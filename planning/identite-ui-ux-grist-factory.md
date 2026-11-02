@@ -1213,7 +1213,9 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   le trait sous elle : classes `pp-struck` et `pp-underlined`) ; le Markdown, le PowerPoint et l'Excel portaient déjà les traits de la case par les marques qui enveloppent son texte (le PowerPoint ne reprend pas les notes de
   bas de page, dit dans sa fiche ; la grille d'un modèle Excel n'accepte ni note ni numéro de page) ; l'e-mail est un texte brut, sans mise en forme à porter. La case d'une variable Oui / Non reçoit ses traits comme la case conditionnelle (elle les
   avait déjà dans le Markdown, le PowerPoint et l'Excel, pas à la Lecture, au PDF ni au Word) : ceux des marques posées sur elle, jamais le barré d'une tâche faite d'une liste à cases, qui n'est pas un trait posé sur la case.
-  Gardé par `badgeMarks`, `tableCellsMouse`, `settingsWindowMouse`, `condCheckboxMouse`, `condCheckbox`, `docx`, `htmlExport`, `gfsStorage` et `codeHygiene`.
+  Le numéro de page d'un texte de diapositive, dans le PowerPoint, prend le style du texte qui l'entoure - sa taille, et la couleur, le surlignage, le souligné et le barré posés sur lui - comme dans le Word et le PDF, et non
+  le vert et la petite taille de sa pastille (carte du 02/11, « Faire suivre au numéro de page du PowerPoint la couleur que tu choisis ? », « Oui, comme le Word et le PDF »).
+  Gardé par `badgeMarks`, `tableCellsMouse`, `settingsWindowMouse`, `condCheckboxMouse`, `condCheckbox`, `docx`, `htmlExport`, `pptxExport`, `gfsStorage` et `codeHygiene`.
 - Autres attributs : « Insérer » ajoute les attributs cochés juste après la bulle ; « Remplacer » (demande d'Antoine du
   01/10, entre « Annuler » et « Insérer », qui reste le bouton bleu) les met à sa place. C'est la même bulle dont la
   colonne change : son gras, sa couleur, sa boucle, sa condition (sauf case « Reprendre la condition d'affichage »

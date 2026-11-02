@@ -12,6 +12,7 @@
 //  LE LOT : « Toutes les lignes de la vue (ZIP) » demande sa confirmation (« Annuler » n'exporte rien), « Générer » rend une archive d'un .pptx par ligne, chacun avec les valeurs de sa ligne.
 //  LES AUTRES SORTIES : le HTML d'une présentation ne garde rien du repère de diapositive (ni transition, ni fond en attribut, ni notes) : `keepProps` ne vaut que pour le PowerPoint.
 //  SANS LIGNE : aucune ligne sélectionnée, le bouton Exporter dit de cliquer sur une ligne et ne télécharge rien.
+//  LE NUMÉRO DE PAGE (02/11, carte « Faire suivre au numéro de page du PowerPoint la couleur que tu choisis ? », « Oui, comme le Word et le PDF ») : le champ de numéro de diapositive (`a:fld` « slidenum ») prend le style du texte qui l'entoure - sa taille, et la couleur, le surlignage et le souligné posés sur lui - et non celui de sa pastille de l'éditeur (vert sur fond vert pâle, plus petite).
 // Lancé par run-headless.mjs (groupe Node « pptxExport », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-pptx-export.mjs
 // PPTX_SHOTS=<dossier> : enregistre aussi les .pptx téléchargés (à ouvrir dans PowerPoint ou LibreOffice, à l'œil) ; sans lui, rien n'est écrit.
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -501,6 +502,35 @@ async function otherOutputs(lang, page) {
   await park(page);
 }
 
+// Le numéro de page dans le texte : le champ de numéro de diapositive suit le style du texte qui l'entoure (comme le Word et le PDF), pas celui de sa pastille. Le moteur est appelé dans la page, comme le fait l'export.
+async function pageNumberField(lang, page) {
+  const tag = `[${lang}] `;
+  console.log(`\n${tag}10) Le numéro de page dans le texte`);
+  const fields = await page.evaluate(async (record) => {
+    const badge = '<span class="page-number-badge" data-format="page-n">Page #</span>';
+    const html = `<p><span style="font-size: 20pt;">Sans marque ${badge} puis <span style="color: #b91c1c; background-color: #fde68a"><u>${badge}</u></span> fin</span></p>`;
+    await ExportCommon.ensureJsZipLoaded();
+    const { blob } = await PptxExport.getPptxBlobForRecord(html, 'PpDepart', record, '', null, null);
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const doc = new DOMParser().parseFromString(await zip.file('ppt/slides/slide1.xml').async('string'), 'application/xml');
+    const first = (el, name) => (el ? el.getElementsByTagName(name)[0] || null : null);
+    const look = (run) => {
+      const rPr = Array.from(run.children).find(c => c.tagName === 'a:rPr');
+      const fill = Array.from(rPr.children).find(c => c.tagName === 'a:solidFill');
+      const hl = first(rPr, 'a:highlight');
+      return { sz: rPr.getAttribute('sz'), u: rPr.getAttribute('u'), color: fill ? first(fill, 'a:srgbClr').getAttribute('val') : null, highlight: hl ? first(hl, 'a:srgbClr').getAttribute('val') : null };
+    };
+    return Array.from(doc.getElementsByTagName('a:fld')).map(fld => Object.assign({ type: fld.getAttribute('type'), text: first(fld, 'a:t').textContent, before: fld.previousElementSibling ? first(fld.previousElementSibling, 'a:t').textContent : null },
+      look(fld), { prefix: fld.previousElementSibling && fld.previousElementSibling.tagName === 'a:r' ? look(fld.previousElementSibling) : null }));
+  }, RECORD);
+  const [plain, marked] = fields;
+  const same = f => f && f.prefix && f.prefix.sz === f.sz && f.prefix.color === f.color && f.prefix.highlight === f.highlight && f.prefix.u === f.u;
+  check(tag + 'deux champs « slidenum », le numéro de la diapositive (1), précédés de « Page »', fields.length === 2 && fields.every(f => f.type === 'slidenum' && f.text === '1' && f.before === 'Page '), fields);
+  check(tag + 'sans marque, le numéro de page a la taille du texte (20 pt) et ni le vert ni le fond vert pâle de sa pastille', !!plain && plain.sz === '2000' && plain.color === null && plain.highlight === null && plain.u === null, plain);
+  check(tag + 'avec une couleur, un surlignage et un souligné posés sur lui, le numéro de page les prend (rouge B91C1C, fond FDE68A, souligné) et garde la taille du texte', !!marked && marked.sz === '2000' && marked.color === 'B91C1C' && marked.highlight === 'FDE68A' && marked.u === 'sng', marked);
+  check(tag + 'le mot « Page » qui le précède s\'écrit comme lui', same(plain) && same(marked), fields.map(f => f.prefix));
+}
+
 // Sans ligne sélectionnée.
 async function withoutRow(lang) {
   const T = TEXTS[lang];
@@ -519,6 +549,7 @@ const fr = await run('fr', 'light', true);
 if (fr.page) {
   await batch('fr', fr.page, fr.keep);
   await otherOutputs('fr', fr.page);
+  await pageNumberField('fr', fr.page);
 }
 await withoutRow('fr');
 console.log('\n=== verify-pptx-export : anglais, sombre ===');

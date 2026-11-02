@@ -320,7 +320,9 @@ const PptxExport = (function () {
       }
       if (/^(UL|OL|TABLE)$/.test(el.tagName) || (el !== unit.el && el.tagName === 'DIV' && !el.classList.contains('resolved-var') && Array.from(el.children).some(child => BLOCK_TAGS.test(child.tagName)))) return;
       if (INVISIBLE.some(name => el.classList.contains(name)) || el.tagName === 'LABEL' || el.tagName === 'INPUT') return;
-      if (el.classList.contains('page-number-badge')) { push({ field: true, st: runStyleOf(el, unit.el), format: el.getAttribute('data-format') || 'n' }); return; }
+      // Le champ du numéro de page prend le style du texte qui l'entoure (la couleur, le surlignage, le souligné et le barré posés sur lui, la taille du texte), comme dans le Word et le PDF : pas celui de sa pastille de
+      // l'éditeur (vert sur fond vert pâle, plus petite), qui n'est pas un choix de la personne.
+      if (el.classList.contains('page-number-badge')) { push({ field: true, st: runStyleOf(el.parentElement || el, unit.el), format: el.getAttribute('data-format') || 'n' }); return; }
       if (el.classList.contains('resolved-checkbox')) { push({ text: el.textContent, st: Object.assign(runStyleOf(el, unit.el), { family: 'Segoe UI Symbol', pitch: 34 }) }); return; }
       Array.from(el.childNodes).forEach(walk);
     };
