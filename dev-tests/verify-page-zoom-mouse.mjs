@@ -669,7 +669,9 @@ async function runContract(theme, lang) {
   await page.waitForFunction(() => getComputedStyle(document.getElementById('v2-read-flyout')).display !== 'none', null, { timeout: 4000 }).catch(() => {});
   await sleep(150);
   const row = await boxOf('#v2-btn-clean-reading');
-  if (row) { await page.mouse.move(row.x, row.y, { steps: 10 }); await page.mouse.click(row.x, row.y); }
+  if (row) { await page.mouse.move(row.x, row.y, { steps: 10 }); await page.mouse.click(row.x, row.y); } // la ligne se coche seulement : c'est le bouton Mode lecture qui fait la Lecture épurée
+  await page.mouse.move(hover.x, hover.y, { steps: 8 });
+  await page.mouse.click(hover.x, hover.y);
   await page.waitForFunction(() => document.body.classList.contains('pp-clean-reading'), null, { timeout: 8000 }).catch(() => {});
   await settle();
   const clean = await page.evaluate(() => {

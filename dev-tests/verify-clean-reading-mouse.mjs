@@ -3,9 +3,11 @@
 // panneau Grist d'Antoine (~700x400), en thème clair puis sombre, pour une personne qui a tous les droits puis pour une personne en lecture seule - retours
 // d'Antoine du 2026-10-02, point 19 : « un mode Lecture épuré qui enlève la toolbar etc. pour juste avoir la lecture clean d'un document ».
 // dev-tests/scenarios-clean-reading.js vérifie la structure et les états DANS la page (.click(), touches synthétiques) ; ici, ce qui se mesure aux PIXELS et au
-// geste réel : le menu qui s'ouvre au survol du bouton Mode lecture et qu'on atteint sans le perdre, la barre du haut qui disparaît, le document qui prend tout le
-// panneau (rien d'autre à l'écran), le bouton de sortie atteignable sans masquer une ligne de texte, la molette qui fait défiler, Échap au vrai clavier, le retour
-// à l'Édition avec le curseur dans le document, et - en lecture seule - un éditeur qui ne s'affiche jamais et aucune écriture dans le document Grist.
+// geste réel : le menu qui s'ouvre au survol du bouton Mode lecture et qu'on atteint sans le perdre - deux lignes à cocher comme le menu du bouton Exporter, « Lecture simple » (cochée
+// au départ) au-dessus de « Lecture épurée », la coche devant la ligne cochée seulement - cocher une ligne qui ne fait que la cocher (le curseur reste dans le texte), le bouton qui fait ce que la
+// ligne cochée dit (demande d'Antoine du 2026-11-02), la barre du haut qui disparaît, le document qui prend tout le panneau (rien d'autre à l'écran), le bouton de sortie atteignable sans masquer
+// une ligne de texte, la molette qui fait défiler, Échap au vrai clavier, le retour à l'Édition avec le curseur dans le document, et - en lecture seule - un éditeur qui ne s'affiche jamais et
+// aucune écriture dans le document Grist.
 // Lancé par run-headless.mjs (groupe Node "cleanReadingMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-clean-reading-mouse.mjs
 // (CLEAN_READING_SHOTS=<dossier> y range une capture par étape, à regarder - aucune vérification n'en dépend).
 import { createServer } from 'node:http';
@@ -191,8 +193,8 @@ async function realClick(page, selector) {
   return b;
 }
 
-// Vrai geste vers la ligne « Lecture épurée » : la souris survole le bouton Mode lecture (le menu s'ouvre), puis DESCEND vers la ligne en une dizaine de pas - la bande entre
-// le bouton et son menu est reprise par le pont de survol (css/editor-v2.css), le menu doit tenir tout le trajet - et clique.
+// Vrai geste vers une ligne du menu du bouton Mode lecture : la souris survole le bouton (le menu s'ouvre), puis DESCEND vers la ligne en une dizaine de pas - la bande entre
+// le bouton et son menu est reprise par le pont de survol (css/editor-v2.css), le menu doit tenir tout le trajet - et clique. Le clic ne fait que cocher la ligne.
 async function hoverReadButton(page) {
   const b = await boxOf(page, '#btn-mode-read');
   await page.mouse.move(b.x - 8, b.y, { steps: 2 });
@@ -201,13 +203,27 @@ async function hoverReadButton(page) {
   await page.waitForTimeout(120);
   return b;
 }
-async function realClickCleanRow(page) {
+async function realPickRow(page, id) {
   await hoverReadButton(page);
-  const r = await boxOf(page, '#v2-btn-clean-reading');
+  const r = await boxOf(page, '#' + id);
   if (!r) return null;
   await page.mouse.move(r.x, r.y, { steps: 10 });
   await page.mouse.click(r.x, r.y);
   return r;
+}
+// Le bouton Mode lecture, cliqué à la vraie souris juste après une ligne : la souris REMONTE de la ligne au bouton (le menu reste ouvert tout du long), comme on lance un export.
+async function realClickReadButtonFromMenu(page) {
+  const b = await boxOf(page, '#btn-mode-read');
+  await page.mouse.move(b.x, b.y, { steps: 8 });
+  await page.mouse.click(b.x, b.y);
+  return b;
+}
+// Entrer dans la Lecture épurée à la vraie souris : cocher « Lecture épurée » dans le menu, puis cliquer le bouton Mode lecture.
+async function realEnterClean(page) {
+  const row = await realPickRow(page, 'v2-btn-clean-reading');
+  if (!row) return null;
+  await realClickReadButtonFromMenu(page);
+  return row;
 }
 
 const snapshot = page => page.evaluate(() => {
@@ -216,7 +232,11 @@ const snapshot = page => page.evaluate(() => {
   const editor = document.getElementById('editor-container');
   const flyout = document.getElementById('v2-read-flyout');
   const active = document.activeElement;
+  const rowIds = ['v2-btn-read-simple', 'v2-btn-clean-reading'];
   return {
+    choice: CleanReading.getChoice(),
+    rows: rowIds.map(id => document.getElementById(id).getAttribute('aria-checked')).join(','),
+    marks: rowIds.map(id => getComputedStyle(document.getElementById(id), '::before').visibility).join(','), // la coche devant la ligne : visible seulement devant la ligne cochée (menu ouvert)
     clean: CleanReading.isActive(),
     bodyClass: document.body.classList.contains('pp-clean-reading'),
     reader: reader.style.display, editor: editor.style.display,
@@ -290,18 +310,23 @@ async function runTheme(theme) {
   const readBox = await hoverReadButton(page);
   const menu = await page.evaluate(() => {
     const flyout = document.getElementById('v2-read-flyout');
+    const simple = document.getElementById('v2-btn-read-simple');
     const row = document.getElementById('v2-btn-clean-reading');
     const label = flyout.querySelector('.v2-hover-flyout-label');
-    const fr = flyout.getBoundingClientRect(), rr = row.getBoundingClientRect();
-    const hit = document.elementFromPoint(rr.x + rr.width / 2, rr.y + rr.height / 2);
+    const fr = flyout.getBoundingClientRect(), sr = simple.getBoundingClientRect(), rr = row.getBoundingClientRect();
+    const reached = (el, r) => { const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return !!hit && (hit === el || el.contains(hit)); };
+    const inside = r => r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight;
+    const mark = el => { const c = getComputedStyle(el, '::before'); return { visibility: c.visibility, width: c.width }; };
     return {
-      open: getComputedStyle(flyout).display !== 'none', inViewport: fr.left >= 0 && fr.top >= 0 && fr.right <= innerWidth && fr.bottom <= innerHeight,
-      rowText: row.textContent, rowHit: !!hit && (hit === row || row.contains(hit)), rowInViewport: rr.left >= 0 && rr.top >= 0 && rr.right <= innerWidth && rr.bottom <= innerHeight,
+      open: getComputedStyle(flyout).display !== 'none', inViewport: inside(fr),
+      simpleText: simple.textContent, rowText: row.textContent, simpleHit: reached(simple, sr), rowHit: reached(row, rr), simpleInViewport: inside(sr), rowInViewport: inside(rr), simpleAbove: sr.bottom <= rr.top + 0.5 && sr.top > fr.top,
+      checked: simple.getAttribute('aria-checked') + ',' + row.getAttribute('aria-checked'), marks: mark(simple).visibility + ',' + mark(row).visibility, markWidth: mark(simple).width,
       keyHint: getComputedStyle(label, '::after').content, expanded: document.getElementById('btn-mode-read').getAttribute('aria-expanded'),
     };
   });
-  check(`${label} - le survol du bouton Mode lecture ouvre son menu, entièrement dans le panneau, avec « Lecture épurée » atteignable (rien ne la recouvre)`,
-    menu.open && menu.inViewport && menu.rowText === 'Lecture épurée' && menu.rowHit && menu.rowInViewport, menu);
+  check(`${label} - le survol du bouton Mode lecture ouvre son menu, entièrement dans le panneau, avec « Lecture simple » au-dessus de « Lecture épurée », toutes deux atteignables (rien ne les recouvre)`,
+    menu.open && menu.inViewport && menu.simpleText === 'Lecture simple' && menu.rowText === 'Lecture épurée' && menu.simpleAbove && menu.simpleHit && menu.rowHit && menu.simpleInViewport && menu.rowInViewport, menu);
+  check(`${label} - au départ « Lecture simple » est cochée : la coche (celle du menu Exporter) ne se voit que devant elle`, menu.checked === 'true,false' && menu.marks === 'visible,hidden' && menu.markWidth === '13px', menu);
   check(`${label} - le titre du menu dit la touche Alt+L du bouton (l'info-bulle du bouton a laissé la place au menu)`, /Alt\+L/.test(menu.keyHint), menu);
   await shot(page, `clean-${theme}-1-menu`);
   // La souris repart sans cliquer : le menu se referme (aucun menu resté ouvert).
@@ -310,26 +335,33 @@ async function runTheme(theme) {
   const closed = await snapshot(page);
   check(`${label} - la souris partie, le menu se referme`, !closed.flyoutOpen && !closed.clean, closed);
 
-  // 2) Un clic sur le bouton lui-même fait ce qu'il faisait : la Lecture, avec sa barre (rien d'épuré), puis retour à l'Édition à la souris.
+  // 2) « Lecture simple » est cochée : un clic sur le bouton lui-même fait ce qu'il faisait, la Lecture, avec sa barre (rien d'épuré), puis retour à l'Édition à la souris.
   await realClick(page, '#btn-mode-read');
   await waitReader(page);
   const plainRead = await snapshot(page);
-  check(`${label} - vrai clic sur le bouton Mode lecture : la Lecture ordinaire, barre visible, pas d'état épuré`, plainRead.reader === 'block' && plainRead.editor === 'none' && plainRead.barShown && !plainRead.clean && !plainRead.bodyClass, plainRead);
+  check(`${label} - vrai clic sur le bouton Mode lecture, « Lecture simple » cochée : la Lecture ordinaire, barre visible, pas d'état épuré`, plainRead.choice === 'simple' && plainRead.reader === 'block' && plainRead.editor === 'none' && plainRead.barShown && !plainRead.clean && !plainRead.bodyClass, plainRead);
   await realClick(page, '#btn-mode-edit');
   await waitEditor(page);
   const editBar = await snapshot(page);
   check(`${label} - retour en Édition : l'éditeur et la barre sont revenus`, editBar.editor !== 'none' && editBar.reader === 'none' && editBar.barShown, editBar);
 
-  // 3) Depuis l'Édition : vrai survol puis vrai clic sur la ligne. Le premier focus de l'éditeur de la session fait lire les abréviations, donc identifier la personne (une ligne
+  // 3) Depuis l'Édition : vrai survol puis vrai clic sur la ligne « Lecture épurée », qui ne fait que la cocher (le curseur reste dans le texte, rien ne change à l'écran), puis vrai clic sur le bouton Mode
+  //    lecture, qui fait ce que la ligne cochée dit. Le premier focus de l'éditeur de la session fait lire les abréviations, donc identifier la personne (une ligne
   //    de la table interne Publipostage_UserProbe, ajoutée puis retirée, js/text-expansion.js) : il a lieu avant, pour que la comparaison finale ne voie que ce que la Lecture épurée écrirait.
   await page.evaluate(() => EditorCore.getEditor().commands.focus('end'));
   await page.waitForTimeout(900);
   const actionsBefore = await stub();
-  await realClickCleanRow(page);
+  await realPickRow(page, 'v2-btn-clean-reading');
+  await page.waitForTimeout(300);
+  const ticked = await snapshot(page);
+  check(`${label} - vrai clic sur « Lecture épurée » : la ligne est cochée (la coche a changé de ligne) et rien d'autre ne bouge - l'Édition, la barre, aucun état épuré, le curseur toujours dans le texte`,
+    ticked.choice === 'clean' && ticked.rows === 'false,true' && ticked.marks === 'hidden,visible' && ticked.flyoutOpen && ticked.editor !== 'none' && ticked.reader === 'none' && ticked.barShown && !ticked.clean && !ticked.bodyClass && ticked.inEditor, ticked);
+  await shot(page, `clean-${theme}-1b-ligne-cochee`);
+  await realClickReadButtonFromMenu(page);
   await waitClean(page, true);
   await waitReader(page);
   const clean = await snapshot(page);
-  check(`${label} - vrai clic sur « Lecture épurée » depuis l'Édition : la Lecture s'affiche, état épuré, barre du haut cachée, éditeur masqué sans le focus`,
+  check(`${label} - vrai clic sur le bouton Mode lecture, « Lecture épurée » cochée, depuis l'Édition : la Lecture s'affiche, état épuré, barre du haut cachée, éditeur masqué sans le focus`,
     clean.clean && clean.bodyClass && clean.reader === 'block' && clean.editor === 'none' && !clean.barShown && clean.barHeight === 0 && !clean.inEditor, clean);
   const geo = await page.evaluate(() => {
     const r = document.getElementById('reader-container').getBoundingClientRect();
@@ -382,18 +414,41 @@ async function runTheme(theme) {
   check(`${label} - vrai clic sur le bouton de sortie : l'Édition revient, la barre aussi (même hauteur), le curseur est dans le document, aucun menu ouvert`,
     !out.clean && !out.bodyClass && out.editor !== 'none' && out.reader === 'none' && out.barShown && out.barHeight === start.barHeight && out.inEditor && !out.flyoutOpen, { start, out });
 
-  // 5) Au clavier, depuis la Lecture : focus sur le bouton Mode lecture, Tab jusqu'à la ligne du menu (ouvert par le focus), Entrée ; Échap sort et rend le focus au bouton.
-  await realClick(page, '#btn-mode-read');
+  // 4b) Le choix est gardé d'une entrée à l'autre (un état de la session) : « Lecture épurée » est toujours cochée ; « Lecture simple » recochée à la souris, le bouton refait la Lecture ordinaire.
+  const kept = await snapshot(page);
+  check(`${label} - la sortie garde le choix : « Lecture épurée » est toujours cochée`, kept.choice === 'clean' && kept.rows === 'false,true', kept);
+  await realPickRow(page, 'v2-btn-read-simple');
+  await page.waitForTimeout(200);
+  const unticked = await snapshot(page);
+  await realClickReadButtonFromMenu(page);
   await waitReader(page);
+  const plainAgain = await snapshot(page);
+  check(`${label} - « Lecture simple » recochée à la souris : la coche revient devant elle, puis le bouton refait la Lecture ordinaire (barre visible, pas d'état épuré)`,
+    unticked.rows === 'true,false' && unticked.marks === 'visible,hidden' && !unticked.clean && unticked.editor !== 'none' && plainAgain.choice === 'simple' && plainAgain.reader === 'block' && plainAgain.barShown && !plainAgain.clean, { unticked, plainAgain });
+
+  // 5) Au clavier, depuis la Lecture : focus sur le bouton Mode lecture, Tab jusqu'aux lignes du menu (ouvert par le focus), Entrée sur « Lecture épurée » la coche seulement ; Maj+Tab jusqu'au bouton, Entrée dessus
+  //    fait la Lecture épurée ; Échap sort et rend le focus au bouton.
   await page.mouse.move(WIDTH / 2, HEIGHT - 20, { steps: 4 });
   await page.focus('#btn-mode-read');
   await page.keyboard.press('Tab');
+  const tabbedSimple = await snapshot(page);
+  check(`${label} - au clavier : Tab depuis le bouton Mode lecture arrive sur « Lecture simple » (le menu s'ouvre au focus)`, tabbedSimple.focusId === 'v2-btn-read-simple' && tabbedSimple.flyoutOpen, tabbedSimple);
+  await page.keyboard.press('Tab');
   const tabbed = await snapshot(page);
-  check(`${label} - au clavier : Tab depuis le bouton Mode lecture arrive sur « Lecture épurée » (le menu s'ouvre au focus)`, tabbed.focusId === 'v2-btn-clean-reading' && tabbed.flyoutOpen, tabbed);
+  check(`${label} - au clavier : Tab suivant arrive sur « Lecture épurée »`, tabbed.focusId === 'v2-btn-clean-reading' && tabbed.flyoutOpen, tabbed);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  const keyTick = await snapshot(page);
+  check(`${label} - Entrée sur « Lecture épurée » la coche et rien de plus : la Lecture reste affichée avec sa barre`,
+    keyTick.choice === 'clean' && keyTick.rows === 'false,true' && keyTick.marks === 'hidden,visible' && !keyTick.clean && keyTick.reader === 'block' && keyTick.barShown, keyTick);
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Shift+Tab');
+  const backOnButton = await snapshot(page);
+  check(`${label} - Maj+Tab deux fois : le focus est revenu sur le bouton Mode lecture`, backOnButton.focusId === 'btn-mode-read', backOnButton);
   await page.keyboard.press('Enter');
   await waitClean(page, true);
   const keyClean = await snapshot(page);
-  check(`${label} - Entrée sur « Lecture épurée » : état épuré, barre cachée, la Lecture reste affichée`, keyClean.clean && keyClean.reader === 'block' && !keyClean.barShown, keyClean);
+  check(`${label} - Entrée sur le bouton Mode lecture, « Lecture épurée » cochée : état épuré, barre cachée, la Lecture reste affichée`, keyClean.clean && keyClean.reader === 'block' && !keyClean.barShown, keyClean);
   await page.keyboard.press('Escape');
   await waitClean(page, false);
   const keyOut = await snapshot(page);
@@ -418,12 +473,12 @@ async function runReadOnly(theme) {
   const start = await snapshot(page);
   check(`${label} - lecture seule : le widget s'ouvre sur la Lecture, éditeur caché, barre visible`, start.reader === 'block' && start.editor === 'none' && start.barShown && !start.clean, start);
 
-  await realClickCleanRow(page);
+  await realEnterClean(page);
   await waitClean(page, true);
   const clean = await snapshot(page);
   const audit = await screenAudit(page);
   const geo = await page.evaluate(() => { const r = document.getElementById('reader-container').getBoundingClientRect(); const b = document.getElementById('btn-exit-clean-reading').getBoundingClientRect(); return { top: r.top, bottom: r.bottom, exitInViewport: b.width > 0 && b.right <= innerWidth && b.top >= 0 }; });
-  check(`${label} - lecture seule, vrai clic sur « Lecture épurée » : état épuré, barre cachée, document dans tout le panneau, bouton de sortie visible, rien d'autre à l'écran`,
+  check(`${label} - lecture seule, vrai clic sur « Lecture épurée » puis sur le bouton Mode lecture : état épuré, barre cachée, document dans tout le panneau, bouton de sortie visible, rien d'autre à l'écran`,
     clean.clean && !clean.barShown && clean.editor === 'none' && geo.top === 0 && Math.abs(geo.bottom - HEIGHT) < 1 && geo.exitInViewport && audit.strangers.length === 0, { clean, geo, audit });
   await shot(page, `clean-readonly-${theme}`);
 
@@ -432,18 +487,25 @@ async function runReadOnly(theme) {
   const out = await snapshot(page);
   check(`${label} - lecture seule, bouton de sortie : la Lecture et sa barre reviennent, l'éditeur ne s'est jamais affiché`, !out.clean && out.reader === 'block' && out.editor === 'none' && out.barShown, out);
 
-  // Au clavier aussi, et Échap pour sortir.
+  // Au clavier aussi, et Échap pour sortir : Tab jusqu'à « Lecture simple » (Entrée la coche), Tab jusqu'à « Lecture épurée » (Entrée la coche), Maj+Tab deux fois jusqu'au bouton, Entrée.
   await page.mouse.move(WIDTH / 2, HEIGHT - 20, { steps: 4 });
   await page.focus('#btn-mode-read');
   await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');
+  const keySimple = await snapshot(page);
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');
+  const keyCleanRow = await snapshot(page);
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Shift+Tab');
   await page.keyboard.press('Enter');
   await waitClean(page, true);
   const again = await snapshot(page);
   await page.keyboard.press('Escape');
   await waitClean(page, false);
   const back = await snapshot(page);
-  check(`${label} - lecture seule, au clavier : Entrée sur la ligne entre, Échap sort, focus rendu au bouton Mode lecture, éditeur toujours caché`,
-    again.clean && !back.clean && back.reader === 'block' && back.editor === 'none' && back.barShown && back.focusId === 'btn-mode-read', { again, back });
+  check(`${label} - lecture seule, au clavier : Entrée sur une ligne la coche seulement, Entrée sur le bouton Mode lecture entre, Échap sort, focus rendu au bouton, éditeur toujours caché`,
+    keySimple.choice === 'simple' && !keySimple.clean && keyCleanRow.choice === 'clean' && !keyCleanRow.clean && again.clean && !back.clean && back.reader === 'block' && back.editor === 'none' && back.barShown && back.focusId === 'btn-mode-read', { keySimple, keyCleanRow, again, back });
 
   const actionsAfter = await page.evaluate(() => window.__gristStub.getActionLog().length);
   check(`${label} - lecture seule : rien n'est écrit dans le document Grist`, actionsAfter === actionsBefore, { actionsBefore, actionsAfter });
@@ -484,8 +546,8 @@ async function runStartup(theme) {
   await page.waitForTimeout(900);
   const stays = await snapshot(page);
   check(`${label} - sortie faite, la relecture des droits et une nouvelle ligne ne la ramènent pas dans la Lecture épurée`, !stays.clean && stays.barShown, stays);
-  // À la demande, elle y retourne par le menu comme les autres, et en sort par le bouton rond.
-  await realClickCleanRow(page);
+  // À la demande, elle y retourne par le menu comme les autres (cocher « Lecture épurée », puis le bouton), et en sort par le bouton rond.
+  await realEnterClean(page);
   await waitClean(page, true);
   const again = await snapshot(page);
   await realClick(page, '#btn-exit-clean-reading');

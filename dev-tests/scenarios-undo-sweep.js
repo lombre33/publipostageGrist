@@ -156,11 +156,12 @@ window.EditorTestSuites.undoSweep = (function () {
     await GristAPI.refreshSchema();
     stub.fireRecord(row, VAR_TABLE);
   }
-  // Le départ de chaque essai est le même, celui du widget qui s'ouvre : le mode Édition, hors Lecture épurée, sur l'Aperçu A4 (resetEditor() le retire), aucune fenêtre ouverte, le suivi des modifications éteint. Un contrôle
-  // `view` ou une fenêtre ne laisse rien à l'essai suivant.
+  // Le départ de chaque essai est le même, celui du widget qui s'ouvre : le mode Édition, hors Lecture épurée et la ligne « Lecture simple » cochée au menu du bouton Mode lecture, sur l'Aperçu A4 (resetEditor() le retire), aucune
+  // fenêtre ouverte, le suivi des modifications éteint. Un contrôle `view` ou une fenêtre ne laisse rien à l'essai suivant.
   async function restoreBaseline() {
     document.getElementById('editor-container').classList.add('a4-preview');
     if (document.body.classList.contains('pp-clean-reading')) { document.getElementById('btn-exit-clean-reading').click(); await sleep(250); }
+    CleanReading.choose('simple'); // la ligne « Lecture épurée » cochée par un essai ferait entrer le bouton Mode lecture du suivant dans l'état épuré
     const edit = document.getElementById('btn-mode-edit');
     if (edit && !edit.classList.contains('active')) { edit.click(); await sleep(350); }
     await closeOverlays();

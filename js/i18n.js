@@ -83,7 +83,8 @@ const I18n = (function () {
     'toolbar.linkRules.aria': { fr: 'Tables liées : comment trouver la bonne ligne d’une autre table', en: 'Linked tables: how the right row of another table is found' },
     'toolbar.modeEdit': { fr: 'Mode édition', en: 'Edit mode' },
     'toolbar.modeRead': { fr: 'Mode lecture', en: 'Read mode' },
-    // Lecture épurée (js/clean-reading.js) : la ligne du menu du bouton Mode lecture, et l'info-bulle du bouton de sortie.
+    // Lecture simple et Lecture épurée (js/clean-reading.js) : les deux lignes à cocher du menu du bouton Mode lecture, et l'info-bulle du bouton de sortie.
+    'toolbar.readSimple': { fr: 'Lecture simple', en: 'Standard reading' },
     'toolbar.cleanReading': { fr: 'Lecture épurée', en: 'Clean reading' },
     'cleanReading.exit': { fr: 'Quitter la lecture épurée (Échap)', en: 'Exit clean reading (Esc)' },
     // Zoom de la page (js/page-zoom.js) : la pastille du coin bas droit du document. {keys} : le raccourci,

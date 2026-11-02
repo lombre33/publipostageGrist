@@ -184,8 +184,10 @@ par mode. Ce principe — pas de duplication de code d'UI entre modes/contextes 
 explicite d'Antoine, pas seulement une observation.
 **Seule exception, voulue par Antoine (02/10, « un mode Lecture épuré qui enlève la toolbar etc. pour juste avoir la lecture clean d'un document »)** : la **Lecture épurée**
 (`js/clean-reading.js`, `css/clean-reading.css`) cache la barre du haut en entier - barre, champs de l'email, barre de mise en forme, bandeau « Revenir au macro-modèle » - et laisse le document seul dans le panneau. Ce n'est
-pas un troisième mode : c'est la Lecture dans un état de plus (`pp-clean-reading` sur `<body>`), que rien n'allume sans un geste (la ligne « Lecture épurée » du menu au survol du bouton
-Mode lecture : la barre reste gelée, aucune icône de plus) et que rien ne garde d'une ouverture du widget à l'autre. On en sort par le bouton rond du coin haut droit ou par Échap (qui
+pas un troisième mode : c'est la Lecture dans un état de plus (`pp-clean-reading` sur `<body>`), que rien n'allume sans un geste (le menu au survol du bouton Mode lecture a deux lignes à cocher, comme
+celui du bouton Exporter - « Lecture simple », cochée au départ, au-dessus de « Lecture épurée » ; cocher une ligne ne fait que la cocher, c'est le bouton, comme Alt+L, qui fait ce que la ligne cochée dit :
+demande d'Antoine du 02/11, « harmoniser l'UI avec le bouton télécharger » ; la barre reste gelée, aucune icône de plus) et que rien ne garde d'une ouverture du widget à l'autre, le choix coché pas plus
+que l'état. On en sort par le bouton rond du coin haut droit ou par Échap (qui
 attend une fenêtre ou un fil de commentaire ouvert), et le mode d'où l'on venait revient. Elle ne modifie rien : une personne en lecture seule y a droit comme les autres.
 
 ### Non-régression stricte de l'UI existante

@@ -1,8 +1,10 @@
 // Suite "cleanReading" - Lecture épurée (js/clean-reading.js, css/clean-reading.css), retours d'Antoine du 2026-10-02, point 19 : « un mode Lecture épuré qui enlève la toolbar
 // etc. pour juste avoir la lecture clean d'un document ». Le mode Lecture sans la barre du haut ni le reste de l'interface, le document seul dans le panneau.
+// Le menu du bouton Mode lecture a deux lignes à cocher comme celui du bouton Exporter - « Lecture simple » (cochée au départ) puis « Lecture épurée » - et le bouton fait ce que la ligne
+// cochée dit (demande d'Antoine du 2026-11-02) : cocher une ligne ne fait que la cocher.
 // Ici : la structure et les états, DANS la page (clics et touches synthétiques) ; dev-tests/verify-clean-reading-mouse.mjs en mesure les pixels à 700x400 à la vraie souris et au
 // vrai clavier, en clair et en sombre, pour une personne en lecture seule comprise.
-// Chaque scénario repart de l'Édition et y revient (finish) : l'état épuré ne doit rien laisser derrière lui.
+// Chaque scénario repart de l'Édition, de « Lecture simple » cochée, et y revient (finish) : l'état épuré ne doit rien laisser derrière lui.
 (function () {
   const cases = [];
   const stub = () => window.__gristStub;
@@ -29,17 +31,36 @@
   const exitButton = () => el('btn-exit-clean-reading');
   const exitShown = () => { const b = exitButton(); return getComputedStyle(b).display !== 'none' && b.getClientRects().length > 0; };
   const pressEscape = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
-  // La ligne du menu se clique comme le fait la souris : appui (retenu par la ligne, qui ne prend pas le focus), puis clic.
-  async function clickRow() {
-    const row = el('v2-btn-clean-reading');
+  const ROW_SIMPLE = 'v2-btn-read-simple';
+  const ROW_CLEAN = 'v2-btn-clean-reading';
+  const rowsState = () => [ROW_SIMPLE, ROW_CLEAN].map(id => el(id).getAttribute('aria-checked')).join(',');
+  // Une ligne du menu se clique comme le fait la souris : appui (retenu par la ligne, qui ne prend pas le focus), puis clic. Le clic ne fait que cocher la ligne.
+  function pickRow(id) {
+    const row = el(id);
     row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
     row.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  }
+  // Le clic du bouton Mode lecture à la souris : `detail` à 1. Un `.click()` nu part comme du clavier (`detail` à 0) : Entrée ou Espace sur le bouton, et Alt+L qui le clique.
+  const mouseClickReadButton = () => el('btn-mode-read').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+  // Entrer dans la Lecture épurée comme la personne : cocher « Lecture épurée », puis cliquer le bouton Mode lecture.
+  async function enterClean() {
+    pickRow(ROW_CLEAN);
+    mouseClickReadButton();
     await waitFor(() => CleanReading.isActive(), 4000);
     await sleep(250);
+  }
+  // Tout ce que la page garde dans le navigateur : le choix du menu n'en écrit rien (un état d'affichage de la session, comme le zoom).
+  function storageDump() {
+    const dump = {};
+    ['localStorage', 'sessionStorage'].forEach(name => {
+      try { const store = window[name]; dump[name] = Object.keys(store).sort().map(key => key + '=' + store.getItem(key)); } catch (e) { dump[name] = 'illisible'; }
+    });
+    return JSON.stringify(dump);
   }
 
   async function setup(h, html) {
     await h.resetEditor();
+    CleanReading.choose('simple');
     I18n.setLang(PAGE_LANG);
     stub().setVariables(TABLE, { Nom: 'Text' });
     stub().setRows(TABLE, [{ id: 1, Nom: 'Dupont' }, { id: 2, Nom: 'Martin' }]);
@@ -53,6 +74,7 @@
 
   async function finish() {
     if (CleanReading.isActive()) await CleanReading.exit();
+    CleanReading.choose('simple');
     I18n.setLang(PAGE_LANG);
     if (!inEdit()) { el('btn-mode-edit').click(); await sleep(400); }
     document.querySelectorAll('#v2-comment-popup[data-test-fake]').forEach(p => p.remove());
@@ -60,16 +82,20 @@
 
   cases.push({
     id: 'clean_reading_row_sits_under_mode_read_and_the_title_keeps_the_key',
-    description: 'La ligne « Lecture épurée » est dans le menu du bouton Mode lecture (aucune icône de plus), qui garde son geste, son aspect de bouton segmenté et sa touche Alt+L, dite par le titre du menu ; le bouton de sortie est caché hors de l’état épuré',
+    description: 'Le menu du bouton Mode lecture a deux lignes à cocher, « Lecture simple » au-dessus de « Lecture épurée » (aucune icône de plus), la première cochée au départ, comme les lignes du menu Exporter ; le bouton garde son geste, son aspect de bouton segmenté et sa touche Alt+L, dite par le titre du menu ; le bouton de sortie est caché hors de l’état épuré',
     run: async (h) => {
       await setup(h);
       const group = el('v2-read-group');
       const button = el('btn-mode-read');
       const flyout = el('v2-read-flyout');
-      const row = el('v2-btn-clean-reading');
+      const simple = el(ROW_SIMPLE);
+      const row = el(ROW_CLEAN);
       const label = flyout && flyout.querySelector('.v2-hover-flyout-label');
+      const rows = flyout ? Array.from(flyout.querySelectorAll(':scope > .v2-hover-row')) : [];
       const structure = { group: !!group, buttonInGroup: !!group && group.querySelector(':scope > #btn-mode-read') === button, flyoutInGroup: !!group && group.querySelector(':scope > #v2-read-flyout') === flyout,
-        rowInFlyout: !!flyout && row && row.parentElement === flyout, rowText: row && row.textContent, labelText: label && label.textContent, rowRole: row && row.getAttribute('role'), rowTab: row && row.tabIndex,
+        rowInFlyout: !!flyout && row && row.parentElement === flyout, simpleInFlyout: !!flyout && simple && simple.parentElement === flyout, order: rows.map(r => r.id).join(','),
+        rowTexts: rows.map(r => r.textContent).join('|'), labelText: label && label.textContent, rowRoles: rows.map(r => r.getAttribute('role')).join(','), rowTabs: rows.map(r => r.tabIndex).join(','),
+        checkClass: rows.map(r => r.classList.contains('v2-hover-row-check-start')).join(','), checked: rowsState(), choice: CleanReading.getChoice(), labelBeforeRows: !!label && label.nextElementSibling === simple,
         noTip: button && !button.hasAttribute('data-tip'), aria: button && button.getAttribute('aria-label') };
       const expectedKeytip = ' (' + Shortcuts.format(Shortcuts.keyFor('modeRead')) + ')';
       const keytip = label && label.getAttribute('data-keytip');
@@ -94,20 +120,138 @@
       el('btn-mode-edit').click();
       await sleep(300);
       await finish();
-      const pass = structure.group && structure.buttonInGroup && structure.flyoutInGroup && structure.rowInFlyout && structure.rowText === 'Lecture épurée' && structure.labelText === 'Mode lecture'
-        && structure.rowRole === 'menuitem' && structure.rowTab === 0 && structure.noTip && structure.aria === 'Mode lecture' && keytip === expectedKeytip && !!shortcutKeys
+      const pass = structure.group && structure.buttonInGroup && structure.flyoutInGroup && structure.rowInFlyout && structure.simpleInFlyout && structure.order === ROW_SIMPLE + ',' + ROW_CLEAN
+        && structure.rowTexts === 'Lecture simple|Lecture épurée' && structure.labelText === 'Mode lecture' && structure.labelBeforeRows && structure.rowRoles === 'menuitemradio,menuitemradio' && structure.rowTabs === '0,0'
+        && structure.checkClass === 'true,true' && structure.checked === 'true,false' && structure.choice === 'simple' && structure.noTip && structure.aria === 'Mode lecture' && keytip === expectedKeytip && !!shortcutKeys
         && toolbarIconsAdded === 0 && lookOk && !rest.bodyClass && !rest.exitShown && rest.barShown && !rest.active && ran && toRead;
       return { pass, notes: JSON.stringify({ structure, keytip, expectedKeytip, shortcutKeys, toolbarIconsAdded, look, lookOk, rest, ran, toRead }) };
     },
   });
 
+  // Le menu fait comme celui du bouton Exporter (js/main.js:wireExportMenus) : une ligne se coche, c'est le bouton qui agit. Rien de ce choix n'est gardé ni annulable (un état d'affichage de la session).
+  cases.push({
+    id: 'clean_reading_a_row_only_ticks_itself_and_nothing_else_moves',
+    description: 'Comme dans le menu Exporter, cocher une ligne (clic, Entrée, Espace) ne fait que la cocher : une seule ligne l’est à la fois, depuis l’Édition comme depuis la Lecture ; ni le mode, ni la barre, ni l’état épuré, ni Annuler et Rétablir, ni ce que le navigateur garde ne bougent ; une autre touche ne coche rien',
+    run: async (h) => {
+      await setup(h);
+      await sleep(500); // ce que le chargement du modèle fait encore (écritures différées) est fini avant de regarder ce que le menu écrit
+      const editor = EditorCore.getEditor();
+      const world = () => ({ active: CleanReading.isActive(), bodyClass: document.body.classList.contains('pp-clean-reading'), editing: inEdit(), reading: inRead(), barShown: barShown(), exitShown: exitShown(),
+        canUndo: editor.can().undo(), canRedo: editor.can().redo(), storage: storageDump() });
+      const snap = () => ({ choice: CleanReading.getChoice(), rows: rowsState(), world: world() });
+      const unmoved = (a, b) => JSON.stringify(a.world) === JSON.stringify(b.world);
+      const key = (id, name) => { const row = el(id); row.focus(); return !row.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true })); };
+      // Depuis l'Édition : un clic coche la ligne et décoche l'autre ; recocher la même ligne ne change rien.
+      const start = snap();
+      pickRow(ROW_CLEAN);
+      await sleep(200);
+      const clickClean = snap();
+      pickRow(ROW_CLEAN);
+      const clickCleanAgain = snap();
+      pickRow(ROW_SIMPLE);
+      const clickSimple = snap();
+      // Le clavier : Entrée et Espace sur une ligne la cochent aussi (la touche est retenue : la page ne défile pas) ; une autre touche ne coche rien.
+      const heldEnter = key(ROW_CLEAN, 'Enter');
+      const enterKey = snap();
+      const heldSpace = key(ROW_SIMPLE, ' ');
+      const spaceKey = snap();
+      const heldOther = key(ROW_CLEAN, 'a');
+      const otherKey = snap();
+      // Un choix inconnu est refusé et ne change rien.
+      const unknown = { refused: CleanReading.choose('autre') === false, after: snap() };
+      // Depuis la Lecture : la même chose.
+      el('btn-mode-read').click();
+      await waitFor(inRead, 4000);
+      await sleep(500);
+      const readStart = snap();
+      pickRow(ROW_CLEAN);
+      await sleep(200);
+      const readClick = snap();
+      await finish();
+      const pass = start.choice === 'simple' && start.rows === 'true,false' && start.world.editing && !start.world.active && start.world.barShown
+        && clickClean.choice === 'clean' && clickClean.rows === 'false,true' && unmoved(start, clickClean)
+        && clickCleanAgain.choice === 'clean' && clickCleanAgain.rows === 'false,true' && unmoved(start, clickCleanAgain)
+        && clickSimple.choice === 'simple' && clickSimple.rows === 'true,false' && unmoved(start, clickSimple)
+        && heldEnter && enterKey.choice === 'clean' && enterKey.rows === 'false,true' && unmoved(start, enterKey)
+        && heldSpace && spaceKey.choice === 'simple' && spaceKey.rows === 'true,false' && unmoved(start, spaceKey)
+        && !heldOther && otherKey.choice === 'simple' && otherKey.rows === 'true,false' && unmoved(start, otherKey)
+        && unknown.refused && unknown.after.choice === 'simple' && unknown.after.rows === 'true,false'
+        && readStart.world.reading && !readStart.world.active && readStart.world.barShown
+        && readClick.choice === 'clean' && readClick.rows === 'false,true' && unmoved(readStart, readClick);
+      return { pass, notes: JSON.stringify({ start, clickClean, clickCleanAgain, clickSimple, heldEnter, enterKey, heldSpace, spaceKey, heldOther, otherKey, unknown, readStart, readClick }) };
+    },
+  });
+
+  cases.push({
+    id: 'clean_reading_the_button_and_alt_l_do_what_the_ticked_row_says',
+    description: 'Le bouton Mode lecture fait ce que la ligne cochée dit, comme le bouton Exporter : « Lecture simple » (au départ) la Lecture ordinaire, « Lecture épurée » la Lecture sans la barre, depuis l’Édition comme depuis la Lecture, et Alt+L, qui clique le bouton, fait de même ; la sortie rend le mode d’où l’on venait et le choix est gardé, d’une entrée à l’autre',
+    run: async (h) => {
+      await setup(h);
+      const snap = () => ({ choice: CleanReading.getChoice(), rows: rowsState(), active: CleanReading.isActive(), reading: inRead(), editing: inEdit(), barShown: barShown(), exitShown: exitShown() });
+      const toRead = async () => { await waitFor(inRead, 4000); await sleep(400); };
+      const toEdit = async () => { el('btn-mode-edit').click(); await waitFor(() => inEdit() && !CleanReading.isActive(), 4000); await sleep(350); };
+      const toClean = async () => { await waitFor(() => CleanReading.isActive(), 4000); await sleep(300); };
+      const leaveClean = async () => { exitButton().click(); await waitFor(() => !CleanReading.isActive(), 4000); await sleep(350); };
+      // « Lecture simple », cochée au départ : le bouton (à la souris) puis Alt+L font la Lecture ordinaire depuis l'Édition.
+      mouseClickReadButton();
+      await toRead();
+      const simpleButton = snap();
+      await toEdit();
+      const ranSimple = Shortcuts.run('modeRead') === true;
+      await toRead();
+      const simpleAlt = snap();
+      await toEdit();
+      // « Lecture épurée » cochée : le bouton fait la Lecture épurée depuis l'Édition, la sortie rend l'Édition, le choix reste coché ; Alt+L fait de même.
+      pickRow(ROW_CLEAN);
+      mouseClickReadButton();
+      await toClean();
+      const cleanButton = snap();
+      await leaveClean();
+      const cleanLeft = snap();
+      const ranClean = Shortcuts.run('modeRead') === true;
+      await toClean();
+      const cleanAlt = snap();
+      // Pendant l'état épuré, un second appel (Alt+L, la barre est cachée) ne change rien.
+      Shortcuts.run('modeRead');
+      await sleep(300);
+      const cleanAgain = snap();
+      await leaveClean();
+      // Depuis la Lecture, « Lecture épurée » cochée : la Lecture épurée, la sortie rend la Lecture.
+      pickRow(ROW_SIMPLE);
+      mouseClickReadButton();
+      await toRead();
+      pickRow(ROW_CLEAN);
+      mouseClickReadButton();
+      await toClean();
+      const fromRead = snap();
+      await leaveClean();
+      const fromReadLeft = snap();
+      // Revenue à « Lecture simple » dans la Lecture : le bouton reste dans la Lecture ordinaire.
+      pickRow(ROW_SIMPLE);
+      mouseClickReadButton();
+      await sleep(400);
+      const backToSimple = snap();
+      await finish();
+      const pass = simpleButton.choice === 'simple' && simpleButton.reading && !simpleButton.active && simpleButton.barShown && !simpleButton.exitShown
+        && ranSimple && simpleAlt.reading && !simpleAlt.active && simpleAlt.barShown
+        && cleanButton.choice === 'clean' && cleanButton.rows === 'false,true' && cleanButton.active && cleanButton.reading && !cleanButton.barShown && cleanButton.exitShown
+        && cleanLeft.choice === 'clean' && cleanLeft.rows === 'false,true' && !cleanLeft.active && cleanLeft.editing && cleanLeft.barShown && !cleanLeft.exitShown
+        && ranClean && cleanAlt.active && cleanAlt.reading && !cleanAlt.barShown
+        && cleanAgain.active && cleanAgain.reading && !cleanAgain.barShown
+        && fromRead.choice === 'clean' && fromRead.active && fromRead.reading && !fromRead.barShown
+        && fromReadLeft.choice === 'clean' && !fromReadLeft.active && fromReadLeft.reading && fromReadLeft.barShown
+        && backToSimple.choice === 'simple' && backToSimple.rows === 'true,false' && backToSimple.reading && !backToSimple.active && backToSimple.barShown;
+      return { pass, notes: JSON.stringify({ simpleButton, ranSimple, simpleAlt, cleanButton, cleanLeft, ranClean, cleanAlt, cleanAgain, fromRead, fromReadLeft, backToSimple }) };
+    },
+  });
+
   cases.push({
     id: 'clean_reading_from_edit_shows_only_the_document_and_leaving_returns_to_edit',
-    description: 'Depuis l’Édition, la ligne du menu affiche la Lecture sans la barre du haut : barre cachée, document dans tout le panneau, bouton de sortie seul ; le bouton de sortie rend l’Édition, le curseur dans le document',
+    description: 'Depuis l’Édition, « Lecture épurée » cochée, le bouton Mode lecture affiche la Lecture sans la barre du haut : barre cachée, document dans tout le panneau, bouton de sortie seul ; le bouton de sortie rend l’Édition, le curseur dans le document',
     run: async (h) => {
       await setup(h);
       const barBefore = bar().getBoundingClientRect().height;
-      await clickRow();
+      await enterClean();
       const on = {
         active: CleanReading.isActive(), bodyClass: document.body.classList.contains('pp-clean-reading'), reading: inRead(), readActive: el('btn-mode-read').classList.contains('active'),
         barShown: barShown(), barHeight: bar().getBoundingClientRect().height, exitShown: exitShown(), readerTop: reader().getBoundingClientRect().top,
@@ -144,7 +288,7 @@
       reader().scrollTop = 240;
       await sleep(150);
       const scrolled = reader().scrollTop;
-      await clickRow();
+      await enterClean();
       const entered = { active: CleanReading.isActive(), scroll: reader().scrollTop, reading: inRead(), tall: reader().scrollHeight > reader().clientHeight };
       // Un fil de commentaire ouvert prend son Échap d'abord : la sortie attend.
       const thread = document.createElement('div');
@@ -182,7 +326,7 @@
     description: 'Dans la Lecture épurée, une autre ligne de la table met le document à jour sans quitter l’état ; une demande d’un autre mode (js/main.js:switchMode) en sort sans autre geste, la barre revient avec l’Édition',
     run: async (h) => {
       await setup(h);
-      await clickRow();
+      await enterClean();
       const first = readerText().indexOf('Bonjour Dupont') !== -1;
       stub().fireRecord({ id: 2, Nom: 'Martin' }, TABLE);
       await waitFor(() => readerText().indexOf('Bonjour Martin') !== -1, 4000);
@@ -200,16 +344,26 @@
 
   cases.push({
     id: 'clean_reading_keyboard_entry_gives_the_focus_back_and_texts_are_in_french',
-    description: 'Entrée au clavier (Entrée sur la ligne) : à la sortie, le focus revient au bouton Mode lecture ; entrée à la souris : il n’y revient pas (le menu s’ouvrirait) ; la ligne, le bouton de sortie et son info-bulle sont en français (l’anglais : page qui démarre en anglais, plus bas)',
+    description: 'Au clavier : Entrée ou Espace sur une ligne la coche seulement (la touche ne défile pas la page), Entrée sur le bouton Mode lecture fait ce que la ligne cochée dit, et à la sortie le focus revient au bouton ; à la souris : il n’y revient pas (le menu s’ouvrirait) ; les lignes, le bouton de sortie et son info-bulle sont en français (l’anglais : page qui démarre en anglais, plus bas)',
     run: async (h) => {
       await setup(h);
       el('btn-mode-read').click();
       await waitFor(inRead, 4000);
       await sleep(400);
-      // Clavier : le focus est sur la ligne (Tab depuis le bouton), Entrée entre ; Échap sort et rend le focus au bouton Mode lecture.
-      const row = el('v2-btn-clean-reading');
-      row.focus();
-      row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      // Clavier : le focus est sur une ligne (Tab depuis le bouton), Entrée ou Espace la coche, rien de plus ; le bouton Mode lecture (un `click()` nu : `detail` à 0, comme Entrée) fait alors la Lecture épurée ;
+      // Échap sort et rend le focus au bouton Mode lecture.
+      const simple = el(ROW_SIMPLE);
+      const row = el(ROW_CLEAN);
+      const press = (target, key) => { target.focus(); return !target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); }; // vrai : la touche est retenue (preventDefault)
+      const enterTicked = press(row, 'Enter');
+      await sleep(250);
+      const afterEnter = { held: enterTicked, choice: CleanReading.getChoice(), rows: rowsState(), active: CleanReading.isActive(), reading: inRead(), barShown: barShown() };
+      const spaceTicked = press(simple, ' ');
+      await sleep(150);
+      const afterSpace = { held: spaceTicked, choice: CleanReading.getChoice(), rows: rowsState(), active: CleanReading.isActive() };
+      press(row, 'Enter');
+      el('btn-mode-read').focus();
+      el('btn-mode-read').click();
       await waitFor(() => CleanReading.isActive(), 4000);
       await sleep(250);
       const keyboardOn = CleanReading.isActive();
@@ -219,19 +373,21 @@
       const keyboardBack = { active: CleanReading.isActive(), focus: document.activeElement && document.activeElement.id, reading: inRead() };
       // Souris : la ligne ne prend pas le focus et la sortie ne le rend pas au bouton.
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-      await clickRow();
+      await enterClean();
       const mouseOn = CleanReading.isActive();
       exitButton().click();
       await waitFor(() => !CleanReading.isActive(), 3000);
       await sleep(200);
       const mouseBack = { active: CleanReading.isActive(), focus: document.activeElement && document.activeElement.id, reading: inRead() };
-      // Langue : la ligne et le titre du menu, puis le bouton de sortie (aria-label et title).
-      const fr = { row: el('v2-btn-clean-reading').textContent, exitTitle: exitButton().title, exitAria: exitButton().getAttribute('aria-label') };
+      // Langue : les lignes et le titre du menu, puis le bouton de sortie (aria-label et title).
+      const fr = { simple: el(ROW_SIMPLE).textContent, row: el(ROW_CLEAN).textContent, exitTitle: exitButton().title, exitAria: exitButton().getAttribute('aria-label') };
       await finish();
-      const pass = keyboardOn && !keyboardBack.active && keyboardBack.focus === 'btn-mode-read' && keyboardBack.reading
+      const pass = afterEnter.held && afterEnter.choice === 'clean' && afterEnter.rows === 'false,true' && !afterEnter.active && afterEnter.reading && afterEnter.barShown
+        && afterSpace.held && afterSpace.choice === 'simple' && afterSpace.rows === 'true,false' && !afterSpace.active
+        && keyboardOn && !keyboardBack.active && keyboardBack.focus === 'btn-mode-read' && keyboardBack.reading
         && mouseOn && !mouseBack.active && mouseBack.focus !== 'btn-mode-read' && mouseBack.reading
-        && fr.row === 'Lecture épurée' && fr.exitTitle === 'Quitter la lecture épurée (Échap)' && fr.exitAria === 'Quitter la lecture épurée (Échap)';
-      return { pass, notes: JSON.stringify({ keyboardOn, keyboardBack, mouseOn, mouseBack, fr }) };
+        && fr.simple === 'Lecture simple' && fr.row === 'Lecture épurée' && fr.exitTitle === 'Quitter la lecture épurée (Échap)' && fr.exitAria === 'Quitter la lecture épurée (Échap)';
+      return { pass, notes: JSON.stringify({ afterEnter, afterSpace, keyboardOn, keyboardBack, mouseOn, mouseBack, fr }) };
     },
   });
 
@@ -239,12 +395,12 @@
   cases.push({
     id: 'clean_reading_texts_are_in_english_on_a_page_that_starts_in_english',
     lang: 'en',
-    description: 'Page qui démarre en anglais : la ligne du menu (« Clean reading »), le bouton de sortie, son info-bulle et son nom accessible (« Exit clean reading (Esc) ») sont en anglais',
+    description: 'Page qui démarre en anglais : les lignes du menu (« Standard reading », « Clean reading »), le bouton de sortie, son info-bulle et son nom accessible (« Exit clean reading (Esc) ») sont en anglais',
     run: async (h) => {
       await setup(h);
-      const en = { row: el('v2-btn-clean-reading').textContent, exitTitle: exitButton().title, exitAria: exitButton().getAttribute('aria-label') };
+      const en = { simple: el(ROW_SIMPLE).textContent, row: el(ROW_CLEAN).textContent, exitTitle: exitButton().title, exitAria: exitButton().getAttribute('aria-label') };
       await finish();
-      const pass = I18n.getLang() === 'en' && en.row === 'Clean reading' && en.exitTitle === 'Exit clean reading (Esc)' && en.exitAria === 'Exit clean reading (Esc)';
+      const pass = I18n.getLang() === 'en' && en.simple === 'Standard reading' && en.row === 'Clean reading' && en.exitTitle === 'Exit clean reading (Esc)' && en.exitAria === 'Exit clean reading (Esc)';
       return { pass, notes: JSON.stringify({ en }) };
     },
   });
@@ -259,7 +415,7 @@
       banner.hidden = false; // ce que js/main.js:syncMacroReturnBar fait quand le modèle à l'écran a été ouvert par le stylo du résumé d'un macro-modèle
       await sleep(80);
       const before = shown();
-      await clickRow();
+      await enterClean();
       const during = { shown: shown(), active: CleanReading.isActive() };
       await CleanReading.exit();
       await sleep(300);
@@ -281,7 +437,7 @@
       banner.hidden = false; // ce que js/main.js:syncLinkedReturnBar fait quand le modèle à l'écran a été ouvert par « Ouvrir le modèle » du menu du lien d'un tableau lié
       await sleep(80);
       const before = shown();
-      await clickRow();
+      await enterClean();
       const during = { shown: shown(), active: CleanReading.isActive() };
       await CleanReading.exit();
       await sleep(300);

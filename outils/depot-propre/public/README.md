@@ -108,7 +108,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Renommages suivis : quand une table ou une colonne est renommée dans Grist, les modèles suivent
 
 **Lecture, enregistrement et collaboration**
-- Mode lecture (le document rempli avec la ligne sélectionnée) et lecture épurée, sans barre d'outils
+- Mode lecture (le document rempli avec la ligne sélectionnée) et lecture épurée, sans barre d'outils (le menu du bouton Mode lecture coche « Lecture simple » ou « Lecture épurée », comme celui du bouton Exporter : le bouton fait ce que la ligne cochée dit)
 - Enregistrement automatique avec détection d'un conflit si quelqu'un d'autre a enregistré le modèle
   entre-temps
 - Historique des versions d'un modèle (menu du bouton Enregistrer) : qui a changé quoi et quand, aperçu de
@@ -583,7 +583,7 @@ GitHub Pages, with no backend and no build step.
 - Tracked renames: when a table or a column is renamed in Grist, templates follow
 
 **Reading, saving and collaboration**
-- Reading mode (the document filled with the selected row) and clean reading, without the toolbar
+- Reading mode (the document filled with the selected row) and clean reading, without the toolbar (the Reading mode button's menu ticks "Standard reading" or "Clean reading", like the Export button's: the button does what the ticked row says)
 - Autosave with conflict detection if someone else saved the template in the meantime
 - Version history of a template (Save button menu): who changed what and when, a preview of each version,
   "Compare" with the current version (green for what the version has in addition, struck-through red for

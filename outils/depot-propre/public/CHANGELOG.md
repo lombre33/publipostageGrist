@@ -1418,6 +1418,20 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ### Modifié
 
+- **Le menu du bouton « Mode lecture » se coche comme celui d'« Exporter » : « Lecture simple » au-dessus de « Lecture épurée », et le bouton fait ce que la ligne cochée dit** (demande du 02/11 : « harmoniser l'UI avec le
+  bouton télécharger, donc rajouter mode lecture simple au-dessus de mode lecture épuré dans le drop down, le premier est sélectionné par défaut et la sélection dicte l'action réalisée par le bouton ») : le menu qui
+  s'ouvre au survol du bouton Mode lecture a maintenant deux lignes à cocher, **« Lecture simple »** (cochée au départ) puis **« Lecture épurée »**, avec la même petite coche devant le libellé que le menu Exporter.
+  Cocher une ligne ne fait que la cocher (rien ne change à l'écran, le curseur reste dans le texte) ; c'est le **bouton Mode lecture** qui fait ce que la ligne cochée dit : la Lecture comme toujours, ou la Lecture épurée
+  (le document seul, sans la barre du haut ; Échap ou le bouton rond du coin pour en sortir), depuis l'Édition comme depuis la Lecture. **Alt+L**, qui clique le bouton, fait de même. Avant, la ligne « Lecture épurée » entrait
+  d'un clic dans l'état épuré. La sortie rend le mode d'où l'on venait et le choix est gardé d'une entrée à l'autre, pour la session seulement : à chaque ouverture du widget, « Lecture simple » est cochée (un état
+  d'affichage, comme le zoom : rien n'est écrit, rien n'entre dans Annuler). La barre d'outils n'a pas une icône de plus. Le code est dans `js/clean-reading.js` (`choose`, `getChoice`, `readButton`), `index.html` et le clic du
+  bouton dans `js/main.js` ; les textes (`toolbar.readSimple`) sont en français et en anglais ; les essais de `cleanReading` et de `cleanReadingMouse` (700×400, à la vraie souris et au vrai clavier, clair et sombre) couvrent la
+  coche, le clic qui ne fait que cocher, le bouton, Alt+L, l'Édition et la Lecture, et le registre de Ctrl+Z classe la ligne en affichage.
+  *🇬🇧 The Reading mode button's menu now ticks like Export's: "Standard reading" above "Clean reading", and the button does what the ticked row says. The menu that opens on hover has two tickable rows, "Standard reading"
+  (ticked at the start) then "Clean reading", with the same small check mark before the label as the Export menu. Ticking a row only ticks it (nothing changes on screen, the caret stays in the text); the Reading mode button
+  does what the ticked row says: Reading as always, or Clean reading (the document alone, without the top bar; Esc or the round corner button to leave), from Editing as from Reading. Alt+L, which clicks the button, does the
+  same. Before, the "Clean reading" row entered the clean state in one click. Leaving returns to the mode you came from and the choice is kept from one entry to the next, for the session only: each time the widget opens,
+  "Standard reading" is ticked (a display state, like the zoom: nothing is written, nothing goes into Undo). The toolbar has no extra icon.*
 - **La Boucle peut suivre la vue d'à côté : un troisième choix dans « Lignes de la table à utiliser »** (demande du 23/10 : « on peut laisser le choix à l'utilisateur dans la modale des boucles ? », à la suite de
   l'export « Toutes les lignes de la vue ») : dans la fenêtre « Boucle » d'une boucle sur toutes les lignes de la table de la page, la liste **« Lignes de la table à utiliser »** a maintenant jusqu'à trois choix :
   **« Comme le widget (son filtre et son tri) »** (celui d'avant, toujours choisi d'office ; il disait « Comme la vue Grist », deux mots devenus ambigus avec deux vues), **« Comme la vue « Clients de Lyon » liée

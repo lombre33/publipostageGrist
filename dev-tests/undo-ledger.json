@@ -136,6 +136,7 @@
     "#v2-font-chip": {"class": "view", "start": "para"},
     "#btn-mode-edit": {"class": "view", "start": "para"},
     "#btn-mode-read": {"class": "view", "start": "para"},
+    "#v2-btn-read-simple": {"class": "view", "start": "para"},
     "#v2-btn-clean-reading": {"class": "view", "start": "para"},
     "#btn-exit-clean-reading": {"class": "view", "start": "para"},
     "#v2-btn-settings": {"class": "view", "start": "para"},

@@ -3,8 +3,11 @@
 //    <body>. css/clean-reading.css masque alors #toolbar-top (barre, champs de l'email, barre de mise en forme) et le bandeau « Revenir au
 //    macro-modèle », et montre le bouton de sortie. La Lecture se dessine, se met en page, se commente et se suit d'une ligne à l'autre de la table
 //    exactement comme sans lui : seule la place change. Rien ne s'écrit, la personne en lecture seule y a donc droit comme les autres ;
-//  - entrée : la ligne « Lecture épurée » du menu au survol du bouton Mode lecture (la barre d'outils reste gelée, aucune icône de plus). Depuis
-//    l'Édition, le mode Lecture est affiché d'abord ;
+//  - entrée : le menu au survol du bouton Mode lecture a deux lignes à cocher, « Lecture simple » (cochée au départ) et « Lecture épurée », comme le menu du
+//    bouton Exporter : la ligne cochée dicte l'action du bouton. Cocher une ligne ne fait rien d'autre que la cocher ; c'est le bouton Mode lecture - et Alt+L,
+//    qui le clique - qui fait ce que la ligne cochée dit : la Lecture comme toujours, ou la Lecture épurée. La barre d'outils reste gelée, aucune icône de
+//    plus. Depuis l'Édition, le mode Lecture est affiché d'abord. Le choix est celui de la session (un état d'affichage, comme le zoom : ni gardé d'une
+//    ouverture du widget à l'autre, ni dans Annuler) et repart de « Lecture simple » ;
 //  - sortie : le bouton du coin haut droit, ou Échap (sauf sous une fenêtre ou un fil de commentaire ouvert : ils prennent leur Échap d'abord). Elle
 //    rend le mode d'où l'on venait ; de retour en Édition, le curseur est dans le document. Revenu en Lecture, le focus va au bouton Mode lecture
 //    seulement si l'on était entré au clavier : à la souris, un menu au survol dont le bouton reprend le focus s'ouvre et reste ouvert
@@ -20,16 +23,32 @@
 // prévient d'un changement de mode.
 const CleanReading = (function () {
   const BODY_CLASS = 'pp-clean-reading';
-  const ROW_ID = 'v2-btn-clean-reading';
+  const ROWS = '#v2-read-flyout .v2-hover-row[data-read-choice]'; // les deux lignes à cocher du menu du bouton Mode lecture (index.html)
   const EXIT_ID = 'btn-exit-clean-reading';
   const READ_BUTTON_ID = 'btn-mode-read';
+  const CHOICES = ['simple', 'clean']; // « Lecture simple », « Lecture épurée » : la première est cochée au départ
   let host = null;       // { getMode, switchMode, focusEditor } : ce que js/main.js fournit
   let active = false;
   let returnMode = 'read'; // le mode d'où l'on est venu, rendu à la sortie
   let focusBack = null;  // le bouton Mode lecture, quand on est entré au clavier
   let busy = false;
+  let choice = CHOICES[0]; // la ligne cochée : ce que fait le bouton Mode lecture
 
   function isActive() { return active; }
+
+  // La ligne cochée du menu du bouton Mode lecture, `aria-checked` de chaque ligne (la coche devant le libellé est celle du menu Exporter,
+  // css/editor-v2.css : `v2-hover-row-check-start`).
+  function getChoice() { return choice; }
+  function syncRows() {
+    document.querySelectorAll(ROWS).forEach(row => row.setAttribute('aria-checked', row.dataset.readChoice === choice ? 'true' : 'false'));
+  }
+  // Coche une ligne, sans rien faire d'autre : ni changer de mode, ni entrer dans l'état épuré, rien d'écrit. Rend faux pour un choix inconnu.
+  function choose(value) {
+    if (CHOICES.indexOf(value) === -1) return false;
+    choice = value;
+    syncRows();
+    return true;
+  }
 
   function show() { document.body.classList.add(BODY_CLASS); }
   function hide() { document.body.classList.remove(BODY_CLASS); }
@@ -60,6 +79,14 @@ const CleanReading = (function () {
     // disparaître, rien ne se taperait.
     if (returnMode === 'edit') { host.focusEditor(); return; }
     if (back && back.isConnected) back.focus({ preventScroll: true });
+  }
+
+  // Le clic du bouton Mode lecture (js/main.js) et Alt+L, qui le clique : ce que dit la ligne cochée du menu, comme le bouton Exporter lance l'option cochée du sien.
+  // « Lecture simple » : le mode Lecture, comme toujours ; « Lecture épurée » : la Lecture sans la barre, depuis le mode où l'on est (l'Édition ou la Lecture).
+  // `viaKeyboard` : le geste vient du clavier (`detail` à 0), le focus est rendu au bouton à la sortie.
+  function readButton(viaKeyboard) {
+    if (!host) return Promise.resolve();
+    return choice === 'clean' ? enter(!!viaKeyboard) : host.switchMode('read');
   }
 
   // `state` = AccessRights.getStatus().state. L'attente (pending : le calcul tourne, Grist lent) et la table des droits illisible (error : droits
@@ -122,18 +149,19 @@ const CleanReading = (function () {
 
   function wire(options) {
     host = options;
-    const row = document.getElementById(ROW_ID);
-    if (row) {
+    document.querySelectorAll(ROWS).forEach(row => {
       // Une ligne de menu est un <span tabindex="0"> : la souris la focaliserait, et son menu (:focus-within) resterait ouvert une fois la souris
-      // partie - même geste que les lignes du menu Enregistrer (js/main.js:wireSaveMenu). Entrée et Espace font ce que fait le clic.
+      // partie - même geste que les lignes du menu Enregistrer (js/main.js:wireSaveMenu). Entrée et Espace font ce que fait le clic : cocher la ligne,
+      // comme dans le menu Exporter (js/main.js:wireExportMenus) ; c'est le bouton Mode lecture qui agit.
       row.addEventListener('mousedown', event => event.preventDefault());
-      row.addEventListener('click', () => enter(false));
+      row.addEventListener('click', () => choose(row.dataset.readChoice));
       row.addEventListener('keydown', event => {
         if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
-        enter(true);
+        choose(row.dataset.readChoice);
       });
-    }
+    });
+    syncRows();
     const exitButton = document.getElementById(EXIT_ID);
     if (exitButton) {
       exitButton.addEventListener('click', exit);
@@ -143,5 +171,5 @@ const CleanReading = (function () {
     applyTexts();
   }
 
-  return { wire, exit, isActive, onModeChange, isAnswered, wouldOpenForReadOnly, openForReadOnly };
+  return { wire, exit, isActive, getChoice, choose, readButton, onModeChange, isAnswered, wouldOpenForReadOnly, openForReadOnly };
 })();

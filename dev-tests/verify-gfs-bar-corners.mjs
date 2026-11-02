@@ -143,9 +143,13 @@ if (wanted(3)) {
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 4) La sortie de la Lecture épurée.
 const EXIT = '#btn-exit-clean-reading';
-// Ouvre la Lecture épurée (le clic de la ligne du menu du bouton Mode lecture : le menu s'ouvre au survol, mais un cadre de 160 px de haut n'a pas la place de le montrer entier) et rend le rectangle du bouton de sortie.
+// Ouvre la Lecture épurée (le clic de la ligne « Lecture épurée » du menu du bouton Mode lecture, qui la coche, puis le clic du bouton, qui fait ce que la ligne cochée dit : le menu s'ouvre au survol, mais un cadre
+// de 160 px de haut n'a pas la place de le montrer entier) et rend le rectangle du bouton de sortie.
 async function enterClean({ app }) {
-  await app.evaluate(() => { document.getElementById('v2-btn-clean-reading').click(); });
+  await app.evaluate(() => {
+    document.getElementById('v2-btn-clean-reading').click();
+    document.getElementById('btn-mode-read').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })); // un clic de souris (`detail` à 1), le focus ne bouge pas
+  });
   await app.waitForFunction(() => CleanReading.isActive() && document.body.classList.contains('pp-clean-reading'), null, { timeout: 6000 });
   await sleep(250);
   return rectOf(app, EXIT);

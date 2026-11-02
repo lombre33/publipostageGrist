@@ -202,12 +202,13 @@
       <span class="bar-sep"></span>
       <div class="mode-toggle">
         <button id="btn-mode-edit" class="active" aria-label="Mode édition" data-tip="Mode édition" data-i18n-aria="toolbar.modeEdit" data-i18n-tip="toolbar.modeEdit"></button>
-        <!-- Mode lecture : un clic affiche la Lecture, comme avant ; son menu au survol ajoute « Lecture épurée » (js/clean-reading.js). Comme Enregistrer et Exporter, le bouton n'a pas de data-tip : l'info-bulle se retirerait dès l'ouverture du menu, le titre du menu dit le bouton et sa touche (js/shortcuts.js). -->
+        <!-- Mode lecture : comme Exporter, son menu au survol a deux lignes à cocher, « Lecture simple » (cochée au départ) et « Lecture épurée », et le bouton fait ce que la ligne cochée dit (js/clean-reading.js : cocher ne change rien d'autre). Comme Enregistrer et Exporter, le bouton n'a pas de data-tip : l'info-bulle se retirerait dès l'ouverture du menu, le titre du menu dit le bouton et sa touche (js/shortcuts.js). -->
         <span class="v2-hover-group" id="v2-read-group" data-close-on-click>
           <button id="btn-mode-read" aria-label="Mode lecture" data-i18n-aria="toolbar.modeRead"></button>
           <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-read-flyout" role="menu" aria-label="Mode lecture" data-i18n-aria="toolbar.modeRead">
             <span class="v2-hover-flyout-label" data-i18n="toolbar.modeRead">Mode lecture</span>
-            <span class="v2-hover-row" id="v2-btn-clean-reading" role="menuitem" tabindex="0" data-i18n="toolbar.cleanReading">Lecture épurée</span>
+            <span class="v2-hover-row v2-hover-row-check-start" id="v2-btn-read-simple" role="menuitemradio" aria-checked="true" tabindex="0" data-read-choice="simple" data-i18n="toolbar.readSimple">Lecture simple</span>
+            <span class="v2-hover-row v2-hover-row-check-start" id="v2-btn-clean-reading" role="menuitemradio" aria-checked="false" tabindex="0" data-read-choice="clean" data-i18n="toolbar.cleanReading">Lecture épurée</span>
           </span>
         </span>
       </div>
@@ -835,7 +836,7 @@
 <script src="js/space-gap.js?v=0.2"></script>
 <script src="js/reader-mode.js?v=0.171"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
-<script src="js/i18n.js?v=0.300"></script>
+<script src="js/i18n.js?v=0.301"></script>
 <script src="js/shortcuts.js?v=0.24"></script>
 <script src="js/page-layout.js?v=0.25"></script>
 <script src="js/page-sections.js?v=0.3"></script>
@@ -997,10 +998,10 @@
 <script src="js/pdf-protection-dialog.js?v=0.3"></script>
 <script src="js/page-sense-edit.js?v=0.2"></script>
 <script src="js/orientation-toggle.js?v=0.16"></script>
-<script src="js/clean-reading.js?v=0.7"></script>
+<script src="js/clean-reading.js?v=0.8"></script>
 <script src="js/page-zoom.js?v=0.12"></script>
 <script src="js/field-codec.js?v=0.6"></script>
 <script src="js/field-editor.js?v=0.7"></script>
-<script src="js/main.js?v=0.199"></script>
+<script src="js/main.js?v=0.200"></script>
 </body>
 </html>
