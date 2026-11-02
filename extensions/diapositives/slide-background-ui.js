@@ -17,16 +17,16 @@ const SlideBackgroundUi = (function () {
   let state = null;                 // { indexes, draft, onClose } : ce que la fenêtre règle ; `draft` : #rrggbb, ou '' pour « sans fond »
 
   const editor = () => EditorCore.getEditor();
-  // Une pastille de la palette : celle de js/color-palette.js (mêmes classes, donc même dessin, même coche et même marque que ColorPalette.mark).
-  function swatch(color) {
-    const name = color.toUpperCase();
+  // Une pastille de la palette : celle de js/color-palette.js (mêmes classes, donc même dessin, même coche et même marque que ColorPalette.mark). `role` : le nom du réglage d'une couleur du thème, devant son code.
+  function swatch(color, role) {
+    const name = (typeof role === 'string' && role ? role + ' · ' : '') + color.toUpperCase();
     return `<button type="button" class="cp-swatch" data-color="${color}" style="--swatch:${color};--ink:${ColorMath.inkOn(color)}" title="${name}" aria-label="${name}" aria-pressed="false"></button>`;
   }
   const groupOf = (html, label) => `<div class="pp-slide-background-colors" role="group" aria-label="${label}">${html}</div>`;
   // Les couleurs gardées (js/color-store.js), une rangée chacune quand elle en a ; relues à chaque ouverture et après « Personnalisé… », qui en garde une de plus.
   function savedHtml() {
-    return ColorStore.scopes().filter(scope => scope.colors.length).map(scope => `<div class="cp-row" role="group" aria-label="${scope.label}"><div class="cp-row-label" title="${scope.hint}">${scope.label}</div>`
-      + `<div class="cp-row-list pp-slide-background-colors">${scope.colors.map(swatch).join('')}</div></div>`).join('');
+    return ColorStore.rows().filter(scope => scope.colors.length).map(scope => `<div class="cp-row" role="group" aria-label="${scope.label}"><div class="cp-row-label" title="${scope.hint}">${scope.label}</div>`
+      + `<div class="cp-row-list pp-slide-background-colors">${scope.colors.map((color, at) => swatch(color, scope.names && scope.names[at])).join('')}</div></div>`).join('');
   }
 
   // La fenêtre

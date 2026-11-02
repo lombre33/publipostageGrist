@@ -814,6 +814,14 @@
 #v2-page-flyout .v2-segmented-btn.is-disabled:hover { background: transparent; }
 /* Le choix retenu quand le menu est grisé (un export en cours) garde son fond et son texte blanc : seul son opacité baisse. */
 #v2-page-flyout .v2-segmented-btn.active.is-disabled, #v2-page-flyout .v2-segmented-btn.active.is-disabled:hover { background: var(--accent-solid); color: #fff; opacity: .55; }
+/* Le menu Page d'une présentation (rapports de la diapositive, sens, formats, « Format libre… », « Thème… », « Filigrane… ») : neuf lignes sous deux blocs, 401 px de haut à 27 px par ligne et 3 px d'écart, sous le bas d'un panneau
+   de 700 x 400 (celui de Grist), et plus encore avec une police du système aux lignes hautes. Dans un panneau bas il se resserre comme le menu « Type d'export » plus bas : lignes de 24 px (la taille minimale d'une cible,
+   WCAG 2.5.8) dont la hauteur de texte est fixée, pour que la police du système ne la fasse pas varier d'un ordinateur à l'autre, et 2 px d'écart ; il finit vers 360 px et garde toutes ses lignes, sans défilement. Le menu
+   d'un document et celui d'un macro-modèle, plus courts, gardent leur dessin. Gardé par `slidesHarmony` et `slideThemeMouse`. */
+@media (max-height: 470px) {
+  #v2-page-flyout.v2-page-flyout-ratios { gap: 2px; }
+  #v2-page-flyout.v2-page-flyout-ratios .v2-hover-row { padding: 4px 9px; line-height: 16px; }
+}
 /* Bloc « Numérotation des titres » du flyout Titre : mêmes `.v2-segmented` et `.v2-segmented-btn` que la pastille d'en-tête et de pied, pour ne
    pas inventer un second style de contrôle segmenté dans ce fichier. */
 .v2-numbering-block { padding: 6px 9px 4px; }

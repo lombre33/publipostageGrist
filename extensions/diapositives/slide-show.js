@@ -354,7 +354,7 @@ const SlideShow = (function () {
     if (run || launching) return;
     if (off) { SlidesEntry.explainOff(); return; }
     closeMenu(false);
-    const html = SlidesEntry.outputHtml('presentation', Editor.getHTML());
+    const html = SlidesEntry.outputHtml('presentation', Editor.getHTML(), { theme: PageLayout.getTheme() });
     const headerFooter = Editor.getHeaderFooterData();
     const how = { startPage: fromCurrent ? firstPageOf(currentSlide()) : 0, fromCurrent: !!fromCurrent };
     const focusBack = document.activeElement;

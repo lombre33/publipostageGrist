@@ -466,10 +466,12 @@ const MainToolbar = (function () {
   function syncTextStyleChips() {
     // Dans un titre dont le niveau a un style (js/heading-styles.js), la police, la taille et les couleurs de ce style, sous celles que la sélection porte elle-même.
     const textStyleAttrs = HeadingStyles.withStyleAt(editor.state, Object.assign({}, TypingStyle.commonStyle(editor.state.selection), editor.getAttributes('textStyle')));
-    EditorCore.setColorIcon('v2-text-color-icon', textStyleAttrs.color || null);
+    // Dans une présentation themée (js/slide-theme.js), la police et la couleur du thème sont celles du texte que rien ne change : la barre les montre au lieu de Roboto et du noir.
+    const themed = SlideTheme.defaultsAt(editor.state);
+    EditorCore.setColorIcon('v2-text-color-icon', textStyleAttrs.color || (themed && themed.color) || null);
     EditorCore.setColorIcon('v2-highlight-icon', textStyleAttrs.backgroundColor || null);
     // Sans marque explicite, la police et la taille réellement rendues (Roboto, 10.5pt : .tiptap dans css/editor-v2.css), plutôt qu'un champ vide.
-    setChipText('v2-font-chip-val', textStyleAttrs.fontFamily || 'Roboto');
+    setChipText('v2-font-chip-val', textStyleAttrs.fontFamily || (themed && themed.fontFamily) || 'Roboto');
     setChipText('v2-size-chip-val', textStyleAttrs.fontSize || '10.5pt');
   }
   function setChipText(id, value) {
@@ -629,6 +631,8 @@ const MainToolbar = (function () {
   // Chaque bouton appelle directement une commande TipTap sur la sélection réelle, sans avoir à savoir si elle est dans une case ou une colonne.
   function wireToolbar() {
     applyToolbarIcons();
+    // Le thème de la présentation change (sa fenêtre, Ctrl+Z) : la police et la couleur que la barre montre par défaut changent avec lui, sans que le curseur ait bougé.
+    document.addEventListener('pp:themeChanged', () => { if (editor) syncToolbarState(); });
     const bind = (id, fn) => { const el = byId(id); if (el) el.addEventListener('click', fn); };
     bind('v2-btn-bold', () => editor.chain().focus().toggleBold().run());
     bind('v2-btn-italic', () => editor.chain().focus().toggleItalic().run());

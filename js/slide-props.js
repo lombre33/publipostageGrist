@@ -15,7 +15,8 @@
 //  - Le FOND se dessine dans l'éditeur par le repère lui-même (css/free-frame.css : un pseudo-élément de la taille de la page, sous le texte, posé depuis le coin de la page comme un cadre
 //    libre) ; les miniatures en copient le rendu. Il couvre la page où la diapositive s'ouvre (comme un cadre libre) : ce que la diapositive déborde sur une deuxième page reste blanc.
 //    Les sorties le voient comme un cadre libre de la page entière, sans trait ni texte, rangé avant les autres (forOutput) : la Lecture, le diaporama et l'impression le peignent sous
-//    le texte, le PDF au fond de sa page, le Word en forme « derrière le texte ».
+//    le texte, le PDF au fond de sa page, le Word en forme « derrière le texte ». Le thème de la présentation (js/slide-theme.js) donne ce même fond à toutes les diapositives qui n'ont pas le leur : à l'écran par
+//    la feuille de l'éditeur (css/slide-theme.css), dans les sorties par `forOutput` (option `background`, `withPaper` : un repère posé ou complété à l'ouverture de chaque diapositive, avant qu'il devienne cadre).
 //  - Les NOTES ne se voient nulle part ailleurs que dans leur fenêtre : le repère s'en va des sorties (forOutput, strip) avec leur texte, si bien que ni la Lecture, ni le diaporama, ni
 //    l'impression, ni le PDF, ni le Word, ni le HTML, ni le Markdown, ni les e-mails ne les portent. Seul l'export PowerPoint (js/pptx-export.js) garde le repère (`keepProps` de
 //    SlidesEntry.outputHtml) : ses notes y sont le volet « Notes » de la diapositive, sa transition celle de PowerPoint, son fond le fond de la diapositive. Elles suivent leur diapositive (la déplacer, la dupliquer, la copier, l'importer ou la
@@ -418,13 +419,35 @@ const SlideProps = (function () {
   // Le HTML que reçoivent la Lecture et les exports : le repère s'en va, et le fond de sa diapositive devient, à sa place, le cadre qui le peint (FreeFrame.backgroundHtml : la page entière,
   // sans texte, avant les cadres libres de la diapositive, qui sont donc au-dessus de lui). Une diapositive sans fond n'a rien de plus. `anchors` : la diapositive qui est la cible d'un lien
   // (son signet, js/anchors.js) y laisse un bloc vide de hauteur nulle qui porte son adresse (`data-anchor`), que la Lecture amène en haut de la zone qui défile.
-  function forOutput(html, { anchors = false } = {}) {
-    return rewrite(html, (el) => {
+  function forOutput(html, { anchors = false, background = '' } = {}) {
+    const paper = background && html ? colorOf(background) : '';
+    return rewrite(paper ? withPaper(String(html == null ? '' : html), paper) : html, (el) => {
       const a = attrsOfEl(el);
       if (a.bg) el.after(Dom.inertTemplate(FreeFrame.backgroundHtml(a.bg)).content);
       if (anchors && a.anchorId) el.after(Dom.inertTemplate(anchorHtml(a)).content);
       el.remove();
     });
+  }
+  // Le HTML avec un fond pour CHAQUE diapositive : celle qui n'en a pas prend `paper` (#rrggbb), le fond que le thème de la présentation donne à toutes ses diapositives (js/slide-theme.js:paperOf, option `background` de
+  // forOutput). Une diapositive qui a un repère sans fond le reçoit dans ce repère, une qui n'a pas de repère en reçoit un en tête, celle qui a déjà son fond le garde. Le repère écrit ici est celui que l'éditeur écrirait pour
+  // ce fond (html) : forOutput en fait ensuite le cadre qui le peint, comme pour un fond choisi diapositive par diapositive. Les diapositives sont ce qu'il y a entre deux sauts de page de premier niveau (comme slidesOf).
+  function withPaper(text, paper) {
+    const body = HtmlSanitize.parseInert(text);
+    let opener = null; // le saut de page qui ouvre la diapositive en cours (null : la première)
+    let marker = null; // le premier repère de la diapositive en cours
+    const close = () => {
+      if (marker) {
+        if (!attrsOfEl(marker).bg) marker.setAttribute(DOM_ATTRS.bg, paper);
+        return;
+      }
+      const fresh = Dom.inertTemplate(html({ bg: paper })).content;
+      if (opener) opener.after(fresh); else body.prepend(fresh);
+    };
+    Array.from(body.children).forEach((block) => {
+      if (block.classList.contains('page-break-marker')) { close(); opener = block; marker = null; } else if (!marker && block.matches('div.' + CLASS)) marker = block;
+    });
+    close();
+    return body.innerHTML;
   }
   const escapeAttr = text => String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   // Le bloc qui porte l'adresse d'une diapositive dans la Lecture : rien de visible, aucune place.

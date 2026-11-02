@@ -27,16 +27,18 @@ const ColorPalette = (function () {
 
   const FORGET_ICON = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.2 2.2l5.6 5.6M7.8 2.2 2.2 7.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
 
-  // Une pastille. `pick` : le nom de l'action (« pick:<couleur> »). L'encre sert à la coche de la pastille choisie.
-  function swatch(color, pick, attributes) {
-    const name = color.toUpperCase();
+  // Une pastille. `pick` : le nom de l'action (« pick:<couleur> »). L'encre sert à la coche de la pastille choisie. `role` : le nom du réglage d'une couleur du thème (« Accent 1 »), devant son code dans l'infobulle.
+  function swatch(color, pick, attributes, role) {
+    const name = (role ? role + ' · ' : '') + color.toUpperCase();
     return `<button type="button" class="cp-swatch" data-action="${pick}:${color}" data-color="${color}" style="--swatch:${color};--ink:${ColorMath.inkOn(color)}" title="${name}" aria-label="${name}" aria-pressed="false"${attributes || ''}></button>`;
   }
 
   // Une rangée de couleurs gardées : son nom, puis ses pastilles, chacune avec sa croix (au survol : css/color-palette.css) qui la retire de la
   // rangée. Sans couleur, « Aucune » à côté du nom (une seule ligne : css/color-palette.css).
   function savedRow(scope, pick) {
-    const items = scope.colors.map(color => {
+    const items = scope.colors.map((color, at) => {
+      // La rangée du thème : des pastilles sans croix (hors de `.cp-saved`, que Suppr retire), chacune avec le nom de son réglage.
+      if (scope.readonly) return swatch(color, pick, '', scope.names && scope.names[at]);
       const forget = I18n.t('color.forget', { color: color.toUpperCase() });
       return `<span class="cp-saved" data-scope="${scope.id}">${swatch(color, pick, ' aria-keyshortcuts="Delete"')}`
         + `<button type="button" class="cp-forget" data-action="forget:${scope.id}:${color}" tabindex="-1" title="${forget}" aria-label="${forget}">${FORGET_ICON}</button></span>`;
@@ -63,7 +65,7 @@ const ColorPalette = (function () {
     const grid = ROWS.filter((row, at) => !opts.rows || opts.rows.includes(at)).map(row => row.map(color => swatch(color, opts.pickAction)).join('')).join('');
     return '<div class="cp-body"><div class="cp-main">' + (opts.head || '')
       + `<div class="cp-grid" role="group" aria-label="${I18n.t('color.palette')}">${grid}</div></div>`
-      + `<div class="cp-rows">${ColorStore.scopes().map(scope => savedRow(scope, opts.pickAction)).join('')}</div>`
+      + `<div class="cp-rows">${ColorStore.rows().map(scope => savedRow(scope, opts.pickAction)).join('')}</div>`
       + footer(opts) + '</div>'
       + (opts.tail || '');
   }

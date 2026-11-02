@@ -74,6 +74,9 @@ const FreeFrame = (function () {
   const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
   // L'aspect d'une ligne neuve : le trait de PowerPoint des formes, un peu plus épais (sa pointe en grandit avec lui : trois fois l'épaisseur). Une ligne a toujours une couleur et une épaisseur.
   const LINE_LOOK = { line: '#2f5597', lw: 3 };
+  // Une forme et une ligne neuves d'une présentation qui a un thème (js/slide-theme.js) prennent l'aspect de son premier accent : le fond clair et le trait foncé, au lieu du bleu ci-dessus. Sans thème, celui d'avant.
+  const shapeLook = () => (typeof SlideTheme !== 'undefined' && SlideTheme.shapeLook()) || SHAPE_LOOK;
+  const lineLook = () => (typeof SlideTheme !== 'undefined' && SlideTheme.lineLook()) || LINE_LOOK;
   const LINE_MIN_PT = 0.25;
   const LINE_MIN_LENGTH_PT = 1;
   const SNAP_STEP = Math.PI / 12;
@@ -643,7 +646,7 @@ const FreeFrame = (function () {
     const w = Math.min(size.w, Math.max(LIMITS.minW, page.width - 2 * STAY_ON_PAGE_PT));
     const h = Math.min(size.h, Math.max(LIMITS.minH, page.height - 2 * STAY_ON_PAGE_PT));
     const at = headRange(state.doc, slideStart).to;
-    const wanted = Object.assign({ x: (page.width - w) / 2, y: (page.height - h) / 2, w, h, shape: kind }, kind ? SHAPE_LOOK : {});
+    const wanted = Object.assign({ x: (page.width - w) / 2, y: (page.height - h) / 2, w, h, shape: kind }, kind ? shapeLook() : {});
     const attrs = freeSpot(normalized(wanted), takenIn(state.doc, slideStart), page);
     const type = state.schema.nodes[NODE];
     const node = kind ? type.create(attrs, state.schema.nodes.paragraph.create({ textAlign: 'center' })) : type.createAndFill(attrs);
@@ -690,7 +693,8 @@ const FreeFrame = (function () {
     const { state } = ed;
     const page = pageSize();
     const w = Math.min(ShapeGeometry.defaults(ShapeGeometry.LINE).w, Math.max(LINE_MIN_LENGTH_PT, page.width - 2 * STAY_ON_PAGE_PT));
-    const wanted = { x: (page.width - w) / 2, y: page.height / 2, w, h: 0, shape: ShapeGeometry.LINE, line: LINE_LOOK.line, lw: LINE_LOOK.lw, head: options.head, tail: options.tail };
+    const look = lineLook();
+    const wanted = { x: (page.width - w) / 2, y: page.height / 2, w, h: 0, shape: ShapeGeometry.LINE, line: look.line, lw: look.lw, head: options.head, tail: options.tail };
     const attrs = freeSpot(normalized(wanted), takenIn(state.doc, slideStart), page);
     const at = headRange(state.doc, slideStart).to;
     const tr = own(state.tr.insert(at, state.schema.nodes[LINE_NODE].create(attrs)));

@@ -27,6 +27,7 @@ const SlidesEntry = (function () {
   const TYPE = 'presentation';
   const FEATURE_KEY = 'slides.function';
   const TEXT_FEATURE_KEY = 'slides.text.function';
+  const THEME_FEATURE_KEY = 'slides.theme.function';
   const RETRY_AFTER_FAILURE_MS = 30000;
   const SLIDE_BREAK_ATTR = 'data-slide-break';
 
@@ -35,6 +36,7 @@ const SlidesEntry = (function () {
   let context = () => ({ type: 'document', editing: false });
   let strip = null;            // la bande, que l'extension pose une fois chargée (register)
   let textImport = null;       // le volet « une diapositive en texte », posé de même (registerTextImport)
+  let themeWindow = null;      // la fenêtre « Thème… », posée de même (registerTheme)
   let loadStarted = false;
   let failedAt = 0;
 
@@ -117,23 +119,29 @@ const SlidesEntry = (function () {
   // marque ses sauts de page `data-slide-break` : ReaderMode.trimTrailingBlankBlocks ne retire jamais un tel saut, ni la première ligne de la page qu'il ouvre. Un texte qui finit sur un
   // saut de page reçoit cette ligne, sans quoi la page ne s'ouvrirait pas (le PDF ouvre une page avec le bloc qui suit le saut). Le modèle enregistré n'est jamais touché.
   // `keepProps` (l'export PowerPoint, js/pptx-export.js) : le repère de chaque diapositive reste, avec sa transition, son fond et ses notes, que le fichier écrit lui-même. `anchors` (la Lecture) : une diapositive
-  // que vise un lien y laisse un bloc vide qui porte son adresse (SlideProps.forOutput).
-  function outputHtml(typeModele, html, { keepProps = false, anchors = false } = {}) {
+  // que vise un lien y laisse un bloc vide qui porte son adresse (SlideProps.forOutput). `theme` : le thème de CETTE présentation (sa clé `theme` de la page, PageLayout.getTheme pour celle de l'écran, celle de
+  // sa ligne pour un autre modèle d'un lot ou d'un macro-modèle) : ses polices et ses couleurs sont écrites en style sur le texte et les titres (SlideTheme.forOutput), et son fond est celui de chaque diapositive qui n'a pas le sien (SlideTheme.paperOf) ; sans thème, rien n'est ajouté.
+  function outputHtml(typeModele, html, { keepProps = false, anchors = false, theme = null } = {}) {
     // Un document ne montre jamais le repère de ses copies en texte (js/slide-copies.js), et une copie dont la diapositive a changé la reprend.
     if (html && !isPresentation(typeModele)) return SlideCopies.forOutput(html);
     if (!isPresentation(typeModele) || !html) return html;
     // Le repère d'une diapositive liée n'en sort jamais, et une diapositive que seule sa source a changée prend celle de la source (js/slide-links.js:forOutput).
     html = SlideLinks.forOutput(html);
-    // Ni celui de la transition d'une diapositive (js/slide-props.js) : le diaporama la lit dans le texte de l'éditeur. Son fond, lui, y devient le cadre qui le peint.
-    if (!keepProps) html = SlideProps.forOutput(html, { anchors });
+    // Ni celui de la transition d'une diapositive (js/slide-props.js) : le diaporama la lit dans le texte de l'éditeur. Son fond, lui, y devient le cadre qui le peint, et celui du thème (SlideTheme.paperOf) le
+    // cadre de chaque diapositive qui n'a pas le sien. L'export PowerPoint (`keepProps`) n'en écrit pas : le fond du thème est celui de son masque (js/pptx-export.js).
+    if (!keepProps) html = SlideProps.forOutput(html, { anchors, background: SlideTheme.paperOf(theme) });
     // Ni les objets masqués (js/free-frame.js : `data-ff-hidden`) ; l'export PowerPoint les écrit masqués.
     if (!keepProps) html = FreeFrame.withoutHidden(html);
+    // Le thème de la présentation : sa police et sa couleur sur le texte et les titres, la même chose qu'à l'écran (css/slide-theme.css).
+    if (theme) html = SlideTheme.forOutput(html, theme);
     const host = Dom.inertTemplate(html);
     const blocks = Array.from(host.content.children);
     const breaks = blocks.filter(block => block.classList.contains('page-break-marker'));
     if (!breaks.length) return html;
     breaks.forEach(block => block.setAttribute(SLIDE_BREAK_ATTR, ''));
-    if (blocks[blocks.length - 1].classList.contains('page-break-marker')) host.content.appendChild(document.createElement('p'));
+    // Le cadre du fond de la dernière diapositive ne compte pas : il se dessine sans texte, la page doit encore s'ouvrir sur une ligne.
+    const written = blocks.filter(block => !block.hasAttribute('data-ff-bg'));
+    if (written[written.length - 1].classList.contains('page-break-marker')) host.content.appendChild(document.createElement('p'));
     return host.innerHTML;
   }
 
@@ -280,6 +288,18 @@ const SlidesEntry = (function () {
     });
     return result.html;
   }
+  // Le thème de la présentation
+  // Posé par l'extension à son chargement (extensions/diapositives/slide-theme-ui.js) : { open(onClose), close(), isOpen() } ; la fenêtre « Thème… ». Le thème lui-même est du socle (js/slide-theme.js).
+  function registerTheme(next) { themeWindow = next; }
+  // La ligne « Thème… » du menu Page (js/orientation-toggle.js) : sans l'extension, elle explique ; avec elle, le code se charge d'abord (un échec le dit, le clic suivant réessaie), puis la fenêtre s'ouvre ; le clavier
+  // revient ensuite dans l'éditeur. Rien ne se passe hors de l'Édition d'une présentation : la ligne y est grisée, et un clic qui l'atteindrait quand même n'ouvre rien. Vrai quand la fenêtre est ouverte.
+  async function openTheme() {
+    const shown = context();
+    if (!isPresentation(shown.type) || !shown.editing) return false;
+    if (!(await ensureFor(TYPE, THEME_FEATURE_KEY)) || !themeWindow) return false;
+    themeWindow.open(() => { const editor = EditorCore.getEditor(); if (editor && !editor.isDestroyed) editor.view.focus(); });
+    return true;
+  }
   // Un geste grisé de la bande, l'extension éteinte : hébergé par GFS, sa fenêtre d'installation ; seul, la fenêtre qui dit qu'il faut passer par GFS.
   const explainOff = () => Extensions.explain(ID, FEATURE_KEY);
   const relayout = () => hooks.relayout();
@@ -291,6 +311,6 @@ const SlidesEntry = (function () {
   return {
     ID, TYPE, FEATURE_KEY, SLIDE_BREAK_ATTR, setHooks, setContext, isAvailable, reason, startNew, ensureFor, unavailableReason, pageFor, onChange: Extensions.onChange,
     changed: sync, register, explainOff, relayout, status, showsEveryPage, presentationShown, seamLabel, outputHtml, TEXT_SIZE, HEADING_SIZES, createTextExtension, textMarks,
-    registerTextImport, openTextImport, pastedInDocument,
+    registerTextImport, openTextImport, pastedInDocument, registerTheme, openTheme,
   };
 })();

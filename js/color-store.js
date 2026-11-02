@@ -45,6 +45,19 @@ const ColorStore = (function () {
     return SCOPES.map(scope => ({ id: scope.id, label: I18n.t(scope.labelKey), hint: I18n.t(scope.hintKey), colors: scope.read() }));
   }
 
+  // La rangée « Couleurs du thème » (js/slide-theme.js) d'une présentation qui a un thème : le fond, le texte, les titres et les six accents, dans l'ordre de SlideTheme.COLOR_SLOTS. Elle se lit comme une rangée gardée
+  // mais n'en est pas une : `readonly` (aucune croix pour la retirer, aucune case « garder » dans la fenêtre de couleur : elle ne figure pas dans `scopes`), `names` le nom de chaque réglage (son infobulle). null sans thème.
+  function themeRow() {
+    const palette = typeof SlideTheme !== 'undefined' ? SlideTheme.paletteOf() : [];
+    if (!palette.length) return null;
+    return { id: 'theme', readonly: true, label: I18n.t('color.scope.theme'), hint: I18n.t('color.scope.theme.hint'), colors: palette.map(item => item.color), names: palette.map(item => I18n.t('slides.theme.slot.' + item.slot)) };
+  }
+  // Les rangées que montre un menu de couleur : celle du thème d'abord quand la présentation en a un, puis celles qu'on a gardées.
+  function rows() {
+    const theme = themeRow();
+    return (theme ? [theme] : []).concat(scopes());
+  }
+
   // Garde `color` (un #rrggbb) en tête de la portée ; faux pour une portée inconnue ou une couleur qui n'en est pas une.
   function add(id, color) {
     const scope = scopeOf(id);
@@ -60,5 +73,5 @@ const ColorStore = (function () {
     return !!scope && scope.write(scope.read().filter(kept => kept !== color));
   }
 
-  return { MAX, scopes, add, addTo, remove };
+  return { MAX, scopes, themeRow, rows, add, addTo, remove };
 })();

@@ -22,6 +22,7 @@ const OrientationToggle = (function () {
   const FLYOUT_ID = 'v2-page-flyout';
   const A4_TOGGLE_ID = 'v2-a4-toggle';
   const WATERMARK_ROW_ID = 'v2-btn-watermark';
+  const THEME_ROW_ID = 'v2-btn-slide-theme';
   const CUSTOM_ROW_ID = 'v2-btn-page-custom';
   // La clé (data-page-format) de la ligne « Format libre… » : pas un format de la liste, la ligne se coche quand la page n'en est aucun.
   const CUSTOM_KEY = 'custom';
@@ -196,6 +197,11 @@ const OrientationToggle = (function () {
     if (!canChange() || typeof WatermarkDialog === 'undefined') return;
     WatermarkDialog.open();
   }
+  // « Thème… » : la fenêtre du thème de la présentation (SlidesEntry.openTheme : sans l'extension, elle explique ; avec elle, le code se charge d'abord).
+  function openTheme() {
+    if (!canChange() || currentType !== PRESENTATION_TYPE) return;
+    SlidesEntry.openTheme();
+  }
 
   // Une ligne du menu : un <span> atteignable au clavier (tabindex), comme celles du menu Enregistrer (js/main.js:wireSaveMenu). mousedown ne prend
   // pas le focus (le curseur reste dans le texte), le clic fait perdre le sien à un champ de saisie (nom du modèle en renommage...) avant d'agir,
@@ -325,6 +331,34 @@ const OrientationToggle = (function () {
     host.appendChild(watermark);
   }
 
+  // La ligne « Thème… » (js/slide-theme.js) : une action (une fenêtre) comme le filigrane, avec le nom du thème en cours à droite. Posée avant le filigrane (qui reste la dernière ligne) dans le menu d'une présentation,
+  // retirée des autres types : leur menu reste celui d'avant.
+  function makeThemeRow() {
+    const row = document.createElement('span');
+    row.className = 'v2-hover-row v2-page-watermark-row';
+    row.id = THEME_ROW_ID;
+    row.setAttribute('role', 'menuitem');
+    row.tabIndex = 0;
+    const name = document.createElement('span');
+    name.className = 'v2-page-row-name';
+    const value = document.createElement('span');
+    value.className = 'v2-page-row-size';
+    row.append(name, value);
+    wireRow(row, openTheme);
+    return row;
+  }
+  function syncThemeRow(host, presentation) {
+    let row = document.getElementById(THEME_ROW_ID);
+    if (presentation && !row) {
+      row = makeThemeRow();
+      host.insertBefore(row, document.getElementById(WATERMARK_ROW_ID));
+    } else if (!presentation && row) {
+      row.remove();
+      row = null;
+    }
+    return row;
+  }
+
   // La ligne « Selon chaque modèle » : posée en tête du menu d'un macro-modèle, retirée des autres types (leur menu reste celui d'avant).
   function syncAutoRow(host, macro) {
     let row = host.querySelector('[data-page-orientation="' + AUTO_KEY + '"]');
@@ -446,6 +480,20 @@ const OrientationToggle = (function () {
       watermarkRow.classList.toggle('v2-hover-row-disabled', !enabled);
       watermarkRow.tabIndex = enabled ? 0 : -1;
     }
+    // La ligne du thème : dans le menu d'une présentation seulement ; grisée avec sa raison quand l'extension est éteinte (son clic explique).
+    const presentation = supported && currentType === PRESENTATION_TYPE;
+    const themeRow = syncThemeRow(host, presentation);
+    if (themeRow) {
+      const off = !SlidesEntry.isAvailable();
+      const themeEnabled = enabled && !off;
+      themeRow.querySelector('.v2-page-row-name').textContent = I18n.t('toolbar.page.theme');
+      const theme = PageLayout.getTheme();
+      themeRow.querySelector('.v2-page-row-size').textContent = theme ? SlideTheme.displayName(theme) : '';
+      themeRow.setAttribute('aria-disabled', themeEnabled ? 'false' : 'true');
+      themeRow.classList.toggle('v2-hover-row-disabled', !themeEnabled);
+      themeRow.tabIndex = themeEnabled ? 0 : -1;
+      if (off) themeRow.title = SlidesEntry.reason(); else themeRow.removeAttribute('title');
+    }
   }
 
   // « Aperçu A4 » devient « Aperçu A5 » (ou « Aperçu 7 × 3,7 cm ») : la case limite l'éditeur à la largeur de la page du modèle, pas d'un A4.
@@ -503,6 +551,8 @@ const OrientationToggle = (function () {
     wireScope();
     // Le filigrane change depuis sa fenêtre : la ligne du menu en montre le texte.
     document.addEventListener('pp:watermarkChanged', () => sync());
+    // Le thème change depuis sa fenêtre, ou à un Ctrl+Z : la ligne du menu en montre le nom.
+    document.addEventListener('pp:themeChanged', () => sync());
     // La page change de taille depuis la fenêtre « Format libre… » (ou d'un autre module) : le bouton, la case Aperçu et le menu la relisent.
     document.addEventListener('pp:pageLayoutChanged', () => sync());
     sync();

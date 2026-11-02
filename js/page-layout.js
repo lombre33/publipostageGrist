@@ -24,6 +24,8 @@
 //   et les borne (normalizeCustomColors) ; js/color-store.js les ajoute et les retire, js/color-palette.js les montre ;
 // - `textFormats` : les mises en forme gardées du modèle, la rangée « Mises en forme du modèle » du menu du pinceau (absente = aucune). Ce module les
 //   garde et en borne la forme (normalizeCustomFormats) ; js/format-slots.js les juge, les ajoute et les retire, js/format-slots-menu.js les montre.
+// - `theme` : le thème d'une présentation, ses couleurs et ses polices (absent = pas de thème, la présentation d'avant). Ce module le garde, js/slide-theme.js le borne (SlideTheme.normalize), l'éditeur
+//   et les sorties le montrent ; la fenêtre « Thème… » de l'extension « diapositives » le règle.
 const PageLayout = (function () {
   // Les nombres de la page : A4, sens, unités (mm, pt, px, twip), marge par défaut, bandes réservées, planchers. Des constantes, sans état.
   const Units = (function () {
@@ -353,6 +355,9 @@ const PageLayout = (function () {
     // Et pour les mises en forme gardées du modèle : la clé n'existe que pour un modèle qui en a.
     const textFormats = normalizeCustomFormats(merged.textFormats);
     if (textFormats.length) marginsDraft.textFormats = textFormats;
+    // Et pour le thème d'une présentation : la clé n'existe que pour un modèle qui en a un (js/slide-theme.js le borne).
+    const theme = typeof SlideTheme !== 'undefined' ? SlideTheme.normalize(merged.theme) : null;
+    if (theme) marginsDraft.theme = theme;
     applyToPreviewCss();
   }
 
@@ -483,7 +488,20 @@ const PageLayout = (function () {
     return true;
   }
 
-  // Une copie du brouillon de la page (marges, sens, format, filigrane, couleurs et mises en forme gardées du modèle) : l'état que js/history-markers.js garde avant et après un geste de la page, pour que Ctrl + Z le défasse.
+  function getTheme() { return marginsDraft.theme || null; }
+  function setTheme(value) {
+    // Pose (ou retire, avec null) le thème de la présentation en gardant tout le reste. Même contrat que setWatermark : ne rafraîchit rien d'autre que les variables de l'écran (applyToPreviewCss), annonce
+    // `pp:themeChanged` si le thème change, l'appelant marque le brouillon modifié (pp:marginsChanged) et refait la mise en page (les polices changent les lignes). Rend vrai si quelque chose a changé.
+    const next = typeof SlideTheme !== 'undefined' ? SlideTheme.normalize(value) : null;
+    if (JSON.stringify(next) === JSON.stringify(getTheme())) return false;
+    const rest = Object.assign({}, marginsDraft);
+    delete rest.theme;
+    setMarginsMm(next ? Object.assign(rest, { theme: next }) : rest);
+    document.dispatchEvent(new CustomEvent('pp:themeChanged', { detail: { theme: getTheme() } }));
+    return true;
+  }
+
+  // Une copie du brouillon de la page (marges, sens, format, filigrane, couleurs et mises en forme gardées du modèle, thème) : l'état que js/history-markers.js garde avant et après un geste de la page, pour que Ctrl + Z le défasse.
   function snapshot() { return JSON.parse(JSON.stringify(marginsDraft)); }
   // Rend à la page ce qu'un geste y a changé, au Ctrl + Z comme au Ctrl + Y : `next` est la page à rendre, `prev` celle d'avant ce retour (la page du geste, ou la page d'avant lui). Seules les clés qui diffèrent
   // entre les deux sont posées : un réglage que le geste n'a pas touché (une couleur du modèle gardée depuis) reste tel quel. Annonce comme les gestes eux-mêmes ce qui a changé (`pp:pageLayoutChanged` pour le
@@ -500,6 +518,7 @@ const PageLayout = (function () {
     if (JSON.stringify(was) === JSON.stringify(now)) return false;
     if (was.orientation !== now.orientation || was.format !== now.format || (was.orientationAuto === true) !== (now.orientationAuto === true)) announcePageLayoutChanged();
     if (JSON.stringify(was.watermark || null) !== JSON.stringify(now.watermark || null)) document.dispatchEvent(new CustomEvent('pp:watermarkChanged', { detail: { watermark: getWatermark() } }));
+    if (JSON.stringify(was.theme || null) !== JSON.stringify(now.theme || null)) document.dispatchEvent(new CustomEvent('pp:themeChanged', { detail: { theme: getTheme() } }));
     return true;
   }
 
@@ -545,6 +564,8 @@ const PageLayout = (function () {
     const out = { top: m.top * MM_TO_PT, right: m.right * MM_TO_PT, bottom: m.bottom * MM_TO_PT, left: m.left * MM_TO_PT, orientation: m.orientation, format: m.format };
     // Le filigrane voyage avec la page, comme le sens et le format : les exporteurs n'ont aucun autre canal pour l'apprendre.
     if (m.watermark) out.watermark = m.watermark;
+    // Le thème aussi : le PowerPoint l'écrit dans son thème (js/pptx-export.js).
+    if (m.theme) out.theme = m.theme;
     return out;
   }
 
@@ -563,6 +584,7 @@ const PageLayout = (function () {
       orientation: m.orientation, format: m.format,
     };
     if (m.watermark) out.watermark = m.watermark;
+    if (m.theme) out.theme = m.theme;
     return out;
   }
 
@@ -582,6 +604,8 @@ const PageLayout = (function () {
     root.setProperty('--pp-page-width', getSheetWidthPx() + 'px');
     // Sa hauteur : ce que pose sur une page (un cadre de texte libre, css/free-frame.css) est rogné à son bord, jamais montré sur la page d'à côté.
     root.setProperty('--pp-page-height', Math.round(getPageSizePx().height * 100) / 100 + 'px');
+    // Le thème de la présentation (ses couleurs et ses polices) se pose sur l'écran avec la page : js/slide-theme.js.
+    if (typeof SlideTheme !== 'undefined') SlideTheme.refresh();
   }
 
   function pageNumberText(format, pageNum, totalPages) {
@@ -613,6 +637,7 @@ const PageLayout = (function () {
     WATERMARK_MAX_CHARS, WATERMARK_DEFAULT, normalizeWatermark, getWatermark, setWatermark,
     CUSTOM_COLORS_MAX, normalizeCustomColors, getCustomColors, setCustomColors,
     CUSTOM_FORMATS_MAX, CUSTOM_FORMAT_NAME_MAX, normalizeCustomFormats, getCustomFormats, setCustomFormats,
+    getTheme, setTheme,
     snapshot, restore,
     pageNumberText, resolvePageNumberBadges,
   };

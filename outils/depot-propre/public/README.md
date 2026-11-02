@@ -71,6 +71,16 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   case garde celles du document), une page trop longue en plusieurs, coupées entre deux blocs (un tableau, entre deux lignes),
   et Ctrl+C dans un document puis Ctrl+V sur la bande en fait autant ; cochée, la case « Garder liée » garde les diapositives
   d'une page liées à elle : elles la suivent quand elle change et ne s'écrivent plus dans la présentation, jusqu'à « Détacher »
+  ; le thème (ligne « Thème… » du menu Page, une présentation seulement) donne à toutes les diapositives la police et la couleur
+  du texte et des titres, le fond et six accents : sept thèmes prêts (Océan, Hélianthe, Forêt, Bordeaux, Soleil, Ardoise,
+  Éditorial) ou neuf couleurs et deux polices (parmi les six du menu de police) composées dans une fenêtre à brouillon,
+  avec un aperçu et un avertissement quand le texte se lirait mal sur le fond ; « Aspect d'origine » est l'absence de thème.
+  Il est gardé dans le modèle et se montre dans l'éditeur, la bande, la Lecture, le diaporama, le PDF, le Word, le HTML et le
+  PowerPoint (le thème du fichier) ; son fond est celui de la page, sous chaque diapositive qui n'a pas le sien (une page
+  foncée, la vide de la fin comprise) ; une couleur ou une police choisie sur un mot, le style d'un niveau de titre et un bloc
+  de code gardent les leurs. Changer de thème recolore ce qui avait une couleur de l'ancien thème, jamais une couleur composée à
+  la main, et un seul Ctrl+Z rend le thème et les couleurs ; les menus de couleur ont une rangée « Couleurs du thème » et une
+  forme neuve prend l'aspect du premier accent. Pas encore : le décor commun des diapositives ; les liens gardent leur bleu d'origine
 
 **Mise en page**
 - Mise en forme complète : gras, italique, souligné, barré, exposant et indice, couleurs et surlignage, six

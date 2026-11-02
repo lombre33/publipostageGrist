@@ -210,12 +210,14 @@ const ColorDialog = (function () {
   }
 
   function checkedScopes() {
+    if (refs.keep.hidden) return [];
     return Array.from(refs.keep.querySelectorAll('input:checked')).map(box => box.value);
   }
 
   // Ouvre la fenêtre. `initial` : la couleur de départ (#rrggbb), montrée face à la nouvelle ; sans elle, le bleu d'accent et pas de « Actuelle ».
   // `onApply({ color, scopes })` : « Appliquer » (`color` en #rrggbb, `scopes` les rangées cochées). `onClose()` : la fenêtre s'est fermée, quelle que
-  // soit la sortie, après `onApply`. Faux si la fenêtre ne peut pas s'ouvrir.
+  // soit la sortie, après `onApply`. `keep: false` : sans les cases « garder » (une couleur de thème, qui n'a pas de rangée où se ranger) ; `scopes` est alors vide.
+  // Faux si la fenêtre ne peut pas s'ouvrir.
   function open(options) {
     if (typeof ModalBase === 'undefined') return false;
     ensure();
@@ -238,6 +240,7 @@ const ColorDialog = (function () {
     state = null;
     setColor(options.initial || START_COLOR);
     renderKeep();
+    refs.keep.hidden = options.keep === false;
     win.show(hex);
     hex.select();
     return true;

@@ -37,6 +37,8 @@ const PptxExport = (function () {
   const NATURAL_LINE = ExportCommon.EDITOR_STYLE.naturalLine;
   const LINK_COLOR = '0563C1';
   const TEXT_COLOR = '1B2430'; // la couleur du texte de l'éditeur : celle du thème (dk1), jamais récrite sur chaque série de caractères
+  // La couleur du texte du fichier en cours : celle du thème de la présentation quand elle en a un (SlideTheme), sinon TEXT_COLOR. Posée au départ de `fromHtml`, lue par `runStyleOf`.
+  let textColor = TEXT_COLOR;
   const GENERIC_FONTS = { cousine: 'Courier New', 'sans-serif': 'Arial', 'system-ui': 'Arial', 'ui-sans-serif': 'Arial', serif: 'Times New Roman', monospace: 'Courier New', 'ui-monospace': 'Courier New' };
   const BULLETS = { disc: ['Arial', '•'], circle: ['Courier New', 'o'], square: ['Wingdings', '§'] };
   const NUMBERING = { decimal: 'arabicPeriod', 'lower-alpha': 'alphaLcPeriod', 'lower-latin': 'alphaLcPeriod', 'upper-alpha': 'alphaUcPeriod', 'upper-latin': 'alphaUcPeriod', 'lower-roman': 'romanLcPeriod', 'upper-roman': 'romanUcPeriod' };
@@ -64,16 +66,21 @@ const PptxExport = (function () {
   }
 
   // --- Le gabarit du fichier : thème, masque, mise en page, propriétés. Écrits à la main, sans rien d'autre qu'un titre et un texte : ils ne portent aucun style, tout est posé sur les objets. ---------
-  function themeXml(name) {
+  // `theme` : le thème de la présentation (SlideTheme, clé `theme` de la page), ou rien : le thème d'avant (les couleurs d'origine, Arial). Avec lui, le texte et le fond sont dk1 et lt1, les titres dk2, les six accents sont
+  // ceux du thème, et la police des titres et celle du texte sont les deux polices du fichier (la police de série `+mj-lt` et `+mn-lt`) : changer le thème dans PowerPoint recolore et change les polices de ce qui les suit.
+  function themeXml(name, theme) {
+    const t = typeof SlideTheme !== 'undefined' ? SlideTheme.normalize(theme) : null;
+    const hex = slot => t.colors[slot].slice(1).toUpperCase();
     const line = w => `<a:ln w="${w}" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/><a:miter lim="800000"/></a:ln>`;
     const fill = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
     const effect = '<a:effectStyle><a:effectLst/></a:effectStyle>';
-    const fonts = tag => `<a:${tag}><a:latin typeface="Arial"/><a:ea typeface=""/><a:cs typeface=""/></a:${tag}>`;
+    const fonts = (tag, face) => `<a:${tag}><a:latin typeface="${esc(face)}"/><a:ea typeface=""/><a:cs typeface=""/></a:${tag}>`;
+    const accent = (n, fallback) => `<a:accent${n}><a:srgbClr val="${t ? hex('accent' + n) : fallback}"/></a:accent${n}>`;
     return XML_HEAD + `<a:theme xmlns:a="${NS.a}" name="${esc(name)}"><a:themeElements>`
-      + `<a:clrScheme name="Grist Factory"><a:dk1><a:srgbClr val="${TEXT_COLOR}"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="44546A"/></a:dk2><a:lt2><a:srgbClr val="E7E6E6"/></a:lt2>`
-      + '<a:accent1><a:srgbClr val="2F6FED"/></a:accent1><a:accent2><a:srgbClr val="ED7D31"/></a:accent2><a:accent3><a:srgbClr val="A5A5A5"/></a:accent3><a:accent4><a:srgbClr val="FFC000"/></a:accent4>'
-      + `<a:accent5><a:srgbClr val="5B9BD5"/></a:accent5><a:accent6><a:srgbClr val="70AD47"/></a:accent6><a:hlink><a:srgbClr val="${LINK_COLOR}"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme>`
-      + `<a:fontScheme name="Grist Factory">${fonts('majorFont')}${fonts('minorFont')}</a:fontScheme>`
+      + `<a:clrScheme name="${esc(t && t.name ? t.name : 'Grist Factory')}"><a:dk1><a:srgbClr val="${t ? hex('text') : TEXT_COLOR}"/></a:dk1><a:lt1><a:srgbClr val="${t ? hex('bg') : 'FFFFFF'}"/></a:lt1><a:dk2><a:srgbClr val="${t ? hex('title') : '44546A'}"/></a:dk2><a:lt2><a:srgbClr val="E7E6E6"/></a:lt2>`
+      + accent(1, '2F6FED') + accent(2, 'ED7D31') + accent(3, 'A5A5A5') + accent(4, 'FFC000')
+      + accent(5, '5B9BD5') + accent(6, '70AD47') + `<a:hlink><a:srgbClr val="${LINK_COLOR}"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme>`
+      + `<a:fontScheme name="${esc(t && t.name ? t.name : 'Grist Factory')}">${fonts('majorFont', t ? t.fonts.title : 'Arial')}${fonts('minorFont', t ? t.fonts.body : 'Arial')}</a:fontScheme>`
       + `<a:fmtScheme name="Grist Factory"><a:fillStyleLst>${fill}${fill}${fill}</a:fillStyleLst><a:lnStyleLst>${line(6350)}${line(12700)}${line(19050)}</a:lnStyleLst>`
       + `<a:effectStyleLst>${effect}${effect}${effect}</a:effectStyleLst><a:bgFillStyleLst>${fill}${fill}${fill}</a:bgFillStyleLst></a:fmtScheme>`
       + '</a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>';
@@ -248,7 +255,7 @@ const PptxExport = (function () {
       spc: spacingOf(cs.letterSpacing),
       cap: cs.textTransform === 'uppercase' ? 'all' : (/small-caps/.test(cs.fontVariantCaps || '') ? 'small' : ''),
       baseline: script === ScriptMarks.SUPERSCRIPT ? 30000 : (script === ScriptMarks.SUBSCRIPT ? -25000 : 0),
-      color: link ? LINK_COLOR : (cssHex(cs.color) === TEXT_COLOR ? null : cssHex(cs.color)),
+      color: link ? LINK_COLOR : (cssHex(cs.color) === textColor ? null : cssHex(cs.color)),
       highlight,
       family,
       pitch: pitchOf(cs.fontFamily, family),
@@ -1072,6 +1079,9 @@ const PptxExport = (function () {
   async function fromHtml(html, options = {}) {
     await ExportCommon.ensureJsZipLoaded();
     const marginsPt = options.marginsPt || PageLayout.getMarginsPt();
+    // La couleur du texte du fichier : celle du thème de la présentation (dk1 de son thème), que `runStyleOf` ne récrit pas sur chaque série de caractères.
+    const themed = typeof SlideTheme !== 'undefined' ? SlideTheme.normalize(marginsPt.theme) : null;
+    textColor = themed ? themed.colors.text.slice(1).toUpperCase() : TEXT_COLOR;
     const size = slideSizeOf(marginsPt);
     const page = PageLayout.pageSizePtFor(marginsPt.orientation, marginsPt.format);
     const sources = slidesOf(html);
@@ -1119,7 +1129,7 @@ const PptxExport = (function () {
     put('ppt/presProps.xml', PRESENTATION_PROPERTIES);
     put('ppt/viewProps.xml', VIEW_PROPERTIES);
     put('ppt/tableStyles.xml', TABLE_STYLES);
-    put('ppt/theme/theme1.xml', themeXml('Grist Factory'));
+    put('ppt/theme/theme1.xml', themeXml('Grist Factory', marginsPt.theme));
     put('ppt/slideMasters/slideMaster1.xml', masterXml(size));
     put('ppt/slideMasters/_rels/slideMaster1.xml.rels', relsXml([
       { id: 'rId1', type: REL + 'slideLayout', target: '../slideLayouts/slideLayout1.xml' },
@@ -1130,7 +1140,7 @@ const PptxExport = (function () {
     if (noted.length) {
       put('ppt/notesMasters/notesMaster1.xml', notesMasterXml(size));
       put('ppt/notesMasters/_rels/notesMaster1.xml.rels', relsXml([{ id: 'rId1', type: REL + 'theme', target: '../theme/theme2.xml' }]));
-      put('ppt/theme/theme2.xml', themeXml('Grist Factory'));
+      put('ppt/theme/theme2.xml', themeXml('Grist Factory', marginsPt.theme));
     }
     slides.forEach((slide, i) => {
       const rels = slide.rels.slice();

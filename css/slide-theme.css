@@ -1,0 +1,22 @@
+/* Le thème d'une présentation (js/slide-theme.js) : la police et la couleur du texte et des titres, et le fond de la page, que l'éditeur et les miniatures de la bande des diapositives prennent du thème. `refresh` pose les variables
+   `--pp-theme-*` sur :root et la classe `pp-themed` sur <html> quand la présentation a un thème ; sans thème, rien de ce fichier ne s'applique et l'éditeur est celui d'avant. Ce sont des valeurs PAR DÉFAUT,
+   posées sur `.tiptap` et sur les titres : une police ou une couleur choisie sur un mot (une marque, un `<span style>`), le style d'un niveau de titre (une décoration en ligne, js/heading-styles.js) ou la couleur
+   d'une forme les remplacent comme avant, car une règle de feuille de style ne l'emporte jamais sur un style en ligne et aucune règle ici n'est `!important`. Un bloc de code garde sa police et sa couleur
+   (css/editor-v2.css : `.tiptap pre`). Hors de la page : l'édition d'en-tête ou de pied (`.hf-editing`) garde la police d'avant, comme leur sortie, qui n'a pas le thème. Les sorties (Lecture, impression, diaporama, exports)
+   n'ont pas besoin de ces règles : le thème y est écrit en `style` sur le HTML (SlideTheme.forOutput). */
+html.pp-themed #editor-container:not(.hf-editing) .tiptap,
+html.pp-themed .pp-slide-thumb .pp-slide-page.tiptap { color: var(--pp-theme-text); font-family: var(--pp-theme-font-body); }
+html.pp-themed #editor-container:not(.hf-editing) .tiptap :is(h1, h2, h3, h4, h5, h6),
+html.pp-themed .pp-slide-thumb .pp-slide-page.tiptap :is(h1, h2, h3, h4, h5, h6) { color: var(--pp-theme-title); font-family: var(--pp-theme-font-title); }
+/* Une citation a sa couleur (css/editor-v2.css : `.tiptap blockquote`), que le HTML des sorties n'a pas (leur paragraphe porte celle du thème) : elle prend celle du texte. */
+html.pp-themed #editor-container:not(.hf-editing) .tiptap blockquote,
+html.pp-themed .pp-slide-thumb .pp-slide-page.tiptap blockquote { color: var(--pp-theme-text); }
+
+/* Le FOND du thème : la feuille de l'éditeur (sans aperçu de page, toute sa surface ; avec des pages tournées, le papier de chacune) et la page de chaque miniature ont la couleur de fond du thème. Une diapositive qui a
+   son propre fond (js/slide-props.js : son repère dessine un pseudo-élément de la taille de la page, à `z-index: -1`, dans le contexte d'empilement du texte) le peint par-dessus celui-ci. Les séparations entre les pages
+   gardent la couleur de la gouttière. Les sorties peignent le même fond par un cadre sous le texte de chaque diapositive qui n'a pas le sien (SlideProps.forOutput, option `background`) : la page où la diapositive s'ouvre,
+   comme pour un fond choisi diapositive par diapositive, alors que la feuille de l'éditeur est d'une seule couleur (ce que la diapositive déborde sur une deuxième page n'est pas peint dans les sorties). */
+html.pp-themed #editor-container.a4-preview:not(.hf-editing, .pp-mixed-pages) .v2-page-sheet,
+html.pp-themed #editor-container:not(.a4-preview, .hf-editing) { background: var(--pp-theme-bg); }
+html.pp-themed #editor-container.a4-preview.pp-mixed-pages:not(.hf-editing) .v2-page-paper,
+html.pp-themed .pp-slide-thumb .pp-slide-page.tiptap { background: var(--pp-theme-bg); }
