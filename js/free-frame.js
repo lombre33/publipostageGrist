@@ -86,6 +86,9 @@ const FreeFrame = (function () {
   const BAR_GAP_PX = 8;
   const LIMITS = { pos: 4000, minW: 24, maxW: 4000, minH: 12, maxH: 4000 };
   const STAY_ON_PAGE_PT = 24;
+  // Les marges d'un cadre de texte (css/free-frame.css), celles par défaut de PowerPoint : un tableau posé dans un cadre les garde autour de lui.
+  const FRAME_PAD_X_PT = 7.2;
+  const FRAME_PAD_Y_PT = 3.6;
   const OVERFLOW_SLACK_PT = 0.5;
   const NUDGE_PT = 1;
   const NUDGE_BIG_PT = 10;
@@ -646,6 +649,37 @@ const FreeFrame = (function () {
     const node = kind ? type.create(attrs, state.schema.nodes.paragraph.create({ textAlign: 'center' })) : type.createAndFill(attrs);
     const tr = own(state.tr.insert(at, node));
     tr.setSelection(kind ? libs.NodeSelection.create(tr.doc, at) : libs.TextSelection.near(tr.doc.resolve(at + 1), 1)).scrollIntoView();
+    ed.view.dispatch(tr);
+    ed.view.focus();
+    return true;
+  }
+  // Pose un tableau dans un cadre neuf, au centre de la diapositive qui commence à `slideStart` (demande du 02/11 : « Tableau » du menu Objets, comme sur un document). `options.table` : le tableau à poser
+  // (la copie d'un modèle Grille, que js/linked-table.js lie) ; sans lui, un tableau de deux lignes et deux colonnes, vide, comme le bouton « Tableau » de la barre. Le cadre prend la largeur du tableau
+  // posé (la somme des largeurs de colonnes de sa première ligne, ou celle d'un cadre de texte), rognée à la page ; sa hauteur est un minimum, le cadre grandit avec ses lignes. Le curseur va dans la
+  // première case, la barre du tableau s'ouvre. `options.meta` : des marques de la transaction (le lien d'un tableau lié). Faux hors d'une présentation modifiable.
+  const TABLE_ROW_PT = 21;
+  function insertTable(ed, slideStart, options) {
+    if (!libs || !ed || !ed.isEditable || !inPresentation()) return false;
+    const { state } = ed;
+    const { schema } = state;
+    const page = pageSize();
+    const given = options && options.table;
+    const table = given || schema.nodes.table.create(null, [0, 1].map(() => schema.nodes.tableRow.create(null, [0, 1].map(() => schema.nodes.tableCell.createAndFill()))));
+    let columnsPx = 0;
+    const first = table.firstChild;
+    if (given && first) {
+      first.forEach((cell) => { columnsPx += cell.attrs.colwidth ? cell.attrs.colwidth.reduce((sum, px) => sum + px, 0) : 0; });
+    }
+    const natural = columnsPx ? columnsPx * 0.75 + 2 * FRAME_PAD_X_PT : DEFAULTS.w;
+    const w = Math.min(natural, Math.max(LIMITS.minW, page.width - 2 * STAY_ON_PAGE_PT));
+    const h = Math.min(table.childCount * TABLE_ROW_PT + 2 * FRAME_PAD_Y_PT, Math.max(LIMITS.minH, page.height - 2 * STAY_ON_PAGE_PT));
+    const at = headRange(state.doc, slideStart).to;
+    const wanted = { x: (page.width - w) / 2, y: (page.height - h) / 2, w, h };
+    const attrs = freeSpot(normalized(wanted), takenIn(state.doc, slideStart), page);
+    const tr = own(state.tr.insert(at, schema.nodes[NODE].create(attrs, table)));
+    const meta = (options && options.meta) || {};
+    Object.keys(meta).forEach((name) => { tr.setMeta(name, meta[name]); });
+    tr.setSelection(libs.TextSelection.near(tr.doc.resolve(at + 3), 1)).scrollIntoView();
     ed.view.dispatch(tr);
     ed.view.focus();
     return true;
@@ -1626,6 +1660,6 @@ const FreeFrame = (function () {
   return {
     NODE, LINE_NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, LAYER_BEHIND, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml, html, artFits, lookRefused,
     configure, createNode, createLineNode, createExtension, wireToolbar, normalized, withoutHidden, measuresOf: attrsOfEl, straight, horizontal, flatten, gesture, lineGesture, rotationAt, turnOf, storedHeight, keepReachable, overflowsPage, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
-    insert, patch, nudge, turnBy, reorder, duplicate, remove, select, currentFrame, frameAround, syncToolbar,
+    insert, insertTable, patch, nudge, turnBy, reorder, duplicate, remove, select, currentFrame, frameAround, syncToolbar,
   };
 })();

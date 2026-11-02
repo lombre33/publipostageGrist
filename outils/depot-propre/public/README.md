@@ -57,7 +57,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   Document, sur une page 16:9 en paysage ; chaque saut de page commence une diapositive, et une bande de
   miniatures à gauche du texte mène à chacune, l'ajoute, la duplique, la déplace ou la supprime (« Ajouter »,
   « Importer » sont deux boutons d'une icône sur une ligne au bas de la bande, leur nom en info-bulle) ; « Objets », dans la barre d'outils du haut (derrière « Image »),
-  y pose un cadre de texte libre ou une forme (rectangle, ellipse, triangle, losange, flèches, étoile, chevron,
+  y pose un cadre de texte libre, un tableau dans un cadre (local, ou la copie liée en direct d'un modèle Grille) ou une forme (rectangle, ellipse, triangle, losange, flèches, étoile, chevron,
   pentagone, hexagone, parallélogramme, croix, bulle...) ou une ligne (avec ou sans flèche, d'une forme et d'une taille au choix à chaque bout), qu'on
   place où l'on veut sur la diapositive, qu'on fait pivoter (sauf une ligne), avec le fond et le trait de son choix (couleur, épaisseur, style du trait : tirets, bouts, trait double ou triple, transparence) ; le menu ⋯ d'une
   miniature règle sa transition (fondu, poussée, balayage, recouvrement, dévoilement, zoom), que le

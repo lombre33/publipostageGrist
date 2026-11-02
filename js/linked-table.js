@@ -224,9 +224,11 @@ const LinkedTable = (function () {
 
   // Pourquoi un tableau lié ne se pose pas ici (clé de la raison), ou null : suivi allumé, une zone d'en-tête ou de pied de page, ou le curseur est déjà dans un
   // tableau (un tableau lié ne se pose pas dans une case, et un autre tableau lié ne vient pas dans celui-ci).
-  function placeBlock(editor) {
+  // `inFrame` : le tableau se pose dans un cadre libre neuf (menu Objets) : le curseur dans un tableau ou dans une zone d'en-tête n'y change rien, le cadre est un autre endroit (le menu quitte la zone avant).
+  function placeBlock(editor, inFrame) {
     if (Editor.isTrackChangesOn()) return 'linkedTable.rowTracked';
     if (LiveEntry.isLive()) return 'linkedTable.rowLive';
+    if (inFrame) return null;
     if (inZone()) return 'linkedTable.rowZone';
     const { selection } = editor.state;
     if (insideTable(selection.$anchorCell ? selection.$headCell : selection.$head) || (selection.node && selection.node.type.name === 'table')) return 'linkedTable.rowInTable';
@@ -503,14 +505,19 @@ const LinkedTable = (function () {
   // Pose la copie du tableau de `model` à la place de la sélection, comme le bouton « Tableau », et met le curseur dans sa première case (la barre du tableau
   // s'ouvre sur le lien). Le tableau porte le jeton `key` du modèle (la liste avec recherche le crée avant, Templates.ensureToken) ; sans lui, celui que la liste des modèles lui
   // connaît, sinon un lien ancien. Faux, sans rien changer, quand le modèle est déjà lié dans le document, n'a pas de tableau ou que la sélection ne s'y prête pas.
-  function insert(editor, model, key) {
-    if (!editor || !editor.isEditable || GridEditor.isActive() || placeBlock(editor)) return false;
+  // `inFrame` : le tableau se pose dans un cadre libre neuf au centre de la diapositive du curseur (FreeFrame.insertTable), pas à la place de la sélection.
+  function insert(editor, model, key, inFrame) {
+    if (!editor || !editor.isEditable || GridEditor.isActive() || placeBlock(editor, inFrame)) return false;
     const live = model ? modelOf(model.id) : null;
     if (!live || liveTables(editor.state.doc).some(({ node }) => node.attrs[ATTR] === live.id)) return false;
     const copy = tableNodeOf(editor, live, key);
     if (!copy) return false;
     const node = withBase(editor, copy);
-    editor.view.dispatch(editor.state.tr.replaceSelectionWith(node).scrollIntoView().setMeta(OWN_META, 'place'));
+    if (inFrame) {
+      if (!FreeFrame.insertTable(editor, FreeFrame.slideStartOf(editor.state.doc, editor.state.selection.from), { table: node, meta: { [OWN_META]: 'place' } })) return false;
+    } else {
+      editor.view.dispatch(editor.state.tr.replaceSelectionWith(node).scrollIntoView().setMeta(OWN_META, 'place'));
+    }
     const placed = linkedTables(editor.state.doc).find(entry => entry.node.attrs[ATTR] === live.id && entry.node.attrs[KEY] === node.attrs[KEY]);
     if (placed) editor.view.dispatch(editor.state.tr.setSelection(libs.TextSelection.near(editor.state.doc.resolve(placed.pos + 1), 1)));
     editor.view.focus();
@@ -531,11 +538,14 @@ const LinkedTable = (function () {
       host.remove();
     }
 
-    // Le rectangle de la ligne du menu ; le menu se referme dès que la souris le quitte (ligne en display:none, rectangle nul) : celui du bouton Tableau sert
+    // Le rectangle de la ligne du menu ; le menu se referme dès que la souris le quitte (ligne en display:none, rectangle nul) : celui du bouton de son menu (Tableau, Objets) sert
     // alors.
     function anchorRect(anchorEl) {
       const rect = anchorEl.getBoundingClientRect();
-      return rect.width || rect.height ? rect : document.getElementById('v2-btn-table').getBoundingClientRect();
+      if (rect.width || rect.height) return rect;
+      const group = anchorEl.closest('.v2-hover-group');
+      const button = group && group.querySelector(':scope > button');
+      return (button || document.getElementById('v2-btn-table')).getBoundingClientRect();
     }
 
     // Pourquoi ce modèle ne peut pas être posé (clé de la raison), ou null.
@@ -545,11 +555,12 @@ const LinkedTable = (function () {
     }
 
     // Faux si la liste avec recherche est indisponible (fichier introuvable, erreur) : il n'y a pas de liste simple de repli, rien ne s'ouvre.
-    async function openPicker(editor, anchorEl) {
-      if (!editor || GridEditor.isActive() || placeBlock(editor)) return false;
+    // `inFrame` : le tableau choisi se pose dans un cadre libre (menu Objets, cf. insert).
+    async function openPicker(editor, anchorEl, inFrame) {
+      if (!editor || GridEditor.isActive() || placeBlock(editor, inFrame)) return false;
       // Les modèles et leur contenu sont relus : la liste du moment, pas celle d'il y a quelques minutes (une grille faite ou changée ailleurs).
       await refreshModels();
-      if (placeBlock(editor)) return false;
+      if (placeBlock(editor, inFrame)) return false;
       const models = Templates.getCached().filter(t => t.typeModele === GridEditor.TYPE).sort((a, b) => collator.compare(a.nom, b.nom));
       const linked = new Set(liveTables(editor.state.doc).map(({ node }) => node.attrs[ATTR]));
       let host = null;
@@ -588,7 +599,7 @@ const LinkedTable = (function () {
           // Le jeton du modèle (créé au premier lien) est celui que le tableau porte. Sans lui (Grist n'écrit pas, hors ligne), le lien se pose sans identité : un lien ancien, à la main.
           let key = '';
           try { key = await Templates.ensureToken(model.id); } catch (e) { console.warn('[LinkedTable] jeton du modèle impossible', e); }
-          insert(editor, model, key);
+          insert(editor, model, key, inFrame);
         });
         search.open();
         return true;
@@ -1024,9 +1035,9 @@ const LinkedTable = (function () {
   // La ligne « Tableau d'un modèle Grille… » du menu du bouton Tableau : grisée avec sa raison en info-bulle (suivi des modifications, curseur dans un tableau),
   // comme la ligne « Garder avec le suivant » ; le grisé du mode (grille, e-mail, macro-modèle) est celui du bouton Tableau, dont le menu ne s'ouvre plus
   // (css/linked-table.css).
-  function syncRow(row, editor) {
+  function syncRow(row, editor, inFrame) {
     if (!row || !editor) return;
-    const reason = placeBlock(editor);
+    const reason = placeBlock(editor, inFrame);
     row.setAttribute('aria-disabled', reason ? 'true' : 'false');
     row.classList.toggle('v2-hover-row-disabled', !!reason);
     if (reason) row.title = I18n.t(reason); else row.removeAttribute('title');
