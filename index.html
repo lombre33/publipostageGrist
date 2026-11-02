@@ -146,7 +146,7 @@
 <link rel="stylesheet" href="css/character-format.css?v=0.2">
 <link rel="stylesheet" href="css/bullet-format.css?v=0.2">
 <link rel="stylesheet" href="css/clean-reading.css?v=0.3">
-<link rel="stylesheet" href="css/format-painter.css?v=0.2">
+<link rel="stylesheet" href="css/format-painter.css?v=0.3">
 <link rel="stylesheet" href="css/sheet-assembly.css?v=0.3">
 <link rel="stylesheet" href="css/pdf-protection.css?v=0.2">
 <link rel="stylesheet" href="css/versions-history.css?v=0.2">
@@ -433,7 +433,13 @@
           <span class="v2-color-split-caret" id="v2-color-highlight-caret"></span>
         </button>
       </span>
-      <button type="button" id="v2-btn-format-painter" data-tip="Reproduire la mise en forme" aria-label="Reproduire la mise en forme : copie celle du texte sélectionné, puis la pose sur le texte qu'on sélectionne ensuite (double-clic : plusieurs fois, Échap pour arrêter)" aria-pressed="false" data-i18n-tip="fmt.painter.tip" data-i18n-aria="fmt.painter.aria"></button>
+      <!-- Pinceau de mise en forme : un clic copie la mise en forme du texte, son menu au survol garde trois mises en forme du modèle et trois partagées par le document (js/format-slots-menu.js remplit le menu sous son intitulé). Comme Tableau, Image et Enregistrer, le bouton n'a pas de data-tip : l'info-bulle se retirerait dès l'ouverture du menu, l'intitulé du menu dit le bouton et sa touche (js/shortcuts.js). Le groupe est marqué data-close-on-click, comme Enregistrer : le clic sur le bouton est le geste (il copie et arme le pinceau), le menu resté ouvert sous la souris recouvrirait le texte qu'on vise ensuite. -->
+      <span class="v2-hover-group" id="v2-painter-group" data-close-on-click>
+        <button type="button" id="v2-btn-format-painter" aria-label="Reproduire la mise en forme : copie celle du texte sélectionné, puis la pose sur le texte qu'on sélectionne ensuite (double-clic : plusieurs fois, Échap pour arrêter)" aria-pressed="false" data-i18n-aria="fmt.painter.aria"></button>
+        <span class="v2-hover-flyout v2-hover-flyout-v v2-hover-flyout-scrollable" id="v2-painter-flyout">
+          <span class="v2-hover-flyout-label" data-i18n="fmt.painter.tip">Reproduire la mise en forme</span>
+        </span>
+      </span>
       <span class="v2-sep"></span>
       <!-- Tableau : un clic pose un tableau ordinaire ; son menu au survol ajoute « Tableau d'un modèle Grille… » (js/linked-table.js). Comme Image, Enregistrer et Exporter, le bouton n'a pas de data-tip : l'info-bulle se retirerait dès l'ouverture du menu, le titre du menu dit le bouton et sa touche (js/shortcuts.js). -->
       <span class="v2-hover-group" id="v2-table-group">
@@ -839,9 +845,9 @@
 <script src="js/space-gap.js?v=0.2"></script>
 <script src="js/reader-mode.js?v=0.173"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
-<script src="js/i18n.js?v=0.302"></script>
-<script src="js/shortcuts.js?v=0.24"></script>
-<script src="js/page-layout.js?v=0.25"></script>
+<script src="js/i18n.js?v=0.303"></script>
+<script src="js/shortcuts.js?v=0.25"></script>
+<script src="js/page-layout.js?v=0.26"></script>
 <script src="js/page-sections.js?v=0.3"></script>
 <script src="js/color-math.js?v=0.1"></script>
 <script src="js/color-store.js?v=0.1"></script>
@@ -864,8 +870,8 @@
 <script src="js/header-footer-preview.js?v=1.53"></script>
 <script src="js/editor-nodes.js?v=1.59"></script>
 <script src="js/floating-toolbars.js?v=0.72"></script>
-<script src="js/main-toolbar.js?v=1.48"></script>
-<script src="js/format-painter.js?v=0.6"></script>
+<script src="js/main-toolbar.js?v=1.49"></script>
+<script src="js/format-painter.js?v=0.7"></script>
 <script src="js/script-marks.js?v=0.1"></script>
 <script src="js/tab-indent.js?v=0.2"></script>
 <script src="js/comments.js?v=0.17"></script>
@@ -947,7 +953,7 @@
 <script src="js/paragraph-format.js?v=0.4"></script>
 <script src="js/character-format.js?v=0.3"></script>
 <script src="js/bullet-format.js?v=0.3"></script>
-<script src="js/typing-style.js?v=0.4"></script>
+<script src="js/typing-style.js?v=0.5"></script>
 <script src="js/anchors.js?v=0.2"></script>
 <script src="js/qr-code.js?v=0.9"></script>
 <script src="js/gfs-open.js?v=0.3"></script>
@@ -989,6 +995,8 @@
 <script src="js/link-rule-history.js?v=0.1"></script>
 <script src="js/settings-history.js?v=0.4"></script>
 <script src="js/expansion-history.js?v=0.1"></script>
+<script src="js/format-slots.js?v=0.1"></script>
+<script src="js/format-slots-menu.js?v=0.1"></script>
 <script src="js/access-rights.js?v=0.12"></script>
 <script src="js/save-reminder.js?v=0.3"></script>
 <script src="js/schema-renames.js?v=0.14"></script>
@@ -1006,6 +1014,6 @@
 <script src="js/page-zoom.js?v=0.13"></script>
 <script src="js/field-codec.js?v=0.6"></script>
 <script src="js/field-editor.js?v=0.7"></script>
-<script src="js/main.js?v=0.201"></script>
+<script src="js/main.js?v=0.202"></script>
 </body>
 </html>

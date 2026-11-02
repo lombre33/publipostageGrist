@@ -320,6 +320,8 @@ const MainToolbar = (function () {
     syncLiveRow();
     // « Mettre à jour « Titre N » d'après la sélection » et « Rétablir le style d'origine » (menu Titre) : le niveau du titre où est le curseur dans leur libellé, grisées avec leur raison hors d'un titre du texte.
     HeadingStyles.syncRows(editor, { update: byId('v2-btn-heading-style-update'), reset: byId('v2-btn-heading-style-reset') });
+    // Les mises en forme gardées (menu du pinceau) : le menu se redessine quand ses places, la langue ou le droit de peindre la sélection changent.
+    FormatSlotsMenu.sync(editor);
     // « Garder avec le suivant » (menu Alignement) : cochée quand les paragraphes visés le portent, grisée avec sa raison hors du texte courant.
     KeepWithNext.syncRow(byId('v2-btn-keep-next'), editor);
     // « Texte de droite à gauche » (menu Alignement) : cochée quand les paragraphes visés le portent, grisée avec sa raison hors du texte.
@@ -344,7 +346,7 @@ const MainToolbar = (function () {
       // document. Les groupes à survol (titres, alignement, image) le sont en entier : pointer-events s'hérite (.v2-hf-locked, css/toolbar-v2.css),
       // ce qui bloque aussi leur volet déroulant. Un niveau de titre n'est qu'une taille et un poids, que le texte brut ne porte pas.
       [mailOrMacro, ['v2-btn-bold', 'v2-btn-italic', 'v2-btn-underline', 'v2-btn-strike', 'v2-heading-group', 'v2-align-group', 'v2-size-stepper', 'v2-font-chip',
-        'v2-text-color-split', 'v2-highlight-split', 'v2-btn-format-painter', 'v2-btn-table', 'v2-btn-two-columns', 'v2-image-group']],
+        'v2-text-color-split', 'v2-highlight-split', 'v2-painter-group', 'v2-btn-table', 'v2-btn-two-columns', 'v2-image-group']],
       // Le sommaire a la condition de ce groupe, plus l'en-tête et le pied de page : une zone n'a que 60 px de hauteur, aucune liste de titres n'y a sa
       // place (une condition par bouton : un second groupe lèverait le grisé du premier).
       [mailOrMacro || inHfMode, ['v2-btn-toc']],
@@ -762,8 +764,9 @@ const MainToolbar = (function () {
     // caractère inséré par le code rouvre la même autocomplétion que s'il était tapé. Un texte sélectionné n'est pas remplacé par le « # » : la liste
     // s'ouvre devant lui, sur l'onglet Chips, pour l'entourer d'un bloc « Texte conditionnel » (js/conditional-text.js:startFromSelection).
     bind('v2-btn-insert-variable', () => { if (!ConditionalText.startFromSelection(editor)) editor.chain().focus().insertContent(Variables.triggerChar()).run(); });
-    // Le pinceau de mise en forme câble lui-même son clic et son double-clic (js/format-painter.js).
+    // Le pinceau de mise en forme câble lui-même son clic et son double-clic (js/format-painter.js) ; son menu au survol garde les mises en forme (js/format-slots-menu.js).
     FormatPainter.wire(editor);
+    FormatSlotsMenu.wire(editor);
     // Pendant l'écriture en direct, Annuler et Rétablir passent par l'historique de Yjs, qui ne défait que les frappes de la personne (js/live-entry.js) ; le suivi des modifications est fermé.
     bind('v2-btn-undo', () => { HistoryMarkers.flush(); if (LiveEntry.undo()) editor.commands.focus(); else editor.chain().focus().undo().run(); });
     bind('v2-btn-redo', () => { HistoryMarkers.flush(); if (LiveEntry.redo()) editor.commands.focus(); else editor.chain().focus().redo().run(); });

@@ -60,24 +60,28 @@
   // Le bouton écrit son infobulle et son nom accessible dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
   const buttonCase = {
     id: 'fp_button_is_in_the_toolbar_after_the_highlight_with_an_icon_a_name_and_the_key_in_both_languages',
-    description: 'Le bouton du pinceau suit le surlignage dans la barre, porte une icône, son nom et la touche de départ (Alt+Maj+C) dans l\'infobulle, son nom accessible, dans la langue de la page ; les deux actions de la liste des touches existent',
+    description: 'Le bouton du pinceau (dans son groupe à menu) suit le surlignage dans la barre, porte une icône, son nom accessible, et son nom et la touche de départ (Alt+Maj+C) sont dans l\'intitulé de son menu, dans la langue de la page ; les deux actions de la liste des touches existent',
     run: async (h) => {
       await h.resetEditor();
       const english = I18n.getLang() === 'en';
       const b = button();
       const out = { exists: !!b };
       if (b) {
-        out.afterHighlight = b.previousElementSibling && b.previousElementSibling.id === 'v2-highlight-split';
+        // Le bouton ouvre un menu au survol (les mises en forme gardées) : comme Tableau et Image, il n'a pas de data-tip, l'intitulé du menu dit son nom et sa touche.
+        const group = b.closest('#v2-painter-group');
+        const label = document.querySelector('#v2-painter-flyout .v2-hover-flyout-label');
+        out.afterHighlight = !!group && group.previousElementSibling && group.previousElementSibling.id === 'v2-highlight-split';
+        out.noTip = !b.hasAttribute('data-tip');
         out.icon = !!b.querySelector('svg path, svg rect');
         out.pressed = b.getAttribute('aria-pressed');
-        out.texts = { tip: b.getAttribute('data-tip'), keytip: b.getAttribute('data-keytip'), aria: b.getAttribute('aria-label'), keys: b.getAttribute('aria-keyshortcuts') };
+        out.texts = { tip: label && label.textContent, keytip: label && label.getAttribute('data-keytip'), aria: b.getAttribute('aria-label'), keys: b.getAttribute('aria-keyshortcuts') };
       }
       const keys = { painter: Shortcuts.keyFor('formatPainter'), paste: Shortcuts.keyFor('formatPaste') };
       const names = ['formatPainter', 'formatPaste'].map(id => I18n.t(Shortcuts.action(id).label)).join(' / ');
       const textsOk = !!out.texts && (english
         ? out.texts.tip === 'Format painter' && out.texts.keytip === ' (Alt+Shift+C)' && /double-click/.test(out.texts.aria)
         : out.texts.tip === 'Reproduire la mise en forme' && out.texts.keytip === ' (Alt+Maj+C)' && /double-clic/.test(out.texts.aria));
-      const pass = out.exists && out.afterHighlight && out.icon && out.pressed === 'false' && textsOk && out.texts.keys === 'Alt+Shift+C'
+      const pass = out.exists && out.afterHighlight && out.noTip && out.icon && out.pressed === 'false' && textsOk && out.texts.keys === 'Alt+Shift+C'
         && keys.painter === 'Alt+Shift+c' && keys.paste === 'Alt+Shift+v'
         && names === (english ? 'Format painter / Apply the copied formatting' : 'Reproduire la mise en forme / Appliquer la mise en forme');
       return { pass, notes: JSON.stringify({ lang: I18n.getLang(), out, keys, names }) };
@@ -87,7 +91,7 @@
   cases.push(Object.assign({}, buttonCase, {
     id: 'fp_button_is_in_the_toolbar_after_the_highlight_with_an_icon_a_name_and_the_key_in_english',
     lang: 'en',
-    description: 'Page qui démarre en anglais : le bouton du pinceau porte « Format painter » et la touche (Alt+Shift+C) dans l\'infobulle, son nom accessible parle du double-clic, les deux actions s\'appellent « Format painter » et « Apply the copied formatting »',
+    description: 'Page qui démarre en anglais : l\'intitulé du menu du pinceau porte « Format painter » et la touche (Alt+Shift+C), son nom accessible parle du double-clic, les deux actions s\'appellent « Format painter » et « Apply the copied formatting »',
   }));
 
   cases.push({
@@ -260,20 +264,22 @@
 
   cases.push({
     id: 'fp_is_greyed_in_email_and_macro_modes_and_an_armed_painter_stops',
-    description: 'En mode e-mail et en macro-modèle le bouton est grisé (v2-hf-locked), sa touche ne fait rien ; un pinceau armé qui se retrouve grisé (Lecture, droits, e-mail) s\'arrête à la transaction suivante',
+    description: 'En mode e-mail et en macro-modèle le bouton est grisé (v2-hf-locked, posée sur son groupe), sa touche ne fait rien ; un pinceau armé qui se retrouve grisé (Lecture, droits, e-mail) s\'arrête à la transaction suivante',
     run: async (h) => {
       await load('<p><strong>Gras</strong> a</p>');
       const b = button();
+      // Le grisé se pose sur le groupe du bouton (#v2-painter-group : le menu des mises en forme gardées est grisé avec lui), comme pour Tableau et Image.
+      const group = document.getElementById('v2-painter-group');
       const out = {};
-      const reset = () => { MainToolbar.setEmailMode(false); MainToolbar.setMacroMode(false); MainToolbar.syncToolbarState(); b.classList.remove('pp-access-locked'); };
+      const reset = () => { MainToolbar.setEmailMode(false); MainToolbar.setMacroMode(false); MainToolbar.syncToolbarState(); group.classList.remove('pp-access-locked'); };
       reset();
-      out.free = b.classList.contains('v2-hf-locked');
+      out.free = group.classList.contains('v2-hf-locked');
       MainToolbar.setEmailMode(true); MainToolbar.syncToolbarState();
-      out.email = b.classList.contains('v2-hf-locked');
+      out.email = group.classList.contains('v2-hf-locked');
       out.emailKey = Shortcuts.run('formatPainter');
       reset();
       MainToolbar.setMacroMode(true); MainToolbar.syncToolbarState();
-      out.macro = b.classList.contains('v2-hf-locked');
+      out.macro = group.classList.contains('v2-hf-locked');
       reset();
       // armé, puis grisé par e-mail
       await selectText('Gras');
@@ -285,7 +291,7 @@
       reset();
       // armé, puis grisé par la Lecture / les droits (classe posée par js/main.js)
       b.click();
-      b.classList.add('pp-access-locked');
+      group.classList.add('pp-access-locked');
       await sleep(30);
       out.stoppedByAccess = !FormatPainter.isArmed();
       out.copyWhenLocked = FormatPainter.copy();

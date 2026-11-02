@@ -1177,6 +1177,28 @@ Dans Firefox, le widget (seul puis hébergé par GFS), panneau d'environ 700×40
 
 ---
 
+## 41. Les trois mises en forme gardées du pinceau (menu au survol) : le modèle, le document et Ctrl+Z pour de vrai
+
+**Couverture automatisée** : le groupe `formatSlots` (13 cas : les bornes du JSON du modèle et un JSON abîmé, garder, appliquer comme le pinceau, appliquer un titre, renommer, retirer, Ctrl+Z et Ctrl+Y du modèle et du document sans écraser le changement d'un collègue, un refus d'écriture, le dessin du menu en français et en anglais, le grisé, les boutons du menu, les verrous e-mail et macro), le script Node `formatSlotsMouse` (68 vérifications à la vraie souris et au vrai clavier, à 700×400, en français clair puis en anglais sombre), `formatPainter` et `formatPainterMouse` (le bouton est dans le groupe du menu) et le balayage `undoSweep` (les quatre gestes au registre de Ctrl+Z).
+**Non couvert** : le vrai Firefox, le widget hébergé par GFS, deux personnes qui changent les mises en forme partagées en même temps (le test simule la seconde), le refus d'écriture d'un vrai Grist (simulé) et un document ouvert en lecture seule dans un vrai Grist.
+
+### Protocole
+Dans Firefox, le widget hébergé par GFS, panneau d'environ 700×400, deux modèles du même document, un paragraphe en Georgia 18 pt rouge gras centré (« Source ») et deux paragraphes ordinaires (« Cible ») :
+1. Passer la souris sur le bouton du pinceau (deuxième rangée, après le surlignage) : le menu s'ouvre sous le bouton, dans le panneau, sous l'intitulé « Reproduire la mise en forme (Alt+Maj+C) » ; deux blocs, « Mises en forme du modèle » et « Mises en forme partagées », trois places vides chacun (« + Garder la mise en forme du texte »). Le menu défile s'il est trop haut ; la dernière ligne s'atteint à la souris. Un clic sur le bouton copie toujours la mise en forme (le pinceau s'arme) et referme le menu tout de suite, souris encore dessus (il ne recouvre pas le texte qu'on vise ensuite) ; un double-clic le garde armé.
+2. Curseur dans « Source », cliquer la première place du modèle : elle devient « Mise en forme 1 » avec un crayon et une corbeille ; le coin d'état le dit ; le focus et le curseur restent dans le texte. Faire de même dans la première place partagée.
+3. Sélectionner « Cible » en entier, ouvrir le menu, cliquer « Mise en forme 1 » : la cible devient Georgia 18 pt rouge gras centré, le menu se range, le focus revient au texte. UN Ctrl+Z la remet comme avant, Ctrl+Y la refait.
+4. Avec le curseur seul (rien de sélectionné), les places prises sont grisées et leur infobulle dit « Sélectionnez le texte à mettre en forme. » ; un clic ne fait rien.
+5. Crayon : la fenêtre « Renommer la mise en forme » montre le nom ; Entrée le change, Échap le garde ; un nom de 40 caractères est coupé dans le menu sans défilement de côté. Ctrl+Z rend l'ancien nom.
+6. Corbeille d'une mise en forme du modèle : elle part d'un clic ; Ctrl+Z la rend. Corbeille d'une mise en forme partagée : une question d'abord (« Retirer « Mise en forme 2 » ? ») ; Annuler la garde ; Retirer la retire ; Ctrl+Z la rend.
+7. Enregistrer le modèle, recharger le document Grist, rouvrir le modèle : ses mises en forme sont là, les partagées aussi. Ouvrir l'autre modèle du document : les partagées y sont, celles du modèle non. « Enregistrer sous… » un autre nom : la copie garde les mises en forme du modèle (comme ses couleurs du modèle).
+8. Avec une seconde personne (ou un second onglet) sur le même document : la mise en forme partagée qu'elle garde apparaît chez vous à l'ouverture du menu ; si elle a changé la même place depuis votre geste, votre Ctrl+Z le dit sans écraser son changement.
+9. Garder la mise en forme d'un titre 2 centré, puis l'appliquer à un paragraphe sélectionné en entier : il devient un titre 2 centré ; appliquée à un seul mot, elle ne change que les caractères et laisse le paragraphe tel qu'il est.
+10. Au clavier seul : Tab jusqu'au bouton du pinceau ouvre le menu ; Tab entre dans le menu, sur la première place du modèle ; Entrée sur une place vide la remplit, le menu reste ouvert et le focus passe à la ligne de cette place (nom, crayon, corbeille : Tab les suit, puis la place suivante, Maj+Tab revient) ; Entrée sur la corbeille d'une mise en forme du modèle la retire sans question et le focus passe à la place vide ; Entrée sur le crayon ouvre la fenêtre, Entrée la valide et le focus revient au crayon ; Entrée sur un nom, avec une sélection, peint le texte, rend le focus au texte et range le menu.
+11. En Lecture, dans un modèle d'e-mail, dans un macro-modèle, et dans un document ouvert en lecture seule : le bouton du pinceau et son menu sont grisés (jamais retirés) et rien n'agit.
+12. En anglais : « Template formats », « Shared formats », « Keep the text’s formatting », « Format 1 » tiennent dans le menu sans texte coupé.
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas

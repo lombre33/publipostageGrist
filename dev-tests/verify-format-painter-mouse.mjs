@@ -3,7 +3,8 @@
 // clavier (page.keyboard), en clair, en sombre et en anglais. Ce que dev-tests/scenarios-format-painter.js ne peut pas voir depuis la page : une sélection posée par programme ne dit pas
 // si ProseMirror a suivi la souris au relâchement (double-clic sur un mot, glissé, triple-clic sur un paragraphe, cases d'un tableau).
 //  - le bouton : sur la 2e rangée, collé au surlignage comme le sont les boutons voisins, de la taille des autres (icône comprise), sans faire passer la barre à une 3e rangée ; icône lisible
-//    au repos (≥ 4,5:1) et armé (≥ 3:1, comme tout bouton enfoncé de la barre) ; l'infobulle entière dans la fenêtre avec sa touche ;
+//    au repos (≥ 4,5:1) et armé (≥ 3:1, comme tout bouton enfoncé de la barre) ; son menu au survol (les mises en forme gardées, dev-tests/verify-format-slots-mouse.mjs) se nomme avec sa touche
+//    et tient dans la fenêtre ;
 //  - un double-clic sur un mot de la source, un clic sur le pinceau, puis un double-clic sur un mot de la cible : le mot prend gras, italique, souligné, barré, police, taille, couleur
 //    et surlignage ; le pinceau se range (bouton relâché, curseur de texte), le clavier est dans le document, la sélection reste ;
 //  - un glissé sur plusieurs mots, un triple-clic sur un paragraphe (le titre 2 centré d'un curseur, dont le paragraphe passe titre), les cases d'un tableau glissées ;
@@ -217,20 +218,20 @@ const iconContrast = () => page.evaluate(() => {
   const l1 = lum(fgc), l2 = lum(bg);
   return Math.round((Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05) * 100) / 100;
 });
-const tipOf = id => page.evaluate(id => {
-  const host = document.getElementById(id);
-  const r = host.getBoundingClientRect();
-  const cs = getComputedStyle(host, '::after');
-  const w = parseFloat(cs.width) + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-  const left = r.left + host.clientLeft + parseFloat(cs.left) - w / 2;
-  return { content: cs.content.replace(/^"|"$/g, ''), opacity: Number(cs.opacity), left: Math.round(left * 10) / 10, right: Math.round((left + w) * 10) / 10 };
-}, id);
-async function hover(id) {
-  const point = await page.evaluate(id => { const r = document.getElementById(id).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, id);
+// Le bouton ouvre un menu au survol (les mises en forme gardées), comme Tableau ou Image : il n'a pas d'infobulle, l'intitulé du menu dit son nom et sa touche.
+async function openMenu() {
+  const point = await page.evaluate(() => { const r = document.getElementById('v2-btn-format-painter').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
   await page.mouse.move(point.x, point.y);
-  await page.waitForFunction(id => Number(getComputedStyle(document.getElementById(id), '::after').opacity) === 1, id, { timeout: 2500 }).catch(() => {});
-  await page.waitForTimeout(60);
+  await page.waitForFunction(() => getComputedStyle(document.getElementById('v2-painter-flyout')).display !== 'none', null, { timeout: 2500 }).catch(() => {});
+  await page.waitForTimeout(80);
 }
+const menuTitle = () => page.evaluate(() => {
+  const flyout = document.getElementById('v2-painter-flyout');
+  const label = flyout.querySelector('.v2-hover-flyout-label');
+  const box = flyout.getBoundingClientRect();
+  return { content: label.textContent + getComputedStyle(label, '::after').content.replace(/^"|"$/g, ''), shown: box.width > 0 && getComputedStyle(flyout).display !== 'none',
+    left: Math.round(box.left), right: Math.round(box.right), top: Math.round(box.top), bottom: Math.round(box.bottom) };
+});
 
 const STYLED = '<strong><em><u><s><span style="color: #c0392b; background-color: #fff3a3; font-size: 14pt; font-family: Georgia">Source</span></s></u></em></strong>';
 const DOC = '<p>' + STYLED + ' et du texte ordinaire plus bas.</p>'
@@ -259,16 +260,16 @@ async function buttonPart(T) {
     const icon = b.querySelector('svg').getBoundingClientRect();
     const tableIcon = document.getElementById('v2-btn-table').querySelector('svg').getBoundingClientRect();
     return { w: r.width, h: r.height, tableW: table.width, tableH: table.height, tableIconW: tableIcon.width, gap: Math.round((r.left - hl.right) * 10) / 10, neighbourGap: Math.round((redo.left - undo.right) * 10) / 10,
-      sameRow: Math.abs(r.top - hl.top) < 2, rows, lastRight: Math.round(last.right), iconW: icon.width, afterHighlight: b.previousElementSibling.id, visible: r.width > 0 && r.right <= 700 };
+      sameRow: Math.abs(r.top - hl.top) < 2, rows, lastRight: Math.round(last.right), iconW: icon.width, afterHighlight: b.closest('#v2-painter-group').previousElementSibling.id, visible: r.width > 0 && r.right <= 700 };
   });
   check(`${T} : le bouton du pinceau suit le surlignage, sur sa rangée, de la taille des autres boutons`, geometry.afterHighlight === 'v2-highlight-split' && geometry.sameRow && geometry.w === geometry.tableW && geometry.h === geometry.tableH && geometry.visible, geometry);
   check(`${T} : collé au surlignage comme le sont les boutons voisins (Annuler et Rétablir), icône de la taille des autres`, geometry.gap === geometry.neighbourGap && geometry.iconW === geometry.tableIconW && geometry.iconW > 0, geometry);
   check(`${T} : la barre garde ses deux rangées à 700 px et rien ne déborde à droite`, geometry.rows === 2 && geometry.lastRight <= WIDTH - 8, geometry);
   const restContrast = await iconContrast();
   check(`${T} : l'icône au repos fait 4,5:1 au moins sur son fond (${restContrast})`, restContrast >= 4.5, restContrast);
-  await hover('v2-btn-format-painter');
-  const tip = await tipOf('v2-btn-format-painter');
-  check(`${T} : l'infobulle « Reproduire la mise en forme (Alt+Maj+C) » est entière dans la fenêtre`, tip.content === 'Reproduire la mise en forme (Alt+Maj+C)' && tip.opacity === 1 && tip.left >= 0 && tip.right <= WIDTH, tip);
+  await openMenu();
+  const title = await menuTitle();
+  check(`${T} : le menu du bouton se nomme « Reproduire la mise en forme (Alt+Maj+C) » et tient dans la fenêtre`, title.content === 'Reproduire la mise en forme (Alt+Maj+C)' && title.shown && title.left >= 0 && title.right <= WIDTH && title.bottom <= HEIGHT, title);
   await page.mouse.move(400, 300);
   await snap(`${T}-bouton`);
 }
@@ -433,7 +434,8 @@ async function readingPart(T) {
   await page.waitForTimeout(120);
   await page.click('#btn-mode-read');
   await page.waitForTimeout(500);
-  const grey = await page.evaluate(() => { const b = document.getElementById('v2-btn-format-painter'); return { locked: b.classList.contains('pp-access-locked'), opacity: Number(getComputedStyle(b).opacity), pointer: getComputedStyle(b).pointerEvents }; });
+  // Le grisé de la Lecture se pose sur le groupe du bouton (il porte aussi son menu), le bouton en hérite.
+  const grey = await page.evaluate(() => { const b = document.getElementById('v2-btn-format-painter'); const g = b.closest('#v2-painter-group'); return { locked: g.classList.contains('pp-access-locked'), opacity: Number(getComputedStyle(g).opacity), pointer: getComputedStyle(b).pointerEvents }; });
   check(`${T} : en Lecture le bouton est grisé, jamais retiré`, grey.locked && (grey.opacity < 1 || grey.pointer === 'none'), grey);
   await page.keyboard.press('Alt+Shift+c');
   await page.waitForTimeout(120);
@@ -459,9 +461,9 @@ async function englishPart() {
   await restartIn('en');
   await page.waitForTimeout(250);
   await setDoc(DOC);
-  await hover('v2-btn-format-painter');
-  const tip = await tipOf('v2-btn-format-painter');
-  check(`${T} : l'infobulle dit « Format painter (Alt+Shift+C) », entière dans la fenêtre`, tip.content === 'Format painter (Alt+Shift+C)' && tip.opacity === 1 && tip.left >= 0 && tip.right <= WIDTH, tip);
+  await openMenu();
+  const title = await menuTitle();
+  check(`${T} : le menu du bouton se nomme « Format painter (Alt+Shift+C) », entier dans la fenêtre`, title.content === 'Format painter (Alt+Shift+C)' && title.shown && title.left >= 0 && title.right <= WIDTH && title.bottom <= HEIGHT, title);
   const aria = await page.evaluate(() => document.getElementById('v2-btn-format-painter').getAttribute('aria-label'));
   check(`${T} : le nom accessible est en anglais`, /^Format painter: copies the formatting/.test(aria), aria);
   await page.mouse.move(400, 300);
