@@ -70,6 +70,9 @@ const Templates = (function () {
     // (AddTable ne sert qu'aux documents neufs). `columns` est aussi ce que loadAll sait d'une migration déjà faite (cf. ensureOnce).
     return ensureOnce(async function () {
       await ensureTableExists();
+      // Un compte Lecteur de Grist n'écrit rien et n'essaie pas : Grist refuserait l'ajout (js/grist-api.js:isDocumentReadOnly). La colonne qui manque à un document d'avant elle se lit vide (templateFromRow) et le premier
+      // compte qui modifie le document la crée à son tour.
+      if (GristAPI.isDocumentReadOnly()) return false;
       try {
         const data = await grist.docApi.fetchTable(TABLE_NAME);
         const actions = columns.filter(([id]) => !(id in data)).map(([id, type, label]) => ['AddVisibleColumn', TABLE_NAME, id, { type, isFormula: false, label }]);

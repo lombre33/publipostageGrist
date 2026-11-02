@@ -6,7 +6,8 @@
 // le premier affichage :
 //  - réglage Accès présent (la ligne de la personne dit « modification, sans export, commentaires » : elle ne doit pas compter, un Lecteur n'est pas identifié) ;
 //  - le widget s'ouvre en Lecture, le texte résolu, la barre d'édition grisée (pas retirée), Commenter grisé : de vrais clics n'y font rien ;
-//  - Exporter en PDF part (l'export est gardé) ; Enregistrer au clavier n'écrit rien ; aucune écriture n'a été refusée de tout le parcours ;
+//  - Exporter en PDF part (l'export est gardé) ; Enregistrer au clavier n'écrit rien ; aucune écriture n'a été refusée de tout le parcours, aucun ajout de colonne n'a même été
+//    tenté (la colonne « Modifié par », qui manque à un document d'avant elle, se lit vide : le Lecteur ne la demande pas) alors que le témoin, un compte qui modifie, l'ajoute ;
 //  - Réglages > Accès dit « Compte Lecteur dans Grist : lecture seule, export, sans commentaires », listes et case verrouillées ; Réglages > Vue verrouillé ;
 //  - case « Ouvrir les personnes en lecture seule sur la Lecture épurée » cochée : le widget s'ouvre d'emblée sur le document seul (le comportement que
 //    « le mode Lecture épurée n'est pas par défaut quand il est coché » disait manquer), le bouton rond du coin rend la barre, toujours en lecture seule ;
@@ -133,7 +134,7 @@ async function openWidget({ viewer, clean }) {
       m.id.push(1); m.Nom.push('Contrat');
       m.Contenu.push('<p>Bonjour <span class="var-badge" data-table="Clients" data-column="Nom" data-key="Clients.Nom"></span>, voici le contrat de location.</p><p>Second paragraphe du modèle.</p>');
       m.NomFichierPDF.push(''); m.HeaderFooter.push(''); m.DateModif.push(1790000000); m.Margins.push(''); m.EstParDefaut.push(true);
-      // Un document déjà migré, comme celui d'un propriétaire qui utilise le widget : aucune colonne à ajouter au démarrage (un Lecteur ne le pourrait pas).
+      // Un document déjà migré, comme celui d'un propriétaire qui utilise le widget, sauf la colonne « Modifié par » (venue après les autres) : un Lecteur ne peut ajouter aucune colonne et ne doit en demander aucune.
       ['TypeModele', 'Destinataires', 'Cc', 'Cci', 'Objet', 'SuiviModifications'].forEach(column => { m[column] = ['']; });
       stub.state.nextRowId.Publipostage_Modeles = 2;
     };
@@ -180,6 +181,8 @@ const click = async (page, selector) => {
 };
 const activeTab = page => page.evaluate(() => { const t = document.querySelector('#settings-tabs .settings-tab.active'); return t ? t.getAttribute('data-settings-tab') : null; });
 const modalOpen = page => page.evaluate(() => { const m = document.getElementById('settings-modal'); return getComputedStyle(m).display !== 'none' && m.getClientRects().length > 0; });
+// Les colonnes de la table des modèles telles que le faux Grist les garde (les tables du widget y sont en colonnes : `rows`, une clé par colonne, `id` compris).
+const tableColumns = page => page.evaluate(() => Object.keys(window.__gristStub.state.rows.Publipostage_Modeles || {}));
 const state = page => page.evaluate(() => ({
   status: document.getElementById('status-msg').textContent,
   readerShown: document.getElementById('reader-container').style.display,
@@ -298,6 +301,8 @@ const state = page => page.evaluate(() => ({
   check('Lecteur : « Fermer » visible à 700x400 et le vrai clic ferme les Réglages', closeBtn.found && closeBtn.inViewport && closeBtn.onTop && !(await modalOpen(page)), closeBtn);
   const end = await state(page);
   check('Lecteur : aucune écriture refusée par Grist de tout le parcours (la lecture seule n\'a rien tenté, démarrage compris)', end.denied === 0, end);
+  const viewerColumns = await tableColumns(page);
+  check('Lecteur : aucun ajout de colonne tenté (« Modifié par » manque à ce document, la table garde ses colonnes)', !end.deniedActions.some(a => /^Add(Visible)?Column /.test(a)) && viewerColumns.indexOf('ModifiePar') === -1 && viewerColumns.indexOf('Contenu') !== -1, { deniedActions: end.deniedActions, viewerColumns });
   await context.close();
 }
 
@@ -331,6 +336,8 @@ const state = page => page.evaluate(() => ({
   check('Témoin (même réglage, adresse sans `readonly=true`) : le widget s\'ouvre en Édition, tous les droits, ni Lecture épurée ni état « viewer »',
     s.editorShown === 'block' && s.readerShown !== 'block' && !s.clean && s.rights.readOnly === false && s.state === 'found', s);
   await shot(page, '4-temoin-edition');
+  const witnessColumns = await tableColumns(page);
+  check('Témoin : un compte qui modifie le document ajoute, lui, la colonne « Modifié par »', witnessColumns.indexOf('ModifiePar') !== -1, witnessColumns);
   await context.close();
 }
 
