@@ -1656,6 +1656,12 @@
     lossCase('fond en image en mosaïque', { shapePictures: 1 }, card({ fill: '<a:blipFill><a:blip r:embed="rId2"/><a:tile tx="0" ty="0" sx="100000" sy="100000" flip="none" algn="tl"/></a:blipFill>' })),
     lossCase('objet masqué : repris masqué (lot 10c), rien au rapport', {}, card({ cnv: 'hidden="1"' })),
     lossCase('tableau masqué : un tableau est posé dans le texte, il ne se masque pas', { hiddenObjects: 1 }, table({ id: 6, x: 60, y: 60, cols: [150, 150], rows: [{ h: 40, cells: [{ text: 'A' }, { text: 'B' }] }] }).replace('name="Tableau"', 'name="Tableau" hidden="1"')),
+    lossCase('graphique masqué : compté comme un graphique, pas comme un objet du masque', { charts: 1 },
+      '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="8" name="Graphique" hidden="1"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>' + xfrm(60, 60, 200, 100, '', 'p:xfrm')
+        + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId9"/></a:graphicData></a:graphic></p:graphicFrame>'),
+    lossCase('texte masqué qui n\'a de place nulle part : non repris, compté', { unreadable: 1 }, sp({ id: 2, name: 'Corps', ph: '<p:ph type="body" idx="9"/>', cnv: 'hidden="1"', text: para(sm('Texte sans place')) })),
+    lossCase('texte visible qui n\'a de place nulle part : non repris, compté', { unreadable: 1 }, sp({ id: 2, name: 'Corps', ph: '<p:ph type="body" idx="9"/>', text: para(sm('Texte sans place')) })),
+    lossCase('espace réservé vide, sans place : rien à dire', {}, sp({ id: 2, name: 'Corps', ph: '<p:ph type="body" idx="9"/>' })),
     lossCase('lien web posé sur une forme à texte : repris (lot 10a), rien au rapport', {}, card({ cnvInner: LINK })),
     lossCase('lien web posé sur une forme sans texte : compté', { objectLinks: 1 }, card({ cnvInner: LINK, text: '' })),
     lossCase('lien posé sur une forme, vers une diapositive absente du fichier : compté', { objectLinks: 1 }, card({ cnvInner: '<a:hlinkClick r:id="rId11" action="ppaction://hlinksldjump"/>' })),

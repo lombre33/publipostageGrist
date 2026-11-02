@@ -1609,7 +1609,8 @@ const PptxImport = (function () {
     const spPr = kid(sp, 'spPr');
     const holders = [spPr, context.layoutSp && kid(context.layoutSp, 'spPr'), context.masterSp && kid(context.masterSp, 'spPr')].filter(Boolean);
     const xf = holders.map(xfrmOf).find(Boolean);
-    if (!xf) return;
+    // Un objet sans place nulle part (ni lui, ni sa mise en page, ni son masque) n'a pas où se poser : il n'est pas repris, et s'il porte du texte le rapport le compte (masqué ou non).
+    if (!xf) { if (descendants(kid(sp, 'txBody'), 't').some(t => t.textContent.trim())) ctx.report.unreadable += 1; return; }
     const geom = holders.map(h => kid(h, ['prstGeom', 'custGeom'])).find(Boolean);
     const prst = attr(geom, 'prst') || (geom ? 'cust' : 'rect');
     if (LINE_PRESETS.has(prst)) { connectorObject(sp, env, groups, out); return; }
@@ -2095,9 +2096,9 @@ const PptxImport = (function () {
       if (!env.decor && /^(sp|cxnSp|pic|grpSp|graphicFrame)$/.test(node.localName)) ctx.objects += 1;
       const from = out.length;
       const tablesFrom = out.tables ? out.tables.length : 0;
-      // Un objet masqué (volet Sélection) : un tableau ou un objet du décor n'est pas repris (le rapport le dit) ; les autres le sont, masqués (`data-ff-hidden`).
+      // Un objet masqué (volet Sélection) : un objet du décor n'est pas repris (le rapport le dit) ; les autres le sont, masqués (`data-ff-hidden`) - un tableau, qui ne se masque pas, est ôté et compté (hideFrames), un graphique reste compté comme un graphique.
       const hidden = /^(sp|cxnSp|pic|grpSp|graphicFrame)$/.test(node.localName) && bool(attr(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr']), 'cNvPr'), 'hidden'));
-      if (hidden && (env.decor || node.localName === 'graphicFrame')) { ctx.report.hiddenObjects += 1; continue; }
+      if (hidden && env.decor) { ctx.report.hiddenObjects += 1; continue; }
       try {
         switch (node.localName) {
           case 'sp': await shapeObject(node, env, groups, out); break;
