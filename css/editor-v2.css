@@ -97,8 +97,8 @@
   border: solid currentColor; border-width: 0 .143em .143em 0; transform: rotate(40deg);
 }
 .resolved-checkbox[data-checked="true"]:not([data-checkbox-style="classic"])::after { border-color: #fff; }
-/* Le souligné et le barré posés sur une case conditionnelle (js/conditional-checkbox.js:resolve les écrit en `data-checkbox-lines`) : la case est une boîte en ligne, que le trait
-   d'une marque parente n'atteint pas. Le barré la traverse (un fin dégradé, blanc sur une case d'accent cochée, comme sa coche) ; le souligné passe juste sous elle (une ombre
+/* Le souligné et le barré posés sur une case conditionnelle ou sur la bulle d'une variable Oui / Non (js/conditional-checkbox.js:resolve et js/reader-mode.js:carryBoxLines les écrivent
+   en `data-checkbox-lines`) : la case est une boîte en ligne, que le trait d'une marque parente n'atteint pas. Le barré la traverse (un fin dégradé, blanc sur une case d'accent cochée, comme sa coche) ; le souligné passe juste sous elle (une ombre
    sans flou : le `overflow: hidden` de la case ne coupe pas la sienne). `[data-checked]` donne à la première règle le poids du fond de la case cochée, `background: currentColor`,
    qu'elle suit : sans lui, ce raccourci remettrait la taille du dégradé à « auto » et la case cochée apparaîtrait toute blanche. */
 .resolved-checkbox[data-checkbox-lines~="line-through"][data-checked] { background-image: linear-gradient(currentColor, currentColor); background-size: 100% .1em; background-position: 0 50%; background-repeat: no-repeat; }

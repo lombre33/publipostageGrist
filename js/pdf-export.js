@@ -563,8 +563,9 @@ const PdfExport = (function () {
 
   // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : un glyphe des polices de cases (js/pdf-fonts-boxes.js) - la police du
   // texte n'a ni ☑ ni ☐ -, de la taille du texte et de la couleur de la case (style en ligne, déjà lu par inheritedStyle). Jamais grasse ni en
-  // italique, et sans trait de ce qui l'enveloppe : le barré d'une case d'accent cochée vise le texte qui la suit, pas une autre case. Seule exception, la case
-  // conditionnelle (js/conditional-checkbox.js:resolve), qui porte en `data-checkbox-lines` le souligné et le barré que la personne a posés sur elle.
+  // italique, et sans trait de ce qui l'enveloppe : le barré d'une case d'accent cochée vise le texte qui la suit, pas une autre case. Seule exception, les traits que la
+  // personne a posés sur la case elle-même, en `data-checkbox-lines` (la case conditionnelle, js/conditional-checkbox.js:resolve, et celle d'une variable Oui / Non,
+  // js/reader-mode.js:carryBoxLines) : le souligné et le barré de sa marque.
   const MARK_LINES = { underline: 'underline', 'line-through': 'lineThrough' };
   function checkboxRuns(node, style) {
     const box = Object.assign({}, style, {

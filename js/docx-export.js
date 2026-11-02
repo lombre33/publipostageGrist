@@ -376,8 +376,9 @@ const DocxExport = (function () {
 
   // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : le caractère ☑ ou ☐ en « Segoe UI Symbol » (Word, Google Docs et
   // LibreOffice en prennent une autre si elle manque), dans la couleur de la case (style en ligne, déjà lu par inheritedRunStyle) et jamais barré :
-  // le barré d'une case d'accent cochée vise le texte qui la suit. Seule exception, la case conditionnelle (js/conditional-checkbox.js:resolve), qui
-  // porte en `data-checkbox-lines` les traits que la personne a posés sur elle : le barré de sa marque s'écrit (son souligné, lui, vient déjà de `style`).
+  // le barré d'une case d'accent cochée vise le texte qui la suit. Seule exception, la case conditionnelle (js/conditional-checkbox.js:resolve) et celle d'une
+  // variable Oui / Non (js/reader-mode.js:carryBoxLines), qui portent en `data-checkbox-lines` les traits que la personne a posés sur elles : le barré de sa marque
+  // s'écrit (son souligné, lui, vient déjà de `style`).
   function checkboxRuns(node, style) {
     const struck = (node.getAttribute('data-checkbox-lines') || '').split(' ').includes('line-through');
     return [textRun(node.textContent, Object.assign({}, style, { strike: struck, font: 'Segoe UI Symbol' }))];

@@ -38,9 +38,20 @@ const ReaderMode = (function () {
     if (around.after) node.append(document.createTextNode(around.after));
     return node;
   }
+  // Les traits (souligné, barré) que la personne a posés sur une bulle réglée sur un style de case (variable Oui / Non) s'écrivent sur chaque case de sa valeur, comme sur la case
+  // conditionnelle (js/conditional-checkbox.js:resolve) : `data-checkbox-lines`, lu par la Lecture (css/editor-v2.css), le PDF, le Word et le HTML. Une case est une boîte en ligne que le
+  // trait d'une marque parente n'atteint pas ; ceux d'un style de liste (une tâche faite, barrée par sa feuille de style) ne sont pas des marques et n'y passent pas.
+  function carryBoxLines(badge, node) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
+    const boxes = node.querySelectorAll('.resolved-checkbox');
+    if (!boxes.length) return;
+    const { lines } = textMarksOf(badge);
+    if (lines.length) boxes.forEach(box => box.setAttribute('data-checkbox-lines', lines.join(' ')));
+  }
   // La valeur `node` prend la place de `badge`. Si elle n'écrit rien (bulle masquée par sa condition, vide, à zéro masqué, boucle sans ligne), les espaces tapés
   // autour d'elle ne s'additionnent pas (js/space-gap.js) : « Bonjour #Prénom #Nom » sans prénom ne laisse pas deux espaces.
   function putValue(badge, node) {
+    carryBoxLines(badge, node);
     badge.replaceWith(node);
     return SpaceGap.settle(node);
   }
@@ -1377,7 +1388,7 @@ const ReaderMode = (function () {
     // (exports).
     if (to && to.nodeType === 1 && from.hasAttribute('data-pp-atom')) to.setAttribute('data-pp-atom', from.getAttribute('data-pp-atom'));
   }
-  // La couleur et les traits que la personne a posés sur une puce (la note de bas de page, la case conditionnelle), lus sur les éléments qui l'enveloppent dans
+  // La couleur et les traits que la personne a posés sur une puce (la note de bas de page, la case conditionnelle, la bulle d'une variable Oui / Non), lus sur les éléments qui l'enveloppent dans
   // le HTML résolu - le <span style> de la couleur et du surlignage, <u>, <s> : ce que l'éditeur relève sur les marques du nœud (js/editor-nodes.js:showTextMarks).
   // Les enveloppes se remontent jusqu'au premier bloc ; un lien se traverse sans rien donner (son soulignement est celui de la feuille de style, pas une
   // marque). Rend { color, lines } : `color` celle de l'enveloppe la plus proche qui en pose une (null sinon), `lines` parmi « underline » et « line-through ».

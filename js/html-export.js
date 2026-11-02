@@ -84,13 +84,18 @@ const HtmlExport = (function () {
     '@media (max-width: 36em) { .pp-doc .pp-columns { grid-template-columns: 1fr; } }',
   ].join('\n');
   // Les cases (une variable Oui / Non et une liste à cases) : un carré dessiné à la main dans la couleur du texte, le caractère ☑ / ☐ gardé dedans, poussé hors du carré (il se copie
-  // et se lit sans se voir). Mêmes règles que css/editor-v2.css (`.resolved-checkbox`).
+  // et se lit sans se voir). Mêmes règles que css/editor-v2.css (`.resolved-checkbox`), dont celles du souligné et du barré posés sur la case elle-même (`data-checkbox-lines` : la case
+  // est une boîte en ligne, que le trait d'une marque parente n'atteint pas). Le barré d'une case d'accent cochée pèse plus que son fond (`background: currentColor`, quatre classes),
+  // qui remettrait sinon la taille du dégradé à « auto » : il reprend donc les quatre réglages du fond et une classe de plus.
   const CHECKBOX_CSS = [
     '.pp-doc .pp-checkbox { display: inline-block; position: relative; box-sizing: border-box; width: 1.07em; height: 1.07em; margin: 0 .1em; vertical-align: -.16em; overflow: hidden; white-space: nowrap; text-indent: 3em; text-decoration: none; border: .107em solid currentColor; border-radius: .2em; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }',
     '.pp-doc .pp-checkbox.pp-classic { border-radius: .143em; }',
     '.pp-doc .pp-checkbox.pp-checked:not(.pp-classic) { background: currentColor; }',
     '.pp-doc .pp-checkbox.pp-checked::after { content: ""; position: absolute; left: .21em; top: -.07em; width: .29em; height: .57em; border: solid currentColor; border-width: 0 .143em .143em 0; transform: rotate(40deg); }',
     '.pp-doc .pp-checkbox.pp-checked:not(.pp-classic)::after { border-color: #fff; }',
+    '.pp-doc .pp-checkbox.pp-struck { background-image: linear-gradient(currentColor, currentColor); background-size: 100% .1em; background-position: 0 50%; background-repeat: no-repeat; }',
+    '.pp-doc .pp-checkbox.pp-struck.pp-checked:not(.pp-classic) { background-image: linear-gradient(#fff, #fff); background-size: 100% .1em; background-position: 0 50%; background-repeat: no-repeat; }',
+    '.pp-doc .pp-checkbox.pp-underlined { box-shadow: 0 .17em 0 -.08em currentColor; }',
   ].join('\n');
   const TASKS_CSS = [
     '.pp-doc ul.pp-tasks > li { display: flex; align-items: flex-start; gap: 6px; }',
@@ -373,6 +378,10 @@ const HtmlExport = (function () {
     link.setAttribute('id', targetId(ctx, 'fnref', n));
     link.setAttribute('href', '#' + targetId(ctx, 'fn', n));
     link.textContent = String(n);
+    // La couleur que la personne a posée sur la note (les enveloppes du renvoi, ReaderMode.textMarksOf) passe devant le vert de la feuille de style, qui colorait `a` : son souligné,
+    // son barré et son surlignage, eux, viennent déjà des enveloppes que le renvoi garde autour de lui.
+    const { color } = ReaderMode.textMarksOf(el);
+    if (color && color.length <= 80 && !UNSAFE_VALUE.test(color)) link.setAttribute('style', 'color: ' + color);
     sup.appendChild(link);
     parent.appendChild(sup);
   }
@@ -523,9 +532,12 @@ const HtmlExport = (function () {
     childrenInto(el, out, ctx);
     parent.appendChild(out);
   }
-  function checkboxSpan(ctx, checked, style, label, color) {
+  // `lines` : les traits posés sur la case elle-même (`data-checkbox-lines` : « underline », « line-through »), que ses classes `pp-underlined` et `pp-struck` dessinent.
+  function checkboxSpan(ctx, checked, style, label, color, lines) {
     ctx.uses.add('checkbox');
-    const box = make(ctx, 'span', PREFIX + 'checkbox' + (checked ? ' ' + PREFIX + 'checked' : '') + (style === 'classic' ? ' ' + PREFIX + 'classic' : ''));
+    const marks = String(lines || '').split(' ');
+    const box = make(ctx, 'span', PREFIX + 'checkbox' + (checked ? ' ' + PREFIX + 'checked' : '') + (style === 'classic' ? ' ' + PREFIX + 'classic' : '')
+      + (marks.includes('line-through') ? ' ' + PREFIX + 'struck' : '') + (marks.includes('underline') ? ' ' + PREFIX + 'underlined' : ''));
     box.setAttribute('role', 'img');
     box.setAttribute('aria-label', label || I18n.t(checked ? 'varFmt.boolChecked' : 'varFmt.boolUnchecked'));
     if (color && color.length <= 80 && !UNSAFE_VALUE.test(color)) box.setAttribute('style', 'color: ' + color);
@@ -740,7 +752,7 @@ const HtmlExport = (function () {
       return;
     }
     if (cl.contains('resolved-checkbox')) {
-      parent.appendChild(checkboxSpan(ctx, el.getAttribute('data-checked') === 'true', el.getAttribute('data-checkbox-style'), el.getAttribute('aria-label'), el.style && el.style.color));
+      parent.appendChild(checkboxSpan(ctx, el.getAttribute('data-checked') === 'true', el.getAttribute('data-checkbox-style'), el.getAttribute('aria-label'), el.style && el.style.color, el.getAttribute('data-checkbox-lines')));
       return;
     }
     // Un élément de fusion resté dans le HTML (un modèle non résolu) n'est que son libellé.

@@ -463,6 +463,35 @@
       return result(bad);
     });
 
+  // --- La mise en forme posée sur une note et sur une case (02/11 : l'alignement des autres sorties, laissé en suspens depuis le 22/10) ---------------------------------
+  // Le renvoi d'une note de bas de page est un lien (`.pp-fnref a`) que la feuille de style colore en vert : la couleur que la personne a posée sur la note passe devant, en ligne, sur le lien ; son
+  // souligné, son barré et son surlignage viennent des enveloppes que le fichier garde autour du renvoi. Une case est une boîte en ligne que le trait d'une marque parente n'atteint pas : celle qui
+  // porte `data-checkbox-lines` (la case conditionnelle et celle d'une variable Oui / Non, js/reader-mode.js) écrit les classes `pp-struck` et `pp-underlined`, que la feuille de style dessine.
+  const NOTE_REF = text => `<sup class="footnote-ref-marker" data-note-id="n-${text}" data-note-text="${text}"></sup>`;
+  const BOX = (checked, lines, style) => `<span class="resolved-checkbox" data-checked="${checked}"${style ? ` data-checkbox-style="${style}"` : ''}${lines ? ` data-checkbox-lines="${lines}"` : ''}>${checked ? '☑' : '☐'}</span>`;
+
+  add('html_the_color_put_on_a_note_and_the_lines_put_on_a_box_are_written',
+    'La couleur posée sur le renvoi d\'une note de bas de page s\'écrit sur son lien, devant le vert de la feuille de style ; un renvoi sans couleur (nu, en gras, souligné, barré ou surligné) n\'écrit rien de plus et garde le vert, ses traits et son surlignage restant ceux des enveloppes qu\'il garde ; une case qui porte `data-checkbox-lines` écrit `pp-struck` et `pp-underlined` selon ses traits, une case sans trait aucune des deux',
+    async (h) => {
+      await seed(h);
+      const bad = [];
+      const notes = await html(h, `<p>a<span style="color: #b91c1c; background-color: #fde68a"><u><s>${NOTE_REF('Une')}</s></u></span> b<strong>${NOTE_REF('Deux')}</strong> c${NOTE_REF('Trois')} `
+        + `d<span style="background-color: #fde68a"><u><s>${NOTE_REF('Quatre')}</s></u></span> e<span style="color: #1d4ed8"><strong>${NOTE_REF('Cinq')}</strong></span></p>`);
+      const anchors = Array.from(pageOf(notes).querySelectorAll('.pp-fnref a')).map(a => a.getAttribute('style'));
+      const wantAnchors = ['color: rgb(185, 28, 28)', null, null, null, 'color: rgb(29, 78, 216)'];
+      if (JSON.stringify(anchors) !== JSON.stringify(wantAnchors)) bad.push('couleurs des notes=' + JSON.stringify(anchors) + ' au lieu de ' + JSON.stringify(wantAnchors));
+      if (!markup(notes).includes('<u><s><sup class="pp-fnref">')) bad.push('les enveloppes du renvoi (souligné, barré) ne sont pas gardées=' + JSON.stringify(markup(notes).slice(0, 220)));
+      const boxes = await html(h, '<p>' + [BOX(true, 'line-through'), BOX(true, 'underline', 'classic'), BOX(false, 'underline line-through'), BOX(true, ''), BOX(false, 'line-through', 'classic')].join(' ') + '</p>');
+      const classes = Array.from(pageOf(boxes).querySelectorAll('.pp-checkbox')).map(box => box.className);
+      const wantClasses = ['pp-checkbox pp-checked pp-struck', 'pp-checkbox pp-checked pp-classic pp-underlined', 'pp-checkbox pp-struck pp-underlined', 'pp-checkbox pp-checked', 'pp-checkbox pp-classic pp-struck'];
+      if (JSON.stringify(classes) !== JSON.stringify(wantClasses)) bad.push('classes des cases=' + JSON.stringify(classes) + ' au lieu de ' + JSON.stringify(wantClasses));
+      const css = styleOf(boxes);
+      ['.pp-doc .pp-checkbox.pp-struck {', '.pp-doc .pp-checkbox.pp-struck.pp-checked:not(.pp-classic) {', '.pp-doc .pp-checkbox.pp-underlined {'].forEach(rule => { if (!css.includes(rule)) bad.push('règle absente de la feuille de style : ' + rule); });
+      const plain = styleOf(await html(h, '<p>sans case</p>'));
+      if (plain.includes('pp-struck') || plain.includes('pp-underlined')) bad.push('les règles des traits sont écrites sans case dans le document');
+      return result(bad);
+    });
+
   // --- L'en-tête et le pied de page --------------------------------------------------------------------------------------------------------------------
   const zone = (kind, inner) => `<div class="pp-zone pp-${kind}">${inner}</div>`;
   const PAGE_NUMBER = (format, label) => `<span class="page-number-badge" data-format="${format}">${label || '#'}</span>`;
@@ -784,6 +813,33 @@
       });
       if (narrow) bad.push(narrow);
       return result(bad);
+    });
+
+  add('html_a_struck_or_underlined_box_and_a_colored_note_look_like_the_reader_when_the_file_is_opened',
+    'Le fichier ouvert dans une page : une case barrée est traversée d\'un trait fin (le fond d\'une case d\'accent cochée ne le remet pas à « auto » : la case ne devient pas toute blanche), blanc sur une case d\'accent cochée, de la couleur de la case ailleurs ; une case soulignée a son trait sous elle ; une case sans trait n\'en a aucun ; un renvoi de note coloré est de sa couleur, un autre garde le vert',
+    async (h) => {
+      await seed(h);
+      const out = await html(h, '<p>' + [BOX(true, 'line-through'), BOX(false, 'line-through'), BOX(true, 'underline', 'classic'), BOX(true, 'underline line-through'), BOX(true, 'line-through', 'classic'), BOX(true, '')].join(' ') + '</p>'
+        + `<p>a<span style="color: #b91c1c">${NOTE_REF('Une')}</span> b${NOTE_REF('Deux')}</p>`);
+      const found = await inFrame(out.text, 900, async (doc, win) => {
+        const bad = [];
+        const boxes = Array.from(doc.querySelectorAll('.pp-checkbox')).map(box => { const style = win.getComputedStyle(box); return { image: style.backgroundImage, size: style.backgroundSize, shadow: style.boxShadow }; });
+        const thin = box => box.image !== 'none' && /^100% [\d.]+px$/.test(box.size);
+        const white = box => box.image.includes('rgb(255, 255, 255)');
+        const want = [
+          ['accent cochée barrée', boxes[0] && thin(boxes[0]) && white(boxes[0]) && boxes[0].shadow === 'none'],
+          ['accent décochée barrée', boxes[1] && thin(boxes[1]) && !white(boxes[1]) && boxes[1].shadow === 'none'],
+          ['classique cochée soulignée', boxes[2] && boxes[2].image === 'none' && boxes[2].shadow !== 'none'],
+          ['accent cochée barrée et soulignée', boxes[3] && thin(boxes[3]) && white(boxes[3]) && boxes[3].shadow !== 'none'],
+          ['classique cochée barrée', boxes[4] && thin(boxes[4]) && !white(boxes[4]) && boxes[4].shadow === 'none'],
+          ['sans trait', boxes[5] && boxes[5].image === 'none' && boxes[5].shadow === 'none'],
+        ];
+        want.forEach(([label, ok]) => { if (!ok) bad.push(label + ' : ' + JSON.stringify(boxes[want.findIndex(w => w[0] === label)])); });
+        const colors = Array.from(doc.querySelectorAll('.pp-fnref a')).map(a => win.getComputedStyle(a).color);
+        if (JSON.stringify(colors) !== JSON.stringify(['rgb(185, 28, 28)', 'rgb(20, 108, 67)'])) bad.push('couleurs des notes=' + JSON.stringify(colors));
+        return bad;
+      });
+      return result(found);
     });
 
   add('html_the_pasted_content_keeps_its_look_in_a_site_with_its_own_styles',

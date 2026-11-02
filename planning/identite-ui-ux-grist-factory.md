@@ -1207,8 +1207,12 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   Lecture pour ces trois ? », « Oui, aligner partout ») : le Word écrit sur le renvoi de la note sa couleur, son souligné, son barré et son surlignage (il reste le style « Renvoi de note » de Word, en exposant) et barre la
   case conditionnelle que la personne a barrée ; le PDF trace le souligné et le barré de la case (le barré d'une case d'accent cochée, pleine, en blanc : à sa couleur il ne se verrait que de part et d'autre d'elle) ; la
   Lecture montre la note dans la couleur choisie (son vert sans couleur) et dessine les traits de la case, un trait fin qui la traverse et un trait sous elle. Le numéro de page ne change pas à la Lecture (il y reste une pastille ;
-  dans une zone ou un pied de page, son numéro suit déjà ses marques) ; le HTML, le Markdown, le PowerPoint, l'Excel et l'e-mail non plus. Gardé par `badgeMarks`, `tableCellsMouse`, `settingsWindowMouse`, `condCheckboxMouse`,
-  `condCheckbox`, `docx`, `gfsStorage` et `codeHygiene`.
+  dans une zone ou un pied de page, son numéro suit déjà ses marques). Les autres exports (02/11, au go général d'Antoine : « si tu as des sujet en pause ou en attente tu peux les lancer », sur la carte restée en attente) :
+  le HTML écrit la couleur de la note sur son lien (le vert de la note sans couleur) et les traits de la case, avec les mêmes dessins que la Lecture (le trait fin qui la traverse, en blanc sur une case d'accent cochée, et
+  le trait sous elle : classes `pp-struck` et `pp-underlined`) ; le Markdown, le PowerPoint et l'Excel portaient déjà les traits de la case par les marques qui enveloppent son texte (le PowerPoint ne reprend pas les notes de
+  bas de page, dit dans sa fiche ; la grille d'un modèle Excel n'accepte ni note ni numéro de page) ; l'e-mail est un texte brut, sans mise en forme à porter. La case d'une variable Oui / Non reçoit ses traits comme la case conditionnelle (elle les
+  avait déjà dans le Markdown, le PowerPoint et l'Excel, pas à la Lecture, au PDF ni au Word) : ceux des marques posées sur elle, jamais le barré d'une tâche faite d'une liste à cases, qui n'est pas un trait posé sur la case.
+  Gardé par `badgeMarks`, `tableCellsMouse`, `settingsWindowMouse`, `condCheckboxMouse`, `condCheckbox`, `docx`, `htmlExport`, `gfsStorage` et `codeHygiene`.
 - Autres attributs : « Insérer » ajoute les attributs cochés juste après la bulle ; « Remplacer » (demande d'Antoine du
   01/10, entre « Annuler » et « Insérer », qui reste le bouton bleu) les met à sa place. C'est la même bulle dont la
   colonne change : son gras, sa couleur, sa boucle, sa condition (sauf case « Reprendre la condition d'affichage »
