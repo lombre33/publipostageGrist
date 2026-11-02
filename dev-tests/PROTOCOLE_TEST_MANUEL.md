@@ -1137,6 +1137,26 @@ Dans Firefox, le widget (seul puis hébergé par GFS), sur un document avec une 
 
 ---
 
+## 39. Le site en ligne sert ce qu'on vient de pousser (à vérifier à chaque lot)
+
+**Couverture automatisée** : aucune. GitHub Pages ne s'essaie qu'en ligne : le run de publication, les dix minutes de cache et le site servi ne se voient pas d'un poste de développement. Ce qui est gardé : `.nojekyll` est à la racine du dépôt et
+`outils/depot-propre/publier.sh` le classe (il refuse une entrée inconnue à la racine).
+**Non couvert** : tout ce qui suit.
+
+**Pourquoi** (consigne 037 de GFS, 02/11) : GFS ouvre l'app sur le site publié (`https://lombre33.github.io/publipostageGrist/index.html`) et ne retombe sur la copie de son sous-module que si le site ne répond pas en 15 secondes ; un site publié mais ancien est servi comme
+s'il était à jour, et GFS ne peut pas l'ouvrir depuis son environnement pour le vérifier à notre place. Sans `.nojekyll`, Pages passe les fichiers `.md` dans Jekyll avant de publier : une accolade double non fermée dans l'un d'eux (un `{{` sans `}}`, un `{%` sans `%}`)
+fait échouer la publication, et le site reste sur la version d'avant, sans rien montrer. Avec `.nojekyll`, Pages publie les fichiers tels quels et ne lit plus les `.md` ; il sert alors aussi les noms qui commencent par « _ » ou « . » (ici `.claude/settings.json` et
+`dev-tests/.offline-cache/`, déjà publics dans le dépôt) : ne rien garder là qui ne doive pas être lu.
+
+### Protocole
+Après chaque push sur `main`, une fois passées les dix minutes de cache de GitHub Pages :
+1. Onglet Actions du dépôt : le dernier run « pages build and deployment » est vert (ni en cours, ni rouge, ni absent). Rouge ou absent : le site reste sur la version d'avant ; lire le journal du run avant tout autre essai et ne pas passer au lot suivant.
+2. Un changement visible du lot est bien en ligne : le numéro de version de Réglages > Crédits quand `js/version.js` a bougé ; sinon le numéro `?v=` du fichier que le lot a changé, lu dans l'`index.html` servi (il doit être celui de `main`), ou un détail du lot (un texte, un bouton,
+   un nombre) vu dans l'app rechargée sans cache (Ctrl+Maj+R).
+3. `https://lombre33.github.io/publipostageGrist/.nojekyll` répond (fichier vide) et aucune page `.html` n'est plus fabriquée à partir d'un `.md` (`GFS-ETAT.html` répond 404, `GFS-ETAT.md` est servi tel quel) : Pages ne passe plus par Jekyll.
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas
