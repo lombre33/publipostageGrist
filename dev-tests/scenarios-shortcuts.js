@@ -768,7 +768,7 @@
 
   cases.push({
     id: 'sc_undo_and_redo_leave_a_list_or_a_slider_to_the_toolbar_buttons_and_nothing_else_does',
-    description: 'Avec le focus sur une liste, une glissière, une case à cocher ou un bouton radio hors de l\'éditeur (le focus qu\'une barre flottante garde après un réglage) : Ctrl+Z, Ctrl+Y et Ctrl+Maj+Z partent aux boutons Annuler et Rétablir, mais Alt+Maj+H (une autre action « éditeur ») reste à l\'éditeur ; dans un champ où l\'on tape aucune des quatre ne part ; sous une fenêtre ouverte, une liste ne laisse rien partir',
+    description: 'Avec le focus sur une liste, une glissière, une case à cocher ou un bouton radio hors de l\'éditeur (le focus qu\'une barre flottante garde après un réglage) : Ctrl+Z, Ctrl+Y et Ctrl+Maj+Z partent aux boutons Annuler et Rétablir, mais Alt+Maj+H (une autre action « éditeur ») reste à l\'éditeur ; dans un champ où l\'on tape aucune des quatre ne part ; sous une fenêtre ouverte, une liste ne laisse rien partir aux boutons mais les trois touches sont prises (le navigateur ne défait pas derrière la fenêtre), alors qu\'un champ de saisie de la fenêtre garde les siennes',
     run: async (h) => {
       await reset(h);
       const spy = spyPresses(['v2-btn-undo', 'v2-btn-redo', 'v2-btn-highlight']);
@@ -809,13 +809,17 @@
       const underWindow = put(control('select'), document.getElementById('settings-modal'));
       out.window = keys(underWindow);
       underWindow.remove();
+      const windowField = put(control('text'), document.getElementById('settings-modal'));
+      out.windowField = keys(windowField);
+      windowField.remove();
       document.getElementById('settings-close').click();
       await sleep(200);
       spy.stop();
       const BOTH = 'v2-btn-undo,v2-btn-redo,v2-btn-redo';
       const pass = Object.keys(lists).every(type => lists[type].buttons === BOTH && lists[type].taken === 'true,true,true' && lists[type].otherTaken === false)
         && out.typing.buttons === '' && out.typing.taken === 'false,false,false' && out.typing.otherTaken === false
-        && out.window.buttons === '' && out.window.taken === 'false,false,false';
+        && out.window.buttons === '' && out.window.taken === 'true,true,true' && out.window.otherTaken === false
+        && out.windowField.buttons === '' && out.windowField.taken === 'false,false,false' && out.windowField.otherTaken === false;
       await reset(h);
       return { pass, notes: JSON.stringify(out) };
     },
@@ -1260,6 +1264,85 @@
         freedUnderModal: 'prise, vue après, 0 lancement, ' + prise,
         nativeLeft: 'prise, vue après, 0 lancement, ' + prise,
         nativeKept: 'prise, cachée aux autres, 1 lancement, ' + prise + ', changée true',
+      };
+      return { pass: JSON.stringify(out) === JSON.stringify(expected), notes: JSON.stringify(out) };
+    },
+  });
+
+  // Sous une fenêtre ouverte, aucune action ne part - la fenêtre a ses boutons - et le NAVIGATEUR ne défait pas non plus : le Ctrl + Z natif de Chrome défait sinon, derrière la fenêtre et sans qu'on le voie, la dernière
+  // frappe du document (focus sur un bouton, une case ou une liste de la fenêtre). Seule la touche d'Annuler et de Rétablir est prise (preventDefault), les écouteurs d'après la voient ; dans un champ de saisie de la fenêtre
+  // elle garde son sens de texte. Le même garde tient quand la touche d'origine a été rendue (Annuler a une autre touche) et pour la nouvelle touche d'Annuler.
+  cases.push({
+    id: 'sc_under_a_window_the_keys_of_undo_and_redo_keep_the_browser_from_undoing_behind_it',
+    description: 'Une fenêtre ouverte, le focus sur un bouton, une case ou une liste de la fenêtre : Ctrl+Z, Ctrl+Y et Ctrl+Maj+Z sont pris (preventDefault : le navigateur ne défait rien derrière la fenêtre), sans lancer l\'action et sans la cacher aux écouteurs d\'après ; dans un champ de saisie ou une zone de texte de la fenêtre ils restent au champ ; la touche d\'une autre action reste laissée à la page ; Annuler changé de touche (Alt+U) : sa touche d\'origine rendue et sa nouvelle touche sont prises de même hors d\'un champ, laissées dans un champ ; la fenêtre refermée, les trois touches lancent de nouveau l\'action',
+    run: async (h) => {
+      await reset(h);
+      Shortcuts.setPlatform('other');
+      const modal = document.createElement('div');
+      modal.className = 'pp-modal';
+      modal.style.cssText = 'display:block;position:fixed;left:0;top:0;width:320px;height:90px;z-index:99999';
+      const button = Object.assign(document.createElement('button'), { textContent: 'OK' });
+      const box = Object.assign(document.createElement('input'), { type: 'checkbox' });
+      const list = document.createElement('select');
+      list.innerHTML = '<option>Un</option><option>Deux</option>';
+      const field = Object.assign(document.createElement('input'), { type: 'text' });
+      const area = document.createElement('textarea');
+      modal.append(button, box, list, field, area);
+      document.body.appendChild(modal);
+      const outside = Object.assign(document.createElement('button'), { textContent: 'Hors fenêtre' });
+      outside.style.cssText = 'position:fixed;left:0;bottom:0;z-index:99998';
+      document.body.appendChild(outside);
+      const focused = el => {
+        el.focus();
+        if (document.activeElement !== el) throw new Error('le contrôle de test n\'a pas pris le focus');
+        return el;
+      };
+      const THREE = [['undo', 'Ctrl+z'], ['redo', 'Ctrl+y'], ['redo', 'Ctrl+Shift+z']];
+      const three = el => THREE.map(([id, combo]) => decision(keyDecision(combo, id, { target: focused(el) }))).join(' | ');
+      const out = {};
+      try {
+        out.button = three(button);
+        out.checkbox = three(box);
+        out.list = three(list);
+        out.field = three(field);
+        out.area = three(area);
+        // La touche d'une autre action : laissée à la page, comme avant.
+        Shortcuts.setKey('new', 'Alt+n');
+        out.otherAction = decision(keyDecision('Alt+n', 'new', { target: focused(button) }));
+        // Annuler a une autre touche : Ctrl+Z est une touche rendue (le navigateur ne défait pas derrière la fenêtre), Alt+U est la touche d'Annuler.
+        Shortcuts.setKey('undo', 'Alt+u');
+        out.freedButton = decision(keyDecision('Ctrl+z', 'undo', { target: focused(button) }));
+        out.freedList = decision(keyDecision('Ctrl+z', 'undo', { target: focused(list) }));
+        out.freedField = decision(keyDecision('Ctrl+z', 'undo', { target: focused(field) }));
+        out.newKeyButton = decision(keyDecision('Alt+u', 'undo', { target: focused(button) }));
+        out.newKeyField = decision(keyDecision('Alt+u', 'undo', { target: focused(field) }));
+        Shortcuts.resetKey('undo');
+        // La fenêtre refermée : les trois touches lancent de nouveau l'action et la cachent aux écouteurs d'après.
+        modal.remove();
+        out.closed = THREE.map(([id, combo]) => decision(keyDecision(combo, id, { target: focused(outside) }))).join(' | ');
+      } finally {
+        modal.remove();
+        outside.remove();
+        Shortcuts.resetAll();
+      }
+      await reset(h);
+      const held = 'prise, vue après, 0 lancement, 0 erreur, 0 avis';
+      const left = 'laissée, vue après, 0 lancement, 0 erreur, 0 avis';
+      const ran = 'prise, cachée aux autres, 1 lancement, 0 erreur, 0 avis';
+      const triple = what => [what, what, what].join(' | ');
+      const expected = {
+        button: triple(held),
+        checkbox: triple(held),
+        list: triple(held),
+        field: triple(left),
+        area: triple(left),
+        otherAction: left,
+        freedButton: held,
+        freedList: held,
+        freedField: left,
+        newKeyButton: held,
+        newKeyField: left,
+        closed: triple(ran),
       };
       return { pass: JSON.stringify(out) === JSON.stringify(expected), notes: JSON.stringify(out) };
     },

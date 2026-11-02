@@ -498,6 +498,13 @@ const Shortcuts = (function () {
       return !active || !active.closest || !active.closest('.ProseMirror, [data-own-undo]');
     }
 
+    // Une fenêtre est ouverte et le focus n'est pas dans un champ où l'on écrit (un bouton, une case, une liste de la fenêtre) : Annuler et Rétablir (`anywhere`) n'y partent pas - la fenêtre a ses
+    // boutons - et le navigateur ne les fait pas non plus. Le Ctrl + Z natif de Chrome défait sinon, derrière la fenêtre et sans qu'on le voie, la dernière frappe du document (et Ctrl + Y la rend). Seule
+    // la touche est prise : les écouteurs d'après la voient encore. Dans un champ de la fenêtre elle garde son sens de texte, elle y défait la frappe.
+    function holdBehindWindow(event, action) {
+      if (action.anywhere && (!inTextField() || typesNothing())) event.preventDefault();
+    }
+
     // La touche est celle d'une action : la fait partir, sauf quand l'éditeur ou une fenêtre la garde.
     function runOwnerKey(event, owner, combo) {
       // À sa touche d'origine, une action native est déjà prise en charge par l'éditeur ou js/main.js : rien à faire ici - sauf sur une sélection de
@@ -505,7 +512,8 @@ const Shortcuts = (function () {
       // `cells` donne, quand le bouton ne fait pas comme la touche d'origine) - et pour une action `anywhere` quand l'éditeur n'a pas le focus.
       const originalKey = owner.native && !isCustomized(owner) && (defaultOf(owner) === combo || (owner.aliases || []).indexOf(combo) !== -1);
       if (originalKey && !(owner.cells && onCellSelection()) && !(owner.anywhere && editorOnScreenWithoutFocus())) return;
-      if (modalOpen() || (owner.scope === 'editor' && inTextField() && !(owner.anywhere && typesNothing()))) return;
+      if (modalOpen()) { holdBehindWindow(event, owner); return; }
+      if (owner.scope === 'editor' && inTextField() && !(owner.anywhere && typesNothing())) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       if (event.repeat && !owner.repeat) return;
@@ -517,7 +525,10 @@ const Shortcuts = (function () {
     function swallowFreedKey(event, combo) {
       // Mais dans un champ de saisie autre que l'éditeur elle garde son sens de texte (Ctrl+Z y défait la frappe).
       const freed = freedBy(combo);
-      if (freed && !modalOpen() && !(freed.scope === 'editor' && inTextField())) { event.preventDefault(); event.stopImmediatePropagation(); }
+      if (!freed) return;
+      // Sous une fenêtre ouverte elle reste à la page (les écouteurs d'après la voient), sauf la touche d'origine d'Annuler ou de Rétablir : le navigateur ne défait pas derrière la fenêtre.
+      if (modalOpen()) { holdBehindWindow(event, freed); return; }
+      if (!(freed.scope === 'editor' && inTextField())) { event.preventDefault(); event.stopImmediatePropagation(); }
     }
 
     function onKeydown(event) {

@@ -225,6 +225,9 @@ window.EditorTestSuites.undoPage = (function () {
         await h.sleep(100);
         const wide = page();
         if (same(narrow.margins, start.margins) || same(wide.margins, narrow.margins)) problems.push('les préréglages n\'ont rien posé : ' + JSON.stringify({ start: start.margins, narrow: narrow.margins, wide: wide.margins }));
+        // Sous une fenêtre ouverte, Ctrl + Z ne défait rien derrière elle : la personne la referme d'abord.
+        closeSettings();
+        await h.sleep(150);
         undo();
         await h.sleep(120);
         check(problems, 'Ctrl + Z, Larges défait', page(), narrow);
@@ -236,12 +239,14 @@ window.EditorTestSuites.undoPage = (function () {
         await h.sleep(120);
         check(problems, 'Ctrl + Y deux fois', page(), wide);
         // Un préréglage déjà en place ne change rien : il n'ajoute rien à l'historique.
+        await openMargins(h);
         preset('wide').click();
         await h.sleep(80);
+        closeSettings();
+        await h.sleep(150);
         undo();
         await h.sleep(120);
         check(problems, 'Ctrl + Z après un préréglage déjà en place', page(), narrow);
-        closeSettings();
         return verdict(problems, {});
       } finally { await leave(h); }
     },
@@ -695,7 +700,7 @@ window.EditorTestSuites.undoPage = (function () {
 
   cases.push({
     id: 'undo_page_ctrl_z_leaves_text_fields_windows_and_reading_alone',
-    description: 'Le format A5 posé : Ctrl + Z dans un champ de saisie (il y défait la frappe), sous une fenêtre ouverte (Réglages) et en Lecture (l\'éditeur n\'est pas à l\'écran) ne touche pas à la page et n\'est pas pris ; retour à l\'écran de l\'éditeur, il agit de nouveau',
+    description: 'Le format A5 posé : Ctrl + Z dans un champ de saisie (il y défait la frappe) et en Lecture (l\'éditeur n\'est pas à l\'écran) ne touche pas à la page et n\'est pas pris ; sous une fenêtre ouverte (Réglages) il ne touche pas à la page non plus mais est tenu (le navigateur ne défait rien derrière la fenêtre) ; retour à l\'écran de l\'éditeur, il agit de nouveau',
     async run(h) {
       const problems = [];
       const input = document.createElement('input');
@@ -715,7 +720,8 @@ window.EditorTestSuites.undoPage = (function () {
         blurAll();
         byId('v2-btn-settings').click();
         await h.sleep(300);
-        if (pressAt('z', document.activeElement || document.body)) problems.push('Ctrl + Z sous la fenêtre Réglages : la touche a été prise');
+        // La touche est tenue (le navigateur ne défait rien derrière la fenêtre : js/shortcuts.js, holdBehindWindow) sans rien lancer.
+        if (!pressAt('z', document.activeElement || document.body)) problems.push('Ctrl + Z sous la fenêtre Réglages : la touche n\'a pas été tenue');
         await h.sleep(100);
         check(problems, 'Ctrl + Z sous la fenêtre Réglages', page(), a5);
         byId('settings-close').click();
@@ -798,7 +804,7 @@ window.EditorTestSuites.undoPage = (function () {
 
   cases.push({
     id: 'undo_page_ctrl_z_stays_with_a_field_where_one_types_and_with_any_control_under_a_window',
-    description: 'Le format A5 posé : Ctrl + Z, Ctrl + Y et Ctrl + Maj + Z dans un champ où l\'on tape (texte, recherche, e-mail, adresse, téléphone, mot de passe, nombre, date, heure, mois, semaine), une zone de texte ou un texte éditable ne sont pas pris et la page reste A5 ; sous la fenêtre Réglages, une liste et une glissière ne laissent rien partir non plus',
+    description: 'Le format A5 posé : Ctrl + Z, Ctrl + Y et Ctrl + Maj + Z dans un champ où l\'on tape (texte, recherche, e-mail, adresse, téléphone, mot de passe, nombre, date, heure, mois, semaine), une zone de texte ou un texte éditable ne sont pas pris et la page reste A5 ; sous la fenêtre Réglages, une liste et une glissière tiennent la touche (le navigateur ne défait rien derrière la fenêtre) sans rien lancer, la page reste A5',
     async run(h) {
       const problems = [];
       const made = [];
@@ -823,15 +829,15 @@ window.EditorTestSuites.undoPage = (function () {
         }
         await h.sleep(150);
         check(problems, 'la page après les champs de saisie', page(), a5);
-        // Sous une fenêtre ouverte (Réglages), ni une liste ni une glissière ne laissent partir la touche.
+        // Sous une fenêtre ouverte (Réglages), une liste et une glissière tiennent la touche (le navigateur ne défait rien derrière la fenêtre) sans qu'elle parte aux boutons Annuler et Rétablir.
         byId('v2-btn-settings').click();
         await h.sleep(300);
         for (const name of ['une liste', 'une glissière']) {
           const el = NO_TYPING[name]();
           made.push(el);
           if (!shown(el, byId('settings-modal'))) { problems.push(name + ' de la fenêtre n\'a pas pris le focus'); continue; }
-          if (pressAt('z', el)) problems.push('Ctrl + Z, focus sur ' + name + ' sous la fenêtre Réglages : la touche a été prise');
-          if (pressAt('y', el)) problems.push('Ctrl + Y, focus sur ' + name + ' sous la fenêtre Réglages : la touche a été prise');
+          if (!pressAt('z', el)) problems.push('Ctrl + Z, focus sur ' + name + ' sous la fenêtre Réglages : la touche n\'a pas été tenue');
+          if (!pressAt('y', el)) problems.push('Ctrl + Y, focus sur ' + name + ' sous la fenêtre Réglages : la touche n\'a pas été tenue');
         }
         await h.sleep(150);
         check(problems, 'la page sous la fenêtre Réglages', page(), a5);
