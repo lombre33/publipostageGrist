@@ -31,6 +31,8 @@ const HistoryMarkers = (function () {
   let undoDepth = () => 0;
   // Vrai le temps qu'un Annuler ou un Rétablir rend sa page : les gestes qu'il provoque (une mise en page qui se refait) ne posent pas de repère.
   let restoring = false;
+  // Vrai le temps que `recordUndoneAction` défait le repère qu'il vient de poser : ce Annuler-là ne rend rien à personne.
+  let silent = false;
 
   const domains = {
     page: {
@@ -118,7 +120,7 @@ const HistoryMarkers = (function () {
 
   // Annuler et Rétablir rendent leurs pas dans une transaction : chaque repère qu'elle porte rend sa page au domaine, dans l'ordre.
   function replay(tr) {
-    if (!stepClass || !tr.steps.length || tr.getMeta(RECORD_META)) return;
+    if (silent || !stepClass || !tr.steps.length || tr.getMeta(RECORD_META)) return;
     tr.steps.forEach(step => {
       if (!(step instanceof stepClass) || step.generation !== generation) return;
       const domain = domains[step.domain];
@@ -197,6 +199,17 @@ const HistoryMarkers = (function () {
     return true;
   }
 
+  // Le repère d'une action DÉFAITE, rangé là où Rétablir le trouve : posé comme fait, puis défait aussitôt sans que l'action soit rejouée (`silent`). Pour une action dont la défaite a rechargé le modèle (js/main.js : la copie retirée,
+  // le modèle d'avant rouvert) : l'historique neuf n'a plus de Rétablir, et celui d'avant ne se remet pas tel quel - ses positions sont celles d'un autre texte. Rend vrai s'il a été posé.
+  function recordUndoneAction(id) {
+    const editor = editorOf();
+    if (!editor || !stepClass || restoring) return false;
+    place(editor, 'actions', { id, done: false }, { id, done: true }, false);
+    silent = true;
+    try { editor.commands.undo(); } finally { silent = false; }
+    return true;
+  }
+
   // Le début d'un geste : l'état d'avant, pris tout de suite. `commit()` pose le repère à la fin. `before` : l'état pris plus tôt, quand le geste a rechargé le modèle entre-temps (l'« Enregistrer » de la fenêtre d'un
   // macro-modèle le recharge, ce qui change de génération) : le geste commence alors après le rechargement, avec l'état d'avant celui-ci. `scope` : la partie de l'état que le geste vise, relue à l'identique à la fin.
   function begin(domain, before, scope) {
@@ -252,5 +265,5 @@ const HistoryMarkers = (function () {
 
   function isReady() { return !!stepClass; }
 
-  return { createExtension, define, begin, track, recordAction, reset, keep, redoDepth, resume, flush, isReady };
+  return { createExtension, define, begin, track, recordAction, recordUndoneAction, reset, keep, redoDepth, resume, flush, isReady };
 })();

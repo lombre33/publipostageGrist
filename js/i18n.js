@@ -808,6 +808,12 @@ const I18n = (function () {
     'history.abbreviationChanged': { fr: 'Cette abréviation a changé depuis : rien n’a été modifié.', en: 'This abbreviation has changed since: nothing was changed.' },
     'history.abbreviationTaken': { fr: 'Une autre abréviation porte déjà ce nom : rien n’a été modifié.', en: 'Another abbreviation already has this name: nothing was changed.' },
     'history.settingLocked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé, rien n’a été modifié.', en: 'You are read-only: this setting is locked, nothing was changed.' },
+    // La copie qu'Annuler retire (« Enregistrer sous… », un modèle de la galerie) : la question, ses deux phrases, le bouton, et ce que dit le coin d'état quand la personne la garde.
+    'history.removeCopyTitle': { fr: 'Retirer « {name} » ?', en: 'Remove “{name}”?' },
+    'history.removeCopyMessage': { fr: 'Le modèle quitte la liste ; Rétablir le rend.', en: 'The template leaves the list; Redo brings it back.' },
+    'history.removeCopyTables': { fr: 'Le modèle quitte la liste ; Rétablir le rend. Les tables créées avec lui restent dans le document.', en: 'The template leaves the list; Redo brings it back. The tables created with it stay in the document.' },
+    'history.removeCopyConfirm': { fr: 'Retirer', en: 'Remove' },
+    'history.copyKept': { fr: '« {name} » est gardé : rien n’a été modifié.', en: '“{name}” is kept: nothing was changed.' },
 
     // --- Édition collaborative (le bouton de la barre qui range le suivi des modifications, « Tout accepter » et « Tout refuser ») ---
     'collab.tip': { fr: 'Édition collaborative', en: 'Collaborative editing' },
@@ -2101,6 +2107,7 @@ const I18n = (function () {
     'status.defaultTemplateError': { fr: 'Échec de l’enregistrement du modèle par défaut.', en: 'Saving the default template failed.' },
     'status.templateUnavailable': { fr: '« {name} » ne s’ouvre pas ici. {reason}.', en: '“{name}” cannot be opened here. {reason}.' },
     'status.templateDeleted': { fr: 'Modèle supprimé.', en: 'Template deleted.' },
+    'status.templateRemoved': { fr: 'Modèle « {name} » retiré.', en: 'Template “{name}” removed.' },
     'status.templateRestored': { fr: 'Modèle « {name} » rétabli.', en: 'Template “{name}” restored.' },
     'status.templateRestoredAs': { fr: 'Modèle rétabli sous le nom « {name} » : son nom d’origine est pris.', en: 'Template restored as “{name}”: its original name is taken.' },
     'status.templatePinned': { fr: 'Modèle « {name} » épinglé.', en: 'Template “{name}” pinned.' },

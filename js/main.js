@@ -1200,6 +1200,9 @@
     if (!asked) return;
     const nom = asked.trim();
     if (!nom) return;
+    // Le modèle qu'on copie : la copie, une fois faite, entre dans l'historique d'Annuler / Rétablir (copiedTemplateAction). Un document pas encore enregistré n'a pas de modèle d'origine : son « Enregistrer sous… » est son
+    // premier enregistrement, que « Enregistrer » ne range pas non plus.
+    const from = Templates.getCurrentId();
     // Un macro-modèle se copie par sa composition (mêmes emplacements, nouvel identifiant) : passer par onSave rouvrirait sa fenêtre au lieu de
     // dupliquer.
     if (currentTypeModele === 'macro') {
@@ -1210,6 +1213,7 @@
         const copyName = Templates.uniqueName(nom);
         const { id: newId } = await Templates.save(null, copyName, JSON.stringify(macroSlots), kept.nomFichierPDF, kept.headerFooter, kept.marginsMm, 'macro', null);
         await onMacroSaved(newId, copyName !== nom ? copyName : null);
+        if (from != null) ActionHistory.add(copiedTemplateAction(newId, from, false));
       } catch (e) {
         console.error('[main] échec de la copie du macro-modèle', e);
         setStatus(I18n.t('status.saveError'), true);
@@ -1226,7 +1230,19 @@
     if (templateNameInput) templateNameInput.value = nom;
     Templates.setCurrentId(null);
     ExportChoices.detach();
+    if (from == null) await onSave();
+    else await saveAsNewTemplate(from, false);
+  }
+
+  // Enregistre l'écran comme un modèle NEUF - une copie (« Enregistrer sous… »), un modèle de la galerie - puis range l'action dans l'historique d'Annuler / Rétablir. `from` : le modèle que l'écran montrait avant (null : aucun) ;
+  // `withTables` : la galerie a créé des tables avec lui. Rien n'est rangé quand l'enregistrement n'a créé aucun modèle (nom manquant, refus, erreur : le coin d'état le dit) ni quand un autre modèle a été choisi pendant qu'il
+  // durait (l'identifiant courant est alors le sien).
+  async function saveAsNewTemplate(from, withTables) {
+    const epoch = autosaveEpoch;
     await onSave();
+    if (epoch !== autosaveEpoch) return;
+    const id = Templates.getCurrentId();
+    if (id != null && Templates.byId(id)) ActionHistory.add(copiedTemplateAction(id, from, !!withTables));
   }
 
   // Historique des versions (js/versions-store.js garde les versions à chaque enregistrement ; la fenêtre, js/versions-history.js, ne se charge qu'ici, au premier clic). Le modèle ouvert
@@ -1355,6 +1371,74 @@
     startBlankDocument();
     setStatus(I18n.t('status.templateDeleted'));
     if (kept) ActionHistory.add(deletedTemplateAction(kept));
+  }
+
+  // Le modèle `id` vient d'être créé comme copie de ce que l'écran montrait - « Enregistrer sous… » (`from` : le modèle qu'on copiait) ou un modèle de la galerie (`from` : celui qu'on quittait, null si l'écran n'en avait pas) :
+  // l'action de l'historique d'Annuler / Rétablir (js/action-history.js). Défaire RETIRE la copie, après une question (« Retirer … ? ») : elle a pu être travaillée depuis, et un Ctrl + Z de trop ne doit pas la perdre en silence ;
+  // « Annuler » à la question la garde. Si l'écran la montrait encore, `from` se rouvre tel que la table le garde (un document vierge quand il n'existe plus ou qu'il n'y en avait pas). Rétablir rend la ligne sous son numéro et son
+  // jeton (Templates.restoreRow, comme une suppression défaite) et, si l'écran est resté tel que Annuler l'a laissé, la rouvre. Les tables qu'un modèle de la galerie a créées avec lui (`withTables`) ne sont jamais touchées : un autre
+  // modèle peut déjà s'en servir.
+  function copiedTemplateAction(id, from, withTables) {
+    let row = null; // la ligne telle que Grist la gardait quand la copie a été retirée
+    let rowId = id;
+    let reopened = false; // la copie était à l'écran quand elle a été retirée : l'écran a changé avec elle
+    // L'écran est resté ce que Annuler a laissé : le modèle d'où venait la copie sans rien de tapé depuis, ou le document vierge.
+    const screenLeftAsUndone = () => (Templates.getCurrentId() == null
+      ? (!autosaveDirty || (!autosaveSettingsDirty && EditorCore.getEditor().isEmpty))
+      : Templates.isCurrent(from) && !autosaveDirty);
+    async function remove(entryId) {
+      if (isReadOnly()) throw new Error('lecture seule');
+      const named = Templates.byId(rowId);
+      if (!named) throw ActionHistory.conflict(I18n.t('history.templateGone'));
+      // Pas d'écriture automatique ni de texte qui en remplace un autre tant que la question est posée et que l'écran change (comme la question de départ, askBeforeLeaving).
+      leavePromptCount++;
+      leavePromptOpen = true;
+      try {
+        const sure = await Dialogs.confirm({ title: I18n.t('history.removeCopyTitle', { name: named.nom }), message: I18n.t(withTables ? 'history.removeCopyTables' : 'history.removeCopyMessage'), confirmLabel: I18n.t('history.removeCopyConfirm'), danger: true });
+        if (!sure) throw ActionHistory.conflict(I18n.t('history.copyKept', { name: named.nom }));
+        // Un passage de l'enregistrement automatique, ou un enregistrement, encore en route finit d'écrire la copie avant qu'elle parte.
+        await whenAutosaveTickDone();
+        while (saveIsRunning() || saveWaiting) await (saveWaiting || whenSaveFinished());
+        const now = await Templates.snapshotRow(rowId);
+        if (!now) throw ActionHistory.conflict(I18n.t('history.templateGone'));
+        const shown = Templates.isCurrent(rowId);
+        await Templates.remove(rowId);
+        row = now;
+        reopened = shown;
+        await showTemplateList();
+        if (shown) {
+          const back = from == null ? undefined : Templates.openableById(from);
+          if (back) {
+            templateSelect.value = String(back.id);
+            loadTemplateIntoEditor(back);
+            syncDefaultTemplateButton();
+          } else {
+            startBlankDocument();
+          }
+          // Charger un modèle vide l'historique, et Ctrl + Y n'aurait plus rien à rétablir : le repère de cette copie, défaite, est reposé dans l'historique neuf. L'historique d'avant ne se remet pas (HistoryMarkers.resume) :
+          // il garde les positions du texte de la copie, qui ne sont pas celles du modèle rouvert.
+          HistoryMarkers.recordUndoneAction(entryId);
+        }
+        return I18n.t('status.templateRemoved', { name: String(now.values.Nom || named.nom) });
+      } finally {
+        if (--leavePromptCount === 0) leavePromptOpen = false;
+      }
+    }
+    async function bringBack() {
+      if (isReadOnly()) throw new Error('lecture seule');
+      const back = await Templates.restoreRow(row);
+      if (back.present) throw ActionHistory.conflict(I18n.t('history.templateBack'));
+      rowId = back.id;
+      await showTemplateList();
+      const open = reopened && screenLeftAsUndone() && Templates.openableById(rowId);
+      reopened = false;
+      if (open) {
+        templateSelect.value = String(rowId);
+        loadTemplateIntoEditor(Templates.byId(rowId));
+      }
+      return I18n.t(back.renamed ? 'status.templateRestoredAs' : 'status.templateRestored', { name: back.nom });
+    }
+    return { undo: remove, redo: bringBack };
   }
 
   // Droits par personne (js/access-rights.js)
@@ -3113,7 +3197,8 @@
   function wireTemplateGalleryModal() {
     TemplateGalleryModal.wire({
       clearTemplateSelection: () => { templateSelect.value = ''; },
-      loadTemplateIntoEditor, onSave, setStatus, hasEditsToConfirmBeforeLeaving, askBeforeLeaving, savedTemplateName,
+      // `saveCreated` enregistre l'écran comme un modèle neuf et le range dans l'historique d'Annuler / Rétablir (saveAsNewTemplate) ; `currentTemplateId`, le modèle que l'écran montre avant que le nouveau le remplace.
+      loadTemplateIntoEditor, saveCreated: saveAsNewTemplate, currentTemplateId: () => Templates.getCurrentId(), setStatus, hasEditsToConfirmBeforeLeaving, askBeforeLeaving, savedTemplateName,
       saveWatchdogMs: SAVE_WATCHDOG_MS,
     });
   }

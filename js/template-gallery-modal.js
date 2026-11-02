@@ -245,12 +245,14 @@ const TemplateGalleryModal = (function () {
   }
 
   // Charger le modèle ne suffit pas : sans enregistrement explicite, il ne reste qu'un tampon d'édition, invisible dans #template-select. Passe par
-  // onSave plutôt que d'appeler Templates.save à part.
-  async function saveEntryAsTemplate(html, settings) {
+  // l'enregistrement de la page (host.saveCreated : onSave, puis le modèle neuf entre dans l'historique d'Annuler / Rétablir) plutôt que d'appeler
+  // Templates.save à part. `madeTables` : des tables viennent d'être créées avec lui (Annuler les laisse, et le dit dans sa question).
+  async function saveEntryAsTemplate(html, settings, madeTables) {
     const headerFooter = await TemplateGallery.fetchHeaderFooter(currentEntry);
+    const from = host.currentTemplateId(); // le modèle qu'on quitte : Annuler le rouvre
     host.clearTemplateSelection();
     host.loadTemplateIntoEditor(Object.assign({ id: null, contenu: html, headerFooter, nom: entryName(currentEntry), nomFichierPDF: '' }, settings || {}));
-    await host.onSave();
+    await host.saveCreated(from, !!madeTables);
     closeAll();
   }
 
@@ -293,7 +295,7 @@ const TemplateGalleryModal = (function () {
       host.setStatus(I18n.t('status.tableCreationError', { table: tableName }), true);
       return;
     }
-    await saveEntryAsTemplate(TemplateGallery.rebindVariableTable(currentHtml, schema.tableName, actualTableId));
+    await saveEntryAsTemplate(TemplateGallery.rebindVariableTable(currentHtml, schema.tableName, actualTableId), null, true);
     host.setStatus(I18n.t('status.tableCreatedSummary', { table: actualTableId, count: schema.columns.length, name: host.savedTemplateName(entryName(currentEntry)) }));
   }
 
@@ -356,7 +358,7 @@ const TemplateGalleryModal = (function () {
       host.setStatus(I18n.t(TemplatePack.isPackError(e) && e.packCode === 'renamed' ? 'status.packRenamed' : 'status.packError'), true);
       return;
     }
-    await saveEntryAsTemplate(currentHtml, packSettings(pack, false));
+    await saveEntryAsTemplate(currentHtml, packSettings(pack, false), result.created.length > 0);
     const name = host.savedTemplateName(entryName(currentEntry));
     const parts = [result.created.length
       ? I18n.t('status.packCreated', { name, n: result.created.length, tables: result.created.join(', ') })
@@ -365,8 +367,8 @@ const TemplateGalleryModal = (function () {
     host.setStatus(parts.join(' '));
   }
 
-  // `options` (gardé dans `host`) : { clearTemplateSelection, loadTemplateIntoEditor, onSave, setStatus, hasEditsToConfirmBeforeLeaving,
-  // askBeforeLeaving, savedTemplateName, saveWatchdogMs }.
+  // `options` (gardé dans `host`) : { clearTemplateSelection, loadTemplateIntoEditor, saveCreated, currentTemplateId, setStatus,
+  // hasEditsToConfirmBeforeLeaving, askBeforeLeaving, savedTemplateName, saveWatchdogMs }.
   function wire(options) {
     const openLink = document.getElementById('v2-btn-new-from-template');
     const galleryClose = document.getElementById('tpl-gallery-close');

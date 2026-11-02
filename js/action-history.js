@@ -5,7 +5,7 @@
 // Ctrl + Z doit pourtant le rendre. Ce module garde donc de quoi défaire et refaire chaque action (`add`, une fois l'action FAITE), et le nouvel historique reçoit à chaque modèle chargé le repère de celles qui sont faites (`reseed`) :
 // l'ordre des gestes, les frappes mêlées aux actions, le bouton, la touche et le menu Édition du navigateur restent ceux de l'historique de l'éditeur, qui défait un repère en appelant `sync`.
 //
-// Une action est { undo, redo } : deux fonctions asynchrones qui rendent le texte du coin d'état (ce qui vient d'être défait ou rétabli) ou lèvent une erreur. `conflict(message)` est l'erreur d'une action qui ne peut plus se défaire
+// Une action est { undo, redo } : deux fonctions asynchrones qui rendent le texte du coin d'état (ce qui vient d'être défait ou rétabli) ou lèvent une erreur ; elles reçoivent le numéro de l'action (celui de son repère dans l'historique de l'éditeur). `conflict(message)` est l'erreur d'une action qui ne peut plus se défaire
 // parce que le document a changé depuis (un autre modèle par défaut, un modèle supprimé par quelqu'un d'autre) : rien n'est écrit, et le message le dit au lieu d'écraser le geste d'une autre personne. Les actions se suivent l'une
 // après l'autre, dans l'ordre où l'historique les rend (deux Ctrl + Z de suite défont la deuxième action puis la première). Une action neuve efface ce qui se rétablissait, comme une frappe.
 //
@@ -49,7 +49,7 @@ const ActionHistory = (function () {
     if (entry.done === done) return;
     entry.busy = true;
     try {
-      const message = await (done ? entry.redo : entry.undo)();
+      const message = await (done ? entry.redo : entry.undo)(entry.id);
       entry.done = done;
       if (message) host.status(message, false);
     } catch (error) {

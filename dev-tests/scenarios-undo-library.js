@@ -4,7 +4,8 @@
 // document (le bouton de la barre, une ligne de la liste, une ligne d'« Organiser mes modèles »). Et deux états du MODÈLE OUVERT, rangés dans son historique comme le texte (domaines « name » et « exportChoices » de
 // js/history-markers.js) : 2) le nom que le crayon lui donne, 3) le type, la qualité du PDF et les lignes d'export qu'on lui choisit. Puis 4) la suppression d'un modèle : Ctrl + Z rend sa ligne (même numéro, même jeton) et
 // rouvre le modèle, Ctrl + Y le supprime de nouveau. Et 5) le rangement de la personne : l'épingle d'un modèle, le dossier où il est rangé, le dossier « replié par défaut » (js/template-arrangement.js, par la liste des modèles et la
-// fenêtre « Organiser mes modèles »).
+// fenêtre « Organiser mes modèles »). Enfin 6) les copies (go général du 02/11, carte « Ctrl + Z doit-il retirer la copie… ? », option « Oui, avec une question ») : « Enregistrer sous… » et un modèle de la galerie - Ctrl + Z
+// demande « Retirer … ? » puis retire la copie et rouvre le modèle d'où elle venait, Ctrl + Y la rend ; les tables que la galerie crée avec son modèle ne sont jamais touchées.
 //
 // Les attendus sont ceux de la personne qui défait : UN Ctrl + Z rend le ★ à ce qu'il était (au modèle d'avant, ou à aucun), UN Ctrl + Y le repose ; l'ordre est celui des gestes, texte et actions mêlés ; depuis un AUTRE modèle
 // que celui où l'action a été faite ; un geste neuf efface ce qui se rétablissait ; ce qu'une autre personne a changé depuis n'est jamais écrasé. Le même parcours à la vraie souris dans le panneau de 700x400 : verify-undo-library-mouse.mjs
@@ -1492,6 +1493,294 @@ window.EditorTestSuites.undoLibrary = (function () {
         check(problems, 'le coin d\'état le dit', [status(), byId('status-msg').className], [I18n.t('history.templateGone'), 'error-msg']);
         return verdict(problems, { status: status() });
       } finally { await leave(h); }
+    },
+  });
+
+
+  // --- 6) les copies : « Enregistrer sous… » et un modèle de la galerie ---
+  // Le vrai bouton « Enregistrer sous… », la saisie du nom répondue `name`. Rend les demandes reçues.
+  async function saveAsCopy(h, name) {
+    const dialogs = h.stubDialogs({ prompt: name });
+    try {
+      await h.clickButton('v2-btn-save-as');
+      await h.sleep(900);
+    } finally { dialogs.restore(); }
+    return dialogs.asked;
+  }
+  // Ctrl + Z au clavier de l'éditeur (ou de la page), la question « Retirer … ? » répondue `answer`. Rend les questions posées.
+  async function undoAnswering(h, answer, inPageToo) {
+    const dialogs = h.stubDialogs({ confirm: answer });
+    try {
+      if (inPageToo) inPage('z'); else inEditor('z');
+      await settle(h);
+    } finally { dialogs.restore(); }
+    return dialogs.asked;
+  }
+  async function redoAfter(h, inPageToo) {
+    if (inPageToo) inPage('y'); else inEditor('y');
+    await settle(h);
+  }
+  const removed = name => I18n.t('status.templateRemoved', { name });
+  const kept = name => I18n.t('history.copyKept', { name });
+  const questionOf = (asked, name, tables) => [asked.length, asked[0] && asked[0].kind, asked[0] && asked[0].title, asked[0] && asked[0].message, asked[0] && asked[0].danger, asked[0] && asked[0].confirmLabel]
+    .join('|') === [1, 'confirm', I18n.t('history.removeCopyTitle', { name }), I18n.t(tables ? 'history.removeCopyTables' : 'history.removeCopyMessage'), true, I18n.t('history.removeCopyConfirm')].join('|');
+  const waitUntil = async (h, fn, ms) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (fn()) return true; await h.sleep(40); } return !!fn(); };
+  const galleryShown = () => ['template-preview-modal', 'template-gallery-modal'].some(id => { const modal = byId(id); return !!modal && modal.style.display !== 'none'; });
+  const closeGallery = () => ['template-preview-modal', 'template-gallery-modal'].forEach(id => { const modal = byId(id); if (modal) modal.style.display = 'none'; });
+  // La galerie ouverte et l'aperçu du modèle de ce nom (le premier sans nom) lu : rend son nom, ou null.
+  async function openGalleryPreview(h, name) {
+    byId('v2-btn-new-from-template').click();
+    if (!await waitUntil(h, () => !!document.querySelector('#tpl-gallery-grid .tpl-gallery-card'), 8000)) return null;
+    const cards = Array.from(document.querySelectorAll('#tpl-gallery-grid .tpl-gallery-card'));
+    const card = name ? cards.find(c => c.querySelector('.tpl-gallery-card-name').textContent === name) : cards[0];
+    if (!card) return null;
+    card.click();
+    const shown = await waitUntil(h, () => {
+      const preview = byId('template-preview-modal');
+      return !!preview && preview.style.display !== 'none' && (byId('tpl-preview-tiptap').innerHTML.length > 20 || !byId('tpl-preview-captures').hidden);
+    }, 8000);
+    return shown ? byId('tpl-preview-name').textContent.trim() : null;
+  }
+
+  cases.push({
+    id: 'undo_library_save_as_copy_is_removed_after_a_question_and_ctrl_y_brings_it_back',
+    description: '« Enregistrer sous… » : UN Ctrl + Z pose la question « Retirer … ? » puis retire la copie (une seule écriture, l\'original n\'est pas touché), la liste ne la montre plus et l\'écran rouvre le modèle copié ; UN Ctrl + Y rend la ligne sous son numéro et son jeton, identique, et rouvre la copie ; « Annuler » à la question laisse tout en place et le coin d\'état le dit',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Copie un pas');
+        await open(h, ids.a);
+        await Templates.ensureToken(ids.a);
+        const original = rowOf(ids.a);
+        const name = 'Copie UL un pas';
+        stub().clearActionLog();
+        await saveAsCopy(h, name);
+        const copy = Templates.getCurrentId();
+        check(problems, 'la copie est le modèle ouvert, sous le nom demandé, et la liste la montre', [copy != null && String(copy) !== String(ids.a), nameInput().value, inList(copy)], [true, name, true]);
+        check(problems, 'la copie est écrite, l\'original n\'a pas bougé', [rowOf(copy) && rowOf(copy).Nom, rowOf(ids.a)], [name, original]);
+        check(problems, 'une action en réserve', reserve().count(), 1);
+        const copyRow = rowOf(copy);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        stub().clearActionLog();
+        const asked = await undoAnswering(h, true);
+        check(problems, 'Ctrl + Z : la question dit le nom, en danger, avec « Retirer »', questionOf(asked, name, false), true);
+        check(problems, 'Ctrl + Z : la ligne de la copie n\'est plus dans la table', rowOf(copy), null);
+        check(problems, 'Ctrl + Z : seule la copie est retirée', modelWrites(), [['RemoveRecord', copy]]);
+        check(problems, 'Ctrl + Z : la liste ne la montre plus, l\'original y reste', [inList(copy), inList(ids.a)], [false, true]);
+        check(problems, 'Ctrl + Z : l\'écran rouvre le modèle copié, avec son nom et son texte', [shownId(), byId('template-select').value, nameInput().value, ed().getText()], [String(ids.a), String(ids.a), ids.nameA, 'Contenu de ' + ids.nameA]);
+        check(problems, 'Ctrl + Z : le coin d\'état', status(), removed(name));
+        check(problems, 'Ctrl + Z : l\'action reste en réserve pour Ctrl + Y', reserve().count(), 1);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        stub().clearActionLog();
+        await redoAfter(h);
+        check(problems, 'Ctrl + Y : la ligne est rendue telle qu\'elle était, sous son numéro', rowOf(copy), copyRow);
+        check(problems, 'Ctrl + Y : une seule écriture, la ligne sous son numéro', modelWrites(), [['AddRecord', copy]]);
+        check(problems, 'Ctrl + Y : la liste la montre et l\'écran la rouvre', [inList(copy), shownId(), nameInput().value, ed().getText()], [true, String(copy), name, 'Contenu de ' + ids.nameA]);
+        check(problems, 'Ctrl + Y : le coin d\'état', status(), restored(name));
+        ed().commands.focus('end');
+        await h.sleep(100);
+        stub().clearActionLog();
+        const refused = await undoAnswering(h, false);
+        check(problems, '2e Ctrl + Z : la question est posée de nouveau', questionOf(refused, name, false), true);
+        check(problems, '« Annuler » : rien n\'est écrit, la copie reste ouverte', [modelWrites(), rowOf(copy) !== null, shownId(), inList(copy)], [[], true, String(copy), true]);
+        check(problems, '« Annuler » : le coin d\'état dit que la copie est gardée, en erreur', [status(), byId('status-msg').className], [kept(name), 'error-msg']);
+        return verdict(problems, { copy, row: rowOf(copy) });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_save_as_copy_comes_after_the_text_typed_in_it',
+    description: 'Du texte tapé dans la copie : le premier Ctrl + Z défait la frappe SANS question, le second pose la question de la copie ; un Ctrl + Y de plus ne la retire pas',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Copie ordre');
+        await open(h, ids.a);
+        const name = 'Copie UL ordre';
+        await saveAsCopy(h, name);
+        const copy = Templates.getCurrentId();
+        ed().commands.focus('end');
+        await h.sleep(100);
+        typedAtEnd(' plus');
+        await h.sleep(100);
+        const asked1 = await undoAnswering(h, true);
+        check(problems, '1er Ctrl + Z : aucune question, la frappe est défaite, la copie reste', [asked1.length, / plus/.test(ed().getText()), rowOf(copy) !== null, shownId()], [0, false, true, String(copy)]);
+        const asked2 = await undoAnswering(h, false);
+        check(problems, '2e Ctrl + Z : la question de la copie, gardée', [questionOf(asked2, name, false), rowOf(copy) !== null], [true, true]);
+        await redoAfter(h);
+        check(problems, 'Ctrl + Y : la copie n\'est pas retirée', [rowOf(copy) !== null, shownId()], [true, String(copy)]);
+        return verdict(problems, { text: ed().getText() });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_save_as_copy_not_on_screen_is_removed_without_touching_the_screen',
+    description: 'La copie faite, un autre modèle ouvert : Ctrl + Z (après la question) retire la copie de la liste et de la table sans toucher à l\'écran, Ctrl + Y la rend sans la rouvrir',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Copie ailleurs');
+        await open(h, ids.a);
+        const name = 'Copie UL ailleurs';
+        await saveAsCopy(h, name);
+        const copy = Templates.getCurrentId();
+        await open(h, ids.b);
+        check(problems, 'B est ouvert, la copie est dans la liste', [shownId(), inList(copy)], [String(ids.b), true]);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        stub().clearActionLog();
+        const asked = await undoAnswering(h, true);
+        check(problems, 'Ctrl + Z : la question nomme la copie', questionOf(asked, name, false), true);
+        check(problems, 'Ctrl + Z : la copie n\'est plus ni dans la table ni dans la liste', [rowOf(copy), inList(copy)], [null, false]);
+        check(problems, 'Ctrl + Z : l\'écran est resté B, texte compris', [shownId(), nameInput().value, ed().getText()], [String(ids.b), ids.nameB, 'Contenu de ' + ids.nameB]);
+        check(problems, 'Ctrl + Z : seule la copie est écrite', modelWrites(), [['RemoveRecord', copy]]);
+        await redoAfter(h);
+        check(problems, 'Ctrl + Y : la copie est rendue dans la liste, l\'écran reste B', [rowOf(copy) !== null, inList(copy), shownId()], [true, true, String(ids.b)]);
+        return verdict(problems, { writes: modelWrites() });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_saving_a_new_document_is_not_a_copy',
+    description: '« Enregistrer sous… » sur un document pas encore enregistré en est le premier enregistrement, comme « Enregistrer » : aucune action en réserve, Ctrl + Z ne pose aucune question et ne retire rien',
+    async run(h) {
+      const problems = [];
+      try {
+        await fresh(h, 'Copie neuf');
+        await h.clickButton('btn-new');
+        await h.sleep(300);
+        Editor.setHTML('<p>Document neuf UL</p>');
+        const name = 'Neuf UL enregistré sous';
+        await saveAsCopy(h, name);
+        const id = Templates.getCurrentId();
+        check(problems, 'le document est enregistré sous le nom demandé', [id != null, rowOf(id) && rowOf(id).Nom], [true, name]);
+        check(problems, 'aucune action en réserve', reserve().count(), 0);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        const asked = await undoAnswering(h, true);
+        check(problems, 'Ctrl + Z ne pose aucune question et ne retire rien', [asked.length, rowOf(id) !== null], [0, true]);
+        return verdict(problems, { id });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_macro_copy_is_removed_after_a_question_and_the_macro_comes_back',
+    description: '« Enregistrer sous… » sur un macro-modèle : sa copie s\'ouvre ; Ctrl + Z (la page, l\'éditeur est caché) pose la question puis la retire et rouvre le macro-modèle d\'où elle venait ; Ctrl + Y la rend et la rouvre',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Copie macro');
+        // Un macro-modèle créé par la vraie fenêtre de composition (la page de garde est le premier modèle) : il est enregistré, sélectionné et ouvert.
+        MacroEditor.openModal(null);
+        byId('macro-editor-name').value = 'Macro UL';
+        const cover = byId('macro-editor-cover');
+        cover.value = String(ids.a);
+        cover.dispatchEvent(new Event('change', { bubbles: true }));
+        byId('macro-editor-save').click();
+        await h.sleep(900);
+        const macro = { id: Templates.getCurrentId() };
+        check(problems, 'le macro-modèle est ouvert', [macro.id != null, rowOf(macro.id) && rowOf(macro.id).TypeModele], [true, 'macro']);
+        const name = 'Macro UL copie';
+        await saveAsCopy(h, name);
+        const copy = Templates.getCurrentId();
+        check(problems, 'la copie du macro-modèle est ouverte, avec la même composition', [copy != null && String(copy) !== String(macro.id), nameInput().value, rowOf(copy) && rowOf(copy).Contenu === rowOf(macro.id).Contenu, rowOf(copy) && rowOf(copy).TypeModele], [true, name, true, 'macro']);
+        check(problems, 'une action en réserve', reserve().count(), 1);
+        stub().clearActionLog();
+        const asked = await undoAnswering(h, true, true);
+        check(problems, 'Ctrl + Z : la question nomme la copie', questionOf(asked, name, false), true);
+        check(problems, 'Ctrl + Z : la copie est retirée, le macro-modèle rouvert', [rowOf(copy), shownId(), modelWrites()], [null, String(macro.id), [['RemoveRecord', copy]]]);
+        await redoAfter(h, true);
+        check(problems, 'Ctrl + Y : la copie revient et s\'ouvre', [rowOf(copy) !== null, shownId(), nameInput().value], [true, String(copy), name]);
+        return verdict(problems, { copy });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_gallery_template_is_removed_after_a_question_and_the_open_template_comes_back',
+    description: '« Utiliser ce modèle » de la galerie : le modèle créé s\'ouvre ; UN Ctrl + Z pose la question « Retirer … ? » puis le retire (une seule écriture) et rouvre le modèle qu\'on avait quitté ; UN Ctrl + Y le rend sous son numéro et le rouvre',
+    async run(h) {
+      const problems = [];
+      try {
+        const ids = await fresh(h, 'Galerie un pas');
+        await open(h, ids.a);
+        const entryName = await openGalleryPreview(h);
+        if (!entryName) { problems.push('l\'aperçu de la galerie ne s\'ouvre pas'); return verdict(problems, {}); }
+        const expected = Templates.uniqueName(entryName);
+        stub().clearActionLog();
+        byId('tpl-preview-use-empty').click();
+        await waitUntil(h, () => !galleryShown() && Templates.getCurrentId() != null && String(Templates.getCurrentId()) !== String(ids.a), 8000);
+        await h.sleep(300);
+        const made = Templates.getCurrentId();
+        check(problems, 'le modèle de la galerie est créé, ouvert, sous son nom', [made != null && String(made) !== String(ids.a), nameInput().value, inList(made), galleryShown()], [true, expected, true, false]);
+        check(problems, 'une action en réserve', reserve().count(), 1);
+        const madeRow = rowOf(made);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        stub().clearActionLog();
+        const asked = await undoAnswering(h, true);
+        check(problems, 'Ctrl + Z : la question nomme le modèle de la galerie', questionOf(asked, expected, false), true);
+        check(problems, 'Ctrl + Z : le modèle n\'est plus dans la table, seule cette ligne est retirée', [rowOf(made), modelWrites()], [null, [['RemoveRecord', made]]]);
+        check(problems, 'Ctrl + Z : l\'écran rouvre le modèle qu\'on avait quitté', [shownId(), nameInput().value, ed().getText()], [String(ids.a), ids.nameA, 'Contenu de ' + ids.nameA]);
+        check(problems, 'Ctrl + Z : le coin d\'état', status(), removed(expected));
+        ed().commands.focus('end');
+        await h.sleep(100);
+        stub().clearActionLog();
+        await redoAfter(h);
+        check(problems, 'Ctrl + Y : la ligne revient telle qu\'elle était, sous son numéro, et s\'ouvre', [rowOf(made), modelWrites(), shownId(), nameInput().value], [madeRow, [['AddRecord', made]], String(made), expected]);
+        return verdict(problems, { entryName });
+      } finally { closeGallery(); await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_gallery_template_with_a_new_table_keeps_the_table_and_says_so',
+    description: '« Utiliser avec une nouvelle table de données » : Ctrl + Z retire le modèle après une question qui dit que la table reste ; la table du document n\'est jamais touchée (aucune suppression de table), Ctrl + Y rend le modèle',
+    async run(h) {
+      const problems = [];
+      const dev = await (await fetch('templates-gallery-dev/catalogue.json', { cache: 'no-store' })).json();
+      const list = await TemplateGallery.loadManifest();
+      const entry = Object.assign({}, dev.find(e => e.schema && !e.pack), { __base: 'templates-gallery-dev/' });
+      list.unshift(entry);
+      const tableName = 'Table_UL_galerie';
+      const dialogs = h.stubDialogs({ prompt: tableName });
+      try {
+        const ids = await fresh(h, 'Galerie table');
+        await open(h, ids.a);
+        const entryName = await openGalleryPreview(h, entry.name);
+        if (!entryName) { problems.push('l\'aperçu de la galerie ne s\'ouvre pas'); return verdict(problems, {}); }
+        const expected = Templates.uniqueName(entryName);
+        stub().clearActionLog();
+        byId('tpl-preview-use-data').click();
+        await waitUntil(h, () => !galleryShown() && Templates.getCurrentId() != null && String(Templates.getCurrentId()) !== String(ids.a), 8000);
+        await h.sleep(300);
+        const made = Templates.getCurrentId();
+        dialogs.restore();
+        check(problems, 'la table et le modèle sont créés', [stub().state.tables.indexOf(tableName) !== -1, made != null && String(made) !== String(ids.a), reserve().count()], [true, true, 1]);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        stub().clearActionLog();
+        const asked = await undoAnswering(h, true);
+        check(problems, 'Ctrl + Z : la question dit que les tables créées avec le modèle restent', questionOf(asked, expected, true), true);
+        check(problems, 'Ctrl + Z : le modèle est retiré, le modèle d\'avant rouvert', [rowOf(made), shownId()], [null, String(ids.a)]);
+        check(problems, 'Ctrl + Z : la table reste dans le document, aucune table n\'est supprimée', [stub().state.tables.indexOf(tableName) !== -1, stub().getActionLog().filter(a => a[0] === 'RemoveTable').length], [true, 0]);
+        await redoAfter(h);
+        check(problems, 'Ctrl + Y : le modèle revient, la table n\'a pas bougé', [rowOf(made) !== null, shownId(), stub().state.tables.indexOf(tableName) !== -1], [true, String(made), true]);
+        return verdict(problems, { tables: stub().state.tables.slice(-3) });
+      } finally {
+        dialogs.restore();
+        closeGallery();
+        const at = list.indexOf(entry);
+        if (at !== -1) list.splice(at, 1);
+        try { await stub().applyUserActions([['RemoveTable', tableName]]); } catch (e) { /* déjà partie */ }
+        await leave(h);
+      }
     },
   });
 
