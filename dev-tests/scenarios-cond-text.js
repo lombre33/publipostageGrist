@@ -1817,7 +1817,7 @@
       const state = () => ({ disabled: area.disabled, value: area.value, title: field.title, labelTitle: label.title });
       const found = {
         shown: visibleRow('.var-condition-otherwise-area-row'), valueRow: visibleRow('.var-condition-otherwise-text-row'), bubbleList: visibleRow('.var-condition-otherwise-row'),
-        tag: area.tagName, label: label.textContent, placeholder: area.placeholder, max: area.maxLength, grey: state(),
+        tag: area.tagName, editor: !!area.querySelector('.pp-field-text[role="textbox"][aria-multiline="true"]'), label: label.textContent, placeholder: area.placeholder, max: area.maxLength, grey: state(),
       };
       await pickColumn(h, modal.querySelector('.macro-rule-row'), 'Statut');
       await h.sleep(60);
@@ -1828,7 +1828,7 @@
       cancelWindow(modal);
       const needs = I18n.t('varCond.otherwiseTextNeedsRule');
       const pass = elsewhere.varBadge === false && elsewhere.conditionalValue === false && elsewhere.conditionalCheckbox === false
-        && found.shown && !found.valueRow && !found.bubbleList && found.tag === 'TEXTAREA' && found.label === I18n.t('varCond.otherwiseLabel') && found.placeholder === I18n.t('varCond.otherwiseBlockPlaceholder') && found.max === 1000
+        && found.shown && !found.valueRow && !found.bubbleList && found.tag === 'DIV' && found.editor && found.label === I18n.t('varCond.otherwiseLabel') && found.placeholder === I18n.t('varCond.otherwiseBlockPlaceholder') && found.max === 1000
         && found.grey.disabled && found.grey.value === '' && found.grey.title === needs && found.grey.labelTitle === needs
         && !found.ready.disabled && found.ready.title === I18n.t('varCond.otherwiseBlockTitle') && found.ready.labelTitle === I18n.t('varCond.otherwiseBlockTitle')
         && found.greyAgain.disabled && found.greyAgain.title === needs;
@@ -2152,9 +2152,9 @@
       const keys = ['varCond.otherwiseLabel', 'varCond.otherwiseBlockTitle', 'varCond.otherwiseTextNeedsRule', 'varCond.otherwiseBlockPlaceholder', 'varCond.debug.currentNotMetBlockOtherwise', 'condText.tag.ifOtherwise', 'condText.tag.titleIfOtherwise'];
       const missing = keys.filter(k => I18n.t(k) === k);
       const want = en
-        ? { label: 'If Statut = Normal · otherwise', title: /^Shown if Statut = Normal, otherwise “à confirmer”\./, row: 'Otherwise show', placeholder: 'Empty: the block disappears', fieldTitle: /^The text written in place of this block/,
+        ? { label: 'If Statut = Normal · otherwise', title: /^Shown if Statut = Normal, otherwise “à confirmer”\./, row: 'Otherwise show', placeholder: 'Empty: block disappears (#Variable allowed)', fieldTitle: /^The text written in place of this block/,
           line: 'Selected row (#1): condition not met, the block is replaced by “à confirmer”.' }
-        : { label: 'Si Statut = Normal · sinon', title: /^S’affiche si Statut = Normal, sinon « à confirmer »\./, row: 'Sinon afficher', placeholder: 'Vide : le bloc disparaît', fieldTitle: /^Le texte écrit à la place de ce bloc/,
+        : { label: 'Si Statut = Normal · sinon', title: /^S’affiche si Statut = Normal, sinon « à confirmer »\./, row: 'Sinon afficher', placeholder: 'Vide : le bloc disparaît (#Variable autorisée)', fieldTitle: /^Le texte écrit à la place de ce bloc/,
           line: 'Ligne sélectionnée (n° 1) : condition non remplie, le bloc est remplacé par « à confirmer ».' };
       const label = tags()[0].textContent;
       const title = tags()[0].title;

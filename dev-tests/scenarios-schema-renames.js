@@ -353,6 +353,39 @@
   });
 
   cases.push({
+    id: 'schemarenames_the_variables_of_a_value_and_block_otherwise_follow_a_rename_too',
+    description: 'Le « Sinon afficher » d’une valeur ou d’un bloc de texte cite des variables (attribut `data-otherwise`, texte brut « §Dossiers.Montant » ou HTML de champ) : la table et la colonne renommées y sont réécrites dans l’une et l’autre écriture, le texte autour (et le « Avant » d’une variable) est gardé, un sinon sans variable renommée reste identique à l’octet ; un modèle qui ne nomme la table de la page que dans un sinon est lu comme un modèle de cette page',
+    run: async () => {
+      const m = mapper();
+      const ctx = { page: m.tableContext('Dossiers'), trigger: trigger() };
+      const rule = cond([['Statut', '=', 'x']]);
+      const value = (otherwise, rules) => `<span class="conditional-value"${attr('data-condition', rules || rule)}${attr('data-otherwise', otherwise)}>Texte</span>`;
+      const blockOf = otherwise => `<div class="conditional-text"${attr('data-condition', rule)}${attr('data-otherwise', otherwise)}><p>Bloc</p></div>`;
+      const plain = text('Reste à payer : §Dossiers.Montant (§Projets.Nom)');
+      const rich = `<p class="pp-field">Total : ${badge('Dossiers', 'Montant', attr('data-before', ' ('))}</p>`;
+      const out = SchemaRenames.rewriteHtml(`<p>Avant ${value(plain)}</p>${blockOf(rich)}`, m, ctx);
+      const sinons = all(out.html, '[data-otherwise]').map(el => el.getAttribute('data-otherwise'));
+      const richBadge = sinons[1] ? all(sinons[1], '.var-badge')[0] : null;
+      const unchanged = `<p>${value(text('Titre : §Dossiers.Titre'))}${blockOf('Rien à signaler')}</p>`;
+      const quiet = SchemaRenames.rewriteHtml(unchanged, m, ctx);
+      // La seule mention de la table de la page est dans le sinon : la condition sans nom de table se lit dans cette table.
+      const viaOtherwise = SchemaRenames.rewriteHtml(`<p>${badge('Annuaire', 'Email')}${value(text('§Dossiers.Titre'), cond([['Montant', '>', '1']]))}</p>`, m, ctx);
+      const viaRichOtherwise = SchemaRenames.rewriteHtml(`<p>${badge('Annuaire', 'Email')}${value(`<p class="pp-field">${badge('Dossiers', 'Titre')}</p>`, cond([['Montant', '>', '1']]))}</p>`, m, ctx);
+      const checks = {
+        plainRewritten: sinons[0] === text('Reste à payer : §Dossiers.Total (§Portefeuille.Intitule)'),
+        richRewritten: !!richBadge && richBadge.getAttribute('data-column') === 'Total' && richBadge.getAttribute('data-key') === 'Dossiers.Total' && richBadge.getAttribute('data-before') === ' (' && richBadge.textContent === text('§Dossiers.Total'),
+        richText: !!sinons[1] && sinons[1].indexOf('Total : ') !== -1,
+        counted: out.count === 3,
+        untouched: quiet.count === 0 && quiet.html === unchanged,
+        pageReadThroughTheOtherwise: viaOtherwise.count === 2 && same(json(all(viaOtherwise.html, '.conditional-value')[0], 'data-condition').rules.map(r => r.column), ['Total']),
+        pageReadThroughTheRichOtherwise: viaRichOtherwise.count === 2 && same(json(all(viaRichOtherwise.html, '.conditional-value')[0], 'data-condition').rules.map(r => r.column), ['Total']),
+      };
+      const v = verdict(checks);
+      return { pass: v.pass, notes: v.failed.length ? JSON.stringify({ failed: v.failed, sinons, count: out.count, viaCount: viaOtherwise.count, viaHtml: viaOtherwise.html, viaRich: viaRichOtherwise.html }) : 'ok' };
+    },
+  });
+
+  cases.push({
     id: 'schemarenames_a_bare_column_that_another_table_still_has_is_left_where_the_loop_table_is_certain',
     description: 'Une colonne nue dont une autre table porte encore le nom (le modèle peut servir sur l’autre page) ne bouge pas, dans une condition comme dans un macro-modèle ; le filtre et le tri d’une boucle, sur une table certaine, suivent quand même',
     run: async () => {

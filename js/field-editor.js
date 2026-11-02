@@ -9,19 +9,27 @@
 // puce n'est posée, du HTML sinon.
 // Annuler et Rétablir (Ctrl + Z, Ctrl + Y, boutons de la barre) : chaque champ garde l'historique de sa frappe tant qu'il a le focus ; une fois quitté, sa séance
 // laisse un repère dans l'historique du modèle (js/history-markers.js, domaine « fields ») qui rend sa valeur d'avant ou d'après (`snapshot`, `restore`, `settle`).
+// Un quatrième usage, hors de la page : le « Sinon afficher » d'un bloc de texte ou d'une valeur conditionnels (js/variable-condition.js). Le champ est monté dans la
+// fenêtre de condition (`options.hostWindow`, `options.windowEl`), d'une ligne pour la valeur, de plusieurs pour le bloc (`options.multiline`, un paragraphe par ligne). Il reprend l'interface d'un
+// <input> (`value`, `placeholder`, `disabled`, `maxLength`, évènement `input`) pour que la fenêtre le traite comme le champ de texte qu'il remplace, mais n'entre pas dans
+// l'historique d'Annuler du modèle : la fenêtre est un brouillon, « Enregistrer » le pose d'un coup (une seule étape à annuler). La barre de ses variables s'ouvre devant
+// la fenêtre et règle le zéro et les cases Oui / Non comme dans le document - le sinon s'y écrit.
 const FieldEditor = (function () {
   const fields = new Map(); // élément du champ -> { host, editor, libs, panels, shown, readOnly, session }
   let watchingFocus = false;
 
-  const { docJson, itemsOfDoc } = (function () {
-    // Le document d'un champ : un seul paragraphe, du texte, des bulles et des puces (les éléments { text }, { badge } ou { chip } de FieldCodec)
+  const { docJson, itemsOfDoc, linesDocJson, linesOfDoc } = (function () {
+    // Le document d'un champ : un seul paragraphe (un par ligne pour un champ de plusieurs lignes), du texte, des bulles et des puces (les éléments { text }, { badge }
+    // ou { chip } de FieldCodec)
 
     function nodeJson(item) {
       if (FieldCodec.isText(item)) return { type: 'text', text: item.text };
       if (FieldCodec.isChip(item)) return { type: 'smartChip', attrs: Object.assign({}, item.chip) };
       return { type: 'varBadge', attrs: Object.assign({}, item.badge) };
     }
-    const docJson = items => ({ type: 'doc', content: [{ type: 'paragraph', content: items.map(nodeJson) }] });
+    const paragraphJson = items => ({ type: 'paragraph', content: items.map(nodeJson) });
+    const docJson = items => ({ type: 'doc', content: [paragraphJson(items)] });
+    const linesDocJson = lines => ({ type: 'doc', content: (lines.length ? lines : [[]]).map(paragraphJson) });
     function itemsOfDoc(doc) {
       const items = [];
       doc.descendants(node => {
@@ -32,18 +40,34 @@ const FieldEditor = (function () {
       });
       return items;
     }
-    return { docJson, itemsOfDoc };
+    // Les lignes d'un champ de plusieurs lignes : les éléments de chaque paragraphe.
+    function linesOfDoc(doc) {
+      const lines = [];
+      doc.forEach(paragraph => lines.push(itemsOfDoc(paragraph)));
+      return lines;
+    }
+    return { docJson, itemsOfDoc, linesDocJson, linesOfDoc };
   })();
 
+  // Le contenu d'un champ, d'une ligne ou de plusieurs : sa valeur enregistrée (FieldCodec) et son document ProseMirror. `content` : les éléments du champ d'une ligne, les
+  // lignes de celui de plusieurs.
+  const storedOf = field => (field.multiline ? FieldCodec.toStoredLines(linesOfDoc(field.editor.state.doc))
+    : FieldCodec.toStored(itemsOfDoc(field.editor.state.doc), { keepSpaces: field.keepSpaces }));
+  const contentOf = (field, stored) => (field.multiline ? FieldCodec.linesOf(stored) : FieldCodec.itemsOf(stored));
+  const docOf = (field, content) => field.editor.schema.nodeFromJSON(field.multiline ? linesDocJson(content) : docJson(content));
+  // Les caractères que le champ porte, comme la limite d'un <input> les compte : le texte, et « #Clé » pour une variable.
+  const lengthOf = (doc, multiline) => (multiline ? linesOfDoc(doc).map(FieldCodec.serializePlain).join('\n') : FieldCodec.serializePlain(itemsOfDoc(doc))).length;
+
   const { editorProps } = (function () {
-    // Le clavier et le presse-papiers d'un champ : une seule ligne, du texte et des bulles, aucune mise en forme
+    // Le clavier et le presse-papiers d'un champ : une seule ligne (un paragraphe par ligne pour un champ de plusieurs), du texte et des bulles, aucune mise en forme
 
     const BLOCK_TAGS = /^(address|article|aside|blockquote|br|dd|details|div|dl|dt|fieldset|figcaption|figure|footer|form|h[1-6]|header|hr|li|main|nav|ol|p|pre|section|table|tr|ul)$/i;
     const SKIPPED_TAGS = /^(script|style|template|head|title|meta|link)$/i;
 
     // Le HTML collé, réduit à ce qu'un champ garde : le texte, sur une ligne (un changement de bloc ou de ligne devient une espace), les bulles - une
     // bulle copiée dans un autre champ ou dans le document arrive avec ses réglages - et les puces. Un <template> est inerte : rien ne s'exécute ni ne se charge.
-    function inlineHtml(html) {
+    // `lines` : un champ de plusieurs lignes, où un changement de bloc ou de ligne est un changement de paragraphe.
+    function inlineHtml(html, lines) {
       const template = Dom.inertTemplate(html);
       let out = '';
       const walk = parent => parent.childNodes.forEach(node => {
@@ -59,24 +83,24 @@ const FieldEditor = (function () {
         }
         if (node.matches('span.smart-chip')) { out += EditorNodes.smartChipHtml(EditorNodes.smartChipAttrsOf(node)); return; }
         const block = BLOCK_TAGS.test(node.tagName);
-        if (block) out += ' ';
+        if (block) out += lines ? '</p><p>' : ' ';
         walk(node);
-        if (block) out += ' ';
+        if (block) out += lines ? '</p><p>' : ' ';
       });
       walk(template.content);
-      return out;
+      return lines ? '<p>' + out + '</p>' : out;
     }
-    // Le texte brut collé : sans retour à la ligne, ProseMirror en ferait un paragraphe par ligne.
+    // Le texte brut collé : sans retour à la ligne, ProseMirror en ferait un paragraphe par ligne (ce que veut un champ de plusieurs lignes).
     const flatText = text => text.replace(/\s*[\r\n]+\s*/g, ' ');
     // Le texte brut d'une sélection copiée : une bulle s'écrit « #Clé », comme dans la valeur enregistrée.
     const plainText = slice => FieldCodec.serializePlain(itemsOfDoc(slice.content));
 
-    function editorProps() {
+    function editorProps(multiline) {
       return {
         // `role` est repris ici : TipTap le pose à la création seulement, et setEditable (la Lecture) remplace tous les attributs de la vue.
-        attributes: { role: 'textbox', 'aria-multiline': 'false', autocapitalize: 'off', autocorrect: 'off' },
-        transformPastedHTML: inlineHtml,
-        transformPastedText: flatText,
+        attributes: { role: 'textbox', 'aria-multiline': multiline ? 'true' : 'false', autocapitalize: 'off', autocorrect: 'off' },
+        transformPastedHTML: html => inlineHtml(html, multiline),
+        transformPastedText: multiline ? text => text : flatText,
         clipboardTextSerializer: plainText,
         // Gras, italique et souligné du navigateur : le champ n'a aucune mise en forme.
         handleKeyDown(view, event) {
@@ -88,11 +112,26 @@ const FieldEditor = (function () {
     return { editorProps };
   })();
 
-  // Les extensions d'un champ : le texte, un paragraphe unique, la bulle de variable et la puce, Entrée et la liste « # ». L'ordre compte : TipTap essaie la dernière
-  // extension rangée en premier, la liste ouverte garde donc Entrée, Tab, Échap et les flèches.
-  function extensions(libs, host) {
-    const { Extension, Node: TiptapNode, mergeAttributes, StarterKit, Document, Suggestion } = libs;
+  // Les extensions d'un champ : le texte, un paragraphe unique (un ou plusieurs pour un champ de plusieurs lignes), la bulle de variable et la puce, Entrée et la liste
+  // « # ». L'ordre compte : TipTap essaie la dernière extension rangée en premier, la liste ouverte garde donc Entrée, Tab, Échap et les flèches. Un champ de plusieurs
+  // lignes garde Entrée pour changer de ligne ; `options.max` limite ce qu'il porte, comme le `maxLength` d'un <input>.
+  function extensions(libs, host, options) {
+    const { Extension, Node: TiptapNode, mergeAttributes, StarterKit, Document, Suggestion, Plugin } = libs;
     const press = () => { host.dispatchEvent(new CustomEvent('fieldenter')); return true; };
+    const lengthLimit = options.limit ? Extension.create({
+      name: 'fieldLimit',
+      addProseMirrorPlugins() {
+        // Une saisie qui dépasserait la limite est refusée en bloc, un collage comme une frappe ; on peut toujours effacer.
+        return [new Plugin({
+          filterTransaction(tr, state) {
+            const max = options.limit();
+            if (!tr.docChanged || !(max > 0)) return true;
+            const now = lengthOf(tr.doc, options.multiline);
+            return now <= max || now <= lengthOf(state.doc, options.multiline);
+          },
+        })];
+      },
+    }) : null;
     return [
       // Du texte, un paragraphe et l'historique Annuler / Rétablir : rien d'autre (ni gras, ni titres, ni listes, ni saut de ligne).
       StarterKit.configure({
@@ -100,19 +139,21 @@ const FieldEditor = (function () {
         hardBreak: false, heading: false, horizontalRule: false, italic: false, listItem: false, listKeymap: false, link: false, orderedList: false,
         strike: false, underline: false, trailingNode: false,
       }),
-      Document.extend({ content: 'paragraph' }),
+      Document.extend({ content: options.multiline ? 'paragraph+' : 'paragraph' }),
       EditorNodes.createVarBadgeNode(TiptapNode, mergeAttributes),
       EditorNodes.createSmartChipNode(TiptapNode, mergeAttributes),
-      Extension.create({ name: 'fieldEnter', addKeyboardShortcuts: () => ({ Enter: press, 'Shift-Enter': press, 'Mod-Enter': press }) }),
+      options.multiline ? null : Extension.create({ name: 'fieldEnter', addKeyboardShortcuts: () => ({ Enter: press, 'Shift-Enter': press, 'Mod-Enter': press }) }),
+      lengthLimit,
       Variables.createFieldExtension(Extension, Suggestion),
-    ];
+    ].filter(Boolean);
   }
 
   // Une fenêtre de la bulle (FloatingToolbars.variableWindowOpen) ou la clé de correspondance tient une position de la bulle qu'elle règle : tant qu'elle
-  // est ouverte, le champ ne remplace pas son document.
-  function windowOpen() {
+  // est ouverte, le champ ne remplace pas son document. La fenêtre qui porte le champ (le « Sinon afficher » de la fenêtre de condition) est ouverte tant qu'il vit :
+  // elle ne compte pas.
+  function windowOpen(field) {
     const link = document.getElementById('link-config-modal');
-    return FloatingToolbars.variableWindowOpen() || !!(link && link.style.display === 'flex');
+    return FloatingToolbars.variableWindowOpen(field && field.hostWindow) || !!(link && link.style.display === 'flex');
   }
 
   const { show, tidy, sync } = (function () {
@@ -125,10 +166,10 @@ const FieldEditor = (function () {
     }
     // Remplace le document par `items` sans passer par une transaction : rien n'est une modification de la personne (ni `input`, ni brouillon « modifié »)
     // et l'historique Annuler repart de zéro - un autre modèle ne s'annule pas dans celui-ci.
-    function show(field, items) {
+    function show(field, content) {
       const { editor, libs } = field;
       const view = editor.view;
-      const doc = editor.schema.nodeFromJSON(docJson(items));
+      const doc = docOf(field, content);
       view.updateState(libs.EditorState.create({ schema: editor.schema, doc, plugins: view.state.plugins }));
       // La barre d'une bulle (ou d'une puce « Heure actuelle ») du document précédent n'a plus d'objet.
       field.panels.forEach(panel => panel.hide());
@@ -140,8 +181,8 @@ const FieldEditor = (function () {
     function normalize(field) {
       const { editor } = field;
       if (field.shown != null || !editor.isEditable) return;
-      const wanted = editor.schema.nodeFromJSON(docJson(FieldCodec.itemsOf(FieldCodec.toStored(itemsOfDoc(editor.state.doc)))));
-      if (!wanted.eq(editor.state.doc)) show(field, itemsOfDoc(wanted));
+      const wanted = docOf(field, contentOf(field, storedOf(field)));
+      if (!wanted.eq(editor.state.doc)) show(field, field.multiline ? linesOfDoc(wanted) : itemsOfDoc(wanted));
     }
     // Au départ du curseur : une bulle sélectionnée ne reste pas la sélection (la première touche tapée au retour la remplacerait), et les clés tapées
     // en entier deviennent des bulles. Pas quand le focus est passé dans la barre de la bulle (son nombre de décimales, sa devise : de vrais champs de
@@ -163,7 +204,7 @@ const FieldEditor = (function () {
     // La valeur enregistrée de chaque champ modifiable, par l'identifiant de son élément. En Lecture un champ montre le texte résolu, jamais ce qu'un repère doit garder : il est laissé de côté.
     function snapshot() {
       const state = {};
-      fields.forEach(field => { if (field.shown == null && field.host.id) state[field.host.id] = field.host.value; });
+      fields.forEach(field => { if (field.shown == null && field.host.id && !field.hostWindow) state[field.host.id] = field.host.value; });
       return state;
     }
 
@@ -173,7 +214,7 @@ const FieldEditor = (function () {
       let changed = false;
       fields.forEach(field => {
         const id = field.host.id;
-        if (field.shown != null || !(id in next) || next[id] === prev[id] || field.host.value === next[id]) return;
+        if (field.hostWindow || field.shown != null || !(id in next) || next[id] === prev[id] || field.host.value === next[id]) return;
         field.host.value = next[id];
         emit(field.host, 'input', true);
         emit(field.host, 'fieldrestored');
@@ -184,11 +225,12 @@ const FieldEditor = (function () {
 
     // Le champ sert encore tant qu'il a le focus, que la barre de l'une de ses bulles en a un champ de formulaire (décimales, devise) ou qu'une fenêtre de la bulle (condition, clé de correspondance) est ouverte : ce que ces
     // réglages changent appartient à la même séance.
-    const inUse = field => field.editor.view.hasFocus() || windowOpen() || field.panels.some(panel => panel.el.contains(document.activeElement));
+    const inUse = field => field.editor.view.hasFocus() || windowOpen(field) || field.panels.some(panel => panel.el.contains(document.activeElement));
 
     // Le focus du champ ouvre la séance (une seule à la fois : le retour du focus après la barre ou la fenêtre la continue). Pas en Lecture : le champ y montre le texte résolu, rien ne s'y modifie.
     function open(field) {
-      if (field.session || !field.editor.isEditable || field.shown != null) return;
+      // Le champ d'une fenêtre est un brouillon : la fenêtre pose son contenu en une fois à « Enregistrer », rien ne se défait champ par champ dans l'historique du modèle.
+      if (field.hostWindow || field.session || !field.editor.isEditable || field.shown != null) return;
       field.session = HistoryMarkers.begin('fields');
     }
 
@@ -229,8 +271,8 @@ const FieldEditor = (function () {
     const define = (name, descriptor) => Object.defineProperty(host, name, Object.assign({ configurable: true }, descriptor));
     // La valeur enregistrée (FieldCodec.toStored) ; pendant la Lecture, le texte affiché, comme un <input> en lecture seule.
     define('value', {
-      get: () => (field.shown != null ? field.shown : FieldCodec.toStored(itemsOfDoc(editor.state.doc))),
-      set: value => { field.shown = null; show(field, FieldCodec.itemsOf(value)); },
+      get: () => (field.shown != null ? field.shown : storedOf(field)),
+      set: value => { field.shown = null; show(field, contentOf(field, value)); },
     });
     define('readOnly', {
       get: () => field.readOnly,
@@ -242,6 +284,20 @@ const FieldEditor = (function () {
         host.classList.toggle('is-readonly', field.readOnly);
       },
     });
+    // Un champ porté par une fenêtre se traite comme le <input> qu'il remplace : l'indication, le grisé (la fenêtre le grise tant que la condition n'est pas complète) et la limite.
+    if (field.hostWindow) {
+      define('placeholder', { get: () => host.getAttribute('placeholder') || '', set: text => host.setAttribute('placeholder', text) });
+      define('disabled', {
+        get: () => !!field.disabled,
+        set: flag => {
+          field.disabled = !!flag;
+          host.readOnly = !!flag;
+          host.classList.toggle('is-disabled', !!flag);
+          if (flag) host.setAttribute('aria-disabled', 'true'); else host.removeAttribute('aria-disabled');
+        },
+      });
+      define('maxLength', { get: () => (field.limit ? field.limit() : -1), set: max => { field.limit = () => max; } });
+    }
     // La Lecture écrit ici la valeur résolue : un texte, jamais lu comme un modèle (un « # » résolu n'y devient pas une bulle).
     host.showText = text => {
       field.shown = String(text == null ? '' : text);
@@ -260,18 +316,24 @@ const FieldEditor = (function () {
   function emit(host, type, bubbles) { host.dispatchEvent(new Event(type, { bubbles: !!bubbles })); }
 
   // Transforme `host` en champ texte à bulles. `libs` : les classes de TipTap et de ProseMirror (Editor.loadLibraries) ; l'éditeur du document est déjà
-  // prêt, la barre d'une bulle a besoin de ses réglages (Editor.init). Rend l'éditeur TipTap du champ.
-  function attach(host, libs) {
+  // prêt, la barre d'une bulle a besoin de ses réglages (Editor.init). Rend l'éditeur TipTap du champ. `options` (facultatif) : un champ porté par une fenêtre
+  // - { hostWindow: 'condition', windowEl: l'élément de la fenêtre, multiline: plusieurs lignes, keepSpaces: les espaces des deux bouts comptent, limit: () => le nombre
+  // de caractères permis } -, voir l'en-tête.
+  function attach(host, libs, options) {
     if (!host) return null;
     if (fields.has(host)) return fields.get(host).editor;
+    const opts = options || {};
     // Une valeur posée sur l'élément avant sa transformation n'est pas perdue.
     const earlyValue = Object.prototype.hasOwnProperty.call(host, 'value') ? String(host.value || '') : '';
-    const field = { host, libs, editor: null, panels: [], shown: null, readOnly: false, session: null };
+    const field = {
+      host, libs, editor: null, panels: [], shown: null, readOnly: false, session: null,
+      multiline: !!opts.multiline, keepSpaces: !!opts.keepSpaces, hostWindow: opts.hostWindow || null, limit: opts.limit || null,
+    };
     field.editor = new libs.TiptapEditor({
       element: host,
-      extensions: extensions(libs, host),
-      content: docJson([]),
-      editorProps: editorProps(),
+      extensions: extensions(libs, host, { multiline: field.multiline, limit: field.hostWindow ? () => (field.limit ? field.limit() : 0) : null }),
+      content: field.multiline ? linesDocJson([[]]) : docJson([]),
+      editorProps: editorProps(field.multiline),
       enableInputRules: false,
       enablePasteRules: false,
       onUpdate: () => { field.shown = null; sync(field); emit(host, 'input', true); },
@@ -282,7 +344,7 @@ const FieldEditor = (function () {
         // Après le tour : une fenêtre ouverte par ce clic (condition, clé de correspondance...) tient une position, le champ n'y touche pas.
         setTimeout(() => {
           if (field.editor.isDestroyed) return;
-          if (!field.editor.view.hasFocus() && !windowOpen()) tidy(field);
+          if (!field.editor.view.hasFocus() && !windowOpen(field)) tidy(field);
           settle(field);
         }, 0);
       },
@@ -296,7 +358,10 @@ const FieldEditor = (function () {
     host.classList.add('pp-field-editor');
     mirrorLabels(host, dom);
     defineInputApi(field);
-    field.panels = [FloatingToolbars.attachVariableToolbar(field.editor, host), FloatingToolbars.attachTimeChipToolbar(field.editor, host)];
+    // La barre d'une bulle du « Sinon afficher » d'une fenêtre passe devant elle et ne se cache pas avec elle (FloatingToolbars.createVariableToolbar).
+    const barExtra = field.hostWindow ? { sinon: true, hostWindow: field.hostWindow, windowEl: opts.windowEl } : undefined;
+    field.panels = [FloatingToolbars.attachVariableToolbar(field.editor, host, barExtra), FloatingToolbars.attachTimeChipToolbar(field.editor, host, barExtra)];
+    host.classList.toggle('is-multiline', field.multiline);
     // Le bord du champ, hors du texte, place le curseur : un clic y viserait sinon rien.
     host.addEventListener('mousedown', event => {
       if (event.target !== host || !field.editor.isEditable) return;
@@ -330,5 +395,11 @@ const FieldEditor = (function () {
     fields.forEach(field => field.editor.view.dispatch(field.editor.state.tr));
   }
 
-  return { attach, of, refreshBadgeValidity, resyncBars, snapshot, restore, settle };
+  // Cache les barres des bulles d'un champ (la fenêtre qui le porte se ferme alors que l'une de ses bulles est choisie).
+  function hidePanels(host) {
+    const field = fields.get(host);
+    if (field) field.panels.forEach(panel => panel.hide());
+  }
+
+  return { attach, of, hidePanels, refreshBadgeValidity, resyncBars, snapshot, restore, settle };
 })();

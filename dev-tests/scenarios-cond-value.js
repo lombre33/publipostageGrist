@@ -1879,9 +1879,9 @@
         for (const code of ['fr', 'en']) { I18n.setLang(code); missing[code] = keys.filter(k => I18n.t(k) === k); }
       } finally { I18n.setLang(lang); }
       const want = lang === 'en'
-        ? { title: /^Shown if Statut = Normal, otherwise “à confirmer”\./, label: 'Otherwise show', placeholder: 'Empty: the value disappears', fieldTitle: /^The text written in place of this value/,
+        ? { title: /^Shown if Statut = Normal, otherwise “à confirmer”\./, label: 'Otherwise show', placeholder: 'Empty: value disappears (#Variable allowed)', fieldTitle: /^The text written in place of this value/,
           line: 'Selected row (#1): condition not met, the value is replaced by “à confirmer”.' }
-        : { title: /^S’affiche si Statut = Normal, sinon « à confirmer »\./, label: 'Sinon afficher', placeholder: 'Vide : la valeur disparaît', fieldTitle: /^Le texte écrit à la place de cette valeur/,
+        : { title: /^S’affiche si Statut = Normal, sinon « à confirmer »\./, label: 'Sinon afficher', placeholder: 'Vide : la valeur disparaît (#Variable autorisée)', fieldTitle: /^Le texte écrit à la place de cette valeur/,
           line: 'Ligne sélectionnée (n° 1) : condition non remplie, la valeur est remplacée par « à confirmer ».' };
       const title = valueEls()[0].title;
       const modal = await openValueWindow(h, 0, 1);

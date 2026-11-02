@@ -2876,8 +2876,8 @@ const I18n = (function () {
     // sélectionnée.
     'condText.tag.ifOtherwise': { fr: 'Si {condition} · sinon', en: 'If {condition} · otherwise' },
     'condText.tag.titleIfOtherwise': { fr: 'S’affiche si {condition}, sinon « {otherwise} ». Cliquez pour modifier sa condition.', en: 'Shown if {condition}, otherwise “{otherwise}”. Click to edit its condition.' },
-    'varCond.otherwiseBlockTitle': { fr: 'Le texte écrit à la place de ce bloc quand la condition n’est pas remplie. Une ligne, un paragraphe ; les lignes vides ne comptent pas.', en: 'The text written in place of this block when the condition is not met. One line, one paragraph; empty lines do not count.' },
-    'varCond.otherwiseBlockPlaceholder': { fr: 'Vide : le bloc disparaît', en: 'Empty: the block disappears' },
+    'varCond.otherwiseBlockTitle': { fr: 'Le texte écrit à la place de ce bloc quand la condition n’est pas remplie. Une ligne, un paragraphe ; les lignes vides ne comptent pas. Tapez # pour y mettre une variable.', en: 'The text written in place of this block when the condition is not met. One line, one paragraph; empty lines do not count. Type # to add a variable.' },
+    'varCond.otherwiseBlockPlaceholder': { fr: 'Vide : le bloc disparaît (#Variable autorisée)', en: 'Empty: block disappears (#Variable allowed)' },
     'varCond.debug.currentNotMetBlockOtherwise': { fr: 'Ligne sélectionnée (n° {id}) : condition non remplie, le bloc est remplacé par « {value} ».', en: 'Selected row (#{id}): condition not met, the block is replaced by “{value}”.' },
 
     // --- Valeur conditionnelle (menu des variables, onglet Chips ; js/conditional-value.js, js/editor-nodes.js:createConditionalValueNode) :
@@ -2894,10 +2894,10 @@ const I18n = (function () {
     'varCond.debug.currentMetValue': { fr: 'Ligne sélectionnée (n° {id}) : condition remplie, la valeur s’affiche.', en: 'Selected row (#{id}): condition met, the value is shown.' },
     'varCond.debug.currentNotMetValue': { fr: 'Ligne sélectionnée (n° {id}) : condition non remplie, la valeur est masquée.', en: 'Selected row (#{id}): condition not met, the value is hidden.' },
     // Le sinon d'une valeur (js/variable-condition.js, js/conditional-text.js:otherwiseText) : la ligne « Sinon afficher » (son étiquette est celle des bulles,
-    // varCond.otherwiseLabel), son champ de texte libre, l'aperçu de la ligne sélectionnée et l'info-bulle de la valeur dans l'éditeur.
-    'varCond.otherwiseTextTitle': { fr: 'Le texte écrit à la place de cette valeur quand la condition n’est pas remplie. Les espaces comptent.', en: 'The text written in place of this value when the condition is not met. Spaces count.' },
+    // varCond.otherwiseLabel), son champ à variables (comme l'objet d'un email : on y tape « # »), l'aperçu de la ligne sélectionnée et l'info-bulle de la valeur dans l'éditeur.
+    'varCond.otherwiseTextTitle': { fr: 'Le texte écrit à la place de cette valeur quand la condition n’est pas remplie. Les espaces comptent. Tapez # pour y mettre une variable.', en: 'The text written in place of this value when the condition is not met. Spaces count. Type # to add a variable.' },
     'varCond.otherwiseTextNeedsRule': { fr: 'Complétez d’abord une condition : le texte de remplacement s’écrit quand elle n’est pas remplie.', en: 'Complete a condition first: the replacement text is written when it is not met.' },
-    'varCond.otherwiseTextPlaceholder': { fr: 'Vide : la valeur disparaît', en: 'Empty: the value disappears' },
+    'varCond.otherwiseTextPlaceholder': { fr: 'Vide : la valeur disparaît (#Variable autorisée)', en: 'Empty: value disappears (#Variable allowed)' },
     'varCond.debug.currentNotMetValueOtherwise': { fr: 'Ligne sélectionnée (n° {id}) : condition non remplie, la valeur est remplacée par « {value} ».', en: 'Selected row (#{id}): condition not met, the value is replaced by “{value}”.' },
     'varCond.saveLostValue': { fr: 'La valeur conditionnelle a été déplacée ou supprimée pendant l’édition : la condition n’a pas été enregistrée.', en: 'The conditional value was moved or deleted while editing: the condition was not saved.' },
     'varCond.unwrapValue': { fr: 'Défaire la valeur', en: 'Unwrap value' },

@@ -56,10 +56,8 @@ const FieldCodec = (function () {
     if (last < text.length) items.push({ text: text.slice(last) });
     return mergeText(items);
   }
-  // Le HTML d'un champ en éléments, sans rien exécuter ni charger (un <template> est inerte).
-  function parseRich(html) {
-    const template = Dom.inertTemplate(html);
-    const paragraph = template.content.firstElementChild;
+  // Les éléments d'un paragraphe `<p class="pp-field">` : son texte, ses bulles et ses puces, dans l'ordre.
+  function itemsOfParagraph(paragraph) {
     const items = [];
     Array.from(paragraph ? paragraph.childNodes : []).forEach(node => {
       if (node.nodeType === Node.TEXT_NODE) items.push({ text: node.nodeValue });
@@ -69,12 +67,32 @@ const FieldCodec = (function () {
     });
     return mergeText(items);
   }
+  // Le HTML d'un champ en éléments, sans rien exécuter ni charger (un <template> est inerte).
+  function parseRich(html) {
+    const template = Dom.inertTemplate(html);
+    return itemsOfParagraph(template.content.firstElementChild);
+  }
+  // Le HTML d'un champ de plusieurs lignes (le sinon d'un bloc de texte) : les éléments de chacun de ses paragraphes.
+  function parseRichLines(html) {
+    const template = Dom.inertTemplate(html);
+    return Array.from(template.content.children).filter(node => node.matches('p')).map(itemsOfParagraph);
+  }
   // Les éléments d'une valeur enregistrée, dans l'une ou l'autre écriture.
   function itemsOf(value) {
     const text = String(value == null ? '' : value);
     if (isRich(text)) return parseRich(text);
     return text ? parsePlain(text) : [];
   }
+
+  // Les lignes d'une valeur enregistrée, une suite d'éléments chacune : le texte brut se coupe à ses retours à la ligne, le HTML a un paragraphe par ligne.
+  // C'est l'écriture d'un champ de plusieurs lignes (le sinon d'un bloc de texte, js/conditional-text.js) ; celle d'un champ d'une ligne n'en a qu'une.
+  function linesOf(value) {
+    const text = String(value == null ? '' : value);
+    if (isRich(text)) return parseRichLines(text);
+    return text.split(/\r\n|\r|\n/).map(line => parsePlain(line));
+  }
+  // Une suite dit quelque chose : un texte qui n'est pas que des espaces, une bulle ou une puce.
+  const hasContent = items => items.some(item => !isText(item) || /\S/.test(item.text));
 
   // Un texte posé tel quel dans du HTML (partagé avec js/field-editor.js : le texte collé).
   const escapeText = text => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -87,12 +105,16 @@ const FieldCodec = (function () {
       return isChip(item) ? EditorNodes.smartChipLabel(item.chip.kind) : trigger + item.badge.key;
     }).join('');
   }
-  function serializeRich(items) {
-    const html = item => {
+  // Le HTML d'une ligne sans son paragraphe : de quoi la poser dans un autre élément (le sinon d'une valeur, js/conditional-value.js).
+  function itemsHtml(items) {
+    return items.map(item => {
       if (isText(item)) return escapeText(item.text);
       return isChip(item) ? EditorNodes.smartChipHtml(item.chip) : EditorNodes.varBadgeHtml(item.badge);
-    };
-    return RICH_OPEN + items.map(html).join('') + RICH_CLOSE;
+    }).join('');
+  }
+
+  function serializeRich(items) {
+    return RICH_OPEN + itemsHtml(items) + RICH_CLOSE;
   }
 
   // Deux suites disent la même chose : mêmes textes, mêmes puces (genre et, pour l'heure, écriture), mêmes variables (table, colonne, clé).
@@ -109,8 +131,11 @@ const FieldCodec = (function () {
   // Ce que le champ enregistre : le texte brut tant qu'il se relit à l'identique, le HTML sinon. Une clé tapée en entier à la main dans le texte
   // (« #TpProjet.Nom ») vaut une bulle, comme avant dans un champ texte : elle le devient ici, dans l'une et l'autre écriture. '' pour un champ vide.
   // Un texte qui s'écrit lui-même comme un champ en HTML (`<p class="pp-field">…</p>` tapé tel quel) ne reste pas brut : il serait relu comme du HTML.
-  function toStored(items) {
-    const list = trimEnds(mergeText(items).flatMap(item => (isText(item) ? parsePlain(item.text) : [item])));
+  // `keepSpaces` : les espaces des deux bouts restent (le sinon d'une valeur dans la phrase, écrit tel qu'il est tapé).
+  function toStored(items, options) {
+    const keepSpaces = !!(options && options.keepSpaces);
+    const merged = mergeText(items).flatMap(item => (isText(item) ? parsePlain(item.text) : [item]));
+    const list = keepSpaces ? mergeText(merged) : trimEnds(merged);
     if (!list.length) return '';
     if (list.every(item => isText(item) || (!isChip(item) && isPlainBadge(item.badge)))) {
       const plain = serializePlain(list);
@@ -119,11 +144,30 @@ const FieldCodec = (function () {
     return serializeRich(list);
   }
 
-  // Les variables que cite une valeur enregistrée : [{ table, column }], pour savoir quels modèles une règle de liaison concerne - celle d'un sinon
-  // (js/variable-otherwise.js) comprise.
-  function variablesIn(value) {
-    return itemsOf(value).filter(item => item.badge).flatMap(({ badge }) => [badge, badge.otherwise].filter(Boolean).map(({ table, column }) => ({ table, column })));
+  // Les lignes d'un champ de plusieurs lignes, nettoyées comme le fait l'enregistrement : les espaces de leurs deux bouts tombent, les lignes vides disparaissent.
+  const cleanLines = lines => lines.map(items => trimEnds(mergeText(items).flatMap(item => (isText(item) ? parsePlain(item.text) : [item])))).filter(items => items.length);
+
+  // Ce qu'enregistre un champ de plusieurs lignes : le texte brut (une ligne par ligne, comme avant les variables) tant que chaque ligne se relit à
+  // l'identique, sinon un paragraphe `<p class="pp-field">` par ligne. '' sans aucune ligne.
+  function toStoredLines(lines) {
+    const list = cleanLines(lines);
+    if (!list.length) return '';
+    if (list.every(items => items.every(item => isText(item) || (!isChip(item) && isPlainBadge(item.badge))))) {
+      const plain = list.map(serializePlain).join('\n');
+      if (!isRich(plain) && list.every(items => sameItems(parsePlain(serializePlain(items)), items))) return plain;
+    }
+    return list.map(serializeRich).join('');
   }
 
-  return { isRich, isText, isChip, isPlainBadge, itemsOf, toStored, serializePlain, serializeRich, parsePlain, sameItems, variablesIn, escapeText };
+  // Les variables que cite une valeur enregistrée, sur toutes ses lignes : [{ table, column }], pour savoir quels modèles une règle de liaison concerne - celle
+  // d'un sinon (js/variable-otherwise.js) comprise.
+  function variablesIn(value) {
+    return linesOf(value).flat().filter(item => item.badge)
+      .flatMap(({ badge }) => [badge, badge.otherwise].filter(Boolean).map(({ table, column }) => ({ table, column })));
+  }
+
+  return {
+    isRich, isText, isChip, isPlainBadge, itemsOf, linesOf, hasContent, cleanLines, toStored, toStoredLines, itemsHtml, serializePlain, serializeRich, parsePlain, sameItems,
+    variablesIn, escapeText,
+  };
 })();

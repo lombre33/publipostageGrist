@@ -630,17 +630,17 @@ const OTHERWISE_LINES = ['Dossier à compléter.', 'Contactez le service.'];
 
 // La ligne `selector` de la fenêtre de condition, amenée entière dans la partie visible du corps de la fenêtre à la VRAIE molette (le corps défile, le titre et les boutons restent).
 // Rend { fully, ... } à la fin, ou null si la ligne n'existe pas.
-async function wheelIntoView(page, selector) {
+async function wheelIntoView(page, selector, scope) {
   let last = null;
   for (let i = 0; i < 14; i++) {
-    last = await page.evaluate(sel => {
+    last = await page.evaluate(({ sel, scope }) => {
       const el = document.querySelector(sel);
-      const body = document.querySelector('#var-condition-modal .pp-modal-body');
+      const body = document.querySelector(scope + ' .pp-modal-body');
       if (!el || !body) return null;
       const r = el.getBoundingClientRect();
       const v = body.getBoundingClientRect();
       return { fully: r.top >= v.top - 0.5 && r.bottom <= v.bottom + 0.5, below: r.bottom > v.bottom, x: v.left + v.width / 2, y: v.top + v.height / 2, scrollTop: body.scrollTop, maxScroll: body.scrollHeight - body.clientHeight };
-    }, selector);
+    }, { sel: selector, scope: scope || '#var-condition-modal' });
     if (!last || last.fully) return last;
     await page.mouse.move(last.x, last.y);
     await page.mouse.wheel(0, last.below ? 110 : -110);
@@ -667,15 +667,18 @@ const areaRowOf = page => page.evaluate(() => {
   const cs = getComputedStyle(input);
   const labelBg = getComputedStyle(document.querySelector('#var-condition-modal .var-modal-content')).backgroundColor;
   return {
-    found: true, hidden: row.hidden, tag: input.tagName, disabled: input.disabled, value: input.value, placeholder: input.placeholder, max: input.maxLength, rows: input.rows, label: label.textContent, labelTitle: label.title,
-    fieldTitle: field.title, focused: document.activeElement === input, valueRowShown: !!document.querySelector('#var-condition-modal .var-condition-otherwise-text-row:not([hidden])'),
+    found: true, hidden: row.hidden, tag: input.tagName, textbox: !!input.querySelector('.pp-field-text[role="textbox"][aria-multiline="true"]'), disabled: input.disabled, value: input.value, placeholder: input.placeholder, max: input.maxLength,
+    label: label.textContent, labelTitle: label.title,
+    fieldTitle: field.title, focused: input.contains(document.activeElement), valueRowShown: !!document.querySelector('#var-condition-modal .var-condition-otherwise-text-row:not([hidden])'),
     input: { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height, x: r.left + r.width / 2, y: r.top + r.height / 2 },
     labelAbove: l.top <= r.top + 8, insideWindow: l.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom,
     // Entiers dans la partie visible du corps de la fenêtre (qui défile) : ni coupés en bas par les boutons, ni en haut par le titre, ni de côté.
     inBody: l.left >= v.left - 0.5 && r.right <= v.right + 0.5 && l.top >= v.top - 0.5 && r.top >= v.top - 0.5 && r.bottom <= v.bottom + 0.5 && l.bottom <= v.bottom + 0.5,
     onTop: !!top && field.contains(top),
     bodyOverflowX: body.scrollWidth - body.clientWidth,
-    textContrast: contrast(cs.color, cs.backgroundColor), placeholderContrast: contrast(getComputedStyle(input, '::placeholder').color, cs.backgroundColor), labelContrast: contrast(getComputedStyle(label).color, labelBg),
+    textContrast: contrast(cs.color, cs.backgroundColor), labelContrast: contrast(getComputedStyle(label).color, labelBg),
+    // Le texte d'attente du champ vide est le ::before de la zone (js/field-editor.js), pas le ::placeholder d'un <textarea> : on le mesure quand il est affiché.
+    placeholderContrast: contrast(getComputedStyle(input, input.classList.contains('is-empty') ? '::before' : null).color, cs.backgroundColor),
   };
 });
 // Les lignes de l'aperçu de la fenêtre qui se lisent (celles qui ne sont pas masquées).
@@ -693,9 +696,9 @@ async function runOtherwise(theme, lang) {
   console.log(`\n=== Sinon d'un bloc de texte conditionnel à la vraie souris et au vrai clavier, ${WIDTH}x${HEIGHT}, thème ${label} ===`);
   const { context, page } = await openWidget(theme);
   const T = lang === 'en'
-    ? { label: 'Otherwise show', placeholder: 'Empty: the block disappears', fieldTitle: /^The text written in place of this block/, needsRule: /^Complete a condition first/, line: /replaced by “Dossier à compléter\. \/ Contactez le service\.”/, saveLabel: 'Save',
+    ? { label: 'Otherwise show', placeholder: 'Empty: block disappears (#Variable allowed)', fieldTitle: /^The text written in place of this block/, needsRule: /^Complete a condition first/, line: /replaced by “Dossier à compléter\. \/ Contactez le service\.”/, saveLabel: 'Save',
         tag: 'If Statut = Normal · otherwise', plainTag: 'If Statut = Normal', titleHas: /, otherwise “Dossier à compléter\. \/ Contactez le service\.”/ }
-    : { label: 'Sinon afficher', placeholder: 'Vide : le bloc disparaît', fieldTitle: /^Le texte écrit à la place de ce bloc/, needsRule: /^Complétez d’abord une condition/, line: /remplacé par « Dossier à compléter\. \/ Contactez le service\. »/, saveLabel: 'Enregistrer',
+    : { label: 'Sinon afficher', placeholder: 'Vide : le bloc disparaît (#Variable autorisée)', fieldTitle: /^Le texte écrit à la place de ce bloc/, needsRule: /^Complétez d’abord une condition/, line: /remplacé par « Dossier à compléter\. \/ Contactez le service\. »/, saveLabel: 'Enregistrer',
         tag: 'Si Statut = Normal · sinon', plainTag: 'Si Statut = Normal', titleHas: /, sinon « Dossier à compléter\. \/ Contactez le service\. »/ };
   if (lang === 'en') await page.evaluate(() => I18n.setLang('en'));
   await page.evaluate(async ({ record }) => {
@@ -719,7 +722,7 @@ async function runOtherwise(theme, lang) {
   let row = await areaRowOf(page);
   await shot(page, `${theme}-${lang}-s1-sinon-grise`);
   check(`${label} - fenêtre d'un bloc sans condition : la ligne « ${T.label} » est atteinte à la molette, entière dans la fenêtre, son champ (plusieurs lignes) visible et au premier plan, seul de son espèce`,
-    reached && reached.fully && row.found && !row.hidden && row.tag === 'TEXTAREA' && row.rows === 3 && row.label === T.label && row.insideWindow && row.inBody && row.onTop && row.bodyOverflowX <= 0 && !row.valueRowShown, { reached, row });
+    reached && reached.fully && row.found && !row.hidden && row.tag === 'DIV' && row.textbox && row.input.height >= 56 && row.label === T.label && row.insideWindow && row.inBody && row.onTop && row.bodyOverflowX <= 0 && !row.valueRowShown, { reached, row });
   check(`${label} - son champ est grisé (aucune règle complète), vide, avec son texte d'attente et son info-bulle qui dit pourquoi, sur l'étiquette comme sur le champ`,
     row.disabled && row.value === '' && row.placeholder === T.placeholder && row.max === 1000 && T.needsRule.test(row.fieldTitle) && T.needsRule.test(row.labelTitle), row);
   const inkGrey = await ink(page, '#var-condition-otherwise-area');
@@ -818,6 +821,86 @@ async function runOtherwise(theme, lang) {
   await page.waitForTimeout(350);
   const cleared = await page.evaluate(() => ({ html: EditorCore.getEditor().getHTML().replace(/ data-condition="[^"]*"/, ' data-condition=…'), label: document.querySelector('.tiptap .conditional-text-tag').textContent }));
   check(`${label} - champ vidé puis Enregistrer : plus de sinon, l'étiquette redevient « ${T.plainTag} », la condition reste`, !cleared.html.includes('data-otherwise') && cleared.html.includes('data-condition=') && cleared.label === T.plainTag, cleared);
+
+  // 7) Une variable dans le sinon d'un bloc, à la vraie souris et au vrai clavier : « # » ouvre la liste des variables devant la fenêtre, un clic sur « Titre » la pose en bulle, Entrée
+  // passe à la ligne et la seconde ligne se tape, un clic sur la bulle ouvre sa barre devant la fenêtre, « Condition » ouvre la seconde fenêtre par-dessus la première, « Avant » / « Après »
+  // tapés puis Enregistrer les rendent à la bulle, Enregistrer la première pose le sinon (un paragraphe par ligne) ; la Lecture écrit la valeur de la ligne entre ses textes.
+  await park(page);
+  await openFirstBlockWindow(page);
+  await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-area-row');
+  row = await areaRowOf(page);
+  await realClick(page, row.input);
+  await page.keyboard.type('Dossier #');
+  await page.waitForTimeout(350);
+  const list = await page.evaluate(() => {
+    const box = document.getElementById('autocomplete-box');
+    if (!box || box.style.display === 'none' || !box.getClientRects().length) return { shown: false };
+    const r = box.getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(r.height / 2, 24));
+    const items = Array.from(box.querySelectorAll('.ac-item'));
+    const titre = items.find(i => /Titre/.test(i.textContent));
+    const t = titre && titre.getBoundingClientRect();
+    return { shown: true, onTop: !!top && box.contains(top), inViewport: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5, items: items.map(i => i.textContent).slice(0, 6), titre: t ? { x: t.left + t.width / 2, y: t.top + t.height / 2 } : null };
+  });
+  await shot(page, `${theme}-${lang}-s5-sinon-liste-variables`);
+  check(`${label} - « # » dans le champ du sinon d'un bloc ouvre la liste des variables DEVANT la fenêtre, entière dans le panneau, avec « Titre »`, list.shown && list.onTop && list.inViewport && !!list.titre, list);
+  await realClick(page, list.titre);
+  await page.waitForTimeout(350);
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('à suivre');
+  await page.waitForTimeout(300);
+  const placed = await page.evaluate(() => {
+    const input = document.getElementById('var-condition-otherwise-area');
+    const box = document.getElementById('autocomplete-box');
+    return { value: input.value, paragraphs: input.querySelectorAll('.pp-field-text > p').length, bubbles: Array.from(input.querySelectorAll('.var-badge')).map(b => b.dataset.key), listOpen: !!box && box.style.display !== 'none' && box.getClientRects().length > 0, focused: input.contains(document.activeElement) };
+  });
+  check(`${label} - un clic sur « Titre » pose la variable en bulle, Entrée passe à la ligne : deux paragraphes, la liste fermée, le curseur dans le champ, la fenêtre ouverte`,
+    placed.value === 'Dossier #CtDossiers.Titre\nà suivre' && placed.paragraphs === 2 && JSON.stringify(placed.bubbles) === '["CtDossiers.Titre"]' && !placed.listOpen && placed.focused
+      && (await hitTest(page, '#var-condition-modal .var-modal-content')).inViewport, placed);
+  await realClick(page, await hitTest(page, '#var-condition-otherwise-area .var-badge'));
+  await page.waitForTimeout(400);
+  const barOpen = await hitTest(page, '.v2-varfmt-toolbar.visible');
+  const conditionButton = await hitTest(page, '.v2-varfmt-toolbar.visible button[data-action="var-condition"]');
+  await shot(page, `${theme}-${lang}-s6-sinon-variable-barre`);
+  check(`${label} - un clic sur la bulle du champ ouvre sa barre DEVANT la fenêtre, entière dans le panneau, son bouton « Condition » au premier plan`, barOpen.found && barOpen.inViewport && barOpen.onTop && conditionButton.found && conditionButton.onTop, { barOpen, conditionButton });
+  await realClick(page, conditionButton);
+  await page.waitForTimeout(450);
+  const second = await hitTest(page, '#var-condition-modal-2 .var-modal-content');
+  const barsLeft = await page.evaluate(() => Array.from(document.querySelectorAll('.v2-varfmt-toolbar.visible')).length);
+  await shot(page, `${theme}-${lang}-s7-sinon-seconde-fenetre`);
+  check(`${label} - « Condition » ouvre une seconde fenêtre PAR-DESSUS la première, entière dans le panneau ; la barre de la bulle se cache`, second.found && second.inViewport && second.onTop && barsLeft === 0, { second, barsLeft });
+  await wheelIntoView(page, '#var-condition-before-2', '#var-condition-modal-2');
+  await realClick(page, await hitTest(page, '#var-condition-before-2'));
+  await page.keyboard.type('« ');
+  await realClick(page, await hitTest(page, '#var-condition-after-2'));
+  await page.keyboard.type(' »');
+  await page.waitForTimeout(200);
+  await realClick(page, await hitTest(page, '#var-condition-modal-2 .var-modal-primary'));
+  await page.waitForTimeout(400);
+  const framed = await page.evaluate(() => {
+    const input = document.getElementById('var-condition-otherwise-area');
+    const b = input.querySelector('.var-badge');
+    const shown = id => getComputedStyle(document.getElementById(id)).display !== 'none';
+    return { value: input.value, before: b && b.dataset.before, after: b && b.dataset.after, first: shown('var-condition-modal'), second: shown('var-condition-modal-2'), focused: input.contains(document.activeElement) };
+  });
+  check(`${label} - « Avant » et « Après » tapés dans la seconde fenêtre : Enregistrer la ferme et les rend à la bulle du champ ; la première fenêtre reste ouverte, le curseur est revenu dans le champ`,
+    framed.before === '« ' && framed.after === ' »' && !framed.second && framed.first && (framed.value.match(/<p class="pp-field">/g) || []).length === 2 && framed.focused, framed);
+  await realClick(page, await hitTest(page, '#var-condition-modal .var-modal-primary'));
+  await page.waitForTimeout(400);
+  const richSaved = await page.evaluate(() => {
+    const el = new DOMParser().parseFromString(EditorCore.getEditor().getHTML(), 'text/html').querySelector('.conditional-text');
+    return { otherwise: el.getAttribute('data-otherwise'), label: document.querySelector('.tiptap .conditional-text-tag').textContent };
+  });
+  check(`${label} - Enregistrer : le sinon est écrit en HTML de champ, un paragraphe par ligne, la variable avec son « Avant » et son « Après » ; l'étiquette redit « ${T.tag} »`,
+    /^<p class="pp-field">Dossier <span class="var-badge"[^>]*data-before="« "[^>]*data-after=" »"[^>]*>[^<]*<\/span><\/p><p class="pp-field">à suivre<\/p>$/.test(richSaved.otherwise) && richSaved.label === T.tag, richSaved);
+  await realClick(page, await hitTest(page, '#btn-mode-read'));
+  await page.waitForTimeout(700);
+  await page.evaluate(record => window.__gristStub.fireRecord(record, 'CtDossiers'), RECORD_URGENT);
+  await page.waitForTimeout(800);
+  const readVar = await reading();
+  await shot(page, `${theme}-${lang}-s8-lecture-sinon-variable`);
+  check(`${label} - Lecture, ligne « Urgent » : le sinon écrit sa variable entre son texte (« Dossier « Dossier A » »), puis sa seconde ligne, chacune dans son paragraphe, sans trace du champ`,
+    readVar.shown && JSON.stringify(readVar.paragraphs) === JSON.stringify(['Madame, Monsieur,', 'Dossier « Dossier A »', 'à suivre', 'Fin du courrier']) && readVar.frames === 0, readVar);
   await context.close();
 }
 

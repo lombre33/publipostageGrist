@@ -190,17 +190,24 @@
 .var-condition-affix .var-condition-otherwise-field .ss-trigger:disabled { pointer-events: none; }
 .var-condition-affix .var-condition-otherwise-hint { grid-column: 2 / -1; font-size: 11px; font-weight: 600; line-height: 1.4; color: var(--danger-ink); }
 .var-condition-affix .var-condition-otherwise-hint[hidden] { display: none; }
-/* « Sinon afficher » d'une valeur ou d'un bloc : le même emplacement, un champ de texte libre à la place de la liste (288 px au plus, moins quand la fenêtre est étroite : son
-   conteneur peut alors rétrécir sous la largeur du champ). Grisé sans règle complète : il laisse passer la souris, pour que l'info-bulle du conteneur dise pourquoi. `scroll-margin` :
-   quand l'aperçu grandit pendant la frappe, le champ ramené dans la fenêtre garde un peu d'air sous lui (js/variable-condition.js:keepTypedFieldInView). */
+/* « Sinon afficher » d'une valeur ou d'un bloc : le même emplacement, un champ à variables (js/field-editor.js, celui de l'objet d'un e-mail) à la place de la liste (288 px au plus, moins
+   quand la fenêtre est étroite : son conteneur peut alors rétrécir sous la largeur du champ). Mêmes bordure, police et fond que les champs d'une ligne (`.var-condition-affix input`).
+   Grisé sans règle complète : il laisse passer la souris, pour que l'info-bulle du conteneur dise pourquoi. `scroll-margin` : quand l'aperçu grandit pendant la frappe, le champ ramené
+   dans la fenêtre garde un peu d'air sous lui (js/variable-condition.js:keepTypedFieldInView). */
 .var-condition-otherwise-text-row .var-condition-otherwise-field, .var-condition-otherwise-area-row .var-condition-otherwise-field { min-width: 0; }
-.var-condition-affix .var-condition-otherwise-text-input, .var-condition-affix .var-condition-otherwise-area-input { width: 288px; max-width: 100%; min-width: 0; scroll-margin: 6px; }
-.var-condition-affix .var-condition-otherwise-text-input:disabled, .var-condition-affix .var-condition-otherwise-area-input:disabled { opacity: .55; pointer-events: none; }
-/* Le champ d'un bloc a plusieurs lignes (trois visibles, il défile au-delà, une poignée l'agrandit) : son étiquette reste en haut, à hauteur de sa première ligne. Mêmes bordure, police et
-   fond que les champs d'une ligne (`.var-condition-affix input`). */
+.var-condition-affix .var-condition-otherwise-text-input, .var-condition-affix .var-condition-otherwise-area-input {
+  box-sizing: border-box; width: 288px; max-width: 100%; min-width: 0; min-height: 26px; padding: 0 6px; scroll-margin: 6px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12px; font-weight: 400;
+}
+.var-condition-affix .var-condition-otherwise-text-input .pp-field-text, .var-condition-affix .var-condition-otherwise-area-input .pp-field-text { line-height: 24px; }
+.var-condition-affix .var-condition-otherwise-text-input:focus-within, .var-condition-affix .var-condition-otherwise-area-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.var-condition-affix .var-condition-otherwise-text-input.is-disabled, .var-condition-affix .var-condition-otherwise-area-input.is-disabled { opacity: .55; pointer-events: none; }
+/* Le champ d'un bloc a plusieurs lignes (trois visibles, il défile au-delà, une poignée l'agrandit) : son étiquette reste en haut, à hauteur de sa première ligne, et son indication aussi. */
 .var-condition-otherwise-area-row { align-items: start; }
 .var-condition-otherwise-area-row > label { padding-top: 5px; }
-.var-condition-affix .var-condition-otherwise-area-input { box-sizing: border-box; padding: 4px 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12px; line-height: 1.4; background: var(--surface); color: var(--text); resize: vertical; }
+.var-condition-affix .var-condition-otherwise-area-input { align-items: flex-start; min-height: 56px; max-height: 160px; overflow-y: auto; resize: vertical; padding: 4px 6px; }
+.var-condition-affix .var-condition-otherwise-area-input .pp-field-text { white-space: pre-wrap; overflow: visible; overflow-wrap: anywhere; line-height: 1.4; }
+.var-condition-affix .var-condition-otherwise-area-input.is-empty::before { top: 4px; transform: none; }
 @media (min-width: 520px) {
   .var-condition-affix { grid-template-columns: repeat(4, max-content); }
   .var-condition-affix .var-condition-affix-after { padding-left: 12px; }

@@ -320,6 +320,17 @@ const LoopRules = (function () {
   // conditionnels (leur condition), et la puce « N° de ligne » (le rang du tour).
   const BOUND_SELECTOR = '.var-badge, .calc-badge, img.editor-image[data-var-table], img.editor-image[data-qr-text], .conditional-text, .conditional-value, .conditional-checkbox, .smart-chip[data-chip-kind="rowNumber"]';
   function bindingOf(el) { return (el && bindings.get(el)) || null; }
+  // Les éléments qui prennent la place d'un autre APRÈS le déroulé des zones (le sinon d'un bloc ou d'une valeur conditionnels, qui porte des variables) lisent la
+  // même ligne du tour que lui : ils reprennent sa liaison. Rien à faire hors d'une zone répétée.
+  function inheritBinding(source, nodes) {
+    const binding = bindingOf(source);
+    if (!binding) return;
+    nodes.forEach(node => {
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      if (node.matches(BOUND_SELECTOR)) bindings.set(node, binding);
+      node.querySelectorAll(BOUND_SELECTOR).forEach(el => bindings.set(el, binding));
+    });
+  }
   // Ligne du tour ajoutée à ce qu'un élément tient déjà d'une zone englobante (une zone répétée dans une autre, copiée-collée : chacune garde sa
   // table). `turn` : le rang du tour dans sa zone (1, 2, 3...) ; sans lui (bulle en boucle dans la phrase, aperçu), la liaison n'en porte pas.
   function itemBinding(loop, item, inherited, turn) {
@@ -502,6 +513,6 @@ const LoopRules = (function () {
 
   return {
     EMPTY_MODES, defaultEmpty, normalizeLoop, sourceFor, allSourceFor, referenceColumnsTo, nestedColumn, parentTable, enclosingOf, sourceError, scopeFor, createContext, iterate, itemBinding,
-    bindingOf, expandZones, inlineLoopOf, resolveInline, removeHiddenBlocks, removeAndPrune, joinValues,
+    bindingOf, inheritBinding, expandZones, inlineLoopOf, resolveInline, removeHiddenBlocks, removeAndPrune, joinValues,
   };
 })();

@@ -11,39 +11,56 @@
 //
 // Le sinon (suite de celui de la valeur conditionnelle, js/conditional-value.js) est un second texte, écrit à la place du bloc quand sa condition n'est pas
 // remplie : l'attribut `otherwise` du nœud, `data-otherwise` dans le HTML, réglé par la ligne « Sinon afficher » de la fenêtre de condition
-// (js/variable-condition.js, un champ de plusieurs lignes). Du texte brut - jamais lu comme du HTML - dont chaque ligne non vide fait un paragraphe, sans les
-// espaces de ses deux bouts ; rien, ou que des espaces et des lignes vides, n'est pas un sinon (le bloc disparaît comme avant). Les deux fonctions qui le
-// lisent (`otherwiseText`, `otherwiseLines`) servent aussi à la valeur conditionnelle.
+// (js/variable-condition.js). C'est un champ à variables, le même que l'objet d'un e-mail (js/field-codec.js, js/field-editor.js) : du texte et des
+// variables tapées avec « # », une ligne par paragraphe. Enregistré en texte brut, une ligne par ligne, tant qu'aucune variable n'a de réglage - c'est ainsi
+// qu'étaient enregistrés les sinon d'avant les variables, qui se relisent à l'identique -, sinon en HTML, un `<p class="pp-field">` par ligne. Chaque ligne
+// non vide fait un paragraphe, sans les espaces de ses deux bouts ; rien, ou que des espaces et des lignes vides, n'est pas un sinon (le bloc disparaît
+// comme avant). Les fonctions qui le lisent (`otherwiseText`, `otherwiseItems`, `otherwiseLines`) servent aussi à la valeur conditionnelle.
 const ConditionalText = (function () {
   const TYPE = 'conditionalText';
   const SELECTOR = 'div.conditional-text';
   // Les caractères qu'un sinon de bloc peut porter dans sa fenêtre (quelques lignes : au-delà, c'est un second bloc, aux conditions opposées).
   const OTHERWISE_MAX = 1000;
 
-  // Le sinon d'un bloc ou d'une valeur tel qu'il est enregistré (attribut `data-otherwise`, ou celui du nœud) : le texte lui-même, ou null - rien, ou que des
-  // espaces et des retours à la ligne, n'est pas un sinon.
+  // Le sinon d'un bloc ou d'une valeur tel qu'il est enregistré (attribut `data-otherwise`, ou celui du nœud) : le champ lui-même, texte brut ou HTML (js/field-codec.js),
+  // ou null - rien, ou que des espaces et des retours à la ligne, n'est pas un sinon.
   function otherwiseText(raw) {
-    return typeof raw === 'string' && /\S/.test(raw) ? raw : null;
+    return typeof raw === 'string' && FieldCodec.linesOf(raw).some(FieldCodec.hasContent) ? raw : null;
   }
-  // Ses lignes non vides, sans les espaces de leurs deux bouts : un paragraphe chacune à la place d'un bloc, et ce que l'aperçu et l'info-bulle en citent.
-  function otherwiseLines(raw) {
+  // Ses lignes non vides, sans les espaces de leurs deux bouts, chacune une suite d'éléments - du texte, des bulles de variable, des puces (FieldCodec.itemsOf) : un
+  // paragraphe chacune à la place d'un bloc.
+  function otherwiseItems(raw) {
     const text = otherwiseText(raw);
-    return text ? text.split(/\r\n|\r|\n/).map(line => line.trim()).filter(Boolean) : [];
+    return text ? FieldCodec.cleanLines(FieldCodec.linesOf(text)) : [];
   }
+  // Les mêmes lignes en texte, une variable s'y écrit « #Clé » : ce que l'aperçu et l'info-bulle en citent.
+  function otherwiseLines(raw) {
+    return otherwiseItems(raw).map(FieldCodec.serializePlain);
+  }
+  // Le sinon d'une valeur dans la phrase : une seule ligne, écrite telle qu'elle est tapée, espaces des deux bouts comprises (comme l'« Avant » / « Après » d'une
+  // bulle). Les éléments de cette ligne, ou null sans sinon ; `otherwiseLine` la même en texte (« #Clé » pour une variable), '' sans sinon.
+  function otherwiseValueItems(raw) {
+    const text = otherwiseText(raw);
+    return text ? FieldCodec.itemsOf(text) : null;
+  }
+  const otherwiseLine = raw => { const items = otherwiseValueItems(raw); return items ? FieldCodec.serializePlain(items) : ''; };
 
   // Défait chaque bloc de `root` dont la condition est remplie (le cadre disparaît, son contenu reste), retire les autres - ou les remplace par leur sinon, un
   // paragraphe par ligne. Un bloc extérieur retiré emporte les blocs qu'il contient (son sinon seul s'écrit), un bloc extérieur défait laisse les siens à leur
-  // verdict.
+  // verdict. Les variables du sinon sont des bulles ordinaires, lues ensuite avec le reste du document (js/reader-mode.js) : elles prennent la ligne du tour du bloc
+  // (LoopRules.inheritBinding), les zones répétées étant déjà déroulées.
   function resolve(root, tableId, record) {
     return ConditionRules.resolveElements(root, SELECTOR, tableId, record, true, (block, holds) => {
       if (holds) { block.replaceWith(...Array.from(block.childNodes)); return; }
-      const lines = otherwiseLines(block.getAttribute('data-otherwise'));
+      const lines = otherwiseItems(block.getAttribute('data-otherwise'));
       if (!lines.length) { LoopRules.removeAndPrune(block); return; }
-      block.replaceWith(...lines.map(line => {
+      const paragraphs = lines.map(items => {
         const paragraph = block.ownerDocument.createElement('p');
-        paragraph.textContent = line;
+        Dom.setMarkup(paragraph, FieldCodec.itemsHtml(items));
         return paragraph;
-      }));
+      });
+      LoopRules.inheritBinding(block, paragraphs);
+      block.replaceWith(...paragraphs);
     });
   }
 
@@ -262,5 +279,7 @@ const ConditionalText = (function () {
 
   // `takePending` sert aussi à la valeur conditionnelle (js/conditional-value.js) : le texte retenu par le bouton « Insérer une variable » peut être
   // entouré d'un bloc ou, dans un seul paragraphe, d'une valeur.
-  return { OTHERWISE_MAX, otherwiseText, otherwiseLines, resolve, startFromSelection, hasPending, cancelPending, takePending, insertFromPanel, unwrap, addParagraphAfter, addParagraphBefore };
+  return {
+    OTHERWISE_MAX, otherwiseText, otherwiseItems, otherwiseLines, otherwiseValueItems, otherwiseLine, resolve, startFromSelection, hasPending, cancelPending, takePending, insertFromPanel, unwrap, addParagraphAfter, addParagraphBefore,
+  };
 })();

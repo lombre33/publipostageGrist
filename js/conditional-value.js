@@ -11,10 +11,11 @@
 // masquée : un paragraphe qui n'en contenait qu'une garde sa ligne, et les espaces tapés autour d'elle ne s'additionnent pas, js/space-gap.js) - ou, quand la
 // valeur a un sinon, ce texte s'écrit à sa place. Pas de condition : toujours affichée. Condition illisible : comme une condition non remplie, comme pour une bulle.
 //
-// Le sinon (demande du 13/10 : harmoniser avec le « Sinon afficher » des bulles, js/variable-otherwise.js) est un texte libre : l'attribut `otherwise` du nœud,
-// `data-otherwise` dans le HTML, réglé par la ligne « Sinon afficher » de la fenêtre de condition (js/variable-condition.js). Il s'écrit tel qu'il est tapé, espaces
-// comprises (comme l'« Avant » / « Après » d'une bulle), en texte brut - jamais lu comme du HTML - et dans le style du texte qui entoure la valeur, pas de celui
-// de son contenu ; rien, ou que des espaces, n'est pas un sinon (la valeur disparaît comme avant) - c'est la lecture du sinon d'un bloc, js/conditional-text.js:otherwiseText.
+// Le sinon (demande du 13/10 : harmoniser avec le « Sinon afficher » des bulles, js/variable-otherwise.js) est un champ à variables : l'attribut `otherwise` du nœud,
+// `data-otherwise` dans le HTML, réglé par la ligne « Sinon afficher » de la fenêtre de condition (js/variable-condition.js). Du texte et des variables tapées avec « # »
+// - le champ de l'objet d'un e-mail, js/field-codec.js -, écrit tel qu'il est tapé, espaces comprises (comme l'« Avant » / « Après » d'une bulle), dans le style du texte qui
+// entoure la valeur, pas de celui de son contenu ; enregistré en texte brut tant qu'aucune variable n'a de réglage, comme avant les variables. Rien, ou que des espaces, n'est
+// pas un sinon (la valeur disparaît comme avant) - c'est la lecture du sinon d'un bloc, js/conditional-text.js:otherwiseText.
 // Un sinon écrit quelque chose : les espaces tapés autour de la valeur restent toutes (js/space-gap.js ne joue que pour ce qui n'écrit rien).
 const ConditionalValue = (function () {
   const TYPE = 'conditionalValue';
@@ -26,9 +27,14 @@ const ConditionalValue = (function () {
   // Une valeur extérieure retirée emporte celles qu'elle contient (son sinon seul s'écrit), une valeur extérieure défaite laisse les siennes à leur verdict.
   function resolve(root, tableId, record) {
     return ConditionRules.resolveElements(root, SELECTOR, tableId, record, true, (span, holds) => {
-      const otherwise = holds ? null : ConditionalText.otherwiseText(span.getAttribute('data-otherwise'));
+      const otherwise = holds ? null : ConditionalText.otherwiseValueItems(span.getAttribute('data-otherwise'));
       if (otherwise) {
-        span.replaceWith(document.createTextNode(otherwise));
+        // Le sinon prend la place de la valeur, texte et bulles : les bulles sont lues ensuite avec le reste du document, sur la ligne du tour de la valeur.
+        const holder = document.createElement('span');
+        Dom.setMarkup(holder, FieldCodec.itemsHtml(otherwise));
+        const nodes = Array.from(holder.childNodes);
+        LoopRules.inheritBinding(span, nodes);
+        span.replaceWith(...nodes);
         return;
       }
       // Une valeur retirée (ou restée vide) n'écrit rien : les espaces tapés autour d'elle ne s'additionnent pas (js/space-gap.js), « Cher » + _ + « Madame » ne

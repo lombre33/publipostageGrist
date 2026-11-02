@@ -242,10 +242,14 @@ const Editor = (function () {
   // Les classes de TipTap et de ProseMirror, chargées une seule fois : l'éditeur du document (init) et les champs texte à bulles (js/field-editor.js)
   // les prennent au même endroit.
   let librariesLoading = null;
+  let librariesLoaded = null;
   function loadLibraries() {
-    if (!librariesLoading) librariesLoading = importLibraries();
+    if (!librariesLoading) librariesLoading = importLibraries().then(libs => { librariesLoaded = libs; return libs; });
     return librariesLoading;
   }
+  // Les mêmes classes, tout de suite, ou null tant qu'elles ne sont pas chargées : la fenêtre de condition (js/variable-condition.js) monte son champ « Sinon afficher » à
+  // l'ouverture, sans attendre - le document dont elle règle un nœud a déjà chargé l'éditeur.
+  const loadedLibraries = () => librariesLoaded;
   async function importLibraries() {
     // TipTap et ProseMirror se chargent par import() : leurs classes n'existent pas avant. Aucune dépendance d'ordre entre ces modules (chacun
     // n'alimente que sa propre variable) : ils partent en parallèle plutôt qu'en `await` séquentiels, car un import() est une requête réseau vers
@@ -914,7 +918,7 @@ const Editor = (function () {
   }
 
   return {
-    init, loadLibraries, markBadgeValidity, refreshLinkState, badgeProblemText, getHTML, setHTML, getHeadingNumberingStyle, insertImageAtDefaultSize,
+    init, loadLibraries, loadedLibraries, markBadgeValidity, refreshLinkState, badgeProblemText, getHTML, setHTML, getHeadingNumberingStyle, insertImageAtDefaultSize,
     getHeaderFooterData: HeaderFooterPreview.getHeaderFooterData, setHeaderFooterData: HeaderFooterPreview.setHeaderFooterData,
     exitHeaderFooterModeIfActive: HeaderFooterPreview.exitHeaderFooterModeIfActive,
     // Aperçu A4 rallumé, facteur d'ajustement changé... : la pagination est refaite, et la position des images d'un modèle chargé sans mise en page

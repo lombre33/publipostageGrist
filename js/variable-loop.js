@@ -51,7 +51,15 @@ const VariableLoop = (function () {
     });
     return owner;
   }
-  // Zones répétées qui contiennent `pos`, de la plus proche à la plus large : [{ repeat, start (position du nœud de la zone), owner }].
+  // Le contexte d'un éditeur qui vit hors du document mais dont le texte s'y écrit : le « Sinon afficher » d'une valeur ou d'un bloc conditionnels (js/variable-condition.js)
+  // est un petit éditeur de sa fenêtre, et ses variables, une fois écrites à la place du nœud, lisent la ligne du tour des zones répétées qui entourent ce nœud. `provider`
+  // rend ces zones (zonesAt du document, à la position du nœud). Rangé par schéma de l'éditeur, qui est le sien ; sans `provider`, le contexte est retiré.
+  const contexts = new WeakMap();
+  function setContext(schema, provider) {
+    if (provider) contexts.set(schema, provider); else contexts.delete(schema);
+  }
+  // Zones répétées qui contiennent `pos`, de la plus proche à la plus large : [{ repeat, start (position du nœud de la zone), owner }]. Celles du contexte de l'éditeur
+  // (setContext) viennent après, marquées `outer` : leurs positions sont celles d'un autre document.
   function zonesAt(editorState, pos) {
     const $pos = editorState.doc.resolve(pos);
     const zones = [];
@@ -62,6 +70,8 @@ const VariableLoop = (function () {
       const owner = zoneOwner(editorState.doc, $pos.before(d), node, repeat);
       if (owner) zones.push({ repeat, start: $pos.before(d), owner });
     }
+    const context = contexts.get(editorState.schema);
+    if (context) context().forEach(zone => zones.push(Object.assign({}, zone, { outer: true })));
     return zones;
   }
   // Tables que parcourent les zones répétées qui contiennent `pos`, de la plus proche à la plus large, chacune une fois : l'autocomplétion # propose
@@ -77,7 +87,7 @@ const VariableLoop = (function () {
   // La zone répétée la plus proche de `pos` dont la boucle n'est pas celle de la bulle à `bubblePos` (aucune bulle : l'insertion d'une variable) : la
   // zone dans laquelle une boucle de cette bulle serait imbriquée. Null hors d'une telle zone.
   function enclosingAt(editorState, pos, bubblePos) {
-    return zonesAt(editorState, pos).find(z => z.owner.pos !== bubblePos) || null;
+    return zonesAt(editorState, pos).find(z => z.outer || z.owner.pos !== bubblePos) || null;
   }
   // Vrai quand la variable `item` ({ table, column }) placée à `pos` se parcourt dans la zone répétée qui l'entoure sans lien avec la page : ses lignes
   // se rattachent à celles de la zone (js/loop-rules.js:sourceFor). L'insertion ne demande alors pas de lien ; la boucle se pose ensuite sur la bulle.
@@ -907,5 +917,5 @@ const VariableLoop = (function () {
     if (probing) probeLinkedView(state);
   }
 
-  return { open, isOpen, status, rowStatus, openRow, loopTablesAt, nestableAt, nestableInFedZoneAt, feedsAt };
+  return { open, isOpen, status, rowStatus, openRow, loopTablesAt, setContext, zonesAt, nestableAt, nestableInFedZoneAt, feedsAt };
 })();

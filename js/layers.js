@@ -57,5 +57,19 @@ const Layers = (function () {
     stack.forEach((member, rank) => { member.style.zIndex = String(level + Math.min(rank, WIDTH - 1)); });
   }
 
-  return { raise };
+  // Une couche posée devant la fenêtre `over` sans passer par la pile des menus : une barre flottante ouverte depuis le champ d'une fenêtre (le « Sinon afficher » de
+  // js/variable-condition.js - `raise` laisse les barres à l'ordre du DOM, et leur niveau est sous celui des fenêtres), ou une fenêtre ouverte par-dessus une autre
+  // (js/modal-base.js : deux fenêtres au même niveau se superposent dans l'ordre où leurs voiles ont été CRÉÉS, pas ouverts). Elle ne monte que si sa feuille de style ne la
+  // met pas déjà devant ; sans `over`, elle reprend le niveau de sa feuille de style. `release` rend ce niveau à la fermeture.
+  function above(el, over) {
+    if (!el) return;
+    el.style.zIndex = '';
+    const level = levelAbove(over);
+    if (level > (parseInt(getComputedStyle(el).zIndex, 10) || 0)) el.style.zIndex = String(level);
+  }
+  function release(el) {
+    if (el) el.style.zIndex = '';
+  }
+
+  return { raise, above, release };
 })();

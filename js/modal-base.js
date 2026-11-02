@@ -13,7 +13,8 @@ const ModalBase = (function () {
 
   const stack = [];          // fenêtres ouvertes, la dernière est au-dessus : c'est elle qui reçoit le clavier
   const pages = new Set();   // fenêtres reprises d'index.html : leur module les ouvre et les ferme, la base le constate (MutationObserver)
-  const FOCUSABLE = 'a[href], button, input:not([type="hidden"]), select, textarea, [tabindex]';
+  // Un champ à variables (js/field-editor.js, le « Sinon afficher » de la fenêtre de condition) est une zone modifiable, pas un <input> : Tab doit l'atteindre aussi.
+  const FOCUSABLE = 'a[href], button, input:not([type="hidden"]), select, textarea, [tabindex], [contenteditable="true"]';
   let lastOutside = null;    // dernier élément focalisé hors d'une fenêtre reprise : l'ouvreur quand le module a déjà mis le focus dedans
 
   // Éléments atteignables à Tab dans `root`, dans l'ordre du document : ni désactivés, ni cachés (hidden, display:none d'un ancêtre), ni retirés de
@@ -59,7 +60,6 @@ const ModalBase = (function () {
   function giveFocusBack(win, back) {
     if (win.restoreFocus !== false && back && back.isConnected && typeof back.focus === 'function') back.focus();
   }
-
   // Fenêtres reprises d'index.html
 
   const isShown = win => getComputedStyle(win.overlay).display !== 'none';
@@ -133,8 +133,12 @@ const ModalBase = (function () {
       // `target` : l'élément (ou la fonction qui le donne) à mettre au premier plan du clavier ; par défaut le premier champ du contenu.
       show(target) {
         if (!win.isOpen()) {
+          const below = stack[stack.length - 1];
           attach(win, document.activeElement);
           overlay.style.display = 'flex';
+          // Une fenêtre ouverte par-dessus une autre passe devant : la fenêtre de la boucle, créée avant celle de condition, passait dessous quand la barre d'une variable du
+          // « Sinon afficher » de la seconde l'ouvrait (js/layers.js : deux fenêtres au même niveau se superposent dans l'ordre de CRÉATION de leurs voiles).
+          Layers.above(overlay, below && below.overlay);
         }
         const focusTarget = (typeof target === 'function' ? target() : target) || focusables(body)[0] || focusables(box)[0] || box;
         focusTarget.focus();
@@ -142,6 +146,7 @@ const ModalBase = (function () {
       hide() {
         if (!win.isOpen()) return;
         overlay.style.display = 'none';
+        Layers.release(overlay);
         giveFocusBack(win, detach(win));
       },
     };

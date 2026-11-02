@@ -1219,10 +1219,12 @@ const EditorNodes = (function () {
               // Un sinon n'a de sens que pour une condition : sans elle, la valeur est toujours écrite et rien ne le signale.
               const otherwise = condition ? ConditionalText.otherwiseText(node.attrs.otherwise) : null;
               dom.classList.toggle('has-otherwise', !!otherwise);
+              // L'info-bulle cite le sinon en texte, une variable s'y écrit « #Clé ».
+              const otherwiseShown = otherwise ? ConditionalText.otherwiseLine(otherwise) : '';
               dom.setAttribute('data-placeholder', I18n.t('condValue.placeholder'));
               const described = condition ? VariableCondition.describe(condition, { full: true }) : '';
               const title = !condition ? I18n.t('condValue.titleNone')
-                : (otherwise ? I18n.t('condValue.titleIfOtherwise', { condition: described, otherwise }) : I18n.t('condValue.titleIf', { condition: described }));
+                : (otherwise ? I18n.t('condValue.titleIfOtherwise', { condition: described, otherwise: otherwiseShown }) : I18n.t('condValue.titleIf', { condition: described }));
               dom.title = title;
               dom.setAttribute('aria-label', title);
             }

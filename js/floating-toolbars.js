@@ -933,17 +933,23 @@ const FloatingToolbars = (function () {
 
   // Une fenêtre (condition, autres attributs, boucle, liste, calcul) est ouverte sur une bulle : sa barre reste masquée tant qu'elle l'est - son niveau,
   // sous les fenêtres, la cacherait de toute façon derrière le voile - et le champ texte qui porte la bulle ne remplace pas son document (js/field-editor.js).
-  function variableWindowOpen() {
-    return VariableCondition.isOpen() || VariableLinkedAttrs.isOpen() || VariableLoop.isOpen() || VariableList.isOpen() || VariableCalc.isOpen();
+  // `except` : la fenêtre dont la barre est celle d'un champ qu'elle porte (le sinon de js/variable-condition.js) - cette fenêtre-là est ouverte tant que le champ vit,
+  // elle ne cache pas sa propre barre ; la fenêtre de condition ouverte par-dessus elle, pour une variable du champ, la cache. 'condition' : la fenêtre de condition.
+  function variableWindowOpen(except) {
+    return VariableCondition.isOpen(except === 'condition' ? 1 : 0) || VariableLinkedAttrs.isOpen() || VariableLoop.isOpen() || VariableList.isOpen() || VariableCalc.isOpen();
   }
 
   // La barre flottante d'une bulle #Variable pour UN éditeur : celui du document (wireVariableFloatingToolbar) ou celui d'un champ texte (Objet, À, Cc,
   // Cci, nom du PDF, js/field-editor.js:attachVariableToolbar). Tout ce qui suit lit `editor`, le paramètre, qui cache celui du module : une barre par
   // éditeur, chacune sur sa propre sélection. `options.field` : la barre d'un champ texte, qui n'écrit qu'une ligne de texte - la boucle n'y est que « dans
   // la phrase », « Un document par valeur » n'a pas d'objet, le zéro s'y écrit toujours et un Oui / Non y garde « true » / « false » (Variables.formatValue,
-  // `rawNumbers`). `options.ownerEl` : l'élément du champ, dont un clic ne ferme pas la barre (EditorCore.registerFloatingPanel).
+  // `rawNumbers`). `options.sinon` : le champ est le « Sinon afficher » d'un bloc ou d'une valeur (js/variable-condition.js), qui s'écrit dans le document : même
+  // barre qu'un champ, mais le zéro et les cases Oui / Non s'y règlent comme dans le document. `options.hostWindow` : la fenêtre qui porte ce champ (variableWindowOpen).
+  // `options.ownerEl` : l'élément du champ, dont un clic ne ferme pas la barre (EditorCore.registerFloatingPanel).
   function createVariableToolbar(editor, options) {
     const inField = !!(options && options.field);
+    // Un champ qui s'écrit en texte brut (l'objet d'un e-mail) : la valeur d'une variable y est celle de Grist, sans la mise en forme du document.
+    const rawText = inField && !(options && options.sinon);
     // Relit la sélection et remet la barre à jour (posé par wireToolbar) : pour un geste qui ne change pas le document et qui doit pourtant se voir (« Comme dans Grist » qui
     // trouve la colonne réglée autrement qu'il n'y paraissait).
     let refreshToolbar = () => {};
@@ -1080,7 +1086,7 @@ const FloatingToolbars = (function () {
           // l'écriture par défaut retire la clé, et une bulle sans autre réglage retrouve un format vide.
           case 'num-zero': {
             // Grisé dans un champ texte (syncNumberFormat) : le zéro s'y écrit toujours.
-            if (inField) break;
+            if (rawText) break;
             const next = Object.assign({}, format);
             if (Variables.zeroHidden(format, variableColumnType(t.node))) next.zero = 'show'; else delete next.zero;
             setVariableFormat(t, Object.keys(next).length ? next : null);
@@ -1318,12 +1324,12 @@ const FloatingToolbars = (function () {
         const zeroBtn = ui.button('num-zero');
         if (zeroBtn) {
           // Dans un champ texte, le zéro s'écrit toujours (`rawNumbers`) : le bouton reste là, grisé et relâché, sa raison en info-bulle.
-          const zeroOff = !inField && Variables.zeroHidden(format, variableColumnType(node));
+          const zeroOff = !rawText && Variables.zeroHidden(format, variableColumnType(node));
           ui.setActive('num-zero', zeroOff);
           zeroBtn.setAttribute('aria-pressed', zeroOff ? 'true' : 'false');
           const slash = zeroBtn.querySelector('svg path');
           if (slash) slash.setAttribute('display', zeroOff ? 'inline' : 'none');
-          ui.setDisabled('num-zero', inField, I18n.t(inField ? 'varFmt.zeroInField' : 'varFmt.zero'));
+          ui.setDisabled('num-zero', rawText, I18n.t(rawText ? 'varFmt.zeroInField' : 'varFmt.zero'));
           zeroBtn.setAttribute('aria-label', zeroBtn.title);
         }
       }
@@ -1349,7 +1355,7 @@ const FloatingToolbars = (function () {
         const isDate = VariableFormat.isDateType(type);
         // Les trois cases : une colonne Oui / Non, et la case conditionnelle - dont la barre n'a pas « vrai / faux », elle est toujours une case.
         // Pas de cases dans un champ texte : un Oui / Non y est écrit « true » / « false », quel que soit le réglage (Variables.formatValue).
-        const isBool = !inField && (type === 'Bool' || kind === 'checkbox');
+        const isBool = !rawText && (type === 'Bool' || kind === 'checkbox');
         ui.section('grist').hidden = !isNumber && !isDate;
         ui.section('number').hidden = !isNumber;
         ui.section('date').hidden = !isDate;
@@ -1372,7 +1378,7 @@ const FloatingToolbars = (function () {
           // du mousedown, fiable y compris pour un <select> ; ici, seule la sélection décide.
           const t = variableTarget();
           if (!t) { panel.hide(); return; }
-          if (variableWindowOpen()) { panel.hide(); return; }
+          if (variableWindowOpen(options && options.hostWindow)) { panel.hide(); return; }
           const { kind, node, pos } = t;
           showVariableFormatPanels(ui, panel, kind, node);
           const dom = editor.view.nodeDOM(pos);
@@ -1414,8 +1420,13 @@ const FloatingToolbars = (function () {
 
   // La barre de la bulle du document : câblée une seule fois, à la création de l'éditeur (Editor.init).
   function wireVariableFloatingToolbar() { return createVariableToolbar(editor).wire(); }
-  // La barre des bulles d'un champ texte : une par champ, sur son propre éditeur ; `ownerEl` est l'élément du champ.
-  function attachVariableToolbar(fieldEditor, ownerEl) { return createVariableToolbar(fieldEditor, { field: true, ownerEl }).wire(); }
+  // La barre des bulles d'un champ texte : une par champ, sur son propre éditeur ; `ownerEl` est l'élément du champ. `extra` : les réglages d'un champ porté par une
+  // fenêtre (`sinon`, `hostWindow`, createVariableToolbar) et `windowEl`, l'élément de cette fenêtre : la barre passe devant elle.
+  function attachVariableToolbar(fieldEditor, ownerEl, extra) {
+    const panel = createVariableToolbar(fieldEditor, Object.assign({ field: true, ownerEl }, extra)).wire();
+    if (extra && extra.windowEl) Layers.above(panel.el, extra.windowEl);
+    return panel;
+  }
 
   // La barre flottante de la puce « Heure actuelle » pour UN éditeur (celui du document ou celui d'un champ texte, comme createVariableToolbar) : la liste « Heure » d'une bulle sur une colonne
   // « Date et heure » (VariableFormat.timeChoices : 14:30, 14 h 30, 2:30 PM, 2:30pm), sans « Sans heure » - une puce écrit toujours une heure. Une puce sans réglage écrit sur 24 heures
@@ -1458,7 +1469,11 @@ const FloatingToolbars = (function () {
     return { wire };
   }
   function wireTimeChipFloatingToolbar() { return createTimeChipToolbar(editor).wire(); }
-  function attachTimeChipToolbar(fieldEditor, ownerEl) { return createTimeChipToolbar(fieldEditor, { field: true, ownerEl }).wire(); }
+  function attachTimeChipToolbar(fieldEditor, ownerEl, extra) {
+    const panel = createTimeChipToolbar(fieldEditor, { field: true, ownerEl }).wire();
+    if (extra && extra.windowEl) Layers.above(panel.el, extra.windowEl);
+    return panel;
+  }
 
   // La barre flottante d'une pastille « @ » (js/mention.js) sélectionnée, comme celle d'une bulle de variable : un seul bouton, « Autres colonnes de la même fiche », qui ouvre la fenêtre des bulles
   // (js/variable-linked-attrs.js) sur la ligne de la fiche - et non sur celle que la page affiche - pour changer la colonne que la pastille lit ou en citer d'autres à la suite. Grisé, jamais retiré,

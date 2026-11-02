@@ -329,8 +329,10 @@ const Variables = (function () {
       latestCommand = props.command;
       setTabsVisible(true);
       render();
-      // La liste de l'éditeur retrouve son étage de menu : un champ de fenêtre l'a peut-être montée devant sa fenêtre (checkForFilenameTrigger).
-      listWindow = null;
+      // La liste de l'éditeur retrouve son étage de menu : un champ de fenêtre l'a peut-être montée devant sa fenêtre (checkForFilenameTrigger). Un champ à bulles que porte
+      // une fenêtre (le « Sinon afficher » de js/variable-condition.js) la monte devant elle.
+      const dom = props.editor && props.editor.view && props.editor.view.dom;
+      listWindow = dom && dom.closest ? dom.closest('.pp-modal') : null;
       ensureBox().style.display = currentItems.length ? 'flex' : 'none';
       position(props.clientRect);
     }
@@ -1430,10 +1432,19 @@ const Variables = (function () {
     // Les modèles dont le contenu contient au moins une bulle #Variable vers `tableCible`, ou une bulle dont le sinon (js/variable-otherwise.js) y va : une
     // recherche brute sur l'attribut sérialisé suffit, sans DOMParser. Les champs texte (Objet, À, Cc, Cci, nom du PDF) y comptent aussi : leurs variables
     // suivent la même règle de liaison. Sert à avertir avant de supprimer une règle encore utilisée ailleurs.
+    // Les variables du sinon d'un bloc ou d'une valeur conditionnels (js/conditional-text.js) sont dans l'attribut `data-otherwise`, en texte brut ou en HTML, dont les guillemets
+    // sont écrits en entités : la recherche brute ne les voit pas, l'attribut est lu (le navigateur défait les entités).
+    function otherwiseCites(contenu, tableCible) {
+      if (contenu.indexOf('data-otherwise="') === -1) return false;
+      return Array.from(contenu.matchAll(/data-otherwise="([^"]*)"/g)).some(found => {
+        const value = Dom.inertTemplate('<i data-x="' + found[1] + '"></i>').content.firstChild.getAttribute('data-x');
+        return FieldCodec.variablesIn(value).some(v => v.table === tableCible);
+      });
+    }
     function findTemplatesUsingTable(tableCible) {
       const needles = ['data-table="' + tableCible + '"', 'data-otherwise-table="' + tableCible + '"'];
       const fields = tpl => [tpl.nomFichierPDF, tpl.objet, tpl.destinataires, tpl.cc, tpl.cci];
-      return Templates.getCached().filter(tpl => (tpl.contenu && needles.some(needle => tpl.contenu.indexOf(needle) !== -1))
+      return Templates.getCached().filter(tpl => (tpl.contenu && (needles.some(needle => tpl.contenu.indexOf(needle) !== -1) || otherwiseCites(tpl.contenu, tableCible)))
         || fields(tpl).some(value => value && FieldCodec.variablesIn(value).some(v => v.table === tableCible)));
     }
     async function confirmDeleteLinkRule(rule) {

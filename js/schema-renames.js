@@ -393,8 +393,26 @@ const SchemaRenames = (function () {
     mention: { table: 'data-mention-table', column: 'data-mention-column', key: 'data-mention-key' },
   };
 
+  // Les tables que cite le sinon d'un bloc ou d'une valeur conditionnels (js/conditional-text.js) : celles de ses bulles quand il est écrit en HTML, celles de ses
+  // clés « #Table.Colonne » quand c'est du texte brut. Les clés se lisent avec les noms d'hier (`m.matchTextKey`), pas avec le schéma d'aujourd'hui : après un
+  // renommage, la clé enregistrée ne s'y trouve plus.
+  function otherwiseTablesOf(value, m, trigger) {
+    const tables = [];
+    if (FieldCodec.isRich(value)) {
+      Dom.inertTemplate(value).content.querySelectorAll('.var-badge').forEach(badge => {
+        [badge.getAttribute('data-table'), badge.getAttribute(REFERENCE_ATTRS.otherwise.table)].forEach(table => { if (table) tables.push(table); });
+      });
+      return tables;
+    }
+    for (let at = trigger ? value.indexOf(trigger) : -1; at !== -1; at = value.indexOf(trigger, at + 1)) {
+      const hit = m.matchTextKey(value.slice(at + 1));
+      if (hit) tables.push(hit.table);
+    }
+    return tables;
+  }
+
   // Les tables que le contenu nomme en toutes lettres : bulles, images liées, formules, boucles, règles « Table.Colonne ».
-  function explicitTablesOf(elements) {
+  function explicitTablesOf(elements, m, trigger) {
     const tables = new Set();
     const addRules = condition => {
       for (const rule of (condition && Array.isArray(condition.rules) ? condition.rules : [])) {
@@ -410,6 +428,9 @@ const SchemaRenames = (function () {
       if (table) tables.add(table);
       const otherwise = el.getAttribute(REFERENCE_ATTRS.otherwise.table);
       if (otherwise) tables.add(otherwise);
+      // Les variables du sinon d'un bloc ou d'une valeur conditionnels nomment aussi leurs tables.
+      const typed = el.matches('.conditional-text, .conditional-value') ? el.getAttribute('data-otherwise') : null;
+      if (typed) otherwiseTablesOf(typed, m, trigger).forEach(table => tables.add(table));
       for (const found of (el.getAttribute('data-formula') || '').matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\./g)) tables.add(found[1]);
       addRules(parseJson(el.getAttribute('data-condition')));
       const loop = parseJson(el.getAttribute('data-loop'));
@@ -461,6 +482,13 @@ const SchemaRenames = (function () {
       const next = rewriteText(qr, m, trigger);
       if (next.count) { el.setAttribute('data-qr-text', next.text); count += next.count; }
     }
+    // Le sinon d'un bloc ou d'une valeur conditionnels (js/conditional-text.js) : un champ à variables, comme l'objet d'un e-mail. Du texte brut, où une clé
+    // « #Table.Colonne » se réécrit comme dans le nom du PDF, ou du HTML, dont les bulles se réécrivent comme celles du corps.
+    const rawOtherwise = el.matches('.conditional-text, .conditional-value') ? el.getAttribute('data-otherwise') : null;
+    if (rawOtherwise) {
+      const next = FieldCodec.isRich(rawOtherwise) ? rewriteHtml(rawOtherwise, m, { page, trigger }) : rewriteText(rawOtherwise, m, trigger);
+      if (next.count) { el.setAttribute('data-otherwise', next.html != null ? next.html : next.text); count += next.count; }
+    }
     const rawCondition = el.getAttribute('data-condition');
     if (rawCondition) {
       const next = rewriteCondition(parseJson(rawCondition), m, page, true);
@@ -486,7 +514,7 @@ const SchemaRenames = (function () {
     // Un modèle qui nomme d'autres tables que celle de la page, et jamais celle-ci, n'est pas lu comme un modèle de cette page : ses colonnes sans
     // nom de table restent.
     const elements = root.querySelectorAll(ELEMENT_SELECTOR);
-    const explicit = explicitTablesOf(elements);
+    const explicit = explicitTablesOf(elements, m, ctx.trigger);
     const page = ctx.page && (!explicit.size || explicit.has(ctx.page.oldName) || explicit.has(ctx.page.newName)) ? ctx.page : null;
     let count = 0;
     elements.forEach(el => { count += rewriteElement(el, m, page, ctx.trigger); });
