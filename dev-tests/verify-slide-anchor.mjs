@@ -3,7 +3,7 @@
 // autre diapositive devient un lien vers le signet de cette diapositive (`#slide-3`), que porte son repère caché (`data-anchor`, `data-anchor-name`). Ce test joue la partie de l'éditeur et de la Lecture
 // à la vraie souris et au vrai clavier, 700x400, français clair puis anglais sombre, hébergé par GFS (simulé par dev-tests/gfs-stub.js), l'extension « diapositives » active.
 //  L'ÉDITEUR : Ctrl+clic sur un lien mène à la diapositive visée (elle monte en haut de la zone qui défile, le curseur est dans son premier texte) ; la liste « Dans ce document » de la fenêtre « Lien… »
-//   propose les diapositives qui ont un signet, sous leur nom ; le signet suit sa diapositive quand on lui pose une transition (un repère qui dit un signet n'est pas un repère vide) ; deux diapositives
+//   propose TOUTES les diapositives, sous leur rang et leur titre (verify-slide-link-dialog.mjs le joue à la souris) ; le signet suit sa diapositive quand on lui pose une transition (un repère qui dit un signet n'est pas un repère vide) ; deux diapositives
 //   qui portent la même adresse (une copie) n'en gardent qu'une.
 //  LA LECTURE : le clic sur le lien amène la diapositive visée en haut de la zone qui défile, sans quitter la page.
 // Lancé par run-headless.mjs (groupe Node "slideAnchor", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slide-anchor.mjs
@@ -105,7 +105,7 @@ async function run(lang, colorScheme) {
   const markers = await page.evaluate(() => Array.from(new DOMParser().parseFromString(Editor.getHTML(), 'text/html').body.querySelectorAll('div.pp-slide-props')).map(m => m.getAttribute('data-anchor')));
   check(tag + 'les trois diapositives sont ouvertes, les deux dernières portent leur signet dans leur repère', same(markers, ['slide-2', 'slide-3']), markers);
   const found = await page.evaluate(() => ({ two: !!Anchors.find(EditorCore.getEditor(), 'slide-2'), three: !!Anchors.find(EditorCore.getEditor(), 'slide-3'), label: Anchors.labelOf(EditorCore.getEditor(), 'slide-3') }));
-  check(tag + 'Anchors retrouve les deux diapositives, la seconde sous son nom', found.two && found.three && /^(Diapositive|Slide) 3$/.test(found.label), found);
+  check(tag + 'Anchors retrouve les deux diapositives, la seconde sous son rang et son titre (« 3. Titre trois »)', found.two && found.three && found.label === '3. Titre trois', found);
   const link = await placeOf(page, 'Aller', '.tiptap');
   await sleep(250);
   const where = await placeOf(page, 'Aller', '.tiptap');
@@ -122,8 +122,8 @@ async function run(lang, colorScheme) {
 
   // 2) La liste « Dans ce document » de la fenêtre « Lien… ».
   console.log('\n' + tag + '2) La liste « Dans ce document »');
-  const targets = await page.evaluate(() => Anchors.targets(EditorCore.getEditor()).bookmarks.map(b => b.id + ':' + b.name + ':' + b.snippet));
-  check(tag + 'les deux diapositives sont des signets nommés, sans extrait de texte', targets.length === 2 && /^slide-2:(Diapositive|Slide) 2:$/.test(targets[0]) && /^slide-3:(Diapositive|Slide) 3:$/.test(targets[1]), targets);
+  const targets = await page.evaluate(() => { const all = Anchors.targets(EditorCore.getEditor()); return { slides: all.slides.map(s => (s.id || '-') + ':' + s.text), bookmarks: all.bookmarks.length }; });
+  check(tag + 'les trois diapositives sont dans la liste, sous leur rang et leur titre (les deux qui ont un signet sous leur adresse, la première sans), et aucune n\'est comptée deux fois parmi les signets', same(targets.slides, ['-:1. Un', 'slide-2:2. Titre deux', 'slide-3:3. Titre trois']) && targets.bookmarks === 0, targets);
 
   // 3) Une transition posée sur une diapositive qui a un signet : le signet reste, dans le même repère.
   console.log('\n' + tag + '3) Le signet suit sa diapositive');

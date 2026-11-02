@@ -8,9 +8,10 @@
 //    sous les yeux : des retours à la ligne, NOTES_MAX caractères au plus ; rien : pas de notes). Une diapositive qui n'a rien de tout cela n'a pas de
 //    repère : le texte d'une présentation qui n'en a jamais posé s'écrit comme avant. Il est dans la diapositive (entre ses deux sauts de page) : la déplacer, la dupliquer, la copier,
 //    l'importer ou la supprimer emporte sa transition, son fond et ses notes sans que ces gestes le sachent.
-//  - Le SIGNET (`anchorId`, `anchorName` ; `data-anchor`, `data-anchor-name`) : l'adresse d'un lien vers cette diapositive (`#slide-3`, js/anchors.js) et son nom dans la liste « Dans ce document ». Seul l'import d'un fichier
-//    PowerPoint en pose, sur les diapositives que vise un lien (js/pptx-import.js). Un repère qui n'a qu'un signet n'est pas vide (isBlank). La Lecture le reçoit comme un bloc vide qui porte l'adresse
-//    (forOutput, option `anchors`) ; le PDF, le Word et le HTML ne le voient pas encore, l'export PowerPoint en fait la cible des liens.
+//  - Le SIGNET (`anchorId`, `anchorName` ; `data-anchor`, `data-anchor-name`) : l'adresse d'un lien vers cette diapositive (`#slide-3`, js/anchors.js) et son nom dans la liste « Dans ce document ». L'import d'un fichier
+//    PowerPoint en pose, sur les diapositives que vise un lien (js/pptx-import.js, avec un nom), et la fenêtre « Lien… » en pose une, SANS nom, sur celle qu'un lien neuf vise (CLAIM_META : le rangement
+//    l'ajoute à l'événement du lien, un seul Annuler). Un repère qui n'a qu'un signet n'est pas vide (isBlank). La Lecture, le PDF, le Word et le HTML le reçoivent comme un bloc vide qui porte l'adresse
+//    (forOutput, option `anchors`) ; l'export PowerPoint en fait la cible des liens.
 //  - Le FOND se dessine dans l'éditeur par le repère lui-même (css/free-frame.css : un pseudo-élément de la taille de la page, sous le texte, posé depuis le coin de la page comme un cadre
 //    libre) ; les miniatures en copient le rendu. Il couvre la page où la diapositive s'ouvre (comme un cadre libre) : ce que la diapositive déborde sur une deuxième page reste blanc.
 //    Les sorties le voient comme un cadre libre de la page entière, sans trait ni texte, rangé avant les autres (forOutput) : la Lecture, le diaporama et l'impression le peignent sous
@@ -33,6 +34,8 @@ const SlideProps = (function () {
   const CLASS = 'pp-slide-props';
   const ANCHOR_CLASS = 'pp-slide-anchor';
   const OWN_META = 'ppSlideProps';
+  // La demande d'un signet pour une diapositive, posée par la fenêtre « Lien… » sur la transaction du lien ({ index, id }) : le rangement l'exécute dans l'événement du lien (un seul Annuler).
+  const CLAIM_META = 'ppSlideClaim';
   // Les effets, dans l'ordre où la fenêtre les propose ; OPTIONS : ceux qui ont un choix à faire, avec les valeurs de `from` qu'ils offrent (le côté d'où la diapositive arrive pour une
   // poussée, un balayage, un recouvrement, un dévoilement ; l'ouverture d'une division ; le sens des lames d'un store) ; SIDED : leurs noms. Un `from` que l'effet n'offre pas devient son premier choix.
   const KINDS = ['fade', 'push', 'wipe', 'cover', 'uncover', 'zoom', 'split', 'blinds', 'circle', 'diamond', 'plus'];
@@ -171,8 +174,41 @@ const SlideProps = (function () {
   // Les notes de chaque diapositive de `doc`, dans l'ordre : le texte, ou '' quand elle n'en a pas.
   const notesOf = doc => slidesOf(doc).map((slide) => { const a = attrsOfSlide(slide); return a ? a.notes : ''; });
 
+  // Le titre de chaque diapositive de `doc`, dans l'ordre, tel que la fenêtre « Lien… » le montre : le texte de son premier titre ; sans titre, celui de son premier texte, d'un cadre libre ou d'une forme
+  // (coupé à TITLE_MAX caractères) ; '' quand elle n'a aucun texte.
+  const TITLE_MAX = 60;
+  function titlesOf(doc) {
+    const clean = text => text.replace(/\s+/g, ' ').trim();
+    return slidesOf(doc).map((slide) => {
+      let heading = '';
+      let other = '';
+      doc.nodesBetween(slide.start, slide.end, (node) => {
+        if (heading) return false;
+        if (node.type.name === 'heading') { heading = clean(node.textContent); return false; }
+        if (!other && (node.isTextblock || node.type.name === 'freeFrame')) other = clean(node.textContent);
+        return !node.isTextblock;
+      });
+      const title = heading || other;
+      return title.length > TITLE_MAX ? title.slice(0, TITLE_MAX - 1).replace(/\s+$/, '') + '…' : title;
+    });
+  }
+
   // Les commandes
   const own = tr => TrackChanges.skipTracking(tr.setMeta(OWN_META, true));
+  // Le signet `id` pour la diapositive `index` de `state` (la demande CLAIM_META d'une transaction de la personne) : le repère de la diapositive le prend, ou en reçoit un, au tout début d'elle. Rend la
+  // transaction à ajouter à l'événement, ou null quand il n'y a rien à faire (la diapositive n'existe plus, elle l'a déjà).
+  function claimTransaction(state, claim) {
+    const type = state.schema.nodes[NODE];
+    const slide = type ? slidesOf(state.doc)[claim.index] : null;
+    if (!slide || !anchorIdOf(claim.id)) return null;
+    const had = slide.markers[0] || null;
+    const current = settled(had ? had.node.attrs : null);
+    if (current.anchorId === claim.id) return null;
+    const next = settled(Object.assign({}, current, { anchorId: claim.id }));
+    const tr = state.tr;
+    if (had) tr.setNodeMarkup(had.pos, undefined, next); else tr.insert(slide.start, type.create(next));
+    return own(tr);
+  }
   // Change le repère des diapositives `indexes` (leurs rangs dans le texte de l'éditeur) : `change(attrs)` rend les attributs d'après ceux d'avant (le repère de la diapositive, ou ses valeurs
   // par défaut quand elle n'en a pas). Un repère qui ne dit plus rien s'efface, une diapositive qui doit en avoir un en reçoit un. Tout tient en UNE transaction : un seul Ctrl+Z la
   // défait, la sélection ne bouge pas. Rend le nombre de diapositives qui ont changé, ou -1 quand l'éditeur a refusé la transaction (une diapositive bloquée par son lien : js/slide-links.js
@@ -363,6 +399,9 @@ const SlideProps = (function () {
             transformPasted,
           },
           appendTransaction(trs, oldState, newState) {
+            // Le signet que la fenêtre « Lien… » demande pour une diapositive : dans l'événement du lien, donc défait avec lui.
+            const claimed = trs.find(tr => tr.getMeta(CLAIM_META));
+            if (claimed && inPresentation()) return claimTransaction(newState, claimed.getMeta(CLAIM_META));
             if (!trs.some(tr => tr.docChanged)) return null;
             if (trs.some(tr => tr.getMeta(OWN_META) || tr.getMeta('preventUpdate') || tr.getMeta('history$') || LiveEntry.isRemote(tr))) return null;
             return inPresentation() ? tidyTransaction(trs, oldState, newState) : null;
@@ -403,7 +442,7 @@ const SlideProps = (function () {
   }
 
   return {
-    NODE, CLASS, KINDS, OPTIONS, SIDED, SIDES, DEFAULTS, DURATION, NOTES_MAX, createNode, createExtension, normalized, attrsOf: attrsOfEl, isNone, hasBackground, hasNotes, isBlank, slidesOf, listOf, backgroundsOf, timingsOf, notesOf, anchorsOf,
+    NODE, CLASS, CLAIM_META, KINDS, OPTIONS, SIDED, SIDES, DEFAULTS, DURATION, NOTES_MAX, createNode, createExtension, normalized, attrsOf: attrsOfEl, isNone, hasBackground, hasNotes, isBlank, slidesOf, listOf, backgroundsOf, timingsOf, notesOf, anchorsOf, titlesOf,
     apply: applyTransition, applyTransition, applyHidden, ADVANCE, applyBackground, applyNotes, strip, forOutput, html,
   };
 })();

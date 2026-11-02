@@ -10,7 +10,8 @@
 // de page : les exports n'y savent pas encore poser de destination) ; celui qu'un bloc porte ailleurs (collé, ou entré dans une liste) est retiré. Un doublon (un
 // bloc copié) perd le sien : le premier du document garde l'adresse, un signet déplacé (couper-coller) la garde donc.
 // Une diapositive peut aussi être une cible : son repère (js/slide-props.js) porte les mêmes `anchorId` et `anchorName` (`<div class="pp-slide-props" data-anchor="slide-3" data-anchor-name="Diapositive 3">`), que pose l'import d'un
-// fichier PowerPoint pour une diapositive que vise un lien (js/pptx-import.js). Elle n'a ni drapeau ni fenêtre « Signet… » ; elle est dans la liste « Dans ce document », et la Lecture et le diaporama la retrouvent par son bloc
+// fichier PowerPoint pour une diapositive que vise un lien (js/pptx-import.js), ou la fenêtre « Lien… » pour celle qu'un lien neuf vise (SlideProps.CLAIM_META : `slide-3`, sans nom). Elle n'a ni drapeau ni fenêtre « Signet… » ;
+// dans une présentation, la liste « Dans ce document » commence par TOUTES les diapositives, avec ou sans signet (« 3. Titre » : targets().slides) ; la Lecture et le diaporama la retrouvent par son bloc
 // d'adresse (SlideProps.forOutput, option `anchors`).
 // Ce qui se passe au clic est ailleurs : js/link-dialog.js (Ctrl/⌘+clic dans l'éditeur), js/reader-mode.js (la Lecture), et les exports écrivent chacun leur
 // destination (js/pdf-export.js, js/docx-export.js, js/html-export.js, js/markdown-export.js).
@@ -276,14 +277,31 @@ const Anchors = (function () {
     return uniqueId(slugify(node.textContent), candidate => taken.has(candidate));
   }
 
-  // Ce que la fenêtre « Lien… » propose dans « Dans ce document » : les titres du premier niveau (leur texte comme le sommaire l'écrit, numérotation comprise) et les
-  // signets nommés, dans l'ordre du document. `pos` est la place du bloc, `id` son adresse (null pour un titre qui n'en a pas encore), `plain` le texte du titre sans sa
+  // Le nom d'une diapositive dans la liste « Dans ce document » : son rang et son titre (« 3. Les chiffres »), ou « Diapositive 3 » quand elle n'a aucun texte.
+  const slideLabel = (index, title) => (title ? (index + 1) + '. ' + title : I18n.t('slides.seam', { n: index + 1 }));
+  // L'adresse qu'un lien aurait pour la diapositive de rang `index` quand elle n'en a pas : `slide-3`, ou `slide-3-2`... si une autre diapositive la porte déjà.
+  function slideIdFor(editor, index) {
+    const taken = idsIn(editor.state.doc, -1);
+    return uniqueId('slide-' + (index + 1), candidate => taken.has(candidate));
+  }
+  // Ce que la fenêtre « Lien… » propose dans « Dans ce document » : les diapositives d'une présentation (toutes, dans l'ordre : `index` est le rang, `id` l'adresse que son repère porte, null
+  // quand elle n'en a pas encore - un lien lui en donne une, SlideProps.CLAIM_META -, `title` son titre), les titres du premier niveau (leur texte comme le sommaire l'écrit, numérotation
+  // comprise) et les signets nommés, dans l'ordre du document. `pos` est la place du bloc, `id` son adresse (null pour un titre qui n'en a pas encore), `plain` le texte du titre sans sa
   // numérotation.
   function targets(editor) {
     const dom = editor.view.dom;
     const entries = HeadingNumbering.entriesFor(Array.from(dom.querySelectorAll(HEADINGS)), dom.dataset.headingStyle || 'none');
     const headings = [];
     const bookmarks = [];
+    const slides = [];
+    const inSlides = SlidesEntry.presentationShown() && !HeaderFooterPreview.getHfMode();
+    if (inSlides) {
+      const titles = SlideProps.titlesOf(editor.state.doc);
+      SlideProps.slidesOf(editor.state.doc).forEach((slide, index) => {
+        const marker = slide.markers[0];
+        slides.push({ index, pos: marker ? marker.pos : slide.start, id: marker && marker.node.attrs.anchorId ? marker.node.attrs.anchorId : null, title: titles[index], text: slideLabel(index, titles[index]) });
+      });
+    }
     let rank = 0;
     editor.state.doc.forEach((node, pos) => {
       if (!isTarget(node)) return;
@@ -292,15 +310,20 @@ const Anchors = (function () {
         const text = (entry ? entry.text : node.textContent).trim();
         if (text) headings.push({ pos, id: node.attrs.anchorId || null, text, plain: node.textContent.replace(/\s+/g, ' ').trim(), level: node.attrs.level || 1 });
       }
-      if (node.attrs.anchorName) bookmarks.push({ pos, id: node.attrs.anchorId, name: node.attrs.anchorName, snippet: isSlide(node) ? '' : node.textContent.replace(/\s+/g, ' ').trim().slice(0, 40) });
+      // Dans une présentation, une diapositive qui a un nom (celles d'un fichier PowerPoint) est dans la liste des diapositives, sous son titre d'aujourd'hui, pas sous son nom d'hier.
+      if (node.attrs.anchorName && !(inSlides && isSlide(node))) bookmarks.push({ pos, id: node.attrs.anchorId, name: node.attrs.anchorName, snippet: isSlide(node) ? '' : node.textContent.replace(/\s+/g, ' ').trim().slice(0, 40) });
     });
-    return { headings, bookmarks };
+    return { headings, bookmarks, slides };
   }
 
   // Le nom que la personne reconnaît pour l'adresse `id` (le nom du signet, sinon le texte du titre), ou null : la cible n'existe plus.
   function labelOf(editor, id) {
     const found = find(editor, id);
     if (!found) return null;
+    if (isSlide(found.node) && SlidesEntry.presentationShown()) {
+      const slide = targets(editor).slides.find(entry => entry.id === id);
+      if (slide) return slide.text;
+    }
     return found.node.attrs.anchorName || found.node.textContent.replace(/\s+/g, ' ').trim() || id;
   }
 
@@ -352,6 +375,6 @@ const Anchors = (function () {
 
   return {
     ATTR_ID, ATTR_NAME, MAX_NAME, slugify, uniqueId, cleanName, hrefOf, idOfHref, isId, createExtension, status, syncRow, blockAtSelection, save, nameTaken, previewId, idFor,
-    targets, labelOf, find, goTo, linkCount, elementFor, elementsOf, indexElements,
+    targets, labelOf, slideLabel, slideIdFor, find, goTo, linkCount, elementFor, elementsOf, indexElements,
   };
 })();

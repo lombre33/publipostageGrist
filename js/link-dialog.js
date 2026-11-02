@@ -98,6 +98,7 @@ const LinkDialog = (function () {
   let refs = null;
   let ctx = null; // { from, to, empty, href, withText } : la sélection à l'ouverture
   let mode = 'web'; // 'web' ou 'document' : ce que la fenêtre montre
+  let slideTargets = false; // la liste « Dans ce document » commence par les diapositives de la présentation
 
   // Un en-tête, un pied de page et un modèle d'e-mail n'ont pas de signet où mener (la Lecture et les exports ne le résolvent que dans le texte) : la clé de la raison, ou null.
   const documentLock = () => (HeaderFooterPreview.getHfMode() || MainToolbar.isEmailMode() ? 'hyperlink.mode.documentLocked' : null);
@@ -201,7 +202,7 @@ const LinkDialog = (function () {
     modeBoxes[next].input.checked = true;
     webField.hidden = next !== 'web';
     docField.hidden = next !== 'document';
-    text.placeholder = I18n.t(next === 'document' ? 'hyperlink.text.placeholderDocument' : 'hyperlink.text.placeholder');
+    text.placeholder = I18n.t(next === 'document' ? (slideTargets ? 'hyperlink.text.placeholderSlide' : 'hyperlink.text.placeholderDocument') : 'hyperlink.text.placeholder');
     if (focus) {
       if (next === 'document') { target.focus(); } else { url.focus(); url.select(); }
     }
@@ -211,10 +212,14 @@ const LinkDialog = (function () {
   // Les titres et les signets du document dans la liste, les groupes étant « Titres » et « Signets » ; `selectedId` : l'adresse du lien qu'on modifie. Rend vrai quand
   // le document a au moins un titre ou un signet.
   function fillTargets(ed, selectedId) {
-    const { target, targetHint, targetList } = refs;
-    const { headings, bookmarks } = Anchors.targets(ed);
+    const { target, targetLabel, targetHint, targetList } = refs;
+    const { headings, bookmarks, slides } = Anchors.targets(ed);
+    // Dans une présentation, la liste commence par les diapositives : le libellé, l'invite, l'indication et le texte d'un lien neuf le disent.
+    const slideMode = slides.length > 0;
+    slideTargets = slideMode;
+    targetLabel.textContent = I18n.t(slideMode ? 'hyperlink.target.labelSlide' : 'hyperlink.target.label');
     target.textContent = '';
-    const placeholder = Dom.option('', I18n.t('hyperlink.target.placeholder'));
+    const placeholder = Dom.option('', I18n.t(slideMode ? 'hyperlink.target.placeholderSlide' : 'hyperlink.target.placeholder'));
     placeholder.disabled = true;
     target.appendChild(placeholder);
     const group = (labelKey, entries, valueOf, hintOf) => {
@@ -230,18 +235,21 @@ const LinkDialog = (function () {
       });
       target.appendChild(optgroup);
     };
+    group('hyperlink.target.slides', slides, entry => 's:' + entry.index, () => '');
     group('hyperlink.target.headings', headings, (entry, index) => 'h:' + index, entry => I18n.t('hyperlink.target.level', { n: entry.level }));
     group('hyperlink.target.bookmarks', bookmarks, entry => 'a:' + entry.id, entry => entry.snippet);
     // Le choix d'un lien qu'on modifie : son signet, sinon le titre qui porte cette adresse.
     let selected = '';
     if (selectedId) {
-      if (bookmarks.some(entry => entry.id === selectedId)) selected = 'a:' + selectedId;
+      const slide = slides.find(entry => entry.id === selectedId);
+      if (slide) selected = 's:' + slide.index;
+      else if (bookmarks.some(entry => entry.id === selectedId)) selected = 'a:' + selectedId;
       else { const rank = headings.findIndex(entry => entry.id === selectedId); if (rank >= 0) selected = 'h:' + rank; }
     }
     target.value = selected;
-    const any = headings.length + bookmarks.length > 0;
+    const any = headings.length + bookmarks.length + slides.length > 0;
     target.disabled = !any;
-    targetHint.textContent = I18n.t(!any ? 'hyperlink.target.none' : selectedId && !selected ? 'hyperlink.target.missing' : 'hyperlink.target.hint');
+    targetHint.textContent = I18n.t(!any ? 'hyperlink.target.none' : selectedId && !selected ? (slideMode ? 'hyperlink.target.missingSlide' : 'hyperlink.target.missing') : (slideMode ? 'hyperlink.target.hintSlide' : 'hyperlink.target.hint'));
     if (targetList) targetList.sync();
     return any;
   }
@@ -309,11 +317,19 @@ const LinkDialog = (function () {
     target.focus();
   }
 
-  // Le titre ou le signet choisi : { id, label (le texte qu'un lien neuf affiche), claim ({ pos, id } : l'adresse qu'un titre sans signet reçoit en même temps que le lien) },
-  // ou { error }. Relu dans le document au moment de valider : il a pu changer depuis l'ouverture (écriture en direct).
+  // La diapositive, le titre ou le signet choisi : { id, label (le texte qu'un lien neuf affiche), claim ({ pos, id } : l'adresse qu'un titre sans signet reçoit en même temps que le lien ; { slide, id } :
+  // celle d'une diapositive qui n'en a pas) }, ou { error }. Relu dans le document au moment de valider : il a pu changer depuis l'ouverture (écriture en direct).
   function pickedTarget(ed) {
     const value = refs.target.value;
     if (!value) return { error: 'hyperlink.error.noTarget' };
+    if (value.indexOf('s:') === 0) {
+      const slide = Anchors.targets(ed).slides[parseInt(value.slice(2), 10)];
+      if (!slide) return { error: 'hyperlink.target.missingSlide' };
+      const label = slide.title || Anchors.slideLabel(slide.index, '');
+      if (slide.id) return { id: slide.id, label, claim: null };
+      const id = Anchors.slideIdFor(ed, slide.index);
+      return { id, label, claim: { slide: slide.index, id } };
+    }
     if (value.indexOf('a:') === 0) {
       const id = value.slice(2);
       const label = Anchors.labelOf(ed, id);
@@ -346,7 +362,9 @@ const LinkDialog = (function () {
     // La sélection de l'éditeur n'a pas bougé pendant que la fenêtre était ouverte (le focus est parti, pas la sélection) : les commandes s'y
     // appliquent. Un titre sans signet reçoit son adresse dans la même transaction que le lien : un seul Annuler défait les deux.
     const chain = ed.chain().focus();
-    if (claim) chain.command(({ tr }) => { tr.setNodeAttribute(claim.pos, 'anchorId', claim.id); return true; });
+    // Une diapositive sans signet en reçoit un dans l'événement du lien (SlideProps.CLAIM_META : le rangement de son repère le pose après la transaction, avec elle dans l'historique).
+    if (claim && claim.slide != null) chain.command(({ tr }) => { tr.setMeta(SlideProps.CLAIM_META, { index: claim.slide, id: claim.id }); return true; });
+    else if (claim) chain.command(({ tr }) => { tr.setNodeAttribute(claim.pos, 'anchorId', claim.id); return true; });
     if (ctx.withText) {
       // Le curseur sort du lien après l'insertion : ce qui se tape ensuite ne s'ajoute pas à son texte (la marque de TipTap s'étend sinon, autolink
       // actif).
@@ -397,7 +415,7 @@ const LinkDialog = (function () {
     if (anchorId) {
       // Un lien vers un titre ou un signet du document : son nom, ou « introuvable » quand il n'existe plus (il n'y a alors rien où aller).
       const label = Anchors.labelOf(EditorCore.getEditor(), anchorId);
-      tip.append(el('span', 'pp-link-tip-url', I18n.t(label ? 'hyperlink.tip.internal' : 'hyperlink.tip.missing', { name: label })));
+      tip.append(el('span', 'pp-link-tip-url', I18n.t(label ? 'hyperlink.tip.internal' : SlidesEntry.presentationShown() ? 'hyperlink.tip.missingSlide' : 'hyperlink.tip.missing', { name: label })));
       if (label) tip.append(el('span', 'pp-link-tip-hint', I18n.t('hyperlink.openHint.internal', { key: modKey() })));
     } else {
       tip.append(el('span', 'pp-link-tip-url', href), el('span', 'pp-link-tip-hint', I18n.t('hyperlink.openHint', { key: modKey() })));

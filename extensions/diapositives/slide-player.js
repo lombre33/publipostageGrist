@@ -314,7 +314,8 @@ const SlidePlayer = (function () {
       if (slide >= 0) {
         event.preventDefault();
         const target = s.windows.findIndex(win => win.page >= s.starts[slide]);
-        if (target >= 0) go(target);
+        // Comme PowerPoint : la diapositive visée arrive avec sa propre transition (`step`), de l'avant, d'où qu'on vienne.
+        if (target >= 0) go(target, { step: true });
         return;
       }
       next();
