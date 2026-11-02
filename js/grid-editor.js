@@ -1257,7 +1257,7 @@ const GridEditor = (function () {
       // devant son numéro.
       const zoom = active ? 1 : EditorCore.layoutZoom(table);
       const pads = rows.map(row => HeaderFooterPreview.rowPadOf(row) * zoom);
-      return { info, table, rect, width: rect.width, height: rect.height, rows, widths: cols.map(c => c.getBoundingClientRect().width), heights: rows.map(r => r.getBoundingClientRect().height), pads };
+      return { info, table, rect, width: rect.width, height: rect.height, rows, widths: cols.map(c => c.getBoundingClientRect().width), heights: rows.map(r => r.getBoundingClientRect().height), pads, zoom };
     }
     return { setColumnWidths, setColumnWidth, setRowHeight, colName, tableElement, measure, measureTable };
   })();
@@ -1573,8 +1573,11 @@ const GridEditor = (function () {
       const sizes = lines.map(i => (isCol ? m.widths[i] : m.heights[i] - m.pads[i]) / zoom);
       // Colonnes : la largeur de départ de CHAQUE colonne, car la page les lie (celles à droite cèdent la place qui manque). Celle que le document pose ;
       // une colonne automatique (sans largeur posée) a celle du rendu, arrondie vers le bas : la somme ne dépasse pas ce que la page montre.
+      // Une colonne automatique part de sa largeur sur la page à l'échelle 1 (EditorCore.pageScale) : la même à toute taille de panneau, avec ou sans Aperçu A4. Les bandeaux, eux, restent
+      // à la largeur de l'écran.
       const known = isCol ? knownColumnWidths(m.info.node) : [];
-      const base = isCol ? m.widths.map((w, i) => known[i] || Math.floor(w / zoom + 1e-6)) : [];
+      const onPage = isCol ? EditorCore.atPageScale(editor, () => measureTable(m.info)) : null;
+      const base = isCol ? m.widths.map((w, i) => known[i] || Math.floor((onPage ? onPage.widths[i] / onPage.zoom : w / zoom) + 1e-6)) : [];
       const pageWidth = isCol ? set.ctx.pageWidth(m.table) : null;
       const start = isCol ? event.clientX : event.clientY;
       const startSize = isCol ? base[index] : sizes[lines.indexOf(index)];
@@ -1690,10 +1693,12 @@ const GridEditor = (function () {
       const info = tableInfo(ed.state.doc, ed.state.selection);
       const lines = coveredLines(ed, info, kind);
       if (lines.length < 2) return false;
-      const m = measureTable(info);
-      if (!m) return false;
-      const zoom = active ? 1 : EditorCore.layoutZoom(m.table);
       const isCol = kind === 'col';
+      // Les largeurs se lisent sur la page à l'échelle 1 (EditorCore.pageScale) : la même à toute taille de panneau, avec ou sans Aperçu A4 (qui ne montre alors que la largeur du panneau,
+      // et le document en dépendait). Les hauteurs, à l'écran. Le facteur de la feuille est celui de la mesure (`m.zoom`).
+      const m = isCol ? EditorCore.atPageScale(ed, () => measureTable(info)) : measureTable(info);
+      if (!m) return false;
+      const zoom = m.zoom;
       const mean = Math.round(lines.reduce((sum, i) => sum + (isCol ? m.widths[i] : m.heights[i] - m.pads[i]), 0) / lines.length / zoom);
       if (isCol) {
         setColumnWidth(info, lines, Math.min(MAX_COL_WIDTH_PX, Math.max(MIN_COL_WIDTH_PX, mean)));

@@ -269,11 +269,27 @@ const PageZoom = (function () {
   // différence que la bibliothèque calcule reste exacte. Sans zoom (facteur 1) rien n'est touché. La poignée est « prise » quand l'éditeur porte la classe
   // resize-cursor au moment de l'appui.
   const shadowClientX = (e, x) => Object.defineProperty(e, 'clientX', { configurable: true, value: x });
+  // La bibliothèque lit aussi, à l'appui, la largeur de départ d'une colonne automatique sur le rendu (`offsetWidth`) : sans Aperçu A4 c'est celle du panneau, et le document en
+  // dépendait (la colonne tirée partait de 457 px dans un panneau de 1 400 px, de 224 px dans un de 700 px). Elle se lit sur la page à l'échelle 1 (EditorCore.pageScale) : la fenêtre
+  // s'ouvre avant l'écouteur de la bibliothèque (sur l'éditeur) et se referme après lui (sur le document, en remontée), ou au tour de boucle suivant.
+  function readStartWidthOnPage() {
+    const page = EditorCore.pageScale(EditorCore.getEditor());
+    page.measure(() => 0);
+    let timer = 0;
+    const close = () => {
+      document.removeEventListener('mousedown', close);
+      clearTimeout(timer);
+      page.close();
+    };
+    document.addEventListener('mousedown', close);
+    timer = setTimeout(close, 0);
+  }
   function onColumnDragStart(event) {
     if (event.button !== 0 || !event.target || !event.target.closest) return;
     const editorDom = event.target.closest('.tiptap');
     if (!editorDom || !editorDom.classList.contains('resize-cursor')) return;
     const z = EditorCore.layoutZoom(editorDom);
+    readStartWidthOnPage();
     if (Math.abs(z - 1) < 0.001) return;
     const startX = Math.round(event.clientX);
     shadowClientX(event, startX);

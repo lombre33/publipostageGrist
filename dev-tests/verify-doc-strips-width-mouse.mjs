@@ -208,6 +208,9 @@ const stripsState = (page, n = 0) => page.evaluate((index) => {
   const heads = (root ? Array.from(root.querySelectorAll('.v2-grid-colhead')) : []).map(h => Object.assign({ label: h.textContent, handles: h.querySelectorAll('.v2-grid-handle').length }, rect(h)));
   return { shown: !!root && !root.hidden && getComputedStyle(root).display !== 'none', table: rect(table), cols: cols.map(rect), heads };
 }, n);
+// Les colonnes du premier tableau sur la page à l'échelle 1 (EditorCore.atPageScale), arrondies vers le bas : ce que le glissé d'une lettre fige sans Aperçu A4, où l'écran montre la
+// largeur du panneau et non celle d'une page (le document ne dépend pas du panneau).
+const pageColumns = page => page.evaluate(() => EditorCore.atPageScale(EditorCore.getEditor(), () => Array.from(document.querySelectorAll('.tiptap table')[0].querySelectorAll(':scope > colgroup > col')).map(c => Math.floor(c.getBoundingClientRect().width + 0.001))));
 // Les lettres sont sur les colonnes (bords mesurés, pixels écran).
 const headsOnColumns = (s, tolerance = 1.5) => s.shown && s.heads.length === s.cols.length && s.heads.every((h, i) => near(h.left, s.cols[i].left, tolerance) && near(h.right, s.cols[i].right, tolerance));
 // Ce qu'un vrai pointeur trouve au centre de `selector` : est-ce lui (ou un de ses enfants) ?
@@ -444,6 +447,8 @@ async function runTheme(theme, size, tag) {
     const autoBefore = await stripsState(page);
     const autoModel0 = await modelOf(page);
     const baseAuto = autoBefore.cols.map(c => Math.floor(c.width / zoom + 0.001));
+    // Sans Aperçu A4 le glissé part des colonnes sur la page (celles de l'Aperçu A4), pas de celles du panneau que l'écran montre.
+    const startAuto = a4 ? baseAuto : await pageColumns(page);
     const AUTO_DX = narrow ? 30 : 40;
     const growth = Math.round(AUTO_DX / zoom);
     const autoDrag = await drag(page, COLHANDLE(1), AUTO_DX, 0, { during: async () => ({ s: await stripsState(page), model: await modelOf(page) }) });
@@ -451,13 +456,14 @@ async function runTheme(theme, size, tag) {
     const autoModel = await modelOf(page);
     const excess = a4 ? Math.max(0, sum(baseAuto) + growth - Math.max(P, sum(baseAuto))) : 0;
     const wA = autoModel.first;
-    check(`${tag2} - colonnes automatiques (aucune largeur posée) : tirer la lettre A de ${AUTO_DX} px lui donne ${baseAuto[0] + growth} px et fige B et C à leur largeur du moment${a4 ? ` (moins les ${excess} px que la page leur prend)` : ''}, sur toutes les lignes`,
-      sameModel(autoDrag.mid.model, autoModel0) && wA.every(w => Number.isInteger(w)) && wA[0] === baseAuto[0] + growth && (a4 ? sum(wA) <= P && wA[1] + wA[2] === baseAuto[1] + baseAuto[2] - excess : wA[1] === baseAuto[1] && wA[2] === baseAuto[2]) && autoModel.widths.every(line => line.join() === wA.join()),
-      { avant: baseAuto, apres: wA, excess, P });
+    check(`${tag2} - colonnes automatiques (aucune largeur posée) : tirer la lettre A de ${AUTO_DX} px lui donne ${startAuto[0] + growth} px et fige B et C à leur largeur du moment${a4 ? ` (moins les ${excess} px que la page leur prend)` : ' sur la page (celle de l\'Aperçu A4 : le panneau n\'y est pour rien)'}, sur toutes les lignes`,
+      sameModel(autoDrag.mid.model, autoModel0) && wA.every(w => Number.isInteger(w)) && wA[0] === startAuto[0] + growth && (a4 ? sum(wA) <= P && wA[1] + wA[2] === baseAuto[1] + baseAuto[2] - excess : wA[1] === startAuto[1] && wA[2] === startAuto[2]) && autoModel.widths.every(line => line.join() === wA.join()),
+      { avant: startAuto, ecran: baseAuto, apres: wA, excess, P });
     check(`${tag2} - le rendu en plein glissé est celui du relâcher (pas de saut), les lettres sont sur leurs colonnes`, autoDrag.mid.s.cols.every((c, i) => near(c.width, autoAfter.cols[i].width, 0.8)) && headsOnColumns(autoAfter), { pendant: autoDrag.mid.s.cols.map(c => c.width), apres: autoAfter.cols.map(c => c.width) });
     await undoKey(page);
     const autoUndone = await stripsState(page);
-    check(`${tag2} - un Ctrl+Z rend les colonnes à leur largeur d'avant (au pixel près : ${baseAuto.join(', ')} px)`, autoUndone.cols.every((c, i) => near(c.width, autoBefore.cols[i].width, 1.5)) && (await modelOf(page)).widths.every(line => line.join() === baseAuto.join()), { avant: autoBefore.cols.map(c => c.width), apres: autoUndone.cols.map(c => c.width), model: await modelOf(page) });
+    // Sans Aperçu A4 les colonnes que le glissé a figées gardent leur largeur sur la page : l'annulation rend la largeur de A, pas celle que le panneau montrait.
+    check(`${tag2} - un Ctrl+Z rend les colonnes à leur largeur d'avant${a4 ? '' : ' le glissé (figées sur la page)'} (au pixel près : ${startAuto.join(', ')} px)`, autoUndone.cols.every((c, i) => near(c.width, a4 ? autoBefore.cols[i].width : startAuto[i] * zoom, 1.5)) && (await modelOf(page)).widths.every(line => line.join() === startAuto.join()), { avant: autoBefore.cols.map(c => c.width), apres: autoUndone.cols.map(c => c.width), model: await modelOf(page), startAuto });
 
     // ---------- 5) Échap annule ----------
     await load(page, DOC);
@@ -530,7 +536,8 @@ async function runTheme(theme, size, tag) {
     await load(page, AUTO);
     await clickCell(page, 'B2');
     const autoZoom = await sheetZoom(page);
-    const autoBase = (await stripsState(page)).cols.map(c => Math.floor(c.width / autoZoom + 0.001));
+    // Sans Aperçu A4, les colonnes que le glissé fige sont celles de la page (l'écran montre le panneau).
+    const autoBase = a4 ? (await stripsState(page)).cols.map(c => Math.floor(c.width / autoZoom + 0.001)) : await pageColumns(page);
     await page.evaluate(() => Editor.setTrackChanges(true));
     await page.waitForTimeout(300);
     await clickCell(page, 'B2');

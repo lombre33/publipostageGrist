@@ -1075,7 +1075,7 @@
 
   cases.push({
     id: 'equalize_merged_cell_gets_both_shares_and_auto_columns_are_measured',
-    description: 'Une case fusionnée sur deux colonnes reçoit les parts des deux colonnes égalisées ; des colonnes automatiques (sans largeur posée) sont égalisées sur leur largeur de mise en page, la colonne laissée garde la sienne et le tableau garde sa largeur',
+    description: 'Une case fusionnée sur deux colonnes reçoit les parts des deux colonnes égalisées ; des colonnes automatiques (sans largeur posée) sont égalisées sur leur largeur de mise en page, la colonne laissée garde la sienne et le tableau garde sa largeur ; sans Aperçu A4 le document reçoit les mêmes largeurs, celles de la page et non celles du panneau',
     run: async (h) => {
       const bad = [];
       await withDoc(h, '<p>avant</p><table><tbody><tr><td colspan="2" colwidth="100,200"><p>Fusion</p></td><td colwidth="90"><p>C1</p></td></tr><tr><td colwidth="100"><p>A2</p></td><td colwidth="200"><p>B2</p></td><td colwidth="90"><p>C2</p></td></tr></tbody></table>', async () => {
@@ -1090,14 +1090,30 @@
         const merged = JSON.stringify(cellAttrs(0, 0, 0).colwidth), second = JSON.stringify([cellAttrs(0, 1, 0).colwidth, cellAttrs(0, 1, 1).colwidth, cellAttrs(0, 1, 2).colwidth]);
         if (merged !== '[130,130]' || second !== '[[130],[130],[130]]') bad.push('fusionnée ' + merged + ', seconde ligne ' + second);
       });
-      await withDoc(h, '<p>avant</p>' + tableHtml('Z', 2, 3), async () => {
-        const before = layoutSizes(0);
-        await selectCells(0, 0, 0, 1, 1);
-        GridEditor.equalizeLines(ed(), 'col');
-        await sleep(300);
-        const after = layoutSizes(0);
-        if (Math.abs(after.cols[0] - after.cols[1]) > 1.5 || Math.abs(after.cols[2] - before.cols[2]) > 1.5 || Math.abs(after.cols.reduce((a, b) => a + b, 0) - before.cols.reduce((a, b) => a + b, 0)) > 2.5) bad.push('colonnes automatiques : avant ' + JSON.stringify(before.cols) + ', après ' + JSON.stringify(after.cols));
-      });
+      // Des colonnes automatiques, d'abord en Aperçu A4 (l'écran montre la page : la colonne laissée garde sa largeur, le tableau la sienne), puis sans l'aperçu (l'écran montre le panneau, 1 400 px ici) :
+      // le document garde les largeurs de la page, les mêmes qu'avec l'aperçu, et non celles du panneau (deux colonnes à 457 px et la troisième écrasée à 25 px).
+      const wasA4 = document.getElementById('editor-container').classList.contains('a4-preview');
+      try {
+        let onPage = null;
+        for (const a4 of [true, false]) {
+          await withDoc(h, '<p>avant</p>' + tableHtml('Z', 2, 3), async () => {
+            h.setA4Preview(a4);
+            await sleep(300);
+            const before = layoutSizes(0);
+            await selectCells(0, 0, 0, 1, 1);
+            GridEditor.equalizeLines(ed(), 'col');
+            await sleep(300);
+            const after = layoutSizes(0);
+            const widths = colWidths(0);
+            if (a4) {
+              onPage = widths;
+              if (Math.abs(after.cols[0] - after.cols[1]) > 1.5 || Math.abs(after.cols[2] - before.cols[2]) > 1.5 || Math.abs(after.cols.reduce((a, b) => a + b, 0) - before.cols.reduce((a, b) => a + b, 0)) > 2.5) bad.push('colonnes automatiques : avant ' + JSON.stringify(before.cols) + ', après ' + JSON.stringify(after.cols));
+            } else if (JSON.stringify(widths) !== JSON.stringify(onPage)) bad.push('sans Aperçu A4 : ' + JSON.stringify(widths) + ' posées (attendu les largeurs de la page, ' + JSON.stringify(onPage) + ') ; le panneau les rendait ' + JSON.stringify(before.cols) + ' avant');
+          });
+        }
+      } finally {
+        h.setA4Preview(wasA4);
+      }
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     },
   });
@@ -1400,6 +1416,39 @@
   });
 
   cases.push({
+    id: 'docstrips_a_column_drag_without_the_a4_preview_starts_from_the_page_widths',
+    description: 'Sans Aperçu A4 (l\'écran montre le panneau, 1 400 px ici), tirer la lettre A d\'un tableau aux colonnes automatiques les fige à leur largeur sur la page, celle qu\'elles ont avec l\'Aperçu A4, et non à celle du panneau : la colonne tirée part de la page (plus 40 px), l\'autre la garde ; rien ne limite la largeur sans page ; un seul Annuler',
+    run: async (h) => {
+      const bad = [];
+      const wasA4 = document.getElementById('editor-container').classList.contains('a4-preview');
+      try {
+        let onPage = null;
+        for (const a4 of [true, false]) {
+          await withDoc(h, TWO_TABLES, async () => {
+            h.setA4Preview(a4);
+            await sleep(300);
+            await cursorIn(0, 0, 0);
+            const screen = layoutSizes(0).cols;
+            if (a4) onPage = screen.map(w => Math.floor(w + 0.001));
+            await dragColHandle(1, 40);
+            if (a4) return;
+            const widths = widthRows(0);
+            const wanted = [onPage[0] + 40, onPage[1]];
+            if (widths.some(line => line.join() !== wanted.join())) bad.push('sans Aperçu A4 : ' + JSON.stringify(widths) + ' posées (attendu ' + JSON.stringify(wanted) + ' : la largeur de la page plus 40 px, l\'autre colonne telle qu\'elle est sur la page ; le panneau les montrait à ' + JSON.stringify(screen.map(Math.round)) + ')');
+            // Un Annuler rend les colonnes à leur largeur sur la page (celles que le glissé a figées sans que ce soit un choix), pas à celle du panneau.
+            await sleep(GROUP_GAP_MS);
+            await undo();
+            if (widthRows(0).some(line => line.join() !== onPage.join())) bad.push('un Annuler devait rendre les colonnes à leur largeur sur la page : ' + JSON.stringify(widthRows(0)) + ' pour ' + JSON.stringify(onPage));
+          });
+        }
+      } finally {
+        h.setA4Preview(wasA4);
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
     id: 'docstrips_column_drag_escape_and_chosen_columns_and_merged_cells',
     description: 'Échap en plein glissé de largeur rend les lettres à leurs colonnes sans rien écrire ni laisser (marque, feuille d\'aperçu, bulle, curseur) ; des colonnes choisies par leurs lettres prennent toutes la largeur de la poignée tirée (un seul Annuler) ; une case fusionnée sur deux colonnes reçoit la part de la colonne tirée et garde l\'autre ; un tableau dans une case garde ses largeurs',
     run: async (h) => {
@@ -1481,7 +1530,8 @@
           h.setA4Preview(false);
           await sleep(250);
           await cursorIn(0, 0, 0);
-          const before = layoutSizes(0).cols.map(w => Math.floor(w + 0.001));
+          // Sans Aperçu A4 le panneau montre les colonnes plus larges (685 px ici) que la page : elles se figent à leur largeur sur la page.
+          const before = EditorCore.atPageScale(ed(), () => layoutSizes(0).cols).map(w => Math.floor(w + 0.001));
           Editor.setTrackChanges(true);
           await sleep(100);
           await dragColHandle(1, 40);

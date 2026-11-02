@@ -6,10 +6,15 @@
 //  - en Aperçu A4 (tableaux de largeurs fixes, mixtes et trop larges, un tableau dans une colonne de zone à deux colonnes, images en calque à poser sur la grille de page,
 //    pages tournées) ;
 //  - sans Aperçu A4 (e-mail, case décochée) : les colonnes « automatiques » d'un tableau mixte se figeaient à la largeur du panneau (236 px dans 700 px, 586 px dans 1400 px) ;
+//  - sans Aperçu A4, « Égaliser » deux colonnes automatiques sur trois et la bordure d'une colonne automatique tirée à la vraie souris posent les mêmes largeurs à trois tailles de
+//    panneau, celles de la page (et non du panneau, qui écrasait la troisième colonne à 25 px) ;
 //  - un glissé continu du panneau n'écrit rien (aucune transaction) ;
+//  - un tableau écrit par la bêta à 658 px s'ouvre tel quel dans une page de 657,65 px (18 mm de marges) : la largeur exacte de la page le rognait d'un pixel par colonne ;
 //  - un tableau ramené dans la page n'en sort pas (A4 et A5) : arrondies au plus près, ses colonnes la dépassaient d'un demi-pixel chacune ;
 //  - avec un moteur qui dessine le contenu au carré du zoom de la feuille (Firefox chez Antoine, capture du 21/10 ; émulé par une règle de style) ou qui combine le zoom autrement :
 //    le contenu retrouve le zoom de la feuille, les tableaux restent dans la page et ce qui s'enregistre ne change pas.
+// Les gestes de largeur (js/grid-editor.js:equalizeLines et startResize, js/page-zoom.js:readStartWidthOnPage) lisent la page à l'échelle 1 (EditorCore.atPageScale), comme les colonnes
+// figées ; une grille, qui n'a pas de page, se mesure là où elle est (js/editor-core.js:openPageScale).
 // Avant le correctif (js/editor-core.js:pageScale, js/editor.js, js/header-footer-preview.js), tout ce que le DOM mesurait pour l'écrire dans le document (colonnes figées,
 // largeur d'une colonne de zone, position des images en calque) se lisait à l'échelle que le panneau donnait à la feuille, arrondie à la façon du moteur : le même modèle
 // s'enregistrait à 1 ou 2 px près selon le panneau, et sans Aperçu A4 sur la largeur du panneau.
@@ -226,6 +231,72 @@ check('sans Aperçu A4 : le panneau retrouve sa classe et son zoom d\'avant la m
   return !c.classList.contains('a4-preview') && !c.style.getPropertyValue('--pp-fit-zoom') && !c.style.getPropertyValue('--pp-content-fix');
 }));
 await setA4(true);
+
+// 3 bis) Sans Aperçu A4, les gestes de colonne lisent la page, pas le panneau : Égaliser deux colonnes automatiques sur trois et tirer la bordure d'une colonne automatique posent les mêmes largeurs à toute
+// taille de panneau, celles qu'ils posent avec l'Aperçu A4. Elles se lisaient à l'écran : sans l'aperçu, 457 px par colonne dans un panneau de 1 400 px et 224 px dans un de 700 px, la troisième colonne
+// écrasée à 25 px ou rallongée à 270 px, et la colonne tirée partait de la largeur du panneau, les autres se figeant sur la page.
+const AUTO3 = '<p>Avant</p>' + table([0, 0, 0], 2) + '<p>Après</p>';
+const equalizeFirstTwo = () => frame.evaluate(async () => {
+  const ed = EditorCore.getEditor();
+  let tablePos = -1;
+  ed.state.doc.descendants((node, pos) => { if (tablePos < 0 && node.type.name === 'table') { tablePos = pos; return false; } });
+  const cells = [];
+  let rowPos = tablePos + 1;
+  ed.state.doc.nodeAt(tablePos).forEach(row => { const line = []; let cellPos = rowPos + 1; row.forEach(cell => { line.push(cellPos); cellPos += cell.nodeSize; }); cells.push(line); rowPos += row.nodeSize; });
+  ed.commands.setCellSelection({ anchorCell: cells[0][0], headCell: cells[1][1] });
+  await new Promise(r => setTimeout(r, 150));
+  GridEditor.equalizeLines(ed, 'col');
+  await new Promise(r => setTimeout(r, 700));
+});
+// La bordure droite de la première colonne, à la vraie souris.
+const dragFirstBorder = async dx => {
+  const border = await frame.evaluate(() => { const r = document.querySelector('#editor-container .tiptap table td').getBoundingClientRect(); return { x: r.right - 1, y: r.top + r.height / 2 }; });
+  await page.mouse.move(border.x - 30, border.y);
+  await page.mouse.move(border.x, border.y, { steps: 4 });
+  await sleep(200);
+  await page.mouse.down();
+  await page.mouse.move(border.x + dx, border.y, { steps: 6 });
+  await page.mouse.up();
+  await sleep(900);
+};
+const GESTURE_SIZES = [[700, 400], [1000, 600], [1400, 900]];
+const savedByGesture = async (a4, gesture) => {
+  await setSize(1000, 600);
+  await setA4(a4);
+  const seen = [];
+  for (const [w, h] of GESTURE_SIZES) {
+    await setSize(w, h);
+    await loadDoc(AUTO3);
+    await gesture();
+    seen.push(widthsOf(await savedHtml())[0]);
+  }
+  return seen;
+};
+const equalizedFluid = await savedByGesture(false, equalizeFirstTwo);
+const equalizedPage = await savedByGesture(true, equalizeFirstTwo);
+check('sans Aperçu A4 : Égaliser deux colonnes automatiques sur trois pose les mêmes largeurs à trois tailles de panneau', new Set(equalizedFluid).size === 1, equalizedFluid);
+check('sans Aperçu A4 : Égaliser pose les largeurs de la page, les mêmes qu\'avec l\'Aperçu A4 (la troisième colonne n\'est plus écrasée)', equalizedFluid[0] === equalizedPage[0] && new Set(equalizedPage).size === 1, { sansApercu: equalizedFluid, apercu: equalizedPage });
+const draggedFluid = await savedByGesture(false, () => dragFirstBorder(-40));
+const draggedPage = await savedByGesture(true, () => dragFirstBorder(-40));
+check('sans Aperçu A4 : tirer la bordure d\'une colonne automatique pose les mêmes largeurs à trois tailles de panneau', new Set(draggedFluid).size === 1, draggedFluid);
+// Avec l'aperçu, la feuille est réduite dans un panneau étroit : 40 px d'écran font plus de 40 px de page (le déplacement de la souris, pas la largeur de départ). Le panneau de 1 400 px n'a pas de réduction.
+check('sans Aperçu A4 : la colonne tirée part de sa largeur sur la page, comme avec l\'Aperçu A4 (sans réduction de la feuille)', draggedFluid[0] === draggedPage[2], { sansApercu: draggedFluid, apercu: draggedPage });
+await setSize(1000, 600);
+await setA4(true);
+
+// 3 ter) Un tableau enregistré à la largeur de la page en pixels entiers (658 px pour une page de 657,65 px : 18 mm de marges, comme les modèles de la bêta) s'ouvre tel quel ; un tableau plus large
+// de plus d'un pixel y est ramené. Avec la largeur exacte de la page, le premier perdait un pixel par colonne à chaque ouverture.
+await setSize(700, 400);
+await frame.evaluate(() => PageLayout.setMarginsMm({ top: 20, right: 18, bottom: 20, left: 18, orientation: 'portrait', format: 'A4' }));
+await sleep(500);
+const margins18 = await frame.evaluate(() => EditorCore.editorContentWidthPx(EditorCore.getEditor()));
+await loadDoc(table([170, 56, 64, 84, 284]));
+check('un tableau enregistré à 658 px dans une page de 657,65 px (18 mm de marges) s\'ouvre tel quel', widthsOf(await savedHtml())[0] === '170,56,64,84,284', { page: margins18, enregistre: widthsOf(await savedHtml())[0] });
+await loadDoc(table([172, 57, 64, 84, 284]));
+const wider = widthsOf(await savedHtml())[0].split(',').map(Number);
+check('un tableau plus large de plus d\'un pixel que la page y est ramené', wider.reduce((s, w) => s + w, 0) <= margins18, { page: margins18, enregistre: wider });
+await frame.evaluate(() => PageLayout.setMarginsMm(null));
+await sleep(500);
 
 // 4) Un moteur qui dessine le contenu au carré du zoom de la feuille (émulé) : le contenu retrouve le zoom de la feuille, les tableaux restent dans la page, rien ne change à l'enregistrement.
 const geometry = () => frame.evaluate(() => {

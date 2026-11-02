@@ -58,6 +58,8 @@ const EditorCore = (function () {
   // poserait son propre zoom, que la fermeture écraserait) : l'appelant mesure, ferme, puis écrit. Un éditeur masqué n'a rien à mesurer : la fenêtre ne s'ouvre pas.
   const PAGE_SCALE_VARS = ['--pp-fit-zoom', '--pp-content-fix'];
   function openPageScale(container) {
+    // Une grille n'a pas de page : ses tailles se mesurent là où elles sont, sans lui poser d'Aperçu A4 le temps d'une mesure.
+    if (container.classList.contains('v2-grid-mode')) return null;
     const wasA4 = container.classList.contains('a4-preview');
     const was = PAGE_SCALE_VARS.map(name => container.style.getPropertyValue(name));
     if (wasA4 && was.every(value => !value || parseFloat(value) === 1)) return null;

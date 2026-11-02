@@ -160,6 +160,9 @@ const Editor = (function () {
   const DEFAULT_COL_PX = 25;
   // Ce qu'une largeur de colonne lue à l'échelle de l'écran peut s'écarter de la vraie (entiers arrondis deux fois, à la feuille réduite jusqu'à moitié).
   const ZONE_QUICK_MARGIN_PX = 2;
+  // Un tableau qui dépasse sa page de moins d'un pixel n'en sort pas : la bêta écrit « toute la page » en pixels entiers (658 px pour une page de 657,65 px, 18 mm de marges), et la
+  // largeur exacte de la page (EditorCore.pageContentWidthPx) rognait ces modèles d'un pixel par colonne à chaque ouverture.
+  const OVERFLOW_TOLERANCE_PX = 1;
 
   function backfillAutoColumnWidths(currentEditor, trigger) {
     // Tant qu'une colonne reste "auto" (sans `colwidth`), le tableau garde `width:100%` et une poignée de bord droit ne peut jamais l'agrandir ; on
@@ -221,7 +224,7 @@ const Editor = (function () {
         const columnWidth = page.measure(() => ExportCommon.zoneColumnWidthPx(tableDom));
         if (columnWidth > 0) limit = Math.min(pageWidth, columnWidth);
       }
-      if (total <= limit) return null;
+      if (total <= limit + OVERFLOW_TOLERANCE_PX) return null;
       const scale = limit / total;
       // Une colonne "auto" par défaut reste telle quelle.
       const columnAt = round => w => (w ? Math.max(DEFAULT_COL_PX, round(w * scale)) : w);
