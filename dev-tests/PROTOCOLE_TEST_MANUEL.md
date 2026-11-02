@@ -1144,8 +1144,8 @@ Dans Firefox, le widget (seul puis hébergé par GFS), sur un document avec une 
 **Non couvert** : tout ce qui suit.
 
 **Pourquoi** (consigne 037 de GFS, 02/11) : GFS ouvre l'app sur le site publié (`https://lombre33.github.io/publipostageGrist/index.html`) et ne retombe sur la copie de son sous-module que si le site ne répond pas en 15 secondes ; un site publié mais ancien est servi comme
-s'il était à jour, et GFS ne peut pas l'ouvrir depuis son environnement pour le vérifier à notre place. Sans `.nojekyll`, Pages passe les fichiers `.md` dans Jekyll avant de publier : une accolade double non fermée dans l'un d'eux (un `{{` sans `}}`, un `{%` sans `%}`)
-fait échouer la publication, et le site reste sur la version d'avant, sans rien montrer. Avec `.nojekyll`, Pages publie les fichiers tels quels et ne lit plus les `.md` ; il sert alors aussi les noms qui commencent par « _ » ou « . » (ici `.claude/settings.json` et
+s'il était à jour, et GFS ne peut pas l'ouvrir depuis son environnement pour le vérifier à notre place. Sans `.nojekyll`, Pages passe les fichiers `.md` dans Jekyll avant de publier : une accolade double ouverte et jamais refermée dans l'un d'eux (celle qui ouvre une variable, ou une balise ; elle n'est pas écrite ici
+tout exprès, pour que ce document ne casse pas la publication si `.nojekyll` disparaissait) fait échouer la publication, et le site reste sur la version d'avant, sans rien montrer. Avec `.nojekyll`, Pages publie les fichiers tels quels et ne lit plus les `.md` ; il sert alors aussi les noms qui commencent par « _ » ou « . » (ici `.claude/settings.json` et
 `dev-tests/.offline-cache/`, déjà publics dans le dépôt) : ne rien garder là qui ne doive pas être lu.
 
 ### Protocole
