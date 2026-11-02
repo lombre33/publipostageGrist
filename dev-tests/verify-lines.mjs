@@ -739,6 +739,9 @@ async function run(lang, colorScheme, full) {
   check(tag + 'une pastille (#be185d) pose la couleur de la ligne, sans toucher à l\'épaisseur ni aux pointes, et la barre dit la couleur', one.line === '#be185d' && one.lw === 3 && one.tail === 'triangle' && (await page.evaluate(() => getComputedStyle(document.getElementById('v2-frame-line-bar')).backgroundColor)) === 'rgb(190, 24, 93)', one);
   await undo();
   // L'épaisseur : sept épaisseurs, pas de « Aucun trait ».
+  // La souris quitte d'abord la zone du menu « Objets », resté ouvert sous le pointeur depuis la palette : il couvrirait la pastille de l'épaisseur.
+  await page.mouse.move(660, 395);
+  await sleep(400);
   await click('#v2-frame-width-open');
   const widths = await page.evaluate(() => {
     const m = document.querySelector('.v2-frame-width-menu.visible');
