@@ -261,12 +261,6 @@
           <span class="v2-hover-row" data-quality="native" data-export-for="pdf pdfProtected" data-i18n="quality.native">Vectoriel (par défaut)</span>
           <span class="v2-hover-row" data-quality="browser-print" data-export-for="pdf pdfProtected" data-export-grey-for="pdfProtected" data-i18n="quality.browserPrint">Impression navigateur</span>
           <span class="v2-hover-row" data-quality="light" data-export-for="pdf pdfProtected" data-i18n="quality.light">Léger (images réduites)</span>
-          <!-- Où va le PDF (js/pdf-delivery.js, consigne GFS 043) : télécharger (l'origine), ranger dans GFS ou les deux ; un réglage de la personne (PersonStore), le même pour tous ses documents. Sans GFS les deux lignes qui rangent sont grisées, jamais retirées, et leur clic explique. -->
-          <span class="v2-hover-hsep" data-export-for="pdf pdfProtected"></span>
-          <span class="v2-hover-flyout-label" data-export-for="pdf pdfProtected" data-i18n="destination.label">Destination du PDF</span>
-          <span class="v2-hover-row is-active" data-destination="download" data-export-for="pdf pdfProtected" data-i18n="destination.download">Télécharger</span>
-          <span class="v2-hover-row" data-destination="gfs" data-export-for="pdf pdfProtected" data-i18n="destination.gfs">Ranger dans GFS</span>
-          <span class="v2-hover-row" data-destination="both" data-export-for="pdf pdfProtected" data-i18n="destination.both">Télécharger et ranger dans GFS</span>
         </span>
       </span>
       <span class="v2-hover-group" id="v2-export-pdf-group">
@@ -288,6 +282,12 @@
           <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-merged" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="merged" data-export-for="pdf pdfProtected" data-export-grey-for="pdfProtected" data-i18n="exportLines.merged">Toutes les lignes de la vue en un seul PDF</span>
           <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-sheets" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="sheets" data-export-for="pdf pdfProtected" data-export-grey-for="pdfProtected" data-i18n="exportLines.sheets">Assemblage avant impression</span>
           <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-workbook" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="workbook" data-export-for="xlsx" hidden data-i18n="exportLines.workbook">Toutes les valeurs de la vue dans un seul classeur</span>
+          <!-- Où va le PDF (js/pdf-delivery.js, consigne GFS 043) : télécharger (l'origine), ranger dans GFS ou les deux. Un réglage de la personne (PersonStore, clé pp_export_destination), le même pour tous ses documents, montré pour les deux PDF seulement ; la ligne cochée est la destination qui s'applique. Il est ici et non dans le menu Type d'export, dont le bas est à 490 px pour un panneau de 400 : trois lignes de plus y passeraient sous le pli. Sans GFS les deux lignes qui rangent sont grisées, jamais retirées, et leur clic explique. -->
+          <span class="v2-hover-hsep" data-export-for="pdf pdfProtected"></span>
+          <span class="v2-hover-flyout-label" data-export-for="pdf pdfProtected" data-i18n="destination.label">Destination du PDF</span>
+          <span class="v2-hover-row v2-hover-row-check-start" role="menuitemradio" aria-checked="true" tabindex="0" data-destination="download" data-export-for="pdf pdfProtected" data-i18n="destination.download">Télécharger</span>
+          <span class="v2-hover-row v2-hover-row-check-start" role="menuitemradio" aria-checked="false" tabindex="0" data-destination="gfs" data-export-for="pdf pdfProtected" data-i18n="destination.gfs">Ranger dans GFS</span>
+          <span class="v2-hover-row v2-hover-row-check-start" role="menuitemradio" aria-checked="false" tabindex="0" data-destination="both" data-export-for="pdf pdfProtected" data-i18n="destination.both">Télécharger et ranger dans GFS</span>
           <!-- Les neuf lignes d'export d'avant (et « Exporter en PDF ») ne sont plus montrées : le bouton Exporter lance le même export selon l'option cochée ci-dessus (demande du 12/10). Elles restent dans la page, masquées, avec leur identifiant, leur gestionnaire et leur grisé selon le modèle (js/main.js:syncExportRowsForModelType) : rien n'est retiré. -->
           <span id="v2-export-legacy-rows" hidden>
             <span class="v2-hover-row" id="v2-btn-export-pdf" data-i18n="toolbar.exportPdf">Exporter en PDF</span>
@@ -1019,7 +1019,7 @@
 <script src="js/template-arrangement.js?v=0.1"></script>
 <script src="js/link-rule-history.js?v=0.1"></script>
 <script src="js/settings-history.js?v=0.4"></script>
-<script src="js/pdf-delivery.js?v=0.1"></script>
+<script src="js/pdf-delivery.js?v=0.2"></script>
 <script src="js/expansion-history.js?v=0.1"></script>
 <script src="js/format-slots.js?v=0.1"></script>
 <script src="js/format-slots-menu.js?v=0.1"></script>
@@ -1040,6 +1040,6 @@
 <script src="js/page-zoom.js?v=0.14"></script>
 <script src="js/field-codec.js?v=0.8"></script>
 <script src="js/field-editor.js?v=0.8"></script>
-<script src="js/main.js?v=0.211"></script>
+<script src="js/main.js?v=0.212"></script>
 </body>
 </html>

@@ -156,7 +156,7 @@ const PdfDelivery = (function () {
     return out;
   }
 
-  // --- Le menu « Destination du PDF » (les trois lignes de #v2-quality-flyout, js/main.js : wireExportMenus et syncExportMenus) ---
+  // --- Le menu « Destination du PDF » (les trois lignes de #v2-export-pdf-flyout, des cases à cocher comme les options de lignes ; js/main.js : wireExportMenus et syncExportMenus) ---
 
   // Le réglage de la personne, tel que SettingsHistory le défait et le rétablit.
   const SETTING = {
@@ -165,14 +165,14 @@ const PdfDelivery = (function () {
     say: value => I18n.t('status.settingSet', { setting: I18n.t('destination.label'), value: I18n.t('destination.' + value) }),
   };
 
-  // Les lignes du menu d'accord avec ce qui vaut maintenant : la ligne active est la destination qui s'applique ; les deux lignes qui rangent sont grisées, jamais retirées, quand GFS ne peut pas les faire (info-bulle : pourquoi).
+  // Les lignes du menu d'accord avec ce qui vaut maintenant : la ligne cochée est la destination qui s'applique ; les deux lignes qui rangent sont grisées, jamais retirées, quand GFS ne peut pas les faire (info-bulle : pourquoi).
   function sync(flyout) {
     const where = destination();
     const canShelve = available();
     flyout.querySelectorAll('.v2-hover-row[data-destination]').forEach(row => {
       const value = row.dataset.destination;
       const off = value !== 'download' && !canShelve;
-      row.classList.toggle('is-active', value === where);
+      row.setAttribute('aria-checked', value === where ? 'true' : 'false');
       row.classList.toggle('v2-hover-row-disabled', off);
       if (off) { row.setAttribute('aria-disabled', 'true'); row.title = I18n.t('destination.off.tip'); }
       else { row.removeAttribute('aria-disabled'); row.removeAttribute('title'); }
@@ -191,8 +191,16 @@ const PdfDelivery = (function () {
     after();
   }
 
+  // Un clic, ou Entrée ou Espace sur la ligne (elle prend le focus, comme les options de lignes du même menu), choisit.
   function wire(flyout, after) {
-    flyout.querySelectorAll('.v2-hover-row[data-destination]').forEach(row => row.addEventListener('click', () => pick(row, after)));
+    flyout.querySelectorAll('.v2-hover-row[data-destination]').forEach(row => {
+      row.addEventListener('click', () => pick(row, after));
+      row.addEventListener('keydown', e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        pick(row, after);
+      });
+    });
   }
 
   return { KEY, DESTINATIONS, chosen, destination, available, choose, plan, lotFor, nameFor, deliver, onProgress, keep, takeReport, describe, sync, wire };

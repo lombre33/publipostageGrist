@@ -30,6 +30,12 @@
 //   pour un cadre de cette taille (34 × 124 px à 4 px du bord, centrée sur lui, 4 px de marge autour : la zone fait 42 × 132 px), celle que donne la consigne 026 pour la barre à quatre boutons (700 × 400, gauche : x 0, y 134).
 //   window.__gfsStub.setReglages(enregistres) : l'événement `reglages` (contrats 5.2 point 2, consigne 039), que GFS envoie après chaque écriture des réglages de la vue de l'app : `enregistres: true`, le réglage est dans
 //   la vue ; `false`, il est resté un brouillon de Grist. Le contexte n'en porte pas : avant le premier appel, l'app ne sait rien.
+//   window.__gfsStub.ranger : l'appel `ranger { fichier, nom, type?, lot?, suivants?, dossier? }` (contrats 5.4 point 9, consigne 043) - null : un GFS d'avant la consigne 043, dont l'appel reçoit `GFS_INCONNU` (par défaut) ; sinon un objet de réglage que le
+//   test pose (`{}` : un GFS qui sait ranger) : `quandPris` ('copie' par défaut, 'remplace' ou 'ignore', ou une fonction `(nom, args, rang) => …` : ce que la personne répond à la fenêtre « Ce nom est déjà pris »), `erreur` ({ code, message } : toutes les
+//   demandes échouent ainsi), `erreurs` ({ rang: { code, message } } : celle-là seule, `rang` compté de 1 dans l'ordre des appels), `delai` (millisecondes avant la réponse : le temps que la personne prend). Il tient le contrat : le nom reçoit « .pdf » s'il lui
+//   manque et son retour à la ligne devient une espace (1 à 200 signes), `lot` 1 à 64 signes, `suivants` un entier de 0 ou plus, `type` seulement `pdf`, le contenu non vide et qui commence par %PDF-, sinon `GFS_REFUSE` ; un nom déjà pris (sans tenir compte de
+//   la casse) pose la question : `copie` garde les deux (« Facture (1).pdf »), `remplace` garde l'identifiant et prend le contenu, `ignore` n'écrit rien (`id` et `nom` null). Les fichiers gardés sont dans `fichiers` ({ id, nom, taille, octets, lot }), `rangerAppels`
+//   dit chaque appel reçu dans l'ordre ({ rang, nom, lot, suivants, taille, type, instance, dossier }), `rangerEnCours` compte les appels sans réponse et `rangerMax` le plus grand nombre à la fois (1 : un fichier à la fois).
 //   window.__gfsStub.ouvrir(args) : l'appel `ouvrir` de GFS vers l'app déjà ouverte (contrats 5.4) ; la promesse rend la réponse ou l'erreur de l'app. call(nom, args) : un appel de GFS de ce nom.
 //   window.__gfsStub.answers : tout ce que l'app répond aux appels de GFS ({ type, id, data | code, message }), dans l'ordre.
 //   window.__gfsStubParent = 'nom' (posé avant ce script) : le stub est chargé par la page PARENTE d'un <iframe name="nom"> qui porte l'app dans un cadre isolé (dev-tests/verify-gfs-frame.mjs) et joue
@@ -67,6 +73,12 @@
     ignoreContext: false,
     contextDelayMs: 0,
     installReply: null,
+    ranger: null,
+    fichiers: [],
+    rangerAppels: [],
+    rangerEnCours: 0,
+    rangerMax: 0,
+    prochainFichier: 1,
     calls: [],
     answers: [],
     library(id) {
@@ -147,6 +159,52 @@
       if (args.valeur === null) delete stub.stockage[args.cle]; else stub.stockage[args.cle] = args.valeur;
       if (answers) stub.post({ type: 'reponse', id: message.id, data: { retenu: true } });
     },
+    // L'appel `ranger` (consigne 043) : voir `ranger` ci-dessus.
+    async deposit(message) {
+      const answers = Number.isInteger(message.id);
+      const fail = (code, text) => { if (answers) stub.post({ type: 'erreur', id: message.id, code, message: text }); };
+      const options = stub.ranger;
+      if (!options) { fail('GFS_INCONNU', 'appel inconnu : ranger'); return; }
+      const args = message.args && typeof message.args === 'object' ? message.args : {};
+      stub.rangerEnCours += 1;
+      stub.rangerMax = Math.max(stub.rangerMax, stub.rangerEnCours);
+      try {
+        const rank = stub.rangerAppels.length + 1;
+        const file = args.fichier;
+        const isBlob = typeof Blob === 'function' && file instanceof Blob;
+        const bytes = isBlob ? new Uint8Array(await file.arrayBuffer()) : null;
+        stub.rangerAppels.push({
+          rang: rank, nom: args.nom, lot: args.lot, suivants: args.suivants, dossier: args.dossier, typeDeclare: args.type,
+          taille: bytes ? bytes.length : 0, type: isBlob ? file.type : '', instance: isBlob ? (typeof File === 'function' && file instanceof File ? 'File' : 'Blob') : typeof file,
+        });
+        if (options.delai) await new Promise(resolve => setTimeout(resolve, options.delai));
+        const failure = (options.erreurs && options.erreurs[rank]) || options.erreur;
+        if (failure) { fail(failure.code, failure.message || failure.code); return; }
+        const name = typeof args.nom === 'string' ? args.nom.replace(/[\r\n]+/g, ' ').trim() : '';
+        const named = /\.pdf$/i.test(name) ? name : name + '.pdf';
+        const refusal = !bytes ? 'fichier manquant'
+          : (!name || named.length > 200) ? 'nom hors de la règle (1 à 200 signes)'
+            : (args.lot !== undefined && !(typeof args.lot === 'string' && args.lot.length >= 1 && args.lot.length <= 64)) ? 'lot hors de la règle (1 à 64 signes)'
+              : (args.suivants !== undefined && !(Number.isInteger(args.suivants) && args.suivants >= 0)) ? 'suivants hors de la règle (un entier de 0 ou plus)'
+                : (args.type !== undefined && args.type !== 'pdf') ? 'type non déclaré : ' + args.type
+                  : (!bytes.length || String.fromCharCode.apply(null, Array.from(bytes.slice(0, 5))) !== '%PDF-') ? 'ce fichier n’est pas un PDF' : '';
+        if (refusal) { fail('GFS_REFUSE', refusal); return; }
+        const taken = stub.fichiers.find(f => f.nom.toLowerCase() === named.toLowerCase());
+        const reply = data => { if (answers) stub.post({ type: 'reponse', id: message.id, data }); };
+        const keep = (finalName, id) => { const entry = { id: id == null ? stub.prochainFichier++ : id, nom: finalName, taille: bytes.length, octets: bytes, lot: args.lot }; stub.fichiers.push(entry); return entry; };
+        if (!taken) { const entry = keep(named); reply({ statut: 'ajoute', id: entry.id, nom: entry.nom }); return; }
+        const answer = typeof options.quandPris === 'function' ? options.quandPris(named, args, rank) : (options.quandPris || 'copie');
+        if (answer === 'remplace') { taken.taille = bytes.length; taken.octets = bytes; taken.lot = args.lot; reply({ statut: 'remplace', id: taken.id, nom: taken.nom }); return; }
+        if (answer === 'ignore') { reply({ statut: 'ignore', id: null, nom: null }); return; }
+        const base = named.replace(/\.pdf$/i, '');
+        let n = 1;
+        while (stub.fichiers.some(f => f.nom.toLowerCase() === (base + ' (' + n + ').pdf').toLowerCase())) n += 1;
+        const entry = keep(base + ' (' + n + ').pdf');
+        reply({ statut: 'copie', id: entry.id, nom: entry.nom });
+      } finally {
+        stub.rangerEnCours -= 1;
+      }
+    },
     post(message) { deliver(Object.assign({ gfs: CONTRACT }, message), '*'); },
     // Un appel de GFS vers l'app (contrats 5.1) : la promesse rend la réponse ou l'erreur de l'app.
     call(nom, args) {
@@ -183,6 +241,8 @@
       stub.writeStorage(message);
     } else if (message.nom === 'barre.masquer') {
       stub.hideBar(message);
+    } else if (message.nom === 'ranger') {
+      stub.deposit(message).catch((e) => { console.error('[gfs-stub] ranger en échec', e); if (Number.isInteger(message.id)) stub.post({ type: 'erreur', id: message.id, code: 'GFS_ECHEC', message: String(e && e.message || e) }); });
     } else if (message.nom === 'installer') {
       const reply = stub.installReply || { actives: stub.extensions.slice() };
       if (reply.error) stub.post({ type: 'erreur', id: message.id, code: 'GFS_REFUSE', message: reply.error });

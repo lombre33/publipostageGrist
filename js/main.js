@@ -2527,7 +2527,9 @@
   //   (`data-export-grey-for` : le navigateur imprime, il ne chiffre pas) et la ligne active est celle qui s'applique, « Vectoriel » si c'était l'impression ;
   // - menu « Exporter » (#v2-export-pdf-flyout) : seules les options du type choisi sont montrées (`data-export-for`, une liste de types) et celle que le bouton
   //   Exporter lance, selectedExportLines, est cochée (`aria-checked`). Une option que le type montre sans pouvoir la faire est grisée, avec sa raison en info-bulle
-  //   (`data-export-grey-for` : le PDF unique et l'assemblage en PDF protégé, que pdf-lib assemble sans pouvoir les chiffrer) ;
+  //   (`data-export-grey-for` : le PDF unique et l'assemblage en PDF protégé, que pdf-lib assemble sans pouvoir les chiffrer). Sous les options de lignes, pour les deux PDF seulement, la
+  //   destination du PDF (intitulé, filet et trois lignes `data-destination`) : `PdfDelivery.sync` coche celle qui s'applique et grise, avec sa raison, les deux qui rangent dans GFS quand GFS
+  //   n'héberge pas l'app ou ne répond pas. Elle est dans ce menu et non dans celui du type, dont le bas est à 490 px pour un panneau de 400 ;
   // - le bouton du type est allumé quand ce n'est pas le PDF, pour qu'on sache avant de cliquer sur Exporter que le fichier ne sera pas un PDF.
   // Un type que le modèle ne sait pas faire revient au PDF pour de bon (la liste cachée est remise), de sorte que le modèle suivant ne le retrouve pas.
   function syncExportMenus() {
@@ -2561,7 +2563,7 @@
       grey(row, !pdfType || notForProtected);
     });
     // Où va le PDF (js/pdf-delivery.js) : télécharger, ranger dans GFS ou les deux ; les deux lignes qui rangent sont grisées sans GFS.
-    PdfDelivery.sync(typeFlyout);
+    PdfDelivery.sync(exportFlyout);
     [typeFlyout, exportFlyout].forEach(flyout => flyout.querySelectorAll('[data-export-for]').forEach(el => {
       el.hidden = el.dataset.exportFor.split(' ').indexOf(type) === -1;
     }));
@@ -3141,7 +3143,8 @@
 
   // Type d'export : bouton + panneau au survol plutôt qu'un <select> toujours affiché. Quatre lignes de type (PDF, PDF protégé, Word, Excel), puis la qualité du PDF
   // (le vectoriel par défaut, l'impression par le navigateur, « Léger » : le vectoriel aux images réduites), montrée pour les deux PDF seulement. Un clic sur une ligne
-  // grisée ne choisit rien. Le menu du bouton Exporter se câble de même : un clic (ou Entrée, Espace) sur une option de lignes la coche, rien ne s'exporte.
+  // grisée ne choisit rien. Le menu du bouton Exporter se câble de même : un clic (ou Entrée, Espace) sur une option de lignes la coche, rien ne s'exporte ; la destination du PDF
+  // (le télécharger, le ranger dans GFS ou les deux : js/pdf-delivery.js) s'y coche de la même façon.
   // Le bouton Exporter, onExportPdf et les lots lisent les valeurs choisies ; syncExportMenus tient les deux menus d'accord, aussi à chaque survol (un
   // appel direct a pu changer la liste cachée).
   function wireExportMenus() {
@@ -3159,7 +3162,7 @@
     flyout.querySelectorAll('.v2-hover-row[data-export-type]').forEach(row => onRow(row, typeSelect, row.dataset.exportType));
     flyout.querySelectorAll('.v2-hover-row[data-quality]').forEach(row => onRow(row, qualitySelect, row.dataset.quality));
     // La destination du PDF est un réglage de la personne (PersonStore), pas du modèle : son pas d'Annuler est celui de SettingsHistory, et le rangement dit au coin d'état où il en est.
-    PdfDelivery.wire(flyout, syncExportMenus);
+    PdfDelivery.wire(exportFlyout, syncExportMenus);
     PdfDelivery.onProgress((current, total) => setStatus(I18n.t(total > 1 ? 'shelve.progress' : 'shelve.progressOne', { current, total })));
     exportFlyout.querySelectorAll('.v2-hover-row[data-export-lines]').forEach(row => {
       onRow(row, linesSelect, row.dataset.exportLines);
