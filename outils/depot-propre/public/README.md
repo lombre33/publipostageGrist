@@ -209,7 +209,8 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Galerie de 22 modèles prêts à l'emploi : facture, contrat de prestation de services, attestation,
   courrier de relance, quittance de loyer, bulletin scolaire, fiche recette, émargement, bon de commande,
   fiche d'inventaire, des modèles à imprimer (flyer A6, invitation, affiche A3, carte de visite, badge,
-  étiquettes) et une présentation commerciale de trente diapositives (avec l'extension « diapositives » de
+  étiquettes) et une présentation commerciale de trente-neuf diapositives (formes, tableaux, douze graphiques lus
+  dans des tables, liens et vues en direct entre diapositives, transitions et animations, thème avec décor ; avec les extensions « diapositives » et « graphique » de
   Grist Factory Suite). Un modèle peut créer ses tables, vides, avec leurs colonnes de calcul et leurs liens, et son
   aperçu montre le document rempli en images (voir l'[avertissement](#limites-connues) à leur sujet)
 
@@ -681,8 +682,10 @@ GitHub Pages, with no backend and no build step.
   imported (a word says so in its place)
 - Gallery of 22 ready-to-use templates: invoice, service agreement, certificate, payment reminder letter,
   rent receipt, school report, recipe sheet, attendance sheet, purchase order, inventory sheet, templates
-  to print (A6 flyer, invitation, A3 poster, business card, badge, labels) and a thirty-slide sales
-  presentation (with the Grist Factory Suite "diapositives" extension). A template can create
+  to print (A6 flyer, invitation, A3 poster, business card, badge, labels) and a sales
+  presentation of thirty-nine slides (shapes, tables, twelve charts read from tables, links and live views between
+  slides, transitions and animations, a theme with its decor; with the Grist Factory Suite "diapositives" and
+  "graphique" extensions). A template can create
   its tables, empty, with their calculated columns and links, and its preview shows the filled document as
   images (see the [warning](#known-limitations) about them)
 

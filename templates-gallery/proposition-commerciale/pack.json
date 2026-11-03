@@ -2,7 +2,227 @@
   "version": 1,
   "family": "contacts",
   "main": "Contacts",
-  "tables": ["Contacts"],
+  "requires": [
+    "graphique"
+  ],
+  "tables": [
+    "Contacts",
+    {
+      "id": "Marche",
+      "columns": [
+        {
+          "id": "Annee",
+          "type": "Text",
+          "label": "Année"
+        },
+        {
+          "id": "Montant",
+          "type": "Numeric",
+          "label": "Montant (M€)"
+        }
+      ]
+    },
+    {
+      "id": "Acteurs",
+      "columns": [
+        {
+          "id": "Type",
+          "type": "Text",
+          "label": "Type d’acteur"
+        },
+        {
+          "id": "Part",
+          "type": "Numeric",
+          "label": "Part (%)"
+        }
+      ]
+    },
+    {
+      "id": "Positionnement",
+      "columns": [
+        {
+          "id": "Critere",
+          "type": "Text",
+          "label": "Critère"
+        },
+        {
+          "id": "Helianthe",
+          "type": "Numeric",
+          "label": "Hélianthe Conseil"
+        },
+        {
+          "id": "Cabinets",
+          "type": "Numeric",
+          "label": "Grands cabinets"
+        },
+        {
+          "id": "Integrateurs",
+          "type": "Numeric",
+          "label": "Intégrateurs"
+        }
+      ]
+    },
+    {
+      "id": "Pistes",
+      "columns": [
+        {
+          "id": "Etape",
+          "type": "Text",
+          "label": "Étape"
+        },
+        {
+          "id": "Nombre",
+          "type": "Numeric",
+          "label": "Nombre de pistes"
+        }
+      ]
+    },
+    {
+      "id": "Charge",
+      "columns": [
+        {
+          "id": "Semaine",
+          "type": "Int",
+          "label": "Semaine"
+        },
+        {
+          "id": "Pilotage",
+          "type": "Numeric",
+          "label": "Pilotage"
+        },
+        {
+          "id": "Experts",
+          "type": "Numeric",
+          "label": "Experts"
+        },
+        {
+          "id": "Terrain",
+          "type": "Numeric",
+          "label": "Terrain"
+        }
+      ]
+    },
+    {
+      "id": "Missions",
+      "columns": [
+        {
+          "id": "Duree",
+          "type": "Numeric",
+          "label": "Durée (semaines)"
+        },
+        {
+          "id": "Industrie",
+          "type": "Numeric",
+          "label": "Industrie et logistique"
+        },
+        {
+          "id": "Services",
+          "type": "Numeric",
+          "label": "Santé et services"
+        }
+      ]
+    },
+    {
+      "id": "Budget",
+      "columns": [
+        {
+          "id": "Poste",
+          "type": "Text",
+          "label": "Poste"
+        },
+        {
+          "id": "Montant",
+          "type": "Numeric",
+          "label": "Montant (k€ HT)"
+        }
+      ]
+    },
+    {
+      "id": "Profils",
+      "columns": [
+        {
+          "id": "Profil",
+          "type": "Text",
+          "label": "Profil"
+        },
+        {
+          "id": "Jours",
+          "type": "Int",
+          "label": "Jours de conseil"
+        }
+      ]
+    },
+    {
+      "id": "Retour",
+      "columns": [
+        {
+          "id": "Mois",
+          "type": "Int",
+          "label": "Mois"
+        },
+        {
+          "id": "Gains",
+          "type": "Numeric",
+          "label": "Gains cumulés (k€)"
+        },
+        {
+          "id": "Cout",
+          "type": "Numeric",
+          "label": "Coût cumulé (k€)"
+        }
+      ]
+    },
+    {
+      "id": "Gains",
+      "columns": [
+        {
+          "id": "Source",
+          "type": "Text",
+          "label": "Source"
+        },
+        {
+          "id": "Montant",
+          "type": "Numeric",
+          "label": "Montant (k€)"
+        }
+      ]
+    },
+    {
+      "id": "Objectifs",
+      "columns": [
+        {
+          "id": "Indicateur",
+          "type": "Text",
+          "label": "Indicateur"
+        },
+        {
+          "id": "Cible",
+          "type": "Numeric",
+          "label": "Cible à 12 mois (%)"
+        }
+      ]
+    },
+    {
+      "id": "Indicateurs",
+      "columns": [
+        {
+          "id": "Mois",
+          "type": "Text",
+          "label": "Mois"
+        },
+        {
+          "id": "Delai",
+          "type": "Numeric",
+          "label": "Délai (jours)"
+        },
+        {
+          "id": "Objectif",
+          "type": "Numeric",
+          "label": "Objectif (jours)"
+        }
+      ]
+    }
+  ],
   "links": [],
   "template": {
     "type": "presentation",
@@ -10,7 +230,90 @@
     "page": {
       "format": "190.5x338.7",
       "orientation": "landscape",
-      "margins": [14, 20, 14, 20]
+      "margins": [
+        14,
+        20,
+        14,
+        20
+      ],
+      "theme": {
+        "v": 1,
+        "name": "Hélianthe",
+        "colors": {
+          "bg": "#ffffff",
+          "text": "#2a3b49",
+          "title": "#0d2e43",
+          "accent1": "#048189",
+          "accent2": "#d9742a",
+          "accent3": "#0d2e43",
+          "accent4": "#f2b45a",
+          "accent5": "#6aa7a9",
+          "accent6": "#8a9ba8"
+        },
+        "fonts": {
+          "title": "Roboto",
+          "body": "Roboto"
+        },
+        "decor": {
+          "band": {
+            "edge": "left",
+            "size": "medium",
+            "color": "accent1"
+          },
+          "logo": {
+            "src": "data:image/png;base64,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",
+            "w": 160,
+            "h": 160,
+            "pos": "tr",
+            "size": "small"
+          },
+          "number": {
+            "pos": "br"
+          },
+          "footer": {
+            "text": "Hélianthe Conseil · Proposition commerciale",
+            "pos": "bl"
+          },
+          "skipFirst": true
+        }
+      },
+      "textFormats": [
+        {
+          "name": "Chiffre clé",
+          "style": {
+            "bold": true,
+            "fontSize": "40pt",
+            "color": "#048189"
+          },
+          "block": {
+            "type": "paragraph",
+            "align": "center"
+          }
+        },
+        {
+          "name": "Surtitre",
+          "style": {
+            "bold": true,
+            "fontSize": "11pt",
+            "color": "#048189",
+            "letterSpacing": "1pt"
+          },
+          "block": {
+            "type": "paragraph"
+          }
+        },
+        {
+          "name": "Citation",
+          "style": {
+            "italic": true,
+            "fontSize": "16pt",
+            "color": "#0d2e43"
+          },
+          "block": {
+            "type": "paragraph"
+          }
+        }
+      ]
     }
   }
 }

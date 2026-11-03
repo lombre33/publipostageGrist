@@ -153,8 +153,8 @@ const TemplateGalleryModal = (function () {
     previewUsePack.hidden = !pack;
     previewModal.classList.toggle('has-pack', !!pack);
     if (pack) previewUsePack.textContent = I18n.t('gallery.useWithTables', { n: pack.tables.length });
-    // Un modèle de présentation sans l'extension « diapositives » : ses deux boutons restent, grisés avec leur raison, et leur clic l'explique (useEmpty, useWithPack).
-    const reason = pack ? SlidesEntry.unavailableReason(pack.template.type) : '';
+    // Un modèle de présentation sans l'extension « diapositives », ou dont le pack exige une extension éteinte (`requires`) : ses deux boutons restent, grisés avec leur raison, et leur clic l'explique (useEmpty, useWithPack).
+    const reason = unavailableReason(pack);
     [previewUseEmpty, previewUsePack].forEach(button => {
       button.setAttribute('aria-disabled', reason ? 'true' : 'false');
       if (reason) button.title = reason; else button.removeAttribute('title');
@@ -225,6 +225,29 @@ const TemplateGalleryModal = (function () {
     previewModal.style.display = 'none';
   }
 
+  // ---- Les extensions que le modèle exige ----
+
+  // La fonction que la fenêtre d'explication cite pour chaque extension qu'un pack peut exiger (Extensions.explain) ; une extension qui n'est pas ici explique par la fonction des présentations.
+  const REQUIRED_FEATURE = { graphique: 'chart.make.function', diapositives: 'slides.function' };
+  // Les extensions que le pack exige (`requires`, js/template-pack.js) et que Grist Factory Suite n'a pas allumées. Une extension que le widget ne connaît pas n'est jamais attendue.
+  const missingExtensions = pack => ((pack && pack.requires) || []).filter(id => Extensions.isKnown(id) && !Extensions.isActive(id));
+  // Pourquoi les deux boutons du modèle sont grisés, dans la langue de l'interface : l'extension de son type d'abord (une présentation demande « diapositives »), puis la première que son pack exige ; '' quand rien ne manque.
+  function unavailableReason(pack) {
+    if (!pack) return '';
+    const byType = SlidesEntry.unavailableReason(pack.template.type);
+    if (byType) return byType;
+    const missing = missingExtensions(pack);
+    return missing.length ? I18n.t('template.unavailable.extension', { name: Extensions.nameOf(missing[0]) }) : '';
+  }
+  // Avant tout effet : vrai quand le modèle peut s'installer. Sinon le clic a expliqué (ou demandé à GFS d'installer l'extension) et rien n'est créé : ni table, ni modèle.
+  async function ensureExtensions(pack) {
+    if (!(await SlidesEntry.ensureFor(pack && pack.template.type))) return false;
+    const missing = missingExtensions(pack);
+    if (!missing.length) return true;
+    await Extensions.explain(missing[0], REQUIRED_FEATURE[missing[0]] || 'slides.function');
+    return false;
+  }
+
   // ---- Créer le modèle ----
 
   // Ce que le modèle enregistré reçoit en plus de son texte quand la galerie le tire d'un pack : la page (format, sens, marges), le type (document,
@@ -258,8 +281,8 @@ const TemplateGalleryModal = (function () {
 
   async function useEmpty() {
     if (!currentEntry || !currentHtml) return;
-    // Un modèle de présentation : l'extension d'abord (sans elle, le clic l'explique et rien n'est créé).
-    if (!(await SlidesEntry.ensureFor(currentPack && currentPack.template.type))) return;
+    // Un modèle de présentation, ou dont le pack exige une extension (`requires`) : l'extension d'abord (sans elle, le clic l'explique et rien n'est créé).
+    if (!(await ensureExtensions(currentPack))) return;
     // Le nouveau modèle remplace l'éditeur : même question que pour un changement de modèle (« Annuler » laisse la galerie ouverte, rien n'est
     // créé).
     if (host.hasEditsToConfirmBeforeLeaving() && !(await host.askBeforeLeaving())) return;
@@ -337,7 +360,7 @@ const TemplateGalleryModal = (function () {
   async function useWithPack() {
     if (!currentEntry || !currentHtml || !currentPack) return;
     const pack = currentPack;
-    if (!(await SlidesEntry.ensureFor(pack.template.type))) return;
+    if (!(await ensureExtensions(pack))) return;
     // Avant tout effet : « Annuler » ne laisse rien derrière elle (ni table ni modèle).
     if (host.hasEditsToConfirmBeforeLeaving() && !(await host.askBeforeLeaving())) return;
     let plan;

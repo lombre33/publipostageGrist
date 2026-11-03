@@ -709,14 +709,22 @@
         "src": "proposition-commerciale/capture-5.png",
         "w": 694,
         "h": 390
+      },
+      {
+        "src": "proposition-commerciale/capture-6.png",
+        "w": 694,
+        "h": 390
       }
     ],
     "html": "proposition-commerciale/template.html",
     "pack": "proposition-commerciale/pack.json",
     "shows": [
       "presentation",
-      "images",
-      "twoColumns"
+      "charts",
+      "slideLinks",
+      "slideViews",
+      "transitions",
+      "theme"
     ]
   }
 ]

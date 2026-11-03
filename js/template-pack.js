@@ -2,6 +2,13 @@
 // templates-gallery/ dit les tables et leurs colonnes (types, choix, colonnes à formule, « Colonne à afficher » des Références), les règles de liaison
 // et la page du modèle ; une famille de tables partagée par plusieurs modèles (templates-gallery/families/<famille>.json) évite de redire les mêmes
 // colonnes dans chacun. Les tables sont créées VIDES : les lignes d'exemple n'existent que dans les captures de l'aperçu, jamais dans le document.
+// Deux choses de plus voyagent avec le pack (demande du 03/11, « une présentation qui utilise exhaustivement toutes les nouvelles features ») :
+//  - `template.page.theme` et `template.page.textFormats` : le thème d'une présentation (js/slide-theme.js) et les mises en forme gardées du modèle (js/format-slots.js), que le modèle garde
+//    dans la clé de même nom de sa colonne Margins (js/page-layout.js). Le pack les donne tels que PageLayout les garde ; PageLayout.setMarginsMm les borne à l'installation, comme pour un
+//    modèle qu'on ouvre. Sans eux, le modèle installé est celui d'avant (aucune clé en plus) ;
+//  - `requires` : les extensions de Grist Factory Suite sans lesquelles ce modèle ne se montre pas en entier (« graphique » pour un modèle dont les graphiques ne se dessinent pas sans
+//    elle) ; la galerie grise ses deux boutons avec leur raison tant qu'une manque (js/template-gallery-modal.js). Le type du modèle (une présentation demande « diapositives ») n'a pas
+//    à y être : il dit déjà la sienne.
 //
 // Trois temps, chacun lisible seul :
 //  - normalize(raw, family) : le pack tel que le fichier le donne -> un pack complet et validé (jamais d'objet à moitié valide plus loin) ;
@@ -20,6 +27,9 @@ const TemplatePack = (function () {
   const LINK_MODES = ['match', 'singleton'];
   const MODEL_TYPES = ['document', 'email', 'grille', 'presentation'];
   const ORIENTATIONS = ['portrait', 'landscape'];
+  const EXTENSION_ID_RE = /^[a-z][a-z0-9-]{1,30}$/;
+  const REQUIRES_MAX = 4;
+  const TEXT_FORMATS_MAX = 3;      // les emplacements du modèle (PageLayout.CUSTOM_FORMATS_MAX)
   // Le format d'une page : A3 à A6, ou « LARGEURxHAUTEUR » en millimètres, côté court d'abord (le format libre de js/page-layout.js : « 55x85 » est une carte de
   // visite, que `orientation: landscape` met en 85 x 55). Une autre écriture serait lue comme A4 en silence : le fichier est refusé.
   const FREE_FORMAT_RE = /^(\d+(?:\.\d)?)x(\d+(?:\.\d)?)$/;
@@ -103,11 +113,22 @@ const TemplatePack = (function () {
     if (margins && (!Array.isArray(margins) || margins.length !== 4 || margins.some(m => typeof m !== 'number' || !isFinite(m) || m < 0 || m > 100))) fail('la page', 'a des marges illisibles (quatre nombres, en mm)');
     const format = text(page.format, 'la page (format)') || 'A4';
     if (!isPageFormat(format)) fail('la page', 'a un format inconnu : ' + format);
+    // Le thème et les mises en forme gardées : seulement la forme ici (un objet avec ses couleurs, une liste de trois emplacements au plus qui ont chacun un nom), le reste est borné à l'installation.
+    const theme = page.theme == null ? null : page.theme;
+    if (theme && (typeof theme !== 'object' || Array.isArray(theme) || !theme.colors || typeof theme.colors !== 'object' || Array.isArray(theme.colors))) fail('la page', 'a un thème illisible (un objet avec ses couleurs)');
+    if (theme && type !== 'presentation') fail('la page', 'a un thème sans être une présentation');
+    const textFormats = page.textFormats == null ? null : page.textFormats;
+    if (textFormats && (!Array.isArray(textFormats) || !textFormats.length || textFormats.length > TEXT_FORMATS_MAX || textFormats.some(slot => !slot || typeof slot !== 'object' || Array.isArray(slot) || typeof slot.name !== 'string' || !slot.name.trim()))) {
+      fail('la page', 'a des mises en forme illisibles (de une à ' + TEXT_FORMATS_MAX + ' emplacements, chacun avec son nom)');
+    }
     const email = raw.email || {};
     return {
       type,
       pdfName: text(raw.pdfName, 'le modèle (nom du fichier PDF)'),
-      page: { format, orientation, margins: margins ? { top: margins[0], right: margins[1], bottom: margins[2], left: margins[3] } : null },
+      page: {
+        format, orientation, margins: margins ? { top: margins[0], right: margins[1], bottom: margins[2], left: margins[3] } : null,
+        theme: theme ? JSON.parse(JSON.stringify(theme)) : null, textFormats: textFormats ? JSON.parse(JSON.stringify(textFormats)) : null,
+      },
       email: { destinataires: text(email.to, 'l’e-mail (à)'), cc: text(email.cc, 'l’e-mail (cc)'), cci: text(email.bcc, 'l’e-mail (cci)'), objet: text(email.subject, 'l’e-mail (objet)') },
     };
   }
@@ -147,7 +168,13 @@ const TemplatePack = (function () {
       const has = (table, id) => id === 'id' || table.columns.some(column => column.id === id);
       if (link.mode === 'match' && (!has(linked, link.target) || !has(mainTable, link.source))) fail('la règle de ' + link.table, 'nomme une colonne qui n’existe pas');
     });
-    return { version: VERSION, tables, main, links, template: normalizeTemplate(raw.template) };
+    // Les extensions requises : des identifiants de Grist Factory Suite (js/extensions.js), sans doublon. Un identifiant que le widget ne connaît pas est refusé par l'essai des modèles de la galerie, pas ici.
+    const requiresRaw = raw.requires == null ? [] : raw.requires;
+    if (!Array.isArray(requiresRaw) || requiresRaw.length > REQUIRES_MAX || requiresRaw.some(id => typeof id !== 'string' || !EXTENSION_ID_RE.test(id))) {
+      fail('le fichier', 'a des extensions requises illisibles (au plus ' + REQUIRES_MAX + ' identifiants)');
+    }
+    const requires = requiresRaw.filter((id, i) => requiresRaw.indexOf(id) === i);
+    return { version: VERSION, tables, main, links, requires, template: normalizeTemplate(raw.template) };
   }
 
   // ---- Le document tel qu'il est ----
@@ -320,7 +347,11 @@ const TemplatePack = (function () {
   // PageLayout.setMarginsMm la remplace par sa valeur de départ, clé par clé.
   function marginsOf(pack) {
     const page = pack.template.page;
-    return Object.assign({}, page.margins || {}, { orientation: page.orientation, format: page.format });
+    // Le thème et les mises en forme gardées ne sont écrits que si le pack en a : un modèle sans eux n'a aucune clé de plus dans sa colonne Margins.
+    const kept = {};
+    if (page.theme) kept.theme = page.theme;
+    if (page.textFormats) kept.textFormats = page.textFormats;
+    return Object.assign({}, page.margins || {}, { orientation: page.orientation, format: page.format }, kept);
   }
 
   return { VERSION, normalize, readDocumentSchema, plan, tableActions, formulaActions, displayActions, apply, marginsOf, isPackError, parseType, isReference, sameKind };

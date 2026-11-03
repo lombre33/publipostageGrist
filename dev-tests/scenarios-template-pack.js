@@ -456,6 +456,51 @@
   });
 
   cases.push({
+    id: 'pack_theme_text_formats_and_required_extensions_travel_with_the_pack',
+    description: 'Le thème d’une présentation (page.theme), les mises en forme gardées du modèle (page.textFormats) et les extensions exigées (requires) voyagent avec le pack : marginsOf les donne à loadTemplateIntoEditor, PageLayout les prend, un pack qui n’en a pas ne change rien, et chaque forme illisible est refusée avec la phrase qui la nomme',
+    run: async () => {
+      const make = (mutate, type) => { const raw = rawPack('Zz'); raw.template.type = type || 'presentation'; mutate(raw); return raw; };
+      const attempt = raw => { try { return TemplatePack.normalize(raw, null); } catch (e) { return String(e.message); } };
+      const theme = { name: 'Hélianthe', colors: { text: '#2a3b49', title: '#0d2e43', accent1: '#048189', accent2: '#d9742a' }, fonts: { title: 'Roboto', body: 'Roboto' } };
+      const formats = [
+        { name: 'Chiffre clé', style: { bold: true, fontSize: '40pt', color: '#048189' }, block: { type: 'paragraph', align: 'center' } },
+        { name: 'Légende', style: { italic: true, fontSize: '10pt', color: '#5b6b79' } },
+      ];
+      const full = attempt(make((raw) => { raw.template.page.theme = theme; raw.template.page.textFormats = formats; raw.requires = ['graphique', 'graphique']; }));
+      const plain = attempt(make(() => {}, 'document'));
+      const kept = typeof full === 'object' ? TemplatePack.marginsOf(full) : {};
+      const refuses = (mutate, pattern, type) => pattern.test(attempt(make(mutate, type)));
+      // Ce que PageLayout garde quand le modèle s'installe : le thème borné par SlideTheme et les emplacements, puis l'écran est remis comme avant.
+      const before = PageLayout.getMarginsMm();
+      let installed = null;
+      try {
+        PageLayout.setMarginsMm(kept);
+        installed = { theme: PageLayout.getTheme(), formats: PageLayout.getCustomFormats() };
+      } finally { PageLayout.setMarginsMm(before); }
+      const checks = {
+        carried: typeof full === 'object' && same(full.template.page.theme, theme) && same(full.template.page.textFormats, formats),
+        marginsOfKeepsThem: same(kept.theme, theme) && same(kept.textFormats, formats) && kept.format === 'A6' && kept.orientation === 'landscape' && kept.top === 8,
+        independent: typeof full === 'object' && (full.template.page.theme.colors.accent1 = '#000000') && theme.colors.accent1 === '#048189',
+        requiresWithoutDuplicates: typeof full === 'object' && same(full.requires, ['graphique']),
+        plainPackChangesNothing: typeof plain === 'object' && same(plain.requires, []) && plain.template.page.theme === null && plain.template.page.textFormats === null
+          && same(Object.keys(TemplatePack.marginsOf(plain)).sort(), ['bottom', 'format', 'left', 'orientation', 'right', 'top']),
+        pageLayoutTakesTheTheme: !!installed && !!installed.theme && installed.theme.name === 'Hélianthe' && installed.theme.colors.title === '#0d2e43' && installed.theme.colors.accent2 === '#d9742a'
+          && installed.theme.fonts.title === 'Roboto' && installed.theme.colors.bg === '#ffffff',
+        pageLayoutTakesTheFormats: !!installed && installed.formats.length === 2 && installed.formats[0].name === 'Chiffre clé' && installed.formats[0].style.fontSize === '40pt' && installed.formats[1].name === 'Légende',
+        themeNeedsColors: refuses((raw) => { raw.template.page.theme = { name: 'x' }; }, /thème illisible/),
+        themeIsAnObject: refuses((raw) => { raw.template.page.theme = 'bleu'; }, /thème illisible/) && refuses((raw) => { raw.template.page.theme = [1]; }, /thème illisible/),
+        themeNeedsAPresentation: refuses((raw) => { raw.template.page.theme = theme; }, /thème sans être une présentation/, 'document'),
+        formatsAreSlotsWithAName: refuses((raw) => { raw.template.page.textFormats = [{ style: { bold: true } }]; }, /mises en forme illisibles/) && refuses((raw) => { raw.template.page.textFormats = 'gras'; }, /mises en forme illisibles/)
+          && refuses((raw) => { raw.template.page.textFormats = []; }, /mises en forme illisibles/),
+        formatsAreThreeAtMost: refuses((raw) => { raw.template.page.textFormats = [1, 2, 3, 4].map(n => ({ name: 'F' + n, style: { bold: true } })); }, /mises en forme illisibles/),
+        requiresAreIds: refuses((raw) => { raw.requires = 'graphique'; }, /extensions requises illisibles/) && refuses((raw) => { raw.requires = ['Graphique']; }, /extensions requises illisibles/) && refuses((raw) => { raw.requires = [42]; }, /extensions requises illisibles/),
+        requiresAreFourAtMost: refuses((raw) => { raw.requires = ['aa', 'bb', 'cc', 'dd', 'ee']; }, /extensions requises illisibles/),
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify(checks) };
+    },
+  });
+
+  cases.push({
     id: 'pack_page_format_takes_a_free_format_short_side_first_and_refuses_any_other_writing',
     description: 'Le format de la page : A3 à A6 ou « LARGEURxHAUTEUR » en mm, côté court d’abord (« 55x85 » + paysage = une carte de visite 85 x 55) ; B7, côté long d’abord, trop petit, trop grand ou une autre écriture sont refusés (ils seraient lus comme A4 en silence)',
     run: async () => {

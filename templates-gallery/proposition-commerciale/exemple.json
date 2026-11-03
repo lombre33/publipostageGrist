@@ -1,6 +1,517 @@
 {
+  "rows": {
+    "Marche": [
+      {
+        "id": 1,
+        "Annee": "2021",
+        "Montant": 1840
+      },
+      {
+        "id": 2,
+        "Annee": "2022",
+        "Montant": 1960
+      },
+      {
+        "id": 3,
+        "Annee": "2023",
+        "Montant": 2110
+      },
+      {
+        "id": 4,
+        "Annee": "2024",
+        "Montant": 2290
+      },
+      {
+        "id": 5,
+        "Annee": "2025",
+        "Montant": 2480
+      },
+      {
+        "id": 6,
+        "Annee": "2026 e",
+        "Montant": 2700
+      },
+      {
+        "id": 7,
+        "Annee": "2027 p",
+        "Montant": 2950
+      }
+    ],
+    "Acteurs": [
+      {
+        "id": 1,
+        "Type": "Grands cabinets internationaux",
+        "Part": 34
+      },
+      {
+        "id": 2,
+        "Type": "Cabinets indépendants",
+        "Part": 27
+      },
+      {
+        "id": 3,
+        "Type": "Intégrateurs d’éditeurs",
+        "Part": 21
+      },
+      {
+        "id": 4,
+        "Type": "Équipes internes",
+        "Part": 12
+      },
+      {
+        "id": 5,
+        "Type": "Autres acteurs",
+        "Part": 6
+      }
+    ],
+    "Positionnement": [
+      {
+        "id": 1,
+        "Critere": "Expertise métier",
+        "Helianthe": 4,
+        "Cabinets": 5,
+        "Integrateurs": 3
+      },
+      {
+        "id": 2,
+        "Critere": "Proximité du terrain",
+        "Helianthe": 5,
+        "Cabinets": 2,
+        "Integrateurs": 3
+      },
+      {
+        "id": 3,
+        "Critere": "Rapidité de mise en œuvre",
+        "Helianthe": 4,
+        "Cabinets": 2,
+        "Integrateurs": 4
+      },
+      {
+        "id": 4,
+        "Critere": "Maîtrise des coûts",
+        "Helianthe": 4,
+        "Cabinets": 2,
+        "Integrateurs": 3
+      },
+      {
+        "id": 5,
+        "Critere": "Transfert de compétences",
+        "Helianthe": 5,
+        "Cabinets": 3,
+        "Integrateurs": 2
+      },
+      {
+        "id": 6,
+        "Critere": "Outils et données",
+        "Helianthe": 4,
+        "Cabinets": 4,
+        "Integrateurs": 5
+      }
+    ],
+    "Pistes": [
+      {
+        "id": 1,
+        "Etape": "Pistes recensées",
+        "Nombre": 120
+      },
+      {
+        "id": 2,
+        "Etape": "Pistes chiffrées",
+        "Nombre": 64
+      },
+      {
+        "id": 3,
+        "Etape": "Pistes retenues",
+        "Nombre": 28
+      },
+      {
+        "id": 4,
+        "Etape": "Actions déployées",
+        "Nombre": 14
+      }
+    ],
+    "Charge": [
+      {
+        "id": 1,
+        "Semaine": 1,
+        "Pilotage": 1,
+        "Experts": 1.5,
+        "Terrain": 1
+      },
+      {
+        "id": 2,
+        "Semaine": 3,
+        "Pilotage": 1,
+        "Experts": 2.5,
+        "Terrain": 2
+      },
+      {
+        "id": 3,
+        "Semaine": 5,
+        "Pilotage": 1,
+        "Experts": 1,
+        "Terrain": 0.5
+      },
+      {
+        "id": 4,
+        "Semaine": 7,
+        "Pilotage": 1,
+        "Experts": 2,
+        "Terrain": 1
+      },
+      {
+        "id": 5,
+        "Semaine": 9,
+        "Pilotage": 1,
+        "Experts": 2.5,
+        "Terrain": 1.5
+      },
+      {
+        "id": 6,
+        "Semaine": 11,
+        "Pilotage": 1,
+        "Experts": 1.5,
+        "Terrain": 3
+      },
+      {
+        "id": 7,
+        "Semaine": 13,
+        "Pilotage": 1,
+        "Experts": 1,
+        "Terrain": 4
+      },
+      {
+        "id": 8,
+        "Semaine": 15,
+        "Pilotage": 1,
+        "Experts": 1,
+        "Terrain": 4.5
+      },
+      {
+        "id": 9,
+        "Semaine": 17,
+        "Pilotage": 1,
+        "Experts": 1,
+        "Terrain": 3
+      },
+      {
+        "id": 10,
+        "Semaine": 19,
+        "Pilotage": 0.5,
+        "Experts": 1,
+        "Terrain": 2
+      },
+      {
+        "id": 11,
+        "Semaine": 21,
+        "Pilotage": 0.5,
+        "Experts": 0.5,
+        "Terrain": 1
+      }
+    ],
+    "Missions": [
+      {
+        "id": 1,
+        "Duree": 10,
+        "Industrie": null,
+        "Services": 9
+      },
+      {
+        "id": 2,
+        "Duree": 12,
+        "Industrie": 14,
+        "Services": null
+      },
+      {
+        "id": 3,
+        "Duree": 14,
+        "Industrie": null,
+        "Services": 12
+      },
+      {
+        "id": 4,
+        "Duree": 16,
+        "Industrie": 18,
+        "Services": null
+      },
+      {
+        "id": 5,
+        "Duree": 18,
+        "Industrie": null,
+        "Services": 16
+      },
+      {
+        "id": 6,
+        "Duree": 20,
+        "Industrie": 23,
+        "Services": null
+      },
+      {
+        "id": 7,
+        "Duree": 22,
+        "Industrie": null,
+        "Services": 19
+      },
+      {
+        "id": 8,
+        "Duree": 24,
+        "Industrie": 26,
+        "Services": null
+      },
+      {
+        "id": 9,
+        "Duree": 26,
+        "Industrie": null,
+        "Services": 22
+      },
+      {
+        "id": 10,
+        "Duree": 28,
+        "Industrie": 29,
+        "Services": null
+      },
+      {
+        "id": 11,
+        "Duree": 32,
+        "Industrie": 31,
+        "Services": null
+      }
+    ],
+    "Budget": [
+      {
+        "id": 1,
+        "Poste": "Diagnostic flash",
+        "Montant": 13.8
+      },
+      {
+        "id": 2,
+        "Poste": "Co-construction",
+        "Montant": 20.7
+      },
+      {
+        "id": 3,
+        "Poste": "Déploiement pilote",
+        "Montant": 31.5
+      },
+      {
+        "id": 4,
+        "Poste": "Accompagnement",
+        "Montant": 14.7
+      },
+      {
+        "id": 5,
+        "Poste": "Pilotage et comités",
+        "Montant": 10
+      },
+      {
+        "id": 6,
+        "Poste": "Frais de déplacement",
+        "Montant": 3.6
+      }
+    ],
+    "Profils": [
+      {
+        "id": 1,
+        "Profil": "Associée",
+        "Jours": 8
+      },
+      {
+        "id": 2,
+        "Profil": "Directeur de mission",
+        "Jours": 22
+      },
+      {
+        "id": 3,
+        "Profil": "Experts",
+        "Jours": 20
+      },
+      {
+        "id": 4,
+        "Profil": "Consultants de terrain",
+        "Jours": 32
+      }
+    ],
+    "Retour": [
+      {
+        "id": 1,
+        "Mois": 0,
+        "Gains": 0,
+        "Cout": 0
+      },
+      {
+        "id": 2,
+        "Mois": 2,
+        "Gains": 0,
+        "Cout": 35
+      },
+      {
+        "id": 3,
+        "Mois": 4,
+        "Gains": 3,
+        "Cout": 70
+      },
+      {
+        "id": 4,
+        "Mois": 6,
+        "Gains": 18,
+        "Cout": 105
+      },
+      {
+        "id": 5,
+        "Mois": 8,
+        "Gains": 45,
+        "Cout": 110
+      },
+      {
+        "id": 6,
+        "Mois": 10,
+        "Gains": 81,
+        "Cout": 115
+      },
+      {
+        "id": 7,
+        "Mois": 12,
+        "Gains": 117,
+        "Cout": 120
+      },
+      {
+        "id": 8,
+        "Mois": 14,
+        "Gains": 153,
+        "Cout": 120
+      },
+      {
+        "id": 9,
+        "Mois": 16,
+        "Gains": 189,
+        "Cout": 120
+      },
+      {
+        "id": 10,
+        "Mois": 18,
+        "Gains": 225,
+        "Cout": 120
+      },
+      {
+        "id": 11,
+        "Mois": 20,
+        "Gains": 261,
+        "Cout": 120
+      },
+      {
+        "id": 12,
+        "Mois": 22,
+        "Gains": 297,
+        "Cout": 120
+      },
+      {
+        "id": 13,
+        "Mois": 24,
+        "Gains": 333,
+        "Cout": 120
+      }
+    ],
+    "Gains": [
+      {
+        "id": 1,
+        "Source": "Encadrants",
+        "Montant": 132
+      },
+      {
+        "id": 2,
+        "Source": "Retards",
+        "Montant": 86
+      },
+      {
+        "id": 3,
+        "Source": "Stocks",
+        "Montant": 64
+      },
+      {
+        "id": 4,
+        "Source": "Non-qualité",
+        "Montant": 51
+      },
+      {
+        "id": 5,
+        "Source": "Programme",
+        "Montant": -120
+      }
+    ],
+    "Objectifs": [
+      {
+        "id": 1,
+        "Indicateur": "Taux de service",
+        "Cible": 96
+      },
+      {
+        "id": 2,
+        "Indicateur": "Indicateurs automatisés",
+        "Cible": 90
+      },
+      {
+        "id": 3,
+        "Indicateur": "Équipes autonomes",
+        "Cible": 80
+      }
+    ],
+    "Indicateurs": [
+      {
+        "id": 1,
+        "Mois": "Sept.",
+        "Delai": 6.1,
+        "Objectif": 4.8
+      },
+      {
+        "id": 2,
+        "Mois": "Oct.",
+        "Delai": 5.8,
+        "Objectif": 4.8
+      },
+      {
+        "id": 3,
+        "Mois": "Nov.",
+        "Delai": 5.2,
+        "Objectif": 4.8
+      },
+      {
+        "id": 4,
+        "Mois": "Déc.",
+        "Delai": 4.9,
+        "Objectif": 4.8
+      },
+      {
+        "id": 5,
+        "Mois": "Janv.",
+        "Delai": 4.5,
+        "Objectif": 4.8
+      },
+      {
+        "id": 6,
+        "Mois": "Févr.",
+        "Delai": 4.2,
+        "Objectif": 4.8
+      }
+    ]
+  },
+  "extensions": [
+    "graphique"
+  ],
   "captures": [
-    {"kind": "pdf", "row": 1, "pages": [1, 5, 14, 19, 28], "expectPages": 30, "width": 700}
+    {
+      "kind": "pdf",
+      "row": 1,
+      "pages": [
+        1,
+        8,
+        14,
+        21,
+        33,
+        36
+      ],
+      "expectPages": 39,
+      "width": 700
+    }
   ],
   "thumb": {
     "capture": 1

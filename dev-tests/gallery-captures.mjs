@@ -21,6 +21,8 @@
 //                                                                         une Référence est l'id de la ligne visée, une date « AAAA-MM-JJ », une liste un tableau,
 //                                                                         une colonne de calcul sa valeur (le faux Grist ne calcule rien)
 //     "images": { "1": { "label": "LOGO", "from": "#1d4ed8", "to": "#60a5fa", "width": 480, "height": 320 } },   les pièces jointes (id -> image fabriquée)
+//     "extensions": ["graphique"],                                        les extensions de GFS que le modèle demande en plus (« diapositives » l'est toujours pour une présentation) :
+//                                                                         des graphiques lus dans les tables n'existent que si « graphique » est active (ECharts vient du miroir hors ligne)
 //     "captures": [{ "row": 1, "pages": [1, 2], "kind": "pdf", "width": 560, "expectPages": 2 }],         une ligne de la table principale par capture
 //     "thumb": { "capture": 1, "page": 1 } }                                                              (par défaut : la première page de la première capture)
 // Une capture : `row` (le rang de la ligne de la table principale, 1 au départ), `pages` (les pages du PDF à garder, [1] au départ), `width` (la largeur du PNG en px),
@@ -121,6 +123,7 @@ const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf-lib\.min\.js$/, 'umd/pdf-lib.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/qrcode\.min\.js$/, 'umd/qrcode.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@.*$/, 'umd/docx.iife.js'],
+  ...(existsSync(join(CACHE, 'umd/echarts.min.js')) ? [[/^https:\/\/cdn\.jsdelivr\.net\/npm\/echarts@[\d.]+\/dist\/echarts\.min\.js$/, 'umd/echarts.min.js']] : []),
 ] : [];
 const CHUNK_BASE = 'https://esm.sh/_offline-chunks/';
 const absoluteChunks = (code) => code.replace(/(from\s*|import\s*)"\.\/(chunk-[A-Z0-9]+\.js)"/g, (_, kw, file) => `${kw}"${CHUNK_BASE}${file}"`);
@@ -142,7 +145,7 @@ function makeImage(spec) {
 }
 
 // `slides` : le modèle est une présentation ; le widget s'ouvre hébergé par le GFS simulé, l'extension « diapositives » active (sans elle, la galerie ne la crée pas).
-async function openWidget(browser, images, { slides = false } = {}) {
+async function openWidget(browser, images, { slides = false, extensions = [] } = {}) {
   const context = await browser.newContext({ viewport: { width: VIEW_W, height: VIEW_H }, acceptDownloads: true });
   const page = await context.newPage();
   const problems = [];
@@ -177,7 +180,10 @@ async function openWidget(browser, images, { slides = false } = {}) {
   await page.clock.setFixedTime(CAPTURE_NOW);
   if (slides) {
     await page.addInitScript({ path: GFS_STUB });
-    await page.addInitScript(() => { window.__gfsStub.extensions = ['diapositives']; });
+    await page.addInitScript((list) => { window.__gfsStub.extensions = list; }, ['diapositives'].concat(extensions.filter(id => id !== 'diapositives')));
+  } else if (extensions.length) {
+    await page.addInitScript({ path: GFS_STUB });
+    await page.addInitScript((list) => { window.__gfsStub.extensions = list; }, extensions);
   }
   await page.goto(`${BASE}/_captures.html?${slides ? 'gfs=0&' : ''}dev`, { waitUntil: 'load' });
   await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
@@ -370,7 +376,7 @@ for (const job of todo) {
     const imageBuffers = {};
     Object.keys(imageSpecs).forEach((id) => { imageBuffers[id] = makeImage(imageSpecs[id]); });
     const type = (pack.template && pack.template.type) || 'document';
-    session = await openWidget(browser, imageBuffers, { slides: type === 'presentation' });
+    session = await openWidget(browser, imageBuffers, { slides: type === 'presentation', extensions: files.exemple.extensions || [] });
     const { page, problems } = session;
     await installFromGallery(page, entry.name);
     const main = pack.main || tables[0].id;

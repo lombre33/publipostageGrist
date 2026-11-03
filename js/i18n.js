@@ -1866,6 +1866,11 @@ const I18n = (function () {
   'gallery.shows.sortFilter': { fr: 'Boucle triée ou filtrée', en: 'Sorted or filtered loop' },
   'gallery.shows.refListLoop': { fr: 'Boucle sur une colonne Références', en: 'Loop over a Reference list column' },
   'gallery.shows.presentation': { fr: 'Présentation', en: 'Presentation' },
+  'gallery.shows.charts': { fr: 'Graphiques de tables', en: 'Charts from tables' },
+  'gallery.shows.slideLinks': { fr: 'Liens entre diapositives', en: 'Links between slides' },
+  'gallery.shows.slideViews': { fr: 'Vues en direct', en: 'Live views' },
+  'gallery.shows.transitions': { fr: 'Transitions et animations', en: 'Transitions and animations' },
+  'gallery.shows.theme': { fr: 'Thème et décor', en: 'Theme and decor' },
     // Les noms et les mots-clés du catalogue de la galerie (templates-gallery/catalogue.json, écrit en français), pour une interface qui n'est pas en français : `gallery.name.<id du modèle>` et
     // `gallery.tag.<mot-clé sans accent>`. En français le nom du catalogue parle seul (js/template-gallery-modal.js : entryName) : le texte français d'ici n'en est que la copie, que
     // dev-tests/verify-gallery-captures.mjs compare au catalogue (un nom changé là doit l'être ici ; un mot-clé, à la majuscule près : il s'affiche en capitale, dans les deux langues

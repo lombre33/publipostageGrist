@@ -11,6 +11,8 @@
 //   7. chaque modèle de templates-gallery/ a son nom, et chaque mot-clé de ses modèles son libellé, dans js/i18n.js (gallery.name.<id>, gallery.tag.<mot-clé sans accent>) : le texte
 //      français est la copie exacte du catalogue (un nom changé dans le catalogue doit l'être dans js/i18n.js), l'anglais tient lui aussi en 40 caractères, et aucune traduction
 //      ne reste sans modèle ni mot-clé. Sans cela, l'interface anglaise montrerait un nom ou un mot-clé français (21/10).
+//   8. les extensions qu'un pack exige (`requires`, js/template-pack.js) sont des identifiants que le widget connaît (js/extensions.js), et un modèle qui montre des graphiques exige « graphique » :
+//      la galerie grise ses boutons tant qu'une extension exigée manque (js/template-gallery-modal.js).
 // Lancé par run-headless.mjs (groupe Node "galleryCaptures"), ou seul : node dev-tests/verify-gallery-captures.mjs
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -81,7 +83,17 @@ const PROOFS = {
   sortFilter: ({ html }) => /data-loop="[^"]*&quot;(sort|filter)&quot;/.test(html), // le réglage de la boucle est du JSON dans un attribut : guillemets échappés
   refListLoop: ({ html }) => /data-loop="[^"]*&quot;via&quot;/.test(html),
   presentation: ({ pack, html }) => !!pack.template && pack.template.type === 'presentation' && /class="page-break-marker"/.test(html),
+  // Les graphiques sont lus dans des tables que le pack crée (une table du pack, hors la famille, est celle d'un graphique), les liens et les vues sont ceux de js/frame-link.js et de js/slide-view.js, les transitions
+  // celles de la marque de diapositive (js/slide-props.js).
+  charts: ({ pack, html }) => /data-chart-spec=/.test(html) && (pack.tables || []).some(table => typeof table === 'object'),
+  slideLinks: ({ html }) => /data-ff-link="#[A-Za-z0-9][^"]*"/.test(html),
+  slideViews: ({ html }) => /data-ff-view="[A-Za-z0-9][^"]*"/.test(html),
+  transitions: ({ html }) => /data-trans="[a-z]+"/.test(html),
+  // Le thème que le pack porte (template.page.theme, js/slide-theme.js) avec son décor (bandeau, logo, numéro, pied) : le modèle installé les garde dans sa colonne Margins.
+  theme: ({ pack }) => { const page = (pack.template && pack.template.page) || {}; return !!(page.theme && page.theme.decor && Object.keys(page.theme.decor).length); },
 };
+// Les extensions du widget (js/extensions.js : une entrée par identifiant de GFS) : un pack ne peut en exiger (`requires`) que de connues.
+const knownExtensions = Array.from(readFileSync(join(ROOT, 'js', 'extensions.js'), 'utf8').matchAll(/\n {4}([a-z][a-z0-9-]*): \{\n {6}nameKey:/g)).map((m) => m[1]);
 
 const galleries = [{ dir: 'templates-gallery', dev: false }, { dir: 'templates-gallery-dev', dev: true }];
 const seenKeys = new Set();
@@ -131,6 +143,10 @@ for (const gallery of galleries) {
 
     const shows = entry.shows || [];
     const headerFooter = entry.headerFooter && existsSync(join(root, entry.headerFooter)) ? readFileSync(join(root, entry.headerFooter), 'utf8') : '';
+    // Les extensions que le modèle exige : connues du widget, et un modèle dont les graphiques sont lus dans ses tables exige « graphique » (sans elle ils ne se dessinent pas : la galerie grise ses boutons).
+    const requires = (f.pack && f.pack.requires) || [];
+    check(`${id} : les extensions qu'il exige (${requires.join(', ') || 'aucune'}) sont connues du widget (js/extensions.js : ${knownExtensions.join(', ')})`, requires.every((r) => knownExtensions.includes(r)), requires);
+    check(`${id} : un modèle qui montre des graphiques exige l'extension « graphique »`, !(entry.shows || []).includes('charts') || requires.includes('graphique'), requires);
     check(`${id} : au plus 6 pastilles « Fonctions montrées »`, shows.length <= 6, shows);
     check(`${id} : des pastilles sans doublon`, new Set(shows).size === shows.length, shows);
     for (const key of shows) {

@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 // La présentation commerciale de la galerie (templates-gallery/proposition-commerciale, js/template-gallery-modal.js, js/template-pack.js, js/slides-entry.js), dans GFS simulé, à la vraie souris,
 // 700x400, français clair puis anglais sombre.
-//  EXTENSION « diapositives » ÉTEINTE : la carte est dans la galerie avec sa vignette ; son aperçu montre ses captures ; « Utiliser ce modèle » et « Créer avec sa table » restent, grisés
-//   (aria-disabled) avec leur raison au survol ; leur clic demande l'extension à GFS (`installer`) et ne crée rien (ni table, ni modèle, aucune question).
-//  GFS L'ALLUME PENDANT L'APERÇU (événement `extensions`) : les deux boutons redeviennent utilisables sans rouvrir l'aperçu.
-//  FRANÇAIS : « Créer avec sa table », puis « Créer » à la question : la table Contacts est créée vide, le modèle est enregistré sous le type « presentation » avec sa page 16:9 en paysage et
-//   s'ouvre : trente diapositives dans la bande, aucune qui déborde. ANGLAIS : « Sales presentation », « Use this template » : la même présentation, sans table.
+//  AUCUNE EXTENSION ALLUMÉE : la carte est dans la galerie avec sa vignette ; son aperçu montre ses captures ; « Utiliser ce modèle » et « Créer avec sa table » restent, grisés
+//   (aria-disabled) avec leur raison au survol (l'extension du type du modèle d'abord, « diapositives ») ; leur clic demande cette extension à GFS (`installer`) et ne crée rien (ni table, ni modèle, aucune question).
+//  « DIAPOSITIVES » ALLUMÉE, « GRAPHIQUE » ÉTEINTE : le modèle exige aussi « graphique » (`requires` de son pack : ses treize graphiques ne se dessinent pas sans elle) ; les deux boutons restent grisés avec CETTE raison,
+//   leur clic demande « graphique » à GFS et ne crée rien.
+//  GFS ALLUME « GRAPHIQUE » PENDANT L'APERÇU (événement `extensions`) : les deux boutons redeviennent utilisables sans rouvrir l'aperçu.
+//  FRANÇAIS : « Créer avec ses tables », puis « Créer » à la question : les treize tables sont créées vides (Contacts, et les douze que les graphiques lisent), le modèle est enregistré sous le type « presentation » avec sa page 16:9 en paysage,
+//   son thème « Hélianthe » (couleurs, polices et décor : bandeau, logo, numéro, pied) et ses trois mises en forme gardées, et s'ouvre : trente-neuf diapositives dans la bande, aucune qui déborde.
+//   ANGLAIS : « Sales presentation », « Use this template » : la même présentation (thème et mises en forme compris), sans table.
 // Lancé par run-headless.mjs (groupe Node "slidesGallery", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slides-gallery.mjs
 // SLIDES_GALLERY_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { mkdir } from 'node:fs/promises';
@@ -17,11 +20,13 @@ if (SHOTS) await mkdir(SHOTS, { recursive: true });
 const t = await start({ name: 'verify-slides-gallery', port: Number(process.env.SLIDES_GALLERY_PORT || 8946) });
 const { check } = t;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const SLIDES = 30;
+const SLIDES = 39;
+// Les tables que les graphiques de la présentation lisent (le pack les crée vides, avec Contacts).
+const CHART_TABLES = ['Marche', 'Acteurs', 'Positionnement', 'Pistes', 'Charge', 'Missions', 'Budget', 'Profils', 'Retour', 'Gains', 'Objectifs', 'Indicateurs'];
 
 const TEXTS = {
-  fr: { card: 'Présentation commerciale', reason: 'Demande l’extension Diapositives (Grist Factory Suite)', create: 'Créer', question: 'Créer les tables du modèle ?' },
-  en: { card: 'Sales presentation', reason: 'Needs the Slides extension (Grist Factory Suite)', create: 'Create', question: 'Create the template’s tables?' },
+  fr: { card: 'Présentation commerciale', reason: 'Demande l’extension Diapositives (Grist Factory Suite)', reasonChart: 'Demande l’extension Graphique (Grist Factory Suite)', create: 'Créer', question: 'Créer les tables du modèle ?' },
+  en: { card: 'Sales presentation', reason: 'Needs the Slides extension (Grist Factory Suite)', reasonChart: 'Needs the Chart extension (Grist Factory Suite)', create: 'Create', question: 'Create the template’s tables?' },
 };
 
 async function snap(page, name) { if (SHOTS) await page.screenshot({ path: join(SHOTS, name + '.png') }); }
@@ -84,10 +89,13 @@ const preview = page => page.evaluate(() => {
   return { open, captures: document.querySelectorAll('#tpl-preview-captures img').length, empty: button('tpl-preview-use-empty'), pack: button('tpl-preview-use-pack') };
 });
 const dialogOpen = page => page.evaluate(() => { const m = document.getElementById('pp-dialog-modal'); return !!m && m.style.display !== 'none' && m.getBoundingClientRect().height > 0 ? m.querySelector('#pp-dialog-title').textContent : ''; });
-const doc = page => page.evaluate(() => {
+const doc = page => page.evaluate((chartTables) => {
   const st = window.__gristStub.state;
-  return { contacts: st.tables.indexOf('Contacts') !== -1, contactRows: st.rows.Contacts ? st.rows.Contacts.id.length : 0, models: st.rows.Publipostage_Modeles.id.length, current: Templates.getCurrentId() };
-});
+  return {
+    contacts: st.tables.indexOf('Contacts') !== -1, contactRows: st.rows.Contacts ? st.rows.Contacts.id.length : 0, models: st.rows.Publipostage_Modeles.id.length, current: Templates.getCurrentId(),
+    charts: chartTables.filter(name => st.tables.indexOf(name) !== -1).length, chartRows: chartTables.reduce((sum, name) => sum + (st.rows[name] ? st.rows[name].id.length : 0), 0),
+  };
+}, CHART_TABLES);
 // Le modèle ouvert : sa ligne dans la table des modèles, sa page, la bande des diapositives.
 const opened = page => page.evaluate(() => {
   const id = Templates.getCurrentId();
@@ -100,6 +108,9 @@ const opened = page => page.evaluate(() => {
     name: document.getElementById('template-name').value, type: row && row.TypeModele, format: margins && margins.format, orientation: margins && margins.orientation,
     label: PageLayout.getFormatLabel(), slides: strip && !strip.hidden ? strip.querySelectorAll('.pp-slide-item').length : 0, overflow: overflow.length,
     text: document.querySelector('.ProseMirror').textContent,
+    // Le thème et les mises en forme que le modèle garde dans sa colonne Margins (le pack les porte, la galerie les installe).
+    theme: margins && margins.theme ? { name: margins.theme.name, decor: Object.keys(margins.theme.decor || {}).sort().join(','), band: margins.theme.decor && margins.theme.decor.band && margins.theme.decor.band.edge, accent: margins.theme.colors && margins.theme.colors.accent1 } : null,
+    formats: margins && Array.isArray(margins.textFormats) ? margins.textFormats.map(f => f.name) : [],
   };
 });
 const installCalls = page => page.evaluate(() => window.__gfsStub.calls.filter(c => c.nom === 'installer').map(c => JSON.stringify(c.args)));
@@ -107,11 +118,11 @@ const installCalls = page => page.evaluate(() => window.__gfsStub.calls.filter(c
 async function run(lang, colorScheme) {
   const T = TEXTS[lang];
   const tag = `[${lang} ${colorScheme}] `;
-  const { page } = await t.openPage({ hosted: true, stub: { extensions: ['graphique'] }, seed: seedModels(), lang, colorScheme });
+  const { page } = await t.openPage({ hosted: true, stub: { extensions: [] }, seed: seedModels(), lang, colorScheme });
   const { click, openGallery, card, clickDialog } = toolsOf(page);
   const before = await doc(page);
 
-  // --- La carte et son aperçu, l'extension éteinte.
+  // --- La carte et son aperçu, aucune extension allumée.
   await openGallery();
   await card(T.card);
   // La vignette se charge une fois la carte à l'écran.
@@ -127,8 +138,8 @@ async function run(lang, colorScheme) {
   await page.waitForFunction(() => document.querySelectorAll('#tpl-preview-captures img').length > 0, null, { timeout: 8000 }).catch(() => {});
   await sleep(300);
   let p = await preview(page);
-  check(tag + 'l’aperçu s’ouvre sur ses cinq captures', p.open && p.captures === 5, p);
-  check(tag + 'extension éteinte : « Utiliser ce modèle » et « Créer avec sa table » restent, grisés, avec la raison « ' + T.reason + ' » au survol, au premier plan dans le panneau',
+  check(tag + 'l’aperçu s’ouvre sur ses six captures', p.open && p.captures === 6, p);
+  check(tag + 'aucune extension : « Utiliser ce modèle » et « Créer avec sa table » restent, grisés, avec la raison « ' + T.reason + ' » au survol, au premier plan dans le panneau',
     !p.empty.hidden && !p.pack.hidden && p.empty.disabled === 'true' && p.pack.disabled === 'true' && p.empty.title === T.reason && p.pack.title === T.reason
     && p.empty.onTop && p.pack.onTop && p.empty.inPanel && p.pack.inPanel, p);
   await snap(page, `apercu-eteint-${lang}`);
@@ -140,14 +151,29 @@ async function run(lang, colorScheme) {
   let now = await doc(page);
   check(tag + 'leur clic demande l’extension « diapositives » à GFS (installer), deux fois, sans question ni fenêtre',
     calls.length === 2 && calls.every(a => /diapositives/.test(a)) && (await dialogOpen(page)) === '', calls);
-  check(tag + 'rien n’est créé : ni table Contacts, ni modèle ; l’aperçu reste ouvert',
-    !now.contacts && now.models === before.models && now.current === before.current && (await preview(page)).open, now);
+  check(tag + 'rien n’est créé : ni table (Contacts, ni celles des graphiques), ni modèle ; l’aperçu reste ouvert',
+    !now.contacts && now.charts === 0 && now.models === before.models && now.current === before.current && (await preview(page)).open, now);
 
-  // --- GFS allume l'extension pendant l'aperçu : les boutons suivent.
+  // --- GFS allume « diapositives » seule : le modèle exige aussi « graphique » (requires de son pack), les boutons restent grisés avec CETTE raison ; leur clic demande « graphique » et ne crée rien.
+  await page.evaluate(() => window.__gfsStub.setExtensions(['diapositives']));
+  await sleep(600);
+  p = await preview(page);
+  check(tag + 'diapositives allumée, graphique éteinte : les deux boutons restent grisés, avec la raison « ' + T.reasonChart + ' », au premier plan, l’aperçu toujours ouvert',
+    p.open && p.empty.disabled === 'true' && p.pack.disabled === 'true' && p.empty.title === T.reasonChart && p.pack.title === T.reasonChart && p.empty.onTop && p.pack.onTop, p);
+  await snap(page, `apercu-graphique-eteint-${lang}`);
+  const callsBefore = (await installCalls(page)).length;
+  await click('#tpl-preview-use-pack', 700);
+  await click('#tpl-preview-use-empty', 700);
+  const callsChart = (await installCalls(page)).slice(callsBefore);
+  now = await doc(page);
+  check(tag + 'leur clic demande l’extension « graphique » à GFS (installer), deux fois, sans question ni fenêtre, et ne crée rien',
+    callsChart.length === 2 && callsChart.every(a => /graphique/.test(a)) && (await dialogOpen(page)) === '' && !now.contacts && now.charts === 0 && now.models === before.models && now.current === before.current && (await preview(page)).open, { callsChart, now });
+
+  // --- GFS allume l'extension qui manquait pendant l'aperçu : les boutons suivent.
   await page.evaluate(() => window.__gfsStub.setExtensions(['graphique', 'diapositives']));
   await sleep(600);
   p = await preview(page);
-  check(tag + 'GFS allume l’extension : les deux boutons redeviennent utilisables, sans raison, l’aperçu toujours ouvert',
+  check(tag + 'GFS allume « graphique » : les deux boutons redeviennent utilisables, sans raison, l’aperçu toujours ouvert',
     p.open && p.empty.disabled === 'false' && p.pack.disabled === 'false' && p.empty.title === '' && p.pack.title === '', p);
 
   if (lang === 'fr') {
@@ -163,11 +189,13 @@ async function run(lang, colorScheme) {
   await sleep(800);
   now = await doc(page);
   const o = await opened(page);
-  check(tag + (lang === 'fr' ? 'la table Contacts est créée, vide' : '« Use this template » ne crée aucune table'), lang === 'fr' ? now.contacts && now.contactRows === 0 : !now.contacts, now);
+  check(tag + (lang === 'fr' ? 'les treize tables du modèle sont créées, vides : Contacts et les douze que les graphiques lisent' : '« Use this template » ne crée aucune table'), lang === 'fr' ? now.contacts && now.contactRows === 0 && now.charts === CHART_TABLES.length && now.chartRows === 0 : !now.contacts && now.charts === 0, now);
   check(tag + 'le modèle est enregistré sous le nom de la carte, type « presentation », page 16:9 en paysage, et s’ouvre',
     now.models === before.models + 1 && now.current != null && o.name === T.card && o.type === 'presentation' && o.format === '190.5x338.7' && o.orientation === 'landscape' && o.label === '16:9', { now, o });
   check(tag + 'la bande montre ses ' + SLIDES + ' diapositives, aucune ne déborde, le texte est celui du modèle',
     o.slides === SLIDES && o.overflow === 0 && /Mieux piloter/.test(o.text) && /Merci de votre/.test(o.text), { slides: o.slides, overflow: o.overflow });
+  check(tag + 'le modèle garde le thème « Hélianthe » avec son décor (bandeau à gauche, logo, numéro, pied, première diapositive sans) et ses trois mises en forme (Chiffre clé, Surtitre, Citation)',
+    !!o.theme && o.theme.name === 'Hélianthe' && o.theme.accent === '#048189' && o.theme.band === 'left' && o.theme.decor === 'band,footer,logo,number,skipFirst' && o.formats.join('|') === 'Chiffre clé|Surtitre|Citation', { theme: o.theme, formats: o.formats });
   await snap(page, `ouverte-${lang}`);
   await page.context().close();
 }
