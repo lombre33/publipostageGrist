@@ -295,6 +295,70 @@
     },
   });
 
+  cases.push({
+    id: 'pagination_reader_places_every_run_of_plain_page_breaks_at_once_even_after_a_table_cut',
+    description: "La Lecture d'un long texte qui coupe un tableau toutes les quelques pages pose, comme l'éditeur, chaque suite de coupures simples d'un coup (la première coupure dans un tableau renvoyait toutes les suivantes au calcul une à une, une mise en page par coupure, à chaque entrée en Lecture) : au plus deux feuilles posées pour une seule coupure simple, une réserve par coupure simple et une seule, et des coupures dans un tableau comme avant",
+    run: async (h) => {
+      await setup(h, textWithTables());
+      const watch = watchPaginationSheets();
+      let seams = 0; let inner = 0; let reserves = 0; let alone = 0;
+      try {
+        await h.renderReaderMode(Editor.getHTML(), Editor.getHeaderFooterData());
+        await h.sleep(250);
+        const rc = document.getElementById('reader-container');
+        const bands = Array.from(rc.querySelectorAll('.v2-pagination-overlay .v2-page-band'));
+        seams = bands.length;
+        // Une coupure dans un tableau porte le chapeau qui coiffe la ligne coupée (`v2-page-seam-cap`).
+        inner = bands.filter(band => band.querySelector('.v2-page-seam-cap')).length;
+        reserves = Array.from(rc.querySelectorAll('.reader-content > style.v2-pagination-style')).reduce((sum, el) => sum + (el.textContent.match(/margin-bottom:/g) || []).length, 0);
+        // Une coupure simple posée seule a sa propre feuille d'une seule règle de réserve (EditorCore.createStepSheets.add) ; une suite posée d'un coup, une feuille de toutes ses règles.
+        const perSheet = new Map();
+        watch.writes.forEach(w => {
+          const sheet = perSheet.get(w.el) || { single: true, reserve: false };
+          sheet.single = sheet.single && rulesIn(w.value) === 1;
+          sheet.reserve = sheet.reserve || (/margin-bottom:/.test(w.value) && !/padding-top|clip-path/.test(w.value));
+          perSheet.set(w.el, sheet);
+        });
+        alone = Array.from(perSheet.values()).filter(sheet => sheet.single && sheet.reserve).length;
+      } finally {
+        watch.stop();
+        restoreReader();
+      }
+      const simple = seams - inner;
+      if (simple < 10 || inner < 3) return { pass: false, notes: 'document sans assez de coupures de chaque genre : ' + simple + ' simples, ' + inner + ' dans un tableau (' + seams + ' en tout)' };
+      return {
+        pass: alone <= 2 && reserves === simple,
+        notes: seams + ' coupures (' + simple + ' simples, ' + inner + ' dans un tableau), feuilles de coupure simple posée seule=' + alone + ' (attendu au plus 2 ; le calcul une à une en pose une par coupure d\'après le premier tableau coupé), règles de réserve=' + reserves + ' (attendu ' + simple + ')',
+      };
+    },
+  });
+
+  cases.push({
+    id: 'pagination_reader_footer_page_numbers_follow_the_seams_of_a_batch_resumed_after_a_table_cut',
+    description: "Le numéro de page du pied d'une couture est le rang de sa coupure, même pour les coupures d'un lot repris après un tableau coupé : le lot reprend à la coupure `start`, ses numéros ne repartent pas de 1",
+    run: async (h) => {
+      await setup(h, textWithTables());
+      const badge = '<span class="page-number-badge" contenteditable="false" data-format="n">#</span>';
+      Editor.setHeaderFooterData({ enabled: true, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '<p>— ' + badge + ' —</p>', first: '' } });
+      let numbers = []; let inner = 0;
+      try {
+        await h.renderReaderMode(Editor.getHTML(), Editor.getHeaderFooterData());
+        await h.sleep(250);
+        const bands = Array.from(document.querySelectorAll('#reader-container .v2-pagination-overlay .v2-page-band'));
+        numbers = bands.map(band => { const m = (band.textContent || '').match(/—\s*(\d+)\s*—/); return m ? Number(m[1]) : null; });
+        inner = bands.filter(band => band.querySelector('.v2-page-seam-cap')).length;
+      } finally {
+        restoreReader();
+      }
+      if (numbers.length < 10 || inner < 3) return { pass: false, notes: 'document sans assez de coupures : ' + numbers.length + ' en tout, ' + inner + ' dans un tableau' };
+      const expected = numbers.map((_, i) => i + 1);
+      return {
+        pass: JSON.stringify(numbers) === JSON.stringify(expected),
+        notes: numbers.length + ' coupures (' + inner + ' dans un tableau), numéros du pied=' + numbers.join(',') + ' (attendu 1 à ' + numbers.length + ' dans l\'ordre)',
+      };
+    },
+  });
+
   // Le réglage de numérotation des titres (`heading-numbering-config`, que porte tout document aux titres numérotés ou au style de titres, la présentation « Présentation commerciale » comprise) : un
   // bloc de premier niveau que le style cache (`display: none`), qui n'a aucune place et dont le rectangle est nul à l'origine de l'ÉCRAN. Demande d'Antoine du 03/11 (« slides+ est assez laggy »).
   const HIDDEN_CONFIG = '<div class="heading-numbering-config" data-style="numeric"></div>';
