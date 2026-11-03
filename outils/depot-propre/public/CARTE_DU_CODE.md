@@ -189,7 +189,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 
 | Fichier | Rôle |
 |---|---|
-| `js/reader-mode.js` | Le document résolu pour une ligne et paginé (même calcul des coupures que l'éditeur : `placeSimpleSeamsAtOnce`, puis `placeSeam`, mêmes réserves vérifiées et surveillées, `watchGeometry` ; `computePageBreakOffsets` ignore de même un bloc non rendu) ; `preview()` sert aussi tous les exports. |
+| `js/reader-mode.js` | Le document résolu pour une ligne et paginé (même calcul des coupures que l'éditeur : `placeSimpleSeamsAtOnce`, puis `placeSeam`, mêmes réserves vérifiées et surveillées, `watchGeometry` ; `computePageBreakOffsets` ignore de même un bloc non rendu ; `layOutSheets` suspend l'ancrage de défilement le temps de la mise en page) ; `preview()` sert aussi tous les exports. |
 | `js/reader-guide.js` | Le guide affiché quand aucune ligne n'est choisie, et la carte « Donnez l'accès complet à ce widget » que l'éditeur montre à la place du document quand Grist ne lui donne pas l'accès complet. |
 
 ### Mode grille (6 fichiers, 3 800 lignes)
@@ -591,7 +591,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 
 | File | Role |
 |---|---|
-| `js/reader-mode.js` | The document resolved for a row and paginated (the same cut calculation as the editor: `placeSimpleSeamsAtOnce`, then `placeSeam`, the same reserves checked and watched, `watchGeometry`); `preview()` also serves all the exports. |
+| `js/reader-mode.js` | The document resolved for a row and paginated (the same cut calculation as the editor: `placeSimpleSeamsAtOnce`, then `placeSeam`, the same reserves checked and watched, `watchGeometry`; `layOutSheets` suspends scroll anchoring for the time of the layout); `preview()` also serves all the exports. |
 | `js/reader-guide.js` | The guide shown when no row is chosen, and the "Give this widget full access" card the editor shows in place of the document when Grist does not give it full access. |
 
 ### Grid mode (6 files, 3,800 lines)

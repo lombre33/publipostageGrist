@@ -321,6 +321,53 @@
     },
   });
 
+  // Les réserves de bas de page de la Lecture (les `margin-bottom` des feuilles de pagination, `.reader-content > style.v2-pagination-style`) : leurs nombres seuls, dans l'ordre du document.
+  const readerReserves = () => numbersOf(Array.from(document.querySelectorAll('#reader-container .reader-content > style.v2-pagination-style')).map(s => (s.textContent.match(/margin-bottom: [0-9.]+px/g) || []).join(' ')).join(' '));
+
+  cases.push({
+    id: 'pagination_reader_measures_the_same_reserves_wherever_the_reader_is_scrolled',
+    description: "La Lecture qui se mesure de nouveau alors qu'on lit plus bas dans le document, d'elle-même (une police qui arrive, une image qui change de taille : watchGeometry) ou par un rendu complet (un autre enregistrement), pose les mêmes réserves de bas de page qu'au haut et garde son défilement : le navigateur ne décale plus le défilement entre deux lectures de rectangles du calcul (l'ancrage de défilement est suspendu pendant la mise en page, puis rendu). Avant : une réserve plus grande d'une centaine de pixels (un blanc de trois centimètres à un saut de page), et le rendu complet faisait sauter la vue de la même hauteur",
+    run: async (h) => {
+      await setup(h, HIDDEN_CONFIG + lines(500));
+      const html = Editor.getHTML();
+      const hf = Editor.getHeaderFooterData();
+      const gapsOf = (reserves, base) => reserves.map((v, i) => Math.round((v - base[i]) * 100) / 100).filter(d => d !== 0);
+      try {
+        const rc = document.getElementById('reader-container');
+        // La mesure de départ se fait en haut : un défilement laissé par un autre essai fausserait déjà celle-ci.
+        rc.scrollTop = 0;
+        await h.renderReaderMode(html, hf);
+        await h.sleep(250);
+        const atTop = readerReserves();
+        const lower = Math.min(1500, Math.floor((rc.scrollHeight - rc.clientHeight) / 2));
+        if (lower < 300 || atTop.length < 8) return { pass: false, notes: 'Lecture trop courte ou peu défilable : ' + atTop.length + ' réserves, ' + (rc.scrollHeight - rc.clientHeight) + ' px défilables' };
+        rc.scrollTop = lower;
+        // Le temps d'une image à l'écran : le navigateur retient alors le bloc qu'on lit pour ancre.
+        await h.sleep(150);
+        const reached = rc.scrollTop;
+        // Une police qui finit de charger : la Lecture refait sa mise en page à sa place (watchGeometry) et rend le défilement qu'elle avait.
+        document.fonts.dispatchEvent(new Event('loadingdone'));
+        await h.sleep(400);
+        const refit = readerReserves();
+        const refitScroll = rc.scrollTop;
+        // Un rendu complet, la Lecture défilée (un autre enregistrement) : la vue reste où elle était.
+        await h.renderReaderMode(html, hf);
+        await h.sleep(250);
+        const rendered = readerReserves();
+        const renderedScroll = rc.scrollTop;
+        const refitGaps = gapsOf(refit, atTop);
+        const renderedGaps = gapsOf(rendered, atTop);
+        // L'ancrage est rendu après le calcul : la Lecture le garde le reste du temps.
+        const anchoring = getComputedStyle(rc).overflowAnchor;
+        return {
+          pass: Math.abs(reached - lower) <= 1 && sameNumbers(refit, atTop, 0.01) && Math.abs(refitScroll - reached) <= 1 && sameNumbers(rendered, atTop, 0.01) && Math.abs(renderedScroll - reached) <= 1 && anchoring === 'auto',
+          notes: atTop.length + ' réserves en haut ; défilé à ' + reached + ' (demandé ' + lower + ') ; mesurée de nouveau par la police : ' + refit.length + ' réserves, écarts ' + (refitGaps.length ? JSON.stringify(refitGaps) : 'aucun') + ', défilement ' + Math.round(refitScroll)
+            + ' ; par un rendu complet : ' + rendered.length + ' réserves, écarts ' + (renderedGaps.length ? JSON.stringify(renderedGaps) : 'aucun') + ', défilement ' + Math.round(renderedScroll) + ' (attendu aucun écart, défilement ' + Math.round(reached) + ') ; ancrage après le calcul : ' + anchoring + ' (attendu auto)',
+        };
+      } finally { restoreReader(); }
+    },
+  });
+
   // Les paginations posées pendant un affichage : chaque calcul commence par vider la feuille des marges (une écriture de texte vide).
   async function paginationsDuring(h, html) {
     await setup(h, lines(30));

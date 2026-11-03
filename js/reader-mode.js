@@ -906,6 +906,16 @@ const ReaderMode = (function () {
     }));
     return Object.assign({}, pagedSections[0], { pages: [].concat(...pagedSections.map(paged => paged.pages)), sections: pagedSections });
   }
+  // La mise en page de la feuille (ou des sections) sans ancrage de défilement. Les positions de page se lisent sur des rectangles pris à des instants différents du calcul (la feuille des marges est
+  // retirée, les réserves sont reposées une à une), et le navigateur, qui garde en place le bloc qu'il tient pour ancre, décale le défilement entre deux lectures : une Lecture mesurée de nouveau
+  // défilée (une image ou une police qui change de taille, watchGeometry) trouvait une réserve plus grande d'une centaine de pixels, un blanc au milieu d'une page. L'éditeur n'a jamais d'ancrage
+  // (css/editor-v2.css, `#editor-container`) ; la Lecture ne s'en prive que pendant le calcul : le reste du temps, ce qui se charge au-dessus de ce qu'on lit ne fait toujours pas sauter la page.
+  function layOutSheets(container, sections, wrapper, zones) {
+    const anchoring = container.style.overflowAnchor;
+    container.style.overflowAnchor = 'none';
+    try { return sections ? paginateSections(container, sections, zones) : paginate(container, wrapper, zones); }
+    finally { container.style.overflowAnchor = anchoring; }
+  }
 
   // Page d'un bloc de premier niveau : une frontière (`afterIndex`) renvoie à la page d'après tous les blocs qui la suivent.
   function pageOfChildIndex(offsets, index) { return offsets.filter(o => o.afterIndex < index).length; }
@@ -1242,7 +1252,7 @@ const ReaderMode = (function () {
     const sections = zones ? splitIntoSections(wrapper) : null;
     syncWidestSheet(container, sections);
     const wrappers = sections ? sections.map(section => section.wrapper) : [wrapper];
-    const layOut = () => (sections ? paginateSections(container, sections, zones) : paginate(container, wrapper, zones));
+    const layOut = () => layOutSheets(container, sections, wrapper, zones);
     layOut();
     if (!stale()) watchGeometry(container, wrappers, layOut);
   }
@@ -1277,7 +1287,7 @@ const ReaderMode = (function () {
       const widest = widestSheetPx(sections);
       if (widest) container.style.setProperty('--pp-page-width', widest + 'px');
       const wrappers = sections ? sections.map(section => section.wrapper) : [wrapper];
-      const layOut = () => (sections ? paginateSections(container, sections, zones) : paginate(container, wrapper, zones));
+      const layOut = () => layOutSheets(container, sections, wrapper, zones);
       const fonts = container.ownerDocument.fonts;
       const settle = async () => { await settleImages(container, PRINT_SETTLE_MS); if (fonts) await fonts.ready; };
       await settle();
