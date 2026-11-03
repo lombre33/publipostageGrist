@@ -5,7 +5,7 @@
 //  UN SEUL RENDU À LA PREMIÈRE ENTRÉE : le conteneur de la Lecture vient d'être affiché, c'est le moment où l'observateur de taille (js/main.js:wirePageFitZoom) trouvait le facteur d'ajustement changé et
 //   redessinait toute la Lecture en plein rendu ; avec des barres de défilement qui prennent de la largeur (chez qui les a classiques), le contenu qui entre le changeait une fois de plus. `ReaderMode.render` n'est
 //   appelé qu'une fois, avec ou sans barres, et le facteur final est celui que le conteneur donne maintenant (la page tient dans la largeur qui reste).
-//  LE HTML N'EST PAS REFAIT POUR RIEN : le même document, rentré une deuxième fois en Lecture, ne repasse ni par SlideProps.forOutput ni par la sérialisation du modèle (js/slides-entry.js:outputHtml,
+//  LE HTML N'EST PAS REFAIT POUR RIEN : le même document, rentré une deuxième fois en Lecture, ne repasse ni par SlideProps.forOutputTree (la première étape du calcul, js/slides-entry.js:computeOutputHtml) ni par la sérialisation du modèle (js/slides-entry.js:outputHtml,
 //   js/comments.js:buildReaderHtml : numéro de rendu des repères de position inchangé) ; la page lue est la même, au caractère près. Rien n'est servi de périmé : un texte tapé, un autre format de page, un
 //   autre réglage des titres, un thème d'une autre couleur ou un lien entre diapositives (qui lit d'autres modèles) refont le calcul.
 //  LES LECTURES DE GRIST SE RECOUVRENT : les types de colonnes se lisent avant que le HTML se construise, et les images de variable, les codes QR, les graphiques et les puces se résolvent ensemble (l'une après
@@ -111,11 +111,11 @@ async function firstEntry(label, tab) {
 {
   const tab = await openDeck();
   const { page } = tab;
-  // Les passes qui refont le HTML d'une présentation à la sortie (SlideProps.forOutput, une par entrée en Lecture si rien n'est gardé), et le numéro de rendu des repères de position (Comments.buildReaderHtml).
+  // Les passes qui refont le HTML d'une présentation à la sortie (SlideProps.forOutputTree, la première étape du calcul : une par entrée en Lecture si rien n'est gardé), et le numéro de rendu des repères de position (Comments.buildReaderHtml).
   await page.evaluate(() => {
     window.__passes = 0;
-    const forOutput = SlideProps.forOutput;
-    SlideProps.forOutput = function (...args) { window.__passes++; return forOutput.apply(this, args); };
+    const forOutput = SlideProps.forOutputTree;
+    SlideProps.forOutputTree = function (...args) { window.__passes++; return forOutput.apply(this, args); };
   });
   await enterReading(page);
   const first = { passes: await page.evaluate(() => window.__passes), html: await readerHtml(page) };
@@ -149,8 +149,8 @@ async function firstEntry(label, tab) {
   const settings = await page.evaluate(() => {
     const html = '<h2>Titre</h2><p>' + 'texte '.repeat(4000) + '</p>';
     let passes = 0;
-    const forOutput = SlideProps.forOutput;
-    SlideProps.forOutput = function (...args) { passes++; return forOutput.apply(this, args); };
+    const forOutput = SlideProps.forOutputTree;
+    SlideProps.forOutputTree = function (...args) { passes++; return forOutput.apply(this, args); };
     const run = (options) => { const before = passes; SlidesEntry.outputHtml('presentation', html, options); return passes - before; };
     const out = {};
     out.first = run({ anchors: true });
@@ -169,7 +169,7 @@ async function firstEntry(label, tab) {
     PageLayout.setFormat(format);
     out.formatBack = run({ anchors: true });
     out.link = (() => { const linked = html.replace('<h2>', '<h2 data-link-slide="1">'); const a = (() => { const b = passes; SlidesEntry.outputHtml('presentation', linked, { anchors: true }); SlidesEntry.outputHtml('presentation', linked, { anchors: true }); return passes - b; })(); return a; })();
-    SlideProps.forOutput = forOutput;
+    SlideProps.forOutputTree = forOutput;
     return out;
   });
   check('périmé : le même HTML, les mêmes options, une seule fois calculé', settings.first >= 1 && settings.again === 0, settings);

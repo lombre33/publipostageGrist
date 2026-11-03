@@ -199,15 +199,26 @@ const SlideTheme = (function () {
     const t = normalize(theme);
     if (!html || !t) return html;
     const host = Dom.inertTemplate(html);
-    const levels = levelStylesOf(host.content);
-    host.content.querySelectorAll('p, h1, h2, h3, h4, h5, h6').forEach((block) => {
+    applyTo(host.content, t);
+    return host.innerHTML;
+  }
+  // La même chose sur un arbre déjà lu (un fragment de gabarit ou un `body`), que js/slides-entry.js:outputHtml enchaîne avec les autres étapes sans le sérialiser ni le relire ; `theme` est un thème
+  // (il se normalise ici). Vrai quand il y a un thème à appliquer.
+  function forOutputIn(root, theme) {
+    const t = normalize(theme);
+    if (!t) return false;
+    applyTo(root, t);
+    return true;
+  }
+  function applyTo(root, t) {
+    const levels = levelStylesOf(root);
+    root.querySelectorAll('p, h1, h2, h3, h4, h5, h6').forEach((block) => {
       if (block.closest('pre') || block.hasAttribute('data-caption')) return;
       const heading = /^H[1-6]$/.test(block.tagName);
       const own = (heading && levels[block.tagName.slice(1)]) || {};
       if (!block.style.fontFamily && !own.fontFamily) block.style.fontFamily = heading ? t.fonts.title : t.fonts.body;
       if (!block.style.color && !own.color) block.style.color = heading ? t.colors.title : t.colors.text;
     });
-    return host.innerHTML;
   }
   // Le fond que les SORTIES peignent sous les diapositives qui n'ont pas le leur (SlideProps.forOutput, option `background`) : le fond du thème, ou '' tant que c'est le blanc du papier - il n'y a rien à peindre,
   // et les sorties d'une présentation au fond blanc sont exactement celles d'avant. À l'écran, c'est css/slide-theme.css qui peint le même fond (la feuille de l'éditeur, les miniatures).
@@ -522,6 +533,6 @@ const SlideTheme = (function () {
   return {
     VERSION, NAME_MAX, COLOR_SLOTS, ACCENT_SLOTS, FONTS, DEFAULT_COLORS, DEFAULT_FONTS, CLASS, VARS,
     BAND_EDGES, BAND_SIZES, BAND_COLORS, CORNERS, LOGO_HEIGHTS, LOGO_MAX_WIDTH, FOOT_SPOTS, FOOTER_MAX, LOGO_SRC_MAX, PAGE_BASE_PT,
-    normalize, normalizeDecor, equals, displayName, original, fontOf, fontCss, lighten, darken, shapeLook, lineLook, cssVars, refresh, defaultsAt, forOutput, paperOf, paletteOf, remap, colorTable, DECOR_META, decorItems, decorHtmlFor, decorElement, decorElementFor, decorKey, createExtension, mutedText,
+    normalize, normalizeDecor, equals, displayName, original, fontOf, fontCss, lighten, darken, shapeLook, lineLook, cssVars, refresh, defaultsAt, forOutput, forOutputIn, paperOf, paletteOf, remap, colorTable, DECOR_META, decorItems, decorHtmlFor, decorElement, decorElementFor, decorKey, createExtension, mutedText,
   };
 })();

@@ -384,10 +384,14 @@ const FreeFrame = (function () {
     const text = String(source == null ? '' : source);
     if (text.indexOf(DOM_ATTRS.hidden) === -1) return text;
     const body = HtmlSanitize.parseInert(text);
-    const found = body.querySelectorAll('.' + CLASS + '[' + DOM_ATTRS.hidden + ']');
-    if (!found.length) return text;
+    return withoutHiddenIn(body) ? body.innerHTML : text;
+  }
+  // La même chose sur un arbre déjà lu (js/slides-entry.js:outputHtml l'enchaîne avec les autres étapes sans le relire) ; vrai quand un objet masqué est parti.
+  function withoutHiddenIn(root) {
+    const found = root.querySelectorAll('.' + CLASS + '[' + DOM_ATTRS.hidden + ']');
+    if (!found.length) return false;
     found.forEach((el) => { el.remove(); });
-    return body.innerHTML;
+    return true;
   }
   // La page en points (celle du modèle ouvert) : ce qui borne un cadre et le centre d'un cadre neuf.
   function pageSize() {
@@ -1905,7 +1909,7 @@ const FreeFrame = (function () {
 
   return {
     NODE, LINE_NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, DECOR_ATTR, LAYER_BEHIND, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml, html, decorHtml, artFits, lookRefused,
-    configure, createNode, createLineNode, createExtension, wireToolbar, normalized, withoutHidden, measuresOf: attrsOfEl, straight, horizontal, flatten, gesture, lineGesture, rotationAt, turnOf, storedHeight, keepReachable, overflowsPage, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
+    configure, createNode, createLineNode, createExtension, wireToolbar, normalized, withoutHidden, withoutHiddenIn, measuresOf: attrsOfEl, straight, horizontal, flatten, gesture, lineGesture, rotationAt, turnOf, storedHeight, keepReachable, overflowsPage, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
     insert, insertTable, insertView, patch, nudge, turnBy, reorder, duplicate, remove, select, currentFrame, frameAround, syncToolbar,
   };
 })();

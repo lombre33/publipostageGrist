@@ -166,20 +166,36 @@ const SlidesEntry = (function () {
     html = SlideLinks.forOutput(html);
     // Ni celui de la transition d'une diapositive (js/slide-props.js) : le diaporama la lit dans le texte de l'éditeur. Son fond, lui, y devient le cadre qui le peint, et celui du thème (SlideTheme.paperOf) le
     // cadre de chaque diapositive qui n'a pas le sien. L'export PowerPoint (`keepProps`) n'en écrit pas : le fond du thème est celui de son masque (js/pptx-export.js).
-    if (!keepProps) html = SlideProps.forOutput(html, { anchors, background: SlideTheme.paperOf(theme), decor: SlideTheme.decorHtmlFor(theme, page || (stored !== undefined ? pageSizeOf(typeModele, stored) : null)) });
+    // Le HTML est lu UNE fois, et les étapes qui suivent (objets masqués, thème, sauts de diapositive) se font sur le même arbre : chacune, avec un texte pour entrée et pour sortie, le relisait et le
+    // sérialisait (cinq lectures, quatre écritures, de 0,12 à 0,16 s dans « Présentation commerciale »). Le texte qui sort est le même, au caractère près (dev-tests/verify-output-html.mjs).
+    if (!keepProps) {
+      const tree = SlideProps.forOutputTree(html, { anchors, background: SlideTheme.paperOf(theme), decor: SlideTheme.decorHtmlFor(theme, page || (stored !== undefined ? pageSizeOf(typeModele, stored) : null)) });
+      if (tree) {
+        // Ni les objets masqués (js/free-frame.js : `data-ff-hidden`).
+        FreeFrame.withoutHiddenIn(tree);
+        // Le thème de la présentation : sa police et sa couleur sur le texte et les titres, la même chose qu'à l'écran (css/slide-theme.css).
+        if (theme) SlideTheme.forOutputIn(tree, theme);
+        markSlideBreaks(tree);
+        return tree.innerHTML;
+      }
+    }
     // Ni les objets masqués (js/free-frame.js : `data-ff-hidden`) ; l'export PowerPoint les écrit masqués.
     if (!keepProps) html = FreeFrame.withoutHidden(html);
     // Le thème de la présentation : sa police et sa couleur sur le texte et les titres, la même chose qu'à l'écran (css/slide-theme.css).
     if (theme) html = SlideTheme.forOutput(html, theme);
     const host = Dom.inertTemplate(html);
-    const blocks = Array.from(host.content.children);
+    return markSlideBreaks(host.content) ? host.innerHTML : html;
+  }
+  // Marque les sauts de page de premier niveau de `root` (un arbre lu : un fragment ou un `body`) comme sauts de diapositive, et ouvre la dernière diapositive sur une ligne ; vrai quand il y en a.
+  function markSlideBreaks(root) {
+    const blocks = Array.from(root.children);
     const breaks = blocks.filter(block => block.classList.contains('page-break-marker'));
-    if (!breaks.length) return html;
+    if (!breaks.length) return false;
     breaks.forEach(block => block.setAttribute(SLIDE_BREAK_ATTR, ''));
     // Le cadre du fond de la dernière diapositive ne compte pas, ni ceux de son décor : ils se dessinent sans texte à eux, la page doit encore s'ouvrir sur une ligne.
     const written = blocks.filter(block => !block.hasAttribute('data-ff-bg') && !block.hasAttribute(FreeFrame.DECOR_ATTR));
-    if (written[written.length - 1].classList.contains('page-break-marker')) host.content.appendChild(document.createElement('p'));
-    return host.innerHTML;
+    if (written[written.length - 1].classList.contains('page-break-marker')) root.appendChild(document.createElement('p'));
+    return true;
   }
 
   // Le texte neuf d'une diapositive

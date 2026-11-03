@@ -445,12 +445,28 @@ const SlideProps = (function () {
   function forOutput(html, { anchors = false, background = '', decor = null } = {}) {
     const paper = background && html ? colorOf(background) : '';
     const frames = typeof decor === 'function' && html ? decor : null;
-    return rewrite(paper || frames ? withPaper(String(html == null ? '' : html), paper, frames) : html, (el) => {
+    return rewrite(paper || frames ? withPaper(String(html == null ? '' : html), paper, frames) : html, outputEach(anchors));
+  }
+  // Ce que forOutput fait de chaque repère : le cadre de son fond, le bloc de son adresse (`anchors`), puis le repère s'en va.
+  function outputEach(anchors) {
+    return (el) => {
       const a = attrsOfEl(el);
       if (a.bg) el.after(Dom.inertTemplate(FreeFrame.backgroundHtml(a.bg)).content);
       if (anchors && a.anchorId) el.after(Dom.inertTemplate(anchorHtml(a)).content);
       el.remove();
-    });
+    };
+  }
+  // Le même travail que forOutput, mais rendu comme l'ARBRE lu une fois (un `body` d'un document inerte) au lieu d'un texte relu à chaque étape : les étapes suivantes de js/slides-entry.js:outputHtml (objets
+  // masqués, thème, sauts de diapositive) continuent sur ce même arbre au lieu de le sérialiser et de le relire quatre fois. Null quand forOutput rend le texte tel quel (ni fond de thème, ni décor, ni repère,
+  // le nom de la classe n'étant dans le texte que comme du texte) : l'appelant reprend alors le chemin par le texte, qui n'a rien changé.
+  function forOutputTree(html, { anchors = false, background = '', decor = null } = {}) {
+    const paper = background && html ? colorOf(background) : '';
+    const frames = typeof decor === 'function' && html ? decor : null;
+    const text = String(html == null ? '' : html);
+    if (!paper && !frames && text.indexOf(CLASS) === -1) return null;
+    const body = HtmlSanitize.parseInert(text);
+    if (paper || frames) withPaperIn(body, paper, frames);
+    return rewriteIn(body, outputEach(anchors)) || paper || frames ? body : null;
   }
   // Le HTML avec un fond pour CHAQUE diapositive : celle qui n'en a pas prend `paper` (#rrggbb), le fond que le thème de la présentation donne à toutes ses diapositives (js/slide-theme.js:paperOf, option `background` de
   // forOutput). Une diapositive qui a un repère sans fond le reçoit dans ce repère, une qui n'a pas de repère en reçoit un en tête, celle qui a déjà son fond le garde. Le repère écrit ici est celui que l'éditeur écrirait pour
@@ -459,6 +475,10 @@ const SlideProps = (function () {
   // son fond (forOutput lui fait sa place juste après le repère), avant ses cadres libres, qui sont donc au-dessus d'eux. Une diapositive sans repère en reçoit un pour son fond, sans fond (`paper` vide) ses cadres suivent son saut de page.
   function withPaper(text, paper, decor) {
     const body = HtmlSanitize.parseInert(text);
+    withPaperIn(body, paper, decor);
+    return body.innerHTML;
+  }
+  function withPaperIn(body, paper, decor) {
     let opener = null; // le saut de page qui ouvre la diapositive en cours (null : la première)
     let marker = null; // le premier repère de la diapositive en cours
     let rank = 0;      // le rang de la diapositive en cours, à partir de 0
@@ -481,7 +501,6 @@ const SlideProps = (function () {
       if (block.classList.contains('page-break-marker')) { close(); opener = block; marker = null; } else if (!marker && block.matches('div.' + CLASS)) marker = block;
     });
     close();
-    return body.innerHTML;
   }
   const escapeAttr = text => String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   // Le bloc qui porte l'adresse d'une diapositive dans la Lecture : rien de visible, aucune place.
@@ -492,14 +511,18 @@ const SlideProps = (function () {
     const text = String(html == null ? '' : html);
     if (text.indexOf(CLASS) === -1) return text;
     const body = HtmlSanitize.parseInert(text);
+    return rewriteIn(body, each) ? body.innerHTML : text;
+  }
+  // Applique `each` à chaque repère d'un arbre déjà lu ; vrai s'il y en avait.
+  function rewriteIn(body, each) {
     const found = body.querySelectorAll('div.' + CLASS);
-    if (!found.length) return text;
+    if (!found.length) return false;
     found.forEach(each);
-    return body.innerHTML;
+    return true;
   }
 
   return {
     NODE, CLASS, CLAIM_META, KINDS, OPTIONS, SIDED, SIDES, SIDE_CHOICES, choicesOf, DURATION_CHOICES, DEFAULTS, DURATION, NOTES_MAX, createNode, createExtension, normalized, attrsOf: attrsOfEl, isNone, hasBackground, hasNotes, isBlank, slidesOf, listOf, backgroundsOf, timingsOf, notesOf, anchorsOf, titlesOf,
-    apply: applyTransition, applyTransition, applyHidden, ADVANCE, applyBackground, applyNotes, strip, forOutput, html,
+    apply: applyTransition, applyTransition, applyHidden, ADVANCE, applyBackground, applyNotes, strip, forOutput, forOutputTree, html,
   };
 })();
