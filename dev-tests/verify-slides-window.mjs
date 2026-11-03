@@ -11,6 +11,9 @@
 //  LE PLEIN ÉCRAN : le premier clic, ou la première touche (pas Échap, ni une touche seule, ni un raccourci), ne fait que le demander - il ne passe pas aussi à la suivante - ; accordé, la ligne s'efface ; le
 //   suivant passe. → ← Espace Entrée Début Fin, la molette, un clic sur un lien vers une autre diapositive (il y mène), la barre du bas, devant la page (de l'encre à sa place à l'écran), et ses boutons marchent dans la fenêtre comme dans le panneau.
 //  SORTIR : Échap, « Quitter », la fin suivie d'une touche ferment la fenêtre ; le document de l'app n'a pas bougé, rien n'est enregistré, la fenêtre libère ce qu'elle gardait (l'app le sait).
+//  LES EFFETS (demande du 03/11 : « même le mode plein écran dans un nouvel onglet pour lire le diapo rame ») : la page charge ce que ses effets lisent (js/color-math.js : sans lui chaque effet échouait et laissait
+//   une copie de toute la présentation), l'effet se joue pour de bon, la copie de la page quittée est la même d'un effet à l'autre (faite une fois, garée hors de l'écran entre deux) et montre la page quittée telle
+//   qu'elle était, la barre du bas reste devant la page qui arrive, et passer d'une diapositive à l'autre ne lit pas la taille de l'écran (calcul forcé de la mise en page de toute la copie).
 //  ROUVRIR : ▶ pendant que la fenêtre est ouverte la remplace au lieu d'en empiler une deuxième (même nom) ; une fenêtre rechargée redemande son rendu ; une image d'un autre site pose sa question AVANT
 //   la fenêtre (Annuler n'ouvre rien, Continuer l'ouvre : le geste est celui du bouton de la question) ; un rendu qui échoue ferme la fenêtre et le dit.
 //  LE DÉLAI DU GESTE : un rendu de 6,5 s n'empêche pas la fenêtre de s'ouvrir tout de suite (elle s'ouvre avant le rendu) ; une attente de 6,5 s avant l'ouverture la fait refuser par le navigateur : le panneau, avec
@@ -36,10 +39,16 @@ const FRAME = '<div class="pp-free-frame" role="group" data-ff-x="360" data-ff-y
 // Le signet de la 3e diapositive (cible du lien « Aller » de la première), dans son repère caché.
 const ANCHOR = '<div class="pp-slide-props" contenteditable="false" aria-hidden="true" style="display:block;height:0;margin:0;padding:0;border:0;overflow:hidden" data-anchor="slide-3" data-anchor-name="Diapositive 3"></div>';
 const BACKGROUND = '<div class="pp-slide-props" data-bg="#e6f0ff"></div>';
+// 10 « Effets » : trois diapositives de mille millisecondes d'effet. La 1 : un objet qui entre en fondu au clic. La 2 : arrive par une poussée depuis la droite (la page qui arrive passe devant). La 3 : arrive en
+// découvrant (la page quittée glisse vers la gauche, par-dessus celle qui arrive).
+const TRANS = (kind, from) => `<div class="pp-slide-props" contenteditable="false" aria-hidden="true" style="display:block;height:0;margin:0;padding:0;border:0;overflow:hidden" data-trans="${kind}" data-trans-from="${from}" data-trans-dur="1000"></div>`;
+const ANIMATED = '<div class="pp-free-frame" role="group" data-ff-x="40" data-ff-y="100" data-ff-w="200" data-ff-h="60" data-ff-anim="fade"><div class="pp-free-frame-box"><div class="pp-free-frame-content"><p>Objet animé</p></div></div></div>';
+const EFFECTS = `<h2>Un</h2>${ANIMATED}${BR}${TRANS('push', 'r')}<h2>Deux</h2><p>Texte deux</p>${BR}${TRANS('uncover', 'l')}<h2>Trois</h2><p>Texte trois</p>`;
 const OUTSIDE = '<p><img class="editor-image" src="https://pp-window.test/a.png" alt="" style="width: 120px;"></p>';
 const SEED = seedModels({ record: { id: 1, Nom: 'Alice', Statut: 'Urgent' } }) + `
   add(8, 'Cible', '<h1>Bonjour ${CHIP}</h1><p>Cible un</p><p><a href="#slide-3">Aller</a></p>${BR}${BACKGROUND}${FRAME}<h2>Deux</h2><p>Cible deux</p>${BR}${ANCHOR}<p>Cible trois</p><p>${SHAPE}</p>', false, 'presentation');
   add(9, 'Dehors', '<p>Dehors un</p>${OUTSIDE}${BR}<p>Dehors deux</p>', false, 'presentation');
+  add(10, 'Effets', '${EFFECTS}', false, 'presentation');
   stub.state.nextRowId.Publipostage_Modeles = 12;
 `;
 const TINY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
@@ -410,6 +419,101 @@ async function run(lang, colorScheme) {
     await closing(third.click('.pp-slide-show-exit'));
     check(tag + '« Quitter » (vraie souris) ferme la fenêtre', await closedWithin(third, 4000), null);
   } else check(tag + '« Quitter » (vraie souris) ferme la fenêtre', false, 'pas de fenêtre');
+
+  // --- Les effets dans la fenêtre à part. La page présente.html charge ce que ses effets lisent (js/color-math.js : sans lui chaque effet échouait, `ColorMath is not defined`, et laissait par-dessus la page une copie de toute
+  // la présentation, une de plus à chaque diapositive) ; l'effet se joue pour de bon ; la copie de la page quittée est la même d'un effet à l'autre (faite une fois, garée hors de l'écran entre deux) et montre cette page telle
+  // qu'elle était, l'objet animé déjà entré ; la barre du bas reste devant la page qui arrive ; et passer d'une diapositive à l'autre ne lit pas la taille de l'écran (`clientWidth` : la mise en page de toute la copie à refaire).
+  await open(A, 10, 3);
+  await cursorIn(a, 0);
+  const errorsBeforeEffects = errors.length;
+  const fx = await playAndCatch(A, a);
+  if (fx) {
+    const fxProbe = () => fx.evaluate(() => {
+      const shadow = document.getElementById('pp-slide-show-stage').shadowRoot;
+      const scope = shadow.querySelector('.pp-print-scope');
+      const layers = Array.from(scope.querySelectorAll(':scope > .pp-slide-show-layer'));
+      const live = layers.find(l => !l.classList.contains('pp-slide-show-ghost')) || null;
+      const ghost = layers.find(l => l.classList.contains('pp-slide-show-ghost')) || null;
+      const windowOf = (layer) => { const view = layer && layer.firstElementChild && layer.firstElementChild.firstElementChild; return view ? { top: view.style.top, height: view.style.height, stage: view.firstElementChild.style.top } : null; };
+      const rect = (e) => { const r = e.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; };
+      // Le rang d'empilement tel que l'arbre ombre le calcule (la règle de slide-show.css y est-elle arrivée ?) : '' sans rang.
+      const rankOf = (layer) => { const z = getComputedStyle(layer).zIndex; return z === 'auto' ? '' : z; };
+      const animated = ghost ? ghost.querySelector('.pp-free-frame[data-ff-anim] > .pp-free-frame-box') : null;
+      return {
+        layers: layers.length, ghosts: layers.filter(l => l.classList.contains('pp-slide-show-ghost')).length,
+        onScreen: layers.filter((l) => { const r = l.getBoundingClientRect(); return r.right > 1 && r.left < innerWidth - 1; }).length,
+        parked: ghost ? ghost.classList.contains('pp-slide-show-parked') : null, animations: layers.reduce((n, l) => n + l.getAnimations().length, 0),
+        liveWindow: windowOf(live), ghostWindow: windowOf(ghost), liveZ: live ? rankOf(live) : null, ghostZ: ghost ? rankOf(ghost) : null, ghostLast: !!ghost && scope.lastElementChild === ghost,
+        animatedShown: animated ? getComputedStyle(animated).visibility : null, animatedBox: animated ? rect(animated) : null, ghostFrame: ghost ? rect(ghost.firstElementChild) : null,
+        nodes: shadow.querySelectorAll('*').length, inert: ghost ? ghost.inert : null, hidden: ghost ? ghost.getAttribute('aria-hidden') : null, events: ghost ? getComputedStyle(ghost).pointerEvents : null,
+        bar: getComputedStyle(document.querySelector('.pp-slide-show-bar')).opacity,
+      };
+    });
+    // Arrête les effets en cours à `ms` millisecondes de leur course (ou, sans `ms`, les termine).
+    const settle = ms => fx.evaluate((at) => {
+      const shadow = document.getElementById('pp-slide-show-stage').shadowRoot;
+      const animations = Array.from(shadow.querySelectorAll('.pp-slide-show-layer')).flatMap(l => l.getAnimations());
+      animations.forEach((x) => { if (at === null) x.finish(); else { x.pause(); x.currentTime = at; } });
+      return animations.length;
+    }, ms === undefined ? null : ms);
+    await waitCounter(fx);
+    await sleep(900);   // la copie de rechange se prépare un instant après la première diapositive
+    await fx.mouse.click(350, 200);   // le premier geste ne fait que demander le plein écran
+    await sleep(700);
+    const rest0 = await fxProbe();
+    check(tag + 'effets, fenêtre à part : au repos un seul calque est à l’écran, aucun effet ne court, et la copie de rechange - s’il y en a une - est garée hors de l’écran, inerte, cachée aux lecteurs d’écran',
+      rest0.onScreen === 1 && rest0.animations === 0 && (rest0.ghosts === 0 || (rest0.ghosts === 1 && rest0.parked === true && rest0.inert === true && rest0.hidden === 'true' && rest0.events === 'none')), rest0);
+    // → joue l'entrée de l'objet animé (fondu au clic), sans changer de diapositive.
+    await fx.keyboard.press('ArrowRight');
+    await sleep(900);
+    const before = await fxProbe();
+    await fx.evaluate(() => {
+      const shadow = document.getElementById('pp-slide-show-stage').shadowRoot;
+      window.__spare = shadow.querySelector('.pp-slide-show-ghost');
+      window.__widths = 0;
+      const own = Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth');
+      Object.defineProperty(Element.prototype, 'clientWidth', { configurable: true, get() { if (this.classList && this.classList.contains('pp-slide-show')) window.__widths++; return own.get.call(this); } });
+    });
+    // La souris qui bouge montre la barre du bas ; → passe à la 2e par une poussée, arrêtée presque à son terme : la page qui arrive couvre alors l'écran, et la barre doit rester devant elle.
+    await fx.mouse.move(260, 220, { steps: 3 });
+    await sleep(350);
+    await fx.keyboard.press('ArrowRight');
+    await sleep(150);
+    const frozen = await settle(900);
+    await sleep(120);
+    const mid = await fxProbe();
+    const barBox = await fx.evaluate(() => { const r = document.querySelector('.pp-slide-show-bar').getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width, height: r.height }; });
+    const barInk = await inkIn(page, await fx.screenshot({ type: 'png' }), barBox);
+    check(tag + 'effets, fenêtre à part : la poussée joue pour de bon (les deux calques sont animés), avec une seule copie de la page quittée, à l’écran',
+      frozen >= 2 && mid.animations >= 2 && mid.layers === 2 && mid.ghosts === 1 && mid.parked === false && mid.animations === frozen && errors.length === errorsBeforeEffects, { frozen, mid, errors: errors.slice(errorsBeforeEffects) });
+    check(tag + 'la copie montre la page quittée telle qu’elle était : la 1re diapositive (la même fenêtre de la copie du document que celle qu’on vient de quitter), l’objet animé déjà entré (visible, dans la page)',
+      !!before.liveWindow && JSON.stringify(mid.ghostWindow) === JSON.stringify(before.liveWindow) && JSON.stringify(mid.liveWindow) !== JSON.stringify(before.liveWindow) && mid.animatedShown === 'visible' && !!mid.animatedBox && !!mid.ghostFrame
+        && mid.animatedBox.left >= mid.ghostFrame.left - 1 && mid.animatedBox.right <= mid.ghostFrame.right + 1 && mid.animatedBox.top >= mid.ghostFrame.top - 1 && mid.animatedBox.bottom <= mid.ghostFrame.bottom + 1, { before: before.liveWindow, mid });
+    check(tag + 'la page qui arrive passe devant la copie sans que rien ne change de place dans le document ; la barre du bas reste devant elle (de l’encre à sa place à l’écran, bien que la page d’arrivée couvre l’écran)',
+      mid.ghostLast && Number(mid.liveZ || 0) > Number(mid.ghostZ || 0) && mid.bar === '1' && barInk > 60, { liveZ: mid.liveZ, ghostZ: mid.ghostZ, ghostLast: mid.ghostLast, bar: mid.bar, barInk });
+    await settle();
+    await sleep(250);
+    const rest1 = await fxProbe();
+    check(tag + 'l’effet fini : un seul calque à l’écran, plus rien d’animé, aucun rang d’empilement resté, la copie garée hors de l’écran', rest1.onScreen === 1 && rest1.animations === 0 && rest1.liveZ === '' && rest1.parked === true, rest1);
+    // → de la 2e à la 3e : « découvrir », la page quittée glisse PAR-DESSUS celle qui arrive. La copie est celle d'avant, remise à la 2e diapositive.
+    await fx.keyboard.press('ArrowRight');
+    await sleep(150);
+    await settle(400);
+    await sleep(100);
+    const mid2 = await fxProbe();
+    const spare = await fx.evaluate(() => { const all = document.getElementById('pp-slide-show-stage').shadowRoot.querySelectorAll('.pp-slide-show-ghost'); return { count: all.length, same: !!window.__spare && all.length === 1 && all[0] === window.__spare }; });
+    check(tag + 'la copie de la page quittée est la même d’un effet à l’autre (faite une fois, garée entre deux), remise à la 2e diapositive, et - « découvrir » - par-dessus la page qui arrive',
+      spare.same && spare.count === 1 && JSON.stringify(mid2.ghostWindow) === JSON.stringify(mid.liveWindow) && mid2.ghostLast && Number(mid2.ghostZ || 0) >= Number(mid2.liveZ || 0) && mid2.animations >= 1, { spare, mid2, was: mid.liveWindow });
+    await settle();
+    await sleep(250);
+    const rest2 = await fxProbe();
+    const widths = await fx.evaluate(() => window.__widths);
+    check(tag + 'effets, fenêtre à part : rien ne s’accumule d’une diapositive à l’autre (autant de nœuds qu’au départ, deux calques au plus) et la taille de l’écran n’est pas relue à chaque diapositive',
+      rest2.nodes <= rest0.nodes + 40 && rest2.layers <= 2 && rest2.onScreen === 1 && rest2.animations === 0 && widths === 0, { nodes: [rest0.nodes, rest2.nodes], layers: rest2.layers, widths });
+    check(tag + 'aucune erreur de page pendant les effets (la fenêtre lit les couleurs de la transition : js/color-math.js est chargé)', errors.length === errorsBeforeEffects, errors.slice(errorsBeforeEffects));
+    await closing(fx.keyboard.press('Escape'));
+    await closedWithin(fx, 3000);
+  } else check(tag + 'effets, fenêtre à part : la fenêtre s’ouvre', false, 'pas de fenêtre');
 
   // --- Une image d'un autre site : la question d'abord ; Annuler n'ouvre rien, Continuer ouvre la fenêtre (le geste est celui du bouton).
   await open(A, 9, 2);

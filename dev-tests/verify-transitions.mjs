@@ -603,13 +603,14 @@ async function run(lang, colorScheme, full) {
       const shadow = host && host.shadowRoot;
       if (!root || !shadow) return null;
       const rr = root.getBoundingClientRect();
-      const layers = Array.from(shadow.querySelectorAll('.pp-slide-show-layer')).map((layer) => {
+      // Les calques à l'écran : la copie de rechange garée hors de l'écran entre deux effets (`pp-slide-show-parked`, slide-player.js:buildSpare) n'en est pas un.
+      const layers = Array.from(shadow.querySelectorAll('.pp-slide-show-layer:not(.pp-slide-show-parked)')).map((layer) => {
         const r = layer.getBoundingClientRect();
         const cs = getComputedStyle(layer);
         const animations = layer.getAnimations();
         const frame = layer.firstElementChild ? layer.firstElementChild.getBoundingClientRect() : null;
         return {
-          ghost: layer.classList.contains('pp-slide-show-ghost'), dx: r.left - rr.left, dy: r.top - rr.top, w: r.width, h: r.height, opacity: Number(cs.opacity), clip: cs.clipPath, z: layer.style.zIndex, order: Array.from(layer.parentNode.children).indexOf(layer), animations: animations.length,
+          ghost: layer.classList.contains('pp-slide-show-ghost'), dx: r.left - rr.left, dy: r.top - rr.top, w: r.width, h: r.height, opacity: Number(cs.opacity), clip: cs.clipPath, z: cs.zIndex === 'auto' ? '' : cs.zIndex, order: Array.from(layer.parentNode.children).indexOf(layer), animations: animations.length,
           progress: animations.map(a => a.effect.getComputedTiming().progress), inert: !!layer.inert, hidden: layer.getAttribute('aria-hidden'), events: cs.pointerEvents, frame: frame && { left: frame.left, top: frame.top, right: frame.right, bottom: frame.bottom },
         };
       });
@@ -626,6 +627,8 @@ async function run(lang, colorScheme, full) {
       Array.from(host.shadowRoot.querySelectorAll('.pp-slide-show-layer')).flatMap(l => l.getAnimations()).forEach(a => a.finish());
     });
     const counter = () => page.evaluate(() => (document.querySelector('.pp-slide-show-counter') || {}).textContent || '');
+    // Lequel de deux calques est devant : le rang d'empilement d'abord (sans z-index, 0), puis l'ordre dans le conteneur (le dernier est devant).
+    const frontOf = (a, b) => ((Number(a.z) || 0) !== (Number(b.z) || 0) ? (Number(a.z) || 0) > (Number(b.z) || 0) : a.order > b.order);
     const insets = (clip, w, h) => {
       const m = /inset\(([^)]*)\)/.exec(clip || '');
       if (!m) return null;
@@ -707,7 +710,7 @@ async function run(lang, colorScheme, full) {
           geometry.push(['effet connu', false, key]);
       }
       const above = (reverse ? (kind === 'uncover' ? 'new' : 'old') : (kind === 'uncover' ? 'old' : 'new'));
-      geometry.push([`la pile : ${above === 'new' ? 'la page d\'arrivée' : 'la page quittée'} est devant (le dernier calque du conteneur, sans aucun z-index posé)`, (above === 'new' ? now.order > old.order : old.order > now.order) && now.z === '' && old.z === '', { now: [now.order, now.z], old: [old.order, old.z] }]);
+      geometry.push([`la pile : ${above === 'new' ? 'la page d\'arrivée' : 'la page quittée'} est devant (au rang d'empilement ou à l'ordre du conteneur) et aucun calque n'a changé de place dans le document (la copie reste après le calque courant)`, (above === 'new' ? frontOf(now, old) : frontOf(old, now)) && old.order > now.order && (above === 'new' ? old.z === '' : now.z === '' && old.z === ''), { now: [now.order, now.z], old: [old.order, old.z] }]);
       geometry.push(['la copie de la page quittée ne prend ni la souris ni le clavier (inerte, cachée aux lecteurs d\'écran)', old.inert && old.hidden === 'true' && old.events === 'none', old]);
       return { geometry, pixels, p };
     }
@@ -930,7 +933,7 @@ async function run(lang, colorScheme, full) {
       const who = reverse ? 'de la page quittée' : 'de la page d\'arrivée';
       const geometry = [
         [`seul le calque ${who} est animé, découpé par une forme`, mover.animations === 1 && other.animations === 0 && /^(polygon|inset|circle)\(/.test(mover.clip) && other.clip === 'none', { mover: [mover.animations, mover.clip.slice(0, 60)], other: [other.animations, other.clip] }],
-        [`le calque ${who} est devant (le dernier du conteneur), sans z-index`, mover.order > other.order && now.z === '' && old.z === '', { mover: mover.order, other: other.order }],
+        [`le calque ${who} est devant (rang d'empilement ou ordre du conteneur), sans que rien ne change de place dans le document`, frontOf(mover, other) && old.order > now.order, { mover: [mover.order, mover.z], other: [other.order, other.z] }],
         ['la forme est à mi-course (ni vide, ni pleine)', q > 0.1 && q < 0.9, { q }],
         ['assez de points pour juger', probes.inside.length >= 2 && probes.outside.length >= 1, { inside: probes.inside.length, outside: probes.outside.length }],
       ];
@@ -1183,7 +1186,7 @@ async function run(lang, colorScheme, full) {
     const worst = Math.max(0, ...stats.clones);
     console.log(`  (soixante-dix diapositives : ${total}, copie de la page quittée : ${stats.clones.map(x => x.toFixed(1)).join(' / ')} ms, tâches longues : ${stats.long.map(x => Math.round(x)).join(' / ') || 'aucune'}, nœuds ${nodes0} -> ${nodes1})`);
     check(tag + 'chacun des douze pas joue un fondu', walked.length === 12 && walked.every(kind => kind === 'fade'), walked);
-    check(tag + `la copie de la page quittée prend moins de 80 ms (au plus ${worst.toFixed(1)} ms sur ${stats.clones.length})`, stats.clones.length === 12 && worst < 80, stats.clones);
+    check(tag + `la copie de la page quittée est faite UNE fois pour les douze transitions (au plus ${worst.toFixed(1)} ms), pas une à chaque diapositive : refaire une copie de toute la présentation arrêtait l'image de 100 à 150 ms à chaque effet`, stats.clones.length === 1 && worst < 80, stats.clones);
     check(tag + 'aucune tâche longue de plus de 200 ms pendant les douze transitions', Math.max(0, ...stats.long) < 200, stats.long);
     check(tag + 'rien ne s\'accumule : douze transitions plus tard, le diaporama compte autant de nœuds qu\'avant (aucune copie oubliée)', nodes1 === nodes0, [nodes0, nodes1]);
     await press('Escape', 400);

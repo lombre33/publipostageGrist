@@ -57,3 +57,7 @@
 .pp-slide-show-exit { font-size: 13px; }
 .pp-slide-show-counter { min-width: 52px; padding: 0 4px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
 @media (prefers-reduced-motion: reduce) { .pp-slide-show-bar { transition: none; } }
+
+/* Le rang d'empilement que prend le calque d'arrivée pendant un effet qui le fait passer devant la copie de la page quittée (slide-transitions.js:stack). Les calques sont dans l'arbre ombre du rendu, qui reçoit les feuilles de la page
+   (js/print-export.js:pageStyleSheets) : la règle y est comme ici. Ils sont dans la feuille (`z-index:0`, slide-player.js:surface), si bien que ce rang ne passe jamais devant la barre du bas ni la ligne d'information (`z-index:1` chacune). */
+.pp-slide-show-layer.pp-slide-above { z-index: 1; }

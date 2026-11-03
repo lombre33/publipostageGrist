@@ -37,7 +37,8 @@ const SlidePlayer = (function () {
   function surface(job, box) {
     const { host, root: scope, stage } = job;
     host.classList.add('pp-slide-show-host');
-    scope.style.cssText = 'position:absolute;inset:0;overflow:hidden;background:transparent';
+    // `z-index:0` : un contexte d'empilement à elle, où le rang qu'une transition donne à un calque (slide-transitions.js:stack) reste : la barre du bas et la ligne d'information, qui ont le leur (`z-index:1`, slide-show.css), restent devant.
+    scope.style.cssText = 'position:absolute;inset:0;overflow:hidden;background:transparent;z-index:0';
     const frame = document.createElement('div');
     frame.style.cssText = 'position:absolute;left:50%;top:50%;overflow:hidden;background:#fff;transform-origin:50% 50%';
     const view = document.createElement('div');
@@ -51,11 +52,15 @@ const SlidePlayer = (function () {
     layer.appendChild(frame);
     scope.appendChild(layer);
     let shown = null;
+    // La taille de `box`, lue une fois puis tenue à jour par l'observateur ci-dessous : la lire à chaque page (`clientWidth` juste après `place`) obligeait le navigateur à refaire la mise en page de toute la
+    // copie, qu'on venait de déplacer, avant même que l'effet commence (quelque 70 ms par page à 1 920 px, mesuré avec la présentation commerciale de la galerie).
+    let boxSize = null;
     const paperOf = win => win.sheet || { width: job.pagePx.width, height: job.pagePx.height, left: job.sheetLeft };
     function fit() {
       if (!shown) return;
       const paper = paperOf(shown);
-      const scale = Math.min(box.clientWidth / paper.width, box.clientHeight / paper.height);
+      if (!boxSize) boxSize = { width: box.clientWidth, height: box.clientHeight };
+      const scale = Math.min(boxSize.width / paper.width, boxSize.height / paper.height);
       frame.style.width = paper.width + 'px';
       frame.style.height = paper.height + 'px';
       frame.style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
@@ -73,7 +78,7 @@ const SlidePlayer = (function () {
       fit();
     }
     let sizes = null;
-    if (typeof ResizeObserver === 'function') { sizes = new ResizeObserver(() => fit()); sizes.observe(box); }
+    if (typeof ResizeObserver === 'function') { sizes = new ResizeObserver(() => { boxSize = { width: box.clientWidth, height: box.clientHeight }; fit(); }); sizes.observe(box); }
     return { layer, frame, view, stage, place, fit, destroy() { if (sizes) sizes.disconnect(); } };
   }
 
@@ -120,7 +125,7 @@ const SlidePlayer = (function () {
     root.append(status, end, noteCard, bar.el);
     document.body.appendChild(root);
     // L'état de ce diaporama : `props` (la transition de chaque diapositive), `timings` (masquée, passage seul), `starts` (la première page de chacune), `anchors` (le signet de chacune, cible d'un lien du texte), `windows` (la découpe en pages de la copie).
-    const s = { root, status, end, bar, windows: [], index: 0, ended: false, job: null, fullscreen: false, idleTimer: 0, lastWheel: 0, ready: false, props: [], timings: [], starts: [], anchors: [], transition: null, advanceTimer: 0, anims: new Map(), anim: null, animTimer: 0, noteTimer: 0, last: -1, started: false, destroyed: false };
+    const s = { root, status, end, bar, windows: [], index: 0, ended: false, job: null, fullscreen: false, idleTimer: 0, lastWheel: 0, ready: false, props: [], timings: [], starts: [], anchors: [], transition: null, advanceTimer: 0, anims: new Map(), anim: null, animTimer: 0, noteTimer: 0, last: -1, started: false, destroyed: false, spare: null };
 
     // La copie mesurée du document, posée dans une feuille de la taille d'une page, au centre, agrandie ou réduite à l'écran ; la fenêtre de la page montrée la rogne (`surface`, plus haut).
     function mount(job) {
@@ -150,7 +155,7 @@ const SlidePlayer = (function () {
       if (s.started && s.windows[s.index] && slideOfWindow(s.index) !== slideOfWindow(Math.max(0, index))) s.last = s.index;
       s.started = true;
       const spec = how && how.step ? transitionFor(s.index, Math.max(0, index), !!how.reverse, how.trans) : null;
-      const ghost = spec ? makeGhost() : null;
+      const ghost = spec ? takeGhost() : null;
       s.index = Math.max(0, index);
       s.surf.place(s.windows[s.index]);
       bar.counter.textContent = labels.counter.replace('{n}', String(s.index + 1)).replace('{total}', String(count));
@@ -244,28 +249,67 @@ const SlidePlayer = (function () {
       if (override) return override.transition ? override : null;
       return s.props[reverse ? leaving : arriving] || null;
     }
-    // Une copie figée du calque tel qu'il est (la page qu'on quitte), posée par-dessus : la page d'arrivée se met en place dessous, le temps que l'effet joue.
-    function makeGhost() {
-      const copy = s.layer.cloneNode(true);
-      copy.classList.add('pp-slide-show-ghost');
-      copy.setAttribute('aria-hidden', 'true');
-      copy.inert = true;
-      copy.style.pointerEvents = 'none';
-      s.layer.parentNode.appendChild(copy);
-      return copy;
+    // Une copie figée du calque tel qu'il est (la page qu'on quitte), posée par-dessus : la page d'arrivée se met en place dessous, le temps que l'effet joue. La copie porte toute la présentation
+    // (quelque 6 000 nœuds pour une quarantaine de diapositives) : la refaire à chaque effet, puis la jeter, coûtait de 100 à 150 ms de mise en page et de styles à chaque diapositive, juste avant que
+    // l'effet démarre - l'image s'arrêtait un instant. Elle est donc faite UNE fois (`buildSpare`) et reste dans la feuille, GARÉE hors de l'écran, où ses styles et sa mise en page restent faits : la rendre
+    // à l'écran n'est plus qu'un décalage, et à la fin de l'effet on la gare de nouveau. Rien ne change à l'écran : à chaque effet elle reprend l'état exact du calque qu'on quitte (`takeGhost`).
+    const PARKED = '-300% 0';
+    function buildSpare() {
+      if (s.spare || s.destroyed || !s.layer) return s.spare;
+      const layer = s.layer.cloneNode(true);
+      layer.className = 'pp-slide-show-layer pp-slide-show-ghost pp-slide-show-parked';
+      layer.style.cssText = 'position:absolute;inset:0;pointer-events:none;translate:' + PARKED;
+      layer.setAttribute('aria-hidden', 'true');
+      layer.inert = true;
+      s.layer.parentNode.appendChild(layer);
+      const frame = layer.firstElementChild;
+      const view = frame.firstElementChild;
+      const stage = view.firstElementChild;
+      s.spare = { layer, frame, view, stage, anims: FrameAnim.framesOf(stage) };
+      return s.spare;
+    }
+    // La copie de rechange, remise dans l'état du calque tel qu'il est à cet instant - la page qu'on quitte : la place de la page (le cadre, la fenêtre et la copie du document), les objets animés
+    // montrés ou cachés, le calque « éveillé » ou non ; puis rendue à l'écran, par-dessus.
+    function takeGhost() {
+      const spare = buildSpare();
+      if (!spare) return null;
+      const same = (copy, original) => { if (copy.style.cssText !== original.style.cssText) copy.style.cssText = original.style.cssText; };
+      same(spare.frame, s.frame);
+      same(spare.view, s.view);
+      same(spare.stage, s.stage);
+      s.anims.forEach((list, slide) => {
+        const other = spare.anims.get(slide);
+        if (!other) return;
+        list.forEach((item, k) => {
+          const shown = item.box.style.visibility;
+          if (other[k] && other[k].box.style.visibility !== shown) other[k].box.style.visibility = shown;
+        });
+      });
+      const layer = spare.layer;
+      layer.classList.toggle('pp-slide-show-awake', s.layer.classList.contains('pp-slide-show-awake'));
+      layer.classList.remove('pp-slide-show-parked');
+      layer.style.translate = '';
+      return layer;
+    }
+    // La copie sort de l'écran et attend le prochain effet.
+    function parkSpare(layer) {
+      layer.classList.add('pp-slide-show-parked');
+      layer.style.translate = PARKED;
     }
     function beginTransition(ghost, spec, reverse) {
-      const job = SlideTransitions.play(ghost, s.layer, spec, { reverse });
+      // Un effet qui ne se joue pas (une erreur dans le calcul de l'effet) ne laisse pas sa copie à l'écran et n'empêche pas d'arriver (les animations des objets suivent).
+      let job;
+      try { job = SlideTransitions.play(ghost, s.layer, spec, { reverse }); } catch (e) { parkSpare(ghost); s.layer.classList.remove(SlideTransitions.ABOVE); return; }
       s.transition = { job, ghost, kind: job.kind, side: job.side, duration: job.duration, reverse };
       job.done.then(() => { if (s.transition && s.transition.job === job) endTransition(false); });
     }
-    // Termine l'effet en cours (`finish` : il saute à l'image d'arrivée) et retire la copie.
+    // Termine l'effet en cours (`finish` : il saute à l'image d'arrivée) et gare la copie.
     function endTransition(finish) {
       const running = s.transition;
       if (!running) return;
       s.transition = null;
       if (finish) running.job.finish(); else running.job.cancel();
-      running.ghost.remove();
+      parkSpare(running.ghost);
     }
     function showEnd(on) {
       s.ended = on;
@@ -468,6 +512,8 @@ const SlidePlayer = (function () {
       const at = first >= 0 ? first : 0;
       const shown = how.fromCurrent ? at : visibleFrom(at, 1);
       go(shown >= 0 ? shown : at);
+      // La copie de rechange des effets, prête avant le premier geste : seulement quand une diapositive a un effet (sinon, au premier effet qu'un objet à lien demande) ; la faire en cours de route arrêterait l'image un instant.
+      if (s.props.some(Boolean)) buildSpare();
     }
 
     // Le lecteur se ferme : minuteries, écouteurs, effet en cours, plein écran et copie mesurée. La racine reste dans la page, c'est à celui qui l'a créé de la retirer.

@@ -1531,7 +1531,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('diaporama à part : present.html a sa politique de sécurité du contenu avant son premier script - scripts du dossier seulement (`script-src \'self\'` : ni en ligne, ni eval, ni autre site), aucun objet, cadre, formulaire ni balise de base - et ni script en ligne ni gestionnaire d\'événement',
     policyAt > 0 && policyAt < page.indexOf('<script') && JSON.stringify(directives.get('script-src')) === '["\'self\'"]' && JSON.stringify(directives.get('object-src')) === '["\'none\'"]' && JSON.stringify(directives.get('base-uri')) === '["\'none\'"]'
       && JSON.stringify(directives.get('frame-src')) === '["\'none\'"]' && JSON.stringify(directives.get('form-action')) === '["\'none\'"]' && !/unsafe-/.test(policy)
-      && scriptTags.length >= 8 && scriptTags.every(tag => /\bsrc="[^"]+"/.test(tag[1]) && !tag[2].trim()) && !/\son[a-z]+\s*=/i.test(page.replace(/<meta[^>]*>/g, '')), policy);
+      && scriptTags.length >= 9 && scriptTags.every(tag => /\bsrc="[^"]+"/.test(tag[1]) && !tag[2].trim()) && !/\son[a-z]+\s*=/i.test(page.replace(/<meta[^>]*>/g, '')), policy);
   const literal = (read('js/extensions.js').match(/const REGISTRY = (\{[\s\S]*?\n  \});/) || [])[1];
   let registry = null;
   try { registry = literal ? vm.runInNewContext('(' + literal + ')') : null; } catch (e) { registry = null; }
@@ -1549,8 +1549,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     if ((query || '') !== 'v=' + want) problems.push(`${ref} : version « ${(query || '').replace(/^v=/, '')} », attendue « ${want} »`);
   }
   const scriptOrder = scriptTags.map(tag => (tag[1].match(/\bsrc="([^"?]+)/) || [])[1]);
-  check('diaporama à part : present.html charge ses huit scripts dans l\'ordre (dom, slide-props, frame-anim, frame-link, slide-transitions, slide-player, slide-window, slide-present), un seul i18n ni app avec eux, et chaque fichier cité existe à la version de cache d\'index.html (css/, js/) ou du registre (extensions/diapositives)',
-    JSON.stringify(scriptOrder) === JSON.stringify(['../../js/dom.js', '../../js/slide-props.js', '../../js/frame-anim.js', '../../js/frame-link.js', 'slide-transitions.js', 'slide-player.js', 'slide-window.js', 'slide-present.js']) && !!own && problems.length === 0 && refs.length >= 10,
+  check('diaporama à part : present.html charge ses neuf scripts dans l\'ordre (dom, color-math, slide-props, frame-anim, frame-link, slide-transitions, slide-player, slide-window, slide-present - color-math avant slide-props, qui y lit les couleurs : sans lui, chaque transition de la fenêtre à part échouait), un seul i18n ni app avec eux, et chaque fichier cité existe à la version de cache d\'index.html (css/, js/) ou du registre (extensions/diapositives)',
+    JSON.stringify(scriptOrder) === JSON.stringify(['../../js/dom.js', '../../js/color-math.js', '../../js/slide-props.js', '../../js/frame-anim.js', '../../js/frame-link.js', 'slide-transitions.js', 'slide-player.js', 'slide-window.js', 'slide-present.js']) && !!own && problems.length === 0 && refs.length >= 11,
     problems.join(' ; ') || scriptOrder.join(', '));
   check('diaporama à part : le registre nomme present.html et slide-present.js (`standalone`), que le widget ne charge jamais, et slide-window.js (`scripts`), qui envoie vers la fenêtre ; slide-present.js n\'est nommé ni par `scripts` ni par index.html',
     !!own && JSON.stringify(own.standalone) === '["present.html","slide-present.js"]' && own.scripts.includes('slide-window.js') && own.scripts.includes('slide-player.js') && !own.scripts.includes('slide-present.js') && !/slide-present|present\.html/.test(index), own ? JSON.stringify(own.standalone) : 'registre illisible');

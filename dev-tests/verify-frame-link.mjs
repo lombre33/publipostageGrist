@@ -290,7 +290,7 @@ async function run(lang, colorScheme) {
     const s = SlideShow.state();
     if (!s) return { open: false, index: -1, ended: false, kind: null, reverse: null, layers: 0, counter: '' };
     const host = document.querySelector('.pp-slide-show .pp-slide-show-host');
-    const layers = host && host.shadowRoot ? host.shadowRoot.querySelectorAll('.pp-slide-show-layer') : [];
+    const layers = host && host.shadowRoot ? host.shadowRoot.querySelectorAll('.pp-slide-show-layer:not(.pp-slide-show-parked)') : [];
     return { open: !!document.querySelector('.pp-slide-show'), index: s.index, ended: s.ended, kind: s.transition ? s.transition.kind : null, reverse: s.transition ? s.transition.reverse : null, layers: layers.length, counter: (document.querySelector('.pp-slide-show-counter') || {}).textContent || '' };
   });
   // Le point d'un objet de la diapositive montrée (`fraction` : où sur sa largeur), ce que la souris y toucherait, et le pointeur.

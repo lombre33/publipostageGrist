@@ -21,8 +21,10 @@
 .pp-slide-transition-choice[aria-disabled="true"], .pp-slide-transition-choices[aria-disabled="true"] .pp-slide-transition-choice { color: var(--text-muted); border-color: var(--border); cursor: not-allowed; }
 .pp-slide-transition-choice[aria-disabled="true"]:hover, .pp-slide-transition-choices[aria-disabled="true"] .pp-slide-transition-choice:hover { background: var(--surface); }
 .pp-slide-transition-choices[aria-disabled="true"] .pp-slide-transition-choice[aria-checked="true"] { border-color: var(--border-strong); background: var(--surface-sunken); box-shadow: none; }
-.pp-slide-transition-preview { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface-sunken); }
+.pp-slide-transition-preview { position: relative; z-index: 0; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface-sunken); }
 .pp-slide-transition-card { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 600; }
+/* Le rang d'empilement que prend la carte qui doit passer devant l'autre pendant l'effet (slide-transitions.js:stack). */
+.pp-slide-transition-card.pp-slide-above { z-index: 1; }
 .pp-slide-transition-before { background: var(--surface); color: var(--text); }
 .pp-slide-transition-after { background: var(--solid-neutral); color: #fff; }
 

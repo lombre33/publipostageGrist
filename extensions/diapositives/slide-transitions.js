@@ -98,14 +98,16 @@ const SlideTransitions = (function () {
 
   const prefersReducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // La pile : les deux calques sont posés l'un sur l'autre dans le même conteneur, et le dernier est devant. Pour faire passer `top` devant `under`, on range `under` avant lui le temps de
-  // l'effet (aucun z-index à poser : le calque d'un diaporama n'est pas une couche flottante) ; la fonction rendue remet l'ordre d'avant.
+  // La pile : les deux calques sont posés l'un sur l'autre dans le même conteneur, et le dernier est devant. Pour faire passer `top` devant `under`, on lui donne le rang d'empilement de la classe ABOVE le temps de
+  // l'effet (`z-index: 1` dans slide-show.css et slide-transitions.css : les deux calques sont en position absolue dans le même contexte, celui de la feuille du diaporama) ; la fonction rendue le lui retire.
+  // Ranger `under` avant `top` dans le document, comme on le faisait, retirait puis reposait un calque qui porte toute la copie du document : sa mise en page et ses styles se refaisaient en entier à chaque effet, deux
+  // fois (au départ et à la fin).
+  const ABOVE = 'pp-slide-above';
   function stack(top, under) {
     const parent = top.parentNode;
     if (!parent || under.parentNode !== parent || !(under.compareDocumentPosition(top) & Node.DOCUMENT_POSITION_PRECEDING)) return () => {};
-    const after = under.nextSibling;
-    parent.insertBefore(under, top);
-    return () => { if (under.parentNode === parent) parent.insertBefore(under, after && after.parentNode === parent ? after : null); };
+    top.classList.add(ABOVE);
+    return () => { top.classList.remove(ABOVE); };
   }
 
   // Joue la transition `spec` ({ transition, from, dur }) du calque `oldLayer` (celui qu'on quitte) vers `newLayer` (celui où l'on arrive). `options.reverse` : le retour en arrière ;
@@ -147,5 +149,5 @@ const SlideTransitions = (function () {
     };
   }
 
-  return { EASING, REDUCED_MS, plan, play, prefersReducedMotion };
+  return { EASING, REDUCED_MS, ABOVE, plan, play, prefersReducedMotion };
 })();

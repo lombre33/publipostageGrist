@@ -279,7 +279,7 @@ async function run(lang, colorScheme) {
   const showState = () => page.evaluate(() => {
     const s = SlideShow.state();
     const host = document.querySelector('.pp-slide-show .pp-slide-show-host');
-    const layers = host && host.shadowRoot ? host.shadowRoot.querySelectorAll('.pp-slide-show-layer') : [];
+    const layers = host && host.shadowRoot ? host.shadowRoot.querySelectorAll('.pp-slide-show-layer:not(.pp-slide-show-parked)') : [];
     return { index: s.index, kind: s.transition ? s.transition.kind : null, reverse: s.transition ? s.transition.reverse : null, layers: layers.length, counter: (document.querySelector('.pp-slide-show-counter') || {}).textContent || '' };
   });
   const toThree = await inShow('Voir');
