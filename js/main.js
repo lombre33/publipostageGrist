@@ -2954,6 +2954,10 @@
     btnRead.classList.toggle('active', mode === 'read');
     syncEditorVisibilityForMode();
     readerContainer.style.display = mode === 'read' ? 'block' : 'none';
+    // Le facteur d'ajustement de la page se pose avant le rendu quand la Lecture n'en a pas encore : le conteneur vient d'être affiché, et c'est le moment où l'observateur de taille
+    // (wirePageFitZoom) le trouverait changé et redessinerait la Lecture une seconde fois, en plein rendu - la première entrée la dessinait deux fois. Une Lecture qui en a un déjà (une
+    // entrée suivante) le garde : le recalculer ici ferait mettre en page l'ancien contenu, qui est sur le point d'être remplacé.
+    if (mode === 'read' && !readerContainer.style.getPropertyValue('--pp-fit-zoom')) applyPageFitZoom(readerContainer);
     // Les graphiques de l'éditeur se redessinent pour la ligne et les données d'aujourd'hui : la Lecture a pu les changer pendant qu'ils étaient cachés.
     if (mode === 'edit') ChartEntry.refreshEditor();
     if (mode === 'read') await renderReader(latestRecord || GristAPI.getCurrentRecord(), latestRecordTableId || GristAPI.getCurrentTableId());

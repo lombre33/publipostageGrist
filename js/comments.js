@@ -530,7 +530,25 @@ const Comments = (function () {
 
   let AnnotatingSerializer = null;
   let annotatingBase = null;
-  async function buildReaderHtml() {
+  // Même document, même HTML : la Lecture s'ouvre à chaque entrée, et parfois deux fois de suite (rendu de la bascule, puis rendu à la taille réelle de la page) ; sérialiser une
+  // présentation de dix-huit diapositives coûte plusieurs dizaines de millisecondes à chaque fois. Un seul résultat est gardé, pour un objet document ProseMirror (immuable : toute
+  // modification en fait un autre), un éditeur, une langue (le sommaire écrit son texte) et un état de la grille (GridEditor.serialize en dépend). Le numéro de rendu reste celui du
+  // premier calcul : readerDocs le relie toujours à ce même document, une sélection faite sur ce rendu n'est donc « périmée » que si le document a vraiment changé.
+  let readerHtmlCache = null;
+  function buildReaderHtml() {
+    if (!editor) return Promise.resolve('');
+    const doc = editor.state.doc;
+    const grid = GridEditor.isActive();
+    const lang = I18n.getLang();
+    const hit = readerHtmlCache;
+    if (hit && hit.editor === editor && hit.doc === doc && hit.grid === grid && hit.lang === lang) return hit.promise;
+    const promise = serializeReaderHtml(doc);
+    const entry = { editor, doc, grid, lang, promise };
+    readerHtmlCache = entry;
+    promise.catch(() => { if (readerHtmlCache === entry) readerHtmlCache = null; });
+    return promise;
+  }
+  async function serializeReaderHtml(doc) {
     // Même sortie qu'editor.getHTML() (DOMSerializer du schéma, cf. @tiptap/core getHTMLFromFragment), repères de position en plus. Sous-classe
     // plutôt que la table `nodes` du sérialiseur : prosemirror-model 1.25 écrit les textes sans jamais la consulter (serializeNodeInner). Sous-classe
     // du sérialiseur du schéma (js/track-changes.js, installSerializer), pas de la classe de la bibliothèque : une colonne ou une ligne suivie s'y
@@ -563,7 +581,6 @@ const Comments = (function () {
         }
       };
     }
-    const doc = editor.state.doc;
     const version = ++readerRenderVersion;
     readerDocs.set(version, doc);
     readerDocs.forEach((d, v) => { if (v < version - 4) readerDocs.delete(v); });

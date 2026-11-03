@@ -856,6 +856,22 @@ const ReaderMode = (function () {
     container.style.setProperty('--pp-fit-zoom', String(fit));
     PageZoom.syncRowGrow(container, fit);
   }
+  function refitToContent(container) {
+    // Le facteur d'ajustement de la page, relu une fois la Lecture mise en page : le contenu qui vient d'entrer fait apparaître la barre de défilement verticale (chez qui l'a classique), qui
+    // retire sa largeur au conteneur, donc change le facteur (js/page-zoom.js:factorFor). L'observateur de taille de js/main.js:wirePageFitZoom le voyait ensuite changé et redessinait toute
+    // la Lecture, ses lectures de Grist comprises, alors que le contenu résolu n'a pas bougé : seule la mise en page dépend du facteur. Rend vrai quand le facteur a changé (la mise en
+    // page se refait alors, avec lui), faux quand il n'y a rien à faire - presque toujours, et la mesure ne coûte rien : la mise en page vient d'être faite.
+    if (!container.classList.contains('a4-preview')) return false;
+    const zoom = PageZoom.factorFor(container);
+    if (zoom == null) return false;
+    const fit = String(Math.round(zoom * 1000) / 1000);
+    // Lire avant d'écrire, comme js/main.js:planPageFitZoom : l'écart de hauteur des lignes de tableau sous ce facteur se mesure (une fois par facteur) par une sonde qui, la variable déjà posée, obligerait
+    // à refaire le style de toute la Lecture pour la lire.
+    if (Number(fit) > 0 && Number(fit) !== 1) PageZoom.rowGrow(Number(fit));
+    const changed = container.style.getPropertyValue('--pp-fit-zoom') !== fit;
+    if (changed) container.style.setProperty('--pp-fit-zoom', fit);
+    return PageZoom.syncRowGrow(container, Number(fit)) || changed;
+  }
   function sectionGutter(zones, pageBase) {
     // La gouttière entre la dernière page d'une section et la première de la suivante (la `pageBase + 1`-ième) : celle d'une couture (css/editor-v2.css), avec le
     // repère « Page N » quand ni le pied de la page qui finit ni l'en-tête de celle qui commence n'ont de contenu - sinon ils sont dans les espaceurs de bord
@@ -1185,13 +1201,14 @@ const ReaderMode = (function () {
     wrapper.dataset.headingStyle = (configEl && configEl.dataset.style) || 'none';
     return wrapper;
   }
-  async function resolveReaderBody(wrapper, tableId, record, stale) {
+  async function resolveReaderBody(wrapper, tableId, record, stale, columnTypes) {
     // Résout le contenu de `wrapper` pour `record` (boucles, blocs conditionnels, bulles, images, codes QR, puces, sommaire). Rend `{ hasError }`
     // (une bulle n'a pas pu être résolue), ou `null` dès qu'un rendu plus récent a démarré (`stale`) : le reste de ses lectures serait inutile.
     // Rafraîchit les types de colonnes avant de résoudre les bulles : resolveBadgeNode a besoin de GristAPI.getColumnType à jour pour détecter une
     // colonne Attachments récemment ajoutée. Pas refreshSchema : il relirait chaque table du document en entier, à chaque rendu, pour une liste de
-    // colonnes que la Lecture n'utilise pas.
-    await GristAPI.refreshColumnTypes().catch(() => {});
+    // colonnes que la Lecture n'utilise pas. `columnTypes` : cette lecture déjà lancée par l'appelant (renderRecord la lance avant de construire le HTML, qui n'en
+    // dépend pas : les deux avancent ensemble) ; sans elle, elle part d'ici.
+    await (columnTypes || GristAPI.refreshColumnTypes().catch(() => {}));
     if (stale()) return null;
     // Zones répétées d'une boucle (js/loop-rules.js) déroulées avant la résolution : chaque copie porte la ligne de son tour, lue par
     // resolveBadgeNode.
@@ -1211,10 +1228,14 @@ const ReaderMode = (function () {
     if (stale()) return null;
     for (const r of results) { if (r.isError) hasError = true; carryReaderAtom(r.badge, r.node); putValue(r.badge, r.node); }
     LoopRules.removeHiddenBlocks(wrapper);
-    await resolveVariableImages(wrapper, tableId, record);
-    await resolveQrCodes(wrapper, tableId, record);
-    await resolveCharts(wrapper, tableId, record);
-    await resolveSmartChips(wrapper);
+    // Ensemble : ces quatre résolutions touchent chacune ses propres éléments (images de variable, codes QR, graphiques, puces) et lisent le document par la même lecture partagée du rendu
+    // (GristAPI.withReadPass) ; l'une après l'autre, chaque série de lectures de Grist attendait la fin de la précédente, quatre allers-retours de suite avant la première image.
+    await Promise.all([
+      resolveVariableImages(wrapper, tableId, record),
+      resolveQrCodes(wrapper, tableId, record),
+      resolveCharts(wrapper, tableId, record),
+      resolveSmartChips(wrapper),
+    ]);
     carryNoteColors(wrapper);
     if (stale()) return null;
     trimTrailingBlankBlocks(wrapper);
@@ -1236,10 +1257,13 @@ const ReaderMode = (function () {
   async function renderRecord(renderId, container, htmlContent, tableId, record, headerFooterData) {
     // Un rendu plus récent a démarré : celui-ci sera écarté au remplacement final, inutile de poursuivre ses lectures et ses résolutions.
     const stale = () => renderId !== renderGeneration;
+    // Les types de colonnes se lisent dans Grist pendant que le HTML se construit (resolveReaderBody les attend ensuite) : le HTML d'un macro-modèle lit lui aussi des tables, les deux
+    // attentes se recouvrent au lieu de s'ajouter.
+    const columnTypes = GristAPI.refreshColumnTypes().catch(() => {});
     if (typeof htmlContent === 'function') htmlContent = await htmlContent();
     if (stale()) return;
     const wrapper = readerWrapperFrom(htmlContent);
-    const resolved = await resolveReaderBody(wrapper, tableId, record, stale);
+    const resolved = await resolveReaderBody(wrapper, tableId, record, stale, columnTypes);
     if (!resolved) return;
     displayedReadsAll = resolved.readsAll;
     container.innerHTML = '';
@@ -1254,6 +1278,7 @@ const ReaderMode = (function () {
     const wrappers = sections ? sections.map(section => section.wrapper) : [wrapper];
     const layOut = () => layOutSheets(container, sections, wrapper, zones);
     layOut();
+    if (!stale() && refitToContent(container)) { clearPagination(container, wrappers); layOut(); }
     if (!stale()) watchGeometry(container, wrappers, layOut);
   }
   // === Le même rendu, dans un autre document : l'impression par le navigateur (js/print-export.js) ===

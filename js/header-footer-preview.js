@@ -774,7 +774,15 @@ const HeaderFooterPreview = (function () {
   let paginationSteps = null;
   function schedulePaginationRecompute() {
     if (paginationRecomputeTimer) clearTimeout(paginationRecomputeTimer);
-    paginationRecomputeTimer = setTimeout(renderPaginationOverlay, 200);
+    paginationRecomputeTimer = setTimeout(recomputeIfShown, 200);
+  }
+  // L'éditeur masqué (Lecture, résumé d'un macro-modèle, carte de l'accès) n'a aucune mise en page à mesurer : le calcul ne trouverait que des rectangles vides, et prenait pourtant 0,2 s juste
+  // après la première image de la Lecture (l'observateur de taille voit l'éditeur tomber à 0 et relance la minuterie). Rien n'est perdu : chaque retour de l'éditeur à l'écran
+  // repagine (Editor.refreshLayout, js/main.js:syncEditorVisibilityForMode).
+  function recomputeIfShown() {
+    const tiptapEl = editor && editor.view && editor.view.dom;
+    if (tiptapEl && !tiptapEl.getClientRects().length) { paginationRecomputeTimer = null; return; }
+    renderPaginationOverlay();
   }
   // La couture suit la géométrie du contenu, pas seulement les frappes : onUpdate (js/editor.js) ne rappelle schedulePaginationRecompute que si le
   // document change, or le contenu change de taille sans transaction (police chargée, image arrivée, bulle de variable devenue valide ou cassée,

@@ -131,7 +131,34 @@ const SlidesEntry = (function () {
   // sa ligne pour un autre modèle d'un lot ou d'un macro-modèle) : ses polices et ses couleurs sont écrites en style sur le texte et les titres (SlideTheme.forOutput), son fond est celui de chaque diapositive qui n'a pas le sien (SlideTheme.paperOf) et son décor
   // (bandeau, logo, numéro, pied : SlideTheme.decorHtmlFor) des cadres derrière le texte de chaque diapositive ; sans thème, rien n'est ajouté. `page` : la page de CETTE présentation en points ({ width, height }), pour le décor ; `stored` : à défaut, la colonne Margins de sa ligne (un autre modèle d'un lot ou d'un macro-modèle : sa page
   // n'est pas celle de l'écran) ; sans l'un ni l'autre, la page du modèle ouvert.
-  function outputHtml(typeModele, html, { keepProps = false, anchors = false, theme = null, page = null, stored } = {}) {
+  function outputHtml(typeModele, html, options) {
+    // Un texte de présentation qui n'a pas changé rend la même sortie : la Lecture la demande à chaque rendu (autre ligne choisie, retour de l'Édition sans rien avoir écrit, page réajustée) et un macro-modèle à chaque
+    // ligne d'un lot, pour chacun de ses modèles, or elle relit et réécrit le texte entier cinq à six fois (0,12 à 0,16 s sur « Présentation commerciale »). Les dernières sorties sont gardées avec tout ce qu'elles ont lu
+    // pour se faire : le texte, les options, la page du modèle ouvert et les styles de titres du document, seuls états lus en route. Une diapositive liée prend celle de sa source (un autre modèle) : ce texte-là n'est jamais gardé.
+    if (!isPresentation(typeModele) || !html || html.length < OUTPUT_CACHE_MIN_CHARS || html.indexOf('data-link-slide') !== -1) return computeOutputHtml(typeModele, html, options);
+    const key = outputKey(typeModele, options);
+    const styles = typeof HeadingStyles !== 'undefined' ? HeadingStyles.documentStyles() : null;
+    const hit = outputCache.findIndex(entry => entry.key === key && entry.styles === styles && entry.html === html);
+    if (hit !== -1) {
+      const [entry] = outputCache.splice(hit, 1);
+      outputCache.push(entry);
+      return entry.out;
+    }
+    const out = computeOutputHtml(typeModele, html, options);
+    outputCache.push({ key, styles, html, out });
+    if (outputCache.length > OUTPUT_CACHE_MAX) outputCache.shift();
+    return out;
+  }
+  const OUTPUT_CACHE_MAX = 3;
+  const OUTPUT_CACHE_MIN_CHARS = 20000;
+  const outputCache = [];
+  function outputKey(typeModele, options) {
+    const { keepProps = false, anchors = false, theme = null, page = null, stored } = options || {};
+    // La page du modèle ouvert se lit toujours en route : le cadre du fond de chaque diapositive est de sa taille (FreeFrame.backgroundHtml), et le décor quand aucune autre page n'est dite (SlideTheme.decorHtmlFor).
+    const own = typeof PageLayout !== 'undefined' ? PageLayout.getPageSizePt() : null;
+    return JSON.stringify([typeModele, keepProps, anchors, theme, page, stored === undefined ? null : stored, stored === undefined, own]);
+  }
+  function computeOutputHtml(typeModele, html, { keepProps = false, anchors = false, theme = null, page = null, stored } = {}) {
     // Un document ne montre jamais le repère de ses copies en texte (js/slide-copies.js), et une copie dont la diapositive a changé la reprend.
     if (html && !isPresentation(typeModele)) return SlideCopies.forOutput(html);
     if (!isPresentation(typeModele) || !html) return html;
