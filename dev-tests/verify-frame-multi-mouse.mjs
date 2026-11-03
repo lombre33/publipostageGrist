@@ -8,7 +8,7 @@
 // Lancé par run-headless.mjs (groupe Node "frameMultiMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-frame-multi-mouse.mjs
 import { start, seedModels, WIDTH, HEIGHT } from './gfs-page.mjs';
 
-const t = await start({ name: 'verify-frame-multi-mouse', port: Number(process.env.FRAME_MULTI_PORT || 9161) });
+const t = await start({ name: 'verify-frame-multi-mouse', port: Number(process.env.FRAME_MULTI_PORT || 9185) });
 const { check } = t;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ACTIVE = ['graphique', 'diapositives'];
