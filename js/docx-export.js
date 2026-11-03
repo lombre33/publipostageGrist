@@ -1158,7 +1158,12 @@ const DocxExport = (function () {
   function keepContinuationCellsWithNext(tableRows, rows, joinedRows, keptRows) {
     tableRows.forEach((tableRow, i) => {
       if (!joinedRows.has(rows[i]) && !keptRows.has(rows[i])) return;
-      tableRow.cells.forEach((tableCell) => { if (tableCell.options && tableCell.options.verticalMerge === docx.VerticalMergeType.CONTINUE) tableCell.addChildElement(new docx.Paragraph({ keepNext: true })); });
+      tableRow.cells.forEach((tableCell) => {
+        if (!tableCell.options || tableCell.options.verticalMerge !== docx.VerticalMergeType.CONTINUE) return;
+        // docx 9.15.1 met déjà un paragraphe (sans keepNext) dans la case de continuation : on le retire, puis on pose celui qui garde avec le suivant.
+        if (Array.isArray(tableCell.root)) tableCell.root = tableCell.root.filter(child => !(child instanceof docx.Paragraph));
+        tableCell.addChildElement(new docx.Paragraph({ keepNext: true }));
+      });
     });
   }
 
@@ -1317,7 +1322,10 @@ const DocxExport = (function () {
   }
   // Le STYLE du trait (`dash`, `cap`, `cmpd` : js/shape-geometry.js). Le bout et le type composé sont des attributs de `a:ln` (`cap` : `rnd` ou `sq`, le bout plat étant celui de Word sans rien écrire ;
   // `cmpd` : `dbl`, `thinThick`, `thickThin`, `tri`) ; le tiret en est un enfant, qui suit le remplissage du trait et précède les pointes : `a:prstDash val` pour un tiret de PowerPoint, `a:custDash` et ses `a:ds d sp` (en millièmes de pour cent de l'épaisseur) pour une liste.
-  const LINE_CAPS = { round: 'rnd', square: 'sq' };
+  // docx 9.15.1 ne prend plus la valeur de Word (`rnd`, `dbl`...) mais le NOM de la constante (`LineCap.ROUND`, `CompoundLine.DOUBLE`) et retire sans erreur ce qu'il ne connaît pas : le bout et le trait composé
+  // se perdaient dans le Word depuis le passage de 9.7.1 à 9.15.1.
+  const LINE_CAPS = { round: 'ROUND', square: 'SQUARE' };
+  const COMPOUND_LINES = { dbl: 'DOUBLE', thinThick: 'THIN_THICK', thickThin: 'THICK_THIN', tri: 'TRI' };
   function dashElementOf(dash) {
     const spec = ShapeGeometry.dashDrawingMl(dash);
     if (!spec) return null;
@@ -1358,7 +1366,7 @@ const DocxExport = (function () {
       transformation: { width: attrs.w / ptPerPx, height: attrs.h / ptPerPx, flip: { horizontal: flip.includes('h') || undefined, vertical: flip.includes('v') || undefined } },
       altText: { id: ctx.imageIdCounter, name: '', description: attrs.alt || '', title: '' },
       nonVisualProperties: {},
-      outline: { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: Math.round(FreeFrame.lineWidthOf(attrs) * EMU_PER_PT), cap: LINE_CAPS[attrs.cap], compoundLine: attrs.cmpd || undefined },
+      outline: { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: Math.round(FreeFrame.lineWidthOf(attrs) * EMU_PER_PT), cap: LINE_CAPS[attrs.cap], compoundLine: COMPOUND_LINES[attrs.cmpd] },
       children: [new docx.Paragraph('')],
       floating: {
         horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.PAGE, offset: Math.round(attrs.x * EMU_PER_PT) },
@@ -1429,7 +1437,7 @@ const DocxExport = (function () {
       transformation: { width: Math.max(1, place.w / ptPerPx), height: Math.max(1, place.h / ptPerPx), rotation: attrs.rot || undefined },
       altText: { id: ctx.imageIdCounter, name: '', description: attrs.alt || '', title: '' },
       nonVisualProperties: attrs.shape || isBackground ? {} : { txBox: '1' },
-      outline: edgePt ? { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: emu(edgePt), cap: LINE_CAPS[attrs.cap], compoundLine: attrs.cmpd || undefined } : { type: 'noFill' },
+      outline: edgePt ? { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: emu(edgePt), cap: LINE_CAPS[attrs.cap], compoundLine: COMPOUND_LINES[attrs.cmpd] } : { type: 'noFill' },
       solidFill: attrs.fill ? { type: 'rgb', value: rgbHex(attrs.fill) } : undefined,
       bodyProperties: { margins: { top: emu(margins[0]), right: emu(margins[1]), bottom: emu(margins[2]), left: emu(margins[3]) }, verticalAnchor: attrs.shape ? docx.VerticalAnchor.CENTER : docx.VerticalAnchor.TOP },
       children: blocks,
