@@ -11,7 +11,13 @@
 //   - la Lecture montre les 40 images, et les 40 dessins sont faits UNE seule fois en tout (l'éditeur, la bande et la Lecture partagent la mémoire des dessins) ; le retour en édition n'en refait aucun et ne
 //     fait revenir à aucun cadre dessiné, même un instant, le cadre pointillé.
 //  UN DOCUMENT de six sections, un graphique créé chacune (pas de bande : rien ne demande un dessin que la vue) : même chose, et le retour de la Lecture ne fait pas clignoter le cadre dessiné qu'on voit.
-//  LA TOILE : ChartMake.toImage rend la même image qu'avant (octet pour octet, 1440 x 900 pour 480 x 300 à trois pixels par pixel) et remet à zéro toutes les toiles qu'il a créées (leur mémoire est rendue tout de suite).
+//  LE DÉFILEMENT (demande du fil des miniatures, 03/11 : « 3 à 6 tâches longues de 65 à 200 ms à la molette, 1 à 3 images au-dessus de 100 ms ; sur 7322e6f, aucune ») : un dessin prend le fil principal 30 à 80 ms, il ne
+//  commence donc jamais pendant que la molette tourne (une rafale de 35 pas de 100 px, un pas toutes les 60 ms : aucun dessin ni aucune tâche longue commencés pendant, aucune image au-dessus de 100 ms), et, la rafale finie,
+//  tout ce que l'éditeur montre est dessiné ; par pauses d'une seconde entre trois coups de molette, le cadre qui arrive dans la vue est déjà dessiné (on dessine deux écrans d'avance, dans les pauses).
+//  LES LECTURES EN SÉRIE (même demande : « avec 300 ms de latence, les cinq premiers graphiques n'ont leurs données que 1,9 s après la bande, au lieu de 0,6 s ») : cinq graphiques créés sur cinq tables, Grist à 300 ms l'appel :
+//  leurs lectures partent ensemble (au moins quatre lectures de tables de données en vol en même temps), pas l'une après l'autre.
+//  LA TOILE : ChartMake.toImage rend la même image qu'avant (octet pour octet, 1440 x 900 pour 480 x 300 à trois pixels par pixel) et remet à zéro toutes les toiles qu'il a créées (leur mémoire est rendue tout de suite) ;
+//  six dessins demandés ensemble encodent leur PNG hors du fil principal (`toBlob`), un à la fois (deux encodages en attente garderaient chacun leurs toiles de 5 Mo).
 //  LA LECTURE DES RÉGLAGES : un graphique créé (ChartSource.made) lit deux tables de Grist, `_grist_Tables` et `_grist_Tables_column` ; un graphique de la page (`read`) toutes sauf `_grist_Pages` ; la liste (`list`) les sept.
 // Lancé par run-headless.mjs (groupe Node « chartLazy », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-chart-lazy.mjs
 import { join } from 'node:path';
@@ -28,8 +34,8 @@ const KINDS = ['bar', 'line', 'area', 'pie', 'donut'];
 
 // ---- Les deux modèles de l'essai -----------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Le graphique créé, tel que l'éditeur l'écrit : jamais d'image, sa définition (colonnes par identifiant), les lignes, son nom. Un titre à chacun : une définition, donc un dessin, à chacun.
-const made = (title, k) => '<img class="editor-image" alt="Graphique" style="width: 480px; height: 300px" data-layer="normal" data-wrap="inline" data-chart-spec="'
-  + JSON.stringify({ v: 1, kind: KINDS[k % KINDS.length], table: 'GfVentes', label: 'Mois', values: ['Montant'], title }).replace(/"/g, '&quot;') + '" data-chart-scope="all" data-chart-name="' + title + '">';
+const made = (title, k, table = 'GfVentes', width = 480, height = 300) => '<img class="editor-image" alt="Graphique" style="width: ' + width + 'px; height: ' + height + 'px" data-layer="normal" data-wrap="inline" data-chart-spec="'
+  + JSON.stringify({ v: 1, kind: KINDS[k % KINDS.length], table, label: 'Mois', values: ['Montant'], title }).replace(/"/g, '&quot;') + '" data-chart-scope="all" data-chart-name="' + title + '">';
 const BR = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
 const PROPS = '<div class="pp-slide-props" contenteditable="false" aria-hidden="true" style="display:block;height:0;margin:0;padding:0;border:0"></div>';
 const slides = [PROPS];
@@ -42,9 +48,14 @@ for (let k = 1; k <= M; k++) {
   sections.push('<h2>Section ' + k + '</h2>', '<p>Le texte de la section ' + k + '.</p>', '<p>' + made('Section ' + k, k) + '</p>');
   if (k < M) sections.push(BR);
 }
+// Un document de cinq petits graphiques (300 x 100), chacun sur sa table (GfV1 à GfV5) : tous près de la vue à l'ouverture, et cinq tables à lire.
+const TABLES = 5;
+const several = ['<h1>Cinq tables</h1>'];
+for (let k = 1; k <= TABLES; k++) several.push('<p>' + made('Table ' + k, k, 'GfV' + k, 300, 100) + '</p>');
 const SEED = seedModels({}) + `
   add(7, 'Présentation longue', ${JSON.stringify(slides.join(''))}, false, 'presentation');
   add(8, 'Document long', ${JSON.stringify(sections.join(''))}, false, 'document');
+  add(9, 'Document à cinq tables', ${JSON.stringify(several.join(''))}, false, 'document');
   stub.state.nextRowId.Publipostage_Modeles = 20;
 `;
 
@@ -55,11 +66,23 @@ async function openApp() {
   // Le document de Grist est celui de scenarios-chart-block.js : une seule description des données, chargée dans la page.
   await page.addScriptTag({ path: join(ROOT, 'dev-tests', 'scenarios-chart-block.js') });
   await page.evaluate(async () => { await GfsLink.ready; await Extensions.loadAll(); await window.__chartFixture.seed({ resetEditor: async () => {} }); });
-  // Le compte des dessins : chaque appel du moteur (ECharts) pour un graphique créé, posé avant l'ouverture du modèle.
+  // Cinq tables de plus pour le document à cinq tables : les colonnes et les lignes de GfVentes, un nom chacune.
   await page.evaluate(() => {
-    window.__draws = { n: 0 };
+    for (let k = 1; k <= 5; k++) {
+      window.__gristStub.setVariables('GfV' + k, { Mois: 'Text', Montant: 'Numeric' });
+      window.__gristStub.setRows('GfV' + k, [{ id: 1, Mois: 'Janvier', Montant: 10 * k }, { id: 2, Mois: 'Février', Montant: 20 * k }, { id: 3, Mois: 'Mars', Montant: 15 * k }]);
+    }
+  });
+  // Le compte des dessins : chaque appel du moteur (ECharts) pour un graphique créé, posé avant l'ouverture du modèle, avec l'heure où il commence ; les tâches longues (50 ms et plus) ; le plus long intervalle entre deux images.
+  await page.evaluate(() => {
+    window.__draws = { n: 0, at: [] };
     const real = ChartMake.toImage;
-    ChartMake.toImage = function () { window.__draws.n += 1; return real.apply(this, arguments); };
+    ChartMake.toImage = function () { window.__draws.n += 1; window.__draws.at.push(performance.now()); return real.apply(this, arguments); };
+    window.__long = [];
+    try { new PerformanceObserver((list) => { list.getEntries().forEach((e) => window.__long.push({ at: e.startTime, ms: e.duration })); }).observe({ type: 'longtask', buffered: true }); } catch (e) { /* pas de tâche longue à compter */ }
+    window.__fps = { last: 0, max: 0 };
+    const tick = (now) => { if (window.__fps.last) window.__fps.max = Math.max(window.__fps.max, now - window.__fps.last); window.__fps.last = now; requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
     // Les boîtes que les gestes visent : le conteneur de l'éditeur, la bande (le premier parent de la liste qui défile), le cadre `i` du document, la miniature `i`.
     const strip = () => {
       const first = document.querySelector('.pp-slide-list .pp-slide-item');
@@ -143,6 +166,30 @@ async function wheelTo(page, which, index) {
   }
   return false;
 }
+// Une rafale de coups de molette sur l'éditeur : `steps` pas de 100 px, un toutes les `every` ms. Rend ce que la page a vécu pendant la rafale : les dessins commencés, les tâches longues commencées (leur durée) et le plus long
+// intervalle entre deux images du navigateur (relevé à la fin de la rafale, avant les dessins qu'elle laisse derrière elle).
+async function wheelBurst(page, steps, every) {
+  const at = await page.evaluate(() => { const r = window.__lazy.editor().getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + Math.min(r.height, innerHeight - r.top) / 2 }; });
+  await page.mouse.move(at.x, at.y);
+  await page.evaluate(() => { window.__fps.max = 0; window.__burstFrom = performance.now(); });
+  for (let i = 0; i < steps; i++) { await page.mouse.wheel(0, 100); await sleep(every); }
+  const end = await page.evaluate(() => { window.__burstTo = performance.now(); return { worstFrame: Math.round(window.__fps.max) }; });
+  await sleep(300);   // le navigateur livre les tâches longues avec un peu de retard
+  const seen = await page.evaluate(() => {
+    const from = window.__burstFrom;
+    const to = window.__burstTo;
+    return { ms: Math.round(to - from), draws: window.__draws.at.filter(t => t >= from && t <= to).length, longs: window.__long.filter(l => l.at >= from && l.at <= to).map(l => Math.round(l.ms)) };
+  });
+  return Object.assign(seen, end);
+}
+// Les cadres de l'éditeur dans la vue (au moins 4 px dedans) qui n'ont pas leur dessin : leur rang (de 1).
+const viewHoles = page => page.evaluate(() => {
+  const box = window.__lazy.editor().getBoundingClientRect();
+  const bottom = Math.min(box.bottom, innerHeight);
+  const drawn = (w) => { const img = w.querySelector('img'); return w.classList.contains('editor-image-chart-drawn') && /^data:image\/png/.test((img && img.getAttribute('src')) || ''); };
+  return Array.from(document.querySelectorAll('.editor-image-chart-placeholder')).filter(w => !w.closest('.pp-slide-list')).map((w, i) => ({ w, i, b: w.getBoundingClientRect() }))
+    .filter(f => f.b.width > 0 && f.b.bottom > box.top + 4 && f.b.top < bottom - 4 && !drawn(f.w)).map(f => f.i + 1);
+});
 async function waitFor(page, what, fn, arg, timeout = 15000) {
   try { await page.waitForFunction(fn, arg, { timeout }); return true; } catch (e) { console.log('  (attente sans fin : ' + what + ')'); return false; }
 }
@@ -196,10 +243,49 @@ check('les cadres dessinés sont autant que les dessins faits (aucun dessin perd
 const undrawn = framesOpen.map((f, i) => (isDrawn(f) ? -1 : i)).filter(i => i >= 0);
 check('la plupart des cadres sont encore le cadre pointillé : pas d\'image, pas de classe « dessiné »', undrawn.length >= N / 2 && undrawn.every(i => !framesOpen[i].drawn && framesOpen[i].src === ''), undrawn.length);
 
+// 1b) La molette : aucun dessin ne commence pendant qu'elle tourne ; tout ce qu'on voit est dessiné à l'arrêt ; entre deux gestes, les pauses suffisent pour que le cadre qui arrive soit déjà dessiné.
+console.log('\nLe défilement à la molette');
+const before0 = await editorFrames(page);
+// Un endroit où plus de dix cadres sont encore sans dessin : on met en vue le cadre d'avant (d'un saut), et on laisse se dessiner ce qui est près.
+const run = before0.findIndex((f, i) => i >= 3 && before0.length - i >= 12 && before0.slice(i, i + 12).every(x => !isDrawn(x)));
+if (run < 0) check('un endroit du document où douze cadres de suite sont encore sans dessin, pour essayer la molette', false, before0.map(f => isDrawn(f)));
+else {
+  await page.evaluate((i) => { const L = window.__lazy; const r = L.editor().getBoundingClientRect(); const b = L.frame(i).getBoundingClientRect(); L.editor().scrollTop += (b.top + b.height / 2) - (r.top + r.height / 2); }, run - 1);
+  await calm(page, 1500);
+  const framesJump = await editorFrames(page);
+  const ahead = framesJump.filter((f, i) => i >= run && !isDrawn(f)).length;
+  check('au saut, ce qui est près de la vue se dessine et il reste plus bas au moins 6 cadres sans dessin pour la rafale', ahead >= 6, { dessines: framesJump.filter(isDrawn).length, sansDessinPlusBas: ahead });
+  const draws0 = await page.evaluate(() => window.__draws.n);
+  const burst = await wheelBurst(page, 35, 60);
+  await calm(page, 1500);
+  const madeAfter = (await page.evaluate(() => window.__draws.n)) - draws0;
+  const holes = await viewHoles(page);
+  console.log('  (rafale de ' + burst.ms + ' ms : ' + burst.draws + ' dessins commencés pendant, tâches longues ' + JSON.stringify(burst.longs) + ', plus long intervalle entre deux images ' + burst.worstFrame + ' ms ; ' + madeAfter + ' dessins depuis le saut)');
+  check('la rafale de molette (35 pas de 100 px, un toutes les 60 ms) a fait entrer des cadres sans dessin dans le champ : il s\'est dessiné de quoi les montrer', madeAfter >= 1, madeAfter);
+  check('aucun dessin ne commence pendant que la molette tourne (un dessin fige la page 30 à 80 ms : un à-coup à chaque graphique qui arrive)', burst.draws === 0, burst);
+  check('aucune tâche longue (50 ms et plus) ne commence pendant que la molette tourne', burst.longs.length === 0, burst.longs);
+  check('aucune image du navigateur ne dépasse 100 ms pendant que la molette tourne', burst.worstFrame <= 100, burst.worstFrame);
+  check('la rafale finie, tout ce que l\'éditeur montre est dessiné (aucun cadre pointillé dans la vue)', holes.length === 0, holes);
+  check('défiler ne dessine que ce qui est près de la vue, pas tous les cadres qu\'on a dépassés : quelques dessins, pas plus de 10', madeAfter <= 10, madeAfter);
+}
+// Des gestes et des pauses : trois coups de molette, une seconde de pause, cinq fois de suite ; à chaque pause, aucun cadre pointillé dans la vue (deux écrans d'avance, dessinés pendant les pauses).
+const pauses = [];
+for (let g = 0; g < 5; g++) {
+  await wheelBurst(page, 3, 60);
+  await sleep(1000);
+  pauses.push((await viewHoles(page)).length);
+}
+check('entre deux gestes de molette, aucun cadre pointillé n\'arrive dans la vue (les cadres proches se dessinent dans les pauses)', pauses.every(n => n === 0), pauses);
+// La suite repart du haut du document : ce qui est près se dessine, et on regarde de nouveau quels cadres n'ont pas de dessin.
+await page.evaluate(() => { window.__lazy.editor().scrollTop = 0; });
+await calm(page, 1500);
+const framesTop = await editorFrames(page);
+const undrawn2 = framesTop.map((f, i) => (isDrawn(f) ? -1 : i)).filter(i => i >= 0);
+
 // 2) Un cadre loin de la vue : la molette l'amène, il se dessine.
-const target = undrawn[Math.floor(undrawn.length / 2)];
-let framesScroll = framesOpen;
-if (target === undefined) check('un cadre sans dessin attend la molette (il y en a plus de la moitié)', false, undrawn.length);
+const target = undrawn2[Math.floor(undrawn2.length / 2)];
+let framesScroll = framesTop;
+if (target === undefined) check('un cadre sans dessin attend la molette', false, undrawn2.length);
 else {
   const before = await page.evaluate(() => window.__draws.n);
   const reached = await wheelTo(page, 'editor', target);
@@ -209,7 +295,7 @@ else {
   framesScroll = await editorFrames(page);
   check('le cadre, une fois dans la vue, se dessine (une image PNG)', framed && isDrawn(framesScroll[target]), framesScroll[target] && [framesScroll[target].drawn, framesScroll[target].src.slice(0, 22)]);
   check('le cadre ne change que de son trait pointillé (2 px) quand le dessin vient : même largeur, même hauteur à 4 px près (la pagination et la mise en page n\'en savent rien)',
-    framesOpen[target].width > 100 && Math.abs(framesScroll[target].width - framesOpen[target].width) <= 4 && Math.abs(framesScroll[target].height - framesOpen[target].height) <= 4, [framesOpen[target].width, framesOpen[target].height, framesScroll[target].width, framesScroll[target].height]);
+    framesTop[target].width > 100 && Math.abs(framesScroll[target].width - framesTop[target].width) <= 4 && Math.abs(framesScroll[target].height - framesTop[target].height) <= 4, [framesTop[target].width, framesTop[target].height, framesScroll[target].width, framesScroll[target].height]);
   check('défiler dessine ce qui entre dans la vue, pas tout le document : quelques dessins de plus, pas les ' + (N - before), afterScroll > before && afterScroll - before <= 8, { avant: before, apres: afterScroll });
 }
 
@@ -259,6 +345,30 @@ check('la Lecture du document montre les ' + M + ' graphiques, dessinés une seu
 check('le retour en édition du document ne refait aucun dessin', docBack.afterEdit === docBack.total, [docBack.total, docBack.afterEdit]);
 check('au retour en édition du document, le cadre dessiné qu\'on voit (rien ne le demande que la vue) ne redevient pas, un instant, le cadre pointillé', docBack.flash.seen > 0 && docBack.flash.bad === 0, docBack.flash);
 
+// ---- Les lectures en série : cinq graphiques sur cinq tables, Grist à 300 ms l'appel -----------------------------------------------------------------------------------------------------------------
+console.log('\nCinq graphiques sur cinq tables, Grist à 300 ms l\'appel');
+await page.evaluate(() => {
+  const d = grist.docApi;
+  const real = d.fetchTable.bind(d);
+  const reads = window.__reads = { live: 0, peak: 0, real };
+  d.fetchTable = function (name) {
+    if (!/^GfV\d$/.test(String(name))) return real(name);
+    reads.live += 1;
+    reads.peak = Math.max(reads.peak, reads.live);
+    return Promise.resolve(real(name)).finally(() => { reads.live -= 1; });
+  };
+  window.__gristStub.setLatency(300);
+  document.getElementById('editor-container').scrollTop = 0;
+});
+const latencyFrom = Date.now();
+await openModel(page, 9, 0);
+const severalDrawn = await waitFor(page, 'les ' + TABLES + ' dessins', n => { const w = Array.from(document.querySelectorAll('.editor-image-chart-placeholder')); return w.length === n && w.every(x => x.classList.contains('editor-image-chart-drawn')); }, TABLES, 40000);
+const severalMs = Date.now() - latencyFrom;
+const severalReads = await page.evaluate(() => { const r = window.__reads; grist.docApi.fetchTable = r.real; window.__gristStub.setLatency(0); return { peak: r.peak }; });
+console.log('  (les ' + TABLES + ' graphiques dessinés ' + severalMs + ' ms après l\'ordre d\'ouverture, jusqu\'à ' + severalReads.peak + ' lectures de tables de données en vol en même temps)');
+check('les ' + TABLES + ' graphiques sur ' + TABLES + ' tables se dessinent', severalDrawn, severalMs);
+check('leurs lectures de Grist partent ensemble : au moins ' + (TABLES - 1) + ' lectures de tables de données en vol en même temps, pas une après l\'autre', severalReads.peak >= TABLES - 1, severalReads);
+
 // ---- La toile : la même image, et plus aucune toile pleine derrière ----------------------------------------------------------------------------------------------------------------------------------
 console.log('\nLa toile d\'ECharts');
 const canvas = await page.evaluate(async () => {
@@ -283,6 +393,21 @@ const canvas = await page.evaluate(async () => {
 check('ChartMake.toImage rend une image PNG de 1440 x 900 pixels pour 480 x 300 (trois pixels par pixel)', PNG.test(canvas.png) && canvas.size.width === 1440 && canvas.size.height === 900, canvas);
 check('c\'est la même image, octet pour octet, que celle du dessin d\'avant (sans toile remise à zéro)', canvas.same && canvas.bytes > 1000, { memeImage: canvas.same, octets: canvas.bytes });
 check('toutes les toiles que le dessin a créées sont ramenées à zéro (leur mémoire est rendue tout de suite, pas au prochain ramasse-miettes)', canvas.canvases >= 2 && canvas.full.length === 0, canvas);
+
+// Six dessins demandés ensemble (un export, la bande et la Lecture à la fois) : l'encodage du PNG se fait hors du fil principal (`toBlob`), et deux dessins qui l'attendraient ensemble garderaient chacun leurs toiles de 5 Mo.
+const queued = await page.evaluate(async () => {
+  const option = { animation: false, backgroundColor: '#ffffff', xAxis: { type: 'category', data: ['a', 'b', 'c'] }, yAxis: { type: 'value' }, series: [{ type: 'bar', data: [3, 5, 2] }] };
+  const realBlob = HTMLCanvasElement.prototype.toBlob;
+  let open = 0, peak = 0, calls = 0;
+  HTMLCanvasElement.prototype.toBlob = function (callback, ...rest) { calls += 1; open += 1; peak = Math.max(peak, open); return realBlob.call(this, (blob) => { open -= 1; callback(blob); }, ...rest); };
+  const created = [];
+  const realCreate = document.createElement;
+  document.createElement = function (tag) { const el = realCreate.apply(this, arguments); if (String(tag).toLowerCase() === 'canvas') created.push(el); return el; };
+  let uris = [];
+  try { uris = await Promise.all([1, 2, 3, 4, 5, 6].map(() => ChartMake.toImage(option, 480, 300))); } finally { HTMLCanvasElement.prototype.toBlob = realBlob; document.createElement = realCreate; }
+  return { calls, peak, png: uris.every(u => /^data:image\/png;base64,/.test(u)), same: uris.every(u => u === uris[0]), canvases: created.length, full: created.filter(c => c.width !== 0 || c.height !== 0).length };
+});
+check('six dessins demandés ensemble : l\'encodage du PNG se fait hors du fil principal (toBlob), un dessin à la fois (jamais deux encodages en même temps), les six images sont les mêmes et aucune toile ne reste pleine', queued.calls === 6 && queued.peak === 1 && queued.png && queued.same && queued.canvases >= 12 && queued.full === 0, queued);
 
 // ---- La lecture des réglages : deux tables pour un graphique créé ---------------------------------------------------------------------------------------------------------------------------------
 console.log('\nLes tables de réglages de Grist');

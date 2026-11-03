@@ -89,28 +89,31 @@ const ChartBlock = (function () {
   // Dessine le graphique de la section `id` pour la ligne `record` : { uri } (le PNG, adresse `data:`) ou { empty: true } quand il n'y a aucune ligne à
   // tracer. Lève une erreur dont `kind` dit ce qui manque : « chart » (graphique supprimé ou plus redessinable), « rows » (lignes illisibles), sinon la
   // bibliothèque ou le dessin.
-  async function draw(id, scope, tableId, record, width, height) {
+  // Le dessin se fait en deux temps : la lecture (ce que Grist dit du graphique et de ses lignes : des allers-retours qui ne prennent pas le fil principal) et le dessin (le moteur, qui le prend). Le cadre de l'éditeur
+  // lance la lecture de tous ses graphiques d'un coup (paintAll) : elle part avant son tour de dessin.
+  async function foundRows(spec, scope, tableId, record) {
+    try { return await ChartSource.rows(spec, scope, tableId, record); }
+    catch (e) { throw problem('rows', e && e.message ? e.message : 'Lignes illisibles'); }
+  }
+  async function readPlot(id, scope, tableId, record) {
     const spec = await ChartSource.read(id);
     if (!spec) throw problem('chart', 'Graphique introuvable : ' + id);
     if (spec.unsupported) throw problem('chart', 'Graphique non redessiné : ' + spec.unsupported);
-    let found;
-    try { found = await ChartSource.rows(spec, scope, tableId, record); }
-    catch (e) { throw problem('rows', e && e.message ? e.message : 'Lignes illisibles'); }
-    if (!found.length) return { empty: true };
-    const figure = ChartPlot.figure(spec.type, ChartSource.series(spec, found), spec.options);
-    return once(['plot', I18n.getLang(), figure, width, height], async () => ({ uri: await ChartPlot.toImage(figure, width, height) }));
+    return { spec, found: await foundRows(spec, scope, tableId, record) };
   }
-
-  // Dessine le graphique CRÉÉ `def` (chart-make.js) pour la ligne `record` : { uri } ou { empty: true }, avec les mêmes erreurs que `draw` (`kind` « chart » : la définition est illisible ou sa table, une de
-  // ses colonnes n'existe plus).
-  async function drawMade(def, scope, tableId, record, width, height) {
+  async function readMade(def, scope, tableId, record) {
     const spec = def && await ChartSource.made(def);
     if (!spec) throw problem('chart', 'Graphique créé illisible ou sans table : ' + (def ? def.table : ''));
-    let found;
-    try { found = await ChartSource.rows(spec, scope, tableId, record); }
-    catch (e) { throw problem('rows', e && e.message ? e.message : 'Lignes illisibles'); }
-    if (!found.length) return { empty: true };
-    const series = ChartSource.series(spec, found);
+    return { spec, found: await foundRows(spec, scope, tableId, record) };
+  }
+  function drawPlot(read, width, height) {
+    if (!read.found.length) return { empty: true };
+    const figure = ChartPlot.figure(read.spec.type, ChartSource.series(read.spec, read.found), read.spec.options);
+    return once(['plot', I18n.getLang(), figure, width, height], async () => ({ uri: await ChartPlot.toImage(figure, width, height) }));
+  }
+  function drawMadeFrom(def, read, width, height) {
+    if (!read.found.length) return { empty: true };
+    const series = ChartSource.series(read.spec, read.found);
     return once(['made', I18n.getLang(), def, series, width, height], async () => {
       const made = { uri: await ChartMake.toImage(ChartMake.option(def, series, { width, height }), width, height) };
       // Le modèle d'Office du même graphique (chart-office.js) : ce que Word, PowerPoint et Excel refont en graphique natif et modifiable. Un graphique qu'il ne sait pas dire (un nuage dont l'abscisse est du texte, plus de
@@ -118,6 +121,15 @@ const ChartBlock = (function () {
       try { made.office = ChartOffice.model(def, series); } catch (e) { console.warn('[ChartBlock] modèle d\'Office impossible', e); }
       return made;
     });
+  }
+  async function draw(id, scope, tableId, record, width, height) {
+    return drawPlot(await readPlot(id, scope, tableId, record), width, height);
+  }
+
+  // Dessine le graphique CRÉÉ `def` (chart-make.js) pour la ligne `record` : { uri } ou { empty: true }, avec les mêmes erreurs que `draw` (`kind` « chart » : la définition est illisible ou sa table, une de
+  // ses colonnes n'existe plus).
+  async function drawMade(def, scope, tableId, record, width, height) {
+    return drawMadeFrom(def, await readMade(def, scope, tableId, record), width, height);
   }
 
   // À la Lecture et à l'export
@@ -157,13 +169,18 @@ const ChartBlock = (function () {
   // illisible, bibliothèque absente), le cadre pointillé reste. Rien ne prévient le widget quand les données d'une autre table changent : le dessin est refait à
   // l'ouverture du modèle, au changement de taille, au changement de ligne (« liées »), aux valeurs de la ligne qui changent (tous), au clic sur le cadre et au
   // retour en édition ; la Lecture, elle, redessine toujours.
-  // Seuls les cadres qu'on voit, ou qu'on verra tout de suite, se dessinent : ceux qui sont dans le champ de l'éditeur ou à un écran de lui (`near`, IntersectionObserver), et ceux dont une copie de l'éditeur
+  // Seuls les cadres qu'on voit, ou qu'on verra tout de suite, se dessinent : ceux qui sont dans le champ de l'éditeur ou à deux écrans de lui (`near`, IntersectionObserver), et ceux dont une copie de l'éditeur
   // a besoin (`asked` : les miniatures de la bande des diapositives et les vues de diapositive, par `demand`). Une présentation de douze graphiques en dessinait douze à l'ouverture (une seconde de travail, des
-  // dizaines de Mo) pour en montrer un ou deux ; les autres se dessinent quand on y arrive (un écran avant, le temps d'un dessin : on ne voit pas le cadre pointillé). Sans IntersectionObserver,
-  // ou hors de l'éditeur, tous les cadres sont « tout près », comme avant.
+  // dizaines de Mo) pour en montrer un ou deux ; les autres se dessinent quand on s'en approche. Sans IntersectionObserver, ou hors de l'éditeur, tous les cadres sont « tout près », comme avant.
+  // Un dessin prend le fil principal 30 à 80 ms : il ne se fait jamais pendant un défilement (molette, clavier, barre, miniature : `moving`), il attend que la page soit calme (SCROLL_QUIET_MS sans défilement) ; c'est
+  // pour cela qu'on dessine deux écrans d'avance, dans les pauses du défilement, plutôt qu'un seul écran d'avance au moment d'y arriver (3 à 6 à-coups de 65 à 200 ms à la molette dans une présentation). Les
+  // lectures de Grist de tous les cadres à dessiner partent ensemble (chacune attendait celle du cadre d'avant : 300 ms de latence, cinq graphiques prêts en 1,9 s au lieu de 0,6 s), puis les dessins se font
+  // un par tâche, les cadres qu'on voit en premier.
   const FRAME_DELAY_MS = 120;
   const FRAME_DRAW_LIMIT_MS = 20000;
-  const FRAME_AHEAD = '100% 0px';   // un écran de plus au-dessus et au-dessous du champ de l'éditeur
+  const FRAME_AHEAD = '200% 0px';   // deux écrans de plus au-dessus et au-dessous du champ de l'éditeur
+  const SCROLL_QUIET_MS = 150;      // le temps sans défilement avant un dessin (une animation de défilement dure moins)
+  const SCROLL_PATIENCE_MS = 8000;  // ce qu'un défilement continu retient les dessins, au plus
   const frames = new Set();   // les cadres vivants (l'objet `view` de js/editor-nodes.js : wrap, img, chart)
   const watched = new Map();   // l'élément du cadre (`wrap`) -> son `view`, pour ceux que l'observateur suit
   let nearObserver = null;
@@ -172,6 +189,8 @@ const ChartBlock = (function () {
   let frameRunning = false;
   let frameAgain = false;
   let framesListen = false;
+  let lastMoveAt = -Infinity;   // l'heure du dernier défilement (ou coup de molette) vu dans la page
+  let moveStartedAt = -Infinity;   // et celle du début de ce défilement
   let lastRowId;
 
   // Ce que le nœud demande : { id, spec, def, scope, width, height }, ou null quand ce n'est pas un graphique sans image. Un graphique de la page a le numéro de sa section (`id`) ; un graphique créé
@@ -196,6 +215,21 @@ const ChartBlock = (function () {
     let timer;
     const limit = new Promise((resolve, reject) => { timer = setTimeout(() => reject(new Error('Dessin trop long')), ms); });
     return Promise.race([work, limit]).finally(() => clearTimeout(timer));
+  }
+  // La page défile-t-elle (la molette, la barre, le clavier, une miniature qu'on a cliquée) ? Les événements `scroll` et `wheel` de toute la page, vus à la capture (`scroll` ne remonte pas). Un défilement qui dure
+  // plus de SCROLL_PATIENCE_MS d'affilée (ou des événements de défilement qui ne s'arrêtent pas) ne retient pas les dessins pour toujours : ils se font quand même.
+  const noteMove = () => {
+    const now = performance.now();
+    if (now - lastMoveAt >= SCROLL_QUIET_MS) moveStartedAt = now;
+    lastMoveAt = now;
+  };
+  const moving = () => {
+    const now = performance.now();
+    return now - lastMoveAt < SCROLL_QUIET_MS && now - moveStartedAt < SCROLL_PATIENCE_MS;
+  };
+  // Rend la main quand la page ne défile plus depuis SCROLL_QUIET_MS.
+  async function quiet() {
+    while (moving()) await new Promise(resolve => setTimeout(resolve, SCROLL_QUIET_MS - (performance.now() - lastMoveAt) + 1));
   }
 
   // `force` : les dessins sont refaits d'après les lignes d'aujourd'hui même si rien n'a changé (chaque cadre le garde jusqu'à son tour, quand il est loin).
@@ -271,35 +305,76 @@ const ChartBlock = (function () {
     frameRunning = true;
     try {
       do {
+        // Pas pendant un défilement : un dessin fige la page, il attend l'arrêt. Les cadres qu'on a dépassés en défilant n'ont plus à se dessiner : ce qui est à dessiner se calcule après l'attente.
+        await quiet();
         frameAgain = false;
         // Un éditeur caché (la Lecture) ne dessine rien ; le retour en édition (refreshEditor) rattrape. Les cadres affichés sont suivis ; seuls ceux qu'on voit ou qui sont demandés se dessinent.
         const shown = Array.from(frames).filter(isShown);
         shown.forEach(watchNear);
         const due = shown.filter(isWanted);
         shown.forEach((view) => { if (!isWanted(view)) forget(view); });
-        // Un dessin à la fois, et la main rendue entre deux : cinq dessins de 80 ms ne font pas une tâche de 400 ms qui fige la page.
-        if (due.length) await GristAPI.withReadPass(async () => { for (const view of due) { if (await paintOne(view)) await nextTask(); } });
+        if (due.length) await paintAll(due);
       } while (frameAgain);
     } finally { frameRunning = false; }
   }
 
-  // Dessine le cadre `view` s'il n'est pas à jour ; vrai quand il y a eu un dessin à faire (ou à relire dans la mémoire des dessins).
-  async function paintOne(view) {
+  // Les cadres, ceux qu'on voit d'abord : par leur distance au champ de l'éditeur (zéro dans le champ), dans l'ordre du document à distance égale.
+  function byDistance(list) {
+    const root = nearRoot ? nearRoot.getBoundingClientRect() : null;
+    const distance = new Map(list.map((view) => {
+      if (!root) return [view, 0];
+      const box = view.wrap.getBoundingClientRect();
+      return [view, box.bottom < root.top ? root.top - box.bottom : (box.top > root.bottom ? box.top - root.bottom : 0)];
+    }));
+    return list.slice().sort((a, b) => distance.get(a) - distance.get(b));
+  }
+
+  // Le dessin de `due`, en trois temps : les lectures de Grist de tous les cadres partent ensemble (une table ne se lit qu'une fois dans le rendu, et le premier cadre ne fait plus attendre les autres) ; puis un dessin par
+  // tâche, la main rendue entre deux (cinq dessins de 80 ms ne font pas une tâche de 400 ms qui fige la page) ; un défilement qui reprend arrête la file, refaite à son arrêt.
+  async function paintAll(due) {
+    const tableId = GristAPI.getCurrentTableId();
+    const plans = await GristAPI.withReadPass(async () => {
+      const made = byDistance(due).map(view => planOf(view, tableId)).filter(Boolean);
+      await Promise.all(made.map(plan => plan.reading && plan.reading.catch(() => null)));
+      return made;
+    });
+    for (let i = 0; i < plans.length; i++) {
+      if (moving()) { plans.slice(i).forEach(undoPlan); frameAgain = true; return; }
+      if (!frames.has(plans[i].view) || !isWanted(plans[i].view)) { undoPlan(plans[i]); continue; }
+      if (await finishOne(plans[i])) await nextTask();
+    }
+  }
+
+  // Le plan du dessin du cadre `view` s'il n'est pas à jour (sinon null) : sa clé, et sa lecture de Grist, déjà partie. « Liées » sans ligne sélectionnée : rien à tracer (pas de lecture), le cadre reste jusqu'à la prochaine ligne.
+  function planOf(view, tableId) {
     const state = view.chart;
     const want = state && state.want;
-    if (!want) return false;
+    if (!want) return null;
     const force = state.forced;
     state.forced = false;
     const record = want.scope === 'linked' ? GristAPI.getCurrentRecord() : null;
     const key = keyOf(want, record);
-    if (!force && state.key === key) return false;
+    if (!force && state.key === key) return null;
     const token = ++state.token;
-    let uri = '';
-    // « Liées » sans ligne sélectionnée : rien à tracer, le cadre reste jusqu'à la prochaine ligne.
+    let reading = null;
     if (want.scope === 'all' || record) {
+      reading = withLimit(want.spec ? readMade(want.def, want.scope, tableId, record) : readPlot(want.id, want.scope, tableId, record), FRAME_DRAW_LIMIT_MS);
+      reading.catch(() => {});   // l'erreur se dit au dessin du cadre (finishOne) ; un cadre qu'on ne dessine pas finalement n'en fait pas une erreur non gérée
+    }
+    return { view, state, want, force, key, token, reading };
+  }
+  // Un plan qu'on ne suit pas (le cadre n'est plus à voir, ou le défilement a repris) : la demande de redessin qu'il avait consommée reste à faire.
+  function undoPlan(plan) {
+    if (plan.force && plan.view.chart === plan.state) plan.state.forced = true;
+  }
+  // Dessine le cadre du plan : vrai quand il y a eu un dessin à faire (ou à relire dans la mémoire des dessins).
+  async function finishOne(plan) {
+    const { view, state, want, key, token } = plan;
+    let uri = '';
+    if (plan.reading) {
       try {
-        const drawn = await withLimit(want.spec ? drawMade(want.def, want.scope, GristAPI.getCurrentTableId(), record, want.width, want.height)
-          : draw(want.id, want.scope, GristAPI.getCurrentTableId(), record, want.width, want.height), FRAME_DRAW_LIMIT_MS);
+        const read = await plan.reading;
+        const drawn = await withLimit(want.spec ? drawMadeFrom(want.def, read, want.width, want.height) : drawPlot(read, want.width, want.height), FRAME_DRAW_LIMIT_MS);
         uri = drawn.uri || '';
       } catch (e) {
         // Un graphique supprimé ou que le widget ne redessine pas garde son cadre sans bruit ; le reste (lignes illisibles, bibliothèque, dessin) se signale.
@@ -324,7 +399,12 @@ const ChartBlock = (function () {
     state.repaint = repaint;
     if (!frames.has(view)) {
       frames.add(view);
-      if (!framesListen) { framesListen = true; GristAPI.onRecord(onRow); }
+      if (!framesListen) {
+        framesListen = true;
+        GristAPI.onRecord(onRow);
+        document.addEventListener('scroll', noteMove, { capture: true, passive: true });
+        document.addEventListener('wheel', noteMove, { capture: true, passive: true });
+      }
     }
     if (state.key !== keyOf(want, want.scope === 'linked' ? GristAPI.getCurrentRecord() : null)) scheduleFrames(false, 0);
     return state.id === want.id && state.spec === want.spec && state.scope === want.scope ? state.uri : '';

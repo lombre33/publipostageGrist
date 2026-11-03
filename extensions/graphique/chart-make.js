@@ -525,10 +525,37 @@ const ChartMake = (function () {
     return Object.assign({ animation: false, backgroundColor: BACKGROUND, color: paletteOf(def), textStyle: textStyle() }, title ? { title } : {}, BUILDERS[def.kind](def, copy, frame));
   }
 
+  // L'adresse `data:` du PNG d'une toile. `toBlob` encode hors du fil principal (les mêmes octets que `toDataURL`, qui fige la page 25 à 50 ms sur les 55 d'un dessin) : on l'attend, puis FileReader écrit l'adresse.
+  // Un navigateur qui ne rappellerait pas (page cachée, toile refusée) ne bloque rien : après PNG_PATIENCE_MS, `toDataURL` donne l'adresse, la toile étant encore là.
+  const PNG_PATIENCE_MS = 5000;
+  function pngAddress(canvas) {
+    if (typeof canvas.toBlob !== 'function' || typeof FileReader !== 'function') return Promise.resolve(canvas.toDataURL('image/png'));
+    return new Promise((resolve, reject) => {
+      const direct = () => { try { resolve(canvas.toDataURL('image/png')); } catch (e) { reject(e); } };
+      const patience = setTimeout(direct, PNG_PATIENCE_MS);
+      canvas.toBlob((blob) => {
+        clearTimeout(patience);
+        if (!blob) { direct(); return; }
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error || new Error('PNG illisible'));
+        reader.readAsDataURL(blob);
+      }, 'image/png');
+    });
+  }
+
   // L'image PNG (adresse `data:`) de cette option, de `width` x `height` pixels de mise en page. Charge ECharts au premier appel. Le dessin se fait sur une page hors de l'écran, détruite aussitôt.
   // Les toiles du dessin pèsent 3 pixels par pixel (5 Mo chacune pour un graphique de 480 x 300), deux par dessin (celle d'ECharts et la copie qu'il en fait pour l'image) : elles ne rendent leur mémoire qu'au
   // prochain ramasse-miettes, qui ne passe pas entre deux dessins, et douze graphiques d'une présentation en gardaient jusqu'à 190 Mo. Ramenées à zéro, elles la rendent tout de suite (même image, octet pour octet).
-  async function toImage(chartOption, width, height) {
+  // Un seul dessin à la fois : l'encodage du PNG se fait hors du fil principal, et deux dessins qui s'y attendraient ensemble garderaient chacun leurs toiles (40 graphiques exportés d'un coup : 400 Mo).
+  let drawing = Promise.resolve();
+  function toImage(chartOption, width, height) {
+    const turn = drawing.then(() => paint(chartOption, width, height));
+    drawing = turn.then(() => {}, () => {});
+    return turn;
+  }
+
+  async function paint(chartOption, width, height) {
     await ensureLibrary();
     const host = document.createElement('div');
     host.style.cssText = 'position:fixed;left:-10000px;top:0;pointer-events:none;width:' + width + 'px;height:' + height + 'px';
@@ -544,7 +571,7 @@ const ChartMake = (function () {
       if (typeof chart.renderToCanvas !== 'function') return chart.getDataURL(wanted);
       const image = chart.renderToCanvas(wanted);
       canvases.push(image);
-      return image.toDataURL('image/png');
+      return await pngAddress(image);
     } finally {
       if (chart) chart.dispose();
       host.remove();
