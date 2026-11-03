@@ -10,7 +10,7 @@ const HeaderFooterPreview = (function () {
     revealHooked = true;
     ExternalImages.onReveal(() => renderPaginationOverlay());
   }
-  function setEditor(ed) { editor = ed; watchPaginationGeometry(); hookReveal(); hookEscape(); }
+  function setEditor(ed) { editor = ed; paginatedDoc = null; paginatedBlocks = []; watchPaginationGeometry(); hookReveal(); hookEscape(); }
 
   const ZONES = ['header', 'footer'];
   const VARIANTS = ['default', 'first'];
@@ -792,6 +792,39 @@ const HeaderFooterPreview = (function () {
   let observedRecomputesTimer = null;
   let reserveCheckTimers = [];
   const RESERVE_CHECKS_MS = [300, 1500];
+  // Une modification qui ne touche que des cadres libres (leur texte, leurs mesures, leur aspect) ne change rien à la pagination : un cadre est une ancre de hauteur nulle (css/free-frame.css), ni sa
+  // boîte ni son contenu ne comptent dans la place d'une page, et les règles de réserve de la dernière pagination visent encore les mêmes blocs. Elle se refaisait pourtant à chaque pause de frappe
+  // ou de geste (0,12 s dans « Présentation commerciale »), pour retrouver au chiffre près la même. `paginatedDoc` est le texte que la dernière pagination a lu et `paginatedBlocks` ses blocs de
+  // premier niveau dans le DOM (null et vide tant qu'aucune n'a abouti : sans aperçu de la page, pendant l'écriture d'un en-tête, calcul interrompu en route) : paginationHolds les compare à ceux du moment.
+  let paginatedDoc = null;
+  let paginatedBlocks = [];
+  const isFrameAnchor = node => node.type.name === FreeFrame.NODE || node.type.name === FreeFrame.LINE_NODE;
+  // Une image en calque (« Devant » ou « Derrière le texte ») est posée sur une page : ses copies de « Sur toutes les pages » se peignent avec la pagination (paintRepeatedCopies parcourt tout
+  // le texte, cadres compris), et la bande des diapositives la suit de page en page à chaque pagination (followLayers, qui retient l'objet du nœud). Un cadre qui en porte une veut son calcul.
+  function carriesPageImage(node) {
+    let found = false;
+    node.descendants((child) => {
+      if (child.type.name === 'editorImage' && child.attrs.layer && child.attrs.layer !== 'normal') found = true;
+      return !found;
+    });
+    return found;
+  }
+  // La dernière pagination vaut-elle encore pour le texte d'à présent ? Aucun calcul n'attend, chaque bloc de premier niveau est le même objet qu'à la dernière pagination ou, de part et d'autre,
+  // un cadre libre à la même place (sans image en calque), et le DOM a les mêmes blocs aux mêmes rangs : les règles de marge visent des rangs (`:nth-child`), les coupures (`afterEl`) et la bande des
+  // diapositives lisent ces blocs. Un cadre posé, retiré ou changé de rang dans le texte (pas de place sur la page) change les rangs : le calcul se refait. Au moindre doute, non, et le calcul se refait comme avant.
+  function paginationHolds() {
+    const tiptapEl = editor && editor.view && editor.view.dom;
+    if (!tiptapEl || !paginatedDoc || paginationRecomputeTimer) return false;
+    const doc = editor.state.doc;
+    if (doc.childCount !== paginatedDoc.childCount) return false;
+    for (let i = 0; i < doc.childCount; i++) {
+      const now = doc.child(i);
+      const then = paginatedDoc.child(i);
+      if (now !== then && !(isFrameAnchor(now) && isFrameAnchor(then) && !carriesPageImage(now) && !carriesPageImage(then))) return false;
+    }
+    const blocks = tiptapEl.children;
+    return blocks.length === paginatedBlocks.length && paginatedBlocks.every((block, i) => blocks[i] === block);
+  }
   // Les réserves de la dernière pagination qui tenaient quand elle les a posées (placeReserve) : { next, bodyTopRel }.
   let lastReserves = [];
   // Chaque bloc qui ouvre une page commence-t-il toujours au haut du corps de sa page ? Un bloc retiré du document ne compte pas : la transaction qui l'a retiré relance déjà
@@ -845,6 +878,8 @@ const HeaderFooterPreview = (function () {
     Array.from(tiptapEl.children).forEach(child => blocksObserver.observe(child, BORDER_BOX));
   }
   function clearPaginationOverlay() {
+    paginatedDoc = null;
+    paginatedBlocks = [];
     if (paginationOverlayEl) paginationOverlayEl.innerHTML = '';
     ['top', 'bottom'].forEach(pos => {
       if (edgeZones[pos]) edgeZones[pos].remove();
@@ -1619,6 +1654,9 @@ const HeaderFooterPreview = (function () {
     const tiptapEl = editor && editor.view && editor.view.dom;
     if (!container || !tiptapEl) return;
     if (hfMode || !isA4Preview()) { container.style.removeProperty('--pp-top-band'); clearPaginationOverlay(); notifyPaginated(); return; }
+    // Le calcul commence : tant qu'il n'a pas abouti (une exception en route laisse des règles à demi posées), aucune pagination ne vaut pour le texte (paginationHolds).
+    paginatedDoc = null;
+    paginatedBlocks = [];
     wireMarginZones(container);
     EditorCore.settleContentZoom(container, tiptapEl);
 
@@ -1662,6 +1700,9 @@ const HeaderFooterPreview = (function () {
     // Les marges de coupure ont pu descendre la ligne du curseur d'une page (la « Page 2 » qui apparaît sous un texte tapé derrière un saut de page posé en fin de
     // document) : le panneau la suit, sans quoi la frappe suivante se fait hors de vue. Seulement si le curseur était à l'écran avant le calcul.
     if (caretShownBefore === true && caretShownIn(container) === false) editor.view.dispatch(editor.state.tr.scrollIntoView());
+    // Posé avant d'avertir les abonnés : ce qu'ils écrivent dans le texte (la bande des diapositives qui replace une image en calque) vaut alors un nouveau calcul, comme avant.
+    paginatedDoc = editor.state.doc;
+    paginatedBlocks = Array.from(tiptapEl.children);
     notifyPaginated();
   }
 
@@ -1669,7 +1710,7 @@ const HeaderFooterPreview = (function () {
     setEditor, setEmailMode, getHfMode, mainDocumentHtml, scheduleZoneCheck, refreshZoneOverflow, shrinkZoneImage, createEscapeExtension,
     enterHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter, listStories, openStory, onStoriesChange,
     getHeaderFooterData, setHeaderFooterData, snapshot, restore,
-    schedulePaginationRecompute, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, reconcileLayerImagesWithGrid, recaptureLayeredImageGrids,
+    schedulePaginationRecompute, paginationHolds, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, reconcileLayerImagesWithGrid, recaptureLayeredImageGrids,
     rowPadOf, pageBreaks, pageIndexOf, pageBodyTops, onPaginated, scrollToPage, breaksOf,
   };
 })();

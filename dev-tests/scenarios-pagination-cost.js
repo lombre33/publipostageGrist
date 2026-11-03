@@ -368,6 +368,129 @@
     },
   });
 
+  // Les cadres libres d'une présentation (`FreeFrame`, js/free-frame.js) : chacun est une ancre de hauteur nulle (css/free-frame.css) que la pagination ne compte pas, et ce qu'il porte (son texte, ses
+  // mesures, son aspect) ne change la place d'aucune page. Demande d'Antoine du 03/11 (« slides+ est assez laggy ») : une frappe, un déplacement ou un réglage qui ne touche qu'un cadre refaisait pourtant
+  // toute la pagination à la pause qui suit (0,12 s dans « Présentation commerciale »), pour retrouver au chiffre près la même.
+  const frameHtml = (x, inner) => FreeFrame.html({ x, y: 80, w: 240, h: 120 }, inner);
+  const topBlocks = () => { const out = []; EditorCore.getEditor().state.doc.forEach((node, pos) => out.push({ node, pos })); return out; };
+  const frameStarting = text => topBlocks().find(({ node }) => node.type.name === 'freeFrame' && node.textContent.startsWith(text));
+  const marginSheet = () => document.getElementById('v2-pagination-margins-style').textContent;
+  // Les paginations que posent `act`, puis la pause que le calcul attend (200 ms après la dernière transaction) et de quoi le laisser finir.
+  async function paginationsAfter(h, act) {
+    let count = 0;
+    const stop = HeaderFooterPreview.onPaginated(() => { count++; });
+    try { act(); await h.sleep(450); } finally { stop(); }
+    return count;
+  }
+
+  cases.push({
+    id: 'pagination_editor_is_not_recalculated_after_an_edit_that_only_touches_free_frames',
+    description: "Une frappe dans un cadre libre, son déplacement, son agrandissement (ce que les gestes écrivent) et un Annuler ne refont pas la pagination de l'éditeur : un cadre est une ancre de hauteur nulle, rien de ce qu'il porte ne change la place d'une page, et le calcul retrouvait au chiffre près la même. Mêmes règles de marge, mêmes coupures, même haut de page et même hauteur de document qu'un calcul neuf ; une frappe dans le texte, elle, refait la pagination (le nombre de pages suit). Avant : un calcul de 0,12 s à chaque pause, dans « Présentation commerciale »",
+    run: async (h) => {
+      await setup(h, frameHtml(100, '<p>Texte A</p>') + frameHtml(400, '<p>Texte B</p>') + lines(500));
+      const editor = EditorCore.getEditor();
+      HeaderFooterPreview.renderPaginationOverlay();
+      await h.sleep(100);
+      const start = editorPagination();
+      const startRules = marginSheet();
+      if (start.breaks < 8) return { pass: false, notes: 'document trop court : ' + start.breaks + ' coupure(s) seulement' };
+      if (!frameStarting('Texte A') || !frameStarting('Texte B')) return { pass: false, notes: 'les deux cadres ne sont pas dans le texte : ' + topBlocks().slice(0, 4).map(b => b.node.type.name).join(',') };
+      const steps = {};
+      const patchFrame = (text, change) => { const { node, pos } = frameStarting(text); editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, change(node.attrs)))); };
+      const typeInFrame = (text, typed) => { const { pos } = frameStarting(text); editor.view.dispatch(editor.state.tr.insertText(typed, pos + 2)); };
+      steps.typed = await paginationsAfter(h, () => typeInFrame('Texte A', 'abc'));
+      const typedIn = !!frameStarting('abcTexte A');
+      steps.typedAgain = await paginationsAfter(h, () => typeInFrame('abcTexte A', 'def'));
+      steps.moved = await paginationsAfter(h, () => patchFrame('defabcTexte A', a => ({ x: a.x + 30, y: a.y + 12 })));
+      steps.resized = await paginationsAfter(h, () => patchFrame('defabcTexte A', a => ({ w: a.w + 40, h: a.h + 20 })));
+      const docBeforeUndo = editor.state.doc;
+      steps.undone = await paginationsAfter(h, () => { editor.commands.undo(); });
+      const undone = editor.state.doc !== docBeforeUndo;
+      const kept = editorPagination();
+      const keptRules = marginSheet();
+      HeaderFooterPreview.renderPaginationOverlay();
+      await h.sleep(100);
+      const fresh = editorPagination();
+      const freshRules = marginSheet();
+      const same = (a, b) => a.breaks === b.breaks && sameNumbers(a.margins, b.margins, 0.01) && sameNumbers(a.tops, b.tops, 0.01) && Math.abs(a.height - b.height) <= 1;
+      // Une frappe dans le texte : la pagination se refait, et suit le texte qui s'allonge de quelques pages.
+      steps.text = await paginationsAfter(h, () => editor.commands.insertContentAt(editor.state.doc.content.size, lines(120)));
+      const longer = HeaderFooterPreview.pageBreaks().length;
+      const counts = JSON.stringify(steps);
+      return {
+        pass: typedIn && undone && steps.typed === 0 && steps.typedAgain === 0 && steps.moved === 0 && steps.resized === 0 && steps.undone === 0 && same(kept, start) && same(fresh, kept) && keptRules === startRules && freshRules === startRules
+          && steps.text >= 1 && longer > start.breaks,
+        notes: 'paginations après chaque geste ' + counts + ' (attendu 0 pour les cinq premiers, au moins 1 pour le texte) ; frappe prise par le cadre=' + typedIn + ', Annuler a défait=' + undone + ' ; pagination en place : ' + kept.breaks + ' coupures, page 2 à ' + kept.tops[1] + ', hauteur ' + kept.height
+          + ' (au départ ' + start.breaks + ', ' + start.tops[1] + ', ' + start.height + ' ; calcul neuf ' + fresh.breaks + ', ' + fresh.tops[1] + ', ' + fresh.height + ') ; règles de marge identiques=' + (keptRules === startRules && freshRules === startRules) + ' ; coupures après 120 lignes de plus : ' + longer + ' (attendu plus de ' + start.breaks + ')',
+      };
+    },
+  });
+
+  cases.push({
+    id: 'pagination_editor_is_recalculated_when_a_frame_comes_goes_or_carries_a_layered_image',
+    description: "Garde-fous du cas précédent (ils passent aussi sur l'ancien code) : un cadre posé ou retiré du texte décale le rang de tous les blocs d'après (les règles de marge visent des rangs, `:nth-child`), un cadre qui porte une image en calque « Sur toutes les pages » est déplacé avec ses copies que la pagination peint : la pagination se refait dans ces trois cas, et la feuille de marges posée est celle d'un calcul neuf.",
+    run: async (h) => {
+      const layered = '<p><img class="editor-image" src="' + PNG + '" alt="" style="width: 60px; height: 60px; position: absolute; left: 20px; top: 20px; z-index: -1;" data-layer="behind" data-wrap="inline" data-page-index="0" data-page-left-pt="40" data-page-top-pt="40" data-repeat="true"></p>';
+      await setup(h, frameHtml(100, '<p>Texte A</p>') + frameHtml(400, layered) + lines(300));
+      const editor = EditorCore.getEditor();
+      HeaderFooterPreview.renderPaginationOverlay();
+      await h.sleep(100);
+      const carrier = () => topBlocks().find(({ node }) => { let found = false; node.descendants(child => { if (child.type.name === 'editorImage' && child.attrs.layer === 'behind' && child.attrs.repeat) found = true; return !found; }); return node.type.name === 'freeFrame' && found; });
+      if (!carrier()) return { pass: false, notes: "le cadre qui porte l'image en calque répétée n'est pas dans le texte : " + topBlocks().slice(0, 4).map(b => b.node.type.name).join(',') };
+      const results = {};
+      // Le décompte, puis la feuille de marges telle qu'elle est posée contre celle d'un calcul neuf.
+      const measure = async (name, act) => {
+        const before = marginSheet();
+        const passes = await paginationsAfter(h, act);
+        const placed = marginSheet();
+        HeaderFooterPreview.renderPaginationOverlay();
+        await h.sleep(100);
+        results[name] = { passes, shifted: before !== placed, fresh: placed === marginSheet() };
+      };
+      const frameJson = text => ({ type: 'freeFrame', attrs: { x: 10, y: 10, w: 100, h: 50 }, content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
+      await measure('inserted', () => editor.view.dispatch(editor.state.tr.insert(0, editor.schema.nodeFromJSON(frameJson('Neuf')))));
+      await measure('removed', () => { const { node, pos } = frameStarting('Neuf'); editor.view.dispatch(editor.state.tr.delete(pos, pos + node.nodeSize)); });
+      await measure('layeredMoved', () => { const { node, pos } = carrier(); editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, { x: node.attrs.x + 30 }))); });
+      return {
+        pass: results.inserted.passes >= 1 && results.inserted.shifted && results.inserted.fresh && results.removed.passes >= 1 && results.removed.shifted && results.removed.fresh && results.layeredMoved.passes >= 1 && results.layeredMoved.fresh,
+        notes: 'paginations et feuille de marges : ' + JSON.stringify(results) + ' (attendu au moins 1 calcul chaque fois, règles décalées par la pose et le retrait, feuille identique à un calcul neuf)',
+      };
+    },
+  });
+
+  cases.push({
+    id: 'pagination_editor_holds_only_while_the_text_is_the_one_it_paginated',
+    description: "HeaderFooterPreview.paginationHolds dit si la dernière pagination vaut encore pour le texte : vrai une fois le calcul fait, vrai encore après un changement de cadre seul, faux dès qu'un bloc du texte change (avant même le calcul que la frappe attend), faux tant qu'un calcul attend sa minuterie et sans aperçu de la page, de nouveau vrai quand le calcul est refait. Avant : la fonction n'existait pas, chaque transaction faisait refaire la pagination",
+    run: async (h) => {
+      await setup(h, frameHtml(100, '<p>Texte A</p>') + lines(120));
+      const editor = EditorCore.getEditor();
+      HeaderFooterPreview.renderPaginationOverlay();
+      await h.sleep(100);
+      const holds = () => HeaderFooterPreview.paginationHolds();
+      const seen = { settled: holds() };
+      const { pos: framePos } = frameStarting('Texte A');
+      editor.view.dispatch(editor.state.tr.insertText('abc', framePos + 2));
+      seen.afterFrameEdit = holds();
+      let paragraphPos = null;
+      editor.state.doc.forEach((node, pos) => { if (paragraphPos === null && node.type.name === 'paragraph') paragraphPos = pos; });
+      editor.view.dispatch(editor.state.tr.insertText('xyz', paragraphPos + 1));
+      seen.afterTextEdit = holds();
+      HeaderFooterPreview.schedulePaginationRecompute();
+      seen.whileTimerPending = holds();
+      await h.sleep(450);
+      seen.afterRecalculation = holds();
+      h.setA4Preview(false);
+      HeaderFooterPreview.renderPaginationOverlay();
+      seen.withoutPreview = holds();
+      h.setA4Preview(true);
+      HeaderFooterPreview.renderPaginationOverlay();
+      await h.sleep(100);
+      seen.previewBack = holds();
+      const want = { settled: true, afterFrameEdit: true, afterTextEdit: false, whileTimerPending: false, afterRecalculation: true, withoutPreview: false, previewBack: true };
+      return { pass: Object.keys(want).every(k => seen[k] === want[k]), notes: 'paginationHolds : ' + JSON.stringify(seen) + ' (attendu ' + JSON.stringify(want) + ')' };
+    },
+  });
+
   // Les paginations posées pendant un affichage : chaque calcul commence par vider la feuille des marges (une écriture de texte vide).
   async function paginationsDuring(h, html) {
     await setup(h, lines(30));

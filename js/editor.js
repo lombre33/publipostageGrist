@@ -336,7 +336,8 @@ const Editor = (function () {
       backfillAutoColumnWidths(updatedEditor, transaction);
       clampOverflowingTables(updatedEditor, transaction);
     }
-    HeaderFooterPreview.schedulePaginationRecompute();
+    // Un texte dont seuls des cadres libres (de hauteur nulle) ont changé garde la pagination qu'il avait : rien à recalculer (HeaderFooterPreview.paginationHolds).
+    if (!HeaderFooterPreview.paginationHolds()) HeaderFooterPreview.schedulePaginationRecompute();
     refreshVariableBadgeValidity();
   }
 
