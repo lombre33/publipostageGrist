@@ -590,6 +590,57 @@
     },
   });
 
+  // L'ajustement de la page (js/main.js : planPageFitZoom, commitPageFitZoom) LIT tout ce qu'il lui faut avant d'écrire : le facteur de l'éditeur, celui de la Lecture et l'écart de hauteur des lignes de
+  // tableau que mesure la sonde de js/page-zoom.js. Un facteur écrit avant que la sonde lise la mise en page lui fait refaire le style de tout le document (0,2 s sur une présentation de
+  // 39 diapositives) ; l'écart de lignes, écrit à son tour, le refait encore ; le conteneur lu en dernier paie ce que le premier vient de défaire. Le test écoute, dans l'ordre, les lectures
+  // (PageZoom.factorFor de chaque conteneur, pose de la sonde dans body) et les écritures de `--pp-fit-zoom` et `--pp-row-grow` sur les deux conteneurs.
+  cases.push({
+    id: 'page_zoom_fit_reads_both_containers_and_the_probe_before_writing_the_factor',
+    description: 'Quand le panneau se rétrécit, l\'ajustement lit les deux conteneurs et mesure la sonde des lignes de tableau avant d\'écrire le facteur : aucune écriture de --pp-fit-zoom ou --pp-row-grow n\'a lieu tant qu\'une lecture reste à faire',
+    run: async (h) => {
+      const box = editorBox();
+      const reader = readerBox();
+      const events = [];
+      const realFactorFor = PageZoom.factorFor;
+      const realSetProperty = CSSStyleDeclaration.prototype.setProperty;
+      const nameOf = node => (node === box ? 'editor' : node === reader ? 'reader' : '?');
+      const restore = () => {
+        PageZoom.factorFor = realFactorFor;
+        CSSStyleDeclaration.prototype.setProperty = realSetProperty;
+        delete document.body.appendChild;
+      };
+      try {
+        await setup(h);
+        const before = factorOf(box);
+        PageZoom.factorFor = function (container) { events.push('lit ' + nameOf(container)); return realFactorFor.apply(this, arguments); };
+        CSSStyleDeclaration.prototype.setProperty = function (name) {
+          if ((name === '--pp-fit-zoom' || name === '--pp-row-grow') && (this === box.style || this === reader.style)) events.push('écrit ' + name + ' ' + (this === box.style ? 'editor' : 'reader'));
+          return realSetProperty.apply(this, arguments);
+        };
+        // La sonde est un tableau de 13 lignes posé dans body, le temps d'une mesure, sous le zoom à mesurer (js/page-zoom.js : probePitch).
+        document.body.appendChild = function (node) {
+          if (node && node.classList && node.classList.contains('tiptap') && node.style.zoom) events.push('sonde');
+          return Node.prototype.appendChild.apply(this, arguments);
+        };
+        // 583 px : une largeur que aucun autre scénario n'a mesurée, donc un facteur dont la sonde n'est pas déjà en mémoire.
+        box.style.maxWidth = '583px';
+        await sleep(450);
+        restore();
+        const firstWrite = events.findIndex(e => e.indexOf('écrit') === 0);
+        // Le tour d'ajustement qui a écrit le premier : de la dernière lecture de l'éditeur avant lui jusqu'à lui.
+        const start = firstWrite < 0 ? -1 : events.lastIndexOf('lit editor', firstWrite);
+        const round = start < 0 ? [] : events.slice(start, firstWrite);
+        const reads = { editor: round.indexOf('lit editor') >= 0, reader: round.indexOf('lit reader') >= 0, probe: round.indexOf('sonde') >= 0 };
+        const factor = factorOf(box);
+        const wrote = events.indexOf('écrit --pp-fit-zoom editor') >= 0;
+        return {
+          pass: wrote && reads.editor && reads.reader && reads.probe && factor < before && factor > 0,
+          notes: JSON.stringify({ before, factor, firstWrite, reads, events: events.slice(0, 14) }),
+        };
+      } finally { restore(); box.style.maxWidth = ''; await finish(h); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pageZoom = cases;
 })();

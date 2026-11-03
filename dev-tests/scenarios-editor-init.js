@@ -138,6 +138,42 @@
     },
   });
 
+  // `Editor.setHTML` remet l'historique à zéro par `clearHistory` (js/editor-nodes.js) : EditorState.create relance l'`init` de chaque plugin, et celui de prosemirror-tables refait la fonction de la vue de nœud
+  // du tableau. ProseMirror compare ces fonctions par identité : à la moindre différence il détruit toute la vue du document pour la reconstruire, ce qui doublait la construction du texte à chaque modèle ouvert
+  // (0,5 s pour une présentation de 39 diapositives, et la mise en page de la première construction jetée avec elle). Le texte chargé n'est construit qu'une fois et les vues de nœud gardent leur fonction.
+  cases.push({
+    id: 'editor_init_set_html_builds_the_document_view_once',
+    description: 'charger un texte (Editor.setHTML) ne reconstruit pas la vue : aucun bloc posé par le chargement n\'est retiré par lui-même, les vues de nœud des plugins gardent leur fonction, et l\'historique est bien remis à zéro',
+    run: () => {
+      const ed = editor();
+      const html = Array.from({ length: 12 }, (_, i) => '<p>Paragraphe ' + i + '</p>').join('');
+      Editor.setHTML('<p>Avant</p>', null);
+      ed.commands.insertContent('x');
+      const canUndoBefore = ed.can().undo();
+      const viewsBefore = Object.assign({}, ed.view.nodeViews);
+      const observer = new MutationObserver(() => {});
+      observer.observe(ed.view.dom, { childList: true, subtree: true });
+      let records;
+      try {
+        Editor.setHTML(html, null);
+      } finally {
+        records = observer.takeRecords();
+        observer.disconnect();
+      }
+      const added = new Set();
+      records.forEach(record => record.addedNodes.forEach(node => added.add(node)));
+      const builtThenRemoved = records.reduce((count, record) => count + Array.from(record.removedNodes).filter(node => added.has(node)).length, 0);
+      const viewsAfter = ed.view.nodeViews;
+      const sameViews = Object.keys(viewsAfter).length === Object.keys(viewsBefore).length && Object.keys(viewsBefore).every(name => viewsAfter[name] === viewsBefore[name]);
+      const canUndoAfter = ed.can().undo();
+      const rendered = ed.view.dom.querySelectorAll('p').length;
+      return {
+        pass: canUndoBefore && !canUndoAfter && builtThenRemoved === 0 && sameViews && added.size > 0 && rendered === 12,
+        notes: JSON.stringify({ canUndoBefore, canUndoAfter, added: added.size, builtThenRemoved, sameViews, rendered }),
+      };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.editorInit = cases;
 })();

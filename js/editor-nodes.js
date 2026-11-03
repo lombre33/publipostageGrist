@@ -661,8 +661,22 @@ const EditorNodes = (function () {
       });
     }
 
+    // Les vues de nœud que portent les plugins (`plugin.props.nodeViews`), avec leur fonction du moment. prosemirror-tables (columnResizing) en refait une pour le tableau à CHAQUE
+    // `init` de son état, donc à chaque EditorState.create : ProseMirror compare ces fonctions par identité et, à la moindre différence, détruit toute la vue du document pour la
+    // reconstruire (updateStateInner, `redraw`) - même quand le document est le même. Chargé, un modèle de 440 cadres se construisait deux fois (0,5 s de plus à chaque ouverture, et
+    // la mise en page de la première construction jetée avec elle).
+    function nodeViewsOf(plugins) {
+      const kept = [];
+      plugins.forEach(plugin => {
+        const views = plugin.props && plugin.props.nodeViews;
+        if (views && typeof views === 'object') Object.keys(views).forEach(name => kept.push({ views, name, make: views[name] }));
+      });
+      return kept;
+    }
+
     // TipTap v3 n'expose plus de commande clearHistory (seulement undo/redo) : reconstruire l'EditorState avec les mêmes plugins réinitialise leur état
-    // (dont l'historique) sans recréer la vue ni perdre le document.
+    // (dont l'historique) sans recréer la vue ni perdre le document. Les vues de nœud reprennent leur fonction d'avant la reconstruction (celle qui vient d'être refaite a les mêmes réglages
+    // et le même schéma) pour que la vue ne se redessine pas ; l'état des plugins, lui, est bien remis à zéro.
     function createClearHistoryExtension(Extension, EditorState) {
       return Extension.create({
         name: 'clearHistory',
@@ -670,7 +684,10 @@ const EditorNodes = (function () {
           return {
             clearHistory: () => ({ editor: ed }) => {
               const { view } = ed;
-              view.updateState(EditorState.create({ schema: view.state.schema, doc: view.state.doc, selection: view.state.selection, plugins: view.state.plugins }));
+              const kept = nodeViewsOf(view.state.plugins);
+              const fresh = EditorState.create({ schema: view.state.schema, doc: view.state.doc, selection: view.state.selection, plugins: view.state.plugins });
+              kept.forEach(({ views, name, make }) => { views[name] = make; });
+              view.updateState(fresh);
               return true;
             },
           };
