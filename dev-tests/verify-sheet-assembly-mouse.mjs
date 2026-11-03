@@ -293,7 +293,7 @@ async function run(theme, full) {
   // 1) Le menu : un survol réel du bouton l'ouvre ; l'option est la quatrième, atteignable à la souris, son texte se lit.
   await openExportMenu();
   const flyout = await hit(FLYOUT), row = await hit(ROW);
-  const rows = await page.evaluate(() => Array.from(document.querySelectorAll('#v2-export-pdf-flyout .v2-hover-row')).filter(r => r.getBoundingClientRect().width > 0).map(r => ({ lines: r.dataset.exportLines, text: r.textContent.trim() })));
+  const rows = await page.evaluate(() => Array.from(document.querySelectorAll('#v2-export-pdf-flyout .v2-hover-row[data-export-lines]')).filter(r => r.getBoundingClientRect().width > 0).map(r => ({ lines: r.dataset.exportLines, text: r.textContent.trim() })));
   check(`${T}, menu : au survol, le volet « Exporter » s'ouvre dans le panneau`, flyout.found && flyout.inPanel, flyout);
   check(`${T}, menu : « Assemblage avant impression » est la quatrième option, après « un seul PDF », au premier plan et dans le panneau`, rows.length === 4 && rows[3].lines === 'sheets' && rows[3].text === 'Assemblage avant impression' && seen(row), { rows, row });
   const cRow = await contrastOf(ROW);

@@ -33,7 +33,7 @@
   // Ce que les menus montrent : la ligne de type active, l'option cochée de « Exporter », le bouton du type allumé quand ce n'est pas le PDF.
   const menus = () => ({
     type: Array.from(document.querySelectorAll(TYPE_FLYOUT + ' .v2-hover-row[data-export-type].is-active')).map(row => row.dataset.exportType).join(),
-    ticked: Array.from(document.querySelectorAll(EXPORT_FLYOUT + ' .v2-hover-row[aria-checked="true"]')).map(row => row.dataset.exportLines).join(),
+    ticked: Array.from(document.querySelectorAll(EXPORT_FLYOUT + ' .v2-hover-row[data-export-lines][aria-checked="true"]')).map(row => row.dataset.exportLines).join(),
     lit: document.getElementById('v2-btn-quality').classList.contains('active'),
   });
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);

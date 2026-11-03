@@ -57,8 +57,8 @@
   const live = row => !row.classList.contains('v2-hover-row-disabled') && row.getAttribute('aria-disabled') === null;
   const shown = el => el.closest('[hidden]') === null;
   const shownRows = flyout => Array.from(document.querySelectorAll(flyout + ' .v2-hover-row')).filter(shown);
-  const shownLines = () => shownRows(EXPORT_FLYOUT).map(row => row.dataset.exportLines).join();
-  const tickedLines = () => Array.from(document.querySelectorAll(EXPORT_FLYOUT + ' .v2-hover-row[aria-checked="true"]')).map(row => row.dataset.exportLines).join();
+  const shownLines = () => shownRows(EXPORT_FLYOUT).filter(row => row.dataset.exportLines).map(row => row.dataset.exportLines).join();
+  const tickedLines = () => Array.from(document.querySelectorAll(EXPORT_FLYOUT + ' .v2-hover-row[data-export-lines][aria-checked="true"]')).map(row => row.dataset.exportLines).join();
   const activeRows = () => Array.from(document.querySelectorAll(TYPE_FLYOUT + ' .v2-hover-row.is-active')).map(row => row.dataset.exportType || row.dataset.quality).join();
   const pickType = async type => { typeRow(type).click(); await sleep(20); };
   const pickQuality = async quality => { qualityRow(quality).click(); await sleep(20); };
