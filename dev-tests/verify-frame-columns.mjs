@@ -124,7 +124,7 @@ async function part(lang, colorScheme) {
   const bar = await barIds(page);
   const ids = bar ? bar.ids : [];
   check(tag + `la barre du cadre de texte a le bouton « ${T.columns} » après l'animation et le bouton de l'orientation, entière dans le panneau de 700x400, chaque bouton dans la barre`,
-    !!bar && ids.indexOf('v2-frame-orient-open') === ids.indexOf('animate') + 1 && ids.indexOf('v2-frame-columns-open') === ids.indexOf('v2-frame-orient-open') + 1 && bar.inside && inPanel(bar.rect), bar);
+    !!bar && ids.indexOf('v2-frame-orient-open') > ids.indexOf('animate') && ids.indexOf('v2-frame-columns-open') === ids.indexOf('v2-frame-orient-open') + 1 && bar.inside && inPanel(bar.rect), bar);
   check(tag + `le bouton se nomme « ${T.columns} » (nom accessible et info-bulle), annonce son menu, son icône est là`,
     !!bar && !!bar.chip && bar.chip.name === T.columns && bar.chip.title === T.columns && bar.chip.popup === 'true' && bar.chip.expanded === 'false' && bar.chip.svg, bar && bar.chip);
   await click('#v2-frame-columns-open');

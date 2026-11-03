@@ -71,7 +71,7 @@ const FreeFrame = (function () {
   // et celle du trait en pour cent (0 : opaque, 100 : invisible ; celle d'un fond ou d'un trait absent vaut 0), le tiret du trait ('' : plein), son bout ('' : plat, 'round', 'square') et son
   // type composé ('' : simple, 'dbl', 'thinThick', 'thickThin', 'tri'). Une ligne a de plus, à chaque bout, sa pointe (`head` au début, `tail` à la fin : '' aucune, ou 'triangle', 'arrow', 'stealth', 'diamond', 'oval')
   // et la largeur et la longueur de celle-ci (`headW`, `headLen`, `tailW`, `tailLen` : '' moyenne, 'sm' petite, 'lg' grande).
-  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '', anim: '', cols: 0, colGap: 0, vert: '', alt: '', link: '', linkTrans: '', view: '', hidden: '' };
+  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '', anim: '', cols: 0, colGap: 0, vert: '', alt: '', link: '', linkTrans: '', view: '', hidden: '', group: '' };
   // L'aspect d'une forme neuve : un fond clair, un trait plus foncé de la même teinte (le texte noir y reste lisible).
   const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
   // L'aspect d'une ligne neuve : le trait de PowerPoint des formes, un peu plus épais (sa pointe en grandit avec lui : trois fois l'épaisseur). Une ligne a toujours une couleur et une épaisseur.
@@ -106,7 +106,7 @@ const FreeFrame = (function () {
   // Ce qui marque, dans le HTML des sorties, un cadre du DÉCOR commun d'une présentation (js/slide-theme.js:decorItems : le bandeau, le logo, le numéro et le texte de pied) : le cadre est un cadre derrière le texte, sans
   // rôle pour un lecteur d'écran, et l'éditeur ne le relit jamais (parseHTML), comme le fond d'une diapositive.
   const DECOR_ATTR = 'data-ff-decor';
-  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim', cols: 'data-ff-cols', colGap: 'data-ff-col-gap', vert: 'data-ff-vert', alt: 'data-ff-alt', link: 'data-ff-link', linkTrans: 'data-ff-link-trans', view: 'data-ff-view', hidden: 'data-ff-hidden' };
+  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim', cols: 'data-ff-cols', colGap: 'data-ff-col-gap', vert: 'data-ff-vert', alt: 'data-ff-alt', link: 'data-ff-link', linkTrans: 'data-ff-link-trans', view: 'data-ff-view', hidden: 'data-ff-hidden', group: 'data-ff-group' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
   const LOOK_VARS = ['--ff-fill', '--ff-fill-op', '--ff-fill-inset', '--ff-fill-radius', '--ff-line', '--ff-line-op', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-art', '--ff-art-nine', '--ff-fill-art', '--ff-slice', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot', '--ff-cols', '--ff-col-gap'];
   const EDGES = ['n', 'e', 's', 'w'];
@@ -152,6 +152,8 @@ const FreeFrame = (function () {
   const ALT_MAX = 500;
   // L'adresse du repère d'une diapositive (`slide-3` : la même forme que SlideProps, anchorId) : celle de la diapositive qu'une vue montre.
   const viewOf = raw => (typeof raw === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(raw) ? raw : '');
+  // L'identifiant du groupe où l'objet est rangé (js/frame-multi.js) : des lettres et des chiffres, '' quand il n'est dans aucun. Il ne vaut que parmi les objets d'une même diapositive.
+  const groupOf = raw => (typeof raw === 'string' && /^[a-z0-9]{3,16}$/.test(raw) ? raw : '');
   const altOf = raw => (typeof raw === 'string' ? raw.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, ALT_MAX) : '');
   const columnGapOf = raw => tidy(clamp(toNumber(raw, COLUMN_GAP_PT), 0, COLUMN_GAP_MAX_PT));
   // Une transparence, en pour cent entier de 0 (opaque) à 100 (invisible) ; une valeur absente ou illisible vaut 0.
@@ -209,6 +211,8 @@ const FreeFrame = (function () {
       view: line ? '' : viewOf(a.view),
       // Son masquage (demande du 24/10, chantier 10 : `hidden` de l'objet, le volet Sélection de PowerPoint) : « 1 » quand l'objet est masqué ; atténué dans l'éditeur, absent de la Lecture, du diaporama et des exports.
       hidden: a.hidden === '1' || a.hidden === 1 || a.hidden === true ? '1' : '',
+      // Son groupe (demande du 03/11, « Idem + guides + groupes ») : les objets du même groupe se choisissent, se déplacent et s'alignent ensemble ; rien n'en part dans les exports.
+      group: groupOf(a.group),
     };
     if (out.cols) out.colGap = columnGapOf(a.colGap);
     if (line && Math.hypot(out.w, out.h) < LINE_MIN_LENGTH_PT) out.w = LINE_MIN_LENGTH_PT;
@@ -340,6 +344,7 @@ const FreeFrame = (function () {
     if (a.linkTrans) out[DOM_ATTRS.linkTrans] = a.linkTrans;
     if (a.view) out[DOM_ATTRS.view] = a.view;
     if (a.hidden) out[DOM_ATTRS.hidden] = '1';
+    if (a.group) out[DOM_ATTRS.group] = a.group;
     return out;
   }
   function domAttrs(a) {
@@ -803,7 +808,7 @@ const FreeFrame = (function () {
     const page = pageSize();
     const a = normalized(found.node.attrs);
     const spot = freeSpot(keepReachable(Object.assign({}, a, { x: a.x + CASCADE_PT, y: a.y + CASCADE_PT }), page), takenIn(state.doc, slideStart), page);
-    const copy = found.node.type.create(Object.assign({}, found.node.attrs, spot), found.node.content, found.node.marks);
+    const copy = found.node.type.create(Object.assign({}, found.node.attrs, spot, { group: '' }), found.node.content, found.node.marks);
     const tr = own(state.tr.insert(at, copy));
     tr.setSelection(libs.NodeSelection.create(tr.doc, at)).scrollIntoView();
     ed.view.dispatch(tr);
@@ -936,6 +941,8 @@ const FreeFrame = (function () {
     const show = measures => paint(dom, Object.assign({}, start, measures));
     // Les autres cadres choisis suivent du même écart (chacun reste atteignable).
     const followers = group.map(member => ({ member, current: member.start }));
+    // Les repères (js/frame-multi.js) : en déplaçant, l'ensemble s'accroche aux bords et aux centres des autres objets et de la diapositive, des traits le disent ; Alt les suspend.
+    const snapper = kind === 'move' ? FrameMulti.snapper(ed, { pos: live.pos, members: group.map(g => g.pos), box, start, shown, zoom }) : null;
     const showGroup = (now) => {
       followers.forEach((f) => {
         const moved = keepReachable({ x: f.member.start.x + (now.x - start.x), y: f.member.start.y + (now.y - start.y), w: f.member.start.w, h: f.member.start.h }, page);
@@ -947,9 +954,10 @@ const FreeFrame = (function () {
       if (!moved) { moved = true; if (toolbar) { toolbar.hide(); } FrameMulti.hideBar(); }
       const dx = (e.clientX - event.clientX) / zoom * PT_PER_PX;
       const dy = (e.clientY - event.clientY) / zoom * PT_PER_PX;
-      if (isLine) { current = lineGesture(kind, start, dx, dy, page, e.shiftKey); show(current); showGroup(current); return; }
+      if (isLine) { current = lineGesture(kind, start, dx, dy, page, e.shiftKey); if (snapper) current = snapper.snap(current, e.altKey); show(current); showGroup(current); return; }
       // La largeur change ce que demande le texte : posée d'abord, elle donne la hauteur du texte qui règle le bord du haut (et, pour un cadre pivoté, le centre autour duquel il tourne).
       current = gesture(kind, start, dx, dy, shown, 0, page);
+      if (snapper) current = snapper.snap(current, e.altKey);
       show(current);
       showGroup(current);
       if (kind !== 'move' && (kind.indexOf('n') >= 0 || start.rot)) { current = gesture(kind, start, dx, dy, shown, naturalHeight(box, zoom), page); show(current); }
@@ -958,6 +966,7 @@ const FreeFrame = (function () {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       document.removeEventListener('keydown', onKey, true);
+      if (snapper) snapper.end();
     }
     function onUp() {
       stop();
@@ -1846,7 +1855,7 @@ const FreeFrame = (function () {
   const syncToolbar = () => { if (syncBar) syncBar(); };
 
   FrameMulti.bind({
-    libs: () => libs, selectedFrame, isFrame, isLineAttrs, normalized, naturalHeight, pageSize, own, headRange, slideStartOf, keepReachable, select, frameAround, inPresentation, BOX, CLASS,
+    ptPerPx: PT_PER_PX, libs: () => libs, selectedFrame, isFrame, isLineAttrs, normalized, naturalHeight, pageSize, own, headRange, slideStartOf, keepReachable, select, frameAround, inPresentation, BOX, CLASS,
     rotateRoomPx: () => ROTATE_ROOM_PX,
   });
 

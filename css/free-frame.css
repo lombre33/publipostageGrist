@@ -265,3 +265,11 @@
 .ProseMirror .pp-ff-view { pointer-events: auto !important; cursor: move; }
 .pp-ff-view .pp-ff-ui { display: none; }
 .pp-free-frame.pp-ff-has-view > .pp-free-frame-box > .pp-free-frame-content { visibility: hidden; }
+
+/* Les repères d'un glissé (js/frame-multi.js:snapper) : des traits roses sur la feuille, au premier plan, que la souris traverse. Les couleurs sont ici (une seule teinte, claire sur fond sombre). */
+.pp-ff-guides { position: fixed; inset: 0; z-index: var(--z-tip); pointer-events: none; --pp-ff-guide: #d6336c; }
+:root[data-theme="dark"] .pp-ff-guides { --pp-ff-guide: #ff6f9c; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pp-ff-guides { --pp-ff-guide: #ff6f9c; } }
+.pp-ff-guide { position: fixed; background: var(--pp-ff-guide); pointer-events: none; }
+.pp-ff-guide-x { width: 1px; }
+.pp-ff-guide-y { height: 1px; }

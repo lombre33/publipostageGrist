@@ -261,6 +261,8 @@ const Icons = (function () {
       alignObjBottom: '<path d="M3 20h18"/><rect x="6" y="5" width="4" height="12" rx="1"/><rect x="14" y="10" width="4" height="7" rx="1"/>',
       distributeH: '<path d="M4 3v18M20 3v18"/><rect x="9.5" y="7" width="5" height="10" rx="1"/>',
       distributeV: '<path d="M3 4h18M3 20h18"/><rect x="7" y="9.5" width="10" height="5" rx="1"/>',
+      groupObjects: '<rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="3 2"/><rect x="6.5" y="6.5" width="5" height="5" rx="1"/><rect x="12.5" y="12.5" width="5" height="5" rx="1"/>',
+      ungroupObjects: '<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M14 5h5v5M10 19H5v-5" stroke-dasharray="2 2"/>',
       duplicate: '<rect x="8.5" y="8.5" width="12" height="12" rx="1.8"/><path d="M15.5 8.5V5.8A1.8 1.8 0 0 0 13.7 4H5.8A1.8 1.8 0 0 0 4 5.8v7.9a1.8 1.8 0 0 0 1.8 1.8h2.7"/>',
       // Les formes de « Objets » (js/objects-menu.js, js/shape-geometry.js) : le contour de chacune, au trait comme les autres icônes. Dans la barre d'un cadre
       // (js/free-frame.js) : « Couleur du trait » (un cadre et son fond en retrait) et « Épaisseur du trait » (trois traits de plus en plus gras).

@@ -355,7 +355,10 @@ async function run(lang, colorScheme, full) {
   const edge = topEdge(box);
   const edgeHit = await page.evaluate(([x, y]) => { const hit = document.elementFromPoint(x, y); return hit ? { cls: String(hit.className), cursor: getComputedStyle(hit).cursor } : null; }, [edge.x, edge.y]);
   check(tag + 'le bord du cadre se saisit (sous la souris : le bord, curseur « déplacer »)', !!edgeHit && /pp-ff-edge/.test(edgeHit.cls) && edgeHit.cursor === 'move', edgeHit);
+  // Alt suspend l'accroche des repères (js/frame-multi.js) : la distance mesurée est celle de la souris, sans l'attrait d'un bord voisin.
+  await page.keyboard.down('Alt');
   await drag(edge, 60, 30);
+  await page.keyboard.up('Alt');
   const moved = await docState(page);
   const dxPt = 60 / z / PT;
   const dyPt = 30 / z / PT;
@@ -458,7 +461,7 @@ async function run(lang, colorScheme, full) {
   await drag(topEdge(edgeBox), -150 * pxPerPt, 0);
   const movedRight = (await docState(page)).frames;
   dotsNow = await dots();
-  check(tag + 'un vrai glissement ramène le cadre de droite dans la page (700 → ~550) : le point reste, le cadre du bas sort encore', near(movedRight[1].x, 550, 6) && flagsOf(dotsNow) === '10', { frames: movedRight, dotsNow });
+  check(tag + 'un vrai glissement ramène le cadre de droite dans la page (700 → ~550, ou 560 quand le bord droit s'accroche à celui de la page) : le point reste, le cadre du bas sort encore', near(movedRight[1].x, 550, 12) && flagsOf(dotsNow) === '10', { frames: movedRight, dotsNow });
   edgeBox = await showFrame(0);
   await drag(topEdge(edgeBox), 0, -24 * pxPerPt);
   const movedUp = (await docState(page)).frames;

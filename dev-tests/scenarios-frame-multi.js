@@ -58,6 +58,28 @@
     },
   });
 
+  cases.push({
+    id: 'framemulti_snap_moves_to_the_nearest_edge_or_center_within_the_threshold',
+    description: 'Les repères : l\'ensemble en mouvement rejoint le bord ou le centre le plus proche d\'un autre objet ou de la page, à `thr` points près, axe par axe ; au-delà, rien ne bouge et aucun trait ; les traits disent chaque alignement exact et couvrent les deux objets.',
+    run: async () => {
+      const targets = [{ l: 0, t: 0, r: 960, b: 540 }, { l: 300, t: 50, r: 450, b: 120 }];
+      // Un objet de 100 x 40 dont le bord gauche est à 3 pt du bord gauche de l'autre (300) et dont le haut est loin de tout.
+      const near1 = FrameMulti.snapMove({ l: 303, t: 200, r: 403, b: 240 }, targets, 5);
+      // Son centre à 4 pt du centre de la page (480).
+      const center = FrameMulti.snapMove({ l: 434, t: 200, r: 534, b: 240 }, targets, 5);
+      // À 8 pt de tout : rien.
+      const far = FrameMulti.snapMove({ l: 311, t: 200, r: 411, b: 240 }, targets, 5);
+      // Deux candidats sur l'axe (300 et 303) : le plus proche de 301 (1 pt) l'emporte sur l'autre (2 pt).
+      const closest = FrameMulti.snapMove({ l: 301, t: 200, r: 401, b: 240 }, [{ l: 300, t: 0, r: 400, b: 10 }, { l: 303, t: 0, r: 403, b: 10 }], 5);
+      const lineX = near1.guides.find(g => g.axis === 'x' && near(g.at, 300));
+      const pass = near(near1.dx, -3) && near1.dy === 0 && !!lineX && near(lineX.from, 50) && near(lineX.to, 240)
+        && near(center.dx, 480 - 484) && center.guides.some(g => g.axis === 'x' && near(g.at, 480))
+        && far.dx === 0 && far.dy === 0 && far.guides.length === 0
+        && near(closest.dx, -1);
+      return { pass, notes: JSON.stringify({ near1, center, far, closest }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.frameMulti = cases;
 })();

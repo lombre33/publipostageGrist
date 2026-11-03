@@ -5,6 +5,9 @@
 //  LA BARRE : à deux cadres ou plus la barre « objets sélectionnés » remplace celle du cadre (entière dans le panneau), « Répartir » est grisé avec sa raison tant qu'ils ne sont pas trois.
 //  LES GESTES : aligner (six réglages), répartir à égalité, glisser le bord de l'un les déplace tous, les flèches aussi, Ctrl + D les duplique, Suppr les supprime ; chaque geste est UN pas d'historique.
 //  UN CADRE SEUL : le menu « Aligner sur la diapositive » de sa barre le centre sur la page.
+//  LES REPÈRES (03/11, « Idem + guides + groupes ») : en glissant, un cadre s'accroche au bord d'un autre et au centre de la page, des traits roses le disent et partent à la souris relâchée ; Alt suspend l'accroche.
+//  LES GROUPES : Ctrl + G (ou le bouton), un clic sur l'un prend tout le groupe, il se déplace d'un bloc, Maj + clic ne le coupe pas, Ctrl + Maj + G le défait, Ctrl + D en fait une copie à part, un clic dans le
+//  texte d'un membre y pose le curseur, le groupe survit à l'enregistrement du HTML ; chaque geste est UN pas d'historique.
 // Lancé par run-headless.mjs (groupe Node "frameMultiMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-frame-multi-mouse.mjs
 import { start, seedModels, WIDTH, HEIGHT } from './gfs-page.mjs';
 
@@ -30,7 +33,7 @@ const rectOf = (page, selector, index = 0) => page.evaluate(([sel, i]) => {
 const htmlOf = page => page.evaluate(() => EditorCore.getEditor().getHTML());
 const framesOf = page => page.evaluate(() => {
   const out = [];
-  EditorCore.getEditor().state.doc.forEach((node) => { if (node.type.name === 'freeFrame') out.push({ x: node.attrs.x, y: node.attrs.y, w: node.attrs.w, h: node.attrs.h, text: node.textContent }); });
+  EditorCore.getEditor().state.doc.forEach((node) => { if (node.type.name === 'freeFrame') out.push({ x: node.attrs.x, y: node.attrs.y, w: node.attrs.w, h: node.attrs.h, text: node.textContent, group: node.attrs.group }); });
   return out.sort((p, q) => p.text.localeCompare(q.text));
 });
 const selectedCount = page => page.evaluate(() => FrameMulti.count(EditorCore.getEditor().state));
@@ -227,6 +230,118 @@ async function part(lang, colorScheme) {
   await press('Control+z');
   await press('Control+z');
   check(tag + 'deux Ctrl+Z rendent le HTML d\'avant', (await htmlOf(page)) === base);
+
+  console.log('\n' + tag + '5) Les repères');
+  const dragEdge = async (letter, dxPt, dyPt, hold) => {
+    const zoom = await page.evaluate(() => EditorCore.layoutZoom(document.querySelector('#editor-container .tiptap .pp-free-frame')));
+    // Un point du bord du haut à un cinquième de sa longueur : le milieu porte la poignée du haut d'un cadre choisi, qui redimensionnerait au lieu de déplacer.
+    const e = await page.evaluate((l) => {
+      const frame = Array.from(document.querySelectorAll('#editor-container .tiptap .pp-free-frame')).find(f => f.textContent.trim() === l);
+      frame.scrollIntoView({ block: 'center' });
+      const r = frame.querySelector('.pp-ff-edge-n').getBoundingClientRect();
+      return { x: r.left + r.width * 0.2, y: r.top + r.height / 2 };
+    }, letter);
+    const px = pt => pt / 0.75 * zoom;
+    await page.mouse.move(e.x, e.y);
+    await page.mouse.down();
+    if (hold) await page.keyboard.down('Alt');
+    await page.mouse.move(e.x + px(dxPt) / 2, e.y + px(dyPt) / 2, { steps: 4 });
+    await page.mouse.move(e.x + px(dxPt), e.y + px(dyPt), { steps: 4 });
+    await sleep(150);
+    const guides = await page.evaluate(() => Array.from(document.querySelectorAll('.pp-ff-guide')).map(g => ({ cls: g.className, left: g.getBoundingClientRect().left, top: g.getBoundingClientRect().top, w: g.getBoundingClientRect().width, h: g.getBoundingClientRect().height })));
+    if (hold) await page.keyboard.up('Alt');
+    await page.mouse.up();
+    await sleep(450);
+    return guides;
+  };
+  // « A » (x 40) est glissé à x = 303, trois points du bord gauche de « B » (300) : il s'accroche à 300 exactement, et un trait vertical le montre pendant le geste.
+  let seen = await dragEdge('A', 263, 0, false);
+  now = await framesOf(page);
+  check(tag + 'glisser « A » à 3 pt du bord gauche de « B » : il s\'accroche (x = 300 exactement)', near(now[0].x, 300, 0.01), now[0]);
+  check(tag + 'un trait vertical rose le montrait pendant le geste, de la hauteur des deux cadres', seen.some(g => g.cls.indexOf('pp-ff-guide-x') >= 0 && g.h > 20 && g.w <= 2), seen);
+  check(tag + 'les traits partent quand la souris est relâchée', (await page.evaluate(() => document.querySelectorAll('.pp-ff-guide, .pp-ff-guides').length)) === 0);
+  await press('Control+z');
+  check(tag + 'UN Ctrl+Z rend « A » à sa place (le HTML d\'avant)', (await htmlOf(page)) === base);
+  // Alt suspend l'accroche : « A » arrive à 303 (aucun trait).
+  seen = await dragEdge('A', 263, 0, true);
+  now = await framesOf(page);
+  check(tag + 'avec Alt, « A » n\'est pas accroché (x = 303 à 1 pt près, pas 300) et aucun trait ne se montre', near(now[0].x, 303, 1) && Math.abs(now[0].x - 300) > 1.5 && seen.length === 0, { a: now[0], seen });
+  await press('Control+z');
+  // Le centre de « B » (375) à 3 pt du centre de la page (480) : x + largeur / 2 = la moitié de la page.
+  const page1 = await page.evaluate(() => PageLayout.getPageSizePt());
+  seen = await dragEdge('B', 480 - 375 - 3, 0, false);
+  now = await framesOf(page);
+  check(tag + '« B » glissé près du centre de la page s\'y accroche (son centre est celui de la page)', near(now[1].x + now[1].w / 2, page1.width / 2, 0.1) && seen.some(g => g.cls.indexOf('pp-ff-guide-x') >= 0), { b: now[1], page1, seen });
+  await press('Control+z');
+  check(tag + 'rendu : le HTML d\'avant', (await htmlOf(page)) === base);
+  // Le groupe en mouvement s'accroche comme un seul objet : « A » et « B » choisis, glissés ensemble, le bord droit de l'ensemble sur celui de « C ».
+  await clickEdge('A', false);
+  await clickEdge('B', true);
+  seen = await dragEdge('A', 560 + 100 - 450 - 3, 0, false);
+  now = await framesOf(page);
+  check(tag + 'deux cadres choisis glissés : leur ensemble s\'accroche (bord droit de « B » sur celui de « C », 660), « A » suit du même écart', near(now[1].x + now[1].w, 660, 0.01) && near(now[0].x - 40, now[1].x - 300, 0.3), now);
+  await press('Control+z');
+  check(tag + 'UN Ctrl+Z rend les deux', (await htmlOf(page)) === base);
+
+  console.log('\n' + tag + '6) Les groupes');
+  const groupsOf = async () => (await framesOf(page)).map(f => f.group || '');
+  await clickEdge('A', false);
+  await clickEdge('B', true);
+  await clickEdge('C', true);
+  const gBtn = await page.evaluate(() => { const g = document.querySelector('.v2-multi-toolbar [data-action="group"]'); const u = document.querySelector('.v2-multi-toolbar [data-action="ungroup"]'); return { gOff: g.disabled, uOff: u.disabled, uTitle: u.title }; });
+  check(tag + 'à trois objets libres, « Grouper » est actif et « Dissocier » est grisé avec sa raison', !gBtn.gOff && gBtn.uOff && gBtn.uTitle.length > 10, gBtn);
+  await press('Control+g');
+  let groups = await groupsOf();
+  check(tag + 'Ctrl + G : les trois objets ont le même groupe, non vide', groups.every(g => g && g === groups[0]), groups);
+  check(tag + 'le HTML enregistré porte data-ff-group trois fois, le même', ((await htmlOf(page)).match(/data-ff-group="([a-z0-9]+)"/g) || []).length === 3);
+  const gBtn2 = await page.evaluate(() => { const g = document.querySelector('.v2-multi-toolbar [data-action="group"]'); const u = document.querySelector('.v2-multi-toolbar [data-action="ungroup"]'); return { gOff: g.disabled, uOff: u.disabled }; });
+  check(tag + 'groupés, « Grouper » est grisé (ils forment déjà un groupe) et « Dissocier » est actif', gBtn2.gOff && !gBtn2.uOff, gBtn2);
+  await press('Control+z');
+  check(tag + 'UN Ctrl+Z défait le groupe (le HTML d\'avant)', (await htmlOf(page)) === base);
+  await press('Control+y');
+  groups = await groupsOf();
+  check(tag + 'Ctrl+Y le refait', groups.every(g => g && g === groups[0]), groups);
+  const keepId = groups[0];
+  // Un clic sur le bord de « A » : tout le groupe est choisi.
+  await clickEdge('A', false);
+  check(tag + 'un clic sur le bord de « A » choisit les trois du groupe', (await selectedCount(page)) === 3, await selectedCount(page));
+  // Le groupe se déplace d'un bloc.
+  seen = await dragEdge('B', 20, 40, false);
+  now = await framesOf(page);
+  const moved6 = now.map((f, i) => ({ dx: f.x - start3[i].x, dy: f.y - start3[i].y }));
+  check(tag + 'glisser le bord de l\'un déplace tout le groupe du même écart, les trois restent choisis', moved6.every(m => Math.abs(m.dx - moved6[0].dx) < 0.3 && Math.abs(m.dy - moved6[0].dy) < 0.3) && Math.abs(moved6[0].dx) > 5 && (await selectedCount(page)) === 3, moved6);
+  await press('Control+z');
+  // Maj + clic sur un membre ne coupe pas le groupe ; Échap non plus.
+  await clickEdge('B', true);
+  check(tag + 'Maj + clic sur un membre ne laisse pas un morceau du groupe : les trois restent choisis', (await selectedCount(page)) === 3, await selectedCount(page));
+  await press('Escape');
+  check(tag + 'Échap ne laisse pas un morceau du groupe non plus', (await selectedCount(page)) === 3);
+  // Ctrl + D : la copie est un groupe à part.
+  await press('Control+d');
+  groups = await groupsOf();
+  const kinds = Array.from(new Set(groups));
+  check(tag + 'Ctrl + D : six objets, deux groupes distincts de trois (la copie n\'est pas mêlée à l\'original)', groups.length === 6 && kinds.length === 2 && kinds.every(k => k && groups.filter(g => g === k).length === 3) && kinds.indexOf(keepId) >= 0, groups);
+  await press('Control+z');
+  check(tag + 'UN Ctrl+Z retire la copie', (await groupsOf()).length === 3);
+  // Le groupe survit au HTML : on le relit.
+  const roundtrip = await page.evaluate(() => { const ed = EditorCore.getEditor(); const html = ed.getHTML(); Editor.setHTML(html); return EditorCore.getEditor().getHTML() === html; });
+  groups = await groupsOf();
+  check(tag + 'relu depuis le HTML, le groupe est le même (trois objets, même identifiant) et le HTML est identique', roundtrip && groups.length === 3 && groups.every(g => g === keepId), { roundtrip, groups });
+  // Un clic dans le texte d'un membre y pose le curseur (et choisit rien).
+  await clickEdge('A', false);
+  const inB = await page.evaluate(() => { const f = Array.from(document.querySelectorAll('#editor-container .tiptap .pp-free-frame')).find(x => x.textContent.trim() === 'B'); f.scrollIntoView({ block: 'center' }); const r = f.querySelector('.pp-free-frame-content p').getBoundingClientRect(); return { x: r.left + 4, y: r.top + r.height / 2 }; });
+  await page.mouse.move(inB.x, inB.y);
+  await page.mouse.click(inB.x, inB.y);
+  await sleep(300);
+  check(tag + 'un clic dans le texte de « B » (groupé) y pose le curseur : plus de cadre choisi, le groupe reste', (await selectedCount(page)) === 0 && (await groupsOf()).every(g => g === keepId), { c: await selectedCount(page) });
+  // Dissocier : Ctrl + Maj + G.
+  await clickEdge('A', false);
+  await press('Control+Shift+g');
+  groups = await groupsOf();
+  check(tag + 'Ctrl + Maj + G : plus aucun groupe, les trois restent choisis', groups.every(g => g === '') && (await selectedCount(page)) === 3, { groups, c: await selectedCount(page) });
+  check(tag + 'le HTML ne porte plus data-ff-group', (await htmlOf(page)) === base);
+  await press('Escape');
+  check(tag + 'sans groupe, Échap revient à « A » seul (rien ne le retient plus avec les autres)', (await selectedCount(page)) === 1);
 }
 
 await part('fr', 'light');
