@@ -97,9 +97,9 @@ const ShortcutsPanel = (function () {
     const plain = !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
     if (plain && event.key === 'Escape') { stopRecording(); return; }
     if (plain && (event.key === 'Backspace' || event.key === 'Delete')) { SettingsHistory.track(KEYS_SETTING, () => Shortcuts.setKey(id, '')); stopRecording(); return; }
-    const { combo, altGr } = Shortcuts.fromEvent(event);
+    const { combo } = Shortcuts.fromEvent(event);
     if (!combo) return; // un modificateur seul : on attend la suite
-    if (altGr) { showError(id, t('settings.keys.problem.altGr')); return; }
+    if (Shortcuts.isAltGr(event)) { showError(id, t('settings.keys.problem.altGr')); return; } // sauf Ctrl+Alt+M, la touche de départ de « Commenter la sélection »
     const result = SettingsHistory.track(KEYS_SETTING, () => Shortcuts.setKey(id, combo));
     if (result.problem) { showError(id, problemText(combo, result)); return; }
     stopRecording();

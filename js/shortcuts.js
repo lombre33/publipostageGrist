@@ -62,7 +62,7 @@ const Shortcuts = (function () {
     }
 
     // { combo, altGr } ; combo = null quand l'événement n'est qu'un modificateur ou une touche sans nom. `altGr` : Ctrl+Alt sous Windows et Linux,
-    // c'est AltGr, qui écrit des caractères (« @ », « # » sur un clavier AZERTY) : jamais un raccourci.
+    // c'est AltGr, qui écrit des caractères (« @ », « # » sur un clavier AZERTY) : jamais un raccourci (la seule Ctrl+Alt+lettre prise l'est par `isAltGr`, plus bas).
     function fromEvent(event) {
       const key = keyOf(event);
       if (!key) return { combo: null, altGr: false };
@@ -263,7 +263,8 @@ const Shortcuts = (function () {
     // : vaut partout), repeat (la touche enfoncée se répète), hint (sélecteur de l'élément qui montre la touche : infobulle, ligne ou titre de menu),
     // aria (sélecteur de l'élément qui la dit aux lecteurs d'écran, `hint` par défaut), anywhere (une action native que l'éditeur seul traite quand il a le focus et que ce module traite
     // aussi quand le focus est ailleurs, hors d'un champ où l'on tape : Annuler et Rétablir, après un clic sur un bouton ou une fermeture de fenêtre qui a laissé le focus sur le corps de la page, ou après le réglage
-    // d'une liste ou d'une glissière de la barre flottante, dont le focus reste sur le contrôle), run }.
+    // d'une liste ou d'une glissière de la barre flottante, dont le focus reste sur le contrôle), ctrlAlt (la touche d'origine est une Ctrl+Alt+lettre que ce module prend lui-même, la touche de Google
+    // Docs : sous Windows et Linux c'est de l'AltGr, jamais prise - sauf quand la touche a écrit la lettre elle-même, `plainCtrlAlt`), run }.
     const tip = id => '#' + id;
     const ACTIONS = [
       // Modèles
@@ -317,8 +318,9 @@ const Shortcuts = (function () {
       { id: 'image', group: 'insert', label: 'shortcuts.action.image', key: '', scope: 'editor', hint: '#v2-image-flyout .v2-hover-flyout-label', aria: tip('v2-btn-image'), run: click('v2-btn-image') },
       { id: 'pageBreak', group: 'insert', label: 'insert.pageBreak.tip', key: 'Alt+Enter', scope: 'editor', hint: tip('v2-btn-page-break'), run: click('v2-btn-page-break') },
       { id: 'toc', group: 'insert', label: 'insert.toc.tip', key: '', scope: 'editor', hint: tip('v2-btn-toc'), run: click('v2-btn-toc') },
-      // Commenter : Ctrl+Maj+M (⇧⌘M sur Mac) depuis le 03/11, à la place d'Alt+Maj+M. Ce n'est pas la touche de Google Docs (Ctrl+Alt+M) : Ctrl+Alt est de l'AltGr sous Windows et Linux, que `onKeydown` n'écoute jamais.
-      { id: 'comment', group: 'insert', label: 'insert.comment.tip', key: 'Mod+Shift+m', scope: 'editor', hint: tip('v2-btn-comment'), run: click('v2-btn-comment') },
+      // Commenter : Ctrl+Alt+M (⌥⌘M sur Mac), la touche de Google Docs, depuis le 03/11, à la place d'Alt+Maj+M. Ce module la prend lui-même (`ctrlAlt`), et non l'éditeur comme Ctrl+Alt+C : Commenter agit aussi dans la
+      // Lecture et dans un document en lecture seule, où l'éditeur est caché.
+      { id: 'comment', group: 'insert', label: 'insert.comment.tip', key: 'Mod+Alt+m', ctrlAlt: true, scope: 'editor', hint: tip('v2-btn-comment'), run: click('v2-btn-comment') },
       { id: 'link', group: 'insert', label: 'insert.link.row', key: 'Mod+k', native: true, scope: 'editor', aria: '#v2-btn-link, #v2-row-link', run: click('v2-btn-link') },
       { id: 'citation', group: 'insert', label: 'insert.citation.tip', key: 'Mod+Shift+b', native: true, cells: true, scope: 'editor', hint: tip('v2-btn-citation'), run: click('v2-btn-citation') },
       { id: 'codeBlock', group: 'insert', label: 'insert.codeBlock.tip', key: 'Mod+Alt+c', native: true, scope: 'editor', hint: tip('v2-btn-code-block'), run: click('v2-btn-code-block') },
@@ -460,7 +462,7 @@ const Shortcuts = (function () {
     return { decorate, changed, setKey, resetKey, resetAll, chosen, restore };
   })();
 
-  const { onKeydown } = (function () {
+  const { onKeydown, isAltGr } = (function () {
     // Le clavier
 
     function modalOpen() {
@@ -533,6 +535,19 @@ const Shortcuts = (function () {
       if (!(freed.scope === 'editor' && inTextField())) { event.preventDefault(); event.stopImmediatePropagation(); }
     }
 
+    // Ctrl+Alt+lettre sous Windows et Linux est de l'AltGr tant que la touche écrit un autre caractère (« µ » pour AltGr+M sur un clavier allemand ou américain international) : jamais un raccourci, la
+    // frappe reste au texte. Quand la touche a écrit la lettre elle-même (`event.key`), AltGr n'a rien écrit : c'est bien Ctrl+Alt, la touche de Google Docs. Seule une Ctrl+Alt+lettre qui est la touche
+    // d'origine d'une action qui le demande (`ctrlAlt` : Commenter la sélection) est prise ainsi - qu'elle l'ait gardée ou non : toute autre combinaison Ctrl+Alt reste à l'éditeur (Ctrl+Alt+C) ou au texte.
+    function plainCtrlAlt(event, combo) {
+      return !!combo && ACTIONS.some(action => action.ctrlAlt === true && defaultOf(action) === combo)
+        && typeof event.key === 'string' && event.key.toLowerCase() === combo.split('+').pop();
+    }
+    // Ce que l'écouteur ci-dessous et l'écoute de Réglages (js/shortcuts-panel.js) refusent comme AltGr : `fromEvent(event).altGr`, sauf pour cette Ctrl+Alt+lettre.
+    function isAltGr(event) {
+      const { combo, altGr } = fromEvent(event);
+      return altGr && !plainCtrlAlt(event, combo);
+    }
+
     function onKeydown(event) {
       if (event.isComposing || event.keyCode === 229) return; // une saisie en cours (IME) : ni action, ni enregistrement
       if (recorder) {
@@ -543,13 +558,13 @@ const Shortcuts = (function () {
       }
       if (event.defaultPrevented) return;
       const { combo, altGr } = fromEvent(event);
-      if (!combo || altGr) return;
+      if (!combo || (altGr && !plainCtrlAlt(event, combo))) return;
       // Une autre touche d'origine d'une action `anywhere` (Ctrl+Maj+Z, qui rétablit) en est la touche tant qu'elle n'a pas changé de touche.
       const owner = ownerOf(combo) || ACTIONS.find(action => action.anywhere && !isCustomized(action) && (action.aliases || []).indexOf(combo) !== -1);
       if (owner) runOwnerKey(event, owner, combo);
       else swallowFreedKey(event, combo);
     }
-    return { onKeydown };
+    return { onKeydown, isAltGr };
   })();
   document.addEventListener('keydown', onKeydown, true);
 
@@ -561,7 +576,7 @@ const Shortcuts = (function () {
   return {
     GROUPS, ACTIONS,
     action: actionOf, keyFor, defaultKeyFor, label, isChanged, check, setKey, resetKey, resetAll, chosen, restore,
-    fromEvent, format, ariaKeys, formProblem,
+    fromEvent, isAltGr, format, ariaKeys, formProblem,
     setRecorder: fn => { recorder = typeof fn === 'function' ? fn : null; },
     isRecording: () => !!recorder,
     onChange: fn => { if (typeof fn === 'function') listeners.push(fn); },

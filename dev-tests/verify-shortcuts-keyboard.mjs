@@ -3,7 +3,7 @@
 // souris (page.mouse), en clair, en sombre, en anglais et en mode Mac. Ce que dev-tests/scenarios-shortcuts.js ne peut pas voir depuis la page : un KeyboardEvent construit à la main
 // ne passe ni par l'ordre des écouteurs d'une vraie touche (l'écouteur de Shortcuts doit arrêter Ctrl+B AVANT l'éditeur), ni par ce que le navigateur écrit dans le texte.
 //  - les touches de départ (Alt+L, Alt+E, Alt+Maj+1 2 3, Alt+Entrée, Alt+Maj+D, Alt+Maj+H, Ctrl+/, F2, Alt+M, Alt+P) font ce que font leurs boutons, sans rien écrire dans le texte ;
-//  - « Commenter la sélection » : Ctrl+Maj+M (⇧⌘M sur Mac) ouvre le composeur sur le mot choisi à la souris, le curseur dans sa réponse, rien d'écrit dans le texte ; Alt+Maj+M, l'ancienne, ne fait plus rien (demande du 03/11) ;
+//  - « Commenter la sélection » : Ctrl+Alt+M (⌥⌘M sur Mac), la touche de Google Docs, ouvre le composeur sur le mot choisi à la souris, le curseur dans sa réponse, rien d'écrit dans le texte ; Alt+Maj+M et Ctrl+Maj+M ne font plus rien ; un AltGr+M qui écrit « µ » n'est pas pris (demande du 03/11) ;
 //  - Rechercher (Ctrl+F) et Rechercher et remplacer (Ctrl+H) restent à la barre de recherche ; changés, la nouvelle touche l'ouvre (sans la refermer), l'ancienne ne fait plus rien, la loupe la dit ;
 //  - une touche changée dans Réglages > Raccourcis marche tout de suite, l'ancienne ne fait plus rien (Ctrl+B ne met plus en gras), « Par défaut » les rend ;
 //  - l'écoute d'une combinaison : un doublon, une touche seule, Ctrl+Alt (AltGr) sont refusés sous la touche concernée, Échap abandonne sans fermer la fenêtre ;
@@ -628,9 +628,10 @@ async function tooltipsPart(T, fr) {
   await page.waitForTimeout(250);
 }
 
-// === « Commenter la sélection » : Ctrl+Maj+M à la vraie frappe, Alt+Maj+M ne fait plus rien ====================================================================================
-// Demande du 03/11 : « changer le raccourci par défaut en ctrl shift m ». Un commentaire exige un modèle enregistré (sinon js/comments.js dit « Enregistrez d'abord le modèle » par un alert()
-// que la fin de ce script refuse) : le modèle est enregistré une fois, au premier passage. Le mot est choisi à la vraie souris (double-clic), la touche tapée au vrai clavier.
+// === « Commenter la sélection » : Ctrl+Alt+M à la vraie frappe, Alt+Maj+M et Ctrl+Maj+M ne font plus rien ============================================================================
+// Demande du 03/11 : « je veux que par défaut ça soit comme sur Google donc Ctrl+Alt+M » (Ctrl+Maj+M l'a été quelques minutes). Sous Windows et Linux Ctrl+Alt est de l'AltGr, que le module ne
+// prend jamais : cette touche fait exception, quand elle a écrit la lettre elle-même. Un commentaire exige un modèle enregistré (sinon js/comments.js dit « Enregistrez d'abord le modèle » par un
+// alert() que la fin de ce script refuse) : le modèle est enregistré une fois, au premier passage. Le mot est choisi à la vraie souris (double-clic), la touche tapée au vrai clavier.
 async function commentKeyPart(T, fr) {
   await resetAll();
   // Le menu Titre reste ouvert après `tooltipsPart` (sa souris finit à 350, 380, dans son cadre) et couvrirait le mot, que le double-clic atteindrait à sa place : la souris va dans le coin
@@ -669,25 +670,28 @@ async function commentKeyPart(T, fr) {
   await page.waitForTimeout(200);
   const selected = await page.evaluate(() => String(window.getSelection()));
   check(`${T} : le mot « monde » est sélectionné à la souris`, selected === 'monde', { selected, point });
-  // L'ancienne touche ne fait plus rien : ni composeur, ni marque, rien d'écrit.
-  await page.keyboard.press('Alt+Shift+m');
-  await page.waitForTimeout(400);
-  let state = await composer();
-  check(`${T} : Alt+Maj+M, l'ancienne touche, ne fait plus rien (ni composeur, ni marque, rien d'écrit)`, !state.shown && state.marks.length === 0 && (await plain()) === 'Bonjour monde', { state, plain: await plain() });
-  // Sur l'ancien code elle ouvre le composeur : on le referme pour que le contrôle de la nouvelle touche parte d'un écran net, et ne passe pas grâce au composeur resté ouvert.
-  if (state.shown) {
+  // Sur l'ancien code une ancienne touche ouvre le composeur : on le referme et on reprend le mot, pour que le contrôle suivant parte d'un écran net et ne passe pas grâce au composeur resté ouvert.
+  const startOver = async () => {
     await page.click('#v2-comment-popup .v2-comment-popup-close', { timeout: 5000 });
     await page.waitForTimeout(300);
     await page.evaluate(() => { Editor.setHTML('<p>Bonjour monde</p>'); });
     await page.waitForTimeout(250);
     await page.mouse.dblclick(point.x, point.y);
     await page.waitForTimeout(200);
+  };
+  // Les anciennes touches ne font plus rien : ni composeur, ni marque, rien d'écrit.
+  for (const [keys, name] of [['Alt+Shift+m', 'Alt+Maj+M'], ['Control+Shift+m', 'Ctrl+Maj+M']]) {
+    await page.keyboard.press(keys);
+    await page.waitForTimeout(400);
+    const old = await composer();
+    check(`${T} : ${name}, une ancienne touche, ne fait plus rien (ni composeur, ni marque, rien d'écrit)`, !old.shown && old.marks.length === 0 && (await plain()) === 'Bonjour monde', { state: old, plain: await plain() });
+    if (old.shown) await startOver();
   }
-  // La nouvelle : le composeur s'ouvre sur le mot, le curseur dans la zone de réponse.
-  await page.keyboard.press('Control+Shift+m');
+  // La nouvelle, celle de Google Docs : le composeur s'ouvre sur le mot, le curseur dans la zone de réponse.
+  await page.keyboard.press('Control+Alt+m');
   await page.waitForTimeout(500);
-  state = await composer();
-  check(`${T} : Ctrl+Maj+M ouvre le composeur de commentaire sur le mot sélectionné, le curseur dans sa zone de réponse`, state.shown && state.replyFocused && state.marks.join('|') === 'monde', state);
+  const state = await composer();
+  check(`${T} : Ctrl+Alt+M ouvre le composeur de commentaire sur le mot sélectionné, le curseur dans sa zone de réponse`, state.shown && state.replyFocused && state.marks.join('|') === 'monde', state);
   check(`${T} : le composeur tient dans la fenêtre ${WIDTH}x${HEIGHT}`, state.inWindow, state);
   check(`${T} : aucune lettre n'est écrite dans le document (« Bonjour monde » intact)`, (await plain()) === 'Bonjour monde', await plain());
   await snap(`${T}-8-commentaire`);
@@ -697,7 +701,22 @@ async function commentKeyPart(T, fr) {
   }
   // L'infobulle du bouton et les lecteurs d'écran disent la touche.
   const tip = await page.evaluate(() => { const b = document.getElementById('v2-btn-comment'); return { tip: getComputedStyle(b, '::after').content.replace(/^"|"$/g, ''), aria: b.getAttribute('aria-keyshortcuts') }; });
-  check(`${T} : l'infobulle du bouton Commenter dit Ctrl+Maj+M, et aria-keyshortcuts aussi`, tip.tip === (fr ? 'Commenter la sélection (Ctrl+Maj+M)' : 'Comment on selection (Ctrl+Shift+M)') && tip.aria === 'Control+Shift+M', tip);
+  check(`${T} : l'infobulle du bouton Commenter dit Ctrl+Alt+M, et aria-keyshortcuts aussi`, tip.tip === (fr ? 'Commenter la sélection (Ctrl+Alt+M)' : 'Comment on selection (Ctrl+Alt+M)') && tip.aria === 'Control+Alt+M', tip);
+  // AltGr+M d'un clavier allemand : Windows envoie Ctrl+Alt avec la touche « µ ». Elle n'est pas prise : la frappe arrive aux écouteurs d'après (ici, un écouteur de la fenêtre, après celui de Shortcuts),
+  // sans preventDefault, et aucun composeur ne s'ouvre. (Ce que le navigateur écrit ensuite dans le texte dépend de la plateforme : on ne le mesure pas.)
+  await page.evaluate(() => {
+    window.__altGrSeen = null;
+    if (!window.__altGrListener) {
+      window.__altGrListener = e => { window.__altGrSeen = { key: e.key, prevented: e.defaultPrevented }; };
+      window.addEventListener('keydown', window.__altGrListener, false);
+    }
+  });
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', modifiers: 3, key: 'µ', code: 'KeyM', windowsVirtualKeyCode: 77, text: 'µ', unmodifiedText: 'µ' });
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', modifiers: 3, key: 'µ', code: 'KeyM', windowsVirtualKeyCode: 77 });
+  await page.waitForTimeout(300);
+  const altGr = await page.evaluate(() => window.__altGrSeen);
+  check(`${T} : AltGr+M, qui écrit « µ », n'est pas prise (la frappe reste au texte, aucun composeur)`, !!altGr && altGr.key === 'µ' && altGr.prevented === false && !(await composer()).shown, { altGr, state: await composer() });
   await setDoc('<p></p>');
 }
 
@@ -727,7 +746,7 @@ async function englishPart() {
     name: document.querySelector('.settings-key-row[data-action="heading1"] .settings-key-name').textContent,
     comment: document.querySelector('.settings-key-row[data-action="comment"] .settings-key-btn').textContent,
   }));
-  check(`${T} : onglet, titre, groupes et touches de la liste sont en anglais (« Alt+Shift+1 », « Ctrl+Shift+M »)`, labels.tab === 'Shortcuts' && labels.title === 'Keyboard keys' && labels.group === 'Templates|View|Formatting|Insert|History and tracking' && labels.heading === 'Alt+Shift+1' && labels.comment === 'Ctrl+Shift+M', labels);
+  check(`${T} : onglet, titre, groupes et touches de la liste sont en anglais (« Alt+Shift+1 », « Ctrl+Alt+M »)`, labels.tab === 'Shortcuts' && labels.title === 'Keyboard keys' && labels.group === 'Templates|View|Formatting|Insert|History and tracking' && labels.heading === 'Alt+Shift+1' && labels.comment === 'Ctrl+Alt+M', labels);
   await snap(`${T}-1-liste`);
   await closeSettings();
   await remapPart(T, false);
@@ -745,7 +764,7 @@ async function macPart() {
   await page.evaluate(() => Shortcuts.setPlatform('mac'));
   await openKeys();
   const keys = await page.evaluate(() => ({ read: document.querySelector('.settings-key-row[data-action="modeRead"] .settings-key-btn').textContent, bold: document.querySelector('.settings-key-row[data-action="bold"] .settings-key-btn').textContent, h1: document.querySelector('.settings-key-row[data-action="heading1"] .settings-key-btn').textContent, enter: document.querySelector('.settings-key-row[data-action="pageBreak"] .settings-key-btn').textContent, comment: document.querySelector('.settings-key-row[data-action="comment"] .settings-key-btn').textContent }));
-  check(`${T} : la liste écrit ⌥L, ⌘B, ⌥⇧1, ⌥↩ et ⇧⌘M (Commenter)`, keys.read === '⌥L' && keys.bold === '⌘B' && keys.h1 === '⌥⇧1' && keys.enter === '⌥↩' && keys.comment === '⇧⌘M', keys);
+  check(`${T} : la liste écrit ⌥L, ⌘B, ⌥⇧1, ⌥↩ et ⌥⌘M (Commenter)`, keys.read === '⌥L' && keys.bold === '⌘B' && keys.h1 === '⌥⇧1' && keys.enter === '⌥↩' && keys.comment === '⌥⌘M', keys);
   await snap(`${T}-1-liste`);
   // Ctrl+lettre y sert à se déplacer dans le texte : refusé avec sa raison.
   await click(keyBtn('table'), 120);

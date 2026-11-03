@@ -247,12 +247,12 @@
 
   cases.push({
     id: 'sc_default_keys_are_the_ones_proposed_to_antoine_and_never_clash',
-    description: 'Les touches de départ sont celles de la carte (Alt+L Lecture, Alt+E Édition, Alt+M modèles, F2 renommer, Alt+P export PDF, Ctrl+/ liste, Alt+Maj+1 2 3 titres, Alt+Maj+H surligner, Alt+Entrée saut de page, Ctrl+Maj+M commentaire, Alt+Maj+D date du jour) ; les touches déjà liées (Ctrl+S, Ctrl+K, Ctrl+B...) y figurent ; aucune touche n\'est prise deux fois, aucune n\'est gardée par le navigateur',
+    description: 'Les touches de départ sont celles de la carte (Alt+L Lecture, Alt+E Édition, Alt+M modèles, F2 renommer, Alt+P export PDF, Ctrl+/ liste, Alt+Maj+1 2 3 titres, Alt+Maj+H surligner, Alt+Entrée saut de page, Ctrl+Alt+M commentaire, Alt+Maj+D date du jour) ; les touches déjà liées (Ctrl+S, Ctrl+K, Ctrl+B...) y figurent ; aucune touche n\'est prise deux fois, aucune n\'est gardée par le navigateur',
     run: async (h) => {
       await reset(h);
       const expected = {
         modeRead: 'Alt+l', modeEdit: 'Alt+e', templates: 'Alt+m', rename: 'F2', exportPdf: 'Alt+p', keysList: 'Mod+/',
-        heading1: 'Alt+Shift+1', heading2: 'Alt+Shift+2', heading3: 'Alt+Shift+3', highlight: 'Alt+Shift+h', pageBreak: 'Alt+Enter', comment: 'Mod+Shift+m', today: 'Alt+Shift+d',
+        heading1: 'Alt+Shift+1', heading2: 'Alt+Shift+2', heading3: 'Alt+Shift+3', highlight: 'Alt+Shift+h', pageBreak: 'Alt+Enter', comment: 'Mod+Alt+m', today: 'Alt+Shift+d',
         save: 'Mod+s', link: 'Mod+k', bold: 'Mod+b', italic: 'Mod+i', underline: 'Mod+u', undo: 'Mod+z', redo: 'Mod+y', find: 'Mod+f', replace: 'Mod+h',
         bulletList: 'Mod+Shift+8', orderedList: 'Mod+Shift+7', taskList: 'Mod+Shift+9',
       };
@@ -275,46 +275,93 @@
     },
   });
 
-  // « Commenter la sélection » : Ctrl+Maj+M (⇧⌘M sur Mac) depuis le 03/11 (demande d'Antoine : « changer le raccourci par défaut en ctrl shift m »), à la place d'Alt+Maj+M. L'ancienne
-  // touche ne presse plus le bouton et la liste de Réglages peut la donner à une autre action. Ce n'est pas la touche de Google Docs (Ctrl+Alt+M) : `onKeydown` n'écoute jamais Ctrl+Alt (AltGr).
+  // « Commenter la sélection » : Ctrl+Alt+M (⌥⌘M sur Mac), la touche de Google Docs, depuis le 03/11 (demande d'Antoine : « je veux que par défaut ça soit comme sur Google donc Ctrl+Alt+M »), à la place
+  // d'Alt+Maj+M (et de Ctrl+Maj+M, qu'elle a eue quelques minutes le même jour). Sous Windows et Linux, Ctrl+Alt est de l'AltGr, que le module ne prend jamais : cette seule touche fait exception
+  // (`ctrlAlt`), et seulement quand elle a écrit la lettre elle-même (`event.key` vaut « m ») - un AltGr+M qui écrit « µ » (clavier allemand) reste au texte. Le module la prend lui-même, pas l'éditeur :
+  // Commenter agit aussi dans la Lecture.
   cases.push({
-    id: 'sc_comment_key_is_ctrl_shift_m_and_the_old_alt_shift_m_does_nothing',
-    description: 'La touche de « Commenter la sélection » est Ctrl+Maj+M (⇧⌘M sur Mac) : elle presse le bouton, l\'infobulle et aria-keyshortcuts la disent et la liste de Réglages la refuse à une autre action ; Alt+Maj+M, l\'ancienne, ne presse plus rien et peut aller à une autre action ; une personne qui l\'a choisie la garde, « Par défaut » rend Ctrl+Maj+M',
+    id: 'sc_comment_key_is_ctrl_alt_m_like_google_docs_and_altgr_keeps_typing',
+    description: 'La touche de « Commenter la sélection » est Ctrl+Alt+M (⌥⌘M sur Mac), celle de Google Docs : elle presse le bouton, dans l\'éditeur comme dans la Lecture, l\'infobulle et aria-keyshortcuts la disent, la liste de Réglages la refuse à une autre action et la rend à Commenter ; un AltGr+M qui écrit « µ », Ctrl+Alt+Maj+M et les autres Ctrl+Alt restent au texte ; Alt+Maj+M et Ctrl+Maj+M ne pressent plus rien ; une touche choisie est gardée, « Par défaut » rend Ctrl+Alt+M',
     run: async (h) => {
       await reset(h);
       await withText(h);
+      Shortcuts.setPlatform('other');
       const button = document.getElementById('v2-btn-comment');
       const out = {};
+      // Une touche pressée : prise (preventDefault) ou laissée, et les boutons pressés par elle (le clic est avalé, aucun composeur ne s'ouvre).
+      const seenKey = (combo, target, extra) => {
+        const spy = spyPresses(['v2-btn-comment']);
+        const event = press(combo, target || inEditor(), extra);
+        spy.stop();
+        return { taken: event.defaultPrevented, pressed: spy.seen.join(',') };
+      };
+      // Ce que l'écoute de Réglages refuse comme AltGr.
+      const altGrOf = (combo, extra) => Shortcuts.isAltGr(new KeyboardEvent('keydown', Object.assign(eventInit(combo), extra || {})));
       out.key = Shortcuts.keyFor('comment');
       out.label = label('comment');
       Shortcuts.setPlatform('mac');
       out.mac = label('comment');
-      Shortcuts.setPlatform(null);
+      Shortcuts.setPlatform('other');
       out.tip = afterContent(button);
       out.aria = button.getAttribute('aria-keyshortcuts');
-      const spy = spyPresses(['v2-btn-comment']);
-      const fresh = press('Ctrl+Shift+m', inEditor());
-      out.newKey = { taken: fresh.defaultPrevented, pressed: spy.seen.join(',') };
-      spy.seen.length = 0;
-      const old = press('Alt+Shift+m', inEditor());
-      out.oldKey = { taken: old.defaultPrevented, pressed: spy.seen.join(',') };
-      spy.stop();
-      out.duplicate = Shortcuts.check('table', 'Mod+Shift+m').problem;
-      out.oldFree = Shortcuts.check('table', 'Alt+Shift+m').problem;
-      // Une personne qui a remis Alt+Maj+M à « Commenter la sélection » la garde ; « Par défaut » rend Ctrl+Maj+M.
+      out.google = seenKey('Ctrl+Alt+m');
+      out.capsLock = seenKey('Ctrl+Alt+m', null, { key: 'M' });
+      out.altGrWrites = seenKey('Ctrl+Alt+m', null, { key: 'µ' });
+      out.withShift = seenKey('Ctrl+Alt+Shift+m');
+      out.otherCtrlAlt = seenKey('Ctrl+Alt+x');
+      out.oldKeys = { altShift: seenKey('Alt+Shift+m'), ctrlShift: seenKey('Ctrl+Shift+m') };
+      out.check = { taken: Shortcuts.check('table', 'Mod+Alt+m').problem, ctrlShiftFree: Shortcuts.check('table', 'Mod+Shift+m').problem, altShiftFree: Shortcuts.check('table', 'Alt+Shift+m').problem };
+      out.isAltGr = { google: altGrOf('Ctrl+Alt+m'), writes: altGrOf('Ctrl+Alt+m', { key: 'µ' }), other: altGrOf('Ctrl+Alt+c'), withShift: altGrOf('Ctrl+Alt+Shift+m'), altOnly: altGrOf('Alt+m') };
+      // Sur Mac la touche est ⌥⌘M : ⌘ est Mod, Ctrl n'est pas ⌘.
+      Shortcuts.setPlatform('mac');
+      out.macKey = seenKey('Meta+Alt+m');
+      out.macCtrl = seenKey('Ctrl+Alt+m');
+      out.macIsAltGr = altGrOf('Ctrl+Alt+m');
+      Shortcuts.setPlatform('other');
+      // La Lecture (et un document en lecture seule) : l'éditeur y est caché, Commenter agit sur le texte de la Lecture. La touche presse le bouton comme dans l'éditeur.
+      document.getElementById('btn-mode-read').click();
+      await sleep(300);
+      out.reading = seenKey('Ctrl+Alt+m', document.body);
+      document.getElementById('btn-mode-edit').click();
+      await sleep(300);
+      // Une personne qui a choisi sa touche la garde : l'autre ne presse plus rien, « Par défaut » rend Ctrl+Alt+M.
       Shortcuts.setKey('comment', 'Alt+Shift+m');
-      const chosen = spyPresses(['v2-btn-comment']);
-      press('Alt+Shift+m', inEditor());
-      out.chosenKey = chosen.seen.join(',');
-      chosen.stop();
+      out.chosen = { key: seenKey('Alt+Shift+m'), googleNow: seenKey('Ctrl+Alt+m'), recordsDefault: altGrOf('Ctrl+Alt+m') };
       Shortcuts.resetKey('comment');
-      out.afterReset = Shortcuts.keyFor('comment');
-      const pass = out.key === 'Mod+Shift+m' && out.label === 'Ctrl+Maj+M' && out.mac === '⇧⌘M'
-        && out.tip === 'Commenter la sélection (Ctrl+Maj+M)' && out.aria === 'Control+Shift+M'
-        && out.newKey.taken === true && out.newKey.pressed === 'v2-btn-comment'
-        && out.oldKey.taken === false && out.oldKey.pressed === ''
-        && out.duplicate === 'duplicate' && out.oldFree === ''
-        && out.chosenKey === 'v2-btn-comment' && out.afterReset === 'Mod+Shift+m';
+      out.afterReset = { key: Shortcuts.keyFor('comment'), works: seenKey('Ctrl+Alt+m') };
+      // L'écoute de Réglages : Ctrl+Alt+M donnée à une autre action est un doublon (et non de l'AltGr), l'AltGr qui écrit « µ » est refusé comme AltGr, et Commenter reprend sa touche de départ en la tapant.
+      openKeysPanel();
+      await sleep(200);
+      const row = id => document.querySelector('.settings-key-row[data-action="' + id + '"]');
+      const keyButton = id => row(id).querySelector('.settings-key-btn');
+      const errorOf = id => { const e = row(id).querySelector('.settings-key-error'); return e.hidden ? '' : e.textContent; };
+      keyButton('modeEdit').click();
+      press('Ctrl+Alt+m', keyButton('modeEdit'));
+      out.recordOther = { error: errorOf('modeEdit'), recording: Shortcuts.isRecording() };
+      press('Ctrl+Alt+m', keyButton('modeEdit'), { key: 'µ' });
+      out.recordAltGr = errorOf('modeEdit');
+      press('Escape', keyButton('modeEdit'));
+      Shortcuts.setKey('comment', 'Alt+Shift+m');
+      keyButton('comment').click();
+      press('Ctrl+Alt+m', keyButton('comment'));
+      out.recordOwn = { key: Shortcuts.keyFor('comment'), changed: Shortcuts.isChanged('comment'), error: errorOf('comment'), recording: Shortcuts.isRecording(), shown: keyButton('comment').textContent };
+      const pressed = { taken: true, pressed: 'v2-btn-comment' };
+      const left = { taken: false, pressed: '' };
+      const pass = out.key === 'Mod+Alt+m' && out.label === 'Ctrl+Alt+M' && out.mac === '⌥⌘M'
+        && out.tip === 'Commenter la sélection (Ctrl+Alt+M)' && out.aria === 'Control+Alt+M'
+        && JSON.stringify(out.google) === JSON.stringify(pressed) && JSON.stringify(out.capsLock) === JSON.stringify(pressed)
+        && JSON.stringify(out.altGrWrites) === JSON.stringify(left) && JSON.stringify(out.withShift) === JSON.stringify(left) && JSON.stringify(out.otherCtrlAlt) === JSON.stringify(left)
+        && JSON.stringify(out.oldKeys) === JSON.stringify({ altShift: left, ctrlShift: left })
+        && JSON.stringify(out.check) === JSON.stringify({ taken: 'duplicate', ctrlShiftFree: '', altShiftFree: '' })
+        && JSON.stringify(out.isAltGr) === JSON.stringify({ google: false, writes: true, other: true, withShift: true, altOnly: false })
+        && JSON.stringify(out.macKey) === JSON.stringify(pressed) && JSON.stringify(out.macCtrl) === JSON.stringify(left) && out.macIsAltGr === false
+        && JSON.stringify(out.reading) === JSON.stringify(pressed)
+        && JSON.stringify(out.chosen) === JSON.stringify({ key: pressed, googleNow: left, recordsDefault: false })
+        && JSON.stringify(out.afterReset) === JSON.stringify({ key: 'Mod+Alt+m', works: pressed })
+        && out.recordOther.error === 'Ctrl+Alt+M est déjà la touche de « Commenter la sélection ».' && out.recordOther.recording === true
+        && out.recordAltGr.indexOf('AltGr') !== -1
+        && JSON.stringify(out.recordOwn) === JSON.stringify({ key: 'Mod+Alt+m', changed: false, error: '', recording: false, shown: 'Ctrl+Alt+M' });
+      document.getElementById('settings-close').click();
       await reset(h);
       return { pass, notes: JSON.stringify(out) };
     },

@@ -511,10 +511,12 @@ Deux options utiles :
   scénario qui a trouvé que Surligner, la couleur du texte et la taille de police sont câblés sur `mousedown` et ne voyaient pas un `click` ; une nouvelle action sur un bouton
   s'ajoute à `MOUSE_BUTTON`. Rechercher (Ctrl+F) et Rechercher et remplacer (Ctrl+H, ⇧⌘H sur Mac), natifs de `js/find-replace.js`, ouvrent la même barre quand on les change (sans la refermer si elle
   l'est déjà, avec la ligne « Remplacer par » pour le remplacement), l'ancienne ne fait plus rien, et l'infobulle de la loupe dit la touche (cas
-  `sc_find_and_replace_keys_open_the_bar_follow_the_choice_and_the_loupe_tooltip`). « Commenter la sélection » a pour touche de départ Ctrl+Maj+M (⇧⌘M sur Mac) depuis le 03/11 (demande : « changer le
-  raccourci par défaut en ctrl shift m », avant Alt+Maj+M) : `sc_comment_key_is_ctrl_shift_m_and_the_old_alt_shift_m_does_nothing` vérifie qu'elle presse le bouton, que l'infobulle et `aria-keyshortcuts` la
-  disent, que la liste de Réglages la refuse à une autre action, qu'Alt+Maj+M ne presse plus rien (et peut aller à une autre action), qu'une personne qui l'a choisie la garde et que « Par défaut » rend
-  Ctrl+Maj+M ; il échoue sur l'ancien code. Ce n'est pas la touche de Google Docs (Ctrl+Alt+M) : `onKeydown` n'écoute jamais Ctrl+Alt (AltGr). Le reste : les touches de départ sont exactement celles de la carte, sans doublon ; une touche d'origine « rendue » (Ctrl+B après avoir donné Alt+B au
+  `sc_find_and_replace_keys_open_the_bar_follow_the_choice_and_the_loupe_tooltip`). « Commenter la sélection » a pour touche de départ Ctrl+Alt+M (⌥⌘M sur Mac), celle de Google Docs, depuis le 03/11 (demande : « je veux que par défaut ça soit comme sur Google donc Ctrl+Alt+M », avant
+  Alt+Maj+M ; Ctrl+Maj+M l'a été quelques minutes) : `sc_comment_key_is_ctrl_alt_m_like_google_docs_and_altgr_keeps_typing` vérifie qu'elle presse le bouton (dans l'éditeur comme dans la Lecture, aussi en capitales),
+  que l'infobulle et `aria-keyshortcuts` la disent, que la liste de Réglages la refuse à une autre action comme un doublon (et non comme de l'AltGr) et la rend à Commenter, qu'Alt+Maj+M et Ctrl+Maj+M ne pressent plus
+  rien, qu'un AltGr+M qui écrit « µ », Ctrl+Alt+Maj+M et les autres Ctrl+Alt restent au texte, qu'une personne qui a choisi sa touche la garde et que « Par défaut » rend Ctrl+Alt+M ; il échoue sur l'ancien code.
+  Sous Windows et Linux Ctrl+Alt est de l'AltGr, que `onKeydown` ne prend jamais : cette seule touche fait exception (`ctrlAlt` dans `ACTIONS`, `Shortcuts.isAltGr`), et seulement quand la touche a écrit la lettre
+  elle-même (`event.key` vaut « m »). Le reste : les touches de départ sont exactement celles de la carte, sans doublon ; une touche d'origine « rendue » (Ctrl+B après avoir donné Alt+B au
   gras) ne fait plus rien et n'arrive pas à l'éditeur, sauf dans un champ de saisie où elle garde son sens de texte ; les refus et leur code (`duplicate`, `reserved`,
   `needsModifier`, `macCtrl`, `altGr`, `invalid`) sans rien écrire ; le stockage (`pp_shortcuts`, seules les actions changées, un JSON abîmé ignoré, l'évènement `storage`) ; un
   bouton grisé par les droits (`pp-access-locked`), par le mode (`v2-hf-locked`, un simple `pointer-events: none` qu'un clic par programme ne voit pas), désactivé, masqué ou en
@@ -600,8 +602,9 @@ Deux options utiles :
 - `shortcutsKeyboard` (`dev-tests/verify-shortcuts-keyboard.mjs`, 217 contrôles) tape pour de vrai à 700×400, en clair, en sombre, en anglais, puis en mode Mac : les touches de départ
   (Alt+L et Alt+E avec le curseur rendu au document, Alt+Maj+1 2 3 et le retour au paragraphe, Alt+Entrée, Alt+Maj+D, Alt+Maj+H, F2 qui bascule le champ de nom, Alt+M, Alt+P, Ctrl+/ ;
   rien n'est écrit dans le texte, rien ne part fenêtre ouverte) ; « Commenter la sélection » (`commentKeyPart`, en clair et en sombre, avec un modèle enregistré et un mot choisi par double-clic) :
-  Alt+Maj+M, l'ancienne touche, ne fait plus rien, Ctrl+Maj+M ouvre le composeur sur le mot, le curseur dans sa réponse, dans la fenêtre, sans lettre écrite, et l'infobulle du bouton dit Ctrl+Maj+M
-  (la liste de Réglages l'écrit « Ctrl+Shift+M » en anglais et « ⇧⌘M » en mode Mac) ; piège constaté : le menu Titre reste ouvert après
+  Alt+Maj+M et Ctrl+Maj+M, les anciennes touches, ne font plus rien, Ctrl+Alt+M ouvre le composeur sur le mot, le curseur dans sa réponse, dans la fenêtre, sans lettre écrite, l'infobulle du bouton dit Ctrl+Alt+M
+  et un AltGr+M qui écrit « µ » (envoyé par le protocole de Chromium : Ctrl+Alt, touche « µ ») n'est pas pris - la frappe arrive aux écouteurs d'après, sans preventDefault, aucun composeur ne s'ouvre
+  (la liste de Réglages écrit « Ctrl+Alt+M » en anglais et « ⌥⌘M » en mode Mac) ; piège constaté : le menu Titre reste ouvert après
   les infobulles (la souris de `tooltipsPart` finit à 350, 380, dans son cadre) et le double-clic du deuxième passage (en sombre, modèle déjà enregistré) visait une de ses lignes au lieu du mot : la partie met
   la souris dans le coin libre et attend que les menus au survol se referment ; Ctrl+F et Ctrl+H qui ouvrent la barre de recherche d'origine, puis Rechercher mis sur Alt+F dans la liste (la barre
   s'ouvre, une seconde fois elle reste ouverte, Ctrl+F ne fait plus rien, l'infobulle de la loupe dit Alt+F) ; changer la touche du gras à la souris (Alt+B prise, Ctrl+B qui ne met plus en gras, Alt+B qui bascule, l'infobulle
