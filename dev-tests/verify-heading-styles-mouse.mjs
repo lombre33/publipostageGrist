@@ -7,7 +7,10 @@
 //      italique), le titre 2 et le paragraphe non ; « Rétablir » s'allume, un vrai clic dessus rend l'aspect d'origine.
 //   3) Une ligne grisée (le curseur dans un paragraphe) : un vrai clic ne change rien, le pointeur dit « interdit ».
 //   4) Au vrai clavier : Ctrl+Z défait la mise à jour d'un coup (le style et la mise en forme à la main d'un autre titre), Ctrl+Y la remet.
-//   5) Aucune erreur de page.
+//   5) Le bloc des styles PARTAGÉS du menu (lot 3, 03/11 : « comme pour les couleurs on doit pouvoir voir les styles liés aux modèles et ceux liés au document ») : les deux intitulés (« Styles de titres du modèle »,
+//      « Styles de titres partagés ») et leur aperçu (« Aucun » puis une pastille par niveau stylé), ses deux lignes atteignables et nommant le niveau ; un vrai clic sur « Mettre à jour » écrit le style dans les
+//      réglages du document (pas dans le modèle) et peint les titres, « Rétablir » le retire, Ctrl+Z défait chaque geste d'un coup (le texte ET le document), Ctrl+Y le remet.
+//   6) Aucune erreur de page.
 // Lancé par run-headless.mjs (groupe Node « headingStylesMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-heading-styles-mouse.mjs
 import { open, stopServer, sleep, center } from './load-lib.mjs';
 
@@ -149,6 +152,67 @@ async function pass(lang, theme, tag) {
     await page.keyboard.press('Control+y');
     await sleep(250);
     check(`${tag} : Ctrl+Y remet la mise à jour`, (await HTML(page)) === updatedHtml);
+
+    console.log(`\n[${tag}] Le bloc des styles partagés, à la vraie souris`);
+    await page.evaluate(() => Templates.updateDocumentSettings({ headingStyles: null }));
+    await setDocument(page);
+    const sharedStart = await HTML(page);
+    const sharedOf = () => page.evaluate(() => JSON.stringify(Templates.getDocumentSetting('headingStyles') || null));
+    const modelOf = () => page.evaluate(() => JSON.stringify(HeadingStyles.stylesOf(EditorCore.getEditor().state.doc)));
+    const expectedShared = JSON.stringify({ 1: { italic: true, color: '#1f4e79', fontSize: '18pt', fontFamily: 'Georgia' } });
+    await openMenu(page);
+    const docUpdate = await reachRow(page, 'v2-btn-heading-style-doc-update');
+    const docReset = await reachRow(page, 'v2-btn-heading-style-doc-reset');
+    check(`${tag} : « Mettre à jour » du bloc partagé nomme le niveau et dit « partagé »`, docUpdate.text === (english ? 'Update shared “Heading 1” to match the selection' : 'Mettre à jour « Titre 1 » (partagé) d’après la sélection') && docUpdate.disabled === 'false', docUpdate);
+    check(`${tag} : « Rétablir » du bloc partagé est grisée tant que le document n'a pas de style à ce niveau`, docReset.text === (english ? 'Restore the original style of shared “Heading 1”' : 'Rétablir le style d’origine de « Titre 1 » (partagé)') && docReset.disabled === 'true' && docReset.cursor === 'not-allowed', docReset);
+    check(`${tag} : les deux lignes partagées tiennent dans le menu, sans défilement de côté, atteignables à la souris, d'au moins 24 px`, docUpdate.insideFlyout && docReset.insideFlyout && docUpdate.sideScroll <= 0 && docUpdate.underPointerIsRow && docReset.underPointerIsRow && docUpdate.height >= 24 && docReset.height >= 24, { docUpdate, docReset });
+    const blocks = await page.evaluate(() => {
+      const pick = (head, levels) => ({ head: document.getElementById(head).textContent, hint: document.getElementById(head).title, levels: document.getElementById(levels).textContent, chips: document.querySelectorAll('#' + levels + ' .pp-hs-chip').length });
+      return { model: pick('v2-heading-scope-model', 'v2-heading-levels-model'), shared: pick('v2-heading-scope-document', 'v2-heading-levels-document') };
+    });
+    check(`${tag} : les deux blocs ont leur intitulé et leur infobulle, et disent « ${english ? 'None' : 'Aucun'} » sans style`,
+      blocks.model.head === (english ? 'Template heading styles' : 'Styles de titres du modèle') && blocks.model.hint === (english ? 'With this template only' : 'Avec ce modèle seulement')
+      && blocks.shared.head === (english ? 'Shared heading styles' : 'Styles de titres partagés') && blocks.shared.hint === (english ? 'For every template in this Grist document, shared with the team' : 'Pour tous les modèles de ce document Grist, partagés avec l’équipe')
+      && blocks.model.levels === (english ? 'None' : 'Aucun') && blocks.shared.levels === (english ? 'None' : 'Aucun') && !blocks.model.chips && !blocks.shared.chips, blocks);
+    const clickedShared = await clickRow(page, 'v2-btn-heading-style-doc-update');
+    const afterShared = await page.evaluate(() => ({
+      focusInEditor: !!document.activeElement && !!document.activeElement.closest('.ProseMirror'), selection: EditorCore.getEditor().state.selection.from,
+    }));
+    check(`${tag} : le premier appui ne remonte pas le menu et laisse la ligne sous le pointeur`, clickedShared.during.underIsRow && clickedShared.during.scrollTop === clickedShared.before.scrollTop, clickedShared);
+    check(`${tag} : le premier clic suffit : le style est dans les réglages du document, pas dans le modèle`, (await sharedOf()) === expectedShared && (await modelOf()) === 'null', { shared: await sharedOf(), model: await modelOf() });
+    check(`${tag} : l'éditeur garde le focus et la sélection`, afterShared.focusInEditor && afterShared.selection > 0, afterShared);
+    const chip = await page.evaluate(() => {
+      const el = document.querySelector('#v2-heading-levels-document .pp-hs-chip');
+      if (!el) return null;
+      el.scrollIntoView({ block: 'nearest' });
+      const r = el.getBoundingClientRect();
+      const f = document.getElementById('v2-heading-flyout').getBoundingClientRect();
+      return { text: el.textContent, color: getComputedStyle(el).color, italic: getComputedStyle(el).fontStyle, inside: r.left >= f.left && r.right <= f.right && r.top >= f.top && r.bottom <= f.bottom, title: el.title, modelChips: document.querySelectorAll('#v2-heading-levels-model .pp-hs-chip').length };
+    });
+    check(`${tag} : le bloc partagé montre le niveau 1 en pastille (sa couleur, son italique, dans le menu), le bloc du modèle reste vide`, !!chip && chip.text === (english ? 'Heading 1' : 'Titre 1') && chip.color === 'rgb(31, 78, 121)' && chip.italic === 'italic' && chip.inside && chip.modelChips === 0 && chip.title.indexOf('Georgia') !== -1, chip);
+    await leaveMenu(page);
+    const sharedOnes = await paintOf(page, `${EDITOR} h1`);
+    const sharedTwo = await paintOf(page, `${EDITOR} h2`);
+    check(`${tag} : les trois titres 1 prennent le style du document (même celui qui était rouge à la main), le titre 2 non`, sharedOnes.length === 3 && sharedOnes.every(p => p.size === '24px' && p.color === 'rgb(31, 78, 121)' && p.italic === 'italic' && p.family === 'Georgia') && sharedTwo[0].italic === 'normal', { sharedOnes, sharedTwo });
+    const sharedUpdatedHtml = await HTML(page);
+    await openMenu(page);
+    const docResetNow = await reachRow(page, 'v2-btn-heading-style-doc-reset');
+    check(`${tag} : « Rétablir » du bloc partagé s'allume (le document a un style à ce niveau)`, docResetNow.disabled === 'false', docResetNow);
+    const clickedReset = await clickRow(page, 'v2-btn-heading-style-doc-reset');
+    await leaveMenu(page);
+    const sharedRestored = await paintOf(page, `${EDITOR} h1`);
+    check(`${tag} : un vrai clic sur « Rétablir » retire le style du document et rend leur aspect d'origine aux titres 1`, clickedReset.during.underIsRow && (await sharedOf()) === 'null' && sharedRestored.every(p => p.size === '32px' && p.italic === 'normal' && p.color !== 'rgb(31, 78, 121)'), { shared: await sharedOf(), sharedRestored });
+    await page.evaluate(() => EditorCore.getEditor().chain().focus().run());
+    await page.keyboard.press('Control+z');
+    await sleep(350);
+    check(`${tag} : un Ctrl+Z défait « Rétablir » : le style du document revient`, (await sharedOf()) === expectedShared && (await HTML(page)) === sharedUpdatedHtml, await sharedOf());
+    await sleep(600);
+    await page.keyboard.press('Control+z');
+    await sleep(350);
+    check(`${tag} : un second Ctrl+Z défait la mise à jour d'un coup : le style du document part ET la mise en forme à la main revient, octet pour octet`, (await sharedOf()) === 'null' && (await HTML(page)) === sharedStart, { shared: await sharedOf(), html: (await HTML(page)).slice(0, 160) });
+    await page.keyboard.press('Control+y');
+    await sleep(350);
+    check(`${tag} : Ctrl+Y remet la mise à jour (le style du document et le texte)`, (await sharedOf()) === expectedShared && (await HTML(page)) === sharedUpdatedHtml);
 
     console.log(`\n[${tag}] Une ligne grisée ne fait rien`);
     await page.evaluate(() => { const ed = EditorCore.getEditor(); let at = -1; ed.state.doc.descendants((n, pos) => { if (at < 0 && n.isText && n.text.indexOf('Un paragraphe') === 0) at = pos; }); ed.chain().focus().setTextSelection(at + 3).run(); });

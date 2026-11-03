@@ -19,6 +19,18 @@
 // « Mettre à jour » écrit le style et retire, des titres du niveau, la mise en forme à la main des réglages que le style porte (sinon la couleur posée sur un titre garderait ce titre hors du style, aujourd'hui et à la
 // prochaine mise à jour), en une seule transaction : un Ctrl+Z défait les deux. Le suivi des modifications n'en fait pas des suggestions (un réglage de modèle, pas une rédaction). Les liens, les commentaires, le gras,
 // l'exposant, l'indice et le reste ne sont pas touchés.
+//
+// Le style a deux portées (demande du 03/11 : « comme pour les couleurs, on doit pouvoir voir les styles liés au modèle et ceux liés au document »), comme les couleurs (js/color-store.js) et les mises en forme
+// gardées (js/format-slots.js) :
+//  - le MODÈLE, comme ci-dessus : le style voyage avec lui ;
+//  - le DOCUMENT Grist, pour tous ses modèles et toute l'équipe : la ligne réservée aux réglages du document de la table des modèles (Templates.getDocumentSetting, clé `headingStyles`, la même forme
+//    { "1": style … "6": style }), sans table de plus. Le changement vaut tout de suite pour les lecteurs et s'écrit dans Grist ensuite ; un refus (droits, connexion) se dit dans le coin d'état et rend l'ancien style.
+// Le style d'un niveau est celui du modèle quand il en a un, à défaut celui du document - niveau par niveau : un modèle qui ne règle que « Titre 1 » prend le « Titre 2 » du document. Le menu Titre montre les deux blocs,
+// « Styles de titres du modèle » et « Styles de titres partagés », chacun avec l'aperçu de ses niveaux et ses deux lignes (mettre à jour, rétablir). Le style du document se lit partout comme celui du modèle : l'éditeur
+// (la décoration suit les réglages du document, `pp:documentSettingsChanged`), la Lecture, l'impression, le diaporama et les exports (`effective`).
+// Mettre à jour le style partagé retire, des titres du niveau de CE modèle, la mise en forme à la main que le style porte - sauf quand le modèle a son propre style de ce niveau, qui l'emporte ici et que le geste ne
+// touche pas. Un seul Ctrl+Z défait le geste (repère HistoryMarkers, domaine « headingDocStyles », joint à la transaction qui retire la mise en forme à la main) ; il ne touche qu'aux niveaux que le geste a changés, et
+// jamais par-dessus un style que quelqu'un d'autre a changé depuis. Comme tout repère, il se perd quand un autre modèle est chargé.
 const HeadingStyles = (function () {
   const ATTR = 'data-level-styles';
   const LEVELS = [1, 2, 3, 4, 5, 6];
@@ -77,15 +89,47 @@ const HeadingStyles = (function () {
     doc.forEach((node, pos) => { if (node.type.name === 'headingNumberingConfig') found = { node, pos }; });
     return found;
   }
+  // Les styles que le MODÈLE écrit lui-même (son nœud de configuration), sans ceux du document : voir `effective`.
   const stylesOf = doc => { const config = configOf(doc); return (config && config.node.attrs.levelStyles) || null; };
+
+  // --- Les styles du document (partagés par tous ses modèles) ---
+
+  // La clé du réglage du document (Templates.getDocumentSetting).
+  const SETTING = 'headingStyles';
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const copy = value => (value ? JSON.parse(JSON.stringify(value)) : value);
+  // Où dire ce qui se passe (le coin d'état de la page, js/main.js) : `status(texte, erreur)`.
+  let host = { status: () => {} };
+  function wire(options) { host = Object.assign({}, host, options); }
+
+  // Les styles de niveau du document, relus d'un JSON qu'une autre version ou une autre personne a pu écrire (`normalize`) ; null quand il n'y en a pas (ou hors d'une page qui lit les modèles). Gardés tant que le
+  // réglage ne change pas, la barre d'outils les relisant à chaque mise à jour de la sélection : un objet à ne jamais modifier.
+  let shared = { key: '', styles: null };
+  function documentStyles() {
+    if (typeof Templates === 'undefined' || typeof Templates.getDocumentSetting !== 'function') return null;
+    const raw = Templates.getDocumentSetting(SETTING);
+    const key = raw === undefined ? '' : JSON.stringify(raw);
+    if (key !== shared.key) shared = { key, styles: normalize(raw) };
+    return shared.styles;
+  }
+
+  // Le style de chaque niveau tel qu'un modèle le montre : le sien (`modelStyles`, ce que son nœud de configuration écrit), à défaut celui du document. null quand aucun niveau n'a de style. Un objet à ne pas modifier.
+  function effective(modelStyles) {
+    const common = documentStyles();
+    if (!common) return modelStyles || null;
+    return modelStyles ? Object.assign({}, common, modelStyles) : common;
+  }
+  const effectiveOf = doc => effective(stylesOf(doc));
+  // Le point de départ du style d'un niveau qu'on met à jour : celui que le titre montre déjà (le style du modèle, à défaut celui du document), pour que le style neuf garde son aspect et y ajoute ce que la sélection pose.
+  const baseOf = (own, level) => (own && own[level]) || (documentStyles() || {})[level] || null;
 
   // --- Le HTML résolu (Lecture, impression, diaporama, exports) ---
 
-  // Pose sur chaque <h1> à <h6> de `root` le style de son niveau, d'après le nœud de configuration que `root` porte à sa racine ; rend le nombre de titres mis en forme. Un réglage que le titre porte déjà en ligne
-  // (son `text-align`) n'est pas remplacé.
+  // Pose sur chaque <h1> à <h6> de `root` le style de son niveau, d'après le nœud de configuration que `root` porte à sa racine et les styles du document ; rend le nombre de titres mis en forme. Un réglage que le titre
+  // porte déjà en ligne (son `text-align`) n'est pas remplacé.
   function apply(root) {
     const config = root.querySelector(':scope > .heading-numbering-config');
-    const styles = config ? normalize(config.getAttribute(ATTR)) : null;
+    const styles = effective(config ? normalize(config.getAttribute(ATTR)) : null);
     if (!styles) return 0;
     let count = 0;
     root.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading) => {
@@ -112,7 +156,7 @@ const HeadingStyles = (function () {
     const { Plugin, PluginKey, Decoration, DecorationSet } = libs;
     const key = new PluginKey('headingStyles');
     function decorationsOf(doc) {
-      const styles = stylesOf(doc);
+      const styles = effectiveOf(doc);
       if (!styles) return DecorationSet.empty;
       const found = [];
       doc.descendants((node, pos) => {
@@ -134,9 +178,20 @@ const HeadingStyles = (function () {
           key,
           state: {
             init: (config, state) => decorationsOf(state.doc),
-            apply: (tr, set, oldState, newState) => (tr.docChanged ? decorationsOf(newState.doc) : set),
+            // Le texte change, ou les styles du document (la méta du plugin, voir `view`) : les décorations se refont.
+            apply: (tr, set, oldState, newState) => (tr.docChanged || tr.getMeta(key) ? decorationsOf(newState.doc) : set),
           },
           props: { decorations: state => key.getState(state) },
+          // Les styles du document changent (une écriture d'ici ou d'une autre personne, le retour arrière d'une écriture refusée, un Annuler) : l'éditeur les montre tout de suite. Une transaction qui ne touche ni au texte
+          // ni à l'historique ni à l'enregistrement automatique, seulement aux décorations.
+          view: (view) => {
+            const onSettings = () => {
+              if (view.isDestroyed) return;
+              view.dispatch(view.state.tr.setMeta(key, 'refresh').setMeta('addToHistory', false).setMeta('preventUpdate', true));
+            };
+            document.addEventListener('pp:documentSettingsChanged', onSettings);
+            return { destroy: () => document.removeEventListener('pp:documentSettingsChanged', onSettings) };
+          },
         })];
       },
     });
@@ -232,16 +287,111 @@ const HeadingStyles = (function () {
     else tr.insert(0, state.schema.nodes.headingNumberingConfig.create(attrs));
   }
 
-  // L'état des deux lignes du menu Titre : `level` (celui du titre visé, ou null), `locked` (la clé de la raison du grisage de « Mettre à jour »), `resetLocked` (celle de « Rétablir »).
-  function status(editor) {
-    const found = target(editor.state);
-    if (found.locked) return { level: null, locked: found.locked, resetLocked: found.locked };
-    const styles = stylesOf(editor.state.doc);
-    return { level: found.level, locked: null, resetLocked: styles && styles[found.level] ? null : 'headingStyle.none' };
+  // --- Le geste sur le style partagé, dans Ctrl + Z ---
+
+  // Écrit les styles du document dans ses réglages (un objet sans niveau retire la clé). Le changement vaut tout de suite pour les lecteurs ; la promesse rend vrai quand Grist l'a écrit, faux sinon (droits, connexion) :
+  // le coin d'état le dit, et les lecteurs retrouvent les derniers styles que Grist a confirmés.
+  // `failedKey` : le texte du coin d'état quand Grist refuse, ou une fonction qui le donne au moment du refus (le geste qui a aussi retiré de la mise en forme à la main des titres le dit).
+  function writeShared(styles, failedKey) {
+    const saved = Templates.updateDocumentSettings({ [SETTING]: normalize(styles) });
+    Promise.resolve(saved).then((ok) => {
+      if (ok === false) host.status(I18n.t(typeof failedKey === 'function' ? failedKey() : failedKey || 'headingStyle.status.documentFailed'), true);
+    });
+    return saved;
   }
 
-  // Les deux lignes du menu à l'état de la sélection : libellé avec le niveau du titre, grisées par aria-disabled et `v2-hover-row-disabled` (comme les autres lignes du menu) avec leur raison pour info-bulle, sorties de
-  // l'ordre des tabulations quand elles sont grisées.
+  // Le repère de Ctrl + Z du style partagé (js/history-markers.js) : les styles du document avant et après le geste. Annuler et Rétablir ne rendent que les niveaux que le geste a changés, et seulement tant que le
+  // document les a encore tels que le geste les a laissés - jamais par-dessus le changement de quelqu'un d'autre (le coin d'état le dit).
+  const DOMAIN = 'headingDocStyles';
+  const sharedSnapshot = () => copy(documentStyles()) || {};
+  function restoreShared(next, prev) {
+    const current = sharedSnapshot();
+    const merged = Object.assign({}, current);
+    let changed = false;
+    let moved = false;
+    LEVELS.forEach((level) => {
+      if (same(next[level], prev[level]) || same(current[level], next[level])) return;
+      if (!same(current[level], prev[level])) { moved = true; return; }
+      if (next[level]) merged[level] = next[level]; else delete merged[level];
+      changed = true;
+    });
+    // Après la transaction de l'historique qui nous appelle : le texte qu'elle rend fait dire au coin d'état l'état de l'enregistrement (js/main.js:updateSaveStatus), qui couvrirait ce message.
+    if (moved) Promise.resolve().then(() => host.status(I18n.t('headingStyle.status.changedSince'), true));
+    if (changed) writeShared(merged);
+  }
+  if (typeof HistoryMarkers !== 'undefined') HistoryMarkers.define(DOMAIN, { read: sharedSnapshot, write: restoreShared });
+  // Le geste, rangé dans l'historique de l'éditeur : joint à la transaction qui retire la mise en forme à la main des titres quand il en a ouvert une, sinon un événement à lui. Un seul Ctrl + Z dans les deux cas.
+  const trackShared = work => (typeof HistoryMarkers !== 'undefined' ? HistoryMarkers.track(DOMAIN, work) : work());
+
+  // --- Les lignes du menu Titre ---
+
+  // L'état des lignes du menu Titre. Pour le modèle : `level` (celui du titre visé, ou null), `locked` (la clé de la raison du grisage de « Mettre à jour »), `resetLocked` (celle de « Rétablir »). Pour le style partagé,
+  // les deux mêmes dans `document` : « Rétablir » n'a rien à retirer quand le document n'a pas de style à ce niveau.
+  function status(editor) {
+    const found = target(editor.state);
+    if (found.locked) return { level: null, locked: found.locked, resetLocked: found.locked, document: { locked: found.locked, resetLocked: found.locked } };
+    const own = stylesOf(editor.state.doc);
+    const common = documentStyles();
+    return {
+      level: found.level,
+      locked: null,
+      resetLocked: own && own[found.level] ? null : 'headingStyle.none',
+      document: { locked: null, resetLocked: common && common[found.level] ? null : 'headingStyle.document.none' },
+    };
+  }
+
+  // L'aperçu d'un niveau dans l'intitulé de son bloc : sa police, sa couleur, son italique, son souligné et son surlignage, sur le blanc de la page, à une taille de menu (la taille du style est dite dans l'infobulle).
+  function chipLook(style) {
+    const found = [];
+    if (style.fontFamily) found.push('font-family: ' + style.fontFamily);
+    if (style.color) found.push('color: ' + style.color);
+    if (style.italic) found.push('font-style: italic');
+    const lines = [style.underline && 'underline', style.strike && 'line-through'].filter(Boolean);
+    if (lines.length) found.push('text-decoration: ' + lines.join(' '));
+    if (style.backgroundColor) found.push('background-color: ' + style.backgroundColor);
+    return found.join('; ');
+  }
+  // Le style d'un niveau en mots, pour l'infobulle de son aperçu : « Titre 1 · Georgia · 18pt · #1f4e79 · Italique », et ce qui le lie à l'autre bloc (`note` : `overrides` pour le style du modèle qui remplace celui du
+  // document, `masked` pour celui du document qu'un style du modèle remplace).
+  function describe(entry) {
+    const style = entry.style;
+    const family = style.fontFamily ? style.fontFamily.split(',')[0].replace(/["']/g, '').trim() : '';
+    const parts = [
+      I18n.t('heading.level' + entry.level), family, style.fontSize, style.color,
+      style.italic && I18n.t('fmt.italic'), style.underline && I18n.t('fmt.underline'), style.strike && I18n.t('fmt.strike'),
+      style.textAlign && I18n.t('headingStyle.align.' + style.textAlign),
+    ].filter(Boolean);
+    return parts.join(' · ') + (entry.note ? ' — ' + I18n.t('headingStyle.note.' + entry.note) : '');
+  }
+  function chipOf(entry) {
+    const chip = Dom.el('span', 'pp-hs-chip' + (entry.note === 'masked' ? ' is-masked' : ''), I18n.t('heading.level' + entry.level));
+    const look = chipLook(entry.style);
+    if (look) chip.setAttribute('style', look);
+    chip.title = describe(entry);
+    return chip;
+  }
+  // Redessine la ligne d'aperçu d'un bloc, seulement quand ce qu'elle montre (la langue, les niveaux et leurs styles) a changé : le menu garde son dessin d'une mise à jour de la barre à l'autre.
+  function drawLevels(box, entries) {
+    if (!box) return;
+    const signature = JSON.stringify([I18n.getLang(), entries]);
+    if (box.dataset.drawn === signature) return;
+    box.dataset.drawn = signature;
+    box.textContent = '';
+    box.append(...(entries.length ? entries.map(chipOf) : [Dom.el('span', 'pp-hs-none', I18n.t('headingStyle.scope.none'))]));
+  }
+  // Les niveaux à montrer de chaque bloc : ceux du modèle (`overrides` quand le document a aussi un style de ce niveau) et ceux du document (`masked` quand le modèle a le sien : il l'emporte ici).
+  function levelsOf(doc) {
+    const own = stylesOf(doc) || {};
+    const common = documentStyles() || {};
+    return {
+      model: LEVELS.filter(level => own[level]).map(level => ({ level, style: own[level], note: common[level] ? 'overrides' : '' })),
+      document: LEVELS.filter(level => common[level]).map(level => ({ level, style: common[level], note: own[level] ? 'masked' : '' })),
+    };
+  }
+
+  // Les lignes du menu à l'état de la sélection : libellé avec le niveau du titre, grisées par aria-disabled et `v2-hover-row-disabled` (comme les autres lignes du menu) avec leur raison pour info-bulle, sorties de
+  // l'ordre des tabulations quand elles sont grisées. `rows` : { update, reset } pour le modèle, { documentUpdate, documentReset } pour le style partagé, et les éléments des deux blocs - { modelScope, documentScope }
+  // (intitulés : leur infobulle dit où vit chaque style) et { modelLevels, documentLevels } (l'aperçu des niveaux qui ont un style). Chaque élément est facultatif.
   function syncRows(editor, rows) {
     if (!editor || !rows) return;
     const s = status(editor);
@@ -256,17 +406,29 @@ const HeadingStyles = (function () {
     };
     setRow(rows.update, s.locked, 'headingStyle.update');
     setRow(rows.reset, s.resetLocked, 'headingStyle.reset');
+    setRow(rows.documentUpdate, s.document.locked, 'headingStyle.document.update');
+    setRow(rows.documentReset, s.document.resetLocked, 'headingStyle.document.reset');
+    [[rows.modelScope, 'headingStyle.scope.model.hint'], [rows.documentScope, 'headingStyle.scope.document.hint']].forEach(([head, hint]) => {
+      if (head && head.title !== I18n.t(hint)) head.title = I18n.t(hint);
+    });
+    if (rows.modelLevels || rows.documentLevels) {
+      const levels = levelsOf(editor.state.doc);
+      drawLevels(rows.modelLevels, levels.model);
+      drawLevels(rows.documentLevels, levels.document);
+    }
   }
 
-  // « Mettre à jour « Titre N » d'après la sélection » : une seule transaction (un Ctrl+Z la défait d'un coup). Faux, sans rien changer, quand la ligne est grisée, que l'éditeur n'est pas modifiable ou que le style
-  // et les titres sont déjà tels que la sélection les donne.
-  function update(editor) {
+  // --- Les gestes ---
+
+  // « Mettre à jour « Titre N » d'après la sélection » : le style de CE modèle. Une seule transaction (un Ctrl+Z la défait d'un coup). Faux, sans rien changer, quand la ligne est grisée, que l'éditeur n'est pas modifiable
+  // ou que le style et les titres sont déjà tels que la sélection les donne. Le point de départ est le style que le niveau montre déjà (celui du modèle, à défaut celui du document : `baseOf`).
+  function updateModel(editor) {
     if (!editor || !editor.isEditable) return false;
     const { state, view } = editor;
     const found = target(state);
     if (found.locked) return false;
     const styles = stylesOf(state.doc) || {};
-    const captured = captureStyle(state, found.heading, styles[found.level] || null);
+    const captured = captureStyle(state, found.heading, baseOf(styles, found.level));
     if (!captured) return false;
     const tr = state.tr;
     stripDirect(tr, state.doc, found.level, captured.set);
@@ -277,9 +439,45 @@ const HeadingStyles = (function () {
     return true;
   }
 
-  // « Rétablir le style d'origine » : retire le style du niveau du titre visé (la taille et le poids de la balise reviennent). Les titres n'ont plus de mise en forme à la main des réglages du style : ils la perdent à la
-  // mise à jour. Une seule transaction.
-  function reset(editor) {
+  // « Mettre à jour « Titre N » (partagé) d'après la sélection » : le style du niveau, écrit dans les réglages du document - tous ses modèles et toute l'équipe le prennent. Les titres de ce modèle perdent la mise en forme à
+  // la main des réglages que la sélection pose, sauf quand le modèle a son propre style de ce niveau : il l'emporte ici, rien n'y change. Un seul Ctrl + Z défait le geste. Faux, sans rien changer, quand la ligne est grisée,
+  // que l'éditeur n'est pas modifiable ou que le style partagé et les titres sont déjà tels que la sélection les donne.
+  function updateShared(editor) {
+    if (!editor || !editor.isEditable) return false;
+    const { state, view } = editor;
+    const found = target(state);
+    if (found.locked) return false;
+    const own = stylesOf(state.doc) || {};
+    const common = documentStyles() || {};
+    const captured = captureStyle(state, found.heading, baseOf(own, found.level));
+    if (!captured) return false;
+    const next = Object.assign({}, common, { [found.level]: captured.style });
+    const changesShared = !same(next, common);
+    const masked = !!own[found.level];
+    // Si Grist refuse le style, les titres ont déjà perdu leur mise en forme à la main : le coin d'état dit que Ctrl + Z la rend.
+    let stripped = false;
+    const done = trackShared(() => {
+      if (changesShared) writeShared(next, () => (stripped ? 'headingStyle.status.documentFailedStripped' : 'headingStyle.status.documentFailed'));
+      if (masked) return changesShared;
+      const tr = editor.state.tr;
+      stripDirect(tr, editor.state.doc, found.level, captured.set);
+      if (!tr.docChanged) return changesShared;
+      stripped = true;
+      view.dispatch(TrackChanges.skipTracking(tr));
+      return true;
+    });
+    if (!done) return false;
+    view.focus();
+    host.status(I18n.t(masked ? 'headingStyle.status.documentMasked' : 'headingStyle.status.documentUpdated', { level: found.level }), false);
+    return true;
+  }
+
+  // « Mettre à jour » : `scope` 'document' pour le style partagé, le modèle sinon.
+  function update(editor, scope) { return scope === 'document' ? updateShared(editor) : updateModel(editor); }
+
+  // « Rétablir le style d'origine » du modèle : retire le style du niveau du titre visé (la taille et le poids de la balise reviennent, ou le style du document s'il en a un). Les titres n'ont plus de mise en forme à la
+  // main des réglages du style : ils la perdent à la mise à jour. Une seule transaction.
+  function resetModel(editor) {
     if (!editor || !editor.isEditable) return false;
     const { state, view } = editor;
     const found = target(state);
@@ -294,12 +492,29 @@ const HeadingStyles = (function () {
     return true;
   }
 
+  // « Rétablir le style d'origine » du style partagé : retire le style du niveau du titre visé des réglages du document. Les titres des modèles qui n'ont pas le leur reprennent l'aspect de leur balise. Un seul Ctrl + Z.
+  function resetShared(editor) {
+    if (!editor || !editor.isEditable) return false;
+    const found = target(editor.state);
+    const common = documentStyles();
+    if (found.locked || !common || !common[found.level]) return false;
+    const next = Object.assign({}, common);
+    delete next[found.level];
+    trackShared(() => writeShared(next));
+    editor.view.focus();
+    host.status(I18n.t('headingStyle.status.documentReset', { level: found.level }), false);
+    return true;
+  }
+
+  // « Rétablir » : `scope` 'document' pour le style partagé, le modèle sinon.
+  function reset(editor, scope) { return scope === 'document' ? resetShared(editor) : resetModel(editor); }
+
   // --- La barre d'outils ---
 
-  // Le style du titre où est le curseur (celui de son niveau), ou null hors d'un titre ou sans style.
+  // Le style du titre où est le curseur (celui de son niveau : le style du modèle, à défaut celui du document), ou null hors d'un titre ou sans style.
   function styleAt(state) {
     const { $from } = state.selection;
-    const styles = $from.parent.type.name === 'heading' ? stylesOf(state.doc) : null;
+    const styles = $from.parent.type.name === 'heading' ? effectiveOf(state.doc) : null;
     return styles ? styles[$from.parent.attrs.level] || null : null;
   }
 
@@ -314,6 +529,7 @@ const HeadingStyles = (function () {
   }
 
   return {
-    ATTR, LEVELS, normalize, serialize, declarations, apply, createExtension, captureStyle, styleOfMarks, configOf, stylesOf, status, syncRows, update, reset, styleAt, withStyleAt,
+    ATTR, SETTING, LEVELS, normalize, serialize, declarations, apply, createExtension, captureStyle, styleOfMarks, configOf, stylesOf, documentStyles, effective, effectiveOf, wire, status, syncRows, update, reset, styleAt,
+    withStyleAt,
   };
 })();

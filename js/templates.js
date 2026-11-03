@@ -330,13 +330,27 @@ const Templates = (function () {
   // qui a croisé une écriture de ce widget (partie avant elle, ou finie pendant) montre un état d'avant : elle n'est pas adoptée, la suivante le sera.
   function adoptDocumentSettings(data, at, epoch) {
     if (epoch !== settingsEpoch || settingsPending > 0) return;
+    const before = JSON.stringify(documentSettings);
     settingsRowId = at === -1 ? null : data.id[at];
     settingsSaved = at === -1 ? {} : safeParseObject(data.Contenu ? data.Contenu[at] : null);
     documentSettings = settingsSaved;
+    if (JSON.stringify(documentSettings) !== before) announceSettings();
+  }
+
+  // Prévient les modules qui montrent un réglage du document (le style des titres, js/heading-styles.js) qu'il a pu changer : une écriture d'ici, le retour arrière d'une écriture refusée, une lecture qui
+  // apporte ce qu'une autre personne a écrit. Rien hors d'une page (les essais de ce module seul).
+  function announceSettings() {
+    if (typeof document !== 'undefined' && document && typeof document.dispatchEvent === 'function' && typeof CustomEvent === 'function') document.dispatchEvent(new CustomEvent('pp:documentSettingsChanged'));
   }
 
   // Une copie des réglages du document ({} tant que rien n'est écrit ou lu).
   function getDocumentSettings() { return JSON.parse(JSON.stringify(documentSettings)); }
+
+  // Une copie d'UN réglage du document (undefined quand il n'est pas écrit) : la lecture légère de ce que la barre d'outils relit à chaque mise à jour de la sélection.
+  function getDocumentSetting(key) {
+    const value = documentSettings[key];
+    return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+  }
 
   // Fusionne `patch` ({ clé: valeur }, une valeur null ou absente retire la clé) dans les réglages du document et les écrit. Le changement vaut tout
   // de suite pour getDocumentSettings ; la promesse rend vrai quand Grist l'a écrit, faux sinon (table refusée, droit d'écriture absent, Grist
@@ -347,6 +361,7 @@ const Templates = (function () {
     Object.keys(patch).forEach(key => { if (patch[key] == null) delete next[key]; else next[key] = patch[key]; });
     if (JSON.stringify(next) === JSON.stringify(documentSettings)) return Promise.resolve(true);
     documentSettings = next;
+    announceSettings();
     settingsPending++;
     settingsEpoch++;
     settingsQueue = settingsQueue || GristAPI.createWriteQueue();
@@ -365,7 +380,7 @@ const Templates = (function () {
       settingsPending--;
       settingsEpoch++;
       if (!GristAPI.isTablesDeclined(e)) console.warn('[Templates] réglages du document non enregistrés', e);
-      if (settingsPending === 0) documentSettings = settingsSaved;
+      if (settingsPending === 0) { documentSettings = settingsSaved; announceSettings(); }
       return false;
     });
   }
@@ -947,6 +962,6 @@ const Templates = (function () {
     loadAll, getCached, byId, openableById, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, snapshotRow, restoreRow, restoreVersion, sameName, uniqueName,
     isOpenableType, isKnownType, declareExtensionType, unavailableOf, unavailableText,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
-    sameDateModif, getLoadedChars, TABLE_NAME, getDocumentSettings, updateDocumentSettings, readPdfPassword, writePdfPassword, PDF_PASSWORD_LOCATION,
+    sameDateModif, getLoadedChars, TABLE_NAME, getDocumentSettings, getDocumentSetting, updateDocumentSettings, readPdfPassword, writePdfPassword, PDF_PASSWORD_LOCATION,
   };
 })();

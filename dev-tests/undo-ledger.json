@@ -20,6 +20,8 @@
     "#v2-heading-flyout span[level=*]": {"class": "model", "start": "para"},
     "#v2-btn-heading-style-update": {"class": "model", "start": "heading", "setup": [["control", "#v2-btn-align-center"]]},
     "#v2-btn-heading-style-reset": {"class": "model", "start": "heading", "setup": [["control", "#v2-btn-align-center"], ["control", "#v2-btn-heading-style-update"]]},
+    "#v2-btn-heading-style-doc-update": {"class": "covered", "cases": ["headingStyles", "headingStylesMouse"], "note": "Mettre à jour le style de titre PARTAGÉ (les réglages du document, hors du modèle que le balayage compare) : UN Ctrl + Z défait le style du document ET la mise en forme à la main retirée des titres (le repère « headingDocStyles » de HistoryMarkers est joint à la transaction), Ctrl + Y le remet ; il ne touche qu'aux niveaux du geste, jamais par-dessus le changement d'une autre personne"},
+    "#v2-btn-heading-style-doc-reset": {"class": "covered", "cases": ["headingStyles", "headingStylesMouse"], "note": "Rétablir le style de titre PARTAGÉ (retiré des réglages du document) : UN Ctrl + Z le remet, Ctrl + Y le retire, comme la mise à jour"},
     "#v2-numbering-seg button[num=none]": {"class": "model", "start": "para", "setup": [["control", "#v2-numbering-seg button[num=numeric]"]]},
     "#v2-numbering-seg button[num=*]": {"class": "model", "start": "para"},
     "#v2-btn-bold": {"class": "model", "start": "para"},

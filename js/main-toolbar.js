@@ -322,8 +322,18 @@ const MainToolbar = (function () {
     setDisabled('v2-btn-accept-all', !hasPending);
     setDisabled('v2-btn-reject-all', !hasPending);
     syncLiveRow();
-    // « Mettre à jour « Titre N » d'après la sélection » et « Rétablir le style d'origine » (menu Titre) : le niveau du titre où est le curseur dans leur libellé, grisées avec leur raison hors d'un titre du texte.
-    HeadingStyles.syncRows(editor, { update: byId('v2-btn-heading-style-update'), reset: byId('v2-btn-heading-style-reset') });
+    // Les styles de titres du menu Titre, ceux du modèle et ceux du document : « Mettre à jour « Titre N » d'après la sélection » et « Rétablir le style d'origine » de chaque bloc (le niveau du titre où est le curseur dans leur
+    // libellé, grisées avec leur raison hors d'un titre du texte), et l'aperçu des niveaux qui ont un style.
+    HeadingStyles.syncRows(editor, {
+      update: byId('v2-btn-heading-style-update'),
+      reset: byId('v2-btn-heading-style-reset'),
+      documentUpdate: byId('v2-btn-heading-style-doc-update'),
+      documentReset: byId('v2-btn-heading-style-doc-reset'),
+      modelScope: byId('v2-heading-scope-model'),
+      documentScope: byId('v2-heading-scope-document'),
+      modelLevels: byId('v2-heading-levels-model'),
+      documentLevels: byId('v2-heading-levels-document'),
+    });
     // Les mises en forme gardées (menu du pinceau) : le menu se redessine quand ses places, la langue ou le droit de peindre la sélection changent.
     FormatSlotsMenu.sync(editor);
     // « Garder avec le suivant » (menu Alignement) : cochée quand les paragraphes visés le portent, grisée avec sa raison hors du texte courant.
@@ -826,14 +836,17 @@ const MainToolbar = (function () {
         });
       });
     }
-    // « Mettre à jour « Titre N » d'après la sélection » et « Rétablir le style d'origine » (js/heading-styles.js) : au clic comme au clavier (Entrée, Espace) ; sans effet quand la ligne est grisée (hors
-    // d'un titre, ou sans style à rétablir) ou que le groupe l'est (e-mail, macro-modèle, lecture seule, Lecture).
-    [['v2-btn-heading-style-update', 'update'], ['v2-btn-heading-style-reset', 'reset']].forEach(([id, action]) => {
+    // « Mettre à jour « Titre N » d'après la sélection » et « Rétablir le style d'origine » (js/heading-styles.js), pour le modèle puis pour le document (styles partagés) : au clic comme au clavier (Entrée, Espace) ;
+    // sans effet quand la ligne est grisée (hors d'un titre, ou sans style à rétablir) ou que le groupe l'est (e-mail, macro-modèle, lecture seule, Lecture).
+    [
+      ['v2-btn-heading-style-update', 'update'], ['v2-btn-heading-style-reset', 'reset'],
+      ['v2-btn-heading-style-doc-update', 'update', 'document'], ['v2-btn-heading-style-doc-reset', 'reset', 'document'],
+    ].forEach(([id, action, scope]) => {
       const row = byId(id);
       if (!row) return;
       const run = () => {
         if (row.getAttribute('aria-disabled') === 'true' || row.closest('.v2-hf-locked, .pp-access-locked')) return;
-        HeadingStyles[action](editor);
+        HeadingStyles[action](editor, scope);
       };
       row.addEventListener('mousedown', event => event.preventDefault());
       row.addEventListener('click', run);

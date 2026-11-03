@@ -184,12 +184,12 @@ const SlideTheme = (function () {
 
   // --- Les sorties ---
 
-  // Les styles des niveaux de titre que porte le HTML (js/heading-styles.js) : leur police et leur couleur l'emportent sur celles du thème.
+  // Les styles des niveaux de titre que porte le HTML (js/heading-styles.js), ceux du modèle et à défaut ceux du document : leur police et leur couleur l'emportent sur celles du thème.
   // `root` est un fragment de gabarit : `:scope` n'y désigne rien, le nœud de configuration se cherche parmi ses enfants.
   function levelStylesOf(root) {
     if (typeof HeadingStyles === 'undefined') return {};
     const config = Array.from(root.children).find(el => el.classList.contains('heading-numbering-config'));
-    return (config && HeadingStyles.normalize(config.getAttribute(HeadingStyles.ATTR))) || {};
+    return HeadingStyles.effective(config ? HeadingStyles.normalize(config.getAttribute(HeadingStyles.ATTR)) : null) || {};
   }
   // Le HTML d'une présentation (celui de SlidesEntry.outputHtml) avec la police et la couleur du thème sur chaque paragraphe et chaque titre qui n'en a pas : le texte de l'éditeur, d'une liste, d'une case ou d'un cadre
   // est toujours un paragraphe ou un titre. Un bloc de code, une légende et un bloc qui porte déjà une police ou une couleur n'y sont pas touchés ; sans thème, le HTML revient tel quel.

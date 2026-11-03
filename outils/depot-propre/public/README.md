@@ -93,7 +93,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 
 **Mise en page**
 - Mise en forme complète : gras, italique, souligné, barré, exposant et indice, couleurs et surlignage, six
-  polices en tailles réelles de 8 à 72 points, alignement, retraits et tabulations (Tab, Maj+Tab), titres numérotés, un style par niveau de titre pris d'après la sélection,
+  polices en tailles réelles de 8 à 72 points, alignement, retraits et tabulations (Tab, Maj+Tab), titres numérotés, un style par niveau de titre pris d'après la sélection (celui du modèle, et celui de tout le document Grist, partagé par tous ses modèles : les deux sont visibles dans le menu « Titre »),
   pinceau de mise en forme (son menu garde trois mises en forme dans le modèle et trois partagées par tous les modèles du document, renommables)
 - Interligne, espace avant, espace après, retrait à gauche et retrait de la première ligne de chaque paragraphe (« Paragraphe… », menu Alignement), repris dans la Lecture, le PDF, le Word, le PowerPoint et le HTML
 - Listes à puces, numérotées et de tâches à cocher ; le rond, le tiret ou le numéro prend la couleur et la taille du début du texte de son point
@@ -574,7 +574,7 @@ GitHub Pages, with no backend and no build step.
 
 **Layout**
 - Full formatting: bold, italic, underline, strikethrough, superscript and subscript, colors and highlighting,
-  six fonts in real point sizes from 8 to 72, alignment, indents and tabs (Tab, Shift+Tab), numbered headings, a style per heading level taken from the selection, format painter (its menu keeps three formats in the template and three shared by every template of the document, renamable)
+  six fonts in real point sizes from 8 to 72, alignment, indents and tabs (Tab, Shift+Tab), numbered headings, a style per heading level taken from the selection (the template's own, and one for the whole Grist document shared by all its templates: both are shown in the Heading menu), format painter (its menu keeps three formats in the template and three shared by every template of the document, renamable)
 - Line spacing, space before, space after, left indent and first-line indent for each paragraph ("Paragraph…", Alignment menu), carried into Reading mode, PDF, Word, PowerPoint and HTML
 - Bullet lists, numbered lists and checkable task lists; the bullet, dash or number takes the color and size of the start of its item's text
 - Tables (merging and splitting cells, cell background, caption), two-column zones

@@ -7,6 +7,11 @@
 //  - Ctrl+Z et Ctrl+Y : une mise à jour (style et titres retouchés) ou un rétablissement est UN pas ; le suivi des modifications n'en fait pas des suggestions ;
 //  - le même style partout : la Lecture, l'impression, le PDF (le numéro du titre compris), le Word, le HTML ; un document sans style sort comme avant ; un texte JSON abîmé est ignoré ;
 //  - le style suit le modèle : le HTML enregistré le porte, changer la numérotation des titres le garde.
+//  - le style DU DOCUMENT (lot 3, demande d'Antoine du 03/11 : « comme pour les couleurs on doit pouvoir voir les styles liés aux modèles et ceux liés au document ») : la clé `headingStyles` des réglages du
+//    document (ligne réservée de la table des modèles) ; un modèle sans style de ce niveau prend celui du document, niveau par niveau ; l'éditeur, la Lecture, le PDF, le Word et le diaporama le montrent, et il
+//    n'est écrit dans aucun modèle ; « Mettre à jour » et « Rétablir » du bloc partagé : un seul pas de Ctrl+Z, la mise en forme à la main retirée sauf dans un modèle qui a son propre style du niveau, Grist qui
+//    reçoit l'écriture, un refus qui se dit, une autre personne qui change le style (l'éditeur se met à jour, Ctrl+Z n'écrase pas son changement) ; la mise à jour du modèle part du style que le titre montre ;
+//    le menu montre les deux blocs (intitulé et infobulle, aperçu des niveaux, « Aucun », le style du document qu'un style du modèle remplace), en français et en anglais.
 // Le vrai clic à 700x400 (le menu au survol, les lignes atteignables, clair et sombre, français et anglais) est dans dev-tests/verify-heading-styles-mouse.mjs.
 (function () {
   const cases = [];
@@ -439,6 +444,395 @@
       const run = h.docxParagraphs(parts.doc).filter(p => p.text)[0].runs[0];
       if (!(run.text === '1) ' && run.bold && run.sizeHalfPt === 48 && run.color === 'auto' && !run.italics && !run.underline && !run.font)) bad.push('marqueur Word : ' + JSON.stringify(run));
       return result(bad);
+    });
+
+  // === Le style du document (lot 3) ===
+  const TABLE = 'Publipostage_Modeles';
+  const stub = () => window.__gristStub;
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const statusText = () => byId('status-msg').textContent;
+  const OCEAN = { name: 'Océan', colors: { bg: '#ffffff', text: '#1e2a35', title: '#0b3c5d', accent1: '#1d70b8', accent2: '#00a3a3', accent3: '#5aa9e6', accent4: '#f2a541', accent5: '#6c8ead', accent6: '#3bb273' }, fonts: { title: 'Georgia', body: 'Calibri' } };
+  // La ligne réservée aux réglages du document dans la table des modèles (ce que Grist garde) : ses lignes, une au plus.
+  const settingsRows = () => { const t = stub().state.rows[TABLE]; return t && t.TypeModele ? t.id.filter((id, i) => t.TypeModele[i] === 'reglages').map(id => stub().getRow(TABLE, id)) : []; };
+  const settingsJson = () => { const rows = settingsRows(); try { return rows.length ? JSON.parse(rows[0].Contenu) : null; } catch (e) { return 'illisible'; } };
+  async function resetDocumentSettings() {
+    if (!settingsRows().length && Templates.getDocumentSetting('headingStyles') === undefined) return;
+    for (const row of settingsRows()) await stub().applyUserActions([['RemoveRecord', TABLE, row.id]]);
+    await Templates.loadAll();
+  }
+  // Attend que Grist ait reçu l'écriture des réglages du document.
+  async function written(check) {
+    for (let i = 0; i < 40; i += 1) { if (check(settingsJson())) return true; await sleep(50); }
+    return false;
+  }
+  async function docSetup(h, markup) {
+    await h.resetEditor();
+    await resetDocumentSettings();
+    ActionHistory.reset();
+    if (markup) await load(markup);
+  }
+  async function docCleanup(h) {
+    I18n.setLang('fr');
+    await h.resetEditor();
+    await resetDocumentSettings();
+    ActionHistory.reset();
+  }
+  const sharedOf = () => Templates.getDocumentSetting('headingStyles');
+  const SHARED = { 1: { color: '#1f4e79', fontSize: '18pt', fontFamily: 'Georgia' }, 2: { italic: true } };
+  // Toutes les lignes et les éléments des deux blocs du menu Titre.
+  const allRows = () => ({
+    update: updateRow(), reset: resetRow(), documentUpdate: byId('v2-btn-heading-style-doc-update'), documentReset: byId('v2-btn-heading-style-doc-reset'),
+    modelScope: byId('v2-heading-scope-model'), documentScope: byId('v2-heading-scope-document'), modelLevels: byId('v2-heading-levels-model'), documentLevels: byId('v2-heading-levels-document'),
+  });
+  const chips = box => Array.from(box.querySelectorAll('.pp-hs-chip'));
+  const undoOnce = async () => { press('z'); await sleep(150); };
+  const redoOnce = async () => { press('y'); await sleep(150); };
+
+  add('hs_doc_a_shared_style_reaches_a_model_without_its_own_level_by_level_in_the_editor_the_reader_and_the_exports',
+    'Le style écrit dans les réglages du document est montré par l\'éditeur, la Lecture, le PDF et le Word d\'un modèle qui n\'en a pas, sans rien écrire dans ce modèle ; un modèle qui a son propre style du niveau 1 le garde (niveau par niveau) et prend le niveau 2 du document',
+    async (h) => {
+      try {
+        await docSetup(h, '<h1>Alpha</h1><h2>Beta</h2><p>texte</p>');
+        const bad = [];
+        const before = Editor.getHTML();
+        if (!(await Templates.updateDocumentSettings({ headingStyles: SHARED }))) bad.push('les réglages n\'ont pas été écrits');
+        await sleep(100);
+        const one = paint(headings(1)[0]);
+        const two = paint(headings(2)[0]);
+        if (one.size !== '24px' || one.color !== 'rgb(31, 78, 121)' || !/Georgia/.test(one.family)) bad.push('éditeur, titre 1 : ' + JSON.stringify(one));
+        if (two.italic !== 'italic') bad.push('éditeur, titre 2 : ' + JSON.stringify(two));
+        if (Editor.getHTML() !== before || levelStyles()) bad.push('le modèle a reçu le style du document : ' + Editor.getHTML());
+        const reader = await h.renderReaderMode(Editor.getHTML());
+        const read = paint(reader.querySelector('h1'));
+        document.getElementById('reader-container').style.display = 'none';
+        if (read.size !== '24px' || read.color !== 'rgb(31, 78, 121)' || !/Georgia/.test(read.family)) bad.push('Lecture : ' + JSON.stringify(read));
+        const pdf = await h.exportPdfContent(Editor.getHTML());
+        const blocks = h.findTextBlocks(pdf.content, b => b._isHeading);
+        const runs = Array.isArray(blocks[0].text) ? blocks[0].text : [{ text: blocks[0].text }];
+        if (!runs.length || !runs.every(r => r.fontSize === 18 && r.color === '#1f4e79')) bad.push('PDF, titre 1 : ' + JSON.stringify(runs));
+        const beta = Array.isArray(blocks[1].text) ? blocks[1].text : [];
+        if (!beta.length || !beta.every(r => r.italics === true)) bad.push('PDF, titre 2 : ' + JSON.stringify(beta));
+        const parts = await h.exportDocxParts(Editor.getHTML());
+        const [d1, d2] = h.docxParagraphs(parts.doc).filter(p => p.text);
+        if (!d1.runs.every(r => r.sizeHalfPt === 36 && r.color === '1F4E79' && r.font === 'Georgia')) bad.push('Word, titre 1 : ' + JSON.stringify(d1.runs));
+        if (!d2.runs.every(r => r.italics)) bad.push('Word, titre 2 : ' + JSON.stringify(d2.runs));
+        // Un modèle qui a son propre style du niveau 1 : le sien l'emporte pour ce niveau, le niveau 2 vient du document.
+        await load(config({ 1: { color: '#c0392b' } }) + '<h1>Alpha</h1><h2>Beta</h2><p>texte</p>');
+        const own = paint(headings(1)[0]);
+        if (own.color !== 'rgb(192, 57, 43)' || own.size !== DEFAULT_H1_PX || /Georgia/.test(own.family)) bad.push('le style du modèle ne l\'emporte pas : ' + JSON.stringify(own));
+        if (paint(headings(2)[0]).italic !== 'italic') bad.push('le titre 2 ne prend pas celui du document');
+        return result(bad);
+      } finally { await docCleanup(h); }
+    });
+
+  add('hs_doc_update_writes_the_shared_style_strips_the_hand_formatting_and_is_one_undo_step',
+    '« Mettre à jour » du bloc partagé : le style (police, taille, couleur, italique) entre dans les réglages du document et dans Grist, pas dans le modèle ; les titres du niveau le prennent, la mise en forme à la main est retirée (le gras et le lien restent) ; le coin d\'état le dit ; UN Ctrl+Z défait tout (le HTML revient octet pour octet, Grist aussi), Ctrl+Y le remet',
+    async (h) => {
+      try {
+        await docSetup(h);
+        await styledByHand();
+        mark('Deux', { color: '#c0392b' });
+        await selectText('Un');
+        await sleep(600);
+        const start = Editor.getHTML();
+        const bad = [];
+        const done = HeadingStyles.update(editor(), 'document');
+        await sleep(150);
+        const updated = Editor.getHTML();
+        const expected = HeadingStyles.normalize({ 1: STYLE });
+        if (!done) bad.push('update a rendu faux');
+        if (!same(HeadingStyles.documentStyles(), expected)) bad.push('style du document : ' + JSON.stringify(HeadingStyles.documentStyles()));
+        if (levelStyles()) bad.push('le modèle a reçu un style : ' + JSON.stringify(levelStyles()));
+        headings(1).forEach((el, i) => {
+          const p = paint(el);
+          if (p.size !== '24px' || p.color !== 'rgb(31, 78, 121)' || p.italic !== 'italic' || !/Georgia/.test(p.family)) bad.push('titre 1 n° ' + (i + 1) + ' : ' + JSON.stringify(p));
+        });
+        if (marksOf('Un') !== '' || marksOf('Deux') !== '') bad.push('marques à la main restantes : ' + marksOf('Un') + ' / ' + marksOf('Deux'));
+        if (marksOf('gras') !== 'bold' || !/^link/.test(marksOf('lien'))) bad.push('le gras ou le lien a bougé');
+        if (!/pour tout le document/.test(statusText())) bad.push('le coin d\'état ne le dit pas : ' + statusText());
+        if (!(await written(json => json && same(HeadingStyles.normalize(json.headingStyles), expected)))) bad.push('Grist n\'a pas reçu le style : ' + JSON.stringify(settingsJson()));
+        if (start === updated) bad.push('le texte n\'a pas changé');
+        await undoOnce();
+        if (Editor.getHTML() !== start) bad.push('Ctrl+Z ne rend pas le texte de départ');
+        if (sharedOf() !== undefined) bad.push('Ctrl+Z ne retire pas le style du document : ' + JSON.stringify(sharedOf()));
+        if (!(await written(json => !json || !('headingStyles' in json)))) bad.push('Grist n\'a pas reçu le retour : ' + JSON.stringify(settingsJson()));
+        await redoOnce();
+        if (Editor.getHTML() !== updated) bad.push('Ctrl+Y ne remet pas le texte mis à jour');
+        if (!same(HeadingStyles.documentStyles(), expected)) bad.push('Ctrl+Y ne remet pas le style du document : ' + JSON.stringify(sharedOf()));
+        if (!(await written(json => json && same(HeadingStyles.normalize(json.headingStyles), expected)))) bad.push('Grist n\'a pas reçu le rétablissement');
+        return result(bad);
+      } finally { await docCleanup(h); }
+    });
+
+  add('hs_doc_update_in_a_model_with_its_own_level_changes_only_the_document_and_leaves_the_titles_alone',
+    'Un modèle qui a son propre style du niveau 1 : « Mettre à jour » du bloc partagé part du style que le titre montre (celui du modèle) et y ajoute la sélection, écrit le document, ne retire aucune mise en forme à la main, ne change pas l\'aspect du modèle, le dit ; UN Ctrl+Z retire le style du document',
+    async (h) => {
+      try {
+        await docSetup(h, config({ 1: { color: '#c0392b' } }) + SAMPLE);
+        mark('Un', { fontFamily: 'Georgia', fontSize: '18pt' });
+        await selectText('Un');
+        await sleep(600);
+        const start = Editor.getHTML();
+        const bad = [];
+        const look = headings(1).map(el => JSON.stringify(paint(el)));
+        const done = HeadingStyles.update(editor(), 'document');
+        await sleep(150);
+        if (!done) bad.push('update a rendu faux');
+        if (!same(HeadingStyles.documentStyles(), HeadingStyles.normalize({ 1: { color: '#c0392b', fontSize: '18pt', fontFamily: 'Georgia' } }))) bad.push('style du document : ' + JSON.stringify(sharedOf()));
+        if (!/Georgia/.test(marksOf('Un'))) bad.push('la mise en forme à la main a été retirée malgré le style du modèle : ' + marksOf('Un'));
+        if (!same(headings(1).map(el => JSON.stringify(paint(el))), look)) bad.push('l\'aspect du modèle a changé');
+        if (Editor.getHTML() !== start) bad.push('le texte du modèle a changé');
+        if (!/Ce modèle a le sien/.test(statusText())) bad.push('le coin d\'état ne dit pas que le modèle l\'emporte : ' + statusText());
+        await undoOnce();
+        if (sharedOf() !== undefined) bad.push('Ctrl+Z ne retire pas le style du document : ' + JSON.stringify(sharedOf()));
+        if (Editor.getHTML() !== start) bad.push('Ctrl+Z a changé le texte');
+        return result(bad);
+      } finally { await docCleanup(h); }
+    });
+
+  add('hs_doc_restore_removes_the_shared_level_greys_out_without_one_and_is_one_undo_step',
+    '« Rétablir » du bloc partagé retire le style du niveau du titre visé des réglages du document (Grist le reçoit), les titres reprennent l\'aspect de leur balise ; grisée sans style partagé à ce niveau ; UN Ctrl+Z le remet, Ctrl+Y le retire ; le style du modèle n\'est pas touché',
+    async (h) => {
+      try {
+        await docSetup(h, '<h1>Un</h1><h2>Deux</h2><p>texte</p>');
+        const bad = [];
+        await Templates.updateDocumentSettings({ headingStyles: SHARED });
+        await sleep(100);
+        await caretIn('Un');
+        HeadingStyles.syncRows(editor(), allRows());
+        if (allRows().documentReset.getAttribute('aria-disabled') !== 'false') bad.push('« Rétablir » partagé est grisée avec un style à ce niveau');
+        const done = HeadingStyles.reset(editor(), 'document');
+        await sleep(150);
+        if (!done) bad.push('reset a rendu faux');
+        if (!same(sharedOf(), { 2: { italic: true } })) bad.push('niveau 1 non retiré : ' + JSON.stringify(sharedOf()));
+        const p = paint(headings(1)[0]);
+        if (p.size !== DEFAULT_H1_PX || p.color === 'rgb(31, 78, 121)' || /Georgia/.test(p.family)) bad.push('le titre 1 n\'a pas retrouvé sa balise : ' + JSON.stringify(p));
+        if (paint(headings(2)[0]).italic !== 'italic') bad.push('le niveau 2 a bougé');
+        if (!(await written(json => json && json.headingStyles && !json.headingStyles['1'] && json.headingStyles['2']))) bad.push('Grist n\'a pas reçu le retrait : ' + JSON.stringify(settingsJson()));
+        HeadingStyles.syncRows(editor(), allRows());
+        const rows = allRows();
+        if (rows.documentReset.getAttribute('aria-disabled') !== 'true' || rows.documentReset.title !== 'Ce niveau de titre n’a pas de style partagé') bad.push('« Rétablir » partagé non grisée sans style : ' + rows.documentReset.getAttribute('aria-disabled') + ' / ' + rows.documentReset.title);
+        if (HeadingStyles.reset(editor(), 'document') !== false) bad.push('reset sans style partagé a agi');
+        await undoOnce();
+        if (!same(sharedOf(), SHARED)) bad.push('Ctrl+Z ne remet pas le style : ' + JSON.stringify(sharedOf()));
+        await redoOnce();
+        if (!same(sharedOf(), { 2: { italic: true } })) bad.push('Ctrl+Y ne le retire pas : ' + JSON.stringify(sharedOf()));
+        return result(bad);
+      } finally { await docCleanup(h); }
+    });
+
+  add('hs_doc_the_model_update_starts_from_the_shared_style_the_title_already_shows',
+    '« Mettre à jour » du modèle sur un niveau que le document règle déjà : le style du modèle garde l\'aspect du titre (le style du document) et y ajoute la sélection (l\'italique), le document n\'est pas touché, l\'aspect de tous les titres du niveau est inchangé',
+    async (h) => {
+      try {
+        await docSetup(h);
+        await Templates.updateDocumentSettings({ headingStyles: { 1: { color: '#1f4e79', fontSize: '18pt', fontFamily: 'Georgia' } } });
+        await load('<h1>Un</h1><h1>Deux</h1><p>texte</p>');
+        const bad = [];
+        const before = headings(1).map(el => paint(el));
+        editor().chain().focus().setTextSelection(range('Un')).setMark('italic').run();
+        await sleep(60);
+        await selectText('Un');
+        if (!HeadingStyles.update(editor())) bad.push('update a rendu faux');
+        await sleep(120);
+        if (!same(levelStyles(), HeadingStyles.normalize({ 1: { italic: true, color: '#1f4e79', fontSize: '18pt', fontFamily: 'Georgia' } }))) bad.push('style du modèle : ' + JSON.stringify(levelStyles()));
+        if (!same(sharedOf(), { 1: { color: '#1f4e79', fontSize: '18pt', fontFamily: 'Georgia' } })) bad.push('le document a été touché : ' + JSON.stringify(sharedOf()));
+        const after = headings(1).map(el => paint(el));
+        ['size', 'color', 'family'].forEach((k) => { after.forEach((p, i) => { if (p[k] !== before[i][k]) bad.push('titre ' + (i + 1) + ' : ' + k + ' ' + before[i][k] + ' -> ' + p[k]); }); });
+        if (after[0].italic !== 'italic' || after[1].italic !== 'italic') bad.push('l\'italique manque : ' + after.map(p => p.italic).join());
+        return result(bad);
+      } finally { await docCleanup(h); }
+    });
+
+  add('hs_doc_another_persons_change_reaches_the_open_editor_and_undo_never_overwrites_it',
+    'Une autre personne change le style du document : l\'éditeur ouvert le montre sans que le texte change (un seul avis par changement, aucun quand la relecture n\'apporte rien) ; si elle change le même niveau après un geste, Ctrl+Z n\'écrit rien et le dit, si elle change un autre niveau, Ctrl+Z rend le niveau du geste et garde le sien',
+    async (h) => {
+      try {
+        await docSetup(h, SAMPLE);
+        const bad = [];
+        let events = 0;
+        const on = () => { events += 1; };
+        document.addEventListener('pp:documentSettingsChanged', on);
+        try {
+          await Templates.updateDocumentSettings({ headingStyles: { 1: { color: '#1f4e79' } } });
+          await written(json => json && json.headingStyles);
+          if (events < 1) bad.push('aucun avis pour l\'écriture d\'ici');
+          const html = Editor.getHTML();
+          if (paint(headings(1)[0]).color !== 'rgb(31, 78, 121)') bad.push('éditeur, avant : ' + paint(headings(1)[0]).color);
+          // Une autre personne la change : le document se relit.
+          let before = events;
+          await stub().applyUserActions([['UpdateRecord', TABLE, settingsRows()[0].id, { Contenu: JSON.stringify({ headingStyles: { 1: { color: '#c0392b' } } }) }]]);
+          await Templates.loadAll();
+          await sleep(60);
+          if (events !== before + 1) bad.push('avis pour le changement d\'une autre personne : ' + (events - before));
+          if (paint(headings(1)[0]).color !== 'rgb(192, 57, 43)') bad.push('l\'éditeur ne montre pas le style de l\'autre personne : ' + paint(headings(1)[0]).color);
+          if (Editor.getHTML() !== html) bad.push('le texte a changé');
+          before = events;
+          await Templates.loadAll();
+          if (events !== before) bad.push('une relecture qui n\'apporte rien a prévenu');
+          // Un geste, puis la même clé changée par l'autre : Ctrl+Z n'écrase pas.
+          await caretIn('Un');
+          mark('Un', { fontSize: '18pt' });
+          await selectText('Un');
+          await sleep(600);
+          if (!HeadingStyles.update(editor(), 'document')) bad.push('update a rendu faux');
+          await sleep(150);
+          await Templates.updateDocumentSettings({ headingStyles: { 1: { color: '#0b6e4f' }, 2: { italic: true } } });
+          await undoOnce();
+          if (!same(sharedOf(), { 1: { color: '#0b6e4f' }, 2: { italic: true } })) bad.push('Ctrl+Z a écrasé le changement de l\'autre personne : ' + JSON.stringify(sharedOf()));
+          if (!/a changé depuis/.test(statusText())) bad.push('le coin d\'état ne dit pas le conflit : ' + statusText());
+          await redoOnce();
+          // Un autre niveau changé par l'autre : le niveau du geste est rendu, le sien est gardé.
+          await resetDocumentSettings();
+          await Templates.updateDocumentSettings({ headingStyles: { 1: { color: '#1f4e79' } } });
+          await written(json => json && json.headingStyles);
+          await load('<h1>Un</h1><h2>Deux</h2><p>texte</p>');
+          ActionHistory.reset();
+          await caretIn('Un');
+          mark('Un', { fontSize: '16pt' });
+          await selectText('Un');
+          await sleep(600);
+          HeadingStyles.update(editor(), 'document');
+          await sleep(150);
+          await Templates.updateDocumentSettings({ headingStyles: Object.assign({}, sharedOf(), { 2: { italic: true } }) });
+          await undoOnce();
+          if (!same(sharedOf(), { 1: { color: '#1f4e79' }, 2: { italic: true } })) bad.push('Ctrl+Z n\'a pas rendu le niveau 1 en gardant le niveau 2 : ' + JSON.stringify(sharedOf()));
+        } finally { document.removeEventListener('pp:documentSettingsChanged', on); }
+        return result(bad);
+      } finally { await docCleanup(h); }
+    });
+
+  add('hs_doc_a_refused_write_is_said_and_the_last_confirmed_style_comes_back',
+    'Grist refuse d\'écrire le style du document : le coin d\'état le dit (et que Ctrl+Z rend la mise en forme retirée), l\'éditeur retrouve le dernier style confirmé ; Ctrl+Z rend la mise en forme à la main des titres sans rien écrire de faux',
+    async (h) => {
+      const original = grist.docApi.applyUserActions;
+      const warn = console.warn;
+      try {
+        await docSetup(h, SAMPLE);
+        const bad = [];
+        await Templates.updateDocumentSettings({ headingStyles: { 1: { color: '#1f4e79' } } });
+        await written(json => json && json.headingStyles);
+        await load(SAMPLE);
+        mark('Un', { fontSize: '18pt' });
+        await selectText('Un');
+        await sleep(600);
+        const start = Editor.getHTML();
+        grist.docApi.applyUserActions = async () => { throw new Error('refusé'); };
+        console.warn = () => {};
+        const done = HeadingStyles.update(editor(), 'document');
+        await sleep(400);
+        grist.docApi.applyUserActions = original;
+        console.warn = warn;
+        if (!done) bad.push('update a rendu faux');
+        if (!/n’a pas pu être écrit/.test(statusText()) || !/Ctrl\+Z/.test(statusText())) bad.push('le refus n\'est pas dit : ' + statusText());
+        if (!same(sharedOf(), { 1: { color: '#1f4e79' } })) bad.push('le dernier style confirmé n\'est pas revenu : ' + JSON.stringify(sharedOf()));
+        if (paint(headings(1)[0]).size !== DEFAULT_H1_PX) bad.push('l\'éditeur montre encore le style refusé : ' + paint(headings(1)[0]).size);
+        await undoOnce();
+        if (Editor.getHTML() !== start) bad.push('Ctrl+Z ne rend pas le texte de départ');
+        if (!same(sharedOf(), { 1: { color: '#1f4e79' } })) bad.push('Ctrl+Z a écrit un style faux : ' + JSON.stringify(sharedOf()));
+        if (/a changé depuis/.test(statusText())) bad.push('Ctrl+Z annonce un conflit qui n\'existe pas : ' + statusText());
+        return result(bad);
+      } finally {
+        grist.docApi.applyUserActions = original;
+        console.warn = warn;
+        await docCleanup(h);
+      }
+    });
+
+  add('hs_doc_the_menu_shows_the_model_styles_and_the_shared_styles_apart_in_both_languages',
+    'Le menu Titre : deux blocs (« Styles de titres du modèle » / « partagés ») avec l\'infobulle de leur portée ; sans style, « Aucun » ; avec des styles, une pastille par niveau stylé dessinée avec sa couleur, son infobulle en mots, celle du document que le style du modèle remplace en pointillés ; les lignes du bloc partagé disent le niveau et se grisent avec leur raison ; rien n\'est redessiné quand rien ne change',
+    async (h) => {
+      try {
+        await docSetup(h, '<h1>Un</h1><h2>Deux</h2><p>texte</p>');
+        const english = I18n.getLang() === 'en';
+        const t = (fr, en) => (english ? en : fr);
+        const bad = [];
+        const sync = () => HeadingStyles.syncRows(editor(), allRows());
+        await caretIn('texte');
+        sync();
+        let rows = allRows();
+        if (rows.modelScope.textContent !== t('Styles de titres du modèle', 'Template heading styles') || rows.modelScope.title !== t('Avec ce modèle seulement', 'With this template only')) bad.push('bloc du modèle : ' + rows.modelScope.textContent + ' / ' + rows.modelScope.title);
+        if (rows.documentScope.textContent !== t('Styles de titres partagés', 'Shared heading styles') || rows.documentScope.title !== t('Pour tous les modèles de ce document Grist, partagés avec l’équipe', 'For every template in this Grist document, shared with the team')) bad.push('bloc partagé : ' + rows.documentScope.textContent + ' / ' + rows.documentScope.title);
+        [rows.modelLevels, rows.documentLevels].forEach((box, i) => { if (chips(box).length || box.textContent !== t('Aucun', 'None')) bad.push('bloc ' + i + ' sans style : ' + box.textContent); });
+        if (rows.documentUpdate.getAttribute('aria-disabled') !== 'true' || rows.documentReset.getAttribute('aria-disabled') !== 'true' || !rows.documentUpdate.title) bad.push('lignes partagées non grisées hors d\'un titre');
+        if (rows.documentUpdate.textContent !== t('Mettre à jour le style de titre partagé d’après la sélection', 'Update the shared heading style to match the selection')) bad.push('libellé hors titre : ' + rows.documentUpdate.textContent);
+        // Un style du modèle (niveau 1) et du document (niveaux 1 et 2).
+        await Templates.updateDocumentSettings({ headingStyles: SHARED });
+        await load(config({ 1: { color: '#c0392b', italic: true, backgroundColor: '#fff3a3' } }) + '<h1>Un</h1><h2>Deux</h2><p>texte</p>');
+        await caretIn('Deux');
+        sync();
+        rows = allRows();
+        const model = chips(rows.modelLevels);
+        const doc = chips(rows.documentLevels);
+        if (model.length !== 1 || model[0].textContent !== t('Titre 1', 'Heading 1') || model[0].style.color !== 'rgb(192, 57, 43)' || model[0].style.fontStyle !== 'italic' || model[0].style.backgroundColor !== 'rgb(255, 243, 163)') bad.push('pastilles du modèle : ' + model.map(c => c.textContent + '|' + c.getAttribute('style')).join(' ; '));
+        if (!/ — /.test(model[0].title) || model[0].title.indexOf(t('remplace le style partagé de ce niveau', 'replaces the shared style of this level')) === -1) bad.push('infobulle du modèle : ' + model[0].title);
+        if (doc.length !== 2 || doc[0].textContent !== t('Titre 1', 'Heading 1') || doc[1].textContent !== t('Titre 2', 'Heading 2')) bad.push('pastilles partagées : ' + doc.map(c => c.textContent).join());
+        if (doc.length === 2) {
+          if (!doc[0].classList.contains('is-masked') || doc[1].classList.contains('is-masked')) bad.push('le niveau remplacé n\'est pas marqué : ' + doc.map(c => c.className).join(' / '));
+          if (doc[0].title !== 'Titre 1 · Georgia · 18pt · #1f4e79 — remplacé dans ce modèle par son propre style' && doc[0].title !== 'Heading 1 · Georgia · 18pt · #1f4e79 — replaced in this template by its own style') bad.push('infobulle du niveau 1 : ' + doc[0].title);
+          if (doc[1].title !== t('Titre 2 · Italique', 'Heading 2 · Italic')) bad.push('infobulle du niveau 2 : ' + doc[1].title);
+          if (getComputedStyle(doc[0]).borderTopStyle !== 'dashed' || getComputedStyle(doc[1]).borderTopStyle !== 'solid') bad.push('bordures : ' + getComputedStyle(doc[0]).borderTopStyle + ' / ' + getComputedStyle(doc[1]).borderTopStyle);
+          if (!/Georgia/.test(getComputedStyle(doc[0]).fontFamily) || getComputedStyle(doc[1]).fontStyle !== 'italic') bad.push('pastilles non dessinées avec le style');
+        }
+        // Dans le titre 2 : le bloc partagé dit le niveau, « Rétablir » du modèle reste grisée (le modèle n'a pas de style de niveau 2), celle du document est allumée.
+        if (rows.documentUpdate.textContent !== t('Mettre à jour « Titre 2 » (partagé) d’après la sélection', 'Update shared “Heading 2” to match the selection') || rows.documentUpdate.getAttribute('aria-disabled') !== 'false') bad.push('« Mettre à jour » partagé dans le titre 2 : ' + rows.documentUpdate.textContent + ' / ' + rows.documentUpdate.getAttribute('aria-disabled'));
+        if (rows.documentReset.textContent !== t('Rétablir le style d’origine de « Titre 2 » (partagé)', 'Restore the original style of shared “Heading 2”') || rows.documentReset.getAttribute('aria-disabled') !== 'false') bad.push('« Rétablir » partagé dans le titre 2 : ' + rows.documentReset.textContent + ' / ' + rows.documentReset.getAttribute('aria-disabled'));
+        if (rows.reset.getAttribute('aria-disabled') !== 'true') bad.push('« Rétablir » du modèle allumée sans style de niveau 2');
+        // Rien ne change : rien n'est redessiné (mêmes pastilles).
+        sync();
+        if (!doc.every((chip, i) => chips(allRows().documentLevels)[i] === chip)) bad.push('un aperçu inchangé a été redessiné');
+        // Le style du document change : l'aperçu suit.
+        await Templates.updateDocumentSettings({ headingStyles: { 2: { italic: true } } });
+        sync();
+        if (chips(allRows().documentLevels).length !== 1 || chips(allRows().documentLevels)[0].textContent !== t('Titre 2', 'Heading 2')) bad.push('l\'aperçu ne suit pas le document');
+        return result(bad);
+      } finally { await docCleanup(h); }
+    });
+  cases.push(Object.assign({}, cases[cases.length - 1], {
+    id: 'hs_doc_the_menu_shows_the_model_styles_and_the_shared_styles_apart_in_english',
+    lang: 'en',
+  }));
+
+  add('hs_doc_clicking_the_shared_rows_updates_and_restores_through_the_toolbar_wiring',
+    'Le clic sur les lignes du bloc partagé (câblage de la barre, comme la souris) met à jour puis rétablit le style du document ; une ligne grisée ne fait rien',
+    async (h) => {
+      try {
+        await docSetup(h);
+        await styledByHand();
+        const bad = [];
+        const click = async (row) => {
+          HeadingStyles.syncRows(editor(), allRows());
+          row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+          row.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          await sleep(150);
+        };
+        await click(allRows().documentReset);
+        if (sharedOf() !== undefined) bad.push('« Rétablir » partagé grisée a pourtant agi');
+        await click(allRows().documentUpdate);
+        if (!sharedOf() || !sharedOf()[1]) bad.push('le clic sur « Mettre à jour » partagé n\'a rien écrit');
+        if (levelStyles()) bad.push('le clic partagé a écrit dans le modèle');
+        await selectText('Trois');
+        await click(allRows().documentReset);
+        if (sharedOf() !== undefined) bad.push('« Rétablir » partagé n\'a pas retiré le style : ' + JSON.stringify(sharedOf()));
+        return result(bad);
+      } finally { await docCleanup(h); }
+    });
+
+  add('hs_doc_the_slide_theme_keeps_the_shared_font_and_color_over_its_own',
+    'Dans une présentation à thème, la police et la couleur du style partagé d\'un niveau l\'emportent sur celles du thème, comme le style du modèle ; un niveau sans style garde celles du thème',
+    async (h) => {
+      try {
+        await docSetup(h);
+        const bad = [];
+        await Templates.updateDocumentSettings({ headingStyles: { 1: { color: '#c0392b' } } });
+        const host = document.createElement('div');
+        host.innerHTML = SlideTheme.forOutput('<h1>Un</h1><h2>Deux</h2>', OCEAN);
+        const h1 = host.querySelector('h1');
+        const h2 = host.querySelector('h2');
+        if (h1.style.color !== '' || !/Georgia/.test(h1.style.fontFamily)) bad.push('titre 1 : ' + h1.getAttribute('style'));
+        if (h2.style.color === '' || !/Georgia/.test(h2.style.fontFamily)) bad.push('titre 2 : ' + h2.getAttribute('style'));
+        return result(bad);
+      } finally { await docCleanup(h); }
     });
 
   window.EditorTestSuites = window.EditorTestSuites || {};

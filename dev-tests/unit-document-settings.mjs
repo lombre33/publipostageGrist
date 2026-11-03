@@ -16,7 +16,10 @@
 //  9) le mot de passe commun des PDF protégés (demande du 12/10, « un mot de passe stocké dans grist pour l'ensemble des pdf ») : une colonne de plus de la même ligne
 //     réservée, créée à la première écriture seulement, jamais dans un cache du widget, écrite sans doubler la ligne des réglages dans aucun des deux ordres ;
 // 10) un document de la bêta, créé avant la colonne « Modifié par » (historique des versions, 14/10) : l'ouverture l'ajoute - sa seule écriture - et un document à jour n'écrit plus rien
-//     (c'est le cas de tous les autres : le faux document porte la colonne).
+//     (c'est le cas de tous les autres : le faux document porte la colonne) ;
+// 11) la lecture d'UN réglage (`getDocumentSetting`, une copie, undefined quand il n'est pas écrit) et l'avis `pp:documentSettingsChanged` (lot 3 des styles de titres, 03/11) que le style des
+//     titres écoute pour montrer tout de suite le style du document : une écriture d'ici, le retour arrière d'une écriture refusée, une lecture qui apporte le changement d'une autre
+//     personne le donnent - une lecture qui n'apporte rien, jamais ; sans page (ce contexte n'a pas de `document`), rien n'est annoncé et rien ne casse.
 // Lancer : node dev-tests/unit-document-settings.mjs
 import { createContext, loadScript, evalIn, check, summarizeAndExit } from './unit-harness.mjs';
 
@@ -89,12 +92,12 @@ class Doc {
   count(type) { return this.actions.filter((a) => a[0] === type).length; }
 }
 
-function fresh(doc) {
+function fresh(doc, extra) {
   const warnings = [];
-  const ctx = createContext({
+  const ctx = createContext(Object.assign({
     grist: { docApi: doc, ready() {}, onRecord() {}, onOptions() {}, async getOptions() { return null; } },
     console: { log() {}, warn(...a) { warnings.push(a.join(' ')); }, error(...a) { warnings.push(a.join(' ')); } },
-  });
+  }, extra));
   ['js/grist-api.js', 'js/templates.js'].forEach((s) => loadScript(ctx, s));
   return { ctx, warnings, run: (expr) => evalIn(ctx, expr) };
 }
@@ -395,6 +398,40 @@ async function main() {
     await reopened.run('Templates.loadAll()');
     check('rouvert, la colonne est là : plus rien n\'est écrit', doc.cols.includes(COL) && doc.actions.length === 1, JSON.stringify(doc.actions));
     check('aucun avertissement ni erreur, ni à la première ouverture ni à la suivante', warnings.length === 0 && reopened.warnings.length === 0, warnings.concat(reopened.warnings).join());
+  }
+
+  // 11. Un réglage seul, et l'avis de changement.
+  {
+    const doc = documentWith([{ Nom: 'Contrat', Contenu: '<p>a</p>' }]);
+    const heard = [];
+    const page = { document: { dispatchEvent(event) { heard.push(event.type); return true; } }, CustomEvent: class { constructor(type) { this.type = type; } } };
+    const { run } = fresh(doc, page);
+    await run('Templates.loadAll()');
+    check('avant toute écriture : un réglage absent est undefined, et la lecture des modèles n\'annonce rien', run('Templates.getDocumentSetting("headingStyles")') === undefined && heard.length === 0, heard.join());
+    const done = run('Templates.updateDocumentSettings({ headingStyles: { 1: { color: "#1f4e79" } }, colors: ["#111111"] })');
+    check('une écriture d\'ici annonce le changement tout de suite, avant que Grist ait répondu', heard.length === 1 && heard[0] === 'pp:documentSettingsChanged', heard.join());
+    check('getDocumentSetting rend le réglage de cette écriture', sameList(run('Templates.getDocumentSetting("headingStyles")'), { 1: { color: '#1f4e79' } }));
+    await done;
+    check('getDocumentSetting rend une copie : la modifier ne change pas le réglage', (() => { const copy = run('Templates.getDocumentSetting("headingStyles")'); copy[1].color = '#000000'; return sameList(run('Templates.getDocumentSetting("headingStyles")'), { 1: { color: '#1f4e79' } }); })());
+    check('la même écriture ne change rien : rien n\'est annoncé', (await run('Templates.updateDocumentSettings({ colors: ["#111111"] })')) === true && heard.length === 1, heard.join());
+    // Une autre personne change le style : la lecture suivante l'annonce, une relecture identique non.
+    doc.rows.find((r) => r.TypeModele === 'reglages').Contenu = JSON.stringify({ headingStyles: { 1: { color: '#c0392b' } }, colors: ['#111111'] });
+    await run('Templates.loadAll()');
+    check('la lecture qui apporte le changement d\'une autre personne l\'annonce, une seule fois', heard.length === 2 && sameList(run('Templates.getDocumentSetting("headingStyles")'), { 1: { color: '#c0392b' } }), heard.join());
+    await run('Templates.loadAll()');
+    check('une lecture qui n\'apporte rien n\'annonce rien', heard.length === 2, heard.join());
+    // Un refus : l'état optimiste est annoncé, puis le dernier état confirmé.
+    doc.failWrites = () => new Error('droit d\'écriture absent');
+    const refused = await run('Templates.updateDocumentSettings({ headingStyles: { 1: { color: "#000000" } } })');
+    check('un refus annonce l\'état posé puis le retour au dernier état confirmé', refused === false && heard.length === 4 && sameList(run('Templates.getDocumentSetting("headingStyles")'), { 1: { color: '#c0392b' } }), heard.join() + ' / ' + JSON.stringify(run('Templates.getDocumentSetting("headingStyles")')));
+  }
+  {
+    // Sans page (aucun `document`) : rien ne s'annonce, rien ne casse.
+    const doc = documentWith([{ Nom: 'Contrat', Contenu: '<p>a</p>' }]);
+    const { run, warnings } = fresh(doc);
+    await run('Templates.loadAll()');
+    const saved = await run('Templates.updateDocumentSettings({ headingStyles: { 2: { italic: true } } })');
+    check('sans page : l\'écriture réussit, sans avertissement', saved === true && sameList(run('Templates.getDocumentSetting("headingStyles")'), { 2: { italic: true } }) && warnings.length === 0, warnings.join());
   }
 
   summarizeAndExit();

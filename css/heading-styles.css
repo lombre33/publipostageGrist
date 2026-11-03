@@ -1,0 +1,13 @@
+/* Les styles de titres dans le menu « Titre » (js/heading-styles.js, index.html:#v2-heading-flyout) : deux blocs comme les rangées « Couleurs du modèle » et « Couleurs partagées » des menus de couleur - « Styles de titres du
+   modèle » et « Styles de titres partagés » -, chacun avec l'aperçu des niveaux qui ont un style puis ses deux lignes (mettre à jour, rétablir). Un aperçu est une pastille au nom du niveau, dessinée avec la police, la couleur,
+   l'italique, le souligné et le surlignage du style, sur le blanc de la page (le papier ne change pas avec le thème de l'écran, comme les pastilles de couleur) ; sa taille, elle, est dite dans l'infobulle. Une pastille du
+   document que le style du modèle remplace (`is-masked`) est en pointillés sur un fond gris clair (fixe, comme le blanc : le papier ne suit pas le thème de l'écran) : le texte garde son contraste. Le menu défile (`v2-hover-flyout-scrollable`) et ne porte aucune info-bulle `data-tip` : les
+   infobulles sont des `title`. */
+.pp-hs-scope { display: block; padding: 5px 9px 2px; font-size: 11px; font-weight: 600; color: var(--text-faint, #5f6b7e); white-space: nowrap; }
+.pp-hs-levels { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; padding: 2px 9px 4px; min-height: 22px; }
+.pp-hs-chip {
+  display: inline-block; padding: 1px 6px; border: 1px solid var(--border-strong, #c3cad6); border-radius: 4px; background: #fff; color: #1b2430;
+  font-size: 12px; font-weight: 700; line-height: 18px; white-space: nowrap; cursor: default;
+}
+.pp-hs-chip.is-masked { border-style: dashed; background-color: #eef1f6; }
+.pp-hs-none { font-size: 12px; color: var(--text-muted, #5f6b7e); }
