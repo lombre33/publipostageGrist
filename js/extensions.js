@@ -19,8 +19,8 @@ const Extensions = (function () {
     // `libraries` : le fichier de GFS qu'elle exige, chargé avec elle (`id` et `forme` de la bibliothèque) ; il fait partie du chargement : s'il est refusé, l'extension ne se charge pas.
     edition: {
       nameKey: 'extension.edition.name',
-      version: '0.4',
-      scripts: ['live-sync.js', 'live-channel.js', 'live-editor.js', 'live-control.js'],
+      version: '0.5',
+      scripts: ['live-sync.js', 'live-channel.js', 'live-page.js', 'live-editor.js', 'live-control.js'],
       styles: ['live.css'],
       libraries: [{ id: 'edition-live', forme: 'module' }],
     },

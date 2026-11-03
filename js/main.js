@@ -3233,7 +3233,13 @@
     wireCciToggle();
     // Émis par js/settings.js à chaque saisie dans les quatre champs de marge (onglet Réglages) : changer seulement les marges ne touche pas au
     // texte, et sans cet évènement le brouillon ne serait jamais marqué « modifié ».
-    document.addEventListener('pp:marginsChanged', markAutosaveDirty);
+    // En écriture en direct, la page est celle du groupe (extensions/edition/live-page.js) : changée ici, ou reçue d'une autre personne (`detail.remote`, rien à marquer, le modèle est déjà « à enregistrer »),
+    // elle n'est pas un réglage de cette personne. Le modèle est seulement « à enregistrer » et c'est la personne qui enregistre qui l'écrit, avec le texte : une personne qui n'enregistre pas ne réécrit
+    // jamais la page à sa place (une page restée en retard écraserait celle du groupe).
+    document.addEventListener('pp:marginsChanged', (event) => {
+      if (event.detail && event.detail.remote) return;
+      if (LiveEntry.isLive()) markTextDirty(); else markAutosaveDirty();
+    });
     // Émis par PageLayout.setOrientation (bouton Portrait / Paysage) : la feuille change de largeur et de hauteur. Le bouton ne rafraîchit rien
     // lui-même.
     document.addEventListener('pp:pageLayoutChanged', onPageLayoutChanged);

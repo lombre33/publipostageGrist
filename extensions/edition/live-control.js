@@ -1,4 +1,4 @@
-// Le chef d'orchestre de l'écriture en direct : il assemble le canal (live-channel.js), le moteur (live-sync.js) et l'éditeur (live-editor.js), allume et éteint le direct, tient la barre
+// Le chef d'orchestre de l'écriture en direct : il assemble le canal (live-channel.js), le moteur (live-sync.js), l'éditeur (live-editor.js) et la page du modèle (live-page.js), allume et éteint le direct, tient la barre
 // des personnes et dit au reste du widget ce qu'il doit savoir pendant que le texte est partagé (js/live-entry.js, le seul point d'entrée du socle). Rien ici ne s'exécute avant le premier clic
 // sur « Écriture en direct » : l'extension (et le fichier de Grist Factory Suite, Yjs compris) ne se charge qu'alors, et seulement si GFS dit l'extension active.
 //
@@ -7,7 +7,7 @@
 // l'éditeur s'accroche au texte du salon. Un modèle de plus à la fois : changer de modèle ferme le direct
 // (releaseEditor, avant que l'éditeur ne change de texte).
 //
-// L'ENREGISTREMENT : le salon partage le TEXTE ; le modèle enregistré dans Grist reste celui de js/main.js. Pour ne pas l'écrire à plusieurs en même temps (et se croire en conflit les uns avec les
+// L'ENREGISTREMENT : le salon partage le TEXTE et la PAGE (format, marges, thème...) ; le modèle enregistré dans Grist reste celui de js/main.js. Pour ne pas l'écrire à plusieurs en même temps (et se croire en conflit les uns avec les
 // autres), UNE personne l'écrit pour tout le monde : celle dont le numéro de client est le plus bas parmi les pages visibles (isScribe). Elle annonce ce qu'elle a écrit (publishSaved : la date
 // de Grist et l'état du texte) ; les autres adoptent cette date et, si leur texte en est au même état, se tiennent pour enregistrées (onSaved).
 const LiveControl = (function () {
@@ -142,7 +142,7 @@ const LiveControl = (function () {
     live.bar = null;
   }
 
-  // Un enregistrement d'une autre personne du direct : sa date de Grist et si le texte d'ici est dans l'état qu'elle a enregistré (jugé à l'instant où il est entendu), puis dit aux abonnés (js/main.js : adoptLiveSave).
+  // Un enregistrement d'une autre personne du direct : sa date de Grist et si le document d'ici est dans l'état qu'elle a enregistré (jugé à l'instant où il est entendu), puis dit aux abonnés (js/main.js : adoptLiveSave).
   function hearSaved(live, detail) {
     const modified = typeof detail.modified === 'string' && /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(detail.modified) ? Number(detail.modified) : detail.modified;
     const atState = live.session.isAtState(detail.stateVector);
@@ -235,7 +235,7 @@ const LiveControl = (function () {
     const editor = EditorCore.getEditor();
     const doc = Templates.getCurrentId();
     if (!editor || doc == null) return false;
-    const live = { doc: String(doc), automatic, phase: 'starting', cancelled: false, paused: false, trouble: false, problemShown: false, atSavedState: false, heardSaved: null, offs: [], session: null, channel: null, binding: null, bar: null, user: null, running: null };
+    const live = { doc: String(doc), automatic, phase: 'starting', cancelled: false, paused: false, trouble: false, problemShown: false, atSavedState: false, heardSaved: null, offs: [], session: null, channel: null, binding: null, page: null, bar: null, user: null, running: null };
     current = live;
     LiveEntry.changed();
     live.running = run(live, editor);
@@ -280,8 +280,10 @@ const LiveControl = (function () {
     live.user = { name: person.name, color: pickColor(person.seed) };
     live.session.setUser(live.user);
     live.binding = LiveEditor.create({ editor, yt: modules.yt, PM: modules.PM, session: live.session, onProblem: error => problem(live, error) });
+    // La page du modèle (format, marges, thème, décor...) est partagée comme le texte, dans le même document (extensions/edition/live-page.js).
+    live.page = LivePage.create({ session: live.session, binding: live.binding });
     const role = await live.session.open({
-      fill: draft => live.binding.fill(draft),
+      fill: (draft) => { live.binding.fill(draft); LivePage.fill(draft); },
       confirmJoin: live.automatic ? () => LiveEntry.mayJoinNow() : confirmJoin,
       joinOnly: live.automatic,
     });
@@ -289,11 +291,12 @@ const LiveControl = (function () {
     live.role = role;
     live.channel.connect(rows => live.session.receive(rows));
     // Ce qui s'écrit à l'écran pour s'accrocher au salon n'est pas une frappe (settingUp : js/main.js ne s'en sert pas pour « à enregistrer »). Le moteur démarre AVANT l'accroche : ce que la
-    // bibliothèque réécrit en s'accrochant part, avec le reste.
+    // bibliothèque réécrit en s'accrochant part, avec le reste. La page s'accroche après le texte : elle range ses gestes dans l'historique que l'éditeur vient de poser.
     settingUp = true;
     try {
       live.session.start();
       live.binding.attach();
+      live.page.attach();
     } finally {
       settingUp = false;
     }
@@ -324,6 +327,7 @@ const LiveControl = (function () {
   // Rend l'éditeur à lui-même, tout de suite : plugins retirés, historique de ProseMirror remis, barre ôtée.
   function releaseUi(live) {
     live.offs.splice(0).forEach((off) => { try { off(); } catch (e) { console.warn('[LiveControl] écouteur non retiré', e); } });
+    if (live.page) { try { live.page.detach(); } catch (e) { console.warn('[LiveControl] page non rendue', e); } }
     if (live.binding) { try { live.binding.detach(); } catch (e) { console.warn('[LiveControl] éditeur non rendu', e); } }
     removeBar(live);
   }

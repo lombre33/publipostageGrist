@@ -73,7 +73,7 @@ const LiveEditor = (function () {
   }
 
   // Branche l'éditeur. `options` : editor (le TipTap du widget), yt (@tiptap/y-tiptap), PM ({ Plugin, PluginKey } de prosemirror-state, { Decoration, DecorationSet } de prosemirror-view : les copies de l'éditeur du widget), session (le moteur), onProblem(error) (le texte
-  // partagé ne se lit plus dans le schéma de l'éditeur : la synchronisation s'arrête). Rend { attach, detach, undo, redo, projectionError, isAttached, fill }.
+  // partagé ne se lit plus dans le schéma de l'éditeur : la synchronisation s'arrête). Rend { attach, detach, undo, redo, projectionError, isAttached, fill, track, stopCapturing, beforeCapture }.
   function create(options) {
     const { editor, yt, PM, session } = options;
     let attached = false;
@@ -106,6 +106,33 @@ const LiveEditor = (function () {
 
     function undo() { return attached ? !!yt.undo(editor.state) : false; }
     function redo() { return attached ? !!yt.redo(editor.state) : false; }
+
+    // Range dans l'historique de cette personne les gestes d'une autre table de Yjs (la page du modèle, extensions/edition/live-page.js) : ceux qu'elle écrit avec l'origine `origin` se défont et se
+    // refont avec ses frappes, par le même Ctrl+Z - jamais ceux des autres. À appeler une fois l'éditeur accroché (attach). Rend vrai quand c'est fait.
+    function track(ytype, origin) {
+      if (!attached || !manager) return false;
+      manager.addToScope(ytype);
+      manager.addTrackedOrigin(origin);
+      return true;
+    }
+    // Le prochain geste ne se range pas avec le précédent (Yjs groupe ce qui arrive à moins d'une demi-seconde l'un de l'autre).
+    function stopCapturing() { if (attached && manager) manager.stopCapturing(); }
+    // Appelle `fn(transaction)` juste avant que l'historique de cette personne range une écriture - du texte, un Annuler, ou un geste d'une table suivie (track) -, c'est-à-dire à l'instant où Yjs décide de la
+    // grouper avec la précédente ou d'en faire un pas à elle : l'occasion de la séparer (stopCapturing). Rien n'est appelé pour ce que l'historique ne range pas (ce qui vient des autres, les écritures sans
+    // changement que la bibliothèque fait à chaque mouvement du curseur). Rend de quoi retirer l'appel.
+    function beforeCapture(fn) {
+      if (!attached || !manager || typeof manager.captureTransaction !== 'function') return () => {};
+      const target = manager;
+      const original = target.captureTransaction;
+      const ranges = transaction => target.scope.some(type => transaction.changedParentTypes.has(type) || type === target.doc)
+        && (target.trackedOrigins.has(transaction.origin) || (!!transaction.origin && target.trackedOrigins.has(transaction.origin.constructor)));
+      target.captureTransaction = (transaction) => {
+        const kept = original.call(target, transaction);
+        if (kept && ranges(transaction)) fn(transaction);
+        return kept;
+      };
+      return () => { if (target.captureTransaction !== original) target.captureTransaction = original; };
+    }
 
     function keysPlugin() {
       return new PM.Plugin({
@@ -318,7 +345,7 @@ const LiveEditor = (function () {
       manager = null;
     }
 
-    return { attach, detach, undo, redo, fill, projectionError, isAttached: () => attached };
+    return { attach, detach, undo, redo, fill, track, stopCapturing, beforeCapture, projectionError, isAttached: () => attached };
   }
 
   return { create, cursorBuilder, selectionBuilder, readableOn, showsCaret };

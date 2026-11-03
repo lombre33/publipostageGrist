@@ -401,7 +401,7 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
   recharger la dernière version ; le bouton « Enregistrer » écrase la version enregistrée sans le
   vérifier. Il n'y a pas de co-édition en temps réel, sauf l'écriture en direct (avec Grist Factory Suite), qui ne couvre
   que le texte d'un modèle Document.
-- **Écriture en direct** (avec Grist Factory Suite) : elle ne couvre que le texte d'un modèle Document. Tant qu'elle
+- **Écriture en direct** (avec Grist Factory Suite) : elle couvre le texte d'un modèle Document ou d'une présentation, et la page (son format, son sens, ses marges, le thème et son décor, le filigrane, les couleurs et mises en forme gardées ; Ctrl+Z ne défait que le dernier geste de page de la personne). Tant qu'elle
   dure, l'en-tête et le pied de page, le suivi des modifications, les tableaux liés et la restauration d'une version sont
   grisés, avec leur raison ; un modèle e-mail, une grille ou un macro-modèle ne s'écrit pas en direct. Une seule personne
   enregistre le modèle pour tout le monde (la première de la liste, parmi les pages visibles ; si elle ferme sa page, la
@@ -870,8 +870,9 @@ libraries and fonts are in [NOTICE](NOTICE).
   Factory Suite), which only covers the text of a Document template or a presentation.
 - **Live editing** (with Grist Factory Suite): it only covers the text of a Document template or a presentation (in a
   presentation: also the free frames - position, size, text -, the slides of the strip and their background,
-  transition and notes; the object another person has chosen carries their outline and name; the page format, the
-  theme and the decor are not shared yet). While it lasts, the
+  transition and notes; the object another person has chosen carries their outline and name; for a document or a presentation, the page
+  too: its format, direction, margins, the theme and its decor, the watermark and the saved colors and formats, with an Undo
+  that only reverts the person's own last page gesture). While it lasts, the
   header and footer, track changes, linked tables and restoring a version are greyed out, with their reason; an e-mail
   template, a grid or a macro-template cannot be written live. One person saves the template for everyone (the first in
   the list, among the visible pages; if they close their page, the next one takes over). A keystroke shows up for the
