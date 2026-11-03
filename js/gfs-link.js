@@ -17,7 +17,7 @@
 //    dans la vue de Grist, il n'y a plus de « Enregistrer » à cliquer ; `false`, il est resté un brouillon de Grist (GFS s'est replié dessus), que « Enregistrer » partage. Le dernier est gardé (`settingsSaved()`),
 //    les abonnés de `onSettings` sont rappelés quand il change (js/save-reminder.js, le seul à s'en servir) ;
 //  - `installer`, quand la personne clique une fonction grisée dans GFS : GFS ouvre sa fenêtre d'installation ;
-//  - l'appel `ouvrir`, que GFS envoie à l'app déjà ouverte quand la personne double-clique un autre fichier (consigne 010) ou choisit « Nouveau > Importer » (consigne 035, avec le fichier) : l'abonné de `onOpen` répond, ce fichier lui rend la réponse. Tout
+//  - l'appel `ouvrir`, que GFS envoie à l'app déjà ouverte quand la personne double-clique un autre fichier (consigne 010) ou choisit « Nouveau > Importer » (consigne 035, avec le fichier) ou « Lire » sur un PDF (consigne 040, avec le PDF) : l'abonné de `onOpen` répond, ce fichier lui rend la réponse. Tout
 //    autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3).
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
 // `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `settingsSaved()` rend null, `hideBar()` rend faux et `opensInNewTab()` rend faux. Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
@@ -29,6 +29,7 @@ const GfsLink = (function () {
   const STORAGE_KEY = /^[A-Za-z0-9_.:-]{1,64}$/;   // contrats 5.3 : la forme d'une clé de l'espace d'une app (1 à 64 caractères)
   const BAR_EDGES = { gauche: 'left', haut: 'top', droite: 'right', bas: 'bottom' };   // contrats 5.2, point 7 : les quatre bords où GFS pose sa barre, nommés comme le reste de l'app
   const IMPORT_REASON = 'importer';   // contrats 5.2, point 3 (consigne 035) : la raison d'une ouverture qui porte `importation`
+  const READ_REASON = 'lire';         // contrats 5.2, point 3 (consigne 040) : la raison d'une ouverture qui porte `lecture`
 
   const hostContract = (function () {
     try {
@@ -41,7 +42,7 @@ const GfsLink = (function () {
   let extensions = [];
   let libraries = new Map();   // identifiant -> { src, integrite, forme } (forme : 'script' ou 'module', contrats de GFS 5.2 point 4)
   let address = '';            // `adresseWidget` du contexte ('' : seul, ou GFS ne l'a pas donnée)
-  let opening = null;          // `ouverture` du contexte : null, ou { fichier: null | { id, type }, type, dossier, raison[, importation: { valeur, fichier: File }] }
+  let opening = null;          // `ouverture` du contexte : null, ou { fichier: null | { id, type }, type, dossier, raison[, importation: { valeur, fichier: File }][, lecture: { id, fichier: File }] }
   let language = null;         // `langue` du contexte, puis de l'événement `langue` : 'fr' ou 'en' (null : seul, ou GFS ne la donne pas)
   let storage = null;          // `stockage` du contexte (consigne 024) : Map clé -> texte, l'espace de cette app chez GFS (null : seul, GFS ne répond pas ou ne le donne pas)
   const languageListeners = new Set();
@@ -77,7 +78,9 @@ const GfsLink = (function () {
   // `ouverture` (contrats 5.2, point 3) ou `args` de l'appel `ouvrir` (5.4) : { fichier, type, dossier, raison } où `fichier` est null ou { id, type }, l'`id` pris comme texte (le numéro de
   // ligne du modèle). Pour la raison `importer` (« Nouveau > Importer », consigne 035 : GFS a ouvert le sélecteur lui-même et donne le fichier choisi, une seule fois), s'y ajoute
   // `importation: { valeur, fichier }` : `valeur` un texte (`excel`, `markdown` ou `powerpoint`) et `fichier` un `File`. Pour toute autre raison, ou si `valeur` n'est pas un texte ou `fichier` pas un
-  // `File`, l'ouverture est lue sans importation. Rien d'autre n'est gardé ; null quand ce n'est pas un objet.
+  // `File`, l'ouverture est lue sans importation. Pour la raison `lire` (« Lire » sur un PDF, consigne 040 : GFS garde le PDF, le télécharge lui-même et le donne, une seule fois), s'y ajoute
+  // `lecture: { id, fichier }` : `id` un texte (l'identifiant du PDF chez GFS) et `fichier` un `File` (le PDF, à son nom) ; pour toute autre raison, ou si `id` n'est pas un texte ou `fichier` pas un `File`,
+  // l'ouverture est lue sans lecture. Rien d'autre n'est gardé ; null quand ce n'est pas un objet.
   function normalizeOpening(raw) {
     if (!raw || typeof raw !== 'object') return null;
     const file = raw.fichier && typeof raw.fichier === 'object' && raw.fichier.id != null && String(raw.fichier.id).trim() !== '' ? raw.fichier : null;
@@ -86,6 +89,10 @@ const GfsLink = (function () {
     const imported = raw.importation;
     if (found.raison === IMPORT_REASON && imported && typeof imported === 'object' && typeof imported.valeur === 'string' && typeof File === 'function' && imported.fichier instanceof File) {
       found.importation = { valeur: imported.valeur, fichier: imported.fichier };
+    }
+    const reading = raw.lecture;
+    if (found.raison === READ_REASON && reading && typeof reading === 'object' && typeof reading.id === 'string' && typeof File === 'function' && reading.fichier instanceof File) {
+      found.lecture = { id: reading.id, fichier: reading.fichier };
     }
     return found;
   }
@@ -223,7 +230,7 @@ const GfsLink = (function () {
   // Un lien `mailto:` ou `tel:` suivi dans le cadre isolé de GFS le fait mourir (sa politique `frame-src` ne connaît pas ces adresses, consigne 011) : hébergée, l'app l'ouvre donc dans un
   // nouvel onglet, où rien ne casse. Seule, faux : ces liens se comportent comme avant.
   const opensInNewTab = href => hosted && /^(?:mailto|tel):/i.test(String(href == null ? '' : href).trim());
-  // Ce que GFS demande d'ouvrir au démarrage (`ouverture` du contexte) : null, ou { fichier: null | { id, type }, type, dossier, raison[, importation: { valeur, fichier }] } (voir normalizeOpening). null seul, si GFS
+  // Ce que GFS demande d'ouvrir au démarrage (`ouverture` du contexte) : null, ou { fichier: null | { id, type }, type, dossier, raison[, importation: { valeur, fichier }][, lecture: { id, fichier }] } (voir normalizeOpening). null seul, si GFS
   // ne répond pas, ou s'il n'a rien demandé.
   const getOpening = () => opening;
   // La langue de GFS qui vaut maintenant, 'fr' ou 'en' : celle du contexte, puis celle du dernier événement `langue`. null seul, si GFS ne répond pas ou ne la donne pas (un GFS d'avant la consigne 019).
@@ -264,7 +271,7 @@ const GfsLink = (function () {
   // Un abonné des réglages est rappelé (`fn(true | false)`, ce que rend `settingsSaved()`) à chaque événement `reglages` qui change l'état, jamais à l'arrivée du contexte (il n'en porte pas) : le départ lit
   // `settingsSaved()`. Rend de quoi se désabonner.
   function onSettings(fn) { settingsListeners.add(fn); return () => settingsListeners.delete(fn); }
-  // Inscrit celui qui ouvre ce que GFS demande : `fn({ fichier, type, dossier, raison[, importation] })` rend (une promesse de) vrai quand le fichier demandé est ouvert à la fin, faux sinon ; GFS en reçoit
+  // Inscrit celui qui ouvre ce que GFS demande : `fn({ fichier, type, dossier, raison[, importation][, lecture] })` rend (une promesse de) vrai quand le fichier demandé est ouvert à la fin, faux sinon ; GFS en reçoit
   // `{ ouvert }`, sans délai (la personne peut prendre son temps). Un seul abonné ; les appels arrivés avant lui lui sont donnés dans l'ordre.
   function onOpen(fn) {
     openHandler = fn;

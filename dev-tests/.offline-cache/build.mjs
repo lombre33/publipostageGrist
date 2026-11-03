@@ -101,4 +101,29 @@ if (existsSync(LIVE_SPEC)) {
   liveBuilt = true;
 }
 
-console.log('[build-offline] OK -', Object.keys(map).length, 'modules ESM +', umd.length, 'UMD', liveBuilt ? '+ edition-live' : '(' + LIVE_SPEC + ' absent : le fichier edition-live n\'est pas construit)');
+// Le fichier « pdfjs » de Grist Factory Suite (consigne GFS 040, la lecture de PDF) : pdf.js 6.5 (pdfjs-dist) et son moteur en UN module ES qui se range dans globalThis.GfsPaquets.pdfjs - comme le fichier de GFS,
+// il pose lui-même le « faux Worker » (globalThis.pdfjsWorker : un cadre d'app sans `allow-same-origin` ne crée aucun Worker, l'app ne règle donc jamais `workerSrc`). Mêmes réglages d'assemblage que le fichier
+// « edition-live » ci-dessus ; les octets peuvent différer de ceux de GFS, le contenu et la forme sont les mêmes. Recette et version dans pdfjs-gfs.json ; sans lui, cette étape est sautée (le labo de GFS n'en a pas besoin).
+const PDFJS_SPEC = 'pdfjs-gfs.json';
+let pdfjsBuilt = false;
+if (existsSync(PDFJS_SPEC)) {
+  const spec = JSON.parse(readFileSync(PDFJS_SPEC, 'utf8'));
+  const recipe = spec.assemble;
+  const pdfjsDeps = join(process.cwd(), 'pdfjs-deps');
+  mkdirSync(pdfjsDeps, { recursive: true });
+  writeFileSync(join(pdfjsDeps, 'package.json'), JSON.stringify({ name: 'publipostage-pdfjs-deps', private: true, dependencies: spec.dependencies }, null, 2));
+  execFileSync('npm', ['install', '--no-audit', '--no-fund', '--silent'], { cwd: pdfjsDeps, stdio: 'inherit' });
+  const pdfjsRegistry = `${recipe.modules.map((name, i) => `import * as m${i} from ${JSON.stringify(name)};`).join('\n')}\nimport * as engine from ${JSON.stringify(recipe.moteur)};\n`
+    + `globalThis.pdfjsWorker = { WorkerMessageHandler: engine.WorkerMessageHandler };\n`
+    + `(globalThis.GfsPaquets ||= {})["pdfjs"] = { version: ${JSON.stringify(recipe.version)}, modules: { ${recipe.modules.map((name, i) => `${JSON.stringify(name)}: m${i}`).join(', ')} } };\n`;
+  const pdfjs = await build({
+    bundle: true, format: 'esm', target: 'es2022', platform: 'browser', minify: true, legalComments: 'none',
+    absWorkingDir: process.cwd(), write: false, logLevel: 'warning',
+    stdin: { contents: pdfjsRegistry, resolveDir: pdfjsDeps, sourcefile: 'registre.js' },
+  });
+  mkdirSync('pdfjs', { recursive: true });
+  writeFileSync('pdfjs/pdfjs.js', pdfjs.outputFiles[0].contents);
+  pdfjsBuilt = true;
+}
+
+console.log('[build-offline] OK -', Object.keys(map).length, 'modules ESM +', umd.length, 'UMD', liveBuilt ? '+ edition-live' : '(' + LIVE_SPEC + ' absent : le fichier edition-live n\'est pas construit)', pdfjsBuilt ? '+ pdfjs' : '(' + PDFJS_SPEC + ' absent : le fichier pdfjs n\'est pas construit)');

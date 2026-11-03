@@ -1,7 +1,7 @@
 // Saisies et confirmations du widget : deux fenêtres à la place de window.prompt et window.confirm, sur la base commune (js/modal-base.js : titre et
 // boutons fixes, Tab et Échap tenus, thème).
-//  Dialogs.prompt({ title, label?, message?, value?, placeholder?, confirmLabel? }) -> Promise<string | null> (null : annulé ; '' : champ laissé
-//  vide)
+//  Dialogs.prompt({ title, label?, message?, value?, placeholder?, confirmLabel?, secret? }) -> Promise<string | null> (null : annulé ; '' : champ laissé
+//  vide ; `secret` : le champ masque ce qui s'y tape, un mot de passe)
 //  Dialogs.confirm({ title, message, confirmLabel?, danger? }) -> Promise<boolean>
 //  Dialogs.choose({ title, message, choices, cancelLabel? }) -> Promise<string | null> (`value` du choix cliqué ; null : annulé, Échap compris)
 //    choices : [{ value, label, primary? }] dans l'ordre d'affichage, à droite de « Annuler » (qui reste le premier bouton) ; le focus arrive sur le
@@ -58,6 +58,7 @@ const Dialogs = (function () {
     label.hidden = !isPrompt || !opts.label;
     input.hidden = !isPrompt;
     input.value = isPrompt && opts.value != null ? String(opts.value) : '';
+    input.type = opts.secret ? 'password' : 'text';
     input.placeholder = opts.placeholder || '';
     // Le champ est nommé par son libellé, sinon par le titre ; la fenêtre est décrite par le message quand il y en a un.
     input.setAttribute('aria-labelledby', opts.label ? 'pp-dialog-input-label' : 'pp-dialog-title');

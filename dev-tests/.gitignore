@@ -5,5 +5,7 @@
 .offline-cache/entries/
 .offline-cache/edition-live/
 .offline-cache/edition-live-deps/
+.offline-cache/pdfjs/
+.offline-cache/pdfjs-deps/
 .offline-cache/esm-map.json
 .offline-cache/package-lock.json

@@ -320,6 +320,8 @@
     // Le point de passage de toute ouverture (liste, modèle de la vue, règle de ligne, retours, restauration...) : un modèle d'un type que le widget ne sait pas ouvrir n'entre jamais
     // dans l'éditeur, quel que soit le chemin (garde « type inconnu », js/templates.js:isOpenableType). Avant tout le reste : rien de l'écran ne change.
     if (tpl && !Templates.isOpenableType(tpl.typeModele)) { keepOpenTemplate(tpl); return; }
+    // Un PDF à l'écran (js/pdf-reading.js) se ferme dès qu'un modèle s'ouvre, quel que soit le chemin : le mode d'avant la lecture revient (onPdfReadingChange).
+    PdfReading.close();
     // L'écriture en direct est celle du texte d'UN modèle : elle s'arrête avant que l'éditeur change de texte, quel que soit le chemin d'ouverture (js/live-entry.js).
     LiveEntry.releaseEditor();
     forgetMacroOriginUnless(tpl);
@@ -703,6 +705,29 @@
       case 'powerpoint': return importPptxFile(file);
       default: return false;
     }
+  }
+
+  // « Lire » un PDF demandé par GFS (js/gfs-open.js, consigne GFS 040 ; js/pdf-reading.js, extension « lecture-pdf ») : GFS donne le PDF qu'il garde et la Lecture le montre. Le PDF est lu d'abord (un PDF illisible ne coûte rien) ;
+  // ensuite il quitte le modèle ouvert par le chemin d'un autre modèle - « Enregistrer / Abandonner / Annuler » s'il est modifié, puis un document vierge en dessous (rien d'écrit, comme « Nouveau ») - et le mode d'avant la
+  // lecture est gardé pour être rendu quand un modèle s'ouvre. Un compte en lecture seule lit un PDF comme il lit un modèle. true : on peut continuer ; false : la personne reste (« Annuler »).
+  let pdfReturnMode = null;
+  async function leaveForPdf() {
+    if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return false;
+    pdfReturnMode = currentMode;
+    startBlankDocument();
+    return true;
+  }
+  // Le PDF arrive ou part : grisés, feuille de la Lecture, et à son départ le mode d'avant (l'édition) revient AVANT que le modèle qui le ferme se pose (loadTemplateIntoEditor appelle PdfReading.close en tête) : ce modèle
+  // se charge dans l'éditeur montré, et ne se dessine pas deux fois dans la Lecture. Resté en Lecture avant le PDF, on y reste : le modèle posé s'y dessine (la fin de loadTemplateIntoEditor).
+  function onPdfReadingChange(active) {
+    applyPdfLocks();
+    ReaderMode.lend(active);
+    const toggle = document.getElementById('v2-toggle-a4-preview');
+    readerContainer.classList.toggle('a4-preview', active || (!!toggle && toggle.checked && !GridEditor.isGridType(currentTypeModele)));
+    if (active) { refreshPageFitZoom(); return; }
+    const back = pdfReturnMode;
+    pdfReturnMode = null;
+    if (back === 'edit' && currentMode === 'read') switchMode('edit');
   }
 
   // Import d'un classeur Excel (js/grid-xlsx-import.js). Le sélecteur de fichier doit s'ouvrir dans le clic ; le classeur est lu ensuite et, s'il a
@@ -1472,6 +1497,40 @@
     else el.removeAttribute('aria-disabled');
   }
 
+  // Pendant la lecture d'un PDF (js/pdf-reading.js, consigne GFS 040), ce qui ne s'applique pas à lui reste là, GRISÉ avec sa raison - dans l'info-bulle du survol (`title`, comme setExplained de js/main-toolbar.js :
+  // l'info-bulle de l'app, qu'un grisé estomperait avec le bouton, est cachée en CSS) et, au clic, dans le coin d'état -, jamais caché : l'édition, ce qui change ou range un modèle (enregistrer, renommer, supprimer, la
+  // page), l'export et les commentaires. « Nouveau » et l'arbre des modèles restent actifs : ouvrir un modèle ferme le PDF (loadTemplateIntoEditor). Un compte en lecture seule garde en plus son propre grisé
+  // (ACCESS_LOCK_CLASS), qui ne s'efface pas avec celui-ci. Les règles de la feuille de style : extensions/lecture-pdf/pdf-view.css.
+  const PDF_LOCK_CLASS = 'pp-pdf-locked';
+  const PDF_LOCKS = [
+    { reason: 'edit', ids: ['btn-mode-edit'] },
+    { reason: 'template', ids: ['v2-save-group', 'btn-delete', 'btn-link-rules', 'btn-rename-template', 'btn-set-default-template', 'v2-pdf-filename-cluster', 'v2-page-group'] },
+    { reason: 'export', ids: EXPORT_LOCKED_IDS },
+    { reason: 'comment', ids: ['v2-btn-comment'] },
+  ];
+  const PDF_KEPT_TITLE = 'data-pp-pdf-kept-title';   // le `title` que la commande avait avant le grisé, rendu au dégrisé
+  function applyPdfLocks() {
+    const on = PdfReading.isActive();
+    const reasons = on ? PdfReading.reasons() : null;
+    PDF_LOCKS.forEach(({ reason, ids }) => ids.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.toggle(PDF_LOCK_CLASS, on);
+      if (on) {
+        if (!el.hasAttribute(PDF_KEPT_TITLE)) el.setAttribute(PDF_KEPT_TITLE, el.getAttribute('title') || '');
+        el.setAttribute('aria-disabled', 'true');
+        el.setAttribute('data-pp-pdf-reason', reasons[reason]);
+        el.title = reasons[reason];
+      } else if (el.hasAttribute(PDF_KEPT_TITLE)) {
+        const before = el.getAttribute(PDF_KEPT_TITLE);
+        el.removeAttribute(PDF_KEPT_TITLE);
+        el.removeAttribute('data-pp-pdf-reason');
+        if (before) el.title = before; else el.removeAttribute('title');
+        if (!el.classList.contains(ACCESS_LOCK_CLASS)) el.removeAttribute('aria-disabled');
+      }
+    }));
+  }
+
   // Barre de mise en forme et d'insertion (#v2-toolbar) : grisée en lecture seule, dès que la Lecture est affichée, choisie ou imposée, et tant que la
   // carte de l'accès remplace l'éditeur. L'éditeur y est masqué mais ses commandes restent actives : un clic sur Tableau, Sommaire ou Citation
   // modifierait le modèle caché, que l'enregistrement automatique écrirait sans rien montrer. Commenter suit son propre droit, jamais le mode : dans la
@@ -1501,6 +1560,7 @@
     EXPORT_LOCKED_IDS.forEach(id => setAccessLocked(document.getElementById(id), !rights.canExport));
     READ_ONLY_DISABLED_INPUTS.forEach(id => { const input = document.getElementById(id); if (input) input.disabled = rights.readOnly; });
     applyCommentsPermissions();
+    applyPdfLocks();
     updateSaveStatus();
     LiveEntry.changed(); // un document en lecture seule ne s'écrit pas en direct : la ligne du menu suit les droits (js/live-entry.js)
     SlidesEntry.changed(); // ni ses diapositives (js/slides-entry.js)
@@ -1554,6 +1614,14 @@
       if (!target || !target.closest || !target.closest('.' + ACCESS_LOCK_CLASS)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
+    }, true);
+    // Le grisé de la lecture d'un PDF (applyPdfLocks) : le clic ne fait rien et le coin d'état en dit la raison.
+    document.addEventListener('click', event => {
+      const locked = event.target && event.target.closest ? event.target.closest('.' + PDF_LOCK_CLASS) : null;
+      if (!locked) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setStatus(locked.getAttribute('data-pp-pdf-reason') || '');
     }, true);
   }
 
@@ -1668,6 +1736,8 @@
   // « Enregistré à HH:MM » seulement quand tout ce qui a été tapé est en base, rien sinon (brouillon jamais enregistré, frappe en attente, conflit
   // non résolu) ; avec l'enregistrement automatique coupé, une frappe en attente le dit.
   function updateSaveStatus() {
+    // Un PDF à l'écran (js/pdf-reading.js) n'a ni enregistrement ni modèle sans nom à signaler : le coin d'état dit le PDF.
+    if (PdfReading.isActive()) { const pdf = PdfReading.info(); setStatus(I18n.t('pdf.status.opened', { name: pdf.name, n: pdf.pages })); return; }
     // Lecture seule (js/access-rights.js) : rien ne s'enregistre pour cette personne, « Enregistré à… » ou « modèle non enregistré » n'auraient pas
     // de sens.
     if (isReadOnly()) { setStatus(I18n.t('status.readOnly')); return; }
@@ -1960,6 +2030,8 @@
   function perModelOption(perModel = PageLayout.isOrientationAuto()) { return { perModel }; }
 
   async function renderReader(record, recordTableId) {
+    // Un PDF à l'écran (js/pdf-reading.js) : la Lecture montre le PDF, que la ligne de la table change ou non ; il se pose une fois, et seul un modèle qui s'ouvre le remplace.
+    if (PdfReading.isActive()) { await PdfReading.render(readerContainer); return; }
     if (typeof record === 'undefined') record = latestRecord || GristAPI.getCurrentRecord();
     let tableId = recordTableId || GristAPI.getCurrentTableId() || currentTableId;
     // Sans ligne sélectionnée, ReaderMode.render() affiche tout de même son état vide : un simple `return` laisserait #reader-container vide, un
@@ -2944,6 +3016,8 @@
   async function switchMode(mode) {
     // Lecture seule : le mode Lecture est le seul accessible, y compris depuis la dernière ligne d'init().
     if (isReadOnly()) mode = 'read';
+    // Un PDF à l'écran (js/pdf-reading.js) ne s'édite pas : le mode Lecture est le seul accessible, le bouton Édition est grisé avec sa raison (applyPdfLocks).
+    if (PdfReading.isActive()) mode = 'read';
     // La Lecture épurée (js/clean-reading.js) n'existe que dans le mode Lecture : un autre mode la quitte, la barre du haut revient avec lui.
     CleanReading.onModeChange(mode);
     if (mode === 'read') Editor.exitHeaderFooterModeIfActive();
@@ -2974,7 +3048,7 @@
     const label = toggle.closest('.a4-toggle');
     const on = toggle.checked && !GridEditor.isGridType(currentTypeModele);
     editorContainer.classList.toggle('a4-preview', on);
-    readerContainer.classList.toggle('a4-preview', on);
+    readerContainer.classList.toggle('a4-preview', on || PdfReading.isActive());
     if (label) label.classList.toggle('checked', toggle.checked);
     // Le facteur d'ajustement n'a de sens qu'en Aperçu A4 : applyPageFitZoom le retire de lui-même quand la classe disparaît. Avant la pagination,
     // qui mesure le rendu réel et serait sinon calculée avec l'ancien facteur.
@@ -3478,13 +3552,16 @@
     ExportDate.init();
     SaveReminder.init();
     RowTemplate.init({
-      openTemplate: openTemplateForRow,
+      // La ligne de la table qui change ne remplace pas le PDF que la personne lit.
+      openTemplate: id => (PdfReading.isActive() ? Promise.resolve(false) : openTemplateForRow(id)),
       currentId: () => Templates.getCurrentId(),
       currentRecord: () => ({ record: latestRecord, tableId: latestRecordTableId }),
     });
     // GFS (js/gfs-open.js, consignes GFS 010, 014 et 035) : le modèle qu'il désigne s'ouvre au démarrage, et son appel `ouvrir` passe par le chemin du sélecteur, comme la règle de ligne ; « Nouveau » ouvre un modèle vierge du type
     // demandé, par le chemin du bouton « Nouveau » de ce type ; « Nouveau > Importer » importe le fichier qu'il donne, par le chemin de la ligne d'import du menu « + ». Seul, rien n'arrive.
-    GfsOpen.init({ openTemplate: openTemplateForRow, openBlank: openBlankOfType, importFile: importFileFromGfs, say: text => setStatus(text) });
+    GfsOpen.init({ openTemplate: openTemplateForRow, openBlank: openBlankOfType, importFile: importFileFromGfs, readPdf: PdfReading.open, say: text => setStatus(text) });
+    PdfReading.init({ leave: leaveForPdf, show: () => switchMode('read'), say: (text, isError) => setStatus(text, isError), layoutChanged: () => refreshPageFitZoom() });
+    PdfReading.onChange(onPdfReadingChange);
     await editorReady;
     attachFieldEditors(await Editor.loadLibraries());
     Comments.setReaderHooks({ save: saveReaderCommentAnchors, refresh: () => renderReader() });

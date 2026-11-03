@@ -1168,7 +1168,18 @@ const ReaderMode = (function () {
   // Vrai quand la Lecture affichée porte une boucle sur toutes les lignes (LoopRules.createContext : `readsAll`) : ses lignes ne suivent pas la ligne choisie,
   // js/main.js la redessine quand les lignes de la vue de Grist changent (BatchScope.onViewChange).
   let displayedReadsAll = false;
+  // La Lecture prêtée à autre chose que le modèle (un PDF, js/pdf-reading.js) : tant que c'est le cas, `render` ne dessine rien - ni le rendu commencé avant le prêt (il écrirait par-dessus : le document vierge sous un PDF ouvert
+  // depuis la Lecture), ni celui qu'on demande pendant (la ligne de la table change, un commentaire se pose) - et la mise en page suivie du modèle s'arrête. `lend(false)` rend la Lecture : le modèle qui s'ouvre s'y dessine.
+  let lent = false;
+  function lend(on) {
+    lent = on === true;
+    if (!lent) return;
+    renderGeneration++;
+    stopGeometryWatch();
+    displayedReadsAll = false;
+  }
   async function render(htmlContent, tableId, record, headerFooterData) {
+    if (lent) return;
     // `htmlContent` : le HTML du document, ou une fonction qui le donne (js/main.js : un macro-modèle assemble ses modèles contre la ligne courante,
     // ce qui relit des tables : l'appel se fait donc dans les lectures partagées de ce rendu, cf. GristAPI.withReadPass).
     const renderId = ++renderGeneration;
@@ -1702,5 +1713,5 @@ const ReaderMode = (function () {
       catch (e) { return ''; }
     });
   }
-  return { render, renderInto, preview, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll };
+  return { render, lend, renderInto, preview, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll };
 })();
