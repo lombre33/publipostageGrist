@@ -247,12 +247,12 @@
 
   cases.push({
     id: 'sc_default_keys_are_the_ones_proposed_to_antoine_and_never_clash',
-    description: 'Les touches de départ sont celles de la carte (Alt+L Lecture, Alt+E Édition, Alt+M modèles, F2 renommer, Alt+P export PDF, Ctrl+/ liste, Alt+Maj+1 2 3 titres, Alt+Maj+H surligner, Alt+Entrée saut de page, Alt+Maj+M commentaire, Alt+Maj+D date du jour) ; les touches déjà liées (Ctrl+S, Ctrl+K, Ctrl+B...) y figurent ; aucune touche n\'est prise deux fois, aucune n\'est gardée par le navigateur',
+    description: 'Les touches de départ sont celles de la carte (Alt+L Lecture, Alt+E Édition, Alt+M modèles, F2 renommer, Alt+P export PDF, Ctrl+/ liste, Alt+Maj+1 2 3 titres, Alt+Maj+H surligner, Alt+Entrée saut de page, Ctrl+Maj+M commentaire, Alt+Maj+D date du jour) ; les touches déjà liées (Ctrl+S, Ctrl+K, Ctrl+B...) y figurent ; aucune touche n\'est prise deux fois, aucune n\'est gardée par le navigateur',
     run: async (h) => {
       await reset(h);
       const expected = {
         modeRead: 'Alt+l', modeEdit: 'Alt+e', templates: 'Alt+m', rename: 'F2', exportPdf: 'Alt+p', keysList: 'Mod+/',
-        heading1: 'Alt+Shift+1', heading2: 'Alt+Shift+2', heading3: 'Alt+Shift+3', highlight: 'Alt+Shift+h', pageBreak: 'Alt+Enter', comment: 'Alt+Shift+m', today: 'Alt+Shift+d',
+        heading1: 'Alt+Shift+1', heading2: 'Alt+Shift+2', heading3: 'Alt+Shift+3', highlight: 'Alt+Shift+h', pageBreak: 'Alt+Enter', comment: 'Mod+Shift+m', today: 'Alt+Shift+d',
         save: 'Mod+s', link: 'Mod+k', bold: 'Mod+b', italic: 'Mod+i', underline: 'Mod+u', undo: 'Mod+z', redo: 'Mod+y', find: 'Mod+f', replace: 'Mod+h',
         bulletList: 'Mod+Shift+8', orderedList: 'Mod+Shift+7', taskList: 'Mod+Shift+9',
       };
@@ -272,6 +272,51 @@
       const pass = wrong.length === 0 && without.length === 0 && clashes.length === 0 && refused.length === 0
         && labels.join(' | ') === 'Alt+L | Alt+Maj+1 | Alt+Entrée | Ctrl+S | Ctrl+/';
       return { pass, notes: JSON.stringify({ wrong, without, clashes, refused, labels }) };
+    },
+  });
+
+  // « Commenter la sélection » : Ctrl+Maj+M (⇧⌘M sur Mac) depuis le 03/11 (demande d'Antoine : « changer le raccourci par défaut en ctrl shift m »), à la place d'Alt+Maj+M. L'ancienne
+  // touche ne presse plus le bouton et la liste de Réglages peut la donner à une autre action. Ce n'est pas la touche de Google Docs (Ctrl+Alt+M) : `onKeydown` n'écoute jamais Ctrl+Alt (AltGr).
+  cases.push({
+    id: 'sc_comment_key_is_ctrl_shift_m_and_the_old_alt_shift_m_does_nothing',
+    description: 'La touche de « Commenter la sélection » est Ctrl+Maj+M (⇧⌘M sur Mac) : elle presse le bouton, l\'infobulle et aria-keyshortcuts la disent et la liste de Réglages la refuse à une autre action ; Alt+Maj+M, l\'ancienne, ne presse plus rien et peut aller à une autre action ; une personne qui l\'a choisie la garde, « Par défaut » rend Ctrl+Maj+M',
+    run: async (h) => {
+      await reset(h);
+      await withText(h);
+      const button = document.getElementById('v2-btn-comment');
+      const out = {};
+      out.key = Shortcuts.keyFor('comment');
+      out.label = label('comment');
+      Shortcuts.setPlatform('mac');
+      out.mac = label('comment');
+      Shortcuts.setPlatform(null);
+      out.tip = afterContent(button);
+      out.aria = button.getAttribute('aria-keyshortcuts');
+      const spy = spyPresses(['v2-btn-comment']);
+      const fresh = press('Ctrl+Shift+m', inEditor());
+      out.newKey = { taken: fresh.defaultPrevented, pressed: spy.seen.join(',') };
+      spy.seen.length = 0;
+      const old = press('Alt+Shift+m', inEditor());
+      out.oldKey = { taken: old.defaultPrevented, pressed: spy.seen.join(',') };
+      spy.stop();
+      out.duplicate = Shortcuts.check('table', 'Mod+Shift+m').problem;
+      out.oldFree = Shortcuts.check('table', 'Alt+Shift+m').problem;
+      // Une personne qui a remis Alt+Maj+M à « Commenter la sélection » la garde ; « Par défaut » rend Ctrl+Maj+M.
+      Shortcuts.setKey('comment', 'Alt+Shift+m');
+      const chosen = spyPresses(['v2-btn-comment']);
+      press('Alt+Shift+m', inEditor());
+      out.chosenKey = chosen.seen.join(',');
+      chosen.stop();
+      Shortcuts.resetKey('comment');
+      out.afterReset = Shortcuts.keyFor('comment');
+      const pass = out.key === 'Mod+Shift+m' && out.label === 'Ctrl+Maj+M' && out.mac === '⇧⌘M'
+        && out.tip === 'Commenter la sélection (Ctrl+Maj+M)' && out.aria === 'Control+Shift+M'
+        && out.newKey.taken === true && out.newKey.pressed === 'v2-btn-comment'
+        && out.oldKey.taken === false && out.oldKey.pressed === ''
+        && out.duplicate === 'duplicate' && out.oldFree === ''
+        && out.chosenKey === 'v2-btn-comment' && out.afterReset === 'Mod+Shift+m';
+      await reset(h);
+      return { pass, notes: JSON.stringify(out) };
     },
   });
 

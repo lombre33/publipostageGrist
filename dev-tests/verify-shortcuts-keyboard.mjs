@@ -3,6 +3,7 @@
 // souris (page.mouse), en clair, en sombre, en anglais et en mode Mac. Ce que dev-tests/scenarios-shortcuts.js ne peut pas voir depuis la page : un KeyboardEvent construit à la main
 // ne passe ni par l'ordre des écouteurs d'une vraie touche (l'écouteur de Shortcuts doit arrêter Ctrl+B AVANT l'éditeur), ni par ce que le navigateur écrit dans le texte.
 //  - les touches de départ (Alt+L, Alt+E, Alt+Maj+1 2 3, Alt+Entrée, Alt+Maj+D, Alt+Maj+H, Ctrl+/, F2, Alt+M, Alt+P) font ce que font leurs boutons, sans rien écrire dans le texte ;
+//  - « Commenter la sélection » : Ctrl+Maj+M (⇧⌘M sur Mac) ouvre le composeur sur le mot choisi à la souris, le curseur dans sa réponse, rien d'écrit dans le texte ; Alt+Maj+M, l'ancienne, ne fait plus rien (demande du 03/11) ;
 //  - Rechercher (Ctrl+F) et Rechercher et remplacer (Ctrl+H) restent à la barre de recherche ; changés, la nouvelle touche l'ouvre (sans la refermer), l'ancienne ne fait plus rien, la loupe la dit ;
 //  - une touche changée dans Réglages > Raccourcis marche tout de suite, l'ancienne ne fait plus rien (Ctrl+B ne met plus en gras), « Par défaut » les rend ;
 //  - l'écoute d'une combinaison : un doublon, une touche seule, Ctrl+Alt (AltGr) sont refusés sous la touche concernée, Échap abandonne sans fermer la fenêtre ;
@@ -627,6 +628,79 @@ async function tooltipsPart(T, fr) {
   await page.waitForTimeout(250);
 }
 
+// === « Commenter la sélection » : Ctrl+Maj+M à la vraie frappe, Alt+Maj+M ne fait plus rien ====================================================================================
+// Demande du 03/11 : « changer le raccourci par défaut en ctrl shift m ». Un commentaire exige un modèle enregistré (sinon js/comments.js dit « Enregistrez d'abord le modèle » par un alert()
+// que la fin de ce script refuse) : le modèle est enregistré une fois, au premier passage. Le mot est choisi à la vraie souris (double-clic), la touche tapée au vrai clavier.
+async function commentKeyPart(T, fr) {
+  await resetAll();
+  // Le menu Titre reste ouvert après `tooltipsPart` (sa souris finit à 350, 380, dans son cadre) et couvrirait le mot, que le double-clic atteindrait à sa place : la souris va dans le coin
+  // libre et on attend que les menus au survol se referment.
+  await page.mouse.move(WIDTH - 4, HEIGHT - 4);
+  await page.waitForFunction(() => !Array.from(document.querySelectorAll('.v2-hover-flyout')).some(f => getComputedStyle(f).display !== 'none' && f.getClientRects().length > 0), null, { timeout: 4000 }).catch(() => {});
+  if (!(await page.evaluate(() => !!Templates.getCurrentId()))) {
+    await page.evaluate(() => { Editor.setHTML('<p>Bonjour monde</p>'); document.getElementById('template-name').value = 'Essai touche commentaire'; });
+    await page.waitForTimeout(250);
+    await click('#btn-save', 900);
+  }
+  await setDoc('<p>Bonjour monde</p>');
+  const composer = () => page.evaluate(() => {
+    const p = document.getElementById('v2-comment-popup');
+    const reply = p && p.querySelector('.v2-comment-popup-reply');
+    const r = p ? p.getBoundingClientRect() : null;
+    return {
+      shown: !!p && p.style.display !== 'none' && p.getClientRects().length > 0,
+      replyFocused: !!reply && document.activeElement === reply,
+      marks: Array.from(document.querySelectorAll('.tiptap .comment-mark')).map(m => m.textContent),
+      inWindow: !!r && r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight,
+    };
+  });
+  const point = await page.evaluate(() => {
+    const node = document.querySelector('.tiptap p').firstChild;
+    const at = node.textContent.indexOf('monde');
+    const range = document.createRange();
+    range.setStart(node, at);
+    range.setEnd(node, at + 5);
+    const b = range.getBoundingClientRect();
+    const x = b.left + b.width / 2, y = b.top + b.height / 2;
+    const hit = document.elementFromPoint(x, y);
+    return { x, y, hit: hit ? hit.tagName + '.' + String(hit.className).slice(0, 40) : null };
+  });
+  await page.mouse.dblclick(point.x, point.y);
+  await page.waitForTimeout(200);
+  const selected = await page.evaluate(() => String(window.getSelection()));
+  check(`${T} : le mot « monde » est sélectionné à la souris`, selected === 'monde', { selected, point });
+  // L'ancienne touche ne fait plus rien : ni composeur, ni marque, rien d'écrit.
+  await page.keyboard.press('Alt+Shift+m');
+  await page.waitForTimeout(400);
+  let state = await composer();
+  check(`${T} : Alt+Maj+M, l'ancienne touche, ne fait plus rien (ni composeur, ni marque, rien d'écrit)`, !state.shown && state.marks.length === 0 && (await plain()) === 'Bonjour monde', { state, plain: await plain() });
+  // Sur l'ancien code elle ouvre le composeur : on le referme pour que le contrôle de la nouvelle touche parte d'un écran net, et ne passe pas grâce au composeur resté ouvert.
+  if (state.shown) {
+    await page.click('#v2-comment-popup .v2-comment-popup-close', { timeout: 5000 });
+    await page.waitForTimeout(300);
+    await page.evaluate(() => { Editor.setHTML('<p>Bonjour monde</p>'); });
+    await page.waitForTimeout(250);
+    await page.mouse.dblclick(point.x, point.y);
+    await page.waitForTimeout(200);
+  }
+  // La nouvelle : le composeur s'ouvre sur le mot, le curseur dans la zone de réponse.
+  await page.keyboard.press('Control+Shift+m');
+  await page.waitForTimeout(500);
+  state = await composer();
+  check(`${T} : Ctrl+Maj+M ouvre le composeur de commentaire sur le mot sélectionné, le curseur dans sa zone de réponse`, state.shown && state.replyFocused && state.marks.join('|') === 'monde', state);
+  check(`${T} : le composeur tient dans la fenêtre ${WIDTH}x${HEIGHT}`, state.inWindow, state);
+  check(`${T} : aucune lettre n'est écrite dans le document (« Bonjour monde » intact)`, (await plain()) === 'Bonjour monde', await plain());
+  await snap(`${T}-8-commentaire`);
+  if (state.shown) {
+    await page.click('#v2-comment-popup .v2-comment-popup-close', { timeout: 5000 });
+    await page.waitForTimeout(300);
+  }
+  // L'infobulle du bouton et les lecteurs d'écran disent la touche.
+  const tip = await page.evaluate(() => { const b = document.getElementById('v2-btn-comment'); return { tip: getComputedStyle(b, '::after').content.replace(/^"|"$/g, ''), aria: b.getAttribute('aria-keyshortcuts') }; });
+  check(`${T} : l'infobulle du bouton Commenter dit Ctrl+Maj+M, et aria-keyshortcuts aussi`, tip.tip === (fr ? 'Commenter la sélection (Ctrl+Maj+M)' : 'Comment on selection (Ctrl+Shift+M)') && tip.aria === 'Control+Shift+M', tip);
+  await setDoc('<p></p>');
+}
+
 async function run(theme, fr) {
   const T = theme;
   await starterKeysPart(T);
@@ -635,6 +709,7 @@ async function run(theme, fr) {
   await keyboardOnlyPart(T);
   await layoutPart(T);
   await tooltipsPart(T, fr);
+  await commentKeyPart(T, fr);
 }
 
 // === Anglais : la liste, les refus, les infobulles =============================================================================================================
@@ -650,8 +725,9 @@ async function englishPart() {
     group: Array.from(document.querySelectorAll('.settings-keys-group')).map(g => g.textContent).join('|'),
     heading: document.querySelector('.settings-key-row[data-action="heading1"] .settings-key-btn').textContent,
     name: document.querySelector('.settings-key-row[data-action="heading1"] .settings-key-name').textContent,
+    comment: document.querySelector('.settings-key-row[data-action="comment"] .settings-key-btn').textContent,
   }));
-  check(`${T} : onglet, titre, groupes et touches de la liste sont en anglais (« Alt+Shift+1 »)`, labels.tab === 'Shortcuts' && labels.title === 'Keyboard keys' && labels.group === 'Templates|View|Formatting|Insert|History and tracking' && labels.heading === 'Alt+Shift+1', labels);
+  check(`${T} : onglet, titre, groupes et touches de la liste sont en anglais (« Alt+Shift+1 », « Ctrl+Shift+M »)`, labels.tab === 'Shortcuts' && labels.title === 'Keyboard keys' && labels.group === 'Templates|View|Formatting|Insert|History and tracking' && labels.heading === 'Alt+Shift+1' && labels.comment === 'Ctrl+Shift+M', labels);
   await snap(`${T}-1-liste`);
   await closeSettings();
   await remapPart(T, false);
@@ -668,8 +744,8 @@ async function macPart() {
   await resetAll();
   await page.evaluate(() => Shortcuts.setPlatform('mac'));
   await openKeys();
-  const keys = await page.evaluate(() => ({ read: document.querySelector('.settings-key-row[data-action="modeRead"] .settings-key-btn').textContent, bold: document.querySelector('.settings-key-row[data-action="bold"] .settings-key-btn').textContent, h1: document.querySelector('.settings-key-row[data-action="heading1"] .settings-key-btn').textContent, enter: document.querySelector('.settings-key-row[data-action="pageBreak"] .settings-key-btn').textContent }));
-  check(`${T} : la liste écrit ⌥L, ⌘B, ⌥⇧1 et ⌥↩`, keys.read === '⌥L' && keys.bold === '⌘B' && keys.h1 === '⌥⇧1' && keys.enter === '⌥↩', keys);
+  const keys = await page.evaluate(() => ({ read: document.querySelector('.settings-key-row[data-action="modeRead"] .settings-key-btn').textContent, bold: document.querySelector('.settings-key-row[data-action="bold"] .settings-key-btn').textContent, h1: document.querySelector('.settings-key-row[data-action="heading1"] .settings-key-btn').textContent, enter: document.querySelector('.settings-key-row[data-action="pageBreak"] .settings-key-btn').textContent, comment: document.querySelector('.settings-key-row[data-action="comment"] .settings-key-btn').textContent }));
+  check(`${T} : la liste écrit ⌥L, ⌘B, ⌥⇧1, ⌥↩ et ⇧⌘M (Commenter)`, keys.read === '⌥L' && keys.bold === '⌘B' && keys.h1 === '⌥⇧1' && keys.enter === '⌥↩' && keys.comment === '⇧⌘M', keys);
   await snap(`${T}-1-liste`);
   // Ctrl+lettre y sert à se déplacer dans le texte : refusé avec sa raison.
   await click(keyBtn('table'), 120);

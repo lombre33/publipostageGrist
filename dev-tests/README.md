@@ -502,7 +502,7 @@ Deux options utiles :
   document) et un seul Ctrl+Z la rend, Échap referme sans rien écrire, « Insérer 2 colonnes » pose deux pastilles dans l'ordre de la table (un seul Ctrl+Z), dans une case de 120 px la pastille d'un nom
   long (coupée par « … ») a la même barre et la même fenêtre et reste dans sa case après « Remplacer », une fiche disparue grise le bouton (un clic dessus n'ouvre rien), un curseur dans le texte
   ferme la barre. `MENTION_SHOTS=<dossier>` enregistre aussi des captures à relire à l'œil.
-- Le groupe `shortcuts` (`dev-tests/scenarios-shortcuts.js`, 22 scénarios) couvre les raccourcis clavier personnalisables de `js/shortcuts.js` (demande d'Antoine du 01/10 :
+- Le groupe `shortcuts` (`dev-tests/scenarios-shortcuts.js`, 23 scénarios) couvre les raccourcis clavier personnalisables de `js/shortcuts.js` (demande d'Antoine du 01/10 :
   « définir des raccourcis personnalisés », choix de la carte « Tout, par personne »). Une combinaison s'écrit `Mod+Alt+Shift+k` (Mod = Ctrl, ⌘ sur Mac) : lue d'un évènement
   (les chiffres par le code physique, Maj retiré pour un signe, Ctrl+Alt = AltGr ignoré hors Mac, la touche Windows jamais), écrite pour l'écran (« Ctrl+Alt+Maj+K », « ⌥⇧⌘K ») et
   pour les lecteurs d'écran (`aria-keyshortcuts`). Chacune des 58 actions a un nom français et anglais, un groupe et un vrai contrôle ; lancée une fois avec tous les clics avalés,
@@ -511,7 +511,10 @@ Deux options utiles :
   scénario qui a trouvé que Surligner, la couleur du texte et la taille de police sont câblés sur `mousedown` et ne voyaient pas un `click` ; une nouvelle action sur un bouton
   s'ajoute à `MOUSE_BUTTON`. Rechercher (Ctrl+F) et Rechercher et remplacer (Ctrl+H, ⇧⌘H sur Mac), natifs de `js/find-replace.js`, ouvrent la même barre quand on les change (sans la refermer si elle
   l'est déjà, avec la ligne « Remplacer par » pour le remplacement), l'ancienne ne fait plus rien, et l'infobulle de la loupe dit la touche (cas
-  `sc_find_and_replace_keys_open_the_bar_follow_the_choice_and_the_loupe_tooltip`). Le reste : les touches de départ sont exactement celles de la carte, sans doublon ; une touche d'origine « rendue » (Ctrl+B après avoir donné Alt+B au
+  `sc_find_and_replace_keys_open_the_bar_follow_the_choice_and_the_loupe_tooltip`). « Commenter la sélection » a pour touche de départ Ctrl+Maj+M (⇧⌘M sur Mac) depuis le 03/11 (demande : « changer le
+  raccourci par défaut en ctrl shift m », avant Alt+Maj+M) : `sc_comment_key_is_ctrl_shift_m_and_the_old_alt_shift_m_does_nothing` vérifie qu'elle presse le bouton, que l'infobulle et `aria-keyshortcuts` la
+  disent, que la liste de Réglages la refuse à une autre action, qu'Alt+Maj+M ne presse plus rien (et peut aller à une autre action), qu'une personne qui l'a choisie la garde et que « Par défaut » rend
+  Ctrl+Maj+M ; il échoue sur l'ancien code. Ce n'est pas la touche de Google Docs (Ctrl+Alt+M) : `onKeydown` n'écoute jamais Ctrl+Alt (AltGr). Le reste : les touches de départ sont exactement celles de la carte, sans doublon ; une touche d'origine « rendue » (Ctrl+B après avoir donné Alt+B au
   gras) ne fait plus rien et n'arrive pas à l'éditeur, sauf dans un champ de saisie où elle garde son sens de texte ; les refus et leur code (`duplicate`, `reserved`,
   `needsModifier`, `macCtrl`, `altGr`, `invalid`) sans rien écrire ; le stockage (`pp_shortcuts`, seules les actions changées, un JSON abîmé ignoré, l'évènement `storage`) ; un
   bouton grisé par les droits (`pp-access-locked`), par le mode (`v2-hf-locked`, un simple `pointer-events: none` qu'un clic par programme ne voit pas), désactivé, masqué ou en
@@ -594,9 +597,13 @@ Deux options utiles :
   nom ignoré, stockage illisible) ; un appui sur la pastille ne ferme pas la barre flottante de l'image, un appui ailleurs la ferme toujours. Pièges : la Lecture n'affiche rien sans ligne de Grist
   (`setVariables`, `setRows`, `refreshSchema`, `fireRecord`, comme `cleanReading`) ; un modèle écrit par `Templates.save` n'est pas dans la liste cachée `#template-select` - `Templates.loadAll()` puis
   l'`<option>` posée à la main, comme `orientation` ; le niveau d'un scénario est rendu par `toOriginal` (le pourcentage), jamais laissé au suivant.
-- `shortcutsKeyboard` (`dev-tests/verify-shortcuts-keyboard.mjs`, 205 contrôles) tape pour de vrai à 700×400, en clair, en sombre, en anglais, puis en mode Mac : les touches de départ
+- `shortcutsKeyboard` (`dev-tests/verify-shortcuts-keyboard.mjs`, 217 contrôles) tape pour de vrai à 700×400, en clair, en sombre, en anglais, puis en mode Mac : les touches de départ
   (Alt+L et Alt+E avec le curseur rendu au document, Alt+Maj+1 2 3 et le retour au paragraphe, Alt+Entrée, Alt+Maj+D, Alt+Maj+H, F2 qui bascule le champ de nom, Alt+M, Alt+P, Ctrl+/ ;
-  rien n'est écrit dans le texte, rien ne part fenêtre ouverte) ; Ctrl+F et Ctrl+H qui ouvrent la barre de recherche d'origine, puis Rechercher mis sur Alt+F dans la liste (la barre
+  rien n'est écrit dans le texte, rien ne part fenêtre ouverte) ; « Commenter la sélection » (`commentKeyPart`, en clair et en sombre, avec un modèle enregistré et un mot choisi par double-clic) :
+  Alt+Maj+M, l'ancienne touche, ne fait plus rien, Ctrl+Maj+M ouvre le composeur sur le mot, le curseur dans sa réponse, dans la fenêtre, sans lettre écrite, et l'infobulle du bouton dit Ctrl+Maj+M
+  (la liste de Réglages l'écrit « Ctrl+Shift+M » en anglais et « ⇧⌘M » en mode Mac) ; piège constaté : le menu Titre reste ouvert après
+  les infobulles (la souris de `tooltipsPart` finit à 350, 380, dans son cadre) et le double-clic du deuxième passage (en sombre, modèle déjà enregistré) visait une de ses lignes au lieu du mot : la partie met
+  la souris dans le coin libre et attend que les menus au survol se referment ; Ctrl+F et Ctrl+H qui ouvrent la barre de recherche d'origine, puis Rechercher mis sur Alt+F dans la liste (la barre
   s'ouvre, une seconde fois elle reste ouverte, Ctrl+F ne fait plus rien, l'infobulle de la loupe dit Alt+F) ; changer la touche du gras à la souris (Alt+B prise, Ctrl+B qui ne met plus en gras, Alt+B qui bascule, l'infobulle
   « Gras (Alt+B) », Retour arrière, « Par défaut », « Tout remettre par défaut » avec sa confirmation et Échap) ; les refus sous la touche (doublon, touche seule, Ctrl+Alt, Ctrl+E) à
   leur vraie place - dans la colonne de la touche, sous elle, sans élargir la ligne ; Échap qui abandonne puis ferme ; au clavier seul (Ctrl+/, Tab, Entrée, la touche tapée, « Par

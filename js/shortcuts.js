@@ -317,7 +317,8 @@ const Shortcuts = (function () {
       { id: 'image', group: 'insert', label: 'shortcuts.action.image', key: '', scope: 'editor', hint: '#v2-image-flyout .v2-hover-flyout-label', aria: tip('v2-btn-image'), run: click('v2-btn-image') },
       { id: 'pageBreak', group: 'insert', label: 'insert.pageBreak.tip', key: 'Alt+Enter', scope: 'editor', hint: tip('v2-btn-page-break'), run: click('v2-btn-page-break') },
       { id: 'toc', group: 'insert', label: 'insert.toc.tip', key: '', scope: 'editor', hint: tip('v2-btn-toc'), run: click('v2-btn-toc') },
-      { id: 'comment', group: 'insert', label: 'insert.comment.tip', key: 'Alt+Shift+m', scope: 'editor', hint: tip('v2-btn-comment'), run: click('v2-btn-comment') },
+      // Commenter : Ctrl+Maj+M (⇧⌘M sur Mac) depuis le 03/11, à la place d'Alt+Maj+M. Ce n'est pas la touche de Google Docs (Ctrl+Alt+M) : Ctrl+Alt est de l'AltGr sous Windows et Linux, que `onKeydown` n'écoute jamais.
+      { id: 'comment', group: 'insert', label: 'insert.comment.tip', key: 'Mod+Shift+m', scope: 'editor', hint: tip('v2-btn-comment'), run: click('v2-btn-comment') },
       { id: 'link', group: 'insert', label: 'insert.link.row', key: 'Mod+k', native: true, scope: 'editor', aria: '#v2-btn-link, #v2-row-link', run: click('v2-btn-link') },
       { id: 'citation', group: 'insert', label: 'insert.citation.tip', key: 'Mod+Shift+b', native: true, cells: true, scope: 'editor', hint: tip('v2-btn-citation'), run: click('v2-btn-citation') },
       { id: 'codeBlock', group: 'insert', label: 'insert.codeBlock.tip', key: 'Mod+Alt+c', native: true, scope: 'editor', hint: tip('v2-btn-code-block'), run: click('v2-btn-code-block') },
