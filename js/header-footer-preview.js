@@ -1481,25 +1481,27 @@ const HeaderFooterPreview = (function () {
     if (next && EditorCore.fitReserve(sheet, ruleFor, margin, () => (next.getBoundingClientRect().top - tiptapRect.top) / zoom, bodyTopRel)) pass.reserves.push({ next, bodyTopRel });
     return sheet.textContent;
   }
-  // Les coutures des premières coupures simples (ni entre deux lignes d'un tableau, ni dans une zone à deux colonnes), posées d'un coup (carte du 21/10, « Accélérer »).
-  // placePaginationSeam pose la règle d'une coupure puis mesure le document avant la suivante : une mise en page par page, 2 à 3 ms chacune (0,2 s pour une présentation de 70
-  // diapositives chargées). Ici, une lecture d'abord (chaque couture, le bas du bloc de chaque coupure, l'écart jusqu'au bloc suivant) ; puis chaque coupure se calcule comme
-  // dans placePaginationSeam, sur la position que son bloc aura une fois les règles d'avant posées : la marge du bas posée en px devient, sous le zoom de la feuille, l'écart
-  // jusqu'au bloc suivant, arrondi au 1/64 de pixel inférieur (Chromium : mesuré), au lieu de l'écart d'avant ; toutes les règles se posent d'un coup, et une seconde lecture
+  // Les coutures d'une suite de coupures simples (ni entre deux lignes d'un tableau, ni dans une zone à deux colonnes) qui commence à la coupure `start`, posées d'un coup (carte du
+  // 21/10, « Accélérer »). placePaginationSeam pose la règle d'une coupure puis mesure le document avant la suivante : une mise en page par page, 2 à 3 ms chacune (0,2 s pour une
+  // présentation de 70 diapositives chargées). Ici, une lecture d'abord (chaque couture, le bas du bloc de chaque coupure, l'écart jusqu'au bloc suivant) ; puis chaque coupure se
+  // calcule comme dans placePaginationSeam, sur la position que son bloc aura une fois les règles d'avant posées : la marge du bas posée en px devient, sous le zoom de la feuille,
+  // l'écart jusqu'au bloc suivant, arrondi au 1/64 de pixel inférieur (Chromium : mesuré), au lieu de l'écart d'avant ; toutes les règles se posent d'un coup, et une seconde lecture
   // vérifie chaque coupure : son bloc est exactement là où elle l'a prévu. La première coupure qui n'y est pas, et toutes celles d'après, repassent par placePaginationSeam :
   // ce qui en sort est toujours ce que le calcul une à une aurait posé. Une marge qui ne l'emporte pas sur l'écart d'avant (une marge du bloc suivant plus grande) arrête la
-  // prévision : la suite repasse elle aussi par placePaginationSeam. Rend le rang de la première coupure que placePaginationSeam doit encore poser.
-  function placeSimpleSeamsAtOnce(pass, breaks) {
+  // prévision : la suite repasse elle aussi par placePaginationSeam. Rend le nombre de coupures posées (0 : rien n'a pu l'être, et plus aucune suite n'est tentée dans ce calcul :
+  // `pass.atOnce`). Les coupures déjà posées avant `start` (une coupure dans un tableau ou une zone, posée une à une) sont dans le document : la lecture les voit.
+  function placeSimpleSeamsAtOnce(pass, breaks, start) {
     let count = 0;
-    while (count < breaks.length && breaks[count].rowIndex == null && !breaks[count].zone) count++;
+    while (start + count < breaks.length && breaks[start + count].rowIndex == null && !breaks[start + count].zone) count++;
     if (count < 2) return 0;
     const { geometry, totalPages, mPx, footAreaPx, headAreaPx, sheetLeft, sheetWidth, zoom, tiptapRect, toLayoutY, tiptapChildren, marginRules, pages } = pass;
     const { enabled, differentFirstPage, headerForPage, footerForPage } = geometry;
     const built = [];
     for (let i = 0; i < count; i++) {
+      const page = start + i;
       const { seam, divider } = buildSeam({
-        footerText: enabled ? footerForPage(i + 1) : null, headerText: enabled ? headerForPage(i + 2) : null, pageEnding: i + 1, pageStarting: i + 2, totalPages, differentFirstPage,
-        footAreaPx, headAreaPx, topMarginPx: mPx.top, footBox: pass.boxOfPage(i), headBox: pass.boxOfPage(i + 1),
+        footerText: enabled ? footerForPage(page + 1) : null, headerText: enabled ? headerForPage(page + 2) : null, pageEnding: page + 1, pageStarting: page + 2, totalPages, differentFirstPage,
+        footAreaPx, headAreaPx, topMarginPx: mPx.top, footBox: pass.boxOfPage(page), headBox: pass.boxOfPage(page + 1),
       });
       paginationOverlayEl.appendChild(seam);
       seam.style.left = sheetLeft + 'px';
@@ -1507,7 +1509,7 @@ const HeaderFooterPreview = (function () {
       built.push({ seam, divider });
     }
     const read = built.map(({ seam, divider }, i) => {
-      const afterEl = breaks[i].afterEl;
+      const afterEl = breaks[start + i].afterEl;
       const next = nextInFlow(afterEl);
       const bottom = afterEl.getBoundingClientRect().bottom;
       return { seamHeight: seam.getBoundingClientRect().height / zoom, dividerHeight: divider.getBoundingClientRect().height / zoom, bottom, gap: next ? next.getBoundingClientRect().top - bottom : null };
@@ -1519,13 +1521,13 @@ const HeaderFooterPreview = (function () {
       const { seamHeight, dividerHeight, bottom, gap } = read[i];
       const afterBottomScreen = bottom + shift;
       const afterBottomRel = (afterBottomScreen - tiptapRect.top) / zoom;
-      const remaining = Math.max(0, pass.capacityOfPage(i) - (afterBottomRel - bodyTopRel));
+      const remaining = Math.max(0, pass.capacityOfPage(start + i) - (afterBottomRel - bodyTopRel));
       const margin = seamHeight + remaining;
       const seamTop = toLayoutY(afterBottomScreen) + remaining;
       bodyTopRel = afterBottomRel + remaining + seamHeight;
       planned.push({
         afterBottomScreen, seamTop, bodyTopRel, page: { top: seamTop + footAreaPx + dividerHeight, bodyTop: seamTop + seamHeight },
-        rule: '#editor-container .tiptap > *:nth-child(' + (tiptapChildren.indexOf(breaks[i].afterEl) + 1) + ') { margin-bottom: ' + margin + 'px; }',
+        rule: '#editor-container .tiptap > *:nth-child(' + (tiptapChildren.indexOf(breaks[start + i].afterEl) + 1) + ') { margin-bottom: ' + margin + 'px; }',
       });
       const laid = Math.floor(margin * zoom * 64) / 64;
       if (gap === null || laid < gap) break;
@@ -1534,15 +1536,15 @@ const HeaderFooterPreview = (function () {
     const sheet = paginationSteps.add(planned.map(p => p.rule).join('\n'));
     // Chaque coupure posée l'est vraiment : son bloc finit où prévu, et le bloc qui ouvre la page suivante commence au haut de son corps (comme placeReserve le vérifie).
     const opens = i => {
-      const next = nextInFlow(breaks[i].afterEl);
+      const next = nextInFlow(breaks[start + i].afterEl);
       return !next || EditorCore.opensPageAt((next.getBoundingClientRect().top - tiptapRect.top) / zoom, planned[i].bodyTopRel);
     };
     let placed = 0;
-    while (placed < planned.length && breaks[placed].afterEl.getBoundingClientRect().bottom === planned[placed].afterBottomScreen && opens(placed)) placed++;
+    while (placed < planned.length && breaks[start + placed].afterEl.getBoundingClientRect().bottom === planned[placed].afterBottomScreen && opens(placed)) placed++;
     if (placed < planned.length) sheet.textContent = planned.slice(0, placed).map(p => p.rule).join('\n');
     built.slice(placed).forEach(({ seam }) => seam.remove());
     planned.slice(0, placed).forEach((p, i) => {
-      const next = nextInFlow(breaks[i].afterEl);
+      const next = nextInFlow(breaks[start + i].afterEl);
       if (next) pass.reserves.push({ next, bodyTopRel: p.bodyTopRel });
       marginRules.push(p.rule);
       built[i].seam.style.top = p.seamTop + 'px';
@@ -1550,6 +1552,7 @@ const HeaderFooterPreview = (function () {
       pages.push(p.page);
     });
     if (placed > 0) pass.bodyTopRel = planned[placed - 1].bodyTopRel;
+    else pass.atOnce = false;
     return placed;
   }
   // Les coutures de toutes les frontières de page, les règles de marge qui réservent leur place (`marginRules[0]` : le plancher de `.tiptap`, remis à
@@ -1596,7 +1599,15 @@ const HeaderFooterPreview = (function () {
       capacityOfPage: k => (sections ? geometry.capacityOf(sections.senses[k]) : geometry.pageContentHeightPx),
       boxOfPage: k => (sections ? { gap: sections.gapOf(sections.senses[k]), width: sections.sheetOf(sections.senses[k]) } : null),
     };
-    for (let i = placeSimpleSeamsAtOnce(pass, breaks); i < breaks.length; i++) placePaginationSeam(pass, breaks[i], i);
+    // Les coupures simples d'une suite d'un coup, chaque coupure dans un tableau ou une zone une à une, puis la suite simple d'après d'un coup : un long texte coupe un tableau toutes les
+    // trois ou quatre pages, et la première coupure de ce genre renvoyait toutes les suivantes au calcul une à une (une mise en page par coupure : 0,5 s à 117 pages).
+    pass.atOnce = true;
+    for (let i = 0; i < breaks.length;) {
+      const placed = pass.atOnce ? placeSimpleSeamsAtOnce(pass, breaks, i) : 0;
+      if (placed > 0) { i += placed; continue; }
+      placePaginationSeam(pass, breaks[i], i);
+      i++;
+    }
     // La dernière page, jusqu'à sa hauteur réelle : `.tiptap` ne descend jamais sous le haut du corps de cette page + B + sa marge du bas (le
     // plancher ne gêne pas un contenu plus long). Ajouté à la même feuille de style que les réserves : effacé avec elles.
     marginRules[0] = '#editor-container .tiptap { min-height: ' + (pass.bodyTopRel + pass.capacityOfPage(totalPages - 1) + mPx.bottom) + 'px; }';

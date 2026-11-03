@@ -188,6 +188,84 @@
     },
   });
 
+  // Un long texte qui mêle des paragraphes et de grands tableaux, chacun coupé entre deux lignes sur deux pages ou plus : des suites de coupures simples entre des coupures dans un tableau.
+  const textWithTables = () => {
+    const para = i => '<p>Paragraphe ' + i + ' : ' + 'du texte pour remplir la ligne et en ouvrir une autre. '.repeat(1 + (i % 3)) + '</p>';
+    const table = n => '<table><tbody>' + Array.from({ length: 60 }, (_, r) => '<tr><td><p>Ligne ' + (n * 100 + r + 1) + ' case 1</p></td><td><p>case 2</p></td></tr>').join('') + '</tbody></table>';
+    let html = '';
+    for (let block = 0; block < 4; block++) {
+      for (let i = 0; i < 70; i++) html += para(block * 100 + i);
+      html += table(block);
+    }
+    for (let i = 0; i < 60; i++) html += para(500 + i);
+    return html;
+  };
+  // Les feuilles <style> posées dans `root` pendant `fn()`, elles-mêmes (leur texte se relit après, une fois retirées).
+  function sheetsAddedDuring(root, fn) {
+    const observer = new MutationObserver(() => {});
+    observer.observe(root, { childList: true, subtree: true });
+    let records = [];
+    try { fn(); } finally { records = observer.takeRecords(); observer.disconnect(); }
+    return records.reduce((all, r) => all.concat(Array.from(r.addedNodes).filter(n => n.nodeName === 'STYLE')), []);
+  }
+  // Comme oneByOneGaps, pour un texte qui a aussi des coupures dans un tableau : la couture de chaque coupure est au haut que le calcul une à une lui donne (pour un tableau, depuis le bas de
+  // la ligne qui précède la coupure : celle dont la suivante porte le rembourrage de la coupure), et la réserve de chaque coupure simple est sa règle. Rend les écarts et le nombre de coupures de chaque genre.
+  function oneByOneGapsWithTables() {
+    const tip = document.querySelector('#editor-container .tiptap');
+    const container = document.getElementById('editor-container');
+    const zoom = EditorCore.layoutZoom(tip);
+    const m = PageLayout.getMarginsPx();
+    const pageContentHeightPx = Math.max(50, PageLayout.getPageSizePx().height - m.top - m.bottom);
+    const children = Array.from(tip.children);
+    const tipTop = tip.getBoundingClientRect().top;
+    const box = container.getBoundingClientRect();
+    const toLayoutY = v => (v - box.top - container.clientTop + container.scrollTop) / zoom;
+    const seams = Array.from(container.querySelectorAll('.v2-pagination-overlay > .v2-page-band'));
+    const sheet = document.getElementById('v2-pagination-margins-style').textContent;
+    const gaps = [];
+    const probe = document.createElement('div');
+    const cutsSeen = new Map();
+    let simple = 0; let inner = 0;
+    let bodyTopRel = parseFloat(getComputedStyle(tip).paddingTop) || 0;
+    HeaderFooterPreview.pageBreaks().forEach((brk, i) => {
+      let bottomEl = brk.afterEl;
+      if (brk.inner) {
+        const rows = TablePageCut.rowsOf(brk.afterEl.querySelector(':scope > table')) || [];
+        const opening = rows.filter(row => HeaderFooterPreview.rowPadOf(row) > 0);
+        const k = cutsSeen.get(brk.afterEl) || 0;
+        cutsSeen.set(brk.afterEl, k + 1);
+        bottomEl = rows[rows.indexOf(opening[k]) - 1] || brk.afterEl;
+        inner++;
+      } else simple++;
+      const afterBottomScreen = bottomEl.getBoundingClientRect().bottom;
+      const afterBottomRel = (afterBottomScreen - tipTop) / zoom;
+      const remaining = Math.max(0, pageContentHeightPx - (afterBottomRel - bodyTopRel));
+      const seamHeight = seams[i].getBoundingClientRect().height / zoom;
+      const rule = '#editor-container .tiptap > *:nth-child(' + (children.indexOf(brk.afterEl) + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }';
+      probe.style.top = (toLayoutY(afterBottomScreen) + remaining) + 'px';
+      if ((!brk.inner && !sheet.includes(rule)) || seams[i].style.top !== probe.style.top) gaps.push({ page: i + 1, inner: !!brk.inner, rule: brk.inner ? undefined : rule, top: probe.style.top, posed: seams[i].style.top });
+      bodyTopRel = afterBottomRel + remaining + seamHeight;
+    });
+    return { gaps, breaks: seams.length, simple, inner };
+  }
+
+  cases.push({
+    id: 'pagination_editor_places_every_run_of_plain_page_breaks_at_once_even_after_a_table_cut',
+    description: "Un long texte qui coupe un tableau toutes les quelques pages : les coupures simples d'entre deux tableaux se posent elles aussi d'un coup (la première coupure dans un tableau renvoyait toutes les suivantes au calcul une à une, une mise en page par page : 0,5 s à 117 pages, à chaque pause de frappe), et chaque couture est exactement à la place du calcul une coupure après l'autre",
+    run: async (h) => {
+      await setup(h, textWithTables());
+      const sheets = sheetsAddedDuring(document.head, () => HeaderFooterPreview.renderPaginationOverlay());
+      const { gaps, breaks, simple, inner } = oneByOneGapsWithTables();
+      if (simple < 10 || inner < 3) return { pass: false, notes: 'document sans assez de coupures de chaque genre : ' + simple + ' simples, ' + inner + ' dans un tableau (' + breaks + ' en tout)' };
+      // Une coupure simple posée seule a sa propre feuille d'une seule règle (placeReserve) ; une suite posée d'un coup, une feuille de toutes ses règles.
+      const alone = sheets.filter(el => rulesIn(el.textContent) === 1 && /margin-bottom:/.test(el.textContent) && !/padding-top|clip-path/.test(el.textContent)).length;
+      return {
+        pass: alone <= 2 && gaps.length === 0,
+        notes: breaks + ' coupures (' + simple + ' simples, ' + inner + ' dans un tableau), feuilles de coupure simple posée seule=' + alone + ' (attendu au plus 2 ; le calcul une à une en pose une par coupure d\'après le premier tableau coupé), écarts au calcul une à une=' + gaps.length + (gaps.length ? ' ' + JSON.stringify(gaps.slice(0, 2)) : ''),
+      };
+    },
+  });
+
   cases.push({
     id: 'pagination_reader_places_plain_page_breaks_at_once',
     description: "Carte « Accélérer » (21/10) : la Lecture pose elle aussi les coupures simples d'un coup : aucune feuille posée en route pour une seule règle (le calcul une à une en pose une par coupure, à chaque calcul), et la même réserve par saut",
