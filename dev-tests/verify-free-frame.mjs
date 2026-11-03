@@ -461,7 +461,7 @@ async function run(lang, colorScheme, full) {
   await drag(topEdge(edgeBox), -150 * pxPerPt, 0);
   const movedRight = (await docState(page)).frames;
   dotsNow = await dots();
-  check(tag + 'un vrai glissement ramène le cadre de droite dans la page (700 → ~550, ou 560 quand le bord droit s'accroche à celui de la page) : le point reste, le cadre du bas sort encore', near(movedRight[1].x, 550, 12) && flagsOf(dotsNow) === '10', { frames: movedRight, dotsNow });
+  check(tag + 'un vrai glissement ramène le cadre de droite dans la page (700 → ~550, ou 560 quand le bord droit s’accroche à celui de la page) : le point reste, le cadre du bas sort encore', near(movedRight[1].x, 550, 12) && flagsOf(dotsNow) === '10', { frames: movedRight, dotsNow });
   edgeBox = await showFrame(0);
   await drag(topEdge(edgeBox), 0, -24 * pxPerPt);
   const movedUp = (await docState(page)).frames;
