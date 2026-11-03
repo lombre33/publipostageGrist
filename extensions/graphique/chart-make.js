@@ -1,9 +1,9 @@
 // Les graphiques CRÉÉS dans le modèle (la ligne « Créer un graphique… » du menu « Ajouter une image », extensions/graphique/chart-make-ui.js) : à la différence du graphique de la page
 // (chart-block.js, chart-plot.js), ils n'existent pas dans Grist et n'y ajoutent rien. Leurs réglages sont gardés dans le modèle, sur l'image : l'attribut `chartSpec` du nœud (`data-chart-spec`,
-// js/editor-nodes.js), un petit texte JSON { v, kind, table, label, values, stack, horizontal } - la forme du graphique, la table, la colonne des étiquettes et les colonnes à tracer, par leur identifiant.
+// js/editor-nodes.js), un petit texte JSON { v, kind, table, label, values, stack, horizontal, total, max } - la forme du graphique, la table, la colonne des étiquettes et les colonnes à tracer, par leur identifiant.
 // Ce fichier ne sait que deux choses : lire et écrire cette définition (normalize, parse, stringify) et la tracer. Les lignes viennent de chart-source.js (`made` rend la section que Grist aurait
 // écrite, `rows` et `series` en font les séries), le cadre de l'éditeur, la Lecture et les exports de chart-block.js, comme pour le graphique de la page.
-// Le moteur est ECharts 6.1.0 (Apache-2.0), le paquet complet : seul lui dessine le radar (et plus tard la jauge et l'entonnoir). Comme Plotly, il n'est ni dans la liste des bibliothèques du widget ni dans son
+// Le moteur est ECharts 6.1.0 (Apache-2.0), le paquet complet : seul lui dessine le radar, l'entonnoir et la jauge. Comme Plotly, il n'est ni dans la liste des bibliothèques du widget ni dans son
 // import map : Grist Factory Suite le porte et en donne l'adresse et l'empreinte (js/extensions.js : Extensions.library), `ensureLibrary` le charge à la première utilisation par le chargeur
 // des exports (ExportCommon.loadScriptOnce). Aucun fichier du widget n'écrit son adresse : seule la politique de sécurité du contenu d'index.html la garde.
 // Le dessin est une image PNG (adresse `data:`) à 3 pixels par pixel de mise en page, sur fond blanc, avec les couleurs et la police du graphique de la page : un document s'imprime sur du blanc,
@@ -12,8 +12,11 @@ const ChartMake = (function () {
   // La bibliothèque que le dessin exige : son identifiant dans le catalogue de Grist Factory Suite et la version exacte pour laquelle les options sont écrites. C'est le SEUL endroit du widget qui la
   // nomme ; aucune adresse ni empreinte ici : elles sont à GFS.
   const LIBRARY = { id: 'echarts', version: '6.1.0' };
-  const KINDS = ['bar', 'line', 'area', 'scatter', 'pie', 'donut', 'radar'];
+  const KINDS = ['bar', 'line', 'area', 'scatter', 'pie', 'donut', 'radar', 'funnel', 'waterfall', 'gauge'];
   const MAX_VALUES = 8;           // les colonnes à tracer d'un graphique
+  const MAX_GAUGES = 12;          // les jauges d'un graphique « jauge » : une par ligne, les douze premières
+  const GAUGE_FULL = 100;         // la valeur pleine d'une jauge tant que la personne n'en a pas réglé une
+  const MAX_GAUGE_FULL = 1e12;
   const MAX_TEXT = 200;           // un identifiant de table ou de colonne
   const SCALE = 3;                // 3 pixels d'image par pixel de mise en page : net à l'impression
   const MAX_TITLE = 120;          // le titre du graphique, en caractères
@@ -35,7 +38,10 @@ const ChartMake = (function () {
   const MIXABLE = ['bar', 'line', 'area'];
   const SERIES_TYPES = ['bar', 'line'];
   const baseTypeOf = kind => (kind === 'bar' ? 'bar' : 'line');
-  const hasSeries = kind => kind !== 'pie' && kind !== 'donut';
+  // Les formes dont les parts (secteurs, anneau, étapes d'un entonnoir, jauges) ou les marches (cascade : hausse, baisse, total) prennent les couleurs du jeu choisi, dans l'ordre : elles n'ont pas de colonne à
+  // colorer une à une. Les autres ont une série par colonne à tracer.
+  const PART_KINDS = ['pie', 'donut', 'funnel', 'waterfall', 'gauge'];
+  const hasSeries = kind => PART_KINDS.indexOf(kind) === -1;
   const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
   const COLORWAY = PALETTES[DEFAULT_PALETTE];
   const FOREGROUND = '#444444';
@@ -83,8 +89,8 @@ const ChartMake = (function () {
     values.forEach((column) => { if (hasOwn(raw, column) && SERIES_TYPES.indexOf(raw[column]) !== -1 && raw[column] !== baseTypeOf(kind)) mix[column] = raw[column]; });
     return Object.keys(mix).length ? mix : null;
   }
-  // Ce que le widget garde d'une définition lue (ou d'un choix de la fenêtre) : la forme, la table, la colonne des étiquettes, les colonnes à tracer, les deux réglages qui ont un sens pour la forme
-  // (barres et aires empilées, barres horizontales) et l'aspect : le titre, le jeu de couleurs (le jeu d'origine n'est pas écrit), la couleur de chaque série, les valeurs affichées et le type des
+  // Ce que le widget garde d'une définition lue (ou d'un choix de la fenêtre) : la forme, la table, la colonne des étiquettes, les colonnes à tracer, les réglages qui ont un sens pour la forme
+  // (barres et aires empilées, barres horizontales, le total d'une cascade, le maximum des jauges) et l'aspect : le titre, le jeu de couleurs (le jeu d'origine n'est pas écrit), la couleur de chaque série, les valeurs affichées et le type des
   // séries d'un graphique mixte. Null quand ce n'est pas un graphique que ce widget sait tracer : une forme inconnue (celle d'une version à venir) ne devient jamais des barres. Une définition d'avant
   // l'aspect (lot 1) se lit telle quelle et se réécrit de même : rien n'est ajouté tant que la personne n'a rien réglé.
   function normalize(raw) {
@@ -93,6 +99,9 @@ const ChartMake = (function () {
     const def = { kind: raw.kind, table: raw.table, label: raw.label, values };
     if (raw.stack === true && (raw.kind === 'bar' || raw.kind === 'area')) def.stack = true;
     if (raw.horizontal === true && raw.kind === 'bar') def.horizontal = true;
+    // « Afficher le total » : une dernière marche de la cascade ; « Maximum » : la valeur pleine des jauges (100 quand rien n'est réglé : rien n'est écrit).
+    if (raw.total === true && raw.kind === 'waterfall') def.total = true;
+    if (raw.kind === 'gauge' && typeof raw.max === 'number' && isFinite(raw.max) && raw.max > 0 && raw.max <= MAX_GAUGE_FULL && raw.max !== GAUGE_FULL) def.max = raw.max;
     const title = titleOf(raw.title);
     if (title) def.title = title;
     if (PALETTE_IDS.indexOf(raw.palette) > 0) def.palette = raw.palette;
@@ -118,8 +127,8 @@ const ChartMake = (function () {
     try { return normalize(JSON.parse(text)); } catch (e) { return null; }
   }
   const stringify = def => JSON.stringify(Object.assign({ v: 1 }, normalize(def)));
-  // Les formes qui n'ont rien à tracer sans colonne de valeurs : toutes sauf secteurs et anneau, qui comptent alors les occurrences de chaque étiquette.
-  const needsValues = kind => kind !== 'pie' && kind !== 'donut';
+  // Les formes qui n'ont rien à tracer sans colonne de valeurs : toutes sauf secteurs, anneau et entonnoir, qui comptent alors les occurrences de chaque étiquette.
+  const needsValues = kind => ['pie', 'donut', 'funnel'].indexOf(kind) === -1;
   // Le nom montré dans le cadre de l'éditeur et lu pour l'image : le titre du graphique quand il en a un, sinon « Barres · Notes ».
   const nameOf = def => def.title || (I18n.t('chart.type.' + def.kind) + ' · ' + def.table);
 
@@ -303,9 +312,9 @@ const ChartMake = (function () {
     const french = I18n.getLang() === 'fr';
     return rounded.toLocaleString(french ? 'fr-FR' : 'en-US', { maximumFractionDigits: 1 }) + (french ? ' %' : '%');
   }
-  // Secteurs et anneau : les étiquettes sont les parts, la première colonne de valeurs leur taille ; sans valeur, chaque ligne compte pour un. Deux lignes de même étiquette ne font qu'une part. Les
-  // parts prennent les couleurs du jeu, dans l'ordre. Un titre fait descendre et rétrécir le disque ; les valeurs affichées s'écrivent avec la part : « 12 (15,1 %) ».
-  function pie(def, series) {
+  // Les parts d'un secteur ou les étapes d'un entonnoir : une par étiquette (deux lignes de même étiquette n'en font qu'une), de la taille de la première colonne de valeurs, ou de un par ligne sans valeur ;
+  // une taille nulle, négative ou absente n'a pas de part. Dans l'ordre où les étiquettes paraissent.
+  function partsOf(series) {
     const x = series[0];
     const y = series[1];
     const parts = new Map();
@@ -315,7 +324,14 @@ const ChartMake = (function () {
       const name = labelOf(value);
       parts.set(name, (parts.get(name) || 0) + size);
     });
-    const data = Array.from(parts, ([name, value]) => ({ name, value }));
+    return parts;
+  }
+  // Secteurs et anneau : les étiquettes sont les parts, la première colonne de valeurs leur taille ; sans valeur, chaque ligne compte pour un. Deux lignes de même étiquette ne font qu'une part. Les
+  // parts prennent les couleurs du jeu, dans l'ordre. Un titre fait descendre et rétrécir le disque ; les valeurs affichées s'écrivent avec la part : « 12 (15,1 %) ».
+  function pie(def, series) {
+    const x = series[0];
+    const y = series[1];
+    const data = Array.from(partsOf(series), ([name, value]) => ({ name, value }));
     const outer = def.title ? 54 : 60;
     return {
       legend: { bottom: 4, itemWidth: 14, itemHeight: 10, textStyle: textStyle(), data: data.map(part => part.name) },
@@ -358,7 +374,145 @@ const ChartMake = (function () {
     };
   }
 
-  const BUILDERS = { bar: cartesian, line: cartesian, area: cartesian, scatter, pie, donut: pie, radar };
+  // Entonnoir : une étape par étiquette, dans l'ordre de la table (celui du parcours : visites, devis, commandes), aussi large que sa valeur (la plus grande remplit la largeur, zéro n'a pas de largeur) ; deux
+  // lignes de même étiquette n'en font qu'une, sans valeur chaque ligne compte pour un. Le nom de l'étape est écrit à droite, relié à elle ; les valeurs affichées s'y ajoutent. Les étapes prennent les couleurs
+  // du jeu, dans l'ordre.
+  function funnel(def, series, size) {
+    const y = series[1];
+    const data = Array.from(partsOf(series), ([name, value]) => ({ name, value }));
+    const width = size.width || 480;
+    const colon = I18n.getLang() === 'fr' ? ' : ' : ': ';
+    const text = part => (def.labels ? part.name + colon + numberText(part.value) : part.name);
+    const top = Math.max(1, ...data.map(stage => stage.value));
+    // Les noms sont écrits à droite de chaque étape (coupés à 40 % de l'image) : l'entonnoir prend la plus grande largeur qui laisse la place du nom de chacune, le trait qui le relie compris.
+    const room = Math.round(width * 0.4);
+    const span = data.reduce((most, stage) => Math.min(most, 2 * (width - 36 - Math.min(room, widthOfText(text(stage).length))) / (1 + stage.value / top)), width - 24);
+    const wide = Math.max(Math.round(width * 0.3), Math.round(span));
+    return {
+      series: [{
+        type: 'funnel', name: y ? y.label : series[0].label, data, sort: 'none', min: 0, max: top, minSize: '0%', maxSize: '100%', gap: 2,
+        left: 12, right: Math.max(12, width - 12 - wide), top: 14 + liftOf(def), bottom: 14,
+        label: { show: true, position: 'right', formatter: text, color: FOREGROUND, fontFamily: FONT_FAMILY, fontSize: FONT_SIZE, width: room - 14, overflow: 'truncate' },
+        labelLine: { show: true, length: 12, lineStyle: { color: AXIS_LINE } }, itemStyle: { borderColor: BACKGROUND, borderWidth: 1 },
+      }],
+    };
+  }
+
+  // Cascade : chaque ligne ajoute (ou retire) sa valeur au cumul des lignes qui la précèdent, et sa marche va de l'ancien cumul au nouveau ; avec « Afficher le total », une dernière marche va de zéro au cumul final.
+  // Une valeur absente n'est pas une marche. Rend { name, from, to, delta, role } : `role` « up » (hausse), « down » (baisse) ou « total ».
+  const STEP_ROLES = ['up', 'down', 'total'];
+  function stepsOf(def, series) {
+    const x = series[0];
+    const y = series[1];
+    const steps = [];
+    let sum = 0;
+    x.values.forEach((value, i) => {
+      const delta = y ? y.values[i] : null;
+      if (!finite(delta)) return;
+      steps.push({ name: labelOf(value), from: sum, to: sum + delta, delta, role: delta < 0 ? 'down' : 'up' });
+      sum += delta;
+    });
+    if (def.total && steps.length) steps.push({ name: I18n.t('chart.waterfall.total'), from: 0, to: sum, delta: sum, role: 'total' });
+    return steps;
+  }
+  // Les marches sont des rectangles flottants (une série « sur mesure » par rôle, pour que la légende dise lequel est lequel) : une marche qui passe de l'autre côté de zéro reste d'un seul tenant, et un trait
+  // fin relie le haut de chaque marche à la suivante. Hausse, baisse et total prennent les trois premières couleurs du jeu.
+  function waterfall(def, series, size) {
+    const steps = stepsOf(def, series);
+    const palette = paletteOf(def);
+    const names = steps.map(step => step.name);
+    const roles = STEP_ROLES.filter(role => steps.some(step => step.role === role));
+    const roleName = role => I18n.t('chart.waterfall.' + role);
+    const lift = liftOf(def);
+    const levels = [{ values: steps.reduce((all, step) => all.concat([step.from, step.to]), []) }];
+    const xName = series[0].label;
+    const yName = series[1] ? series[1].label : '';
+    const legend = roles.length > 1;
+    const grid = marginsOf(xName, yName, legend, lift, def.labels ? { top: 12 } : {});
+    const category = {
+      type: 'category', data: names, boundaryGap: true, axisLine: { lineStyle: { color: AXIS_LINE } }, axisTick: { alignWithLabel: true, lineStyle: { color: AXIS_LINE } },
+      axisLabel: categoryLabels(names, (size.width || 480) - tickWidthOf(levels) - (yName ? NAME_PX : 0) - 28),
+    };
+    const signed = step => (step.role === 'total' ? '' : (step.delta > 0 ? '+' : '')) + numberText(step.delta);
+    const data = roles.map((role) => {
+      const color = palette[STEP_ROLES.indexOf(role) % palette.length];
+      return {
+        type: 'custom', name: roleName(role), itemStyle: { color }, encode: { x: 0, y: [1, 2] }, z: 2,
+        data: steps.map((step, at) => [at, step.from, step.to, step.delta, at < steps.length - 1 ? 1 : 0]).filter((item, at) => steps[at].role === role),
+        renderItem: (params, api) => {
+          const at = api.value(0);
+          const from = api.coord([at, api.value(1)]);
+          const to = api.coord([at, api.value(2)]);
+          const band = api.size([1, 0])[0];
+          const wide = Math.min(48, Math.max(2, band * 0.6));
+          const top = Math.min(from[1], to[1]);
+          const children = [{ type: 'rect', shape: { x: from[0] - wide / 2, y: top, width: wide, height: Math.max(1, Math.abs(from[1] - to[1])) }, style: api.style() }];
+          if (api.value(4)) {
+            const next = api.coord([at + 1, api.value(2)]);
+            children.push({ type: 'line', shape: { x1: from[0] + wide / 2, y1: to[1], x2: next[0] - wide / 2, y2: to[1] }, style: { stroke: AXIS_LINE, lineWidth: 1 } });
+          }
+          const step = steps[at];
+          const label = signed(step);
+          if (def.labels && widthOfText(label.length) <= band) {
+            children.push({ type: 'text', style: { text: label, x: from[0], y: top - 3, textAlign: 'center', textVerticalAlign: 'bottom', font: VALUE_PX + 'px ' + FONT_FAMILY, fill: FOREGROUND } });
+          }
+          return { type: 'group', children };
+        },
+      };
+    });
+    return {
+      legend: legendOf(roles.map(role => ({ label: roleName(role) })), legend, lift), grid, graphic: axisNames(size, grid, xName, yName),
+      xAxis: category, yAxis: valueAxisOf(), series: data, color: roles.map(role => palette[STEP_ROLES.indexOf(role) % palette.length]),
+    };
+  }
+
+  // Jauge : une jauge par ligne (les douze premières), sa valeur au centre et son étiquette dessous, sur une échelle de zéro au maximum réglé (100 sans réglage) : au-delà, l'arc est plein et la valeur
+  // reste celle de la ligne. Les jauges se rangent en une rangée (trois au plus) ou en deux ou trois, la dernière rangée centrée ; chacune prend une couleur du jeu, dans l'ordre. « Afficher les
+  // valeurs » écrit les deux bouts de l'échelle.
+  function gauge(def, series, size) {
+    const x = series[0];
+    const y = series[1];
+    const full = def.max || GAUGE_FULL;
+    const items = [];
+    x.values.forEach((value, i) => {
+      const at = y ? y.values[i] : null;
+      if (finite(at)) items.push({ name: labelOf(value), value: at });
+    });
+    const shown = items.slice(0, MAX_GAUGES);
+    const count = shown.length;
+    const width = size.width || 480;
+    const height = size.height || 300;
+    const lift = liftOf(def);
+    const columns = Math.max(1, count <= 3 ? count : Math.ceil(count / (count <= 8 ? 2 : 3)));
+    const lines = Math.ceil(count / columns) || 1;
+    const cellW = width / columns;
+    const cellH = (height - lift) / lines;
+    // Un cadran (l'arc, puis son nom dessous) a 1,72 rayon de haut et 24 px de plus : il tient dans sa case, avec de l'air autour, et s'y centre.
+    const radius = Math.max(20, Math.floor(Math.min(cellW / 2 - 10, (cellH - 44) / 1.72)));
+    const thick = Math.max(6, Math.min(18, Math.round(radius * 0.12)));
+    const gap = Math.max(2, Math.round((cellH - (1.72 * radius + 24)) / 2));
+    const palette = paletteOf(def);
+    return {
+      series: shown.map((item, at) => {
+        const line = Math.floor(at / columns);
+        const inLine = line === lines - 1 ? count - columns * (lines - 1) : columns;
+        const cx = (width - inLine * cellW) / 2 + (at % columns + 0.5) * cellW;
+        const cy = lift + line * cellH + gap + radius;
+        return {
+          type: 'gauge', center: [Math.round(cx), Math.round(cy)], radius, min: 0, max: full, startAngle: 225, endAngle: -45, splitNumber: 1,
+          axisLine: { roundCap: true, lineStyle: { width: thick, color: [[1, GRID_LINE]] } },
+          progress: { show: true, roundCap: true, width: thick, itemStyle: { color: palette[at % palette.length] } },
+          pointer: { show: false }, anchor: { show: false }, axisTick: { show: false }, splitLine: { show: false },
+          axisLabel: { show: !!def.labels, distance: thick + 2, color: FOREGROUND, fontFamily: FONT_FAMILY, fontSize: VALUE_PX, formatter: value => numberText(value, 6) },
+          title: { show: true, offsetCenter: [0, Math.round(radius * 0.72)], color: FOREGROUND, fontFamily: FONT_FAMILY, fontSize: FONT_SIZE, width: Math.round(cellW - 12), overflow: 'truncate' },
+          detail: { valueAnimation: false, offsetCenter: [0, Math.round(radius * 0.05)], color: FOREGROUND, fontFamily: FONT_FAMILY, fontSize: Math.max(12, Math.min(26, Math.round(radius * 0.4))), fontWeight: 'bold', formatter: value => numberText(value) },
+          data: [{ value: item.value, name: item.name }],
+        };
+      }),
+    };
+  }
+
+  const BUILDERS = { bar: cartesian, line: cartesian, area: cartesian, scatter, pie, donut: pie, radar, funnel, waterfall, gauge };
 
   // L'option d'ECharts de `def` pour ces séries (celles de ChartSource.series : la première est l'axe des étiquettes, les autres portent l'identifiant de leur colonne), pour une image de `size.width` x
   // `size.height` pixels de mise en page. Ne modifie pas `series`.
@@ -389,6 +543,6 @@ const ChartMake = (function () {
   }
 
   return {
-    LIBRARY, KINDS, SCALE, PALETTES, PALETTE_IDS, MAX_TITLE, MIXABLE, ensureLibrary, normalize, parse, stringify, needsValues, nameOf, option, toImage, paletteOf, seriesColor, seriesType, baseTypeOf, hasSeries, numberText, ordered: orderedSeries, niceCeil,
+    LIBRARY, KINDS, SCALE, PALETTES, PALETTE_IDS, MAX_TITLE, MAX_GAUGES, GAUGE_FULL, MIXABLE, ensureLibrary, normalize, parse, stringify, needsValues, nameOf, option, toImage, paletteOf, seriesColor, seriesType, baseTypeOf, hasSeries, numberText, ordered: orderedSeries, niceCeil,
   };
 })();

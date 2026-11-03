@@ -2,7 +2,7 @@
 // extensions/graphique/chart-office.js (le modèle d'Office : les séries, leurs couleurs et leurs types, que les exports lisent sans rien savoir d'ECharts), extensions/graphique/chart-block.js (le modèle posé dans
 // l'attribut `data-chart-office` de l'image, à la Lecture et à l'export) et js/docx-export.js (la `ChartRun` de docx/charts, chargée à la demande). Joué hébergé comme les suites « chart » et « chartMake » : un GFS simulé
 // donne l'extension « graphique » et la source d'ECharts (cf. HOSTED_GROUPS de run-headless.mjs) ; le document de Grist est celui de dev-tests/scenarios-chart-block.js (`window.__chartFixture`). Trois parties :
-//  1) le MODÈLE : ce que ChartOffice.model garde de chacune des sept formes (étiquettes, séries, couleurs, types, empilé, couché, valeurs affichées, titre, axes, échelle d'un radar, abscisses en dates), et ce qu'il refuse ;
+//  1) le MODÈLE : ce que ChartOffice.model garde de chacune des sept premières formes (étiquettes, séries, couleurs, types, empilé, couché, valeurs affichées, titre, axes, échelle d'un radar, abscisses en dates), et ce qu'il refuse ;
 //  2) le TRANSPORT : l'attribut de l'image à la Lecture (et pas sur un graphique de la page), absent du HTML, du Markdown et du PDF ;
 //  3) le WORD, lu dans le .docx GÉNÉRÉ (dézippé : word/charts/chartN.xml, le classeur embarqué, word/document.xml), jamais dans les objets de docx.js : chaque forme a son élément d'Office, un graphique mêlé a ses deux
 //     éléments, aucune image PNG pour un graphique natif, la taille réglée, des identifiants de dessin tous différents, et le repli sur l'image PNG quand Word ne saurait pas lire le graphique.
@@ -11,6 +11,7 @@
 //  5) l'EXCEL (lot 5) : le .xlsx généré, relu (dézippé et par ExcelJS) : le graphique natif ancré sur la case de l'image, à sa taille, ses formules vers la feuille « Données des graphiques » (la dernière) dont les cellules disent ce que le
 //     graphique a en cache, le dessin partagé avec des images, un classeur de plusieurs enregistrements (un bloc de données par graphique, la feuille renommée si un enregistrement a son nom, un enregistrement en échec qui n'en laisse rien),
 //     et le repli sur l'image PNG (modèle illisible, archive qui refuse).
+//  6) l'ENTONNOIR, la CASCADE et la JAUGE (lot 6) : Office n'a pas ces formes, l'image PNG reste dans les trois exports et un graphique en barres posé à côté reste natif.
 // Le rendu réel (LibreOffice) est vérifié à part.
 (function () {
   const cases = [];
@@ -147,7 +148,7 @@
       const series = [xs('Quantité', [30, 10, 20], 'Numeric'), ys('Montant', [3, 1, 2])];
       modelOf('line', series, { label: 'Quantité', values: ['Montant'] });
       return {
-        pass: ChartOffice.model({ kind: 'gauge' }, [MONTHS, AMOUNT]) === null && ChartOffice.model(null, [MONTHS, AMOUNT]) === null && ChartOffice.model(def('bar'), []) === null
+        pass: ChartOffice.model({ kind: 'treemap' }, [MONTHS, AMOUNT]) === null && ChartOffice.model(null, [MONTHS, AMOUNT]) === null && ChartOffice.model(def('bar'), []) === null
           && modelOf('bar', [many, values(many.values.length)], { values: ['Montant'] }) === null && !!modelOf('bar', [limit, values(limit.values.length)], { values: ['Montant'] })
           && JSON.stringify(series) === before && ChartOffice.VERSION === 1,
         notes: JSON.stringify({ limit: ChartOffice.MAX_CATEGORIES, unchanged: JSON.stringify(series) === before }),
@@ -884,6 +885,57 @@
       return {
         pass: out.charts.length === 1 && found.length === 1 && out.sheets.length === 2 && out.sheets[0].indexOf('R&D l\'été') === 0 && data.getCell(1, 1).value === I18n.t('xlsx.chart.name') + ' 1 - Ventes & « Q1 » <essai>' && brokenFormulas(out.book, out.charts[0]).length === 0,
         notes: JSON.stringify({ sheets: out.sheets, found, head: data.getCell(1, 1).value }),
+      };
+    },
+  });
+
+  // === 6) L'entonnoir, la cascade et la jauge (lot 6) ===========================================================================================================
+  // Office n'a pas ces trois formes : ChartOffice.model dit « pas de modèle » (null), l'image ne porte pas `data-chart-office` et Word, PowerPoint et Excel gardent l'image PNG, telle qu'avant ; un graphique en barres
+  // posé à côté reste un graphique natif (le moteur de Word ne se charge que pour lui, mais l'image de l'autre est gardée).
+  const LOT6 = [['funnel', { values: ['Montant'] }], ['waterfall', { values: ['Montant'], total: true }], ['gauge', { values: ['Montant'], max: 500 }]];
+
+  cases.push({
+    id: 'chart_office_funnel_waterfall_and_gauge_have_no_office_model_and_stay_a_picture_in_word_powerpoint_and_excel',
+    description: 'Entonnoir, cascade, jauge : ChartOffice.model ne les connaît pas (null), l\'image de la Lecture ne porte pas `data-chart-office` et reste un PNG ; le .docx, le .pptx et le classeur n\'ont aucun graphique natif (ni pièce de graphique, ni classeur embarqué, ni feuille de données) mais UNE image PNG chacun',
+    run: async (h) => {
+      await seed(h);
+      const out = [];
+      for (const [kind, extra] of LOT6) {
+        const html = docOf(madeHtml(def(kind, extra), 'linked'));
+        const content = await renderReader(html, recordOf(1));
+        const img = content.querySelector('img');
+        const word = await docxOf(html, recordOf(1));
+        const slides = await pptxOf(html, recordOf(1));
+        const book = await xlsxOf(gridHtml(madeHtml(def(kind, extra), 'linked', SMALL)), recordOf(1));
+        out.push({
+          kind, model: ChartOffice.model(def(kind, extra), [MONTHS, AMOUNT]), office: img ? img.getAttribute('data-chart-office') : 'aucune image', png: !!img && (img.getAttribute('src') || '').startsWith('data:image/png;base64,'),
+          word: [word.charts.length, word.workbooks.length, word.media.length], pptx: [slides.charts.length, slides.workbooks.length, slides.media.length], xlsx: [book.charts.length, book.sheets.length, book.media.length],
+        });
+      }
+      hideReader();
+      return {
+        pass: out.length === 3 && out.every(o => o.model === null && o.office === null && o.png && same(o.word, [0, 0, 1]) && same(o.pptx, [0, 0, 1]) && same(o.xlsx, [0, 1, 1])),
+        notes: JSON.stringify(out),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_a_bar_chart_beside_a_funnel_stays_native_while_the_funnel_keeps_its_picture',
+    description: 'Un entonnoir et un graphique en barres dans le même document : Word, PowerPoint et Excel ont UN graphique natif (les barres, avec son classeur) et UNE image PNG (l\'entonnoir) ; le classeur a sa feuille de données',
+    run: async (h) => {
+      await seed(h);
+      const funnel = madeHtml(def('funnel', { values: ['Montant'] }), 'linked');
+      const bars = madeHtml(def('bar', { values: ['Montant'] }), 'linked');
+      const html = docOf(funnel, bars);
+      const word = await docxOf(html, recordOf(1));
+      const slides = await pptxOf(html, recordOf(1));
+      const book = await xlsxOf(gridHtml(madeHtml(def('funnel', { values: ['Montant'] }), 'linked', SMALL), madeHtml(def('bar', { values: ['Montant'] }), 'linked', SMALL)), recordOf(1));
+      return {
+        pass: word.charts.length === 1 && word.media.length === 1 && same(plotsOf(word.charts[0]), ['c:barChart']) && word.workbooks.length === 1
+          && slides.charts.length === 1 && slides.media.length === 1 && slides.workbooks.length === 1
+          && book.charts.length === 1 && book.media.length === 1 && book.sheets.length === 2,
+        notes: JSON.stringify({ word: [word.charts.length, word.media.length, word.workbooks.length], pptx: [slides.charts.length, slides.media.length, slides.workbooks.length], xlsx: [book.charts.length, book.media.length, book.sheets] }),
       };
     },
   });

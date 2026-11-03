@@ -2,6 +2,7 @@
 // modifie dans l'application (ses données s'ouvrent dans Excel), au lieu de l'image PNG que la Lecture, le PDF et l'éditeur montrent. Ce fichier ne sait que le construire : mêmes séries que le dessin
 // (celles de chart-source.js, dans le même ordre, avec les mêmes couleurs, les mêmes types de séries et les mêmes valeurs affichées), en données simples que n'importe quel export lit sans rien savoir
 // du widget, d'ECharts ni de la définition du graphique. Aucune bibliothèque : une fonction pure, comme `ChartMake.option`.
+// L'entonnoir, la cascade et la jauge (lot 6) n'ont pas de modèle : Office n'a pas ces formes, `model` rend null et l'image PNG reste dans les exports (Word, PowerPoint, Excel).
 //
 // Le modèle voyage de la Lecture à l'export dans l'attribut `data-chart-office` de l'image (ChartBlock.resolveImage le pose avec le dessin, pour la ligne exportée), en JSON :
 //   { v: 1, kind, title?, horizontal?, stacked?, labels?, axes?: { category?, value? }, categories: [texte], series: [...], scale?: { min, max }, xDates? }

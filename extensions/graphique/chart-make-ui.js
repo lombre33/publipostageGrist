@@ -3,8 +3,8 @@
 // graphique à la place du curseur, ou change celui qui est sélectionné ; ses réglages sont gardés sur l'image, dans le modèle (chart-make.js : `chartSpec`), jamais dans Grist.
 // Elle est la sœur de la fenêtre « Graphique de la page » (chart-block.js) : mêmes lignes du graphique (liées ou toute la table), même liaison réglée à la validation quand elle manque, même
 // aperçu pour la ligne affichée, mêmes textes pour ce qui manque. Le dessin et la lecture des lignes sont ceux de chart-block.js (drawMade) ; les styles, ceux de chart-block.css.
-// Tout tient dans le panneau de 700x400, sans défiler. À gauche, deux onglets (à droite du titre, dans l'en-tête de la fenêtre) : « Données » (la forme en une rangée de boutons, la table et la colonne des étiquettes côte à côte, les colonnes
-// à tracer en une liste qui défile seule quand la table en a beaucoup, et sous elle les deux réglages de forme - empilé, horizontal - qui n'apparaissent que pour les formes qui les ont) et « Aspect »
+// Tout tient dans le panneau de 700x400, sans défiler. À gauche, deux onglets (à droite du titre, dans l'en-tête de la fenêtre) : « Données » (la forme en boutons sur deux rangées, la table et la colonne des étiquettes côte à côte, les colonnes
+// à tracer en une liste qui défile seule quand la table en a beaucoup, et sous elle les réglages de forme - empilé, horizontal, le total d'une cascade, le maximum des jauges - qui n'apparaissent que pour les formes qui les ont) et « Aspect »
 // (le titre, le jeu de couleurs, la couleur et le type - barres ou courbe - de chaque série, les valeurs affichées) ; à droite, sur les deux onglets, l'aperçu et les lignes. Le choix d'une couleur
 // de série prend la place des onglets le temps d'un choix (la palette de tous les menus de couleur, les couleurs gardées, « Personnalisé… »), puis rend la main : pas de menu volant, qui ne
 // tiendrait pas dans la hauteur du panneau. Les onglets sont de vrais onglets (flèches, Début, Fin) ; Échap ferme d'abord le choix d'une couleur, puis la fenêtre.
@@ -15,8 +15,12 @@ const ChartMakeUi = (function () {
   const DEFAULT_HEIGHT_PX = ChartEntry.DEFAULT_HEIGHT_PX;
   const PREVIEW_DELAY_MS = 120;
   const NUMERIC_TYPES = ['Numeric', 'Int', 'Any'];
-  const ONE_VALUE_KINDS = ['pie', 'donut'];
+  // Les formes qui ne tracent qu'une colonne de valeurs (la première cochée reste), et parmi elles celles qui comptent les lignes de chaque étiquette quand aucune n'est cochée.
+  const ONE_VALUE_KINDS = ['pie', 'donut', 'funnel', 'waterfall', 'gauge'];
+  const COUNTING_KINDS = ['pie', 'donut', 'funnel'];
   const TABS = ['data', 'aspect'];
+  // Ce que dit l'onglet « Aspect » des formes sans série : d'où viennent les couleurs de leurs parts.
+  const PARTS_NOTE = { pie: 'chart.make.series.slices', donut: 'chart.make.series.slices', funnel: 'chart.make.series.stages', waterfall: 'chart.make.series.steps', gauge: 'chart.make.series.gauges' };
   const GRID_COLUMNS = 10;          // les colonnes de la palette (js/color-palette.js) : haut et bas d'une pastille à celle de la rangée d'à côté
   const SAMPLE_STRIP = 4;           // les couleurs d'un jeu montrées sur son bouton
 
@@ -37,6 +41,13 @@ const ChartMakeUi = (function () {
   const sameTable = table => !!table && table === currentTable();
   const needsLink = table => !!table && !sameTable(table) && !GristAPI.getLinkRule(table);
   const isOneValue = kind => ONE_VALUE_KINDS.indexOf(kind) !== -1;
+  const isCounting = kind => COUNTING_KINDS.indexOf(kind) !== -1;
+  // Le maximum des jauges : ce que la personne a écrit (la virgule vaut le point), `undefined` tant que le champ est vide ou n'est pas un nombre.
+  function maxOf(text) {
+    const value = String(text === undefined || text === null ? '' : text).trim().replace(',', '.');
+    const number = value === '' ? NaN : Number(value);
+    return isFinite(number) ? number : undefined;
+  }
 
   // Une pastille de la palette : celle de js/color-palette.js (mêmes classes, donc même dessin, même coche et même marque que ColorPalette.mark). `role` : le nom du réglage d'une couleur du thème
   // (« Accent 1 »), devant son code dans l'infobulle, comme dans les autres menus de couleur.
@@ -78,7 +89,7 @@ const ChartMakeUi = (function () {
     const dataPanel = tabs[0].panel;
     const aspectPanel = tabs[1].panel;
 
-    // La forme : sept vrais boutons radio (flèches, Tab) dessinés en boutons.
+    // La forme : dix vrais boutons radio (flèches, Tab) dessinés en boutons, sur deux rangées.
     const kinds = el('fieldset', 'pp-chartmake-kinds');
     const kindsLegend = el('legend', 'pp-dialog-label');
     const kindRow = el('div', 'pp-chartmake-kind-row');
@@ -122,11 +133,26 @@ const ChartMakeUi = (function () {
     valuesNote.hidden = true;
     values.append(valuesLegend, valuesList, valuesNote);
 
-    // Les deux réglages de la forme (empilé, horizontal), sous les colonnes : ils n'apparaissent que pour les formes qui les ont.
+    // Les réglages de la forme (empilé, horizontal, le total d'une cascade, le maximum des jauges), sous les colonnes : ils n'apparaissent que pour les formes qui les ont.
     const options = el('div', 'pp-chartmake-options');
     const stack = optionBox('stack');
     const horizontal = optionBox('horizontal');
-    options.append(stack.label, horizontal.label);
+    const total = optionBox('total');
+    const maxBox = el('label', 'pp-chartmake-option pp-chartmake-max');
+    const maxText = el('span');
+    const maxInput = el('input', 'pp-chartmake-max-input');
+    maxInput.type = 'text';
+    maxInput.inputMode = 'decimal';
+    maxInput.autocomplete = 'off';
+    maxInput.name = 'pp-chartmake-max';
+    maxInput.placeholder = String(ChartMake.GAUGE_FULL);
+    maxBox.append(maxText, maxInput);
+    // Ce que la jauge fait des lignes se dit sur la même rangée que son maximum : sous les colonnes, la note ferait grandir la fenêtre.
+    const maxNote = el('span', 'pp-chart-note pp-chartmake-max-note');
+    maxNote.id = 'pp-chartmake-max-note';
+    maxNote.hidden = true;
+    maxInput.setAttribute('aria-describedby', 'pp-chartmake-max-note');
+    options.append(stack.label, horizontal.label, total.label, maxBox, maxNote);
 
     const error = el('p', 'pp-chart-note pp-chart-error');
     error.id = 'pp-chartmake-error';
@@ -173,7 +199,7 @@ const ChartMakeUi = (function () {
     const seriesNote = el('p', 'pp-chart-note');
     seriesNote.hidden = true;
     series.append(seriesLegend, seriesList, seriesNote);
-    // Secteurs et anneau n'ont pas de séries : chaque secteur prend une couleur du jeu choisi.
+    // Secteurs, anneau, entonnoir, cascade et jauges n'ont pas de séries à colorer une à une : leurs parts prennent les couleurs du jeu choisi.
     const slicesNote = el('p', 'pp-chart-note');
     slicesNote.hidden = true;
     const labelsBox = optionBox('labels');
@@ -239,7 +265,7 @@ const ChartMakeUi = (function () {
     const { cancel, ok } = win.addButtons();
     refs = {
       tabsBar, tabs, kindsLegend, kindInputs, tableLabel, tableSelect, labelLabel, labelSelect, valuesLegend, valuesList, valuesNote, error, previewLabel, paper, image, message, caption,
-      rowsLegend, linked, all, rowsNote, options, stack, horizontal,
+      rowsLegend, linked, all, rowsNote, options, stack, horizontal, total, maxBox, maxText, maxInput, maxNote,
       titleLabel, titleInput, palettesLegend, paletteInputs, series, seriesLegend, seriesList, seriesNote, slicesNote, labels: labelsBox,
       colors, back, backText, colorsTitle, palette, saved, auto, custom, cancel, ok,
     };
@@ -249,6 +275,14 @@ const ChartMakeUi = (function () {
     labelSelect.addEventListener('change', pickLabel);
     stack.input.addEventListener('change', () => { state.stack = stack.input.checked; changed(); });
     horizontal.input.addEventListener('change', () => { state.horizontal = horizontal.input.checked; changed(); });
+    total.input.addEventListener('change', () => { state.total = total.input.checked; changed(); });
+    maxInput.addEventListener('input', () => { state.max = maxInput.value; changed(); });
+    // Entrée dans le maximum valide la fenêtre, comme dans le titre.
+    maxInput.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' || event.isComposing) return;
+      event.preventDefault();
+      if (!refs.ok.disabled) apply();
+    });
     labelsBox.input.addEventListener('change', () => { state.labels = labelsBox.input.checked; changed(); });
     titleInput.addEventListener('input', () => { state.title = titleInput.value; changed(); });
     // Entrée dans le titre valide la fenêtre, comme dans les autres saisies ; pendant une composition (accents, saisie japonaise), elle ne fait que valider le caractère.
@@ -304,7 +338,7 @@ const ChartMakeUi = (function () {
   function shape() {
     const values = state.values.filter(column => column !== state.label);
     return {
-      kind: state.kind, table: state.table, label: state.label, values: isOneValue(state.kind) ? values.slice(0, 1) : values, stack: state.stack, horizontal: state.horizontal,
+      kind: state.kind, table: state.table, label: state.label, values: isOneValue(state.kind) ? values.slice(0, 1) : values, stack: state.stack, horizontal: state.horizontal, total: state.total, max: maxOf(state.max),
       title: state.title, palette: state.palette, colors: state.colors, labels: state.labels, mix: state.mix,
     };
   }
@@ -365,11 +399,12 @@ const ChartMakeUi = (function () {
       label.append(input, text);
       valuesList.appendChild(label);
     });
-    // Une table sans colonne de nombres le dit ; secteurs et anneau, qui comptent les lignes sans valeur choisie, le disent aussi.
-    const one = isOneValue(state.kind);
+    // Une table sans colonne de nombres le dit ; secteurs, anneau et entonnoir, qui comptent les lignes sans valeur choisie, le disent aussi.
+    const counting = isCounting(state.kind);
+    const countNote = state.kind === 'funnel' ? 'chart.make.values.count.funnel' : 'chart.make.values.count';
     let note = '';
-    if (state.table && !columns.length) note = one ? 'chart.make.values.count' : 'chart.make.values.none';
-    else if (one && state.table && !state.values.length) note = 'chart.make.values.count';
+    if (state.table && !columns.length) note = counting ? countNote : 'chart.make.values.none';
+    else if (counting && state.table && !state.values.length) note = countNote;
     valuesNote.hidden = !note;
     valuesNote.textContent = note ? I18n.t(note) : '';
   }
@@ -402,11 +437,15 @@ const ChartMakeUi = (function () {
 
   // Les choix
   function pickKind(kind) {
+    const was = state.kind;
     state.kind = kind;
-    // Secteurs et anneau ne tracent qu'une colonne : la première cochée reste.
+    // Secteurs, anneau, entonnoir, cascade et jauge ne tracent qu'une colonne : la première cochée reste.
     if (isOneValue(kind) && state.values.length > 1) state.values = state.values.slice(0, 1);
     state.stack = state.stack && (kind === 'bar' || kind === 'area');
     state.horizontal = state.horizontal && kind === 'bar';
+    // Une cascade neuve se ferme sur son total (la personne le retire si elle ne le veut pas) ; le maximum ne sert qu'aux jauges.
+    state.total = kind === 'waterfall' && (was === 'waterfall' ? state.total : true);
+    if (kind !== 'gauge') state.max = '';
     // Le type de chaque série se compte à partir de la forme (barres pour des barres, courbe pour une courbe) : une autre forme repart de zéro, toutes les séries à son type.
     state.mix = {};
     renderKind();
@@ -470,14 +509,19 @@ const ChartMakeUi = (function () {
   }
 
   function renderKind() {
-    const { kindInputs, options, stack, horizontal, valuesLegend } = refs;
+    const { kindInputs, options, stack, horizontal, total, maxBox, maxInput, maxNote, valuesLegend } = refs;
     kindInputs.forEach((item) => { item.input.checked = item.kind === state.kind; });
     const canStack = state.kind === 'bar' || state.kind === 'area';
     stack.label.hidden = !canStack;
     stack.input.checked = canStack && !!state.stack;
     horizontal.label.hidden = state.kind !== 'bar';
     horizontal.input.checked = state.kind === 'bar' && !!state.horizontal;
-    options.hidden = stack.label.hidden && horizontal.label.hidden;
+    total.label.hidden = state.kind !== 'waterfall';
+    total.input.checked = state.kind === 'waterfall' && !!state.total;
+    maxBox.hidden = state.kind !== 'gauge';
+    maxNote.hidden = maxBox.hidden;
+    maxInput.value = state.kind === 'gauge' ? state.max : '';
+    options.hidden = stack.label.hidden && horizontal.label.hidden && total.label.hidden && maxBox.hidden;
     valuesLegend.textContent = I18n.t(isOneValue(state.kind) ? 'chart.make.values.one' : 'chart.make.values');
     refs.valuesList.dataset.single = isOneValue(state.kind) ? 'true' : 'false';
   }
@@ -504,7 +548,7 @@ const ChartMakeUi = (function () {
     const slices = !ChartMake.hasSeries(state.kind);
     series.hidden = slices;
     slicesNote.hidden = !slices;
-    slicesNote.textContent = slices ? I18n.t('chart.make.series.slices') : '';
+    slicesNote.textContent = slices ? I18n.t(PARTS_NOTE[state.kind] || 'chart.make.series.slices') : '';
     seriesList.replaceChildren();
     if (slices) return;
     const def = displayDef();
@@ -706,11 +750,11 @@ const ChartMakeUi = (function () {
     const def = found ? ChartMake.parse(found.node.attrs.chartSpec) : null;
     state = {
       editing: !!found, pos: found ? found.pos : null, kind: def ? def.kind : 'bar', table: def ? def.table : '', label: def ? def.label : '', values: def ? def.values.slice() : [],
-      stack: !!(def && def.stack), horizontal: !!(def && def.horizontal), scope: found && found.node.attrs.chartScope === 'all' ? 'all' : 'linked',
+      stack: !!(def && def.stack), horizontal: !!(def && def.horizontal), total: !!(def && def.total), max: def && def.max ? String(def.max) : '', scope: found && found.node.attrs.chartScope === 'all' ? 'all' : 'linked',
       title: def && def.title ? def.title : '', palette: def && def.palette ? def.palette : ChartMake.PALETTE_IDS[0], colors: def && def.colors ? Object.assign({}, def.colors) : {},
       labels: !!(def && def.labels), mix: def && def.mix ? Object.assign({}, def.mix) : {}, tab: 'data', colorFor: null,
     };
-    const { kindsLegend, kindInputs, tableLabel, labelLabel, previewLabel, rowsLegend, linked, all, stack, horizontal, labels, cancel, ok, tabs, titleLabel, titleInput, seriesLegend, paletteInputs } = refs;
+    const { kindsLegend, kindInputs, tableLabel, labelLabel, previewLabel, rowsLegend, linked, all, stack, horizontal, total, maxBox, maxText, maxInput, maxNote, labels, cancel, ok, tabs, titleLabel, titleInput, seriesLegend, paletteInputs } = refs;
     win.title.textContent = I18n.t(found ? 'chart.title.edit' : 'chart.make.title.new');
     refs.tabsBar.setAttribute('aria-label', I18n.t('chart.make.tabs'));
     tabs.forEach((tab) => { tab.button.textContent = I18n.t('chart.make.tab.' + tab.name); });
@@ -726,6 +770,11 @@ const ChartMakeUi = (function () {
     all.label.title = I18n.t('chart.rows.all.detail');
     stack.text.textContent = I18n.t('chart.make.stack');
     horizontal.text.textContent = I18n.t('chart.make.horizontal');
+    total.text.textContent = I18n.t('chart.make.total');
+    maxText.textContent = I18n.t('chart.make.max');
+    maxBox.title = I18n.t('chart.make.max.detail');
+    maxInput.setAttribute('aria-label', I18n.t('chart.make.max'));
+    maxNote.textContent = I18n.t('chart.make.max.note');
     titleLabel.textContent = I18n.t('chart.make.heading');
     titleInput.placeholder = I18n.t('chart.make.heading.placeholder');
     titleInput.value = state.title;

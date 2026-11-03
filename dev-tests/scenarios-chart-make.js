@@ -2,7 +2,7 @@
 // la présentation), extensions/graphique/chart-make.js (la définition et le dessin d'ECharts), chart-make-ui.js (la fenêtre), chart-source.js (`made`), chart-block.js (`drawMade`, le cadre de l'éditeur, la Lecture
 // et les exports) et js/chart-entry.js. Joué hébergé comme la suite « chart » : un GFS simulé donne l'extension « graphique » et les sources de ses deux bibliothèques (cf. HOSTED_GROUPS de run-headless.mjs) ;
 // le document de Grist est celui de dev-tests/scenarios-chart-block.js (`window.__chartFixture` : les clients, leurs ventes, la règle de liaison). Cinq parties :
-//  1) la DÉFINITION et le DESSIN : ce que le widget garde d'un graphique créé, l'option d'ECharts de chaque forme (barres, courbe, aire, nuage, secteurs, anneau, radar), l'image PNG réellement tracée ;
+//  1) la DÉFINITION et le DESSIN : ce que le widget garde d'un graphique créé, l'option d'ECharts de chaque forme (barres, courbe, aire, nuage, secteurs, anneau, radar ; lot 6 : entonnoir, cascade, jauge), l'image PNG réellement tracée ;
 //  2) les LIGNES : les colonnes lues par leur identifiant dans l'ordre de la table, les lignes liées, la table ou la colonne disparue, une ligne sans valeur ;
 //  3) l'ÉDITEUR : la ligne du menu « Ajouter une image » (celui des blocs garde ses neuf lignes), son grisé, la fenêtre (formes, table, colonnes, lignes, aperçu), le nœud (`data-chart-spec`, jamais d'image),
 //     le cadre dessiné, la modification, la relecture du modèle, la définition illisible, l'anglais, le mode lecture seule ;
@@ -75,17 +75,17 @@
       const line = ChartMake.normalize({ kind: 'line', table: SALES, label: 'Mois', values: ['Montant'], stack: true, horizontal: true });
       const area = ChartMake.normalize({ kind: 'area', table: SALES, label: 'Mois', values: ['Montant'], stack: true, horizontal: true });
       const many = ChartMake.normalize({ kind: 'bar', table: SALES, label: 'Mois', values: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 3, '', null] });
-      const refused = [{ kind: 'gauge', table: 'T', label: 'L', values: [] }, { kind: 'bar', label: 'L', values: [] }, { kind: 'bar', table: 'T', values: [] }, { kind: 'bar', table: 'x'.repeat(201), label: 'L' }, null, 'bar', 42].map(raw => ChartMake.normalize(raw));
+      const refused = [{ kind: 'treemap', table: 'T', label: 'L', values: [] }, { kind: 'bar', label: 'L', values: [] }, { kind: 'bar', table: 'T', values: [] }, { kind: 'bar', table: 'x'.repeat(201), label: 'L' }, null, 'bar', 42].map(raw => ChartMake.normalize(raw));
       const written = ChartMake.stringify(full);
       const back = ChartMake.parse(written);
-      const bad = [ChartMake.parse('{bad'), ChartMake.parse(''), ChartMake.parse(null), ChartMake.parse('x'.repeat(4001)), ChartMake.parse('{"v":1,"kind":"gauge","table":"T","label":"L"}')];
+      const bad = [ChartMake.parse('{bad'), ChartMake.parse(''), ChartMake.parse(null), ChartMake.parse('x'.repeat(4001)), ChartMake.parse('{"v":1,"kind":"treemap","table":"T","label":"L"}')];
       return {
         pass: same(full, { kind: 'bar', table: SALES, label: 'Mois', values: ['Montant', 'Cout'], stack: true, horizontal: true })
           && same(line, { kind: 'line', table: SALES, label: 'Mois', values: ['Montant'] }) && same(area, { kind: 'area', table: SALES, label: 'Mois', values: ['Montant'], stack: true })
           && many.values.length === 8 && many.values.join('') === 'abcdefgh' && refused.every(r => r === null)
           && written.startsWith('{"v":1,"kind":"bar"') && same(back, full) && bad.every(r => r === null)
           && ChartMake.needsValues('bar') && ChartMake.needsValues('radar') && ChartMake.needsValues('scatter') && !ChartMake.needsValues('pie') && !ChartMake.needsValues('donut')
-          && ChartMake.nameOf(full) === 'Barres · GfVentes' && ChartMake.nameOf(line) === 'Courbe · GfVentes' && same(ChartMake.KINDS, ['bar', 'line', 'area', 'scatter', 'pie', 'donut', 'radar'])
+          && ChartMake.nameOf(full) === 'Barres · GfVentes' && ChartMake.nameOf(line) === 'Courbe · GfVentes' && same(ChartMake.KINDS, ['bar', 'line', 'area', 'scatter', 'pie', 'donut', 'radar', 'funnel', 'waterfall', 'gauge'])
           && ChartMake.LIBRARY.id === 'echarts' && ChartMake.LIBRARY.version === '6.1.0',
         notes: JSON.stringify({ full, line, area, many: many.values.length, written, bad }),
       };
@@ -165,7 +165,7 @@
       const option = optionOf('bar', series, { values: ['x'] });
       const after = JSON.stringify(series);
       let unknown = ''; let empty = '';
-      try { ChartMake.option({ kind: 'gauge', table: 'T', label: 'L', values: [] }, [MONTHS], {}); } catch (e) { unknown = String(e.message); }
+      try { ChartMake.option({ kind: 'treemap', table: 'T', label: 'L', values: [] }, [MONTHS], {}); } catch (e) { unknown = String(e.message); }
       try { ChartMake.option(def('bar'), [], {}); } catch (e) { empty = String(e.message); }
       const text = JSON.stringify(option);
       return {
@@ -178,7 +178,7 @@
 
   cases.push({
     id: 'chart_make_image_is_a_png_of_the_requested_proportions_with_ink_for_every_shape',
-    description: 'L\'image de chaque forme est un vrai PNG de 3 pixels par pixel de mise en page (480 x 300 : 1 440 x 900), sur fond blanc, avec de l\'encre ; les barres ont la première couleur de la palette ; un graphique de 300 x 180 fait 900 x 540 ; les sept formes se tracent sans erreur',
+    description: 'L\'image de chaque forme est un vrai PNG de 3 pixels par pixel de mise en page (480 x 300 : 1 440 x 900), sur fond blanc, avec de l\'encre ; les barres ont la première couleur de la palette ; un graphique de 300 x 180 fait 900 x 540 ; les dix formes se tracent sans erreur',
     run: async () => {
       const picture = async (kind, series, extra, size) => {
         const option = optionOf(kind, series, extra, size);
@@ -186,7 +186,7 @@
         return Object.assign({ uri }, await pixelsOf(uri));
       };
       const results = {};
-      const shapes = { bar: [MONTHS, AMOUNT, COST], line: [MONTHS, AMOUNT, COST], area: [MONTHS, AMOUNT, COST], scatter: [xs('Heures', [1, 2, 3], 'Numeric'), AMOUNT], pie: [MONTHS, AMOUNT], donut: [MONTHS, AMOUNT], radar: [MONTHS, AMOUNT, COST] };
+      const shapes = { bar: [MONTHS, AMOUNT, COST], line: [MONTHS, AMOUNT, COST], area: [MONTHS, AMOUNT, COST], scatter: [xs('Heures', [1, 2, 3], 'Numeric'), AMOUNT], pie: [MONTHS, AMOUNT], donut: [MONTHS, AMOUNT], radar: [MONTHS, AMOUNT, COST], funnel: [MONTHS, AMOUNT], waterfall: [MONTHS, AMOUNT], gauge: [MONTHS, AMOUNT] };
       let failure = '';
       for (const kind of ChartMake.KINDS) {
         try { const p = await picture(kind, shapes[kind], { values: ['Montant', 'Cout'] }); results[kind] = { w: p.width, h: p.height, ink: inkOf(p), png: p.uri.startsWith('data:image/png;base64,'), corner: [p.data[0], p.data[1], p.data[2], p.data[3]] }; }
@@ -198,6 +198,154 @@
         pass: !failure && ChartMake.KINDS.every(kind => results[kind] && results[kind].w === 1440 && results[kind].h === 900 && results[kind].png && results[kind].ink > 3000 && same(results[kind].corner, [255, 255, 255, 255]))
           && small.width === 900 && small.height === 540 && nearOf(bars, BAR_BLUE, 14) > 2500 && ChartMake.SCALE === 3,
         notes: JSON.stringify({ failure, results, small: [small.width, small.height], blue: nearOf(bars, BAR_BLUE, 14) }),
+      };
+    },
+  });
+
+  // === 1 ter) Entonnoir, cascade et jauge (lot 6) ============================================================================================================
+  const raw6 = (kind, extra) => Object.assign({ kind, table: SALES, label: 'Mois', values: ['Montant'] }, extra || {});
+  const SET = ChartMake.PALETTES.standard;
+  const rgbOf = hex => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+  const picture6 = async (kind, series, extra, size) => {
+    const frame = size || { width: 480, height: 300 };
+    return pixelsOf(await ChartMake.toImage(optionOf(kind, series, extra, frame), frame.width, frame.height));
+  };
+
+  cases.push({
+    id: 'chart_make_definition_of_funnel_waterfall_and_gauge_keeps_the_total_and_the_maximum_only_where_they_mean_something',
+    description: 'Entonnoir, cascade et jauge : la définition garde « total » (une dernière marche) pour une cascade seulement et « maximum » pour une jauge seulement ; un maximum nul, négatif, absent, qui n\'est pas un nombre, plus grand que mille milliards ou égal au 100 d\'origine ne s\'écrit pas ; « empilé », « horizontal », les couleurs par série et les types de séries n\'ont aucun sens pour ces formes et ne se gardent pas ; l\'entonnoir se passe de colonne de valeurs (il compte les lignes de chaque étiquette), la cascade et la jauge non ; aucune de ces trois formes n\'a de série à colorer ; le texte écrit se relit à l\'identique ; le nom du cadre dit la forme',
+    run: async () => {
+      const own = { table: SALES, label: 'Mois' };
+      const fall = ChartMake.normalize(raw6('waterfall', { total: true, stack: true, horizontal: true, colors: { Montant: '#112233' }, mix: { Montant: 'line' } }));
+      const fallOff = ChartMake.normalize(raw6('waterfall', { total: false }));
+      const barsWith = ChartMake.normalize(raw6('bar', { total: true, max: 500 }));
+      const gauge = ChartMake.normalize(raw6('gauge', { max: 500, total: true }));
+      const gaugeFull = ChartMake.normalize(raw6('gauge', { max: 100 }));
+      const badMax = [0, -5, '500', NaN, Infinity, 1e13, null].map(max => ChartMake.normalize(raw6('gauge', { max })));
+      const small = ChartMake.normalize(raw6('gauge', { max: 0.5 }));
+      const funnel = ChartMake.normalize(raw6('funnel', { values: [], stack: true, total: true, max: 5, colors: { Montant: '#112233' } }));
+      const written = ChartMake.stringify(gauge);
+      const back = ChartMake.parse(written);
+      return {
+        pass: same(fall, { kind: 'waterfall', ...own, values: ['Montant'], total: true }) && same(fallOff, { kind: 'waterfall', ...own, values: ['Montant'] }) && same(barsWith, { kind: 'bar', ...own, values: ['Montant'] })
+          && same(gauge, { kind: 'gauge', ...own, values: ['Montant'], max: 500 }) && same(gaugeFull, { kind: 'gauge', ...own, values: ['Montant'] }) && badMax.every(def => def && !('max' in def)) && small.max === 0.5
+          && same(funnel, { kind: 'funnel', ...own, values: [] })
+          && ChartMake.needsValues('waterfall') && ChartMake.needsValues('gauge') && !ChartMake.needsValues('funnel') && ['pie', 'donut', 'funnel', 'waterfall', 'gauge'].every(kind => !ChartMake.hasSeries(kind))
+          && ['bar', 'line', 'area', 'scatter', 'radar'].every(kind => ChartMake.hasSeries(kind))
+          && written === '{"v":1,"kind":"gauge","table":"GfVentes","label":"Mois","values":["Montant"],"max":500}' && same(back, gauge)
+          && ChartMake.nameOf(fall) === 'Cascade · GfVentes' && ChartMake.nameOf(gauge) === 'Jauge · GfVentes' && ChartMake.nameOf(funnel) === 'Entonnoir · GfVentes' && ChartMake.GAUGE_FULL === 100 && ChartMake.MAX_GAUGES === 12,
+        notes: JSON.stringify({ fall, fallOff, barsWith, gauge, gaugeFull, badMax: badMax.map(def => def && def.max), funnel, written }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_make_option_funnel_has_one_stage_per_label_in_table_order_as_wide_as_its_value_with_its_name_beside_it',
+    description: 'Entonnoir : une étape par étiquette dans l\'ordre de la table (jamais triée : c\'est le parcours), deux lignes de même étiquette n\'en font qu\'une, une valeur nulle, négative ou absente n\'a pas d\'étape ; sans colonne de valeurs chaque ligne compte pour un ; la plus grande étape remplit la largeur et zéro n\'en a pas ; le nom est écrit à côté de l\'étape, avec sa valeur quand « Afficher les valeurs » est coché ; l\'entonnoir laisse la place du nom le plus long dans l\'image et un titre le fait descendre',
+    run: async () => {
+      const stages = xs('Étape', ['Visites', 'Devis', 'Visites', 'Commandes', 'Vide', 'Négatif', 'Absent']);
+      const sizes = ys('Nombre', [1000, 300, 200, 120, 0, -4, null]);
+      const mine = { kind: 'funnel', label: 'Étape', values: ['Nombre'] };
+      const sized = optionOf('funnel', [stages, sizes], mine);
+      const counted = optionOf('funnel', [xs('Statut', ['Nouveau', 'Gagné', 'Nouveau', 'Nouveau'])], { kind: 'funnel', label: 'Statut', values: [] });
+      const shown = optionOf('funnel', [stages, sizes], Object.assign({ labels: true }, mine));
+      const titled = optionOf('funnel', [stages, sizes], Object.assign({ title: 'Parcours' }, mine));
+      const long = optionOf('funnel', [xs('Étape', ['Une étape au nom vraiment très très long à lire', 'Courte']), ys('Nombre', [100, 10])], mine);
+      const s = sized.series[0];
+      const wide = option => 480 - 12 - option.series[0].right;
+      return {
+        pass: s.type === 'funnel' && same(s.data, [{ name: 'Visites', value: 1200 }, { name: 'Devis', value: 300 }, { name: 'Commandes', value: 120 }]) && s.sort === 'none' && s.min === 0 && s.max === 1200
+          && same(counted.series[0].data, [{ name: 'Nouveau', value: 3 }, { name: 'Gagné', value: 1 }]) && s.label.show && s.label.position === 'right' && s.label.formatter(s.data[0]) === 'Visites'
+          && shown.series[0].label.formatter(s.data[0]) === 'Visites : ' + ChartMake.numberText(1200) && s.left === 12 && s.right >= 12 && wide(sized) >= 144 && wide(sized) <= 456
+          && wide(long) < wide(sized) && long.series[0].label.overflow === 'truncate' && long.series[0].label.width <= 192 && titled.title && titled.series[0].top > s.top && !sized.legend
+          && sized.backgroundColor === '#ffffff' && sized.color[0] === SET[0],
+        notes: JSON.stringify({ data: s.data, counted: counted.series[0].data, box: [s.left, s.right, s.top, s.bottom], wide: [wide(sized), wide(long)], titledTop: titled.series[0].top }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_make_option_waterfall_walks_a_running_total_across_zero_with_hausse_baisse_and_total_steps',
+    description: 'Cascade : chaque ligne ajoute sa valeur au cumul des précédentes, la marche va de l\'ancien cumul au nouveau (y compris de l\'autre côté de zéro, d\'un seul tenant) ; une valeur absente n\'est pas une marche ; avec « Afficher le total » une dernière marche « Total » va de zéro au cumul final ; hausses, baisses et total sont trois séries (la légende dit lesquelles existent) aux trois premières couleurs du jeu ; un trait relie chaque marche à la suivante, les valeurs affichées s\'écrivent avec leur signe, et la marche reste un seul rectangle même quand elle franchit zéro',
+    run: async () => {
+      const names = xs('Poste', ['Début', 'Ventes', 'Remises', 'Vide', 'Aides']);
+      const deltas = ys('Variation', [100, -250, 80, null, 300]);
+      const mine = { kind: 'waterfall', label: 'Poste', values: ['Variation'] };
+      const full = optionOf('waterfall', [names, deltas], Object.assign({ total: true, labels: true }, mine));
+      const open = optionOf('waterfall', [names, deltas], mine);
+      const ups = optionOf('waterfall', [xs('Mois', ['A', 'B']), ys('V', [10, 5])], mine);
+      const warm = optionOf('waterfall', [names, deltas], Object.assign({ palette: 'warm', total: true }, mine));
+      const [up, down, total] = ['Hausse', 'Baisse', 'Total'].map(name => full.series.find(s => s.name === name));
+      // Un faux repère (100 px par catégorie, un pixel par unité, vers le haut) pour dessiner une marche : la « Baisse » de 100 à -150 franchit zéro.
+      const frame = item => ({ value: i => item[i], coord: point => [50 + point[0] * 100, 300 - point[1]], size: () => [100, 0], style: () => ({ fill: '#2b78ae' }) });
+      const group = down.renderItem({}, frame(down.data[0]));
+      const rect = group.children[0];
+      const link = group.children.find(c => c.type === 'line');
+      const label = group.children.find(c => c.type === 'text');
+      const lastUp = up.renderItem({}, frame(up.data[2]));
+      const totalGroup = total.renderItem({}, frame(total.data[0]));
+      return {
+        pass: same(full.xAxis.data, ['Début', 'Ventes', 'Remises', 'Aides', 'Total']) && same(full.series.map(s => s.name), ['Hausse', 'Baisse', 'Total']) && full.series.every(s => s.type === 'custom')
+          && same(up.data, [[0, 0, 100, 100, 1], [2, -150, -70, 80, 1], [3, -70, 230, 300, 1]]) && same(down.data, [[1, 100, -150, -250, 1]]) && same(total.data, [[4, 0, 230, 230, 0]])
+          && same(full.color, [SET[0], SET[1], SET[2]]) && same(full.legend.data, ['Hausse', 'Baisse', 'Total']) && up.itemStyle.color === SET[0] && down.itemStyle.color === SET[1] && total.itemStyle.color === SET[2]
+          && same(open.xAxis.data, ['Début', 'Ventes', 'Remises', 'Aides']) && same(open.series.map(s => s.name), ['Hausse', 'Baisse']) && ups.series.length === 1 && !ups.legend && same(ups.series[0].data, [[0, 0, 10, 10, 1], [1, 10, 15, 5, 0]])
+          && same(warm.color, [ChartMake.PALETTES.warm[0], ChartMake.PALETTES.warm[1], ChartMake.PALETTES.warm[2]])
+          && rect.type === 'rect' && rect.shape.y === 200 && rect.shape.height === 250 && rect.shape.width === 48 && !!link && link.shape.y1 === 450 && link.shape.y2 === 450 && link.shape.x1 < link.shape.x2
+          && !!label && label.style.text === '-250' && lastUp.children.find(c => c.type === 'text').style.text === '+300' && !totalGroup.children.some(c => c.type === 'line') && totalGroup.children.find(c => c.type === 'text').style.text === '230',
+        notes: JSON.stringify({ cats: full.xAxis.data, up: up.data, down: down.data, total: total.data, rect: rect.shape, link: link && link.shape, label: label && label.style.text }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_make_option_gauge_draws_one_dial_per_row_up_to_twelve_on_a_scale_from_zero_to_the_maximum',
+    description: 'Jauge : un cadran par ligne qui a une valeur (une ligne sans valeur n\'en a pas), douze au plus, de zéro au maximum réglé (100 sans réglage) ; la valeur est au centre, l\'étiquette dessous, chacun a une couleur du jeu dans l\'ordre ; les cadrans tiennent dans l\'image sans se toucher, d\'autant plus grands qu\'ils sont moins nombreux, sous le titre quand il y en a un ; « Afficher les valeurs » écrit les deux bouts de l\'échelle',
+    run: async () => {
+      const kpi = xs('Indicateur', ['Ventes', 'Marge', 'Vide', 'Qualité']);
+      const kv = ys('Valeur', [72, 55, null, 130]);
+      const mine = { kind: 'gauge', label: 'Indicateur', values: ['Valeur'] };
+      const plain = optionOf('gauge', [kpi, kv], mine);
+      const g200 = optionOf('gauge', [kpi, kv], Object.assign({ max: 200 }, mine));
+      const marked = optionOf('gauge', [kpi, kv], Object.assign({ labels: true }, mine));
+      const titled = optionOf('gauge', [kpi, kv], Object.assign({ title: 'Tableau de bord' }, mine));
+      const many = optionOf('gauge', [xs('N', Array.from({ length: 15 }, (_, i) => 'L' + i)), ys('V', Array.from({ length: 15 }, (_, i) => i * 5))], mine);
+      const solo = optionOf('gauge', [xs('N', ['A']), ys('V', [40])], mine);
+      const inside = (option, top) => option.series.every(s => s.center[0] - s.radius >= 0 && s.center[0] + s.radius <= 480 && s.center[1] - s.radius >= top && s.center[1] + Math.round(s.radius * 0.72) + 10 <= 300);
+      const apart = option => option.series.every((a, i) => option.series.every((b, j) => i === j || Math.hypot(a.center[0] - b.center[0], a.center[1] - b.center[1]) >= a.radius + b.radius - 1));
+      return {
+        pass: plain.series.length === 3 && plain.series.every(s => s.type === 'gauge' && s.min === 0 && s.max === 100) && same(plain.series.map(s => s.data[0]), [{ value: 72, name: 'Ventes' }, { value: 55, name: 'Marge' }, { value: 130, name: 'Qualité' }])
+          && g200.series.every(s => s.max === 200) && same(plain.series.map(s => s.progress.itemStyle.color), [SET[0], SET[1], SET[2]]) && plain.series.every(s => s.title.show && !s.pointer.show && s.progress.show)
+          && inside(plain, 0) && apart(plain) && inside(many, 0) && apart(many) && many.series.length === 12 && many.series[11].data[0].name === 'L11' && solo.series[0].radius > plain.series[0].radius && plain.series[0].radius > many.series[0].radius
+          && inside(titled, 28) && titled.title.text === 'Tableau de bord' && plain.series.every(s => s.axisLabel.show === false) && marked.series.every(s => s.axisLabel.show === true && s.splitNumber === 1)
+          && marked.series[0].axisLabel.formatter(100) === '100' && plain.series[0].detail.formatter(1234.5) === ChartMake.numberText(1234.5) && !plain.legend,
+        notes: JSON.stringify({ radius: [solo.series[0].radius, plain.series[0].radius, many.series[0].radius], centers: plain.series.map(s => s.center), many: many.series.length }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_make_image_of_funnel_waterfall_and_gauge_takes_the_colors_of_the_set_in_order_and_writes_the_values',
+    description: 'L\'image de l\'entonnoir, de la cascade et de la jauge est tracée avec les couleurs du jeu choisi, dans l\'ordre (étapes ; hausse, baisse et total ; cadrans) et pas avec celles d\'un autre jeu ; « Afficher les valeurs » ajoute du texte à la cascade ; une jauge de 1 440 x 900 et un graphique de 300 x 180 (900 x 540) se tracent aussi',
+    run: async () => {
+      const stages = xs('Étape', ['Visites', 'Devis', 'Commandes']);
+      const counts = ys('Nombre', [1000, 600, 300]);
+      const funnel = await picture6('funnel', [stages, counts], { kind: 'funnel', label: 'Étape', values: ['Nombre'] });
+      const names = xs('Poste', ['Début', 'Ventes', 'Remises']);
+      const steps = ys('Variation', [100, 40, -30]);
+      const mine = { kind: 'waterfall', label: 'Poste', values: ['Variation'], total: true };
+      const fall = await picture6('waterfall', [names, steps], mine);
+      const shown = await picture6('waterfall', [names, steps], Object.assign({ labels: true }, mine));
+      const kpi = xs('Indicateur', ['Ventes', 'Marge', 'Qualité']);
+      const kv = ys('Valeur', [72, 55, 88]);
+      const gauge = await picture6('gauge', [kpi, kv], { kind: 'gauge', label: 'Indicateur', values: ['Valeur'] });
+      const warm = await picture6('gauge', [kpi, kv], { kind: 'gauge', label: 'Indicateur', values: ['Valeur'], palette: 'warm' });
+      const small = await picture6('gauge', [kpi, kv], { kind: 'gauge', label: 'Indicateur', values: ['Valeur'] }, { width: 300, height: 180 });
+      const dark = p => nearOf(p, hexRgb('#444444'), 40);
+      const near = (p, hex) => nearOf(p, rgbOf(hex), 14);
+      return {
+        pass: [0, 1, 2].every(i => near(funnel, SET[i]) > 3000) && [0, 1, 2].every(i => near(fall, SET[i]) > 1500) && dark(shown) > dark(fall) + 100 && shown.width === 1440
+          && [0, 1, 2].every(i => near(gauge, SET[i]) > 2000) && gauge.width === 1440 && gauge.height === 900 && near(warm, ChartMake.PALETTES.warm[0]) > 2000 && near(warm, SET[0]) < 60 && small.width === 900 && small.height === 540 && inkOf(small) > 3000,
+        notes: JSON.stringify({ funnel: [0, 1, 2].map(i => near(funnel, SET[i])), fall: [0, 1, 2].map(i => near(fall, SET[i])), text: [dark(fall), dark(shown)], gauge: [0, 1, 2].map(i => near(gauge, SET[i])), warmBlue: near(warm, SET[0]) }),
       };
     },
   });
@@ -536,8 +684,8 @@
   });
 
   cases.push({
-    id: 'chart_make_window_starts_on_the_page_table_with_bars_chosen_and_insert_disabled_and_lists_the_seven_shapes',
-    description: 'La fenêtre s\'ouvre sur « Créer un graphique » : les sept formes en vrais boutons radio (Barres choisie), la table du document choisie d\'office (c\'est celle qu\'on a sous les yeux), sa première colonne de texte en étiquettes ; les clients n\'ont aucune colonne de nombres : la fenêtre le dit, « Insérer » est grisé et l\'aperçu dit quoi choisir ; « Empilées » et « Horizontales » ne se montrent que pour les barres',
+    id: 'chart_make_window_starts_on_the_page_table_with_bars_chosen_and_insert_disabled_and_lists_the_ten_shapes',
+    description: 'La fenêtre s\'ouvre sur « Créer un graphique » : les dix formes en vrais boutons radio (Barres choisie), la table du document choisie d\'office (c\'est celle qu\'on a sous les yeux), sa première colonne de texte en étiquettes ; les clients n\'ont aucune colonne de nombres : la fenêtre le dit, « Insérer » est grisé et l\'aperçu dit quoi choisir ; « Empilées » et « Horizontales » ne se montrent que pour les barres',
     run: async (h) => {
       await seed(h);
       await setDoc(h, '<p>Avant</p>');
@@ -555,7 +703,7 @@
       const onArea = { stack: visible(optionInput('stack')), horizontal: visible(optionInput('horizontal')) };
       await closeWindowIfOpen();
       return {
-        pass: first.title === 'Créer un graphique' && same(first.kinds, ['bar', 'line', 'area', 'scatter', 'pie', 'donut', 'radar']) && same(first.names, ['Barres', 'Courbe', 'Aire', 'Nuage', 'Secteurs', 'Anneau', 'Radar']) && same(first.checked, ['bar']) && first.types.every(t => t === 'radio')
+        pass: first.title === 'Créer un graphique' && same(first.kinds, ['bar', 'line', 'area', 'scatter', 'pie', 'donut', 'radar', 'funnel', 'waterfall', 'gauge']) && same(first.names, ['Barres', 'Courbe', 'Aire', 'Nuage', 'Secteurs', 'Anneau', 'Radar', 'Entonnoir', 'Cascade', 'Jauge']) && same(first.checked, ['bar']) && first.types.every(t => t === 'radio')
           && first.table === PAGE_TABLE && first.label === 'Nom' && first.values === 0 && first.note === 'Cette table n’a pas de colonne de nombres à tracer.' && first.ok === true && first.okText === 'Insérer'
           && first.state === 'empty' && first.message === 'Choisissez la table, les étiquettes et les valeurs.' && first.stack && first.horizontal
           && !onLine.stack && !onLine.horizontal && onArea.stack && !onArea.horizontal && !modalOpen(),
@@ -594,6 +742,80 @@
           && counted.note === 'Sans valeur, chaque ligne compte pour une part.' && counted.ok === false && radarNeeds.ok === true && radarNeeds.checked === 0
           && back.label === 'Nom' && back.values === 0,
         notes: JSON.stringify({ chosen: Object.assign({}, chosen, { src: chosen.src.slice(0, 22) }), two, pie, counted, radarNeeds, back }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_make_window_offers_the_total_of_a_waterfall_and_the_maximum_of_gauges_and_the_node_keeps_them',
+    description: 'Entonnoir, cascade, jauge dans la fenêtre : la cascade propose « Afficher le total » (coché d\'office, ni « Empilées » ni « Horizontales »), la jauge un champ « Maximum » (vide : 100, qui n\'est pas un nombre : rien) et, sur la même rangée, la note « Une jauge par ligne, les douze premières. » (la fenêtre garde sa hauteur), l\'entonnoir compte les lignes de chaque étiquette sans valeur cochée ; les trois ne tracent qu\'une colonne (la première cochée reste) ; le maximum change l\'aperçu et se perd en quittant la jauge ; valider une jauge garde `max` sur le nœud et sa fenêtre le relit, une cascade sans total ne garde pas `total` et sa fenêtre le relit décoché',
+    run: async (h) => {
+      await seed(h);
+      await setDoc(h, '<p>Avant</p>');
+      await placeCursorAtEnd();
+      await openWindow();
+      await pickTable(SALES);
+      await settle();
+      const options = () => visible(document.querySelector('#pp-chartmake-modal .pp-chartmake-options'));
+      const ui = () => ({
+        total: visible(optionInput('total')), totalOn: optionInput('total').checked, stack: visible(optionInput('stack')), horizontal: visible(optionInput('horizontal')), max: visible(optionInput('max')), maxValue: optionInput('max').value, options: options(),
+        values: valueInputs().filter(i => i.checked).map(i => i.value), legend: text('#pp-chartmake-modal .pp-chartmake-values legend'), note: visible(document.querySelector('#pp-chartmake-modal .pp-chartmake-values .pp-chart-note')) ? text('#pp-chartmake-modal .pp-chartmake-values .pp-chart-note') : '',
+        ok: !okButton().disabled, state: paperState(), maxNote: visible(document.getElementById('pp-chartmake-max-note')) ? text('#pp-chartmake-max-note') : '', height: Math.round(document.querySelector('#pp-chartmake-modal .pp-modal-box').getBoundingClientRect().height),
+      });
+      const src = () => previewImage().getAttribute('src') || '';
+      const typeMax = async (value) => { const input = optionInput('max'); input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); await settle(); };
+      await tick('Cout', true);
+      const bars = ui();
+      await pickKind('waterfall');
+      await settle();
+      const fall = ui();
+      const fallSrc = src();
+      await pickKind('gauge');
+      await settle();
+      const gauge = ui();
+      const placeholder = optionInput('max').placeholder;
+      const gaugeSrc = src();
+      await typeMax('250');
+      const gauge250 = src();
+      await typeMax('abc');
+      const gaugeAbc = src();
+      await typeMax('250');
+      await pickKind('funnel');
+      await tick('Montant', false);
+      await settle();
+      const funnel = ui();
+      await pickKind('gauge');
+      const goneMax = ui().maxValue;
+      await tick('Montant', true);
+      await typeMax('250');
+      await confirm();
+      const drawn = await waitFor(() => drawnSrc() !== '', 12000);
+      const gaugeSpec = JSON.parse(madeNodes()[0].getAttribute('data-chart-spec'));
+      const gaugeName = madeNodes()[0].getAttribute('data-chart-name');
+      await selectMade();
+      await openWindow();
+      const reopened = { gauge: kindInput('gauge').checked, max: ui().maxValue, shown: ui().max, values: ui().values, total: ui().total };
+      await pickKind('waterfall');
+      const fresh = ui();
+      await change(optionInput('total'), (el) => { el.checked = false; });
+      await settle();
+      await confirm();
+      const fallSpec = JSON.parse(madeNodes()[0].getAttribute('data-chart-spec'));
+      await selectMade();
+      await openWindow();
+      const again = { fall: kindInput('waterfall').checked, total: ui().total, totalOn: ui().totalOn, max: ui().max };
+      await closeWindowIfOpen();
+      return {
+        pass: !bars.total && !bars.max && bars.stack && bars.horizontal && bars.values.join() === 'Montant,Cout'
+          && fall.total && fall.totalOn && !fall.stack && !fall.horizontal && !fall.max && fall.options && fall.values.join() === 'Montant' && fall.legend === 'Valeur à tracer (une seule)' && fall.note === '' && fall.ok && fall.state === 'chart'
+          && !gauge.total && gauge.max && gauge.maxValue === '' && placeholder === '100' && gauge.maxNote === 'Une jauge par ligne, les douze premières.' && gauge.note === '' && fall.maxNote === '' && funnel.maxNote === '' && Math.abs(gauge.height - fall.height) <= 1 && Math.abs(gauge.height - funnel.height) <= 1 && gauge.ok && gauge.values.join() === 'Montant' && gaugeSrc !== fallSrc
+          && gauge250 !== gaugeSrc && gaugeAbc === gaugeSrc
+          && !funnel.max && !funnel.total && funnel.values.length === 0 && funnel.note === 'Sans valeur, on compte les lignes de chaque étiquette.' && funnel.ok && funnel.state === 'chart' && !funnel.options
+          && goneMax === '' && drawn && same(gaugeSpec, { v: 1, kind: 'gauge', table: SALES, label: 'Client', values: ['Montant'], max: 250 }) && gaugeName === 'Jauge · GfVentes'
+          && reopened.gauge && reopened.max === '250' && reopened.shown && same(reopened.values, ['Montant']) && !reopened.total
+          && fresh.total && fresh.totalOn && !fresh.max && same(fallSpec, { v: 1, kind: 'waterfall', table: SALES, label: 'Client', values: ['Montant'] })
+          && again.fall && again.total && !again.totalOn && !again.max && !modalOpen(),
+        notes: JSON.stringify({ bars, fall, gauge, placeholder, srcs: [gauge250 !== gaugeSrc, gaugeAbc === gaugeSrc], funnel, goneMax, drawn, gaugeSpec, gaugeName, reopened, fresh, fallSpec, again }),
       };
     },
   });
@@ -931,7 +1153,7 @@
       await seed(h);
       const gone = def('bar', { table: 'Nulle part' });
       const broken = '<img class="editor-image" alt="Graphique" style="width: 480px; height: 300px" data-layer="normal" data-wrap="inline" data-chart-spec="{bad" data-chart-scope="all" data-chart-name="Cassé">';
-      const future = '<img class="editor-image" alt="Graphique" style="width: 480px; height: 300px" data-layer="normal" data-wrap="inline" data-chart-spec="{&quot;v&quot;:2,&quot;kind&quot;:&quot;gauge&quot;,&quot;table&quot;:&quot;GfVentes&quot;,&quot;label&quot;:&quot;Mois&quot;}" data-chart-scope="all" data-chart-name="Jauge">';
+      const future = '<img class="editor-image" alt="Graphique" style="width: 480px; height: 300px" data-layer="normal" data-wrap="inline" data-chart-spec="{&quot;v&quot;:2,&quot;kind&quot;:&quot;treemap&quot;,&quot;table&quot;:&quot;GfVentes&quot;,&quot;label&quot;:&quot;Mois&quot;}" data-chart-scope="all" data-chart-name="Treemap">';
       const errors = [];
       const onError = e => errors.push(e.message || String(e));
       window.addEventListener('error', onError);
@@ -949,7 +1171,7 @@
         const notes = content.textContent;
         reader.style.display = 'none';
         return {
-          pass: frames.length === 3 && drawn === 0 && html.includes('data-chart-spec="{bad"') && html.includes('&quot;kind&quot;:&quot;gauge&quot;') && madeNodes().length === 3 && images === 0 && (notes.match(/Graphique indisponible|graphique est indisponible|indisponible/g) || []).length >= 3 && errors.length === 0,
+          pass: frames.length === 3 && drawn === 0 && html.includes('data-chart-spec="{bad"') && html.includes('&quot;kind&quot;:&quot;treemap&quot;') && madeNodes().length === 3 && images === 0 && (notes.match(/Graphique indisponible|graphique est indisponible|indisponible/g) || []).length >= 3 && errors.length === 0,
           notes: JSON.stringify({ frames: frames.length, drawn, images, errors, text: notes.slice(0, 200) }),
         };
       } finally {
@@ -1002,6 +1224,19 @@
         en.linked = rowsInput('linked').parentElement.textContent.trim();
         en.all = rowsInput('all').parentElement.textContent.trim();
         en.values = text('#pp-chartmake-modal .pp-chartmake-values legend');
+        // Les trois formes du lot 6 : leurs réglages et leurs notes.
+        await pickKind('waterfall');
+        const totalLabel = optionInput('total').closest('label');
+        en.totalShown = visible(totalLabel) && totalLabel.textContent.trim();
+        await pickKind('gauge');
+        en.max = text('#pp-chartmake-modal .pp-chartmake-max span');
+        en.maxLabel = optionInput('max').getAttribute('aria-label');
+        en.gaugeNote = text('#pp-chartmake-max-note');
+        await pickKind('funnel');
+        await tick('Montant', false);
+        en.funnelNote = text('#pp-chartmake-modal .pp-chartmake-values .pp-chart-note');
+        en.waterfallName = ChartMake.nameOf({ kind: 'waterfall', table: SALES });
+        await pickKind('bar');
         await closeWindowIfOpen();
         await selectMade();
         en.rowEdit = row().textContent.trim();
@@ -1015,7 +1250,8 @@
         await closeWindowIfOpen();
       }
       return {
-        pass: I18n.getLang() === 'en' && en.row === 'Create a chart…' && en.aria === 'Create a chart' && en.title === 'Create a chart' && same(en.kinds, ['Bars', 'Line', 'Area', 'Scatter', 'Pie', 'Donut', 'Radar']) && en.legend === 'Shape'
+        pass: I18n.getLang() === 'en' && en.row === 'Create a chart…' && en.aria === 'Create a chart' && en.title === 'Create a chart' && same(en.kinds, ['Bars', 'Line', 'Area', 'Scatter', 'Pie', 'Donut', 'Radar', 'Funnel', 'Waterfall', 'Gauge']) && en.legend === 'Shape'
+          && en.totalShown === 'Show total' && en.max === 'Maximum' && en.maxLabel === 'Maximum' && en.gaugeNote === 'One gauge per row, the first twelve.' && en.funnelNote === 'Without a value, the rows of each label are counted.' && en.waterfallName === 'Waterfall · GfVentes'
           && en.note === 'This table has no numeric column to plot.' && en.message === 'Choose the table, the labels and the values.' && en.ok === 'Insert' && en.cancel === 'Cancel' && en.rows === 'Rows to plot' && en.same === 'Unavailable on the page’s table.' && en.stack === 'Stacked'
           && en.caption === 'For the selected row.' && en.linked === 'Linked rows' && en.all === 'Whole table' && en.values === 'Values to plot'
           && en.rowEdit === 'Edit chart…' && en.ariaEdit === 'Edit the chart' && en.titleEdit === 'Edit the chart' && en.okEdit === 'Confirm' && en.name === 'Bars · GfVentes',

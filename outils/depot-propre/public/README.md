@@ -93,9 +93,9 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   collées, ajoutées par adresse ou prises dans une colonne Pièces jointes de Grist ; une image
   hébergée sur un autre site n'apparaît qu'après un clic sur « Afficher »
 - Graphiques créés (« Créer un graphique… », au menu de l'image) : barres, courbe, aire, nuage de points, secteurs,
-  anneau et radar, tracés d'après les colonnes d'une table de Grist, dans un document, une grille ou une diapositive ;
+  anneau, radar, entonnoir, cascade et jauge, tracés d'après les colonnes d'une table de Grist, dans un document, une grille ou une diapositive ;
   un titre, cinq jeux de couleurs, la couleur de chaque série, les valeurs affichées et des barres mêlées à une courbe ;
-  dans le Word, le PowerPoint et l'Excel, un graphique natif que l'on modifie dans l'application (ses données s'ouvrent dans Excel)
+  dans le Word, le PowerPoint et l'Excel, un graphique natif que l'on modifie dans l'application (ses données s'ouvrent dans Excel ; l'entonnoir, la cascade et la jauge y restent des images)
 - En-têtes et pieds de page (première page différente, numéro de page, QR code), notes de bas de page, sommaire
   généré, sauts de page, filigrane
 - Citation, bloc de code, encadré (Note, Attention, Important), bloc de signature, QR code, graphique de la

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// « Créer un graphique… » (lots 1 et 2 du module de graphiques ; extensions/graphique/chart-make.js, chart-make-ui.js, chart-make.css ; js/chart-entry.js, js/main-toolbar.js, index.html) : le panneau de 700x400, à la VRAIE
+// « Créer un graphique… » (lots 1, 2 et 6 du module de graphiques ; extensions/graphique/chart-make.js, chart-make-ui.js, chart-make.css ; js/chart-entry.js, js/main-toolbar.js, index.html) : le panneau de 700x400, à la VRAIE
 // souris (page.mouse) et au VRAI clavier (frappe, flèches, Tab, Entrée, Échap, Ctrl+Z), hébergé par GFS (simulé par dev-tests/gfs-stub.js), les extensions « graphique » et « diapositives » actives, en français
 // clair puis en anglais sombre. Ce que dev-tests/scenarios-chart-make.js ne peut pas voir depuis la page :
 //  - le survol de l'Image ouvre son menu : la ligne « Créer un graphique… » y est, entière dans le panneau et au premier plan, sous « Image depuis une variable… » ; le menu « Lien et blocs de contenu »
 //    garde ses neuf lignes, la dernière entière dans le panneau (une dixième n'y tiendrait pas : c'est pourquoi la ligne est dans le menu de l'Image) ;
-//  - un clic sur la ligne ouvre la fenêtre : elle tient dans 700x400 sans défiler, les sept formes tiennent sur une rangée, le focus est dans le champ de la table, « Insérer » est grisé ;
+//  - un clic sur la ligne ouvre la fenêtre : elle tient dans 700x400 sans défiler, les dix formes tiennent sur deux rangées, le focus est dans le champ de la table, « Insérer » est grisé ;
 //    tous les textes (titre, libellés, formes choisie et non choisie, notes, ligne grisée, « Annuler ») ont un contraste d'au moins 4,5:1 ;
 //  - une forme se choisit au clic (celle d'avant se décoche, « Empilées » et « Horizontales » ne restent que pour les barres) et aux flèches du clavier ;
 //  - la liste des tables s'ouvre AU-DESSUS de la fenêtre et dans le panneau, se filtre à la frappe et se valide par Entrée ; l'aperçu montre le vrai graphique dans la feuille blanche ; une colonne cochée et
@@ -15,6 +15,9 @@
 //  - l'ASPECT (lot 2) : les deux onglets de l'en-tête (clic, flèches, Début, Fin) ; la fenêtre garde la même hauteur et ne défile pas dans ses trois vues (Données, Aspect, choix d'une couleur) ; le titre tapé, les jeux de
 //    couleurs, la liste des séries ; le choix d'une couleur à la place des onglets (palette, clavier, « Couleur de la palette », « Personnalisé… », la rangée « Couleurs du thème ») ; le type d'une série, « Afficher les
 //    valeurs » ; valider garde tout dans le nœud, UN Ctrl+Z rend l'ancienne définition ;
+//  - l'ENTONNOIR, la CASCADE et la JAUGE (lot 6) : un clic les choisit (« Empilées » et « Horizontales » partent), la cascade propose « Afficher le total » (coché d'office, un clic le décoche et l'aperçu change), la jauge un champ
+//    « Maximum » où l'on tape au vrai clavier (l'aperçu change, effacé il revient, Entrée valide) ; la fenêtre garde sa hauteur et ne défile pas ; valider garde le maximum, le titre et le jeu de couleurs déjà réglés,
+//    UN Ctrl+Z rend l'ancienne définition, la fenêtre rouverte relit la forme et le maximum ;
 //  - aucune boîte native du navigateur, aucune erreur de page.
 // Lancé par run-headless.mjs (groupe Node « chartMakeMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-chart-make-mouse.mjs
 // CHART_MAKE_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans lui, rien n'est écrit.
@@ -36,13 +39,15 @@ const HEIGHT = 400;
 const TEXTS = {
   fr: {
     row: 'Créer un graphique…', rowEdit: 'Modifier le graphique…', pageRow: 'Graphique de la page…', title: 'Créer un graphique', titleEdit: 'Modifier le graphique', insert: 'Insérer', confirm: 'Valider',
-    kinds: ['Barres', 'Courbe', 'Aire', 'Nuage', 'Secteurs', 'Anneau', 'Radar'], sameTable: 'Indisponible sur la table de la page.', imageLabel: 'Ajouter une image',
+    kinds: ['Barres', 'Courbe', 'Aire', 'Nuage', 'Secteurs', 'Anneau', 'Radar', 'Entonnoir', 'Cascade', 'Jauge'], total: 'Afficher le total', max: 'Maximum', gaugeNote: 'Une jauge par ligne, les douze premières.',
+    steps: 'Hausse, baisse et total prennent les trois premières couleurs du jeu choisi.', sameTable: 'Indisponible sur la table de la page.', imageLabel: 'Ajouter une image',
     tabs: ['Données', 'Aspect'], slices: 'Chaque secteur prend une couleur du jeu choisi.', series: ['Barres', 'Courbe'], palettes: ['Standard', 'Bleus', 'Chaudes', 'Froides', 'Gris'], back: 'Retour', auto: 'Couleur de la palette', custom: 'Personnalisé…',
     colorTitle: name => `Couleur de « ${name} »`, themeRow: 'Couleurs du thème', showValues: 'Afficher les valeurs', noMix: 'Des barres horizontales ne se mêlent pas à une courbe.',
   },
   en: {
     row: 'Create a chart…', rowEdit: 'Edit chart…', pageRow: 'Chart from the page…', title: 'Create a chart', titleEdit: 'Edit the chart', insert: 'Insert', confirm: 'Confirm',
-    kinds: ['Bars', 'Line', 'Area', 'Scatter', 'Pie', 'Donut', 'Radar'], sameTable: 'Unavailable on the page’s table.', imageLabel: 'Add an image',
+    kinds: ['Bars', 'Line', 'Area', 'Scatter', 'Pie', 'Donut', 'Radar', 'Funnel', 'Waterfall', 'Gauge'], total: 'Show total', max: 'Maximum', gaugeNote: 'One gauge per row, the first twelve.',
+    steps: 'Increase, decrease and total take the first three colors of the chosen set.', sameTable: 'Unavailable on the page’s table.', imageLabel: 'Add an image',
     tabs: ['Data', 'Appearance'], slices: 'Each slice takes a color from the chosen set.', series: ['Bars', 'Line'], palettes: ['Standard', 'Blues', 'Warm', 'Cool', 'Grays'], back: 'Back', auto: 'Palette color', custom: 'Custom…',
     colorTitle: name => `Color of “${name}”`, themeRow: 'Theme colors', showValues: 'Show values', noMix: 'Horizontal bars do not mix with a line.',
   },
@@ -62,7 +67,9 @@ const KIND = kind => `${WIN} input[name="pp-chartmake-kind"][value="${kind}"]`;
 const ROWS_RADIO = value => `${WIN} input[name="pp-chartmake-rows"][value="${value}"]`;
 const TABLE_TRIGGER = `${WIN} .pp-chartmake-field:nth-child(1) .ss-trigger`;
 const FRAME = '.tiptap .editor-image-chart-placeholder';
-const KINDS = ['bar', 'line', 'area', 'scatter', 'pie', 'donut', 'radar'];
+const KINDS = ['bar', 'line', 'area', 'scatter', 'pie', 'donut', 'radar', 'funnel', 'waterfall', 'gauge'];
+const TOTAL = `${WIN} input[name="pp-chartmake-total"]`;
+const MAX_INPUT = `${WIN} input[name="pp-chartmake-max"]`;
 const TAB = name => `${WIN} #pp-chartmake-tab-${name}`;
 const TITLE_INPUT = `${WIN} #pp-chartmake-title-input`;
 const PALETTE_RADIO = id => `${WIN} input[name="pp-chartmake-palette"][value="${id}"]`;
@@ -189,7 +196,7 @@ async function runPass(lang, scheme) {
   const focus = await page.evaluate(() => { const a = document.activeElement; return a ? { id: a.id || '', cls: String(a.className || '').split(' ')[0], inModal: !!a.closest('#pp-chartmake-modal'), inTable: !!a.closest('.pp-chartmake-field:nth-child(1)'), editor: !!a.closest('.tiptap') } : null; });
   const first = { title: await textOf(page, '#pp-chartmake-title'), ok: await isDisabled(page, OK), okText: await textOf(page, OK), state: await state(page), table: await page.evaluate(() => document.getElementById('pp-chartmake-table').value) };
   check(`${T}, fenêtre : « ${X.title} » entière dans le panneau, sans défiler (titre, formes, champs, colonnes, aperçu, lignes, boutons)`, inPanel(box) && scroll.sh <= scroll.ch + 1 && first.title === X.title, { box, scroll, title: first.title });
-  check(`${T}, fenêtre : les sept formes tiennent sur une seule rangée, dans l'ordre`, pills.map(p => p.t).join() === X.kinds.join() && new Set(pills.map(p => p.top)).size === 1 && pills[6].right <= box.r, pills);
+  check(`${T}, fenêtre : les dix formes tiennent sur deux rangées, dans l'ordre, chacune entière dans la fenêtre`, pills.map(p => p.t).join() === X.kinds.join() && new Set(pills.map(p => p.top)).size === 2 && pills.every(p => p.right <= box.r), pills);
   check(`${T}, fenêtre : le focus est dans le champ de la table (ni dans l'éditeur ni sur « Annuler »), « ${X.insert} » est grisé, la table du document est choisie d'office`, focus && focus.inModal && focus.inTable && !focus.editor && first.ok && first.okText === X.insert && first.table === 'GfClients' && first.state === 'empty', { focus, first });
   const colors = {
     title: await contrastOf(page, '#pp-chartmake-title'), legend: await contrastOf(page, `${WIN} .pp-chartmake-kinds legend`), label: await contrastOf(page, `${WIN} .pp-chartmake-field .pp-dialog-label`),
@@ -617,6 +624,128 @@ async function runPass(lang, scheme) {
   await snap(page, `${T}-8-lecture`);
   await click(page, '#btn-mode-edit');
   await sleep(1200);
+
+  // 11) Entonnoir, cascade, jauge (lot 6) : les trois dernières formes, à la vraie souris et au vrai clavier, dans le panneau de 700x400, sur le graphique déjà réglé (titre, jeu « Chaudes », valeurs affichées).
+  await waitDrawn(page, '');
+  const before6Spec = (await madeNodes(page))[0].spec;
+  const before6Src = (await frameInfo(page))[0].src;
+  // La page est remontée en haut à chaque fois : un Ctrl+Z ou un Ctrl+Y fait défiler jusqu'au graphique, dont la barre flottante recouvrirait alors le bouton de l'Image.
+  const openEdit = async () => {
+    await page.evaluate(() => { let n = document.querySelector('.tiptap'); while (n && n !== document.documentElement) { if (n.scrollHeight > n.clientHeight + 1 && ['auto', 'scroll'].includes(getComputedStyle(n).overflowY)) { n.scrollTop = 0; break; } n = n.parentElement; } });
+    await sleep(300);
+    await click(page, FRAME);
+    await sleep(300);
+    await hoverRow(page, '#v2-btn-image', '#v2-btn-chart-make');
+    await page.mouse.click(...(await page.evaluate(() => { const r = document.getElementById('v2-btn-chart-make').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })));
+    await page.waitForFunction(() => { const m = document.getElementById('pp-chartmake-modal'); return !!m && m.style.display !== 'none'; }, null, { timeout: 15000 });
+    await settle(page);
+  };
+  const settings = () => page.evaluate(() => {
+    const shown = sel => { const e = document.querySelector(sel); return !!e && !e.hidden && e.getClientRects().length > 0; };
+    const note = document.querySelector('#pp-chartmake-modal .pp-chartmake-values .pp-chart-note');
+    const max = document.querySelector('#pp-chartmake-modal input[name="pp-chartmake-max"]');
+    const total = document.querySelector('#pp-chartmake-modal input[name="pp-chartmake-total"]');
+    return {
+      kind: (document.querySelector('#pp-chartmake-modal input[name="pp-chartmake-kind"]:checked') || {}).value,
+      stack: shown('#pp-chartmake-modal input[name="pp-chartmake-stack"]'), horizontal: shown('#pp-chartmake-modal input[name="pp-chartmake-horizontal"]'), total: shown('#pp-chartmake-modal input[name="pp-chartmake-total"]'), totalOn: total.checked, totalText: total.closest('label').textContent.trim(),
+      max: shown('#pp-chartmake-modal input[name="pp-chartmake-max"]'), maxValue: max.value, placeholder: max.placeholder, maxText: max.closest('label').textContent.trim(), options: shown('#pp-chartmake-modal .pp-chartmake-options'),
+      legend: document.querySelector('#pp-chartmake-modal .pp-chartmake-values legend').textContent.trim(), oneLegend: I18n.t('chart.make.values.one'), note: note && !note.hidden ? note.textContent.trim() : '', maxNote: shown('#pp-chartmake-max-note') ? document.getElementById('pp-chartmake-max-note').textContent.trim() : '',
+      values: Array.from(document.querySelectorAll('#pp-chartmake-modal .pp-chartmake-value input')).filter(i => i.checked).map(i => i.value),
+    };
+  });
+  await openEdit();
+  const sameHeight = name => Math.abs(heights[name] - heights['data-pie']) <= 1;
+  await click(page, KIND('funnel'));
+  await sleep(200);
+  await settle(page);
+  const funnel = await settings();
+  const funnelSrc = await previewSrc(page);
+  const funnelFits = await geometry('data-funnel');
+  check(`${T}, entonnoir : un clic choisit « ${X.kinds[7]} » (ni « Empilées » ni « Horizontales », ni total, ni maximum : la rangée des réglages se cache), une seule valeur reste cochée, l'aperçu change, la fenêtre garde sa hauteur sans défiler`,
+    funnel.kind === 'funnel' && !funnel.stack && !funnel.horizontal && !funnel.total && !funnel.max && !funnel.options && funnel.legend === funnel.oneLegend && funnel.values.join() === 'Montant'
+      && await state(page) === 'chart' && funnelSrc.startsWith('data:image/png') && funnelSrc !== before6Src && funnelFits && sameHeight('data-funnel'), { funnel, fits: funnelFits, heights });
+  await snap(page, `${T}-14-entonnoir`);
+  await click(page, KIND('waterfall'));
+  await sleep(200);
+  await settle(page);
+  const fall = await settings();
+  const fallSrc = await previewSrc(page);
+  const fallFits = await geometry('data-waterfall');
+  const fallColors = { label: await contrastOf(page, `${WIN} .pp-chartmake-options > .pp-chartmake-option:nth-child(3) span`), note: await contrastOf(page, `${WIN} .pp-chartmake-values .pp-chart-note`) };
+  check(`${T}, cascade : un clic choisit « ${X.kinds[8]} », « ${X.total} » apparaît coché d'office (ni « Empilées » ni « Horizontales », ni maximum), l'aperçu change, la fenêtre garde sa hauteur sans défiler, le texte a un contraste d'au moins 4,5:1`,
+    fall.kind === 'waterfall' && fall.total && fall.totalOn && fall.totalText === X.total && !fall.stack && !fall.horizontal && !fall.max && fall.options && fall.legend === fall.oneLegend && fall.values.join() === 'Montant'
+      && fallSrc.startsWith('data:image/png') && fallSrc !== funnelSrc && fallFits && sameHeight('data-waterfall') && fallColors.label >= 4.5, { fall, fits: fallFits, fallColors, heights });
+  await snap(page, `${T}-15-cascade`);
+  // La cascade sans total : un clic réel sur la case redessine l'aperçu sans le dernier palier.
+  await clickLabelOf(page, TOTAL);
+  await settle(page);
+  const noTotal = { on: await isChecked(page, TOTAL), src: await previewSrc(page) };
+  await clickLabelOf(page, TOTAL);
+  await settle(page);
+  const backTotal = { on: await isChecked(page, TOTAL), src: await previewSrc(page) };
+  check(`${T}, cascade : un clic sur « ${X.total} » le décoche (l'aperçu change), un autre le rend (la même image qu'avant)`, !noTotal.on && noTotal.src !== fallSrc && backTotal.on && backTotal.src === fallSrc, { noTotal: noTotal.on, changed: noTotal.src !== fallSrc, back: backTotal.on, same: backTotal.src === fallSrc });
+  await click(page, TAB('aspect'));
+  await sleep(250);
+  const fallAspect = await page.evaluate(() => {
+    const shown = sel => { const e = document.querySelector(sel); return !!e && !e.hidden && e.getClientRects().length > 0; };
+    return { series: shown('#pp-chartmake-modal .pp-chartmake-series'), note: (document.querySelector('#pp-chartmake-panel-aspect > .pp-chart-note') || {}).textContent, palettes: shown('#pp-chartmake-modal .pp-chartmake-palettes') };
+  });
+  const fallAspectFits = await geometry('aspect-waterfall');
+  const fallNote = await contrastOf(page, '#pp-chartmake-panel-aspect > .pp-chart-note');
+  check(`${T}, cascade, onglet « ${X.tabs[1]} » : pas de séries, la note dit « ${X.steps} » (contraste ${fallNote}), les jeux de couleurs restent ; entier dans le panneau, sans défiler, à la même hauteur`,
+    !fallAspect.series && fallAspect.note === X.steps && fallAspect.palettes && fallNote >= 4.5 && fallAspectFits && sameHeight('aspect-waterfall'), { fallAspect, fallAspectFits, fallNote, heights });
+  await click(page, TAB('data'));
+  await sleep(200);
+  await click(page, KIND('gauge'));
+  await sleep(200);
+  await settle(page);
+  const gauge = await settings();
+  const gaugeSrc = await previewSrc(page);
+  const gaugeFits = await geometry('data-gauge');
+  const gaugeColors = { label: await contrastOf(page, `${WIN} .pp-chartmake-max span`), input: await contrastOf(page, `${WIN} .pp-chartmake-max-input`), note: await contrastOf(page, `${WIN} #pp-chartmake-max-note`) };
+  check(`${T}, jauge : un clic choisit « ${X.kinds[9]} », le champ « ${X.max} » apparaît vide avec 100 en filigrane (ni total, ni « Empilées »), la note dit « ${X.gaugeNote} » sur la même rangée, l'aperçu change, la fenêtre garde sa hauteur sans défiler, textes à 4,5:1 au moins`,
+    gauge.kind === 'gauge' && gauge.max && gauge.maxValue === '' && gauge.placeholder === '100' && gauge.maxText === X.max && !gauge.total && !gauge.stack && !gauge.horizontal && gauge.maxNote === X.gaugeNote && gauge.note === '' && fall.maxNote === '' && funnel.maxNote === '' && gauge.values.join() === 'Montant'
+      && gaugeSrc.startsWith('data:image/png') && gaugeSrc !== fallSrc && gaugeFits && sameHeight('data-gauge') && Object.values(gaugeColors).every(v => v !== null && v >= 4.5), { gauge, fits: gaugeFits, gaugeColors, heights });
+  await snap(page, `${T}-16-jauge`);
+  // Le maximum se tape au vrai clavier : l'aperçu change, effacé il revient à celui d'avant, retapé il redonne le même.
+  await click(page, MAX_INPUT);
+  await page.keyboard.type('250', { delay: 40 });
+  await settle(page);
+  const typedMax = { value: await page.evaluate(sel => document.querySelector(sel).value, MAX_INPUT), src: await previewSrc(page) };
+  for (let i = 0; i < 3; i += 1) await page.keyboard.press('Backspace');
+  await settle(page);
+  const clearedMax = { value: await page.evaluate(sel => document.querySelector(sel).value, MAX_INPUT), src: await previewSrc(page) };
+  await page.keyboard.type('250', { delay: 40 });
+  await settle(page);
+  const retypedMax = await previewSrc(page);
+  check(`${T}, jauge : taper 250 dans « ${X.max} » redessine l'aperçu, l'effacer rend celui de 100, le retaper redonne celui de 250`,
+    typedMax.value === '250' && typedMax.src !== gaugeSrc && clearedMax.value === '' && clearedMax.src === gaugeSrc && retypedMax === typedMax.src, { typedMax: typedMax.value, changed: typedMax.src !== gaugeSrc, clearedMax: clearedMax.value, back: clearedMax.src === gaugeSrc, same: retypedMax === typedMax.src });
+  // Entrée dans le maximum valide la fenêtre : le graphique garde la jauge, son maximum, le titre et le jeu déjà réglés, et se redessine.
+  await page.keyboard.press('Enter');
+  await sleep(400);
+  const drawnGauge = await waitDrawn(page, before6Src);
+  const gaugeNodes = await madeNodes(page);
+  const gaugeFrame = (await frameInfo(page))[0];
+  const gaugeSpec = gaugeNodes[0] && gaugeNodes[0].spec;
+  check(`${T}, jauge : Entrée dans « ${X.max} » valide la fenêtre ; le graphique est une jauge au maximum 250 (une seule valeur, ni total ni mélange), garde le titre, le jeu « ${X.palettes[2]} » et les valeurs affichées, et se redessine`,
+    !(await winOpen(page)) && drawnGauge && gaugeNodes.length === 1 && gaugeSpec.kind === 'gauge' && gaugeSpec.max === 250 && gaugeSpec.values.join() === 'Montant' && gaugeSpec.total === undefined && gaugeSpec.mix === undefined && gaugeSpec.stack === undefined
+      && gaugeSpec.title === 'Ventes & coûts' && gaugeSpec.palette === 'warm' && gaugeSpec.labels === true && gaugeNodes[0].name === 'Ventes & coûts' && gaugeNodes[0].width === '480px' && !gaugeNodes[0].src && gaugeFrame.src !== before6Src,
+    { drawnGauge, spec: gaugeSpec, name: gaugeNodes[0] && gaugeNodes[0].name });
+  await page.keyboard.press('Control+z');
+  await sleep(500);
+  const undoneGauge = await madeNodes(page);
+  check(`${T}, jauge : un seul Ctrl+Z rend la définition d'avant (les barres, sans maximum)`, undoneGauge.length === 1 && JSON.stringify(undoneGauge[0].spec) === JSON.stringify(before6Spec) && undoneGauge[0].spec.max === undefined, undoneGauge.map(n => n.spec));
+  await page.keyboard.press('Control+y');
+  await sleep(500);
+  await waitDrawn(page, '');
+  // La fenêtre rouverte relit la forme et le maximum ; Échap la ferme sans toucher au graphique.
+  await openEdit();
+  const reopened = await settings();
+  const specKept = JSON.stringify((await madeNodes(page))[0].spec);
+  await page.keyboard.press('Escape');
+  await sleep(300);
+  check(`${T}, jauge : la fenêtre rouverte relit « ${X.kinds[9]} » et son maximum (250) ; Échap la ferme sans toucher au graphique`,
+    reopened.kind === 'gauge' && reopened.max && reopened.maxValue === '250' && reopened.values.join() === 'Montant' && !(await winOpen(page)) && JSON.stringify((await madeNodes(page))[0].spec) === specKept, { reopened, closed: !(await winOpen(page)) });
 
   check(`${T}, aucune boîte native du navigateur ni erreur de page pendant tout le parcours`, dialogs.length === 0 && errors.length === 0, { dialogs, errors });
   await page.close();
