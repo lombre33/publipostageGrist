@@ -1,0 +1,15 @@
+{
+  "name": "publipostage-pdfjs-gfs",
+  "private": true,
+  "description": "Le fichier « pdfjs » que Grist Factory Suite assemble pour la lecture de PDF (consigne GFS 040, extension « lecture-pdf ») : pdf.js (pdfjs-dist) et son moteur en UN module ES qui se range dans globalThis.GfsPaquets.pdfjs, refait ICI pour les essais seulement. À part de package.json, comme edition-live.json : la liste de l'app ne nomme pas les bibliothèques d'une extension. build.mjs lit ce fichier, installe le paquet dans pdfjs-deps/ et construit pdfjs/pdfjs.js, que les essais servent à la place de GFS ; sans ce fichier (le labo de GFS ne copie que build.mjs et package.json), il saute cette étape. Jamais commités : pdfjs-deps/ et pdfjs/.",
+  "dependencies": {
+    "pdfjs-dist": "6.5.438"
+  },
+  "assemble": {
+    "version": "1.0.0",
+    "modules": [
+      "pdfjs-dist/build/pdf.min.mjs"
+    ],
+    "moteur": "pdfjs-dist/build/pdf.worker.min.mjs"
+  }
+}

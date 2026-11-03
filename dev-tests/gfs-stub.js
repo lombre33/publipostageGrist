@@ -8,6 +8,8 @@
 //   window.__gfsStub.mode : 'cdn' (l'adresse de jsDelivr) ou 'vendorise' (un fichier de l'origine de la page, /vendor/plotly/2.13.2/plotly-basic.min.js, que le test sert lui-même).
 //   window.__gfsStub.editionLive : la bibliothèque « edition-live » de l'écriture en direct, { src, integrite, forme: 'module' } (consigne GFS 012 : un seul fichier assemblé, de forme module) - null : GFS ne la
 //   donne pas. C'est le test qui la fixe (le fichier qu'il sert lui-même, dev-tests/live-test-kit.mjs) ; l'extension « edition » l'exige (`requires`).
+//   window.__gfsStub.pdfjs : la bibliothèque « pdfjs » de la lecture de PDF, { src, integrite, forme: 'module' } (consigne GFS 040 : pdf.js 6.5 et son moteur en UN fichier de forme module, qui se range dans
+//   GfsPaquets.pdfjs) - null : GFS ne la donne pas. C'est le test qui la fixe (le fichier qu'il sert lui-même, dev-tests/verify-gfs-read.mjs) ; l'extension « lecture-pdf » l'exige (`requires`).
 //   window.__gfsStub.calls : les appels reçus ({ nom, args, id }) ; ignoreContext : ne pas répondre (GFS absent) ; installReply : { actives } ou { error } que reçoit `installer`.
 //   window.__gfsStub.adresseWidget : l'adresse du widget que rend le contexte (contrats 5.2, consigne 009) : celle de GFS, que portent les sections de la page, jamais celle de la page de test (le widget n'en
 //   est que le sous-cadre) ; null : GFS ne la donne pas. Réglée avant le chargement de la page, comme `mode` : le contexte ne se demande qu'au démarrage, et l'événement `extensions` n'en porte pas.
@@ -50,8 +52,9 @@
     contract: CONTRACT,
     extensions: ['graphique'],
     echarts: true,   // false : GFS ne porte pas ECharts (un GFS d'avant le graphique créé) : `library('echarts')` rend null
-    requires: { graphique: ['plotly', 'echarts'], edition: ['edition-live'] },
+    requires: { graphique: ['plotly', 'echarts'], edition: ['edition-live'], 'lecture-pdf': ['pdfjs'] },
     editionLive: null,
+    pdfjs: null,
     mode: 'cdn',
     adresseWidget: 'https://gfs.example/gfs/index.html',
     ouverture: null,
@@ -68,6 +71,7 @@
     answers: [],
     library(id) {
       if (id === 'edition-live') return stub.editionLive;
+      if (id === 'pdfjs') return stub.pdfjs;
       if (id === 'echarts') return stub.echarts === false ? null : { src: 'https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js', integrite: ECHARTS_INTEGRITY };
       if (id !== 'plotly') return null;
       return stub.mode === 'vendorise'
