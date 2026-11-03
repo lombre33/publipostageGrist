@@ -408,7 +408,7 @@ const FreeFrame = (function () {
   // (`data-ff-bg`, des sorties seulement) est la page même. L'écart d'un demi-point ne compte pas (l'arrondi des mesures). Une boîte sans fond ni trait ne se voit pas : seul son contenu (le texte,
   // une image) sort de la page ou n'en sort pas, ses marges ne comptent pas (une image au ras de la page, d'un fond ou d'un import PowerPoint, n'est pas un cadre qui dépasse). Un cadre DERRIÈRE le texte
   // qui n'a pas de texte à lui (un bandeau, une forme, une image : un décor) est rogné à la page par construction, rien n'y est perdu : il n'est jamais signalé.
-  function overflowsPage(dom) {
+  function measuredOverflow(dom) {
     if (dom.hasAttribute(BACKGROUND_ATTR) || dom.hasAttribute(DECOR_ATTR)) return false;
     const a = attrsOfEl(dom);
     const box = dom.querySelector(':scope > .' + BOX);
@@ -432,6 +432,19 @@ const FreeFrame = (function () {
     const centerY = a.y + shown / 2;
     const page = pageSize();
     return centerX - halfW < -OVERFLOW_SLACK_PT || centerY - halfH < -OVERFLOW_SLACK_PT || centerX + halfW > page.width + OVERFLOW_SLACK_PT || centerY + halfH > page.height + OVERFLOW_SLACK_PT;
+  }
+  // La réponse de `overflowsPage` pour chaque cadre vivant, et de quoi elle dépend : la hauteur montrée de sa boîte et la page. La bande des diapositives la demande à chaque frappe pour tous
+  // les cadres du texte (494 sur une présentation chargée) : relire leurs réglages et leur style à chaque fois coûtait ~8 ms par lettre. Ni les réglages ni le texte d'un cadre ne changent sans que
+  // `paint` repasse dessus (nœud mis à jour, geste) : il oublie alors la réponse (null). Un élément que `paint` n'a jamais peint (un test, une copie) n'est pas gardé (undefined).
+  const overflowKept = new WeakMap();
+  function overflowsPage(dom) {
+    const kept = overflowKept.get(dom);
+    const page = pageSize();
+    if (kept && kept.box.offsetHeight === kept.height && kept.width === page.width && kept.pageHeight === page.height) return kept.out;
+    const out = measuredOverflow(dom);
+    const box = kept === undefined ? null : dom.querySelector(':scope > .' + BOX);
+    if (box) overflowKept.set(dom, { box, height: box.offsetHeight, width: page.width, pageHeight: page.height, out });
+    return out;
   }
 
   // Le geste, en pure fonction : `kind` est 'move' ou les côtés tenus par la poignée (n, e, s, w, ne, nw, se, sw) ; `dx` et `dy` le déplacement de la souris en points ; `shown` la hauteur
@@ -876,6 +889,7 @@ const FreeFrame = (function () {
     return height;
   }
   function paint(dom, a) {
+    overflowKept.set(dom, null);
     const vars = varsOf(a);
     Object.keys(vars).forEach((name) => { dom.style.setProperty(name, vars[name]); });
     LOOK_VARS.forEach((name) => { if (!(name in vars)) dom.style.removeProperty(name); });

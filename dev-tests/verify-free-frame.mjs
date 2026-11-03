@@ -15,6 +15,9 @@
 //  LES SORTIES : le diaporama et la Lecture posent chaque cadre à ses mesures, sans feuille de plus pour un cadre posé au bas d'une diapositive ; le PDF (vrai clic) pose chaque cadre à sa place sur
 //   la page (texte relu par pdf.js), sans page de plus ; le Word (vrai clic) en fait une zone de texte ancrée à la page (EMU), devant le texte ; le HTML et le Markdown gardent son texte, sans sa
 //   position ; une présentation sans cadre part en PDF comme avant.
+//  CE QUI DÉPASSE (sections 4b et 4c, carte du 22/10 « Un point rouge sur la miniature ») : la miniature d'une diapositive dont un cadre sort de la page porte le point rouge ; à chaque frappe la bande demande
+//   si un cadre sort (FreeFrame.overflowsPage) et sa réponse est gardée par cadre : une lettre tapée ne fait relire que son cadre (un sur trente-sept), et le point suit le texte du cadre qui grandit (Ctrl+Z l'éteint)
+//   comme la page qui change de format (4:3, 16:9).
 // Lancé par run-headless.mjs (groupe Node "freeFrame", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-free-frame.mjs
 // FREE_FRAME_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { mkdir } from 'node:fs/promises';
@@ -53,11 +56,15 @@ const POSED = `${FRAME(600, 60, 300, 40, '<p>Cadre un en haut à droite</p>')}<h
 const BEHIND = frame => frame.replace('role="group"', 'role="group" data-ff-layer="behind"');
 const FILLED = frame => frame.replace('role="group"', 'role="group" data-ff-fill="#d9e2f3"');
 const DECOR = `${BEHIND(FRAME(-40, 0, 1040, 60, ''))}<h1>Un</h1>${BR}${BEHIND(FRAME(700, 100, 400, 40, '<p>Texte derrière</p>'))}<h1>Deux</h1>${BR}${FRAME(-7, 100, 974, 40, '<p>Au ras de la page</p>')}<h1>Trois</h1>${BR}${FILLED(FRAME(-7, 100, 974, 40, '<p>Au ras, avec un fond</p>'))}<h1>Quatre</h1>`;
+// Les trois diapositives de « Nombreux » (19) : douze cadres chacune, en quatre colonnes de 200 pt (la dernière finit à 900 pt : dans une page 16:9 de 960 pt, hors d'une page 4:3 de 720 pt), et, sur
+// la troisième, un cadre posé près du bas de la page (470 + 40 pt sur 540) dont le texte, en grandissant, passe le bord : trente-sept cadres, dont aucun ne dépasse (l'essai de ce que la bande relit à chaque frappe).
+const GRID = n => Array.from({ length: 12 }, (_, k) => FRAME(40 + 220 * (k % 4), 40 + 100 * Math.floor(k / 4), 200, 40, `<p>Cadre ${n}-${k + 1}</p>`)).join('');
+const CROWD = `${GRID(1)}<h1>Un</h1>${BR}${GRID(2)}<h1>Deux</h1>${BR}${GRID(3)}${FRAME(40, 470, 400, 40, '<p>Cadre du bas</p>')}<h1>Trois</h1>`;
 // 7 « Cadres » : trois diapositives sans cadre (l'entrée, la pose) ; 12 « Gestes » : un cadre de 300 x 120 au début de la diapositive 2 (les gestes, le clavier) ; 13 « Barre » : trois diapositives sans
 // cadre (la barre du cadre, la bande, le collage) ; 8 « Posés » : quatre diapositives dont trois portent un cadre, rangés au début de la leur (le diaporama, la Lecture, les exports) ; 9 « Document » :
 // un document (un collage y perd ses cadres) ; 10 « Mal rangé » : un cadre au milieu du texte de la diapositive 1 (rien ne se range à l'ouverture) ; 11 « Sans cadre » : trois diapositives que le PDF
 // a toujours montrées de la même façon ; 14 « Rogné » : un cadre posé près du bas de la page (son texte passe le bord) et un cadre qui dépasse le bord droit (le rognage à la page) ; 15 « En-tête et pied » : les quatre diapositives de « Posés » avec un
-// en-tête et un pied de page (la bande que l'en-tête réserve en haut de chaque page) ; 16 « Pivotés » : six diapositives dont certaines portent un cadre ou une ligne qui sort de la page, et 17 « Au bord » : deux cadres qui en sortent (le point rouge de la bande).
+// en-tête et un pied de page (la bande que l'en-tête réserve en haut de chaque page) ; 16 « Pivotés » : six diapositives dont certaines portent un cadre ou une ligne qui sort de la page, 17 « Au bord » : deux cadres qui en sortent (le point rouge de la bande), 18 « Décor » : ce que l'import d'un PowerPoint pose, et 19 « Nombreux » : trente-sept cadres dans la page, en trois diapositives (ce que la bande relit à chaque frappe).
 const SEED = seedModels({ record: RECORD }) + `
   add(7, 'Cadres', '${SLIDES}', false, 'presentation');
   add(8, 'Posés', '${POSED}', false, 'presentation');
@@ -72,7 +79,8 @@ const SEED = seedModels({ record: RECORD }) + `
   add(16, 'Pivotés', '${TURNEDSLIDES}', false, 'presentation');
   add(17, 'Au bord', '${EDGE}', false, 'presentation');
   add(18, 'Décor', '${DECOR}', false, 'presentation');
-  stub.state.nextRowId.Publipostage_Modeles = 19;
+  add(19, 'Nombreux', '${CROWD}', false, 'presentation');
+  stub.state.nextRowId.Publipostage_Modeles = 20;
 `;
 
 const TEXTS = {
@@ -497,6 +505,63 @@ async function run(lang, colorScheme, full) {
   dotsNow = await dots();
   check(tag + '« Décor » : un bandeau derrière le texte qui dépasse la page (1) et un cadre sans fond au ras de la page (3) n\'allument rien ; un cadre derrière le texte AVEC du texte qui sort (2) et le même cadre au ras avec un fond (4) allument le point',
     flagsOf(dotsNow) === '0101' && dotsNow[1].title === T.frameOverflow && dotsNow[3].title === T.frameOverflow, dotsNow);
+
+  // --- 4c. Le point rouge à chaque frappe : une lettre tapée ne fait relire que le cadre où elle tombe (la bande demande à chaque transaction ce qui dépasse, pour tous les cadres du texte : 494 sur la
+  // « Présentation commerciale » de la galerie, ~8 ms par lettre quand chacun était relu), et le point suit le texte du cadre comme la page.
+  console.log('\n' + tag + '4c) Une frappe ne relit que son cadre ; le point rouge suit le texte du cadre et la page');
+  await open(19, 3);
+  dotsNow = await dots();
+  const crowd = await page.evaluate(() => document.querySelectorAll('#editor-container .pp-free-frame').length);
+  check(tag + '« Nombreux » : trente-sept cadres dans la page, aucun point rouge', crowd === 37 && flagsOf(dotsNow) === '000', { crowd, dotsNow });
+  // Le texte d'un cadre, amené à l'écran et cliqué à la vraie souris, le curseur à la fin de sa ligne.
+  const clickFrameText = async (index) => {
+    await page.evaluate(i => document.querySelectorAll('#editor-container .pp-free-frame-content p')[i].scrollIntoView({ block: 'center' }), index);
+    await sleep(250);
+    const r = await rectOf('#editor-container .pp-free-frame-content p', index);
+    await page.mouse.click(r.left + Math.min(16, r.width / 2), r.y);
+    await sleep(250);
+    await press('End');
+  };
+  await clickFrameText(2);
+  // Les réglages d'un cadre se lisent sur son élément (`data-ff-x`) : on compte combien de cadres la frappe en fait relire.
+  await page.evaluate(() => {
+    const get = Element.prototype.getAttribute;
+    window.__ffReads = 0;
+    window.__ffRestore = () => { Element.prototype.getAttribute = get; };
+    Element.prototype.getAttribute = function (name) { if (name === 'data-ff-x') window.__ffReads += 1; return get.call(this, name); };
+  });
+  await page.keyboard.type('x');
+  await sleep(400);
+  const reads = await page.evaluate(() => { const n = window.__ffReads; window.__ffRestore(); return n; });
+  const typedText = (await docState(page)).frames[2].text;
+  check(tag + 'une lettre tapée dans un cadre ne fait relire les réglages que de ce cadre, pas des trente-sept', typedText === 'Cadre 1-3x' && reads >= 1 && reads <= 3, { reads, crowd, typedText });
+  // Le cadre du bas de la diapositive 3 grandit avec son texte : deux lignes de plus lui font passer le bas de la page, le point rouge de cette miniature s'allume - le sien seul - ; Ctrl+Z l'éteint.
+  const bottom = await page.evaluate(() => Array.from(document.querySelectorAll('#editor-container .pp-free-frame-content p')).findIndex(p => p.textContent === 'Cadre du bas'));
+  await clickFrameText(bottom);
+  for (const line of ['Ligne 1', 'Ligne 2']) { await press('Enter'); await page.keyboard.type(line); await sleep(250); }
+  dotsNow = await dots();
+  check(tag + 'le cadre du bas grandit avec son texte et passe le bas de la page : le point rouge de la diapositive 3 s\'allume, les autres non', flagsOf(dotsNow) === '001' && dotsNow[2].title === T.frameOverflow, dotsNow);
+  const bottomText = async () => (await docState(page)).frames.find(f => /^Cadre du bas/.test(f.text)).text;
+  for (let k = 0; k < 10 && (await bottomText()) !== 'Cadre du bas'; k++) await press('Control+z');
+  dotsNow = await dots();
+  check(tag + 'Ctrl+Z rend son texte d\'avant : le point rouge s\'éteint', (await bottomText()) === 'Cadre du bas' && flagsOf(dotsNow) === '000', { text: await bottomText(), dotsNow });
+  // La page change de format (4:3, un vrai clic dans le menu « Page ») : la dernière colonne de cadres, qui finit à 900 pt, passe le bord droit d'une page de 720 pt ; le point rouge s'allume sur les trois
+  // diapositives. Le 16:9 rendu, il s'éteint.
+  await leave();
+  await hover('#btn-page-orientation');
+  await sleep(250);
+  await click('#v2-page-ratios [data-page-ratio="190.5x254"]');
+  await leave();
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('.pp-slide-overflow')).every(d => !d.hidden), null, { timeout: 5000 }).catch(() => {});
+  dotsNow = await dots();
+  check(tag + 'la page passe en 4:3 (720 pt de large) : la dernière colonne de cadres sort par la droite, le point rouge s\'allume sur les trois diapositives', flagsOf(dotsNow) === '111' && dotsNow.every(d => d.title === T.frameOverflow), dotsNow);
+  await hover('#btn-page-orientation');
+  await sleep(250);
+  await click('#v2-page-ratios [data-page-ratio="190.5x338.7"]');
+  await leave();
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('.pp-slide-overflow')).every(d => d.hidden), null, { timeout: 5000 }).catch(() => {});
+  dotsNow = await dots();
+  check(tag + 'la page revient en 16:9 (960 pt) : plus aucun cadre ne sort, les points rouges s\'éteignent', flagsOf(dotsNow) === '000', dotsNow);
 
   if (!full) return;
 
