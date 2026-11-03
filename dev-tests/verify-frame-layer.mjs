@@ -589,6 +589,75 @@ async function run(lang, colorScheme, full) {
     const frontSpot = await s.page.evaluate(() => { const b = document.querySelector('#editor-container .pp-free-frame-box').getBoundingClientRect(); return [b.right - 30, b.top + b.height / 2]; });
     await s.moveTo(...frontSpot);
     check(tag + 'un cadre devant le texte : le pointeur dessus ne laisse rien passer (il reçoit déjà les clics)', !(await reaching()), frontSpot);
+
+    // La règle de `pp-ff-reaching` vise le texte de la diapositive par une CLASSE (`pp-ff-flow`, posée par le plugin `freeFrameFlow` de js/free-frame.js tant qu'un cadre est derrière le texte), jamais par
+    // « tout ce qui n'est pas un cadre » : cette règle-là faisait refaire le style de tous les descendants, cadres compris, à chaque bascule (12 000 éléments, 90 ms, deux fois par mouvement de la souris sur un
+    // cadre derrière le texte dans « Présentation commerciale »).
+    const flowCount = () => s.page.evaluate(() => {
+      const kids = Array.from(EditorCore.getEditor().view.dom.children);
+      const isFrame = k => k.classList.contains('pp-free-frame');
+      const isText = k => !isFrame(k) && !k.classList.contains('ProseMirror-widget') && !/^(STYLE|SCRIPT)$/.test(k.tagName);
+      const nodes = kids.filter(isText);
+      return { nodes: nodes.length, marked: nodes.filter(k => k.classList.contains('pp-ff-flow')).length, onFrames: kids.filter(k => isFrame(k) && k.classList.contains('pp-ff-flow')).length, onOthers: kids.filter(k => !isFrame(k) && !isText(k) && k.classList.contains('pp-ff-flow')).length };
+    });
+    const none = await flowCount();
+    check(tag + 'sans cadre derrière le texte, aucun bloc ne porte `pp-ff-flow` (rien de plus à faire pour le texte)', none.nodes > 0 && none.marked === 0 && none.onFrames === 0, none);
+    const sheetRules = await s.page.evaluate(() => {
+      const out = [];
+      for (const sheet of Array.from(document.styleSheets)) {
+        let list = [];
+        try { list = Array.from(sheet.cssRules); } catch (e) { continue; }
+        list.forEach(r => { if (r.selectorText && r.selectorText.indexOf('pp-ff-reaching') !== -1) out.push(r.selectorText); });
+      }
+      return out;
+    });
+    check(tag + 'une seule règle suit `pp-ff-reaching` et son sujet est la classe `pp-ff-flow` (jamais `:not(.pp-free-frame)`, qui ferait refaire le style de tous les cadres)', sheetRules.length === 1 && /\.pp-ff-flow$/.test(sheetRules[0]) && sheetRules[0].indexOf(':not(') === -1, sheetRules);
+    // Une présentation de quarante diapositives, huit cadres chacune dont un derrière le texte : de quoi mesurer ce que refait une bascule.
+    const bigDeck = (behind) => Array.from({ length: 40 }, (_, i) => `<h1>Diapositive ${i + 1}</h1><p>Un peu de texte ${i + 1}</p>`
+      + Array.from({ length: 8 }, (_, k) => FRAME(30 + (k % 4) * 225, 140 + Math.floor(k / 4) * 120, 200, 90, (behind && k === 0 ? BEHIND : '') + (k % 2 ? BLUE : MAGENTA), `<p>Cadre ${k + 1}</p>`)).join('') + (i < 39 ? BR : '')).join('');
+    await s.page.evaluate(h => Editor.setHTML(h), bigDeck(true));
+    await sleep(3000);
+    const flowing = await flowCount();
+    check(tag + 'avec des cadres derrière le texte, chaque bloc du texte (repères, sauts de page, titres, paragraphes) porte `pp-ff-flow` et aucun cadre ne la porte', flowing.nodes > 100 && flowing.marked === flowing.nodes && flowing.onFrames === 0 && flowing.onOthers === 0, flowing);
+    const effect = await s.page.evaluate(() => {
+      const view = EditorCore.getEditor().view;
+      const host = view.dom.parentElement;
+      const pe = el => getComputedStyle(el).pointerEvents;
+      const text = view.dom.querySelector(':scope > h1');
+      const frame = view.dom.querySelector(':scope > .pp-free-frame');
+      const off = { text: pe(text), frame: pe(frame), editor: pe(view.dom) };
+      host.classList.add('pp-ff-reaching');
+      const on = { text: pe(text), frame: pe(frame), editor: pe(view.dom) };
+      host.classList.remove('pp-ff-reaching');
+      return { off, on, after: pe(text) };
+    });
+    check(tag + 'avec `pp-ff-reaching` le texte de la diapositive ne reçoit plus la souris (pointer-events: none), le cadre et l\'éditeur la gardent ; sans elle, tout la reçoit', effect.on.text === 'none' && effect.on.frame === 'auto' && effect.on.editor === 'auto' && effect.off.text === 'auto' && effect.off.frame === 'auto' && effect.after === 'auto', effect);
+    await s.page.evaluate(() => { const h = EditorCore.getEditor().view.dom.querySelector(':scope > h1'); h.scrollIntoView({ block: 'center' }); });
+    await sleep(300);
+    // Le texte écrit, le décor relu : la classe suit (une décoration, pas une marque posée à la main sur le DOM de ProseMirror).
+    await s.page.evaluate(() => { const ed = EditorCore.getEditor(); ed.chain().focus().setTextSelection(3).insertContent('Z').run(); });
+    await sleep(500);
+    const typed = await flowCount();
+    check(tag + 'après une frappe, chaque bloc du texte porte encore `pp-ff-flow`', typed.nodes === flowing.nodes && typed.marked === typed.nodes, typed);
+    const trace = async (fn) => {
+      await t.browser.startTracing(s.page, { screenshots: false, categories: ['-*', 'devtools.timeline'] });
+      await fn();
+      const events = JSON.parse((await t.browser.stopTracing()).toString());
+      return (events.traceEvents || events).filter(e => e.name === 'UpdateLayoutTree' && e.ph === 'X').map(e => (e.args && e.args.elementCount) || 0);
+    };
+    const elements = await s.page.evaluate(() => EditorCore.getEditor().view.dom.querySelectorAll('*').length);
+    const restyled = await trace(() => s.page.evaluate(() => {
+      const host = EditorCore.getEditor().view.dom.parentElement;
+      for (let i = 0; i < 4; i++) { host.classList.toggle('pp-ff-reaching'); document.elementsFromPoint(300, 200); }
+      host.classList.remove('pp-ff-reaching');
+      document.elementsFromPoint(300, 200);
+    }));
+    const biggest = Math.max(0, ...restyled);
+    check(tag + `basculer \`pp-ff-reaching\` ne refait le style que du texte : au plus un quart des ${elements} éléments de l'éditeur (avant : tous)`, restyled.length > 0 && biggest > 0 && biggest < elements / 4, { biggest, elements, restyled });
+    await s.page.evaluate(h => Editor.setHTML(h), bigDeck(false));
+    await sleep(2500);
+    const gone = await flowCount();
+    check(tag + 'sans plus aucun cadre derrière le texte, la classe `pp-ff-flow` s\'en va', gone.nodes > 100 && gone.marked === 0, gone);
   }
 
   // --- 5. Les sorties : le PDF, le Word, le PowerPoint.

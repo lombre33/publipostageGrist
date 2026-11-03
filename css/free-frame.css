@@ -89,8 +89,11 @@
    `.reader-content` sont des contextes d'empilement (`z-index: 0`, css/editor-v2.css) : le cadre ne passe jamais sous le papier. Un cadre devant le texte n'a pas de couche : rien ne change pour lui. */
 .pp-free-frame[data-ff-layer="behind"] { z-index: -1; }
 /* L'éditeur : le texte de la diapositive couvre toute la largeur de sa colonne, même là où il n'y a pas une lettre. Tant que le pointeur est sur un cadre derrière le texte sans être sur une lettre
-   (js/free-frame.js:reachBehind, qui pose `pp-ff-reaching` sur le parent de l'éditeur), le texte laisse passer les clics : le cadre les reçoit, son texte, ses bords et ses poignées. */
-.pp-ff-reaching > .tiptap > :not(.pp-free-frame) { pointer-events: none; }
+   (js/free-frame.js:reachBehind, qui pose `pp-ff-reaching` sur le parent de l'éditeur), le texte laisse passer les clics : le cadre les reçoit, son texte, ses bords et ses poignées. La règle vise les blocs
+   de premier niveau qui ne sont pas des cadres par une CLASSE (`pp-ff-flow`, que le plugin `freeFrameFlow` de js/free-frame.js leur pose tant qu'un cadre est derrière le texte) et non par `:not(.pp-free-frame)` :
+   un sujet sans classe ni balise fait refaire le style de TOUS les descendants à chaque bascule (les cadres d'une présentation de 39 diapositives : 12 000 éléments, 90 ms, deux fois par mouvement de la souris
+   sur un cadre derrière le texte) ; avec une classe, seuls les blocs du texte le sont (2 ms). */
+.pp-ff-reaching > .tiptap > .pp-ff-flow { pointer-events: none; }
 
 /* Le FOND d'une diapositive (js/slide-props.js) : une couleur sur toute la page, sous le texte. Dans l'éditeur et les miniatures, c'est le repère de la diapositive (hauteur nulle, au coin
    de son texte, comme l'ancre d'un cadre) qui le dessine : un pseudo-élément de la taille de la page, posé depuis son coin (marges et bande d'en-tête retranchées, comme la boîte d'un cadre),

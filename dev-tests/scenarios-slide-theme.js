@@ -785,6 +785,35 @@
       return result(bad);
     });
 
+  add('th_the_logo_address_check_is_remembered_but_never_lets_a_bad_address_in',
+    'normalizeDecor se souvient de la dernière adresse de logo qui a passé le contrôle (l\'éditeur relit le décor à chaque frappe, une fois par diapositive, et l\'expression coûte plus d\'une milliseconde sur 54 Ko) : la même adresse, même écrite deux fois, passe encore et, relue dix fois, ne passe qu\'une fois au plus par l\'expression (dix fois sur l\'ancien code) ; une adresse vide, qui n\'en diffère que d\'un signe, d\'un autre type, sans son en-tête ou trop lourde reste refusée, avant comme après une adresse valide',
+    async (h) => {
+      await reset(h);
+      const bad = [];
+      const logo = src => SlideTheme.normalizeDecor({ logo: { src, w: 10, h: 10 } });
+      const body = 'iVBORw0KGgo' + 'A'.repeat(4000);
+      const a = 'data:image/png;base64,' + body;
+      const b = 'data:image/png;base64,' + body.slice(0, body.length - 1) + body.slice(body.length - 1);   // une autre chaîne, le même texte
+      if (!logo(a)) bad.push('une adresse valide est refusée');
+      const again = logo(b);
+      if (!again || again.logo.src !== b) bad.push('la même adresse, écrite une seconde fois, n\'est plus gardée');
+      // Après une adresse valide, aucune autre ne passe par la mémoire.
+      const variants = [['vide', ''], ['avec un signe de trop au milieu', a.slice(0, 2000) + '"' + a.slice(2000)], ['avec un signe interdit à la fin', a + '!'], ['d\'un autre type', a.replace('png', 'svg+xml')], ['sans son en-tête', body], ['trop lourde', 'data:image/png;base64,' + 'A'.repeat(SlideTheme.LOGO_SRC_MAX)], ['sans rien après l\'en-tête', 'data:image/png;base64,']];
+      variants.forEach(([label, src]) => { if (logo(src) !== null) bad.push('une adresse ' + label + ' passe après une adresse valide'); });
+      if (!logo(a)) bad.push('l\'adresse valide n\'est plus gardée après les refus');
+      // Le coût lui-même : la même adresse relue dix fois (le décor de dix diapositives, à chaque frappe) n'est contrôlée par l'expression qu'une fois au plus (sur l'ancien code : dix).
+      const realTest = RegExp.prototype.test;
+      let checks = 0;
+      RegExp.prototype.test = function (text) { if (this.source.indexOf('data:image') !== -1) checks++; return realTest.call(this, text); };
+      try { for (let i = 0; i < 10; i++) if (!logo(a)) bad.push('l\'adresse valide est refusée à la ' + (i + 1) + 'e lecture'); } finally { RegExp.prototype.test = realTest; }
+      if (checks > 1) bad.push('la même adresse, lue dix fois, passe ' + checks + ' fois par l\'expression de contrôle (une fois au plus attendu)');
+      // Deux adresses valides tour à tour : chacune passe (la mémoire n\'en tient qu\'une, l\'expression fait le reste).
+      const j = 'data:image/jpeg;base64,/9j/4AAQ' + 'B'.repeat(100);
+      if (!logo(j) || !logo(a) || !logo(j) || !logo(a)) bad.push('deux adresses valides tour à tour : l\'une est refusée');
+      if (logo(j + '*') !== null) bad.push('une adresse qui n\'en diffère que par un signe interdit passe après l\'adresse valide');
+      return result(bad);
+    });
+
   add('th_the_decor_stays_on_the_page_and_never_covers_what_it_must_not',
     'decorItems : le bandeau est au bord dit, de l\'épaisseur dite, à l\'échelle de la hauteur de la page (autre taille, portrait compris) ; le logo garde son rapport, tient dans son coin, sous un bandeau du haut, à côté d\'un bandeau de gauche, au-dessus du numéro et du pied ; le numéro et le pied du même endroit ne font qu\'un texte « pied · 3 » ; « pas sur la première » ne retire que les textes ; sur toutes les combinaisons, deux pages, rien ne sort de la page',
     async (h) => {

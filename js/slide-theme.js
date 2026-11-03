@@ -58,6 +58,7 @@ const SlideTheme = (function () {
   const FOOTER_MAX = 60;
   const LOGO_SRC = /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/]+={0,2}$/i;      // jamais d'image vectorielle : elle peut porter un script
   const LOGO_SRC_MAX = 72000;                                  // le poids de l'adresse de données du logo (≈ 54 Ko d'image) : le thème se range avec la page de chaque modèle
+  let lastLogoSrc = null;                                      // la dernière adresse qui a passé LOGO_SRC : le décor se relit à chaque frappe, une fois par diapositive, et l'expression coûte plus d'une milliseconde sur 54 Ko ; la même adresse a toujours la même réponse
   const LOGO_PX_MAX = 4096;
   const PAGE_BASE_PT = 540;                                    // la hauteur de la page de référence, 190,5 mm : les mesures du décor y sont dites, puis mises à l'échelle de la hauteur de la page
   const pick = (value, list, fallback) => (list.indexOf(value) !== -1 ? value : fallback);
@@ -72,7 +73,8 @@ const SlideTheme = (function () {
     const band = raw.band;
     if (band && typeof band === 'object' && BAND_EDGES.indexOf(band.edge) !== -1) out.band = { edge: band.edge, size: pick(band.size, Object.keys(BAND_SIZES), 'medium'), color: pick(band.color, BAND_COLORS, 'accent1') };
     const logo = raw.logo;
-    if (logo && typeof logo === 'object' && typeof logo.src === 'string' && logo.src.length <= LOGO_SRC_MAX && LOGO_SRC.test(logo.src)) {
+    if (logo && typeof logo === 'object' && typeof logo.src === 'string' && logo.src.length <= LOGO_SRC_MAX && (logo.src === lastLogoSrc || LOGO_SRC.test(logo.src))) {
+      lastLogoSrc = logo.src;
       const w = Math.round(Number(logo.w));
       const h = Math.round(Number(logo.h));
       if (w >= 1 && h >= 1 && w <= LOGO_PX_MAX && h <= LOGO_PX_MAX) out.logo = { src: logo.src, w, h, pos: pick(logo.pos, CORNERS, 'tr'), size: pick(logo.size, Object.keys(LOGO_HEIGHTS), 'medium') };

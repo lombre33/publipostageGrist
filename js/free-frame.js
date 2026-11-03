@@ -63,6 +63,8 @@ const FreeFrame = (function () {
   // La couche derrière le texte, et la marque que l'éditeur pose sur le parent de son texte tant que les clics y passent au cadre sous le pointeur (css/free-frame.css).
   const LAYER_BEHIND = 'behind';
   const REACHING = 'pp-ff-reaching';
+  // La classe des blocs de premier niveau qui ne sont pas des cadres (le texte de la diapositive) : la règle de `pp-ff-reaching` (css/free-frame.css) les vise par elle.
+  const FLOW = 'pp-ff-flow';
   const OWN_META = 'ppFreeFrame';
   const BODY = '(paragraph | heading | bulletList | orderedList | taskList | blockquote | table)+';
   const PT_PER_PX = 0.75;
@@ -1345,7 +1347,35 @@ const FreeFrame = (function () {
           },
         });
 
-        return [views, FrameMulti.createPlugin(deps), new Plugin({
+        // Le texte de la diapositive laisse passer les clics quand le pointeur est sur un cadre derrière lui (`pp-ff-reaching`) : la règle de css/free-frame.css vise les blocs de premier niveau qui ne sont pas des
+        // cadres par la classe FLOW, posée ici (une décoration : ni écrite dans le texte, ni annulable) sur chacun d'eux tant que le texte a un cadre derrière le texte, le seul cas où `reachBehind` allume la marque
+        // (elle ne regarde pas `inPresentation`, ni cette décoration : un cadre derrière dans le DOM suffit aux deux). Sans cadre derrière le texte, aucune classe n'est posée et rien ne se calcule de plus que la
+        // recherche d'un tel cadre, faite une fois par texte (jamais pour un simple changement de sélection) et qui ne descend pas dans les blocs de texte.
+        let flowOf = { doc: null, set: null };
+        const hasBehindFrame = (doc) => {
+          let found = false;
+          doc.descendants((node) => {
+            if (found) return false;
+            if (isFrame(node) && node.attrs.layer === LAYER_BEHIND) { found = true; return false; }
+            return !node.isTextblock;
+          });
+          return found;
+        };
+        const flow = new Plugin({
+          key: new PluginKey('freeFrameFlow'),
+          props: {
+            decorations(state) {
+              if (flowOf.doc !== state.doc) {
+                const marks = [];
+                if (hasBehindFrame(state.doc)) state.doc.forEach((child, offset) => { if (!isFrame(child)) marks.push(Decoration.node(offset, offset + child.nodeSize, { class: FLOW })); });
+                flowOf = { doc: state.doc, set: marks.length ? DecorationSet.create(state.doc, marks) : null };
+              }
+              return flowOf.set;
+            },
+          },
+        });
+
+        return [views, flow, FrameMulti.createPlugin(deps), new Plugin({
           key: new PluginKey('freeFrame'),
           props: {
             // Le curseur dans un cadre : son contour se dessine (le cadre sélectionné a le sien, par selectNode).
