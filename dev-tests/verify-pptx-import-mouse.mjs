@@ -50,7 +50,7 @@ const TEXTS = {
     report: ['2 animations d’objets non reprises', '1 graphique non repris', '1 dégradé remplacé par sa couleur moyenne',
       '2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '1 objet dont la liste de tirets est trop longue ou illisible (son trait est dessiné plein)'],
     manyFirst: '3 animations d’objets non reprises', manyLast: '1 objet illisible non repris', lostLast: '3 objets illisibles non repris',
-    lostSamples: ['2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '2 sections de diapositives non reprises (noms sans place dans les notes)', '1 thème repris en couleurs et polices fixes', '2 textes verticaux écrits à l’horizontale'],
+    lostSamples: ['2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '2 sections de diapositives non reprises (noms sans place dans les notes)', '2 textes verticaux écrits à l’horizontale'],
     offTitle: 'Cette fonction demande Grist Factory Suite', offMessage: /Diapositives/,
   },
   en: {
@@ -65,7 +65,7 @@ const TEXTS = {
     report: ['2 object animations not imported', '1 chart not imported', '1 gradient replaced by its average color',
       '2 fonts missing from the editor, replaced by the nearest available', '1 object with a dash list too long or unreadable (its line drawn solid)'],
     manyFirst: '3 object animations not imported', manyLast: '1 unreadable object not imported', lostLast: '3 unreadable objects not imported',
-    lostSamples: ['2 fonts missing from the editor, replaced by the nearest available', '2 slide sections not imported (name does not fit in the notes)', '1 theme imported as fixed colors and fonts', '2 vertical texts written horizontally'],
+    lostSamples: ['2 fonts missing from the editor, replaced by the nearest available', '2 slide sections not imported (name does not fit in the notes)', '2 vertical texts written horizontally'],
     offTitle: 'This feature needs Grist Factory Suite', offMessage: /Slides/,
   },
 };
@@ -76,7 +76,7 @@ const TEXTS = {
 // une présentation ; `empty` : une présentation sans diapositive.
 const buildDeck = async (page, kind) => Buffer.from(await page.evaluate(async (which) => {
   const F = window.PptxFixtures;
-  const { pptx, sp, textBox, cxn, pic, table, para, run, solid, ln, TWO_TONE, IMAGE_REL, everyKindOfObject, xfrm } = F;
+  const { pptx, sp, textBox, cxn, pic, table, para, run, solid, ln, TWO_TONE, IMAGE_REL, everyKindOfObject, xfrm, CLR_MAP, BG1, ownBg } = F;
   const frame = (uri, inner, name) => `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="30" name="${name}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>${xfrm(100, 100, 200, 100, '', 'p:xfrm')}<a:graphic><a:graphicData uri="${uri}">${inner}</a:graphicData></a:graphic></p:graphicFrame>`;
   const cells = texts => texts.map(text => ({ text, attrs: 'sz="1800"' }));
   // Neuf couples : plus que l'éditeur n'en lit (huit au plus), le trait est dessiné plein et le compte rendu le dit.
@@ -115,6 +115,11 @@ const buildDeck = async (page, kind) => Buffer.from(await page.evaluate(async (w
       return Object.assign({}, objects, losses, { slides: objects.slides.concat(losses.slides), media: Object.assign({}, objects.media, losses.media) });
     },
     fourThree: () => ({ size: [720, 540], slides: [{ shapes: textBox(72, 54, 576, 60, para(run('Quatre tiers', 'sz="3200"')), { id: 2 }) }] }),
+    // Un fichier au thème sombre (le fond 1 est le noir, le texte 1 le blanc) : sa première diapositive montre le fond du thème, la seconde garde son blanc.
+    dark: () => ({
+      colors: { dk1: '000000', lt1: 'FFFFFF', dk2: '44546A', lt2: 'E7E6E6' }, master: { clrMap: CLR_MAP.replace('bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2"', 'bg1="dk1" tx1="lt1" bg2="dk2" tx2="lt2"'), bg: BG1 },
+      slides: [{ shapes: textBox(60, 40, 840, 80, para(run('Nuit', 'sz="4000"', solid('FFFFFF'))), { id: 2 }) }, { bg: ownBg('FFFFFF'), shapes: textBox(60, 40, 840, 80, para(run('Jour', 'sz="4000"', solid('1B2430'))), { id: 2 }) }],
+    }),
     empty: () => ({ slides: [] }),
   };
   let buffer;
@@ -306,6 +311,20 @@ async function run(lang, scheme) {
       /Bilan de l’année/.test(plain.text) && /Premier point/.test(plain.text) && /Deuxième point/.test(plain.text) && /Carte/.test(plain.text) && /Les chiffres/.test(plain.text) && /Février/.test(plain.text)
       && plain.tables === 1 && plain.images === 1 && plain.frames === 7, { tables: plain.tables, images: plain.images, frames: plain.frames, text: plain.text.slice(0, 120) });
     check(tag + 'aucune miniature ne porte le point rouge (aucun cadre ne sort de sa diapositive)', plain.dots === 0, plain.dots);
+    // Le thème du fichier est celui de la présentation : la ligne « Thème… » du menu Page, au vrai survol, le nomme (le nom du thème du fichier de l'essai : « Essai »).
+    await parkMouse(page);
+    const pageButton = await page.evaluate(() => { const r = document.getElementById('btn-page-orientation').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+    await page.mouse.move(pageButton.x - 14, pageButton.y - 6, { steps: 2 });
+    await page.mouse.move(pageButton.x, pageButton.y, { steps: 4 });
+    await sleep(450);
+    const themeRow = await page.evaluate(() => {
+      const row = document.getElementById('v2-btn-slide-theme');
+      if (!row) return null;
+      const r = row.getBoundingClientRect();
+      return { shown: r.width > 0 && r.height > 0, disabled: row.getAttribute('aria-disabled'), value: row.querySelector('.v2-page-row-size').textContent };
+    });
+    check(tag + 'le thème du fichier est celui de la présentation : la ligne « Thème… » du menu Page, ouverte au vrai survol, est active et le nomme « Essai »', !!themeRow && themeRow.shown && themeRow.disabled !== 'true' && themeRow.value === 'Essai', themeRow);
+    await parkMouse(page);
     // Les cadres sont de vrais cadres de l'éditeur : « Carte » se sélectionne à l'appui à 1 pixel DANS le bord de son haut, comme n'importe quel cadre.
     const card = await page.evaluate(() => {
       const boxes = Array.from(document.querySelectorAll('#editor-container .pp-free-frame-box'));
@@ -441,7 +460,7 @@ async function run(lang, scheme) {
     check(tag + `le rapport le plus long de tous : ${wanted.length} genres, un par ligne, dans l'ordre et dans la langue de l'interface, du premier (animations) au dernier (objet illisible), aucune clé laissée telle quelle`,
       lost.shown && lost.title === T.reportTitle && lostLines[0] === T.reportIntro && wanted.length >= keys - 3 && JSON.stringify(lostLines.slice(1)) === JSON.stringify(wanted) && lostLines[1] === '• ' + T.manyFirst
         && lostLines[lostLines.length - 1] === '• ' + T.lostLast && !lost.message.includes('pptx.import.report.'), { title: lost.title, count: lostLines.length - 1, wanted: wanted.length, first: lostLines[1], last: lostLines[lostLines.length - 1] });
-    check(tag + 'des lignes à lire telles quelles, au singulier et au pluriel : ' + T.lostSamples.map(line => '« ' + line + ' »').join(', '), T.lostSamples.every(line => lostLines.includes('• ' + line)), lostLines.filter(line => /polices|fonts|sections|thème|theme|verticaux|vertical/.test(line)));
+    check(tag + 'des lignes à lire telles quelles, au singulier et au pluriel : ' + T.lostSamples.map(line => '« ' + line + ' »').join(', '), T.lostSamples.every(line => lostLines.includes('• ' + line)), lostLines.filter(line => /polices|fonts|sections|verticaux|vertical/.test(line)));
     check(tag + 'la fenêtre tient dans le panneau : titre et bouton « ' + T.close + ' » à l\'écran sans défiler la page, le texte défile dans la fenêtre', lost.boxInPanel && lost.titleInPanel && lost.buttonsInPanel && lost.scrolls && lost.scrollMax > long.scrollMax, { box: lost.box, scrolls: lost.scrolls, scrollMax: lost.scrollMax, longScrollMax: long.scrollMax });
     await snap('report-lost');
     await wheelToTheEnd(lost, T.lostLast, 'report-lost-end');
@@ -461,6 +480,26 @@ async function run(lang, scheme) {
       Math.abs(fourThree.page.width - 720) < 1 && Math.abs(fourThree.page.height - 540) < 1 && fourThree.slides === 1 && /Quatre tiers/.test(fourThree.text) && !(await dialogState(page)).shown && fourThreeStatus.text === T.imported(1),
       { page: fourThree.page, slides: fourThree.slides, status: fourThreeStatus.text });
     await snap('four-three');
+
+    // 5 ter) Un fichier au thème sombre : la page de l'éditeur prend son fond (noir), la diapositive qui montre le fond du thème n'écrit pas le sien (la seconde garde son blanc), la ligne du menu Page nomme le thème.
+    await pickFile(page, pptxFile('nuit.pptx', await buildDeck(page, 'dark')));
+    await settle(page, /^$/);
+    await clickDialogButton(page, T.discard);
+    await settle(page, T.importedPattern);
+    await waitStrip(page, 2);
+    await sleep(500);
+    const dark = await page.evaluate(() => {
+      const sheet = document.querySelector('#editor-container .v2-page-sheet') || document.getElementById('editor-container');
+      const theme = PageLayout.getTheme();
+      const html = Editor.getHTML();
+      return {
+        bg: getComputedStyle(sheet).backgroundColor, themed: document.documentElement.classList.contains('pp-themed'), theme: theme && { bg: theme.colors.bg, text: theme.colors.text },
+        ownBgs: (html.match(/data-bg="[^"]*"/g) || []), text: document.getElementById('editor-container').textContent,
+      };
+    });
+    check(tag + 'un fichier au thème sombre : la feuille de la page est noire (rgb(0, 0, 0)), le thème du fichier est gardé (fond #000000, texte #ffffff), un seul fond écrit (le blanc de la seconde diapositive : celle du thème n\'en écrit pas)',
+      dark.bg === 'rgb(0, 0, 0)' && dark.themed && !!dark.theme && dark.theme.bg === '#000000' && dark.theme.text === '#ffffff' && dark.ownBgs.length === 1 && /ffffff/i.test(dark.ownBgs[0]) && /Nuit/.test(dark.text), dark);
+    await snap('dark-file');
 
     // 6) Les fichiers refusés : un message clair en rouge, aucune fenêtre (même avec un document à enregistrer), le document ne bouge pas.
     const baseline = await snapshot(page);

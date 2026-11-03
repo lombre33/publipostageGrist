@@ -20,3 +20,16 @@ html.pp-themed #editor-container.a4-preview:not(.hf-editing, .pp-mixed-pages) .v
 html.pp-themed #editor-container:not(.a4-preview, .hf-editing) { background: var(--pp-theme-bg); }
 html.pp-themed #editor-container.a4-preview.pp-mixed-pages:not(.hf-editing) .v2-page-paper,
 html.pp-themed .pp-slide-thumb .pp-slide-page.tiptap { background: var(--pp-theme-bg); }
+
+/* Le DÉCOR du thème (js/slide-theme.js : decorElement, posé par une décoration de ProseMirror au début de chaque diapositive, et dans chaque miniature) : une enveloppe sans hauteur et une boîte de la taille de la page, posée au coin de
+   la page comme le fond propre d'une diapositive (css/free-frame.css : `.pp-slide-props[data-bg]::before`), à `z-index: -1` dans le contexte d'empilement du texte : au-dessus du fond de la diapositive (le repère la précède) et des
+   papiers, sous son texte et ses cadres libres, l'ordre de peinture des sorties. Seul l'aperçu de page le montre (la feuille sans pages n'a pas de coin) ; l'écriture d'en-tête ou de pied ne l'a pas. Rien n'y reçoit le pointeur. */
+.pp-slide-decor { display: none; position: relative; height: 0; margin: 0; padding: 0; border: 0; pointer-events: none; user-select: none; }
+#editor-container.a4-preview:not(.hf-editing) .pp-slide-decor,
+.pp-slide-thumb .pp-slide-page .pp-slide-decor { display: block; }
+.pp-slide-decor-page { position: absolute; z-index: -1; box-sizing: border-box; overflow: hidden; pointer-events: none;
+  left: calc(0px - var(--pp-margin-left, 0px)); top: calc(0px - var(--pp-margin-top, 0px) - var(--pp-top-band, 0px)); width: var(--pp-page-width, 100%); height: var(--pp-page-height, 100%);
+  -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.pp-slide-decor-page > * { position: absolute; box-sizing: border-box; display: block; margin: 0; padding: 0; border: 0; }
+.pp-slide-decor-logo { object-fit: contain; }
+.pp-slide-decor-text { overflow: hidden; white-space: nowrap; }

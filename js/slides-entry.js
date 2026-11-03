@@ -80,6 +80,14 @@ const SlidesEntry = (function () {
     return Object.assign({}, stored, { orientation: PageLayout.LANDSCAPE, format: PageLayout.SLIDE_FORMAT });
   }
 
+  // La page, en points ({ width, height }), d'une présentation dont la ligne porte `stored` (sa colonne Margins ; null : un modèle vierge) : celle que le décor du thème mesure pour un modèle qui n'est pas celui de l'écran
+  // (un lot, un macro-modèle). Null pour un modèle qui n'est pas une présentation.
+  function pageSizeOf(typeModele, stored) {
+    if (!isPresentation(typeModele)) return null;
+    const own = pageFor(typeModele, stored);
+    return PageLayout.pageSizePtFor(own.orientation, own.format);
+  }
+
   // La bande des diapositives
   // Montrée quand une présentation est à l'écran en Édition, que son code est là (fichiers et feuille de style arrivés) ; cachée sinon. Rappelée par js/main.js à chaque changement de ce
   // que l'écran montre (modèle, mode, droits) et par GFS quand il allume ou éteint une extension.
@@ -120,8 +128,10 @@ const SlidesEntry = (function () {
   // saut de page reçoit cette ligne, sans quoi la page ne s'ouvrirait pas (le PDF ouvre une page avec le bloc qui suit le saut). Le modèle enregistré n'est jamais touché.
   // `keepProps` (l'export PowerPoint, js/pptx-export.js) : le repère de chaque diapositive reste, avec sa transition, son fond et ses notes, que le fichier écrit lui-même. `anchors` (la Lecture) : une diapositive
   // que vise un lien y laisse un bloc vide qui porte son adresse (SlideProps.forOutput). `theme` : le thème de CETTE présentation (sa clé `theme` de la page, PageLayout.getTheme pour celle de l'écran, celle de
-  // sa ligne pour un autre modèle d'un lot ou d'un macro-modèle) : ses polices et ses couleurs sont écrites en style sur le texte et les titres (SlideTheme.forOutput), et son fond est celui de chaque diapositive qui n'a pas le sien (SlideTheme.paperOf) ; sans thème, rien n'est ajouté.
-  function outputHtml(typeModele, html, { keepProps = false, anchors = false, theme = null } = {}) {
+  // sa ligne pour un autre modèle d'un lot ou d'un macro-modèle) : ses polices et ses couleurs sont écrites en style sur le texte et les titres (SlideTheme.forOutput), son fond est celui de chaque diapositive qui n'a pas le sien (SlideTheme.paperOf) et son décor
+  // (bandeau, logo, numéro, pied : SlideTheme.decorHtmlFor) des cadres derrière le texte de chaque diapositive ; sans thème, rien n'est ajouté. `page` : la page de CETTE présentation en points ({ width, height }), pour le décor ; `stored` : à défaut, la colonne Margins de sa ligne (un autre modèle d'un lot ou d'un macro-modèle : sa page
+  // n'est pas celle de l'écran) ; sans l'un ni l'autre, la page du modèle ouvert.
+  function outputHtml(typeModele, html, { keepProps = false, anchors = false, theme = null, page = null, stored } = {}) {
     // Un document ne montre jamais le repère de ses copies en texte (js/slide-copies.js), et une copie dont la diapositive a changé la reprend.
     if (html && !isPresentation(typeModele)) return SlideCopies.forOutput(html);
     if (!isPresentation(typeModele) || !html) return html;
@@ -129,7 +139,7 @@ const SlidesEntry = (function () {
     html = SlideLinks.forOutput(html);
     // Ni celui de la transition d'une diapositive (js/slide-props.js) : le diaporama la lit dans le texte de l'éditeur. Son fond, lui, y devient le cadre qui le peint, et celui du thème (SlideTheme.paperOf) le
     // cadre de chaque diapositive qui n'a pas le sien. L'export PowerPoint (`keepProps`) n'en écrit pas : le fond du thème est celui de son masque (js/pptx-export.js).
-    if (!keepProps) html = SlideProps.forOutput(html, { anchors, background: SlideTheme.paperOf(theme) });
+    if (!keepProps) html = SlideProps.forOutput(html, { anchors, background: SlideTheme.paperOf(theme), decor: SlideTheme.decorHtmlFor(theme, page || (stored !== undefined ? pageSizeOf(typeModele, stored) : null)) });
     // Ni les objets masqués (js/free-frame.js : `data-ff-hidden`) ; l'export PowerPoint les écrit masqués.
     if (!keepProps) html = FreeFrame.withoutHidden(html);
     // Le thème de la présentation : sa police et sa couleur sur le texte et les titres, la même chose qu'à l'écran (css/slide-theme.css).
@@ -139,8 +149,8 @@ const SlidesEntry = (function () {
     const breaks = blocks.filter(block => block.classList.contains('page-break-marker'));
     if (!breaks.length) return html;
     breaks.forEach(block => block.setAttribute(SLIDE_BREAK_ATTR, ''));
-    // Le cadre du fond de la dernière diapositive ne compte pas : il se dessine sans texte, la page doit encore s'ouvrir sur une ligne.
-    const written = blocks.filter(block => !block.hasAttribute('data-ff-bg'));
+    // Le cadre du fond de la dernière diapositive ne compte pas, ni ceux de son décor : ils se dessinent sans texte à eux, la page doit encore s'ouvrir sur une ligne.
+    const written = blocks.filter(block => !block.hasAttribute('data-ff-bg') && !block.hasAttribute(FreeFrame.DECOR_ATTR));
     if (written[written.length - 1].classList.contains('page-break-marker')) host.content.appendChild(document.createElement('p'));
     return host.innerHTML;
   }
@@ -309,7 +319,7 @@ const SlidesEntry = (function () {
   Extensions.onChange(sync);
 
   return {
-    ID, TYPE, FEATURE_KEY, SLIDE_BREAK_ATTR, setHooks, setContext, isAvailable, reason, startNew, ensureFor, unavailableReason, pageFor, onChange: Extensions.onChange,
+    ID, TYPE, FEATURE_KEY, SLIDE_BREAK_ATTR, setHooks, setContext, isAvailable, reason, startNew, ensureFor, unavailableReason, pageFor, pageSizeOf, onChange: Extensions.onChange,
     changed: sync, register, explainOff, relayout, status, showsEveryPage, presentationShown, seamLabel, outputHtml, TEXT_SIZE, HEADING_SIZES, createTextExtension, textMarks,
     registerTextImport, openTextImport, pastedInDocument, registerTheme, openTheme,
   };

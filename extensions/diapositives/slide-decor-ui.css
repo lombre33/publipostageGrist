@@ -1,0 +1,38 @@
+/* La fenêtre « Décor… » du thème (extensions/diapositives/slide-decor-ui.js, sur la base commune des fenêtres) : à gauche l'aperçu d'une diapositive aux couleurs du brouillon avec le décor par-dessus, à droite quatre rangées (le bandeau, le logo,
+   le numéro, le texte de pied) et la case « pas sur la première ». Les deux colonnes passent l'une sous l'autre quand la place manque (le panneau de Grist fait ~700 px) ; le contenu défile, le titre et les boutons restent, et la fenêtre tient
+   dans les ~376 px du panneau de 700x400. Couleurs de l'interface : jetons de css/style.css (texte ≥ 4,5:1, clair et sombre) ; seuls l'aperçu et les pastilles de couleur ont les couleurs du thème. Ce fichier ne se charge qu'avec l'extension. */
+.pp-slide-decor-intro { margin: 0 0 8px; color: var(--text-muted); font-size: 12.5px; line-height: 1.3; }
+.pp-slide-decor-columns { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 20px; }
+.pp-slide-decor-side { flex: none; max-width: 100%; }
+.pp-slide-decor-form { display: grid; flex: 1 1 340px; grid-template-columns: auto minmax(0, 1fr); gap: 8px 10px; align-items: center; min-width: 0; }
+.pp-slide-decor-row-label { color: var(--text-muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.pp-slide-decor-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.pp-slide-decor-select, .pp-slide-decor-input { box-sizing: border-box; height: 26px; padding: 0 4px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; }
+.pp-slide-decor-select { max-width: 100%; }
+.pp-slide-decor-input { flex: 1 1 120px; min-width: 0; padding: 0 6px; }
+.pp-slide-decor-select:disabled { background: var(--surface-sunken); color: var(--text-muted); }
+.pp-slide-decor-select:focus-visible, .pp-slide-decor-input:focus-visible, .pp-slide-decor-check input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-slide-decor-tool { box-sizing: border-box; height: 26px; margin: 0; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.pp-slide-decor-tool:hover { background: var(--surface-sunken); }
+.pp-slide-decor-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-slide-decor-tool[hidden] { display: none; }
+.pp-slide-decor-swatches { display: inline-flex; gap: 4px; }
+.pp-slide-decor-swatch { box-sizing: border-box; flex: none; width: 20px; height: 20px; margin: 0; padding: 0; border: 1px solid color-mix(in srgb, var(--text) 22%, transparent); border-radius: 50%; background: var(--chip); cursor: pointer; }
+.pp-slide-decor-swatch[aria-checked="true"] { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-slide-decor-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pp-slide-decor-swatch:disabled { opacity: .4; cursor: default; }
+.pp-slide-decor-check { display: flex; grid-column: 1 / -1; align-items: center; gap: 6px; color: var(--text); font-size: 12.5px; cursor: pointer; }
+.pp-slide-decor-check input { margin: 0; }
+.pp-slide-decor-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* L'état de l'image (illisible, trop lourde) : rouge lisible (jeton de texte, jamais `--danger`) ; vide (sans place) quand tout va bien. */
+.pp-slide-decor-status { color: var(--danger-ink); font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.pp-slide-decor-status:not(:empty) { margin-top: 6px; }
+
+/* L'aperçu de la fenêtre : le papier de la fenêtre « Thème… » (extensions/diapositives/slide-theme-ui.css), en grand. */
+.pp-slide-theme-paper.is-large { width: 250px; --pp-decor-scale: 0.2604; padding: 7% 8%; }
+.pp-slide-theme-paper.is-large .pp-slide-theme-sample-title { font-size: 21px; }
+.pp-slide-theme-paper.is-large .pp-slide-theme-sample-text { margin-top: 3px; font-size: 14px; }
+
+@media (forced-colors: active) {
+  .pp-slide-decor-swatch[aria-checked="true"] { outline-color: Highlight; }
+}

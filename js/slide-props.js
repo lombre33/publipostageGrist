@@ -442,9 +442,10 @@ const SlideProps = (function () {
   // Le HTML que reçoivent la Lecture et les exports : le repère s'en va, et le fond de sa diapositive devient, à sa place, le cadre qui le peint (FreeFrame.backgroundHtml : la page entière,
   // sans texte, avant les cadres libres de la diapositive, qui sont donc au-dessus de lui). Une diapositive sans fond n'a rien de plus. `anchors` : la diapositive qui est la cible d'un lien
   // (son signet, js/anchors.js) y laisse un bloc vide de hauteur nulle qui porte son adresse (`data-anchor`), que la Lecture amène en haut de la zone qui défile.
-  function forOutput(html, { anchors = false, background = '' } = {}) {
+  function forOutput(html, { anchors = false, background = '', decor = null } = {}) {
     const paper = background && html ? colorOf(background) : '';
-    return rewrite(paper ? withPaper(String(html == null ? '' : html), paper) : html, (el) => {
+    const frames = typeof decor === 'function' && html ? decor : null;
+    return rewrite(paper || frames ? withPaper(String(html == null ? '' : html), paper, frames) : html, (el) => {
       const a = attrsOfEl(el);
       if (a.bg) el.after(Dom.inertTemplate(FreeFrame.backgroundHtml(a.bg)).content);
       if (anchors && a.anchorId) el.after(Dom.inertTemplate(anchorHtml(a)).content);
@@ -454,17 +455,27 @@ const SlideProps = (function () {
   // Le HTML avec un fond pour CHAQUE diapositive : celle qui n'en a pas prend `paper` (#rrggbb), le fond que le thème de la présentation donne à toutes ses diapositives (js/slide-theme.js:paperOf, option `background` de
   // forOutput). Une diapositive qui a un repère sans fond le reçoit dans ce repère, une qui n'a pas de repère en reçoit un en tête, celle qui a déjà son fond le garde. Le repère écrit ici est celui que l'éditeur écrirait pour
   // ce fond (html) : forOutput en fait ensuite le cadre qui le peint, comme pour un fond choisi diapositive par diapositive. Les diapositives sont ce qu'il y a entre deux sauts de page de premier niveau (comme slidesOf).
-  function withPaper(text, paper) {
+  // `decor` (option `decor` de forOutput) : (rang de la diapositive, à partir de 0) => le HTML des cadres du décor commun de la présentation (js/slide-theme.js:decorHtmlFor), posés juste derrière le repère de la diapositive : après
+  // son fond (forOutput lui fait sa place juste après le repère), avant ses cadres libres, qui sont donc au-dessus d'eux. Une diapositive sans repère en reçoit un pour son fond, sans fond (`paper` vide) ses cadres suivent son saut de page.
+  function withPaper(text, paper, decor) {
     const body = HtmlSanitize.parseInert(text);
     let opener = null; // le saut de page qui ouvre la diapositive en cours (null : la première)
     let marker = null; // le premier repère de la diapositive en cours
+    let rank = 0;      // le rang de la diapositive en cours, à partir de 0
     const close = () => {
+      let anchor = marker;
       if (marker) {
-        if (!attrsOfEl(marker).bg) marker.setAttribute(DOM_ATTRS.bg, paper);
-        return;
+        if (paper && !attrsOfEl(marker).bg) marker.setAttribute(DOM_ATTRS.bg, paper);
+      } else if (paper) {
+        const fresh = Dom.inertTemplate(html({ bg: paper })).content;
+        anchor = fresh.firstElementChild;
+        if (opener) opener.after(fresh); else body.prepend(fresh);
+      } else anchor = opener;
+      if (decor) {
+        const frames = Dom.inertTemplate(decor(rank)).content;
+        if (anchor) anchor.after(frames); else body.prepend(frames);
       }
-      const fresh = Dom.inertTemplate(html({ bg: paper })).content;
-      if (opener) opener.after(fresh); else body.prepend(fresh);
+      rank += 1;
     };
     Array.from(body.children).forEach((block) => {
       if (block.classList.contains('page-break-marker')) { close(); opener = block; marker = null; } else if (!marker && block.matches('div.' + CLASS)) marker = block;

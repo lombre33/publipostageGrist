@@ -299,7 +299,6 @@ const PptxImport = (function () {
         if (name === 'phClr') { if (!phColor) return null; rgb = phColor.rgb.slice(); break; }
         const scheme = env.clrMap[name] || name;
         rgb = hexRgb(env.theme.colors[scheme]);
-        env.theme.used = true;
         break;
       }
       default: return null;
@@ -531,9 +530,8 @@ const PptxImport = (function () {
     });
     const font = name => attr(at(elements, 'fontScheme/' + name + '/latin'), 'typeface') || '';
     const fmt = at(elements, 'fmtScheme');
-    // `used` : un objet a pris une couleur ou une police de ce thème (colorOf, faceOf) - le rapport dit alors que le thème est figé.
     return {
-      colors, major: font('majorFont'), minor: font('minorFont'), used: false,
+      name: attr(root, 'name') || '', colors, major: font('majorFont'), minor: font('minorFont'),
       fills: kids(kid(fmt, 'fillStyleLst')), lines: kids(kid(fmt, 'lnStyleLst')), effects: kids(kid(fmt, 'effectStyleLst')), bgFills: kids(kid(fmt, 'bgFillStyleLst')),
     };
   }
@@ -543,13 +541,10 @@ const PptxImport = (function () {
     if (el) for (let i = 0; i < el.attributes.length; i++) out[el.attributes[i].name] = el.attributes[i].value;
     return out;
   }
-  // Le nom d'une police, celle du thème (`+mj-lt`, `+mn-lt`) comprise : le thème est alors marqué comme employé.
+  // Le nom d'une police, celle du thème (`+mj-lt`, `+mn-lt`) comprise.
   function faceOf(name, theme) {
     let face = String(name || '').trim();
-    if (face.charAt(0) === '+') {
-      theme.used = true;
-      face = face.indexOf('mj') === 1 ? theme.major : theme.minor;
-    }
+    if (face.charAt(0) === '+') face = face.indexOf('mj') === 1 ? theme.major : theme.minor;
     return String(face || '').trim();
   }
   // La famille de remplacement la plus proche parmi celles de l'éditeur (Roboto par défaut, Arial, Times New Roman, Georgia, Courier New, Calibri) ; null : celle de l'éditeur.
@@ -563,6 +558,28 @@ const PptxImport = (function () {
     if (/^(courier|consolas|lucida console|monaco|menlo|cascadia|source code|fira (code|mono)|andale mono|cousine|monospace)/.test(key)) return 'Courier New';
     if (/^(times|tinos|cambria|garamond|palatino|book antiqua|bookman|century (schoolbook|old)|constantia|baskerville|didot|bodoni|sitka|minion|perpetua|goudy|caslon|georgia pro|serif$)/.test(key)) return 'Times New Roman';
     return null;
+  }
+  // Le thème du fichier dans la forme du thème d'une présentation (js/slide-theme.js) : son nom, le fond et le texte (par la correspondance de couleurs du masque : « fond 1 » et « texte 1 »), les titres (la couleur du
+  // premier niveau du style de titre du masque, le texte à défaut), les six accents et les deux polices (la plus proche parmi celles de l'éditeur, Roboto à défaut). null quand une couleur manque ou que l'éditeur n'a pas
+  // de thème.
+  function themeOf(master) {
+    if (!master || !master.theme || typeof SlideTheme === 'undefined') return null;
+    const { theme, clrMap } = master;
+    const hexOf = key => { const rgb = hexRgb(theme.colors[clrMap[key] || key]); return rgb ? '#' + toHex(rgb) : ''; };
+    const text = hexOf('tx1');
+    let title = '';
+    try {
+      const fill = kid(at(master.txStyles.title, 'lvl1pPr/defRPr'), 'solidFill');
+      const hex = fill ? colorHexOf(fill, { theme, clrMap, bgRgb: [255, 255, 255] }) : '';
+      title = hex ? '#' + hex : '';
+    } catch (e) {
+      title = '';
+    }
+    const family = name => familyOf(name, theme) || 'Roboto';
+    const colors = { bg: hexOf('bg1'), text, title: title || text };
+    for (let i = 1; i <= 6; i++) colors['accent' + i] = hexOf('accent' + i);
+    if (Object.keys(colors).some(key => !colors[key])) return null;
+    return SlideTheme.normalize({ v: 1, name: theme.name, colors, fonts: { title: family(theme.major), body: family(theme.minor) } });
   }
 
   // --- La cascade des styles de texte ---------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2392,6 +2409,8 @@ const PptxImport = (function () {
     const layoutRel = slideRels.ofType('slideLayout')[0];
     const layout = await loadLayout(layoutRel && layoutRel.target ? layoutRel.target : '', ctx);
     const master = layout.master;
+    // Le thème du fichier est celui du masque de sa première diapositive : il devient le thème de la présentation (fromBuffer).
+    if (!ctx.themeKnown) { ctx.themeKnown = true; ctx.theme = themeOf(master); }
     const override = at(root, 'clrMapOvr/overrideClrMapping');
     const env = {
       ctx, theme: master.theme, layout, master, slideRels, bgRgb: [255, 255, 255], page: pageBox,
@@ -2423,13 +2442,17 @@ const PptxImport = (function () {
     }
     const noted = await commentsOf(env, spoken);
     ctx.report.comments += noted.left;
-    const props = Object.assign({ bg: bgHex && bgHex !== 'ffffff' ? '#' + bgHex : '', notes: noted.text, hidden: attr(root, 'show') === '0' }, transitionOf(root, ctx.report));
+    // Le fond du thème est celui de la page sous chaque diapositive qui n'écrit pas le sien : une diapositive qui montre ce fond ne l'écrit pas (elle suit le thème, texte et page changent ensemble), une autre l'écrit,
+    // le blanc d'une diapositive d'un fichier au thème sombre aussi.
+    const paper = ctx.theme ? ctx.theme.colors.bg.slice(1) : 'ffffff';
+    const shown = bgHex || 'ffffff';
+    const props = Object.assign({ bg: shown === paper ? '' : '#' + shown, notes: noted.text, hidden: attr(root, 'show') === '0' }, transitionOf(root, ctx.report));
     return { props, frames: frames.join(''), tail: '<p></p>' };
   }
 
   // --- Le fichier ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   // Les genres du rapport, dans l'ordre où la fenêtre les dit : d'abord ce qui n'arrive pas ou arrive remplacé, puis ce que le fichier demande et que l'éditeur ne sait pas encore faire, famille par famille (le texte, les puces,
-  // les formes et les traits, les images, les tableaux, les diapositives, le fichier), enfin les limites (objets du masque, diapositives en trop, objets illisibles). `theme` : voir fromBuffer.
+  // les formes et les traits, les images, les tableaux, les diapositives, le fichier), enfin les limites (objets du masque, diapositives en trop, objets illisibles).
   const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'shrunk', 'embedded', 'media', 'ink', 'freeDrawings', 'equations', 'comments', 'images', 'shapes', 'gradients', 'transitions', 'advanceClick', 'slideLinks',
     'tabs', 'vertical',
     'textEffects', 'textGradient', 'underlines', 'fonts',
@@ -2437,7 +2460,7 @@ const PptxImport = (function () {
     'dashes', 'shadows', 'effects', 'relief', 'patterns', 'shapePictures', 'hiddenObjects',
     'imageShapes', 'imageAdjust', 'imageFrames', 'objectLinks', 'altTexts',
     'cellFills',
-    'slidePatterns', 'sections', 'theme',
+    'slidePatterns', 'sections',
     'masterObjects', 'slidesCut', 'unreadable'];
   // La page de l'éditeur pour des diapositives de `cx` sur `cy` EMU : le format libre (côté court d'abord, au dixième de millimètre, borné) et le sens ; `k` rapporte le fichier à cette page (1, sauf si la page
   // du fichier dépasse la plus grande que l'éditeur accepte).
@@ -2455,7 +2478,7 @@ const PptxImport = (function () {
     return { orientation, format, k: Math.abs(k - 1) < 0.002 ? 1 : k, widthPt: pt.width, heightPt: pt.height };
   }
   const PAGE_BREAK = '<div class="page-break-marker"></div>';
-  // Le texte d'une présentation d'après le contenu d'un fichier .pptx : { html, page: { orientation, format }, slideCount, report: [{ key, n }] }.
+  // Le texte d'une présentation d'après le contenu d'un fichier .pptx : { html, page: { orientation, format, theme }, slideCount, report: [{ key, n }] } ; `theme` : celui du fichier (themeOf), absent sans thème lisible.
   async function fromBuffer(buffer) {
     if (!buffer || buffer.byteLength > MAX_FILE_BYTES) throw fail('tooBig', 'Ce fichier est trop gros pour être importé.', { size: buffer ? buffer.byteLength : 0, max: MAX_FILE_BYTES });
     const pkg = await openPackage(buffer);
@@ -2521,13 +2544,14 @@ const PptxImport = (function () {
       const anchor = ctx.linkedSlides.has(i + 1) ? { anchorId: slideAnchorId(i + 1), anchorName: I18n.t('pptx.import.slideAnchor', { n: i + 1 }) } : {};
       return SlideProps.html(Object.assign({}, slide.props, anchor)) + slide.frames + slide.tail;
     });
-    // Le thème : ses couleurs et ses polices sont figées sur celles du fichier (l'éditeur n'a pas de thème qu'on change). Le rapport le dit avec les autres lignes, jamais seul : presque tout fichier a un thème, et
-    // un fichier qui n'a que cela à dire s'ouvre sans fenêtre.
-    report.theme = Array.from(ctx.masters.values()).filter(master => master.theme.used).length;
+    // Le thème du fichier (couleurs, polices, fond) devient celui de la présentation : il se change d'un coup (« Thème… » du menu Page). Les couleurs d'un texte qui sont celles du thème le suivent ; une police posée
+    // sur une série de caractères reste celle du fichier. Un fichier sans thème lisible n'en a pas (la présentation d'avant).
     const said = REPORT_KEYS.filter(key => report[key] > 0);
+    const imported = { orientation: page.orientation, format: page.format };
+    if (ctx.theme) imported.theme = ctx.theme;
     return {
-      html: texts.join(PAGE_BREAK), page: { orientation: page.orientation, format: page.format }, slideCount: slides.length,
-      report: (said.length === 1 && said[0] === 'theme' ? [] : said).map(key => ({ key, n: report[key] })),
+      html: texts.join(PAGE_BREAK), page: imported, slideCount: slides.length,
+      report: said.map(key => ({ key, n: report[key] })),
     };
   }
   async function fromFile(file) {

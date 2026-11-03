@@ -2667,7 +2667,7 @@
       perModelSense = isMacro && PageLayout.isOrientationAuto();
     } finally { PageLayout.setMarginsMm(onScreen); }
     return {
-      typeModele: tpl.typeModele || 'document', isMacro, html: isMacro ? null : SlidesEntry.outputHtml(tpl.typeModele, LinkedTable.resolveHtml(EditorCore.getEditor(), tpl.contenu || ''), { keepProps: !!cfg.keepProps, anchors: writesSlideAnchors(cfg), theme: tpl.marginsMm && tpl.marginsMm.theme }), macroSlots: isMacro ? (tpl.macroSlots || { slots: [] }) : null, perModelSense, anchors: writesSlideAnchors(cfg),
+      typeModele: tpl.typeModele || 'document', isMacro, html: isMacro ? null : SlidesEntry.outputHtml(tpl.typeModele, LinkedTable.resolveHtml(EditorCore.getEditor(), tpl.contenu || ''), { keepProps: !!cfg.keepProps, anchors: writesSlideAnchors(cfg), theme: tpl.marginsMm && tpl.marginsMm.theme, stored: tpl.marginsMm || null }), macroSlots: isMacro ? (tpl.macroSlots || { slots: [] }) : null, perModelSense, anchors: writesSlideAnchors(cfg),
       headerFooterData: tpl.headerFooter, filenameTemplate: String(tpl.nomFichierPDF || '').trim(), margins, pageOptions,
     };
   }

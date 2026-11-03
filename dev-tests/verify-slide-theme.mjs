@@ -41,14 +41,24 @@ const SEED = seedModels({ record: RECORD }) + `
 
 const TEXTS = {
   fr: {
-    row: 'Thème…', title: 'Thème de la présentation', apply: 'Appliquer', cancel: 'Annuler', original: 'Aspect d’origine', ocean: 'Océan', forest: 'Forêt', custom: 'Personnalisé',
+    row: 'Thème…', title: 'Thème de la présentation', apply: 'Appliquer', cancel: 'Annuler', original: 'Aspect d’origine', ocean: 'Océan', forest: 'Forêt', custom: 'Personnalisé', decor: 'Décor…',
     applied: 'Thème « Océan » appliqué.', themeColors: 'Couleurs du thème', text: 'Texte', accent1: 'Accent 1', accent2: 'Accent 2', warn: 'Se lit mal sur le fond : Texte.', warnBoth: 'Se lit mal sur le fond : Texte, Titres.', fontTitle: 'Police des titres',
+    saveTool: 'Enregistrer comme thème…', forgetTool: 'Retirer de la liste', promptTitle: 'Enregistrer comme thème', defaultName: 'Mon thème', mine: 'Maison', rose: 'Rose',
+    savedMsg: 'Thème « Maison » enregistré dans le document.', replacedMsg: 'Thème « Rose » remplacé dans le document.', removedMsg: 'Thème « Maison » retiré de la liste du document.', needsTheme: /^Choisissez ou composez un thème d’abord/, needsMine: /^Choisissez un de vos thèmes/,
+    undoneMsg: 'Thèmes du document : aucun.', redoneMsg: 'Thèmes du document : « Maison ».', fullMsg: /^La liste du document garde 12 thèmes au plus/,
   },
   en: {
-    row: 'Theme…', title: 'Presentation theme', apply: 'Apply', cancel: 'Cancel', original: 'Original look', ocean: 'Ocean', forest: 'Forest', custom: 'Custom',
+    row: 'Theme…', title: 'Presentation theme', apply: 'Apply', cancel: 'Cancel', original: 'Original look', ocean: 'Ocean', forest: 'Forest', custom: 'Custom', decor: 'Decoration…',
     applied: 'Theme “Ocean” applied.', themeColors: 'Theme colors', text: 'Text', accent1: 'Accent 1', accent2: 'Accent 2', warn: 'Hard to read on the background: Text.', warnBoth: 'Hard to read on the background: Text, Titles.', fontTitle: 'Title font',
+    saveTool: 'Save as theme…', forgetTool: 'Remove from list', promptTitle: 'Save as theme', defaultName: 'My theme', mine: 'House', rose: 'Rose',
+    savedMsg: 'Theme “House” saved in the document.', replacedMsg: 'Theme “Rose” replaced in the document.', removedMsg: 'Theme “House” removed from the document’s list.', needsTheme: /^Pick or build a theme first/, needsMine: /^Choose one of your own themes/,
+    undoneMsg: 'Document themes: none.', redoneMsg: 'Document themes: “House”.', fullMsg: /^The document’s list keeps 12 themes at most/,
   },
 };
+// « Annuler » de la fenêtre du thème (les deux gestes du document sont des boutons du même pied, à sa gauche).
+const CANCEL = '#pp-slide-theme .pp-modal-actions button:not(.var-modal-primary):not(.var-modal-spacer):not(.pp-slide-theme-tool)';
+const SAVE = '#pp-slide-theme .pp-slide-theme-save';
+const FORGET = '#pp-slide-theme .pp-slide-theme-forget';
 const rgb = hex => 'rgb(' + [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).join(', ') + ')';
 const within = (a, b, tolerance = 0.6) => typeof a === 'number' && Math.abs(a - b) <= tolerance;
 const inPanel = r => !!r && r.width > 0 && r.left >= -0.5 && r.top >= -0.5 && r.right <= WIDTH + 0.5 && r.bottom <= HEIGHT + 0.5;
@@ -119,8 +129,9 @@ const windowState = page => page.evaluate(() => {
   const rows = Array.from(overlay.querySelectorAll('.pp-slide-theme-row'));
   const chips = Array.from(overlay.querySelectorAll('.pp-slide-theme-chip'));
   const selects = Array.from(overlay.querySelectorAll('.pp-slide-theme-select'));
-  const buttons = Array.from(overlay.querySelectorAll('.pp-modal-actions button'));
-  const controls = rows.concat(chips, selects, buttons);
+  const buttons = Array.from(overlay.querySelectorAll('.pp-modal-actions button:not(.pp-slide-theme-tool)'));
+  const tools = Array.from(overlay.querySelectorAll('.pp-modal-actions .pp-slide-theme-tool'));
+  const controls = rows.concat(chips, selects, buttons, tools);
   const covered = controls.filter((el) => { const q = el.getBoundingClientRect(); const hit = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return !(hit === el || el.contains(hit)); }).map(el => el.dataset.value || el.dataset.slot || el.textContent.trim());
   const active = document.activeElement;
   let focus = '';
@@ -128,6 +139,7 @@ const windowState = page => page.evaluate(() => {
     if (active.classList.contains('pp-slide-theme-row')) focus = 'row:' + active.dataset.value;
     else if (active.classList.contains('pp-slide-theme-chip')) focus = 'chip:' + active.dataset.slot;
     else if (active.classList.contains('pp-slide-theme-select')) focus = 'select:' + active.dataset.role;
+    else if (active.classList.contains('pp-slide-theme-tool')) focus = 'tool:' + active.textContent.trim();
     else if (overlay.contains(active)) focus = 'button:' + active.textContent.trim();
     else focus = (active.tagName + '.' + (active.className || '')).slice(0, 60);
   }
@@ -135,7 +147,9 @@ const windowState = page => page.evaluate(() => {
   return {
     title: overlay.querySelector('h3').textContent, labelledBy: box.getAttribute('aria-labelledby'), titleId: overlay.querySelector('h3').id, describedBy: box.getAttribute('aria-describedby'),
     describedText: (document.getElementById(box.getAttribute('aria-describedby')) || {}).textContent || '', box: rect(box), scrolls: body.scrollHeight > body.clientHeight + 1 || box.scrollHeight > box.clientHeight + 1,
-    rows: rows.map(r => ({ value: r.dataset.value, text: r.textContent.trim(), checked: r.getAttribute('aria-checked'), tab: r.tabIndex, height: r.getBoundingClientRect().height })),
+    rows: rows.map(r => ({ value: r.dataset.value, text: r.textContent.trim(), checked: r.getAttribute('aria-checked'), tab: r.tabIndex, height: r.getBoundingClientRect().height, mine: r.classList.contains('is-mine'), firstReady: r.classList.contains('is-first-ready'), title: r.title, visible: (() => { const q = r.getBoundingClientRect(); const l = overlay.querySelector('.pp-slide-theme-list').getBoundingClientRect(); return q.top >= l.top - 0.5 && q.bottom <= l.bottom + 0.5; })() })),
+    tools: tools.map(b => ({ text: b.textContent.trim(), disabled: b.getAttribute('aria-disabled'), title: b.title, rect: rect(b) })),
+    list: (() => { const l = overlay.querySelector('.pp-slide-theme-list'); const r = l.getBoundingClientRect(); return { scrolls: l.scrollHeight > l.clientHeight + 1, top: r.top, bottom: r.bottom, scrollTop: l.scrollTop }; })(),
     chips: chips.map(c => ({ slot: c.dataset.slot, label: c.getAttribute('aria-label'), background: getComputedStyle(c).backgroundColor, pressed: c.getAttribute('aria-pressed'), width: c.getBoundingClientRect().width, height: c.getBoundingClientRect().height })),
     selects: selects.map(s => ({ role: s.dataset.role, value: s.value, label: s.getAttribute('aria-label') })),
     paper: style(preview), previewTitle: style(overlay.querySelector('.pp-slide-theme-sample-title')), previewText: style(overlay.querySelector('.pp-slide-theme-sample-text')),
@@ -222,6 +236,28 @@ const readPdf = (page, b64, points) => page.evaluate(async ([data64, pts]) => {
   return { numPages: doc.numPages, colors };
 }, [b64, points || []]);
 const savedMargins = (page, id) => page.evaluate((n) => { const m = window.__gristStub.state.rows.Publipostage_Modeles; return m.Margins[m.id.indexOf(n)]; }, id);
+const noThemes = list => list === null || (Array.isArray(list) && list.length === 0);
+// Les thèmes du document tels que Grist les a reçus : la clé `themes` de la ligne réservée aux réglages (TypeModele « reglages »), [] sans clé, null sans ligne.
+const documentThemes = page => page.evaluate(() => {
+  const m = window.__gristStub.state.rows.Publipostage_Modeles;
+  const at = m.TypeModele.indexOf('reglages');
+  if (at < 0) return null;
+  try { return JSON.parse(m.Contenu[at]).themes || []; } catch (e) { return 'illisible'; }
+});
+// La fenêtre de saisie du nom (js/dialogs.js), posée par-dessus celle du thème.
+const promptState = page => page.evaluate(() => {
+  const modal = document.getElementById('pp-dialog-modal');
+  if (!modal || getComputedStyle(modal).display === 'none') return null;
+  const box = modal.querySelector('.pp-dialog-box') || modal.querySelector('.pp-modal-box') || modal.firstElementChild;
+  const r = box.getBoundingClientRect();
+  const input = document.getElementById('pp-dialog-input');
+  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return {
+    title: (document.getElementById('pp-dialog-title') || {}).textContent, value: input.value, focused: document.activeElement === input,
+    selected: input.selectionStart === 0 && input.selectionEnd === input.value.length, onTop: !!hit && box.contains(hit),
+    inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight, ok: (modal.querySelector('.var-modal-primary') || {}).textContent,
+  };
+});
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 async function run(lang, colorScheme, full) {
@@ -301,7 +337,7 @@ async function run(lang, colorScheme, full) {
     (await themeOf(page)) === null && JSON.stringify(await paintOf(page, 'p')) === JSON.stringify(before) && !(await pageClass(page)) && !(await unsaved(page)), [await themeOf(page), before, await paintOf(page, 'p')]);
 
   // 4) « Annuler » et Échap ne changent rien et rendent le clavier à l'éditeur.
-  await realClick(page, '#pp-slide-theme .pp-modal-actions button:not(.var-modal-primary):not(.var-modal-spacer)');
+  await realClick(page, CANCEL);
   await sleep(300);
   check(tag + '« ' + T.cancel + ' » ferme la fenêtre sans rien poser, le clavier est dans l\'éditeur', (await windowState(page)) === null && (await themeOf(page)) === null && !(await unsaved(page)) && (await inEditor(page)), [await themeOf(page), await inEditor(page)]);
   await clickThemeRow(page);
@@ -325,14 +361,13 @@ async function run(lang, colorScheme, full) {
   await sleep(150);
   win = await windowState(page);
   check(tag + 'bas puis haut revient à « ' + T.ocean + ' »', win.focus === 'row:ocean' && win.rows.filter(r => r.checked === 'true').length === 1, win.focus);
-  await page.keyboard.press('Tab');
-  await sleep(100);
-  const afterTab = (await windowState(page)).focus;
-  await page.keyboard.press('Tab');
-  await page.keyboard.press('Tab');
-  await sleep(100);
-  const afterThree = (await windowState(page)).focus;
-  check(tag + 'Tab sort de la liste vers la police des titres, puis la police du texte, puis la première pastille', afterTab === 'select:title' && afterThree === 'chip:bg', [afterTab, afterThree]);
+  const tabbed = [];
+  for (let n = 0; n < 4; n++) {
+    await page.keyboard.press('Tab');
+    await sleep(100);
+    tabbed.push((await windowState(page)).focus);
+  }
+  check(tag + 'Tab sort de la liste vers la police des titres, puis la police du texte, puis « ' + T.decor + ' » (sous les polices), puis la première pastille', tabbed.join() === ['select:title', 'select:body', 'button:' + T.decor, 'chip:bg'].join(), tabbed);
   await chooseRow('ocean');
   await page.keyboard.press('Enter');
   const unsavedRightAfter = await unsaved(page);
@@ -621,6 +656,154 @@ async function run(lang, colorScheme, full) {
     check(tag + 'le PowerPoint : lt1 du thème est le fond (1B2430), le masque peint bg1, seule la diapositive 2 écrit son fond jaune',
       /<a:lt1><a:srgbClr val="1B2430"\/>/i.test(ppt.theme) && /<p:bg><p:bgRef[^>]*><a:schemeClr val="bg1"\/>/.test(ppt.master) && ppt.backgrounds.length === 4 && ppt.backgrounds.map(b => /FDE047/i.test(b)).join() === 'false,true,false,false', { lt1: (/<a:lt1>[\s\S]*?<\/a:lt1>/.exec(ppt.theme) || [''])[0], backgrounds: ppt.backgrounds });
     await away(page);
+  }
+
+  // 11c) Les thèmes du DOCUMENT : « Enregistrer comme thème… » range le thème du brouillon sous un nom, toutes les présentations du document le retrouvent, « Retirer de la liste » l'ôte ; chaque geste est un pas de Ctrl+Z.
+  if (await open(8, 2)) {
+    console.log('\n' + tag + '11c) Les thèmes du document');
+    const closeWindow = async () => { await realClick(page, CANCEL); await sleep(300); };
+    const reopen = async () => { await clickThemeRow(page); await away(page); return windowState(page); };
+    const tool = async (which) => { await realClick(page, which === 1 ? SAVE : FORGET); await sleep(350); };
+    const undoStep = async () => { await selectWord(page, 'Titre'); await page.keyboard.press('Control+z'); await sleep(700); };
+    const redoStep = async () => { await selectWord(page, 'Titre'); await page.keyboard.press('Control+y'); await sleep(700); };
+    win = await reopen();
+    check(tag + `au pied de la fenêtre, à gauche d'« ${T.cancel} », deux boutons : « ${T.saveTool} » (actif : le thème choisi est celui de la présentation) et « ${T.forgetTool} » (grisé : aucun thème du document n'est choisi), dans le panneau, de 24 px au moins, sans rien devant, sur la ligne des boutons de la fenêtre`,
+      !!win && win.rows.length === 8 && win.rows.every(r => !r.mine) && win.tools.length === 2 && win.tools[0].text === T.saveTool && win.tools[1].text === T.forgetTool && win.tools[0].disabled === 'false' && win.tools[1].disabled === 'true'
+      && win.tools.every(b => inPanel(b.rect) && b.rect.height >= 24 && Math.abs((b.rect.top + b.rect.bottom) / 2 - (win.buttons[0].rect.top + win.buttons[0].rect.bottom) / 2) < 3 && b.rect.right <= win.buttons[0].rect.left) && win.tools[0].rect.right <= win.tools[1].rect.left && !win.covered.length && inPanel(win.box) && !win.scrolls, win && { rows: win.rows.length, tools: win.tools.map(b => [b.text, b.disabled, Math.round(b.rect.height)]), covered: win.covered, scrolls: win.scrolls });
+    check(tag + 'le bouton grisé dit sa raison dans son infobulle, les deux textes se lisent (4,5:1)', !!win && T.needsMine.test(win.tools[1].title) && (await contrastOf(page, SAVE)) >= 4.5 && (await contrastOf(page, FORGET)) >= 4.5,
+      [win && win.tools[1].title, await contrastOf(page, SAVE), await contrastOf(page, FORGET)]);
+    await tool(2);
+    win = await windowState(page);
+    check(tag + 'un clic sur le bouton grisé ne retire rien, la ligne sous les couleurs dit pourquoi', !!win && win.rows.length === 8 && T.needsMine.test(win.caption) && (await promptState(page)) === null && noThemes(await documentThemes(page)), win && { rows: win.rows.length, caption: win.caption });
+    // Un nom se demande : Échap ne range rien, la fenêtre du thème reste ouverte.
+    await tool(1);
+    let ask = await promptState(page);
+    check(tag + `« ${T.saveTool} » demande un nom : la saisie « ${T.promptTitle} » est devant la fenêtre du thème, dans le panneau, propose « ${T.defaultName} » (sélectionné, le clavier dedans)`, !!ask && ask.title === T.promptTitle && ask.value === T.defaultName && ask.focused && ask.selected && ask.onTop && ask.inside, ask);
+    await snap(page, `${lang}-${colorScheme}-9-nom`);
+    await page.keyboard.press('Escape');
+    await sleep(350);
+    win = await windowState(page);
+    check(tag + 'Échap ferme la saisie seule : la fenêtre du thème reste ouverte, rien n\'est rangé, rien n\'est écrit dans Grist', (await promptState(page)) === null && !!win && win.rows.length === 8 && noThemes(await documentThemes(page)), [win && win.rows.length, await documentThemes(page)]);
+    // Ranger « Maison » : le nom tapé remplace le nom proposé ; la saisie se valide au vrai clic.
+    await tool(1);
+    await page.keyboard.type(T.mine);
+    await realClick(page, '#pp-dialog-modal .var-modal-primary');
+    await sleep(500);
+    win = await windowState(page);
+    const mineRow = win && win.rows.find(r => r.value === 'my:' + T.mine);
+    check(tag + `« ${T.mine} » est rangé : une neuvième ligne, juste après « ${T.original} » et avant les thèmes prêts (le premier est séparé d'eux par un filet), entière dans la liste, cochée (seule), le clavier dessus, la fenêtre du thème ne défile pas`,
+      !!win && win.rows.length === 9 && win.rows[1].value === 'my:' + T.mine && !!mineRow && mineRow.mine && mineRow.visible && win.rows[2].firstReady && mineRow.checked === 'true' && win.rows.filter(r => r.checked === 'true').length === 1 && win.focus === 'row:my:' + T.mine && !win.scrolls && inPanel(win.box) && win.rows.every(r => r.height >= 23.5),
+      win && { rows: win.rows.map(r => [r.value, r.checked, r.mine, r.firstReady, r.visible]), focus: win.focus, scrolls: win.scrolls });
+    check(tag + 'la ligne sous les couleurs le dit, « ' + T.forgetTool + ' » devient actif, la ligne du document a son infobulle', !!win && win.caption === T.savedMsg && win.tools[1].disabled === 'false' && !!mineRow && mineRow.title.length > 10, win && { caption: win.caption, tools: win.tools.map(b => b.disabled), title: mineRow && mineRow.title });
+    await snap(page, `${lang}-${colorScheme}-10-liste`);
+    const stored = await documentThemes(page);
+    check(tag + 'Grist a reçu la liste : un thème, « ' + T.mine + ' », aux couleurs et aux polices de la présentation', Array.isArray(stored) && stored.length === 1 && stored[0].name === T.mine && JSON.stringify(stored[0].colors) === JSON.stringify(FOREST.colors) && JSON.stringify(stored[0].fonts) === JSON.stringify(FOREST.fonts), stored);
+    await closeWindow();
+    check(tag + 'rien n\'est posé sur la présentation (« Annuler » ferme), le modèle n\'est pas modifié : la liste est celle du document', (await themeOf(page)).id === 'forest' && !(await unsaved(page)), [await themeOf(page), await unsaved(page)]);
+    // Ctrl+Z défait le rangement (depuis la présentation, au vrai clavier), Ctrl+Y le remet.
+    await undoStep();
+    check(tag + 'un Ctrl+Z défait le rangement : la liste est vide, Grist l\'a reçu, le coin d\'état le dit', (await documentThemes(page)).length === 0 && (await statusLog()).includes(T.undoneMsg), [await documentThemes(page), (await statusLog()).slice(-3)]);
+    win = await reopen();
+    check(tag + 'rouverte, la fenêtre n\'a plus de thème du document', !!win && win.rows.length === 8 && win.rows.every(r => !r.mine), win && win.rows.length);
+    await closeWindow();
+    await redoStep();
+    check(tag + 'un Ctrl+Y remet « ' + T.mine + ' » (Grist le reçoit, le coin d\'état le dit)', (await documentThemes(page)).length === 1 && (await statusLog()).includes(T.redoneMsg), [await documentThemes(page), (await statusLog()).slice(-3)]);
+    // Retirer : le thème choisi quitte la liste, le brouillon garde ses réglages ; un Ctrl+Z le remet.
+    win = await reopen();
+    await chooseRow('my:' + T.mine);
+    await tool(2);
+    win = await windowState(page);
+    check(tag + `« ${T.forgetTool} » retire « ${T.mine} » de la liste : huit lignes, la ligne sous les couleurs le dit, les réglages restent dans le brouillon (le thème prêt qu'ils sont est coché), le clavier sur la ligne cochée`,
+      !!win && win.rows.length === 8 && win.caption === T.removedMsg && win.rows.filter(r => r.checked === 'true').length === 1 && win.rows.find(r => r.value === 'forest').checked === 'true' && /^row:/.test(win.focus) && win.tools[1].disabled === 'true' && (await documentThemes(page)).length === 0,
+      win && { rows: win.rows.length, caption: win.caption, focus: win.focus, tools: win.tools.map(b => b.disabled) });
+    await closeWindow();
+    await undoStep();
+    check(tag + 'un Ctrl+Z remet le thème retiré dans la liste (Grist le reçoit)', (await documentThemes(page)).length === 1 && (await documentThemes(page))[0].name === T.mine, await documentThemes(page));
+    // Un thème composé dans une présentation est rangé, une AUTRE présentation du document le retrouve et le pose.
+    if (await open(7, 2)) {
+      win = await reopen();
+      check(tag + 'dans l\'autre présentation, la liste du document est là (« ' + T.mine + ' » juste après « ' + T.original + ' », visible sans défiler la liste) et son thème personnalisé n\'est dans aucune ligne cochée', !!win && win.rows.length === 9 && win.rows[1].value === 'my:' + T.mine && win.rows[1].visible && win.rows.every(r => r.checked === 'false'), win && win.rows.map(r => [r.value, r.checked, r.visible]));
+      await tool(1);
+      ask = await promptState(page);
+      check(tag + `« ${T.saveTool} » propose « ${T.defaultName} » (le nom n'est pas pris)`, !!ask && ask.value === T.defaultName, ask);
+      await page.keyboard.type(T.rose);
+      await page.keyboard.press('Enter');
+      await sleep(500);
+      win = await windowState(page);
+      check(tag + `« ${T.rose} » est rangé : dixième ligne, la deuxième du document (après « ${T.mine} »), cochée, avec le premier accent et la police des titres composés ; Grist a deux thèmes`,
+        !!win && win.rows.length === 10 && win.rows[2].value === 'my:' + T.rose && win.rows[2].checked === 'true' && win.rows[2].visible && win.caption === T.savedMsg.replace(T.mine, T.rose) && (await documentThemes(page)).length === 2 && (await documentThemes(page))[1].colors.accent1 === '#aa3366' && (await documentThemes(page))[1].fonts.title === 'Courier New',
+        win && { rows: win.rows.map(r => [r.value, r.checked]), caption: win.caption, stored: await documentThemes(page) });
+      await closeWindow();
+      if (await open(8, 2)) {
+        win = await reopen();
+        check(tag + 'dans la première présentation, « ' + T.rose + ' » est dans la liste', !!win && win.rows.length === 10 && !!win.rows.find(r => r.value === 'my:' + T.rose), win && win.rows.map(r => r.value));
+        await chooseRow('my:' + T.rose);
+        await realClick(page, '#pp-slide-theme .pp-modal-actions .var-modal-primary');
+        await sleep(900);
+        const posed = await themeOf(page);
+        const rowRose = await (async () => { await openPageMenu(page); const s = await themeRowState(page); await away(page); return s; })();
+        const h1Rose = await paintOf(page, 'h1');
+        check(tag + 'un thème du document se pose comme un thème prêt : couleurs, polices et nom de « ' + T.rose + ' », le menu Page dit « ' + T.rose + ' », le titre est en Courier New',
+          !!posed && posed.id === null && posed.name === T.rose && posed.colors.accent1 === '#aa3366' && posed.fonts.title === 'Courier New' && !!rowRose && rowRose.value === T.rose && !!h1Rose && h1Rose.family === 'Courier New', [posed, rowRose && rowRose.value, h1Rose]);
+        // Remplacer : on part de « Rose », on change une police, on range sous le même nom (proposé) : la ligne est remplacée à sa place.
+        win = await reopen();
+        await page.selectOption('#pp-slide-theme .pp-slide-theme-select[data-role="title"]', 'Georgia');
+        await sleep(200);
+        await tool(1);
+        ask = await promptState(page);
+        check(tag + 'à partir d\'un thème du document, « ' + T.saveTool + ' » propose son nom (« ' + T.rose + ' ») : le ranger le remplace', !!ask && ask.value === T.rose, ask);
+        await page.keyboard.press('Enter');
+        await sleep(500);
+        win = await windowState(page);
+        const roseNow = (await documentThemes(page)).find(item => item.name === T.rose);
+        check(tag + 'la ligne « ' + T.rose + ' » est remplacée à sa place (toujours dix lignes, la ligne sous les couleurs le dit, Grist a la police des titres Georgia)', !!win && win.rows.length === 10 && win.rows[2].value === 'my:' + T.rose && win.caption === T.replacedMsg && !!roseNow && roseNow.fonts.title === 'Georgia', win && { rows: win.rows.length, caption: win.caption, stored: roseNow });
+        // « Aspect d'origine » n'est pas un thème à ranger.
+        await chooseRow('');
+        win = await windowState(page);
+        check(tag + `avec « ${T.original} » choisi, « ${T.saveTool} » est grisé avec sa raison`, !!win && win.tools[0].disabled === 'true' && T.needsTheme.test(win.tools[0].title), win && win.tools[0]);
+        await tool(1);
+        win = await windowState(page);
+        check(tag + 'un clic sur le bouton grisé n\'ouvre aucune saisie et dit pourquoi', (await promptState(page)) === null && !!win && T.needsTheme.test(win.caption), win && win.caption);
+        await closeWindow();
+        check(tag + '« ' + T.cancel + ' » ne change pas le thème posé sur la présentation (« ' + T.rose + ' »)', (await themeOf(page)).name === T.rose, await themeOf(page));
+      }
+    }
+    // Douze thèmes au plus, et une liste longue tient dans le panneau : elle défile dans sa colonne, la fenêtre ne bouge pas.
+    await page.evaluate(() => { for (let n = 3; n <= 12; n += 1) SlideThemes.save(SlideThemes.byId('ocean').theme, 'Thème ' + n); });
+    await sleep(500);
+    win = await reopen();
+    check(tag + 'douze thèmes du document : vingt lignes, la liste défile dans sa colonne, la fenêtre et ses boutons restent dans le panneau sans défiler', !!win && win.rows.length === 20 && win.list.scrolls && !win.scrolls && inPanel(win.box) && win.buttons.every(b => inPanel(b.rect)) && win.tools.every(b => inPanel(b.rect)),
+      win && { rows: win.rows.length, listScrolls: win.list.scrolls, scrolls: win.scrolls, box: win.box });
+    await snap(page, `${lang}-${colorScheme}-11-liste-longue`);
+    await chooseRow('my:' + T.mine);
+    await tool(1);
+    ask = await promptState(page);
+    await page.keyboard.type('Treize');
+    await page.keyboard.press('Enter');
+    await sleep(500);
+    win = await windowState(page);
+    check(tag + 'une treizième entrée est refusée : aucune ligne de plus, la ligne sous les couleurs le dit, la saisie est fermée', !!ask && (await promptState(page)) === null && !!win && win.rows.length === 20 && T.fullMsg.test(win.caption) && (await documentThemes(page)).length === 12, win && { rows: win.rows.length, caption: win.caption, stored: (await documentThemes(page)).length });
+    // La dernière ligne s'atteint à la souris (la molette fait défiler la liste) et se coche.
+    const listBox = await boxOf(page, '#pp-slide-theme .pp-slide-theme-list');
+    await page.mouse.move(listBox.x, listBox.y, { steps: 3 });
+    await page.mouse.wheel(0, 1200);
+    await sleep(400);
+    const lastValue = 'editorial';
+    const EDITORIAL = await page.evaluate(() => SlideThemes.byId('editorial').theme);
+    const lastBox = await boxOf(page, `#pp-slide-theme .pp-slide-theme-row[data-value="${lastValue}"]`);
+    const shownInList = !!lastBox && lastBox.top >= listBox.top - 0.5 && lastBox.bottom <= listBox.bottom + 0.5;
+    check(tag + 'la molette fait défiler la liste jusqu\'à la dernière ligne (un thème prêt, après les douze du document), entière dans sa colonne', shownInList, { lastBox, listBox });
+    if (shownInList) {
+      await realClick(page, `#pp-slide-theme .pp-slide-theme-row[data-value="${lastValue}"]`);
+      win = await windowState(page);
+      check(tag + 'un clic sur la dernière ligne la coche (seule) et l\'aperçu prend ses couleurs', !!win && win.rows.find(r => r.value === lastValue).checked === 'true' && win.rows.filter(r => r.checked === 'true').length === 1 && win.previewTitle.color === rgb(EDITORIAL.colors.title) && win.previewTitle.family === EDITORIAL.fonts.title, win && { checked: win.rows.filter(r => r.checked === 'true').map(r => r.value), title: win.previewTitle });
+    }
+    await closeWindow();
+    // Chaque geste est un pas : le Ctrl+Z qui suit ne défait que le dernier.
+    await selectWord(page, 'Titre');
+    await page.keyboard.press('Control+z');
+    await sleep(500);
+    check(tag + 'le Ctrl+Z qui suit défait le dernier geste seulement (« Thème 12 »), pas toute la liste', (await documentThemes(page)).length === 11 && !(await documentThemes(page)).some(item => item.name === 'Thème 12'), (await documentThemes(page)).map(item => item.name));
   }
 
   // 12) L'extension éteinte grise la ligne avec sa raison et rien ne s'ouvre.

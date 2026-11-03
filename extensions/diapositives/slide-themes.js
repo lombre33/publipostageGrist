@@ -4,6 +4,12 @@
 //  - leurs polices sont les six du menu de police (les seules que le PDF, le Word et le PowerPoint savent écrire), deux par thème : une pour les titres, une pour le texte ;
 //  - tous ont le fond blanc : le fond propre à un thème (une page foncée) viendra avec le décor commun des diapositives.
 // « Hélianthe » est celui de la proposition commerciale de la galerie : le bleu nuit des titres, le turquoise du bandeau et l'orange du filet de sa première diapositive.
+// Les thèmes du DOCUMENT (carte « où garder le thème », 02/11) : « Enregistrer comme thème » (la fenêtre js `slide-theme-ui.js`) range le thème du brouillon, sous le nom qu'on lui donne, dans la liste du document, que toutes
+// ses présentations retrouvent à la suite des thèmes prêts. Comme les couleurs du document (js/color-store.js) et les mises en forme du pinceau (js/format-slots.js), la liste vit dans la ligne réservée aux réglages du document
+// de la table des modèles (Templates.getDocumentSettings, clé `themes`), sans table de plus et sans clé `pp_*` : le changement vaut tout de suite, l'écriture dans Grist suit (Templates.updateDocumentSettings). Le geste se range
+// dans Ctrl + Z avec les actions du document (SettingsHistory) : défaire ne remet que ce que le geste avait posé, jamais par-dessus le geste d'une autre personne. La liste est relue d'un JSON qu'une autre version ou une autre
+// personne a pu écrire : tout est revu à la lecture (`cleanSaved`), et ce qui ne tient pas debout n'est pas un thème. Un thème gardé a toujours un nom (40 caractères au plus, unique à la casse près) ; la liste en garde
+// SAVED_MAX au plus, dans l'ordre où on les a rangés.
 const SlideThemes = (function () {
   const make = (id, colors, fonts) => ({ id, theme: { colors: Object.assign({ bg: '#ffffff' }, colors), fonts } });
 
@@ -33,5 +39,89 @@ const SlideThemes = (function () {
     return preset ? I18n.t('slides.theme.preset.' + preset.id) : (normalized.name || I18n.t('slides.theme.custom'));
   }
 
-  return { LIST, find, byId, nameOf };
+  // --- Les thèmes du document ---
+  const SAVED_MAX = 12;
+  // Le poids de la liste, en caractères de son JSON : le logo d'un thème (son décor) y est une adresse de données, jusqu'à SlideTheme.LOGO_SRC_MAX caractères, et la liste s'écrit d'un bloc dans la ligne des réglages du document.
+  // `save` refuse ('heavy') ce qui la ferait passer au-dessus ; la lecture, elle, garde tout ce qui est écrit.
+  const SAVED_CHARS_MAX = 360000;
+  const NAME_MAX = SlideTheme.NAME_MAX;
+  const cleanName = text => (typeof text === 'string' ? text.replace(/\s+/g, ' ').trim().slice(0, NAME_MAX).trim() : '');
+  const sameName = (a, b) => cleanName(a).toLowerCase() === cleanName(b).toLowerCase();
+  // La liste telle qu'elle doit être : des thèmes revus (SlideTheme.normalize) qui ont un nom, un nom par thème, SAVED_MAX au plus.
+  function cleanSaved(raw) {
+    const list = [];
+    (Array.isArray(raw) ? raw : []).forEach((item) => {
+      const theme = SlideTheme.normalize(item);
+      const name = theme ? cleanName(theme.name) : '';
+      if (!name || list.some(kept => sameName(kept.name, name))) return;
+      list.push(Object.assign({}, theme, { name }));
+    });
+    return list.slice(0, SAVED_MAX);
+  }
+  const saved = () => cleanSaved(Templates.getDocumentSettings().themes);
+  const savedByName = name => saved().find(theme => sameName(theme.name, name)) || null;
+  const isReadOnly = () => typeof AccessRights !== 'undefined' && AccessRights.get().readOnly;
+  // Un nom que la liste n'a pas encore : `base`, puis « base 2 », « base 3 »… (le nom reste dans NAME_MAX caractères).
+  function freeName(base) {
+    const root = cleanName(base) || I18n.t('slides.theme.save.default');
+    const list = saved();
+    if (!list.some(theme => sameName(theme.name, root))) return root;
+    for (let n = 2; n < 100; n++) {
+      const suffix = ' ' + n;
+      const name = cleanName(root.slice(0, NAME_MAX - suffix.length)) + suffix;
+      if (!list.some(theme => sameName(theme.name, name))) return name;
+    }
+    return root;
+  }
+
+  // Le réglage du document pour l'historique d'Annuler / Rétablir (js/settings-history.js) : lire, poser (en attendant que Grist l'ait écrit : un refus lève un conflit, rien n'est faussement dit « fait »), dire.
+  const namesOf = list => list.map(theme => I18n.t('slides.theme.quoted', { name: theme.name })).join(', ');
+  const DOCUMENT_SETTING = {
+    read: saved,
+    async write(list) {
+      const next = cleanSaved(list);
+      const done = await Templates.updateDocumentSettings({ themes: next.length ? next : null });
+      if (!done) throw ActionHistory.conflict(I18n.t('slides.theme.saved.failed'));
+    },
+    say: list => I18n.t('slides.theme.saved.now', { names: namesOf(list) || I18n.t('slides.theme.saved.none') }),
+    locked: isReadOnly,
+  };
+  // `host.status(texte, erreur)` : le coin d'état de la page, pour un refus de Grist qui arrive après coup.
+  let host = { status: () => {} };
+  function wire(options) { host = Object.assign({}, host, options); }
+  // Pose la liste (le changement vaut tout de suite pour les lecteurs, Grist suit) ; un seul pas de Ctrl + Z.
+  function put(list) {
+    SettingsHistory.track(DOCUMENT_SETTING, () => {
+      const next = cleanSaved(list);
+      Templates.updateDocumentSettings({ themes: next.length ? next : null }).then((done) => { if (!done) host.status(I18n.t('slides.theme.saved.failed'), true); });
+    });
+  }
+
+  // Range `theme` sous `name` : 'added' (un thème de plus), 'replaced' (le thème de ce nom est remplacé, à sa place dans la liste), 'full' (SAVED_MAX thèmes, aucun de ce nom), 'heavy' (la liste passerait SAVED_CHARS_MAX :
+  // des logos trop nombreux), 'locked' (compte en lecture seule) ou 'invalid' (pas de thème, ou pas de nom).
+  function save(theme, name) {
+    const clean = cleanName(name);
+    const normalized = SlideTheme.normalize(Object.assign({}, theme, { name: clean }));
+    if (!normalized || !clean) return 'invalid';
+    if (isReadOnly()) return 'locked';
+    const list = saved();
+    const at = list.findIndex(item => sameName(item.name, clean));
+    if (at < 0 && list.length >= SAVED_MAX) return 'full';
+    const next = list.slice();
+    if (at < 0) next.push(normalized); else next[at] = normalized;
+    if (JSON.stringify(next).length > SAVED_CHARS_MAX) return 'heavy';
+    put(next);
+    return at < 0 ? 'added' : 'replaced';
+  }
+  // Retire le thème de ce nom de la liste : vrai s'il y était (et si le compte peut écrire).
+  function remove(name) {
+    if (isReadOnly()) return false;
+    const list = saved();
+    const next = list.filter(item => !sameName(item.name, name));
+    if (next.length === list.length) return false;
+    put(next);
+    return true;
+  }
+
+  return { LIST, find, byId, nameOf, SAVED_MAX, SAVED_CHARS_MAX, cleanName, saved, savedByName, freeName, save, remove, isReadOnly, wire };
 })();

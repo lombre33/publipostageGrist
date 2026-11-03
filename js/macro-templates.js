@@ -124,7 +124,7 @@ const MacroTemplates = (function () {
       if (modeleId == null) continue;
       const tpl = templates.find(t => String(t.id) === String(modeleId));
       if (!tpl) { console.error('[MacroTemplates] modèle introuvable pour un slot, id=', modeleId); continue; }
-      const content = SlidesEntry.outputHtml(tpl.typeModele, tpl.contenu || '', { anchors, theme: tpl.marginsMm && tpl.marginsMm.theme });
+      const content = SlidesEntry.outputHtml(tpl.typeModele, tpl.contenu || '', { anchors, theme: tpl.marginsMm && tpl.marginsMm.theme, stored: tpl.marginsMm || null });
       fragments.push({ html: perModel ? content : withoutTurnedBreaks(content), page: pageOfTemplate(tpl) });
     }
     const body = fragments.reduce((html, fragment, rank) => html + (rank ? slotBreakHtml(rank, perModel ? fragment.page : null) : '') + fragment.html, '');

@@ -74,13 +74,22 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   ; le thème (ligne « Thème… » du menu Page, une présentation seulement) donne à toutes les diapositives la police et la couleur
   du texte et des titres, le fond et six accents : sept thèmes prêts (Océan, Hélianthe, Forêt, Bordeaux, Soleil, Ardoise,
   Éditorial) ou neuf couleurs et deux polices (parmi les six du menu de police) composées dans une fenêtre à brouillon,
-  avec un aperçu et un avertissement quand le texte se lirait mal sur le fond ; « Aspect d'origine » est l'absence de thème.
+  avec un aperçu et un avertissement quand le texte se lirait mal sur le fond ; « Aspect d'origine » est l'absence de thème ; « Enregistrer
+  comme thème… » range un thème composé dans la liste du document (douze au plus, retrouvés par toutes ses présentations, retirables,
+  chaque geste défait d'un Ctrl+Z).
   Il est gardé dans le modèle et se montre dans l'éditeur, la bande, la Lecture, le diaporama, le PDF, le Word, le HTML et le
   PowerPoint (le thème du fichier) ; son fond est celui de la page, sous chaque diapositive qui n'a pas le sien (une page
   foncée, la vide de la fin comprise) ; une couleur ou une police choisie sur un mot, le style d'un niveau de titre et un bloc
   de code gardent les leurs. Changer de thème recolore ce qui avait une couleur de l'ancien thème, jamais une couleur composée à
   la main, et un seul Ctrl+Z rend le thème et les couleurs ; les menus de couleur ont une rangée « Couleurs du thème » et une
-  forme neuve prend l'aspect du premier accent. Pas encore : le décor commun des diapositives ; les liens gardent leur bleu d'origine
+  forme neuve prend l'aspect du premier accent. Le bouton « Décor… » de la fenêtre règle un décor commun, derrière le texte de
+  toutes les diapositives : un bandeau de couleur sur un bord (sa couleur est un réglage du thème, il le suit), un logo dans un
+  coin (une image choisie dans le sélecteur de fichier, ramenée à un poids que le modèle peut garder), le numéro de la
+  diapositive et un texte de pied, avec une case « ni numéro ni texte de pied sur la première » ; un thème prêt garde le décor
+  réglé, un thème du document garde le sien. Il se montre dans l'éditeur (sans changer la pagination), la bande, la Lecture, le
+  diaporama, le PDF et le Word, et sur le masque du fichier PowerPoint. Pas encore : le décor n'est pas peint sur la page de plus
+  d'une diapositive trop longue ni dans l'export HTML ; les liens gardent leur bleu d'origine (peu lisible sur un fond foncé) et
+  le texte d'un en-tête ou d'un pied de page garde sa couleur.
 
 **Mise en page**
 - Mise en forme complète : gras, italique, souligné, barré, exposant et indice, couleurs et surlignage, six

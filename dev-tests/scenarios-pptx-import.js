@@ -9,7 +9,7 @@
 //    présentation, un ancien .ppt, une présentation sans diapositive, un fichier trop gros) avec son code d'erreur ; rien d'autre ne fait échouer l'import ;
 //  - les objets : un texte posé, une forme (rotation, fond, trait, forme libre gardée (lot 4b), ou rectangle comptée quand elle ne tient pas dans un nom ; toute forme de la norme reprise telle quelle, réglages compris, son cadre couvrant tout ce qu'elle dessine, lot 4a), un trait ou une flèche (bouts, retournement, connecteur coudé compté), une image (rognée, retournée, étirée aux proportions de
 //    sa boîte, au pixel près), un groupe (ses enfants à leur place), un rectangle trop mince (un trait) ;
-//  - l'héritage : un espace réservé prend sa place, sa taille, sa couleur, son alignement et ses puces de la mise en page puis du masque ; les couleurs du thème et leurs retouches ; l'inversion des couleurs du masque ;
+//  - l'héritage : un espace réservé prend sa place, sa taille, sa couleur, son alignement et ses puces de la mise en page puis du masque ; les couleurs du thème et leurs retouches ; l'inversion des couleurs du masque ; le thème du fichier (nom, fond, texte, titres, six accents, polices), devenu celui de la présentation importée, avec le fond que chaque diapositive écrit ou non et l'aller-retour de l'export ;
 //  - le texte : gras, italique, souligné, barré, exposant, couleur, SURLIGNAGE, taille, lien, numéro de diapositive, alignement, puces et numérotations imbriquées, retour à la ligne, tabulation, majuscules ;
 //    l'interligne, les espaces avant et après et les retraits d'un paragraphe, repris comme « Paragraphe… » (js/paragraph-format.js) les règle (chantier 2 de « Import PowerPoint sans perte » : 2a l'interligne et les espaces,
 //    2b les retraits), de leur héritage (paragraphe, forme, mise en page, masque), à l'échelle de la page ;
@@ -21,7 +21,7 @@
 //    transitions, liens vers une diapositive, diapositives masquées, objets du masque, diapositives en trop) ; puis, demande du 22/10 « Import PowerPoint sans perte », chantier 1 « le compte rendu dit tout »,
 //    chaque chose que le fichier demande et que l'éditeur ne sait pas encore faire (tabulations, sens d'écriture, colonnes, vertical, espacement des caractères, petites capitales,
 //    ombre ou contour des lettres, dégradé, souligné, polices absentes, puces, liste de tirets illisible, pointes spéciales, ombre, lueur, reflet, relief, motif, image en fond, objet masqué, liens et textes
-//    alternatifs, images en forme ou réglées, fonds de case et de diapositive en motif, minutage, sections, thème) : un fichier par famille dont le rapport est EXACTEMENT ce que son seul objet demande, un cas « rien à
+//    alternatifs, images en forme ou réglées, fonds de case et de diapositive en motif, minutage, sections) : un fichier par famille dont le rapport est EXACTEMENT ce que son seul objet demande, un cas « rien à
 //    dire » (ce que l'éditeur fait lui-même ne donne aucune ligne), un cas « une fois » (un objet n'est compté qu'une fois, quel que soit le nombre de passes), un fichier qui demande tout, les lignes dans les deux langues ;
 //  - l'aller-retour : une présentation écrite par l'export PowerPoint de l'éditeur (js/pptx-export.js) puis importée redonne les mêmes cadres, formes, traits, fond, notes et transition.
 (function () {
@@ -52,12 +52,13 @@
   const COLORS = { dk1: '000000', lt1: 'FFFFFF', dk2: '44546A', lt2: 'E7E6E6', accent1: '4472C4', accent2: 'ED7D31', accent3: 'A5A5A5', accent4: 'FFC000', accent5: '5B9BD5', accent6: '70AD47', hlink: '0563C1', folHlink: '954F72' };
   const CLR_MAP = 'bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"';
   // `lines` : { 1: { attrs, inner }, 2: ..., 3: ... }, ce que les trois styles de trait du thème ont de plus (un bout `attrs: ' cap="rnd"'`, un tiret `inner: '<a:prstDash val="sysDash"/>'`).
-  const themeXml = (colors, effects = '<a:effectStyle><a:effectLst/></a:effectStyle>', lines = {}) => {
+  // `fonts` : { major, minor }, les polices des titres et du texte du thème (Calibri Light et Calibri par défaut).
+  const themeXml = (colors, effects = '<a:effectStyle><a:effectLst/></a:effectStyle>', lines = {}, fonts = {}) => {
     const c = Object.assign({}, COLORS, colors);
     const phLine = (w, i) => `<a:ln w="${w}"${(lines[i] || {}).attrs || ''}><a:solidFill><a:schemeClr val="phClr"/></a:solidFill>${(lines[i] || {}).inner || ''}</a:ln>`;
     const phFill = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
     return `${HEAD}<a:theme xmlns:a="${A_NS}" name="Essai"><a:themeElements><a:clrScheme name="Essai">${Object.keys(c).map(k => `<a:${k}><a:srgbClr val="${c[k]}"/></a:${k}>`).join('')}</a:clrScheme>`
-      + '<a:fontScheme name="Essai"><a:majorFont><a:latin typeface="Calibri Light"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme>'
+      + `<a:fontScheme name="Essai"><a:majorFont><a:latin typeface="${esc(fonts.major || 'Calibri Light')}"/></a:majorFont><a:minorFont><a:latin typeface="${esc(fonts.minor || 'Calibri')}"/></a:minorFont></a:fontScheme>`
       + `<a:fmtScheme name="Essai"><a:fillStyleLst>${phFill}${phFill}${phFill}</a:fillStyleLst><a:lnStyleLst>${phLine(9525, 1)}${phLine(25400, 2)}${phLine(38100, 3)}</a:lnStyleLst><a:effectStyleLst>${effects}</a:effectStyleLst><a:bgFillStyleLst>${phFill}${phFill}${phFill}</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`;
   };
   const masterXml = m => `${HEAD}<p:sldMaster ${NS}><p:cSld>${m.bg || ''}${tree(m.shapes || '')}</p:cSld><p:clrMap ${m.clrMap || CLR_MAP}/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>`
@@ -68,8 +69,8 @@
     + `<p:sp><p:nvSpPr><p:cNvPr id="3" name="Notes"/><p:cNvSpPr/><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>${lines.map(l => `<a:p><a:r><a:rPr lang="fr-FR"/><a:t>${esc(l)}</a:t></a:r></a:p>`).join('')}</p:txBody></p:sp>`)}</p:cSld></p:notes>`;
   // Le fichier : `size` (points), `slides` ({ shapes, bg, notes (lignes), transition, timing, show, showMasterSp, rels (liens de la diapositive : { id, type, target, external }) }), `master` et `layout` ({ shapes, bg,
   // clrMap, title, body, other, showMasterSp, rels }), `colors` (le thème), `effects` (ses styles d'effet : le deuxième est l'`effectRef idx="2"` d'un objet), `media` ({ nom: base64 }), `defaultText` (le style par défaut
-  // de la présentation), `presentationExt` (la fin de la présentation : ses sections), `parts` (d'autres parties du paquet : { chemin: texte }), `themeLines` (le tiret et le bout des styles de trait du thème), `presentationRels` (d'autres relations de la présentation : les auteurs des commentaires).
-  async function pptx({ size = [960, 540], slides = [{}], master = {}, layout = {}, colors, effects, media = {}, defaultText = '', presentationExt = '', parts = {}, themeLines, presentationRels = [] } = {}) {
+  // de la présentation), `presentationExt` (la fin de la présentation : ses sections), `parts` (d'autres parties du paquet : { chemin: texte }), `themeLines` (le tiret et le bout des styles de trait du thème), `fonts` (les polices des titres et du texte du thème : { major, minor }), `presentationRels` (d'autres relations de la présentation : les auteurs des commentaires).
+  async function pptx({ size = [960, 540], slides = [{}], master = {}, layout = {}, colors, effects, media = {}, defaultText = '', presentationExt = '', parts = {}, themeLines, fonts, presentationRels = [] } = {}) {
     await ExportCommon.ensureJsZipLoaded();
     const zip = new JSZip();
     const put = (name, text) => zip.file(name, text);
@@ -81,7 +82,7 @@
     put('ppt/slideMasters/_rels/slideMaster1.xml.rels', rels([{ id: 'rId1', type: 'slideLayout', target: '../slideLayouts/slideLayout1.xml' }, { id: 'rId2', type: 'theme', target: '../theme/theme1.xml' }].concat(master.rels || [])));
     put('ppt/slideLayouts/slideLayout1.xml', layoutXml(layout));
     put('ppt/slideLayouts/_rels/slideLayout1.xml.rels', rels([{ id: 'rId1', type: 'slideMaster', target: '../slideMasters/slideMaster1.xml' }].concat(layout.rels || [])));
-    put('ppt/theme/theme1.xml', themeXml(colors, effects, themeLines));
+    put('ppt/theme/theme1.xml', themeXml(colors, effects, themeLines, fonts));
     slides.forEach((s, i) => {
       const list = [{ id: 'rId1', type: 'slideLayout', target: '../slideLayouts/slideLayout1.xml' }].concat(s.rels || []);
       if (s.notes) {
@@ -308,8 +309,118 @@
         slides: [{ shapes: rect(0, scheme('tx1')) + rect(1, scheme('bg1')) }],
       });
       const d = slidesOf(dark.html)[0];
-      expect('masque sombre : le fond de la diapositive est celui de « fond 1 », qui est le noir (dk1) : #000000', d.props && d.props.bg === '#000000', d.props);
+      expect('masque sombre : le fond de la diapositive est celui de « fond 1 », le noir (dk1), qui est aussi le fond du thème de la présentation : elle n\'écrit pas le sien, elle suit le thème',
+        (!d.props || !d.props.bg) && !!dark.page.theme && dark.page.theme.colors.bg === '#000000' && dark.page.theme.colors.text === '#ffffff', { props: d.props, theme: dark.page.theme });
       expect('masque sombre : « texte 1 » est le blanc du thème (lt1), « fond 1 » le noir', d.frames[0].fill === '#ffffff' && d.frames[1].fill === '#000000', d.frames.map(f => f.fill));
+      return result(bad);
+    });
+
+  // Le thème du fichier devient celui de la présentation (carte « thème d'un PowerPoint importé », 02/11) : js/pptx-import.js `themeOf`, lu ici dans la page et dans le vrai éditeur.
+  const BG1 = '<p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg>';
+  const ownBg = hex => `<p:bg><p:bgPr>${solid(hex)}<a:effectLst/></p:bgPr></p:bg>`;
+  const FOREST = { dk1: '1B2430', lt1: 'FDFBF7', dk2: '1B2430', lt2: 'E7E6E6', accent1: '2F6F4F', accent2: '00A3A3', accent3: 'F2A541', accent4: '9AD0F5', accent5: 'C7D3E0', accent6: 'D64545' };
+  add('pptx_import_the_file_theme_becomes_the_theme_of_the_presentation',
+    'Le thème du fichier (son nom, le fond et le texte par la correspondance de couleurs du masque, la couleur du premier niveau du style de titre du masque, les six accents, la police des titres et celle du texte rapprochées de celles de l\'éditeur, Roboto à défaut) devient le thème de la présentation importée, et le rapport n\'en dit plus rien ; une diapositive qui montre le fond du thème n\'écrit pas le sien, une autre l\'écrit',
+    async () => {
+      const r = await run1({
+        colors: FOREST, fonts: { major: 'Georgia', minor: 'Segoe UI' }, master: { bg: BG1, title: `<a:lvl1pPr><a:defRPr sz="4400">${scheme('accent1')}</a:defRPr></a:lvl1pPr>` },
+        slides: [{ shapes: '' }, { shapes: '', bg: ownBg('FFFFFF') }, { shapes: '', bg: ownBg('FFF2CC') }],
+      });
+      const { bad, expect } = checker();
+      const want = { v: 1, name: 'Essai', colors: { bg: '#fdfbf7', text: '#1b2430', title: '#2f6f4f', accent1: '#2f6f4f', accent2: '#00a3a3', accent3: '#f2a541', accent4: '#9ad0f5', accent5: '#c7d3e0', accent6: '#d64545' }, fonts: { title: 'Georgia', body: 'Roboto' } };
+      expect('la page porte le thème du fichier : nom « Essai », fond lt1, texte dk1, titres = accent 1 du style de titre du masque, six accents, Georgia pour les titres, Roboto pour une police que l\'éditeur n\'a pas (Segoe UI)',
+        JSON.stringify(r.page.theme) === JSON.stringify(want), r.page.theme);
+      expect('la page garde son sens et son format', r.page.orientation === 'landscape' && r.page.format === PageLayout.SLIDE_FORMAT, r.page);
+      expect('le thème n\'est plus une ligne du rapport (fichier sans autre perte : rapport vide, aucune fenêtre)', r.report.length === 0 && !PptxImport.REPORT_KEYS.includes('theme'), r.report);
+      const slides = slidesOf(r.html);
+      expect('la diapositive qui montre le fond du thème (celui du masque) n\'écrit pas le sien : elle suit le thème', !slides[0].props || !slides[0].props.bg, slides[0].props);
+      expect('la diapositive au fond blanc écrit son blanc : #ffffff (elle ne prend pas le fond crème du thème)', !!slides[1].props && slides[1].props.bg === '#ffffff', slides[1].props);
+      expect('la diapositive au fond propre l\'écrit : #fff2cc', !!slides[2].props && slides[2].props.bg === '#fff2cc', slides[2].props);
+      return result(bad);
+    });
+  add('pptx_import_the_title_color_falls_back_to_the_text_and_an_unreadable_theme_gives_none',
+    'Sans style de titre dans le masque, la couleur des titres du thème est celle du texte ; un fichier dont le thème n\'a pas toutes ses couleurs lisibles n\'a pas de thème (la présentation d\'avant : aucune clé, aucun fond écrit sur ses diapositives blanches) ; une police du thème inconnue de l\'éditeur est Roboto',
+    async () => {
+      const plain = await run1({ colors: FOREST, master: { bg: BG1 }, slides: [{ shapes: '' }] });
+      const { bad, expect } = checker();
+      expect('pas de style de titre : titres = texte (#1b2430) ; polices Calibri (Calibri Light et Calibri)', !!plain.page.theme && plain.page.theme.colors.title === '#1b2430' && plain.page.theme.fonts.title === 'Calibri' && plain.page.theme.fonts.body === 'Calibri', plain.page.theme);
+      const broken = await run1({ colors: { accent3: 'pas-une-couleur' }, slides: [{ shapes: '' }, { shapes: '', bg: ownBg('FFF2CC') }] });
+      expect('une couleur du thème illisible : pas de thème, la page ne porte que son sens et son format', !('theme' in broken.page) && Object.keys(broken.page).sort().join() === 'format,orientation', broken.page);
+      const slides = slidesOf(broken.html);
+      expect('sans thème, la diapositive blanche n\'écrit rien et celle au fond propre l\'écrit (comme avant)', (!slides[0].props || !slides[0].props.bg) && slides[1].props && slides[1].props.bg === '#fff2cc', slides.map(s => s.props));
+      return result(bad);
+    });
+  add('pptx_import_the_theme_of_a_dark_file_paints_the_editor_and_follows_a_theme_change',
+    'Un fichier au thème sombre ouvert dans l\'éditeur : la page prend le fond du thème (PageLayout.getTheme, SlideTheme.paperOf, variable --pp-theme-bg), la diapositive qui montre ce fond n\'a pas de fond à elle, celle qui a son blanc le garde ; un autre thème posé ensuite (Thème… du menu Page) change le fond de la première et pas celui de la seconde, et un texte dont la couleur était celle du texte du thème prend celle du nouveau',
+    async (h) => {
+      const DARK = { dk1: '000000', lt1: 'F5F5F5', dk2: '44546A', lt2: 'E7E6E6' };
+      const r = await run1({
+        colors: DARK, master: { clrMap: CLR_MAP.replace('bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2"', 'bg1="dk1" tx1="lt1" bg2="dk2" tx2="lt2"'), bg: BG1 },
+        slides: [{ shapes: textBox(60, 60, 400, 60, para(run('Texte clair', 'sz="2400"', solid('F5F5F5')))) }, { shapes: textBox(60, 60, 400, 60, para(run('Texte clair', 'sz="2400"', solid('F5F5F5')))), bg: ownBg('FFFFFF') }],
+      });
+      const { bad, expect } = checker();
+      const html = await inEditor(h, r);
+      try {
+        const theme = PageLayout.getTheme();
+        expect('l\'éditeur garde le thème du fichier : fond noir, texte f5f5f5', !!theme && theme.colors.bg === '#000000' && theme.colors.text === '#f5f5f5', theme);
+        expect('la page est peinte du fond du thème : classe pp-themed, variable --pp-theme-bg et fond de la feuille',
+          document.documentElement.classList.contains('pp-themed') && document.documentElement.style.getPropertyValue('--pp-theme-bg') === '#000000' && SlideTheme.paperOf(PageLayout.getTheme()) === '#000000', { cls: document.documentElement.className, bg: document.documentElement.style.getPropertyValue('--pp-theme-bg'), paper: SlideTheme.paperOf(PageLayout.getTheme()) });
+        const slides = slidesOf(html);
+        expect('la première diapositive n\'a pas de fond à elle, la seconde garde son blanc', (!slides[0].props || !slides[0].props.bg) && slides[1].props && slides[1].props.bg === '#ffffff', slides.map(s => s.props));
+        // Un autre thème posé par le geste du menu Page : le fond qui suivait le thème le suit, celui qui était écrit reste.
+        const light = JSON.parse(JSON.stringify(theme));
+        light.name = 'Clair';
+        light.colors.bg = '#ffffff';
+        light.colors.text = '#222222';
+        light.colors.title = '#222222';
+        const ed = EditorCore.getEditor();
+        const before = JSON.parse(JSON.stringify(PageLayout.getTheme()));
+        const gesture = HistoryMarkers.begin('page');
+        PageLayout.setTheme(light);
+        const tr = ed.state.tr;
+        SlideTheme.remap(tr, before, light);
+        if (tr.docChanged) ed.view.dispatch(TrackChanges.skipTracking(tr));
+        gesture.commit();
+        await sleep(300);
+        const after = slidesOf(Editor.getHTML());
+        expect('le thème clair posé : le fond de la page est blanc, le texte clair du fichier (celui du texte de l\'ancien thème) prend le texte du nouveau',
+          PageLayout.getTheme().colors.bg === '#ffffff' && document.documentElement.style.getPropertyValue('--pp-theme-bg') === '#ffffff' && /color: ?(#222222|rgb\(34, ?34, ?34\))/i.test(Editor.getHTML()), { theme: PageLayout.getTheme().colors, bg: document.documentElement.style.getPropertyValue('--pp-theme-bg'), html: Editor.getHTML().slice(0, 400) });
+        expect('la seconde diapositive garde son fond écrit, la première n\'en a toujours pas', (!after[0].props || !after[0].props.bg) && after[1].props && after[1].props.bg === '#ffffff', after.map(s => s.props));
+      } finally {
+        PageLayout.setMarginsMm(null);
+        document.documentElement.classList.remove('pp-themed');
+      }
+      return result(bad);
+    });
+  add('pptx_import_an_exported_themed_presentation_comes_back_with_its_theme',
+    'Une présentation à thème écrite par l\'export PowerPoint (js/pptx-export.js) puis importée redonne son thème : nom, fond, texte, titres (le style de titre du masque suit dk2, la couleur des titres du thème, quand il y a un thème), six accents, polices ; sans thème, l\'export garde son masque d\'avant (titres en tx1) et l\'import ne trouve que les couleurs d\'origine',
+    async () => {
+      await ExportEngines.ensure('pptx', 'pptxImport');
+      await ExportCommon.ensureJsZipLoaded();
+      const theme = { v: 1, name: 'Forêt', colors: { bg: '#fdfbf7', text: '#1b2430', title: '#2f6f4f', accent1: '#2f6f4f', accent2: '#00a3a3', accent3: '#f2a541', accent4: '#9ad0f5', accent5: '#c7d3e0', accent6: '#d64545' }, fonts: { title: 'Georgia', body: 'Calibri' } };
+      const html = FreeFrame.html({ x: 60, y: 60, w: 600, h: 120 }, '<p>Un texte</p>') + '<p></p>';
+      const titleColorOf = async (blob) => {
+        const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+        const found = /<p:titleStyle>[\s\S]*?<a:schemeClr val="(\w+)"/.exec(await zip.file('ppt/slideMasters/slideMaster1.xml').async('string'));
+        return found ? found[1] : null;
+      };
+      const { bad, expect } = checker();
+      try {
+        await PageLayout.setMarginsMm(Object.assign({}, SlidesEntry.pageFor('presentation', null), { theme }));
+        const themed = await PptxExport.fromHtml(html, { marginsPt: PageLayout.getMarginsPt(), title: 'Essai' });
+        const back = await PptxImport.fromBuffer(await themed.arrayBuffer());
+        expect('le style de titre du masque suit dk2 (tx2) quand la présentation a un thème', await titleColorOf(themed) === 'tx2', await titleColorOf(themed));
+        expect('les couleurs reviennent comme elles sont parties : fond, texte, titres, six accents ; Georgia pour les titres, Calibri pour le texte',
+          !!back.page.theme && JSON.stringify(back.page.theme.colors) === JSON.stringify(theme.colors) && back.page.theme.fonts.title === 'Georgia' && back.page.theme.fonts.body === 'Calibri', back.page.theme);
+        expect('le nom du thème revient aussi (le nom du schéma de couleurs écrit par l\'export)', !!back.page.theme && back.page.theme.name === 'Forêt', back.page.theme);
+        expect('rien à dire au rapport', back.report.length === 0, back.report);
+        await PageLayout.setMarginsMm(SlidesEntry.pageFor('presentation', null));
+        const plain = await PptxExport.fromHtml(html, { marginsPt: PageLayout.getMarginsPt(), title: 'Essai' });
+        expect('sans thème : le style de titre du masque garde tx1', await titleColorOf(plain) === 'tx1', await titleColorOf(plain));
+      } finally {
+        PageLayout.setMarginsMm(null);
+        document.documentElement.classList.remove('pp-themed');
+      }
       return result(bad);
     });
 
@@ -1722,8 +1833,8 @@
       lossCase('minutage et effet de transition inconnu : le minutage est repris, seul l\'effet est compté', { transitions: 1 }, '', { slide: { transition: '<p:transition advTm="2000"><p:checker/></p:transition>' } }),
       lossCase('passage seul sans clic (advClick="0") : le temps est repris, le rapport dit que le clic fait aussi passer', { advanceClick: 1 }, '', { slide: { transition: '<p:transition advTm="5000" advClick="0"/>' } }),
       lossCase('sections de diapositives : celle qui a une diapositive arrive dans les notes, celle qui n\'en a aucune est comptée', { sections: 1 }, '', { options: { presentationExt: SECTIONS } }),
-      lossCase('police du thème : comptée sous son vrai nom, le thème dit avec elle', { fonts: 1, theme: 1 }, lone(para(sm('Titre', '', '<a:latin typeface="+mj-lt"/>')))),
-      lossCase('couleurs du thème : dites avec une autre ligne', { dashes: 1, theme: 1 }, card({ fill: scheme('accent1'), line: unreadable })),
+      lossCase('police du thème : comptée sous son vrai nom, le thème n\'a plus de ligne à lui (il devient celui de la présentation)', { fonts: 1 }, lone(para(sm('Titre', '', '<a:latin typeface="+mj-lt"/>')))),
+      lossCase('couleurs du thème : rien au rapport que la perte de l\'objet', { dashes: 1 }, card({ fill: scheme('accent1'), line: unreadable })),
     ];
   };
   // Tout ce que le fichier peut demander, une fois chaque : une diapositive par cas (les cas qui changent tout le fichier n'y sont pas) ; `expect` en est le rapport attendu. Le test à la vraie souris le donne à choisir
@@ -1734,7 +1845,6 @@
     cases.forEach((c) => { Object.assign(options, c.options); });
     const expect = {};
     cases.forEach((c) => { Object.keys(c.expect).forEach((key) => { expect[key] = (expect[key] || 0) + c.expect[key]; }); });
-    expect.theme = Math.min(expect.theme, 1);
     return { options, expect };
   }
 
@@ -1753,7 +1863,7 @@
     'Le rapport dit, une fois par objet et par genre, ce que le fichier demande d\'une forme ou d\'un trait que l\'éditeur ne dessine pas : liste de tirets illisible, pointes spéciales, ombre (celle du thème comprise), lueur, reflet, relief, motif, image en fond, objet masqué, bulle ovale, lien, texte alternatif ; jamais pour un objet qui n\'arrive pas',
     () => runLosses(objectLosses()));
   add('pptx_import_report_says_what_an_image_a_table_a_slide_or_the_file_asks_and_the_editor_cannot_do',
-    'Le rapport dit ce que le fichier demande d\'une image (forme, réglages, bordure, ombre, lien), d\'un tableau (fonds en dégradé ou en motif, texte vertical), d\'une diapositive (fond en motif, minutage), du fichier (sections, thème figé, police du thème sous son vrai nom)',
+    'Le rapport dit ce que le fichier demande d\'une image (forme, réglages, bordure, ombre, lien), d\'un tableau (fonds en dégradé ou en motif, texte vertical), d\'une diapositive (fond en motif, minutage), du fichier (sections, police du thème sous son vrai nom ; le thème lui-même n\'est plus une perte)',
     () => runLosses(fileLosses()));
 
   // Chantier 3a « Transparence » : le fond et le trait translucides sont repris tels quels (couleur et transparence), plus mêlés au blanc.
@@ -2616,7 +2726,7 @@
     });
 
   // Les mêmes briques pour le test à la vraie souris (dev-tests/verify-pptx-import-mouse.mjs) : il charge ce fichier dans la page et y fabrique ses fichiers .pptx, sans fichier binaire dans le dépôt.
-  window.PptxFixtures = { pptx, sp, textBox, cxn, pic, grp, table, png, TWO_TONE, para, run, solid, scheme, ln, xfrm, emu, IMAGE_REL, everyKindOfObject, everyKindOfLoss };
+  window.PptxFixtures = { pptx, sp, textBox, cxn, pic, grp, table, png, TWO_TONE, para, run, solid, scheme, ln, xfrm, emu, IMAGE_REL, CLR_MAP, BG1, ownBg, everyKindOfObject, everyKindOfLoss };
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pptxImport = cases;
 })();

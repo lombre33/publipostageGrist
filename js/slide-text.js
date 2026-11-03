@@ -18,6 +18,7 @@ const SlideText = (function () {
   const FRAME = 'div.pp-free-frame';
   const FRAME_CONTENT = '.pp-free-frame-content';
   const BACKGROUND_ATTR = 'data-ff-bg';
+  const DECOR_ATTR = 'data-ff-decor';
   const PROPS = 'div.pp-slide-props';
   const BREAK_CLASS = 'page-break-marker';
   const LAYERED = 'img.editor-image[data-layer="front"], img.editor-image[data-layer="behind"]';
@@ -79,7 +80,7 @@ const SlideText = (function () {
       out.push(node);
     });
     readingOrder(frames).forEach((frame) => {
-      if (frame.hasAttribute(BACKGROUND_ATTR)) return;
+      if (frame.hasAttribute(BACKGROUND_ATTR) || frame.hasAttribute(DECOR_ATTR)) return;
       const shape = frame.getAttribute('data-ff-shape') || '';
       if (shape === ShapeGeometry.LINE) { dropped.lines++; return; }
       if (shape) dropped.shapes++;

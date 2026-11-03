@@ -341,7 +341,7 @@ const SlideStrip = (function () {
     list.appendChild(row);
     // Sans observateur (navigateur ancien), toutes les miniatures se copient, comme avant.
     if (nearObserver) nearObserver.observe(row);
-    return { row, item, num, dot, link, linkLook: '', trans, transLook: '', notes, notesLook: '', hid, hidLook: false, thumb, page, more, nodes: null, sizedFor: '', near: !nearObserver };
+    return { row, item, num, dot, link, linkLook: '', trans, transLook: '', notes, notesLook: '', hid, hidLook: false, thumb, page, more, nodes: null, decorKey: '', sizedFor: '', near: !nearObserver };
   }
   function removeRow(r) {
     if (nearObserver) nearObserver.unobserve(r.row);
@@ -420,6 +420,12 @@ const SlideStrip = (function () {
     clearTimeout(redrawTimer);
     redrawTimer = setTimeout(drawThumbs, REDRAW_DELAY_MS);
   }
+  // Les copies d'une diapositive avec son décor : juste après son repère s'il en a un (son fond propre, que le repère dessine, est donc dessous), avant ses cadres libres, comme dans l'éditeur (js/slide-theme.js : createExtension).
+  function withDecor(copies, decorEl) {
+    if (!decorEl) return copies;
+    const marker = copies.length > 0 && copies[0].classList && copies[0].classList.contains('pp-slide-props');
+    return marker ? [copies[0], decorEl, ...copies.slice(1)] : [decorEl, ...copies];
+  }
   // Refait la miniature des diapositives dont les blocs ont changé (un bloc que le texte n'a pas touché reste le même objet d'une transaction à l'autre), toutes quand la page a changé ;
   // seulement celles que la bande montre, ou presque (`near`) : les autres se copient quand elle défile jusqu'à elles (onNear). Chaque rangée prend la hauteur de la page, copiée ou non.
   function drawThumbs() {
@@ -432,11 +438,17 @@ const SlideStrip = (function () {
     rows.forEach((r, i) => {
       if (r.sizedFor !== geometry.key) { sizeThumb(r, geometry); r.nodes = null; }
       const nodes = slides[i].nodes.map(entry => entry.node);
-      if (r.near && !shows(r, nodes)) due.push({ r, slide: slides[i], nodes });
+      // Le décor du thème (bandeau, logo, numéro, pied) n'est pas dans les blocs : sa clé dit quand la miniature doit se refaire (le thème, la page ou le rang de la diapositive ont changé).
+      const decor = SlideTheme.decorKey(i);
+      if (r.near && (!shows(r, nodes) || r.decorKey !== decor)) due.push({ r, slide: slides[i], nodes, rank: i, decor });
     });
     // Toutes les copies d'abord, puis toutes les écritures : copier lit la mise en page de l'éditeur (placeLayers), qu'une écriture dans la bande obligerait à refaire.
     const copies = due.map(({ slide }) => copiesOf(slide, geometry));
-    due.forEach(({ r, nodes }, k) => { r.page.replaceChildren(...copies[k]); r.nodes = nodes; });
+    due.forEach(({ r, nodes, rank, decor }, k) => {
+      r.page.replaceChildren(...withDecor(copies[k], decor ? SlideTheme.decorElementFor(rank) : null));
+      r.nodes = nodes;
+      r.decorKey = decor;
+    });
   }
   // Les rangées qui entrent dans la bande, ou presque, copient leur miniature quand elle n'est pas à jour (une pause de la frappe attendue les copiera aussi).
   function onNear(entries) {
@@ -481,10 +493,13 @@ const SlideStrip = (function () {
     const slide = slidesOf(doc)[index];
     const geometry = pageGeometry();
     const nodes = slide.nodes.map(entry => entry.node);
-    if (seen && seen.key === geometry.key && seen.nodes.length === nodes.length && nodes.every((node, i) => node === seen.nodes[i])) return { same: true, nodes, key: geometry.key };
+    // Le décor du thème de cette diapositive (son rang, pas celui du cadre qui la montre), comme sur sa miniature : il est dans la clé, la copie se refait quand il change.
+    const decor = SlideTheme.decorKey(index);
+    const key = decor ? geometry.key + '|' + decor : geometry.key;
+    if (seen && seen.key === key && seen.nodes.length === nodes.length && nodes.every((node, i) => node === seen.nodes[i])) return { same: true, nodes, key };
     const page = el('div', 'pp-slide-page tiptap');
-    page.replaceChildren(...copiesOf(slide, geometry));
-    return { page, nodes, key: geometry.key, width: geometry.width, height: geometry.height };
+    page.replaceChildren(...withDecor(copiesOf(slide, geometry), decor ? SlideTheme.decorElementFor(index) : null));
+    return { page, nodes, key, width: geometry.width, height: geometry.height };
   }
   // Les miniatures des diapositives qui portent une vue de diapositive (js/slide-view.js) : le calque de la vue vient de changer (la diapositive montrée a été modifiée, ou la vue vient de se remplir) et la
   // miniature en a copié l'ancien ; elle se refait à la prochaine pause de la frappe, avec lui.
@@ -1560,6 +1575,12 @@ const SlideStrip = (function () {
     if (transaction.docChanged && !transaction.getMeta(STRIP_META) && !transaction.getMeta(LAYERS_META)) picked = [];
     const count = slides.length;
     refresh(false);
+    // Le thème ou la page ont changé (la transaction vide de SlideTheme.createExtension) : le décor des miniatures est à refaire, et celui des vues de diapositive (js/slide-view.js), qui copient la diapositive montrée avec le sien.
+    if (!transaction.docChanged && transaction.getMeta(SlideTheme.DECOR_META)) {
+      scheduleThumbs();
+      if (typeof SlideView !== 'undefined') SlideView.schedule();
+      return;
+    }
     if (!transaction.docChanged) return;
     if (!transaction.getMeta(LAYERS_META)) layerTrigger = transaction;
     // Une diapositive de plus ou de moins (un saut de page posé ou effacé dans le texte) : tout de suite, sinon après la pause de la frappe.

@@ -510,6 +510,8 @@ const Editor = (function () {
       // Transition d'une diapositive (js/slide-props.js) : son repère caché, rangé au début d'elle, et ses garde-fous (un seul, Retour arrière ne l'efface pas, un collage hors d'une présentation ne le pose pas).
       SlideProps.createNode(Node),
       SlideProps.createExtension(Extension, { Plugin, PluginKey }),
+      // Le décor commun d'une présentation (js/slide-theme.js : bandeau, logo, numéro, pied du thème) : une décoration au début de chaque diapositive, jamais dans le texte.
+      SlideTheme.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       EditorNodes.createTabNavigationExtension(Extension),
       // Échap dans l'en-tête ou le pied de page (js/header-footer-preview.js) : la sortie du mode, comme « Terminer ». À la priorité de la tabulation et AVANT elle dans cette liste : TipTap essaie à priorité
       // égale la dernière ajoutée d'abord, si bien que la tabulation arme sa sortie (« Échap puis Tab ») avant que celle-ci ne referme le mode.

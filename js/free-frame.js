@@ -90,6 +90,8 @@ const FreeFrame = (function () {
   const ROTATE_ROOM_PX = 34;
   const BAR_GAP_PX = 8;
   const LIMITS = { pos: 4000, minW: 24, maxW: 4000, minH: 12, maxH: 4000 };
+  // Le plus petit côté d'un cadre du DÉCOR (data-ff-decor) : un bandeau fin est plus mince qu'un cadre de texte ne peut l'être.
+  const DECOR_MIN_PT = 1;
   const STAY_ON_PAGE_PT = 24;
   // Les marges d'un cadre de texte (css/free-frame.css), celles par défaut de PowerPoint : un tableau posé dans un cadre les garde autour de lui.
   const FRAME_PAD_X_PT = 7.2;
@@ -101,6 +103,9 @@ const FreeFrame = (function () {
   // Les attributs du nœud et leur écriture dans le HTML enregistré.
   // Ce qui marque, dans le HTML des sorties, le cadre qui peint le fond d'une diapositive (js/slide-props.js:forOutput).
   const BACKGROUND_ATTR = 'data-ff-bg';
+  // Ce qui marque, dans le HTML des sorties, un cadre du DÉCOR commun d'une présentation (js/slide-theme.js:decorItems : le bandeau, le logo, le numéro et le texte de pied) : le cadre est un cadre derrière le texte, sans
+  // rôle pour un lecteur d'écran, et l'éditeur ne le relit jamais (parseHTML), comme le fond d'une diapositive.
+  const DECOR_ATTR = 'data-ff-decor';
   const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim', cols: 'data-ff-cols', colGap: 'data-ff-col-gap', vert: 'data-ff-vert', alt: 'data-ff-alt', link: 'data-ff-link', linkTrans: 'data-ff-link-trans', view: 'data-ff-view', hidden: 'data-ff-hidden' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
   const LOOK_VARS = ['--ff-fill', '--ff-fill-op', '--ff-fill-inset', '--ff-fill-radius', '--ff-line', '--ff-line-op', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-art', '--ff-art-nine', '--ff-fill-art', '--ff-slice', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot', '--ff-cols', '--ff-col-gap'];
@@ -165,8 +170,8 @@ const FreeFrame = (function () {
     const out = {
       x: tidy(clamp(toNumber(a.x, DEFAULTS.x), -LIMITS.pos, LIMITS.pos)),
       y: tidy(clamp(toNumber(a.y, DEFAULTS.y), -LIMITS.pos, LIMITS.pos)),
-      w: tidy(clamp(toNumber(a.w, DEFAULTS.w), line ? 0 : LIMITS.minW, LIMITS.maxW)),
-      h: tidy(clamp(toNumber(a.h, DEFAULTS.h), line ? 0 : LIMITS.minH, LIMITS.maxH)),
+      w: tidy(clamp(toNumber(a.w, DEFAULTS.w), line ? 0 : (a.decor ? DECOR_MIN_PT : LIMITS.minW), LIMITS.maxW)),
+      h: tidy(clamp(toNumber(a.h, DEFAULTS.h), line ? 0 : (a.decor ? DECOR_MIN_PT : LIMITS.minH), LIMITS.maxH)),
       shape,
       fill,
       line: stroke,
@@ -221,6 +226,7 @@ const FreeFrame = (function () {
     const raw = {};
     Object.keys(DOM_ATTRS).forEach((key) => { raw[key] = dom.getAttribute(DOM_ATTRS[key]); });
     if (shape) raw.shape = shape;
+    if (dom.hasAttribute(DECOR_ATTR)) raw.decor = true;
     return normalized(raw);
   }
   // Ce que le CSS lit pour dessiner l'aspect du cadre `a` : ses marges de texte (la sorte et le trait les règlent), son fond, son trait (la bordure d'une boîte rectangulaire ou arrondie, un
@@ -356,6 +362,15 @@ const FreeFrame = (function () {
     const text = Object.keys(attrs).map(name => ' ' + name + '="' + String(attrs[name]).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '"').join('');
     return '<div' + text + '><div class="' + BOX + '"><div class="' + CONTENT + '">' + (inner || '') + '</div></div></div>';
   }
+  // Le HTML d'un cadre du décor commun d'une présentation, tel que les sorties le lisent (js/slide-props.js:forOutput) : comme `html`, derrière le texte, mais sans rôle (le logo, le numéro et le bandeau ne sont
+  // pas du contenu pour un lecteur d'écran) et marqué `data-ff-decor` : la Lecture, le PDF, le Word le posent comme n'importe quel cadre derrière le texte, un fichier HTML qui coule comme une page web et la lecture
+  // simple de la diapositive (js/slide-text.js) le laissent de côté, comme le fond.
+  function decorHtml(raw, inner) {
+    const a = normalized(Object.assign({}, raw, { layer: LAYER_BEHIND, decor: true }));
+    const attrs = Object.assign({ class: CLASS, role: 'presentation', 'aria-hidden': 'true', style: styleOf(a), [DECOR_ATTR]: '' }, dataAttrsOf(a));
+    const text = Object.keys(attrs).map(name => ' ' + name + '="' + String(attrs[name]).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '"').join('');
+    return '<div' + text + '><div class="' + BOX + '"><div class="' + CONTENT + '">' + (inner || '') + '</div></div></div>';
+  }
   // Le HTML d'une présentation sans ses objets masqués : ce que la Lecture, le diaporama, l'impression et les exports reçoivent (js/slides-entry.js:outputHtml) ; l'export PowerPoint garde les
   // siens (il les écrit masqués). Le modèle enregistré n'est jamais touché.
   function withoutHidden(source) {
@@ -387,7 +402,7 @@ const FreeFrame = (function () {
   // une image) sort de la page ou n'en sort pas, ses marges ne comptent pas (une image au ras de la page, d'un fond ou d'un import PowerPoint, n'est pas un cadre qui dépasse). Un cadre DERRIÈRE le texte
   // qui n'a pas de texte à lui (un bandeau, une forme, une image : un décor) est rogné à la page par construction, rien n'y est perdu : il n'est jamais signalé.
   function overflowsPage(dom) {
-    if (dom.hasAttribute(BACKGROUND_ATTR)) return false;
+    if (dom.hasAttribute(BACKGROUND_ATTR) || dom.hasAttribute(DECOR_ATTR)) return false;
     const a = attrsOfEl(dom);
     const box = dom.querySelector(':scope > .' + BOX);
     if (a.layer === LAYER_BEHIND) {
@@ -1179,7 +1194,7 @@ const FreeFrame = (function () {
       isolating: true,
       addAttributes() { return attributeSpecs({}); },
       // Le fond d'une diapositive que les sorties écrivent comme un cadre (backgroundHtml) n'est pas un cadre de la personne : collé de la Lecture, il n'entre pas.
-      parseHTML() { return [{ tag: 'div.' + CLASS + '[' + BACKGROUND_ATTR + ']', priority: 1100, ignore: true }, { tag: 'div.' + CLASS, priority: 1000, contentElement: '.' + CONTENT }]; },
+      parseHTML() { return [{ tag: 'div.' + CLASS + '[' + BACKGROUND_ATTR + ']', priority: 1100, ignore: true }, { tag: 'div.' + CLASS + '[' + DECOR_ATTR + ']', priority: 1100, ignore: true }, { tag: 'div.' + CLASS, priority: 1000, contentElement: '.' + CONTENT }]; },
       renderHTML({ node }) { return ['div', domAttrs(normalized(node.attrs)), ['div', { class: BOX }, ['div', { class: CONTENT }, 0]]]; },
       addNodeView() { return nodeView; },
     });
@@ -1836,7 +1851,7 @@ const FreeFrame = (function () {
   });
 
   return {
-    NODE, LINE_NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, LAYER_BEHIND, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml, html, artFits, lookRefused,
+    NODE, LINE_NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, DECOR_ATTR, LAYER_BEHIND, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml, html, decorHtml, artFits, lookRefused,
     configure, createNode, createLineNode, createExtension, wireToolbar, normalized, withoutHidden, measuresOf: attrsOfEl, straight, horizontal, flatten, gesture, lineGesture, rotationAt, turnOf, storedHeight, keepReachable, overflowsPage, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
     insert, insertTable, insertView, patch, nudge, turnBy, reorder, duplicate, remove, select, currentFrame, frameAround, syncToolbar,
   };

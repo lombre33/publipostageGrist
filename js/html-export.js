@@ -226,8 +226,9 @@ const HtmlExport = (function () {
   // modifications encore en attente y sont acceptées (le texte supprimé n'y est plus) : le HTML d'une ligne les a déjà vues acceptées (ReaderMode.preview).
   function rootOf(html) {
     const root = HtmlSanitize.parseInert(html || '');
-    // Le fond d'une diapositive (js/slide-props.js:forOutput) est une couleur de page : un fichier qui coule comme une page web n'en garde pas même les boîtes vides.
-    root.querySelectorAll('[data-ff-bg]').forEach(el => el.remove());
+    // Le fond d'une diapositive (js/slide-props.js:forOutput) est une couleur de page : un fichier qui coule comme une page web n'en garde pas même les boîtes vides. Le décor commun de la présentation (bandeau, logo, numéro, pied)
+    // est posé sur la page, lui aussi : il ne se range pas dans un flux.
+    root.querySelectorAll('[data-ff-bg], [data-ff-decor]').forEach(el => el.remove());
     // Une ligne (js/free-frame.js : `freeLine`) n'est que son dessin, sans texte : même règle, ses boîtes vides ne restent pas non plus.
     root.querySelectorAll('.pp-free-frame[data-ff-shape="line"]').forEach(el => el.remove());
     // Si la vue échoue, le document reste tel qu'il est écrit (suggestions visibles) plutôt que perdu : même repli que ReaderMode.

@@ -72,7 +72,7 @@ const PptxExport = (function () {
 
   // --- Le gabarit du fichier : thème, masque, mise en page, propriétés. Écrits à la main, sans rien d'autre qu'un titre et un texte : ils ne portent aucun style, tout est posé sur les objets. ---------
   // `theme` : le thème de la présentation (SlideTheme, clé `theme` de la page), ou rien : le thème d'avant (les couleurs d'origine, Arial). Avec lui, le texte et le fond sont dk1 et lt1, les titres dk2, les six accents sont
-  // ceux du thème, et la police des titres et celle du texte sont les deux polices du fichier (la police de série `+mj-lt` et `+mn-lt`) : changer le thème dans PowerPoint recolore et change les polices de ce qui les suit.
+  // ceux du thème, et la police des titres et celle du texte sont les deux polices du fichier (la police de série `+mj-lt` et `+mn-lt`) : changer le thème dans PowerPoint recolore et change les polices de ce qui les suit. Le nom du thème est celui du fichier (`a:theme`, comme ses schémas de couleurs et de polices) : l'import le relit.
   function themeXml(name, theme) {
     const t = typeof SlideTheme !== 'undefined' ? SlideTheme.normalize(theme) : null;
     const hex = slot => t.colors[slot].slice(1).toUpperCase();
@@ -81,7 +81,7 @@ const PptxExport = (function () {
     const effect = '<a:effectStyle><a:effectLst/></a:effectStyle>';
     const fonts = (tag, face) => `<a:${tag}><a:latin typeface="${esc(face)}"/><a:ea typeface=""/><a:cs typeface=""/></a:${tag}>`;
     const accent = (n, fallback) => `<a:accent${n}><a:srgbClr val="${t ? hex('accent' + n) : fallback}"/></a:accent${n}>`;
-    return XML_HEAD + `<a:theme xmlns:a="${NS.a}" name="${esc(name)}"><a:themeElements>`
+    return XML_HEAD + `<a:theme xmlns:a="${NS.a}" name="${esc(t && t.name ? t.name : name)}"><a:themeElements>`
       + `<a:clrScheme name="${esc(t && t.name ? t.name : 'Grist Factory')}"><a:dk1><a:srgbClr val="${t ? hex('text') : TEXT_COLOR}"/></a:dk1><a:lt1><a:srgbClr val="${t ? hex('bg') : 'FFFFFF'}"/></a:lt1><a:dk2><a:srgbClr val="${t ? hex('title') : '44546A'}"/></a:dk2><a:lt2><a:srgbClr val="E7E6E6"/></a:lt2>`
       + accent(1, '2F6FED') + accent(2, 'ED7D31') + accent(3, 'A5A5A5') + accent(4, 'FFC000')
       + accent(5, '5B9BD5') + accent(6, '70AD47') + `<a:hlink><a:srgbClr val="${LINK_COLOR}"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme>`
@@ -109,21 +109,24 @@ const PptxExport = (function () {
       number: [x(0.70625), y(0.92683), x(0.225), y(0.05324)],
     };
   }
-  function masterXml(size) {
+  // `themed` : la présentation a un thème. Ses titres prennent alors la couleur des titres du thème (tx2, dk2 du fichier) : PowerPoint recolore avec lui ses nouveaux titres, et l'import (js/pptx-import.js, `themeOf`) relit la
+  // couleur des titres du thème qu'il a écrit.
+  // `decor` : le décor du thème (decorPartsOf) : ses objets sont ceux du masque, derrière les espaces réservés ; avec « pas sur la première », la mise en page n° 2 (celle de la première diapositive) s'ajoute à la liste.
+  function masterXml(size, themed, decor) {
     const box = frameBoxes(size);
     const footerLike = (id, name, ph, geometry, align, content) => placeholderShape(id, name, ph, geometry,
       `<p:txBody><a:bodyPr vert="horz" lIns="91440" tIns="45720" rIns="91440" bIns="45720" rtlCol="0" anchor="ctr"/><a:lstStyle><a:lvl1pPr algn="${align}"><a:defRPr sz="1200"><a:solidFill><a:schemeClr val="tx1"><a:tint val="75000"/></a:schemeClr></a:solidFill></a:defRPr></a:lvl1pPr></a:lstStyle><a:p>${content}<a:endParaRPr lang="en-US"/></a:p></p:txBody>`);
     const bodyStyle = levelStyles(n => ` marL="${342900 + (n - 1) * 400050}" indent="-342900" algn="l" defTabSz="914400" rtl="0" eaLnBrk="1" latinLnBrk="0" hangingPunct="1"><a:spcBef><a:spcPct val="20000"/></a:spcBef><a:buFont typeface="Arial"/><a:buChar char="•"/>${DEF_RPR(Math.max(1400, 2800 - (n - 1) * 400))}`);
     const otherStyle = levelStyles(n => ` marL="${(n - 1) * 457200}" algn="l" defTabSz="914400" rtl="0" eaLnBrk="1" latinLnBrk="0" hangingPunct="1">${DEF_RPR(1800)}`);
-    return XML_HEAD + `<p:sldMaster ${ROOT_NS}><p:cSld><p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg><p:spTree>${GROUP_PROPERTIES}`
+    return XML_HEAD + `<p:sldMaster ${ROOT_NS}><p:cSld><p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg><p:spTree>${GROUP_PROPERTIES}${decor ? decor.master : ''}`
       + placeholderShape(2, 'Title Placeholder 1', 'type="title"', box.title, `<p:txBody><a:bodyPr vert="horz" lIns="91440" tIns="45720" rIns="91440" bIns="45720" rtlCol="0" anchor="ctr"><a:normAutofit/></a:bodyPr><a:lstStyle/><a:p><a:r><a:rPr lang="en-US"/><a:t>Click to edit Master title style</a:t></a:r><a:endParaRPr lang="en-US"/></a:p></p:txBody>`)
       + placeholderShape(3, 'Text Placeholder 2', 'type="body" idx="1"', box.body, `<p:txBody><a:bodyPr vert="horz" lIns="91440" tIns="45720" rIns="91440" bIns="45720" rtlCol="0"><a:normAutofit/></a:bodyPr><a:lstStyle/><a:p><a:pPr lvl="0"/><a:r><a:rPr lang="en-US"/><a:t>Click to edit Master text styles</a:t></a:r><a:endParaRPr lang="en-US"/></a:p></p:txBody>`)
       + footerLike(4, 'Date Placeholder 3', 'type="dt" sz="half" idx="2"', box.date, 'l', '')
       + footerLike(5, 'Footer Placeholder 4', 'type="ftr" sz="quarter" idx="3"', box.footer, 'ctr', '')
       + footerLike(6, 'Slide Number Placeholder 5', 'type="sldNum" sz="quarter" idx="4"', box.number, 'r', SLIDE_NUMBER_FIELD)
       + '</p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>'
-      + '<p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>'
-      + `<p:txStyles><p:titleStyle><a:lvl1pPr algn="l" defTabSz="914400" rtl="0" eaLnBrk="1" latinLnBrk="0" hangingPunct="1"><a:lnSpc><a:spcPct val="90000"/></a:lnSpc><a:spcBef><a:spcPct val="0"/></a:spcBef><a:buNone/><a:defRPr sz="4400" kern="1200"><a:solidFill><a:schemeClr val="tx1"/></a:solidFill><a:latin typeface="+mj-lt"/><a:ea typeface="+mj-ea"/><a:cs typeface="+mj-cs"/></a:defRPr></a:lvl1pPr></p:titleStyle>`
+      + `<p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/>${decor && decor.first !== null ? '<p:sldLayoutId id="2147483650" r:id="rId3"/>' : ''}</p:sldLayoutIdLst>`
+      + `<p:txStyles><p:titleStyle><a:lvl1pPr algn="l" defTabSz="914400" rtl="0" eaLnBrk="1" latinLnBrk="0" hangingPunct="1"><a:lnSpc><a:spcPct val="90000"/></a:lnSpc><a:spcBef><a:spcPct val="0"/></a:spcBef><a:buNone/><a:defRPr sz="4400" kern="1200"><a:solidFill><a:schemeClr val="${themed ? 'tx2' : 'tx1'}"/></a:solidFill><a:latin typeface="+mj-lt"/><a:ea typeface="+mj-ea"/><a:cs typeface="+mj-cs"/></a:defRPr></a:lvl1pPr></p:titleStyle>`
       + `<p:bodyStyle>${bodyStyle}</p:bodyStyle><p:otherStyle><a:defPPr><a:defRPr lang="en-US"/></a:defPPr>${otherStyle}</p:otherStyle></p:txStyles></p:sldMaster>`;
   }
   function layoutXml() {
@@ -134,6 +137,12 @@ const PptxExport = (function () {
       + footerLike(4, 'Footer Placeholder 3', 'type="ftr" sz="quarter" idx="11"', '')
       + footerLike(5, 'Slide Number Placeholder 4', 'type="sldNum" sz="quarter" idx="12"', SLIDE_NUMBER_FIELD)
       + '</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>';
+  }
+  // La mise en page de la première diapositive quand le décor n'a « ni numéro ni pied sur la première » : elle cache les objets du masque (showMasterSp) et reprend ceux du décor qui restent (le bandeau, le logo), à leur place de la première diapositive.
+  function firstLayoutXml(shapes) {
+    return XML_HEAD + `<p:sldLayout ${ROOT_NS} showMasterSp="0" preserve="1" userDrawn="1"><p:cSld name="Title Only, first slide"><p:spTree>${GROUP_PROPERTIES}`
+      + '<p:sp><p:nvSpPr><p:cNvPr id="2" name="Title 1"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US"/><a:t>Click to edit Master title style</a:t></a:r><a:endParaRPr lang="en-US"/></a:p></p:txBody></p:sp>'
+      + shapes + '</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>';
   }
   function notesMasterXml(size) {
     const sheet = { w: 6858000, h: 9144000 };
@@ -179,7 +188,7 @@ const PptxExport = (function () {
       + extensions.map(ext => `<Default Extension="${ext}" ContentType="${MEDIA_TYPES[ext]}"/>`).join('')
       + (parts.charts.length ? `<Default Extension="xlsx" ContentType="${XLSX_CT}"/>` : '')
       + `<Override PartName="/ppt/presentation.xml" ContentType="${CT}presentation.main+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="${CT}slideMaster+xml"/>`
-      + `<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="${CT}slideLayout+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>`
+      + `<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="${CT}slideLayout+xml"/>${parts.firstLayout ? `<Override PartName="/ppt/slideLayouts/slideLayout2.xml" ContentType="${CT}slideLayout+xml"/>` : ''}<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>`
       + `<Override PartName="/ppt/presProps.xml" ContentType="${CT}presProps+xml"/><Override PartName="/ppt/viewProps.xml" ContentType="${CT}viewProps+xml"/><Override PartName="/ppt/tableStyles.xml" ContentType="${CT}tableStyles+xml"/>`
       + (parts.notes ? `<Override PartName="/ppt/notesMasters/notesMaster1.xml" ContentType="${CT}notesMaster+xml"/><Override PartName="/ppt/theme/theme2.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>` : '')
       + parts.slides.map((slide, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="${CT}slide+xml"/>`).join('')
@@ -1106,6 +1115,54 @@ const PptxExport = (function () {
       + `<p:txBody><a:bodyPr ${insetsXml(pad('Top'), pad('Right'), pad('Bottom'), pad('Left'))} anchor="t"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paragraphXml(unit, { originLeft: unit.rect.left, gapPx: 0 }, slide, ctx)}</p:txBody></p:sp>`;
   }
 
+  // --- Le décor du thème (js/slide-theme.js, `decor` ; carte « Décor réglé dans le thème », 02/11) : celui de PowerPoint, sur le MASQUE ---------------------------------------------------------------------------------------
+  // Le bandeau, le logo, le numéro et le texte de pied sont des objets du masque des diapositives (ils se voient partout et se changent dans « Masque des diapositives »), derrière les espaces réservés. Le bandeau a la couleur d'un
+  // réglage du thème (`schemeClr` : changer de thème dans PowerPoint le recolore), le texte la police du texte du thème (`+mn-lt`), le numéro est le champ « numéro de diapositive ». Les objets du masque sont ceux d'une diapositive
+  // ordinaire ; avec « pas sur la première », la première diapositive a sa mise en page, qui cache ceux du masque et en reprend le bandeau et le logo, à leur place de la première diapositive (decorItems, rang 0).
+  const DECOR_SCHEME = { title: 'tx2', text: 'tx1' };
+  const DECOR_ALIGN = { left: 'l', center: 'ctr', right: 'r' };
+  const decorFieldId = '{9B1F5D7A-3C42-4E0B-8F2A-5D6E7C8A9B10}';
+  // Les objets du décor (SlideTheme.decorItems) en `p:sp` et `p:pic`, à partir de l'identifiant `firstId` ; `logoRel` : la relation de l'image du logo dans la pièce qui les porte.
+  function decorShapesXml(items, theme, firstId, logoRel) {
+    let id = firstId;
+    const at = () => id++;
+    return items.map((item) => {
+      if (item.kind === 'rect') {
+        const slot = theme.decor.band.color;
+        return `<p:sp><p:nvSpPr><p:cNvPr id="${at()}" name="${esc(I18n.t('pptx.name.decorBand'))}"/><p:cNvSpPr/><p:nvPr userDrawn="1"/></p:nvSpPr><p:spPr>${xfrmXml(emu(item.x), emu(item.y), emu(item.w), emu(item.h))}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`
+          + `<a:solidFill><a:schemeClr val="${DECOR_SCHEME[slot] || slot}"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>`;
+      }
+      if (item.kind === 'image') {
+        if (!logoRel) return '';
+        return `<p:pic><p:nvPicPr><p:cNvPr id="${at()}" name="${esc(I18n.t('pptx.name.decorLogo'))}" descr=""/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr userDrawn="1"/></p:nvPicPr>`
+          + `<p:blipFill><a:blip r:embed="${logoRel}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrmXml(emu(item.x), emu(item.y), emu(item.w), emu(item.h))}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
+      }
+      const rPr = `<a:rPr lang="en-US" sz="${Math.round(item.size * 100)}" dirty="0">${fillXml(item.color.slice(1).toUpperCase())}<a:latin typeface="+mn-lt"/></a:rPr>`;
+      const runs = item.runs.map(run => (run.field
+        ? `<a:fld id="${decorFieldId}" type="slidenum">${rPr}<a:t>‹#›</a:t></a:fld>`
+        : `<a:r>${rPr}<a:t>${esc(run.text)}</a:t></a:r>`)).join('');
+      return `<p:sp><p:nvSpPr><p:cNvPr id="${at()}" name="${esc(I18n.t('pptx.name.decorText'))}"/><p:cNvSpPr txBox="1"/><p:nvPr userDrawn="1"/></p:nvSpPr><p:spPr>${xfrmXml(emu(item.x), emu(item.y), emu(item.w), emu(item.h))}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>`
+        + `<p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" rtlCol="0" anchor="ctr"><a:noAutofit/></a:bodyPr><a:lstStyle/><a:p><a:pPr algn="${DECOR_ALIGN[item.align] || 'l'}"/>${runs}</a:p></p:txBody></p:sp>`;
+    }).join('');
+  }
+  // Le décor du fichier, ou null sans décor : { logo (le fichier image, ou null), master (les objets du masque, ceux d'une diapositive ordinaire), first (ceux de la mise en page de la première, ou null) }.
+  // Les relations de l'image : rId4 sur le masque, rId2 sur la mise en page n° 2.
+  async function decorPartsOf(themed, page, ctx) {
+    const decor = themed && themed.decor;
+    if (!decor) return null;
+    let logo = null;
+    if (decor.logo) {
+      const img = document.createElement('img');
+      img.setAttribute('src', decor.logo.src);
+      logo = await mediaFor(img, ctx);
+    }
+    return {
+      logo,
+      master: decorShapesXml(SlideTheme.decorItems(themed, page, 1), themed, 7, logo ? 'rId4' : ''),
+      first: decor.skipFirst ? decorShapesXml(SlideTheme.decorItems(themed, page, 0), themed, 3, logo ? 'rId2' : '') : null,
+    };
+  }
+
   // --- Le fichier -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   // Les diapositives d'un HTML résolu : ce qui est entre deux sauts de page, avec le repère de la diapositive (SlideProps) et les signets qu'elle porte.
   function slidesOf(html) {
@@ -1155,12 +1212,14 @@ const PptxExport = (function () {
       slide.props = sources[i].props || { transition: '', from: 'r', dur: 700, bg: '', notes: '', hidden: false, advance: 0 };
       slides.push(slide);
     }
+    // Le décor du thème, sur le masque : son logo est une image du fichier comme une autre (il est lu avant la liste des types de [Content_Types].xml).
+    const decor = await decorPartsOf(themed, page, ctx);
     const noted = slides.filter(slide => slide.notes);
     const zip = new JSZip();
     // Aucun dossier à part dans l'archive (« ppt/ », « _rels/ »…) : un paquet OPC n'a que des parties, comme python-pptx ou PowerPoint les écrivent.
     const put = (path, data) => zip.file(path, data, { createFolders: false });
     const relIds = { master: 'rId1', notesMaster: 'rId' + (slides.length + 6), slides: slides.map((slide, i) => 'rId' + (i + 2)) };
-    put('[Content_Types].xml', contentTypesXml({ media: ctx.mediaList, charts: ctx.charts, slides, notes: noted.length > 0 }));
+    put('[Content_Types].xml', contentTypesXml({ media: ctx.mediaList, charts: ctx.charts, slides, notes: noted.length > 0, firstLayout: !!(decor && decor.first !== null) }));
     put('_rels/.rels', relsXml([
       { id: 'rId1', type: REL + 'officeDocument', target: 'ppt/presentation.xml' },
       { id: 'rId2', type: 'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties', target: 'docProps/core.xml' },
@@ -1183,13 +1242,22 @@ const PptxExport = (function () {
     put('ppt/viewProps.xml', VIEW_PROPERTIES);
     put('ppt/tableStyles.xml', TABLE_STYLES);
     put('ppt/theme/theme1.xml', themeXml('Grist Factory', marginsPt.theme));
-    put('ppt/slideMasters/slideMaster1.xml', masterXml(size));
+    put('ppt/slideMasters/slideMaster1.xml', masterXml(size, !!themed, decor));
+    const hasFirstLayout = !!decor && decor.first !== null;
     put('ppt/slideMasters/_rels/slideMaster1.xml.rels', relsXml([
       { id: 'rId1', type: REL + 'slideLayout', target: '../slideLayouts/slideLayout1.xml' },
       { id: 'rId2', type: REL + 'theme', target: '../theme/theme1.xml' },
-    ]));
+    ].concat(hasFirstLayout ? [{ id: 'rId3', type: REL + 'slideLayout', target: '../slideLayouts/slideLayout2.xml' }] : [])
+      .concat(decor && decor.logo ? [{ id: 'rId4', type: REL + 'image', target: '../media/' + decor.logo.name }] : [])));
     put('ppt/slideLayouts/slideLayout1.xml', layoutXml());
     put('ppt/slideLayouts/_rels/slideLayout1.xml.rels', relsXml([{ id: 'rId1', type: REL + 'slideMaster', target: '../slideMasters/slideMaster1.xml' }]));
+    if (hasFirstLayout) {
+      put('ppt/slideLayouts/slideLayout2.xml', firstLayoutXml(decor.first));
+      put('ppt/slideLayouts/_rels/slideLayout2.xml.rels', relsXml([{ id: 'rId1', type: REL + 'slideMaster', target: '../slideMasters/slideMaster1.xml' }]
+        .concat(decor.logo ? [{ id: 'rId2', type: REL + 'image', target: '../media/' + decor.logo.name }] : [])));
+      // La première diapositive prend la mise en page n° 2.
+      slides[0].rels[0].target = '../slideLayouts/slideLayout2.xml';
+    }
     if (noted.length) {
       put('ppt/notesMasters/notesMaster1.xml', notesMasterXml(size));
       put('ppt/notesMasters/_rels/notesMaster1.xml.rels', relsXml([{ id: 'rId1', type: REL + 'theme', target: '../theme/theme2.xml' }]));

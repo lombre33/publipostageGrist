@@ -6,7 +6,7 @@
 .pp-slide-theme-columns { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 20px; }
 .pp-slide-theme-choices { flex: 0 1 200px; min-width: 150px; }
 .pp-slide-theme-label { margin: 0 0 4px; color: var(--text-muted); font-size: 12px; font-weight: 600; }
-.pp-slide-theme-list { display: flex; flex-direction: column; gap: 0; max-height: 232px; padding: 2px; overflow-y: auto; }
+.pp-slide-theme-list { display: flex; flex-direction: column; gap: 0; max-height: 200px; padding: 2px; overflow-y: auto; }
 .pp-slide-theme-row { display: flex; align-items: center; gap: 8px; box-sizing: border-box; width: 100%; min-height: 24px; margin: 0; padding: 1px 8px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
 .pp-slide-theme-row:hover { background: var(--surface-sunken); }
 .pp-slide-theme-row[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
@@ -14,6 +14,15 @@
 .pp-slide-theme-dots { display: inline-flex; flex: none; gap: 2px; }
 .pp-slide-theme-dots i { display: block; width: 11px; height: 11px; border-radius: 50%; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 22%, transparent); }
 .pp-slide-theme-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Les thèmes du document (rangés par « Enregistrer comme thème… ») précèdent les thèmes prêts dans la même liste (un thème qu'on vient de ranger ne se cache pas sous le pli), un filet les en sépare. Les deux gestes (ranger le thème du brouillon, retirer celui qui est choisi) sont au pied
+   de la fenêtre, à gauche d'« Annuler » : ils ne prennent pas de place sous la liste, la fenêtre reste dans les ~376 px du panneau de 700x400, et le pied passe à la ligne dans un panneau plus étroit. Un bouton grisé (aria-disabled) reste
+   atteignable au clavier : sa raison est dans son infobulle et, après un clic, sous les couleurs. */
+.pp-slide-theme-row.is-first-ready { position: relative; margin-top: 5px; }
+.pp-slide-theme-row.is-first-ready::before { content: ""; position: absolute; top: -3px; right: 6px; left: 6px; border-top: 1px solid var(--border-strong); }
+#pp-slide-theme .pp-modal-actions { flex-wrap: wrap; row-gap: 8px; }
+#pp-slide-theme .pp-slide-theme-tool.is-disabled { color: var(--text-muted); cursor: not-allowed; }
+#pp-slide-theme .pp-slide-theme-tool.is-disabled:hover { background: var(--surface); }
+#pp-slide-theme .pp-slide-theme-forget.is-disabled:hover { background: transparent; }
 .pp-slide-theme-side { flex: 1 1 300px; min-width: 0; max-width: 460px; }
 /* L'aperçu : une diapositive 16:9 (fond, titre, texte, les six accents, une forme neuve) à gauche, les deux polices l'une sous l'autre à sa droite. Il a les couleurs et les polices du brouillon, jamais celles de l'interface. */
 .pp-slide-theme-preview { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 12px; }
@@ -23,6 +32,11 @@
 .pp-slide-theme-bars { display: flex; gap: 3px; margin-top: 6px; width: 64%; }
 .pp-slide-theme-bars i { display: block; flex: 1; height: 5px; border-radius: 2px; }
 .pp-slide-theme-sample-shape { position: absolute; right: 7%; bottom: 9%; box-sizing: border-box; width: 26%; height: 24%; border: 1.5px solid var(--pp-theme-shape-line); border-radius: 3px; background: var(--pp-theme-shape-fill); }
+/* Le décor du brouillon (extensions/diapositives/slide-decor-ui.js, paintDecor) : une enveloppe sans hauteur au coin du papier, dont la page de 960x540 points (un point par pixel) est ramenée à la largeur du papier (--pp-decor-scale = sa largeur / 960)
+   et reste derrière le titre et le texte de l'aperçu (le papier isole son empilement). Les règles de l'éditeur (css/slide-theme.css) cachent cette enveloppe hors de la page à l'écran : ici on la montre. */
+.pp-slide-theme-paper { isolation: isolate; --pp-decor-scale: 0.15625; }
+.pp-slide-theme-paper .pp-slide-decor { display: block; position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.pp-slide-theme-paper .pp-slide-decor-page { left: 0; top: 0; width: 960px; height: 540px; transform: scale(var(--pp-decor-scale)); transform-origin: 0 0; }
 .pp-slide-theme-fonts { display: flex; flex: 1 1 130px; flex-direction: column; gap: 6px; min-width: 0; }
 .pp-slide-theme-field { display: flex; flex: none; flex-direction: column; gap: 2px; min-width: 0; }
 .pp-slide-theme-field-label { color: var(--text-muted); font-size: 11.5px; font-weight: 600; }
