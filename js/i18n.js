@@ -2012,6 +2012,12 @@ const I18n = (function () {
       fr: 'Réglages propres à cette vue. Pour les appliquer à tout le monde, enregistrez ensuite la vue dans Grist (bouton Enregistrer en haut du widget).',
       en: 'Settings for this view only. To apply them to everyone, save the view in Grist afterwards (Save button at the top of the widget).',
     },
+    // La même phrase quand Grist Factory Suite met lui-même les réglages dans la vue (son événement `reglages` dit `enregistres: true`, js/save-reminder.js, consigne 039 de GFS) : plus de « Enregistrer » à cliquer
+    // dans Grist, le réglage est déjà pour tout le monde. Même chose pour `settings.access.saveHintSaved`.
+    'settings.view.introSaved': {
+      fr: 'Réglages propres à cette vue. Ils s’appliquent à tout le monde.',
+      en: 'Settings for this view only. They apply to everyone.',
+    },
     // Ligne à gauche de « Fermer » dans les Réglages, onglets Vue et Accès, après un changement de réglage du widget (js/save-reminder.js). Une consigne, pas
     // un constat : Grist ne dit pas au widget qu'on a cliqué sur « Enregistrer », la ligne reste donc jusqu'à la fermeture des Réglages.
     // Espaces insécables dans les guillemets : la ligne passe à la ligne dans un panneau étroit, et un » ne doit pas commencer la seconde.
@@ -2110,6 +2116,10 @@ const I18n = (function () {
     'settings.access.saveHint': {
       fr: 'Pour l’appliquer à tout le monde, enregistrez ensuite la vue dans Grist (bouton Enregistrer en haut du widget). Une personne absente de la table garde tous les droits ; un compte Lecteur de Grist ouvre toujours en lecture seule.',
       en: 'To apply it to everyone, save the view in Grist afterwards (Save button at the top of the widget). A person missing from the table keeps all rights; a Grist Viewer account always opens read-only.',
+    },
+    'settings.access.saveHintSaved': {
+      fr: 'Une personne absente de la table garde tous les droits ; un compte Lecteur de Grist ouvre toujours en lecture seule.',
+      en: 'A person missing from the table keeps all rights; a Grist Viewer account always opens read-only.',
     },
     'settings.access.protectHint': {
       fr: 'Simple verrou d’interface : seules les règles d’accès de Grist protègent vraiment les modèles et les données.',

@@ -26,6 +26,8 @@
 //   barre (`masquee: true` : l'événement `barre` suit, avec null) ou la rend ; sans `id` il ne répond rien, avec un `id` il rend `{ masquee }` ; un argument qui n'est pas vrai ou faux reçoit `GFS_REFUSE` (`refusBarre`
 //   les garde). GFS remontre la barre à chaque `contexte` : un cadre rechargé repart avec elle. `masquee` dit si l'app l'a masquée. window.__gfsStub.zoneDe(bord, largeur, hauteur) donne la forme que GFS calcule
 //   pour un cadre de cette taille (34 × 124 px à 4 px du bord, centrée sur lui, 4 px de marge autour : la zone fait 42 × 132 px), celle que donne la consigne 026 pour la barre à quatre boutons (700 × 400, gauche : x 0, y 134).
+//   window.__gfsStub.setReglages(enregistres) : l'événement `reglages` (contrats 5.2 point 2, consigne 039), que GFS envoie après chaque écriture des réglages de la vue de l'app : `enregistres: true`, le réglage est dans
+//   la vue ; `false`, il est resté un brouillon de Grist. Le contexte n'en porte pas : avant le premier appel, l'app ne sait rien.
 //   window.__gfsStub.ouvrir(args) : l'appel `ouvrir` de GFS vers l'app déjà ouverte (contrats 5.4) ; la promesse rend la réponse ou l'erreur de l'app. call(nom, args) : un appel de GFS de ce nom.
 //   window.__gfsStub.answers : tout ce que l'app répond aux appels de GFS ({ type, id, data | code, message }), dans l'ordre.
 //   window.__gfsStubParent = 'nom' (posé avant ce script) : le stub est chargé par la page PARENTE d'un <iframe name="nom"> qui porte l'app dans un cadre isolé (dev-tests/verify-gfs-frame.mjs) et joue
@@ -158,6 +160,8 @@
       stub.langue = next;
       stub.post({ type: 'evenement', nom: 'langue', data: { langue: next } });
     },
+    // L'événement `reglages` : GFS dit où en sont les réglages de la vue que l'app vient d'écrire (voir l'en-tête). Envoyé tel quel, même quand l'état ne change pas : c'est l'app qui compare.
+    setReglages(enregistres) { stub.post({ type: 'evenement', nom: 'reglages', data: { enregistres } }); },
   };
   // Ce que l'app écrit à son parent : ses appels (contrats 5.1) et ses réponses aux appels de GFS.
   function fromApp(message) {

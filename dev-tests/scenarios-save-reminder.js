@@ -460,6 +460,39 @@
     },
   });
 
+  // Seule (sans GFS), personne n'écoute l'événement `reglages` (consigne 039 de GFS) : un message qui le singe ne change ni la ligne ni les deux phrases. Le cas hébergé est dans
+  // dev-tests/scenarios-save-reminder-gfs.js (groupe `saveReminderGfs`).
+  cases.push({
+    id: 'save_reminder_app_alone_ignores_a_reglages_event_and_keeps_the_line_and_both_asks',
+    description: 'Seule, sans GFS (pas de gfs=<n> dans l’adresse), un message `reglages` { enregistres: true } posté à la page n’est écouté de personne : le rappel apparaît après un réglage de la vue comme avant, et les deux phrases (Vue et Accès) gardent leur demande d’enregistrer la vue',
+    run: async (h) => {
+      await setup(h);
+      const VIEW_ASK = 'Réglages propres à cette vue. Pour les appliquer à tout le monde, enregistrez ensuite la vue dans Grist (bouton Enregistrer en haut du widget).';
+      const ACCESS_ASK = 'Pour l’appliquer à tout le monde, enregistrez ensuite la vue dans Grist (bouton Enregistrer en haut du widget). Une personne absente de la table garde tous les droits ; un compte Lecteur de Grist ouvre toujours en lecture seule.';
+      const view = () => document.querySelector('[data-settings-panel="rowTemplate"] .settings-panel-intro');
+      const access = () => document.querySelector('[data-settings-panel="access"] [data-i18n^="settings.access.saveHint"]');
+      const held = () => (typeof GfsLink.settingsSaved === 'function' ? GfsLink.settingsSaved() : null);
+      const got = { hosted: GfsLink.hosted, stateBefore: held() };
+      window.postMessage({ gfs: 0, type: 'evenement', nom: 'reglages', data: { enregistres: true } }, '*');
+      await sleep(150);
+      got.stateAfter = held();
+      await openSettings('rowTemplate');
+      await ViewTemplate.set(7); await sleep(300);
+      got.line = shown();
+      got.lineText = box().textContent;
+      got.viewKey = view().getAttribute('data-i18n');
+      got.viewText = view().textContent;
+      await openSettings('access');
+      got.accessKey = access().getAttribute('data-i18n');
+      got.accessText = access().textContent;
+      await finish();
+      const pass = got.hosted === false && got.stateBefore === null && got.stateAfter === null
+        && got.line === true && got.lineText === FR_TEXT
+        && got.viewKey === 'settings.view.intro' && got.viewText === VIEW_ASK && got.accessKey === 'settings.access.saveHint' && got.accessText === ACCESS_ASK;
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.saveReminder = cases;
 })();

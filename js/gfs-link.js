@@ -1,6 +1,6 @@
 // Le lien avec Grist Factory Suite (GFS) : ce que le widget en sait quand GFS l'héberge, et rien quand il tourne seul (une fenêtre de Grist qui charge l'adresse de ce dépôt).
 // Les messages de GFS ont leur enveloppe (contrats de GFS, section 5) : { gfs: <contrat>, type: 'appel' | 'reponse' | 'erreur' | 'evenement', id, nom, args | data }, sans le `mtype` du
-// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Sept choses seulement :
+// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Huit choses seulement :
 //  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }),
 //    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre),
 //    `ouverture`, ce que GFS demande d'ouvrir au démarrage (consigne 010 ; pour « Nouveau > Importer », le fichier à importer que GFS donne, consigne 035), `langue`, la langue qui vaut maintenant (`fr` ou `en`, consigne 019), `stockage`, l'espace de cette app chez GFS
@@ -13,11 +13,14 @@
 //  - l'événement `extensions`, quand la personne en active ou en désactive une dans GFS : la même forme ;
 //  - l'événement `langue`, `{ langue: 'fr' | 'en' }`, quand la personne change la langue de GFS (un seul choix pour GFS et toutes ses apps, contrats 5.2 point 6) : une seule fois par changement, sans que GFS
 //    touche au cadre de l'app, qui décide comment suivre (js/settings.js:followGfsLanguage) ;
+//  - l'événement `reglages`, `{ enregistres: true | false }` (consigne 039), que GFS envoie après chaque écriture des réglages de la vue de l'app (`setOption`, `setOptions`, `clearOptions`) : `true`, le réglage est
+//    dans la vue de Grist, il n'y a plus de « Enregistrer » à cliquer ; `false`, il est resté un brouillon de Grist (GFS s'est replié dessus), que « Enregistrer » partage. Le dernier est gardé (`settingsSaved()`),
+//    les abonnés de `onSettings` sont rappelés quand il change (js/save-reminder.js, le seul à s'en servir) ;
 //  - `installer`, quand la personne clique une fonction grisée dans GFS : GFS ouvre sa fenêtre d'installation ;
 //  - l'appel `ouvrir`, que GFS envoie à l'app déjà ouverte quand la personne double-clique un autre fichier (consigne 010) ou choisit « Nouveau > Importer » (consigne 035, avec le fichier) : l'abonné de `onOpen` répond, ce fichier lui rend la réponse. Tout
 //    autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3).
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
-// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `hideBar()` rend faux et `opensInNewTab()` rend faux. Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
+// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `settingsSaved()` rend null, `hideBar()` rend faux et `opensInNewTab()` rend faux. Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
 // qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js, js/gfs-open.js, js/person-store.js et js/gfs-bar.js, jamais par ce fichier (sauf `opensInNewTab`, que trois liens consultent, consigne 011).
 const GfsLink = (function () {
   const CONTRACT = 0;                // le contrat que parle l'app, celui de son manifeste
@@ -42,7 +45,9 @@ const GfsLink = (function () {
   let language = null;         // `langue` du contexte, puis de l'événement `langue` : 'fr' ou 'en' (null : seul, ou GFS ne la donne pas)
   let storage = null;          // `stockage` du contexte (consigne 024) : Map clé -> texte, l'espace de cette app chez GFS (null : seul, GFS ne répond pas ou ne le donne pas)
   const languageListeners = new Set();
-  let bar = null;              // `barre` du contexte, puis de l'événement `barre` (consigne 025) : null (seul, GFS ne la donne pas, l'explorateur est ouvert ou l'app l'a masquée) ou { edge, depth, zone: { x, y, width, height } }
+  let settingsSaved = null;    // `enregistres` du dernier événement `reglages` (consigne 039) : true (les réglages écrits sont dans la vue), false (restés un brouillon de Grist) ; null : aucun événement (seul, GFS ne l'envoie pas, ou pas encore)
+  const settingsListeners = new Set();
+  let bar = null;             // `barre` du contexte, puis de l'événement `barre` (consigne 025) : null (seul, GFS ne la donne pas, l'explorateur est ouvert ou l'app l'a masquée) ou { edge, depth, zone: { x, y, width, height } }
   const barListeners = new Set();
   let openHandler = null;      // celui qui s'est inscrit pour l'appel `ouvrir` (onOpen)
   const earlyOpens = [];       // les appels `ouvrir` arrivés avant lui : ils attendent son inscription
@@ -145,6 +150,17 @@ const GfsLink = (function () {
     languageListeners.forEach((fn) => { try { fn(language); } catch (e) { console.warn('[GfsLink] abonné de la langue en échec', e); } });
   }
 
+  // L'événement `reglages` (contrats 5.2, point 2, consigne 039) : GFS l'envoie après chaque écriture des réglages de la vue de l'app, `{ enregistres: true }` quand le réglage est dans la vue (personne n'a rien à
+  // enregistrer dans Grist), `{ enregistres: false }` quand il est resté un brouillon de Grist. Le dernier état est gardé ; les abonnés de `onSettings` sont rappelés (`fn(true | false)`) quand il change. Un événement
+  // dont `enregistres` n'est pas un booléen n'est pas gardé et ne rappelle personne : l'état d'avant vaut toujours. Rien n'est jamais écrit ici : l'app n'écrit aucun réglage sans un geste de la personne.
+  function applySettings(data) {
+    known = true;
+    const next = data && typeof data === 'object' && typeof data.enregistres === 'boolean' ? data.enregistres : null;
+    if (next === null || next === settingsSaved) return;
+    settingsSaved = next;
+    settingsListeners.forEach((fn) => { try { fn(settingsSaved); } catch (e) { console.warn('[GfsLink] abonné des réglages en échec', e); } });
+  }
+
   // L'événement `barre` (contrats 5.2, point 7) : `{ barre }`, de la même forme que celle du contexte, une fois par changement chez GFS (la personne déplace la barre, le cadre change de taille, l'explorateur
   // s'ouvre ou se ferme, l'app la masque ou la rend). Les abonnés de `onBar` sont rappelés (`fn(bar())`) quand l'état change vraiment ; un événement qui répète l'état d'avant, ou qui n'a pas de `barre`, ne
   // rappelle personne.
@@ -169,6 +185,7 @@ const GfsLink = (function () {
     } else if (message.type === 'evenement' && message.nom === 'extensions') apply(message.data);
     else if (message.type === 'evenement' && message.nom === 'langue') applyLanguage(message.data);
     else if (message.type === 'evenement' && message.nom === 'barre') applyBar(message.data);
+    else if (message.type === 'evenement' && message.nom === 'reglages') applySettings(message.data);
     else if (message.type === 'appel') receiveCall(message);
   }
 
@@ -211,6 +228,9 @@ const GfsLink = (function () {
   const getOpening = () => opening;
   // La langue de GFS qui vaut maintenant, 'fr' ou 'en' : celle du contexte, puis celle du dernier événement `langue`. null seul, si GFS ne répond pas ou ne la donne pas (un GFS d'avant la consigne 019).
   const getLanguage = () => language;
+  // Où en sont les réglages de la vue que l'app a écrits (consigne 039) : true (GFS les a mis dans la vue : plus de « Enregistrer » dans Grist), false (restés un brouillon de Grist), null (aucun événement
+  // `reglages` : seule, un GFS qui ne l'envoie pas, ou rien d'écrit depuis l'ouverture). Seul `true` éteint ce qui demande d'enregistrer ; tout le reste le garde.
+  const getSettingsSaved = () => settingsSaved;
   // L'espace de cette app chez GFS (consigne 024) : vrai quand le contexte en a donné un, même vide ; faux seul, sans réponse de GFS, ou avec un GFS d'avant la consigne 024 (js/person-store.js garde alors les
   // préférences comme avant). La valeur d'une clé est un texte, null quand elle n'y est pas.
   const hasStorage = () => storage !== null;
@@ -241,6 +261,9 @@ const GfsLink = (function () {
   function onBar(fn) { barListeners.add(fn); return () => barListeners.delete(fn); }
   // Un abonné de la langue est rappelé (`fn('fr' | 'en')`) à chaque événement `langue` qui change celle de GFS, jamais à l'arrivée du contexte : le départ lit `language()`. Rend de quoi se désabonner.
   function onLanguage(fn) { languageListeners.add(fn); return () => languageListeners.delete(fn); }
+  // Un abonné des réglages est rappelé (`fn(true | false)`, ce que rend `settingsSaved()`) à chaque événement `reglages` qui change l'état, jamais à l'arrivée du contexte (il n'en porte pas) : le départ lit
+  // `settingsSaved()`. Rend de quoi se désabonner.
+  function onSettings(fn) { settingsListeners.add(fn); return () => settingsListeners.delete(fn); }
   // Inscrit celui qui ouvre ce que GFS demande : `fn({ fichier, type, dossier, raison[, importation] })` rend (une promesse de) vrai quand le fichier demandé est ouvert à la fin, faux sinon ; GFS en reçoit
   // `{ ouvert }`, sans délai (la personne peut prendre son temps). Un seul abonné ; les appels arrivés avant lui lui sont donnés dans l'ordre.
   function onOpen(fn) {
@@ -266,5 +289,5 @@ const GfsLink = (function () {
     call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(settleReady);
   } else settleReady();
 
-  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, onChange, onLanguage, onBar, onOpen, install };
+  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, onChange, onLanguage, onSettings, onBar, onOpen, install };
 })();

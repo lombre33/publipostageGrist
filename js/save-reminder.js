@@ -17,6 +17,10 @@
 // `null` vaut « absent » (setOption(clé, null) retire un réglage) : un réglage incomplet, que le widget retire, ne rappelle rien.
 // Limite : un brouillon posé avant l'ouverture du widget (page quittée puis retrouvée, cadre reconstruit par Grist) est pris pour l'état enregistré ;
 // la ligne ne parle que des changements faits depuis l'ouverture des Réglages.
+// Dans Grist Factory Suite (GFS), le « Enregistrer » de Grist n'existe plus pour ces réglages : GFS les écrit lui-même dans la vue, puis le dit par l'événement
+// `reglages` (js/gfs-link.js, consigne 039 de GFS). Quand son dernier événement dit `enregistres: true`, la ligne reste vide et les deux phrases des Réglages qui
+// demandent d'enregistrer la vue (Vue : `settings.view.intro`, Accès : `settings.access.saveHint`) disent la même chose sans la demande (leurs variantes `…Saved`) ;
+// avec `enregistres: false` (GFS s'est replié sur le brouillon de Grist), avant le premier événement et dans l'app seule, tout reste comme avant. Rien n'est écrit ici.
 // Script classique (pas type="module"), même convention de portée globale que AccessRights ; js/main.js appelle init() une fois GristAPI.init() faite.
 const SaveReminder = (function () {
   const BOX_ID = 'settings-save-reminder';
@@ -90,14 +94,36 @@ const SaveReminder = (function () {
     return tab ? tab.getAttribute('data-settings-tab') : null;
   }
 
+  // GFS a mis lui-même les réglages dans la vue (son dernier événement `reglages` dit `enregistres: true`) : il n'y a plus rien à enregistrer dans Grist. Faux seule, sans événement
+  // et avec `enregistres: false` : la ligne et les deux phrases restent comme avant.
+  const savedByHost = () => typeof GfsLink !== 'undefined' && GfsLink.settingsSaved() === true;
+
   // Le texte n'est posé qu'à l'apparition de la ligne : une zone `role="status"` qui change de texte est lue, une zone que l'on dévoile ne l'est pas
   // toujours.
   function render() {
     const box = document.getElementById(BOX_ID);
     if (!box) return;
-    const show = !!tracker && tracker.isUnsaved() && TABS.indexOf(activeTab()) !== -1;
+    const show = !!tracker && tracker.isUnsaved() && TABS.indexOf(activeTab()) !== -1 && !savedByHost();
     box.textContent = show ? I18n.t('settings.saveReminder') : '';
     box.hidden = !show;
+  }
+
+  // Les deux phrases des Réglages qui demandent d'enregistrer la vue : la clé `ask` (la demande) tant que le réglage peut rester un brouillon, la clé `done` (la même phrase sans la demande)
+  // quand GFS l'a mis dans la vue. La clé change dans `data-i18n` : le changement de langue (I18n.apply) retraduit ensuite la bonne phrase, sans que rien d'autre ne s'en mêle.
+  const ASKS = [
+    { ask: 'settings.view.intro', done: 'settings.view.introSaved' },
+    { ask: 'settings.access.saveHint', done: 'settings.access.saveHintSaved' },
+  ];
+  function renderAsks() {
+    const saved = savedByHost();
+    ASKS.forEach(({ ask, done }) => {
+      const el = document.querySelector('[data-i18n="' + ask + '"], [data-i18n="' + done + '"]');
+      if (!el) return;
+      const key = saved ? done : ask;
+      if (el.getAttribute('data-i18n') === key) return;
+      el.setAttribute('data-i18n', key);
+      el.textContent = I18n.t(key);
+    });
   }
 
   function isUnsaved() { return !!tracker && tracker.isUnsaved(); }
@@ -122,6 +148,9 @@ const SaveReminder = (function () {
     if (tabs && typeof MutationObserver === 'function') {
       new MutationObserver(render).observe(tabs, { attributes: true, attributeFilter: ['class'], subtree: true });
     }
+    // GFS dit où en sont les réglages (événement `reglages`) : la ligne et les deux phrases le suivent. S'il l'a déjà dit avant ce départ, renderAsks() le reprend ici.
+    if (typeof GfsLink !== 'undefined') GfsLink.onSettings(() => { render(); renderAsks(); });
+    renderAsks();
     render();
   }
 
