@@ -64,6 +64,9 @@
 //      listes de modèles de la galerie, qui s'appellent catalogue.json.
 //  28. le balisage calculé qui entre dans la page ailleurs que par `Dom.setMarkup` / `Dom.inertTemplate` (js/dom.js) : `innerHTML` ou `outerHTML` reçoit autre chose qu'un littéral, ou `insertAdjacentHTML`,
 //      `createContextualFragment`, `document.write` reviennent dans js/ ou extensions/ (audit externe du 21/10, point C-XSS-01 : quarante et une écritures éparpillées, toutes fermées dans le fond, aucune lisible comme telle).
+//  30. le site de GitHub Pages qui perd un des deux fichiers de sa racine : `.nojekyll` (sans lui, Pages passe d'abord les .md dans Jekyll, et une accolade double ouverte dans un seul d'entre eux fait
+//      échouer la publication en silence : le site reste sur la version d'avant ; consigne 037 de GFS) ou `index.html` ; et l'envoi sur le dépôt public qui le laisserait derrière : `.nojekyll` retiré de PUBLIES
+//      ou rangé dans EXCLUS (publier.sh), absent de la liste des fichiers requis de controles.mjs, ou un arbre à publier sans lui que controles.mjs laisserait passer (« Les deux » d'Antoine du 03/11).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -81,6 +84,31 @@ import { check, summarizeAndExit } from './unit-harness.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = rel => readFileSync(join(ROOT, rel), 'utf8');
+
+// ============================================================================
+// 30. Le site de GitHub Pages garde les deux fichiers de sa racine, et le dépôt public reçoit .nojekyll (consigne 037 de GFS ; « Les deux » d'Antoine du 03/11)
+// ============================================================================
+// (Placée ici, en tête, et non après la 29 : le script lit index.html dès les lignes qui suivent ; sans lui à la racine, il s'arrêterait sur cette lecture avant d'avoir pu dire que c'est lui qui manque.)
+// Le site https://lombre33.github.io/publipostageGrist/ (celui que GFS ouvre d'abord, consigne 033) est publié par GitHub Pages depuis la racine du dépôt. Sans un fichier .nojekyll à la racine, Pages passe
+// d'abord tous les .md dans Jekyll : une seule accolade double ouverte dans l'un d'eux (la page d'état de GFS, un protocole, un README) fait échouer la publication, et le site reste en silence sur la version
+// d'avant (c'est ainsi qu'Automation+ est resté à sa version du 21/10 jusqu'au 02/11). Sans index.html à la racine, le site n'a plus de page d'accueil. Rien de tout cela ne casse un test fonctionnel : le
+// fichier est vide et aucun script ne le lit. Le dépôt public (grist-factory/Publipostage-Plus) a lui aussi son site : `.nojekyll` part donc avec le reste de ce que publier.sh envoie (PUBLIES, jamais EXCLUS)
+// et controles.mjs refuse un arbre à publier qui ne l'a pas (la section 26 le prouve sur l'arbre assemblé, un `.nojekyll` retiré à la copie).
+{
+  const fichier = nom => existsSync(join(ROOT, nom)) && statSync(join(ROOT, nom)).isFile();
+  check('site : `.nojekyll` est à la racine du dépôt - sans lui, GitHub Pages passe les .md dans Jekyll et une accolade double ouverte dans l\'un d\'eux fait échouer la publication, le site restant sur la version d\'avant sans rien montrer (consigne 037 de GFS)',
+    fichier('.nojekyll'), fichier('.nojekyll') ? '' : '.nojekyll est absent de la racine');
+  check('site : `index.html` est à la racine du dépôt - c\'est la page d\'accueil du site de GitHub Pages',
+    fichier('index.html'), fichier('index.html') ? '' : 'index.html est absent de la racine');
+  const script = read('outils/depot-propre/publier.sh');
+  const liste = nom => ((script.match(new RegExp('^' + nom + '=\\(([^)]*)\\)', 'm')) || [])[1] || '').split(/\s+/).filter(Boolean);
+  const publiees = liste('PUBLIES'), exclues = liste('EXCLUS');
+  check('envoi public : publier.sh envoie `.nojekyll` et `index.html` (PUBLIES) et ne range ni l\'un ni l\'autre dans EXCLUS - le site du dépôt public les veut aussi',
+    publiees.includes('.nojekyll') && publiees.includes('index.html') && !exclues.includes('.nojekyll') && !exclues.includes('index.html'), JSON.stringify({ publiees, exclues }));
+  const requis = (read('outils/depot-propre/controles.mjs').match(/for \(const required of \[([^\]]*)\]/) || [])[1] || '';
+  check('envoi public : controles.mjs compte `.nojekyll` et `index.html` parmi les fichiers requis de l\'arbre à publier - un arbre qui ne les a pas ne se committe pas',
+    /'\.nojekyll'/.test(requis) && /'index\.html'/.test(requis), requis.slice(0, 160));
+}
 
 function listFiles(dir, re) {
   const abs = join(ROOT, dir);
@@ -1359,7 +1387,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const version = (read('js/version.js').match(/PP_VERSION\s*=\s*['"]([^'"]+)['"]/) || [])[1] || '';
   const arbre = mkdtempSync(join(tmpdir(), 'arbre-publier-'));
   try {
-    for (const entree of publiees) cpSync(join(ROOT, entree), join(arbre, entree), { recursive: true });
+    // Une entrée de PUBLIES absente du dossier de travail n'est pas copiée : controles.mjs la signale (sa liste de fichiers requis) et la section 30 la nomme, au lieu d'un plantage ici.
+    for (const entree of publiees) if (existsSync(join(ROOT, entree))) cpSync(join(ROOT, entree), join(arbre, entree), { recursive: true });
     const documents = join(ROOT, 'outils/depot-propre/public');
     for (const doc of readdirSync(documents, { withFileTypes: true })) {
       if (doc.isDirectory()) { if (doc.name === 'screenshots') cpSync(join(documents, doc.name), join(arbre, doc.name), { recursive: true }); continue; }
@@ -1376,6 +1405,11 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
       publiees.length >= 7 && /^\d+\.\d+\.\d+/.test(version) && clean.read >= 300, JSON.stringify({ publiees: publiees.length, version, lus: clean.read, erreur: clean.error }));
     check('envoi public : controles.mjs (outils/depot-propre) ne trouve aucune erreur sur l\'arbre qu\'on publierait - une clé « pp_ » que le README ne nomme pas, un fichier cité qui n\'existe plus, un lien cassé : l\'envoi suivant ne sera pas refusé',
       clean.status === 0 && clean.errors.length === 0, clean.errors.slice(0, 3).map(line => line.slice(0, 240)).join(' | ') || `sortie ${clean.status} ${clean.error}`);
+    rmSync(join(arbre, '.nojekyll'), { force: true });
+    const sansNojekyll = lancer();
+    check('envoi public : un arbre sans .nojekyll, posé dans une copie de l\'arbre, fait échouer controles.mjs, qui le nomme (le dépôt public a son propre site GitHub Pages : sans lui, Pages passe ses .md dans Jekyll et une accolade double ouverte fait échouer la publication en silence)',
+      clean.status === 0 && sansNojekyll.status === 1 && sansNojekyll.errors.some(line => line.includes('fichier absent : .nojekyll')), JSON.stringify({ avec: clean.status, sans: sansNojekyll.status, erreurs: sansNojekyll.errors.slice(0, 2) }));
+    writeFileSync(join(arbre, '.nojekyll'), '');
     appendFileSync(join(arbre, 'js/main.js'), "\nconst cleDeLEssai = 'pp_cle_inconnue_de_l_essai';\n");
     const unknown = lancer();
     check('envoi public : une clé « pp_ » inconnue de STORED, posée dans une copie de l\'arbre, fait échouer controles.mjs, qui la nomme (garde-fou de l\'analyse elle-même : c\'est ce qui échouait avec pp_versions_added)',

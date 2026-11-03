@@ -26,10 +26,11 @@ set -euo pipefail
 ICI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Ce qui part sur le dépôt public, tel que le dépôt de développement le suit.
-PUBLIES=(index.html css js extensions img templates-gallery LICENSE)
+# .nojekyll (un fichier vide) part avec le reste : le dépôt public a son propre site (GitHub Pages) et, sans lui, Pages passe les .md dans Jekyll
+# avant de publier ; une accolade double ouverte dans un .md fait alors échouer la publication, et le site reste sur la version d'avant (consigne 037 de GFS).
+PUBLIES=(index.html css js extensions img templates-gallery LICENSE .nojekyll)
 # Ce qui ne part jamais (les documents publics viennent de public/, pas du README du dépôt de développement).
-# .nojekyll est celui du site du dépôt de développement (consigne 037 de GFS) ; l'envoyer aussi au dépôt public reste à décider.
-EXCLUS=(.claude .gitignore .nojekyll AUDIT_CODE.md CAHIER_DES_CHARGES.md GFS-ETAT.md README.md dev-tests outils planning prototypes templates-gallery-dev)
+EXCLUS=(.claude .gitignore AUDIT_CODE.md CAHIER_DES_CHARGES.md GFS-ETAT.md README.md dev-tests outils planning prototypes templates-gallery-dev)
 
 DEV=""
 PROPRE=""

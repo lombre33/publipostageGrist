@@ -64,7 +64,8 @@ function report(level, label, hits, show = 4) {
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // 1. Ce qui doit être là, et ce qui ne doit jamais l'être
 // ---------------------------------------------------------------------------------------------------------------------------------------------
-for (const required of ['index.html', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'NOTICE', 'CARTE_DU_CODE.md']) {
+// .nojekyll (un fichier vide) : le dépôt public a son propre site GitHub Pages ; sans lui, Pages passe les .md dans Jekyll avant de publier, et une accolade double ouverte dans un seul d'entre eux fait échouer la publication en silence (le site reste sur la version d'avant).
+for (const required of ['index.html', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'NOTICE', 'CARTE_DU_CODE.md', '.nojekyll']) {
   if (!has(required)) fail(`fichier absent : ${required}`);
 }
 const NEVER = ['dev-tests', 'planning', 'prototypes', 'templates-gallery-dev', 'outils', '.claude', 'AUDIT_CODE.md', 'CAHIER_DES_CHARGES.md', 'GFS-ETAT.md'];

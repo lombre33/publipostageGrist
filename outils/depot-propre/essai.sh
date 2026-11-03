@@ -36,6 +36,7 @@ HTML
   echo "const PP_VERSION = '1.0.0-beta.1';" > js/version.js
   echo 'window.main = function () { return 1; };' > js/main.js
   echo 'jpg' > img/logo.jpg
+  : > .nojekyll   # vide, comme celui du dépôt de développement : publier.sh le fait partir, controles.mjs l'exige
   echo '[]' > templates-gallery/catalogue.json
   printf 'GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\n' > LICENSE
   echo '# dev' > README.md; echo x > dev-tests/a.mjs; echo x > planning/a.md
@@ -61,6 +62,9 @@ git clone -q "$T/web/github.com/grist-factory/Publipostage-Plus.git" "$T/propre"
 AVANT="$(git -C "$T/propre" rev-parse HEAD)"
 
 echo "publier.sh : refus"
+(cd "$T/dev" && G rm -q .nojekyll && G commit -qm "sans .nojekyll" && git push -q origin main)
+attend "refuse un dépôt de développement sans .nojekyll (le site du dépôt public passerait ses .md dans Jekyll)" ".nojekyll n'existe pas dans le dépôt de développement" "$(publier)"
+(cd "$T/dev" && : > .nojekyll && G add .nojekyll && G commit -qm "avec .nojekyll" && git push -q origin main)
 echo 'x' >> "$T/dev/README.md"
 attend "refuse un dépôt de développement modifié" "modifications non committées" "$(publier)"
 git -C "$T/dev" checkout -q -- README.md
@@ -93,6 +97,7 @@ vrai "étiquette annotée v1.0.0-beta.1" test "$(git -C "$P" cat-file -t v1.0.0-
 vrai "un commit de plus sur l'historique existant" test "$(git -C "$P" rev-parse HEAD~1)" = "$AVANT"
 vrai "le message ne porte aucune trace de session" test -z "$(git -C "$P" log -1 --format=%B | grep -i -E 'claude|session|co-authored')"
 vrai "dev-tests, planning et outils ne partent pas" test -z "$(git -C "$P" ls-tree --name-only HEAD | grep -E '^(dev-tests|planning|outils)$')"
+vrai ".nojekyll part avec le reste, vide, à la racine du dépôt public" test -f "$P/.nojekyll" -a ! -s "$P/.nojekyll" -a -n "$(git -C "$P" ls-tree --name-only HEAD | grep -x '.nojekyll')"
 vrai "les documents publics sont là, README du dépôt de développement absent" test -f "$P/SECURITY.md" -a -f "$P/NOTICE" -a "$(head -1 "$P/README.md")" = "# Publipostage+ pour Grist"
 vrai "la carte du code part avec les documents publics, version et date remplacées" bash -c "grep -q '^# Carte du code de Publipostage+' '$P/CARTE_DU_CODE.md' && ! grep -q '{{' '$P/CARTE_DU_CODE.md'"
 vrai "les captures de public/screenshots/ sont posées dans screenshots/ du dépôt public, identiques" bash -c "cmp -s '$T/dev/outils/depot-propre/public/screenshots/edition-variables.png' '$P/screenshots/edition-variables.png' && cmp -s '$T/dev/outils/depot-propre/public/screenshots/lecture-resolue.png' '$P/screenshots/lecture-resolue.png'"
@@ -149,6 +154,7 @@ muter "un fichier cité par la page, absent" "cite des fichiers absents" "rm img
 muter "un dossier de la galerie dont le nom commence par « _ » (GitHub Pages ne le sert pas)" "commence par « _ » ou « . »" "mkdir -p templates-gallery/_tables; echo x > templates-gallery/_tables/gestion.json"
 muter "un fichier caché dans js/ (GitHub Pages ne le sert pas)" "commence par « _ » ou « . »" "echo x > js/.cache"
 muter "la carte du code absente" "fichier absent : CARTE_DU_CODE.md" "rm CARTE_DU_CODE.md"
+muter "le .nojekyll manquant (GitHub Pages passerait les .md dans Jekyll)" "fichier absent : .nojekyll" "rm .nojekyll"
 muter "une carte du code qui cite un fichier disparu" "CARTE_DU_CODE.md cite des fichiers absents" "rm js/dom.js"
 muter "un fichier de js/ sans ligne dans la carte du code" "sans ligne dans CARTE_DU_CODE.md" "echo x > js/nouveau.js"
 muter "un lien cassé dans la carte du code" "CARTE_DU_CODE.md → SECU.md" "sed -i 's/(SECURITY.md)/(SECU.md)/' CARTE_DU_CODE.md"

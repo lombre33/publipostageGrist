@@ -62,6 +62,10 @@ chemin est affiché.
 - Une entrée à la racine du dépôt de développement qu'il ne connaît pas (`PUBLIES` ou `EXCLUS` dans
   `publier.sh`) : un nouveau dossier ne part jamais par oubli. Un dossier publié s'ajoute aussi à `KNOWN`
   dans `controles.mjs`, un dossier qui ne doit pas partir à `NEVER`.
+- Un fichier ou un dossier de `PUBLIES` que le dépôt de développement ne suit pas. `.nojekyll`, un fichier vide
+  à la racine, en fait partie : il part avec le reste, car le dépôt public a son propre site (GitHub Pages) et,
+  sans lui, Pages passe les `.md` dans Jekyll avant de publier ; un `.md` qui porte une accolade double ouverte
+  seule fait alors échouer la publication, et le site reste sur la version d'avant, sans rien montrer.
 - Un sous-dossier de `public/` autre que `screenshots/`, ou autre chose qu'un `.png` dans `public/screenshots/`.
 - Une version qui n'est pas du semver, ou une étiquette déjà prise.
 - D'écraser ce que le dépôt public a reçu depuis la dernière étiquette (une contribution acceptée là-bas et
@@ -71,7 +75,7 @@ chemin est affiché.
 
 ## Les contrôles
 
-ERREUR (bloque le commit) : fichier requis absent ; dossier de développement présent ; licence qui n'est pas
+ERREUR (bloque le commit) : fichier requis absent (`.nojekyll` compris) ; dossier de développement présent ; licence qui n'est pas
 la GPL v3 ; prénom du développeur, compte personnel, lien ou trace de session, renvoi à la mémoire du projet,
 secret ; politique de sécurité du contenu absente, après un script, avec `'unsafe-inline'`, ou dont les
 empreintes ne sont pas celles des scripts en ligne de `index.html` ; fichier cité par la page absent ;

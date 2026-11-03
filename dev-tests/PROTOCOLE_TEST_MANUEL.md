@@ -1139,8 +1139,9 @@ Dans Firefox, le widget (seul puis hébergé par GFS), sur un document avec une 
 
 ## 39. Le site en ligne sert ce qu'on vient de pousser (à vérifier à chaque lot)
 
-**Couverture automatisée** : aucune. GitHub Pages ne s'essaie qu'en ligne : le run de publication, les dix minutes de cache et le site servi ne se voient pas d'un poste de développement. Ce qui est gardé : `.nojekyll` est à la racine du dépôt et
-`outils/depot-propre/publier.sh` le classe (il refuse une entrée inconnue à la racine).
+**Couverture automatisée** : le groupe `codeHygiene` (`dev-tests/verify-code-hygiene.mjs`, section 30), pour la racine seulement : `.nojekyll` et `index.html` sont à la racine du dépôt, et le test échoue si l'un des deux manque. L'envoi sur le dépôt public emporte aussi
+`.nojekyll` (`PUBLIES` de `outils/depot-propre/publier.sh`, fichiers requis de `outils/depot-propre/controles.mjs`, et la section 26, qui retire `.nojekyll` de l'arbre assemblé et attend l'erreur de `controles.mjs`). GitHub Pages ne s'essaie qu'en ligne : le run de publication, les dix minutes
+de cache et le site servi ne se voient pas d'un poste de développement.
 **Non couvert** : tout ce qui suit.
 
 **Pourquoi** (consigne 037 de GFS, 02/11) : GFS ouvre l'app sur le site publié (`https://lombre33.github.io/publipostageGrist/index.html`) et ne retombe sur la copie de son sous-module que si le site ne répond pas en 15 secondes ; un site publié mais ancien est servi comme
