@@ -969,11 +969,25 @@ const GristAPI = (function () {
     }
   }
 
+  // Une règle « match » lit, dans la ligne de la page, la colonne `colonneSource` : quand la table de la page n'a pas cette colonne, la règle n'a rien à y lire et
+  // ne s'applique pas à cette page. Un lien commun écrit avant les liens propres à une table, ou pour une autre page, masquait sinon la colonne Référence qui relie
+  // vraiment les deux tables : des champs vides, sans un mot (consigne 038 de GFS). La règle reste telle quelle dans « Tables liées » (getAllLinkRules, findLinkRule),
+  // seule sa portée change. L'identifiant de ligne (« Auto », `id`) et la règle « singleton » ne lisent aucune colonne de la page : ils s'appliquent à toute page.
+  // Tant que le schéma de la page n'est pas lu (métadonnées illisibles, table pas encore connue), la règle s'applique comme avant.
+  function linkRuleApplies(rule, page) {
+    if (!rule || rule.mode !== 'match' || rule.colonneSource === 'id') return !!rule;
+    const columns = page && _columnTypesByTable[page];
+    return !columns || Object.prototype.hasOwnProperty.call(columns, rule.colonneSource);
+  }
+
   // Le lien à suivre pour lire `tableId` depuis `pageTable` (la table de la page du moment quand on ne la donne pas) : celui de ce couple, sinon le lien
-  // commun à toutes les tables ; null s'il n'y en a aucun.
+  // commun à toutes les tables, pourvu que sa colonne source soit une colonne de la table de la page (linkRuleApplies) ; null s'il n'y en a aucun.
   function getLinkRule(tableId, pageTable) {
     const page = pageTable == null ? getCurrentTableId() : pageTable;
-    return (page && _linkRulesByPair[linkPairKey(tableId, page)]) || _linkRulesByPair[linkPairKey(tableId, '')] || null;
+    const own = page && _linkRulesByPair[linkPairKey(tableId, page)];
+    if (own && linkRuleApplies(own, page)) return own;
+    const shared = _linkRulesByPair[linkPairKey(tableId, '')];
+    return shared && linkRuleApplies(shared, page) ? shared : null;
   }
 
   // Le lien réglé pour ce couple exactement, sans repli sur le lien commun (`tableSource` vide : le lien commun lui-même).

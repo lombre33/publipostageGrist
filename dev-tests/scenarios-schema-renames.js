@@ -999,7 +999,9 @@
       const res = await pass(h);
       const portefeuille = GristAPI.getLinkRule('SrPortefeuille');
       const old = GristAPI.getLinkRule('SrProjets');
-      const annuaire = GristAPI.getLinkRule('SrAnnuaire');
+      // La clé commune se lit telle qu'elle est écrite (findLinkRule) : depuis la consigne 038 de GFS, getLinkRule ne la rend plus pour une page qui n'a plus sa colonne
+      // source (ici « Responsable », devenue « Contact » sur SrDossiers), mais la clé, elle, reste dans « Tables liées », intacte.
+      const annuaire = GristAPI.findLinkRule('SrAnnuaire', '');
       const checks = {
         keptTheirs: !!portefeuille && portefeuille.colonneCible === 'Code' && portefeuille.colonneSource === 'Titre',
         oldOneStays: !!old && old.colonneSource === 'Projet' && old.colonneCible === 'id',

@@ -282,6 +282,76 @@ async function main() {
       && (await run('GristAPI.getLinkRule("Personnes", "Missions").colonneSource')) === 'Personne', JSON.stringify(linkRows(doc)));
   });
 
+  // === Un lien dont la colonne source manque dans la table de la page est passé (consigne 038 de GFS, décision du porteur du 03/11) ===
+  // Un lien commun écrit avant les liens propres à une table, ou pour une autre page, lit une colonne que la table de la page n'a pas : il ne trouve aucune
+  // ligne, sans un mot, et masque la colonne Référence qui relie vraiment les deux tables. getLinkRule le passe comme s'il n'y en avait pas ; il reste
+  // dans « Tables liées » (getAllLinkRules, findLinkRule), rien n'est écrit ni supprimé.
+  const MISSING_TABLES = Object.assign({}, TWO_TABLES, { Courriers: { Convention: 'Text' } });
+  const docWithLinks = (links) => {
+    const doc = new Doc({ tables: Object.assign({}, MISSING_TABLES, { Publipostage_LiensTables: { TableCible: 'Text', Mode: 'Text', ColonneCible: 'Text', ColonneSource: 'Text', TableSource: 'Text' } }) });
+    links.forEach((link, i) => doc.tables.Publipostage_LiensTables.rows.push(Object.assign({ id: i + 1, TableCible: 'Personnes', Mode: 'match', ColonneCible: 'id', ColonneSource: '' }, link)));
+    return doc;
+  };
+  const sourceOf = (rule) => (rule ? rule.colonneSource : null);
+
+  await section('liens : un lien commun dont la colonne source manque dans la table de la page', async () => {
+    const doc = docWithLinks([{ ColonneSource: 'Convention' }]);
+    const { run } = fresh(doc);
+    await run('GristAPI.init()');
+    check('Missions n\'a pas la colonne « Convention » : le lien commun ne s\'applique pas à elle (null, comme sans lien)',
+      (await run('GristAPI.getLinkRule("Personnes", "Missions")')) === null, JSON.stringify(await run('GristAPI.getLinkRule("Personnes", "Missions")')));
+    check('... Courriers l\'a : le même lien commun s\'y applique', sourceOf(await run('GristAPI.getLinkRule("Personnes", "Courriers")')) === 'Convention');
+    check('... une table que le schéma ne connaît pas : il s\'applique comme avant, rien n\'est deviné',
+      sourceOf(await run('GristAPI.getLinkRule("Personnes", "Inconnue")')) === 'Convention');
+    check('... sans table de la page (aucune ligne reçue) : il s\'applique comme avant', !(await run('GristAPI.getCurrentTableId()')) && sourceOf(await run('GristAPI.getLinkRule("Personnes")')) === 'Convention');
+    check('le lien passé reste dans « Tables liées » tel quel : getAllLinkRules et findLinkRule le donnent, aucune écriture',
+      same((await run('GristAPI.getAllLinkRules()')).map((r) => [r.tableCible, r.tableSource, r.colonneSource]), [['Personnes', '', 'Convention']])
+      && sourceOf(await run('GristAPI.findLinkRule("Personnes", "")')) === 'Convention' && doc.journal.length === 0 && linkRows(doc).length === 1 && linkRows(doc)[0].ColonneSource === 'Convention',
+      JSON.stringify(doc.journal));
+    doc.tables.Missions.cols.Convention = 'Text';
+    await run('GristAPI.refreshSchema()');
+    check('la colonne ajoutée à la table de la page, le même lien s\'applique de nouveau (sans rien réécrire)',
+      sourceOf(await run('GristAPI.getLinkRule("Personnes", "Missions")')) === 'Convention' && doc.journal.length === 0);
+    delete doc.tables.Missions.cols.Convention;
+    await run('GristAPI.refreshSchema()');
+    check('... et retirée, il est passé de nouveau', (await run('GristAPI.getLinkRule("Personnes", "Missions")')) === null);
+  });
+
+  await section('liens : ce qui s\'applique comme avant', async () => {
+    const byId = fresh(docWithLinks([{ ColonneCible: 'Nom', ColonneSource: 'id' }]));
+    await byId.run('GristAPI.init()');
+    check('l\'identifiant de ligne (« Auto », id) en source s\'applique à toute table de la page',
+      sourceOf(await byId.run('GristAPI.getLinkRule("Personnes", "Missions")')) === 'id' && sourceOf(await byId.run('GristAPI.getLinkRule("Personnes", "Courriers")')) === 'id');
+    const singleton = fresh(docWithLinks([{ Mode: 'singleton', ColonneCible: '', ColonneSource: '' }]));
+    await singleton.run('GristAPI.init()');
+    check('la règle « singleton » ne lit aucune colonne de la page : elle s\'applique à toute table de la page',
+      (await singleton.run('GristAPI.getLinkRule("Personnes", "Missions").mode')) === 'singleton' && (await singleton.run('GristAPI.getLinkRule("Personnes", "Courriers").mode')) === 'singleton');
+    const existing = fresh(docWithLinks([{ ColonneSource: 'Personne' }]));
+    await existing.run('GristAPI.init()');
+    check('un lien commun dont la colonne est dans la table de la page s\'applique (Missions a « Personne »)', sourceOf(await existing.run('GristAPI.getLinkRule("Personnes", "Missions")')) === 'Personne');
+  });
+
+  await section('liens : le lien propre à une table de la page et le lien commun', async () => {
+    const both = fresh(docWithLinks([{ ColonneSource: 'Personne' }, { ColonneSource: 'Titre', ColonneCible: 'Nom', TableSource: 'Missions' }]));
+    await both.run('GristAPI.init()');
+    check('le lien propre à la table de la page, quand sa colonne existe, passe avant le lien commun', sourceOf(await both.run('GristAPI.getLinkRule("Personnes", "Missions")')) === 'Titre');
+    const stale = fresh(docWithLinks([{ ColonneSource: 'Personne' }, { ColonneSource: 'Disparue', ColonneCible: 'Nom', TableSource: 'Missions' }]));
+    await stale.run('GristAPI.init()');
+    check('le lien propre dont la colonne a disparu est passé : le lien commun, s\'il s\'applique, prend le relais',
+      sourceOf(await stale.run('GristAPI.getLinkRule("Personnes", "Missions")')) === 'Personne');
+    const none = fresh(docWithLinks([{ ColonneSource: 'Convention' }, { ColonneSource: 'Disparue', ColonneCible: 'Nom', TableSource: 'Missions' }]));
+    await none.run('GristAPI.init()');
+    check('aucun des deux ne s\'applique : null', (await none.run('GristAPI.getLinkRule("Personnes", "Missions")')) === null);
+  });
+
+  await section('liens : métadonnées illisibles', async () => {
+    const doc = docWithLinks([{ ColonneSource: 'Convention' }]);
+    doc.failMeta = true;
+    const { run } = fresh(doc);
+    await run('GristAPI.init()');
+    check('le schéma n\'a pas pu être lu : le lien s\'applique comme avant (il n\'est passé que sur un schéma lu)', sourceOf(await run('GristAPI.getLinkRule("Personnes", "Missions")')) === 'Convention');
+  });
+
   // === createWriteQueue ===
   await section('createWriteQueue', async () => {
     const { run } = fresh(new Doc());

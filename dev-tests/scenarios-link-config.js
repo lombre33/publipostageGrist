@@ -630,9 +630,15 @@
 
   cases.push({
     id: 'linkcfg_a_link_from_before_still_serves_every_page_table_until_one_sets_its_own',
-    description: 'Un lien d’avant les liens par table (sans table de page) reste le repli de toutes les tables : il lit la variable sur LcDossiers comme sur LcNotifs, un lien propre à LcNotifs prend alors le pas sur lui pour cette table seulement, et le supprimer rend à LcNotifs le lien commun',
+    description: 'Un lien d’avant les liens par table (sans table de page) reste le repli de toutes les tables qui ont sa colonne source : il lit la variable sur LcDossiers comme sur LcNotifs, un lien propre à LcNotifs prend alors le pas sur lui pour cette table seulement, et le supprimer rend à LcNotifs le lien commun',
     run: async (h) => {
       await seedTwoPages(h);
+      // Consigne 038 de GFS : un lien commun ne vaut que pour une table de page qui a sa colonne source (« Responsable »). LcNotifs la reçoit donc ici ; le cas où
+      // elle manque, où le lien est passé comme s'il n'y en avait pas, a ses propres essais (linkcfg_missing_source_…).
+      const stub = window.__gristStub;
+      stub.setVariables('LcNotifs', { Objet: 'Text', Contact: 'Ref:LcAnnuaire', Responsable: 'Text', gristHelper_Display: 'Any' }, null, { Contact: 'gristHelper_Display' });
+      stub.setRows('LcNotifs', [{ id: 1, Objet: 'Relance', Contact: 8, Responsable: '', gristHelper_Display: 'Martin Claire' }]);
+      await GristAPI.refreshSchema();
       try {
         await GristAPI.saveLinkRule('LcAnnuaire', { mode: 'match', colonneCible: 'id', colonneSource: 'Responsable' });
         const common = { dossiers: ruleOf('LcAnnuaire', 'LcDossiers'), notifs: ruleOf('LcAnnuaire', 'LcNotifs'), exactNotifs: GristAPI.findLinkRule('LcAnnuaire', 'LcNotifs') };
@@ -712,6 +718,83 @@
         await GristAPI.deleteLinkRule('LcContacts');
         Variables.refreshLinkRulesPanel();
       }
+    },
+  });
+
+  // === Un lien dont la colonne source manque dans la table de la page est passé (consigne 038 de GFS, décision du porteur du 03/11) ===
+  // Le cas du porteur : la page est sur LcEnvoi, dont Projet et B sont des Références (vers LcProjets et LcEtabs) que Grist affiche par du texte, comme en Lecture.
+  // Le lien commun de LcEtabs lit « Convention », une colonne que LcEnvoi n'a pas ; celui de LcProjets lit « Projet », qu'elle a. LcSeul n'a, lui, aucune Référence
+  // qui y mène et son seul lien lit aussi « Convention ».
+  const NO_HF = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
+  const badgeOf = (table, column) => `<span class="var-badge" data-table="${table}" data-column="${column}" data-key="${table}.${column}"></span>`;
+  async function readerTextOf(html) {
+    const reader = document.getElementById('reader-container');
+    reader.style.display = 'block';
+    await ReaderMode.render(html, 'LcEnvoi', GristAPI.getCurrentRecord(), NO_HF);
+    return reader.querySelector('.reader-content').textContent;
+  }
+  async function seedMissingSource(h) {
+    await h.resetEditor();
+    const stub = window.__gristStub;
+    stub.setVariables('LcProjets', { Nom: 'Text' });
+    stub.setVariables('LcEtabs', { Nom: 'Text', Ville: 'Text' });
+    stub.setVariables('LcSeul', { Nom: 'Text' });
+    stub.setVariables('LcEnvoi', { Objet: 'Text', Projet: 'Ref:LcProjets', B: 'Ref:LcEtabs', gristHelper_Display: 'Any', gristHelper_Display2: 'Any' },
+      null, { Projet: 'gristHelper_Display', B: 'gristHelper_Display2' });
+    stub.setRows('LcProjets', [{ id: 1, Nom: 'Alpha' }, { id: 2, Nom: 'Beta' }]);
+    stub.setRows('LcEtabs', [{ id: 4, Nom: 'Martin SA', Ville: 'Paris' }, { id: 5, Nom: 'Dupont SARL', Ville: 'Lyon' }]);
+    stub.setRows('LcSeul', [{ id: 1, Nom: 'Seul' }]);
+    stub.setRows('LcEnvoi', [{ id: 1, Objet: 'Envoi 1', Projet: 1, B: 5, gristHelper_Display: 'Alpha', gristHelper_Display2: 'Dupont SARL' }]);
+    await GristAPI.refreshSchema();
+    for (const table of ['LcProjets', 'LcEtabs', 'LcSeul']) await GristAPI.deleteLinkRule(table);
+    await GristAPI.saveLinkRule('LcEtabs', { mode: 'match', colonneCible: 'id', colonneSource: 'Convention' });
+    await GristAPI.saveLinkRule('LcProjets', { mode: 'match', colonneCible: 'id', colonneSource: 'Projet' });
+    await GristAPI.saveLinkRule('LcSeul', { mode: 'match', colonneCible: 'id', colonneSource: 'Convention' });
+    stub.fireRecord({ id: 1, Objet: 'Envoi 1', Projet: 'Alpha', B: 'Dupont SARL' }, 'LcEnvoi');
+    await h.sleep(50);
+  }
+  async function cleanMissingSource() {
+    for (const table of ['LcProjets', 'LcEtabs', 'LcSeul']) await GristAPI.deleteLinkRule(table);
+    Variables.refreshLinkRulesPanel();
+  }
+
+  cases.push({
+    id: 'linkcfg_missing_source_rule_is_passed_and_reference_column_links',
+    description: 'Lecture par ligne : le lien commun d’une table dont la colonne source manque dans la table de la page est passé, la colonne Référence de la page relie (le champ n’est plus vide) ; un lien dont la colonne existe s’applique comme avant ; le lien reste, intact, dans « Tables liées »',
+    run: async (h) => {
+      await seedMissingSource(h);
+      try {
+        const etabs = await readerTextOf(`<p>E=${badgeOf('LcEtabs', 'Nom')}|V=${badgeOf('LcEtabs', 'Ville')}</p>`);
+        const projets = await readerTextOf(`<p>P=${badgeOf('LcProjets', 'Nom')}</p>`);
+        const rows = await Variables.resolveRows('LcEtabs', [], 'LcEnvoi', GristAPI.getCurrentRecord());
+        Variables.refreshLinkRulesPanel();
+        const panelText = document.getElementById('link-rules-list').textContent;
+        const kept = GristAPI.findLinkRule('LcEtabs', '');
+        const pass = etabs === 'E=Dupont SARL|V=Lyon' && projets === 'P=Alpha' && !rows.error && rows.rows.length === 1 && rows.rows[0].id === 5
+          && !!kept && kept.colonneSource === 'Convention' && kept.colonneCible === 'id' && panelText.indexOf('Convention') !== -1 && GristAPI.getAllLinkRules().length === 3;
+        return { pass, notes: JSON.stringify({ etabs, projets, rows: rows.error || rows.rows.map(r => r.id), kept, panelText }) };
+      } finally { await cleanMissingSource(); }
+    },
+  });
+
+  cases.push({
+    id: 'linkcfg_missing_source_without_reference_proposes_the_link_window',
+    description: 'Une table dont le seul lien lit une colonne absente de la table de la page, sans Référence qui y mène : la bulle est orange (plus de lien) et insérer une de ses variables ouvre la fenêtre de liaison, comme pour une table sans lien ; annulée, le lien de la personne n’est ni retiré ni réécrit',
+    run: async (h) => {
+      await seedMissingSource(h);
+      try {
+        const orange = Variables.isUnlinked('LcSeul'), blue = Variables.isUnlinked('LcEtabs'), appliedBefore = Variables.isUnlinked('LcProjets');
+        let done = false;
+        const closed = Variables.ensureLinkConfigured({ table: 'LcSeul' }).then(v => { done = true; return v; });
+        await h.sleep(150);
+        const opened = !done && modal().style.display !== 'none';
+        await closeWindow(h);
+        const answer = await settled(closed);
+        const kept = GristAPI.findLinkRule('LcSeul', '');
+        const pass = orange === true && blue === false && appliedBefore === false && opened && answer === false
+          && !!kept && kept.colonneSource === 'Convention' && GristAPI.findLinkRule('LcSeul', 'LcEnvoi') === null;
+        return { pass, notes: JSON.stringify({ orange, blue, appliedBefore, opened, answer, kept }) };
+      } finally { await cleanMissingSource(); }
     },
   });
 
