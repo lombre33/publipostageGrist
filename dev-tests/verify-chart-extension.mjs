@@ -92,6 +92,8 @@ const pageErrors = [];
 // Le graphique d'un modèle, tel que l'éditeur l'écrit : sa référence (section, portée, nom), sa taille ; jamais d'image dans le modèle.
 const CHART_IMG = '<img class="editor-image" alt="Graphique" style="width: 480px; height: 300px" data-layer="normal" data-wrap="inline" data-chart-section="101" data-chart-scope="linked" data-chart-name="Ventes par mois">';
 const FILES = ['chart-plot.js', 'chart-source.js', 'chart-make.js', 'chart-office.js', 'chart-block.js', 'chart-make-ui.js', 'chart-block.css', 'chart-make.css'];
+// La version de cache de l'extension, celle du registre (js/extensions.js) : lue là, jamais recopiée ici, pour qu'une montée de version (chaque changement d'un fichier de extensions/graphique/) ne casse pas l'essai.
+const REGISTRY_VERSION = (() => { const source = readFileSync(join(ROOT, 'js', 'extensions.js'), 'utf8'); return /version: '([^']+)'/.exec(source.slice(source.indexOf('\n    graphique: {')))[1]; })();
 
 // Les modèles : 1 « Rapport » (document, ★) porte le graphique ; 2 « Note » n'en porte pas. `starId` : celui qui s'ouvre au démarrage. La ligne reçue dès l'abonnement est « L1 ».
 const seedOf = starId => `
@@ -549,7 +551,7 @@ async function runHostedActive(lang, colorScheme) {
   await page.waitForFunction(() => { const m = document.getElementById('pp-chart-modal'); return !!m && m.style.display !== 'none' && m.getBoundingClientRect().height > 0; }, null, { timeout: 15000 }).catch(() => {});
   const windowBox = await hit(`${CHART_WINDOW} .modal-content`);
   const asked = extensionRequests(requests);
-  const expected = FILES.map(file => `/extensions/graphique/${file}?v=0.9`).sort();
+  const expected = FILES.map(file => `/extensions/graphique/${file}?v=${REGISTRY_VERSION}`).sort();
   check('le clic charge l’extension : ses huit fichiers (le graphique de la page et le graphique créé), avec la version du registre, une seule fois', JSON.stringify(asked.slice().sort()) === JSON.stringify(expected), asked);
   check('la fenêtre du graphique s’ouvre dans le panneau, sans la fenêtre « passer par GFS »', (await chartWindowOpen(page)) && windowBox.found && windowBox.inPanel && !(await dialogState(page)).open, { windowBox });
   await snap(page, `heberge-${lang}-${colorScheme}-1-fenetre`);

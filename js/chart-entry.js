@@ -113,6 +113,9 @@ const ChartEntry = (function () {
   function refreshFrame(view) { if (delegated.has(view)) ChartBlock.refreshFrame(view); }
   // Le retour en édition (js/main.js, switchMode) : la Lecture a pu changer de ligne ou de données pendant que les cadres étaient cachés.
   function refreshEditor() { if (delegated.size) ChartBlock.refreshEditor(); }
+  // Seuls les cadres qu'on voit (ou qui sont à un écran du champ de l'éditeur) se dessinent : une copie de l'éditeur qui va montrer ce que porte `root` (un bloc de l'éditeur : la miniature d'une diapositive
+  // dans la bande, la vue d'une diapositive) demande les dessins des graphiques qu'il porte, qui arrivent après coup (PAINTED_EVENT).
+  function demand(root) { if (delegated.size) ChartBlock.demand(root); }
 
   // À la Lecture et à l'export
   // Dessine le graphique de `img` pour la ligne `record` (extensions/graphique/chart-block.js) ; sans l'extension, ou si elle ne se charge pas, une note prend sa place. Hébergé par GFS, le
@@ -151,6 +154,6 @@ const ChartEntry = (function () {
 
   return {
     DEFAULT_WIDTH_PX, DEFAULT_HEIGHT_PX, PAINTED_EVENT, isAvailable, reason, onChange: Extensions.onChange, sizeOf, sizeOfAttrs, isChartAttrs, needsImage, selectedNode, isSelected, isMadeSelected, noteInPlaceOf,
-    paintFrame, releaseFrame, refreshFrame, refreshEditor, resolveImage, open, openMake,
+    paintFrame, releaseFrame, refreshFrame, refreshEditor, demand, resolveImage, open, openMake,
   };
 })();

@@ -526,19 +526,29 @@ const ChartMake = (function () {
   }
 
   // L'image PNG (adresse `data:`) de cette option, de `width` x `height` pixels de mise en page. Charge ECharts au premier appel. Le dessin se fait sur une page hors de l'écran, détruite aussitôt.
+  // Les toiles du dessin pèsent 3 pixels par pixel (5 Mo chacune pour un graphique de 480 x 300), deux par dessin (celle d'ECharts et la copie qu'il en fait pour l'image) : elles ne rendent leur mémoire qu'au
+  // prochain ramasse-miettes, qui ne passe pas entre deux dessins, et douze graphiques d'une présentation en gardaient jusqu'à 190 Mo. Ramenées à zéro, elles la rendent tout de suite (même image, octet pour octet).
   async function toImage(chartOption, width, height) {
     await ensureLibrary();
     const host = document.createElement('div');
     host.style.cssText = 'position:fixed;left:-10000px;top:0;pointer-events:none;width:' + width + 'px;height:' + height + 'px';
     document.body.appendChild(host);
     let chart = null;
+    let canvases = [];
     try {
       chart = window.echarts.init(host, null, { renderer: 'canvas', width, height, devicePixelRatio: SCALE });
       chart.setOption(chartOption, true);
-      return chart.getDataURL({ type: 'png', pixelRatio: SCALE, backgroundColor: BACKGROUND });
+      canvases = Array.from(host.querySelectorAll('canvas'));
+      const wanted = { type: 'png', pixelRatio: SCALE, backgroundColor: BACKGROUND };
+      // `getDataURL` fait ces deux gestes (renderToCanvas puis toDataURL) sans rendre la toile qu'il crée : on la garde pour la libérer.
+      if (typeof chart.renderToCanvas !== 'function') return chart.getDataURL(wanted);
+      const image = chart.renderToCanvas(wanted);
+      canvases.push(image);
+      return image.toDataURL('image/png');
     } finally {
       if (chart) chart.dispose();
       host.remove();
+      canvases.forEach((canvas) => { canvas.width = 0; canvas.height = 0; });
     }
   }
 

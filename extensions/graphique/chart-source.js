@@ -7,14 +7,23 @@
 // FilterState.ts, SortFunc.ts, SortSpec.ts de grist-core 1.7.20, Apache-2.0 : voir NOTICE) ; leur code est dans js/view-source.js, que l'export en lot lit aussi pour suivre la vue
 // à laquelle le widget est relié. Ce que le widget ne sait pas encore redessiner ressort de `read` avec une raison (`unsupported`, une clé de js/i18n.js) : la liste le montre grisé.
 const ChartSource = (function () {
-  const META_TABLES = ['_grist_Views', '_grist_Views_section', '_grist_Views_section_field', '_grist_Pages', '_grist_Tables', '_grist_Tables_column', '_grist_Filters'];
+  // Les tables de réglages de Grist, sous le nom que `readMeta` donne à leurs lignes.
+  const META_TABLES = { views: '_grist_Views', sections: '_grist_Views_section', fields: '_grist_Views_section_field', pages: '_grist_Pages', tables: '_grist_Tables', columns: '_grist_Tables_column', filters: '_grist_Filters' };
+  const BY_ID = ['views', 'tables', 'columns'];
+  // Ce que chaque lecture demande : un graphique de la page toutes les tables sauf les pages (`read`), la liste des graphiques toutes (`list` : l'ordre des pages), un graphique CRÉÉ seulement les tables et leurs
+  // colonnes (`made`). Chaque table lue de plus est une lecture de Grist de plus à chaque entrée en Lecture et à chaque passe de l'éditeur.
+  const ALL_META = Object.keys(META_TABLES);
+  const READ_META = ALL_META.filter(key => key !== 'pages');
+  const MADE_META = ['tables', 'columns'];
 
-  // Les tables de réglages, lues d'un coup : { views, sections, fields, pages, tables, columns, filters } (des tableaux de lignes, sauf `views`, `tables` et
-  // `columns`, rangées par identifiant dans une Map). `_grist_Filters` manque dans un très vieux document : alors pas de filtre.
-  async function readMeta() {
-    const lists = await Promise.all(META_TABLES.map(name => GristAPI.fetchTableRows(name).catch((e) => { if (name === '_grist_Filters') return []; throw e; })));
-    const byId = rows => new Map(rows.map(row => [row.id, row]));
-    return { views: byId(lists[0]), sections: lists[1], fields: lists[2], pages: lists[3], tables: byId(lists[4]), columns: byId(lists[5]), filters: lists[6] };
+  // Les tables de réglages nommées par `keys` (toutes par défaut), lues d'un coup : { views, sections, fields, pages, tables, columns, filters } (des tableaux de lignes, sauf `views`, `tables` et
+  // `columns`, rangées par identifiant dans une Map ; vides pour celles qu'on n'a pas demandées). `_grist_Filters` manque dans un très vieux document : alors pas de filtre.
+  async function readMeta(keys) {
+    const wanted = keys || ALL_META;
+    const lists = await Promise.all(wanted.map(key => GristAPI.fetchTableRows(META_TABLES[key]).catch((e) => { if (key === 'filters') return []; throw e; })));
+    const meta = { views: new Map(), sections: [], fields: [], pages: [], tables: new Map(), columns: new Map(), filters: [] };
+    wanted.forEach((key, i) => { meta[key] = BY_ID.indexOf(key) === -1 ? lists[i] : new Map(lists[i].map(row => [row.id, row])); });
+    return meta;
   }
 
   const { parseJson, pureTypeOf, isoInTimezone, dayEdge } = ViewSource;
@@ -102,7 +111,7 @@ const ChartSource = (function () {
   // Le graphique de la section `id` : un `specOf`, ou null quand la section n'existe plus ou n'est pas un graphique (supprimé dans Grist, ou numéro d'un
   // autre document).
   async function read(id) {
-    const meta = await readMeta();
+    const meta = await readMeta(READ_META);
     const section = meta.sections.find(row => row.id === Number(id));
     return section && section.parentKey === 'chart' ? specOf(meta, section) : null;
   }
@@ -111,7 +120,7 @@ const ChartSource = (function () {
   // page (`specOf`), pour que `rows` et `series` le lisent sans rien savoir de la différence. Il n'a ni filtre ni tri : les lignes gardent l'ordre de la table, celui que la personne a voulu. Null quand
   // la table ou une colonne n'existe plus (supprimée, ou renommée dans Grist : un identifiant de colonne suit son nom).
   async function made(def) {
-    const meta = await readMeta();
+    const meta = await readMeta(MADE_META);
     const table = Array.from(meta.tables.values()).find(row => row.tableId === def.table);
     if (!table) return null;
     const columns = Array.from(meta.columns.values()).filter(column => column.parentId === table.id);

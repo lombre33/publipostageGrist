@@ -157,13 +157,20 @@ const ChartBlock = (function () {
   // illisible, bibliothèque absente), le cadre pointillé reste. Rien ne prévient le widget quand les données d'une autre table changent : le dessin est refait à
   // l'ouverture du modèle, au changement de taille, au changement de ligne (« liées »), aux valeurs de la ligne qui changent (tous), au clic sur le cadre et au
   // retour en édition ; la Lecture, elle, redessine toujours.
+  // Seuls les cadres qu'on voit, ou qu'on verra tout de suite, se dessinent : ceux qui sont dans le champ de l'éditeur ou à un écran de lui (`near`, IntersectionObserver), et ceux dont une copie de l'éditeur
+  // a besoin (`asked` : les miniatures de la bande des diapositives et les vues de diapositive, par `demand`). Une présentation de douze graphiques en dessinait douze à l'ouverture (une seconde de travail, des
+  // dizaines de Mo) pour en montrer un ou deux ; les autres se dessinent quand on y arrive (un écran avant, le temps d'un dessin : on ne voit pas le cadre pointillé). Sans IntersectionObserver,
+  // ou hors de l'éditeur, tous les cadres sont « tout près », comme avant.
   const FRAME_DELAY_MS = 120;
   const FRAME_DRAW_LIMIT_MS = 20000;
+  const FRAME_AHEAD = '100% 0px';   // un écran de plus au-dessus et au-dessous du champ de l'éditeur
   const frames = new Set();   // les cadres vivants (l'objet `view` de js/editor-nodes.js : wrap, img, chart)
+  const watched = new Map();   // l'élément du cadre (`wrap`) -> son `view`, pour ceux que l'observateur suit
+  let nearObserver = null;
+  let nearRoot = null;
   let frameTimer = 0;
   let frameRunning = false;
   let frameAgain = false;
-  let frameForce = false;
   let framesListen = false;
   let lastRowId;
 
@@ -180,17 +187,75 @@ const ChartBlock = (function () {
   // Le dessin dépend de la section (ou de la définition), des lignes, de la taille et, pour « liées », de la ligne affichée.
   const keyOf = (want, record) => [want.spec || want.id, want.scope, want.width, want.height, want.scope === 'linked' && record ? record.id : ''].join('|');
   const isShown = view => view.wrap.isConnected && view.wrap.getClientRects().length > 0;
+  // Le cadre est-il à dessiner maintenant : dans le champ de l'éditeur (ou à un écran de lui), ou demandé par une copie ? `near` vaut null tant que l'observateur n'a pas dit où il est (au départ, et au retour
+  // en édition, où le champ vient de se rouvrir) : on ne sait pas, le cadre n'est ni dessiné ni oublié.
+  const isWanted = view => !!view.chart && (view.chart.near === true || view.chart.asked);
 
+  const nextTask = () => new Promise(resolve => setTimeout(resolve, 0));
   function withLimit(work, ms) {
     let timer;
     const limit = new Promise((resolve, reject) => { timer = setTimeout(() => reject(new Error('Dessin trop long')), ms); });
     return Promise.race([work, limit]).finally(() => clearTimeout(timer));
   }
 
+  // `force` : les dessins sont refaits d'après les lignes d'aujourd'hui même si rien n'a changé (chaque cadre le garde jusqu'à son tour, quand il est loin).
   function scheduleFrames(force, delay) {
-    frameForce = frameForce || !!force;
+    if (force) frames.forEach((view) => { if (view.chart) view.chart.forced = true; });
     clearTimeout(frameTimer);
     frameTimer = setTimeout(runFrames, delay === undefined ? FRAME_DELAY_MS : delay);
+  }
+
+  // Le suivi du champ de l'éditeur : un cadre est suivi dès qu'il est affiché dans #editor-container (son `wrap` n'y est pas encore quand le nœud le crée). Sans IntersectionObserver, ou dans un autre
+  // conteneur, il est « tout près » une fois pour toutes.
+  function watchNear(view) {
+    const state = view.chart;
+    if (!state || state.watched) return;
+    state.watched = true;
+    const root = view.wrap.closest('#editor-container');
+    if (typeof IntersectionObserver !== 'function' || !root || (nearRoot && nearRoot !== root)) { state.near = true; return; }
+    if (!nearObserver) { nearRoot = root; nearObserver = new IntersectionObserver(onNear, { root, rootMargin: FRAME_AHEAD }); }
+    watched.set(view.wrap, view);
+    nearObserver.observe(view.wrap);
+  }
+  function unwatch(view) {
+    if (!watched.delete(view.wrap) || !nearObserver) return;
+    nearObserver.unobserve(view.wrap);
+  }
+  // Des cadres entrent dans le champ (ou en sortent, ou l'observateur dit enfin où ils sont) : ceux qui arrivent se dessinent après une courte pause, pas pendant un défilement rapide (chaque changement repousse
+  // la minuterie), ceux qui s'éloignent et dont le dessin n'est plus d'aujourd'hui sont oubliés (`forget`).
+  function onNear(entries) {
+    let changed = false;
+    entries.forEach((entry) => {
+      const view = watched.get(entry.target);
+      if (!view || !view.chart) return;
+      if (view.chart.near !== entry.isIntersecting) changed = true;
+      view.chart.near = entry.isIntersecting;
+    });
+    if (changed) scheduleFrames(false);
+  }
+  // Le cadre montre-t-il le dessin d'aujourd'hui (celui de sa clé, qu'aucune ligne ni aucune valeur n'a changé depuis) ?
+  const isCurrent = view => !!view.chart && !!view.chart.want && !!view.chart.uri && !view.chart.forced
+    && view.chart.key === keyOf(view.chart.want, view.chart.want.scope === 'linked' ? GristAPI.getCurrentRecord() : null);
+  // Un cadre loin du champ n'est pas redessiné quand une ligne ou des valeurs changent : il ne garde pas pour autant le dessin d'avant, qu'on verrait un instant en y arrivant. Il redevient le cadre pointillé
+  // (rien n'est visible : il est loin), et se dessine quand on y arrive. Jamais un cadre dont on ne sait pas encore où il est (`near` null) : il peut être à l'écran, et garde son image jusqu'à son tour.
+  function forget(view) {
+    const state = view.chart;
+    if (!state || state.near !== false || !state.uri || isCurrent(view)) return;
+    state.uri = '';
+    state.key = '';
+    if (state.repaint) state.repaint();
+  }
+  // Une copie de l'éditeur va montrer ce que porte `root` (un bloc de l'éditeur : la miniature d'une diapositive dans la bande, la vue d'une diapositive) : les graphiques qui n'y sont pas encore dessinés le
+  // sont, et la copie se refait quand leur dessin arrive (ChartEntry.PAINTED_EVENT).
+  function demand(root) {
+    let due = false;
+    frames.forEach((view) => {
+      const state = view.chart;
+      if (!state || !root.contains(view.wrap)) return;
+      state.asked = true;
+      if (!isCurrent(view)) due = true;
+    });
+    if (due) scheduleFrames(false, 0);
   }
 
   // Une ligne arrive de Grist : une autre ligne change les graphiques « liées » (la clé du dessin), la même ligne a de nouvelles valeurs.
@@ -207,22 +272,27 @@ const ChartBlock = (function () {
     try {
       do {
         frameAgain = false;
-        const force = frameForce;
-        frameForce = false;
-        // Un éditeur caché (la Lecture) ne dessine rien ; le retour en édition (refreshEditor) rattrape.
+        // Un éditeur caché (la Lecture) ne dessine rien ; le retour en édition (refreshEditor) rattrape. Les cadres affichés sont suivis ; seuls ceux qu'on voit ou qui sont demandés se dessinent.
         const shown = Array.from(frames).filter(isShown);
-        if (shown.length) await GristAPI.withReadPass(async () => { for (const view of shown) await paintOne(view, force); });
+        shown.forEach(watchNear);
+        const due = shown.filter(isWanted);
+        shown.forEach((view) => { if (!isWanted(view)) forget(view); });
+        // Un dessin à la fois, et la main rendue entre deux : cinq dessins de 80 ms ne font pas une tâche de 400 ms qui fige la page.
+        if (due.length) await GristAPI.withReadPass(async () => { for (const view of due) { if (await paintOne(view)) await nextTask(); } });
       } while (frameAgain);
     } finally { frameRunning = false; }
   }
 
-  async function paintOne(view, force) {
+  // Dessine le cadre `view` s'il n'est pas à jour ; vrai quand il y a eu un dessin à faire (ou à relire dans la mémoire des dessins).
+  async function paintOne(view) {
     const state = view.chart;
-    const want = state && wantedOf(state.attrs);
-    if (!want) return;
+    const want = state && state.want;
+    if (!want) return false;
+    const force = state.forced;
+    state.forced = false;
     const record = want.scope === 'linked' ? GristAPI.getCurrentRecord() : null;
     const key = keyOf(want, record);
-    if (!force && state.key === key) return;
+    if (!force && state.key === key) return false;
     const token = ++state.token;
     let uri = '';
     // « Liées » sans ligne sélectionnée : rien à tracer, le cadre reste jusqu'à la prochaine ligne.
@@ -237,9 +307,10 @@ const ChartBlock = (function () {
       }
     }
     // Le cadre a changé ou disparu pendant le dessin : le résultat n'est plus le sien.
-    if (token !== state.token || !frames.has(view)) return;
+    if (token !== state.token || !frames.has(view)) return true;
     Object.assign(state, { key, uri, id: want.id, spec: want.spec, scope: want.scope });
     if (state.repaint) state.repaint();
+    return true;
   }
 
   // Appelée par applyImageAttrs à chaque mise à jour du cadre `view` d'un graphique : retient le cadre, demande son dessin quand il n'est pas à jour et rend
@@ -247,8 +318,9 @@ const ChartBlock = (function () {
   function paintFrame(view, attrs, repaint) {
     const want = wantedOf(attrs);
     if (!want) { releaseFrame(view); return ''; }
-    const state = view.chart || (view.chart = { key: '', uri: '', id: 0, spec: '', scope: '', token: 0, attrs: null, repaint: null });
+    const state = view.chart || (view.chart = { key: '', uri: '', id: 0, spec: '', scope: '', token: 0, attrs: null, want: null, repaint: null, near: null, asked: false, forced: false, watched: false });
     state.attrs = attrs;
+    state.want = want;
     state.repaint = repaint;
     if (!frames.has(view)) {
       frames.add(view);
@@ -259,16 +331,25 @@ const ChartBlock = (function () {
   }
   function releaseFrame(view) {
     frames.delete(view);
+    unwatch(view);
     if (view.chart) { view.chart.token += 1; view.chart.repaint = null; delete view.chart; }
   }
   // Le clic sur un cadre : son dessin est refait d'après les données d'aujourd'hui.
   function refreshFrame(view) {
     if (!view.chart || !frames.has(view)) return;
     view.chart.key = '';
+    view.chart.asked = true;   // sélectionné : on le voit, même si l'observateur ne l'a pas encore dit
     scheduleFrames(false, 0);
   }
   // Le retour en édition (js/main.js, switchMode) : la Lecture a pu changer de ligne ou de données pendant que les cadres étaient cachés.
-  const refreshEditor = () => { if (frames.size) scheduleFrames(true, 0); };
+  // Le champ de l'éditeur s'est refermé avec lui (l'observateur disait « loin » de tous les cadres) : chaque cadre est « on ne sait pas » jusqu'à ce que l'observateur, relancé, dise où il est ; ceux qu'on voit gardent
+  // leur image en attendant, puis elle est refaite d'après les lignes d'aujourd'hui (la mémoire des dessins la rend), sans repasser par le cadre pointillé.
+  const refreshEditor = () => {
+    if (!frames.size) return;
+    frames.forEach((view) => { if (view.chart) view.chart.near = null; });
+    if (nearObserver) watched.forEach((view, wrap) => { nearObserver.unobserve(wrap); nearObserver.observe(wrap); });
+    scheduleFrames(true, 0);
+  };
 
   // La fenêtre
   let win = null;
@@ -551,5 +632,5 @@ const ChartBlock = (function () {
     closeWindow();
   }
 
-  return { resolveImage, drawMade, paintFrame, releaseFrame, refreshFrame, refreshEditor, open, forgetDrawings };
+  return { resolveImage, drawMade, paintFrame, releaseFrame, refreshFrame, refreshEditor, demand, open, forgetDrawings };
 })();

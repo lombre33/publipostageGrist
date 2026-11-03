@@ -485,6 +485,8 @@ const SlideStrip = (function () {
     slide.nodes.forEach(({ node, pos }) => {
       const original = view.nodeDOM(pos);
       if (!(original instanceof HTMLElement)) return;
+      // Les graphiques de cette diapositive que l'éditeur n'a pas dessinés (il ne dessine que ceux qu'on voit) le sont : la miniature se recopie quand leur dessin arrive (onChartPainted).
+      ChartEntry.demand(original);
       const copy = original.cloneNode(true);
       tidyCopy(copy);
       placeLayers(copy, original, node, pos, geometry);
