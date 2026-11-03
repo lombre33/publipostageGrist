@@ -1,4 +1,4 @@
-// Suite "chartOffice" - le graphique CRÉÉ (« Créer un graphique… ») en graphique NATIF de Word (lot 3 du module de graphiques, demande du 02/11 : « modifiable dans Word, PowerPoint et Excel »),
+// Suite "chartOffice" - le graphique CRÉÉ (« Créer un graphique… ») en graphique NATIF de Word, de PowerPoint et d'Excel (lots 3 à 5 du module de graphiques, demande du 02/11 : « modifiable dans Word, PowerPoint et Excel »),
 // extensions/graphique/chart-office.js (le modèle d'Office : les séries, leurs couleurs et leurs types, que les exports lisent sans rien savoir d'ECharts), extensions/graphique/chart-block.js (le modèle posé dans
 // l'attribut `data-chart-office` de l'image, à la Lecture et à l'export) et js/docx-export.js (la `ChartRun` de docx/charts, chargée à la demande). Joué hébergé comme les suites « chart » et « chartMake » : un GFS simulé
 // donne l'extension « graphique » et la source d'ECharts (cf. HOSTED_GROUPS de run-headless.mjs) ; le document de Grist est celui de dev-tests/scenarios-chart-block.js (`window.__chartFixture`). Trois parties :
@@ -8,7 +8,10 @@
 //     éléments, aucune image PNG pour un graphique natif, la taille réglée, des identifiants de dessin tous différents, et le repli sur l'image PNG quand Word ne saurait pas lire le graphique.
 //  4) le POWERPOINT (lot 4) : le .pptx généré, dézippé (ppt/charts/chartN.xml, le classeur embarqué, la diapositive et ses relations), la place et la taille de l'image, un cadre de diapositive, le repli sur l'image PNG (lien, rotation, modèle refusé),
 //     le moteur Word demandé seulement pour un graphique créé, et la limite de l'import (« graphique non repris »).
-// Le rendu réel (LibreOffice) et le graphique d'Excel sont vérifiés à part (lot 5).
+//  5) l'EXCEL (lot 5) : le .xlsx généré, relu (dézippé et par ExcelJS) : le graphique natif ancré sur la case de l'image, à sa taille, ses formules vers la feuille « Données des graphiques » (la dernière) dont les cellules disent ce que le
+//     graphique a en cache, le dessin partagé avec des images, un classeur de plusieurs enregistrements (un bloc de données par graphique, la feuille renommée si un enregistrement a son nom, un enregistrement en échec qui n'en laisse rien),
+//     et le repli sur l'image PNG (modèle illisible, archive qui refuse).
+// Le rendu réel (LibreOffice) est vérifié à part.
 (function () {
   const cases = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -603,6 +606,284 @@
       return {
         pass: r.report.some(line => line.key === 'charts' && line.n === 1) && /Ventes/.test(r.html),
         notes: JSON.stringify({ report: r.report, html: String(r.html).slice(0, 160) }),
+      };
+    },
+  });
+
+  // === 5) L'Excel ==============================================================================================================================================
+  // Le .xlsx généré, relu : { zip, parts (les textes XML par nom), book (ExcelJS : les cellules, comme le lira Excel), sheets (les noms des feuilles, dans l'ordre), charts (xl/charts/chartN.xml, parsés), media (xl/media/*),
+  // drawings (xl/drawings/drawingN.xml, parsés) }.
+  const byNumber = (a, b) => parseInt(a.replace(/\D/g, ''), 10) - parseInt(b.replace(/\D/g, ''), 10);
+  async function readXlsx(blob) {
+    await ExportCommon.ensureJsZipLoaded();
+    const buffer = await blob.arrayBuffer();
+    const zip = await JSZip.loadAsync(buffer);
+    const all = Object.keys(zip.files).filter(name => !zip.files[name].dir);
+    const parts = {};
+    for (const name of all.filter(n => /\.(xml|rels)$/.test(n))) parts[name] = await zip.file(name).async('string');
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(buffer);
+    const numbered = pattern => all.filter(n => pattern.test(n)).sort(byNumber);
+    return {
+      zip, parts, book, sheets: book.worksheets.map(sheet => sheet.name),
+      charts: numbered(/^xl\/charts\/chart\d+\.xml$/).map(n => parseXml(parts[n])), media: all.filter(n => n.startsWith('xl/media/')),
+      drawings: numbered(/^xl\/drawings\/drawing\d+\.xml$/).map(n => parseXml(parts[n])),
+    };
+  }
+  async function xlsxOf(html, record, filenameTemplate) {
+    await ExportEngines.ensure('xlsx');
+    await XlsxExport.ensureExcelLibLoaded();
+    const { blob } = await XlsxExport.getXlsxBlobForRecord(html, record ? PAGE_TABLE : null, record || {}, filenameTemplate || '', {});
+    return readXlsx(blob);
+  }
+  // Une ligne de tableau de grille, une case de 150 x 140 px par bloc : le graphique de la case B se pose sur la colonne B, ligne 1.
+  const gridHtml = (...cells) => '<table style="width: ' + cells.length * 150 + 'px;"><colgroup>' + cells.map(() => '<col style="width: 150px;">').join('') + '</colgroup><tbody><tr data-row-height="140" style="height: 140px">'
+    + cells.map(cell => '<td colwidth="150"><p>' + cell + '</p></td>').join('') + '</tr></tbody></table>';
+  const SMALL = 'width: 140px; height: 90px';
+  const smallChart = model => drawnHtml(model).replace(/^<p>|<\/p>$/g, '').replace('width: 480px; height: 300px', SMALL);
+  const plainPicture = '<img class="editor-image" alt="Une image" src="' + 'DATA' + '" style="width: 60px; height: 40px" data-layer="normal" data-wrap="inline">';
+  // Les graphiques posés dans le dessin d'une feuille : la boîte en px, l'ancre (colonne et ligne, depuis 0), le nom, le texte alternatif, la relation qu'ils nomment.
+  const sheetCharts = drawing => tagsOf(drawing, 'xdr:oneCellAnchor').filter(a => a.getElementsByTagName('xdr:graphicFrame').length).map((anchor) => {
+    const props = anchor.getElementsByTagName('xdr:cNvPr')[0];
+    const ext = anchor.getElementsByTagName('xdr:ext')[0];
+    return {
+      col: Number(anchor.getElementsByTagName('xdr:col')[0].textContent), row: Number(anchor.getElementsByTagName('xdr:row')[0].textContent), w: ext.getAttribute('cx') / 9525, h: ext.getAttribute('cy') / 9525,
+      name: props.getAttribute('name'), alt: props.getAttribute('descr'), id: props.getAttribute('id'), rel: anchor.getElementsByTagName('c:chart')[0].getAttribute('r:id'),
+    };
+  });
+  const letterNumber = letters => letters.split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
+  // Les cellules qu'une formule `c:f` vise dans le classeur relu (une colonne, ou une seule cellule) : « 'Données des graphiques'!$B$2:$B$4 » -> les trois valeurs ; null si la formule ne vise pas une feuille du classeur.
+  function cellsOf(book, formula) {
+    const m = /^'((?:[^']|'')+)'!\$([A-Z]+)\$(\d+)(?::\$([A-Z]+)\$(\d+))?$/.exec(formula);
+    const sheet = m && book.getWorksheet(m[1].replace(/''/g, '\''));
+    if (!sheet || (m[4] && m[4] !== m[2])) return null;
+    const out = [];
+    for (let row = Number(m[3]); row <= Number(m[5] || m[3]); row++) out.push(sheet.getCell(row, letterNumber(m[2])).value);
+    return out;
+  }
+  // Les formules d'un graphique qui ne tiennent pas : celles qui ne visent aucune feuille du classeur, ou dont les cellules ne disent pas ce que le graphique a en cache (nom, étiquettes, valeurs).
+  function brokenFormulas(book, chart) {
+    return tagsOf(chart, 'c:f').filter((f) => {
+      const cache = Array.from(f.parentNode.children).find(child => /Cache$/.test(child.nodeName));
+      if (!cache) return true;
+      const cached = new Map(tagsOf(cache, 'c:pt').map(pt => [Number(pt.getAttribute('idx')), pt.getElementsByTagName('c:v')[0].textContent]));
+      const cells = cellsOf(book, f.textContent);
+      return !cells || cells.some((value, i) => (cached.has(i) ? String(value) !== cached.get(i) : (value !== null && value !== undefined && value !== '')));
+    }).map(f => f.textContent);
+  }
+  // Les lignes de titre (« Graphique 1 », « Graphique 2 - Ventes ») de la feuille des données.
+  const chartHeads = (sheet) => { const out = []; sheet.eachRow({ includeEmpty: false }, (row, n) => { if (String(sheet.getCell(n, 1).value).indexOf(I18n.t('xlsx.chart.name') + ' ') === 0) out.push(n); }); return out; };
+
+  cases.push({
+    id: 'chart_office_xlsx_bar_is_a_native_chart_on_its_cell_and_its_data_are_in_the_last_sheet',
+    description: 'Excel (grille) : le graphique créé de la case B1 (140 x 90 px) est un graphique natif d\'Excel posé sur cette case, à cette taille, sans image PNG ; ses formules visent la feuille « Données des graphiques », la dernière du classeur, dont les cellules disent ce que le graphique a en cache ; une ligne sans vente n\'a ni graphique ni feuille de données',
+    run: async (h) => {
+      await seed(h);
+      const html = gridHtml('Avant', madeHtml(def('bar', { values: ['Montant', 'Cout'] }), 'linked', SMALL));
+      const filled = await xlsxOf(html, recordOf(1));
+      const empty = await xlsxOf(html, NO_SALE);
+      const found = filled.drawings[0] ? sheetCharts(filled.drawings[0]) : [];
+      const chart = filled.charts[0];
+      const series = chart ? seriesOf(chart) : [];
+      const data = filled.book.worksheets[filled.book.worksheets.length - 1];
+      const types = parseXml(filled.parts['[Content_Types].xml'] || '<x/>');
+      const overrides = tagsOf(types, 'Override').map(o => o.getAttribute('PartName') + ' ' + o.getAttribute('ContentType'));
+      const sheetRel = /<drawing r:id="([^"]+)"/.exec(filled.parts['xl/worksheets/sheet1.xml'] || '');
+      const toDrawing = sheetRel && relOf(filled.parts, 'xl/worksheets/_rels/sheet1.xml.rels', sheetRel[1]);
+      const toChart = found[0] && relOf(filled.parts, 'xl/drawings/_rels/drawing1.xml.rels', found[0].rel);
+      return {
+        pass: filled.charts.length === 1 && filled.media.length === 0 && filled.drawings.length === 1 && found.length === 1 && found[0].col === 1 && found[0].row === 0 && Math.abs(found[0].w - 140) < 0.6 && Math.abs(found[0].h - 90) < 0.6
+          && found[0].name === I18n.t('xlsx.chart.name') + ' 1' && found[0].alt === 'Graphique'
+          && same(plotsOf(chart), ['c:barChart']) && same(series.map(s => s.name), ['Montant', 'Cout']) && same(series.map(s => s.color), ['2B78AE', 'FE945B']) && same(series[0].cats, ['Mars', 'Janvier']) && same(series[0].vals, [300, 100]) && same(series[1].vals, [120, 60])
+          && tagsOf(chart, 'c:externalData').length === 0 && same(brokenFormulas(filled.book, chart), [])
+          && filled.sheets.length === 2 && filled.sheets[1] === I18n.t('xlsx.chart.sheet') && data.getCell(1, 1).value === I18n.t('xlsx.chart.name') + ' 1' && data.getCell(2, 2).value === 'Montant'
+          && overrides.indexOf('/xl/charts/chart1.xml application/vnd.openxmlformats-officedocument.drawingml.chart+xml') >= 0 && overrides.indexOf('/xl/drawings/drawing1.xml application/vnd.openxmlformats-officedocument.drawing+xml') >= 0
+          && !!toDrawing && toDrawing.getAttribute('Target') === '../drawings/drawing1.xml' && /relationships\/drawing$/.test(toDrawing.getAttribute('Type'))
+          && !!toChart && toChart.getAttribute('Target') === '../charts/chart1.xml' && /relationships\/chart$/.test(toChart.getAttribute('Type'))
+          && empty.charts.length === 0 && empty.media.length === 0 && empty.drawings.length === 0 && empty.sheets.length === 1 && empty.sheets[0] !== I18n.t('xlsx.chart.sheet'),
+        notes: JSON.stringify({ charts: filled.charts.length, media: filled.media, found, series, sheets: filled.sheets, broken: chart && brokenFormulas(filled.book, chart), head: [data.getCell(1, 1).value, data.getCell(2, 2).value], overrides, toDrawing: toDrawing && toDrawing.getAttribute('Target'), toChart: toChart && toChart.getAttribute('Target'), empty: [empty.charts.length, empty.media.length, empty.drawings.length, empty.sheets] }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_xlsx_every_shape_has_its_native_chart_of_office_with_formulas_that_hold',
+    description: 'Excel : chacune des sept formes de la vraie chaîne (la ligne 1 du client) devient son graphique d\'Office dans le classeur - barres, barres couchées, courbe, aire, nuage, secteurs, anneau, radar - sans image PNG, et les cellules que visent ses formules disent ce que le graphique a en cache',
+    run: async (h) => {
+      await seed(h);
+      const shapes = [
+        ['bar', { values: ['Montant'] }, 'c:barChart'], ['bar', { values: ['Montant'], horizontal: true }, 'c:barChart'], ['line', { values: ['Montant'] }, 'c:lineChart'], ['area', { values: ['Montant'] }, 'c:areaChart'],
+        ['scatter', { label: 'Cout', values: ['Montant'] }, 'c:scatterChart'], ['pie', { label: 'Famille', values: ['Montant'] }, 'c:pieChart'], ['donut', { label: 'Famille', values: ['Montant'] }, 'c:doughnutChart'], ['radar', { values: ['Montant', 'Cout'] }, 'c:radarChart'],
+      ];
+      const out = [];
+      for (const [kind, extra, tag] of shapes) {
+        const result = await xlsxOf(gridHtml(madeHtml(def(kind, extra), 'linked', SMALL)), recordOf(1));
+        const dir = result.charts[0] && tagsOf(result.charts[0], 'c:barDir')[0];
+        out.push({ kind: kind + (extra.horizontal ? ' couché' : ''), tag, plots: result.charts[0] ? plotsOf(result.charts[0]) : [], charts: result.charts.length, media: result.media.length, sheets: result.sheets.length, dir: dir && dir.getAttribute('val'), broken: result.charts[0] ? brokenFormulas(result.book, result.charts[0]) : ['aucun graphique'] });
+      }
+      return {
+        pass: out.every(o => o.charts === 1 && o.media === 0 && o.sheets === 2 && same(o.plots, [o.tag]) && o.broken.length === 0) && out[0].dir === 'col' && out[1].dir === 'bar',
+        notes: JSON.stringify(out),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_xlsx_a_chart_and_pictures_share_the_drawing_of_a_sheet_without_clashing',
+    description: 'Excel : une feuille qui porte des images ET un graphique créé garde ses images (celles d\'ExcelJS) et reçoit le graphique dans le même dessin : une ancre par objet, des identifiants et des relations tous différents, la partie du graphique à côté de ses deux images',
+    run: async () => {
+      const picture = plainPicture.replace('DATA', PNG());
+      const out = await xlsxOf(gridHtml(picture, smallChart(BAR_MODEL), picture));
+      const drawing = out.drawings[0];
+      const anchors = drawing ? tagsOf(drawing, 'xdr:oneCellAnchor') : [];
+      const ids = anchors.map(a => a.getElementsByTagName('xdr:cNvPr')[0].getAttribute('id'));
+      const rels = parseXml(out.parts['xl/drawings/_rels/drawing1.xml.rels'] || '<x/>');
+      const relIds = tagsOf(rels, 'Relationship').map(r => r.getAttribute('Id'));
+      const targets = tagsOf(rels, 'Relationship').map(r => r.getAttribute('Target'));
+      const found = drawing ? sheetCharts(drawing) : [];
+      return {
+        pass: out.drawings.length === 1 && out.charts.length === 1 && out.media.length === 2 && anchors.length === 3 && tagsOf(drawing, 'xdr:pic').length === 2 && found.length === 1 && found[0].col === 1
+          && new Set(ids).size === 3 && new Set(relIds).size === 3 && targets.filter(t => /charts\/chart1\.xml$/.test(t)).length === 1 && targets.filter(t => /media\//.test(t)).length === 2 && out.sheets.length === 2,
+        notes: JSON.stringify({ drawings: out.drawings.length, charts: out.charts.length, media: out.media, anchors: anchors.length, ids, relIds, targets, found, sheets: out.sheets }),
+      };
+    },
+  });
+
+  // Un classeur de plusieurs enregistrements (« les valeurs de la table dans un seul classeur ») : `list` : les [enregistrement, nom de sa feuille] ; `again` écrit le fichier une seconde fois.
+  async function workbookOf(html, list) {
+    await ExportEngines.ensure('xlsx');
+    await XlsxExport.ensureExcelLibLoaded();
+    const book = await XlsxExport.createSingleWorkbook({});
+    const failures = [];
+    for (const [record, name] of list) {
+      try { await book.appendRecord(html, PAGE_TABLE, record, name || '', null, null); } catch (e) { failures.push(String(e && e.message || e)); }
+    }
+    const blob = await book.toBlob();
+    return Object.assign(await readXlsx(blob), { failures, again: async () => readXlsx(await book.toBlob()) });
+  }
+
+  cases.push({
+    id: 'chart_office_xlsx_one_workbook_for_several_records_has_one_data_sheet_with_a_block_per_chart_and_renames_it_if_a_record_has_its_name',
+    description: 'Excel (un seul classeur) : deux enregistrements, deux feuilles, chacune son graphique ; une seule feuille de données, la dernière, avec un bloc par graphique (« Graphique 1 », « Graphique 2 ») dont les lignes ne se recouvrent pas ; un enregistrement qui porte déjà le nom de cette feuille la laisse devenir « … (2) » ; écrit deux fois, le classeur donne deux fichiers pareils',
+    run: async (h) => {
+      await seed(h);
+      const html = gridHtml('Avant', madeHtml(def('bar', { values: ['Montant', 'Cout'] }), 'linked', SMALL));
+      const two = await workbookOf(html, [[recordOf(1), 'Fiche un'], [recordOf(2), 'Fiche deux']]);
+      const clash = await workbookOf(html, [[recordOf(1), I18n.t('xlsx.chart.sheet')], [recordOf(2), 'Fiche deux']]);
+      const dataSheet = two.book.worksheets[two.book.worksheets.length - 1];
+      const heads = chartHeads(dataSheet);
+      const refs = chart => tagsOf(chart, 'c:f').map(f => /\$(\d+)(?::\$[A-Z]+\$(\d+))?$/.exec(f.textContent)).map(m => [Number(m[1]), Number(m[2] || m[1])]);
+      const rangesOf = chart => { const all = refs(chart); return [Math.min(...all.map(r => r[0])), Math.max(...all.map(r => r[1]))]; };
+      const [first, second] = [rangesOf(two.charts[0]), rangesOf(two.charts[1])];
+      const sheetNames = clash.sheets;
+      const again = await two.again();
+      return {
+        pass: two.failures.length === 0 && same(two.sheets.slice(0, 2), ['Fiche un', 'Fiche deux']) && two.sheets.length === 3 && two.sheets[2] === I18n.t('xlsx.chart.sheet') && two.charts.length === 2 && two.media.length === 0 && two.drawings.length === 2
+          && heads.length === 2 && dataSheet.getCell(heads[0], 1).value === I18n.t('xlsx.chart.name') + ' 1' && dataSheet.getCell(heads[1], 1).value === I18n.t('xlsx.chart.name') + ' 2' && first[1] < heads[1] && second[0] > heads[1] && first[1] < second[0]
+          && two.charts.every(chart => brokenFormulas(two.book, chart).length === 0)
+          && same(sheetNames, [I18n.t('xlsx.chart.sheet'), 'Fiche deux', I18n.t('xlsx.chart.sheet') + ' (2)']) && clash.charts.every(chart => brokenFormulas(clash.book, chart).length === 0)
+          && again.charts.length === 2 && again.sheets.length === 3 && again.media.length === 0,
+        notes: JSON.stringify({ failures: two.failures, sheets: two.sheets, charts: two.charts.length, heads, first, second, clash: sheetNames, again: [again.charts.length, again.sheets] }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_xlsx_a_record_that_fails_leaves_no_chart_and_no_data_behind',
+    description: 'Excel (un seul classeur) : un enregistrement qui échoue en route (son image suivante ne s\'écrit pas) ne laisse ni sa feuille, ni son graphique, ni ses cellules de données dans le classeur ; le suivant garde le sien (un seul bloc dans la feuille de données), sans image dans son classeur',
+    run: async (h) => {
+      await seed(h);
+      const picture = plainPicture.replace('DATA', PNG());
+      const bad = gridHtml(madeHtml(def('bar', { values: ['Montant'] }), 'linked', SMALL), picture);
+      const good = gridHtml(madeHtml(def('line', { values: ['Montant'] }), 'linked', SMALL));
+      const original = ExcelJS.Workbook.prototype.addImage;
+      const warn = console.warn;
+      console.warn = () => {};
+      let out;
+      try {
+        // Toute image qui se pose sur une feuille échoue : l'enregistrement « bad » casse sur la sienne, après son graphique ; « good » n'a que son graphique, qui ne demande aucune image.
+        ExcelJS.Workbook.prototype.addImage = function () { throw new Error('essai : image refusée'); };
+        await ExportEngines.ensure('xlsx');
+        await XlsxExport.ensureExcelLibLoaded();
+        const book = await XlsxExport.createSingleWorkbook({});
+        const failures = [];
+        for (const [html, record, name] of [[bad, recordOf(1), 'Cassée'], [good, recordOf(2), 'Bonne']]) {
+          try { await book.appendRecord(html, PAGE_TABLE, record, name, null, null); } catch (e) { failures.push(String(e && e.message || e)); }
+        }
+        out = Object.assign(await readXlsx(await book.toBlob()), { failures });
+      } finally { ExcelJS.Workbook.prototype.addImage = original; console.warn = warn; }
+      const dataSheet = out.book.worksheets[out.book.worksheets.length - 1];
+      const heads = chartHeads(dataSheet);
+      return {
+        pass: out.failures.length === 1 && /image refusée/.test(out.failures[0]) && same(out.sheets, ['Bonne', I18n.t('xlsx.chart.sheet')]) && out.charts.length === 1 && same(plotsOf(out.charts[0]), ['c:lineChart']) && out.media.length === 0
+          && heads.length === 1 && dataSheet.getCell(heads[0], 1).value === I18n.t('xlsx.chart.name') + ' 1' && heads[0] === 1 && brokenFormulas(out.book, out.charts[0]).length === 0,
+        notes: JSON.stringify({ failures: out.failures, sheets: out.sheets, charts: out.charts.length, media: out.media, heads }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_xlsx_keeps_the_png_when_excel_could_not_read_the_chart_and_when_the_archive_refuses_it',
+    description: 'Excel : l\'image PNG reste (aucune partie de graphique, aucune feuille de données) quand le graphique n\'a pas de modèle lisible - texte illisible, autre version, part négative, image sans modèle - et quand l\'archive refuse d\'écrire les parties du graphique (la feuille des données s\'en va, les images prennent la place)',
+    run: async () => {
+      const warn = console.warn;
+      console.warn = () => {};
+      const out = [];
+      try {
+        const negative = { v: 1, kind: 'pie', categories: ['a', 'b'], series: [{ name: 'Parts', color: '#2b78ae', values: [-1, 2], colors: ['#2b78ae', '#fe945b'] }] };
+        const cases5 = [['texte illisible', drawnHtml('{bad')], ['autre version', drawnHtml(Object.assign({}, BAR_MODEL, { v: 2 }))], ['part négative', drawnHtml(negative)], ['sans modèle', drawnHtml(undefined)]];
+        for (const [why, html] of cases5) {
+          const result = await xlsxOf(gridHtml(html.replace(/^<p>|<\/p>$/g, '').replace('width: 480px; height: 300px', SMALL)));
+          out.push({ why, charts: result.charts.length, media: result.media.length, sheets: result.sheets.length, pics: result.drawings[0] ? tagsOf(result.drawings[0], 'xdr:pic').length : 0 });
+        }
+        // L'archive refuse : le seul `generateAsync` du JSZip de la page est celui de l'écriture des graphiques (ExcelJS et docx ont leur JSZip).
+        const original = JSZip.prototype.generateAsync;
+        let refused = 0;
+        JSZip.prototype.generateAsync = function () { refused++; return Promise.reject(new Error('essai : archive refusée')); };
+        try {
+          const result = await xlsxOf(gridHtml(smallChart(BAR_MODEL)));
+          out.push({ why: 'archive refusée', charts: result.charts.length, media: result.media.length, sheets: result.sheets.length, pics: result.drawings[0] ? tagsOf(result.drawings[0], 'xdr:pic').length : 0, refused });
+        } finally { JSZip.prototype.generateAsync = original; }
+      } finally { console.warn = warn; }
+      return {
+        pass: out.length === 5 && out.every(o => o.charts === 0 && o.media === 1 && o.sheets === 1 && o.pics === 1) && out[4].refused === 1,
+        notes: JSON.stringify(out),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_xlsx_asks_for_the_word_engine_only_for_a_workbook_with_a_created_chart',
+    description: 'Excel : le moteur Word (qui fabrique le graphique) n\'est demandé que pour un classeur qui porte un graphique créé : du texte, un tableau, une image ordinaire n\'en veulent pas (et n\'ont pas de feuille de données) ; un graphique créé le demande',
+    run: async () => {
+      const asked = [];
+      const original = ExportEngines.ensure;
+      ExportEngines.ensure = function (...engines) { asked.push(...engines.flat()); return original.apply(this, arguments); };
+      try {
+        const picture = plainPicture.replace('DATA', PNG());
+        const plain = await xlsxOf(gridHtml('Du texte', picture));
+        const wordForPlain = asked.filter(name => name === 'docx').length;
+        const one = await xlsxOf(gridHtml(smallChart(BAR_MODEL)));
+        const wordForOne = asked.filter(name => name === 'docx').length;
+        return {
+          pass: wordForPlain === 0 && plain.charts.length === 0 && plain.sheets.length === 1 && plain.media.length === 1 && wordForOne >= 1 && one.charts.length === 1 && one.sheets.length === 2,
+          notes: JSON.stringify({ wordForPlain, wordForOne, plain: [plain.charts.length, plain.sheets, plain.media], one: [one.charts.length, one.sheets] }),
+        };
+      } finally { ExportEngines.ensure = original; }
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_xlsx_special_characters_in_a_sheet_name_and_a_title_keep_the_file_well_formed',
+    description: 'Excel : une feuille dont le nom porte & \' " et un graphique dont le titre porte & < > « » donnent un classeur bien formé : le graphique est sur la bonne feuille, le titre est dans la feuille des données, les formules tiennent',
+    run: async () => {
+      const model = Object.assign({}, BAR_MODEL, { title: 'Ventes & « Q1 » <essai>' });
+      const out = await xlsxOf(gridHtml(smallChart(model)), null, 'R&D l\'été "un"');
+      const data = out.book.worksheets[out.book.worksheets.length - 1];
+      const found = out.drawings[0] ? sheetCharts(out.drawings[0]) : [];
+      return {
+        pass: out.charts.length === 1 && found.length === 1 && out.sheets.length === 2 && out.sheets[0].indexOf('R&D l\'été') === 0 && data.getCell(1, 1).value === I18n.t('xlsx.chart.name') + ' 1 - Ventes & « Q1 » <essai>' && brokenFormulas(out.book, out.charts[0]).length === 0,
+        notes: JSON.stringify({ sheets: out.sheets, found, head: data.getCell(1, 1).value }),
       };
     },
   });

@@ -6,7 +6,7 @@
 //  2) les LIGNES : les colonnes lues par leur identifiant dans l'ordre de la table, les lignes liées, la table ou la colonne disparue, une ligne sans valeur ;
 //  3) l'ÉDITEUR : la ligne du menu « Ajouter une image » (celui des blocs garde ses neuf lignes), son grisé, la fenêtre (formes, table, colonnes, lignes, aperçu), le nœud (`data-chart-spec`, jamais d'image),
 //     le cadre dessiné, la modification, la relecture du modèle, la définition illisible, l'anglais, le mode lecture seule ;
-//  4) les RENDUS : Lecture, PDF et Excel (grille) montrent la même image que l'éditeur ; le Word est un graphique natif (lot 3 : suite « chartOffice ») ;
+//  4) les RENDUS : Lecture et PDF montrent la même image que l'éditeur ; le Word, le PowerPoint et l'Excel sont des graphiques natifs (lots 3 à 5 : suite « chartOffice ») ;
 //  5) l'ASPECT (lot 2) : le titre, les cinq jeux de couleurs, la couleur de chaque série, les valeurs affichées, les barres mêlées à une courbe ; leur définition, leur dessin, l'onglet « Aspect » de la fenêtre,
 //     le choix d'une couleur à la place des onglets (dont la rangée « Couleurs du thème »), l'écriture dans le nœud et UN seul Annuler.
 // La vraie souris et le vrai clavier à 700x400 (clair, sombre, anglais) sont dans dev-tests/verify-chart-make-mouse.mjs : une page.evaluate ne déclenche ni un survol ni une frappe de confiance.
@@ -1024,7 +1024,7 @@
     },
   });
 
-  // === 4) Les rendus : Lecture, PDF, Word, Excel ============================================================================================================
+  // === 4) Les rendus : Lecture, PDF ==========================================================================================================================
   async function renderReader(html, record) {
     const reader = document.getElementById('reader-container');
     reader.style.display = 'block';
@@ -1128,41 +1128,6 @@
         pass: filled.charts.length === 1 && filled.workbooks.length === 1 && filled.media.length === 0 && drawings.length === 1 && drawings[0].kind === 'inline' && Math.abs(drawings[0].widthPt - 360) < 0.6 && Math.abs(drawings[0].heightPt - 225) < 0.6
           && empty.charts.length === 0 && empty.media.length === 0 && h.docxDrawings(empty.document).length === 0,
         notes: JSON.stringify({ drawings: drawings.map(d => [d.kind, d.widthPt, d.heightPt]), charts: filled.charts, workbooks: filled.workbooks, media: filled.media, empty: [empty.charts.length, empty.media.length] }),
-      };
-    },
-  });
-
-  cases.push({
-    id: 'chart_make_xlsx_puts_the_chart_of_a_grid_cell_on_its_cell_and_a_row_without_rows_has_no_image',
-    description: 'Excel (grille) : le graphique créé d\'une case est une image PNG du classeur posée sur sa case (colonne B, ligne 1), aux proportions réglées (140 x 90 px, image de 420 x 270) ; une ligne sans vente n\'a aucune image',
-    run: async (h) => {
-      await seed(h);
-      const frame = madeHtml(def('bar', { values: ['Montant'] }), 'linked', undefined, 'width: 140px; height: 90px');
-      const xlsxOf = async (record) => {
-        GridEditor.setActive(false);
-        Editor.setHTML(`<table style="width: 300px;"><colgroup><col style="width: 150px;"><col style="width: 150px;"></colgroup><tbody><tr data-row-height="140" style="height: 140px"><td colwidth="150"><p>Avant</p></td><td colwidth="150"><p>${frame}</p></td></tr></tbody></table>`);
-        GridEditor.setActive(true);
-        await sleep(250);
-        try {
-          await ExportCommon.ensureJsZipLoaded();
-          const { blob } = await XlsxExport.getXlsxBlobForRecord(Editor.getHTML(), PAGE_TABLE, record, '');
-          const zip = await JSZip.loadAsync(await blob.arrayBuffer());
-          const media = Object.keys(zip.files).filter(n => n.startsWith('xl/media/') && !zip.files[n].dir);
-          const drawingName = Object.keys(zip.files).find(n => /^xl\/drawings\/drawing\d+\.xml$/.test(n));
-          const drawing = drawingName ? await zip.file(drawingName).async('string') : '';
-          const pictures = [];
-          for (const name of media) pictures.push(await pixelsOf(URL.createObjectURL(new Blob([await zip.file(name).async('uint8array')], { type: 'image/png' }))));
-          return { media: media.length, pictures, anchor: /<xdr:from><xdr:col>(\d+)<\/xdr:col>.*?<xdr:row>(\d+)<\/xdr:row>/.exec(drawing), ext: /<xdr:ext cx="(\d+)" cy="(\d+)"/.exec(drawing) };
-        } finally {
-          GridEditor.setActive(false);
-        }
-      };
-      const filled = await xlsxOf(recordOf(1));
-      const empty = await xlsxOf(NO_SALE);
-      const ratio = filled.ext && Number(filled.ext[1]) / Number(filled.ext[2]);
-      return {
-        pass: filled.media === 1 && filled.pictures[0].width === 420 && filled.pictures[0].height === 270 && !!filled.anchor && filled.anchor[1] === '1' && filled.anchor[2] === '0' && Math.abs(ratio - 140 / 90) < 0.02 && empty.media === 0,
-        notes: JSON.stringify({ media: filled.media, picture: filled.pictures[0] && [filled.pictures[0].width, filled.pictures[0].height], anchor: filled.anchor && filled.anchor.slice(1, 3), ext: filled.ext && filled.ext.slice(1, 3), empty: empty.media }),
       };
     },
   });

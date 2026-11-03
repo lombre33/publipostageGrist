@@ -95,7 +95,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Graphiques créés (« Créer un graphique… », au menu de l'image) : barres, courbe, aire, nuage de points, secteurs,
   anneau et radar, tracés d'après les colonnes d'une table de Grist, dans un document, une grille ou une diapositive ;
   un titre, cinq jeux de couleurs, la couleur de chaque série, les valeurs affichées et des barres mêlées à une courbe ;
-  dans le Word et le PowerPoint, un graphique natif que l'on modifie dans l'application (ses données s'ouvrent dans Excel)
+  dans le Word, le PowerPoint et l'Excel, un graphique natif que l'on modifie dans l'application (ses données s'ouvrent dans Excel)
 - En-têtes et pieds de page (première page différente, numéro de page, QR code), notes de bas de page, sommaire
   généré, sauts de page, filigrane
 - Citation, bloc de code, encadré (Note, Attention, Important), bloc de signature, QR code, graphique de la
@@ -574,7 +574,7 @@ GitHub Pages, with no backend and no build step.
   appears after a click on "Show"
 - Created charts ("Create a chart…", in the image menu): bars, line, area, scatter, pie, donut and radar, drawn
   from the columns of a Grist table, in a document, a grid or a slide; a title, five color sets, the color of each
-  series, shown values and bars mixed with a line; in Word and PowerPoint, a native chart you edit in the application (its data opens in Excel)
+  series, shown values and bars mixed with a line; in Word, PowerPoint and Excel, a native chart you edit in the application (its data opens in Excel)
 - Headers and footers (different first page, page number, QR code), footnotes, generated table of contents,
   page breaks, watermark
 - Quote, code block, callout (Note, Warning, Important), signature block, QR code, chart from the page (a

@@ -316,6 +316,9 @@ const I18n = (function () {
     'toolbar.exportPdfSheets': { fr: 'Assemblage avant impression…', en: 'Assemble before printing…' },
     'toolbar.exportDocx': { fr: 'Exporter en DOCX (bêta)…', en: 'Export to DOCX (beta)…' },
     'toolbar.exportDocxBatch': { fr: 'Exporter les lignes en DOCX (ZIP)…', en: 'Export rows to DOCX (ZIP)…' },
+    // Un graphique créé exporté en Excel est un graphique natif (js/xlsx-export.js) : ses cellules s'écrivent dans une feuille à part, en dernier, et chaque graphique y a son titre (« Graphique 1 », « Graphique 1 - Ventes »).
+    'xlsx.chart.sheet': { fr: 'Données des graphiques', en: 'Chart data' },
+    'xlsx.chart.name': { fr: 'Graphique', en: 'Chart' },
     'toolbar.exportXlsx': { fr: 'Exporter en Excel…', en: 'Export to Excel…' },
     'toolbar.exportXlsxBatch': { fr: 'Exporter les valeurs de la table en Excel (ZIP)…', en: 'Export table values to Excel (ZIP)…' },
     'toolbar.exportXlsxSingle': { fr: 'Exporter les valeurs de la table dans un seul classeur…', en: 'Export table values to a single workbook…' },

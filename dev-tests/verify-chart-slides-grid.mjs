@@ -64,8 +64,8 @@ const CLIENT_2 = { id: 2, Nom: 'Brasserie Roy', Ville: 'Nantes' };
 const NO_SALE = { id: 99, Nom: 'Sans vente' };
 
 const TEXTS = {
-  fr: { row: 'Graphique de la page…', makeRow: 'Créer un graphique…' },
-  en: { row: 'Chart from the page…', makeRow: 'Create a chart…' },
+  fr: { row: 'Graphique de la page…', makeRow: 'Créer un graphique…', chartSheet: 'Données des graphiques' },
+  en: { row: 'Chart from the page…', makeRow: 'Create a chart…', chartSheet: 'Chart data' },
 };
 
 // ---- Les gestes ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -127,7 +127,7 @@ async function readerImages(page) {
   await sleep(1200);
   return out;
 }
-// Un .pptx relu dans la page : par diapositive, les images (boîte en EMU, image de l'archive en base64) ; un .xlsx : l'ancre et la taille de l'image posée, son PNG.
+// Un .pptx relu dans la page : par diapositive, les images (boîte en EMU, image de l'archive en base64) ; un .xlsx : l'ancre et la taille de l'objet posé (image ou graphique natif), son PNG, les graphiques d'Excel et les feuilles.
 async function installReaders(page) {
   await page.evaluate(() => {
     window.__readPptx = async (b64) => {
@@ -185,7 +185,16 @@ async function installReaders(page) {
         const size = await new Promise((ok) => { const img = new Image(); img.onload = () => ok({ width: img.naturalWidth, height: img.naturalHeight }); img.onerror = () => ok({ width: 0, height: 0 }); img.src = url; });
         pictures.push(size);
       }
-      return { media: media.length, pictures, col: anchor ? Number(anchor[1]) : null, row: anchor ? Number(anchor[2]) : null, cx: ext ? Number(ext[1]) : null, cy: ext ? Number(ext[2]) : null };
+      // Les graphiques natifs d'Excel (xl/charts/chartN.xml) : leur forme ; les feuilles du classeur, dans l'ordre.
+      const chartNames = names.filter(n => /^xl\/charts\/chart\d+\.xml$/.test(n));
+      const kinds = [];
+      for (const name of chartNames) {
+        const text = await zip.file(name).async('string');
+        kinds.push(['c:barChart', 'c:lineChart', 'c:pieChart', 'c:doughnutChart'].filter(tag => text.indexOf('<' + tag) >= 0));
+      }
+      const workbook = zip.file('xl/workbook.xml') ? await zip.file('xl/workbook.xml').async('string') : '';
+      const sheets = Array.from(workbook.matchAll(/<sheet\b[^>]*\sname="([^"]*)"/g), m => m[1]);
+      return { media: media.length, pictures, col: anchor ? Number(anchor[1]) : null, row: anchor ? Number(anchor[2]) : null, cx: ext ? Number(ext[1]) : null, cy: ext ? Number(ext[2]) : null, charts: chartNames.length, kinds, sheets };
     };
   });
 }
@@ -321,8 +330,13 @@ async function run(lang, colorScheme, full, kind) {
   const sheet = await exportAs(page, 'xlsx');
   await keep(`grille-${FILE}${lang}-${colorScheme}.xlsx`, sheet);
   const xlsx = sheet ? await page.evaluate(b64 => window.__readXlsx(b64), sheet.toString('base64')) : null;
-  check(tag + 'l\'Excel de la grille pose l\'image du graphique sur sa case (colonne B, ligne 1), à 140 x 90 pixels, une seule image de 420 x 270 pixels dans le classeur',
-    !!xlsx && xlsx.media === 1 && xlsx.col === 1 && xlsx.row === 0 && near(xlsx.cx / 9525, 140, 1) && near(xlsx.cy / 9525, 90, 1) && xlsx.pictures[0].width === 420 && xlsx.pictures[0].height === 270, xlsx);
+  if (created) {
+    check(tag + 'l\'Excel de la grille pose le graphique créé sur sa case (colonne B, ligne 1), à 140 x 90 pixels : un graphique natif d\'Excel (un seul, d\'une forme), aucune image dans le classeur, et ses données dans une feuille de plus, la dernière',
+      !!xlsx && xlsx.media === 0 && xlsx.charts === 1 && xlsx.kinds[0].length === 1 && xlsx.col === 1 && xlsx.row === 0 && near(xlsx.cx / 9525, 140, 1) && near(xlsx.cy / 9525, 90, 1) && xlsx.sheets.length === 2 && xlsx.sheets[1] === T.chartSheet, xlsx);
+  } else {
+    check(tag + 'l\'Excel de la grille pose l\'image du graphique sur sa case (colonne B, ligne 1), à 140 x 90 pixels, une seule image de 420 x 270 pixels dans le classeur',
+      !!xlsx && xlsx.media === 1 && xlsx.charts === 0 && xlsx.col === 1 && xlsx.row === 0 && near(xlsx.cx / 9525, 140, 1) && near(xlsx.cy / 9525, 90, 1) && xlsx.pictures[0].width === 420 && xlsx.pictures[0].height === 270, xlsx);
+  }
   return page;
 }
 

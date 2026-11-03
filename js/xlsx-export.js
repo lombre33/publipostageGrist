@@ -438,6 +438,166 @@ const XlsxExport = (function () {
     return { width: 320, height: 320 * ratio };
   }
 
+  // Les graphiques créés (« Créer un graphique… », extensions/graphique/) : un graphique NATIF d'Excel, que la personne modifie dans Excel (« Sélectionner des données » montre les cellules du classeur). ExcelJS ne
+  // sait pas écrire de graphique : le classeur s'écrit sans (la case n'a pas d'image non plus), puis `workbookToBlob` ajoute à l'archive la partie xl/charts/chartN.xml de chacun et son ancre dans le dessin de sa
+  // feuille. La partie est celle que DocxExport.chartPartsOf tire de la bibliothèque docx (le même `c:chartSpace` dans Word, PowerPoint et Excel) ; ses formules ne visent plus le classeur embarqué (« Sheet1 »)
+  // mais la feuille « Données des graphiques », la dernière du classeur, où les cellules de chaque graphique sont écrites. Ce qu'Excel ne saurait pas lire garde l'image PNG, comme avant.
+  const chartsOf = new WeakMap(); // classeur -> ses graphiques natifs, dans l'ordre où ils se posent : { sheetName, col, row, width, height, alt, title, chartXml, rows, img }
+  const chartListOf = (workbook) => { if (!chartsOf.has(workbook)) chartsOf.set(workbook, []); return chartsOf.get(workbook); };
+  async function dataRowsOf(bytes) {
+    // Les cellules de la première feuille du classeur embarqué d'un graphique : [{ number (la ligne, depuis 1), cells: [{ col, value, numFmt }] }].
+    const source = new ExcelJS.Workbook();
+    await source.xlsx.load(bytes);
+    const rows = [];
+    if (source.worksheets[0]) {
+      source.worksheets[0].eachRow({ includeEmpty: false }, (row, number) => {
+        const cells = [];
+        row.eachCell({ includeEmpty: false }, (cell, col) => cells.push({ col, value: cell.value, numFmt: cell.numFmt }));
+        rows.push({ number, cells });
+      });
+    }
+    return rows;
+  }
+  async function addNativeChart(workbook, sheet, entry, size) {
+    // Le graphique créé de l'image `entry.img`, noté pour `workbookToBlob` (rien n'est posé sur la feuille), ou false : l'image n'est pas un graphique créé, le moteur Word (qui porte la bibliothèque des
+    // graphiques) ne se charge pas, ou Office refuserait ses données ; l'appelant pose alors l'image.
+    const img = entry.img;
+    if (!img.hasAttribute('data-chart-office')) return false;
+    try { await ExportEngines.ensure('docx'); }
+    catch (e) { console.warn('[XlsxExport] graphique natif impossible (moteur Word injoignable), l\'image est gardée :', e); return false; }
+    const part = await DocxExport.chartPartsOf(img, size.width, size.height);
+    if (!part) return false;
+    let rows;
+    try { rows = await dataRowsOf(part.workbook); }
+    catch (e) { console.warn('[XlsxExport] graphique natif impossible (données illisibles), l\'image est gardée :', e); return false; }
+    if (!rows.length) return false;
+    chartListOf(workbook).push({
+      sheetName: sheet.name, col: entry.col, row: entry.row, width: Math.round(size.width), height: Math.round(size.height),
+      alt: (img.getAttribute('alt') || '').trim(), title: part.model.title || '', chartXml: part.chartXml, rows, img,
+    });
+    return true;
+  }
+
+  // L'écriture de l'archive : les parties d'Office, écrites à la main (le classeur est un zip de fichiers XML liés par des relations).
+  const EMU_PER_PX = 9525;
+  const NS_CHART = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+  const NS_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const CHART_CT = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
+  const DRAWING_CT = 'application/vnd.openxmlformats-officedocument.drawing+xml';
+  const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  const EMPTY_DRAWING = XML_HEAD + '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"></xdr:wsDr>';
+  // L'élément `drawing` d'une feuille se place avant ceux qui le suivent dans le schéma (legacyDrawing, picture, tableParts, extLst...), sinon à la fin.
+  const AFTER_DRAWING = ['<legacyDrawing', '<legacyDrawingHF', '<drawingHF', '<picture', '<oleObjects', '<controls', '<webPublishItems', '<tableParts', '<extLst'];
+  const xmlText = text => String(text == null ? '' : text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const xmlAttr = text => xmlText(text).replace(/"/g, '&quot;');
+  const xmlRead = text => String(text).replace(/&quot;/g, '"').replace(/&apos;/g, '\'').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const relationsXml = list => XML_HEAD + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + list.map(rel => `<Relationship Id="${rel.id}" Type="${rel.type}" Target="${xmlAttr(rel.target)}"/>`).join('') + '</Relationships>';
+  const relationsOf = text => Array.from(String(text || '').matchAll(/<Relationship\b[^>]*>/g), (found) => {
+    const get = name => { const m = new RegExp('\\s' + name + '="([^"]*)"').exec(found[0]); return m ? xmlRead(m[1]) : ''; };
+    return { id: get('Id'), type: get('Type'), target: get('Target') };
+  });
+  const nextRelId = list => 'rId' + (list.reduce((top, rel) => Math.max(top, parseInt(String(rel.id).replace(/\D/g, ''), 10) || 0), 0) + 1);
+
+  function retargetedChartXml(chartXml, sheetName, shift) {
+    // Les formules `c:f` d'un graphique de docx visent la feuille « Sheet1 » de son classeur embarqué ; ici ses cellules sont dans la feuille `sheetName`, ses lignes décalées de `shift` ; un graphique d'un
+    // classeur n'a pas de `c:externalData` (le classeur embarqué de Word et de PowerPoint).
+    const quoted = xmlText('\'' + String(sheetName).replace(/'/g, '\'\'') + '\'');
+    return chartXml
+      .replace(/<c:externalData\b[\s\S]*?<\/c:externalData>/g, '')
+      .replace(/<c:f>Sheet1!\$([A-Z]+)\$(\d+)(?::\$([A-Z]+)\$(\d+))?<\/c:f>/g, (all, c1, r1, c2, r2) => `<c:f>${quoted}!$${c1}$${Number(r1) + shift}${c2 ? `:$${c2}$${Number(r2) + shift}` : ''}</c:f>`);
+  }
+  function chartAnchorXml(chart, id, relId, name) {
+    // L'ancre d'un graphique dans le dessin de sa feuille : son coin haut gauche est celui de la case de l'image, sa taille celle de l'image.
+    return `<xdr:oneCellAnchor><xdr:from><xdr:col>${chart.col}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${chart.row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>`
+      + `<xdr:ext cx="${Math.round(chart.width * EMU_PER_PX)}" cy="${Math.round(chart.height * EMU_PER_PX)}"/>`
+      + `<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${id}" name="${xmlAttr(name)}"${chart.alt ? ` descr="${xmlAttr(chart.alt)}"` : ''}/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>`
+      + '<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>'
+      + `<a:graphic><a:graphicData uri="${NS_CHART}"><c:chart xmlns:c="${NS_CHART}" xmlns:r="${NS_REL}" r:id="${relId}"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:oneCellAnchor>`;
+  }
+  function withDrawingElement(sheetXml, relId) {
+    const at = AFTER_DRAWING.map(tag => sheetXml.indexOf(tag)).filter(i => i >= 0).sort((a, b) => a - b)[0];
+    const place = at === undefined ? sheetXml.lastIndexOf('</worksheet>') : at;
+    return sheetXml.slice(0, place) + `<drawing r:id="${relId}"/>` + sheetXml.slice(place);
+  }
+  async function injectCharts(zip, items) {
+    // Ajoute au zip du classeur les graphiques `items` ([{ chart (la ligne de chartListOf), xml (sa partie, formules retournées), name }]) : leur partie xl/charts/chartN.xml, leur ancre dans le dessin de leur
+    // feuille (celui d'ExcelJS quand la feuille porte des images, un neuf sinon), les relations et les types de contenu.
+    const read = async name => (zip.file(name) ? zip.file(name).async('string') : null);
+    const workbookXml = await read('xl/workbook.xml');
+    const workbookRels = relationsOf(await read('xl/_rels/workbook.xml.rels'));
+    const sheetPathOf = (name) => {
+      const tag = Array.from(workbookXml.matchAll(/<sheet\b[^>]*>/g), m => m[0]).find(t => xmlRead((/\sname="([^"]*)"/.exec(t) || [])[1] || '') === name);
+      const rel = tag && workbookRels.find(r => r.id === (/\sr:id="([^"]*)"/.exec(tag) || [])[1]);
+      return rel ? 'xl/' + rel.target.replace(/^\//, '').replace(/^xl\//, '') : null;
+    };
+    let types = await read('[Content_Types].xml');
+    const addOverride = (part, type) => { if (types.indexOf('PartName="' + part + '"') < 0) types = types.replace('</Types>', `<Override PartName="${part}" ContentType="${type}"/></Types>`); };
+    const names = Object.keys(zip.files);
+    let chartNumber = names.filter(n => /^xl\/charts\/chart\d+\.xml$/.test(n)).length;
+    let drawingNumber = names.filter(n => /^xl\/drawings\/drawing\d+\.xml$/.test(n)).reduce((top, n) => Math.max(top, parseInt(n.replace(/\D/g, ''), 10)), 0);
+    const drawings = new Map(); // chemin de la feuille -> son dessin { path, xml, rels }
+    for (const item of items) {
+      const sheetPath = sheetPathOf(item.chart.sheetName);
+      if (!sheetPath) continue;
+      let drawing = drawings.get(sheetPath);
+      if (!drawing) {
+        const sheetRelsPath = sheetPath.replace(/([^/]+)$/, '_rels/$1.rels');
+        const sheetRels = relationsOf(await read(sheetRelsPath));
+        const own = sheetRels.find(r => r.type === NS_REL + '/drawing');
+        if (own) {
+          const path = 'xl/' + own.target.replace(/^\.\.\//, '');
+          drawing = { path, xml: await read(path), rels: relationsOf(await read(path.replace(/([^/]+)$/, '_rels/$1.rels'))) };
+        } else {
+          drawingNumber += 1;
+          const id = nextRelId(sheetRels);
+          sheetRels.push({ id, type: NS_REL + '/drawing', target: `../drawings/drawing${drawingNumber}.xml` });
+          zip.file(sheetRelsPath, relationsXml(sheetRels), { createFolders: false });
+          zip.file(sheetPath, withDrawingElement(await read(sheetPath), id), { createFolders: false });
+          addOverride(`/xl/drawings/drawing${drawingNumber}.xml`, DRAWING_CT);
+          drawing = { path: `xl/drawings/drawing${drawingNumber}.xml`, xml: EMPTY_DRAWING, rels: [] };
+        }
+        drawings.set(sheetPath, drawing);
+      }
+      chartNumber += 1;
+      zip.file(`xl/charts/chart${chartNumber}.xml`, item.xml, { createFolders: false });
+      addOverride(`/xl/charts/chart${chartNumber}.xml`, CHART_CT);
+      const relId = nextRelId(drawing.rels);
+      drawing.rels.push({ id: relId, type: NS_REL + '/chart', target: `../charts/chart${chartNumber}.xml` });
+      const taken = Array.from(drawing.xml.matchAll(/<xdr:cNvPr\b[^>]*\sid="(\d+)"/g), m => Number(m[1]));
+      drawing.xml = drawing.xml.replace('</xdr:wsDr>', chartAnchorXml(item.chart, Math.max(0, ...taken) + 1, relId, item.name) + '</xdr:wsDr>');
+    }
+    drawings.forEach((drawing) => {
+      zip.file(drawing.path, drawing.xml, { createFolders: false });
+      zip.file(drawing.path.replace(/([^/]+)$/, '_rels/$1.rels'), relationsXml(drawing.rels), { createFolders: false });
+    });
+    zip.file('[Content_Types].xml', types, { createFolders: false });
+  }
+  function writeChartData(workbook, charts) {
+    // La feuille des données des graphiques, ajoutée en dernier : par graphique, un titre (« Graphique 2 - Ventes ») puis les cellules de son classeur embarqué, une ligne vide avant le suivant. Rend la feuille et,
+    // pour chaque graphique, sa partie dont les formules visent ses cellules.
+    const taken = new Set(workbook.worksheets.map(sheet => sheet.name.toLowerCase()));
+    const sheet = workbook.addWorksheet(sheetNameFrom(I18n.t('xlsx.chart.sheet'), taken));
+    sheet.getColumn(1).width = 28;
+    let top = 1;
+    const parts = charts.map((chart, index) => {
+      const head = sheet.getCell(top, 1);
+      head.value = chartName(index) + (chart.title ? ' - ' + chart.title : '');
+      head.font = fontOf({ bold: true });
+      chart.rows.forEach(row => row.cells.forEach((cell) => {
+        const target = sheet.getCell(top + row.number, cell.col);
+        target.value = cell.value;
+        target.font = fontOf({});
+        if (cell.numFmt && cell.numFmt !== 'General') target.numFmt = cell.numFmt;
+      }));
+      const xml = retargetedChartXml(chart.chartXml, sheet.name, top);
+      top += chart.rows[chart.rows.length - 1].number + 2;
+      return xml;
+    });
+    return { sheet, parts };
+  }
+  const chartName = index => I18n.t('xlsx.chart.name') + ' ' + (index + 1);
+
   function sheetNameFrom(name, used) {
     // Feuille
     // Nom de feuille valable pour Excel : 31 caractères au plus, sans \ / ? * [ ] :, ni apostrophe au début ou à la fin ; unique dans le classeur
@@ -569,10 +729,14 @@ const XlsxExport = (function () {
     return content.images.map(img => ({ img, row: p.row, col: p.col }));
   }
   async function addSheetImage(workbook, sheet, entry) {
-    // Pose l'image d'une case sur la feuille, à sa taille ; une image illisible est laissée de côté.
+    // Pose l'image d'une case sur la feuille, à sa taille ; une image illisible est laissée de côté. Un graphique créé qui devient un graphique natif d'Excel (addNativeChart) n'a pas d'image.
     const data = await imageForWorkbook(entry.img);
     if (!data) return;
     const size = imageSizePx(entry.img, data);
+    if (await addNativeChart(workbook, sheet, entry, size)) return;
+    placePicture(workbook, sheet, entry, data, size);
+  }
+  function placePicture(workbook, sheet, entry, data, size) {
     const id = workbook.addImage({ base64: data.base64, extension: data.extension });
     sheet.addImage(id, { tl: { col: entry.col, row: entry.row }, ext: { width: Math.round(size.width), height: Math.round(size.height) }, editAs: 'oneCell' });
   }
@@ -626,8 +790,29 @@ const XlsxExport = (function () {
   const resolveRecord = (htmlContent, tableId, record, filenameTemplate) =>
     ExportCommon.resolveRecord(htmlContent, tableId, record, filenameTemplate, null, typedCellHook(tableId, record));
   async function workbookToBlob(workbook) {
-    const buffer = await workbook.xlsx.writeBuffer();
-    return new Blob([buffer], { type: XLSX_MIME });
+    // Le classeur en fichier. Les graphiques natifs (addNativeChart) dont la feuille est encore là (un enregistrement qui échoue retire la sienne) entrent après l'écriture d'ExcelJS : la feuille des données
+    // s'ajoute, l'archive s'écrit, puis chaque graphique y prend sa place. Si cela échoue, la feuille des données s'en va et les images prennent la place des graphiques.
+    const charts = chartListOf(workbook).filter(chart => workbook.getWorksheet(chart.sheetName));
+    if (charts.length) {
+      let data = null;
+      try {
+        await ExportCommon.ensureJsZipLoaded();
+        data = writeChartData(workbook, charts);
+        const zip = await JSZip.loadAsync(await workbook.xlsx.writeBuffer());
+        await injectCharts(zip, charts.map((chart, index) => ({ chart, xml: data.parts[index], name: chartName(index) })));
+        return await zip.generateAsync({ type: 'blob', mimeType: XLSX_MIME, compression: 'DEFLATE' });
+      } catch (e) {
+        console.warn('[XlsxExport] graphiques natifs impossibles, les images sont gardées :', e);
+        chartListOf(workbook).length = 0;
+        for (const chart of charts) {
+          const picture = await imageForWorkbook(chart.img);
+          if (picture) placePicture(workbook, workbook.getWorksheet(chart.sheetName), chart, picture, chart);
+        }
+      } finally {
+        if (data) workbook.removeWorksheet(data.sheet.id);
+      }
+    }
+    return new Blob([await workbook.xlsx.writeBuffer()], { type: XLSX_MIME });
   }
 
   async function getXlsxBlobForRecord(htmlContent, tableId, record, filenameTemplate, options) {
@@ -670,10 +855,12 @@ const XlsxExport = (function () {
         await ExternalImages.confirmExport(htmlContent, null);
         const { resolvedHtml, filename } = await resolveRecord(htmlContent, tableId, record, filenameTemplate);
         const before = workbook.worksheets.length;
+        const chartsBefore = chartListOf(workbook).length;
         try {
           await addRecordSheet(workbook, nameWithValue(filename, valueName), resolvedHtml, Object.assign(pageOptionsFromLayout(), options || {}, pageOptions || {}, { usedNames }));
         } catch (e) {
           workbook.worksheets.slice(before).forEach(sheet => { usedNames.delete(sheet.name.toLowerCase()); workbook.removeWorksheet(sheet.id); });
+          chartListOf(workbook).length = chartsBefore;
           throw e;
         }
         return { filename };
