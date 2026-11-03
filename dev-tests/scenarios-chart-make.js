@@ -1,12 +1,14 @@
-// Suite "chartMake" - « Créer un graphique… » (lot 1 du module de graphiques, demande du 02/11 : un graphique réglé dans le modèle, en plus de celui qu'on importe de Grist, pour le document, la grille et
+// Suite "chartMake" - « Créer un graphique… » (lots 1 et 2 du module de graphiques, demande du 02/11 : un graphique réglé dans le modèle, en plus de celui qu'on importe de Grist, pour le document, la grille et
 // la présentation), extensions/graphique/chart-make.js (la définition et le dessin d'ECharts), chart-make-ui.js (la fenêtre), chart-source.js (`made`), chart-block.js (`drawMade`, le cadre de l'éditeur, la Lecture
 // et les exports) et js/chart-entry.js. Joué hébergé comme la suite « chart » : un GFS simulé donne l'extension « graphique » et les sources de ses deux bibliothèques (cf. HOSTED_GROUPS de run-headless.mjs) ;
-// le document de Grist est celui de dev-tests/scenarios-chart-block.js (`window.__chartFixture` : les clients, leurs ventes, la règle de liaison). Quatre moitiés :
+// le document de Grist est celui de dev-tests/scenarios-chart-block.js (`window.__chartFixture` : les clients, leurs ventes, la règle de liaison). Cinq parties :
 //  1) la DÉFINITION et le DESSIN : ce que le widget garde d'un graphique créé, l'option d'ECharts de chaque forme (barres, courbe, aire, nuage, secteurs, anneau, radar), l'image PNG réellement tracée ;
 //  2) les LIGNES : les colonnes lues par leur identifiant dans l'ordre de la table, les lignes liées, la table ou la colonne disparue, une ligne sans valeur ;
 //  3) l'ÉDITEUR : la ligne du menu « Ajouter une image » (celui des blocs garde ses neuf lignes), son grisé, la fenêtre (formes, table, colonnes, lignes, aperçu), le nœud (`data-chart-spec`, jamais d'image),
 //     le cadre dessiné, la modification, la relecture du modèle, la définition illisible, l'anglais, le mode lecture seule ;
-//  4) les RENDUS : Lecture, PDF, Word et Excel (grille) montrent la même image que l'éditeur.
+//  4) les RENDUS : Lecture, PDF, Word et Excel (grille) montrent la même image que l'éditeur ;
+//  5) l'ASPECT (lot 2) : le titre, les cinq jeux de couleurs, la couleur de chaque série, les valeurs affichées, les barres mêlées à une courbe ; leur définition, leur dessin, l'onglet « Aspect » de la fenêtre,
+//     le choix d'une couleur à la place des onglets (dont la rangée « Couleurs du thème »), l'écriture dans le nœud et UN seul Annuler.
 // La vraie souris et le vrai clavier à 700x400 (clair, sombre, anglais) sont dans dev-tests/verify-chart-make-mouse.mjs : une page.evaluate ne déclenche ni un survol ni une frappe de confiance.
 (function () {
   const cases = [];
@@ -202,6 +204,154 @@
     },
   });
 
+  // === 1 bis) L'aspect : le titre, les couleurs, les valeurs affichées, le type des séries (lot 2) ==========================================================================================
+  // Une série qui porte l'identifiant de sa colonne (ChartSource.series le met) : sa couleur est celle de sa colonne, jamais celle de son rang.
+  const withId = (series, colId) => Object.assign({}, series, { colId });
+  const AMOUNT_ID = withId(AMOUNT, 'Montant');
+  const COST_ID = withId(COST, 'Cout');
+  const STANDARD = ChartMake.PALETTES.standard;
+  const hexRgb = hex => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+
+  cases.push({
+    id: 'chart_make_aspect_is_kept_cleaned_and_a_definition_written_before_it_reads_and_writes_back_the_same',
+    description: 'L\'aspect gardé sur le nœud : le titre (une seule ligne, 120 caractères au plus, vide = aucun), le jeu de couleurs par son nom (« standard » et un nom inconnu ne s\'écrivent pas), la couleur de chaque série par l\'identifiant de sa colonne (#rrggbb seulement, rien pour une colonne qui n\'est pas tracée ni pour secteurs et anneau), les valeurs affichées et le type des séries d\'un graphique mixte (seulement ceux qui diffèrent de la forme, seulement pour barres, courbe et aire, jamais pour des barres horizontales) ; une définition écrite avant l\'aspect se relit et se réécrit à l\'identique, octet pour octet',
+    run: async () => {
+      const base = { kind: 'bar', table: SALES, label: 'Mois', values: ['Montant', 'Cout'] };
+      const made = extra => ChartMake.normalize(Object.assign({}, base, extra));
+      const titled = made({ title: '  Ventes \n par   mois\t' });
+      const long = made({ title: 'é'.repeat(130) });
+      const blank = made({ title: ' \n ' });
+      const notText = made({ title: 42 });
+      const palettes = ['blue', 'warm', 'cool', 'gray', 'standard', 'rose', 7, null].map(palette => made({ palette }).palette);
+      const colors = made({ colors: { Montant: '#E8742C', Cout: 'red', Autre: '#00ff00' } }).colors;
+      const noColors = [made({ colors: { Montant: 'red' } }), made({ colors: [] }), made({ kind: 'pie', colors: { Montant: '#112233' } })].map(d => d.colors);
+      const labels = [true, 'true', 1, false].map(value => made({ labels: value }).labels);
+      const mix = (kind, extra) => made(Object.assign({ kind }, extra)).mix;
+      const mixes = {
+        bar: mix('bar', { mix: { Montant: 'bar', Cout: 'line', Autre: 'line' } }), line: mix('line', { mix: { Cout: 'bar', Montant: 'line' } }), area: mix('area', { mix: { Cout: 'bar' } }),
+        bad: mix('bar', { mix: { Cout: 'area', Montant: 'pie' } }), horizontal: mix('bar', { horizontal: true, mix: { Cout: 'line' } }),
+        others: ['scatter', 'pie', 'donut', 'radar'].map(kind => mix(kind, { mix: { Cout: 'line' } })),
+      };
+      const full = made({ stack: true, title: 'Ventes', palette: 'warm', colors: { Cout: '#112233' }, labels: true, mix: { Cout: 'line' } });
+      const back = ChartMake.parse(ChartMake.stringify(full));
+      const old = '{"v":1,"kind":"bar","table":"GfVentes","label":"Mois","values":["Montant","Cout"],"stack":true}';
+      const oldBack = ChartMake.stringify(ChartMake.parse(old));
+      const plain = ChartMake.stringify(made({}));
+      return {
+        pass: titled.title === 'Ventes par mois' && Array.from(long.title).length === 120 && !('title' in blank) && !('title' in notText)
+          && same(palettes, ['blue', 'warm', 'cool', 'gray', undefined, undefined, undefined, undefined])
+          && same(colors, { Montant: '#e8742c' }) && noColors.every(c => c === undefined) && same(labels, [true, undefined, undefined, undefined])
+          && same(mixes.bar, { Cout: 'line' }) && same(mixes.line, { Cout: 'bar' }) && same(mixes.area, { Cout: 'bar' }) && mixes.bad === undefined && mixes.horizontal === undefined && mixes.others.every(m => m === undefined)
+          && same(back, full) && full.stack === true && oldBack === old && plain === '{"v":1,"kind":"bar","table":"GfVentes","label":"Mois","values":["Montant","Cout"]}'
+          && ChartMake.nameOf(titled) === 'Ventes par mois' && ChartMake.nameOf(made({})) === 'Barres · GfVentes' && ChartMake.PALETTE_IDS[0] === 'standard' && ChartMake.PALETTE_IDS.length === 5,
+        notes: JSON.stringify({ titled: titled.title, long: Array.from(long.title).length, palettes, colors, noColors, labels, mixes, full, oldBack }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_make_option_title_sits_on_top_values_show_and_each_series_keeps_the_color_of_its_column',
+    description: 'Le titre est centré en haut de l\'image et tout descend d\'autant (légende, graphique, disque, radar) ; il s\'écrit tel quel (jamais du HTML) ; le jeu de couleurs donne leur couleur aux séries dans l\'ordre (et aux parts de secteurs) ; la couleur choisie d\'une colonne la suit : retirer ou réordonner les autres colonnes ne la change pas ; « valeurs affichées » écrit les nombres au-dessus des barres, des points et des courbes, au milieu des barres empilées (dans l\'encre qui se lit sur leur couleur), au bout des barres horizontales, avec la part des secteurs ; dans la langue de l\'interface ; rien tant que la personne ne le demande',
+    run: async () => {
+      const two = [MONTHS, AMOUNT_ID, COST_ID];
+      const plain = optionOf('bar', two);
+      const titled = optionOf('bar', two, { title: 'Ventes par mois' });
+      const evil = optionOf('bar', two, { title: '<img src=x onerror="window.__made_title=1">{b|gras}' });
+      const pieTitled = optionOf('pie', [MONTHS, AMOUNT_ID], { kind: 'pie', values: ['Montant'], title: 'Parts' });
+      const pieBare = optionOf('pie', [MONTHS, AMOUNT_ID], { kind: 'pie', values: ['Montant'] });
+      const radarTitled = optionOf('radar', two, { title: 'Profil' });
+      const radarBare = optionOf('radar', two);
+      const blue = optionOf('bar', two, { palette: 'blue' });
+      const pieWarm = optionOf('pie', [MONTHS, AMOUNT_ID], { kind: 'pie', values: ['Montant'], palette: 'warm' });
+      const own = optionOf('bar', two, { colors: { Cout: '#112233' } });
+      const swapped = optionOf('bar', [MONTHS, COST_ID, AMOUNT_ID], { values: ['Cout', 'Montant'], colors: { Cout: '#112233' } });
+      const alone = optionOf('bar', [MONTHS, COST_ID], { values: ['Cout'], colors: { Cout: '#112233' } });
+      const noId = optionOf('bar', [MONTHS, AMOUNT, COST]);
+      const shown = optionOf('bar', two, { labels: true });
+      const stacked = optionOf('bar', two, { labels: true, stack: true });
+      const lying = optionOf('bar', [MONTHS, AMOUNT_ID], { values: ['Montant'], labels: true, horizontal: true });
+      const lyingBare = optionOf('bar', [MONTHS, AMOUNT_ID], { values: ['Montant'], horizontal: true });
+      const lines = optionOf('line', two, { labels: true });
+      const cloud = optionOf('scatter', [xs('Heures', [1, 2, 3], 'Numeric'), AMOUNT_ID], { values: ['Montant'], labels: true });
+      const pie = optionOf('pie', [xs('Famille', ['Pain', 'Gâteau']), ys('Montant', [500, 100])], { kind: 'pie', label: 'Famille', values: ['Montant'], labels: true });
+      const donutBare = optionOf('donut', [xs('Famille', ['Pain', 'Gâteau']), ys('Montant', [500, 100])], { kind: 'donut', label: 'Famille', values: ['Montant'] });
+      const radar = optionOf('radar', two, { labels: true });
+      const thousands = shown.series[0].label.formatter({ value: 1234.5 });
+      return {
+        pass: plain.title === undefined && titled.title.text === 'Ventes par mois' && titled.title.left === 'center' && titled.title.textStyle.overflow === 'truncate' && titled.title.textStyle.fontWeight === 'bold'
+          && titled.legend.top > plain.legend.top && titled.grid.top > plain.grid.top && titled.grid.top - plain.grid.top === titled.legend.top - plain.legend.top
+          && evil.title.text === '<img src=x onerror="window.__made_title=1">{b|gras}' && !('rich' in evil.title.textStyle) && window.__made_title === undefined
+          && pieTitled.title.text === 'Parts' && Number.parseFloat(pieTitled.series[0].radius) < Number.parseFloat(pieBare.series[0].radius) && pieBare.title === undefined
+          && radarTitled.title.text === 'Profil' && Number.parseFloat(radarTitled.radar.center[1]) > Number.parseFloat(radarBare.radar.center[1])
+          && same(plain.color, [STANDARD[0], STANDARD[1]]) && same(blue.color, [ChartMake.PALETTES.blue[0], ChartMake.PALETTES.blue[1]]) && same(pieWarm.color, ChartMake.PALETTES.warm) && same(pieBare.color, STANDARD)
+          && same(own.color, [STANDARD[0], '#112233']) && same(swapped.color, ['#112233', STANDARD[1]]) && same(alone.color, ['#112233']) && same(noId.color, [STANDARD[0], STANDARD[1]])
+          && plain.series.every(s => !s.label) && plain.series.every(s => !s.labelLayout)
+          && shown.series.every(s => s.label.show === true && s.label.position === 'top' && s.labelLayout.hideOverlap === true) && shown.grid.top === plain.grid.top + 10
+          && stacked.series.every((s, i) => s.label.position === 'inside' && s.label.color === ColorMath.inkOn(stacked.color[i])) && lying.series[0].label.position === 'right' && lying.grid.right === lyingBare.grid.right + 28 && lines.series.every(s => s.label.position === 'top')
+          && cloud.series[0].label.formatter({ value: [2, 1234.5] }) === thousands && pie.series[0].label.formatter({ value: 500, percent: 83.33 }) === '500 (83\u00a0%)' && donutBare.series[0].label.formatter({ percent: 16.67 }) === '17\u00a0%'
+          && radar.series[0].label.show === true && radar.series[0].label.formatter({ value: 300 }) === '300'
+          && thousands === '1\u00a0234,5',
+        notes: JSON.stringify({ title: titled.title, tops: [plain.legend.top, titled.legend.top, plain.grid.top, titled.grid.top], colors: [plain.color, blue.color, own.color, swapped.color, alone.color], pie: [pieBare.series[0].radius, pieTitled.series[0].radius], labels: [stacked.series.map(s => s.label.position), lying.series[0].label.position], thousands, pieLabel: pie.series[0].label.formatter({ value: 500, percent: 83.33 }) }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_make_option_mixes_bars_and_lines_on_the_same_axes_and_stacks_each_kind_apart',
+    description: 'Un graphique mixte : des barres avec une courbe, une courbe avec des barres, une aire avec des barres, sur les mêmes axes et dans l\'ordre des séries (la légende ne change pas) ; la barre garde sa largeur, la courbe ses points ; sur une aire, seule la courbe est remplie ; avec des barres l\'axe des étiquettes laisse une marge au bord ; « empilées » empile les barres entre elles et les courbes entre elles, jamais une courbe sur des barres ; des barres horizontales ne se mêlent pas à une courbe (le réglage est ignoré)',
+    run: async () => {
+      const two = [MONTHS, AMOUNT_ID, COST_ID];
+      const types = option => option.series.map(s => s.type);
+      const barsLine = optionOf('bar', two, { mix: { Cout: 'line' } });
+      const stackedBarsLine = optionOf('bar', two, { stack: true, mix: { Cout: 'line' } });
+      const lineBars = optionOf('line', two, { mix: { Cout: 'bar' } });
+      const areaBars = optionOf('area', two, { stack: true, mix: { Cout: 'bar' } });
+      const areaOnly = optionOf('area', two, { stack: true });
+      const lying = optionOf('bar', two, { horizontal: true, mix: { Cout: 'line' } });
+      const reversed = optionOf('bar', [MONTHS, COST_ID, AMOUNT_ID], { values: ['Cout', 'Montant'], mix: { Cout: 'line' } });
+      return {
+        pass: same(types(barsLine), ['bar', 'line']) && same(barsLine.series.map(s => s.name), ['Montant', 'Cout']) && same(barsLine.legend.data, ['Montant', 'Cout']) && barsLine.series[0].barMaxWidth === 48 && barsLine.series[1].symbol === 'circle' && barsLine.series[1].lineStyle.width === 2
+          && barsLine.xAxis.boundaryGap === true && same(barsLine.xAxis.data, ['Mars', 'Janvier', 'Février']) && same(barsLine.series[1].data, [120, 60, 90])
+          && same(stackedBarsLine.series.map(s => s.stack), ['total', undefined])
+          && same(types(lineBars), ['line', 'bar']) && lineBars.series.every(s => !s.areaStyle) && lineBars.xAxis.boundaryGap === true
+          && same(types(areaBars), ['line', 'bar']) && !!areaBars.series[0].areaStyle && !areaBars.series[1].areaStyle && same(areaBars.series.map(s => s.stack), ['total', 'bars']) && areaBars.xAxis.boundaryGap === true
+          && areaOnly.xAxis.boundaryGap === false && areaOnly.series.every(s => s.type === 'line' && !!s.areaStyle && s.stack === 'total')
+          && same(types(lying), ['bar', 'bar']) && lying.xAxis.type === 'value' && same(types(reversed), ['line', 'bar']) && same(reversed.series.map(s => s.name), ['Cout', 'Montant']),
+        notes: JSON.stringify({ barsLine: types(barsLine), stacked: stackedBarsLine.series.map(s => s.stack), lineBars: types(lineBars), areaBars: [types(areaBars), areaBars.series.map(s => s.stack)], lying: types(lying), reversed: types(reversed) }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_make_image_shows_the_title_the_color_chosen_the_palette_the_values_and_a_line_among_bars',
+    description: 'L\'image réellement tracée change avec l\'aspect : le titre met de l\'encre en haut de l\'image (où rien ne s\'écrit sans lui) ; la couleur choisie d\'une colonne remplace celle du jeu (plus de bleu, de l\'orange) ; un autre jeu de couleurs donne d\'autres couleurs (rouge brique pour « Chaudes ») ; les valeurs affichées ajoutent du texte gris foncé ; une courbe mêlée aux barres laisse les barres bleues et ajoute la couleur de la courbe ; une image sans aspect reste celle du lot 1 (le bleu, aucun titre)',
+    run: async () => {
+      const picture = async (extra, series) => {
+        const option = ChartMake.option(def('bar', Object.assign({ values: ['Montant'] }, extra)), series || [MONTHS, AMOUNT_ID], { width: 480, height: 300 });
+        const uri = await ChartMake.toImage(option, 480, 300);
+        return Object.assign({ uri }, await pixelsOf(uri));
+      };
+      const topInk = (p) => { let n = 0; for (let y = 0; y < 50; y += 1) for (let x = 300; x < 1140; x += 1) { const i = (y * p.width + x) * 4; if (p.data[i + 3] > 0 && (p.data[i] < 200 || p.data[i + 1] < 200 || p.data[i + 2] < 200)) n += 1; } return n; };
+      const plain = await picture({});
+      const titled = await picture({ title: 'Ventes par mois' });
+      const orange = await picture({ colors: { Montant: '#e8742c' } });
+      const warm = await picture({ palette: 'warm' });
+      const shown = await picture({ labels: true });
+      const mixed = await picture({ values: ['Montant', 'Cout'], mix: { Cout: 'line' } }, [MONTHS, AMOUNT_ID, COST_ID]);
+      const bars = await picture({ values: ['Montant', 'Cout'] }, [MONTHS, AMOUNT_ID, COST_ID]);
+      const darkOf = p => nearOf(p, hexRgb('#444444'), 40);
+      const ORANGE = hexRgb('#e8742c');
+      const BRICK = hexRgb('#a32a1f');
+      const LINE = hexRgb(STANDARD[1]);
+      return {
+        pass: topInk(plain) === 0 && topInk(titled) > 500 && nearOf(plain, BAR_BLUE, 14) > 2500 && nearOf(orange, ORANGE, 14) > 2500 && nearOf(orange, BAR_BLUE, 14) < 60
+          && nearOf(warm, BRICK, 14) > 2500 && nearOf(warm, BAR_BLUE, 14) < 60 && darkOf(shown) > darkOf(plain) + 100 && shown.uri !== plain.uri
+          && nearOf(mixed, BAR_BLUE, 14) > 1500 && nearOf(mixed, LINE, 14) > 300 && mixed.uri !== bars.uri && nearOf(bars, LINE, 14) > 2500 && nearOf(plain, ORANGE, 14) < 60,
+        notes: JSON.stringify({ topInk: [topInk(plain), topInk(titled)], blue: [nearOf(plain, BAR_BLUE, 14), nearOf(orange, BAR_BLUE, 14), nearOf(warm, BAR_BLUE, 14)], orange: nearOf(orange, ORANGE, 14), brick: nearOf(warm, BRICK, 14), dark: [darkOf(plain), darkOf(shown)], mixed: [nearOf(mixed, BAR_BLUE, 14), nearOf(mixed, LINE, 14), nearOf(bars, LINE, 14)] }),
+      };
+    },
+  });
+
   // === 2) Les lignes =========================================================================================================================================
   cases.push({
     id: 'chart_make_source_reads_the_columns_by_identifier_in_table_order_and_the_linked_rows_follow_the_link_rule',
@@ -221,6 +371,24 @@
           && same(all.map(r => r.id), [1, 2, 3, 4, 5]) && same(one.map(r => r.id), [1, 2]) && same(two.map(r => r.id), [5]) && none.length === 0
           && series.length === 3 && same(series.map(s => s.label), ['Mois', 'Montant', 'Cout']) && same(series[0].values, ['Mars', 'Janvier', 'Février', 'Avril', 'Mai']) && same(series[1].values, [300, 100, 200, 50, 75]) && same(series[2].values, [120, 60, 90, 20, 30]),
         notes: JSON.stringify({ all: all.map(r => r.id), one: one.map(r => r.id), two: two.map(r => r.id), none: none.length, series: series.map(s => [s.label, s.values]) }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_make_source_series_carry_the_identifier_of_their_column_so_a_color_follows_its_column',
+    description: 'Les séries que ChartSource rend portent l\'identifiant de leur colonne (la couleur et le type d\'une série s\'y accrochent) ; une colonne qui n\'est plus un nombre n\'est pas tracée et ne passe pas sa couleur à sa voisine : la couleur choisie d\'une colonne reste sur elle, celle du jeu suit le rang de la colonne dans la définition',
+    run: async (h) => {
+      await seed(h);
+      const definition = def('bar', { label: 'Client', values: ['Montant', 'Note', 'Cout'], colors: { Cout: '#112233' } });
+      const made = await ChartSource.made(definition);
+      const rows = await GristAPI.withReadPass(() => ChartSource.rows(made, 'all', PAGE_TABLE, recordOf(1)));
+      const series = await GristAPI.withReadPass(() => ChartSource.series(made, rows));
+      const option = ChartMake.option(definition, series, { width: 480, height: 300 });
+      const uncolored = ChartMake.option(def('bar', { label: 'Client', values: ['Montant', 'Note', 'Cout'] }), series, { width: 480, height: 300 });
+      return {
+        pass: same(series.map(s => s.colId), ['Client', 'Montant', 'Cout']) && same(series.map(s => s.label), ['Client', 'Montant', 'Cout']) && same(option.color, [STANDARD[0], '#112233']) && same(uncolored.color, [STANDARD[0], STANDARD[2]]),
+        notes: JSON.stringify({ series: series.map(s => [s.colId, s.label]), colors: option.color, uncolored: uncolored.color }),
       };
     },
   });
@@ -549,6 +717,191 @@
           && JSON.parse(undone.chartSpec).kind === 'bar' && JSON.parse(undone.chartSpec).stack === true && same(JSON.parse(undone.chartSpec).values, ['Montant', 'Cout']),
         notes: JSON.stringify({ onPlain, onMade, opened, after: after && { spec: after.chartSpec, scope: after.chartScope, name: after.chartName, w: after.width, h: after.height }, undone: undone && undone.chartSpec }),
       };
+    },
+  });
+
+  // L'onglet « Aspect » de la fenêtre (lot 2).
+  const tab = name => document.getElementById('pp-chartmake-tab-' + name);
+  const panel = name => document.getElementById('pp-chartmake-panel-' + name);
+  const tabInfo = name => ({ selected: tab(name).getAttribute('aria-selected'), stop: tab(name).tabIndex, shown: visible(panel(name)) });
+  const titleInput = () => document.getElementById('pp-chartmake-title-input');
+  const paletteInput = id => document.querySelector('#pp-chartmake-modal input[name="pp-chartmake-palette"][value="' + id + '"]');
+  const labelsInput = () => optionInput('labels');
+  const seriesRows = () => Array.from(document.querySelectorAll('#pp-chartmake-modal .pp-chartmake-serie')).map((line) => {
+    const swatch = line.querySelector('.pp-chartmake-swatch');
+    const type = line.querySelector('.pp-chartmake-serie-type');
+    return { column: swatch.dataset.column, color: swatch.style.getPropertyValue('--swatch').trim(), name: line.querySelector('.pp-chartmake-serie-name').textContent, type: type ? type.value : null, off: type ? type.disabled : null };
+  });
+  const swatchOf = column => Array.from(document.querySelectorAll('#pp-chartmake-modal .pp-chartmake-swatch')).find(button => button.dataset.column === column);
+  const typeSelect = column => Array.from(document.querySelectorAll('#pp-chartmake-modal .pp-chartmake-serie-type')).find(select => select.dataset.column === column);
+  const colorsView = () => document.querySelector('#pp-chartmake-modal .pp-chartmake-colors');
+  const gridSwatch = color => document.querySelector('#pp-chartmake-modal .pp-chartmake-colors .cp-grid .cp-swatch[data-color="' + color + '"]');
+  const showTab = async (name) => { tab(name).click(); await sleep(120); };
+  const typeTitle = async (value) => { titleInput().value = value; titleInput().dispatchEvent(new Event('input', { bubbles: true })); await sleep(80); };
+  const pressEscape = async () => { document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await sleep(120); };
+
+  cases.push({
+    id: 'chart_make_window_aspect_tab_sets_title_palette_color_type_and_values_and_the_node_keeps_them_in_one_undo',
+    description: 'La fenêtre a deux onglets (Données, Aspect : de vrais onglets, un seul visible) ; « Aspect » a le titre, les cinq jeux de couleurs, une ligne par série (la pastille de sa couleur, son nom, son type barres ou courbe) et les valeurs affichées ; l\'aperçu suit chaque réglage ; la pastille ouvre le choix de la couleur à la place des onglets (Échap le referme sans fermer la fenêtre), une pastille de la palette le valide ; « Insérer » écrit tout sur le nœud (le nom du graphique est son titre) ; rouvert, le graphique montre les mêmes réglages ; barres horizontales : le type des séries se grise et la note dit pourquoi, un autre type d\'aperçu le rend ; secteurs : plus de séries, la note des parts ; un seul Annuler rend l\'ancienne définition',
+    run: async (h) => {
+      await seed(h);
+      await setDoc(h, '<p>Avant</p>');
+      await placeCursorAtEnd();
+      await openWindow();
+      await pickTable(SALES);
+      await pickLabel('Mois');
+      await tick('Cout', true);
+      await settle();
+      const start = { data: tabInfo('data'), aspect: tabInfo('aspect') };
+      const plainSrc = previewImage().getAttribute('src');
+      await showTab('aspect');
+      const opened = { data: tabInfo('data'), aspect: tabInfo('aspect'), rows: seriesRows(), title: titleInput().value, palette: ChartMake.PALETTE_IDS.filter(id => paletteInput(id).checked), labels: labelsInput().checked, names: Array.from(document.querySelectorAll('#pp-chartmake-modal .pp-chartmake-palette-name')).map(n => n.textContent), legend: text('#pp-chartmake-modal .pp-chartmake-series legend') };
+      await typeTitle('  Ventes   et coûts ');
+      await settle();
+      const titledSrc = previewImage().getAttribute('src');
+      await change(paletteInput('warm'), (el) => { el.checked = true; });
+      await settle();
+      const warm = seriesRows();
+      swatchOf('Montant').click();
+      await sleep(150);
+      const picking = { colors: visible(colorsView()), aspect: visible(panel('aspect')), tabs: getComputedStyle(tab('data').parentElement).visibility, grid: document.querySelectorAll('#pp-chartmake-modal .pp-chartmake-colors .cp-grid .cp-swatch').length, auto: document.querySelector('#pp-chartmake-modal .pp-chartmake-tool:not(.cp-custom)').getAttribute('aria-pressed'), title: text('#pp-chartmake-modal .pp-chartmake-colors-title'), inside: !!document.activeElement.closest('.pp-chartmake-colors') };
+      await pressEscape();
+      const escaped = { colors: visible(colorsView()), aspect: visible(panel('aspect')), open: modalOpen(), focus: document.activeElement === swatchOf('Montant') };
+      swatchOf('Montant').click();
+      await sleep(150);
+      gridSwatch('#0369a1').click();
+      await sleep(200);
+      const chosen = { colors: visible(colorsView()), aspect: visible(panel('aspect')), rows: seriesRows(), focus: document.activeElement === swatchOf('Montant') };
+      await change(typeSelect('Cout'), (el) => { el.value = 'line'; });
+      await change(labelsInput(), (el) => { el.checked = true; });
+      await settle();
+      const mixedSrc = previewImage().getAttribute('src');
+      await showTab('data');
+      const back = { data: tabInfo('data'), aspect: tabInfo('aspect') };
+      await showTab('aspect');
+      const kept = { title: titleInput().value, palette: paletteInput('warm').checked, rows: seriesRows(), labels: labelsInput().checked };
+      await confirm();
+      const attrs = madeAttrs();
+      const spec = attrs && JSON.parse(attrs.chartSpec);
+      await waitFor(() => !!drawnSrc(), 25000);
+      const firstWrite = attrs && attrs.chartSpec;
+
+      await selectMade();
+      await openWindow();
+      const reopened = { title: text('#pp-chartmake-title'), kind: kindInput('bar').checked, titleField: titleInput().value, tabs: tabInfo('data').selected };
+      await showTab('aspect');
+      const again = { palette: paletteInput('warm').checked, rows: seriesRows(), labels: labelsInput().checked };
+      await showTab('data');
+      await change(optionInput('horizontal'), (el) => { el.checked = true; });
+      await showTab('aspect');
+      const lying = { rows: seriesRows(), note: text('#pp-chartmake-modal .pp-chartmake-series .pp-chart-note'), noteShown: visible(document.querySelector('#pp-chartmake-modal .pp-chartmake-series .pp-chart-note')) };
+      await showTab('data');
+      await change(optionInput('horizontal'), (el) => { el.checked = false; });
+      await showTab('aspect');
+      const upright = { rows: seriesRows(), noteShown: visible(document.querySelector('#pp-chartmake-modal .pp-chartmake-series .pp-chart-note')) };
+      await showTab('data');
+      await pickKind('pie');
+      await showTab('aspect');
+      const pie = { series: visible(document.querySelector('#pp-chartmake-modal .pp-chartmake-series')), note: text('#pp-chartmake-panel-aspect > .pp-chart-note'), noteShown: visible(document.querySelector('#pp-chartmake-panel-aspect > .pp-chart-note')), palette: visible(document.querySelector('#pp-chartmake-modal .pp-chartmake-palettes')), labels: visible(labelsInput()) };
+      await showTab('data');
+      await pickKind('scatter');
+      await showTab('aspect');
+      const scatter = { rows: seriesRows(), types: document.querySelectorAll('#pp-chartmake-modal .pp-chartmake-serie-type').length };
+      await showTab('data');
+      await tick('Cout', true);
+      await pickKind('line');
+      await showTab('aspect');
+      const line = seriesRows();
+      await showTab('data');
+      await pickKind('bar');
+      await showTab('aspect');
+      const rebar = seriesRows();
+      await change(typeSelect('Cout'), (el) => { el.value = 'line'; });
+      await typeTitle('Ventes 2026');
+      await settle();
+      await confirm();
+      const second = madeAttrs();
+      await h.clickButton('v2-btn-undo');
+      await sleep(150);
+      const undone = madeAttrs();
+      const WARM = ChartMake.PALETTES.warm;
+      return {
+        pass: start.data.selected === 'true' && start.data.stop === 0 && start.data.shown && start.aspect.selected === 'false' && start.aspect.stop === -1 && !start.aspect.shown
+          && opened.data.selected === 'false' && !opened.data.shown && opened.aspect.selected === 'true' && opened.aspect.shown && same(opened.rows, [{ column: 'Montant', color: STANDARD[0], name: 'Montant', type: 'bar', off: false }, { column: 'Cout', color: STANDARD[1], name: 'Cout', type: 'bar', off: false }])
+          && opened.title === '' && same(opened.palette, ['standard']) && !opened.labels && same(opened.names, ['Standard', 'Bleus', 'Chaudes', 'Froides', 'Gris']) && opened.legend === 'Séries'
+          && titledSrc.startsWith('data:image/png') && titledSrc !== plainSrc && same(warm.map(r => r.color), [WARM[0], WARM[1]])
+          && picking.colors && !picking.aspect && picking.tabs === 'hidden' && picking.grid === 50 && picking.auto === 'true' && picking.title === 'Couleur de « Montant »' && picking.inside
+          && !escaped.colors && escaped.aspect && escaped.open && escaped.focus
+          && !chosen.colors && chosen.aspect && chosen.rows[0].color === '#0369a1' && chosen.rows[1].color === WARM[1] && chosen.focus && mixedSrc.startsWith('data:image/png') && mixedSrc !== titledSrc
+          && back.data.selected === 'true' && back.data.shown && !back.aspect.shown && kept.title === '  Ventes   et coûts ' && kept.palette && kept.labels && kept.rows[1].type === 'line'
+          && same(spec, { v: 1, kind: 'bar', table: SALES, label: 'Mois', values: ['Montant', 'Cout'], title: 'Ventes et coûts', palette: 'warm', colors: { Montant: '#0369a1' }, labels: true, mix: { Cout: 'line' } })
+          && attrs.chartName === 'Ventes et coûts' && attrs.alt === 'Graphique : Ventes et coûts' && !modalOpen()
+          && reopened.title === 'Modifier le graphique' && reopened.kind && reopened.titleField === 'Ventes et coûts' && reopened.tabs === 'true'
+          && again.palette && again.labels && same(again.rows.map(r => [r.color, r.type]), [['#0369a1', 'bar'], [WARM[1], 'line']])
+          && same(lying.rows.map(r => [r.type, r.off]), [['bar', true], ['bar', true]]) && lying.noteShown && lying.note === 'Des barres horizontales ne se mêlent pas à une courbe.'
+          && same(upright.rows.map(r => [r.type, r.off]), [['bar', false], ['line', false]]) && !upright.noteShown
+          && !pie.series && pie.noteShown && pie.note === 'Chaque secteur prend une couleur du jeu choisi.' && pie.palette && pie.labels
+          && scatter.types === 0 && scatter.rows.length === 1 && scatter.rows[0].color === '#0369a1'
+          && same(line.map(r => r.type), ['line', 'line']) && same(rebar.map(r => r.type), ['bar', 'bar']) && rebar[0].color === '#0369a1'
+          && JSON.parse(second.chartSpec).title === 'Ventes 2026' && JSON.parse(second.chartSpec).mix.Cout === 'line' && JSON.parse(undone.chartSpec).title === 'Ventes et coûts' && undone.chartSpec === firstWrite,
+        notes: JSON.stringify({ start, opened, warm: warm.map(r => r.color), picking, escaped, chosen, back, kept, spec, name: attrs && attrs.chartName, reopened, again, lying, upright, pie, scatter, line: line.map(r => r.type), rebar: rebar.map(r => r.type), undone: undone && undone.chartSpec }),
+      };
+    },
+  });
+
+  // Le thème de la présentation (js/slide-theme.js) : sa rangée de couleurs est en tête de tous les menus de couleur, celui de la série aussi.
+  const THEME = { name: 'Océan', colors: { bg: '#ffffff', text: '#1e2a35', title: '#0b3c5d', accent1: '#1d70b8', accent2: '#00a3a3', accent3: '#5aa9e6', accent4: '#f2a541', accent5: '#6c8ead', accent6: '#3bb273' }, fonts: { title: 'Georgia', body: 'Calibri' } };
+  const colorRows = () => Array.from(document.querySelectorAll('#pp-chartmake-modal .pp-chartmake-colors .cp-row')).map((row) => {
+    const swatches = Array.from(row.querySelectorAll('.cp-swatch'));
+    return { label: row.getAttribute('aria-label'), colors: swatches.map(s => s.dataset.color), titles: swatches.map(s => s.title), forgets: row.querySelectorAll('.cp-forget').length };
+  });
+
+  cases.push({
+    id: 'chart_make_series_color_view_offers_the_presentation_theme_row_first_with_the_name_of_each_setting_and_keeps_the_chosen_accent',
+    description: 'Quand la présentation a un thème, le choix de la couleur d\'une série montre en tête la rangée « Couleurs du thème » (le fond, le texte, les titres, les six accents : sans croix, chaque pastille porte le nom de son réglage dans son infobulle), comme tous les menus de couleur ; sans thème la rangée n\'y est pas ; l\'accent choisi est gardé dans la définition',
+    run: async (h) => {
+      await seed(h);
+      await setDoc(h, '<p>Avant</p>');
+      await placeCursorAtEnd();
+      PageLayout.setTheme(null);
+      try {
+        await openWindow();
+        await pickTable(SALES);
+        await pickLabel('Mois');
+        await settle();
+        await showTab('aspect');
+        swatchOf('Montant').click();
+        await sleep(150);
+        const bare = colorRows();
+        await pressEscape();
+        PageLayout.setTheme(THEME);
+        await sleep(80);
+        swatchOf('Montant').click();
+        await sleep(150);
+        const themed = colorRows();
+        const accent = Array.from(document.querySelectorAll('#pp-chartmake-modal .pp-chartmake-colors .cp-row .cp-swatch')).find(s => s.dataset.color === THEME.colors.accent2);
+        accent.click();
+        await sleep(200);
+        const chosen = seriesRows()[0];
+        swatchOf('Montant').click();
+        await sleep(150);
+        const marked = Array.from(document.querySelectorAll('#pp-chartmake-modal .pp-chartmake-colors .cp-swatch[aria-pressed="true"]')).map(s => s.dataset.color);
+        await pressEscape();
+        await confirm();
+        const spec = JSON.parse(madeAttrs().chartSpec);
+        const slots = ['bg', 'text', 'title', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'];
+        const names = ['Fond', 'Texte', 'Titres', 'Accent 1', 'Accent 2', 'Accent 3', 'Accent 4', 'Accent 5', 'Accent 6'];
+        return {
+          pass: bare.every(row => row.label !== 'Couleurs du thème')
+            && themed.length >= 1 && themed[0].label === 'Couleurs du thème' && same(themed[0].colors, slots.map(slot => THEME.colors[slot])) && themed[0].forgets === 0
+            && same(themed[0].titles, slots.map((slot, at) => names[at] + ' · ' + THEME.colors[slot].toUpperCase()))
+            && same(marked, [THEME.colors.accent2])
+            && chosen.color === THEME.colors.accent2 && spec.colors && spec.colors.Montant === THEME.colors.accent2 && !modalOpen(),
+          notes: JSON.stringify({ bare, themed, marked, chosen, spec }),
+        };
+      } finally {
+        PageLayout.setTheme(null);
+      }
     },
   });
 

@@ -1,20 +1,31 @@
 /* Fenêtre « Créer un graphique » (extensions/graphique/chart-make-ui.js). Elle reprend la grille, la liste, l'aperçu et les notes de la fenêtre « Graphique de la page » (chart-block.css, chargée
-   avant celle-ci) ; seul ce qui lui est propre est ici : la rangée des formes, la table et les étiquettes côte à côte, la liste des colonnes à tracer, les lignes et les deux réglages de forme.
-   Tout tient dans les 376 px de haut du panneau de 700x400, sans défiler : la liste des colonnes défile seule quand la table en a beaucoup. */
-.pp-chartmake-kinds, .pp-chartmake-values, .pp-chartmake-rows { min-width: 0; margin: 0; padding: 0; border: 0; }
-.pp-chartmake-kinds legend, .pp-chartmake-values legend, .pp-chartmake-rows legend { padding: 0; }
-/* La forme : de vrais boutons radio (flèches, Tab, lecteur d'écran) dessinés en boutons ; le choix est le bouton plein. */
-.pp-chartmake-kind-row { display: flex; flex-wrap: wrap; gap: 3px; }
-.pp-chartmake-kind { position: relative; display: inline-flex; cursor: pointer; }
-.pp-chartmake-kind input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
-.pp-chartmake-kind span { display: inline-block; box-sizing: border-box; padding: 4px 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); font-size: 12px; line-height: 1.3; color: var(--text); }
-.pp-chartmake-kind:hover span { background: var(--surface-sunken); }
-.pp-chartmake-kind input:checked + span { border-color: var(--solid-neutral-border); background: var(--solid-neutral); color: #fff; }
-.pp-chartmake-kind input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+   avant celle-ci) ; seul ce qui lui est propre est ici : les deux onglets (le commutateur de css/shortcuts.css), la rangée des formes et celle des jeux de couleurs, la table et les étiquettes côte à côte,
+   la liste des colonnes à tracer, les lignes et les deux réglages de forme, l'onglet « Aspect » (le titre, les séries, les valeurs) et le choix de la couleur d'une série (la palette et les couleurs
+   gardées sont celles de css/color-palette.css). Tout tient dans les 376 px de haut du panneau de 700x400, sans défiler : la liste des colonnes et celle des séries défilent seules quand elles sont longues. */
+.pp-chartmake-kinds, .pp-chartmake-values, .pp-chartmake-rows, .pp-chartmake-palettes, .pp-chartmake-series { min-width: 0; margin: 0; padding: 0; border: 0; }
+.pp-chartmake-kinds legend, .pp-chartmake-values legend, .pp-chartmake-rows legend, .pp-chartmake-palettes legend, .pp-chartmake-series legend { padding: 0; }
+/* Les onglets : le commutateur de css/shortcuts.css, dans l'en-tête de la fenêtre, à droite du titre (sans la marge du bas qu'il a ailleurs). Pendant le choix d'une couleur, ils restent à leur place,
+   invisibles et hors du clavier (visibility) : la fenêtre ne change pas de hauteur. */
+.pp-chartmake-box .pp-modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pp-chartmake-box .pp-chartmake-tabs { flex: none; margin: 0; }
+.pp-chartmake-box.is-picking-color .pp-chartmake-tabs { visibility: hidden; }
+.pp-chartmake-panel[hidden], .pp-chartmake-colors[hidden] { display: none; }
+/* La forme et le jeu de couleurs : de vrais boutons radio (flèches, Tab, lecteur d'écran) dessinés en boutons ; le choix est le bouton plein. */
+.pp-chartmake-kind-row, .pp-chartmake-palette-row { display: flex; flex-wrap: wrap; gap: 3px; }
+.pp-chartmake-kind, .pp-chartmake-palette { position: relative; display: inline-flex; cursor: pointer; }
+.pp-chartmake-kind input, .pp-chartmake-palette input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
+.pp-chartmake-kind > span, .pp-chartmake-palette > span { display: inline-block; box-sizing: border-box; padding: 4px 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); font-size: 12px; line-height: 1.3; color: var(--text); }
+.pp-chartmake-kind:hover > span, .pp-chartmake-palette:hover > span { background: var(--surface-sunken); }
+.pp-chartmake-kind input:checked + span, .pp-chartmake-palette input:checked + span { border-color: var(--solid-neutral-border); background: var(--solid-neutral); color: #fff; }
+.pp-chartmake-kind input:focus-visible + span, .pp-chartmake-palette input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Un jeu de couleurs montre, sous son nom, un échantillon de ses quatre premières couleurs. */
+.pp-chartmake-palette > span { display: inline-flex; flex-direction: column; gap: 2px; }
+.pp-chartmake-palette-strip { display: flex; height: 4px; overflow: hidden; border-radius: 2px; }
+.pp-chartmake-palette-strip i { display: block; flex: 1 1 0; }
 /* La table et la colonne des étiquettes. */
 .pp-chartmake-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 8px; margin-top: 8px; }
 .pp-chartmake-field { min-width: 0; }
-.pp-chartmake-box .pp-chartmake-field .pp-dialog-label { margin-bottom: 4px; }
+.pp-chartmake-box .pp-chartmake-field .pp-dialog-label, .pp-chartmake-box .pp-chartmake-palettes legend, .pp-chartmake-box .pp-chartmake-series legend { margin-bottom: 4px; }
 /* Les colonnes à tracer : une case par colonne numérique, dans une liste qui défile seule. */
 .pp-chartmake-values { margin-top: 8px; }
 .pp-chartmake-values-list { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 8px; max-height: 64px; overflow-y: auto; padding: 2px 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
@@ -34,3 +45,28 @@
 .pp-chartmake-option input { margin: 0; accent-color: var(--accent-solid); cursor: inherit; }
 .pp-chartmake-option input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pp-chartmake-box .pp-chart-select[aria-invalid="true"] + .ss-wrap .ss-trigger { border-color: var(--danger); }
+/* L'onglet « Aspect » : le titre, les jeux de couleurs, les séries (une ligne chacune : sa couleur, son nom, son type) puis les valeurs affichées. */
+.pp-chartmake-palettes, .pp-chartmake-series { margin-top: 6px; }
+.pp-chartmake-labels { margin-top: 4px; }
+.pp-chartmake-series-list { display: flex; flex-direction: column; box-sizing: border-box; max-height: 79px; overflow-y: auto; padding: 1px 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
+.pp-chartmake-series-list .pp-chart-note { margin: 4px 0; }
+.pp-chartmake-serie { display: flex; align-items: center; gap: 8px; min-height: 25px; }
+.pp-chartmake-swatch { flex: none; }
+.pp-chartmake-serie-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--text); }
+.pp-chartmake-serie-type { flex: none; box-sizing: border-box; height: 24px; padding: 0 4px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); font-family: var(--font-ui); font-size: 12px; color: var(--text); }
+.pp-chartmake-serie-type:disabled { opacity: .55; }
+.pp-chartmake-serie-type:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Le choix de la couleur d'une série, à la place des onglets : une barre (un retour et le nom de la série) puis le corps de la palette (css/color-palette.css : `.cp-body` met les couleurs gardées à droite
+   dans un panneau court), enfin « Couleur de la palette » et « Personnalisé… ». */
+.pp-chartmake-colors-head { display: flex; align-items: center; gap: 10px; min-height: 28px; margin: 0 0 8px; }
+.pp-chartmake-back { display: inline-flex; flex: none; align-items: center; gap: 6px; box-sizing: border-box; height: 28px; margin: 0; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: 600 12.5px var(--font-ui); cursor: pointer; }
+.pp-chartmake-back:hover { background: var(--surface-sunken); }
+.pp-chartmake-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-chartmake-colors-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 700; color: var(--text); }
+.pp-chartmake-colors .cp-rows[hidden] { display: none; }
+.pp-chartmake-tools button.is-active { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+@media (forced-colors: active) {
+  .pp-chartmake-tools button.is-active { outline-color: Highlight; }
+  .pp-chartmake-palette-strip { forced-color-adjust: none; }
+}

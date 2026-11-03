@@ -157,7 +157,7 @@ const ChartSource = (function () {
         if (field.isDate) return typeof raw === 'number' && raw ? isoInTimezone(raw * 1000, field.timezone) : null;
         return raw === undefined ? null : raw;
       });
-      return { label: field.label, pureType: field.pureType, values };
+      return { label: field.label, pureType: field.pureType, colId: field.colId, values };
     });
     // Un axe X en liste (plusieurs choix, plusieurs références) donne un point par élément.
     if (plotted.length && plotted[0].isList) result = ChartPlot.splitValues(result, value => (Array.isArray(value) && value[0] === 'L' ? value.slice(1) : null));
