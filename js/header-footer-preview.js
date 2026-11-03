@@ -640,8 +640,15 @@ const HeaderFooterPreview = (function () {
       lastBlock = child;
       if (keeps) { counted = index + 1 + captions.length; lastBlock = captions[captions.length - 1]; }
     };
+    // Texte entier non affiché (aucun bloc n'a de rectangle) : on ne triche pas, rien ne change.
+    const tiptapShown = tiptapEl.getClientRects().length > 0;
     children.forEach((child, index) => {
       if (index < counted) return;
+      // Un bloc non rendu (`display: none` : le réglage de numérotation des titres, `heading-numbering-config`, que porte tout document aux titres numérotés ou au style de titres) ne prend ni
+      // place ni page, et son rectangle est nul à l'origine de l'ÉCRAN, non du texte : l'écart qu'EditorCore.gapAbove lui trouvait avec le bloc d'avant grandissait avec le défilement du
+      // conteneur, et une pagination faite plus bas que le haut du document ouvrait un blanc de plusieurs pages (la vue sautait à chaque pause de frappe). Il ne compte pas et ne porte
+      // jamais une coupure : la marge d'une coupure sur lui n'aurait aucun effet.
+      if (tiptapShown && !child.getClientRects().length) return;
       const height = heightOf(child);
       if (child.classList.contains('page-break-marker')) {
         if (index >= blankTailStart) return;

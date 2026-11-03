@@ -217,6 +217,110 @@
     },
   });
 
+  // Le réglage de numérotation des titres (`heading-numbering-config`, que porte tout document aux titres numérotés ou au style de titres, la présentation « Présentation commerciale » comprise) : un
+  // bloc de premier niveau que le style cache (`display: none`), qui n'a aucune place et dont le rectangle est nul à l'origine de l'ÉCRAN. Demande d'Antoine du 03/11 (« slides+ est assez laggy »).
+  const HIDDEN_CONFIG = '<div class="heading-numbering-config" data-style="numeric"></div>';
+  const numbersOf = text => (String(text).match(/-?\d+(?:\.\d+)?/g) || []).map(Number);
+  const sameNumbers = (a, b, tol) => a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) <= tol);
+  // La pagination de l'éditeur telle qu'elle est posée : nombre de coupures, réserves (les nombres seuls : les rangs `nth-child` suivent le bloc caché), haut du corps des pages, hauteur du document.
+  function editorPagination() {
+    const sheet = document.getElementById('v2-pagination-margins-style').textContent;
+    return {
+      breaks: HeaderFooterPreview.pageBreaks().length,
+      margins: numbersOf((sheet.match(/margin-bottom: [0-9.]+px/g) || []).join(' ')),
+      tops: (HeaderFooterPreview.pageBodyTops() || []).map(v => Math.round(v * 100) / 100),
+      height: document.getElementById('editor-container').scrollHeight,
+    };
+  }
+
+  cases.push({
+    id: 'pagination_editor_ignores_a_hidden_block_wherever_the_container_is_scrolled',
+    description: "Un bloc non rendu (le réglage de numérotation des titres, display: none) ne compte pas dans la pagination de l'éditeur : mêmes coupures, mêmes réserves, même haut de page et même hauteur de document à n'importe quel défilement du conteneur, d'un calcul au suivant, et ceux du même texte sans ce bloc. Avant : un calcul fait plus bas que le haut du document ouvrait un blanc de plusieurs pages (le bloc caché était pris pour un bloc dont l'écart avec le précédent grandit avec le défilement), le document s'allongeait à chaque pause de frappe et la vue sautait",
+    run: async (h) => {
+      await setup(h, HIDDEN_CONFIG + lines(500));
+      const container = document.getElementById('editor-container');
+      const config = document.querySelector('#editor-container .tiptap > .heading-numbering-config');
+      if (!config || getComputedStyle(config).display !== 'none') return { pass: false, notes: 'le bloc caché est absent ou visible : ' + (config ? getComputedStyle(config).display : 'absent') };
+      const lower = Math.min(1500, Math.floor((container.scrollHeight - container.clientHeight) / 2));
+      if (lower < 300) return { pass: false, notes: 'conteneur trop peu défilable : ' + (container.scrollHeight - container.clientHeight) + ' px' };
+      container.scrollTop = 0;
+      HeaderFooterPreview.renderPaginationOverlay();
+      const atTop = editorPagination();
+      container.scrollTop = lower;
+      const reached = container.scrollTop;
+      HeaderFooterPreview.renderPaginationOverlay();
+      const scrolled = editorPagination();
+      HeaderFooterPreview.renderPaginationOverlay();
+      const again = editorPagination();
+      await setup(h, lines(500));
+      HeaderFooterPreview.renderPaginationOverlay();
+      const without = editorPagination();
+      if (atTop.breaks < 8) return { pass: false, notes: 'document trop court : ' + atTop.breaks + ' coupure(s) seulement' };
+      const same = (a, b) => a.breaks === b.breaks && sameNumbers(a.margins, b.margins, 0.01) && sameNumbers(a.tops, b.tops, 0.01) && Math.abs(a.height - b.height) <= 1;
+      return {
+        pass: Math.abs(reached - lower) <= 1 && same(scrolled, atTop) && same(again, scrolled) && without.breaks === atTop.breaks && sameNumbers(without.tops, atTop.tops, 0.01) && Math.abs(without.height - atTop.height) <= 1,
+        notes: 'en haut : ' + atTop.breaks + ' coupures, page 2 à ' + atTop.tops[1] + ', hauteur ' + atTop.height + ' ; défilé à ' + reached + ' : ' + scrolled.breaks + ' coupures, page 2 à ' + scrolled.tops[1] + ', hauteur ' + scrolled.height
+          + ' (attendu les mêmes) ; recalcul au même défilement : hauteur ' + again.height + ' ; sans le bloc caché : ' + without.breaks + ' coupures, page 2 à ' + without.tops[1] + ', hauteur ' + without.height,
+      };
+    },
+  });
+
+  cases.push({
+    id: 'pagination_editor_zone_after_a_hidden_block_opens_the_same_pages_as_without_it',
+    description: "Une zone à deux colonnes juste après le bloc caché se coupe où elle se couperait sans lui : l'écart avec ce qui la précède se mesure sur le bloc d'avant qui a une place, jamais sur le bloc caché (rectangle nul à l'origine de l'écran)",
+    run: async (h) => {
+      const zone = '<div class="two-columns-zone" style="--layout-left: 50%"><div class="two-columns-column">' + lines(70) + '</div><div class="two-columns-column">' + lines(40) + '</div></div>';
+      const body = zone + lines(320);
+      await setup(h, HIDDEN_CONFIG + body);
+      const config = document.querySelector('#editor-container .tiptap > .heading-numbering-config');
+      if (!config || getComputedStyle(config).display !== 'none') return { pass: false, notes: 'le bloc caché est absent ou visible : ' + (config ? getComputedStyle(config).display : 'absent') };
+      document.getElementById('editor-container').scrollTop = 0;
+      HeaderFooterPreview.renderPaginationOverlay();
+      const withConfig = editorPagination();
+      await setup(h, body);
+      HeaderFooterPreview.renderPaginationOverlay();
+      const without = editorPagination();
+      if (without.breaks < 4) return { pass: false, notes: 'document trop court : ' + without.breaks + ' coupure(s) seulement' };
+      return {
+        pass: withConfig.breaks === without.breaks && sameNumbers(withConfig.tops, without.tops, 0.01) && Math.abs(withConfig.height - without.height) <= 1,
+        notes: 'avec le bloc caché : ' + withConfig.breaks + ' coupures, page 2 à ' + withConfig.tops[1] + ', hauteur ' + withConfig.height + ' ; sans : ' + without.breaks + ' coupures, page 2 à ' + without.tops[1] + ', hauteur ' + without.height,
+      };
+    },
+  });
+
+  cases.push({
+    id: 'pagination_reader_ignores_a_hidden_block_wherever_the_reader_is_scrolled',
+    description: "La Lecture compte de même un bloc non rendu pour rien : mêmes coupures et même hauteur de feuille quand elle est mesurée de nouveau avec le conteneur défilé (un autre enregistrement ouvert pendant la lecture, une image ou une police qui change de taille). Avant : un blanc de plusieurs pages s'ouvrait en haut de la feuille",
+    run: async (h) => {
+      await setup(h, HIDDEN_CONFIG + lines(500));
+      const html = Editor.getHTML();
+      const hf = Editor.getHeaderFooterData();
+      const read = () => {
+        const rc = document.getElementById('reader-container');
+        return { breaks: rc.querySelectorAll('.v2-pagination-overlay .v2-page-band').length, height: rc.scrollHeight };
+      };
+      try {
+        await h.renderReaderMode(html, hf);
+        await h.sleep(250);
+        const rc = document.getElementById('reader-container');
+        const config = rc.querySelector('.reader-content > .heading-numbering-config');
+        if (!config || getComputedStyle(config).display !== 'none') return { pass: false, notes: 'le bloc caché est absent ou visible dans la Lecture : ' + (config ? getComputedStyle(config).display : 'absent') };
+        const atTop = read();
+        const lower = Math.min(1500, Math.floor((rc.scrollHeight - rc.clientHeight) / 2));
+        if (lower < 300 || atTop.breaks < 8) return { pass: false, notes: 'Lecture trop courte ou peu défilable : ' + atTop.breaks + ' coupures, ' + (rc.scrollHeight - rc.clientHeight) + ' px défilables' };
+        rc.scrollTop = lower;
+        const reached = rc.scrollTop;
+        await h.renderReaderMode(html, hf);
+        await h.sleep(250);
+        const scrolled = read();
+        return {
+          pass: Math.abs(reached - lower) <= 1 && scrolled.breaks === atTop.breaks && Math.abs(scrolled.height - atTop.height) <= 1,
+          notes: 'en haut : ' + atTop.breaks + ' coupures, hauteur ' + atTop.height + ' ; mesurée avec le conteneur à ' + reached + ' (demandé ' + lower + ') : ' + scrolled.breaks + ' coupures, hauteur ' + scrolled.height + ' (attendu les mêmes)',
+        };
+      } finally { restoreReader(); }
+    },
+  });
+
   // Les paginations posées pendant un affichage : chaque calcul commence par vider la feuille des marges (une écriture de texte vide).
   async function paginationsDuring(h, html) {
     await setup(h, lines(30));

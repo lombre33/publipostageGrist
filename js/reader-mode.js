@@ -177,8 +177,14 @@ const ReaderMode = (function () {
       else { consumed += gap + unitHeight; }
       if (keeps) counted = index + 1 + captions.length;
     };
+    // Feuille entière non affichée (aucun bloc n'a de rectangle) : on ne triche pas, rien ne change.
+    const rootShown = rootEl.getClientRects().length > 0;
     children.forEach((child, index) => {
       if (index < counted) return;
+      // Un bloc non rendu (`display: none` : le réglage de numérotation des titres, `heading-numbering-config`) ne prend ni place ni page, et son rectangle est nul à l'origine de l'ÉCRAN : l'écart
+      // qu'EditorCore.gapAbove lui trouvait avec le bloc d'avant grandissait avec le défilement du conteneur, et une mesure refaite plus bas que le haut de la feuille (taille d'une image ou d'une
+      // police qui change) ouvrait un blanc de plusieurs pages. Il ne compte pas, comme dans l'éditeur (js/header-footer-preview.js:computePageBreaks).
+      if (rootShown && !child.getClientRects().length) return;
       const rect = child.getBoundingClientRect();
       const top = (rect.top - rootRect.top) / zoom;
       const height = rect.height / zoom;

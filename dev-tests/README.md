@@ -1862,7 +1862,7 @@ Deux options utiles :
   (1) Trois affichages de suite, bulles valides, juste après une passe : aucune lecture de la table (contre l'ancien code : trois). (2) Une colonne ajoutée dans Grist après la passe : la bulle qui la cite
   est rouge d'après le schéma en cache, la passe repart et la bulle cesse d'être rouge - garde-fou de la variante qui aurait demandé `maxAgeMs` sans regarder le rouge (le cas échoue alors).
   (3) Une passe vieille de plus d'une minute (`Date.now` avancé de 61 s le temps d'un affichage) : le schéma est relu.
-- `paginationCost` (`dev-tests/scenarios-pagination-cost.js`, 10 cas, ~9 s) - lot « Gros tableaux » de « Tests de charge » (04/10) : ce que coûte l'affichage d'un long document.
+- `paginationCost` (`dev-tests/scenarios-pagination-cost.js`, 13 cas, ~12 s) - lot « Gros tableaux » de « Tests de charge » (04/10) : ce que coûte l'affichage d'un long document.
   Mesuré à 1 000 lignes de 6 colonnes : 5,6 s pour afficher le tableau dans l'éditeur, dont 3,1 s de style refait de force (chaque saut de page réécrivait la feuille des marges
   entière : tout le style du document refait, 86 ms par page, un calcul quadratique en nombre de pages), 1,3 s à lire le HTML (la bibliothèque de tableaux cherche les `<col>` du
   tableau entier pour chaque case) et deux paginations par affichage. Les cas comptent ces opérations (écritures de feuille, paginations, recherches de `<col>`), pas des millisecondes :
@@ -1877,6 +1877,13 @@ Deux options utiles :
   pagination de l'éditeur pose ses coupures d'un coup (une feuille posée en route, 14 avant) et chaque réserve et chaque couture est, au chiffre près, celle du calcul une à une refait
   sur le document ; (10) la Lecture aussi : aucune feuille posée pour une seule coupure (14 avant), une réserve par saut. Contre l'ancien code 8 cas sur 10 échouent (les cas 5 et 7
   passent : ce sont les garde-fous du résultat inchangé ; le 9 échoue sur le nombre de feuilles, ses coupures sont les mêmes).
+  Le bloc caché (demande d'Antoine du 03/11, « slides+ est assez laggy ») : le réglage de numérotation des titres (`heading-numbering-config`, `display: none`, rectangle nul à l'origine de l'ÉCRAN)
+  ne compte pour rien dans la pagination (`computePageBreaks` de `js/header-footer-preview.js`, `computePageBreakOffsets` de `js/reader-mode.js`). (11) Sur 500 lignes, l'éditeur : mêmes coupures, mêmes
+  réserves, même haut de page et même hauteur de document à défilement 0 et à 1 500 px, d'un calcul au suivant, et ceux du même texte sans le bloc (avant : une page de trop en haut du document dès
+  que le calcul se fait défilé, 9 coupures puis 10, page 2 à 1 188 puis 1 503, hauteur 11 505 puis 12 970 px ; dans « Présentation commerciale », un blanc de plusieurs milliers de pixels après la
+  première diapositive, qui grandissait à chaque pause de frappe) ; (12) une zone à deux colonnes juste après le bloc caché se coupe où elle se couperait sans lui (garde-fou : passe aussi sur l'ancien
+  code) ; (13) la Lecture mesurée de nouveau avec son conteneur défilé à 1 500 px : mêmes coupures et même hauteur (avant : 10 coupures et 14 662 px au lieu de 9 et 11 513 ; le cas ne compare que les
+  coupures et la hauteur, pas les réserves : l'une peut différer d'un cran quand le navigateur ancre le défilement pendant la mesure). Contre l'ancien code les cas 11 et 13 échouent, le 12 passe.
   Banc `load content`, avant et après : tableau de 1 000 lignes, éditeur 5,3 s puis 1,1 s, Lecture 2,3 s puis 0,9 s ; 2 000 lignes, éditeur 45 s puis 3,8 s, Lecture 26 s puis 4,0 s, retour
   de la Lecture 20 s puis 3,0 s ; texte de 120 pages, éditeur 3,7 s puis 0,6 s. La mise en page écrite est la même qu'avant, règle pour règle.
 - `templateMenuMouse` (`dev-tests/verify-template-menu-mouse.mjs`, 46 vérifications) clique pour de vrai, à 700×400, en clair puis en sombre, la liste déroulante des
