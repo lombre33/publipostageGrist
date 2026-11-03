@@ -1,6 +1,6 @@
 // Le lien avec Grist Factory Suite (GFS) : ce que le widget en sait quand GFS l'héberge, et rien quand il tourne seul (une fenêtre de Grist qui charge l'adresse de ce dépôt).
 // Les messages de GFS ont leur enveloppe (contrats de GFS, section 5) : { gfs: <contrat>, type: 'appel' | 'reponse' | 'erreur' | 'evenement', id, nom, args | data }, sans le `mtype` du
-// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Huit choses seulement :
+// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Neuf choses seulement :
 //  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }),
 //    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre),
 //    `ouverture`, ce que GFS demande d'ouvrir au démarrage (consigne 010 ; pour « Nouveau > Importer », le fichier à importer que GFS donne, consigne 035), `langue`, la langue qui vaut maintenant (`fr` ou `en`, consigne 019), `stockage`, l'espace de cette app chez GFS
@@ -17,10 +17,12 @@
 //    dans la vue de Grist, il n'y a plus de « Enregistrer » à cliquer ; `false`, il est resté un brouillon de Grist (GFS s'est replié dessus), que « Enregistrer » partage. Le dernier est gardé (`settingsSaved()`),
 //    les abonnés de `onSettings` sont rappelés quand il change (js/save-reminder.js, le seul à s'en servir) ;
 //  - `installer`, quand la personne clique une fonction grisée dans GFS : GFS ouvre sa fenêtre d'installation ;
+//  - l'appel `ranger { fichier, nom, type, lot?, suivants? }` (consigne 043), que l'app envoie pour qu'un PDF qu'elle vient de fabriquer se range parmi les fichiers de GFS, un fichier par appel, sans délai (GFS pose lui-même la
+//    question du nom pris) : la réponse est `{ statut, id, nom }` et une erreur de GFS garde son `code` (`GFS_ANNULE`, `GFS_ECHEC`…), de quoi js/pdf-delivery.js, le seul à s'en servir, décide de la suite ;
 //  - l'appel `ouvrir`, que GFS envoie à l'app déjà ouverte quand la personne double-clique un autre fichier (consigne 010) ou choisit « Nouveau > Importer » (consigne 035, avec le fichier) ou « Lire » sur un PDF (consigne 040, avec le PDF) : l'abonné de `onOpen` répond, ce fichier lui rend la réponse. Tout
 //    autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3).
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
-// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `settingsSaved()` rend null, `hideBar()` rend faux et `opensInNewTab()` rend faux. Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
+// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `settingsSaved()` rend null, `hideBar()` rend faux, `opensInNewTab()` rend faux et `deposit()` rejette sans rien envoyer. Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
 // qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js, js/gfs-open.js, js/person-store.js et js/gfs-bar.js, jamais par ce fichier (sauf `opensInNewTab`, que trois liens consultent, consigne 011).
 const GfsLink = (function () {
   const CONTRACT = 0;                // le contrat que parle l'app, celui de son manifeste
@@ -188,7 +190,8 @@ const GfsLink = (function () {
       const entry = pending.get(message.id);
       if (!entry) return;
       if (message.type === 'reponse') entry.resolve(message.data);
-      else entry.reject(new Error(String(message.message || message.code || 'erreur de GFS')));
+      // L'erreur garde le `code` de GFS (`GFS_ANNULE`, `GFS_ECHEC`, `GFS_REFUSE`…, contrats 5.1 point 3) : la réaction de l'appelant en dépend (consigne 043 : `GFS_ANNULE` arrête les rangements d'un export, `GFS_ECHEC` non).
+      else entry.reject(Object.assign(new Error(String(message.message || message.code || 'erreur de GFS')), { code: typeof message.code === 'string' ? message.code : '' }));
     } else if (message.type === 'evenement' && message.nom === 'extensions') apply(message.data);
     else if (message.type === 'evenement' && message.nom === 'langue') applyLanguage(message.data);
     else if (message.type === 'evenement' && message.nom === 'barre') applyBar(message.data);
@@ -291,10 +294,32 @@ const GfsLink = (function () {
     return installing.get(extension);
   }
 
+  // Ce que GFS répond à `ranger` : `{ statut, id, nom }` (contrats 5.4, point 9), `statut` l'un des quatre mots du contrat, `id` et `nom` un texte ou null (`ignore` : la personne n'en veut pas, les deux sont null). Une réponse
+  // hors de cette forme n'est pas lue au hasard : elle est une erreur (`GFS_REPONSE`), et l'export, lui, ne se perd pas (PdfDelivery télécharge le fichier).
+  const DEPOSIT_STATUSES = ['ajoute', 'remplace', 'copie', 'ignore'];
+  function normalizeDeposit(data) {
+    if (!data || typeof data !== 'object' || DEPOSIT_STATUSES.indexOf(data.statut) === -1) throw Object.assign(new Error('Réponse de GFS illisible : ranger'), { code: 'GFS_REPONSE' });
+    return { statut: data.statut, id: data.id == null ? null : String(data.id), nom: typeof data.nom === 'string' ? data.nom : null };
+  }
+
+  // Donne à GFS un PDF que l'app vient de fabriquer, pour qu'il le garde parmi ses fichiers (consigne 043, contrats 5.4 point 9) : l'appel `ranger { fichier, nom, type: 'pdf', lot?, suivants? }`, sans délai (GFS pose lui-même à la
+  // personne la question du nom pris, et elle répond quand elle veut). `fichier` : un `File` ou un `Blob` (les octets passent dans le message) ; `nom` : 1 à 200 signes ; `lot` : un texte de 1 à 64 signes qui nomme CET export quand il a
+  // plusieurs fichiers, et `suivants` : combien d'autres fichiers du même export viendront après celui-ci (0 pour le dernier) - GFS offre alors « Faire pareil pour les suivants ». Jamais de `dossier` : les PDF arrivent à la racine.
+  // Rend `{ statut: 'ajoute' | 'remplace' | 'copie' | 'ignore', id, nom }` (`nom` : celui que GFS a gardé, « Facture (1).pdf » pour une copie) ; rejette avec le `code` de GFS quand il refuse ou échoue. Un seul fichier à la fois : l'appelant
+  // attend la réponse avant d'envoyer le suivant (chaque appel copie les octets). Seule, rejette sans rien envoyer.
+  function deposit(fields) {
+    if (!hosted) return Promise.reject(new Error('GFS absent'));
+    const given = fields && typeof fields === 'object' ? fields : {};
+    const args = { fichier: given.fichier, nom: given.nom, type: 'pdf' };
+    if (typeof given.lot === 'string' && given.lot) args.lot = given.lot;
+    if (Number.isInteger(given.suivants) && given.suivants >= 0) args.suivants = given.suivants;
+    return call('ranger', args).then(normalizeDeposit);
+  }
+
   if (hosted) {
     window.addEventListener('message', onMessage);
     call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(settleReady);
   } else settleReady();
 
-  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, onChange, onLanguage, onSettings, onBar, onOpen, install };
+  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, onChange, onLanguage, onSettings, onBar, onOpen, install, deposit };
 })();
