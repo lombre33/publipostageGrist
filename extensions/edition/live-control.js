@@ -23,6 +23,7 @@ const LiveControl = (function () {
   let current = null;                    // la session au premier plan : { doc, phase, session, channel, binding, bar, ... }
   let settingUp = false;                 // le texte de l'éditeur est en train de s'accrocher à celui du salon : ce n'est pas une frappe
   const savedListeners = new Set();
+  const peerListeners = new Set();       // ceux qui veulent savoir quand les autres personnes arrivent, partent ou changent de place (js/live-entry.js : onPeers)
 
   const state = () => (current ? current.phase : 'off');
   const alive = live => current === live && !live.cancelled;
@@ -152,6 +153,9 @@ const LiveControl = (function () {
   function tellSaved(heard) {
     savedListeners.forEach((fn) => { try { fn(heard); } catch (e) { console.warn('[LiveControl] abonné à l’enregistrement en échec', e); } });
   }
+  function tellPeers() {
+    peerListeners.forEach((fn) => { try { fn(); } catch (e) { console.warn('[LiveControl] abonné aux personnes en échec', e); } });
+  }
 
   // Les événements du moteur
   function onEvent(live, type, detail) {
@@ -222,7 +226,7 @@ const LiveControl = (function () {
     listenTo(live, document, 'pointerdown', poke, true);
     listenTo(live, document, 'keydown', poke, true);
     listenTo(live, window, 'pagehide', () => { if (live.phase === 'live') live.session.leave(); });
-    const onAwareness = () => refreshBar(live);
+    const onAwareness = () => { refreshBar(live); tellPeers(); };
     live.session.awareness.on('change', onAwareness);
     live.offs.push(() => { try { live.session.awareness.off('change', onAwareness); } catch (e) { /* la session est déjà détruite */ } });
     setVisible();
@@ -398,6 +402,10 @@ const LiveControl = (function () {
     if (current && current.phase === 'live' && token) current.session.publishSaved(token, modified);
   }
   function onSaved(fn) { savedListeners.add(fn); return () => savedListeners.delete(fn); }
+  // Les autres personnes du direct et la place de leur sélection dans le texte d'ici : [{ clientId, name, color, pos }] (la bande des diapositives en tire une pastille sous la miniature de leur diapositive),
+  // et de quoi savoir quand elles arrivent, partent ou bougent.
+  const peerPlaces = () => (current && current.phase === 'live' && current.binding ? current.binding.peerPlaces() : []);
+  function onPeers(fn) { peerListeners.add(fn); return () => peerListeners.delete(fn); }
   const hasPeers = () => !!current && current.phase === 'live' && current.session.hasPeers();
   const isSettingUp = () => settingUp;
 
@@ -407,10 +415,12 @@ const LiveControl = (function () {
     return {
       phase: current.phase, doc: current.doc, role: current.role, automatic: current.automatic, user: current.user, scribe: isScribe(), peers: current.session ? current.session.peers() : [],
       summary: current.session ? current.session.summary() : null, paused: current.paused, trouble: current.trouble, clientId: current.session ? current.session.ydoc.clientID : null,
+      // Les champs de présence que chaque autre personne publie (leur contenu n'en sort pas) : son curseur de texte, la place de sa sélection, l'objet qu'elle a choisi.
+      fields: current.session ? current.session.peers().map(peer => { const remote = current.session.awareness.getStates().get(peer.clientId) || {}; return { clientId: peer.clientId, name: peer.name, cursor: !!remote.cursor, place: !!remote.place, object: !!remote.object }; }) : [],
     };
   }
 
-  LiveEntry.register({ state, start, stop, releaseEditor, undo, redo, isScribe, saveToken, publishSaved, onSaved, hasPeers, isSettingUp, debug });
+  LiveEntry.register({ state, start, stop, releaseEditor, undo, redo, isScribe, saveToken, publishSaved, onSaved, peerPlaces, onPeers, hasPeers, isSettingUp, debug });
 
-  return { PALETTE, state, start, stop, releaseEditor, undo, redo, isScribe, saveToken, publishSaved, onSaved, hasPeers, isSettingUp, pickColor, debug };
+  return { PALETTE, state, start, stop, releaseEditor, undo, redo, isScribe, saveToken, publishSaved, onSaved, peerPlaces, onPeers, hasPeers, isSettingUp, pickColor, debug };
 })();

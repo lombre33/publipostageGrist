@@ -45,6 +45,9 @@
 //    se règle dans la fenêtre « Transition… » ; sa pastille est celle de la transition.
 //  - Une diapositive dont le contenu DÉPASSE de sa page continue sur une page de plus, comme un document (carte du 19/10, « Continuer ») : sa miniature porte un point rouge, et la liste
 //    le dit. Lu sur la pagination de l'éditeur (HeaderFooterPreview.pageBreaks) : une coupure qui n'est pas un saut de page tombe dans cette diapositive.
+//  - Les PERSONNES du direct (écriture en direct, extension « édition » : LiveEntry.places, demande du 03/11) : sous la miniature de la diapositive où quelqu'un d'autre est (la place de sa sélection,
+//    même quand son clavier n'est pas dans l'éditeur), une pastille de sa couleur - son nom au survol et dans le nom de la miniature - ; au-delà de quatre sur la même, un « +N ». La pastille se
+//    pose sur le bord bas de la miniature, hors de la mise en page : la bande ne bouge pas quand quelqu'un arrive, part ou change de diapositive.
 //  - GFS éteint l'extension pendant que la présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur diapositive ; ses gestes sont grisés avec leur raison, et
 //    leur clic explique (SlidesEntry.explainOff).
 //  - Pendant l'écriture d'un en-tête ou d'un pied de page, l'éditeur porte leur texte, pas celui des diapositives : la bande ne bouge pas, et un geste referme d'abord l'en-tête.
@@ -65,6 +68,7 @@ const SlideStrip = (function () {
   // Les lignes du menu d'une diapositive, dans l'ordre ; null : un filet.
   const MENU = ['addAfter', 'duplicate', null, 'moveUp', 'moveDown', null, 'transition', 'background', 'notes', 'hide', null, 'delete'];
   const NOTES_EXCERPT = 60;        // le début des notes que dit la pastille de la miniature, en caractères
+  const MAX_PEOPLE = 4;            // les pastilles de personnes du direct montrées sous une miniature ; les autres se comptent dans un « +N »
   // Puis, sous un filet, les lignes du lien d'une diapositive liée (slide-links-ui.js), montrées pour elle seule ; les trois premières sont les sens du lien (js/slide-links.js:MODES).
   const LINK_MENU = ['linkBoth', 'linkPull', 'linkPush', 'linkCompare', 'linkDetach'];
   const LINK_MODES = { linkBoth: 'both', linkPull: 'pull', linkPush: 'push' };
@@ -101,6 +105,7 @@ const SlideStrip = (function () {
   let stopPaginated = null;
   let resizeObserver = null;
   let stopBar = null;              // se désabonne de la barre de GFS
+  let stopPeers = null;            // se désabonne des personnes du direct (LiveEntry.onPeers)
   let gutter = 0;                  // ce que la barre de GFS mord de la bande, en px (la gouttière qu'elle occupe à gauche)
   let nearObserver = null;         // dit quelles rangées la bande montre, ou presque (DRAW_AHEAD_PX) : leurs miniatures seules se copient
   // Les images en calque (followLayers) : pour chacune, la première page de sa diapositive à la dernière pagination où la bande l'a vue, et si elle est posée sur la page même (`flat`,
@@ -325,6 +330,10 @@ const SlideStrip = (function () {
     const hid = el('span', 'pp-slide-hidden-badge');
     hid.hidden = true;
     side.append(num, dot, link, trans, notes, hid);
+    // Les personnes du direct qui sont sur cette diapositive : sur le bord bas de la miniature (syncPeople).
+    const people = el('span', 'pp-slide-people');
+    people.setAttribute('aria-hidden', 'true');
+    people.hidden = true;
     const thumb = el('div', 'pp-slide-thumb');
     thumb.setAttribute('aria-hidden', 'true');
     const page = el('div', 'pp-slide-page tiptap');
@@ -337,11 +346,11 @@ const SlideStrip = (function () {
     more.setAttribute('aria-hidden', 'true');
     more.innerHTML = Icons.svg('more');
     hideIcon(more);
-    row.append(item, more);
+    row.append(item, more, people);
     list.appendChild(row);
     // Sans observateur (navigateur ancien), toutes les miniatures se copient, comme avant.
     if (nearObserver) nearObserver.observe(row);
-    return { row, item, num, dot, link, linkLook: '', trans, transLook: '', notes, notesLook: '', hid, hidLook: false, thumb, page, more, nodes: null, decorKey: '', sizedFor: '', near: !nearObserver };
+    return { row, item, num, dot, link, linkLook: '', trans, transLook: '', notes, notesLook: '', hid, hidLook: false, people, peopleKey: '', peopleNames: [], thumb, page, more, nodes: null, decorKey: '', sizedFor: '', near: !nearObserver };
   }
   function removeRow(r) {
     if (nearObserver) nearObserver.unobserve(r.row);
@@ -408,6 +417,7 @@ const SlideStrip = (function () {
       syncHidden();
       syncOverflow();
     }
+    syncPeople();
     if (thumbs) drawThumbs();
     syncCurrent(moved);
     syncOff();
@@ -571,6 +581,7 @@ const SlideStrip = (function () {
       if (r.transLook) parts.push(r.trans.title);
       if (r.notesLook) parts.push(r.notes.title);
       if (r.hidLook) parts.push(r.hid.title);
+      if (r.peopleNames.length) parts.push(I18n.t('slides.strip.people', { names: r.peopleNames.join(', '), n: r.peopleNames.length }));
       const name = parts.join(' · ');
       if (r.item.getAttribute('aria-label') !== name) r.item.setAttribute('aria-label', name);
     });
@@ -645,6 +656,48 @@ const SlideStrip = (function () {
     if (flat.length <= NOTES_EXCERPT) return flat;
     const last = flat.charCodeAt(NOTES_EXCERPT - 1);
     return flat.slice(0, last >= 0xD800 && last <= 0xDBFF ? NOTES_EXCERPT - 1 : NOTES_EXCERPT).trimEnd() + '…';
+  }
+  // Les personnes du direct (LiveEntry.places : où est la sélection de chacune dans le texte d'ici) : sous la miniature de la diapositive où elle est, une pastille de sa couleur ; son nom est son info-bulle
+  // et le dit dans le nom de la miniature. Rien hors du direct, ni sur un texte que la bande n'a pas encore relu (refresh y revient aussitôt : la position se lit dans le texte d'ici). Dans l'ordre de leur numéro
+  // de client, comme LiveEntry.places les rend : une pastille ne change pas de rang quand les autres bougent.
+  function syncPeople() {
+    if (!editor || editingHeaderFooter() || editor.state.doc !== readDoc) return;
+    const bySlide = new Map();
+    if (LiveEntry.isLive()) {
+      LiveEntry.places().forEach((person) => {
+        const index = slideAt(person.pos);
+        if (!bySlide.has(index)) bySlide.set(index, []);
+        bySlide.get(index).push(person);
+      });
+    }
+    let renamed = false;
+    rows.forEach((r, i) => {
+      const here = bySlide.get(i) || [];
+      const key = here.map(person => person.name + '|' + person.color).join('\n');
+      if (r.peopleKey === key) return;
+      r.peopleKey = key;
+      r.peopleNames = here.map(person => person.name);
+      renamed = true;
+      r.people.hidden = !here.length;
+      const marks = here.slice(0, MAX_PEOPLE).map((person) => {
+        const mark = el('span', 'pp-slide-person');
+        mark.style.setProperty('--pp-live-color', person.color);
+        mark.title = person.name;
+        return mark;
+      });
+      if (here.length > MAX_PEOPLE) {
+        const more = el('span', 'pp-slide-person pp-slide-person-more', '+' + (here.length - MAX_PEOPLE));
+        more.title = here.slice(MAX_PEOPLE).map(person => person.name).join(', ');
+        marks.push(more);
+      }
+      r.people.replaceChildren(...marks);
+    });
+    if (renamed) labelRows();
+  }
+  // Les autres personnes du direct arrivent, partent ou bougent (ou le direct s'allume, s'éteint) : leurs pastilles. Un texte que la bande n'a pas encore relu les placerait mal : elle le relit d'abord.
+  function onPeers() {
+    if (!shown || editingHeaderFooter()) return;
+    if (editor.state.doc !== readDoc) refresh(false); else syncPeople();
   }
   function linkLook(info) {
     const differs = !!info.differs;
@@ -1663,6 +1716,7 @@ const SlideStrip = (function () {
       chartDom = editor.view.dom;
       chartDom.addEventListener(ChartEntry.PAINTED_EVENT, onChartPainted);
       stopPaginated = HeaderFooterPreview.onPaginated(onPaginated);
+      stopPeers = LiveEntry.onPeers(onPeers);
       document.addEventListener('copy', onCopy, true);
       document.addEventListener('copy', rememberCopy);
       document.addEventListener('cut', rememberCopy);
@@ -1695,6 +1749,7 @@ const SlideStrip = (function () {
     if (editor) editor.off('transaction', onTransaction);
     if (chartDom) { chartDom.removeEventListener(ChartEntry.PAINTED_EVENT, onChartPainted); chartDom = null; }
     if (stopPaginated) { stopPaginated(); stopPaginated = null; }
+    if (stopPeers) { stopPeers(); stopPeers = null; }
     document.removeEventListener('copy', onCopy, true);
     document.removeEventListener('copy', rememberCopy);
     document.removeEventListener('cut', rememberCopy);

@@ -1550,6 +1550,7 @@ const I18n = (function () {
     'slides.strip.transition': { fr: 'Transition : {name}', en: 'Transition: {name}' },
     'slides.strip.notes': { fr: 'Notes : {text}', en: 'Notes: {text}' },
     'slides.strip.hidden': { fr: 'Masquée : sautée au diaporama', en: 'Hidden: skipped in the slide show' },
+    'slides.strip.people': { fr: '{names} {n|est|sont} ici', en: '{names} {n|is|are} here' },
     'slides.hidden.set': { fr: '{n} {n|diapositive masquée|diapositives masquées} : le diaporama {n|la saute|les saute}.', en: '{n} {n|slide|slides} hidden: the slide show skips {n|it|them}.' },
     'slides.hidden.cleared': { fr: '{n} {n|diapositive affichée|diapositives affichées} de nouveau.', en: '{n} {n|slide|slides} shown again.' },
     'slides.transition.title': { fr: 'Transition de la diapositive {n}', en: 'Transition of slide {n}' },

@@ -61,14 +61,22 @@ const LiveEntry = (function () {
     control = next;
     earlySaved.forEach(fn => control.onSaved(fn));
     earlySaved.clear();
+    control.onPeers(tellPeers);
   }
   function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
   function changed() {
     noteState();
     noteArrival();
     listeners.forEach((fn) => { try { fn(); } catch (e) { console.warn('[LiveEntry] abonné en échec', e); } });
+    tellPeers();
     rearm(baseEpoch === epoch ? WATCH_MS : ARRIVAL_MS);
   }
+  // Les autres personnes du direct : où est la sélection de chacune dans le texte d'ici, [{ clientId, name, color, pos }] (vide hors du direct) - la bande des diapositives en tire la pastille de leur
+  // couleur sous la miniature de la diapositive où elles sont. `onPeers(fn)` : appelé quand elles arrivent, partent ou bougent, et quand le direct s'allume ou s'éteint ; rend de quoi se désabonner.
+  const peerListeners = new Set();
+  const places = () => (isLive() ? control.peerPlaces() : []);
+  function onPeers(fn) { peerListeners.add(fn); return () => peerListeners.delete(fn); }
+  function tellPeers() { peerListeners.forEach((fn) => { try { fn(); } catch (e) { console.warn('[LiveEntry] abonné aux personnes en échec', e); } }); }
 
   // L'état
   function state() {
@@ -365,6 +373,6 @@ const LiveEntry = (function () {
 
   return {
     ID, FEATURE_KEY, register, setContext, setHooks, onChange, changed, state, isLive, isBusy, isAvailable, unavailable, reason, toggle, stop, releaseEditor, isRemote, undo, redo,
-    hasUnsavedEdits, savedDate, markUnsaved, isScribe, isSettingUp, blocksAutosave, saveToken, published, onSaved, expectsAnnouncement, lockedReason, explainLocked, setAutomatic, mayJoinNow,
+    hasUnsavedEdits, savedDate, markUnsaved, isScribe, isSettingUp, blocksAutosave, saveToken, published, onSaved, places, onPeers, expectsAnnouncement, lockedReason, explainLocked, setAutomatic, mayJoinNow,
   };
 })();

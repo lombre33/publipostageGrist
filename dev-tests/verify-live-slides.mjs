@@ -88,6 +88,8 @@ async function typeInFrame(page, index, text) {
     ed.commands.focus();
     ed.commands.setTextSelection(out[at]);
   }, { at: index });
+  // Le clavier n'arrive dans l'éditeur qu'à l'image suivante (le `focus()` de TipTap passe par requestAnimationFrame) : taper avant fait perdre la première touche.
+  await page.waitForFunction(() => EditorCore.getEditor().view.hasFocus(), null, { timeout: 5000 });
   await page.keyboard.type(text, { delay: 15 });
 }
 // Les positions que les pages montrent, dans le DOM de l'éditeur (pas dans les miniatures de la bande).

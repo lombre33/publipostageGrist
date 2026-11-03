@@ -57,6 +57,14 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 .pp-slide-row:hover .pp-slide-more, .pp-slide-row.pp-slide-menu-open .pp-slide-more, .pp-slide-item[aria-selected="true"] + .pp-slide-more { display: inline-flex; }
 .pp-slide-more:hover { background: var(--surface-sunken); }
 
+/* Les personnes du direct (slide-strip.js:syncPeople) : une pastille de leur couleur (--pp-live-color, posée par le script) SOUS la miniature de la diapositive où elles sont, à cheval sur son bord bas, hors
+   de la mise en page (la bande ne bouge pas quand quelqu'un arrive, part ou change de diapositive). Un liseré blanc la détache de la miniature comme du fond de la bande, clair ou sombre ; son nom est
+   son info-bulle. Au-delà de quatre sur la même diapositive, un « +N ». 21 px : le rembourrage de la miniature (3), son numéro (14) et l'écart (4). */
+.pp-slide-people { position: absolute; left: 21px; bottom: -3px; z-index: 1; display: flex; align-items: center; gap: 3px; }
+.pp-slide-people[hidden] { display: none; }
+.pp-slide-person { flex: none; box-sizing: border-box; width: 11px; height: 11px; border: 1.5px solid #fff; border-radius: 50%; background: var(--pp-live-color, var(--text-muted)); }
+.pp-slide-person-more { width: auto; min-width: 11px; padding: 0 3px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface-sunken); color: var(--text); font-size: 9px; font-variant-numeric: tabular-nums; line-height: 9px; }
+
 /* Glisser une miniature (slide-strip.js:onDragPress) : celle qu'on emporte s'estompe à sa place, sa copie suit la souris au-dessus de tout, une ligne d'accent dit où elle se posera.
    Plusieurs diapositives choisies s'estompent toutes, et la copie porte leur nombre. */
 .pp-slide-list.pp-slide-dragging, .pp-slide-list.pp-slide-dragging .pp-slide-item { cursor: grabbing; }
@@ -111,6 +119,7 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
   .pp-slide-link-badge.pp-slide-link-differs { color: Highlight; }
   .pp-slide-item[aria-selected="true"] .pp-slide-thumb { outline: 2px solid Highlight; }
   .pp-slide-drop { forced-color-adjust: none; background: Highlight; }
+  .pp-slide-person:not(.pp-slide-person-more) { forced-color-adjust: none; border-color: CanvasText; }
   .pp-slide-ghost-count { forced-color-adjust: none; background: Highlight; color: HighlightText; }
 }
 @media print {

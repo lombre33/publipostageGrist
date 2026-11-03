@@ -5,7 +5,9 @@
 //    (deux historiques sur le même texte se défont l'un l'autre) et remis à la fin, vide ;
 //  - yCursorPlugin : le curseur, la sélection et le nom des autres, dessinés sur le texte (nom et couleur nettoyés avant d'arriver à l'écran) ;
 //  - les OBJETS que les autres ont choisis (un cadre, une forme, une ligne d'une présentation : une sélection de nœud, sans texte où poser un curseur) : leur contour de la couleur de la
-//    personne et son nom au coin. Sans lui, le curseur de la bibliothèque se poserait ENTRE deux blocs et décalerait le texte d'une ligne ; il est tu pour ces personnes-là (`showsCaret`) ;
+//    personne et son nom au coin. Sans lui, le curseur de la bibliothèque se poserait ENTRE deux blocs et décalerait le texte d'une ligne ; il est tu pour ces personnes-là (`showsCaret`).
+//    Le même plugin publie OÙ la personne en est (`place`, sa sélection : le curseur de la bibliothèque ne se publie que tant que le clavier est dans l'éditeur) et `peerPlaces` lit celle des
+//    autres : la bande des diapositives (extensions/diapositives/slide-strip.js) en tire la pastille de leur couleur sous la miniature de la diapositive où ils sont ;
 //  - une touche : Ctrl/⌘+Z, Ctrl/⌘+Y et Ctrl/⌘+Maj+Z passent par Yjs - sans elle l'historique retiré laisserait le navigateur défaire le texte tout seul, hors de ProseMirror ;
 //  - les marques des nœuds en ligne qui ne sont pas du texte (une bulle de variable en gras, une image dans un lien) : Yjs ne garde les marques que sur les passages de texte ; elles voyagent donc
 //    dans l'attribut `ppMarks` de ces nœuds (js/editor-nodes.js:createInlineMarksCarrier), que ce plugin tient d'accord avec elles - de la marque vers l'attribut pour ce qui se tape ici, de
@@ -18,6 +20,7 @@ const LiveEditor = (function () {
   const OBJECTS_PLUGIN = 'pp-live-objects';
   const OBJECT_FIELD = 'object';     // le champ de la présence d'une personne qui a choisi un objet : { type, pos } - le nom du nœud et sa position RELATIVE dans le texte partagé (elle suit le texte quand les autres écrivent)
   const OBJECT_NODES = ['freeFrame', 'freeLine'];   // js/free-frame.js : un cadre ou une forme, une ligne
+  const PLACE_FIELD = 'place';       // le champ de la présence qui dit où la personne en est : la position RELATIVE de sa sélection dans le texte partagé (elle suit le texte), publiée même quand le clavier n'est pas dans l'éditeur
 
   // Le noir ou le blanc, selon lequel se lit le mieux sur `hex` (contraste calculé comme WCAG) : le nom d'une personne reste lisible sur sa couleur, quelle qu'elle soit.
   function readableOn(hex) {
@@ -73,7 +76,7 @@ const LiveEditor = (function () {
   }
 
   // Branche l'éditeur. `options` : editor (le TipTap du widget), yt (@tiptap/y-tiptap), PM ({ Plugin, PluginKey } de prosemirror-state, { Decoration, DecorationSet } de prosemirror-view : les copies de l'éditeur du widget), session (le moteur), onProblem(error) (le texte
-  // partagé ne se lit plus dans le schéma de l'éditeur : la synchronisation s'arrête). Rend { attach, detach, undo, redo, projectionError, isAttached, fill, track, stopCapturing, beforeCapture }.
+  // partagé ne se lit plus dans le schéma de l'éditeur : la synchronisation s'arrête). Rend { attach, detach, undo, redo, projectionError, isAttached, fill, track, stopCapturing, beforeCapture, peerPlaces }.
   function create(options) {
     const { editor, yt, PM, session } = options;
     let attached = false;
@@ -102,6 +105,24 @@ const LiveEditor = (function () {
     function projectionError() {
       const state = attached ? syncState() : null;
       return state && state.binding ? state.binding.projectionError : null;
+    }
+
+    // Où sont les autres : [{ clientId, name, color, pos }] - `pos`, la position dans le texte d'ici de la sélection de chacun (sa `place`). Une personne dont la place ne se lit pas (une page d'avant
+    // cette version, qui ne la publie pas) n'y est pas ; dans l'ordre de leur numéro, pour qu'une pastille ne change pas de rang quand les autres bougent.
+    function peerPlaces() {
+      const sync = attached ? syncState() : null;
+      if (!sync || !sync.doc || !sync.binding || sync.snapshot != null || sync.prevSnapshot != null || sync.binding.mapping.size === 0) return [];
+      const size = editor.state.doc.content.size;
+      const found = [];
+      session.peers().forEach((peer) => {
+        const remote = session.awareness.getStates().get(peer.clientId);
+        const given = remote && remote[PLACE_FIELD];
+        if (!given || typeof given !== 'object') return;
+        let pos = null;
+        try { pos = yt.relativePositionToAbsolutePosition(sync.doc, sync.type, session.Y.createRelativePositionFromJSON(given), sync.binding.mapping); } catch (e) { pos = null; }
+        if (typeof pos === 'number' && pos >= 0 && pos <= size) found.push(Object.assign({}, peer, { pos }));
+      });
+      return found.sort((a, b) => a.clientId - b.clientId);
     }
 
     function undo() { return attached ? !!yt.undo(editor.state) : false; }
@@ -248,6 +269,20 @@ const LiveEditor = (function () {
           if (!mine || mine.type !== selected.type.name || JSON.stringify(mine.pos) !== JSON.stringify(pos)) awareness.setLocalStateField(OBJECT_FIELD, { type: selected.type.name, pos });
         } catch (e) { /* une position que la bibliothèque ne sait pas dire : l'objet reste sans contour chez les autres */ }
       }
+      // Où la personne en est, dans sa présence : la place de sa sélection (relative, elle suit le texte). Le curseur de la bibliothèque, lui, n'est publié que tant que le clavier est dans l'éditeur :
+      // la place reste quand la personne clique la bande des diapositives ou une barre d'outils, et les autres la voient toujours à la même diapositive.
+      let placed = null;      // la sélection et le texte pour lesquels la place a été publiée en dernier
+      function publishPlace(view) {
+        const state = view.state;
+        if (placed && placed.selection === state.selection && placed.doc === state.doc) return;
+        const sync = yt.ySyncPluginKey.getState(state);
+        if (!sync || !sync.binding || sync.binding.projectionError !== null) return;
+        try {
+          const pos = yt.absolutePositionToRelativePosition(state.selection.head, sync.type, sync.binding.mapping);
+          placed = { selection: state.selection, doc: state.doc };
+          if (JSON.stringify((awareness.getLocalState() || {})[PLACE_FIELD]) !== JSON.stringify(pos)) awareness.setLocalStateField(PLACE_FIELD, pos);
+        } catch (e) { /* une position que la bibliothèque ne sait pas dire : les autres ne voient pas où l'on est */ }
+      }
 
       return new PM.Plugin({
         key,
@@ -270,8 +305,8 @@ const LiveEditor = (function () {
           };
           awareness.on('change', onChange);
           return {
-            update: publish,
-            destroy() { awareness.off('change', onChange); awareness.setLocalStateField(OBJECT_FIELD, null); },
+            update(updated) { publish(updated); publishPlace(updated); },
+            destroy() { awareness.off('change', onChange); awareness.setLocalStateField(OBJECT_FIELD, null); awareness.setLocalStateField(PLACE_FIELD, null); },
           };
         },
       });
@@ -345,7 +380,7 @@ const LiveEditor = (function () {
       manager = null;
     }
 
-    return { attach, detach, undo, redo, fill, track, stopCapturing, beforeCapture, projectionError, isAttached: () => attached };
+    return { attach, detach, undo, redo, fill, track, stopCapturing, beforeCapture, peerPlaces, projectionError, isAttached: () => attached };
   }
 
   return { create, cursorBuilder, selectionBuilder, readableOn, showsCaret };

@@ -250,6 +250,8 @@ export async function converge(views, timeout = 12000) {
 // Tape au clavier (celui de la page de premier niveau `page`) dans l'éditeur de `view` (la page, ou son sous-cadre), au début ou à la fin.
 export async function typeAt(page, where, text, view = page) {
   await view.evaluate((w) => EditorCore.getEditor().commands.focus(w), where);
+  // Le `focus()` de TipTap ne donne le clavier à l'éditeur qu'à l'image suivante (requestAnimationFrame) : une touche tapée avant part sur la page et se perd - la première lettre, ou l'espace.
+  await view.waitForFunction(() => EditorCore.getEditor().view.hasFocus(), null, { timeout: 5000 });
   await page.keyboard.type(text, { delay: 12 });
 }
 
