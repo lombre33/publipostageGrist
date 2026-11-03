@@ -564,6 +564,108 @@
     },
   });
 
+  cases.push({
+    id: 'chart_make_draw_keeps_the_picture_of_the_same_definition_values_and_size_and_draws_again_as_soon_as_one_of_them_changes',
+    description: 'ChartBlock.drawMade garde le dessin tant que la définition, les valeurs tracées, la taille et la langue de l\'interface sont les mêmes (l\'éditeur, la Lecture, le diaporama, le retour en édition et les exports le redemandent : ECharts et le PNG à 3 pixels par pixel coûtent plus de 100 ms par graphique) : un second appel identique rend la même image sans repasser par ECharts, avec sa propre copie de la réponse ; une autre ligne, une autre taille, une autre forme, une autre langue, une valeur de la table qui change redessinent (les données d\'aujourd\'hui sont toujours relues), et revenir aux premières valeurs retrouve le premier dessin ; un dessin raté n\'est pas gardé',
+    run: async (h) => {
+      await seed(h);
+      ChartBlock.forgetDrawings();   // les essais d'avant ont pu dessiner la même chose : on repart d'une mémoire vide
+      const real = ChartMake.toImage;
+      let calls = 0;
+      let fail = false;
+      ChartMake.toImage = function (...args) { calls += 1; if (fail) return Promise.reject(new Error('dessin raté')); return real.apply(this, args); };
+      const sales = window.__chartFixture.sales;
+      try {
+        const draw = (definition, scope, record, width, height) => GristAPI.withReadPass(() => ChartBlock.drawMade(definition, scope, PAGE_TABLE, record, width || 480, height || 300));
+        const first = await draw(def('bar'), 'linked', recordOf(1));
+        const afterFirst = calls;
+        const again = await draw(def('bar'), 'linked', recordOf(1));
+        const afterAgain = calls;
+        again.uri = 'modifiée par celui qui l\'a reçue';
+        const third = await draw(def('bar'), 'linked', recordOf(1));
+        const afterThird = calls;
+        // La langue de l'interface écrit les nombres et les noms des marches : une autre langue est un autre dessin, et le retour à la première retrouve le sien.
+        const lang = I18n.getLang();
+        I18n.setLang(lang === 'en' ? 'fr' : 'en');
+        try { await draw(def('bar'), 'linked', recordOf(1)); } finally { I18n.setLang(lang); }
+        const afterLang = calls;
+        const backInLang = await draw(def('bar'), 'linked', recordOf(1));
+        const afterBack = calls;
+        const otherRow = await draw(def('bar'), 'linked', recordOf(2));
+        const afterRow = calls;
+        const wider = await draw(def('bar'), 'linked', recordOf(1), 600, 300);
+        const afterSize = calls;
+        const otherKind = await draw(def('line'), 'linked', recordOf(1));
+        const afterKind = calls;
+        window.__gristStub.setRows(SALES, sales.map(r => (r.id === 1 ? Object.assign({}, r, { Montant: 480 }) : r)));
+        const edited = await draw(def('bar'), 'linked', recordOf(1));
+        const afterEdit = calls;
+        window.__gristStub.setRows(SALES, sales);
+        const restored = await draw(def('bar'), 'linked', recordOf(1));
+        const afterRestore = calls;
+        fail = true;
+        let failed = '';
+        try { await draw(def('bar'), 'linked', recordOf(3)); } catch (e) { failed = e.message; }
+        fail = false;
+        const retried = await draw(def('bar'), 'linked', recordOf(3));
+        return {
+          pass: first.uri.startsWith('data:image/png;base64,') && afterFirst === 1 && afterAgain === 1 && again !== first && third.uri === first.uri && afterThird === 1 && afterLang === 2 && afterBack === 2 && backInLang.uri === first.uri && JSON.stringify(third.office) === JSON.stringify(first.office) && !!first.office
+            && otherRow.uri !== first.uri && afterRow === 3 && wider.uri !== first.uri && afterSize === 4 && otherKind.uri !== first.uri && afterKind === 5
+            && edited.uri !== first.uri && afterEdit === 6 && restored.uri === first.uri && afterRestore === 6
+            && failed === 'dessin raté' && !!retried.uri && calls === 8,
+          notes: JSON.stringify({ calls: [afterFirst, afterAgain, afterThird, afterLang, afterBack, afterRow, afterSize, afterKind, afterEdit, afterRestore, calls], failed }),
+        };
+      } finally {
+        ChartMake.toImage = real;
+        window.__gristStub.setRows(SALES, sales);
+      }
+    },
+  });
+
+  cases.push({
+    id: 'chart_make_draw_keeps_at_most_64_pictures_and_a_bounded_weight_and_the_last_asked_always_stays',
+    description: 'ChartBlock.drawMade ne garde pas tout : au plus 64 dessins (le plus ancien s\'en va le premier ; un dessin redemandé repasse en dernier), et pas plus de ~40 millions de caractères d\'adresses `data:` (deux dessins de 25 millions : le plus ancien s\'en va, le dernier demandé reste toujours)',
+    run: async (h) => {
+      await seed(h);
+      ChartBlock.forgetDrawings();   // les essais d'avant ont pu remplir la mémoire : on repart d'une mémoire vide
+      const real = ChartMake.toImage;
+      let calls = 0;
+      let huge = false;
+      ChartMake.toImage = function (...args) {
+        calls += 1;
+        // Un faux dessin (l'adresse change à chaque appel) : ce qui se compte ici est ce que le cache garde, pas ECharts.
+        return Promise.resolve('data:image/png;base64,' + 'A'.repeat(huge ? 25000000 : 100) + calls);
+      };
+      try {
+        const draw = (width) => GristAPI.withReadPass(() => ChartBlock.drawMade(def('bar'), 'linked', PAGE_TABLE, recordOf(1), width, 300));
+        for (let w = 200; w < 266; w++) await draw(w);          // 66 tailles : 66 dessins
+        const afterFill = calls;
+        await draw(265);                                         // le dernier : gardé
+        const afterLast = calls;
+        await draw(200);                                         // le premier : parti (66 > 64), refait
+        const afterFirst = calls;
+        await draw(201);                                         // le deuxième : parti aussi quand le premier est revenu
+        const afterSecond = calls;
+        await draw(264);                                         // l'avant-dernier : toujours là
+        const afterNear = calls;
+        huge = true;
+        await draw(900);                                         // 25 millions de caractères : les petits partent d'abord, celui-ci reste
+        await draw(901);                                         // un second : 50 millions en tout, le plus ancien (900) part
+        const afterHuge = calls;
+        await draw(901);                                         // le dernier demandé : toujours là
+        const afterKept = calls;
+        await draw(900);                                         // le plus ancien : refait
+        const afterOld = calls;
+        return {
+          pass: afterFill === 66 && afterLast === 66 && afterFirst === 67 && afterSecond === 68 && afterNear === 68 && afterHuge === 70 && afterKept === 70 && afterOld === 71,
+          notes: JSON.stringify({ calls: [afterFill, afterLast, afterFirst, afterSecond, afterNear, afterHuge, afterKept, afterOld] }),
+        };
+      } finally {
+        ChartMake.toImage = real;
+      }
+    },
+  });
+
   // === 3) L'éditeur ==========================================================================================================================================
   const modal = () => document.getElementById('pp-chartmake-modal');
   const modalOpen = () => { const m = modal(); return !!m && m.style.display !== 'none'; };

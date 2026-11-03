@@ -31,6 +31,61 @@ const ChartBlock = (function () {
     return error;
   }
 
+  // Les dessins déjà faits. Un dessin ne dépend que de ce qui le décrit : la définition (ou la figure) du graphique, les valeurs qu'il trace, sa taille et la langue de l'interface (qui écrit les nombres et les
+  // noms des marches). Tant que ces quatre-là sont les mêmes, le PNG est le même octet pour octet (police du système, échelle fixe), et le refaire coûte 100 ms et plus par graphique (ECharts ou Plotly, puis
+  // l'encodage du PNG à 3 pixels par pixel). L'éditeur, la Lecture, le diaporama, le retour en édition et les exports le redemandent chacun : ils lisent toujours les lignes de Grist d'aujourd'hui (un graphique
+  // dont les données ont bougé a une autre clé et se redessine), mais ne repassent par le moteur de dessin que pour un dessin qu'on n'a pas. Les dessins gardés sont les derniers demandés, au plus DRAWN_MAX ;
+  // un dessin raté n'est jamais gardé.
+  const DRAWN_MAX = 64;
+  const DRAWN_CHARS_MAX = 40000000;   // le poids des adresses `data:` gardées (un caractère chacune) : une présentation de grands graphiques n'en garde pas des dizaines de Mo
+  const drawings = new Map();   // clé -> { promise, size }, le plus récemment demandé en dernier
+  // Un résumé de 64 bits d'un texte (cyrb53), pour que la clé reste courte quelles que soient les valeurs tracées.
+  function digest(text) {
+    let h1 = 0xdeadbeef ^ text.length;
+    let h2 = 0x41c6ce57 ^ text.length;
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      h1 = Math.imul(h1 ^ code, 2654435761);
+      h2 = Math.imul(h2 ^ code, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36) + '.' + text.length.toString(36);
+  }
+  // Les plus anciens s'en vont quand il y en a plus de DRAWN_MAX ou qu'ils pèsent plus que DRAWN_CHARS_MAX ; le dernier demandé reste toujours.
+  function trimDrawings() {
+    let total = 0;
+    drawings.forEach((entry) => { total += entry.size; });
+    while (drawings.size > 1 && (drawings.size > DRAWN_MAX || total > DRAWN_CHARS_MAX)) {
+      const oldest = drawings.keys().next().value;
+      total -= drawings.get(oldest).size;
+      drawings.delete(oldest);
+    }
+  }
+  // Le dessin de ce que décrit `parts` : celui qu'on a gardé, ou celui que `make` fait (une promesse de { uri, office? } ou { empty: true }). Chacun reçoit sa copie de la réponse.
+  function once(parts, make) {
+    let key;
+    try { key = digest(JSON.stringify(parts)); } catch (e) { return make(); }
+    let kept = drawings.get(key);
+    if (kept) drawings.delete(key);
+    else {
+      kept = { size: 0, promise: null };
+      kept.promise = make().then((result) => {
+        kept.size = result && typeof result.uri === 'string' ? result.uri.length : 0;
+        trimDrawings();
+        return result;
+      }, (error) => {
+        if (drawings.get(key) === kept) drawings.delete(key);
+        throw error;
+      });
+    }
+    drawings.set(key, kept);
+    trimDrawings();
+    return kept.promise.then(result => Object.assign({}, result));
+  }
+  // Oublie tous les dessins gardés : un essai qui compte les appels au moteur de dessin, ou qui le fait échouer, repart d'une mémoire vide.
+  function forgetDrawings() { drawings.clear(); }
+
   // Dessine le graphique de la section `id` pour la ligne `record` : { uri } (le PNG, adresse `data:`) ou { empty: true } quand il n'y a aucune ligne à
   // tracer. Lève une erreur dont `kind` dit ce qui manque : « chart » (graphique supprimé ou plus redessinable), « rows » (lignes illisibles), sinon la
   // bibliothèque ou le dessin.
@@ -43,7 +98,7 @@ const ChartBlock = (function () {
     catch (e) { throw problem('rows', e && e.message ? e.message : 'Lignes illisibles'); }
     if (!found.length) return { empty: true };
     const figure = ChartPlot.figure(spec.type, ChartSource.series(spec, found), spec.options);
-    return { uri: await ChartPlot.toImage(figure, width, height) };
+    return once(['plot', I18n.getLang(), figure, width, height], async () => ({ uri: await ChartPlot.toImage(figure, width, height) }));
   }
 
   // Dessine le graphique CRÉÉ `def` (chart-make.js) pour la ligne `record` : { uri } ou { empty: true }, avec les mêmes erreurs que `draw` (`kind` « chart » : la définition est illisible ou sa table, une de
@@ -56,11 +111,13 @@ const ChartBlock = (function () {
     catch (e) { throw problem('rows', e && e.message ? e.message : 'Lignes illisibles'); }
     if (!found.length) return { empty: true };
     const series = ChartSource.series(spec, found);
-    const drawn = { uri: await ChartMake.toImage(ChartMake.option(def, series, { width, height }), width, height) };
-    // Le modèle d'Office du même graphique (chart-office.js) : ce que Word, PowerPoint et Excel refont en graphique natif et modifiable. Un graphique qu'il ne sait pas dire (un nuage dont l'abscisse est du texte, plus de
-    // 2 000 étiquettes) n'en a pas : il sort en image, et un modèle qui ne se construit pas ne gâte jamais le dessin.
-    try { drawn.office = ChartOffice.model(def, series); } catch (e) { console.warn('[ChartBlock] modèle d\'Office impossible', e); }
-    return drawn;
+    return once(['made', I18n.getLang(), def, series, width, height], async () => {
+      const made = { uri: await ChartMake.toImage(ChartMake.option(def, series, { width, height }), width, height) };
+      // Le modèle d'Office du même graphique (chart-office.js) : ce que Word, PowerPoint et Excel refont en graphique natif et modifiable. Un graphique qu'il ne sait pas dire (un nuage dont l'abscisse est du texte, plus de
+      // 2 000 étiquettes) n'en a pas : il sort en image, et un modèle qui ne se construit pas ne gâte jamais le dessin.
+      try { made.office = ChartOffice.model(def, series); } catch (e) { console.warn('[ChartBlock] modèle d\'Office impossible', e); }
+      return made;
+    });
   }
 
   // À la Lecture et à l'export
@@ -494,5 +551,5 @@ const ChartBlock = (function () {
     closeWindow();
   }
 
-  return { resolveImage, drawMade, paintFrame, releaseFrame, refreshFrame, refreshEditor, open };
+  return { resolveImage, drawMade, paintFrame, releaseFrame, refreshFrame, refreshEditor, open, forgetDrawings };
 })();

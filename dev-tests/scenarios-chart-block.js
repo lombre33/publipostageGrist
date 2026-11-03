@@ -1008,6 +1008,8 @@
   const labelDisplay = view => getComputedStyle(view.querySelector('.editor-image-var-label')).display;
   // Espionne ce que le dessin reçoit : les figures (abscisses ou secteurs de la première série) et les tailles demandées à Plotly ; `fail` fait échouer le dessin.
   function spyDrawing(fail) {
+    // Un dessin déjà fait est gardé (ChartBlock.forgetDrawings) : l'essai qui compte les appels au moteur de dessin, ou le fait échouer, repart d'une mémoire vide.
+    ChartBlock.forgetDrawings();
     const figures = [];
     const sizes = [];
     const realFigure = ChartPlot.figure;
@@ -1437,6 +1439,7 @@
       const goneNote = gone.querySelector('.error-msg');
       const kaplan = await renderReader(docOf(chartHtml(105, 'all')), recordOf(1));
       const real = ChartPlot.toImage;
+      ChartBlock.forgetDrawings();   // un dessin gardé ne laisserait pas la bibliothèque manquer
       ChartPlot.toImage = async () => { throw new Error('bibliothèque absente'); };
       let broken;
       try { broken = await renderReader(docOf(chartHtml(101, 'all')), recordOf(1)); } finally { ChartPlot.toImage = real; }
@@ -1449,6 +1452,35 @@
           && broken.querySelector('.error-msg').textContent === '[Graphique indisponible]' && broken.querySelectorAll('img').length === 0 && english.querySelector('.error-msg').textContent === '[Chart unavailable]',
         notes: JSON.stringify({ empty, gone: goneNote && goneNote.textContent, kaplan: kaplan.querySelector('.error-msg') && kaplan.querySelector('.error-msg').textContent, broken: broken.querySelector('.error-msg') && broken.querySelector('.error-msg').textContent, english: english.querySelector('.error-msg') && english.querySelector('.error-msg').textContent }),
       };
+    },
+  });
+
+  cases.push({
+    id: 'chart_reader_keeps_the_picture_of_a_page_chart_for_the_same_row_and_draws_again_for_another_row_or_once_forgotten',
+    description: 'Le dessin d\'un graphique de la page est gardé tant que sa figure (le type, les valeurs tracées, les réglages), sa taille et la langue sont les mêmes : la Lecture, l\'aperçu des exports et le retour en édition le redemandent sans repasser par Plotly, avec la même image ; une autre ligne le redessine, et ChartBlock.forgetDrawings l\'oublie',
+    run: async (h) => {
+      await seed(h);
+      const spy = spyDrawing(false);
+      try {
+        const html = docOf(chartHtml(101, 'linked'));
+        const first = (await renderReader(html, recordOf(1))).querySelector('img');
+        const afterFirst = spy.sizes.length;
+        const again = (await renderReader(html, recordOf(1))).querySelector('img');
+        const afterAgain = spy.sizes.length;
+        const preview = (await previewOf(html, recordOf(1))).querySelector('img');
+        const afterPreview = spy.sizes.length;
+        const other = (await renderReader(html, recordOf(2))).querySelector('img');
+        const afterOther = spy.sizes.length;
+        ChartBlock.forgetDrawings();
+        const forgotten = (await renderReader(html, recordOf(1))).querySelector('img');
+        const afterForget = spy.sizes.length;
+        const src = img => (img ? img.getAttribute('src') : null);
+        return {
+          pass: !!first && !!again && !!preview && !!other && !!forgotten && afterFirst === 1 && afterAgain === 1 && afterPreview === 1 && afterOther === 2 && afterForget === 3
+            && src(first) === src(again) && src(first) === src(preview) && src(other) !== src(first) && src(forgotten) === src(first),
+          notes: JSON.stringify({ calls: [afterFirst, afterAgain, afterPreview, afterOther, afterForget] }),
+        };
+      } finally { spy.restore(); }
     },
   });
 
