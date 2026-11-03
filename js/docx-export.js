@@ -529,6 +529,13 @@ const DocxExport = (function () {
     }
     return out;
   }
+  // La `ChartRun` d'un modèle d'Office : ses options, la taille du dessin (px), son identifiant et le texte alternatif de l'image `node` (la bibliothèque en écrit un d'elle-même, en anglais, quand l'image n'en a pas).
+  function newChartRun(model, node, transformation, id, floating) {
+    const alt = (node.getAttribute('alt') || '').trim();
+    const options = Object.assign(chartOptionsFromModel(model), { transformation, altText: Object.assign({ id, name: '', title: '' }, alt ? { description: alt } : {}) });
+    if (floating) options.floating = floating;
+    return new docxCharts.ChartRun(options);
+  }
   // La ligne du graphique natif de `node` (une `ChartRun`, de la taille et de la place de l'image : `runOptions` est celui de l'image), ou null : l'image n'est pas un graphique créé, elle est dans un cadre de diapositive
   // (Word ne met pas de graphique dans une zone de texte), la bibliothèque ne se charge pas, ou Word refuserait ses données.
   async function chartRunFrom(node, runOptions) {
@@ -536,13 +543,35 @@ const DocxExport = (function () {
     if (!model || node.closest('.pp-free-frame')) return null;
     try {
       await ensureDocxChartsLoaded();
-      const alt = (node.getAttribute('alt') || '').trim();
-      const options = Object.assign(chartOptionsFromModel(model), {
-        transformation: runOptions.transformation,
-        altText: Object.assign({ id: runOptions.altText.id, name: '', title: '' }, alt ? { description: alt } : {}),
-      });
-      if (runOptions.floating) options.floating = runOptions.floating;
-      return new docxCharts.ChartRun(options);
+      return newChartRun(model, node, runOptions.transformation, runOptions.altText.id, runOptions.floating);
+    } catch (e) {
+      console.warn('[DocxExport] graphique natif impossible, l\'image est gardée :', e);
+      return null;
+    }
+  }
+  // Pour PowerPoint (js/pptx-export.js) et Excel (js/xlsx-export.js), qui n'ont pas de bibliothèque de graphiques : les PARTIES d'un graphique natif d'Office pour l'image `node`, de `width` x `height` px, tirées d'un .docx
+  // que la bibliothèque écrit pour l'occasion (le `c:chartSpace` est le même dans les trois applications) : { chartXml (le texte de word/charts/chartN.xml), externalId (l'identifiant, dans ce texte, de la relation vers le
+  // classeur), workbook (l'.xlsx embarqué, des octets), model } ; null quand l'image n'est pas un graphique créé, ou que la bibliothèque ne se charge pas ou refuse les données (l'appelant garde l'image). Le cadre
+  // d'une diapositive n'est pas écarté ici, contrairement à `chartRunFrom` : c'est l'appelant, PowerPoint, qui décide de ce qu'il en fait.
+  async function chartPartsOf(node, width, height) {
+    const model = chartModelOf(node);
+    if (!model) return null;
+    try {
+      await ensureDocxLibLoaded();
+      await ensureDocxChartsLoaded();
+      await ExportCommon.ensureJsZipLoaded();
+      const run = newChartRun(model, node, { width: Math.max(1, Math.round(width)), height: Math.max(1, Math.round(height)) }, 1);
+      const zip = await JSZip.loadAsync(await (await docx.Packer.toBlob(new docx.Document({ sections: [{ children: [new docx.Paragraph({ children: [run] })] }] }))).arrayBuffer());
+      const names = Object.keys(zip.files);
+      const chartName = names.find(name => /^word\/charts\/chart\d+\.xml$/.test(name));
+      const relsName = names.find(name => /^word\/charts\/_rels\/chart\d+\.xml\.rels$/.test(name));
+      const workbookName = names.find(name => /^word\/embeddings\/[^/]+\.xlsx$/.test(name));
+      if (!chartName || !relsName || !workbookName) return null;
+      const chartXml = await zip.file(chartName).async('string');
+      const rels = await zip.file(relsName).async('string');
+      const externalId = (/<c:externalData[^>]*\sr:id="([^"]+)"/.exec(chartXml) || [])[1];
+      if (!externalId || rels.indexOf('Id="' + externalId + '"') < 0) return null;
+      return { chartXml, externalId, workbook: await zip.file(workbookName).async('uint8array'), model };
     } catch (e) {
       console.warn('[DocxExport] graphique natif impossible, l\'image est gardée :', e);
       return null;
@@ -1974,5 +2003,5 @@ const DocxExport = (function () {
     ExportCommon.downloadBlob(blob, (filename || 'publipostage') + '.docx');
   }
 
-  return { exportCurrentRecord, getDocxBlobForRecord, ensureDocxLibLoaded, ensureDocxChartsLoaded, chartOptionsFromModel };
+  return { exportCurrentRecord, getDocxBlobForRecord, ensureDocxLibLoaded, ensureDocxChartsLoaded, chartOptionsFromModel, chartPartsOf };
 })();

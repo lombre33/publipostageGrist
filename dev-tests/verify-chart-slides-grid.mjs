@@ -149,9 +149,25 @@ async function installReaders(page) {
           const media = zip.file('ppt/' + target.replace(/^\.\.\//, ''));
           pictures.push({ x: Number(off.getAttribute('x')), y: Number(off.getAttribute('y')), cx: Number(ext.getAttribute('cx')), cy: Number(ext.getAttribute('cy')), target, png: media ? await media.async('base64') : '' });
         }
-        slides.push({ pictures });
+        // Les graphiques de PowerPoint (`p:graphicFrame` d'un `c:chart`) : la boîte en EMU, la partie du graphique (par la relation de la diapositive), son classeur embarqué (par les relations de la partie) et ses séries.
+        const charts = [];
+        for (const frame of Array.from(doc.getElementsByTagName('p:graphicFrame'))) {
+          const ref = frame.getElementsByTagName('c:chart')[0];
+          if (!ref) continue;
+          const xfrm = frame.getElementsByTagName('p:xfrm')[0];
+          const off = xfrm.getElementsByTagName('a:off')[0];
+          const ext = xfrm.getElementsByTagName('a:ext')[0];
+          const target = targets[ref.getAttribute('r:id')];
+          const part = 'ppt/' + target.replace(/^\.\.\//, '');
+          const partRels = zip.file(part.replace(/([^/]+)$/, '_rels/$1.rels'));
+          const workbook = partRels ? /Target="\.\.\/embeddings\/([^"]+\.xlsx)"/.exec(await partRels.async('string')) : null;
+          const chartDoc = zip.file(part) ? await parse(part) : null;
+          charts.push({ x: Number(off.getAttribute('x')), y: Number(off.getAttribute('y')), cx: Number(ext.getAttribute('cx')), cy: Number(ext.getAttribute('cy')), target, workbook: !!workbook && !!zip.file('ppt/embeddings/' + workbook[1]),
+            series: chartDoc ? Array.from(chartDoc.getElementsByTagName('c:ser')).length : 0, kinds: chartDoc ? ['c:barChart', 'c:lineChart', 'c:pieChart', 'c:doughnutChart'].filter(tag => chartDoc.getElementsByTagName(tag).length) : [] });
+        }
+        slides.push({ pictures, charts });
       }
-      return { slides, size: await (async () => { const p = await parse('ppt/presentation.xml'); const s = p.getElementsByTagName('p:sldSz')[0]; return { cx: Number(s.getAttribute('cx')), cy: Number(s.getAttribute('cy')) }; })() };
+      return { slides, media: Object.keys(zip.files).filter(n => n.startsWith('ppt/media/')).length, size: await (async () => { const p = await parse('ppt/presentation.xml'); const s = p.getElementsByTagName('p:sldSz')[0]; return { cx: Number(s.getAttribute('cx')), cy: Number(s.getAttribute('cy')) }; })() };
     };
     window.__readXlsx = async (b64) => {
       await ExportCommon.ensureJsZipLoaded();
@@ -259,9 +275,14 @@ async function run(lang, colorScheme, full, kind) {
   const pptx = file ? await page.evaluate(b64 => window.__readPptx(b64), file.toString('base64')) : null;
   check(tag + 'le PowerPoint se lit : trois diapositives de 960 x 540 points', !!pptx && pptx.slides.length === 3 && pptx.size.cx === 12192000 && pptx.size.cy === 6858000, pptx && pptx.slides.length);
   if (!pptx || pptx.slides.length !== 3) return page;
-  const pic = pptx.slides.map(s => s.pictures);
-  check(tag + 'une seule image par diapositive : le graphique',
-    pic.every(list => list.length === 1), pic.map(list => list.length));
+  // Le graphique de la page (importé de Grist) sort en image PNG ; le graphique CRÉÉ en graphique de PowerPoint (modifiable, classeur embarqué), sans la moindre image.
+  const pic = pptx.slides.map(s => (created ? s.charts : s.pictures));
+  check(tag + (created ? 'un seul objet par diapositive : le graphique, un graphique de PowerPoint (pas une image)' : 'une seule image par diapositive : le graphique'),
+    pic.every(list => list.length === 1) && (!created || (pptx.slides.every(s => s.pictures.length === 0) && pptx.media === 0)), pic.map(list => list.length));
+  if (created) {
+    check(tag + 'chaque graphique de PowerPoint a sa partie et son classeur embarqué (« Modifier les données » ouvre Excel) : barres, courbe, secteurs',
+      pic.every(list => list[0].workbook && list[0].series >= 1) && pptx.slides.map(s => s.charts[0].kinds[0]).join() === 'c:barChart,c:lineChart,c:pieChart', pic.map(list => [list[0].target, list[0].workbook, list[0].series, list[0].kinds]));
+  }
   const inside = p => p.x >= 0 && p.y >= 0 && p.x + p.cx <= pptx.size.cx && p.y + p.cy <= pptx.size.cy;
   check(tag + 'les images ont la taille réglée : 360 x 225 points dans le texte (480 x 300 px), 225 x 140 points dans le cadre (300 x 187 px), toutes dans la diapositive',
     near(pic[0][0].cx / EMU, 360, 1) && near(pic[0][0].cy / EMU, 225, 1) && near(pic[1][0].cx / EMU, 225, 1) && near(pic[1][0].cy / EMU, 140.25, 1) && near(pic[2][0].cx / EMU, 360, 1) && near(pic[2][0].cy / EMU, 225, 1) && pic.every(list => inside(list[0])),
@@ -270,7 +291,7 @@ async function run(lang, colorScheme, full, kind) {
   check(tag + 'l\'image du cadre est DANS le cadre : entre son bord gauche (60 pt) et son bord droit (400 pt), son bord haut (120 pt) et son bord bas (350 pt)',
     frame.x / EMU >= FRAME_AT.x - 0.5 && (frame.x + frame.cx) / EMU <= FRAME_AT.x + FRAME_AT.w + 0.5 && frame.y / EMU >= FRAME_AT.y - 0.5 && (frame.y + frame.cy) / EMU <= FRAME_AT.y + FRAME_AT.h + 0.5, [frame.x / EMU, frame.y / EMU, (frame.x + frame.cx) / EMU, (frame.y + frame.cy) / EMU]);
   check(tag + 'l\'image du texte est sous le titre de sa diapositive (pas par-dessus)', pic[0][0].y / EMU > 40 && pic[2][0].y / EMU > 40, [pic[0][0].y / EMU, pic[2][0].y / EMU]);
-  check(tag + 'les images de l\'archive sont les MÊMES octets que celles de la Lecture (PNG)', pic.every((list, i) => list[0].png === payloadOf(reading[i].src) && list[0].png.length > 1000), pic.map((list, i) => list[0].png === payloadOf(reading[i].src)));
+  if (!created) check(tag + 'les images de l\'archive sont les MÊMES octets que celles de la Lecture (PNG)', pic.every((list, i) => list[0].png === payloadOf(reading[i].src) && list[0].png.length > 1000), pic.map((list, i) => list[0].png === payloadOf(reading[i].src)));
 
   // Une ligne sans vente : plus d'image pour « liées », celle de « toute la table » reste.
   await fire(page, NO_SALE);
@@ -278,8 +299,9 @@ async function run(lang, colorScheme, full, kind) {
   const bare = await exportAs(page, 'pptx');
   await keep(`presentation-sans-vente-${FILE}${lang}-${colorScheme}.pptx`, bare);
   const without = bare ? await page.evaluate(b64 => window.__readPptx(b64), bare.toString('base64')) : null;
-  check(tag + 'une ligne sans vente : la diapositive 1 n\'a plus d\'image (le graphique « liées » disparaît, comme une image sans pièce jointe), les deux autres gardent la leur',
-    !!without && without.slides.length === 3 && without.slides[0].pictures.length === 0 && without.slides[1].pictures.length === 1 && without.slides[2].pictures.length === 1, without && without.slides.map(s => s.pictures.length));
+  const objectsOf = s => (created ? s.charts : s.pictures).length;
+  check(tag + 'une ligne sans vente : la diapositive 1 n\'a plus ' + (created ? 'de graphique' : 'd\'image') + ' (le graphique « liées » disparaît, comme une image sans pièce jointe), les deux autres gardent le leur',
+    !!without && without.slides.length === 3 && objectsOf(without.slides[0]) === 0 && objectsOf(without.slides[1]) === 1 && objectsOf(without.slides[2]) === 1, without && without.slides.map(objectsOf));
 
   // 4) Une grille.
   console.log(`\n${tag}Une grille d'une case-graphique`);

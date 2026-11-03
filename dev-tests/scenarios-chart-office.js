@@ -6,7 +6,9 @@
 //  2) le TRANSPORT : l'attribut de l'image à la Lecture (et pas sur un graphique de la page), absent du HTML, du Markdown et du PDF ;
 //  3) le WORD, lu dans le .docx GÉNÉRÉ (dézippé : word/charts/chartN.xml, le classeur embarqué, word/document.xml), jamais dans les objets de docx.js : chaque forme a son élément d'Office, un graphique mêlé a ses deux
 //     éléments, aucune image PNG pour un graphique natif, la taille réglée, des identifiants de dessin tous différents, et le repli sur l'image PNG quand Word ne saurait pas lire le graphique.
-// Le rendu réel (LibreOffice) et les graphiques de PowerPoint et d'Excel sont vérifiés à part (lots 4 et 5).
+//  4) le POWERPOINT (lot 4) : le .pptx généré, dézippé (ppt/charts/chartN.xml, le classeur embarqué, la diapositive et ses relations), la place et la taille de l'image, un cadre de diapositive, le repli sur l'image PNG (lien, rotation, modèle refusé),
+//     le moteur Word demandé seulement pour un graphique créé, et la limite de l'import (« graphique non repris »).
+// Le rendu réel (LibreOffice) et le graphique d'Excel sont vérifiés à part (lot 5).
 (function () {
   const cases = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -443,6 +445,164 @@
       return {
         pass: out.every(o => o.charts === 0 && o.media === 1 && o.drawings >= 1) && out[6].drawings === 2 && out.slice(0, 6).every(o => o.drawings === 1) && out.length === 7,
         notes: JSON.stringify({ out, warned: warned.length }),
+      };
+    },
+  });
+
+  // === 4) Le PowerPoint =======================================================================================================================================
+  // Le .pptx généré, dézippé : { zip, parts, slides (ppt/slides/slideN.xml parsés), charts (ppt/charts/chartN.xml parsés), media, workbooks (ppt/embeddings/*.xlsx) }. Avec `record`, l'export de la vraie chaîne
+  // (les images de graphique sont résolues pour la ligne, comme à l'export de la personne) ; sans, le HTML donné tel quel (une image déjà dessinée, avec son modèle : `drawnHtml`).
+  async function pptxOf(html, record) {
+    await ExportEngines.ensure('pptx');
+    await ExportCommon.ensureJsZipLoaded();
+    const blob = record ? (await PptxExport.getPptxBlobForRecord(html, PAGE_TABLE, record, '', null, null)).blob : await PptxExport.fromHtml(html, { title: 'essai' });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const all = Object.keys(zip.files).filter(name => !zip.files[name].dir);
+    const parts = {};
+    for (const name of all.filter(n => /\.(xml|rels)$/.test(n))) parts[name] = await zip.file(name).async('string');
+    const numbered = (pattern) => all.filter(n => pattern.test(n)).sort((a, b) => parseInt(a.replace(/\D/g, ''), 10) - parseInt(b.replace(/\D/g, ''), 10));
+    return {
+      zip, parts, slides: numbered(/^ppt\/slides\/slide\d+\.xml$/).map(n => parseXml(parts[n])), charts: numbered(/^ppt\/charts\/chart\d+\.xml$/).map(n => parseXml(parts[n])),
+      media: all.filter(n => n.startsWith('ppt/media/')), workbooks: all.filter(n => /^ppt\/embeddings\/.+\.xlsx$/.test(n)),
+    };
+  }
+  // Les objets « graphique » d'une diapositive : leur boîte en points, leur nom, leur texte alternatif, la relation qu'ils nomment.
+  const chartFrames = slide => tagsOf(slide, 'p:graphicFrame').filter(frame => /\/chart$/.test((frame.getElementsByTagName('a:graphicData')[0] || { getAttribute: () => '' }).getAttribute('uri') || '')).map((frame) => {
+    const box = frame.getElementsByTagName('p:xfrm')[0];
+    const off = box.getElementsByTagName('a:off')[0];
+    const ext = box.getElementsByTagName('a:ext')[0];
+    const props = frame.getElementsByTagName('p:cNvPr')[0];
+    return { x: off.getAttribute('x') / 12700, y: off.getAttribute('y') / 12700, w: ext.getAttribute('cx') / 12700, h: ext.getAttribute('cy') / 12700, name: props.getAttribute('name'), alt: props.getAttribute('descr'), rel: frame.getElementsByTagName('c:chart')[0].getAttribute('r:id'), id: props.getAttribute('id') };
+  });
+  const relOf = (parts, path, id) => { const doc = parseXml(parts[path] || '<x/>'); return tagsOf(doc, 'Relationship').find(rel => rel.getAttribute('Id') === id); };
+
+  cases.push({
+    id: 'chart_office_pptx_bar_is_a_native_chart_with_its_workbook_at_the_place_of_the_picture_and_no_picture',
+    description: 'PowerPoint : le graphique créé (barres) est un graphique de PowerPoint (un objet « graphique » de la diapositive, sa partie ppt/charts/chart1.xml, le classeur embarqué que « Modifier les données » ouvre dans Excel, leurs types de contenu et leurs relations) à la place et à la taille de l\'image (360 x 225 pt), avec son texte alternatif, ses deux séries (nom, couleur, étiquettes, valeurs) ; aucune image PNG dans le fichier',
+    run: async () => {
+      const out = await pptxOf('<h1>Ventes</h1>' + drawnHtml(BAR_MODEL));
+      const frames = chartFrames(out.slides[0]);
+      const frame = frames[0];
+      const series = out.charts[0] ? seriesOf(out.charts[0]) : [];
+      const sheetRel = out.charts[0] ? relOf(out.parts, 'ppt/charts/_rels/chart1.xml.rels', tagsOf(out.charts[0], 'c:externalData')[0].getAttribute('r:id')) : null;
+      const slideRel = frame ? relOf(out.parts, 'ppt/slides/_rels/slide1.xml.rels', frame.rel) : null;
+      const types = parseXml(out.parts['[Content_Types].xml'] || '<x/>');
+      const hasChartType = tagsOf(types, 'Override').some(o => o.getAttribute('PartName') === '/ppt/charts/chart1.xml' && /drawingml\.chart\+xml$/.test(o.getAttribute('ContentType')));
+      const hasSheetType = tagsOf(types, 'Default').some(d => d.getAttribute('Extension') === 'xlsx' && /spreadsheetml\.sheet$/.test(d.getAttribute('ContentType')));
+      const book = out.workbooks.length ? await JSZip.loadAsync(await out.zip.file(out.workbooks[0]).async('uint8array')) : null;
+      const strings = book && book.file('xl/sharedStrings.xml') ? await book.file('xl/sharedStrings.xml').async('string') : '';
+      return {
+        pass: out.charts.length === 1 && frames.length === 1 && tagsOf(out.slides[0], 'p:pic').length === 0 && out.media.length === 0 && Math.abs(frame.w - 360) < 0.6 && Math.abs(frame.h - 225) < 0.6 && frame.alt === 'Mon graphique' && frame.name.indexOf(I18n.t('pptx.name.chart')) === 0
+          && same(plotsOf(out.charts[0]), ['c:barChart']) && same(series.map(s => s.name), ['Paris', 'Lyon']) && same(series.map(s => s.color), ['2B78AE', 'FE945B']) && same(series[0].cats, months) && same(series[0].vals, [12, 19, 8]) && same(series[1].vals, [7, 11, 14])
+          && !!slideRel && /relationships\/chart$/.test(slideRel.getAttribute('Type')) && slideRel.getAttribute('Target') === '../charts/chart1.xml'
+          && !!sheetRel && /relationships\/package$/.test(sheetRel.getAttribute('Type')) && sheetRel.getAttribute('Target') === '../embeddings/Microsoft_Excel_Worksheet1.xlsx' && same(out.workbooks, ['ppt/embeddings/Microsoft_Excel_Worksheet1.xlsx'])
+          && hasChartType && hasSheetType && /Paris/.test(strings) && /Lyon/.test(strings) && /Janvier/.test(strings),
+        notes: JSON.stringify({ charts: out.charts.length, frames, pics: tagsOf(out.slides[0], 'p:pic').length, media: out.media, series, slideRel: slideRel && slideRel.getAttribute('Target'), sheetRel: sheetRel && sheetRel.getAttribute('Target'), workbooks: out.workbooks, hasChartType, hasSheetType, strings: strings.slice(0, 120) }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_pptx_every_shape_has_its_native_chart_of_office',
+    description: 'PowerPoint : chacune des sept formes de la vraie chaîne (la ligne 1 du client) devient son graphique d\'Office - barres, barres couchées, courbe, aire, nuage, secteurs, anneau, radar - seul objet de la diapositive de son espèce, sans image PNG',
+    run: async (h) => {
+      await seed(h);
+      const shapes = [
+        ['bar', { values: ['Montant'] }, 'c:barChart'], ['bar', { values: ['Montant'], horizontal: true }, 'c:barChart'], ['line', { values: ['Montant'] }, 'c:lineChart'], ['area', { values: ['Montant'] }, 'c:areaChart'],
+        ['scatter', { label: 'Cout', values: ['Montant'] }, 'c:scatterChart'], ['pie', { label: 'Famille', values: ['Montant'] }, 'c:pieChart'], ['donut', { label: 'Famille', values: ['Montant'] }, 'c:doughnutChart'], ['radar', { values: ['Montant', 'Cout'] }, 'c:radarChart'],
+      ];
+      const out = [];
+      for (const [kind, extra, tag] of shapes) {
+        const result = await pptxOf(docOf(madeHtml(def(kind, extra), 'linked')), recordOf(1));
+        const dir = result.charts[0] && tagsOf(result.charts[0], 'c:barDir')[0];
+        out.push({ kind: kind + (extra.horizontal ? ' couché' : ''), tag, plots: result.charts[0] ? plotsOf(result.charts[0]) : [], charts: result.charts.length, frames: chartFrames(result.slides[0]).length, pics: tagsOf(result.slides[0], 'p:pic').length, media: result.media.length, dir: dir ? dir.getAttribute('val') : null });
+      }
+      return {
+        pass: out.every(o => o.charts === 1 && o.frames === 1 && o.pics === 0 && o.media === 0 && same(o.plots, [o.tag])) && out[0].dir === 'col' && out[1].dir === 'bar',
+        notes: JSON.stringify(out),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_pptx_chart_in_a_slide_frame_keeps_its_place_in_the_frame_and_each_chart_has_its_own_part',
+    description: 'PowerPoint : le graphique d\'un cadre de diapositive est un graphique de PowerPoint DANS le cadre (entre ses bords), deux graphiques (l\'un dans le texte, l\'autre dans un cadre) ont chacun leur partie, leur classeur et leur identifiant d\'objet, et une diapositive sans graphique créé n\'a rien de tout cela',
+    run: async () => {
+      const small = drawnHtml(BAR_MODEL).replace('width: 480px; height: 300px', 'width: 240px; height: 150px');
+      const html = '<h1>Texte</h1>' + drawnHtml(BAR_MODEL) + '<div class="page-break-marker"></div><h2>Cadre</h2>' + FreeFrame.html({ x: 60, y: 120, w: 340, h: 230 }, small) + '<div class="page-break-marker"></div><h2>Rien</h2><p>Un texte seul.</p>';
+      const out = await pptxOf(html);
+      const first = chartFrames(out.slides[0]);
+      const second = chartFrames(out.slides[1]);
+      const frame = second[0];
+      const names = Object.keys(out.parts).filter(n => /^ppt\/charts\/chart\d+\.xml$/.test(n)).sort();
+      const sheets = Object.keys(out.parts).filter(n => /^ppt\/charts\/_rels\//.test(n)).map(n => /Target="([^"]+)"/.exec(out.parts[n])[1]).sort();
+      return {
+        pass: out.charts.length === 2 && first.length === 1 && second.length === 1 && chartFrames(out.slides[2]).length === 0 && out.media.length === 0 && out.workbooks.length === 2
+          && Math.abs(frame.w - 180) < 0.6 && Math.abs(frame.h - 112.5) < 0.6 && frame.x >= 60 - 0.5 && frame.x + frame.w <= 400.5 && frame.y >= 120 - 0.5 && frame.y + frame.h <= 350.5
+          && same(names, ['ppt/charts/chart1.xml', 'ppt/charts/chart2.xml']) && same(sheets, ['../embeddings/Microsoft_Excel_Worksheet1.xlsx', '../embeddings/Microsoft_Excel_Worksheet2.xlsx'])
+          && relOf(out.parts, 'ppt/slides/_rels/slide1.xml.rels', first[0].rel).getAttribute('Target') !== relOf(out.parts, 'ppt/slides/_rels/slide2.xml.rels', second[0].rel).getAttribute('Target'),
+        notes: JSON.stringify({ first, second, names, sheets, media: out.media, workbooks: out.workbooks }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_pptx_keeps_the_png_for_a_link_a_turn_a_bad_model_and_an_image_without_model',
+    description: 'PowerPoint : l\'image PNG sort telle qu\'avant quand PowerPoint ne saurait pas garder le graphique - une image à lien (PowerPoint n\'en accepte pas sur un graphique), l\'image d\'un cadre qui mène quelque part, un cadre tourné (il ne tourne pas un graphique), un modèle illisible, d\'une autre version ou refusé (une part négative) - et pour une image sans modèle',
+    run: async () => {
+      const warn = console.warn;
+      console.warn = () => {};
+      const out = [];
+      try {
+        const linked = drawnHtml(BAR_MODEL).replace('<p>', '<p><a href="https://example.org/">').replace('</p>', '</a></p>');
+        const small = drawnHtml(BAR_MODEL).replace('width: 480px; height: 300px', 'width: 240px; height: 150px');
+        const negative = { v: 1, kind: 'pie', categories: ['a', 'b'], series: [{ name: 'Parts', color: '#2b78ae', values: [-1, 2], colors: ['#2b78ae', '#fe945b'] }] };
+        const cases4 = [
+          ['lien', linked], ['cadre à lien', FreeFrame.html({ x: 60, y: 120, w: 340, h: 230, link: 'https://example.org/' }, small)], ['cadre tourné', FreeFrame.html({ x: 60, y: 120, w: 340, h: 230, rot: 30 }, small)],
+          ['texte illisible', drawnHtml('{bad')], ['autre version', drawnHtml(Object.assign({}, BAR_MODEL, { v: 2 }))], ['part négative', drawnHtml(negative)], ['sans modèle', drawnHtml(undefined)],
+        ];
+        for (const [why, html] of cases4) {
+          const result = await pptxOf(html);
+          out.push({ why, charts: result.charts.length, frames: chartFrames(result.slides[0]).length, pics: tagsOf(result.slides[0], 'p:pic').length, media: result.media.length });
+        }
+      } finally { console.warn = warn; }
+      return {
+        pass: out.length === 7 && out.every(o => o.charts === 0 && o.frames === 0 && o.pics === 1 && o.media === 1),
+        notes: JSON.stringify(out),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_pptx_asks_for_the_word_engine_only_for_a_presentation_with_a_created_chart',
+    description: 'PowerPoint : le moteur Word (qui fabrique le graphique) n\'est demandé que pour une présentation qui porte un graphique créé : du texte, une image ordinaire ou un graphique de la page n\'en veulent pas ; un graphique créé le demande, pour un deuxième aussi sans rien de plus',
+    run: async () => {
+      const asked = [];
+      const original = ExportEngines.ensure;
+      ExportEngines.ensure = function (...engines) { asked.push(...engines.flat()); return original.apply(this, arguments); };
+      try {
+        await pptxOf('<h1>Texte</h1><p>Un paragraphe.</p>' + drawnHtml(undefined));
+        const plain = asked.filter(name => name === 'docx').length;
+        const one = await pptxOf(drawnHtml(BAR_MODEL));
+        const afterOne = asked.filter(name => name === 'docx').length;
+        return {
+          pass: plain === 0 && afterOne >= 1 && one.charts.length === 1,
+          notes: JSON.stringify({ plain, afterOne, asked }),
+        };
+      } finally { ExportEngines.ensure = original; }
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_pptx_reimport_reports_the_exported_chart_as_not_imported',
+    description: 'PowerPoint : réimporté, un graphique exporté est compté « graphique non repris » par le rapport de l\'import (l\'import ne lit pas encore les graphiques de PowerPoint : une limite dite, pas une perte silencieuse), et la diapositive garde son titre',
+    run: async () => {
+      await ExportEngines.ensure('pptxImport');
+      const exported = await PptxExport.fromHtml('<h1>Ventes</h1>' + drawnHtml(BAR_MODEL), { title: 'essai' });
+      const r = await PptxImport.fromBuffer(await exported.arrayBuffer());
+      return {
+        pass: r.report.some(line => line.key === 'charts' && line.n === 1) && /Ventes/.test(r.html),
+        notes: JSON.stringify({ report: r.report, html: String(r.html).slice(0, 160) }),
       };
     },
   });

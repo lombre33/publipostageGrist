@@ -35,6 +35,8 @@ const PptxExport = (function () {
   // Les actions du diaporama d'un objet (js/frame-link.js : `pp:next`...) et les sauts de PowerPoint qui leur répondent (`ppaction://hlinkshowjump?jump=...`).
   const SHOW_JUMPS = { next: 'nextslide', prev: 'previousslide', first: 'firstslide', last: 'lastslide', back: 'lastslideviewed', end: 'endshow' };
   const CT = 'application/vnd.openxmlformats-officedocument.presentationml.';
+  const CHART_CT = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
+  const XLSX_CT = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   // Le rapport entre la hauteur d'une ligne et le corps de la police de l'éditeur (Roboto : 1,172) : l'interligne d'un paragraphe (1,42 dans l'éditeur) se compte en pourcentage de la ligne « simple »
   // de PowerPoint, qui est celle de la police.
   const NATURAL_LINE = ExportCommon.EDITOR_STYLE.naturalLine;
@@ -175,12 +177,14 @@ const PptxExport = (function () {
     const extensions = Array.from(new Set(parts.media.map(m => m.ext)));
     return XML_HEAD + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>'
       + extensions.map(ext => `<Default Extension="${ext}" ContentType="${MEDIA_TYPES[ext]}"/>`).join('')
+      + (parts.charts.length ? `<Default Extension="xlsx" ContentType="${XLSX_CT}"/>` : '')
       + `<Override PartName="/ppt/presentation.xml" ContentType="${CT}presentation.main+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="${CT}slideMaster+xml"/>`
       + `<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="${CT}slideLayout+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>`
       + `<Override PartName="/ppt/presProps.xml" ContentType="${CT}presProps+xml"/><Override PartName="/ppt/viewProps.xml" ContentType="${CT}viewProps+xml"/><Override PartName="/ppt/tableStyles.xml" ContentType="${CT}tableStyles+xml"/>`
       + (parts.notes ? `<Override PartName="/ppt/notesMasters/notesMaster1.xml" ContentType="${CT}notesMaster+xml"/><Override PartName="/ppt/theme/theme2.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>` : '')
       + parts.slides.map((slide, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="${CT}slide+xml"/>`).join('')
       + parts.slides.filter(slide => slide.notes).map(slide => `<Override PartName="/ppt/notesSlides/notesSlide${slide.number}.xml" ContentType="${CT}notesSlide+xml"/>`).join('')
+      + parts.charts.map(chart => `<Override PartName="/ppt/charts/${chart.name}.xml" ContentType="${CHART_CT}"/>`).join('')
       + '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>';
   }
 
@@ -572,6 +576,26 @@ const PptxExport = (function () {
     return ctx.media.get(src);
   }
 
+  // --- Les graphiques créés (« Créer un graphique… ») : un graphique de PowerPoint que l'on modifie dans PowerPoint (« Modifier les données » ouvre ses données dans Excel), et non l'image PNG de la Lecture -----------
+  // L'image porte le modèle d'Office du graphique (`data-chart-office`, extensions/graphique/chart-office.js) ; ses parties (le `c:chartSpace` et le classeur embarqué) sont celles que la bibliothèque docx écrit pour Word
+  // (DocxExport.chartPartsOf : le même graphique d'Office dans les trois applications), le moteur Word n'étant chargé que pour un graphique créé. Tout ce que PowerPoint ne saurait pas faire laisse l'image, comme avant :
+  // un lien (PowerPoint n'en accepte pas sur un graphique), une rotation (il ne tourne pas un graphique), un moteur ou une bibliothèque qui ne se charge pas, une donnée refusée.
+  async function chartPartOf(img, ctx, box) {
+    if (!img.hasAttribute('data-chart-office') || img.closest('a[href]') || img.closest('.pp-free-frame[data-ff-link]')) return null;
+    try { await ExportEngines.ensure('docx'); }
+    catch (e) { console.warn('[PptxExport] graphique natif impossible (moteur Word injoignable), l\'image est gardée :', e); return null; }
+    return DocxExport.chartPartsOf(img, box.w * PT_TO_PX, box.h * PT_TO_PX);
+  }
+  // L'objet « graphique » de la diapositive (`p:graphicFrame`) : ses parties vont au fichier avec `ctx.charts` (fromHtml), sa relation est celle de la diapositive.
+  function chartFrameXml(slide, ctx, part, box, img) {
+    const number = ctx.charts.length + 1;
+    ctx.charts.push({ name: 'chart' + number, workbook: 'Microsoft_Excel_Worksheet' + number + '.xlsx', part });
+    const id = slide.takeId();
+    return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${nameOf(slide, 'chart', id)}"${descrXml((img.getAttribute('alt') || '').trim())}/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>`
+      + `<p:xfrm><a:off x="${emu(box.x)}" y="${emu(box.y)}"/><a:ext cx="${emu(box.w)}" cy="${emu(box.h)}"/></p:xfrm>`
+      + `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="${slide.relFor(REL + 'chart', '../charts/chart' + number + '.xml')}"/></a:graphicData></a:graphic></p:graphicFrame>`;
+  }
+
   // --- La mesure : tout se lit sur l'hôte attaché hors écran, depuis son coin haut gauche (le coin du texte de la page) ; les marges de la page y ajoutent leur part -------------------------------------------------
   // `at` : le coin haut gauche de `root` sur la diapositive, en points (par défaut celui du texte de la page ; pour un cadre libre, celui de son texte).
   function scopeFor(root, ctx, at) {
@@ -707,13 +731,15 @@ const PptxExport = (function () {
   // Une image dans le texte ou seule : à la place que l'éditeur lui donne ; en calque (devant ou derrière le texte) à la place de la grille de la page que l'éditeur a relevée (data-page-left-pt et data-page-top-pt,
   // depuis le coin du texte), à défaut à celle que le rendu lui donne. Taille : celle que l'image montre.
   async function pictureOf(img, slide, ctx, scope, place) {
-    const media = await mediaFor(img, ctx);
-    if (!media) return null;
+    // Un graphique créé n'a pas besoin de son image tant que PowerPoint peut le garder en graphique (chartPartOf) : l'image PNG n'entre pas dans le fichier pour rien.
+    const isChart = img.hasAttribute('data-chart-office');
+    const media = isChart ? null : await mediaFor(img, ctx);
+    if (!isChart && !media) return null;
     const layer = img.getAttribute('data-layer');
     const shown = scope.box(img);
     const styleWidth = parseFloat(img.style.width) * PX_TO_PT;
     let w = shown.width > 0 ? shown.width * PX_TO_PT : (styleWidth || 240);
-    let h = shown.height > 0 ? shown.height * PX_TO_PT : w * media.ratio;
+    let h = shown.height > 0 ? shown.height * PX_TO_PT : w * (media ? media.ratio : 0.625);
     const at = scope.onSlide(shown);
     let x = at.x;
     let y = at.y;
@@ -722,10 +748,13 @@ const PptxExport = (function () {
     if ((layer === 'front' || layer === 'behind') && Number.isFinite(gridLeft) && Number.isFinite(gridTop)) {
       x = ctx.margins.left + gridLeft;
       y = ctx.margins.top + gridTop;
-      if (!(shown.width > 0)) { w = styleWidth || w; h = w * media.ratio; }
+      if (!(shown.width > 0)) { w = styleWidth || w; h = w * (media ? media.ratio : 0.625); }
     }
     const placed = place ? place({ x, y, w, h }) : { x, y, w, h, rot: 0 };
-    return { layer, xml: pictureXml(slide, media, placed, img, placed.rot) };
+    const chart = isChart && !placed.rot ? await chartPartOf(img, ctx, placed) : null;
+    if (chart) return { layer, xml: chartFrameXml(slide, ctx, chart, placed, img) };
+    const drawing = media || await mediaFor(img, ctx);
+    return drawing ? { layer, xml: pictureXml(slide, drawing, placed, img, placed.rot) } : null;
   }
   function putPicture(slide, picture) {
     if (!picture) return;
@@ -815,8 +844,13 @@ const PptxExport = (function () {
       const centre = { x: attrs.x + attrs.w / 2, y: attrs.y + heightPt / 2 };
       for (const item of found.flow) {
         if (item.type === 'picture') {
-          const media = await mediaFor(item.el, ctx);
-          if (media) out.push(pictureXml(slide, media, rotatedAbout(scope.onSlide(scope.box(item.el)), centre, attrs.rot), item.el, attrs.rot));
+          const at = rotatedAbout(scope.onSlide(scope.box(item.el)), centre, attrs.rot);
+          const chart = attrs.rot ? null : await chartPartOf(item.el, ctx, at);
+          if (chart) out.push(chartFrameXml(slide, ctx, chart, at, item.el));
+          else {
+            const media = await mediaFor(item.el, ctx);
+            if (media) out.push(pictureXml(slide, media, at, item.el, attrs.rot));
+          }
         } else if (item.type === 'table') {
           const b = rotatedAbout(scope.onSlide(scope.box(item.el)), centre, attrs.rot);
           out.push(tableXml(item.el, slide, ctx, scope, b));
@@ -1111,7 +1145,7 @@ const PptxExport = (function () {
       Anchors.indexElements(source.nodes.filter(node => node.nodeType === 1)).forEach((el, id) => { if (!anchors.has(id)) anchors.set(id, i + 1); });
     });
     const ctx = {
-      size, anchors, media: new Map(), mediaList: [], slideCount: sources.length,
+      size, anchors, media: new Map(), mediaList: [], charts: [], slideCount: sources.length,
       margins: { top: marginsPt.top, right: marginsPt.right, bottom: marginsPt.bottom, left: marginsPt.left },
       contentWidthPx: Math.max(40, (page.width - marginsPt.left - marginsPt.right) * PT_TO_PX),
     };
@@ -1126,7 +1160,7 @@ const PptxExport = (function () {
     // Aucun dossier à part dans l'archive (« ppt/ », « _rels/ »…) : un paquet OPC n'a que des parties, comme python-pptx ou PowerPoint les écrivent.
     const put = (path, data) => zip.file(path, data, { createFolders: false });
     const relIds = { master: 'rId1', notesMaster: 'rId' + (slides.length + 6), slides: slides.map((slide, i) => 'rId' + (i + 2)) };
-    put('[Content_Types].xml', contentTypesXml({ media: ctx.mediaList, slides, notes: noted.length > 0 }));
+    put('[Content_Types].xml', contentTypesXml({ media: ctx.mediaList, charts: ctx.charts, slides, notes: noted.length > 0 }));
     put('_rels/.rels', relsXml([
       { id: 'rId1', type: REL + 'officeDocument', target: 'ppt/presentation.xml' },
       { id: 'rId2', type: 'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties', target: 'docProps/core.xml' },
@@ -1175,6 +1209,12 @@ const PptxExport = (function () {
       }
     });
     ctx.mediaList.forEach(media => put('ppt/media/' + media.name, media.data));
+    // Un graphique de PowerPoint : sa partie, la relation vers son classeur (celle que son texte nomme) et le classeur embarqué, que « Modifier les données » ouvre dans Excel.
+    ctx.charts.forEach((chart) => {
+      put(`ppt/charts/${chart.name}.xml`, chart.part.chartXml);
+      put(`ppt/charts/_rels/${chart.name}.xml.rels`, relsXml([{ id: chart.part.externalId, type: REL + 'package', target: '../embeddings/' + chart.workbook }]));
+      put('ppt/embeddings/' + chart.workbook, chart.part.workbook);
+    });
     return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', compression: 'DEFLATE' });
   }
 

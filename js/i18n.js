@@ -288,6 +288,7 @@ const I18n = (function () {
     'pptx.name.text': { fr: 'Zone de texte', en: 'Text box' },
     'pptx.name.picture': { fr: 'Image', en: 'Picture' },
     'pptx.name.table': { fr: 'Tableau', en: 'Table' },
+    'pptx.name.chart': { fr: 'Graphique', en: 'Chart' },
     'pptx.name.shape': { fr: 'Forme', en: 'Shape' },
     'pptx.name.line': { fr: 'Connecteur droit', en: 'Straight connector' },
     'pptx.name.code': { fr: 'Bloc de code', en: 'Code block' },
