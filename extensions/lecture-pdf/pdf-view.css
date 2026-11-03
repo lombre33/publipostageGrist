@@ -1,0 +1,25 @@
+/* La lecture d'un PDF (extension « lecture-pdf », extensions/lecture-pdf/pdf-view.js) : les pages l'une sous l'autre dans la Lecture, sur le gris de ses feuilles, avec leur ombre et leur zoom (`--pp-fit-zoom`,
+   js/page-zoom.js). Le blanc de la feuille est celui du papier : un PDF reste clair en thème sombre, comme la feuille de la Lecture. */
+#reader-container.pp-pdf-reading { background: var(--pp-page-gutter, #eef1f5); }
+.pp-pdf-pages { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 14px 12px; outline: none; }
+.pp-pdf-pages:focus-visible { outline: 2px solid var(--focus-ring, #1b2430); outline-offset: -2px; }
+.pp-pdf-page { position: relative; flex: none; box-sizing: border-box; background: #fff; box-shadow: 0 0 0 1px #d7dde3, 0 4px 16px rgba(20, 28, 46, .10); zoom: var(--pp-fit-zoom, 1); overflow: hidden; }
+.pp-pdf-canvas { display: block; position: absolute; top: 0; left: 0; }
+.pp-pdf-failed { position: absolute; inset: 0; margin: 0; display: flex; align-items: center; justify-content: center; padding: 16px; text-align: center; font: 13px/1.4 var(--font-ui, system-ui, sans-serif); color: #4a5563; }
+
+/* La couche de texte de pdf.js : transparente au-dessus du canvas, elle porte la sélection et la copie. Les règles viennent de ce qu'il faut à `TextLayer` (le fichier de GFS n'apporte aucune feuille de style). */
+.pp-pdf-text { position: absolute; inset: 0; overflow: clip; line-height: 1; text-align: initial; opacity: 1; forced-color-adjust: none; transform-origin: 0 0; -webkit-text-size-adjust: none; text-size-adjust: none; z-index: 0; }
+.pp-pdf-text :is(span, br) { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0 0; }
+.pp-pdf-text > :not(.markedContent), .pp-pdf-text .markedContent span:not(.markedContent) { z-index: 1; }
+.pp-pdf-text ::selection { background: rgba(0, 76, 217, .30); }
+.pp-pdf-text br::selection { background: transparent; }
+.pp-pdf-text .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: 0; cursor: default; user-select: none; }
+.pp-pdf-text.selecting .endOfContent { top: 0; }
+
+/* Ce que la lecture d'un PDF grise (js/main.js:applyPdfLocks) : l'édition, les modèles, l'export, les commentaires. Estompé comme ce qu'un compte en lecture seule ne peut pas (css/access-rights.css), mais la souris l'atteint
+   encore : son `title` dit la raison au survol et son clic la dit dans le coin d'état. Les enfants ne reçoivent plus la souris (l'info-bulle et le clic sont ceux du groupe), le menu au survol d'un groupe ne s'ouvre pas, et l'info-bulle
+   de l'app (`[data-tip]`), que l'estompage rendrait illisible avec le bouton, laisse la place au `title`. !important : un groupe à survol ou un bouton de la barre a ses propres règles d'opacité, plus précises. */
+.pp-pdf-locked { opacity: .35 !important; cursor: not-allowed; }
+.pp-pdf-locked > * { pointer-events: none; }
+.pp-pdf-locked .v2-hover-flyout { display: none !important; }
+.pp-pdf-locked[data-tip]::after, .pp-pdf-locked [data-tip]::after { display: none !important; }

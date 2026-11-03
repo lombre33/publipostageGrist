@@ -11,14 +11,20 @@
 //    réussie ; le résultat est un modèle sans nom et pas encore enregistré. Une valeur inconnue, une importation illisible (js/gfs-link.js ne la garde que bien formée), un fichier refusé, une personne qui annule ou
 //    un document en lecture seule : rien n'est ouvert, et jamais un modèle vierge à la place (il ferait perdre le fichier sans un mot). Au démarrage, l'ordre habituel ouvre d'abord son modèle et « Widget prêt. » se
 //    dit, puis l'import suit (avant les appels `ouvrir` qui attendaient) : ses phrases du coin d'état ne sont pas recouvertes par celle du démarrage et les erreurs de lecture restent à l'écran.
+//    Une ouverture de raison `lire` porte `lecture: { id, fichier: File }` (consigne 040 : GFS garde le PDF, le télécharge lui-même et le donne, une seule fois) : ce n'est jamais un « Nouveau » du type, ni un
+//    modèle à ouvrir, ni l'ordre habituel qui prend sa place (le PDF serait perdu sans un mot). Le PDF se lit par js/pdf-reading.js (hook `readPdf` de js/main.js, extension « lecture-pdf ») dans le mode Lecture ;
+//    la question « Enregistrer / Abandonner / Annuler » d'un modèle modifié se pose avant de le quitter, après la lecture du PDF (un PDF illisible ne coûte rien). Une ouverture `lire` sans `lecture` bien formée
+//    (js/gfs-link.js ne la garde que bien formée) n'ouvre rien, et jamais un modèle vierge à la place. Au démarrage, comme l'import : l'ordre habituel ouvre son modèle, « Widget prêt. » se dit, puis le PDF le
+//    remplace (avant les appels `ouvrir` qui attendaient) ; un PDF qui ne s'ouvre pas laisse le modèle habituel, et le coin d'état dit pourquoi.
 //  - L'app déjà ouverte reçoit l'appel `ouvrir` (GfsLink.onOpen) : un à la fois, après la fin du démarrage, par le chemin du sélecteur de modèles - donc avec sa question « Enregistrer / Abandonner /
 //    Annuler » quand des modifications attendent. Pour « Nouveau », par celui du bouton « Nouveau » du même type (js/main.js `openBlankOfType`), question comprise. GFS reçoit `{ ouvert }` : vrai quand le modèle
 //    demandé (ou importé) est ouvert à la fin (c'était déjà lui : rien ne change, rien n'est dit ; un modèle vierge : à l'écran, son avertissement « modèle non enregistré » intact ; un macro-modèle : son écran de composition est
 //    ouvert), faux si la personne annule, si le modèle est introuvable ou refusé par la garde, si le type demandé est refusé, si le fichier à importer est refusé, ou si le document est en lecture seule. Pas de délai : la personne peut prendre son temps.
 // Seule (adresse sans `gfs=`), GfsLink ne rend aucune ouverture et n'appelle jamais : l'ordre d'arrivée est celui d'avant. Ce fichier n'écrit ni n'écoute aucun message : tout passe par js/gfs-link.js.
-//   GfsOpen.init({ openTemplate(id) -> Promise<bool>, openBlank(type) -> Promise<bool>, importFile(valeur, fichier) -> Promise<bool>, say(text) })  s'inscrit à l'appel `ouvrir` ; `openTemplate` rend vrai si le
-//                                                                                                       modèle est ouvert à la fin, `openBlank` si le modèle vierge de ce type l'est, `importFile` si le modèle
-//                                                                                                       importé de ce fichier l'est, `say` écrit dans le coin d'état
+//   GfsOpen.init({ openTemplate(id) -> Promise<bool>, openBlank(type) -> Promise<bool>, importFile(valeur, fichier) -> Promise<bool>, readPdf(lecture) -> Promise<bool>, say(text) })  s'inscrit à l'appel `ouvrir` ;
+//                                                                                                       `openTemplate` rend vrai si le modèle est ouvert à la fin, `openBlank` si le modèle vierge de ce type l'est,
+//                                                                                                       `importFile` si le modèle importé de ce fichier l'est, `readPdf` si le PDF (`lecture`) est lu à l'écran,
+//                                                                                                       `say` écrit dans le coin d'état
 //   GfsOpen.startupTemplateId() -> Promise<id | null>               à attendre avant de choisir le modèle de départ
 //   GfsOpen.startupBlankType() -> Promise<type | null>              le type du modèle vierge que « Nouveau » demande au démarrage, ou null : à attendre de même
 //   GfsOpen.startupDone() / startupFailed()                         la fin du démarrage : dit pourquoi le modèle s'est ouvert, lance l'import que l'ouverture demandait ; libère (ou refuse) les appels `ouvrir` qui attendaient
@@ -30,7 +36,7 @@ const GfsOpen = (function () {
   let hooks = null;
   let startupReason = '';    // la raison de l'ouverture du démarrage, dite quand le coin d'état a fini de dire « Widget prêt. »
   let queue = Promise.resolve();
-  let startupImport = Promise.resolve();   // l'import que l'ouverture du démarrage demande, lancé par startupDone : les appels `ouvrir` qui attendaient passent après lui
+  let startupTask = Promise.resolve();   // l'import ou la lecture de PDF que l'ouverture du démarrage demande, lancé par startupDone : les appels `ouvrir` qui attendaient passent après lui
   let settleStarted;
   // Vraie quand le démarrage est fini, fausse quand il a échoué : un appel `ouvrir` reçu avant attend cette fin.
   const started = new Promise((resolve) => { settleStarted = resolve; });
@@ -38,16 +44,19 @@ const GfsOpen = (function () {
   // Une ouverture de raison `importer` (consigne 035) : GFS donne le fichier à importer. Elle n'est ni le modèle d'un fichier ni un « Nouveau » du type, même quand son importation est illisible.
   const isImport = opening => !!opening && opening.raison === 'importer';
 
+  // Une ouverture de raison `lire` (consigne 040) : GFS donne un PDF à lire. Elle n'est ni le modèle d'un fichier ni un « Nouveau » du type, même quand sa `lecture` est illisible (js/gfs-link.js ne la garde que bien formée).
+  const isReading = opening => !!opening && opening.raison === 'lire';
+
   // L'identifiant du modèle que cette ouverture désigne, ou null : pas de fichier, modèle introuvable, ou d'un type que la garde « type inconnu » (Templates.openableById) n'ouvre pas.
   function designated(opening) {
-    const tpl = opening && opening.fichier && !isImport(opening) ? Templates.openableById(opening.fichier.id) : undefined;
+    const tpl = opening && opening.fichier && !isImport(opening) && !isReading(opening) ? Templates.openableById(opening.fichier.id) : undefined;
     return tpl ? tpl.id : null;
   }
 
   // Le type du modèle vierge que cette ouverture demande (« Nouveau » : pas de fichier et un type que la garde « type inconnu » laisse ouvrir), ou null. Un type absent n'en est pas un : la garde l'accepte pour un
   // ancien modèle, qui n'en a pas, mais ici c'est une ouverture mal formée.
   function requestedBlank(opening) {
-    if (!opening || opening.fichier || !opening.type || isImport(opening)) return null;
+    if (!opening || opening.fichier || !opening.type || isImport(opening) || isReading(opening)) return null;
     return Templates.isOpenableType(opening.type) ? opening.type : null;
   }
 
@@ -75,7 +84,9 @@ const GfsOpen = (function () {
     say(startupReason);
     const opening = GfsLink.opening();
     if (isImport(opening)) {
-      startupImport = Promise.resolve().then(() => importFrom(opening)).catch((e) => { console.warn('[GfsOpen] import demandé au démarrage en échec', e); return false; });
+      startupTask = Promise.resolve().then(() => importFrom(opening)).catch((e) => { console.warn('[GfsOpen] import demandé au démarrage en échec', e); return false; });
+    } else if (isReading(opening)) {
+      startupTask = Promise.resolve().then(() => readFrom(opening)).catch((e) => { console.warn('[GfsOpen] lecture de PDF demandée au démarrage en échec', e); return false; });
     }
     settleStarted(true);
   }
@@ -90,8 +101,16 @@ const GfsOpen = (function () {
     return (await hooks.importFile(wanted.valeur, wanted.fichier)) === true;
   }
 
+  // Le PDF que cette ouverture demande de lire : vrai quand il est lu à l'écran à la fin ; faux sans `lecture` bien formée, quand le PDF est illisible, vide ou refusé, ou quand la personne annule (js/main.js `readPdfFromGfs`).
+  async function readFrom(opening) {
+    const wanted = opening.lecture;
+    if (!wanted) return false;
+    return (await hooks.readPdf(wanted)) === true;
+  }
+
   async function open(opening) {
     if (isImport(opening)) return importFrom(opening);
+    if (isReading(opening)) return readFrom(opening);
     const blank = requestedBlank(opening);
     if (blank !== null) return (await hooks.openBlank(blank)) === true;
     const id = designated(opening);
@@ -104,7 +123,7 @@ const GfsOpen = (function () {
 
   // L'appel `ouvrir` : à la suite des précédents (la question d'enregistrement de l'un ne se pose pas par-dessus celle d'un autre) et après la fin du démarrage.
   function handleCall(opening) {
-    const run = queue.then(() => started).then(ok => (ok ? startupImport.then(() => open(opening)) : false));
+    const run = queue.then(() => started).then(ok => (ok ? startupTask.then(() => open(opening)) : false));
     queue = run.catch(() => {});
     return run;
   }

@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { extname, join, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 
 export const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 export const WIDTH = 700;
@@ -16,6 +17,14 @@ export const HEIGHT = 400;
 export const ISOLATED_SANDBOX = 'allow-scripts allow-forms allow-popups allow-modals allow-downloads';
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
 const GFS_STUB = join(ROOT, 'dev-tests', 'gfs-stub.js');
+// Le fichier « pdfjs » de la lecture de PDF (consigne GFS 040) tel que GFS le sert : à l'adresse de la page, avec l'en-tête CORS qu'exige un sous-cadre à origine opaque (celui de GFS). Construit par `bash dev-tests/offline-deps.sh`
+// (dev-tests/.offline-cache/pdfjs-gfs.json) ; `pdfjsLibrary()` rend ce que GFS donne dans `bibliotheques.pdfjs` (null quand le fichier n'est pas construit).
+export const PDFJS_PATH = '/vendor/pdfjs/1.0.0/pdfjs.js';
+const PDFJS_FILE = join(CACHE, 'pdfjs', 'pdfjs.js');
+export function pdfjsLibrary() {
+  if (!existsSync(PDFJS_FILE)) return null;
+  return { src: PDFJS_PATH, integrite: 'sha384-' + createHash('sha384').update(readFileSync(PDFJS_FILE)).digest('base64'), forme: 'module' };
+}
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -55,6 +64,11 @@ export async function start({ name, port, popupBlocker = false }) {
   const server = createServer(async (req, res) => {
     try {
       const urlPath = decodeURIComponent(req.url.split('?')[0]);
+      if (urlPath === PDFJS_PATH && existsSync(PDFJS_FILE)) {
+        res.writeHead(200, { 'Content-Type': MIME['.js'], 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
+        res.end(await readFile(PDFJS_FILE));
+        return;
+      }
       const filePath = join(ROOT, normalize(urlPath).replace(/^(\.\.[/\\])+/, ''));
       if (!filePath.startsWith(ROOT)) { res.writeHead(403).end(); return; }
       const info = await stat(filePath);
@@ -175,7 +189,8 @@ export async function start({ name, port, popupBlocker = false }) {
 // du registre, pour qu'un test de « chaque fichier arrive une fois, à la bonne version » ne change pas avec chaque version ni chaque fichier ajouté.
 export function registryFiles(id) {
   const source = readFileSync(join(ROOT, 'js', 'extensions.js'), 'utf8');
-  const start = source.indexOf('\n    ' + id + ': {');
+  let start = source.indexOf('\n    ' + id + ': {');
+  if (start < 0) start = source.indexOf("\n    '" + id + "': {");   // un identifiant à tiret s'écrit entre apostrophes
   if (start < 0) throw new Error('extension absente du registre : ' + id);
   const block = source.slice(start, source.indexOf('\n    },', start));
   const version = /version: '([^']+)'/.exec(block)[1];
