@@ -3420,7 +3420,15 @@ const I18n = (function () {
     'varLoop.empty.text': { fr: 'Afficher un texte', en: 'Show a text' },
     'varLoop.empty.blank': { fr: 'Laisser vide', en: 'Leave empty' },
     'varLoop.empty.textLabel': { fr: 'Texte affiché', en: 'Text shown' },
-    'varLoop.empty.textPlaceholder': { fr: 'Ex. Aucune ligne', en: 'E.g. No rows' },
+    'varLoop.empty.textPlaceholder': { fr: 'Ex. Aucune ligne (#Variable autorisée)', en: 'E.g. No rows (#Variable allowed)' },
+    'varLoop.empty.textTitle': {
+      fr: 'Le texte écrit à la place de la répétition quand aucune ligne n’est retenue. Les espaces comptent. Tapez # pour y mettre une variable.',
+      en: 'The text written in place of the repetition when no row is kept. Spaces count. Type # to add a variable.',
+    },
+    'varLoop.alreadyOpen': {
+      fr: 'Une boucle ne se pose pas dans le texte d’une boucle',
+      en: 'A loop cannot be set inside a loop’s text',
+    },
     'varLoop.preview.linked': { fr: 'Ligne sélectionnée (n° {id}) : {count} {count|ligne liée|lignes liées}.', en: 'Selected row (#{id}): {count} linked {count|row|rows}.' },
     'varLoop.preview.kept': { fr: 'Ligne sélectionnée (n° {id}) : {count} {count|ligne|lignes} sur {total} {count|retenue|retenues}.', en: 'Selected row (#{id}): {count} of {total} {total|row|rows} kept.' },
     'varLoop.preview.noneLinked': { fr: 'Ligne sélectionnée (n° {id}) : aucune ligne liée.', en: 'Selected row (#{id}): no linked row.' },

@@ -1441,10 +1441,20 @@ const Variables = (function () {
         return FieldCodec.variablesIn(value).some(v => v.table === tableCible);
       });
     }
+    // Le texte « Si aucune ligne » d'une boucle (js/loop-rules.js) est un champ à variables rangé dans le JSON de l'attribut `data-loop` : lu comme le sinon.
+    function loopCites(contenu, tableCible) {
+      if (contenu.indexOf('data-loop="') === -1) return false;
+      return Array.from(contenu.matchAll(/data-loop="([^"]*)"/g)).some(found => {
+        const raw = Dom.inertTemplate('<i data-x="' + found[1] + '"></i>').content.firstChild.getAttribute('data-x');
+        let loop = null;
+        try { loop = JSON.parse(raw); } catch (e) { return false; }
+        return !!loop && typeof loop.emptyText === 'string' && FieldCodec.variablesIn(loop.emptyText).some(v => v.table === tableCible);
+      });
+    }
     function findTemplatesUsingTable(tableCible) {
       const needles = ['data-table="' + tableCible + '"', 'data-otherwise-table="' + tableCible + '"'];
       const fields = tpl => [tpl.nomFichierPDF, tpl.objet, tpl.destinataires, tpl.cc, tpl.cci];
-      return Templates.getCached().filter(tpl => (tpl.contenu && (needles.some(needle => tpl.contenu.indexOf(needle) !== -1) || otherwiseCites(tpl.contenu, tableCible)))
+      return Templates.getCached().filter(tpl => (tpl.contenu && (needles.some(needle => tpl.contenu.indexOf(needle) !== -1) || otherwiseCites(tpl.contenu, tableCible) || loopCites(tpl.contenu, tableCible)))
         || fields(tpl).some(value => value && FieldCodec.variablesIn(value).some(v => v.table === tableCible)));
     }
     async function confirmDeleteLinkRule(rule) {

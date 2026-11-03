@@ -360,7 +360,14 @@ const VariableLoop = (function () {
     emptyCol.append(emptyLabelEl, emptySelect);
     const two = el('div', 'var-loop-two');
     two.append(sortCol, emptyCol);
-    const emptyText = VariableModal.labelledInput('var-loop-empty-text');
+    // Le texte « Si aucune ligne » : un champ à variables, le même que le « Sinon afficher » d'une valeur (js/field-editor.js, monté par mountEmptyField). L'élément `input` n'est
+    // qu'un <div> qui en reprend l'interface (`value`, `placeholder`, évènement `input`) : le reste de la fenêtre le traite comme le champ de texte d'avant.
+    const emptyText = { label: el('label'), input: el('div', 'var-loop-empty-field') };
+    emptyText.label.id = 'var-loop-empty-text-label';
+    emptyText.label.htmlFor = 'var-loop-empty-text';
+    emptyText.input.id = 'var-loop-empty-text';
+    emptyText.input.setAttribute('aria-labelledby', emptyText.label.id);
+    emptyText.input.spellcheck = false;
     const emptyTextRow = el('div', 'var-loop-empty-text');
     emptyTextRow.append(emptyText.label, emptyText.input);
 
@@ -374,6 +381,17 @@ const VariableLoop = (function () {
     };
 
     wireModal();
+  }
+
+  // Monte le champ du texte « Si aucune ligne » : à la première ouverture, quand les classes de TipTap sont chargées (le document dont la fenêtre règle une boucle a déjà chargé
+  // l'éditeur). Son texte s'écrit à la place de la zone répétée : ses variables lisent la ligne du tour des zones qui l'entourent - celle de cette boucle exceptée, qui n'a ici aucune
+  // ligne -, comme le « Sinon afficher » d'une valeur (js/variable-condition.js:mountTextFields).
+  function mountEmptyField() {
+    const libs = Editor.loadedLibraries();
+    if (!libs || refs.emptyMounted) return;
+    const editor = FieldEditor.attach(refs.emptyText.input, libs, { hostWindow: 'loop', windowEl: win.overlay, keepSpaces: true });
+    setContext(editor.schema, () => (state ? zonesAt(state.editor.state, state.pos).filter(z => z.outer || z.owner.pos !== state.pos) : []));
+    refs.emptyMounted = true;
   }
 
   // Les réactions de la fenêtre.
@@ -663,7 +681,7 @@ const VariableLoop = (function () {
     emptySelect.replaceChildren(...LoopRules.EMPTY_MODES[repeat].map(mode => option(mode, emptyLabel(mode, repeat, state.place))));
     emptySelect.value = state.working.empty;
     emptyTextRow.hidden = state.working.empty !== 'text';
-    if (document.activeElement !== emptyText.input) emptyText.input.value = state.working.emptyText;
+    if (!emptyText.input.contains(document.activeElement)) emptyText.input.value = state.working.emptyText;
   }
 
   // Boucle telle qu'elle sera enregistrée : seulement les champs utiles à sa zone (js/loop-rules.js:normalizeLoop complète le reste à la lecture).
@@ -749,6 +767,18 @@ const VariableLoop = (function () {
     const key = loop.repeat === 'paragraph' && state.place.kind === 'heading' ? 'varLoop.preview.heading' : 'varLoop.preview.' + loop.repeat;
     return { text: head + ' ' + I18n.t(key, { count, values }), good };
   }
+  // Le texte « Si aucune ligne » tel que la Lecture l'écrira pour la ligne d'exemple, celui que citent les phrases de l'aperçu : ses variables lues comme celles du document
+  // (ReaderMode.preview : formats, « Avant » / « Après », condition), le reste tel quel. Sans variable ni puce, il n'y a rien à lire : le texte, tout de suite.
+  async function emptyShown(loop, tableId, record) {
+    if (loop.empty !== 'text' || !loop.emptyText) return '';
+    const items = FieldCodec.itemsOf(loop.emptyText);
+    if (items.every(FieldCodec.isText)) return FieldCodec.serializePlain(items);
+    try {
+      return shorten(Dom.inertTemplate(await ReaderMode.preview('<p>' + FieldCodec.itemsHtml(items) + '</p>', tableId, record)).content.textContent, 240);
+    } catch (e) {
+      return FieldCodec.serializePlain(items);
+    }
+  }
   async function statsSummary(loop, tableId, ctx, stale) {
     const rows = await ctx.fetchRows(tableId);
     if (stale()) return null;
@@ -802,12 +832,15 @@ const VariableLoop = (function () {
       const result = await LoopRules.iterate(loop, tableId, record, ctx);
       if (stale()) return;
       if (result.error) { setLine(currentLine, I18n.t(outer ? 'varLoop.preview.nested.noSource' : 'varLoop.preview.noSource', { id: record.id, within: outer }), false); return; }
-      const current = await currentSummary(loop, tableId, record, result);
+      // Les phrases de l'aperçu citent le texte « Si aucune ligne » tel que la ligne d'exemple l'écrira : sa copie en porte les variables lues.
+      const shown = Object.assign({}, loop, { emptyText: await emptyShown(loop, tableId, record) });
+      if (stale()) return;
+      const current = await currentSummary(shown, tableId, record, result);
       if (stale()) return;
       setLine(currentLine, current.text, current.good);
       // Toutes les lignes : la même liste pour chaque ligne de la page, rien à compter ligne par ligne - seulement prévenir quand elle est très longue.
       if (loop.all) { setLine(statsLine, result.items.length > MANY_ROWS ? I18n.t('varLoop.stats.many', { count: result.items.length }) : '', false); return; }
-      const stats = await statsSummary(loop, tableId, ctx, stale);
+      const stats = await statsSummary(shown, tableId, ctx, stale);
       if (stale() || !stats) return;
       setLine(statsLine, stats, false);
     } catch (e) {
@@ -876,6 +909,7 @@ const VariableLoop = (function () {
     const { existing, source } = found;
     if (!source) return;
     ensureModal();
+    mountEmptyField();
     const place = placeOf(editor.state, pos, !!(options && options.inlineOnly));
     // La vue d'à côté ne se cherche que pour la table de la page (le widget n'a de vue que d'elle) : `undefined` tant que la recherche (probeLinkedView) n'a pas répondu.
     const probing = !!(found.all && found.all.table === GristAPI.getCurrentTableId());
@@ -898,6 +932,8 @@ const VariableLoop = (function () {
     r.emptyLabelEl.textContent = I18n.t('varLoop.section.empty');
     r.emptyText.label.textContent = I18n.t('varLoop.empty.textLabel');
     r.emptyText.input.placeholder = I18n.t('varLoop.empty.textPlaceholder');
+    r.emptyText.input.title = I18n.t('varLoop.empty.textTitle');
+    r.emptyText.label.title = I18n.t('varLoop.empty.textTitle');
     r.emptyText.input.value = state.working.emptyText;
     r.removeBtn.textContent = I18n.t('varLoop.remove');
     r.removeBtn.hidden = !state.had;

@@ -1546,6 +1546,23 @@ const ReaderMode = (function () {
     });
     return frag;
   }
+  // Le texte « Si aucune ligne » d'une boucle dans la phrase (js/loop-rules.js:emptyInlineNode) est un champ à variables : ses bulles sont lues ici, pour la ligne de la bulle
+  // en boucle, comme celles du corps - leur sinon d'abord, puis leur condition, leur boucle dans la phrase et leur format. Dans un champ texte (`textOpts`, cf. fieldText) les
+  // puces s'écrivent aussi : le tour de ses puces est déjà fait, celui-ci n'y était pas. Hors d'un champ, resolveSmartChips les lit avec le reste du document.
+  async function resolveEmptyLoopText(node, tableId, record, loopCtx, textOpts) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE || !node.querySelector(BADGE_SELECTOR + ', .smart-chip')) return;
+    await VariableOtherwise.resolve(node, tableId, record);
+    await Promise.all(Array.from(node.querySelectorAll(BADGE_SELECTOR)).map(async inner => {
+      const { node: value } = await resolveBadgeNode(inner, tableId, record, parseBadgeFormat(inner), loopCtx, textOpts);
+      putValue(inner, value);
+    }));
+    if (!textOpts) return;
+    for (const chip of Array.from(node.querySelectorAll('.smart-chip'))) {
+      let text = '';
+      try { text = (await smartChipValue(chip.getAttribute('data-chip-kind'), chip.getAttribute('data-chip-time'))).text; } catch (e) { /* une puce illisible donne un texte vide */ }
+      chip.replaceWith(document.createTextNode(text));
+    }
+  }
   async function resolveInlineLoop(badge, table, column, tableId, record, format, loopCtx, textOpts) {
     // Bulle en boucle « dans la phrase » (js/loop-rules.js) : ses valeurs pour chaque ligne retenue, jointes par les séparateurs de la boucle (les
     // images d'une colonne Pièces jointes, à la suite). Null sans boucle, ou si la boucle ne trouve plus sa source : résolution ordinaire. `textOpts` :
@@ -1561,12 +1578,16 @@ const ReaderMode = (function () {
           return found.length ? 'x' : '';
         });
         if (!res) return null;
+        if (res.node) await resolveEmptyLoopText(res.node, tableId, record, loopCtx, textOpts);
         return { node: res.node || attachmentImages(ids), isError: false };
       }
       const res = await LoopRules.resolveInline(badge, loop, tableId, record, loopCtx,
         binding => Variables.resolveVariable(table, column, tableId, record, format, Object.assign({}, textOpts, loopOpts(binding))));
       if (!res) return null;
-      if (res.node) return { node: res.node, isError: false };
+      if (res.node) {
+        await resolveEmptyLoopText(res.node, tableId, record, loopCtx, textOpts);
+        return { node: res.node, isError: false };
+      }
       return { node: valueNode(res.text, format, 'resolved-var'), isError: false };
     } catch (e) {
       console.error('[ReaderMode] échec de la boucle d\'une variable', e);

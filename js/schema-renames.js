@@ -308,9 +308,11 @@ const SchemaRenames = (function () {
     return count ? { condition: Object.assign({}, condition, { rules }), count } : { condition, count: 0 };
   }
 
-  // { repeat, table, via: { table, column }, within, by, filter, sort: { column, direction }, … } (js/loop-rules.js). Le filtre, le tri et `by` (la
-  // colonne qui rattache à `within`) parlent de la table parcourue.
-  function rewriteLoop(loop, m) {
+  // { repeat, table, via: { table, column }, within, by, filter, sort: { column, direction }, emptyText, … } (js/loop-rules.js). Le filtre, le tri et `by` (la
+  // colonne qui rattache à `within`) parlent de la table parcourue. `emptyText` (« Si aucune ligne ») est un champ à variables, comme le sinon d'une valeur :
+  // du texte brut dont les clés « #Table.Colonne » se réécrivent comme dans le nom du PDF, ou du HTML dont les bulles se réécrivent comme celles du corps ;
+  // il se lit dans la ligne de la page, pas dans la table parcourue. `reading` : { page, trigger } comme le `ctx` de `rewriteHtml` (sans lui, seules les bulles se lisent).
+  function rewriteLoop(loop, m, reading) {
     if (!loop || typeof loop !== 'object' || !loop.table) return { loop, count: 0 };
     const next = Object.assign({}, loop);
     const table = m.mapTable(loop.table);
@@ -346,7 +348,17 @@ const SchemaRenames = (function () {
       next.sort = Object.assign({}, loop.sort, { column });
       return 1;
     };
-    const count = (table ? 1 : 0) + rewriteVia() + rewriteWithin() + rewriteBy() + rewriteFilter() + rewriteSort();
+    const rewriteEmptyText = () => {
+      if (typeof loop.emptyText !== 'string' || !loop.emptyText) return 0;
+      const trigger = reading && reading.trigger;
+      const written = FieldCodec.isRich(loop.emptyText)
+        ? rewriteHtml(loop.emptyText, m, { page: reading && reading.page, trigger })
+        : rewriteText(loop.emptyText, m, trigger);
+      if (!written.count) return 0;
+      next.emptyText = written.html != null ? written.html : written.text;
+      return written.count;
+    };
+    const count = (table ? 1 : 0) + rewriteVia() + rewriteWithin() + rewriteBy() + rewriteFilter() + rewriteSort() + rewriteEmptyText();
     return count ? { loop: next, count } : { loop, count: 0 };
   }
 
@@ -443,6 +455,8 @@ const SchemaRenames = (function () {
         if (loop.via && loop.via.table) tables.add(loop.via.table);
         if (loop.within) tables.add(loop.within);
         addRules(loop.filter);
+        // Les variables du texte « Si aucune ligne » nomment aussi leurs tables.
+        if (typeof loop.emptyText === 'string' && loop.emptyText) otherwiseTablesOf(loop.emptyText, m, trigger).forEach(name => tables.add(name));
       }
     });
     return tables;
@@ -500,7 +514,7 @@ const SchemaRenames = (function () {
     }
     const rawLoop = el.getAttribute('data-loop');
     if (rawLoop) {
-      const next = rewriteLoop(parseJson(rawLoop), m);
+      const next = rewriteLoop(parseJson(rawLoop), m, { page, trigger });
       if (next.count) { el.setAttribute('data-loop', JSON.stringify(next.loop)); count += next.count; }
     }
     return count;

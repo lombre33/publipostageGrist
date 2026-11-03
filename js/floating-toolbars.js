@@ -934,22 +934,26 @@ const FloatingToolbars = (function () {
   // Une fenêtre (condition, autres attributs, boucle, liste, calcul) est ouverte sur une bulle : sa barre reste masquée tant qu'elle l'est - son niveau,
   // sous les fenêtres, la cacherait de toute façon derrière le voile - et le champ texte qui porte la bulle ne remplace pas son document (js/field-editor.js).
   // `except` : la fenêtre dont la barre est celle d'un champ qu'elle porte (le sinon de js/variable-condition.js) - cette fenêtre-là est ouverte tant que le champ vit,
-  // elle ne cache pas sa propre barre ; la fenêtre de condition ouverte par-dessus elle, pour une variable du champ, la cache. 'condition' : la fenêtre de condition.
+  // elle ne cache pas sa propre barre ; la fenêtre de condition ouverte par-dessus elle, pour une variable du champ, la cache. 'condition' : la fenêtre de condition ; 'loop' :
+  // la fenêtre de la boucle (le texte « Si aucune ligne », js/variable-loop.js).
   function variableWindowOpen(except) {
-    return VariableCondition.isOpen(except === 'condition' ? 1 : 0) || VariableLinkedAttrs.isOpen() || VariableLoop.isOpen() || VariableList.isOpen() || VariableCalc.isOpen();
+    return VariableCondition.isOpen(except === 'condition' ? 1 : 0) || VariableLinkedAttrs.isOpen() || (except !== 'loop' && VariableLoop.isOpen()) || VariableList.isOpen() || VariableCalc.isOpen();
   }
 
   // La barre flottante d'une bulle #Variable pour UN éditeur : celui du document (wireVariableFloatingToolbar) ou celui d'un champ texte (Objet, À, Cc,
   // Cci, nom du PDF, js/field-editor.js:attachVariableToolbar). Tout ce qui suit lit `editor`, le paramètre, qui cache celui du module : une barre par
   // éditeur, chacune sur sa propre sélection. `options.field` : la barre d'un champ texte, qui n'écrit qu'une ligne de texte - la boucle n'y est que « dans
   // la phrase », « Un document par valeur » n'a pas d'objet, le zéro s'y écrit toujours et un Oui / Non y garde « true » / « false » (Variables.formatValue,
-  // `rawNumbers`). `options.sinon` : le champ est le « Sinon afficher » d'un bloc ou d'une valeur (js/variable-condition.js), qui s'écrit dans le document : même
+  // `rawNumbers`). `options.sinon` : le champ est le « Sinon afficher » d'un bloc, d'une valeur ou d'une bulle (js/variable-condition.js) ou le texte « Si aucune ligne » d'une boucle (js/variable-loop.js), qui s'écrit dans le document : même
   // barre qu'un champ, mais le zéro et les cases Oui / Non s'y règlent comme dans le document. `options.hostWindow` : la fenêtre qui porte ce champ (variableWindowOpen).
   // `options.ownerEl` : l'élément du champ, dont un clic ne ferme pas la barre (EditorCore.registerFloatingPanel).
   function createVariableToolbar(editor, options) {
     const inField = !!(options && options.field);
     // Un champ qui s'écrit en texte brut (l'objet d'un e-mail) : la valeur d'une variable y est celle de Grist, sans la mise en forme du document.
     const rawText = inField && !(options && options.sinon);
+    // La fenêtre de la boucle porte un champ (son texte « Si aucune ligne ») et n'existe qu'une fois : tant qu'elle est ouverte, la barre d'une variable d'un champ - le sien, ou le
+    // « Sinon afficher » d'une fenêtre de condition ouverte par-dessus - ne peut pas en ouvrir une seconde.
+    const loopWindowTaken = () => inField && VariableLoop.isOpen();
     // Relit la sélection et remet la barre à jour (posé par wireToolbar) : pour un geste qui ne change pas le document et qui doit pourtant se voir (« Comme dans Grist » qui
     // trouve la colonne réglée autrement qu'il n'y paraissait).
     let refreshToolbar = () => {};
@@ -1126,7 +1130,7 @@ const FloatingToolbars = (function () {
       const WINDOWS = {
         'var-condition': (node, pos) => VariableCondition.open(editor, pos),
         'var-linked': (node, pos) => { if (VariableLinkedAttrs.isAvailable(node.attrs)) VariableLinkedAttrs.open(editor, pos); },
-        'var-loop': (node, pos) => { if (VariableLoop.status(editor, pos, node).enabled) VariableLoop.open(editor, pos, { inlineOnly: inField }); },
+        'var-loop': (node, pos) => { if (VariableLoop.status(editor, pos, node).enabled && !loopWindowTaken()) VariableLoop.open(editor, pos, { inlineOnly: inField }); },
         'var-list': (node, pos) => { if (VariableList.status(node).enabled) VariableList.open(editor, pos, { field: inField }); },
         'var-column': (node, pos) => VariableColumn.open(editor, pos),
       };
@@ -1279,8 +1283,9 @@ const FloatingToolbars = (function () {
           // Boucle : active (bleue) quand posée ; grisée pour une variable qui ne montre qu'une ligne, ou déjà répétée avec une autre bulle
           // (js/variable-loop.js).
           const loop = VariableLoop.status(editor, pos, node);
+          const taken = loopWindowTaken();
           ui.setActive('var-loop', loop.active);
-          ui.setDisabled('var-loop', !loop.enabled, loop.title);
+          ui.setDisabled('var-loop', !loop.enabled || taken, taken ? I18n.t('varLoop.alreadyOpen') : loop.title);
         }
       }
 

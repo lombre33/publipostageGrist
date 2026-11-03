@@ -1175,6 +1175,45 @@
     },
   );
 
+  // Le texte « Si aucune ligne » d'une boucle (`emptyText`, js/loop-rules.js) est un champ à variables, comme le sinon d'une valeur : du texte brut où une clé « §Table.Colonne » suit un
+  // renommage comme dans le nom du PDF, ou le HTML d'un champ dont les bulles se réécrivent comme celles du corps. Sans renommage, la boucle est rendue telle quelle.
+  cases.push({
+    id: 'schemarenames_empty_text_of_a_loop_follows_the_renames',
+    description: 'Le texte « Si aucune ligne » d’une boucle (champ à variables) suit les renommages : ses clés « #Table.Colonne » en texte brut et les bulles de son HTML de champ sont réécrites, avec leur « Avant » / « Après » ; sans rien à renommer la boucle est rendue telle quelle ; un modèle dont seule cette boucle cite la table de la page compte comme un modèle de cette page (ses colonnes sans nom de table suivent), un modèle qui ne la cite pas non',
+    run: async () => {
+      const m = mapper();
+      const page = m.tableContext('Dossiers');
+      const reading = { page, trigger: trigger() };
+      const loopOf = emptyText => ({ repeat: 'inline', table: 'Annuaire', via: null, filter: null, sort: { column: 'NomPrenom', direction: 'asc' }, empty: 'text', emptyText });
+      const richText = '<p class="pp-field">Chez ' + badge('Dossiers', 'Montant', ' data-before="« " data-after=" »"') + '</p>';
+      const plain = SchemaRenames.rewriteLoop(loopOf(text('Aucun pour §Dossiers.Montant et §Projets.Nom, §Dossiers.Titre')), m, reading);
+      const rich = SchemaRenames.rewriteLoop(loopOf(richText), m, reading);
+      const richBubble = all(rich.loop.emptyText, '.var-badge')[0];
+      const untouchedLoop = loopOf(text('Aucun pour §Dossiers.Titre'));
+      const untouched = SchemaRenames.rewriteLoop(untouchedLoop, m, reading);
+      const empty = SchemaRenames.rewriteLoop(loopOf(''), m, reading);
+      const twoArguments = SchemaRenames.rewriteLoop(loopOf(text('Aucun pour §Dossiers.Montant')), m);
+      // Le modèle entier : sa seule bulle est d'une autre table (Annuaire) ; un sinon de boucle qui cite la table de la page (Dossiers) fait lire sa colonne nue « Montant » comme celle de la page.
+      const template = emptyText => '<p>' + badge('Annuaire', 'NomPrenom', attr('data-loop', loopOf(emptyText))) + '</p>'
+        + '<p><span class="conditional-value"' + attr('data-condition', cond([['Montant', '>', '100']])) + '>x</span></p>';
+      const conditionColumn = html => json(all(html, '.conditional-value')[0], 'data-condition').rules[0].column;
+      const citing = SchemaRenames.rewriteHtml(template(text('voir §Dossiers.Titre')), m, reading);
+      const notCiting = SchemaRenames.rewriteHtml(template(''), m, reading);
+      const checks = {
+        plainKeysFollow: plain.count === 2 && plain.loop.emptyText === text('Aucun pour §Dossiers.Total et §Portefeuille.Intitule, §Dossiers.Titre') && plain.loop.table === 'Annuaire',
+        richBubbleFollows: rich.count === 1 && richBubble.getAttribute('data-column') === 'Total' && richBubble.getAttribute('data-key') === 'Dossiers.Total'
+          && richBubble.getAttribute('data-before') === '« ' && richBubble.getAttribute('data-after') === ' »',
+        otherFieldsOfTheLoopKept: same(Object.keys(plain.loop), Object.keys(loopOf('x'))) && plain.loop.empty === 'text' && plain.loop.sort.column === 'NomPrenom',
+        nothingToRenameIsTheSameObject: untouched.count === 0 && untouched.loop === untouchedLoop && empty.count === 0,
+        oldCallWithoutReadingContextKeepsTheText: twoArguments.count === 0 && twoArguments.loop.emptyText === text('Aucun pour §Dossiers.Montant'),
+        templateCitingThePageReadsItsBareColumn: citing.count === 1 && conditionColumn(citing.html) === 'Total' && json(all(citing.html, '.var-badge')[0], 'data-loop').emptyText === text('voir §Dossiers.Titre'),
+        templateNotCitingItKeepsItsBareColumn: conditionColumn(notCiting.html) === 'Montant',
+      };
+      const v = verdict(checks);
+      return { pass: v.pass, notes: v.failed.join(', ') || 'ok' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.schemaRenames = cases;
 })();

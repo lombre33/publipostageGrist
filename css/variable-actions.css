@@ -286,7 +286,7 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
 .var-loop-seps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--text); }
 .var-loop-seps[hidden] { display: none; }
 .var-loop-seps label + input { margin-right: 6px; }
-.var-loop-seps input, .var-loop-empty-text input { height: 26px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.var-loop-seps input { height: 26px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .var-loop-seps .var-loop-sep-input { width: 44px; }
 .var-loop-seps .var-loop-last-input { width: 52px; }
 .var-loop-hint { font-size: 11.5px; font-weight: 500; color: var(--text-muted); }
@@ -299,7 +299,14 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
 .var-loop-two .var-loop-empty-select { width: 100%; }
 .var-loop-empty-text { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--text); }
 .var-loop-empty-text[hidden] { display: none; }
-.var-loop-empty-text input { flex: 1; min-width: 0; }
+/* Le texte « Si aucune ligne » est un champ à variables (js/field-editor.js, celui du « Sinon afficher » d'une valeur : mêmes bordure, police et fond que les champs d'une ligne
+   de cette fenêtre) ; `scroll-margin` : un champ ramené dans la fenêtre garde un peu d'air sous lui. */
+.var-loop-empty-text .var-loop-empty-field {
+  flex: 1; box-sizing: border-box; min-width: 0; min-height: 26px; padding: 0 6px; scroll-margin: 6px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12px; font-weight: 400;
+}
+.var-loop-empty-text .var-loop-empty-field .pp-field-text { line-height: 24px; }
+.var-loop-empty-text .var-loop-empty-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 
 /* Repères de boucle dans l'éditeur : la zone répétée (ligne de tableau, élément de liste, paragraphe ou titre qui contient une bulle en boucle)
    est teintée, avec un onglet dans la marge de gauche ; une bulle en boucle « dans la phrase » porte une petite icône. CSS seul, lu sur l'attribut

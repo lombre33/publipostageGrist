@@ -24,6 +24,9 @@
 // - Portée sur la bulle plutôt que sur la zone : supprimer ou déplacer la bulle emporte sa boucle, jamais une zone répétée qu'aucune bulle ne
 //   permettrait plus d'ouvrir. Une bulle déplacée hors de sa zone (hors du tableau, de la liste) redevient une bulle ordinaire, en édition comme en
 //   lecture.
+// - `emptyText` : le texte écrit à la place de la zone quand aucune ligne n'est retenue (« Si aucune ligne → Afficher un texte »). C'est un champ à variables, comme le
+//   « Sinon afficher » d'une valeur (js/field-codec.js : texte brut tant qu'aucune variable n'a de réglage, HTML sinon) ; ses variables lisent la ligne de la page - ou celle
+//   du tour de la zone qui entoure la boucle -, pas une ligne de la boucle (emptyNodes).
 // Dans chaque copie de la zone, chaque bulle (et chaque image liée à une variable) est associée à la ligne du tour (bindingOf) :
 // js/variables.js:resolveRawValue lit alors la valeur dans cette ligne (opts.loop) au lieu de chercher les lignes liées - valeur, format, condition
 // et images compris. Elle porte aussi le rang du tour (`turn`, 1 pour la première ligne retenue : après le filtre et le tri) que la puce « N° de
@@ -393,12 +396,23 @@ const LoopRules = (function () {
       parent = next;
     }
   }
-  function textParagraph(text) {
+  // Le texte « Si aucune ligne » (`emptyText`) est un champ à variables, le même que le « Sinon afficher » d'une valeur (js/field-codec.js : du texte brut tant qu'aucune
+  // variable n'a de réglage, du HTML sinon) : du texte et des bulles #Variable, que la Lecture lit ensuite avec le reste du document. Elles lisent la ligne du tour qui entoure la
+  // bulle de la boucle (`source`, inheritBinding : une boucle dans une zone répétée par une autre), jamais celle d'une boucle qui n'a aucune ligne.
+  function emptyNodes(loop, source) {
+    if (!loop.emptyText) return [];
+    const holder = document.createElement('span');
+    Dom.setMarkup(holder, FieldCodec.itemsHtml(FieldCodec.itemsOf(loop.emptyText)));
+    const nodes = Array.from(holder.childNodes);
+    inheritBinding(source, nodes);
+    return nodes;
+  }
+  function textParagraph(loop, source) {
     const p = document.createElement('p');
-    p.textContent = text;
+    p.append(...emptyNodes(loop, source));
     return p;
   }
-  function applyEmptyZone(zone, loop) {
+  function applyEmptyZone(zone, loop, badge) {
     if (loop.repeat === 'row') {
       if (loop.empty !== 'text') { removeAndPrune(zone); return; }
       // « Une ligne de texte » : une seule cellule sur toute la largeur de la ligne (colspan lu par les exports PDF et DOCX).
@@ -406,17 +420,17 @@ const LoopRules = (function () {
       const span = cells.reduce((n, c) => n + (parseInt(c.getAttribute('colspan'), 10) || 1), 0) || 1;
       const td = document.createElement('td');
       td.setAttribute('colspan', String(span));
-      td.appendChild(textParagraph(loop.emptyText));
+      td.appendChild(textParagraph(loop, badge));
       zone.replaceChildren(td);
       return;
     }
     if (loop.repeat === 'item') {
       if (loop.empty !== 'text') { removeAndPrune(zone); return; }
-      zone.replaceChildren(textParagraph(loop.emptyText));
+      zone.replaceChildren(textParagraph(loop, badge));
       return;
     }
     if (loop.empty === 'hide') { removeAndPrune(zone); return; }
-    zone.textContent = loop.empty === 'text' ? loop.emptyText : '';
+    zone.replaceChildren(...(loop.empty === 'text' ? emptyNodes(loop, badge) : []));
   }
 
   // Une zone : sa copie pour chaque ligne retenue, associée à cette ligne ; « si aucune ligne » sinon. Une boucle qui ne trouve plus sa source laisse la
@@ -432,7 +446,7 @@ const LoopRules = (function () {
     try { result = await iterate(loop, scope.tableId, scope.record, context); }
     catch (e) { console.error('[LoopRules] échec du calcul des lignes de la boucle', loop, e); return; }
     if (result.error) { console.warn('[LoopRules] boucle sur « ' + loop.table + ' » sans source (' + result.error + ') : zone affichée une fois.'); return; }
-    if (!result.items.length) { applyEmptyZone(zone, loop); return; }
+    if (!result.items.length) { applyEmptyZone(zone, loop, badge); return; }
     const copies = document.createDocumentFragment();
     result.items.forEach((item, index) => {
       const clone = zone.cloneNode(true);
@@ -471,12 +485,13 @@ const LoopRules = (function () {
   }
   const HIDE_MARKER_CLASS = 'pp-loop-hide-block';
   // Nœud qui remplace une bulle en boucle sans aucune ligne retenue ; « Masquer le paragraphe » pose un repère que removeHiddenBlocks traite une fois
-  // toutes les bulles remplacées (le paragraphe ne doit pas disparaître pendant que les autres bulles se résolvent encore).
-  function emptyInlineNode(loop) {
+  // toutes les bulles remplacées (le paragraphe ne doit pas disparaître pendant que les autres bulles se résolvent encore). Le texte « Si aucune ligne » peut porter
+  // des variables (emptyNodes) : le nœud les porte encore, js/reader-mode.js:resolveInlineLoop les lit pour la ligne de `badge`.
+  function emptyInlineNode(loop, badge) {
     if (loop.empty === 'text' && loop.emptyText) {
       const span = document.createElement('span');
       span.className = 'resolved-var';
-      span.textContent = loop.emptyText;
+      span.append(...emptyNodes(loop, badge));
       return span;
     }
     if (loop.empty === 'hide') {
@@ -507,7 +522,7 @@ const LoopRules = (function () {
       const value = await valueFor(itemBinding(loop, item, inherited));
       if (value !== '' && value != null) values.push(String(value));
     }
-    if (!values.length) return { node: emptyInlineNode(loop) };
+    if (!values.length) return { node: emptyInlineNode(loop, badge) };
     return { text: joinValues(values, loop.separator, loop.lastSeparator) };
   }
 
