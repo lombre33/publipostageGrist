@@ -311,33 +311,56 @@
 
   cases.push({
     id: 'bprint_small_overflow_in_the_bottom_margin_makes_no_extra_sheet',
-    description: 'Une page de la Lecture qui dépasse de quelques pixels (les marges des citations, que la pagination ne compte pas) mais dont tout ce qui est dessiné tient sur la feuille ne crée pas de feuille de suite : autant de feuilles que de pages, chaque ligne entière sur sa feuille ; un saut de page forcé (son repère est écrit en transparent) ne compte pas comme de l’encre non plus',
+    description: 'Une page de la Lecture dont le dernier texte se dessine plus bas que le corps de page (un décalage que la pagination ne voit pas, comme une image qui arrive après la mesure) mais dont tout ce qui est dessiné tient sur la feuille ne crée pas de feuille de suite : autant de feuilles que de pages, chaque ligne entière sur sa feuille ; le repère d’un saut de page forcé (son texte est transparent), même tombé sous la feuille, ne compte pas non plus comme de l’encre',
     run: async (h) => {
-      // Neuf citations de 52 lignes en tout remplissent une page : leurs marges (4 px devant chacune) la font descendre d'une vingtaine de pixels sous le corps de page,
-      // sans sortir de la feuille. Cinq lignes de plus passent à la page suivante.
-      const quote = (n, lines) => '<blockquote>' + Array.from({ length: lines }, (_, k) => '<p>Citation ' + n + ' ligne ' + (k + 1) + '</p>').join('') + '</blockquote>';
-      const quotes = [6, 6, 6, 6, 6, 6, 6, 5, 5].map((lines, i) => quote(i + 1, lines)).join('');
-      const html = quotes + bodyLines(5);
+      // La pagination compte la marge des blocs (lot de la marge des blocs) : une page ne grandit plus de la marge de ses citations et rien d'ordinaire ne descend dans la marge du bas. On fabrique donc ce
+      // qu'elle ne voit pas : un bloc de hauteur nulle (la pagination lit son rectangle) dont le texte déborde vers le bas, comme le ferait une image qui arrive après la mesure.
+      const lines = (from, to) => Array.from({ length: Math.max(0, to - from + 1) }, (_, i) => '<p>Ligne ' + (from + i) + ' du corps du document.</p>').join('');
+      const overflow = '<div style="height: 0"><p>Débord sous le corps de page</p><p>et dans la marge du bas</p></div>';
+      // Les boîtes des lignes de la copie imprimée, dans les coordonnées de la pile (celles des fenêtres de l'impression).
+      const boxesOf = (job) => {
+        const copy = sheetsOf(job)[0].querySelector('.reader-content');
+        const shift = copy.getBoundingClientRect().top - copy.closest('#reader-container').getBoundingClientRect().top;
+        return lineBoxes(copy, 1).map(box => ({ top: box.top + shift, bottom: box.top + box.height + shift }));
+      };
+      const round = value => Math.round(value * 100) / 100;
       const seen = {};
+      let page = null;
       try {
-        const rc = await readAt(h, html, NO_HF);
+        // Combien de lignes tiennent sur la première page : celles qui se dessinent tout entières dans sa fenêtre.
+        const plain = lines(1, 100);
+        await readAt(h, plain, NO_HF);
+        page = PageLayout.getPageSizePx();
+        const margins = PageLayout.getMarginsPx();
+        seen.bodyBottom = round(page.height - margins.bottom);
+        seen.fit = await withJob(plain, NO_HF, async job => boxesOf(job).filter(box => box.bottom <= job.windows[0].to + 0.5).length);
+        // Une première page pleine, puis un texte qui déborde de sa dernière ligne : il se dessine dans la marge du bas, sans sortir de la feuille.
+        const small = lines(1, seen.fit) + overflow + lines(seen.fit + 1, seen.fit + 5);
+        const rc = await readAt(h, small, NO_HF);
         seen.readingPages = overlayBands(rc).length + 1;
-        const page = PageLayout.getPageSizePx();
-        await withJob(html, NO_HF, async job => {
-          const copy = sheetsOf(job)[0].querySelector('.reader-content');
+        await withJob(small, NO_HF, async job => {
           seen.sheets = job.pageCount;
-          seen.windows = job.windows.map(w => [Math.round(w.from), Math.round(w.to), Math.round(w.at)]);
-          seen.cover = windowsCover(job, copy);
-          seen.pitch = job.windows.length > 1 ? Math.round((job.windows[1].from - job.windows[0].from) * 100) / 100 : 0;
-          seen.taller = seen.pitch - 28 - page.height;
+          seen.windows = job.windows.map(w => [round(w.from), round(w.to), round(w.at)]);
+          seen.cover = windowsCover(job, sheetsOf(job)[0].querySelector('.reader-content'));
+          seen.inkBottom = round(boxesOf(job)[seen.fit + 1].bottom);
         });
-        // Un saut de page forcé en bas d'une page pleine : le repère (texte transparent) ne fait pas descendre la page.
-        const withBreak = quotes + '<div class="page-break-marker">Saut de page</div>' + bodyLines(3);
-        await readAt(h, withBreak, NO_HF);
-        await withJob(withBreak, NO_HF, async job => { seen.breakSheets = job.pageCount; seen.breakWindows = job.windows.map(w => [Math.round(w.from), Math.round(w.to), Math.round(w.at)]); });
+        // Le repère d'un saut de page forcé, tombé sous la feuille : son texte est transparent, il ne compte pas comme de l'encre.
+        const marker = '<div class="page-break-marker" style="position: relative; top: ' + Math.round(page.height) + 'px">Saut de page</div>';
+        const withBreak = lines(1, seen.fit - 1) + marker + lines(seen.fit, seen.fit + 2);
+        const rcBreak = await readAt(h, withBreak, NO_HF);
+        seen.breakReadingPages = overlayBands(rcBreak).length + 1;
+        await withJob(withBreak, NO_HF, async job => {
+          const copy = sheetsOf(job)[0].querySelector('.reader-content');
+          seen.breakSheets = job.pageCount;
+          seen.breakWindows = job.windows.map(w => [round(w.from), round(w.to), round(w.at)]);
+          const mark = copy.querySelector('.page-break-marker');
+          seen.markerTop = mark ? round(mark.getBoundingClientRect().top - copy.closest('#reader-container').getBoundingClientRect().top) : null;
+        });
       } finally { h.setA4Preview(false); restoreContainers(); }
-      const pass = seen.sheets === seen.readingPages && seen.readingPages === 2 && seen.taller > 5 && seen.taller < 37 && seen.cover.lost === 0 && seen.cover.doubled === 0 && seen.cover.lines > 55
-        && seen.windows.every(w => w[2] === 0 && w[1] - w[0] === Math.round(PageLayout.getPageSizePx().height)) && seen.breakSheets === 2;
+      const pass = !!page && seen.fit > 20 && seen.readingPages === 2 && seen.sheets === 2 && seen.inkBottom > seen.bodyBottom + 10 && seen.inkBottom <= page.height - 5
+        && seen.cover.lost === 0 && seen.cover.doubled === 0 && seen.cover.lines === seen.fit + 7
+        && seen.windows.every(w => w[2] === 0 && Math.abs(w[1] - w[0] - page.height) < 0.02)
+        && seen.markerTop > page.height && seen.breakReadingPages === 2 && seen.breakSheets === 2;
       return { pass, notes: JSON.stringify(seen) };
     },
   });
@@ -530,10 +553,11 @@
     '.two-columns-zone .two-columns-column', 'img[data-align="left"]', 'img[data-layer="behind"]', 'img[data-layer="front"]', '.footnote-ref-marker', '.toc-resolved .toc-entry', 'p[data-caption="true"]', 'h4', 'p[data-keep-next="true"]', '.v2-page-watermark'];
 
   // Ce que le navigateur calcule pour chaque élément du document et ses pseudo-éléments (`::before`, `::after` qui écrivent un contenu), vu de la fenêtre `view` : toutes les propriétés, sauf les mesures
-  // (les positions se comparent dans bprint_text_is_laid_out_exactly_like_the_reading), les variables CSS (les valeurs du thème), `print-color-adjust` (que le conteneur pose exprès) et `pointer-events` (le conteneur est invisible et ne prend aucun clic). Trois éléments
+  // (les positions se comparent dans bprint_text_is_laid_out_exactly_like_the_reading), les variables CSS (les valeurs du thème), `print-color-adjust` (que le conteneur pose exprès), `color-scheme` (que le conteneur pose exprès à `light` : l'impression est toujours claire, alors que la Lecture le laisse `normal` ;
+  // le cas le vérifie à part, thème clair et thème sombre) et `pointer-events` (le conteneur est invisible et ne prend aucun clic). Trois éléments
   // ne se comparent pas parce que leur mise en forme est celle de l'écran par construction : le conteneur de la Lecture (gouttière, remplissage), la feuille de papier (son ombre) et les entretoises
   // des bords de page (centrées sur l'écran). Tout ce qu'ils contiennent se compare.
-  const SIZES = /^(width|height|inline-size|block-size|min-.*|max-.*|perspective-origin|transform-origin|top|left|right|bottom|inset.*|margin-block.*|margin-inline.*|padding-block.*|padding-inline.*|border-block.*|border-inline.*|zoom|(-webkit-)?print-color-adjust|pointer-events)$/;
+  const SIZES = /^(color-scheme|width|height|inline-size|block-size|min-.*|max-.*|perspective-origin|transform-origin|top|left|right|bottom|inset.*|margin-block.*|margin-inline.*|padding-block.*|padding-inline.*|border-block.*|border-inline.*|zoom|(-webkit-)?print-color-adjust|pointer-events)$/;
   function looksOf(root, view) {
     const list = [];
     // Les marges du texte du document (`.reader-content`) sont celles de son centrage sur l'écran, en pixels : elles dépendent de la largeur du panneau, pas du document.
@@ -564,7 +588,7 @@
 
   cases.push({
     id: 'bprint_every_document_feature_looks_the_same_in_the_print_as_in_the_reading',
-    description: 'Chaque fonction du document (texte, listes, tableau, citation, code, lien, encadrés, colonnes, images en calque, pastilles, note, sommaire, titres numérotés, légendes, filigrane, en-tête et pied) a, dans le conteneur d’impression, les mêmes propriétés calculées - couleur, fond, bordures, police, puces, contenu et masque des pseudo-éléments - que dans la Lecture de la page : aucune fonction ne perd son aspect à l’impression, comme l’encadré avant le 14/10',
+    description: 'Chaque fonction du document (texte, listes, tableau, citation, code, lien, encadrés, colonnes, images en calque, pastilles, note, sommaire, titres numérotés, légendes, filigrane, en-tête et pied) a, dans le conteneur d’impression, les mêmes propriétés calculées - couleur, fond, bordures, police, puces, contenu et masque des pseudo-éléments - que dans la Lecture de la page : aucune fonction ne perd son aspect à l’impression, comme l’encadré avant le 14/10 ; seul `color-scheme` diffère, exprès : l’impression est toujours claire (`light`), thème clair ou sombre de la page',
     run: async (h) => {
       const seen = {};
       const theme = document.documentElement.getAttribute('data-theme');
@@ -582,13 +606,18 @@
           seen.sheets = [overlayBands(rc).length + 1, job.pageCount];
           seen.missing = FEATURE_SELECTORS.filter(selector => !rc.querySelector(selector) || !copy.querySelector(selector));
           seen.diffs = lookDiffs(reading, printed);
+          seen.scheme = [getComputedStyle(copy).colorScheme];
         });
+        // L'impression est claire quel que soit le thème de la page : le conteneur d'impression pose `color-scheme: light` (css/print.css).
+        document.documentElement.setAttribute('data-theme', 'dark');
+        await withJob(html, HF, async job => { seen.scheme.push(getComputedStyle(sheetsOf(job)[0].querySelector('#reader-container')).colorScheme); });
       } finally {
         if (theme === null) document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', theme);
         PageLayout.setMarginsMm(null); h.setA4Preview(false); restoreContainers();
       }
       const shown = seen.diffs.length > 12 ? seen.diffs.slice(0, 12).concat(['… et ' + (seen.diffs.length - 12) + ' autres']) : seen.diffs;
-      return { pass: seen.elements[0] > 250 && seen.sheets[0] >= 3 && seen.sheets[0] === seen.sheets[1] && seen.missing.length === 0 && seen.diffs.length === 0, notes: JSON.stringify(Object.assign({}, seen, { diffs: shown })) };
+      return { pass: seen.elements[0] > 250 && seen.sheets[0] >= 3 && seen.sheets[0] === seen.sheets[1] && seen.missing.length === 0 && seen.diffs.length === 0
+        && seen.scheme.length === 2 && seen.scheme.every(scheme => scheme === 'light'), notes: JSON.stringify(Object.assign({}, seen, { diffs: shown })) };
     },
   });
 

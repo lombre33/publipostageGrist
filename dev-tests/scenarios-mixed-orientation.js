@@ -100,7 +100,8 @@ window.EditorTestSuites.mixedOrientation = (function () {
   const wordOpensPage = node => node.nodeName === 'w:p' && node.getElementsByTagName('w:pageBreakBefore').length > 0;
   const numberOf = (el, name) => (el && el.getAttribute(name) !== null ? Number(el.getAttribute(name)) : null);
   // Les sections du document.xml, dans l'ordre : la page (taille, sens, marges, « première page différente »), les en-têtes et pieds qu'elle déclare (type -> fichier) et ses blocs.
-  // Docx.js écrit le <w:sectPr> d'une section dans un paragraphe vide à sa fin (le dernier est au bout du corps) : ce paragraphe-là n'est pas du contenu, `blocks` ne le garde pas.
+  // Docx.js écrit le <w:sectPr> d'une section à sa fin (le dernier est au bout du corps), dans un paragraphe qui n'est pas du contenu : un paragraphe vide ajouté (avant la 9.15.1), ou le dernier
+  // paragraphe de la section quand elle finit par un paragraphe (depuis la 9.15.1). Un paragraphe vide qui porte le sectPr n'est pas un bloc ; celui qui porte du texte ou qui ouvre une page en est un.
   function wordSections(parts) {
     const rels = {};
     Array.from(parts.part('word/_rels/document.xml.rels').getElementsByTagName('Relationship')).forEach(rel => { rels[rel.getAttribute('Id')] = 'word/' + rel.getAttribute('Target'); });
@@ -123,7 +124,7 @@ window.EditorTestSuites.mixedOrientation = (function () {
       if (node.nodeName === 'w:sectPr') { close(node); return; }
       const pPr = node.nodeName === 'w:p' ? Array.from(node.children).find(child => child.nodeName === 'w:pPr') : null;
       const sect = pPr && Array.from(pPr.children).find(child => child.nodeName === 'w:sectPr');
-      if (sect) close(sect); else blocks.push(node);
+      if (sect) { if (wordText(node) || wordOpensPage(node)) blocks.push(node); close(sect); } else blocks.push(node);
     });
     return sections;
   }
