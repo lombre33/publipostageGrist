@@ -3,8 +3,8 @@
 // GFS (js/extensions.js, js/gfs-link.js). Ce fichier garde ce qui reste quand l'extension est absente et le SEUL point d'entrée par lequel le reste du widget (js/main.js, js/main-toolbar.js,
 // js/header-footer-preview.js, js/editor-nodes.js...) l'atteint :
 //  - le GRISÉ, sans l'extension : jamais caché. La ligne « Écriture en direct » du menu « Édition collaborative » est grisée avec sa raison et son clic explique (hébergé par GFS : ouvre sa fenêtre
-//    d'installation, seul : une fenêtre simple dit qu'il faut passer par GFS - Extensions.explain). Même grisé quand le modèle ouvert n'a pas de sens pour elle (pas encore enregistré, pas un
-//    document, document en lecture seule) ou que le fichier de GFS n'a pas pu être chargé (la ligne dit pourquoi, et son clic retente) ;
+//    d'installation, seul : une fenêtre simple dit qu'il faut passer par GFS - Extensions.explain). Même grisé quand le modèle ouvert n'a pas de sens pour elle (pas encore enregistré, ni un
+//    document ni une présentation - Slides+ s'écrit en direct depuis le 03/11 -, document en lecture seule) ou que le fichier de GFS n'a pas pu être chargé (la ligne dit pourquoi, et son clic retente) ;
 //  - l'ACTIVATION : le code de l'extension et le fichier de GFS ne se chargent qu'au premier clic, et seulement si GFS dit l'extension active ;
 //  - l'ENTRÉE AUTOMATIQUE : quand une personne allume l'écriture en direct d'un modèle, celles qui l'ont ouvert - présentes ou arrivées ensuite - la rejoignent toutes seules, sans la question
 //    « Rejoindre ? » (plus bas) ; la personne qui l'arrête, ou qui refuse de la rejoindre, n'y est pas ramenée avant d'avoir rouvert le modèle ;
@@ -88,7 +88,7 @@ const LiveEntry = (function () {
     if (failure && !Extensions.isLoaded(ID)) return { kind: 'load', text: I18n.t('live.unavailable.loadFailed', { reason: failure }) };
     const shown = context();
     if (shown.readOnly) return { kind: 'template', text: I18n.t('live.unavailable.readOnly') };
-    if (shown.type !== 'document') return { kind: 'template', text: I18n.t('live.unavailable.type') };
+    if (shown.type !== 'document' && !SlidesEntry.isPresentation(shown.type)) return { kind: 'template', text: I18n.t('live.unavailable.type') };
     if (shown.id == null) return { kind: 'template', text: I18n.t('live.unavailable.unsaved') };
     return null;
   }

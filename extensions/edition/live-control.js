@@ -61,7 +61,9 @@ const LiveControl = (function () {
     const names = { Y: 'yjs', protocol: 'y-protocols/awareness', yt: '@tiptap/y-tiptap' };
     const missing = Object.keys(names).filter(key => !given || !given[names[key]]).map(key => names[key]);
     if (missing.length) throw new Error(I18n.t('live.failed.modules', { names: missing.join(', ') }));
-    const PM = await import('prosemirror-state');
+    const state = await import('prosemirror-state');
+    const view = await import('prosemirror-view');
+    const PM = { Plugin: state.Plugin, PluginKey: state.PluginKey, Decoration: view.Decoration, DecorationSet: view.DecorationSet };
     return { Y: given[names.Y], protocol: given[names.protocol], yt: given[names.yt], PM };
   }
 

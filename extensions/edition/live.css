@@ -18,15 +18,32 @@
 .live-chip-more { padding: 0 8px; }
 .live-bar-stop { flex: none; }
 
-/* Le curseur d'une autre personne : un trait de sa couleur, son nom au-dessus. Les deux « joints de mots » que pose le script gardent le trait collé au caractère de la césure. */
-.pp-live-caret { position: relative; margin-left: -1px; margin-right: -1px; border-left: 2px solid var(--pp-live-color, #6b6b6b); pointer-events: none; word-break: normal; }
-.pp-live-caret-label { position: absolute; top: -1.4em; left: -2px; padding: 1px 5px; border-radius: 4px 4px 4px 0; background: var(--pp-live-color, #6b6b6b); color: var(--pp-live-ink, #fff); font-family: var(--font-ui); font-size: 11px; font-weight: 600; line-height: 1.25; white-space: nowrap; user-select: none; pointer-events: none; }
+/* Le curseur d'une autre personne : un trait de sa couleur, son nom au-dessus. Les deux « joints de mots » que pose le script gardent le trait collé au caractère de la césure.
+   La feuille est réduite à l'écran (`zoom: var(--pp-fit-zoom)`, css/editor-v2.css : ~0,85 pour une page A4 dans un panneau de 700 px, ~0,44 pour une diapositive) : le trait et le nom sont à l'envers de ce
+   facteur (`--live-px` est un pixel de l'écran, comme dans css/external-images.css) pour rester lisibles ; à l'échelle 1, rien ne change. */
+.pp-live-caret { --live-px: calc(1px / var(--pp-fit-zoom, 1)); position: relative; margin-left: calc(-1 * var(--live-px)); margin-right: calc(-1 * var(--live-px)); border-left: calc(2 * var(--live-px)) solid var(--pp-live-color, #6b6b6b); pointer-events: none; word-break: normal; }
+.pp-live-caret-label { position: absolute; top: -1.4em; left: calc(-2 * var(--live-px)); padding: var(--live-px) calc(5 * var(--live-px)); border-radius: calc(4 * var(--live-px)) calc(4 * var(--live-px)) calc(4 * var(--live-px)) 0; background: var(--pp-live-color, #6b6b6b); color: var(--pp-live-ink, #fff); font-family: var(--font-ui); font-size: calc(11 * var(--live-px)); font-weight: 600; line-height: 1.25; white-space: nowrap; user-select: none; pointer-events: none; }
 .pp-live-selection { background: color-mix(in srgb, var(--pp-live-color, #6b6b6b) 26%, transparent); }
+/* Un objet de diapositive (cadre, forme, ligne) qu'une AUTRE personne a choisi : un anneau de sa couleur et son nom au coin haut gauche. Il n'a pas de texte où poser un curseur : la classe
+   `pp-live-object` et les propriétés --pp-live-color, --pp-live-ink et --pp-live-name viennent de extensions/edition/live-editor.js (objectsPlugin). Un anneau d'ombre plutôt qu'un contour : l'objet choisi
+   ICI garde le sien (css/free-frame.css), et les deux se voient quand deux personnes ont choisi le même. Le nom monte de 22 px d'écran au plus au-dessus de la boîte - moins quand la diapositive n'a pas
+   la place (le haut de la feuille, ou le rognage de la boîte, 34 px de la feuille), jusqu'à entrer dans la boîte - et tourne avec elle. Une ligne n'a pas de contour de boîte à elle (celle de ses deux bouts n'est pas son dessin) : un trait en tirets.
+   Dans l'éditeur seulement : les miniatures de la bande en copient les classes, pas le dessin (comme pour le cadre choisi ici, css/free-frame.css). */
+#editor-container .tiptap .pp-free-frame.pp-live-object > .pp-free-frame-box { --live-px: calc(1px / var(--pp-fit-zoom, 1)); box-shadow: 0 0 0 calc(3 * var(--live-px)) var(--pp-live-color, #6b6b6b); }
+#editor-container .tiptap .pp-free-frame.pp-live-object[data-ff-shape="line"] > .pp-free-frame-box { box-shadow: none; outline: var(--live-px) dashed var(--pp-live-color, #6b6b6b); }
+#editor-container .tiptap .pp-free-frame.pp-live-object > .pp-free-frame-box > .pp-ff-ui::after {
+  content: var(--pp-live-name, ''); position: absolute; left: calc(-3 * var(--live-px)); top: max(-30px, calc(-22 * var(--live-px)), calc(0px - var(--ff-y, 0pt) + var(--ff-bleed, 0pt)));
+  max-width: calc(240 * var(--live-px)); padding: var(--live-px) calc(5 * var(--live-px)); box-sizing: border-box; overflow: hidden; text-overflow: ellipsis;
+  border-radius: calc(4 * var(--live-px)) calc(4 * var(--live-px)) calc(4 * var(--live-px)) 0; background: var(--pp-live-color, #6b6b6b); color: var(--pp-live-ink, #fff);
+  font-family: var(--font-ui); font-size: calc(11 * var(--live-px)); font-weight: 600; line-height: 1.25; white-space: nowrap; user-select: none; pointer-events: none;
+}
 @media (forced-colors: active) {
   .pp-live-caret { border-left-color: CanvasText; }
   .pp-live-caret-label { background: CanvasText; color: Canvas; forced-color-adjust: none; }
   .pp-live-selection { background: Highlight; }
   .live-chip-dot { forced-color-adjust: none; }
+  #editor-container .tiptap .pp-free-frame.pp-live-object > .pp-free-frame-box { box-shadow: none; outline: 3px solid Highlight; }
+  #editor-container .tiptap .pp-free-frame.pp-live-object > .pp-free-frame-box > .pp-ff-ui::after { background: CanvasText; color: Canvas; forced-color-adjust: none; }
 }
 
 /* Ce que le direct ferme : l'en-tête et le pied de page (leur texte n'est pas partagé). Estompés, jamais retirés ni rendus insensibles : un clic dessus explique pourquoi (js/header-footer-preview.js). */

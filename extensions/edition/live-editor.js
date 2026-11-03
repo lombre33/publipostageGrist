@@ -1,9 +1,11 @@
 // L'éditeur de l'écriture en direct : branche, À CHAUD, la synchronisation de Yjs sur l'éditeur TipTap du widget, et la débranche. Le texte du modèle reste celui de l'éditeur (ProseMirror) ;
-// le document Yjs (extensions/edition/live-sync.js) en est le miroir partagé : ce que l'on tape y passe, ce que les autres tapent en revient. Cinq plugins ProseMirror, posés d'un coup :
+// le document Yjs (extensions/edition/live-sync.js) en est le miroir partagé : ce que l'on tape y passe, ce que les autres tapent en revient. Six plugins ProseMirror, posés d'un coup :
 //  - ySyncPlugin : lie le fragment de Yjs au texte de l'éditeur (la bibliothèque de GFS : @tiptap/y-tiptap) ;
 //  - yUndoPlugin : Annuler et Rétablir PAR PERSONNE (chacun ne défait que ses frappes, jamais celles des autres) - il REMPLACE l'historique de ProseMirror, retiré tant que l'écriture dure
 //    (deux historiques sur le même texte se défont l'un l'autre) et remis à la fin, vide ;
 //  - yCursorPlugin : le curseur, la sélection et le nom des autres, dessinés sur le texte (nom et couleur nettoyés avant d'arriver à l'écran) ;
+//  - les OBJETS que les autres ont choisis (un cadre, une forme, une ligne d'une présentation : une sélection de nœud, sans texte où poser un curseur) : leur contour de la couleur de la
+//    personne et son nom au coin. Sans lui, le curseur de la bibliothèque se poserait ENTRE deux blocs et décalerait le texte d'une ligne ; il est tu pour ces personnes-là (`showsCaret`) ;
 //  - une touche : Ctrl/⌘+Z, Ctrl/⌘+Y et Ctrl/⌘+Maj+Z passent par Yjs - sans elle l'historique retiré laisserait le navigateur défaire le texte tout seul, hors de ProseMirror ;
 //  - les marques des nœuds en ligne qui ne sont pas du texte (une bulle de variable en gras, une image dans un lien) : Yjs ne garde les marques que sur les passages de texte ; elles voyagent donc
 //    dans l'attribut `ppMarks` de ces nœuds (js/editor-nodes.js:createInlineMarksCarrier), que ce plugin tient d'accord avec elles - de la marque vers l'attribut pour ce qui se tape ici, de
@@ -13,6 +15,9 @@ const LiveEditor = (function () {
   const KEYS_PLUGIN = 'pp-live-keys';
   const MARKS_PLUGIN = 'pp-live-atom-marks';
   const MARKS_ATTR = 'ppMarks';      // EditorNodes.INLINE_MARKS_ATTR (lu ici sans dépendre de l'éditeur : ce fichier ne connaît que ce que create() reçoit)
+  const OBJECTS_PLUGIN = 'pp-live-objects';
+  const OBJECT_FIELD = 'object';     // le champ de la présence d'une personne qui a choisi un objet : { type, pos } - le nom du nœud et sa position RELATIVE dans le texte partagé (elle suit le texte quand les autres écrivent)
+  const OBJECT_NODES = ['freeFrame', 'freeLine'];   // js/free-frame.js : un cadre ou une forme, une ligne
 
   // Le noir ou le blanc, selon lequel se lit le mieux sur `hex` (contraste calculé comme WCAG) : le nom d'une personne reste lisible sur sa couleur, quelle qu'elle soit.
   function readableOn(hex) {
@@ -38,6 +43,10 @@ const LiveEditor = (function () {
   function selectionBuilder(user) {
     return { class: 'pp-live-selection', style: '--pp-live-color: ' + LiveSync.cleanColor(user && user.color) };
   }
+  // Le curseur d'une personne qui a choisi un objet n'est pas dessiné : la bibliothèque le poserait entre deux blocs, ce qui décalerait le texte d'une ligne. L'objet a son contour (objectsPlugin).
+  const showsCaret = (own, other, state) => own !== other && !(state && state[OBJECT_FIELD]);
+  // Un texte pour la propriété `content` de la feuille de style (le nom d'une personne : du texte, jamais du code).
+  const cssString = text => '"' + String(text).replace(/[\\"]/g, '\\$&') + '"';
 
   // Les marques d'un nœud en ligne qui n'est pas du texte (et dont le type a l'attribut `ppMarks`), en JSON ; null sans marque.
   const carriesMarks = node => node.isInline && !node.isText && MARKS_ATTR in node.type.attrs;
@@ -52,7 +61,18 @@ const LiveEditor = (function () {
     return marks.sort((a, b) => a.type.rank - b.type.rank);
   }
 
-  // Branche l'éditeur. `options` : editor (le TipTap du widget), yt (@tiptap/y-tiptap), PM ({ Plugin, PluginKey } de prosemirror-state), session (le moteur), onProblem(error) (le texte
+  // La position la plus proche de `pos` (en avant d'abord) où l'on écrit - dans du texte - dans chacun des textes donnés ; null quand il n'y en a aucune.
+  function writableNear(docs, pos) {
+    const size = Math.min.apply(null, docs.map(doc => doc.content.size));
+    const start = Math.min(Math.max(pos, 0), size);
+    const writable = at => at >= 0 && at <= size && docs.every(doc => doc.resolve(at).parent.inlineContent);
+    for (let gap = 0; gap <= size; gap++) {
+      for (const at of gap === 0 ? [start] : [start + gap, start - gap]) if (writable(at)) return at;
+    }
+    return null;
+  }
+
+  // Branche l'éditeur. `options` : editor (le TipTap du widget), yt (@tiptap/y-tiptap), PM ({ Plugin, PluginKey } de prosemirror-state, { Decoration, DecorationSet } de prosemirror-view : les copies de l'éditeur du widget), session (le moteur), onProblem(error) (le texte
   // partagé ne se lit plus dans le schéma de l'éditeur : la synchronisation s'arrête). Rend { attach, detach, undo, redo, projectionError, isAttached, fill }.
   function create(options) {
     const { editor, yt, PM, session } = options;
@@ -138,8 +158,117 @@ const LiveEditor = (function () {
       });
     }
 
+    // Les objets choisis par les AUTRES (leur présence porte `object`) : chacun reçoit la classe `pp-live-object` et, en propriétés de la feuille de style, la couleur de la personne et son nom
+    // (live.css dessine le contour et le nom au coin). Plusieurs personnes sur le même objet : leurs noms l'un après l'autre, la couleur de la première. L'objet que la personne choisit ICI part
+    // dans sa présence. Un objet qui a disparu, ou qui n'est plus de la sorte annoncée, ne se dessine pas.
+    function objectsPlugin() {
+      const key = new PM.PluginKey(OBJECTS_PLUGIN);
+      const { Decoration, DecorationSet } = PM;
+      const awareness = session.awareness;
+      const own = session.ydoc.clientID;
+
+      // L'objet que dit la présence `remote` : { pos, node }, ou null.
+      function resolve(state, sync, remote) {
+        const given = remote && remote[OBJECT_FIELD];
+        if (!given || OBJECT_NODES.indexOf(given.type) === -1 || !given.pos || typeof given.pos !== 'object') return null;
+        try {
+          const pos = yt.relativePositionToAbsolutePosition(sync.doc, sync.type, session.Y.createRelativePositionFromJSON(given.pos), sync.binding.mapping);
+          const node = pos == null || pos < 0 || pos > state.doc.content.size ? null : state.doc.nodeAt(pos);
+          return node && node.type.name === given.type ? { pos, node } : null;
+        } catch (e) { return null; }
+      }
+      function build(state) {
+        const sync = yt.ySyncPluginKey.getState(state);
+        if (!sync || !sync.doc || !sync.binding || sync.snapshot != null || sync.prevSnapshot != null || sync.binding.mapping.size === 0) return DecorationSet.empty;
+        const chosen = new Map();     // position -> { node, color, names }
+        awareness.getStates().forEach((remote, clientId) => {
+          if (clientId === own) return;
+          const found = resolve(state, sync, remote);
+          if (!found) return;
+          const user = remote.user || {};
+          const name = LiveSync.cleanName(user.name) || '?';
+          const entry = chosen.get(found.pos);
+          if (entry) entry.names.push(name);
+          else chosen.set(found.pos, { node: found.node, color: LiveSync.cleanColor(user.color), names: [name] });
+        });
+        const decorations = [];
+        chosen.forEach((entry, pos) => {
+          const style = '--pp-live-color: ' + entry.color + '; --pp-live-ink: ' + readableOn(entry.color) + '; --pp-live-name: ' + cssString(entry.names.join(', '));
+          decorations.push(Decoration.node(pos, pos + entry.node.nodeSize, { class: 'pp-live-object', style }));
+        });
+        return DecorationSet.create(state.doc, decorations);
+      }
+      // Ce que les autres ont choisi, en une ligne : la page ne se redessine que lorsqu'elle change.
+      function signature() {
+        const parts = [];
+        awareness.getStates().forEach((remote, clientId) => {
+          if (clientId !== own && remote && remote[OBJECT_FIELD]) parts.push(clientId + ':' + JSON.stringify(remote[OBJECT_FIELD]) + ':' + JSON.stringify(remote.user || null));
+        });
+        return parts.join('|');
+      }
+      // L'objet choisi ICI, dans la présence de la personne : il suit la sélection de nœud d'un cadre ou d'une ligne, rien d'autre.
+      function publish(view) {
+        const sync = yt.ySyncPluginKey.getState(view.state);
+        if (!sync || !sync.binding || sync.binding.projectionError !== null) return;
+        const selected = view.state.selection.node;
+        const mine = (awareness.getLocalState() || {})[OBJECT_FIELD];
+        if (!selected || OBJECT_NODES.indexOf(selected.type.name) === -1) {
+          if (mine != null) awareness.setLocalStateField(OBJECT_FIELD, null);
+          return;
+        }
+        try {
+          const pos = yt.absolutePositionToRelativePosition(view.state.selection.from, sync.type, sync.binding.mapping);
+          if (!mine || mine.type !== selected.type.name || JSON.stringify(mine.pos) !== JSON.stringify(pos)) awareness.setLocalStateField(OBJECT_FIELD, { type: selected.type.name, pos });
+        } catch (e) { /* une position que la bibliothèque ne sait pas dire : l'objet reste sans contour chez les autres */ }
+      }
+
+      return new PM.Plugin({
+        key,
+        state: {
+          init: (_config, state) => build(state),
+          apply(transaction, set, _old, state) {
+            const meta = transaction.getMeta(key);
+            if (isRemote(transaction) || (meta && meta.awarenessUpdated)) return build(state);
+            return transaction.docChanged ? set.map(transaction.mapping, transaction.doc) : set;
+          },
+        },
+        props: { decorations: state => key.getState(state) },
+        view(view) {
+          let seen = signature();
+          const onChange = () => {
+            const now = signature();
+            if (now === seen || view.isDestroyed) return;
+            seen = now;
+            view.dispatch(view.state.tr.setMeta(key, { awarenessUpdated: true }));
+          };
+          awareness.on('change', onChange);
+          return {
+            update: publish,
+            destroy() { awareness.off('change', onChange); awareness.setLocalStateField(OBJECT_FIELD, null); },
+          };
+        },
+      });
+    }
+
     function reconfigure(plugins) {
       editor.view.updateState(editor.state.reconfigure({ plugins }));
+    }
+
+    // En dessinant le texte du salon, la bibliothèque remet le curseur au MÊME numéro de position que dans le texte d'avant. Quand cet endroit n'est pas dans du texte du salon (un cadre de plus en
+    // tête, une liste, une diapositive de plus), le curseur reste là où rien ne s'écrit : ProseMirror s'en plaint dans la console et les autres voient un curseur entre deux blocs. On le pose donc
+    // d'abord à l'endroit le plus proche qui est dans du texte dans les DEUX textes (celui de l'éditeur et celui du salon, lu sans toucher à Yjs).
+    function settleCursor(fragment) {
+      try {
+        const shared = yt.initProseMirrorDoc(fragment, editor.schema).doc;
+        const selection = editor.state.selection;
+        const docs = [editor.state.doc, shared];
+        const from = writableNear(docs, selection.from);
+        const to = selection.to === selection.from ? from : writableNear(docs, selection.to);
+        if (from === null || to === null) return;
+        const inText = selection.$from.parent.inlineContent && selection.$to.parent.inlineContent;
+        if (inText && from === selection.from && to === selection.to) return;
+        editor.commands.setTextSelection({ from, to });
+      } catch (e) { /* le texte du salon ne se lit pas dans le schéma : attach() le signale */ }
     }
 
     // Pose les plugins. Le fragment de Yjs doit déjà porter le texte du salon (le moteur l'a rempli en fondant ou en rejoignant) : en s'accrochant, la bibliothèque dessine ce texte dans
@@ -149,12 +278,13 @@ const LiveEditor = (function () {
       const plugins = editor.state.plugins;
       const at = plugins.findIndex(plugin => plugin.key === 'history$');
       history = at === -1 ? null : { plugin: plugins[at], index: at };
-      const selection = editor.state.selection;
       const fragment = session.ydoc.getXmlFragment(session.field);
+      settleCursor(fragment);
       ours = [
         yt.ySyncPlugin(fragment),
         yt.yUndoPlugin(),
-        yt.yCursorPlugin(session.awareness, { cursorBuilder, selectionBuilder }),
+        yt.yCursorPlugin(session.awareness, { awarenessStateFilter: showsCaret, cursorBuilder, selectionBuilder }),
+        objectsPlugin(),
         keysPlugin(),
         marksPlugin(),
       ];
@@ -165,11 +295,15 @@ const LiveEditor = (function () {
       manager.clear();
       const problem = projectionError();
       if (problem && options.onProblem) options.onProblem(problem);
-      // Le curseur reste où il était, quand l'endroit existe encore dans le texte du salon.
+      // Le texte du salon n'a pas pu se lire d'avance (projectionError) ou n'a aucun endroit en commun avec le nôtre : le curseur, s'il est là où rien ne s'écrit, va à l'endroit le plus proche où l'on écrit.
       try {
-        const size = editor.state.doc.content.size;
-        if (selection && selection.from <= size && selection.to <= size) editor.commands.setTextSelection({ from: selection.from, to: selection.to });
-      } catch (e) { /* le texte du salon n'a pas cet endroit : le curseur reste où la bibliothèque l'a mis */ }
+        const selection = editor.state.selection;
+        if (!selection.$from.parent.inlineContent || !selection.$to.parent.inlineContent) {
+          const from = writableNear([editor.state.doc], selection.from);
+          const to = selection.to === selection.from ? from : writableNear([editor.state.doc], selection.to);
+          if (from !== null && to !== null) editor.commands.setTextSelection({ from, to });
+        }
+      } catch (e) { /* le curseur reste où la bibliothèque l'a mis */ }
     }
 
     // Retire les plugins et rend l'historique de ProseMirror, VIDE : le texte reste tel qu'il est à l'écran.
@@ -187,5 +321,5 @@ const LiveEditor = (function () {
     return { attach, detach, undo, redo, fill, projectionError, isAttached: () => attached };
   }
 
-  return { create, cursorBuilder, selectionBuilder, readableOn };
+  return { create, cursorBuilder, selectionBuilder, readableOn, showsCaret };
 })();

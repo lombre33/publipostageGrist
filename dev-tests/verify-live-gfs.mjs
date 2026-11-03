@@ -62,7 +62,8 @@ const importsOfSix = imports.filter(entry => SIX.some(name => entry.split(' : ')
 check('aucun fichier du widget n\'importe un des six paquets (import() ou import ... from) : ils ne viennent que de GfsPaquets', importsOfSix.length === 0, importsOfSix);
 const editionFiles = sources.filter(file => /extensions\/edition\//.test(file));
 const dynamic = imports.filter(entry => /extensions\/edition\//.test(entry));
-check('l\'extension « édition » n\'importe que la bibliothèque de l\'éditeur du widget (prosemirror-state), rien de Yjs', editionFiles.length >= 4 && dynamic.every(entry => /: prosemirror-state$/.test(entry)), dynamic);
+// prosemirror-view : l'anneau des objets de diapositive (Decoration, DecorationSet) doit venir de la MÊME copie que la vue de l'éditeur du widget, celle de sa carte d'importation (comme prosemirror-state).
+check('l\'extension « édition » n\'importe que la bibliothèque de l\'éditeur du widget (prosemirror-state, prosemirror-view), rien de Yjs', editionFiles.length >= 4 && dynamic.length >= 1 && dynamic.every(entry => /: prosemirror-(state|view)$/.test(entry)), dynamic);
 
 // ---- Le banc -----------------------------------------------------------------------------------------------------------------------------------
 

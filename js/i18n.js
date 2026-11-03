@@ -1742,7 +1742,7 @@ const I18n = (function () {
     'live.unavailable.title': { fr: 'Écriture en direct indisponible', en: 'Live editing unavailable' },
     'live.unavailable.loadFailed': { fr: 'Le fichier de Grist Factory Suite n’a pas pu être chargé ({reason}). Cliquer pour réessayer', en: 'The Grist Factory Suite file could not be loaded ({reason}). Click to try again' },
     'live.unavailable.readOnly': { fr: 'Indisponible : ce document est en lecture seule pour vous', en: 'Unavailable: this document is read-only for you' },
-    'live.unavailable.type': { fr: 'Indisponible : seul le texte d’un document s’écrit en direct (ni un modèle email, ni une grille, ni un macro-modèle, ni une présentation)', en: 'Unavailable: only the text of a document can be edited live (not an email template, a grid, a macro-template or a presentation)' },
+    'live.unavailable.type': { fr: 'Indisponible : seul le texte d’un document ou d’une présentation s’écrit en direct (ni un modèle email, ni une grille, ni un macro-modèle)', en: 'Unavailable: only the text of a document or a presentation can be edited live (not an email template, a grid or a macro-template)' },
     'live.unavailable.unsaved': { fr: 'Indisponible : enregistrez d’abord ce modèle', en: 'Unavailable: save this template first' },
     'live.failed.title': { fr: 'Écriture en direct impossible', en: 'Live editing not possible' },
     'live.failed.message': { fr: 'L’extension « {extension} » n’a pas pu être chargée ({reason}). Vérifiez la connexion, puis réessayez.', en: 'The “{extension}” extension could not be loaded ({reason}). Check your connection, then try again.' },

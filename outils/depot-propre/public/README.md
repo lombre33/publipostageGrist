@@ -624,7 +624,7 @@ GitHub Pages, with no backend and no build step.
   when there is no name); track changes, "Accept all" and "Reject all" sit under the "Collaborative
   editing" button of the toolbar
 - Live editing (with Grist Factory Suite, "Live editing" row of the same menu): several people write the text of the
-  same Document template at the same time, with each person's cursor and name and a bar saying who is there; Undo and
+  same Document template or presentation at the same time, with each person's cursor and name and a bar saying who is there; Undo and
   Redo only undo the person's own typing, and one person saves the template for everyone
 - Per-person rights (read-only, export, comments), read from a table of the document
 - Personal organization of templates: pins and folders that other people don't see
@@ -867,8 +867,11 @@ libraries and fonts are in [NOTICE](NOTICE).
 - **Saving**: two people editing the same template at the same time are not merged. Autosave detects
   that someone else saved in the meantime and offers to reload the latest version; the "Save" button
   overwrites the saved version without checking. There is no real-time co-editing, except live editing (with Grist
-  Factory Suite), which only covers the text of a Document template.
-- **Live editing** (with Grist Factory Suite): it only covers the text of a Document template. While it lasts, the
+  Factory Suite), which only covers the text of a Document template or a presentation.
+- **Live editing** (with Grist Factory Suite): it only covers the text of a Document template or a presentation (in a
+  presentation: also the free frames - position, size, text -, the slides of the strip and their background,
+  transition and notes; the object another person has chosen carries their outline and name; the page format, the
+  theme and the decor are not shared yet). While it lasts, the
   header and footer, track changes, linked tables and restoring a version are greyed out, with their reason; an e-mail
   template, a grid or a macro-template cannot be written live. One person saves the template for everyone (the first in
   the list, among the visible pages; if they close their page, the next one takes over). A keystroke shows up for the

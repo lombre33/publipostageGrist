@@ -220,7 +220,7 @@ const kinds = await C.page.evaluate(async () => {
   }
   return out;
 });
-check('sur un modèle email ou un macro-modèle la ligne est grisée avec sa raison (seul le texte d\'un document s\'écrit en direct), puis redevient utilisable sur un document',
+check('sur un modèle email ou un macro-modèle la ligne est grisée avec sa raison (seul le texte d\'un document ou d\'une présentation s\'écrit en direct), puis redevient utilisable sur un document',
   ['courriel', 'macro'].every(k => /seul le texte d.un document/.test(kinds[k].reason) && kinds[k].aria === 'true' && kinds[k].title === kinds[k].reason) && kinds['document'].aria === 'false' && kinds['document'].reason === '' && kinds['document'].current === 1, kinds);
 
 // ---- 5) L'enregistrement -----------------------------------------------------------------------------------------------------------------------
