@@ -145,7 +145,8 @@ const GROUPS = {
   calloutSignature: 'scenarios-callout-signature',
   qrCode: 'scenarios-qr-code', // QR code (js/qr-code.js) : ligne du menu de la chaîne, fenêtre, image et cadre de l'éditeur, Lecture, PDF, Word et Excel, relus par un décodeur (jsQR)
   chart: 'scenarios-chart-block', // Graphique de la page (extensions/graphique/chart-plot.js, chart-source.js, chart-block.js ; joué hébergé : voir HOSTED_GROUPS) : lecture des réglages d'un graphique de Grist (type, colonnes, filtres, tri, lignes), figure Plotly de chaque type, ligne du menu, nœud et cadre de l'éditeur, fenêtre, Lecture, PDF, Word et Excel
-  chartMake: 'scenarios-chart-make', // « Créer un graphique… » (extensions/graphique/chart-make.js, chart-make-ui.js, chart-source.js `made`, chart-block.js `drawMade` ; joué hébergé : voir HOSTED_GROUPS) : la définition gardée sur le nœud (`data-chart-spec`), l'option d'ECharts de chacune des sept formes et l'image PNG tracée, les lignes lues par identifiant, la ligne du menu « Ajouter une image » (celui des blocs garde ses neuf lignes) et son grisé, la fenêtre, l'insertion et la modification en un seul Annuler, le cadre dessiné, la définition illisible, l'anglais, la Lecture, le PDF, le Word et l'Excel, puis l'aspect (lot 2 : titre, jeux de couleurs, couleur de chaque série, valeurs affichées, barres mêlées à une courbe ; l'onglet « Aspect », le choix d'une couleur, la rangée du thème)
+  chartMake: 'scenarios-chart-make', // « Créer un graphique… » (extensions/graphique/chart-make.js, chart-make-ui.js, chart-source.js `made`, chart-block.js `drawMade` ; joué hébergé : voir HOSTED_GROUPS) : la définition gardée sur le nœud (`data-chart-spec`), l'option d'ECharts de chacune des sept formes et l'image PNG tracée, les lignes lues par identifiant, la ligne du menu « Ajouter une image » (celui des blocs garde ses neuf lignes) et son grisé, la fenêtre, l'insertion et la modification en un seul Annuler, le cadre dessiné, la définition illisible, l'anglais, la Lecture, le PDF, le Word (graphique natif) et l'Excel, puis l'aspect (lot 2 : titre, jeux de couleurs, couleur de chaque série, valeurs affichées, barres mêlées à une courbe ; l'onglet « Aspect », le choix d'une couleur, la rangée du thème)
+  chartOffice: 'scenarios-chart-office', // le graphique CRÉÉ en graphique NATIF de Word, modifiable dans Word (lot 3 des graphiques : extensions/graphique/chart-office.js, chart-block.js `data-chart-office`, js/docx-export.js `ChartRun` de docx/charts ; joué hébergé : voir HOSTED_GROUPS) : le modèle d'Office de chacune des sept formes (étiquettes, séries, couleurs, types, empilé, couché, valeurs affichées, échelle d'un radar, dates d'un nuage), l'attribut de l'image à la Lecture et son absence du HTML, du Markdown et du PDF, le .docx dézippé (un élément d'Office par forme, deux éléments pour des barres mêlées à une courbe, le classeur embarqué, la taille réglée, des identifiants de dessin tous différents, le texte alternatif, le paragraphe centré, l'ancre flottante) et le repli sur l'image PNG
   caption: 'scenarios-caption', // légende sous une image ou un tableau (js/caption.js) : attribut `data-caption`, boutons des barres flottantes, grisage, tableau / case / colonne, texte d'attente, suivi, style de l'éditeur et de la Lecture, PDF, Word, e-mail
   keepNext: 'scenarios-keep-next', // « Garder avec le suivant » (js/keep-with-next.js) : attribut `data-keep-next`, ligne à cocher du menu Alignement (pose, retrait, grisage et sa raison, deux langues, suivi), la suite de paragraphes gardés passe d'un seul tenant à la page suivante dans l'éditeur, la Lecture, le PDF et le Word
   paragraphFormat: 'scenarios-paragraph-format', // « Paragraphe… » (js/paragraph-format.js) : interligne et espaces avant / après d'un paragraphe (attributs `data-line-height`, `data-space-before`, `data-space-after`), fenêtre du menu Alignement (pose en un Annuler, valeurs mêlées, « Par défaut », erreurs, deux langues), éditeur mesuré, Lecture, PDF relu par pdf.js, Word dézippé, PowerPoint, HTML exporté, pinceau
@@ -560,12 +561,14 @@ const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf\.worker\.min\.js$/, 'umd/pdf.worker.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/jszip\.min\.js$/, 'umd/jszip.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf-lib\.min\.js$/, 'umd/pdf-lib.min.js'],
-  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@.*$/, 'umd/docx.iife.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@(?:(?!charts\.iife\.js).)*$/, 'umd/docx.iife.js'],
+  // Les graphiques natifs de Word (lot 3 des graphiques créés) : le second fichier de la même version de docx, qui lit le global `docx` du premier.
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@[\d.]+\/dist\/charts\.iife\.js$/, 'umd/docx-charts.iife.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/exceljs\.min\.js$/, 'umd/exceljs.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/qrcode\.min\.js$/, 'umd/qrcode.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/marked\/[\d.]+\/marked\.min\.js$/, 'umd/marked.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/echarts@[\d.]+\/dist\/echarts\.min\.js$/, 'umd/echarts.min.js'],
-].filter(([, rel]) => (rel !== 'umd/exceljs.min.js' && rel !== 'umd/qrcode.min.js' && rel !== 'umd/marked.min.js' && rel !== 'umd/echarts.min.js') || existsSync(join(CACHE, rel))) : [];
+].filter(([, rel]) => (rel !== 'umd/exceljs.min.js' && rel !== 'umd/qrcode.min.js' && rel !== 'umd/marked.min.js' && rel !== 'umd/echarts.min.js' && rel !== 'umd/docx-charts.iife.js') || existsSync(join(CACHE, rel))) : [];
 if (!OFFLINE) console.log('[run-headless] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.');
 
 const require = createRequire(import.meta.url);
@@ -586,7 +589,7 @@ const DEV_FILES = ['helpers', 'runner'];
 // Les groupes joués « hébergés » : la page s'ouvre avec `?gfs=0` et dev-tests/gfs-stub.js répond à la place de Grist Factory Suite en donnant l'extension « graphique » et la source de Plotly. Le graphique
 // de la page est une extension (extensions/graphique/) : seule, la page ne la charge pas, et ses scénarios ne trouveraient ni ChartBlock, ni ChartPlot, ni ChartSource. Une fois la page prête, le lanceur
 // charge les extensions actives (Extensions.loadAll, comme ExportEngines.loadAll pour les moteurs d'export). Les scénarios « seule » du graphique sont dans dev-tests/verify-chart-extension.mjs.
-const HOSTED_GROUPS = new Set(['chart', 'chartMake']);
+const HOSTED_GROUPS = new Set(['chart', 'chartMake', 'chartOffice']);
 
 async function runGroup(name, probeExpr, lang) {
   const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });

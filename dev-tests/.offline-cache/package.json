@@ -41,7 +41,7 @@
     "pdfjs-dist": "3.11.174",
     "jszip": "3.10.1",
     "pdf-lib": "1.17.1",
-    "docx": "9.7.1",
+    "docx": "9.15.1",
     "exceljs": "4.4.0",
     "esbuild": "0.25.10",
     "qrcode-generator": "1.4.4",

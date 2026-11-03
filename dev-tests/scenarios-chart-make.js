@@ -6,7 +6,7 @@
 //  2) les LIGNES : les colonnes lues par leur identifiant dans l'ordre de la table, les lignes liées, la table ou la colonne disparue, une ligne sans valeur ;
 //  3) l'ÉDITEUR : la ligne du menu « Ajouter une image » (celui des blocs garde ses neuf lignes), son grisé, la fenêtre (formes, table, colonnes, lignes, aperçu), le nœud (`data-chart-spec`, jamais d'image),
 //     le cadre dessiné, la modification, la relecture du modèle, la définition illisible, l'anglais, le mode lecture seule ;
-//  4) les RENDUS : Lecture, PDF, Word et Excel (grille) montrent la même image que l'éditeur ;
+//  4) les RENDUS : Lecture, PDF et Excel (grille) montrent la même image que l'éditeur ; le Word est un graphique natif (lot 3 : suite « chartOffice ») ;
 //  5) l'ASPECT (lot 2) : le titre, les cinq jeux de couleurs, la couleur de chaque série, les valeurs affichées, les barres mêlées à une courbe ; leur définition, leur dessin, l'onglet « Aspect » de la fenêtre,
 //     le choix d'une couleur à la place des onglets (dont la rangée « Couleurs du thème »), l'écriture dans le nœud et UN seul Annuler.
 // La vraie souris et le vrai clavier à 700x400 (clair, sombre, anglais) sont dans dev-tests/verify-chart-make-mouse.mjs : une page.evaluate ne déclenche ni un survol ni une frappe de confiance.
@@ -65,8 +65,6 @@
   const inkOf = (picture) => { let n = 0; for (let i = 0; i < picture.data.length; i += 4) if (picture.data[i + 3] > 0 && (picture.data[i] < 235 || picture.data[i + 1] < 235 || picture.data[i + 2] < 235)) n += 1; return n; };
   const nearOf = (picture, rgb, tolerance) => { let n = 0; for (let i = 0; i < picture.data.length; i += 4) if (Math.abs(picture.data[i] - rgb[0]) <= tolerance && Math.abs(picture.data[i + 1] - rgb[1]) <= tolerance && Math.abs(picture.data[i + 2] - rgb[2]) <= tolerance) n += 1; return n; };
   const BAR_BLUE = [43, 120, 174];
-  const bytesOf = uri => Uint8Array.from(atob(uri.slice(uri.indexOf(',') + 1)), c => c.charCodeAt(0));
-  const sameBytes = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 
   // === 1) La définition et le dessin ========================================================================================================================
   cases.push({
@@ -1112,29 +1110,24 @@
     await DocxExport.ensureDocxLibLoaded();
     const { blob } = await DocxExport.getDocxBlobForRecord(html, PAGE_TABLE, record, '', null, null);
     const zip = await JSZip.loadAsync(await blob.arrayBuffer());
-    const names = Object.keys(zip.files).filter(n => n.startsWith('word/media/') && !zip.files[n].dir);
+    const names = Object.keys(zip.files).filter(n => !zip.files[n].dir);
     const document = new DOMParser().parseFromString(await zip.file('word/document.xml').async('string'), 'application/xml');
-    const media = [];
-    for (const name of names) media.push({ name, bytes: await zip.file(name).async('uint8array') });
-    return { document, media };
+    return { document, media: names.filter(n => n.startsWith('word/media/')), charts: names.filter(n => /^word\/charts\/chart\d+\.xml$/.test(n)), workbooks: names.filter(n => n.startsWith('word/embeddings/')) };
   }
 
   cases.push({
-    id: 'chart_make_docx_embeds_the_same_png_as_the_reader_inline_at_the_size_set_and_a_row_without_rows_has_no_image',
-    description: 'Word : le graphique créé est une image PNG dans le flux du texte de 360 x 225 pt (la MÊME image que la Lecture, 1 440 x 900) ; une ligne sans vente n\'a aucune image',
+    id: 'chart_make_docx_has_the_chart_as_a_native_chart_inline_at_the_size_set_and_a_row_without_rows_has_nothing',
+    description: 'Word : le graphique créé est un graphique NATIF de Word (modifiable : un classeur embarqué) dans le flux du texte de 360 x 225 pt, et non l\'image PNG de la Lecture ; une ligne sans vente n\'a rien (le détail de chaque forme est dans la suite « chartOffice »)',
     run: async (h) => {
       await seed(h);
       const html = docOf(madeHtml(def('bar', { values: ['Montant'] }), 'linked'));
       const filled = await docxFor(html, recordOf(1));
       const empty = await docxFor(html, NO_SALE);
       const drawings = h.docxDrawings(filled.document);
-      const reader = (await renderReader(html, recordOf(1))).querySelector('img').getAttribute('src');
-      document.getElementById('reader-container').style.display = 'none';
-      const picture = filled.media[0] && await pixelsOf(URL.createObjectURL(new Blob([filled.media[0].bytes], { type: 'image/png' })));
       return {
-        pass: filled.media.length === 1 && drawings.length === 1 && drawings[0].kind === 'inline' && Math.abs(drawings[0].widthPt - 360) < 0.6 && Math.abs(drawings[0].heightPt - 225) < 0.6
-          && picture.width === 1440 && picture.height === 900 && sameBytes(filled.media[0].bytes, bytesOf(reader)) && empty.media.length === 0 && h.docxDrawings(empty.document).length === 0,
-        notes: JSON.stringify({ drawings: drawings.map(d => [d.kind, d.widthPt, d.heightPt]), media: filled.media.map(m => m.name), picture: picture && [picture.width, picture.height], empty: empty.media.length }),
+        pass: filled.charts.length === 1 && filled.workbooks.length === 1 && filled.media.length === 0 && drawings.length === 1 && drawings[0].kind === 'inline' && Math.abs(drawings[0].widthPt - 360) < 0.6 && Math.abs(drawings[0].heightPt - 225) < 0.6
+          && empty.charts.length === 0 && empty.media.length === 0 && h.docxDrawings(empty.document).length === 0,
+        notes: JSON.stringify({ drawings: drawings.map(d => [d.kind, d.widthPt, d.heightPt]), charts: filled.charts, workbooks: filled.workbooks, media: filled.media, empty: [empty.charts.length, empty.media.length] }),
       };
     },
   });

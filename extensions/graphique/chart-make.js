@@ -145,6 +145,8 @@ const ChartMake = (function () {
     const order = x.map((value, i) => i).sort((a, b) => ViewSource.typedCompare(x[a], x[b]) || a - b);
     return series.map(s => Object.assign({}, s, { values: order.map(i => s.values[i]) }));
   }
+  // Les séries d'un graphique à catégories dans l'ordre où le dessin les trace : courbe et aire suivent l'ordre des étiquettes, les barres celui de la table (aussi pour le modèle d'Office, chart-office.js).
+  const orderedSeries = (def, series) => (def.kind === 'line' || def.kind === 'area' ? sortedByLabel(series) : series);
 
   // L'option d'ECharts
   const textStyle = (extra) => Object.assign({ fontFamily: FONT_FAMILY, fontSize: FONT_SIZE, color: FOREGROUND }, extra || {});
@@ -219,7 +221,7 @@ const ChartMake = (function () {
   function cartesian(def, series, size) {
     const kind = def.kind;
     const horizontal = kind === 'bar' && !!def.horizontal;
-    const ordered = kind === 'line' || kind === 'area' ? sortedByLabel(series) : series;
+    const ordered = orderedSeries(def, series);
     const labels = ordered[0].values.map(labelOf);
     const ys = ordered.slice(1);
     const types = ys.map(s => seriesType(def, s.colId));
@@ -387,6 +389,6 @@ const ChartMake = (function () {
   }
 
   return {
-    LIBRARY, KINDS, SCALE, PALETTES, PALETTE_IDS, MAX_TITLE, MIXABLE, ensureLibrary, normalize, parse, stringify, needsValues, nameOf, option, toImage, paletteOf, seriesColor, seriesType, baseTypeOf, hasSeries, numberText,
+    LIBRARY, KINDS, SCALE, PALETTES, PALETTE_IDS, MAX_TITLE, MIXABLE, ensureLibrary, normalize, parse, stringify, needsValues, nameOf, option, toImage, paletteOf, seriesColor, seriesType, baseTypeOf, hasSeries, numberText, ordered: orderedSeries, niceCeil,
   };
 })();

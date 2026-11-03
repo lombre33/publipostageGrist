@@ -1288,7 +1288,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   let registry = null;
   try { registry = literal ? vm.runInNewContext('(' + literal + ')') : null; } catch (e) { registry = null; }
   check('extension : le registre de js/extensions.js se lit (garde-fou de l\'analyse elle-même) : « graphique » y a une version de cache, des scripts et une feuille de style',
-    !!registry && !!registry.graphique && /^\d+(\.\d+)*$/.test(registry.graphique.version) && registry.graphique.scripts.length === 5 && registry.graphique.styles.length === 2, literal ? literal.slice(0, 80) : 'REGISTRY introuvable');
+    !!registry && !!registry.graphique && /^\d+(\.\d+)*$/.test(registry.graphique.version) && registry.graphique.scripts.length === 6 && registry.graphique.styles.length === 2, literal ? literal.slice(0, 80) : 'REGISTRY introuvable');
   if (registry) {
     const problems = [];
     const dirs = existsSync(join(ROOT, 'extensions')) ? readdirSync(join(ROOT, 'extensions')) : [];

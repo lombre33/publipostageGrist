@@ -1,5 +1,5 @@
 // Le graphique de la page et le graphique créé vus du socle du widget. Leur dessin est l'extension « graphique » (extensions/graphique/ : chart-plot.js, chart-source.js, chart-make.js,
-// chart-block.js, chart-make-ui.js et leurs feuilles de style), que Grist Factory Suite active ou non et dont les bibliothèques, Plotly pour le graphique de la page et ECharts pour le graphique créé,
+// chart-office.js, chart-block.js, chart-make-ui.js et leurs feuilles de style), que Grist Factory Suite active ou non et dont les bibliothèques, Plotly pour le graphique de la page et ECharts pour le graphique créé,
 // lui viennent de GFS (js/extensions.js, js/gfs-link.js). Ce fichier garde ce qui reste quand l'extension est absente
 // et le SEUL point d'entrée par lequel le reste du widget (js/editor-nodes.js, js/main-toolbar.js, js/main.js, js/reader-mode.js) atteint le graphique :
 //  - la FORME : le nœud `img.editor-image` et ses attributs `chartSection` (un graphique de la page) ou `chartSpec` (un graphique créé : sa définition, extensions/graphique/chart-make.js),

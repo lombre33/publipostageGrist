@@ -62,6 +62,7 @@ const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/jszip\/[\d.]+\/jszip\.min\.js$/, 'umd/jszip.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/pdf-lib\/[\d.]+\/pdf-lib\.min\.js$/, 'umd/pdf-lib.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@[\d.]+\/dist\/index\.iife\.js$/, 'umd/docx.iife.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@[\d.]+\/dist\/charts\.iife\.js$/, 'umd/docx-charts.iife.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/exceljs\/[\d.]+\/exceljs\.min\.js$/, 'umd/exceljs.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/qrcode-generator\/[\d.]+\/qrcode\.min\.js$/, 'umd/qrcode.min.js'],
   [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/marked\/[\d.]+\/marked\.min\.js$/, 'umd/marked.min.js'],
@@ -182,6 +183,8 @@ const exportsRun = await page.evaluate(async () => {
   await step('zip', async () => { await ExportCommon.ensureJsZipLoaded(); const z = new JSZip(); z.file('a.txt', 'x'); return (await z.generateAsync({ type: 'uint8array' })).length > 20; });
   await step('pdfMerge', async () => { const merged = await PdfMerge.create('t'); await merged.append(pdf); return (await merged.toBlob()).size > 1000; });
   await step('docx', async () => { await DocxExport.ensureDocxLibLoaded(); const r = await DocxExport.getDocxBlobForRecord('<p>Texte du Word</p>', null, {}, '', null, null); return r.blob.size > 1000; });
+  // Les graphiques natifs de Word : le second fichier de docx (charts.iife.js, jsDelivr, avec son empreinte), chargé au premier graphique créé, lit le global du premier et fabrique une ligne de graphique.
+  await step('docxCharts', async () => { await DocxExport.ensureDocxChartsLoaded(); return typeof docxCharts !== 'undefined' && typeof docxCharts.ChartRun === 'function' && new docxCharts.ChartRun({ type: 'column', categories: ['a'], series: [{ name: 's', values: [1] }] }) instanceof docx.Run; });
   await step('xlsx', async () => { await XlsxExport.ensureExcelLibLoaded(); const wb = new ExcelJS.Workbook(); wb.addWorksheet('a').getCell('A1').value = 'x'; return (await wb.xlsx.writeBuffer()).byteLength > 1000; });
   // L'import Markdown (js/markdown-import.js) : le lecteur (marked, cdnjs, avec son empreinte) se charge au premier import, sous la politique, et lit un texte.
   await step('markdownImport', async () => { await MarkdownImport.ensureLibLoaded(); const imported = MarkdownImport.toDocument('# Titre\n\nTexte **gras**\n'); return imported.html === '<h1>Titre</h1>\n<p>Texte <strong>gras</strong></p>' || imported.html; });
@@ -205,7 +208,7 @@ const exportsRun = await page.evaluate(async () => {
   });
   return out;
 });
-for (const [name, label] of [['moteurs', 'les moteurs du widget (PDF, fusion, feuilles, Word, Excel, format des nombres, Markdown : js/export-engines.js, au premier export)'], ['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['xlsx', 'Excel (ExcelJS)'], ['markdownImport', 'import Markdown (marked, avec son empreinte)'], ['qr', 'QR code (qrcode-generator)'], ['chart', 'graphique de la page (l\'extension de GFS, puis Plotly en copie vendorisée de l\'origine de la page)'], ['print', 'impression par le navigateur (conteneur et feuilles prêts dans la page, sans cadre ni fichier : la fenêtre du navigateur s\'ouvre ensuite)']]) {
+for (const [name, label] of [['moteurs', 'les moteurs du widget (PDF, fusion, feuilles, Word, Excel, format des nombres, Markdown : js/export-engines.js, au premier export)'], ['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['docxCharts', 'Word, graphiques natifs (docx/charts, le second fichier de docx)'], ['xlsx', 'Excel (ExcelJS)'], ['markdownImport', 'import Markdown (marked, avec son empreinte)'], ['qr', 'QR code (qrcode-generator)'], ['chart', 'graphique de la page (l\'extension de GFS, puis Plotly en copie vendorisée de l\'origine de la page)'], ['print', 'impression par le navigateur (conteneur et feuilles prêts dans la page, sans cadre ni fichier : la fenêtre du navigateur s\'ouvre ensuite)']]) {
   check('export : ' + label + ' se charge et produit son fichier sous la politique', exportsRun[name] === true, exportsRun[name]);
 }
 check('rien n\'a été refusé pendant tout ce parcours (aucune violation, aucun message du navigateur)', (await violations()).length === 0 && consoleRefusals.length === 0, { violations: await violations(), consoleRefusals });

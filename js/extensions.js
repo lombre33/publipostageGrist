@@ -11,8 +11,8 @@ const Extensions = (function () {
   const REGISTRY = {
     graphique: {
       nameKey: 'extension.graphique.name',
-      version: '0.5',
-      scripts: ['chart-plot.js', 'chart-source.js', 'chart-make.js', 'chart-block.js', 'chart-make-ui.js'],
+      version: '0.6',
+      scripts: ['chart-plot.js', 'chart-source.js', 'chart-make.js', 'chart-office.js', 'chart-block.js', 'chart-make-ui.js'],
       styles: ['chart-block.css', 'chart-make.css'],
     },
     // L'écriture en direct du texte d'un modèle (extensions/edition/). Ses fichiers ne dépendent pas de leur ordre d'arrivée : aucun n'appelle un autre avant que l'extension soit chargée.

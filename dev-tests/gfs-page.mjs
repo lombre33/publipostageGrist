@@ -75,7 +75,9 @@ export async function start({ name, port, popupBlocker = false }) {
     [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf\.min\.js$/, 'umd/pdf.min.js'],
     [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf\.worker\.min\.js$/, 'umd/pdf.worker.min.js'],
     [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/jszip\.min\.js$/, 'umd/jszip.min.js'],
-    [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@.*$/, 'umd/docx.iife.js'],
+    [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@(?:(?!charts\.iife\.js).)*$/, 'umd/docx.iife.js'],
+    // Les graphiques natifs de Word (lot 3 des graphiques créés) : le second fichier de la même version de docx, qui lit le global `docx` du premier (sans lui, l'export garde l'image du graphique).
+    ...(existsSync(join(CACHE, 'umd/docx-charts.iife.js')) ? [[/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@[\d.]+\/dist\/charts\.iife\.js$/, 'umd/docx-charts.iife.js']] : []),
     // ECharts 6.1.0 (le graphique créé) : le paquet que GFS donne, détourné vers le miroir quand il est construit (dev-tests/offline-deps.sh).
     ...(existsSync(join(CACHE, 'umd/echarts.min.js')) ? [[/^https:\/\/cdn\.jsdelivr\.net\/npm\/echarts@[\d.]+\/dist\/echarts\.min\.js$/, 'umd/echarts.min.js']] : []),
   ] : [];

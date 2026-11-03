@@ -5,7 +5,7 @@
 // d'un item, ce que ne fait pas un marqueur texte), colonnes de tableau mesurées sur le rendu réel (comme le PDF), notes de bas de page, numéro de
 // page et nombre de pages en vrais champs, titres en styles « Titre 1 » à « Titre 6 » (que reprend le volet de navigation de Word), sommaire en vrai
 // champ TOC de Word (buildTocBlocks), images en calque (devant ou derrière le texte) et images habillées à gauche ou à droite en ancres flottantes
-// natives, export en lot (un ZIP, une ligne = un .docx : js/main.js:onExportBatch).
+// natives, graphiques créés (« Créer un graphique… ») en graphiques natifs de Word que l'on modifie dans Word (chartRunFrom), export en lot (un ZIP, une ligne = un .docx : js/main.js:onExportBatch).
 //
 // Ce qu'il ne fait pas, volontairement :
 // - Case à cocher : le caractère ☑ ou ☐ tel quel, pas une case à cocher Word native (un contrôle de contenu `w:sdt`, bien plus lourd que la
@@ -17,11 +17,20 @@ const DocxExport = (function () {
   // `docx` n'est pas sur cdnjs ; jsDelivr sert le fichier tel que publié sur npm (dist/index.iife.js, pas ...iife.min.js, que jsDelivr reminifie à la
   // volée : incompatible avec un SRI stable). Recalculer l'integrity si la version change : `curl -s <url> | openssl dgst -sha384 -binary | openssl
   // base64 -A`.
-  const DOCX_LIB = { src: 'https://cdn.jsdelivr.net/npm/docx@9.7.1/dist/index.iife.js', integrity: 'sha384-9OH56uLhIvkZkwF0jWNlfpcK3gPuSy5DfEMNqKe156wCpkND+MDdtaRyd05kwpG0' };
+  const DOCX_LIB = { src: 'https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/index.iife.js', integrity: 'sha384-ud8085E8t6iW4uUom5nN5cpzTZ4OdsNKB/AKWfOsI62tzsoV2X7r7/o4KWESO8rq' };
   let docxLibPromise = null;
   async function ensureDocxLibLoaded() {
     if (!docxLibPromise) docxLibPromise = ExportCommon.loadScriptOnce(DOCX_LIB).catch(e => { docxLibPromise = null; throw e; });
     return docxLibPromise;
+  }
+  // Les graphiques natifs de Word (docx/charts : `docxCharts.ChartRun`) sont un second fichier de la MÊME version de docx, qui lit le global `docx` du premier : ils se chargent à la demande, au premier
+  // graphique créé (« Créer un graphique… ») d'un export, et jamais pour un document sans graphique (215 Ko de plus). Même règle pour l'empreinte : `curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A`.
+  const DOCX_CHARTS_LIB = { src: 'https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/charts.iife.js', integrity: 'sha384-PFbg0J+cwbPG1He8zpFvlw/uXmHMA3ea3Gyyw9aS2IIjX0zKpD7YeprlCNVCMs1Y' };
+  let docxChartsPromise = null;
+  async function ensureDocxChartsLoaded() {
+    await ensureDocxLibLoaded();
+    if (!docxChartsPromise) docxChartsPromise = (window.docxCharts ? Promise.resolve() : ExportCommon.loadScriptOnce(DOCX_CHARTS_LIB)).catch(e => { docxChartsPromise = null; throw e; });
+    return docxChartsPromise;
   }
 
   // 1 twip = 1/20 pt = 1/1440 pouce.
@@ -420,6 +429,126 @@ const DocxExport = (function () {
     return ExportCommon.codeLinesOf(node).map((line, i) => new docx.TextRun(Object.assign({ text: line }, runOpts(style), i ? { break: 1 } : {})));
   }
 
+  // Un graphique CRÉÉ (« Créer un graphique… », extensions/graphique/) sort en graphique NATIF de Word, que la personne modifie dans Word (« Modifier les données » ouvre ses données dans Excel), et non en image :
+  // ChartBlock.resolveImage pose le modèle d'Office du graphique (extensions/graphique/chart-office.js : les séries, leurs couleurs et leurs types, le titre, les axes) dans l'attribut `data-chart-office` de
+  // son image, avec le dessin PNG que la Lecture et le PDF gardent. La ligne que fabrique chartRunFrom est une `ChartRun` de docx (docx/charts, DOCX_CHARTS_LIB). Tout ce que Word ne saurait pas lire - bibliothèque
+  // injoignable, modèle illisible, donnée qu'il refuserait (la bibliothèque la refuse à la construction) - laisse l'image PNG, qui sort comme avant.
+  const CHART_MARKER = { shape: 'circle', size: 6 };
+  const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+  const hexOfChart = color => (HEX_COLOR.test(String(color)) ? String(color).slice(1).toUpperCase() : undefined);
+  const chartNumber = value => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+  const chartNumbers = values => (Array.isArray(values) ? values.map(chartNumber) : []);
+  const isWhole = value => value === null || Math.abs(value - Math.round(value)) < 1e-9;
+  // Le modèle lu sur l'image : null quand l'image n'en porte pas ou qu'il est illisible.
+  function chartModelOf(node) {
+    const text = node.getAttribute('data-chart-office');
+    if (!text) return null;
+    try {
+      const model = JSON.parse(text);
+      return model && model.v === 1 && typeof model.kind === 'string' && Array.isArray(model.series) && model.series.length ? model : null;
+    } catch (e) { return null; }
+  }
+  // Les options de docx.ChartRun d'un modèle d'Office (fonction pure, vérifiée seule par dev-tests/scenarios-chart-office.js). Les couleurs sont celles du dessin ; les valeurs affichées s'écrivent sans décimale
+  // quand toutes sont entières, avec deux sinon ; le titre d'un axe est le nom de sa colonne (celui de l'unique série pour l'axe des valeurs), comme dans le dessin ; la légende est en haut quand il y a
+  // plusieurs séries, en bas pour les secteurs et l'anneau, et absente d'une série seule (l'axe porte son nom). Barres couchées : la première étiquette est en haut, comme dans le dessin et dans la table, et
+  // l'axe des valeurs reste en bas (Word met la première étiquette en bas, et l'axe des valeurs en haut quand on les retourne, sauf s'il croise au maximum).
+  function chartOptionsFromModel(model) {
+    const series = model.series;
+    const axes = model.axes || {};
+    const points = s => (Array.isArray(s.points) ? s.points : []);
+    const allValues = chartNumbers(series.reduce((all, s) => all.concat(Array.isArray(s.values) ? s.values : points(s).map(point => point[1])), []));
+    const numberFormat = allValues.every(isWhole) ? '#,##0' : '#,##0.00';
+    const out = { chartArea: { border: 'none' } };
+    if (model.title) out.title = String(model.title);
+    const categories = (Array.isArray(model.categories) ? model.categories : []).map(String);
+    const nameOf = s => String(s.name == null ? '' : s.name);
+    const axisOf = name => (name ? { title: String(name) } : {});
+
+    if (model.kind === 'pie' || model.kind === 'donut') {
+      const part = series[0];
+      out.type = model.kind === 'donut' ? 'doughnut' : 'pie';
+      out.categories = categories;
+      const colors = (Array.isArray(part.colors) ? part.colors : []).map(hexOfChart);
+      out.series = [{ name: nameOf(part), values: chartNumbers(part.values), colors }];
+      out.dataLabels = Object.assign({ percentage: true }, model.labels ? { value: true } : {});
+      // Les parts d'un anneau portent leur texte dans l'anneau (Word n'en met pas dehors) : l'encre se règle sur la couleur de chaque part ; celles d'un disque se lisent dehors.
+      if (model.kind === 'donut') out.series[0].pointLabels = colors.map(color => (color ? { font: { color: hexOfChart(ColorMath.inkOn('#' + color)) } } : undefined));
+      else out.dataLabels.position = 'outsideEnd';
+      out.legend = { position: 'bottom' };
+      if (model.kind === 'donut') out.holeSize = 60;
+      return out;
+    }
+
+    out.legend = series.length > 1 ? { position: 'top' } : false;
+
+    if (model.kind === 'scatter') {
+      out.type = 'scatter';
+      out.markers = CHART_MARKER;
+      out.lines = 'none';
+      out.series = series.map(s => ({ name: nameOf(s), color: hexOfChart(s.color), points: points(s).map(point => ({ x: Number(point[0]), y: Number(point[1]) })) }));
+      out.xAxis = axisOf(axes.category);
+      out.yAxis = axisOf(axes.value);
+      if (model.xDates) out.xAxis.numberFormat = series.every(s => points(s).every(point => isWhole(chartNumber(point[0])))) ? 'yyyy-mm-dd' : 'yyyy-mm-dd hh:mm';
+      if (model.labels) out.dataLabels = { value: true, position: 'above', numberFormat };
+      return out;
+    }
+
+    if (model.kind === 'radar') {
+      out.type = 'radar';
+      out.categories = categories;
+      out.markers = CHART_MARKER;
+      out.filled = false;
+      out.series = series.map(s => ({ name: nameOf(s), color: hexOfChart(s.color), values: chartNumbers(s.values) }));
+      if (model.scale && Number.isFinite(model.scale.min) && Number.isFinite(model.scale.max)) out.valueAxis = { minimum: model.scale.min, maximum: model.scale.max };
+      if (model.labels) out.dataLabels = { value: true, numberFormat };
+      return out;
+    }
+
+    // Barres, courbe, aire : un type par série (des barres et une courbe sur les mêmes axes), la forme de la définition donnant celui du graphique.
+    const horizontal = model.kind === 'bar' && !!model.horizontal;
+    out.type = model.kind === 'bar' ? (horizontal ? 'bar' : 'column') : model.kind;
+    out.categories = categories;
+    out.stacking = model.stacked ? 'stacked' : 'none';
+    out.series = series.map((s) => {
+      const type = s.type === 'line' || s.type === 'area' ? s.type : 'column';
+      const item = { name: nameOf(s), color: hexOfChart(s.color), values: chartNumbers(s.values) };
+      if (!horizontal) item.type = type;
+      if (type === 'line') item.markers = CHART_MARKER;
+      if (model.labels) {
+        // Au-dessus des barres, au milieu des barres empilées (dans l'encre qui se lit sur leur couleur), au-dessus des points d'une courbe ; une aire n'a pas de place à donner.
+        if (type === 'column') item.dataLabels = model.stacked ? { value: true, position: 'center', numberFormat, font: { color: hexOfChart(ColorMath.inkOn(HEX_COLOR.test(String(s.color)) ? s.color : '#808080')) } } : { value: true, position: 'outsideEnd', numberFormat };
+        else item.dataLabels = type === 'line' ? { value: true, position: 'above', numberFormat } : { value: true, numberFormat };
+      }
+      return item;
+    });
+    out.categoryAxis = axisOf(axes.category);
+    out.valueAxis = axisOf(axes.value);
+    if (horizontal) {
+      out.categoryAxis.reverseOrder = true;
+      out.valueAxis.crossesAt = 'maximum';
+    }
+    return out;
+  }
+  // La ligne du graphique natif de `node` (une `ChartRun`, de la taille et de la place de l'image : `runOptions` est celui de l'image), ou null : l'image n'est pas un graphique créé, elle est dans un cadre de diapositive
+  // (Word ne met pas de graphique dans une zone de texte), la bibliothèque ne se charge pas, ou Word refuserait ses données.
+  async function chartRunFrom(node, runOptions) {
+    const model = chartModelOf(node);
+    if (!model || node.closest('.pp-free-frame')) return null;
+    try {
+      await ensureDocxChartsLoaded();
+      const alt = (node.getAttribute('alt') || '').trim();
+      const options = Object.assign(chartOptionsFromModel(model), {
+        transformation: runOptions.transformation,
+        altText: Object.assign({ id: runOptions.altText.id, name: '', title: '' }, alt ? { description: alt } : {}),
+      });
+      if (runOptions.floating) options.floating = runOptions.floating;
+      return new docxCharts.ChartRun(options);
+    } catch (e) {
+      console.warn('[DocxExport] graphique natif impossible, l\'image est gardée :', e);
+      return null;
+    }
+  }
+
   async function imageRunsFrom(node, style, ctx) {
     if (node.hasAttribute('data-pdf-skip')) return [];
     // « Sur toutes les pages » (js/page-layer.js) : ancrée dans l'en-tête de chaque page (buildDocxDocument), pas dans le paragraphe qui la porte.
@@ -433,7 +562,7 @@ const DocxExport = (function () {
     const runOptions = { type: imgData.type, data: imgData.data, transformation: { width: imgData.width, height: imgData.height }, altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' } };
     const floatingOptions = docxFloatingOptionsFrom(node, ctx.imageIdCounter, ctx);
     if (floatingOptions) runOptions.floating = floatingOptions;
-    const imgRun = new docx.ImageRun(runOptions);
+    const imgRun = (await chartRunFrom(node, runOptions)) || new docx.ImageRun(runOptions);
     markImageRun(imgRun, node, floatingOptions);
     return [imgRun];
   }
@@ -1159,8 +1288,8 @@ const DocxExport = (function () {
     ctx.headingBlocks.push(entry);
     return entry;
   }
-  // BookmarkStart et BookmarkEnd posés à la main, jamais `new docx.Bookmark` : docx.js 9.7.1 y crée un compteur par instance, donc le même w:id (1) pour
-  // tous les signets du fichier, alors que Word apparie le début et la fin d'un signet par cet id.
+  // BookmarkStart et BookmarkEnd posés à la main, jamais `new docx.Bookmark` : docx.js 9.7.1 y créait un compteur par instance, donc le même w:id (1) pour
+  // tous les signets du fichier, alors que Word apparie le début et la fin d'un signet par cet id ; les identifiants restent donnés ici, appariés signet par signet.
   const bookmarkedRuns = (entry, runs) => [new docx.BookmarkStart(entry.anchor, entry.bookmarkId)].concat(runs, [new docx.BookmarkEnd(entry.bookmarkId)]);
   const bookmarksAround = (entries, runs) => entries.filter(Boolean).reduce((inner, entry) => bookmarkedRuns(entry, inner), runs);
 
@@ -1845,5 +1974,5 @@ const DocxExport = (function () {
     ExportCommon.downloadBlob(blob, (filename || 'publipostage') + '.docx');
   }
 
-  return { exportCurrentRecord, getDocxBlobForRecord, ensureDocxLibLoaded };
+  return { exportCurrentRecord, getDocxBlobForRecord, ensureDocxLibLoaded, ensureDocxChartsLoaded, chartOptionsFromModel };
 })();

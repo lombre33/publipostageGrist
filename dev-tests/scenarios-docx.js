@@ -844,24 +844,34 @@
     });
 
   add('docx_toc_styles_are_defined_with_the_toc',
-    'Un document qui a un sommaire définit les styles « toc 1 » à « toc 6 » (indentation par niveau, gras du premier niveau) que Word reprend en mettant le sommaire à jour ; un document sans sommaire ne les porte pas',
+    'Un document qui a un sommaire définit les styles « toc 1 » à « toc 6 » (indentation par niveau, gras du premier niveau), une seule fois chacun, que Word reprend en mettant le sommaire à jour ; sans sommaire, le document ne porte pas les leurs (docx 9.15 garde ses styles « toc » neutres et masqués dans tout document)',
     async (h) => {
       const withToc = await h.exportDocxParts('<div class="toc-marker"></div><h1>Alpha</h1><h2>Beta</h2>');
       const without = await h.exportDocxParts('<h1>Alpha</h1><h2>Beta</h2>');
-      const styleOf = (parts, id) => Array.from(parts.part('word/styles.xml').getElementsByTagName('w:style')).find(st => st.getAttribute('w:styleId') === id);
+      const stylesOf = (parts, id) => Array.from(parts.part('word/styles.xml').getElementsByTagName('w:style')).filter(st => st.getAttribute('w:styleId') === id);
+      const hidden = st => !!st.getElementsByTagName('w:semiHidden')[0];
       const bad = [];
       [1, 2, 3, 4, 5, 6].forEach(n => {
-        const st = styleOf(withToc, 'TOC' + n);
-        if (!st) return bad.push('TOC' + n + ' absent');
+        const found = stylesOf(withToc, 'TOC' + n);
+        if (!found.length) return bad.push('TOC' + n + ' absent');
+        // Un identifiant de style n'existe qu'une fois : celui du widget remplace le style neutre de la bibliothèque, il ne s'y ajoute pas.
+        if (found.length !== 1) return bad.push('TOC' + n + ' défini ' + found.length + ' fois');
+        const st = found[0];
         const name = st.getElementsByTagName('w:name')[0].getAttribute('w:val');
         const left = st.getElementsByTagName('w:ind')[0] ? st.getElementsByTagName('w:ind')[0].getAttribute('w:left') : null;
         const bold = !!st.getElementsByTagName('w:b')[0];
         if (name !== 'toc ' + n) bad.push('TOC' + n + ' nom ' + name);
         if (left !== String((n - 1) * 360)) bad.push('TOC' + n + ' retrait ' + left);
         if (bold !== (n === 1)) bad.push('TOC' + n + ' gras ' + bold);
+        if (hidden(st)) bad.push('TOC' + n + ' masqué alors que le sommaire s\'en sert');
       });
-      if (styleOf(without, 'TOC1')) bad.push('TOC1 présent sans sommaire');
-      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'six styles, aucun sans sommaire' };
+      // Sans sommaire, ce qui reste est le style neutre et masqué de la bibliothèque : jamais celui du widget (ni gras, ni retrait de 360).
+      [1, 2, 3, 4, 5, 6].forEach(n => {
+        const found = stylesOf(without, 'TOC' + n);
+        if (found.length > 1) bad.push('TOC' + n + ' défini ' + found.length + ' fois sans sommaire');
+        found.forEach((st) => { if (!hidden(st) || st.getElementsByTagName('w:b')[0]) bad.push('TOC' + n + ' du widget présent sans sommaire'); });
+      });
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'six styles, un seul de chaque avec le sommaire, aucun du widget sans' };
     });
 
   add('docx_toc_without_headings',

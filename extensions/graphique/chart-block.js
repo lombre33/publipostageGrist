@@ -12,7 +12,8 @@
 // La fenêtre « Graphique de la page… » s'ouvre depuis le menu « Lien et blocs de contenu » (index.html, js/main-toolbar.js) ; styles dans
 // extensions/graphique/chart-block.css.
 // Le graphique CRÉÉ dans le modèle (« Créer un graphique… », chart-make.js et chart-make-ui.js) suit le même chemin : son nœud porte `data-chart-spec` (sa définition) à la place de `data-chart-section`,
-// `drawMade` lit ses lignes et le trace avec ECharts, et le cadre, la Lecture et les exports le traitent comme celui de la page.
+// `drawMade` lit ses lignes et le trace avec ECharts, et le cadre, la Lecture et les exports le traitent comme celui de la page. Il en tire aussi le modèle d'Office (chart-office.js), que la Lecture et l'export posent dans l'attribut `data-chart-office` de
+// l'image : Word le refait en graphique natif et modifiable (js/docx-export.js), l'image PNG restant celle de tout le reste.
 // Ce fichier fait partie de l'extension « graphique » (extensions/graphique/), que Grist Factory Suite active ou non : le reste du widget ne l'appelle jamais directement mais par
 // js/chart-entry.js, qui garde la forme du graphique (le nœud, la taille du cadre, le grisé) et répond aussi quand l'extension est absente.
 const ChartBlock = (function () {
@@ -54,7 +55,12 @@ const ChartBlock = (function () {
     try { found = await ChartSource.rows(spec, scope, tableId, record); }
     catch (e) { throw problem('rows', e && e.message ? e.message : 'Lignes illisibles'); }
     if (!found.length) return { empty: true };
-    return { uri: await ChartMake.toImage(ChartMake.option(def, ChartSource.series(spec, found), { width, height }), width, height) };
+    const series = ChartSource.series(spec, found);
+    const drawn = { uri: await ChartMake.toImage(ChartMake.option(def, series, { width, height }), width, height) };
+    // Le modèle d'Office du même graphique (chart-office.js) : ce que Word, PowerPoint et Excel refont en graphique natif et modifiable. Un graphique qu'il ne sait pas dire (un nuage dont l'abscisse est du texte, plus de
+    // 2 000 étiquettes) n'en a pas : il sort en image, et un modèle qui ne se construit pas ne gâte jamais le dessin.
+    try { drawn.office = ChartOffice.model(def, series); } catch (e) { console.warn('[ChartBlock] modèle d\'Office impossible', e); }
+    return drawn;
   }
 
   // À la Lecture et à l'export
@@ -78,6 +84,8 @@ const ChartBlock = (function () {
     }
     if (drawn.empty) { img.remove(); return; }
     img.setAttribute('src', drawn.uri);
+    // Le modèle d'Office voyage avec l'image jusqu'aux exports (Word, PowerPoint, Excel le lisent sur l'attribut : ils reçoivent le HTML en texte) ; le HTML, le Markdown et le PDF ne le copient pas.
+    if (drawn.office) img.setAttribute('data-chart-office', JSON.stringify(drawn.office));
     // Le PNG a exactement les proportions réglées : sans hauteur fixe, un graphique plus large que sa case rétrécit sans se déformer.
     img.style.width = size.width + 'px';
     img.style.height = '';
