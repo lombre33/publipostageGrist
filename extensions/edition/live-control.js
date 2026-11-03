@@ -142,6 +142,17 @@ const LiveControl = (function () {
     live.bar = null;
   }
 
+  // Un enregistrement d'une autre personne du direct : sa date de Grist et si le texte d'ici est dans l'état qu'elle a enregistré (jugé à l'instant où il est entendu), puis dit aux abonnés (js/main.js : adoptLiveSave).
+  function hearSaved(live, detail) {
+    const modified = typeof detail.modified === 'string' && /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(detail.modified) ? Number(detail.modified) : detail.modified;
+    const atState = live.session.isAtState(detail.stateVector);
+    if (atState) live.atSavedState = true;
+    return { modified, atState };
+  }
+  function tellSaved(heard) {
+    savedListeners.forEach((fn) => { try { fn(heard); } catch (e) { console.warn('[LiveControl] abonné à l’enregistrement en échec', e); } });
+  }
+
   // Les événements du moteur
   function onEvent(live, type, detail) {
     if (type === 'rows') {
@@ -156,10 +167,9 @@ const LiveControl = (function () {
       if (LiveChannel.isInactive(detail)) live.paused = true; else live.trouble = true;
       refreshBar(live);
     } else if (type === 'saved') {
-      const modified = typeof detail.modified === 'string' && /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(detail.modified) ? Number(detail.modified) : detail.modified;
-      const atState = live.session.isAtState(detail.stateVector);
-      if (atState) live.atSavedState = true;
-      savedListeners.forEach((fn) => { try { fn({ modified, atState }); } catch (e) { console.warn('[LiveControl] abonné à l’enregistrement en échec', e); } });
+      // Le dernier enregistrement du salon, entendu pendant l'accroche, attend que le direct soit allumé (run) : js/main.js n'adopte une date que d'une page qui est en direct.
+      const heard = hearSaved(live, detail);
+      if (live.phase === 'starting') live.heardSaved = heard; else tellSaved(heard);
     } else if (type === 'replaced') {
       lostRoom(live, detail && detail.reason);
     }
@@ -225,7 +235,7 @@ const LiveControl = (function () {
     const editor = EditorCore.getEditor();
     const doc = Templates.getCurrentId();
     if (!editor || doc == null) return false;
-    const live = { doc: String(doc), automatic, phase: 'starting', cancelled: false, paused: false, trouble: false, problemShown: false, atSavedState: false, offs: [], session: null, channel: null, binding: null, bar: null, user: null, running: null };
+    const live = { doc: String(doc), automatic, phase: 'starting', cancelled: false, paused: false, trouble: false, problemShown: false, atSavedState: false, heardSaved: null, offs: [], session: null, channel: null, binding: null, bar: null, user: null, running: null };
     current = live;
     LiveEntry.changed();
     live.running = run(live, editor);
@@ -296,6 +306,9 @@ const LiveControl = (function () {
       live.session.setUser(live.user);
     }
     live.phase = 'live';
+    // Le dernier enregistrement du salon, entendu en s'accrochant : sa date est désormais celle que cette page connaît. Rejoindre avec un modèle ouvert d'avant cet enregistrement la laissait sur l'ancienne,
+    // et le jour où cette page devenait celle qui enregistre, Grist en avait une plus récente : « modifié ailleurs », l'enregistrement bloqué.
+    if (live.heardSaved) { const heard = live.heardSaved; live.heardSaved = null; tellSaved(heard); }
     wirePage(live);
     buildBar(live);
     Editor.refreshPaginationPreview();

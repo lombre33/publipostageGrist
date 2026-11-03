@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 // L'écriture en direct dans le texte d'un modèle (extension « édition » de Grist Factory Suite : js/live-entry.js, extensions/edition/), dans un vrai navigateur, avec des pages du widget qui
 // partagent UNE table du direct (dev-tests/live-test-kit.mjs : un faux Grist par page, la table Publipostage_Direct commune côté Node, un GFS simulé qui donne le fichier assemblé
-// `edition-live` sous la forme de la consigne 012 de GFS : <script type="module">, empreinte, CORS). Trois personnes : Alice (A) et Bob (B) écrivent, Carole (C) ne rejoint pas.
+// `edition-live` sous la forme de la consigne 012 de GFS : <script type="module">, empreinte, CORS). Trois personnes : Alice (A) et Bob (B) écrivent, Carole (C) ne rejoint pas (sauf en retard, à la section 5).
 //   1) démarrer seul (rien à demander), rejoindre (la question, ou refuser), la barre des personnes, la ligne du menu ;
 //   2) deux personnes tapent : même texte des deux côtés, le curseur de l'autre est dessiné ;
 //   3) Annuler et Rétablir par personne : chacun ne défait que ses frappes, au clavier comme par le bouton ;
 //   4) ce que le direct ferme : le suivi des modifications, l'en-tête et le pied, les tableaux liés, la restauration d'une version, la Recherche - grisés avec leur raison, jamais retirés ;
 //   5) l'enregistrement : UNE personne enregistre le modèle pour tout le monde, l'autre n'écrit qu'un réglage qui lui est propre, la date de l'une est adoptée par l'autre, la personne qui
-//      enregistre passe à l'autre quand sa page se cache, une personne hors du direct qui enregistre est un conflit (le bandeau), « Recharger » sort du direct ;
+//      enregistre passe à l'autre quand sa page se cache, une personne qui rejoint après les enregistrements du groupe prend leur date (son bandeau « modifié ailleurs » disparaît, et elle enregistre sans
+//      bandeau le jour où elle devient celle qui enregistre), une personne hors du direct qui enregistre est un conflit (le bandeau), « Recharger » sort du direct ;
 //   6) partir : changer de modèle, la barre, la dernière personne qui part vide la table ;
 //   7) les marques d'une puce (gras) voyagent, le texte qui ressemble à une adresse n'est pas lié par personne ;
 //   8) les 25 modèles de la galerie sortent identiques de l'aller-retour par Yjs ;
@@ -260,6 +261,29 @@ await hide(S.page, false);
 await until(S.page, () => LiveEntry.isScribe(), null, 10000);
 await until(O.page, () => !LiveEntry.isScribe(), null, 10000);
 check(`${sName} remet sa page au premier plan : elle redevient la personne qui enregistre`, (await flags(S.page)).scribe && !(await flags(O.page)).scribe);
+
+// Une personne qui rejoint plus tard : Carole a ouvert le modèle AVANT les enregistrements du groupe. Elle prend la date du DERNIER enregistrement du groupe ; sinon, le jour où elle devient celle qui
+// enregistre, Grist en a une plus récente : le bandeau « modifié ailleurs » bloque son enregistrement.
+const latest = await model(S.page);
+const knows = page => page.evaluate((date) => Templates.sameDateModif(LiveEntry.savedDate(), date), latest.dateModif);
+check('avant de rejoindre, Carole connaît la date d\'AVANT les enregistrements du groupe (elle avait ouvert le modèle plus tôt)', !(await knows(C.page)), { known: await C.page.evaluate(() => LiveEntry.savedDate()), latest: latest.dateModif });
+// Hors du direct, sa page voit ce que voit toute page dont le modèle a été réécrit sous ses yeux : le bandeau « modifié ailleurs » (au repos, un passage relit toutes les 15 s).
+const sawBanner = await C.page.waitForFunction(() => document.getElementById('autosave-conflict-banner').style.display !== 'none', null, { timeout: 40000 }).then(() => true, () => false);
+check('hors du direct, la page de Carole montre le bandeau « modifié ailleurs » (le groupe a enregistré pendant que son modèle était ouvert)', sawBanner, await flags(C.page));
+const late = await startLive(C.page, { ask: true, answer: 'Rejoindre' });
+check('Carole rejoint le direct', late.started === true && (await flags(C.page)).live === 'live', late);
+check('elle prend la date du dernier enregistrement du groupe (celle du modèle dans Grist) : plus de bandeau pour cet enregistrement, rien « à enregistrer » chez elle', (await knows(C.page)) && !(await flags(C.page)).unsaved && !(await flags(C.page)).banner, { known: await C.page.evaluate(() => LiveEntry.savedDate()), latest: latest.dateModif, flags: await flags(C.page) });
+await hide(S.page, true); await hide(O.page, true);
+await until(C.page, () => LiveEntry.isScribe(), null, 15000);
+await typeAt(C.page, 'end', ' Carole-tard');
+let lateSaved = null;
+for (let i = 0; i < 40 && !lateSaved; i++) { const m = await model(C.page); if (m && m.contenu.includes('Carole-tard')) lateSaved = m; else await C.page.waitForTimeout(500); }
+check('devenue la seule page visible, Carole enregistre à son tour (« Carole-tard » est dans le modèle) sans le bandeau « modifié ailleurs »', !!lateSaved && !(await flags(C.page)).banner, { lateSaved: !!lateSaved, flags: await flags(C.page) });
+await hide(S.page, false); await hide(O.page, false);
+await stopLive(C.page);
+await until(S.page, () => LiveEntry.isScribe(), null, 15000);
+await until(O.page, () => !LiveEntry.isScribe(), null, 15000);
+check('Carole sort : le texte du groupe reste le même des deux côtés, et il y a de nouveau une seule personne qui enregistre', (await converge([A.page, B.page])) !== null && (await editorText(S.page)).includes('Carole-tard') && !(await flags(O.page)).scribe, { s: await flags(S.page), o: await flags(O.page) });
 
 // Carole n'est pas dans le direct : son enregistrement manuel écrit un modèle que le groupe ne connaît pas = un conflit, dit à la personne qui enregistre.
 await C.page.evaluate(() => { const select = document.getElementById('template-select'); select.value = '1'; select.dispatchEvent(new Event('change')); });

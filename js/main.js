@@ -3243,11 +3243,22 @@
     document.addEventListener('pp:mailClientChanged', scheduleEmailLengthGauge);
   }
 
+  // La date `a` d'un modèle est-elle antérieure à `b` ? (secondes de Grist, ou leur écriture ISO quand la relecture a échoué ; une date illisible n'est antérieure à rien)
+  function dateModifBefore(a, b) {
+    const seconds = value => (typeof value === 'number' ? value : Date.parse(value) / 1000);
+    const x = seconds(a), y = seconds(b);
+    return Number.isFinite(x) && Number.isFinite(y) && x < y && !Templates.sameDateModif(a, b);
+  }
   // L'écriture en direct (extension « édition », js/live-entry.js) : ce que le socle lui dit du modèle ouvert, ce qu'elle peut lui demander, et l'enregistrement d'une autre personne du direct.
   // Sa date est celle que ce widget connaît maintenant (le passage suivant n'y voit pas un conflit) et, si le texte d'ici est dans l'état qu'elle a enregistré, rien n'est plus « à enregistrer ».
   function adoptLiveSave({ modified, atState }) {
     if (!LiveEntry.isLive()) return;
+    // Jamais en arrière : le dernier enregistrement que le salon garde peut être plus ancien que le modèle ouvert ici (enregistré depuis, hors du direct) ; sa date ferait voir un conflit qui n'en est pas un.
+    if (dateModifBefore(modified, autosaveLastKnownDateModif)) return;
     autosaveLastKnownDateModif = modified;
+    // Une page ouverte hors du direct pendant que le groupe enregistrait montre le bandeau « modifié ailleurs » d'un enregistrement du groupe ; en rejoignant, elle prend le texte du groupe, qui est
+    // celui de cet enregistrement ou d'un plus récent : le conflit est réglé. Un enregistrement fait depuis hors du direct (plus récent que celui du groupe) garde le bandeau.
+    if (autosaveConflictActive && autosaveConflictTpl && !dateModifBefore(modified, autosaveConflictTpl.dateModif)) hideConflictBanner();
     if (atState && !autosaveSettingsDirty) autosaveDirty = false;
     updateSaveStatus();
   }
