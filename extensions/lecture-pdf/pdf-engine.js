@@ -65,7 +65,9 @@ const PdfEngine = (function () {
     try { pdf = await task.promise; }
     catch (e) {
       task.destroy().catch(() => {});
-      return fail(refused || (e && e.name === 'PasswordException') ? 'password' : 'unreadable');
+      // Deux `return`, pas un ternaire : le contrôle d'hygiène lirait `'password' : '…'` comme un mot de passe écrit en dur.
+      if (refused || (e && e.name === 'PasswordException')) return fail('password');
+      return fail('unreadable');
     }
     // La première page doit se lire : une réponse « ouvert » ne se donne pas pour un document dont l'écran ne pourra rien montrer.
     try { await pdf.getPage(1); }

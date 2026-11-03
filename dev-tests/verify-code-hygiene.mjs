@@ -130,6 +130,8 @@ const LIBRARY_CLASSES = new Set([
   'resize-cursor',       // prosemirror-tables : curseur pendant le survol d'une bordure
   'ProseMirror-selectednode', // prosemirror-view : nœud « atome » sélectionné (la bulle choisie d'une variable ou d'un calcul)
   'ProseMirror-separator', // prosemirror-view : l'<img> posée après une image en fin de paragraphe (css/editor-v2.css retire sa ligne quand l'image est seule sur la sienne)
+  'endOfContent',        // pdf.js (TextLayer) : le bloc de fin de la couche de texte d'une page, qui garde la sélection continue (extensions/lecture-pdf/pdf-view.css)
+  'selecting',           // pdf.js (TextLayer) : posée sur la couche de texte pendant une sélection à la souris, elle remonte le bloc de fin (même feuille)
 ]);
 
 // Le code du widget : js/ et css/, et le code des extensions de Grist Factory Suite (extensions/<identifiant>/, chargé au premier usage, js/extensions.js) - il est publié et soumis aux mêmes règles.
