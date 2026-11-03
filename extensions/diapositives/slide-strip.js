@@ -470,6 +470,30 @@ const SlideStrip = (function () {
     });
     return copies;
   }
+  // Une copie de la diapositive d'adresse `anchorId`, pour la vue d'un cadre (js/slide-view.js) : { page, nodes, key, width, height }, la page (à la taille de la feuille, ses blocs copiés comme ceux d'une miniature, 
+  // sans la réduire) ou null quand cette diapositive n'existe plus. `seen` : ce que la copie précédente a rendu ({ nodes, key }) ; quand ni les blocs de la diapositive, ni la page n'ont changé, rend
+  // `{ same: true, nodes, key }` et ne copie rien. Une page, pas une miniature : la bande peut être cachée ou loin de cette diapositive.
+  function pageCopy(anchorId, seen) {
+    if (!shown || !editor || editor.isDestroyed || editingHeaderFooter()) return null;
+    const doc = editor.state.doc;
+    const index = SlideProps.anchorsOf(doc).indexOf(anchorId);
+    if (index < 0) return null;
+    const slide = slidesOf(doc)[index];
+    const geometry = pageGeometry();
+    const nodes = slide.nodes.map(entry => entry.node);
+    if (seen && seen.key === geometry.key && seen.nodes.length === nodes.length && nodes.every((node, i) => node === seen.nodes[i])) return { same: true, nodes, key: geometry.key };
+    const page = el('div', 'pp-slide-page tiptap');
+    page.replaceChildren(...copiesOf(slide, geometry));
+    return { page, nodes, key: geometry.key, width: geometry.width, height: geometry.height };
+  }
+  // Les miniatures des diapositives qui portent une vue de diapositive (js/slide-view.js) : le calque de la vue vient de changer (la diapositive montrée a été modifiée, ou la vue vient de se remplir) et la
+  // miniature en a copié l'ancien ; elle se refait à la prochaine pause de la frappe, avec lui.
+  function redrawViews() {
+    if (!shown || !editor || editor.isDestroyed || editingHeaderFooter()) return;
+    if (editor.state.doc !== readDoc) refresh(false);
+    rows.forEach((r, i) => { if (slides[i] && slides[i].nodes.some(({ node }) => node.type.name === 'freeFrame' && node.attrs.view)) r.nodes = null; });
+    scheduleThumbs();
+  }
   function tidyCopy(copy) {
     copy.querySelectorAll('.editor-image-handle, .editor-image-move-handle, .column-resize-handle, .ProseMirror-gapcursor').forEach(node => node.remove());
     [copy, ...copy.querySelectorAll('*')].forEach((node) => {
@@ -1633,6 +1657,8 @@ const SlideStrip = (function () {
     refresh(true);
     // Une autre présentation à l'écran, une extension allumée ou éteinte : le volet d'import relit ses sources et son grisé.
     if (typeof SlideImport !== 'undefined') SlideImport.sync(true);
+    // Les vues de diapositive (js/slide-view.js) que le texte porte déjà se remplissent des copies que la bande sait faire, dès qu'elle les sait faire.
+    if (typeof SlideView !== 'undefined') SlideView.schedule(0);
   }
   function hide() {
     if (!shown) return;
@@ -1668,9 +1694,11 @@ const SlideStrip = (function () {
     layerTrigger = null;
     settling = [];
     SlidesEntry.relayout();
+    // Sans la bande, plus de copie à montrer : les vues se cachent et le texte de repli de leur cadre se lit.
+    if (typeof SlideView !== 'undefined') SlideView.schedule(0);
   }
 
   SlidesEntry.register({ show, hide });
 
-  return { show, hide, slidesOf, importAfterCurrent, settleLinked, syncLinks: () => syncLinks(false), current: () => current, isOff: () => off, isShown: () => shown };
+  return { show, hide, slidesOf, pageCopy, redrawViews, importAfterCurrent, settleLinked, syncLinks: () => syncLinks(false), current: () => current, isOff: () => off, isShown: () => shown };
 })();

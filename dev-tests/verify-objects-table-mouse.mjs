@@ -84,10 +84,10 @@ async function part(lang, colorScheme) {
     id: b.dataset.action, text: b.textContent.trim(), tip: b.getAttribute('data-tip') || '', off: b.getAttribute('aria-disabled') === 'true' || b.disabled,
     rect: (() => { const r = b.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width }; })(),
   })), OBJECTS_MENU);
-  const labels = lang === 'fr' ? ['Cadre de texte', 'Tableau', 'Tableau d’un modèle Grille…'] : ['Text frame', 'Table', 'Table from a Grid template…'];
-  check(tag + 'le menu a trois lignes dans l\'ordre : le cadre de texte, le tableau, le tableau d\'un modèle Grille', JSON.stringify(names.map(n => n.text)) === JSON.stringify(labels), names.map(n => n.text));
-  check(tag + 'les trois lignes sont dans le panneau et aucune n\'est grisée', names.length === 3 && names.every(n => inPanel(n.rect) && !n.off), names);
-  check(tag + 'l\'info-bulle des deux nouvelles lignes dit où le tableau se pose : la diapositive 2', /\b2\b/.test(names[1].tip) && /\b2\b/.test(names[2].tip), names.map(n => n.tip));
+  const labels = lang === 'fr' ? ['Cadre de texte', 'Tableau', 'Vue…', 'Tableau d’un modèle Grille…'] : ['Text frame', 'Table', 'Slide view…', 'Table from a Grid template…'];
+  check(tag + 'le menu a quatre lignes dans l\'ordre : le cadre de texte, le tableau, la vue d\'une diapositive, le tableau d\'un modèle Grille', JSON.stringify(names.map(n => n.text)) === JSON.stringify(labels), names.map(n => n.text));
+  check(tag + 'les quatre lignes sont dans le panneau et aucune n\'est grisée', names.length === 4 && names.every(n => inPanel(n.rect) && !n.off), names);
+  check(tag + 'l\'info-bulle de « Tableau » et celle de « Tableau d\'un modèle Grille… » disent où le tableau se pose : la diapositive 2', /\b2\b/.test(names[1].tip) && /\b2\b/.test(names[3].tip), names.map(n => n.tip));
   await page.mouse.move(WIDTH / 2, HEIGHT - 20, { steps: 4 });
   await sleep(300);
 
@@ -197,7 +197,7 @@ async function part(lang, colorScheme) {
   await press('ArrowDown');
   check(tag + '↓ sur le bouton Objets donne le clavier à « Cadre de texte »', (await active()) === 'textFrame', await active());
   await press('ArrowDown');
-  check(tag + '↓ mène à « Tableau d\'un modèle Grille… » (sous la paire)', (await active()) === 'linkedTable', await active());
+  check(tag + '↓ mène à « Tableau d\'un modèle Grille… » (sous les trois boutons)', (await active()) === 'linkedTable', await active());
   await press('ArrowUp');
   check(tag + '↑ revient sur « Cadre de texte » (même colonne)', (await active()) === 'textFrame', await active());
   await press('ArrowRight');

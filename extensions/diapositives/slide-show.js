@@ -354,7 +354,9 @@ const SlideShow = (function () {
     if (run || launching) return;
     if (off) { SlidesEntry.explainOff(); return; }
     closeMenu(false);
-    const html = SlidesEntry.outputHtml('presentation', Editor.getHTML(), { theme: PageLayout.getTheme() });
+    // Une présentation qui a des vues de diapositive (js/slide-view.js) garde le repère des diapositives que le texte vise : la copie que la vue montre se prend à cette adresse.
+    const source = Editor.getHTML();
+    const html = SlidesEntry.outputHtml('presentation', source, { theme: PageLayout.getTheme(), anchors: SlideView.shows(source) });
     const headerFooter = Editor.getHeaderFooterData();
     const how = { startPage: fromCurrent ? firstPageOf(currentSlide()) : 0, fromCurrent: !!fromCurrent };
     const focusBack = document.activeElement;

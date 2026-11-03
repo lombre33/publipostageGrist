@@ -20,6 +20,8 @@ const ObjectsMenu = (function () {
     // « Tableau » (demande du 02/11, « pareil que sur un document ») : un tableau local de deux lignes et deux colonnes dans un cadre, ou « Tableau d'un modèle Grille… », la copie liée d'un modèle
     // Grille (js/linked-table.js : sa liste avec recherche, puis le tableau posé dans un cadre). Le curseur y va, la barre du tableau s'ouvre, avec le lien pour un tableau lié.
     { id: 'table', pair: true, icon: 'table', label: 'slides.objects.table', tip: 'slides.objects.tableTip', place: (ed, slideStart) => FreeFrame.insertTable(ed, slideStart) },
+    // « Vue… » (demande du 02/11, « Lien, puis aperçu animé d'affilée », troisième niveau) : la liste avec recherche des diapositives, puis un cadre qui montre la choisie en direct et y mène au clic (js/slide-view.js).
+    { id: 'slideView', pair: true, icon: 'slideView', label: 'slides.objects.slideView', tip: 'slides.objects.slideViewTip', picker: true },
     { id: 'linkedTable', icon: 'linkedTable', label: 'slides.objects.linkedTable', tip: 'slides.objects.linkedTableTip', picker: true },
   ];
   // Les formes, en grille sous les onglets : le nom est `shape.<sorte>` ; l'icône des seize d'avant est dessinée à la main (`shape<Sorte>`, js/icons.js), celle des autres vient de leur dessin
@@ -284,12 +286,12 @@ const ObjectsMenu = (function () {
   function choose(id, byKeyboard) {
     const spec = SPECS.find(s => s.id === id);
     if (!spec || state.reason) return;
-    if (spec.picker && LinkedTable.placeBlock(EditorCore.getEditor(), true)) return;   // grisée : sa raison est en info-bulle
+    if (spec.id === 'linkedTable' && LinkedTable.placeBlock(EditorCore.getEditor(), true)) return;   // grisée : sa raison est en info-bulle
     EditorCore.closeHoverMenu(group);
     Editor.exitHeaderFooterModeIfActive();
     const ed = EditorCore.getEditor();
     if (!ed) return;
-    if (spec.picker) { LinkedTable.openPicker(ed, flyout.querySelector('[data-action="' + spec.id + '"]'), true); return; }
+    if (spec.picker) { (spec.id === 'slideView' ? SlideView : LinkedTable).openPicker(ed, flyout.querySelector('[data-action="' + spec.id + '"]'), true); return; }
     spec.place(ed, FreeFrame.slideStartOf(ed.state.doc, ed.state.selection.from));
     // La barre du cadre posé se montre une fois la transaction passée (js/editor-core.js ferme les barres flottantes au geste qui vient d'avoir lieu).
     setTimeout(FreeFrame.syncToolbar, 0);

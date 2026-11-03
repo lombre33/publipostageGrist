@@ -1470,6 +1470,13 @@ const I18n = (function () {
     'slides.objects.tableTip': { fr: 'Un tableau de deux lignes et deux colonnes, dans un cadre au centre de la diapositive {n}', en: 'A two-row, two-column table in a frame in the middle of slide {n}' },
     'slides.objects.linkedTable': { fr: 'Tableau d’un modèle Grille…', en: 'Table from a Grid template…' },
     'slides.objects.linkedTableTip': { fr: 'La copie liée en direct d’un modèle Grille, dans un cadre au centre de la diapositive {n}', en: 'A live-linked copy of a Grid template, in a frame in the middle of slide {n}' },
+    'slides.objects.slideView': { fr: 'Vue…', en: 'Slide view…' },
+    'slides.objects.slideViewTip': { fr: 'La vue en direct d’une autre diapositive, dans un cadre au centre de la diapositive {n} : un clic y mène', en: 'A live view of another slide, in a frame in the middle of slide {n}: a click goes to it' },
+    'slideView.search': { fr: 'Rechercher une diapositive…', en: 'Search for a slide…' },
+    'slideView.none': { fr: 'Aucune diapositive.', en: 'No slide.' },
+    'slideView.noMatch': { fr: 'Aucune diapositive ne correspond.', en: 'No slide matches.' },
+    'slideView.alt': { fr: 'Vue de la diapositive {n} : {title}', en: 'View of slide {n}: {title}' },
+    'slideView.altBare': { fr: 'Vue de la diapositive {n}', en: 'View of slide {n}' },
     'slides.objects.shapes': { fr: 'Formes', en: 'Shapes' },
     // Les onglets des formes du menu « Objets » (js/objects-menu.js) : les seize d'avant, puis les formes de base, les flèches, les étoiles et les bulles de PowerPoint.
     'slides.objects.tab.common': { fr: 'Courantes', en: 'Common' },

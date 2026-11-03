@@ -165,7 +165,7 @@
     "#v2-btn-accept-all": {"class": "covered", "cases": ["undoSuggestions", "undoSuggestionsMouse"]},
     "#v2-btn-reject-all": {"class": "covered", "cases": ["undoSuggestions", "undoSuggestionsMouse"]},
     "#v2-btn-objects": {"class": "covered", "cases": ["freeFrame", "shapes", "lines"], "note": "les objets, formes et traits : une présentation"},
-    "#v2-objects-flyout button[*": {"class": "covered", "cases": ["freeFrame", "shapes", "lines"]},
+    "#v2-objects-flyout button[*": {"class": "covered", "cases": ["freeFrame", "shapes", "lines", "slideView"]},
     ".v2-format-panel button[action=width:*]": {"class": "covered", "cases": ["frameDashMouse", "lines"]},
     ".v2-format-panel button[action=ends:*]": {"class": "covered", "cases": ["frameEndsMouse"]},
     ".v2-format-panel button[action=end:*]": {"class": "covered", "cases": ["frameEndsMouse"]},

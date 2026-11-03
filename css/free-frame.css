@@ -216,10 +216,11 @@
 #v2-objects-flyout { min-width: 0; }
 #v2-objects-flyout .v2-objects-grid { display: grid; grid-template-columns: repeat(8, 30px); gap: 3px; padding: 0 1px 2px; }
 #v2-objects-flyout .v2-objects-grid[hidden] { display: none; }
-/* « Cadre de texte » et « Tableau » côte à côte, le titre « Lignes » et ses trois lignes sur une même ligne : avec « Tableau d'un modèle Grille… » le menu a une ligne de plus, qui ferait sortir
-   sa dernière rangée sous le bas d'un panneau de 700 x 400 (il finit vers 375 px). */
+/* « Cadre de texte », « Tableau » et « Vue… » côte à côte, le titre « Lignes » et ses trois lignes sur une même ligne : avec « Tableau d'un modèle Grille… » le menu a une ligne de plus, et une de plus
+   encore avec la vue d'une diapositive, qui feraient sortir sa dernière rangée sous le bas d'un panneau de 700 x 400 (il finit vers 381 px). Trois boutons : leurs marges sont serrées (4 px) pour que le
+   plus long des noms (« Cadre de texte », « Vue… ») tienne dans la largeur de la grille des formes, sans élargir le menu. */
 #v2-objects-flyout .v2-objects-pair { display: flex; gap: 2px; }
-#v2-toolbar #v2-objects-flyout .v2-objects-pair > .v2-menu-row { flex: 1 1 0; width: auto; min-width: 0; padding-left: 7px; padding-right: 7px; white-space: nowrap; }
+#v2-toolbar #v2-objects-flyout .v2-objects-pair > .v2-menu-row { flex: 1 1 auto; width: auto; min-width: 0; gap: 4px; padding-left: 4px; padding-right: 4px; white-space: nowrap; }
 #v2-objects-flyout .v2-objects-lines-row { display: flex; align-items: center; }
 #v2-objects-flyout .v2-objects-lines-row > .v2-hover-flyout-label { flex: none; padding-top: 0; padding-bottom: 0; }
 #v2-objects-flyout .v2-objects-lines-row > .v2-objects-grid { grid-template-columns: repeat(3, 30px); padding-bottom: 0; }
@@ -244,3 +245,23 @@
 #editor-container .tiptap .pp-free-frame.pp-ff-multi > .pp-free-frame-box { outline: 2px solid var(--accent, #2f6fed); }
 #editor-container .tiptap .pp-free-frame.pp-ff-multi > .pp-free-frame-box > .pp-ff-ui .pp-ff-handle,
 #editor-container .tiptap .pp-free-frame.pp-ff-multi > .pp-free-frame-box > .pp-ff-ui .pp-ff-rotate { display: none; }
+
+/* La VUE d'une diapositive (`data-ff-view`, js/slide-view.js) : le calque `.pp-ff-view` couvre la boîte du cadre (dans son trait : `--ff-edge`) et montre une copie de la diapositive visée, à la taille de la page,
+   que ses variables réduisent (`--ffv-w` et `--ffv-h` : la page, `--ffv-scale` : le facteur, `--ffv-dx` et `--ffv-dy` : le centrage). Le texte de repli du cadre (le titre de cette diapositive) reste dessous,
+   caché tant que le calque est rempli (`.pp-ff-has-view`) : sans calque - le PDF, le Word, le HTML, le PowerPoint - il se lit. La copie est inerte : rien n'y reçoit la souris, sauf le calque de l'éditeur (un clic
+   choisit le cadre, un glisser le déplace). La page copiée porte les classes de la feuille (`.tiptap` dans l'éditeur, `.reader-content` à la Lecture) pour que les règles des blocs la reconnaissent : ses mesures sont
+   donc imposées (`!important`), les règles de la feuille elle-même (`#editor-container.a4-preview .tiptap`, `#reader-container.a4-preview .reader-content` : largeur, marges, fond, ombre, et le zoom que la Lecture
+   donne à sa feuille : la copie est déjà dans le calque, qui le subit, elle ne le double pas) la visant aussi. */
+.pp-ff-view { position: absolute; inset: var(--ff-edge, 0pt); z-index: 1; overflow: hidden; background: #fff; pointer-events: none; }
+.pp-ff-view[hidden] { display: none; }
+.pp-ff-view > .pp-ff-view-page {
+  position: absolute !important; left: 0 !important; top: 0 !important; box-sizing: border-box !important; margin: 0 !important; min-height: 0 !important; overflow: hidden !important; background: #fff !important; box-shadow: none !important;
+  width: var(--ffv-w, 1280px) !important; height: var(--ffv-h, 720px) !important; zoom: 1 !important;
+  padding: var(--pp-margin-top, 37.33px) var(--pp-margin-right, 37.33px) var(--pp-margin-bottom, 37.33px) var(--pp-margin-left, 37.33px) !important;
+  transform-origin: 0 0; transform: translate(var(--ffv-dx, 0px), var(--ffv-dy, 0px)) scale(var(--ffv-scale, .25));
+  user-select: none; -webkit-user-select: none; white-space: pre-wrap; white-space: break-spaces; word-wrap: break-word; font-variant-ligatures: none; font-feature-settings: "liga" 0;
+}
+.pp-ff-view, .pp-ff-view * { pointer-events: none !important; }
+.ProseMirror .pp-ff-view { pointer-events: auto !important; cursor: move; }
+.pp-ff-view .pp-ff-ui { display: none; }
+.pp-free-frame.pp-ff-has-view > .pp-free-frame-box > .pp-free-frame-content { visibility: hidden; }

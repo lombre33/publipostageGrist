@@ -1212,6 +1212,8 @@ const ReaderMode = (function () {
     ListMarkers.apply(wrapper);
     // Le style de chaque niveau de titre, gardé dans le modèle (js/heading-styles.js) : posé en ligne sur les <h1> à <h6>, que l'impression et le diaporama relisent comme la Lecture.
     HeadingStyles.apply(wrapper);
+    // Les vues de diapositive (js/slide-view.js) : le calque de chaque cadre à vue reçoit une copie de la diapositive montrée, prise dans ce texte résolu, avant la mise en page de la Lecture, de l'impression et du diaporama.
+    SlideView.fill(wrapper);
     if (stale()) return null;
     return { hasError, readsAll: loopCtx.readsAll };
   }

@@ -71,7 +71,7 @@ const FreeFrame = (function () {
   // et celle du trait en pour cent (0 : opaque, 100 : invisible ; celle d'un fond ou d'un trait absent vaut 0), le tiret du trait ('' : plein), son bout ('' : plat, 'round', 'square') et son
   // type composé ('' : simple, 'dbl', 'thinThick', 'thickThin', 'tri'). Une ligne a de plus, à chaque bout, sa pointe (`head` au début, `tail` à la fin : '' aucune, ou 'triangle', 'arrow', 'stealth', 'diamond', 'oval')
   // et la largeur et la longueur de celle-ci (`headW`, `headLen`, `tailW`, `tailLen` : '' moyenne, 'sm' petite, 'lg' grande).
-  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '', anim: '', cols: 0, colGap: 0, vert: '', alt: '', link: '', linkTrans: '', hidden: '' };
+  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '', anim: '', cols: 0, colGap: 0, vert: '', alt: '', link: '', linkTrans: '', view: '', hidden: '' };
   // L'aspect d'une forme neuve : un fond clair, un trait plus foncé de la même teinte (le texte noir y reste lisible).
   const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
   // L'aspect d'une ligne neuve : le trait de PowerPoint des formes, un peu plus épais (sa pointe en grandit avec lui : trois fois l'épaisseur). Une ligne a toujours une couleur et une épaisseur.
@@ -101,7 +101,7 @@ const FreeFrame = (function () {
   // Les attributs du nœud et leur écriture dans le HTML enregistré.
   // Ce qui marque, dans le HTML des sorties, le cadre qui peint le fond d'une diapositive (js/slide-props.js:forOutput).
   const BACKGROUND_ATTR = 'data-ff-bg';
-  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim', cols: 'data-ff-cols', colGap: 'data-ff-col-gap', vert: 'data-ff-vert', alt: 'data-ff-alt', link: 'data-ff-link', linkTrans: 'data-ff-link-trans', hidden: 'data-ff-hidden' };
+  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim', cols: 'data-ff-cols', colGap: 'data-ff-col-gap', vert: 'data-ff-vert', alt: 'data-ff-alt', link: 'data-ff-link', linkTrans: 'data-ff-link-trans', view: 'data-ff-view', hidden: 'data-ff-hidden' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
   const LOOK_VARS = ['--ff-fill', '--ff-fill-op', '--ff-fill-inset', '--ff-fill-radius', '--ff-line', '--ff-line-op', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-art', '--ff-art-nine', '--ff-fill-art', '--ff-slice', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot', '--ff-cols', '--ff-col-gap'];
   const EDGES = ['n', 'e', 's', 'w'];
@@ -145,6 +145,8 @@ const FreeFrame = (function () {
   const columnsOf = (raw) => { const n = Math.round(toNumber(raw, 0)); return n >= 2 ? Math.min(n, COLUMNS_MAX) : 0; };
   // Un texte alternatif : une ligne de 500 signes au plus, les blancs ramenés à une espace, sans signe de commande ; '' quand il n'y en a pas.
   const ALT_MAX = 500;
+  // L'adresse du repère d'une diapositive (`slide-3` : la même forme que SlideProps, anchorId) : celle de la diapositive qu'une vue montre.
+  const viewOf = raw => (typeof raw === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(raw) ? raw : '');
   const altOf = raw => (typeof raw === 'string' ? raw.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, ALT_MAX) : '');
   const columnGapOf = raw => tidy(clamp(toNumber(raw, COLUMN_GAP_PT), 0, COLUMN_GAP_MAX_PT));
   // Une transparence, en pour cent entier de 0 (opaque) à 100 (invisible) ; une valeur absente ou illisible vaut 0.
@@ -198,6 +200,8 @@ const FreeFrame = (function () {
       link: line ? '' : FrameLink.text(a.link),
       // Son animation au clic (js/frame-link.js:transText) : ce que joue le diaporama en suivant le lien, ni plus ni moins que sur un lien qui mène à une diapositive ; '' : l'effet de la diapositive visée.
       linkTrans: line || !FrameLink.canAnimate(a.link) ? '' : FrameLink.transText(a.linkTrans),
+      // La diapositive qu'il montre en petit et en direct (js/slide-view.js) : l'adresse de son repère (`slide-3`) ; '' quand il n'en montre pas. Une ligne n'en montre pas.
+      view: line ? '' : viewOf(a.view),
       // Son masquage (demande du 24/10, chantier 10 : `hidden` de l'objet, le volet Sélection de PowerPoint) : « 1 » quand l'objet est masqué ; atténué dans l'éditeur, absent de la Lecture, du diaporama et des exports.
       hidden: a.hidden === '1' || a.hidden === 1 || a.hidden === true ? '1' : '',
     };
@@ -328,6 +332,7 @@ const FreeFrame = (function () {
     if (a.alt) out[DOM_ATTRS.alt] = a.alt;
     if (a.link) out[DOM_ATTRS.link] = a.link;
     if (a.linkTrans) out[DOM_ATTRS.linkTrans] = a.linkTrans;
+    if (a.view) out[DOM_ATTRS.view] = a.view;
     if (a.hidden) out[DOM_ATTRS.hidden] = '1';
     return out;
   }
@@ -695,6 +700,31 @@ const FreeFrame = (function () {
     ed.view.focus();
     return true;
   }
+  // Pose la VUE d'une diapositive (js/slide-view.js, « Vue… » du menu « Objets ») : un cadre à la forme de la page, large de 40 % d'elle, au centre de la diapositive qui commence à `slideStart`,
+  // au premier plan, qui montre en direct la diapositive d'adresse `options.id` et y mène au clic (son lien, `#id`). Son texte de repli est le titre de cette diapositive (`options.title`), son fond blanc,
+  // son trait gris et fin : ce que le PDF, le Word, le HTML et le PowerPoint montrent à la place de la vue. `options.claim` : le repère que la diapositive montrée reçoit avec la vue (SlideProps.CLAIM_META),
+  // défait avec elle d'un seul Ctrl+Z. Le cadre est SÉLECTIONNÉ (sa barre propose le lien et son animation). Faux hors d'une présentation modifiable.
+  const VIEW_WIDTH_RATIO = 0.4;
+  const VIEW_LOOK = { fill: '#ffffff', line: '#bfbfbf', lw: 0.75 };
+  function insertView(ed, slideStart, options) {
+    if (!libs || !ed || !ed.isEditable || !inPresentation() || !options || !viewOf(options.id)) return false;
+    const { state } = ed;
+    const { schema } = state;
+    const page = pageSize();
+    const w = Math.min(tidy(page.width * VIEW_WIDTH_RATIO), Math.max(LIMITS.minW, page.width - 2 * STAY_ON_PAGE_PT));
+    const h = Math.min(tidy(w * page.height / page.width), Math.max(LIMITS.minH, page.height - 2 * STAY_ON_PAGE_PT));
+    const at = headRange(state.doc, slideStart).to;
+    const wanted = Object.assign({ x: (page.width - w) / 2, y: (page.height - h) / 2, w, h, view: options.id, link: '#' + options.id, alt: options.alt || '' }, VIEW_LOOK);
+    const attrs = freeSpot(normalized(wanted), takenIn(state.doc, slideStart), page);
+    const title = String(options.title || '');
+    const node = schema.nodes[NODE].create(attrs, schema.nodes.paragraph.create({ textAlign: 'center' }, title ? schema.text(title) : null));
+    const tr = own(state.tr.insert(at, node));
+    if (options.claim) tr.setMeta(SlideProps.CLAIM_META, options.claim);
+    tr.setSelection(libs.NodeSelection.create(tr.doc, at)).scrollIntoView();
+    ed.view.dispatch(tr);
+    ed.view.focus();
+    return true;
+  }
   // Pose une ligne neuve (`options.head` et `options.tail` : ses pointes) : horizontale, au milieu de la diapositive, au premier plan, SÉLECTIONNÉE (ses deux bouts se saisissent, sa barre propose le
   // trait et les extrémités). Une ligne n'a pas de texte à recevoir.
   function insertLine(ed, slideStart, options) {
@@ -1012,11 +1042,26 @@ const FreeFrame = (function () {
     box.append(ui, content);
     dom.appendChild(box);
     dom.setAttribute('role', 'group');
+    // La vue d'une diapositive (js/slide-view.js) : un calque sous l'interface, que le cadre pose quand il a `view` et retire sinon ; un clic dessus choisit le cadre, un glisser le déplace (comme son bord).
+    let viewHost = null;
+    const syncView = (a) => {
+      if (!a.view) {
+        if (viewHost) { SlideView.untrack(viewHost); viewHost.remove(); viewHost = null; dom.classList.remove(SlideView.HAS); }
+        return;
+      }
+      if (!viewHost) {
+        viewHost = SlideView.host();
+        box.insertBefore(viewHost, ui);
+        viewHost.addEventListener('mousedown', (event) => startGesture(event, 'move', { ed, getPos, dom, box }));
+      }
+      SlideView.track(viewHost, dom, a);
+    };
     // Le nom du cadre dit sa sorte : « Ellipse », « Étoile »... ; « Cadre de texte » sinon.
     const refresh = () => {
       const a = normalized(node.attrs);
       paint(dom, a);
       remember(dom, a);
+      syncView(a);
       handles.forEach((handle) => { handle.style.cursor = a.rot ? cursorFor(handle.dataset.ffKind, a.rot) : ''; });
       dom.setAttribute('aria-label', a.alt || I18n.t(a.shape ? 'shape.' + (ShapePresets.isCustom(a.shape) ? 'cust' : a.shape) : 'frame.label'));
       dom.classList.toggle(EMPTY, isEmptyFrame(node));
@@ -1037,9 +1082,9 @@ const FreeFrame = (function () {
       },
       selectNode() { dom.classList.add(SELECTED); },
       deselectNode() { dom.classList.remove(SELECTED); },
-      destroy() { behindFrames.delete(dom); },
-      // Les bords et les poignées sont à eux : ni sélection, ni glisser de l'éditeur sur leur clic. Rien de ce qui n'est pas le texte du cadre n'est une modification du document.
-      stopEvent: event => ui.contains(event.target),
+      destroy() { behindFrames.delete(dom); if (viewHost) SlideView.untrack(viewHost); },
+      // Les bords et les poignées sont à eux : ni sélection, ni glisser de l'éditeur sur leur clic. Rien de ce qui n'est pas le texte du cadre n'est une modification du document. Le calque d'une vue aussi.
+      stopEvent: event => ui.contains(event.target) || (!!viewHost && viewHost.contains(event.target)),
       ignoreMutation: mutation => mutation.type !== 'selection' && !content.contains(mutation.target),
     };
   }
@@ -1262,7 +1307,21 @@ const FreeFrame = (function () {
     return Extension.create({
       name: 'freeFrameBehaviour',
       addProseMirrorPlugins() {
-        return [FrameMulti.createPlugin(deps), new Plugin({
+        // Les vues de diapositive (js/slide-view.js) se refont un instant après chaque changement du texte, et quand un graphique finit de se peindre : ce qu'elles montrent est ce que le texte dit.
+        const views = new Plugin({
+          key: new PluginKey('freeFrameViews'),
+          view(editorView) {
+            const onPainted = () => SlideView.schedule();
+            const painted = typeof ChartEntry !== 'undefined' ? ChartEntry.PAINTED_EVENT : '';
+            if (painted) editorView.dom.addEventListener(painted, onPainted);
+            return {
+              update(view, previous) { if (view.state.doc !== previous.doc) SlideView.schedule(); },
+              destroy() { if (painted) editorView.dom.removeEventListener(painted, onPainted); },
+            };
+          },
+        });
+
+        return [views, FrameMulti.createPlugin(deps), new Plugin({
           key: new PluginKey('freeFrame'),
           props: {
             // Le curseur dans un cadre : son contour se dessine (le cadre sélectionné a le sien, par selectNode).
@@ -1779,6 +1838,6 @@ const FreeFrame = (function () {
   return {
     NODE, LINE_NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, LAYER_BEHIND, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml, html, artFits, lookRefused,
     configure, createNode, createLineNode, createExtension, wireToolbar, normalized, withoutHidden, measuresOf: attrsOfEl, straight, horizontal, flatten, gesture, lineGesture, rotationAt, turnOf, storedHeight, keepReachable, overflowsPage, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
-    insert, insertTable, patch, nudge, turnBy, reorder, duplicate, remove, select, currentFrame, frameAround, syncToolbar,
+    insert, insertTable, insertView, patch, nudge, turnBy, reorder, duplicate, remove, select, currentFrame, frameAround, syncToolbar,
   };
 })();
