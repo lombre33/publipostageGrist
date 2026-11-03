@@ -2,15 +2,18 @@
 // modifie dans l'application (ses données s'ouvrent dans Excel), au lieu de l'image PNG que la Lecture, le PDF et l'éditeur montrent. Ce fichier ne sait que le construire : mêmes séries que le dessin
 // (celles de chart-source.js, dans le même ordre, avec les mêmes couleurs, les mêmes types de séries et les mêmes valeurs affichées), en données simples que n'importe quel export lit sans rien savoir
 // du widget, d'ECharts ni de la définition du graphique. Aucune bibliothèque : une fonction pure, comme `ChartMake.option`.
-// L'entonnoir, la cascade et la jauge (lot 6) n'ont pas de modèle : Office n'a pas ces formes, `model` rend null et l'image PNG reste dans les exports (Word, PowerPoint, Excel).
+// L'entonnoir et la jauge (lot 6) n'ont pas de modèle : Office n'a pas ces formes, `model` rend null et l'image PNG reste dans les exports (Word, PowerPoint, Excel). La cascade (lot 7) a le sien :
+// ses marches et ses trois couleurs, que les exports refont en colonnes empilées dont les formules suivent la colonne des montants (js/docx-export.js : waterfallOf).
 //
 // Le modèle voyage de la Lecture à l'export dans l'attribut `data-chart-office` de l'image (ChartBlock.resolveImage le pose avec le dessin, pour la ligne exportée), en JSON :
 //   { v: 1, kind, title?, horizontal?, stacked?, labels?, axes?: { category?, value? }, categories: [texte], series: [...], scale?: { min, max }, xDates? }
-//  - `kind` : la forme de la définition (bar, line, area, scatter, pie, donut, radar) ; `categories` : les étiquettes (barres, courbe, aire, radar) ou le nom de chaque part (secteurs, anneau) ;
+//  - `kind` : la forme de la définition (bar, line, area, scatter, pie, donut, radar, waterfall) ; `categories` : les étiquettes (barres, courbe, aire, radar) ou le nom de chaque part (secteurs, anneau) ;
 //  - `series` : { name, color: '#rrggbb', type, values } - `type` : 'column', 'line' ou 'area' (une série d'un graphique mixte a le sien), `values` : un nombre ou null par catégorie ; un nuage de points
 //    a `points: [[x, y]]` à la place de `values` ; secteurs et anneau une seule série dont `colors` donne la couleur de chaque part ;
 //  - `labels` : les valeurs sont écrites sur le graphique ; `stacked` : barres ou aires empilées ; `horizontal` : barres couchées ; `axes` : le nom des deux axes quand le dessin en porte ;
 //    `scale` : les bouts de l'échelle d'un radar ; `xDates` : les abscisses d'un nuage sont des dates (numéros de série d'Excel).
+//  - cascade : `categories` : le nom de chaque marche (la dernière est « Total » quand la cascade en a un), une seule série dont `values` donne le montant de chaque marche (null pour « Total », la somme des
+//    autres), et `waterfall` : { total: la dernière marche est le total, colors: [hausse, baisse, total], texts: les noms des séries et des colonnes de calcul, dans la langue de la personne }.
 // Un graphique que cette forme ne sait pas dire (un nuage dont l'abscisse est du texte, plus de MAX_CATEGORIES étiquettes) n'a pas de modèle : il reste l'image, qui sort telle quelle.
 const ChartOffice = (function () {
   const VERSION = 1;
@@ -92,7 +95,28 @@ const ChartOffice = (function () {
     };
   }
 
-  const BUILDERS = { bar: cartesian, line: cartesian, area: cartesian, scatter, pie, donut: pie, radar };
+  // Cascade (lot 7) : les marches du dessin (ChartMake.stepsOf) - leur nom, leur montant (null pour la marche « Total », qui n'en a pas : c'est la somme des autres) - et les trois couleurs du jeu (hausse, baisse,
+  // total). Office n'a pas de cascade : le Word, le PowerPoint et l'Excel la refont en colonnes empilées, avec des formules qui calculent les colonnes d'après celle des montants (js/docx-export.js : waterfallOf) ;
+  // ce modèle ne sait rien de cette mise en colonnes. Une cascade sans marche (aucune ligne n'a de montant) n'a pas de modèle : elle reste l'image.
+  const WATERFALL_TEXTS = ['base', 'up', 'down', 'total', 'upBelow', 'downBelow', 'low', 'high', 'note'];
+  function waterfall(def, series) {
+    const y = series[1];
+    const steps = y ? ChartMake.stepsOf(def, series) : [];
+    if (!steps.length) return null;
+    const palette = ChartMake.paletteOf(def);
+    return {
+      categories: steps.map(step => step.name),
+      axes: { category: series[0].label, value: y.label },
+      series: [{ name: y.label, color: palette[0], type: 'column', values: steps.map(step => (step.role === 'total' ? null : numberOrNull(step.delta))) }],
+      waterfall: {
+        total: steps[steps.length - 1].role === 'total' || undefined,
+        colors: ChartMake.STEP_ROLES.map((role, at) => palette[at % palette.length]),
+        texts: Object.fromEntries(WATERFALL_TEXTS.map(key => [key, I18n.t('chart.waterfall.' + key)])),
+      },
+    };
+  }
+
+  const BUILDERS = { bar: cartesian, line: cartesian, area: cartesian, scatter, pie, donut: pie, radar, waterfall };
 
   // Le modèle de `def` pour ces séries (celles de ChartSource.series) : un objet simple, prêt à s'écrire en JSON ; null quand la forme n'a pas d'équivalent modifiable. Ne modifie pas `series`.
   function model(def, series) {

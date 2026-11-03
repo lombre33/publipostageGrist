@@ -543,6 +543,6 @@ const ChartMake = (function () {
   }
 
   return {
-    LIBRARY, KINDS, SCALE, PALETTES, PALETTE_IDS, MAX_TITLE, MAX_GAUGES, GAUGE_FULL, MIXABLE, ensureLibrary, normalize, parse, stringify, needsValues, nameOf, option, toImage, paletteOf, seriesColor, seriesType, baseTypeOf, hasSeries, numberText, ordered: orderedSeries, niceCeil,
+    LIBRARY, KINDS, SCALE, PALETTES, PALETTE_IDS, MAX_TITLE, MAX_GAUGES, GAUGE_FULL, MIXABLE, ensureLibrary, normalize, parse, stringify, needsValues, nameOf, option, toImage, paletteOf, seriesColor, seriesType, baseTypeOf, hasSeries, numberText, ordered: orderedSeries, niceCeil, stepsOf, STEP_ROLES,
   };
 })();

@@ -803,6 +803,14 @@ const I18n = (function () {
     'chart.waterfall.up': { fr: 'Hausse', en: 'Increase' },
     'chart.waterfall.down': { fr: 'Baisse', en: 'Decrease' },
     'chart.waterfall.total': { fr: 'Total', en: 'Total' },
+    // Les données de la cascade dans Word, PowerPoint et Excel (lot 7) : une série « Base » (invisible) porte chaque marche à sa hauteur, deux séries « sous zéro » complètent une marche qui passe de l'autre
+    // côté de zéro ; les deux colonnes de calcul disent où la marche commence et où elle finit ; la note dit quelle colonne modifier (js/docx-export.js : waterfallOf).
+    'chart.waterfall.base': { fr: 'Base', en: 'Base' },
+    'chart.waterfall.upBelow': { fr: 'Hausse (sous zéro)', en: 'Increase (below zero)' },
+    'chart.waterfall.downBelow': { fr: 'Baisse (sous zéro)', en: 'Decrease (below zero)' },
+    'chart.waterfall.low': { fr: 'Bas de la marche', en: 'Step bottom' },
+    'chart.waterfall.high': { fr: 'Haut de la marche', en: 'Step top' },
+    'chart.waterfall.note': { fr: 'Modifiez la colonne « {name} » ({col}) : les autres colonnes se calculent.', en: 'Edit the “{name}” column ({col}): the other columns are calculated.' },
     'chart.make.color.title': { fr: 'Couleur de « {name} »', en: 'Color of “{name}”' },
     'chart.make.color.back': { fr: 'Retour', en: 'Back' },
     'chart.make.color.auto': { fr: 'Couleur de la palette', en: 'Palette color' },

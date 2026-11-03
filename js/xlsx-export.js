@@ -452,7 +452,9 @@ const XlsxExport = (function () {
     if (source.worksheets[0]) {
       source.worksheets[0].eachRow({ includeEmpty: false }, (row, number) => {
         const cells = [];
-        row.eachCell({ includeEmpty: false }, (cell, col) => cells.push({ col, value: cell.value, numFmt: cell.numFmt }));
+        // ExcelJS perd le résultat « 0 » d'une formule à la lecture (`<v>0</v>` donne une formule sans résultat) : celles de la cascade portent toutes leur valeur en cache, un résultat absent est donc un zéro.
+        const kept = value => (value && typeof value === 'object' && typeof value.formula === 'string' && value.result === undefined ? { formula: value.formula, result: 0 } : value);
+        row.eachCell({ includeEmpty: false }, (cell, col) => cells.push({ col, value: kept(cell.value), numFmt: cell.numFmt }));
         rows.push({ number, cells });
       });
     }
@@ -573,6 +575,11 @@ const XlsxExport = (function () {
     });
     zip.file('[Content_Types].xml', types, { createFolders: false });
   }
+  // Une cellule du classeur embarqué d'un graphique, posée `shift` lignes plus bas dans la feuille des données : une formule (celles d'une cascade, dont les cellules se visent entre elles) voit chacune de ses références
+  // descendre d'autant ; un texte ou un nombre reste tel quel. Les références sont celles de la forme `B2`, `$B$2`, `I$2:I5` (aucune fonction de nos formules n'a de chiffre dans son nom).
+  const shiftedValue = (value, shift) => (value && typeof value === 'object' && typeof value.formula === 'string'
+    ? { formula: value.formula.replace(/(\$?[A-Z]{1,3}\$?)(\d+)/g, (all, column, row) => column + (Number(row) + shift)), result: value.result }
+    : value);
   function writeChartData(workbook, charts) {
     // La feuille des données des graphiques, ajoutée en dernier : par graphique, un titre (« Graphique 2 - Ventes ») puis les cellules de son classeur embarqué, une ligne vide avant le suivant. Rend la feuille et,
     // pour chaque graphique, sa partie dont les formules visent ses cellules.
@@ -586,7 +593,7 @@ const XlsxExport = (function () {
       head.font = fontOf({ bold: true });
       chart.rows.forEach(row => row.cells.forEach((cell) => {
         const target = sheet.getCell(top + row.number, cell.col);
-        target.value = cell.value;
+        target.value = shiftedValue(cell.value, top);
         target.font = fontOf({});
         if (cell.numFmt && cell.numFmt !== 'General') target.numFmt = cell.numFmt;
       }));

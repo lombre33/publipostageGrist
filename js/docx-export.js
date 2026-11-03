@@ -448,11 +448,171 @@ const DocxExport = (function () {
       return model && model.v === 1 && typeof model.kind === 'string' && Array.isArray(model.series) && model.series.length ? model : null;
     } catch (e) { return null; }
   }
+  // === La cascade (« waterfall ») en graphique d'Office (lot 7) ===============================================================================================================================================
+  // Office n'a pas de cascade que docx, LibreOffice ou Google savent écrire ou lire (celle d'Office 2016 est d'un format à part) : la cascade sort en COLONNES EMPILÉES, dont une série « Base », sans remplissage,
+  // porte chaque marche à sa hauteur. Les colonnes se calculent d'une seule colonne du classeur embarqué, celle des montants, que la personne modifie : tout le reste est des FORMULES, de sorte que changer un
+  // montant redessine la cascade (c'est le piège des cascades faites à la main, dont la « base » reste figée). Les positifs et les négatifs s'empilent chacun de leur côté de zéro : une marche d'un seul côté est
+  // une base et une colonne ; une marche qui passe de l'autre côté de zéro n'a pas de base, et ses deux morceaux sont dans la colonne de son rôle (le morceau positif) et dans celle « sous zéro » (le négatif).
+  // Le modèle (extensions/graphique/chart-office.js : waterfall) ne dit que les marches : montants (null pour le « Total », la somme des autres), noms, trois couleurs, noms des séries et des colonnes. Le dessin
+  // diffère de celui de l'éditeur sur un point : pas de trait d'une marche à la suivante.
+  const COLUMN_AFTER_SERIES = 3; // série j dans la colonne j + 2 ; puis une colonne vide, puis celle des montants (série count + 3), le bas et le haut de la marche
+  const columnName = (n) => { let name = ''; for (let rest = n; rest > 0; rest = Math.floor((rest - 1) / 26)) name = String.fromCharCode(65 + ((rest - 1) % 26)) + name; return name; };
+  const tidy = value => (Math.abs(value) < 1e-9 ? 0 : Number(value.toPrecision(14)));
+  const WATERFALL_TAG = /\s?\[pp-wf-(\d+)\]/;
+  const WATERFALL_TAGS = /\s?\[pp-wf-\d+\]/g;
+  // Les séries, les cellules du classeur (`grid[ligne][colonne]` depuis 0 : { text }, { number } ou { f: formule, v: sa valeur }), les lignes (`rows` : rôle de la marche, passe-t-elle zéro) d'une cascade ;
+  // jette une erreur quand le modèle n'est pas lisible (l'appelant garde l'image).
+  function waterfallOf(model) {
+    const wf = model.waterfall || {};
+    const texts = wf.texts || {};
+    const text = (key, fallback) => (typeof texts[key] === 'string' && texts[key] ? texts[key] : fallback);
+    const names = (Array.isArray(model.categories) ? model.categories : []).map(String);
+    const amounts = model.series && model.series[0] && Array.isArray(model.series[0].values) ? model.series[0].values : [];
+    const total = !!wf.total;
+    const stepCount = names.length - (total ? 1 : 0);
+    if (stepCount < 1 || amounts.length !== names.length) throw new Error('cascade : montants illisibles');
+    const colors = [0, 1, 2].map(at => hexOfChart((Array.isArray(wf.colors) ? wf.colors : [])[at]));
+    // Les marches : d'où elle part (le cumul des précédentes), où elle arrive ; la « Total » va de zéro au cumul.
+    let sum = 0;
+    const rows = names.map((name, at) => {
+      const last = total && at === names.length - 1;
+      const amount = last ? sum : amounts[at];
+      if (typeof amount !== 'number' || !Number.isFinite(amount)) throw new Error('cascade : montant illisible');
+      const from = last ? 0 : sum;
+      const to = last ? sum : sum + amount;
+      if (!last) sum = to;
+      const low = tidy(Math.min(from, to));
+      const high = tidy(Math.max(from, to));
+      // Ce que le classeur en tire : la base (invisible) et le morceau visible du côté où la marche se trouve, ou le morceau positif d'une marche qui passe zéro avec son morceau négatif à part.
+      const base = low >= 0 ? low : (high <= 0 ? high : 0);
+      const main = low >= 0 ? tidy(high - low) : (high <= 0 ? tidy(low - high) : high);
+      const below = low < 0 && high > 0 ? low : 0;
+      return { name, amount: tidy(amount), role: last ? 'total' : (amount < 0 ? 'down' : 'up'), low, high, base, main, below, crosses: low < 0 && high > 0 };
+    });
+    const defs = [
+      { id: 'base', name: text('base', 'Base') },
+      { id: 'up', name: text('up', 'Hausse'), color: colors[0] },
+      { id: 'down', name: text('down', 'Baisse'), color: colors[1] },
+    ].concat(total ? [{ id: 'total', name: text('total', 'Total'), color: colors[2] }] : [], [
+      { id: 'upBelow', name: text('upBelow', 'Hausse (sous zéro)'), color: colors[0] },
+      { id: 'downBelow', name: text('downBelow', 'Baisse (sous zéro)'), color: colors[1] },
+    ]);
+    const amountColumn = columnName(defs.length + COLUMN_AFTER_SERIES);
+    const lowColumn = columnName(defs.length + COLUMN_AFTER_SERIES + 1);
+    const highColumn = columnName(defs.length + COLUMN_AFTER_SERIES + 2);
+    const inputName = String(model.series[0].name == null ? '' : model.series[0].name);
+    // Les valeurs de chaque série (null : pas de cellule) et la formule de la cellule : `r` est la ligne du classeur (depuis 1).
+    const cell = (value, f) => ({ value, f });
+    const L = r => lowColumn + r;
+    const U = r => highColumn + r;
+    const V = r => amountColumn + r;
+    const pieceOf = r => `IF(${L(r)}>=0,${U(r)}-${L(r)},IF(${U(r)}<=0,${L(r)}-${U(r)},${U(r)}))`;
+    const belowOf = r => `IF(AND(${L(r)}<0,${U(r)}>0),${L(r)},0)`;
+    const cellOf = (id, row, r) => {
+      const step = row.role !== 'total';
+      switch (id) {
+        case 'base': return cell(row.base, `IF(${L(r)}>=0,${L(r)},IF(${U(r)}<=0,${U(r)},0))`);
+        case 'up': return step ? cell(row.role === 'up' ? row.main : 0, `IF(${V(r)}>=0,${pieceOf(r)},0)`) : cell(null);
+        case 'down': return step ? cell(row.role === 'down' ? row.main : 0, `IF(${V(r)}<0,${pieceOf(r)},0)`) : cell(null);
+        case 'total': return step ? cell(null) : cell(row.main, pieceOf(r));
+        case 'upBelow': return step ? cell(row.role === 'up' ? row.below : 0, `IF(${V(r)}>=0,${belowOf(r)},0)`) : cell(null);
+        default: return step ? cell(row.role === 'down' ? row.below : 0, `IF(${V(r)}<0,${belowOf(r)},0)`) : cell(null);
+      }
+    };
+    const series = defs.map(def => Object.assign({}, def, { values: [] }));
+    const grid = [[undefined].concat(defs.map(def => ({ text: def.name })), [undefined, { text: inputName }, { text: text('low', 'Bas de la marche') }, { text: text('high', 'Haut de la marche') }])];
+    rows.forEach((row, at) => {
+      const r = at + 2;
+      const line = [{ text: row.name }];
+      series.forEach((one) => {
+        const made = cellOf(one.id, row, r);
+        one.values.push(made.value);
+        line.push(made.value === null ? undefined : { f: made.f, v: made.value });
+      });
+      const last = row.role === 'total';
+      line.push(undefined);
+      line.push(last ? { f: `SUM(${amountColumn}$2:${amountColumn}${r - 1})`, v: row.amount } : { number: row.amount });
+      line.push({ f: last ? `MIN(0,${V(r)})` : `SUM(${amountColumn}$2:${V(r)})-MAX(${V(r)},0)`, v: row.low });
+      line.push({ f: last ? `MAX(0,${V(r)})` : `SUM(${amountColumn}$2:${V(r)})-MIN(${V(r)},0)`, v: row.high });
+      grid.push(line);
+    });
+    grid.push([]);
+    grid.push([{ text: text('note', '').split('{name}').join(inputName).split('{col}').join(amountColumn) }]);
+    return { categories: names, series, grid, rows, amountColumn, inputName };
+  }
+  const xmlOf = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // La feuille du classeur embarqué (xl/worksheets/sheet1.xml) d'une cascade : les textes en place (pas de table de chaînes), les formules avec leur valeur en cache (Excel les recalcule dès qu'on modifie un montant).
+  function waterfallSheetXml(grid) {
+    const width = Math.max(1, ...grid.map(line => line.length));
+    const body = grid.map((line, at) => {
+      const cells = line.map((one, col) => {
+        if (!one) return '';
+        const ref = columnName(col + 1) + (at + 1);
+        if (typeof one.f === 'string') return `<c r="${ref}"><f>${xmlOf(one.f)}</f><v>${one.v}</v></c>`;
+        if (typeof one.number === 'number') return `<c r="${ref}"><v>${one.number}</v></c>`;
+        return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xmlOf(one.text)}</t></is></c>`;
+      }).join('');
+      return cells ? `<row r="${at + 1}">${cells}</row>` : '';
+    }).join('');
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+      + `<dimension ref="A1:${columnName(width)}${grid.length}"/><sheetData>${body}</sheetData></worksheet>`;
+  }
+  const EMPTY_STRINGS = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="0" uniqueCount="0"/>';
+  // Ce que la bibliothèque ne sait pas écrire, ajouté aux parties qu'elle a écrites : la série « Base » sans remplissage (la marque posée à son nom par chartOptionsFromModel s'en va) et un classeur dont la feuille
+  // porte les formules de waterfallOf. Rend { chartXml, workbook } ; jette une erreur si la partie n'est pas celle attendue (l'appelant garde l'image).
+  async function finishWaterfall(chartXml, workbook, model) {
+    const made = waterfallOf(model);
+    let seen = false;
+    const xml = chartXml.replace(WATERFALL_TAGS, '').replace(/<c:ser>[\s\S]*?<\/c:ser>/, (ser) => {
+      const bare = ser.replace(/(<c:spPr>)<a:solidFill>[\s\S]*?<\/a:solidFill>/, '$1<a:noFill/>');
+      seen = bare !== ser;
+      return bare;
+    });
+    if (!seen) throw new Error('cascade : série de base introuvable');
+    // Les noms des marches se posent au bas du dessin, pas sur la ligne de zéro (où des marches sous zéro les couvriraient).
+    const placed = xml.replace(/(<c:catAx>[\s\S]*?<c:tickLblPos val=")nextTo("\s*\/>)/, '$1low$2');
+    await ExportCommon.ensureJsZipLoaded();
+    const zip = await JSZip.loadAsync(workbook);
+    if (!zip.file('xl/worksheets/sheet1.xml')) throw new Error('cascade : classeur illisible');
+    zip.file('xl/worksheets/sheet1.xml', waterfallSheetXml(made.grid), { createFolders: false });
+    zip.file('xl/sharedStrings.xml', EMPTY_STRINGS, { createFolders: false });
+    return { chartXml: placed, workbook: await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' }) };
+  }
+  // Le Word : les graphiques sont déjà dans l'archive que la bibliothèque a écrite (elle numérote les parties à l'écriture) ; chaque cascade s'y retrouve à la marque de sa série de base (`[pp-wf-3]` : le rang du modèle
+  // dans `models`), et se termine comme finishWaterfall. Une cascade qui ne se termine pas garde sa base blanche : le graphique reste lisible et modifiable, la marque en plus.
+  const relationTarget = (rels, id) => {
+    const tag = Array.from(String(rels).matchAll(/<Relationship\b[^>]*>/g), found => found[0]).find(one => one.indexOf('Id="' + id + '"') >= 0);
+    const found = tag && /\sTarget="([^"]+)"/.exec(tag);
+    return found ? found[1] : null;
+  };
+  async function finishDocxWaterfalls(blob, models) {
+    if (!models.length) return blob;
+    try {
+      await ExportCommon.ensureJsZipLoaded();
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      for (const name of Object.keys(zip.files).filter(one => /^word\/charts\/chart\d+\.xml$/.test(one))) {
+        const xml = await zip.file(name).async('string');
+        const tag = WATERFALL_TAG.exec(xml);
+        if (!tag || !models[Number(tag[1])]) continue;
+        const rels = await zip.file(name.replace(/charts\/(chart\d+\.xml)$/, 'charts/_rels/$1.rels')).async('string');
+        const target = relationTarget(rels, (/<c:externalData[^>]*\sr:id="([^"]+)"/.exec(xml) || [])[1]);
+        const workbookName = target && 'word/' + target.replace(/^\.\.\//, '');
+        if (!workbookName || !zip.file(workbookName)) throw new Error('cascade : classeur introuvable');
+        const done = await finishWaterfall(xml, await zip.file(workbookName).async('uint8array'), models[Number(tag[1])]);
+        zip.file(name, done.chartXml, { createFolders: false });
+        zip.file(workbookName, done.workbook, { createFolders: false });
+      }
+      return await zip.generateAsync({ type: 'blob', mimeType: blob.type, compression: 'DEFLATE' });
+    } catch (e) {
+      console.warn('[DocxExport] cascade : la base invisible et les formules manquent, le graphique reste modifiable :', e);
+      return blob;
+    }
+  }
   // Les options de docx.ChartRun d'un modèle d'Office (fonction pure, vérifiée seule par dev-tests/scenarios-chart-office.js). Les couleurs sont celles du dessin ; les valeurs affichées s'écrivent sans décimale
   // quand toutes sont entières, avec deux sinon ; le titre d'un axe est le nom de sa colonne (celui de l'unique série pour l'axe des valeurs), comme dans le dessin ; la légende est en haut quand il y a
   // plusieurs séries, en bas pour les secteurs et l'anneau, et absente d'une série seule (l'axe porte son nom). Barres couchées : la première étiquette est en haut, comme dans le dessin et dans la table, et
   // l'axe des valeurs reste en bas (Word met la première étiquette en bas, et l'axe des valeurs en haut quand on les retourne, sauf s'il croise au maximum).
-  function chartOptionsFromModel(model) {
+  function chartOptionsFromModel(model, tag) {
     const series = model.series;
     const axes = model.axes || {};
     const points = s => (Array.isArray(s.points) ? s.points : []);
@@ -476,6 +636,33 @@ const DocxExport = (function () {
       else out.dataLabels.position = 'outsideEnd';
       out.legend = { position: 'bottom' };
       if (model.kind === 'donut') out.holeSize = 60;
+      return out;
+    }
+
+    // Cascade : des colonnes empilées (voir waterfallOf). `tag` (le rang de la cascade dans le document de Word) marque le nom de la série de base : finishDocxWaterfalls la retrouve à cette marque dans
+    // l'archive écrite. Les valeurs affichées disent le signe de la marche (« +120 », « -50 ») et se taisent à zéro ; une marche qui passe zéro n'en a pas (ses morceaux ne sont que des parties de sa valeur).
+    if (model.kind === 'waterfall') {
+      const made = waterfallOf(model);
+      out.type = 'column';
+      out.categories = made.categories;
+      out.stacking = 'stacked';
+      out.gapWidth = 67;
+      const whole = made.series.every(one => one.values.every(isWhole));
+      const number = whole ? '#,##0' : '#,##0.00';
+      const FORMATS = { up: `+${number};+${number};`, down: `-${number};-${number};`, total: `${number};-${number};` };
+      const marked = one => (tag !== undefined && one.id === 'base' ? one.name + ' [pp-wf-' + tag + ']' : one.name);
+      out.series = made.series.map((one) => {
+        const item = { name: marked(one), color: one.id === 'base' ? 'FFFFFF' : one.color, values: one.values };
+        if (model.labels && FORMATS[one.id]) {
+          item.dataLabels = { value: true, position: 'center', numberFormat: FORMATS[one.id], font: { color: hexOfChart(ColorMath.inkOn(one.color ? '#' + one.color : '#808080')) } };
+          if (made.rows.some(row => row.crosses)) item.pointLabels = made.rows.map(row => (row.crosses ? false : undefined));
+        }
+        return item;
+      });
+      const shown = ['up', 'down', 'total'].filter(role => made.rows.some(row => row.role === role));
+      out.legend = shown.length > 1 ? { position: 'top', hiddenEntries: made.series.filter(one => shown.indexOf(one.id) < 0).map(marked) } : false;
+      out.categoryAxis = axisOf(axes.category);
+      out.valueAxis = axisOf(axes.value);
       return out;
     }
 
@@ -530,20 +717,25 @@ const DocxExport = (function () {
     return out;
   }
   // La `ChartRun` d'un modèle d'Office : ses options, la taille du dessin (px), son identifiant et le texte alternatif de l'image `node` (la bibliothèque en écrit un d'elle-même, en anglais, quand l'image n'en a pas).
-  function newChartRun(model, node, transformation, id, floating) {
-    const alt = (node.getAttribute('alt') || '').trim();
-    const options = Object.assign(chartOptionsFromModel(model), { transformation, altText: Object.assign({ id, name: '', title: '' }, alt ? { description: alt } : {}) });
+  function newChartRun(model, node, transformation, id, floating, tag) {
+    // Une cascade sans texte alternatif en reçoit un court (« Graphique : Marge », ou « Graphique : Cascade » sans titre) : la description que la bibliothèque tire des séries parlerait de la « Base » et des colonnes de calcul.
+    const alt = (node.getAttribute('alt') || '').trim() || (model.kind === 'waterfall' ? I18n.t('chart.alt', { name: model.title || I18n.t('chart.make.kind.waterfall') }) : '');
+    const options = Object.assign(chartOptionsFromModel(model, tag), { transformation, altText: Object.assign({ id, name: '', title: '' }, alt ? { description: alt } : {}) });
     if (floating) options.floating = floating;
     return new docxCharts.ChartRun(options);
   }
   // La ligne du graphique natif de `node` (une `ChartRun`, de la taille et de la place de l'image : `runOptions` est celui de l'image), ou null : l'image n'est pas un graphique créé, elle est dans un cadre de diapositive
   // (Word ne met pas de graphique dans une zone de texte), la bibliothèque ne se charge pas, ou Word refuserait ses données.
-  async function chartRunFrom(node, runOptions) {
+  async function chartRunFrom(node, runOptions, ctx) {
     const model = chartModelOf(node);
     if (!model || node.closest('.pp-free-frame')) return null;
     try {
       await ensureDocxChartsLoaded();
-      return newChartRun(model, node, runOptions.transformation, runOptions.altText.id, runOptions.floating);
+      // Une cascade est marquée de son rang dans `ctx.waterfalls` (finishDocxWaterfalls) ; elle n'y entre qu'une fois sa ChartRun faite.
+      const tag = model.kind === 'waterfall' && ctx && ctx.waterfalls ? ctx.waterfalls.length : undefined;
+      const run = newChartRun(model, node, runOptions.transformation, runOptions.altText.id, runOptions.floating, tag);
+      if (tag !== undefined) ctx.waterfalls.push(model);
+      return run;
     } catch (e) {
       console.warn('[DocxExport] graphique natif impossible, l\'image est gardée :', e);
       return null;
@@ -571,7 +763,9 @@ const DocxExport = (function () {
       const rels = await zip.file(relsName).async('string');
       const externalId = (/<c:externalData[^>]*\sr:id="([^"]+)"/.exec(chartXml) || [])[1];
       if (!externalId || rels.indexOf('Id="' + externalId + '"') < 0) return null;
-      return { chartXml, externalId, workbook: await zip.file(workbookName).async('uint8array'), model };
+      const workbook = await zip.file(workbookName).async('uint8array');
+      if (model.kind === 'waterfall') return Object.assign(await finishWaterfall(chartXml, workbook, model), { externalId, model });
+      return { chartXml, externalId, workbook, model };
     } catch (e) {
       console.warn('[DocxExport] graphique natif impossible, l\'image est gardée :', e);
       return null;
@@ -591,7 +785,7 @@ const DocxExport = (function () {
     const runOptions = { type: imgData.type, data: imgData.data, transformation: { width: imgData.width, height: imgData.height }, altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' } };
     const floatingOptions = docxFloatingOptionsFrom(node, ctx.imageIdCounter, ctx);
     if (floatingOptions) runOptions.floating = floatingOptions;
-    const imgRun = (await chartRunFrom(node, runOptions)) || new docx.ImageRun(runOptions);
+    const imgRun = (await chartRunFrom(node, runOptions, ctx)) || new docx.ImageRun(runOptions);
     markImageRun(imgRun, node, floatingOptions);
     return [imgRun];
   }
@@ -1921,7 +2115,7 @@ const DocxExport = (function () {
     const root = document.createElement('div'); root.innerHTML = resolvedHtml || '';
     // Ni ligne vide ni saut de page orphelin en fin de document : quand le texte arrive à la marge du bas, ils ouvrent une page blanche.
     ReaderMode.trimTrailingBlankBlocks(root);
-    const ctx = { footnotes: {}, footnoteCounter: 0, headingBlocks: [], numberingConfigs: [], numberingCounter: 0, imageIdCounter: 0, measureRoot: root };
+    const ctx = { footnotes: {}, footnoteCounter: 0, headingBlocks: [], numberingConfigs: [], numberingCounter: 0, imageIdCounter: 0, measureRoot: root, waterfalls: [] };
     // Un macro-modèle (ses sauts de page `data-macro-slot`) garde les images répétées de chaque modèle dans les sections de ce modèle ; un document ordinaire dont des pages tournent
     // les répète sur toutes ses pages, donc dans l'en-tête de chacune de ses sections.
     const isMacro = !!root.querySelector('.page-break-marker[data-macro-slot]');
@@ -1983,6 +2177,7 @@ const DocxExport = (function () {
     // pointerait vers un numId inconnu et Word n'afficherait ni puce ni numéro. Chaque instance est donc créée ici, avant la mise en fichier
     // (docx.js ignore un doublon : celles du corps, créées à leur tour à l'écriture du document, ne changent pas).
     ctx.numberingConfigs.forEach(config => file.Numbering.createConcreteNumberingInstance(config.reference, 0));
+    file.ppWaterfalls = ctx.waterfalls;
     return file;
   }
 
@@ -1994,7 +2189,7 @@ const DocxExport = (function () {
     await ensureDocxLibLoaded();
     const { resolvedHtml, filename, resolvedHeaderFooterData } = await ExportCommon.resolveRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData);
     const doc = await buildDocxDocument(resolvedHtml, resolvedHeaderFooterData);
-    const blob = await docx.Packer.toBlob(doc);
+    const blob = await finishDocxWaterfalls(await docx.Packer.toBlob(doc), doc.ppWaterfalls || []);
     return { blob, filename };
   }
   async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsTwip) {
@@ -2003,5 +2198,5 @@ const DocxExport = (function () {
     ExportCommon.downloadBlob(blob, (filename || 'publipostage') + '.docx');
   }
 
-  return { exportCurrentRecord, getDocxBlobForRecord, ensureDocxLibLoaded, ensureDocxChartsLoaded, chartOptionsFromModel, chartPartsOf };
+  return { exportCurrentRecord, getDocxBlobForRecord, ensureDocxLibLoaded, ensureDocxChartsLoaded, chartOptionsFromModel, chartPartsOf, waterfallOf };
 })();

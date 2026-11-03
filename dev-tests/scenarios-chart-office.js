@@ -11,7 +11,10 @@
 //  5) l'EXCEL (lot 5) : le .xlsx généré, relu (dézippé et par ExcelJS) : le graphique natif ancré sur la case de l'image, à sa taille, ses formules vers la feuille « Données des graphiques » (la dernière) dont les cellules disent ce que le
 //     graphique a en cache, le dessin partagé avec des images, un classeur de plusieurs enregistrements (un bloc de données par graphique, la feuille renommée si un enregistrement a son nom, un enregistrement en échec qui n'en laisse rien),
 //     et le repli sur l'image PNG (modèle illisible, archive qui refuse).
-//  6) l'ENTONNOIR, la CASCADE et la JAUGE (lot 6) : Office n'a pas ces formes, l'image PNG reste dans les trois exports et un graphique en barres posé à côté reste natif.
+//  6) l'ENTONNOIR et la JAUGE (lot 6) : Office n'a pas ces formes, l'image PNG reste dans les trois exports et un graphique en barres posé à côté reste natif.
+//  7) la CASCADE (lot 7, décision d'Antoine du 03/11 : « seulement la cascade ») : Office n'a pas la sienne que les bibliothèques savent écrire, elle sort en COLONNES EMPILÉES dont la série « Base » est invisible et dont
+//     toutes les colonnes se calculent, par formules, d'une seule colonne de montants que la personne modifie : le modèle, les formules (évaluées ici, avant et après la modification d'un montant, contre le tracé que doit
+//     avoir la cascade), les options de la ChartRun, le Word, le PowerPoint et l'Excel lus dans l'archive (base sans remplissage, aucune marque, classeur et cache qui disent la même chose), et les replis sur l'image.
 // Le rendu réel (LibreOffice) est vérifié à part.
 (function () {
   const cases = [];
@@ -224,9 +227,10 @@
     const all = Object.keys(zip.files).filter(name => !zip.files[name].dir);
     const parts = {};
     for (const name of all.filter(n => /\.(xml|rels)$/.test(n))) parts[name] = await zip.file(name).async('string');
-    const charts = all.filter(n => /^word\/charts\/chart\d+\.xml$/.test(n)).sort((a, b) => parseInt(a.replace(/\D/g, ''), 10) - parseInt(b.replace(/\D/g, ''), 10)).map(n => parseXml(parts[n]));
+    const chartNames = all.filter(n => /^word\/charts\/chart\d+\.xml$/.test(n)).sort((a, b) => parseInt(a.replace(/\D/g, ''), 10) - parseInt(b.replace(/\D/g, ''), 10));
+    const charts = chartNames.map(n => parseXml(parts[n]));
     return {
-      zip, parts, charts, doc: parseXml(parts['word/document.xml']),
+      zip, parts, charts, chartNames, doc: parseXml(parts['word/document.xml']),
       media: all.filter(n => n.startsWith('word/media/')), workbooks: all.filter(n => /^word\/embeddings\/.+\.xlsx$/.test(n)),
     };
   }
@@ -465,8 +469,9 @@
     const parts = {};
     for (const name of all.filter(n => /\.(xml|rels)$/.test(n))) parts[name] = await zip.file(name).async('string');
     const numbered = (pattern) => all.filter(n => pattern.test(n)).sort((a, b) => parseInt(a.replace(/\D/g, ''), 10) - parseInt(b.replace(/\D/g, ''), 10));
+    const chartNames = numbered(/^ppt\/charts\/chart\d+\.xml$/);
     return {
-      zip, parts, slides: numbered(/^ppt\/slides\/slide\d+\.xml$/).map(n => parseXml(parts[n])), charts: numbered(/^ppt\/charts\/chart\d+\.xml$/).map(n => parseXml(parts[n])),
+      zip, parts, slides: numbered(/^ppt\/slides\/slide\d+\.xml$/).map(n => parseXml(parts[n])), charts: chartNames.map(n => parseXml(parts[n])), chartNames,
       media: all.filter(n => n.startsWith('ppt/media/')), workbooks: all.filter(n => /^ppt\/embeddings\/.+\.xlsx$/.test(n)),
     };
   }
@@ -889,14 +894,14 @@
     },
   });
 
-  // === 6) L'entonnoir, la cascade et la jauge (lot 6) ===========================================================================================================
-  // Office n'a pas ces trois formes : ChartOffice.model dit « pas de modèle » (null), l'image ne porte pas `data-chart-office` et Word, PowerPoint et Excel gardent l'image PNG, telle qu'avant ; un graphique en barres
-  // posé à côté reste un graphique natif (le moteur de Word ne se charge que pour lui, mais l'image de l'autre est gardée).
-  const LOT6 = [['funnel', { values: ['Montant'] }], ['waterfall', { values: ['Montant'], total: true }], ['gauge', { values: ['Montant'], max: 500 }]];
+  // === 6) L'entonnoir et la jauge (lot 6) =====================================================================================================================
+  // Office n'a pas ces deux formes : ChartOffice.model dit « pas de modèle » (null), l'image ne porte pas `data-chart-office` et Word, PowerPoint et Excel gardent l'image PNG, telle qu'avant ; un graphique en barres
+  // posé à côté reste un graphique natif (le moteur de Word ne se charge que pour lui, mais l'image de l'autre est gardée). La cascade, elle, a son modèle depuis le lot 7 (section 7).
+  const LOT6 = [['funnel', { values: ['Montant'] }], ['gauge', { values: ['Montant'], max: 500 }]];
 
   cases.push({
-    id: 'chart_office_funnel_waterfall_and_gauge_have_no_office_model_and_stay_a_picture_in_word_powerpoint_and_excel',
-    description: 'Entonnoir, cascade, jauge : ChartOffice.model ne les connaît pas (null), l\'image de la Lecture ne porte pas `data-chart-office` et reste un PNG ; le .docx, le .pptx et le classeur n\'ont aucun graphique natif (ni pièce de graphique, ni classeur embarqué, ni feuille de données) mais UNE image PNG chacun',
+    id: 'chart_office_funnel_and_gauge_have_no_office_model_and_stay_a_picture_in_word_powerpoint_and_excel',
+    description: 'Entonnoir, jauge : ChartOffice.model ne les connaît pas (null), l\'image de la Lecture ne porte pas `data-chart-office` et reste un PNG ; le .docx, le .pptx et le classeur n\'ont aucun graphique natif (ni pièce de graphique, ni classeur embarqué, ni feuille de données) mais UNE image PNG chacun',
     run: async (h) => {
       await seed(h);
       const out = [];
@@ -914,7 +919,7 @@
       }
       hideReader();
       return {
-        pass: out.length === 3 && out.every(o => o.model === null && o.office === null && o.png && same(o.word, [0, 0, 1]) && same(o.pptx, [0, 0, 1]) && same(o.xlsx, [0, 1, 1])),
+        pass: out.length === 2 && out.every(o => o.model === null && o.office === null && o.png && same(o.word, [0, 0, 1]) && same(o.pptx, [0, 0, 1]) && same(o.xlsx, [0, 1, 1])),
         notes: JSON.stringify(out),
       };
     },
@@ -936,6 +941,394 @@
           && slides.charts.length === 1 && slides.media.length === 1 && slides.workbooks.length === 1
           && book.charts.length === 1 && book.media.length === 1 && book.sheets.length === 2,
         notes: JSON.stringify({ word: [word.charts.length, word.media.length, word.workbooks.length], pptx: [slides.charts.length, slides.media.length, slides.workbooks.length], xlsx: [book.charts.length, book.media.length, book.sheets] }),
+      };
+    },
+  });
+
+  // === 7) La cascade (lot 7) ===================================================================================================================================
+  // Office n'a pas de cascade que les bibliothèques sachent écrire : elle sort en colonnes empilées (une série « Base » sans remplissage porte chaque marche à sa hauteur) et toutes les colonnes se calculent, par formules,
+  // de la seule colonne des montants du classeur (« Modifier les données » : changer un montant redessine la cascade). Les essais lisent l'archive générée, jamais les objets des bibliothèques, et ÉVALUENT les formules
+  // (un petit évaluateur ci-dessous) : ce qu'Excel dessinera du classeur est comparé au tracé que doit avoir la cascade, avant et après la modification d'un montant.
+  const NAMES = ['Chiffre d\'affaires', 'Remises', 'Coûts de production', 'Frais généraux', 'Autres frais', 'Divers'];
+  // Le modèle d'une cascade de ces montants (avec sa marche « Total » sauf `total: false`), `names` : le nom des marches.
+  const cascade = (amounts, extra, names) => modelOf('waterfall', [xs('Poste', names || NAMES.slice(0, amounts.length)), ys('Montant', amounts)], Object.assign({ values: ['Montant'], total: true }, extra || {}));
+  const WF_MARGIN = cascade([1000, -150, -600, -120], { title: 'Marge', labels: true });                                          // le cumul reste positif, avec son total
+  const WF_CASH = cascade([50, -120, 60, -5], { title: 'Trésorerie', labels: true }, ['Solde initial', 'Achats', 'Ventes', 'Intérêts']); // le cumul passe sous zéro à la 2e marche, qui passe zéro
+  const WF_CROSS = cascade([30, -80, 100, -90], { labels: true, palette: 'cool' }, ['Départ', 'Perte', 'Gain', 'Perte 2']);         // trois marches passent zéro
+  const WF_UPS = cascade([10, 20, 5], { total: false }, ['A', 'B', 'C']);                                                          // des hausses seules, sans total
+  const WF_DECIMALS = cascade([10.5, -2.25, 1.75], { labels: true }, ['Recettes', 'Dépenses', 'Subvention']);
+  const r6 = n => Math.round(n * 1e6) / 1e6;
+  const letters = (n) => { let name = ''; for (let rest = n; rest > 0; rest = Math.floor((rest - 1) / 26)) name = String.fromCharCode(65 + ((rest - 1) % 26)) + name; return name; };
+  const stepCount = model => model.categories.length - (model.waterfall.total ? 1 : 0);
+
+  // Ce que la cascade doit dessiner, marche par marche : [bas, haut] ; « Total » va de zéro au cumul. Du calcul simple, sans rien des formules.
+  function cascadeRanges(model) {
+    let sum = 0;
+    return model.categories.map((name, at) => {
+      const last = !!model.waterfall.total && at === model.categories.length - 1;
+      const amount = last ? sum : model.series[0].values[at];
+      const from = last ? 0 : sum;
+      const to = last ? sum : sum + amount;
+      if (!last) sum = to;
+      return [r6(Math.min(from, to)), r6(Math.max(from, to))];
+    });
+  }
+  // La grille de DocxExport.waterfallOf (lignes, colonnes depuis 0) en cellules : Map « B3 » -> { number } | { text } | { f, v }.
+  function gridCells(grid) {
+    const cells = new Map();
+    grid.forEach((line, row) => line.forEach((one, col) => { if (one) cells.set(letters(col + 1) + (row + 1), one); }));
+    return cells;
+  }
+  // Les cellules d'une feuille lue dans l'archive (xl/worksheets/sheetN.xml et sa table de chaînes) : les mêmes cellules ; `v` est la valeur en cache d'une formule (undefined quand le fichier n'en dit pas).
+  function sheetCells(sheetXml, stringsXml) {
+    const strings = stringsXml ? tagsOf(parseXml(stringsXml), 'si').map(si => textsOf(si, 't').join('')) : [];
+    const cells = new Map();
+    tagsOf(parseXml(sheetXml), 'c').forEach((cell) => {
+      const type = cell.getAttribute('t');
+      const formula = cell.getElementsByTagName('f')[0];
+      const value = cell.getElementsByTagName('v')[0];
+      let text = null;
+      if (type === 'inlineStr') text = textsOf(cell, 't').join('');
+      else if (type === 's' && value) text = strings[Number(value.textContent)];
+      else if (type === 'str' && value) text = value.textContent;
+      const shown = text !== null ? text : (value ? Number(value.textContent) : undefined);
+      if (formula) cells.set(cell.getAttribute('r'), { f: formula.textContent, v: shown });
+      else if (text !== null) cells.set(cell.getAttribute('r'), { text });
+      else if (value) cells.set(cell.getAttribute('r'), { number: Number(value.textContent) });
+    });
+    return cells;
+  }
+  // Un petit évaluateur des formules d'une cascade (IF, AND, SUM, MAX, MIN, les comparaisons, + et -), pour ce qu'Excel en tirera : rend la fonction « B3 » -> valeur ; `edits` : { 'I3': le montant mis à la place }.
+  function calculator(cells, edits) {
+    const memo = new Map();
+    const functions = { IF: (test, yes, no) => (test ? yes : no), AND: (...all) => all.every(Boolean), SUM: (...all) => all.flat().reduce((n, v) => n + v, 0), MAX: (...all) => Math.max(...all.flat()), MIN: (...all) => Math.min(...all.flat()) };
+    const range = (column, from, to) => { const list = []; for (let row = from; row <= to; row++) list.push(value(column + row)); return list; };
+    function value(ref) {
+      if (edits && Object.prototype.hasOwnProperty.call(edits, ref)) return edits[ref];
+      if (memo.has(ref)) return memo.get(ref);
+      const one = cells.get(ref);
+      let out = 0;
+      if (one && typeof one.number === 'number') out = one.number;
+      else if (one && typeof one.f === 'string') {
+        const code = one.f.replace(/\$?([A-Z]+)\$?(\d+):\$?([A-Z]+)\$?(\d+)/g, (all, column, top, other, bottom) => 'RANGE("' + column + '",' + top + ',' + bottom + ')').replace(/\b([A-Z]{1,3}\d+)\b/g, 'REF("$1")');
+        out = new Function('IF', 'AND', 'SUM', 'MAX', 'MIN', 'REF', 'RANGE', 'return (' + code + ');')(functions.IF, functions.AND, functions.SUM, functions.MAX, functions.MIN, value, range);
+      }
+      memo.set(ref, out);
+      return out;
+    }
+    return value;
+  }
+  // Ce que les colonnes empilées dessinent, marche par marche, d'après les cellules calculées : les valeurs positives s'empilent au-dessus de zéro, les négatives au-dessous, dans l'ordre des séries ; la première, « Base »,
+  // ne se voit pas. Rend [bas, haut] de ce qui se voit. `firstRow` : la ligne de la première marche dans le classeur.
+  function drawnRanges(made, value, firstRow) {
+    return made.categories.map((name, at) => {
+      let up = 0;
+      let down = 0;
+      let low = Infinity;
+      let high = -Infinity;
+      made.series.forEach((one, k) => {
+        const number = value(letters(k + 2) + (firstRow + at));
+        if (!number) return;
+        const from = number > 0 ? up : down;
+        const to = from + number;
+        if (number > 0) up = to; else down = to;
+        if (one.id !== 'base') { low = Math.min(low, from, to); high = Math.max(high, from, to); }
+      });
+      return [r6(low), r6(high)];
+    });
+  }
+  // Les formules d'un graphique dont les cellules ne disent pas ce que le graphique a en cache (nom, étiquettes, valeurs), ou qui ne visent pas la feuille `sheetName` ; `cells` : celles de cette feuille (sheetCells).
+  function cacheMismatches(chart, cells, sheetName) {
+    return tagsOf(chart, 'c:f').filter((f) => {
+      const m = /^(?:'((?:[^']|'')+)'|([^'!]+))!\$([A-Z]+)\$(\d+)(?::\$([A-Z]+)\$(\d+))?$/.exec(f.textContent);
+      const cache = Array.from(f.parentNode.children).find(child => /Cache$/.test(child.nodeName));
+      if (!m || !cache || (m[1] || m[2]).replace(/''/g, '\'') !== sheetName || (m[5] && m[5] !== m[3])) return true;
+      const cached = new Map(tagsOf(cache, 'c:pt').map(pt => [Number(pt.getAttribute('idx')), pt.getElementsByTagName('c:v')[0].textContent]));
+      for (let row = Number(m[4]); row <= Number(m[6] || m[4]); row++) {
+        const cell = cells.get(m[3] + row);
+        const shown = cell ? (cell.f !== undefined ? cell.v : (cell.text !== undefined ? cell.text : cell.number)) : undefined;
+        const at = row - Number(m[4]);
+        if (cached.has(at) ? String(shown) !== cached.get(at) : shown !== undefined) return true;
+      }
+      return false;
+    }).map(f => f.textContent);
+  }
+  // Le classeur embarqué d'un graphique de Word ou de PowerPoint (`folder` : 'word/' ou 'ppt/'), trouvé par la relation de la partie du graphique : ses cellules.
+  async function embeddedCells(out, chartName, folder) {
+    const rels = out.parts[chartName.replace(/charts\/(chart\d+\.xml)$/, 'charts/_rels/$1.rels')] || '';
+    const target = (/Target="([^"]+)"/.exec(rels) || [])[1];
+    const path = target ? folder + target.replace(/^\.\.\//, '') : null;
+    if (!path || !out.zip.file(path)) return null;
+    const book = await JSZip.loadAsync(await out.zip.file(path).async('uint8array'));
+    return sheetCells(await book.file('xl/worksheets/sheet1.xml').async('string'), book.file('xl/sharedStrings.xml') ? await book.file('xl/sharedStrings.xml').async('string') : '');
+  }
+  // Ce que la partie d'une cascade (le graphique `at` de `out`, sa feuille `cells` de première marche `firstRow`) dit de juste : séries, base sans remplissage, cache = cellules, formules = valeurs en cache, montants, tracé.
+  function waterfallReport(chart, cells, sheetName, firstRow, model) {
+    const made = DocxExport.waterfallOf(model);
+    const value = calculator(cells);
+    const formulas = Array.from(cells.entries()).filter(([ref, one]) => typeof one.f === 'string');
+    const base = tagsOf(chart, 'c:ser')[0];
+    const own = Array.from(base.children).find(child => child.nodeName === 'c:spPr');
+    const amountAt = at => cells.get(made.amountColumn + (firstRow + at));
+    return {
+      names: seriesOf(chart).map(s => s.name),
+      stacked: tagsOf(chart, 'c:grouping')[0].getAttribute('val') === 'stacked',
+      invisibleBase: !!own && own.getElementsByTagName('a:noFill').length >= 1 && own.getElementsByTagName('a:solidFill').length === 0,
+      mismatches: cacheMismatches(chart, cells, sheetName),
+      formulas: formulas.length,
+      withoutValue: formulas.filter(([ref, one]) => typeof one.v !== 'number').length,
+      recalculated: formulas.every(([ref, one]) => Math.abs(value(ref) - one.v) < 1e-9),
+      amounts: Array.from({ length: stepCount(model) }, (v, at) => (amountAt(at) || {}).number),
+      drawn: drawnRanges(made, value, firstRow),
+      clean: JSON.stringify(Array.from(cells.values())).indexOf('pp-wf') < 0,
+    };
+  }
+  const amountsOf = model => model.series[0].values.slice(0, stepCount(model));
+  const goodReport = (report, model, names) => same(report.names, names) && report.stacked && report.invisibleBase && report.mismatches.length === 0 && report.formulas > 0 && report.withoutValue === 0 && report.recalculated
+    && same(report.amounts, amountsOf(model)) && same(report.drawn, cascadeRanges(model)) && report.clean;
+  const nameOfSeries = model => DocxExport.waterfallOf(model).series.map(s => s.name);
+
+  cases.push({
+    id: 'chart_office_model_waterfall_keeps_the_steps_the_amounts_the_three_colors_and_the_texts_of_the_workbook',
+    description: 'Cascade : le modèle garde le nom de chaque marche (« Total » à la fin avec « Afficher le total »), une seule série dont `values` donne le montant de chaque marche (null pour « Total », la somme des autres), les trois couleurs du jeu (hausse, baisse, total) et les neuf textes du classeur dans la langue de la personne ; une ligne sans montant n\'est pas une marche ; sans marche ni colonne de montants, pas de modèle (l\'image reste) ; le texte du modèle se relit à l\'identique',
+    run: async () => {
+      const keys = ['base', 'up', 'down', 'total', 'upBelow', 'downBelow', 'low', 'high', 'note'];
+      const firstThree = name => { const palette = ChartMake.paletteOf(def('waterfall', name ? { palette: name } : {})); return [0, 1, 2].map(at => palette[at % palette.length]); };
+      const gap = modelOf('waterfall', [xs('Poste', ['A', 'B', 'C']), ys('Montant', [5, null, -2])], { values: ['Montant'] });
+      const warm = cascade([1, 2], { palette: 'warm' }, ['A', 'B']);
+      const noColumn = ChartOffice.model(def('waterfall', { values: [] }), [xs('Poste', ['A', 'B'])]);
+      const noStep = modelOf('waterfall', [xs('Poste', ['A', 'B']), ys('Montant', [null, null])], { values: ['Montant'], total: true });
+      return {
+        pass: WF_MARGIN.v === 1 && WF_MARGIN.kind === 'waterfall' && WF_MARGIN.title === 'Marge' && WF_MARGIN.labels === true && same(WF_MARGIN.categories, NAMES.slice(0, 4).concat([I18n.t('chart.waterfall.total')]))
+          && WF_MARGIN.series.length === 1 && WF_MARGIN.series[0].name === 'Montant' && same(WF_MARGIN.series[0].values, [1000, -150, -600, -120, null]) && same(WF_MARGIN.axes, { category: 'Poste', value: 'Montant' })
+          && WF_MARGIN.waterfall.total === true && same(WF_MARGIN.waterfall.colors, firstThree()) && same(Object.keys(WF_MARGIN.waterfall.texts), keys)
+          && keys.every(key => WF_MARGIN.waterfall.texts[key] === I18n.t('chart.waterfall.' + key) && WF_MARGIN.waterfall.texts[key].length > 0)
+          && same(WF_UPS.categories, ['A', 'B', 'C']) && WF_UPS.waterfall.total === undefined && same(WF_UPS.series[0].values, [10, 20, 5])
+          && same(gap.categories, ['A', 'C']) && same(gap.series[0].values, [5, -2]) && same(warm.waterfall.colors, firstThree('warm')) && warm.waterfall.colors[0] !== WF_MARGIN.waterfall.colors[0]
+          && noColumn === null && noStep === null && same(JSON.parse(JSON.stringify(WF_MARGIN)), WF_MARGIN),
+        notes: JSON.stringify({ margin: [WF_MARGIN.categories, WF_MARGIN.series[0].values, WF_MARGIN.waterfall.colors, Object.keys(WF_MARGIN.waterfall.texts)], gap: [gap.categories, gap.series[0].values], noColumn, noStep }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_waterfall_sheet_has_one_column_of_amounts_and_formulas_that_redraw_it_when_an_amount_is_edited',
+    description: 'Cascade : la feuille du classeur n\'a qu\'une colonne de saisie (les montants des marches) ; Base, Hausse, Baisse, Total, les deux « sous zéro » et le bas et le haut de chaque marche sont des FORMULES, de valeur en cache exacte ; évaluées, les colonnes empilées dessinent le tracé de la cascade (cumul positif, cumul négatif, marches qui passent zéro, hausses seules, décimales) et le redessinent après la modification de montants (une hausse devenue baisse, un cumul qui passe sous zéro)',
+    run: async () => {
+      const scenarios = [
+        ['marge', WF_MARGIN, [1000, 300, -600, -120]], ['trésorerie', WF_CASH, [10, 20, 30, 40]], ['passage de zéro', WF_CROSS, [-30, 80, -100, 90]],
+        ['hausses seules', WF_UPS, [10, -50, 5]], ['décimales', WF_DECIMALS, [10.5, 2.25, -20.75]],
+      ];
+      const out = scenarios.map(([why, model, edited]) => {
+        const made = DocxExport.waterfallOf(model);
+        const cells = gridCells(made.grid);
+        const steps = stepCount(model);
+        const entries = Array.from(cells.entries());
+        const inputs = entries.filter(([ref, one]) => typeof one.number === 'number').map(([ref]) => ref).sort();
+        const formulas = entries.filter(([ref, one]) => typeof one.f === 'string');
+        const value = calculator(cells);
+        const amountRefs = Array.from({ length: steps }, (v, at) => made.amountColumn + (2 + at));
+        const edits = Object.fromEntries(amountRefs.map((ref, at) => [ref, edited[at]]));
+        const editedModel = cascade(edited, { total: !!model.waterfall.total }, model.categories.slice(0, steps));
+        return {
+          why, inputs: same(inputs, amountRefs.slice().sort()), formulas: formulas.length, cached: formulas.every(([ref, one]) => Math.abs(value(ref) - one.v) < 1e-9),
+          before: same(drawnRanges(made, value, 2), cascadeRanges(model)), after: same(drawnRanges(made, calculator(cells, edits), 2), cascadeRanges(editedModel)),
+          series: made.series.map(one => one.name), amountColumn: made.amountColumn,
+        };
+      });
+      const margin = DocxExport.waterfallOf(WF_MARGIN);
+      const ups = DocxExport.waterfallOf(WF_UPS);
+      const names = ['Base', 'Hausse', 'Baisse', 'Total', 'Hausse (sous zéro)', 'Baisse (sous zéro)'];
+      const head = margin.grid[0].map(one => (one ? one.text : null));
+      return {
+        pass: out.every(o => o.inputs && o.formulas > 0 && o.cached && o.before && o.after)
+          && same(out[0].series, names) && same(out[3].series, names.filter(name => name !== 'Total')) && out[0].amountColumn === 'I' && out[3].amountColumn === 'H'
+          && same(head, [null, 'Base', 'Hausse', 'Baisse', 'Total', 'Hausse (sous zéro)', 'Baisse (sous zéro)', null, 'Montant', 'Bas de la marche', 'Haut de la marche'])
+          && margin.grid[margin.grid.length - 1][0].text === I18n.t('chart.waterfall.note').split('{name}').join('Montant').split('{col}').join('I') && ups.grid[0][7] && ups.grid[0][7].text === 'Montant',
+        notes: JSON.stringify(out),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_docx_waterfall_options_are_stacked_columns_with_an_invisible_base_signed_labels_and_a_legend_of_the_roles_shown',
+    description: 'Les options de la ChartRun d\'une cascade (DocxExport.chartOptionsFromModel) : colonnes empilées serrées, la « Base » blanche et, pour Word seulement, marquée du rang de la cascade ; Hausse, Baisse, Total aux trois couleurs du jeu (les deux « sous zéro » reprennent celles de la hausse et de la baisse) ; valeurs affichées au centre avec leur signe (« +120 », « -50 », total sans signe), deux décimales dès qu\'un montant en a, aucune sur la base ni sur les « sous zéro », aucune sans « Afficher les valeurs », celles d\'une marche qui passe zéro retirées ; légende des seuls rôles présents (ni base, ni « sous zéro »), absente d\'un seul rôle ; noms des deux axes',
+    run: async () => {
+      const options = (model, tag) => DocxExport.chartOptionsFromModel(model, tag);
+      const hex = color => color.slice(1).toUpperCase();
+      const margin = options(WF_MARGIN, 3);
+      const bare = options(WF_MARGIN);
+      const cash = options(WF_CASH);
+      const cross = options(WF_CROSS);
+      const ups = options(WF_UPS);
+      const decimals = options(WF_DECIMALS);
+      const quiet = options(cascade([40, -15, 25, -10], { total: false }));
+      const colors = WF_MARGIN.waterfall.colors.map(hex);
+      const formats = o => o.series.map(s => (s.dataLabels ? s.dataLabels.numberFormat : null));
+      const hidden = o => (o.legend ? o.legend.hiddenEntries : null);
+      return {
+        pass: margin.type === 'column' && margin.stacking === 'stacked' && margin.gapWidth === 67 && same(margin.categories, WF_MARGIN.categories) && margin.title === 'Marge'
+          && same(margin.series.map(s => s.name), ['Base [pp-wf-3]', 'Hausse', 'Baisse', 'Total', 'Hausse (sous zéro)', 'Baisse (sous zéro)']) && bare.series[0].name === 'Base'
+          && same(margin.series.map(s => s.color), ['FFFFFF', colors[0], colors[1], colors[2], colors[0], colors[1]])
+          && same(margin.series[0].values, [0, 850, 250, 130, 0]) && same(margin.series[1].values, [1000, 0, 0, 0, null]) && same(margin.series[2].values, [0, 150, 600, 120, null]) && same(margin.series[3].values, [null, null, null, null, 130]) && same(margin.series[4].values, [0, 0, 0, 0, null])
+          && same(formats(margin), [null, '+#,##0;+#,##0;', '-#,##0;-#,##0;', '#,##0;-#,##0;', null, null]) && margin.series[1].dataLabels.position === 'center' && margin.series[1].dataLabels.value === true
+          && margin.series[1].dataLabels.font.color === 'FFFFFF' && margin.series[2].dataLabels.font.color === '000000' && margin.series[1].pointLabels === undefined
+          && margin.legend.position === 'top' && same(hidden(margin), ['Base [pp-wf-3]', 'Hausse (sous zéro)', 'Baisse (sous zéro)']) && same(hidden(bare), ['Base', 'Hausse (sous zéro)', 'Baisse (sous zéro)'])
+          && same(margin.categoryAxis, { title: 'Poste' }) && same(margin.valueAxis, { title: 'Montant' })
+          && same(cash.series[1].pointLabels.map(p => p === false), [false, true, false, false, false]) && same(cash.series[2].pointLabels.map(p => p === false), [false, true, false, false, false]) && same(cash.series[3].pointLabels.map(p => p === false), [false, true, false, false, false])
+          && cash.series[4].dataLabels === undefined && cash.series[0].dataLabels === undefined
+          && same(cross.series[1].pointLabels.map(p => p === false), [false, true, true, true, false]) && cross.series.length === 6
+          && ups.legend === false && same(ups.series.map(s => s.name), ['Base', 'Hausse', 'Baisse', 'Hausse (sous zéro)', 'Baisse (sous zéro)']) && ups.series.every(s => s.dataLabels === undefined)
+          && same(formats(decimals), [null, '+#,##0.00;+#,##0.00;', '-#,##0.00;-#,##0.00;', '#,##0.00;-#,##0.00;', null, null])
+          && same(hidden(options(cascade([5, 7], { total: false }, ['A', 'B']))), null) && quiet.series.every(s => s.dataLabels === undefined) && quiet.legend.position === 'top' && same(hidden(quiet), ['Base', 'Hausse (sous zéro)', 'Baisse (sous zéro)']),
+        notes: JSON.stringify({ margin: margin.series.map(s => [s.name, s.color, s.values]), formats: formats(margin), hidden: hidden(margin), cash: cash.series[1].pointLabels, cross: cross.series[1].pointLabels, ups: [ups.legend, ups.series.map(s => s.name)], decimals: formats(decimals), quiet: [quiet.legend, hidden(quiet)] }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_docx_waterfall_is_a_native_stacked_chart_with_an_invisible_base_formulas_and_no_mark_left',
+    description: 'Word : quatre graphiques créés d\'un même .docx (deux cascades, des barres entre elles, une cascade sans texte alternatif) sont quatre graphiques natifs, sans image PNG, la cascade sans texte alternatif décrite « Graphique : Cascade » (pas par ses colonnes de calcul) ; chaque cascade est en colonnes empilées dont la série « Base » est sans remplissage, avec son classeur embarqué propre (ses montants, ses formules, ses valeurs en cache qui disent ce que le graphique a en cache, le tracé de la cascade une fois les formules évaluées) ; aucune marque de travail (`[pp-wf-N]`) nulle part, les barres gardent leur remplissage',
+    run: async () => {
+      const noAlt = '<p><img class="editor-image" alt="" src="' + PNG() + '" style="width: 480px; height: 300px" data-layer="normal" data-wrap="inline" data-chart-office="' + JSON.stringify(WF_UPS).replace(/"/g, '&quot;') + '"></p>';
+      const out = await docxOf(drawnHtml(WF_MARGIN) + drawnHtml(BAR_MODEL) + drawnHtml(WF_CROSS) + noAlt);
+      const find = categories => out.charts.findIndex(chart => same(seriesOf(chart)[0].cats, categories));
+      const at = { margin: find(WF_MARGIN.categories), bar: find(months), cross: find(WF_CROSS.categories), ups: find(WF_UPS.categories) };
+      const report = async (name, model) => { const cells = await embeddedCells(out, out.chartNames[at[name]], 'word/'); return cells ? waterfallReport(out.charts[at[name]], cells, 'Sheet1', 2, model) : null; };
+      const margin = await report('margin', WF_MARGIN);
+      const cross = await report('cross', WF_CROSS);
+      const ups = await report('ups', WF_UPS);
+      const bar = at.bar >= 0 ? seriesOf(out.charts[at.bar]) : [];
+      const legendEntries = chart => tagsOf(chart, 'c:legendEntry').map(entry => entry.getElementsByTagName('c:idx')[0].getAttribute('val'));
+      const deleted = chart => tagsOf(chart, 'c:dLbl').filter(label => label.getElementsByTagName('c:delete')[0]).length;
+      // Les formats des valeurs affichées (ceux des étiquettes de données, pas ceux des axes, « General »).
+      const formatsOf = chart => tagsOf(chart, 'c:dLbls').reduce((all, labels) => all.concat(Array.from(labels.children).filter(child => child.nodeName === 'c:numFmt').map(node => node.getAttribute('formatCode'))), []);
+      const leaks = Object.keys(out.parts).filter(name => out.parts[name].indexOf('pp-wf') >= 0);
+      const described = tagsOf(out.doc, 'wp:docPr').map(props => props.getAttribute('descr'));
+      return {
+        pass: out.charts.length === 4 && out.media.length === 0 && out.workbooks.length === 4 && Object.values(at).every(n => n >= 0) && new Set(Object.values(at)).size === 4
+          && !!margin && goodReport(margin, WF_MARGIN, nameOfSeries(WF_MARGIN)) && !!cross && goodReport(cross, WF_CROSS, nameOfSeries(WF_CROSS)) && !!ups && goodReport(ups, WF_UPS, nameOfSeries(WF_UPS))
+          && same(margin.names, ['Base', 'Hausse', 'Baisse', 'Total', 'Hausse (sous zéro)', 'Baisse (sous zéro)']) && same(ups.names, ['Base', 'Hausse', 'Baisse', 'Hausse (sous zéro)', 'Baisse (sous zéro)'])
+          && same(bar.map(s => s.name), ['Paris', 'Lyon']) && same(bar.map(s => s.color), ['2B78AE', 'FE945B']) && same(plotsOf(out.charts[at.bar]), ['c:barChart']) && tagsOf(out.charts[at.bar], 'c:grouping')[0].getAttribute('val') === 'clustered'
+          && same(legendEntries(out.charts[at.margin]), ['0', '4', '5']) && tagsOf(out.charts[at.ups], 'c:legend').length === 0
+          && deleted(out.charts[at.margin]) === 0 && deleted(out.charts[at.cross]) === 9
+          && same(formatsOf(out.charts[at.margin]).filter((format, i, all) => all.indexOf(format) === i).sort(), ['#,##0;-#,##0;', '+#,##0;+#,##0;', '-#,##0;-#,##0;']) && formatsOf(out.charts[at.ups]).length === 0
+          && tagsOf(out.charts[at.margin], 'c:gapWidth')[0].getAttribute('val') === '67' && same(tagsOf(out.charts[at.margin], 'c:tickLblPos').map(n => n.getAttribute('val')).slice(0, 1), ['low'])
+          && leaks.length === 0 && described.filter(text => text === 'Mon graphique').length === 3 && described.filter(text => text === I18n.t('chart.alt', { name: I18n.t('chart.make.kind.waterfall') })).length === 1,
+        notes: JSON.stringify({ at, described, margin, cross, ups, bar, leaks, legend: legendEntries(out.charts[at.margin]), deleted: [deleted(out.charts[at.margin]), deleted(out.charts[at.cross])], formats: formatsOf(out.charts[at.margin]) }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_pptx_waterfall_is_a_native_stacked_chart_with_its_own_formulas_on_each_slide',
+    description: 'PowerPoint : deux cascades sur deux diapositives sont deux graphiques natifs (un objet « graphique » chacune, aucune image PNG), en colonnes empilées à la « Base » sans remplissage, chacune avec son classeur embarqué : ses montants, ses formules, ses valeurs en cache qui disent ce que le graphique a en cache, et le tracé de la cascade une fois les formules évaluées ; aucune marque de travail',
+    run: async () => {
+      const out = await pptxOf('<h1>Marge</h1>' + drawnHtml(WF_MARGIN) + '<div class="page-break-marker"></div><h2>Trésorerie</h2>' + drawnHtml(WF_CASH));
+      const reports = [];
+      for (const [at, model] of [[0, WF_MARGIN], [1, WF_CASH]]) {
+        const cells = await embeddedCells(out, out.chartNames[at], 'ppt/');
+        reports.push(cells ? waterfallReport(out.charts[at], cells, 'Sheet1', 2, model) : null);
+      }
+      const frames = out.slides.map(slide => chartFrames(slide).length);
+      const leaks = Object.keys(out.parts).filter(name => out.parts[name].indexOf('pp-wf') >= 0);
+      return {
+        pass: out.charts.length === 2 && same(frames, [1, 1]) && out.slides.every(slide => tagsOf(slide, 'p:pic').length === 0) && out.media.length === 0 && out.workbooks.length === 2
+          && same(seriesOf(out.charts[0])[0].cats, WF_MARGIN.categories) && same(seriesOf(out.charts[1])[0].cats, WF_CASH.categories)
+          && !!reports[0] && goodReport(reports[0], WF_MARGIN, nameOfSeries(WF_MARGIN)) && !!reports[1] && goodReport(reports[1], WF_CASH, nameOfSeries(WF_CASH)) && leaks.length === 0
+          && same(tagsOf(out.charts[1], 'c:dLbl').filter(label => label.getElementsByTagName('c:delete')[0]).length, 3),
+        notes: JSON.stringify({ charts: out.charts.length, frames, media: out.media, reports, leaks }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_xlsx_waterfall_blocks_have_their_formulas_shifted_to_their_own_rows_and_keep_their_zero_results',
+    description: 'Excel : deux cascades d\'une feuille sont deux graphiques natifs dont les formules visent la feuille « Données des graphiques » ; chaque bloc de cette feuille a ses formules à ses propres lignes (le second ne lit pas le premier : un montant modifié ne redessine que sa cascade), chaque formule garde sa valeur en cache - les ZÉROS aussi, qu\'ExcelJS perdait à la copie - et ces valeurs disent ce que le graphique a en cache ; le tracé de la cascade, les formules évaluées, est le bon avant et après la modification des montants de son bloc',
+    run: async () => {
+      const out = await xlsxOf(gridHtml(smallChart(WF_MARGIN), smallChart(WF_CROSS)));
+      const sheetName = I18n.t('xlsx.chart.sheet');
+      const cells = sheetCells(out.parts['xl/worksheets/sheet' + out.sheets.length + '.xml'], out.parts['xl/sharedStrings.xml']);
+      const rows = [];
+      for (const [model, chart] of [[WF_MARGIN, out.charts[0]], [WF_CROSS, out.charts[1]]]) {
+        const made = DocxExport.waterfallOf(model);
+        const firstRow = Number(/\$(\d+)(?::\$[A-Z]+\$\d+)?$/.exec(tagsOf(tagsOf(chart, 'c:ser')[0], 'c:cat')[0].getElementsByTagName('c:f')[0].textContent)[1]);
+        const report = waterfallReport(chart, cells, sheetName, firstRow, model);
+        // Les montants de CE bloc changent : si ses formules lisaient les lignes d'un autre bloc (décalage faux), sa cascade ne se redessinerait pas comme elle doit.
+        const edited = amountsOf(model).map((amount, at) => (at % 2 ? amount * -1 - 7 : amount + 11));
+        const edits = Object.fromEntries(edited.map((amount, at) => [made.amountColumn + (firstRow + at), amount]));
+        const editedModel = cascade(edited, { total: !!model.waterfall.total }, model.categories.slice(0, stepCount(model)));
+        rows.push({ firstRow, report, after: same(drawnRanges(made, calculator(cells, edits), firstRow), cascadeRanges(editedModel)) });
+      }
+      const another = rows.length === 2 && rows[1].firstRow > rows[0].firstRow + WF_MARGIN.categories.length;
+      return {
+        pass: out.charts.length === 2 && out.media.length === 0 && out.sheets.length === 2 && out.sheets[1] === sheetName && same(seriesOf(out.charts[0])[0].cats, WF_MARGIN.categories) && same(seriesOf(out.charts[1])[0].cats, WF_CROSS.categories)
+          && rows.length === 2 && another && rows.every(row => row.report.recalculated && row.report.withoutValue === 0 && row.report.mismatches.length === 0 && row.report.invisibleBase && row.report.stacked && row.after)
+          && goodReport(rows[0].report, WF_MARGIN, nameOfSeries(WF_MARGIN)) && goodReport(rows[1].report, WF_CROSS, nameOfSeries(WF_CROSS))
+          && out.charts.every(chart => tagsOf(chart, 'c:f').every(f => /^'Données des graphiques'!/.test(f.textContent))),
+        notes: JSON.stringify({ sheets: out.sheets, rows, head: [cells.get('A1'), cells.get('A2')] }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_waterfall_keeps_the_png_when_its_model_is_unreadable_and_a_failed_finish_still_exports_a_chart',
+    description: 'Cascade : un modèle dont un montant n\'est pas un nombre, ou dont les montants ne vont pas avec les marches, laisse l\'image PNG dans le .docx, le .pptx et le classeur (aucun graphique, aucune feuille de données), sans rien bloquer ; quand la fin du Word échoue (l\'archive refuse de s\'écrire), le .docx sort quand même avec son graphique natif, modifiable, dont la base reste blanche',
+    run: async () => {
+      const warn = console.warn;
+      const warned = [];
+      console.warn = (...args) => { warned.push(String(args[0])); };
+      const first = WF_MARGIN.series[0];
+      const out = [];
+      let unfinished;
+      let refused = 0;
+      try {
+        for (const [why, values] of [['montant illisible', [1000, 'x', -600, -120, null]], ['montants en trop ou en moins', [1000, -150]]]) {
+          const model = Object.assign({}, WF_MARGIN, { series: [Object.assign({}, first, { values })] });
+          const word = await docxOf(drawnHtml(model));
+          const slides = await pptxOf(drawnHtml(model));
+          const book = await xlsxOf(gridHtml(smallChart(model)));
+          out.push({ why, word: [word.charts.length, word.media.length], pptx: [slides.charts.length, slides.media.length, tagsOf(slides.slides[0], 'p:pic').length], xlsx: [book.charts.length, book.sheets.length, book.media.length] });
+        }
+        const original = JSZip.prototype.generateAsync;
+        JSZip.prototype.generateAsync = function () { refused++; return Promise.reject(new Error('essai : archive refusée')); };
+        try { unfinished = await docxOf(drawnHtml(WF_MARGIN)); } finally { JSZip.prototype.generateAsync = original; }
+      } finally { console.warn = warn; }
+      const series = unfinished && unfinished.charts[0] ? seriesOf(unfinished.charts[0]) : [];
+      return {
+        pass: out.length === 2 && out.every(o => same(o.word, [0, 1]) && same(o.pptx, [0, 1, 1]) && same(o.xlsx, [0, 1, 1]))
+          && !!unfinished && refused >= 1 && unfinished.charts.length === 1 && unfinished.media.length === 0 && unfinished.workbooks.length === 1 && series.length === 6 && series[0].color === 'FFFFFF' && /^Base/.test(series[0].name)
+          && warned.some(text => /cascade|graphique natif/.test(text)),
+        notes: JSON.stringify({ out, refused, unfinished: unfinished && [unfinished.charts.length, unfinished.media.length, series.map(s => [s.name, s.color])], warned: warned.length }),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'chart_office_waterfall_of_the_real_chain_is_native_in_word_powerpoint_and_excel',
+    description: 'Cascade de la vraie chaîne (le client 1, « Afficher le total » et les valeurs) : la Lecture pose `data-chart-office` (modèle « waterfall » : Mars, Janvier et « Total ») sur l\'image PNG ; le .docx, le .pptx et le classeur ont chacun UN graphique natif en colonnes empilées et son classeur, aucune image PNG, la feuille de données dans l\'Excel ; une ligne sans vente n\'a rien',
+    run: async (h) => {
+      await seed(h);
+      const extra = { values: ['Montant'], total: true, labels: true };
+      const html = docOf(madeHtml(def('waterfall', extra), 'linked'));
+      const content = await renderReader(html, recordOf(1));
+      const img = content.querySelector('img');
+      const model = img && JSON.parse(img.getAttribute('data-chart-office') || 'null');
+      const png = !!img && (img.getAttribute('src') || '').startsWith('data:image/png;base64,');
+      hideReader();
+      const word = await docxOf(html, recordOf(1));
+      const slides = await pptxOf(html, recordOf(1));
+      const book = await xlsxOf(gridHtml(madeHtml(def('waterfall', extra), 'linked', SMALL)), recordOf(1));
+      const empty = await docxOf(html, NO_SALE);
+      const names = ['Base', 'Hausse', 'Baisse', 'Total', 'Hausse (sous zéro)', 'Baisse (sous zéro)'];
+      const stacked = chart => !!chart && same(plotsOf(chart), ['c:barChart']) && tagsOf(chart, 'c:grouping')[0].getAttribute('val') === 'stacked' && same(seriesOf(chart).map(s => s.name), names);
+      return {
+        pass: !!model && model.kind === 'waterfall' && same(model.categories, ['Mars', 'Janvier', I18n.t('chart.waterfall.total')]) && same(model.series[0].values, [300, 100, null]) && model.waterfall.total === true && png
+          && word.charts.length === 1 && word.media.length === 0 && word.workbooks.length === 1 && stacked(word.charts[0])
+          && slides.charts.length === 1 && slides.media.length === 0 && slides.workbooks.length === 1 && stacked(slides.charts[0])
+          && book.charts.length === 1 && book.media.length === 0 && book.sheets.length === 2 && book.sheets[1] === I18n.t('xlsx.chart.sheet') && stacked(book.charts[0])
+          && empty.charts.length === 0 && empty.media.length === 0,
+        notes: JSON.stringify({ model: model && [model.kind, model.categories, model.series[0].values], png, word: [word.charts.length, word.media.length, word.workbooks.length], pptx: [slides.charts.length, slides.media.length, slides.workbooks.length], xlsx: [book.charts.length, book.media.length, book.sheets], empty: [empty.charts.length, empty.media.length] }),
       };
     },
   });
