@@ -45,6 +45,8 @@ function toolsOf(page) {
   }, [selector, index]);
   const reach = async (c) => { await page.mouse.move(c.x - 10, c.y); await page.mouse.move(c.x, c.y, { steps: 2 }); await sleep(80); };
   const hover = async (selector, index = 0) => {
+    // Un menu de la barre du haut (Objets, Puces…) reste ouvert sous un pointeur resté dans sa zone (survol gardé) : il couvrirait la pastille visée, la souris le quitte d'abord.
+    if (await page.evaluate(([sel, i]) => { const g = document.querySelector('.v2-hover-group:hover'); const el = document.querySelectorAll(sel)[i]; return !!g && !!el && !g.contains(el); }, [selector, index])) { await page.mouse.move(WIDTH - 40, HEIGHT - 5); await sleep(400); }
     const c = await rectOf(selector, index);
     if (!c) throw new Error('introuvable : ' + selector + ' #' + index);
     await reach(c);
