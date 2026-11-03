@@ -605,6 +605,81 @@
     },
   });
 
+  // Le HTML de l'enregistrement automatique (js/editor.js : documentHtml). Toutes les 2,5 s tant qu'on écrit, l'éditeur relisait tout le document pour n'en changer qu'un bloc (90 ms dans
+  // « Présentation commerciale », 590 blocs) : il garde maintenant le HTML de chaque bloc de premier niveau tant que le nœud est le même. Le cas qui compte les appels de rendu d'un nœud échoue sur
+  // l'ancien code (tout se refaisait à chaque lecture) ; celui qui suit garde le contrat : le texte écrit reste, octet pour octet, celui de TipTap quand la langue ou la touche de déclenchement change.
+  cases.push({
+    id: 'autosave_html_serializes_only_the_blocks_an_edit_changed_and_writes_the_same_bytes',
+    description: "Lire le HTML du document deux fois de suite ne rend aucun bloc la seconde fois, une lettre tapée dans un paragraphe n'en fait rendre qu'un, et le texte reste celui de TipTap (editor.getHTML) octet pour octet à chaque lecture",
+    run: async (h) => {
+      await setup(h, lines(60));
+      const editor = EditorCore.getEditor();
+      const serializer = editor.schema.cached.domSerializer;
+      const real = serializer.nodes.paragraph;
+      let calls = 0;
+      serializer.nodes.paragraph = function () { calls++; return real.apply(this, arguments); };
+      try {
+        const counted = fn => { calls = 0; const value = fn(); return { value, calls }; };
+        const fullBefore = counted(() => editor.getHTML());
+        const first = counted(() => Editor.getHTML());
+        const unchanged = counted(() => Editor.getHTML());
+        let pos = -1;
+        let seen = 0;
+        editor.state.doc.forEach((node, offset) => { if (node.type.name === 'paragraph' && ++seen === 30) pos = offset + 1; });
+        editor.view.dispatch(editor.state.tr.insertText('x', pos));
+        const edited = counted(() => Editor.getHTML());
+        const fullAfter = counted(() => editor.getHTML());
+        const same = first.value === fullBefore.value && unchanged.value === first.value && edited.value === fullAfter.value;
+        const shown = edited.value !== unchanged.value && edited.value.indexOf('<p>xLigne 30 ') >= 0;
+        return {
+          pass: fullBefore.calls >= 60 && unchanged.calls === 0 && edited.calls === 1 && same && shown,
+          notes: 'blocs rendus : TipTap ' + fullBefore.calls + ', 1re lecture ' + first.calls + ', 2e lecture ' + unchanged.calls + ' (attendu 0), après une lettre ' + edited.calls + ' (attendu 1) ; mêmes octets=' + same + ' (' + edited.value.length + ' caractères), lettre dans le texte=' + shown,
+        };
+      } finally { serializer.nodes.paragraph = real; }
+    },
+  });
+
+  cases.push({
+    id: 'autosave_html_follows_the_interface_language_and_the_trigger_key_like_the_full_serialization',
+    description: "Quand la langue de l'interface ou la touche de déclenchement du panneau « # » change sans que le texte change, le HTML lu reste celui de TipTap octet pour octet (puce d'une date, sommaire, bulle d'une variable, bulle d'un calcul) : la mémoire des blocs repart à neuf",
+    run: async (h) => {
+      await setup(h, lines(3));
+      const editor = EditorCore.getEditor();
+      const lang = I18n.getLang();
+      const triggerBefore = localStorage.getItem('pp_trigger_char');
+      try {
+        editor.commands.setContent({
+          type: 'doc',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'Client ' }, { type: 'varBadge', attrs: { table: 'Clients', column: 'Nom', key: 'Clients.Nom' } }, { type: 'text', text: ' le ' }, { type: 'smartChip', attrs: { kind: 'date' } }] },
+            { type: 'paragraph', content: [{ type: 'calcBadge', attrs: { formula: '{Clients.Total} * 2' } }] },
+            { type: 'toc' },
+            { type: 'paragraph', content: [{ type: 'text', text: 'Fin' }] },
+          ],
+        });
+        const same = () => Editor.getHTML() === editor.getHTML();
+        const start = Editor.getHTML();
+        const checks = { start: same(), badge: start.indexOf('#Clients.Nom') >= 0, again: Editor.getHTML() === start };
+        localStorage.setItem('pp_trigger_char', '@');
+        const at = Editor.getHTML();
+        checks.triggerSame = same();
+        checks.triggerShown = at.indexOf('@Clients.Nom') >= 0 && at.indexOf('#Clients.Nom') < 0 && at !== start;
+        if (triggerBefore === null) localStorage.removeItem('pp_trigger_char'); else localStorage.setItem('pp_trigger_char', triggerBefore);
+        checks.triggerBack = Editor.getHTML() === start;
+        I18n.setLang(lang === 'fr' ? 'en' : 'fr');
+        const other = Editor.getHTML();
+        checks.langSame = same();
+        checks.langShown = other !== start;
+        I18n.setLang(lang);
+        checks.langBack = Editor.getHTML() === start && same();
+        return { pass: Object.keys(checks).every(k => checks[k]), notes: JSON.stringify(checks) };
+      } finally {
+        if (triggerBefore === null) localStorage.removeItem('pp_trigger_char'); else localStorage.setItem('pp_trigger_char', triggerBefore);
+        I18n.setLang(lang);
+      }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.paginationCost = cases;
 })();

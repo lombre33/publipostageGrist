@@ -533,6 +533,7 @@ const Editor = (function () {
   async function init() {
     const libs = await loadLibraries();
     htmlOfFragment = libs.getHTMLFromFragment;
+    domSerializerClass = libs.PMDOMSerializer;
     configureModules(libs);
     // Les marques de suivi et le pont ProseMirror se construisent une fois, avant les extensions qui s'en servent.
     trackChangesApi = await TrackChanges.createExtensions(libs.Node, libs.Mark, libs.Extension, libs.mergeAttributes);
@@ -610,13 +611,50 @@ const Editor = (function () {
     window.addEventListener('resize', HeaderFooterPreview.schedulePaginationRecompute);
   }
 
+  let htmlOfFragment = null;
+  let domSerializerClass = null;
+  // Le HTML du document, un bloc de premier niveau après l'autre : l'enregistrement automatique le relit toutes les 2,5 s tant qu'on écrit (90 ms pour « Présentation commerciale », 590 blocs de premier niveau), alors
+  // qu'une frappe n'en change qu'un. ProseMirror ne remplace que les nœuds qu'un pas touche, les autres gardent leur identité : le HTML d'un bloc se garde donc par nœud (WeakMap, il s'en va avec lui)
+  // et seuls les blocs neufs se sérialisent. Même sérialiseur que `editor.getHTML()` (celui du schéma, qui écrit les marques de suivi des cases) sur le même nœud ; les blocs d'un document ne
+  // portent aucune marque (`serializeFragment` n'a alors rien à regrouper d'un bloc à l'autre) et l'`innerHTML` d'un conteneur est la suite des HTML de ses enfants : la sortie est la même, octet pour octet.
+  // Seul le rendu peut changer sans que le nœud change : ce qui ne vient pas de ses attributs (la langue de l'interface pour la puce d'une date, la touche de déclenchement du panneau « # » pour la
+  // bulle d'une variable ou d'un calcul) fait repartir la mémoire à neuf. Une marque sur un bloc de premier niveau, ou une erreur : le calcul d'avant, en entier. Un bloc de plus de 64 Ko (une photo
+  // collée dans le texte) ne se garde pas : le texte gardé doublerait le poids de l'image en mémoire, et la refaire coûte quelques millisecondes.
+  const BLOCK_HTML_KEPT_MAX = 65536;
+  let blockHtml = new WeakMap();
+  let blockHtmlSetup = '';
+  function documentHtml(content, schema) {
+    let plain = !!domSerializerClass;
+    content.forEach(node => { if (node.marks.length) plain = false; });
+    if (!plain) return htmlOfFragment(content, schema);
+    try {
+      const setup = I18n.getLang() + '|' + Variables.triggerChar();
+      if (setup !== blockHtmlSetup) { blockHtml = new WeakMap(); blockHtmlSetup = setup; }
+      const serializer = domSerializerClass.fromSchema(schema);
+      let holder = null;
+      const parts = [];
+      content.forEach(node => {
+        let html = blockHtml.get(node);
+        if (html === undefined) {
+          if (!holder) holder = document.implementation.createHTMLDocument().createElement('div');
+          holder.appendChild(serializer.serializeNode(node));
+          html = holder.innerHTML;
+          holder.textContent = '';
+          if (html.length <= BLOCK_HTML_KEPT_MAX) blockHtml.set(node, html);
+        }
+        parts.push(html);
+      });
+      return parts.join('');
+    } catch (e) {
+      return htmlOfFragment(content, schema);
+    }
+  }
   // Une grille s'enregistre et s'exporte sans le paragraphe vide caché sous son tableau (GridEditor.serialize). `doc` : le HTML d'un état à venir du document, jamais posé dans l'éditeur,
   // écrit par le même sérialiseur que celui de l'éditeur (js/linked-table.js:prepareSend écrit le document avec les bases d'après un envoi aux modèles, que l'éditeur ne prend qu'une fois
   // Grist d'accord).
-  let htmlOfFragment = null;
   function getHTML(doc) {
     if (!editor) return '';
-    return GridEditor.serialize(doc && doc.content ? htmlOfFragment(doc.content, editor.schema) : editor.getHTML());
+    return GridEditor.serialize(documentHtml(doc && doc.content ? doc.content : editor.state.doc.content, editor.schema));
   }
 
   function getHeadingNumberingStyle() {
