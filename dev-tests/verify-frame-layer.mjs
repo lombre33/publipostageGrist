@@ -327,8 +327,11 @@ async function run(lang, colorScheme, full) {
     const CHIP = `${BAR} #v2-frame-order-open`;
     const ROWS = '.v2-frame-order-menu.visible';
     const ROW = name => `${ROWS} [data-action="order:${name}"]`;
-    const pick = async (name) => { await s.click(CHIP); await s.click(ROW(name)); };
+    // La souris qui vient de choisir une ligne reste où le menu était : selon la largeur de la barre, c'est sur un bouton de la barre du haut (« Objets »), dont le menu au survol recouvre la pastille. Elle est mise à l'écart avant d'y retourner.
+    const aside = () => s.page.mouse.move(660, 385);
+    const pick = async (name) => { await aside(); await s.click(CHIP); await s.click(ROW(name)); };
     const rowState = async (name) => {
+      await aside();
       await s.click(CHIP);
       const row = await s.page.evaluate(sel => { const b = document.querySelector(sel); return b ? { checked: b.getAttribute('aria-checked'), active: b.classList.contains('is-active') } : null; }, ROW(name));
       await s.click(CHIP);

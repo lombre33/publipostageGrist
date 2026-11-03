@@ -1021,6 +1021,21 @@ const ReaderMode = (function () {
     revealHooked = true;
     ExternalImages.onReveal(() => { if (geometryWatch && geometryWatch.schedule) geometryWatch.schedule(); });
     document.addEventListener('click', followInternalLink);
+    document.addEventListener('click', followFrameLink);
+  }
+  // Un objet de diapositive à lien (js/frame-link.js : un bouton, une forme, une image) suit son lien au clic, comme au diaporama : un titre, un signet ou une diapositive du document amène sa cible en haut de la zone
+  // qui défile, une adresse web, de courrier ou de téléphone s'ouvre (dans un nouvel onglet). Les actions du diaporama (suivante, précédente...) n'ont pas de sens ici. Un lien du texte de l'objet passe avant
+  // (il a le sien) ; un clic qui ne tombe pas dans le document (une barre, une fenêtre par-dessus) n'est pas pour l'objet qu'elle recouvre.
+  function followFrameLink(event) {
+    const container = document.getElementById('reader-container');
+    const target = event.target;
+    if (event.button !== 0 || !container || !target || !target.closest || !container.contains(target) || target.closest('a[href]')) return;
+    const framed = FrameLink.frameAt(document, event.clientX, event.clientY);
+    if (!framed || !container.contains(framed.el) || framed.link.kind === 'action') return;
+    event.preventDefault();
+    if (framed.link.kind === 'url') { FrameLink.openUrl(framed.link.url); return; }
+    const mark = container.querySelector('[data-anchor="' + framed.link.id + '"]');
+    if (mark) TocLinks.reveal(mark);
   }
   // Un lien vers un titre ou un signet du document (`#adresse`, js/anchors.js) amène sa cible en haut de la zone qui défile, sans quitter la page du widget : suivre `#adresse`
   // dans le cadre en changerait l'adresse. Un seul écouteur sur la page, posé au premier rendu : la Lecture refait son contenu à chaque rendu, ses liens n'ont pas à être câblés un à un.

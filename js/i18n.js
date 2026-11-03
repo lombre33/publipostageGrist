@@ -772,6 +772,7 @@ const I18n = (function () {
     // --- Fenêtre du lien (js/link-dialog.js) : « hyperlink » et pas « link », préfixe déjà pris par les tables liées (linkRules, linkConfig) ---
     'hyperlink.title.new': { fr: 'Insérer un lien', en: 'Insert a link' },
     'hyperlink.title.edit': { fr: 'Modifier le lien', en: 'Edit the link' },
+    'hyperlink.title.object': { fr: 'Lien de l’objet', en: 'Object link' },
     'hyperlink.url.label': { fr: 'Adresse du lien', en: 'Link address' },
     'hyperlink.url.placeholder': { fr: 'https://exemple.fr', en: 'https://example.com' },
     'hyperlink.url.hint': { fr: 'Une adresse web, une adresse email ou un numéro de téléphone.', en: 'A web address, an email address or a phone number.' },
@@ -799,6 +800,15 @@ const I18n = (function () {
     'hyperlink.text.placeholderSlide': { fr: 'Vide : le nom de la diapositive, du titre ou du signet s’affiche', en: 'Empty: the name of the slide, heading or bookmark is shown' },
     'hyperlink.target.hintSlide': { fr: 'Le lien mène à cet endroit au diaporama, dans la Lecture et dans les exports PDF, Word, HTML et PowerPoint.', en: 'The link goes to that place in the slideshow, in Read mode and in the PDF, Word, HTML and PowerPoint exports.' },
     'hyperlink.target.missingSlide': { fr: 'Cette diapositive, ce titre ou ce signet n’existe plus dans le document.', en: 'This slide, heading or bookmark no longer exists in the document.' },
+    // Un objet de diapositive peut aussi mener à une action du diaporama (js/frame-link.js, js/link-dialog.js)
+    'hyperlink.target.actions': { fr: 'Actions au diaporama', en: 'Slide show actions' },
+    'hyperlink.action.next': { fr: 'Diapositive suivante', en: 'Next slide' },
+    'hyperlink.action.prev': { fr: 'Diapositive précédente', en: 'Previous slide' },
+    'hyperlink.action.first': { fr: 'Première diapositive', en: 'First slide' },
+    'hyperlink.action.last': { fr: 'Dernière diapositive', en: 'Last slide' },
+    'hyperlink.action.back': { fr: 'Dernière diapositive vue', en: 'Last slide viewed' },
+    'hyperlink.action.end': { fr: 'Fin du diaporama', en: 'End of the slide show' },
+    'hyperlink.target.hintObject': { fr: 'Un clic sur l’objet mène à cet endroit au diaporama et dans la Lecture ; une action n’agit qu’au diaporama.', en: 'A click on the object goes to that place in the slide show and in Read mode; an action only works in the slide show.' },
     'hyperlink.target.hint': { fr: 'Le lien mène à cet endroit dans la Lecture et dans les exports PDF, Word et HTML.', en: 'The link goes to that place in Read mode and in the PDF, Word and HTML exports.' },
     'hyperlink.target.none': { fr: 'Ce document n’a ni titre ni signet pour l’instant. Posez un signet avec « Signet… », dans le même menu.', en: 'This document has no heading or bookmark yet. Place one with “Bookmark…” in the same menu.' },
     'hyperlink.target.missing': { fr: 'Ce titre ou ce signet n’existe plus dans le document.', en: 'This heading or bookmark no longer exists in the document.' },
@@ -1116,6 +1126,9 @@ const I18n = (function () {
     'frame.order': { fr: 'Ordre', en: 'Order' },
     // --- Animation d'un objet (js/frame-anim.js, extensions/diapositives/frame-anim-ui.js : la fenêtre ouverte par la barre de l'objet, js/free-frame.js ; jouée par le diaporama) ---
     'frame.animation': { fr: 'Animation…', en: 'Animation…' },
+    // Le lien d'un objet de diapositive (js/frame-link.js) : le bouton de sa barre, qui dit où il mène quand il en a un
+    'frame.link': { fr: 'Lien…', en: 'Link…' },
+    'frame.linkOn': { fr: 'Lien : {name}', en: 'Link: {name}' },
     'frame.hide': { fr: 'Masquer l\'objet', en: 'Hide object' },
     'frame.orientation': { fr: 'Orientation du texte', en: 'Text direction' },
     'frame.orientHorz': { fr: 'Horizontal', en: 'Horizontal' },

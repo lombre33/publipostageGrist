@@ -69,18 +69,8 @@ const LinkDialog = (function () {
 
   // Ouvre une adresse déjà normalisée par un <a> synthétique cliqué, comme partout dans le widget (window.open se comporte moins bien dans l'iframe
   // d'un widget Grist). Un lien web s'ouvre dans un nouvel onglet ; mailto: et tel: passent la main à l'application du système (dans le cadre isolé de GFS, eux aussi s'ouvrent dans un
-  // nouvel onglet : GfsLink.opensInNewTab).
-  function openExternal(href) {
-    if (!/^(?:https?|mailto|tel):/i.test(href || '')) return false;
-    const a = document.createElement('a');
-    a.href = href;
-    if (/^https?:/i.test(href) || GfsLink.opensInNewTab(href)) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    return true;
-  }
+  // nouvel onglet : GfsLink.opensInNewTab). Le geste est celui de js/frame-link.js (openUrl), que l'objet à lien et le diaporama partagent.
+  const openExternal = href => FrameLink.openUrl(href);
 
   // Ce que la sélection permet : un bloc de code n'accepte aucune marque (donc aucun lien) ; ailleurs, `can().setLink` dit si la marque passe sur la
   // sélection (une image seule, un saut de page, une sélection sans texte : non). Sans sélection, le texte du lien s'insère : il suffit que le
@@ -96,7 +86,7 @@ const LinkDialog = (function () {
   // sélectionné.
   let win = null;
   let refs = null;
-  let ctx = null; // { from, to, empty, href, withText } : la sélection à l'ouverture
+  let ctx = null; // { from, to, empty, href, withText, object } : la sélection à l'ouverture ; `object` : { apply(href, claim), remove() } quand la fenêtre sert à un objet de diapositive (js/frame-link.js)
   let mode = 'web'; // 'web' ou 'document' : ce que la fenêtre montre
   let slideTargets = false; // la liste « Dans ce document » commence par les diapositives de la présentation
 
@@ -211,7 +201,7 @@ const LinkDialog = (function () {
 
   // Les titres et les signets du document dans la liste, les groupes étant « Titres » et « Signets » ; `selectedId` : l'adresse du lien qu'on modifie. Rend vrai quand
   // le document a au moins un titre ou un signet.
-  function fillTargets(ed, selectedId) {
+  function fillTargets(ed, selectedId, selectedAction) {
     const { target, targetLabel, targetHint, targetList } = refs;
     const { headings, bookmarks, slides } = Anchors.targets(ed);
     // Dans une présentation, la liste commence par les diapositives : le libellé, l'invite, l'indication et le texte d'un lien neuf le disent.
@@ -238,9 +228,12 @@ const LinkDialog = (function () {
     group('hyperlink.target.slides', slides, entry => 's:' + entry.index, () => '');
     group('hyperlink.target.headings', headings, (entry, index) => 'h:' + index, entry => I18n.t('hyperlink.target.level', { n: entry.level }));
     group('hyperlink.target.bookmarks', bookmarks, entry => 'a:' + entry.id, entry => entry.snippet);
+    // Pour un objet de diapositive, la liste finit par les actions du diaporama (la suivante, la précédente... : js/frame-link.js).
+    if (ctx.object && slideMode) group('hyperlink.target.actions', FrameLink.ACTIONS.map(name => ({ name, text: I18n.t('hyperlink.action.' + name) })), entry => 'x:' + entry.name, () => '');
     // Le choix d'un lien qu'on modifie : son signet, sinon le titre qui porte cette adresse.
     let selected = '';
-    if (selectedId) {
+    if (selectedAction) selected = 'x:' + selectedAction;
+    else if (selectedId) {
       const slide = slides.find(entry => entry.id === selectedId);
       if (slide) selected = 's:' + slide.index;
       else if (bookmarks.some(entry => entry.id === selectedId)) selected = 'a:' + selectedId;
@@ -249,7 +242,8 @@ const LinkDialog = (function () {
     target.value = selected;
     const any = headings.length + bookmarks.length + slides.length > 0;
     target.disabled = !any;
-    targetHint.textContent = I18n.t(!any ? 'hyperlink.target.none' : selectedId && !selected ? (slideMode ? 'hyperlink.target.missingSlide' : 'hyperlink.target.missing') : (slideMode ? 'hyperlink.target.hintSlide' : 'hyperlink.target.hint'));
+    const hint = ctx.object && slideMode ? 'hyperlink.target.hintObject' : slideMode ? 'hyperlink.target.hintSlide' : 'hyperlink.target.hint';
+    targetHint.textContent = I18n.t(!any ? 'hyperlink.target.none' : selectedId && !selected ? (slideMode ? 'hyperlink.target.missingSlide' : 'hyperlink.target.missing') : hint);
     if (targetList) targetList.sync();
     return any;
   }
@@ -262,12 +256,36 @@ const LinkDialog = (function () {
     ensure();
     const { from, to, empty } = ed.state.selection;
     const href = (ed.getAttributes('link') || {}).href || '';
-    const anchorId = Anchors.idOfHref(href);
     // Texte à afficher : seulement quand il n'y a rien de sélectionné ni de lien sous le curseur - sinon c'est le texte qui est déjà là, qu'on garde
     // tel quel.
-    ctx = { from, to, empty, href, withText: empty && !href };
+    ctx = { from, to, empty, href, withText: empty && !href, object: null };
+    present(ed, href);
+    return true;
+  }
+
+  // La même fenêtre pour un objet de diapositive (le bouton « Lien… » de sa barre, js/free-frame.js) : `href` est son lien d'aujourd'hui ('' sans), `apply(href, claim)` pose le lien choisi (et le signet d'une
+  // diapositive qui n'en avait pas : claimInto), `remove()` le retire. Pas de texte à afficher ; la liste « Dans ce document » finit par les actions du diaporama (js/frame-link.js).
+  function openForObject(options) {
+    ensure();
+    const href = FrameLink.text(options.href);
+    ctx = { from: 0, to: 0, empty: true, href, withText: false, object: { apply: options.apply, remove: options.remove } };
+    present(EditorCore.getEditor(), href);
+  }
+
+  // Ce qu'un signet demandé pour une diapositive ou un titre (`claim`, rendu par pickedTarget) ajoute à la transaction `tr` du lien : la diapositive prend son repère (SlideProps.CLAIM_META), le titre son adresse.
+  function claimInto(tr, claim) {
+    if (!claim) return tr;
+    if (claim.slide != null) tr.setMeta(SlideProps.CLAIM_META, { index: claim.slide, id: claim.id });
+    else tr.setNodeAttribute(claim.pos, 'anchorId', claim.id);
+    return tr;
+  }
+
+  // Remplit la fenêtre d'après `ctx` et le lien `href` de la sélection (ou de l'objet), puis l'ouvre.
+  function present(ed, href) {
+    const anchorId = Anchors.idOfHref(href);
+    const action = ctx.object ? FrameLink.actionOf(href) : '';
     const { modes, modeBoxes, urlLabel, url, hint, error, targetLabel, target, targetError, textField, textLabel, text, remove, cancel, ok } = refs;
-    win.title.textContent = I18n.t(href ? 'hyperlink.title.edit' : 'hyperlink.title.new');
+    win.title.textContent = I18n.t(ctx.object ? 'hyperlink.title.object' : href ? 'hyperlink.title.edit' : 'hyperlink.title.new');
     modes.setAttribute('aria-label', I18n.t('hyperlink.mode.label'));
     modeBoxes.web.text.textContent = I18n.t('hyperlink.mode.web');
     modeBoxes.document.text.textContent = I18n.t('hyperlink.mode.document');
@@ -278,7 +296,7 @@ const LinkDialog = (function () {
     if (lock) modeBoxes.document.label.title = I18n.t(lock); else modeBoxes.document.label.removeAttribute('title');
     urlLabel.textContent = I18n.t('hyperlink.url.label');
     url.placeholder = I18n.t('hyperlink.url.placeholder');
-    url.value = anchorId ? '' : href;
+    url.value = anchorId || action ? '' : href;
     url.removeAttribute('aria-invalid');
     hint.textContent = I18n.t('hyperlink.url.hint');
     error.hidden = true;
@@ -287,18 +305,17 @@ const LinkDialog = (function () {
     targetError.hidden = true;
     targetError.textContent = '';
     target.removeAttribute('aria-invalid');
-    fillTargets(ed, anchorId);
+    fillTargets(ed, anchorId, action);
     textField.hidden = !ctx.withText;
     textLabel.textContent = I18n.t('hyperlink.text.label');
     text.value = '';
     remove.textContent = I18n.t('hyperlink.remove');
     remove.hidden = !href;
     cancel.textContent = I18n.t('common.cancel');
-    ok.textContent = I18n.t(href ? 'common.confirm' : 'common.insert');
-    setMode(anchorId && !lock ? 'document' : 'web', false);
+    ok.textContent = I18n.t(href || ctx.object ? 'common.confirm' : 'common.insert');
+    setMode((anchorId || action) && !lock ? 'document' : 'web', false);
     win.show(mode === 'document' ? target : url);
     if (mode === 'web') url.select();
-    return true;
   }
 
   function showError(kind) {
@@ -322,6 +339,10 @@ const LinkDialog = (function () {
   function pickedTarget(ed) {
     const value = refs.target.value;
     if (!value) return { error: 'hyperlink.error.noTarget' };
+    if (value.indexOf('x:') === 0) {
+      const name = value.slice(2);
+      return FrameLink.hrefOfAction(name) ? { action: name, label: I18n.t('hyperlink.action.' + name), claim: null } : { error: 'hyperlink.target.missing' };
+    }
     if (value.indexOf('s:') === 0) {
       const slide = Anchors.targets(ed).slides[parseInt(value.slice(2), 10)];
       if (!slide) return { error: 'hyperlink.target.missingSlide' };
@@ -350,7 +371,7 @@ const LinkDialog = (function () {
     if (mode === 'document') {
       const picked = pickedTarget(ed);
       if (picked.error) { showTargetError(picked.error); return; }
-      href = Anchors.hrefOf(picked.id);
+      href = picked.action ? FrameLink.hrefOfAction(picked.action) : Anchors.hrefOf(picked.id);
       label = picked.label;
       claim = picked.claim;
     } else {
@@ -359,12 +380,18 @@ const LinkDialog = (function () {
       href = result.href;
       label = result.text;
     }
+    // Un objet de diapositive : c'est lui qui pose le lien (js/free-frame.js), le texte n'y est pour rien.
+    if (ctx.object) {
+      const object = ctx.object;
+      closeWindow();
+      object.apply(FrameLink.text(href), claim);
+      return;
+    }
     // La sélection de l'éditeur n'a pas bougé pendant que la fenêtre était ouverte (le focus est parti, pas la sélection) : les commandes s'y
-    // appliquent. Un titre sans signet reçoit son adresse dans la même transaction que le lien : un seul Annuler défait les deux.
+    // appliquent. Un titre sans signet reçoit son adresse dans la même transaction que le lien : un seul Annuler défait les deux ; une diapositive sans signet en reçoit un dans l'événement du lien
+    // (SlideProps.CLAIM_META : le rangement de son repère le pose après la transaction, avec elle dans l'historique).
     const chain = ed.chain().focus();
-    // Une diapositive sans signet en reçoit un dans l'événement du lien (SlideProps.CLAIM_META : le rangement de son repère le pose après la transaction, avec elle dans l'historique).
-    if (claim && claim.slide != null) chain.command(({ tr }) => { tr.setMeta(SlideProps.CLAIM_META, { index: claim.slide, id: claim.id }); return true; });
-    else if (claim) chain.command(({ tr }) => { tr.setNodeAttribute(claim.pos, 'anchorId', claim.id); return true; });
+    if (claim) chain.command(({ tr }) => { claimInto(tr, claim); return true; });
     if (ctx.withText) {
       // Le curseur sort du lien après l'insertion : ce qui se tape ensuite ne s'ajoute pas à son texte (la marque de TipTap s'étend sinon, autolink
       // actif).
@@ -379,6 +406,12 @@ const LinkDialog = (function () {
   }
 
   function removeLink() {
+    if (ctx.object) {
+      const object = ctx.object;
+      closeWindow();
+      object.remove();
+      return;
+    }
     EditorCore.getEditor().chain().focus().unsetLink().run();
     closeWindow();
   }
@@ -459,5 +492,5 @@ const LinkDialog = (function () {
     document.addEventListener('scroll', hideTip, true);
   }
 
-  return { normalizeUrl, canLinkHere, open, createExtension, wireEditor, shortcutLabel };
+  return { normalizeUrl, canLinkHere, open, openForObject, claimInto, createExtension, wireEditor, shortcutLabel };
 })();

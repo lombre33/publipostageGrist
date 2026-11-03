@@ -149,6 +149,17 @@
 .pp-ff-selected > .pp-free-frame-box > .pp-ff-ui .pp-ff-line-handle { display: block; }
 /* Ni dans les miniatures, ni dans un éditeur en lecture seule. */
 .pp-slide-page .pp-ff-ui, .tiptap[contenteditable="false"] .pp-ff-ui { display: none; }
+
+/* La marque d'un objet à lien (`data-ff-link`, js/frame-link.js) : une petite chaîne dans le coin haut droit de sa boîte, dans l'éditeur seulement (l'interface `.pp-ff-ui` n'est ni dans le texte, ni dans les sorties, ni
+   dans les miniatures), qui ne prend aucun clic. Au diaporama et à la Lecture, un clic sur l'objet suit son lien : le pointeur y devient une main (au diaporama tant que la souris bouge, le pointeur s'y cache sinon ; à la Lecture, sauf pour une action du diaporama, qui n'y fait rien). */
+.pp-ff-link-badge { display: none; position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; box-sizing: border-box; padding: 2px; border-radius: 4px; background: var(--surface, #fff); color: var(--text, #1b2430); border: 1px solid var(--border-strong, #c3cad6); pointer-events: none; }
+.pp-ff-link-badge svg { display: block; width: 100%; height: 100%; }
+.pp-free-frame[data-ff-link] > .pp-free-frame-box > .pp-ff-ui .pp-ff-link-badge { display: block; }
+.pp-slide-show-layer.pp-slide-show-awake .pp-free-frame[data-ff-link] > .pp-free-frame-box, .reader-content .pp-free-frame[data-ff-link]:not([data-ff-link^="pp:"]) > .pp-free-frame-box { cursor: pointer; }
+/* Au diaporama (extensions/diapositives/slide-player.js), la copie mesurée est inerte - le lecteur reçoit tous les clics - : la boîte de chaque objet reçoit la souris, ce qui dit quel objet un clic touche (js/frame-link.js:frameAt) ;
+   rien dedans n'en reçoit (un lien web du texte n'agit pas au diaporama, comme avant). Un fond et une ligne (règles plus haut, plus précises) et la copie figée d'une transition restent inertes. */
+:where(.pp-slide-show-layer:not(.pp-slide-show-ghost)) .pp-free-frame-box { pointer-events: auto; }
+:where(.pp-slide-show-layer) .pp-free-frame-box * { pointer-events: none; }
 .pp-slide-page .pp-free-frame-box, .tiptap[contenteditable="false"] .pp-free-frame-box { outline: none; }
 
 /* La barre d'un objet sélectionné : le fond, le trait et son épaisseur sont des pastilles à icône et chevron, plus larges que les boutons carrés des barres flottantes ; la liste

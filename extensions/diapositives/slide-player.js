@@ -15,6 +15,9 @@
 //    molette ou le bouton « suivante ») joue le pas suivant AVANT de passer à la diapositive d'après ; le geste « précédent » défait le dernier pas d'un coup avant de revenir à la
 //    diapositive d'avant, où tout est déjà joué. Un geste pendant un pas le termine aussitôt. Le passage seul (« après n s ») ne joue pas les pas : il passe à la suivante. Sans
 //    animation dans la présentation, rien de tout cela ne se passe.
+//  - Les LIENS (demandes du 02/11) : un clic sur un lien du texte vers une diapositive mène à elle ; un clic sur un objet à lien (js/frame-link.js : un bouton, une forme, une image) suit le sien - une diapositive, un
+//    titre ou un signet, une adresse web, de courrier ou de téléphone, ou une action (suivante, précédente, première, dernière, dernière vue, fin du diaporama). La diapositive où l'on arrive joue SA transition. Le lien du
+//    texte passe avant celui de l'objet qui le porte ; un objet sans lien ne laisse pas passer le clic à celui du dessous, il passe à la suivante.
 //  - SORTIR : Échap, « Quitter », l'écran de fin suivi d'un geste, ou la sortie du plein écran que le lecteur a obtenu : il appelle `onExit`, et c'est à celui qui l'a créé de le fermer (`destroy`).
 //  - Le clavier reste dans le lecteur (une fenêtre modale) : aucune touche n'atteint ce qui est dessous. `onGesture(event)` peut prendre un geste (clic, touche) pour lui : la fenêtre à part y
 //    demande le plein écran au premier, qui ne doit pas aussi passer à la diapositive suivante.
@@ -116,7 +119,7 @@ const SlidePlayer = (function () {
     root.append(status, end, noteCard, bar.el);
     document.body.appendChild(root);
     // L'état de ce diaporama : `props` (la transition de chaque diapositive), `timings` (masquée, passage seul), `starts` (la première page de chacune), `anchors` (le signet de chacune, cible d'un lien du texte), `windows` (la découpe en pages de la copie).
-    const s = { root, status, end, bar, windows: [], index: 0, ended: false, job: null, fullscreen: false, idleTimer: 0, lastWheel: 0, ready: false, props: [], timings: [], starts: [], anchors: [], transition: null, advanceTimer: 0, anims: new Map(), anim: null, animTimer: 0, noteTimer: 0, destroyed: false };
+    const s = { root, status, end, bar, windows: [], index: 0, ended: false, job: null, fullscreen: false, idleTimer: 0, lastWheel: 0, ready: false, props: [], timings: [], starts: [], anchors: [], transition: null, advanceTimer: 0, anims: new Map(), anim: null, animTimer: 0, noteTimer: 0, last: -1, started: false, destroyed: false };
 
     // La copie mesurée du document, posée dans une feuille de la taille d'une page, au centre, agrandie ou réduite à l'écran ; la fenêtre de la page montrée la rogne (`surface`, plus haut).
     function mount(job) {
@@ -142,6 +145,9 @@ const SlidePlayer = (function () {
       if (s.anim) settleAnim(s.anim);
       if (index >= count) { showEnd(true); emit(); return; }
       showEnd(false);
+      // La dernière diapositive vue (l'action « dernière vue » d'un objet à lien) : celle qu'on quitte pour une autre ; passer d'une page à l'autre d'une même diapositive ne compte pas.
+      if (s.started && s.windows[s.index] && slideOfWindow(s.index) !== slideOfWindow(Math.max(0, index))) s.last = s.index;
+      s.started = true;
       const spec = how && how.step ? transitionFor(s.index, Math.max(0, index), !!how.reverse) : null;
       const ghost = spec ? makeGhost() : null;
       s.index = Math.max(0, index);
@@ -302,12 +308,17 @@ const SlidePlayer = (function () {
       barEl.addEventListener('mousedown', event => event.preventDefault());
       return { el: barEl, prev: prevButton, next: nextButton, counter, exit: exitButton };
     }
+    // « Éveillé » : la souris vient de bouger. La racine le dit (le pointeur, la barre) ; le calque aussi, qui est dans l'arbre ombre où la feuille de la page ne voit pas la racine : la main d'un objet à lien ne s'y affiche qu'éveillé.
+    function setAwake(on) {
+      root.classList.toggle('pp-slide-show-awake', on);
+      if (s.layer) s.layer.classList.toggle('pp-slide-show-awake', on);
+    }
     function wake() {
       if (s.destroyed) return;
-      root.classList.add('pp-slide-show-awake');
+      setAwake(true);
       clearTimeout(s.idleTimer);
       // Le clavier sur un bouton de la barre la garde montrée.
-      s.idleTimer = setTimeout(() => { if (!bar.el.contains(document.activeElement)) root.classList.remove('pp-slide-show-awake'); }, IDLE_MS);
+      s.idleTimer = setTimeout(() => { if (!bar.el.contains(document.activeElement)) setAwake(false); }, IDLE_MS);
     }
 
     function onKey(event) {
@@ -340,6 +351,40 @@ const SlidePlayer = (function () {
       const link = links.find(a => Array.from(a.getClientRects()).some(r => event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom));
       return link ? s.anchors.indexOf(link.getAttribute('data-link-anchor')) : -1;
     }
+    // La page qui montre le signet `id` (l'adresse d'un lien, sans le dièse) : la première page de la diapositive qui le porte ; ou, pour un titre ou un signet du texte, la page où il se trouve
+    // (`[data-anchor]`, que la copie mesurée garde ; même calcul que js/print-export.js:planTargets, la copie étant ici à l'échelle de l'écran). -1 quand il n'est nulle part.
+    function windowOfAnchor(id) {
+      const slide = s.anchors.indexOf(id);
+      if (slide >= 0) return s.windows.findIndex(win => win.page >= s.starts[slide]);
+      const mark = Array.from(s.stage.querySelectorAll('[data-anchor]')).find(el => el.getAttribute('data-anchor') === id);
+      if (!mark || !s.windows.length) return -1;
+      const scale = s.frame.getBoundingClientRect().width / (parseFloat(s.frame.style.width) || 1) || 1;
+      const y = (mark.getBoundingClientRect().top - s.stage.getBoundingClientRect().top) / scale;
+      const found = s.windows.findIndex(win => y < win.to - 0.5);
+      return found < 0 ? s.windows.length - 1 : found;
+    }
+    // Le lien d'un objet (js/frame-link.js:parse) suivi au diaporama. Comme PowerPoint, la diapositive visée arrive avec SA transition (`step`), de l'avant, d'où qu'on vienne, sans jouer les pas d'animation
+    // de celle qu'on quitte ; « précédente » est la seule à reculer (sa transition à l'envers, comme le geste du même nom), « dernière vue » revient à la diapositive qu'on vient de quitter (et, rappelée, y retourne).
+    // Un signet qui n'existe plus, une action sans diapositive à atteindre (« précédente » sur la première, « dernière vue » au départ) : rien ne se passe, le clic ne passe pas à la suivante.
+    function followFrame(link) {
+      if (link.kind === 'url') { FrameLink.openUrl(link.url); return; }
+      if (link.kind === 'anchor') {
+        const to = windowOfAnchor(link.id);
+        if (to >= 0) go(to, { step: true });
+        return;
+      }
+      const count = s.windows.length;
+      const toVisible = (to, how) => { if (to >= 0) go(to, how); };
+      switch (link.action) {
+        case 'next': next(true); break;
+        case 'prev': toVisible(s.index > 0 ? visibleFrom(s.index - 1, -1) : -1, { step: true, reverse: true }); break;
+        case 'first': toVisible(visibleFrom(0, 1), { step: true }); break;
+        case 'last': toVisible(visibleFrom(count - 1, -1), { step: true }); break;
+        case 'back': toVisible(s.last < count ? s.last : -1, { step: true }); break;
+        case 'end': onExit(); break;
+        default: break;
+      }
+    }
     function onClick(event) {
       if (s.destroyed || event.button !== 0 || bar.el.contains(event.target)) return;
       if (onGesture(event)) return;
@@ -349,6 +394,13 @@ const SlidePlayer = (function () {
         const target = firstWindowOf(s.windows, s.starts, slide);
         // Comme PowerPoint : la diapositive visée arrive avec sa propre transition (`step`), de l'avant, d'où qu'on vienne.
         if (target >= 0) go(target, { step: true });
+        return;
+      }
+      // Un objet à lien (js/frame-link.js) : le clic suit son lien au lieu de passer à la suivante ; l'objet le plus haut sous le pointeur décide (un objet sans lien ne laisse pas passer le clic à celui du dessous).
+      const framed = s.ready && !s.ended && s.stage ? FrameLink.frameAt(s.stage.getRootNode(), event.clientX, event.clientY) : null;
+      if (framed) {
+        event.preventDefault();
+        followFrame(framed.link);
         return;
       }
       next();

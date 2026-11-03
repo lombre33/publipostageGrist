@@ -46,6 +46,8 @@
 //    `data-ff-layer="behind"` : jamais écrit pour un cadre devant), peint SOUS lui. Le CSS (css/free-frame.css) le fait pour l'éditeur, la Lecture, le diaporama, l'impression et les miniatures ; le PDF
 //    (devant, il est peint après le texte de sa page), le Word (`behindDoc`) et le PowerPoint (l'ordre des formes) le suivent. Le texte de la diapositive couvre toute la largeur de sa colonne et recevrait
 //    tous les clics tombés sur le cadre : comme pour une image derrière le texte, l'éditeur les laisse passer au cadre là où le pointeur n'est sur aucune lettre (`reachesBehind`).
+//  - Le LIEN (demande du 02/11, « Lien, puis aperçu animé d'affilée », second niveau) : un cadre, une forme ou une ligne mène quelque part au clic (`link` : `data-ff-link`, une adresse, un signet du document ou une
+//    action du diaporama - js/frame-link.js ; jamais écrit sans lien). Le bouton « Lien… » de sa barre flottante ouvre la fenêtre « Lien… » du texte (js/link-dialog.js) ; le diaporama et la Lecture suivent le lien.
 // Les écritures de ce module (geste, rangement, empilement) ne sont pas des modifications à suivre (TrackChanges.skipTracking) et ne rejouent pas le rangement (OWN_META).
 const FreeFrame = (function () {
   const el = Dom.el;
@@ -69,7 +71,7 @@ const FreeFrame = (function () {
   // et celle du trait en pour cent (0 : opaque, 100 : invisible ; celle d'un fond ou d'un trait absent vaut 0), le tiret du trait ('' : plein), son bout ('' : plat, 'round', 'square') et son
   // type composé ('' : simple, 'dbl', 'thinThick', 'thickThin', 'tri'). Une ligne a de plus, à chaque bout, sa pointe (`head` au début, `tail` à la fin : '' aucune, ou 'triangle', 'arrow', 'stealth', 'diamond', 'oval')
   // et la largeur et la longueur de celle-ci (`headW`, `headLen`, `tailW`, `tailLen` : '' moyenne, 'sm' petite, 'lg' grande).
-  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '', anim: '', cols: 0, colGap: 0, vert: '', alt: '', hidden: '' };
+  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '', anim: '', cols: 0, colGap: 0, vert: '', alt: '', link: '', hidden: '' };
   // L'aspect d'une forme neuve : un fond clair, un trait plus foncé de la même teinte (le texte noir y reste lisible).
   const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
   // L'aspect d'une ligne neuve : le trait de PowerPoint des formes, un peu plus épais (sa pointe en grandit avec lui : trois fois l'épaisseur). Une ligne a toujours une couleur et une épaisseur.
@@ -99,7 +101,7 @@ const FreeFrame = (function () {
   // Les attributs du nœud et leur écriture dans le HTML enregistré.
   // Ce qui marque, dans le HTML des sorties, le cadre qui peint le fond d'une diapositive (js/slide-props.js:forOutput).
   const BACKGROUND_ATTR = 'data-ff-bg';
-  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim', cols: 'data-ff-cols', colGap: 'data-ff-col-gap', vert: 'data-ff-vert', alt: 'data-ff-alt', hidden: 'data-ff-hidden' };
+  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim', cols: 'data-ff-cols', colGap: 'data-ff-col-gap', vert: 'data-ff-vert', alt: 'data-ff-alt', link: 'data-ff-link', hidden: 'data-ff-hidden' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
   const LOOK_VARS = ['--ff-fill', '--ff-fill-op', '--ff-fill-inset', '--ff-fill-radius', '--ff-line', '--ff-line-op', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-art', '--ff-art-nine', '--ff-fill-art', '--ff-slice', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot', '--ff-cols', '--ff-col-gap'];
   const EDGES = ['n', 'e', 's', 'w'];
@@ -192,6 +194,8 @@ const FreeFrame = (function () {
       vert: line ? '' : verticalOf(a.vert),
       // Son texte alternatif (demande du 24/10, « Import PowerPoint sans perte », chantier 10 : `descr` de l'objet) : ce que lit un lecteur d'écran à la place du nom de la sorte.
       alt: altOf(a.alt),
+      // Son lien (js/frame-link.js) : une adresse, un signet du document ou une action du diaporama ; '' quand il n'en a pas (ou que ce qu'il dit n'est rien de cela). Une ligne n'en a pas : sa boîte ne prend aucun clic.
+      link: line ? '' : FrameLink.text(a.link),
       // Son masquage (demande du 24/10, chantier 10 : `hidden` de l'objet, le volet Sélection de PowerPoint) : « 1 » quand l'objet est masqué ; atténué dans l'éditeur, absent de la Lecture, du diaporama et des exports.
       hidden: a.hidden === '1' || a.hidden === 1 || a.hidden === true ? '1' : '',
     };
@@ -320,6 +324,7 @@ const FreeFrame = (function () {
     if (a.cols && a.colGap !== COLUMN_GAP_PT) out[DOM_ATTRS.colGap] = String(a.colGap);
     if (a.vert) out[DOM_ATTRS.vert] = a.vert;
     if (a.alt) out[DOM_ATTRS.alt] = a.alt;
+    if (a.link) out[DOM_ATTRS.link] = a.link;
     if (a.hidden) out[DOM_ATTRS.hidden] = '1';
     return out;
   }
@@ -704,13 +709,15 @@ const FreeFrame = (function () {
     return true;
   }
   // Les mesures d'un cadre, écrites : UN pas d'historique, la sélection (le cadre) gardée. Rend vrai quand quelque chose a changé.
-  function patch(ed, pos, changes, reselect) {
+  // `extend(tr)` : ce que l'appelant ajoute à la même transaction (le signet qu'un lien neuf demande, js/link-dialog.js), défait avec elle d'un seul Annuler.
+  function patch(ed, pos, changes, reselect, extend) {
     const node = ed.state.doc.nodeAt(pos);
     if (!isFrame(node)) return false;
     const next = normalized(Object.assign({}, node.attrs, changes));
     if (Object.keys(next).every(key => next[key] === node.attrs[key])) return false;
     const tr = own(ed.state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, next)));
     if (reselect) tr.setSelection(libs.NodeSelection.create(tr.doc, pos));
+    if (extend) extend(tr);
     ed.view.dispatch(tr);
     return true;
   }
@@ -844,6 +851,10 @@ const FreeFrame = (function () {
     rotate.title = I18n.t('frame.rotateTip');
     Dom.setMarkup(rotate, Icons.svg('rotate'));
     ui.appendChild(rotate);
+    // La marque d'un objet à lien (js/frame-link.js) : une petite chaîne dans son coin ; le CSS ne la montre que pour un cadre qui a `data-ff-link`.
+    const badge = el('div', 'pp-ff-link-badge');
+    Dom.setMarkup(badge, Icons.svg('link'));
+    ui.appendChild(badge);
     return ui;
   }
   function liveFrame(ed, getPos) {
@@ -1287,6 +1298,17 @@ const FreeFrame = (function () {
     EditorCore.closeDropdownPanel();
     FrameAnimUi.open(ed, found.pos);
   }
+  // « Lien… » : la fenêtre « Lien… » du texte (js/link-dialog.js), pour l'objet entier (js/frame-link.js). Le lien choisi se pose d'UN pas d'historique, avec le signet d'une diapositive qui n'en avait pas.
+  function openLink(ed, found) {
+    EditorCore.closeDropdownPanel();
+    // L'objet se retrouve à la validation : la fenêtre est ouverte, le texte peut avoir bougé (écriture en direct), la sélection est restée sur lui.
+    const here = () => { const again = selectedFrame(ed.state.selection); return again ? again.pos : -1; };
+    LinkDialog.openForObject({
+      href: normalized(found.node.attrs).link,
+      apply: (href, claim) => { const pos = here(); if (pos >= 0) patch(ed, pos, { link: href }, true, tr => LinkDialog.claimInto(tr, claim)); },
+      remove: () => { const pos = here(); if (pos >= 0) patch(ed, pos, { link: '' }, true); },
+    });
+  }
   const numberText = n => String(n).replace('.', I18n.getLang() === 'fr' ? ',' : '.');
   function wireToolbar(ed) {
     const button = (action, icon, key) => '<button data-action="' + action + '" title="' + I18n.t(key) + '" aria-label="' + I18n.t(key) + '">' + Icons.svg(icon) + '</button>';
@@ -1302,6 +1324,7 @@ const FreeFrame = (function () {
       chip('order-open', 'layerFront', 'frame.order'),
       '<span class="v2-floating-sep"></span>',
       button('animate', 'frameAnimation', 'frame.animation'),
+      button('link', 'link', 'frame.link'),
       chip('orient-open', 'frameOrientDown', 'frame.orientation'),
       chip('columns-open', 'frameColumns', 'frame.columns'),
       chip('align-open', 'alignObjLeft', 'frame.align'),
@@ -1674,6 +1697,7 @@ const FreeFrame = (function () {
       const found = selectedFrame(ed.state.selection);
       if (!found) return;
       if (action === 'animate') openAnimation(ed, found);
+      else if (action === 'link') openLink(ed, found);
       else if (action === 'hide') patch(ed, found.pos, { hidden: normalized(found.node.attrs).hidden ? '' : '1' }, true);
       else if (action === 'duplicate') duplicate(ed, found);
       else if (action === 'delete') remove(ed, found);
@@ -1685,6 +1709,7 @@ const FreeFrame = (function () {
     const orientChip = panel.el.querySelector('#v2-frame-orient-open');
     const orderChip = panel.el.querySelector('#v2-frame-order-open');
     const animateButton = panel.el.querySelector('[data-action="animate"]');
+    const linkButton = panel.el.querySelector('[data-action="link"]');
     const hideButton = panel.el.querySelector('[data-action="hide"]');
     EditorCore.registerFloatingPanel(panel);
     const check = ({ transaction } = {}) => {
@@ -1701,6 +1726,7 @@ const FreeFrame = (function () {
       if (endsChip) endsChip.style.display = isLine ? '' : 'none';
       if (columnsChip) columnsChip.style.display = isLine ? 'none' : '';
       if (orientChip) orientChip.style.display = isLine ? 'none' : '';
+      if (linkButton) linkButton.style.display = isLine ? 'none' : '';
       // « Derrière le texte » est un réglage : la pastille de l'ordre est enfoncée quand le cadre l'est (le menu coche sa ligne), comme l'était son bouton.
       if (orderChip) orderChip.classList.toggle('is-active', !!a && a.layer === LAYER_BEHIND);
       if (menus['order-open'].el.classList.contains('visible')) markOrder();
@@ -1708,6 +1734,14 @@ const FreeFrame = (function () {
       if (animateButton) {
         animateButton.classList.toggle('is-active', !!a && !!a.anim);
         animateButton.setAttribute('aria-pressed', a && a.anim ? 'true' : 'false');
+      }
+      // « Lien… » est enfoncé quand l'objet a un lien, et son info-bulle dit où il mène.
+      if (linkButton) {
+        linkButton.classList.toggle('is-active', !!a && !!a.link);
+        linkButton.setAttribute('aria-pressed', a && a.link ? 'true' : 'false');
+        const tip = a && a.link ? I18n.t('frame.linkOn', { name: FrameLink.describe(ed, a.link) }) : I18n.t('frame.link');
+        linkButton.title = tip;
+        linkButton.setAttribute('aria-label', tip);
       }
       // « Masquer l'objet » est enfoncé quand l'objet est masqué.
       if (hideButton) {
