@@ -1401,7 +1401,12 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const arbre = mkdtempSync(join(tmpdir(), 'arbre-publier-'));
   try {
     // Une entrée de PUBLIES absente du dossier de travail n'est pas copiée : controles.mjs la signale (sa liste de fichiers requis) et la section 30 la nomme, au lieu d'un plantage ici.
-    for (const entree of publiees) if (existsSync(join(ROOT, entree))) cpSync(join(ROOT, entree), join(arbre, entree), { recursive: true });
+    // Le kit (un sous-module) ne part que par KIT_PARTIES, comme dans publier.sh : ni son README, ni son journal, ni ses essais, ni son lien .git. Sans `git submodule update --init kit`, il n'y a rien à copier.
+    const kitParties = ((read('outils/depot-propre/publier.sh').match(/^KIT_PARTIES=\(([^)]*)\)/m) || [])[1] || '').split(/\s+/).filter(Boolean);
+    for (const entree of publiees) {
+      if (entree === 'kit') { for (const partie of kitParties) if (existsSync(join(ROOT, 'kit', partie))) cpSync(join(ROOT, 'kit', partie), join(arbre, 'kit', partie), { recursive: true }); continue; }
+      if (existsSync(join(ROOT, entree))) cpSync(join(ROOT, entree), join(arbre, entree), { recursive: true });
+    }
     const documents = join(ROOT, 'outils/depot-propre/public');
     for (const doc of readdirSync(documents, { withFileTypes: true })) {
       if (doc.isDirectory()) { if (doc.name === 'screenshots') cpSync(join(documents, doc.name), join(arbre, doc.name), { recursive: true }); continue; }

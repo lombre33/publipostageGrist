@@ -7,7 +7,7 @@ Ce dossier ne part pas sur le dépôt public (`outils/` est dans les exclusions 
 
 | Fichier | Rôle |
 |---|---|
-| `publier.sh` | Remplace dans un clone du dépôt public les fichiers publiés par ceux du dépôt de développement, pose les documents et les captures de `public/`, lance les contrôles, committe et étiquette. |
+| `publier.sh` | Remplace dans un clone du dépôt public les fichiers publiés par ceux du dépôt de développement (le kit de Grist Factory, `kit/`, un sous-module, part en fichiers : css, js et licence, au commit que le dépôt de développement épingle), pose les documents et les captures de `public/`, lance les contrôles, committe et étiquette. |
 | `controles.mjs` | Les contrôles sur l'arbre à publier : une ERREUR empêche le commit, un AVERTISSEMENT se relit. |
 | `essai.sh` | Les essais de ces deux scripts sur de faux dépôts (sans réseau, rien n'est poussé). À relancer après toute modification d'un des deux. |
 | `public/` | Les documents publics : `README.md` (bilingue), `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `NOTICE`, `CARTE_DU_CODE.md` (la carte du code, bilingue). `{{VERSION}}`, `{{DATE}}`, `{{DATE_FR}}` et `{{DATE_EN}}` y sont remplacés à la publication. `public/screenshots/` porte les captures du README (des `.png`), posées telles quelles dans `screenshots/` du dépôt public : une capture du même nom est remplacée, les autres sont gardées. |
@@ -16,7 +16,7 @@ Ce dossier ne part pas sur le dépôt public (`outils/` est dans les exclusions 
 ## Publier
 
 1. Dépôt de développement : propre, sur `origin/main`, clone complet (`git fetch --unshallow origin main`
-   sur un clone partiel). Tous les lots à publier y sont déjà.
+   sur un clone partiel), kit récupéré (`git submodule update --init kit`). Tous les lots à publier y sont déjà.
 2. Clone du dépôt public, une fois pour toutes : `git clone https://github.com/grist-factory/Publipostage-Plus.git`.
 3. Version : `PP_VERSION` dans `js/version.js` (semver, `1.0.0-beta.1` pour la première bêta), et la section
    `## [{{VERSION}}] - {{DATE}}` du `public/CHANGELOG.md`, en français et en anglais : elle reste ouverte entre
@@ -66,6 +66,11 @@ chemin est affiché.
   à la racine, en fait partie : il part avec le reste, car le dépôt public a son propre site (GitHub Pages) et,
   sans lui, Pages passe les `.md` dans Jekyll avant de publier ; un `.md` qui porte une accolade double ouverte
   seule fait alors échouer la publication, et le site reste sur la version d'avant, sans rien montrer.
+- Un kit que le dépôt de développement ne récupère pas (`git submodule update --init kit`), ou qui n'est pas un
+  sous-module. Le dépôt public n'a pas de sous-module : `.gitmodules` ne part pas (`EXCLUS`), le kit y arrive en
+  fichiers ordinaires, ceux de son commit épinglé (`KIT_PARTIES` : `css`, `js`, `LICENSE`), sans son README, son
+  journal ni ses essais. Ce que la page ou `js/` en importe (`kit/js/ambiance-message.js`, `ambiance-pose.js`,
+  `once.js`) doit y être, sinon `controles.mjs` s'arrête.
 - Un sous-dossier de `public/` autre que `screenshots/`, ou autre chose qu'un `.png` dans `public/screenshots/`.
 - Une version qui n'est pas du semver, ou une étiquette déjà prise.
 - D'écraser ce que le dépôt public a reçu depuis la dernière étiquette (une contribution acceptée là-bas et
@@ -81,7 +86,7 @@ secret ; politique de sécurité du contenu absente, après un script, avec `'un
 empreintes ne sont pas celles des scripts en ligne de `index.html` ; fichier cité par la page absent ;
 adresse du dépôt de développement ; gabarit `{{…}}` resté en place ; lien ou ancre cassé dans les documents
 publics ; `CHANGELOG.md` sans la section de la version ; `js/version.js` absent, non chargé par `index.html` ou qui annonce une autre version ;
-`CARTE_DU_CODE.md` qui cite un fichier absent ; clé du `localStorage` que le code garde et que le paragraphe du README sur le stockage
+`CARTE_DU_CODE.md` qui cite un fichier absent ; `.gitmodules` dans l'arbre ; code qui cite `kit/js/…` alors qu'un fichier du kit dont l'app dépend manque ; clé du `localStorage` que le code garde et que le paragraphe du README sur le stockage
 du navigateur ne nomme pas, en français ou en anglais (la liste est `STORED` dans `controles.mjs`, à compléter avec le README).
 
 AVERTISSEMENT (à relire) : renvoi à un dossier non publié (`planning`, `dev-tests`…) ; entrée inconnue à la

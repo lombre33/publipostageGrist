@@ -15,6 +15,11 @@ Publipostage+ is distributed under the GNU General Public License v3.0 (LICENSE 
 Grist Labs.
 "Grist" is a product of Grist Labs. Publipostage+ is a third-party widget, not published by Grist Labs.
 
+Le dossier kit/ reprend, tel quel, le kit commun des applications Grist Factory (jetons de la charte, lien avec
+Grist Factory Suite, ambiance) : il a son propre fichier de licence (kit/LICENSE), la même, GNU General Public License v3.0.
+The kit/ folder carries, as is, the common kit of the Grist Factory apps (charter tokens, link with Grist Factory
+Suite, ambiance): it has its own license file (kit/LICENSE), the same one, GNU General Public License v3.0.
+
 ============================================================
 2. Bibliothèques chargées à l'exécution / Libraries loaded at runtime
 ============================================================

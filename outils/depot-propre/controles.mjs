@@ -71,8 +71,16 @@ for (const required of ['index.html', 'LICENSE', 'README.md', 'SECURITY.md', 'CO
 const NEVER = ['dev-tests', 'planning', 'prototypes', 'templates-gallery-dev', 'outils', '.claude', 'AUDIT_CODE.md', 'CAHIER_DES_CHARGES.md', 'GFS-ETAT.md'];
 const topLevel = new Set(files.map(file => file.rel.split('/')[0]));
 for (const name of NEVER) if (topLevel.has(name)) fail(`entrée du dépôt de développement présente à la racine : ${name}`);
-const KNOWN = new Set(['index.html', 'css', 'js', 'extensions', 'img', 'templates-gallery', 'screenshots', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'NOTICE', 'CARTE_DU_CODE.md', '.github', '.gitignore', '.gitattributes', '.nojekyll']);
+const KNOWN = new Set(['index.html', 'css', 'js', 'extensions', 'img', 'templates-gallery', 'screenshots', 'kit', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'NOTICE', 'CARTE_DU_CODE.md', '.github', '.gitignore', '.gitattributes', '.nojekyll']);
 for (const name of topLevel) if (!KNOWN.has(name) && !NEVER.includes(name)) warn(`entrée inconnue à la racine : ${name} (à classer dans publier.sh et dans controles.mjs)`);
+// Le kit de Grist Factory (kit/, sous-module du dépôt de développement, ici en fichiers : publier.sh) : un sous-module vide (.gitmodules sans fichiers) ne servirait rien, et le dépôt public n'a pas de sous-module.
+if (has('.gitmodules')) fail('.gitmodules présent : le dépôt public n\'a pas de sous-module, le kit y est en fichiers (publier.sh)');
+// Ce que l'app importe du kit (consigne 041 de GFS : la page et js/) : si le code cite le kit, ces fichiers-là sont dans l'arbre.
+{
+  const KIT_FILES = ['kit/js/ambiance-message.js', 'kit/js/ambiance-pose.js', 'kit/js/once.js'];
+  const cited = [...new Set(grep(/\bkit\/js\//, textFiles.filter(file => file.rel === 'index.html' || file.rel.startsWith('js/'))).map(hit => hit.file))];
+  if (cited.length) for (const file of KIT_FILES) if (!has(file)) fail(`${cited.join(', ')} cite le kit, mais ${file} est absent de l'arbre (publier.sh doit y poser le kit : css, js et LICENSE)`);
+}
 
 if (has('LICENSE')) {
   const license = read('LICENSE');

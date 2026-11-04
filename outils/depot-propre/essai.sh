@@ -44,6 +44,18 @@ HTML
   cp -r "$ICI"/public/* outils/depot-propre/public/
   # La carte du code cite chaque fichier du widget : le faux dépôt les porte (vides, pages .html comprises), pour que ses références tiennent.
   grep -oE '`(js|css|extensions)/[A-Za-z0-9_./-]+\.(js|css|html)`' "$ICI/public/CARTE_DU_CODE.md" | tr -d '`' | sort -u | while read -r f; do [ -e "$f" ] || { mkdir -p "$(dirname "$f")"; echo "/* $f */" > "$f"; }; done
+  # Le kit de Grist Factory (consigne 041 de GFS) : un sous-module, ici d'un faux dépôt local (git ne laisse cloner un chemin local qu'avec cet accord, le temps de l'essai).
+  git init -q -b main "$T/kit-src"
+  (
+    cd "$T/kit-src"
+    mkdir -p css js test
+    echo '.kit { color: #000; }' > css/tokens.css
+    for f in ambiance-message ambiance-pose once; do echo "export default '$f';" > "js/$f.js"; done
+    printf 'GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\n' > LICENSE
+    echo '# kit' > README.md; echo x > CHANGELOG.md; echo x > test/a.mjs
+    G add -A; G commit -qm kit
+  )
+  git -c protocol.file.allow=always submodule add -q "$T/kit-src" kit
   G add -A; G commit -qm essai
   git remote add origin "$T/dev-origin.git"; git push -q origin main
 )
@@ -65,6 +77,11 @@ echo "publier.sh : refus"
 (cd "$T/dev" && G rm -q .nojekyll && G commit -qm "sans .nojekyll" && git push -q origin main)
 attend "refuse un dépôt de développement sans .nojekyll (le site du dépôt public passerait ses .md dans Jekyll)" ".nojekyll n'existe pas dans le dépôt de développement" "$(publier)"
 (cd "$T/dev" && : > .nojekyll && G add .nojekyll && G commit -qm "avec .nojekyll" && git push -q origin main)
+# Le kit est un sous-module : tant que `git submodule update --init kit` n'a pas été fait dans le dépôt de développement, il n'y a rien à publier, et la publication dit quoi faire.
+(cd "$T/dev" && git submodule deinit -q -f kit)
+attend "refuse un kit qui n'est pas récupéré, et dit comment le récupérer" "submodule update --init kit" "$(publier)"
+(cd "$T/dev" && git -c protocol.file.allow=always submodule update -q --init kit)
+vrai "... et le dépôt de développement est de nouveau propre, kit récupéré" test -z "$(git -C "$T/dev" status --porcelain)" -a -s "$T/dev/kit/js/ambiance-pose.js"
 echo 'x' >> "$T/dev/README.md"
 attend "refuse un dépôt de développement modifié" "modifications non committées" "$(publier)"
 git -C "$T/dev" checkout -q -- README.md
@@ -102,6 +119,12 @@ vrai "les documents publics sont là, README du dépôt de développement absent
 vrai "la carte du code part avec les documents publics, version et date remplacées" bash -c "grep -q '^# Carte du code de Publipostage+' '$P/CARTE_DU_CODE.md' && ! grep -q '{{' '$P/CARTE_DU_CODE.md'"
 vrai "les captures de public/screenshots/ sont posées dans screenshots/ du dépôt public, identiques" bash -c "cmp -s '$T/dev/outils/depot-propre/public/screenshots/edition-variables.png' '$P/screenshots/edition-variables.png' && cmp -s '$T/dev/outils/depot-propre/public/screenshots/lecture-resolue.png' '$P/screenshots/lecture-resolue.png'"
 vrai "une capture que seul le dépôt public porte est gardée" test "$(cat "$P/screenshots/ancienne.png")" = png
+kit_en_fichiers() { # css, js et licence du kit, en fichiers ordinaires, sans .gitmodules ni lien de sous-module (le dépôt public n'a pas de sous-module)
+  [ -s "$P/kit/js/ambiance-pose.js" ] && [ -s "$P/kit/js/ambiance-message.js" ] && [ -s "$P/kit/js/once.js" ] && [ -s "$P/kit/css/tokens.css" ] && [ -s "$P/kit/LICENSE" ] \
+    && [ ! -e "$P/.gitmodules" ] && [ -z "$(git -C "$P" ls-tree -r HEAD | grep -E '^160000')" ] && [ -n "$(git -C "$P" ls-tree --name-only HEAD kit/js/ambiance-pose.js)" ]
+}
+vrai "le kit part en fichiers (css, js, licence), au commit épinglé, sans .gitmodules ni sous-module" kit_en_fichiers
+vrai "... sans son README, son journal ni ses essais" test ! -e "$P/kit/README.md" -a ! -e "$P/kit/CHANGELOG.md" -a ! -e "$P/kit/test" -a ! -e "$P/kit/.git"
 vrai "la date est écrite en toutes lettres" grep -q "4 octobre 2026" "$P/README.md"
 vrai "la sauvegarde .bundle existe" test -s "$T/sortie1/publication-1.0.0-beta.1.bundle"
 vrai "le clone public est propre" test -z "$(git -C "$P" status --porcelain)"
@@ -171,6 +194,9 @@ muter "une clé du navigateur que le contrôle ne connaît pas" "sans que contro
 muter "un README français qui ne nomme plus le zoom gardé" "README.md (français) ne nomme pas ce que garde « pp_page_zoom »" "echo \"localStorage.setItem('pp_page_zoom', 1);\" >> js/main.js; sed -i ':a;N;\$!ba;s/niveau\\nde zoom/réglage/' README.md"
 muter "un README anglais qui ne nomme plus le zoom gardé" "README.md (anglais) ne nomme pas ce que garde « pp_page_zoom »" "echo \"localStorage.setItem('pp_page_zoom', 1);\" >> js/main.js; sed -i 's/zoom level/setting/' README.md"
 vrai "une clé du navigateur nommée dans le README passe" bash -c "rm -rf '$T/mut'; cp -a '$P' '$T/mut'; rm -rf '$T/mut/.git'; echo \"localStorage.setItem('pp_page_zoom', 1);\" >> '$T/mut/js/main.js'; node '$C' '$T/mut' --version 1.0.0-beta.2 | grep -q ' 0 erreur'"
+muter "un .gitmodules resté dans l'arbre public (il n'a pas de sous-module)" "n'a pas de sous-module" "printf '[submodule \"kit\"]\n' > .gitmodules"
+muter "un code qui cite le kit alors qu'un de ses fichiers manque" "cite le kit, mais kit/js/ambiance-pose.js est absent" "echo \"import('../kit/js/ambiance-pose.js');\" >> js/main.js; rm kit/js/ambiance-pose.js"
+vrai "un code qui cite le kit, ses fichiers présents, passe" bash -c "rm -rf '$T/mut'; cp -a '$P' '$T/mut'; rm -rf '$T/mut/.git'; echo \"import('../kit/js/ambiance-pose.js');\" >> '$T/mut/js/main.js'; node '$C' '$T/mut' --version 1.0.0-beta.2 | grep -q ' 0 erreur'"
 muter "une licence qui n'est pas la GPL" "GNU GPL version 3" "echo 'MIT' > LICENSE"
 muter "un CHANGELOG sans la version" "aucune section" "sed -i 's/^## \[1.0.0-beta.2\]/## [9.9.9]/' CHANGELOG.md"
 muter "js/version.js absent (et la page qui le chargeait retirée)" "js/version.js absent" "rm js/version.js; sed -i 's#<script src=\"js/version.js\"></script>##' index.html"

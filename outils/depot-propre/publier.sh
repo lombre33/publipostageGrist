@@ -13,7 +13,8 @@
 #   2. refuse toute entrée de la racine du dépôt de développement qu'il ne connaît pas (PUBLIES ou EXCLUS ci-dessous) : un nouveau dossier ne part jamais par oubli ;
 #   3. refuse d'écraser des changements faits dans le dépôt public depuis la dernière étiquette vX.Y.Z (contribution acceptée là-bas et pas reportée ici) ;
 #   4. remplace dans le clone public les entrées PUBLIEES par celles du dépôt de développement (fichiers suivis seulement, les fichiers retirés disparaissent) ;
-#      les entrées que seul le dépôt public porte (.github/…) ne sont pas touchées ;
+#      le kit de Grist Factory (kit/, un sous-module du dépôt de développement) part en fichiers, ceux du commit que le dépôt de développement épingle (css, js et la licence),
+#      sans .gitmodules : le dépôt public n'a pas de sous-module ; les entrées que seul le dépôt public porte (.github/…) ne sont pas touchées ;
 #   5. pose par-dessus les documents publics de outils/depot-propre/public/ (README, SECURITY, CONTRIBUTING, CODE_OF_CONDUCT, CHANGELOG, NOTICE, CARTE_DU_CODE),
 #      où {{VERSION}}, {{DATE}} (2026-10-04), {{DATE_FR}} (4 octobre 2026) et {{DATE_EN}} (October 4, 2026) sont remplacés, et les captures du README
 #      de outils/depot-propre/public/screenshots/ (des .png) dans screenshots/ du clone public : une capture du même nom est remplacée, les autres sont gardées ;
@@ -28,9 +29,13 @@ ICI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Ce qui part sur le dépôt public, tel que le dépôt de développement le suit.
 # .nojekyll (un fichier vide) part avec le reste : le dépôt public a son propre site (GitHub Pages) et, sans lui, Pages passe les .md dans Jekyll
 # avant de publier ; une accolade double ouverte dans un .md fait alors échouer la publication, et le site reste sur la version d'avant (consigne 037 de GFS).
-PUBLIES=(index.html css js extensions img templates-gallery LICENSE .nojekyll)
-# Ce qui ne part jamais (les documents publics viennent de public/, pas du README du dépôt de développement).
-EXCLUS=(.claude .gitignore AUDIT_CODE.md CAHIER_DES_CHARGES.md GFS-ETAT.md README.md dev-tests outils planning prototypes templates-gallery-dev)
+PUBLIES=(index.html css js extensions img templates-gallery LICENSE .nojekyll kit)
+# Ce qui ne part jamais (les documents publics viennent de public/, pas du README du dépôt de développement). .gitmodules : le dépôt public n'a pas de sous-module,
+# et son adresse nomme le compte du dépôt de développement ; le kit part en fichiers (KIT_PARTIES ci-dessous).
+EXCLUS=(.claude .gitignore .gitmodules AUDIT_CODE.md CAHIER_DES_CHARGES.md GFS-ETAT.md README.md dev-tests outils planning prototypes templates-gallery-dev)
+# Ce que le dépôt public reçoit du kit (consigne 041 de GFS : l'app en importe ambiance-message.js et ambiance-pose.js, qui importe once.js) : ce que le kit sert, sa licence ;
+# ni son README, ni son journal, ni ses essais.
+KIT_PARTIES=(css js LICENSE)
 
 DEV=""
 PROPRE=""
@@ -118,7 +123,16 @@ while IFS= read -r entree; do
 done < <(git -C "$DEV" ls-tree --name-only HEAD)
 [ -z "$inconnues" ] || die "entrée(s) de la racine du dépôt de développement à classer dans PUBLIES ou EXCLUS de publier.sh :"$'\n'"$inconnues"
 for x in "${PUBLIES[@]}"; do
-  git -C "$DEV" cat-file -e "HEAD:$x" 2>/dev/null || die "$x n'existe pas dans le dépôt de développement"
+  # `ls-tree` et non `cat-file -e` : le commit d'un sous-module n'est pas un objet du dépôt de développement.
+  [ -n "$(git -C "$DEV" ls-tree --name-only HEAD -- "$x")" ] || die "$x n'existe pas dans le dépôt de développement"
+done
+# Le kit est un sous-module : il part en fichiers, au commit que le dépôt de développement épingle, et ce commit doit être là (git submodule update --init kit).
+[ "$(git -C "$DEV" ls-tree HEAD -- kit | cut -c1-6)" = "160000" ] || die "kit n'est pas un sous-module du dépôt de développement"
+KIT_COMMIT="$(git -C "$DEV" rev-parse HEAD:kit)"
+git -C "$DEV/kit" cat-file -e "$KIT_COMMIT^{commit}" 2>/dev/null \
+  || die "le sous-module kit n'est pas récupéré au commit $KIT_COMMIT dans le dépôt de développement : git -C $DEV submodule update --init kit"
+for x in "${KIT_PARTIES[@]}"; do
+  git -C "$DEV/kit" cat-file -e "$KIT_COMMIT:$x" 2>/dev/null || die "le kit ($KIT_COMMIT) n'a pas de $x"
 done
 [ -d "$ICI/public" ] || die "$ICI/public est introuvable (les documents publics)"
 DOCS=()
@@ -157,6 +171,9 @@ fi
 MODIFIE=1
 for x in "${PUBLIES[@]}"; do rm -rf "${PROPRE:?}/$x"; done
 git -C "$DEV" archive --format=tar HEAD "${PUBLIES[@]}" | tar -x -C "$PROPRE"
+# `git archive` ne descend pas dans un sous-module (il laisse un dossier vide) : le kit vient de son propre commit épinglé.
+mkdir -p "$PROPRE/kit"
+git -C "$DEV/kit" archive --format=tar "$KIT_COMMIT" "${KIT_PARTIES[@]}" | tar -x -C "$PROPRE/kit"
 for nom in "${DOCS[@]}"; do
   sed -e "s/{{VERSION}}/$VERSION/g" -e "s/{{DATE_FR}}/$DATE_FR/g" -e "s/{{DATE_EN}}/$DATE_EN/g" -e "s/{{DATE}}/$DATE_PUB/g" \
     "$ICI/public/$nom" > "$PROPRE/$nom"
