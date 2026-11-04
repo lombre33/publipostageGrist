@@ -16,6 +16,12 @@
 .pp-pdf-text .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: 0; cursor: default; user-select: none; }
 .pp-pdf-text.selecting .endOfContent { top: 0; }
 
+/* Les marques des commentaires (extensions/lecture-pdf/pdf-view.js, consigne GFS 045) : le passage commenté, surligné DANS la couche de texte (il suit le zoom et le défilement avec la page). L'aspect est celui des marques d'un
+   modèle (css/access-rights.css) : un fond ambre et un trait dessous, atténués et sans trait plein quand le fil est résolu. La couche est AU-DESSUS du canevas : le fond est translucide, pour que le texte du PDF reste lisible
+   dessous, et il donne à peu près l'ambre `#fff3cf` du modèle sur le blanc de la page ; le trait garde la teinte pleine. Le texte de la couche est transparent : la marque n'a rien d'autre à dire. */
+.pp-pdf-text span.pp-pdf-mark { position: static; transform: none; cursor: pointer; background: rgba(240, 195, 109, .25); border-bottom: 2px solid #f0c36d; }
+.pp-pdf-text span.pp-pdf-mark-resolved { background: transparent; border-bottom-color: var(--text-faint, #8a94a6); }
+
 /* Ce que la lecture d'un PDF grise (js/main.js:applyPdfLocks) : l'édition, les modèles, l'export, les commentaires. Estompé comme ce qu'un compte en lecture seule ne peut pas (css/access-rights.css), mais la souris l'atteint
    encore : son `title` dit la raison au survol et son clic la dit dans le coin d'état. Les enfants ne reçoivent plus la souris (l'info-bulle et le clic sont ceux du groupe), le menu au survol d'un groupe ne s'ouvre pas, et l'info-bulle
    de l'app (`[data-tip]`), que l'estompage rendrait illisible avec le bouton, laisse la place au `title`. !important : un groupe à survol ou un bouton de la barre a ses propres règles d'opacité, plus précises. */
