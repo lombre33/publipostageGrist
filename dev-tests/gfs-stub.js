@@ -40,6 +40,8 @@
 //   la casse) pose la question : `copie` garde les deux (« Facture (1).pdf »), `remplace` garde l'identifiant et prend le contenu, `ignore` n'écrit rien (`id` et `nom` null). Les fichiers gardés sont dans `fichiers` ({ id, nom, taille, octets, lot }), `rangerAppels`
 //   dit chaque appel reçu dans l'ordre ({ rang, nom, lot, suivants, taille, type, instance, dossier }), `rangerEnCours` compte les appels sans réponse et `rangerMax` le plus grand nombre à la fois (1 : un fichier à la fois).
 //   window.__gfsStub.ouvrir(args) : l'appel `ouvrir` de GFS vers l'app déjà ouverte (contrats 5.4) ; la promesse rend la réponse ou l'erreur de l'app. call(nom, args) : un appel de GFS de ce nom.
+//   window.__gfsStub.fermer(raison) : l'appel `fermer { raison }` de GFS vers l'app active (contrats 5.4, point 3, consigne 047), envoyé avant qu'une autre app prenne sa place : la promesse rend la réponse (`{ ferme }`) ou l'erreur de l'app,
+//   et le stub ne détruit rien (la page reste là, comme un GFS dont la personne a répondu « Annuler »). Une app qui ne connaît pas l'appel rend l'erreur `GFS_INCONNU`.
 //   window.__gfsStub.answers : tout ce que l'app répond aux appels de GFS ({ type, id, data | code, message }), dans l'ordre.
 //   window.__gfsStubParent = 'nom' (posé avant ce script) : le stub est chargé par la page PARENTE d'un <iframe name="nom"> qui porte l'app dans un cadre isolé (dev-tests/verify-gfs-frame.mjs) et joue
 //   GFS pour ce cadre, par `postMessage` dans les deux sens, comme le vrai GFS.
@@ -218,6 +220,7 @@
       return new Promise((resolve) => { waiting.set(id, resolve); stub.post({ type: 'appel', id, nom, args }); });
     },
     ouvrir(args) { return stub.call('ouvrir', args); },
+    fermer(raison) { return stub.call('fermer', { raison }); },
     // L'événement `extensions` : la liste active et la source de leurs bibliothèques.
     send() { stub.post({ type: 'evenement', nom: 'extensions', data: { extensions: stub.extensions.slice(), bibliotheques: stub.libraries(stub.extensions) } }); },
     setExtensions(list) { stub.extensions = list.slice(); stub.send(); },

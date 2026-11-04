@@ -17,14 +17,23 @@
 //    (js/gfs-link.js ne la garde que bien formée) n'ouvre rien, et jamais un modèle vierge à la place. Au démarrage, comme l'import : l'ordre habituel ouvre son modèle, « Widget prêt. » se dit, puis le PDF le
 //    remplace (avant les appels `ouvrir` qui attendaient) ; un PDF qui ne s'ouvre pas laisse le modèle habituel, et le coin d'état dit pourquoi.
 //  - L'app déjà ouverte reçoit l'appel `ouvrir` (GfsLink.onOpen) : un à la fois, après la fin du démarrage, par le chemin du sélecteur de modèles - donc avec sa question « Enregistrer / Abandonner /
-//    Annuler » quand des modifications attendent. Pour « Nouveau », par celui du bouton « Nouveau » du même type (js/main.js `openBlankOfType`), question comprise. GFS reçoit `{ ouvert }` : vrai quand le modèle
+//    Annuler » quand des modifications attendent encore (voir plus bas ce que l'enregistrement automatique allumé en a déjà enregistré). Pour « Nouveau », par celui du bouton « Nouveau » du même type (js/main.js `openBlankOfType`), question comprise. GFS reçoit `{ ouvert }` : vrai quand le modèle
 //    demandé (ou importé) est ouvert à la fin (c'était déjà lui : rien ne change, rien n'est dit ; un modèle vierge : à l'écran, son avertissement « modèle non enregistré » intact ; un macro-modèle : son écran de composition est
 //    ouvert), faux si la personne annule, si le modèle est introuvable ou refusé par la garde, si le type demandé est refusé, si le fichier à importer est refusé, ou si le document est en lecture seule. Pas de délai : la personne peut prendre son temps.
+//    Avant de quitter le modèle à l'écran pour celui-là (un modèle, un vierge, un import, un PDF), ce qui attend d'être enregistré l'est (consigne GFS 047, hook `saveBeforeLeaving`) : sans question quand l'enregistrement
+//    automatique est allumé, la personne ayant dit en l'allumant qu'elle veut que l'app enregistre ; la question ci-dessus ne reste que pour ce que l'app ne peut pas décider seule (js/main.js `saveBeforeGfsLeaves` :
+//    enregistrement automatique coupé, modèle sans nom, modèle changé ailleurs, écriture refusée). Un appel qui n'ouvre rien (déjà ouvert, introuvable, refusé) n'enregistre rien de plus que ne le ferait l'enregistrement automatique.
+//  - L'app reçoit aussi l'appel `fermer { raison }` (GfsLink.onClose, consigne 047) : GFS va détruire son cadre pour laisser la place à une autre app ou au fichier d'une autre app, et attend `{ ferme }`. L'app répond d'après
+//    l'état de ses données (js/main.js `leaveForGfs`) : rien n'attend, ou tout a été enregistré (enregistrement automatique allumé) : vrai tout de suite, sans question ; sinon sa question « Enregistrer / Abandonner / Annuler »
+//    (« Annuler » : faux, tout reste en place). Elle ne se ferme pas d'elle-même et ne répond jamais vrai avant d'avoir fini d'écrire. La réponse ne dépend ni de la raison ni du démarrage : un `fermer` reçu avant
+//    l'inscription attend `init`, un autre pendant que le démarrage s'achève trouve un modèle sans rien à enregistrer.
 // Seule (adresse sans `gfs=`), GfsLink ne rend aucune ouverture et n'appelle jamais : l'ordre d'arrivée est celui d'avant. Ce fichier n'écrit ni n'écoute aucun message : tout passe par js/gfs-link.js.
-//   GfsOpen.init({ openTemplate(id) -> Promise<bool>, openBlank(type) -> Promise<bool>, importFile(valeur, fichier) -> Promise<bool>, readPdf(lecture) -> Promise<bool>, say(text) })  s'inscrit à l'appel `ouvrir` ;
+//   GfsOpen.init({ openTemplate(id) -> Promise<bool>, openBlank(type) -> Promise<bool>, importFile(valeur, fichier) -> Promise<bool>, readPdf(lecture) -> Promise<bool>, say(text), saveBeforeLeaving() -> Promise,
+//                  leave(raison) -> Promise<bool> })  s'inscrit aux appels `ouvrir` et `fermer` ;
 //                                                                                                       `openTemplate` rend vrai si le modèle est ouvert à la fin, `openBlank` si le modèle vierge de ce type l'est,
 //                                                                                                       `importFile` si le modèle importé de ce fichier l'est, `readPdf` si le PDF (`lecture`) est lu à l'écran,
-//                                                                                                       `say` écrit dans le coin d'état
+//                                                                                                       `say` écrit dans le coin d'état, `saveBeforeLeaving` enregistre ce qui attend avant qu'un autre fichier
+//                                                                                                       s'ouvre (sans rien poser comme question), `leave` répond à `fermer` : vrai si l'app peut laisser la place
 //   GfsOpen.startupTemplateId() -> Promise<id | null>               à attendre avant de choisir le modèle de départ
 //   GfsOpen.startupBlankType() -> Promise<type | null>              le type du modèle vierge que « Nouveau » demande au démarrage, ou null : à attendre de même
 //   GfsOpen.startupDone() / startupFailed()                         la fin du démarrage : dit pourquoi le modèle s'est ouvert, lance l'import que l'ouverture demandait ; libère (ou refuse) les appels `ouvrir` qui attendaient
@@ -108,14 +117,27 @@ const GfsOpen = (function () {
     return (await hooks.readPdf(wanted)) === true;
   }
 
+  // Ce qui attend d'être enregistré l'est avant de quitter le modèle à l'écran pour celui-ci (consigne 047) : js/main.js `saveBeforeGfsLeaves`, qui ne pose aucune question.
+  const settle = () => hooks.saveBeforeLeaving();
+
   async function open(opening) {
-    if (isImport(opening)) return importFrom(opening);
-    if (isReading(opening)) return readFrom(opening);
+    if (isImport(opening)) {
+      if (opening.importation) await settle();
+      return importFrom(opening);
+    }
+    if (isReading(opening)) {
+      if (opening.lecture) await settle();
+      return readFrom(opening);
+    }
     const blank = requestedBlank(opening);
-    if (blank !== null) return (await hooks.openBlank(blank)) === true;
+    if (blank !== null) {
+      await settle();
+      return (await hooks.openBlank(blank)) === true;
+    }
     const id = designated(opening);
     if (id === null) return false;
     if (Templates.isCurrent(id)) return true;
+    await settle();
     const opened = await hooks.openTemplate(id);
     if (opened) say(opening.raison);
     return opened === true;
@@ -128,9 +150,15 @@ const GfsOpen = (function () {
     return run;
   }
 
+  // L'appel `fermer` (consigne 047) : l'app répond d'après l'état de ses données, tout de suite - GFS n'attend pas la fin d'une ouverture qu'une question retient, et sa propre fenêtre « ne répond pas » vient au bout de 10 secondes.
+  function handleClose(reason) {
+    return hooks.leave(reason);
+  }
+
   function init(given) {
     hooks = given;
     GfsLink.onOpen(handleCall);
+    GfsLink.onClose(handleClose);
   }
 
   return { init, startupTemplateId, startupBlankType, startupDone, startupFailed };

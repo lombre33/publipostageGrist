@@ -354,18 +354,18 @@ console.log('\n== L’appel `ouvrir` : l’app est déjà ouverte ==');
   got = await shown(page);
   check('une raison inconnue : le modèle s’ouvre, le coin d’état ne dit rien de plus que ce que l’ouverture a posé', reply.data && reply.data.ouvert === true && got.name === 'Départ E email' && got.status !== PHRASE.fr, { reply, got });
 
-  reply = await ask(page, WHAT(1), 'fermer');
-  check('un autre nom d’appel (`fermer`) reçoit `GFS_INCONNU`, avec l’`id` de l’appel', reply.type === 'erreur' && reply.code === 'GFS_INCONNU' && Number.isInteger(reply.id) && typeof reply.message === 'string', reply);
+  reply = await ask(page, WHAT(1), 'inventer');
+  check('un autre nom d’appel (`inventer`) reçoit `GFS_INCONNU`, avec l’`id` de l’appel', reply.type === 'erreur' && reply.code === 'GFS_INCONNU' && Number.isInteger(reply.id) && typeof reply.message === 'string', reply);
   reply = await ask(page, {}, 'installer');
   check('`installer` aussi : cet appel ne va que d’une app vers GFS', reply.type === 'erreur' && reply.code === 'GFS_INCONNU', reply);
 
   const before = (await answers(page)).length;
-  await page.evaluate(() => window.__gfsStub.post({ type: 'appel', nom: 'fermer', args: {} }));
+  await page.evaluate(() => window.__gfsStub.post({ type: 'appel', nom: 'inventer', args: {} }));
   await page.evaluate(() => window.__gfsStub.post({ type: 'appel', nom: 'ouvrir', args: { fichier: { id: '2', type: 'modele' }, type: '', dossier: '', raison: 'explorateur' } }));
   await page.waitForFunction(() => String(Templates.getCurrentId()) === '2', null, { timeout: 4000 }).catch(() => {});
   await sleep(500);
   got = await shown(page);
-  check('un appel sans `id` n’attend pas de réponse : `ouvrir` ouvre quand même le modèle, `fermer` est ignoré, rien n’est répondu', got.name === 'Départ B' && (await answers(page)).length === before, { got, before, after: (await answers(page)).length });
+  check('un appel sans `id` n’attend pas de réponse : `ouvrir` ouvre quand même le modèle, l’appel inconnu est ignoré, rien n’est répondu', got.name === 'Départ B' && (await answers(page)).length === before, { got, before, after: (await answers(page)).length });
 
   // Deux appels postés dans le même instant : le modèle de chacun s'ouvre à son tour (Templates.setCurrentId est le point de passage de toute ouverture), et les réponses suivent dans cet ordre.
   const both = await page.evaluate(async () => {

@@ -1,6 +1,6 @@
 // Le lien avec Grist Factory Suite (GFS) : ce que le widget en sait quand GFS l'héberge, et rien quand il tourne seul (une fenêtre de Grist qui charge l'adresse de ce dépôt).
 // Les messages de GFS ont leur enveloppe (contrats de GFS, section 5) : { gfs: <contrat>, type: 'appel' | 'reponse' | 'erreur' | 'evenement', id, nom, args | data }, sans le `mtype` du
-// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Neuf choses seulement :
+// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Onze choses seulement :
 //  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }),
 //    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre),
 //    `ouverture`, ce que GFS demande d'ouvrir au démarrage (consigne 010 ; pour « Nouveau > Importer », le fichier à importer que GFS donne, consigne 035), `langue`, la langue qui vaut maintenant (`fr` ou `en`, consigne 019), `stockage`, l'espace de cette app chez GFS
@@ -23,8 +23,10 @@
 //  - `installer`, quand la personne clique une fonction grisée dans GFS : GFS ouvre sa fenêtre d'installation ;
 //  - l'appel `ranger { fichier, nom, type, lot?, suivants? }` (consigne 043), que l'app envoie pour qu'un PDF qu'elle vient de fabriquer se range parmi les fichiers de GFS, un fichier par appel, sans délai (GFS pose lui-même la
 //    question du nom pris) : la réponse est `{ statut, id, nom }` et une erreur de GFS garde son `code` (`GFS_ANNULE`, `GFS_ECHEC`…), de quoi js/pdf-delivery.js, le seul à s'en servir, décide de la suite ;
-//  - l'appel `ouvrir`, que GFS envoie à l'app déjà ouverte quand la personne double-clique un autre fichier (consigne 010) ou choisit « Nouveau > Importer » (consigne 035, avec le fichier) ou « Lire » sur un PDF (consigne 040, avec le PDF) : l'abonné de `onOpen` répond, ce fichier lui rend la réponse. Tout
-//    autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3).
+//  - l'appel `ouvrir`, que GFS envoie à l'app déjà ouverte quand la personne double-clique un autre fichier (consigne 010) ou choisit « Nouveau > Importer » (consigne 035, avec le fichier) ou « Lire » sur un PDF (consigne 040, avec le PDF) : l'abonné de `onOpen` répond, ce fichier lui rend la réponse ;
+//  - l'appel `fermer { raison }` (consigne 047), que GFS envoie à l'app active avant de la remplacer par une autre app ou de lui faire laisser la place au fichier d'une autre app (`raison` : `app`, `explorateur`, `nouveau`,
+//    `importer`, `lire` ou `lien`) et dont il attend `{ ferme: true | false }` avant de détruire son cadre : l'abonné de `onClose` répond (js/gfs-open.js : ce qui attend est enregistré avant le `oui`). Une réponse qui
+//    échoue est une erreur (`GFS_ECHEC`, GFS demande alors à la personne), jamais un `oui`. Tout autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3).
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
 // `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `settingsSaved()` rend null, `ambiance()` rend null, `hideBar()` rend faux, `opensInNewTab()` rend faux et `deposit()` rejette sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
 // qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js, js/gfs-open.js, js/person-store.js et js/gfs-bar.js, jamais par ce fichier (sauf `opensInNewTab`, que trois liens consultent, consigne 011).
@@ -63,7 +65,9 @@ const GfsLink = (function () {
   const ambianceListeners = new Set();
   let openHandler = null;      // celui qui s'est inscrit pour l'appel `ouvrir` (onOpen)
   const earlyOpens = [];       // les appels `ouvrir` arrivés avant lui : ils attendent son inscription
-  let known = false;           // le contexte (ou un événement) est arrivé
+  let closeHandler = null;     // celui qui s'est inscrit pour l'appel `fermer` (onClose)
+  const earlyCloses = [];      // les appels `fermer` arrivés avant lui : ils attendent son inscription
+  let known = false;          // le contexte (ou un événement) est arrivé
   const listeners = new Set();
   const pending = new Map();   // id d'appel -> { resolve, reject }
   const installing = new Map();
@@ -242,9 +246,22 @@ const GfsLink = (function () {
     try { window.parent.postMessage(Object.assign({ gfs: CONTRACT, id }, fields), '*'); } catch (e) { /* GFS n'est plus là : personne n'attend la réponse */ }
   }
 
-  // Un appel de GFS vers l'app : `ouvrir` va à celui qui s'est inscrit (onOpen), tout autre nom reçoit `GFS_INCONNU` (contrats 5.1, point 3). Un appel sans `id` entier n'attend pas de réponse (point 2).
+  // La raison d'un appel `fermer` (contrats 5.4, point 3) : l'un des six mots du contrat, '' pour tout autre texte ou une forme inattendue. La réponse n'en dépend pas - l'app enregistre avant de partir quelle que soit la raison -
+  // mais l'abonné la reçoit, et un appel dont la raison est inconnue est répondu comme les autres.
+  const CLOSE_REASONS = ['app', 'explorateur', 'nouveau', 'importer', 'lire', 'lien'];
+  function normalizeCloseReason(args) {
+    const reason = args && typeof args === 'object' && typeof args.raison === 'string' ? args.raison : '';
+    return CLOSE_REASONS.includes(reason) ? reason : '';
+  }
+
+  // Un appel de GFS vers l'app : `ouvrir` va à celui qui s'est inscrit (onOpen), `fermer` à celui de onClose, tout autre nom reçoit `GFS_INCONNU` (contrats 5.1, point 3). Un appel sans `id` entier n'attend pas de réponse (point 2).
   function receiveCall(message) {
     const id = Number.isInteger(message.id) ? message.id : null;
+    if (message.nom === 'fermer') {
+      const call = { id, reason: normalizeCloseReason(message.args) };
+      if (closeHandler) deliverClose(call); else earlyCloses.push(call);
+      return;
+    }
     if (message.nom !== 'ouvrir') {
       if (id !== null) reply(id, { type: 'erreur', code: 'GFS_INCONNU', message: 'Appel inconnu : ' + String(message.nom).slice(0, 60) });
       return;
@@ -259,6 +276,18 @@ const GfsLink = (function () {
     let result;
     try { result = Promise.resolve(openHandler(call.args)); } catch (e) { result = Promise.reject(e); }
     result.then(answer, (e) => { console.warn('[GfsLink] ouverture demandée par GFS en échec', e); answer(false); });
+  }
+
+  // Donne l'appel `fermer` à l'abonné et renvoie sa réponse à GFS : `{ ferme: true }` si l'abonné rend vrai (tout ce qui attendait est enregistré, ou la personne a abandonné), `{ ferme: false }` sinon (la personne reste). Quand
+  // l'abonné échoue, GFS reçoit une erreur et jamais un `oui` : ce qui n'est pas enregistré le resterait pour rien, et c'est à GFS de demander à la personne (« Fermer quand même » ou « Rester », contrats 5.4, point 3).
+  function deliverClose(call) {
+    const answer = fields => { if (call.id !== null) reply(call.id, fields); };
+    let result;
+    try { result = Promise.resolve(closeHandler(call.reason)); } catch (e) { result = Promise.reject(e); }
+    result.then(
+      closed => answer({ type: 'reponse', data: { ferme: closed === true } }),
+      (e) => { console.warn('[GfsLink] fermeture demandée par GFS en échec', e); answer({ type: 'erreur', code: 'GFS_ECHEC', message: 'La fermeture a échoué' }); },
+    );
   }
 
   // Les extensions que la personne a activées dans GFS, et la source de la bibliothèque `id` ({ src, integrite, forme } ou null).
@@ -325,6 +354,14 @@ const GfsLink = (function () {
     earlyOpens.splice(0).forEach(deliverOpen);
   }
 
+  // Inscrit celui qui répond à `fermer` (consigne 047) : `fn(raison)` rend (une promesse de) vrai quand l'app peut laisser la place - rien n'attend, tout ce qui attendait est enregistré, ou la personne a répondu « Abandonner » -,
+  // faux quand la personne reste. GFS en reçoit `{ ferme }` et ne détruit le cadre qu'après `{ ferme: true }` ; il n'y a pas de délai à tenir (au bout de 10 secondes, c'est lui qui demande à la personne). Un seul abonné ; les
+  // appels arrivés avant lui lui sont donnés dans l'ordre.
+  function onClose(fn) {
+    closeHandler = fn;
+    earlyCloses.splice(0).forEach(deliverClose);
+  }
+
   // Ouvre, dans GFS, la fenêtre d'installation de l'extension `extension` (un clic sur une fonction grisée). Rend les extensions actives après le choix de la personne ; l'événement
   // `extensions` suit si elle en a activé une. Deux clics pendant que la fenêtre est ouverte ne posent qu'une demande.
   function install(extension) {
@@ -367,5 +404,5 @@ const GfsLink = (function () {
     call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(readerIfNeeded).then(settleReady);
   } else settleReady();
 
-  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, onChange, onLanguage, onSettings, onBar, onAmbiance, onOpen, install, deposit };
+  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, onChange, onLanguage, onSettings, onBar, onAmbiance, onOpen, onClose, install, deposit };
 })();

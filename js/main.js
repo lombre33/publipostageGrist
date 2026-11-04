@@ -617,6 +617,35 @@
     return false;
   }
 
+  // GFS laisse la place à une autre app ou au fichier d'une autre app (appel `fermer { raison }`, consigne GFS 047), ou donne à l'app un autre de ses fichiers (appel `ouvrir`) : ce qui attend d'être enregistré l'est AVANT de partir,
+  // sans question quand l'enregistrement automatique est allumé - la personne a dit, en l'allumant, qu'elle veut que l'app enregistre (« j'enregistre et je pars »). La question « Enregistrer / Abandonner / Annuler »
+  // (askBeforeLeaving) ne reste que pour ce que l'app ne peut pas décider seule : l'enregistrement automatique coupé, un modèle sans nom (il ne peut pas être enregistré), un modèle changé ailleurs (l'enregistrer serait
+  // trancher à la place de la personne : seul son « Enregistrer » le fait) et une écriture qui échoue. Les sorties de l'app elle-même (changer de modèle dans la liste, « Nouveau »...) gardent leur question, enregistrement
+  // automatique allumé ou non : ce choix est le leur. Rien n'est dit « fini » pendant qu'une écriture court : le passage de l'enregistrement automatique en route, un enregistrement fait à la main et une restauration de version
+  // finissent d'abord, et aucun nouveau passage ne part pendant ce temps (leavePromptOpen, comme pendant la question).
+  // Contrairement à la question de départ (LEAVE_PROMPT_TICK_WAIT_MS : la personne attend une fenêtre), l'attente va jusqu'au garde-fou d'un passage : GFS a sa propre fenêtre « ne répond pas » au bout de 10 secondes, et un
+  // Grist lent (la première écriture d'un document crée des tables) ne doit pas faire écrire deux fois en même temps.
+  async function saveBeforeGfsLeaves() {
+    leavePromptCount++;
+    leavePromptOpen = true;
+    try {
+      const giveUpAt = Date.now() + AUTOSAVE_TICK_WATCHDOG_MS;
+      await whenAutosaveTickDone();
+      while (restoringVersion && Date.now() < giveUpAt) await new Promise(resolve => setTimeout(resolve, 40));
+      while (saveIsRunning() || saveWaiting) await (saveWaiting || whenSaveFinished());
+      if (!hasEditsToConfirmBeforeLeaving()) return;
+      const named = !!(templateNameInput && templateNameInput.value.trim());
+      if (isAutosaveEnabled() && named && !autosaveConflictActive && !restoringVersion) await onSave();
+    } finally { if (--leavePromptCount === 0) leavePromptOpen = false; }
+  }
+
+  // L'appel `fermer` de GFS (js/gfs-open.js) : vrai, l'app peut laisser la place - rien n'attendait, tout est enregistré, ou la personne a répondu « Abandonner » ; faux, la personne reste (« Annuler », Échap, un enregistrement
+  // refusé : tout reste en place). GFS ne détruit le cadre qu'après le vrai.
+  async function leaveForGfs() {
+    await saveBeforeGfsLeaves();
+    return !hasEditsToConfirmBeforeLeaving() || askBeforeLeaving();
+  }
+
   // Une fenêtre ou une liste abandonnée (« Annuler », la liste des feuilles d'un Excel) : la personne reprend où elle en était. Ouverte depuis une
   // ligne de menu (une étiquette que la souris ne focalise pas), elle n'a aucun focus à rendre : le bouton cliqué, tout juste caché, le garde
   // jusqu'au prochain rendu, d'où le test « n'est plus affiché » en plus du focus sur <body>. Un focus ailleurs, sur un champ où l'on vient de
@@ -3635,9 +3664,10 @@
       currentId: () => Templates.getCurrentId(),
       currentRecord: () => ({ record: latestRecord, tableId: latestRecordTableId }),
     });
-    // GFS (js/gfs-open.js, consignes GFS 010, 014 et 035) : le modèle qu'il désigne s'ouvre au démarrage, et son appel `ouvrir` passe par le chemin du sélecteur, comme la règle de ligne ; « Nouveau » ouvre un modèle vierge du type
-    // demandé, par le chemin du bouton « Nouveau » de ce type ; « Nouveau > Importer » importe le fichier qu'il donne, par le chemin de la ligne d'import du menu « + ». Seul, rien n'arrive.
-    GfsOpen.init({ openTemplate: openTemplateForRow, openBlank: openBlankOfType, importFile: importFileFromGfs, readPdf: PdfReading.open, say: text => setStatus(text) });
+    // GFS (js/gfs-open.js, consignes GFS 010, 014, 035 et 047) : le modèle qu'il désigne s'ouvre au démarrage, et son appel `ouvrir` passe par le chemin du sélecteur, comme la règle de ligne ; « Nouveau » ouvre un modèle vierge du type
+    // demandé, par le chemin du bouton « Nouveau » de ce type ; « Nouveau > Importer » importe le fichier qu'il donne, par le chemin de la ligne d'import du menu « + ». Avant de quitter le modèle ouvert, ce qui attend est enregistré
+    // sans question quand l'enregistrement automatique est allumé (saveBeforeGfsLeaves), et l'appel `fermer` y répond (leaveForGfs). Seul, rien n'arrive.
+    GfsOpen.init({ openTemplate: openTemplateForRow, openBlank: openBlankOfType, importFile: importFileFromGfs, readPdf: PdfReading.open, say: text => setStatus(text), saveBeforeLeaving: saveBeforeGfsLeaves, leave: leaveForGfs });
     PdfReading.init({ leave: leaveForPdf, show: () => switchMode('read'), say: (text, isError) => setStatus(text, isError), layoutChanged: () => refreshPageFitZoom() });
     PdfReading.onChange(onPdfReadingChange);
     PdfReading.onLocksChanged(applyPdfLocks);
