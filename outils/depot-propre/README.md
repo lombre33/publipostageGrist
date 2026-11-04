@@ -117,12 +117,15 @@ for x in index.html css js img templates-gallery LICENSE; do git archive v1.0.0-
 git add beta
 git -c user.name="grist-factory" -c user.email="328957858+grist-factory@users.noreply.github.com" -c commit.gpgsign=false \
     commit -m "Ajout de la copie figée de la bêta 1.0.0-beta.1 à l'adresse /beta/"
+for x in index.html css js img templates-gallery LICENSE; do
+  [ "$(git rev-parse v1.0.0-beta.1:$x)" = "$(git rev-parse HEAD:beta/$x)" ] && echo "identique  $x" || echo "DIFFÉRENT  $x"
+done
 git push origin main
 ```
 
-Même identité que les publications (l'adresse noreply du compte public, jamais l'adresse personnelle) ; pas d'étiquette pour ce commit. Ensuite, à GitHub Pages
-d'avoir fini (« pages build and deployment »), `…/beta/js/version.js` doit montrer `1.0.0-beta.1`, et le widget chargé par cette adresse dans un document Grist
-de test, Réglages > Crédits, la même version.
+Les six lignes doivent dire « identique » avant le `git push` (sinon `git reset --hard origin/main` et on recommence). Même identité que les publications (l'adresse
+noreply du compte public, jamais l'adresse personnelle) ; pas d'étiquette pour ce commit. Ensuite, à GitHub Pages d'avoir fini (« pages build and deployment »),
+`…/beta/js/version.js` doit montrer `1.0.0-beta.1`, et le widget chargé par cette adresse dans un document Grist de test, Réglages > Crédits, la même version.
 
 `publier.sh` ne la touche pas (`beta` n'est ni dans `PUBLIES` ni dans les documents de `public/`) et la vérifie avant toute chose : `beta/` doit être là et
 identique, octet pour octet (empreintes git de chaque entrée), à ce que l'étiquette de la bêta porte, sans entrée de plus ; `PP_BETA_ETIQUETTE` nomme une autre étiquette
