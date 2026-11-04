@@ -958,470 +958,487 @@ const FloatingToolbars = (function () {
     // trouve la colonne réglée autrement qu'il n'y paraissait).
     let refreshToolbar = () => {};
 
-    const { variableToolbarHtml } = (function () {
-      // Le HTML de la barre d'une bulle : les boutons de gauche, puis les sous-panneaux de format (nombre, date, Oui / Non)
+    const { variableToolbarHtml } = createVariableToolbarHtml();
 
-      function variableToolbarHtml() {
-        const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
-        const timeOptions = `<option value="">${I18n.t('varFmt.timeNone')}</option>` + VariableFormat.timeChoices().map(t => `<option value="${t.key}">${VariableFormat.timeLabel(t)}</option>`).join('');
-        const boolTitles = { accentStrike: 'varFmt.boolAccentStrike', classic: 'list.checklistClassic.tip', accentPlain: 'list.checklistAccentPlain.tip', text: 'varFmt.boolTextTitle' };
-        return [
-          '<div class="v2-varbadge-actions">',
-          `<button data-action="calc-edit" title="${I18n.t('varToolbar.calcEdit')}" aria-label="${I18n.t('varToolbar.calcEdit')}" hidden>${Icons.svg('calc')}</button>`,
-          `<button data-action="var-condition" title="${I18n.t('varToolbar.condition')}" aria-label="${I18n.t('varToolbar.condition')}">${Icons.svg('varCondition')}</button>`,
-          `<button data-action="var-linked" title="${I18n.t('varToolbar.linked')}" aria-label="${I18n.t('varToolbar.linked')}">${Icons.svg('varLinked')}</button>`,
-          `<button data-action="var-loop" title="${I18n.t('varToolbar.loop')}" aria-label="${I18n.t('varToolbar.loop')}">${Icons.svg('varLoop')}</button>`,
-          `<button data-action="var-list" title="${I18n.t('varToolbar.list')}" aria-label="${I18n.t('varToolbar.list')}">${Icons.svg('varList')}</button>`,
-          `<button data-action="var-column" title="${I18n.t('varToolbar.columnBroken')}" aria-label="${I18n.t('varToolbar.columnBroken')}" hidden>${Icons.svg('varColumn')}</button>`,
-          '</div>',
-          '<span class="v2-floating-sep" data-var-sep></span>',
-          // « Comme dans Grist » : pour une colonne nombre ou date seulement (showVariableFormatPanels) ; son info-bulle dit ce que le bouton écrirait, ou pourquoi il est
-          // grisé (syncGristButton).
-          '<div data-var-panel="grist" hidden>',
-          `<button data-action="grist-format" title="${I18n.t('varFmt.grist')}" aria-label="${I18n.t('varFmt.grist')}">${Icons.svg('gristFormat')}</button>`,
-          '<span class="v2-floating-sep"></span>',
-          '</div>',
-          '<div data-var-panel="number">',
-          '<span class="v2-varfmt-seg">',
-          `<button data-action="num-style:fr" title="${I18n.t('varFmt.styleFr')}">FR</button>`,
-          `<button data-action="num-style:us" title="${I18n.t('varFmt.styleUs')}">US</button>`,
-          `<button data-action="num-style:none" title="${I18n.t('varFmt.styleNone')}">—</button>`,
-          '</span>',
-          `<select data-role="num-decimals" title="${I18n.t('varFmt.decimals')}"><option value="">${I18n.t('varFmt.decimalsAuto')}</option><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="range" hidden></option></select>`,
-          `<input type="text" data-role="num-currency" placeholder="${I18n.t('varFmt.currencyPlaceholder')}" title="${I18n.t('varFmt.currencyTitle')}" maxlength="6">`,
-          `<button data-action="num-percent" title="${I18n.t('varFmt.percentTitle')}" aria-label="${I18n.t('varFmt.percentTitle')}" aria-pressed="false">%</button>`,
-          '<span class="v2-floating-sep"></span>',
-          `<button data-action="num-words" title="${I18n.t('varFmt.wordsNumberTitle')}">${I18n.t('varFmt.wordsButton')}</button>`,
-          '<span class="v2-floating-sep"></span>',
-          `<button data-action="num-zero" title="${I18n.t('varFmt.zero')}" aria-label="${I18n.t('varFmt.zero')}" aria-pressed="true">${Icons.svg('zeroToggle')}</button>`,
-          '</div>',
-          '<div data-var-panel="date" hidden>',
-          '<span class="v2-varfmt-seg">',
-          `<button data-action="date-part:day" title="${I18n.t('varFmt.showDay')}">${I18n.t('varFmt.dayLetter')}</button>`,
-          `<button data-action="date-part:month" title="${I18n.t('varFmt.showMonth')}">${I18n.t('varFmt.monthLetter')}</button>`,
-          `<button data-action="date-part:year" title="${I18n.t('varFmt.showYear')}">${I18n.t('varFmt.yearLetter')}</button>`,
-          '</span>',
-          `<select data-role="date-preset" title="${I18n.t('varFmt.datePreset')}">${dateOptions}</select>`,
-          // L'heure : pour une colonne « Date et heure » seulement (showVariableFormatPanels) ; « Sans heure » est l'écriture d'avant ce réglage.
-          `<select data-role="date-time" title="${I18n.t('varFmt.time')}" aria-label="${I18n.t('varFmt.time')}" hidden>${timeOptions}</select>`,
-          '<span class="v2-floating-sep"></span>',
-          `<button data-action="date-words" title="${I18n.t('varFmt.wordsDateTitle')}">${I18n.t('varFmt.wordsButton')}</button>`,
-          '</div>',
-          // Colonne Oui / Non : les trois cases de la liste à cases (mêmes icônes, mêmes noms) puis le texte « vrai / faux ».
-          '<div data-var-panel="bool" hidden>',
-          '<span class="v2-varfmt-seg">',
-          VariableFormat.BOOL_CHECKBOX_STYLES.map(style => `<button data-action="bool-style:${style}" title="${I18n.t(boolTitles[style])}" aria-label="${I18n.t(boolTitles[style])}">${Icons.svg('checklist' + style.charAt(0).toUpperCase() + style.slice(1))}</button>`).join(''),
-          `<button data-action="bool-style:text" title="${I18n.t(boolTitles.text)}" aria-label="${I18n.t(boolTitles.text)}">${I18n.t('varFmt.boolTextButton')}</button>`,
-          '</span>',
-          '</div>',
-        ].join('');
-      }
+    const { isFormatKind, variableTarget, variableColumnType } = createVariableTarget({ editor });
 
-      return { variableToolbarHtml };
-    })();
+    const { patchVariableFormat, applyVariableFormat, gristFormatOf } = createVariableFormat({ editor, rawText, refreshToolbar: (...args) => refreshToolbar(...args), isFormatKind, variableTarget, variableColumnType });
 
-    const { isFormatKind, variableTarget, variableColumnType } = (function () {
-      // La cible de la barre d'une bulle (ce que la sélection désigne) et le type de sa colonne
+    const { onVariableAction, onVariableInput } = createVariableHandlers({ editor, inField, loopWindowTaken, isFormatKind, variableTarget, patchVariableFormat, applyVariableFormat });
 
-      // Ce que la barre règle, d'après la sélection : une bulle (`badge`, variable) ou un `calc`, un bloc de texte conditionnel (`block`, clic sur son
-      // étiquette), une case conditionnelle (`checkbox`, clic sur sa puce) ou une valeur conditionnelle (`value` : le curseur dans son texte, ou la
-      // valeur sélectionnée en entier ; une sélection qui déborde ne l'ouvre pas). { kind, node, pos } ou null. Un seul cas à la fois : un nœud
-      // sélectionné n'a qu'un type, et le curseur ne désigne une valeur que sans nœud sélectionné.
-      const NODE_KINDS = { varBadge: 'badge', calcBadge: 'calc', conditionalText: 'block', conditionalCheckbox: 'checkbox', conditionalValue: 'value' };
-      const isFormatKind = kind => kind === 'badge' || kind === 'calc';
-      function variableTarget() {
-        const { selection } = editor.state;
-        if (selection.node) {
-          const kind = selection.node.type && NODE_KINDS[selection.node.type.name];
-          return kind ? { kind, node: selection.node, pos: selection.from } : null;
-        }
-        const { $from, $to } = selection;
-        for (let depth = $from.depth; depth > 0; depth--) {
-          const node = $from.node(depth);
-          if (node.type.name === 'conditionalValue') return ($to.depth >= depth && $to.node(depth) === node) ? { kind: 'value', node, pos: $from.before(depth) } : null;
-        }
-        return null;
-      }
-      // Le type de colonne d'un calcul est « Numérique » : son résultat est un nombre, écrit et caché à zéro comme celui d'une colonne Numérique
-      // (Variables.resolveCalcResult).
-      function variableColumnType(node) { return node.type.name === 'calcBadge' ? 'Numeric' : GristAPI.getColumnType(node.attrs.table, node.attrs.column); }
+    const { setLabeled, greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit } = createVariableButtons({ editor });
 
-      return { isFormatKind, variableTarget, variableColumnType };
-    })();
+    const { syncConditionalState, syncBoolButtons } = createConditionalState({ greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit });
 
-    const { patchVariableFormat, applyVariableFormat, gristFormatOf } = (function () {
-      // Le format d'une bulle ou d'un calcul
+    const { syncVariableState } = createVariableState({ editor, rawText, loopWindowTaken, variableColumnType, gristFormatOf, setLabeled, greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit, syncBoolButtons });
 
-      // `setVariableFormat` le remplace (null = format vide), `patchVariableFormat` fusionne dans l'existant.
-      const setVariableFormat = ({ node, pos }, format) => EditorCore.patchNodeAndReselect(editor, pos, Object.assign({}, node.attrs, { format }));
-      // Une clé laissée à `undefined` est retirée du format (« Sans heure » : le format garde la forme d'avant ce réglage).
-      const patchVariableFormat = (t, patch) => {
-        const next = Object.assign({}, t.node.attrs.format, patch);
-        Object.keys(next).forEach(key => { if (next[key] === undefined) delete next[key]; });
-        setVariableFormat(t, next);
-      };
-      // Le format que « Comme dans Grist » donne à cette variable, d'après la colonne qu'elle écrit : { format, exact } ou { refusal, detail } (VariableFormat.gristColumnFormat) ;
-      // un calcul n'a pas de colonne Grist.
-      function gristFormatOf(node) {
-        if (node.type.name === 'calcBadge') return { refusal: 'calc' };
-        const { table, column } = node.attrs;
-        return VariableFormat.gristColumnFormat(GristAPI.getColumnType(table, column), GristAPI.getColumnFormatOptions(table, column),
-          VariableFormat.documentCurrency(GristAPI.getDocumentSettings()), I18n.getLang());
-      }
-      // Pose le format de la colonne Grist en une seule opération (un seul « Annuler »). Les réglages de la colonne sont relus d'abord : ils ont pu changer dans Grist depuis la
-      // dernière lecture du schéma, et le bouton écrit ce que Grist montre maintenant. Si la sélection a bougé pendant la lecture, ou si la colonne n'a plus de format que le
-      // widget sait écrire, rien n'est posé et la barre se met à jour (le bouton se grise, avec sa raison).
-      async function applyGristColumnFormat(t) {
-        await GristAPI.refreshColumnTypes();
-        const now = variableTarget();
-        if (!now || !isFormatKind(now.kind) || now.pos !== t.pos || now.node.type !== t.node.type) return;
-        const result = gristFormatOf(now.node);
-        const next = result.refusal ? null : VariableFormat.applyGristFormat(now.node.attrs.format, result.format);
-        if (next && !VariableFormat.sameFormat(next, now.node.attrs.format)) setVariableFormat(now, next);
-        else refreshToolbar();
-      }
-      function applyVariableFormat(t, action) {
-        const [name, arg] = action.split(':');
-        const format = t.node.attrs.format || {};
-        switch (name) {
-          case 'num-style': patchVariableFormat(t, { type: 'number', style: arg }); break;
-          // Enfoncé (0 barré), le zéro ne s'écrit pas - c'est l'écriture par défaut -, relâché la bulle l'affiche (`zero: 'show'`). Sans `type:
-          // 'number'`, pour ne pas poser de style à la place de celui que la barre annonce déjà (FR, ou US en interface anglaise) ; revenir à
-          // l'écriture par défaut retire la clé, et une bulle sans autre réglage retrouve un format vide.
-          case 'num-zero': {
-            // Grisé dans un champ texte (syncNumberFormat) : le zéro s'y écrit toujours.
-            if (rawText) break;
-            const next = Object.assign({}, format);
-            if (Variables.zeroHidden(format, variableColumnType(t.node))) next.zero = 'show'; else delete next.zero;
-            setVariableFormat(t, Object.keys(next).length ? next : null);
-            break;
-          }
-          // « Lettres » et « % » s'excluent (le pourcentage ne s'écrit pas en toutes lettres) : le dernier choisi reste, comme la devise, qu'un pourcentage ne porte pas.
-          case 'num-words': patchVariableFormat(t, { type: 'number', words: !format.words, percent: undefined }); break;
-          case 'num-percent': patchVariableFormat(t, format.percent ? { type: 'number', percent: undefined } : { type: 'number', percent: true, currency: undefined, words: undefined }); break;
-          case 'grist-format': applyGristColumnFormat(t); break;
-          // Le dernier composant J/M/A actif ne peut pas être désactivé (date vide sinon).
-          case 'date-part': {
-            const active = ['day', 'month', 'year'].filter(part => format[part] !== false);
-            if (active.length === 1 && active[0] === arg) break;
-            patchVariableFormat(t, { type: 'date', [arg]: format[arg] === false });
-            break;
-          }
-          case 'date-words': patchVariableFormat(t, { type: 'date', words: !format.words }); break;
-          // Oui / Non : le style remplace tout le format (une colonne passée de nombre à Oui / Non ne garde pas ses décimales). « vrai / faux » est
-          // l'écriture par défaut : la choisir retire le réglage, la bulle retrouve un format vide (sans le point bleu d'une bulle réglée), comme le
-          // bouton du zéro d'un nombre.
-          case 'bool-style':
-            if (arg === 'text') setVariableFormat(t, null);
-            else if (VariableFormat.isCheckboxStyle(arg)) setVariableFormat(t, { type: 'bool', style: arg });
-            break;
-        }
-      }
-
-      return { patchVariableFormat, applyVariableFormat, gristFormatOf };
-    })();
-
-    const { onVariableAction, onVariableInput } = (function () {
-      // Ce que fait un clic dans la barre d'une bulle, et un réglage de son format
-
-      // Les fenêtres des boutons de gauche, ouvertes sur la bulle sélectionnée ; position capturée au clic, la fenêtre retire ensuite le focus de
-      // l'éditeur. Un bouton grisé (cf. syncVariableState) ne fait rien. « Autres attributs » : variable d'une autre table (déjà liée à l'insertion)
-      // ou colonne Référence de la table de la page, règle tenue par js/variable-linked-attrs.js.
-      const WINDOWS = {
-        'var-condition': (node, pos) => VariableCondition.openAt(editor, pos),
-        'var-linked': (node, pos) => { if (VariableLinkedAttrs.isAvailable(node.attrs)) VariableLinkedAttrs.openAt(editor, pos); },
-        'var-loop': (node, pos) => { if (VariableLoop.status(editor, pos, node).enabled && !loopWindowTaken()) VariableLoop.openAt(editor, pos, { inlineOnly: inField }); },
-        'var-list': (node, pos) => { if (VariableList.status(node).enabled) VariableList.openAt(editor, pos, { field: inField }); },
-        'var-column': (node, pos) => VariableColumn.openAt(editor, pos),
-      };
-      function onVariableAction(action) {
-        const t = variableTarget();
-        if (!t) return;
-        const { kind, node, pos } = t;
-        if (action === 'calc-edit') { if (kind === 'calc') VariableCalc.openAt(editor, pos); return; }
-        const open = WINDOWS[action];
-        if (open) {
-          // Un bloc, une valeur et une case n'ont que la condition ; un calcul aucun de ces boutons (grisés par syncVariableState).
-          if (kind === 'badge' || (kind !== 'calc' && action === 'var-condition')) open(node, pos);
-        } else if (kind === 'checkbox') {
-          if (action.indexOf('bool-style:') === 0 && VariableFormat.isCheckboxStyle(action.slice(11))) {
-            EditorCore.patchNodeAndReselect(editor, pos, Object.assign({}, node.attrs, { style: action.slice(11) }));
-          }
-        } else if (isFormatKind(kind)) {
-          applyVariableFormat(t, action);
-        }
-      }
-      function onVariableInput(role, value) {
-        const t = variableTarget();
-        if (!t || !isFormatKind(t.kind)) return;
-        // Choisir un nombre de décimales remplace le « de x à y » que « Comme dans Grist » a pu poser (maxDecimals) ; une devise remplace le pourcentage.
-        if (role === 'num-decimals') patchVariableFormat(t, { type: 'number', decimals: value === '' ? null : parseInt(value, 10), maxDecimals: undefined });
-        else if (role === 'num-currency') patchVariableFormat(t, value.trim() ? { type: 'number', currency: value.trim(), percent: undefined } : { type: 'number', currency: '' });
-        else if (role === 'date-preset') patchVariableFormat(t, { type: 'date', preset: value });
-        else if (role === 'date-time') patchVariableFormat(t, { type: 'date', time: value || undefined });
-      }
-
-      return { onVariableAction, onVariableInput };
-    })();
-
-    const { setLabeled, greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit } = (function () {
-      // Les boutons de gauche de la barre d'une bulle : grisés, actifs ou cachés selon la sélection. `ui` : les contrôles de la barre
-
-      // Bouton grisé ou actif dont le nom accessible suit l'info-bulle.
-      function setLabeled(ui, action, disabled, title) {
-        ui.setDisabled(action, disabled, title);
-        const btn = ui.button(action);
-        if (btn) btn.setAttribute('aria-label', title);
-      }
-      // Bouton sans objet pour la sélection : grisé (jamais retiré) et éteint, sa raison en info-bulle.
-      function greyOut(ui, action, reasonKey) {
-        ui.setDisabled(action, true, I18n.t(reasonKey));
-        ui.setActive(action, false);
-      }
-      // « Colonne… » : là seulement sur une variable cassée (la bulle rouge : colonne, chemin ou table disparus dans Grist), pour y choisir la bonne
-      // colonne, ou sans lien (la bulle orange : sa table n'a plus de lien avec la page), pour y refaire le lien en choisissant sa colonne ; absente -
-      // cachée, pas grisée : demande expresse, exception à « rien ne disparaît » - d'une variable saine, d'un calcul (même cassé), d'un bloc de texte,
-      // d'une valeur et d'une case conditionnelle. Relue à chaque ouverture de la barre : une variable réparée la perd. `pos` : la place de la bulle
-      // (une variable sans lien l'est selon l'endroit où elle est, VariableColumn.isUnlinkedAt).
-      function syncColumnButton(ui, node, pos) {
-        const btn = ui.button('var-column');
-        if (!btn) return;
-        const isVariable = node.type.name === 'varBadge';
-        const broken = isVariable && VariableColumn.isBroken(node.attrs);
-        const unlinked = isVariable && pos != null && VariableColumn.isUnlinkedAt(editor, pos, node.attrs);
-        btn.hidden = !broken && !unlinked;
-        if (broken || unlinked) setLabeled(ui, 'var-column', false, I18n.t(broken ? 'varToolbar.columnBroken' : 'varToolbar.columnUnlinked'));
-      }
-      // « Liste… » : active (bleue) quand la bulle a un réglage de liste, grisée pour une colonne qui n'est pas une liste, une bulle en boucle, un
-      // calcul, un bloc de texte, une valeur et une case conditionnelle, avec sa raison en info-bulle. `status` : { active, enabled, title }, comme
-      // VariableList.status.
-      function syncListButton(ui, status) {
-        setLabeled(ui, 'var-list', !status.enabled, status.title);
-        ui.setActive('var-list', status.active);
-      }
-      // La condition garde son nom d'origine pour une bulle et un bloc ; une case conditionnelle dit « cochée si… » (une condition d'affichage n'aurait
-      // pas de sens pour elle). `reasonKey` : grisée avec cette raison (un calcul). Allumée aussi pour une bulle qui n'a que du texte « Avant » /
-      // « Après » : la même fenêtre le règle.
-      function syncConditionButton(ui, node, labelKey, reasonKey) {
-        const btn = ui.button('var-condition');
-        if (!btn) return;
-        btn.setAttribute('aria-label', I18n.t(labelKey));
-        ui.setDisabled('var-condition', !!reasonKey, I18n.t(reasonKey || labelKey));
-        const set = !!ConditionRules.normalizeCondition(node.attrs.condition) || !!VariableFormat.affixes(node.attrs.before, node.attrs.after);
-        ui.setActive('var-condition', !reasonKey && set);
-      }
-      // « Modifier le calcul » n'est là que pour un calcul : un calcul choisi juste avant l'a montré, l'autre sélection le cache.
-      function showCalcEdit(ui, shown) {
-        const btn = ui.button('calc-edit');
-        if (btn) btn.hidden = !shown;
-      }
-
-      return { setLabeled, greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit };
-    })();
-
-    const { syncConditionalState, syncBoolButtons } = (function () {
-      // Un bloc de texte conditionnel, une valeur et une case conditionnelle, et les boutons des styles de case
-
-      // Un bloc de texte conditionnel, une valeur et une case ont la même barre : seuls le nom de la condition et les raisons des boutons grisés
-      // changent (clés de js/i18n.js).
-      const REASONS = {
-        block: { condition: 'varToolbar.condition', linked: 'varToolbar.linkedBlock', loop: 'varToolbar.loopBlock', list: 'varToolbar.listBlock' },
-        value: { condition: 'varToolbar.condition', linked: 'varToolbar.notForValue', loop: 'varToolbar.loopValue', list: 'varToolbar.notForValue' },
-        checkbox: { condition: 'varToolbar.conditionCheckbox', linked: 'varToolbar.linkedCheckbox', loop: 'varToolbar.loopCheckbox', list: 'varToolbar.listCheckbox' },
-      };
-      function syncConditionalState(ui, node, kind) {
-        const why = REASONS[kind];
-        syncConditionButton(ui, node, why.condition);
-        showCalcEdit(ui, false);
-        greyOut(ui, 'var-linked', why.linked);
-        greyOut(ui, 'var-loop', why.loop);
-        syncListButton(ui, { active: false, enabled: false, title: I18n.t(why.list) });
-        syncColumnButton(ui, node);
-      }
-
-      // Les boutons des styles de case : celui du style en cours est allumé et enfoncé. « vrai / faux » (`text`) est le style d'une bulle sans
-      // réglage ; une case conditionnelle n'a pas ce bouton.
-      function syncBoolButtons(ui, currentStyle) {
-        VariableFormat.BOOL_CHECKBOX_STYLES.concat('text').forEach(style => {
-          const btn = ui.button(`bool-style:${style}`);
-          if (!btn) return;
-          btn.classList.toggle('is-active', style === currentStyle);
-          btn.setAttribute('aria-pressed', style === currentStyle ? 'true' : 'false');
-        });
-      }
-
-      return { syncConditionalState, syncBoolButtons };
-    })();
-
-    const { syncVariableState } = (function () {
-      // Une variable ou un calcul : la condition, les boutons de gauche et le sous-panneau de format que choisit le type de la colonne
-
-      function syncVariableState(ui, node, pos) {
-        const format = node.attrs.format || {};
-        syncVariableActions(ui, node, pos);
-        syncGristButton(ui, node, format);
-        syncNumberFormat(ui, node, format);
-        syncDateFormat(ui, format);
-        // Oui / Non : le style en cours est allumé, « vrai / faux » tant que rien n'est réglé (c'est ce que la bulle écrit).
-        syncBoolButtons(ui, VariableFormat.boolStyle(format));
-      }
-
-      function syncVariableActions(ui, node, pos) {
-        const isCalc = node.type.name === 'calcBadge';
-        showCalcEdit(ui, isCalc);
-        syncConditionButton(ui, node, 'varToolbar.condition', isCalc ? 'varToolbar.notForCalc' : null);
-        syncColumnButton(ui, node, pos);
-        if (isCalc) {
-          // Un calcul n'a ni autre attribut de sa ligne ni boucle : les deux boutons restent à leur place, grisés, avec leur raison en info-bulle.
-          greyOut(ui, 'var-linked', 'varToolbar.notForCalc');
-          greyOut(ui, 'var-loop', 'varToolbar.notForCalc');
-          syncListButton(ui, { active: false, enabled: false, title: I18n.t('varToolbar.notForCalc') });
-        } else {
-          syncListButton(ui, VariableList.status(node));
-          const linked = VariableLinkedAttrs.isAvailable(node.attrs);
-          ui.setDisabled('var-linked', !linked, I18n.t(linked ? 'varToolbar.linked' : 'varToolbar.linkedDisabled'));
-          // Boucle : active (bleue) quand posée ; grisée pour une variable qui ne montre qu'une ligne, ou déjà répétée avec une autre bulle
-          // (js/variable-loop.js).
-          const loop = VariableLoop.status(editor, pos, node);
-          const taken = loopWindowTaken();
-          ui.setActive('var-loop', loop.active);
-          ui.setDisabled('var-loop', !loop.enabled || taken, taken ? I18n.t('varLoop.alreadyOpen') : loop.title);
-        }
-      }
-
-      // « Comme dans Grist » : son info-bulle dit ce que le bouton écrirait (« Comme dans Grist : 1 234,57 € », suivi de « approché » quand ce n'est pas tout à fait le
-      // même texte) ; grisé - jamais retiré -, elle dit pourquoi : la variable est déjà écrite ainsi, c'est un calcul, ou le widget ne sait pas écrire ce format.
-      function syncGristButton(ui, node, format) {
-        const result = gristFormatOf(node);
-        let title;
-        let disabled = true;
-        if (result.refusal) title = I18n.t('varFmt.gristRefuse.' + result.refusal, { format: result.detail });
-        else if (VariableFormat.sameFormat(VariableFormat.applyGristFormat(format, result.format), format)) title = I18n.t('varFmt.gristSame');
-        else {
-          disabled = false;
-          const preview = VariableFormat.gristPreview(GristAPI.getColumnType(node.attrs.table, node.attrs.column), result.format);
-          title = I18n.t(result.exact ? 'varFmt.gristTip' : 'varFmt.gristTipApprox', { preview });
-        }
-        setLabeled(ui, 'grist-format', disabled, title);
-      }
-
-      function syncNumberFormat(ui, node, format) {
-        const isNumber = format.type === 'number';
-        // Repli aligné sur la langue de l'interface, sauf si un style explicite est déjà posé.
-        const defaultStyle = I18n.getLang() === 'en' ? 'us' : 'fr';
-        const style = isNumber ? (format.style || defaultStyle) : defaultStyle;
-        ['fr', 'us', 'none'].forEach(name => ui.setActive('num-style:' + name, style === name));
-        ui.setActive('num-words', isNumber && format.words);
-        ui.section('number').classList.toggle('v2-varfmt-words-active', isNumber && !!format.words);
-        // Les décimales : un nombre fixe de 0 à 3, « Auto », ou - ce que « Comme dans Grist » pose - un « de x à y » ou plus de trois, que l'option cachée « range » montre.
-        const digits = isNumber ? VariableFormat.decimalDigits(format) : null;
-        const range = digits && (digits.min !== digits.max || digits.min > 3);
-        const rangeOption = ui.section('number').querySelector('select[data-role="num-decimals"] option[value="range"]');
-        if (rangeOption) rangeOption.textContent = range ? I18n.t('varFmt.decimalsRange', { min: digits.min, max: digits.max }) : '';
-        ui.setField('select[data-role="num-decimals"]', range ? 'range' : (digits ? String(digits.min) : ''));
-        ui.setActive('num-percent', isNumber && !!format.percent);
-        const percentButton = ui.button('num-percent');
-        if (percentButton) percentButton.setAttribute('aria-pressed', isNumber && format.percent ? 'true' : 'false');
-        ui.setField('input[data-role="num-currency"]', isNumber && format.currency ? format.currency : '');
-        // Même règle que le rendu (Variables.zeroHidden) : la barre montre ce que le document écrit - bouton enfoncé et 0 barré tant que le zéro ne
-        // s'écrit pas. Le trait du 0 se cache par son attribut `display` : remplacer le SVG pendant le mousedown détacherait la cible du clic, que le
-        // filet de editor-core.js (clic hors de la barre = on ferme) prendrait pour un clic ailleurs.
-        const zeroBtn = ui.button('num-zero');
-        if (zeroBtn) {
-          // Dans un champ texte, le zéro s'écrit toujours (`rawNumbers`) : le bouton reste là, grisé et relâché, sa raison en info-bulle.
-          const zeroOff = !rawText && Variables.zeroHidden(format, variableColumnType(node));
-          ui.setActive('num-zero', zeroOff);
-          zeroBtn.setAttribute('aria-pressed', zeroOff ? 'true' : 'false');
-          const slash = zeroBtn.querySelector('svg path');
-          if (slash) slash.setAttribute('display', zeroOff ? 'inline' : 'none');
-          ui.setDisabled('num-zero', rawText, I18n.t(rawText ? 'varFmt.zeroInField' : 'varFmt.zero'));
-          zeroBtn.setAttribute('aria-label', zeroBtn.title);
-        }
-      }
-
-      function syncDateFormat(ui, format) {
-        const isDate = format.type === 'date';
-        ui.setField('select[data-role="date-preset"]', isDate && format.preset ? format.preset : VariableFormat.DATE_PRESETS[0].key);
-        ui.setField('select[data-role="date-time"]', isDate ? VariableFormat.timeChoiceOf(format.time) : '');
-        ['day', 'month', 'year'].forEach(part => ui.setActive('date-part:' + part, !isDate || format[part] !== false));
-        ui.setActive('date-words', isDate && format.words);
-      }
-
-      return { syncVariableState };
-    })();
-
-    const { wireToolbar } = (function () {
-      // Barre flottante d'une bulle #Variable : ce qu'elle montre selon la sélection, où elle se pose, et son câblage
-
-      function showVariableFormatPanels(ui, panel, kind, node) {
-        const type = isFormatKind(kind) ? variableColumnType(node) : null;
-        const isNumber = type === 'Numeric' || type === 'Int';
-        // Le type d'une colonne « Date et heure » est « DateTime:<fuseau> » (VariableFormat.isDateType) ; elle seule a la liste « Heure ».
-        const isDate = VariableFormat.isDateType(type);
-        // Les trois cases : une colonne Oui / Non, et la case conditionnelle - dont la barre n'a pas « vrai / faux », elle est toujours une case.
-        // Pas de cases dans un champ texte : un Oui / Non y est écrit « true » / « false », quel que soit le réglage (Variables.formatValue).
-        const isBool = !rawText && (type === 'Bool' || kind === 'checkbox');
-        ui.section('grist').hidden = !isNumber && !isDate;
-        ui.section('number').hidden = !isNumber;
-        ui.section('date').hidden = !isDate;
-        const timeSelect = panel.el.querySelector('select[data-role="date-time"]');
-        if (timeSelect) timeSelect.hidden = !VariableFormat.isDateTimeType(type);
-        ui.section('bool').hidden = !isBool;
-        const textButton = ui.button('bool-style:text');
-        if (textButton) textButton.hidden = kind === 'checkbox';
-        panel.el.querySelector('[data-var-sep]').hidden = !isNumber && !isDate && !isBool;
-      }
-
-      function variableToolbarCheck(panel, ui) {
-        return ({ transaction } = {}) => {
-          // Le blur de l'éditeur est ignoré : cf. wireImageFloatingToolbar.
-          if (transaction && transaction.getMeta('blur')) return;
-          // Pas de garde hasFocus() ni document.activeElement ici : le panneau contient de vrais contrôles de formulaire (nombre de décimales, format
-          // de date, devise). Cliquer dessus déplace le focus hors de l'éditeur (editor.view.hasFocus() devient faux), mais un <select> ne reçoit pas
-          // toujours le focus de façon fiable ni synchrone : contrôler `panel.el.contains(document.activeElement)` fermait la barre au moment où la
-          // liste native s'ouvrait. La fermeture au clic hors du panneau est gérée par hideFloatingContextToolbars (js/editor-core.js), sur la cible
-          // du mousedown, fiable y compris pour un <select> ; ici, seule la sélection décide.
-          const t = variableTarget();
-          if (!t) { panel.hide(); return; }
-          if (variableWindowOpen(options && options.hostWindow)) { panel.hide(); return; }
-          const { kind, node, pos } = t;
-          showVariableFormatPanels(ui, panel, kind, node);
-          const dom = editor.view.nodeDOM(pos);
-          // Éditeur masqué (Lecture, résumé d'un macro-modèle) : la bulle reste sélectionnée mais n'a plus de boîte, et floating-ui poserait la barre
-          // en haut à gauche (8, 8) - une transaction qui arrive alors (le blur de l'éditeur à un clic sur « Lecture », par exemple) ne doit pas la
-          // rouvrir.
-          if (!dom || !dom.getClientRects().length) { panel.hide(); return; }
-          if (isFormatKind(kind)) syncVariableState(ui, node, pos);
-          else syncConditionalState(ui, node, kind);
-          if (kind === 'checkbox') syncBoolButtons(ui, ConditionalCheckbox.styleOf(node.attrs.style));
-          // Un bloc de texte conditionnel : la barre s'ancre sur son étiquette (en haut à gauche), pas au milieu de sa largeur.
-          panel.show(kind === 'block' ? (dom.querySelector && dom.querySelector(':scope > .conditional-text-tag')) || dom : dom, inField ? undefined : anchoredBarOptions);
-        };
-      }
-
-      // Barre flottante d'une bulle #Variable (même modèle que l'image), ouverte sur toutes les variables : un groupe d'actions à gauche (condition
-      // d'affichage, autres attributs de la même ligne, boucle sur les lignes liées, liste des valeurs d'une colonne Liste de choix ou de références,
-      // et, seulement sur une variable cassée, le choix d'une autre colonne), puis, pour une colonne nombre, date ou Oui / Non seulement, le
-      // sous-panneau de format choisi par le type de la colonne Grist (Oui /
-      // Non : trois cases et « vrai / faux »). Une bulle « Calcul » (js/variable-calc.js) ouvre la même barre : « Modifier le calcul » prend la place du
-      // groupe d'actions (condition, autres attributs et boucle sont grisés, sans objet pour une formule), avec le réglage nombre puisque son résultat
-      // est un nombre.
-      function wireToolbar() {
-        const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-varfmt-toolbar', variableToolbarHtml(), onVariableAction, onVariableInput);
-        EditorCore.registerFloatingPanel(panel, inField ? options.ownerEl : null);
-        const ui = Object.assign(controlsOf(panel), { section: name => panel.el.querySelector(`[data-var-panel="${name}"]`) });
-        const check = variableToolbarCheck(panel, ui);
-        refreshToolbar = () => check();
-        editor.on('selectionUpdate', check);
-        editor.on('transaction', check);
-        return panel;
-      }
-
-      return { wireToolbar };
-    })();
+    const { wireToolbar } = createVariableToolbarWiring({ editor, options, inField, rawText, setRefreshToolbar: value => { refreshToolbar = value; }, variableToolbarHtml, isFormatKind, variableTarget, variableColumnType, onVariableAction, onVariableInput, syncConditionalState, syncBoolButtons, syncVariableState });
 
     return { wire: wireToolbar };
   }
+
+  function createVariableToolbarHtml() {
+    // Le HTML de la barre d'une bulle : les boutons de gauche, puis les sous-panneaux de format (nombre, date, Oui / Non)
+
+    function variableToolbarHtml() {
+      const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
+      const timeOptions = `<option value="">${I18n.t('varFmt.timeNone')}</option>` + VariableFormat.timeChoices().map(t => `<option value="${t.key}">${VariableFormat.timeLabel(t)}</option>`).join('');
+      const boolTitles = { accentStrike: 'varFmt.boolAccentStrike', classic: 'list.checklistClassic.tip', accentPlain: 'list.checklistAccentPlain.tip', text: 'varFmt.boolTextTitle' };
+      return [
+        '<div class="v2-varbadge-actions">',
+        `<button data-action="calc-edit" title="${I18n.t('varToolbar.calcEdit')}" aria-label="${I18n.t('varToolbar.calcEdit')}" hidden>${Icons.svg('calc')}</button>`,
+        `<button data-action="var-condition" title="${I18n.t('varToolbar.condition')}" aria-label="${I18n.t('varToolbar.condition')}">${Icons.svg('varCondition')}</button>`,
+        `<button data-action="var-linked" title="${I18n.t('varToolbar.linked')}" aria-label="${I18n.t('varToolbar.linked')}">${Icons.svg('varLinked')}</button>`,
+        `<button data-action="var-loop" title="${I18n.t('varToolbar.loop')}" aria-label="${I18n.t('varToolbar.loop')}">${Icons.svg('varLoop')}</button>`,
+        `<button data-action="var-list" title="${I18n.t('varToolbar.list')}" aria-label="${I18n.t('varToolbar.list')}">${Icons.svg('varList')}</button>`,
+        `<button data-action="var-column" title="${I18n.t('varToolbar.columnBroken')}" aria-label="${I18n.t('varToolbar.columnBroken')}" hidden>${Icons.svg('varColumn')}</button>`,
+        '</div>',
+        '<span class="v2-floating-sep" data-var-sep></span>',
+        // « Comme dans Grist » : pour une colonne nombre ou date seulement (showVariableFormatPanels) ; son info-bulle dit ce que le bouton écrirait, ou pourquoi il est
+        // grisé (syncGristButton).
+        '<div data-var-panel="grist" hidden>',
+        `<button data-action="grist-format" title="${I18n.t('varFmt.grist')}" aria-label="${I18n.t('varFmt.grist')}">${Icons.svg('gristFormat')}</button>`,
+        '<span class="v2-floating-sep"></span>',
+        '</div>',
+        '<div data-var-panel="number">',
+        '<span class="v2-varfmt-seg">',
+        `<button data-action="num-style:fr" title="${I18n.t('varFmt.styleFr')}">FR</button>`,
+        `<button data-action="num-style:us" title="${I18n.t('varFmt.styleUs')}">US</button>`,
+        `<button data-action="num-style:none" title="${I18n.t('varFmt.styleNone')}">—</button>`,
+        '</span>',
+        `<select data-role="num-decimals" title="${I18n.t('varFmt.decimals')}"><option value="">${I18n.t('varFmt.decimalsAuto')}</option><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="range" hidden></option></select>`,
+        `<input type="text" data-role="num-currency" placeholder="${I18n.t('varFmt.currencyPlaceholder')}" title="${I18n.t('varFmt.currencyTitle')}" maxlength="6">`,
+        `<button data-action="num-percent" title="${I18n.t('varFmt.percentTitle')}" aria-label="${I18n.t('varFmt.percentTitle')}" aria-pressed="false">%</button>`,
+        '<span class="v2-floating-sep"></span>',
+        `<button data-action="num-words" title="${I18n.t('varFmt.wordsNumberTitle')}">${I18n.t('varFmt.wordsButton')}</button>`,
+        '<span class="v2-floating-sep"></span>',
+        `<button data-action="num-zero" title="${I18n.t('varFmt.zero')}" aria-label="${I18n.t('varFmt.zero')}" aria-pressed="true">${Icons.svg('zeroToggle')}</button>`,
+        '</div>',
+        '<div data-var-panel="date" hidden>',
+        '<span class="v2-varfmt-seg">',
+        `<button data-action="date-part:day" title="${I18n.t('varFmt.showDay')}">${I18n.t('varFmt.dayLetter')}</button>`,
+        `<button data-action="date-part:month" title="${I18n.t('varFmt.showMonth')}">${I18n.t('varFmt.monthLetter')}</button>`,
+        `<button data-action="date-part:year" title="${I18n.t('varFmt.showYear')}">${I18n.t('varFmt.yearLetter')}</button>`,
+        '</span>',
+        `<select data-role="date-preset" title="${I18n.t('varFmt.datePreset')}">${dateOptions}</select>`,
+        // L'heure : pour une colonne « Date et heure » seulement (showVariableFormatPanels) ; « Sans heure » est l'écriture d'avant ce réglage.
+        `<select data-role="date-time" title="${I18n.t('varFmt.time')}" aria-label="${I18n.t('varFmt.time')}" hidden>${timeOptions}</select>`,
+        '<span class="v2-floating-sep"></span>',
+        `<button data-action="date-words" title="${I18n.t('varFmt.wordsDateTitle')}">${I18n.t('varFmt.wordsButton')}</button>`,
+        '</div>',
+        // Colonne Oui / Non : les trois cases de la liste à cases (mêmes icônes, mêmes noms) puis le texte « vrai / faux ».
+        '<div data-var-panel="bool" hidden>',
+        '<span class="v2-varfmt-seg">',
+        VariableFormat.BOOL_CHECKBOX_STYLES.map(style => `<button data-action="bool-style:${style}" title="${I18n.t(boolTitles[style])}" aria-label="${I18n.t(boolTitles[style])}">${Icons.svg('checklist' + style.charAt(0).toUpperCase() + style.slice(1))}</button>`).join(''),
+        `<button data-action="bool-style:text" title="${I18n.t(boolTitles.text)}" aria-label="${I18n.t(boolTitles.text)}">${I18n.t('varFmt.boolTextButton')}</button>`,
+        '</span>',
+        '</div>',
+      ].join('');
+    }
+
+    return { variableToolbarHtml };
+  }
+
+  function createVariableTarget({ editor }) {
+    // La cible de la barre d'une bulle (ce que la sélection désigne) et le type de sa colonne
+
+    // Ce que la barre règle, d'après la sélection : une bulle (`badge`, variable) ou un `calc`, un bloc de texte conditionnel (`block`, clic sur son
+    // étiquette), une case conditionnelle (`checkbox`, clic sur sa puce) ou une valeur conditionnelle (`value` : le curseur dans son texte, ou la
+    // valeur sélectionnée en entier ; une sélection qui déborde ne l'ouvre pas). { kind, node, pos } ou null. Un seul cas à la fois : un nœud
+    // sélectionné n'a qu'un type, et le curseur ne désigne une valeur que sans nœud sélectionné.
+    const NODE_KINDS = { varBadge: 'badge', calcBadge: 'calc', conditionalText: 'block', conditionalCheckbox: 'checkbox', conditionalValue: 'value' };
+    const isFormatKind = kind => kind === 'badge' || kind === 'calc';
+    function variableTarget() {
+      const { selection } = editor.state;
+      if (selection.node) {
+        const kind = selection.node.type && NODE_KINDS[selection.node.type.name];
+        return kind ? { kind, node: selection.node, pos: selection.from } : null;
+      }
+      const { $from, $to } = selection;
+      for (let depth = $from.depth; depth > 0; depth--) {
+        const node = $from.node(depth);
+        if (node.type.name === 'conditionalValue') return ($to.depth >= depth && $to.node(depth) === node) ? { kind: 'value', node, pos: $from.before(depth) } : null;
+      }
+      return null;
+    }
+    // Le type de colonne d'un calcul est « Numérique » : son résultat est un nombre, écrit et caché à zéro comme celui d'une colonne Numérique
+    // (Variables.resolveCalcResult).
+    function variableColumnType(node) { return node.type.name === 'calcBadge' ? 'Numeric' : GristAPI.getColumnType(node.attrs.table, node.attrs.column); }
+
+    return { isFormatKind, variableTarget, variableColumnType };
+  }
+
+  function createVariableFormat({ editor, rawText, refreshToolbar, isFormatKind, variableTarget, variableColumnType }) {
+    // Le format d'une bulle ou d'un calcul
+
+    // `setVariableFormat` le remplace (null = format vide), `patchVariableFormat` fusionne dans l'existant.
+    const setVariableFormat = ({ node, pos }, format) => EditorCore.patchNodeAndReselect(editor, pos, Object.assign({}, node.attrs, { format }));
+    // Une clé laissée à `undefined` est retirée du format (« Sans heure » : le format garde la forme d'avant ce réglage).
+    const patchVariableFormat = (t, patch) => {
+      const next = Object.assign({}, t.node.attrs.format, patch);
+      Object.keys(next).forEach(key => { if (next[key] === undefined) delete next[key]; });
+      setVariableFormat(t, next);
+    };
+    // Le format que « Comme dans Grist » donne à cette variable, d'après la colonne qu'elle écrit : { format, exact } ou { refusal, detail } (VariableFormat.gristColumnFormat) ;
+    // un calcul n'a pas de colonne Grist.
+    function gristFormatOf(node) {
+      if (node.type.name === 'calcBadge') return { refusal: 'calc' };
+      const { table, column } = node.attrs;
+      return VariableFormat.gristColumnFormat(GristAPI.getColumnType(table, column), GristAPI.getColumnFormatOptions(table, column),
+        VariableFormat.documentCurrency(GristAPI.getDocumentSettings()), I18n.getLang());
+    }
+    // Pose le format de la colonne Grist en une seule opération (un seul « Annuler »). Les réglages de la colonne sont relus d'abord : ils ont pu changer dans Grist depuis la
+    // dernière lecture du schéma, et le bouton écrit ce que Grist montre maintenant. Si la sélection a bougé pendant la lecture, ou si la colonne n'a plus de format que le
+    // widget sait écrire, rien n'est posé et la barre se met à jour (le bouton se grise, avec sa raison).
+    async function applyGristColumnFormat(t) {
+      await GristAPI.refreshColumnTypes();
+      const now = variableTarget();
+      if (!now || !isFormatKind(now.kind) || now.pos !== t.pos || now.node.type !== t.node.type) return;
+      const result = gristFormatOf(now.node);
+      const next = result.refusal ? null : VariableFormat.applyGristFormat(now.node.attrs.format, result.format);
+      if (next && !VariableFormat.sameFormat(next, now.node.attrs.format)) setVariableFormat(now, next);
+      else refreshToolbar();
+    }
+    function applyVariableFormat(t, action) {
+      const [name, arg] = action.split(':');
+      const format = t.node.attrs.format || {};
+      switch (name) {
+        case 'num-style': patchVariableFormat(t, { type: 'number', style: arg }); break;
+        // Enfoncé (0 barré), le zéro ne s'écrit pas - c'est l'écriture par défaut -, relâché la bulle l'affiche (`zero: 'show'`). Sans `type:
+        // 'number'`, pour ne pas poser de style à la place de celui que la barre annonce déjà (FR, ou US en interface anglaise) ; revenir à
+        // l'écriture par défaut retire la clé, et une bulle sans autre réglage retrouve un format vide.
+        case 'num-zero': {
+          // Grisé dans un champ texte (syncNumberFormat) : le zéro s'y écrit toujours.
+          if (rawText) break;
+          const next = Object.assign({}, format);
+          if (Variables.zeroHidden(format, variableColumnType(t.node))) next.zero = 'show'; else delete next.zero;
+          setVariableFormat(t, Object.keys(next).length ? next : null);
+          break;
+        }
+        // « Lettres » et « % » s'excluent (le pourcentage ne s'écrit pas en toutes lettres) : le dernier choisi reste, comme la devise, qu'un pourcentage ne porte pas.
+        case 'num-words': patchVariableFormat(t, { type: 'number', words: !format.words, percent: undefined }); break;
+        case 'num-percent': patchVariableFormat(t, format.percent ? { type: 'number', percent: undefined } : { type: 'number', percent: true, currency: undefined, words: undefined }); break;
+        case 'grist-format': applyGristColumnFormat(t); break;
+        // Le dernier composant J/M/A actif ne peut pas être désactivé (date vide sinon).
+        case 'date-part': {
+          const active = ['day', 'month', 'year'].filter(part => format[part] !== false);
+          if (active.length === 1 && active[0] === arg) break;
+          patchVariableFormat(t, { type: 'date', [arg]: format[arg] === false });
+          break;
+        }
+        case 'date-words': patchVariableFormat(t, { type: 'date', words: !format.words }); break;
+        // Oui / Non : le style remplace tout le format (une colonne passée de nombre à Oui / Non ne garde pas ses décimales). « vrai / faux » est
+        // l'écriture par défaut : la choisir retire le réglage, la bulle retrouve un format vide (sans le point bleu d'une bulle réglée), comme le
+        // bouton du zéro d'un nombre.
+        case 'bool-style':
+          if (arg === 'text') setVariableFormat(t, null);
+          else if (VariableFormat.isCheckboxStyle(arg)) setVariableFormat(t, { type: 'bool', style: arg });
+          break;
+      }
+    }
+
+    return { patchVariableFormat, applyVariableFormat, gristFormatOf };
+  }
+
+  function createVariableHandlers({ editor, inField, loopWindowTaken, isFormatKind, variableTarget, patchVariableFormat, applyVariableFormat }) {
+    // Ce que fait un clic dans la barre d'une bulle, et un réglage de son format
+
+    // Les fenêtres des boutons de gauche, ouvertes sur la bulle sélectionnée ; position capturée au clic, la fenêtre retire ensuite le focus de
+    // l'éditeur. Un bouton grisé (cf. syncVariableState) ne fait rien. « Autres attributs » : variable d'une autre table (déjà liée à l'insertion)
+    // ou colonne Référence de la table de la page, règle tenue par js/variable-linked-attrs.js.
+    const WINDOWS = {
+      'var-condition': (node, pos) => VariableCondition.openAt(editor, pos),
+      'var-linked': (node, pos) => { if (VariableLinkedAttrs.isAvailable(node.attrs)) VariableLinkedAttrs.openAt(editor, pos); },
+      'var-loop': (node, pos) => { if (VariableLoop.status(editor, pos, node).enabled && !loopWindowTaken()) VariableLoop.openAt(editor, pos, { inlineOnly: inField }); },
+      'var-list': (node, pos) => { if (VariableList.status(node).enabled) VariableList.openAt(editor, pos, { field: inField }); },
+      'var-column': (node, pos) => VariableColumn.openAt(editor, pos),
+    };
+    function onVariableAction(action) {
+      const t = variableTarget();
+      if (!t) return;
+      const { kind, node, pos } = t;
+      if (action === 'calc-edit') { if (kind === 'calc') VariableCalc.openAt(editor, pos); return; }
+      const open = WINDOWS[action];
+      if (open) {
+        // Un bloc, une valeur et une case n'ont que la condition ; un calcul aucun de ces boutons (grisés par syncVariableState).
+        if (kind === 'badge' || (kind !== 'calc' && action === 'var-condition')) open(node, pos);
+      } else if (kind === 'checkbox') {
+        if (action.indexOf('bool-style:') === 0 && VariableFormat.isCheckboxStyle(action.slice(11))) {
+          EditorCore.patchNodeAndReselect(editor, pos, Object.assign({}, node.attrs, { style: action.slice(11) }));
+        }
+      } else if (isFormatKind(kind)) {
+        applyVariableFormat(t, action);
+      }
+    }
+    function onVariableInput(role, value) {
+      const t = variableTarget();
+      if (!t || !isFormatKind(t.kind)) return;
+      // Choisir un nombre de décimales remplace le « de x à y » que « Comme dans Grist » a pu poser (maxDecimals) ; une devise remplace le pourcentage.
+      if (role === 'num-decimals') patchVariableFormat(t, { type: 'number', decimals: value === '' ? null : parseInt(value, 10), maxDecimals: undefined });
+      else if (role === 'num-currency') patchVariableFormat(t, value.trim() ? { type: 'number', currency: value.trim(), percent: undefined } : { type: 'number', currency: '' });
+      else if (role === 'date-preset') patchVariableFormat(t, { type: 'date', preset: value });
+      else if (role === 'date-time') patchVariableFormat(t, { type: 'date', time: value || undefined });
+    }
+
+    return { onVariableAction, onVariableInput };
+  }
+
+  function createVariableButtons({ editor }) {
+    // Les boutons de gauche de la barre d'une bulle : grisés, actifs ou cachés selon la sélection. `ui` : les contrôles de la barre
+
+    // Bouton grisé ou actif dont le nom accessible suit l'info-bulle.
+    function setLabeled(ui, action, disabled, title) {
+      ui.setDisabled(action, disabled, title);
+      const btn = ui.button(action);
+      if (btn) btn.setAttribute('aria-label', title);
+    }
+    // Bouton sans objet pour la sélection : grisé (jamais retiré) et éteint, sa raison en info-bulle.
+    function greyOut(ui, action, reasonKey) {
+      ui.setDisabled(action, true, I18n.t(reasonKey));
+      ui.setActive(action, false);
+    }
+    // « Colonne… » : là seulement sur une variable cassée (la bulle rouge : colonne, chemin ou table disparus dans Grist), pour y choisir la bonne
+    // colonne, ou sans lien (la bulle orange : sa table n'a plus de lien avec la page), pour y refaire le lien en choisissant sa colonne ; absente -
+    // cachée, pas grisée : demande expresse, exception à « rien ne disparaît » - d'une variable saine, d'un calcul (même cassé), d'un bloc de texte,
+    // d'une valeur et d'une case conditionnelle. Relue à chaque ouverture de la barre : une variable réparée la perd. `pos` : la place de la bulle
+    // (une variable sans lien l'est selon l'endroit où elle est, VariableColumn.isUnlinkedAt).
+    function syncColumnButton(ui, node, pos) {
+      const btn = ui.button('var-column');
+      if (!btn) return;
+      const isVariable = node.type.name === 'varBadge';
+      const broken = isVariable && VariableColumn.isBroken(node.attrs);
+      const unlinked = isVariable && pos != null && VariableColumn.isUnlinkedAt(editor, pos, node.attrs);
+      btn.hidden = !broken && !unlinked;
+      if (broken || unlinked) setLabeled(ui, 'var-column', false, I18n.t(broken ? 'varToolbar.columnBroken' : 'varToolbar.columnUnlinked'));
+    }
+    // « Liste… » : active (bleue) quand la bulle a un réglage de liste, grisée pour une colonne qui n'est pas une liste, une bulle en boucle, un
+    // calcul, un bloc de texte, une valeur et une case conditionnelle, avec sa raison en info-bulle. `status` : { active, enabled, title }, comme
+    // VariableList.status.
+    function syncListButton(ui, status) {
+      setLabeled(ui, 'var-list', !status.enabled, status.title);
+      ui.setActive('var-list', status.active);
+    }
+    // La condition garde son nom d'origine pour une bulle et un bloc ; une case conditionnelle dit « cochée si… » (une condition d'affichage n'aurait
+    // pas de sens pour elle). `reasonKey` : grisée avec cette raison (un calcul). Allumée aussi pour une bulle qui n'a que du texte « Avant » /
+    // « Après » : la même fenêtre le règle.
+    function syncConditionButton(ui, node, labelKey, reasonKey) {
+      const btn = ui.button('var-condition');
+      if (!btn) return;
+      btn.setAttribute('aria-label', I18n.t(labelKey));
+      ui.setDisabled('var-condition', !!reasonKey, I18n.t(reasonKey || labelKey));
+      const set = !!ConditionRules.normalizeCondition(node.attrs.condition) || !!VariableFormat.affixes(node.attrs.before, node.attrs.after);
+      ui.setActive('var-condition', !reasonKey && set);
+    }
+    // « Modifier le calcul » n'est là que pour un calcul : un calcul choisi juste avant l'a montré, l'autre sélection le cache.
+    function showCalcEdit(ui, shown) {
+      const btn = ui.button('calc-edit');
+      if (btn) btn.hidden = !shown;
+    }
+
+    return { setLabeled, greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit };
+  }
+
+  function createConditionalState({ greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit }) {
+    // Un bloc de texte conditionnel, une valeur et une case conditionnelle, et les boutons des styles de case
+
+    // Un bloc de texte conditionnel, une valeur et une case ont la même barre : seuls le nom de la condition et les raisons des boutons grisés
+    // changent (clés de js/i18n.js).
+    const REASONS = {
+      block: { condition: 'varToolbar.condition', linked: 'varToolbar.linkedBlock', loop: 'varToolbar.loopBlock', list: 'varToolbar.listBlock' },
+      value: { condition: 'varToolbar.condition', linked: 'varToolbar.notForValue', loop: 'varToolbar.loopValue', list: 'varToolbar.notForValue' },
+      checkbox: { condition: 'varToolbar.conditionCheckbox', linked: 'varToolbar.linkedCheckbox', loop: 'varToolbar.loopCheckbox', list: 'varToolbar.listCheckbox' },
+    };
+    function syncConditionalState(ui, node, kind) {
+      const why = REASONS[kind];
+      syncConditionButton(ui, node, why.condition);
+      showCalcEdit(ui, false);
+      greyOut(ui, 'var-linked', why.linked);
+      greyOut(ui, 'var-loop', why.loop);
+      syncListButton(ui, { active: false, enabled: false, title: I18n.t(why.list) });
+      syncColumnButton(ui, node);
+    }
+
+    // Les boutons des styles de case : celui du style en cours est allumé et enfoncé. « vrai / faux » (`text`) est le style d'une bulle sans
+    // réglage ; une case conditionnelle n'a pas ce bouton.
+    function syncBoolButtons(ui, currentStyle) {
+      VariableFormat.BOOL_CHECKBOX_STYLES.concat('text').forEach(style => {
+        const btn = ui.button(`bool-style:${style}`);
+        if (!btn) return;
+        btn.classList.toggle('is-active', style === currentStyle);
+        btn.setAttribute('aria-pressed', style === currentStyle ? 'true' : 'false');
+      });
+    }
+
+    return { syncConditionalState, syncBoolButtons };
+  }
+
+  function createVariableState({ editor, rawText, loopWindowTaken, variableColumnType, gristFormatOf, setLabeled, greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit, syncBoolButtons }) {
+    // Une variable ou un calcul : la condition, les boutons de gauche et le sous-panneau de format que choisit le type de la colonne
+
+    function syncVariableState(ui, node, pos) {
+      const format = node.attrs.format || {};
+      syncVariableActions(ui, node, pos);
+      syncGristButton(ui, node, format);
+      syncNumberFormat(ui, node, format);
+      syncDateFormat(ui, format);
+      // Oui / Non : le style en cours est allumé, « vrai / faux » tant que rien n'est réglé (c'est ce que la bulle écrit).
+      syncBoolButtons(ui, VariableFormat.boolStyle(format));
+    }
+
+    function syncVariableActions(ui, node, pos) {
+      const isCalc = node.type.name === 'calcBadge';
+      showCalcEdit(ui, isCalc);
+      syncConditionButton(ui, node, 'varToolbar.condition', isCalc ? 'varToolbar.notForCalc' : null);
+      syncColumnButton(ui, node, pos);
+      if (isCalc) {
+        // Un calcul n'a ni autre attribut de sa ligne ni boucle : les deux boutons restent à leur place, grisés, avec leur raison en info-bulle.
+        greyOut(ui, 'var-linked', 'varToolbar.notForCalc');
+        greyOut(ui, 'var-loop', 'varToolbar.notForCalc');
+        syncListButton(ui, { active: false, enabled: false, title: I18n.t('varToolbar.notForCalc') });
+      } else {
+        syncListButton(ui, VariableList.status(node));
+        const linked = VariableLinkedAttrs.isAvailable(node.attrs);
+        ui.setDisabled('var-linked', !linked, I18n.t(linked ? 'varToolbar.linked' : 'varToolbar.linkedDisabled'));
+        // Boucle : active (bleue) quand posée ; grisée pour une variable qui ne montre qu'une ligne, ou déjà répétée avec une autre bulle
+        // (js/variable-loop.js).
+        const loop = VariableLoop.status(editor, pos, node);
+        const taken = loopWindowTaken();
+        ui.setActive('var-loop', loop.active);
+        ui.setDisabled('var-loop', !loop.enabled || taken, taken ? I18n.t('varLoop.alreadyOpen') : loop.title);
+      }
+    }
+
+    // « Comme dans Grist » : son info-bulle dit ce que le bouton écrirait (« Comme dans Grist : 1 234,57 € », suivi de « approché » quand ce n'est pas tout à fait le
+    // même texte) ; grisé - jamais retiré -, elle dit pourquoi : la variable est déjà écrite ainsi, c'est un calcul, ou le widget ne sait pas écrire ce format.
+    function syncGristButton(ui, node, format) {
+      const result = gristFormatOf(node);
+      let title;
+      let disabled = true;
+      if (result.refusal) title = I18n.t('varFmt.gristRefuse.' + result.refusal, { format: result.detail });
+      else if (VariableFormat.sameFormat(VariableFormat.applyGristFormat(format, result.format), format)) title = I18n.t('varFmt.gristSame');
+      else {
+        disabled = false;
+        const preview = VariableFormat.gristPreview(GristAPI.getColumnType(node.attrs.table, node.attrs.column), result.format);
+        title = I18n.t(result.exact ? 'varFmt.gristTip' : 'varFmt.gristTipApprox', { preview });
+      }
+      setLabeled(ui, 'grist-format', disabled, title);
+    }
+
+    function syncNumberFormat(ui, node, format) {
+      const isNumber = format.type === 'number';
+      // Repli aligné sur la langue de l'interface, sauf si un style explicite est déjà posé.
+      const defaultStyle = I18n.getLang() === 'en' ? 'us' : 'fr';
+      const style = isNumber ? (format.style || defaultStyle) : defaultStyle;
+      ['fr', 'us', 'none'].forEach(name => ui.setActive('num-style:' + name, style === name));
+      ui.setActive('num-words', isNumber && format.words);
+      ui.section('number').classList.toggle('v2-varfmt-words-active', isNumber && !!format.words);
+      // Les décimales : un nombre fixe de 0 à 3, « Auto », ou - ce que « Comme dans Grist » pose - un « de x à y » ou plus de trois, que l'option cachée « range » montre.
+      const digits = isNumber ? VariableFormat.decimalDigits(format) : null;
+      const range = digits && (digits.min !== digits.max || digits.min > 3);
+      const rangeOption = ui.section('number').querySelector('select[data-role="num-decimals"] option[value="range"]');
+      if (rangeOption) rangeOption.textContent = range ? I18n.t('varFmt.decimalsRange', { min: digits.min, max: digits.max }) : '';
+      ui.setField('select[data-role="num-decimals"]', range ? 'range' : (digits ? String(digits.min) : ''));
+      ui.setActive('num-percent', isNumber && !!format.percent);
+      const percentButton = ui.button('num-percent');
+      if (percentButton) percentButton.setAttribute('aria-pressed', isNumber && format.percent ? 'true' : 'false');
+      ui.setField('input[data-role="num-currency"]', isNumber && format.currency ? format.currency : '');
+      // Même règle que le rendu (Variables.zeroHidden) : la barre montre ce que le document écrit - bouton enfoncé et 0 barré tant que le zéro ne
+      // s'écrit pas. Le trait du 0 se cache par son attribut `display` : remplacer le SVG pendant le mousedown détacherait la cible du clic, que le
+      // filet de editor-core.js (clic hors de la barre = on ferme) prendrait pour un clic ailleurs.
+      const zeroBtn = ui.button('num-zero');
+      if (zeroBtn) {
+        // Dans un champ texte, le zéro s'écrit toujours (`rawNumbers`) : le bouton reste là, grisé et relâché, sa raison en info-bulle.
+        const zeroOff = !rawText && Variables.zeroHidden(format, variableColumnType(node));
+        ui.setActive('num-zero', zeroOff);
+        zeroBtn.setAttribute('aria-pressed', zeroOff ? 'true' : 'false');
+        const slash = zeroBtn.querySelector('svg path');
+        if (slash) slash.setAttribute('display', zeroOff ? 'inline' : 'none');
+        ui.setDisabled('num-zero', rawText, I18n.t(rawText ? 'varFmt.zeroInField' : 'varFmt.zero'));
+        zeroBtn.setAttribute('aria-label', zeroBtn.title);
+      }
+    }
+
+    function syncDateFormat(ui, format) {
+      const isDate = format.type === 'date';
+      ui.setField('select[data-role="date-preset"]', isDate && format.preset ? format.preset : VariableFormat.DATE_PRESETS[0].key);
+      ui.setField('select[data-role="date-time"]', isDate ? VariableFormat.timeChoiceOf(format.time) : '');
+      ['day', 'month', 'year'].forEach(part => ui.setActive('date-part:' + part, !isDate || format[part] !== false));
+      ui.setActive('date-words', isDate && format.words);
+    }
+
+    return { syncVariableState };
+  }
+
+  function createVariableToolbarWiring({ editor, options, inField, rawText, setRefreshToolbar, variableToolbarHtml, isFormatKind, variableTarget, variableColumnType, onVariableAction, onVariableInput, syncConditionalState, syncBoolButtons, syncVariableState }) {
+    // Barre flottante d'une bulle #Variable : ce qu'elle montre selon la sélection, où elle se pose, et son câblage
+
+    function showVariableFormatPanels(ui, panel, kind, node) {
+      const type = isFormatKind(kind) ? variableColumnType(node) : null;
+      const isNumber = type === 'Numeric' || type === 'Int';
+      // Le type d'une colonne « Date et heure » est « DateTime:<fuseau> » (VariableFormat.isDateType) ; elle seule a la liste « Heure ».
+      const isDate = VariableFormat.isDateType(type);
+      // Les trois cases : une colonne Oui / Non, et la case conditionnelle - dont la barre n'a pas « vrai / faux », elle est toujours une case.
+      // Pas de cases dans un champ texte : un Oui / Non y est écrit « true » / « false », quel que soit le réglage (Variables.formatValue).
+      const isBool = !rawText && (type === 'Bool' || kind === 'checkbox');
+      ui.section('grist').hidden = !isNumber && !isDate;
+      ui.section('number').hidden = !isNumber;
+      ui.section('date').hidden = !isDate;
+      const timeSelect = panel.el.querySelector('select[data-role="date-time"]');
+      if (timeSelect) timeSelect.hidden = !VariableFormat.isDateTimeType(type);
+      ui.section('bool').hidden = !isBool;
+      const textButton = ui.button('bool-style:text');
+      if (textButton) textButton.hidden = kind === 'checkbox';
+      panel.el.querySelector('[data-var-sep]').hidden = !isNumber && !isDate && !isBool;
+    }
+
+    function variableToolbarCheck(panel, ui) {
+      return ({ transaction } = {}) => {
+        // Le blur de l'éditeur est ignoré : cf. wireImageFloatingToolbar.
+        if (transaction && transaction.getMeta('blur')) return;
+        // Pas de garde hasFocus() ni document.activeElement ici : le panneau contient de vrais contrôles de formulaire (nombre de décimales, format
+        // de date, devise). Cliquer dessus déplace le focus hors de l'éditeur (editor.view.hasFocus() devient faux), mais un <select> ne reçoit pas
+        // toujours le focus de façon fiable ni synchrone : contrôler `panel.el.contains(document.activeElement)` fermait la barre au moment où la
+        // liste native s'ouvrait. La fermeture au clic hors du panneau est gérée par hideFloatingContextToolbars (js/editor-core.js), sur la cible
+        // du mousedown, fiable y compris pour un <select> ; ici, seule la sélection décide.
+        const t = variableTarget();
+        if (!t) { panel.hide(); return; }
+        if (variableWindowOpen(options && options.hostWindow)) { panel.hide(); return; }
+        const { kind, node, pos } = t;
+        showVariableFormatPanels(ui, panel, kind, node);
+        const dom = editor.view.nodeDOM(pos);
+        // Éditeur masqué (Lecture, résumé d'un macro-modèle) : la bulle reste sélectionnée mais n'a plus de boîte, et floating-ui poserait la barre
+        // en haut à gauche (8, 8) - une transaction qui arrive alors (le blur de l'éditeur à un clic sur « Lecture », par exemple) ne doit pas la
+        // rouvrir.
+        if (!dom || !dom.getClientRects().length) { panel.hide(); return; }
+        if (isFormatKind(kind)) syncVariableState(ui, node, pos);
+        else syncConditionalState(ui, node, kind);
+        if (kind === 'checkbox') syncBoolButtons(ui, ConditionalCheckbox.styleOf(node.attrs.style));
+        // Un bloc de texte conditionnel : la barre s'ancre sur son étiquette (en haut à gauche), pas au milieu de sa largeur.
+        panel.show(kind === 'block' ? (dom.querySelector && dom.querySelector(':scope > .conditional-text-tag')) || dom : dom, inField ? undefined : anchoredBarOptions);
+      };
+    }
+
+    // Barre flottante d'une bulle #Variable (même modèle que l'image), ouverte sur toutes les variables : un groupe d'actions à gauche (condition
+    // d'affichage, autres attributs de la même ligne, boucle sur les lignes liées, liste des valeurs d'une colonne Liste de choix ou de références,
+    // et, seulement sur une variable cassée, le choix d'une autre colonne), puis, pour une colonne nombre, date ou Oui / Non seulement, le
+    // sous-panneau de format choisi par le type de la colonne Grist (Oui /
+    // Non : trois cases et « vrai / faux »). Une bulle « Calcul » (js/variable-calc.js) ouvre la même barre : « Modifier le calcul » prend la place du
+    // groupe d'actions (condition, autres attributs et boucle sont grisés, sans objet pour une formule), avec le réglage nombre puisque son résultat
+    // est un nombre.
+    function wireToolbar() {
+      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-varfmt-toolbar', variableToolbarHtml(), onVariableAction, onVariableInput);
+      EditorCore.registerFloatingPanel(panel, inField ? options.ownerEl : null);
+      const ui = Object.assign(controlsOf(panel), { section: name => panel.el.querySelector(`[data-var-panel="${name}"]`) });
+      const check = variableToolbarCheck(panel, ui);
+      setRefreshToolbar(() => check());
+      editor.on('selectionUpdate', check);
+      editor.on('transaction', check);
+      return panel;
+    }
+
+    return { wireToolbar };
+  }
+
 
   // La barre de la bulle du document : câblée une seule fois, à la création de l'éditeur (Editor.init).
   function wireVariableFloatingToolbar() { return createVariableToolbar(editor).wire(); }
