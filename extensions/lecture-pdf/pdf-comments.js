@@ -9,6 +9,10 @@
 //    rien n'est écrit et « Commenter » reste grisé pour ce PDF.
 //  - LES FILS se lisent à l'ouverture du PDF, à l'ouverture d'un fil et après chaque geste (jamais en continu). Une marque est un surlignage du passage dans la couche de texte (extensions/lecture-pdf/pdf-view.js) ; un clic dessus
 //    ouvre le fil, comme pour un modèle. Un fil ne couvre qu'une page : une sélection qui déborde est coupée à la fin de la page où elle commence, et le coin d'état le dit.
+//  - UN PDF REMPLACÉ garde ses fils (la clé ne change pas) : à chaque PDF posé, chaque fil retrouve son passage dans le texte des pages (extensions/lecture-pdf/pdf-anchor.js:relocate) - là où il était, sinon par sa citation (la
+//    même page d'abord, puis les autres de proche en proche, le meilleur entourage), page par page sans bloquer la lecture. Ce qu'on retrouve ne s'écrit JAMAIS : l'ancre d'un fil reste celle de sa publication, si bien qu'une version
+//    ultérieure qui rend le passage le retrouve. Un fil dont le passage n'est plus nulle part n'est pas effacé : il reste lisible, on peut y répondre, le résoudre et le supprimer, et un bandeau en haut du PDF (« N commentaires sans
+//    passage », seulement quand il y en a) en ouvre la liste.
 //  - ANNULER et RÉTABLIR (Ctrl + Z, Ctrl + Y, les boutons) couvrent chaque geste par js/action-history.js : publier, répondre, résoudre ou rouvrir, supprimer. Un fil qui a reçu les réponses d'une autre personne depuis n'est pas défait
 //    (rien n'est écrit, le coin d'état le dit). Ces actions s'oublient quand le PDF quitte l'écran.
 //    PdfComments.comment()    PdfComments.lockReason() -> texte | null    PdfComments.threads() -> [fils]    PdfComments.whenIdle() -> Promise
@@ -19,13 +23,18 @@ const PdfComments = (function () {
 
   let key = null;               // l'identifiant que GFS donne au PDF à l'écran : la clé de ses fils
   let epoch = 0;                // change à chaque PDF : ce qu'une lecture ou une écriture rend après coup n'est plus pour celui de l'écran
-  let threads = new Map();      // CommentId -> { id, page, debut, fin, citation, avant, apres, resolved, anchorRow, messages: [{ id, auteur, texte, creeLe }], at }
+  let threads = new Map();      // CommentId -> { id, page, debut, fin, citation, avant, apres, resolved, anchorRow, messages: [{ id, auteur, texte, creeLe }], at, state }
   let draft = null;             // { id, anchor } : le passage choisi par « Commenter », pas encore écrit
   let win = null;               // { id, isNew, anchor } : le fil que la fenêtre montre
   let signature = null;         // ce que la fenêtre montre (résolu, messages) : relue, elle n'est redessinée que si cela a changé
   let refused = false;          // Grist a refusé la structure pour ce PDF : « Commenter » reste grisé
   let busy = false;             // un geste d'écriture est en route
   let actionIds = [];           // les actions d'Annuler / Rétablir de ce PDF
+  let pages = 0;                // le nombre de pages du PDF à l'écran
+  const placements = new Map(); // CommentId -> { sig, state: 'found' | 'lost', at } : ce que la recherche des passages a trouvé pour une ancre (repart de zéro à chaque PDF ; jamais écrit)
+  let pass = 0;                 // le numéro de la recherche des passages en cours : une nouvelle relève l'ancienne
+  let placing = Promise.resolve();
+  let bar = null;               // le bandeau des fils sans passage : { element, button, text, panel, open }
 
   // Les écritures et les lectures se font l'une après l'autre : une lecture lancée après une écriture la voit, et deux Ctrl + Z de suite se suivent. `tail` : rendu quand tout est fini (les essais l'attendent).
   let tail = Promise.resolve();
@@ -34,7 +43,15 @@ const PdfComments = (function () {
     tail = run.catch(() => {});
     return run;
   }
-  const whenIdle = () => tail;
+  // Les essais attendent que tout soit fini : les écritures, les lectures, la recherche des passages (une nouvelle relève l'ancienne : on attend la dernière).
+  async function whenIdle() {
+    for (;;) {
+      const seen = placing;
+      await tail;
+      await seen;
+      if (seen === placing) return;
+    }
+  }
 
   const text = value => (value === null || value === undefined ? '' : String(value));
   const number = value => (value === null || value === undefined || value === '' ? NaN : Number(value));
@@ -67,7 +84,7 @@ const PdfComments = (function () {
       if (!cid) continue;
       let thread = found.get(cid);
       if (!thread) {
-        thread = { id: cid, page: NaN, debut: NaN, fin: NaN, citation: '', avant: '', apres: '', resolved: false, anchorRow: null, messages: [], at: null };
+        thread = { id: cid, page: NaN, debut: NaN, fin: NaN, citation: '', avant: '', apres: '', resolved: false, anchorRow: null, messages: [], at: null, state: 'pending' };
         found.set(cid, thread);
       }
       thread.messages.push({ id: ids[i], auteur: text(column('Auteur')[i]), texte: text(column('Texte')[i]), creeLe: text(column('CreeLe')[i]) });
@@ -144,11 +161,25 @@ const PdfComments = (function () {
   }
 
   // ==============================================================================================================================================================================================
-  // Ce que l'écran montre : les marques, la fenêtre d'un fil.
+  // Où est le passage de chaque fil dans le PDF à l'écran, et ce que l'écran en montre : les marques des passages trouvés, le bandeau de ceux qui n'ont plus de place, la fenêtre d'un fil.
 
-  // Où est le passage d'un fil dans le PDF à l'écran : { page, debut, fin }, ou null quand il n'a pas de place.
+  // L'ancre d'un fil, en une ligne : une recherche déjà faite pour cette ancre vaut tant qu'elle ne change pas.
+  const signatureOf = thread => [thread.page, thread.debut, thread.fin, thread.citation, thread.avant, thread.apres].join('\u0001');
+
+  // Ce qu'on sait du passage d'un fil : { state, at } d'une recherche déjà faite pour cette ancre, sinon « pending » (pas de marque tant qu'on n'a pas regardé le texte du PDF à l'écran). `state` : 'found' (`at` : { page, debut,
+  // fin } dans le texte de la page, là où il est maintenant), 'lost' (nulle part dans ce PDF) ou 'pending'.
   function place(thread) {
-    thread.at = thread.fin > thread.debut && thread.page >= 1 ? { page: thread.page, debut: thread.debut, fin: thread.fin } : null;
+    const known = placements.get(thread.id);
+    if (known && known.sig === signatureOf(thread)) { thread.state = known.state; thread.at = known.at; return; }
+    thread.state = 'pending';
+    thread.at = null;
+  }
+
+  // Un fil qu'on vient de publier est là où la personne l'a choisi : rien à chercher.
+  function placedWhereChosen(thread) {
+    thread.at = { page: thread.page, debut: thread.debut, fin: thread.fin };
+    thread.state = 'found';
+    placements.set(thread.id, { sig: signatureOf(thread), state: 'found', at: thread.at });
   }
 
   function showMarks() {
@@ -156,6 +187,120 @@ const PdfComments = (function () {
     threads.forEach((thread) => { if (thread.at) marks.push({ id: thread.id, page: thread.at.page, debut: thread.at.debut, fin: thread.at.fin, resolved: thread.resolved }); });
     if (draft) marks.push({ id: draft.id, page: draft.anchor.page, debut: draft.anchor.debut, fin: draft.anchor.fin, resolved: false });
     PdfView.setMarks(marks);
+  }
+
+  // Ce que l'écran dit des fils : les marques, et le bandeau des fils sans passage.
+  function render() {
+    showMarks();
+    showBar();
+  }
+
+  // La recherche des passages : pour chaque fil qui n'a pas encore de place, dans le texte des pages du PDF à l'écran (extensions/lecture-pdf/pdf-anchor.js:relocate : là où il était, sinon par sa citation, la page d'origine
+  // d'abord). Elle ne bloque rien (le navigateur reprend la main entre deux pages, les fils des pages à l'écran passent d'abord), ne s'écrit nulle part et s'arrête quand le PDF change, ou quand ses pages ne sont plus posées
+  // (un fil que la recherche n'a pas fini reste « pending » et sera repris à la pose suivante : jamais « sans passage » par défaut).
+  async function placeAll(run, mine) {
+    const cancelled = () => run !== pass || mine !== epoch || !PdfView.isMounted();
+    // Les pages ne sont pas encore posées (les fils se lisent plus vite que le PDF ne se pose) : rien à chercher, la pose relance la recherche (PdfView.onMounted). Un PDF dont on ne sait pas les pages ne dit rien d'aucun passage : pas de « sans passage » par défaut.
+    if (cancelled() || pages < 1) return;
+    const shown = PdfView.pagesShown();
+    const gap = thread => (Number.isFinite(thread.page) && shown.length ? Math.min(...shown.map(n => Math.abs(n - thread.page))) : 0);
+    const todo = Array.from(threads.values()).filter(thread => thread.state === 'pending').sort((a, b) => (gap(a) - gap(b)) || ((a.page || 0) - (b.page || 0)));
+    for (const thread of todo) {
+      if (cancelled()) return;
+      const found = await PdfAnchor.relocate(thread, pages, PdfView.pageText, { cancelled });
+      if (cancelled()) return;
+      const current = threads.get(thread.id);
+      if (!current || signatureOf(current) !== signatureOf(thread)) continue;
+      const verdict = found ? { state: 'found', at: found } : { state: 'lost', at: null };
+      placements.set(current.id, { sig: signatureOf(current), state: verdict.state, at: verdict.at });
+      current.state = verdict.state;
+      current.at = verdict.at;
+      render();
+      syncWindow();
+    }
+  }
+  function placeSoon() {
+    const run = ++pass;
+    placing = placeAll(run, epoch).catch((e) => { console.warn('[PdfComments] passages non cherchés', e); });
+    return placing;
+  }
+
+  // Les fils sans passage, dans l'ordre du PDF (la page où ils étaient), puis de leur date.
+  const lostThreads = () => Array.from(threads.values()).filter(thread => thread.state === 'lost')
+    .sort((a, b) => ((a.page || 0) - (b.page || 0)) || byDate(a.messages[0] || {}, b.messages[0] || {}));
+
+  // Le bandeau : une ligne collée en haut des pages, seulement quand un fil a perdu son passage (la barre d'outils ne change pas) ; un clic ouvre la liste de ces fils, un clic sur l'un ouvre sa fenêtre.
+  function buildBar() {
+    const element = Dom.el('div', 'pp-pdf-bar');
+    element.setAttribute('role', 'region');
+    element.setAttribute('aria-label', I18n.t('pdf.comment.lost.region'));
+    const button = Dom.el('button', 'pp-pdf-bar-button');
+    button.type = 'button';
+    button.setAttribute('aria-expanded', 'false');
+    const label = Dom.el('span', 'pp-pdf-bar-text');
+    const caret = Dom.el('span', 'pp-pdf-bar-caret');
+    caret.setAttribute('aria-hidden', 'true');
+    button.append(label, caret);
+    const panel = Dom.el('div', 'pp-pdf-bar-panel');
+    panel.hidden = true;
+    const made = { element, button, text: label, panel, open: false };
+    button.addEventListener('click', () => { if (made.open) closePanel(); else openPanel(); });
+    element.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !made.open) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closePanel();
+      button.focus();
+    });
+    element.append(button, panel);
+    return made;
+  }
+
+  function drawPanel() {
+    bar.panel.replaceChildren();
+    lostThreads().forEach((thread) => {
+      const row = Dom.el('button', 'pp-pdf-bar-row');
+      row.type = 'button';
+      row.setAttribute('data-comment-id', thread.id);
+      const quote = Dom.el('span', 'pp-pdf-bar-quote');
+      quote.textContent = thread.citation || (thread.messages[0] ? thread.messages[0].texte : '');
+      const meta = Dom.el('span', 'pp-pdf-bar-meta');
+      meta.textContent = [Number.isFinite(thread.page) ? I18n.t('pdf.comment.lost.page', { page: thread.page }) : '', thread.resolved ? I18n.t('comments.resolvedBadge') : ''].filter(Boolean).join(' · ');
+      row.append(quote, meta);
+      row.addEventListener('click', () => openLost(thread.id));
+      bar.panel.appendChild(row);
+    });
+  }
+
+  function outsideBar(event) { if (bar && !bar.element.contains(event.target)) closePanel(); }
+  function openPanel() {
+    if (!bar || bar.open) return;
+    bar.open = true;
+    bar.panel.hidden = false;
+    bar.button.setAttribute('aria-expanded', 'true');
+    drawPanel();
+    document.addEventListener('mousedown', outsideBar, true);
+  }
+  function closePanel() {
+    if (!bar || !bar.open) return;
+    bar.open = false;
+    bar.panel.hidden = true;
+    bar.button.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('mousedown', outsideBar, true);
+  }
+
+  function showBar() {
+    const lost = lostThreads();
+    if (!lost.length) { dropBar(); return; }
+    if (!bar) { bar = buildBar(); PdfView.setBar(bar.element); }
+    bar.text.textContent = I18n.t('pdf.comment.lost.banner', { n: lost.length });
+    if (bar.open) drawPanel();
+  }
+  function dropBar() {
+    if (!bar) return;
+    closePanel();
+    PdfView.setBar(null);
+    bar = null;
   }
 
   const rectAnchor = rect => ({ getBoundingClientRect: () => rect });
@@ -176,21 +321,52 @@ const PdfComments = (function () {
     return actions;
   }
 
+  // Ce que la fenêtre d'un fil sans passage dit en plus, en deux lignes (elle doit encore montrer sa saisie et ses boutons à 700x400) : « Passage introuvable » et la page d'avant, puis le passage d'avant - la citation, gardée telle quelle.
+  function lostNote(thread) {
+    const note = Dom.el('div', 'pp-pdf-lost');
+    const title = Dom.el('div', 'pp-pdf-lost-title');
+    title.textContent = I18n.t('pdf.comment.lost.title');
+    if (Number.isFinite(thread.page)) {
+      const where = Dom.el('span', 'pp-pdf-lost-page');
+      where.textContent = ' · ' + I18n.t('pdf.comment.lost.was', { page: thread.page });
+      title.appendChild(where);
+    }
+    note.appendChild(title);
+    if (thread.citation) {
+      const quote = Dom.el('div', 'pp-pdf-lost-quote');
+      quote.textContent = thread.citation;
+      note.appendChild(quote);
+    }
+    return note;
+  }
+
   function drawWindow() {
     const box = kit.box();
     const thread = threads.get(win.id);
     const messages = thread ? thread.messages : [];
     const resolved = !!(thread && thread.resolved);
-    signature = JSON.stringify([resolved, messages.map(message => message.id)]);
+    const lost = !!thread && thread.state === 'lost';
+    signature = JSON.stringify([resolved, lost, messages.map(message => message.id)]);
     box.innerHTML = '';
     const replyArea = kit.replyArea(messages.length > 0, closeWindow);
-    box.append(kit.header(resolved, closeWindow), kit.list(messages), replyArea, actionsOf(win.id, resolved, messages.length > 0, replyArea));
+    box.append(kit.header(resolved, closeWindow), ...(lost ? [lostNote(thread)] : []), kit.list(messages), replyArea, actionsOf(win.id, resolved, messages.length > 0, replyArea));
     return replyArea;
   }
 
+  // La fenêtre se pose contre la marque du passage ; sans marque (un fil sans passage), contre le bandeau qui l'a ouverte. Dans un petit panneau (700x400 sous la barre d'outils) il n'y a pas la place sous le bandeau, et la fenêtre y défilerait sa saisie et
+  // ses boutons hors de vue : elle se pose alors contre le bas du panneau, par-dessus le bandeau, tant qu'elle y tient en entier.
   function placeWindow() {
     const box = shownBox();
-    if (box && win) kit.place(box, PdfView.markElement(win.id) || win.anchor);
+    if (!box || !win) return;
+    const mark = PdfView.markElement(win.id);
+    if (mark) { kit.place(box, mark); return; }
+    const target = bar ? bar.element : win.anchor;
+    kit.place(box, target);
+    if (box.scrollHeight > box.clientHeight + 1) {
+      const rect = target.getBoundingClientRect();
+      const bottom = document.documentElement.clientHeight;
+      kit.place(box, rectAnchor({ left: rect.left, right: rect.right, top: bottom, bottom, width: rect.width, height: 0 }));
+    }
   }
 
   function showWindow(commentId, isNew, anchor) {
@@ -223,7 +399,7 @@ const PdfComments = (function () {
     const thread = threads.get(win.id);
     if (!thread) { if (!win.isNew) closeWindow(); return; }
     win.isNew = false;
-    if (JSON.stringify([!!thread.resolved, thread.messages.map(message => message.id)]) === signature) return;
+    if (JSON.stringify([!!thread.resolved, thread.state === 'lost', thread.messages.map(message => message.id)]) === signature) return;
     // La réponse qu'on est en train de taper reste, avec le focus et la place du curseur : la fenêtre se redessine sous les doigts de la personne.
     const typing = box.querySelector('.v2-comment-popup-reply');
     const kept = typing ? typing.value : '';
@@ -250,8 +426,10 @@ const PdfComments = (function () {
     if (mine !== epoch || !key) return false;
     threads = data ? parse(data, key) : new Map();
     threads.forEach(place);
-    showMarks();
+    placements.forEach((known, id) => { if (!threads.has(id)) placements.delete(id); });
+    render();
     syncWindow();
+    placeSoon();
     return true;
   }
   const reloadSoon = () => enqueue(reload).catch(() => false);
@@ -326,12 +504,12 @@ const PdfComments = (function () {
         return;
       }
       const thread = outcome.thread;
-      place(thread);
+      placedWhereChosen(thread);
       threads.set(thread.id, thread);
       if (draft && draft.id === thread.id) draft = null;
       // La fenêtre fermée pendant l'écriture ne se rouvre pas : le fil est publié, sa marque est là.
       if (win && win.id === thread.id) { win.isNew = false; drawWindow(); placeWindow(); }
-      showMarks();
+      render();
       rememberPublish(forKey, thread, outcome.message);
       reloadSoon();
     });
@@ -425,7 +603,7 @@ const PdfComments = (function () {
       catch (e) { if (mine === epoch) failed(e, 'pdf.comment.changeFailed'); return; }
       if (mine !== epoch) return;
       (threads.get(commentId) || thread).resolved = next;
-      showMarks();
+      render();
       if (win && win.id === commentId) { drawWindow(); placeWindow(); }
       const said = value => I18n.t(value ? 'pdf.comment.status.resolved' : 'pdf.comment.status.reopened');
       remember(forKey,
@@ -455,8 +633,9 @@ const PdfComments = (function () {
       if (mine !== epoch) return;
       const wanted = removed.map(row => ({ fields: row.fields, key: row.key }));
       threads.delete(commentId);
+      placements.delete(commentId);
       closeWindow();
-      showMarks();
+      render();
       if (!wanted.length) { reloadSoon(); return; }   // le fil n'était déjà plus dans la table : rien à rendre
       remember(forKey, async () => {
         await enqueue(() => addRows(wanted.map(row => row.fields)));
@@ -483,14 +662,27 @@ const PdfComments = (function () {
     reloadSoon();
   }
 
+  // Un clic sur un fil du bandeau : sa fenêtre s'ouvre contre le bandeau (il n'a pas de marque).
+  function openLost(commentId) {
+    if (!threads.has(commentId) || !bar) return;
+    const anchor = bar.element;
+    closePanel();
+    showWindow(commentId, false, anchor);
+    reloadSoon();
+  }
+
   // ==============================================================================================================================================================================================
   // Le PDF à l'écran arrive, change ou part.
 
   function stop() {
     epoch++;
+    pass++;
     closeWindow();
+    dropBar();
     draft = null;
     threads = new Map();
+    placements.clear();
+    pages = 0;
     actionIds.forEach(id => ActionHistory.forget(id));
     actionIds = [];
     key = null;
@@ -505,12 +697,15 @@ const PdfComments = (function () {
     wired = true;
     PdfView.onMarkClick(openThread);
     PdfView.onTextKnown(() => PdfReading.locksChanged());
+    // Les pages du PDF viennent d'être posées (la première fois, ou de nouveau après une Lecture qui s'est redessinée) : le texte de ses pages se lit, les fils qui n'ont pas encore de place la cherchent.
+    PdfView.onMounted(() => { if (key) placeSoon(); });
   }
 
   function start(info) {
     wire();
     stop();
     key = text(info.id);
+    pages = Number(info.pages) || 0;
     reloadSoon();
   }
 
@@ -527,7 +722,7 @@ const PdfComments = (function () {
   }
 
   // Les fils du PDF à l'écran tels que l'app les tient (pour les essais).
-  const list = () => Array.from(threads.values()).map(thread => ({ id: thread.id, page: thread.page, debut: thread.debut, fin: thread.fin, citation: thread.citation, resolved: thread.resolved, messages: thread.messages.length, at: thread.at }));
+  const list = () => Array.from(threads.values()).map(thread => ({ id: thread.id, page: thread.page, debut: thread.debut, fin: thread.fin, citation: thread.citation, resolved: thread.resolved, messages: thread.messages.length, state: thread.state, at: thread.at }));
 
   return { comment, lockReason, threads: list, whenIdle };
 })();

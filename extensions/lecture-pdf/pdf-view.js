@@ -13,6 +13,8 @@
 //    PdfView.mount(container, doc, { page(n, total) -> texte, failed -> texte }) -> Promise<void>    PdfView.unmount()    PdfView.pagesShown() -> [numéros des pages dessinées]
 //    PdfView.selection() -> { page, debut, fin, citation, avant, apres, clipped, rect } | null    PdfView.clearSelection()    PdfView.setMarks([{ id, page, debut, fin, resolved }])    PdfView.markElement(id)    PdfView.onMarkClick(fn(id, élément))
 //    PdfView.hasText() -> true | false | null (null : on ne sait pas encore)    PdfView.onTextKnown(fn(bool)) (s'ajoute aux écouteurs déjà posés)    PdfView.pageText(n) -> Promise<{ text, ... } | null> (dessinée ou non)
+//  - Le BANDEAU (consigne GFS 045) : un élément que le module des commentaires construit (les fils qui ont perdu leur passage) et que cet écran garde collé en haut des pages, d'un PDF posé à l'autre comme les marques.
+//    PdfView.setBar(élément | null)    PdfView.barElement()    PdfView.onMounted(fn()) (rappelé à chaque PDF posé, quand ses feuilles existent : le texte des pages se lit alors)
 const PdfView = (function () {
   const el = Dom.el;
   const CLASS = 'pp-pdf-reading';
@@ -24,6 +26,8 @@ const PdfView = (function () {
   let view = null;                    // { container, doc, text, root, pages[], observer, visible:Set<number>, widest, dead, marks[], retained, hasText, texts }
   // Les marques voulues : celles que le module des commentaires a données, gardées d'un PDF posé à l'autre (elles se posent à chaque `mount`, quel que soit l'ordre où le PDF et ses fils arrivent).
   let wantedMarks = [];
+  // Le bandeau voulu : posé en tête des pages à chaque `mount`, quel que soit l'ordre où le PDF et le module des commentaires arrivent.
+  let wantedBar = null;
 
   const cssSize = viewport => ({ width: viewport.width, height: viewport.height });
   function sizeFrame(page, size) {
@@ -128,7 +132,7 @@ const PdfView = (function () {
   // Les commentaires (consigne GFS 045) : le PDF a-t-il du texte, les marques posées sur la couche de texte, la sélection lue en positions dans le texte de la page.
 
   const MARK = 'pp-pdf-mark';
-  const handlers = { markClick: null, textKnown: [] };   // posés par le module des commentaires, ils survivent au changement de PDF (le clic sur une marque n'a qu'un gestionnaire ; qui veut savoir si le PDF a du texte s'ajoute à ceux qui le savent déjà)
+  const handlers = { markClick: null, textKnown: [], mounted: [] };   // posés par le module des commentaires, ils survivent au changement de PDF (le clic sur une marque n'a qu'un gestionnaire ; qui veut savoir si le PDF a du texte s'ajoute à ceux qui le savent déjà)
 
   // Le PDF « a du texte » dès qu'une page dessinée en a. Il n'en a pas quand les pages qui se dessinent à l'arrivée sont toutes dessinées et sans texte (un scan) : tant que l'une d'elles se dessine encore, on ne sait pas
   // (`null`), pour ne pas griser « Commenter » un instant devant une première page blanche suivie de pages de texte. Une page de texte qui arrive plus tard le rend vrai.
@@ -338,6 +342,7 @@ const PdfView = (function () {
       root.appendChild(frame);
       owner.pages.push(page);
     }
+    if (wantedBar) root.insertBefore(wantedBar, root.firstChild);
     view = owner;
     wireComments(owner);
     container.replaceChildren(root);
@@ -345,6 +350,7 @@ const PdfView = (function () {
     container.scrollTop = 0;
     updateWidest(size);
     observe(owner);
+    handlers.mounted.slice().forEach((listener) => { try { listener(); } catch (e) { /* un écouteur qui échoue n'empêche pas les autres */ } });
   }
 
   const pagesShown = () => (view ? view.pages.filter(page => page.state === 'done').map(page => page.n) : []);
@@ -352,6 +358,16 @@ const PdfView = (function () {
   const hasText = () => (view ? view.hasText : null);
   function onMarkClick(fn) { handlers.markClick = typeof fn === 'function' ? fn : null; }
   function onTextKnown(fn) { if (typeof fn === 'function') handlers.textKnown.push(fn); }
+  function onMounted(fn) { if (typeof fn === 'function') handlers.mounted.push(fn); }
 
-  return { mount, unmount, pagesShown, isMounted, selection, clearSelection, setMarks, markElement, onMarkClick, hasText, onTextKnown, pageText };
+  // Le bandeau en tête des pages (avant la première) : un seul à la fois, celui qu'on donne remplace l'ancien ; null le retire.
+  function setBar(element) {
+    const next = element || null;
+    if (wantedBar && wantedBar !== next) wantedBar.remove();
+    wantedBar = next;
+    if (view && wantedBar && wantedBar.parentNode !== view.root) view.root.insertBefore(wantedBar, view.root.firstChild);
+  }
+  const barElement = () => wantedBar;
+
+  return { mount, unmount, pagesShown, isMounted, selection, clearSelection, setMarks, markElement, onMarkClick, hasText, onTextKnown, onMounted, pageText, setBar, barElement };
 })();

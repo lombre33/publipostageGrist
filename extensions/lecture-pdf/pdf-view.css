@@ -22,6 +22,29 @@
 .pp-pdf-text span.pp-pdf-mark { position: static; transform: none; cursor: pointer; background: rgba(240, 195, 109, .25); border-bottom: 2px solid #f0c36d; }
 .pp-pdf-text span.pp-pdf-mark-resolved { background: transparent; border-bottom-color: var(--text-faint, #8a94a6); }
 
+/* Le bandeau des commentaires sans passage (extensions/lecture-pdf/pdf-comments.js, consigne GFS 045) : une ligne en tête des pages, sur la largeur de la colonne des pages, seulement quand un fil a perdu son passage dans ce PDF ; elle reste
+   en vue quand on défile (collée en haut du panneau) et sa liste s'ouvre dessous. Les couleurs sont celles de l'application (jetons de css/style.css : clair comme sombre), pas celles du papier. Elle ne s'imprime pas. */
+.pp-pdf-bar { position: sticky; top: 6px; z-index: 5; align-self: stretch; box-sizing: border-box; overflow: hidden; background: var(--surface, #fff); color: var(--text, #1b2430); border: 1px solid var(--border-strong, #c4ccd6); border-radius: var(--radius-md, 8px); box-shadow: 0 2px 8px rgba(20, 28, 46, .10); font: 12.5px/1.3 var(--font-ui, system-ui, sans-serif); }
+.pp-pdf-bar-button { display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; min-height: 30px; padding: 4px 12px; border: 0; background: none; color: inherit; font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.pp-pdf-bar-button:hover { background: var(--surface-sunken, #eef1f5); }
+.pp-pdf-bar-button:focus-visible, .pp-pdf-bar-row:focus-visible { outline: 2px solid var(--accent, #2f6fed); outline-offset: -2px; }
+.pp-pdf-bar-caret { flex: none; margin: -3px 2px 0 auto; width: 6px; height: 6px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); }
+.pp-pdf-bar-button[aria-expanded="true"] .pp-pdf-bar-caret { margin-top: 3px; transform: rotate(-135deg); }
+.pp-pdf-bar-panel { max-height: 150px; overflow-y: auto; border-top: 1px solid var(--border, #d7dde3); }
+.pp-pdf-bar-row { display: flex; flex-direction: column; gap: 2px; width: 100%; box-sizing: border-box; padding: 6px 12px; border: 0; border-bottom: 1px solid var(--border, #d7dde3); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.pp-pdf-bar-row:last-child { border-bottom: 0; }
+.pp-pdf-bar-row:hover { background: var(--surface-sunken, #eef1f5); }
+.pp-pdf-bar-quote { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-pdf-bar-meta { font-size: 11px; color: var(--text-muted, #566170); }
+@media print { .pp-pdf-bar { display: none; } }
+
+/* La fenêtre d'un fil sans passage (la fenêtre des commentaires, css/editor-v2.css) : deux lignes de plus sous son en-tête - « Passage introuvable » et la page d'avant, puis le passage d'avant (la citation) -, pas plus : à 700x400 la
+   fenêtre doit encore montrer la saisie et ses boutons sans défiler. */
+#v2-comment-popup .pp-pdf-lost { margin: 0 0 6px; padding: 5px 8px; border-radius: var(--radius-xs, 5px); background: var(--surface-sunken, #eef1f5); color: var(--text, #1b2430); font-size: 12px; }
+#v2-comment-popup .pp-pdf-lost-title { font-weight: 700; }
+#v2-comment-popup .pp-pdf-lost-page { font-weight: 400; color: var(--text-muted, #566170); }
+#v2-comment-popup .pp-pdf-lost-quote { margin-top: 2px; padding-left: 8px; border-left: 2px solid var(--border-strong, #c4ccd6); max-height: 2.6em; overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: var(--text-muted, #566170); }
+
 /* Ce que la lecture d'un PDF grise (js/main.js:applyPdfLocks) : l'édition, les modèles, l'export, les commentaires. Estompé comme ce qu'un compte en lecture seule ne peut pas (css/access-rights.css), mais la souris l'atteint
    encore : son `title` dit la raison au survol et son clic la dit dans le coin d'état. Les enfants ne reçoivent plus la souris (l'info-bulle et le clic sont ceux du groupe), le menu au survol d'un groupe ne s'ouvre pas, et l'info-bulle
    de l'app (`[data-tip]`), que l'estompage rendrait illisible avec le bouton, laisse la place au `title`. !important : un groupe à survol ou un bouton de la barre a ses propres règles d'opacité, plus précises. */

@@ -105,6 +105,7 @@ const PdfAnchor = (function () {
     return best ? { debut: best.debut, fin: best.fin, score: best.score } : null;
   }
 
+  // Rendre la main au navigateur entre deux pages : un minuteur à zéro passe après ce qui attend déjà (la souris, le clavier, le dessin, les autres minuteurs), si bien que la recherche d'un passage dans un gros PDF ne bloque jamais la lecture.
   const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
   // Le passage de `anchor` dans tout le PDF : la page où il était d'abord, puis les autres de la plus proche à la plus lointaine (une page avant, une page après, deux pages avant...). Un passage retrouvé sur la page où il était, ou ailleurs
