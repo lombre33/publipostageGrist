@@ -31,7 +31,7 @@ const ExportDate = (function () {
   let column = null;         // identifiant de la colonne choisie (texte) ou null
   let search = null;         // la liste avec recherche de la section (SearchSelect), absente quand le composant ne s'est pas attaché
   // Ce que cet écran vient d'écrire dans les options : Grist le renvoie par onOptions, parfois après un choix plus récent (même garde que js/view-template.js).
-  const expectedEchoes = [];
+  const echoes = GristAPI.createEchoGuard();
 
   const normalize = value => (typeof value === 'string' && value !== '' ? value : null);
   const getColumn = () => column;
@@ -67,8 +67,7 @@ const ExportDate = (function () {
 
   async function write(next) {
     const value = normalize(next);
-    expectedEchoes.push(JSON.stringify(value));
-    if (expectedEchoes.length > 20) expectedEchoes.shift();
+    echoes.remember(JSON.stringify(value));
     column = value;
     try { await GristAPI.setWidgetOption(OPTION_KEY, value); }
     catch (e) { console.error('[ExportDate] enregistrement de l’option du widget impossible', e); }
@@ -90,9 +89,7 @@ const ExportDate = (function () {
     column = normalize((GristAPI.getWidgetOptions() || {})[OPTION_KEY]);
     GristAPI.onWidgetOptionsChange(options => {
       const incoming = normalize(options && options[OPTION_KEY]);
-      const echo = expectedEchoes.indexOf(JSON.stringify(incoming));
-      if (echo !== -1) { expectedEchoes.splice(0, echo + 1); return; }
-      expectedEchoes.length = 0;
+      if (echoes.isEcho(JSON.stringify(incoming))) return;
       column = incoming;
       renderPanel();
     });

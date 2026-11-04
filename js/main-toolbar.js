@@ -660,6 +660,26 @@ const MainToolbar = (function () {
     const kbd = byId('v2-row-link-kbd');
     if (kbd) kbd.textContent = label;
   }
+  // Les lignes d'un panneau de la barre : la souris ne prend pas le focus du texte (mousedown retenu). Sans effet quand le groupe est grisé (.v2-hf-locked, .pp-access-locked).
+  // Une ligne à cocher se commande aussi au clavier (Entrée, Espace) ; une ligne d'action (« Paragraphe… », « Puce… ») est de plus sans effet quand elle-même est grisée.
+  const isLockedRow = row => !!row.closest('.v2-hf-locked, .pp-access-locked');
+  function wireCheckRow(row, run) {
+    const toggle = () => { if (!isLockedRow(row)) run(); };
+    row.addEventListener('mousedown', event => event.preventDefault());
+    row.addEventListener('click', toggle);
+    row.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      toggle();
+    });
+  }
+  function wireActionRow(row, run) {
+    row.addEventListener('mousedown', event => event.preventDefault());
+    row.addEventListener('click', () => {
+      if (row.getAttribute('aria-disabled') === 'true' || isLockedRow(row)) return;
+      run();
+    });
+  }
   // Chaque bouton appelle directement une commande TipTap sur la sélection réelle, sans avoir à savoir si elle est dans une case ou une colonne.
   function wireToolbar() {
     applyToolbarIcons();
@@ -681,48 +701,18 @@ const MainToolbar = (function () {
     // « Garder avec le suivant » (js/keep-with-next.js) : ligne à cocher du même panneau, au clic comme au clavier (Entrée, Espace). Sans effet quand
     // le groupe est grisé (e-mail, macro-modèle, lecture seule, Lecture) : son `tabindex` laisse y arriver au clavier.
     const keepNextRow = byId('v2-btn-keep-next');
-    if (keepNextRow) {
-      const toggleKeepNext = () => { if (!keepNextRow.closest('.v2-hf-locked, .pp-access-locked')) KeepWithNext.run(editor); };
-      keepNextRow.addEventListener('mousedown', event => event.preventDefault());
-      keepNextRow.addEventListener('click', toggleKeepNext);
-      keepNextRow.addEventListener('keydown', event => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        toggleKeepNext();
-      });
-    }
+    if (keepNextRow) wireCheckRow(keepNextRow, () => KeepWithNext.run(editor));
     // « Texte de droite à gauche » (js/text-direction.js) : ligne à cocher du même panneau, au clic comme au clavier (Entrée, Espace).
     const rtlRow = byId('v2-btn-rtl');
-    if (rtlRow) {
-      const toggleRtl = () => { if (!rtlRow.closest('.v2-hf-locked, .pp-access-locked')) TextDirection.run(editor); };
-      rtlRow.addEventListener('mousedown', event => event.preventDefault());
-      rtlRow.addEventListener('click', toggleRtl);
-      rtlRow.addEventListener('keydown', event => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        toggleRtl();
-      });
-    }
+    if (rtlRow) wireCheckRow(rtlRow, () => TextDirection.run(editor));
     // « Paragraphe… » (js/paragraph-format.js) : ouvre la fenêtre de l'interligne et des espaces avant et après ; sans effet quand le groupe ou la ligne est grisé.
     const paragraphRow = byId('v2-btn-paragraph');
-    if (paragraphRow) {
-      paragraphRow.addEventListener('mousedown', event => event.preventDefault());
-      paragraphRow.addEventListener('click', () => {
-        if (paragraphRow.getAttribute('aria-disabled') === 'true' || paragraphRow.closest('.v2-hf-locked, .pp-access-locked')) return;
-        ParagraphFormat.open(editor);
-      });
-    }
+    if (paragraphRow) wireActionRow(paragraphRow, () => ParagraphFormat.open(editor));
     // Les menus « Souligné » (la sorte du trait) et « Aa » (petites capitales, ombre, contour, espacement ; exposant et indice ci-dessus) : chaque réglage s'applique tout de suite, sans fenêtre (js/character-format.js).
     CharacterFormat.wireMenus(() => editor);
     // « Puce… » (js/bullet-format.js) : ouvre la fenêtre du signe de la puce ; sans effet quand la ligne est grisée (hors d'une liste à puces).
     const bulletCharRow = byId('v2-btn-bullet-char');
-    if (bulletCharRow) {
-      bulletCharRow.addEventListener('mousedown', event => event.preventDefault());
-      bulletCharRow.addEventListener('click', () => {
-        if (bulletCharRow.getAttribute('aria-disabled') === 'true' || bulletCharRow.closest('.v2-hf-locked, .pp-access-locked')) return;
-        BulletFormat.open(editor);
-      });
-    }
+    if (bulletCharRow) wireActionRow(bulletCharRow, () => BulletFormat.open(editor));
     // Une liste se pose dans toutes les cases d'une sélection de cases, ou s'en retire (EditorCore.toggleList, aussi derrière Ctrl+Maj+8 et
     // Ctrl+Maj+7, js/shortcuts.js).
     bind('v2-btn-bullet', () => EditorCore.toggleList('bulletList', 'toggleBulletList'));

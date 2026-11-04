@@ -986,14 +986,19 @@
   // templateId } est remis à null dès qu'un autre modèle se charge (liste, « + », galerie, suppression : forgetMacroOriginUnless, en tête de
   // loadTemplateIntoEditor), jamais quand le même est rechargé (conflit d'enregistrement automatique).
 
+  // Un bandeau « Revenir à… » (macro-modèle ou document) : montré tant que le modèle d'origine existe, avec son nom dans la phrase. Le nom d'un modèle long est coupé par « … » : la phrase se lit en
+  // entier au survol.
+  function showReturnBar(bar, textId, textKey, origin) {
+    bar.hidden = !origin;
+    const text = document.getElementById(textId);
+    if (!text) return;
+    text.textContent = origin ? I18n.t(textKey, { name: origin.nom }) : '';
+    text.title = text.textContent;
+  }
+
   function syncMacroReturnBar() {
     if (!macroReturnBar) return;
-    const macro = macroOrigin && Templates.byId(macroOrigin.macroId);
-    macroReturnBar.hidden = !macro;
-    const text = document.getElementById('macro-return-text');
-    if (!text) return;
-    text.textContent = macro ? I18n.t('macro.return.text', { name: macro.nom }) : '';
-    text.title = text.textContent; // le nom d'un macro-modèle long est coupé par « … » : la phrase se lit en entier au survol
+    showReturnBar(macroReturnBar, 'macro-return-text', 'macro.return.text', macroOrigin && Templates.byId(macroOrigin.macroId));
   }
 
   function forgetMacroOriginUnless(tpl) {
@@ -1051,12 +1056,7 @@
 
   function syncLinkedReturnBar() {
     if (!linkedReturnBar) return;
-    const origin = linkedOrigin && Templates.byId(linkedOrigin.templateId);
-    linkedReturnBar.hidden = !origin;
-    const text = document.getElementById('linked-return-text');
-    if (!text) return;
-    text.textContent = origin ? I18n.t('linkedTable.return.text', { name: origin.nom }) : '';
-    text.title = text.textContent; // le nom d'un document long est coupé par « … » : la phrase se lit en entier au survol
+    showReturnBar(linkedReturnBar, 'linked-return-text', 'linkedTable.return.text', linkedOrigin && Templates.byId(linkedOrigin.templateId));
   }
 
   function forgetLinkedOriginUnless(tpl) {

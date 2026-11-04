@@ -234,6 +234,52 @@ const OrientationToggle = (function () {
     return row;
   }
 
+  // Un contrôle segmenté dans un bloc de groupe caché jusqu'à sa synchronisation (« Tout le document / Cette page », les rapports d'une diapositive) : ses choix sont des <span>, comme les lignes du menu.
+  function makeSegmentedBlock(className, id, choices) {
+    const block = document.createElement('div');
+    block.className = className;
+    block.id = id;
+    block.setAttribute('role', 'group');
+    block.hidden = true;
+    const control = document.createElement('span');
+    control.className = 'v2-segmented';
+    choices.forEach(({ attribute, value, text, action }) => {
+      const choice = document.createElement('span');
+      choice.className = 'v2-segmented-btn';
+      choice.setAttribute('role', 'menuitemradio');
+      choice.setAttribute('aria-checked', 'false');
+      choice.setAttribute(attribute, value);
+      choice.tabIndex = 0;
+      if (text !== undefined) choice.textContent = text;
+      wireRow(choice, action);
+      control.appendChild(choice);
+    });
+    block.appendChild(control);
+    return block;
+  }
+  // Un filet entre deux groupes de lignes du menu.
+  function makeSeparator() {
+    const separator = document.createElement('span');
+    separator.className = 'v2-hover-hsep';
+    separator.setAttribute('role', 'separator');
+    return separator;
+  }
+  // Une action (une fenêtre), pas un choix à cocher : une ligne de menu avec son nom et le texte en cours à droite (le filigrane, le thème).
+  function makeActionRow(id, action) {
+    const row = document.createElement('span');
+    row.className = 'v2-hover-row v2-page-watermark-row';
+    row.id = id;
+    row.setAttribute('role', 'menuitem');
+    row.tabIndex = 0;
+    const name = document.createElement('span');
+    name.className = 'v2-page-row-name';
+    const value = document.createElement('span');
+    value.className = 'v2-page-row-size';
+    row.append(name, value);
+    wireRow(row, action);
+    return row;
+  }
+
   // Titre, les deux sens, un filet, les formats (lus à PageLayout : un format de plus s'ajoute là-bas et apparaît ici sans autre changement).
   function buildMenu() {
     const host = menu();
@@ -246,53 +292,15 @@ const OrientationToggle = (function () {
     host.appendChild(title);
     // « Tout le document / Cette page » : deux choix d'un même groupe, posés sous le titre ; syncMenu les montre dans le menu d'un document seulement. Des <span>, comme les lignes : un <button> prendrait les
     // dimensions et l'icône de ceux de la barre (#toolbar-top button).
-    const scopeBlock = document.createElement('div');
-    scopeBlock.className = 'v2-page-scope-block';
-    scopeBlock.id = SCOPE_ID;
-    scopeBlock.setAttribute('role', 'group');
-    scopeBlock.hidden = true;
-    const scopeControl = document.createElement('span');
-    scopeControl.className = 'v2-segmented';
-    [SCOPE_DOCUMENT, SCOPE_PAGE].forEach(value => {
-      const choice = document.createElement('span');
-      choice.className = 'v2-segmented-btn';
-      choice.setAttribute('role', 'menuitemradio');
-      choice.setAttribute('aria-checked', 'false');
-      choice.setAttribute('data-page-scope', value);
-      choice.tabIndex = 0;
-      wireRow(choice, () => selectScope(value));
-      scopeControl.appendChild(choice);
-    });
-    scopeBlock.appendChild(scopeControl);
-    host.appendChild(scopeBlock);
+    host.appendChild(makeSegmentedBlock('v2-page-scope-block', SCOPE_ID,
+      [SCOPE_DOCUMENT, SCOPE_PAGE].map(value => ({ attribute: 'data-page-scope', value, action: () => selectScope(value) }))));
     // Les rapports de la diapositive : le même contrôle segmenté, sous le titre du menu d'une présentation seulement (syncRatios). Le texte de chaque choix est le rapport lui-même, qu'aucune langue ne traduit.
-    const ratiosBlock = document.createElement('div');
-    ratiosBlock.className = 'v2-page-scope-block v2-page-ratio-block';
-    ratiosBlock.id = RATIOS_ID;
-    ratiosBlock.setAttribute('role', 'group');
-    ratiosBlock.hidden = true;
-    const ratiosControl = document.createElement('span');
-    ratiosControl.className = 'v2-segmented';
-    PageLayout.getSlideRatios().forEach(slide => {
-      const choice = document.createElement('span');
-      choice.className = 'v2-segmented-btn';
-      choice.setAttribute('role', 'menuitemradio');
-      choice.setAttribute('aria-checked', 'false');
-      choice.setAttribute('data-page-ratio', slide.id);
-      choice.tabIndex = 0;
-      choice.textContent = slide.ratio;
-      wireRow(choice, () => selectFormat(slide.id));
-      ratiosControl.appendChild(choice);
-    });
-    ratiosBlock.appendChild(ratiosControl);
-    host.appendChild(ratiosBlock);
+    host.appendChild(makeSegmentedBlock('v2-page-scope-block v2-page-ratio-block', RATIOS_ID,
+      PageLayout.getSlideRatios().map(slide => ({ attribute: 'data-page-ratio', value: slide.id, text: slide.ratio, action: () => selectFormat(slide.id) }))));
     [PageLayout.PORTRAIT, PageLayout.LANDSCAPE].forEach(orientation => {
       host.appendChild(makeRow('data-page-orientation', orientation, () => selectOrientation(orientation)));
     });
-    const separator = document.createElement('span');
-    separator.className = 'v2-hover-hsep';
-    separator.setAttribute('role', 'separator');
-    host.appendChild(separator);
+    host.appendChild(makeSeparator());
     PageLayout.getFormats().forEach(format => {
       const row = makeRow('data-page-format', format.id, () => selectFormat(format.id));
       row.querySelector('.v2-page-row-name').textContent = format.id;
@@ -313,40 +321,13 @@ const OrientationToggle = (function () {
     host.appendChild(custom);
     // Le filigrane : une action (une fenêtre), pas un choix à cocher - une ligne de menu comme « Enregistrer sous… », avec le texte en cours à
     // droite.
-    const separatorBeforeWatermark = document.createElement('span');
-    separatorBeforeWatermark.className = 'v2-hover-hsep';
-    separatorBeforeWatermark.setAttribute('role', 'separator');
-    host.appendChild(separatorBeforeWatermark);
-    const watermark = document.createElement('span');
-    watermark.className = 'v2-hover-row v2-page-watermark-row';
-    watermark.id = WATERMARK_ROW_ID;
-    watermark.setAttribute('role', 'menuitem');
-    watermark.tabIndex = 0;
-    const watermarkName = document.createElement('span');
-    watermarkName.className = 'v2-page-row-name';
-    const watermarkText = document.createElement('span');
-    watermarkText.className = 'v2-page-row-size';
-    watermark.append(watermarkName, watermarkText);
-    wireRow(watermark, openWatermark);
-    host.appendChild(watermark);
+    host.appendChild(makeSeparator());
+    host.appendChild(makeActionRow(WATERMARK_ROW_ID, openWatermark));
   }
 
   // La ligne « Thème… » (js/slide-theme.js) : une action (une fenêtre) comme le filigrane, avec le nom du thème en cours à droite. Posée avant le filigrane (qui reste la dernière ligne) dans le menu d'une présentation,
   // retirée des autres types : leur menu reste celui d'avant.
-  function makeThemeRow() {
-    const row = document.createElement('span');
-    row.className = 'v2-hover-row v2-page-watermark-row';
-    row.id = THEME_ROW_ID;
-    row.setAttribute('role', 'menuitem');
-    row.tabIndex = 0;
-    const name = document.createElement('span');
-    name.className = 'v2-page-row-name';
-    const value = document.createElement('span');
-    value.className = 'v2-page-row-size';
-    row.append(name, value);
-    wireRow(row, openTheme);
-    return row;
-  }
+  function makeThemeRow() { return makeActionRow(THEME_ROW_ID, openTheme); }
   function syncThemeRow(host, presentation) {
     let row = document.getElementById(THEME_ROW_ID);
     if (presentation && !row) {

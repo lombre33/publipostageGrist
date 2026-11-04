@@ -522,30 +522,21 @@ const PageLayout = (function () {
     return true;
   }
 
-  function getCustomColors() { return (marginsDraft.colors || []).slice(); }
-  function setCustomColors(value) {
-    // Remplace les couleurs personnalisées du modèle en gardant tout le reste ; une liste vide les retire. Aucune page ne change : rien à annoncer
-    // ni à repeindre, l'appelant marque seulement le brouillon modifié (pp:marginsChanged). Rend vrai si quelque chose a changé.
-    const next = normalizeCustomColors(value);
-    if (JSON.stringify(next) === JSON.stringify(marginsDraft.colors || [])) return false;
+  // Remplace la liste gardée sous `key` dans le brouillon des marges en gardant tout le reste ; une liste vide la retire. Aucune page ne change : rien à annoncer ni à repeindre, l'appelant
+  // marque seulement le brouillon modifié (pp:marginsChanged). Rend vrai si quelque chose a changé.
+  function replaceDraftList(key, next) {
+    if (JSON.stringify(next) === JSON.stringify(marginsDraft[key] || [])) return false;
     const rest = Object.assign({}, marginsDraft);
-    delete rest.colors;
-    setMarginsMm(next.length ? Object.assign(rest, { colors: next }) : rest);
+    delete rest[key];
+    setMarginsMm(next.length ? Object.assign(rest, { [key]: next }) : rest);
     return true;
   }
+  function getCustomColors() { return (marginsDraft.colors || []).slice(); }
+  function setCustomColors(value) { return replaceDraftList('colors', normalizeCustomColors(value)); }
 
   // Les mises en forme gardées du modèle : un tableau de trois places au plus (null : une place vide). Comme les couleurs, elles suivent le modèle d'un export à l'autre.
   function getCustomFormats() { return JSON.parse(JSON.stringify(marginsDraft.textFormats || [])); }
-  function setCustomFormats(value) {
-    // Remplace les mises en forme gardées du modèle en gardant tout le reste ; une liste vide les retire. Aucune page ne change : l'appelant marque seulement le brouillon
-    // modifié (pp:marginsChanged). Rend vrai si quelque chose a changé.
-    const next = normalizeCustomFormats(value);
-    if (JSON.stringify(next) === JSON.stringify(marginsDraft.textFormats || [])) return false;
-    const rest = Object.assign({}, marginsDraft);
-    delete rest.textFormats;
-    setMarginsMm(next.length ? Object.assign(rest, { textFormats: next }) : rest);
-    return true;
-  }
+  function setCustomFormats(value) { return replaceDraftList('textFormats', normalizeCustomFormats(value)); }
 
   // Page courante (sens et format compris) dans chaque unité des moteurs : mm, pt (pdfmake), px CSS (aperçu, pagination), twip (docx).
   function getPageSizeMm() { return pageSizeMm(marginsDraft.orientation, marginsDraft.format); }

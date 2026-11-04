@@ -838,6 +838,20 @@ const GristAPI = (function () {
   // Options JSON propres au widget (jamais accessLevel, cf. init()) : lues au démarrage par getOptions puis tenues à jour par onOptions.
   function getWidgetOptions() { return _currentOptions; }
   function onWidgetOptionsChange(cb) { _optionsCallbacks.push(cb); }
+  // Ce qu'un écran vient d'écrire dans les options du widget : Grist le renvoie par onOptions, parfois après un choix plus récent, et l'écho d'une valeur déjà remplacée ne doit pas défaire le réglage
+  // en cours. `remember(texte)` note une écriture (vingt au plus) ; `isEcho(texte)` rend vrai pour le renvoi d'une écriture notée (et oublie celles d'avant), faux pour un changement venu d'ailleurs.
+  function createEchoGuard() {
+    const expected = [];
+    return {
+      remember(text) { expected.push(text); if (expected.length > 20) expected.shift(); },
+      isEcho(text) {
+        const at = expected.indexOf(text);
+        if (at !== -1) { expected.splice(0, at + 1); return true; }
+        expected.length = 0;
+        return false;
+      },
+    };
+  }
   function onWidgetOptionWrite(cb) { _optionWriteCallbacks.push(cb); }
   // 'linked' (relié à une autre vue), 'unlinked' (« Sélectionner par » vide) ou 'unknown' ; le rappel reçoit le nouvel état à chaque changement.
   function getLinkState() { return _linkState; }
@@ -1229,5 +1243,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getColumnLabel, isFormulaColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getColumnLabel, isFormulaColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

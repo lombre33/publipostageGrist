@@ -17,7 +17,7 @@ const ViewTemplate = (function () {
   let currentId = null;      // id choisi (texte) ou null
   // Ce que cet écran vient d'écrire dans les options : Grist le renvoie par onOptions, parfois après un choix plus récent (même garde que
   // js/row-template.js).
-  const expectedEchoes = [];
+  const echoes = GristAPI.createEchoGuard();
 
   const normalize = value => (value != null && value !== '' ? String(value) : null);
   const find = Templates.byId;
@@ -34,8 +34,7 @@ const ViewTemplate = (function () {
 
   async function write(id) {
     const next = normalize(id);
-    expectedEchoes.push(JSON.stringify(next));
-    if (expectedEchoes.length > 20) expectedEchoes.shift();
+    echoes.remember(JSON.stringify(next));
     currentId = next;
     try { await GristAPI.setWidgetOption(OPTION_KEY, next); }
     catch (e) { console.error('[ViewTemplate] enregistrement de l’option du widget impossible', e); }
@@ -52,9 +51,7 @@ const ViewTemplate = (function () {
     currentId = normalize((GristAPI.getWidgetOptions() || {})[OPTION_KEY]);
     GristAPI.onWidgetOptionsChange(options => {
       const incoming = normalize(options && options[OPTION_KEY]);
-      const echo = expectedEchoes.indexOf(JSON.stringify(incoming));
-      if (echo !== -1) { expectedEchoes.splice(0, echo + 1); return; }
-      expectedEchoes.length = 0;
+      if (echoes.isEcho(JSON.stringify(incoming))) return;
       currentId = incoming;
       renderPanel();
     });

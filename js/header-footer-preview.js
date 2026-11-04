@@ -717,12 +717,7 @@ const HeaderFooterPreview = (function () {
     if (!top) return null;
     const children = Array.from(tiptapEl.children);
     const elIdx = children.indexOf(top);
-    const rowRankIn = (wrapper) => {
-      const rows = TablePageCut.rowsOf(wrapper.querySelector(':scope > table'));
-      let row = el.closest('tr');
-      while (rows && row && rows.indexOf(row) < 0) row = row.parentElement && row.parentElement.closest('tr');
-      return rows && row ? rows.indexOf(row) : -1;
-    };
+    const rowRankIn = (wrapper) => rowRankOf(wrapper, el);
     let pageIndex = 0;
     for (const brk of lastBreaks) {
       const afterIdx = children.indexOf(brk.afterEl);
@@ -1084,18 +1079,20 @@ const HeaderFooterPreview = (function () {
 
   // Édition d'en-tête ou de pied : pas de mise en page mesurée, la page est celle du bloc qui porte l'élément, lue sur les coupures du fragment.
   // `firstPageTop` : haut du corps de la première page, en pixels écran.
+  // Le rang, parmi les lignes du tableau que `wrapper` enveloppe, de la ligne qui contient `el` (-1 s'il n'est dans aucune) : un élément dans un tableau coupé entre deux lignes est sur la page de sa ligne.
+  function rowRankOf(wrapper, el) {
+    const rows = TablePageCut.rowsOf(wrapper.querySelector(':scope > table'));
+    let row = el.closest('tr');
+    while (rows && row && rows.indexOf(row) < 0) row = row.parentElement && row.parentElement.closest('tr');
+    return rows && row ? rows.indexOf(row) : -1;
+  }
   function pageStartFromBreaks(tiptapEl, topLevelEl, el, pageContentHeightPx, zoom, firstPageTop, capacityOf) {
     const breaks = computePageBreaks(tiptapEl, pageContentHeightPx, capacityOf);
     const children = Array.from(tiptapEl.children);
     const elIdx = children.indexOf(topLevelEl);
     // Un élément dans un tableau coupé entre deux lignes est sur la page de sa ligne : rang de la ligne parmi celles du tableau, -1 s'il n'est dans
     // aucune.
-    const rowRankIn = (wrapper) => {
-      const rows = TablePageCut.rowsOf(wrapper.querySelector(':scope > table'));
-      let row = el.closest('tr');
-      while (rows && row && rows.indexOf(row) < 0) row = row.parentElement && row.parentElement.closest('tr');
-      return rows && row ? rows.indexOf(row) : -1;
-    };
+    const rowRankIn = (wrapper) => rowRankOf(wrapper, el);
     let pageIndex = 0;
     let lastBreak = null;
     for (const brk of breaks) {

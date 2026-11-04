@@ -38,7 +38,7 @@ const RowTemplate = (function () {
   let running = false;
   // Ce que cet écran vient d'écrire dans les options : Grist le renvoie par onOptions, parfois après une saisie plus récente - l'écho d'une valeur
   // déjà remplacée ne doit pas défaire le réglage en cours.
-  const expectedEchoes = [];
+  const echoes = GristAPI.createEchoGuard();
 
   const isComplete = r => !!(r && r.column && r.modeleId != null && r.modeleId !== '');
 
@@ -166,9 +166,7 @@ const RowTemplate = (function () {
     config = normalizeConfig((GristAPI.getWidgetOptions() || {})[OPTION_KEY]);
     GristAPI.onWidgetOptionsChange(options => {
       const incoming = JSON.stringify(normalizeRaw(options && options[OPTION_KEY]));
-      const echo = expectedEchoes.indexOf(incoming);
-      if (echo !== -1) { expectedEchoes.splice(0, echo + 1); return; }
-      expectedEchoes.length = 0;
+      if (echoes.isEcho(incoming)) return;
       setConfig(normalizeConfig(options && options[OPTION_KEY])).catch(e => console.error('[RowTemplate] réglage non appliqué', e));
     });
   }
@@ -180,8 +178,7 @@ const RowTemplate = (function () {
     if (JSON.stringify(clean) === JSON.stringify(normalizeRaw((GristAPI.getWidgetOptions() || {})[OPTION_KEY]))) return setConfig(normalizeConfig(clean), false);
     // Brouillon de Grist : visible par tous une fois la vue enregistrée (bouton Enregistrer en haut du widget). Un échec n'empêche pas de l'appliquer
     // ici.
-    expectedEchoes.push(JSON.stringify(clean));
-    if (expectedEchoes.length > 20) expectedEchoes.shift();
+    echoes.remember(JSON.stringify(clean));
     try { await GristAPI.setWidgetOption(OPTION_KEY, clean); }
     catch (e) { console.error('[RowTemplate] enregistrement de l’option du widget impossible', e); }
     return setConfig(normalizeConfig(clean), false);
