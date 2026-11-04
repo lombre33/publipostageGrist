@@ -10,7 +10,8 @@ Ce dossier ne part pas sur le dépôt public (`outils/` est dans les exclusions 
 | `publier.sh` | Remplace dans un clone du dépôt public les fichiers publiés par ceux du dépôt de développement (le kit de Grist Factory, `kit/`, un sous-module, part en fichiers : css, js et licence, au commit que le dépôt de développement épingle), pose les documents et les captures de `public/`, lance les contrôles, committe et étiquette. |
 | `controles.mjs` | Les contrôles sur l'arbre à publier : une ERREUR empêche le commit, un AVERTISSEMENT se relit. |
 | `essai.sh` | Les essais de ces deux scripts sur de faux dépôts (sans réseau, rien n'est poussé). À relancer après toute modification d'un des deux. |
-| `public/` | Les documents publics : `README.md` (bilingue), `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `NOTICE`, `CARTE_DU_CODE.md` (la carte du code, bilingue). `{{VERSION}}`, `{{DATE}}`, `{{DATE_FR}}` et `{{DATE_EN}}` y sont remplacés à la publication. `public/screenshots/` porte les captures du README (des `.png`), posées telles quelles dans `screenshots/` du dépôt public : une capture du même nom est remplacée, les autres sont gardées. |
+| `public/` | Les documents publics : `README.md` (bilingue), `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `PATCH_NOTES.md` (la note de version : une puce par fonction, en français puis en anglais), `NOTICE`, `CARTE_DU_CODE.md` (la carte du code, bilingue). `{{VERSION}}`, `{{DATE}}`, `{{DATE_FR}}` et `{{DATE_EN}}` y sont remplacés à la publication. `public/screenshots/` porte les captures du README (des `.png`), posées telles quelles dans `screenshots/` du dépôt public : une capture du même nom est remplacée, les autres sont gardées. |
+| `en-attente/` | Des documents prêts et pas publiés : aujourd'hui `PATCH_NOTES_GFS.md`, la partie de la note de version qui demande Grist Factory Suite (présentations, graphiques, écriture en direct, lecture de PDF, intégration à GFS). `publier.sh` ne les lit pas ; pour en publier un, le poser dans `public/` et l'ajouter aux trois listes de `controles.mjs` (fichiers requis, entrées connues, documents dont les liens se contrôlent). |
 | `captures-readme.mjs` | Refait les deux captures du README (`edition-variables.png`, `lecture-resolue.png`) sur l'interface du jour : le modèle « Contrat de prestation de services » de la galerie, une ligne d'exemple, 1400×680 à l'échelle 2, hors Grist (le faux Grist de `dev-tests/`, qui sert aussi ses bibliothèques depuis `dev-tests/.offline-cache/` quand elle existe). `node outils/depot-propre/captures-readme.mjs`, puis committer les images de `public/screenshots/`. |
 
 ## Publier
@@ -24,6 +25,9 @@ Ce dossier ne part pas sur le dépôt public (`outils/` est dans les exclusions 
    prend sa version et sa date en clair (`## [1.0.0-beta.1] - 2026-10-05`) et une nouvelle section
    `## [{{VERSION}}] - {{DATE}}` s'ouvre au-dessus. Relire `public/README.md`
    (limites connues, roadmap) : il décrit l'état du jour de la publication, pas celui de la précédente.
+   Relire `public/PATCH_NOTES.md` (la note de version) contre la section `## [{{VERSION}}]` du CHANGELOG : une puce par fonction, en
+   français puis en anglais, avec le même nombre de puces des deux côtés ; une fonction née depuis sa dernière relecture y prend sa puce
+   (celles qui demandent Grist Factory Suite vont dans `en-attente/PATCH_NOTES_GFS.md`, pas dans la note publique).
    Relire aussi `public/CARTE_DU_CODE.md` : les contrôles voient un fichier cité qui n'existe plus ou un fichier de
    `js/` qui n'y figure pas, mais pas les nombres de lignes, qui se recomptent (`wc -l`). Si l'interface a changé
    depuis les captures du README (`public/screenshots/`), les refaire : `node outils/depot-propre/captures-readme.mjs`.

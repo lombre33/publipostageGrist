@@ -131,6 +131,7 @@ vrai "dev-tests, planning et outils ne partent pas" test -z "$(git -C "$P" ls-tr
 vrai ".nojekyll part avec le reste, vide, à la racine du dépôt public" test -f "$P/.nojekyll" -a ! -s "$P/.nojekyll" -a -n "$(git -C "$P" ls-tree --name-only HEAD | grep -x '.nojekyll')"
 vrai "les documents publics sont là, README du dépôt de développement absent" test -f "$P/SECURITY.md" -a -f "$P/NOTICE" -a "$(head -1 "$P/README.md")" = "# Publipostage+ pour Grist"
 vrai "la carte du code part avec les documents publics, version et date remplacées" bash -c "grep -q '^# Carte du code de Publipostage+' '$P/CARTE_DU_CODE.md' && ! grep -q '{{' '$P/CARTE_DU_CODE.md'"
+vrai "la note de version part avec les documents publics, version et dates remplacées, en français puis en anglais" bash -c "grep -q '^# Publipostage+ : notes de version' '$P/PATCH_NOTES.md' && grep -q '^# Publipostage+: release notes (English)' '$P/PATCH_NOTES.md' && ! grep -q '{{' '$P/PATCH_NOTES.md' && grep -qF '**Publipostage+ 1.0.0-beta.1**, publiée le 4 octobre 2026' '$P/PATCH_NOTES.md' && grep -qF '**Publipostage+ 1.0.0-beta.1**, released on October 4, 2026' '$P/PATCH_NOTES.md'"
 vrai "les captures de public/screenshots/ sont posées dans screenshots/ du dépôt public, identiques" bash -c "cmp -s '$T/dev/outils/depot-propre/public/screenshots/edition-variables.png' '$P/screenshots/edition-variables.png' && cmp -s '$T/dev/outils/depot-propre/public/screenshots/lecture-resolue.png' '$P/screenshots/lecture-resolue.png'"
 vrai "une capture que seul le dépôt public porte est gardée" test "$(cat "$P/screenshots/ancienne.png")" = png
 kit_en_fichiers() { # css, js et licence du kit, en fichiers ordinaires, sans .gitmodules ni lien de sous-module (le dépôt public n'a pas de sous-module)
@@ -197,6 +198,10 @@ muter "le .nojekyll manquant (GitHub Pages passerait les .md dans Jekyll)" "fich
 muter "une carte du code qui cite un fichier disparu" "CARTE_DU_CODE.md cite des fichiers absents" "rm js/dom.js"
 muter "un fichier de js/ sans ligne dans la carte du code" "sans ligne dans CARTE_DU_CODE.md" "echo x > js/nouveau.js"
 muter "un lien cassé dans la carte du code" "CARTE_DU_CODE.md → SECU.md" "sed -i 's/(SECURITY.md)/(SECU.md)/' CARTE_DU_CODE.md"
+muter "la note de version absente" "fichier absent : PATCH_NOTES.md" "rm PATCH_NOTES.md"
+muter "un lien cassé dans la note de version" "PATCH_NOTES.md → JOURNAL.md" "sed -i 's/(CHANGELOG.md)/(JOURNAL.md)/' PATCH_NOTES.md"
+muter "une ancre cassée dans la table des matières anglaise de la note de version" "PATCH_NOTES.md → #correctifs" "sed -i 's/(#fixes)/(#correctifs)/' PATCH_NOTES.md"
+muter "un retour vers la partie française de la note de version qui perd son double tiret (l'ancre de « Publipostage+ : notes de version »)" "PATCH_NOTES.md → #publipostage-notes-de-version" "sed -i 's/(#publipostage--notes-de-version)/(#publipostage-notes-de-version)/' PATCH_NOTES.md"
 # Les nombres que la carte annonce se lisent dans la carte (elle les change à chaque envoi), pas dans ce script.
 NJS="$(grep -oEm1 '[0-9]+ fichiers dans `js/`' "$P/CARTE_DU_CODE.md" | grep -oE '^[0-9]+')"
 LJS="$(grep -oEm1 '\([0-9][0-9 ]* lignes :' "$P/CARTE_DU_CODE.md" | grep -oE '[0-9][0-9 ]*[0-9]')"

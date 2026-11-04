@@ -67,13 +67,13 @@ function report(level, label, hits, show = 4) {
 // 1. Ce qui doit être là, et ce qui ne doit jamais l'être
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // .nojekyll (un fichier vide) : le dépôt public a son propre site GitHub Pages ; sans lui, Pages passe les .md dans Jekyll avant de publier, et une accolade double ouverte dans un seul d'entre eux fait échouer la publication en silence (le site reste sur la version d'avant).
-for (const required of ['index.html', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'NOTICE', 'CARTE_DU_CODE.md', '.nojekyll']) {
+for (const required of ['index.html', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'PATCH_NOTES.md', 'NOTICE', 'CARTE_DU_CODE.md', '.nojekyll']) {
   if (!has(required)) fail(`fichier absent : ${required}`);
 }
 const NEVER = ['dev-tests', 'planning', 'prototypes', 'templates-gallery-dev', 'outils', '.claude', 'AUDIT_CODE.md', 'CAHIER_DES_CHARGES.md', 'GFS-ETAT.md'];
 const topLevel = new Set(files.map(file => file.rel.split('/')[0]));
 for (const name of NEVER) if (topLevel.has(name)) fail(`entrée du dépôt de développement présente à la racine : ${name}`);
-const KNOWN = new Set(['index.html', 'css', 'js', 'extensions', 'img', 'templates-gallery', 'screenshots', 'kit', 'beta', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'NOTICE', 'CARTE_DU_CODE.md', '.github', '.gitignore', '.gitattributes', '.nojekyll']);
+const KNOWN = new Set(['index.html', 'css', 'js', 'extensions', 'img', 'templates-gallery', 'screenshots', 'kit', 'beta', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'PATCH_NOTES.md', 'NOTICE', 'CARTE_DU_CODE.md', '.github', '.gitignore', '.gitattributes', '.nojekyll']);
 for (const name of topLevel) if (!KNOWN.has(name) && !NEVER.includes(name)) warn(`entrée inconnue à la racine : ${name} (à classer dans publier.sh et dans controles.mjs)`);
 // Le kit de Grist Factory (kit/, sous-module du dépôt de développement, ici en fichiers : publier.sh) : un sous-module vide (.gitmodules sans fichiers) ne servirait rien, et le dépôt public n'a pas de sous-module.
 if (has('.gitmodules')) fail('.gitmodules présent : le dépôt public n\'a pas de sous-module, le kit y est en fichiers (publier.sh)');
@@ -233,7 +233,7 @@ if (version) {
 // 5. Les liens des documents publics : fichiers présents, ancres présentes (ancres calculées comme le fait GitHub)
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 {
-  const DOCS = ['README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'CARTE_DU_CODE.md'];
+  const DOCS = ['README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'PATCH_NOTES.md', 'CARTE_DU_CODE.md'];
   const blank = match => match.replace(/[^\n]/g, ' ');
   const withoutCode = text => text.replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, blank).replace(/`[^`\n]*`/g, blank);
   function anchorsOf(text) {

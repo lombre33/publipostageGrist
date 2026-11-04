@@ -16,7 +16,7 @@
 #   4. remplace dans le clone public les entrées PUBLIEES par celles du dépôt de développement (fichiers suivis seulement, les fichiers retirés disparaissent) ;
 #      le kit de Grist Factory (kit/, un sous-module du dépôt de développement) part en fichiers, ceux du commit que le dépôt de développement épingle (css, js et la licence),
 #      sans .gitmodules : le dépôt public n'a pas de sous-module ; les entrées que seul le dépôt public porte (.github/…) ne sont pas touchées ;
-#   5. pose par-dessus les documents publics de outils/depot-propre/public/ (README, SECURITY, CONTRIBUTING, CODE_OF_CONDUCT, CHANGELOG, NOTICE, CARTE_DU_CODE),
+#   5. pose par-dessus les documents publics de outils/depot-propre/public/ (README, SECURITY, CONTRIBUTING, CODE_OF_CONDUCT, CHANGELOG, PATCH_NOTES, NOTICE, CARTE_DU_CODE),
 #      où {{VERSION}}, {{DATE}} (2026-10-04), {{DATE_FR}} (4 octobre 2026) et {{DATE_EN}} (October 4, 2026) sont remplacés, et les captures du README
 #      de outils/depot-propre/public/screenshots/ (des .png) dans screenshots/ du clone public : une capture du même nom est remplacée, les autres sont gardées ;
 #   6. lance controles.mjs sur l'arbre obtenu : une ERREUR empêche le commit ;
