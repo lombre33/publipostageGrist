@@ -522,6 +522,10 @@ async function restartIn(lang) {
 await run('light');
 await page.evaluate(() => Settings.setTheme('dark'));
 await page.waitForTimeout(250);
+// Le passage en Lecture puis le retour laissent la page avec la sélection du dernier clic, dans un texte que `Editor.setHTML` reprend tel quel, et l'éditeur sans le focus : le premier clic de ce passage,
+// au même endroit, ne change rien pour le navigateur, donc rien pour ProseMirror (qui garde la dernière sélection du navigateur qu'il a vue) et le curseur reste en fin de document. Le focus rendu à
+// l'éditeur, comme le fait la personne qui clique dans son texte pour continuer, remet les deux d'accord.
+await page.evaluate(() => EditorCore.getEditor().commands.focus());
 await run('dark');
 await restartIn('en');
 await page.waitForTimeout(300);
