@@ -408,7 +408,7 @@ It describes the widget on its own, installed in Grist. What also needs Grist Fa
 
 - **"Light" PDF**: the same vector PDF, with its images brought down to 150 points per inch (a 4 MB photo weighs only a few dozen KB).
 - **Protected PDF**: encrypted with AES-256, with an opening password, permissions (print, copy, edit or annotate) and author, subject and keywords.
-- **Three ways to give the password of the protected PDF**: typed at each export (recommended), the same for everyone and saved in the document, or the one of a column of the row.
+- **Three ways to give the password of the protected PDF**: typed at each export (recommended), the same for everyone and saved in the document, or the one read from a column of the row.
 - **Printing through the browser**: the browser's print window prints Reading mode, with the same page breaks, headers, footers, fonts and watermark.
 - **Blank page warning**: before saving the PDF of a row, a window says which pages carry nothing and lets you choose between "Cancel" and "Export anyway"; for an export of several rows, an end-of-batch window lists the rows concerned.
 - **Date of the last PDF export**: Settings > View chooses the column (Date, Date and time or Text) where the widget writes the moment of the last PDF export of each row.
