@@ -19,6 +19,9 @@
 //  LES IMAGES EN CALQUE SUIVENT LEUR DIAPOSITIVE (défaut vu le 21/10) : une image passée « Devant le texte » (vrai clic sur sa barre) sur la diapositive 2 monte avec elle (Ctrl+↑ :
 //   page 1, dessinée avec son texte, une seule pagination), et la Lecture (vrai clic) la montre sur la page 1 ; un Ctrl+Z rend le texte d'avant à l'identique ; « Ajouter » avant
 //   elle l'envoie en page 3 (une seule pagination) ; la diapositive 1 qui dépasse (frappe au vrai clavier) l'envoie en page 3, et un Ctrl+Z la ramène ; enregistrée, elle garde sa page.
+//   SUPPRIMER (demande du 04/11, « super fluide de bout en bout ») : dans une présentation de douze diapositives dont la dernière porte une image « Devant le texte », Suppr efface la
+//   diapositive 4, l'image passe en page 11 (une seule pagination) sans que ProseMirror refasse un seul des blocs d'après (leur élément est le même, `blocksKept`), et un seul Ctrl+Z
+//   rend le texte d'avant et l'image en page 12 ; la prévision des images est dans une seconde transaction du même pas d'historique (slide-strip.js : placePredictedLayers).
 //  LA DIAPOSITIVE VIDE DE FIN (« Tout de suite ») : une présentation qui finit sur un saut de page montre la page de sa dernière diapositive dans l'éditeur, la Lecture (vrai clic), le PDF
 //   (vrai clic sur « Exporter » : trois pages, sans question) et le Word ; un document au même texte garde ses deux pages (carte du 14/10), et la bande n'y est pas.
 //  LES DIAPOSITIVES VIDES DU PDF (carte du 19/10, « Ne plus avertir ») : une présentation dont la première, une du milieu et la dernière diapositive sont vides part en PDF sans
@@ -50,6 +53,9 @@ const RECORD = { id: 1, Nom: 'Alice', Statut: 'Urgent' };
 // quarante diapositives (« Diapo n », « Texte n ») ; 14 « Formes » : trois diapositives, une image dans le texte de la deuxième. Deux lignes dans `PpDepart` pour l'export en lot.
 const FORTY = Array.from({ length: 40 }, (_, i) => `<h2>Diapo ${i + 1}</h2><p>Texte ${i + 1}</p>`).join(BR);
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAG0lEQVR4nGP4z8DwnxLMMGoAw6gBDKMGMAAAJ/wD/fJ9qnkAAAAASUVORK5CYII=';
+// 15 « Dense » : douze diapositives de neuf blocs (un titre, huit lignes), une image « Devant le texte » à la fin de la dernière : un geste de la bande qui la fait changer de page ne doit pas faire refaire les blocs d'après.
+const DENSE = Array.from({ length: 12 }, (_, i) => `<h2>Dense ${i + 1}</h2>` + Array.from({ length: 8 }, (_, k) => `<p>Ligne ${k + 1}</p>`).join('')).join(BR)
+  + `<p>Fin <img class="editor-image" src="${PNG}" alt="" style="width: 40px; height: 40px; position: absolute; left: 0px; top: 0px; z-index: 5" data-layer="front" data-wrap="inline" data-page-index="11" data-page-left-pt="40" data-page-top-pt="40"></p>`;
 const SEED = seedModels({ record: RECORD }) + `
   add(7, 'Diapos', '<h1>Titre un</h1><p>Premier texte</p>${BR}<h2>Deux</h2><ul><li><p>a</p></li><li><p>b</p></li></ul>${BR}<p>Trois</p>', false, 'presentation');
   add(8, 'Longue', '<p>Court</p>${BR}${lines(45)}${BR}<p>Fin</p>', false, 'presentation');
@@ -59,7 +65,8 @@ const SEED = seedModels({ record: RECORD }) + `
   add(12, 'Doc blanc', '<p>Un</p>${BR}<p></p>${BR}<p>Trois</p>', false, 'document');
   add(13, 'Quarante', '${FORTY}', false, 'presentation');
   add(14, 'Formes', '<p>Un</p>${BR}<p>Deux texte</p><p><img class="editor-image" src="${PNG}" alt="" style="width: 120px; height: 80px" data-layer="normal" data-wrap="inline"></p>${BR}<p>Trois</p>', false, 'presentation');
-  stub.state.nextRowId.Publipostage_Modeles = 15;
+  add(15, 'Dense', '${DENSE}', false, 'presentation');
+  stub.state.nextRowId.Publipostage_Modeles = 16;
   stub.setRows('PpDepart', [{ id: 1, Nom: 'Alice', Statut: 'Urgent' }, { id: 2, Nom: 'Bruno', Statut: 'Autre' }]);
   stub.state.lastTableId = 'PpDepart'; // la table de ce widget, que lit la vue d'un lot (fetchSelectedTable) : seedModels donne sa ligne sans passer par fireRecord
 `;
@@ -235,6 +242,24 @@ const readerImagePage = page => page.evaluate(() => {
   const middle = r.top + r.height / 2;
   return Array.from(document.querySelectorAll('#reader-container .v2-pagination-overlay .v2-page-break-line, #reader-container .v2-pagination-overlay .v2-page-seam'))
     .filter(seam => seam.getBoundingClientRect().top < middle).length + 1;
+});
+// Les blocs de premier niveau de l'éditeur et l'élément qui montre chacun, notés avant un geste (`blocksKept` : combien de ceux que le geste n'a pas touchés, le même objet avant et après, sont
+// montrés par un autre élément : ProseMirror qui a refait la vue d'un bloc que rien n'a changé).
+const noteBlocks = page => page.evaluate(() => {
+  const view = EditorCore.getEditor().view;
+  window.__blocks = [];
+  view.state.doc.forEach((node, offset) => window.__blocks.push({ node, dom: view.nodeDOM(offset) }));
+});
+const blocksKept = page => page.evaluate(() => {
+  const view = EditorCore.getEditor().view;
+  const before = new Map(window.__blocks.map(b => [b.node, b.dom]));
+  let survivors = 0, remade = 0;
+  view.state.doc.forEach((node, offset) => {
+    if (!before.has(node)) return;
+    survivors += 1;
+    if (view.nodeDOM(offset) !== before.get(node)) remade += 1;
+  });
+  return { survivors, remade, blocks: view.state.doc.childCount };
 });
 // Compte les paginations de l'éditeur à partir de maintenant ; `paginations(page)` rend leur nombre et arrête de compter.
 const countPaginations = page => page.evaluate(() => { window.__paginations = 0; window.__stopCounting = HeaderFooterPreview.onPaginated(() => { window.__paginations += 1; }); });
@@ -642,6 +667,36 @@ async function run(lang, colorScheme) {
   await save();
   const storedImage = String(await page.evaluate(() => window.__gristStub.getRow('Publipostage_Modeles', 14).Contenu) || '').match(/<img[^>]*>/);
   check(tag + 'enregistrée, la présentation garde l’image sur sa page, la 1 (data-page-index="0")', !!storedImage && /data-page-index="0"/.test(storedImage[0]), { storedImage: storedImage && storedImage[0].replace(/src="[^"]*"/, 'src=…') });
+
+  // --- Supprimer une diapositive ne fait pas refaire les blocs d'après : l'image « Devant le texte » de la dernière change de page dans une seconde transaction, du même pas d'historique.
+  // (Dans la transaction du geste, elle empêchait ProseMirror de reconnaître les blocs d'après en les comparant depuis la fin du texte : il les refaisait tous.)
+  await open(15, 12);
+  await sleep(900);
+  layer = await layerState(page);
+  check(tag + 'une présentation de douze diapositives dont la dernière porte une image « Devant le texte » : l’image est sur la page 12 (data-page-index 11)', layer.layer === 'front' && layer.pageIndex === 11 && layer.texts.length === 12, layer);
+  await click('.pp-slide-thumb', 3);
+  await press('Escape');
+  for (let i = 0; i < 10 && !/^item/.test((await stripState(page)).focus || ''); i++) await press('Tab');
+  const denseHtml = (await stripState(page)).html;
+  await noteBlocks(page);
+  await countPaginations(page);
+  await press('Delete');
+  await sleep(900);
+  count = await paginations(page);
+  s = await stripState(page);
+  layer = await layerState(page);
+  const kept = await blocksKept(page);
+  check(tag + 'Suppr efface la diapositive 4 : onze diapositives, l’image suit la dernière en page 11 (data-page-index 10), et l’éditeur ne se pagine qu’une fois',
+    s.count === 11 && layer.pageIndex === 10 && layer.drawnOn === 10 && count === 1, { count: s.count, layer, paginations: count });
+  check(tag + 'aucun des blocs que la suppression n’a pas touchés n’est refait : tous gardent leur élément (l’image qui change de page ne fait pas refaire les diapositives d’après)',
+    kept.survivors >= 90 && kept.remade <= 2, kept);
+  await sleep(APART_MS);
+  await press('Control+z');
+  await sleep(700);
+  s = await stripState(page);
+  layer = await layerState(page);
+  check(tag + 'un seul Ctrl+Z rend la diapositive et remet l’image en page 12 : le texte d’avant, à l’identique', s.count === 12 && s.html === denseHtml && layer.pageIndex === 11 && layer.drawnOn === 11, { count: s.count, same: s.html === denseHtml, layer });
+  await save();
 
   // --- La diapositive vide de fin : sa page dans l'éditeur, la Lecture, le PDF et le Word.
   await open(9, 3);

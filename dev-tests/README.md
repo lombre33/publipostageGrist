@@ -1004,11 +1004,11 @@ Deux options utiles :
   classe, `data-explains`, raison au survol, 4,5:1 au moins), son clic ouvre la fenêtre « Cette fonction demande Grist Factory Suite » (« « Présentations » fait partie de l'extension
   « Diapositives »… », un seul bouton « Fermer », le focus dedans), Échap la ferme et rien ne change. Contre l'ancien code, la ligne du menu n'existe pas. Lancé par `run-headless.mjs` (groupe
   Node `slidesGfs`) ou seul ; `SLIDES_GFS_SHOTS=<dossier>` enregistre des captures.
-- `slidesStrip` (`dev-tests/verify-slides-strip.mjs`, 127 vérifications, lot 2 du chantier des présentations, cartes du 19/10 « Continuer », « Tout de suite » et « Ne plus avertir », demandes du 21/10 sur les sauts de page et la légèreté, défaut des images en calque vu le 21/10, carte du 22/10 « Trois icônes sur une ligne ») : la bande
+- `slidesStrip` (`dev-tests/verify-slides-strip.mjs`, 135 vérifications, lot 2 du chantier des présentations, cartes du 19/10 « Continuer », « Tout de suite » et « Ne plus avertir », demandes du 21/10 sur les sauts de page et la légèreté, défaut des images en calque vu le 21/10, carte du 22/10 « Trois icônes sur une ligne ») : la bande
   des diapositives (`extensions/diapositives/slide-strip.js` et `.css`, `js/slides-entry.js`) à la vraie souris et au vrai clavier, 700×400, français clair puis anglais sombre,
   hébergé (GFS simulé, l'extension active), sur `dev-tests/gfs-page.mjs` avec quatre modèles de plus (7 « Diapos », trois diapositives ; 8 « Longue », la deuxième trop longue ;
   9 « Fin vide », une présentation qui finit sur un saut de page ; 10 « Doc fin », un document au même texte ; 11 « Vides », une présentation dont la première, la troisième et la cinquième diapositive sont vides ; 12 « Doc blanc »,
-  un document dont la page 2 est blanche ; 13 « Quarante », quarante diapositives « Diapo n », « Texte n » ; 14 « Formes », une image dans le texte de la deuxième de trois diapositives), une ligne courante (le PDF) et deux lignes dans `PpDepart` (le lot). **LA BANDE** : ouverte par l'appel
+  un document dont la page 2 est blanche ; 13 « Quarante », quarante diapositives « Diapo n », « Texte n » ; 14 « Formes », une image dans le texte de la deuxième de trois diapositives ; 15 « Dense », douze diapositives de neuf blocs dont la dernière porte une image « Devant le texte »), une ligne courante (le PDF) et deux lignes dans `PpDepart` (le lot). **LA BANDE** : ouverte par l'appel
   `ouvrir` de GFS, ses deux fichiers arrivent une fois chacun à la version du registre ; elle est à gauche de la page, sur la hauteur visible du document, sans la recouvrir ;
   une liste « Diapositives », une miniature 80×45 par diapositive avec son texte, « Diapositive n sur N », celle du curseur seule cochée et seule atteinte par Tab ; numéros et
   icône d'« Ajouter » à 4,5:1 au moins. **LES DEUX BOUTONS** (carte du 22/10 ; « Objets » est passé dans la barre d'outils du haut le 22/10, `freeFrame` § 1) : « Ajouter » et « Importer » sont une seule ligne de deux carrés de 30 px écartés
@@ -1028,7 +1028,7 @@ Deux options utiles :
   passe « Devant le texte » (vrai clic sur l'image puis sur le bouton de sa barre) en page 2 ; Ctrl+↑ dans la bande la monte avec sa diapositive (page 1, dessinée avec son
   texte, une pagination) et la Lecture (vrai clic) la dessine sur la page 1 ; un Ctrl+Z rend le texte d'avant à l'identique ; « Ajouter » (vrai clic) après la diapositive 1
   l'envoie en page 3 (une pagination) ; soixante lignes tapées dans la diapositive 1 la font dépasser : l'image passe en page 3 avec sa diapositive, et un Ctrl+Z rend le texte
-  d'avant ; montée puis enregistrée, la ligne du modèle porte `data-page-index="0"`. **LA DIAPOSITIVE VIDE DE FIN** :
+  d'avant ; montée puis enregistrée, la ligne du modèle porte `data-page-index="0"`. **SUPPRIMER** (demande du 04/11, « super fluide de bout en bout ») : dans « Dense », Suppr (vrai clavier) efface la diapositive 4 : l'image de la dernière passe en page 11 (une pagination), aucun des 109 blocs que la suppression n'a pas touchés n'est refait (le même élément avant et après : ProseMirror les reconnaît, `blocksKept`), et un seul Ctrl+Z rend le texte d'avant et l'image en page 12 ; la prévision des images est dans une seconde transaction du même pas d'historique (`placePredictedLayers`). **LA DIAPOSITIVE VIDE DE FIN** :
   trois pages dans l'éditeur, la Lecture (vrai clic, sans la bande, qui revient en Édition), le PDF (vrai clic sur « Exporter » : trois pages, sans « Exporter quand même ? ») et
   le Word (deux sauts de page) ; le document au même texte garde ses deux pages, sans bande, sa marge gauche redevenue la sienne. **LES DIAPOSITIVES VIDES DU PDF** (carte
   « Ne plus avertir ») : « Vides » a cinq miniatures et son PDF (vrai clic) part sans question avec ses cinq pages ; son lot (« Générer » au vrai clic) donne une archive de
@@ -1037,7 +1037,7 @@ Deux options utiles :
   Contre l'ancien code, rien de `extensions/diapositives/` n'existe et la présentation qui finit sur un saut de page n'a que deux pages ; contre le code d'avant le 22/10 (six échecs), les trois
   boutons sont en colonne, avec leur texte, et la liste ne montre que deux miniatures ; contre le code d'avant le 21/10, l'image
   en calque reste en page 2 (dix échecs : monter, Lecture, ajouter, dépasser, enregistrer, en français et en anglais) ; contre le code d'avant la carte
-  « Ne plus avertir », le PDF d'une présentation à diapositive vide demande « Exporter quand même ? » et son lot finit sur la fenêtre des pages blanches. Lancé par `run-headless.mjs` (groupe
+  « Ne plus avertir », le PDF d'une présentation à diapositive vide demande « Exporter quand même ? » et son lot finit sur la fenêtre des pages blanches ; contre le code d'avant le 04/11, 79 des 109 blocs sont refaits (un échec par langue, le seul). Lancé par `run-headless.mjs` (groupe
   Node `slidesStrip`) ou seul ; `SLIDES_STRIP_SHOTS=<dossier>` enregistre des captures.
 - `slidesClipboard` (`dev-tests/verify-slides-clipboard.mjs`, 33 vérifications, demande du 21/10 « avec contrôle C et contrôle V entre deux onglets du navigateur ») : copier et
   coller une diapositive (`onCopy`, `slideForClipboard`, `onPaste`, `pasteAfter`, `placePastedLayers` de `extensions/diapositives/slide-strip.js`) au vrai clavier et à la vraie

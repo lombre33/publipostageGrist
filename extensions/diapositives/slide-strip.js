@@ -233,6 +233,21 @@ const SlideStrip = (function () {
       anchors.set(tr.doc.nodeAt(m.pos), m.seen);
     });
   }
+  // Le geste `trigger` (supprimer) vient de passer : les images en calque qu'il fait changer de page changent de page tout de suite (predictLayers), dans une seconde transaction rangée dans
+  // son événement d'historique (un Ctrl+Z défait tout) et posée avant la pagination (l'éditeur ne se pagine qu'une fois), comme celle d'un collage (placePastedLayers). Pas dans la
+  // transaction du geste : ProseMirror reconnaît les blocs d'après un retrait en les comparant depuis la FIN du texte, et une image changée vers la fin l'en empêchait ; il refaisait alors
+  // les blocs de toutes les diapositives suivantes (5 000 éléments et 0,4 s pour supprimer une diapositive de « Présentation commerciale »). Les autres gestes n'y gagnent rien (ajouter,
+  // dupliquer et déplacer : ProseMirror y reconnaît déjà les blocs d'après) et paieraient une seconde mise à jour : leur prévision reste dans leur transaction (act).
+  function placePredictedLayers(trigger) {
+    const { view } = editor;
+    const tr = view.state.tr;
+    predictLayers(tr);
+    if (!tr.docChanged) return;
+    tr.setMeta('appendedTransaction', trigger.getMeta('appendedTransaction') || trigger);
+    tr.setMeta(LAYERS_META, true);
+    TrackChanges.skipTracking(tr);
+    view.dispatch(tr);
+  }
   // Après chaque pagination : une image en calque dont la diapositive n'a plus la même première page change d'autant de pages, dans une transaction rangée dans l'événement
   // d'historique de celle qui l'a causé (le contrat de prosemirror-history qu'emploient aussi les largeurs de colonnes, js/editor.js), hors suivi des modifications ; une transaction
   // venue d'une autre personne (écriture en direct) est suivie chez elle. Puis chaque image note la première page de sa diapositive.
@@ -801,13 +816,16 @@ const SlideStrip = (function () {
     const { state, view } = editor;
     const tr = state.tr;
     plan.apply(tr, state.schema);
-    predictLayers(tr);
+    // Supprimer envoie la prévision des images en calque après, dans une seconde transaction (placePredictedLayers) ; les autres gestes la gardent dans la leur (une seule mise à jour).
+    const later = action === 'delete';
+    if (!later) predictLayers(tr);
     const after = slidesOf(tr.doc);
     const target = Math.max(0, Math.min(plan.target, after.length - 1));
     const selection = (plan.selectText && firstTextIn(tr.doc, after[target])) || selectionIn(tr.doc, after[target]);
     if (selection) tr.setSelection(selection);
     tr.setMeta(STRIP_META, true);
     view.dispatch(tr);
+    if (later) placePredictedLayers(tr);
     pick(plan.picked || []);
     anchor = target;
     // La pagination tout de suite, pas après sa minuterie : le défilement vise la page que la diapositive occupe maintenant (comme le bouton « Saut de page », js/main-toolbar.js).
