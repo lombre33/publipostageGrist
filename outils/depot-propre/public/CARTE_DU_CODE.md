@@ -23,7 +23,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   (l'extension « diapositives ») et la lecture d'un PDF sont des extensions de Grist Factory Suite (GFS) : leur code
   est dans `extensions/graphique/` (six scripts et deux feuilles de style), `extensions/edition/` (cinq scripts et
   une feuille de style), `extensions/diapositives/` (dix-sept scripts, dix feuilles de style et une page,
-  `present.html`) et `extensions/lecture-pdf/` (deux scripts et une feuille de style), que `js/extensions.js`
+  `present.html`) et `extensions/lecture-pdf/` (quatre scripts et une feuille de style), que `js/extensions.js`
   charge au premier usage, et seulement si GFS les dit actives (`js/gfs-link.js` lui demande le contexte).
   `index.html` n'en demande aucun fichier. Seul, le widget n'en charge rien : la fonction est grisée, jamais cachée
   ni perdue, et son clic dit qu'il faut passer par GFS. Leurs bibliothèques viennent de GFS, pas de ce dépôt :
@@ -36,9 +36,9 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 190 fichiers dans `js/` (87 400 lignes : 66 000 de code, 16 900 de commentaires, 4 500 de
-  blanc), 45 dans `extensions/` (12 200 lignes, dont 2 900 dans `graphique/`, 1 700 dans `edition/`, 7 300 dans
-  `diapositives/` et 300 dans `lecture-pdf/`), 57 feuilles de style (4 700 lignes), une page de 1 100 lignes.
+- **Le volume** : 191 fichiers dans `js/` (87 800 lignes : 66 200 de code, 17 100 de commentaires, 4 500 de
+  blanc), 47 dans `extensions/` (13 400 lignes, dont 2 900 dans `graphique/`, 1 700 dans `edition/`, 7 400 dans
+  `diapositives/` et 1 400 dans `lecture-pdf/`), 57 feuilles de style (4 700 lignes), une page de 1 100 lignes.
   Quatre fichiers de polices du PDF pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à
   traduire, pas de la logique.
 
@@ -109,7 +109,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/html-sanitize.js` | Filtre à liste blanche, lu dans un document inerte, pour le HTML des colonnes Grist, des modèles importés et de la galerie. Toute déclaration de style qui porte une `url(...)` ou un `image-set(...)` en est retirée, même dans une variable : la seule image qui passe est celle du trait en tirets d'un cadre libre (`--ff-art`, `--ff-art-nine` : `ART_PROPS`, `isSafeArt`, un `data:image/svg+xml` qui ne contient que des `path` aux attributs connus, rien d'autre derrière). |
 | `js/external-images.js` | Images d'un autre site : un cadre « Afficher » à leur place jusqu'au clic (rien n'est retenu), signalées ensuite en permanence, et une fenêtre avant tout export qui les lirait. |
 
-### L'éditeur (47 fichiers, 17 900 lignes)
+### L'éditeur (47 fichiers, 18 000 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -237,7 +237,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/pdf-protection.js` | Le « PDF protégé » (type du menu « Type d'export ») sans interface : les réglages propres (les trois façons de donner le mot de passe - saisi, commun enregistré dans le document, ou celui de chaque ligne -, trois droits, propriétés du fichier), le mot de passe d'une ligne lu dans sa cellule, le mot de passe « propriétaire » tiré au hasard quand seuls des droits sont posés, et les champs de document que pdfmake lit (chiffrement AES-256). |
 | `js/pdf-protection-dialog.js` | La fenêtre « PDF protégé » (sur la fenêtre commune), ouverte avant l'export d'une ligne et d'une archive ZIP : elle rend les réglages ou rien. Elle propose les trois façons de donner le mot de passe, dit où le mot de passe commun s'écrit dans le document et le risque d'un mot de passe en clair, et lit puis écrit ce mot de passe commun par `js/templates.js`. Aucun mot de passe n'est gardé dans le navigateur ; seuls la façon choisie, les droits, l'auteur et la colonne des mots de passe le sont. |
 
-### Socle de l'interface et réglages (17 fichiers, 7 700 lignes)
+### Socle de l'interface et réglages (18 fichiers, 7 900 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -259,7 +259,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 
 ### Extensions de Grist Factory Suite (24 fichiers, 9 800 lignes)
 
-Les nombres du titre ne comptent que les fichiers de `js/`, le socle de ces fonctions ; les 45 fichiers d'`extensions/`, qui sont
+Les nombres du titre ne comptent que les fichiers de `js/`, le socle de ces fonctions ; les 47 fichiers d'`extensions/`, qui sont
 les extensions elles-mêmes, sont décrits plus bas et comptés dans « Le volume ».
 
 | Fichier | Rôle |
@@ -312,7 +312,7 @@ les extensions elles-mêmes, sont décrits plus bas et comptés dans « Le volum
 
 ### Orchestration
 
-`js/main.js` (3 700 lignes) : modèles, modes Édition et Lecture, enregistrement automatique, exports (un
+`js/main.js` (3 800 lignes) : modèles, modes Édition et Lecture, enregistrement automatique, exports (un
 fichier, un lot), câblage de la galerie et de Grist. C'est le fichier qui connaît tous les autres.
 
 ### Les feuilles de style
@@ -453,7 +453,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
 - **Extensions, kept apart.** The chart from the page, the created chart, live editing, presentations (the "slides"
   extension) and PDF reading are Grist Factory Suite (GFS) extensions: their code is in `extensions/graphique/` (six
   scripts and two stylesheets), `extensions/edition/` (five scripts and a stylesheet), `extensions/diapositives/`
-  (seventeen scripts, ten stylesheets and one page, `present.html`) and `extensions/lecture-pdf/` (two scripts and a
+  (seventeen scripts, ten stylesheets and one page, `present.html`) and `extensions/lecture-pdf/` (four scripts and a
   stylesheet), which `js/extensions.js` loads on first use, and only if GFS says they are active (`js/gfs-link.js` asks
   it for the context). `index.html` requests none of their files. Alone, the widget loads nothing of them: the feature is
   greyed out, never hidden or lost, and clicking it says it must be used through GFS. Their libraries come from GFS, not
@@ -465,8 +465,8 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 190 files in `js/` (87,400 lines: 66,000 of code, 16,900 of comments, 4,500 blank), 45 in
-  `extensions/` (12,200 lines, 2,900 of them in `graphique/`, 1,700 in `edition/`, 7,300 in `diapositives/` and 300 in
+- **The size**: 191 files in `js/` (87,800 lines: 66,200 of code, 17,100 of comments, 4,500 blank), 47 in
+  `extensions/` (13,400 lines, 2,900 of them in `graphique/`, 1,700 in `edition/`, 7,400 in `diapositives/` and 1,400 in
   `lecture-pdf/`), 57 stylesheets (4,700 lines), a 1,100-line page. Four PDF font files weigh 2.5 MB in a few lines
   (data); `js/i18n.js` is text to translate, not logic.
 
@@ -536,7 +536,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/html-sanitize.js` | Allow-list filter, parsed in an inert document, for the HTML of Grist columns, imported templates and the gallery. Every style declaration that carries a `url(...)` or an `image-set(...)` is removed from it, even in a variable: the only image that passes is a free frame's dashed line (`--ff-art`, `--ff-art-nine`: `ART_PROPS`, `isSafeArt`, a `data:image/svg+xml` that holds only `path` elements with known attributes, nothing else behind it). |
 | `js/external-images.js` | Images from another site: a "Show" frame in their place until the click (nothing is remembered), flagged at all times afterwards, and a window before any export that would read them. |
 
-### The editor (47 files, 17,900 lines)
+### The editor (47 files, 18,000 lines)
 
 | File | Role |
 |---|---|
@@ -664,7 +664,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/pdf-protection.js` | The "Protected PDF" (a type of the "Export type" menu) without any interface: the cleaned settings (the three ways to give the password - typed, a shared one saved in the document, or one per row -, three permissions, file properties), the password of a row read from its cell, the random "owner" password drawn when only permissions are set, and the document fields pdfmake reads (AES-256 encryption). |
 | `js/pdf-protection-dialog.js` | The "Protected PDF" window (on top of the shared window), opened before the export of one row and of a ZIP archive: it returns the settings or nothing. It offers the three ways to give the password, says where the shared password is written in the document and the risk of a plain-text password, and reads then writes that shared password through `js/templates.js`. No password is kept in the browser; only the chosen way, the permissions, the author and the password column are. |
 
-### Interface foundations and settings (17 files, 7,700 lines)
+### Interface foundations and settings (18 files, 7,900 lines)
 
 | File | Role |
 |---|---|
@@ -686,7 +686,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 
 ### Grist Factory Suite extensions (24 files, 9,800 lines)
 
-The numbers in the title count only the files of `js/`, the base of these features; the 45 files of `extensions/`, which are
+The numbers in the title count only the files of `js/`, the base of these features; the 47 files of `extensions/`, which are
 the extensions themselves, are described below and counted in "The size".
 
 | File | Role |
@@ -739,7 +739,7 @@ the extensions themselves, are described below and counted in "The size".
 
 ### Orchestration
 
-`js/main.js` (3,700 lines): templates, Edit and Reading modes, autosave, exports (one file, one batch),
+`js/main.js` (3,800 lines): templates, Edit and Reading modes, autosave, exports (one file, one batch),
 wiring of the gallery and of Grist. It is the file that knows all the others.
 
 ### Stylesheets
