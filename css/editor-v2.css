@@ -193,7 +193,7 @@
 .tiptap .two-columns-mm-button {
   position: absolute; top: calc(50% - 26px); left: var(--pp-col-left, var(--layout-left, 50%)); transform: translateX(-50%);
   display: flex; align-items: center; justify-content: center; height: 18px; padding: 0 6px; border: none; border-radius: 4px;
-  background: var(--accent-solid, #2f6fed); color: #fff; font-family: var(--font-ui); font-size: 10px; font-weight: 700; line-height: 1;
+  background: var(--fill, var(--accent-solid, #2f6fed)) border-box; color: var(--on-accent); font-family: var(--font-ui); font-size: 10px; font-weight: 700; line-height: 1;
   cursor: pointer; opacity: 0; transition: opacity .15s ease; z-index: 5;
 }
 .tiptap .two-columns-zone-outer:hover .two-columns-mm-button { opacity: 1; }
@@ -203,10 +203,10 @@
 .two-columns-mm-popover {
   position: absolute; top: calc(50% + 22px); left: var(--pp-col-left, var(--layout-left, 50%)); transform: translateX(-50%);
   display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: var(--surface, #fff); border: 1px solid var(--border-strong, #c3cad6);
-  border-radius: 6px; box-shadow: 0 6px 16px rgba(20, 28, 46, .16); z-index: 6; font-size: 12.5px; color: var(--text, #3a4452); white-space: nowrap;
+  border-radius: var(--radius-md, 6px); box-shadow: 0 6px 16px rgba(20, 28, 46, .16); z-index: 6; font-size: 12.5px; color: var(--text, #3a4452); white-space: nowrap;
 }
 .two-columns-mm-popover label { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.two-columns-mm-popover input { width: 56px; padding: 3px 5px; border: 1px solid var(--border, #d7dde3); border-radius: 4px; font-size: 12.5px; }
+.two-columns-mm-popover input { width: 56px; padding: 3px 5px; border: 1px solid var(--border, #d7dde3); border-radius: var(--radius-xs, 4px); font-size: 12.5px; }
 .two-columns-mm-computed { display: inline-block; width: 56px; padding: 3px 5px; text-align: right; color: var(--text-faint, #6b7684); }
 .tiptap img.editor-image { max-width: 100%; height: auto; vertical-align: bottom; }
 
@@ -316,12 +316,12 @@
 .v2-hf-overflow {
   position: sticky; bottom: 10px; z-index: 25; width: fit-content; max-width: calc(100% - 28px); margin: 12px auto 0;
   display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 14px;
-  background: var(--surface); border: 1px solid var(--danger-ink); border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--danger-ink); border-radius: var(--radius-lg, 14px);
   box-shadow: 0 6px 18px rgba(20, 28, 46, .16); font-family: var(--font-ui); font-size: 12.5px; line-height: 1.4; color: var(--text);
 }
 .v2-hf-overflow[hidden] { display: none; }
 .v2-hf-overflow-text { min-width: 0; }
-.v2-hf-overflow-btn { flex: none; width: auto; height: 28px; padding: 0 12px; font-size: 12.5px; font-weight: 700; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--surface-sunken); color: var(--text); cursor: pointer; }
+.v2-hf-overflow-btn { flex: none; width: auto; height: 28px; padding: 0 12px; font-size: 12.5px; font-weight: 700; border-radius: var(--radius-pill, 999px); border: 1px solid var(--border-strong); background: var(--surface-sunken); color: var(--text); cursor: pointer; }
 .v2-hf-overflow-btn:hover { background: var(--accent-soft); border-color: var(--accent-soft-border); }
 .v2-hf-overflow-btn[hidden] { display: none; }
 
@@ -486,7 +486,7 @@
 .v2-hf-zone-body img[data-align="left"], .v2-page-edge-spacer img[data-align="left"], .v2-page-band-header img[data-align="left"], .v2-page-band-footer img[data-align="left"] { float: left; margin: 0 12px 8px 0; }
 .v2-hf-zone-body img[data-align="right"], .v2-page-edge-spacer img[data-align="right"], .v2-page-band-header img[data-align="right"], .v2-page-band-footer img[data-align="right"] { float: right; margin: 0 0 8px 12px; }
 .v2-hf-zone-body img[data-align="center"] { display: block; margin-left: auto; margin-right: auto; }
-.v2-hf-zone-pencil { display: none; position: absolute; top: 50%; right: 12px; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 5px; background: #fff; box-shadow: 0 0 0 1px var(--accent-soft-border, #c7dbfd); color: var(--accent, #2f6fed); }
+.v2-hf-zone-pencil { display: none; position: absolute; top: 50%; right: 12px; transform: translateY(-50%); width: 20px; height: 20px; border-radius: var(--radius-xs, 5px); background: #fff; box-shadow: 0 0 0 1px var(--accent-soft-border, #c7dbfd); color: var(--accent, #2f6fed); }
 .v2-hf-zone-pencil::before { content: ''; position: absolute; inset: 5px; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M12 20h9'/%3E%3Cpath d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E"); }
 #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled.v2-hf-zone-hover .v2-hf-zone-pencil, #editor-container.a4-preview .v2-hf-zone.v2-hf-zone-filled:hover .v2-hf-zone-pencil { display: block; }
 
@@ -535,7 +535,7 @@
    la page reste blanche dans les deux thèmes. */
 .v2-page-seam-cap { position: absolute; bottom: 0; height: 1px; background: #b8c0c9; pointer-events: none; }
 
-#v2-a4-toggle { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px; border: 1px solid var(--border, #d7dde3); border-radius: 4px; font-size: 12.5px; cursor: pointer; user-select: none; }
+#v2-a4-toggle { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px; border: 1px solid var(--border, #d7dde3); border-radius: var(--radius-xs, 4px); font-size: 12.5px; cursor: pointer; user-select: none; }
 #v2-a4-toggle:hover { background: var(--surface-sunken, #f2f4f7); }
 
 /* Numérotation des titres : compteurs CSS scopés à `.tiptap`. Seuls les titres de premier niveau du flux principal sont numérotés (sélecteur
@@ -622,27 +622,27 @@
 
 /* Popup d'édition du texte d'une note (js/editor.js:ensureFootnotePopupBox) : mêmes jetons que #v2-image-var-picker (`--surface`,
    `--border-strong`, `--font-ui`), jamais la teinte verte des chips, réservée au contenu des bulles et pas au chrome. */
-#v2-footnote-popup { position: absolute; z-index: var(--z-menu); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.10); padding: 8px; width: 240px; font-family: var(--font-ui); }
-#v2-footnote-popup textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 12.5px; color: var(--text); border: 1px solid var(--border-strong); border-radius: 5px; padding: 5px 6px; resize: vertical; }
+#v2-footnote-popup { position: absolute; z-index: var(--z-menu); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-md, 6px); box-shadow: 0 4px 14px rgba(0,0,0,.10); padding: 8px; width: 240px; font-family: var(--font-ui); }
+#v2-footnote-popup textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 12.5px; color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius-xs, 5px); padding: 5px 6px; resize: vertical; }
 #v2-footnote-popup textarea:focus-visible { outline: 2px solid var(--accent-soft-border); outline-offset: -1px; }
 #v2-footnote-popup .v2-footnote-popup-actions { display: flex; justify-content: space-between; gap: 6px; margin-top: 6px; }
 /* Mêmes boutons que `.link-rules-modal-content .modal-actions` : OK en primaire (accent plein), Supprimer en secondaire teinté danger
    (`--danger`), comme les autres actions destructives de l'application. */
-#v2-footnote-popup .v2-footnote-popup-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
+#v2-footnote-popup .v2-footnote-popup-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; border-radius: var(--radius-btn, var(--radius-sm)); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
 #v2-footnote-popup .v2-footnote-popup-actions button:hover { background: var(--surface-sunken); }
 /* `button.xxx` et non `.xxx` seul : sans l'élément, ces deux règles auraient la même spécificité que la règle générique au-dessus et perdraient
    contre elle (OK et Supprimer resteraient blancs et gris). */
 #v2-footnote-popup button.v2-footnote-popup-delete { color: var(--danger-ink); border-color: var(--danger-soft); }
 #v2-footnote-popup button.v2-footnote-popup-delete:hover { background: var(--danger-soft); }
-#v2-footnote-popup button.v2-footnote-popup-ok { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; }
-#v2-footnote-popup button.v2-footnote-popup-ok:hover { background: var(--accent-solid-hover); }
+#v2-footnote-popup button.v2-footnote-popup-ok { background: var(--fill, var(--accent-solid)) border-box; border-color: var(--fill-line, var(--accent-solid)); color: var(--on-accent); }
+#v2-footnote-popup button.v2-footnote-popup-ok:hover { background: var(--fill-hover, var(--accent-solid-hover)) border-box; }
 
 /* Carte de commentaire (js/comments.js) : même chrome et mêmes jetons que #v2-footnote-popup, en plus large (fil de discussion et réponse), sur le
    modèle de Google Docs : bandeau d'état en tête, messages empilés, réponse et actions en pied. Elle ne se ferme que par la ×, comme le popup de
    note : la fermeture au clic extérieur y a déjà causé des régressions. */
-#v2-comment-popup { position: absolute; z-index: var(--z-menu); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.10); padding: 10px; width: 280px; font-family: var(--font-ui); }
+#v2-comment-popup { position: absolute; z-index: var(--z-menu); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-md, 8px); box-shadow: 0 4px 14px rgba(0,0,0,.10); padding: 10px; width: 280px; font-family: var(--font-ui); }
 #v2-comment-popup .v2-comment-popup-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-#v2-comment-popup .v2-comment-popup-badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #8a6d00; background: #fff3cf; border-radius: 4px; padding: 2px 6px; }
+#v2-comment-popup .v2-comment-popup-badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #8a6d00; background: #fff3cf; border-radius: var(--radius-xs, 4px); padding: 2px 6px; }
 #v2-comment-popup .v2-comment-popup-badge.is-resolved { color: var(--text-muted); background: var(--surface-sunken); }
 #v2-comment-popup .v2-comment-popup-close { border: none; background: none; font-size: 18px; line-height: 1; color: var(--text-faint); cursor: pointer; padding: 0 2px; }
 #v2-comment-popup .v2-comment-popup-close:hover { color: var(--text); }
@@ -651,20 +651,20 @@
 #v2-comment-popup .v2-comment-popup-message:last-child { border-bottom: none; }
 #v2-comment-popup .v2-comment-popup-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 2px; }
 #v2-comment-popup .v2-comment-popup-text { font-size: 12.5px; color: var(--text); white-space: pre-wrap; word-break: break-word; }
-#v2-comment-popup .v2-comment-popup-reply { width: 100%; box-sizing: border-box; font: inherit; font-size: 12.5px; color: var(--text); border: 1px solid var(--border-strong); border-radius: 5px; padding: 5px 6px; resize: vertical; }
+#v2-comment-popup .v2-comment-popup-reply { width: 100%; box-sizing: border-box; font: inherit; font-size: 12.5px; color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius-xs, 5px); padding: 5px 6px; resize: vertical; }
 #v2-comment-popup .v2-comment-popup-reply:focus-visible { outline: 2px solid var(--accent-soft-border); outline-offset: -1px; }
 #v2-comment-popup .v2-comment-popup-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-top: 6px; }
-#v2-comment-popup .v2-comment-popup-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
+#v2-comment-popup .v2-comment-popup-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; border-radius: var(--radius-btn, var(--radius-sm)); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
 #v2-comment-popup .v2-comment-popup-actions button:hover { background: var(--surface-sunken); }
-#v2-comment-popup button.v2-comment-popup-post { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; margin-right: auto; }
-#v2-comment-popup button.v2-comment-popup-post:hover { background: var(--accent-solid-hover); }
+#v2-comment-popup button.v2-comment-popup-post { background: var(--fill, var(--accent-solid)) border-box; border-color: var(--fill-line, var(--accent-solid)); color: var(--on-accent); margin-right: auto; }
+#v2-comment-popup button.v2-comment-popup-post:hover { background: var(--fill-hover, var(--accent-solid-hover)) border-box; }
 #v2-comment-popup button.v2-comment-popup-delete { color: var(--danger-ink); border-color: var(--danger-soft); }
 #v2-comment-popup button.v2-comment-popup-delete:hover { background: var(--danger-soft); }
 
 /* Panneau `#` (js/variables.js:ensureBox), seule définition de #autocomplete-box : colonne flex (le JS bascule son display en `flex`) pour que
    `.ac-tabs` reste fixe pendant que `.ac-items` défile seul. Onglets Variables (par défaut) et Chips, en `--accent` pour l'onglet actif comme
    partout dans ce fichier, pas le vert des chips (réservé au contenu des bulles, pas à la navigation). */
-#autocomplete-box { position: absolute; z-index: var(--z-menu); min-width: 160px; max-width: 320px; display: flex; flex-direction: column; max-height: 280px; overflow: hidden; padding: 0; font-family: var(--font-ui); font-size: 12.5px; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: 0 4px 14px rgba(0,0,0,.10); border-radius: 6px; }
+#autocomplete-box { position: absolute; z-index: var(--z-menu); min-width: 160px; max-width: 320px; display: flex; flex-direction: column; max-height: 280px; overflow: hidden; padding: 0; font-family: var(--font-ui); font-size: 12.5px; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: 0 4px 14px rgba(0,0,0,.10); border-radius: var(--radius-md, 6px); }
 #autocomplete-box .ac-items { overflow: auto; }
 #autocomplete-box .ac-item { padding: 4px 8px; cursor: pointer; color: var(--text); }
 #autocomplete-box .ac-item:hover, #autocomplete-box .ac-item.selected { background: var(--surface-sunken); }
@@ -684,7 +684,7 @@
    (info-bulle au survol), présent sur chaque bouton, les identifie. */
 /* Pas de contour gris permanent (trop lourd) : le bouton reste nu au repos, un fond et une bordure discrète n'apparaissent qu'au survol (comme les
    boutons indenter et désindenter, ce traitement est ici le style par défaut). */
-#v2-toolbar button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 28px; border: 1px solid transparent; background: transparent; border-radius: 5px; padding: 0; cursor: pointer; color: var(--text, #3a4452); }
+#v2-toolbar button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 28px; border: 1px solid transparent; background: transparent; border-radius: var(--radius-xs, 5px); padding: 0; cursor: pointer; color: var(--text, #3a4452); }
 #v2-toolbar button svg { width: 16px; height: 16px; }
 #v2-toolbar button:hover { background: var(--surface-sunken, #f2f4f7); border-color: var(--border, #d7dde3); }
 /* État actif (par exemple le gras là où est le curseur), voir MainToolbar.syncToolbarState (js/main-toolbar.js). */
@@ -697,7 +697,7 @@
 #v2-toolbar button.v2-btn-variable { border-color: var(--accent-soft-border, #c7dbfd); color: var(--accent, #2f6fed); }
 #v2-toolbar button.v2-btn-variable:hover { background: var(--accent-soft, #e8f0fe); }
 #v2-toolbar button:disabled, #v2-toolbar button:disabled:hover { opacity: .35; cursor: default; background: transparent; border-color: transparent; }
-#v2-toolbar select { border: 1px solid transparent; border-radius: 4px; padding: 3px 6px; font-size: 12.5px; background: transparent; }
+#v2-toolbar select { border: 1px solid transparent; border-radius: var(--radius-xs, 4px); padding: 3px 6px; font-size: 12.5px; background: transparent; }
 #v2-toolbar select:hover, #v2-toolbar select:focus-visible { border-color: var(--border, #d7dde3); background: var(--surface, #fff); }
 #v2-toolbar .v2-sep { width: 1px; align-self: stretch; background: var(--border, #d7dde3); margin: 0 4px; }
 /* Groupe « bouton principal et variantes au survol » (alignement, puces, numérotation) : le bouton principal reste l'action rapide par défaut ; le
@@ -714,7 +714,7 @@
    positionFlyout le remonte au-dessus des menus déjà ouverts (Layers.raise, js/layers.js). */
 .v2-hover-flyout {
   position: absolute; top: 100%; left: 0; display: none; gap: 3px; padding: 4px;
-  background: var(--surface, #fff); border: 1px solid var(--border-strong, #c3cad6); border-radius: 6px;
+  background: var(--surface, #fff); border: 1px solid var(--border-strong, #c3cad6); border-radius: var(--radius-md, 6px);
   box-shadow: 0 6px 16px rgba(20, 28, 46, .16); z-index: var(--z-menu);
   opacity: 0; transform: translateY(-4px);
 }
@@ -751,7 +751,7 @@
 /* Rappel non cliquable de l'action du bouton principal, en tête du flyout : il remplace l'info-bulle `[data-tip]` du bouton, qui se superposerait
    au flyout au survol. Un seul panneau porte ainsi les deux informations, empilées et lisibles. */
 .v2-hover-flyout-label { display: block; padding: 6px 9px 3px; font-size: 11px; font-weight: 600; color: var(--text-faint, #98a2b3); white-space: nowrap; }
-.v2-hover-row { padding: 6px 9px; border-radius: 5px; font-size: 12.5px; color: var(--text, #3a4452); cursor: pointer; white-space: nowrap; }
+.v2-hover-row { padding: 6px 9px; border-radius: var(--radius-xs, 5px); font-size: 12.5px; color: var(--text, #3a4452); cursor: pointer; white-space: nowrap; }
 .v2-hover-row:hover { background: var(--surface-sunken, #f2f4f7); }
 .v2-hover-row.is-active { color: var(--accent, #2f6fed); font-weight: 700; }
 /* La ligne choisie sous la souris, dans tout menu au survol (Type d'export, qualité du PDF, titres) : le bleu d'accent ne fait que 4,02:1 (clair) et 4,43:1
@@ -766,7 +766,7 @@
 /* Lignes du menu « Lien, citation, bloc de code » (#v2-blocks-flyout) : de vrais boutons, atteignables au clavier (les `.v2-hover-row` sont des
    `<span>`), avec l'icône de la fonction devant et le raccourci à droite. Plus spécifique que `#v2-toolbar button` (30 × 28, centré), qui vise
    tout bouton de la barre. */
-#v2-toolbar .v2-hover-flyout .v2-menu-row { display: flex; align-items: center; justify-content: flex-start; gap: 8px; width: 100%; height: auto; min-height: 28px; padding: 5px 9px; border: 1px solid transparent; border-radius: 5px; background: transparent; font: inherit; font-size: 12.5px; text-align: left; white-space: nowrap; color: var(--text, #3a4452); }
+#v2-toolbar .v2-hover-flyout .v2-menu-row { display: flex; align-items: center; justify-content: flex-start; gap: 8px; width: 100%; height: auto; min-height: 28px; padding: 5px 9px; border: 1px solid transparent; border-radius: var(--radius-xs, 5px); background: transparent; font: inherit; font-size: 12.5px; text-align: left; white-space: nowrap; color: var(--text, #3a4452); }
 #v2-toolbar .v2-hover-flyout .v2-menu-row:hover, #v2-toolbar .v2-hover-flyout .v2-menu-row:focus-visible { background: var(--surface-sunken, #f2f4f7); border-color: transparent; }
 #v2-toolbar .v2-hover-flyout .v2-menu-row.is-active { background: transparent; border-color: transparent; color: var(--accent, #2f6fed); font-weight: 700; }
 /* Le menu « Lien et blocs de contenu » a huit lignes depuis « Signet… », neuf depuis « Diapositive d'une présentation… » : dans un panneau bas (700 x 400, celui de Grist), neuf lignes de 28 px
@@ -808,12 +808,12 @@
 .v2-page-scope-block[hidden] { display: none; }
 #v2-page-flyout .v2-page-scope-block .v2-segmented { display: flex; }
 #v2-page-flyout .v2-segmented-btn { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; color: var(--text); cursor: pointer; }
-#v2-page-flyout .v2-segmented-btn.active { color: #fff; }
+#v2-page-flyout .v2-segmented-btn.active { color: var(--on-accent); }
 #v2-page-flyout .v2-segmented-btn:focus-visible { outline: 2px solid var(--accent, #2f6fed); outline-offset: -2px; }
 #v2-page-flyout .v2-segmented-btn.is-disabled { color: var(--text-muted); cursor: not-allowed; }
 #v2-page-flyout .v2-segmented-btn.is-disabled:hover { background: transparent; }
 /* Le choix retenu quand le menu est grisé (un export en cours) garde son fond et son texte blanc : seul son opacité baisse. */
-#v2-page-flyout .v2-segmented-btn.active.is-disabled, #v2-page-flyout .v2-segmented-btn.active.is-disabled:hover { background: var(--accent-solid); color: #fff; opacity: .55; }
+#v2-page-flyout .v2-segmented-btn.active.is-disabled, #v2-page-flyout .v2-segmented-btn.active.is-disabled:hover { background: var(--fill, var(--accent-solid)) border-box; color: var(--on-accent); opacity: .55; }
 /* Le menu Page d'une présentation (rapports de la diapositive, sens, formats, « Format libre… », « Thème… », « Filigrane… ») : neuf lignes sous deux blocs, 401 px de haut à 27 px par ligne et 3 px d'écart, sous le bas d'un panneau
    de 700 x 400 (celui de Grist), et plus encore avec une police du système aux lignes hautes. Dans un panneau bas il se resserre comme le menu « Type d'export » plus bas : lignes de 24 px (la taille minimale d'une cible,
    WCAG 2.5.8) dont la hauteur de texte est fixée, pour que la police du système ne la fasse pas varier d'un ordinateur à l'autre, et 2 px d'écart ; il finit vers 360 px et garde toutes ses lignes, sans défilement. Le menu
@@ -851,10 +851,10 @@
 /* Couleur de police et surlignage : deux boutons indépendants. Le premier (l'icône) applique directement la dernière couleur choisie, le second
    (le chevron) ouvre le menu de nuances (`.v2-color-dropdown`), comme dans Word ou Google Docs. C'est l'icône elle-même qui se teinte
    (setColorIcon). */
-.v2-color-split { display: inline-flex; align-items: stretch; height: 28px; border-radius: 5px; overflow: hidden; }
+.v2-color-split { display: inline-flex; align-items: stretch; height: 28px; border-radius: var(--radius-xs, 5px); overflow: hidden; }
 #v2-toolbar .v2-color-split button { width: auto; height: 28px; padding: 0 6px; border: 1px solid transparent; border-radius: 0; background: transparent; }
-#v2-toolbar .v2-color-split button:first-child { border-radius: 5px 0 0 5px; }
-#v2-toolbar .v2-color-split button:last-child { border-radius: 0 5px 5px 0; }
+#v2-toolbar .v2-color-split button:first-child { border-radius: var(--radius-xs, 5px) 0 0 var(--radius-xs, 5px); }
+#v2-toolbar .v2-color-split button:last-child { border-radius: 0 var(--radius-xs, 5px) var(--radius-xs, 5px) 0; }
 .v2-color-split-icon { font-size: 13px; font-weight: 700; line-height: 1; display: inline-flex; }
 .v2-color-split-icon svg { width: 14px; height: 14px; }
 .v2-color-split-caret { display: inline-flex; color: #8a94a3; }
@@ -863,10 +863,10 @@
 
 /* Fond de cellule (barre flottante de tableau) : un bouton unique, sans « dernière couleur » à appliquer d'un clic. Classe dédiée pour ne pas
    hériter du split ci-dessus, avec sa pastille de couleur courante. */
-.v2-fill-chip { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 6px; border: 1px solid transparent; border-radius: 4px; background: transparent; cursor: pointer; color: var(--text, #3a4452); }
+.v2-fill-chip { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 6px; border: 1px solid transparent; border-radius: var(--radius-xs, 4px); background: transparent; cursor: pointer; color: var(--text, #3a4452); }
 .v2-fill-chip:hover { background: var(--surface-sunken, #f2f4f7); border-color: var(--border, #d7dde3); }
 .v2-fill-chip svg { width: 14px; height: 14px; }
-.v2-fill-bar { width: 14px; height: 3px; border-radius: 1px; background: #000; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08); }
+.v2-fill-bar { width: 14px; height: 3px; border-radius: var(--radius-xs, 1px); background: #000; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08); }
 
 /* Police et taille compactes : une pastille icône et valeur et un stepper -/valeur/+ remplacent les `<select>` natifs (la police imposait sa
    largeur de texte, « Times New Roman » par exemple, à toute la barre) et ouvrent `.v2-format-panel` au clic (même mécanisme flottant que le menu
@@ -874,12 +874,12 @@
 /* `width: auto` et `flex-shrink: 0` : `#v2-toolbar button` pose `width: 30px` et un chip ne redéfinissait pas `width` (la cascade s'applique par
    propriété, la spécificité ne sert à rien pour une propriété non redéclarée). Le chip et sa valeur seraient écrasés à quelques pixels dès que la
    barre manque de place ; `flex-shrink: 0` seul ne suffit pas depuis une base de 30 px déjà trop étroite. */
-.v2-format-chip, #v2-toolbar button.v2-format-chip { display: inline-flex; align-items: center; gap: 4px; width: auto; height: 28px; padding: 0 7px 0 6px; border: 1px solid transparent; border-radius: 5px; background: transparent; cursor: pointer; color: var(--text, #3a4452); font-family: inherit; flex-shrink: 0; }
+.v2-format-chip, #v2-toolbar button.v2-format-chip { display: inline-flex; align-items: center; gap: 4px; width: auto; height: 28px; padding: 0 7px 0 6px; border: 1px solid transparent; border-radius: var(--radius-xs, 5px); background: transparent; cursor: pointer; color: var(--text, #3a4452); font-family: inherit; flex-shrink: 0; }
 .v2-format-chip:hover { background: var(--surface-sunken, #f2f4f7); border-color: var(--border, #d7dde3); }
 .v2-format-chip-val { font-size: 12px; font-weight: 700; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v2-format-chip-caret { display: inline-flex; color: #8a94a3; }
 .v2-format-chip-caret svg { width: 10px; height: 10px; }
-.v2-stepper { display: inline-flex; align-items: stretch; height: 28px; border: 1px solid transparent; border-radius: 5px; overflow: hidden; }
+.v2-stepper { display: inline-flex; align-items: stretch; height: 28px; border: 1px solid transparent; border-radius: var(--radius-xs, 5px); overflow: hidden; }
 .v2-stepper:hover { border-color: var(--border, #d7dde3); }
 .v2-stepper button { border: none; border-radius: 0; background: transparent; cursor: pointer; color: var(--text, #3a4452); padding: 0; }
 .v2-stepper button:hover { background: var(--surface-sunken, #f2f4f7); }
@@ -887,27 +887,27 @@
 .v2-stepper-val { width: 46px; font-size: 11.5px; font-weight: 700; }
 /* `font-family` explicite : rattaché à document.body, le panneau sort de la cascade de la barre d'outils (--font-ui) et ses boutons (`font-family: inherit`)
    retomberaient sur l'Arial de body. */
-.v2-format-panel { display: none; position: absolute; top: 0; left: 0; z-index: var(--z-menu); background: var(--surface, #fff); border: 1px solid var(--border, #d7dde3); border-radius: 8px; box-shadow: 0 4px 16px rgba(20, 28, 46, .18); padding: 5px; min-width: 168px; max-height: 260px; overflow-y: auto; font-family: var(--font-ui); }
+.v2-format-panel { display: none; position: absolute; top: 0; left: 0; z-index: var(--z-menu); background: var(--surface, #fff); border: 1px solid var(--border, #d7dde3); border-radius: var(--radius-md, 8px); box-shadow: 0 4px 16px rgba(20, 28, 46, .18); padding: 5px; min-width: 168px; max-height: 260px; overflow-y: auto; font-family: var(--font-ui); }
 .v2-format-panel.visible { display: block; }
 /* `line-height: 14px` : la hauteur de ligne que l'Arial donnait (`normal`, à 12,5 px). Avec `normal`, chaque police du système donne la sienne et le menu grandit
    d'un ou deux pixels par ligne. */
-.v2-format-panel button { display: block; width: 100%; text-align: left; padding: 6px 9px; border: none; border-radius: 5px; background: none; cursor: pointer; font-size: 12.5px; line-height: 14px; color: var(--text, #3a4452); font-family: inherit; }
+.v2-format-panel button { display: block; width: 100%; text-align: left; padding: 6px 9px; border: none; border-radius: var(--radius-xs, 5px); background: none; cursor: pointer; font-size: 12.5px; line-height: 14px; color: var(--text, #3a4452); font-family: inherit; }
 .v2-format-panel button:hover { background: var(--surface-sunken, #f2f4f7); }
 .v2-format-panel button.is-active { color: var(--accent, #2f6fed); font-weight: 700; }
 .v2-format-panel button.is-active:hover { color: var(--accent-ink, #2558c4); }
 
 /* Menu déroulant de couleur (bouton couleur ci-dessus) : le panneau seulement. Sa palette, ses rangées de couleurs gardées, son pied et la fenêtre
    « Couleur personnalisée » sont à css/color-palette.css (js/color-palette.js). */
-.v2-color-dropdown { display: none; position: absolute; top: 0; left: 0; z-index: var(--z-menu); background: var(--surface, #fff); border: 1px solid var(--border, #d7dde3); border-radius: 8px; box-shadow: 0 4px 16px rgba(20, 28, 46, .18); padding: 5px 8px; }
+.v2-color-dropdown { display: none; position: absolute; top: 0; left: 0; z-index: var(--z-menu); background: var(--surface, #fff); border: 1px solid var(--border, #d7dde3); border-radius: var(--radius-md, 8px); box-shadow: 0 4px 16px rgba(20, 28, 46, .18); padding: 5px 8px; }
 .v2-color-dropdown.visible { display: block; }
 
 /* Barre contextuelle flottante (tableau, image...), positionnée par @floating-ui/dom et ancrée dans `document.body` plutôt que dans
    #editor-container pour éviter tout souci de contexte d'empilement avec un ancêtre. Niveau `--z-floating-toolbar` (css/style.css) : sous tous les
    menus, listes et popups (`--z-menu`), qui s'ouvrent donc par-dessus, et sous les fenêtres. Layers.raise ne les range pas entre elles : celle
    d'une bulle ou d'une image, créée après celle du tableau, reste dessus quand un seul clic ouvre les deux (js/layers.js). */
-.v2-floating-toolbar { display: none; position: absolute; top: 0; left: 0; z-index: var(--z-floating-toolbar); gap: 2px; padding: 3px; background: var(--surface, #fff); border: 1px solid var(--border, #d7dde3); border-radius: 6px; box-shadow: 0 4px 16px rgba(20, 28, 46, .18); }
+.v2-floating-toolbar { display: none; position: absolute; top: 0; left: 0; z-index: var(--z-floating-toolbar); gap: 2px; padding: 3px; background: var(--surface, #fff); border: 1px solid var(--border, #d7dde3); border-radius: var(--radius-md, 6px); box-shadow: 0 4px 16px rgba(20, 28, 46, .18); }
 .v2-floating-toolbar.visible { display: flex; }
-.v2-floating-toolbar button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; border: none; background: transparent; border-radius: 4px; padding: 0; cursor: pointer; color: var(--text, #3a4452); }
+.v2-floating-toolbar button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; border: none; background: transparent; border-radius: var(--radius-xs, 4px); padding: 0; cursor: pointer; color: var(--text, #3a4452); }
 .v2-floating-toolbar button svg { width: 15px; height: 15px; }
 .v2-floating-toolbar button:hover { background: var(--surface-sunken, #f2f4f7); }
 /* État actif (par exemple le calque courant du sélecteur normal, devant, derrière) : même traitement que la barre principale, pour voir lequel des

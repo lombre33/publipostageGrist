@@ -7,7 +7,7 @@
 .pp-first-contact-body li { margin: 0 0 6px; }
 .pp-first-contact-body a { color: var(--accent-ink); }
 .pp-first-contact-body code, .pp-first-contact-details pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace; font-size: 12px; }
-.pp-first-contact-body code { padding: 1px 5px; border-radius: 4px; background: var(--surface-sunken); overflow-wrap: anywhere; }
+.pp-first-contact-body code { padding: 1px 5px; border-radius: var(--radius-xs, 4px); background: var(--surface-sunken); overflow-wrap: anywhere; }
 /* L'adresse à coller dans Grist, d'un clic (user-select: all) ou par « Copier » ; elle passe à la ligne plutôt que de sortir de la fenêtre. */
 .pp-first-contact-address { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 .pp-first-contact-address code { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); user-select: all; }

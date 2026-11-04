@@ -19,7 +19,7 @@
 .pp-link-text-field { margin-top: 14px; }
 /* Info-bulle d'un lien de l'éditeur : l'adresse, et comment l'ouvrir. Même teinte que les infobulles de la barre (var(--text) en fond), texte en
    var(--surface) pour rester lisible dans les deux thèmes. Au-dessus des fenêtres (2100). */
-.pp-link-tip { position: fixed; z-index: 2200; display: flex; flex-direction: column; gap: 2px; max-width: 320px; box-sizing: border-box; padding: 5px 9px; border-radius: 6px; background: var(--text); color: var(--surface); font-family: var(--font-ui); font-size: 11.5px; line-height: 1.4; pointer-events: none; box-shadow: 0 4px 10px rgba(15, 23, 42, .25); }
+.pp-link-tip { position: fixed; z-index: 2200; display: flex; flex-direction: column; gap: 2px; max-width: 320px; box-sizing: border-box; padding: 5px 9px; border-radius: var(--radius-md, 6px); background: var(--text); color: var(--surface); font-family: var(--font-ui); font-size: 11.5px; line-height: 1.4; pointer-events: none; box-shadow: 0 4px 10px rgba(15, 23, 42, .25); }
 .pp-link-tip[hidden] { display: none; }
 .pp-link-tip-url { font-weight: 600; overflow-wrap: anywhere; }
 .pp-link-tip-hint { opacity: .85; }

@@ -1,0 +1,24 @@
+/* L'ambiance de GFS sur ce que l'app montre à la personne (consigne GFS 041, guide des apps règle 15). js/gfs-ambiance.js pose sur <html> les jetons de l'ambiance choisie dans GFS (les dix-neuf couleurs du mode affiché
+   et les jetons de forme), puis `data-gfs-ambiance="<id>"` et, quand l'ambiance porte des jetons de forme, `data-gfs-forme`. Les autres feuilles lisent déjà ces jetons, chacun avec sa valeur d'origine en repli :
+   les couleurs par la charte (`var(--surface)`, `var(--on-accent)`), les arrondis par `var(--radius-md, 8px)`, le bouton plein par `var(--fill, var(--accent-solid))`. Ne reste ici que ce qu'un repli ne peut pas dire :
+   ce que l'app définit elle-même (`--shadow-float`, `--pp-page-gutter`) ou ajoute (le filet des fenêtres, le décor du plan de travail, la police des titres).
+   Tout est sous `:root[data-gfs-ambiance]` ou `:root[data-gfs-forme]` : hors GFS, ou dans GFS avec « Grist Factory » sans couleur, cette feuille ne change rien. Le contenu que l'app produit (la page de l'éditeur, le PDF, l'e-mail,
+   les exports) n'est jamais ici ; dev-tests/ambiance-exceptions.json dit pourquoi chaque couleur écrite en dur dans les feuilles y reste.
+   Jamais lus : `--main-bg`, `--ex-bg`, `--main-overflow`, `--gap`, `--divider`, `--divider-w` (la mise en page de GFS), ni `--bw`, `--bar-w`, `--avatar-*` (la barre d'outils et les menus tiennent à 700x400 avec leurs traits d'origine). */
+
+/* Le plan de travail autour des pages (l'aperçu paginé, la Lecture) prend le fond de page de l'ambiance. */
+:root[data-gfs-ambiance] { --pp-page-gutter: var(--bg); }
+
+/* Le décor de l'ambiance (`--wash`) se pose en image du fond de page et du plan de travail, avec sa taille (`--wash-size`). */
+:root[data-gfs-forme] body,
+:root[data-gfs-forme] :is(#editor-container, #reader-container).a4-preview { background-image: var(--wash, none); background-size: var(--wash-size, auto); }
+
+/* Les surfaces flottantes (fenêtres, menus, popups, info-bulles) prennent l'ombre flottante de l'ambiance. Celles qui lisent déjà `var(--shadow-float)` la suivent seules. */
+:root[data-gfs-forme] :is(.modal-content, .v2-hf-pill, #v2-image-var-picker, .two-columns-mm-popover, .v2-hf-overflow, #v2-footnote-popup, #v2-comment-popup, #autocomplete-box, .v2-hover-flyout,
+  .v2-format-panel, .v2-color-dropdown, .v2-floating-toolbar, .pp-link-tip, #expansion-box, #mention-box, .pp-news-exp-menu, .pp-show-menu, .pp-slide-menu, .pp-slide-layouts),
+:root[data-gfs-forme] .bar-row [data-tip]::after,
+:root[data-gfs-forme] #v2-toolbar [data-tip]::after { box-shadow: var(--shadow-float); }
+
+/* Une fenêtre : le filet de l'ambiance en haut du cadre (`--stripe`, `--stripe-h` ; 0 de haut quand l'ambiance n'en a pas), puis la police de ses titres. */
+:root[data-gfs-forme] .pp-modal-box::before { content: ''; display: block; flex: none; height: var(--stripe-h, 0px); background: var(--stripe, none); border-radius: var(--radius-lg, 8px) var(--radius-lg, 8px) 0 0; }
+:root[data-gfs-forme] .pp-modal-header h3 { font-family: var(--font-head, var(--font-ui)); font-weight: var(--fw-head, 700); letter-spacing: var(--ls-head, normal); text-transform: var(--tt-head, none); }

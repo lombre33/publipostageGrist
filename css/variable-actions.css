@@ -113,10 +113,10 @@
 .var-modal-intro { font-size: 12px; line-height: 1.5; color: var(--text-muted); margin: 0 0 12px; overflow-wrap: anywhere; }
 .var-modal-intro .var-badge { border-style: dashed; border-color: #5b7fc0; font-size: 11.5px; }
 .var-modal-actions .var-modal-spacer { flex: 1; }
-.var-modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
+.var-modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-btn, var(--radius-sm)); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
 .var-modal-actions button:hover { background: var(--surface-sunken); }
-.var-modal-actions button.var-modal-primary { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; }
-.var-modal-actions button.var-modal-primary:hover { background: var(--accent-solid-hover); }
+.var-modal-actions button.var-modal-primary { background: var(--fill, var(--accent-solid)) border-box; border-color: var(--fill-line, var(--accent-solid)); color: var(--on-accent); }
+.var-modal-actions button.var-modal-primary:hover { background: var(--fill-hover, var(--accent-solid-hover)) border-box; }
 .var-modal-actions button:disabled { opacity: .45; cursor: default; }
 .var-modal-actions button:disabled:not(.var-modal-primary):hover { background: var(--surface); }
 /* Autres attributs : Annuler, Remplacer et « Insérer N attributs » ne tiennent pas côte à côte dans un panneau étroit (sous ~400 px) : « Insérer »
@@ -138,8 +138,8 @@
 .var-modal-actions-end { margin-left: auto; }
 .var-condition-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 12px; font-weight: 600; color: var(--text); }
 .var-condition-mode[hidden] { display: none; }
-.var-condition-mode select, .cond-group-head select { height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; padding: 0 4px; background: var(--surface); color: var(--text); font-family: var(--font-ui); }
-.var-condition-rules { display: flex; flex-direction: column; gap: 4px; padding: 10px; background: var(--surface-sunken); border: 1px solid var(--border); border-radius: 8px; }
+.var-condition-mode select, .cond-group-head select { height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-size: 12px; padding: 0 4px; background: var(--surface); color: var(--text); font-family: var(--font-ui); }
+.var-condition-rules { display: flex; flex-direction: column; gap: 4px; padding: 10px; background: var(--surface-sunken); border: 1px solid var(--border); border-radius: var(--radius-md, 8px); }
 .var-condition-rules .macro-rule-column-type { padding-left: 39px; box-sizing: border-box; }
 .var-condition-link-hint { flex: 1 0 100%; padding-left: 39px; box-sizing: border-box; font-size: 10.5px; font-weight: 600; color: var(--text-muted); white-space: normal; }
 .var-condition-link-hint[hidden] { display: none; }
@@ -152,7 +152,7 @@
 .var-condition-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
 .var-condition-foot .var-condition-add { align-self: center; margin-top: 0; }
 .var-condition-clip { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
-.var-condition-clip-btn { min-width: 62px; height: 26px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); font-family: var(--font-ui); font-size: 12px; font-weight: 700; color: var(--text-muted); cursor: pointer; }
+.var-condition-clip-btn { min-width: 62px; height: 26px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-btn, var(--radius-sm)); background: var(--surface); font-family: var(--font-ui); font-size: 12px; font-weight: 700; color: var(--text-muted); cursor: pointer; }
 .var-condition-clip-btn:hover { color: var(--accent); border-color: var(--accent); }
 .var-condition-clip-btn.is-disabled { opacity: .45; cursor: default; }
 .var-condition-clip-btn.is-disabled:hover { color: var(--text-muted); border-color: var(--border-strong); }
@@ -164,7 +164,7 @@
    la classe `.macro-rule-row` : elle ne désigne que des lignes de règle. */
 .cond-group-row { display: flex; align-items: flex-start; gap: 5px; padding: 3px 0; }
 .cond-group-row > .macro-rule-connector { margin-top: 7px; line-height: 26px; }
-.cond-group { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 6px 8px 8px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; }
+.cond-group { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 6px 8px 8px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-md, 8px); }
 .cond-group-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-bottom: 2px; font-size: 12px; font-weight: 600; color: var(--text); }
 .cond-group-head .macro-rule-remove { margin-left: auto; }
 .cond-group .var-condition-add { align-self: flex-start; margin-top: 2px; }
@@ -181,7 +181,7 @@
    des champs garde ses espaces. */
 .var-condition-affix { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 6px 8px; margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--text); }
 .var-condition-affix[hidden] { display: none; }
-.var-condition-affix input { width: 120px; height: 26px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.var-condition-affix input { width: 120px; height: 26px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .var-condition-affix .var-loop-hint { grid-column: 2; }
 /* « Sinon afficher » (js/variable-otherwise.js) : une seconde grille de même classe, sous l'aperçu - un champ à variables (js/field-editor.js, celui de l'objet d'un e-mail) à la
    place des champs « Avant » / « Après » ; 288 px au plus, moins quand la fenêtre est étroite : son conteneur peut alors rétrécir sous la largeur du champ. Mêmes bordure, police et fond
@@ -192,7 +192,7 @@
 .var-condition-otherwise-text-row .var-condition-otherwise-field, .var-condition-otherwise-area-row .var-condition-otherwise-field { min-width: 0; }
 .var-condition-affix .var-condition-otherwise-text-input, .var-condition-affix .var-condition-otherwise-area-input {
   box-sizing: border-box; width: 288px; max-width: 100%; min-width: 0; min-height: 26px; padding: 0 6px; scroll-margin: 6px;
-  border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12px; font-weight: 400;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12px; font-weight: 400;
 }
 .var-condition-affix .var-condition-otherwise-text-input .pp-field-text, .var-condition-affix .var-condition-otherwise-area-input .pp-field-text { line-height: 24px; }
 .var-condition-affix .var-condition-otherwise-text-input:focus-within, .var-condition-affix .var-condition-otherwise-area-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
@@ -210,14 +210,14 @@
   .var-condition-affix .var-loop-hint { grid-column: 2 / -1; }
 }
 .var-condition-debug { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
-.var-condition-debug-line { display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px; border-radius: 6px; font-size: 12px; line-height: 1.45; background: var(--surface-sunken); border: 1px solid var(--border); color: var(--text-muted); overflow-wrap: anywhere; }
+.var-condition-debug-line { display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px; border-radius: var(--radius-md, 6px); font-size: 12px; line-height: 1.45; background: var(--surface-sunken); border: 1px solid var(--border); color: var(--text-muted); overflow-wrap: anywhere; }
 .var-condition-debug-line[hidden] { display: none; }
 .var-condition-debug-line.is-good { background: var(--good-soft, #e5f6ee); border-color: var(--good-soft-border, #bfe6d3); color: var(--good, #146c48); }
 .var-condition-debug-line strong { color: var(--text); }
 .var-condition-debug-line.is-good strong { color: inherit; }
 
 .var-linked-filter { display: block; width: 100%; height: 28px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12px; padding: 0 8px; margin-bottom: 8px; background: var(--surface); color: var(--text); }
-.var-linked-list { display: flex; flex-direction: column; max-height: min(220px, 38vh); overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+.var-linked-list { display: flex; flex-direction: column; max-height: min(220px, 38vh); overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md, 8px); }
 /* Autres attributs, une ligne : la case (nom et valeur) qui coche la colonne, puis, pour une colonne Référence, la flèche qui ouvre les colonnes
    de la table désignée. La ligne grisée (la variable elle-même) ne grise que la case : sa flèche reste utilisable. */
 .var-linked-row { display: flex; align-items: stretch; font-size: 12.5px; border-top: 1px solid var(--border); color: var(--text); }
@@ -234,7 +234,7 @@
 /* Fil d'Ariane des niveaux (« Projet › Accompagnateur ») : les niveaux du dessus sont des boutons qui y reviennent, le niveau affiché est en gras. */
 .var-linked-path { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 2px; margin: 0 0 8px; font-size: 12px; color: var(--text-muted); }
 .var-linked-path[hidden] { display: none; }
-.var-linked-crumb { padding: 2px 6px; border: 0; border-radius: 5px; background: none; font: inherit; color: var(--text-muted); overflow-wrap: anywhere; }
+.var-linked-crumb { padding: 2px 6px; border: 0; border-radius: var(--radius-xs, 5px); background: none; font: inherit; color: var(--text-muted); overflow-wrap: anywhere; }
 button.var-linked-crumb { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 button.var-linked-crumb:hover { background: var(--surface-sunken); color: var(--text); }
 button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -258,7 +258,7 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
    condition ici). */
 .var-loop-modal-content .var-modal-intro .var-badge { border-style: solid; border-color: #b7cdf2; }
 .var-loop-label { display: block; margin: 12px 0 5px; font-size: 11px; font-weight: 700; color: var(--text-muted); }
-.var-loop-source { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 10px; background: var(--surface-sunken); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.var-loop-source { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 10px; background: var(--surface-sunken); border: 1px solid var(--border); border-radius: var(--radius-md, 8px); font-size: 12px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
 .var-loop-link { padding: 0; border: none; background: transparent; font-family: var(--font-ui); font-size: 12px; font-weight: 700; color: var(--accent-ink); text-decoration: underline; cursor: pointer; }
 .var-loop-link[hidden] { display: none; }
 .var-loop-by { display: flex; flex: 1 1 180px; min-width: 140px; max-width: 320px; }
@@ -267,9 +267,9 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
 .var-loop-scope { display: flex; flex: 1 1 auto; max-width: 100%; }
 .var-loop-scope[hidden] { display: none; }
 /* Sa largeur de départ est celle de son choix le plus long : il passe à la ligne plutôt que de couper son texte. */
-.var-loop-scope select { flex: 1 1 auto; min-width: 0; max-width: 100%; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.var-loop-scope select { flex: 1 1 auto; min-width: 0; max-width: 100%; height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 /* Les deux choix à bascule de la fenêtre : « Répéter » (.var-loop-seg) et la source des lignes (.var-loop-source-seg), le même aspect. */
-.var-loop-seg, .var-loop-source-seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.var-loop-seg, .var-loop-source-seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius-md, 7px); overflow: hidden; }
 .var-loop-seg[hidden], .var-loop-source-seg[hidden] { display: none; }
 .var-loop-source-seg { margin-bottom: 6px; }
 .var-loop-seg button, .var-loop-source-seg button { height: 28px; padding: 0 11px; border: none; background: var(--surface); font-family: var(--font-ui); font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer; white-space: nowrap; }
@@ -281,12 +281,12 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
 .var-loop-seg button[aria-disabled="true"] { opacity: .45; cursor: default; }
 .var-loop-seg button[aria-disabled="true"]:hover { background: var(--surface); }
 /* Sous « Ce qui se répète » : « La variable, dans sa cellule » laisse les autres variables de la ligne en place (même aspect que les lignes d'aperçu). */
-.var-loop-row-note { margin-top: 8px; padding: 7px 10px; border-radius: 6px; font-size: 12px; line-height: 1.45; background: var(--surface-sunken); border: 1px solid var(--border); color: var(--text-muted); overflow-wrap: anywhere; }
+.var-loop-row-note { margin-top: 8px; padding: 7px 10px; border-radius: var(--radius-md, 6px); font-size: 12px; line-height: 1.45; background: var(--surface-sunken); border: 1px solid var(--border); color: var(--text-muted); overflow-wrap: anywhere; }
 .var-loop-row-note[hidden] { display: none; }
 .var-loop-seps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--text); }
 .var-loop-seps[hidden] { display: none; }
 .var-loop-seps label + input { margin-right: 6px; }
-.var-loop-seps input { height: 26px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.var-loop-seps input { height: 26px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .var-loop-seps .var-loop-sep-input { width: 44px; }
 .var-loop-seps .var-loop-last-input { width: 52px; }
 .var-loop-hint { font-size: 11.5px; font-weight: 500; color: var(--text-muted); }
@@ -294,7 +294,7 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
 .var-loop-filter-empty .var-condition-add { margin-top: 0; }
 .var-loop-two { display: grid; grid-template-columns: minmax(0, 1fr) max-content; gap: 12px; }
 .var-loop-sort-row { display: flex; gap: 6px; }
-.var-loop-two select { height: 26px; min-width: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.var-loop-two select { height: 26px; min-width: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .var-loop-sort-row select:first-child { flex: 1; }
 .var-loop-two .var-loop-empty-select { width: 100%; }
 .var-loop-empty-text { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--text); }
@@ -303,7 +303,7 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
    de cette fenêtre) ; `scroll-margin` : un champ ramené dans la fenêtre garde un peu d'air sous lui. */
 .var-loop-empty-text .var-loop-empty-field {
   flex: 1; box-sizing: border-box; min-width: 0; min-height: 26px; padding: 0 6px; scroll-margin: 6px;
-  border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12px; font-weight: 400;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12px; font-weight: 400;
 }
 .var-loop-empty-text .var-loop-empty-field .pp-field-text { line-height: 24px; }
 .var-loop-empty-text .var-loop-empty-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }

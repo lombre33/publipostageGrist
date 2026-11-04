@@ -67,6 +67,10 @@
 //  30. le site de GitHub Pages qui perd un des deux fichiers de sa racine : `.nojekyll` (sans lui, Pages passe d'abord les .md dans Jekyll, et une accolade double ouverte dans un seul d'entre eux fait
 //      échouer la publication en silence : le site reste sur la version d'avant ; consigne 037 de GFS) ou `index.html` ; et l'envoi sur le dépôt public qui le laisserait derrière : `.nojekyll` retiré de PUBLIES
 //      ou rangé dans EXCLUS (publier.sh), absent de la liste des fichiers requis de controles.mjs, ou un arbre à publier sans lui que controles.mjs laisserait passer (« Les deux » d'Antoine du 03/11).
+//  31. l'ambiance de GFS (consigne GFS 041, guide des apps règle 15) : le kit de GFS est un sous-module épinglé que la carte d'importation de index.html ne nomme que par ses deux modules de lecture et de pose, à son empreinte, et que
+//      rien d'autre n'importe (jamais son lien, jamais son `ambiance.js` : deux liens dans un cadre se prennent les réponses) ; css/gfs-ambiance.css n'agit que sous `data-gfs-ambiance` ou `data-gfs-forme` ; un jeton de forme se lit
+//      avec sa valeur d'origine en repli, jamais ceux de la mise en page de GFS (`--main-bg`, `--gap`...) ; l'impression les remet à leur repli ; et aucune couleur n'est écrite en dur dans les feuilles hors de la liste justifiée
+//      dev-tests/ambiance-exceptions.json (le papier, l'état, le type, les repères de capture : ce que l'ambiance ne doit pas changer).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -1606,6 +1610,130 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     problems.join(' ; ') || scriptOrder.join(', '));
   check('diaporama à part : le registre nomme present.html et slide-present.js (`standalone`), que le widget ne charge jamais, et slide-window.js (`scripts`), qui envoie vers la fenêtre ; slide-present.js n\'est nommé ni par `scripts` ni par index.html',
     !!own && JSON.stringify(own.standalone) === '["present.html","slide-present.js"]' && own.scripts.includes('slide-window.js') && own.scripts.includes('slide-player.js') && !own.scripts.includes('slide-present.js') && !/slide-present|present\.html/.test(index), own ? JSON.stringify(own.standalone) : 'registre illisible');
+}
+
+// ============================================================================
+// 31. L'ambiance de GFS : le kit épinglé, des feuilles qui lisent les jetons, aucune couleur en dur hors de la liste justifiée (consigne GFS 041)
+// ============================================================================
+// Dans GFS, la personne choisit une ambiance (Grist Factory, Pop, Papier, Brut, Néon, ou sa couleur) : js/gfs-ambiance.js pose ses jetons sur <html> et les feuilles les lisent. Rien de tout cela ne casse un test
+// fonctionnel quand il se défait : une couleur écrite en dur ne suit simplement pas l'ambiance, un jeton lu sans repli casse la page hors de GFS, un second lien de GFS dans le cadre prend les réponses du premier. Ce
+// contrôle garde les cinq règles : (1) le kit est un sous-module (.gitmodules + gitlink) dont la carte d'importation de index.html ne nomme que `kit/ambiance-message` et `kit/ambiance-pose`, à l'empreinte du gitlink ;
+// (2) rien n'importe un autre module du kit ; (3) css/gfs-ambiance.css n'a aucune règle hors `:root[data-gfs-ambiance]` ou `:root[data-gfs-forme]` (sans ambiance, elle ne change rien) ; (4) un jeton de forme se lit avec
+// sa valeur d'origine en repli, ceux de la mise en page de GFS ne se lisent jamais, et `.pp-print-host` (l'impression : ce que l'app produit) remet à leur repli tous ceux que les feuilles lisent ; (5) aucune couleur
+// (#rrggbb, rgb(), hsl(), nom) n'est écrite en dur dans css/ ni extensions/ - hors définition de jeton et hors repli de `var(--x, #fff)` - sans règle de dev-tests/ambiance-exceptions.json qui dit pourquoi, et
+// aucune règle de cette liste ne reste sans effet.
+{
+  const stripComments = css => css.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '));
+  // Les déclarations d'une feuille : { sel, line, prop, val }. `sel` est le dernier sélecteur qui n'est pas une règle @ ; `line` la ligne où la déclaration commence.
+  const declarations = (css) => {
+    const items = []; const stack = []; let buf = ''; let line = 1; let bufLine = 1;
+    const flush = () => {
+      const text = buf.trim(); buf = '';
+      const at = text.indexOf(':');
+      if (!text || !stack.length || at <= 0) return;
+      const sels = stack.filter(entry => !entry.startsWith('@'));
+      items.push({ sel: sels.length ? sels[sels.length - 1] : '', line: bufLine, prop: text.slice(0, at).trim(), val: text.slice(at + 1).trim() });
+    };
+    for (const c of css) {
+      if (c === '\n') line++;
+      if (c === '{') { stack.push(buf.split(/\s+/).filter(Boolean).join(' ')); buf = ''; bufLine = line; continue; }
+      if (c === '}') { flush(); stack.pop(); bufLine = line; continue; }
+      if (c === ';') { flush(); bufLine = line; continue; }
+      if (!buf.trim()) bufLine = line;
+      buf += c;
+    }
+    return items;
+  };
+  const sheets = [...listFiles('css', /\.css$/), ...listFiles('extensions', /\.css$/)];
+  const sheetText = new Map(sheets.map(rel => [rel, stripComments(read(rel))]));
+  const index = read('index.html');
+
+  // (1) le kit : un sous-module épinglé, deux entrées de la carte d'importation à son empreinte
+  const listed = spawnSync('git', ['ls-files', '-s', 'kit'], { cwd: ROOT, encoding: 'utf8' });
+  const pin = ((/^160000 ([0-9a-f]{40}) 0\tkit$/m.exec(listed.stdout || '')) || [])[1] || '';
+  const modules = existsSync(join(ROOT, '.gitmodules')) ? read('.gitmodules') : '';
+  const importMap = (() => { try { return JSON.parse((index.match(/<script type="importmap">([\s\S]*?)<\/script>/) || [])[1]).imports; } catch (e) { return {}; } })();
+  const kitEntries = Object.entries(importMap).filter(([name]) => name.startsWith('kit/'));
+  check('ambiance de GFS : le kit est un sous-module épinglé (.gitmodules et gitlink) et la carte d\'importation de index.html n\'en nomme que `kit/ambiance-message` et `kit/ambiance-pose`, à l\'empreinte du gitlink (sept premiers caractères)',
+    pin !== '' && /\[submodule "kit"\]\s+path = kit\s+url = https:\/\/github\.com\/lombre33\/grist-factory-kit\.git/.test(modules)
+      && JSON.stringify(kitEntries) === JSON.stringify([['kit/ambiance-message', `./kit/js/ambiance-message.js?v=${pin.slice(0, 7)}`], ['kit/ambiance-pose', `./kit/js/ambiance-pose.js?v=${pin.slice(0, 7)}`]]),
+    JSON.stringify({ pin: pin.slice(0, 7), kitEntries }));
+
+  // (2) rien n'importe un autre module du kit
+  const importers = [['index.html', index], ...[...jsFiles].map(rel => [rel, read(rel)])];
+  const kitImports = [];
+  for (const [rel, text] of importers) {
+    for (const match of text.matchAll(/(?:import\s*\(\s*|\bfrom\s+|\bsrc=)['"]([^'"]*\bkit\/[^'"]*)['"]/g)) kitImports.push(`${rel} : ${match[1]}`);
+  }
+  check('ambiance de GFS : seuls js/gfs-link.js (`kit/ambiance-message`) et js/gfs-ambiance.js (`kit/ambiance-pose`) importent le kit - jamais son lien (`kit/js/gfs-link.js`), son `ambiance.js` ni son `host.js` : deux liens de GFS dans un cadre numérotent chacun leurs appels depuis 1 et se prennent les réponses',
+    JSON.stringify(kitImports.sort()) === JSON.stringify(['js/gfs-ambiance.js : kit/ambiance-pose', 'js/gfs-link.js : kit/ambiance-message']), kitImports.join(' ; '));
+
+  // (3) la feuille de l'ambiance n'agit que sous ses deux marques de <html>
+  const unscoped = [];
+  // Les sélecteurs d'une règle, séparés aux virgules qui ne sont pas dans une parenthèse (`:is(a, b)` reste entier).
+  const topLevel = (selector) => {
+    const parts = []; let depth = 0; let current = '';
+    for (const c of selector) {
+      if (c === '(') depth++;
+      if (c === ')') depth--;
+      if (c === ',' && depth === 0) { parts.push(current.trim()); current = ''; } else current += c;
+    }
+    parts.push(current.trim());
+    return parts.filter(Boolean);
+  };
+  for (const { sel, line } of declarations(sheetText.get('css/gfs-ambiance.css') || '')) {
+    for (const part of topLevel(sel)) if (!/^:root\[data-gfs-(?:ambiance|forme)\]/.test(part)) unscoped.push(`ligne ${line} : ${part}`);
+  }
+  check('ambiance de GFS : css/gfs-ambiance.css n\'a aucune règle hors `:root[data-gfs-ambiance]` ou `:root[data-gfs-forme]` - sans ambiance (hors GFS, ou « Grist Factory » sans couleur) elle ne change rien',
+    sheetText.has('css/gfs-ambiance.css') && unscoped.length === 0 && /href="css\/gfs-ambiance\.css\?v=[^"]+"/.test(index), unscoped.slice(0, 3).join(' ; ') || 'feuille ou lien absent');
+
+  // (4) les jetons de forme : avec leur repli, jamais ceux de la mise en page de GFS, remis à leur repli par l'impression
+  const SHAPE = 'radius-(?:xs|md|lg|pill|btn|input|panel)|shadow-(?:ctl|panel)|fill(?:-hover|-line)?|stripe(?:-h)?|font-(?:head|label)|fw-head|ls-(?:head|label)|tt-head|wash(?:-size)?';
+  const bare = []; const forbidden = []; const readShapes = new Set();
+  for (const [rel, text] of sheetText) {
+    for (const match of text.matchAll(new RegExp('var\\(\\s*--(' + SHAPE + ')\\s*([,)])', 'g'))) {
+      readShapes.add(match[1]);
+      if (match[2] === ')') bare.push(`${rel} : --${match[1]}`);
+    }
+    for (const match of text.matchAll(/var\(\s*--(main-bg|ex-bg|main-overflow|gap|divider|divider-w|bw|bar-w|avatar-[a-z]+)(?![\w-])/g)) forbidden.push(`${rel} : --${match[1]}`);
+  }
+  check('ambiance de GFS : un jeton de forme (arrondis, bouton plein, filet, décor, police des titres) se lit avec sa valeur d\'origine en repli - `var(--radius-md, 8px)` - sinon la page seule, sans ambiance, perd cette règle',
+    bare.length === 0 && readShapes.size > 0, bare.slice(0, 4).join(' ; ') || `${readShapes.size} jetons lus`);
+  check('ambiance de GFS : aucune feuille ne lit les jetons de la mise en page de GFS (`--main-bg`, `--ex-bg`, `--main-overflow`, `--gap`, `--divider`, `--divider-w`) ni `--bw`, `--bar-w`, `--avatar-*` (guide des apps, règle 15 : la barre d\'outils et les menus tiennent à 700x400 avec leurs traits)',
+    forbidden.length === 0, forbidden.slice(0, 4).join(' ; '));
+  const printBlock = (stripComments(read('css/style.css')).match(/^\.pp-print-host \{([^}]*)\}/m) || [])[1] || '';
+  const printReset = new Set(Array.from(printBlock.matchAll(/--([a-z-]+):\s*initial/g)).map(match => match[1]));
+  const notReset = [...readShapes].filter(name => !printReset.has(name));
+  check('ambiance de GFS : `.pp-print-host` (css/style.css, l\'impression : ce que l\'app produit) remet à `initial`, donc à leur repli, chaque jeton de forme que les feuilles lisent - l\'impression ne suit jamais l\'ambiance',
+    notReset.length === 0 && [...printReset].every(name => readShapes.has(name)), `non remis : ${notReset.join(', ') || '-'} ; remis mais jamais lus : ${[...printReset].filter(name => !readShapes.has(name)).join(', ') || '-'}`);
+
+  // (5) aucune couleur en dur hors de la liste justifiée
+  const COLOR = /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\([^)]*\)|(?<![\w-])(?:white|black|red|green|blue|gray|grey|orange|yellow|purple|pink|silver|navy|teal|maroon|olive|lime|aqua|fuchsia|cyan|magenta|gold|crimson)(?![\w-])/gi;
+  const blankFallbacks = (value) => {
+    let previous = null; let current = value;
+    while (previous !== current) { previous = current; current = current.replace(/var\(\s*(--[\w-]+)\s*,[^()]*(?:\([^()]*\)[^()]*)*\)/g, 'var($1)'); }
+    return current;
+  };
+  let listFile = null;
+  try { listFile = JSON.parse(read('dev-tests/ambiance-exceptions.json')); } catch (e) { listFile = null; }
+  const categories = (listFile && listFile.categories) || {};
+  const rules = ((listFile && listFile.regles) || []).map(rule => ({ ...rule, re: (() => { try { return new RegExp(rule.selecteur); } catch (e) { return null; } })(), used: 0 }));
+  const malformed = rules.filter(rule => !rule.re || !sheets.includes(rule.fichier) || !categories[rule.categorie] || (rule.pourquoi !== undefined && !String(rule.pourquoi).trim()));
+  const hardCoded = []; let seen = 0;
+  for (const [rel, text] of sheetText) {
+    for (const { sel, line, prop, val } of declarations(text)) {
+      if (prop.startsWith('--') || !/^[a-z-]+$/.test(prop)) continue;
+      if (!(blankFallbacks(val).match(COLOR) || []).length) continue;
+      seen++;
+      const hits = rules.filter(rule => rule.fichier === rel && rule.re && rule.re.test(sel));
+      hits.forEach(rule => { rule.used++; });
+      if (!hits.length) hardCoded.push(`${rel}:${line} ${sel.slice(0, 60)} { ${prop}: ${val.slice(0, 40)} }`);
+    }
+  }
+  check('ambiance de GFS : aucune couleur n\'est écrite en dur dans css/ ni extensions/ (hors définition de jeton et hors repli de `var(--x, #fff)`) sans une règle de dev-tests/ambiance-exceptions.json qui dit pourquoi (papier, état, type, repère de capture...) : un jeton (`var(--surface)`, `var(--on-accent)`) suit l\'ambiance, une couleur en dur non',
+    hardCoded.length === 0 && malformed.length === 0, hardCoded.slice(0, 4).join(' ; ') || malformed.slice(0, 3).map(rule => `${rule.fichier} ${rule.selecteur}`).join(' ; ') || `${seen} déclarations, toutes justifiées`);
+  check('ambiance de GFS : chaque règle de dev-tests/ambiance-exceptions.json vise encore au moins une couleur en dur - une règle sans effet est retirée (la liste ne garde que ce que les feuilles portent)',
+    rules.length > 0 && rules.every(rule => rule.used > 0), rules.filter(rule => rule.used === 0).slice(0, 4).map(rule => `${rule.fichier} ${rule.selecteur}`).join(' ; ') || `${rules.length} règles`);
 }
 
 summarizeAndExit();

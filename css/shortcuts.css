@@ -19,8 +19,8 @@
 .settings-switch-btn { height: 26px; padding: 0 14px; font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; color: var(--text); background: var(--surface); border: 0; cursor: pointer; }
 .settings-switch-btn + .settings-switch-btn { border-left: 1px solid var(--border-strong); }
 .settings-switch-btn:hover { background: var(--surface-sunken); }
-.settings-switch-btn.active { color: #fff; background: var(--accent-solid); }
-.settings-switch-btn.active:hover { background: var(--accent-solid-hover); }
+.settings-switch-btn.active { color: var(--on-accent); background: var(--fill, var(--accent-solid)) border-box; }
+.settings-switch-btn.active:hover { background: var(--fill-hover, var(--accent-solid-hover)) border-box; }
 .settings-switch-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 /* Liste des touches */
@@ -33,7 +33,7 @@
 .settings-keys-rows { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
 .settings-key-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0 8px; padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
 .settings-key-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.settings-key-btn { box-sizing: border-box; min-width: 112px; height: 26px; padding: 0 8px; font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; text-align: center; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); cursor: pointer; }
+.settings-key-btn { box-sizing: border-box; min-width: 112px; height: 26px; padding: 0 8px; font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; text-align: center; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-btn, var(--radius-sm)); cursor: pointer; }
 .settings-key-btn:hover { background: var(--surface-sunken); }
 .settings-key-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .settings-key-btn.is-none { font-style: italic; font-weight: 400; }

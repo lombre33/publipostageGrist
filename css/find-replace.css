@@ -5,12 +5,12 @@
 .pp-find-bar[hidden], .pp-find-row[hidden] { display: none; }
 .pp-find-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 
-.pp-find-input { flex: 1 1 150px; min-width: 110px; height: 28px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 13px; }
+.pp-find-input { flex: 1 1 150px; min-width: 110px; height: 28px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 13px; }
 .pp-find-input::placeholder { color: var(--text-muted); opacity: 1; }
 .pp-find-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
 
 /* Boutons icône : nus au repos, fond et bordure discrets au survol (comme ceux de la barre d'outils, css/editor-v2.css). */
-.pp-find-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text); cursor: pointer; }
+.pp-find-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-xs, 5px); background: transparent; color: var(--text); cursor: pointer; }
 .pp-find-btn svg { width: 16px; height: 16px; pointer-events: none; }
 .pp-find-btn:hover { background: var(--surface-sunken); border-color: var(--border); }
 .pp-find-btn:focus-visible, .pp-find-text-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -22,7 +22,7 @@
 .pp-find-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
 .pp-find-spacer { flex: none; width: 28px; }
 
-.pp-find-text-btn { flex: none; height: 28px; padding: 0 10px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.pp-find-text-btn { flex: none; height: 28px; padding: 0 10px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-btn, var(--radius-sm)); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .pp-find-text-btn:hover { background: var(--surface-sunken); }
 /* Grisé, jamais retiré, et toujours atteignable au clavier (aria-disabled) : le bouton qui vient de remplacer le dernier résultat ne doit pas
    faire perdre le focus. */

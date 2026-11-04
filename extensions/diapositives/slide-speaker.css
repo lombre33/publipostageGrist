@@ -6,7 +6,7 @@
 .pp-speaker { position: fixed; inset: 0; z-index: var(--z-floating-toolbar); display: flex; flex-direction: column; box-sizing: border-box; background: var(--bg); color: var(--text); outline: none; font-family: var(--font-ui); font-size: 13px; }
 
 .pp-speaker-head { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; box-sizing: border-box; min-height: 38px; padding: 5px 8px; background: var(--surface); border-bottom: 1px solid var(--border); }
-.pp-speaker-btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; box-sizing: border-box; min-width: 28px; height: 26px; margin: 0; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); font: inherit; line-height: 1; cursor: pointer; }
+.pp-speaker-btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; box-sizing: border-box; min-width: 28px; height: 26px; margin: 0; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 6px); background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); font: inherit; line-height: 1; cursor: pointer; }
 .pp-speaker-btn:hover { background: var(--surface-sunken); }
 .pp-speaker-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pp-speaker-btn[aria-disabled="true"] { opacity: .45; cursor: default; }
@@ -39,16 +39,16 @@
 .pp-speaker-upcoming { flex: 2 1 0; --pp-ring: var(--border-strong); --pp-ring-width: 1px; }
 .pp-speaker-stage { position: absolute; inset: 4px; }
 .pp-speaker-stage > .pp-print-host.pp-slide-show-host { position: absolute; inset: -4px; width: auto; opacity: 1; pointer-events: none; }
-.pp-speaker-card { position: absolute; z-index: 1; left: 50%; top: 50%; transform: translate(-50%, -50%); box-sizing: border-box; max-width: calc(100% - 16px); padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); text-align: center; }
+.pp-speaker-card { position: absolute; z-index: 1; left: 50%; top: 50%; transform: translate(-50%, -50%); box-sizing: border-box; max-width: calc(100% - 16px); padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 8px); background: var(--surface); color: var(--text); text-align: center; }
 .pp-speaker-card[hidden] { display: none; }
 .pp-speaker-status { z-index: 2; }
 
 /* Ce que le prochain clic fera : une phrase discrète, mise en avant (teinte d'accent) quand c'est une animation et non un changement de diapositive. */
-.pp-speaker-hint { flex: 0 0 auto; box-sizing: border-box; min-height: 22px; padding: 3px 8px; border: 1px solid transparent; border-radius: 6px; color: var(--text-muted); font-size: 12px; line-height: 1.3; }
+.pp-speaker-hint { flex: 0 0 auto; box-sizing: border-box; min-height: 22px; padding: 3px 8px; border: 1px solid transparent; border-radius: var(--radius-md, 6px); color: var(--text-muted); font-size: 12px; line-height: 1.3; }
 .pp-speaker-hint-click { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent-ink); font-weight: 600; }
 
 /* Les notes : du texte simple, retours à la ligne gardés ; elles défilent quand elles dépassent. */
-.pp-speaker-notes { flex: 1 1 0; min-height: 0; box-sizing: border-box; overflow: auto; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 16px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pp-speaker-notes { flex: 1 1 0; min-height: 0; box-sizing: border-box; overflow: auto; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md, 6px); background: var(--surface); color: var(--text); font-size: 16px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pp-speaker-notes:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .pp-speaker-notes-empty { color: var(--text-muted); font-style: italic; }
 

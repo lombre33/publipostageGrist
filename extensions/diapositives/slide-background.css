@@ -10,7 +10,7 @@
 .pp-slide-background-label { margin: 0 0 4px; color: var(--text-muted); font-size: 12px; font-weight: 600; }
 .pp-slide-background-saved[hidden] { display: none; }
 .pp-slide-background-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.pp-slide-background-tool { box-sizing: border-box; min-width: 34px; height: 28px; margin: 0; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.pp-slide-background-tool { box-sizing: border-box; min-width: 34px; height: 28px; margin: 0; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 6px); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
 .pp-slide-background-tool:hover { background: var(--surface-sunken); }
 .pp-slide-background-tool.is-active { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
 .pp-slide-background-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

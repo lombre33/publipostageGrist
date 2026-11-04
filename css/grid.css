@@ -79,7 +79,7 @@ body.pp-grid-resizing-col .v2-grid-handle::after, body.pp-grid-resizing-row .v2-
 }
 .v2-grid-break {
   position: absolute; left: 9px; top: -9px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; width: 26px; height: 18px;
-  border-radius: 5px; background: var(--accent-solid); color: #fff; pointer-events: none;
+  border-radius: var(--radius-xs, 5px); background: var(--fill, var(--accent-solid)) border-box; color: var(--on-accent); pointer-events: none;
 }
 .v2-grid-break svg { width: 14px; height: 14px; }
 /* Les numéros d'un tableau de document n'ont que 20 px de large et reposent sur la marge de la page : la pastille tient dans leur largeur (elle ne passe pas sur
@@ -93,7 +93,7 @@ body.pp-grid-resizing-col .v2-grid-handle::after, body.pp-grid-resizing-row .v2-
 #v2-toolbar #v2-btn-page-break.pp-row-break[data-keytip]::after { content: attr(data-tip); }
 
 /* Taille affichée près du pointeur pendant le glissé. */
-.v2-grid-tip { position: fixed; z-index: 4000; padding: 2px 7px; border-radius: 4px; background: var(--text); color: var(--surface); font: 600 12px/1.4 var(--font-ui); pointer-events: none; white-space: nowrap; }
+.v2-grid-tip { position: fixed; z-index: 4000; padding: 2px 7px; border-radius: var(--radius-xs, 4px); background: var(--text); color: var(--surface); font: 600 12px/1.4 var(--font-ui); pointer-events: none; white-space: nowrap; }
 
 /* Aperçu A4 n'a plus de sens (plus de feuille) : grisé, jamais retiré. Le reste du grisé passe par `v2-hf-locked` (js/main-toolbar.js). */
 body.pp-grid-mode #v2-a4-toggle { opacity: .35; pointer-events: none; }
@@ -120,13 +120,13 @@ body.pp-grid-mode:not(.pp-editor-hidden) .v2-cell-bar-dock { display: flex; }
    et le pied du menu de couleur (css/color-palette.css). `v2-color-dropdown` lui donne le niveau des menus (--z-menu), au-dessus de la bande de la
    barre. Un réglage grisé (« Intérieures » pour une seule case) reste atteignable : un clic dessus ne fait rien. */
 .v2-borders-presets { display: grid; grid-template-columns: repeat(8, 28px); gap: 3px; }
-.v2-borders-presets button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text); cursor: pointer; }
+.v2-borders-presets button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-xs, 4px); background: transparent; color: var(--text); cursor: pointer; }
 .v2-borders-presets button svg { width: 16px; height: 16px; }
 .v2-borders-presets button:hover { background: var(--surface-sunken); border-color: var(--border); }
 /* « Couleur du trait » et, à sa droite, le bouton « Transparent » (pas de trait) : le même bouton que ceux du pied (css/color-palette.css), un peu moins haut pour que la
    ligne ne grandisse presque pas (le menu tient sous la bande de la barre d'une grille : 207 px). Enfoncé (`is-active`), il porte l'anneau d'accent des autres choix. */
 .v2-borders-pen { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0 4px; font: 600 11px/1.2 var(--font-ui); color: var(--text-muted); }
-.v2-borders-pen button { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--text); font: 12px/1.2 var(--font-ui); white-space: nowrap; cursor: pointer; }
+.v2-borders-pen button { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border: 1px solid var(--border); border-radius: var(--radius-xs, 5px); background: var(--surface); color: var(--text); font: 12px/1.2 var(--font-ui); white-space: nowrap; cursor: pointer; }
 .v2-borders-pen button svg { width: 12px; height: 12px; }
 .v2-borders-pen button:hover { background: var(--surface-sunken); }
 .v2-borders-pen button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

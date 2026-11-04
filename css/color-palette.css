@@ -12,7 +12,7 @@
 /* La palette : dix colonnes, cinq rangées (les gris, puis quatre tons). Le liseré de chaque pastille suit le texte à 18 % pour qu'un blanc se voie sur
    le fond clair et un noir sur le fond sombre. */
 .cp-grid { display: grid; grid-template-columns: repeat(10, 20px); gap: 4px; }
-.cp-swatch { position: relative; box-sizing: border-box; width: 20px; height: 20px; padding: 0; border: 1px solid color-mix(in srgb, var(--text) 18%, transparent); border-radius: 5px; background: var(--swatch); cursor: pointer; }
+.cp-swatch { position: relative; box-sizing: border-box; width: 20px; height: 20px; padding: 0; border: 1px solid color-mix(in srgb, var(--text) 18%, transparent); border-radius: var(--radius-xs, 5px); background: var(--swatch); cursor: pointer; }
 .cp-swatch:hover { transform: scale(1.14); z-index: 1; }
 .cp-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* La pastille choisie : un anneau d'accent et une coche dans l'encre qui se lit sur sa couleur (--ink, posée par js/color-palette.js). Le même
@@ -52,7 +52,7 @@
 
 /* Le pied : « Personnalisé… » et, selon le menu, « Par défaut » ou « Aucun ». */
 .v2-color-dropdown-footer { display: flex; gap: 6px; margin-top: 5px; padding-top: 6px; border-top: 1px solid var(--border, #d7dde3); }
-.v2-color-dropdown-footer button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border: 1px solid var(--border, #d7dde3); border-radius: 5px; background: var(--surface, #fff); cursor: pointer; font: 12px var(--font-ui); color: var(--text, #3a4452); white-space: nowrap; }
+.v2-color-dropdown-footer button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border: 1px solid var(--border, #d7dde3); border-radius: var(--radius-xs, 5px); background: var(--surface, #fff); cursor: pointer; font: 12px var(--font-ui); color: var(--text, #3a4452); white-space: nowrap; }
 .v2-color-dropdown-footer button svg { width: 13px; height: 13px; }
 .v2-color-dropdown-footer button:hover { background: var(--surface-sunken, #f2f4f7); }
 .v2-color-dropdown-footer button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -61,11 +61,11 @@
    « garder ». Tout tient dans les 376 px du panneau de 700x400, sans défiler. */
 .pp-color-picker { display: grid; grid-template-columns: 200px minmax(0, 1fr); column-gap: 20px; align-items: start; }
 .pp-color-left, .pp-color-right { min-width: 0; }
-.pp-color-area { position: relative; height: 124px; border-radius: 6px; box-shadow: inset 0 0 0 1px var(--border-strong); cursor: crosshair; touch-action: none; user-select: none; background: linear-gradient(to top, #000, rgba(0, 0, 0, 0)), linear-gradient(to right, #fff, var(--hue, #f00)); }
+.pp-color-area { position: relative; height: 124px; border-radius: var(--radius-md, 6px); box-shadow: inset 0 0 0 1px var(--border-strong); cursor: crosshair; touch-action: none; user-select: none; background: linear-gradient(to top, #000, rgba(0, 0, 0, 0)), linear-gradient(to right, #fff, var(--hue, #f00)); }
 .pp-color-area:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* Le curseur du carré : un anneau blanc cerné de sombre, qui se lit sur toutes les couleurs du carré. */
 .pp-color-thumb { position: absolute; box-sizing: border-box; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, .55), 0 1px 3px rgba(0, 0, 0, .4); pointer-events: none; }
-.pp-color-hue { display: block; box-sizing: border-box; width: 100%; height: 14px; margin: 12px 0 0; padding: 0; border: 1px solid var(--border-strong); border-radius: 7px; background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); -webkit-appearance: none; appearance: none; cursor: pointer; }
+.pp-color-hue { display: block; box-sizing: border-box; width: 100%; height: 14px; margin: 12px 0 0; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 7px); background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); -webkit-appearance: none; appearance: none; cursor: pointer; }
 .pp-color-hue::-webkit-slider-runnable-track { height: 12px; background: transparent; }
 .pp-color-hue::-webkit-slider-thumb { -webkit-appearance: none; box-sizing: border-box; width: 16px; height: 16px; margin-top: -2px; border: 2px solid #fff; border-radius: 50%; background: transparent; box-shadow: 0 0 0 1px rgba(0, 0, 0, .55), 0 1px 3px rgba(0, 0, 0, .4); }
 .pp-color-hue::-moz-range-track { height: 12px; background: transparent; }
@@ -75,7 +75,7 @@
 /* L'aperçu : la couleur de départ et la nouvelle côte à côte (la nouvelle seule quand il n'y a pas de couleur de départ). */
 .pp-color-compare { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; }
 .pp-color-compare-cell[hidden] { display: none; }
-.pp-color-chip { height: 34px; border-radius: 6px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent); }
+.pp-color-chip { height: 34px; border-radius: var(--radius-md, 6px); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent); }
 .pp-color-caption { display: block; margin-top: 3px; font: 600 11px/1.2 var(--font-ui); color: var(--text-muted); text-align: center; }
 .pp-color-label { display: block; margin: 10px 0 4px; font-size: 12px; font-weight: 700; color: var(--text); }
 .pp-color-hex { max-width: 140px; font-variant-numeric: tabular-nums; }

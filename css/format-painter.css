@@ -17,7 +17,7 @@ html.pp-format-painting .tiptap, html.pp-format-painting .tiptap * {
 .pp-fs-row { display: flex; align-items: center; gap: 2px; }
 #v2-toolbar .pp-fs-row .pp-fs-name {
   flex: 1 1 auto; min-width: 0; width: auto; height: auto; min-height: 28px; padding: 4px 9px; display: flex; align-items: center; justify-content: flex-start;
-  border: 1px solid transparent; border-radius: 5px; background: transparent; font: inherit; font-size: 12.5px; text-align: left; white-space: nowrap; color: var(--text, #1b2430); cursor: pointer;
+  border: 1px solid transparent; border-radius: var(--radius-xs, 5px); background: transparent; font: inherit; font-size: 12.5px; text-align: left; white-space: nowrap; color: var(--text, #1b2430); cursor: pointer;
 }
 #v2-toolbar .pp-fs-row .pp-fs-name:hover, #v2-toolbar .pp-fs-row .pp-fs-name:focus-visible { background: var(--surface-sunken, #eef1f6); border-color: transparent; }
 #v2-toolbar .pp-fs-row .pp-fs-name:focus-visible { outline: 2px solid var(--accent, #2f6fed); outline-offset: -2px; }
@@ -27,7 +27,7 @@ html.pp-format-painting .tiptap, html.pp-format-painting .tiptap * {
 .pp-fs-label { display: block; max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
 #v2-toolbar .pp-fs-row .pp-fs-icon {
   flex: none; width: 24px; height: 24px; min-height: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text-muted, #5f6b7e); cursor: pointer;
+  border: 1px solid transparent; border-radius: var(--radius-xs, 5px); background: transparent; color: var(--text-muted, #5f6b7e); cursor: pointer;
 }
 #v2-toolbar .pp-fs-row .pp-fs-icon svg { width: 14px; height: 14px; }
 #v2-toolbar .pp-fs-row .pp-fs-icon:hover, #v2-toolbar .pp-fs-row .pp-fs-icon:focus-visible { background: var(--surface-sunken, #eef1f6); color: var(--text, #1b2430); border-color: transparent; }

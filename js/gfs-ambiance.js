@@ -8,7 +8,10 @@
 //   - Le mode : le choix de la personne dans Réglages (`data-theme` sur <html>, js/settings.js), à défaut la préférence du système - ce que lisent les feuilles de css/style.css. La pose suit l'un et l'autre (le kit
 //     observe `data-theme` et la préférence du système) : le thème qui change repeint les jetons de l'autre mode sans que GFS dise rien.
 //   - GFS dit `null` (rien n'est choisi, ou la personne revient à Grist Factory) : tout ce qui avait été posé est retiré, et rien d'autre. L'app retrouve ses couleurs sans recharger.
-//   - Ce que l'app PRODUIT (la page écrite dans l'éditeur, le PDF, l'e-mail, les exports) garde l'aspect du modèle : l'ambiance ne vaut que pour ce que l'app montre à la personne (css/style.css dit où, pour le papier).
+//   - Ce que l'app PRODUIT (la page écrite dans l'éditeur, le PDF, l'e-mail, les exports) garde l'aspect du modèle : l'ambiance ne vaut que pour ce que l'app montre à la personne (dev-tests/ambiance-exceptions.json dit
+//     pourquoi chaque couleur écrite en dur dans les feuilles y reste ; le papier ne lit aucun jeton de l'ambiance).
+//   - `data-gfs-ambiance="<id>"` sur <html> quand l'ambiance est posée, et `data-gfs-forme` quand elle porte des jetons de forme : css/gfs-ambiance.css n'agit que sous eux (plan de travail, ombres flottantes, filet et titres
+//     des fenêtres), donc rien ne change sans ambiance, ni quand le module de pose ne s'est pas chargé. Retirés avec l'ambiance.
 //   - Le module de pose ne se charge pas (le dépôt de l'app sans son kit, un réseau qui le coupe) : l'app garde ses couleurs et le dit une fois dans la console.
 //   GfsAmbiance.ready     résolue (jamais rejetée) quand la pose a démarré et posé l'ambiance du contexte, ou qu'elle ne démarre pas (seule, module absent) ; l'app n'a pas à l'attendre pour s'afficher
 //   GfsAmbiance.active()  vrai quand la pose tourne (hébergée, module chargé)
@@ -27,11 +30,26 @@ const GfsAmbiance = (function () {
 
   const active = () => running !== null;
 
+  // Les deux marques de <html> que lit css/gfs-ambiance.css. L'identifiant vient de `normalizeAmbiance` du kit (`[a-z][a-z0-9-]{0,31}`) : rien d'autre ne s'écrit dans l'attribut.
+  function mark(ambiance) {
+    const root = document.documentElement;
+    if (ambiance === null) {
+      root.removeAttribute('data-gfs-ambiance');
+      root.removeAttribute('data-gfs-forme');
+      return;
+    }
+    root.setAttribute('data-gfs-ambiance', ambiance.id);
+    if (Object.keys(ambiance.forme || {}).length > 0) root.setAttribute('data-gfs-forme', '');
+    else root.removeAttribute('data-gfs-forme');
+  }
+
   // Le module de pose du kit se charge en même temps que le lien demande le contexte (js/gfs-link.js charge le lecteur du message au même instant) ; `start()` pose tout de suite ce que le lien sait, puis suit
   // `onAmbiance` et le mode. `ready` du kit se règle quand le contexte de GFS est arrivé et que l'ambiance est posée.
   const ready = !GfsLink.hosted ? Promise.resolve() : import('kit/ambiance-pose')
     .then((module) => {
       running = module.createAmbiance({ link: GfsLink, isDark }).start();
+      GfsLink.onAmbiance(mark);
+      mark(GfsLink.ambiance());
       return running.ready;
     })
     .catch(e => console.warn('[GfsAmbiance] la pose de l\'ambiance ne démarre pas : l\'app garde ses couleurs', e))

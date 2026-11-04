@@ -7,12 +7,12 @@
 .pp-slide-decor-form { display: grid; flex: 1 1 340px; grid-template-columns: auto minmax(0, 1fr); gap: 8px 10px; align-items: center; min-width: 0; }
 .pp-slide-decor-row-label { color: var(--text-muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .pp-slide-decor-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
-.pp-slide-decor-select, .pp-slide-decor-input { box-sizing: border-box; height: 26px; padding: 0 4px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; }
+.pp-slide-decor-select, .pp-slide-decor-input { box-sizing: border-box; height: 26px; padding: 0 4px; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 6px); background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; }
 .pp-slide-decor-select { max-width: 100%; }
 .pp-slide-decor-input { flex: 1 1 120px; min-width: 0; padding: 0 6px; }
 .pp-slide-decor-select:disabled { background: var(--surface-sunken); color: var(--text-muted); }
 .pp-slide-decor-select:focus-visible, .pp-slide-decor-input:focus-visible, .pp-slide-decor-check input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.pp-slide-decor-tool { box-sizing: border-box; height: 26px; margin: 0; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.pp-slide-decor-tool { box-sizing: border-box; height: 26px; margin: 0; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 6px); background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 .pp-slide-decor-tool:hover { background: var(--surface-sunken); }
 .pp-slide-decor-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pp-slide-decor-tool[hidden] { display: none; }

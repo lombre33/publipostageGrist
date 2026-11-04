@@ -30,6 +30,8 @@
      sur le fond, ne donnerait que 3,08:1 au texte blanc. Survol : plus foncé, donc plus contrasté, dans les deux thèmes. */
   --accent-solid: #2f6fed;
   --accent-solid-hover: #2558c4;
+  /* Texte posé sur un fond plein (`--accent-solid`, `--fill`) : blanc ici ; dans GFS, l'ambiance choisie le remplace par la couleur qui garde 4,5:1 sur son accent (css/gfs-ambiance.css). */
+  --on-accent: #ffffff;
   /* Texte d'accent posé sur un fond teinté (`--accent-soft`, `--surface-sunken`) : `--accent` n'y atteint que 3,97 à 4,43:1. Plus foncé en clair,
      plus clair en sombre. */
   --accent-ink: #2558c4;
@@ -83,6 +85,14 @@
   --z-floating-toolbar: 1500;
   --z-menu: 1600;
   --z-tip: 1800;
+}
+
+/* Ce que l'app produit (l'impression de js/print-export.js) ne suit jamais l'ambiance de GFS : les jetons de forme que lisent les feuilles, avec leur valeur d'origine en repli, y reprennent
+   cette valeur (`initial` : la déclaration est invalide, `var(--radius-md, 8px)` retombe sur son repli). Les couleurs et `--radius-sm`, `--shadow-float`, `--font-ui` sont posés par le bloc ci-dessus. */
+.pp-print-host {
+  --radius-xs: initial; --radius-md: initial; --radius-lg: initial; --radius-pill: initial; --radius-btn: initial; --radius-input: initial;
+  --font-head: initial; --fw-head: initial; --ls-head: initial; --tt-head: initial;
+  --fill: initial; --fill-hover: initial; --fill-line: initial; --stripe: initial; --stripe-h: initial; --wash: initial; --wash-size: initial;
 }
 
 /* Thème sombre : il ne concerne que le chrome de l'application (barre du haut, plan de travail autour de la page, modales, panneaux flottants). La
@@ -181,7 +191,7 @@ input, select, textarea, button { font-family: var(--font-ui); }
 /* `.pp-field-editor` : les champs texte à bulles (js/field-editor.js : Objet, À, Cc, Cci, nom du PDF), qui ont le cadre des <input> qu'ils remplacent. */
 #toolbar-top select, #toolbar-top input[type="text"], #toolbar-top .pp-field-editor {
   font-family: var(--font-ui); font-size: 13px; color: var(--text);
-  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm));
   padding: 4px 8px; height: 28px;
 }
 .template-select { max-width: 160px; }
@@ -189,7 +199,7 @@ input, select, textarea, button { font-family: var(--font-ui); }
   font-family: var(--font-ui); font-weight: 600; font-size: 13px;
   display: inline-flex; align-items: center;
   height: 28px; padding: 0 7px; margin: 0;
-  border-radius: var(--radius-sm); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-btn, var(--radius-sm)); border: 1px solid var(--border-strong);
   background: transparent; color: var(--text); cursor: pointer;
   transition: background .12s ease, border-color .12s ease;
 }
@@ -207,8 +217,8 @@ input, select, textarea, button { font-family: var(--font-ui); }
 #btn-mode-read::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); }
 /* Préfixées par #toolbar-top pour l'emporter sans ambiguïté sur la règle générique `#toolbar-top button` ci-dessus (même compte d'ID et type
    `button` : sinon égalité de spécificité). */
-#toolbar-top #btn-save { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
-#toolbar-top #btn-save:hover { background: var(--accent-solid-hover); border-color: var(--accent-solid-hover); }
+#toolbar-top #btn-save { background: var(--fill, var(--accent-solid)) border-box; border-color: var(--fill-line, var(--accent-solid)); color: var(--on-accent); box-shadow: 0 1px 2px color-mix(in srgb, var(--accent-solid) 35%, transparent); }
+#toolbar-top #btn-save:hover { background: var(--fill-hover, var(--accent-solid-hover)) border-box; border-color: var(--fill-line, var(--accent-solid-hover)); }
 /* Enregistrement automatique coupé (js/main.js:wireSaveMenu) : noir et blanc classique ; le bleu dit « enregistrement automatique actif ». Deux
    classes disent la même chose : celle du bouton, et celle de `<html>`, posée par le `<head>` d'index.html avant le premier affichage (le bouton
    n'est jamais peint en bleu puis en fondu vers le noir). */
@@ -216,14 +226,14 @@ input, select, textarea, button { font-family: var(--font-ui); }
 #toolbar-top #btn-save.is-autosave-off:hover, html.pp-autosave-off #toolbar-top #btn-save:hover { background: var(--solid-neutral-hover); border-color: var(--solid-neutral-hover); }
 #toolbar-top #btn-delete { color: var(--danger); }
 #toolbar-top #btn-delete:hover { background: var(--danger-soft); border-color: var(--danger); }
-#toolbar-top #btn-export-pdf { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; box-shadow: 0 1px 2px rgba(47,111,237,.35); }
-#toolbar-top #btn-export-pdf:hover { background: var(--accent-solid-hover); border-color: var(--accent-solid-hover); }
+#toolbar-top #btn-export-pdf { background: var(--fill, var(--accent-solid)) border-box; border-color: var(--fill-line, var(--accent-solid)); color: var(--on-accent); box-shadow: 0 1px 2px color-mix(in srgb, var(--accent-solid) 35%, transparent); }
+#toolbar-top #btn-export-pdf:hover { background: var(--fill-hover, var(--accent-solid-hover)) border-box; border-color: var(--fill-line, var(--accent-solid-hover)); }
 /* Les deux boutons de mode sont fusionnés visuellement en un sélecteur segmenté ; ils gardent leurs id et leur classe `.active`, basculée par
    js/main.js. */
 .mode-toggle { display:inline-flex; }
 #toolbar-top #btn-mode-edit, #toolbar-top #btn-mode-read { background: var(--surface-sunken); }
-#toolbar-top #btn-mode-edit { border-radius: var(--radius-sm) 0 0 var(--radius-sm); border-right: none; }
-#toolbar-top #btn-mode-read { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+#toolbar-top #btn-mode-edit { border-radius: var(--radius-btn, var(--radius-sm)) 0 0 var(--radius-btn, var(--radius-sm)); border-right: none; }
+#toolbar-top #btn-mode-read { border-radius: 0 var(--radius-btn, var(--radius-sm)) var(--radius-btn, var(--radius-sm)) 0; }
 #toolbar-top button.active { background: var(--surface); color: var(--accent); border-color: var(--accent); box-shadow: var(--shadow-card); }
 .var-badge { display:inline-block; background:#eaf2ff; color:#12406b; border:1px solid #b7cdf2; padding:0 4px; border-radius:3px; font-size:.92em; line-height:1.4; }
 /* Variable #Variable dont la table ou la colonne référencée n'existe plus (rouge), ou dont la table n'a plus de lien avec la page (ambre : la colonne
@@ -240,7 +250,7 @@ input, select, textarea, button { font-family: var(--font-ui); }
   -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4'%3E%3Cpath d='M12 3 2 20h20Z'/%3E%3Cpath d='M12 10v4M12 17h.01'/%3E%3C/svg%3E");
   mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4'%3E%3Cpath d='M12 3 2 20h20Z'/%3E%3Cpath d='M12 10v4M12 17h.01'/%3E%3C/svg%3E");
 }
-.modal-content { background:var(--surface); color:var(--text); border-radius:8px; padding:18px 20px; box-shadow:0 12px 32px rgba(0,0,0,.18); min-width:320px; max-width:440px; }
+.modal-content { background:var(--surface); color:var(--text); border-radius:var(--radius-lg, 8px); padding:18px 20px; box-shadow:0 12px 32px rgba(0,0,0,.18); min-width:320px; max-width:440px; }
 .modal-actions { display:flex; justify-content:flex-end; gap:8px; }
 .link-rule-row { font-size:12px; }
 .link-rule-row button { font-size:11px; padding:2px 6px; }
@@ -248,7 +258,7 @@ input, select, textarea, button { font-family: var(--font-ui); }
 /* Bandeau de conflit de l'enregistrement automatique (js/main.js) : ambre plutôt que `--danger`, car il signale une action à prendre et non une
    erreur. Une seule action (« Recharger ») ; garder ses modifications locales reste implicite (ne rien faire, ou Enregistrer à la main). */
 .autosave-conflict-banner { display:flex; align-items:center; gap:10px; padding:8px 14px; background:#fff7e6; border-bottom:1px solid #f0c36d; color:#7a5900; font-family: var(--font-ui); font-size:13px; }
-.autosave-conflict-banner button { font-family: var(--font-ui); font-size:12px; font-weight:600; padding:4px 10px; border:1px solid #f0c36d; border-radius: var(--radius-sm); background:#fff; color:#7a5900; cursor:pointer; }
+.autosave-conflict-banner button { font-family: var(--font-ui); font-size:12px; font-weight:600; padding:4px 10px; border:1px solid #f0c36d; border-radius: var(--radius-btn, var(--radius-sm)); background:#fff; color:#7a5900; cursor:pointer; }
 .autosave-conflict-banner button:hover { background:#fff2d1; }
 /* `z-index: 0` (en plus de `position: relative`) : #reader-container établit son propre contexte d'empilement ; sans cela son fond opaque se
    peindrait par-dessus toute image en calque « derrière le texte » (`z-index` négatif), la rendant invisible et lui volant ses clics. */
@@ -259,7 +269,7 @@ input, select, textarea, button { font-family: var(--font-ui); }
 .two-columns-zone { position: relative; display: grid; grid-template-columns: var(--layout-left, 50%) calc(100% - var(--layout-left, 50%) - 18px); gap: 18px; margin: 0; padding: 16px 10px 4px; border: 1px dashed #8b98a5; border-radius: 3px; box-sizing: border-box; max-width: 100%; }
 .two-columns-column { min-width: 0; min-height: 48px; padding: 6px; border: 1px solid #d7dde3; box-sizing: border-box; overflow-wrap: anywhere; word-break: break-word; }
 .two-columns-resize-grip { position: absolute; top: 50%; left: var(--layout-left, 50%); width: 22px; height: 40px; transform: translate(-50%, -50%); cursor: ew-resize; z-index: 20; user-select: none; touch-action: none; display: flex; align-items: center; justify-content: center; }
-.two-columns-resize-grip::before { content: ''; width: 6px; height: 32px; border-radius: 3px; background: var(--border); }
+.two-columns-resize-grip::before { content: ''; width: 6px; height: 32px; border-radius: var(--radius-xs, 3px); background: var(--border); }
 .two-columns-resize-grip:hover::before, .two-columns-resize-grip:active::before { background: var(--accent); }
 #reader-container .two-columns-zone { border-color: transparent; padding-top: 0; }
 #reader-container .two-columns-resize-grip { display: none; }

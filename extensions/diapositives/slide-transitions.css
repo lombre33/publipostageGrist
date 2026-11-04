@@ -12,7 +12,7 @@
 .pp-slide-transition-pairs { display: flex; flex-wrap: wrap; column-gap: 18px; }
 .pp-slide-transition-pair .pp-slide-transition-label { margin-top: 10px; }
 .pp-slide-transition-choices { display: flex; flex-wrap: wrap; gap: 4px; }
-.pp-slide-transition-choice, .pp-slide-transition-replay { box-sizing: border-box; min-width: 34px; height: 28px; margin: 0; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.pp-slide-transition-choice, .pp-slide-transition-replay { box-sizing: border-box; min-width: 34px; height: 28px; margin: 0; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 6px); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
 .pp-slide-transition-choice:hover, .pp-slide-transition-replay:hover { background: var(--surface-sunken); }
 .pp-slide-transition-choice[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
 .pp-slide-transition-choice:focus-visible, .pp-slide-transition-replay:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

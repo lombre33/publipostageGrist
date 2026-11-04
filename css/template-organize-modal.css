@@ -20,9 +20,9 @@
 .template-organize-legend .tts-star-glyph { width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; color: var(--accent); }
 
 .template-organize-search { display: flex; gap: 6px; }
-.template-organize-search input { flex: 1; height: 30px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 10px; font-family: var(--font-ui); font-size: 12.5px; background: var(--surface); color: var(--text); }
+.template-organize-search input { flex: 1; height: 30px; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); padding: 0 10px; font-family: var(--font-ui); font-size: 12.5px; background: var(--surface); color: var(--text); }
 
-.tom-new-folder-btn { flex: none; height: 30px; padding: 0 10px; font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
+.tom-new-folder-btn { flex: none; height: 30px; padding: 0 10px; font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; border: 1px solid var(--border-strong); border-radius: var(--radius-btn, var(--radius-sm)); background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
 .tom-new-folder-btn:hover { background: var(--surface-sunken); }
 
 .template-organize-list { max-height: 360px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
@@ -30,7 +30,7 @@
    0 20px`, qu'une seule classe ne battrait pas. */
 .template-organize-modal-content .template-organize-list { min-height: 72px; margin: 0 20px; padding: 4px; }
 
-.template-organize-modal-content .modal-actions button { flex: none; font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
+.template-organize-modal-content .modal-actions button { flex: none; font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-btn, var(--radius-sm)); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
 .template-organize-modal-content .modal-actions button:hover { background: var(--surface-sunken); }
 
 /* Ces lignes ne sélectionnent rien au clic (contrairement à .tts-popup) : seul un dossier réagit (dépliage), d'où l'absence du curseur « pointer »
@@ -39,7 +39,7 @@
 
 .tom-folder-hint { flex: none; font-size: 11px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
 
-.tom-move-btn { flex: none; border: none; background: transparent; color: var(--text-faint); font: inherit; font-size: 11.5px; font-weight: 600; padding: 3px 6px; border-radius: var(--radius-sm); cursor: pointer; opacity: 0; }
+.tom-move-btn { flex: none; border: none; background: transparent; color: var(--text-faint); font: inherit; font-size: 11.5px; font-weight: 600; padding: 3px 6px; border-radius: var(--radius-btn, var(--radius-sm)); cursor: pointer; opacity: 0; }
 .tts-row:hover .tom-move-btn, .tts-row:focus-within .tom-move-btn { opacity: 1; }
 @media not (hover: hover) {
   /* Sur tactile, ce bouton reste visible plutôt que de dépendre d'un :hover qui ne se déclenchera jamais. */
@@ -54,14 +54,14 @@
 /* accent-soft (pas surface-sunken) : les lignes dossier ont elles-mêmes un fond surface-sunken, la cible du glisser-déposer doit s'en détacher. */
 .tom-drop-target { background: var(--accent-soft); outline: 2px dashed var(--accent); outline-offset: -2px; }
 
-.tom-add-subfolder-btn { flex: none; border: none; background: transparent; color: var(--text-faint); font: inherit; font-size: 13px; font-weight: 700; line-height: 1; padding: 3px 7px; border-radius: var(--radius-sm); cursor: pointer; opacity: 0; }
+.tom-add-subfolder-btn { flex: none; border: none; background: transparent; color: var(--text-faint); font: inherit; font-size: 13px; font-weight: 700; line-height: 1; padding: 3px 7px; border-radius: var(--radius-btn, var(--radius-sm)); cursor: pointer; opacity: 0; }
 .tts-row-folder:hover .tom-add-subfolder-btn, .tts-row-folder:focus-within .tom-add-subfolder-btn { opacity: 1; }
 @media not (hover: hover) {
   .tom-add-subfolder-btn { opacity: 1; }
 }
 .tom-add-subfolder-btn:hover { background: var(--surface); color: var(--text); }
 
-.tom-place-here-btn { flex: none; border: 1px solid var(--accent); background: transparent; color: var(--accent); font: inherit; font-size: 11.5px; font-weight: 600; padding: 3px 6px; border-radius: var(--radius-sm); cursor: pointer; }
+.tom-place-here-btn { flex: none; border: 1px solid var(--accent); background: transparent; color: var(--accent); font: inherit; font-size: 11.5px; font-weight: 600; padding: 3px 6px; border-radius: var(--radius-btn, var(--radius-sm)); cursor: pointer; }
 .tom-place-here-btn:hover { background: var(--accent); color: var(--surface); }
 
 .tom-pending-folder { border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); font-style: italic; color: var(--text-faint); background: transparent; }
@@ -70,14 +70,14 @@
 .tom-pending-folder .tts-folder-caret { visibility: hidden; }
 .tom-pending-folder .tts-row-label { font-style: italic; font-weight: 600; }
 .tom-pending-hint { flex: 1; min-width: 0; font-size: 11px; font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tom-cancel-pending-btn { flex: none; border: none; background: transparent; color: var(--text-faint); font: inherit; font-size: 14px; line-height: 1; padding: 2px 6px; border-radius: var(--radius-sm); cursor: pointer; }
+.tom-cancel-pending-btn { flex: none; border: none; background: transparent; color: var(--text-faint); font: inherit; font-size: 14px; line-height: 1; padding: 2px 6px; border-radius: var(--radius-btn, var(--radius-sm)); cursor: pointer; }
 .tom-cancel-pending-btn:hover { background: var(--surface-sunken); color: var(--text); }
 
 /* Interrupteur « ce dossier s'ouvre déplié ou replié dans la liste déroulante » : une icône par ligne dossier (réelle ou en attente), deux tracés qui
    montrent l'état (déplié : contenu sous l'en-tête ; replié : en-tête seul et trois points, accent). Ni la punaise, ni l'étoile, ni un chevron.
    Toujours visible, contrairement à l'épingle : c'est un état à lire d'un coup d'œil. padding: 0 : le padding natif d'un <button> écrase sinon le
    glyphe (même piège que .tts-pin-btn). */
-.tom-folder-default-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; flex: none; border: none; background: transparent; border-radius: var(--radius-sm); color: var(--text-faint); cursor: pointer; }
+.tom-folder-default-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; flex: none; border: none; background: transparent; border-radius: var(--radius-btn, var(--radius-sm)); color: var(--text-faint); cursor: pointer; }
 .tom-folder-default-btn.is-collapsed { color: var(--accent); }
 @media (hover: hover) and (pointer: fine) {
   .tom-folder-default-btn:hover { background: var(--surface); }

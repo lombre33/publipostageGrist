@@ -140,7 +140,7 @@
 .pp-ff-rotate svg { display: block; width: 100%; height: 100%; }
 .pp-ff-rotate::before { content: ''; position: absolute; left: calc(50% - 0.75px); top: 100%; width: 1.5px; height: 13px; background: var(--accent, #2f6fed); }
 .pp-ff-active > .pp-free-frame-box > .pp-ff-ui .pp-ff-rotate, .pp-ff-selected > .pp-free-frame-box > .pp-ff-ui .pp-ff-rotate { display: block; }
-.pp-ff-angle { position: fixed; z-index: var(--z-tip); padding: 2px 6px; border-radius: 4px; background: var(--text); color: var(--surface); font: 600 11px/1.3 var(--font-ui); font-variant-numeric: tabular-nums; pointer-events: none; }
+.pp-ff-angle { position: fixed; z-index: var(--z-tip); padding: 2px 6px; border-radius: var(--radius-xs, 4px); background: var(--text); color: var(--surface); font: 600 11px/1.3 var(--font-ui); font-variant-numeric: tabular-nums; pointer-events: none; }
 /* Une ligne : pas de contour de boîte (celle de ses deux bouts n'est pas son dessin) ; la bande qui suit le trait se saisit pour la déplacer, ses deux bouts se glissent (ronds, comme les poignées
    d'un cadre, visibles quand la ligne est sélectionnée). Tout le reste de la boîte laisse passer les clics. */
 #editor-container .tiptap .pp-free-frame[data-ff-shape="line"] > .pp-free-frame-box, #editor-container .tiptap .pp-free-frame[data-ff-shape="line"]:hover > .pp-free-frame-box,
@@ -155,7 +155,7 @@
 
 /* La marque d'un objet à lien (`data-ff-link`, js/frame-link.js) : une petite chaîne dans le coin haut droit de sa boîte, dans l'éditeur seulement (l'interface `.pp-ff-ui` n'est ni dans le texte, ni dans les sorties, ni
    dans les miniatures), qui ne prend aucun clic. Au diaporama et à la Lecture, un clic sur l'objet suit son lien : le pointeur y devient une main (au diaporama tant que la souris bouge, le pointeur s'y cache sinon ; à la Lecture, sauf pour une action du diaporama, qui n'y fait rien). */
-.pp-ff-link-badge { display: none; position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; box-sizing: border-box; padding: 2px; border-radius: 4px; background: var(--surface, #fff); color: var(--text, #1b2430); border: 1px solid var(--border-strong, #c3cad6); pointer-events: none; }
+.pp-ff-link-badge { display: none; position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; box-sizing: border-box; padding: 2px; border-radius: var(--radius-xs, 4px); background: var(--surface, #fff); color: var(--text, #1b2430); border: 1px solid var(--border-strong, #c3cad6); pointer-events: none; }
 .pp-ff-link-badge svg { display: block; width: 100%; height: 100%; }
 .pp-free-frame[data-ff-link] > .pp-free-frame-box > .pp-ff-ui .pp-ff-link-badge { display: block; }
 .pp-slide-show-layer.pp-slide-show-awake .pp-free-frame[data-ff-link] > .pp-free-frame-box, .reader-content .pp-free-frame[data-ff-link]:not([data-ff-link^="pp:"]) > .pp-free-frame-box { cursor: pointer; }
@@ -231,7 +231,7 @@
    les autres en gris lisible (`--text-muted`, >= 4,5:1 sur le fond du menu et sur celui du survol). Plus précis que `#v2-toolbar button` (30 x 28, centré), qui vise tout bouton de la barre. Une
    langue aux noms plus longs élargit le menu, sans jamais passer à la ligne. */
 #v2-objects-flyout .v2-objects-tabs { display: flex; justify-content: space-between; gap: 1px; padding: 2px 1px 1px; }
-#v2-toolbar #v2-objects-flyout .v2-objects-tab { width: auto; height: auto; padding: 3px 4px 2px; border: 0; border-radius: 4px; font: inherit; font-size: 11px; font-weight: 600; line-height: 15px; white-space: nowrap; color: var(--text-muted, #5f6b7e); }
+#v2-toolbar #v2-objects-flyout .v2-objects-tab { width: auto; height: auto; padding: 3px 4px 2px; border: 0; border-radius: var(--radius-xs, 4px); font: inherit; font-size: 11px; font-weight: 600; line-height: 15px; white-space: nowrap; color: var(--text-muted, #5f6b7e); }
 #v2-toolbar #v2-objects-flyout .v2-objects-tab:hover { background: var(--surface-sunken, #eef1f6); }
 #v2-toolbar #v2-objects-flyout .v2-objects-tab[aria-checked="true"] { color: var(--text, #1b2430); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
 #v2-objects-flyout .v2-objects-reason { display: none; max-width: 230px; padding: 3px 9px 7px; color: var(--text-muted, #6b7684); font-size: 11.5px; line-height: 1.35; white-space: normal; }

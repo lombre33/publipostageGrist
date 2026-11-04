@@ -6,10 +6,10 @@
    ligne choisie sur --surface-sunken. Rattachée à <body> comme lui ; placée sous le curseur (ou au-dessus, en bas d'un petit panneau) par
    ViewportFit.placePopup, qui plafonne sa hauteur et la remonte au-dessus des couches déjà ouvertes (Layers.raise). Son niveau est le jeton
    --z-menu de css/style.css, jamais un nombre : le dernier menu ouvert est toujours au-dessus. */
-#expansion-box, #mention-box { position: absolute; z-index: var(--z-menu); display: none; flex-direction: column; box-sizing: border-box; min-width: 200px; max-width: 360px; max-height: 232px; overflow-y: auto; padding: 3px; font-family: var(--font-ui); font-size: 12.5px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.10); }
+#expansion-box, #mention-box { position: absolute; z-index: var(--z-menu); display: none; flex-direction: column; box-sizing: border-box; min-width: 200px; max-width: 360px; max-height: 232px; overflow-y: auto; padding: 3px; font-family: var(--font-ui); font-size: 12.5px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-md, 6px); box-shadow: 0 4px 14px rgba(0,0,0,.10); }
 /* L'abréviation en gras, son texte à côté sur une seule ligne coupée par « … » (un retour à la ligne du texte s'y lit comme une espace). Les deux
    en --text : le texte gris (--text-muted) n'atteindrait pas 4,5:1 sur la ligne choisie, teintée. */
-.ex-item { display: flex; align-items: baseline; gap: 10px; padding: 4px 8px; border-radius: 4px; cursor: pointer; color: var(--text); }
+.ex-item { display: flex; align-items: baseline; gap: 10px; padding: 4px 8px; border-radius: var(--radius-xs, 4px); cursor: pointer; color: var(--text); }
 .ex-item.selected, .ex-item:hover { background: var(--surface-sunken); }
 .ex-abbr { flex: none; font-weight: 700; }
 .ex-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -20,7 +20,7 @@
 #expansion-box.has-more, #mention-box.has-more { padding-bottom: 0; }
 /* Une liste sans ligne qui a quelque chose à dire (« Recherche des fiches… », « Aucune fiche ne correspond. ») : un texte seul, en --text comme les lignes. */
 .ex-status { padding: 5px 8px; line-height: 1.35; color: var(--text); }
-.ex-more { position: sticky; bottom: 0; flex: none; margin: 6px -3px 0; padding: 6px 11px 5px; font-size: 12px; line-height: 1.35; color: var(--text-faint); background: var(--surface); border-top: 1px solid var(--border); border-radius: 0 0 5px 5px; }
+.ex-more { position: sticky; bottom: 0; flex: none; margin: 6px -3px 0; padding: 6px 11px 5px; font-size: 12px; line-height: 1.35; color: var(--text-faint); background: var(--surface); border-top: 1px solid var(--border); border-radius: 0 0 var(--radius-xs, 5px) var(--radius-xs, 5px); }
 
 /* Réglages > Raccourcis > Abréviations. Pas de `display` sur .settings-panel (css/toolbar-v2.css : il battrait l'attribut `hidden` des onglets
    masqués) : tout est dans la section à l'intérieur. La fenêtre ne défile pas, seul le contenu de l'onglet le fait (.settings-body) : la liste
@@ -41,15 +41,15 @@
 #settings-expansion-char-status { width: fit-content; max-width: 80%; margin: -2px 0 8px auto; padding: 0 8px 0 0; border-left: 0; border-right: 3px solid var(--danger); text-align: right; }
 .settings-expansion-form { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; align-items: center; margin: 0 0 10px; }
 .settings-expansion-form label { font-size: 13px; color: var(--text); }
-.settings-expansion-form input, .settings-expansion-form textarea { box-sizing: border-box; min-width: 0; width: 100%; padding: 0 8px; font-family: var(--font-ui); font-size: 13px; background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
+.settings-expansion-form input, .settings-expansion-form textarea { box-sizing: border-box; min-width: 0; width: 100%; padding: 0 8px; font-family: var(--font-ui); font-size: 13px; background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); }
 .settings-expansion-form input { height: 28px; }
 .settings-expansion-form textarea { height: 52px; padding: 5px 8px; resize: none; line-height: 1.35; }
 /* Boutons : mêmes mesures que ceux du bas de la fenêtre (.settings-modal-content .modal-actions button, css/toolbar-v2.css). */
 .settings-expansion-actions { grid-column: 2; display: flex; gap: 8px; }
-.settings-expansion-actions button, .settings-expansion-row button { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); cursor: pointer; }
+.settings-expansion-actions button, .settings-expansion-row button { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-btn, var(--radius-sm)); cursor: pointer; }
 .settings-expansion-actions button[hidden] { display: none; }
-.settings-expansion-actions button[type="submit"] { color: #fff; background: var(--accent-solid); border-color: var(--accent-solid); }
-.settings-expansion-actions button[type="submit"]:hover { background: var(--accent-solid-hover); border-color: var(--accent-solid-hover); }
+.settings-expansion-actions button[type="submit"] { color: var(--on-accent); background: var(--fill, var(--accent-solid)) border-box; border-color: var(--fill-line, var(--accent-solid)); }
+.settings-expansion-actions button[type="submit"]:hover { background: var(--fill-hover, var(--accent-solid-hover)) border-box; border-color: var(--fill-line, var(--accent-solid-hover)); }
 .settings-expansion-actions button:disabled { opacity: .55; cursor: default; }
 .settings-expansion-actions button:not([type="submit"]):hover, .settings-expansion-row button:hover { background: var(--surface-sunken); }
 .settings-expansion-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }

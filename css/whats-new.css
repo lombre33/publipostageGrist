@@ -8,15 +8,15 @@
 .pp-news-text { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-muted); }
 
 /* Un écran du carrousel : un bandeau 3:1 (1200x400, affiché en 580x193), le titre, deux lignes. */
-.pp-news-hero { position: relative; margin: 0 0 10px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-sunken); line-height: 0; }
+.pp-news-hero { position: relative; margin: 0 0 10px; border: 1px solid var(--border); border-radius: var(--radius-md, 8px); overflow: hidden; background: var(--surface-sunken); line-height: 0; }
 .pp-news-hero img { display: block; width: 100%; height: auto; aspect-ratio: 3 / 1; }
 /* « Grist Factory Suite » : l'étiquette des nouveautés qui n'existent que par GFS (grisées ailleurs). Contraste du texte >= 4,5:1 sur le fond de l'étiquette. */
-.pp-news-badge { display: inline-block; padding: 1px 8px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface-sunken); color: var(--text); font-size: 11px; font-weight: 700; line-height: 14px; white-space: nowrap; }
+.pp-news-badge { display: inline-block; padding: 1px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-pill, 999px); background: var(--surface-sunken); color: var(--text); font-size: 11px; font-weight: 700; line-height: 14px; white-space: nowrap; }
 
 /* Un écran « avant → après » : une ligne par habitude qui change. Les deux colonnes de texte prennent la part que l'écran leur donne (--pp-news-from, --pp-news-to). */
 .pp-news-lead { margin: 0 0 8px; font-size: 12.5px; line-height: 1.4; color: var(--text-muted); }
 .pp-news-rows { display: grid; gap: 6px; margin: 8px 0 10px; padding: 0; list-style: none; }
-.pp-news-row { display: grid; grid-template-columns: minmax(0, var(--pp-news-from, 0.85fr)) 20px minmax(0, var(--pp-news-to, 1.35fr)); align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-sunken); font-size: 12.5px; line-height: 1.4; color: var(--text); }
+.pp-news-row { display: grid; grid-template-columns: minmax(0, var(--pp-news-from, 0.85fr)) 20px minmax(0, var(--pp-news-to, 1.35fr)); align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md, 8px); background: var(--surface-sunken); font-size: 12.5px; line-height: 1.4; color: var(--text); }
 .pp-news-row-from { color: var(--text-muted); }
 .pp-news-row-arrow { text-align: center; color: var(--text-muted); font-size: 15px; }
 .pp-news-row-to { font-weight: 700; }
@@ -24,7 +24,7 @@
 /* Un lien posé sur le fond grisé d'une ligne : `--accent-ink` (`--accent` n'y atteint pas 4,5:1). Le lien qui ouvre « Exporter, en détail » est un bouton, qui a l'aspect d'un lien. */
 .pp-news-list a, .pp-news-link { color: var(--accent-ink); }
 .pp-news-link { padding: 0; border: 0; background: none; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
-.pp-news-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 2px; }
+.pp-news-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: var(--radius-xs, 2px); }
 
 /* Les points : un par écran, un seul arrêt de Tab (celui de l'écran affiché), les flèches passent de l'un à l'autre. Ce sont des commandes, pas un décor : gris du texte secondaire (5:1 au moins sur
    la fenêtre, clair et sombre) pour ceux qu'on peut choisir, noir du texte et un peu plus gros pour l'écran affiché, la taille disant ce que la couleur seule ne dirait pas. */
@@ -39,13 +39,13 @@
 .pp-news-exp-slide .pp-news-name { margin-bottom: 6px; }
 .pp-news-exp-cols { display: grid; gap: 16px; align-items: start; }
 .pp-news-exp-three { grid-template-columns: repeat(3, 178px); gap: 23px; }
-.pp-news-exp-shot { position: relative; box-sizing: content-box; margin: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-sunken); line-height: 0; }
+.pp-news-exp-shot { position: relative; box-sizing: content-box; margin: 0; border: 1px solid var(--border); border-radius: var(--radius-md, 8px); overflow: hidden; background: var(--surface-sunken); line-height: 0; }
 .pp-news-exp-shot img { display: block; }
 /* Un menu ouvert : sans cadre, avec l'ombre de celui du widget. Coupé en bas ou en haut quand la capture n'en montre qu'un morceau : un fondu, pas un bord net. */
-.pp-news-exp-menu { border: 0; border-radius: 8px; background: transparent; box-shadow: 0 1px 8px rgba(0, 0, 0, .22); }
+.pp-news-exp-menu { border: 0; border-radius: var(--radius-md, 8px); background: transparent; box-shadow: 0 1px 8px rgba(0, 0, 0, .22); }
 .pp-news-exp-cut-bottom img { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 12px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 12px), transparent); }
 .pp-news-exp-cut-top img { -webkit-mask-image: linear-gradient(to top, #000 calc(100% - 8px), transparent); mask-image: linear-gradient(to top, #000 calc(100% - 8px), transparent); }
-.pp-news-exp-badge { position: absolute; box-sizing: border-box; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: var(--accent-solid); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--surface); }
+.pp-news-exp-badge { position: absolute; box-sizing: border-box; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: #2f6fed; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--surface); }
 .pp-news-exp-legend { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; font-size: 12.5px; line-height: 1.4; color: var(--text-muted); }
 .pp-news-exp-legend li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 8px; align-items: start; }
 .pp-news-exp-legend .pp-news-exp-badge { position: static; margin: 1px 0 0; }
@@ -58,4 +58,4 @@
 
 /* Réglages > Crédits : la ligne « Nouveautés », sous la version. Un bouton, qui a l'aspect des liens de cette liste (css/toolbar-v2.css). */
 .settings-credits-list .pp-news-open { padding: 0; border: 0; background: none; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
-.settings-credits-list .pp-news-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 2px; }
+.settings-credits-list .pp-news-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: var(--radius-xs, 2px); }

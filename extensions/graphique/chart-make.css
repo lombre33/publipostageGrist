@@ -47,7 +47,7 @@
 /* Le maximum des jauges : un petit champ de nombre à la suite de son nom, sur la hauteur d'une case à cocher (la rangée des réglages ne grandit pas), et ce que la jauge fait des lignes à côté. */
 .pp-chartmake-max { padding: 0; cursor: default; }
 .pp-chartmake-max-note { align-self: center; margin: 0; }
-.pp-chartmake-max-input { box-sizing: border-box; width: 72px; height: 21px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); font-family: var(--font-ui); font-size: 12px; color: var(--text); }
+.pp-chartmake-max-input { box-sizing: border-box; width: 72px; height: 21px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); background: var(--surface); font-family: var(--font-ui); font-size: 12px; color: var(--text); }
 .pp-chartmake-max-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pp-chartmake-box .pp-chart-select[aria-invalid="true"] + .ss-wrap .ss-trigger { border-color: var(--danger); }
 /* L'onglet « Aspect » : le titre, les jeux de couleurs, les séries (une ligne chacune : sa couleur, son nom, son type) puis les valeurs affichées. */

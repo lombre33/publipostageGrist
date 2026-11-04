@@ -16,7 +16,7 @@
    restent en place. */
 .settings-access-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; align-items: center; }
 .settings-access-grid label { font-size: 13px; color: var(--text); }
-.settings-access-grid select { min-width: 0; width: 100%; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 0 6px; font-family: var(--font-ui); font-size: 13px; background: var(--surface); color: var(--text); }
+.settings-access-grid select { min-width: 0; width: 100%; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); padding: 0 6px; font-family: var(--font-ui); font-size: 13px; background: var(--surface); color: var(--text); }
 .settings-access-grid select:disabled { opacity: .55; }
 /* Choix de colonne avec recherche (js/search-select.js) : même hauteur et même corps de texte que la liste des tables à côté, qui reste native. */
 .settings-access-grid .ss-trigger { height: 28px; padding: 0 6px; font-size: 13px; }

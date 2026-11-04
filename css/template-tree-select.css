@@ -72,9 +72,9 @@
 
 /* En-tête du panneau : reste en haut quand la liste défile (sticky), titre à gauche et « Organiser mes modèles » à droite. Les marges négatives lui
    font couvrir le padding de 4 px du panneau, pour que les lignes qui défilent ne se voient pas au-dessus. */
-.tts-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -4px -4px 2px; padding: 4px 6px 4px 12px; background: var(--surface); border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; }
+.tts-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -4px -4px 2px; padding: 4px 6px 4px 12px; background: var(--surface); border-bottom: 1px solid var(--border); border-radius: var(--radius-md, 6px) var(--radius-md, 6px) 0 0; }
 .tts-head-title { font-size: 11px; font-weight: 600; color: var(--text-faint); white-space: nowrap; }
-.tts-organize-btn { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); font-family: var(--font-ui); font-size: 12px; font-weight: 500; cursor: pointer; }
+.tts-organize-btn { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border: none; border-radius: var(--radius-btn, var(--radius-sm)); background: transparent; color: var(--text-muted); font-family: var(--font-ui); font-size: 12px; font-weight: 500; cursor: pointer; }
 .tts-organize-btn .tts-icon { width: 13px; height: 13px; }
 /* @media (hover: hover) - même piège que .tts-trigger:hover ci-dessus (fond collé après un tap). */
 @media (hover: hover) and (pointer: fine) {
@@ -125,7 +125,7 @@
 
 /* Épingle (favori personnel, section « Épinglés ») : punaise en contour, volontairement pas l'étoile, réservée au « modèle par défaut »
    (#btn-set-default-template de css/toolbar-v2.css et .tts-star-btn plus bas) : une icône = une fonction. */
-.tts-pin-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; flex: none; border: none; background: transparent; border-radius: var(--radius-sm); color: var(--text-faint); opacity: 0; }
+.tts-pin-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; flex: none; border: none; background: transparent; border-radius: var(--radius-btn, var(--radius-sm)); color: var(--text-faint); opacity: 0; }
 .tts-row:hover .tts-pin-btn, .tts-row:focus-within .tts-pin-btn, .tts-pin-btn.is-pinned { opacity: 1; }
 /* @media (hover: hover) - même piège que .tts-trigger:hover ci-dessus (fond collé après un tap). */
 @media (hover: hover) and (pointer: fine) {
@@ -140,7 +140,7 @@
    « au démarrage » (.tts-default-note). .tts-star-glyph : le même tracé, seul, pour la légende d'« Organiser mes modèles ». Comme l'épingle,
    visible au survol et au focus de la ligne ; sur la ligne du modèle par défaut, toujours ; sans survol possible (écran tactile), sur toutes les lignes.
    Grisée, jamais retirée, pour un email, un macro-modèle et en lecture seule. */
-.tts-star-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; flex: none; border: none; background: transparent; border-radius: var(--radius-sm); color: var(--text-faint); cursor: pointer; opacity: 0; }
+.tts-star-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; flex: none; border: none; background: transparent; border-radius: var(--radius-btn, var(--radius-sm)); color: var(--text-faint); cursor: pointer; opacity: 0; }
 .tts-row:hover .tts-star-btn, .tts-row:focus-within .tts-star-btn, .tts-star-btn.is-default { opacity: 1; }
 .tts-row:hover .tts-star-btn.is-disabled, .tts-row:focus-within .tts-star-btn.is-disabled, .tts-star-btn.is-default.is-disabled { opacity: .45; }
 @media not (hover: hover) {

@@ -15,7 +15,7 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 .pp-slide-row { position: relative; flex: none; }
 
 /* Une miniature : son numéro (et le point rouge d'une diapositive qui dépasse de sa page), puis la page réduite. Celle du curseur est cochée : numéro et liseré d'accent. */
-.pp-slide-item { display: flex; align-items: flex-start; gap: 4px; padding: 3px; border-radius: 6px; cursor: pointer; outline: none; }
+.pp-slide-item { display: flex; align-items: flex-start; gap: 4px; padding: 3px; border-radius: var(--radius-md, 6px); cursor: pointer; outline: none; }
 .pp-slide-item:hover { background: var(--surface-sunken); }
 .pp-slide-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
 .pp-slide-side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; width: 14px; padding-top: 1px; }
@@ -52,7 +52,7 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 
 /* « ⋯ » : le menu de la diapositive, sur sa miniature, au survol et sur celle du curseur (un écran tactile, sans survol, l'y trouve). Pour la souris : le clavier ouvre le même menu par
    Maj+F10 ou la touche Menu. */
-.pp-slide-more { position: absolute; top: 6px; right: 5px; display: none; align-items: center; justify-content: center; box-sizing: border-box; width: 22px; height: 18px; margin: 0; padding: 0; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface); color: var(--text); cursor: pointer; }
+.pp-slide-more { position: absolute; top: 6px; right: 5px; display: none; align-items: center; justify-content: center; box-sizing: border-box; width: 22px; height: 18px; margin: 0; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-xs, 4px); background: var(--surface); color: var(--text); cursor: pointer; }
 .pp-slide-more svg { width: 14px; height: 14px; }
 .pp-slide-row:hover .pp-slide-more, .pp-slide-row.pp-slide-menu-open .pp-slide-more, .pp-slide-item[aria-selected="true"] + .pp-slide-more { display: inline-flex; }
 .pp-slide-more:hover { background: var(--surface-sunken); }
@@ -63,7 +63,7 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 .pp-slide-people { position: absolute; left: 21px; bottom: -3px; z-index: 1; display: flex; align-items: center; gap: 3px; }
 .pp-slide-people[hidden] { display: none; }
 .pp-slide-person { flex: none; box-sizing: border-box; width: 11px; height: 11px; border: 1.5px solid #fff; border-radius: 50%; background: var(--pp-live-color, var(--text-muted)); }
-.pp-slide-person-more { width: auto; min-width: 11px; padding: 0 3px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface-sunken); color: var(--text); font-size: 9px; font-variant-numeric: tabular-nums; line-height: 9px; }
+.pp-slide-person-more { width: auto; min-width: 11px; padding: 0 3px; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 6px); background: var(--surface-sunken); color: var(--text); font-size: 9px; font-variant-numeric: tabular-nums; line-height: 9px; }
 
 /* Glisser une miniature (slide-strip.js:onDragPress) : celle qu'on emporte s'estompe à sa place, sa copie suit la souris au-dessus de tout, une ligne d'accent dit où elle se posera.
    Plusieurs diapositives choisies s'estompent toutes, et la copie porte leur nombre. */
@@ -75,13 +75,13 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 .pp-slide-drop[hidden] { display: none; }
 .pp-slide-ghost { position: fixed; left: 0; top: 0; z-index: var(--z-tip); pointer-events: none; opacity: .85; border-radius: 2px; box-shadow: 0 4px 14px rgba(20, 20, 20, .28); }
 .pp-slide-ghost .pp-slide-thumb { box-shadow: 0 0 0 2px var(--accent); }
-.pp-slide-ghost-count { position: absolute; top: -7px; right: -7px; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--accent-solid); color: #fff; font: 600 11px/18px var(--font-ui); text-align: center; }
+.pp-slide-ghost-count { position: absolute; top: -7px; right: -7px; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: var(--radius-pill, 9px); background: var(--fill, var(--accent-solid)) border-box; color: var(--on-accent); font: 600 11px/18px var(--font-ui); text-align: center; }
 
 /* « Ajouter » et « Importer » (qui ouvre le volet de droite, slide-import.css), au bas de la bande : deux boutons carrés d'une icône, SUR UNE LIGNE (carte du 22/10, « Trois icônes sur une
    ligne » ; « Objets », le troisième, est depuis dans la barre d'outils du haut, js/objects-menu.js), du même dessin ; leur nom est l'info-bulle. Les deux (2 x 30 px, un écart de 4 px, 6 px
    de chaque côté) tiennent dans les 111 px que la bande laisse au contenu. Grisés (l'extension éteinte) : la couleur des textes discrets, toujours atteignables ; leur clic explique. */
 .pp-slide-actions { flex: none; display: grid; grid-template-columns: repeat(2, 30px); justify-content: center; gap: 4px; padding: 6px; }
-.pp-slide-add { display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: 30px; height: 30px; margin: 0; padding: 0; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+.pp-slide-add { display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: 30px; height: 30px; margin: 0; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 6px); background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
 .pp-slide-add:hover { background: var(--surface-sunken); }
 .pp-slide-add:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pp-slide-add svg { flex: none; width: 16px; height: 16px; }
@@ -91,9 +91,9 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 
 /* Le menu d'une diapositive et celui des mises en page de « Ajouter » (EditorCore.createFloatingPanel ; js/layers.js les pose au-dessus de l'existant). Une ligne grisée garde sa raison
    en info-bulle. */
-.pp-slide-menu, .pp-slide-layouts { display: none; position: absolute; top: 0; left: 0; z-index: var(--z-menu); flex-direction: column; min-width: 180px; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: 0 4px 16px rgba(20, 28, 46, .18); font-family: var(--font-ui); }
+.pp-slide-menu, .pp-slide-layouts { display: none; position: absolute; top: 0; left: 0; z-index: var(--z-menu); flex-direction: column; min-width: 180px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-md, 8px); background: var(--surface); box-shadow: 0 4px 16px rgba(20, 28, 46, .18); font-family: var(--font-ui); }
 .pp-slide-menu.visible, .pp-slide-layouts.visible { display: flex; }
-.pp-slide-menu button, .pp-slide-layouts button { display: block; margin: 0; padding: 6px 9px; border: none; border-radius: 5px; background: transparent; color: var(--text); font: inherit; font-size: 12.5px; text-align: left; white-space: nowrap; cursor: pointer; }
+.pp-slide-menu button, .pp-slide-layouts button { display: block; margin: 0; padding: 6px 9px; border: none; border-radius: var(--radius-xs, 5px); background: transparent; color: var(--text); font: inherit; font-size: 12.5px; text-align: left; white-space: nowrap; cursor: pointer; }
 .pp-slide-menu button:hover, .pp-slide-layouts button:hover { background: var(--surface-sunken); }
 .pp-slide-menu button:focus-visible, .pp-slide-layouts button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .pp-slide-menu button[aria-disabled="true"] { color: var(--text-muted); cursor: not-allowed; }

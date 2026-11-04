@@ -7,8 +7,8 @@
 .template-preview-modal-content .tpl-preview-heading h3 { margin-bottom: 4px; }
 .tpl-preview-note { margin: 0 0 12px; font-size: 12px; line-height: 1.4; color: var(--text-muted); overflow-wrap: anywhere; }
 .tpl-preview-note[hidden] { display: none; }
-.tpl-preview-actions #tpl-preview-use-pack { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; }
-.tpl-preview-actions #tpl-preview-use-pack:hover { background: var(--accent-solid-hover); }
+.tpl-preview-actions #tpl-preview-use-pack { background: var(--fill, var(--accent-solid)) border-box; border-color: var(--fill-line, var(--accent-solid)); color: var(--on-accent); }
+.tpl-preview-actions #tpl-preview-use-pack:hover { background: var(--fill-hover, var(--accent-solid-hover)) border-box; }
 .tpl-preview-actions #tpl-preview-use-pack[hidden] { display: none; }
 /* Cadre étroit : le titre garde sa largeur (il ne se réduit jamais à une lettre par ligne), les boutons descendent dessous et passent à la ligne à leur tour. */
 .template-preview-modal-content .tpl-preview-header { flex-wrap: wrap; }
@@ -25,7 +25,7 @@
 .tpl-preview-shows { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 14px; }
 .tpl-preview-shows[hidden] { display: none; }
 .tpl-preview-shows-label { font-size: 11.5px; font-weight: 700; color: var(--text-muted); margin-right: 2px; }
-.tpl-preview-chip { font-size: 11.5px; font-weight: 600; line-height: 1.3; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; padding: 2px 9px; }
+.tpl-preview-chip { font-size: 11.5px; font-weight: 600; line-height: 1.3; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-pill, 12px); padding: 2px 9px; }
 
 /* Le document rempli : une image par page, à sa taille d'écran (le HTML donne `width`/`height`), réduite à la largeur de la fenêtre ; deux pages étroites (un flyer A6) se rangent côte à côte, une page large (une A4, une planche) prend la ligne. */
 .tpl-preview-captures { display: flex; flex-flow: row wrap; justify-content: center; align-items: flex-start; gap: 14px; }

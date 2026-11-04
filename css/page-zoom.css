@@ -7,8 +7,8 @@
    d'une mesure). Niveau --z-page-zoom
    (css/style.css) : sous les barres flottantes d'une bulle, d'une image ou d'un tableau, les menus, les info-bulles et les fenêtres. Couleurs : jetons de
    css/style.css (texte ≥ 4,5:1, clair et sombre), aucune couleur en dur ; monochrome, l'accent ne sert qu'à l'état enfoncé d'« Ajuster ». */
-.pp-page-zoom { position: fixed; right: calc(var(--pp-zoom-right, 0px) + var(--pp-gfs-shift-x, 0px) + 3px); bottom: calc(var(--pp-zoom-bottom, 0px) + var(--pp-gfs-shift-y, 0px) + 3px); z-index: var(--z-page-zoom); display: inline-flex; align-items: center; gap: 2px; box-sizing: border-box; height: 24px; padding: 1px 2px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); font-family: var(--font-ui); font-size: 12px; line-height: 1; user-select: none; }
-.pp-page-zoom button { box-sizing: border-box; height: 20px; margin: 0; padding: 0 8px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.pp-page-zoom { position: fixed; right: calc(var(--pp-zoom-right, 0px) + var(--pp-gfs-shift-x, 0px) + 3px); bottom: calc(var(--pp-zoom-bottom, 0px) + var(--pp-gfs-shift-y, 0px) + 3px); z-index: var(--z-page-zoom); display: inline-flex; align-items: center; gap: 2px; box-sizing: border-box; height: 24px; padding: 1px 2px; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 8px); background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); font-family: var(--font-ui); font-size: 12px; line-height: 1; user-select: none; }
+.pp-page-zoom button { box-sizing: border-box; height: 20px; margin: 0; padding: 0 8px; border: 1px solid transparent; border-radius: var(--radius-xs, 5px); background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .pp-page-zoom button:hover { background: var(--surface-sunken); border-color: var(--border); }
 .pp-page-zoom button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* Moins et plus : un carré, le signe un peu plus grand que le texte. */

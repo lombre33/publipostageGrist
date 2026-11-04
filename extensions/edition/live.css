@@ -11,7 +11,7 @@
 .live-bar[data-state="trouble"] .live-bar-text { color: var(--danger-ink); }
 .live-bar-text { flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .live-bar-people { flex: none; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
-.live-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 150px; height: 20px; padding: 0 8px 0 6px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface); color: var(--text); font-size: 12px; line-height: 1; }
+.live-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 150px; height: 20px; padding: 0 8px 0 6px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-pill, 10px); background: var(--surface); color: var(--text); font-size: 12px; line-height: 1; }
 /* Un anneau gris autour du point : une couleur sombre de la palette (assez sombre pour le nom blanc du curseur) se distingue mal d'une pastille sombre, en thème sombre ; l'anneau garde le point visible (3:1) sur les deux. */
 .live-chip-dot { flex: none; box-sizing: border-box; width: 10px; height: 10px; border: 1px solid var(--text-muted); border-radius: 50%; background: var(--pp-live-color, #6b6b6b); }
 .live-chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -27,7 +27,7 @@
 .v2-linked-menu-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v2-linked-menu-hint { padding: 3px 6px 7px; font: 11px/1.35 var(--font-ui); color: var(--text-muted, #6b7482); }
 .v2-linked-menu-rows { padding-top: 5px; border-top: 1px solid var(--border, #d7dde3); }
-.v2-linked-menu-row { display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; padding: 5px 6px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text, #3a4452); font: 12.5px/1.3 var(--font-ui); text-align: left; cursor: pointer; }
+.v2-linked-menu-row { display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; padding: 5px 6px; border: 1px solid transparent; border-radius: var(--radius-xs, 5px); background: transparent; color: var(--text, #3a4452); font: 12.5px/1.3 var(--font-ui); text-align: left; cursor: pointer; }
 .v2-linked-menu-row svg { flex: none; width: 15px; height: 15px; }
 .v2-linked-menu-row:hover, .v2-linked-menu-row:focus-visible { background: var(--surface-sunken, #f2f4f7); }
 /* Grisée (verrouillé) : elle garde sa place, la raison est dite au-dessus et en info-bulle ; un clic dessus ne fait rien. */
