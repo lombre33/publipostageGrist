@@ -491,14 +491,16 @@ const Shortcuts = (function () {
     }
 
     // L'éditeur du document est à l'écran (pas dans la Lecture, qui le cache) sans avoir le focus : le focus est sur le corps de la page, un bouton, une ligne de menu. Là, une touche native de
-    // l'éditeur ne va nulle part (`anywhere`). Le résumé d'un macro-modèle, qui prend la place de l'éditeur, compte comme lui : son historique (la page, la composition) est celui de l'éditeur caché.
+    // l'éditeur ne va nulle part (`anywhere`). Le résumé d'un macro-modèle, qui prend la place de l'éditeur, compte comme lui : son historique (la page, la composition) est celui de l'éditeur caché. Un PDF lu dans la
+    // Lecture aussi (js/pdf-reading.js) : ses commentaires se défont par l'historique de l'éditeur caché, comme les actions de la bibliothèque (js/action-history.js).
     // Sauf dans un composant qui la traite lui-même et garde le focus sur ses boutons (`data-own-undo` : le panneau Rechercher / Remplacer, où Ctrl + Z sur « Remplacer » défait le remplacement
     // sans quitter le bouton).
     function editorOnScreenWithoutFocus() {
       const editor = typeof EditorCore !== 'undefined' && EditorCore.getEditor();
       if (!editor || editor.isDestroyed) return false;
       const summary = document.getElementById('macro-summary-container');
-      if (!editor.view.dom.getClientRects().length && !(summary && summary.getClientRects().length)) return false;
+      const pdf = typeof PdfReading !== 'undefined' && PdfReading.isActive();
+      if (!editor.view.dom.getClientRects().length && !(summary && summary.getClientRects().length) && !pdf) return false;
       const active = document.activeElement;
       return !active || !active.closest || !active.closest('.ProseMirror, [data-own-undo]');
     }

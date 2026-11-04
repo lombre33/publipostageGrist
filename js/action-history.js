@@ -76,6 +76,9 @@ const ActionHistory = (function () {
     entries.forEach(entry => { if (entry.want) HistoryMarkers.recordAction(entry.id); });
   }
 
+  // Une action dont plus rien ne dépend (le PDF dont elle visait le fil n'est plus à l'écran, extensions/lecture-pdf/pdf-comments.js) : elle ne se défait plus. Son repère, resté dans l'historique de l'éditeur, ne fait plus rien (`sync`).
+  function forget(id) { entries.delete(id); }
+
   // Les essais : rendre la main une fois les actions en route finies, et repartir de zéro.
   const whenIdle = () => queue;
   function reset() {
@@ -84,5 +87,5 @@ const ActionHistory = (function () {
   }
   const count = () => entries.size;
 
-  return { wire, add, sync, reseed, conflict, whenIdle, reset, count };
+  return { wire, add, sync, reseed, conflict, forget, whenIdle, reset, count };
 })();

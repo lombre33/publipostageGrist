@@ -6,17 +6,35 @@
 // (js/editor-nodes.js:createCommentMark) : ProseMirror la déplace, l'étend et la découpe au fil des modifications, sans code de suivi. Le contenu du
 // fil (qui a écrit quoi, quand) vit dans une table Grist compagnon (Publipostage_Commentaires, comme Publipostage_LiensTables), partagée entre toutes
 // les personnes du document, contrairement à un stockage local.
+//
+// Les fils d'un PDF lu dans la Lecture (consigne GFS 045) vivent dans la même table : un PDF n'a pas de document où poser une marque, l'ancre du passage (page, positions dans le texte de la page, citation) et l'état « résolu » sont donc
+// des colonnes, sur la ligne du premier message du fil, et la clé du PDF (`lecture.id`, que GFS donne) remplace le `ModeleId`. Leur code est dans l'extension (extensions/lecture-pdf/pdf-comments.js) ; ce fichier lui prête le cadre et les
+// morceaux de la fenêtre d'un fil (`kit`), pour qu'elle soit la même, et lui passe le geste « Commenter » quand un PDF est à l'écran.
 const Comments = (function () {
   const element = Dom.el;
 
   const TABLE_NAME = 'Publipostage_Commentaires';
-  const TABLE_COLUMNS = [
+  // Les colonnes d'un fil de modèle : celles que la table a toujours eues, et seules créées avec elle par un commentaire de modèle.
+  const MODEL_COLUMNS = [
     { id: 'ModeleId', type: 'Int' },
     { id: 'CommentId', type: 'Text' },
     { id: 'Auteur', type: 'Text' },
     { id: 'Texte', type: 'Text' },
     { id: 'CreeLe', type: 'DateTime' },
   ];
+  // Celles de plus d'un fil de PDF : la clé du PDF, puis - sur la ligne du PREMIER message seulement - la page, le début et la fin du passage dans le texte de la page, la citation, un peu de texte avant et après, et l'état résolu.
+  const PDF_COLUMNS = [
+    { id: 'LectureId', type: 'Text' },
+    { id: 'Page', type: 'Int' },
+    { id: 'Debut', type: 'Int' },
+    { id: 'Fin', type: 'Int' },
+    { id: 'Citation', type: 'Text' },
+    { id: 'Avant', type: 'Text' },
+    { id: 'Apres', type: 'Text' },
+    { id: 'Resolu', type: 'Bool' },
+  ];
+  // Toutes : la table qu'un fil de PDF crée dans un document qui n'en a pas ; dans une table d'avant, il n'ajoute que celles qui manquent.
+  const TABLE_COLUMNS = MODEL_COLUMNS.concat(PDF_COLUMNS);
   let editor = null;
   function setEditor(ed) {
     editor = ed;
@@ -76,7 +94,7 @@ const Comments = (function () {
 
   // Faux quand la personne refuse de créer la table : l'appelant s'arrête, sans journal d'erreur (une autre panne est journalisée et la suite la rencontre).
   async function ensureTableExists() {
-    try { await GristAPI.ensureTable(TABLE_NAME, TABLE_COLUMNS); }
+    try { await GristAPI.ensureTable(TABLE_NAME, MODEL_COLUMNS); }
     catch (e) {
       if (GristAPI.isTablesDeclined(e)) return false;
       console.error('[Comments] Erreur création table commentaires', e);
@@ -335,10 +353,13 @@ const Comments = (function () {
     return popupBox;
   }
 
+  // Le module des fils d'un PDF, qui se sert du même cadre : prévenu quand le cadre est refermé par ici (droits qui changent, modèle chargé), pour défaire ce qu'il montrait.
+  let externalHide = null;
   function hidePopup() {
     popupCommentId = null;
     popupIsNewThread = false;
     if (popupBox) popupBox.style.display = 'none';
+    if (externalHide) externalHide();
   }
 
   function closePopup() {
@@ -368,13 +389,14 @@ const Comments = (function () {
     return btn;
   }
 
-  function popupHeader(resolved) {
+  // `onClose` : ce que fait la croix ; la fenêtre d'un fil de modèle la referme (closePopup), celle d'un fil de PDF lui substitue la sienne.
+  function popupHeader(resolved, onClose) {
     const badge = element('span', 'v2-comment-popup-badge' + (resolved ? ' is-resolved' : ''));
     badge.textContent = I18n.t(resolved ? 'comments.resolvedBadge' : 'comments.activeBadge');
     const closeBtn = element('button', 'v2-comment-popup-close', '×');
     closeBtn.type = 'button';
     closeBtn.setAttribute('aria-label', I18n.t('comments.close'));
-    closeBtn.addEventListener('mousedown', event => { event.preventDefault(); closePopup(); });
+    closeBtn.addEventListener('mousedown', event => { event.preventDefault(); (onClose || closePopup)(); });
     const header = element('div', 'v2-comment-popup-header');
     header.append(badge, closeBtn);
     return header;
@@ -391,14 +413,15 @@ const Comments = (function () {
     return list;
   }
 
-  function popupReplyArea(hasMessages) {
+  // `onEscape` : ce que fait Échap dans la saisie (même règle que `onClose` de popupHeader).
+  function popupReplyArea(hasMessages, onEscape) {
     const replyArea = element('textarea', 'v2-comment-popup-reply');
     replyArea.rows = 2;
     replyArea.placeholder = I18n.t(hasMessages ? 'comments.replyPlaceholder' : 'comments.firstMessagePlaceholder');
     // Commentaires non autorisés pour cette personne : le fil reste lisible, la saisie et les actions sont grisées (jamais retirées).
     replyArea.disabled = !canComment;
     replyArea.addEventListener('keydown', event => {
-      if (event.key === 'Escape') { event.preventDefault(); closePopup(); }
+      if (event.key === 'Escape') { event.preventDefault(); (onEscape || closePopup)(); }
     });
     return replyArea;
   }
@@ -513,6 +536,8 @@ const Comments = (function () {
   function newCommentId() { return 'cm-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
   function insertCommentAtSelection() {
+    // Un PDF à l'écran (js/pdf-reading.js) : le geste vise son texte, pas l'éditeur masqué ni le modèle de la Lecture.
+    if (typeof PdfReading !== 'undefined' && PdfReading.isActive()) { if (canComment) PdfReading.comment(); return; }
     if (!editor || !canComment) return;
     if (readerMode) { insertCommentFromReader(); return; }
     if (editor.state.selection.empty) { alert(I18n.t('comments.selectTextFirst')); return; }
@@ -724,9 +749,25 @@ const Comments = (function () {
     });
   }
 
+  // La fenêtre d'un fil, pour les fils d'un PDF (extensions/lecture-pdf/pdf-comments.js) : le même cadre (un seul à la fois à l'écran), les mêmes morceaux, la même pose. `closeModelPopup` ferme celle d'un modèle avant qu'un fil de PDF
+  // s'ouvre ; `onHide(fn)` prévient le module quand ce fichier referme le cadre.
+  const kit = {
+    box: ensurePopupBox,
+    header: popupHeader,
+    list: popupThreadList,
+    replyArea: popupReplyArea,
+    button: popupButton,
+    place: positionPopup,
+    closeModelPopup: closePopup,
+    onHide(fn) { externalHide = typeof fn === 'function' ? fn : null; },
+    canComment: () => canComment,
+    newId: newCommentId,
+  };
+
   return {
     setEditor, loadForTemplate, insertCommentAtSelection, wireClickToOpen,
     setPermissions, isReaderMode, setReaderHooks, buildReaderHtml, wireReader,
     snapshot, restore, whenIdle,
+    TABLE_NAME, TABLE_COLUMNS, PDF_COLUMNS, kit,
   };
 })();

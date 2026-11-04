@@ -723,6 +723,7 @@
   // se charge dans l'éditeur montré, et ne se dessine pas deux fois dans la Lecture. Resté en Lecture avant le PDF, on y reste : le modèle posé s'y dessine (la fin de loadTemplateIntoEditor).
   function onPdfReadingChange(active) {
     applyPdfLocks();
+    applyFormattingBarLock();
     ReaderMode.lend(active);
     const toggle = document.getElementById('v2-toggle-a4-preview');
     readerContainer.classList.toggle('a4-preview', active || (!!toggle && toggle.checked && !GridEditor.isGridType(currentTypeModele)));
@@ -1481,6 +1482,8 @@
   // #v2-export-pdf-group (le bouton Exporter et ses lignes, Word et Excel compris) sont grisés ensemble.
   const EXPORT_LOCKED_IDS = ['v2-quality-group', 'v2-export-pdf-group', 'btn-create-email'];
   // Les quatre champs des marges, et avec eux les quatre préréglages et la chaîne qui lie les marges (js/settings.js) : tout ce qui change une marge est grisé.
+  // Annuler et Rétablir, que la lecture d'un PDF garde actifs (applyFormattingBarLock).
+  const PDF_HISTORY_IDS = ['v2-btn-undo', 'v2-btn-redo'];
   const READ_ONLY_DISABLED_INPUTS = ['settings-margin-top', 'settings-margin-right', 'settings-margin-bottom', 'settings-margin-left',
     'settings-margin-preset-none', 'settings-margin-preset-narrow', 'settings-margin-preset-classic', 'settings-margin-preset-wide', 'settings-margins-link'];
   // Réglage présent au démarrage : les droits sont attendus avant le premier affichage, au plus ce délai (Grist qui tarde à répondre) - au-delà le
@@ -1519,10 +1522,12 @@
       const el = document.getElementById(id);
       if (!el) return;
       const wasOn = el.classList.contains(PDF_LOCK_CLASS);
-      el.classList.toggle(PDF_LOCK_CLASS, on);
+      // Sans raison, pas de grisé : « Commenter » se dégrise pour un PDF qui a du texte (js/pdf-reading.js:reasons).
+      const locked = on && !!reasons[reason];
+      el.classList.toggle(PDF_LOCK_CLASS, locked);
       // La raison est l'info-bulle du contrôle et ce que son clic écrit dans le coin d'état : js/lock-reasons.js (cause « pdf »), qui rend aussi au dégrisé le `title` d'avant.
-      LockReasons.set(el, 'pdf', on ? reasons[reason] : '');
-      if (on) {
+      LockReasons.set(el, 'pdf', locked ? reasons[reason] : '');
+      if (locked) {
         el.setAttribute('aria-disabled', 'true');
         el.setAttribute('data-pp-pdf-reason', reasons[reason]);
       } else if (wasOn) {
@@ -1543,7 +1548,14 @@
     const locked = isReadOnly() || currentMode === 'read' || isAccessGuideShown();
     // Pourquoi, dans l'ordre : un document en lecture seule, le mode lecture, la carte de l'accès. Les séparateurs se grisent avec la barre mais ne disent rien : on ne les clique pas.
     const reason = isReadOnly() ? 'lock.readOnly' : currentMode === 'read' ? 'lock.readMode' : 'lock.accessGuide';
-    Array.from(formattingBar.children).forEach(child => { if (child.id !== 'v2-btn-comment') setAccessLocked(child, locked, child.classList.contains('v2-sep') ? '' : reason); });
+    // Un PDF à l'écran se commente (extensions/lecture-pdf/pdf-comments.js) et ses commentaires se défont par l'historique de l'éditeur caché (js/action-history.js) : Annuler et Rétablir suivent alors le droit de commenter,
+    // comme Commenter (et disent la même raison), au lieu du grisé de la Lecture.
+    const followComments = PdfReading.isActive() && !isAccessGuideShown();
+    Array.from(formattingBar.children).forEach((child) => {
+      if (child.id === 'v2-btn-comment') return;
+      const follows = followComments && PDF_HISTORY_IDS.indexOf(child.id) !== -1;
+      setAccessLocked(child, follows ? !AccessRights.get().canComment : locked, child.classList.contains('v2-sep') ? '' : (follows ? 'lock.noComment' : reason));
+    });
   }
 
   // Commentaires : la Lecture les montre et en accepte de nouveaux (js/comments.js:readerMode) dès qu'elle est affichée, choisie ou imposée par la
@@ -3628,6 +3640,7 @@
     GfsOpen.init({ openTemplate: openTemplateForRow, openBlank: openBlankOfType, importFile: importFileFromGfs, readPdf: PdfReading.open, say: text => setStatus(text) });
     PdfReading.init({ leave: leaveForPdf, show: () => switchMode('read'), say: (text, isError) => setStatus(text, isError), layoutChanged: () => refreshPageFitZoom() });
     PdfReading.onChange(onPdfReadingChange);
+    PdfReading.onLocksChanged(applyPdfLocks);
     await editorReady;
     attachFieldEditors(await Editor.loadLibraries());
     Comments.setReaderHooks({ save: saveReaderCommentAnchors, refresh: () => renderReader() });

@@ -11,8 +11,8 @@
 //    morceaux de sa couche de texte (`TextLayer.textDivs`, dans le même ordre) : une sélection à la souris se lit en positions dans le texte de la page, jamais en pixels, et une marque (`setMarks`) enveloppe le passage dans ces
 //    mêmes morceaux, si bien qu'elle suit le zoom, le défilement et la Lecture épurée avec la page et se repose à chaque fois qu'une page se redessine. Un fil ne couvre qu'une page : une sélection qui déborde est coupée à la fin de la page où elle commence.
 //    PdfView.mount(container, doc, { page(n, total) -> texte, failed -> texte }) -> Promise<void>    PdfView.unmount()    PdfView.pagesShown() -> [numéros des pages dessinées]
-//    PdfView.selection() -> { page, debut, fin, citation, avant, apres, clipped, rect } | null    PdfView.setMarks([{ id, page, debut, fin, resolved }])    PdfView.markElement(id)    PdfView.onMarkClick(fn(id, élément))
-//    PdfView.hasText() -> true | false | null (null : on ne sait pas encore)    PdfView.onTextKnown(fn(bool))    PdfView.pageText(n) -> Promise<{ text, ... } | null> (dessinée ou non)
+//    PdfView.selection() -> { page, debut, fin, citation, avant, apres, clipped, rect } | null    PdfView.clearSelection()    PdfView.setMarks([{ id, page, debut, fin, resolved }])    PdfView.markElement(id)    PdfView.onMarkClick(fn(id, élément))
+//    PdfView.hasText() -> true | false | null (null : on ne sait pas encore)    PdfView.onTextKnown(fn(bool)) (s'ajoute aux écouteurs déjà posés)    PdfView.pageText(n) -> Promise<{ text, ... } | null> (dessinée ou non)
 const PdfView = (function () {
   const el = Dom.el;
   const CLASS = 'pp-pdf-reading';
@@ -21,7 +21,9 @@ const PdfView = (function () {
   const KEEP_RENDERED = 8;
   const ROOT_MARGIN = '900px 0px';    // une page se dessine un peu avant d'entrer à l'écran
 
-  let view = null;                    // { container, doc, text, root, pages[], observer, visible:Set<number>, widest, dead, marks[], retained, hasText, onMarkClick, onTextKnown }
+  let view = null;                    // { container, doc, text, root, pages[], observer, visible:Set<number>, widest, dead, marks[], retained, hasText, texts }
+  // Les marques voulues : celles que le module des commentaires a données, gardées d'un PDF posé à l'autre (elles se posent à chaque `mount`, quel que soit l'ordre où le PDF et ses fils arrivent).
+  let wantedMarks = [];
 
   const cssSize = viewport => ({ width: viewport.width, height: viewport.height });
   function sizeFrame(page, size) {
@@ -126,7 +128,7 @@ const PdfView = (function () {
   // Les commentaires (consigne GFS 045) : le PDF a-t-il du texte, les marques posées sur la couche de texte, la sélection lue en positions dans le texte de la page.
 
   const MARK = 'pp-pdf-mark';
-  const handlers = { markClick: null, textKnown: null };   // posés par le module des commentaires, ils survivent au changement de PDF
+  const handlers = { markClick: null, textKnown: [] };   // posés par le module des commentaires, ils survivent au changement de PDF (le clic sur une marque n'a qu'un gestionnaire ; qui veut savoir si le PDF a du texte s'ajoute à ceux qui le savent déjà)
 
   // Le PDF « a du texte » dès qu'une page dessinée en a. Il n'en a pas quand les pages qui se dessinent à l'arrivée sont toutes dessinées et sans texte (un scan) : tant que l'une d'elles se dessine encore, on ne sait pas
   // (`null`), pour ne pas griser « Commenter » un instant devant une première page blanche suivie de pages de texte. Une page de texte qui arrive plus tard le rend vrai.
@@ -137,7 +139,7 @@ const PdfView = (function () {
     const next = drawn.some(page => page.source && page.source.length > 0) ? true : (drawn.length && !pending ? false : null);
     if (next === null || next === owner.hasText) return;
     owner.hasText = next;
-    if (handlers.textKnown) handlers.textKnown(next);
+    handlers.textKnown.slice().forEach((listener) => { try { listener(next); } catch (e) { /* un écouteur qui échoue n'empêche pas les autres */ } });
   }
 
   // Les marques d'une page : retirées (le texte retrouve ses morceaux d'origine), puis posées pour chaque passage de la page, le plus long d'abord pour que les plus courts se logent dedans.
@@ -212,8 +214,9 @@ const PdfView = (function () {
   }
 
   function setMarks(marks) {
+    wantedMarks = (Array.isArray(marks) ? marks : []).map(mark => ({ id: String(mark.id), page: Number(mark.page), debut: Number(mark.debut), fin: Number(mark.fin), resolved: mark.resolved === true }));
     if (!view) return;
-    view.marks = (Array.isArray(marks) ? marks : []).map(mark => ({ id: String(mark.id), page: Number(mark.page), debut: Number(mark.debut), fin: Number(mark.fin), resolved: mark.resolved === true }));
+    view.marks = wantedMarks;
     view.pages.forEach(page => applyMarks(view, page));
   }
 
@@ -271,6 +274,14 @@ const PdfView = (function () {
     return Object.assign(anchor, { clipped, rect: range.getBoundingClientRect() });
   }
 
+  // Oublie la sélection - celle du navigateur et celle qu'on gardait pour le clic sur « Commenter » - : le fil vient de naître, sa marque prend la place de la sélection.
+  function clearSelection() {
+    if (!view) return;
+    view.retained = null;
+    const selected = window.getSelection();
+    if (selected && selected.rangeCount && view.root.contains(selected.getRangeAt(0).commonAncestorContainer)) selected.removeAllRanges();
+  }
+
   function wireComments(owner) {
     owner.onSelectionChange = () => {
       const selected = window.getSelection();
@@ -316,7 +327,7 @@ const PdfView = (function () {
     const root = el('div', 'pp-pdf-pages');
     root.tabIndex = 0;
     root.setAttribute('role', 'document');
-    const owner = { container, doc, text, root, pages: [], observer: null, visible: new Set(), widest: 0, dead: false, onWidest, marks: [], retained: null, hasText: null, texts: new Map() };
+    const owner = { container, doc, text, root, pages: [], observer: null, visible: new Set(), widest: 0, dead: false, onWidest, marks: wantedMarks, retained: null, hasText: null, texts: new Map() };
     for (let n = 1; n <= doc.pageCount; n++) {
       const frame = el('div', 'pp-pdf-page');
       frame.dataset.page = String(n);
@@ -340,7 +351,7 @@ const PdfView = (function () {
   const isMounted = () => view !== null;
   const hasText = () => (view ? view.hasText : null);
   function onMarkClick(fn) { handlers.markClick = typeof fn === 'function' ? fn : null; }
-  function onTextKnown(fn) { handlers.textKnown = typeof fn === 'function' ? fn : null; }
+  function onTextKnown(fn) { if (typeof fn === 'function') handlers.textKnown.push(fn); }
 
-  return { mount, unmount, pagesShown, isMounted, selection, setMarks, markElement, onMarkClick, hasText, onTextKnown, pageText };
+  return { mount, unmount, pagesShown, isMounted, selection, clearSelection, setMarks, markElement, onMarkClick, hasText, onTextKnown, pageText };
 })();

@@ -12,6 +12,9 @@
 //   PdfReading.init({ leave() -> Promise<bool>, show() -> Promise<void>, say(texte, erreur?), layoutChanged() })   ce que js/main.js fournit
 //   PdfReading.open(lecture) -> Promise<bool>    PdfReading.close()    PdfReading.render(container) -> Promise<void>    PdfReading.isActive()    PdfReading.info() -> { id, name, pages } | null
 //   PdfReading.onChange(fn(actif)) -> se désabonner    PdfReading.reasons() -> les phrases des grisés (js/main.js)
+//  - les COMMENTAIRES (consigne GFS 045) : le geste « Commenter » (js/comments.js) vient ici quand un PDF est à l'écran, `comment()` le passe au module des fils (extensions/lecture-pdf/pdf-comments.js, chargé avec l'extension) ;
+//    ce module dit quand « Commenter » se grise ou se dégrise (`locksChanged()` : un PDF sans texte, une structure que Grist refuse) et parle dans le coin d'état par `say`.
+//   PdfReading.comment()    PdfReading.say(texte, erreur?)    PdfReading.onLocksChanged(fn) -> se désabonner    PdfReading.locksChanged()
 const PdfReading = (function () {
   const ID = 'lecture-pdf';
   const LIBRARY = 'pdfjs';   // la bibliothèque que GFS donne (`bibliotheques.pdfjs`) : pdf.js
@@ -28,6 +31,14 @@ const PdfReading = (function () {
   function notify() {
     listeners.forEach((fn) => { try { fn(isActive()); } catch (e) { console.warn('[PdfReading] abonné en échec', e); } });
   }
+  const lockListeners = new Set();
+  function onLocksChanged(fn) { lockListeners.add(fn); return () => lockListeners.delete(fn); }
+  function locksChanged() {
+    lockListeners.forEach((fn) => { try { fn(); } catch (e) { console.warn('[PdfReading] abonné en échec', e); } });
+  }
+  const say = (text, isError) => host.say(text, isError);
+  // Le geste « Commenter » sur le PDF à l'écran : le module des fils, s'il est chargé (l'extension l'apporte), sinon rien.
+  function comment() { if (current && typeof PdfComments !== 'undefined') PdfComments.comment(); }
 
   // Les phrases que l'écran des pages dit (extensions/lecture-pdf/pdf-view.js) : le nom de chaque page pour un lecteur d'écran, et la raison d'une page qui ne s'est pas dessinée.
   const screenTexts = () => ({ page: (n, total) => I18n.t('pdf.page', { n, total }), failed: () => I18n.t('pdf.pageFailed') });
@@ -97,13 +108,14 @@ const PdfReading = (function () {
     return promise;
   }
 
-  // Les raisons des grisés pendant la lecture, pour js/main.js : l'édition, les modèles (enregistrer, renommer, supprimer...), l'export, les commentaires.
+  // Les raisons des grisés pendant la lecture, pour js/main.js : l'édition, les modèles (enregistrer, renommer, supprimer...), l'export, les commentaires. Un grisé sans raison (null) n'en est pas un : « Commenter » se dégrise pour un PDF
+  // qui a du texte, le module des fils dit sinon pourquoi il reste grisé (un PDF sans texte, une structure que Grist refuse) ; sans lui, comme avant la 045, il reste grisé.
   const reasons = () => ({
     edit: I18n.t('pdf.locked.edit'),
     template: I18n.t('pdf.locked.template'),
     export: I18n.t('pdf.locked.export'),
-    comment: I18n.t('pdf.locked.comment'),
+    comment: typeof PdfComments !== 'undefined' ? PdfComments.lockReason() : I18n.t('pdf.locked.comment'),
   });
 
-  return { init, open, close, render, isActive, info, onChange, reasons };
+  return { init, open, close, render, isActive, info, onChange, reasons, comment, say, onLocksChanged, locksChanged };
 })();

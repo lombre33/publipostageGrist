@@ -70,7 +70,7 @@ const PHRASE = {
     unreadable: name => `Le PDF « ${name} » n’a pas pu être lu.`, password: name => `Le PDF « ${name} » reste fermé : son mot de passe n’a pas été donné ou n’est pas le bon.`,
     passwordTitle: 'PDF protégé', passwordAsk: name => `Le PDF « ${name} » est protégé par un mot de passe.`, passwordAgain: name => `Ce mot de passe n’est pas le bon pour « ${name} ». Essayez encore.`,
     edit: 'Un PDF se lit, il ne s’édite pas. Ouvrez un modèle pour l’éditer.', template: 'Un PDF n’est pas un modèle : il n’y a rien à enregistrer, renommer ou supprimer.',
-    export: 'Un PDF est déjà un PDF : l’export ne s’applique qu’à un modèle.', comment: 'Les commentaires sur un PDF ne sont pas encore possibles.', page: (n, total) => `Page ${n} sur ${total}`,
+    export: 'Un PDF est déjà un PDF : l’export ne s’applique qu’à un modèle.', page: (n, total) => `Page ${n} sur ${total}`,
   },
   en: {
     ready: 'Widget ready.', opened: (name, n) => `PDF “${name}”: ${n} ${n > 1 ? 'pages' : 'page'}.`, off: 'PDF reading is not turned on in Grist Factory Suite.',
@@ -79,7 +79,7 @@ const PHRASE = {
     unreadable: name => `The PDF “${name}” could not be read.`, password: name => `The PDF “${name}” stays closed: its password was not given or is not the right one.`,
     passwordTitle: 'Protected PDF', passwordAsk: name => `The PDF “${name}” is protected by a password.`, passwordAgain: name => `That password is not the right one for “${name}”. Try again.`,
     edit: 'A PDF is read, not edited. Open a template to edit it.', template: 'A PDF is not a template: there is nothing to save, rename or delete.',
-    export: 'A PDF is already a PDF: export only applies to a template.', comment: 'Comments on a PDF are not available yet.', page: (n, total) => `Page ${n} of ${total}`,
+    export: 'A PDF is already a PDF: export only applies to a template.', page: (n, total) => `Page ${n} of ${total}`,
   },
 };
 // Ce que chaque commande grisée dit de sa raison, et celles que le PDF NE grise PAS.
@@ -87,10 +87,10 @@ const LOCKS = {
   edit: ['btn-mode-edit'],
   template: ['v2-save-group', 'btn-delete', 'btn-link-rules', 'btn-rename-template', 'btn-set-default-template', 'v2-pdf-filename-cluster', 'v2-page-group'],
   export: ['v2-quality-group', 'v2-export-pdf-group', 'btn-create-email'],
-  comment: ['v2-btn-comment'],
 };
 const ALL_LOCKED = Object.values(LOCKS).flat().sort();
-const STAYS_ACTIVE = ['v2-new-template-group', 'btn-organize-templates', 'btn-mode-read', 'v2-btn-settings'];
+// « Commenter » (extensions/lecture-pdf/pdf-comments.js, consigne GFS 045) reste actif pour un PDF qui a du texte : seul un PDF sans texte ou une structure que Grist refuse le grise (verify-gfs-comment-threads.mjs).
+const STAYS_ACTIVE = ['v2-new-template-group', 'btn-organize-templates', 'btn-mode-read', 'v2-btn-settings', 'v2-btn-comment'];
 
 // Pour toutes les pages : le File se fabrique dans la page (il ne passe ni par page.evaluate ni par le JSON du stub), le navigateur de l'essai prête à pdf.js ce qu'il lui faut (Chromium d'avant la 145 : les méthodes
 // `getOrInsertComputed` de Map et de WeakMap - l'app, elle, dit « navigateur trop ancien » sans elles), et les Workers créés sont comptés (pdf.js prend son « faux Worker » : aucun).
@@ -155,7 +155,7 @@ const seen = page => page.evaluate(({ ALL, STAY }) => {
     editorText: q('.ProseMirror').textContent, readerText: reader.textContent.slice(0, 80),
     locked: Array.from(document.querySelectorAll('.pp-pdf-locked')).map(e => e.id).sort(),
     titles: Object.fromEntries(['btn-mode-edit', 'v2-save-group', 'btn-delete', 'v2-page-group', 'v2-quality-group', 'v2-export-pdf-group', 'v2-btn-comment'].map(id => [id, q('#' + id) ? q('#' + id).getAttribute('title') : null])),
-    aria: Object.fromEntries(ALL.map(id => [id, q('#' + id) ? q('#' + id).getAttribute('aria-disabled') : 'absent'])),
+    aria: Object.fromEntries(ALL.concat(['v2-btn-comment']).map(id => [id, q('#' + id) ? q('#' + id).getAttribute('aria-disabled') : 'absent'])),
     opacity: getComputedStyle(q('#btn-mode-edit')).opacity, bubble: getComputedStyle(q('#btn-mode-edit'), '::after').display,
     stayingActive: STAY.filter(id => q('#' + id) && !q('#' + id).classList.contains('pp-pdf-locked') && q('#' + id).getAttribute('aria-disabled') !== 'true'),
     zoom: frames[0] ? parseFloat(getComputedStyle(frames[0]).zoom) : null, pageWidth: frames[0] ? Math.round(frames[0].getBoundingClientRect().width) : null, readerWidth: reader.clientWidth,
@@ -269,7 +269,7 @@ console.log('\n== Au démarrage : « Lire » ouvre l’app avec le PDF ==');
   check('le PDF est à l’écran, dans la Lecture : 3 pages nommées (« Page 1 sur 3 »…), la première dessinée (du noir sur la page) avec son texte', v.active && same(v.info, { id: 'pdf-7', name: NAME('three'), pages: 3 }) && v.frames === 3 && v.mounted && v.firstText.includes('Bonjour, première page') && v.firstDark > 200 && v.labels[0] === PHRASE.fr.page(1, 3) && v.labels[2] === PHRASE.fr.page(3, 3), v);
   check('la Lecture est le seul mode (l’éditeur est caché, le bouton Édition grisé), le coin d’état dit le PDF et ses pages', v.readerShown && !v.editorShown && v.modeRead && !v.modeEdit && v.status === PHRASE.fr.opened(NAME('three'), 3) && v.statusClass === '', v);
   check('le document dessous est un document vierge, sans nom : rien n’a été écrit', v.current === null || v.current === '' || String(v.current) === 'null', v.current);
-  check('ce qui ne s’applique pas à un PDF est grisé (l’édition, les modèles, l’export, les commentaires), le reste reste actif', same(v.locked, ALL_LOCKED) && same(v.stayingActive.slice().sort(), STAYS_ACTIVE.slice().sort()), { locked: v.locked, attendu: ALL_LOCKED, actifs: v.stayingActive });
+  check('ce qui ne s’applique pas à un PDF est grisé (l’édition, les modèles, l’export), le reste reste actif - « Commenter » aussi, un PDF avec du texte se commente', same(v.locked, ALL_LOCKED) && same(v.stayingActive.slice().sort(), STAYS_ACTIVE.slice().sort()), { locked: v.locked, attendu: ALL_LOCKED, actifs: v.stayingActive });
   check('pdf.js tourne dans la page : aucun Worker créé', v.workers === 0 && o.page.workers().length === 0, { workers: v.workers });
   const traffic = o.requests.map(u => u.replace(/^https?:\/\/[^/]+\//, '')).filter(u => u.startsWith('extensions/lecture-pdf/')).sort();
   check('l’extension charge chacun de ses fichiers une fois, à la version du registre, et pdf.js seulement par la source que GFS a donnée (une fois)', same(traffic, registryFiles('lecture-pdf')) && o.requests.filter(u => u.endsWith(PDFJS_PATH)).length === 1 && !o.requests.some(u => /pdf\.(?:min|worker)|pdfjs-dist/.test(u) && !u.endsWith(PDFJS_PATH)), { traffic, registre: registryFiles('lecture-pdf') });
@@ -328,9 +328,9 @@ let beforePdf;
   let v = await seen(page);
   check('`ouvrir` d’un PDF : GFS reçoit `{ ouvert: true }` quand le PDF est à l’écran (3 pages, texte de la première, noir dessiné)', opened(reply) && v.active && v.frames === 3 && v.firstText.includes('Bonjour, première page') && v.firstDark > 200, { reply, v });
   check('la Lecture est le seul mode : Édition grisé, éditeur caché, le coin d’état dit le PDF', v.readerShown && !v.editorShown && v.modeRead && !v.modeEdit && v.status === PHRASE.fr.opened(NAME('three'), 3), v);
-  check('les commandes grisées le sont toutes (l’édition, les modèles, l’export, les commentaires), les autres restent actives (Nouveau, l’arbre des modèles, Lecture, Réglages)', same(v.locked, ALL_LOCKED) && same(v.stayingActive.slice().sort(), STAYS_ACTIVE.slice().sort()), { locked: v.locked, actifs: v.stayingActive });
-  const reasons = [['btn-mode-edit', 'edit'], ['v2-save-group', 'template'], ['btn-delete', 'template'], ['v2-page-group', 'template'], ['v2-quality-group', 'export'], ['v2-export-pdf-group', 'export'], ['v2-btn-comment', 'comment']];
-  check('chacune dit sa raison dans son info-bulle (`title`) : l’édition, les modèles, l’export, les commentaires', reasons.every(([id, why]) => v.titles[id] === PHRASE.fr[why]), v.titles);
+  check('les commandes grisées le sont toutes (l’édition, les modèles, l’export), les autres restent actives (Nouveau, l’arbre des modèles, Lecture, Réglages, Commenter)', same(v.locked, ALL_LOCKED) && same(v.stayingActive.slice().sort(), STAYS_ACTIVE.slice().sort()), { locked: v.locked, actifs: v.stayingActive });
+  const reasons = [['btn-mode-edit', 'edit'], ['v2-save-group', 'template'], ['btn-delete', 'template'], ['v2-page-group', 'template'], ['v2-quality-group', 'export'], ['v2-export-pdf-group', 'export']];
+  check('chacune dit sa raison dans son info-bulle (`title`) : l’édition, les modèles, l’export ; « Commenter » n’en dit aucune (il n’est pas grisé)', reasons.every(([id, why]) => v.titles[id] === PHRASE.fr[why]) && v.titles['v2-btn-comment'] === null && v.aria['v2-btn-comment'] === null, v.titles);
   check('grisées comme un compte en lecture seule (opacité), sans la bulle de l’app (que l’estompage rendrait illisible) ; `aria-disabled` posé', v.opacity === '0.35' && v.bubble === 'none' && ALL_LOCKED.every(id => v.aria[id] === 'true'), { opacity: v.opacity, bubble: v.bubble, avant: beforePdf.bubble, aria: v.aria });
   check('la page tient dans le panneau 700 px (aucun défilement de côté) : l’ajustement d’origine réduit la feuille', v.scrollsInside && v.zoom > 0.5 && v.zoom < 1 && v.pageWidth <= v.readerWidth, { zoom: v.zoom, pageWidth: v.pageWidth, readerWidth: v.readerWidth });
 
@@ -665,7 +665,7 @@ console.log('\n== En anglais, en thème sombre ==');
   await settled(page);
   let v = await seen(page);
   check('en anglais : le PDF s’ouvre, le coin d’état et le nom des pages sont dans la langue (« Page 1 of 3 »)', opened(reply) && v.active && v.status === PHRASE.en.opened(NAME('three'), 3) && v.labels[0] === PHRASE.en.page(1, 3) && v.labels[2] === PHRASE.en.page(3, 3), { reply, status: v.status, labels: v.labels });
-  check('… les commandes grisées disent leur raison en anglais', v.titles['btn-mode-edit'] === PHRASE.en.edit && v.titles['v2-save-group'] === PHRASE.en.template && v.titles['v2-export-pdf-group'] === PHRASE.en.export && v.titles['v2-btn-comment'] === PHRASE.en.comment, v.titles);
+  check('… les commandes grisées disent leur raison en anglais', v.titles['btn-mode-edit'] === PHRASE.en.edit && v.titles['v2-save-group'] === PHRASE.en.template && v.titles['v2-export-pdf-group'] === PHRASE.en.export && v.titles['v2-btn-comment'] === null, v.titles);
   const paper = await page.evaluate(() => { const rgb = s => (s.match(/\d+/g) || []).slice(0, 3).map(Number); return { page: rgb(getComputedStyle(document.querySelector('.pp-pdf-page')).backgroundColor), around: rgb(getComputedStyle(document.getElementById('reader-container')).backgroundColor) }; });
   check('en thème sombre, la page du PDF reste blanche (c’est le papier) sur un fond sombre', same(paper.page, [255, 255, 255]) && paper.around.reduce((a, b) => a + b, 0) < 3 * 140, paper);
   for (const [key, phrase] of [['empty', PHRASE.en.empty(NAME('empty'))], ['text', PHRASE.en.notPdf(NAME('text'))], ['broken', PHRASE.en.unreadable(NAME('broken'))]]) {
@@ -729,7 +729,7 @@ console.log('\n== Dans le cadre isolé de GFS (sans `allow-same-origin`) ==');
 console.log('\n== Le code : ni adresse, ni import dynamique, ni boîte native, rien à ajouter à la politique de sécurité ==');
 {
   const read = rel => readFileSync(join(ROOT, rel), 'utf8');
-  const mine = ['js/pdf-reading.js', 'extensions/lecture-pdf/pdf-engine.js', 'extensions/lecture-pdf/pdf-anchor.js', 'extensions/lecture-pdf/pdf-view.js'];
+  const mine = ['js/pdf-reading.js', 'extensions/lecture-pdf/pdf-engine.js', 'extensions/lecture-pdf/pdf-anchor.js', 'extensions/lecture-pdf/pdf-view.js', 'extensions/lecture-pdf/pdf-comments.js'];
   const withoutComments = rel => read(rel).replace(/(^|\s)\/\/.*$/gm, '$1');
   check('aucune adresse dans le code de la lecture (ni CDN, ni dépôt : pdf.js vient de GFS, par la source de son contexte)', mine.every(rel => !/https?:\/\//.test(read(rel))), mine.filter(rel => /https?:\/\//.test(read(rel))));
   // `Dialogs.prompt(...)` est la fenêtre de l'app : seuls `prompt()` / `confirm()` / `alert()` seuls ou posés sur `window` sont les boîtes du navigateur.
