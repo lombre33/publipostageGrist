@@ -268,7 +268,7 @@ export const EXPORT_LINES_ROW = lines => `#v2-export-pdf-flyout .v2-hover-row[da
 export async function chooseExportLines(page, lines) {
   await clickHoverRow(page, '#btn-export-pdf', EXPORT_LINES_ROW(lines));
   await sleep(150);
-  const ticked = await page.evaluate(() => Array.from(document.querySelectorAll('#v2-export-pdf-flyout .v2-hover-row[aria-checked="true"]')).map(row => row.dataset.exportLines).join());
+  const ticked = await page.evaluate(() => Array.from(document.querySelectorAll('#v2-export-pdf-flyout .v2-hover-row[data-export-lines][aria-checked="true"]')).map(row => row.dataset.exportLines).join());
   if (ticked !== lines) throw new Error(`option de lignes « ${lines} » non cochée (${ticked})`);
 }
 // Les neuf exports d'avant, chacun = un type et une option de lignes (les lignes d'avant ne sont plus montrées, cf. #v2-export-legacy-rows), les deux du Markdown (md, mdZip) et ceux du HTML

@@ -288,6 +288,12 @@
           <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-merged" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="merged" data-export-for="pdf pdfProtected" data-export-grey-for="pdfProtected" data-i18n="exportLines.merged">Toutes les lignes de la vue en un seul PDF</span>
           <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-sheets" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="sheets" data-export-for="pdf pdfProtected" data-export-grey-for="pdfProtected" data-i18n="exportLines.sheets">Assemblage avant impression</span>
           <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-workbook" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="workbook" data-export-for="xlsx" hidden data-i18n="exportLines.workbook">Toutes les valeurs de la vue dans un seul classeur</span>
+          <!-- Où va le PDF (js/pdf-delivery.js, consigne GFS 043) : télécharger (l'origine), ranger dans GFS ou les deux. Un réglage de la personne (PersonStore, clé pp_export_destination), le même pour tous ses documents, montré pour les deux PDF seulement ; la ligne cochée est la destination qui s'applique. Il est ici et non dans le menu Type d'export, dont le bas est à 490 px pour un panneau de 400 : trois lignes de plus y passeraient sous le pli. Sans GFS les deux lignes qui rangent sont grisées, jamais retirées, et leur clic explique. -->
+          <span class="v2-hover-hsep" data-export-for="pdf pdfProtected"></span>
+          <span class="v2-hover-flyout-label" data-export-for="pdf pdfProtected" data-i18n="destination.label">Destination du PDF</span>
+          <span class="v2-hover-row v2-hover-row-check-start" role="menuitemradio" aria-checked="true" tabindex="0" data-destination="download" data-export-for="pdf pdfProtected" data-i18n="destination.download">Télécharger</span>
+          <span class="v2-hover-row v2-hover-row-check-start" role="menuitemradio" aria-checked="false" tabindex="0" data-destination="gfs" data-export-for="pdf pdfProtected" data-i18n="destination.gfs">Ranger dans GFS</span>
+          <span class="v2-hover-row v2-hover-row-check-start" role="menuitemradio" aria-checked="false" tabindex="0" data-destination="both" data-export-for="pdf pdfProtected" data-i18n="destination.both">Télécharger et ranger dans GFS</span>
           <!-- Les neuf lignes d'export d'avant (et « Exporter en PDF ») ne sont plus montrées : le bouton Exporter lance le même export selon l'option cochée ci-dessus (demande du 12/10). Elles restent dans la page, masquées, avec leur identifiant, leur gestionnaire et leur grisé selon le modèle (js/main.js:syncExportRowsForModelType) : rien n'est retiré. -->
           <span id="v2-export-legacy-rows" hidden>
             <span class="v2-hover-row" id="v2-btn-export-pdf" data-i18n="toolbar.exportPdf">Exporter en PDF</span>
@@ -840,7 +846,7 @@
 <!-- GFS (js/gfs-link.js), les préférences de la personne (js/person-store.js), la barre de GFS (js/gfs-bar.js) puis la pose de son ambiance (js/gfs-ambiance.js, consigne 041) AVANT tout autre script : le contexte que GFS donne
      (dont l'espace de l'app, consigne 024, sa barre, consigne 025, et l'ambiance qu'il a choisie) est demandé dès le premier script et arrive pendant que les autres se chargent, si bien que le thème, les raccourcis ou le caractère de
      déclenchement que ces scripts lisent en se chargeant sont déjà ceux de la personne, que la zone de la barre est connue de qui voudra s'en écarter et que l'ambiance est posée avant que les autres n'aient fini de se charger. -->
-<script src="js/gfs-link.js?v=0.12"></script>
+<script src="js/gfs-link.js?v=0.13"></script>
 <script src="js/person-store.js?v=0.2"></script>
 <script src="js/gfs-bar.js?v=0.5"></script>
 <script src="js/gfs-ambiance.js?v=0.1"></script>
@@ -866,7 +872,7 @@
 <script src="js/space-gap.js?v=0.2"></script>
 <script src="js/reader-mode.js?v=0.183"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
-<script src="js/i18n.js?v=0.330"></script>
+<script src="js/i18n.js?v=0.331"></script>
 <script src="js/shortcuts.js?v=0.28"></script>
 <script src="js/page-layout.js?v=0.28"></script>
 <script src="js/page-sections.js?v=0.3"></script>
@@ -934,7 +940,7 @@
 <!-- Moteurs d'export : js/export-engines.js les charge au premier export (ExportEngines.ensure), pas à l'ouverture. Ces balises ne s'exécutent pas (le
      navigateur ne connaît pas leur type) ; leur version de cache se monte comme celle de tout script. -->
 <script src="js/export-engines.js?v=0.2"></script>
-<script type="text/x-lazy-engine" data-engine="pdf" src="js/pdf-export.js?v=1.102"></script>
+<script type="text/x-lazy-engine" data-engine="pdf" src="js/pdf-export.js?v=1.103"></script>
 <script type="text/x-lazy-engine" data-engine="sheets" src="js/sheet-layout.js?v=0.3"></script>
 <script type="text/x-lazy-engine" data-engine="merge" src="js/pdf-merge.js?v=0.9"></script>
 <script type="text/x-lazy-engine" data-engine="docx" src="js/docx-export.js?v=0.95"></script>
@@ -1020,6 +1026,7 @@
 <script src="js/template-arrangement.js?v=0.1"></script>
 <script src="js/link-rule-history.js?v=0.1"></script>
 <script src="js/settings-history.js?v=0.4"></script>
+<script src="js/pdf-delivery.js?v=0.2"></script>
 <script src="js/expansion-history.js?v=0.1"></script>
 <script src="js/format-slots.js?v=0.1"></script>
 <script src="js/format-slots-menu.js?v=0.1"></script>
@@ -1040,6 +1047,6 @@
 <script src="js/page-zoom.js?v=0.14"></script>
 <script src="js/field-codec.js?v=0.8"></script>
 <script src="js/field-editor.js?v=0.8"></script>
-<script src="js/main.js?v=0.210"></script>
+<script src="js/main.js?v=0.212"></script>
 </body>
 </html>

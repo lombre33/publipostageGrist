@@ -33,8 +33,8 @@
   // « Montré » : ni la ligne ni un parent n'est `hidden` (le panneau lui-même n'apparaît qu'au survol, on ne lit donc pas sa mise en page).
   const shown = el => el.closest('[hidden]') === null;
   const shownRows = flyout => Array.from(document.querySelectorAll(flyout + ' .v2-hover-row')).filter(shown);
-  const shownLines = () => shownRows(EXPORT_FLYOUT).map(row => row.dataset.exportLines).join();
-  const tickedLines = () => Array.from(document.querySelectorAll(EXPORT_FLYOUT + ' .v2-hover-row[aria-checked="true"]')).map(row => row.dataset.exportLines).join();
+  const shownLines = () => shownRows(EXPORT_FLYOUT).filter(row => row.dataset.exportLines).map(row => row.dataset.exportLines).join();
+  const tickedLines = () => Array.from(document.querySelectorAll(EXPORT_FLYOUT + ' .v2-hover-row[data-export-lines][aria-checked="true"]')).map(row => row.dataset.exportLines).join();
 
   async function seed(h) {
     await h.resetEditor();
@@ -266,7 +266,7 @@
         const title = english ? 'Export' : 'Exporter';
         if (labelOf() !== title || ariaOf() !== title) bad.push('titre=' + labelOf() + ' / ' + ariaOf());
         const expectTexts = async (label, fr, enTexts) => {
-          const got = shownRows(EXPORT_FLYOUT).map(row => row.textContent.trim());
+          const got = shownRows(EXPORT_FLYOUT).filter(row => row.dataset.exportLines).map(row => row.textContent.trim());
           if (JSON.stringify(got) !== JSON.stringify(english ? enTexts : fr)) bad.push(label + ' (' + I18n.getLang() + ')=' + JSON.stringify(got));
         };
         // Aucune ligne montrée ne porte l'identifiant ni le nom d'un export d'avant : le menu ne dit que les lignes exportées.
@@ -287,7 +287,7 @@
         const t2 = tickOf(linesRow('zip'));
         if (t1.visibility !== 'visible' || t1.width !== '13px' || t1.content === 'none' || t1.display !== 'flex') bad.push('coche de l\'option cochée=' + JSON.stringify(t1));
         if (t2.visibility !== 'hidden' || t2.width !== '13px') bad.push('place de la coche sur une option non cochée=' + JSON.stringify(t2));
-        const roles = shownRows(EXPORT_FLYOUT).map(row => row.getAttribute('role') + ':' + row.getAttribute('aria-checked') + ':' + row.getAttribute('tabindex'));
+        const roles = shownRows(EXPORT_FLYOUT).filter(row => row.dataset.exportLines).map(row => row.getAttribute('role') + ':' + row.getAttribute('aria-checked') + ':' + row.getAttribute('tabindex'));
         if (roles.join() !== 'menuitemradio:true:0,menuitemradio:false:0,menuitemradio:false:0,menuitemradio:false:0') bad.push('rôles=' + roles.join());
         if (document.querySelector(EXPORT_FLYOUT).getAttribute('role') !== 'menu') bad.push('le menu n\'a pas le rôle « menu »');
         // Word.

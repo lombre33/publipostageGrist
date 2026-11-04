@@ -2337,10 +2337,17 @@
       const doc = await currentRecordDocument(tableId, record, { keepProps: !!spec.keepProps, anchors: writesSlideAnchors(spec) });
       if (doc.split) { await onExportBatch(spec.batch, doc.split, { protection }); return; }
       await ExportEngines.ensure(spec.engines);
+      PdfDelivery.takeReport();   // un rapport resté d'un export d'avant ne dit rien de celui-ci
       const saved = await spec.run(doc, tableId, record, protection);
       // « Annuler » sur la fenêtre des pages blanches (le PDF seul, js/pdf-export.js) : rien n'est enregistré, et la ligne n'est pas datée.
       if (saved === false) { setStatus(I18n.t('status.exportCancelled')); return; }
-      setExportDoneStatus(I18n.t(spec.generated), spec.stampsExportDate ? await stampExportDate(tableId, [record.id]) : '');
+      // Le PDF a pu être rangé dans GFS au lieu d'être téléchargé, ou en plus (js/pdf-delivery.js) : le coin d'état le dit, et la ligne n'est datée que si le fichier est parti quelque part (la personne qui refuse le nom chez GFS n'a pas de PDF).
+      const delivery = PdfDelivery.takeReport();
+      const said = PdfDelivery.describe(delivery);
+      const gone = !delivery || !delivery.shelved || delivery.delivered.size > 0;
+      const problem = spec.stampsExportDate && gone ? await stampExportDate(tableId, [record.id]) : '';
+      const generated = I18n.t(spec.generated);
+      setExportDoneStatus(said.text ? (delivery.downloaded ? said.text + ' ' + generated : said.text) : generated, [said.note, problem].filter(Boolean).join(' '));
     } catch (e) {
       // « Annuler » sur la fenêtre des images d'un site externe (js/external-images.js) : un choix, pas une erreur.
       if (ExternalImages.isCancel(e)) { setStatus(I18n.t('status.exportCancelled')); return; }
@@ -2520,7 +2527,9 @@
   //   (`data-export-grey-for` : le navigateur imprime, il ne chiffre pas) et la ligne active est celle qui s'applique, « Vectoriel » si c'était l'impression ;
   // - menu « Exporter » (#v2-export-pdf-flyout) : seules les options du type choisi sont montrées (`data-export-for`, une liste de types) et celle que le bouton
   //   Exporter lance, selectedExportLines, est cochée (`aria-checked`). Une option que le type montre sans pouvoir la faire est grisée, avec sa raison en info-bulle
-  //   (`data-export-grey-for` : le PDF unique et l'assemblage en PDF protégé, que pdf-lib assemble sans pouvoir les chiffrer) ;
+  //   (`data-export-grey-for` : le PDF unique et l'assemblage en PDF protégé, que pdf-lib assemble sans pouvoir les chiffrer). Sous les options de lignes, pour les deux PDF seulement, la
+  //   destination du PDF (intitulé, filet et trois lignes `data-destination`) : `PdfDelivery.sync` coche celle qui s'applique et grise, avec sa raison, les deux qui rangent dans GFS quand GFS
+  //   n'héberge pas l'app ou ne répond pas. Elle est dans ce menu et non dans celui du type, dont le bas est à 490 px pour un panneau de 400 ;
   // - le bouton du type est allumé quand ce n'est pas le PDF, pour qu'on sache avant de cliquer sur Exporter que le fichier ne sera pas un PDF.
   // Un type que le modèle ne sait pas faire revient au PDF pour de bon (la liste cachée est remise), de sorte que le modèle suivant ne le retrouve pas.
   function syncExportMenus() {
@@ -2553,6 +2562,8 @@
       const notForProtected = greyedFor(row, 'quality.protectedOff');
       grey(row, !pdfType || notForProtected);
     });
+    // Où va le PDF (js/pdf-delivery.js) : télécharger, ranger dans GFS ou les deux ; les deux lignes qui rangent sont grisées sans GFS.
+    PdfDelivery.sync(exportFlyout);
     [typeFlyout, exportFlyout].forEach(flyout => flyout.querySelectorAll('[data-export-for]').forEach(el => {
       el.hidden = el.dataset.exportFor.split(' ').indexOf(type) === -1;
     }));
@@ -2598,6 +2609,8 @@
     engines: ['pdf'], margins: () => PageLayout.getMarginsPt(),
     // La date du dernier export PDF s'écrit pour les lignes du fichier (js/export-date.js) : les trois lots PDF, ZIP, PDF unique et planche.
     stampsExportDate: true,
+    // Le fichier d'un lot PDF peut se ranger dans GFS (js/pdf-delivery.js) au lieu de se télécharger, ou en plus : le PDF unique et la planche d'un bloc, l'archive ZIP PDF par PDF.
+    shelvable: true,
     // Le PDF d'une ligne sait si son modèle est une grille (un lot « Modèle selon la ligne » peut mêler grilles et documents), et la qualité du menu Type d'export
     // choisie au départ du lot (`imageQuality`, cf. openBatchSink) : 'light' ramène les images à leur définition.
     // `docFields` : ceux d'un PDF protégé (js/pdf-protection.js), absents d'un PDF ordinaire. Le PDF d'une présentation ne signale aucune page blanche : chacune est une diapositive
@@ -2858,14 +2871,25 @@
     }
     const zip = new JSZip();
     const usedNames = new Set();
+    // Les PDF de l'archive, un à un, avec la ligne de chacun : GFS garde des PDF, pas des archives (PdfDelivery les range l'un après l'autre). Les lots qui ne sont pas des PDF n'en gardent rien.
+    const files = [];
     return {
       add: async doc => {
         const { blob, filename, blankPages } = await render(doc);
         const base = (sanitizeFilenamePart(filename) || ('document-' + doc.row.id)) + (doc.valueName ? ' - ' + doc.valueName : '');
-        zip.file(uniqueZipFilename(base, usedNames) + cfg.entryExt, blob);
+        const entry = uniqueZipFilename(base, usedNames) + cfg.entryExt;
+        zip.file(entry, blob);
+        if (cfg.shelvable) files.push({ name: entry, blob, rowId: doc.row.id });
         return { blankPages };
       },
-      finish: () => zip.generateAsync({ type: 'blob' }),
+      // Sans argument, l'archive entière ; avec `subset` (des éléments de `files`), l'archive de ces seuls fichiers : ce que GFS n'a pas gardé.
+      finish: subset => {
+        if (!subset) return zip.generateAsync({ type: 'blob' });
+        const part = new JSZip();
+        subset.forEach(file => part.file(file.name, file.blob));
+        return part.generateAsync({ type: 'blob' });
+      },
+      files,
       finishing: 'status.zipCompressing',
     };
   }
@@ -3000,17 +3024,43 @@
   }
 
   // La fin d'un export en lot : le fichier assemblé est téléchargé, le coin d'état dit combien de documents (et de planches) il contient.
+  // Un lot PDF (`shelvable`) peut aussi, ou à la place, se ranger dans GFS (js/pdf-delivery.js) : le PDF unique ou la planche d'un bloc, l'archive PDF par PDF. Le coin d'état dit alors ce que GFS a gardé, et les lignes ne sont datées
+  // que si leur PDF est parti quelque part (téléchargé ou rangé).
   async function finishBatchExport(cfg, sink, { only, tableId, rows, openSource, splitting, ok, failed, exportedIds }) {
-    setStatus(I18n.t(sink.finishing));
-    const outBlob = await sink.finish();
     // Archive d'un export seul : nommée comme la ligne ; sinon comme la table.
-    const outBase = only ? (sanitizeFilenamePart(await ReaderMode.resolveFilename(openSource.filenameTemplate, tableId, rows[0])) || sanitizeFilenamePart(tableId)) : sanitizeFilenamePart(tableId);
-    ExportCommon.downloadBlob(outBlob, outBase + cfg.fileSuffix);
-    const note = cfg.stampsExportDate ? await stampExportDate(tableId, exportedIds) : '';
+    const baseName = async () => (only ? (sanitizeFilenamePart(await ReaderMode.resolveFilename(openSource.filenameTemplate, tableId, rows[0])) || sanitizeFilenamePart(tableId)) : sanitizeFilenamePart(tableId));
+    const how = cfg.shelvable ? PdfDelivery.plan() : { download: true, shelve: false };
+    let delivery = null;
+    let stampIds = exportedIds;
+    if (!how.shelve) {
+      setStatus(I18n.t(sink.finishing));
+      const outBlob = await sink.finish();
+      ExportCommon.downloadBlob(outBlob, (await baseName()) + cfg.fileSuffix);
+    } else {
+      // Rangé seul, une archive ne se fabrique pas : chaque PDF part tel quel.
+      if (how.download || cfg.merged) setStatus(I18n.t(sink.finishing));
+      const base = await baseName();
+      let merged = null;
+      const files = cfg.merged ? [{ name: base + cfg.fileSuffix, blob: async () => merged || (merged = await sink.finish()) }] : sink.files;
+      delivery = await PdfDelivery.deliver(files, async subset => {
+        ExportCommon.downloadBlob(cfg.merged ? await files[0].blob() : await sink.finish(subset), base + cfg.fileSuffix);
+      }, { plan: how, lot: PdfDelivery.lotFor(tableId) });
+      // Un seul fichier (réuni ou posé sur des planches) : ses lignes sont datées s'il est parti ; une archive : les lignes dont chaque PDF est parti.
+      if (cfg.merged) stampIds = delivery.delivered.size ? exportedIds : [];
+      else {
+        const missing = new Set();
+        files.forEach((file, i) => { if (!delivery.delivered.has(i)) missing.add(file.rowId); });
+        stampIds = exportedIds.filter(id => !missing.has(id));
+      }
+    }
+    const note = cfg.stampsExportDate ? await stampExportDate(tableId, stampIds) : '';
     const sheets = sink.sheetCount ? sink.sheetCount() : 0;
     const useSplitTexts = splitting && cfg.splitDone;
     const doneKey = failed ? (useSplitTexts ? cfg.splitDoneWithFailures : cfg.doneWithFailures) : (useSplitTexts ? cfg.splitDone : cfg.done);
-    setExportDoneStatus(exportText(doneKey, { ok, failed, sheets }), note);
+    // Rien n'est téléchargé quand tout est rangé : la phrase « archive ZIP téléchargée » ne serait pas vraie, celle de GFS dit ce qu'il a gardé.
+    const said = PdfDelivery.describe(delivery, failed);
+    const usual = exportText(doneKey, { ok, failed, sheets });
+    setExportDoneStatus(said.text ? (delivery.downloaded ? said.text + ' ' + usual : said.text) : usual, [said.note, note].filter(Boolean).join(' '));
   }
 
   async function switchMode(mode) {
@@ -3093,7 +3143,8 @@
 
   // Type d'export : bouton + panneau au survol plutôt qu'un <select> toujours affiché. Quatre lignes de type (PDF, PDF protégé, Word, Excel), puis la qualité du PDF
   // (le vectoriel par défaut, l'impression par le navigateur, « Léger » : le vectoriel aux images réduites), montrée pour les deux PDF seulement. Un clic sur une ligne
-  // grisée ne choisit rien. Le menu du bouton Exporter se câble de même : un clic (ou Entrée, Espace) sur une option de lignes la coche, rien ne s'exporte.
+  // grisée ne choisit rien. Le menu du bouton Exporter se câble de même : un clic (ou Entrée, Espace) sur une option de lignes la coche, rien ne s'exporte ; la destination du PDF
+  // (le télécharger, le ranger dans GFS ou les deux : js/pdf-delivery.js) s'y coche de la même façon.
   // Le bouton Exporter, onExportPdf et les lots lisent les valeurs choisies ; syncExportMenus tient les deux menus d'accord, aussi à chaque survol (un
   // appel direct a pu changer la liste cachée).
   function wireExportMenus() {
@@ -3110,6 +3161,9 @@
     const onRow = (row, select, value) => row.addEventListener('click', () => { if (!row.classList.contains('v2-hover-row-disabled')) choose(select, value); });
     flyout.querySelectorAll('.v2-hover-row[data-export-type]').forEach(row => onRow(row, typeSelect, row.dataset.exportType));
     flyout.querySelectorAll('.v2-hover-row[data-quality]').forEach(row => onRow(row, qualitySelect, row.dataset.quality));
+    // La destination du PDF est un réglage de la personne (PersonStore), pas du modèle : son pas d'Annuler est celui de SettingsHistory, et le rangement dit au coin d'état où il en est.
+    PdfDelivery.wire(exportFlyout, syncExportMenus);
+    PdfDelivery.onProgress((current, total) => setStatus(I18n.t(total > 1 ? 'shelve.progress' : 'shelve.progressOne', { current, total })));
     exportFlyout.querySelectorAll('.v2-hover-row[data-export-lines]').forEach(row => {
       onRow(row, linesSelect, row.dataset.exportLines);
       row.addEventListener('keydown', e => {

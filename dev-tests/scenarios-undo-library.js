@@ -632,7 +632,7 @@ window.EditorTestSuites.undoLibrary = (function () {
         inEditor('z');
         await settle(h);
         check(problems, '2e Ctrl + Z : les lignes', choices(), 'pdf|light|one');
-        check(problems, '2e Ctrl + Z : l\'option cochée du menu Exporter', Array.from(document.querySelectorAll(EXPORT_FLYOUT + ' .v2-hover-row[aria-checked="true"]')).map(row => row.dataset.exportLines).join(), 'one');
+        check(problems, '2e Ctrl + Z : l\'option cochée du menu Exporter', Array.from(document.querySelectorAll(EXPORT_FLYOUT + ' .v2-hover-row[data-export-lines][aria-checked="true"]')).map(row => row.dataset.exportLines).join(), 'one');
         inEditor('z');
         await settle(h);
         await h.sleep(250);

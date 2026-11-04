@@ -335,6 +335,17 @@ const I18n = (function () {
     'quality.browserPrint': { fr: 'Impression navigateur', en: 'Browser print' },
     'quality.light': { fr: 'Léger (images réduites)', en: 'Light (smaller images)' },
 
+    // --- Où va le PDF (js/pdf-delivery.js, consigne GFS 043) : télécharger (l'origine), ranger dans GFS ou les deux. Les deux lignes qui rangent sont grisées sans GFS ; leur clic ouvre la fenêtre commune des fonctions qui demandent Grist Factory Suite. ---
+    'destination.label': { fr: 'Destination du PDF', en: 'PDF destination' },
+    'destination.download': { fr: 'Télécharger', en: 'Download' },
+    'destination.gfs': { fr: 'Ranger dans GFS', en: 'Save to GFS' },
+    'destination.both': { fr: 'Télécharger et ranger dans GFS', en: 'Download and save to GFS' },
+    'destination.off.tip': { fr: 'Disponible dans Grist Factory Suite', en: 'Available in Grist Factory Suite' },
+    'destination.off.message': {
+      fr: 'Ranger les PDF dans GFS n’est possible que dans Grist Factory Suite. Ouvrez Publipostage+ depuis Grist Factory Suite pour que vos PDF se rangent parmi vos fichiers.',
+      en: 'Saving PDFs to GFS is only possible in Grist Factory Suite. Open Publipostage+ from Grist Factory Suite so your PDFs are saved among your files.',
+    },
+
     // --- PDF protégé (js/pdf-protection.js, js/pdf-protection-dialog.js) : l'explication des lignes grisées, puis la fenêtre du mot de passe ---
     'exportLines.protectedOff': { fr: 'Pas disponible en PDF protégé : un fichier qui réunit plusieurs documents ne se protège pas.', en: 'Not available for a protected PDF: a file combining several documents cannot be protected.' },
     'exportLines.mdTemplate': { fr: 'Un seul fichier : le modèle', en: 'One file: the template' },
@@ -2529,6 +2540,25 @@ const I18n = (function () {
     'status.pdfPasswordProblem.missing': { fr: 'La colonne « {column} » n’existe plus ou n’est pas lisible : choisir une autre colonne. Aucun PDF n’a été généré.', en: 'Column “{column}” no longer exists or cannot be read: choose another column. No PDF was generated.' },
     'status.pdfPasswordProblem.mixedFormats': { fr: 'Un PDF protégé ne peut pas mêler des pages de formats différents (une diapositive entre des pages A4) : ce macro-modèle en assemble. Aucun PDF n’a été généré.', en: 'A protected PDF cannot mix pages of different formats (a slide among A4 pages): this macro template assembles both. No PDF was generated.' },
     'status.pdfGenerationError': { fr: 'Erreur génération PDF.', en: 'PDF generation error.' },
+    // --- Rangement des PDF dans GFS (js/pdf-delivery.js, consigne GFS 043) : GFS ne dit rien par-dessus l'app, le coin d'état dit ce qu'il a gardé, et pourquoi il n'a pas gardé un fichier (le PDF est alors téléchargé comme avant). ---
+    'shelve.progress': { fr: 'Rangement dans GFS : {current}/{total}…', en: 'Saving to GFS: {current}/{total}…' },
+    'shelve.progressOne': { fr: 'Rangement dans GFS…', en: 'Saving to GFS…' },
+    'shelve.quoted': { fr: '« {name} »', en: '“{name}”' },
+    'shelve.one.ajoute': { fr: 'PDF rangé dans GFS.', en: 'PDF saved to GFS.' },
+    'shelve.one.remplace': { fr: 'PDF rangé dans GFS, à la place de l’ancien.', en: 'PDF saved to GFS, replacing the old one.' },
+    'shelve.one.copie': { fr: 'PDF rangé dans GFS sous le nom {name}.', en: 'PDF saved to GFS as {name}.' },
+    'shelve.one.ignore': { fr: 'PDF non rangé : annulé dans GFS.', en: 'PDF not saved: canceled in GFS.' },
+    'shelve.kept': { fr: '{n} {n|PDF rangé|PDF rangés} dans GFS', en: '{n} {n|PDF|PDFs} saved to GFS' },
+    'shelve.replaced': { fr: '{n} {n|remplacé|remplacés}', en: '{n} replaced' },
+    'shelve.copied': { fr: '{n} {n|gardé en double|gardés en double}', en: '{n} kept as {n|a copy|copies}' },
+    'shelve.ignored': { fr: '{n} non {n|rangé|rangés} (annulé dans GFS)', en: '{n} not saved (canceled in GFS)' },
+    'shelve.rowsFailed': { fr: '{failed} {failed|échec|échecs}', en: '{failed} {failed|failure|failures}' },
+    'shelve.failed': { fr: 'GFS n’a pas gardé {n} PDF ({reason}).', en: 'GFS did not keep {n} {n|PDF|PDFs} ({reason}).' },
+    'shelve.failedDownloaded': { fr: 'GFS n’a pas gardé {n} PDF ({reason}) : {n|téléchargé|téléchargés}.', en: 'GFS did not keep {n} {n|PDF|PDFs} ({reason}): downloaded instead.' },
+    'shelve.reason.annule': { fr: 'la table des fichiers n’a pas été créée', en: 'the files table was not created' },
+    'shelve.reason.inconnu': { fr: 'cette version de GFS ne range pas encore les fichiers', en: 'this version of GFS cannot save files yet' },
+    'shelve.reason.reponse': { fr: 'réponse illisible', en: 'unreadable answer' },
+    'shelve.reason.other': { fr: 'raison inconnue', en: 'unknown reason' },
     'status.printPreparing': { fr: 'Préparation de l’impression…', en: 'Preparing the print…' },
     'status.printStarted': { fr: 'Impression lancée.', en: 'Print started.' },
     'status.printFailed': { fr: 'Impossible de préparer l’impression.', en: 'Could not prepare the print.' },

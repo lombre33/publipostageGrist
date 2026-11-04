@@ -1022,7 +1022,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // js/person-store.js (PersonStore) route chaque lecture et chaque écriture - l'espace de GFS quand elle l'héberge et lui en donne un, le navigateur sinon - et ne laisse rien se perdre en route. Seuls la langue
 // (js/i18n.js : GFS la donne) et les noms de colonnes d'un document (js/schema-renames.js : `pp_schema_*`, qui suivent le document) restent au stockage du navigateur. La onzième clé, `pp_news_seen`
 // (la dernière version dont la personne a fermé la fenêtre des nouveautés, js/whats-new.js), passe par PersonStore comme les dix autres, et la douzième, `pp_bubble_marks` (« Par défaut » ou « Mise en forme »
-// pour les bulles et les puces de l'éditeur, js/settings.js).
+// pour les bulles et les puces de l'éditeur, js/settings.js) et la treizième, `pp_export_destination` (« Télécharger », « Ranger dans GFS » ou les deux pour les PDF exportés, js/pdf-delivery.js).
 {
   const store = noCommentsJs(read('js/person-store.js'));
   const link = noCommentsJs(read('js/gfs-link.js'));
@@ -1030,13 +1030,13 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const editor = noCommentsJs(read('js/editor.js'));
   const panel = noCommentsJs(read('js/shortcuts-panel.js'));
   const page = read('index.html').replace(/<!--[\s\S]*?-->/g, '');
-  const KEYS = ['pp_theme', 'pp_trigger_char', 'pp_expansion_char', 'pp_shortcuts', 'pp_shortcuts_view', 'pp_mail_client', 'pp_autosave_enabled', 'pp_sheet_assembly', 'pp_page_zoom', 'pp_pdf_protection', 'pp_news_seen', 'pp_bubble_marks'];
+  const KEYS = ['pp_theme', 'pp_trigger_char', 'pp_expansion_char', 'pp_shortcuts', 'pp_shortcuts_view', 'pp_mail_client', 'pp_autosave_enabled', 'pp_sheet_assembly', 'pp_page_zoom', 'pp_pdf_protection', 'pp_news_seen', 'pp_bubble_marks', 'pp_export_destination'];
   const ALLOWED = ['js/person-store.js', 'js/i18n.js', 'js/schema-renames.js'];
   const rawStorage = jsFiles.filter(rel => !ALLOWED.includes(rel) && /\b(?:localStorage|sessionStorage)\b/.test(noCommentsJs(read(rel))));
   check('stockage de chaque personne : aucun module ne touche localStorage ni sessionStorage, sauf js/person-store.js (les préférences), js/i18n.js (la langue) et js/schema-renames.js (les noms de colonnes) ; les autres lisent et écrivent par PersonStore',
     rawStorage.length === 0, rawStorage.join(', '));
   const unused = KEYS.filter(key => !jsFiles.some(rel => rel !== 'js/person-store.js' && new RegExp("'" + key + "'").test(noCommentsJs(read(rel))) && /\bPersonStore\.(?:get|set|remove)\(/.test(noCommentsJs(read(rel)))));
-  check('stockage de chaque personne : chacune des douze clés (les dix de la consigne 024, `pp_news_seen` la fenêtre des nouveautés et `pp_bubble_marks` le choix des bulles et des puces) est lue ou écrite par PersonStore dans le module qui la nomme', unused.length === 0, unused.join(', '));
+  check('stockage de chaque personne : chacune des treize clés (les dix de la consigne 024, `pp_news_seen` la fenêtre des nouveautés, `pp_bubble_marks` le choix des bulles et des puces et `pp_export_destination` la destination des PDF exportés) est lue ou écrite par PersonStore dans le module qui la nomme', unused.length === 0, unused.join(', '));
   check('stockage de chaque personne : js/person-store.js suit la règle de GFS pour une clé (1 à 64 caractères A-Z a-z 0-9 _ . : -) et un texte pour valeur, lit l’espace de GFS (GfsLink.storageGet) quand il y en a un et le navigateur sinon, et n’écrit RIEN avant que le contexte soit arrivé (lire ne doit jamais écrire : aucune file d’attente qui irait écraser ce que GFS garde)',
     /const KEY = \/\^\[A-Za-z0-9_\.:-\]\{1,64\}\$\/;/.test(store) && /sharedSpace \? GfsLink\.storageGet\(key\) : browserGet\(key\)/.test(store) && /if \(sharedSpace\) return GfsLink\.storageSet\(key, value\);\s*if \(GfsLink\.hosted && !loaded\) return false;\s*return browserWrite\(key, value\);/.test(store)
       && /value !== null && typeof value !== 'string'/.test(store) && !/\bwaiting\b|\bqueue\b/.test(store) && /sharedSpace = GfsLink\.hasStorage\(\);/.test(store) && /const ready = GfsLink\.ready\.then\(load\);/.test(store), 'js/person-store.js');

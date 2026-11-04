@@ -43,7 +43,7 @@ const NO_HF = { enabled: false, differentFirstPage: false, header: { default: ''
 // Les mots de chaque langue : le titre des deux menus, les quatre types, les trois qualités et les options du menu « Exporter » selon le type et le modèle.
 const WORDS = {
   fr: {
-    typeLabel: 'Type d’export', qualityLabel: 'Qualité PDF', exportLabel: 'Exporter', types: ['PDF', 'Word (bêta)', 'Excel', 'Markdown'], qualities: ['Vectoriel (par défaut)', 'Impression navigateur', 'Léger (images réduites)'],
+    typeLabel: 'Type d’export', qualityLabel: 'Qualité PDF', exportLabel: 'Exporter', destinationLabel: 'Destination du PDF', types: ['PDF', 'Word (bêta)', 'Excel', 'Markdown'], qualities: ['Vectoriel (par défaut)', 'Impression navigateur', 'Léger (images réduites)'],
     mdTemplate: 'Markdown (modèle)', mdTemplateNote: 'Un seul fichier : le modèle', templateExported: 'Modèle exporté en Markdown, variables comprises.',
     allTypes: ['PDF', 'PDF protégé', 'Word (bêta)', 'PowerPoint (bêta)', 'Excel', 'Markdown', 'Markdown (modèle)', 'HTML (fichier à déposer)', 'HTML (contenu à coller)'],
     html: 'HTML (fichier à déposer)', htmlFragment: 'HTML (contenu à coller)', htmlGenerated: 'HTML généré.',
@@ -53,7 +53,7 @@ const WORDS = {
     excel: ['Une seule ligne', 'Toutes les valeurs de la vue (ZIP)', 'Toutes les valeurs de la vue dans un seul classeur'],
   },
   en: {
-    typeLabel: 'Export type', qualityLabel: 'PDF quality', exportLabel: 'Export', types: ['PDF', 'Word (beta)', 'Excel', 'Markdown'], qualities: ['Vector (default)', 'Browser print', 'Light (smaller images)'],
+    typeLabel: 'Export type', qualityLabel: 'PDF quality', exportLabel: 'Export', destinationLabel: 'PDF destination', types: ['PDF', 'Word (beta)', 'Excel', 'Markdown'], qualities: ['Vector (default)', 'Browser print', 'Light (smaller images)'],
     mdTemplate: 'Markdown (template)', mdTemplateNote: 'One file: the template', templateExported: 'Template exported to Markdown, variables included.',
     allTypes: ['PDF', 'Protected PDF', 'Word (beta)', 'PowerPoint (beta)', 'Excel', 'Markdown', 'Markdown (template)', 'HTML (file to upload)', 'HTML (content to paste)'],
     html: 'HTML (file to upload)', htmlFragment: 'HTML (content to paste)', htmlGenerated: 'HTML generated.',
@@ -127,7 +127,7 @@ const labelsOf = (page, flyout) => page.evaluate(sel => Array.from(document.quer
 const typeValue = page => page.evaluate(() => document.getElementById('v2-export-type').value);
 const qualityValue = page => page.evaluate(() => document.getElementById('v2-pdf-quality').value);
 const linesValue = page => page.evaluate(() => document.getElementById('v2-export-lines').value);
-const tickedLines = page => page.evaluate(() => Array.from(document.querySelectorAll('#v2-export-pdf-flyout .v2-hover-row[aria-checked="true"]')).map(r => r.dataset.exportLines).join());
+const tickedLines = page => page.evaluate(() => Array.from(document.querySelectorAll('#v2-export-pdf-flyout .v2-hover-row[data-export-lines][aria-checked="true"]')).map(r => r.dataset.exportLines).join());
 const typeButtonLit = page => page.evaluate(() => document.getElementById('v2-btn-quality').classList.contains('active'));
 const dialogState = page => page.evaluate(() => {
   const ov = document.getElementById('pp-dialog-modal');
@@ -199,12 +199,12 @@ async function menus(page, lang, tag) {
   check(`${tag} : « ${W.types[0]} » (type choisi), sous la souris : sur son gris de survol, toujours bleue et en gras, lisible (>= 4,5:1)`, chosenReadable(hoveredType), hoveredType);
   check(`${tag} : « ${W.qualities[0]} » (qualité choisie), sous la souris : sur son gris de survol, toujours bleue et en gras, lisible (>= 4,5:1)`, chosenReadable(hoveredQuality), hoveredQuality);
 
-  console.log(`\n[${tag}] Le menu « ${W.exportLabel} » dans un document, type PDF : rien que des options de lignes`);
+  console.log(`\n[${tag}] Le menu « ${W.exportLabel} » dans un document, type PDF : les options de lignes, puis la destination du PDF`);
   await hoverRow(page, EXPORT_MENU, LINES_ROW('one'));
   const exportLabels = await labelsOf(page, '#v2-export-pdf-flyout');
   const pdfRows = await stateOf(page, PDF_LINES);
   const oldRows = await stateOf(page, OLD_ROWS);
-  check(`${tag} : le titre du menu est « ${W.exportLabel} »`, JSON.stringify(exportLabels) === JSON.stringify([W.exportLabel]), exportLabels);
+  check(`${tag} : le titre du menu est « ${W.exportLabel} », suivi pour le PDF de « ${W.destinationLabel} » (js/pdf-delivery.js)`, JSON.stringify(exportLabels) === JSON.stringify([W.exportLabel, W.destinationLabel]), exportLabels);
   check(`${tag} : quatre options, dans cet ordre (${W.pdf.join(' | ')})`, wanted(pdfRows, W.pdf), pdfRows.map(r => r.text));
   check(`${tag} : les quatre options sont entières dans le panneau, atteignables, lisibles (>= 4,5:1) et actives`, entire(pdfRows) && readable(pdfRows) && pdfRows.every(r => r.live), pdfRows);
   check(`${tag} : la petite coche est devant « ${W.pdf[0]} » (cochée au départ, visible) et seulement devant elle`,

@@ -289,6 +289,7 @@ if (has('README.md')) {
     pp_mail_client: ['messagerie', 'mail program'],
     pp_autosave_enabled: ['enregistrement automatique', 'autosave'],
     pp_sheet_assembly: ['assemblage avant impression', 'sheet assembly before printing'],
+    pp_export_destination: ['destination des pdf', 'pdf destination'],
     pp_page_zoom: ['niveau de zoom', 'zoom level'],
     pp_pdf_protection: ['pdf protégé', 'protected pdf'],
     pp_news_seen: ['fenêtre des nouveautés', 'news window'],
