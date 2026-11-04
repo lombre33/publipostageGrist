@@ -799,7 +799,7 @@ const Editor = (function () {
     clampOverflowingTables(editor);
     HeaderFooterPreview.renderPaginationOverlay();
     const imagesRegridded = HeaderFooterPreview.migrateLegacyImagePositions();
-    HeaderFooterPreview.reconcileLayerImagesWithGrid({ layoutFresh: !imagesRegridded });
+    HeaderFooterPreview.reconcileLayerImagesWithGrid({ layoutFresh: !imagesRegridded, verdictOf: html || '' });
     // Vérification immédiate (schéma en cache) puis après rafraîchissement explicite (couvre une table/colonne supprimée entretemps). La passe
     // exacte lit toutes les tables en entier (1,4 M de cases à chaque modèle affiché dans un document de 40 tables de 2 000 lignes) : quand aucune
     // bulle n'est rouge, celle d'il y a moins d'une minute suffit (js/main.js la demande de même à l'ouverture) ; une bulle rouge peut venir d'un

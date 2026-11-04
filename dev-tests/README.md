@@ -763,6 +763,13 @@ Deux options utiles :
   automatique tirée de 40 px à la vraie souris part de sa largeur sur la page, la même à tout panneau ; un tableau écrit par la bêta à 658 px dans une page de 657,65 px
   (18 mm de marges) s'ouvre tel quel, un tableau plus large d'un pixel que la page y est toujours ramené. Sur le code du 22/10, 5 de ces 6 vérifications échouent (Égaliser
   [457,457,25], la bordure [417,151,151] à 1 400 px, le modèle à 658 px rogné d'un pixel par colonne).
+- `layerVerdict` (`dev-tests/verify-layer-verdict.mjs`, 32 vérifications, demande d'Antoine du 04/11 : « Seulement si le modèle a changé ») compte les fenêtres à l'échelle 1
+  (`EditorCore.pageScale(...).measure`) que l'ouverture d'un modèle ouvre pour relire le `top` des images en calque des pages 2 et suivantes (`js/header-footer-preview.js:reconcileLayerImagesWithGrid`,
+  appelée par `js/editor.js:setHTML` avec le texte chargé). Un modèle dont l'image de la page 2 a un `top` périmé est corrigé à chaque ouverture (une fenêtre) et ne laisse aucun verdict ; le même modèle à jour garde
+  son verdict à la première ouverture (`pp_layer_checks`, par PersonStore : une courte liste de signatures, jamais le contenu d'un modèle), n'ouvre plus aucune fenêtre à la deuxième et enregistre le même texte, le même
+  `top` à cinq tailles de panneau (420 à 1 400 px). Un paragraphe de plus, un autre format de page (A5), un en-tête posé ou une autre version de l'app (le `?v=` de `js/page-layout.js`, changé par une route) font relire ; le texte,
+  la page, l'en-tête ou la version d'avant, revenus, retrouvent leur verdict, qui survit à un rechargement de la page. Un modèle d'avant la grille de page garde la fenêtre de sa migration silencieuse (deux fenêtres à la première
+  ouverture, une à la deuxième). La liste reste à quarante signatures au plus. Sur le code d'avant (chaque ouverture ouvre la fenêtre, aucun verdict), 17 vérifications sur 32 échouent.
 - `layerImagesMouse` (`dev-tests/verify-layer-images-mouse.mjs`, 17 vérifications) charge à la vraie souris, à 700×400 (Aperçu A4), un ancien modèle dont l'image en calque n'a
   que `left` / `top` (pas de position de page), d'abord éditeur visible (témoin : l'image reçoit sa position de page), puis après un macro-modèle et en Mode lecture, deux cas
   où l'éditeur est masqué (`display:none`) pendant le chargement. Il exige que rien ne soit mesuré tant que l'éditeur est masqué, que la position de page soit celle du

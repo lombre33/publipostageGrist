@@ -293,6 +293,7 @@ if (has('README.md')) {
     pp_page_zoom: ['niveau de zoom', 'zoom level'],
     pp_pdf_protection: ['pdf protégé', 'protected pdf'],
     pp_news_seen: ['fenêtre des nouveautés', 'news window'],
+    pp_layer_checks: ['images devant ou derrière le texte', 'images in front of or behind the text'],
     pp_schema_: ['renommages', 'renames'],
   };
   const entryOf = key => Object.keys(STORED).find(name => key === name || (name.endsWith('_') && key.startsWith(name)));

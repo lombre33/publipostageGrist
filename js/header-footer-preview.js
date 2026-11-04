@@ -1263,18 +1263,28 @@ const HeaderFooterPreview = (function () {
       if (!(opts && opts.layoutFresh)) renderPaginationOverlay();
       return false;
     }
+    // `verdictOf` : le texte que l'appelant vient de charger (Editor.setHTML, le seul à le dire). S'il a déjà été relu avec la même page, le même en-tête et pied, la même version de l'app et le même
+    // navigateur, sans rien trouver à corriger (layerCheckKeep plus bas), la fenêtre à l'échelle 1 n'a rien à y changer : on passe comme pour un texte sans image en calque.
+    const signature = opts && typeof opts.verdictOf === 'string' ? layerCheckSignature(opts.verdictOf) : null;
+    if (signature && layerCheckHolds(signature)) {
+      if (!opts.layoutFresh) renderPaginationOverlay();
+      return false;
+    }
     // Le `top` qui s'enregistre se lit sur la pagination de la page à l'échelle 1 (EditorCore.pageScale), refaite pour cela : la même à toutes les tailles de panneau. Celle de
     // l'écran la remplace ensuite.
     const patches = [];
+    let measured = false;   // la page avait une mise en page, et chaque image qu'elle devait comparer a trouvé sa page et son élément
     const scale = EditorCore.pageScale(editor);
     try {
       scale.measure(() => {
         renderPaginationOverlay();
         if (!lastPageLayout) return;
+        measured = true;
         images.forEach(({ pos, attrs }) => {
           const page = lastPageLayout.pages[attrs.pageIndex];
           const dom = editor.view.nodeDOM(pos);
-          if (!page || !dom || dom.offsetParent !== tiptapEl) return;
+          if (!page || !dom) { measured = false; return; }
+          if (dom.offsetParent !== tiptapEl) return;
           const wantedTop = Math.round(page.bodyTop - lastPageLayout.tiptapTop + attrs.pageTopPt * PT_TO_PX);
           if (Math.abs(wantedTop - (attrs.top || 0)) <= 1.5) return;
           patches.push({ pos, attrs: Object.assign({}, attrs, { top: wantedTop }) });
@@ -1283,7 +1293,50 @@ const HeaderFooterPreview = (function () {
     } finally {
       if (scale.close()) renderPaginationOverlay();
     }
-    return applyImagePatches(patches);
+    const changed = applyImagePatches(patches);
+    if (signature && measured && !changed) layerCheckKeep(signature);
+    return changed;
+  }
+
+  // Le verdict de cette relecture, gardé par personne (PersonStore : `pp_layer_checks`, une courte liste de signatures, jamais le contenu d'un modèle ; chez GFS, l'espace de l'app). La signature est celle
+  // de tout ce dont la mesure dépend : le texte chargé, la page du modèle (PageLayout.snapshot), son en-tête et son pied, les versions de tous les fichiers de js/ et css/ de la page (une version de l'app
+  // qui met la page autrement fait relire), la densité de l'écran et le navigateur. Un verdict n'est gardé que si la mesure a eu lieu en entier et n'a rien corrigé ; absent, illisible ou refusé par le
+  // stockage : on mesure comme avant.
+  const LAYER_CHECKS_KEY = 'pp_layer_checks';
+  const LAYER_CHECKS_MAX = 40;
+  let appVersions = null;
+  const layerCheckSignature = (text) => {
+    if (appVersions === null) {
+      appVersions = Array.from(document.querySelectorAll('script[src], link[rel="stylesheet"][href]')).map(el => el.getAttribute('src') || el.getAttribute('href')).filter(url => /^(\.\/)?(js|css)\//.test(url)).join(' ');
+    }
+    let a = 0x811c9dc5;
+    let b = 0x9e3779b9;
+    let length = 0;
+    [text, JSON.stringify(PageLayout.snapshot()), JSON.stringify(headerFooterDraft), appVersions, String(window.devicePixelRatio), navigator.userAgent].forEach((part) => {
+      for (let i = 0; i < part.length; i += 1) {
+        const code = part.charCodeAt(i);
+        a = Math.imul(a ^ code, 16777619);
+        b = Math.imul(b ^ code, 2654435761) ^ (b >>> 15);
+      }
+      a = Math.imul(a ^ 0x1f, 16777619);   // la frontière entre deux parties
+      b = Math.imul(b ^ 0x1f, 2654435761) ^ (b >>> 15);
+      length += part.length;
+    });
+    return (a >>> 0).toString(36) + '.' + (b >>> 0).toString(36) + '.' + length.toString(36);
+  };
+  function layerChecks() {
+    if (typeof PersonStore === 'undefined') return [];
+    try {
+      const list = JSON.parse(PersonStore.get(LAYER_CHECKS_KEY) || '[]');
+      return Array.isArray(list) ? list.filter(item => typeof item === 'string') : [];
+    } catch (e) { return []; }
+  }
+  const layerCheckHolds = signature => layerChecks().includes(signature);
+  function layerCheckKeep(signature) {
+    if (typeof PersonStore === 'undefined') return;
+    const list = layerChecks().filter(item => item !== signature);
+    list.push(signature);
+    PersonStore.set(LAYER_CHECKS_KEY, JSON.stringify(list.slice(-LAYER_CHECKS_MAX)));
   }
 
   // Une couture rejoue ce qui sépare deux feuilles physiques, à leur vraie taille : le bas de la page qui finit (sa marge du bas et la bande de son
