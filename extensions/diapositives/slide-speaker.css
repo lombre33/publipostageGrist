@@ -37,6 +37,12 @@
 .pp-speaker-tool svg { width: 15px; height: 15px; }
 .pp-speaker-tool[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent-ink); }
 .pp-speaker-tool[aria-pressed="true"]:hover { background: var(--accent-soft); }
+/* Le détail d'un outil, au survol ou au focus clavier (slide-speaker.js : `showTip`) : la bulle des liens de l'éditeur (`.pp-link-tip`, css/link-dialog.css) - le nom en gras, ce que l'outil fait dessous -, sombre en thème clair et claire en
+   thème sombre (fond `--text`, texte `--surface`), à position fixe (rien ne bouge dans la console) et au-dessus des aperçus. L'ombre est celle des surfaces flottantes, que l'ambiance de GFS change. */
+.pp-speaker-tip { position: fixed; z-index: var(--z-tip); display: flex; flex-direction: column; gap: 2px; max-width: 280px; box-sizing: border-box; padding: 6px 10px; border-radius: var(--radius-md, 6px); background: var(--text); color: var(--surface); font-size: 11.5px; line-height: 1.4; pointer-events: none; box-shadow: var(--shadow-float); }
+.pp-speaker-tip[hidden] { display: none; }
+.pp-speaker-tip-name { font-weight: 600; }
+.pp-speaker-tip-text { opacity: .85; }
 
 /* Un aperçu : un cadre, et dedans la scène (un peu plus petite) où le lecteur pose la page (SlidePlayer.surface), aussi grande que la scène le permet. Le rendu de la Lecture (`.pp-print-host`, posé hors de l'écran par
    css/print.css pour l'impression) remplit le cadre en débordant de la scène du même écart : le trait qui entoure la page (en ligne sur son cadre, par le script : l'arbre ombre du rendu ne lit pas cette feuille) a sa place
@@ -70,6 +76,7 @@
   .pp-speaker-upcoming { --pp-ring: CanvasText; }
   .pp-speaker-hint-click { border-color: Highlight; }
   .pp-speaker-tool[aria-pressed="true"] { background: Highlight; border-color: Highlight; color: HighlightText; }
+  .pp-speaker-tip { border: 1px solid CanvasText; }
   .pp-speaker-hint-screen { background: CanvasText; border-color: CanvasText; color: Canvas; }
 }
 @media print { .pp-speaker { display: none; } }

@@ -27,6 +27,9 @@ const SlideSpeaker = (function () {
   const SCROLL_KEYS = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'];
   const INK_FLUSH_MS = 30;                                 // les points du stylo partent par envois, à ce rythme au plus...
   const INK_FLUSH_POINTS = 64;                             // ... ou dès qu'il y en a autant (un envoi porte 256 nombres au plus : slide-player.js:inkLayer)
+  const TIP_DELAY_MS = 350;                                // la bulle d'un outil vient après ce temps de survol (comme celles de la barre et des liens)
+  const TIP_GAP = 6;                                       // son écart au bouton, en pixels...
+  const TIP_EDGE = 4;                                      // ... et ce qu'il lui reste de marge au bord de la console
   const pad = n => (n < 10 ? '0' : '') + n;
   const part = value => Math.round(Math.min(1, Math.max(0, value)) * 10000) / 10000;   // une part de la page, de 0 à 1, à quatre décimales
 
@@ -36,7 +39,7 @@ const SlideSpeaker = (function () {
   // Ses sorties pour l'extérieur : `setState` (ce que la fenêtre dit d'elle-même) et `reset` (la fenêtre repart de zéro : le tracé qu'elle gardait n'est plus).
   function create(options) {
     const { labels, slides, onCommand, onExit } = options;
-    const s = { state: null, ready: false, destroyed: false, windows: [], starts: [], current: null, upcoming: null, shownSlide: -1, notesSize: NOTES_START, lastWheel: 0, tick: 0, picker: null, pen: false, stroke: null, inkPlace: null, hintText: '' };
+    const s = { state: null, ready: false, destroyed: false, windows: [], starts: [], current: null, upcoming: null, shownSlide: -1, notesSize: NOTES_START, lastWheel: 0, tick: 0, picker: null, pen: false, stroke: null, inkPlace: null, hintText: '', tipTimer: 0 };
     let mirror = null;               // le tracé tel que la console le fait, posé sur la copie de la diapositive en cours (le même calque que celui de la fenêtre : SlidePlayer.inkLayer)
     // Le chrono : le temps déjà compté (`base`) et, tant qu'il court, l'instant où il a repris (`since`).
     const clock = { started: false, running: false, base: 0, since: 0 };
@@ -110,6 +113,51 @@ const SlideSpeaker = (function () {
     [blackButton, whiteButton, penButton].forEach(button => button.setAttribute('aria-pressed', 'false'));
     setDisabled(eraseButton, true);
     tools.append(blackButton, whiteButton, penButton, eraseButton);
+    // Le DÉTAIL de chaque outil (demande du 04/11 : « en hover à la souris on ait le détail de ce que ces boutons font ») : une bulle au survol et au focus clavier, celle des liens de l'éditeur (le nom en gras, ce que l'outil fait
+    // dessous), posée dans le cadre de la console sans rien déplacer. Le détail se lit aussi par `aria-describedby` ; un outil n'a donc pas de `title` : il doublerait la bulle.
+    const tip = el('div', 'pp-speaker-tip');
+    tip.setAttribute('role', 'tooltip');
+    tip.hidden = true;
+    const tipName = el('span', 'pp-speaker-tip-name');
+    const tipText = el('span', 'pp-speaker-tip-text');
+    tip.append(tipName, tipText);
+    function hideTip() {
+      clearTimeout(s.tipTimer);
+      s.tipTimer = 0;
+      tip.hidden = true;
+    }
+    // Sous le bouton, centrée sur lui et tenue dans la console ; au-dessus quand il n'y a pas la place dessous.
+    function showTip(button, detail) {
+      s.tipTimer = 0;
+      if (s.destroyed || !button.isConnected) return;
+      tipName.textContent = button.getAttribute('aria-label');
+      tipText.textContent = detail;
+      tip.hidden = false;
+      // Mesurée au coin de la fenêtre : là où l'a laissée la précédente, près du bord droit, la largeur disponible la serrerait (étroite et haute).
+      tip.style.left = '0px';
+      tip.style.top = '0px';
+      const box = button.getBoundingClientRect();
+      const size = tip.getBoundingClientRect();
+      const below = box.bottom + TIP_GAP + size.height <= window.innerHeight - TIP_EDGE;
+      tip.style.top = Math.max(TIP_EDGE, below ? box.bottom + TIP_GAP : box.top - TIP_GAP - size.height) + 'px';
+      tip.style.left = Math.max(TIP_EDGE, Math.min(box.left + box.width / 2 - size.width / 2, window.innerWidth - size.width - TIP_EDGE)) + 'px';
+    }
+    function toolTip(button, key, detail) {
+      button.removeAttribute('title');
+      const note = el('span', 'pp-speaker-detail', detail);
+      note.id = 'pp-speaker-detail-' + key;
+      note.hidden = true;
+      tools.append(note);
+      button.setAttribute('aria-describedby', note.id);
+      const arm = () => { clearTimeout(s.tipTimer); s.tipTimer = setTimeout(() => showTip(button, detail), TIP_DELAY_MS); };
+      button.addEventListener('mouseenter', arm);
+      button.addEventListener('focus', () => { if (button.matches(':focus-visible')) arm(); });
+      ['mouseleave', 'blur', 'mousedown'].forEach(type => button.addEventListener(type, hideTip));
+    }
+    toolTip(blackButton, 'black', labels.blackTip);
+    toolTip(whiteButton, 'white', labels.whiteTip);
+    toolTip(penButton, 'pen', labels.penTip);
+    toolTip(eraseButton, 'erase', labels.eraseTip);
     const currentHead = el('div', 'pp-speaker-label');
     currentHead.append(el('span', 'pp-speaker-label-text', labels.current), tools);
     const hint = el('div', 'pp-speaker-hint');
@@ -143,7 +191,7 @@ const SlideSpeaker = (function () {
 
     const status = el('div', 'pp-speaker-card pp-speaker-status', labels.preparing);
     status.setAttribute('role', 'status');
-    root.append(head, body, status);
+    root.append(head, body, status, tip);
     document.body.appendChild(root);
 
     // Une vue : une copie du rendu mesuré posée dans son cadre (`SlidePlayer.surface`, celle du diaporama) avec ses objets animés repérés par diapositive.
@@ -363,6 +411,7 @@ const SlideSpeaker = (function () {
     eraseButton.addEventListener('click', () => { if (eraseButton.getAttribute('aria-disabled') !== 'true') eraseInk(); });
     left.addEventListener('wheel', (event) => {
       event.preventDefault();
+      hideTip();
       const now = Date.now();
       if (now - s.lastWheel < WHEEL_GAP_MS || !event.deltaY) return;
       s.lastWheel = now;
@@ -429,6 +478,7 @@ const SlideSpeaker = (function () {
     }
     function onKey(event) {
       if (s.destroyed || event.isComposing) return;
+      hideTip();
       const target = event.target;
       if (!root.contains(target) && target !== document.body && target !== document.documentElement) return;
       // Pendant la console, aucune touche n'atteint le document en dessous.
@@ -481,6 +531,7 @@ const SlideSpeaker = (function () {
       if (s.destroyed) return;
       s.destroyed = true;
       clearInterval(s.tick);
+      clearTimeout(s.tipTimer);
       document.removeEventListener('keydown', onKey, true);
       closePicker();
       if (s.stroke) { clearTimeout(s.stroke.timer); s.stroke = null; }

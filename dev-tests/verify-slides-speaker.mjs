@@ -77,6 +77,10 @@ const TEXTS = {
     prev: 'Diapositive précédente (←)', next: 'Diapositive suivante (→)', hint: 'Un clic ou une touche pour passer en plein écran.', search: 'Chercher une diapositive…', empty: 'Aucune diapositive ne correspond.',
     blocked: 'Le navigateur a bloqué la fenêtre du diaporama : sans elle, pas de vue intervenant. Le diaporama s’affiche dans le panneau.', annexe: 'annexe',
     tools: 'Écran du public et stylo', black: 'Écran noir pour le public (B)', white: 'Écran blanc pour le public (W)', pen: 'Stylo : dessiner sur la diapositive (D)', erase: 'Effacer le tracé (E)',
+    blackTip: 'Le public ne voit plus que du noir ; votre console reste affichée. B, un clic dans la fenêtre ou un changement de diapositive retire l’écran noir.',
+    whiteTip: 'Le public ne voit plus que du blanc ; votre console reste affichée. W, un clic dans la fenêtre ou un changement de diapositive retire l’écran blanc.',
+    penTip: 'Dessinez en rouge sur la diapositive en cours : le trait apparaît au même endroit chez le public. Changer de diapositive l’efface ; Échap repose le stylo.',
+    eraseTip: 'Efface tout ce qui est dessiné au stylo sur la diapositive en cours, chez vous et chez le public. Grisé quand il n’y a rien à effacer.',
     hintBlack: 'Écran noir pour le public : B pour revenir.', hintWhite: 'Écran blanc pour le public : W pour revenir.', hintPen: 'Stylo : dessine ici. E efface, Échap finit.',
   },
   en: {
@@ -89,6 +93,10 @@ const TEXTS = {
     prev: 'Previous slide (←)', next: 'Next slide (→)', hint: 'Click or press a key to go full screen.', search: 'Search for a slide…', empty: 'No slide matches.',
     blocked: 'The browser blocked the slide show window: without it, there is no presenter view. The slide show is shown in the panel.', annexe: 'hidden',
     tools: 'Audience screen and pen', black: 'Black screen for the audience (B)', white: 'White screen for the audience (W)', pen: 'Pen: draw on the slide (D)', erase: 'Erase the drawing (E)',
+    blackTip: 'The audience sees only black; your console stays visible. B, a click in the window or a slide change removes the black screen.',
+    whiteTip: 'The audience sees only white; your console stays visible. W, a click in the window or a slide change removes the white screen.',
+    penTip: 'Draw in red on the current slide: the stroke appears in the same place for the audience. Changing slides erases it; Esc puts the pen down.',
+    eraseTip: 'Erases everything drawn with the pen on the current slide, for you and for the audience. Grayed out when there is nothing to erase.',
     hintBlack: 'Black screen for the audience: B to go back.', hintWhite: 'White screen for the audience: W to go back.', hintPen: 'Pen: draw here. E erases, Esc stops.',
   },
 };
@@ -126,6 +134,15 @@ function toolsOf(tab) {
     await page.mouse.wheel(0, dy);
     await sleep(settle);
   };
+  // Pose le pointeur sur l'élément et rend l'instant où il y arrive (la bulle d'un outil se compte à partir de là).
+  const hover = async (selector, index = 0) => {
+    const c = await inPage(await centerOf(selector, index));
+    if (!c) throw new Error('introuvable : ' + selector + ' #' + index);
+    const at = Date.now();
+    await page.mouse.move(c.x - 10, c.y);
+    await page.mouse.move(c.x, c.y, { steps: 2 });
+    return at;
+  };
   const triple = async (selector, settle = 250) => {
     const c = await inPage(await centerOf(selector, 0));
     if (!c) throw new Error('introuvable : ' + selector);
@@ -133,7 +150,7 @@ function toolsOf(tab) {
     await page.mouse.click(c.x, c.y, { clickCount: 3 });
     await sleep(settle);
   };
-  return { click, wheel, triple, offset, app };
+  return { click, wheel, triple, hover, offset, app };
 }
 
 // Ce que la fenêtre du diaporama montre : le compteur, le texte que la page laisse voir, la ligne d'information, le plein écran, la taille et la barre d'adresse (une vraie fenêtre n'en a pas).
@@ -711,7 +728,7 @@ async function blocked(lang, colorScheme) {
 const deskOf = app => app.evaluate(() => {
   const q = s => document.querySelector(s);
   const rectOf = (el) => { const b = el.getBoundingClientRect(); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom, width: b.width, height: b.height }; };
-  const button = (sel) => { const b = q(sel); return b ? { pressed: b.getAttribute('aria-pressed'), disabled: b.getAttribute('aria-disabled'), label: b.getAttribute('aria-label'), title: b.title, rect: rectOf(b), icon: !!b.querySelector('svg') } : null; };
+  const button = (sel) => { const b = q(sel); const d = b && b.getAttribute('aria-describedby'); const note = d ? document.getElementById(d) : null; return b ? { pressed: b.getAttribute('aria-pressed'), disabled: b.getAttribute('aria-disabled'), label: b.getAttribute('aria-label'), title: b.title, hasTitle: b.hasAttribute('title'), detail: note ? note.textContent : null, rect: rectOf(b), icon: !!b.querySelector('svg') } : null; };
   const group = q('.pp-speaker-tools');
   const hint = q('.pp-speaker-hint');
   const speaker = SlideShow.speaker();
@@ -723,6 +740,38 @@ const deskOf = app => app.evaluate(() => {
     hint: hint.textContent, hintScreen: hint.classList.contains('pp-speaker-hint-screen'), hintClick: hint.classList.contains('pp-speaker-hint-click'),
     inking: q('.pp-speaker-current').classList.contains('pp-speaker-inking'), cursor: getComputedStyle(q('.pp-speaker-current')).cursor, column: rectOf(q('.pp-speaker-previews')), head: rectOf(q('.pp-speaker-label')),
     screen: state ? state.screen : null, ink: speaker ? speaker.pen() : null, counter: q('.pp-speaker-count').textContent, focusOnButton: !!active && active.tagName === 'BUTTON' && active.classList.contains('pp-speaker-tool'),
+  };
+});
+
+// La bulle des quatre outils (demande du 04/11 : le détail de ce que fait chaque bouton, au survol) : cachée ou non, ses deux lignes (nom, détail), leur place, le contraste réel de chacune sur le fond de la bulle (l'opacité de la ligne comptée : `contrastOf` ne la compte pas), ce qui la rend sans effet sur la souris, et combien il y en a dans la page.
+const tipOf = app => app.evaluate(() => {
+  const tip = document.querySelector('.pp-speaker-tip');
+  // Pas de bulle du tout (l'ancien code) : un état « cachée » sans rôle ni place, que les contrôles refusent, plutôt qu'un essai qui s'arrête.
+  if (!tip) return { hidden: true, missing: true, role: null, tips: 0, details: document.querySelectorAll('.pp-speaker-detail').length };
+  const cs = getComputedStyle(tip);
+  const rectOf = (el) => { if (!el) return null; const b = el.getBoundingClientRect(); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom, width: b.width, height: b.height }; };
+  const name = tip.querySelector('.pp-speaker-tip-name');
+  const text = tip.querySelector('.pp-speaker-tip-text');
+  const parse = (c) => { const m = c.match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(/[ ,/]+/).filter(Boolean).map(s => parseFloat(s)); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };
+  const lumin = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+  const background = parse(cs.backgroundColor);
+  const contrast = (el) => {
+    if (!el || !background) return null;
+    const ecs = getComputedStyle(el);
+    const fg = parse(ecs.color);
+    const alpha = fg.a * parseFloat(ecs.opacity) * parseFloat(cs.opacity);
+    const seen = { r: fg.r * alpha + background.r * (1 - alpha), g: fg.g * alpha + background.g * (1 - alpha), b: fg.b * alpha + background.b * (1 - alpha) };
+    const a = lumin(seen), b = lumin(background);
+    return Math.round(((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)) * 100) / 100;
+  };
+  const root = document.querySelector('.pp-speaker');
+  return {
+    hidden: tip.hidden || cs.display === 'none' || cs.visibility === 'hidden', role: tip.getAttribute('role'), position: cs.position, pointer: cs.pointerEvents, opaque: !!background && background.a === 1,
+    z: Number(cs.zIndex), rootZ: root ? Number(getComputedStyle(root).zIndex) : null, inRoot: !!root && root.contains(tip),
+    name: name ? name.textContent : null, text: text ? text.textContent : null, nameWeight: name ? Number(getComputedStyle(name).fontWeight) : 0,
+    rect: rectOf(tip), nameRect: rectOf(name), textRect: rectOf(text), nameContrast: contrast(name), textContrast: contrast(text),
+    view: { width: innerWidth, height: innerHeight },
+    tips: document.querySelectorAll('.pp-speaker-tip').length, details: document.querySelectorAll('.pp-speaker-detail').length,
   };
 });
 
@@ -881,14 +930,114 @@ async function screensAndPen(lang, colorScheme, full) {
   check(tag + 'la fenêtre (« Plein écran » décoché) se joue telle qu’elle est, 1024x600, à la diapositive 2 / 6, sans voile ; la console dit 2 / 6',
     w.show && w.counter === '2 / 6' && w.note === null && w.size.width === 1024 && w.size.height === 600 && desk.counter === '2 / 6' && veil.veil && !veil.shown && veil.svg, { w: w.counter, size: w.size, note: w.note, veil: veil.veil, shown: veil.shown, svg: veil.svg });
   const names = { black: T.black, white: T.white, pen: T.pen, erase: T.erase };
-  check(tag + 'quatre outils au bord droit du titre « ' + T.current + ' », dans un groupe « ' + T.tools + ' », nommés dans la langue de la page (écran noir B, écran blanc W, stylo D, effacer E), chacun avec son icône ; aucun enfoncé, « effacer » grisé tant qu’il n’y a rien à effacer ; tous dans la colonne des aperçus, au-dessus de la diapositive',
-    !!desk.group && desk.group.role === 'group' && desk.group.label === T.tools && ['black', 'white', 'pen', 'erase'].every(k => desk[k] && desk[k].label === names[k] && desk[k].title === names[k] && desk[k].icon && desk[k].rect.height >= 22 && desk[k].rect.height <= 30
+  const details = { black: T.blackTip, white: T.whiteTip, pen: T.penTip, erase: T.eraseTip };
+  check(tag + 'quatre outils au bord droit du titre « ' + T.current + ' », dans un groupe « ' + T.tools + ' », nommés dans la langue de la page (écran noir B, écran blanc W, stylo D, effacer E), chacun avec son icône, son nom pour nom accessible, son détail lu par `aria-describedby` et aucun `title` natif (il doublerait la bulle) ; aucun enfoncé, « effacer » grisé tant qu’il n’y a rien à effacer ; tous dans la colonne des aperçus, au-dessus de la diapositive',
+    !!desk.group && desk.group.role === 'group' && desk.group.label === T.tools && ['black', 'white', 'pen', 'erase'].every(k => desk[k] && desk[k].label === names[k] && !desk[k].hasTitle && desk[k].detail === details[k] && desk[k].icon && desk[k].rect.height >= 22 && desk[k].rect.height <= 30
       && desk[k].rect.left >= desk.column.left - 0.5 && desk[k].rect.right <= desk.column.right + 0.5 && desk[k].rect.bottom <= preview.box.top + 1) && desk.group.rect.right >= desk.head.right - 8
     && desk.black.pressed === 'false' && desk.white.pressed === 'false' && desk.pen.pressed === 'false' && desk.erase.disabled === 'true' && desk.screen === 0 && !desk.inking, desk);
   const labelRow = await app.evaluate(() => { const row = document.querySelector('.pp-speaker-label'); const text = row.querySelector('.pp-speaker-label-text'); return { text: text.textContent, clipped: text.scrollWidth > text.clientWidth + 1 }; });
   check(tag + 'à 700x400 le titre « ' + T.current + ' » tient entier à côté des outils (rien de tronqué)', labelRow.text.toUpperCase() === T.current && !labelRow.clipped, labelRow);
   const contrast0 = { tool: await contrastOf(app, '.pp-speaker-black'), erase: await contrastOf(app, '.pp-speaker-erase') };
   check(tag + 'les icônes des outils se lisent sur leur fond (4,5:1 au moins)', contrast0.tool >= 4.5 && contrast0.erase >= 4.5, contrast0);
+
+  // --- LA BULLE DES QUATRE OUTILS (demande du 04/11 : « en survol à la souris, le détail de ce que font ces boutons ») : rien au repos ; elle vient après un temps de survol (jamais à un simple passage), dit le nom puis ce que fait l'outil, tient dans la fenêtre sans rien déplacer ni prendre la souris, et part au moindre geste.
+  const KEYS = ['black', 'white', 'pen', 'erase'];
+  const calm = () => a.hover('.pp-speaker-label-text');
+  const tipShown = () => until(async () => { const v = await tipOf(app); return v && !v.hidden ? v : null; }, 2500);
+  const near = (p, q) => !!p && !!q && ['left', 'top', 'width', 'height'].every(f => Math.abs(p[f] - q[f]) <= 0.5);
+  await calm();
+  await sleep(450);
+  const atRest = await tipOf(app);
+  check(tag + 'au repos la bulle des outils est là mais cachée : une seule (`role="tooltip"`, fixe, opaque, au-dessus des cartes de la console, sans effet sur la souris, dans la console) et quatre détails cachés lus par `aria-describedby`',
+    !!atRest && atRest.hidden && atRest.role === 'tooltip' && atRest.position === 'fixed' && atRest.pointer === 'none' && atRest.opaque && atRest.inRoot && atRest.z > 2 && atRest.tips === 1 && atRest.details === 4, atRest);
+  const restDesk = await deskOf(app);
+  const restPreviews = { current: (await previewOf(app, 'current')).frame, upcoming: (await previewOf(app, 'upcoming')).frame };
+  const rounds = {};
+  for (const key of KEYS) {
+    // d'un outil au suivant, sans repasser par le vide : la bulle du précédent est partie, celle-ci se compte à partir de son arrivée
+    const at = await a.hover('.pp-speaker-' + key);
+    await sleep(60);
+    const early = await tipOf(app);
+    const earlyAge = Date.now() - at;
+    const late = await tipShown();
+    const lateAge = Date.now() - at;
+    const deskNow = await deskOf(app);
+    rounds[key] = { early: !!early && early.hidden, earlyAge, late, lateAge, group: deskNow.group.rect, current: (await previewOf(app, 'current')).frame, upcoming: (await previewOf(app, 'upcoming')).frame };
+  }
+  check(tag + 'à la vraie souris, la bulle de chaque outil ne vient pas tout de suite (rien à 0,1 s) mais après un temps de survol (0,35 s), d’un outil au suivant sans repasser par le vide : noir, blanc, stylo, effacer',
+    KEYS.every(k => !!rounds[k].late && (rounds[k].earlyAge > 300 || rounds[k].early) && rounds[k].lateAge >= 300 && rounds[k].lateAge < 2500),
+    KEYS.map(k => ({ k, early: rounds[k].early, earlyAge: rounds[k].earlyAge, lateAge: rounds[k].lateAge, shown: !!rounds[k].late })));
+  check(tag + 'la bulle dit le nom de l’outil (en gras, avec sa touche) puis, dessous, ce qu’il fait, dans la langue de la page (« ' + T.penTip.slice(0, 24) + '… »)',
+    KEYS.every(k => { const v = rounds[k].late; return !!v && v.name === names[k] && v.text === details[k] && v.nameWeight >= 600 && v.nameRect.height > 0 && v.textRect.height > 0 && v.nameRect.bottom <= v.textRect.top + 1; }),
+    KEYS.map(k => ({ k, name: rounds[k].late && rounds[k].late.name, text: rounds[k].late && rounds[k].late.text, weight: rounds[k].late && rounds[k].late.nameWeight })));
+  check(tag + 'elle tient dans la fenêtre à 700x400 (3 pixels de marge au moins), à côté du bouton survolé sans jamais le couvrir, sans prendre la souris, et se lit (4,5:1 au moins pour le nom comme pour le détail)',
+    KEYS.every(k => {
+      const v = rounds[k].late; const b = restDesk[k].rect;
+      return !!v && v.rect.left >= 3 && v.rect.top >= 3 && v.rect.right <= v.view.width - 3 && v.rect.bottom <= v.view.height - 3 && v.rect.width <= 280.5
+        && (v.rect.top - b.bottom >= 0 && v.rect.top - b.bottom <= 14 || b.top - v.rect.bottom >= 0 && b.top - v.rect.bottom <= 14) && v.pointer === 'none' && v.nameContrast >= 4.5 && v.textContrast >= 4.5;
+    }),
+    KEYS.map(k => ({ k, rect: rounds[k].late && rounds[k].late.rect, button: restDesk[k].rect, view: rounds[k].late && rounds[k].late.view, contrast: rounds[k].late && [rounds[k].late.nameContrast, rounds[k].late.textContrast] })));
+  check(tag + 'la bulle ne déplace rien : pendant qu’elle est là, les deux aperçus et le groupe des outils gardent leur taille et leur place',
+    KEYS.every(k => !!rounds[k].late && near(restPreviews.current, rounds[k].current) && near(restPreviews.upcoming, rounds[k].upcoming) && near(restDesk.group.rect, rounds[k].group)),
+    KEYS.map(k => ({ k, current: rounds[k].current, rest: restPreviews.current, group: rounds[k].group })));
+  await calm();
+  await sleep(150);
+  const leftOff = await tipOf(app);
+  check(tag + 'le pointeur qui s’en va fait partir la bulle (qui était bien là)', leftOff.hidden && !!rounds.erase.late, { hidden: leftOff.hidden, wasShown: !!rounds.erase.late });
+  // Posée près du bord droit par la bulle d'avant, elle garde sa largeur : mesurée là où la largeur disponible la serrerait, elle serait étroite et haute.
+  await app.evaluate(() => { const tip = document.querySelector('.pp-speaker-tip'); if (tip) { tip.style.left = '640px'; tip.style.top = '300px'; } });
+  await a.hover('.pp-speaker-pen');
+  const squeezed = await tipShown();
+  await calm();
+  const penBox = restDesk.pen.rect;
+  check(tag + 'une bulle laissée près du bord droit par la précédente se pose pourtant où il faut : sous le bouton du stylo, centrée sur lui, de sa largeur naturelle (mesurée là où la largeur disponible la serrerait, elle serait étroite et haute, donc posée au-dessus et de travers)',
+    !!squeezed && squeezed.rect.width >= 200 && squeezed.rect.height <= 130 && squeezed.rect.top - penBox.bottom >= 0 && squeezed.rect.top - penBox.bottom <= 14 && Math.abs(squeezed.rect.left + squeezed.rect.width / 2 - (penBox.left + penBox.width / 2)) <= 2,
+    { rect: squeezed && squeezed.rect, button: penBox });
+  // Appuyer sur le bouton fait partir la bulle ; le clic fait ce qu'il disait ; elle ne revient pas tant que le pointeur reste dessus.
+  await a.hover('.pp-speaker-black');
+  const beforePress = await tipShown();
+  await page.mouse.down();
+  await sleep(80);
+  const whilePressed = await tipOf(app);
+  await page.mouse.up();
+  await sleep(450);
+  const afterPress = await tipOf(app);
+  const blackOn = await deskOf(app);
+  await sleep(600);
+  const stayed = await tipOf(app);
+  check(tag + 'appuyer sur un outil fait partir sa bulle, le clic fait ce qu’il dit (l’écran noir) et la bulle ne revient pas tant que le pointeur reste sur le bouton',
+    !!beforePress && whilePressed.hidden && afterPress.hidden && blackOn.screen === 1 && blackOn.black.pressed === 'true' && stayed.hidden, { shown: !!beforePress, pressed: whilePressed.hidden, after: afterPress.hidden, screen: blackOn.screen, stayed: stayed.hidden });
+  await a.click('.pp-speaker-black', 0, 450);
+  const blackOff = await deskOf(app);
+  await calm();
+  check(tag + 'un second clic rend la diapositive (le bouton se relève, plus d’écran noir) : la bulle n’a rien changé au comportement des boutons', blackOff.screen === 0 && blackOff.black.pressed === 'false', { screen: blackOff.screen, pressed: blackOff.black.pressed });
+  // Un simple passage sur les quatre outils (une fraction de seconde sur chacun) n'affiche rien, ni après coup.
+  for (const key of KEYS) { await a.hover('.pp-speaker-' + key); await sleep(70); }
+  await calm();
+  await sleep(700);
+  const swept = await tipOf(app);
+  check(tag + 'un simple passage sur les quatre outils (moins d’un tiers de seconde sur chacun) n’affiche rien, ni après coup (alors qu’un survol posé l’affiche)', swept.hidden && !!rounds.black.late, { hidden: swept.hidden, wasShown: !!rounds.black.late });
+  // Au clavier : Tab jusqu'au bouton noir, la bulle vient comme au survol ; une touche la ferme ; Tab vers le blanc et elle revient pour lui ; le focus qui s'en va la ferme.
+  await app.evaluate(() => document.querySelector('.pp-speaker').focus());
+  let tabs = 0;
+  for (; tabs < 24; tabs++) {
+    await page.keyboard.press('Tab');
+    if (await app.evaluate(() => document.activeElement === document.querySelector('.pp-speaker-black'))) break;
+  }
+  const viaKey = await tipShown();
+  await page.keyboard.press('Shift');
+  await sleep(80);
+  const afterKey = await tipOf(app);
+  await page.keyboard.press('Tab');
+  const viaKey2 = await tipShown();
+  await app.evaluate(() => document.querySelector('.pp-speaker').focus());
+  await sleep(80);
+  const afterBlur = await tipOf(app);
+  check(tag + 'au clavier la bulle vient aussi (Tab sur le bouton noir, puis sur le blanc), se ferme à la moindre touche et quand le focus s’en va',
+    tabs < 24 && !!viaKey && viaKey.name === names.black && viaKey.text === details.black && afterKey.hidden && !!viaKey2 && viaKey2.name === names.white && viaKey2.text === details.white && afterBlur.hidden,
+    { tabs, first: viaKey && viaKey.name, shut: afterKey.hidden, second: viaKey2 && viaKey2.name, blur: afterBlur.hidden });
+  const swarm = await tipOf(app);
+  check(tag + 'après tout cela il reste une seule bulle et quatre détails dans la console (rien ne s’empile)', swarm.tips === 1 && swarm.details === 4 && swarm.hidden, { tips: swarm.tips, details: swarm.details, hidden: swarm.hidden });
 
   // --- L'ÉCRAN NOIR : le bouton (vraie souris)
   const shown0 = await probe();
