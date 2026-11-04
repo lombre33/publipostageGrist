@@ -491,6 +491,35 @@ async function run(lang, colorScheme, full) {
   const thumbPx = thumbs[1] ? await pixelAt(page, thumbs[1].left + thumbs[1].width * 0.5, thumbs[1].top + thumbs[1].height * 0.97) : null;
   check(tag + 'les trois miniatures montrent le décor : le bandeau de la deuxième est dans la couleur du deuxième accent, la première n\'a ni pied ni numéro', thumbs.length === 3 && thumbs.every(x => !!x) && closeRgb(thumbPx, hexRgb(accent2.ocean)) && thumbs[0].texts.length === 0 && thumbs[1].texts.length === 2, { thumbs, thumbPx });
 
+  // Supprimer une diapositive renumérote celles d'après : leurs blocs n'ont pas changé, seul le décor (le numéro, le pied de la première) se refait. Les miniatures gardent donc les éléments de leurs blocs
+  // (une marque posée sur chacun survit) : les recopier à chaque suppression coûtait des centaines de millisecondes sur une longue présentation.
+  await page.evaluate(() => document.querySelectorAll('.pp-slide-item').forEach((item, i) => {
+    Array.from(item.querySelector('.pp-slide-page').children).forEach((child) => { if (!child.classList.contains('pp-slide-decor')) child.__kept = i + 1; });
+  }));
+  const thumbMarks = () => page.evaluate(() => Array.from(document.querySelectorAll('.pp-slide-item')).map((item) => {
+    const kids = Array.from(item.querySelector('.pp-slide-page').children);
+    return {
+      kept: kids.filter(child => !child.classList.contains('pp-slide-decor')).map(child => child.__kept || 0),
+      decors: kids.filter(child => child.classList.contains('pp-slide-decor')).length,
+      texts: Array.from(item.querySelectorAll('.pp-slide-decor-text')).map(x => x.textContent),
+    };
+  }));
+  const allMarked = (list, n) => list.length > 0 && list.every(v => v === n);
+  const before = await thumbMarks();
+  await page.evaluate(() => document.querySelector('.pp-slide-item').focus());
+  await page.keyboard.press('Delete');
+  await sleep(900);
+  const afterDelete = await thumbMarks();
+  check(tag + 'Suppr efface la première diapositive : les deux autres miniatures gardent leurs blocs (les mêmes éléments) et changent de décor : la nouvelle première n\'a plus ni pied ni numéro, la suivante passe au numéro 2',
+    before.length === 3 && afterDelete.length === 2 && allMarked(afterDelete[0].kept, 2) && allMarked(afterDelete[1].kept, 3) && afterDelete.every(x => x.decors === 1) && afterDelete[0].texts.length === 0 && sameWords(afterDelete[1].texts, [T.footer, '2']),
+    { before, afterDelete });
+  await page.keyboard.press('Control+z');
+  await sleep(900);
+  const afterRestore = await thumbMarks();
+  check(tag + 'Ctrl+Z rend la première diapositive : les deux miniatures d\'avant gardent encore leurs blocs et reprennent leur numéro (2 et 3), la première n\'a ni pied ni numéro',
+    afterRestore.length === 3 && allMarked(afterRestore[1].kept, 2) && allMarked(afterRestore[2].kept, 3) && afterRestore.every(x => x.decors === 1) && afterRestore[0].texts.length === 0 && sameWords(afterRestore[1].texts, [T.footer, '2']) && sameWords(afterRestore[2].texts, [T.footer, '3']),
+    { afterRestore });
+
   // 8) Un Ctrl+Z (vrai clavier) rend le thème sans décor, un Ctrl+Y le remet.
   await selectWord(page, 'Titre');
   await page.keyboard.press('Control+z');

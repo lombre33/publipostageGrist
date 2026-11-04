@@ -365,7 +365,7 @@ const SlideStrip = (function () {
     list.appendChild(row);
     // Sans observateur (navigateur ancien), toutes les miniatures se copient, comme avant.
     if (nearObserver) nearObserver.observe(row);
-    return { row, item, num, dot, link, linkLook: '', trans, transLook: '', notes, notesLook: '', hid, hidLook: false, people, peopleKey: '', peopleNames: [], thumb, page, more, nodes: null, decorKey: '', sizedFor: '', near: !nearObserver };
+    return { row, item, num, dot, link, linkLook: '', trans, transLook: '', notes, notesLook: '', hid, hidLook: false, people, peopleKey: '', peopleNames: [], thumb, page, more, nodes: null, decorKey: '', decorEl: null, sizedFor: '', near: !nearObserver };
   }
   function removeRow(r) {
     if (nearObserver) nearObserver.unobserve(r.row);
@@ -464,6 +464,12 @@ const SlideStrip = (function () {
     const marker = copies.length > 0 && copies[0].classList && copies[0].classList.contains('pp-slide-props');
     return marker ? [copies[0], decorEl, ...copies.slice(1)] : [decorEl, ...copies];
   }
+  // Supprimer, ajouter ou déplacer une diapositive renumérote celles d'après : leurs blocs sont les mêmes, seul leur rang a changé, et la clé du décor ne diffère que par son dernier terme (`thème:page:rang`).
+  // Le décor seul se remplace alors, à sa place, au lieu de recopier toute la diapositive (une suppression refaisait ainsi huit miniatures d'un coup, près de 1 900 éléments).
+  const canSwapDecor = (r, decor) => {
+    const base = key => key.slice(0, key.lastIndexOf(':'));
+    return !!decor && !!r.decorKey && !!r.decorEl && r.decorEl.parentNode === r.page && base(r.decorKey) === base(decor);
+  };
   // Refait la miniature des diapositives dont les blocs ont changé (un bloc que le texte n'a pas touché reste le même objet d'une transaction à l'autre), toutes quand la page a changé ;
   // seulement celles que la bande montre, ou presque (`near`) : les autres se copient quand elle défile jusqu'à elles (onNear). Chaque rangée prend la hauteur de la page, copiée ou non.
   function drawThumbs() {
@@ -473,19 +479,33 @@ const SlideStrip = (function () {
     if (editor.state.doc !== readDoc) refresh(false);
     const geometry = pageGeometry();
     const due = [];
+    const swaps = [];
     rows.forEach((r, i) => {
       if (r.sizedFor !== geometry.key) { sizeThumb(r, geometry); r.nodes = null; }
+      if (!r.near) return;
       const nodes = slides[i].nodes.map(entry => entry.node);
       // Le décor du thème (bandeau, logo, numéro, pied) n'est pas dans les blocs : sa clé dit quand la miniature doit se refaire (le thème, la page ou le rang de la diapositive ont changé).
       const decor = SlideTheme.decorKey(i);
-      if (r.near && (!shows(r, nodes) || r.decorKey !== decor)) due.push({ r, slide: slides[i], nodes, rank: i, decor });
+      if (!shows(r, nodes)) due.push({ r, slide: slides[i], nodes, rank: i, decor });
+      else if (r.decorKey !== decor) {
+        if (canSwapDecor(r, decor)) swaps.push({ r, rank: i, decor });
+        else due.push({ r, slide: slides[i], nodes, rank: i, decor });
+      }
     });
     // Toutes les copies d'abord, puis toutes les écritures : copier lit la mise en page de l'éditeur (placeLayers), qu'une écriture dans la bande obligerait à refaire.
     const copies = due.map(({ slide }) => copiesOf(slide, geometry));
     due.forEach(({ r, nodes, rank, decor }, k) => {
-      r.page.replaceChildren(...withDecor(copies[k], decor ? SlideTheme.decorElementFor(rank) : null));
+      const decorEl = decor ? SlideTheme.decorElementFor(rank) : null;
+      r.page.replaceChildren(...withDecor(copies[k], decorEl));
       r.nodes = nodes;
       r.decorKey = decor;
+      r.decorEl = decorEl;
+    });
+    swaps.forEach(({ r, rank, decor }) => {
+      const fresh = SlideTheme.decorElementFor(rank);
+      if (fresh) r.decorEl.replaceWith(fresh); else r.decorEl.remove();
+      r.decorKey = decor;
+      r.decorEl = fresh;
     });
   }
   // Les rangées qui entrent dans la bande, ou presque, copient leur miniature quand elle n'est pas à jour (une pause de la frappe attendue les copiera aussi).
