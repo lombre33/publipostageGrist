@@ -38,7 +38,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
 - **Le volume** : 190 fichiers dans `js/` (87 400 lignes : 66 000 de code, 16 900 de commentaires, 4 500 de
   blanc), 45 dans `extensions/` (12 200 lignes, dont 2 900 dans `graphique/`, 1 700 dans `edition/`, 7 300 dans
-  `diapositives/` et 300 dans `lecture-pdf/`), 57 feuilles de style (4 700 lignes), une page de 1 050 lignes.
+  `diapositives/` et 300 dans `lecture-pdf/`), 57 feuilles de style (4 700 lignes), une page de 1 100 lignes.
   Quatre fichiers de polices du PDF pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à
   traduire, pas de la logique.
 
@@ -463,7 +463,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   preferences (language, theme, shortcuts…) in the browser.
 - **The size**: 190 files in `js/` (87,400 lines: 66,000 of code, 16,900 of comments, 4,500 blank), 45 in
   `extensions/` (12,200 lines, 2,900 of them in `graphique/`, 1,700 in `edition/`, 7,300 in `diapositives/` and 300 in
-  `lecture-pdf/`), 57 stylesheets (4,700 lines), a 1,050-line page. Four PDF font files weigh 2.5 MB in a few lines
+  `lecture-pdf/`), 57 stylesheets (4,700 lines), a 1,100-line page. Four PDF font files weigh 2.5 MB in a few lines
   (data); `js/i18n.js` is text to translate, not logic.
 
 ## Where to start
