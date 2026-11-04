@@ -2,10 +2,11 @@
 
 *🇬🇧 An English version of this document is available [at the bottom of this page](#publipostage-for-grist).*
 
-> **Version bêta {{VERSION}}**, publiée le {{DATE_FR}}. Les fonctions décrites ci-dessous sont livrées,
-> mais des défauts peuvent subsister : essayez le widget sur une copie de votre document avant de
-> l'utiliser sur des données importantes. Les [limites connues](#limites-connues) et la
-> [roadmap](#roadmap) disent ce qui manque encore.
+> **Version {{VERSION}}**, publiée le {{DATE_FR}}. Elle succède à la bêta : ce qui change pour qui en vient est dans la
+> [note de version](PATCH_NOTES.md), et la bêta reste servie à [une adresse à part](#installation-dans-grist).
+> Les fonctions décrites ci-dessous sont livrées ; celles qui demandent Grist Factory Suite le disent. Des défauts
+> peuvent subsister : essayez le widget sur une copie de votre document avant de l'utiliser sur des données
+> importantes. Les [limites connues](#limites-connues) et la [roadmap](#roadmap) disent ce qui manque encore.
 
 Il s'agit d'un éditeur de texte avec publipostage et puces intelligentes. Il permet à n'importe qui de
 rédiger des contrats, factures ou étiquettes sans écrire la moindre ligne de code, tout en pouvant
@@ -14,7 +15,7 @@ nécessaire !
 
 C'est un widget personnalisé pour [Grist](https://www.getgrist.com/), conçu par
 [Grist Factory](https://grist-factory.fr). Un document se lit rempli avec les données d'une ligne,
-puis se télécharge en PDF vectoriel (texte sélectionnable), en Word, en PowerPoint (une présentation), en Excel, en Markdown ou en HTML, ou s'envoie dans un
+puis se télécharge en PDF vectoriel (texte sélectionnable), en Word, en PowerPoint (une présentation, avec Grist Factory Suite), en Excel, en Markdown ou en HTML, ou s'envoie dans un
 e-mail prérempli, ligne par ligne ou en lot.
 
 ## Aperçu
@@ -51,7 +52,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Macro-modèle : une page de garde toujours incluse, suivie d'annexes (d'autres modèles) choisies selon
   des règles évaluées sur la même ligne ; des modèles en portrait, en paysage, des modèles Grille et des
   présentations s'y mêlent, chacun sur une page de son sens (ou un seul sens est imposé à tous), jusque dans
-  le PDF ; une présentation y garde sa page de diapositive 16:9 au milieu des pages A4 (Lecture, Word,
+  le PDF ; une présentation (avec Grist Factory Suite) y garde sa page de diapositive 16:9 au milieu des pages A4 (Lecture, Word,
   impression et PDF, un seul fichier ; seul le PDF protégé ne peut pas mêler les formats)
 - Présentation (avec Grist Factory Suite, « Nouvelle présentation » du menu « + ») : le même éditeur que le
   Document, sur une page 16:9 en paysage (le menu Page propose aussi le 4:3, le 16:10 et le carré) ; chaque saut de page commence une diapositive, et une bande de
@@ -101,14 +102,14 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 - Images, y compris flottantes (habillage de texte, calque devant ou derrière, opacité, légende),
   collées, ajoutées par adresse ou prises dans une colonne Pièces jointes de Grist ; une image
   hébergée sur un autre site n'apparaît qu'après un clic sur « Afficher »
-- Graphiques créés (« Créer un graphique… », au menu de l'image) : barres, courbe, aire, nuage de points, secteurs,
+- Graphiques créés (avec Grist Factory Suite ; « Créer un graphique… », au menu de l'image) : barres, courbe, aire, nuage de points, secteurs,
   anneau, radar, entonnoir, cascade et jauge, tracés d'après les colonnes d'une table de Grist, dans un document, une grille ou une diapositive ;
   un titre, cinq jeux de couleurs, la couleur de chaque série, les valeurs affichées et des barres mêlées à une courbe ;
   dans le Word, le PowerPoint et l'Excel, un graphique natif que l'on modifie dans l'application (ses données s'ouvrent dans Excel ; l'entonnoir et la jauge y restent des images ; la cascade y est un graphique en colonnes empilées dont une seule colonne, les montants, se modifie : le reste se calcule)
 - En-têtes et pieds de page (première page différente, numéro de page, QR code), notes de bas de page, sommaire
   généré, sauts de page, filigrane
 - Citation, bloc de code, encadré (Note, Attention, Important), bloc de signature, QR code, graphique de la
-  page (un graphique réglé dans Grist, redessiné dans le document)
+  page (avec Grist Factory Suite : un graphique réglé dans Grist, redessiné dans le document)
 - Rechercher / remplacer (casse, mot entier, expression régulière, texte des bulles, en-tête et pied de page), abréviations qui se développent à la frappe
 - Aperçu « format A4 » fidèle, WYSIWYG (ce que vous voyez est ce que vous obtenez)
 - Zoom de la page à l'écran, en Édition comme en Lecture (pastille du coin, Ajuster, Ctrl + molette) : le
@@ -174,7 +175,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   ou Texte, sans formule), garde le moment du dernier export PDF de chaque ligne ; elle est écrite une
   fois le PDF produit, pour les lignes qui sont dans le fichier
 - Word (`.docx`, bêta) et Excel (`.xlsx`, pour les grilles)
-- PowerPoint (`.pptx`, bêta, pour les présentations) : une diapositive par saut de page, en objets que PowerPoint modifie (titre, texte mis en forme, listes,
+- PowerPoint (`.pptx`, bêta, pour les présentations, avec Grist Factory Suite) : une diapositive par saut de page, en objets que PowerPoint modifie (titre, texte mis en forme, listes,
   tableaux, images, formes et traits à leur place et pivotés, fond), avec la transition et les notes de l'intervenant de chaque diapositive ; un fichier, ou un par ligne dans une archive ZIP
 - Markdown (`.md`, CommonMark et GFM) : le document de la ligne avec les valeurs de ses variables ; ce que le Markdown écrit
   s'écrit en Markdown (titres, gras, italique, barré, liens, listes imbriquées, numérotées et à cases, citations, code,
@@ -206,7 +207,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
   variables `{{Table.Colonne}}` et les éléments de fusion que « Markdown (modèle) » écrit en HTML redeviennent ce qu'ils
   étaient (une clé qui n'est pas une variable du document reste du texte, et le coin d'état la compte) ; une
   image qui n'est ni en ligne ni dans le fichier n'est pas reprise (un mot le dit à sa place)
-- Galerie de 22 modèles prêts à l'emploi : facture, contrat de prestation de services, attestation,
+- Galerie de 22 modèles prêts à l'emploi (21 sans Grist Factory Suite) : facture, contrat de prestation de services, attestation,
   courrier de relance, quittance de loyer, bulletin scolaire, fiche recette, émargement, bon de commande,
   fiche d'inventaire, des modèles à imprimer (flyer A6, invitation, affiche A3, carte de visite, badge,
   étiquettes) et une présentation commerciale de trente-neuf diapositives (formes, tableaux, douze graphiques lus
@@ -395,10 +396,10 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
 - **Réseau** : `esm.sh` (éditeur) et `docs.getgrist.com` (API de Grist) sont nécessaires au démarrage ;
   `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` le sont au premier export ou au premier import Markdown. Un pare-feu qui bloque l'un d'eux empêche le widget de démarrer ou l'export de se faire : il faut
   les autoriser. Au démarrage, le widget le dit dans une fenêtre qui liste ces adresses.
-- **Audit externe** : un audit du code (outil gwaudit, 4 octobre 2026) conclut « NON CONFORME » et compte
+- **Audit externe** : un audit du code (outil gwaudit, 4 octobre 2026, refait le 4 novembre 2026 sur la V1) conclut « NON CONFORME » et compte
   69 points bloquants. Tous tiennent à un seul choix : l'éditeur (TipTap et ProseMirror) se charge depuis
   `esm.sh`, un site tiers, sans intégrité SRI (ce qu'un import map ne permet pas ; voir
-  [Dépendances](#dépendances)). Ce choix est gardé pour la bêta, donc le verdict reste « NON CONFORME », et
+  [Dépendances](#dépendances)). Ce choix est gardé pour la V1, donc le verdict reste « NON CONFORME », et
   l'outil en tire qu'un hébergement sur une instance officielle (DINUM, ANCT) est exclu en l'état. Le
   widget reste installable ailleurs : à chaque personne de juger si ce risque convient à son usage.
 - **Navigateurs** : les tests automatisés tournent sur Chromium (Chrome, Edge), avec un simulateur de
@@ -417,7 +418,7 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
   section, relue toutes les 250 ms) ; le réseau réel d'un Grist en ligne, deux navigateurs et les plafonds de l'offre ne
   sont pas mesurés. Les frappes passent par la table `Publipostage_Direct` : l'historique des actions de Grist grossit
   pendant qu'on écrit et garde ce qui y a été écrit.
-- **Suivi des modifications** (bêta) : la version complète est prévue en V1.
+- **Suivi des modifications** (bêta) : la version complète reste à venir (voir la [roadmap](#roadmap)).
 - **PDF** : les caractères chinois, arabes, hébreux, thaï et la plupart des émojis ne sont pas pris en
   charge (une case vide les remplace) ; le grec, le cyrillique, le vietnamien, les flèches, coches,
   étoiles et monnaies le sont. Le menu « Type d'export » propose PDF, PDF protégé, Word, PowerPoint (pour une présentation seulement), Excel, Markdown, Markdown (modèle) et les deux HTML (fichier à déposer, contenu à coller), puis, pour le PDF, « Vectoriel », « Impression navigateur » et « Léger » (le PDF
@@ -460,7 +461,7 @@ bibliothèques et polices sont dans [NOTICE](NOTICE).
 Ce widget a été réalisé avec l'aide de Claude Code, avec le modèle Claude Sonnet 5 en mode Ultra Code.
 Le code a été relu par un humain (moi), mais je manque de tokens pour être aussi efficace que Claude.
 
-La version Bêta sera aussi l'occasion de corriger ou refacto certains éléments si nécessaire : le
+Les prochaines versions seront aussi l'occasion de corriger ou refacto certains éléments si nécessaire : le
 dépôt est ouvert à la collaboration (cf. ci-après).
 
 ## Roadmap
@@ -470,22 +471,22 @@ semaines. N'hésitez pas à réagir aux issues de ce dépôt, ou à m'écrire su
 prioriser.
 
 **Édition collaborative**
-- Suivi des modifications : version complète (V1)
+- Suivi des modifications : version complète
 
 **Édition augmentée**
-- Codes-barres, en plus du QR code (V1)
+- Codes-barres, en plus du QR code
 - Remplissage d'un modèle avec des données d'exemple, pour le prévisualiser sans ligne réelle
-- Modèles multilingues : variantes d'un même modèle (V1)
+- Modèles multilingues : variantes d'un même modèle
 
 **Import / Export**
-- Import Markdown : fiabilité à confirmer sur des exports réels de Docs de La Suite (V1)
+- Import Markdown : fiabilité à confirmer sur des exports réels de Docs de La Suite
 
 **Confort d'utilisation**
-- Optimisation du chargement (V1)
+- Optimisation du chargement
 
 **Sécurité**
 - Version lecture seule : préparer un modèle sur Docs, puis exporter/importer pour une session en
-  lecture seule, avant export (V1)
+  lecture seule, avant export
 
 ## Contribuer
 
@@ -512,8 +513,10 @@ Grist Labs.
 
 *🇫🇷 Une version française de ce document est disponible [en haut de cette page](#publipostage-pour-grist).*
 
-> **Beta version {{VERSION}}**, released on {{DATE_EN}}. The features described below are delivered,
-> but defects may remain: try the widget on a copy of your document before using it on important data.
+> **Version {{VERSION}}**, released on {{DATE_EN}}. It succeeds the beta: what changes for anyone coming from it is in the
+> [release notes](PATCH_NOTES.md), and the beta is still served at [a separate address](#installing-in-grist).
+> The features described below are delivered; those that need Grist Factory Suite say so. Defects may remain:
+> try the widget on a copy of your document before using it on important data.
 > The [known limitations](#known-limitations) and the [roadmap](#roadmap-1) say what is still missing.
 
 This is a text editor with mail merge and smart chips. It lets anyone write contracts, invoices or
@@ -522,7 +525,7 @@ in the document and reformat it on display if needed!
 
 It is a custom widget for [Grist](https://www.getgrist.com/), made by
 [Grist Factory](https://grist-factory.fr). A document is read filled with the data of one row, then
-downloaded as a vector PDF (selectable text), as Word, PowerPoint (a presentation), Excel, Markdown or HTML, or sent in a pre-filled e-mail, row by
+downloaded as a vector PDF (selectable text), as Word, PowerPoint (a presentation, with Grist Factory Suite), Excel, Markdown or HTML, or sent in a pre-filled e-mail, row by
 row or in batch.
 
 ## Preview
@@ -559,7 +562,7 @@ GitHub Pages, with no backend and no build step.
 - Macro template: a cover page that is always included, followed by appendices (other templates) chosen
   by rules evaluated on the same row; portrait, landscape and Grid templates and presentations can be mixed
   in it, each on a page of its own orientation (or one orientation imposed on all), down to the PDF; a
-  presentation keeps its 16:9 slide page among the A4 pages (Reading, Word, printing and PDF, in a single
+  presentation (with Grist Factory Suite) keeps its 16:9 slide page among the A4 pages (Reading, Word, printing and PDF, in a single
   file; only a protected PDF cannot mix formats)
 - Presentation (with Grist Factory Suite, "New presentation" in the "+" menu): the same editor as the Document,
   on a 16:9 page in landscape (the Page menu also offers 4:3, 16:10 and square); each page break starts a slide, and a strip of thumbnails to the left of the
@@ -589,12 +592,12 @@ GitHub Pages, with no backend and no build step.
 - Images, including floating ones (text wrap, layered in front of/behind, opacity, caption), pasted,
   added by address or taken from a Grist Attachments column; an image hosted on another site only
   appears after a click on "Show"
-- Created charts ("Create a chart…", in the image menu): bars, line, area, scatter, pie, donut and radar, drawn
+- Created charts (with Grist Factory Suite; "Create a chart…", in the image menu): bars, line, area, scatter, pie, donut and radar, drawn
   from the columns of a Grist table, in a document, a grid or a slide; a title, five color sets, the color of each
   series, shown values and bars mixed with a line; in Word, PowerPoint and Excel, a native chart you edit in the application (its data opens in Excel)
 - Headers and footers (different first page, page number, QR code), footnotes, generated table of contents,
   page breaks, watermark
-- Quote, code block, callout (Note, Warning, Important), signature block, QR code, chart from the page (a
+- Quote, code block, callout (Note, Warning, Important), signature block, QR code, chart from the page (with Grist Factory Suite: a
   chart set up in Grist, redrawn in the document)
 - Find / replace (match case, whole word, regular expression, bubble text, header and footer), abbreviations that expand as you type
 - Faithful "A4 format" preview, WYSIWYG (what you see is what you get)
@@ -657,7 +660,7 @@ GitHub Pages, with no backend and no build step.
   Text, no formula), keeps the moment of each row's last PDF export; it is written once the PDF is made,
   for the rows that are in the file
 - Word (`.docx`, beta) and Excel (`.xlsx`, for grids)
-- PowerPoint (`.pptx`, beta, for presentations): one slide per page break, as objects that PowerPoint can edit (title, formatted text, lists, tables, images,
+- PowerPoint (`.pptx`, beta, for presentations, with Grist Factory Suite): one slide per page break, as objects that PowerPoint can edit (title, formatted text, lists, tables, images,
   shapes and lines in place and rotated, background), with each slide's transition and speaker notes; one file, or one per row in a ZIP archive
 - Markdown (`.md`, CommonMark and GFM): the row's document with the values of its variables; what Markdown can write
   is written in Markdown (headings, bold, italic, strikethrough, links, nested, numbered and task lists, quotes, code,
@@ -687,7 +690,7 @@ GitHub Pages, with no backend and no build step.
   "Markdown (template)" writes as HTML come back as they were (a key that is not a variable of the document stays
   text, and the status corner counts it); an image that is neither online nor in the file is not
   imported (a word says so in its place)
-- Gallery of 22 ready-to-use templates: invoice, service agreement, certificate, payment reminder letter,
+- Gallery of 22 ready-to-use templates (21 without Grist Factory Suite): invoice, service agreement, certificate, payment reminder letter,
   rent receipt, school report, recipe sheet, attendance sheet, purchase order, inventory sheet, templates
   to print (A6 flyer, invitation, A3 poster, business card, badge, labels) and a sales
   presentation of thirty-nine slides (shapes, tables, twelve charts read from tables, links and live views between
@@ -869,10 +872,10 @@ libraries and fonts are in [NOTICE](NOTICE).
 - **Network**: `esm.sh` (editor) and `docs.getgrist.com` (Grist API) are needed at startup;
   `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` are needed at the first export or the first Markdown import. A firewall that blocks one of them prevents the widget from starting or the export from working:
   they must be allowed. At startup, the widget says so in a window that lists these addresses.
-- **External audit**: an audit of the code (gwaudit tool, October 4, 2026) concludes "NON CONFORME"
+- **External audit**: an audit of the code (gwaudit tool, October 4, 2026, redone on November 4, 2026 on the V1) concludes "NON CONFORME"
   (non-compliant) and counts 69 blocking points. They all come down to one choice: the editor (TipTap and
   ProseMirror) is loaded from `esm.sh`, a third-party site, without an SRI integrity hash (which an import
-  map doesn't allow; see [Dependencies](#dependencies)). That choice is kept for the beta, so the verdict
+  map doesn't allow; see [Dependencies](#dependencies)). That choice is kept for the V1, so the verdict
   stays "NON CONFORME", and the tool concludes that hosting the widget on an official instance (DINUM,
   ANCT) is ruled out as it stands. The widget remains installable elsewhere: it is up to each person to
   judge whether this risk suits their use.
@@ -894,7 +897,7 @@ libraries and fonts are in [NOTICE](NOTICE).
   notification, about 125 ms more when the live table is not the one of the section and is re-read every 250 ms); the
   real network of an online Grist, two browsers and the plan's limits are not measured. The typing goes through the
   `Publipostage_Direct` table: Grist's action history grows while people type and keeps what was written in it.
-- **Track changes** (beta): the complete version is planned for V1.
+- **Track changes** (beta): the complete version is still to come (see the [roadmap](#roadmap-1)).
 - **PDF**: Chinese, Arabic, Hebrew and Thai characters and most emoji are not supported (an empty box
   replaces them); Greek, Cyrillic, Vietnamese, arrows, check marks, stars and currencies are. The
   "Export type" menu offers PDF, Protected PDF, Word, PowerPoint (for a presentation only), Excel, Markdown, Markdown (template) and the two HTML rows (file to upload, content to paste) and, for the PDF, "Vector", "Browser print" and "Light" (the vector PDF with its images brought
@@ -935,7 +938,7 @@ libraries and fonts are in [NOTICE](NOTICE).
 This widget was built with the help of Claude Code, using the Claude Sonnet 5 model in Ultra Code mode.
 The code was reviewed by a human (me), but I don't have enough tokens to be as thorough as Claude.
 
-The Beta release will also be a chance to fix or refactor certain parts if needed: this repository is
+Upcoming releases will also be a chance to fix or refactor certain parts if needed: this repository is
 open to collaboration (see below).
 
 ## Roadmap
@@ -944,22 +947,22 @@ Plenty of features are planned and will be rolled out gradually over the coming 
 react to this repository's issues, or write to me on Tchap, to help me prioritize them.
 
 **Collaborative editing**
-- Track changes: complete version (V1)
+- Track changes: complete version
 
 **Enhanced editing**
-- Barcodes, in addition to the QR code (V1)
+- Barcodes, in addition to the QR code
 - Filling a template with sample data, to preview it without a real row
-- Multilingual templates: variants of the same template (V1)
+- Multilingual templates: variants of the same template
 
 **Import / export**
-- Markdown import: reliability to be confirmed on real La Suite Docs exports (V1)
+- Markdown import: reliability to be confirmed on real La Suite Docs exports
 
 **Quality of life**
-- Loading time optimization (V1)
+- Loading time optimization
 
 **Security**
 - Read-only version: prepare a template in Docs, then export/import for a read-only session, before
-  exporting (V1)
+  exporting
 
 ## Contributing
 
