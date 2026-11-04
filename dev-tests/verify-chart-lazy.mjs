@@ -16,11 +16,15 @@
 //  tout ce que l'éditeur montre est dessiné ; par pauses d'une seconde entre trois coups de molette, le cadre qui arrive dans la vue est déjà dessiné (on dessine deux écrans d'avance, dans les pauses).
 //  LES LECTURES EN SÉRIE (même demande : « avec 300 ms de latence, les cinq premiers graphiques n'ont leurs données que 1,9 s après la bande, au lieu de 0,6 s ») : cinq graphiques créés sur cinq tables, Grist à 300 ms l'appel :
 //  leurs lectures partent ensemble (au moins quatre lectures de tables de données en vol en même temps), pas l'une après l'autre.
+//  LE DESSIN AU REPOS (carte du 03/11 « Dessiner les graphiques restants au repos, après l'ouverture ? » : « Oui, au repos, un à la fois ») : les parcours ci-dessus le coupent (ChartBlock.setIdleDrawing(false)) ; une page neuve le laisse
+//  permis : après l'ouverture et deux secondes de repos, les cadres que personne ne voit se dessinent un à un (au moins 240 ms entre deux, aucune tâche de plus de 150 ms : un dessin prend de 30 à 100 ms d'un seul tenant, pas plusieurs d'un coup), des touches pressées arrêtent la file, et la première Lecture
+//  ne dessine plus rien.
 //  LA TOILE : ChartMake.toImage rend la même image qu'avant (octet pour octet, 1440 x 900 pour 480 x 300 à trois pixels par pixel) et remet à zéro toutes les toiles qu'il a créées (leur mémoire est rendue tout de suite) ;
 //  six dessins demandés ensemble encodent leur PNG hors du fil principal (`toBlob`), un à la fois (deux encodages en attente garderaient chacun leurs toiles de 5 Mo).
 //  LA LECTURE DES RÉGLAGES : un graphique créé (ChartSource.made) lit deux tables de Grist, `_grist_Tables` et `_grist_Tables_column` ; un graphique de la page (`read`) toutes sauf `_grist_Pages` ; la liste (`list`) les sept.
 // Lancé par run-headless.mjs (groupe Node « chartLazy », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-chart-lazy.mjs
 import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { start, seedModels, ROOT } from './gfs-page.mjs';
 import { click } from './load-lib.mjs';
 
@@ -43,6 +47,13 @@ for (let k = 1; k <= N; k++) {
   slides.push('<h2>Diapositive ' + k + '</h2>', '<p>' + made('Graphique ' + k, k) + '</p>');
   if (k < N) slides.push(BR);
 }
+// Une présentation de plus de graphiques que la mémoire des dessins n'en garde (64) : le dessin au repos doit s'arrêter à 64.
+const BIG = 70;
+const bigSlides = [PROPS];
+for (let k = 1; k <= BIG; k++) {
+  bigSlides.push('<h2>Diapositive ' + k + '</h2>', '<p>' + made('Grand graphique ' + k, k) + '</p>');
+  if (k < BIG) bigSlides.push(BR);
+}
 const sections = ['<h1>Rapport</h1>'];
 for (let k = 1; k <= M; k++) {
   sections.push('<h2>Section ' + k + '</h2>', '<p>Le texte de la section ' + k + '.</p>', '<p>' + made('Section ' + k, k) + '</p>');
@@ -56,11 +67,13 @@ const SEED = seedModels({}) + `
   add(7, 'Présentation longue', ${JSON.stringify(slides.join(''))}, false, 'presentation');
   add(8, 'Document long', ${JSON.stringify(sections.join(''))}, false, 'document');
   add(9, 'Document à cinq tables', ${JSON.stringify(several.join(''))}, false, 'document');
+  add(10, 'Présentation de ${BIG} graphiques', ${JSON.stringify(bigSlides.join(''))}, false, 'presentation');
   stub.state.nextRowId.Publipostage_Modeles = 20;
 `;
 
 // ---- Les gestes ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-async function openApp() {
+// `idle` : le dessin au repos reste permis (par défaut il est coupé : les parcours qui regardent le dessin à la demande ne veulent pas qu'un repos de deux secondes dessine le reste sous leurs yeux).
+async function openApp(idle = false) {
   const opened = await t.openPage({ hosted: true, stub: { extensions: ['graphique', 'diapositives'] }, seed: SEED, lang: 'fr', colorScheme: 'light' });
   const { page } = opened;
   // Le document de Grist est celui de scenarios-chart-block.js : une seule description des données, chargée dans la page.
@@ -98,6 +111,7 @@ async function openApp() {
       thumb: i => document.querySelectorAll('.pp-slide-list .pp-slide-item')[i],
     };
   });
+  if (!idle) await page.evaluate(() => { if (typeof ChartBlock.setIdleDrawing === 'function') ChartBlock.setIdleDrawing(false); });
   await sleep(300);
   return opened;
 }
@@ -242,6 +256,10 @@ check('la diapositive 1, celle de la vue, est dessinée : une image PNG', isDraw
 check('les cadres dessinés sont autant que les dessins faits (aucun dessin perdu, aucun cadre dessiné sans dessin)', drawnOpen === atOpen, { dessins: atOpen, cadresDessines: drawnOpen });
 const undrawn = framesOpen.map((f, i) => (isDrawn(f) ? -1 : i)).filter(i => i >= 0);
 check('la plupart des cadres sont encore le cadre pointillé : pas d\'image, pas de classe « dessiné »', undrawn.length >= N / 2 && undrawn.every(i => !framesOpen[i].drawn && framesOpen[i].src === ''), undrawn.length);
+// Le dessin au repos est coupé dans ce parcours (ChartBlock.setIdleDrawing(false)) : plus de deux secondes de repos, et pas un dessin de plus.
+await sleep(3500);
+const stillAtOpen = await page.evaluate(() => window.__draws.n);
+check('coupé, le dessin au repos ne dessine rien : trois secondes et demie de repos de plus, aucun dessin de plus', stillAtOpen === atOpen, { avant: atOpen, apres: stillAtOpen });
 
 // 1b) La molette : aucun dessin ne commence pendant qu'elle tourne ; tout ce qu'on voit est dessiné à l'arrêt ; entre deux gestes, les pauses suffisent pour que le cadre qui arrive soit déjà dessiné.
 console.log('\nLe défilement à la molette');
@@ -368,6 +386,72 @@ const severalReads = await page.evaluate(() => { const r = window.__reads; grist
 console.log('  (les ' + TABLES + ' graphiques dessinés ' + severalMs + ' ms après l\'ordre d\'ouverture, jusqu\'à ' + severalReads.peak + ' lectures de tables de données en vol en même temps)');
 check('les ' + TABLES + ' graphiques sur ' + TABLES + ' tables se dessinent', severalDrawn, severalMs);
 check('leurs lectures de Grist partent ensemble : au moins ' + (TABLES - 1) + ' lectures de tables de données en vol en même temps, pas une après l\'autre', severalReads.peak >= TABLES - 1, severalReads);
+
+// ---- Le dessin au repos : les cadres que personne ne voit se dessinent quand la page ne bouge plus ----------------------------------------------------------------------------------------------------
+console.log('\nLe dessin au repos');
+// Le repos se lit dans l'activation de l'utilisateur du navigateur (`navigator.userActivation`), jamais dans des écouteurs posés sur la page : un écouteur de frappe ou de clic sur `document` (keydown, pointerdown,
+// input) ajoutait 25 ms à chaque touche tapée dans « Présentation commerciale » (la touche et la saisie : 3 et 0 ms avant, 16 et 12 ms avec trois écouteurs passifs, mesuré le 04/11).
+const blockSource = readFileSync(join(ROOT, 'extensions', 'graphique', 'chart-block.js'), 'utf8');
+const typedListeners = blockSource.match(/addEventListener\(\s*(?:'|")(?:keydown|keypress|keyup|input|beforeinput|pointerdown|mousedown|touchstart)(?:'|")/g) || [];
+const typedLists = blockSource.match(/\[\s*(?:'|")(?:keydown|keypress|keyup|input|beforeinput|pointerdown|mousedown|touchstart)(?:'|")[^\]]*\]\s*\.forEach/g) || [];
+check('le graphique ne pose aucun écouteur de frappe ni de clic sur la page (25 ms de plus par touche tapée) : le repos vient de navigator.userActivation', typedListeners.length === 0 && typedLists.length === 0 && /navigator\.userActivation/.test(blockSource), { ecouteurs: typedListeners.concat(typedLists) });
+// Une page neuve (mémoire des dessins vide, compteurs à zéro) où le dessin au repos reste permis.
+const rest = await openApp(true);
+const rp = rest.page;
+await openModel(rp, 7, N);
+const restOpen = await calm(rp, 1000);
+const restFramesOpen = (await editorFrames(rp)).filter(isDrawn).length;
+console.log('  (à l\'ouverture : ' + restOpen + ' dessins sur ' + N + ', ' + restFramesOpen + ' cadres dessinés)');
+const firstIdle = await waitFor(rp, 'le premier dessin au repos', n => window.__draws.n > n, restOpen, 25000);
+check('la page au repos (ni défilement ni geste depuis quelques secondes), un cadre que personne ne voit se dessine', firstIdle && restOpen < N / 2, { ouverture: restOpen });
+// Une frappe pendant le dessin au repos l'arrête : des touches toutes les 330 ms pendant quatre secondes, aucun dessin ne commence (hors celui qui était déjà parti). Le repos se lit dans l'activation de l'utilisateur
+// du navigateur, et Playwright la lui donne à chaque appel de evaluate : aucun entre le premier dessin au repos et la fin des touches (les heures sont prises à l'horloge murale, `performance.timeOrigin` + l'heure du dessin).
+const keysFrom = Date.now();
+for (let i = 0; i < 12; i++) { await rp.keyboard.press('Insert'); await sleep(330); }   // une touche qui ne fait rien dans l'éditeur ; Maj, Ctrl et Échap ne donnent pas l'activation de l'utilisateur au navigateur
+const keysTo = Date.now();
+const drawnDuringKeys = await rp.evaluate(([from, to]) => window.__draws.at.filter(t => performance.timeOrigin + t > from + 400 && performance.timeOrigin + t <= to).length, [keysFrom, keysTo]);
+check('pendant des frappes, le dessin au repos ne commence aucun dessin (il attend le repos, quelques secondes sans geste, après la dernière)', drawnDuringKeys === 0, { dessinsPendantLesFrappes: drawnDuringKeys });
+const restDone = await waitFor(rp, 'les ' + N + ' cadres dessinés au repos', k => { const w = Array.from(document.querySelectorAll('.editor-image-chart-placeholder')).filter(x => !x.closest('.pp-slide-list')); return w.length === k && w.every(x => x.classList.contains('editor-image-chart-drawn') && /^data:image\/png/.test(x.querySelector('img').getAttribute('src') || '')); }, N, 90000);
+const restTotal = await calm(rp, 1500);
+const idleSpy = await rp.evaluate((first) => {
+  const at = window.__draws.at.slice(first);
+  const gaps = [];
+  for (let i = 1; i < at.length; i++) gaps.push(Math.round(at[i] - at[i - 1]));
+  return { gaps, longs: window.__long.filter(l => l.at >= at[0]).map(l => Math.round(l.ms)) };
+}, restOpen);
+console.log('  (' + restTotal + ' dessins en tout ; intervalles entre deux dessins au repos, en ms : ' + idleSpy.gaps.join(' ') + ' ; tâches longues pendant : ' + JSON.stringify(idleSpy.longs) + ')');
+check('au repos, les ' + N + ' cadres de l\'éditeur se dessinent (une image PNG chacun)', restDone, restTotal);
+check('chaque graphique est dessiné UNE seule fois : ' + N + ' dessins en tout, aucun refait', restTotal === N, restTotal);
+check('un dessin à la fois, avec un intervalle d\'au moins 240 ms entre deux (le navigateur respire)', idleSpy.gaps.length >= 10 && idleSpy.gaps.every(g => g >= 240), idleSpy.gaps);
+check('aucune tâche de plus de 150 ms pendant le dessin au repos (un dessin par tâche : 30 à 100 ms chacun, pas plusieurs d\'un coup)', idleSpy.longs.every(ms => ms <= 150), idleSpy.longs);
+// La première Lecture trouve tout dans la mémoire des dessins : aucun dessin de plus.
+const restRead = await readingAndBack(rp, N);
+check('la première Lecture ne dessine plus rien : les ' + N + ' images y sont, sans un dessin de plus que ceux du repos', restRead.ready && restRead.images.length === N && restRead.images.every(s => PNG.test(s)) && restRead.total === restTotal, { images: restRead.images.length, auRepos: restTotal, apresLaLecture: restRead.total });
+check('le retour en édition ne redessine rien non plus', restRead.afterEdit === N, restRead.afterEdit);
+
+// Plus de graphiques que la mémoire des dessins n'en garde (64) : le dessin au repos s'arrête quand elle est pleine, au lieu de dessiner le 65e qui ferait partir le plus ancien (les plus proches de la vue sont
+// dessinés d'abord, donc ce sont les plus loin qui restent sans dessin) ; la première Lecture ne dessine que ceux-là.
+console.log('\nLe dessin au repos dans une présentation de ' + BIG + ' graphiques (la mémoire des dessins en garde 64)');
+const big = await openApp(true);
+const bp = big.page;
+await openModel(bp, 10, BIG);
+const bigOpen = await calm(bp, 1000);
+// On attend dans la page, sans appeler evaluate (il donnerait l'activation de l'utilisateur au navigateur, et le dessin au repos attend qu'il n'y en ait plus), qu'aucun dessin ne commence plus depuis douze secondes.
+await waitFor(bp, 'la fin du dessin au repos', () => { const at = window.__draws.at; return at.length > 12 && performance.now() - at[at.length - 1] > 12000; }, null, 150000);
+const bigTotal = await bp.evaluate(() => window.__draws.n);
+const bigFrames = await editorFrames(bp);
+const bigDrawn = bigFrames.map(f => isDrawn(f));
+console.log('  (à l\'ouverture : ' + bigOpen + ' dessins ; au repos : ' + bigTotal + ' dessins en tout, ' + bigDrawn.filter(Boolean).length + ' cadres dessinés sur ' + bigFrames.length + ')');
+check('la présentation a ' + BIG + ' cadres de graphique', bigFrames.length === BIG, bigFrames.length);
+check('le dessin au repos se fait (plus de dessins que l\'ouverture n\'en a fait)', bigTotal > bigOpen + 10, { ouverture: bigOpen, enTout: bigTotal });
+check('il s\'arrête à 64 dessins, la mémoire des dessins pleine (pas ' + BIG + ' : le 65e ferait partir un dessin qu\'il faudrait refaire à la Lecture)', bigTotal === 64, bigTotal);
+// Les cadres que l'ouverture a dessinés (la vue, et ce que la bande montre) ne comptent pas dans l'ordre ; ceux du repos vont du plus proche de la vue au plus loin : le haut du document est dessiné, les derniers à l'être
+// manquent.
+check('64 cadres sur ' + BIG + ' sont dessinés : les ' + (BIG - 64) + ' qui manquent sont les plus loin de la vue (le haut du document est dessiné)', bigDrawn.filter(Boolean).length === 64 && bigDrawn.slice(0, 50).every(Boolean), bigDrawn.map(d => (d ? 1 : 0)).join(''));
+// La Lecture montre les 70 images : elle dessine les 6 qui manquent (et, la mémoire des dessins n'en gardant que 64, quelques-uns de ceux que ces 6 en ont fait partir, qu'elle redemande plus loin).
+const bigRead = await readingAndBack(bp, BIG);
+console.log('  (' + bigRead.total + ' dessins en tout après la Lecture, ' + BIG + ' images)');
+check('la première Lecture montre les ' + BIG + ' images (PNG), dessinées au plus une fois chacune de plus que celles qui manquaient', bigRead.ready && bigRead.images.length === BIG && bigRead.images.every(src => PNG.test(src)) && bigRead.total < bigTotal + 2 * (BIG - 64) + 10, { images: bigRead.images.length, dessinsApresLaLecture: bigRead.total });
 
 // ---- La toile : la même image, et plus aucune toile pleine derrière ----------------------------------------------------------------------------------------------------------------------------------
 console.log('\nLa toile d\'ECharts');

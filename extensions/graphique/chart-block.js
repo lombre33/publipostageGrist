@@ -176,11 +176,17 @@ const ChartBlock = (function () {
   // pour cela qu'on dessine deux écrans d'avance, dans les pauses du défilement, plutôt qu'un seul écran d'avance au moment d'y arriver (3 à 6 à-coups de 65 à 200 ms à la molette dans une présentation). Les
   // lectures de Grist de tous les cadres à dessiner partent ensemble (chacune attendait celle du cadre d'avant : 300 ms de latence, cinq graphiques prêts en 1,9 s au lieu de 0,6 s), puis les dessins se font
   // un par tâche, les cadres qu'on voit en premier.
+  // Au repos (la page n'a pas défilé depuis IDLE_DRAW_AFTER_MS et n'a reçu ni frappe, ni clic, ni toucher depuis quelques secondes), les cadres loin du champ se dessinent aussi, un à la fois, les plus proches de la vue d'abord, IDLE_DRAW_GAP_MS entre
+  // deux dessins et quand le navigateur n'a rien d'autre à faire (requestIdleCallback) : la première Lecture, le diaporama et les exports les trouvent dans la mémoire des dessins au lieu de les dessiner (de 0,3 à
+  // 0,5 s de plus à la première Lecture de « Présentation commerciale »). Un geste ou un défilement arrête la file après le dessin en cours ; elle repart au prochain repos.
   const FRAME_DELAY_MS = 120;
   const FRAME_DRAW_LIMIT_MS = 20000;
   const FRAME_AHEAD = '200% 0px';   // deux écrans de plus au-dessus et au-dessous du champ de l'éditeur
   const SCROLL_QUIET_MS = 150;      // le temps sans défilement avant un dessin (une animation de défilement dure moins)
   const SCROLL_PATIENCE_MS = 8000;  // ce qu'un défilement continu retient les dessins, au plus
+  const IDLE_DRAW_AFTER_MS = 2000;  // le repos qu'il faut à la page (ni défilement, ni geste) avant de dessiner ce que personne ne voit
+  const IDLE_DRAW_GAP_MS = 250;     // et le temps laissé au navigateur entre deux de ces dessins
+  const IDLE_RECHECK_MS = 1000;     // le temps entre deux coups d'œil pour voir si le dernier geste (frappe, clic, toucher) est assez ancien
   const frames = new Set();   // les cadres vivants (l'objet `view` de js/editor-nodes.js : wrap, img, chart)
   const watched = new Map();   // l'élément du cadre (`wrap`) -> son `view`, pour ceux que l'observateur suit
   let nearObserver = null;
@@ -191,6 +197,9 @@ const ChartBlock = (function () {
   let framesListen = false;
   let lastMoveAt = -Infinity;   // l'heure du dernier défilement (ou coup de molette) vu dans la page
   let moveStartedAt = -Infinity;   // et celle du début de ce défilement
+  let idleDrawing = true;   // le dessin au repos est-il permis (setIdleDrawing)
+  let idleTimer = 0;
+  let idleRunning = false;
   let lastRowId;
 
   // Ce que le nœud demande : { id, spec, def, scope, width, height }, ou null quand ce n'est pas un graphique sans image. Un graphique de la page a le numéro de sa section (`id`) ; un graphique créé
@@ -315,7 +324,7 @@ const ChartBlock = (function () {
         shown.forEach((view) => { if (!isWanted(view)) forget(view); });
         if (due.length) await paintAll(due);
       } while (frameAgain);
-    } finally { frameRunning = false; }
+    } finally { frameRunning = false; scheduleIdle(); }
   }
 
   // Les cadres, ceux qu'on voit d'abord : par leur distance au champ de l'éditeur (zéro dans le champ), dans l'ordre du document à distance égale.
@@ -343,6 +352,81 @@ const ChartBlock = (function () {
       if (!frames.has(plans[i].view) || !isWanted(plans[i].view)) { undoPlan(plans[i]); continue; }
       if (await finishOne(plans[i])) await nextTask();
     }
+  }
+
+  // Le dessin au repos. `needsDrawing` : le cadre n'a pas le dessin d'aujourd'hui (la règle de `planOf`, sans rien consommer) ; `idleTargets` : ceux que le champ n'atteint pas (l'observateur les dit loin), affichés,
+  // que rien ne demande. Le repos : le dessin est permis, la page est visible et sans défilement ni geste depuis IDLE_DRAW_AFTER_MS.
+  function needsDrawing(view) {
+    const state = view.chart;
+    const want = state && state.want;
+    if (!want) return false;
+    return state.forced || state.key !== keyOf(want, want.scope === 'linked' ? GristAPI.getCurrentRecord() : null);
+  }
+  const idleTargets = () => Array.from(frames).filter(view => isShown(view) && view.chart && view.chart.near === false && !isWanted(view) && needsDrawing(view));
+  // Combien de dessins de plus la mémoire des dessins peut garder pour cette page : une présentation de plus de DRAWN_MAX graphiques ne les garde pas tous, et un dessin de plus ferait partir le plus ancien (que
+  // la Lecture refait). Le dessin au repos s'arrête donc quand les cadres de la page en ont autant que la mémoire en garde, et ne prend plus de place quand elle pèse près de DRAWN_CHARS_MAX.
+  function idleRoom() {
+    let held = 0;
+    let chars = 0;
+    frames.forEach((view) => {
+      const state = view.chart;
+      if (state && state.key && state.uri) { held += 1; chars += state.uri.length; }
+    });
+    return chars > DRAWN_CHARS_MAX * 0.8 ? 0 : Math.max(0, DRAWN_MAX - held);
+  }
+  // Les gestes (frappe, clic, toucher) : l'activation de l'utilisateur du navigateur (`navigator.userActivation`, vraie pendant quelques secondes après chacun) les dit sans écouteur sur la page. Trois écouteurs de
+  // frappe et de clic (keydown, pointerdown, input) posés sur `document` ajoutaient 25 ms à chaque touche tapée dans une présentation de 39 diapositives (la touche et la saisie, 3 ms et 0 ms avant) : ils sont proscrits ici.
+  // Un navigateur sans `userActivation` (Firefox avant 120) ne dessine rien au repos : il garde le dessin à la demande.
+  const canRest = () => typeof navigator !== 'undefined' && !!navigator.userActivation;
+  const gestured = () => !!(navigator.userActivation && navigator.userActivation.isActive);
+  const atRest = () => idleDrawing && canRest() && document.visibilityState !== 'hidden' && !gestured() && performance.now() - lastMoveAt >= IDLE_DRAW_AFTER_MS;
+  // Rend la main quand le navigateur n'a rien d'autre à faire (sans requestIdleCallback : à la tâche suivante). Sans délai maximal : une page qui ne souffle jamais ne dessine pas ce que personne ne voit.
+  const idleSlot = () => new Promise(resolve => (typeof requestIdleCallback === 'function' ? requestIdleCallback(() => resolve()) : setTimeout(resolve, 0)));
+  const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+  function scheduleIdle(delay) {
+    clearTimeout(idleTimer);
+    if (idleDrawing && canRest() && frames.size) idleTimer = setTimeout(runIdle, delay === undefined ? IDLE_DRAW_AFTER_MS : delay);
+  }
+  async function runIdle() {
+    if (idleRunning || frameRunning || !idleDrawing) return;
+    if (!atRest()) {
+      // Pas encore au repos (un geste ou un défilement vient d'avoir lieu) : on revient voir un peu plus tard ; page cachée : au retour (visibilitychange).
+      if (idleDrawing && canRest() && document.visibilityState !== 'hidden') scheduleIdle(gestured() ? IDLE_RECHECK_MS : Math.max(200, IDLE_DRAW_AFTER_MS - (performance.now() - lastMoveAt)));
+      return;
+    }
+    idleRunning = true;
+    try {
+      // Les plus proches de la vue d'abord, pas plus que la mémoire des dessins n'en garde.
+      const room = idleRoom();
+      const far = room > 0 ? byDistance(idleTargets()).slice(0, room) : [];
+      if (far.length) await paintIdle(far);
+    } catch (e) { console.warn('[ChartBlock] dessin au repos', e); }
+    finally { idleRunning = false; }
+    // Ce qui reste (la file arrêtée par un geste, un cadre de plus) reprend au prochain repos.
+    if (idleRoom() > 0 && idleTargets().length) scheduleIdle();
+  }
+  // Comme `paintAll` : les lectures de Grist de tous ces cadres (`far`, déjà par distance) partent ensemble, puis un dessin à la fois, mais chacun attend un moment où le navigateur n'a rien d'autre à faire et la page
+  // encore au repos, et laisse IDLE_DRAW_GAP_MS derrière lui. Un cadre qu'on approche en défilant (il devient « à dessiner ») est laissé à la file ordinaire.
+  async function paintIdle(far) {
+    const tableId = GristAPI.getCurrentTableId();
+    const plans = await GristAPI.withReadPass(async () => {
+      const made = far.map(view => planOf(view, tableId)).filter(Boolean);
+      await Promise.all(made.map(plan => plan.reading && plan.reading.catch(() => null)));
+      return made;
+    });
+    for (let i = 0; i < plans.length; i++) {
+      await idleSlot();
+      const view = plans[i].view;
+      if (!atRest() || idleRoom() <= 0) { plans.slice(i).forEach(undoPlan); return; }
+      if (!frames.has(view) || !isShown(view) || isWanted(view)) { undoPlan(plans[i]); continue; }
+      await finishOne(plans[i]);
+      await pause(IDLE_DRAW_GAP_MS);
+    }
+  }
+  // Permet ou coupe le dessin au repos (les essais le coupent pour ne regarder que le dessin à la demande ; un réglage pourra le faire).
+  function setIdleDrawing(on) {
+    idleDrawing = !!on;
+    if (idleDrawing) scheduleIdle(); else clearTimeout(idleTimer);
   }
 
   // Le plan du dessin du cadre `view` s'il n'est pas à jour (sinon null) : sa clé, et sa lecture de Grist, déjà partie. « Liées » sans ligne sélectionnée : rien à tracer (pas de lecture), le cadre reste jusqu'à la prochaine ligne.
@@ -404,6 +488,7 @@ const ChartBlock = (function () {
         GristAPI.onRecord(onRow);
         document.addEventListener('scroll', noteMove, { capture: true, passive: true });
         document.addEventListener('wheel', noteMove, { capture: true, passive: true });
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') scheduleIdle(); });
       }
     }
     if (state.key !== keyOf(want, want.scope === 'linked' ? GristAPI.getCurrentRecord() : null)) scheduleFrames(false, 0);
@@ -712,5 +797,5 @@ const ChartBlock = (function () {
     closeWindow();
   }
 
-  return { resolveImage, drawMade, paintFrame, releaseFrame, refreshFrame, refreshEditor, demand, open, forgetDrawings };
+  return { resolveImage, drawMade, paintFrame, releaseFrame, refreshFrame, refreshEditor, demand, open, forgetDrawings, setIdleDrawing };
 })();

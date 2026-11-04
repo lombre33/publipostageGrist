@@ -11,7 +11,7 @@ const Extensions = (function () {
   const REGISTRY = {
     graphique: {
       nameKey: 'extension.graphique.name',
-      version: '0.12',
+      version: '0.13',
       scripts: ['chart-plot.js', 'chart-source.js', 'chart-make.js', 'chart-office.js', 'chart-block.js', 'chart-make-ui.js'],
       styles: ['chart-block.css', 'chart-make.css'],
     },
