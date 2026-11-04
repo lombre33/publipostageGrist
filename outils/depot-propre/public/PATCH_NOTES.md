@@ -33,12 +33,12 @@ Elle décrit le widget seul, installé dans Grist. Ce qui demande en plus Grist 
 - **Texte de droite à gauche** : une ligne à cocher du menu Alignement (au survol du bouton) écrit un paragraphe, un titre ou une liste de droite à gauche, pour l'hébreu, l'arabe ou une mise en page en miroir. Les puces, les numéros et les retraits passent à droite, et la Lecture, l'impression, le PDF, le Word et le HTML exporté gardent le sens.
 - **« Paragraphe… » : interligne et espaces** (menu Alignement) : l'interligne, en multiple de la ligne simple comme dans Word et PowerPoint, et l'espace avant et après le paragraphe ; « Par défaut » retire les trois réglages.
 - **« Paragraphe… » : retraits** : retrait à gauche, retrait de la première ligne et retrait suspendu (première ligne négative), en points.
-- **« Caractère… » : espacement des lettres et petites capitales** (menu Alignement) : resserre ou écarte les lettres, et met le texte en petites capitales.
-- **Soulignements** : la fenêtre « Caractère… » offre le soulignement simple, double, pointillé, tireté ou ondulé.
-- **Ombre et contour des lettres** : deux cases de la fenêtre « Caractère… » ; le PDF les dessine aussi.
+- **Menu « Aa » : espacement des lettres et petites capitales** : un bouton « Aa », juste après Barré, ouvre au survol le menu « Caractère » : l'espacement des lettres (« − » et « + » par demi-point, ou une valeur tapée puis Entrée) et les petites capitales. Chaque ligne s'applique tout de suite, sans fenêtre ni « Valider », et Ctrl+Z la défait d'un coup ; une ligne est cochée quand tout le texte choisi a le réglage, un tiret dit qu'une partie seulement l'a.
+- **Soulignements** : le menu du bouton Souligné offre le soulignement classique (celui du bouton et de Ctrl+U), puis double, pointillé, tireté et ondulé, chaque ligne dessinée comme son trait.
+- **Ombre et contour des lettres** : deux lignes à cocher du menu « Aa » ; le PDF les dessine aussi.
 - **Signe de la puce** : la ligne « Puce… » du menu Liste choisit le signe d'une liste à puces (un caractère au choix, ou l'un des douze signes proposés : – — ➢ ➔ ► ✓ ✔ ■ ◆ ★ ✦ ❖).
 - **Couleur et taille de la puce** : une puce peut avoir sa couleur et sa taille à elle, autres que celles du texte (fenêtre « Puce… »).
-- **Exposant et indice** : deux icônes en haut du menu « Lien et blocs de contenu », et les touches Ctrl+. et Ctrl+, (⌘ sous macOS, réglables dans Réglages > Raccourcis) ; même rendu dans l'éditeur, la Lecture et les exports.
+- **Exposant et indice** : deux icônes en tête du menu « Aa », et les touches Ctrl+. et Ctrl+, (⌘ sous macOS, réglables dans Réglages > Raccourcis) ; même rendu dans l'éditeur, la Lecture et les exports.
 - **Pinceau de mise en forme** : son menu (au survol) garde trois mises en forme dans le modèle et trois autres partagées par tous les modèles du document.
 - **Une seule palette de couleurs** : le texte, le surlignage, le fond de case et le trait des bordures ouvrent la même palette (dix colonnes sur cinq rangées, dont des tons foncés lisibles en texte, contraste d'au moins 4,5:1), avec « Personnalisé… » pour une couleur précise.
 - **Bulles et puces de l'éditeur : « Par défaut » ou « Mise en forme »** (Réglages > Thème) : les bulles de variable, de calcul, les puces et les fiches « @ » gardent leur fond pâle repérable, ou montrent la couleur, le surlignage, le souligné et le barré choisis. Le numéro de page, la note de bas de page et la case conditionnelle suivent aussi ce choix, et la Lecture, le PDF et le Word écrivent leur mise en forme.
@@ -170,7 +170,8 @@ La langue reste volontairement hors d'Annuler.
 
 ### Interface, langue et accessibilité
 
-- **Fenêtre des nouveautés** : Réglages > Crédits > « Nouveautés » ouvre un carrousel de captures des nouveautés de la version.
+- **Fenêtre des nouveautés** : Réglages > Crédits > « Nouveautés » ouvre un carrousel de onze écrans avec de vraies captures : huit nouveautés de la version, un écran « Et aussi » (les titres et leurs styles, Rechercher / Remplacer, les pages, les dates et les heures, les exports), ce que devient un modèle fait avec la bêta et les habitudes qui changent ; le dernier écran mène, par « Voir en détail », à une seconde fenêtre, « Exporter, en détail » (cinq écrans).
+- **Un bouton ou une ligne de menu grisé dit pourquoi** : au survol, l'info-bulle donne la raison (dans un modèle e-mail, par exemple, que le modèle s'écrit en texte brut) ; au clic, le coin d'état écrit la même phrase. Rien n'est retiré ni caché. Les raisons couvrent les droits du document, le mode Lecture, le modèle e-mail, le macro-modèle, la grille, l'en-tête et le pied de page, et les types d'export qui ne vont pas au modèle ouvert.
 - **201 textes de fenêtres réécrits**, en français et en anglais : introductions, aides, erreurs, confirmations, messages de la barre d'état et info-bulles disent ce qu'on obtient dans le document.
 - **58 raccourcis clavier** personnalisables (54 en bêta).
 
@@ -275,6 +276,7 @@ Ces corrections touchent ce que la bêta faisait déjà, regroupées par sujet ;
 
 - **Le texte du lien « Créer l'email » est fidèle à l'éditeur** : un paragraphe vide, deux de suite ou un retour à la ligne donnent des lignes vides, des paragraphes qui se suivent restent collés.
 - **Un modèle e-mail n'écrit que du texte brut** : les raccourcis de mise en forme et les signes de Markdown tapés ne font plus rien dans un e-mail (le gras et le souligné ne partent pas encore dans un e-mail).
+- **Un retour à la ligne dans l'objet ou dans une adresse n'ajoute plus rien au lien « Créer l'email »** : l'objet, le destinataire, le Cc et le Cci viennent d'une colonne, et une cellule à plusieurs lignes mettait son retour à la ligne tel quel dans le lien, où une messagerie peut le lire comme le début d'un autre champ. Le retour à la ligne de l'objet devient une espace et celui d'une adresse sépare deux destinataires ; le corps garde ses lignes.
 
 ### Interface et accessibilité
 
@@ -323,12 +325,12 @@ It describes the widget on its own, installed in Grist. What also needs Grist Fa
 - **Right-to-left text**: a checkable row of the Alignment menu (hover the button) writes a paragraph, a heading or a list from right to left, for Hebrew, Arabic or a mirrored layout. Bullets, numbers and indents move to the right, and Reading mode, printing, the PDF, Word and the exported HTML keep the direction.
 - **"Paragraph…": line spacing and spaces** (Alignment menu): line spacing, as a multiple of single spacing like in Word and PowerPoint, and the space before and after the paragraph; "Default" removes the three settings.
 - **"Paragraph…": indents**: left indent, first-line indent and hanging indent (negative first line), in points.
-- **"Character…": letter spacing and small capitals** (Alignment menu): tightens or loosens the letters, and sets the text in small capitals.
-- **Underlines**: the "Character…" window offers single, double, dotted, dashed or wavy underlines.
-- **Letter shadow and outline**: two checkboxes of the "Character…" window; the PDF draws them too.
+- **"Aa" menu: letter spacing and small capitals**: an "Aa" button, right after Strikethrough, opens the "Character" menu on hover: letter spacing ("−" and "+" by half a point, or a typed value then Enter) and small capitals. Each row applies at once, with no window and no "OK", and Ctrl+Z takes it back in one step; a row is ticked when all the chosen text has the setting, and a dash says only part of it does.
+- **Underlines**: the menu of the Underline button offers the classic underline (the button's own, with Ctrl+U), then double, dotted, dashed and wavy, each row drawn like its line.
+- **Letter shadow and outline**: two checkable rows of the "Aa" menu; the PDF draws them too.
 - **Bullet sign**: the "Bullet…" row of the List menu chooses the sign of a bulleted list (any character, or one of the twelve signs offered: – — ➢ ➔ ► ✓ ✔ ■ ◆ ★ ✦ ❖).
 - **Bullet color and size**: a bullet can have its own color and size, different from the text's ("Bullet…" window).
-- **Superscript and subscript**: two icons at the top of the "Link and content blocks" menu, and the keys Ctrl+. and Ctrl+, (⌘ on macOS, adjustable in Settings > Shortcuts); same rendering in the editor, Reading mode and the exports.
+- **Superscript and subscript**: two icons at the top of the "Aa" menu, and the keys Ctrl+. and Ctrl+, (⌘ on macOS, adjustable in Settings > Shortcuts); same rendering in the editor, Reading mode and the exports.
 - **Format painter**: its menu (on hover) keeps three formats in the template and three others shared by all the templates of the document.
 - **One single color palette**: text, highlight, cell fill and border line open the same palette (ten columns over five rows, including dark tones that read well as text, with a contrast of at least 4.5:1), with "Custom…" for a precise color.
 - **Bubbles and chips in the editor: "Default" or "Formatting"** (Settings > Theme): variable bubbles, calculation bubbles, chips and "@" records either keep their pale, easy-to-spot background, or show the chosen color, highlight, underline and strikethrough. The page number, the footnote and the conditional checkbox follow this choice too, and Reading mode, the PDF and Word write their formatting.
@@ -460,7 +462,8 @@ The language is deliberately left out of Undo.
 
 ### Interface, language and accessibility
 
-- **"What's new" window**: Settings > Credits > "What's new" opens a carousel of screenshots of the new features of the version.
+- **"What's new" window**: Settings > Credits > "What's new" opens an eleven-screen carousel with real screenshots: eight new features of the version, an "And also" screen (headings and their styles, Find / Replace, pages, dates and times, exports), what becomes of a template made with the beta, and the habits that change; the last screen leads, through "See details", to a second window, "Exporting, in detail" (five screens).
+- **A greyed-out button or menu row says why**: on hover, the tooltip gives the reason (in an email template, for example, that the template is written in plain text); on click, the status corner writes the same sentence. Nothing is removed or hidden. The reasons cover the document's rights, Reading mode, the email template, the macro-template, the grid, the header and the footer, and the export types that do not fit the open template.
 - **201 window texts rewritten**, in French and in English: introductions, help, errors, confirmations, status bar messages and tooltips say what you get in the document.
 - **58 customizable keyboard shortcuts** (54 in the beta).
 
@@ -565,6 +568,7 @@ These fixes affect what the beta already did, grouped by topic; the [changelog](
 
 - **The text of the "Create email" link is faithful to the editor**: an empty paragraph, two in a row or a line break give empty lines, and paragraphs that follow each other stay stuck together.
 - **An email template writes plain text only**: formatting shortcuts and typed Markdown signs no longer do anything in an email (bold and underline do not go into an email yet).
+- **A line break in the subject or in an address no longer adds anything to the "Create email" link**: the subject, recipient, Cc and Bcc come from a column, and a multi-line cell used to put its line break into the link as it was, where a mail program may read it as the start of another field. The subject's line break becomes a space and an address's line break separates two recipients; the body keeps its lines.
 
 ### Interface and accessibility
 
