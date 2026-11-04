@@ -38,8 +38,14 @@ function state(app) {
     const list = document.querySelector('.pp-slide-list');
     const line = document.querySelector('.pp-slide-drop');
     const ghost = document.querySelector('.pp-slide-ghost');
+    const shield = document.querySelector('.pp-slide-drag-shield');
+    const shieldStyle = shield ? getComputedStyle(shield) : null;
+    const copy = document.querySelector('.pp-slide-strip .pp-slide-thumb .pp-slide-page *');
     return {
       order, shapePage,
+      // Le voile du curseur « saisi » (couvre la fenêtre, sous la copie), le curseur de la liste et celui d'un élément des copies des miniatures (hérité de la rangée).
+      shield: shield ? { rect: rect(shield), position: shieldStyle.position, cursor: shieldStyle.cursor, belowGhost: !!ghost && !!(shield.compareDocumentPosition(ghost) & Node.DOCUMENT_POSITION_FOLLOWING) } : null,
+      listCursor: getComputedStyle(list).cursor, copyCursor: copy ? getComputedStyle(copy).cursor : '', view: { w: window.innerWidth, h: window.innerHeight },
       current: items.findIndex(i => i.getAttribute('aria-selected') === 'true'),
       rows: Array.from(document.querySelectorAll('.pp-slide-strip .pp-slide-row')).map(r => ({ rect: rect(r), mark: r.dataset.testMark || '', source: r.classList.contains('pp-slide-drag-source') })),
       list: rect(list), scrollTop: list.scrollTop, scrollMax: list.scrollHeight - list.clientHeight,
@@ -113,6 +119,7 @@ async function run(lang, colorScheme) {
   let s = await state(app);
   check(tag + 'huit diapositives, la forme sur la première ; la bande déborde', same(s.order, NAMES) && s.shapePage === 0 && s.scrollMax > 0 && s.current === 0,
     { order: s.order, shapePage: s.shapePage, scrollMax: s.scrollMax, current: s.current });
+  const copyCursorBefore = s.copyCursor;
 
   // La bande, à 700x400 sous la barre d'outils, montre trois miniatures : chaque geste vise celles-là, loin des bords qui la font défiler.
   // --- Vers le bas : la première entre la deuxième et la troisième.
@@ -126,6 +133,13 @@ async function run(lang, colorScheme) {
   check(tag + 'glissée : la miniature s’estompe à sa place, sa copie suit la souris, la ligne d’accent est entre la deuxième et la troisième',
     s.dragging && s.rows[0].source && !!s.ghost && !!s.line && s.line.top >= r1.bottom - 1 && s.line.bottom <= r2.top + 1 && s.line.width > 60 && s.scrollTop === 0,
     { dragging: s.dragging, source: s.rows[0].source, ghost: s.ghost, line: s.line, r1, r2, scrollTop: s.scrollTop });
+  // Demande du 04/11 (« quand on doit supprimer ou déplacer une diapo il y a un freeze de quelques secondes ») : `cursor` est hérité, et le mettre sur chaque rangée refaisait le style de
+  // tous les éléments des copies des miniatures (3 500 dans « Présentation commerciale », 60 ms au début du glisser et 40 à la fin). Le curseur « saisi » est donc sur la liste et sur un
+  // voile qui couvre la fenêtre ; les copies gardent le leur.
+  check(tag + 'glissée : le curseur « saisi » est sur la liste et sur un voile qui couvre la fenêtre, sous la copie ; les copies des miniatures gardent leur curseur (cursor est hérité)',
+    !!s.shield && s.shield.position === 'fixed' && s.shield.cursor === 'grabbing' && s.shield.belowGhost && s.shield.rect.width >= s.view.w - 1 && s.shield.rect.height >= s.view.h - 1
+      && s.listCursor === 'grabbing' && !!copyCursorBefore && s.copyCursor === copyCursorBefore,
+    { shield: s.shield, view: s.view, listCursor: s.listCursor, copyCursorBefore, copyCursor: s.copyCursor });
   await a.nudge(0, -6);
   s = await state(app);
   check(tag + 'la copie suit la souris au pixel près', !!s.ghost && !!ghostAt1 && Math.abs(s.ghost.top - (ghostAt1.top - 6)) <= 1 && Math.abs(s.ghost.left - ghostAt1.left) <= 1, { before: ghostAt1, after: s.ghost });
@@ -133,7 +147,7 @@ async function run(lang, colorScheme) {
   await a.up();
   s = await state(app);
   check(tag + 'lâchée : la diapositive est entre « Deux » et « Trois », le curseur la suit, le clavier va au document, la copie et la ligne sont parties',
-    same(s.order, moved(0, 2)) && s.current === 1 && s.focus === 'editor' && !s.ghost && !s.line && !s.dragging, { order: s.order, current: s.current, focus: s.focus });
+    same(s.order, moved(0, 2)) && s.current === 1 && s.focus === 'editor' && !s.ghost && !s.line && !s.dragging && !s.shield, { order: s.order, current: s.current, focus: s.focus, shield: s.shield });
   check(tag + 'la forme change de page avec sa diapositive (deuxième page) ; chaque miniature garde sa rangée, rien ne se recopie',
     s.shapePage === 1 && same(s.rows.map(r => r.mark), ['1', '0', '2', '3', '4', '5', '6', '7']), { shapePage: s.shapePage, marks: s.rows.map(r => r.mark) });
   await a.press('Control+z', 600);
@@ -187,12 +201,12 @@ async function run(lang, colorScheme) {
   const beforeEsc = !!s.line;
   await a.press('Escape', 200);
   s = await state(app);
-  const afterEsc = { ghost: !!s.ghost, line: !!s.line, dragging: s.dragging };
+  const afterEsc = { ghost: !!s.ghost, line: !!s.line, dragging: s.dragging, shield: !!s.shield };
   await a.nudge(0, 4);
   await a.up();
   s = await state(app);
   check(tag + 'Échap : la copie et la ligne partent tout de suite ; le relâchement ne fait rien (ni ordre ni curseur changés)',
-    beforeEsc && !afterEsc.ghost && !afterEsc.line && !afterEsc.dragging && same(s.order, NAMES) && s.current === 2, { beforeEsc, afterEsc, order: s.order, current: s.current });
+    beforeEsc && !afterEsc.ghost && !afterEsc.line && !afterEsc.dragging && !afterEsc.shield && same(s.order, NAMES) && s.current === 2 && !s.shield, { beforeEsc, afterEsc, order: s.order, current: s.current });
 
   // --- Lâchée sur le document, à côté de la bande.
   await toTop(app);

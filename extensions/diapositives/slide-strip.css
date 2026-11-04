@@ -67,7 +67,10 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 
 /* Glisser une miniature (slide-strip.js:onDragPress) : celle qu'on emporte s'estompe à sa place, sa copie suit la souris au-dessus de tout, une ligne d'accent dit où elle se posera.
    Plusieurs diapositives choisies s'estompent toutes, et la copie porte leur nombre. */
-.pp-slide-list.pp-slide-dragging, .pp-slide-list.pp-slide-dragging .pp-slide-item { cursor: grabbing; }
+/* Le curseur « saisi » : sur la liste et sur un voile transparent qui couvre la fenêtre (slide-strip.js:onDragStart), jamais sur les rangées ni leurs miniatures : `cursor` est hérité, et le
+   changer sur chacune faisait refaire le style de tous les éléments de leurs copies (3 500 dans « Présentation commerciale »). */
+.pp-slide-list.pp-slide-dragging { cursor: grabbing; }
+.pp-slide-drag-shield { position: fixed; inset: 0; z-index: var(--z-tip); cursor: grabbing; }
 .pp-slide-list.pp-slide-dragging .pp-slide-item:hover { background: transparent; }
 .pp-slide-list.pp-slide-dragging .pp-slide-more { display: none; }
 .pp-slide-row.pp-slide-drag-source { opacity: .4; }

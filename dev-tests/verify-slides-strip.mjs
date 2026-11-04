@@ -14,8 +14,10 @@
 //  LE CLAVIER : Échap puis Tab quittent le document jusqu'à la bande (la miniature cochée) ; ↑, Début, Fin vont de l'une à l'autre ; Maj+F10 ouvre le menu (focus sur sa première ligne,
 //   Échap le referme) ; Ctrl+↑ déplace, Suppr efface, Ctrl+Z défait, sans quitter la bande ; Entrée rend le clavier au document.
 //  CE QUI DÉPASSE (carte du 19/10, « Continuer ») : la miniature de la diapositive trop longue porte le point rouge, et son nom le dit.
-//  LA LÉGÈRETÉ (demande du 21/10) : dans une présentation de quarante diapositives, la bande ne copie que les miniatures qu'elle montre, et un peu au-delà, chacune avec son texte ; la
-//   molette la descend jusqu'au bout et les dernières se copient en arrivant ; Ctrl+↑ ne pagine l'éditeur qu'une fois et les deux miniatures échangées gardent leur copie.
+//  LA LÉGÈRETÉ (demande du 21/10) : dans une présentation de quarante diapositives, la bande ne copie que les miniatures qu'elle montre, et un peu au-delà, chacune avec son texte ; Suppr
+//   y efface la 4e sans que la bande déplace une seule rangée (slide-strip.js : matchRows ne donne plus aux rangées d'après, sans miniature, la rangée de la diapositive supprimée : les
+//   rangées copiées d'entre les deux passaient devant elle, et chaque déplacement fait revoir le style de leur miniature) ; la molette la descend jusqu'au bout et les dernières se copient
+//   en arrivant ; Ctrl+↑ ne pagine l'éditeur qu'une fois et les deux miniatures échangées gardent leur copie.
 //  LES IMAGES EN CALQUE SUIVENT LEUR DIAPOSITIVE (défaut vu le 21/10) : une image passée « Devant le texte » (vrai clic sur sa barre) sur la diapositive 2 monte avec elle (Ctrl+↑ :
 //   page 1, dessinée avec son texte, une seule pagination), et la Lecture (vrai clic) la montre sur la page 1 ; un Ctrl+Z rend le texte d'avant à l'identique ; « Ajouter » avant
 //   elle l'envoie en page 3 (une seule pagination) ; la diapositive 1 qui dépasse (frappe au vrai clavier) l'envoie en page 3, et un Ctrl+Z la ramène ; enregistrée, elle garde sa page.
@@ -260,6 +262,24 @@ const blocksKept = page => page.evaluate(() => {
     if (view.nodeDOM(offset) !== before.get(node)) remade += 1;
   });
   return { survivors, remade, blocks: view.state.doc.childCount };
+});
+// Les rangées de la bande (les enfants de la liste) retirées ou ajoutées depuis `watchRows` : une rangée déplacée compte pour un retrait et un ajout. `rowChanges(page)` arrête de regarder et
+// rend aussi combien des rangées d'avant sont encore là (les mêmes éléments) et combien la liste en compte.
+const watchRows = page => page.evaluate(() => {
+  const list = document.querySelector('.pp-slide-list');
+  window.__rowsBefore = Array.from(list.children);
+  window.__rowChanges = { removed: 0, added: 0 };
+  const tally = (records) => records.forEach((rec) => { window.__rowChanges.removed += rec.removedNodes.length; window.__rowChanges.added += rec.addedNodes.length; });
+  window.__rowTally = tally;
+  window.__rowObserver = new MutationObserver(tally);
+  window.__rowObserver.observe(list, { childList: true });
+});
+const rowChanges = page => page.evaluate(() => {
+  const list = document.querySelector('.pp-slide-list');
+  window.__rowTally(window.__rowObserver.takeRecords());
+  window.__rowObserver.disconnect();
+  const after = Array.from(list.children);
+  return { removed: window.__rowChanges.removed, added: window.__rowChanges.added, before: window.__rowsBefore.length, after: after.length, kept: after.filter(row => window.__rowsBefore.includes(row)).length };
 });
 // Compte les paginations de l'éditeur à partir de maintenant ; `paginations(page)` rend leur nombre et arrête de compter.
 const countPaginations = page => page.evaluate(() => { window.__paginations = 0; window.__stopCounting = HeaderFooterPreview.onPaginated(() => { window.__paginations += 1; }); });
@@ -571,6 +591,20 @@ async function run(lang, colorScheme) {
   let light = await thumbsState(page);
   check(tag + 'quarante diapositives : la bande ne copie que les miniatures qu’elle montre, et un peu au-delà ; chacune de celles qu’on voit a le texte de sa diapositive',
     light.count === 40 && light.filled < 40 && light.visible.length > 0 && light.visible.every(v => v.text === textOf(v.index + 1)), light);
+  // Suppr efface la 4e : les rangées d'après qui n'ont pas encore de miniature ne montrent aucun bloc, rien ne les fait reconnaître ; elles prennent les rangées libres. Celle de la diapositive
+  // supprimée, la première de la liste, ne doit pas servir à la première d'entre elles : les cinq rangées copiées d'entre les deux passaient devant elle, une à une (un déplacement fait revoir le style de la miniature).
+  await click('.pp-slide-thumb', 3);
+  await press('Escape');
+  for (let i = 0; i < 10 && !/^item/.test((await stripState(page)).focus || ''); i++) await press('Tab');
+  await watchRows(page);
+  await press('Delete');
+  await sleep(900);
+  const longDelete = await rowChanges(page);
+  s = await stripState(page);
+  check(tag + 'quarante diapositives, Suppr efface la 4e : la bande ne retire que sa rangée et n’en déplace aucune (les trente-neuf autres gardent leur élément et leur place)',
+    s.count === 39 && longDelete.removed === 1 && longDelete.added === 0 && longDelete.kept === 39 && longDelete.after === 39, { count: s.count, longDelete });
+  await press('Control+z');
+  await sleep(700);
   await hover('.pp-slide-list');
   for (let i = 0; i < 12; i++) { await page.mouse.wheel(0, 400); await sleep(60); }
   await sleep(500);

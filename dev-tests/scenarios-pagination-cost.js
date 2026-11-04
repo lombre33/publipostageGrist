@@ -142,6 +142,8 @@
     try { fn(); } finally { records = observer.takeRecords(); observer.disconnect(); }
     return records.reduce((sum, r) => sum + Array.from(r.addedNodes).filter(n => n.nodeName === 'STYLE').length, 0);
   }
+  // Le bloc que vise la règle de réserve d'une coupure (js/header-footer-preview.js:seamSubject) : le repère d'un saut de page par sa classe, tout autre bloc par `*`.
+  const subjectOf = el => (el.classList.contains('page-break-marker') ? '.page-break-marker' : '*');
   // Refait, sur le document tel que la pagination l'a laissé, le calcul d'une coupure après l'autre (js/header-footer-preview.js:placePaginationSeam, sans en-tête ni pied) : la
   // réserve et le haut de chaque couture que ce calcul pose, comparés à ce qui est posé, au chiffre près. Rend les écarts.
   function oneByOneGaps() {
@@ -164,7 +166,7 @@
       const afterBottomRel = (afterBottomScreen - tipTop) / zoom;
       const remaining = Math.max(0, pageContentHeightPx - (afterBottomRel - bodyTopRel));
       const seamHeight = seams[i].getBoundingClientRect().height / zoom;
-      const rule = '#editor-container .tiptap > *:nth-child(' + (children.indexOf(brk.afterEl) + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }';
+      const rule = '#editor-container .tiptap > ' + subjectOf(brk.afterEl) + ':nth-child(' + (children.indexOf(brk.afterEl) + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }';
       // Le haut relu tel que le navigateur l'écrit (style.top arrondit l'écriture) : le même nombre posé de la même façon.
       probe.style.top = (toLayoutY(afterBottomScreen) + remaining) + 'px';
       if (!sheet.includes(rule) || seams[i].style.top !== probe.style.top) gaps.push({ page: i + 1, rule, top: probe.style.top, posed: seams[i].style.top });
@@ -184,6 +186,30 @@
       return {
         pass: added <= 1 && gaps.length === 0,
         notes: breaks + ' coupures, feuilles posées en route=' + added + ' (attendu 1 ; le calcul une à une en pose une par coupure), écarts au calcul une à une=' + gaps.length + (gaps.length ? ' ' + JSON.stringify(gaps.slice(0, 2)) : ''),
+      };
+    },
+  });
+
+  // Une présentation : douze diapositives courtes, chacune finie par son repère de saut de page (`div.page-break-marker`), comme « Présentation commerciale ».
+  const deck = n => Array.from({ length: n }, (_, i) => '<p>Diapositive ' + (i + 1) + '</p><p>Un peu de texte pour la remplir.</p>' + (i < n - 1 ? '<div class="page-break-marker" contenteditable="false">Saut de page</div>' : '')).join('');
+  cases.push({
+    id: 'pagination_editor_seam_rules_name_the_page_break_marker_so_a_sheet_does_not_restyle_every_block',
+    description: "Demande du 04/11 (« quand on doit supprimer ou déplacer une diapo il y a un freeze de quelques secondes ») : à chaque pagination, trois feuilles de règles « marge sous le bloc qui finit la page » sont posées ou retirées, et une règle `*:nth-child(N)` peut viser n'importe lequel des blocs : le navigateur refaisait le style de tous les blocs de la présentation (629 à 39 diapositives : 16 ms la feuille de 38 règles, de plus en plus avec sa longueur) ; la règle d'une coupure qui tombe sur le repère d'un saut de page (ce par quoi finit chaque diapositive) vise maintenant `.page-break-marker:nth-child(N)` (4 ms la feuille), toute autre coupure garde `*`. Mêmes blocs visés, mêmes réserves et mêmes coutures au chiffre près que le calcul une coupure après l'autre.",
+    run: async (h) => {
+      await setup(h, deck(12));
+      HeaderFooterPreview.renderPaginationOverlay();
+      const tip = document.querySelector('#editor-container .tiptap');
+      const sheet = document.getElementById('v2-pagination-margins-style').textContent;
+      const children = Array.from(tip.children);
+      const onMarker = HeaderFooterPreview.pageBreaks().filter(brk => brk.afterEl.classList.contains('page-break-marker'));
+      if (onMarker.length < 8) return { pass: false, notes: 'présentation trop courte : ' + onMarker.length + ' coupure(s) sur un repère seulement' };
+      const ruleFor = (brk, subject) => new RegExp('#editor-container \\.tiptap > ' + subject + ':nth-child\\(' + (children.indexOf(brk.afterEl) + 1) + '\\) \\{ margin-bottom: [0-9.]+px; \\}');
+      const named = onMarker.filter(brk => ruleFor(brk, '\\.page-break-marker').test(sheet)).length;
+      const generic = onMarker.filter(brk => ruleFor(brk, '\\*').test(sheet)).length;
+      const { gaps, breaks } = oneByOneGaps();
+      return {
+        pass: named === onMarker.length && generic === 0 && gaps.length === 0 && breaks >= onMarker.length,
+        notes: onMarker.length + ' coupures sur un repère, règles qui nomment `.page-break-marker`=' + named + ' (attendu ' + onMarker.length + '), règles `*:nth-child` sur un repère=' + generic + ' (attendu 0), écarts au calcul une à une=' + gaps.length + (gaps.length ? ' ' + JSON.stringify(gaps.slice(0, 2)) : ''),
       };
     },
   });
@@ -241,7 +267,7 @@
       const afterBottomRel = (afterBottomScreen - tipTop) / zoom;
       const remaining = Math.max(0, pageContentHeightPx - (afterBottomRel - bodyTopRel));
       const seamHeight = seams[i].getBoundingClientRect().height / zoom;
-      const rule = '#editor-container .tiptap > *:nth-child(' + (children.indexOf(brk.afterEl) + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }';
+      const rule = '#editor-container .tiptap > ' + subjectOf(brk.afterEl) + ':nth-child(' + (children.indexOf(brk.afterEl) + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }';
       probe.style.top = (toLayoutY(afterBottomScreen) + remaining) + 'px';
       if ((!brk.inner && !sheet.includes(rule)) || seams[i].style.top !== probe.style.top) gaps.push({ page: i + 1, inner: !!brk.inner, rule: brk.inner ? undefined : rule, top: probe.style.top, posed: seams[i].style.top });
       bodyTopRel = afterBottomRel + remaining + seamHeight;

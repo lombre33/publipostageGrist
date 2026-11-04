@@ -1528,12 +1528,17 @@ const HeaderFooterPreview = (function () {
   // de `.tiptap`). Le bloc et l'endroit voulu d'une réserve qui tient vont dans `pass.reserves`, que la surveillance relit (reservesHold). Rend la règle posée.
   function placeReserve(pass, afterEl, nthChild, margin, bodyTopRel) {
     const { zoom, tiptapRect } = pass;
-    const ruleFor = px => '#editor-container .tiptap > *:nth-child(' + nthChild + ') { margin-bottom: ' + px + 'px; }';
+    const ruleFor = px => '#editor-container .tiptap > ' + seamSubject(afterEl) + ':nth-child(' + nthChild + ') { margin-bottom: ' + px + 'px; }';
     const sheet = paginationSteps.add(ruleFor(margin));
     const next = nextInFlow(afterEl);
     if (next && EditorCore.fitReserve(sheet, ruleFor, margin, () => (next.getBoundingClientRect().top - tiptapRect.top) / zoom, bodyTopRel)) pass.reserves.push({ next, bodyTopRel });
     return sheet.textContent;
   }
+  // Le bloc que vise la règle de réserve d'une coupure, sous la marque `:nth-child(N)` : `*` pour un bloc quelconque, `.page-break-marker` quand c'est le repère d'un saut de page (ce par
+  // quoi finit chaque diapositive d'une présentation ; la classe lui vient du texte et ne change jamais). Avec `*`, la règle peut viser n'importe quel bloc : à chaque feuille posée ou
+  // retirée, le navigateur refait le style des 629 blocs d'une présentation de 39 diapositives (16 ms la feuille de 38 règles, trois feuilles par pagination, et le produit règles x blocs
+  // avec la longueur de la présentation) ; avec la classe, il ne revoit que les repères (4 ms). Le même bloc est visé, avec la même cascade : aucune autre règle de marge n'a d'id.
+  function seamSubject(afterEl) { return afterEl && afterEl.classList && afterEl.classList.contains('page-break-marker') ? '.page-break-marker' : '*'; }
   // Les coutures d'une suite de coupures simples (ni entre deux lignes d'un tableau, ni dans une zone à deux colonnes) qui commence à la coupure `start`, posées d'un coup (carte du
   // 21/10, « Accélérer »). placePaginationSeam pose la règle d'une coupure puis mesure le document avant la suivante : une mise en page par page, 2 à 3 ms chacune (0,2 s pour une
   // présentation de 70 diapositives chargées). Ici, une lecture d'abord (chaque couture, le bas du bloc de chaque coupure, l'écart jusqu'au bloc suivant) ; puis chaque coupure se
@@ -1580,7 +1585,7 @@ const HeaderFooterPreview = (function () {
       bodyTopRel = afterBottomRel + remaining + seamHeight;
       planned.push({
         afterBottomScreen, seamTop, bodyTopRel, page: { top: seamTop + footAreaPx + dividerHeight, bodyTop: seamTop + seamHeight },
-        rule: '#editor-container .tiptap > *:nth-child(' + (tiptapChildren.indexOf(breaks[start + i].afterEl) + 1) + ') { margin-bottom: ' + margin + 'px; }',
+        rule: '#editor-container .tiptap > ' + seamSubject(breaks[start + i].afterEl) + ':nth-child(' + (tiptapChildren.indexOf(breaks[start + i].afterEl) + 1) + ') { margin-bottom: ' + margin + 'px; }',
       });
       const laid = Math.floor(margin * zoom * 64) / 64;
       if (gap === null || laid < gap) break;

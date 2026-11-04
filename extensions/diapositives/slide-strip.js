@@ -399,7 +399,20 @@ const SlideStrip = (function () {
     });
     const spare = rows.filter(r => free.has(r));
     let changed = rows.length !== next.length;
-    next.forEach((r, i) => { if (!r) next[i] = spare.shift() || makeRow(); });
+    // Une diapositive sans rangée (ses blocs ont changé, ou sa miniature n'est pas encore copiée) prend la première rangée libre qui vient après, dans la liste d'aujourd'hui, celle de la
+    // diapositive d'avant : l'ordre de la liste ne change pas, aucune rangée ne se déplace. Faute d'une rangée libre plus loin, la dernière d'avant (la rangée d'une diapositive qui ne fait que
+    // changer de blocs se garde), ou une rangée neuve. Avant, elle prenait la première rangée libre de la liste, celle de la diapositive supprimée, souvent bien plus haut : les rangées des
+    // diapositives intactes entre les deux passaient devant elle, une à une (le navigateur revoyait le style de leurs miniatures : huit déplacements pour supprimer la 4e diapositive de quarante).
+    const place = new Map(rows.map((r, k) => [r, k]));
+    let after = -1;
+    next.forEach((r, i) => {
+      if (!r) {
+        let k = spare.findIndex(candidate => place.get(candidate) > after);
+        if (k < 0) k = spare.length - 1;
+        next[i] = k < 0 ? makeRow() : spare.splice(k, 1)[0];
+      }
+      if (place.has(next[i])) after = place.get(next[i]);
+    });
     spare.forEach(removeRow);
     // Dans l'ordre des diapositives, en ne déplaçant que les rangées qui ne sont pas à leur place. Une rangée déplacée perd le clavier (le navigateur le rend à la page) : la
     // miniature qui l'avait le reprend, elle suit sa diapositive.
@@ -1454,7 +1467,7 @@ const SlideStrip = (function () {
     drag = {
       index, row: r, group, nodes: (slides[index] ? slides[index].nodes : []).map(entry => entry.node), doc: editor.state.doc, pointerId: event.pointerId,
       startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, grabX: event.clientX - box.left, grabY: event.clientY - box.top,
-      active: false, cancelled: false, gap: -1, line: null, ghost: null, frame: 0,
+      active: false, cancelled: false, gap: -1, line: null, ghost: null, shield: null, frame: 0,
     };
     window.addEventListener('pointermove', onDragMove, true);
     window.addEventListener('pointerup', onDragRelease, true);
@@ -1483,6 +1496,11 @@ const SlideStrip = (function () {
     drag.line = el('div', 'pp-slide-drop');
     drag.line.hidden = true;
     list.appendChild(drag.line);
+    // Le curseur « saisi » est sur un voile qui couvre la fenêtre, pas sur les miniatures : `cursor` est hérité, et le changer sur chaque rangée faisait refaire le style de tous les éléments de
+    // leurs copies (3 500 dans « Présentation commerciale » : 60 ms au début du glisser, 40 ms à la fin). Posé avant la copie, il reste dessous.
+    drag.shield = el('div', 'pp-slide-drag-shield');
+    drag.shield.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(drag.shield);
     drag.ghost = el('div', 'pp-slide-ghost');
     drag.ghost.setAttribute('aria-hidden', 'true');
     drag.ghost.appendChild(drag.row.thumb.cloneNode(true));
@@ -1571,8 +1589,10 @@ const SlideStrip = (function () {
     drag.frame = 0;
     if (drag.line) drag.line.remove();
     if (drag.ghost) drag.ghost.remove();
+    if (drag.shield) drag.shield.remove();
     drag.line = null;
     drag.ghost = null;
+    drag.shield = null;
     drag.group.forEach(r => r.row.classList.remove('pp-slide-drag-source'));
     list.classList.remove('pp-slide-dragging');
   }
