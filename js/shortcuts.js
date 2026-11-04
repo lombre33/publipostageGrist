@@ -2,9 +2,10 @@
 // Réglages > Raccourcis (js/shortcuts-panel.js).
 //
 // Une action « fait ce que fait son bouton » : elle clique le bouton de la barre d'outils (ou la ligne de menu) et passe donc par les mêmes gardes
-// que la souris : droits par personne et mode Lecture (`pp-access-locked`, js/main.js:wireAccessLockGuard), grille (js/grid-editor.js). Le grisé
-// `v2-hf-locked` (e-mail, en-tête, macro-modèle) n'est que du CSS (`pointer-events: none`) qu'un clic par programme ne voit pas : `usable()` le relit
-// avant chaque clic.
+// que la souris : droits par personne et mode Lecture (`pp-access-locked`, js/main.js:wireAccessLockGuard), grille (js/grid-editor.js). Un contrôle grisé
+// qui dit pourquoi (`data-pp-lock-blocks`, js/lock-reasons.js : e-mail, en-tête, macro-modèle, grille...) a son clic arrêté en capture, qui écrit la raison dans le
+// coin d'état ; un grisé sans raison (`v2-hf-locked` d'une barre flottante) n'est que du CSS (`pointer-events: none`) qu'un clic par programme ne voit pas :
+// `usable()` relit les deux avant chaque clic, pour qu'une touche n'écrive pas une raison à la place d'un geste.
 //
 // Les touches qui existent déjà (Ctrl+B, Ctrl+K, Ctrl+S, Ctrl+Z...) restent traitées par l'éditeur ou js/main.js tant qu'on n'y touche pas : ce
 // module n'intervient qu'une fois la touche d'une action changée ou retirée. Son écouteur, posé en capture sur le document avant tous les autres
@@ -181,12 +182,12 @@ const Shortcuts = (function () {
 
     const byId = id => document.getElementById(id);
 
-    // Un clic de souris pourrait-il atteindre cet élément ? Faux pour un bouton désactivé, grisé (`v2-hf-locked`, `pp-access-locked`, ou tout autre
+    // Un clic de souris pourrait-il atteindre cet élément ? Faux pour un bouton désactivé, grisé (`v2-hf-locked`, `pp-access-locked`, `data-pp-lock-blocks`, ou tout autre
     // `pointer-events: none` hérité) ou masqué. Une ligne de menu au survol (`.v2-hover-flyout`) est toujours fermée, donc sans dimensions : seul le
     // reste compte pour elle. Une ligne grisée dont le clic explique (`data-explains` : la fonction d'une extension de Grist Factory Suite absente, js/main-toolbar.js:syncChartRow) reste
     // utilisable : la touche fait le même geste que la souris et ouvre la même fenêtre.
     function usable(el) {
-      if (!el || el.disabled || (el.getAttribute('aria-disabled') === 'true' && !el.hasAttribute('data-explains')) || el.closest('[hidden], .v2-hf-locked, .pp-access-locked')) return false;
+      if (!el || el.disabled || (el.getAttribute('aria-disabled') === 'true' && !el.hasAttribute('data-explains')) || el.closest('[hidden], .v2-hf-locked, .pp-access-locked, [data-pp-lock-blocks]')) return false;
       if (getComputedStyle(el).pointerEvents === 'none') return false;
       return !!el.closest('.v2-hover-flyout') || el.getClientRects().length > 0;
     }
@@ -285,10 +286,10 @@ const Shortcuts = (function () {
       // Mise en forme
       { id: 'bold', group: 'format', label: 'fmt.bold', key: 'Mod+b', native: true, scope: 'editor', hint: tip('v2-btn-bold'), run: click('v2-btn-bold') },
       { id: 'italic', group: 'format', label: 'fmt.italic', key: 'Mod+i', native: true, scope: 'editor', hint: tip('v2-btn-italic'), run: click('v2-btn-italic') },
-      { id: 'underline', group: 'format', label: 'fmt.underline', key: 'Mod+u', native: true, scope: 'editor', hint: tip('v2-btn-underline'), run: click('v2-btn-underline') },
+      { id: 'underline', group: 'format', label: 'fmt.underline', key: 'Mod+u', native: true, scope: 'editor', hint: tip('v2-underline-single'), aria: tip('v2-btn-underline') + ', ' + tip('v2-underline-single'), run: click('v2-btn-underline') },
       { id: 'strike', group: 'format', label: 'fmt.strike', key: 'Mod+Shift+s', native: true, scope: 'editor', hint: tip('v2-btn-strike'), run: click('v2-btn-strike') },
-      // Exposant et indice (js/script-marks.js) : les touches de Google Docs, traitées par l'éditeur. Les deux icônes du menu « Lien et blocs de contenu »
-      // les montrent dans leur infobulle.
+      // Exposant et indice (js/script-marks.js) : les touches de Google Docs, traitées par l'éditeur. Les deux icônes du menu « Aa » les montrent dans leur
+      // infobulle. Souligné : la touche est dite par le bouton et par la première ligne de son menu (le soulignement classique).
       { id: 'superscript', group: 'format', label: 'fmt.superscript', key: 'Mod+.', native: true, scope: 'editor', hint: tip('v2-btn-superscript'), run: click('v2-btn-superscript') },
       { id: 'subscript', group: 'format', label: 'fmt.subscript', key: 'Mod+,', native: true, scope: 'editor', hint: tip('v2-btn-subscript'), run: click('v2-btn-subscript') },
       { id: 'alignLeft', group: 'format', label: 'align.left', key: 'Mod+Shift+l', native: true, scope: 'editor', hint: tip('v2-btn-align-left'), run: click('v2-btn-align-left') },

@@ -151,8 +151,17 @@ async function realClick(page, sel, wait = 250) {
   await page.waitForTimeout(wait);
   return c;
 }
-// Hors de tout menu : celui de « Type d’export » (deux titres, trois types et trois qualités) recouvre le milieu du panneau, la souris part donc tout en bas.
-const away = async (page) => { await page.mouse.move(350, 385, { steps: 6 }); await page.waitForTimeout(250); };
+// Hors de tout menu : celui de « Type d’export » (deux titres, trois types et trois qualités) recouvre le milieu du panneau, la souris part donc tout en bas. Celui de « Titre » (ses six niveaux avec leurs
+// raccourcis, puis les styles du modèle) descend jusqu'au bas du panneau et jusqu'à 370 px du bord gauche : le point d'en bas est alors dessous, la souris ne l'aurait jamais quitté, et elle part à droite, sur la feuille.
+const away = async (page) => {
+  const covered = await page.evaluate(([x, y]) => Array.from(document.querySelectorAll('.v2-hover-flyout')).some(f => {
+    if (getComputedStyle(f).display === 'none') return false;
+    const r = f.getBoundingClientRect();
+    return x >= r.left - 8 && x <= r.right + 8 && y >= r.top - 8 && y <= r.bottom + 8;
+  }), [350, 385]);
+  await page.mouse.move(covered ? 680 : 350, covered ? 300 : 385, { steps: 6 });
+  await page.waitForTimeout(250);
+};
 const open = (page, fly) => page.evaluate((s) => getComputedStyle(document.querySelector(s)).display !== 'none', fly);
 const expanded = (page, sel) => page.evaluate((s) => document.querySelector(s).getAttribute('aria-expanded'), sel);
 const activeId = (page) => page.evaluate(() => { const a = document.activeElement; return a ? (a.id || a.className || a.tagName) : null; });
@@ -207,7 +216,9 @@ await page.waitForTimeout(300);
   await page.mouse.click(c.x, c.y); await page.waitForTimeout(300);
   const shut = !(await open(page, '#v2-save-flyout'));
   const exp = await expanded(page, '#btn-save');
-  await page.mouse.move(row.x, row.y, { steps: 8 }); await page.waitForTimeout(150);
+  // Un pas sous le bouton (dans la zone de son menu), puis UN saut sur la cible : la ligne droite traverserait les boutons à menu de la barre (« Aa », la liste à puces...), dont le menu s'ouvre au survol et recouvre le point visé
+  // selon la place de chaque bouton (un bouton de plus dans la barre la déplace) - ce que ce contrôle ne regarde pas.
+  await page.mouse.move(c.x, c.y + 14, { steps: 2 }); await page.mouse.move(row.x, row.y); await page.waitForTimeout(150);
   const under = await page.evaluate(({ x, y }) => { const el = document.elementFromPoint(x, y); return { inMenu: !!el && !!el.closest('#v2-save-flyout'), inEditorZone: !!el && !!el.closest('#editor-container'), at: el ? (el.id || el.className || el.tagName) : null }; }, row);
   await page.mouse.click(row.x, row.y); await page.waitForTimeout(300);
   const after = { autosave: await autosave(), history: await historyOpen(), menu: await open(page, '#v2-save-flyout') };

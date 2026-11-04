@@ -138,6 +138,8 @@
     // et le macro-modèle un mode spécialisé, pas des états où le widget doit démarrer dans toutes les vues. Pour UNE vue, ils le peuvent (Réglages > Vue,
     // js/view-template.js). Le bouton est grisé (même traitement que « aucun modèle chargé »), jamais masqué.
     btn.disabled = currentId == null || !Templates.canBeDocumentDefault(currentTypeModele);
+    // Grisé, il dit pourquoi en info-bulle (cause « state » de js/lock-reasons.js : un bouton `disabled` ne reçoit pas le clic).
+    LockReasons.set(btn, 'state', btn.disabled ? I18n.t(currentId == null ? 'lock.defaultNone' : 'lock.defaultType') : '');
   }
 
   // Le ★ du document, posé sur le modèle `id` ou retiré s'il le porte déjà. Trois endroits y mènent : le bouton de la barre (le modèle ouvert), une ligne de
@@ -1490,11 +1492,13 @@
 
   function isReadOnly() { return AccessRights.get().readOnly; }
 
-  function setAccessLocked(el, locked) {
+  // `reason` : la clé de la phrase qui dit pourquoi (js/i18n.js, « lock.* »), l'info-bulle du contrôle et ce que son clic écrit dans le coin d'état (js/lock-reasons.js, cause « access »).
+  function setAccessLocked(el, locked, reason) {
     if (!el) return;
     el.classList.toggle(ACCESS_LOCK_CLASS, locked);
     if (locked) el.setAttribute('aria-disabled', 'true');
     else el.removeAttribute('aria-disabled');
+    LockReasons.set(el, 'access', locked && reason ? I18n.t(reason) : '');
   }
 
   // Pendant la lecture d'un PDF (js/pdf-reading.js, consigne GFS 040), ce qui ne s'applique pas à lui reste là, GRISÉ avec sa raison - dans l'info-bulle du survol (`title`, comme setExplained de js/main-toolbar.js :
@@ -1508,24 +1512,21 @@
     { reason: 'export', ids: EXPORT_LOCKED_IDS },
     { reason: 'comment', ids: ['v2-btn-comment'] },
   ];
-  const PDF_KEPT_TITLE = 'data-pp-pdf-kept-title';   // le `title` que la commande avait avant le grisé, rendu au dégrisé
   function applyPdfLocks() {
     const on = PdfReading.isActive();
     const reasons = on ? PdfReading.reasons() : null;
     PDF_LOCKS.forEach(({ reason, ids }) => ids.forEach((id) => {
       const el = document.getElementById(id);
       if (!el) return;
+      const wasOn = el.classList.contains(PDF_LOCK_CLASS);
       el.classList.toggle(PDF_LOCK_CLASS, on);
+      // La raison est l'info-bulle du contrôle et ce que son clic écrit dans le coin d'état : js/lock-reasons.js (cause « pdf »), qui rend aussi au dégrisé le `title` d'avant.
+      LockReasons.set(el, 'pdf', on ? reasons[reason] : '');
       if (on) {
-        if (!el.hasAttribute(PDF_KEPT_TITLE)) el.setAttribute(PDF_KEPT_TITLE, el.getAttribute('title') || '');
         el.setAttribute('aria-disabled', 'true');
         el.setAttribute('data-pp-pdf-reason', reasons[reason]);
-        el.title = reasons[reason];
-      } else if (el.hasAttribute(PDF_KEPT_TITLE)) {
-        const before = el.getAttribute(PDF_KEPT_TITLE);
-        el.removeAttribute(PDF_KEPT_TITLE);
+      } else if (wasOn) {
         el.removeAttribute('data-pp-pdf-reason');
-        if (before) el.title = before; else el.removeAttribute('title');
         if (!el.classList.contains(ACCESS_LOCK_CLASS)) el.removeAttribute('aria-disabled');
       }
     }));
@@ -1540,7 +1541,9 @@
     const formattingBar = document.getElementById('v2-toolbar');
     if (!formattingBar) return;
     const locked = isReadOnly() || currentMode === 'read' || isAccessGuideShown();
-    Array.from(formattingBar.children).forEach(child => { if (child.id !== 'v2-btn-comment') setAccessLocked(child, locked); });
+    // Pourquoi, dans l'ordre : un document en lecture seule, le mode lecture, la carte de l'accès. Les séparateurs se grisent avec la barre mais ne disent rien : on ne les clique pas.
+    const reason = isReadOnly() ? 'lock.readOnly' : currentMode === 'read' ? 'lock.readMode' : 'lock.accessGuide';
+    Array.from(formattingBar.children).forEach(child => { if (child.id !== 'v2-btn-comment') setAccessLocked(child, locked, child.classList.contains('v2-sep') ? '' : reason); });
   }
 
   // Commentaires : la Lecture les montre et en accepte de nouveaux (js/comments.js:readerMode) dès qu'elle est affichée, choisie ou imposée par la
@@ -1554,11 +1557,17 @@
 
   function applyAccessRights() {
     const rights = AccessRights.get();
-    READ_ONLY_LOCKED_IDS.forEach(id => setAccessLocked(document.getElementById(id), rights.readOnly));
+    READ_ONLY_LOCKED_IDS.forEach(id => setAccessLocked(document.getElementById(id), rights.readOnly, 'lock.readOnly'));
     applyFormattingBarLock();
-    setAccessLocked(document.getElementById('v2-btn-comment'), !rights.canComment);
-    EXPORT_LOCKED_IDS.forEach(id => setAccessLocked(document.getElementById(id), !rights.canExport));
-    READ_ONLY_DISABLED_INPUTS.forEach(id => { const input = document.getElementById(id); if (input) input.disabled = rights.readOnly; });
+    setAccessLocked(document.getElementById('v2-btn-comment'), !rights.canComment, 'lock.noComment');
+    EXPORT_LOCKED_IDS.forEach(id => setAccessLocked(document.getElementById(id), !rights.canExport, 'lock.noExport'));
+    // Les marges de Réglages : grisées en lecture seule, avec leur raison en info-bulle (cause « state » : un champ `disabled` ne reçoit pas le clic).
+    READ_ONLY_DISABLED_INPUTS.forEach(id => {
+      const input = document.getElementById(id);
+      if (!input) return;
+      input.disabled = rights.readOnly;
+      LockReasons.set(input, 'state', rights.readOnly ? I18n.t('lock.readOnly') : '');
+    });
     applyCommentsPermissions();
     applyPdfLocks();
     updateSaveStatus();
@@ -1607,22 +1616,19 @@
   }
 
   // Un clic (souris, clavier, ou .click() d'un autre module) sur une commande grisée par applyAccessRights ou applyFormattingBarLock est arrêté en
-  // capture, avant tout gestionnaire.
+  // capture, avant tout gestionnaire. Et sur tout contrôle grisé qui dit pourquoi (js/lock-reasons.js : les droits, la lecture d'un PDF, le type du modèle,
+  // une grille...) : le clic ne fait rien et le coin d'état en dit la raison, comme l'info-bulle du survol. Les deux gardes se complètent : le premier
+  // arrête aussi ce qui n'a pas de raison.
   function wireAccessLockGuard() {
     document.addEventListener('click', event => {
       const target = event.target;
       if (!target || !target.closest || !target.closest('.' + ACCESS_LOCK_CLASS)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
+      const reason = LockReasons.reasonOf(target.closest('.' + ACCESS_LOCK_CLASS));
+      if (reason) setStatus(reason);
     }, true);
-    // Le grisé de la lecture d'un PDF (applyPdfLocks) : le clic ne fait rien et le coin d'état en dit la raison.
-    document.addEventListener('click', event => {
-      const locked = event.target && event.target.closest ? event.target.closest('.' + PDF_LOCK_CLASS) : null;
-      if (!locked) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      setStatus(locked.getAttribute('data-pp-pdf-reason') || '');
-    }, true);
+    LockReasons.wire(setStatus);
   }
 
   // Enregistrement automatique
@@ -2369,6 +2375,14 @@
     return type === 'pdf' || type === 'pdfProtected' || ((type === 'docx' || type === 'md' || type === 'html' || type === 'htmlFragment') && !grid) || (type === 'xlsx' && grid)
       || (type === 'mdTemplate' && !grid && currentTypeModele !== 'macro') || (type === 'pptx' && currentTypeModele === 'presentation');
   }
+  // Pourquoi une ligne du menu « Type d'export » est grisée pour le modèle ouvert (js/lock-reasons.js) : PowerPoint ne sert qu'une présentation, Excel qu'une grille, un tableau seul ne s'écrit ni en Word, ni en Markdown, ni en HTML,
+  // un macro-modèle n'a pas de texte à écrire en Markdown.
+  function exportTypeReason(type) {
+    if (type === 'pptx') return I18n.t('lock.exportPptx');
+    if (type === 'xlsx') return I18n.t('lock.exportXlsx');
+    if (type === 'mdTemplate' && currentTypeModele === 'macro') return I18n.t('lock.exportMacroMd');
+    return GridEditor.isGridType(currentTypeModele) ? I18n.t('lock.exportNotGrid') : '';
+  }
   function selectedExportType() {
     const select = document.getElementById('v2-export-type');
     const type = select ? select.value : 'pdf';
@@ -2541,26 +2555,23 @@
     if (!typeSelect || !qualitySelect || !typeFlyout || !exportFlyout || !typeButton) return;
     if (!exportTypeAvailable(typeSelect.value)) typeSelect.value = 'pdf';
     const type = typeSelect.value;
-    const grey = (row, off) => {
+    // Une ligne grisée dit pourquoi : en info-bulle au survol et, au clic, dans le coin d'état (js/lock-reasons.js, cause « mode »). Une ligne qui ne l'est pas n'en porte pas.
+    const grey = (row, off, reason) => {
       row.classList.toggle('v2-hover-row-disabled', off);
       if (off) row.setAttribute('aria-disabled', 'true'); else row.removeAttribute('aria-disabled');
+      LockReasons.set(row, 'mode', off && reason ? reason : '');
     };
     typeFlyout.querySelectorAll('.v2-hover-row[data-export-type]').forEach(row => {
       row.classList.toggle('is-active', row.dataset.exportType === type);
-      grey(row, !exportTypeAvailable(row.dataset.exportType));
+      grey(row, !exportTypeAvailable(row.dataset.exportType), exportTypeReason(row.dataset.exportType));
     });
-    // Une ligne grisée dit pourquoi en info-bulle ; une ligne qui ne l'est pas n'en porte pas.
-    const greyedFor = (row, key) => {
-      const off = (row.dataset.exportGreyFor || '').split(' ').indexOf(type) !== -1;
-      if (off) row.title = I18n.t(key); else row.removeAttribute('title');
-      return off;
-    };
+    const greyedFor = (row, key) => ((row.dataset.exportGreyFor || '').split(' ').indexOf(type) !== -1 ? I18n.t(key) : '');
     const pdfType = type === 'pdf' || type === 'pdfProtected';
     typeFlyout.querySelectorAll('.v2-hover-row[data-quality]').forEach(row => {
       const applied = type === 'pdfProtected' && qualitySelect.value === 'browser-print' ? 'native' : qualitySelect.value;
       row.classList.toggle('is-active', pdfType && row.dataset.quality === applied);
       const notForProtected = greyedFor(row, 'quality.protectedOff');
-      grey(row, !pdfType || notForProtected);
+      grey(row, !pdfType || !!notForProtected, notForProtected || I18n.t('lock.exportPdfOnly'));
     });
     // Où va le PDF (js/pdf-delivery.js) : télécharger, ranger dans GFS ou les deux ; les deux lignes qui rangent sont grisées sans GFS.
     PdfDelivery.sync(exportFlyout);
@@ -2570,7 +2581,8 @@
     const lines = selectedExportLines(type);
     exportFlyout.querySelectorAll('.v2-hover-row[data-export-lines]').forEach(row => {
       row.setAttribute('aria-checked', row.dataset.exportLines === lines ? 'true' : 'false');
-      grey(row, greyedFor(row, 'exportLines.protectedOff'));
+      const protectedOff = greyedFor(row, 'exportLines.protectedOff');
+      grey(row, !!protectedOff, protectedOff);
     });
     typeButton.classList.toggle('active', type !== 'pdf');
   }

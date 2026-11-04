@@ -305,24 +305,35 @@ if (wanted(4)) {
     }, id);
     check(`barre en bas : ${id} défile à la molette, sa dernière ligne est entière dans le menu et la souris la touche`, end.open && end.scrollTop > 0 && end.last.bottom <= end.inner.bottom + 1 && end.last.top >= end.inner.top - 1 && end.touches, end);
   }
-  // Les deux icônes à info-bulle du menu « Lien et blocs » (Exposant, Indice) : l'info-bulle reste dans la boîte du menu qui défile.
+  // Les deux icônes à info-bulle du menu « Aa » (Exposant, Indice ; elles étaient dans « Lien et blocs » jusqu'au 04/11), tout à gauche du menu. Le menu « Aa » est bas : il tient dans la place que la barre laisse et ne défile pas, rien ne rogne
+  // l'info-bulle, qui reste dans le cadre. Un menu qui défile (`.v2-hover-flyout-capped`) la rognerait : elle reste alors dans sa boîte (js/viewport-fit.js) - la classe est posée à la main pour mesurer ce cas aussi.
   {
-    const m = await hoverMenu(ctx, 'v2-blocks-flyout');
+    const m = await hoverMenu(ctx, 'v2-char-flyout');
     await intoMenu(ctx, m);
-    const at = await center(app, '#v2-btn-superscript');
-    await page.mouse.move(at.x, at.y, { steps: 4 });
-    await app.waitForFunction(() => Number(getComputedStyle(document.getElementById('v2-btn-superscript'), '::after').opacity) === 1, null, { timeout: 2500 }).catch(() => {});
-    const tip = await app.evaluate(() => {
-      const host = document.getElementById('v2-btn-superscript');
-      const r = host.getBoundingClientRect();
-      const cs = getComputedStyle(host, '::after');
-      const w = parseFloat(cs.width) + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-      const left = r.left + host.clientLeft + parseFloat(cs.left) - w / 2;
-      const fly = document.getElementById('v2-blocks-flyout');
-      const box = fly.getBoundingClientRect();
-      return { shown: Number(cs.opacity) === 1, left, right: left + w, boxLeft: box.left + fly.clientLeft, boxRight: box.left + fly.clientLeft + fly.clientWidth };
-    });
-    check('barre en bas : l\'info-bulle d\'« Exposant », dans le menu « Lien et blocs » qui défile, reste dans la boîte du menu (sinon son défilement la rognerait)', tip.shown && tip.left >= tip.boxLeft - 0.5 && tip.right <= tip.boxRight + 0.5, tip);
+    const measure = async () => {
+      const at = await center(app, '#v2-btn-superscript');
+      await page.mouse.move(at.x, at.y, { steps: 4 });
+      await app.waitForFunction(() => Number(getComputedStyle(document.getElementById('v2-btn-superscript'), '::after').opacity) === 1, null, { timeout: 2500 }).catch(() => {});
+      return app.evaluate(() => {
+        const host = document.getElementById('v2-btn-superscript');
+        const r = host.getBoundingClientRect();
+        const cs = getComputedStyle(host, '::after');
+        const w = parseFloat(cs.width) + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+        const left = r.left + host.clientLeft + parseFloat(cs.left) - w / 2;
+        const fly = document.getElementById('v2-char-flyout');
+        const box = fly.getBoundingClientRect();
+        return { shown: Number(cs.opacity) === 1, left, right: left + w, boxLeft: box.left + fly.clientLeft, boxRight: box.left + fly.clientLeft + fly.clientWidth, clips: getComputedStyle(fly).overflowY !== 'visible' };
+      });
+    };
+    const tip = await measure();
+    check('barre en bas : l\'info-bulle d\'« Exposant », dans le menu « Aa », reste dans le cadre, et dans la boîte du menu quand celui-ci la rognerait', tip.shown && tip.left >= -0.5 && tip.right <= FRAME[0] + 0.5 && (!tip.clips || (tip.left >= tip.boxLeft - 0.5 && tip.right <= tip.boxRight + 0.5)), tip);
+    await app.evaluate(() => document.getElementById('v2-char-flyout').classList.add('v2-hover-flyout-capped'));
+    const labelAt = await app.evaluate(() => { const r = document.querySelector('#v2-char-flyout .v2-hover-flyout-label').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+    await page.mouse.move(labelAt.x, labelAt.y, { steps: 3 }); // dans le menu, hors de l'icône : y revenir refait `mouseover`, donc le calcul de l'info-bulle
+    await sleep(150);
+    const clipped = await measure();
+    await app.evaluate(() => document.getElementById('v2-char-flyout').classList.remove('v2-hover-flyout-capped'));
+    check('barre en bas : le menu « Aa » qui défile (classe posée à la main) rognerait l\'info-bulle d\'« Exposant » : elle reste dans la boîte du menu', clipped.shown && clipped.clips && clipped.left >= clipped.boxLeft - 0.5 && clipped.right <= clipped.boxRight + 0.5, clipped);
   }
   await showBar(page, app, null, ...FRAME);
   for (const id of ids) {
@@ -380,7 +391,9 @@ if (wanted(5)) {
       await page.mouse.move(at.x, at.y);
       await app.waitForFunction(hid => Number(getComputedStyle(document.getElementById(hid), '::after').opacity) === 1, id, { timeout: 2500 }).catch(() => {});
       const tip = await tipOf(app, id);
-      if (tip.actual.opacity < 1) { await park(page); continue; }
+      // Un contrôle grisé qui dit pourquoi (`data-pp-lock-reason`, js/lock-reasons.js : « Diminuer le retrait » hors d'une liste) laisse la place au `title` du navigateur : l'info-bulle de l'app n'est pas dessinée (`::after` en `display: none`,
+      // sa géométrie est NaN), il n'y a rien à mesurer.
+      if (tip.actual.opacity < 1 || Number.isNaN(tip.actual.left)) { await park(page); continue; }
       checked += 1;
       const a = tip.actual; const n = tip.natural;
       const ok = !hits(a, bar) && a.left >= -0.5 && a.right <= FRAME[0] + 0.5;

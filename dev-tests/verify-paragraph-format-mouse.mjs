@@ -492,9 +492,12 @@ async function run(theme) {
   const lock = await page.evaluate(() => {
     const group = document.getElementById('v2-align-group');
     const cs = getComputedStyle(group);
-    return { locked: group.classList.contains('pp-access-locked'), aria: group.getAttribute('aria-disabled'), pointerEvents: cs.pointerEvents, opacity: Number(cs.opacity), reader: getComputedStyle(document.getElementById('reader-container')).display };
+    // Le groupe grisé reçoit la souris pour dire pourquoi (js/lock-reasons.js) ; son bouton et son menu n'y répondent plus.
+    const button = group.querySelector(':scope > button');
+    const flyout = group.querySelector('.v2-hover-flyout');
+    return { locked: group.classList.contains('pp-access-locked'), aria: group.getAttribute('aria-disabled'), pointerEvents: cs.pointerEvents, buttonPointerEvents: button ? getComputedStyle(button).pointerEvents : null, flyout: flyout ? getComputedStyle(flyout).display : null, reason: group.getAttribute('title') || '', opacity: Number(cs.opacity), reader: getComputedStyle(document.getElementById('reader-container')).display };
   });
-  check(`${T}, Lecture : le groupe Alignement est grisé (pp-access-locked, atténué) et n'accepte plus la souris`, lock.locked && lock.aria === 'true' && lock.pointerEvents === 'none' && lock.opacity < 0.5 && lock.reader !== 'none', lock);
+  check(`${T}, Lecture : le groupe Alignement est grisé (pp-access-locked, atténué), dit pourquoi, et ni son bouton ni son menu n'acceptent la souris`, lock.locked && lock.aria === 'true' && lock.buttonPointerEvents === 'none' && lock.flyout === 'none' && lock.reason !== '' && lock.opacity < 0.5 && lock.reader !== 'none', lock);
   await page.evaluate(sel => document.querySelector(sel).click(), ROW);
   await page.waitForTimeout(250);
   check(`${T}, Lecture : même un clic qui n'est pas de la souris sur la ligne n'ouvre rien`, !(await windowState()).shown);
@@ -519,6 +522,10 @@ async function restartIn(lang) {
 await run('light');
 await page.evaluate(() => Settings.setTheme('dark'));
 await page.waitForTimeout(250);
+// Le passage en Lecture puis le retour laissent la page avec la sélection du dernier clic, dans un texte que `Editor.setHTML` reprend tel quel, et l'éditeur sans le focus : le premier clic de ce passage,
+// au même endroit, ne change rien pour le navigateur, donc rien pour ProseMirror (qui garde la dernière sélection du navigateur qu'il a vue) et le curseur reste en fin de document. Le focus rendu à
+// l'éditeur, comme le fait la personne qui clique dans son texte pour continuer, remet les deux d'accord.
+await page.evaluate(() => EditorCore.getEditor().commands.focus());
 await run('dark');
 await restartIn('en');
 await page.waitForTimeout(300);

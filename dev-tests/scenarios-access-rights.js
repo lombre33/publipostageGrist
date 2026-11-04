@@ -135,11 +135,12 @@
       const editIds = ['btn-mode-edit', 'v2-save-group', 'btn-delete', 'btn-organize-templates', 'v2-new-template-group', 'btn-link-rules', 'v2-page-group', 'v2-btn-bold', 'v2-btn-comment'];
       const greyed = editIds.filter(id => locked(id) && shown(id));
       const exportFree = !locked('v2-export-pdf-group') && !locked('v2-quality-group');
+      // Le dernier clic est celui d'Enregistrer, grisé : le coin d'état dit sa raison (js/lock-reasons.js, « Indisponible : ce document est en lecture seule pour vous »), plus la phrase d'avant.
       const status = document.getElementById('status-msg').textContent;
       await cleanup();
       const backToEdit = !inReadMode();
       const pass = applied && read && stillRead && linkRulesClosed && writesAfter === writesBefore && greyed.length === editIds.length && exportFree
-        && /Lecture seule/.test(status) && backToEdit;
+        && /lecture seule/i.test(status) && backToEdit;
       return { pass, notes: JSON.stringify({ applied, read, stillRead, linkRulesClosed, writesBefore, writesAfter, greyed, exportFree, status, backToEdit }) };
     },
   });

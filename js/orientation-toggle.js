@@ -449,6 +449,8 @@ const OrientationToggle = (function () {
     if (title) title.textContent = titleText;
     host.setAttribute('aria-label', titleText);
     const enabled = supported && !busy;
+    // Pourquoi tout le menu est grisé : un email n'a pas de page ; pendant un export, le sens et le format sont lus au départ.
+    const offReason = !supported ? I18n.t('lock.email') : busy ? I18n.t('lock.pageBusy') : '';
     const scoped = supported && currentType === DOCUMENT_TYPE;
     syncScope(host, scoped, enabled, formatName);
     syncRatios(host, slide, enabled, format);
@@ -469,7 +471,8 @@ const OrientationToggle = (function () {
       row.setAttribute('aria-disabled', rowEnabled ? 'false' : 'true');
       row.classList.toggle('v2-hover-row-disabled', !rowEnabled);
       row.tabIndex = rowEnabled ? 0 : -1;
-      if (reason) row.title = reason; else row.removeAttribute('title');
+      // Grisée, la ligne dit pourquoi (js/lock-reasons.js, cause « mode » : le clic ne fait rien, le coin d'état dit pourquoi) : la raison de son sens, sinon celle du menu entier.
+      LockReasons.set(row, 'mode', rowEnabled ? '' : reason || offReason);
     });
     const watermarkRow = document.getElementById(WATERMARK_ROW_ID);
     if (watermarkRow) {
@@ -479,6 +482,7 @@ const OrientationToggle = (function () {
       watermarkRow.setAttribute('aria-disabled', enabled ? 'false' : 'true');
       watermarkRow.classList.toggle('v2-hover-row-disabled', !enabled);
       watermarkRow.tabIndex = enabled ? 0 : -1;
+      LockReasons.set(watermarkRow, 'mode', enabled ? '' : offReason);
     }
     // La ligne du thème : dans le menu d'une présentation seulement ; grisée avec sa raison quand l'extension est éteinte (son clic explique).
     const presentation = supported && currentType === PRESENTATION_TYPE;
@@ -534,6 +538,8 @@ const OrientationToggle = (function () {
     btn.setAttribute('aria-label', label);
     btn.classList.toggle('active', supported && landscape);
     btn.disabled = !supported || busy || waiting;
+    // Grisé, il dit pourquoi en info-bulle (cause « state » de js/lock-reasons.js : un bouton `disabled` ne reçoit pas le clic) : un email n'a pas de page, un export lit le sens et le format au départ, des pages tournées une à une attendent l'en-tête.
+    LockReasons.set(btn, 'state', !supported ? I18n.t('lock.email') : busy ? I18n.t('lock.pageBusy') : waiting ? I18n.t('lock.pageDocHf') : '');
     syncPreviewToggle(formatName, slide);
     syncMenu(supported, landscape, format, auto, formatName);
   }

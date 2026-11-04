@@ -216,22 +216,63 @@
     },
   });
 
+  // Le Word dézippé : le `w:bidi` et le `w:jc` du paragraphe qui porte ce mot.
+  const wordParagraphInfo = (doc, word) => {
+    const p = Array.from(doc.getElementsByTagName('w:p')).find(x => x.textContent.trim() === word);
+    const props = p && p.getElementsByTagName('w:pPr')[0];
+    const jc = props && props.getElementsByTagName('w:jc')[0];
+    return p ? { bidi: !!(props && props.getElementsByTagName('w:bidi')[0]), jc: jc ? jc.getAttribute('w:val') : null } : null;
+  };
+
   cases.push({
     id: 'textdirection_word_writes_bidi_and_turns_the_alignment',
-    description: 'Word (OOXML dézippé) : un paragraphe de droite à gauche porte `w:bidi` ; son alignement à droite est écrit « left » (début), son alignement à gauche « right » (fin), son centrage reste ; un paragraphe ordinaire n\'a pas `w:bidi` et garde son alignement',
+    description: 'Word (OOXML dézippé) : un paragraphe de droite à gauche porte `w:bidi` ; son alignement à droite est écrit « left » (début), son alignement à gauche « right » (fin), son centrage et son justifié restent, sans alignement posé il n\'a pas de `w:jc` ; un paragraphe ordinaire n\'a pas `w:bidi` et garde son alignement',
     run: async (h) => {
       const para = (attrs, align, text) => '<p' + attrs + (align ? ' style="text-align: ' + align + '"' : '') + '>' + text + '</p>';
-      const out = await h.exportDocxParts(para(RTL, 'right', 'A') + para(RTL, 'left', 'B') + para(RTL, 'center', 'C') + para('', 'right', 'D') + '<ul' + RTL + '><li><p' + RTL + '>E</p></li></ul>');
-      const paragraphs = Array.from(out.doc.getElementsByTagName('w:p'));
-      const info = word => {
-        const p = paragraphs.find(x => x.textContent.trim() === word);
-        const props = p && p.getElementsByTagName('w:pPr')[0];
-        const jc = props && props.getElementsByTagName('w:jc')[0];
-        return p ? { bidi: !!(props && props.getElementsByTagName('w:bidi')[0]), jc: jc ? jc.getAttribute('w:val') : null } : null;
-      };
-      const got = { A: info('A'), B: info('B'), C: info('C'), D: info('D'), E: info('E') };
-      const pass = got.A && got.A.bidi && got.A.jc === 'left' && got.B.bidi && got.B.jc === 'right' && got.C.bidi && got.C.jc === 'center' && !got.D.bidi && got.D.jc === 'right' && got.E.bidi;
+      const out = await h.exportDocxParts(para(RTL, 'right', 'A') + para(RTL, 'left', 'B') + para(RTL, 'center', 'C') + para('', 'right', 'D') + '<ul' + RTL + '><li><p' + RTL + '>E</p></li></ul>'
+        + para('', 'left', 'F') + para(RTL, 'justify', 'G') + para(RTL, '', 'H'));
+      const info = word => wordParagraphInfo(out.doc, word);
+      const got = { A: info('A'), B: info('B'), C: info('C'), D: info('D'), E: info('E'), F: info('F'), G: info('G'), H: info('H') };
+      const pass = got.A && got.A.bidi && got.A.jc === 'left' && got.B.bidi && got.B.jc === 'right' && got.C.bidi && got.C.jc === 'center' && !got.D.bidi && got.D.jc === 'right' && got.E.bidi
+        && !got.F.bidi && got.F.jc === 'left' && got.G.bidi && got.G.jc === 'both' && got.H.bidi && got.H.jc === null;
       return { pass: !!pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'textdirection_word_draws_every_block_on_the_side_the_editor_puts_it',
+    description: 'Word lu comme Word le lit (dans un paragraphe `w:bidi`, « left » et « right » de `w:jc` sont le début et la fin, donc la droite et la gauche de la page) : un paragraphe, un titre, un point de liste à puces ou numérotée et un paragraphe de case de tableau de droite à gauche sont rangés du côté où l\'éditeur les met (à droite sans réglage, à gauche si on les y a alignés), un bloc ordinaire garde le sien ; l\'alignement n\'est retourné qu\'une fois (la bibliothèque docx le retourne déjà : retourné deux fois, Word dessine à gauche ce que l\'éditeur met à droite)',
+    run: async (h) => {
+      const style = side => (side ? ' style="text-align: ' + side + '"' : '');
+      const item = (tag, side, word) => '<' + tag + RTL + '><li><p' + RTL + style(side) + '>' + word + '</p></li></' + tag + '>';
+      const cell = (side, word) => '<table><tbody><tr><td><p' + RTL + style(side) + '>' + word + '</p></td></tr></tbody></table>';
+      // [mot, HTML, côté de la page où l'éditeur met le bloc, de droite à gauche ou non]
+      const blocks = [
+        ['PR', '<p' + RTL + style('right') + '>PR</p>', 'right', true], ['PL', '<p' + RTL + style('left') + '>PL</p>', 'left', true], ['PD', '<p' + RTL + '>PD</p>', 'right', true],
+        ['PC', '<p' + RTL + style('center') + '>PC</p>', 'center', true], ['PJ', '<p' + RTL + style('justify') + '>PJ</p>', 'both', true],
+        ['OR', '<p' + style('right') + '>OR</p>', 'right', false], ['OL', '<p' + style('left') + '>OL</p>', 'left', false], ['OD', '<p>OD</p>', 'left', false],
+        ['HR', '<h2' + RTL + style('right') + '>HR</h2>', 'right', true], ['HL', '<h2' + RTL + style('left') + '>HL</h2>', 'left', true],
+        ['UR', item('ul', 'right', 'UR'), 'right', true], ['UL', item('ul', 'left', 'UL'), 'left', true], ['UD', item('ul', '', 'UD'), 'right', true],
+        ['NR', item('ol', 'right', 'NR'), 'right', true], ['NL', item('ol', 'left', 'NL'), 'left', true],
+        ['TR', cell('right', 'TR'), 'right', true], ['TL', cell('left', 'TL'), 'left', true], ['TD', cell('', 'TD'), 'right', true],
+      ];
+      const out = await h.exportDocxParts(blocks.map(b => b[1]).join(''));
+      // Où Word dessine le paragraphe : `w:jc` « left » et « right » veulent dire « début » et « fin » dans un paragraphe `w:bidi` (le début d'un paragraphe de droite à gauche est à droite) ; sans `w:jc`, il range au début.
+      const drawnOn = info => {
+        const start = info.bidi ? 'right' : 'left';
+        const end = info.bidi ? 'left' : 'right';
+        if (info.jc === null || info.jc === 'start') return start;
+        if (info.jc === 'end') return end;
+        if (info.jc === 'left') return start;
+        if (info.jc === 'right') return end;
+        return info.jc;
+      };
+      const wrong = [];
+      for (const [word, , side, rtl] of blocks) {
+        const info = wordParagraphInfo(out.doc, word);
+        if (!info || info.bidi !== rtl || drawnOn(info) !== side) wrong.push({ word, side, rtl, info });
+      }
+      return { pass: wrong.length === 0, notes: JSON.stringify({ wrong }) };
     },
   });
 

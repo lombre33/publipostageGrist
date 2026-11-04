@@ -1873,6 +1873,8 @@ const GridEditor = (function () {
   function wireLockedClickGuard() {
     document.addEventListener('click', event => {
       if (!active || !event.target.closest) return;
+      // Un contrôle grisé qui dit pourquoi (js/lock-reasons.js) a son propre garde, qui écrit la raison dans le coin d'état : celui-ci le lui laisse, il ne garde que ce qui n'a pas de raison.
+      if (event.target.closest('[data-pp-lock-blocks]')) return;
       if (event.target.closest('#v2-toolbar .v2-hf-locked, .v2-floating-toolbar .v2-hf-locked, #v2-a4-toggle')) {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -1912,6 +1914,8 @@ const GridEditor = (function () {
     document.body.classList.toggle('pp-grid-mode', on);
     const a4Toggle = document.getElementById('v2-toggle-a4-preview');
     if (a4Toggle) a4Toggle.disabled = on;
+    // « Aperçu A4 » grisé dit pourquoi : au survol et au clic (js/lock-reasons.js, cause « grid »).
+    LockReasons.set(document.getElementById('v2-a4-toggle'), 'grid', on ? I18n.t('lock.gridSheet') : '');
     if (!editor) return;
     if (on) {
       // Une grille s'ouvre en haut à gauche : le plan de travail est celui du modèle précédent et en garderait le défilement, bandeaux et première

@@ -462,11 +462,12 @@ async function run(T) {
   await sleep(300);
   check(`${T}, en-tête : un clic réel dans la marge du haut ouvre l'en-tête (sommaire, saut de page, trait)`, await openZoneByMouse('top'));
   await caretInZone();
-  const greyed = id => page.evaluate(sel => { const el = document.getElementById(sel); const cs = getComputedStyle(el); const r = el.getBoundingClientRect(); return { locked: el.classList.contains('v2-hf-locked'), opacity: cs.opacity, pointer: cs.pointerEvents, shown: r.width > 0 && r.height > 0 && r.right <= innerWidth && r.bottom <= innerHeight }; }, id);
+  const greyed = id => page.evaluate(sel => { const el = document.getElementById(sel); const cs = getComputedStyle(el); const r = el.getBoundingClientRect(); return { locked: el.classList.contains('v2-hf-locked'), opacity: cs.opacity, pointer: cs.pointerEvents, reason: el.getAttribute('title') || '', shown: r.width > 0 && r.height > 0 && r.right <= innerWidth && r.bottom <= innerHeight }; }, id);
   const tocBox = await greyed('v2-btn-toc'), breakBox = await greyed('v2-btn-page-break'), tableBox = await greyed('v2-btn-table');
-  check(`${T}, en-tête : « Sommaire » et « Saut de page » sont grisés dans la zone (classe de grisé, opacité .35, la souris ne les atteint plus), toujours dans la barre ; « Tableau » reste actif`,
-    tocBox.locked && tocBox.opacity === '0.35' && tocBox.pointer === 'none' && tocBox.shown && breakBox.locked && breakBox.opacity === '0.35' && breakBox.pointer === 'none' && breakBox.shown
-    && !tableBox.locked && tableBox.opacity === '1', { tocBox, breakBox, tableBox });
+  // Grisés, ils reçoivent la souris pour dire pourquoi (js/lock-reasons.js : info-bulle, et le clic écrit la raison dans le coin d'état sans rien poser) : « en-tête ou pied de page ».
+  check(`${T}, en-tête : « Sommaire » et « Saut de page » sont grisés dans la zone (classe de grisé, opacité .35, la raison en info-bulle), toujours dans la barre ; « Tableau » reste actif`,
+    tocBox.locked && tocBox.opacity === '0.35' && /en-tête|header/i.test(tocBox.reason) && tocBox.shown && breakBox.locked && breakBox.opacity === '0.35' && /en-tête|header/i.test(breakBox.reason) && breakBox.shown
+    && !tableBox.locked && tableBox.opacity === '1' && tableBox.reason === '', { tocBox, breakBox, tableBox });
   await clickCenter('#v2-btn-toc');
   await clickCenter('#v2-btn-page-break');
   await page.keyboard.press('Alt+Enter');

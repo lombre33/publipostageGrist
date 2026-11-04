@@ -597,6 +597,16 @@ async function tooltipsPart(T, fr) {
     if (tip.content !== expected || tip.opacity !== 1 || tip.left < -0.5 || tip.right > WIDTH + 0.5) bad.push({ id, expected, tip });
   }
   check(`${T} : survol à la souris : chaque infobulle dit le texte et la touche, entière, dans la fenêtre`, bad.length === 0, bad.slice(0, 3));
+  // Souligné ouvre un menu au survol et, comme les autres boutons à menu, ne porte pas d'info-bulle (le menu le nomme) : la touche (Ctrl+U, celle du bouton) se lit à droite de la première ligne de ce menu, sans déborder ; le bouton la dit aux lecteurs d'écran.
+  const underlineAt = await page.evaluate(() => { const r = document.getElementById('v2-btn-underline').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await page.mouse.move(underlineAt.x, underlineAt.y);
+  await page.waitForTimeout(450);
+  const underlineRow = await page.evaluate(() => {
+    const r = document.getElementById('v2-underline-single');
+    const rect = r.getBoundingClientRect();
+    return { hint: r.dataset.keyhint, shown: getComputedStyle(r, '::after').content.replace(/^"|"$/g, ''), visible: rect.width > 0 && rect.height > 0, inPanel: rect.left >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight, overflow: r.scrollWidth > r.clientWidth + 1 };
+  });
+  check(`${T} : le menu Souligné montre Ctrl+U à droite de sa première ligne, sans déborder`, underlineRow.visible && underlineRow.inPanel && !underlineRow.overflow && underlineRow.hint === 'Ctrl+U' && underlineRow.shown === 'Ctrl+U', underlineRow);
   await hover('v2-btn-settings');
   const long = await tipOf('v2-btn-settings');
   check(`${T} : la touche la plus longue (${long.content}) tient aussi, sur le bouton le plus à droite`, long.opacity === 1 && long.left >= -0.5 && long.right <= WIDTH + 0.5 && /\(Alt\+/.test(long.content), long);

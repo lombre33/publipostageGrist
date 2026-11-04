@@ -247,9 +247,9 @@ const DocxExport = (function () {
   // celui de son premier paragraphe (ou de celui de sa zone de texte, dans une liste de tâches), celui d'une citation est celui de son premier
   // paragraphe. Même règle que le PDF (ALIGN_PARAGRAPH_OF, js/pdf-export.js). Un paragraphe, un titre ou un <div> garde le sien.
   const ALIGN_PARAGRAPH_OF = { LI: ':scope > p, :scope > div > p', BLOCKQUOTE: ':scope > p' };
-  // Un paragraphe de droite à gauche (js/text-direction.js) est `bidi` dans Word, où « gauche » et « droite » de l'alignement veulent dire « début » et « fin » : l'alignement physique de l'éditeur est retourné.
-  const SWAPPED_ALIGN = () => new Map([[docx.AlignmentType.LEFT, docx.AlignmentType.RIGHT], [docx.AlignmentType.RIGHT, docx.AlignmentType.LEFT]]);
-  const inDirection = (align, rtl) => (rtl && align !== undefined && SWAPPED_ALIGN().has(align) ? SWAPPED_ALIGN().get(align) : align);
+  // Un paragraphe de droite à gauche (js/text-direction.js) est `bidi` dans Word, où « gauche » et « droite » de `w:jc` veulent dire « début » et « fin ». C'est la bibliothèque docx (9.15) qui retourne
+  // `AlignmentType.LEFT` et `RIGHT` d'un paragraphe `bidirectional`, pour qu'ils restent du côté de la page qu'ils nomment : on lui donne l'alignement PHYSIQUE de l'éditeur tel quel. Le retourner ici aussi
+  // le remettait à l'endroit pour la bibliothèque, donc à l'envers pour Word (un paragraphe aligné à droite dans l'éditeur sortait à gauche, et inversement).
   const isRtlBlock = node => TextDirection.isRtl(node) || (node.tagName === 'LI' && TextDirection.isRtl(node.parentElement));
   function blockAlignment(node) {
     const own = paragraphAlignment(node);
@@ -933,7 +933,7 @@ const DocxExport = (function () {
     for (const [i, li] of items.entries()) {
       const baseStyle = isTask ? taskItemBaseStyle(li) : { size: DEFAULT_HALF_PT };
       const rtl = isRtlBlock(li);
-      const align = inDirection(blockAlignment(li), rtl);
+      const align = blockAlignment(li);
       // Un item qui porte un tableau (le bouton Tableau le pose dans l'item où se trouve le curseur) : le texte d'avant (qui porte la puce), le
       // tableau, le texte d'après qui continue l'item, dans l'ordre ; un item sans tableau est un seul morceau, lu en entier comme avant.
       const segments = ExportCommon.hasTableChild(li) ? ExportCommon.segmentsAroundTables(li) : [{ nodes: Array.from(li.childNodes) }];
@@ -1572,7 +1572,7 @@ const DocxExport = (function () {
   async function paragraphBlockFrom(node, ctx, headingMarkers, pageBreakBefore, keepNext, only) {
     const runs = await inlineNodesExcludingNestedLists(node, { size: DEFAULT_HALF_PT }, ctx, only);
     const rtl = isRtlBlock(node);
-    const align = inDirection(blockAlignment(node), rtl);
+    const align = blockAlignment(node);
     const isHeading = isHeadingTag(node.tagName);
     const marker = isHeading && headingMarkers && headingMarkers.get(node);
     // Ce marqueur (« 1) », « 2) »...) est une série à part : celle du titre (inheritedRunStyle : gras, sa taille, color:'auto' - sans quoi il hériterait du bleu du style Word « Titre N » - et la mise en forme que

@@ -1,7 +1,31 @@
-/* La fenêtre « Caractère… » du menu Alignement (js/character-format.js) : l'espacement en points et la case « Petites capitales ». Elle reprend la grille, le champ et les notes de la fenêtre
-   « Paragraphe… » (css/paragraph-format.css, chargé avant) ; n'ajoute que la case. */
-.pp-charfmt-check { width: 18px; height: 18px; margin: 6px 0; accent-color: var(--accent); cursor: pointer; }
-.pp-charfmt-check:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-/* La ligne « Effets » : l'ombre et le contour côte à côte, chacun sa case et son nom (cliquable). */
-.pp-charfmt-effects { gap: 18px; flex-wrap: wrap; }
-.pp-charfmt-effect { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; }
+/* Les menus « Souligné » et « Aa » de la barre (index.html, js/character-format.js : `wireMenus`) : les réglages de caractère se posent sans fenêtre, tout de suite (demande du 04/11 : « pas une popup mais
+   un menu d'outils »). Les lignes sont celles des autres menus au survol (`.v2-hover-row`, css/editor-v2.css) ; ne sont ajoutés ici que le dessin de chaque trait, l'état « mêlé » d'une case et la ligne de l'espacement. */
+
+/* Souligné : chaque ligne est dessinée comme le trait qu'elle pose, pour qu'on le choisisse à ce qu'on voit. `text-underline-offset` : le double, le pointillé, le tireté et l'ondulé se lisent mieux un peu sous le texte. */
+.v2-underline-sample { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+#v2-underline-double .v2-underline-sample { text-decoration-style: double; }
+#v2-underline-dotted .v2-underline-sample { text-decoration-style: dotted; }
+#v2-underline-dashed .v2-underline-sample { text-decoration-style: dashed; }
+#v2-underline-wavy .v2-underline-sample { text-decoration-style: wavy; }
+
+/* Une case dont la sélection est partagée (une partie du texte en petites capitales, l'autre pas) : un tiret à la place de la coche. Un clic la pose pour tout le texte. */
+.v2-hover-row-check[aria-checked="mixed"]::after, .v2-hover-row-check-start[aria-checked="mixed"]::before {
+  visibility: visible;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E");
+}
+
+/* « Aa » : le menu a la largeur de sa ligne la plus longue, avec de quoi lire « Espacement » et son réglage côte à côte. */
+#v2-char-flyout { min-width: 204px; }
+/* L'espacement : son nom à gauche, « − valeur pt + » à droite, comme la taille de police de la barre (#v2-size-stepper) mais dans le menu. Plus spécifique que `#v2-toolbar button` (30 × 28), qui vise tout bouton de la barre. */
+.v2-char-spacing { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 3px 9px; font-size: 12.5px; color: var(--text, #3a4452); }
+.v2-char-spacing-label { white-space: nowrap; }
+.v2-char-stepper { display: inline-flex; align-items: center; height: 26px; border: 1px solid var(--border-strong, #c3cad6); border-radius: var(--radius-xs, 5px); background: var(--surface, #fff); overflow: hidden; }
+.v2-char-stepper:focus-within { border-color: var(--accent, #2f6fed); }
+#v2-toolbar .v2-char-stepper button { width: 24px; height: 100%; border: 0; border-radius: 0; font-size: 14px; font-weight: 600; line-height: 1; color: var(--text, #3a4452); }
+#v2-toolbar .v2-char-stepper button:hover { background: var(--surface-sunken, #f2f4f7); border-color: transparent; }
+#v2-toolbar .v2-char-stepper button:focus-visible { outline: 2px solid var(--accent, #2f6fed); outline-offset: -2px; }
+#v2-toolbar .v2-char-stepper input { width: 38px; height: 100%; padding: 0 2px 0 0; border: 0; border-radius: 0; background: transparent; color: var(--text, #3a4452); font: inherit; font-size: 11.5px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+#v2-toolbar .v2-char-stepper input:focus { outline: none; }
+#v2-toolbar .v2-char-stepper input[aria-invalid="true"] { color: var(--danger-ink, #b42318); }
+.v2-char-stepper-unit { padding: 0 6px 0 2px; font-size: 11px; color: var(--text-muted, #6b7684); }
