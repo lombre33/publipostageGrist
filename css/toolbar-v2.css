@@ -494,7 +494,18 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(120px, calc(var(--gf
    titres est un groupe au survol) hérite vers tous les descendants, bloquant aussi le panneau flottant révélé au survol. `.v2-floating-toolbar
    .v2-hf-locked` en plus : les boutons « devant / derrière le texte » de la barre flottante d'image vivent hors de #v2-toolbar, verrouillés car
    pdf-export.js ne résout pas la position d'une image en calque dans cette zone. */
-#v2-toolbar .v2-hf-locked, .v2-floating-toolbar .v2-hf-locked { pointer-events: none; opacity: .35; }
+#v2-toolbar .v2-hf-locked, .v2-floating-toolbar .v2-hf-locked { opacity: .35; }
+#v2-toolbar .v2-hf-locked:not([data-pp-lock-blocks]), .v2-floating-toolbar .v2-hf-locked { pointer-events: none; }
+
+/* Un grisé qui dit pourquoi (js/lock-reasons.js ; audit UI/UX du 04/11, carte « Faire dire pourquoi un bouton ou une ligne est grisé ? » : « Oui, au survol et au clic ») : estompé comme avant, mais la souris l'atteint -
+   son `title` dit la raison au survol et son clic la dit dans le coin d'état (js/main.js:wireAccessLockGuard), comme la lecture d'un PDF (extensions/lecture-pdf/pdf-view.css). `data-pp-lock-blocks` : une cause arrête le clic.
+   Les enfants ne reçoivent plus la souris (l'info-bulle et le clic sont ceux du contrôle), le menu au survol d'un groupe ne s'ouvre pas, et l'info-bulle de l'app (`[data-tip]`), que l'estompage rendrait illisible avec le
+   bouton, laisse la place au `title` (`data-pp-lock-reason` : toute cause, même celle d'un bouton `disabled` qui ne reçoit pas de clic). `cursor` en !important : #toolbar-top et #v2-toolbar posent le leur, plus précis. Les barres
+   flottantes ne disent rien : leurs boutons agissent à l'appui, ils restent sans souris. */
+[data-pp-lock-blocks] { cursor: not-allowed !important; }
+[data-pp-lock-blocks] > * { pointer-events: none; }
+[data-pp-lock-blocks] .v2-hover-flyout { display: none !important; }
+[data-pp-lock-reason][data-tip]::after, [data-pp-lock-reason] [data-tip]::after { display: none !important; }
 
 /* Pastille flottante d'édition d'en-tête ou de pied (#v2-hf-pill), à la façon de Google Docs et Word : on entre en édition en cliquant une zone de
    marge de la page (`.v2-hf-zone`), la pastille n'apparaît qu'ensuite. `position: sticky` (dans #editor-container, qui défile) plutôt qu'ancrée au

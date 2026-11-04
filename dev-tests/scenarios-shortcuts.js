@@ -760,7 +760,7 @@
 
   cases.push({
     id: 'sc_locked_hidden_or_disabled_controls_are_never_run_by_a_key',
-    description: 'Une touche ne fait pas ce qu\'un clic de souris ne peut pas : bouton grisé par les droits (pp-access-locked), grisé par le mode (v2-hf-locked, simple pointer-events: none), désactivé, masqué ou en Lecture - rien n\'est cliqué, rien ne change dans le document',
+    description: 'Une touche ne fait pas ce qu\'un clic de souris ne peut pas : bouton grisé par les droits (pp-access-locked), grisé par le mode (v2-hf-locked : son clic est arrêté en capture avec sa raison, js/lock-reasons.js), désactivé, masqué ou en Lecture - rien n\'est cliqué, rien ne change dans le document',
     run: async (h) => {
       await reset(h);
       const out = {};

@@ -347,7 +347,9 @@ async function run(theme) {
   const activeRow = await page.evaluate(() => document.getElementById('v2-btn-code-block').classList.contains('is-active'));
   const linkLocked = await page.evaluate(() => document.getElementById('v2-row-link').classList.contains('v2-hf-locked'));
   const linkRow = await hit('#v2-row-link');
-  check(`${T}, bloc de code : sa ligne est active, la ligne « Lien… » est grisée et ne reçoit pas la souris`, activeRow && linkLocked && !linkRow.onTop, { activeRow, linkLocked, linkRow });
+  const linkWhy = await page.evaluate(() => { const row = document.getElementById('v2-row-link'); return { reason: row.getAttribute('data-pp-lock-reason') || '', title: row.title || '' }; });
+  // Depuis la raison des grisés (js/lock-reasons.js) une ligne grisée reçoit la souris : son info-bulle dit pourquoi, et son clic ne fait rien (l'essai suivant).
+  check(`${T}, bloc de code : sa ligne est active, la ligne « Lien… » est grisée, reçoit la souris et dit pourquoi`, activeRow && linkLocked && linkRow.onTop && !!linkWhy.reason && linkWhy.title === linkWhy.reason, { activeRow, linkLocked, linkRow, linkWhy });
   await snap(`${T}-7-menu-bloc-de-code`);
   const lockedAt = await pressRow('#v2-row-link');
   check(`${T}, bloc de code : un clic sur la ligne « Lien… » grisée n'ouvre rien`, !(await winOpen()), lockedAt);

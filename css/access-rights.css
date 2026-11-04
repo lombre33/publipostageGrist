@@ -3,7 +3,9 @@
 /* Commande interdite par les droits : grisée comme .v2-hf-locked (css/toolbar-v2.css), jamais masquée ni retirée. Pour la souris ; le clavier et les
    .click() venus d'autres modules sont arrêtés en capture par js/main.js:wireAccessLockGuard. !important : un groupe à survol (export, qualité) ou un
    bouton de #toolbar-top porte déjà ses propres règles d'opacité, plus spécifiques, qui l'emporteraient sinon. */
-.pp-access-locked { pointer-events: none !important; opacity: .35 !important; cursor: default; }
+.pp-access-locked { opacity: .35 !important; }
+/* Sans raison à dire, elle ne reçoit pas la souris ; avec une raison (`data-pp-lock-blocks`, js/lock-reasons.js), elle la reçoit : le survol et le clic la disent (css/toolbar-v2.css). */
+.pp-access-locked:not([data-pp-lock-blocks]) { pointer-events: none !important; cursor: default; }
 
 /* Commentaires en mode Lecture - pour toute personne qui a le droit de commenter, en lecture seule ou en Lecture choisie
    (js/comments.js:readerMode, classe posée par js/main.js:renderReader). Mêmes teintes que dans l'éditeur (css/editor-v2.css, .tiptap

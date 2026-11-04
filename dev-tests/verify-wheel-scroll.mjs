@@ -325,13 +325,17 @@ async function runAt(width, height) {
     const under = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
     return {
       locked: group.classList.contains('v2-hf-locked'),
+      // Le groupe grisé reçoit la souris (pour dire pourquoi, js/lock-reasons.js) ; son contenu non : le bouton Titre et son menu n'y répondent pas.
       pointerEvents: getComputedStyle(group).pointerEvents,
+      chipPointerEvents: getComputedStyle(chip).pointerEvents,
+      reason: group.getAttribute('title') || '',
+      underPointerIsGroup: under === group,
       underPointerIsChip: !!under && (under === chip || chip.contains(under)),
       flyoutDisplay: getComputedStyle(flyout).display,
       chipExpanded: chip.getAttribute('aria-expanded'),
     };
   });
-  check('mode email+Cci, le groupe Titre est grisé (classe de verrou, pointer-events none)', headingHoverState.locked === true && headingHoverState.pointerEvents === 'none', headingHoverState);
+  check('mode email+Cci, le groupe Titre est grisé (classe de verrou), dit pourquoi (info-bulle) et ne laisse pas la souris à son bouton', headingHoverState.locked === true && headingHoverState.chipPointerEvents === 'none' && headingHoverState.underPointerIsGroup && /email/i.test(headingHoverState.reason), headingHoverState);
   check('mode email+Cci, survol réel du bouton Titre grisé -> le menu ne s\'ouvre pas', headingHoverState.underPointerIsChip === false && headingHoverState.flyoutDisplay === 'none' && headingHoverState.chipExpanded !== 'true', headingHoverState);
 
   const pageOverflowWhileHovering = await page.evaluate(() => ({

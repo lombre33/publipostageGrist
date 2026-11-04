@@ -2,9 +2,10 @@
 // Réglages > Raccourcis (js/shortcuts-panel.js).
 //
 // Une action « fait ce que fait son bouton » : elle clique le bouton de la barre d'outils (ou la ligne de menu) et passe donc par les mêmes gardes
-// que la souris : droits par personne et mode Lecture (`pp-access-locked`, js/main.js:wireAccessLockGuard), grille (js/grid-editor.js). Le grisé
-// `v2-hf-locked` (e-mail, en-tête, macro-modèle) n'est que du CSS (`pointer-events: none`) qu'un clic par programme ne voit pas : `usable()` le relit
-// avant chaque clic.
+// que la souris : droits par personne et mode Lecture (`pp-access-locked`, js/main.js:wireAccessLockGuard), grille (js/grid-editor.js). Un contrôle grisé
+// qui dit pourquoi (`data-pp-lock-blocks`, js/lock-reasons.js : e-mail, en-tête, macro-modèle, grille...) a son clic arrêté en capture, qui écrit la raison dans le
+// coin d'état ; un grisé sans raison (`v2-hf-locked` d'une barre flottante) n'est que du CSS (`pointer-events: none`) qu'un clic par programme ne voit pas :
+// `usable()` relit les deux avant chaque clic, pour qu'une touche n'écrive pas une raison à la place d'un geste.
 //
 // Les touches qui existent déjà (Ctrl+B, Ctrl+K, Ctrl+S, Ctrl+Z...) restent traitées par l'éditeur ou js/main.js tant qu'on n'y touche pas : ce
 // module n'intervient qu'une fois la touche d'une action changée ou retirée. Son écouteur, posé en capture sur le document avant tous les autres
@@ -181,12 +182,12 @@ const Shortcuts = (function () {
 
     const byId = id => document.getElementById(id);
 
-    // Un clic de souris pourrait-il atteindre cet élément ? Faux pour un bouton désactivé, grisé (`v2-hf-locked`, `pp-access-locked`, ou tout autre
+    // Un clic de souris pourrait-il atteindre cet élément ? Faux pour un bouton désactivé, grisé (`v2-hf-locked`, `pp-access-locked`, `data-pp-lock-blocks`, ou tout autre
     // `pointer-events: none` hérité) ou masqué. Une ligne de menu au survol (`.v2-hover-flyout`) est toujours fermée, donc sans dimensions : seul le
     // reste compte pour elle. Une ligne grisée dont le clic explique (`data-explains` : la fonction d'une extension de Grist Factory Suite absente, js/main-toolbar.js:syncChartRow) reste
     // utilisable : la touche fait le même geste que la souris et ouvre la même fenêtre.
     function usable(el) {
-      if (!el || el.disabled || (el.getAttribute('aria-disabled') === 'true' && !el.hasAttribute('data-explains')) || el.closest('[hidden], .v2-hf-locked, .pp-access-locked')) return false;
+      if (!el || el.disabled || (el.getAttribute('aria-disabled') === 'true' && !el.hasAttribute('data-explains')) || el.closest('[hidden], .v2-hf-locked, .pp-access-locked, [data-pp-lock-blocks]')) return false;
       if (getComputedStyle(el).pointerEvents === 'none') return false;
       return !!el.closest('.v2-hover-flyout') || el.getClientRects().length > 0;
     }

@@ -214,14 +214,18 @@
           stillInDom: GREYED_IN_GRID.every(id => !!document.getElementById(id)),
           active: STILL_ACTIVE_IN_GRID.filter(id => isLocked(id)),
           a4Opacity: getComputedStyle(document.getElementById('v2-a4-toggle')).opacity,
-          a4Events: getComputedStyle(document.getElementById('v2-a4-toggle')).pointerEvents,
+          // La case à cocher ne reçoit pas la souris (c'est l'étiquette qui la reçoit, pour dire pourquoi : js/lock-reasons.js) ; l'étiquette dit sa raison, la grille n'ayant pas de feuille.
+          a4Events: getComputedStyle(document.getElementById('v2-toggle-a4-preview')).pointerEvents,
+          a4Reason: document.getElementById('v2-a4-toggle').getAttribute('title'),
         };
       } finally { await leaveGrid(h); }
       await h.resetEditor();
       MainToolbar.syncToolbarState();
       const stuck = GREYED_IN_GRID.filter(id => isLocked(id));
-      const pass = during.greyed.length === 0 && during.stillInDom && during.active.length === 0 && during.a4Opacity === '0.35' && during.a4Events === 'none' && stuck.length === 0;
-      return { pass, notes: JSON.stringify({ during, stuckAfter: stuck }) };
+      const a4After = document.getElementById('v2-a4-toggle').hasAttribute('title') || document.getElementById('v2-a4-toggle').hasAttribute('data-pp-lock-blocks');
+      const pass = during.greyed.length === 0 && during.stillInDom && during.active.length === 0 && during.a4Opacity === '0.35' && during.a4Events === 'none'
+        && during.a4Reason === I18n.t('lock.gridSheet') && !a4After && stuck.length === 0;
+      return { pass, notes: JSON.stringify({ during, a4After, stuckAfter: stuck }) };
     },
   });
 

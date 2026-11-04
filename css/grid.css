@@ -95,8 +95,9 @@ body.pp-grid-resizing-col .v2-grid-handle::after, body.pp-grid-resizing-row .v2-
 /* Taille affichée près du pointeur pendant le glissé. */
 .v2-grid-tip { position: fixed; z-index: 4000; padding: 2px 7px; border-radius: var(--radius-xs, 4px); background: var(--text); color: var(--surface); font: 600 12px/1.4 var(--font-ui); pointer-events: none; white-space: nowrap; }
 
-/* Aperçu A4 n'a plus de sens (plus de feuille) : grisé, jamais retiré. Le reste du grisé passe par `v2-hf-locked` (js/main-toolbar.js). */
-body.pp-grid-mode #v2-a4-toggle { opacity: .35; pointer-events: none; }
+/* Aperçu A4 n'a plus de sens (plus de feuille) : grisé, jamais retiré, avec sa raison au survol et au clic (js/lock-reasons.js : l'étiquette reçoit la souris, ses enfants non). Le reste du grisé passe par `v2-hf-locked` (js/main-toolbar.js). */
+body.pp-grid-mode #v2-a4-toggle { opacity: .35; }
+body.pp-grid-mode #v2-a4-toggle:not([data-pp-lock-blocks]) { pointer-events: none; }
 
 /* Barre de la case : fixée dans cette bande (js/floating-toolbars.js, EditorCore.createFloatingPanel : dock) entre la barre d'outils et le plan de
    travail, jamais posée sur une case : flottante, elle recouvrait les cases voisines de la case courante, un appui dessus tombait sur ses boutons

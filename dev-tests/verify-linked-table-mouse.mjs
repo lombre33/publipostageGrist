@@ -574,15 +574,18 @@ async function run(theme) {
   await clickInText('B2');
   const greyed = {};
   for (const id of ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc']) {
-    greyed[id] = await page.evaluate(i => { const e = document.getElementById(i); const cs = getComputedStyle(e); return { locked: e.classList.contains('v2-hf-locked'), opacity: cs.opacity, events: cs.pointerEvents }; }, id);
+    // Grisé, le bouton reçoit la souris pour dire pourquoi (js/lock-reasons.js) : son info-bulle est la raison et son clic l'écrit dans le coin d'état.
+    greyed[id] = await page.evaluate(i => { const e = document.getElementById(i); const cs = getComputedStyle(e); return { locked: e.classList.contains('v2-hf-locked'), opacity: cs.opacity, reason: e.getAttribute('title') || '' }; }, id);
   }
-  check(`${T}, boutons : Tableau, Deux colonnes et Sommaire sont grisés (jamais retirés) quand le curseur est dans le tableau lié`, Object.values(greyed).every(g => g.locked && g.events === 'none' && Number(g.opacity) < 0.5), greyed);
+  check(`${T}, boutons : Tableau, Deux colonnes et Sommaire sont grisés (jamais retirés) et disent pourquoi quand le curseur est dans le tableau lié`, Object.values(greyed).every(g => g.locked && g.reason !== '' && Number(g.opacity) < 0.5), greyed);
   const docBefore = await html();
   for (const id of ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc']) {
     const c = await centerOf('#' + id);
     await page.mouse.click(c.x, c.y);
     await page.waitForTimeout(120);
   }
+  const saidAfterClicks = await page.evaluate(() => document.getElementById('status-msg').textContent.trim());
+  check(`${T}, boutons : le clic sur le dernier bouton grisé (Sommaire) écrit sa raison dans le coin d'état`, saidAfterClicks !== '' && saidAfterClicks === greyed['v2-btn-toc'].reason, { saidAfterClicks, reason: greyed['v2-btn-toc'].reason });
   const lockedLine = await pressRow('#v2-btn-citation', { from: '#v2-btn-link' });
   await closeMenu();
   const lockedCode = await pressRow('#v2-btn-code-block', { from: '#v2-btn-link' });

@@ -167,11 +167,12 @@ async function runHosted(lang, colorScheme) {
   // --- La Lecture grise la barre : rien ne s'ouvre, rien ne se pose ; l'Édition rend le geste.
   await page.click('#btn-mode-read');
   await sleep(1200);
-  const locked = await page.evaluate(() => { const g = document.getElementById('v2-objects-group'); return { locked: g.classList.contains('pp-access-locked'), aria: g.getAttribute('aria-disabled'), pointer: getComputedStyle(g).pointerEvents }; });
+  // Grisé, le groupe reçoit la souris pour dire pourquoi (js/lock-reasons.js) ; son bouton ne la reçoit pas.
+  const locked = await page.evaluate(() => { const g = document.getElementById('v2-objects-group'); return { locked: g.classList.contains('pp-access-locked'), aria: g.getAttribute('aria-disabled'), buttonPointer: getComputedStyle(g.querySelector(':scope > button')).pointerEvents, reason: g.getAttribute('title') || '' }; });
   const readBefore = await html(page);
   await hoverObjectsButton(page);
   const hovered = await stateOf(page);
-  check(tag + 'en Lecture le groupe est grisé comme le reste de la barre (aria-disabled, aucun événement de souris) : le survol n\'ouvre pas le menu', locked.locked && locked.aria === 'true' && locked.pointer === 'none' && hovered.expanded !== 'true' && !hovered.menu, { locked, hovered });
+  check(tag + 'en Lecture le groupe est grisé comme le reste de la barre (aria-disabled, son bouton ne reçoit plus la souris) et dit pourquoi : le survol n\'ouvre pas le menu', locked.locked && locked.aria === 'true' && locked.buttonPointer === 'none' && locked.reason !== '' && hovered.expanded !== 'true' && !hovered.menu, { locked, hovered });
   await page.focus(OBJECTS_BUTTON);
   await page.keyboard.press('Enter');
   await page.keyboard.press('Tab');

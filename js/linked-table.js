@@ -1040,7 +1040,7 @@ const LinkedTable = (function () {
     const reason = placeBlock(editor, inFrame);
     row.setAttribute('aria-disabled', reason ? 'true' : 'false');
     row.classList.toggle('v2-hover-row-disabled', !!reason);
-    if (reason) row.title = I18n.t(reason); else row.removeAttribute('title');
+    LockReasons.set(row, 'explain', reason ? I18n.t(reason) : ''); // l'info-bulle de la ligne (js/lock-reasons.js) : sa raison dite, son clic n'est pas arrêté
   }
 
   return {

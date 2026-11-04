@@ -402,6 +402,8 @@ const EditorCore = (function () {
     btn.setAttribute('aria-expanded', 'false');
     btn.addEventListener('mousedown', (event) => {
       event.preventDefault();
+      // Un bouton grisé qui dit pourquoi (js/lock-reasons.js) reçoit la souris : son appui n'ouvre rien, son clic écrit la raison dans le coin d'état.
+      if (btn.closest('[data-pp-lock-blocks]')) return;
       captureSelection();
       if (openDropdownPanel === panel) { closeDropdownPanel(); return; }
       closeDropdownPanel();
@@ -507,7 +509,8 @@ const EditorCore = (function () {
     if (!trigger) return;
     // Un menu refermé par un clic de souris le reste, souris dessus : un mouseover venu d'ailleurs (l'icône du bouton redessinée sous une souris au repos)
     // ne le rouvre pas, et aria-expanded dit ce que la personne voit.
-    const open = expanded && !group.classList.contains(CLOSED_BY_CLICK);
+    // Un groupe grisé qui dit pourquoi (js/lock-reasons.js) reçoit la souris, mais son menu ne s'ouvre pas (css/toolbar-v2.css) : aria-expanded reste « false ».
+    const open = expanded && !group.classList.contains(CLOSED_BY_CLICK) && !group.closest('[data-pp-lock-blocks]');
     if (open) { trigger.setAttribute('aria-haspopup', 'true'); positionFlyout(group, trigger.getAttribute('aria-expanded') !== 'true'); }
     trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
