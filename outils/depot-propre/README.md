@@ -9,7 +9,8 @@ Ce dossier ne part pas sur le dépôt public (`outils/` est dans les exclusions 
 |---|---|
 | `publier.sh` | Remplace dans un clone du dépôt public les fichiers publiés par ceux du dépôt de développement (le kit de Grist Factory, `kit/`, un sous-module, part en fichiers : css, js et licence, au commit que le dépôt de développement épingle), pose les documents et les captures de `public/`, lance les contrôles, committe et étiquette. |
 | `controles.mjs` | Les contrôles sur l'arbre à publier : une ERREUR empêche le commit, un AVERTISSEMENT se relit. |
-| `essai.sh` | Les essais de ces deux scripts sur de faux dépôts (sans réseau, rien n'est poussé). À relancer après toute modification d'un des deux. |
+| `essai.sh` | Les essais de ces deux scripts et de `numeros-carte.mjs` sur de faux dépôts (sans réseau, rien n'est poussé). À relancer après toute modification d'un des trois. |
+| `numeros-carte.mjs` | Recompte les nombres de `public/CARTE_DU_CODE.md`, en français et en anglais (le volume de `js/`, des extensions et des feuilles de style, les familles, `js/main.js`) d'après le dépôt de développement : `node outils/depot-propre/numeros-carte.mjs` dit ce qui changerait, `--fix` réécrit la carte. |
 | `public/` | Les documents publics : `README.md` (bilingue), `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `PATCH_NOTES.md` (la note de version : une puce par fonction, en français puis en anglais), `NOTICE`, `CARTE_DU_CODE.md` (la carte du code, bilingue). `{{VERSION}}`, `{{DATE}}`, `{{DATE_FR}}` et `{{DATE_EN}}` y sont remplacés à la publication. `public/screenshots/` porte les captures du README (des `.png`), posées telles quelles dans `screenshots/` du dépôt public : une capture du même nom est remplacée, les autres sont gardées. |
 | `en-attente/` | Des documents prêts et pas publiés : aujourd'hui `PATCH_NOTES_GFS.md`, la partie de la note de version qui demande Grist Factory Suite (présentations, graphiques, écriture en direct, lecture de PDF, intégration à GFS). `publier.sh` ne les lit pas ; pour en publier un, le poser dans `public/` et l'ajouter aux trois listes de `controles.mjs` (fichiers requis, entrées connues, documents dont les liens se contrôlent). |
 | `captures-readme.mjs` | Refait les deux captures du README (`edition-variables.png`, `lecture-resolue.png`) sur l'interface du jour : le modèle « Contrat de prestation de services » de la galerie, une ligne d'exemple, 1400×680 à l'échelle 2, hors Grist (le faux Grist de `dev-tests/`, qui sert aussi ses bibliothèques depuis `dev-tests/.offline-cache/` quand elle existe). `node outils/depot-propre/captures-readme.mjs`, puis committer les images de `public/screenshots/`. |
@@ -28,8 +29,10 @@ Ce dossier ne part pas sur le dépôt public (`outils/` est dans les exclusions 
    Relire `public/PATCH_NOTES.md` (la note de version) contre la section `## [{{VERSION}}]` du CHANGELOG : une puce par fonction, en
    français puis en anglais, avec le même nombre de puces des deux côtés ; une fonction née depuis sa dernière relecture y prend sa puce
    (celles qui demandent Grist Factory Suite vont dans `en-attente/PATCH_NOTES_GFS.md`, pas dans la note publique).
-   Relire aussi `public/CARTE_DU_CODE.md` : les contrôles voient un fichier cité qui n'existe plus ou un fichier de
-   `js/` qui n'y figure pas, mais pas les nombres de lignes, qui se recomptent (`wc -l`). Si l'interface a changé
+   Relire aussi `public/CARTE_DU_CODE.md` : les contrôles voient un fichier cité qui n'existe plus, un fichier de
+   `js/` qui n'y figure pas et les nombres de `js/` périmés (fichiers en tout et par famille, lignes au vingtième près) ;
+   `node outils/depot-propre/numeros-carte.mjs --fix` les recompte tous, ceux des extensions et des feuilles de style aussi.
+   Reste à relire les mots (« six scripts et deux feuilles de style ») et les lignes d'un fichier nouveau ou qui change de rôle. Si l'interface a changé
    depuis les captures du README (`public/screenshots/`), les refaire : `node outils/depot-propre/captures-readme.mjs`.
 4. Préparer sans committer, pour relire :
    `bash outils/depot-propre/publier.sh --propre ../Publipostage-Plus --sans-commit`
@@ -96,7 +99,7 @@ publics ; `CHANGELOG.md` sans la section de la version ; `js/version.js` absent,
 du navigateur ne nomme pas, en français ou en anglais (la liste est `STORED` dans `controles.mjs`, à compléter avec le README).
 
 AVERTISSEMENT (à relire) : renvoi à un dossier non publié (`planning`, `dev-tests`…) ; entrée inconnue à la
-racine ; fichier de `js/` sans ligne dans `CARTE_DU_CODE.md` ; adresse e-mail non fictive ; `console.log` ou `console.info` dans `js/` ; fichier de plus de 2,5 Mo.
+racine ; fichier de `js/` sans ligne dans `CARTE_DU_CODE.md` ; nombre de fichiers ou de lignes de la carte périmé (`js/` en tout, et chaque famille : ses fichiers sont ceux de la première colonne de son tableau) ; adresse e-mail non fictive ; `console.log` ou `console.info` dans `js/` ; fichier de plus de 2,5 Mo.
 
 Avec `--beta-figee` (que `publier.sh` donne ; `codeHygiene` non : l'arbre qu'il assemble n'a pas de `beta/`), `controles.mjs` lit aussi la bêta figée : ERREUR si
 `beta/index.html` manque, si `beta/js/version.js` n'annonce pas `1.0.0-beta.1` (une copie de la version qui part) ou si la page de `beta/` cite un fichier qui n'y est pas.
