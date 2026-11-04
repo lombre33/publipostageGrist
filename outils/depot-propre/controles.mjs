@@ -282,14 +282,27 @@ if (has('CARTE_DU_CODE.md')) {
   const text = read('CARTE_DU_CODE.md');
   const statedFiles = [...new Set([...text.matchAll(/(\d+) (?:fichiers dans|files in) `js\/`/g)].map(match => Number(match[1])))];
   if (statedFiles.some(n => n !== jsFiles.length)) warn(`CARTE_DU_CODE.md annonce ${statedFiles.join(' et ')} fichiers dans js/, l'arbre en compte ${jsFiles.length}`);
+  // Une famille est ce que la première colonne de son tableau nomme : un fichier que le rôle d'un autre cite (« appelé par js/main.js ») n'est pas à elle. Les familles se partagent
+  // ainsi tout js/ (sauf js/main.js, que « Orchestration » dit à part), et leurs nombres s'additionnent.
+  const countLines = file => readFileSync(file.abs, 'utf8').split('\n').length - 1;
+  const jsByRel = new Map(jsFiles.map(file => [file.rel, file]));
   for (const block of text.split(/^### /m).slice(1)) {
     const heading = block.split('\n')[0].trim();
     const stated = /\((\d+) (?:fichiers|files),/.exec(heading);
     if (!stated) continue;
-    const real = new Set([...block.split(/^#{1,2} /m)[0].matchAll(/`(js\/[A-Za-z0-9_.-]+\.js)`/g)].map(match => match[1])).size;
-    if (Number(stated[1]) !== real) warn(`CARTE_DU_CODE.md : « ${heading} » annonce ${stated[1]} fichiers, son tableau en cite ${real}`);
+    const owned = new Set();
+    for (const row of block.split(/^#{1,2} /m)[0].split('\n')) {
+      if (row.startsWith('| `')) for (const match of row.split('|')[1].matchAll(/`(js\/[A-Za-z0-9_.-]+\.js)`/g)) owned.add(match[1]);
+    }
+    if (Number(stated[1]) !== owned.size) warn(`CARTE_DU_CODE.md : « ${heading} » annonce ${stated[1]} fichiers, son tableau en cite ${owned.size}`);
+    // Les lignes du titre, comme celles du volume, se tiennent au vingtième près (au moins 50 lignes de marge pour les petites familles : les titres s'arrondissent à la dizaine ou à la centaine).
+    const statedFamilyLines = /, (\d[\d ,]*) (?:lignes|lines)\)/.exec(heading);
+    if (statedFamilyLines) {
+      const familyLines = [...owned].reduce((total, rel) => total + (jsByRel.has(rel) ? countLines(jsByRel.get(rel)) : 0), 0);
+      if (Math.abs(Number(statedFamilyLines[1].replace(/[ ,]/g, '')) - familyLines) > Math.max(familyLines / 20, 50)) warn(`CARTE_DU_CODE.md : « ${heading} » annonce ${statedFamilyLines[1]} lignes, ses fichiers en comptent ${familyLines}`);
+    }
   }
-  const lines = jsFiles.reduce((total, file) => total + readFileSync(file.abs, 'utf8').split('\n').length - 1, 0);
+  const lines = jsFiles.reduce((total, file) => total + countLines(file), 0);
   for (const match of text.matchAll(/\((\d[\d ,]*) (?:lignes|lines) ?:/g)) {
     const statedLines = Number(match[1].replace(/[ ,]/g, ''));
     if (Math.abs(statedLines - lines) > lines / 20) warn(`CARTE_DU_CODE.md annonce ${match[1]} lignes dans js/, l'arbre en compte ${lines}`);
