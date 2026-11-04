@@ -10,8 +10,6 @@
 /* Un écran du carrousel : un bandeau 3:1 (1200x400, affiché en 580x193), le titre, deux lignes. */
 .pp-news-hero { position: relative; margin: 0 0 10px; border: 1px solid var(--border); border-radius: var(--radius-md, 8px); overflow: hidden; background: var(--surface-sunken); line-height: 0; }
 .pp-news-hero img { display: block; width: 100%; height: auto; aspect-ratio: 3 / 1; }
-/* « Grist Factory Suite » : l'étiquette des nouveautés qui n'existent que par GFS (grisées ailleurs). Contraste du texte >= 4,5:1 sur le fond de l'étiquette. */
-.pp-news-badge { display: inline-block; padding: 1px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-pill, 999px); background: var(--surface-sunken); color: var(--text); font-size: 11px; font-weight: 700; line-height: 14px; white-space: nowrap; }
 
 /* Un écran « avant → après » : une ligne par habitude qui change. Les deux colonnes de texte prennent la part que l'écran leur donne (--pp-news-from, --pp-news-to). */
 .pp-news-lead { margin: 0 0 8px; font-size: 12.5px; line-height: 1.4; color: var(--text-muted); }

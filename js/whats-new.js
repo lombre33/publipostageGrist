@@ -18,7 +18,7 @@ const WhatsNew = (function () {
   const CHANGELOG = 'https://github.com/grist-factory/Publipostage-Plus/blob/main/CHANGELOG.md';
   const NBSP = ' ';
 
-  // Les écrans du carrousel, dans l'ordre. `image` : le bandeau (IMAGE_DIR/<image>-<langue>.webp) ; `gfs` : la nouveauté n'existe que par Grist Factory Suite (l'étiquette le dit).
+  // Les écrans du carrousel, dans l'ordre. `image` : le bandeau (IMAGE_DIR/<image>-<langue>.webp). Une nouveauté qui n'existe que par Grist Factory Suite n'a pas d'écran ici : la V1 seule ne montre que ce qu'elle fait.
   // Un écran « avant → après » (`rows`) donne, pour chaque ligne, les clés de ses textes : `from` (avant), `to` (après), `note` (la suite de « après ») ou `detail` (un bouton qui ouvre
   // « Exporter, en détail ») ; `from` et `to` de l'écran règlent la part de largeur de ses deux colonnes de texte.
   const SLIDES = [
@@ -27,9 +27,9 @@ const WhatsNew = (function () {
     { image: 'gallery', name: 'news.gallery.name', text: 'news.gallery.text', alt: 'news.gallery.alt' },
     { image: 'bookmarks', name: 'news.bookmarks.name', text: 'news.bookmarks.text', alt: 'news.bookmarks.alt' },
     { image: 'format', name: 'news.format.name', text: 'news.format.text', alt: 'news.format.alt' },
-    { image: 'live', gfs: true, name: 'news.live.name', text: 'news.live.text', alt: 'news.live.alt' },
-    { image: 'slides', gfs: true, name: 'news.slides.name', text: 'news.slides.text', alt: 'news.slides.alt' },
-    { image: 'chart', gfs: true, name: 'news.chart.name', text: 'news.chart.text', alt: 'news.chart.alt' },
+    { image: 'tables', name: 'news.tables.name', text: 'news.tables.text', alt: 'news.tables.alt' },
+    { image: 'pages', name: 'news.pages.name', text: 'news.pages.text', alt: 'news.pages.alt' },
+    { image: 'conditions', name: 'news.conditions.name', text: 'news.conditions.text', alt: 'news.conditions.alt' },
     {
       name: 'news.beta.name', lead: 'news.beta.lead', from: '1fr', to: '1.3fr', rows: [
         { from: 'news.beta.email.from', to: 'news.beta.email.to', note: 'news.beta.email.note' },
@@ -181,7 +181,6 @@ const WhatsNew = (function () {
     img.addEventListener('error', () => { figure.hidden = true; });
     figure.append(img);
     const name = el('h4', 'pp-news-name', t(slide.name));
-    if (slide.gfs) name.append(el('span', 'pp-news-badge', t('news.gfs')));
     box.append(figure, name, el('p', 'pp-news-text', t(slide.text)));
     return box;
   }

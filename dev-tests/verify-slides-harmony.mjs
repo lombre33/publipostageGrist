@@ -10,7 +10,6 @@
 //   diapositive se voit en entier (js/page-zoom.js : le plancher du zoom ne vaut pas pour elle) ; le menu d'un document n'a pas ce choix.
 //  LE TEXTE D'ATTENTE : une présentation vierge invite à écrire « votre première diapositive », un document vierge « votre modèle ».
 //  LE VOLET « IMPORTER » : à 700x400, deux miniatures au moins se voient en entier sous l'indication, que « Garder liée » allonge.
-//  LES NOUVEAUTÉS : l'écran « Slides+ » du carrousel parle des formes, des transitions, des notes et de PowerPoint.
 // Lancé par run-headless.mjs (groupe Node "slidesHarmony", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slides-harmony.mjs
 // SLIDES_HARMONY_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { mkdir } from 'node:fs/promises';
@@ -43,14 +42,14 @@ const TEXTS = {
     preview: ratio => `Aperçu ${ratio}`, previewWord: 'diapositive', pageTip: 'Nouvelle diapositive ici', pageAria: 'Commencer une nouvelle diapositive ici : le texte qui suit passe sur la diapositive suivante',
     docPageTip: 'Saut de page', docPageAria: 'Insérer un saut de page (forcé à l’export PDF)', ratios: ['Grand écran (16:9)', 'Standard (4:3)', 'Écran 16:10', 'Carré (1:1)'], ratioGroup: 'Format de la diapositive',
     custom: 'Format libre…', placeholderSlide: 'Commencez à écrire votre première diapositive ici…', placeholderDoc: 'Commencez à écrire votre modèle ici…',
-    news: 'Des présentations : formes, transitions et notes', newsWord: 'PowerPoint', portrait: ratio => `Diapositive ${ratio} en portrait (passer en paysage)`,
+    portrait: ratio => `Diapositive ${ratio} en portrait (passer en paysage)`,
   },
   en: {
     slideButton: ratio => `${ratio} slide in landscape (switch to portrait)`, docButton: 'A4 page in portrait (switch to landscape)', slideTitle: 'Slide', docTitle: 'Page', seam: 'Slide 2', docSeam: 'Page 2',
     preview: ratio => `${ratio} preview`, previewWord: 'slide', pageTip: 'New slide here', pageAria: 'Start a new slide here: the text that follows moves to the next slide',
     docPageTip: 'Page break', docPageAria: 'Insert a page break (forced on PDF export)', ratios: ['Widescreen (16:9)', 'Standard (4:3)', '16:10 screen', 'Square (1:1)'], ratioGroup: 'Slide format',
     custom: 'Custom size…', placeholderSlide: 'Start writing your first slide here…', placeholderDoc: 'Start writing your template here…',
-    news: 'Presentations: shapes, transitions and notes', newsWord: 'PowerPoint', portrait: ratio => `${ratio} slide in portrait (switch to landscape)`,
+    portrait: ratio => `${ratio} slide in portrait (switch to landscape)`,
   },
 };
 const RATIO_IDS = ['190.5x338.7', '190.5x254', '190.5x304.8', '190.5x190.5'];
@@ -254,12 +253,6 @@ async function run(lang, colorScheme) {
   check(tag + '« Garder liée » cochée, l\'indication s\'allonge et deux miniatures se voient encore en entier', d.full >= 2 && d.bottom <= HEIGHT, d);
   await click('.pp-slide-import-close', 0, 500);
 
-  // --- Les nouveautés.
-  await page.evaluate(() => WhatsNew.open(6)); // index 6 : Boucle, versions, galerie, signets, mise en forme du texte, écriture en direct, puis Slides+
-  await sleep(1000);
-  const newsText = await page.evaluate(() => Array.from(document.querySelectorAll('[role="dialog"]')).map(dialog => dialog.textContent).join(' '));
-  check(tag + 'l\'écran « Slides+ » des nouveautés s\'intitule « ' + T.news + ' » et parle de ' + T.newsWord, newsText.includes(T.news) && newsText.includes(T.newsWord), newsText.slice(0, 300));
-  await snap(page, `${lang}-nouveautes`);
   check(tag + 'aucune boîte native (alert, confirm, prompt)', natives.length === 0, natives);
   await context.close();
 }

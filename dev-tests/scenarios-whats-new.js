@@ -4,7 +4,7 @@
 // éléments de la V1, pas de screen de la bêta comme c'était ». Ici, DANS la page : la ligne « Nouveautés » de Réglages > Crédits (sous la version) qui ouvre le carrousel ; la comparaison de la
 // dernière version fermée par la personne (`pp_news_seen`, PersonStore) à celle de la fenêtre, les conditions de son ouverture toute seule (droits confirmés, qui écrit, ni la Lecture épurée ni la carte de l'accès, aucune autre
 // fenêtre, une mémoire qui retient, une seule fois par séance) et ce que la fermeture retient (dev-tests/verify-whats-new-first.mjs le suit à la vraie souris, seul et chez GFS) ;
-// ses dix écrans (huit bandeaux de capture, dont trois étiquetés « Grist Factory Suite », puis deux écrans « avant → après »), tous de la même hauteur, les images réellement chargées dans
+// ses dix écrans (huit bandeaux de capture, aucun étiqueté « Grist Factory Suite » : la V1 seule ne montre que ce qu'elle fait, puis deux écrans « avant → après »), tous de la même hauteur, les images réellement chargées dans
 // la langue de la page ; « Voir en détail » qui ouvre « Exporter, en détail » (cinq écrans, aucun de la bêta) au-dessus du carrousel ; Échap qui ferme la fenêtre du dessus seulement ; les
 // points (un seul arrêt de Tab, les flèches), « Fermer » principal au dernier écran avec le focus ; une image qui ne vient pas ; les deux-points de la légende (insécable en français, collé en
 // anglais). dev-tests/verify-whats-new-mouse.mjs le mesure à 700x400 à la vraie souris et au vrai clavier, en clair et en sombre.
@@ -229,7 +229,7 @@
 
   cases.push({
     id: 'whats_new_carousel_has_ten_screens_of_the_same_height_and_real_images',
-    description: 'Le carrousel : dix écrans (huit bandeaux avec image, titre et texte, puis deux écrans « avant → après »), tous de la même hauteur et sans défilement dans le panneau ; les images viennent de img/news/1.0/ dans la langue de la page ; « Grist Factory Suite » sur trois écrans seulement',
+    description: 'Le carrousel : dix écrans (huit bandeaux avec image, titre et texte, puis deux écrans « avant → après »), tous de la même hauteur et sans défilement dans le panneau ; les images viennent de img/news/1.0/ dans la langue de la page, dans l\'ordre des nouveautés de la V1 ; aucun écran ne parle de Grist Factory Suite (ni étiquette, ni mot)',
     run: async (h) => {
       await setup(h);
       WhatsNew.open();
@@ -244,7 +244,7 @@
         const img = s.querySelector('img');
         if (img) await waitFor(() => img.complete, 4000);
         rows.push({
-          i: i + 1, kind: s.classList.contains('pp-news-list') ? 'list' : 'feature', name: text(s.querySelector('.pp-news-name')), badge: !!s.querySelector('.pp-news-badge'),
+          i: i + 1, kind: s.classList.contains('pp-news-list') ? 'list' : 'feature', name: text(s.querySelector('.pp-news-name')), gfs: !!s.querySelector('.pp-news-badge') || /Grist Factory|GFS/.test(s.textContent),
           img: img ? { src: img.getAttribute('src'), ok: img.complete && img.naturalWidth > 0, w: img.naturalWidth, h: img.naturalHeight, alt: img.alt } : null,
           rows: s.querySelectorAll('.pp-news-row').length, heightOk: heightOk(win), boxH: Math.round(win.querySelector('.pp-modal-box').getBoundingClientRect().height),
         });
@@ -253,7 +253,7 @@
       const features = rows.filter(r => r.kind === 'feature');
       const pass = reached === NEWS && dots.length === NEWS && rows.length === NEWS && features.length === 8 && rows.slice(8).every(r => r.kind === 'list') && rows[8].rows === 4 && rows[9].rows === 5
         && features.every(r => r.img && r.img.ok && r.img.w === 1200 && r.img.h === 400 && r.img.alt && /^img\/news\/1\.0\/[a-z]+-fr\.webp\?v=\d+$/.test(r.img.src) && r.name)
-        && rows.map(r => r.badge).join(',') === 'false,false,false,false,false,true,true,true,false,false' && rows.every(r => r.heightOk) && new Set(rows.map(r => r.boxH)).size === 1
+        && features.map(r => (/\/([a-z]+)-fr\.webp/.exec(r.img.src) || [])[1]).join(',') === 'loop,versions,gallery,bookmarks,format,tables,pages,conditions' && rows.every(r => !r.gfs) && rows.every(r => r.heightOk) && new Set(rows.map(r => r.boxH)).size === 1
         && rows[8].name === 'Vos modèles de la bêta' && rows[9].name === 'Quelques habitudes qui changent';
       return { pass, notes: JSON.stringify(rows) };
     },

@@ -61,7 +61,7 @@ async function measure(page, scope) {
     const ratio = (a, b) => { const la = lum(a), lb = lum(b); return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); };
     const backgroundOf = (el) => { for (let n = el; n; n = n.parentElement) { const c = getComputedStyle(n).backgroundColor; if (!/rgba\(0, 0, 0, 0\)|transparent/.test(c)) return c; } return 'rgb(255, 255, 255)'; };
     // Les textes de la fenêtre : chaque élément qui porte du texte lui-même, mesuré sur son fond réel.
-    const sel = '.pp-news-name, .pp-news-text, .pp-news-lead, .pp-news-row-from, .pp-news-row-arrow, .pp-news-row-to, .pp-news-row-to span, .pp-news-link, .pp-news-list a, .pp-news-badge, .pp-news-exp-legend li > span:last-child, .pp-news-exp-legend b, .pp-news-exp-badge, .pp-news-exp-cap, .pp-news-exp-cap b, .pp-news-exp-foot, .pp-news-exp-options, .pp-news-exp-options b, .pp-modal-header h3';
+    const sel = '.pp-news-name, .pp-news-text, .pp-news-lead, .pp-news-row-from, .pp-news-row-arrow, .pp-news-row-to, .pp-news-row-to span, .pp-news-link, .pp-news-list a, .pp-news-exp-legend li > span:last-child, .pp-news-exp-legend b, .pp-news-exp-badge, .pp-news-exp-cap, .pp-news-exp-cap b, .pp-news-exp-foot, .pp-news-exp-options, .pp-news-exp-options b, .pp-modal-header h3';
     const texts = Array.from(body.querySelectorAll(sel)).concat(Array.from(win.querySelectorAll('.pp-modal-header h3'))).filter(e => e.getClientRects().length && Array.from(e.childNodes).some(n => n.nodeType === 3 && n.textContent.trim()))
       .map(e => ({ cls: e.className || e.tagName, text: e.textContent.trim().slice(0, 24), ratio: Math.round(ratio(getComputedStyle(e).color, backgroundOf(e)) * 100) / 100 }));
     const actions = win.querySelector('.pp-modal-actions');
