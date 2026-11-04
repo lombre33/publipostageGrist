@@ -2196,7 +2196,7 @@ const I18n = (function () {
     'settings.language.fr': { fr: 'Français', en: 'Français' },
     'settings.language.en': { fr: 'English', en: 'English' },
     // Hébergée par GFS, la langue est celle de GFS : les deux cases sont grisées avec cette raison (consigne 019, textes de GFS).
-    'settings.language.gfsNote': { fr: 'La langue se choisit dans Grist Factory Suite (bouton Langue de l’explorateur).', en: 'The language is chosen in Grist Factory Suite (Language button in the explorer).' },
+    'settings.language.gfsNote': { fr: 'La langue se choisit dans Grist Factory Suite (bouton Réglages de l’explorateur, ligne Langue).', en: 'The language is chosen in Grist Factory Suite (Settings button in the explorer, Language row).' },
     'settings.mailClient.intro': { fr: 'Logiciel de messagerie qui ouvre le lien du mode Email. Gardez Standard, sauf si vos emails s’ouvrent dans Zimbra.', en: 'Mail program that opens the Email mode link. Keep Standard unless your emails open in Zimbra.' },
     'settings.mailClient.standard': { fr: 'Standard', en: 'Standard' },
     'settings.mailClient.zimbra': { fr: 'Zimbra', en: 'Zimbra' },

@@ -29,8 +29,8 @@ const TYPED = 'MARQUETAPEE';
 // Le faux Grist (dev-tests/grist-stub.js) dit le navigateur français tant qu'un test ne fixe pas `window.__browserLanguages` : ce script le met en anglais, pour montrer que la langue de GFS passe avant.
 const ENGLISH_BROWSER = "window.__browserLanguages = ['en-US', 'en'];";
 const NOTE = {
-  fr: 'La langue se choisit dans Grist Factory Suite (bouton Langue de l’explorateur).',
-  en: 'The language is chosen in Grist Factory Suite (Language button in the explorer).',
+  fr: 'La langue se choisit dans Grist Factory Suite (bouton Réglages de l’explorateur, ligne Langue).',
+  en: 'The language is chosen in Grist Factory Suite (Settings button in the explorer, Language row).',
 };
 // Ce que GFS demande d'ouvrir au démarrage (consigne 010) : « Départ C », le modèle 3 du faux Grist.
 const C_AT_START = { fichier: { id: '3', type: 'modele' }, type: '', dossier: '', raison: 'explorateur' };
@@ -128,6 +128,8 @@ console.log('\n1) Au départ, la page prend la langue de GFS (avant le navigateu
     panel.radios === 'fr:décoché:grisé en:coché:grisé' && panel.labelsShown && panel.labelsGreyed.every(Boolean) && panel.opacity.every(o => o > 0.3 && o < 0.7), panel);
   check('la phrase qui dit où choisir la langue est là, en anglais, et chaque case la désigne (aria-describedby)',
     !!panel.note && !panel.note.hidden && panel.note.shown && panel.note.text === NOTE.en && panel.describedBy.every(id => id === 'settings-language-gfs-note'), panel.note);
+  check('la phrase nomme le bouton « Settings » de l’explorateur et sa ligne « Language », et plus un bouton « Language » (consigne GFS 049 : l’explorateur n’a plus qu’un bouton « Réglages »)',
+    !!panel.note && /\(Settings button in the explorer, Language row\)/.test(panel.note.text) && !/Language button/.test(panel.note.text), panel.note);
   check('la phrase et les cases tiennent dans la fenêtre sans défilement, dans le panneau de 700x400', !!panel.note && panel.note.inBody && panel.noScroll && panel.inPanel, panel);
   const contrast = await contrastOf(app, '#settings-language-gfs-note');
   check('la phrase se lit en thème sombre (contraste ≥ 4,5)', contrast >= 4.5, contrast);
@@ -152,6 +154,8 @@ console.log('\n1) Au départ, la page prend la langue de GFS (avant le navigateu
   const panel = await languagePanel(app);
   check('Réglages en français, thème clair : « Français » est coché, les deux cases sont grisées, la phrase est là en français, sans défilement',
     panel.radios === 'fr:coché:grisé en:décoché:grisé' && panel.labelsShown && panel.labelsGreyed.every(Boolean) && !!panel.note && panel.note.shown && panel.note.text === NOTE.fr && panel.note.inBody && panel.noScroll && panel.inPanel, panel);
+  check('la phrase nomme le bouton « Réglages » de l’explorateur (pas les Réglages de l’app) et sa ligne « Langue », et plus un bouton « Langue » (consigne GFS 049)',
+    !!panel.note && /\(bouton Réglages de l’explorateur, ligne Langue\)/.test(panel.note.text) && !/bouton Langue/.test(panel.note.text), panel.note);
   const contrast = await contrastOf(app, '#settings-language-gfs-note');
   check('la phrase se lit en thème clair (contraste ≥ 4,5)', contrast >= 4.5, contrast);
   if (SHOTS) await page.screenshot({ path: join(SHOTS, 'reglages-fr-clair.png') });

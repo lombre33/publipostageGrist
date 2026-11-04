@@ -1020,6 +1020,13 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('langue de GFS : la phrase des cases grisées est dans index.html, cachée au départ et traduite (français et anglais), après les deux cases ; une case grisée a son style (opacité, curseur) dans css/toolbar-v2.css',
     /\bhidden\b/.test(noteTag) && noteTag.indexOf('data-i18n="settings.language.gfsNote"') !== -1 && page.indexOf('id="settings-language-gfs-note"') > page.indexOf('name="settings-lang" value="en"')
       && /'settings\.language\.gfsNote': \{ fr: '[^']+', en: '[^']+' \}/.test(i18n) && /\.settings-radio-row label\.is-disabled \{[^}]*opacity: \.45;[^}]*cursor: default;/.test(read('css/toolbar-v2.css')), noteTag);
+  // Consigne GFS 049 : l'explorateur de GFS n'a plus de bouton « Langue » (un seul bouton « Réglages », puis la ligne « Langue »). Les trois textes de la phrase (français et anglais de js/i18n.js, repli
+  // d'index.html) disent le même chemin, et aucun ne nomme un bouton « Langue ».
+  const noteFallback = ((page.match(/<p [^>]*id="settings-language-gfs-note"[^>]*>([^<]*)<\/p>/) || [])[1] || '').trim();
+  const noteTexts = (i18n.match(/'settings\.language\.gfsNote': \{ fr: '([^']+)', en: '([^']+)' \}/) || []).slice(1);
+  check('langue de GFS : la phrase des cases grisées nomme le bouton « Réglages » de l\u2019explorateur et la ligne « Langue » (« Settings » et « Language » en anglais), jamais un bouton « Langue » ; le repli d\u2019index.html est le français de js/i18n.js',
+    noteTexts.length === 2 && noteFallback === noteTexts[0] && /bouton Réglages de l.explorateur, ligne Langue/.test(noteTexts[0]) && /Settings button in the explorer, Language row/.test(noteTexts[1])
+      && !/bouton Langue|Language button/.test(noteTexts.join(' ') + ' ' + noteFallback), { noteFallback, noteTexts });
 }
 
 // ============================================================================

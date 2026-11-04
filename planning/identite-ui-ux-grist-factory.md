@@ -282,7 +282,7 @@ et `codeHygiene` (section 23).
 contrats de GFS 5.2 point 6) : un seul choix par personne, pour GFS et toutes ses apps, gardé par GFS ; hébergée (l'adresse porte `gfs=<n>`), l'app n'en garde plus un à elle. Au départ, la page prend
 la langue que GFS dit (`gfsLang` de `js/i18n.js` : d'abord le fragment `pp-lang` d'un rechargement de l'app, puis le paramètre `language` de l'adresse du cadre, « fr » ou « en » exactement), avant le
 choix gardé et le navigateur, et ne la recopie jamais dans `pp_lang`. Dans Réglages > Langue, les deux cases sont **grisées, jamais masquées** (`applyLanguageLock` : `disabled`, `.is-disabled`) avec la
-raison dessous (`settings.language.gfsNote` : « La langue se choisit dans Grist Factory Suite (bouton Langue de l'explorateur). »), que chaque case désigne (`aria-describedby`) ; seule, ou avec une GFS qui
+raison dessous (`settings.language.gfsNote` : « La langue se choisit dans Grist Factory Suite (bouton Réglages de l'explorateur, ligne Langue). »), que chaque case désigne (`aria-describedby`) ; seule, ou avec une GFS qui
 ne donne pas la langue (`GfsLink.language()` rend null), rien ne change. Quand la personne change la langue dans GFS (événement `langue`, une fois par changement), la page la suit comme un changement
 fait dans Réglages (`followGfsLanguage` : la question « Enregistrer / Abandonner / Annuler » d'abord, « Annuler » laisse la langue d'avant jusqu'au prochain démarrage, puis `reloadKeepingTemplate`, qui
 rouvre le modèle). L'adresse du cadre garde la langue de sa création (GFS ne le recharge jamais) : la nouvelle langue passe par le fragment (`#pp-open=<id>&pp-lang=fr|en`), jamais par le stockage, et une

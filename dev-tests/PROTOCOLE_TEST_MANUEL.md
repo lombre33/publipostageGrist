@@ -444,9 +444,9 @@ une bonne partie de ce protocole sans avoir à retaper du contenu à chaque fois
    (point suivant) ; « Recharger maintenant » y rouvre déjà le modèle, dans la langue de GFS.
    Un F5 ouvre, lui, le modèle habituel.
    **Dans GFS** (consigne GFS 019 du 20/10 : un seul choix de langue par personne, commun à toutes
-   les apps) : à l'ouverture l'app est dans la langue de GFS (bouton Langue de l'explorateur de GFS),
+   les apps) : à l'ouverture l'app est dans la langue de GFS (bouton Réglages de l'explorateur de GFS, ligne Langue),
    quelle que soit celle du navigateur ; Réglages → Langue : les deux cases sont grisées, visibles,
-   avec la phrase « La langue se choisit dans Grist Factory Suite (bouton Langue de l'explorateur). »
+   avec la phrase « La langue se choisit dans Grist Factory Suite (bouton Réglages de l'explorateur, ligne Langue). »
    (rien ne se passe au clic) ; changer la langue dans GFS : l'app se recharge dans la nouvelle
    langue et rouvre le modèle où l'on était ; avec une modification en attente, la question
    « Enregistrer / Abandonner / Annuler » passe d'abord, « Annuler » laisse la langue d'avant
