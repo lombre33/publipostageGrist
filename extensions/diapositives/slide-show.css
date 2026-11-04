@@ -61,3 +61,9 @@
 /* Le rang d'empilement que prend le calque d'arrivée pendant un effet qui le fait passer devant la copie de la page quittée (slide-transitions.js:stack). Les calques sont dans l'arbre ombre du rendu, qui reçoit les feuilles de la page
    (js/print-export.js:pageStyleSheets) : la règle y est comme ici. Ils sont dans la feuille (`z-index:0`, slide-player.js:surface), si bien que ce rang ne passe jamais devant la barre du bas ni la ligne d'information (`z-index:1` chacune). */
 .pp-slide-show-layer.pp-slide-above { z-index: 1; }
+
+/* L'écran noir et l'écran blanc de la vue intervenant (slide-player.js : touches B et W, ordre `screen` de la console) : un voile qui couvre tout le diaporama, la barre du bas et les messages comprise (ils sont à `z-index:1`). Le noir et le blanc sont
+   ceux d'un écran éteint ou vide, non ceux du thème : ils ne changent ni en mode sombre ni en couleurs forcées (`forced-color-adjust`). Sans pointeur : on ne voit pas où l'on clique. */
+.pp-slide-show-screen { position: absolute; inset: 0; z-index: 2; background: #000; cursor: none; forced-color-adjust: none; }
+.pp-slide-show-screen-white { background: #fff; }
+.pp-slide-show-screen[hidden] { display: none; }

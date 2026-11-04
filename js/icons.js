@@ -247,6 +247,11 @@ const Icons = (function () {
       chronoPause: '<path d="M9 5.5v13M15 5.5v13"/>',
       chronoPlay: '<path d="m8 5.5 10.5 6.5L8 18.5z"/>',
       chronoRestart: '<path d="M1 4v6h6"/><path d="M3.5 15a9 9 0 1 0 2.1-9.4L1 10"/>',
+      // Les outils du public de la vue intervenant (extensions/diapositives/slide-speaker.js) : l'écran noir (un écran plein), l'écran blanc (un écran vide), le stylo (un crayon qui trace) et l'effacement (une gomme sur sa ligne).
+      speakerBlack: '<rect x="2.5" y="4.5" width="19" height="13" rx="1.6" fill="currentColor"/><path d="M8.5 21h7"/>',
+      speakerWhite: '<rect x="2.5" y="4.5" width="19" height="13" rx="1.6"/><path d="M8.5 21h7"/>',
+      speakerPen: '<path d="M15.5 4.5a2.1 2.1 0 0 1 3 0l1 1a2.1 2.1 0 0 1 0 3L9 19l-5 1.5L5.5 15.5z"/><path d="m13 7 4 4"/>',
+      speakerErase: '<g transform="rotate(-45 12 11)"><rect x="3.5" y="6.5" width="17" height="9" rx="1.8"/><path d="M10.5 6.5v9"/></g><path d="M5 21h14"/>',
       // La poignée de rotation d'un cadre ou d'une forme (js/free-frame.js) : une flèche circulaire dans le sens des aiguilles d'une montre.
       rotate: '<path d="M23 4v6h-6"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/>',
       // « Objets » de la barre d'outils (js/objects-menu.js) : l'écran 16:9, un cadre en tirets et un rond posés dessus ; « Cadre de texte » (sa ligne, js/free-frame.js) : le cadre en

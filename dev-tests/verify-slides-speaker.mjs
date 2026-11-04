@@ -13,6 +13,12 @@
 //  LE CHRONO ET L'HEURE : le chrono part avec le diaporama, se met en pause, reprend, se remet à zéro ; l'heure est celle de l'appareil ; A− et A+ règlent les notes entre des bornes.
 //  LE CLAVIER : Tab circule dans la console sans en sortir, F5 ne recharge pas la page, un autre ▶ n'ouvre pas une deuxième fenêtre.
 //  SORTIR : Échap, « Quitter », la fenêtre qui se ferme (Échap dedans, ou le navigateur) ferment la console ; la barre de GFS revient, le clavier revient où il était, le document n'a pas bougé et rien n'est enregistré.
+//  L'ÉCRAN NOIR, L'ÉCRAN BLANC ET LE STYLO (demande du 04/11, fonction `screensAndPen`, fenêtre à 1024x600 : « Plein écran » décoché) : quatre outils nommés au bord droit du titre de la diapositive en cours ; B noircit l'écran du public, W le
+//   blanchit (la même touche, le bouton, ou un clic dans la fenêtre le rend ; B sur le blanc passe au noir ; la barre du bas de la fenêtre est couverte), la console garde la diapositive et le dit (bouton enfoncé, phrase en négatif) ;
+//   toute navigation rend la diapositive ; une touche gardée enfoncée ne clignote pas ; le stylo trace à la souris sur la diapositive en cours, le même trait au même endroit de la page dans la console et dans la fenêtre (pixels
+//   rouges), un clic sans glisser fait un point sans passer à la suivante, hors de la page rien ne se trace, derrière un écran non plus (et rien ne revient ensuite) ; effacer (bouton, E), changer de diapositive et recharger la fenêtre
+//   effacent ; Échap finit le stylo avant de quitter ; des messages mal formés, hors page, d'un autre expéditeur ou trop nombreux ne tracent rien de plus que le plafond ; la fenêtre sans vue intervenant (ou le panneau) n'a ni
+//   écran ni stylo ; derrière un écran noir le passage seul attend et se recompte au retour, et le tracé de la page qu'on quitte part avec elle le temps d'un effet.
 //  LES AUTRES CAS : « Plein écran » décoché, la fenêtre se joue telle qu'elle est (aucun clic n'y demande le plein écran) ; sans la case, ▶ ouvre la fenêtre comme avant ; la fenêtre refusée par le navigateur : le diaporama se joue
 //   dans le panneau, avec la ligne qui le dit, sans console ; un message qui ne vient pas de la fenêtre, ou qui n'est pas un état, est ignoré (dans les deux sens) ; soixante-dix diapositives restent fluides.
 // Lancé par run-headless.mjs (groupe Node "slidesSpeaker", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slides-speaker.mjs
@@ -47,31 +53,43 @@ const SLIDES = [
   `${NOTES(LONG_NOTES)}<h2>Conclusion</h2><p>Merci</p>`,
 ].join(BR);
 const MANY = Array.from({ length: 70 }, (_, k) => `${NOTES('Notes de la diapositive ' + (k + 1))}<h2>Titre ${k + 1}</h2><p>Texte de la diapositive ${k + 1}</p>`).join(BR);
+// Quatre diapositives pour l'écran noir : 2 passe seule après 2 s ; 4 arrive en fondu de 2,5 s.
+const TIMED = [
+  '<h2>Un</h2>',
+  '<div class="pp-slide-props" data-advance="2000"></div><h2>Deux</h2>',
+  '<h2>Trois</h2>',
+  '<div class="pp-slide-props" data-trans="fade" data-trans-dur="2500"></div><h2>Quatre</h2>',
+].join(BR);
 const SEED = seedModels({ record: { id: 1, Nom: 'Alice', Statut: 'Urgent' } }) + `
   add(7, 'Intervenant', '${SLIDES}', false, 'presentation');
   add(8, 'Soixante-dix', '${MANY}', false, 'presentation');
+  add(9, 'Ecrans', '${TIMED}', false, 'presentation');
   stub.state.nextRowId.Publipostage_Modeles = 20;
 `;
 const TEXTS = {
   fr: {
     label: 'Vue intervenant', more: 'Autres façons de présenter : depuis le début, plein écran, vue intervenant', menu: 'Vue intervenant',
-    menuNote: 'Le diaporama s’ouvre dans une fenêtre à part ; ce panneau devient la console : diapositive suivante, notes, chrono.',
+    menuNote: 'Le diaporama s’ouvre dans une fenêtre à part ; ce panneau devient la console : diapositive suivante, notes, chrono, écran noir et stylo.',
     current: 'DIAPOSITIVE EN COURS', upcoming: 'SUIVANTE', end: 'Fin du diaporama', hintSlide: 'Prochain clic : diapositive suivante', hintEnd: 'Prochain clic : fin du diaporama',
     hintEnded: 'Fin du diaporama : un geste de plus le ferme.', hintClick: (k, n) => `Prochain clic : animation ${k} / ${n} (la diapositive ne change pas)`,
     noNotes: 'Pas de notes pour cette diapositive.', smaller: 'Notes en plus petit', larger: 'Notes en plus grand', goTo: 'Aller à…', hiddenMark: 'masquée', untitled: n => `Diapositive ${n}`,
     pause: 'Mettre le chrono en pause', resume: 'Reprendre le chrono', reset: 'Remettre le chrono à zéro', exit: 'Quitter le diaporama (Échap)',
     prev: 'Diapositive précédente (←)', next: 'Diapositive suivante (→)', hint: 'Un clic ou une touche pour passer en plein écran.', search: 'Chercher une diapositive…', empty: 'Aucune diapositive ne correspond.',
     blocked: 'Le navigateur a bloqué la fenêtre du diaporama : sans elle, pas de vue intervenant. Le diaporama s’affiche dans le panneau.', annexe: 'annexe',
+    tools: 'Écran du public et stylo', black: 'Écran noir pour le public (B)', white: 'Écran blanc pour le public (W)', pen: 'Stylo : dessiner sur la diapositive (D)', erase: 'Effacer le tracé (E)',
+    hintBlack: 'Écran noir pour le public : B pour revenir.', hintWhite: 'Écran blanc pour le public : W pour revenir.', hintPen: 'Stylo : dessine ici. E efface, Échap finit.',
   },
   en: {
     label: 'Presenter view', more: 'Other ways to present: from the beginning, full screen, presenter view', menu: 'Presenter view',
-    menuNote: 'The slide show opens in its own window; this panel becomes the console: next slide, notes, timer.',
+    menuNote: 'The slide show opens in its own window; this panel becomes the console: next slide, notes, timer, black screen and pen.',
     current: 'CURRENT SLIDE', upcoming: 'NEXT', end: 'End of the slide show', hintSlide: 'Next click: next slide', hintEnd: 'Next click: end of the slide show',
     hintEnded: 'End of the slide show: one more step closes it.', hintClick: (k, n) => `Next click: animation ${k} / ${n} (the slide stays)`,
     noNotes: 'No notes for this slide.', smaller: 'Smaller notes', larger: 'Larger notes', goTo: 'Go to…', hiddenMark: 'hidden', untitled: n => `Slide ${n}`,
     pause: 'Pause the timer', resume: 'Resume the timer', reset: 'Reset the timer', exit: 'Exit the slide show (Esc)',
     prev: 'Previous slide (←)', next: 'Next slide (→)', hint: 'Click or press a key to go full screen.', search: 'Search for a slide…', empty: 'No slide matches.',
     blocked: 'The browser blocked the slide show window: without it, there is no presenter view. The slide show is shown in the panel.', annexe: 'hidden',
+    tools: 'Audience screen and pen', black: 'Black screen for the audience (B)', white: 'White screen for the audience (W)', pen: 'Pen: draw on the slide (D)', erase: 'Erase the drawing (E)',
+    hintBlack: 'Black screen for the audience: B to go back.', hintWhite: 'White screen for the audience: W to go back.', hintPen: 'Pen: draw here. E erases, Esc stops.',
   },
 };
 
@@ -612,6 +630,22 @@ async function run(lang, colorScheme, full) {
   const plainWindow = popup2 ? await showOf(popup2) : null;
   const noConsole = await consoleOf(app);
   check(tag + 'sans « ' + T.menu + ' », ▶ ouvre la fenêtre comme avant : pas de console, pas les dimensions de la console, le diaporama de la fenêtre seul (rien de plus dans le panneau)', !!plainWindow && plainWindow.show && !noConsole.present && plainWindow.size.width === 700 && !(await app.evaluate(() => !!document.querySelector('.pp-slide-show'))), { size: plainWindow && plainWindow.size, console: noConsole.present });
+  // La fenêtre sans vue intervenant n'a ni écran noir ni stylo : B ne fait rien, aucun voile, aucun calque, et un ordre venu de l'ouvreur n'y change rien non plus.
+  if (popup2 && plainWindow) {
+    await popup2.keyboard.press('b');
+    await popup2.keyboard.press('w');
+    await popup2.evaluate(() => {
+      const send = (data) => window.dispatchEvent(new MessageEvent('message', { data, source: window.opener }));
+      send({ type: 'pp-present-command', name: 'screen', index: 1 });
+      send({ type: 'pp-present-command', name: 'ink', index: 1, points: [0.1, 0.1, 0.9, 0.9] });
+    });
+    await sleep(400);
+    const bare = await popup2.evaluate(() => {
+      const host = document.getElementById('pp-slide-show-stage');
+      return { veil: !!document.querySelector('.pp-slide-show-screen'), ink: !!(host && host.shadowRoot && host.shadowRoot.querySelector('svg[data-pp-ink]')), counter: (document.querySelector('.pp-slide-show-counter') || {}).textContent };
+    });
+    check(tag + 'la fenêtre sans « ' + T.menu + ' » n’a ni écran noir ni stylo : B et W ne font rien, ni voile ni calque dans la page, un ordre d’écran ou de trait de l’ouvreur n’y change rien', !bare.veil && !bare.ink && bare.counter === plainWindow.counter, { bare, before: plainWindow.counter });
+  }
   if (popup2) { await popup2.keyboard.press('Escape').catch(() => {}); await until(() => popup2.isClosed(), 4000); }
   await a.click('.pp-slide-show-more', 0, 250);
   await a.click('.pp-show-menu [data-action="speaker"]', 0, 250);
@@ -658,6 +692,11 @@ async function blocked(lang, colorScheme) {
   await app.waitForFunction(() => { const c = document.querySelector('.pp-slide-show-counter'); return !!c && c.textContent !== ''; }, null, { timeout: 25000 }).catch(() => {});
   const seen = await app.evaluate(() => { const note = document.querySelector('.pp-slide-show-note'); return { show: !!document.querySelector('.pp-slide-show'), speaker: !!document.querySelector('.pp-speaker'), note: note && !note.hidden ? note.textContent : null, counter: (document.querySelector('.pp-slide-show-counter') || {}).textContent }; });
   check(tag + 'la fenêtre refusée par le navigateur : le diaporama se joue dans le panneau (2 / 6) avec la ligne « ' + T.blocked.slice(0, 40) + '… », sans console', seen.show && !seen.speaker && seen.note === T.blocked && seen.counter === '2 / 6', seen);
+  // Le diaporama du panneau n'a ni écran noir ni stylo non plus.
+  await page.keyboard.press('b');
+  await sleep(300);
+  const panelBare = await app.evaluate(() => ({ veil: !!document.querySelector('.pp-slide-show-screen'), counter: (document.querySelector('.pp-slide-show-counter') || {}).textContent }));
+  check(tag + 'le diaporama du panneau n’a pas d’écran noir : B ne fait rien (aucun voile, toujours 2 / 6)', !panelBare.veil && panelBare.counter === '2 / 6', panelBare);
   await page.keyboard.press('Escape');
   await sleep(500);
   const after = await app.evaluate(() => ({ show: !!document.querySelector('.pp-slide-show'), speaker: !!document.querySelector('.pp-speaker') }));
@@ -665,7 +704,463 @@ async function blocked(lang, colorScheme) {
   await context.close();
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// L'ÉCRAN NOIR, L'ÉCRAN BLANC ET LE STYLO (demande du 04/11)
+
+// Les outils de la console, tels qu'elle les montre : les quatre boutons (enfoncés ou non), la phrase d'aide, le curseur de la diapositive en cours, l'état de la fenêtre qu'elle a reçu et les traits de sa copie.
+const deskOf = app => app.evaluate(() => {
+  const q = s => document.querySelector(s);
+  const rectOf = (el) => { const b = el.getBoundingClientRect(); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom, width: b.width, height: b.height }; };
+  const button = (sel) => { const b = q(sel); return b ? { pressed: b.getAttribute('aria-pressed'), disabled: b.getAttribute('aria-disabled'), label: b.getAttribute('aria-label'), title: b.title, rect: rectOf(b), icon: !!b.querySelector('svg') } : null; };
+  const group = q('.pp-speaker-tools');
+  const hint = q('.pp-speaker-hint');
+  const speaker = SlideShow.speaker();
+  const state = speaker ? speaker.state() : null;
+  const active = document.activeElement;
+  return {
+    black: button('.pp-speaker-black'), white: button('.pp-speaker-white'), pen: button('.pp-speaker-pen'), erase: button('.pp-speaker-erase'),
+    group: group ? { role: group.getAttribute('role'), label: group.getAttribute('aria-label'), rect: rectOf(group) } : null,
+    hint: hint.textContent, hintScreen: hint.classList.contains('pp-speaker-hint-screen'), hintClick: hint.classList.contains('pp-speaker-hint-click'),
+    inking: q('.pp-speaker-current').classList.contains('pp-speaker-inking'), cursor: getComputedStyle(q('.pp-speaker-current')).cursor, column: rectOf(q('.pp-speaker-previews')), head: rectOf(q('.pp-speaker-label')),
+    screen: state ? state.screen : null, ink: speaker ? speaker.pen() : null, counter: q('.pp-speaker-count').textContent, focusOnButton: !!active && active.tagName === 'BUTTON' && active.classList.contains('pp-speaker-tool'),
+  };
+});
+
+// Ce que la fenêtre du diaporama montre de l'écran et du tracé : le voile (couleur, couvre-t-il tout), la feuille de la page, les traits de son calque (leurs points, en part de la page) et ceux des copies de rechange des effets.
+const veilOf = popup => popup.evaluate(() => {
+  const veil = document.querySelector('.pp-slide-show-screen');
+  const host = document.getElementById('pp-slide-show-stage');
+  const scope = host && host.shadowRoot ? host.shadowRoot.querySelector('.pp-print-scope') : null;
+  const layer = scope ? scope.querySelector(':scope > .pp-slide-show-layer:not(.pp-slide-show-ghost)') : null;
+  const frame = layer ? layer.firstElementChild : null;
+  const svg = frame ? frame.querySelector(':scope > svg[data-pp-ink]') : null;
+  const fr = frame ? frame.getBoundingClientRect() : null;
+  const vr = veil ? veil.getBoundingClientRect() : null;
+  return {
+    veil: !!veil, shown: !!veil && !veil.hidden && getComputedStyle(veil).display !== 'none', background: veil ? getComputedStyle(veil).backgroundColor : '', cursor: veil ? getComputedStyle(veil).cursor : '',
+    covers: !!vr && vr.left <= 0 && vr.top <= 0 && vr.right >= innerWidth && vr.bottom >= innerHeight, counter: (document.querySelector('.pp-slide-show-counter') || {}).textContent || '',
+    frame: fr ? { left: fr.left, top: fr.top, width: fr.width, height: fr.height } : null, svg: !!svg, viewBox: svg ? svg.getAttribute('viewBox') : null,
+    ink: svg ? { pointer: getComputedStyle(svg).pointerEvents, hidden: svg.getAttribute('aria-hidden') } : null,
+    paths: svg ? Array.from(svg.querySelectorAll('path')).map(p => ({ d: p.getAttribute('d') })) : [],
+    ghosts: scope ? Array.from(scope.querySelectorAll(':scope > .pp-slide-show-ghost')).map(g => ({ parked: g.classList.contains('pp-slide-show-parked'), inks: g.querySelectorAll('svg[data-pp-ink]').length, paths: g.querySelectorAll('svg[data-pp-ink] path').length })) : [],
+    size: { width: innerWidth, height: innerHeight },
+  };
+}).catch(() => ({ veil: false, shown: false, paths: [], ghosts: [], frame: null }));
+
+// Les points d'un trait du calque, en part de la page (le chemin `M x y L x y…` est en pixels de page, la boîte du calque dit leur taille).
+function fractionsOf(path, viewBox) {
+  const [, , w, h] = String(viewBox).split(' ').map(Number);
+  const nums = (path.d.match(/-?\d+(?:\.\d+)?/g) || []).map(Number);
+  const points = [];
+  for (let i = 0; i + 1 < nums.length; i += 2) points.push([nums[i] / w, nums[i + 1] / h]);
+  return points;
+}
+// Un trait à la vraie souris dans l'aperçu de la diapositive en cours : `points` sont des parts de la page (de 0 à 1).
+async function stroke(a, page, frame, points, steps = 8) {
+  const off = await a.offset();
+  const at = ([fx, fy]) => ({ x: off.x + frame.left + fx * frame.width, y: off.y + frame.top + fy * frame.height });
+  const first = at(points[0]);
+  await page.mouse.move(first.x, first.y);
+  await page.mouse.down();
+  for (const p of points.slice(1)) { const q = at(p); await page.mouse.move(q.x, q.y, { steps }); }
+  await page.mouse.up();
+  await sleep(250);
+}
+// La couleur la plus rouge dans une petite fenêtre autour d'un point d'une capture (un trait fin tombe entre deux pixels) : [r, g, b] et son « rouge » (r moins la moyenne de g et b).
+async function reddest(page, shot, x, y, reach = 3) {
+  let best = null;
+  for (let dy = -reach; dy <= reach; dy++) {
+    const px = await colorAt(page, shot, x, y + dy);
+    const red = px[0] - (px[1] + px[2]) / 2;
+    if (!best || red > best.red) best = { px, red };
+  }
+  return best;
+}
+function driver(A, a) {
+  const { page, app } = A;
+  async function launch() {
+    const caught = page.waitForEvent('popup', { timeout: 15000 }).catch(() => null);
+    await a.click('.pp-slide-show-open', 0, 150);
+    const popup = await caught;
+    if (popup) {
+      await popup.waitForLoadState('domcontentloaded').catch(() => {});
+      await popup.waitForFunction(() => { const c = document.querySelector('.pp-slide-show-counter'); return !!c && c.textContent !== ''; }, null, { timeout: 25000 }).catch(() => {});
+    }
+    await app.waitForFunction(() => { const s = document.querySelector('.pp-speaker-status'); return !!s && s.hidden; }, null, { timeout: 25000 }).catch(() => {});
+    await until(async () => (await consoleOf(app)).counter, 5000);
+    return popup;
+  }
+  const agree = async (popup, ms = 4000) => until(async () => { const c = await consoleOf(app); const w = await showOf(popup); return c.present && c.counter === w.counter && c.counter !== ''; }, ms);
+  return { launch, agree };
+}
+
+async function screensAndPen(lang, colorScheme, full) {
+  const T = TEXTS[lang];
+  const tag = `[${lang} ${colorScheme}] `;
+  const A = await t.openPage({ hosted: true, framed: true, stub: { extensions: ACTIVE, langue: lang }, seed: SEED, lang, colorScheme, popups: true, bypassCSP: false });
+  const { page, app, context } = A;
+  const a = toolsOf(A);
+  const { launch, agree } = driver(A, a);
+  const popErrors = [];
+  context.on('page', p => p.on('pageerror', e => popErrors.push(String(e.message).slice(0, 200))));
+  await open(A, 7, 6);
+  await cursorIn(a, 1);
+  // « Plein écran » décoché (la fenêtre se joue telle qu'elle est : 1024x600, ses clics et ses touches font ce qu'ils disent au lieu de demander le plein écran) et « Vue intervenant » cochée.
+  await a.click('.pp-slide-show-more', 0, 250);
+  await a.click('.pp-show-menu [data-action="fullscreen"]', 0, 250);
+  await a.click('.pp-slide-show-more', 0, 250);
+  await a.click('.pp-show-menu [data-action="speaker"]', 0, 250);
+  const htmlBefore = await app.evaluate(() => Editor.getHTML());
+  const savesBefore = await saves(app);
+  const popup = await launch();
+  if (!popup) { check(tag + 'la fenêtre de la vue intervenant s’ouvre', false, 'aucune fenêtre'); await context.close(); return; }
+  await agree(popup);
+  const BLACK = [0, 0, 0];
+  const WHITE = [255, 255, 255];
+  const same = (px, rgb, tol = 3) => !!px && px.every((v, i) => Math.abs(v - rgb[i]) <= tol);
+  // Trois points de la fenêtre : la bande noire au-dessus de la page (16:9 dans 1024x600), le papier au centre, et la barre du bas que la souris réveille.
+  const probe = async () => {
+    const shot = await popup.screenshot({ type: 'png' });
+    return { shot, top: await colorAt(page, shot, 512, 3), middle: await colorAt(page, shot, 512, 300), bar: await colorAt(page, shot, 40, 573) };
+  };
+  const frameOf = async () => (await previewOf(app, 'current')).frame;
+  let w = await showOf(popup);
+  let desk = await deskOf(app);
+  let veil = await veilOf(popup);
+  const preview = await previewOf(app, 'current');
+  check(tag + 'la fenêtre (« Plein écran » décoché) se joue telle qu’elle est, 1024x600, à la diapositive 2 / 6, sans voile ; la console dit 2 / 6',
+    w.show && w.counter === '2 / 6' && w.note === null && w.size.width === 1024 && w.size.height === 600 && desk.counter === '2 / 6' && veil.veil && !veil.shown && veil.svg, { w: w.counter, size: w.size, note: w.note, veil: veil.veil, shown: veil.shown, svg: veil.svg });
+  const names = { black: T.black, white: T.white, pen: T.pen, erase: T.erase };
+  check(tag + 'quatre outils au bord droit du titre « ' + T.current + ' », dans un groupe « ' + T.tools + ' », nommés dans la langue de la page (écran noir B, écran blanc W, stylo D, effacer E), chacun avec son icône ; aucun enfoncé, « effacer » grisé tant qu’il n’y a rien à effacer ; tous dans la colonne des aperçus, au-dessus de la diapositive',
+    !!desk.group && desk.group.role === 'group' && desk.group.label === T.tools && ['black', 'white', 'pen', 'erase'].every(k => desk[k] && desk[k].label === names[k] && desk[k].title === names[k] && desk[k].icon && desk[k].rect.height >= 22 && desk[k].rect.height <= 30
+      && desk[k].rect.left >= desk.column.left - 0.5 && desk[k].rect.right <= desk.column.right + 0.5 && desk[k].rect.bottom <= preview.box.top + 1) && desk.group.rect.right >= desk.head.right - 8
+    && desk.black.pressed === 'false' && desk.white.pressed === 'false' && desk.pen.pressed === 'false' && desk.erase.disabled === 'true' && desk.screen === 0 && !desk.inking, desk);
+  const labelRow = await app.evaluate(() => { const row = document.querySelector('.pp-speaker-label'); const text = row.querySelector('.pp-speaker-label-text'); return { text: text.textContent, clipped: text.scrollWidth > text.clientWidth + 1 }; });
+  check(tag + 'à 700x400 le titre « ' + T.current + ' » tient entier à côté des outils (rien de tronqué)', labelRow.text.toUpperCase() === T.current && !labelRow.clipped, labelRow);
+  const contrast0 = { tool: await contrastOf(app, '.pp-speaker-black'), erase: await contrastOf(app, '.pp-speaker-erase') };
+  check(tag + 'les icônes des outils se lisent sur leur fond (4,5:1 au moins)', contrast0.tool >= 4.5 && contrast0.erase >= 4.5, contrast0);
+
+  // --- L'ÉCRAN NOIR : le bouton (vraie souris)
+  const shown0 = await probe();
+  check(tag + 'la diapositive montrée : une bande noire autour de la page, le papier au centre (repères des essais qui suivent)', same(shown0.top, BLACK) && same(shown0.middle, WHITE), { top: shown0.top, middle: shown0.middle });
+  await a.click('.pp-speaker-black', 0, 450);
+  await popup.mouse.move(120, 570);
+  await sleep(350);
+  veil = await veilOf(popup);
+  desk = await deskOf(app);
+  let seen = await probe();
+  const keptPreview = await previewOf(app, 'current');
+  check(tag + 'le bouton noir couvre l’écran du public de noir : un voile qui couvre toute la fenêtre, noir, sans pointeur ; le noir est partout, même sous la barre du bas que la souris réveille ; la diapositive 2 / 6 reste là',
+    veil.shown && veil.covers && veil.background === 'rgb(0, 0, 0)' && veil.cursor === 'none' && same(seen.top, BLACK) && same(seen.middle, BLACK) && same(seen.bar, BLACK) && veil.counter === '2 / 6', { veil: { shown: veil.shown, covers: veil.covers, bg: veil.background, cursor: veil.cursor, counter: veil.counter }, seen: [seen.top, seen.middle, seen.bar] });
+  check(tag + 'la console, elle, reste affichée avec la diapositive en cours (« ' + 'Le constat Trois sites, deux outils' + ' ») sans changer de taille ; le bouton noir est enfoncé, pas le blanc ; la phrase passe en négatif (« ' + T.hintBlack + ' »), sur une ligne, lisible',
+    desk.screen === 1 && desk.black.pressed === 'true' && desk.white.pressed === 'false' && desk.hint === T.hintBlack && desk.hintScreen && !desk.hintClick && keptPreview.text === 'Le constat Trois sites, deux outils' && keptPreview.hidden === false
+    && Math.abs(keptPreview.frame.height - preview.frame.height) <= 1.5 && Math.abs(keptPreview.frame.width - preview.frame.width) <= 1.5
+    && (await contrastOf(app, '.pp-speaker-hint')) >= 4.5 && (await contrastOf(app, '.pp-speaker-black')) >= 4.5, { desk: { screen: desk.screen, black: desk.black.pressed, hint: desk.hint, negative: desk.hintScreen }, text: keptPreview.text });
+  // B (clavier de la console) rend la diapositive : le voile s'en va, le noir autour de la page revient, le bouton se relève.
+  await page.keyboard.press('b');
+  await sleep(450);
+  veil = await veilOf(popup);
+  desk = await deskOf(app);
+  seen = await probe();
+  check(tag + 'B (clavier de la console) rend la diapositive : plus de voile, la bande noire et le papier sont revenus, le bouton se relève, la phrase redevient « ' + T.hintSlide + ' »',
+    !veil.shown && same(seen.top, BLACK) && same(seen.middle, WHITE) && desk.screen === 0 && desk.black.pressed === 'false' && !desk.hintScreen && desk.hint === T.hintSlide && veil.counter === '2 / 6', { shown: veil.shown, top: seen.top, middle: seen.middle, desk: { screen: desk.screen, black: desk.black.pressed, hint: desk.hint } });
+  // W : l'écran blanc.
+  await page.keyboard.press('w');
+  await sleep(450);
+  veil = await veilOf(popup);
+  desk = await deskOf(app);
+  seen = await probe();
+  check(tag + 'W : l’écran blanc - le voile est blanc et couvre tout (la bande noire aussi), le bouton blanc est enfoncé, pas le noir, la phrase dit « ' + T.hintWhite + ' »',
+    veil.shown && veil.covers && veil.background === 'rgb(255, 255, 255)' && same(seen.top, WHITE) && same(seen.middle, WHITE) && same(seen.bar, WHITE) && desk.screen === 2 && desk.white.pressed === 'true' && desk.black.pressed === 'false' && desk.hint === T.hintWhite && desk.hintScreen
+    && (await contrastOf(app, '.pp-speaker-hint')) >= 4.5, { shown: veil.shown, bg: veil.background, seen: [seen.top, seen.middle, seen.bar], desk: { screen: desk.screen, white: desk.white.pressed, hint: desk.hint } });
+  // B sur le blanc passe au noir d'un coup.
+  await page.keyboard.press('b');
+  await sleep(450);
+  veil = await veilOf(popup);
+  desk = await deskOf(app);
+  seen = await probe();
+  check(tag + 'B pendant l’écran blanc passe directement au noir (un seul voile, noir), le bouton noir s’enfonce et le blanc se relève', veil.shown && veil.background === 'rgb(0, 0, 0)' && same(seen.middle, BLACK) && desk.screen === 1 && desk.black.pressed === 'true' && desk.white.pressed === 'false', { bg: veil.background, mid: seen.middle, screen: desk.screen });
+  // Un clic dans la fenêtre, sur le voile, rend la diapositive sans passer à la suivante.
+  await popup.mouse.click(500, 300);
+  await sleep(450);
+  veil = await veilOf(popup);
+  desk = await deskOf(app);
+  check(tag + 'un clic sur l’écran noir, dans la fenêtre, rend la diapositive sans passer à la suivante (toujours 2 / 6) ; la console le sait', !veil.shown && veil.counter === '2 / 6' && desk.screen === 0 && desk.black.pressed === 'false' && desk.counter === '2 / 6', { shown: veil.shown, counter: veil.counter, screen: desk.screen });
+  // Le clavier de la fenêtre.
+  await popup.keyboard.press('B');
+  await sleep(450);
+  veil = await veilOf(popup);
+  desk = await deskOf(app);
+  const fromPopup = { shown: veil.shown, screen: desk.screen, pressed: desk.black.pressed };
+  await popup.keyboard.press('w');
+  await sleep(450);
+  veil = await veilOf(popup);
+  desk = await deskOf(app);
+  const toWhite = { bg: veil.background, screen: desk.screen };
+  await popup.keyboard.press('W');
+  await sleep(450);
+  veil = await veilOf(popup);
+  check(tag + 'les touches B et W marchent aussi dans la fenêtre (majuscule ou minuscule) : noir, puis blanc, puis la diapositive ; la console suit chaque fois (bouton enfoncé)',
+    fromPopup.shown && fromPopup.screen === 1 && fromPopup.pressed === 'true' && toWhite.bg === 'rgb(255, 255, 255)' && toWhite.screen === 2 && !veil.shown && (await deskOf(app)).screen === 0, { fromPopup, toWhite, shown: veil.shown });
+
+  // --- Toute navigation rend la diapositive
+  await page.keyboard.press('b');
+  await sleep(350);
+  await page.keyboard.press('ArrowRight');
+  await sleep(500);
+  await agree(popup);
+  veil = await veilOf(popup);
+  desk = await deskOf(app);
+  check(tag + '→ pendant l’écran noir passe à la suite (4 / 6) ET rend la diapositive : plus de voile, la console à jour', !veil.shown && veil.counter === '4 / 6' && desk.counter === '4 / 6' && desk.screen === 0 && desk.black.pressed === 'false', { shown: veil.shown, popup: veil.counter, console: desk.counter });
+  await page.keyboard.press('w');
+  await sleep(350);
+  await a.click('.pp-speaker-prev', 0, 500);
+  await agree(popup);
+  veil = await veilOf(popup);
+  desk = await deskOf(app);
+  check(tag + '‹ (vraie souris) pendant l’écran blanc revient à la 2 / 6 ET rend la diapositive', !veil.shown && veil.counter === '2 / 6' && desk.counter === '2 / 6' && desk.screen === 0 && desk.white.pressed === 'false', { shown: veil.shown, popup: veil.counter });
+  // « Aller à… » et Début / Fin passent aussi par la même porte : Fin pendant l'écran noir.
+  await page.keyboard.press('b');
+  await sleep(350);
+  await page.keyboard.press('End');
+  await sleep(500);
+  await agree(popup);
+  veil = await veilOf(popup);
+  check(tag + 'Fin pendant l’écran noir saute à la dernière diapositive (6 / 6) et rend la diapositive', !veil.shown && veil.counter === '6 / 6', { shown: veil.shown, counter: veil.counter });
+  // On revient à la 2 / 6 : Début (la 1, qui a deux animations à clic), puis → trois fois (Alpha, Bravo, la diapositive 2).
+  await page.keyboard.press('Home');
+  await sleep(500);
+  for (let i = 0; i < 3; i++) { await page.keyboard.press('ArrowRight'); await sleep(450); }
+  await agree(popup);
+  veil = await veilOf(popup);
+  const backOn2 = veil.counter === '2 / 6';
+  // Une touche gardée enfoncée ne répète pas l'ordre : un seul changement d'écran.
+  await page.keyboard.down('b');
+  await page.keyboard.down('b');
+  await page.keyboard.down('b');
+  await page.keyboard.up('b');
+  await sleep(450);
+  veil = await veilOf(popup);
+  desk = await deskOf(app);
+  check(tag + 'la touche B gardée enfoncée (répétition du clavier) ne change l’écran qu’une fois : noir, sans clignoter', backOn2 && veil.shown && desk.screen === 1, { backOn2, shown: veil.shown, screen: desk.screen });
+  await page.keyboard.press('b');
+  await sleep(450);
+
+  // --- LE STYLO
+  await a.click('.pp-speaker-pen', 0, 250);
+  desk = await deskOf(app);
+  const penPreview = await previewOf(app, 'current');
+  check(tag + 'le bouton stylo s’enfonce, la diapositive en cours prend le curseur de dessin SANS changer de taille (la phrase « ' + T.hintPen + ' » tient sur une ligne : on ne dessine pas sur un aperçu qui bouge), et le clavier reste dans la console (le bouton ne prend pas le focus)',
+    desk.pen.pressed === 'true' && desk.inking && desk.cursor === 'crosshair' && desk.hint === T.hintPen && !desk.hintClick && !desk.hintScreen && !desk.focusOnButton && desk.erase.disabled === 'true'
+    && Math.abs(penPreview.frame.height - preview.frame.height) <= 1.5 && Math.abs(penPreview.frame.width - preview.frame.width) <= 1.5, { pen: desk.pen.pressed, inking: desk.inking, cursor: desk.cursor, hint: desk.hint, focusOnButton: desk.focusOnButton, before: preview.frame, after: penPreview.frame });
+  const frame = await frameOf();
+  const LINE = [[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]];
+  await stroke(a, page, frame, LINE);
+  desk = await deskOf(app);
+  veil = await veilOf(popup);
+  const off = await a.offset();
+  const consoleShot = await page.screenshot({ type: 'png' });
+  const popShot = await popup.screenshot({ type: 'png' });
+  const popMid = await reddest(page, popShot, veil.frame.left + veil.frame.width * 0.5, veil.frame.top + veil.frame.height * 0.5, 4);
+  const conMid = await reddest(page, consoleShot, off.x + frame.left + frame.width * 0.5, off.y + frame.top + frame.height * 0.5, 3);
+  const popPoints = veil.paths.length === 1 ? fractionsOf(veil.paths[0], veil.viewBox) : [];
+  const sameLine = popPoints.length >= 3 && Math.abs(popPoints[0][0] - 0.2) < 0.015 && Math.abs(popPoints[popPoints.length - 1][0] - 0.8) < 0.015 && popPoints.every(p => Math.abs(p[1] - 0.5) < 0.012);
+  check(tag + 'un trait à la souris sur la diapositive en cours : la console en garde un (sur sa copie), la fenêtre en a UN, du même endroit de la page (de 20 % à 80 % de la largeur, à mi-hauteur) ; le calque ne prend aucun clic',
+    desk.ink.strokes === 1 && veil.paths.length === 1 && sameLine && !!veil.ink && veil.ink.pointer === 'none' && veil.ink.hidden === 'true', { console: desk.ink, popPaths: veil.paths.length, first: popPoints[0], last: popPoints[popPoints.length - 1], ink: veil.ink });
+  check(tag + 'le trait est rouge au même endroit des deux côtés : un pixel rouge au milieu de la page dans la fenêtre comme dans la console (capture)', popMid.red > 120 && conMid.red > 60, { popup: popMid, console: conMid });
+  check(tag + 'effacer se dégrise dès qu’il y a un trait, la diapositive n’a pas bougé (2 / 6) : dessiner n’est pas un clic', desk.erase.disabled === 'false' && desk.counter === '2 / 6' && veil.counter === '2 / 6', { erase: desk.erase.disabled, counter: desk.counter });
+  // Un clic sans glisser : un point, pas la diapositive suivante.
+  await page.mouse.click(off.x + frame.left + frame.width * 0.5, off.y + frame.top + frame.height * 0.25);
+  await sleep(350);
+  desk = await deskOf(app);
+  veil = await veilOf(popup);
+  check(tag + 'un clic sans glisser, le stylo en main, fait un point (deux traits des deux côtés) et NE passe PAS à la suivante', desk.ink.strokes === 2 && veil.paths.length === 2 && desk.counter === '2 / 6' && veil.counter === '2 / 6' && /h 0\.01$/.test(veil.paths[1].d), { console: desk.ink, popup: veil.paths.map(p => p.d.slice(-12)), counter: desk.counter });
+  // Un glissé qui part hors de la page (la marge du cadre) ne trace rien.
+  const box = (await previewOf(app, 'current')).box;
+  await page.mouse.move(off.x + box.left + 1, off.y + box.top + 1);
+  await page.mouse.down();
+  await page.mouse.move(off.x + frame.left + frame.width * 0.5, off.y + frame.top + frame.height * 0.7, { steps: 6 });
+  await page.mouse.up();
+  await sleep(300);
+  desk = await deskOf(app);
+  veil = await veilOf(popup);
+  check(tag + 'un glissé qui part hors de la page (dans la marge du cadre) ne trace rien', desk.ink.strokes === 2 && veil.paths.length === 2 && desk.counter === '2 / 6', { console: desk.ink, popup: veil.paths.length });
+  // Derrière un écran, le stylo ne trace pas - et rien ne revient quand l'écran s'en va.
+  await page.keyboard.press('b');
+  await sleep(400);
+  await stroke(a, page, frame, [[0.3, 0.8], [0.7, 0.8]]);
+  desk = await deskOf(app);
+  veil = await veilOf(popup);
+  const behind = { console: desk.ink.strokes, popup: veil.paths.length, shown: veil.shown };
+  await page.keyboard.press('b');
+  await sleep(400);
+  desk = await deskOf(app);
+  veil = await veilOf(popup);
+  check(tag + 'derrière l’écran noir le stylo ne trace rien (ni dans la console, ni dans la fenêtre), et rien ne surgit quand l’écran s’en va', behind.shown && behind.console === 2 && behind.popup === 2 && !veil.shown && desk.ink.strokes === 2 && veil.paths.length === 2, { behind, after: { console: desk.ink.strokes, popup: veil.paths.length } });
+  // Effacer : le bouton, puis la touche E.
+  await a.click('.pp-speaker-erase', 0, 350);
+  desk = await deskOf(app);
+  veil = await veilOf(popup);
+  check(tag + 'le bouton effacer vide le tracé des deux côtés et se grise ; le stylo reste en main', desk.ink.strokes === 0 && veil.paths.length === 0 && desk.erase.disabled === 'true' && desk.pen.pressed === 'true', { console: desk.ink, popup: veil.paths.length, erase: desk.erase.disabled });
+  await stroke(a, page, frame, [[0.25, 0.4], [0.75, 0.45]]);
+  desk = await deskOf(app);
+  await page.keyboard.press('e');
+  await sleep(400);
+  const afterE = { before: desk.ink.strokes, console: (await deskOf(app)).ink.strokes, popup: (await veilOf(popup)).paths.length };
+  check(tag + 'la touche E efface aussi, des deux côtés', afterE.before === 1 && afterE.console === 0 && afterE.popup === 0, afterE);
+  // Changer de diapositive efface : au clavier, et aussi quand le trait est fait pendant que la page change.
+  await stroke(a, page, frame, [[0.25, 0.4], [0.75, 0.45]]);
+  await page.keyboard.press('ArrowRight');
+  await sleep(500);
+  await agree(popup);
+  desk = await deskOf(app);
+  veil = await veilOf(popup);
+  const onNext = { counter: veil.counter, console: desk.ink.strokes, popup: veil.paths.length };
+  await page.keyboard.press('ArrowLeft');
+  await sleep(500);
+  await agree(popup);
+  desk = await deskOf(app);
+  veil = await veilOf(popup);
+  check(tag + 'changer de diapositive efface le tracé (de la console et de la fenêtre) et il ne revient pas en revenant (2 / 6)', onNext.counter === '4 / 6' && onNext.console === 0 && onNext.popup === 0 && veil.counter === '2 / 6' && desk.ink.strokes === 0 && veil.paths.length === 0, { onNext, back: { console: desk.ink.strokes, popup: veil.paths.length } });
+  // Échap finit le stylo d'abord, sans quitter ; D le reprend.
+  await page.keyboard.press('Escape');
+  await sleep(300);
+  desk = await deskOf(app);
+  const stillThere = (await consoleOf(app)).present && !popup.isClosed();
+  check(tag + 'Échap pendant le stylo ne fait que finir le stylo : le bouton se relève, la phrase redevient celle du clic, la console et la fenêtre restent', stillThere && desk.pen.pressed === 'false' && !desk.inking && desk.cursor === 'pointer' && desk.hint !== T.hintPen, { stillThere, pen: desk.pen.pressed, cursor: desk.cursor, hint: desk.hint });
+  await page.keyboard.press('d');
+  await sleep(250);
+  desk = await deskOf(app);
+  await page.keyboard.press('d');
+  await sleep(250);
+  const penOff = await deskOf(app);
+  check(tag + 'D reprend le stylo, D le repose', desk.pen.pressed === 'true' && desk.inking && penOff.pen.pressed === 'false' && !penOff.inking, { on: desk.pen.pressed, off: penOff.pen.pressed });
+  // Sans le stylo, un clic sur la diapositive en cours passe à la suivante comme avant.
+  await a.click('.pp-speaker-current', 0, 500);
+  await agree(popup);
+  const plainClick = (await consoleOf(app)).counter;
+  await a.click('.pp-speaker-prev', 0, 500);
+  await agree(popup);
+  check(tag + 'sans le stylo, un clic sur la diapositive en cours passe à la suivante comme avant (4 / 6)', plainClick === '4 / 6', plainClick);
+
+  // --- Des messages que la fenêtre ne doit pas croire : mal formés, d'un autre expéditeur, trop nombreux.
+  const forged = await popup.evaluate(() => {
+    const send = (data, source = window.opener) => window.dispatchEvent(new MessageEvent('message', { data, source }));
+    const cmd = (name, index, points) => ({ type: 'pp-present-command', name, index, points });
+    const bad = [
+      cmd('ink', 1, [0.1, 0.1, 0.2]), cmd('ink', 1, ['a', 'b']), cmd('ink', 1, [NaN, 0.5]), cmd('ink', 1, [Infinity, 0]), cmd('ink', 1, [[0.1, 0.2]]), cmd('ink', 1, 'x'), cmd('ink', 1, null), cmd('ink', 1, []),
+      cmd('ink', 1, new Array(258).fill(0.5)), cmd('ink', 1, { length: 2, 0: 0.1, 1: 0.1 }), cmd('ink', 1, [null, null]), cmd('ink', 1, [true, false]), cmd('ink', 1, [0.1]), cmd('ink', 1),
+    ];
+    bad.forEach(m => send(m));
+    send(cmd('ink', 1, [0.4, 0.4, 0.6, 0.6]), window);
+    send(cmd('ink', 1, [0.4, 0.4, 0.6, 0.6]), null);
+    return bad.length + 2;
+  });
+  await sleep(300);
+  veil = await veilOf(popup);
+  check(tag + 'la fenêtre ne trace rien d’un envoi mal formé (' + forged + ' essais : points impairs, texte, NaN, infini, imbriqués, vides, 258 nombres, objet, nuls, booléens) ni d’un envoi qui ne vient pas de son ouvreur', veil.paths.length === 0, { paths: veil.paths.length });
+  await popup.evaluate(() => window.dispatchEvent(new MessageEvent('message', { data: { type: 'pp-present-command', name: 'ink', index: 1, points: [-5, 7, 2, -3] }, source: window.opener })));
+  await sleep(250);
+  veil = await veilOf(popup);
+  const clamped = veil.paths.length === 1 ? fractionsOf(veil.paths[0], veil.viewBox) : [];
+  check(tag + 'un envoi bien formé mais hors de la page est ramené à son bord (de 0 à 1) : jamais de trait hors du cadre', clamped.length === 2 && clamped.every(p => p.every(v => v >= 0 && v <= 1)) && clamped[0][0] === 0 && clamped[0][1] === 1 && clamped[1][0] === 1 && clamped[1][1] === 0, clamped);
+  await popup.evaluate(() => {
+    const send = (data) => window.dispatchEvent(new MessageEvent('message', { data, source: window.opener }));
+    const cmd = (name, index, points) => ({ type: 'pp-present-command', name, index, points });
+    send(cmd('inkClear'));
+    for (let i = 0; i < 450; i++) send(cmd('ink', 1, [(i % 100) / 100, 0.5]));
+  });
+  await sleep(500);
+  veil = await veilOf(popup);
+  check(tag + 'le calque garde 400 traits au plus (450 envoyés : les plus anciens s’effacent) et reste réactif', veil.paths.length === 400, { paths: veil.paths.length });
+  const screens = await popup.evaluate(() => {
+    const send = (data) => window.dispatchEvent(new MessageEvent('message', { data, source: window.opener }));
+    const cmd = (name, index) => ({ type: 'pp-present-command', name, index });
+    const shown = () => { const v = document.querySelector('.pp-slide-show-screen'); return !!v && !v.hidden; };
+    send(cmd('inkClear'));
+    ['x', -1, 3, 1.5, '1', null, undefined, NaN, [], {}, true].forEach(i => send(cmd('screen', i)));
+    const afterBad = shown();
+    send(cmd('screen', 1));
+    const black = shown();
+    send({ type: 'pp-present-command', name: 'ink', index: 1, points: [0.1, 0.1, 0.2, 0.2] });
+    const inkBehind = document.getElementById('pp-slide-show-stage').shadowRoot.querySelectorAll('svg[data-pp-ink] path').length;
+    send(cmd('screen', 1));
+    send(cmd('screen', 0));
+    return { afterBad, black, inkBehind, end: shown() };
+  });
+  check(tag + 'un ordre d’écran qui n’est pas 0, 1 ou 2 (texte, négatif, fraction, nul, NaN, objet…) ne fait rien ; 1 couvre, un envoi du stylo derrière le voile ne trace rien, 1 de nouveau puis 0 laissent la diapositive', !screens.afterBad && screens.black && screens.inkBehind === 0 && !screens.end, screens);
+  // Une fenêtre rechargée repart de zéro, et la console le sait : son tracé et son écran noir disparaissent avec ceux de la fenêtre.
+  await a.click('.pp-speaker-pen', 0, 200);
+  await stroke(a, page, frame, [[0.2, 0.3], [0.8, 0.3]]);
+  await page.keyboard.press('b');
+  await sleep(450);
+  desk = await deskOf(app);
+  const beforeReload = { strokes: desk.ink.strokes, screen: desk.screen, black: desk.black.pressed };
+  await popup.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+  await popup.waitForFunction(() => { const n = document.querySelector('.pp-slide-show-counter'); return !!n && n.textContent !== ''; }, null, { timeout: 25000 }).catch(() => {});
+  await agree(popup, 8000);
+  await sleep(400);
+  desk = await deskOf(app);
+  veil = await veilOf(popup);
+  check(tag + 'la fenêtre rechargée repart de zéro et la console le sait : plus de trait chez elle (la copie de la console non plus), plus d’écran noir (le bouton se relève) - le stylo reste en main',
+    beforeReload.strokes === 1 && beforeReload.screen === 1 && beforeReload.black === 'true' && desk.ink.strokes === 0 && desk.screen === 0 && desk.black.pressed === 'false' && veil.paths.length === 0 && !veil.shown && desk.pen.pressed === 'true' && desk.erase.disabled === 'true', { beforeReload, desk: { strokes: desk.ink.strokes, screen: desk.screen, black: desk.black.pressed, pen: desk.pen.pressed }, popup: veil.paths.length });
+  // Après le rechargement tout marche encore : un trait neuf.
+  await stroke(a, page, frame, [[0.2, 0.6], [0.8, 0.6]]);
+  desk = await deskOf(app);
+  veil = await veilOf(popup);
+  check(tag + 'après le rechargement un trait neuf se dessine des deux côtés', desk.ink.strokes === 1 && veil.paths.length === 1, { console: desk.ink.strokes, popup: veil.paths.length });
+  // La console, comme la fenêtre, ne touche pas au document.
+  check(tag + 'rien de tout cela ne touche au document ni ne s’enregistre (le texte et les écritures de la table sont ceux d’avant)', (await app.evaluate(() => Editor.getHTML())) === htmlBefore && (await saves(app)) === savesBefore, { saves: [savesBefore, await saves(app)] });
+  await a.click('.pp-speaker-exit', 0, 300);
+  await until(() => popup.isClosed(), 4000);
+
+  if (full) {
+    // --- Derrière un écran noir, le passage seul attend (la diapositive 2 passe seule après 2 s) et se recompte au retour ; le tracé de la page qu'on quitte part avec elle pendant l'effet (la 4 arrive en fondu de 2,5 s).
+    await open(A, 9, 4);
+    await cursorIn(a, 0);
+    const timed = await launch();
+    if (!timed) { check(tag + 'la fenêtre du modèle à passage seul s’ouvre', false, 'aucune fenêtre'); await context.close(); return; }
+    await agree(timed);
+    await a.click('.pp-speaker-forward', 0, 0);
+    await page.keyboard.press('b');
+    await sleep(300);
+    const t0 = Date.now();
+    let heldView = await veilOf(timed);
+    await sleep(Math.max(0, 2800 - (Date.now() - t0)));
+    const held = await veilOf(timed);
+    const heldDesk = await deskOf(app);
+    check(tag + 'derrière l’écran noir la diapositive 2 (qui passe seule après 2 s) ne passe pas : toujours 2 / 4 après 3 s, des deux côtés', heldView.shown && held.shown && held.counter === '2 / 4' && heldDesk.counter === '2 / 4', { before: heldView.counter, after: held.counter, console: heldDesk.counter });
+    await page.keyboard.press('b');
+    await sleep(1000);
+    const resumed = await veilOf(timed);
+    await sleep(1700);
+    const advanced = await veilOf(timed);
+    check(tag + 'au retour de l’écran son temps se recompte : 1 s après, toujours 2 / 4 ; 2,7 s après, elle est passée seule à la suite (3 / 4)', !resumed.shown && resumed.counter === '2 / 4' && advanced.counter === '3 / 4', { afterOneSecond: resumed.counter, afterTwoSeconds: advanced.counter });
+    await agree(timed);
+    // Le tracé part avec la page quittée : sur la 3, un trait, puis › vers la 4 (fondu de 2,5 s).
+    await a.click('.pp-speaker-pen', 0, 200);
+    const frame3 = await frameOf();
+    await stroke(a, page, frame3, [[0.2, 0.5], [0.8, 0.5]]);
+    const drawn = (await veilOf(timed)).paths.length;
+    await a.click('.pp-speaker-forward', 0, 0);
+    await sleep(400);
+    const during = await veilOf(timed);
+    const live = during.paths.length;
+    const flying = during.ghosts.filter(g => !g.parked);
+    await sleep(3200);
+    const after = await veilOf(timed);
+    check(tag + 'pendant l’effet (fondu de 2,5 s) le tracé de la page quittée part avec elle : la copie de la 3 porte 1 trait, la 4 n’en a aucun ; l’effet fini, la copie est garée sans trait, la 4 est vierge',
+      drawn === 1 && flying.length === 1 && flying[0].inks === 1 && flying[0].paths === 1 && live === 0 && after.counter === '4 / 4' && after.ghosts.every(g => g.parked && g.inks === 0) && after.paths.length === 0, { drawn, flying, live, after: { counter: after.counter, ghosts: after.ghosts, paths: after.paths.length } });
+    await a.click('.pp-speaker-exit', 0, 300);
+    await until(() => timed.isClosed(), 4000);
+  }
+  check(tag + 'aucune erreur de page, ni dans l’app ni dans les fenêtres', popErrors.length === 0, popErrors);
+  await context.close();
+}
+
 await run('fr', 'light', true);
 await run('en', 'dark', false);
 await blocked('fr', 'light');
+await screensAndPen('fr', 'light', true);
+await screensAndPen('en', 'dark', false);
 await t.finish();

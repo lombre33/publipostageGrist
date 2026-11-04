@@ -6,8 +6,9 @@
 //    joue dans la fenêtre telle qu'elle est.
 //  - SORTIR : Échap, « Quitter », la fin suivie d'un geste, ou la sortie du plein écran ferment la fenêtre, comme elles ferment le diaporama du panneau ; le document de l'app n'a pas bougé.
 //  - LA VUE INTERVENANT (demande du 02/11 ; extensions/diapositives/slide-speaker.js, dans l'app) : la page lui dit où en est le diaporama à chaque changement (`STATE` : la page, la diapositive, les animations qui restent, la
-//    page où mène « suivante »), lui dit qu'elle se ferme (`BYE`), et fait ce qu'elle demande - suivante, précédente, saut vers une page - comme le ferait le clavier de la page, sans qu'aucun de ces ordres soit un
-//    geste pour le plein écran. Elle n'écoute que son ouvreur, comme pour tout le reste. Quand l'app a décoché « Plein écran » (`windowed`), la fenêtre se joue telle qu'elle est : aucun geste n'y demande le plein écran.
+//    page où mène « suivante », l'écran noir ou blanc), lui dit qu'elle se ferme (`BYE`), et fait ce qu'elle demande - suivante, précédente, saut vers une page, écran noir (B) ou blanc (W), trait du stylo - comme le ferait le
+//    clavier de la page, sans qu'aucun de ces ordres soit un geste pour le plein écran. Les écrans et le stylo n'y sont que sous la vue intervenant (`speaker`) : un diaporama seul ne les a pas. Elle n'écoute que son ouvreur,
+//    comme pour tout le reste. Quand l'app a décoché « Plein écran » (`windowed`), la fenêtre se joue telle qu'elle est : aucun geste n'y demande le plein écran.
 (function () {
   const opener = window.opener;
   let info = null;        // ce que l'app a dit : { lang, theme, title, labels, windowed }
@@ -46,7 +47,7 @@
     if (wait) wait.remove();
     // « Plein écran » décoché dans le menu du ▶ : la fenêtre se joue telle qu'elle est (on la partage, on la place), aucun clic n'y demande le plein écran.
     if (info.windowed === true) settled = true;
-    player = SlidePlayer.create({ labels: info.labels, onExit: leave, onGesture, onState: report });
+    player = SlidePlayer.create({ labels: info.labels, onExit: leave, onGesture, onState: report, screens: info.speaker === true });
     player.root.focus({ preventScroll: true });
     if (!settled) player.note(info.labels.hint);
   }
@@ -66,8 +67,8 @@
   // Dit à l'app où en est le diaporama (la vue intervenant le suit) : des nombres, ce que le lecteur rend de `state()`, sans l'effet en cours.
   function report(state) {
     if (!opener || left) return;
-    const { index, count, slide, next, prev, clicks, left: remaining, ended, advancing } = state;
-    try { opener.postMessage({ type: SlideWindow.STATE, state: { index, count, slide, next, prev, clicks, left: remaining, ended, advancing } }, '*'); } catch (e) { /* l'app est fermée */ }
+    const { index, count, slide, next, prev, clicks, left: remaining, ended, advancing, screen } = state;
+    try { opener.postMessage({ type: SlideWindow.STATE, state: { index, count, slide, next, prev, clicks, left: remaining, ended, advancing, screen } }, '*'); } catch (e) { /* l'app est fermée */ }
   }
   // Dit à l'app que la fenêtre se ferme d'elle-même (la fin du diaporama), une seule fois. Une fenêtre que le navigateur ferme, ou qu'on recharge, ne le dit pas : un message posté pendant qu'une page se
   // décharge n'a plus de source sous Chromium (mesuré) et un autre navigateur peut lui en garder une, si bien que la même touche F5 fermerait la console ici et pas là. L'app voit la fermeture elle-même
@@ -83,6 +84,9 @@
     if (!player || left || !order || typeof order.name !== 'string' || SlideWindow.COMMANDS.indexOf(order.name) === -1) return;
     if (order.name === 'next') player.next();
     else if (order.name === 'prev') player.prev();
+    else if (order.name === 'screen') player.screen(order.index);
+    else if (order.name === 'ink') player.ink(order.points, order.index === 1);
+    else if (order.name === 'inkClear') player.clearInk();
     else player.jump(order.index);
   }
 

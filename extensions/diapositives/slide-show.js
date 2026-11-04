@@ -18,7 +18,7 @@
 //  - SORTIR : Échap (ou la sortie du plein écran), « Quitter » ; le clavier revient où il était, et le document n'a pas bougé. Rien ne s'écrit : le diaporama ne touche pas au modèle.
 //  - LA VUE INTERVENANT (demande du 02/11, carte « dans le widget » ; extensions/diapositives/slide-speaker.js) : une case du menu ▾, « Vue intervenant » (décochée au départ, gardée pour la page ouverte comme les autres), fait jouer
 //    le diaporama dans sa fenêtre - une vraie fenêtre, qu'on place sur l'écran du public, et non un onglet qui cacherait le widget - pendant que le panneau devient la console : la diapositive en cours, la suivante, les notes, le chrono,
-//    « Aller à… ». Le navigateur n'accorde qu'UNE fenêtre par geste (mesuré, Chromium) : la fenêtre du diaporama est la seule qui s'ouvre, la console est le widget lui-même. Elle suit la fenêtre (slide-window.js : `follow`) et lui
+//    « Aller à… », et pour le public l'écran noir (B), l'écran blanc (W) et le stylo (D). Le navigateur n'accorde qu'UNE fenêtre par geste (mesuré, Chromium) : la fenêtre du diaporama est la seule qui s'ouvre, la console est le widget lui-même. Elle suit la fenêtre (slide-window.js : `follow`) et lui
 //    passe ses ordres ; elle prend fin avec elle (la fenêtre qui se ferme, Échap, « Quitter »). Sans la fenêtre (le navigateur la refuse), le diaporama se joue dans le panneau, avec une ligne qui le dit.
 //  - L'extension éteinte par GFS : le bouton reste, grisé avec sa raison, et son clic l'explique (SlidesEntry.explainOff), comme les gestes de la bande.
 //  - LA BARRE DE GFS (consigne GFS 025) : elle recouvre le cadre au bord choisi par la personne. Le ▶ suit la pastille du zoom, qui s'écarte de la barre quand elle la recouvrirait
@@ -262,14 +262,16 @@ const SlideShow = (function () {
     exit: I18n.t('slides.show.exit'),
     counter: I18n.t('slides.show.counter', { n: '{n}', total: '{total}' }),
   });
-  // Ce que la fenêtre à part sait de l'app : la langue, le thème, le nom du modèle (le titre de la fenêtre), si « Plein écran » est décoché (`windowed` : aucun clic n'y demande le plein écran) et les textes du lecteur, plus les siens.
-  function windowInfo() {
+  // Ce que la fenêtre à part sait de l'app : la langue, le thème, le nom du modèle (le titre de la fenêtre), si « Plein écran » est décoché (`windowed` : aucun clic n'y demande le plein écran), si la vue intervenant la pilote
+  // (`speaker` : la fenêtre a alors l'écran noir et blanc, B et W, et le tracé du stylo) et les textes du lecteur, plus les siens.
+  function windowInfo(speaker) {
     const template = typeof Templates !== 'undefined' ? Templates.byId(Templates.getCurrentId()) : null;
     return {
       lang: document.documentElement.lang === 'en' ? 'en' : 'fr',
       theme: document.documentElement.getAttribute('data-theme') || '',
       title: template && template.nom ? String(template.nom) : '',
       windowed: !wantFullscreen,
+      speaker: speaker === true,
       labels: Object.assign(labels(), {
         hint: I18n.t('slides.show.window.hint'),
         closed: I18n.t('slides.show.window.closed'),
@@ -313,6 +315,14 @@ const SlideShow = (function () {
     goToEmpty: I18n.t('slides.speaker.goToEmpty'),
     untitled: I18n.t('slides.speaker.untitled', { n: '{n}' }),
     hiddenSlide: I18n.t('slides.speaker.hiddenSlide'),
+    tools: I18n.t('slides.speaker.tools'),
+    black: I18n.t('slides.speaker.black'),
+    white: I18n.t('slides.speaker.white'),
+    pen: I18n.t('slides.speaker.pen'),
+    erase: I18n.t('slides.speaker.erase'),
+    hintBlack: I18n.t('slides.speaker.hintBlack'),
+    hintWhite: I18n.t('slides.speaker.hintWhite'),
+    hintPen: I18n.t('slides.speaker.hintPen'),
     elapsed: I18n.t('slides.speaker.elapsed'),
     pause: I18n.t('slides.speaker.pause'),
     resume: I18n.t('slides.speaker.resume'),
@@ -368,7 +378,7 @@ const SlideShow = (function () {
       // La fenêtre à part s'ouvre ICI, tout de suite après le geste (le départ, ou le bouton de la question ci-dessus, un geste neuf) et avant le rendu, qui prend du temps : le navigateur n'accorde plus la fenêtre environ 5 s après le geste ; refusée, le panneau la remplace, avec une ligne qui le dit.
       // Avec la vue intervenant, c'est une vraie fenêtre (non un onglet, qui cacherait le panneau) et le panneau devient la console ; une seule fenêtre s'ouvre, jamais deux au même geste.
       const route = routeOf();
-      const link = route === 'panel' ? null : SlideWindow.open(windowInfo(), route === 'speaker' ? SPEAKER_WINDOW : undefined);
+      const link = route === 'panel' ? null : SlideWindow.open(windowInfo(route === 'speaker'), route === 'speaker' ? SPEAKER_WINDOW : undefined);
       if (link && route === 'speaker') await playWithSpeaker(link, html, headerFooter, how, focusBack);
       else if (link) await playInWindow(link, html, headerFooter, how);
       else await playInPanel(html, headerFooter, how, focusBack, route === 'speaker' ? 'slides.speaker.blocked' : route === 'window' ? 'slides.show.window.blocked' : '');
@@ -422,13 +432,14 @@ const SlideShow = (function () {
   // suivante (SlideWindow.duplicate, prise avant que la console monte la première) ; la console suit la fenêtre (`follow`, avant l'envoi : la première réponse de la fenêtre ne doit pas se perdre) et prend fin avec elle.
   async function playWithSpeaker(link, html, headerFooter, how, focusBack) {
     const data = readSlides();
-    const speaker = SlideSpeaker.create({ labels: speakerLabels(), slides: speakerSlides(), onCommand: (name, index) => link.command(name, index), onExit: stop });
+    const speaker = SlideSpeaker.create({ labels: speakerLabels(), slides: speakerSlides(), onCommand: (name, index, points) => link.command(name, index, points), onExit: stop });
     run = { speaker, link, root: speaker.root, focusBack };
     const current = run;
     // La console prend tout le cadre : la barre de GFS ne reste pas par-dessus (rendue par `stop`).
     GfsBar.hide(true);
     speaker.root.focus({ preventScroll: true });
-    link.follow(state => speaker.setState(state), stop);
+    // La fenêtre qui se dit prête (au départ, et si on la recharge) repart de zéro : le tracé qu'elle gardait n'est plus, celui de la console non plus.
+    link.follow(state => speaker.setState(state), stop, () => speaker.reset());
     try {
       const job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: speaker.boxes.current });
       if (run !== current) return;

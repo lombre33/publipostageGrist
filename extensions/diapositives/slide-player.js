@@ -24,6 +24,10 @@
 //    demande le plein écran au premier, qui ne doit pas aussi passer à la diapositive suivante.
 //  - La VUE INTERVENANT (slide-speaker.js, demande du 02/11) suit le lecteur de loin : `options.onState` lui dit où il en est (la page, la diapositive, les animations qui restent, la page où mène « suivante »)
 //    à chaque changement, et `next`, `prev` et `jump` lui obéissent comme au clavier. Le lecteur ne sait rien d'elle : il joue de la même façon avec ou sans.
+//  - L'ÉCRAN NOIR, L'ÉCRAN BLANC ET LE STYLO (demande du 04/11, carte « noir, blanc et stylo » ; seulement quand `options.screens` est vrai, c'est-à-dire pour la fenêtre que la vue intervenant pilote : un diaporama sans elle
+//    ne change pas) : B noircit l'écran du public, W le blanchit, la même touche le rend ; un geste pour changer de page le rend aussi, et le passage seul (« après n s ») ne le rend pas : il attend derrière l'écran. Le stylo est un trait
+//    que la console envoie (`ink`, des parts de la page) et que le lecteur dessine par-dessus la page (`inkLayer`) ; il s'efface quand la page change, ou à `clearInk` (E). `screen`, `ink` et `clearInk` sont les ordres de la console ;
+//    l'écran en cours est dans `state()`.
 // Styles : extensions/diapositives/slide-show.css. Les fichiers de l'extension se chargent sans ordre : rien ici n'en appelle un autre avant un geste de la personne.
 const SlidePlayer = (function () {
   const el = Dom.el;
@@ -101,13 +105,92 @@ const SlidePlayer = (function () {
   // La première fenêtre de la découpe (`windows`) qui montre la diapositive `slide` ; -1 quand elle n'en a pas.
   const firstWindowOf = (windows, starts, slide) => windows.findIndex(win => win.page >= starts[slide]);
 
+  // Le TRACÉ au stylo : un calque SVG posé DANS le cadre de la page (`frame`, celui de `surface`), qui en suit donc l'échelle - le trait est au même endroit de la page, à la même épaisseur relative, dans la fenêtre du public comme
+  // dans l'aperçu de la console, à toute taille de fenêtre et de plein écran. Les points se donnent en parts de la page (de 0 à 1, une liste plate x, y, x, y…) et se gardent dans la taille de la page ; l'épaisseur est une part de sa
+  // hauteur. Le rendu est dans un arbre ombre que les feuilles de la page n'atteignent pas : tout s'écrit en ligne, et la couleur seule passe par une variable (`--pp-ink`), qui traverse l'arbre. Le calque ne prend aucun clic.
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const INK_WIDTH = 0.008;         // l'épaisseur du trait, en part de la hauteur de la page
+  const INK_COLOR = 'var(--pp-ink, #d92d20)';
+  const INK_BATCH = 256;           // le plus de nombres qu'un envoi porte : un envoi plus long n'est pas lu
+  const INK_POINTS = 6000;         // les points d'un trait : au-delà, le suivant continue
+  const INK_STROKES = 400;         // les traits d'une page : le plus ancien s'efface quand il y en a plus
+  function inkLayer(frame) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('data-pp-ink', '');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden;pointer-events:none;z-index:5';
+    const group = document.createElementNS(SVG_NS, 'g');
+    group.setAttribute('fill', 'none');
+    group.setAttribute('stroke-linecap', 'round');
+    group.setAttribute('stroke-linejoin', 'round');
+    group.style.stroke = INK_COLOR;
+    svg.appendChild(group);
+    frame.appendChild(svg);
+    let strokes = [];              // [{ path, d, n, width, height }]
+    let open = null;               // le trait que les points suivants continuent
+    const round = value => Math.round(value * 100) / 100;
+    const render = stroke => stroke.path.setAttribute('d', stroke.n === 1 ? stroke.d + ' h 0.01' : stroke.d);   // un seul point : un point rond (le bout rond d'un trait presque nul)
+    function begin() {
+      if (strokes.length >= INK_STROKES) strokes.shift().path.remove();
+      // La page se lit dans la taille que `surface` lui a donnée, en pixels de page ; le repère du calque est celui-là, si bien que le trait grandit et rapetisse avec elle.
+      const width = parseFloat(frame.style.width) || 1;
+      const height = parseFloat(frame.style.height) || 1;
+      svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+      group.setAttribute('stroke-width', String(round(height * INK_WIDTH)));
+      const path = document.createElementNS(SVG_NS, 'path');
+      group.appendChild(path);
+      open = { path, d: '', n: 0, width, height };
+      strokes.push(open);
+      return open;
+    }
+    // Les points d'un envoi, lus pour ce qu'ils sont : des nombres et rien d'autre, en nombre borné ; un point hors de la page est ramené à son bord. Vide quand la forme n'est pas la bonne.
+    function read(points) {
+      if (!Array.isArray(points) || points.length < 2 || points.length % 2 !== 0 || points.length > INK_BATCH) return [];
+      const out = [];
+      for (let i = 0; i < points.length; i += 2) {
+        const x = points[i];
+        const y = points[i + 1];
+        if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) return [];
+        out.push([Math.min(1, Math.max(0, x)), Math.min(1, Math.max(0, y))]);
+      }
+      return out;
+    }
+    // Ajoute des points au trait en cours, ou à un nouveau (`start` : ils en commencent un). Vrai quand quelque chose a été lu.
+    function add(points, start) {
+      const list = read(points);
+      if (!list.length) return false;
+      const touched = new Set();
+      list.forEach(([x, y], k) => {
+        if (!open || (start && k === 0) || open.n >= INK_POINTS) begin();
+        open.d += (open.n ? ' L ' : 'M ') + round(x * open.width) + ' ' + round(y * open.height);
+        open.n += 1;
+        touched.add(open);
+      });
+      touched.forEach(render);
+      return true;
+    }
+    return {
+      add,
+      // Le trait en cours est fini : les points qui viennent en commencent un autre.
+      end() { open = null; },
+      clear() { strokes.forEach(stroke => stroke.path.remove()); strokes = []; open = null; },
+      count: () => strokes.length,
+      // Une copie du tracé tel qu'il est, posée dans un autre cadre (celui de la copie de rechange d'un effet : la page qu'on quitte garde son tracé le temps qu'elle part).
+      copyTo(other) { const copy = svg.cloneNode(true); other.appendChild(copy); return copy; },
+      destroy() { svg.remove(); },
+    };
+  }
+
   // `options.labels` : { label, preparing, end, prev, next, exit, counter } (le compteur garde `{n}` et `{total}` à remplir) ; `options.onExit()` : le diaporama demande à se terminer ;
   // `options.onGesture(event)` (facultatif) : vrai quand le geste est pris et que le lecteur n'en fait rien ; `options.onState(state)` (facultatif) : appelé à chaque changement de ce que le lecteur montre, avec
-  // ce que rend `state()`. Le lecteur se pose dans la page tout de suite (« Préparation… »), avec ses écouteurs.
+  // ce que rend `state()` ; `options.screens` (facultatif) : vrai pour la fenêtre que la vue intervenant pilote - l'écran noir et l'écran blanc (B, W), le stylo (`ink`, `clearInk`, E) y sont ; faux, le lecteur n'a ni les uns ni
+  // les autres. Le lecteur se pose dans la page tout de suite (« Préparation… »), avec ses écouteurs.
   function create(options) {
     const { labels, onExit } = options;
     const onGesture = options.onGesture || (() => false);
     const onState = typeof options.onState === 'function' ? options.onState : null;
+    const screens = options.screens === true;
     const root = el('div', 'pp-slide-show');
     root.setAttribute('role', 'dialog');
     root.setAttribute('aria-modal', 'true');
@@ -123,14 +206,22 @@ const SlidePlayer = (function () {
     noteCard.hidden = true;
     const bar = buildBar();
     root.append(status, end, noteCard, bar.el);
+    // L'écran noir ou blanc : un voile qui couvre tout (la barre du bas comprise), là seulement où la vue intervenant le demande.
+    const screenEl = screens ? el('div', 'pp-slide-show-screen') : null;
+    if (screenEl) {
+      screenEl.hidden = true;
+      screenEl.setAttribute('aria-hidden', 'true');
+      root.appendChild(screenEl);
+    }
     document.body.appendChild(root);
-    // L'état de ce diaporama : `props` (la transition de chaque diapositive), `timings` (masquée, passage seul), `starts` (la première page de chacune), `anchors` (le signet de chacune, cible d'un lien du texte), `windows` (la découpe en pages de la copie).
-    const s = { root, status, end, bar, windows: [], index: 0, ended: false, job: null, fullscreen: false, idleTimer: 0, lastWheel: 0, ready: false, props: [], timings: [], starts: [], anchors: [], transition: null, advanceTimer: 0, anims: new Map(), anim: null, animTimer: 0, noteTimer: 0, last: -1, started: false, destroyed: false, spare: null };
+    // L'état de ce diaporama : `props` (la transition de chaque diapositive), `timings` (masquée, passage seul), `starts` (la première page de chacune), `anchors` (le signet de chacune, cible d'un lien du texte), `windows` (la découpe en pages de la copie) ; `screen` : 0 la diapositive, 1 l'écran noir, 2 l'écran blanc ; `ink` : le calque du tracé.
+    const s = { root, status, end, bar, windows: [], index: 0, ended: false, job: null, fullscreen: false, idleTimer: 0, lastWheel: 0, ready: false, props: [], timings: [], starts: [], anchors: [], transition: null, advanceTimer: 0, anims: new Map(), anim: null, animTimer: 0, noteTimer: 0, last: -1, started: false, destroyed: false, spare: null, screen: 0, held: false, ink: null };
 
     // La copie mesurée du document, posée dans une feuille de la taille d'une page, au centre, agrandie ou réduite à l'écran ; la fenêtre de la page montrée la rogne (`surface`, plus haut).
     function mount(job) {
       const surf = surface(job, root);
       Object.assign(s, { surf, layer: surf.layer, frame: surf.frame, view: surf.view, stage: surf.stage, windows: job.windows, anims: FrameAnim.framesOf(surf.stage) });
+      if (screens) s.ink = inkLayer(surf.frame);
     }
 
     // Le temps que la diapositive de la page `i` attend avant de passer seule, et si elle est masquée (js/slide-props.js:timingsOf).
@@ -145,17 +236,21 @@ const SlidePlayer = (function () {
     function go(index, how) {
       if (s.destroyed || !s.ready) return;
       const count = s.windows.length;
+      // Changer de page rend la diapositive à qui voyait un écran noir ou blanc (l'état suit, plus bas) et efface le tracé : il n'a de sens que sur la page où il a été fait.
+      leaveScreen(true);
       endTransition(true);
       clearTimeout(s.advanceTimer);
       s.advanceTimer = 0;
+      s.held = false;
       if (s.anim) settleAnim(s.anim);
-      if (index >= count) { showEnd(true); emit(); return; }
+      if (index >= count) { if (s.ink) s.ink.clear(); showEnd(true); emit(); return; }
       showEnd(false);
       // La dernière diapositive vue (l'action « dernière vue » d'un objet à lien) : celle qu'on quitte pour une autre ; passer d'une page à l'autre d'une même diapositive ne compte pas.
       if (s.started && s.windows[s.index] && slideOfWindow(s.index) !== slideOfWindow(Math.max(0, index))) s.last = s.index;
       s.started = true;
       const spec = how && how.step ? transitionFor(s.index, Math.max(0, index), !!how.reverse, how.trans) : null;
       const ghost = spec ? takeGhost() : null;
+      if (s.ink && Math.max(0, index) !== s.index) s.ink.clear();
       s.index = Math.max(0, index);
       s.surf.place(s.windows[s.index]);
       bar.counter.textContent = labels.counter.replace('{n}', String(s.index + 1)).replace('{total}', String(count));
@@ -166,14 +261,42 @@ const SlidePlayer = (function () {
       clearTimeout(s.advanceTimer);
       s.advanceTimer = 0;
       const wait = timingOf(s.index).advance;
-      if (wait) s.advanceTimer = setTimeout(() => { if (!s.destroyed) next(true); }, wait + (spec ? spec.dur : 0));
+      if (wait) armAdvance(wait + (spec ? spec.dur : 0));
       emit();
+    }
+    // Le passage seul : après `ms`, la diapositive passe à la suivante. Derrière un écran noir ou blanc elle ne passe pas (la personne ne la verrait pas partir) : `held` garde que son temps est venu, et il se recompte quand l'écran s'en va.
+    function armAdvance(ms) {
+      s.advanceTimer = setTimeout(() => {
+        if (s.destroyed) return;
+        if (s.screen) { s.held = true; return; }
+        next(true);
+      }, ms);
     }
     // Dit à qui suit le lecteur (la vue intervenant) où il en est : à chaque page, animation jouée ou défaite, et à l'écran de fin.
     function emit() {
       if (!onState || s.destroyed || !s.ready) return;
       try { onState(state()); } catch (e) { /* celui qui suit le lecteur ne doit pas l'arrêter */ }
     }
+
+    // L'écran noir et l'écran blanc (vue intervenant seulement) : `mode` 1 couvre tout de noir, 2 de blanc, 0 rend la diapositive ; le mode déjà montré se retire (la même touche le rend). Le tracé, la page, les effets et les
+    // animations continuent dessous. `quiet` : celui qui appelle dit lui-même l'état ensuite.
+    function setScreen(mode, quiet) {
+      if (!screens || s.destroyed || !s.ready || (mode !== 0 && mode !== 1 && mode !== 2)) return;
+      const to = mode === s.screen ? 0 : mode;
+      if (to === s.screen) return;
+      s.screen = to;
+      screenEl.hidden = to === 0;
+      screenEl.classList.toggle('pp-slide-show-screen-white', to === 2);
+      // Le passage seul dont le temps est venu derrière l'écran reprend son compte une fois la diapositive rendue.
+      if (!to && s.held) {
+        s.held = false;
+        const wait = timingOf(s.index).advance;
+        if (wait && !s.ended) armAdvance(wait);
+      }
+      if (!quiet) emit();
+    }
+    // Toute navigation rend la diapositive à qui voyait un écran.
+    function leaveScreen(quiet) { if (s.screen) setScreen(0, quiet); }
 
     // Les animations d'objets
     // L'état des objets animés de la diapositive `a` quand `done` pas sont joués (le pas 0, celui qui part seul, compte pour un) : une entrée est là une fois son pas joué, une sortie ne l'est plus ;
@@ -257,6 +380,8 @@ const SlidePlayer = (function () {
     function buildSpare() {
       if (s.spare || s.destroyed || !s.layer) return s.spare;
       const layer = s.layer.cloneNode(true);
+      // Le tracé ne se garde pas dans la copie : celle d'un effet reprend celui du moment (`takeGhost`).
+      if (s.ink) layer.querySelectorAll('[data-pp-ink]').forEach(node => node.remove());
       layer.className = 'pp-slide-show-layer pp-slide-show-ghost pp-slide-show-parked';
       layer.style.cssText = 'position:absolute;inset:0;pointer-events:none;translate:' + PARKED;
       layer.setAttribute('aria-hidden', 'true');
@@ -285,6 +410,8 @@ const SlidePlayer = (function () {
           if (other[k] && other[k].box.style.visibility !== shown) other[k].box.style.visibility = shown;
         });
       });
+      // Le tracé de la page qu'on quitte part avec elle, le temps de l'effet.
+      if (s.ink && s.ink.count()) spare.copy = s.ink.copyTo(spare.frame);
       const layer = spare.layer;
       layer.classList.toggle('pp-slide-show-awake', s.layer.classList.contains('pp-slide-show-awake'));
       layer.classList.remove('pp-slide-show-parked');
@@ -295,6 +422,7 @@ const SlidePlayer = (function () {
     function parkSpare(layer) {
       layer.classList.add('pp-slide-show-parked');
       layer.style.translate = PARKED;
+      if (s.spare && s.spare.layer === layer && s.spare.copy) { s.spare.copy.remove(); s.spare.copy = null; }
     }
     function beginTransition(ghost, spec, reverse) {
       // Un effet qui ne se joue pas (une erreur dans le calcul de l'effet) ne laisse pas sa copie à l'écran et n'empêche pas d'arriver (les animations des objets suivent).
@@ -319,6 +447,7 @@ const SlidePlayer = (function () {
     // `skipSteps` : le passage seul, qui ne joue pas les pas d'animation.
     function next(skipSteps, trans) {
       if (s.destroyed || !s.ready) return;
+      leaveScreen();
       if (s.ended) { onExit(); return; }
       if (!skipSteps && advanceAnim()) return;
       // Les diapositives masquées sont sautées ; plus aucune après celle-ci : l'écran de fin.
@@ -327,6 +456,7 @@ const SlidePlayer = (function () {
     }
     function prev() {
       if (s.destroyed || !s.ready) return;
+      leaveScreen();
       if (s.ended) { const last = visibleFrom(s.windows.length - 1, -1); go(last >= 0 ? last : s.windows.length - 1); return; }
       if (rewindAnim()) return;
       const to = s.index > 0 ? visibleFrom(s.index - 1, -1) : -1;
@@ -369,6 +499,8 @@ const SlidePlayer = (function () {
       s.idleTimer = setTimeout(() => { if (!bar.el.contains(document.activeElement)) setAwake(false); }, IDLE_MS);
     }
 
+    // Les touches des écrans, là seulement où la vue intervenant les demande : B l'écran noir, W l'écran blanc ; la même touche rend la diapositive.
+    const screenKeys = screens ? { b: () => setScreen(1), B: () => setScreen(1), w: () => setScreen(2), W: () => setScreen(2) } : {};
     function onKey(event) {
       if (s.destroyed || event.isComposing) return;
       // Le clavier sur un bouton de la barre : Entrée et Espace l'activent, Tab y circule.
@@ -382,12 +514,13 @@ const SlidePlayer = (function () {
         ArrowLeft: prev, ArrowUp: prev, PageUp: prev, Backspace: prev, p: prev, P: prev,
         Home: () => go(0), End: () => go(s.windows.length - 1), Escape: onExit, F5: () => {},
       };
-      const action = keys[event.key];
+      const screenAction = screenKeys[event.key];
+      const action = keys[event.key] || screenAction;
       // Pendant le diaporama, aucune touche n'atteint le document en dessous.
       event.stopPropagation();
       if (event.ctrlKey || event.metaKey || event.altKey) return;
-      // L'écran de fin : une touche quitte, sauf celles qui reculent.
-      if (s.ended && action !== prev && !/^(Shift|Control|Alt|Meta|CapsLock)$/.test(event.key)) { event.preventDefault(); onExit(); return; }
+      // L'écran de fin : une touche quitte, sauf celles qui reculent et celles des écrans noir et blanc.
+      if (s.ended && action !== prev && !(screenAction && action === screenAction) && !/^(Shift|Control|Alt|Meta|CapsLock)$/.test(event.key)) { event.preventDefault(); onExit(); return; }
       if (!action) return;
       event.preventDefault();
       action();
@@ -437,6 +570,8 @@ const SlidePlayer = (function () {
     function onClick(event) {
       if (s.destroyed || event.button !== 0 || bar.el.contains(event.target)) return;
       if (onGesture(event)) return;
+      // Un clic sur l'écran noir ou blanc rend la diapositive, sans passer à la suivante.
+      if (s.screen) { setScreen(0); return; }
       const slide = s.ready ? slideOfLink(event) : -1;
       if (slide >= 0) {
         event.preventDefault();
@@ -525,6 +660,7 @@ const SlidePlayer = (function () {
       clearTimeout(s.animTimer);
       clearTimeout(s.noteTimer);
       if (s.anim) s.anim.running.forEach(job => job.cancel());
+      if (s.ink) s.ink.destroy();
       document.removeEventListener('keydown', onKey, true);
       document.removeEventListener('focusin', onFocusIn, true);
       document.removeEventListener('fullscreenchange', onFullscreenChange);
@@ -538,7 +674,7 @@ const SlidePlayer = (function () {
     // en cours ; `next` et `prev`, les pages où mènent « suivante » et « précédente » (-1 : la fin, ou rien : les diapositives masquées sont sautées) ; `clicks`, les animations à clic de la diapositive, et `left` celles qui
     // restent à jouer (un clic « suivant » en joue une avant de passer à la diapositive d'après).
     function state() {
-      const base = { index: s.index, ended: s.ended, advancing: !!s.advanceTimer, transition: s.transition ? { kind: s.transition.kind, side: s.transition.side, duration: s.transition.duration, reverse: s.transition.reverse } : null };
+      const base = { index: s.index, ended: s.ended, advancing: !!s.advanceTimer, screen: s.screen, transition: s.transition ? { kind: s.transition.kind, side: s.transition.side, duration: s.transition.duration, reverse: s.transition.reverse } : null };
       if (!s.ready || !s.windows.length) return base;
       const a = s.anim;
       return Object.assign(base, {
@@ -553,8 +689,13 @@ const SlidePlayer = (function () {
     // Les mêmes gestes que le clavier, pour la vue intervenant : « suivante » (une animation d'abord, comme au clic), « précédente », et le saut vers la page `index` (sans transition) ; un rang hors de la découpe n'est pas un saut.
     const jump = index => { if (Number.isInteger(index) && index >= 0 && index < s.windows.length) go(index); };
 
-    return { root, load, note, enterFullscreen, destroy, state, isFullscreen: () => s.fullscreen, next: () => next(), prev: () => prev(), jump };
+    // Les ordres de la console : `screen(mode)` (0 la diapositive, 1 l'écran noir, 2 l'écran blanc ; le mode déjà montré se retire), `ink(points, start)` (les points d'un envoi du stylo, voir `inkLayer` ; `start` : ils commencent un trait ;
+    // sans effet derrière un écran ou sur l'écran de fin ; vrai quand quelque chose a été tracé) et `clearInk()`. Sans `options.screens`, aucun des trois ne fait rien.
+    const ink = (points, start) => !!(s.ink && s.ready && !s.destroyed && !s.ended && !s.screen && s.ink.add(points, start === true));
+    const clearInk = () => { if (s.ink && !s.destroyed) s.ink.clear(); };
+
+    return { root, load, note, enterFullscreen, destroy, state, isFullscreen: () => s.fullscreen, next: () => next(), prev: () => prev(), jump, screen: mode => setScreen(mode), ink, clearInk };
   }
 
-  return { create, surface, paintSteps, slideAt, firstWindowOf, HOST_ID };
+  return { create, surface, paintSteps, slideAt, firstWindowOf, inkLayer, HOST_ID };
 })();

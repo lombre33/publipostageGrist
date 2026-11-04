@@ -1156,7 +1156,7 @@ const I18n = (function () {
     'slides.show.menu.begin': { fr: 'Depuis le début (F5)', en: 'From the beginning (F5)' },
     'slides.show.menu.fullscreen': { fr: 'Plein écran', en: 'Full screen' },
     'slides.show.menu.speaker': { fr: 'Vue intervenant', en: 'Presenter view' },
-    'slides.show.menu.speakerNote': { fr: 'Le diaporama s’ouvre dans une fenêtre à part ; ce panneau devient la console : diapositive suivante, notes, chrono.', en: 'The slide show opens in its own window; this panel becomes the console: next slide, notes, timer.' },
+    'slides.show.menu.speakerNote': { fr: 'Le diaporama s’ouvre dans une fenêtre à part ; ce panneau devient la console : diapositive suivante, notes, chrono, écran noir et stylo.', en: 'The slide show opens in its own window; this panel becomes the console: next slide, notes, timer, black screen and pen.' },
     'slides.show.menu.fullscreenWindow': { fr: 'Ce cadre ne le permet pas : le diaporama s’ouvre dans une fenêtre à part, où un clic ou une touche donne le plein écran.', en: 'This frame does not allow it: the slide show opens in a separate window, where a click or a key press gives full screen.' },
     'slides.show.label': { fr: 'Diaporama', en: 'Slide show' },
     'slides.show.preparing': { fr: 'Préparation du diaporama…', en: 'Preparing the slide show…' },
@@ -1197,6 +1197,14 @@ const I18n = (function () {
     'slides.speaker.reset': { fr: 'Remettre le chrono à zéro', en: 'Reset the timer' },
     'slides.speaker.clock': { fr: 'Heure', en: 'Time' },
     'slides.speaker.exit': { fr: 'Quitter le diaporama (Échap)', en: 'Exit the slide show (Esc)' },
+    'slides.speaker.tools': { fr: 'Écran du public et stylo', en: 'Audience screen and pen' },
+    'slides.speaker.black': { fr: 'Écran noir pour le public (B)', en: 'Black screen for the audience (B)' },
+    'slides.speaker.white': { fr: 'Écran blanc pour le public (W)', en: 'White screen for the audience (W)' },
+    'slides.speaker.pen': { fr: 'Stylo : dessiner sur la diapositive (D)', en: 'Pen: draw on the slide (D)' },
+    'slides.speaker.erase': { fr: 'Effacer le tracé (E)', en: 'Erase the drawing (E)' },
+    'slides.speaker.hintBlack': { fr: 'Écran noir pour le public : B pour revenir.', en: 'Black screen for the audience: B to go back.' },
+    'slides.speaker.hintWhite': { fr: 'Écran blanc pour le public : W pour revenir.', en: 'White screen for the audience: W to go back.' },
+    'slides.speaker.hintPen': { fr: 'Stylo : dessine ici. E efface, Échap finit.', en: 'Pen: draw here. E erases, Esc stops.' },
 
     // --- Objets libres d'une diapositive : cadres de texte (js/free-frame.js), bouton « Objets » de la barre d'outils (js/objects-menu.js) ---
     'frame.label': { fr: 'Cadre de texte', en: 'Text frame' },
