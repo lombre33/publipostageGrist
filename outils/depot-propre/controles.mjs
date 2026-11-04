@@ -2,7 +2,8 @@
 // Contrôles de ce qui part sur le dépôt public (publier.sh les lance sur l'arbre préparé, avant tout commit).
 // Lecture seule : rien n'est modifié. Il lit l'arbre tel qu'il sera publié, pas le dépôt de développement.
 //
-// Usage : node controles.mjs <dossier de l'arbre à publier> [--version 1.0.0-beta.1]
+// Usage : node controles.mjs <dossier de l'arbre à publier> [--version 1.0.0-beta.1] [--beta-figee]
+//   --beta-figee : l'arbre est celui du dépôt public, qui garde dans beta/ la copie figée de la bêta (publier.sh le demande) : elle doit y être, et être la bêta.
 // Sortie : une ligne par constat, « ERREUR » (publier.sh refuse de committer) ou « AVERTISSEMENT » (à relire), puis le total.
 // Code de sortie : 1 s'il y a au moins une erreur, 0 sinon.
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
@@ -12,11 +13,12 @@ import { createHash } from 'node:crypto';
 const args = process.argv.slice(2);
 const root = args[0];
 if (!root || !existsSync(root)) {
-  console.error('Usage : node controles.mjs <dossier de l\'arbre à publier> [--version 1.0.0-beta.1]');
+  console.error('Usage : node controles.mjs <dossier de l\'arbre à publier> [--version 1.0.0-beta.1] [--beta-figee]');
   process.exit(2);
 }
 const versionIdx = args.indexOf('--version');
 const version = versionIdx >= 0 ? (args[versionIdx + 1] || '') : '';
+const betaFigee = args.includes('--beta-figee');
 
 const errors = [];
 const warnings = [];
@@ -71,7 +73,7 @@ for (const required of ['index.html', 'LICENSE', 'README.md', 'SECURITY.md', 'CO
 const NEVER = ['dev-tests', 'planning', 'prototypes', 'templates-gallery-dev', 'outils', '.claude', 'AUDIT_CODE.md', 'CAHIER_DES_CHARGES.md', 'GFS-ETAT.md'];
 const topLevel = new Set(files.map(file => file.rel.split('/')[0]));
 for (const name of NEVER) if (topLevel.has(name)) fail(`entrée du dépôt de développement présente à la racine : ${name}`);
-const KNOWN = new Set(['index.html', 'css', 'js', 'extensions', 'img', 'templates-gallery', 'screenshots', 'kit', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'NOTICE', 'CARTE_DU_CODE.md', '.github', '.gitignore', '.gitattributes', '.nojekyll']);
+const KNOWN = new Set(['index.html', 'css', 'js', 'extensions', 'img', 'templates-gallery', 'screenshots', 'kit', 'beta', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'NOTICE', 'CARTE_DU_CODE.md', '.github', '.gitignore', '.gitattributes', '.nojekyll']);
 for (const name of topLevel) if (!KNOWN.has(name) && !NEVER.includes(name)) warn(`entrée inconnue à la racine : ${name} (à classer dans publier.sh et dans controles.mjs)`);
 // Le kit de Grist Factory (kit/, sous-module du dépôt de développement, ici en fichiers : publier.sh) : un sous-module vide (.gitmodules sans fichiers) ne servirait rien, et le dépôt public n'a pas de sous-module.
 if (has('.gitmodules')) fail('.gitmodules présent : le dépôt public n\'a pas de sous-module, le kit y est en fichiers (publier.sh)');
@@ -87,6 +89,27 @@ if (has('LICENSE')) {
   if (!/GNU GENERAL PUBLIC LICENSE/.test(license) || !/Version 3, 29 June 2007/.test(license)) fail('LICENSE : ce n\'est pas le texte de la GNU GPL version 3');
 }
 
+// La bêta figée (--beta-figee, que publier.sh demande) : le dépôt public garde dans beta/ une copie, sans correctif, des fichiers du site de la bêta (étiquette v1.0.0-beta.1), à une adresse à part
+// (…/Publipostage-Plus/beta/) pour les personnes dont un ancien modèle ne se rouvre pas bien dans la version courante. publier.sh n'y touche pas (beta n'est pas dans PUBLIES) ; ici, on vérifie
+// qu'elle est là, que c'est bien la bêta (et non une copie de la version qui part) et que sa page ne cite rien d'absent de beta/. Le reste des contrôles la lit comme le reste de l'arbre,
+// sauf le renvoi à un dossier non publié (plus bas) : le code de la bêta les cite, et il ne se corrige pas.
+const BETA_FIGEE = '1.0.0-beta.1';
+if (betaFigee) {
+  if (!has('beta/index.html')) {
+    fail('beta/ : la copie figée de la bêta est absente de l\'arbre (beta/index.html) : la poser dans le dépôt public avant l\'envoi (outils/depot-propre/README.md, « La bêta figée »)');
+  } else {
+    const declared = has('beta/js/version.js') ? (read('beta/js/version.js').match(/PP_VERSION\s*=\s*['"]([^'"]+)['"]/) || [])[1] : '';
+    if (declared !== BETA_FIGEE) fail(`beta/js/version.js annonce ${declared || 'aucune version'}, la bêta figée est la ${BETA_FIGEE} : beta/ doit venir de l'étiquette v${BETA_FIGEE}, pas de la version qui part`);
+    const absent = [];
+    for (const match of read('beta/index.html').replace(/<!--[\s\S]*?-->/g, '').matchAll(/\b(?:src|href)="([^"#]+)"/g)) {
+      const target = match[1].split('?')[0];
+      if (/^(https?:|\/\/|data:|mailto:|javascript:)/i.test(target)) continue;
+      if (!has(`beta/${target.replace(/^\.\//, '')}`)) absent.push(target);
+    }
+    if (absent.length) fail(`beta/index.html cite des fichiers absents de beta/ : ${[...new Set(absent)].join(', ')}`);
+  }
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // 2. Identité et traces de travail : jamais dans ce qui est public
 // ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -95,7 +118,7 @@ report('error', 'le compte personnel (lombre33)', grep(/lombre33/i));
 report('error', 'un lien ou une trace de session de travail (claude.ai, Claude-Session, session_…)', grep(/claude\.ai\/|Claude-Session|\b(session|cse)_[A-Za-z0-9]{12,}\b/));
 report('error', 'un renvoi à la mémoire du projet ([[…]])', grep(/\[\[[a-z0-9][a-z0-9-]+\]\]/));
 report('warning', 'un renvoi à un dossier ou un document non publié (planning, dev-tests, prototypes, templates-gallery-dev, AUDIT_CODE, CAHIER_DES_CHARGES)',
-  grep(/\b(planning|dev-tests|prototypes|templates-gallery-dev|AUDIT_CODE|CAHIER_DES_CHARGES)\b/));
+  grep(/\b(planning|dev-tests|prototypes|templates-gallery-dev|AUDIT_CODE|CAHIER_DES_CHARGES)\b/, textFiles.filter(file => !file.rel.startsWith('beta/'))));
 
 // Secrets : mêmes motifs que preuves.sh.
 report('error', 'un secret, un jeton ou un identifiant de document Grist',

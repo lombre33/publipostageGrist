@@ -75,6 +75,8 @@ chemin est affiché.
 - Une version qui n'est pas du semver, ou une étiquette déjà prise.
 - D'écraser ce que le dépôt public a reçu depuis la dernière étiquette (une contribution acceptée là-bas et
   pas reportée ici) : reporter d'abord le changement dans le dépôt de développement, ou `--ecraser`.
+- Un clone public dont `beta/`, la copie figée de la bêta, manque, n'est pas identique aux fichiers du site de
+  l'étiquette de la bêta ou porte une entrée de trop ; un document de `public/` nommé `beta` (voir « La bêta figée »).
 - De committer quand les contrôles ont une erreur, ou sans identité. Il remet alors le clone public à son
   état d'origine.
 
@@ -92,8 +94,45 @@ du navigateur ne nomme pas, en français ou en anglais (la liste est `STORED` da
 AVERTISSEMENT (à relire) : renvoi à un dossier non publié (`planning`, `dev-tests`…) ; entrée inconnue à la
 racine ; fichier de `js/` sans ligne dans `CARTE_DU_CODE.md` ; adresse e-mail non fictive ; `console.log` ou `console.info` dans `js/` ; fichier de plus de 2,5 Mo.
 
+Avec `--beta-figee` (que `publier.sh` donne ; `codeHygiene` non : l'arbre qu'il assemble n'a pas de `beta/`), `controles.mjs` lit aussi la bêta figée : ERREUR si
+`beta/index.html` manque, si `beta/js/version.js` n'annonce pas `1.0.0-beta.1` (une copie de la version qui part) ou si la page de `beta/` cite un fichier qui n'y est pas.
+Le renvoi à un dossier non publié ne compte pas les lignes de `beta/` : le code de la bêta les cite, et il ne se corrige pas.
+
 Ces contrôles ne tournent pas qu'à l'envoi : à chaque correction, `codeHygiene` (`dev-tests/verify-code-hygiene.mjs`, section 26) assemble dans un dossier temporaire l'arbre que `publier.sh` publierait
 (sans clone public ni identité) et y lance `controles.mjs`. Une ERREUR s'y voit le jour où on la fait, pas le jour de l'envoi (choix d'Antoine du 16/10) ; les avertissements restent à relire à l'envoi.
+
+## La bêta figée (`beta/`)
+
+Le dépôt public garde dans `beta/`, à l'adresse `https://grist-factory.github.io/Publipostage-Plus/beta/`, une copie **sans correctif** des
+fichiers du site de la bêta (étiquette `v1.0.0-beta.1`) : `index.html`, `css`, `js`, `img`, `templates-gallery` et `LICENSE`. Elle sert aux personnes
+dont un ancien modèle ne se rouvre pas bien dans la V1 (choix du 04/11, carte « Garder la bêta à une adresse dédiée dans le dépôt public ? » :
+« Oui, dossier beta/ »). Les chemins de la bêta sont relatifs, sa politique de sécurité du contenu n'autorise que sa propre origine : elle démarre
+depuis un sous-dossier (essai du 04/11 : éditeur prêt, galerie chargée, aucune requête en échec ni violation). Elle se pose à la main, une fois, **avant** l'envoi de la V1,
+dans le clone du dépôt public (propre, sur `main`, étiquettes récupérées) :
+
+```
+git pull --ff-only && git fetch --tags
+mkdir beta
+for x in index.html css js img templates-gallery LICENSE; do git archive v1.0.0-beta.1 "$x" | tar -x -C beta; done
+git add beta
+git -c user.name="grist-factory" -c user.email="328957858+grist-factory@users.noreply.github.com" -c commit.gpgsign=false \
+    commit -m "Ajout de la copie figée de la bêta 1.0.0-beta.1 à l'adresse /beta/"
+git push origin main
+```
+
+Même identité que les publications (l'adresse noreply du compte public, jamais l'adresse personnelle) ; pas d'étiquette pour ce commit. Ensuite, à GitHub Pages
+d'avoir fini (« pages build and deployment »), `…/beta/js/version.js` doit montrer `1.0.0-beta.1`, et le widget chargé par cette adresse dans un document Grist
+de test, Réglages > Crédits, la même version.
+
+`publier.sh` ne la touche pas (`beta` n'est ni dans `PUBLIES` ni dans les documents de `public/`) et la vérifie avant toute chose : `beta/` doit être là et
+identique, octet pour octet (empreintes git de chaque entrée), à ce que l'étiquette de la bêta porte, sans entrée de plus ; `PP_BETA_ETIQUETTE` nomme une autre étiquette
+(les essais de `essai.sh` s'en servent). Puis `controles.mjs --beta-figee` relit l'arbre préparé. Une bêta retouchée à la main, ou prise sur `main` plutôt que sur
+l'étiquette, est refusée : on la repose telle que l'étiquette la porte. Pour retirer le dossier un jour : `git rm -r beta` côté public, puis retirer le contrôle (la
+vérification de `publier.sh`, le bloc « bêta figée » de `controles.mjs`, `--beta-figee` et leurs essais).
+
+Limites à dire (forum) : le retour à la bêta n'est sûr que tant qu'aucun contenu propre à la V1 n'est enregistré dans le modèle (la bêta efface signets, exposants et indices,
+« sinon afficher ») ; chaque personne change l'adresse du widget dans Grist ; les préférences gardées dans le navigateur (`pp_*`) sont partagées avec la V1, même origine ;
+aucun correctif, aucune suite.
 
 ## Pourquoi un commit de plus
 

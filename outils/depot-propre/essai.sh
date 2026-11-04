@@ -16,6 +16,8 @@ attend() { if grep -q -- "$2" <<<"$3"; then ok "$1"; else ko "$1" "« $2 » abse
 # vrai(description, commande…)
 vrai() { local d="$1"; shift; if "$@" >/dev/null 2>&1; then ok "$d"; else ko "$d"; fi; }
 
+# L'étiquette de la bêta figée (beta/) : dans ces essais, v1.0.0-beta.1 est celle que la première publication pose plus bas, la bêta des faux dépôts a la sienne.
+export PP_BETA_ETIQUETTE=beta-figee-essai
 PUBLIER_ENV=(PP_DATE=2026-10-04 PP_AUTEUR_NOM=Essai PP_AUTEUR_EMAIL=1+grist-factory@users.noreply.github.com)
 publier() { env "${PUBLIER_ENV[@]}" bash "$T/dev/outils/depot-propre/publier.sh" --propre "$T/propre" "$@" 2>&1; }
 
@@ -66,7 +68,17 @@ git init -q -b main "$T/propre-src"
   cd "$T/propre-src"
   mkdir -p screenshots; echo png > screenshots/edition-variables.png; echo png > screenshots/lecture-resolue.png; echo png > screenshots/ancienne.png
   echo '# alpha' > README.md; echo old > index.html
+  # La bêta figée : beta/ porte les fichiers du site de la bêta (une page, sa feuille de style, sa version, une image, un catalogue, la licence). L'étiquette de la bêta les porte à la racine :
+  # son arbre est celui de beta/ (un commit orphelin, comme l'étiquette v1.0.0-beta.1 du vrai dépôt public, dont l'arbre est celui du site).
+  mkdir -p beta/css beta/js beta/img beta/templates-gallery
+  printf '<!doctype html><title>bêta</title><link rel="stylesheet" href="css/style.css"><script src="js/version.js"></script><img src="img/logo.jpg">\n' > beta/index.html
+  echo 'body { margin: 1px; }' > beta/css/style.css
+  echo "const PP_VERSION = '1.0.0-beta.1';" > beta/js/version.js
+  echo jpg > beta/img/logo.jpg
+  echo '[]' > beta/templates-gallery/catalogue.json
+  printf 'GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\n' > beta/LICENSE
   G add -A; G commit -qm alpha
+  G tag beta-figee-essai "$(echo bêta | G commit-tree HEAD:beta)"
 )
 mkdir -p "$T/web/github.com/grist-factory"
 git clone -q --bare "$T/propre-src" "$T/web/github.com/grist-factory/Publipostage-Plus.git"
@@ -94,7 +106,9 @@ mkdir -p "$T/dev/outils/depot-propre/public/autre"; echo x > "$T/dev/outils/depo
 attend "refuse un sous-dossier inconnu dans public/" "ne contient que des documents" "$(publier)"
 (cd "$T/dev" && G rm -rq outils/depot-propre/public/autre && G commit -qm "retrait" && echo x > outils/depot-propre/public/screenshots/note.txt && G add -A && G commit -qm "fichier qui n'est pas une capture" && git push -q origin main)
 attend "refuse un fichier qui n'est pas un .png dans public/screenshots/" "ne contient que les captures du README" "$(publier)"
-(cd "$T/dev" && G rm -rq outils/depot-propre/public/screenshots/note.txt && G commit -qm "retrait" && echo "// Antoine l'a demandé" >> js/main.js && G commit -qam "prénom" && git push -q origin main)
+(cd "$T/dev" && G rm -rq outils/depot-propre/public/screenshots/note.txt && echo x > outils/depot-propre/public/beta && G add -A && G commit -qm "un document nommé beta dans public/" && git push -q origin main)
+attend "refuse un document de public/ nommé beta (le dossier de la bêta figée du dépôt public n'est jamais écrasé)" "dossier de la bêta figée" "$(publier)"
+(cd "$T/dev" && G rm -q outils/depot-propre/public/beta && G commit -qm "retrait" && echo "// Antoine l'a demandé" >> js/main.js && G commit -qam "prénom" && git push -q origin main)
 # Un modèle de la galerie qui vient avec ses tables : sa capture et le fichier de tables de sa famille manquent, la publication le dit dans la même passe.
 (cd "$T/dev" && mkdir -p templates-gallery/m && echo '{"family":"f"}' > templates-gallery/m/pack.json && echo '[{"id":"m","name":"M","pack":"m/pack.json","preview":[{"src":"m/capture-1.png","w":1,"h":1}]}]' > templates-gallery/catalogue.json && G add -A && G commit -qm "modèle à pack sans capture ni famille" && git push -q origin main)
 SORTIE="$(publier)"
@@ -128,6 +142,7 @@ vrai "... sans son README, son journal ni ses essais" test ! -e "$P/kit/README.m
 vrai "la date est écrite en toutes lettres" grep -q "4 octobre 2026" "$P/README.md"
 vrai "la sauvegarde .bundle existe" test -s "$T/sortie1/publication-1.0.0-beta.1.bundle"
 vrai "le clone public est propre" test -z "$(git -C "$P" status --porcelain)"
+vrai "la bêta figée n'a pas bougé : beta/ est toujours, octet pour octet, ce que l'étiquette de la bêta porte" test "$(git -C "$P" rev-parse HEAD:beta)" = "$(git -C "$P" rev-parse "$PP_BETA_ETIQUETTE^{tree}")"
 
 echo "publier.sh : garde contre l'écrasement"
 (cd "$T/dev" && sed -i 's/beta\.1/beta.2/' js/version.js && G commit -qam "version" && git push -q origin main)
@@ -158,10 +173,11 @@ vrai "la version est celle de js/version.js" grep -q "1.0.0-beta.2" "$P/README.m
 
 echo "controles.mjs : chaque défaut est vu"
 C="$ICI/controles.mjs"
+MUTER_OPTS=""   # options de controles.mjs en plus (--beta-figee pour les essais de beta/)
 muter() { # description, motif attendu, commande de mutation (dans $T/mut)
   rm -rf "$T/mut"; cp -a "$P" "$T/mut"; rm -rf "$T/mut/.git"
   (cd "$T/mut" && eval "$3")
-  attend "$1" "$2" "$(node "$C" "$T/mut" --version 1.0.0-beta.2 2>&1)"
+  attend "$1" "$2" "$(node "$C" "$T/mut" --version 1.0.0-beta.2 $MUTER_OPTS 2>&1)"
 }
 vrai "l'arbre publié passe sans erreur" bash -c "node '$C' '$P' --version 1.0.0-beta.2 | grep -q ' 0 erreur'"
 muter "la politique de sécurité manquante" "aucune politique de sécurité" "sed -i '/Content-Security-Policy/d' index.html"
@@ -202,6 +218,38 @@ muter "un CHANGELOG sans la version" "aucune section" "sed -i 's/^## \[1.0.0-bet
 muter "js/version.js absent (et la page qui le chargeait retirée)" "js/version.js absent" "rm js/version.js; sed -i 's#<script src=\"js/version.js\"></script>##' index.html"
 muter "une page qui ne charge pas js/version.js" "ne charge pas js/version.js" "sed -i 's#<script src=\"js/version.js\"></script>##' index.html"
 muter "js/version.js qui annonce une autre version" "annonce 1.0.0-beta.1" "echo \"const PP_VERSION = '1.0.0-beta.1';\" > js/version.js"
+
+echo "controles.mjs : la bêta figée (beta/)"
+vrai "beta/ est une entrée connue de la racine : pas d'avertissement « entrée inconnue »" bash -c "! node '$C' '$P' --version 1.0.0-beta.2 | grep -q 'entrée inconnue'"
+vrai "l'arbre publié passe sans erreur, bêta figée comprise (--beta-figee)" bash -c "node '$C' '$P' --version 1.0.0-beta.2 --beta-figee | grep -q ' 0 erreur'"
+vrai "sans --beta-figee, un arbre sans beta/ passe (celui que codeHygiene assemble n'en a pas)" bash -c "rm -rf '$T/mut'; cp -a '$P' '$T/mut'; rm -rf '$T/mut/.git' '$T/mut/beta'; node '$C' '$T/mut' --version 1.0.0-beta.2 | grep -q ' 0 erreur'"
+MUTER_OPTS=--beta-figee
+muter "beta/ absente" "la copie figée de la bêta est absente" "rm -rf beta"
+muter "beta/ copiée de la version qui part (js/version.js d'une autre version)" "beta/js/version.js annonce 1.0.0-beta.2" "echo \"const PP_VERSION = '1.0.0-beta.2';\" > beta/js/version.js"
+muter "beta/ sans js/version.js" "beta/js/version.js annonce aucune version" "rm beta/js/version.js"
+muter "une page de beta/ qui cite un fichier absent de beta/" "beta/index.html cite des fichiers absents de beta/ : css/style.css" "rm beta/css/style.css"
+MUTER_OPTS=""
+renvois() { node "$C" "$1" --version 1.0.0-beta.2 | grep 'un renvoi à un dossier' | grep -oE ' : [0-9]+ ligne' | grep -oE '[0-9]+' || echo 0; }
+rm -rf "$T/mut"; cp -a "$P" "$T/mut"; rm -rf "$T/mut/.git"; echo '/* voir planning et dev-tests */' >> "$T/mut/beta/css/style.css"
+vrai "les renvois à un dossier non publié que cite le code de la bêta figée ne se comptent pas ($(renvois "$P") ligne(s) ailleurs)" test "$(renvois "$P")" = "$(renvois "$T/mut")"
+
+echo "publier.sh : la bêta figée (beta/) du dépôt public"
+# Chaque essai part d'un dépôt public neuf (celui du début, bêta figée comprise), y fait une retouche poussée, puis lance la publication : elle doit s'arrêter.
+beta_refus() { # description, motif attendu, retouche du clone public, [variable d'environnement en plus]
+  rm -rf "$T/web2" "$T/clone2"; mkdir -p "$T/web2/github.com/grist-factory"
+  git clone -q --bare "$T/propre-src" "$T/web2/github.com/grist-factory/Publipostage-Plus.git"
+  git clone -q "$T/web2/github.com/grist-factory/Publipostage-Plus.git" "$T/clone2"
+  (cd "$T/clone2" && eval "$3" && G add -A && G commit -qm "essai" && git push -q origin main)
+  attend "$1" "$2" "$(env "${PUBLIER_ENV[@]}" ${4:-} bash "$T/dev/outils/depot-propre/publier.sh" --propre "$T/clone2" --version 1.0.0-beta.9 --sortie "$T/sortie-beta" 2>&1)"
+}
+# Une « bêta » dont l'étiquette porte la copie de la version qui part : beta/ lui est identique, c'est controles.mjs (--beta-figee) qui refuse, ce qui prouve que publier.sh le lui demande.
+copie_de_la_version() { echo "const PP_VERSION = '1.0.0';" > beta/js/version.js && git add -A && G tag copie-de-la-version "$(echo x | G commit-tree "$(git rev-parse "$(git write-tree):beta")")"; }
+beta_refus "refuse un clone public sans beta/" "beta/ est absente du clone public" "git rm -rq beta"
+beta_refus "refuse une beta/ retouchée à la main (la bêta figée ne se corrige pas) et nomme le dossier touché" "  beta/css" "echo '/* correctif */' >> beta/css/style.css"
+beta_refus "refuse une beta/ à laquelle il manque un dossier de la bêta" "  beta/img" "git rm -rq beta/img"
+beta_refus "refuse une beta/ qui porte une entrée que la bêta n'avait pas" "beta/ porte des entrées que la bêta n'avait pas" "echo x > beta/NOTES.md"
+beta_refus "refuse quand l'étiquette de la bêta est introuvable" "l'étiquette etiquette-inconnue de la bêta est absente" "echo x >> README.md" "PP_BETA_ETIQUETTE=etiquette-inconnue"
+beta_refus "passe la copie de la version qui part à controles.mjs, qui refuse une beta/ qui n'est pas la 1.0.0-beta.1" "beta/js/version.js annonce 1.0.0, la bêta figée est la 1.0.0-beta.1" "copie_de_la_version" "PP_BETA_ETIQUETTE=copie-de-la-version"
 
 echo
 echo "$OK réussi(s), $KO échec(s)."
