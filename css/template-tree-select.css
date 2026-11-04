@@ -71,8 +71,9 @@
 .tts-popup.is-open { display: block; }
 
 /* En-tête du panneau : reste en haut quand la liste défile (sticky), titre à gauche et « Organiser mes modèles » à droite. Les marges négatives lui
-   font couvrir le padding de 4 px du panneau, pour que les lignes qui défilent ne se voient pas au-dessus. */
-.tts-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -4px -4px 2px; padding: 4px 6px 4px 12px; background: var(--surface); border-bottom: 1px solid var(--border); border-radius: var(--radius-md, 6px) var(--radius-md, 6px) 0 0; }
+   font couvrir le padding de 4 px du panneau, pour que les lignes qui défilent ne se voient pas au-dessus. `top: -4px` : collé, il se pose au bord
+   du panneau et non 4 px plus bas, dans le padding, où « ÉPINGLÉS » et le trait du modèle épinglé se voyaient passer au-dessus de lui (audit du 04/11). */
+.tts-head { position: sticky; top: -4px; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -4px -4px 2px; padding: 4px 6px 4px 12px; background: var(--surface); border-bottom: 1px solid var(--border); border-radius: var(--radius-md, 6px) var(--radius-md, 6px) 0 0; }
 .tts-head-title { font-size: 11px; font-weight: 600; color: var(--text-faint); white-space: nowrap; }
 .tts-organize-btn { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border: none; border-radius: var(--radius-btn, var(--radius-sm)); background: transparent; color: var(--text-muted); font-family: var(--font-ui); font-size: 12px; font-weight: 500; cursor: pointer; }
 .tts-organize-btn .tts-icon { width: 13px; height: 13px; }

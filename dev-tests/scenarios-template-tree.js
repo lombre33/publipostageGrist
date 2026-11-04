@@ -1030,6 +1030,45 @@
     },
   });
 
+  // Audit UI/UX du 04/11 (carte « Corriger l'en-tête qui laisse voir le texte de la liste des modèles ? », réponse « Oui, le corriger »). Le panneau a 4 px de marge intérieure et l'en-
+  // tête (sticky) les couvre par une marge négative ; collé avec `top: 0`, il se posait pourtant 4 px SOUS le bord du panneau, là où le texte qui défile (« ÉPINGLÉS », le trait du
+  // modèle épinglé) passait au-dessus de lui. Le cas force le défilement (le panneau est ramené à une hauteur plus petite que sa liste), puis mesure : le haut de l'en-tête est
+  // au bord du panneau, et le point juste sous ce bord appartient à l'en-tête, pas à une ligne de la liste.
+  cases.push({
+    id: 'tree_sticky_header_sits_flush_at_the_panel_edge_so_no_list_text_shows_above_it',
+    description: 'Quand la liste des modèles défile, l\'en-tête (« Modèles », « Organiser ») reste collé au bord haut du panneau : aucune bande de 4 px au-dessus où le texte de la liste passerait (audit UI/UX du 04/11)',
+    run: async (h) => {
+      await createTemplate(h, 'document', 'Collé - Un');
+      await createTemplate(h, 'document', 'Collé - Deux');
+      await openPopup(h);
+      const pop = popup();
+      const head = pop.querySelector('.tts-head');
+      const savedMax = pop.style.maxHeight;
+      let measured;
+      try {
+        pop.style.maxHeight = (head.offsetHeight + 30) + 'px';
+        await h.sleep(30);
+        const overflow = pop.scrollHeight - pop.clientHeight;
+        pop.scrollTop = Math.min(pop.scrollHeight - pop.clientHeight, 40);
+        await h.sleep(60);
+        const pr = pop.getBoundingClientRect();
+        const edge = pr.top + pop.clientTop; // bord haut de la zone qui défile
+        const hr = head.getBoundingClientRect();
+        const probe = document.elementFromPoint(pr.left + 40, edge + 1);
+        const probeInHead = !!probe && !!probe.closest('.tts-head');
+        const probeLow = document.elementFromPoint(pr.left + 40, edge + 3);
+        const lowInHead = !!probeLow && !!probeLow.closest('.tts-head');
+        measured = { overflow, scrollTop: pop.scrollTop, gap: Math.round((hr.top - edge) * 10) / 10, probeInHead, lowInHead, probe: probe && (probe.className || probe.tagName) };
+      } finally {
+        pop.style.maxHeight = savedMax;
+        pop.scrollTop = 0;
+        await closeTree(h);
+      }
+      const pass = measured.overflow > 8 && measured.scrollTop > 0 && Math.abs(measured.gap) <= 0.5 && measured.probeInHead && measured.lowInHead;
+      return { pass, notes: JSON.stringify(measured) };
+    },
+  });
+
   cases.push({
     id: 'tree_arrow_up_from_first_row_reaches_organize_and_arrow_down_comes_back',
     description: 'Au clavier : Flèche haut depuis la première ligne atteint « Organiser » (qui n’est plus dans l’ordre de tabulation de la barre), Flèche bas revient à la première ligne, Échap referme',
