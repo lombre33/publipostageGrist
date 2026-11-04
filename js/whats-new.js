@@ -14,7 +14,7 @@ const WhatsNew = (function () {
   const VERSION = '1.0';                  // la version dont la fenêtre dit les nouveautés
   const SEEN_KEY = 'pp_news_seen';        // ce que PersonStore garde de la personne : la dernière version dont elle a fermé la fenêtre (« 1.0 »)
   const IMAGE_DIR = 'img/news/1.0/';
-  const IMAGE_VERSION = '1';              // le `?v=` des images : une capture refaite le fait monter, sinon le navigateur garde l'ancienne
+  const IMAGE_VERSION = '2';              // le `?v=` des images : une capture refaite le fait monter, sinon le navigateur garde l'ancienne
   const CHANGELOG = 'https://github.com/grist-factory/Publipostage-Plus/blob/main/CHANGELOG.md';
   const NBSP = ' ';
 
@@ -26,6 +26,7 @@ const WhatsNew = (function () {
     { image: 'versions', name: 'news.versions.name', text: 'news.versions.text', alt: 'news.versions.alt' },
     { image: 'gallery', name: 'news.gallery.name', text: 'news.gallery.text', alt: 'news.gallery.alt' },
     { image: 'bookmarks', name: 'news.bookmarks.name', text: 'news.bookmarks.text', alt: 'news.bookmarks.alt' },
+    { image: 'format', name: 'news.format.name', text: 'news.format.text', alt: 'news.format.alt' },
     { image: 'live', gfs: true, name: 'news.live.name', text: 'news.live.text', alt: 'news.live.alt' },
     { image: 'slides', gfs: true, name: 'news.slides.name', text: 'news.slides.text', alt: 'news.slides.alt' },
     { image: 'chart', gfs: true, name: 'news.chart.name', text: 'news.chart.text', alt: 'news.chart.alt' },
@@ -43,6 +44,7 @@ const WhatsNew = (function () {
         { from: 'news.habits.track.from', to: 'news.habits.track.to' },
         { from: 'news.habits.enter.from', to: 'news.habits.enter.to', note: 'news.habits.enter.note' },
         { from: 'news.habits.blank.from', to: 'news.habits.blank.to' },
+        { from: 'news.habits.grey.from', to: 'news.habits.grey.to' },
       ], more: { text: 'news.habits.more', link: 'news.habits.changelog' },
     },
   ];
@@ -50,14 +52,14 @@ const WhatsNew = (function () {
   // Les captures de « Exporter, en détail » : leur taille en pixels CSS (la moitié de celle du fichier : prises en échelle 2) et, pour celles qui en portent, les repères où poser une pastille
   // (le centre de la pastille, en pixels CSS de la capture à sa taille d'origine). Seul le menu Exporter change de largeur avec la langue (il s'élargit avec ses libellés).
   const SHOTS = {
-    types: { w: 178, h: 239, at: { xlsx: [159, 120] } },
-    'quality-native': { w: 178, h: 110 },
-    'quality-browser': { w: 178, h: 110 },
-    'quality-light': { w: 178, h: 110 },
+    types: { w: 178, h: 247, at: { xlsx: [159, 136] } },
+    'quality-native': { w: 178, h: 102 },
+    'quality-browser': { w: 178, h: 102 },
+    'quality-light': { w: 178, h: 102 },
     buttons: { w: 139, h: 42, at: { typeBtn: [15, 10], exportBtn: [78, 10] } },
     exporter: {
-      fr: { w: 229, h: 200, at: { checked: [18.8, 120.5], exportBtn: [130, 10] } },
-      en: { w: 189.5, h: 200, at: { checked: [18.8, 120.5], exportBtn: [77.5, 10] } },
+      fr: { w: 281.5, h: 198, at: { checked: [18.9, 120.5], exportBtn: [182.5, 10] } },
+      en: { w: 246.5, h: 198, at: { checked: [19, 120.5], exportBtn: [134.5, 10] } },
     },
     'sheets-preview': { w: 120, h: 118 },
     'dialog-sheets': { w: 620, h: 372 },
@@ -284,7 +286,8 @@ const WhatsNew = (function () {
   function drawTypes() {
     const box = exportSlide('news.export.types.name');
     const cols = el('div', 'pp-news-exp-cols');
-    cols.style.gridTemplateColumns = sizeOf('types').w + 'px minmax(0, 1fr)';
+    const scale = 0.95;   // le menu a huit types et une ligne grisée de plus : un peu réduit, il tient dans la hauteur commune des écrans
+    cols.style.gridTemplateColumns = Math.round(sizeOf('types').w * scale) + 'px minmax(0, 1fr)';
     cols.style.gap = '20px';
     const buttons = shot('buttons', { scale: 1.4, badges: [[1, 'typeBtn'], [2, 'exportBtn']], alt: t('news.export.types.altButtons') });
     buttons.style.marginBottom = '12px';
@@ -294,7 +297,7 @@ const WhatsNew = (function () {
       [2, 'news.export.types.exportButton', 'news.export.types.exportButtonText'],
       [3, null, 'news.export.types.greyed'],
     ]), el('p', 'pp-news-exp-foot', t('news.export.types.foot')));
-    cols.append(shot('types', { menu: true, cut: 'bottom', badges: [[3, 'xlsx']], alt: t('news.export.types.altMenu') }), side);
+    cols.append(shot('types', { scale, menu: true, cut: 'bottom', badges: [[3, 'xlsx']], alt: t('news.export.types.altMenu') }), side);
     box.append(cols);
     return box;
   }
@@ -320,7 +323,8 @@ const WhatsNew = (function () {
   function drawLines() {
     const box = exportSlide('news.export.lines.name');
     const cols = el('div', 'pp-news-exp-cols');
-    cols.style.gridTemplateColumns = (sizeOf('exporter').w + 2) + 'px minmax(0, 1fr)';
+    const scale = 0.9;    // le menu s'est élargi (« de la vue ») : réduit, il laisse sa largeur au texte
+    cols.style.gridTemplateColumns = Math.round(sizeOf('exporter').w * scale + 2) + 'px minmax(0, 1fr)';
     const options = el('div', 'pp-news-exp-options');
     [
       ['news.export.lines.one', 'news.export.lines.oneText'],
@@ -337,7 +341,7 @@ const WhatsNew = (function () {
       [1, null, 'news.export.lines.tick'],
       [2, 'news.export.lines.exportButton', 'news.export.lines.exportButtonText'],
     ]), options, el('p', 'pp-news-exp-foot', t('news.export.lines.foot')));
-    cols.append(shot('exporter', { badges: [[1, 'checked'], [2, 'exportBtn']], alt: t('news.export.lines.alt') }), side);
+    cols.append(shot('exporter', { scale, cut: 'bottom', badges: [[1, 'checked'], [2, 'exportBtn']], alt: t('news.export.lines.alt') }), side);
     box.append(cols);
     return box;
   }

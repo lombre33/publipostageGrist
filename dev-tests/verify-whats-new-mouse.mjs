@@ -3,7 +3,7 @@
 // d'Antoine (700x400), en français clair puis en anglais sombre - demande du 2026-10-21 : une fenêtre qui décrit les nouveautés de la version, avec de vraies captures, puis une fenêtre à part pour
 // « Qualité PDF » (devenue « Type d'export ») et « Exporter ». dev-tests/scenarios-whats-new.js vérifie les états et les textes DANS la page ; ici, ce qui se mesure aux PIXELS et au geste réel :
 //   1) Réglages > Crédits : la ligne « Nouveautés » est sous « Version », son bouton a l'aspect d'un lien (souligné, couleur d'accent, lisible), un vrai clic ouvre le carrousel ;
-//   2) la fenêtre tient dans le panneau (620 px de large, entre les bords haut et bas), les neuf écrans s'atteignent au vrai clic sur « Suivant » sans rien qui défile ni qui sorte à droite,
+//   2) la fenêtre tient dans le panneau (620 px de large, entre les bords haut et bas), les dix écrans s'atteignent au vrai clic sur « Suivant » sans rien qui défile ni qui sorte à droite,
 //      tous de la même hauteur ; chaque image est décodée, peinte (rien ne la recouvre : le point de son centre est elle-même) et dans la zone visible ;
 //   3) le texte se lit : toute couleur de texte de la fenêtre, 4,5:1 au moins sur son fond réel (clair et sombre) ; les points, 4,5:1 aussi pour ceux qu'on peut choisir ;
 //   4) « Voir en détail » (dernier écran) ouvre « Exporter, en détail » par-dessus, au vrai clic : le point du centre du carrousel tombe dans la fenêtre du dessus ; ses cinq écrans s'atteignent de
@@ -11,7 +11,7 @@
 //   5) le clavier : Tab tourne dans la fenêtre du dessus (le point de l'écran affiché, « Fermer », « Suivant »), Entrée sur « Suivant » change d'écran et garde le focus, les flèches changent
 //      d'écran depuis un point et le focus les suit, Échap ferme la fenêtre du dessus seulement (« Exporter, en détail », puis le carrousel, puis les Réglages) et le focus revient d'où la
 //      fenêtre est partie ;
-//   6) aucune image introuvable (toutes en 200), exactement celles de la langue (7 bandeaux et 9 captures), aucune erreur de page.
+//   6) aucune image introuvable (toutes en 200), exactement celles de la langue (8 bandeaux et 9 captures), aucune erreur de page.
 // Lancé par run-headless.mjs (groupe Node « whatsNewMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-whats-new-mouse.mjs
 // (WHATS_NEW_SHOTS=<dossier> y range une capture par écran, à regarder - aucune vérification n'en dépend).
 import { mkdir } from 'node:fs/promises';
@@ -20,7 +20,7 @@ import { open, stopServer, sleep, click, center } from './load-lib.mjs';
 const PORT = Number(process.env.WHATS_NEW_MOUSE_PORT || 9013);
 const SHOTS = process.env.WHATS_NEW_SHOTS || '';
 const SPEC = { tables: [{ id: 'PbClients', rows: 2, columns: [{ id: 'Nom', type: 'Text' }] }] };
-const NEWS = 9;
+const NEWS = 10;
 const DETAIL = 5;
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
 
@@ -150,7 +150,7 @@ async function pass(lang, theme, tag) {
     await sleep(900);
     check(`${tag} : un vrai clic sur « ${T.open} » ouvre le carrousel, les Réglages restent derrière`, (await shownNow(page, 'pp-news-modal')) && (await shownNow(page, 'settings-modal')));
 
-    console.log(`\n[${tag}] Le carrousel, neuf écrans au clic sur « ${T.next} »`);
+    console.log(`\n[${tag}] Le carrousel, dix écrans au clic sur « ${T.next} »`);
     const screens = [];
     for (let i = 0; i < NEWS; i++) {
       await sleep(i === 0 ? 700 : 450);
@@ -164,11 +164,11 @@ async function pass(lang, theme, tag) {
     check(`${tag} : les ${NEWS} écrans ont la même hauteur, sans défilement ni rien qui sorte à droite`,
       screens.length === NEWS && new Set(screens.map(s => s.box.h)).size === 1 && screens.every(s => s.scrollH <= s.clientH && s.scrollW <= s.clientW && s.beyondRight === 0 && s.slideH === 264),
       screens.map(s => ({ h: s.box.h, sh: s.scrollH, ch: s.clientH, slide: s.slideH, beyond: s.beyondRight })));
-    const hero = screens.slice(0, 7);
-    check(`${tag} : sept bandeaux décodés, de 580x193, peints (rien ne les recouvre), dans la zone visible, à plusieurs couleurs`,
+    const hero = screens.slice(0, 8);
+    check(`${tag} : huit bandeaux décodés, de 580x193, peints (rien ne les recouvre), dans la zone visible, à plusieurs couleurs`,
       hero.every(s => s.images.length === 1 && s.images[0].decoded && s.images[0].w >= 578 && s.images[0].w <= 582 && s.images[0].h >= 191 && s.images[0].h <= 195 && s.images[0].visible && s.images[0].onTop && s.images[0].distinct > 3),
       hero.map(s => s.images));
-    check(`${tag} : les deux derniers écrans n'ont pas d'image, quatre lignes « avant → après » chacun`, screens.slice(7).every(s => s.images.length === 0), screens.slice(7).map(s => s.name));
+    check(`${tag} : les deux derniers écrans n'ont pas d'image, quatre puis cinq lignes « avant → après »`, screens.slice(8).every(s => s.images.length === 0), screens.slice(8).map(s => s.name));
     check(`${tag} : tout le texte se lit (4,5:1 au moins sur son fond réel)`, screens.every(s => s.texts.length >= 2 && s.minText >= 4.5), screens.map(s => ({ n: s.name, min: s.minText, worst: s.worst })));
     check(`${tag} : les points (un par écran) se lisent aussi (4,5:1 au moins), l'écran affiché est plus gros`,
       screens.every((s, i) => s.dotRatios.length === NEWS && s.dotRatios.every(r => r >= 4.5) && s.selected === i && s.dotSizes[i] > Math.max(...s.dotSizes.filter((_, k) => k !== i))),
@@ -245,8 +245,8 @@ async function pass(lang, theme, tag) {
 
     const urls = [...new Set(requests.map(r => r.url))];
     const wrongLang = urls.filter(u => !new RegExp(`-${lang}\\.webp$`).test(u));
-    check(`${tag} : aucune image introuvable (toutes en 200), seulement celles de la langue : 7 bandeaux et 9 captures`,
-      requests.length > 0 && requests.every(r => r.status === 200) && urls.length === 16 && wrongLang.length === 0, { requests: requests.length, distinct: urls.length, bad: requests.filter(r => r.status !== 200), wrongLang });
+    check(`${tag} : aucune image introuvable (toutes en 200), seulement celles de la langue : 8 bandeaux et 9 captures`,
+      requests.length > 0 && requests.every(r => r.status === 200) && urls.length === 17 && wrongLang.length === 0, { requests: requests.length, distinct: urls.length, bad: requests.filter(r => r.status !== 200), wrongLang });
     check(`${tag} : aucune erreur de page`, realErrors(w).length === 0, realErrors(w));
   } finally {
     await w.close();

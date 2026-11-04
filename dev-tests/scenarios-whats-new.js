@@ -4,7 +4,7 @@
 // éléments de la V1, pas de screen de la bêta comme c'était ». Ici, DANS la page : la ligne « Nouveautés » de Réglages > Crédits (sous la version) qui ouvre le carrousel ; la comparaison de la
 // dernière version fermée par la personne (`pp_news_seen`, PersonStore) à celle de la fenêtre, les conditions de son ouverture toute seule (droits confirmés, qui écrit, ni la Lecture épurée ni la carte de l'accès, aucune autre
 // fenêtre, une mémoire qui retient, une seule fois par séance) et ce que la fermeture retient (dev-tests/verify-whats-new-first.mjs le suit à la vraie souris, seul et chez GFS) ;
-// ses neuf écrans (sept bandeaux de capture, dont trois étiquetés « Grist Factory Suite », puis deux écrans « avant → après »), tous de la même hauteur, les images réellement chargées dans
+// ses dix écrans (huit bandeaux de capture, dont trois étiquetés « Grist Factory Suite », puis deux écrans « avant → après »), tous de la même hauteur, les images réellement chargées dans
 // la langue de la page ; « Voir en détail » qui ouvre « Exporter, en détail » (cinq écrans, aucun de la bêta) au-dessus du carrousel ; Échap qui ferme la fenêtre du dessus seulement ; les
 // points (un seul arrêt de Tab, les flèches), « Fermer » principal au dernier écran avec le focus ; une image qui ne vient pas ; les deux-points de la légende (insécable en français, collé en
 // anglais). dev-tests/verify-whats-new-mouse.mjs le mesure à 700x400 à la vraie souris et au vrai clavier, en clair et en sombre.
@@ -23,7 +23,7 @@
   const text = el => (el ? el.textContent.replace(/\s+/g, ' ').trim() : '');
   const zOf = m => Number(getComputedStyle(m).zIndex);
   const lang = () => I18n.getLang();
-  const NEWS = 9;     // écrans du carrousel
+  const NEWS = 10;     // écrans du carrousel
   const DETAIL = 5;   // écrans de « Exporter, en détail »
   const KEY = 'pp_news_seen';   // la dernière version dont la personne a fermé la fenêtre ; dev-tests/grist-stub.js la sème à « 99 » (plus récente que toutes) pour que la fenêtre ne s'ouvre pas toute seule
   const seenNow = () => PersonStore.get(KEY);
@@ -228,8 +228,8 @@
   });
 
   cases.push({
-    id: 'whats_new_carousel_has_nine_screens_of_the_same_height_and_real_images',
-    description: 'Le carrousel : neuf écrans (sept bandeaux avec image, titre et texte, puis deux écrans « avant → après »), tous de la même hauteur et sans défilement dans le panneau ; les images viennent de img/news/1.0/ dans la langue de la page ; « Grist Factory Suite » sur trois écrans seulement',
+    id: 'whats_new_carousel_has_ten_screens_of_the_same_height_and_real_images',
+    description: 'Le carrousel : dix écrans (huit bandeaux avec image, titre et texte, puis deux écrans « avant → après »), tous de la même hauteur et sans défilement dans le panneau ; les images viennent de img/news/1.0/ dans la langue de la page ; « Grist Factory Suite » sur trois écrans seulement',
     run: async (h) => {
       await setup(h);
       WhatsNew.open();
@@ -251,10 +251,10 @@
       }
       await finish();
       const features = rows.filter(r => r.kind === 'feature');
-      const pass = reached === NEWS && dots.length === NEWS && rows.length === NEWS && features.length === 7 && rows.slice(7).every(r => r.kind === 'list' && r.rows === 4)
+      const pass = reached === NEWS && dots.length === NEWS && rows.length === NEWS && features.length === 8 && rows.slice(8).every(r => r.kind === 'list') && rows[8].rows === 4 && rows[9].rows === 5
         && features.every(r => r.img && r.img.ok && r.img.w === 1200 && r.img.h === 400 && r.img.alt && /^img\/news\/1\.0\/[a-z]+-fr\.webp\?v=\d+$/.test(r.img.src) && r.name)
-        && rows.map(r => r.badge).join(',') === 'false,false,false,false,true,true,true,false,false' && rows.every(r => r.heightOk) && new Set(rows.map(r => r.boxH)).size === 1
-        && rows[7].name === 'Vos modèles de la bêta' && rows[8].name === 'Quelques habitudes qui changent';
+        && rows.map(r => r.badge).join(',') === 'false,false,false,false,false,true,true,true,false,false' && rows.every(r => r.heightOk) && new Set(rows.map(r => r.boxH)).size === 1
+        && rows[8].name === 'Vos modèles de la bêta' && rows[9].name === 'Quelques habitudes qui changent';
       return { pass, notes: JSON.stringify(rows) };
     },
   });
@@ -298,7 +298,7 @@
 
   cases.push({
     id: 'whats_new_dots_are_one_tab_stop_and_the_arrows_move_between_screens',
-    description: 'Les points forment une liste d\'onglets : un seul arrêt de Tab (celui de l\'écran affiché), chaque point dit « n / 9 : titre », les flèches, Début et Fin changent d\'écran et le focus suit ; un clic sur un point va à son écran',
+    description: 'Les points forment une liste d\'onglets : un seul arrêt de Tab (celui de l\'écran affiché), chaque point dit « n / 10 : titre », les flèches, Début et Fin changent d\'écran et le focus suit ; un clic sur un point va à son écran',
     run: async (h) => {
       await setup(h);
       WhatsNew.open();
@@ -322,7 +322,7 @@
       parts(win).dots[3].click(); await sleep(30);
       const clicked = { selected: selected(), title: text(slide(win).querySelector('.pp-news-name')), panel: pane(win).getAttribute('aria-labelledby') === parts(win).dots[3].id };
       await finish();
-      const pass = start.selected === 0 && start.tabbable === 1 && start.tablist && start.labelledby && start.labels[0].startsWith('1 / 9 : ') && start.labels[1].startsWith('2 / 9 : ')
+      const pass = start.selected === 0 && start.tabbable === 1 && start.tablist && start.labelledby && start.labels[0].startsWith('1 / 10 : ') && start.labels[1].startsWith('2 / 10 : ')
         && right.selected === 1 && right.focus === 1 && right.tabbable === 1 && end.selected === NEWS - 1 && end.focus === NEWS - 1 && beyond.selected === NEWS - 1
         && left.selected === NEWS - 2 && left.focus === NEWS - 2 && home.selected === 0 && clicked.selected === 3 && clicked.title === 'Des liens vers un titre ou un signet' && clicked.panel;
       return { pass, notes: JSON.stringify({ start, right, end, beyond, left, home, clicked }) };
@@ -363,7 +363,7 @@
 
   cases.push({
     id: 'whats_new_export_in_detail_has_five_screens_of_the_v1_only_with_real_images',
-    description: '« Exporter, en détail » : cinq écrans (type d\'export, trois qualités de PDF, lignes à exporter, plusieurs pages sur une feuille, PDF protégé), tous de la même hauteur sans défilement, neuf captures chargées de img/news/1.0/export/ dans la langue de la page, aucune de la bêta, pastilles numérotées renvoyant à leur légende',
+    description: '« Exporter, en détail » : cinq écrans (type d\'export, trois qualités de PDF, lignes à exporter, plusieurs pages sur une feuille, PDF protégé), tous de la même hauteur sans défilement, neuf captures chargées de img/news/1.0/export/ dans la langue de la page, à leurs proportions (la taille posée par SHOTS suit celle du fichier), aucune de la bêta, pastilles numérotées renvoyant à leur légende',
     run: async (h) => {
       await setup(h);
       WhatsNew.openExport();
@@ -379,7 +379,7 @@
         const onImage = Array.from(s.querySelectorAll('.pp-news-exp-shot .pp-news-exp-badge')).map(text);
         rows.push({
           i: i + 1, name: text(s.querySelector('.pp-news-name')), heightOk: heightOk(win), slideH: Math.round(s.getBoundingClientRect().height), boxH: Math.round(win.querySelector('.pp-modal-box').getBoundingClientRect().height),
-          imgs: imagesOf(win).map(img => ({ src: img.getAttribute('src').replace(/\?.*$/, ''), ok: img.complete && img.naturalWidth > 0, alt: !!img.alt, inside: shots.some(f => f.contains(img)) })),
+          imgs: imagesOf(win).map(img => ({ src: img.getAttribute('src').replace(/\?.*$/, ''), ok: img.complete && img.naturalWidth > 0, alt: !!img.alt, inside: shots.some(f => f.contains(img)), ratioOk: img.naturalWidth > 0 && Math.abs((img.width / img.height) / (img.naturalWidth / img.naturalHeight) - 1) < 0.01 })),
           legendBadges, onImage, badgesHidden: Array.from(s.querySelectorAll('.pp-news-exp-shot .pp-news-exp-badge')).every(b => b.getAttribute('aria-hidden') === 'true'),
         });
       }
@@ -387,7 +387,7 @@
       await finish();
       const names = rows.map(r => r.name);
       const pass = rows.length === DETAIL && names.join('|') === 'Choisissez le type d’export|Trois qualités de PDF|Une ligne, toutes les lignes, puis Exporter|Plusieurs pages sur une même feuille|Un PDF protégé par mot de passe'
-        && total === 9 && rows.every(r => r.heightOk && r.imgs.every(i => i.ok && i.alt && i.inside && /^img\/news\/1\.0\/export\/[a-z-]+-fr\.webp$/.test(i.src) && !/beta/.test(i.src))) && new Set(rows.map(r => r.boxH)).size === 1
+        && total === 9 && rows.every(r => r.heightOk && r.imgs.every(i => i.ok && i.alt && i.inside && i.ratioOk && /^img\/news\/1\.0\/export\/[a-z-]+-fr\.webp$/.test(i.src) && !/beta/.test(i.src))) && new Set(rows.map(r => r.boxH)).size === 1
         && rows[0].legendBadges.join(',') === '1,2,3' && rows[0].onImage.slice().sort().join(',') === '1,2,3' && rows[2].legendBadges.join(',') === '1,2' && rows[2].onImage.slice().sort().join(',') === '1,2'
         && rows[4].legendBadges.join(',') === '1,2,3' && rows[4].onImage.slice().sort().join(',') === '1,2,3' && rows.every(r => r.badgesHidden);
       return { pass, notes: JSON.stringify(rows) };
@@ -466,7 +466,7 @@
       const buttons = { close: text(parts(dwin).close), next: text(parts(dwin).next) };
       await finish();
       const pass = title === 'What’s new in version 1.0' && dtitle === 'Exporting, in detail' && buttons.close === 'Close' && buttons.next === 'Next'
-        && rows.slice(0, 7).every(r => /^img\/news\/1\.0\/[a-z]+-en\.webp\?v=\d+$/.test(r.src)) && rows.every(r => r.heightOk && !r.raw && r.name)
+        && rows.slice(0, 8).every(r => /^img\/news\/1\.0\/[a-z]+-en\.webp\?v=\d+$/.test(r.src)) && rows.every(r => r.heightOk && !r.raw && r.name)
         && drows.every(r => r.heightOk && !r.raw && r.name && r.srcs.every(s => /^img\/news\/1\.0\/export\/[a-z-]+-en\.webp\?v=\d+$/.test(s)))
         && rows[0].name === 'One row in the template, every row in the document' && drows[4].name === 'A password-protected PDF';
       return { pass, notes: JSON.stringify({ title, dtitle, rows, drows }) };

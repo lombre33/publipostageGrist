@@ -513,9 +513,9 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
   inégales) le relâche. C'est un réglage de la personne tant que la page est ouverte : rien n'en est enregistré dans le modèle, il repart éteint à chaque chargement. Le sens, le format, le
   filigrane et les couleurs du modèle ne changent pas ; en lecture seule, les boutons et les champs sont grisés. Le code est dans `js/settings.js` (`MARGIN_PRESETS`, `applyMargins`),
   `js/page-layout.js` (`boundedMarginsMm`) et `js/icons.js` (`marginsLinked`, `marginsUnlinked`).
-- **Une fenêtre des nouveautés, avec de vraies captures** : Réglages > Crédits gagne une ligne « Nouveautés », sous la version, qui ouvre un carrousel de neuf écrans : sept nouveautés
-  de la version 1.0 en images (la Boucle, l'historique des versions, la galerie de modèles, les signets, puis, par Grist Factory Suite, l'écriture en direct, les présentations et le
-  graphique de la page, étiquetés « Grist Factory Suite »), puis deux écrans « avant → après » : ce que devient un modèle fait avec la bêta, et les habitudes qui changent. Le dernier
+- **Une fenêtre des nouveautés, avec de vraies captures** : Réglages > Crédits gagne une ligne « Nouveautés », sous la version, qui ouvre un carrousel de dix écrans : huit nouveautés
+  de la version 1.0 en images (la Boucle, l'historique des versions, la galerie de modèles, les signets, la mise en forme du texte (menu « Aa », soulignements, texte de droite à gauche), puis, par Grist Factory Suite, l'écriture en direct, les présentations et le
+  graphique de la page, étiquetés « Grist Factory Suite »), puis deux écrans « avant → après » : ce que devient un modèle fait avec la bêta, et les habitudes qui changent (un bouton grisé dit pourquoi, au survol et au clic). Le dernier
   écran mène, par « Voir en détail », à une seconde fenêtre, « Exporter, en détail » : cinq écrans de captures numérotées (le bouton « Type d'export » et son menu, les trois qualités du
   PDF, « une seule ligne / toutes les lignes », plusieurs pages sur une feuille, le PDF protégé). Les points du bas passent d'un écran à l'autre (un seul arrêt de Tab, les flèches
   changent d'écran) ; Échap ferme une fenêtre à la fois et rend le focus au bouton qui l'avait ouverte ; tous les écrans ont la même hauteur, la fenêtre ne saute pas. Les images sont
@@ -3116,9 +3116,9 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
   changes only itself. It is off at the start, turning it on changes no margin, and "Wide" (four unequal margins) releases it. It is a setting of the person while the page is open: none of
   it is saved in the template, it starts off again at each load. The template's orientation, size, watermark and colors do not change; when read-only, the buttons and the fields are greyed
   out. The code is in `js/settings.js` (`MARGIN_PRESETS`, `applyMargins`), `js/page-layout.js` (`boundedMarginsMm`) and `js/icons.js` (`marginsLinked`, `marginsUnlinked`).
-- **A what's-new window, with real screenshots**: Settings > Credits gains a "What's new" line, under the version, which opens a nine-screen carousel: seven new things of version 1.0
-  in pictures (the Loop, the version history, the template gallery, bookmarks, then, through Grist Factory Suite, live writing, presentations and the page chart, tagged "Grist Factory
-  Suite"), then two "before → after" screens: what becomes of a template made with the beta, and the habits that change. The last screen leads, through "See details", to a second
+- **A what's-new window, with real screenshots**: Settings > Credits gains a "What's new" line, under the version, which opens a ten-screen carousel: eight new things of version 1.0
+  in pictures (the Loop, the version history, the template gallery, bookmarks, text formatting (the “Aa” menu, underlines, right-to-left text), then, through Grist Factory Suite, live writing, presentations and the page chart, tagged "Grist Factory
+  Suite"), then two "before → after" screens: what becomes of a template made with the beta, and the habits that change (a grayed-out button says why, on hover and on click). The last screen leads, through "See details", to a second
   window, "Exporting, in detail": five screens of numbered screenshots (the "Export type" button and its menu, the three PDF qualities, "one row / all rows", several pages on one
   sheet, the protected PDF). The dots at the bottom move from one screen to the next (a single Tab stop, the arrows change screen); Escape closes one window at a time and gives the
   focus back to the button that had opened it; every screen has the same height, so the window doesn't jump. The images are the real widget's, in French and in English (`img/news/`,

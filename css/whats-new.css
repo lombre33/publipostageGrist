@@ -15,8 +15,8 @@
 
 /* Un écran « avant → après » : une ligne par habitude qui change. Les deux colonnes de texte prennent la part que l'écran leur donne (--pp-news-from, --pp-news-to). */
 .pp-news-lead { margin: 0 0 8px; font-size: 12.5px; line-height: 1.4; color: var(--text-muted); }
-.pp-news-rows { display: grid; gap: 6px; margin: 8px 0 10px; padding: 0; list-style: none; }
-.pp-news-row { display: grid; grid-template-columns: minmax(0, var(--pp-news-from, 0.85fr)) 20px minmax(0, var(--pp-news-to, 1.35fr)); align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md, 8px); background: var(--surface-sunken); font-size: 12.5px; line-height: 1.4; color: var(--text); }
+.pp-news-rows { display: grid; gap: 4px; margin: 8px 0 10px; padding: 0; list-style: none; }
+.pp-news-row { display: grid; grid-template-columns: minmax(0, var(--pp-news-from, 0.85fr)) 20px minmax(0, var(--pp-news-to, 1.35fr)); align-items: center; gap: 10px; padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius-md, 8px); background: var(--surface-sunken); font-size: 12.5px; line-height: 1.4; color: var(--text); }
 .pp-news-row-from { color: var(--text-muted); }
 .pp-news-row-arrow { text-align: center; color: var(--text-muted); font-size: 15px; }
 .pp-news-row-to { font-weight: 700; }

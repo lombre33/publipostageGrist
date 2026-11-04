@@ -255,7 +255,7 @@ async function run(lang, colorScheme) {
   await click('.pp-slide-import-close', 0, 500);
 
   // --- Les nouveautés.
-  await page.evaluate(() => WhatsNew.open(5));
+  await page.evaluate(() => WhatsNew.open(6)); // index 6 : Boucle, versions, galerie, signets, mise en forme du texte, écriture en direct, puis Slides+
   await sleep(1000);
   const newsText = await page.evaluate(() => Array.from(document.querySelectorAll('[role="dialog"]')).map(dialog => dialog.textContent).join(' '));
   check(tag + 'l\'écran « Slides+ » des nouveautés s\'intitule « ' + T.news + ' » et parle de ' + T.newsWord, newsText.includes(T.news) && newsText.includes(T.newsWord), newsText.slice(0, 300));
