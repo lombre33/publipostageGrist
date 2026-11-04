@@ -1063,8 +1063,8 @@ const SECTIONS = {
       await clickCenter(cond + ' .macro-rule-compare');
       const wide = await narrowRule(482);
       const wb = wide.boxes;
-      check('autre colonne (482 px) : la règle tient sur une seule ligne, sans recouvrement, la liste de l’autre colonne garde 90 px et la croix reste libre',
-        reachable(wide, 482) && sameLine(...Object.values(wb)) && wb.field.w >= 90, wide);
+      check('autre colonne (482 px) : la règle tient sur une seule ligne, sans recouvrement, la liste de l’autre colonne garde 90 px (89 px au pixel près : le champ ne dépasse plus de sa place) et la croix reste libre',
+        reachable(wide, 482) && sameLine(...Object.values(wb)) && wb.field.w >= 89, wide);
       await clickCenter(cond + ' .macro-rule-compare');
       const wideValue = await narrowRule(482);
       check('autre colonne (482 px) : mode valeur : le champ de la valeur garde 90 px à côté du bouton, sur la même ligne',

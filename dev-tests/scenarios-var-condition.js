@@ -2869,6 +2869,36 @@
     setInput(row.querySelector('.macro-rule-value'), rule.value);
   }
 
+  // Le champ Valeur d'une règle d'un groupe ne déborde pas sur la croix de sa ligne : dans l'encadré, la ligne est plus étroite que celle d'une condition à plat, et la liste des valeurs
+  // (js/search-select.js, `.ss-inline` de 90 px au moins) dépassait de la place restante - son bord droit recouvrait la croix « × » de la règle, qu'un clic n'atteignait plus.
+  cases.push({
+    id: 'varcond_group_rule_value_field_does_not_cover_the_rule_remove_cross',
+    description: 'Dans un groupe de conditions, chaque règle à liste de valeurs (colonne Choix) garde sa croix « × » entière et cliquable : le bord droit du champ Valeur s’arrête avant elle.',
+    run: async (h) => {
+      await seedCompare(h);
+      const inner = [{ column: 'Priorite', operator: '=', value: 'Haute' }, { column: 'Priorite', operator: '=', value: 'Basse' }];
+      const attr = JSON.stringify({ mode: 'all', rules: [GROUP_RULE, { mode: 'any', rules: inner }] }).replace(/"/g, '&quot;');
+      Editor.setHTML(`<div class="conditional-text" data-condition="${attr}"><p>Texte</p></div>`);
+      const ed = EditorCore.getEditor();
+      let pos = null;
+      ed.state.doc.descendants((node, p) => { if (pos == null && node.type.name === 'conditionalText') pos = p; });
+      VariableCondition.openAt(ed, pos);
+      await h.sleep(150);
+      const modal = conditionModal();
+      const rows = Array.from(modal.querySelectorAll('.cond-group .macro-rule-row'));
+      const facts = rows.map(row => {
+        const trigger = row.querySelector('.macro-rule-value-slot .ss-trigger');
+        const cross = row.querySelector(':scope > .macro-rule-remove');
+        const t = trigger && trigger.getBoundingClientRect(), c = cross && cross.getBoundingClientRect();
+        const hit = c && document.elementFromPoint(c.left + c.width / 2, c.top + c.height / 2);
+        return { valueRight: t && Math.round(t.right), crossLeft: c && Math.round(c.left), crossHit: !!(hit && (hit === cross || cross.contains(hit))) };
+      });
+      cancelWindow(modal);
+      const pass = facts.length === 2 && facts.every(f => f.valueRight != null && f.crossLeft != null && f.valueRight <= f.crossLeft && f.crossHit);
+      return { pass, notes: JSON.stringify(facts) };
+    },
+  });
+
   cases.push({
     id: 'varcond_group_a_and_b_or_c_is_built_with_plus_group_then_read_saved_and_reloaded',
     description: '« + Groupe », à côté de « + Ajouter une condition » et de Copier / Coller, pose un encadré de deux lignes vides combinées à l’inverse de la condition (les parenthèses) : un « Et » bouton devant lui, sa liste « Au moins une de ces conditions », sa croix, son « + Ajouter une condition », le focus sur sa première colonne ; « Titre ≠ Dossier A » ET (« Montant ≥ 1000 » OU « Montant < 20 ») donne à l’aperçu 1 ligne sur 3 (la 3), Enregistrer écrit { mode, rules: [règle, { mode, rules }] }, la Lecture suit ligne par ligne et la fenêtre rouverte retrouve l’encadré',
