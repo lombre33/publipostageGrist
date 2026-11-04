@@ -37,12 +37,12 @@ const Extensions = (function () {
       // La fenêtre à part du diaporama : une page et son script, que le navigateur charge seul quand l'app ouvre la fenêtre (slide-window.js) ; le widget ne les charge jamais.
       standalone: ['present.html', 'slide-present.js'],
     },
-    // La lecture d'un PDF dans le mode Lecture (extensions/lecture-pdf/, consigne GFS 040) : le moteur (pdf-engine.js, qui ouvre le PDF que GFS donne avec pdf.js) et l'écran des pages (pdf-view.js et sa feuille de style),
+    // La lecture d'un PDF dans le mode Lecture (extensions/lecture-pdf/, consigne GFS 040) : le moteur (pdf-engine.js, qui ouvre le PDF que GFS donne avec pdf.js), l'ancre d'un commentaire (pdf-anchor.js, consigne GFS 045 : où est le passage commenté, et le retrouver quand le PDF a changé) et l'écran des pages (pdf-view.js et sa feuille de style),
     // posés par js/pdf-reading.js. La bibliothèque « pdfjs » - pdf.js et son moteur, en UN fichier de forme « module » - vient de GFS seul, sans mode CDN : rien n'est à ajouter à la CSP ni à la liste du widget.
     'lecture-pdf': {
       nameKey: 'extension.lecturePdf.name',
-      version: '0.1',
-      scripts: ['pdf-engine.js', 'pdf-view.js'],
+      version: '0.2',
+      scripts: ['pdf-engine.js', 'pdf-anchor.js', 'pdf-view.js'],
       styles: ['pdf-view.css'],
       libraries: [{ id: 'pdfjs', forme: 'module' }],
     },

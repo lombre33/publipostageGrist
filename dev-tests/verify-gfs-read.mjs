@@ -729,7 +729,7 @@ console.log('\n== Dans le cadre isolé de GFS (sans `allow-same-origin`) ==');
 console.log('\n== Le code : ni adresse, ni import dynamique, ni boîte native, rien à ajouter à la politique de sécurité ==');
 {
   const read = rel => readFileSync(join(ROOT, rel), 'utf8');
-  const mine = ['js/pdf-reading.js', 'extensions/lecture-pdf/pdf-engine.js', 'extensions/lecture-pdf/pdf-view.js'];
+  const mine = ['js/pdf-reading.js', 'extensions/lecture-pdf/pdf-engine.js', 'extensions/lecture-pdf/pdf-anchor.js', 'extensions/lecture-pdf/pdf-view.js'];
   const withoutComments = rel => read(rel).replace(/(^|\s)\/\/.*$/gm, '$1');
   check('aucune adresse dans le code de la lecture (ni CDN, ni dépôt : pdf.js vient de GFS, par la source de son contexte)', mine.every(rel => !/https?:\/\//.test(read(rel))), mine.filter(rel => /https?:\/\//.test(read(rel))));
   // `Dialogs.prompt(...)` est la fenêtre de l'app : seuls `prompt()` / `confirm()` / `alert()` seuls ou posés sur `window` sont les boîtes du navigateur.
