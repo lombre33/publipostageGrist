@@ -173,9 +173,12 @@ const Icons = (function () {
       // Bouton « Modifier le calcul » de la barre flottante d'une bulle « Calcul » (js/floating-toolbars.js) : une calculatrice (corps, écran,
       // touches).
       calc: '<rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><path d="M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>',
-      // Menu « Lien et blocs de contenu » de la barre (une seule icône, js/link-dialog.js) : maillon horizontal pour le lien (le maillon en diagonale,
-      // varLinked, est déjà pris par « autres attributs » de la barre d'une bulle : une icône ne porte qu'une fonction) et chevrons pour le bloc de
-      // code.
+      // Bouton du menu « Lien et blocs de contenu » de la barre (js/link-dialog.js) : des blocs - trois côte à côte et un quatrième détaché en haut à
+      // droite. Le maillon seul (link, ci-dessous) ne disait que « lien », alors que le menu porte aussi le signet, la citation, le bloc de code, l'encadré,
+      // la signature, le QR code, le graphique et la diapositive (demande du 04/11, carte « Quelle icône pour le menu Lien et blocs de contenu ? » : A).
+      blocks: '<path d="M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2"/><rect x="14" y="2" width="8" height="8" rx="1"/>',
+      // Le lien : la ligne « Lien… » de ce menu, la marque d'un objet à lien (js/frame-link.js) et celle d'une diapositive liée dans la bande. Un maillon
+      // horizontal (le maillon en diagonale, varLinked, est déjà pris par « autres attributs » de la barre d'une bulle : une icône ne porte qu'une fonction).
       link: '<path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/>',
       // Signet (js/anchors.js) : ligne « Signet… » du menu du lien, un ruban de marque-page.
       bookmark: '<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>',

@@ -197,9 +197,9 @@ const MainToolbar = (function () {
     set('v2-btn-two-columns', 'twoColumns'); set('v2-btn-image', 'image');
     set('v2-btn-page-break', 'pageBreak'); set('v2-btn-toc', 'toc');
     set('v2-btn-comment', 'comment');
-    // Menu « Lien et blocs de contenu » (js/link-dialog.js, js/callout.js, js/qr-code.js, js/chart-entry.js) : le bouton porte l'icône du lien, chaque ligne la
-    // sienne.
-    set('v2-btn-link', 'link');
+    // Menu « Lien et blocs de contenu » (js/link-dialog.js, js/callout.js, js/qr-code.js, js/chart-entry.js) : le bouton porte l'icône des blocs (celle du lien seul ne
+    // disait que « lien »), chaque ligne la sienne - « Lien… » garde le maillon.
+    set('v2-btn-link', 'blocks');
     const setRowIcon = (id, icon) => { const slot = document.querySelector('#' + id + ' .v2-menu-row-icon'); if (slot) Dom.setMarkup(slot, Icons.svg(icon)); };
     setRowIcon('v2-row-link', 'link'); setRowIcon('v2-row-bookmark', 'bookmark'); setRowIcon('v2-btn-citation', 'blockquote'); setRowIcon('v2-btn-code-block', 'codeBlock');
     setRowIcon('v2-btn-callout', 'callout'); setRowIcon('v2-btn-signature', 'signature'); setRowIcon('v2-btn-qr', 'qr'); setRowIcon('v2-btn-chart', 'chart'); setRowIcon('v2-btn-chart-make', 'chartMake');

@@ -215,6 +215,28 @@
     },
   });
 
+  cases.push({
+    id: 'lb_menu_button_shows_the_blocks_icon_and_only_the_link_row_keeps_the_chain',
+    description: 'Le bouton du menu « Lien et blocs de contenu » porte l\'icône des blocs (quatre blocs dont un détaché), pas le maillon : celui-ci ne disait que « lien » alors que le menu porte aussi le signet, la citation, le bloc de code, l\'encadré, la signature, le QR code, le graphique et la diapositive (audit de l\'interface avant la v1, carte du 04/11 : « A — Blocs ») ; seule la ligne « Lien… » garde le maillon, et aucune ligne du menu ne reprend le dessin du bouton',
+    run: async (h) => {
+      await h.resetEditor();
+      // Les dessins se comparent tels que le navigateur les relit (innerHTML d'un svg posé dans la page), jamais comme les chaînes de js/icons.js.
+      const drawing = svg => (svg ? svg.innerHTML : '');
+      const fromIcons = name => { const box = document.createElement('div'); Dom.setMarkup(box, Icons.svg(name)); return drawing(box.querySelector('svg')); };
+      const drawn = id => { const el = document.getElementById(id); const slot = el && (el.querySelector('.v2-menu-row-icon') || el); return drawing(slot && slot.querySelector('svg')); };
+      const rowIds = ['v2-row-link', 'v2-row-bookmark', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart', 'v2-btn-slide-text'];
+      const blocks = fromIcons('blocks');
+      const chain = fromIcons('link');
+      const button = drawn('v2-btn-link');
+      const sharing = rowIds.filter(id => drawn(id) === button);
+      const rects = (button.match(/<rect /g) || []).length;
+      return {
+        pass: blocks.includes('<rect') && blocks !== chain && button === blocks && drawn('v2-row-link') === chain && !button.includes('<line') && rects === 1 && sharing.length === 0,
+        notes: JSON.stringify({ buttonIsBlocks: button === blocks, linkRowIsChain: drawn('v2-row-link') === chain, blocksDrawn: blocks.length > 0, rects, sharing, button: button.slice(0, 80) }),
+      };
+    },
+  });
+
   // Le menu et la fenêtre de lien écrivent leurs textes dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
   const menuTextsCase = {
     id: 'lb_menu_texts_follow_the_interface_language',
