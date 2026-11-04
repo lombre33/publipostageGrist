@@ -295,7 +295,7 @@ fenêtre le dit.
 Le widget écrit dans neuf tables du document, toutes préfixées `Publipostage_` : `Publipostage_Modeles`
 (les modèles, et une ligne « Réglages du document » qui garde les couleurs partagées par tous les
 modèles et, seulement si vous choisissez « Le même pour tous, enregistré dans le document » pour un PDF protégé,
-ce mot de passe commun, en clair, dans sa colonne `MotDePassePdf`), `Publipostage_Commentaires`, `Publipostage_PreferencesModeles` (épingles, dossiers et choix d'export
+ce mot de passe commun, en clair, dans sa colonne `MotDePassePdf`), `Publipostage_Commentaires` (les fils de commentaires, ceux des modèles et ceux des PDF lus dans la Lecture : les colonnes d'un PDF n'arrivent qu'avec son premier fil publié), `Publipostage_PreferencesModeles` (épingles, dossiers et choix d'export
 de chaque personne), `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables`
 (les clés de correspondance entre tables), `Publipostage_Versions` (les versions gardées de chaque
 modèle, créée à la première version gardée et lue seulement à l'ouverture de l'historique), `Publipostage_Direct` (le tuyau de l'écriture en direct, créée au premier
@@ -773,7 +773,7 @@ column: "Typed at each export" is the safest way, and the window says so.
 The widget writes to nine tables of the document, all prefixed `Publipostage_`: `Publipostage_Modeles`
 (the templates, and a "Réglages du document" row that keeps the colors shared by every template and, only if
 you choose "Same for all, saved in the document" for a protected PDF, that shared password, in plain text, in its
-`MotDePassePdf` column), `Publipostage_Commentaires`, `Publipostage_PreferencesModeles` (each person's pins, folders and
+`MotDePassePdf` column), `Publipostage_Commentaires` (the comment threads, those of templates and those of PDFs read in Reading: a PDF's columns only arrive with its first published thread), `Publipostage_PreferencesModeles` (each person's pins, folders and
 export choices), `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables` (the
 matching keys between tables), `Publipostage_Versions` (the versions kept for each template, created
 when the first version is kept and only read when the history is opened), `Publipostage_Direct` (the pipe of live editing, created at the first live
