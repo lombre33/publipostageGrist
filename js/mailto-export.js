@@ -238,10 +238,17 @@ const MailtoExport = (function () {
   // clients de messagerie attendent (Outlook bureau compris), ce qu'un encodeURIComponent sur toute la chaîne ne ferait pas. Un point-virgule entre
   // deux adresses (celui qu'on tape, ou le séparateur réglé dans la fenêtre « Liste » d'une colonne de références, js/variable-list.js) en fait deux
   // aussi : le lien les sépare par la virgule que tous les clients lisent, au lieu d'une seule adresse illisible (« a@b.fr%3Bc@d.fr »).
+  // Un saut de ligne en sépare aussi (une cellule à plusieurs lignes qui porte une adresse par ligne) : il ne reste jamais dans une adresse, même encodé
+  // en « %0D%0A » - le client de messagerie le décoderait, et un saut de ligne suivi d'un faux en-tête (« Bcc: … ») dans un champ du lien est la forme
+  // classique d'une injection d'en-tête (consigne GFS 046 : une valeur de cellule n'ajoute jamais un champ au lien).
   function encodeAddressList(value) {
     if (!value) return '';
-    return value.split(/[,;]/).map(a => a.trim()).filter(Boolean).map(a => encodeURIComponent(a)).join(',');
+    return value.split(/[,;\r\n\u2028\u2029]/).map(address => address.trim()).filter(Boolean).map(address => encodeURIComponent(address)).join(',');
   }
+
+  // L'objet tient sur une ligne : un saut de ligne (une cellule à plusieurs lignes, ou un CR LF suivi d'un faux en-tête « Bcc: … ») devient une espace, pour le
+  // même motif que les adresses.
+  const oneLine = text => String(text).replace(/[\r\n\u2028\u2029]+/g, ' ');
 
   // Zimbra (voir 4 plus haut) : « & », « < », « > » et « + » de l'objet et du corps ne passent par aucun encodage. Leur forme large (« ＆ » U+FF06, « ＜ »
   // U+FF1C, « ＞ » U+FF1E, « ＋ » U+FF0B) est un autre caractère pour Zimbra, lu et affiché tel quel, et se lit presque comme l'original. Le prix : l'encodage du
@@ -258,7 +265,8 @@ const MailtoExport = (function () {
     const params = [];
     if (cc) params.push('cc=' + encodeAddressList(cc));
     if (bcc) params.push('bcc=' + encodeAddressList(bcc));
-    if (subject) params.push('subject=' + encodeURIComponent(zimbra ? forZimbra(subject) : subject));
+    const subjectLine = subject ? oneLine(subject) : '';
+    if (subjectLine) params.push('subject=' + encodeURIComponent(zimbra ? forZimbra(subjectLine) : subjectLine));
     // CRLF requis par le protocole mailto: (RFC 6068) : Outlook bureau y est strict, un simple \n ne suffit pas toujours.
     if (bodyText) params.push('body=' + encodeURIComponent((zimbra ? forZimbra(bodyText) : bodyText).replace(/\r\n/g, '\n').replace(/\n/g, '\r\n')));
     // Zimbra relit le premier paramètre une seconde fois, en le coupant au premier « ? » ou « & » (voir 4) : un « cc » vide en tête reçoit cette seconde

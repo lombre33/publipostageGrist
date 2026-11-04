@@ -685,6 +685,24 @@
   });
 
   cases.push({
+    id: 'xlsx_a_value_of_a_row_that_looks_like_a_formula_or_a_link_stays_text',
+    description: 'Une VALEUR de ligne (pas un texte du modèle) qui commence par =, + , - ou @, ou qui est une adresse « javascript: », reste du texte dans le fichier : une chaîne partagée, jamais une formule (<f>), jamais un lien (consigne GFS 046 : une ligne reçue par un lien public est du texte non fiable)',
+    run: async (h) => {
+      await seed(h);
+      const bad = [];
+      const values = ['=HYPERLINK("https://exemple.invalid","x")', '+1+1', '-2+3', '@SUM(1)', '=1+1 =2', 'javascript:alert(1)'];
+      for (const value of values) {
+        const x = await exportGrid([200], [30], [[td(badge('Nom'))]], { record: Object.assign({}, RECORD, { Nom: value }) });
+        const cell = x.sheet.cell('A1');
+        if (cell.kind !== 'text' || cell.hasFormula || cell.value !== value) bad.push(JSON.stringify(value) + ' -> ' + cell.kind + (cell.hasFormula ? ' avec formule' : '') + ' ' + JSON.stringify(cell.value));
+        if (/<f[ >]/.test(x.sheet.xml)) bad.push(JSON.stringify(value) + ' : une formule (<f>) dans la feuille');
+        if (x.sheet.hyperlinks.length) bad.push(JSON.stringify(value) + ' : un lien ' + JSON.stringify(x.sheet.hyperlinks));
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
     id: 'xlsx_images_sit_on_their_cell_at_their_size',
     description: 'Une image d\'une case est posée sur cette case (angle haut gauche), à sa taille, et son fichier est dans le classeur',
     run: async (h) => {

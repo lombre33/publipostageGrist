@@ -167,6 +167,33 @@
   });
 
   cases.push({
+    id: 'email_link_untrusted_values_add_no_field_and_no_line_break',
+    description: 'E-mail, le lien mailto: avec des valeurs de cellule non fiables (consigne GFS 046, une ligne reçue par un lien public est du texte non fiable) : un « ? », un « & », un « # », un « = » ou un faux champ (« cc=… », « Bcc: … ») dans une adresse, l\'objet ou le corps n\'ajoute aucun champ au lien (seuls cc, bcc, subject et body, chacun une fois) ; un saut de ligne ne reste ni dans l\'objet (il devient une espace) ni dans une adresse (il sépare deux adresses, comme une virgule) - jamais un CR LF qu\'un client de messagerie décoderait en en-tête ; le corps garde ses lignes (CRLF), c\'est du texte',
+    run: async () => {
+      const hostile = 'x@y.fr?cc=evil@z.fr&bcc=evil@z.fr&subject=piege&body=piege#frag=1';
+      const lines = 'Salut\r\nBcc: evil@z.fr\nTo: evil@z.fr\u2028Cc: evil@z.fr';
+      const url = MailtoExport.buildMailtoUrl({ to: hostile + '\nBcc: evil2@z.fr', cc: lines, bcc: 'ok@z.fr\r\n' + hostile, subject: lines + ' ' + hostile, bodyText: 'Ligne 1\nLigne 2 ' + hostile });
+      const parts = url.split('?');
+      const params = Object.fromEntries((parts[1] || '').split('&').map(pair => { const i = pair.indexOf('='); return [pair.slice(0, i), pair.slice(i + 1)]; }));
+      const decode = value => decodeURIComponent(value);
+      const decoded = { to: decode(parts[0].replace(/^mailto:/, '')), cc: decode(params.cc || ''), bcc: decode(params.bcc || ''), subject: decode(params.subject || ''), body: decode(params.body || '') };
+      const checks = {
+        oneQuestionMark: parts.length === 2,
+        onlyTheFourFields: Object.keys(params).join(',') === 'cc,bcc,subject,body' && url.split('&').length === 4,
+        // Dans l'adresse, « ? », « & », « # » et « = » restent des caractères de l'adresse ; le saut de ligne en fait deux éléments, le second est le texte « Bcc: evil2@z.fr », pas un champ.
+        toItems: JSON.stringify(decoded.to.split(',')) === JSON.stringify([hostile, 'Bcc: evil2@z.fr']),
+        ccItems: JSON.stringify(decoded.cc.split(',')) === JSON.stringify(['Salut', 'Bcc: evil@z.fr', 'To: evil@z.fr', 'Cc: evil@z.fr']),
+        bccItems: JSON.stringify(decoded.bcc.split(',')) === JSON.stringify(['ok@z.fr', hostile]),
+        subjectOneLine: decoded.subject === 'Salut Bcc: evil@z.fr To: evil@z.fr Cc: evil@z.fr ' + hostile,
+        noLineBreakBeforeTheBody: !/[\r\n\u2028\u2029]/.test(decoded.to + decoded.cc + decoded.bcc + decoded.subject) && !/%0[AD]|%E2%80%A[89]/i.test(url.slice(0, url.indexOf('body='))),
+        bodyKeepsItsLines: decoded.body === 'Ligne 1\r\nLigne 2 ' + hostile,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, url, decoded }) };
+    },
+  });
+
+  cases.push({
     id: 'email_length_gauge_stops_at_the_safe_length',
     description: 'E-mail, jauge de longueur : un lien de 2000 caractères reste sûr, 2001 ne l\'est plus (avertissement seul, jamais un blocage)',
     run: async () => {
