@@ -412,6 +412,39 @@
     description: 'Page qui démarre en anglais : la fenêtre Réglages fait 480 px, ses sept onglets tiennent sur une ligne sans être coupés, un seul panneau s\'affiche à la fois et « Close » reste sous la zone de contenu',
   }));
 
+  // Même hauteur pour tous les onglets de Réglages (audit UI/UX du 04/11, carte « Garder la même hauteur pour tous les onglets de Réglages ? », réponse « Oui, même hauteur pour
+  // les neuf »). Avant : la fenêtre, centrée, prenait la hauteur de son onglet (207 px pour Langue, 376 px pour Thème), et la rangée des onglets sautait d'environ 85 px d'un onglet à
+  // l'autre. Le cas mesure ce que le harnais établit à toute taille de fenêtre : la hauteur, le haut de la fenêtre, la rangée des onglets et « Fermer » ne bougent pas ; les pixels
+  // à 700×400 sont dans verify-settings-window-mouse.mjs.
+  cases.push({
+    id: 'settings_window_keeps_one_height_and_the_tab_row_in_place_on_every_tab',
+    description: 'La fenêtre Réglages garde la même hauteur d\'un onglet à l\'autre : son haut, la rangée des onglets et « Fermer » ne bougent pas (audit UI/UX du 04/11 ; avant : 207 px pour Langue, 376 px pour Thème, la rangée sautait d\'environ 85 px)',
+    run: async (h) => {
+      const modal = document.getElementById('settings-modal');
+      const content = modal.querySelector('.settings-modal-content');
+      const tabs = Array.from(modal.querySelectorAll('.settings-tab'));
+      const closeBtn = document.getElementById('settings-close');
+      const rows = [];
+      try {
+        await h.clickButton('v2-btn-settings');
+        for (const tab of tabs) {
+          tab.click();
+          await h.sleep(20);
+          const box = content.getBoundingClientRect();
+          rows.push({ name: tab.getAttribute('data-settings-tab'), height: Math.round(box.height), top: Math.round(box.top), tabTop: Math.round(tab.getBoundingClientRect().top), closeTop: Math.round(closeBtn.getBoundingClientRect().top) });
+        }
+        await h.clickButton('settings-close');
+      } finally {
+        modal.style.display = 'none';
+        tabs[0].click();
+      }
+      const spread = (key) => Math.max(...rows.map(r => r[key])) - Math.min(...rows.map(r => r[key]));
+      const spreads = { height: spread('height'), top: spread('top'), tabTop: spread('tabTop'), closeTop: spread('closeTop') };
+      const pass = tabs.length >= 7 && rows.length === tabs.length && Object.values(spreads).every(s => s <= 1);
+      return { pass, notes: JSON.stringify({ tabs: tabs.length, spreads, heights: rows.map(r => r.name + ':' + r.height) }) };
+    },
+  });
+
   // --- Bascule portrait / paysage (js/orientation-toggle.js, bouton #btn-page-orientation à côté d'Aperçu A4) ---
   // Le bouton ne s'allume que pour les types listés dans OrientationToggle.TYPES (les modèles classiques, depuis que l'éditeur, la Lecture, le PDF et le
   // Word suivent l'orientation) ; ces cas règlent la liste le temps d'un scénario (vide pour simuler « aucun type accepté ») et remettent la liste

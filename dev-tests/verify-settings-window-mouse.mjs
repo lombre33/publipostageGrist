@@ -260,6 +260,21 @@ async function runTheme(theme) {
     check(`${tag} - la fenêtre tient dans le panneau (ni la page ni la fenêtre ne défilent)`, bad.fits.length === 0 && bad.boxScroll.length === 0, { fits: bad.fits, boxScroll: bad.boxScroll });
     check(`${tag} - « Fermer » reste entier dans la fenêtre et dans le panneau, et reçoit un vrai point de contact, sur chaque onglet`, bad.close.length === 0, bad.close);
 
+    // Même hauteur sur les neuf onglets (audit UI/UX du 04/11, carte « Garder la même hauteur pour tous les onglets de Réglages ? », réponse « Oui, même hauteur pour les neuf ») : en changeant d'onglet à la
+    // souris, la fenêtre, son haut, la rangée des onglets et « Fermer » ne bougent plus (avant : 207 px pour Langue, 376 px pour Thème, la rangée sautait d'environ 85 px). Ici, aux pixels de 700x400 :
+    // le panneau moins les deux marges de 12 px de la base commune des fenêtres.
+    const tabNames = await page.evaluate(() => Array.from(document.querySelectorAll('#settings-modal .settings-tab')).map(t => t.getAttribute('data-settings-tab')));
+    const steady = [];
+    for (const name of tabNames) {
+      await realClick(page, `#settings-modal .settings-tab[data-settings-tab="${name}"]`);
+      await page.waitForTimeout(120);
+      const m = await measure(page);
+      steady.push({ name, height: Math.round(m.box.height), top: Math.round(m.box.top), tabTop: Math.round(m.tabs[0].top), closeTop: Math.round(m.close.top) });
+    }
+    const unchanged = key => new Set(steady.map(s => s[key])).size === 1;
+    check(`${tag} - la fenêtre garde la même hauteur (${HEIGHT - 24}px) et la rangée des onglets reste en place sur les ${tabNames.length} onglets`,
+      tabNames.length === 9 && ['height', 'top', 'tabTop', 'closeTop'].every(unchanged) && steady[0].height === HEIGHT - 24, steady);
+
     // Accès : le contenu est plus haut que la place restante - il défile lui-même (molette réelle), « Fermer » ne bouge pas et la dernière note devient visible.
     await realClick(page, '#settings-modal .settings-tab[data-settings-tab="access"]');
     await page.waitForTimeout(150);
