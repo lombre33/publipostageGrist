@@ -1,7 +1,7 @@
 // La page de test des scripts « GFS » (verify-gfs-open.mjs, verify-gfs-frame.mjs) : le vrai widget (index.html servi tel quel, faux Grist de dev-tests/grist-stub.js semé AVANT l'init) à 700x400, seul
 // (adresse sans `gfs=`) ou hébergé (`?gfs=0` et un GFS simulé par dev-tests/gfs-stub.js), avec le miroir hors ligne des CDN (dev-tests/offline-deps.sh), un compte des vérifications et la ligne
 // finale « N/N passés » que le lanceur (dev-tests/run-headless.mjs) lit. Même régénération du harnais et même miroir que dev-tests/verify-template-startup-mouse.mjs.
-//   const t = await start({ port });  const { page, app } = await t.openPage({ hosted, stub, seed, lang, colorScheme, init, framed });  t.check(nom, vrai, notes);  await t.finish();
+//   const t = await start({ port });  const { page, app } = await t.openPage({ hosted, stub, seed, lang, colorScheme, init, framed, before });  t.check(nom, vrai, notes);  await t.finish();
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
@@ -124,10 +124,12 @@ export async function start({ name, port, popupBlocker = false, scrollbars = fal
   // remplace le stockage local, que le cadre refuse. `stub.langue` ('fr' | 'en', consigne 019) : la langue de GFS, que le contexte rend et que l'adresse porte (`language=`) à la création du cadre, comme GFS ; un `search`
   // qui nomme `language=` la remplace dans l'adresse seulement (l'adresse d'un cadre dont GFS a changé la langue depuis sa création). `hash` : le fragment qui termine l'adresse de l'app (`#pp-open=…&pp-lang=…`, ce que
   // l'app s'est laissé en se rechargeant elle-même). `popups` : la fenêtre à part du diaporama (extensions/diapositives/present.html) s'ouvre pour de bon ; faux (par défaut), le navigateur de l'essai la
-  // refuse (`window.open` rend null, comme un bloqueur de fenêtres) et le diaporama se joue dans le panneau, ce que la plupart des scripts mesurent.
-  async function openPage({ hosted = true, stub = null, seed = '', lang = 'fr', colorScheme = 'light', init = '', search = '', hash = '', ready = true, width = WIDTH, height = HEIGHT, storage = null, framed = null, bypassCSP = true, popups = false } = {}) {
+  // refuse (`window.open` rend null, comme un bloqueur de fenêtres) et le diaporama se joue dans le panneau, ce que la plupart des scripts mesurent. `before(page, context)` : appelée une fois la page créée et AVANT toute adresse chargée,
+  // pour ce qui doit être en place au premier chargement (une route qui coupe un fichier du kit, un écouteur de console).
+  async function openPage({ hosted = true, stub = null, seed = '', lang = 'fr', colorScheme = 'light', init = '', search = '', hash = '', ready = true, width = WIDTH, height = HEIGHT, storage = null, framed = null, bypassCSP = true, popups = false, before = null } = {}) {
     const context = await browser.newContext(Object.assign({ bypassCSP, viewport: { width, height }, colorScheme }, framed ? { locale: lang === 'en' ? 'en-US' : 'fr-FR' } : {}));
     const page = await context.newPage();
+    if (before) await before(page, context);
     const requests = [];
     const natives = [];
     page.on('request', request => requests.push(request.url()));
