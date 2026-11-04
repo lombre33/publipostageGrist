@@ -8,8 +8,9 @@
 //    Elle n'écoute que son ouvreur (`event.source`), sa politique de sécurité du contenu refuse tout script en ligne et tout gestionnaire d'événement, et `clean` retire encore du HTML reçu ce qui
 //    s'exécuterait (script, cadre, objet, gestionnaire `on…`, adresse `javascript:`) : un message qui ne vient pas de l'app ne fait jamais tourner de code.
 //  - LA VUE INTERVENANT (slide-speaker.js, demande du 02/11) : le widget devient la console pendant que la fenêtre joue le diaporama. La page dit à l'app où elle en est (`STATE`, à chaque page et à chaque animation, puis
-//    `BYE` quand elle se ferme), l'app lui donne des ordres (`COMMAND` : suivante, précédente, saut vers une page) comme le ferait le clavier de la page ; la fenêtre est alors une vraie fenêtre (`features`) et non un onglet,
-//    pour que la console et le diaporama se voient en même temps. Rien de plus ne passe : ni notes, ni titres, qui restent dans l'app. Pour fermer le diaporama, la console ferme la fenêtre (`cancel`) ; la page, elle, dit sa fermeture (`BYE`).
+//    `BYE` quand elle se ferme), l'app lui donne des ordres (`COMMAND` : suivante, précédente, saut vers une page, écran noir ou blanc, points du stylo) comme le ferait le clavier de la page ; la fenêtre est alors une vraie fenêtre
+//    (`features`) et non un onglet, pour que la console et le diaporama se voient en même temps. Rien de plus ne passe : ni notes, ni titres, qui restent dans l'app. Les points du stylo sont des nombres, en part de la page (une liste plate
+//    x, y, x, y… de 256 nombres au plus par envoi) : la page les relit pour ce qu'ils sont (slide-player.js:inkLayer) et n'en fait qu'un trait. Pour fermer le diaporama, la console ferme la fenêtre (`cancel`) ; la page, elle, dit sa fermeture (`BYE`).
 // Seuls ce fichier et slide-present.js parlent à une autre fenêtre que le cadre parent de GFS (js/gfs-link.js) ; codeHygiene garde leurs gardes d'origine.
 const SlideWindow = (function () {
   const PAGE = 'present.html';
@@ -19,9 +20,9 @@ const SlideWindow = (function () {
   const INFO = 'pp-present-info';        // l'app -> la page : la langue, le thème, le titre et les textes
   const SHOW = 'pp-present-show';        // l'app -> la page : le rendu mesuré
   const STATE = 'pp-present-state';      // la page -> l'app : où en est le diaporama (la vue intervenant le suit)
-  const COMMAND = 'pp-present-command';  // l'app -> la page : un ordre de la vue intervenant (suivante, précédente, saut)
+  const COMMAND = 'pp-present-command';  // l'app -> la page : un ordre de la vue intervenant (suivante, précédente, saut, écran, stylo)
   const BYE = 'pp-present-bye';          // la page -> l'app : « je me ferme »
-  const COMMANDS = ['next', 'prev', 'jump'];
+  const COMMANDS = ['next', 'prev', 'jump', 'screen', 'ink', 'inkClear'];
   const OWN = document.currentScript && document.currentScript.src ? document.currentScript.src : '';
 
   let link = null;                       // la fenêtre du dernier lancement
@@ -57,25 +58,35 @@ const SlideWindow = (function () {
       cancel() { self.release(); try { popup.close(); } catch (e) { /* déjà fermée */ } },
       // La fenêtre est fermée, ou remplacée par la suivante : ce qu'elle gardait est libéré.
       release() { clearInterval(self.watch); self.payload = null; if (link === self) link = null; },
-      // La vue intervenant suit la fenêtre : `onState(state)` à chaque changement de ce que le diaporama montre, `onGone()` une fois, quand la fenêtre se ferme (elle l'a dit, ou le navigateur la montre fermée). Plus
-      // attentive tant qu'elle est suivie : une console qui reste affichée devant un diaporama fermé serait une impasse.
-      follow(onState, onGone) {
+      // La vue intervenant suit la fenêtre : `onState(state)` à chaque changement de ce que le diaporama montre, `onGone()` une fois, quand la fenêtre se ferme (elle l'a dit, ou le navigateur la montre fermée), `onReady()`
+      // (facultatif) chaque fois que la page se dit prête - au départ, et de nouveau si elle est rechargée, repartie de zéro (le tracé qu'elle gardait n'est plus). Plus attentive tant qu'elle est suivie : une console qui reste
+      // affichée devant un diaporama fermé serait une impasse.
+      follow(onState, onGone, onReady) {
         self.onState = onState;
         self.onGone = onGone;
+        self.onReady = typeof onReady === 'function' ? onReady : null;
         clearInterval(self.watch);
         self.watch = setInterval(() => { if (popup.closed) self.gone(); }, 500);
       },
-      // Un ordre de la vue intervenant : `name` est l'un de COMMANDS, `index` le rang de la page d'un saut (sa fenêtre dans la découpe).
-      command(name, index) { if (COMMANDS.indexOf(name) !== -1) send(self, COMMAND, { name, index: Number.isInteger(index) ? index : 0 }); },
+      // Un ordre de la vue intervenant : `name` est l'un de COMMANDS, `index` le rang de la page d'un saut (sa fenêtre dans la découpe), le mode d'un écran (0 la diapositive, 1 le noir, 2 le blanc ; celui qui est déjà là
+      // se retire) ou, pour `ink`, 1 quand les points commencent un trait ; `points` : les points du stylo (`ink` seul).
+      command(name, index, points) {
+        if (COMMANDS.indexOf(name) === -1) return;
+        const body = { name, index: Number.isInteger(index) ? index : 0 };
+        if (name === 'ink' && Array.isArray(points)) body.points = points;
+        send(self, COMMAND, body);
+      },
       gone() {
         const notify = self.onGone;
         self.onState = null;
         self.onGone = null;
+        self.onReady = null;
         self.release();
         if (notify) notify();
       },
       onState: null,
       onGone: null,
+      onReady: null,
       watch: 0,
     };
     self.watch = setInterval(() => { if (popup.closed) self.gone(); }, 2000);
@@ -94,6 +105,7 @@ const SlideWindow = (function () {
       link.ready = true;
       send(link, INFO, { info: link.info });
       if (link.payload) send(link, SHOW, { payload: link.payload });
+      if (link.onReady) link.onReady();
     } else if (data.type === STATE) {
       const seen = readState(data.state);
       if (seen && link.onState) link.onState(seen);
@@ -105,7 +117,7 @@ const SlideWindow = (function () {
   function readState(raw) {
     if (!raw || typeof raw !== 'object') return null;
     const whole = value => (Number.isInteger(value) && value >= -1 && value < 100000 ? value : null);
-    const out = { index: whole(raw.index), count: whole(raw.count), slide: whole(raw.slide), next: whole(raw.next), prev: whole(raw.prev), clicks: whole(raw.clicks), left: whole(raw.left), ended: raw.ended === true, advancing: raw.advancing === true };
+    const out = { index: whole(raw.index), count: whole(raw.count), slide: whole(raw.slide), next: whole(raw.next), prev: whole(raw.prev), clicks: whole(raw.clicks), left: whole(raw.left), ended: raw.ended === true, advancing: raw.advancing === true, screen: raw.screen === 1 || raw.screen === 2 ? raw.screen : 0 };
     if (out.index === null || out.index < 0 || out.count === null || out.count < 1 || out.slide === null || out.slide < 0) return null;
     return Object.assign(out, { next: out.next === null ? -1 : out.next, prev: out.prev === null ? -1 : out.prev, clicks: Math.max(0, out.clicks || 0), left: Math.max(0, out.left || 0) });
   }

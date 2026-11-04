@@ -11,8 +11,12 @@
 //  - LE CHRONO part avec le diaporama (la première réponse de la fenêtre), se met en pause et se remet à zéro ; l'heure est celle de l'appareil. Les deux se calculent sur l'horloge (jamais en comptant des tops) : un onglet ralenti par le
 //    navigateur ne les fausse pas.
 //  - « ALLER À… » : la liste des diapositives par leur titre (le premier titre, à défaut le premier texte), avec la recherche de la page (SearchSelect). Une diapositive masquée y est marquée et s'atteint quand même.
-//  - LE CLAVIER est celui du diaporama (→ ↓ Page suivante Espace Entrée N : suivante ; ← ↑ Page précédente Retour arrière P : précédente ; Début, Fin ; Échap : quitter) ; sur les notes, ↑ ↓ Page Début Fin les font défiler. La console
-//    est une fenêtre modale : Tab y circule sans en sortir.
+//  - L'ÉCRAN NOIR, L'ÉCRAN BLANC ET LE STYLO (demande du 04/11) : quatre boutons au-dessus de la diapositive en cours. B couvre l'écran du public de noir, W de blanc, la même touche (ou le bouton, ou un clic dans la fenêtre) le
+//    rend ; la console, elle, reste affichée. Le stylo (D) trace à la souris sur la diapositive en cours : le trait est dessiné tout de suite ici et part, par petits envois de points (des parts de la page, de 0 à 1), vers la fenêtre, qui
+//    le dessine au même endroit à sa taille ; E (ou le bouton) efface, et changer de page efface aussi. Un clic ne passe pas à la suivante pendant qu'on dessine ; Échap finit le stylo avant de quitter. Derrière un écran, le stylo ne
+//    trace pas. Ni l'un ni l'autre ne touche au document. C'est la fenêtre qui sait ce qu'elle montre (`screen` dans son état) : les boutons ne disent que ce qu'elle a répondu.
+//  - LE CLAVIER est celui du diaporama (→ ↓ Page suivante Espace Entrée N : suivante ; ← ↑ Page précédente Retour arrière P : précédente ; Début, Fin ; B W : écran noir, blanc ; D E : stylo, effacer ; Échap : quitter) ; sur les
+//    notes, ↑ ↓ Page Début Fin les font défiler. La console est une fenêtre modale : Tab y circule sans en sortir.
 // Elle se pose au niveau des barres flottantes (--z-floating-toolbar) : sous les menus, pour que la liste « Aller à… » passe devant. Styles : extensions/diapositives/slide-speaker.css.
 const SlideSpeaker = (function () {
   const el = Dom.el;
@@ -21,14 +25,19 @@ const SlideSpeaker = (function () {
   const WHEEL_GAP_MS = 400;                                // un cran de molette par diapositive, comme au diaporama
   const TICK_MS = 250;                                     // le chrono et l'heure se relisent à ce rythme (l'affichage ne change qu'à la seconde)
   const SCROLL_KEYS = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'];
+  const INK_FLUSH_MS = 30;                                 // les points du stylo partent par envois, à ce rythme au plus...
+  const INK_FLUSH_POINTS = 64;                             // ... ou dès qu'il y en a autant (un envoi porte 256 nombres au plus : slide-player.js:inkLayer)
   const pad = n => (n < 10 ? '0' : '') + n;
+  const part = value => Math.round(Math.min(1, Math.max(0, value)) * 10000) / 10000;   // une part de la page, de 0 à 1, à quatre décimales
 
-  // `options.labels` : tous les textes, dans la langue de la page (slide-show.js:speakerLabels) ; `options.slides` : [{ title, notes, hidden }], une entrée par diapositive, dans l'ordre ; `options.onCommand(name, index)` :
-  // « next », « prev » ou « jump » (le rang de la page, une fenêtre de la découpe) ; `options.onExit()` : la personne demande à quitter. La console se pose dans la page tout de suite (« Préparation… ») ; `boxes` dit où poser les
-  // deux copies du rendu mesuré, `load` les lui donne.
+  // `options.labels` : tous les textes, dans la langue de la page (slide-show.js:speakerLabels) ; `options.slides` : [{ title, notes, hidden }], une entrée par diapositive, dans l'ordre ; `options.onCommand(name, index, points)` :
+  // « next », « prev », « jump » (le rang de la page, une fenêtre de la découpe), « screen » (1 l'écran noir, 2 le blanc : le mode déjà montré se retire), « ink » (les `points` d'un envoi du stylo ; `index` 1 quand ils commencent
+  // un trait) ou « inkClear » ; `options.onExit()` : la personne demande à quitter. La console se pose dans la page tout de suite (« Préparation… ») ; `boxes` dit où poser les deux copies du rendu mesuré, `load` les lui donne.
+  // Ses sorties pour l'extérieur : `setState` (ce que la fenêtre dit d'elle-même) et `reset` (la fenêtre repart de zéro : le tracé qu'elle gardait n'est plus).
   function create(options) {
     const { labels, slides, onCommand, onExit } = options;
-    const s = { state: null, ready: false, destroyed: false, windows: [], starts: [], current: null, upcoming: null, shownSlide: -1, notesSize: NOTES_START, lastWheel: 0, tick: 0, picker: null };
+    const s = { state: null, ready: false, destroyed: false, windows: [], starts: [], current: null, upcoming: null, shownSlide: -1, notesSize: NOTES_START, lastWheel: 0, tick: 0, picker: null, pen: false, stroke: null, inkPlace: null, hintText: '' };
+    let mirror = null;               // le tracé tel que la console le fait, posé sur la copie de la diapositive en cours (le même calque que celui de la fenêtre : SlidePlayer.inkLayer)
     // Le chrono : le temps déjà compté (`base`) et, tant qu'il court, l'instant où il a repris (`since`).
     const clock = { started: false, running: false, base: 0, since: 0 };
     const elapsed = () => clock.base + (clock.running ? Date.now() - clock.since : 0);
@@ -90,6 +99,19 @@ const SlideSpeaker = (function () {
     const endCard = el('div', 'pp-speaker-card', labels.nextNone);
     endCard.hidden = true;
     currentBox.append(currentStage, endCard);
+    // Les outils, à droite du titre de la diapositive en cours : l'écran noir, l'écran blanc, le stylo, l'effacement. Les trois premiers s'enfoncent (`aria-pressed`) quand ils sont en service.
+    const tools = el('span', 'pp-speaker-tools');
+    tools.setAttribute('role', 'group');
+    tools.setAttribute('aria-label', labels.tools);
+    const blackButton = iconButton('pp-speaker-tool pp-speaker-black', 'speakerBlack', labels.black);
+    const whiteButton = iconButton('pp-speaker-tool pp-speaker-white', 'speakerWhite', labels.white);
+    const penButton = iconButton('pp-speaker-tool pp-speaker-pen', 'speakerPen', labels.pen);
+    const eraseButton = iconButton('pp-speaker-tool pp-speaker-erase', 'speakerErase', labels.erase);
+    [blackButton, whiteButton, penButton].forEach(button => button.setAttribute('aria-pressed', 'false'));
+    setDisabled(eraseButton, true);
+    tools.append(blackButton, whiteButton, penButton, eraseButton);
+    const currentHead = el('div', 'pp-speaker-label');
+    currentHead.append(el('span', 'pp-speaker-label-text', labels.current), tools);
     const hint = el('div', 'pp-speaker-hint');
     hint.setAttribute('role', 'status');
     const upcomingBox = el('div', 'pp-speaker-box pp-speaker-upcoming');
@@ -98,7 +120,7 @@ const SlideSpeaker = (function () {
     const upcomingCard = el('div', 'pp-speaker-card', labels.nextNone);
     upcomingCard.hidden = true;
     upcomingBox.append(upcomingStage, upcomingCard);
-    left.append(el('div', 'pp-speaker-label', labels.current), currentBox, hint, el('div', 'pp-speaker-label', labels.upcoming), upcomingBox);
+    left.append(currentHead, currentBox, hint, el('div', 'pp-speaker-label', labels.upcoming), upcomingBox);
 
     const right = el('div', 'pp-speaker-col pp-speaker-notes-col');
     const notesHead = el('div', 'pp-speaker-label');
@@ -172,19 +194,39 @@ const SlideSpeaker = (function () {
         s.upcoming.surf.place(s.windows[to]);
         paint(s.upcoming, SlidePlayer.slideAt(s.starts, s.windows[to].page), 0);
       }
+      // Le tracé n'a de sens que sur la page où il a été fait : une autre page, ou la fin, l'efface (la fenêtre fait de même).
+      const place = st.ended ? -1 : st.index;
+      if (place !== s.inkPlace) { s.inkPlace = place; dropInk(); }
       // Ce que le prochain clic fera.
       let text;
       if (st.ended) text = labels.hintEnded;
       else if (st.left > 0) text = labels.hintClick.replace('{k}', String(st.clicks - st.left + 1)).replace('{total}', String(st.clicks));
       else text = to >= 0 ? labels.hintSlide : labels.hintEnd;
-      hint.textContent = text;
-      hint.classList.toggle('pp-speaker-hint-click', !st.ended && st.left > 0);
+      s.hintText = text;
+      paintTools();
       // Les notes de la diapositive ; une autre diapositive les reprend en haut.
       if (s.shownSlide !== slide) { s.shownSlide = slide; notes.scrollTop = 0; }
       setNotes((slides[slide] && slides[slide].notes) || '');
       // « Précédente » défait une animation jouée ou revient à la page d'avant.
       setDisabled(prevButton, st.prev < 0 && st.clicks <= st.left);
       if (!clock.started) startClock();
+    }
+
+    // Les boutons et la phrase d'aide disent l'état du moment : l'écran que le public voit (la fenêtre l'a dit), le stylo, sinon ce que le prochain clic fera. L'écran en service prend la phrase en négatif : c'est ce qu'il ne faut pas oublier.
+    function paintTools() {
+      const st = s.state;
+      const screen = st ? st.screen : 0;
+      blackButton.setAttribute('aria-pressed', screen === 1 ? 'true' : 'false');
+      whiteButton.setAttribute('aria-pressed', screen === 2 ? 'true' : 'false');
+      penButton.setAttribute('aria-pressed', s.pen ? 'true' : 'false');
+      setDisabled(eraseButton, !mirror || mirror.count() === 0);
+      currentBox.classList.toggle('pp-speaker-inking', s.pen);
+      let text = s.hintText;
+      if (screen) text = screen === 1 ? labels.hintBlack : labels.hintWhite;
+      else if (s.pen) text = labels.hintPen;
+      if (hint.textContent !== text) hint.textContent = text;
+      hint.classList.toggle('pp-speaker-hint-click', !screen && !s.pen && !!st && !st.ended && st.left > 0);
+      hint.classList.toggle('pp-speaker-hint-screen', !!screen);
     }
 
     // Le chrono
@@ -222,7 +264,7 @@ const SlideSpeaker = (function () {
     paintTimer();
 
     // Les ordres
-    const send = (name, index) => { if (!s.destroyed && s.ready) onCommand(name, index); };
+    const send = (name, index, points) => { if (!s.destroyed && s.ready) onCommand(name, index, points); };
     const goNext = () => send('next');
     const goPrev = () => { if (prevButton.getAttribute('aria-disabled') !== 'true') send('prev'); };
     prevButton.addEventListener('click', goPrev);
@@ -232,8 +274,93 @@ const SlideSpeaker = (function () {
     restartButton.addEventListener('click', restart);
     smaller.addEventListener('click', () => { if (s.notesSize > 0) { s.notesSize -= 1; applySize(); } });
     larger.addEventListener('click', () => { if (s.notesSize < NOTES_SIZES.length - 1) { s.notesSize += 1; applySize(); } });
-    // Un clic sur la diapositive en cours passe à la suivante, comme au diaporama.
-    currentBox.addEventListener('click', event => { if (event.button === 0) goNext(); });
+    // Un clic sur la diapositive en cours passe à la suivante, comme au diaporama - sauf au stylo, où l'on dessine.
+    currentBox.addEventListener('click', event => { if (event.button === 0 && !s.pen) goNext(); });
+
+    // L'écran noir et l'écran blanc : la fenêtre en décide (le mode déjà montré se retire) et le dit dans son état.
+    const toggleScreen = mode => send('screen', mode);
+    blackButton.addEventListener('click', () => toggleScreen(1));
+    whiteButton.addEventListener('click', () => toggleScreen(2));
+
+    // Le stylo. Le tracé se dessine tout de suite sur la copie de la diapositive en cours (`mirror`) et part, par envois de points (des parts de la page), vers la fenêtre qui le dessine pareil à sa taille : même calque (SlidePlayer.inkLayer),
+    // mêmes envois, si bien que les deux sont les mêmes. On ne trace que sur une page montrée au public : ni l'écran de fin, ni derrière un écran noir ou blanc (la fenêtre ne tracerait rien non plus).
+    const canDraw = () => !!(s.ready && !s.destroyed && mirror && s.state && !s.state.ended && !s.state.screen);
+    function flushInk() {
+      const stroke = s.stroke;
+      if (!stroke) return;
+      clearTimeout(stroke.timer);
+      stroke.timer = 0;
+      const points = stroke.buffer;
+      stroke.buffer = [];
+      if (!points.length || !canDraw()) return;
+      const first = stroke.first;
+      stroke.first = false;
+      mirror.add(points, first);
+      send('ink', first ? 1 : 0, points);
+      paintTools();
+    }
+    // Le trait fini : les derniers points partent, le suivant en commencera un autre.
+    function endStroke() {
+      if (!s.stroke) return;
+      flushInk();
+      if (mirror) mirror.end();
+      s.stroke = null;
+    }
+    // Rien de ce qui n'est pas parti ne part : le trait en cours est lâché, le tracé de la copie effacé (une autre page, la fenêtre repartie de zéro).
+    function dropInk() {
+      if (s.stroke) { clearTimeout(s.stroke.timer); s.stroke = null; }
+      if (mirror) { mirror.end(); mirror.clear(); }
+      paintTools();
+    }
+    function eraseInk() {
+      endStroke();
+      if (!mirror) return;
+      const had = mirror.count() > 0;
+      mirror.clear();
+      if (had) send('inkClear');
+      paintTools();
+    }
+    function setPen(on) {
+      if (s.pen === on) return;
+      s.pen = on;
+      if (!on) endStroke();
+      paintTools();
+    }
+    // Un point du pointeur, en part de la page (le cadre de la copie, tel que l'écran le montre) ; deux fois le même point de suite n'en fait qu'un.
+    function pushPoint(event) {
+      const stroke = s.stroke;
+      const box = s.current ? s.current.surf.frame.getBoundingClientRect() : null;
+      if (!stroke || !box || !box.width || !box.height) return;
+      const x = part((event.clientX - box.left) / box.width);
+      const y = part((event.clientY - box.top) / box.height);
+      if (stroke.x === x && stroke.y === y) return;
+      stroke.x = x;
+      stroke.y = y;
+      stroke.buffer.push(x, y);
+      if (stroke.buffer.length >= INK_FLUSH_POINTS * 2) flushInk(); else if (!stroke.timer) stroke.timer = setTimeout(flushInk, INK_FLUSH_MS);
+    }
+    currentBox.addEventListener('pointerdown', (event) => {
+      if (!s.pen || s.stroke || event.button !== 0 || !event.isPrimary || !canDraw()) return;
+      const box = s.current.surf.frame.getBoundingClientRect();
+      if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) return;
+      event.preventDefault();
+      try { currentBox.setPointerCapture(event.pointerId); } catch (e) { /* le pointeur n'est plus là */ }
+      s.stroke = { id: event.pointerId, first: true, buffer: [], timer: 0, x: -1, y: -1 };
+      pushPoint(event);
+      flushInk();
+    });
+    currentBox.addEventListener('pointermove', (event) => {
+      if (!s.stroke || event.pointerId !== s.stroke.id) return;
+      const moves = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [];
+      (moves.length ? moves : [event]).forEach(pushPoint);
+    });
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type => currentBox.addEventListener(type, (event) => {
+      if (!s.stroke || event.pointerId !== s.stroke.id) return;
+      if (type === 'pointerup') pushPoint(event);
+      endStroke();
+    }));
+    penButton.addEventListener('click', () => setPen(!s.pen));
+    eraseButton.addEventListener('click', () => { if (eraseButton.getAttribute('aria-disabled') !== 'true') eraseInk(); });
     left.addEventListener('wheel', (event) => {
       event.preventDefault();
       const now = Date.now();
@@ -312,10 +439,16 @@ const SlideSpeaker = (function () {
       if (target.closest && target.closest('button') && (event.key === 'Enter' || event.key === ' ')) return;
       if (target === notes && SCROLL_KEYS.indexOf(event.key) !== -1) return;
       const last = Math.max(0, s.windows.length - 1);
+      // Les touches des outils ne se répètent pas : garder B enfoncée ne ferait que clignoter l'écran.
+      const once = action => () => { if (!event.repeat) action(); };
       const keys = {
         ArrowRight: goNext, ArrowDown: goNext, PageDown: goNext, ' ': goNext, Enter: goNext, n: goNext, N: goNext,
         ArrowLeft: goPrev, ArrowUp: goPrev, PageUp: goPrev, Backspace: goPrev, p: goPrev, P: goPrev,
-        Home: () => send('jump', 0), End: () => send('jump', last), Escape: () => onExit(), F5: () => {},
+        Home: () => send('jump', 0), End: () => send('jump', last), F5: () => {},
+        b: once(() => toggleScreen(1)), B: once(() => toggleScreen(1)), w: once(() => toggleScreen(2)), W: once(() => toggleScreen(2)),
+        d: once(() => setPen(!s.pen)), D: once(() => setPen(!s.pen)), e: once(eraseInk), E: once(eraseInk),
+        // Échap finit d'abord le stylo ; quitter vient ensuite.
+        Escape: () => (s.pen ? setPen(false) : onExit()),
       };
       const action = keys[event.key];
       if (!action) return;
@@ -331,6 +464,7 @@ const SlideSpeaker = (function () {
       s.starts = data.starts || [];
       s.current = makeView(job, currentStage);
       s.upcoming = makeView(copy, upcomingStage);
+      mirror = SlidePlayer.inkLayer(s.current.surf.frame);
       s.ready = true;
       status.hidden = true;
       applySize();
@@ -349,16 +483,22 @@ const SlideSpeaker = (function () {
       clearInterval(s.tick);
       document.removeEventListener('keydown', onKey, true);
       closePicker();
+      if (s.stroke) { clearTimeout(s.stroke.timer); s.stroke = null; }
+      if (mirror) mirror.destroy();
       [s.current, s.upcoming].forEach((view) => { if (view) { view.surf.destroy(); view.job.dispose(); } });
       root.remove();
     }
 
+    // La fenêtre repart de zéro (rechargée) : le tracé qu'elle gardait n'est plus, celui de la console non plus.
+    function reset() { if (!s.destroyed) dropInk(); }
+
     applySize();
     return {
-      root, boxes: { current: currentStage, upcoming: upcomingStage }, load, setState, destroy,
-      // Pour les essais : le dernier état reçu, le chrono (en marche ? depuis combien de millisecondes ?).
+      root, boxes: { current: currentStage, upcoming: upcomingStage }, load, setState, reset, destroy,
+      // Pour les essais : le dernier état reçu, le chrono (en marche ? depuis combien de millisecondes ?), le stylo (en service ? combien de traits sur la copie ?).
       state: () => s.state,
       timer: () => ({ running: clock.running, started: clock.started, ms: elapsed() }),
+      pen: () => ({ on: s.pen, strokes: mirror ? mirror.count() : 0, drawing: !!s.stroke }),
     };
   }
 
