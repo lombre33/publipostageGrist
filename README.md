@@ -98,6 +98,7 @@ La galerie **Créer à partir d'un modèle…** propose 22 modèles prêts à l'
 
 - Français et anglais, thème clair, sombre ou celui du système, barre d'outils pensée pour un petit panneau (testée à 700×400).
 - 58 raccourcis clavier personnalisables.
+- Dans Grist Factory Suite, la barre d'outils, les menus et les fenêtres de l'éditeur prennent l'ambiance que la personne y a choisie (Pop, Papier, Brut, Néon, et sa couleur) : couleurs du mode affiché, arrondis, ombres, polices des titres de fenêtre, décor du plan de travail. La page écrite dans l'éditeur, le PDF, l'e-mail et les exports gardent l'aspect du modèle. Avec « Grist Factory », ou hors Grist Factory Suite, rien ne change.
 
 ## Installation dans Grist
 
@@ -170,6 +171,7 @@ L'interface prend la police du système (`--font-ui` de `css/style.css`) : aucun
 | `js/` | Le code du widget, un fichier par fonction (éditeur, barre d'outils, variables, exports, réglages…). |
 | `css/` | Les feuilles de style. |
 | `extensions/` | Le code des extensions de Grist Factory Suite, une par dossier (aujourd'hui `graphique/` : cinq scripts et deux feuilles de style, et `edition/` : quatre scripts et une feuille de style). Il ne se charge qu'au premier usage, et seulement si GFS dit l'extension active (`js/extensions.js` nomme les fichiers ; `index.html` n'en demande aucun). |
+| `kit/` | Le kit de Grist Factory Suite, en sous-module Git à une version figée (`git submodule update --init kit` après un clonage). Seuls deux de ses modules servent : le lecteur du message d'ambiance et la pose de l'ambiance sur la page (`js/gfs-ambiance.js`). Le dépôt public le reçoit en fichiers, sans sous-module. |
 | `img/` | Le logo. |
 | `templates-gallery/` | Les modèles de la galerie : `catalogue.json`, un dossier par modèle (texte, `pack.json` des tables et de la page, captures) et `families/` (les tables de chaque famille de modèles, avec leurs lignes d'exemple, qui ne servent qu'aux captures). |
 | `templates-gallery-dev/` | Des modèles de test, chargés seulement quand l'adresse du widget contient `?dev`. |

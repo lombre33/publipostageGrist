@@ -216,6 +216,7 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 
 **Autres**
 - Interface bilingue français/anglais, thème clair, sombre ou celui du système
+- Dans Grist Factory Suite, la barre d'outils, les menus et les fenêtres prennent l'ambiance choisie dans GFS (Pop, Papier, Brut, Néon, et sa couleur) ; la page, le PDF, l'e-mail et les exports gardent l'aspect du modèle
 - 58 raccourcis clavier personnalisables
 - Choix de la touche utilisée pour déclencher les variables (`#` par défaut)
 - Barre d'outils pensée pour un petit panneau (testée à 700×400)
@@ -691,6 +692,7 @@ GitHub Pages, with no backend and no build step.
 
 **Other**
 - Bilingual French/English interface, light, dark or system theme
+- Inside Grist Factory Suite, the toolbar, menus and windows follow the ambiance chosen in GFS (Pop, Papier, Brut, Néon, and its colour); the page, the PDF, the e-mail and the exports keep the template's look
 - 58 customizable keyboard shortcuts
 - Choice of key used to trigger variables (`#` by default)
 - Toolbar designed for a small panel (tested at 700×400)

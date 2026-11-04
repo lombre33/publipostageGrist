@@ -72,6 +72,7 @@ Palette exacte de Publipostage+ (`css/style.css`, jetons de `:root`, thèmes cla
 | Ombres | `--shadow-float`, `--shadow-card` | portée douce pour les éléments flottants et les fenêtres, très légère pour les cartes | plus marquée |
 
 Ne pas ajouter une couleur qui n'a pas de rôle sémantique clair (pas de couleur « parce que c'est joli »).
+Dans GFS, avec une ambiance choisie, les couleurs, les arrondis et l'ombre viennent de l'ambiance et non de ce tableau : voir « Ambiances de GFS », plus bas. Seul, ou avec « Grist Factory » sans couleur, ce tableau vaut tel quel.
 
 ### Contrastes : 4,5:1 au moins, en clair comme en sombre
 Arbitré le 29/09 après l'audit (en ligne `c428609`) : tout texte, lien, bouton plein et anneau de focus atteint **4,5:1**
@@ -141,6 +142,8 @@ contenu exportable :
   la feuille l'écrirait en Arial, avec d'autres lettres et d'autres coupures de ligne que le PDF. Gardé par `codeHygiene` (la règle existe) et par
   `buttonFontsMouse` (zones de bord, bandes de couture, survol à la souris).
 
+Dans GFS, une ambiance peut redire `--font-ui` et donner sa police aux titres des fenêtres (`--font-head`) : voir « Ambiances de GFS ». Le contenu produit garde Roboto.
+
 ### Thème sombre : uniquement le chrome, jamais le contenu produit
 Règle stricte, documentée en commentaire dans le CSS de Publipostage+ : le thème sombre change la couleur de la
 barre du haut, du plan de travail, des modales et des panneaux flottants — **jamais** la page/le document
@@ -156,6 +159,30 @@ n'y a plus de voile clair fixe.
 
 Ce qui se pose SUR la page prend donc des couleurs qui ne suivent pas le thème : le rouge d'un contour tracé sur la page est celui du thème clair dans les deux (`--paper-danger`,
 `#c53030`, 4,67:1 sur blanc, déclaré dans `css/external-images.css`), jamais `--danger` ni `--danger-ink` du thème sombre (`#f08a8a`, 2,3:1 sur blanc).
+
+### Ambiances de GFS : dans Grist Factory Suite, l'éditeur prend l'ambiance choisie
+Décision d'Antoine du 04/11 (carte « Dans GFS, l'éditeur prend-il les couleurs de l'ambiance choisie ? », réponse « Oui, comme GFS le demande » ; consigne 041 de GFS, contrats 5.2 point 10, guide des apps règle 15).
+Dans GFS, la personne choisit une ambiance (Grist Factory, Pop, Papier, Brut, Néon) et, si elle veut, sa couleur : un seul choix pour GFS et toutes ses apps. Hébergé, le widget le reçoit (`contexte.ambiance`, puis
+l'événement `ambiance`, une fois par geste) : la barre d'outils, les menus, les fenêtres, les panneaux et le plan de travail autour des pages (édition et Lecture) prennent ses couleurs, ses arrondis, son bouton
+plein, son ombre flottante, le filet et la police des titres de ses fenêtres, son décor. **Seul** (adresse sans `gfs=`), **ou dans GFS avec « Grist Factory » sans couleur** (GFS dit `null`), l'éditeur est exactement
+celui de cette charte : rien n'est chargé ni posé, mêmes styles calculés. C'est la seule exception voulue à « un seul éditeur, monochrome, police du système » : elle ne vaut que dans GFS, quand la personne a choisi.
+- **Ce que le widget lit.** Les dix-neuf jetons de couleur du mode affiché (`data-theme`, à défaut le système : le mode change sans que GFS dise rien) et les jetons de forme que les feuilles connaissent (`--radius-xs`,
+  `-sm`, `-md`, `-lg`, `-pill`, `-btn`, `-input`, `--fill`, `--fill-hover`, `--fill-line`, `--stripe`, `--stripe-h`, `--wash`, `--wash-size`, `--font-head`, `--fw-head`, `--ls-head`, `--tt-head`, `--shadow-float`, `--font-ui`).
+  **Jamais lus** : `--main-bg`, `--ex-bg`, `--main-overflow`, `--gap`, `--divider`, `--divider-w` (la mise en page de GFS), ni `--bw`, `--bar-w`, `--avatar-*` : la barre d'outils et les menus tiennent à 700×400 avec leurs traits d'origine.
+  Les autres jetons de forme que GFS envoie (`--font-label`, `--fs-head`, `--ls-label`, `--radius-panel`, `--shadow-ctl`, `--shadow-panel`) ne sont pas lus non plus pour l'instant.
+- **Comment.** `js/gfs-link.js` lit le message par `normalizeAmbiance` du kit (une couleur est un `#rrggbb`, une forme ne porte ni `;`, `{`, `}`, `url(` ni `@import` ; un message qui n'en est pas un vaut « rien de choisi ») ; `js/gfs-ambiance.js`
+  démarre `createAmbiance` du kit, qui écrit les jetons sur `<html>` par le CSSOM (jamais un attribut `style` ni une feuille tirés du message) et retire, à `null`, ce qu'il avait posé et rien d'autre ; deux marques,
+  `data-gfs-ambiance="<id>"` et, quand le message porte des jetons de forme, `data-gfs-forme`, en sont le signe. Les feuilles lisent les jetons avec leur valeur d'origine en repli (`var(--radius-md, 8px)`, `var(--fill, var(--accent-solid))`) :
+  sans ambiance, elles ne changent pas d'un pixel. `css/gfs-ambiance.css`, tout sous ces deux marques, ne porte que ce qu'un repli ne peut pas dire : les jetons que l'app définit déjà (`--shadow-float`, `--pp-page-gutter` ; un repli ne
+  sert jamais quand le jeton existe), le filet des fenêtres, le décor, la police des titres. Le kit (`kit/`, sous-module épinglé) ne se prend que par deux modules, `ambiance-message.js` et `ambiance-pose.js` : jamais
+  `ambiance.js`, `gfs-link.js` ni `host.js` du kit (deux liens avec GFS dans un même cadre se prennent les réponses).
+- **Ce que le widget produit garde l'aspect du modèle** : la page écrite dans l'éditeur (la feuille reste blanche, texte sombre, en clair comme en sombre), le PDF, l'e-mail, l'impression, les exports. L'hôte de l'impression
+  (`.pp-print-host`) remet à `initial` chaque jeton de forme lu et reprend les couleurs claires de la charte ; le papier ne lit aucun jeton de l'ambiance.
+- **Une couleur écrite en dur ne s'ajoute pas.** Une feuille nouvelle lit les jetons (`var(--surface)`, `var(--on-accent)`, `var(--radius-md, …)`). Les seules couleurs en dur sont celles de `dev-tests/ambiance-exceptions.json`, chacune
+  avec sa raison (papier, canevas, état, type de modèle, choix de la personne, aperçu, repère, neutre) ; la section 31 de `codeHygiene` refuse toute autre, tout jeton de forme lu sans repli, tout jeton de la mise en page de GFS,
+  et une règle de `css/gfs-ambiance.css` hors des deux marques.
+- **Contrastes.** Les couleurs d'état (rouge `--danger-ink`, vert `--good`, texte discret) restent celles de la charte et tiennent 4,5:1 sur chaque surface des cinq ambiances et de trois couleurs libres, en clair et en sombre
+  (`gfsAmbiance`). Si le kit ne se charge pas, le widget garde ses couleurs et le dit une fois dans la console (`[GfsAmbiance]`, `[GfsLink]`).
 
 ### Icônes : traits monochromes, jamais de police d'icônes ni d'emoji
 Toutes les icônes de Publipostage+ sont des SVG en **contour** (`stroke`, pas de remplissage), intégrées en
