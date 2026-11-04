@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-// Exposant et indice (js/script-marks.js, js/main-toolbar.js, js/shortcuts.js, css/script-marks.css, index.html) : le panneau de 700x400 d'Antoine, à la VRAIE souris
+// Exposant et indice (js/script-marks.js, js/main-toolbar.js, js/shortcuts.js, css/script-marks.css, index.html ; leurs deux icônes sont, depuis le 04/11, dans le menu du bouton « Aa » : js/character-format.js) : le panneau de 700x400 d'Antoine, à la VRAIE souris
 // (page.mouse) et au VRAI clavier (Ctrl+. et Ctrl+,), en clair et en sombre, en français et en anglais. Ce que scenarios-script-marks.js ne peut pas voir depuis la page :
-//  - le survol de l'icône « Lien et blocs de contenu » ouvre le volet ; les deux icônes Exposant et Indice, à droite du titre du volet, et les lignes de toujours tiennent dans le panneau
-//    et sont au premier plan (rien ne déborde, aucun autre volet ne les recouvre) ; chaque icône est une cible d'au moins 24x24 px, laisse sa place au titre (en français comme en
-//    anglais) et n'ajoute aucune hauteur au volet : il garde la place des lignes que d'autres chantiers y ajoutent ;
+//  - le survol du bouton « Aa » ouvre le menu « Caractère » ; les deux icônes Exposant et Indice, sous son titre et au-dessus de ses lignes, et les lignes elles-mêmes tiennent dans le panneau
+//    et sont au premier plan (rien ne déborde, aucun autre volet ne les recouvre) ; chaque icône est une cible d'au moins 24x24 px, Exposant puis Indice côte à côte ;
 //  - l'infobulle de chaque icône dit son nom et sa touche, entière, dans la fenêtre ;
 //  - un clic réel sur une icône met le mot choisi à la souris (double-clic) en exposant ou en indice, un second clic le retire, l'une remplace l'autre ; l'icône s'enfonce, le mot reste
 //    choisi et le clavier reste dans l'éditeur ;
@@ -123,10 +122,11 @@ await page.waitForFunction(() => {
 const nativeDialogs = [];
 page.on('dialog', async d => { nativeDialogs.push(d.type() + ' : ' + d.message()); await d.dismiss(); });
 
-const MAIN = '#v2-btn-link';
+const MAIN = '#v2-btn-char-main';
+const FLYOUT = '#v2-char-flyout';
 const SUP = '#v2-btn-superscript';
 const SUB = '#v2-btn-subscript';
-const ROWS = ['#v2-row-link', '#v2-row-bookmark', '#v2-btn-citation', '#v2-btn-code-block', '#v2-btn-callout', '#v2-btn-signature', '#v2-btn-qr'];
+const ROWS = ['#v2-btn-char-smallcaps', '#v2-btn-char-shadow', '#v2-btn-char-stroke', '#v2-char-spacing-val'];
 
 async function snap(name) { if (SHOTS) await page.screenshot({ path: join(SHOTS, name + '.png') }); }
 const centerOf = selector => page.evaluate(sel => {
@@ -185,29 +185,25 @@ async function openMenu() {
   await page.waitForTimeout(350);
   return c;
 }
-// Le titre du volet « Lien et blocs de contenu » : où son texte finit, et la hauteur du volet avec puis sans les deux icônes (elles sont hors du flux : la même).
+// Le titre du menu « Caractère » : où son texte finit et où il finit en hauteur (les deux icônes sont sous lui).
 const headOfMenu = () => page.evaluate(() => {
-  const flyout = document.getElementById('v2-blocks-flyout');
-  const range = document.createRange(); range.selectNodeContents(flyout.querySelector('.v2-hover-flyout-label'));
-  const row = flyout.querySelector('.v2-hover-icon-row');
-  const shown = flyout.getBoundingClientRect().height;
-  row.style.display = 'none';
-  const hidden = flyout.getBoundingClientRect().height;
-  row.style.display = '';
-  return { titleRight: range.getBoundingClientRect().right, shown, hidden };
+  const flyout = document.getElementById('v2-char-flyout');
+  const label = flyout.querySelector('.v2-hover-flyout-label');
+  const range = document.createRange(); range.selectNodeContents(label);
+  return { titleRight: range.getBoundingClientRect().right, titleBottom: label.getBoundingClientRect().bottom };
 });
 // La souris part vers le bas du panneau, du côté du volet qui a le plus de place : le volet peut descendre jusqu'à 395 px (huit lignes), un point du bas au milieu serait encore dessus.
 async function closeMenu() {
-  const f = await centerOf('#v2-blocks-flyout');
+  const f = await centerOf(FLYOUT);
   const x = f && f.w > 0 ? (f.l > WIDTH - f.r ? f.l / 2 : (f.r + WIDTH) / 2) : WIDTH / 2;
   await page.mouse.move(x, HEIGHT - 20, { steps: 3 });
   await page.waitForTimeout(250);
 }
-// Une icône du titre du volet, à la vraie souris : le volet s'ouvre au survol de l'icône du menu, la main descend dans le volet jusqu'à la hauteur des icônes (sans en sortir), puis se
+// Une icône du menu « Caractère », à la vraie souris : le menu s'ouvre au survol du bouton « Aa », la main descend dans le menu jusqu'à la hauteur des icônes (sans en sortir), puis se
 // porte de côté sur l'icône, et clique.
 async function pressIcon(selector, { click = true } = {}) {
   const c = await openMenu();
-  const f = await centerOf('#v2-blocks-flyout');
+  const f = await centerOf(FLYOUT);
   const r = await centerOf(selector);
   const x0 = Math.min(Math.max(c.x, f.l + 6), f.r - 6);
   await page.mouse.move(x0, r.y, { steps: 6 });
@@ -226,20 +222,19 @@ async function run(theme) {
   const T = theme;
   const L = { sup: 'Exposant', sub: 'Indice' };
 
-  // 1) Le menu : un survol réel de l'icône ouvre le volet ; les deux icônes du titre et les lignes de toujours (lien, citation, bloc de code, encadré, signature, QR code) sont dans le panneau et au premier plan.
+  // 1) Le menu : un survol réel du bouton « Aa » ouvre le volet ; les deux icônes sous le titre et les lignes (petites capitales, ombre, contour, espacement) sont dans le panneau et au premier plan.
   await setDoc('<p>Bonjour le monde entier</p><p>Deuxième ligne</p>');
   await openMenu();
-  const flyout = await hit('#v2-blocks-flyout');
+  const flyout = await hit(FLYOUT);
   const rows = [];
   for (const sel of ROWS) rows.push(await hit(sel));
   const sup = await hit(SUP), sub = await hit(SUB);
-  check(`${T}, menu : au survol, le volet s'ouvre dans le panneau ${WIDTH}x${HEIGHT} avec ses lignes de toujours au premier plan`, flyout.found && flyout.inPanel && rows.every(seen), { flyout, rows });
+  check(`${T}, menu : au survol de « Aa », le volet s'ouvre dans le panneau ${WIDTH}x${HEIGHT} avec ses lignes au premier plan`, flyout.found && flyout.inPanel && rows.every(seen), { flyout, rows });
   check(`${T}, menu : les icônes Exposant et Indice sont dans le panneau, au premier plan, d'au moins 24x24 px`, seen(sup) && seen(sub) && sup.w >= 24 && sup.h >= 24 && sub.w >= 24 && sub.h >= 24, { sup, sub });
-  const link = await hit('#v2-row-link');
+  const firstRow = await hit(ROWS[0]);
   const head = await headOfMenu();
-  check(`${T}, menu : les deux icônes sont sur la ligne du titre, à sa droite et à 4 px au moins de lui, au-dessus de « Lien… », Exposant puis Indice côte à côte`,
-    sup.b <= link.t + 1 && sub.b <= link.t + 1 && Math.abs(sup.t - sub.t) <= 1 && sup.r <= sub.l + 1 && sup.l >= head.titleRight + 4 && sub.r <= flyout.r, { link, sup, sub, head, flyout });
-  check(`${T}, menu : les deux icônes n'ajoutent aucune hauteur au volet (${head.shown} px avec, ${head.hidden} px sans)`, head.shown === head.hidden && head.shown > 0, head);
+  check(`${T}, menu : les deux icônes sont sous le titre, au-dessus de la première ligne, Exposant puis Indice côte à côte`,
+    sup.t >= head.titleBottom - 1 && sup.b <= firstRow.t + 1 && sub.b <= firstRow.t + 1 && Math.abs(sup.t - sub.t) <= 1 && sup.r <= sub.l + 1 && sub.r <= flyout.r, { firstRow, sup, sub, head, flyout });
   await snap(`${T}-1-menu`);
 
   // 2) Les infobulles : le nom et la touche, entiers, dans la fenêtre.
@@ -253,7 +248,7 @@ async function run(theme) {
   const tipSub = await tipOf('v2-btn-subscript');
   check(`${T}, infobulle : « ${L.sub} (Ctrl+,) », entière, dans la fenêtre`, tipSub.content === `${L.sub} (Ctrl+,)` && tipSub.opacity === 1 && tipSub.left >= 0 && tipSub.right <= WIDTH && tipSub.bottom <= HEIGHT, tipSub);
   await closeMenu();
-  const closed = await page.evaluate(() => getComputedStyle(document.getElementById('v2-blocks-flyout')).display === 'none');
+  const closed = await page.evaluate(() => getComputedStyle(document.getElementById('v2-char-flyout')).display === 'none');
   check(`${T}, menu : la souris partie, le volet se referme`, closed);
 
   // 3) Un mot choisi à la souris (double-clic), les icônes à la souris.
@@ -376,11 +371,11 @@ async function runEnglish() {
   await setDoc('<p>Hello big world</p>');
   await openMenu();
   const names = await page.evaluate(() => ['v2-btn-superscript', 'v2-btn-subscript'].map(id => document.getElementById(id).getAttribute('aria-label')));
-  const flyoutTitle = await page.evaluate(() => document.querySelector('#v2-blocks-flyout .v2-hover-flyout-label').textContent);
-  check('anglais, menu : icônes « Superscript » et « Subscript », titre « Link and content blocks »', JSON.stringify(names) === '["Superscript","Subscript"]' && flyoutTitle === 'Link and content blocks', { names, flyoutTitle });
+  const flyoutTitle = await page.evaluate(() => document.querySelector('#v2-char-flyout .v2-hover-flyout-label').textContent);
+  check('anglais, menu : icônes « Superscript » et « Subscript », titre « Character »', JSON.stringify(names) === '["Superscript","Subscript"]' && flyoutTitle === 'Character', { names, flyoutTitle });
   const enHead = await headOfMenu();
   const enSup = await hit(SUP);
-  check('anglais, menu : les icônes laissent sa place au titre (4 px au moins) et n\'ajoutent aucune hauteur', enSup.l >= enHead.titleRight + 4 && enHead.shown === enHead.hidden, { enHead, enSup });
+  check('anglais, menu : les icônes sont sous le titre, dans le panneau', enSup.t >= enHead.titleBottom - 1 && enSup.inPanel, { enHead, enSup });
   await pressIcon(SUP, { click: false });
   await waitTip('v2-btn-superscript');
   const tipSup = await tipOf('v2-btn-superscript');

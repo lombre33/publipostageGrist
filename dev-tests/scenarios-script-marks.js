@@ -1,6 +1,6 @@
-// Suite "scriptMarks" - exposant et indice (m³, H₂O) : deux marques de caractère (js/script-marks.js, css/script-marks.css), posées par les deux icônes du titre du menu « Lien et
-// blocs de contenu » (#v2-btn-superscript, #v2-btn-subscript) ou par Ctrl+. et Ctrl+, (js/shortcuts.js), le même rendu dans l'éditeur, la Lecture, le PDF et le Word (demande
-// d'Antoine, 09/10 : « Écris-tu des exposants ou des indices ? » - « oui très bonne idée » ; l'icône dans le menu du lien, pas dans la barre).
+// Suite "scriptMarks" - exposant et indice (m³, H₂O) : deux marques de caractère (js/script-marks.js, css/script-marks.css), posées par les deux icônes du menu du bouton « Aa »
+// (#v2-btn-superscript, #v2-btn-subscript) ou par Ctrl+. et Ctrl+, (js/shortcuts.js), le même rendu dans l'éditeur, la Lecture, le PDF et le Word (demande
+// d'Antoine, 09/10 : « Écris-tu des exposants ou des indices ? » - « oui très bonne idée » ; l'icône dans le menu du lien, pas dans la barre ; les deux icônes sont passées le 04/11 dans le menu du bouton « Aa », demande « exposant et indice dans ce menu »).
 //  1) l'ÉDITEUR : les icônes du menu (place, icône, nom, touche, état enfoncé), la pose et le retrait, l'un retire l'autre, la frappe qui suit, les touches, le HTML qu'on relit
 //     (balises <sup> et <sub>, style de Word et de Google Docs), la note de bas de page qui reste un nœud, la taille posée avant ou après, le pinceau, les modes grisés ;
 //  2) l'EMAIL : le lien mailto: est du texte brut (js/mailto-export.js), l'exposant et l'indice y sont les caractères Unicode qui en tiennent lieu (m³, H₂O, 1ᵉʳ) - le texte, les tables
@@ -115,29 +115,32 @@
 
   // --- 1) Les icônes du menu --------------------------------------------------------------------------------------------------------------------------------------------
   cases.push({
-    id: 'sm_icons_sit_on_the_title_line_of_the_blocks_menu_never_a_new_toolbar_icon',
-    description: 'Exposant et Indice sont deux icônes sur la ligne du titre du volet « Lien et blocs de contenu », hors du flux (elles n\'ajoutent aucune hauteur au volet), avant « Lien… » dans l\'ordre du clavier ; chacune a son icône, son nom, sa touche dans l\'infobulle et pour les lecteurs d\'écran ; aucune n\'est dans la barre ; les lignes qui y étaient y sont toujours, dans l\'ordre (d\'autres peuvent s\'y ajouter)',
+    id: 'sm_icons_sit_under_the_title_of_the_aa_menu_and_left_the_blocks_menu',
+    description: 'Exposant et Indice sont deux icônes sous le titre du menu « Caractère » du bouton « Aa » (index.html, #v2-char-flyout), avant ses lignes dans l\'ordre du clavier, Exposant puis Indice ; chacune a son icône, son nom, sa touche dans l\'infobulle et pour les lecteurs d\'écran, et la page n\'en porte qu\'un exemplaire ; elles ne sont plus dans le menu « Lien et blocs de contenu » ni dans la barre',
     run: async (h) => {
       await h.resetEditor();
-      const flyout = byId('v2-blocks-flyout');
-      const order = Array.from(flyout.querySelectorAll('.v2-menu-row, .v2-hover-icon-row button')).map(el => el.id);
+      const flyout = byId('v2-char-flyout');
+      const blocks = byId('v2-blocks-flyout');
+      const order = Array.from(flyout.querySelectorAll('.v2-hover-row[id], .v2-hover-icon-row button')).map(el => el.id);
       const row = flyout.querySelector('.v2-hover-icon-row');
       const label = flyout.querySelector('.v2-hover-flyout-label');
-      const place = { child: row.parentElement === flyout, afterTitle: row.previousElementSibling === label, position: getComputedStyle(row).position };
+      const place = { child: row.parentElement === flyout, afterTitle: row.previousElementSibling === label };
       const info = [SUP, SUB].map(id => {
         const el = byId(id);
-        return { id, tag: el.tagName, inRow: el.parentElement === row, inFlyout: !!el.closest('#v2-blocks-flyout'), icon: !!el.querySelector('svg'), aria: el.getAttribute('aria-label'), tip: el.getAttribute('data-tip'),
+        return { id, tag: el.tagName, inRow: el.parentElement === row, inFlyout: !!el.closest('#v2-char-flyout'), icon: !!el.querySelector('svg'), aria: el.getAttribute('aria-label'), tip: el.getAttribute('data-tip'),
           keytip: el.getAttribute('data-keytip'), keys: el.getAttribute('aria-keyshortcuts'), pressed: el.getAttribute('aria-pressed'), count: document.querySelectorAll('#' + id).length };
       });
-      // Les deux icônes d'abord (l'ordre du clavier), puis les lignes de toujours dans leur ordre : d'autres lignes (le graphique, un jour une autre) peuvent s'y ajouter, pas les déplacer.
-      const known = ['v2-row-link', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr'];
+      // Les deux icônes d'abord (l'ordre du clavier), puis les lignes du menu dans leur ordre.
+      const known = ['v2-btn-char-smallcaps', 'v2-btn-char-shadow', 'v2-btn-char-stroke'];
       let last = -1;
       const rowsKept = known.every(id => { const at = order.indexOf(id); const ok = at > last; last = at; return ok; });
-      const pass = order[0] === SUP && order[1] === SUB && order[2] === 'v2-row-link' && rowsKept && place.child && place.afterTitle && place.position === 'absolute'
+      const gone = { inBlocks: !!blocks.querySelector('#' + SUP + ', #' + SUB), blocksIconRow: !!blocks.querySelector('.v2-hover-icon-row'), inToolbarBar: !!document.querySelector('#v2-toolbar > #' + SUP + ', #v2-toolbar > #' + SUB) };
+      const pass = order[0] === SUP && order[1] === SUB && rowsKept && place.child && place.afterTitle
         && info.every(i => i.tag === 'BUTTON' && i.inRow && i.inFlyout && i.icon && i.pressed === 'false' && i.count === 1)
         && info[0].aria === 'Exposant' && info[0].tip === 'Exposant' && info[0].keytip === ' (Ctrl+.)' && info[0].keys === 'Control+.'
-        && info[1].aria === 'Indice' && info[1].tip === 'Indice' && info[1].keytip === ' (Ctrl+,)' && info[1].keys === 'Control+,';
-      return { pass, notes: JSON.stringify({ order, place, info }) };
+        && info[1].aria === 'Indice' && info[1].tip === 'Indice' && info[1].keytip === ' (Ctrl+,)' && info[1].keys === 'Control+,'
+        && !gone.inBlocks && !gone.blocksIconRow && !gone.inToolbarBar;
+      return { pass, notes: JSON.stringify({ order, place, info, gone }) };
     },
   });
 
@@ -398,11 +401,12 @@
 
   cases.push({
     id: 'sm_icons_are_greyed_for_a_macro_template_only_and_stay_active_in_an_email_and_a_grid',
-    description: 'Grisées (jamais retirées) pour un macro-modèle, comme Gras ; actives dans une grille, dans un document et dans un email, où Gras est grisé mais où le lien écrit l\'exposant et l\'indice en caractères Unicode',
+    description: 'Grisées (jamais retirées) pour un macro-modèle, comme Gras : le menu « Aa » entier l\'est, donc ses deux icônes ; actives dans une grille, dans un document et dans un email, où Gras est grisé mais où le lien écrit l\'exposant et l\'indice en caractères Unicode',
     run: async (h) => {
       await h.resetEditor();
       const reset = () => { MainToolbar.setEmailMode(false); MainToolbar.setMacroMode(false); MainToolbar.setGridMode(false); MainToolbar.syncToolbarState(); };
-      const state = () => [SUP, SUB, 'v2-btn-bold'].map(isLocked);
+      // Le grisé du macro-modèle est posé sur le groupe « Aa » (son menu entier) : les icônes sont grisées par lui.
+      const state = () => [SUP, SUB, 'v2-btn-bold'].map(id => !!byId(id).closest('.v2-hf-locked'));
       const out = {};
       try {
         reset();

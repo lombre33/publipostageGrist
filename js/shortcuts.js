@@ -286,10 +286,10 @@ const Shortcuts = (function () {
       // Mise en forme
       { id: 'bold', group: 'format', label: 'fmt.bold', key: 'Mod+b', native: true, scope: 'editor', hint: tip('v2-btn-bold'), run: click('v2-btn-bold') },
       { id: 'italic', group: 'format', label: 'fmt.italic', key: 'Mod+i', native: true, scope: 'editor', hint: tip('v2-btn-italic'), run: click('v2-btn-italic') },
-      { id: 'underline', group: 'format', label: 'fmt.underline', key: 'Mod+u', native: true, scope: 'editor', hint: tip('v2-btn-underline'), run: click('v2-btn-underline') },
+      { id: 'underline', group: 'format', label: 'fmt.underline', key: 'Mod+u', native: true, scope: 'editor', hint: tip('v2-underline-single'), aria: tip('v2-btn-underline') + ', ' + tip('v2-underline-single'), run: click('v2-btn-underline') },
       { id: 'strike', group: 'format', label: 'fmt.strike', key: 'Mod+Shift+s', native: true, scope: 'editor', hint: tip('v2-btn-strike'), run: click('v2-btn-strike') },
-      // Exposant et indice (js/script-marks.js) : les touches de Google Docs, traitées par l'éditeur. Les deux icônes du menu « Lien et blocs de contenu »
-      // les montrent dans leur infobulle.
+      // Exposant et indice (js/script-marks.js) : les touches de Google Docs, traitées par l'éditeur. Les deux icônes du menu « Aa » les montrent dans leur
+      // infobulle. Souligné : la touche est dite par le bouton et par la première ligne de son menu (le soulignement classique).
       { id: 'superscript', group: 'format', label: 'fmt.superscript', key: 'Mod+.', native: true, scope: 'editor', hint: tip('v2-btn-superscript'), run: click('v2-btn-superscript') },
       { id: 'subscript', group: 'format', label: 'fmt.subscript', key: 'Mod+,', native: true, scope: 'editor', hint: tip('v2-btn-subscript'), run: click('v2-btn-subscript') },
       { id: 'alignLeft', group: 'format', label: 'align.left', key: 'Mod+Shift+l', native: true, scope: 'editor', hint: tip('v2-btn-align-left'), run: click('v2-btn-align-left') },

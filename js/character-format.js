@@ -1,6 +1,6 @@
-// « Caractère… » (menu Alignement) : l'espacement des caractères et les petites capitales d'un texte, comme dans Word et dans PowerPoint. Demande du 24/10 (import PowerPoint sans perte,
-// chantier 9 « caractères et puces », lot 9a) : un fichier PowerPoint resserre ou écarte souvent les lettres d'un titre (`spc`) et met un sous-titre en petites capitales (`cap="small"`), et
-// l'éditeur ne savait ni les lire ni les garder.
+// Les réglages de caractère - l'espacement des caractères, les petites capitales, la sorte de soulignement, l'ombre et le contour des lettres - comme dans Word et dans PowerPoint. Demande du 24/10 (import PowerPoint
+// sans perte, chantier 9 « caractères et puces », lot 9a) : un fichier PowerPoint resserre ou écarte souvent les lettres d'un titre (`spc`) et met un sous-titre en petites capitales (`cap="small"`), et l'éditeur ne
+// savait ni les lire ni les garder. Ils se règlent par DEUX MENUS de la barre, sans fenêtre (demande du 04/11 : « pas une popup mais un menu d'outils ») : le menu du bouton Souligné et le menu « Aa » juste après Barré.
 //
 // Les deux réglages sont des attributs de la marque `textStyle` (celle de la taille, de la couleur et du surlignage, js/editor-nodes.js:createTextStyleExtension) : `letterSpacing`, un
 // nombre de points écrit « 1.5pt » (négatif : resserré), et `fontVariant`, « small-caps ». Ils s'écrivent en style (`letter-spacing`, `font-variant`) sur le <span> du texte, de sorte que
@@ -8,17 +8,18 @@
 // et rem sont ramenés en points) ; `font-variant: normal` et un espacement nul ne sont pas des réglages. Rien ne change pour un document qui ne s'en sert pas.
 //
 // Le SOULIGNEMENT (lot 9b) : la marque `underline` porte en plus `lineStyle`, l'un de `double`, `dotted`, `dashed` ou `wavy` (le simple est la marque seule), écrit en style sur le <u>
-// (`text-decoration-style`) : la ligne se dessine sur l'élément qui la pose, pas sur un <span> voisin. La fenêtre règle aussi la sorte de soulignement (une liste : aucun, simple, double,
-// pointillé, tireté, ondulé). Un soulignement épais ou en tirets mêlés de PowerPoint n'a pas d'équivalent exact : l'import prend le plus proche et le compte au compte rendu.
+// (`text-decoration-style`) : la ligne se dessine sur l'élément qui la pose, pas sur un <span> voisin. Le menu du bouton Souligné règle la sorte de soulignement : en première ligne le soulignement classique (celui du
+// bouton et de Ctrl+U), dessous le double, le pointillé, le tireté et l'ondulé. Un soulignement épais ou en tirets mêlés de PowerPoint n'a pas d'équivalent exact : l'import prend le plus proche et le compte au compte rendu.
 //
 // L'OMBRE et le CONTOUR des lettres (lot 9c) : deux autres attributs de `textStyle`, `textShadow` (« 1.5pt 1.5pt 2pt #00000066 » : décalage à droite, décalage en bas, flou, couleur) et `textStroke`
 // (« 0.75pt #ff0000 » : épaisseur, couleur), écrits en `text-shadow` et `-webkit-text-stroke`. Une seule ombre (un texte collé qui en a plusieurs garde la première) ; les longueurs en px, em et rem sont ramenées en
-// points, les couleurs nommées ou en `rgb()` en hexadécimal. La fenêtre pose l'ombre ou le contour d'origine (une ombre douce grise, un trait noir de 0,75 pt) par une case ; une ombre ou un contour venu d'un fichier
+// points, les couleurs nommées ou en `rgb()` en hexadécimal. Le menu « Aa » pose l'ombre ou le contour d'origine (une ombre douce grise, un trait noir de 0,75 pt) par une ligne à cocher ; une ombre ou un contour venu d'un fichier
 // PowerPoint garde ses valeurs tant qu'on n'y touche pas. Le PDF ne sait pas dessiner ces deux effets dans son texte : un paragraphe qui en porte est dessiné en vectoriel (js/pdf-export.js : `effectParagraph`),
 // l'ombre floue y est approchée par quelques copies décalées.
 //
-// La fenêtre règle le texte sélectionné (ou le style de frappe, curseur seul) : l'espacement en points, la case « Petites capitales » (état mêlé quand la sélection est partagée), le soulignement, l'ombre et le contour.
-// « Valider » pose tout dans une seule transaction (un Annuler la défait d'un coup) ; seul un réglage modifié s'applique, de sorte qu'une sélection aux valeurs mêlées garde chacune des siennes.
+// Les menus règlent le texte sélectionné (ou le style de frappe, curseur seul) et chaque réglage s'applique TOUT DE SUITE, en une transaction (un Annuler le défait, sans fenêtre ni « Valider ») : l'espacement par pas de
+// 0,5 pt (ou saisi en points), les lignes « Petites capitales », « Ombre » et « Contour » (une coche quand tout le texte l'a, un tiret quand une partie seulement), la sorte de soulignement. Un réglage ne touche que
+// lui-même : une sélection aux valeurs mêlées garde celles des autres réglages. Exposant et indice, du même menu « Aa », sont à js/script-marks.js.
 //
 // La Lecture et l'éditeur le montrent par le style. Le PDF (js/pdf-export.js), le Word (js/docx-export.js) et le PowerPoint (js/pptx-export.js) le lisent par `spacingPt` et `smallCapsOf` ;
 // l'import (js/pptx-import.js) l'écrit par `declarations`. Le PDF n'a pas de petites capitales : il les dessine (`smallCapsPieces`), comme le navigateur - des majuscules à 70 % de la taille.
@@ -251,10 +252,11 @@ const CharacterFormat = (function () {
   }
 
   // Pose les réglages de `changes` ({ letterSpacing: un espacement ou null, smallCaps: vrai ou faux, underline: 'none', 'single', 'double', 'dotted', 'dashed' ou 'wavy' } ; une clé absente ne change rien) sur le texte visé, en une seule transaction. Faux, sans
-  // rien changer, quand l'éditeur n'est pas modifiable.
-  function apply(editor, changes) {
+  // rien changer, quand l'éditeur n'est pas modifiable. L'éditeur reprend le clavier (comme après un bouton de la barre), sauf avec `{ focus: false }` : un champ qu'on quitte pour un autre
+  // (l'espacement tapé, validé par `change` au départ du focus) ne se fait pas reprendre le focus par l'éditeur - le clic ou la touche Tab de la personne irait sinon dans le vide.
+  function apply(editor, changes, options) {
     if (!editor || !editor.isEditable) return false;
-    const chain = editor.chain().focus();
+    const chain = options && options.focus === false ? editor.chain() : editor.chain().focus();
     let any = false;
     if ('letterSpacing' in changes) { chain.setMark('textStyle', { letterSpacing: normalizedSpacing(changes.letterSpacing) }); any = true; }
     if ('smallCaps' in changes) { chain.setMark('textStyle', { fontVariant: changes.smallCaps ? SMALL_CAPS : null }); any = true; }
@@ -280,194 +282,166 @@ const CharacterFormat = (function () {
     return any ? chain.run() : false;
   }
 
-  // La fenêtre
-  let win = null;
-  let refs = null;
-  let target = null;  // l'éditeur dont la fenêtre règle le texte
-  let initial = null; // l'état de chaque champ à l'ouverture : { spacing: son texte, caps: 'on' | 'off' | 'mixed', line: la valeur de la liste }
-  const LINE_CHOICES = ['none', 'single'].concat(UNDERLINE_STYLES);
+  // Les menus : « Souligné » (#v2-underline-group) et « Aa » (#v2-char-group), index.html.
+  const byId = id => document.getElementById(id);
+  const UNDERLINE_ROWS = ['single'].concat(UNDERLINE_STYLES);
+  const underlineRow = kind => byId('v2-underline-' + kind);
+  // Les trois lignes à cocher de « Aa » : la clé de readState, ce que `apply` reçoit pour la poser ou la retirer.
+  const EFFECT_ROWS = [
+    { id: 'v2-btn-char-smallcaps', key: 'caps', change: on => ({ smallCaps: on }) },
+    { id: 'v2-btn-char-shadow', key: 'shadow', change: on => ({ textShadow: on }) },
+    { id: 'v2-btn-char-stroke', key: 'stroke', change: on => ({ textStroke: on }) },
+  ];
+  const SPACING_STEP = 0.5;
 
+  // Une liste de valeurs vraies ou fausses (une par morceau de texte visé) : 'on' si tout le texte l'a, 'off' si rien, 'mixed' si une partie seulement.
+  const flagOf = list => (list.length > 1 ? 'mixed' : (list[0] === true ? 'on' : 'off'));
   const numberText = value => String(rounded(value, SPACING.digits)).replace('.', I18n.getLang() === 'fr' ? ',' : '.');
   // « 1,5 », « 1.5 », « -0,5 pt » -> un nombre ; null si ce n'est pas un nombre.
   function parseNumber(text) {
     const match = /^\s*([-−]?)\s*(\d+(?:[.,]\d*)?|[.,]\d+)\s*(?:pt)?\s*$/i.exec(String(text));
     return match ? (match[1] ? -1 : 1) * Number(match[2].replace(',', '.')) : null;
   }
-
-  function ensure() {
-    if (win) return;
-    win = ModalBase.create({ id: 'pp-charfmt-modal', titleId: 'pp-charfmt-title', size: 'md', boxClass: 'pp-parafmt-box', actionsClass: 'var-modal-actions' });
-    const grid = el('div', 'pp-parafmt-grid');
-    const label = el('label', 'pp-parafmt-label');
-    label.htmlFor = 'pp-charfmt-spacing';
-    const input = el('input', 'pp-dialog-input');
-    input.id = 'pp-charfmt-spacing';
-    input.type = 'text';
-    input.inputMode = 'decimal';
-    input.autocomplete = 'off';
-    input.spellcheck = false;
-    input.setAttribute('aria-describedby', 'pp-charfmt-hint pp-charfmt-error');
-    const unit = el('span', 'pp-parafmt-unit', 'pt');
-    unit.setAttribute('aria-hidden', 'true');
-    const cell = el('div', 'pp-parafmt-field');
-    cell.append(input, unit);
-    const capsLabel = el('label', 'pp-parafmt-label');
-    capsLabel.htmlFor = 'pp-charfmt-caps';
-    const caps = el('input', 'pp-charfmt-check');
-    caps.id = 'pp-charfmt-caps';
-    caps.type = 'checkbox';
-    const capsCell = el('div', 'pp-parafmt-field');
-    capsCell.append(caps);
-    const lineLabel = el('label', 'pp-parafmt-label');
-    lineLabel.htmlFor = 'pp-charfmt-line';
-    const line = el('select', 'pp-dialog-input pp-charfmt-line');
-    line.id = 'pp-charfmt-line';
-    const mixedOption = el('option');
-    mixedOption.value = 'mixed';
-    mixedOption.hidden = true;
-    mixedOption.disabled = true;
-    line.appendChild(mixedOption);
-    LINE_CHOICES.forEach((choice) => { const option = el('option'); option.value = choice; line.appendChild(option); });
-    const lineCell = el('div', 'pp-parafmt-field');
-    lineCell.append(line);
-    // Les effets : deux cases côte à côte, l'ombre et le contour des lettres.
-    const effectsLabel = el('span', 'pp-parafmt-label');
-    const effectsCell = el('div', 'pp-parafmt-field pp-charfmt-effects');
-    const effectBox = (id) => {
-      const wrap = el('label', 'pp-charfmt-effect');
-      const box = el('input', 'pp-charfmt-check');
-      box.id = id;
-      box.type = 'checkbox';
-      const text = el('span');
-      wrap.append(box, text);
-      effectsCell.appendChild(wrap);
-      return { box, text };
-    };
-    const shadow = effectBox('pp-charfmt-shadow');
-    const stroke = effectBox('pp-charfmt-stroke');
-    effectsCell.setAttribute('role', 'group');
-    grid.append(label, cell, capsLabel, capsCell, lineLabel, lineCell, effectsLabel, effectsCell);
-    const notes = el('div', 'pp-parafmt-notes');
-    const hint = el('p', 'pp-parafmt-note'); hint.id = 'pp-charfmt-hint';
-    const error = el('p', 'pp-parafmt-note pp-parafmt-error'); error.id = 'pp-charfmt-error';
-    error.setAttribute('role', 'alert');
-    error.hidden = true;
-    notes.append(hint, error);
-    grid.append(notes);
-    win.body.appendChild(grid);
-    const { first: reset, cancel, ok } = win.addButtons('pp-charfmt-reset');
-    refs = { label, capsLabel, lineLabel, effectsLabel, effectsCell, input, caps, line, shadow: shadow.box, shadowText: shadow.text, stroke: stroke.box, strokeText: stroke.text, mixedOption, hint, error, reset, cancel, ok };
-
-    // Entrée valide, sauf pendant une composition (accent mort, saisie asiatique).
-    const submitOnEnter = (event) => {
-      if (event.key !== 'Enter' || event.isComposing) return;
-      event.preventDefault();
-      submit();
-    };
-    input.addEventListener('input', render);
-    input.addEventListener('keydown', submitOnEnter);
-    caps.addEventListener('keydown', submitOnEnter);
-    line.addEventListener('keydown', submitOnEnter);
-    caps.addEventListener('change', () => { caps.indeterminate = false; });
-    [shadow.box, stroke.box].forEach((box) => {
-      box.addEventListener('keydown', submitOnEnter);
-      box.addEventListener('change', () => { box.indeterminate = false; });
-    });
-    reset.addEventListener('click', resetFields);
-    cancel.addEventListener('click', () => win.hide());
-    ok.addEventListener('click', submit);
+  // L'espacement commun au texte visé en points (0 : aucun), ou null quand il diffère d'un morceau à l'autre.
+  function commonSpacing(state) {
+    if (state.spacing.length > 1) return null;
+    return state.spacing[0] ? parseFloat(state.spacing[0]) : 0;
   }
 
-  // L'état du champ d'espacement : { value } (« 1.5pt » ou null pour « aucun »), { error: 'number' | 'range' } sinon.
-  function readSpacing() {
-    const text = refs.input.value;
-    if (!text.trim()) return { value: null, empty: true };
-    const n = parseNumber(text);
-    if (n === null) return { error: 'number' };
-    if (n < SPACING.min || n > SPACING.max) return { error: 'range' };
-    return { value: normalizedSpacing(n) };
-  }
-  function render() {
-    const state = readSpacing();
-    let message = '';
-    if (state.error) {
-      refs.input.setAttribute('aria-invalid', 'true');
-      message = state.error === 'number' ? I18n.t('charFormat.error.number') : I18n.t('charFormat.error.range', { min: numberText(SPACING.min), max: numberText(SPACING.max) });
-    } else refs.input.removeAttribute('aria-invalid');
-    refs.error.hidden = !message;
-    refs.error.textContent = message;
-    refs.ok.disabled = !!state.error;
-  }
-  function resetFields() {
-    refs.input.value = numberText(0);
-    refs.caps.checked = false;
-    refs.caps.indeterminate = false;
-    [refs.shadow, refs.stroke].forEach((box) => { box.checked = false; box.indeterminate = false; });
-    // « Par défaut » ramène un soulignement spécial au simple ; un texte sans soulignement ou aux soulignements mêlés n'est pas touché.
-    if (UNDERLINE_STYLES.indexOf(refs.line.value) !== -1) refs.line.value = 'single';
-    render();
-    refs.input.focus();
-  }
-  const boxState = box => (box.indeterminate ? 'mixed' : (box.checked ? 'on' : 'off'));
-  const capsState = () => boxState(refs.caps);
-
-  // Ouvre la fenêtre sur le texte visé : chaque réglage montre la valeur commune, ou reste vide (case mêlée) quand le texte diffère.
-  function open(editor) {
-    if (typeof ModalBase === 'undefined' || !editor || !editor.isEditable) return false;
-    ensure();
-    target = editor;
-    const { label, capsLabel, lineLabel, effectsLabel, effectsCell, input, caps, line, shadow, shadowText, stroke, strokeText, mixedOption, hint, reset, cancel, ok } = refs;
-    win.title.textContent = I18n.t('charFormat.title');
-    label.textContent = I18n.t('charFormat.spacing.label');
-    capsLabel.textContent = I18n.t('charFormat.caps.label');
-    input.setAttribute('aria-label', I18n.t('charFormat.spacing.aria'));
-    caps.setAttribute('aria-label', I18n.t('charFormat.caps.aria'));
-    lineLabel.textContent = I18n.t('charFormat.line.label');
-    line.setAttribute('aria-label', I18n.t('charFormat.line.aria'));
-    mixedOption.textContent = I18n.t('charFormat.mixed');
-    Array.from(line.options).forEach((option) => { if (option.value !== 'mixed') option.textContent = I18n.t('charFormat.line.' + option.value); });
-    effectsLabel.textContent = I18n.t('charFormat.effects.label');
-    effectsCell.setAttribute('aria-label', I18n.t('charFormat.effects.aria'));
-    shadowText.textContent = I18n.t('charFormat.shadow.label');
-    strokeText.textContent = I18n.t('charFormat.stroke.label');
-    shadow.setAttribute('aria-label', I18n.t('charFormat.shadow.aria'));
-    stroke.setAttribute('aria-label', I18n.t('charFormat.stroke.aria'));
-    hint.textContent = I18n.t('charFormat.hint');
-    reset.textContent = I18n.t('charFormat.reset');
-    cancel.textContent = I18n.t('common.cancel');
-    ok.textContent = I18n.t('common.confirm');
+  // Montre dans les deux menus l'état du texte visé : la ligne du soulignement qu'il porte (aucune s'il en diffère), la coche ou le tiret de chaque effet, l'espacement. Lu à l'ouverture d'un menu et après chaque réglage,
+  // pas à chaque mouvement du curseur : la barre elle-même (js/main-toolbar.js) ne montre que l'enfoncé de « Souligné » et de « Aa ».
+  function syncMenus(editor) {
+    if (!editor || !editor.state) return;
     const state = readState(editor);
-    const sameSpacing = state.spacing.length <= 1;
-    const sameCaps = state.caps.length <= 1;
-    input.placeholder = sameSpacing ? '' : I18n.t('charFormat.mixed');
-    input.value = sameSpacing ? numberText(state.spacing.length && state.spacing[0] ? parseFloat(state.spacing[0]) : 0) : '';
-    caps.indeterminate = !sameCaps;
-    caps.checked = sameCaps && state.caps[0] === true;
-    line.value = state.line.length > 1 ? 'mixed' : (state.line[0] || 'none');
-    [['shadow', shadow], ['stroke', stroke]].forEach(([key, box]) => {
-      box.indeterminate = state[key].length > 1;
-      box.checked = state[key].length === 1 && state[key][0] === true;
+    const line = state.line.length > 1 ? 'mixed' : (state.line[0] || 'none');
+    UNDERLINE_ROWS.forEach((kind) => { const row = underlineRow(kind); if (row) row.setAttribute('aria-checked', line === kind ? 'true' : 'false'); });
+    EFFECT_ROWS.forEach(({ id, key }) => {
+      const row = byId(id);
+      if (!row) return;
+      const flag = flagOf(state[key]);
+      row.setAttribute('aria-checked', flag === 'on' ? 'true' : (flag === 'mixed' ? 'mixed' : 'false'));
     });
-    initial = { spacing: input.value, caps: capsState(), line: line.value, shadow: boxState(shadow), stroke: boxState(stroke) };
-    render();
-    win.show(input);
-    input.select();
-    return true;
+    // Un champ que la personne est en train de saisir n'est pas réécrit sous ses doigts.
+    if (document.activeElement !== byId('v2-char-spacing-val')) showSpacing(state);
+  }
+  // Le champ d'espacement montre l'espacement commun du texte visé (vide, avec un tiret, quand il diffère) et ne porte plus d'erreur.
+  function showSpacing(state) {
+    const input = byId('v2-char-spacing-val');
+    if (!input) return;
+    const spacing = commonSpacing(state);
+    input.value = spacing === null ? '' : numberText(spacing);
+    input.placeholder = spacing === null ? '—' : '';
+    input.removeAttribute('aria-invalid');
+    input.removeAttribute('title');
   }
 
-  // « Valider » : seuls les réglages modifiés s'appliquent (un espacement vidé redevient « aucun ») ; une saisie qui n'est pas bonne garde la fenêtre ouverte.
-  function submit() {
-    const state = readSpacing();
-    if (state.error) { refs.input.focus(); return; }
-    const changes = {};
-    if (refs.input.value.trim() !== initial.spacing) changes.letterSpacing = state.value;
-    if (capsState() !== initial.caps) changes.smallCaps = refs.caps.checked && !refs.caps.indeterminate;
-    if (refs.line.value !== initial.line && refs.line.value !== 'mixed') changes.underline = refs.line.value;
-    if (boxState(refs.shadow) !== initial.shadow && !refs.shadow.indeterminate) changes.textShadow = refs.shadow.checked;
-    if (boxState(refs.stroke) !== initial.stroke && !refs.stroke.indeterminate) changes.textStroke = refs.stroke.checked;
-    win.hide();
-    if (Object.keys(changes).length) apply(target, changes);
+  // Une ligne du soulignement : retire le soulignement quand tout le texte porte déjà cette sorte, la pose sinon (une autre sorte devient celle-ci).
+  function applyUnderline(editor, kind) {
+    const state = readState(editor);
+    const current = state.line.length === 1 ? state.line[0] : null;
+    return apply(editor, { underline: current === kind ? 'none' : kind });
+  }
+  // Une ligne à cocher : tout le texte l'a, elle le retire ; sinon (rien, ou une partie) elle le pose partout.
+  function toggleEffect(editor, effect) {
+    return apply(editor, effect.change(flagOf(readState(editor)[effect.key]) !== 'on'));
+  }
+  // L'espacement : `value` en points (0 : aucun), ramené à ses bornes.
+  function setSpacing(editor, value, options) {
+    return apply(editor, { letterSpacing: Math.min(SPACING.max, Math.max(SPACING.min, value)) }, options);
+  }
+  // Un pas du « − » ou du « + » : à partir de l'espacement commun du texte visé (0 quand il diffère d'un morceau à l'autre).
+  function stepSpacing(editor, direction) {
+    const spacing = commonSpacing(readState(editor));
+    return setSpacing(editor, rounded((spacing || 0) + direction * SPACING_STEP, SPACING.digits));
   }
 
-  return { createExtension, declarations, spacingPt, smallCapsOf, smallCapsPieces, normalizedSpacing, normalizedShadow, normalizedStroke, parseShadow, parseStroke, DEFAULT_SHADOW, DEFAULT_STROKE, normalizedLine, underlineOfPowerPoint, readState, apply, open, SPACING, SMALL_CAPS, SMALL_CAPS_RATIO, UNDERLINE_STYLES, WORD_UNDERLINE, POWERPOINT_UNDERLINE };
+  // Câble les deux menus. `getEditor` rend l'éditeur courant (js/main-toolbar.js). Les lignes se cliquent à la souris sans prendre le focus à l'éditeur (le texte reste sélectionné) et au clavier (Entrée, Espace), par le même clic : les gardes
+  // des commandes grisées (js/lock-reasons.js, js/main.js:wireAccessLockGuard) le voient donc aussi.
+  function wireMenus(getEditor) {
+    const act = (fn) => {
+      const editor = getEditor();
+      if (!editor || !editor.isEditable) return;
+      fn(editor);
+      syncMenus(editor);
+    };
+    const wireRow = (row, fn) => {
+      if (!row) return;
+      row.addEventListener('mousedown', (event) => event.preventDefault());
+      row.addEventListener('click', () => act(fn));
+      row.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        row.click();
+      });
+    };
+    UNDERLINE_ROWS.forEach(kind => wireRow(underlineRow(kind), editor => applyUnderline(editor, kind)));
+    EFFECT_ROWS.forEach(effect => wireRow(byId(effect.id), editor => toggleEffect(editor, effect)));
+    // Un pas ne prend pas non plus le focus à l'éditeur ; le champ, lui, le prend (il se saisit) et le rend au texte à la validation.
+    const minus = byId('v2-char-spacing-minus');
+    const plus = byId('v2-char-spacing-plus');
+    [[minus, -1], [plus, 1]].forEach(([button, direction]) => {
+      if (!button) return;
+      button.addEventListener('mousedown', (event) => event.preventDefault());
+      button.addEventListener('click', () => act(editor => stepSpacing(editor, direction)));
+    });
+    const input = byId('v2-char-spacing-val');
+    if (input) {
+      // Une saisie qui n'est pas un nombre, ou hors des bornes, le dit (rouge et info-bulle) et ne pose rien : Entrée la garde pour qu'on la corrige, la quitter ou Échap rend au champ l'espacement du texte.
+      const problem = () => {
+        const text = input.value;
+        if (!text.trim()) return null;
+        const n = parseNumber(text);
+        if (n === null) return I18n.t('charFormat.error.number');
+        if (n < SPACING.min || n > SPACING.max) return I18n.t('charFormat.error.range', { min: numberText(SPACING.min), max: numberText(SPACING.max) });
+        return null;
+      };
+      let typed = false; // la personne a saisi quelque chose depuis la dernière validation : un champ laissé tel quel ne pose rien (une sélection aux espacements mêlés les garde)
+      const restore = () => {
+        typed = false;
+        const editor = getEditor();
+        if (editor && editor.state) showSpacing(readState(editor)); else { input.removeAttribute('aria-invalid'); input.removeAttribute('title'); }
+      };
+      input.addEventListener('input', () => {
+        typed = true;
+        const message = problem();
+        if (message) { input.setAttribute('aria-invalid', 'true'); input.title = message; } else { input.removeAttribute('aria-invalid'); input.removeAttribute('title'); }
+      });
+      // Valider (Entrée, ou quitter le champ) : un champ vidé est « aucun ».
+      const commit = (returnFocus) => {
+        const editor = getEditor();
+        const wasTyped = typed;
+        typed = false;
+        if (!editor || !editor.isEditable || input.closest('.v2-hf-locked, .pp-access-locked')) { restore(); return; }
+        if (wasTyped) setSpacing(editor, input.value.trim() ? parseNumber(input.value) : 0, returnFocus ? undefined : { focus: false });
+        syncMenus(editor);
+        if (returnFocus) editor.commands.focus();
+      };
+      input.addEventListener('change', () => { if (problem()) restore(); else commit(false); });
+      input.addEventListener('keydown', (event) => {
+        if (event.isComposing) return;
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          if (problem()) input.select(); else commit(true);
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          restore();
+          const editor = getEditor();
+          if (editor) editor.commands.focus();
+        }
+      });
+      // Une saisie fausse laissée telle quelle (la souris est partie avec le focus) reprend l'espacement du texte.
+      input.addEventListener('blur', () => { if (input.getAttribute('aria-invalid') === 'true') restore(); });
+    }
+    // L'état se lit à l'ouverture d'un menu : au survol du groupe ou quand le clavier y entre.
+    ['v2-underline-group', 'v2-char-group'].forEach((id) => {
+      const group = byId(id);
+      if (!group) return;
+      group.addEventListener('mouseenter', () => syncMenus(getEditor()));
+      group.addEventListener('focusin', () => syncMenus(getEditor()));
+      // Le bouton « Souligné » lui-même et les icônes Exposant et Indice changent l'état que le menu ouvert montre : il le relit après eux.
+      group.addEventListener('click', () => syncMenus(getEditor()));
+    });
+  }
+
+  return { createExtension, declarations, spacingPt, smallCapsOf, smallCapsPieces, normalizedSpacing, normalizedShadow, normalizedStroke, parseShadow, parseStroke, DEFAULT_SHADOW, DEFAULT_STROKE, normalizedLine, underlineOfPowerPoint, readState, apply, wireMenus, syncMenus, stepSpacing, SPACING_STEP, SPACING, SMALL_CAPS, SMALL_CAPS_RATIO, UNDERLINE_STYLES, WORD_UNDERLINE, POWERPOINT_UNDERLINE };
 })();
