@@ -280,6 +280,9 @@ async function run(lang, colorScheme) {
   check(tag + 'l\'objet « Bouton posé » est de nouveau lié à la 2e diapositive (pour le diaporama)', (await linkOf(1)) === '#slide-2' && (await markersOf()).includes('slide-2|-'), { link: await linkOf(1), markers: await markersOf() });
   const html = await page.evaluate(() => Editor.getHTML());
   check(tag + 'le HTML enregistré ne dit rien de la marque en forme de chaîne (interface de l\'éditeur seulement)', !/pp-ff-link-badge/.test(html) && (html.match(/data-ff-link="/g) || []).length === 14, (html.match(/data-ff-link="/g) || []).length);
+  // Un objet à lien montre sa marque même sans être choisi ni actif : elle se construit avec le lien (js/free-frame.js : `ensureHandles`), pas avec le choix.
+  const marks = await page.evaluate(() => Array.from(document.querySelectorAll('#editor-container .pp-free-frame[data-ff-link]')).map((f) => { const b = f.querySelector(':scope > .pp-free-frame-box > .pp-ff-ui > .pp-ff-link-badge'); return { shown: !!b && getComputedStyle(b).display === 'block', selected: f.classList.contains('pp-ff-selected') || f.classList.contains('pp-ff-active') }; }));
+  check(tag + 'chaque objet à lien montre sa marque, même quand il n\'est ni choisi ni actif (construite avec le lien)', marks.length === (html.match(/data-ff-link="/g) || []).length && marks.length > 1 && marks.every(m => m.shown) && marks.some(m => !m.selected), marks);
 
   // --- 3. Le diaporama.
   console.log('\n' + tag + '3) Le diaporama');

@@ -324,8 +324,9 @@ async function run(lang, colorScheme, full) {
   check(tag + 'un cadre est posé au début de la diapositive 2, juste après le saut de page, rien d\'autre ne change (titre, texte, saut, CADRE, titre, liste, saut, texte)', before.shape === 'hp|hbu|p' && placed.shape === 'hp|Fhbu|p', { before: before.shape, placed: placed.shape });
   check(tag + 'ses mesures : au centre de la page (x au milieu de la largeur, y 234, 384 x 72 points)', placed.frames.length === 1 && near(placed.frames[0].x, (size.width - 384) / 2, 0.01) && placed.frames[0].y === 234 && placed.frames[0].w === 384 && placed.frames[0].h === 72, { frame: placed.frames, page: size });
   check(tag + 'le curseur est dans le texte du cadre, prêt à écrire (ni cadre sélectionné, ni curseur resté dans la diapositive)', placed.selection.inFrame && !placed.selection.selectedFrame, placed.selection);
-  const activeClass = await page.evaluate(() => { const f = document.querySelector('#editor-container .pp-free-frame'); return { active: f.classList.contains('pp-ff-active'), role: f.getAttribute('role'), label: f.getAttribute('aria-label') }; });
+  const activeClass = await page.evaluate(() => { const f = document.querySelector('#editor-container .pp-free-frame'); return { active: f.classList.contains('pp-ff-active'), role: f.getAttribute('role'), label: f.getAttribute('aria-label'), handles: Array.from(f.querySelectorAll('.pp-ff-handle')).filter(h => getComputedStyle(h).display !== 'none').length, rotate: f.querySelectorAll('.pp-ff-rotate').length }; });
   check(tag + `le cadre est nommé (« ${T.frame} », rôle group) et son contour plein dit que le curseur est dedans`, activeClass.active && activeClass.role === 'group' && activeClass.label === T.frame, activeClass);
+  check(tag + 'le curseur est dans le cadre à peine posé : ses huit poignées et sa rotation sont déjà là, et se montrent (construites à l\'arrivée du cadre actif)', activeClass.handles === 8 && activeClass.rotate === 1, activeClass);
   // Un seul Ctrl+Z défait la pose, Ctrl+Maj+Z la rétablit.
   await press('Control+z');
   const undone = await page.evaluate(() => Editor.getHTML());
@@ -384,6 +385,8 @@ async function run(lang, colorScheme, full) {
   await press1(topEdge(box));
   const se = await handlePoint('se');
   check(tag + 'cadre sélectionné, ses huit poignées se montrent', (await page.evaluate(() => Array.from(document.querySelectorAll('#editor-container .pp-free-frame .pp-ff-handle')).filter(h => getComputedStyle(h).display !== 'none').length)) === 8 && !!se && se.width > 0, se);
+  const builtUi = await page.evaluate(() => { const f = document.querySelector('#editor-container .pp-free-frame.pp-ff-selected'); return f ? { handles: f.querySelectorAll(':scope > .pp-free-frame-box > .pp-ff-ui > .pp-ff-handle').length, rotate: f.querySelectorAll(':scope > .pp-free-frame-box > .pp-ff-ui > .pp-ff-rotate').length, badge: f.querySelectorAll(':scope > .pp-free-frame-box > .pp-ff-ui > .pp-ff-link-badge').length } : null; });
+  check(tag + 'les poignées se construisent à ce premier choix : huit poignées, une rotation, une marque de lien (cachée : le cadre n\'a pas de lien)', !!builtUi && builtUi.handles === 8 && builtUi.rotate === 1 && builtUi.badge === 1, builtUi);
   await drag(se, 50, 20);
   const resized = await docState(page);
   check(tag + 'glisser la poignée bas droite agrandit le cadre de la distance de la souris (en points), sans le déplacer', near(resized.frames[0].w, start.w + 50 / z / PT, 1) && near(resized.frames[0].h, start.h + 20 / z / PT, 1) && resized.frames[0].x === start.x && resized.frames[0].y === start.y, { start, resized: resized.frames[0] });
@@ -459,6 +462,15 @@ async function run(lang, colorScheme, full) {
   const flagsOf = list => list.map(d => (d.shown ? '1' : '0')).join('');
   await open(17, 2);
   let dotsNow = await dots();
+  // Le modèle vient de s'ouvrir, rien n'a été touché : les cadres que le curseur n'habite pas n'ont que leurs bords (un cadre qui a déjà été choisi ou actif garde ses poignées).
+  // L'interface d'un cadre au repos : la couche et ses quatre bords. Les huit poignées, la rotation et la marque de lien se construisent au premier choix, au premier curseur dedans ou avec un lien
+  // (dans « Présentation commerciale », 494 cadres : 5 700 éléments de moins).
+  const idleUi = await page.evaluate(() => Array.from(document.querySelectorAll('#editor-container .pp-free-frame')).map(frame => ({
+    edges: frame.querySelectorAll(':scope > .pp-free-frame-box > .pp-ff-ui > .pp-ff-edge').length,
+    built: frame.querySelectorAll('.pp-ff-handle, .pp-ff-rotate, .pp-ff-link-badge').length,
+    busy: frame.classList.contains('pp-ff-active') || frame.classList.contains('pp-ff-selected') || frame.hasAttribute('data-ff-link'),
+  })));
+  check(tag + 'un cadre ni choisi, ni actif, ni lié n\'a que ses quatre bords : ni poignée, ni rotation, ni marque de lien (ils se construisent au premier besoin)', idleUi.length > 0 && idleUi.every(f => f.edges === 4 && (f.busy || f.built === 0)) && idleUi.some(f => !f.busy), idleUi);
   check(tag + '« Au bord » : la miniature de la diapositive 1 (un cadre posé trop bas, un cadre qui sort à droite) porte le point rouge, celle de la 2 non',
     flagsOf(dotsNow) === '10' && dotsNow[0].size[0] === 8 && dotsNow[0].size[1] === 8, dotsNow);
   check(tag + 'l\'info-bulle du point dit « ' + T.frameOverflow + ' », et le nom de la miniature aussi',

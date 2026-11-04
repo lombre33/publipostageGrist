@@ -566,7 +566,7 @@ async function run(lang, colorScheme, full) {
     await leave();
     await cursorIn('Premier texte');
     const idle = await page.evaluate(() => Array.from(document.querySelectorAll('#editor-container .pp-ff-rotate')).map(h => getComputedStyle(h).display));
-    check(tag + 'sans cadre sélectionné ni actif, aucune poignée de rotation ne s\'affiche (une par cadre : trois ; la ligne n\'en a pas)', idle.length === 3 && idle.every(d => d === 'none'), idle);
+    check(tag + 'sans cadre sélectionné ni actif, aucune poignée de rotation ne s\'affiche, et aucun cadre n\'en a encore construit une (elles se construisent au premier choix)', idle.length === 0 && idle.every(d => d === 'none'), idle);
     check(tag + 'le cadre A se sélectionne', await selectNth(0));
     await bringNth(0);
     const zoom = (await screenState(page)).zoom;

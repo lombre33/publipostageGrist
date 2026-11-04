@@ -903,6 +903,9 @@ const FreeFrame = (function () {
       if (name in data) dom.setAttribute(name, data[name]); else dom.removeAttribute(name);
     });
   }
+  // L'interface d'un cadre : la couche `.pp-ff-ui` et ses quatre bords, qu'on saisit toujours. Les huit poignées, la rotation et la marque de lien (`addHandles`) ne se construisent qu'au premier
+  // besoin (cadre choisi, actif ou lié : css/free-frame.css ne les montre que dans ces trois cas) : dans une présentation de 494 cadres, c'étaient 5 700 éléments de l'éditeur, presque tous cachés,
+  // à construire à l'ouverture, à garder en mémoire et à recalculer à chaque passe de style.
   function buildUi() {
     const ui = el('div', UI);
     ui.contentEditable = 'false';
@@ -913,10 +916,15 @@ const FreeFrame = (function () {
       edge.title = I18n.t('frame.moveTip');
       ui.appendChild(edge);
     });
-    HANDLES.forEach((side) => {
+    return ui;
+  }
+  // Les huit poignées, la rotation et la marque de lien, après les bords de `ui` ; rend les huit poignées.
+  function addHandles(ui) {
+    const handles = HANDLES.map((side) => {
       const handle = el('div', 'pp-ff-handle pp-ff-handle-' + side);
       handle.dataset.ffKind = side;
       ui.appendChild(handle);
+      return handle;
     });
     // La poignée de rotation, au-dessus du cadre, au bout d'une tige.
     const rotate = el('div', 'pp-ff-rotate');
@@ -928,8 +936,10 @@ const FreeFrame = (function () {
     const badge = el('div', 'pp-ff-link-badge');
     Dom.setMarkup(badge, Icons.svg('link'));
     ui.appendChild(badge);
-    return ui;
+    return handles;
   }
+  // Une décoration de nœud du cadre dit-elle qu'il est actif ou choisi (au curseur, ou dans une sélection multiple) ? Alors ses poignées doivent exister.
+  const showsHandles = decorations => !!decorations && decorations.some((d) => { const c = d.type && d.type.attrs && d.type.attrs.class; return !!c && (c.indexOf(ACTIVE) >= 0 || c.indexOf(SELECTED) >= 0); });
   function liveFrame(ed, getPos) {
     const pos = getPos();
     const node = typeof pos === 'number' ? ed.state.doc.nodeAt(pos) : null;
@@ -1076,12 +1086,20 @@ const FreeFrame = (function () {
   // Les cadres « derrière le texte » vivants de l'éditeur (un par vue de nœud) : le survol les passe en revue sans chercher dans le document.
   const behindFrames = new Set();
   const remember = (dom, a) => { if (a.layer) behindFrames.add(dom); else behindFrames.delete(dom); };
-  function nodeView({ node: initial, editor: ed, getPos }) {
+  function nodeView({ node: initial, editor: ed, getPos, decorations }) {
     let node = initial;
     const dom = el('div', CLASS);
     const box = el('div', BOX);
     const ui = buildUi();
-    const handles = Array.from(ui.querySelectorAll('.pp-ff-handle'));
+    // Les poignées : construites au premier besoin (`ensureHandles`), jamais retirées ensuite.
+    let handles = [];
+    const turnHandles = (a) => { handles.forEach((handle) => { handle.style.cursor = a.rot ? cursorFor(handle.dataset.ffKind, a.rot) : ''; }); };
+    const ensureHandles = () => {
+      if (handles.length) return;
+      handles = addHandles(ui);
+      turnHandles(normalized(node.attrs));
+    };
+    // (`update` les construit pour un cadre actif ou choisi, `refresh` pour un cadre lié, `selectNode` pour un choix par la souris ou le clavier, la création pour un cadre né avec le curseur dedans.)
     const content = el('div', CONTENT);
     box.append(ui, content);
     dom.appendChild(box);
@@ -1106,11 +1124,13 @@ const FreeFrame = (function () {
       paint(dom, a);
       remember(dom, a);
       syncView(a);
-      handles.forEach((handle) => { handle.style.cursor = a.rot ? cursorFor(handle.dataset.ffKind, a.rot) : ''; });
+      if (a.link) ensureHandles();
+      turnHandles(a);
       dom.setAttribute('aria-label', a.alt || I18n.t(a.shape ? 'shape.' + (ShapePresets.isCustom(a.shape) ? 'cust' : a.shape) : 'frame.label'));
       dom.classList.toggle(EMPTY, isEmptyFrame(node));
     };
     refresh();
+    if (showsHandles(decorations)) ensureHandles();
     ui.addEventListener('mousedown', (event) => {
       const target = event.target.closest && event.target.closest('[data-ff-kind]');
       if (target) startGesture(event, target.dataset.ffKind, { ed, getPos, dom, box });
@@ -1118,13 +1138,14 @@ const FreeFrame = (function () {
     return {
       dom,
       contentDOM: content,
-      update(updated) {
+      update(updated, outerDecorations) {
         if (updated.type !== node.type) return false;
         node = updated;
         refresh();
+        if (showsHandles(outerDecorations)) ensureHandles();
         return true;
       },
-      selectNode() { dom.classList.add(SELECTED); },
+      selectNode() { dom.classList.add(SELECTED); ensureHandles(); },
       deselectNode() { dom.classList.remove(SELECTED); },
       destroy() { behindFrames.delete(dom); if (viewHost) SlideView.untrack(viewHost); },
       // Les bords et les poignées sont à eux : ni sélection, ni glisser de l'éditeur sur leur clic. Rien de ce qui n'est pas le texte du cadre n'est une modification du document. Le calque d'une vue aussi.
