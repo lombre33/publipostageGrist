@@ -749,7 +749,7 @@
   // menu, groupe non marqué). Le survol réel, à 700x400, est dans verify-menu-click-mouse.mjs (menuClickMouse).
   cases.push({
     id: 'toolbar_a_mouse_click_on_the_save_button_closes_its_menu_until_the_mouse_leaves_the_group',
-    description: "Seuls les groupes d'Enregistrer, de « + », de « Mode lecture », de « Type d'export » et du pinceau de mise en forme (son clic est le geste, la souris file vers le texte à peindre : le menu des mises en forme gardées ne doit pas rester ouvert dessus) sont marqués `data-close-on-click`. Un clic de souris (ou un clic sans type, avec detail) sur le bouton d'un groupe marqué lui pose la classe v2-hover-closed et aria-expanded « false » ; un mouseover venu d'ailleurs ne le rouvre pas ; la sortie de la souris (mouseleave) retire la classe et le survol suivant rouvre ; le focus clavier la retire aussi et rouvre. Un clic de clavier (detail 0), du doigt ou du stylet, un clic sur une ligne du menu et un clic sur un groupe non marqué ne referment rien.",
+    description: "Seuls les groupes d'Enregistrer, de « + », de « Mode lecture », de « Type d'export », de Souligné (son clic pose ou retire le trait classique : le menu des autres traits ne doit pas rester ouvert sur le texte qu'on vise ensuite) et du pinceau de mise en forme (son clic est le geste, la souris file vers le texte à peindre : le menu des mises en forme gardées ne doit pas rester ouvert dessus) sont marqués `data-close-on-click`. Un clic de souris (ou un clic sans type, avec detail) sur le bouton d'un groupe marqué lui pose la classe v2-hover-closed et aria-expanded « false » ; un mouseover venu d'ailleurs ne le rouvre pas ; la sortie de la souris (mouseleave) retire la classe et le survol suivant rouvre ; le focus clavier la retire aussi et rouvre. Un clic de clavier (detail 0), du doigt ou du stylet, un clic sur une ligne du menu et un clic sur un groupe non marqué ne referment rien.",
     run: async (h) => {
       const bar = document.querySelector('.bar-row');
       const marked = [...document.querySelectorAll('[data-close-on-click]')].map(el => el.id);
@@ -800,7 +800,7 @@
         a.group.remove();
         b.group.remove();
       }
-      const pass = JSON.stringify(marked) === '["v2-new-template-group","v2-save-group","v2-read-group","v2-quality-group","v2-painter-group"]'
+      const pass = JSON.stringify(marked) === '["v2-new-template-group","v2-save-group","v2-read-group","v2-quality-group","v2-underline-group","v2-painter-group"]'
         && opened.aria === 'true' && !opened.shut
         && afterClick.shut && afterClick.aria === 'false' && afterOver.shut && afterOver.aria === 'false'
         && !afterLeave.shut && afterLeave.aria === 'false' && !afterReenter.shut && afterReenter.aria === 'true' && !secondLeave.shut

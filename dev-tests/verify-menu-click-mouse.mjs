@@ -216,7 +216,9 @@ await page.waitForTimeout(300);
   await page.mouse.click(c.x, c.y); await page.waitForTimeout(300);
   const shut = !(await open(page, '#v2-save-flyout'));
   const exp = await expanded(page, '#btn-save');
-  await page.mouse.move(row.x, row.y, { steps: 8 }); await page.waitForTimeout(150);
+  // Un pas sous le bouton (dans la zone de son menu), puis UN saut sur la cible : la ligne droite traverserait les boutons à menu de la barre (« Aa », la liste à puces...), dont le menu s'ouvre au survol et recouvre le point visé
+  // selon la place de chaque bouton (un bouton de plus dans la barre la déplace) - ce que ce contrôle ne regarde pas.
+  await page.mouse.move(c.x, c.y + 14, { steps: 2 }); await page.mouse.move(row.x, row.y); await page.waitForTimeout(150);
   const under = await page.evaluate(({ x, y }) => { const el = document.elementFromPoint(x, y); return { inMenu: !!el && !!el.closest('#v2-save-flyout'), inEditorZone: !!el && !!el.closest('#editor-container'), at: el ? (el.id || el.className || el.tagName) : null }; }, row);
   await page.mouse.click(row.x, row.y); await page.waitForTimeout(300);
   const after = { autosave: await autosave(), history: await historyOpen(), menu: await open(page, '#v2-save-flyout') };

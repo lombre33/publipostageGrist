@@ -132,7 +132,7 @@
 <link rel="stylesheet" href="css/callout.css?v=0.2">
 <link rel="stylesheet" href="css/free-frame.css?v=0.23">
 <link rel="stylesheet" href="css/caption.css?v=0.3">
-<link rel="stylesheet" href="css/script-marks.css?v=0.1">
+<link rel="stylesheet" href="css/script-marks.css?v=0.2">
 <link rel="stylesheet" href="css/tab-indent.css?v=0.1">
 <link rel="stylesheet" href="css/qr-code.css?v=0.4">
 <link rel="stylesheet" href="css/chart-frame.css?v=0.1">
@@ -151,7 +151,7 @@
 <link rel="stylesheet" href="css/page-size.css?v=0.3">
 <link rel="stylesheet" href="css/paragraph-format.css?v=0.3">
 <link rel="stylesheet" href="css/text-direction.css?v=0.2">
-<link rel="stylesheet" href="css/character-format.css?v=0.2">
+<link rel="stylesheet" href="css/character-format.css?v=0.3">
 <link rel="stylesheet" href="css/bullet-format.css?v=0.3">
 <link rel="stylesheet" href="css/clean-reading.css?v=0.3">
 <link rel="stylesheet" href="css/format-painter.css?v=0.4">
@@ -383,8 +383,45 @@
       <span class="v2-sep"></span>
       <button id="v2-btn-bold" data-tip="Gras" aria-label="Gras" data-i18n-tip="fmt.bold" data-i18n-aria="fmt.bold"></button>
       <button id="v2-btn-italic" data-tip="Italique" aria-label="Italique" data-i18n-tip="fmt.italic" data-i18n-aria="fmt.italic"></button>
-      <button id="v2-btn-underline" data-tip="Souligné" aria-label="Souligné" data-i18n-tip="fmt.underline" data-i18n-aria="fmt.underline"></button>
+      <!-- Souligné : le bouton garde son clic et Ctrl+U (le soulignement classique) ; son menu au survol offre les autres sortes, sans fenêtre (js/character-format.js, `wireMenus`). Chaque ligne est dessinée comme le trait qu'elle pose. -->
+      <span class="v2-hover-group" id="v2-underline-group" data-close-on-click>
+        <button id="v2-btn-underline" aria-label="Souligné" data-i18n-aria="fmt.underline"></button>
+        <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-underline-flyout">
+          <span class="v2-hover-flyout-label" data-i18n="charFormat.line.label">Soulignement</span>
+          <span class="v2-hover-row v2-hover-row-check-start" id="v2-underline-single" role="menuitemradio" aria-checked="false" tabindex="0" data-underline="single" aria-label="Souligné : un trait simple" data-i18n-aria="charFormat.line.singleAria"><span class="v2-underline-sample" data-i18n="fmt.underline">Souligné</span></span>
+          <span class="v2-hover-hsep"></span>
+          <span class="v2-hover-row v2-hover-row-check-start" id="v2-underline-double" role="menuitemradio" aria-checked="false" tabindex="0" data-underline="double" aria-label="Soulignement double" data-i18n-aria="charFormat.line.doubleAria"><span class="v2-underline-sample" data-i18n="charFormat.line.double">Double</span></span>
+          <span class="v2-hover-row v2-hover-row-check-start" id="v2-underline-dotted" role="menuitemradio" aria-checked="false" tabindex="0" data-underline="dotted" aria-label="Soulignement pointillé" data-i18n-aria="charFormat.line.dottedAria"><span class="v2-underline-sample" data-i18n="charFormat.line.dotted">Pointillé</span></span>
+          <span class="v2-hover-row v2-hover-row-check-start" id="v2-underline-dashed" role="menuitemradio" aria-checked="false" tabindex="0" data-underline="dashed" aria-label="Soulignement tireté" data-i18n-aria="charFormat.line.dashedAria"><span class="v2-underline-sample" data-i18n="charFormat.line.dashed">Tireté</span></span>
+          <span class="v2-hover-row v2-hover-row-check-start" id="v2-underline-wavy" role="menuitemradio" aria-checked="false" tabindex="0" data-underline="wavy" aria-label="Soulignement ondulé" data-i18n-aria="charFormat.line.wavyAria"><span class="v2-underline-sample" data-i18n="charFormat.line.wavy">Ondulé</span></span>
+        </span>
+      </span>
       <button id="v2-btn-strike" data-tip="Barré" aria-label="Barré" data-i18n-tip="fmt.strike" data-i18n-aria="fmt.strike"></button>
+      <!-- « Aa » : le menu des réglages de caractère, à la place de la fenêtre « Caractère… » du menu Alignement (demande du 04/11, carte « Placer le menu « Caractère », avec exposant et indice, à quel endroit ? » : « A — Bouton « Aa » après Barré »). Chaque réglage s'applique tout de suite (js/character-format.js, `wireMenus`). Exposant et indice gardent leurs identifiants et leurs touches (Ctrl+. et Ctrl+,). -->
+      <span class="v2-hover-group" id="v2-char-group">
+        <button type="button" id="v2-btn-char-main" aria-label="Caractère : exposant, indice, petites capitales, ombre, contour et espacement (survoler pour les options)" data-i18n-aria="charFormat.main.aria"></button>
+        <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-char-flyout">
+          <span class="v2-hover-flyout-label" data-i18n="charFormat.title">Caractère</span>
+          <span class="v2-hover-icon-row">
+            <button type="button" id="v2-btn-superscript" data-tip="Exposant" aria-label="Exposant" aria-pressed="false" data-i18n-tip="fmt.superscript" data-i18n-aria="fmt.superscript"></button>
+            <button type="button" id="v2-btn-subscript" data-tip="Indice" aria-label="Indice" aria-pressed="false" data-i18n-tip="fmt.subscript" data-i18n-aria="fmt.subscript"></button>
+          </span>
+          <span class="v2-hover-hsep"></span>
+          <span class="v2-hover-row v2-hover-row-check" id="v2-btn-char-smallcaps" role="menuitemcheckbox" aria-checked="false" tabindex="0" aria-label="Petites capitales : les minuscules deviennent de petites majuscules" data-i18n="charFormat.caps.label" data-i18n-aria="charFormat.caps.aria">Petites capitales</span>
+          <span class="v2-hover-row v2-hover-row-check" id="v2-btn-char-shadow" role="menuitemcheckbox" aria-checked="false" tabindex="0" aria-label="Ombre des lettres : une ombre douce, décalée vers le bas et la droite" data-i18n="charFormat.shadow.label" data-i18n-aria="charFormat.shadow.aria">Ombre</span>
+          <span class="v2-hover-row v2-hover-row-check" id="v2-btn-char-stroke" role="menuitemcheckbox" aria-checked="false" tabindex="0" aria-label="Contour des lettres : un trait fin autour de chaque lettre" data-i18n="charFormat.stroke.label" data-i18n-aria="charFormat.stroke.aria">Contour</span>
+          <span class="v2-hover-hsep"></span>
+          <span class="v2-char-spacing" id="v2-char-spacing" role="group" aria-label="Espacement des caractères, en points (négatif : resserré)" data-i18n-aria="charFormat.spacing.aria">
+            <span class="v2-char-spacing-label" data-i18n="charFormat.spacing.label">Espacement</span>
+            <span class="v2-char-stepper">
+              <button type="button" id="v2-char-spacing-minus" aria-label="Resserrer les caractères" data-i18n-aria="charFormat.spacing.minus">–</button>
+              <input type="text" id="v2-char-spacing-val" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Espacement des caractères, en points (négatif : resserré)" data-i18n-aria="charFormat.spacing.aria" value="0">
+              <span class="v2-char-stepper-unit" aria-hidden="true">pt</span>
+              <button type="button" id="v2-char-spacing-plus" aria-label="Écarter les caractères" data-i18n-aria="charFormat.spacing.plus">+</button>
+            </span>
+          </span>
+        </span>
+      </span>
       <span class="v2-sep"></span>
       <span class="v2-hover-group" id="v2-align-group">
         <button id="v2-btn-align-main" aria-label="Alignement (survoler pour les options)" data-i18n-aria="align.main.aria"></button>
@@ -400,7 +437,6 @@
           <span class="v2-hover-row v2-hover-row-check" id="v2-btn-keep-next" role="menuitemcheckbox" aria-checked="false" tabindex="0" aria-label="Garder avec le suivant : le paragraphe reste sur la même page que le bloc qui le suit" data-i18n="keepNext.row" data-i18n-aria="keepNext.aria">Garder avec le suivant</span>
           <span class="v2-hover-row v2-hover-row-check" id="v2-btn-rtl" role="menuitemcheckbox" aria-checked="false" tabindex="0" aria-label="Texte de droite à gauche : le sens d'écriture du paragraphe ou de la liste" data-i18n="textDirection.row" data-i18n-aria="textDirection.aria">Texte de droite à gauche</span>
           <button type="button" class="v2-menu-row" id="v2-btn-paragraph" aria-label="Paragraphe : interligne, espaces et retraits" data-i18n-aria="paragraphFormat.aria"><span data-i18n="paragraphFormat.row">Paragraphe…</span></button>
-          <button type="button" class="v2-menu-row" id="v2-btn-character" aria-label="Caractère : espacement des caractères, petites capitales et soulignement" data-i18n-aria="charFormat.aria"><span data-i18n="charFormat.row">Caractère…</span></button>
         </span>
       </span>
       <span class="v2-sep"></span>
@@ -498,10 +534,6 @@
         <button type="button" id="v2-btn-link" aria-label="Insérer un lien (Ctrl+K)"></button>
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-blocks-flyout">
           <span class="v2-hover-flyout-label" data-i18n="insert.blocks.tip">Lien et blocs de contenu</span>
-          <span class="v2-hover-icon-row">
-            <button type="button" id="v2-btn-superscript" data-tip="Exposant" aria-label="Exposant" aria-pressed="false" data-i18n-tip="fmt.superscript" data-i18n-aria="fmt.superscript"></button>
-            <button type="button" id="v2-btn-subscript" data-tip="Indice" aria-label="Indice" aria-pressed="false" data-i18n-tip="fmt.subscript" data-i18n-aria="fmt.subscript"></button>
-          </span>
           <button type="button" class="v2-menu-row" id="v2-row-link"><span class="v2-menu-row-icon"></span><span data-i18n="insert.link.row">Lien…</span><span class="v2-menu-row-kbd" id="v2-row-link-kbd"></span></button>
           <button type="button" class="v2-menu-row" id="v2-row-bookmark" aria-label="Poser un signet sur ce paragraphe ou ce titre" data-i18n-aria="insert.bookmark.aria"><span class="v2-menu-row-icon"></span><span data-bookmark-label data-i18n="insert.bookmark.row">Signet…</span></button>
           <button type="button" class="v2-menu-row" id="v2-btn-citation" aria-label="Insérer une citation" data-i18n-aria="insert.citation.aria"><span class="v2-menu-row-icon"></span><span data-i18n="insert.citation.tip">Citation</span></button>
@@ -872,8 +904,8 @@
 <script src="js/space-gap.js?v=0.2"></script>
 <script src="js/reader-mode.js?v=0.183"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
-<script src="js/i18n.js?v=0.333"></script>
-<script src="js/shortcuts.js?v=0.29"></script>
+<script src="js/i18n.js?v=0.334"></script>
+<script src="js/shortcuts.js?v=0.30"></script>
 <script src="js/page-layout.js?v=0.28"></script>
 <script src="js/page-sections.js?v=0.3"></script>
 <script src="js/color-math.js?v=0.1"></script>
@@ -893,13 +925,13 @@
 <script src="js/toolbar-gap.js?v=0.5"></script>
 <script src="js/search-select.js?v=0.22"></script>
 <script src="js/variables.js?v=0.89"></script>
-<script src="js/icons.js?v=0.81"></script>
+<script src="js/icons.js?v=0.82"></script>
 <script src="js/editor-core.js?v=0.39"></script>
 <script src="js/color-palette.js?v=0.5"></script>
 <script src="js/header-footer-preview.js?v=1.59"></script>
 <script src="js/editor-nodes.js?v=1.64"></script>
 <script src="js/floating-toolbars.js?v=0.75"></script>
-<script src="js/main-toolbar.js?v=1.55"></script>
+<script src="js/main-toolbar.js?v=1.56"></script>
 <script src="js/format-painter.js?v=0.7"></script>
 <script src="js/script-marks.js?v=0.1"></script>
 <script src="js/tab-indent.js?v=0.2"></script>
@@ -983,7 +1015,7 @@
 <script src="js/keep-with-next.js?v=0.2"></script>
 <script src="js/text-direction.js?v=0.1"></script>
 <script src="js/paragraph-format.js?v=0.4"></script>
-<script src="js/character-format.js?v=0.3"></script>
+<script src="js/character-format.js?v=0.4"></script>
 <script src="js/bullet-format.js?v=0.3"></script>
 <script src="js/typing-style.js?v=0.5"></script>
 <script src="js/anchors.js?v=0.3"></script>

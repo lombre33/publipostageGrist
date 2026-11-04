@@ -1,228 +1,113 @@
 #!/usr/bin/env node
-// « Caractère… » (js/character-format.js, ligne du menu Alignement : espacement des caractères et petites capitales ; chantier 9a de « Import PowerPoint sans perte ») : le panneau de 700x400 d'Antoine, à la VRAIE
-// souris (page.mouse) et au vrai clavier, en clair, en sombre et en anglais. Ce que scenarios-character-format.js ne peut pas voir depuis la page :
-//  - au survol de l'icône Alignement, le volet s'ouvre dans le panneau et sa ligne « Caractère… » est visible, au premier plan, lisible, avec son nom (français, anglais), sous « Paragraphe… » ;
-//  - un vrai clic sur la ligne ouvre la fenêtre : titre, deux réglages, indication et boutons tiennent dans le panneau, l'espacement a le clavier et sa valeur est sélectionnée ;
-//  - un mot choisi au double-clic reçoit, par la frappe (2,5 / 2.5 selon la langue, Tab, Espace, Entrée), son espacement et ses petites capitales, que l'éditeur dessine (letter-spacing, font-variant) ; seul ce mot ;
-//  - UN Ctrl+Z défait les deux d'un coup, Ctrl+Maj+Z les remet ; « Par défaut » les retire d'une seule étape ;
-//  - une saisie qui n'est pas un nombre ou qui sort des bornes garde la fenêtre ouverte, dit pourquoi, grise « Valider » ; Échap ferme sans toucher au document ;
-//  - une sélection aux valeurs mêlées : l'espacement reste vide et dit « Plusieurs valeurs », la case est mêlée ; ne changer que la case ne touche pas à l'espacement de chacun ;
-//  - curseur seul : la fenêtre règle le style de frappe, le texte tapé ensuite le porte.
+// Les menus « Aa » et « Souligné » de la barre (js/character-format.js : `wireMenus`, index.html, css/character-format.css ; demande du 04/11 : les réglages de caractère « pas une popup mais un menu d'outils ») : le panneau de
+// 700x400 d'Antoine, à la VRAIE souris (page.mouse) et au vrai clavier, en clair, en sombre et en anglais. Ce que dev-tests/scenarios-character-menus.js ne peut pas voir depuis la page :
+//  - « Aa » est dans la barre, entier dans le panneau, avec son icône et son nom, juste après « Barré » ; au survol son menu tient dans le panneau, chaque ligne est lisible (contraste) et au premier plan ;
+//  - un vrai clic sur Petites capitales, Ombre ou Contour règle le mot choisi au double-clic, que l'éditeur DESSINE (et lui seul), sans fenêtre : le mot reste sélectionné, la ligne se coche ; UN Ctrl+Z défait chaque réglage, Ctrl+Maj+Z le remet ;
+//  - l'espacement : « + » et « − » avancent d'un demi-point, une valeur tapée au vrai clavier (2,5 / 2.5 selon la langue) puis Entrée s'applique et rend le clavier au texte, une saisie fausse se dit (rouge) sans rien changer et Échap la rend ;
+//  - Exposant et Indice, dans le même menu, se cliquent et s'enfoncent ; le menu du bouton Souligné : la première ligne est le soulignement classique avec sa touche, les autres sont dessinées comme leur trait ; un clic pose le trait, un
+//    second le retire, un autre le remplace ; le bouton garde son clic ;
+//  - une sélection aux réglages mêlés : la ligne montre un tiret, un clic la pose partout ;
+//  - au clavier : le focus entre dans le menu (Tab), Entrée coche la ligne ;
+//  - un modèle email : les lignes qu'il grise disent pourquoi (info-bulle, coin d'état au clic) sans rien changer, Exposant et Indice restent ; la ligne « Caractère… » n'est plus dans le menu Alignement.
 // Lancé par run-headless.mjs (groupe Node "characterFormatMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-character-format-mouse.mjs
 // CHARACTER_FORMAT_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
-import { createServer } from 'node:http';
-import { readFile, stat, writeFile, mkdir } from 'node:fs/promises';
-import { existsSync, readFileSync } from 'node:fs';
-import { extname, join, resolve, normalize } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { start, seedModels, contrastOf } from './gfs-page.mjs';
 
-const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
-const PORT = Number(process.env.CHARACTER_FORMAT_MOUSE_PORT || 8962);
+const t = await start({ name: 'verify-character-format-mouse', port: Number(process.env.CHARACTER_FORMAT_MOUSE_PORT || 8962) });
 const SHOTS = process.env.CHARACTER_FORMAT_SHOTS || '';
-const WIDTH = 700;
-const HEIGHT = 400;
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
+const pause = ms => new Promise(r => setTimeout(r, ms));
+// Deux réglages de suite à moins de 500 ms ne font qu'un pas d'historique (le groupe de Tiptap) : ces pauses les séparent, comme deux gestes distincts.
+const BETWEEN_STEPS = 700;
 
-// Même régénération du harnais et même miroir hors-ligne que dev-tests/verify-keep-next-mouse.mjs.
-async function regenerateHarness() {
-  const html = await readFile(join(ROOT, 'index.html'), 'utf8');
-  const stubbed = html.replace(
-    '<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>',
-    '<script src="dev-tests/grist-stub.js"></script>'
-  );
-  await writeFile(join(ROOT, '_test-harness.html'), stubbed);
-}
-await regenerateHarness();
+const MAIN = '#v2-btn-char-main';
+const FLYOUT = '#v2-char-flyout';
+const ROW = { caps: '#v2-btn-char-smallcaps', shadow: '#v2-btn-char-shadow', stroke: '#v2-btn-char-stroke' };
+const FIELD = '#v2-char-spacing-val';
+const UNDERLINE = '#v2-btn-underline';
+const UNDERLINE_FLYOUT = '#v2-underline-flyout';
+const underlineRow = kind => '#v2-underline-' + kind;
 
-const MIME = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml',
-  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
-  '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf',
-};
-const server = createServer(async (req, res) => {
-  try {
-    const urlPath = decodeURIComponent(req.url.split('?')[0]);
-    const filePath = join(ROOT, normalize(urlPath).replace(/^(\.\.[/\\])+/, ''));
-    if (!filePath.startsWith(ROOT)) { res.writeHead(403).end(); return; }
-    const info = await stat(filePath);
-    const target = info.isDirectory() ? join(filePath, 'index.html') : filePath;
-    const body = await readFile(target);
-    res.writeHead(200, { 'Content-Type': MIME[extname(target)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
-    res.end(body);
-  } catch { res.writeHead(404).end('not found'); }
-});
-await new Promise((ok, ko) => server.listen(PORT, '127.0.0.1', ok).on('error', ko));
-const BASE = `http://127.0.0.1:${PORT}`;
-
-const esmMapPath = join(CACHE, 'esm-map.json');
-const OFFLINE = existsSync(esmMapPath);
-const esmMap = OFFLINE ? JSON.parse(readFileSync(esmMapPath, 'utf8')) : {};
-const UMD_ROUTES = OFFLINE ? [
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdfmake\.min\.js$/, 'umd/pdfmake.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/vfs_fonts\.min\.js$/, 'umd/vfs_fonts.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf\.min\.js$/, 'umd/pdf.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf\.worker\.min\.js$/, 'umd/pdf.worker.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/jszip\.min\.js$/, 'umd/jszip.min.js'],
-  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@.*$/, 'umd/docx.iife.js'],
-] : [];
-if (!OFFLINE) console.log('[verify-character-format-mouse] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.');
-
-const require = createRequire(import.meta.url);
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
-const CHUNK_BASE = 'https://esm.sh/_offline-chunks/';
-const absoluteChunks = code => code.replace(/(from\s*|import\s*)"\.\/(chunk-[A-Z0-9]+\.js)"/g, (_, kw, file) => `${kw}"${CHUNK_BASE}${file}"`);
-
-let total = 0, failures = 0;
-function check(name, pass, notes) {
-  total++;
-  if (pass) console.log('  ok   - ' + name);
-  else { failures++; console.log('  FAIL - ' + name + (notes !== undefined ? ' (' + JSON.stringify(notes) + ')' : '')); }
-}
-
-const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
-const context = await browser.newContext({ bypassCSP: true, viewport: { width: WIDTH, height: HEIGHT } });
-const page = await context.newPage();
-const pageErrors = [];
-const consoleProblems = [];
-page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
-// Un avertissement de ProseMirror ou de TipTap (sélection invalide, contenu refusé) trahit un geste qui n'a pas la forme attendue : aucun ne doit sortir pendant le parcours.
-page.on('console', m => { if ((m.type() === 'warning' || m.type() === 'error') && /TextSelection|Invalid content|RangeError|characterFormat|character-format/i.test(m.text())) consoleProblems.push(m.text()); });
-if (OFFLINE) {
-  await page.route('**://esm.sh/**', async route => {
-    const url = route.request().url();
-    const chunk = url.match(/\/(chunk-[A-Z0-9]+\.js)$/);
-    if (chunk) return route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: absoluteChunks(await readFile(join(CACHE, 'esm', chunk[1]), 'utf8')) });
-    const spec = Object.keys(esmMap).find(k => url === `https://esm.sh/${k}` || url === `https://esm.sh/*${k}` || url.startsWith(`https://esm.sh/${k}@`) || url.startsWith(`https://esm.sh/*${k}@`));
-    if (!spec) return route.fulfill({ status: 404, body: `// pas de miroir local pour ${url}` });
-    route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: absoluteChunks(await readFile(join(ROOT, esmMap[spec].replace(/^\//, '')), 'utf8')) });
-  });
-  for (const [re, rel] of UMD_ROUTES) {
-    await page.route(re, async route => route.fulfill({
-      status: 200, contentType: 'text/javascript; charset=utf-8',
-      headers: { 'Access-Control-Allow-Origin': '*' },
-      body: await readFile(join(CACHE, rel), 'utf8'),
-    }));
-  }
-  await page.addInitScript(() => {
-    Object.defineProperty(HTMLScriptElement.prototype, 'integrity', { configurable: true, get: () => '', set: () => {} });
-  });
-  await page.route('**://fonts.googleapis.com/**', route => route.fulfill({ status: 200, contentType: 'text/css', body: '' }));
-  await page.route('**://fonts.gstatic.com/**', route => route.fulfill({ status: 200, body: '' }));
-}
-
-await page.goto(`${BASE}/_test-harness.html`, { waitUntil: 'load' });
-await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
-await page.waitForFunction(() => {
-  const el = document.getElementById('status-msg');
-  return !!el && /prêt|ready/i.test(el.textContent || '');
-}, null, { timeout: 90000 });
-
-const nativeDialogs = [];
-page.on('dialog', async d => { nativeDialogs.push(d.type() + ' : ' + d.message()); await d.dismiss(); });
-
-async function snap(name) { if (SHOTS) await page.screenshot({ path: join(SHOTS, name + '.png') }); }
-const centerOf = selector => page.evaluate(sel => {
+// ---- gestes et lectures ---------------------------------------------------------------------------------------------------------------------------------------------
+const boxOf = (page, selector) => page.evaluate(sel => {
   const el = document.querySelector(sel);
   if (!el) return null;
   const r = el.getBoundingClientRect();
-  return { x: r.left + r.width / 2, y: r.top + r.height / 2, l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height };
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height, left: r.left, top: r.top, right: r.right, bottom: r.bottom,
+    inside: r.width > 0 && r.height > 0 && r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5 };
 }, selector);
-const html = () => page.evaluate(() => Editor.getHTML());
-
-
-const ROW = '#v2-btn-character';
-const MAIN = '#v2-btn-align-main';
-const hit = selector => page.evaluate(({ sel, width, height }) => {
-  const el = document.querySelector(sel);
-  if (!el) return { found: false };
-  const r = el.getBoundingClientRect();
-  const x = r.left + r.width / 2, y = r.top + r.height / 2;
-  const top = document.elementFromPoint(x, y);
-  return { found: true, x, y, w: r.width, h: r.height, box: [r.left, r.top, r.right, r.bottom].map(Math.round), inPanel: r.left >= -0.5 && r.top >= -0.5 && r.right <= width + 0.5 && r.bottom <= height + 0.5, onTop: !!top && (top === el || el.contains(top)) };
-}, { sel: selector, width: WIDTH, height: HEIGHT });
-const seen = b => b.found && b.inPanel && b.onTop && b.w > 8 && b.h > 8;
-const rowState = () => page.evaluate(sel => {
-  const row = document.querySelector(sel);
-  const previous = row.previousElementSibling;
-  return { label: row.textContent.trim(), aria: row.getAttribute('aria-label'), tab: row.tabIndex, afterParagraph: !!previous && previous.id === 'v2-btn-paragraph' };
-}, ROW);
-const windowState = () => page.evaluate(({ width, height }) => {
-  const overlay = document.getElementById('pp-charfmt-modal');
-  if (!overlay) return { shown: false };
-  const shown = overlay.style.display !== 'none';
-  const seenIn = (el) => {
-    if (!el) return false;
-    const r = el.getBoundingClientRect();
-    if (r.width < 4 || r.height < 4 || r.left < -0.5 || r.top < -0.5 || r.right > width + 0.5 || r.bottom > height + 0.5) return false;
-    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-    return !!top && (top === el || el.contains(top));
-  };
-  const spacing = document.getElementById('pp-charfmt-spacing');
-  const caps = document.getElementById('pp-charfmt-caps');
-  const line = document.getElementById('pp-charfmt-line');
-  const box = overlay.querySelector('.pp-modal-box');
-  const buttons = Array.from(overlay.querySelectorAll('.pp-modal-actions button'));
-  const error = document.getElementById('pp-charfmt-error');
-  const hint = document.getElementById('pp-charfmt-hint');
-  const ok = overlay.querySelector('.var-modal-primary');
-  const body = overlay.querySelector('.pp-modal-body');
-  const active = document.activeElement;
-  return {
-    shown,
-    boxIn: shown && seenIn(box),
-    titleIn: shown && seenIn(overlay.querySelector('h3')),
-    title: overlay.querySelector('h3').textContent.trim(),
-    buttonsIn: shown && buttons.length === 3 && buttons.every(seenIn),
-    buttons: buttons.map(b => b.textContent.trim()),
-    fieldsIn: shown && seenIn(spacing) && seenIn(caps) && seenIn(line),
-    line: line.value,
-    lineText: line.selectedOptions[0] ? line.selectedOptions[0].textContent.trim() : '',
-    lineChoices: Array.from(line.options).filter(o => !o.hidden).map(o => o.textContent.trim()),
-    labels: Array.from(overlay.querySelectorAll('.pp-parafmt-label')).map(l => l.textContent.trim()),
-    spacing: spacing.value,
-    placeholder: spacing.placeholder,
-    caps: caps.checked,
-    mixedCaps: caps.indeterminate,
-    invalid: spacing.getAttribute('aria-invalid') === 'true',
-    focus: active && active.id,
-    selected: active === spacing ? spacing.selectionStart === 0 && spacing.selectionEnd === spacing.value.length && spacing.value.length > 0 : false,
-    error: error.hidden ? '' : error.textContent.trim(),
-    hint: hint.textContent.trim(),
-    hintIn: shown && seenIn(hint),
-    okDisabled: ok.disabled,
-    scrolls: body.scrollHeight > body.clientHeight + 1,
-  };
-}, { width: WIDTH, height: HEIGHT });
-const caret = () => page.evaluate(() => {
-  const sel = EditorCore.getEditor().state.selection;
-  return { text: sel.$from.parent.textContent, empty: sel.empty, focus: !!document.activeElement && !!document.activeElement.closest('.tiptap') };
-});
-// Ce que l'éditeur dessine d'un mot : son espacement (pt), ses petites capitales.
-const lineOf = word => page.evaluate((needle) => {
-  const walker = document.createTreeWalker(document.querySelector('.tiptap'), NodeFilter.SHOW_TEXT);
-  let n;
-  while ((n = walker.nextNode())) {
-    if (n.textContent.indexOf(needle) < 0) continue;
-    const u = n.parentElement.closest('u');
-    return u ? { style: getComputedStyle(u).textDecorationStyle, line: getComputedStyle(u).textDecorationLine } : null;
+// La souris vient d'à côté et s'arrête au centre du contrôle.
+async function goTo(page, selector) {
+  const b = await boxOf(page, selector);
+  if (!b || !b.w || !b.h) throw new Error('introuvable ou masqué : ' + selector);
+  await page.mouse.move(Math.max(2, b.x - 30), Math.min(396, b.y + 45));
+  await page.mouse.move(b.x, b.y, { steps: 6 });
+  await pause(350);
+  return b;
+}
+// Le groupe à survol ouvre sa ligne sans que la souris la quitte : elle descend du bouton dans le menu, longe le haut du menu jusqu'au-dessus de la ligne (l'espacement est à l'autre bout), puis descend sur elle.
+// Un menu qui s'ouvre sous le bouton (`FLYOUT_OF`) ; les autres (le menu « Nouveau »), des lignes larges, par une diagonale.
+const FLYOUT_OF = { [MAIN]: FLYOUT, [UNDERLINE]: UNDERLINE_FLYOUT };
+async function toRow(page, buttonSelector, rowSelector) {
+  const g = await goTo(page, buttonSelector);
+  await pause(450);
+  const r = await boxOf(page, rowSelector);
+  if (!r || !r.w || !r.h) throw new Error('ligne introuvable ou masquée : ' + rowSelector);
+  const flyout = FLYOUT_OF[buttonSelector] ? await boxOf(page, FLYOUT_OF[buttonSelector]) : null;
+  const x = Math.min(Math.max(g.x, r.left + 6), r.right - 6);
+  if (flyout) {
+    await page.mouse.move(g.x, g.y + 10, { steps: 2 });
+    await page.mouse.move(g.x, flyout.top + 10, { steps: 3 });
+    await page.mouse.move(x, flyout.top + 10, { steps: 4 });
+  } else {
+    await page.mouse.move(x, g.y + 12, { steps: 2 });
   }
-  return undefined;
-}, word);
-const looks = word => page.evaluate((needle) => {
+  await page.mouse.move(x, r.y, { steps: 6 });
+  await page.mouse.move(r.x, r.y, { steps: 3 });
+  await pause(250);
+  return r;
+}
+async function press(page) {
+  await page.mouse.down();
+  await page.mouse.up();
+  await pause(250);
+}
+async function clickRow(page, buttonSelector, rowSelector) {
+  const r = await toRow(page, buttonSelector, rowSelector);
+  await press(page);
+  return r;
+}
+const html = page => page.evaluate(() => Editor.getHTML());
+const status = page => page.evaluate(() => document.getElementById('status-msg').textContent.trim());
+const clearStatus = page => page.evaluate(() => { document.getElementById('status-msg').textContent = ''; });
+const attr = (page, selector, name) => page.evaluate(([sel, n]) => { const el = document.querySelector(sel); return el ? el.getAttribute(n) : null; }, [selector, name]);
+const display = (page, selector) => page.evaluate(sel => { const el = document.querySelector(sel); return el ? getComputedStyle(el).display : null; }, selector);
+const selectedText = page => page.evaluate(() => { const s = EditorCore.getEditor().state; return s.doc.textBetween(s.selection.from, s.selection.to, ' '); });
+const keyboardIn = page => page.evaluate(() => { const a = document.activeElement; return a && a.closest && a.closest('.tiptap') ? 'editor' : (a ? (a.id || a.tagName) : null); });
+// Ce que l'éditeur dessine d'un mot : petites capitales, ombre, contour, espacement (pt), soulignement (le style du trait), exposant, indice.
+const looks = (page, word) => page.evaluate((needle) => {
   const walker = document.createTreeWalker(document.querySelector('.tiptap'), NodeFilter.SHOW_TEXT);
   let n;
   while ((n = walker.nextNode())) {
     if (n.textContent.indexOf(needle) < 0) continue;
-    const cs = getComputedStyle(n.parentElement);
-    return { spacing: cs.letterSpacing === 'normal' ? 0 : Math.round(parseFloat(cs.letterSpacing) * 0.75 * 100) / 100, caps: cs.fontVariantCaps, text: n.textContent };
+    const el = n.parentElement;
+    const cs = getComputedStyle(el);
+    const u = el.closest('u');
+    return {
+      caps: cs.fontVariantCaps,
+      shadow: cs.textShadow !== 'none',
+      stroke: parseFloat(cs.webkitTextStrokeWidth) > 0,
+      spacing: cs.letterSpacing === 'normal' ? 0 : Math.round(parseFloat(cs.letterSpacing) * 0.75 * 100) / 100,
+      line: u ? getComputedStyle(u).textDecorationStyle : null,
+      sup: !!el.closest('sup'),
+      sub: !!el.closest('sub'),
+    };
   }
   return null;
 }, word);
-const pointOf = (text, at = 0.5) => page.evaluate(({ text, at }) => {
+const pointOf = (page, text, at = 0.5) => page.evaluate(({ text, at }) => {
   const walker = document.createTreeWalker(document.querySelector('.tiptap'), NodeFilter.SHOW_TEXT);
   let n;
   while ((n = walker.nextNode())) {
@@ -234,282 +119,285 @@ const pointOf = (text, at = 0.5) => page.evaluate(({ text, at }) => {
   }
   return null;
 }, { text, at });
-const selectedText = () => page.evaluate(() => { const s = EditorCore.getEditor().state; return s.doc.textBetween(s.selection.from, s.selection.to, ' '); });
-async function setDoc(doc) {
+async function setDoc(page, doc) {
   await page.evaluate(d => { Editor.setHTML(d); }, doc);
-  await page.mouse.move(WIDTH / 2, HEIGHT - 20, { steps: 3 });
-  await page.waitForTimeout(300);
+  await page.mouse.move(350, 380, { steps: 3 });
+  await pause(300);
 }
-async function clickText(text, at = 0.5) {
-  const p = await pointOf(text, at);
-  await page.mouse.click(p.x, p.y);
-  await page.waitForTimeout(250);
-}
-async function selectWord(text) {
-  const p = await pointOf(text, 0.5);
+async function selectWord(page, word) {
+  const p = await pointOf(page, word);
   await page.mouse.dblclick(p.x, p.y);
-  await page.waitForTimeout(250);
+  await pause(250);
 }
-async function openMenu() {
-  const c = await centerOf(MAIN);
-  await page.mouse.move(c.x, c.y + 150);
-  await page.mouse.move(c.x, c.y, { steps: 4 });
-  await page.waitForTimeout(350);
-  return c;
+async function clickInText(page, word) {
+  const p = await pointOf(page, word);
+  await page.mouse.click(p.x, p.y);
+  await pause(250);
 }
-async function closeMenu() {
-  await page.mouse.move(WIDTH / 2, HEIGHT - 20, { steps: 3 });
-  await page.waitForTimeout(250);
+const rowState = (page, selector) => page.evaluate(sel => {
+  const el = document.querySelector(sel);
+  if (!el) return null;
+  return { checked: el.getAttribute('aria-checked'), pressed: el.getAttribute('aria-pressed'), reason: el.getAttribute('data-pp-lock-reason') || '', blocks: el.hasAttribute('data-pp-lock-blocks'), title: el.title || '' };
+}, selector);
+const snap = async (page, name) => { if (SHOTS) await page.screenshot({ path: join(SHOTS, name + '.png') }); };
+async function newTemplate(page, kind) {
+  // Quitter un modèle modifié pose la question « Enregistrer / Ne pas enregistrer / Annuler » tant que l'enregistrement automatique (toutes les 2,5 s) n'est pas passé : selon l'instant, elle
+  // s'ouvre ou non, et elle couvrirait le bouton « Aa » (js/main.js:askBeforeLeaving, verify-leave-unsaved-mouse.mjs). Ici le passage au nouveau modèle n'est pas son sujet : « Ne pas enregistrer ».
+  await page.evaluate(() => { Dialogs.choose = async () => 'discard'; });
+  await clickRow(page, '#btn-new', '#v2-btn-new-' + kind);
+  await pause(700);
+  await page.mouse.move(350, 380);
 }
-async function pressRow({ click = true } = {}) {
-  const c = await openMenu();
-  const r = await centerOf(ROW);
-  const x = Math.min(Math.max(c.x, r.l + 8), r.r - 8);
-  await page.mouse.move(x, r.y, { steps: 8 });
-  await page.waitForTimeout(100);
-  if (click) { await page.mouse.click(x, r.y); await page.waitForTimeout(350); }
-  return { x, y: r.y };
-}
-async function clickButton(label) {
-  const point = await page.evaluate((text) => {
-    const button = Array.from(document.querySelectorAll('#pp-charfmt-modal .pp-modal-actions button')).find(b => b.textContent.trim() === text);
-    if (!button) return null;
-    const r = button.getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  }, label);
-  if (!point) return false;
-  await page.mouse.move(point.x, point.y, { steps: 3 });
-  await page.mouse.click(point.x, point.y);
-  await page.waitForTimeout(350);
-  return true;
-}
+const numberAs = (lang, text) => (lang === 'en' ? text.replace(',', '.') : text.replace('.', ','));
 
-const DOC = '<p>Bonjour tout le monde</p><p>Autre ligne</p>';
+// ---- un parcours, dans une langue et un thème -----------------------------------------------------------------------------------------------------------------------
+async function run(theme, lang) {
+  const T = lang === 'en' ? 'anglais' : theme;
+  const { page } = await t.openPage({ hosted: false, lang, seed: seedModels() });
+  if (theme === 'sombre') await page.evaluate(() => Settings.setTheme('dark'));
+  await setDoc(page, '<p>Un deux trois quatre cinq</p>');
+  const names = lang === 'en'
+    ? { main: /Character/, label: 'Character', caps: 'Small capitals', shadow: 'Shadow', stroke: 'Outline', spacing: 'Spacing', sup: 'Superscript', sub: 'Subscript', underline: 'Underline', double: 'Double', dotted: 'Dotted', dashed: 'Dashed', wavy: 'Wavy' }
+    : { main: /Caractère/, label: 'Caractère', caps: 'Petites capitales', shadow: 'Ombre', stroke: 'Contour', spacing: 'Espacement', sup: 'Exposant', sub: 'Indice', underline: 'Souligné', double: 'Double', dotted: 'Pointillé', dashed: 'Tireté', wavy: 'Ondulé' };
 
-async function run(theme) {
-  const T = theme;
-  const en = (await page.evaluate(() => I18n.getLang())) === 'en';
-  const point = en ? '.' : ',';
-  const texts = en
-    ? { lineChoices: ['None', 'Single', 'Double', 'Dotted', 'Dashed', 'Wavy'], row: 'Character…', shadow: 'Shadow', stroke: 'Outline', aria: 'Character: letter spacing, small capitals and underline', title: 'Character', labels: ['Spacing', 'Small capitals', 'Underline', 'Effects'], buttons: ['Default', 'Cancel', 'Confirm'], mixed: 'Several values', numberError: 'Enter a number, for example 1.5.', rangeError: /^The spacing must be between -50 and 500 pt\.$/ }
-    : { lineChoices: ['Aucun', 'Simple', 'Double', 'Pointillé', 'Tireté', 'Ondulé'], row: 'Caractère…', shadow: 'Ombre', stroke: 'Contour', aria: 'Caractère : espacement des caractères, petites capitales et soulignement', title: 'Caractère', labels: ['Espacement', 'Petites capitales', 'Soulignement', 'Effets'], buttons: ['Par défaut', 'Annuler', 'Valider'], mixed: 'Plusieurs valeurs', numberError: 'Saisissez un nombre, par exemple 1,5.', rangeError: /^L’espacement doit être compris entre -50 et 500 pt\.$/ };
+  // 1) Le bouton « Aa » : dans la barre, entier dans le panneau, avec son icône et son nom, juste après Barré.
+  const aa = await boxOf(page, MAIN);
+  const icon = await page.evaluate(sel => { const b = document.querySelector(sel); const svg = b && b.querySelector('svg'); const r = svg && svg.getBoundingClientRect(); return { svg: !!svg, w: r ? r.width : 0, label: b ? b.getAttribute('aria-label') : '' }; }, MAIN);
+  t.check(`${T} : « Aa » est dans la barre, entier dans le panneau, avec son icône`, !!aa && aa.inside && aa.w >= 24 && icon.svg && icon.w >= 12, { aa, icon });
+  t.check(`${T} : « Aa » a son nom (${lang === 'en' ? 'Character' : 'Caractère'}…) pour les lecteurs d'écran`, names.main.test(icon.label), icon.label);
+  const order = await page.evaluate(() => Array.from(document.querySelectorAll('#v2-btn-strike, #v2-btn-char-main, #v2-align-group')).map(e => e.id));
+  t.check(`${T} : « Aa » vient juste après Barré, avant le groupe Alignement`, JSON.stringify(order) === '["v2-btn-strike","v2-btn-char-main","v2-align-group"]', order);
+  const noOldRow = await page.evaluate(() => ({ button: !!document.getElementById('v2-btn-character'), window: !!document.getElementById('pp-charfmt-spacing'), inAlign: /Caractère…|Character…/.test(document.getElementById('v2-align-group').textContent) }));
+  t.check(`${T} : la ligne « Caractère… » n'est plus dans le menu Alignement (ni sa fenêtre)`, !noOldRow.button && !noOldRow.window && !noOldRow.inAlign, noOldRow);
 
-  // 1) Le menu : un survol réel de l'icône ouvre le volet, la ligne y est, dans le panneau, au premier plan, sous « Paragraphe… », avec son nom.
-  await setDoc(DOC);
-  await selectWord('Bonjour');
-  check(`${T}, sélection : le double-clic choisit « Bonjour »`, (await selectedText()) === 'Bonjour', await selectedText());
-  await openMenu();
-  const rowBox = await hit(ROW);
-  const s1 = await rowState();
-  check(`${T}, menu : au survol, la ligne « ${texts.row} » est dans le panneau ${WIDTH}x${HEIGHT}, au premier plan`, seen(rowBox), rowBox);
-  check(`${T}, menu : la ligne s'appelle « ${texts.row} » (nom accessible complet), juste sous « Paragraphe… », dans l'ordre des tabulations`, s1.label === texts.row && s1.aria === texts.aria && s1.tab === 0 && s1.afterParagraph, s1);
-  await snap(`${T}-1-menu`);
-  await closeMenu();
+  // 2) Le menu s'ouvre au survol, dans le panneau, chaque ligne au premier plan et lisible.
+  await selectWord(page, 'deux');
+  t.check(`${T} : le double-clic choisit « deux »`, (await selectedText(page)) === 'deux', await selectedText(page));
+  const first = await toRow(page, MAIN, ROW.caps);
+  const shown = await page.evaluate(({ fly, ids }) => {
+    const f = document.querySelector(fly);
+    const r = f.getBoundingClientRect();
+    const rows = ids.map((id) => {
+      const el = document.querySelector(id);
+      const b = el.getBoundingClientRect();
+      const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+      return { id, inside: b.left >= 0 && b.top >= 0 && b.right <= innerWidth && b.bottom <= innerHeight, onTop: !!top && el.contains(top), text: el.textContent.trim() };
+    });
+    return { display: getComputedStyle(f).display, inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight, label: (f.querySelector('.v2-hover-flyout-label') || {}).textContent, rows };
+  }, { fly: FLYOUT, ids: [ROW.caps, ROW.shadow, ROW.stroke, '#v2-btn-superscript', '#v2-btn-subscript', '#v2-char-spacing-minus', '#v2-char-spacing-plus', FIELD] });
+  t.check(`${T} : au survol de « Aa », le menu « ${names.label} » s'ouvre entier dans le panneau, ses huit contrôles au premier plan`, first.inside && shown.display !== 'none' && shown.inside && shown.rows.every(r => r.inside && r.onTop), shown);
+  t.check(`${T} : le menu dit ${names.label}, ${names.caps}, ${names.shadow}, ${names.stroke}`, shown.label === names.label && shown.rows[0].text === names.caps && shown.rows[1].text === names.shadow && shown.rows[2].text === names.stroke, shown);
+  const spacingLabel = await page.evaluate(() => document.querySelector('.v2-char-spacing-label').textContent);
+  t.check(`${T} : la ligne de l'espacement le nomme (${names.spacing}) et son champ dit « pt »`, spacingLabel === names.spacing && (await page.evaluate(() => document.querySelector('.v2-char-stepper-unit').textContent)) === 'pt', spacingLabel);
+  const ratios = {};
+  for (const [name, selector] of [['caps', ROW.caps], ['shadow', ROW.shadow], ['stroke', ROW.stroke], ['label', FLYOUT + ' .v2-hover-flyout-label'], ['spacing', '.v2-char-spacing-label'], ['field', FIELD]]) ratios[name] = await contrastOf(page, selector);
+  t.check(`${T} : le texte du menu se lit (contraste d'au moins 4,5 : 1 pour les lignes et le champ, 3 : 1 pour le titre)`, ratios.caps >= 4.5 && ratios.shadow >= 4.5 && ratios.stroke >= 4.5 && ratios.spacing >= 4.5 && ratios.field >= 4.5 && ratios.label >= 3, ratios);
+  await snap(page, `${T}-1-menu-aa`);
 
-  // 2) Un vrai clic : la fenêtre s'ouvre entière dans le panneau, sur les valeurs d'origine (0 pt, case décochée), le champ au clavier et sélectionné.
-  const before = await html();
-  await pressRow();
-  const w2 = await windowState();
-  check(`${T}, fenêtre : un clic sur la ligne ouvre « ${texts.title} » ; sa boîte, son titre, ses deux réglages, l'indication et ses trois boutons tiennent dans le panneau, au premier plan, sans défilement`,
-    w2.shown && w2.title === texts.title && w2.boxIn && w2.titleIn && w2.fieldsIn && w2.hintIn && w2.buttonsIn && !w2.scrolls, w2);
-  check(`${T}, fenêtre : libellés ${texts.labels.join(' / ')}, boutons ${texts.buttons.join(' / ')}`, JSON.stringify(w2.labels) === JSON.stringify(texts.labels) && JSON.stringify(w2.buttons) === JSON.stringify(texts.buttons), w2);
-  check(`${T}, fenêtre : 0 pt, case décochée et « ${texts.lineChoices[0]} » en soulignement, l'espacement a le clavier et sa valeur est sélectionnée, rien en erreur`, w2.spacing === '0' && w2.caps === false && !w2.mixedCaps && w2.line === 'none' && w2.focus === 'pp-charfmt-spacing' && w2.selected && !w2.error && !w2.okDisabled, w2);
-  check(`${T}, fenêtre : la liste du soulignement dit ${texts.lineChoices.join(', ')}`, JSON.stringify(w2.lineChoices) === JSON.stringify(texts.lineChoices), w2.lineChoices);
-  check(`${T}, fenêtre : le document n'a pas bougé pendant l'ouverture`, (await html()) === before);
-  await snap(`${T}-2-fenetre`);
+  // 3) Un vrai clic règle le mot, que l'éditeur dessine ; le mot reste choisi ; UN Ctrl+Z le défait.
+  for (const [key, field] of [['caps', 'caps'], ['shadow', 'shadow'], ['stroke', 'stroke']]) {
+    const want = key === 'caps' ? (v => v.caps === 'small-caps') : (v => v[field] === true);
+    await clickRow(page, MAIN, ROW[key]);
+    const on = await looks(page, 'deux');
+    const around = await looks(page, 'trois');
+    const row = await rowState(page, ROW[key]);
+    t.check(`${T} : un clic sur « ${names[key]} » le pose sur « deux » (dessiné), sur lui seul, la ligne est cochée`, want(on) && !want(around) && row.checked === 'true', { on, around, row });
+    t.check(`${T} : le mot reste choisi et le clavier reste dans le texte (pas de fenêtre)`, (await selectedText(page)) === 'deux' && (await keyboardIn(page)) === 'editor' && (await display(page, '.var-modal-overlay')) !== 'flex', { sel: await selectedText(page), kb: await keyboardIn(page) });
+    if (key === 'caps') t.check(`${T} : « Aa » est enfoncé quand le texte porte un réglage`, await page.evaluate(() => document.getElementById('v2-btn-char-main').classList.contains('is-active')));
+    await page.keyboard.press('Control+z');
+    await pause(250);
+    const off = await looks(page, 'deux');
+    t.check(`${T} : UN Ctrl+Z défait « ${names[key]} »`, !want(off), off);
+    await page.keyboard.press('Control+Shift+z');
+    await pause(250);
+    const back = await looks(page, 'deux');
+    t.check(`${T} : Ctrl+Maj+Z le remet`, want(back), back);
+    await page.keyboard.press('Control+z');
+    await pause(250);
+  }
 
-  // 3) La frappe : 2,5 (2.5), Tab, Espace, Entrée. Les deux réglages sont posés sur « Bonjour » seul, la fenêtre se ferme, la sélection et le clavier sont dans le texte.
-  await page.keyboard.type('2' + point + '5', { delay: 15 });
-  await page.keyboard.press('Tab');
-  const tab1 = await windowState();
-  check(`${T}, clavier : Tab passe à la case « ${texts.labels[1]} »`, tab1.focus === 'pp-charfmt-caps' && tab1.spacing === '2' + point + '5', tab1);
-  await page.keyboard.press('Space');
-  check(`${T}, clavier : Espace coche la case`, (await windowState()).caps === true);
-  await page.keyboard.press('Tab');
-  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowDown');
-  const tab2 = await windowState();
-  check(`${T}, clavier : Tab passe à la liste du soulignement, cinq flèches bas choisissent « ${texts.lineChoices[5]} »`, tab2.focus === 'pp-charfmt-line' && tab2.line === 'wavy', tab2);
-  await snap(`${T}-2b-liste`);
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout(350);
-  const w3 = await windowState();
-  check(`${T}, Entrée : la fenêtre se ferme`, !w3.shown);
-  const bonjour = await looks('Bonjour');
-  const reste = await looks(' tout le monde');
-  check(`${T}, l'éditeur dessine « Bonjour » avec 2,5 pt entre les lettres et des petites capitales`, bonjour && bonjour.spacing === 2.5 && bonjour.caps === 'small-caps', bonjour);
-  check(`${T}, le reste du paragraphe n'a ni l'un ni l'autre`, reste && reste.spacing === 0 && reste.caps === 'normal', reste);
-  const written = await html();
-  check(`${T}, le HTML dit letter-spacing: 2.5pt, font-variant: small-caps et <u style="text-decoration-style: wavy"> sur « Bonjour »`, /letter-spacing: 2\.5pt/.test(written) && /font-variant: small-caps/.test(written) && /<u style="text-decoration-style: wavy;?">.*Bonjour/.test(written), written);
-  const wavy = await lineOf('Bonjour');
-  const plainLine = await lineOf(' tout le monde');
-  check(`${T}, l'éditeur dessine le soulignement ondulé sous « Bonjour » seul`, wavy && wavy.style === 'wavy' && /underline/.test(wavy.line) && plainLine === null, { wavy, plainLine });
-  const c3 = await caret();
-  check(`${T}, retour à l'édition : « Bonjour » reste choisi et le clavier est dans le texte`, (await selectedText()) === 'Bonjour' && c3.focus, c3);
-  await snap(`${T}-3-pose`);
-
-  // 4) Un Ctrl+Z défait les deux d'un coup ; Ctrl+Maj+Z les remet.
+  // 4) L'espacement : « + » et « − » (un demi-point), une valeur tapée au clavier, une saisie fausse.
+  await clickRow(page, MAIN, '#v2-char-spacing-plus');
+  await pause(BETWEEN_STEPS);
+  const half = { field: await page.evaluate(sel => document.querySelector(sel).value, FIELD), looks: (await looks(page, 'deux')).spacing };
+  t.check(`${T} : un clic sur « + » écarte d'un demi-point (le champ dit ${numberAs(lang, '0,5')}, l'éditeur dessine 0,5 pt)`, half.field === numberAs(lang, '0,5') && half.looks === 0.5, half);
+  await press(page);
+  await pause(BETWEEN_STEPS);
+  const one = { field: await page.evaluate(sel => document.querySelector(sel).value, FIELD), looks: (await looks(page, 'deux')).spacing };
+  t.check(`${T} : un second clic le porte à 1 pt`, one.field === '1' && one.looks === 1, one);
   await page.keyboard.press('Control+z');
-  await page.waitForTimeout(250);
-  const undone = await looks('Bonjour');
-  check(`${T}, Ctrl+Z : UN seul retour défait l'espacement, les petites capitales et le soulignement`, undone && undone.spacing === 0 && undone.caps === 'normal' && (await html()) === before && (await lineOf('Bonjour')) === null, undone);
-  await page.keyboard.press('Control+Shift+z');
-  await page.waitForTimeout(250);
-  const redone = await looks('Bonjour');
-  check(`${T}, Ctrl+Maj+Z : les trois reviennent`, redone && redone.spacing === 2.5 && redone.caps === 'small-caps' && (await lineOf('Bonjour')).style === 'wavy', redone);
-
-  // 5) Rouvrir : les valeurs de « Bonjour » ; « Par défaut » les retire d'une seule étape.
-  await pressRow();
-  const w5 = await windowState();
-  check(`${T}, réouverture : la fenêtre montre 2${point}5, la case cochée et « ${texts.lineChoices[5]} »`, w5.shown && w5.spacing === '2' + point + '5' && w5.caps === true && !w5.mixedCaps && w5.line === 'wavy', w5);
-  await clickButton(texts.buttons[0]);
-  const w5b = await windowState();
-  check(`${T}, « ${texts.buttons[0]} » : les champs repassent à 0, décoché et soulignement simple sans fermer la fenêtre`, w5b.shown && w5b.spacing === '0' && w5b.caps === false && w5b.line === 'single', w5b);
-  await clickButton(texts.buttons[2]);
-  const gone = await looks('Bonjour');
-  const goneLine = await lineOf('Bonjour');
-  check(`${T}, « ${texts.buttons[2]} » : « Bonjour » redevient normal, souligné simple`, gone && gone.spacing === 0 && gone.caps === 'normal' && goneLine && goneLine.style === 'solid' && /underline/.test(goneLine.line), { gone, goneLine });
+  await pause(250);
+  t.check(`${T} : UN Ctrl+Z ne défait que le dernier pas (0,5 pt)`, (await looks(page, 'deux')).spacing === 0.5, await looks(page, 'deux'));
   await page.keyboard.press('Control+z');
-  await page.waitForTimeout(250);
-  const back = await looks('Bonjour');
-  check(`${T}, Ctrl+Z : un seul retour rend l'espacement, les petites capitales et le soulignement ondulé`, back && back.spacing === 2.5 && back.caps === 'small-caps' && (await lineOf('Bonjour')).style === 'wavy', back);
-
-  // 6) Les erreurs : pas un nombre, hors bornes ; Échap ferme sans toucher au document.
-  const stable = await html();
-  await pressRow();
-  await page.keyboard.type('abc', { delay: 10 });
-  const bad1 = await windowState();
-  check(`${T}, erreur : « abc » est refusé avec son message, le champ est marqué, « ${texts.buttons[2]} » est grisé`, bad1.shown && bad1.invalid && bad1.error === texts.numberError && bad1.okDisabled, bad1);
+  await pause(250);
+  t.check(`${T} : un second Ctrl+Z rend l'espacement d'avant (aucun)`, (await looks(page, 'deux')).spacing === 0, await looks(page, 'deux'));
+  // Une valeur tapée : le champ prend le clavier, Entrée l'applique et le rend au texte.
+  const field = await toRow(page, MAIN, FIELD);
+  await press(page);
+  t.check(`${T} : un clic dans le champ lui donne le clavier`, (await keyboardIn(page)) === 'v2-char-spacing-val', await keyboardIn(page));
   await page.keyboard.press('Control+a');
-  await page.keyboard.type('900', { delay: 10 });
-  const bad2 = await windowState();
-  check(`${T}, erreur : 900 sort des bornes, le message les dit`, bad2.shown && bad2.invalid && texts.rangeError.test(bad2.error) && bad2.okDisabled, bad2);
+  await page.keyboard.type(numberAs(lang, '2,5'));
   await page.keyboard.press('Enter');
-  check(`${T}, erreur : Entrée ne ferme pas la fenêtre tant que la saisie est mauvaise`, (await windowState()).shown);
-  await snap(`${T}-4-erreur`);
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(250);
-  check(`${T}, Échap : la fenêtre se ferme, le document n'a pas bougé`, !(await windowState()).shown && (await html()) === stable);
-
-  // 7) Valeurs mêlées : « Bonjour tout » (le premier mot espacé, le second non). L'espacement reste vide ; ne cocher que la case ne touche pas à l'espacement.
-  const range = await page.evaluate(() => {
-    const s = EditorCore.getEditor().state;
-    let from = null;
-    s.doc.descendants((node, pos) => { if (from === null && node.isText && node.text.indexOf('Bonjour') === 0) from = pos; });
-    EditorCore.getEditor().commands.setTextSelection({ from, to: from + 'Bonjour tout'.length });
-    return from;
-  });
-  await page.waitForTimeout(200);
-  await pressRow();
-  const w7 = await windowState();
-  check(`${T}, valeurs mêlées : l'espacement est vide et dit « ${texts.mixed} », la case est mêlée, le soulignement dit « ${texts.mixed} »`, w7.shown && w7.spacing === '' && w7.placeholder === texts.mixed && w7.mixedCaps && w7.line === 'mixed' && w7.lineText === texts.mixed, { w7, range });
-  await page.keyboard.press('Tab');
-  await page.keyboard.press('Space');
-  const w7b = await windowState();
-  check(`${T}, valeurs mêlées : un Espace sur la case mêlée la coche (plus mêlée)`, w7b.caps === true && !w7b.mixedCaps, w7b);
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout(350);
-  const a = await looks('Bonjour');
-  const b = await looks(' tout');
-  const c = await looks(' le monde');
-  check(`${T}, valeurs mêlées : les deux mots choisis sont en petites capitales, « Bonjour » garde ses 2,5 pt, « tout » reste à 0 et la fin du paragraphe n'a pas bougé`, a && b && c && a.caps === 'small-caps' && b.caps === 'small-caps' && a.spacing === 2.5 && b.spacing === 0 && c.caps === 'normal', { a, b, c });
-
-  // 9) Les effets (lot 9c) : la case « Ombre » et la case « Contour », cliquées à la souris, sont dessinées par l'éditeur sur le mot choisi seul ; un Ctrl+Z défait tout ; elles se décochent.
-  await setDoc(DOC);
-  await selectWord('Bonjour');
-  await pressRow();
-  const boxState = () => page.evaluate(({ width, height }) => {
-    const info = (id) => {
-      const box = document.getElementById(id);
-      const label = box.closest('label');
-      const r = box.getBoundingClientRect();
-      const lr = label.getBoundingClientRect();
-      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-      return { checked: box.checked, mixed: box.indeterminate, name: label.textContent.trim(), in: r.left >= 0 && r.top >= 0 && r.right <= width && r.bottom <= height && lr.right <= width && !!top && (top === box || label.contains(top)) };
-    };
-    return { shadow: info('pp-charfmt-shadow'), stroke: info('pp-charfmt-stroke') };
-  }, { width: WIDTH, height: HEIGHT });
-  const e0 = await boxState();
-  check(`${T}, effets : « ${texts.shadow} » et « ${texts.stroke} » sont là, dans le panneau, décochées`, e0.shadow.in && e0.stroke.in && !e0.shadow.checked && !e0.stroke.checked && e0.shadow.name === texts.shadow && e0.stroke.name === texts.stroke, e0);
-  await snap(`characterfmt-${T}-effects`);
-  const clickBox = async (id) => {
-    const c = await centerOf('#' + id);
-    await page.mouse.move(c.x, c.y, { steps: 3 });
-    await page.mouse.click(c.x, c.y);
-    await page.waitForTimeout(150);
-  };
-  await clickBox('pp-charfmt-shadow');
-  await clickBox('pp-charfmt-stroke');
-  const e1 = await boxState();
-  check(`${T}, effets : un clic sur chaque case la coche`, e1.shadow.checked && e1.stroke.checked, e1);
-  await clickButton(texts.buttons[2]);
-  const fxOf = word => page.evaluate((needle) => {
-    const walker = document.createTreeWalker(document.querySelector('.tiptap'), NodeFilter.SHOW_TEXT);
-    let n;
-    while ((n = walker.nextNode())) {
-      if (n.textContent.indexOf(needle) < 0) continue;
-      const cs = getComputedStyle(n.parentElement);
-      return { shadow: cs.textShadow, stroke: cs.webkitTextStrokeWidth };
-    }
-    return null;
-  }, word);
-  const f1 = await fxOf('Bonjour');
-  const f2 = await fxOf(' tout');
-  check(`${T}, effets : « Valider » dessine l'ombre (2 px en bas et à droite) et le contour (1 px) sur « Bonjour » seul`, f1 && /2px 2px/.test(f1.shadow) && f1.stroke === '1px' && f2 && f2.shadow === 'none' && f2.stroke === '0px', { f1, f2 });
+  await pause(300);
+  const typed = { value: await page.evaluate(sel => document.querySelector(sel).value, FIELD), looks: (await looks(page, 'deux')).spacing, kb: await keyboardIn(page), sel: await selectedText(page) };
+  t.check(`${T} : « ${numberAs(lang, '2,5')} » puis Entrée : 2,5 pt dessinés sur « deux », le clavier retourne dans le texte, le mot reste choisi`, typed.looks === 2.5 && typed.kb === 'editor' && typed.sel === 'deux' && typed.value === numberAs(lang, '2,5'), typed);
   await page.keyboard.press('Control+z');
-  await page.waitForTimeout(250);
-  const f3 = await fxOf('Bonjour');
-  check(`${T}, effets : UN Ctrl+Z retire l'ombre et le contour`, f3 && f3.shadow === 'none' && f3.stroke === '0px', f3);
-  await page.keyboard.press('Control+Shift+z');
-  await page.waitForTimeout(250);
-  await selectWord('Bonjour');
-  await pressRow();
-  const e2 = await boxState();
-  check(`${T}, effets : la fenêtre rouverte montre les deux cases cochées`, e2.shadow.checked && e2.stroke.checked, e2);
-  await clickBox('pp-charfmt-shadow');
-  await clickButton(texts.buttons[2]);
-  const f4 = await fxOf('Bonjour');
-  check(`${T}, effets : décocher « ${texts.shadow} » ne retire que l'ombre, le contour reste`, f4 && f4.shadow === 'none' && f4.stroke === '1px', f4);
-  await closeMenu();
-
-  // 8) Curseur seul : la fenêtre règle le style de frappe, le texte tapé ensuite le porte.
-  await setDoc('<p>Fin</p>');
-  await clickText('Fin', 0.99);
-  await page.keyboard.press('End');
-  await pressRow();
-  await page.keyboard.type('1' + point + '5', { delay: 10 });
+  await pause(250);
+  t.check(`${T} : UN Ctrl+Z défait la valeur tapée`, (await looks(page, 'deux')).spacing === 0, await looks(page, 'deux'));
+  // Une valeur tapée puis la touche Tab (sans Entrée) : elle s'applique au départ du focus, et le focus va où la personne allait (le « + » suivant) : l'éditeur ne le reprend pas.
+  await toRow(page, MAIN, FIELD);
+  await press(page);
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type(numberAs(lang, '1,5'));
+  await page.keyboard.press('Tab');
+  await pause(300);
+  const tabbed = { looks: (await looks(page, 'deux')).spacing, kb: await keyboardIn(page) };
+  t.check(`${T} : « ${numberAs(lang, '1,5')} » puis Tab : 1,5 pt dessinés sur « deux », le focus passe au bouton « + » (l'éditeur ne le reprend pas)`, tabbed.looks === 1.5 && tabbed.kb === 'v2-char-spacing-plus', tabbed);
+  await page.keyboard.press('Control+z');
+  await pause(250);
+  t.check(`${T} : UN Ctrl+Z défait aussi la valeur validée par Tab`, (await looks(page, 'deux')).spacing === 0, await looks(page, 'deux'));
+  // Une saisie fausse se dit et ne pose rien ; Échap rend l'espacement du texte.
+  await toRow(page, MAIN, FIELD);
+  await press(page);
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('abc');
+  await pause(150);
+  const bad = await rowState(page, FIELD);
+  const badInk = await page.evaluate(sel => getComputedStyle(document.querySelector(sel)).color, FIELD);
   await page.keyboard.press('Enter');
-  await page.waitForTimeout(300);
-  await page.keyboard.type(' Suite', { delay: 20 });
-  await page.waitForTimeout(250);
-  const typed = await looks(' Suite');
-  const fin = await looks('Fin');
-  check(`${T}, curseur seul : le texte tapé ensuite a 1,5 pt entre les lettres, le texte d'avant n'a pas bougé`, typed && typed.spacing === 1.5 && fin && fin.spacing === 0, { typed, fin });
-  await closeMenu();
+  await pause(200);
+  const kept = { invalid: await attr(page, FIELD, 'aria-invalid'), value: await page.evaluate(sel => document.querySelector(sel).value, FIELD), kb: await keyboardIn(page), looks: (await looks(page, 'deux')).spacing };
+  t.check(`${T} : « abc » se dit (aria-invalid, info-bulle, texte rouge), Entrée le garde à corriger et ne pose rien`, bad.title.length > 0 && (await attr(page, FIELD, 'aria-invalid')) === 'true' && kept.invalid === 'true' && kept.value === 'abc' && kept.kb === 'v2-char-spacing-val' && kept.looks === 0 && badInk !== 'rgb(27, 36, 48)', { bad, badInk, kept });
+  await page.keyboard.press('Escape');
+  await pause(200);
+  const restored = { invalid: await attr(page, FIELD, 'aria-invalid'), value: await page.evaluate(sel => document.querySelector(sel).value, FIELD), kb: await keyboardIn(page), looks: (await looks(page, 'deux')).spacing };
+  t.check(`${T} : Échap rend au champ l'espacement du texte (0) et le clavier au texte`, restored.invalid === null && restored.value === '0' && restored.kb === 'editor' && restored.looks === 0, restored);
+
+  // 5) Exposant et Indice, dans ce menu.
+  await clickRow(page, MAIN, '#v2-btn-superscript');
+  const sup = { looks: await looks(page, 'deux'), pressed: await attr(page, '#v2-btn-superscript', 'aria-pressed') };
+  t.check(`${T} : « ${names.sup} » du menu pose <sup> sur « deux » et s'enfonce`, sup.looks.sup && !sup.looks.sub && sup.pressed === 'true', sup);
+  await clickRow(page, MAIN, '#v2-btn-subscript');
+  const sub = { looks: await looks(page, 'deux'), pressed: await attr(page, '#v2-btn-subscript', 'aria-pressed'), supPressed: await attr(page, '#v2-btn-superscript', 'aria-pressed') };
+  t.check(`${T} : « ${names.sub} » remplace l'exposant (un seul des deux)`, sub.looks.sub && !sub.looks.sup && sub.pressed === 'true' && sub.supPressed === 'false', sub);
+  await press(page);
+  t.check(`${T} : un second clic retire l'indice`, !(await looks(page, 'deux')).sub);
+
+  // 6) Le menu du bouton Souligné.
+  await setDoc(page, '<p>Un deux trois quatre cinq</p>');
+  await selectWord(page, 'trois');
+  const single = await toRow(page, UNDERLINE, underlineRow('single'));
+  const menu = await page.evaluate(({ fly, kinds }) => {
+    const f = document.querySelector(fly);
+    const r = f.getBoundingClientRect();
+    const rows = kinds.map((kind) => {
+      const el = document.getElementById('v2-underline-' + kind);
+      const b = el.getBoundingClientRect();
+      const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+      const sample = el.querySelector('.v2-underline-sample');
+      return { kind, text: sample.textContent, inside: b.left >= 0 && b.top >= 0 && b.right <= innerWidth && b.bottom <= innerHeight, onTop: !!top && el.contains(top), style: getComputedStyle(sample).textDecorationStyle, line: getComputedStyle(sample).textDecorationLine, hint: el.getAttribute('data-keyhint') || '' };
+    });
+    return { display: getComputedStyle(f).display, inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight, rows };
+  }, { fly: UNDERLINE_FLYOUT, kinds: ['single', 'double', 'dotted', 'dashed', 'wavy'] });
+  t.check(`${T} : au survol de « ${names.underline} », son menu s'ouvre entier dans le panneau, ses cinq lignes au premier plan`, single.inside && menu.display !== 'none' && menu.inside && menu.rows.every(r => r.inside && r.onTop), menu);
+  t.check(`${T} : la première ligne est « ${names.underline} » avec sa touche, puis ${names.double}, ${names.dotted}, ${names.dashed}, ${names.wavy}`, menu.rows.map(r => r.text).join('|') === [names.underline, names.double, names.dotted, names.dashed, names.wavy].join('|') && /(Ctrl|Cmd|⌘)\W*U/i.test(menu.rows[0].hint), menu.rows);
+  t.check(`${T} : chaque ligne est dessinée comme son trait (simple, double, pointillé, tireté, ondulé)`, menu.rows.map(r => r.style).join('|') === 'solid|double|dotted|dashed|wavy' && menu.rows.every(r => /underline/.test(r.line)), menu.rows.map(r => r.style));
+  const underlineInk = {};
+  for (const kind of ['single', 'double', 'wavy']) underlineInk[kind] = await contrastOf(page, underlineRow(kind));
+  t.check(`${T} : les lignes du menu Souligné se lisent (contraste d'au moins 4,5 : 1)`, Object.values(underlineInk).every(r => r >= 4.5), underlineInk);
+  await snap(page, `${T}-2-menu-souligne`);
+  await clickRow(page, UNDERLINE, underlineRow('double'));
+  t.check(`${T} : un clic sur « ${names.double} » pose le trait double sur « trois » seul`, (await looks(page, 'trois')).line === 'double' && (await looks(page, 'deux')).line === null && (await rowState(page, underlineRow('double'))).checked === 'true', { trois: await looks(page, 'trois'), row: await rowState(page, underlineRow('double')) });
+  t.check(`${T} : le bouton « ${names.underline} » est enfoncé et le mot reste choisi`, (await page.evaluate(() => document.getElementById('v2-btn-underline').classList.contains('is-active'))) && (await selectedText(page)) === 'trois', await selectedText(page));
+  await clickRow(page, UNDERLINE, underlineRow('wavy'));
+  t.check(`${T} : un clic sur « ${names.wavy} » remplace le trait (ondulé), la ligne double se décoche`, (await looks(page, 'trois')).line === 'wavy' && (await rowState(page, underlineRow('double'))).checked === 'false' && (await rowState(page, underlineRow('wavy'))).checked === 'true');
+  await press(page);
+  t.check(`${T} : un second clic sur la même ligne retire le soulignement`, (await looks(page, 'trois')).line === null, await looks(page, 'trois'));
+  await page.keyboard.press('Control+z');
+  await pause(250);
+  t.check(`${T} : UN Ctrl+Z rend le trait ondulé`, (await looks(page, 'trois')).line === 'wavy', await looks(page, 'trois'));
+  await clickRow(page, UNDERLINE, underlineRow('single'));
+  t.check(`${T} : la première ligne (« ${names.underline} ») pose le trait simple`, (await looks(page, 'trois')).line === 'solid', await looks(page, 'trois'));
+  // Le bouton lui-même garde son clic : il retire le soulignement, puis le pose.
+  const ub = await goTo(page, UNDERLINE);
+  t.check(`${T} : la souris sur le bouton, le menu est ouvert`, (await display(page, UNDERLINE_FLYOUT)) !== 'none', await display(page, UNDERLINE_FLYOUT));
+  await press(page);
+  t.check(`${T} : le clic sur le bouton retire le soulignement, comme Ctrl+U`, (await looks(page, 'trois')).line === null, await looks(page, 'trois'));
+  t.check(`${T} : le clic referme le menu (la souris est encore dessus) : il ne recouvre pas le texte qu'on vise ensuite`, (await display(page, UNDERLINE_FLYOUT)) === 'none', await display(page, UNDERLINE_FLYOUT));
+  await press(page);
+  t.check(`${T} : un second clic sur le bouton pose le soulignement classique`, (await looks(page, 'trois')).line === 'solid' && ub.inside, await looks(page, 'trois'));
+  await page.keyboard.press('Control+u');
+  await pause(250);
+  t.check(`${T} : Ctrl+U le retire encore`, (await looks(page, 'trois')).line === null, await looks(page, 'trois'));
+
+  // 7) Une sélection aux réglages mêlés : un tiret, et un clic le pose partout.
+  await setDoc(page, '<p>Un deux trois quatre cinq</p>');
+  await selectWord(page, 'deux');
+  await clickRow(page, MAIN, ROW.caps);
+  await clickInText(page, 'Un');
+  await page.keyboard.press('Control+a');
+  await pause(250);
+  await toRow(page, MAIN, ROW.caps);
+  const mixed = await page.evaluate(sel => { const el = document.querySelector(sel); const after = getComputedStyle(el, '::after'); const before = getComputedStyle(el, '::before'); return { checked: el.getAttribute('aria-checked'), mask: (after.maskImage + ' ' + after.webkitMaskImage + ' ' + before.maskImage + ' ' + before.webkitMaskImage), shown: after.visibility + '/' + before.visibility }; }, ROW.caps);
+  t.check(`${T} : « ${names.caps} » sur un texte en partie en petites capitales : tiret (aria-checked « mixed »)`, mixed.checked === 'mixed' && /M6 12h12/.test(mixed.mask) && /visible/.test(mixed.shown), mixed);
+  await press(page);
+  const all = [await looks(page, 'Un'), await looks(page, 'deux'), await looks(page, 'cinq')];
+  t.check(`${T} : un clic la pose partout (la ligne se coche), un second la retire partout`, all.every(l => l.caps === 'small-caps') && (await rowState(page, ROW.caps)).checked === 'true', all);
+  await press(page);
+  t.check(`${T} : un second clic retire les petites capitales de tout le texte`, [await looks(page, 'Un'), await looks(page, 'deux'), await looks(page, 'cinq')].every(l => l.caps === 'normal'));
+
+  // 8) Au clavier : le focus entre dans le menu (Tab), Entrée coche la ligne.
+  await setDoc(page, '<p>Un deux trois quatre cinq</p>');
+  await selectWord(page, 'quatre');
+  await page.focus(MAIN);
+  await pause(300);
+  t.check(`${T} : le focus sur « Aa » ouvre le menu (au clavier aussi)`, (await display(page, FLYOUT)) !== 'none', await display(page, FLYOUT));
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Tab');
+  const focused = await keyboardIn(page);
+  t.check(`${T} : trois Tab amènent le focus sur « ${names.caps} » (Exposant, Indice, puis la ligne)`, focused === ROW.caps.slice(1), focused);
+  await page.keyboard.press('Enter');
+  await pause(250);
+  t.check(`${T} : Entrée coche la ligne, règle « quatre » et rend le clavier au texte (comme les boutons de la barre)`, (await looks(page, 'quatre')).caps === 'small-caps' && (await rowState(page, ROW.caps)).checked === 'true' && (await keyboardIn(page)) === 'editor', { looks: await looks(page, 'quatre'), row: await rowState(page, ROW.caps), kb: await keyboardIn(page) });
+  await page.focus(MAIN);
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Tab');
+  await page.keyboard.press('Space');
+  await pause(250);
+  t.check(`${T} : Espace la décoche et retire le réglage`, (await looks(page, 'quatre')).caps === 'normal' && (await rowState(page, ROW.caps)).checked === 'false', { looks: await looks(page, 'quatre'), row: await rowState(page, ROW.caps) });
+  await page.mouse.move(350, 380, { steps: 3 });
+  await page.evaluate(() => { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); });
+  await pause(250);
+  t.check(`${T} : le menu se referme quand le focus et la souris partent`, (await display(page, FLYOUT)) === 'none', await display(page, FLYOUT));
+
+  // 9) Un modèle email : les lignes qu'il grise disent pourquoi, Exposant et Indice restent.
+  if (lang === 'fr') {
+    await newTemplate(page, 'email');
+    await page.evaluate(() => Editor.setHTML('<p>Un deux trois</p>'));
+    await pause(150);
+    await selectWord(page, 'deux');
+    const before = await html(page);
+    await clearStatus(page);
+    const r = await toRow(page, MAIN, ROW.stroke);
+    const shut = await rowState(page, ROW.stroke);
+    const seenUnder = await page.evaluate(({ x, y }) => { const el = document.elementFromPoint(x, y); const holder = el && el.closest('[data-pp-lock-reason]'); return { holder: holder ? holder.id : null, title: el && el.closest('[title]') ? el.closest('[title]').title : '', cursor: el ? getComputedStyle(el).cursor : '' }; }, { x: r.x, y: r.y });
+    t.check(`${T}, email : la ligne « ${names.stroke} » est grisée, son info-bulle dit pourquoi, le curseur est « interdit »`, shut.blocks && /email/i.test(shut.title) && shut.title === shut.reason && seenUnder.holder === ROW.stroke.slice(1) && seenUnder.cursor === 'not-allowed', { shut, seenUnder });
+    await press(page);
+    t.check(`${T}, email : le clic écrit la raison dans le coin d'état et ne change rien`, (await status(page)) === shut.reason && (await html(page)) === before, { status: await status(page), same: (await html(page)) === before });
+    const kept = await rowState(page, '#v2-btn-superscript');
+    t.check(`${T}, email : Exposant et Indice restent actifs (sans raison)`, !kept.blocks && kept.reason === '', kept);
+    await clickRow(page, MAIN, '#v2-btn-superscript');
+    t.check(`${T}, email : un clic sur Exposant pose <sup>`, (await looks(page, 'deux')).sup, await html(page));
+    // Le soulignement : le groupe grisé n'ouvre pas son menu, l'appui dit pourquoi.
+    await goTo(page, UNDERLINE);
+    await pause(500);
+    t.check(`${T}, email : le menu Souligné grisé ne s'ouvre pas au survol`, (await display(page, UNDERLINE_FLYOUT)) === 'none', await display(page, UNDERLINE_FLYOUT));
+    await clearStatus(page);
+    await press(page);
+    t.check(`${T}, email : l'appui sur Souligné dit pourquoi`, /email/i.test(await status(page)), await status(page));
+  }
+  await page.context().close();
 }
 
-async function restartIn(lang) {
-  await page.evaluate(next => I18n.storeLang(next), lang);
-  await page.reload({ waitUntil: 'load' });
-  await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
-  await page.waitForFunction(() => {
-    const el = document.getElementById('status-msg');
-    return !!el && /prêt|ready/i.test(el.textContent || '');
-  }, null, { timeout: 90000 });
-}
-
-await run('light');
-await page.evaluate(() => Settings.setTheme('dark'));
-await page.waitForTimeout(250);
-await run('dark');
-await restartIn('en');
-await page.waitForTimeout(300);
-await run('anglais');
-
-check('aucune boîte native (prompt, confirm, alert) ne s’est ouverte', nativeDialogs.length === 0, nativeDialogs);
-check('aucun avertissement de ProseMirror (sélection invalide, contenu refusé) pendant le parcours', consoleProblems.length === 0, consoleProblems);
-check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
-
-await browser.close();
-server.close();
-console.log(`\n${total - failures}/${total} passés`);
-process.exit(failures ? 1 : 0);
+await run('clair', 'fr');
+await run('sombre', 'fr');
+await run('clair', 'en');
+await t.finish();

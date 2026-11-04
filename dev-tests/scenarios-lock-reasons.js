@@ -43,7 +43,7 @@
   }
 
   // Ce que la barre grise en email (js/main-toolbar.js:syncLocks, groupe « mailOrMacro » puis les lignes propres à l'email).
-  const EMAIL_IDS = ['v2-btn-bold', 'v2-btn-italic', 'v2-btn-underline', 'v2-btn-strike', 'v2-heading-group', 'v2-align-group', 'v2-size-stepper', 'v2-font-chip', 'v2-text-color-split', 'v2-highlight-split',
+  const EMAIL_IDS = ['v2-btn-bold', 'v2-btn-italic', 'v2-underline-group', 'v2-btn-strike', 'v2-btn-char-smallcaps', 'v2-btn-char-shadow', 'v2-btn-char-stroke', 'v2-char-spacing', 'v2-heading-group', 'v2-align-group', 'v2-size-stepper', 'v2-font-chip', 'v2-text-color-split', 'v2-highlight-split',
     'v2-painter-group', 'v2-btn-table', 'v2-btn-two-columns', 'v2-image-group', 'v2-btn-toc', 'v2-btn-page-break', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-chart', 'v2-btn-chart-make', 'v2-btn-qr', 'v2-btn-slide-text'];
 
   cases.push({
@@ -172,7 +172,7 @@
       await h.resetEditor();
       await goToNewMacro(h);
       const reason = I18n.t('lock.macro');
-      const ids = ['v2-btn-bold', 'v2-heading-group', 'v2-btn-table', 'v2-btn-find', 'v2-btn-track-changes', 'v2-blocks-group', 'v2-collab-group', 'v2-btn-superscript', 'v2-btn-insert-variable', 'v2-btn-comment'];
+      const ids = ['v2-btn-bold', 'v2-heading-group', 'v2-btn-table', 'v2-btn-find', 'v2-btn-track-changes', 'v2-blocks-group', 'v2-collab-group', 'v2-char-group', 'v2-btn-insert-variable', 'v2-btn-comment'];
       const silent = ids.filter(id => titleOf(id) !== reason || !blocks(id));
       clearSaid();
       byId('v2-btn-find').click();
