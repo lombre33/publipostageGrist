@@ -108,12 +108,83 @@ const SlidePlayer = (function () {
   // Le TRACÉ au stylo : un calque SVG posé DANS le cadre de la page (`frame`, celui de `surface`), qui en suit donc l'échelle - le trait est au même endroit de la page, à la même épaisseur relative, dans la fenêtre du public comme
   // dans l'aperçu de la console, à toute taille de fenêtre et de plein écran. Les points se donnent en parts de la page (de 0 à 1, une liste plate x, y, x, y…) et se gardent dans la taille de la page ; l'épaisseur est une part de sa
   // hauteur. Le rendu est dans un arbre ombre que les feuilles de la page n'atteignent pas : tout s'écrit en ligne, et la couleur seule passe par une variable (`--pp-ink`), qui traverse l'arbre. Le calque ne prend aucun clic.
+  // Le trait n'est pas la ligne brisée de ces points : il est LISSÉ (`smoothInk`, `curveOf`), le même calcul sur les mêmes points dans la console et dans la fenêtre.
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const INK_WIDTH = 0.008;         // l'épaisseur du trait, en part de la hauteur de la page
+  const INK_SMOOTH = 0.012;        // le lissage : l'écart type du noyau, en part du plus grand côté de la page (15 px sur une page de 1 280)
   const INK_COLOR = 'var(--pp-ink, #d92d20)';
   const INK_BATCH = 256;           // le plus de nombres qu'un envoi porte : un envoi plus long n'est pas lu
   const INK_POINTS = 6000;         // les points d'un trait : au-delà, le suivant continue
   const INK_STROKES = 400;         // les traits d'une page : le plus ancien s'efface quand il y en a plus
+  const INK_STEP = 2;              // l'écart le plus court entre deux points gardés, en pixels de page : un point plus près du dernier ne s'y ajoute pas, il n'est que le bout du trait (un stylet en donne des centaines au pixel, sans rien de plus à lisser)
+
+  // Le LISSAGE. La souris donne des positions ENTIÈRES dans un aperçu de quelque deux cents pixels : sur l'écran du public un pixel de l'aperçu en vaut sept à dix, et la ligne brisée de ces points est en escalier, bien plus
+  // épaisse que le trait n'est large. Chaque point est donc ramené à la moyenne de ses voisins - ceux qui sont à moins de trois écarts types de lui SELON LA LONGUEUR DU TRAIT, chacun compté pour le bout de trait qu'il porte
+  // (les points ne sont pas à égale distance : la souris va plus ou moins vite) - ce qui lisse les marches sans émousser les courbes. Les deux bouts ne bougent pas : au-delà de chacun, le trait se prolonge par symétrie
+  // centrale (le point opposé à son voisin), si bien que la moyenne y retombe sur le bout même et que le trait finit là où est le pointeur. `points` : [[x, y]] en pixels de page, `sigma` en pixels de page.
+  function smoothInk(points, sigma) {
+    const n = points.length;
+    if (n < 3 || !(sigma > 0)) return points;
+    const along = new Float64Array(n);                   // la longueur du trait jusqu'à chaque point
+    for (let i = 1; i < n; i++) along[i] = along[i - 1] + Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]);
+    const total = along[n - 1];
+    if (!(total > 0)) return points;
+    const reach = 3 * sigma;
+    let before = 0;                                      // les points qui prolongent le trait au-delà du premier...
+    while (before + 1 < n && along[before + 1] <= reach) before++;
+    let after = 0;                                       // ... et au-delà du dernier
+    while (after + 1 < n && total - along[n - 2 - after] <= reach) after++;
+    const m = before + n + after;
+    const at = new Float64Array(m);
+    const px = new Float64Array(m);
+    const py = new Float64Array(m);
+    for (let k = 0; k < before; k++) {                   // le plus loin d'abord
+      const j = before - k;
+      at[k] = -along[j];
+      px[k] = 2 * points[0][0] - points[j][0];
+      py[k] = 2 * points[0][1] - points[j][1];
+    }
+    for (let i = 0; i < n; i++) { at[before + i] = along[i]; px[before + i] = points[i][0]; py[before + i] = points[i][1]; }
+    for (let k = 0; k < after; k++) {
+      const j = n - 2 - k;
+      at[before + n + k] = 2 * total - along[j];
+      px[before + n + k] = 2 * points[n - 1][0] - points[j][0];
+      py[before + n + k] = 2 * points[n - 1][1] - points[j][1];
+    }
+    const k2 = 1 / (2 * sigma * sigma);
+    // Le poids d'un point : le bout de trait qu'il porte (la moitié de la distance entre ses deux voisins), pesé par la gaussienne de sa distance, le long du trait, au point qu'on lisse.
+    const weigh = (j, c) => {
+      const lo = j > 0 ? at[j - 1] : at[j];
+      const hi = j + 1 < m ? at[j + 1] : at[j];
+      return ((hi - lo) / 2) * Math.exp(-((at[j] - at[c]) ** 2) * k2);
+    };
+    const out = [points[0]];
+    for (let i = 1; i < n - 1; i++) {
+      const c = before + i;
+      let sx = 0;
+      let sy = 0;
+      let sw = 0;
+      for (let j = c; j >= 0 && at[c] - at[j] <= reach; j--) { const g = weigh(j, c); sx += g * px[j]; sy += g * py[j]; sw += g; }
+      for (let j = c + 1; j < m && at[j] - at[c] <= reach; j++) { const g = weigh(j, c); sx += g * px[j]; sy += g * py[j]; sw += g; }
+      out.push(sw > 0 ? [sx / sw, sy / sw] : points[i]);
+    }
+    out.push(points[n - 1]);
+    return out;
+  }
+  // Le chemin d'un trait : un point seul est un point rond (le bout rond d'un trait presque nul), deux points une droite, au-delà une courbe qui passe par le milieu de chaque segment et prend chaque point pour poignée
+  // (des arcs de Bézier quadratiques : aucun angle, ni aux points ni entre eux) ; elle part du premier point et finit au dernier.
+  function curveOf(points) {
+    const n = points.length;
+    const num = value => Math.round(value * 100) / 100;
+    const at = p => num(p[0]) + ' ' + num(p[1]);
+    const middle = (a, b) => num((a[0] + b[0]) / 2) + ' ' + num((a[1] + b[1]) / 2);
+    if (n === 1) return 'M ' + at(points[0]) + ' h 0.01';
+    if (n === 2) return 'M ' + at(points[0]) + ' L ' + at(points[1]);
+    let d = 'M ' + at(points[0]) + ' L ' + middle(points[0], points[1]);
+    for (let i = 1; i < n - 1; i++) d += ' Q ' + at(points[i]) + ' ' + middle(points[i], points[i + 1]);
+    return d + ' L ' + at(points[n - 1]);
+  }
+
   function inkLayer(frame) {
     const svg = document.createElementNS(SVG_NS, 'svg');
     svg.setAttribute('data-pp-ink', '');
@@ -127,11 +198,13 @@ const SlidePlayer = (function () {
     group.style.stroke = INK_COLOR;
     svg.appendChild(group);
     frame.appendChild(svg);
-    let strokes = [];              // [{ path, d, n, width, height }]
+    let strokes = [];              // [{ path, raw, tail, sigma, width, height }] : `raw`, les points gardés du trait en pixels de page, tant qu'on peut encore le continuer (`null` ensuite : le chemin dit tout) ; `tail`, son bout : le dernier point reçu quand il est trop près du dernier gardé
     let open = null;               // le trait que les points suivants continuent
     const round = value => Math.round(value * 100) / 100;
-    const render = stroke => stroke.path.setAttribute('d', stroke.n === 1 ? stroke.d + ' h 0.01' : stroke.d);   // un seul point : un point rond (le bout rond d'un trait presque nul)
-    function begin() {
+    const render = stroke => { if (stroke.raw) stroke.path.setAttribute('d', curveOf(smoothInk(stroke.tail ? stroke.raw.concat([stroke.tail]) : stroke.raw, stroke.sigma))); };
+    // Un trait nouveau ; `carry` : le dernier point du trait plein qu'il continue (au-delà de `INK_POINTS`), pour que les deux se touchent.
+    function begin(carry) {
+      if (open) { render(open); open.raw = null; }
       if (strokes.length >= INK_STROKES) strokes.shift().path.remove();
       // La page se lit dans la taille que `surface` lui a donnée, en pixels de page ; le repère du calque est celui-là, si bien que le trait grandit et rapetisse avec elle.
       const width = parseFloat(frame.style.width) || 1;
@@ -140,7 +213,7 @@ const SlidePlayer = (function () {
       group.setAttribute('stroke-width', String(round(height * INK_WIDTH)));
       const path = document.createElementNS(SVG_NS, 'path');
       group.appendChild(path);
-      open = { path, d: '', n: 0, width, height };
+      open = { path, raw: carry ? [carry] : [], tail: null, sigma: INK_SMOOTH * Math.max(width, height), width, height };
       strokes.push(open);
       return open;
     }
@@ -162,9 +235,14 @@ const SlidePlayer = (function () {
       if (!list.length) return false;
       const touched = new Set();
       list.forEach(([x, y], k) => {
-        if (!open || (start && k === 0) || open.n >= INK_POINTS) begin();
-        open.d += (open.n ? ' L ' : 'M ') + round(x * open.width) + ' ' + round(y * open.height);
-        open.n += 1;
+        const full = !!open && !!open.raw && open.raw.length >= INK_POINTS;
+        if (!open || (start && k === 0) || full) begin(full ? (open.tail || open.raw[open.raw.length - 1]) : null);
+        const raw = open.raw;
+        const point = [x * open.width, y * open.height];
+        // Un point à moins de INK_STEP du dernier gardé ne s'y ajoute pas : il devient le bout du trait (le trait finit toujours au pointeur), qui se rend après les points gardés. Ceux-ci sont donc à INK_STEP les uns des autres au moins,
+        // et le lissage, qui relit le trait en cours à chaque envoi, ne voit jamais plus d'une vingtaine de points par côté, quelle que soit la finesse de ce que le pointeur donne.
+        if (raw.length && Math.hypot(point[0] - raw[raw.length - 1][0], point[1] - raw[raw.length - 1][1]) < INK_STEP) open.tail = point;
+        else { raw.push(point); open.tail = null; }
         touched.add(open);
       });
       touched.forEach(render);
@@ -173,7 +251,7 @@ const SlidePlayer = (function () {
     return {
       add,
       // Le trait en cours est fini : les points qui viennent en commencent un autre.
-      end() { open = null; },
+      end() { if (open) { render(open); open.raw = null; } open = null; },
       clear() { strokes.forEach(stroke => stroke.path.remove()); strokes = []; open = null; },
       count: () => strokes.length,
       // Une copie du tracé tel qu'il est, posée dans un autre cadre (celui de la copie de rechange d'un effet : la page qu'on quitte garde son tracé le temps qu'elle part).

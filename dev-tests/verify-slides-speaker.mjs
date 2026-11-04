@@ -766,6 +766,56 @@ async function stroke(a, page, frame, points, steps = 8) {
   await page.mouse.up();
   await sleep(250);
 }
+// Ce que fait une souris : la trajectoire idéale `shape(t)` (t de 0 à 1, en parts de la page) suivie à une vitesse qui varie (de 1,5 à 4,5 pixels d'écran par événement), UNE position par événement, en pixels d'écran
+// ENTIERS - dans un aperçu de quelque 190 pixels, un pixel de la souris en vaut sept à dix de la page sur l'écran du public : c'est ce qui fait l'escalier d'un trait qu'on ne lisse pas. `origin` : le coin de la page à l'écran ;
+// `size` : sa taille à l'écran.
+function mousePositions(shape, size, origin) {
+  const dense = Array.from({ length: 2001 }, (_, k) => { const [fx, fy] = shape(k / 2000); return [origin.x + fx * size.width, origin.y + fy * size.height]; });
+  const along = [0];
+  for (let k = 1; k < dense.length; k++) along.push(along[k - 1] + Math.hypot(dense[k][0] - dense[k - 1][0], dense[k][1] - dense[k - 1][1]));
+  const total = along[along.length - 1];
+  const at = (s) => { let k = 1; while (k < along.length - 1 && along[k] < s) k++; const u = (s - along[k - 1]) / ((along[k] - along[k - 1]) || 1); return [dense[k - 1][0] + (dense[k][0] - dense[k - 1][0]) * u, dense[k - 1][1] + (dense[k][1] - dense[k - 1][1]) * u]; };
+  const out = [];
+  const push = ([x, y]) => { const q = [Math.round(x), Math.round(y)]; const last = out[out.length - 1]; if (!last || last[0] !== q[0] || last[1] !== q[1]) out.push(q); };
+  for (let s = 0; s < total; s += 1.5 + 3 * (0.5 + 0.5 * Math.sin(s / 45))) push(at(s));
+  push(at(total));
+  return out;
+}
+// Un trait fait de ces positions à la vraie souris dans l'aperçu de la diapositive en cours (pas d'interpolation : une position, un événement). Rend les positions, en pixels d'écran.
+async function mouseStroke(a, page, frame, shape) {
+  const off = await a.offset();
+  const positions = mousePositions(shape, frame, { x: off.x + frame.left, y: off.y + frame.top });
+  await page.mouse.move(positions[0][0], positions[0][1]);
+  await page.mouse.down();
+  for (const [x, y] of positions.slice(1)) await page.mouse.move(x, y);
+  await page.mouse.up();
+  await sleep(400);
+  return positions;
+}
+// La rugosité d'un chemin, mesurée dans la page : on le parcourt de 2 pixels en 2 pixels (de la page) et on mesure de combien le cap change d'un pas au suivant. `rug` : l'écart type de ces changements, en degrés ;
+// `maxTurn` : le plus grand. Une ligne brisée aux marches d'un aperçu de 190 pixels est à 4 ou 6 degrés et a des pics de 50 ; un trait lissé est sous 1 degré, ses pics sous 5 (une vraie courbe en a : un cercle de 100 pixels de rayon change de cap de 1,1 degré par pas).
+const roughOf = (page, d) => page.evaluate((d) => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  const path = document.createElementNS(NS, 'path');
+  path.setAttribute('d', d);
+  svg.appendChild(path);
+  svg.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;visibility:hidden';
+  document.body.appendChild(svg);
+  const length = path.getTotalLength();
+  const first = path.getPointAtLength(0);
+  const headings = [];
+  let prev = first;
+  for (let s = 2; s <= length; s += 2) { const q = path.getPointAtLength(s); headings.push(Math.atan2(q.y - prev.y, q.x - prev.x)); prev = q; }
+  const last = path.getPointAtLength(length);
+  const turns = [];
+  for (let k = 1; k < headings.length; k++) { let u = headings[k] - headings[k - 1]; while (u > Math.PI) u -= 2 * Math.PI; while (u < -Math.PI) u += 2 * Math.PI; turns.push(u * 180 / Math.PI); }
+  const mean = turns.reduce((x, y) => x + y, 0) / (turns.length || 1);
+  const rug = Math.sqrt(turns.reduce((x, y) => x + (y - mean) ** 2, 0) / (turns.length || 1));
+  const box = path.getBBox();
+  svg.remove();
+  return { length, rug, maxTurn: Math.max(0, ...turns.map(Math.abs)), first: { x: first.x, y: first.y }, last: { x: last.x, y: last.y }, box: { left: box.x, top: box.y, right: box.x + box.width, bottom: box.y + box.height } };
+}, d);
 // La couleur la plus rouge dans une petite fenêtre autour d'un point d'une capture (un trait fin tombe entre deux pixels) : [r, g, b] et son « rouge » (r moins la moyenne de g et b).
 async function reddest(page, shot, x, y, reach = 3) {
   let best = null;
@@ -1008,6 +1058,85 @@ async function screensAndPen(lang, colorScheme, full) {
   await sleep(400);
   const afterE = { before: desk.ink.strokes, console: (await deskOf(app)).ink.strokes, popup: (await veilOf(popup)).paths.length };
   check(tag + 'la touche E efface aussi, des deux côtés', afterE.before === 1 && afterE.console === 0 && afterE.popup === 0, afterE);
+  // Le trait est LISSÉ (retour du 04/11 : « très crénelé, il manque de lissage »). Une souris donne des positions ENTIÈRES dans un aperçu de quelque 190 pixels : chacune en vaut sept à dix de la page sur l'écran du public, et la
+  // ligne brisée de ces positions est en escalier. Le trait d'une ellipse suivie ainsi, à la vraie souris, est le même des deux côtés et se lit lisse.
+  const ELLIPSE = u => [0.5 + 0.32 * Math.cos(u * Math.PI * 2.2 - Math.PI / 2), 0.5 + 0.3 * Math.sin(u * Math.PI * 2.2 - Math.PI / 2)];
+  const mouse = await mouseStroke(a, page, frame, ELLIPSE);
+  desk = await deskOf(app);
+  veil = await veilOf(popup);
+  // Le calque de la console est dans l'arbre ombre de la copie de la diapositive en cours (comme la page de la fenêtre dans le sien).
+  const conPaths = await app.evaluate(() => {
+    const host = document.querySelector('.pp-speaker-current .pp-print-host');
+    return host && host.shadowRoot ? Array.from(host.shadowRoot.querySelectorAll('svg[data-pp-ink] path')).map(path => path.getAttribute('d')) : [];
+  });
+  const popRough = veil.paths.length === 1 ? await roughOf(popup, veil.paths[0].d) : null;
+  const [, , sheetW, sheetH] = String(veil.viewBox).split(' ').map(Number);
+  const offNow = await a.offset();
+  const onSheet = ([x, y]) => ({ x: (x - offNow.x - frame.left) / frame.width * sheetW, y: (y - offNow.y - frame.top) / frame.height * sheetH });
+  const startAt = onSheet(mouse[0]);
+  const endAt = onSheet(mouse[mouse.length - 1]);
+  check(tag + 'un trait à la vraie souris (positions entières, une par événement : ' + mouse.length + ' ici) est le MÊME des deux côtés, au caractère près : la console et la fenêtre dessinent le même chemin',
+    desk.ink.strokes === 1 && conPaths.length === 1 && veil.paths.length === 1 && conPaths[0] === veil.paths[0].d && mouse.length > 60, { console: conPaths.map(d => d.slice(0, 60)), popup: veil.paths.map(path => path.d.slice(0, 60)), events: mouse.length });
+  check(tag + 'et il est lissé : de 2 pixels de la page en 2 pixels son cap change de moins de 1,5° en moyenne quadratique et de 12° au plus (la ligne brisée de ces positions : 4 à 6° et des pics de 50°)',
+    !!popRough && popRough.rug < 1.5 && popRough.maxTurn < 12, popRough && { rug: Math.round(popRough.rug * 100) / 100, maxTurn: Math.round(popRough.maxTurn * 10) / 10, length: Math.round(popRough.length) });
+  const around = (v, want, reach) => Math.abs(v - want) <= reach;
+  check(tag + 'le lissage garde les bouts et la forme : le trait part et finit où était la souris (à 2 pixels de la page près) et tient dans le cadre de l’ellipse suivie (à 10 pixels près)',
+    !!popRough && Math.hypot(popRough.first.x - startAt.x, popRough.first.y - startAt.y) <= 2 && Math.hypot(popRough.last.x - endAt.x, popRough.last.y - endAt.y) <= 2
+    && around(popRough.box.left, 0.18 * sheetW, 10) && around(popRough.box.right, 0.82 * sheetW, 10) && around(popRough.box.top, 0.2 * sheetH, 10) && around(popRough.box.bottom, 0.8 * sheetH, 10),
+    popRough && { first: popRough.first, wantFirst: startAt, last: popRough.last, wantLast: endAt, box: popRough.box, sheet: [sheetW, sheetH] });
+  await page.keyboard.press('e');
+  await sleep(400);
+  check(tag + 'la touche E efface ce trait des deux côtés (le suivant se dessine sur une page vide)', (await deskOf(app)).ink.strokes === 0 && (await veilOf(popup)).paths.length === 0, { console: (await deskOf(app)).ink.strokes });
+  if (full) {
+    // Le calque seul (`SlidePlayer.inkLayer`), hors de toute fenêtre, sur des positions de souris simulées dans un aperçu de 190 x 107 pixels (le coin de la page n'est pas sur un pixel entier : 0,37 et 0,21).
+    const grain = shape => mousePositions(shape, { width: 190, height: 107 }, { x: 0.37, y: 0.21 }).map(([x, y]) => [Math.round((x - 0.37) / 190 * 1e4) / 1e4, Math.round((y - 0.21) / 107 * 1e4) / 1e4]);
+    const UNDERLINE = u => [0.55 + 0.4 * u, 0.82 + 0.012 * Math.sin(u * Math.PI * 3)];
+    const sets = [grain(ELLIPSE), grain(UNDERLINE)];
+    // Un long trait : un méandre dont chaque point est à 2,5 pixels de page du précédent (un point à moins de 2 pixels du dernier prend sa place, et il ne doit pas en manquer pour passer les 6 000 points gardés) ; un trait DENSE : 6 200 points à un vingtième de pixel les uns des autres,
+    // comme un stylet en donne.
+    const tri = u => { const m = u % 2; return m < 1 ? m : 2 - m; };
+    const long = Array.from({ length: 6200 }, (_, k) => [Math.round((0.05 + 0.9 * tri(k * 2.5 / (0.9 * 1280))) * 1e4) / 1e4, Math.round((0.1 + 0.8 * k / 6200) * 1e4) / 1e4]);
+    const dense = Array.from({ length: 6200 }, (_, k) => [Math.round((0.2 + k * 0.05 / 1280) * 1e4) / 1e4, Math.round((0.5 + 0.1 * Math.sin(k / 500)) * 1e4) / 1e4]);
+    const layer = await app.evaluate(({ sets, one, two, long, dense }) => {
+      const frame = document.createElement('div');
+      frame.style.cssText = 'position:absolute;left:0;top:0;width:1280px;height:720px;visibility:hidden';
+      document.body.appendChild(frame);
+      const draw = (points) => {
+        const l = SlidePlayer.inkLayer(frame);
+        let slowest = 0;
+        for (let i = 0; i < points.length; i += 128) { const t0 = performance.now(); l.add(points.slice(i, i + 128).flat(), i === 0); slowest = Math.max(slowest, performance.now() - t0); }
+        l.end();
+        const paths = Array.from(frame.querySelectorAll('svg[data-pp-ink] path')).map(path => path.getAttribute('d'));
+        l.destroy();
+        return { paths, slowest };
+      };
+      const result = { shapes: sets.map(points => draw(points).paths[0]) };
+      result.one = draw(one).paths[0];
+      result.two = draw(two).paths[0];
+      result.long = draw(long);
+      result.dense = draw(dense);
+      frame.remove();
+      return result;
+    }, { sets, one: [[0.4, 0.4]], two: [[0.2, 0.3], [0.6, 0.7]], long, dense });
+    const rough = await Promise.all(layer.shapes.map(d => roughOf(app, d)));
+    check(tag + 'le calque seul lisse des positions de souris entières dans un aperçu de 190 pixels (une ellipse, un soulignement) : cap qui change de moins de 1,5° en moyenne quadratique, de 12° au plus, et les bouts à 0,1 pixel des points reçus',
+      rough.every(r => r.rug < 1.5 && r.maxTurn < 12) && Math.hypot(rough[0].first.x - sets[0][0][0] * 1280, rough[0].first.y - sets[0][0][1] * 720) <= 0.15 && Math.hypot(rough[0].last.x - sets[0][sets[0].length - 1][0] * 1280, rough[0].last.y - sets[0][sets[0].length - 1][1] * 720) <= 0.15
+      && Math.hypot(rough[1].first.x - sets[1][0][0] * 1280, rough[1].first.y - sets[1][0][1] * 720) <= 0.15,
+      rough.map(r => ({ rug: Math.round(r.rug * 100) / 100, maxTurn: Math.round(r.maxTurn * 10) / 10 })));
+    check(tag + 'un point seul reste un point rond, deux points une droite (rien à lisser), et le trait reste dans le repère de la page (viewBox 1280 x 720)',
+      /^M [\d.]+ [\d.]+ h 0\.01$/.test(layer.one) && /^M 256 216 L 768 504$/.test(layer.two), { one: layer.one, two: layer.two });
+    check(tag + 'au-delà de 6 000 points le trait continue dans un autre chemin qui part où le premier s’arrête (deux chemins pour 6 200 points), et chaque envoi de 128 points se lisse en moins de 150 ms (' + Math.round(layer.long.slowest) + ' ms au plus)',
+      layer.long.paths.length === 2 && layer.long.paths[1].startsWith('M ') && layer.long.slowest < 150 && (() => { const end = layer.long.paths[0].match(/L ([\d.]+) ([\d.]+)$/); const begin = layer.long.paths[1].match(/^M ([\d.]+) ([\d.]+)/); return !!end && !!begin && end[1] === begin[1] && end[2] === begin[2]; })(),
+      { paths: layer.long.paths.map(d => d.slice(0, 30) + '…' + d.slice(-24)), slowest: layer.long.slowest });
+    // Le trait dense ne s'effondre pas en une droite du premier point au dernier (un point à moins de 2 pixels du dernier gardé n'est que le BOUT du trait), ni ne garde ses six mille points : quelques centaines de segments, et une longueur proche de celle de la ligne reçue (le lissage rabote la houle : 84 % ici ; une droite du premier au dernier point n'en ferait que 42 %).
+    const denseRough = layer.dense.paths.length === 1 ? await roughOf(app, layer.dense.paths[0]) : null;
+    const denseSegments = layer.dense.paths.length === 1 ? (layer.dense.paths[0].match(/Q/g) || []).length : 0;
+    const denseLength = dense.reduce((sum, p, k) => k ? sum + Math.hypot((p[0] - dense[k - 1][0]) * 1280, (p[1] - dense[k - 1][1]) * 720) : 0, 0);
+    check(tag + 'un trait DENSE (6 200 points à un vingtième de pixel de page les uns des autres, ce qu\'un stylet donne) se lisse aussi vite (' + Math.round(layer.dense.slowest) + ' ms au plus pour un envoi de 128 points, moins de 150), reste UN chemin de quelques centaines de segments (' + denseSegments + '), en suit la ligne (longueur ' + (denseRough ? Math.round(denseRough.length) : '?') + ' pour ' + Math.round(denseLength) + ' reçus) et finit au dernier point reçu',
+      layer.dense.paths.length === 1 && layer.dense.slowest < 150 && denseSegments >= 100 && denseSegments <= 800 && !!denseRough && denseRough.length >= 0.75 * denseLength && denseRough.length <= 1.02 * denseLength
+      && (() => { const end = layer.dense.paths[0].match(/L ([\d.]+) ([\d.]+)$/); const last = dense[dense.length - 1]; return !!end && Math.abs(Number(end[1]) - last[0] * 1280) <= 0.01 && Math.abs(Number(end[2]) - last[1] * 720) <= 0.01; })(),
+      { paths: layer.dense.paths.map(d => d.length + ' caractères, fin ' + d.slice(-24)), slowest: layer.dense.slowest, segments: denseSegments, length: denseRough && denseRough.length, received: denseLength, last: dense[dense.length - 1] });
+  }
   // Changer de diapositive efface : au clavier, et aussi quand le trait est fait pendant que la page change.
   await stroke(a, page, frame, [[0.25, 0.4], [0.75, 0.45]]);
   await page.keyboard.press('ArrowRight');
