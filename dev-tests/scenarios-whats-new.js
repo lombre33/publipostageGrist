@@ -4,7 +4,7 @@
 // éléments de la V1, pas de screen de la bêta comme c'était ». Ici, DANS la page : la ligne « Nouveautés » de Réglages > Crédits (sous la version) qui ouvre le carrousel ; la comparaison de la
 // dernière version fermée par la personne (`pp_news_seen`, PersonStore) à celle de la fenêtre, les conditions de son ouverture toute seule (droits confirmés, qui écrit, ni la Lecture épurée ni la carte de l'accès, aucune autre
 // fenêtre, une mémoire qui retient, une seule fois par séance) et ce que la fermeture retient (dev-tests/verify-whats-new-first.mjs le suit à la vraie souris, seul et chez GFS) ;
-// ses dix écrans (huit bandeaux de capture, aucun étiqueté « Grist Factory Suite » : la V1 seule ne montre que ce qu'elle fait, puis deux écrans « avant → après »), tous de la même hauteur, les images réellement chargées dans
+// ses onze écrans (huit bandeaux de capture, aucun étiqueté « Grist Factory Suite » : la V1 seule ne montre que ce qu'elle fait, un écran « Et aussi » en cinq lignes sans flèche, puis deux écrans « avant → après »), tous de la même hauteur, les images réellement chargées dans
 // la langue de la page ; « Voir en détail » qui ouvre « Exporter, en détail » (cinq écrans, aucun de la bêta) au-dessus du carrousel ; Échap qui ferme la fenêtre du dessus seulement ; les
 // points (un seul arrêt de Tab, les flèches), « Fermer » principal au dernier écran avec le focus ; une image qui ne vient pas ; les deux-points de la légende (insécable en français, collé en
 // anglais). dev-tests/verify-whats-new-mouse.mjs le mesure à 700x400 à la vraie souris et au vrai clavier, en clair et en sombre.
@@ -23,7 +23,7 @@
   const text = el => (el ? el.textContent.replace(/\s+/g, ' ').trim() : '');
   const zOf = m => Number(getComputedStyle(m).zIndex);
   const lang = () => I18n.getLang();
-  const NEWS = 10;     // écrans du carrousel
+  const NEWS = 11;     // écrans du carrousel
   const DETAIL = 5;   // écrans de « Exporter, en détail »
   const KEY = 'pp_news_seen';   // la dernière version dont la personne a fermé la fenêtre ; dev-tests/grist-stub.js la sème à « 99 » (plus récente que toutes) pour que la fenêtre ne s'ouvre pas toute seule
   const seenNow = () => PersonStore.get(KEY);
@@ -228,8 +228,8 @@
   });
 
   cases.push({
-    id: 'whats_new_carousel_has_ten_screens_of_the_same_height_and_real_images',
-    description: 'Le carrousel : dix écrans (huit bandeaux avec image, titre et texte, puis deux écrans « avant → après »), tous de la même hauteur et sans défilement dans le panneau ; les images viennent de img/news/1.0/ dans la langue de la page, dans l\'ordre des nouveautés de la V1 ; aucun écran ne parle de Grist Factory Suite (ni étiquette, ni mot)',
+    id: 'whats_new_carousel_has_eleven_screens_of_the_same_height_and_real_images',
+    description: 'Le carrousel : onze écrans (huit bandeaux avec image, titre et texte, un écran « Et aussi » de cinq sujets sans flèche, puis deux écrans « avant → après »), tous de la même hauteur et sans défilement dans le panneau ; les images viennent de img/news/1.0/ dans la langue de la page, dans l\'ordre des nouveautés de la V1 ; aucun écran ne parle de Grist Factory Suite (ni étiquette, ni mot)',
     run: async (h) => {
       await setup(h);
       WhatsNew.open();
@@ -246,15 +246,17 @@
         rows.push({
           i: i + 1, kind: s.classList.contains('pp-news-list') ? 'list' : 'feature', name: text(s.querySelector('.pp-news-name')), gfs: !!s.querySelector('.pp-news-badge') || /Grist Factory|GFS/.test(s.textContent),
           img: img ? { src: img.getAttribute('src'), ok: img.complete && img.naturalWidth > 0, w: img.naturalWidth, h: img.naturalHeight, alt: img.alt } : null,
-          rows: s.querySelectorAll('.pp-news-row').length, heightOk: heightOk(win), boxH: Math.round(win.querySelector('.pp-modal-box').getBoundingClientRect().height),
+          rows: s.querySelectorAll('.pp-news-row').length, arrows: s.querySelectorAll('.pp-news-row-arrow').length, subjects: Array.from(s.querySelectorAll('.pp-news-row-from')).map(text),
+          heightOk: heightOk(win), boxH: Math.round(win.querySelector('.pp-modal-box').getBoundingClientRect().height),
         });
       }
       await finish();
       const features = rows.filter(r => r.kind === 'feature');
-      const pass = reached === NEWS && dots.length === NEWS && rows.length === NEWS && features.length === 8 && rows.slice(8).every(r => r.kind === 'list') && rows[8].rows === 4 && rows[9].rows === 5
+      const pass = reached === NEWS && dots.length === NEWS && rows.length === NEWS && features.length === 8 && rows.slice(8).every(r => r.kind === 'list') && rows[8].rows === 5 && rows[9].rows === 4 && rows[10].rows === 5
         && features.every(r => r.img && r.img.ok && r.img.w === 1200 && r.img.h === 400 && r.img.alt && /^img\/news\/1\.0\/[a-z]+-fr\.webp\?v=\d+$/.test(r.img.src) && r.name)
         && features.map(r => (/\/([a-z]+)-fr\.webp/.exec(r.img.src) || [])[1]).join(',') === 'loop,versions,gallery,bookmarks,format,tables,pages,conditions' && rows.every(r => !r.gfs) && rows.every(r => r.heightOk) && new Set(rows.map(r => r.boxH)).size === 1
-        && rows[8].name === 'Vos modèles de la bêta' && rows[9].name === 'Quelques habitudes qui changent';
+        && rows[8].name === 'Et aussi dans cette version' && rows[8].arrows === 0 && rows[8].subjects.join('|') === 'Titres|Rechercher / Remplacer|Pages|Dates et heures|Exports' && rows[9].arrows === 4 && rows[10].arrows === 5
+        && rows[9].name === 'Vos modèles de la bêta' && rows[10].name === 'Quelques habitudes qui changent';
       return { pass, notes: JSON.stringify(rows) };
     },
   });
@@ -298,7 +300,7 @@
 
   cases.push({
     id: 'whats_new_dots_are_one_tab_stop_and_the_arrows_move_between_screens',
-    description: 'Les points forment une liste d\'onglets : un seul arrêt de Tab (celui de l\'écran affiché), chaque point dit « n / 10 : titre », les flèches, Début et Fin changent d\'écran et le focus suit ; un clic sur un point va à son écran',
+    description: 'Les points forment une liste d\'onglets : un seul arrêt de Tab (celui de l\'écran affiché), chaque point dit « n / 11 : titre », les flèches, Début et Fin changent d\'écran et le focus suit ; un clic sur un point va à son écran',
     run: async (h) => {
       await setup(h);
       WhatsNew.open();
@@ -322,7 +324,7 @@
       parts(win).dots[3].click(); await sleep(30);
       const clicked = { selected: selected(), title: text(slide(win).querySelector('.pp-news-name')), panel: pane(win).getAttribute('aria-labelledby') === parts(win).dots[3].id };
       await finish();
-      const pass = start.selected === 0 && start.tabbable === 1 && start.tablist && start.labelledby && start.labels[0].startsWith('1 / 10 : ') && start.labels[1].startsWith('2 / 10 : ')
+      const pass = start.selected === 0 && start.tabbable === 1 && start.tablist && start.labelledby && start.labels[0].startsWith('1 / 11 : ') && start.labels[1].startsWith('2 / 11 : ')
         && right.selected === 1 && right.focus === 1 && right.tabbable === 1 && end.selected === NEWS - 1 && end.focus === NEWS - 1 && beyond.selected === NEWS - 1
         && left.selected === NEWS - 2 && left.focus === NEWS - 2 && home.selected === 0 && clicked.selected === 3 && clicked.title === 'Des liens vers un titre ou un signet' && clicked.panel;
       return { pass, notes: JSON.stringify({ start, right, end, beyond, left, home, clicked }) };

@@ -19,6 +19,10 @@
 .pp-news-row-arrow { text-align: center; color: var(--text-muted); font-size: 15px; }
 .pp-news-row-to { font-weight: 700; }
 .pp-news-row-to span { font-weight: 400; color: var(--text-muted); }
+/* L'écran « Et aussi » (`plain`) : la même liste sans flèche, le sujet en gras à gauche, ce que la version y apporte à droite en texte courant (une ligne ; si une langue ou une police la coupe, les deux lignes s'équilibrent au lieu de laisser un mot seul). */
+.pp-news-list-plain .pp-news-row { grid-template-columns: minmax(0, var(--pp-news-from, 0.85fr)) minmax(0, var(--pp-news-to, 2fr)); }
+.pp-news-list-plain .pp-news-row-from { font-weight: 700; color: var(--text); }
+.pp-news-list-plain .pp-news-row-to { font-weight: 400; color: var(--text-muted); text-wrap: balance; }
 /* Un lien posé sur le fond grisé d'une ligne : `--accent-ink` (`--accent` n'y atteint pas 4,5:1). Le lien qui ouvre « Exporter, en détail » est un bouton, qui a l'aspect d'un lien. */
 .pp-news-list a, .pp-news-link { color: var(--accent-ink); }
 .pp-news-link { padding: 0; border: 0; background: none; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }

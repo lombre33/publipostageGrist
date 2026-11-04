@@ -13,7 +13,7 @@ Les trois écrans retirés, chacun avec l'étiquette « Grist Factory Suite » :
 ## Pour les remettre, quand GFS sort
 
 1. **Images** : copier les six WebP dans `img/news/1.0/` (ou les refaire si les textes ou l'interface de GFS ont changé), puis monter `IMAGE_VERSION` dans `js/whats-new.js` si une image déjà vue est refaite.
-2. **`js/whats-new.js`** : dans `SLIDES`, après l'écran `conditions` et avant l'écran `beta`, remettre les trois lignes ci-dessous ; dans la fonction qui dessine un écran, remettre la ligne du badge juste après la création du titre (`name`) ; et dire dans le commentaire de `SLIDES` que `gfs` marque la nouveauté qui n'existe que par Grist Factory Suite.
+2. **`js/whats-new.js`** : dans `SLIDES`, après l'écran `conditions` et avant l'écran « Et aussi » (`news.also.name`, sans image : tous les bandeaux d'abord, puis les trois listes), remettre les trois lignes ci-dessous ; dans la fonction qui dessine un écran, remettre la ligne du badge juste après la création du titre (`name`) ; et dire dans le commentaire de `SLIDES` que `gfs` marque la nouveauté qui n'existe que par Grist Factory Suite.
 
    ```js
    { image: 'live', gfs: true, name: 'news.live.name', text: 'news.live.text', alt: 'news.live.alt' },
@@ -49,9 +49,9 @@ Les trois écrans retirés, chacun avec l'étiquette « Grist Factory Suite » :
 
 5. **`index.html`** : monter le `?v=` de `js/whats-new.js`, de `css/whats-new.css` et de `js/i18n.js`.
 6. **Essais** (à changer avec le code, ils échoueront sinon) :
-   - `dev-tests/scenarios-whats-new.js` : `NEWS` 10 -> 13 ; huit bandeaux -> onze (`features.length`, `rows.slice(11)`, `rows[11].rows === 4`, `rows[12].rows === 5`) ; la liste des noms d'images ; et l'assertion `gfs` (aujourd'hui « aucun écran ne parle de Grist Factory Suite ») devient « seuls les trois écrans de GFS portent l'étiquette ».
-   - `dev-tests/verify-whats-new-mouse.mjs` : `NEWS`, « huit bandeaux » -> onze, 17 adresses d'images -> 23, et `.pp-news-badge` dans la liste des textes dont on mesure le contraste.
-   - `dev-tests/verify-whats-new-first.mjs` : le nombre d'écrans (`screens === 10` -> 13).
+   - `dev-tests/scenarios-whats-new.js` : `NEWS` 11 -> 14 ; huit bandeaux -> onze (`features.length`, `rows.slice(11)`, `rows[11]` = l'écran « Et aussi » : 5 lignes, 0 flèche, ses cinq sujets ; `rows[12].rows === 4` et 4 flèches ; `rows[13].rows === 5` et 5 flèches ; les trois noms `rows[11]`, `rows[12]`, `rows[13]`) ; « n / 11 » -> « n / 14 » dans le cas des points ; la liste des noms d'images ; et l'assertion `gfs` (aujourd'hui « aucun écran ne parle de Grist Factory Suite ») devient « seuls les trois écrans de GFS portent l'étiquette ».
+   - `dev-tests/verify-whats-new-mouse.mjs` : `NEWS` 11 -> 14, `screens.slice(8)` -> `slice(11)` et `screens[8]`, `[9]`, `[10]` -> `[11]`, `[12]`, `[13]` (lignes et flèches des trois derniers écrans), « huit bandeaux » -> onze (`screens.slice(0, 8)`), 17 adresses d'images -> 23, et `.pp-news-badge` dans la liste des textes dont on mesure le contraste.
+   - `dev-tests/verify-whats-new-first.mjs` : le nombre d'écrans (`screens === 11` -> 14).
    - `dev-tests/verify-slides-harmony.mjs` : le bloc « Les nouveautés » et les textes `news` / `newsWord` de `T` (voir `git show 7f45b0c:dev-tests/verify-slides-harmony.mjs`, l'écran « Slides+ » était le septième, `WhatsNew.open(6)`).
 7. **Documents** : l'entrée « Une fenêtre des nouveautés, avec de vraies captures » du CHANGELOG (français et anglais), la section « La fenêtre des nouveautés » de la charte (`planning/identite-ui-ux-grist-factory.md`), les lignes `whatsNew` de `dev-tests/README.md` et de `dev-tests/run-headless.mjs`.
 

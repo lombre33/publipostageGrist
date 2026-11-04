@@ -133,7 +133,7 @@ if (wanted(1)) {
   const opened = await waitShown(app);
   check('rien n\'est retenu, la fenêtre des nouveautés s\'ouvre toute seule après le démarrage', opened === true, opened);
   const l = await look(app);
-  check('« Nouveautés de la version 1.0 », premier des dix écrans, le focus dans la fenêtre', l.title === l.expectedTitle && l.title === 'Nouveautés de la version 1.0' && l.screen === 0 && l.screens === 10 && l.focusInside, l);
+  check('« Nouveautés de la version 1.0 », premier des onze écrans, le focus dans la fenêtre', l.title === l.expectedTitle && l.title === 'Nouveautés de la version 1.0' && l.screen === 0 && l.screens === 11 && l.focusInside, l);
   check('elle tient tout entière dans le panneau de 700 × 400, « Fermer » compris', l.inside && l.closeInside && l.viewport[0] === 700 && l.viewport[1] === 400, l);
   check('tant qu\'elle est ouverte, « 0 » est retenu : aucune version n\'est vue', (await keptAlone(app)) === '0', await keptAlone(app));
   await clickClose(page, app);

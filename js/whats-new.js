@@ -1,6 +1,6 @@
 // Fenêtre des nouveautés : ce que la version change, en images (demande du 21/10 : une fenêtre qui décrit les nouveautés, avec de vraies captures, claire, impactante, qui donne envie).
 // Deux fenêtres sur la base commune (js/modal-base.js), faites du même moule (`createPager` : le titre, l'écran affiché, les points, « Fermer », « Précédent », « Suivant ») :
-//  - le carrousel : un écran par nouveauté (un bandeau de capture réelle, un titre, deux lignes), puis deux écrans « avant → après » pour les modèles venus de la bêta ;
+//  - le carrousel : un écran par nouveauté (un bandeau de capture réelle, un titre, deux lignes), un écran « Et aussi » (cinq sujets, une ligne chacun), puis deux écrans « avant → après » pour les modèles venus de la bêta ;
 //  - « Exporter, en détail » : cinq écrans de captures annotées (le type d'export, les trois qualités de PDF, les lignes à exporter, plusieurs pages sur une feuille, le PDF protégé),
 //    ouverts par « Voir en détail » sur le dernier écran du carrousel, au-dessus de lui.
 // Réglages > Crédits > « Voir les nouveautés » l'ouvre (`open`), quand on veut. Elle s'ouvre aussi toute seule, UNE fois par personne : à la première ouverture après une version qui a des nouveautés (`openOnFirstConnection`,
@@ -14,13 +14,13 @@ const WhatsNew = (function () {
   const VERSION = '1.0';                  // la version dont la fenêtre dit les nouveautés
   const SEEN_KEY = 'pp_news_seen';        // ce que PersonStore garde de la personne : la dernière version dont elle a fermé la fenêtre (« 1.0 »)
   const IMAGE_DIR = 'img/news/1.0/';
-  const IMAGE_VERSION = '2';              // le `?v=` des images : une capture refaite le fait monter, sinon le navigateur garde l'ancienne
+  const IMAGE_VERSION = '3';              // le `?v=` des images : une capture refaite le fait monter, sinon le navigateur garde l'ancienne
   const CHANGELOG = 'https://github.com/grist-factory/Publipostage-Plus/blob/main/CHANGELOG.md';
   const NBSP = ' ';
 
   // Les écrans du carrousel, dans l'ordre. `image` : le bandeau (IMAGE_DIR/<image>-<langue>.webp). Une nouveauté qui n'existe que par Grist Factory Suite n'a pas d'écran ici : la V1 seule ne montre que ce qu'elle fait.
-  // Un écran « avant → après » (`rows`) donne, pour chaque ligne, les clés de ses textes : `from` (avant), `to` (après), `note` (la suite de « après ») ou `detail` (un bouton qui ouvre
-  // « Exporter, en détail ») ; `from` et `to` de l'écran règlent la part de largeur de ses deux colonnes de texte.
+  // Un écran en liste (`rows`) donne, pour chaque ligne, les clés de ses textes : `from` (avant, ou le sujet), `to` (après, ou ce que la version y apporte), `note` (la suite de `to`) ou `detail` (un bouton qui ouvre
+  // « Exporter, en détail ») ; `from` et `to` de l'écran règlent la part de largeur de ses deux colonnes de texte ; `plain` : un sujet et ce qu'on y gagne, sans flèche (l'écran « Et aussi »).
   const SLIDES = [
     { image: 'loop', name: 'news.loop.name', text: 'news.loop.text', alt: 'news.loop.alt' },
     { image: 'versions', name: 'news.versions.name', text: 'news.versions.text', alt: 'news.versions.alt' },
@@ -30,6 +30,15 @@ const WhatsNew = (function () {
     { image: 'tables', name: 'news.tables.name', text: 'news.tables.text', alt: 'news.tables.alt' },
     { image: 'pages', name: 'news.pages.name', text: 'news.pages.text', alt: 'news.pages.alt' },
     { image: 'conditions', name: 'news.conditions.name', text: 'news.conditions.text', alt: 'news.conditions.alt' },
+    {
+      name: 'news.also.name', plain: true, from: '0.85fr', to: '2fr', rows: [
+        { from: 'news.also.headings.from', to: 'news.also.headings.to' },
+        { from: 'news.also.find.from', to: 'news.also.find.to' },
+        { from: 'news.also.pages.from', to: 'news.also.pages.to' },
+        { from: 'news.also.dates.from', to: 'news.also.dates.to' },
+        { from: 'news.also.exports.from', to: 'news.also.exports.to' },
+      ],
+    },
     {
       name: 'news.beta.name', lead: 'news.beta.lead', from: '1fr', to: '1.3fr', rows: [
         { from: 'news.beta.email.from', to: 'news.beta.email.to', note: 'news.beta.email.note' },
@@ -185,8 +194,9 @@ const WhatsNew = (function () {
     return box;
   }
 
+  // Un écran en liste (`rows`) : « avant → après » (une flèche entre les deux colonnes) ou, avec `plain`, le sujet en gras à gauche et ce que la version y apporte à droite, sans flèche (rien n'y change d'avant en après).
   function drawBeforeAfter(slide) {
-    const box = el('div', 'pp-news-slide pp-news-list');
+    const box = el('div', 'pp-news-slide pp-news-list' + (slide.plain ? ' pp-news-list-plain' : ''));
     box.style.setProperty('--pp-news-from', slide.from);
     box.style.setProperty('--pp-news-to', slide.to);
     box.append(el('h4', 'pp-news-name', t(slide.name)));
@@ -202,7 +212,9 @@ const WhatsNew = (function () {
         to.append(' ', el('span', null, t(row.note)));
       }
       const item = el('li', 'pp-news-row');
-      item.append(el('span', 'pp-news-row-from', t(row.from)), el('span', 'pp-news-row-arrow', '→'), to);
+      item.append(el('span', 'pp-news-row-from', t(row.from)));
+      if (!slide.plain) item.append(el('span', 'pp-news-row-arrow', '→'));
+      item.append(to);
       rows.append(item);
     });
     box.append(rows);

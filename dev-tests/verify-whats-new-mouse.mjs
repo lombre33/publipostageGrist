@@ -3,7 +3,7 @@
 // d'Antoine (700x400), en français clair puis en anglais sombre - demande du 2026-10-21 : une fenêtre qui décrit les nouveautés de la version, avec de vraies captures, puis une fenêtre à part pour
 // « Qualité PDF » (devenue « Type d'export ») et « Exporter ». dev-tests/scenarios-whats-new.js vérifie les états et les textes DANS la page ; ici, ce qui se mesure aux PIXELS et au geste réel :
 //   1) Réglages > Crédits : la ligne « Nouveautés » est sous « Version », son bouton a l'aspect d'un lien (souligné, couleur d'accent, lisible), un vrai clic ouvre le carrousel ;
-//   2) la fenêtre tient dans le panneau (620 px de large, entre les bords haut et bas), les dix écrans s'atteignent au vrai clic sur « Suivant » sans rien qui défile ni qui sorte à droite,
+//   2) la fenêtre tient dans le panneau (620 px de large, entre les bords haut et bas), les onze écrans s'atteignent au vrai clic sur « Suivant » sans rien qui défile ni qui sorte à droite,
 //      tous de la même hauteur ; chaque image est décodée, peinte (rien ne la recouvre : le point de son centre est elle-même) et dans la zone visible ;
 //   3) le texte se lit : toute couleur de texte de la fenêtre, 4,5:1 au moins sur son fond réel (clair et sombre) ; les points, 4,5:1 aussi pour ceux qu'on peut choisir ;
 //   4) « Voir en détail » (dernier écran) ouvre « Exporter, en détail » par-dessus, au vrai clic : le point du centre du carrousel tombe dans la fenêtre du dessus ; ses cinq écrans s'atteignent de
@@ -20,7 +20,7 @@ import { open, stopServer, sleep, click, center } from './load-lib.mjs';
 const PORT = Number(process.env.WHATS_NEW_MOUSE_PORT || 9013);
 const SHOTS = process.env.WHATS_NEW_SHOTS || '';
 const SPEC = { tables: [{ id: 'PbClients', rows: 2, columns: [{ id: 'Nom', type: 'Text' }] }] };
-const NEWS = 10;
+const NEWS = 11;
 const DETAIL = 5;
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
 
@@ -97,6 +97,7 @@ async function measure(page, scope) {
       scrollH: body.scrollHeight, clientH: body.clientHeight, scrollW: body.scrollWidth, clientW: body.clientWidth, slideH: Math.round(slide.getBoundingClientRect().height), beyondRight,
       images, texts, minText: texts.length ? Math.min(...texts.map(t => t.ratio)) : null, worst: texts.slice().sort((a, b) => a.ratio - b.ratio).slice(0, 2), dotRatios, dotSizes, badgesInside: badges.every(Boolean),
       selected: dots.findIndex(d => d.getAttribute('aria-selected') === 'true'),
+      rows: body.querySelectorAll('.pp-news-row').length, arrows: body.querySelectorAll('.pp-news-row-arrow').length,
     };
   }, scope);
 }
@@ -150,7 +151,7 @@ async function pass(lang, theme, tag) {
     await sleep(900);
     check(`${tag} : un vrai clic sur « ${T.open} » ouvre le carrousel, les Réglages restent derrière`, (await shownNow(page, 'pp-news-modal')) && (await shownNow(page, 'settings-modal')));
 
-    console.log(`\n[${tag}] Le carrousel, dix écrans au clic sur « ${T.next} »`);
+    console.log(`\n[${tag}] Le carrousel, onze écrans au clic sur « ${T.next} »`);
     const screens = [];
     for (let i = 0; i < NEWS; i++) {
       await sleep(i === 0 ? 700 : 450);
@@ -168,7 +169,9 @@ async function pass(lang, theme, tag) {
     check(`${tag} : huit bandeaux décodés, de 580x193, peints (rien ne les recouvre), dans la zone visible, à plusieurs couleurs`,
       hero.every(s => s.images.length === 1 && s.images[0].decoded && s.images[0].w >= 578 && s.images[0].w <= 582 && s.images[0].h >= 191 && s.images[0].h <= 195 && s.images[0].visible && s.images[0].onTop && s.images[0].distinct > 3),
       hero.map(s => s.images));
-    check(`${tag} : les deux derniers écrans n'ont pas d'image, quatre puis cinq lignes « avant → après »`, screens.slice(8).every(s => s.images.length === 0), screens.slice(8).map(s => s.name));
+    check(`${tag} : les trois derniers écrans n'ont pas d'image : cinq lignes « Et aussi » sans flèche, puis quatre et cinq lignes « avant → après » avec leur flèche`,
+      screens.slice(8).every(s => s.images.length === 0) && screens[8].rows === 5 && screens[8].arrows === 0 && screens[9].rows === 4 && screens[9].arrows === 4 && screens[10].rows === 5 && screens[10].arrows === 5,
+      screens.slice(8).map(s => ({ n: s.name, rows: s.rows, arrows: s.arrows })));
     check(`${tag} : tout le texte se lit (4,5:1 au moins sur son fond réel)`, screens.every(s => s.texts.length >= 2 && s.minText >= 4.5), screens.map(s => ({ n: s.name, min: s.minText, worst: s.worst })));
     check(`${tag} : les points (un par écran) se lisent aussi (4,5:1 au moins), l'écran affiché est plus gros`,
       screens.every((s, i) => s.dotRatios.length === NEWS && s.dotRatios.every(r => r >= 4.5) && s.selected === i && s.dotSizes[i] > Math.max(...s.dotSizes.filter((_, k) => k !== i))),
