@@ -1,6 +1,6 @@
 // Le lien avec Grist Factory Suite (GFS) : ce que le widget en sait quand GFS l'héberge, et rien quand il tourne seul (une fenêtre de Grist qui charge l'adresse de ce dépôt).
 // Les messages de GFS ont leur enveloppe (contrats de GFS, section 5) : { gfs: <contrat>, type: 'appel' | 'reponse' | 'erreur' | 'evenement', id, nom, args | data }, sans le `mtype` du
-// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Huit choses seulement :
+// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Neuf choses seulement :
 //  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }),
 //    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre),
 //    `ouverture`, ce que GFS demande d'ouvrir au démarrage (consigne 010 ; pour « Nouveau > Importer », le fichier à importer que GFS donne, consigne 035), `langue`, la langue qui vaut maintenant (`fr` ou `en`, consigne 019), `stockage`, l'espace de cette app chez GFS
@@ -16,11 +16,15 @@
 //  - l'événement `reglages`, `{ enregistres: true | false }` (consigne 039), que GFS envoie après chaque écriture des réglages de la vue de l'app (`setOption`, `setOptions`, `clearOptions`) : `true`, le réglage est
 //    dans la vue de Grist, il n'y a plus de « Enregistrer » à cliquer ; `false`, il est resté un brouillon de Grist (GFS s'est replié dessus), que « Enregistrer » partage. Le dernier est gardé (`settingsSaved()`),
 //    les abonnés de `onSettings` sont rappelés quand il change (js/save-reminder.js, le seul à s'en servir) ;
+//  - `ambiance` (contrats 5.2, point 10, consigne 041), au contexte puis par l'événement `ambiance` `{ ambiance }` (une fois par geste de la personne dans la fenêtre « Thème » de GFS) : le choix d'ambiance et de couleur
+//    de la personne, un seul pour GFS et toutes ses apps, `{ id, couleur, ajustee, clair, sombre, forme }` ou `null` (rien n'est choisi : l'app garde ses couleurs). Il est lu par `normalizeAmbiance` du kit
+//    (kit/js/ambiance-message.js, une carte d'importation de index.html le nomme) : les jetons que l'app connaît et des valeurs vérifiées, rien d'autre. Le dernier est gardé (`ambiance()`, une copie),
+//    les abonnés de `onAmbiance` sont rappelés quand il change vraiment (js/gfs-ambiance.js, le seul à s'en servir : il pose les jetons sur la page) ;
 //  - `installer`, quand la personne clique une fonction grisée dans GFS : GFS ouvre sa fenêtre d'installation ;
 //  - l'appel `ouvrir`, que GFS envoie à l'app déjà ouverte quand la personne double-clique un autre fichier (consigne 010) ou choisit « Nouveau > Importer » (consigne 035, avec le fichier) ou « Lire » sur un PDF (consigne 040, avec le PDF) : l'abonné de `onOpen` répond, ce fichier lui rend la réponse. Tout
 //    autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3).
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
-// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `settingsSaved()` rend null, `hideBar()` rend faux et `opensInNewTab()` rend faux. Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
+// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `settingsSaved()` rend null, `ambiance()` rend null, `hideBar()` rend faux et `opensInNewTab()` rend faux (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
 // qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js, js/gfs-open.js, js/person-store.js et js/gfs-bar.js, jamais par ce fichier (sauf `opensInNewTab`, que trois liens consultent, consigne 011).
 const GfsLink = (function () {
   const CONTRACT = 0;                // le contrat que parle l'app, celui de son manifeste
@@ -30,6 +34,7 @@ const GfsLink = (function () {
   const BAR_EDGES = { gauche: 'left', haut: 'top', droite: 'right', bas: 'bottom' };   // contrats 5.2, point 7 : les quatre bords où GFS pose sa barre, nommés comme le reste de l'app
   const IMPORT_REASON = 'importer';   // contrats 5.2, point 3 (consigne 035) : la raison d'une ouverture qui porte `importation`
   const READ_REASON = 'lire';         // contrats 5.2, point 3 (consigne 040) : la raison d'une ouverture qui porte `lecture`
+  const AMBIANCE_WAIT_MS = 1500;      // le contexte porte une ambiance et le lecteur du kit n'est pas encore là : `ready` l'attend ce temps au plus (l'ambiance se pose alors avant l'affichage)
 
   const hostContract = (function () {
     try {
@@ -50,6 +55,10 @@ const GfsLink = (function () {
   const settingsListeners = new Set();
   let bar = null;             // `barre` du contexte, puis de l'événement `barre` (consigne 025) : null (seul, GFS ne la donne pas, l'explorateur est ouvert ou l'app l'a masquée) ou { edge, depth, zone: { x, y, width, height } }
   const barListeners = new Set();
+  let ambiance = null;         // `ambiance` du contexte, puis de l'événement `ambiance` (consigne 041), lue par `normalizeAmbiance` du kit : { id, couleur, ajustee, clair, sombre, forme } ou null (seul, GFS ne la donne pas, rien n'est choisi, ou le lecteur du kit n'est pas là)
+  let ambianceRaw = null;      // ce que GFS a dit, tel quel : relu dès que le lecteur du kit est là
+  let readAmbiance = null;     // `normalizeAmbiance` du kit, une fois son module chargé (hébergée seulement)
+  const ambianceListeners = new Set();
   let openHandler = null;      // celui qui s'est inscrit pour l'appel `ouvrir` (onOpen)
   const earlyOpens = [];       // les appels `ouvrir` arrivés avant lui : ils attendent son inscription
   let known = false;           // le contexte (ou un événement) est arrivé
@@ -121,8 +130,8 @@ const GfsLink = (function () {
     return { edge: BAR_EDGES[raw.bord], depth, zone };
   }
 
-  // Ce que GFS donne (contexte ou événement `extensions`) : une liste d'identifiants, des sources, l'adresse du widget, l'ouverture demandée, la langue, l'espace de l'app et la barre, rien d'autre n'est gardé. L'événement
-  // `extensions` n'a ni adresse, ni ouverture, ni langue, ni espace, ni barre : il ne les efface pas. La langue du contexte (`fr` ou `en`) fait foi à chaque appel `contexte` ; elle est gardée sans rappeler personne
+  // Ce que GFS donne (contexte ou événement `extensions`) : une liste d'identifiants, des sources, l'adresse du widget, l'ouverture demandée, la langue, l'espace de l'app, la barre et l'ambiance, rien d'autre n'est gardé. L'événement
+  // `extensions` n'a ni adresse, ni ouverture, ni langue, ni espace, ni barre, ni ambiance : il ne les efface pas. La langue du contexte (`fr` ou `en`) fait foi à chaque appel `contexte` ; elle est gardée sans rappeler personne
   // (applyLanguage rappelle ceux qui suivent l'événement `langue`). Il en va de même de la barre : celle du contexte est gardée sans rappeler personne (le départ lit `bar()`), applyBar rappelle ceux qui suivent
   // l'événement `barre`.
   function apply(data) {
@@ -132,6 +141,7 @@ const GfsLink = (function () {
     if (data.langue === 'fr' || data.langue === 'en') language = data.langue;
     if ('stockage' in data) storage = normalizeStorage(data.stockage);
     if ('barre' in data) bar = normalizeBar(data.barre);
+    if ('ambiance' in data) setAmbiance(data.ambiance);
     const nextExtensions = (Array.isArray(data.extensions) ? data.extensions : []).filter(id => typeof id === 'string' && ID_PATTERN.test(id));
     const nextLibraries = new Map();
     const given = data.bibliotheques && typeof data.bibliotheques === 'object' ? data.bibliotheques : {};
@@ -180,6 +190,33 @@ const GfsLink = (function () {
     barListeners.forEach((fn) => { try { fn(getBar()); } catch (e) { console.warn('[GfsLink] abonné de la barre en échec', e); } });
   }
 
+  // L'ambiance du contexte ou de l'événement `ambiance` (contrats 5.2, point 10, consigne 041) : le message est gardé tel que GFS l'a dit puis lu par `normalizeAmbiance` du kit, qui ne retient que les jetons que l'app
+  // connaît et des valeurs vérifiées (une couleur `#rrggbb`, une forme sans `;`, `{`, `}`, `url(` ni `@import`) et rend null pour tout ce qui n'est pas un message d'ambiance. Les abonnés de `onAmbiance` sont rappelés
+  // (`fn(ambiance())`) quand le message lu change vraiment, au contexte comme à l'événement ; un message qui, lu, donne le même résultat que le précédent ne rappelle personne. Tant que le lecteur du kit n'est
+  // pas là, rien n'est lu (null) : il relit alors le dernier message dès son arrivée.
+  function setAmbiance(raw) {
+    ambianceRaw = raw === undefined ? null : raw;
+    const next = readAmbiance === null ? null : readAmbiance(ambianceRaw);
+    if (JSON.stringify(next) === JSON.stringify(ambiance)) return;
+    ambiance = next;
+    ambianceListeners.forEach((fn) => { try { fn(getAmbiance()); } catch (e) { console.warn('[GfsLink] abonné de l\'ambiance en échec', e); } });
+  }
+
+  // L'événement `ambiance` : `{ ambiance }`, le message ou null. Un événement sans `ambiance` ne dit rien et ne change rien.
+  function applyAmbiance(data) {
+    known = true;
+    if (!data || typeof data !== 'object' || !('ambiance' in data)) return;
+    setAmbiance(data.ambiance);
+  }
+
+  // Le lecteur du kit : kit/js/ambiance-message.js par la carte d'importation de index.html, une seule adresse (le kit le demande). Seule l'app hébergée le charge, dès le départ et en même temps que le contexte se
+  // demande ; seule, rien n'est téléchargé. Un module qui ne se charge pas (le dépôt de l'app sans son kit, un réseau qui le coupe) ne casse rien : l'app garde ses couleurs et le dit une fois dans la console.
+  const ambianceReader = !hosted ? Promise.resolve() : import('kit/ambiance-message').then((module) => {
+    if (typeof module.normalizeAmbiance !== 'function') throw new TypeError('normalizeAmbiance manque au module');
+    readAmbiance = module.normalizeAmbiance;
+    setAmbiance(ambianceRaw);
+  }).catch(e => console.warn('[GfsLink] le lecteur d\'ambiance du kit ne se charge pas : l\'app garde ses couleurs', e));
+
   function onMessage(event) {
     if (event.source !== window.parent) return;
     const message = event.data;
@@ -193,6 +230,7 @@ const GfsLink = (function () {
     else if (message.type === 'evenement' && message.nom === 'langue') applyLanguage(message.data);
     else if (message.type === 'evenement' && message.nom === 'barre') applyBar(message.data);
     else if (message.type === 'evenement' && message.nom === 'reglages') applySettings(message.data);
+    else if (message.type === 'evenement' && message.nom === 'ambiance') applyAmbiance(message.data);
     else if (message.type === 'appel') receiveCall(message);
   }
 
@@ -262,10 +300,16 @@ const GfsLink = (function () {
     try { window.parent.postMessage({ gfs: CONTRACT, type: 'appel', nom: 'barre.masquer', args: { masquee: masked } }, '*'); } catch (e) { return false; }
     return true;
   }
+  // L'ambiance que la personne a choisie pour GFS et ses apps (consigne 041) : celle du contexte, puis celle du dernier événement `ambiance`, lue par le kit : { id, couleur, ajustee, clair, sombre, forme } (voir
+  // setAmbiance), une copie que l'appelant peut garder. null seul, si GFS ne répond pas ou ne la donne pas (un GFS d'avant la consigne 041), quand rien n'est choisi, ou quand le lecteur du kit ne s'est pas chargé.
+  function getAmbiance() { return ambiance === null ? null : JSON.parse(JSON.stringify(ambiance)); }
   // Un abonné est rappelé à chaque changement des extensions actives ou de leurs sources, et une fois quand le contexte arrive. Rend de quoi se désabonner.
   function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
   // Un abonné de la barre est rappelé (`fn(bar)`, ce que rend `bar()`) à chaque événement `barre` qui change l'état, jamais à l'arrivée du contexte : le départ lit `bar()`. Rend de quoi se désabonner.
   function onBar(fn) { barListeners.add(fn); return () => barListeners.delete(fn); }
+  // Un abonné de l'ambiance est rappelé (`fn(ambiance())`) à chaque changement du message lu : au contexte quand il en porte un, à chaque événement `ambiance` qui change l'état, et quand le lecteur du kit arrive après
+  // eux. Rend de quoi se désabonner.
+  function onAmbiance(fn) { ambianceListeners.add(fn); return () => ambianceListeners.delete(fn); }
   // Un abonné de la langue est rappelé (`fn('fr' | 'en')`) à chaque événement `langue` qui change celle de GFS, jamais à l'arrivée du contexte : le départ lit `language()`. Rend de quoi se désabonner.
   function onLanguage(fn) { languageListeners.add(fn); return () => languageListeners.delete(fn); }
   // Un abonné des réglages est rappelé (`fn(true | false)`, ce que rend `settingsSaved()`) à chaque événement `reglages` qui change l'état, jamais à l'arrivée du contexte (il n'en porte pas) : le départ lit
@@ -293,8 +337,10 @@ const GfsLink = (function () {
 
   if (hosted) {
     window.addEventListener('message', onMessage);
-    call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(settleReady);
+    // `ready` attend aussi le lecteur du kit (1,5 seconde au plus) quand le contexte porte une ambiance : elle est lue avant que l'app ne s'affiche. Sans ambiance, rien à attendre.
+    const readerIfNeeded = () => (ambianceRaw !== null && readAmbiance === null ? Promise.race([ambianceReader, new Promise(resolve => setTimeout(resolve, AMBIANCE_WAIT_MS))]) : undefined);
+    call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(readerIfNeeded).then(settleReady);
   } else settleReady();
 
-  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, onChange, onLanguage, onSettings, onBar, onOpen, install };
+  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, onChange, onLanguage, onSettings, onBar, onAmbiance, onOpen, install };
 })();

@@ -30,6 +30,9 @@
 //   pour un cadre de cette taille (34 × 124 px à 4 px du bord, centrée sur lui, 4 px de marge autour : la zone fait 42 × 132 px), celle que donne la consigne 026 pour la barre à quatre boutons (700 × 400, gauche : x 0, y 134).
 //   window.__gfsStub.setReglages(enregistres) : l'événement `reglages` (contrats 5.2 point 2, consigne 039), que GFS envoie après chaque écriture des réglages de la vue de l'app : `enregistres: true`, le réglage est dans
 //   la vue ; `false`, il est resté un brouillon de Grist. Le contexte n'en porte pas : avant le premier appel, l'app ne sait rien.
+//   window.__gfsStub.ambiance : le message d'ambiance que rend le contexte (contrats 5.2 point 10, consigne 041) : `{ id, couleur, ajustee, clair, sombre, forme }` (dix-neuf jetons de couleur par mode, la forme en textes de CSS), null : rien n'est choisi
+//   (Grist Factory sans couleur), ou undefined : un GFS d'avant la consigne 041 (par défaut), dont le contexte n'a pas d'`ambiance` et qui n'envoie aucun événement. Réglée avant le chargement de la page, comme `barre` ; setAmbiance(message)
+//   la change et envoie l'événement `ambiance` `{ ambiance }`, UNE seule fois par geste, et rien quand le message ne change pas, comme GFS. dev-tests/fixtures/ambiances-gfs.json porte de vrais messages, produits par le moteur d'ambiances de GFS.
 //   window.__gfsStub.ouvrir(args) : l'appel `ouvrir` de GFS vers l'app déjà ouverte (contrats 5.4) ; la promesse rend la réponse ou l'erreur de l'app. call(nom, args) : un appel de GFS de ce nom.
 //   window.__gfsStub.answers : tout ce que l'app répond aux appels de GFS ({ type, id, data | code, message }), dans l'ordre.
 //   window.__gfsStubParent = 'nom' (posé avant ce script) : le stub est chargé par la page PARENTE d'un <iframe name="nom"> qui porte l'app dans un cadre isolé (dev-tests/verify-gfs-frame.mjs) et joue
@@ -62,6 +65,7 @@
     stockage: null,
     refus: [],
     barre: undefined,
+    ambiance: undefined,
     masquee: false,
     refusBarre: [],
     ignoreContext: false,
@@ -88,6 +92,7 @@
       if (stub.langue) data.langue = stub.langue;
       if (stub.stockage) data.stockage = Object.assign({}, stub.stockage);
       if (stub.barre !== undefined) data.barre = stub.shownBar();
+      if (stub.ambiance !== undefined) data.ambiance = JSON.parse(JSON.stringify(stub.ambiance));
       return data;
     },
     // La barre que GFS montre à l'app : null quand il n'y en a pas (explorateur ouvert) ou que l'app l'a masquée.
@@ -166,6 +171,12 @@
     },
     // L'événement `reglages` : GFS dit où en sont les réglages de la vue que l'app vient d'écrire (voir l'en-tête). Envoyé tel quel, même quand l'état ne change pas : c'est l'app qui compare.
     setReglages(enregistres) { stub.post({ type: 'evenement', nom: 'reglages', data: { enregistres } }); },
+    // L'événement `ambiance` : la personne change l'ambiance ou la couleur de GFS (un seul choix pour GFS et toutes ses apps). Un seul événement par geste, et aucun quand le message ne change pas, comme GFS.
+    setAmbiance(next) {
+      if (JSON.stringify(next) === JSON.stringify(stub.ambiance)) return;
+      stub.ambiance = next === undefined ? undefined : JSON.parse(JSON.stringify(next));
+      stub.post({ type: 'evenement', nom: 'ambiance', data: { ambiance: next === undefined ? null : JSON.parse(JSON.stringify(next)) } });
+    },
   };
   // Ce que l'app écrit à son parent : ses appels (contrats 5.1) et ses réponses aux appels de GFS.
   function fromApp(message) {
