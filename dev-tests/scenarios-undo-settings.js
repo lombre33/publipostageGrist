@@ -1500,9 +1500,9 @@ window.EditorTestSuites.undoSettings = (function () {
   // la table et la colonne email d'un réglage pas encore complet ne sont pas enregistrées et ne laissent pas de pas ; défaire ou rétablir écrit l'option comme le choix de l'onglet, recalcule les droits, et reste verrouillé
   // comme l'onglet (une personne en lecture seule ne se déverrouille pas par Ctrl + Z).
   const RIGHTS = { table: 'UaDroits', other: 'UaDroitsBis', email: 'ana@exemple.fr' };
-  const ACCESS_KEY = 'droitsAcces';
+  const ACCESS_OPTION = 'droitsAcces';
   const ACCESS_IDS = { table: 'settings-access-table', email: 'settings-access-email', readOnly: 'settings-access-readonly', exportCol: 'settings-access-export', comments: 'settings-access-comments' };
-  const accessOption = () => optionOf(ACCESS_KEY);
+  const accessOption = () => optionOf(ACCESS_OPTION);
   // La configuration que l'onglet écrit (js/access-rights.js:normalizeConfig) ; les colonnes non choisies valent ''.
   const accessConfig = (table, columns) => Object.assign({ source: 'personne', table, emailColumn: 'Email', readOnlyColumn: '', exportColumn: '', commentsColumn: '', cleanReading: false }, columns);
   const accessSaid = value => said(I18n.t('settings.tab.access'), value ? I18n.t('status.accessTable', { table: value.table }) : I18n.t('status.accessNone'));
@@ -1784,7 +1784,7 @@ window.EditorTestSuites.undoSettings = (function () {
           check(problems, 'Ctrl + Z après le « Retour » : le coin d\'état dit que le réglage a changé', [status(), statusClass() === 'error-msg'], [I18n.t('history.settingChanged'), true]);
           // Une autre personne enregistre la vue avec un autre réglage.
           const foreign = accessConfig(RIGHTS.other, { exportColumn: 'Sortie' });
-          stub().setWidgetOptions({ [ACCESS_KEY]: foreign });
+          stub().setWidgetOptions({ [ACCESS_OPTION]: foreign });
           await h.sleep(250);
           byId('status-msg').textContent = '';
           await undo(h);

@@ -41,9 +41,10 @@ async function textPdf(labels, sizes) {
   });
   return Buffer.from(await doc.save());
 }
+const OWNER_PASSWORD_SAMPLE = 'proprietaire'; // valeur d'exemple du PDF d'essai, rien d'autre
 function protectedPdf(password) {
   const printer = new PdfPrinter({ Helvetica: { normal: 'Helvetica', bold: 'Helvetica-Bold', italics: 'Helvetica-Oblique', bolditalics: 'Helvetica-BoldOblique' } });
-  const doc = printer.createPdfKitDocument({ defaultStyle: { font: 'Helvetica' }, userPassword: password, ownerPassword: 'proprietaire', content: ['Texte protégé : bonjour', { text: 'page deux', pageBreak: 'before' }] });
+  const doc = printer.createPdfKitDocument({ defaultStyle: { font: 'Helvetica' }, userPassword: password, ownerPassword: OWNER_PASSWORD_SAMPLE, content: ['Texte protégé : bonjour', { text: 'page deux', pageBreak: 'before' }] });
   return new Promise((resolve) => { const chunks = []; doc.on('data', c => chunks.push(c)); doc.on('end', () => resolve(Buffer.concat(chunks))); doc.end(); });
 }
 const THREE = ['Bonjour, première page : à très bientôt', 'Deuxième page — élèves', 'Troisième page'];
