@@ -241,6 +241,12 @@ hébergée sur GitHub Pages, sans backend ni étape de build.
 
 Ouvert seul dans un onglet du navigateur, le widget ne fonctionne pas : il le dit et rappelle ces étapes.
 
+**Garder la bêta** : si un ancien modèle ne se rouvre pas bien dans la V1, la bêta 1.0.0-beta.1 reste
+servie, telle quelle et sans correctif, à `https://grist-factory.github.io/Publipostage-Plus/beta/` (dans
+Grist, changez l'adresse du widget personnalisé). Le retour est sûr tant que le modèle n'a pas été
+enregistré avec la V1 : la bêta efface ce qu'elle ne connaît pas (signets, exposants et indices, « Sinon
+afficher »). Elle ne reçoit plus de mise à jour.
+
 **Premiers pas** : ouvrez le menu « Nouveau modèle » puis « Nouveau document » (ou « Créer à partir
 d'un modèle… » pour partir de la galerie), écrivez le texte et tapez `#` pour insérer une variable.
 Passez en mode lecture pour voir le document rempli avec la ligne sélectionnée, puis exportez-le.
@@ -716,6 +722,12 @@ GitHub Pages, with no backend and no build step.
    version.
 
 Opened alone in a browser tab, the widget does not work: it says so and recalls these steps.
+
+**Keeping the beta**: if an old template does not reopen well in the V1, the 1.0.0-beta.1 beta is still
+served, as it was and without fixes, at `https://grist-factory.github.io/Publipostage-Plus/beta/` (in Grist,
+change the address of the custom widget). Going back is safe as long as the template has not been saved with
+the V1: the beta erases what it does not know (bookmarks, superscripts and subscripts, "Otherwise show"). It
+no longer receives updates.
 
 **Getting started**: open the "New template" menu then "New document" (or "Create from a template…" to
 start from the gallery), write the text and type `#` to insert a variable. Switch to reading mode to
