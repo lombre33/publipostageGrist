@@ -699,14 +699,14 @@ const allSecond = await allInfo();
 check('« Toute la table » : le choix change l’aperçu (« Toute la table VcDossiers : 2 lignes ») et tient dans la fenêtre',
   allSecond.scope === 'table' && /Toute la table « VcDossiers » : 2 lignes/.test(allSecond.lines[0] || '') && allSecond.fits && allSecond.inside, allSecond);
 await page.evaluate(() => I18n.setLang('en'));
-await page.evaluate(() => { VariableLoop.open(EditorCore.getEditor(), (() => { let at = 0; EditorCore.getEditor().state.doc.descendants((n, pos) => { if (n.type.name === 'varBadge' && n.attrs.column === 'Titre') at = pos; }); return at; })()); });
+await page.evaluate(() => { VariableLoop.openAt(EditorCore.getEditor(), (() => { let at = 0; EditorCore.getEditor().state.doc.descendants((n, pos) => { if (n.type.name === 'varBadge' && n.attrs.column === 'Titre') at = pos; }); return at; })()); });
 await page.waitForTimeout(700);
 const allEnglish = await allInfo();
 check('en anglais : la phrase et la liste sont traduites, entières et dans le panneau', allEnglish.text === 'Rows of “VcDossiers”:' && /^As the widget/.test(allEnglish.shown) && allEnglish.fits && allEnglish.inside
   && /^Widget “VcDossiers”: 2 of 2 rows\./.test(allEnglish.lines[0] || ''), allEnglish);
 await page.evaluate(() => I18n.setLang('fr'));
 await page.waitForTimeout(200);
-await page.evaluate(() => VariableLoop.open(EditorCore.getEditor(), (() => { let at = 0; EditorCore.getEditor().state.doc.descendants((n, pos) => { if (n.type.name === 'varBadge' && n.attrs.column === 'Titre') at = pos; }); return at; })()));
+await page.evaluate(() => VariableLoop.openAt(EditorCore.getEditor(), (() => { let at = 0; EditorCore.getEditor().state.doc.descendants((n, pos) => { if (n.type.name === 'varBadge' && n.attrs.column === 'Titre') at = pos; }); return at; })()));
 await page.waitForTimeout(700);
 await page.selectOption('#var-loop-modal #var-loop-scope', 'table');
 await page.waitForTimeout(400);
@@ -939,7 +939,7 @@ await page.waitForTimeout(300);
 const rnRow = await rnInfo();
 check('un vrai clic sur « La ligne du tableau » retire la note', rnRow.repeat === 'row' && !rnRow.shown, rnRow);
 await page.evaluate(() => I18n.setLang('en'));
-await page.evaluate(() => VariableLoop.open(EditorCore.getEditor(), (() => { let at = 0; EditorCore.getEditor().state.doc.descendants((n, pos) => { if (n.type.name === 'varBadge' && n.attrs.column === 'Titre') at = pos; }); return at; })()));
+await page.evaluate(() => VariableLoop.openAt(EditorCore.getEditor(), (() => { let at = 0; EditorCore.getEditor().state.doc.descendants((n, pos) => { if (n.type.name === 'varBadge' && n.attrs.column === 'Titre') at = pos; }); return at; })()));
 await page.waitForTimeout(700);
 const rnEnButton = await revealInLoopWindow(LOOP_REPEAT_BUTTON('inline'));
 if (rnEnButton.found) await page.mouse.click(rnEnButton.x, rnEnButton.y);

@@ -263,7 +263,7 @@ const VariableLoop = (function () {
   function openRow(editor) {
     const row = rowStatus(editor);
     if (!row.enabled) return false;
-    open(editor, row.pos, { repeat: 'row' });
+    openAt(editor, row.pos, { repeat: 'row' });
     return isOpen();
   }
 
@@ -902,7 +902,7 @@ const VariableLoop = (function () {
 
   // `pos` : position de la bulle dans le document, capturée au clic sur l'icône (la sélection de l'éditeur est une NodeSelection sur elle).
   // `options.inlineOnly` : la bulle d'un champ texte, cf. placeOf. `options.repeat` : le choix « Ce qui se répète » demandé, cf. repeatFor.
-  function open(editor, pos, options) {
+  function openAt(editor, pos, options) {
     const node = editor && editor.state.doc.nodeAt(pos);
     if (!node || node.type.name !== 'varBadge') return;
     const found = sourcesAt(editor.state, pos, node);
@@ -953,5 +953,5 @@ const VariableLoop = (function () {
     if (probing) probeLinkedView(state);
   }
 
-  return { open, isOpen, status, rowStatus, openRow, loopTablesAt, setContext, zonesAt, nestableAt, nestableInFedZoneAt, feedsAt };
+  return { openAt, isOpen, status, rowStatus, openRow, loopTablesAt, setContext, zonesAt, nestableAt, nestableInFedZoneAt, feedsAt };
 })();

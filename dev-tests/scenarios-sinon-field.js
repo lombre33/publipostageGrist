@@ -88,7 +88,7 @@
   // Le `data-otherwise` du premier nœud conditionnel du HTML enregistré, relu par un vrai analyseur.
   const writtenOtherwise = () => { const el = new DOMParser().parseFromString(Editor.getHTML(), 'text/html').querySelector('.conditional-value, .conditional-text'); return el ? el.getAttribute('data-otherwise') : undefined; };
   async function openWindow(h, type) {
-    VariableCondition.open(ed(), nodeAt(type));
+    VariableCondition.openAt(ed(), nodeAt(type));
     await h.sleep(120);
     return conditionModal();
   }
@@ -123,7 +123,7 @@
   const bubblePositions = () => { const found = []; ed().state.doc.descendants((node, pos) => { if (node.type.name === 'varBadge') found.push(pos); }); return found; };
   const bubbleNode = index => ed().state.doc.nodeAt(bubblePositions()[index || 0]);
   async function openBubble(h, index) {
-    VariableCondition.open(ed(), bubblePositions()[index || 0]);
+    VariableCondition.openAt(ed(), bubblePositions()[index || 0]);
     await h.sleep(120);
     return conditionModal();
   }

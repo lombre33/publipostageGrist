@@ -82,7 +82,7 @@ const PdfReading = (function () {
       host.say(I18n.t('pdf.status.loadFailed'), true);
       return false;
     }
-    const result = await PdfEngine.open(lecture.fichier, { askPassword: again => askPassword(name, again) });
+    const result = await PdfEngine.openFile(lecture.fichier, { askPassword: again => askPassword(name, again) });
     if (!result.ok) { host.say(I18n.t('pdf.status.' + result.reason, { name }), true); return false; }
     // Le PDF est lu : le modèle ouvert se quitte maintenant (pas avant : un PDF refusé ne coûte rien). Un PDF déjà à l'écran n'a plus de modèle derrière lui.
     if (!current && !(await host.leave())) { result.doc.destroy(); host.say(''); return false; }

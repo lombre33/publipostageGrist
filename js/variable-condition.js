@@ -542,7 +542,7 @@ const VariableCondition = (function () {
 
     // `pos` : position de la bulle, du bloc, de la valeur ou de la case dans le document, capturée au clic sur l'icône (la sélection de l'éditeur est
     // une NodeSelection sur elle).
-    function open(editor, pos) {
+    function openAt(editor, pos) {
       const node = editor && editor.state.doc.nodeAt(pos);
       if (!node || !TEXTS[node.type.name]) return;
       ensureModal();
@@ -598,7 +598,7 @@ const VariableCondition = (function () {
     // Vrai quand `editor` est celui d'un champ « Sinon afficher » de cette fenêtre : la condition d'une variable qu'on y tape s'ouvre dans la fenêtre d'après.
     const owns = editor => !!refs && Object.values(refs.textOtherwise).some(free => free.mounted && FieldEditor.of(free.input) === editor);
 
-    return { open, isOpen, owns, syncClipboard: syncClipboardButtons };
+    return { openAt, isOpen, owns, syncClipboard: syncClipboardButtons };
   }
 
   const windows = [];
@@ -606,8 +606,8 @@ const VariableCondition = (function () {
 
   // `pos` : position de la bulle, du bloc, de la valeur ou de la case dans le document, capturée au clic sur l'icône (la sélection de l'éditeur est une NodeSelection sur elle).
   // Un nœud qui est dans le champ « Sinon afficher » d'une fenêtre s'ouvre dans la fenêtre d'après, au-dessus.
-  function open(editor, pos) {
-    windowAt(windows.findIndex(w => w && w.owns(editor)) + 1).open(editor, pos);
+  function openAt(editor, pos) {
+    windowAt(windows.findIndex(w => w && w.owns(editor)) + 1).openAt(editor, pos);
   }
   // Une fenêtre de condition est ouverte ; `fromLevel` 1 : une fenêtre ouverte par-dessus une autre (celle d'une variable du « Sinon afficher » d'une fenêtre).
   const isOpen = fromLevel => windows.some((w, level) => w && level >= (fromLevel || 0) && w.isOpen());
@@ -616,5 +616,5 @@ const VariableCondition = (function () {
     windows.forEach(w => w && w.syncClipboard());
   }
 
-  return { open, isOpen, clearClipboard, describe: conditionSummary };
+  return { openAt, isOpen, clearClipboard, describe: conditionSummary };
 })();

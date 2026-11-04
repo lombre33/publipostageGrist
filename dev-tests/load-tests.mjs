@@ -658,7 +658,7 @@ const OPEN_CONDITION = `
   let pos = -1;
   ed.state.doc.descendants((node, p) => { if (pos < 0 && node.type.name === 'varBadge') pos = p; });
   const t0 = performance.now();
-  VariableCondition.open(ed, pos);
+  VariableCondition.openAt(ed, pos);
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   const sel = document.querySelector('.macro-rule-column');
   return { ms: performance.now() - t0, options: sel ? sel.options.length : -1, values: sel ? Array.from(sel.options).map(o => o.value).slice(0, 3) : [] };`;

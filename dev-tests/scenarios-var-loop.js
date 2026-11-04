@@ -1670,7 +1670,7 @@
     },
   });
 
-  // `VariableLoop.open` (js/variable-loop.js) : rien à ouvrir sans bulle ni source ; une boucle déplacée reprend le premier choix permis de son nouvel endroit.
+  // `VariableLoop.openAt` (js/variable-loop.js) : rien à ouvrir sans bulle ni source ; une boucle déplacée reprend le premier choix permis de son nouvel endroit.
   cases.push({
     id: 'loop_window_does_not_open_without_a_variable_or_a_source_and_a_moved_loop_takes_the_first_choice_of_its_place',
     description: 'Ouvrir la fenêtre Boucle sans éditeur, sur du texte, ou sur une variable qui ne trouve plus sa colonne (aucune ligne à parcourir) : rien ne s’ouvre ; une boucle « ligne du tableau » posée hors d’un tableau rouvre sur « Dans la phrase », avec les choix de « Si aucune ligne » de cette zone',
@@ -1682,8 +1682,8 @@
       const page = found.find(b => b.node.attrs.key === 'LpFactures.Disparue');
       const moved = found.find(b => b.node.attrs.key === 'LpLignes.Designation');
       const attempts = [[null, 0], [ed, 1], [ed, page.pos]];
-      const opened = attempts.map(([editor, pos]) => { VariableLoop.open(editor, pos); return VariableLoop.isOpen() || (!!modal() && visible(modal())); });
-      VariableLoop.open(ed, moved.pos);
+      const opened = attempts.map(([editor, pos]) => { VariableLoop.openAt(editor, pos); return VariableLoop.isOpen() || (!!modal() && visible(modal())); });
+      VariableLoop.openAt(ed, moved.pos);
       await h.sleep(300);
       const m = modal();
       const observed = {
@@ -1721,7 +1721,7 @@
       const notes = {};
       for (const [name, label] of [['cancel', I18n.t('common.cancel')], ['save', I18n.t('common.save')], ['cancelAgain', I18n.t('common.cancel')]]) {
         await selectBadge(h, 'LpParticipants.NomComplet');
-        VariableLoop.open(ed, badgeNodes(ed)[0].pos);
+        VariableLoop.openAt(ed, badgeNodes(ed)[0].pos);
         await h.sleep(300);
         const opened = VariableLoop.isOpen() && visible(modal());
         document.activeElement.blur();
@@ -1848,7 +1848,7 @@
       const flatOr = (await preview(withFilter({ mode: 'any', rules: [expected.rules[0], ...expected.rules[1].rules] }), GristAPI.getCurrentRecord())).textContent;
       // Rouverte : l'encadré est là, avec ses valeurs ; sa croix le retire ; celle de la règle qui reste laisse « sans condition ».
       await selectBadge(h, 'LpParticipants.NomComplet');
-      VariableLoop.open(ed, savedNode().pos);
+      VariableLoop.openAt(ed, savedNode().pos);
       await h.sleep(300);
       const reopened = {
         boxes: filter.querySelectorAll('.cond-group').length, group: filter.querySelector('.cond-group-head select').value,

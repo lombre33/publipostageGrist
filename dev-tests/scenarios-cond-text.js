@@ -1799,7 +1799,7 @@
       await h.sleep(80);
       const elsewhere = {};
       for (const type of ['varBadge', 'conditionalValue', 'conditionalCheckbox']) {
-        VariableCondition.open(ed(), nodeAt(type));
+        VariableCondition.openAt(ed(), nodeAt(type));
         await h.sleep(80);
         const modal = conditionModal();
         const row = modal.querySelector('.var-condition-otherwise-area-row');

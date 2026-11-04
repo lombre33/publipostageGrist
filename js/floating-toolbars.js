@@ -1128,11 +1128,11 @@ const FloatingToolbars = (function () {
       // l'éditeur. Un bouton grisé (cf. syncVariableState) ne fait rien. « Autres attributs » : variable d'une autre table (déjà liée à l'insertion)
       // ou colonne Référence de la table de la page, règle tenue par js/variable-linked-attrs.js.
       const WINDOWS = {
-        'var-condition': (node, pos) => VariableCondition.open(editor, pos),
-        'var-linked': (node, pos) => { if (VariableLinkedAttrs.isAvailable(node.attrs)) VariableLinkedAttrs.open(editor, pos); },
-        'var-loop': (node, pos) => { if (VariableLoop.status(editor, pos, node).enabled && !loopWindowTaken()) VariableLoop.open(editor, pos, { inlineOnly: inField }); },
-        'var-list': (node, pos) => { if (VariableList.status(node).enabled) VariableList.open(editor, pos, { field: inField }); },
-        'var-column': (node, pos) => VariableColumn.open(editor, pos),
+        'var-condition': (node, pos) => VariableCondition.openAt(editor, pos),
+        'var-linked': (node, pos) => { if (VariableLinkedAttrs.isAvailable(node.attrs)) VariableLinkedAttrs.openAt(editor, pos); },
+        'var-loop': (node, pos) => { if (VariableLoop.status(editor, pos, node).enabled && !loopWindowTaken()) VariableLoop.openAt(editor, pos, { inlineOnly: inField }); },
+        'var-list': (node, pos) => { if (VariableList.status(node).enabled) VariableList.openAt(editor, pos, { field: inField }); },
+        'var-column': (node, pos) => VariableColumn.openAt(editor, pos),
       };
       function onVariableAction(action) {
         const t = variableTarget();
@@ -1491,7 +1491,7 @@ const FloatingToolbars = (function () {
     }
     function onAction(action) {
       const chip = selectedMention();
-      if (action === 'mention-linked' && chip && Mention.columnsStatus(chip.node.attrs).enabled) VariableLinkedAttrs.open(editor, chip.pos);
+      if (action === 'mention-linked' && chip && Mention.columnsStatus(chip.node.attrs).enabled) VariableLinkedAttrs.openAt(editor, chip.pos);
     }
     function wire() {
       const label = I18n.t('mention.toolbar.linked');
@@ -1667,7 +1667,7 @@ const FloatingToolbars = (function () {
       document.addEventListener('mouseup', () => {
         if (!state.pointerDown) return;
         state.pointerDown = false;
-        setTimeout(check, 0);
+        setTimeout(() => check(), 0);
       }, true);
     }
 

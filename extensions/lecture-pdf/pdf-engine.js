@@ -10,7 +10,7 @@
 //  - Limites connues de GFS : les polices standard, les CMap et le décodeur JPEG 2000 ne sont pas dans le fichier (un PDF qui en dépend s'affiche avec des polices de repli, ou sans l'image) ; un PDF scanné n'a pas
 //    de couche de texte. pdf.js 6 attend d'un navigateur les méthodes `getOrInsertComputed` de Map et de WeakMap : sans elles, il échoue à la première page - on le dit avant (`oldBrowser`) au lieu d'un
 //    écran blanc.
-//    PdfEngine.open(file, { askPassword(again) -> Promise<string | null> }) -> Promise<{ ok: true, doc } | { ok: false, reason }>
+//    PdfEngine.openFile(file, { askPassword(again) -> Promise<string | null> }) -> Promise<{ ok: true, doc } | { ok: false, reason }>
 //      reason : 'empty' (aucun octet), 'notPdf' (pas d'en-tête %PDF-), 'unreadable' (pdf.js le refuse, ou sa première page ne se lit pas), 'password' (un mot de passe demandé : la personne annule,
 //      ou ne trouve pas le bon), 'engine' (GFS ne donne pas pdf.js, ou ce qu'il donne n'en est pas), 'oldBrowser'.
 //      doc : { name, pageCount, getPage(n) -> Promise<page de pdf.js>, pdfjs (les exports de pdf.js : TextLayer...), destroy() -> Promise<void> }.
@@ -42,7 +42,7 @@ const PdfEngine = (function () {
 
   const modernEnough = () => typeof Map.prototype.getOrInsertComputed === 'function' && typeof WeakMap.prototype.getOrInsertComputed === 'function';
 
-  async function open(file, options) {
+  async function openFile(file, options) {
     if (!file || typeof file.arrayBuffer !== 'function') return fail('unreadable');
     if (!file.size) return fail('empty');
     let bytes;
@@ -85,5 +85,5 @@ const PdfEngine = (function () {
     };
   }
 
-  return { open, hasPdfHeader };
+  return { openFile, hasPdfHeader };
 })();

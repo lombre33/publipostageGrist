@@ -208,7 +208,7 @@ const VariableList = (function () {
   // `pos` : position de la bulle dans le document, capturée au clic sur l'icône (la sélection de l'éditeur est une NodeSelection sur elle).
   // `options.field` : la bulle d'un champ texte (Objet, À, Cc, Cci, nom du PDF) ; « Un document par valeur » n'y a pas d'objet - il se règle sur les
   // bulles du corps du modèle -, la case reste là, grisée et décochée.
-  function open(editor, pos, options) {
+  function openAt(editor, pos, options) {
     const node = editor && editor.state.doc.nodeAt(pos);
     if (!node || node.type.name !== 'varBadge' || !status(node).enabled) return;
     ensureModal();
@@ -249,5 +249,5 @@ const VariableList = (function () {
     updatePreview();
   }
 
-  return { open, isOpen, status };
+  return { openAt, isOpen, status };
 })();

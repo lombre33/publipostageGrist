@@ -969,7 +969,7 @@
           Editor.setHTML('<p>' + chip(ref.table, ref.row, 'NomComplet', 'Disparu') + '</p>');
           const found = mentionNodes(ed)[0];
           ed.commands.setNodeSelection(found.pos);
-          VariableLinkedAttrs.open(ed, found.pos);
+          VariableLinkedAttrs.openAt(ed, found.pos);
           await h.sleep(500);
           const modal = modalOf();
           return {

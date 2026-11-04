@@ -294,7 +294,7 @@ const ObjectsMenu = (function () {
     if (spec.picker) { (spec.id === 'slideView' ? SlideView : LinkedTable).openPicker(ed, flyout.querySelector('[data-action="' + spec.id + '"]'), true); return; }
     spec.place(ed, FreeFrame.slideStartOf(ed.state.doc, ed.state.selection.from));
     // La barre du cadre posé se montre une fois la transaction passée (js/editor-core.js ferme les barres flottantes au geste qui vient d'avoir lieu).
-    setTimeout(FreeFrame.syncToolbar, 0);
+    setTimeout(() => FreeFrame.syncToolbar(), 0);
     if (byKeyboard) ed.view.focus();
   }
 

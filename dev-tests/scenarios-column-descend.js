@@ -732,7 +732,7 @@
       const ed = EditorCore.getEditor();
       let pos = -1;
       ed.state.doc.descendants((node, at) => { if (node.type.name === 'varBadge' && pos < 0) pos = at; });
-      const opened = VariableColumn.open(ed, pos);
+      const opened = VariableColumn.openAt(ed, pos);
       await sleep(150);
       const panel = Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden);
       const wrap = panel && panel.closest('.ss-wrap');
@@ -995,7 +995,7 @@
       pickCancel().click();
       const answer = await asking;
       // La fenêtre d'une bulle, comme avant.
-      await VariableLinkedAttrs.open(ed, pos);
+      await VariableLinkedAttrs.openAt(ed, pos);
       await h.sleep(300);
       const bubble = {
         shown: pickShown(), title: pickTitle(), intro: pickModal().querySelector('.var-modal-intro').textContent, introHidden: pickModal().querySelector('.var-modal-intro').hidden, inputs: pickInputs(),

@@ -1,7 +1,7 @@
 // Suite "undoLinks" - Ctrl + Z, Ctrl + Y et les boutons Annuler / Rétablir rendent aussi les RÈGLES DE LIAISON entre tables (suite de scenarios-undo-library.js : demande du 22/10, « Il doit prendre en compte 100% des actions faites
 // dans le widget », et réponse du 27/10 « Oui, tout, Réglages compris »). Un lien est au document, pas dans un modèle : il se défait depuis n'importe quel modèle, par la pile de js/action-history.js, comme le ★ du document. Trois gestes
 // l'écrivent et passent par js/link-rule-history.js : 1) la fenêtre de la clé (#link-config-modal), ouverte à l'insertion d'une variable d'une autre table sans lien réglé (Variables.ensureLinkConfigured) ou par le crayon de « Tables
-// liées » (Variables.editLinkRule) ; 2) la corbeille de « Tables liées » ; 3) le lien posé d'office pour une colonne Référence de la page (VariableLinkedAttrs.open).
+// liées » (Variables.editLinkRule) ; 2) la corbeille de « Tables liées » ; 3) le lien posé d'office pour une colonne Référence de la page (VariableLinkedAttrs.openAt).
 //
 // Les attendus sont ceux de la personne qui défait : UN Ctrl + Z rend le lien tel qu'il était (aucun : il est retiré), UN Ctrl + Y le repose, dans l'ordre des gestes avec le texte ; le lien commun à toutes les tables et celui d'une table
 // de la page ne se mélangent jamais ; un lien changé depuis par quelqu'un d'autre n'est jamais écrasé, ni rendu à une table disparue ; un geste annulé, inchangé ou refusé ne laisse pas de pas. Le même parcours à la vraie souris dans le
@@ -346,7 +346,7 @@ window.EditorTestSuites.undoLinks = (function () {
         check(problems, 'la bulle est dans le modèle', pos > -1, true);
         reserve().reset();
         stub().clearActionLog();
-        await VariableLinkedAttrs.open(ed(), pos);
+        await VariableLinkedAttrs.openAt(ed(), pos);
         check(problems, 'le lien est posé d\'office, une action', [summary('UlAnnuaire'), linkWrites(), reserve().count()], [['UlDossiers|match|id|Responsable'], ['AddRecord'], 1]);
         VariableLinkedAttrs.close();
         await h.sleep(120);

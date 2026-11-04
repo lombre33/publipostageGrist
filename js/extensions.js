@@ -41,7 +41,7 @@ const Extensions = (function () {
     // posés par js/pdf-reading.js. La bibliothèque « pdfjs » - pdf.js et son moteur, en UN fichier de forme « module » - vient de GFS seul, sans mode CDN : rien n'est à ajouter à la CSP ni à la liste du widget.
     'lecture-pdf': {
       nameKey: 'extension.lecturePdf.name',
-      version: '0.4',
+      version: '0.5',
       scripts: ['pdf-engine.js', 'pdf-anchor.js', 'pdf-view.js', 'pdf-comments.js'],
       styles: ['pdf-view.css'],
       libraries: [{ id: 'pdfjs', forme: 'module' }],

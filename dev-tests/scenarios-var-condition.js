@@ -1553,7 +1553,7 @@
       for (const type of order) {
         const target = found.find(f => f.type === type);
         if (!target) { states.push({ type, missing: true }); continue; }
-        VariableCondition.open(ed, target.pos);
+        VariableCondition.openAt(ed, target.pos);
         await h.sleep(60);
         const modal = conditionModal();
         const row = modal.querySelector('.var-condition-affix');
@@ -2358,7 +2358,7 @@
       ed.state.doc.descendants((node, pos) => { if (['conditionalText', 'conditionalValue', 'conditionalCheckbox'].includes(node.type.name)) targets.push({ type: node.type.name, pos }); });
       const others = [];
       for (const target of targets) {
-        VariableCondition.open(ed, target.pos);
+        VariableCondition.openAt(ed, target.pos);
         await h.sleep(60);
         const other = conditionModal();
         others.push({ type: target.type, rows: visibleOtherwiseFields(other) });
@@ -2805,7 +2805,7 @@
         let pos = null;
         ed.state.doc.descendants((node, p) => { if (pos == null && (node.type.name === 'conditionalText' || node.type.name === 'conditionalCheckbox')) pos = p; });
         if (pos == null) { (type === 'block' ? (block = { missing: true }) : (checkbox = { missing: true })); continue; }
-        VariableCondition.open(ed, pos);
+        VariableCondition.openAt(ed, pos);
         await h.sleep(100);
         const modal = conditionModal();
         const before = connectorViews(modal);
@@ -3093,7 +3093,7 @@
       bed.state.doc.descendants((node, p) => { if (pos == null && node.type.name === 'conditionalText') pos = p; });
       let block = null;
       if (pos != null) {
-        VariableCondition.open(bed, pos);
+        VariableCondition.openAt(bed, pos);
         await h.sleep(100);
         const bm = conditionModal();
         addGroupButton(bm).click();

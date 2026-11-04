@@ -1491,7 +1491,7 @@
       const shownRows = (win, selector) => Array.from(win.querySelectorAll(selector)).filter(r => !r.hidden && r.getClientRects().length > 0);
       const rows = {};
       for (const type of ['varBadge', 'conditionalText', 'conditionalCheckbox']) {
-        VariableCondition.open(ed(), nodeAt(type));
+        VariableCondition.openAt(ed(), nodeAt(type));
         await h.sleep(80);
         const modal = conditionModal();
         rows[type] = {

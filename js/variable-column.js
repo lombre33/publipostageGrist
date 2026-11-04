@@ -107,7 +107,7 @@ const VariableColumn = (function () {
 
   // `pos` : position de la bulle, capturée au clic sur l'icône de la barre flottante. Rend faux quand la liste ne s'ouvre pas (bulle introuvable,
   // aucune colonne, composant indisponible).
-  function open(editor, pos) {
+  function openAt(editor, pos) {
     const node = editor && editor.state.doc.nodeAt(pos);
     if (!node || node.type.name !== 'varBadge' || isOpen()) return false;
     const choices = candidates(editor);
@@ -152,5 +152,5 @@ const VariableColumn = (function () {
     }
   }
 
-  return { open, isBroken, isUnlinkedAt, replacementAttrs, ensureLinked };
+  return { openAt, isBroken, isUnlinkedAt, replacementAttrs, ensureLinked };
 })();

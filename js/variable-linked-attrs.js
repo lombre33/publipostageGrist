@@ -572,7 +572,7 @@ const VariableLinkedAttrs = (function () {
   }
 
   // `pos` : position de la bulle ou de la pastille « @ », capturée au clic sur l'icône de sa barre flottante.
-  async function open(editor, pos) {
+  async function openAt(editor, pos) {
     const node = editor && editor.state.doc.nodeAt(pos);
     if (node && node.type.name === 'mention') {
       if (opening || state || !Mention.columnsStatus(node.attrs).enabled) return;
@@ -638,5 +638,5 @@ const VariableLinkedAttrs = (function () {
     });
   }
 
-  return { open, pickColumn, close, isOpen, isAvailable };
+  return { openAt, pickColumn, close, isOpen, isAvailable };
 })();
