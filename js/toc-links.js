@@ -28,18 +28,18 @@ const TocLinks = (function () {
   // pose le curseur). `focusable` : un arrêt de Tab et Entrée ou Espace pour la suivre (la Lecture ; pas l'éditeur, où Tab indente le texte).
   function link(text, find, options) {
     const { focusable, onGo } = options || {};
-    const a = Dom.el('a', 'toc-link', text);
-    a.setAttribute('role', 'link');
-    if (focusable) a.tabIndex = 0;
+    const link = Dom.el('a', 'toc-link', text);
+    link.setAttribute('role', 'link');
+    if (focusable) link.tabIndex = 0;
     const go = () => {
       const heading = find();
       if (!heading || !heading.isConnected) return;
       reveal(heading);
       if (onGo) onGo(heading);
     };
-    a.addEventListener('click', event => { event.preventDefault(); go(); });
-    if (focusable) a.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); go(); } });
-    return a;
+    link.addEventListener('click', event => { event.preventDefault(); go(); });
+    if (focusable) link.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); go(); } });
+    return link;
   }
 
   return { link, reveal };

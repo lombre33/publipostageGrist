@@ -3819,7 +3819,7 @@ const I18n = (function () {
     return out;
   }
 
-  function t(key, vars) {
+  function translate(key, vars) {
     const entry = STRINGS[key];
     if (!entry) { console.warn('[I18n] clé inconnue :', key); return key; }
     if (!entry[lang]) console.warn('[I18n] traduction "' + lang + '" manquante pour "' + key + '" (repli FR).');
@@ -3850,10 +3850,10 @@ const I18n = (function () {
   // Traduit la page statique : les 4 variantes d'attribut de traduction déclarative - le texte français d'origine reste en dur dans le HTML comme repli si
   // ce fichier n'a pas encore chargé.
   function applyTranslations() {
-    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
-    document.querySelectorAll('[data-i18n-tip]').forEach(el => { el.setAttribute('data-tip', t(el.getAttribute('data-i18n-tip'))); });
-    document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria'))); });
-    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.setAttribute('placeholder', t(el.getAttribute('data-i18n-placeholder'))); });
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = translate(el.getAttribute('data-i18n')); });
+    document.querySelectorAll('[data-i18n-tip]').forEach(el => { el.setAttribute('data-tip', translate(el.getAttribute('data-i18n-tip'))); });
+    document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', translate(el.getAttribute('data-i18n-aria'))); });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.setAttribute('placeholder', translate(el.getAttribute('data-i18n-placeholder'))); });
   }
 
   // Appliqué une seule fois, au chargement : ce script est placé après tout le HTML du bandeau/des modales (les <script> sont en fin de <body>), donc le DOM
@@ -3861,5 +3861,5 @@ const I18n = (function () {
   document.documentElement.lang = lang;
   applyTranslations();
 
-  return { t, has, getLang, setLang, storeLang };
+  return { t: translate, has, getLang, setLang, storeLang };
 })();

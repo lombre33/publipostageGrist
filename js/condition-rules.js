@@ -367,9 +367,9 @@ const ConditionRules = (function () {
   async function conditionHolds(condition, tableId, record, opts) {
     // Vrai si la variable doit s'afficher pour cette ligne : pas de condition = toujours ; 'all' = toutes les règles, 'any' = au moins une (un groupe compte
     // pour une seule, vraie ou fausse selon sa propre combinaison). Une règle illisible compte comme non remplie (comme pour les macro-modèles, cf. matches).
-    const c = normalizeCondition(condition);
-    if (!c) return true;
-    return itemsHold(c.mode, c.rules, tableId, record, opts);
+    const normalized = normalizeCondition(condition);
+    if (!normalized) return true;
+    return itemsHold(normalized.mode, normalized.rules, tableId, record, opts);
   }
 
   async function elementHolds(el, tableId, record, whenNone) {

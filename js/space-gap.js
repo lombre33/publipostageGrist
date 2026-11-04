@@ -85,14 +85,14 @@ const SpaceGap = (function () {
     for (;;) {
       const next = nextText(from, dir, root);
       if (!next.text) return { spans, stop: next.stop };
-      const data = next.text.data;
-      const found = (dir > 0 ? LEADING : TRAILING).exec(data);
-      if (!found) return { spans, stop: dir > 0 ? data[0] : data[data.length - 1] };
+      const text = next.text.data;
+      const found = (dir > 0 ? LEADING : TRAILING).exec(text);
+      if (!found) return { spans, stop: dir > 0 ? text[0] : text[text.length - 1] };
       const start = dir > 0 ? 0 : found.index;
-      const end = dir > 0 ? found[0].length : data.length;
+      const end = dir > 0 ? found[0].length : text.length;
       spans.push({ text: next.text, from: start, to: end });
-      if (dir > 0 && end < data.length) return { spans, stop: data[end] };
-      if (dir < 0 && start > 0) return { spans, stop: data[start - 1] };
+      if (dir > 0 && end < text.length) return { spans, stop: text[end] };
+      if (dir < 0 && start > 0) return { spans, stop: text[start - 1] };
       from = next.text;
     }
   }

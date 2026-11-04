@@ -130,15 +130,15 @@ const SchemaRenames = (function () {
   // from, to }], any }.
   function diff(saved, current) {
     const o = indexOf(saved);
-    const c = indexOf(current);
+    const currentIndex = indexOf(current);
     const tables = [];
     const columns = [];
     Object.keys(o.tableName).forEach(tRow => {
-      if (c.tableName[tRow] !== undefined && c.tableName[tRow] !== o.tableName[tRow]) tables.push({ from: o.tableName[tRow], to: c.tableName[tRow] });
+      if (currentIndex.tableName[tRow] !== undefined && currentIndex.tableName[tRow] !== o.tableName[tRow]) tables.push({ from: o.tableName[tRow], to: currentIndex.tableName[tRow] });
     });
     Object.keys(o.colName).forEach(cRow => {
-      if (c.colName[cRow] !== undefined && c.colTable[cRow] === o.colTable[cRow] && c.colName[cRow] !== o.colName[cRow]) {
-        columns.push({ table: c.tableName[c.colTable[cRow]], from: o.colName[cRow], to: c.colName[cRow] });
+      if (currentIndex.colName[cRow] !== undefined && currentIndex.colTable[cRow] === o.colTable[cRow] && currentIndex.colName[cRow] !== o.colName[cRow]) {
+        columns.push({ table: currentIndex.tableName[currentIndex.colTable[cRow]], from: o.colName[cRow], to: currentIndex.colName[cRow] });
       }
     });
     return { tables, columns, any: tables.length + columns.length > 0 };
@@ -188,16 +188,16 @@ const SchemaRenames = (function () {
   // encore lisible telle qu'elle est écrite, nom inconnu de l'instantané, table ou colonne supprimée.
   function createMapper(saved, current, refs) {
     const o = indexOf(saved);
-    const c = indexOf(current);
-    const refTargetRow = cRow => (refs[cRow] === undefined ? undefined : c.tableRow[refs[cRow]]);
+    const currentIndex = indexOf(current);
+    const refTargetRow = cRow => (refs[cRow] === undefined ? undefined : currentIndex.tableRow[refs[cRow]]);
 
     // La référence se lit-elle aujourd'hui, telle qu'elle est écrite ? Le chemin se descend de colonne Référence en colonne Référence.
     function validNow(table, path) {
-      let tRow = c.tableRow[table];
+      let tRow = currentIndex.tableRow[table];
       if (tRow === undefined) return false;
       const hops = String(path).split('.');
       for (let i = 0; i < hops.length; i++) {
-        const cRow = (c.colRow[tRow] || {})[hops[i]];
+        const cRow = (currentIndex.colRow[tRow] || {})[hops[i]];
         if (cRow === undefined) return false;
         if (i < hops.length - 1) {
           tRow = refTargetRow(cRow);
@@ -214,8 +214,8 @@ const SchemaRenames = (function () {
       const names = [];
       for (let i = 0; i < hops.length; i++) {
         const cRow = (o.colRow[tRow] || {})[hops[i]];
-        if (cRow === undefined || c.colTable[cRow] !== tRow) return null;
-        names.push(c.colName[cRow]);
+        if (cRow === undefined || currentIndex.colTable[cRow] !== tRow) return null;
+        names.push(currentIndex.colName[cRow]);
         if (i < hops.length - 1) {
           tRow = refTargetRow(cRow);
           if (tRow === undefined) return null;
@@ -228,24 +228,24 @@ const SchemaRenames = (function () {
     function mapQualified(table, path) {
       if (!table || !path || validNow(table, path)) return null;
       const tRow = o.tableRow[table];
-      if (tRow === undefined || c.tableName[tRow] === undefined) return null;
+      if (tRow === undefined || currentIndex.tableName[tRow] === undefined) return null;
       const column = walk(tRow, path);
-      if (column === null || (c.tableName[tRow] === table && column === path)) return null;
-      return { table: c.tableName[tRow], column };
+      if (column === null || (currentIndex.tableName[tRow] === table && column === path)) return null;
+      return { table: currentIndex.tableName[tRow], column };
     }
 
     // Un nom de table seul (table parcourue par une boucle, colonne Référence de la page, clé de correspondance).
     function mapTable(table) {
-      if (!table || c.tableRow[table] !== undefined) return null;
+      if (!table || currentIndex.tableRow[table] !== undefined) return null;
       const tRow = o.tableRow[table];
-      const name = tRow === undefined ? undefined : c.tableName[tRow];
+      const name = tRow === undefined ? undefined : currentIndex.tableName[tRow];
       return name === undefined || name === table ? null : name;
     }
 
     // La table où se lit une colonne sans nom de table : { oldRow, oldName, newName } - la table d'aujourd'hui portant ce nom, qui existait déjà dans
     // l'instantané. Null sinon.
     function tableContext(nowName) {
-      const tRow = nowName ? c.tableRow[nowName] : undefined;
+      const tRow = nowName ? currentIndex.tableRow[nowName] : undefined;
       return tRow === undefined || o.tableName[tRow] === undefined ? null : { oldRow: tRow, oldName: o.tableName[tRow], newName: nowName };
     }
 
@@ -258,7 +258,7 @@ const SchemaRenames = (function () {
 
     // Une autre table que `ctx` a-t-elle aujourd'hui une colonne de ce nom ?
     function otherTableHasColumn(name, ctx) {
-      return Object.keys(c.colRow).some(tRow => tRow !== ctx.oldRow && c.colRow[tRow][name] !== undefined);
+      return Object.keys(currentIndex.colRow).some(tRow => tRow !== ctx.oldRow && currentIndex.colRow[tRow][name] !== undefined);
     }
 
     return { mapQualified, mapTable, tableContext, mapBare, otherTableHasColumn, matchTextKey: createTextMatcher(o, refTargetRow) };
@@ -541,11 +541,11 @@ const SchemaRenames = (function () {
 
   // HeaderFooter : { enabled, differentFirstPage, header: { default, first }, footer: { default, first } } - du HTML dans chaque case.
   function rewriteHeaderFooter(json, m, ctx) {
-    const data = parseJson(json);
-    if (!data || typeof data !== 'object') return { text: json, count: 0 };
+    const parsed = parseJson(json);
+    if (!parsed || typeof parsed !== 'object') return { text: json, count: 0 };
     let count = 0;
     ['header', 'footer'].forEach(part => {
-      const zone = data[part];
+      const zone = parsed[part];
       if (!zone || typeof zone !== 'object') return;
       ['default', 'first'].forEach(which => {
         if (typeof zone[which] !== 'string') return;
@@ -553,15 +553,15 @@ const SchemaRenames = (function () {
         if (next.count) { zone[which] = next.html; count += next.count; }
       });
     });
-    return count ? { text: JSON.stringify(data), count } : { text: json, count: 0 };
+    return count ? { text: JSON.stringify(parsed), count } : { text: json, count: 0 };
   }
 
   // Macro-modèle : { slots: [{ type: 'conditional', rules: [{ column, operator, value, modeleId }], … }] } - les colonnes des règles.
   function rewriteMacro(json, m, page) {
-    const data = parseJson(json);
-    if (!data || !Array.isArray(data.slots)) return { text: json, count: 0 };
+    const parsed = parseJson(json);
+    if (!parsed || !Array.isArray(parsed.slots)) return { text: json, count: 0 };
     let count = 0;
-    data.slots.forEach(slot => {
+    parsed.slots.forEach(slot => {
       if (!slot || !Array.isArray(slot.rules)) return;
       slot.rules.forEach(rule => {
         if (!rule || typeof rule.column !== 'string' || !rule.column) return;
@@ -569,7 +569,7 @@ const SchemaRenames = (function () {
         if (next !== null) { rule.column = next; count++; }
       });
     });
-    return count ? { text: JSON.stringify(data), count } : { text: json, count: 0 };
+    return count ? { text: JSON.stringify(parsed), count } : { text: json, count: 0 };
   }
 
   // Un modèle lu tel que Grist le range ({ id, Contenu, HeaderFooter, … } en texte brut) : ce qu'il faut écrire pour qu'il suive les renommages, ou
@@ -636,10 +636,10 @@ const SchemaRenames = (function () {
 
   async function fetchTemplateRows() {
     const TEMPLATE_COLUMNS = ['Nom', 'TypeModele', 'Contenu', 'HeaderFooter', 'NomFichierPDF', 'Destinataires', 'Cc', 'Cci', 'Objet'];
-    const data = await grist.docApi.fetchTable(Templates.TABLE_NAME);
-    return (data.id || []).map((id, i) => {
+    const tableData = await grist.docApi.fetchTable(Templates.TABLE_NAME);
+    return (tableData.id || []).map((id, i) => {
       const row = { id };
-      TEMPLATE_COLUMNS.forEach(column => { row[column] = data[column] ? data[column][i] : undefined; });
+      TEMPLATE_COLUMNS.forEach(column => { row[column] = tableData[column] ? tableData[column][i] : undefined; });
       return row;
     });
   }

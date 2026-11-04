@@ -21,8 +21,8 @@ const TableSelect = (function () {
   }
 
   function cellAround($pos) {
-    for (let d = $pos.depth; d > 0; d--) {
-      if (CELL_NODES.has($pos.node(d).type.name)) return $pos.doc.resolve($pos.before(d));
+    for (let depth = $pos.depth; depth > 0; depth--) {
+      if (CELL_NODES.has($pos.node(depth).type.name)) return $pos.doc.resolve($pos.before(depth));
     }
     return null;
   }
@@ -36,10 +36,10 @@ const TableSelect = (function () {
     if (!box) return null;
     const r = box.getBoundingClientRect();
     const corner = document.querySelector('.v2-grid-corner');
-    const c = corner ? corner.getBoundingClientRect() : null;
+    const cornerBox = corner ? corner.getBoundingClientRect() : null;
     return {
       box,
-      left: r.left + box.clientLeft + (c ? c.width : 0), top: r.top + box.clientTop + (c ? c.height : 0),
+      left: r.left + box.clientLeft + (cornerBox ? cornerBox.width : 0), top: r.top + box.clientTop + (cornerBox ? cornerBox.height : 0),
       right: r.left + box.clientLeft + box.clientWidth, bottom: r.top + box.clientTop + box.clientHeight,
     };
   }

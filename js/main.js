@@ -1785,9 +1785,9 @@
   // donc être gérées.
   function formatSaveTime(dateModif) {
     try {
-      const d = typeof dateModif === 'number' ? new Date(dateModif * 1000) : new Date(dateModif);
-      if (isNaN(d.getTime())) return '';
-      return d.toLocaleTimeString(I18n.getLang() === 'en' ? 'en-US' : 'fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const modified = typeof dateModif === 'number' ? new Date(dateModif * 1000) : new Date(dateModif);
+      if (isNaN(modified.getTime())) return '';
+      return modified.toLocaleTimeString(I18n.getLang() === 'en' ? 'en-US' : 'fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     } catch (e) { return ''; }
   }
 
@@ -2485,13 +2485,13 @@
         setStatus('');
         return;
       }
-      const a = document.createElement('a');
-      a.href = url;
+      const link = document.createElement('a');
+      link.href = url;
       // Dans le cadre isolé de GFS, un lien mailto: suivi dans le cadre le ferait mourir : nouvel onglet (consigne GFS 011). Seule, rien ne change.
-      if (GfsLink.opensInNewTab(url)) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      if (GfsLink.opensInNewTab(url)) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
       setStatus(I18n.t('status.emailCreated'));
     } catch (e) {
       console.error('[main] échec de la création de l’email', e);

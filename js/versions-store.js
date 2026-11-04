@@ -207,11 +207,11 @@ const VersionsStore = (function () {
     try {
       const token = await tokenFor();
       if (!token) return null;
-      const data = await pack(beforeText);
-      if (data.length > MAX_VERSION_CHARS) return null;
+      const packed = await pack(beforeText);
+      if (packed.length > MAX_VERSION_CHARS) return null;
       await ensureTable();
       const at = toMs(dateModif);
-      const fields = { Jeton: token, Date: new Date(at === null ? Date.now() : at).toISOString(), Auteur: modifiePar, Nom: '', Genre: genre || '', Donnees: data };
+      const fields = { Jeton: token, Date: new Date(at === null ? Date.now() : at).toISOString(), Auteur: modifiePar, Nom: '', Genre: genre || '', Donnees: packed };
       return {
         action: ['AddRecord', TABLE_NAME, null, fields],
         commit(addedRowId) {
@@ -237,15 +237,15 @@ const VersionsStore = (function () {
     const tables = await grist.docApi.listTables();
     if (!tables.includes(TABLE_NAME)) return { exists: false, entries: [] };
     tableKnown = true;
-    const data = await grist.docApi.fetchTable(TABLE_NAME);
-    const text = (column, i) => String((data[column] && data[column][i]) || '');
+    const tableData = await grist.docApi.fetchTable(TABLE_NAME);
+    const text = (column, i) => String((tableData[column] && tableData[column][i]) || '');
     const entries = [];
-    for (let i = 0; i < data.id.length; i++) {
+    for (let i = 0; i < tableData.id.length; i++) {
       const token = text('Jeton', i);
       const packed = text('Donnees', i);
       if (!token || !packed) continue;
-      const at = toMs(data.Date ? data.Date[i] : null);
-      entries.push({ rowId: data.id[i], token, at: at === null ? 0 : at, author: text('Auteur', i), name: text('Nom', i), genre: text('Genre', i), data: packed, size: packed.length });
+      const at = toMs(tableData.Date ? tableData.Date[i] : null);
+      entries.push({ rowId: tableData.id[i], token, at: at === null ? 0 : at, author: text('Auteur', i), name: text('Nom', i), genre: text('Genre', i), data: packed, size: packed.length });
     }
     return { exists: true, entries };
   }
@@ -296,9 +296,9 @@ const VersionsStore = (function () {
   // Les jetons des modèles du document, d'après la table des modèles relue à neuf : { token (celui du modèle `rowId`, '' tant qu'aucune copie n'en a été gardée), known (tous
   // les jetons posés, ou null quand la colonne manque ou que la table n'a aucune ligne : les orphelines ne se cherchent alors pas) }.
   async function readModelTokens(rowId) {
-    const data = await grist.docApi.fetchTable((typeof Templates !== 'undefined' && Templates.TABLE_NAME) || 'Publipostage_Modeles');
-    const ids = Array.isArray(data.id) ? data.id : [];
-    const column = Array.isArray(data.Jeton) ? data.Jeton : null;
+    const tableData = await grist.docApi.fetchTable((typeof Templates !== 'undefined' && Templates.TABLE_NAME) || 'Publipostage_Modeles');
+    const ids = Array.isArray(tableData.id) ? tableData.id : [];
+    const column = Array.isArray(tableData.Jeton) ? tableData.Jeton : null;
     const at = ids.findIndex(id => String(id) === String(rowId));
     return {
       token: at === -1 || !column ? '' : String(column[at] || ''),
@@ -362,12 +362,12 @@ const VersionsStore = (function () {
     const label = cleanName(name);
     if (!label) throw new Error('Nom de version vide.');
     const text = stable(state);
-    const data = await pack(text);
-    if (data.length > MAX_VERSION_CHARS) throw Object.assign(new Error('État trop lourd pour être gardé en version.'), { versionsKey: 'versions.nameTooBig' });
+    const packed = await pack(text);
+    if (packed.length > MAX_VERSION_CHARS) throw Object.assign(new Error('État trop lourd pour être gardé en version.'), { versionsKey: 'versions.nameTooBig' });
     const token = await tokenFor();
     if (!token) throw new Error('Jeton du modèle introuvable.');
     await ensureTable();
-    const fields = { Jeton: token, Date: new Date(at || Date.now()).toISOString(), Auteur: author || '', Nom: label, Genre: '', Donnees: data };
+    const fields = { Jeton: token, Date: new Date(at || Date.now()).toISOString(), Auteur: author || '', Nom: label, Genre: '', Donnees: packed };
     const result = await writes.enqueue(() => grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, fields]]));
     const added = result && result.retValues ? result.retValues[0] : null;
     kept.set(String(modelRowId), { at: Date.now(), key: keyOf(text) });

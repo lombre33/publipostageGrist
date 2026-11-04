@@ -63,11 +63,11 @@ const FirstContact = (function () {
   }
 
   function link(href, text) {
-    const a = el('a', null, text);
-    a.href = href;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    return a;
+    const link = el('a', null, text);
+    link.href = href;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    return link;
   }
 
   function addressRow() {

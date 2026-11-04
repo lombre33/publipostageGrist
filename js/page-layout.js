@@ -133,10 +133,10 @@ const PageLayout = (function () {
       if (preset) return preset;
       const match = CUSTOM_ID.exec(raw.toLowerCase());
       if (match) {
-        const a = clampDim(Number(match[1]));
-        const b = clampDim(Number(match[2]));
-        const widthMm = Math.min(a, b);
-        const heightMm = Math.max(a, b);
+        const sideA = clampDim(Number(match[1]));
+        const sideB = clampDim(Number(match[2]));
+        const widthMm = Math.min(sideA, sideB);
+        const heightMm = Math.max(sideA, sideB);
         const same = FORMATS.find(f => f.widthMm === widthMm && f.heightMm === heightMm);
         if (same) return same;
         return {
@@ -172,36 +172,36 @@ const PageLayout = (function () {
     // diapositive - de même « 4:3 », « 16:10 » et « 1:1 », les rapports du menu Page d'une présentation (SLIDE_RATIOS) -, « 7 × 3,7 cm » pour un autre format libre, dans le sens demandé (la page telle
     // qu'on la voit : largeur d'abord).
     function formatLabel(value, orientation) {
-      const f = formatOf(value);
-      if (!f.custom) return f.id;
+      const paperFormat = formatOf(value);
+      if (!paperFormat.custom) return paperFormat.id;
       const landscape = orientation === LANDSCAPE;
-      const ratio = slideRatioOf(f.id);
+      const ratio = slideRatioOf(paperFormat.id);
       if (ratio) return landscape ? ratio : ratio.split(':').reverse().join(':');
-      return cmText(landscape ? f.heightMm : f.widthMm) + ' × ' + cmText(landscape ? f.widthMm : f.heightMm) + ' cm';
+      return cmText(landscape ? paperFormat.heightMm : paperFormat.widthMm) + ' × ' + cmText(landscape ? paperFormat.widthMm : paperFormat.heightMm) + ' cm';
     }
 
     // Page en mm dans le sens demandé, sans état : les trois unités des moteurs (mm, pt, twip) se déduisent d'un même couple (sens, format).
     function pageSizeMmFor(orientation, format) {
-      const f = formatOf(format);
-      return orientation === LANDSCAPE ? { width: f.heightMm, height: f.widthMm } : { width: f.widthMm, height: f.heightMm };
+      const paperFormat = formatOf(format);
+      return orientation === LANDSCAPE ? { width: paperFormat.heightMm, height: paperFormat.widthMm } : { width: paperFormat.widthMm, height: paperFormat.heightMm };
     }
     // Dimensions de la page selon une orientation et un format donnés, sans état : les exporteurs reçoivent l'un et l'autre avec leurs marges
     // (getMarginsPt / getMarginsTwip) et en déduisent la page sans connaître l'état courant de ce module. Sans format, l'A4. Les valeurs sont celles de
     // pdfmake (A4 = 595.28 x 841.89 pt) et de Word (11906 x 16838 twips), pas des conversions de 210 x 297 mm : un modèle A4 portrait garde des
     // largeurs de contenu exactes, au centième de point.
     function pageSizePtFor(orientation, format) {
-      const f = formatOf(format);
-      return orientation === LANDSCAPE ? { width: f.heightPt, height: f.widthPt } : { width: f.widthPt, height: f.heightPt };
+      const paperFormat = formatOf(format);
+      return orientation === LANDSCAPE ? { width: paperFormat.heightPt, height: paperFormat.widthPt } : { width: paperFormat.widthPt, height: paperFormat.heightPt };
     }
     function pageSizeTwipFor(orientation, format) {
-      const f = formatOf(format);
-      return orientation === LANDSCAPE ? { width: f.heightTwip, height: f.widthTwip } : { width: f.widthTwip, height: f.heightTwip };
+      const paperFormat = formatOf(format);
+      return orientation === LANDSCAPE ? { width: paperFormat.heightTwip, height: paperFormat.widthTwip } : { width: paperFormat.widthTwip, height: paperFormat.heightTwip };
     }
     // Nom du format pour pdfmake (`pageSize`, tel quel) et jsPDF (`format`, en minuscules). Un format libre n'a pas de nom : pdfmake reçoit ses
     // dimensions en points, dans le sens portrait (`pageOrientation` les tourne lui-même, comme pour un nom).
     function pdfPageNameFor(format) {
-      const f = formatOf(format);
-      return f.pdfName || { width: f.widthPt, height: f.heightPt };
+      const paperFormat = formatOf(format);
+      return paperFormat.pdfName || { width: paperFormat.widthPt, height: paperFormat.heightPt };
     }
     return { cmText, formatLabel, pageSizeMmFor, pageSizePtFor, pageSizeTwipFor, pdfPageNameFor };
   })();
@@ -449,11 +449,11 @@ const PageLayout = (function () {
     // passent à SMALL_PAGE_MARGIN_MM d'abord. Même contrat que setFormat : ne rafraîchit rien, annonce `pp:pageLayoutChanged` si la page change,
     // l'appelant marque le brouillon modifié (pp:marginsChanged). Rend vrai si quelque chose a changé ; faux, sans rien changer, pour une valeur qui
     // n'est pas un nombre.
-    const a = Number(widthMm);
-    const b = Number(heightMm);
-    if (widthMm === null || heightMm === null || widthMm === '' || heightMm === '' || !Number.isFinite(a) || !Number.isFinite(b)) return false;
-    const next = formatOf(dimText(clampDim(Math.min(a, b))) + 'x' + dimText(clampDim(Math.max(a, b))));
-    const orientation = a > b ? LANDSCAPE : a < b ? PORTRAIT : marginsDraft.orientation;
+    const widthNum = Number(widthMm);
+    const heightNum = Number(heightMm);
+    if (widthMm === null || heightMm === null || widthMm === '' || heightMm === '' || !Number.isFinite(widthNum) || !Number.isFinite(heightNum)) return false;
+    const next = formatOf(dimText(clampDim(Math.min(widthNum, heightNum))) + 'x' + dimText(clampDim(Math.max(widthNum, heightNum))));
+    const orientation = widthNum > heightNum ? LANDSCAPE : widthNum < heightNum ? PORTRAIT : marginsDraft.orientation;
     if (next.id === marginsDraft.format && orientation === marginsDraft.orientation) return false;
     const margins = Object.assign({}, marginsDraft, { format: next.id, orientation });
     // Une forme saisie qui n'est pas celle de la page en cours impose son sens : « Selon chaque modèle » est quitté (une forme semblable, seul le format change, le garde).

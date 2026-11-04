@@ -122,11 +122,11 @@ const Comments = (function () {
   async function readThreads(modeleId) {
     // Les messages de ce modèle, relus dans la table de tout le document.
     const threads = {};
-    const data = await grist.docApi.fetchTable(TABLE_NAME);
-    for (let i = 0; i < data.id.length; i++) {
-      if (Number(data.ModeleId[i]) !== Number(modeleId)) continue;
-      const cid = data.CommentId[i];
-      const message = { id: data.id[i], auteur: data.Auteur[i] || '', texte: data.Texte[i] || '', creeLe: data.CreeLe[i] || '' };
+    const tableData = await grist.docApi.fetchTable(TABLE_NAME);
+    for (let i = 0; i < tableData.id.length; i++) {
+      if (Number(tableData.ModeleId[i]) !== Number(modeleId)) continue;
+      const cid = tableData.CommentId[i];
+      const message = { id: tableData.id[i], auteur: tableData.Auteur[i] || '', texte: tableData.Texte[i] || '', creeLe: tableData.CreeLe[i] || '' };
       message.uid = knownUids.get(contentKey(message)) || 'g' + message.id;
       (threads[cid] = threads[cid] || []).push(message);
     }
@@ -372,8 +372,8 @@ const Comments = (function () {
 
   function formatWhen(iso) {
     if (!iso) return '';
-    const d = new Date(iso);
-    return isNaN(d.getTime()) ? '' : d.toLocaleString(I18n.getLang() === 'en' ? 'en-US' : 'fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const date = new Date(iso);
+    return isNaN(date.getTime()) ? '' : date.toLocaleString(I18n.getLang() === 'en' ? 'en-US' : 'fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
 
   function popupButton(className, label, onPress) {

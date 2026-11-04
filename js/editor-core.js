@@ -110,8 +110,8 @@ const EditorCore = (function () {
     // (redimensionner, déplacer, aligner, passer en calque). Repli sur 1 : feuille non réduite (grand panneau, Aperçu A4 décoché). La Lecture
     // (js/reader-mode.js) mesure de même sa feuille `.reader-content`.
     const sheet = el && el.closest ? el.closest('.v2-page-sheet, .reader-content') : null;
-    const z = sheet ? parseFloat(getComputedStyle(sheet).zoom) : NaN;
-    return (isFinite(z) && z > 0) ? z : 1;
+    const zoom = sheet ? parseFloat(getComputedStyle(sheet).zoom) : NaN;
+    return (isFinite(zoom) && zoom > 0) ? zoom : 1;
   }
 
   // Le zoom que le moteur applique vraiment au texte et aux marges de la page, que la feuille doit lui avoir donné (`zoom` de .v2-page-sheet, lu par layoutZoom). Chez une personne,

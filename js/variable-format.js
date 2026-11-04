@@ -193,8 +193,8 @@ const VariableFormat = (function () {
     if (preset.iso) {
       const y = String(clock.year);
       const m = twoDigits(clock.month);
-      const d = twoDigits(clock.day);
-      parts = [{ type: 'year', value: y }, { type: 'literal', value: '-' }, { type: 'month', value: m }, { type: 'literal', value: '-' }, { type: 'day', value: d }];
+      const day = twoDigits(clock.day);
+      parts = [{ type: 'year', value: y }, { type: 'literal', value: '-' }, { type: 'month', value: m }, { type: 'literal', value: '-' }, { type: 'day', value: day }];
     } else if (preset.shortNoPad) {
       // Construit à la main : Intl fr-FR complète toujours jour et mois à deux chiffres, même avec `numeric`, et ce préréglage existe pour s'en
       // distinguer.
@@ -355,9 +355,9 @@ const VariableFormat = (function () {
     // décimale. Sans `decimals`, l'entier le plus proche. Un montant dans une devise connue ne passe pas par ici : ses décimales sont des centimes
     // (amountToWords).
     const w = WORDS[lang];
-    const d = decimals == null ? 0 : decimals;
-    const { intPart, fracDigits } = splitAbsolute(n, d);
-    const words = w.integer(intPart) + (d > 0 ? w.point + fractionToWords(fracDigits, w.integer, w.zero) : '');
+    const places = decimals == null ? 0 : decimals;
+    const { intPart, fracDigits } = splitAbsolute(n, places);
+    const words = w.integer(intPart) + (places > 0 ? w.point + fractionToWords(fracDigits, w.integer, w.zero) : '');
     return (n < 0 && (intPart > 0 || /[1-9]/.test(fracDigits)) ? w.minus : '') + words;
   }
   function currencyWords(symbol, count, lang) {
@@ -383,10 +383,10 @@ const VariableFormat = (function () {
     // quelle).
     const w = WORDS[lang];
     const unit = w.currency[symbol];
-    const d = decimals == null ? 0 : decimals;
-    if (!unit || d > 2) return null;
-    const { intPart, fracDigits } = splitAbsolute(n, d);
-    const cents = centsOf(fracDigits, d);
+    const places = decimals == null ? 0 : decimals;
+    if (!unit || places > 2) return null;
+    const { intPart, fracDigits } = splitAbsolute(n, places);
+    const cents = centsOf(fracDigits, places);
     const parts = [];
     if (intPart > 0 || cents === 0) parts.push(unitsToWords(intPart, unit, lang));
     if (cents > 0) parts.push(w.integer(cents) + ' ' + w.subunit[symbol][isPlural(cents, lang) ? 1 : 0]);

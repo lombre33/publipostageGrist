@@ -119,12 +119,12 @@ const PdfGlyphFallback = (function () {
 
   function rangesOf(file) {
     if (rangesByFile.has(file)) return rangesByFile.get(file);
-    const data = window.pdfMake && window.pdfMake.vfs && window.pdfMake.vfs[file];
+    const fontData = window.pdfMake && window.pdfMake.vfs && window.pdfMake.vfs[file];
     // Fichier pas encore chargé (les polices arrivent avec le premier export) : rien n'est retenu, le prochain appel le relira.
-    if (typeof data !== 'string') return null;
+    if (typeof fontData !== 'string') return null;
     let ranges = null;
     try {
-      ranges = cmapRanges(bytesOf(data));
+      ranges = cmapRanges(bytesOf(fontData));
     } catch (e) {
       console.warn('[PdfGlyphFallback] table cmap illisible, police ' + file + ' prise pour complète :', e);
     }

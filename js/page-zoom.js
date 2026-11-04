@@ -205,15 +205,15 @@ const PageZoom = (function () {
   }
   // Celui qui montre une feuille : sans l'aperçu de la page (case décochée, grille), il n'y a rien à zoomer.
   function zoomable() {
-    const c = visibleContainer();
-    return c && c.classList.contains('a4-preview') ? c : null;
+    const container = visibleContainer();
+    return container && container.classList.contains('a4-preview') ? container : null;
   }
   function sheetOf(c) {
     return c.querySelector(c.id === EDITOR_ID ? '.v2-page-sheet' : '.reader-content');
   }
   function appliedFactor(c) {
-    const z = parseFloat(c.style.getPropertyValue('--pp-fit-zoom'));
-    return z > 0 ? z : 1;
+    const zoom = parseFloat(c.style.getPropertyValue('--pp-fit-zoom'));
+    return zoom > 0 ? zoom : 1;
   }
   // Une fenêtre (js/modal-base.js) ouverte : ses champs gardent leurs touches, le zoom du navigateur reste ce qu'il était.
   function windowOpen() {
@@ -227,29 +227,29 @@ const PageZoom = (function () {
   function hold(c, anchor) {
     const sheet = sheetOf(c);
     if (!sheet) return null;
-    const z = appliedFactor(c);
+    const zoom = appliedFactor(c);
     const box = c.getBoundingClientRect();
     const x = anchor ? anchor.x : box.left + c.clientWidth / 2;
     const y = anchor ? anchor.y : box.top + c.clientHeight / 2;
     const r = sheet.getBoundingClientRect();
-    return { sheet, x, y, u: (x - r.left) / z, v: (y - r.top) / z };
+    return { sheet, x, y, u: (x - r.left) / zoom, v: (y - r.top) / zoom };
   }
   function release(c, held) {
-    const z = appliedFactor(c);
+    const zoom = appliedFactor(c);
     const r = held.sheet.getBoundingClientRect();
-    c.scrollLeft += r.left - (held.x - held.u * z);
-    c.scrollTop += r.top - (held.y - held.v * z);
+    c.scrollLeft += r.left - (held.x - held.u * zoom);
+    c.scrollTop += r.top - (held.y - held.v * zoom);
   }
 
   function change(update, anchor) {
-    const c = zoomable();
-    if (!c || !host) return;
-    const held = hold(c, anchor);
+    const container = zoomable();
+    if (!container || !host) return;
+    const held = hold(container, anchor);
     update();
     changes++;
     unsaved = true;
     const moved = host.apply();
-    if (held) release(c, held);
+    if (held) release(container, held);
     updatePill();
     clearTimeout(settleTimer);
     needsRefresh = needsRefresh || !!moved;
@@ -262,11 +262,11 @@ const PageZoom = (function () {
     persist();
     if (!needsRefresh || !host) return;
     needsRefresh = false;
-    const c = visibleContainer();
+    const container = visibleContainer();
     const seen = changes;
-    const kept = c ? { top: c.scrollTop, left: c.scrollLeft } : null;
+    const kept = container ? { top: container.scrollTop, left: container.scrollLeft } : null;
     try { await host.refresh(); } catch (e) { console.error('[PageZoom] repagination impossible', e); }
-    if (c && kept && seen === changes && c.isConnected) { c.scrollTop = kept.top; c.scrollLeft = kept.left; }
+    if (container && kept && seen === changes && container.isConnected) { container.scrollTop = kept.top; container.scrollLeft = kept.left; }
   }
 
   function nextStep(from, direction) {
@@ -275,9 +275,9 @@ const PageZoom = (function () {
     return MIN;
   }
   function stepBy(direction) {
-    const c = zoomable();
-    if (!c) return;
-    const from = appliedFactor(c);
+    const container = zoomable();
+    if (!container) return;
+    const from = appliedFactor(container);
     const target = nextStep(from, direction);
     if (Math.abs(target - from) < 0.0005) return;
     change(() => { mode = 'manual'; level = target; });
@@ -293,11 +293,11 @@ const PageZoom = (function () {
   }
   function onWheel(event) {
     if (!(event.ctrlKey || event.metaKey) || !event.deltaY) return;
-    const c = zoomable();
-    if (!c) return;
+    const container = zoomable();
+    if (!container) return;
     event.preventDefault();
-    const from = mode === 'manual' ? level : appliedFactor(c);
-    const target = clamp(from * Math.exp(-wheelPixels(event, c) * WHEEL_SPEED));
+    const from = mode === 'manual' ? level : appliedFactor(container);
+    const target = clamp(from * Math.exp(-wheelPixels(event, container) * WHEEL_SPEED));
     if (mode === 'manual' && Math.abs(target - level) < 1e-6) return;
     change(() => { mode = 'manual'; level = target; }, { x: event.clientX, y: event.clientY });
   }
@@ -349,12 +349,12 @@ const PageZoom = (function () {
     if (event.button !== 0 || !event.target || !event.target.closest) return;
     const editorDom = event.target.closest('.tiptap');
     if (!editorDom || !editorDom.classList.contains('resize-cursor')) return;
-    const z = EditorCore.layoutZoom(editorDom);
+    const zoom = EditorCore.layoutZoom(editorDom);
     readStartWidthOnPage();
-    if (Math.abs(z - 1) < 0.001) return;
+    if (Math.abs(zoom - 1) < 0.001) return;
     const startX = Math.round(event.clientX);
     shadowClientX(event, startX);
-    const rescale = e => shadowClientX(e, startX + Math.round((e.clientX - startX) / z));
+    const rescale = e => shadowClientX(e, startX + Math.round((e.clientX - startX) / zoom));
     const release = e => {
       rescale(e);
       window.removeEventListener('mousemove', rescale, true);
@@ -381,9 +381,9 @@ const PageZoom = (function () {
   // Pourquoi il n'y a rien à zoomer : l'aperçu de la page est décoché, ou il n'y a pas de page (grille : sa case est alors grisée, résumé d'un
   // macro-modèle).
   function unavailableText() {
-    const c = visibleContainer();
+    const container = visibleContainer();
     const toggle = document.getElementById('v2-toggle-a4-preview');
-    if (c && toggle && !toggle.disabled && !toggle.checked) return I18n.t('pageZoom.unavailable.preview', { format: PageLayout.getFormatLabel() });
+    if (container && toggle && !toggle.disabled && !toggle.checked) return I18n.t('pageZoom.unavailable.preview', { format: PageLayout.getFormatLabel() });
     return I18n.t('pageZoom.unavailable.none');
   }
 
@@ -404,12 +404,12 @@ const PageZoom = (function () {
   // est posé en variables, css/page-zoom.css y ajoute l'écart au bord. Sans document à l'écran (résumé d'un macro-modèle), la dernière place est gardée.
   function placePill() {
     if (!pill) return;
-    const c = visibleContainer();
-    if (!c) return;
-    const box = c.getBoundingClientRect();
+    const container = visibleContainer();
+    if (!container) return;
+    const box = container.getBoundingClientRect();
     const root = document.documentElement;
-    pill.style.setProperty('--pp-zoom-right', Math.max(0, Math.round(root.clientWidth - (box.left + c.clientLeft + c.clientWidth))) + 'px');
-    pill.style.setProperty('--pp-zoom-bottom', Math.max(0, Math.round(root.clientHeight - (box.top + c.clientTop + c.clientHeight))) + 'px');
+    pill.style.setProperty('--pp-zoom-right', Math.max(0, Math.round(root.clientWidth - (box.left + container.clientLeft + container.clientWidth))) + 'px');
+    pill.style.setProperty('--pp-zoom-bottom', Math.max(0, Math.round(root.clientHeight - (box.top + container.clientTop + container.clientHeight))) + 'px');
     stepAside();
   }
 
@@ -441,16 +441,16 @@ const PageZoom = (function () {
   function updatePill() {
     if (!pill) return;
     placePill();
-    const c = zoomable();
-    const z = c ? appliedFactor(c) : 1;
-    valueButton.textContent = I18n.t('pageZoom.value', { n: Math.round(z * 100) });
+    const container = zoomable();
+    const zoom = container ? appliedFactor(container) : 1;
+    valueButton.textContent = I18n.t('pageZoom.value', { n: Math.round(zoom * 100) });
     const grey = (button, off) => { if (off) button.setAttribute('aria-disabled', 'true'); else button.removeAttribute('aria-disabled'); };
-    grey(outButton, !c || z <= MIN + 0.001);
-    grey(inButton, !c || z >= MAX - 0.001);
-    grey(valueButton, !c);
-    grey(fitButton, !c);
-    fitButton.setAttribute('aria-pressed', c && mode === 'fit' ? 'true' : 'false');
-    applyTexts(!!c);
+    grey(outButton, !container || zoom <= MIN + 0.001);
+    grey(inButton, !container || zoom >= MAX - 0.001);
+    grey(valueButton, !container);
+    grey(fitButton, !container);
+    fitButton.setAttribute('aria-pressed', container && mode === 'fit' ? 'true' : 'false');
+    applyTexts(!!container);
   }
 
   function build() {

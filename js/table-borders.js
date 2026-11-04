@@ -66,7 +66,7 @@ const TableBorders = (function () {
       const rows = Math.max(1, cell.rowspan || 1);
       const cols = Math.max(1, cell.colspan || 1);
       for (let r = cell.row; r < Math.min(height, cell.row + rows); r++) {
-        for (let c = cell.col; c < Math.min(width, cell.col + cols); c++) owner[r * width + c] = index;
+        for (let col = cell.col; col < Math.min(width, cell.col + cols); col++) owner[r * width + col] = index;
       }
     });
     const parent = Array.from({ length: cells.length * 4 }, (_, n) => n);
@@ -80,27 +80,27 @@ const TableBorders = (function () {
       if (!nodes.length) return;
       if (nodes.length === 2) {
         // La plus petite racine reste : le premier nœud dans l'ordre de lecture donne sa valeur au groupe.
-        const a = find(nodes[0]);
-        const b = find(nodes[1]);
-        if (a !== b) parent[Math.max(a, b)] = Math.min(a, b);
+        const rootFirst = find(nodes[0]);
+        const rootSecond = find(nodes[1]);
+        if (rootFirst !== rootSecond) parent[Math.max(rootFirst, rootSecond)] = Math.min(rootFirst, rootSecond);
       }
       edges.set(kind + ':' + row + ':' + col, nodes[0]);
     };
     const side = (index, name) => (index >= 0 ? index * 4 + SIDES.indexOf(name) : -1);
     for (let r = 0; r <= height; r++) {
-      for (let c = 0; c < width; c++) {
-        const below = r < height ? owner[r * width + c] : -1;
-        const above = r > 0 ? owner[(r - 1) * width + c] : -1;
+      for (let col = 0; col < width; col++) {
+        const below = r < height ? owner[r * width + col] : -1;
+        const above = r > 0 ? owner[(r - 1) * width + col] : -1;
         if (below >= 0 && below === above) continue;
-        link('h', r, c, side(below, 'top'), side(above, 'bottom'));
+        link('h', r, col, side(below, 'top'), side(above, 'bottom'));
       }
     }
     for (let r = 0; r < height; r++) {
-      for (let c = 0; c <= width; c++) {
-        const right = c < width ? owner[r * width + c] : -1;
-        const left = c > 0 ? owner[r * width + c - 1] : -1;
+      for (let col = 0; col <= width; col++) {
+        const right = col < width ? owner[r * width + col] : -1;
+        const left = col > 0 ? owner[r * width + col - 1] : -1;
         if (right >= 0 && right === left) continue;
-        link('v', r, c, side(right, 'left'), side(left, 'right'));
+        link('v', r, col, side(right, 'left'), side(left, 'right'));
       }
     }
     return { find, edges };
@@ -167,7 +167,7 @@ const TableBorders = (function () {
     const parts = PRESET_PARTS[preset] || [];
     const { left, top, right, bottom } = rect;
     const out = [];
-    const horizontal = (row, from, to) => { for (let c = from; c < to; c++) out.push({ kind: 'h', row, col: c }); };
+    const horizontal = (row, from, to) => { for (let col = from; col < to; col++) out.push({ kind: 'h', row, col: col }); };
     const vertical = (col, from, to) => { for (let r = from; r < to; r++) out.push({ kind: 'v', row: r, col }); };
     if (parts.includes('top')) horizontal(top, left, right);
     if (parts.includes('bottom')) horizontal(bottom, left, right);
@@ -175,7 +175,7 @@ const TableBorders = (function () {
     if (parts.includes('right')) vertical(right, top, bottom);
     if (parts.includes('inner')) {
       for (let r = top + 1; r < bottom; r++) horizontal(r, left, right);
-      for (let c = left + 1; c < right; c++) vertical(c, top, bottom);
+      for (let col = left + 1; col < right; col++) vertical(col, top, bottom);
     }
     return out;
   }

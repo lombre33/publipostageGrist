@@ -72,6 +72,8 @@
 //      rien d'autre n'importe (jamais son lien, jamais son `ambiance.js` : deux liens dans un cadre se prennent les réponses) ; css/gfs-ambiance.css n'agit que sous `data-gfs-ambiance` ou `data-gfs-forme` ; un jeton de forme se lit
 //      avec sa valeur d'origine en repli, jamais ceux de la mise en page de GFS (`--main-bg`, `--gap`...) ; l'impression les remet à leur repli ; et aucune couleur n'est écrite en dur dans les feuilles hors de la liste justifiée
 //      dev-tests/ambiance-exceptions.json (le papier, l'état, le type, les repères de capture : ce que l'ambiance ne doit pas changer).
+//  32. un nom que le guide Grist.Gouv juge pauvre : une variable déclarée `a`, `b`, `c`, `d`, `f`, `z`, `data`, `tmp`, `val`, `obj`, `arr`, `ret`... (`e`, `x`, `y`, `i`, `j`, `k`, `n` restent permis) ou une fonction
+//      déclarée d'une ou deux lettres, dans le code du widget (gw audit du 04/11, point B-NOM-01 ; les fichiers de Slides+, de la fenêtre « Nouveautés » et du pont GFS en sont exclus pour l'instant).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -978,7 +980,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     main.indexOf('Settings.takeReopenId()') !== -1 && main.indexOf('Settings.takeReopenId()') < main.indexOf('GfsOpen.startupTemplateId()')
       && /\[reopenTemplateId, gfsTemplateId, startupRowTemplateId, ViewTemplate\.usableId\(\), Templates\.getDefaultId\(\)\]/.test(main), 'js/main.js');
   check('langue : I18n garde le choix par storeLang (faux si le stockage est refusé), seul endroit qui écrit pp_lang ; setLang (réservé aux tests) ne touche ni la page ni le stockage',
-    /function storeLang\(next\)[\s\S]*?return true;[\s\S]*?return false;/.test(i18n) && /function setLang\(next\) \{ lang = next === 'en' \? 'en' : 'fr'; \}/.test(i18n) && (i18n.match(/localStorage\.setItem\('pp_lang'/g) || []).length === 1 && /return \{ t, has, getLang, setLang, storeLang \};/.test(i18n), 'js/i18n.js');
+    /function storeLang\(next\)[\s\S]*?return true;[\s\S]*?return false;/.test(i18n) && /function setLang\(next\) \{ lang = next === 'en' \? 'en' : 'fr'; \}/.test(i18n) && (i18n.match(/localStorage\.setItem\('pp_lang'/g) || []).length === 1 && /return \{ t: translate, has, getLang, setLang, storeLang \};/.test(i18n), 'js/i18n.js');
 
   // La langue de GFS (consigne 019, contrats de GFS 5.2 point 6) : un seul choix par personne pour GFS et toutes ses apps. Hébergée, la page la prend au départ avant le stockage et le navigateur, la suit à chaque
   // événement `langue`, grise les cases de Réglages avec la raison, et ne recopie jamais la langue de GFS dans le stockage de l'app. Seule, rien de tout cela (gfs=<n> absent de l'adresse, `language()` rend null).
@@ -1788,6 +1790,49 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     hardCoded.length === 0 && malformed.length === 0, hardCoded.slice(0, 4).join(' ; ') || malformed.slice(0, 3).map(rule => `${rule.fichier} ${rule.selecteur}`).join(' ; ') || `${seen} déclarations, toutes justifiées`);
   check('ambiance de GFS : chaque règle de dev-tests/ambiance-exceptions.json vise encore au moins une couleur en dur - une règle sans effet est retirée (la liste ne garde que ce que les feuilles portent)',
     rules.length > 0 && rules.every(rule => rule.used > 0), rules.filter(rule => rule.used === 0).slice(0, 4).map(rule => `${rule.fichier} ${rule.selecteur}`).join(' ; ') || `${rules.length} règles`);
+}
+
+// ============================================================================
+// 32. Les noms que le guide Grist.Gouv veut explicites (gw audit du 04/11, point B-NOM-01)
+// ============================================================================
+// L'audit relevait 201 variables au nom pauvre (`data`, `c`, `a`, `d`, `f`...) : un relecteur doit remonter jusqu'à l'affectation pour savoir ce qu'elles contiennent. Les 133 du widget ont été renommées
+// (`tableData`, `column`, `depth`...), chacune par un renommage dont l'équivalence a été prouvée. Ce contrôle garde qu'aucune ne revient : `const|let|var` suivi d'un de ces noms, ou une fonction déclarée
+// d'une ou deux lettres. `PENDING` : les fichiers pas encore passés (Slides+, en pause ; la fenêtre « Nouveautés » et le pont GFS, portés par d'autres lots), vide à la fin ; un fichier qui n'a plus rien à
+// renommer doit en sortir.
+{
+  const PENDING = new Set([
+    'js/frame-anim.js', 'js/frame-link.js', 'js/frame-multi.js', 'js/free-frame.js', 'js/shape-geometry.js', 'js/shape-presets.js', 'js/slide-links-live.js', 'js/slide-links.js', 'js/slide-props.js', 'js/slide-theme.js',
+    'js/whats-new.js', 'js/gfs-link.js',
+    // Hors de ce que l'audit lit (chargés à la demande : moteurs d'export et d'import, comparaison des versions, extensions de Grist Factory Suite) : à passer dans un lot à part, avec leurs groupes d'essais.
+    'js/docx-export.js', 'js/html-export.js', 'js/markdown-export.js', 'js/pdf-export.js', 'js/pptx-export.js', 'js/pptx-import.js', 'js/sheet-layout.js', 'js/versions-compare.js', 'js/xlsx-export.js', 'js/xlsx-number-format.js',
+    'extensions/edition/live-control.js', 'extensions/edition/live-sync.js', 'extensions/graphique/chart-make.js', 'extensions/graphique/chart-plot.js', 'extensions/lecture-pdf/pdf-comments.js',
+  ]);
+  const POOR = 'a|b|c|d|f|z|i2|tmp|temp|val|val2|data\\d?|obj|arr|foo|bar|baz|res2|ret|thing|stuff|truc|machin|toto';
+  const poorIn = code => {
+    const found = [];
+    const declaration = new RegExp(`\\b(?:const|let|var)\\s+(${POOR})\\b(?=\\s*(?:=|;|,|$)|\\s+(?:of|in)\\b)`, 'g');
+    code.split('\n').forEach((line, i) => {
+      for (const m of line.matchAll(declaration)) found.push(`${i + 1} ${m[1]}`);
+      for (const m of line.matchAll(/\bfunction\s+([A-Za-z_$][\w$]?)\s*\(/g)) found.push(`${i + 1} ${m[1]}()`);
+    });
+    return found;
+  };
+  const offenders = [];
+  const stale = [];
+  for (const rel of jsFiles) {
+    const found = poorIn(noCommentsJs(read(rel)));
+    if (rel.startsWith('extensions/diapositives/')) continue; // Slides+ en pause : tout le dossier attend
+    if (found.length && !PENDING.has(rel)) offenders.push(`${rel}: ${found.slice(0, 3).join(', ')}`);
+    if (!found.length && PENDING.has(rel)) stale.push(rel);
+  }
+  const probe = source => poorIn(source).length;
+  check('noms : l\'analyse lit bien le code (garde-fou de l\'analyse elle-même : un nom pauvre est vu, un nom qui le contient ou une boucle `i` ne l\'est pas)',
+    probe('const data = 1;') === 1 && probe('let c = 0;') === 1 && probe('for (const d of list) {}') === 1 && probe('function el(id) {}') === 1 && probe('function go (a) {}') === 1
+      && probe('const tableData = 1;') === 0 && probe('const cell = 1;') === 0 && probe('for (let i = 0; i < n; i++) {}') === 0 && probe('const { a } = obj;') === 0 && probe('function build() {}') === 0 && jsFiles.length >= 100,
+    `${jsFiles.length} fichiers`);
+  check('noms : aucune variable au nom pauvre (a, b, c, d, f, z, data, tmp, val, obj, arr, ret...) ni fonction déclarée d\'une ou deux lettres dans le widget - un nom qui dit ce que la variable contient',
+    offenders.length === 0, offenders.slice(0, 6).join(' ; '));
+  check('noms : un fichier sorti de la liste des lots restants (PENDING) n\'y reste pas', stale.length === 0, stale.join(', '));
 }
 
 summarizeAndExit();

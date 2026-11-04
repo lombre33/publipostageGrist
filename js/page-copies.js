@@ -409,7 +409,7 @@ const PageCopies = (function () {
     if (!selection.empty) return false;
     const $pos = selection.$head;
     if ($pos.depth < 1 || (dir < 0 ? $pos.parentOffset !== 0 : $pos.parentOffset !== $pos.parent.content.size)) return false;
-    for (let d = 1; d < $pos.depth; d++) if ($pos.index(d) !== (dir < 0 ? 0 : $pos.node(d).childCount - 1)) return false;
+    for (let depth = 1; depth < $pos.depth; depth++) if ($pos.index(depth) !== (dir < 0 ? 0 : $pos.node(depth).childCount - 1)) return false;
     const neighbor = doc.maybeChild($pos.index(0) + dir);
     if (!neighbor || !isPageMarker(neighbor)) return false;
     const from = dir < 0 ? $pos.before(1) - neighbor.nodeSize : $pos.after(1);

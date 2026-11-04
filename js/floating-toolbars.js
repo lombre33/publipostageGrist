@@ -1599,8 +1599,8 @@ const FloatingToolbars = (function () {
         get contextElement() { return editor.view.dom; },
         getBoundingClientRect() {
           try {
-            const c = editor.view.coordsAtPos(editor.state.selection.head);
-            lastRect = { x: c.left, y: c.top, width: 0, height: c.bottom - c.top, top: c.top, bottom: c.bottom, left: c.left, right: c.left };
+            const caret = editor.view.coordsAtPos(editor.state.selection.head);
+            lastRect = { x: caret.left, y: caret.top, width: 0, height: caret.bottom - caret.top, top: caret.top, bottom: caret.bottom, left: caret.left, right: caret.left };
           } catch (e) { /* position hors du document le temps d'une transaction : le dernier rectangle connu */ }
           return lastRect || { x: 0, y: 0, width: 0, height: 0, top: 0, bottom: 0, left: 0, right: 0 };
         },

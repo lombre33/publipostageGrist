@@ -38,8 +38,8 @@ const Layers = (function () {
   // ou 2100 (css/modal-base.css).
   function levelAbove(over) {
     if (!over || !over.isConnected) return 0;
-    const z = parseInt(getComputedStyle(over).zIndex, 10);
-    return z > 0 ? z + 1 : 0;
+    const zIndex = parseInt(getComputedStyle(over).zIndex, 10);
+    return zIndex > 0 ? zIndex + 1 : 0;
   }
 
   function raise(el, over) {

@@ -41,7 +41,7 @@ const CharacterFormat = (function () {
   const SHADOW_LIMIT = { offset: 100, blur: 100 };
   const STROKE_LIMIT = { min: 0.1, max: 20 };
 
-  const rounded = (value, digits) => { const f = Math.pow(10, digits); return Math.round(value * f) / f; };
+  const rounded = (value, digits) => { const factor = Math.pow(10, digits); return Math.round(value * factor) / factor; };
   // Une longueur CSS (« 1.5pt », « 2px », « .1em », « normal ») en points ; null quand ce n'en est pas une.
   function toPoints(raw) {
     const m = /^\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s*(pt|px|em|rem)?\s*$/i.exec(String(raw == null ? '' : raw));
@@ -128,9 +128,9 @@ const CharacterFormat = (function () {
       else if (!color) color = parseColor(token); else return null;
     }
     if (lengths.length < 2 || lengths.length > 4 || (!color && lengths.length > 3)) return null;
-    const c = color || { hex: '#000000', alpha: 0.5 };
-    if (c.alpha <= 0) return null;
-    return { dx: rounded(clampTo(lengths[0], -SHADOW_LIMIT.offset, SHADOW_LIMIT.offset), 2), dy: rounded(clampTo(lengths[1], -SHADOW_LIMIT.offset, SHADOW_LIMIT.offset), 2), blur: rounded(clampTo(lengths[2] || 0, 0, SHADOW_LIMIT.blur), 2), hex: c.hex, alpha: rounded(c.alpha, 3) };
+    const shadowColor = color || { hex: '#000000', alpha: 0.5 };
+    if (shadowColor.alpha <= 0) return null;
+    return { dx: rounded(clampTo(lengths[0], -SHADOW_LIMIT.offset, SHADOW_LIMIT.offset), 2), dy: rounded(clampTo(lengths[1], -SHADOW_LIMIT.offset, SHADOW_LIMIT.offset), 2), blur: rounded(clampTo(lengths[2] || 0, 0, SHADOW_LIMIT.blur), 2), hex: shadowColor.hex, alpha: rounded(shadowColor.alpha, 3) };
   }
   // Le texte d'une ombre : « 1.5pt 1.5pt 2pt #00000066 » ; null quand il n'y en a pas.
   function normalizedShadow(raw) {
@@ -151,8 +151,8 @@ const CharacterFormat = (function () {
       if (n === null && !color) return null;
     }
     if (width === null || !(width > 0)) return null;
-    const c = color || { hex: '#000000', alpha: 1 };
-    return { w: rounded(clampTo(width, STROKE_LIMIT.min, STROKE_LIMIT.max), 2), hex: c.hex, alpha: rounded(c.alpha, 3) };
+    const strokeColor = color || { hex: '#000000', alpha: 1 };
+    return { w: rounded(clampTo(width, STROKE_LIMIT.min, STROKE_LIMIT.max), 2), hex: strokeColor.hex, alpha: rounded(strokeColor.alpha, 3) };
   }
   function normalizedStroke(raw) {
     const s = typeof raw === 'object' && raw ? raw : parseStroke(raw);

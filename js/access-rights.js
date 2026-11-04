@@ -239,7 +239,7 @@ const AccessRights = (function () {
   // <select> est rempli à nouveau à chaque rendu : le champ visible le relit ensuite (`sync`).
   const searches = [];
 
-  function el(id) { return document.getElementById(id); }
+  function byId(id) { return document.getElementById(id); }
 
   // `columnsOf` : la table dont `values` sont les colonnes, pour que leur libellé Grist se cherche aussi (rien pour la liste des tables).
   function fillSelect(select, values, current, noneLabel, columnsOf) {
@@ -295,31 +295,31 @@ const AccessRights = (function () {
   function isLocked() { return get().readOnly && (!!config || status.state === 'viewer') && !status.tableGone; }
 
   function renderSettingsPanel() {
-    const tableSelect = el(ids.table);
+    const tableSelect = byId(ids.table);
     if (!tableSelect) return;
     const current = draft || config || {};
     const none = I18n.t('settings.access.none');
     fillSelect(tableSelect, GristAPI.getTables(), current.table, none);
     const table = tableSelect.value;
     // Types proposés pour l'email : ceux qui livrent du texte brut par fetchTable (une Référence y arrive en id de ligne, jamais en email).
-    fillSelect(el(ids.email), table ? columnsOfType(table, ['Text', 'Choice', 'Any']) : [], current.emailColumn, none, table);
+    fillSelect(byId(ids.email), table ? columnsOfType(table, ['Text', 'Choice', 'Any']) : [], current.emailColumn, none, table);
     const bools = table ? columnsOfType(table, ['Bool']) : [];
-    fillSelect(el(ids.readOnly), bools, current.readOnlyColumn, none, table);
-    fillSelect(el(ids.exportCol), bools, current.exportColumn, none, table);
-    fillSelect(el(ids.comments), bools, current.commentsColumn, none, table);
+    fillSelect(byId(ids.readOnly), bools, current.readOnlyColumn, none, table);
+    fillSelect(byId(ids.exportCol), bools, current.exportColumn, none, table);
+    fillSelect(byId(ids.comments), bools, current.commentsColumn, none, table);
     const locked = isLocked();
-    Object.keys(ids).forEach(k => { const s = el(ids[k]); if (s) s.disabled = locked; });
+    Object.keys(ids).forEach(k => { const s = byId(ids[k]); if (s) s.disabled = locked; });
     // La case reste là, grisée, tant qu'aucune colonne « Lecture seule » n'est choisie (rien ne disparaît, on grise) ; verrouillée aussi pour qui est
     // lui-même en lecture seule.
-    const cleanBox = el(CLEAN_ID);
+    const cleanBox = byId(CLEAN_ID);
     if (cleanBox) {
       cleanBox.checked = !!current.cleanReading;
       cleanBox.disabled = locked || !current.readOnlyColumn;
     }
     searches.forEach(search => search.sync());
-    const lockedHint = el('settings-access-locked');
+    const lockedHint = byId('settings-access-locked');
     if (lockedHint) lockedHint.hidden = !locked;
-    const statusEl = el('settings-access-status');
+    const statusEl = byId('settings-access-status');
     if (statusEl) {
       const text = statusText();
       statusEl.textContent = text;
@@ -328,14 +328,14 @@ const AccessRights = (function () {
   }
 
   function readDraftFromPanel() {
-    const valueOf = id => (el(id) ? el(id).value : '');
+    const valueOf = id => (byId(id) ? byId(id).value : '');
     return {
       table: valueOf(ids.table),
       emailColumn: valueOf(ids.email),
       readOnlyColumn: valueOf(ids.readOnly),
       exportColumn: valueOf(ids.exportCol),
       commentsColumn: valueOf(ids.comments),
-      cleanReading: !!(el(CLEAN_ID) && el(CLEAN_ID).checked),
+      cleanReading: !!(byId(CLEAN_ID) && byId(CLEAN_ID).checked),
     };
   }
 
@@ -384,17 +384,17 @@ const AccessRights = (function () {
 
   function wireSettingsPanel() {
     Object.keys(ids).forEach(k => {
-      const select = el(ids[k]);
+      const select = byId(ids[k]);
       if (!select) return;
       select.addEventListener('change', () => { onPanelChange(ids[k]); });
       // Composant indisponible : la liste native reste, inchangée.
       try { searches.push(k === 'table' ? SearchSelect.attachTables(select) : SearchSelect.attachColumns(select)); }
       catch (e) { console.warn('[AccessRights] recherche indisponible, liste native conservée', e); }
     });
-    const cleanBox = el(CLEAN_ID);
+    const cleanBox = byId(CLEAN_ID);
     if (cleanBox) cleanBox.addEventListener('change', () => { onPanelChange(CLEAN_ID); });
     // Rempli à chaque ouverture des Réglages (schéma relu : une table ou une colonne a pu être ajoutée depuis), jamais seulement au démarrage.
-    const openBtn = el('v2-btn-settings');
+    const openBtn = byId('v2-btn-settings');
     if (openBtn) openBtn.addEventListener('click', () => {
       draft = null;
       renderSettingsPanel();

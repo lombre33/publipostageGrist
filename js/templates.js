@@ -74,8 +74,8 @@ const Templates = (function () {
       // compte qui modifie le document la crée à son tour.
       if (GristAPI.isDocumentReadOnly()) return false;
       try {
-        const data = await grist.docApi.fetchTable(TABLE_NAME);
-        const actions = columns.filter(([id]) => !(id in data)).map(([id, type, label]) => ['AddVisibleColumn', TABLE_NAME, id, { type, isFormula: false, label }]);
+        const tableData = await grist.docApi.fetchTable(TABLE_NAME);
+        const actions = columns.filter(([id]) => !(id in tableData)).map(([id, type, label]) => ['AddVisibleColumn', TABLE_NAME, id, { type, isFormula: false, label }]);
         if (actions.length) await grist.docApi.applyUserActions(actions);
         return true;
       } catch (e) {
@@ -216,8 +216,8 @@ const Templates = (function () {
   async function readTable() {
     // Lecture de la table des modèles, null si elle est absente ou illisible (document neuf : les migrations de loadAll la créent).
     try {
-      const data = await grist.docApi.fetchTable(TABLE_NAME);
-      return data && typeof data === 'object' ? data : null;
+      const tableData = await grist.docApi.fetchTable(TABLE_NAME);
+      return tableData && typeof tableData === 'object' ? tableData : null;
     } catch (e) {
       return null;
     }
@@ -398,10 +398,10 @@ const Templates = (function () {
   // Rend { ok, password } : `ok` faux quand la table n'a pas pu être lue (refusée, absente, Grist injoignable) ; sinon le mot de passe gardé, '' quand il n'y en a pas - ni colonne, ni
   // ligne, ou une colonne que les règles d'accès cachent à cette personne. Lire ne crée jamais rien.
   async function readPdfPassword() {
-    const data = await readTable();
-    if (!data || !Array.isArray(data.id)) return { ok: false, password: '' };
-    const at = settingsRowAt(data);
-    const cell = at === -1 || !Array.isArray(data[PDF_PASSWORD_COLUMN]) ? '' : data[PDF_PASSWORD_COLUMN][at];
+    const tableData = await readTable();
+    if (!tableData || !Array.isArray(tableData.id)) return { ok: false, password: '' };
+    const at = settingsRowAt(tableData);
+    const cell = at === -1 || !Array.isArray(tableData[PDF_PASSWORD_COLUMN]) ? '' : tableData[PDF_PASSWORD_COLUMN][at];
     return { ok: true, password: typeof cell === 'string' ? cell : (typeof cell === 'number' ? String(cell) : '') };
   }
 
@@ -417,16 +417,16 @@ const Templates = (function () {
     return settingsQueue.enqueue(async () => {
       await ensureEmailColumns(); // TypeModele : la colonne qui désigne la ligne
       await ensurePdfPasswordColumn();
-      const data = await grist.docApi.fetchTable(TABLE_NAME);
-      if (!Array.isArray(data[PDF_PASSWORD_COLUMN])) throw new Error('Colonne ' + PDF_PASSWORD_COLUMN + ' absente ou cachée : le mot de passe n’est pas enregistré.');
-      const at = settingsRowAt(data);
+      const tableData = await grist.docApi.fetchTable(TABLE_NAME);
+      if (!Array.isArray(tableData[PDF_PASSWORD_COLUMN])) throw new Error('Colonne ' + PDF_PASSWORD_COLUMN + ' absente ou cachée : le mot de passe n’est pas enregistré.');
+      const at = settingsRowAt(tableData);
       if (at === -1) {
         const result = await grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, { Nom: SETTINGS_NAME, TypeModele: SETTINGS_TYPE, [PDF_PASSWORD_COLUMN]: wanted }]]);
         if (settingsRowId == null) settingsRowId = result.retValues[0];
         return;
       }
-      if (settingsRowId == null) settingsRowId = data.id[at];
-      if (data[PDF_PASSWORD_COLUMN][at] !== wanted) await grist.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, data.id[at], { [PDF_PASSWORD_COLUMN]: wanted }]]);
+      if (settingsRowId == null) settingsRowId = tableData.id[at];
+      if (tableData[PDF_PASSWORD_COLUMN][at] !== wanted) await grist.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, tableData.id[at], { [PDF_PASSWORD_COLUMN]: wanted }]]);
     }).then(() => { settingsPending--; settingsEpoch++; return true; }, (e) => {
       settingsPending--;
       settingsEpoch++;
@@ -461,18 +461,18 @@ const Templates = (function () {
     }
     try {
       // Aucune migration n'a tourné (ni écrit une colonne) depuis la lecture initiale : elle est encore la table, inutile de la relire.
-      const data = first && migrationRuns === runsBefore ? first : await grist.docApi.fetchTable(TABLE_NAME);
-      loadedChars = charsOf(data);
+      const tableData = first && migrationRuns === runsBefore ? first : await grist.docApi.fetchTable(TABLE_NAME);
+      loadedChars = charsOf(tableData);
       // La ligne des réglages du document n'est pas un modèle : mise de côté, jamais dans le cache.
       const templates = [];
       let settingsAt = -1;
-      data.id.forEach((id, i) => {
-        if (!isSettingsRow(data, i)) templates.push(templateFromRow(data, i));
+      tableData.id.forEach((id, i) => {
+        if (!isSettingsRow(tableData, i)) templates.push(templateFromRow(tableData, i));
         else if (settingsAt === -1) settingsAt = i;
       });
       templatesCache = keepWrittenSince(templates, writtenAtStart);
       cacheReadAt = readStartedAt;
-      adoptDocumentSettings(data, settingsAt, settingsEpochAtStart);
+      adoptDocumentSettings(tableData, settingsAt, settingsEpochAtStart);
     } catch (e) {
       console.error('Erreur chargement modèles', e);
       templatesCache = [];
@@ -618,13 +618,13 @@ const Templates = (function () {
     const dates = new Map();
     const keep = rowId => dates.set(rowId, fallback);
     try {
-      const data = await grist.docApi.fetchTable(TABLE_NAME);
+      const tableData = await grist.docApi.fetchTable(TABLE_NAME);
       rowIds.forEach((rowId) => {
-        const idx = data.id.indexOf(rowId);
-        if (idx === -1 || !data.DateModif) {
+        const idx = tableData.id.indexOf(rowId);
+        if (idx === -1 || !tableData.DateModif) {
           console.error('Relecture DateModif après enregistrement : ligne ou colonne introuvable, valeur locale conservée');
           keep(rowId);
-        } else dates.set(rowId, data.DateModif[idx]);
+        } else dates.set(rowId, tableData.DateModif[idx]);
       });
     } catch (e) {
       console.error('Erreur relecture DateModif après enregistrement', e);
@@ -656,10 +656,10 @@ const Templates = (function () {
     const cached = byId(id);
     const freshAt = Math.max(cacheReadAt, cacheRowWrittenAt.get(String(id)) || 0);
     if (cached && Date.now() - freshAt <= CACHE_FRESH_MS) return cached;
-    const data = await readTable();
-    if (!data || !Array.isArray(data.id)) return cached || null;
-    const at = data.id.findIndex(rowId => sameId(rowId, id));
-    return at === -1 ? null : templateFromRow(data, at);
+    const tableData = await readTable();
+    if (!tableData || !Array.isArray(tableData.id)) return cached || null;
+    const at = tableData.id.findIndex(rowId => sameId(rowId, id));
+    return at === -1 ? null : templateFromRow(tableData, at);
   }
 
   // La copie de l'état que `columns` va remplacer, à joindre au lot qui l'écrit (cf. VersionsStore.prepare), ou null : rien à garder, historique indisponible (droits, table refusée) ou en pause. Jamais une
@@ -808,9 +808,9 @@ const Templates = (function () {
     await ensureTableExists();
     await ensureTokenColumn();
     async function read() {
-      const data = await grist.docApi.fetchTable(TABLE_NAME);
-      const at = data.id.findIndex(rowId => sameId(rowId, id));
-      return { rowId: at === -1 ? null : data.id[at], token: at === -1 || !data.Jeton ? '' : String(data.Jeton[at] || '') };
+      const tableData = await grist.docApi.fetchTable(TABLE_NAME);
+      const at = tableData.id.findIndex(rowId => sameId(rowId, id));
+      return { rowId: at === -1 ? null : tableData.id[at], token: at === -1 || !tableData.Jeton ? '' : String(tableData.Jeton[at] || '') };
     }
     let { rowId, token } = await read();
     if (rowId == null) return '';
@@ -904,13 +904,13 @@ const Templates = (function () {
   // La ligne `id` telle que Grist la garde en ce moment - relue, pas celle du cache : une autre personne a pu l'enregistrer depuis -, à lire AVANT de la supprimer (Annuler la rend, cf. restoreRow). { id, values } ; null si la
   // ligne n'existe plus ou si la table ne se lit pas.
   async function snapshotRow(id) {
-    const data = await readTable();
-    if (!data || !Array.isArray(data.id)) return null;
-    const at = data.id.findIndex(rowId => sameId(rowId, id));
+    const tableData = await readTable();
+    if (!tableData || !Array.isArray(tableData.id)) return null;
+    const at = tableData.id.findIndex(rowId => sameId(rowId, id));
     if (at === -1) return null;
     const values = {};
-    ROW_COLUMNS.forEach(column => { if (data[column]) values[column] = data[column][at]; });
-    return { id: data.id[at], values };
+    ROW_COLUMNS.forEach(column => { if (tableData[column]) values[column] = tableData[column][at]; });
+    return { id: tableData.id[at], values };
   }
 
   // Rend à la table la ligne que snapshotRow a gardée. Sous le MÊME numéro - les commentaires, le rangement et les choix d'export de la personne le désignent, et un tableau lié le désigne avec son jeton - et le même jeton ; si
@@ -919,13 +919,13 @@ const Templates = (function () {
   function restoreRow(snapshot) {
     return writes.track(async () => {
       await ensureTableExists();
-      const data = await readTable();
-      if (!data || !Array.isArray(data.id)) throw new Error('Table des modèles illisible : rien n’a été rendu.');
+      const tableData = await readTable();
+      if (!tableData || !Array.isArray(tableData.id)) throw new Error('Table des modèles illisible : rien n’a été rendu.');
       // Un ★ resté sur un email ou un macro-modèle ne compte pas (cf. getDefaultId).
-      const rows = data.id.map((rowId, i) => ({
-        id: rowId, settings: isSettingsRow(data, i), nom: data.Nom ? data.Nom[i] : '',
-        jeton: data.Jeton ? String(data.Jeton[i] || '') : '',
-        isDefault: !!(data.EstParDefaut && data.EstParDefaut[i]) && canBeDocumentDefault(data.TypeModele ? data.TypeModele[i] : ''),
+      const rows = tableData.id.map((rowId, i) => ({
+        id: rowId, settings: isSettingsRow(tableData, i), nom: tableData.Nom ? tableData.Nom[i] : '',
+        jeton: tableData.Jeton ? String(tableData.Jeton[i] || '') : '',
+        isDefault: !!(tableData.EstParDefaut && tableData.EstParDefaut[i]) && canBeDocumentDefault(tableData.TypeModele ? tableData.TypeModele[i] : ''),
       }));
       const token = String(snapshot.values.Jeton || '');
       if (token) {
@@ -933,7 +933,7 @@ const Templates = (function () {
         if (back) return { present: true, id: back.id };
       }
       const values = {};
-      ROW_COLUMNS.forEach(column => { if (column in data && snapshot.values[column] !== undefined) values[column] = snapshot.values[column]; });
+      ROW_COLUMNS.forEach(column => { if (column in tableData && snapshot.values[column] !== undefined) values[column] = snapshot.values[column]; });
       const models = rows.filter(row => !row.settings);
       const original = String(values.Nom || '').trim();
       const nom = freeName(original, candidate => models.some(row => sameName(row.nom, candidate)));

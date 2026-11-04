@@ -510,8 +510,8 @@ const GristAPI = (function () {
     const nextColumnsByTable = {};
     await Promise.all(_tables.map(async t => {
       try {
-        const data = await readTable(t);
-        const cols = Object.keys(data || {}).filter(k => k !== 'id' && k !== 'manualSort');
+        const tableData = await readTable(t);
+        const cols = Object.keys(tableData || {}).filter(k => k !== 'id' && k !== 'manualSort');
         nextColumnsByTable[t] = cols;
       } catch (e) {
         // Une table qu'on ne parvient pas à lire garde les colonnes déjà connues (celles des métadonnées, ou d'une passe réussie) : sans elles,
@@ -805,8 +805,8 @@ const GristAPI = (function () {
   function getAllVariables() {
     const vars = [];
     for (const t of _tables) {
-      for (const c of getColumns(t)) {
-        vars.push({ key: t + '.' + c, table: t, column: c });
+      for (const column of getColumns(t)) {
+        vars.push({ key: t + '.' + column, table: t, column: column });
       }
     }
     return vars;
@@ -882,12 +882,12 @@ const GristAPI = (function () {
   }
 
   async function fetchRowById(tableId, rowId, fresh) {
-    const data = await readTable(tableId, fresh);
-    const ids = data && data.id ? data.id : [];
+    const tableData = await readTable(tableId, fresh);
+    const ids = tableData && tableData.id ? tableData.id : [];
     const idx = ids.indexOf(rowId);
     if (idx === -1) return null;
     const row = {};
-    for (const key of Object.keys(data)) row[key] = data[key][idx];
+    for (const key of Object.keys(tableData)) row[key] = tableData[key][idx];
     _rawRows.add(row);
     return row;
   }
@@ -950,18 +950,18 @@ const GristAPI = (function () {
     }
     _linkRulesByPair = {};
     try {
-      const data = await grist.docApi.fetchTable(LINKS_TABLE_NAME);
-      const ids = data && data.id ? data.id : [];
+      const linksData = await grist.docApi.fetchTable(LINKS_TABLE_NAME);
+      const ids = linksData && linksData.id ? linksData.id : [];
       for (let i = 0; i < ids.length; i++) {
         // Une table créée avant la colonne TableSource, ou une ligne qui l'a vide, ne porte que le lien commun à toutes les tables.
-        const tableSource = (data[LINK_SOURCE_COLUMN] && data[LINK_SOURCE_COLUMN][i]) || '';
-        _linkRulesByPair[linkPairKey(data.TableCible[i], tableSource)] = {
-          id: data.id[i],
-          tableCible: data.TableCible[i],
+        const tableSource = (linksData[LINK_SOURCE_COLUMN] && linksData[LINK_SOURCE_COLUMN][i]) || '';
+        _linkRulesByPair[linkPairKey(linksData.TableCible[i], tableSource)] = {
+          id: linksData.id[i],
+          tableCible: linksData.TableCible[i],
           tableSource,
-          mode: data.Mode[i],
-          colonneCible: data.ColonneCible[i],
-          colonneSource: data.ColonneSource[i]
+          mode: linksData.Mode[i],
+          colonneCible: linksData.ColonneCible[i],
+          colonneSource: linksData.ColonneSource[i]
         };
       }
     } catch (e) {
@@ -1004,8 +1004,8 @@ const GristAPI = (function () {
   function ensureLinkSourceColumn() {
     if (!_linkSourceColumn) {
       _linkSourceColumn = (async () => {
-        const data = await grist.docApi.fetchTable(LINKS_TABLE_NAME);
-        if (data && LINK_SOURCE_COLUMN in data) return;
+        const linksData = await grist.docApi.fetchTable(LINKS_TABLE_NAME);
+        if (linksData && LINK_SOURCE_COLUMN in linksData) return;
         await grist.docApi.applyUserActions([['AddVisibleColumn', LINKS_TABLE_NAME, LINK_SOURCE_COLUMN, { type: 'Text', isFormula: false, label: 'Table de la page' }]]);
       })();
       _linkSourceColumn.catch(() => { _linkSourceColumn = null; });

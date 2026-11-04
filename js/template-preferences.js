@@ -54,8 +54,8 @@ const TemplatePreferences = (function () {
   let replieColumnPresent = false;
   async function ensureReplieColumn() {
     if (replieColumnPresent) return;
-    const data = await grist.docApi.fetchTable(TABLE_NAME);
-    if (!('Replie' in data)) {
+    const tableData = await grist.docApi.fetchTable(TABLE_NAME);
+    if (!('Replie' in tableData)) {
       await grist.docApi.applyUserActions([
         ['AddVisibleColumn', TABLE_NAME, 'Replie', { type: 'Bool', isFormula: false, label: 'Dossier replié par défaut' }]
       ]);
@@ -68,8 +68,8 @@ const TemplatePreferences = (function () {
   let exportColumnsPresent = false;
   async function ensureExportColumns() {
     if (exportColumnsPresent) return;
-    const data = await grist.docApi.fetchTable(TABLE_NAME);
-    const missing = EXPORT_FIELDS.filter((f) => !(f.column in data));
+    const tableData = await grist.docApi.fetchTable(TABLE_NAME);
+    const missing = EXPORT_FIELDS.filter((f) => !(f.column in tableData));
     if (missing.length) {
       await grist.docApi.applyUserActions(missing.map((f) => ['AddVisibleColumn', TABLE_NAME, f.column, { type: 'Text', isFormula: false, label: f.label }]));
     }
@@ -117,30 +117,30 @@ const TemplatePreferences = (function () {
     // « oublierait » l'épingle.
     const email = (await userEmail.get()) || '';
     try {
-      const data = await grist.docApi.fetchTable(TABLE_NAME);
+      const tableData = await grist.docApi.fetchTable(TABLE_NAME);
       // Schéma relu à chaque chargement : Replie peut manquer (document ancien) ou avoir été ajoutée ailleurs.
-      replieColumnPresent = ('Replie' in data);
-      exportColumnsPresent = EXPORT_FIELDS.every((f) => f.column in data);
+      replieColumnPresent = ('Replie' in tableData);
+      exportColumnsPresent = EXPORT_FIELDS.every((f) => f.column in tableData);
       // Une lecture sans Utilisateur ni ModeleId (règle d'accès qui les cache, lecture partielle) ne dit rien de la personne : aucune préférence, sans erreur.
       // Dossier et Epingle absents se lisent vides.
-      const count = data.Utilisateur && data.ModeleId ? data.id.length : 0;
-      const folderOf = i => normalizeFolderPath(data.Dossier ? data.Dossier[i] : null);
+      const count = tableData.Utilisateur && tableData.ModeleId ? tableData.id.length : 0;
+      const folderOf = i => normalizeFolderPath(tableData.Dossier ? tableData.Dossier[i] : null);
       for (let i = 0; i < count; i++) {
-        if ((data.Utilisateur[i] || '') !== email) continue;
-        if (data.ModeleId[i] === FOLDER_ROW_MODELE_ID) {
+        if ((tableData.Utilisateur[i] || '') !== email) continue;
+        if (tableData.ModeleId[i] === FOLDER_ROW_MODELE_ID) {
           const chemin = folderOf(i);
-          const replie = !!(data.Replie && data.Replie[i]);
+          const replie = !!(tableData.Replie && tableData.Replie[i]);
           // Plusieurs lignes pour un même dossier (double écriture d'un autre onglet) : la première fait foi, c'est celle que setFolderCollapsed met
           // à jour.
-          if (chemin && !folderStates[chemin]) folderStates[chemin] = { rowId: data.id[i], replie, saved: replie };
+          if (chemin && !folderStates[chemin]) folderStates[chemin] = { rowId: tableData.id[i], replie, saved: replie };
           continue;
         }
         // Les réglages d'export manquent aux lignes d'un document ancien (colonnes pas encore ajoutées) : ils se lisent vides, le réglage d'origine.
         const exportChoices = {};
-        EXPORT_FIELDS.forEach(({ field, column }) => { exportChoices[field] = data[column] ? String(data[column][i] || '') : ''; });
-        cache[data.ModeleId[i]] = {
-          rowId: data.id[i],
-          epingle: !!(data.Epingle && data.Epingle[i]),
+        EXPORT_FIELDS.forEach(({ field, column }) => { exportChoices[field] = tableData[column] ? String(tableData[column][i] || '') : ''; });
+        cache[tableData.ModeleId[i]] = {
+          rowId: tableData.id[i],
+          epingle: !!(tableData.Epingle && tableData.Epingle[i]),
           dossier: folderOf(i),
           exportChoices,
         };
@@ -275,7 +275,7 @@ const TemplatePreferences = (function () {
 
   function listFolders() {
     const set = new Set();
-    Object.keys(cache || {}).forEach((id) => { const d = cache[id].dossier; if (d) set.add(d); });
+    Object.keys(cache || {}).forEach((id) => { const folder = cache[id].dossier; if (folder) set.add(folder); });
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'fr'));
   }
 

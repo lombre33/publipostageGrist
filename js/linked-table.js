@@ -675,7 +675,7 @@ const LinkedTable = (function () {
     const cells = table.child(row);
     const col = Math.min(place.col, cells.childCount - 1);
     at += 1;
-    for (let c = 0; c < col; c++) at += cells.child(c).nodeSize;
+    for (let childIndex = 0; childIndex < col; childIndex++) at += cells.child(childIndex).nodeSize;
     tr.setSelection(libs.TextSelection.near(tr.doc.resolve(at + 1), 1));
   }
 

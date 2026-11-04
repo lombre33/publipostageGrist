@@ -379,7 +379,7 @@ const FieldEditor = (function () {
   }
 
   // L'éditeur TipTap d'un champ, null si l'élément n'en est pas un.
-  function of(host) {
+  function fieldEditorOf(host) {
     const field = fields.get(host);
     return field ? field.editor : null;
   }
@@ -401,5 +401,5 @@ const FieldEditor = (function () {
     if (field) field.panels.forEach(panel => panel.hide());
   }
 
-  return { attach, of, hidePanels, refreshBadgeValidity, resyncBars, snapshot, restore, settle };
+  return { attach, of: fieldEditorOf, hidePanels, refreshBadgeValidity, resyncBars, snapshot, restore, settle };
 })();

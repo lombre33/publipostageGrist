@@ -69,13 +69,13 @@ const PdfProtectionDialog = (function () {
   }
   // Un mot de passe masqué et la case qui le montre, à sa droite sur la même ligne (`row`).
   function secret(id, showId) {
-    const f = field(id, 'password');
-    f.input.maxLength = PdfProtection.MAX_PASSWORD_BYTES;
+    const passwordField = field(id, 'password');
+    passwordField.input.maxLength = PdfProtection.MAX_PASSWORD_BYTES;
     const show = check(showId);
-    show.input.addEventListener('change', () => { f.input.type = show.input.checked ? 'text' : 'password'; });
+    show.input.addEventListener('change', () => { passwordField.input.type = show.input.checked ? 'text' : 'password'; });
     const row = el('div', 'pp-protect-secret');
-    row.append(f.input, show.wrap);
-    return Object.assign(f, { show, row });
+    row.append(passwordField.input, show.wrap);
+    return Object.assign(passwordField, { show, row });
   }
   // Un avertissement de risque : « Risque : » en tête, puis la phrase.
   function risk(id) {

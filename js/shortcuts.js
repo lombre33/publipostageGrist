@@ -379,10 +379,10 @@ const Shortcuts = (function () {
     const nativeKeys = action => (action.native ? [defaultOf(action)] : []).concat(action.aliases || []);
 
     function actionOf(id) { return BY_ID[id] || null; }
-    function keyFor(id) { const a = actionOf(id); return a ? currentKey(a) : ''; }
-    function defaultKeyFor(id) { const a = actionOf(id); return a ? defaultOf(a) : ''; }
+    function keyFor(id) { const action = actionOf(id); return action ? currentKey(action) : ''; }
+    function defaultKeyFor(id) { const action = actionOf(id); return action ? defaultOf(action) : ''; }
     function label(id) { return format(keyFor(id)); }
-    function isChanged(id) { const a = actionOf(id); return !!a && isCustomized(a); }
+    function isChanged(id) { const action = actionOf(id); return !!action && isCustomized(action); }
 
     // L'action qui a cette combinaison comme touche actuelle (hors `exceptId`).
     function ownerOf(combo, exceptId) {
@@ -585,6 +585,6 @@ const Shortcuts = (function () {
     onChange: fn => { if (typeof fn === 'function') listeners.push(fn); },
     setPlatform: value => { platformOverride = value || null; changed(); },
     reload: () => { custom = readStorage(); changed(); },
-    run: id => { const a = actionOf(id); return !!a && a.run(); },
+    run: id => { const action = actionOf(id); return !!action && action.run(); },
   };
 })();

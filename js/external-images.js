@@ -151,8 +151,8 @@ const ExternalImages = (function () {
   function sheetZoom() {
     for (const id of ['editor-container', 'reader-container']) {
       const container = document.getElementById(id);
-      const z = container ? parseFloat(container.style.getPropertyValue('--pp-fit-zoom')) : NaN;
-      if (isFinite(z) && z > 0) return Math.round(z * 100) / 100;
+      const zoom = container ? parseFloat(container.style.getPropertyValue('--pp-fit-zoom')) : NaN;
+      if (isFinite(zoom) && zoom > 0) return Math.round(zoom * 100) / 100;
     }
     return 1;
   }

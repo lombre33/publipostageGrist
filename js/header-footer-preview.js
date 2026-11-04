@@ -496,9 +496,9 @@ const HeaderFooterPreview = (function () {
       const paragraph = editor.state.doc.resolve(editor.view.posAtDOM(el, 0)).parent;
       let onlyFirstPageLayers = paragraph.type.name === 'paragraph' && paragraph.childCount > 0;
       paragraph.forEach(child => {
-        const a = child.attrs;
+        const imageAttrs = child.attrs;
         if (child.isText && !child.text.trim()) return;
-        if (child.type.name !== 'editorImage' || a.layer === 'normal' || a.pageIndex !== 0 || a.pageLeftPt == null || a.pageTopPt == null) onlyFirstPageLayers = false;
+        if (child.type.name !== 'editorImage' || imageAttrs.layer === 'normal' || imageAttrs.pageIndex !== 0 || imageAttrs.pageLeftPt == null || imageAttrs.pageTopPt == null) onlyFirstPageLayers = false;
       });
       return onlyFirstPageLayers;
     } catch (e) { return false; }
@@ -1309,20 +1309,20 @@ const HeaderFooterPreview = (function () {
     if (appVersions === null) {
       appVersions = Array.from(document.querySelectorAll('script[src], link[rel="stylesheet"][href]')).map(el => el.getAttribute('src') || el.getAttribute('href')).filter(url => /^(\.\/)?(js|css)\//.test(url)).join(' ');
     }
-    let a = 0x811c9dc5;
-    let b = 0x9e3779b9;
+    let hashLow = 0x811c9dc5;
+    let hashHigh = 0x9e3779b9;
     let length = 0;
     [text, JSON.stringify(PageLayout.snapshot()), JSON.stringify(headerFooterDraft), appVersions, String(window.devicePixelRatio), navigator.userAgent].forEach((part) => {
       for (let i = 0; i < part.length; i += 1) {
         const code = part.charCodeAt(i);
-        a = Math.imul(a ^ code, 16777619);
-        b = Math.imul(b ^ code, 2654435761) ^ (b >>> 15);
+        hashLow = Math.imul(hashLow ^ code, 16777619);
+        hashHigh = Math.imul(hashHigh ^ code, 2654435761) ^ (hashHigh >>> 15);
       }
-      a = Math.imul(a ^ 0x1f, 16777619);   // la frontière entre deux parties
-      b = Math.imul(b ^ 0x1f, 2654435761) ^ (b >>> 15);
+      hashLow = Math.imul(hashLow ^ 0x1f, 16777619);   // la frontière entre deux parties
+      hashHigh = Math.imul(hashHigh ^ 0x1f, 2654435761) ^ (hashHigh >>> 15);
       length += part.length;
     });
-    return (a >>> 0).toString(36) + '.' + (b >>> 0).toString(36) + '.' + length.toString(36);
+    return (hashLow >>> 0).toString(36) + '.' + (hashHigh >>> 0).toString(36) + '.' + length.toString(36);
   };
   function layerChecks() {
     if (typeof PersonStore === 'undefined') return [];
@@ -1359,13 +1359,13 @@ const HeaderFooterPreview = (function () {
     foot.style.height = footAreaPx + 'px';
     placeInBox(foot, footBox);
     if (footerText) {
-      const f = document.createElement('div');
-      f.className = 'v2-page-band-footer v2-hf-zone v2-hf-zone-filled' + (inEmailMode ? ' v2-hf-locked' : '');
-      Dom.setMarkup(f, PageLayout.resolvePageNumberBadges(footerText, pageEnding, totalPages));
-      f.style.paddingTop = '0';
-      f.style.maxHeight = footAreaPx + 'px';
-      f.onclick = () => openZone('footer', (pageEnding === 1 && differentFirstPage) ? 'first' : 'default');
-      foot.appendChild(f);
+      const footer = document.createElement('div');
+      footer.className = 'v2-page-band-footer v2-hf-zone v2-hf-zone-filled' + (inEmailMode ? ' v2-hf-locked' : '');
+      Dom.setMarkup(footer, PageLayout.resolvePageNumberBadges(footerText, pageEnding, totalPages));
+      footer.style.paddingTop = '0';
+      footer.style.maxHeight = footAreaPx + 'px';
+      footer.onclick = () => openZone('footer', (pageEnding === 1 && differentFirstPage) ? 'first' : 'default');
+      foot.appendChild(footer);
     }
     const divider = document.createElement('div');
     divider.className = 'v2-page-seam-divider';

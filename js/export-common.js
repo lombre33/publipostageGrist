@@ -96,9 +96,9 @@ const ExportCommon = (function () {
   // Télécharge un Blob par un <a download> synthétique : window.location.href se comporte moins bien dans l'iframe sandboxée d'un widget Grist.
   function downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); a.remove();
+    const link = document.createElement('a');
+    link.href = url; link.download = filename;
+    document.body.appendChild(link); link.click(); link.remove();
     URL.revokeObjectURL(url);
   }
 
@@ -135,15 +135,15 @@ const ExportCommon = (function () {
     const placed = [];
     let width = 0;
     rows.forEach((tr, r) => {
-      let c = 0;
+      let column = 0;
       cellsOf(tr).forEach((el) => {
-        while (taken[r] && taken[r][c]) c += 1;
+        while (taken[r] && taken[r][column]) column += 1;
         const colspan = spanOf(el, 'colspan');
         const rowspan = Math.min(rows.length - r, spanOf(el, 'rowspan'));
-        for (let dr = 1; dr < rowspan; dr += 1) for (let dc = 0; dc < colspan; dc += 1) (taken[r + dr] = taken[r + dr] || [])[c + dc] = true;
-        placed.push({ el, row: r, col: c, rowspan, colspan });
-        c += colspan;
-        width = Math.max(width, c);
+        for (let dr = 1; dr < rowspan; dr += 1) for (let dc = 0; dc < colspan; dc += 1) (taken[r + dr] = taken[r + dr] || [])[column + dc] = true;
+        placed.push({ el, row: r, col: column, rowspan, colspan });
+        column += colspan;
+        width = Math.max(width, column);
       });
     });
     return { placed, width };

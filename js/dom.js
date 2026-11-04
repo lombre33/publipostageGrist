@@ -2,7 +2,7 @@
 // portée, avant d'écrire la moindre ligne qui crée un élément.
 const Dom = (function () {
   // Un élément `tag` avec sa classe CSS et son texte, quand ils sont donnés (du texte, jamais du HTML).
-  function el(tag, className, text) {
+  function makeElement(tag, className, text) {
     const node = document.createElement(tag);
     if (className) node.className = className;
     if (text != null) node.textContent = text;
@@ -11,14 +11,14 @@ const Dom = (function () {
 
   // Une <option> de liste déroulante, avec sa valeur et son texte.
   function option(value, text) {
-    const node = el('option', null, text);
+    const node = makeElement('option', null, text);
     node.value = value;
     return node;
   }
 
   // Un bouton qui ne valide jamais un formulaire (type="button"), avec sa classe CSS et son texte quand ils sont donnés.
   function button(className, text) {
-    const node = el('button', className, text);
+    const node = makeElement('button', className, text);
     node.type = 'button';
     return node;
   }
@@ -28,11 +28,11 @@ const Dom = (function () {
   // `options` : [{ value, className, fill(bouton) }], `fill` posant le contenu du bouton. Rend le groupe, ses boutons et `check(value)`, qui coche le
   // bouton de cette valeur.
   function radioGroup({ className, labelId, options, onPick, onEnter }) {
-    const group = el('div', className);
+    const group = makeElement('div', className);
     group.setAttribute('role', 'radiogroup');
     group.setAttribute('aria-labelledby', labelId);
     const buttons = options.map(option => {
-      const button = el('button', option.className);
+      const button = makeElement('button', option.className);
       button.type = 'button';
       button.setAttribute('role', 'radio');
       button.dataset.value = option.value;
@@ -80,5 +80,5 @@ const Dom = (function () {
     target.replaceChildren(inertTemplate(html).content);
   }
 
-  return { el, option, button, radioGroup, inertTemplate, setMarkup };
+  return { el: makeElement, option, button, radioGroup, inertTemplate, setMarkup };
 })();

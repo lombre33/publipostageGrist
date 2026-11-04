@@ -184,8 +184,8 @@ const MarkdownImport = (function () {
   function tagEnd(line, at) {
     let quote = '';
     for (let j = at + 1; j < line.length; j += 1) {
-      const c = line[j];
-      if (quote) { if (c === quote) quote = ''; } else if (c === '"' || c === "'") quote = c; else if (c === '>') return j + 1;
+      const ch = line[j];
+      if (quote) { if (ch === quote) quote = ''; } else if (ch === '"' || ch === "'") quote = ch; else if (ch === '>') return j + 1;
     }
     return -1;
   }
@@ -193,12 +193,12 @@ const MarkdownImport = (function () {
     let out = '';
     let i = 0;
     while (i < line.length) {
-      const c = line[i];
+      const ch = line[i];
       let end = -1;
-      if (c === '\\') end = i + 2;
-      else if (c === '`') { let n = 1; while (line[i + n] === '`') n += 1; end = codeSpanEnd(line, i, n); if (end === -1) end = i + n; }
-      else if (c === '<' && /[A-Za-z/!?]/.test(line[i + 1] || '')) end = tagEnd(line, i);
-      else if (c === '{' && line[i + 1] === '{') {
+      if (ch === '\\') end = i + 2;
+      else if (ch === '`') { let n = 1; while (line[i + n] === '`') n += 1; end = codeSpanEnd(line, i, n); if (end === -1) end = i + n; }
+      else if (ch === '<' && /[A-Za-z/!?]/.test(line[i + 1] || '')) end = tagEnd(line, i);
+      else if (ch === '{' && line[i + 1] === '{') {
         TOKEN.lastIndex = i;
         const m = TOKEN.exec(line);
         if (m && m[1]) {
@@ -412,7 +412,7 @@ const MarkdownImport = (function () {
   // L'alignement : <div align="center"> (et <center>) donne son alignement aux paragraphes et titres qu'il entoure ; un paragraphe ou un titre qui porte align aussi, et
   // une case de tableau (marked écrit align="right" pour « ---: ») : dans l'éditeur, l'alignement est celui des paragraphes de la case. Une image seule dans son
   // paragraphe est centrée ou mise à droite par son propre réglage.
-  const textAlignOf = value => { const a = String(value || '').trim().toLowerCase(); return a === 'center' || a === 'right' ? a : ''; };
+  const textAlignOf = value => { const align = String(value || '').trim().toLowerCase(); return align === 'center' || align === 'right' ? align : ''; };
   function setAlign(node, align) {
     if (node.tagName === 'P') {
       const kids = significant(node);
@@ -506,12 +506,12 @@ const MarkdownImport = (function () {
     const { zones, body } = splitZones(text.split('\n'));
     const html = convert(body, ctx);
     const zoneHtml = name => (zones[name] ? convert(zones[name], ctx) : '');
-    const data = { enabled: false, differentFirstPage: false, header: { default: zoneHtml('header'), first: zoneHtml('header-first') }, footer: { default: zoneHtml('footer'), first: zoneHtml('footer-first') } };
-    const filled = [data.header.default, data.header.first, data.footer.default, data.footer.first].some(PageLayout.hasZoneContent);
+    const headerFooter = { enabled: false, differentFirstPage: false, header: { default: zoneHtml('header'), first: zoneHtml('header-first') }, footer: { default: zoneHtml('footer'), first: zoneHtml('footer-first') } };
+    const filled = [headerFooter.header.default, headerFooter.header.first, headerFooter.footer.default, headerFooter.footer.first].some(PageLayout.hasZoneContent);
     if (!html && !filled) throw fail('empty');
-    data.enabled = filled;
-    data.differentFirstPage = PageLayout.hasZoneContent(data.header.first) || PageLayout.hasZoneContent(data.footer.first);
-    return { html, headerFooter: filled ? data : null, skippedImages: ctx.skippedImages, unknownVariables: ctx.unknownVariables };
+    headerFooter.enabled = filled;
+    headerFooter.differentFirstPage = PageLayout.hasZoneContent(headerFooter.header.first) || PageLayout.hasZoneContent(headerFooter.footer.first);
+    return { html, headerFooter: filled ? headerFooter : null, skippedImages: ctx.skippedImages, unknownVariables: ctx.unknownVariables };
   }
 
   // Le fichier choisi, lu et converti : { html, headerFooter, skippedImages, unknownVariables }, ou une erreur à code (tooBig, unreadable, empty, library : la bibliothèque ne s'est pas chargée).

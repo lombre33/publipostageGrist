@@ -165,8 +165,8 @@ const ConditionalText = (function () {
   // en remontant. Rend la position du bloc, ou -1.
   function insertAfterAncestor(tr, $pos, type, block) {
     let at = -1;
-    for (let d = $pos.depth; d >= 1 && at < 0; d--) {
-      if ($pos.node(d - 1).canReplaceWith($pos.index(d - 1) + 1, $pos.index(d - 1) + 1, type)) { at = $pos.after(d); tr.insert(at, block); }
+    for (let depth = $pos.depth; depth >= 1 && at < 0; depth--) {
+      if ($pos.node(depth - 1).canReplaceWith($pos.index(depth - 1) + 1, $pos.index(depth - 1) + 1, type)) { at = $pos.after(depth); tr.insert(at, block); }
     }
     return at;
   }

@@ -50,14 +50,14 @@ const SavedPageFormats = (function () {
     // Pas de table = aucun format enregistré : elle n'est créée qu'à la première écriture (ensureTable), jamais pour lire.
     if (tables.indexOf(TABLE_NAME) === -1) return found;
     tableKnown = true;
-    let data;
-    try { data = await grist.docApi.fetchTable(TABLE_NAME); } catch (e) { console.warn('[saved-page-formats] lecture des formats enregistrés impossible', e); return found; }
-    for (let i = 0; i < data.id.length; i++) {
-      const name = cleanName(data.Nom && data.Nom[i]);
-      const widthMm = tenth(Number(data.Largeur && data.Largeur[i]));
-      const heightMm = tenth(Number(data.Hauteur && data.Hauteur[i]));
+    let tableData;
+    try { tableData = await grist.docApi.fetchTable(TABLE_NAME); } catch (e) { console.warn('[saved-page-formats] lecture des formats enregistrés impossible', e); return found; }
+    for (let i = 0; i < tableData.id.length; i++) {
+      const name = cleanName(tableData.Nom && tableData.Nom[i]);
+      const widthMm = tenth(Number(tableData.Largeur && tableData.Largeur[i]));
+      const heightMm = tenth(Number(tableData.Hauteur && tableData.Hauteur[i]));
       if (!name || !validSize(widthMm, heightMm)) continue;
-      found.push({ rowId: data.id[i], name, widthMm, heightMm });
+      found.push({ rowId: tableData.id[i], name, widthMm, heightMm });
     }
     return found;
   }

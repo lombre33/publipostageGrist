@@ -88,13 +88,13 @@ const TextExpansion = (function () {
     // Pas de table = aucune abréviation : elle n'est créée qu'à la première écriture (ensureTable), jamais pour lire.
     if (tables.indexOf(TABLE_NAME) === -1) return found;
     tableKnown = true;
-    let data;
-    try { data = await grist.docApi.fetchTable(TABLE_NAME); } catch (e) { console.warn('[text-expansion] lecture des abréviations impossible', e); return found; }
-    for (let i = 0; i < data.id.length; i++) {
-      if (((data.Utilisateur && data.Utilisateur[i]) || '') !== email) continue;
-      const abbreviation = String((data.Abreviation && data.Abreviation[i]) || '').trim();
+    let tableData;
+    try { tableData = await grist.docApi.fetchTable(TABLE_NAME); } catch (e) { console.warn('[text-expansion] lecture des abréviations impossible', e); return found; }
+    for (let i = 0; i < tableData.id.length; i++) {
+      if (((tableData.Utilisateur && tableData.Utilisateur[i]) || '') !== email) continue;
+      const abbreviation = String((tableData.Abreviation && tableData.Abreviation[i]) || '').trim();
       if (!abbreviation) continue;
-      found.push({ rowId: data.id[i], abbreviation, text: String((data.Texte && data.Texte[i]) || '') });
+      found.push({ rowId: tableData.id[i], abbreviation, text: String((tableData.Texte && tableData.Texte[i]) || '') });
     }
     return found;
   }
@@ -192,8 +192,8 @@ const TextExpansion = (function () {
   // Aucune ligne de la table n'a le numéro `rowId`, de quelque personne qu'elle soit : la table est commune à toutes les personnes du document, alors que `entries` n'a que les lignes de la courante.
   async function rowIdIsFree(rowId) {
     try {
-      const data = await grist.docApi.fetchTable(TABLE_NAME);
-      return !!data && Array.isArray(data.id) && data.id.indexOf(rowId) === -1;
+      const tableData = await grist.docApi.fetchTable(TABLE_NAME);
+      return !!tableData && Array.isArray(tableData.id) && tableData.id.indexOf(rowId) === -1;
     } catch (e) { return false; }
   }
 

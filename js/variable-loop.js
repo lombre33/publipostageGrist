@@ -31,7 +31,7 @@ const VariableLoop = (function () {
 
   // === Lecture du document de l'éditeur ===
   function nearestDepth($pos, names) {
-    for (let d = $pos.depth; d > 0; d--) if (names.indexOf($pos.node(d).type.name) !== -1) return d;
+    for (let depth = $pos.depth; depth > 0; depth--) if (names.indexOf($pos.node(depth).type.name) !== -1) return depth;
     return -1;
   }
   // Bulle qui répète ce nœud (`start` : sa position) : la première, dans l'ordre du document, qui porte une boucle `repeat` dont ce nœud est la
@@ -63,12 +63,12 @@ const VariableLoop = (function () {
   function zonesAt(editorState, pos) {
     const $pos = editorState.doc.resolve(pos);
     const zones = [];
-    for (let d = $pos.depth; d > 0; d--) {
-      const node = $pos.node(d);
+    for (let depth = $pos.depth; depth > 0; depth--) {
+      const node = $pos.node(depth);
       const repeat = Object.keys(ZONE_NODES).find(r => ZONE_NODES[r].indexOf(node.type.name) !== -1);
       if (!repeat) continue;
-      const owner = zoneOwner(editorState.doc, $pos.before(d), node, repeat);
-      if (owner) zones.push({ repeat, start: $pos.before(d), owner });
+      const owner = zoneOwner(editorState.doc, $pos.before(depth), node, repeat);
+      if (owner) zones.push({ repeat, start: $pos.before(depth), owner });
     }
     const context = contexts.get(editorState.schema);
     if (context) context().forEach(zone => zones.push(Object.assign({}, zone, { outer: true })));

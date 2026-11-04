@@ -252,7 +252,7 @@ const GridEditor = (function () {
       const rows = [];
       for (let r = 0; r < DEFAULT_ROWS; r++) {
         const cells = [];
-        for (let c = 0; c < DEFAULT_COLS; c++) cells.push(tableCell.createAndFill({ colwidth: [DEFAULT_COL_WIDTH_PX], verticalAlign: DEFAULT_VALIGN }));
+        for (let col = 0; col < DEFAULT_COLS; col++) cells.push(tableCell.createAndFill({ colwidth: [DEFAULT_COL_WIDTH_PX], verticalAlign: DEFAULT_VALIGN }));
         rows.push(tableRow.create({ rowHeight: DEFAULT_ROW_HEIGHT_PX }, cells));
       }
       return table.create(null, rows);
@@ -655,7 +655,7 @@ const GridEditor = (function () {
 
     // La profondeur de l'ancêtre le plus proche de `$pos` dont le type est dans `names`, 0 sans.
     function ancestorDepth($pos, names) {
-      for (let d = $pos.depth; d > 0; d--) if (names.has($pos.node(d).type.name)) return d;
+      for (let depth = $pos.depth; depth > 0; depth--) if (names.has($pos.node(depth).type.name)) return depth;
       return 0;
     }
 
@@ -793,15 +793,15 @@ const GridEditor = (function () {
         if (!node || !rect) return true;
         const map = libs.TableMap.get(node);
         for (let r = rect.top; r < rect.bottom; r++) {
-          for (let c = rect.left; c < rect.right; c++) {
-            const pos = map.map[r * map.width + c];
+          for (let col = rect.left; col < rect.right; col++) {
+            const pos = map.map[r * map.width + col];
             const piece = node.nodeAt(pos);
             if (!hasCellAttr(piece, BORDER_ATTRS.top)) continue;
             const next = Object.assign({}, piece.attrs, {
               borderTop: r === rect.top ? attrs.borderTop || null : null,
               borderBottom: r === rect.bottom - 1 ? attrs.borderBottom || null : null,
-              borderLeft: c === rect.left ? attrs.borderLeft || null : null,
-              borderRight: c === rect.right - 1 ? attrs.borderRight || null : null,
+              borderLeft: col === rect.left ? attrs.borderLeft || null : null,
+              borderRight: col === rect.right - 1 ? attrs.borderRight || null : null,
             });
             if (!sameAttrs(next, piece.attrs)) tr.setNodeMarkup(before.pos + 1 + pos, undefined, next);
           }
@@ -1404,9 +1404,9 @@ const GridEditor = (function () {
         const start = info.pos + 1;
         let rect = null;
         if (isCellSelection(sel)) {
-          const a = map.findCell(sel.$anchorCell.pos - start);
-          const b = map.findCell(sel.$headCell.pos - start);
-          rect = { left: Math.min(a.left, b.left), right: Math.max(a.right, b.right), top: Math.min(a.top, b.top), bottom: Math.max(a.bottom, b.bottom) };
+          const anchorRect = map.findCell(sel.$anchorCell.pos - start);
+          const headRect = map.findCell(sel.$headCell.pos - start);
+          rect = { left: Math.min(anchorRect.left, headRect.left), right: Math.max(anchorRect.right, headRect.right), top: Math.min(anchorRect.top, headRect.top), bottom: Math.max(anchorRect.bottom, headRect.bottom) };
         } else {
           const cellPos = currentCellPos(editor.state);
           if (cellPos != null) rect = map.findCell(cellPos - start);

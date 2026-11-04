@@ -261,10 +261,10 @@ const Formula = (function () {
       case 'neg': return mapList(evalNode(node.a, values), x => 0 - num(x));
       case 'pct': return mapList(evalNode(node.a, values), x => num(x) / 100);
       case 'bin': {
-        const a = evalNode(node.a, values);
-        const b = evalNode(node.b, values);
+        const left = evalNode(node.a, values);
+        const right = evalNode(node.b, values);
         const operate = OPERATIONS[node.op];
-        return zip(a, b, (x, y) => operate(num(x), num(y)));
+        return zip(left, right, (x, y) => operate(num(x), num(y)));
       }
       default: return callFunction(node.name, node.args.map(arg => evalNode(arg, values)));
     }

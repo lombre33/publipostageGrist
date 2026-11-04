@@ -19,7 +19,7 @@ const SheetAssemblyDialog = (function () {
   let ctx = null;     // la demande en cours : { count (lignes de la table), grid (modèle de grille : « valeurs » plutôt que « lignes ») }
   let current = null; // { finish(valeur) } : de quoi refermer la fenêtre en rendant sa réponse
 
-  function el(tag, className, text) {
+  function makeElement(tag, className, text) {
     const e = document.createElement(tag);
     if (className) e.className = className;
     if (text !== undefined) e.textContent = text;
@@ -45,17 +45,17 @@ const SheetAssemblyDialog = (function () {
 
   // Un groupe de choix à une seule réponse (rôle radiogroup) fait de vraies cases d'option : les flèches, Tab et le grisage sont ceux du navigateur.
   function radioGroup(name, labelId, values, onPick) {
-    const group = el('div', 'pp-sheets-options');
+    const group = makeElement('div', 'pp-sheets-options');
     group.setAttribute('role', 'radiogroup');
     group.setAttribute('aria-labelledby', labelId);
     const items = values.map(value => {
-      const label = el('label', 'pp-sheets-option');
-      const input = el('input');
+      const label = makeElement('label', 'pp-sheets-option');
+      const input = makeElement('input');
       input.type = 'radio';
       input.name = name;
       input.value = value;
       input.addEventListener('change', () => { if (input.checked) onPick(value); });
-      const text = el('span');
+      const text = makeElement('span');
       label.append(input, text);
       group.appendChild(label);
       return { value, label, input, text };
@@ -66,10 +66,10 @@ const SheetAssemblyDialog = (function () {
   // Un nombre d'emplacements (1 au maximum que la feuille reçoit dans ce sens), nommé par son libellé de ligne puis par son texte (« Emplacements en
   // largeur »).
   function slotField(id, rowLabelId, onPick) {
-    const field = el('label', 'pp-sheets-slot-field');
-    const select = el('select', 'pp-sheets-select');
+    const field = makeElement('label', 'pp-sheets-slot-field');
+    const select = makeElement('select', 'pp-sheets-select');
     select.id = id;
-    const text = el('span');
+    const text = makeElement('span');
     text.id = id + '-text';
     select.setAttribute('aria-labelledby', rowLabelId + ' ' + text.id);
     select.addEventListener('change', () => onPick(Number(select.value)));
@@ -83,15 +83,15 @@ const SheetAssemblyDialog = (function () {
   // La marge laissée autour de chaque page (mm) : un champ nombre au pas de 0,5 et, à sa droite, la fin de la phrase (« mm autour de chaque page »).
   // Il est nommé par son libellé de ligne puis par ce texte. `onType` reçoit le nombre saisi (NaN tant que le champ est vide ou incomplet).
   function marginField(id, rowLabelId, onType) {
-    const field = el('div', 'pp-sheets-margin');
-    const input = el('input', 'pp-sheets-margin-input');
+    const field = makeElement('div', 'pp-sheets-margin');
+    const input = makeElement('input', 'pp-sheets-margin-input');
     input.id = id;
     input.type = 'number';
     input.min = '0';
     input.step = '0.5';
     input.inputMode = 'decimal';
     input.autocomplete = 'off';
-    const text = el('span');
+    const text = makeElement('span');
     text.id = id + '-text';
     input.setAttribute('aria-labelledby', rowLabelId + ' ' + text.id);
     input.addEventListener('input', () => onType(input.valueAsNumber));
@@ -107,34 +107,34 @@ const SheetAssemblyDialog = (function () {
       id: 'pp-sheets-modal', titleId: 'pp-sheets-title', size: 'md', boxClass: 'pp-sheets-box', actionsClass: 'var-modal-actions',
       onEscape: () => { if (current) current.finish(null); else win.hide(); },
     });
-    const grid = el('div', 'pp-sheets-grid');
+    const grid = makeElement('div', 'pp-sheets-grid');
 
-    const sheetLabel = el('span', 'pp-sheets-label'); sheetLabel.id = 'pp-sheets-sheet-label';
+    const sheetLabel = makeElement('span', 'pp-sheets-label'); sheetLabel.id = 'pp-sheets-sheet-label';
     const sheets = radioGroup('pp-sheets-sheet', 'pp-sheets-sheet-label', SheetLayout.SHEETS, chooseSheet);
     sheets.items.forEach(item => { item.text.textContent = item.value; });
 
-    const orientationLabel = el('span', 'pp-sheets-label'); orientationLabel.id = 'pp-sheets-orientation-label';
+    const orientationLabel = makeElement('span', 'pp-sheets-label'); orientationLabel.id = 'pp-sheets-orientation-label';
     const orientations = radioGroup('pp-sheets-orientation', 'pp-sheets-orientation-label', SheetLayout.ORIENTATIONS, chooseOrientation);
 
-    const slotsLabel = el('span', 'pp-sheets-label'); slotsLabel.id = 'pp-sheets-slots-label';
-    const slots = el('div', 'pp-sheets-slots');
+    const slotsLabel = makeElement('span', 'pp-sheets-label'); slotsLabel.id = 'pp-sheets-slots-label';
+    const slots = makeElement('div', 'pp-sheets-slots');
     slots.setAttribute('role', 'group');
     slots.setAttribute('aria-labelledby', 'pp-sheets-slots-label');
     const across = slotField('pp-sheets-cols', 'pp-sheets-slots-label', n => pick({ cols: n }));
-    const times = el('span', 'pp-sheets-times', '×');
+    const times = makeElement('span', 'pp-sheets-times', '×');
     times.setAttribute('aria-hidden', 'true');
     const down = slotField('pp-sheets-rows', 'pp-sheets-slots-label', n => pick({ rows: n }));
     slots.append(across.field, times, down.field);
 
-    const marksLabel = el('span', 'pp-sheets-label'); marksLabel.id = 'pp-sheets-marks-label';
+    const marksLabel = makeElement('span', 'pp-sheets-label'); marksLabel.id = 'pp-sheets-marks-label';
     const marks = radioGroup('pp-sheets-marks', 'pp-sheets-marks-label', ['off', 'on'], value => pick({ marks: value === 'on' }));
 
-    const marginLabel = el('span', 'pp-sheets-label'); marginLabel.id = 'pp-sheets-margin-label';
+    const marginLabel = makeElement('span', 'pp-sheets-label'); marginLabel.id = 'pp-sheets-margin-label';
     const margin = marginField('pp-sheets-margin', 'pp-sheets-margin-label', n => pick({ margin: Number.isFinite(n) && n > 0 ? roundMm(n) : 0 }));
 
     // La feuille d'aperçu occupe la dernière colonne des trois premières lignes de réglage (la marge et les emplacements, dessous, ont besoin de toute
     // la largeur) ; le papier est blanc dans les deux thèmes, comme celui du document.
-    const preview = el('div', 'pp-sheets-preview');
+    const preview = makeElement('div', 'pp-sheets-preview');
     preview.setAttribute('aria-hidden', 'true');
     const svg = svgEl('svg', { class: 'pp-sheets-svg' });
     preview.appendChild(svg);
@@ -142,22 +142,22 @@ const SheetAssemblyDialog = (function () {
     // Chaque indication commence sous le champ qu'elle concerne, jamais sous son libellé : l'échelle (seulement si les pages sont réduites) sous la
     // marge, le dernier des deux réglages (traits de coupe, marge) qui la demandent, la règle de l'ordre sous les emplacements. Le résumé de ce que le
     // choix donne ferme la fenêtre (aria-live : il suit chaque changement).
-    const scaled = el('p', 'pp-sheets-note'); scaled.id = 'pp-sheets-scaled';
+    const scaled = makeElement('p', 'pp-sheets-note'); scaled.id = 'pp-sheets-scaled';
     scaled.setAttribute('aria-live', 'polite');
     marks.group.setAttribute('aria-describedby', scaled.id);
     margin.input.setAttribute('aria-describedby', scaled.id);
-    const hint = el('p', 'pp-sheets-note'); hint.id = 'pp-sheets-hint';
+    const hint = makeElement('p', 'pp-sheets-note'); hint.id = 'pp-sheets-hint';
     slots.setAttribute('aria-describedby', hint.id);
-    const summary = el('p', 'pp-sheets-summary');
+    const summary = makeElement('p', 'pp-sheets-summary');
     summary.setAttribute('aria-live', 'polite');
 
     grid.append(sheetLabel, sheets.group, orientationLabel, orientations.group, marksLabel, marks.group, marginLabel, margin.field, scaled, slotsLabel, slots, hint, preview, summary);
     win.body.appendChild(grid);
 
-    const spacer = el('span', 'var-modal-spacer');
-    const cancel = el('button');
+    const spacer = makeElement('span', 'var-modal-spacer');
+    const cancel = makeElement('button');
     cancel.type = 'button';
-    const ok = el('button', 'var-modal-primary');
+    const ok = makeElement('button', 'var-modal-primary');
     ok.type = 'button';
     win.actions.append(spacer, cancel, ok);
     refs = { sheetLabel, sheets, orientationLabel, orientations, slotsLabel, across, down, marksLabel, marks, marginLabel, margin, svg, summary, hint, scaled, cancel, ok };
@@ -245,7 +245,7 @@ const SheetAssemblyDialog = (function () {
     const count = Math.max(1, max);
     if (select.options.length !== count) {
       select.textContent = '';
-      for (let n = 1; n <= count; n++) select.appendChild(el('option', '', String(n))).value = String(n);
+      for (let n = 1; n <= count; n++) select.appendChild(makeElement('option', '', String(n))).value = String(n);
     }
     select.value = String(Math.min(value, count));
   }

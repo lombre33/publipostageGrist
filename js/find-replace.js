@@ -278,7 +278,7 @@ const FindReplace = (function () {
   const META = 'ppFindReplace';
   const state = { open: false, query: '', replacement: '', matchCase: false, wholeWord: false, regex: false, replaceVisible: false, flash: '', flashDoc: null };
   let win = null; // { from, to } : positions du document que couvre le surlignage quand il y a plus de ALL_BELOW résultats (placeWindow)
-  let bar = null;
+  let findBar = null;
   let refs = null;
 
   const editor = () => EditorCore.getEditor();
@@ -506,7 +506,7 @@ const FindReplace = (function () {
 
     // Suivant (ou précédent) à partir de la sélection ; quand il n'y en a plus dans ce texte, dans le texte suivant du modèle (l'en-tête, le corps, le pied : on y entre), et
     // en repartant de l'autre bout quand il n'y en a plus nulle part.
-    function go(backwards) {
+    function goToMatch(backwards) {
       afterReplace = null;
       const ed = editor();
       if (!ed || !state.query) return false;
@@ -591,13 +591,13 @@ const FindReplace = (function () {
       if (!ed || !ed.isEditable || !state.query) return false;
       const matches = currentMatches(ed.state);
       const index = indexOfSelection(matches, ed.state.selection);
-      if (index < 0) return go(false);
+      if (index < 0) return goToMatch(false);
       const match = matches[index];
       const replacedIn = liveStoryId();
       const tr = ed.state.tr;
       const kept = replaceMatch(tr, ed.state.doc, match, Editor.isTrackChangesOn());
       // Une bulle qui ne change pas : on le dit et on passe au résultat suivant, comme après un remplacement.
-      if (kept) { go(false); setFlash(I18n.t(KEPT_TEXT[kept], { max: kept === 'tooLongOtherwise' ? VariableOtherwise.TEXT_MAX : VariableFormat.AFFIX_MAX })); return false; }
+      if (kept) { goToMatch(false); setFlash(I18n.t(KEPT_TEXT[kept], { max: kept === 'tooLongOtherwise' ? VariableOtherwise.TEXT_MAX : VariableFormat.AFFIX_MAX })); return false; }
       const applied = dispatchAndCapture(tr);
       if (!applied) { setFlash(I18n.t('find.replaceFailed')); return false; }
       // Ce qui suit le texte qui vient d'être mis : la fin du remplacement dans le document final (en mode suivi, après l'insertion qui suit la
@@ -650,7 +650,7 @@ const FindReplace = (function () {
       return count;
     }
 
-    return { go, applyQuery, replaceCurrent, replaceAll, reopenForUndo, forgetReplacement };
+    return { go: goToMatch, applyQuery, replaceCurrent, replaceAll, reopenForUndo, forgetReplacement };
   })();
 
   // Le panneau
@@ -659,10 +659,10 @@ const FindReplace = (function () {
     const isMac = () => /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
 
     function iconButton(icon, className) {
-      const b = el('button', 'pp-find-btn' + (className ? ' ' + className : ''));
-      b.type = 'button';
-      Dom.setMarkup(b, Icons.svg(icon));
-      return b;
+      const button = el('button', 'pp-find-btn' + (className ? ' ' + className : ''));
+      button.type = 'button';
+      Dom.setMarkup(button, Icons.svg(icon));
+      return button;
     }
     function field(id) {
       const input = el('input', 'pp-find-input');
@@ -681,14 +681,14 @@ const FindReplace = (function () {
     }
 
     function ensure() {
-      if (bar) return;
+      if (findBar) return;
       const container = document.getElementById('editor-container');
-      bar = el('div', 'pp-find-bar');
-      bar.id = 'pp-find-bar';
-      bar.setAttribute('role', 'search');
+      findBar = el('div', 'pp-find-bar');
+      findBar.id = 'pp-find-bar';
+      findBar.setAttribute('role', 'search');
       // Ses boutons gardent le focus et le panneau défait lui-même (wirePanel) : le raccourci d'Annuler de js/shortcuts.js ne prend pas la touche ici.
-      bar.setAttribute('data-own-undo', '');
-      bar.hidden = true;
+      findBar.setAttribute('data-own-undo', '');
+      findBar.hidden = true;
 
       const findRow = el('div', 'pp-find-row');
       const toggle = iconButton('chevronRight', 'pp-find-toggle');
@@ -730,8 +730,8 @@ const FindReplace = (function () {
       all.id = 'pp-find-replace-all';
       replaceRow.append(spacer, replacement, one, all);
 
-      bar.append(findRow, replaceRow);
-      container.parentNode.insertBefore(bar, container);
+      findBar.append(findRow, replaceRow);
+      container.parentNode.insertBefore(findBar, container);
       container.addEventListener('scroll', placeWindow, { passive: true });
       refs = { toggle, find, count, prev, next, matchCase, wholeWord, regex, close, replaceRow, replacement, one, all };
       wirePanel();
@@ -742,7 +742,7 @@ const FindReplace = (function () {
     // [data-tip] de la barre.
     function applyTexts() {
       const t = key => I18n.t(key);
-      bar.setAttribute('aria-label', t('find.aria'));
+      findBar.setAttribute('aria-label', t('find.aria'));
       const label = (button, key) => { button.setAttribute('aria-label', t(key)); button.title = t(key); };
       label(refs.toggle, 'find.toggleReplace');
       label(refs.prev, 'find.prev');
@@ -800,7 +800,7 @@ const FindReplace = (function () {
       return { text: index >= 0 ? I18n.t('find.count.index', { index: index + 1, count: total }) : I18n.t('find.count.total', { count: total }), kind: 'some' };
     }
     function updateCount() {
-      if (!bar || !refs) return;
+      if (!findBar || !refs) return;
       const ed = editor();
       if (state.flash && ed && ed.state.doc !== state.flashDoc) state.flash = '';
       const stories = ed ? allStories(ed.state) : [];
@@ -840,7 +840,7 @@ const FindReplace = (function () {
       });
       // Échap ferme depuis n'importe quel contrôle du panneau ; Ctrl+F et Ctrl+H y servent à aller au champ voulu (jamais à la recherche du
       // navigateur).
-      bar.addEventListener('keydown', event => {
+      findBar.addEventListener('keydown', event => {
         if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closePanel(); return; }
         if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
         const key = event.key.toLowerCase();
@@ -907,7 +907,7 @@ const FindReplace = (function () {
       refs.replacement.value = state.replacement;
       syncOptions();
       state.open = true;
-      bar.hidden = false;
+      findBar.hidden = false;
       setReplaceVisible(ed.isEditable && (wantReplace || state.replaceVisible));
       state.flash = '';
       updateToolbarButton(true);
@@ -924,7 +924,7 @@ const FindReplace = (function () {
       state.open = false;
       forgetReplacement();
       win = null;
-      if (bar) bar.hidden = true;
+      if (findBar) findBar.hidden = true;
       updateToolbarButton(false);
       const ed = editor();
       if (!ed) return;

@@ -25,8 +25,8 @@ const BatchScope = (function () {
     const fetchView = grist.fetchSelectedTable || (grist.docApi && grist.docApi.fetchSelectedTable);
     if (typeof fetchView !== 'function') return null;
     try {
-      const data = await fetchView.call(grist, { includeColumns: 'shown', keepEncoded: true });
-      return data && Array.isArray(data.id) ? data.id.slice() : null;
+      const viewData = await fetchView.call(grist, { includeColumns: 'shown', keepEncoded: true });
+      return viewData && Array.isArray(viewData.id) ? viewData.id.slice() : null;
     } catch (e) {
       console.error('[BatchScope] fetchSelectedTable : les lignes de la vue sont illisibles', e);
       return null;

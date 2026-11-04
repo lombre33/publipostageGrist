@@ -60,13 +60,13 @@ const ParagraphFormat = (function () {
     return block ? normalizedTabSize(block.getAttribute(TAB_FIELD.data)) : null;
   }
 
-  const rounded = (value, digits) => { const f = Math.pow(10, digits); return Math.round(value * f) / f; };
+  const rounded = (value, digits) => { const factor = Math.pow(10, digits); return Math.round(value * factor) / factor; };
   // Une valeur d'attribut ramenée à ses bornes, ou null (absente, illisible : « abc », « 1e999 »).
   function boundedValue(key, raw) {
-    const f = FIELDS[key];
+    const limits = FIELDS[key];
     const n = typeof raw === 'number' ? raw : parseFloat(raw);
     if (!Number.isFinite(n)) return null;
-    return rounded(Math.min(f.max, Math.max(f.min, n)), f.digits);
+    return rounded(Math.min(limits.max, Math.max(limits.min, n)), limits.digits);
   }
   // Un réglage égal à celui d'origine n'est pas écrit : null. L'interligne d'origine et zéro point d'espace sont « aucun réglage ». L'interligne se lit au centième de ligne
   // simple dans la fenêtre (1,21 pour 1,42) : l'écart d'un demi-centième (0,006) à l'interligne d'origine est lui aussi « aucun réglage ».
@@ -275,10 +275,10 @@ const ParagraphFormat = (function () {
       const id = 'pp-parafmt-' + key;
       const label = el('label', 'pp-parafmt-label');
       label.htmlFor = id;
-      const f = field(key, id);
+      const fieldRow = field(key, id);
       labels[key] = label;
-      inputs[key] = f.input;
-      grid.append(label, f.cell);
+      inputs[key] = fieldRow.input;
+      grid.append(label, fieldRow.cell);
     });
     const notes = el('div', 'pp-parafmt-notes');
     const hint = el('p', 'pp-parafmt-note'); hint.id = 'pp-parafmt-hint';

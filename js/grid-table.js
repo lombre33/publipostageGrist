@@ -354,8 +354,8 @@ const GridTable = (function () {
         };
       });
       // Une ligne qui laisse des emplacements libres (HTML bancal) reçoit des cases vides : le tableau est un rectangle.
-      for (let c = 0; c < width; c++) {
-        if (!(occupied[r] && occupied[r][c])) cells.push({ col: c, colspan: 1, rowspan: 1, html: '', align: null, valign: null, fill: null, borders: { top: null, right: null, bottom: null, left: null } });
+      for (let col = 0; col < width; col++) {
+        if (!(occupied[r] && occupied[r][col])) cells.push({ col: col, colspan: 1, rowspan: 1, html: '', align: null, valign: null, fill: null, borders: { top: null, right: null, bottom: null, left: null } });
       }
       cells.sort((a, b) => a.col - b.col);
       model.rows.push({ height: row.height, cells });
@@ -369,7 +369,7 @@ const GridTable = (function () {
     // voisine.
     const sizes = !!(options && options.sizes);
     const widths = [];
-    for (let c = 0; c < model.width; c++) widths.push(Math.round(model.cols[c] || 100));
+    for (let col = 0; col < model.width; col++) widths.push(Math.round(model.cols[col] || 100));
     const cellHtml = (cell) => {
       const attrs = [];
       if (cell.colspan > 1) attrs.push(`colspan="${cell.colspan}"`);

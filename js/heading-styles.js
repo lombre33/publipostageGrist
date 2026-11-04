@@ -57,14 +57,14 @@ const HeadingStyles = (function () {
 
   // Les styles de niveau lus d'un objet ou de son texte JSON ({ "1": style, … "6": style }) : un niveau sans réglage est absent ; null quand il n'en reste aucun.
   function normalize(raw) {
-    let data = raw;
+    let parsed = raw;
     if (typeof raw === 'string') {
-      try { data = JSON.parse(raw); } catch (e) { return null; }
+      try { parsed = JSON.parse(raw); } catch (e) { return null; }
     }
-    if (!data || typeof data !== 'object') return null;
+    if (!parsed || typeof parsed !== 'object') return null;
     const styles = {};
     LEVELS.forEach((level) => {
-      const style = cleanStyle(data[level]);
+      const style = cleanStyle(parsed[level]);
       if (style) styles[level] = style;
     });
     return Object.keys(styles).length ? styles : null;

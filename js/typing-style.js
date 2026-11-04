@@ -41,15 +41,15 @@ const TypingStyle = (function () {
 
   // Le style en attente lu d'un objet ou de son texte JSON : seuls les réglages connus, aux valeurs sûres, dans un ordre fixe ; null quand il n'en reste aucun.
   function normalize(raw) {
-    let data = raw;
+    let parsed = raw;
     if (typeof raw === 'string') {
-      try { data = JSON.parse(raw); } catch (e) { return null; }
+      try { parsed = JSON.parse(raw); } catch (e) { return null; }
     }
-    if (!data || typeof data !== 'object') return null;
+    if (!parsed || typeof parsed !== 'object') return null;
     const style = {};
-    FLAGS.forEach((key) => { if (data[key] === true && !(OPPOSITE[key] && style[OPPOSITE[key]])) style[key] = true; });
+    FLAGS.forEach((key) => { if (parsed[key] === true && !(OPPOSITE[key] && style[OPPOSITE[key]])) style[key] = true; });
     Object.keys(SETTINGS).forEach((key) => {
-      const value = typeof data[key] === 'string' ? data[key].trim() : '';
+      const value = typeof parsed[key] === 'string' ? parsed[key].trim() : '';
       if (value && SETTINGS[key].test(value)) style[key] = value;
     });
     return Object.keys(style).length ? style : null;

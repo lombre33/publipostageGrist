@@ -598,8 +598,8 @@ const EditorNodes = (function () {
     // La colonne d'une zone 2 colonnes où se trouve le curseur : { columnDepth, zoneDepth, colIndex }, ou null hors d'une zone.
     function findTwoColumnsContext($from) {
       let columnDepth = -1;
-      for (let d = $from.depth; d > 0; d -= 1) {
-        if ($from.node(d).type.name === 'twoColumnsColumn') { columnDepth = d; break; }
+      for (let depth = $from.depth; depth > 0; depth -= 1) {
+        if ($from.node(depth).type.name === 'twoColumnsColumn') { columnDepth = depth; break; }
       }
       if (columnDepth === -1) return null;
       const zoneDepth = columnDepth - 1;
@@ -2049,25 +2049,25 @@ const EditorNodes = (function () {
         addAttributes() { return imageAttributes(); },
         parseHTML() { return [{ tag: 'img.editor-image' }]; },
         renderHTML({ node }) {
-          const a = node.attrs;
+          const nodeAttrs = node.attrs;
           // Placeholder lié à une variable : `src` reste vide (résolu au rendu/export par js/reader-mode.js:resolveVariableImages).
-          const attrs = { class: 'editor-image', draggable: 'false', src: a.varTable ? '' : a.src, alt: a.alt, style: styleFor(a), 'data-layer': a.layer, 'data-wrap': a.wrap };
-          if (a.align) attrs['data-align'] = a.align;
-          if (a.pageIndex != null) attrs['data-page-index'] = String(a.pageIndex);
-          if (a.pageLeftPt != null) attrs['data-page-left-pt'] = String(a.pageLeftPt);
-          if (a.pageTopPt != null) attrs['data-page-top-pt'] = String(a.pageTopPt);
-          if (a.repeat) attrs['data-repeat'] = 'true';
-          if (a.varTable) {
-            attrs['data-var-table'] = a.varTable;
-            attrs['data-var-column'] = a.varColumn;
-            attrs['data-var-key'] = a.varKey;
+          const attrs = { class: 'editor-image', draggable: 'false', src: nodeAttrs.varTable ? '' : nodeAttrs.src, alt: nodeAttrs.alt, style: styleFor(nodeAttrs), 'data-layer': nodeAttrs.layer, 'data-wrap': nodeAttrs.wrap };
+          if (nodeAttrs.align) attrs['data-align'] = nodeAttrs.align;
+          if (nodeAttrs.pageIndex != null) attrs['data-page-index'] = String(nodeAttrs.pageIndex);
+          if (nodeAttrs.pageLeftPt != null) attrs['data-page-left-pt'] = String(nodeAttrs.pageLeftPt);
+          if (nodeAttrs.pageTopPt != null) attrs['data-page-top-pt'] = String(nodeAttrs.pageTopPt);
+          if (nodeAttrs.repeat) attrs['data-repeat'] = 'true';
+          if (nodeAttrs.varTable) {
+            attrs['data-var-table'] = nodeAttrs.varTable;
+            attrs['data-var-column'] = nodeAttrs.varColumn;
+            attrs['data-var-key'] = nodeAttrs.varKey;
           }
-          if (a.qrText) attrs['data-qr-text'] = a.qrText;
-          if (ChartEntry.isChartAttrs(a)) {
-            if (a.chartSection) attrs['data-chart-section'] = String(a.chartSection);
-            if (a.chartSpec) attrs['data-chart-spec'] = a.chartSpec;
-            if (a.chartScope) attrs['data-chart-scope'] = a.chartScope;
-            if (a.chartName) attrs['data-chart-name'] = a.chartName;
+          if (nodeAttrs.qrText) attrs['data-qr-text'] = nodeAttrs.qrText;
+          if (ChartEntry.isChartAttrs(nodeAttrs)) {
+            if (nodeAttrs.chartSection) attrs['data-chart-section'] = String(nodeAttrs.chartSection);
+            if (nodeAttrs.chartSpec) attrs['data-chart-spec'] = nodeAttrs.chartSpec;
+            if (nodeAttrs.chartScope) attrs['data-chart-scope'] = nodeAttrs.chartScope;
+            if (nodeAttrs.chartName) attrs['data-chart-name'] = nodeAttrs.chartName;
           }
           return ['img', attrs];
         },

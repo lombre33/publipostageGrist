@@ -293,8 +293,8 @@ const LoopRules = (function () {
     const keyed = items.map((item, index) => ({ item, index, key: sortKey(Variables.cellValue(loop.table, column, item.row)) }));
     keyed.sort((x, y) => {
       if (x.key === null || y.key === null) return (x.key === null) - (y.key === null) || x.index - y.index;
-      const c = compareKeys(x.key, y.key);
-      return (desc ? -c : c) || x.index - y.index;
+      const order = compareKeys(x.key, y.key);
+      return (desc ? -order : order) || x.index - y.index;
     });
     return keyed.map(k => k.item);
   }

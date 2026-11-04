@@ -398,12 +398,12 @@ const ReaderMode = (function () {
     foot.className = 'v2-page-seam-foot';
     foot.style.height = footAreaPx + 'px';
     if (footerText) {
-      const f = document.createElement('div');
-      f.className = 'v2-page-band-footer';
-      Dom.setMarkup(f, clippedZone(PageLayout.resolvePageNumberBadges(footerText, pageEnding, totalPages)));
-      f.style.paddingTop = '0';
-      f.style.maxHeight = footAreaPx + 'px';
-      foot.appendChild(f);
+      const footer = document.createElement('div');
+      footer.className = 'v2-page-band-footer';
+      Dom.setMarkup(footer, clippedZone(PageLayout.resolvePageNumberBadges(footerText, pageEnding, totalPages)));
+      footer.style.paddingTop = '0';
+      footer.style.maxHeight = footAreaPx + 'px';
+      foot.appendChild(footer);
     }
     const divider = document.createElement('div');
     divider.className = 'v2-page-seam-divider';
@@ -1410,14 +1410,14 @@ const ReaderMode = (function () {
     // Chips intelligents : date du jour, heure actuelle, email et nom de la personne connectée. Des valeurs calculées, jamais liées à une colonne
     // Grist : résolues à chaque rendu, sans recherche de ligne ni de table liée. `.footnote-ref-marker` n'a pas besoin de l'être ici : son numéro
     // vient du compteur CSS, déjà juste à l'écran.
-    const d = new Date();
-    return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+    const now = new Date();
+    return String(now.getDate()).padStart(2, '0') + '/' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear();
   }
   function formatNowTime(style) {
     // L'heure de l'appareil, dans l'écriture de la puce (`data-chip-time`, une clé de VariableFormat.TIME_STYLES : « 14:30 », « 2:30 PM », « 2:30pm »...) ; sans réglage - ou avec un
     // réglage que ce widget ne connaît pas - sur 24 heures, comme avant ce réglage.
-    const d = new Date();
-    const clock = { hour: d.getHours(), minute: d.getMinutes() };
+    const now = new Date();
+    const clock = { hour: now.getHours(), minute: now.getMinutes() };
     return VariableFormat.timeText(clock, style) || VariableFormat.timeText(clock, 'colon');
   }
   async function userChipText(read, unavailableKey) {
