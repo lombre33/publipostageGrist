@@ -13,7 +13,7 @@ Ce dossier ne part pas sur le dépôt public (`outils/` est dans les exclusions 
 | `numeros-carte.mjs` | Recompte les nombres de `public/CARTE_DU_CODE.md`, en français et en anglais (le volume de `js/`, des extensions et des feuilles de style, les familles, `js/main.js`) d'après le dépôt de développement : `node outils/depot-propre/numeros-carte.mjs` dit ce qui changerait, `--fix` réécrit la carte. |
 | `public/` | Les documents publics : `README.md` (bilingue), `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `PATCH_NOTES.md` (la note de version : une puce par fonction, en français puis en anglais), `NOTICE`, `CARTE_DU_CODE.md` (la carte du code, bilingue). `{{VERSION}}`, `{{DATE}}`, `{{DATE_FR}}` et `{{DATE_EN}}` y sont remplacés à la publication. `public/screenshots/` porte les captures du README (des `.png`), posées telles quelles dans `screenshots/` du dépôt public : une capture du même nom est remplacée, les autres sont gardées. |
 | `en-attente/` | Des documents prêts et pas publiés : aujourd'hui `PATCH_NOTES_GFS.md`, la partie de la note de version qui demande Grist Factory Suite (présentations, graphiques, écriture en direct, lecture de PDF, intégration à GFS). `publier.sh` ne les lit pas ; pour en publier un, le poser dans `public/` et l'ajouter aux trois listes de `controles.mjs` (fichiers requis, entrées connues, documents dont les liens se contrôlent). |
-| `captures-readme.mjs` | Refait les deux captures du README (`edition-variables.png`, `lecture-resolue.png`) sur l'interface du jour : le modèle « Contrat de prestation de services » de la galerie, une ligne d'exemple, 1400×680 à l'échelle 2, hors Grist (le faux Grist de `dev-tests/`, qui sert aussi ses bibliothèques depuis `dev-tests/.offline-cache/` quand elle existe). `node outils/depot-propre/captures-readme.mjs`, puis committer les images de `public/screenshots/`. |
+| `captures/` | Refait les 17 captures du README (`public/screenshots/`) sur l'interface du jour : le vrai widget et le faux Grist de `dev-tests/`, piloté à la vraie souris, en douze scènes (le modèle « Contrat de prestation de services » de la galerie, le menu « Aa », les conditions, la boucle, un macro-modèle, l'historique des versions, les exports…), 1280 px de large à l'échelle 2. `bash dev-tests/offline-deps.sh` une fois, puis `bash outils/depot-propre/captures/lancer-tout.sh` ; `captures/LISEZMOI.md` dit les scènes et les pièges. Puis committer les images de `public/screenshots/`. |
 
 ## Publier
 
@@ -33,7 +33,7 @@ Ce dossier ne part pas sur le dépôt public (`outils/` est dans les exclusions 
    `js/` qui n'y figure pas et les nombres de `js/` périmés (fichiers en tout et par famille, lignes au vingtième près) ;
    `node outils/depot-propre/numeros-carte.mjs --fix` les recompte tous, ceux des extensions et des feuilles de style aussi.
    Reste à relire les mots (« six scripts et deux feuilles de style ») et les lignes d'un fichier nouveau ou qui change de rôle. Si l'interface a changé
-   depuis les captures du README (`public/screenshots/`), les refaire : `node outils/depot-propre/captures-readme.mjs`.
+   depuis les captures du README (`public/screenshots/`), les refaire : `bash outils/depot-propre/captures/lancer-tout.sh` (voir `captures/LISEZMOI.md`).
 4. Préparer sans committer, pour relire :
    `bash outils/depot-propre/publier.sh --propre ../Publipostage-Plus --sans-commit`
    puis `git -C ../Publipostage-Plus diff --cached --stat`. Le clone public revient à zéro avec

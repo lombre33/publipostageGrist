@@ -2,361 +2,248 @@
 
 *🇬🇧 An English version of this document is available [at the bottom of this page](#publipostage-for-grist).*
 
-> **Version {{VERSION}}**, publiée le {{DATE_FR}}. Elle succède à la bêta : ce qui change pour qui en vient est dans la
-> [note de version](PATCH_NOTES.md), et la bêta reste servie à [une adresse à part](#installation-dans-grist).
-> Les fonctions décrites ci-dessous sont livrées ; celles qui demandent Grist Factory Suite le disent. Des défauts
-> peuvent subsister : essayez le widget sur une copie de votre document avant de l'utiliser sur des données
-> importantes. Les [limites connues](#limites-connues) et la [roadmap](#roadmap) disent ce qui manque encore.
+![Le modèle « Contrat de prestation de services » dans l'éditeur : variables en bulles, bloc conditionnel, en-tête et barre d'outils](screenshots/01-edition-modele-avec-variables.png)
 
-Il s'agit d'un éditeur de texte avec publipostage et puces intelligentes. Il permet à n'importe qui de
-rédiger des contrats, factures ou étiquettes sans écrire la moindre ligne de code, tout en pouvant
-référencer une variable de n'importe quelle table du document et la reformater à l'affichage si
-nécessaire !
+**Publipostage+ est un éditeur de texte complet pour [Grist](https://www.getgrist.com/), avec publipostage et puces intelligentes.** Vous rédigez contrats, factures, courriers ou étiquettes sans écrire la moindre ligne de code. Vous glissez dans le texte des **variables** qui viennent de n'importe quelle table du document (`#Table.Colonne`), vous les reformatez à l'affichage si besoin, puis vous lisez le document rempli avec une ligne de Grist et vous le téléchargez, ou vous l'envoyez par e-mail.
 
-C'est un widget personnalisé pour [Grist](https://www.getgrist.com/), conçu par
-[Grist Factory](https://grist-factory.fr). Un document se lit rempli avec les données d'une ligne,
-puis se télécharge en PDF vectoriel (texte sélectionnable), en Word, en PowerPoint (une présentation, avec Grist Factory Suite), en Excel, en Markdown ou en HTML, ou s'envoie dans un
-e-mail prérempli, ligne par ligne ou en lot.
+C'est un widget personnalisé conçu par [Grist Factory](https://grist-factory.fr), libre (GPL v3) et sans serveur : une simple page statique.
 
-## Aperçu
+> **Version {{VERSION}}**, publiée le {{DATE_FR}}. Elle succède à la bêta : ce qui change pour qui en vient est dans la [note de version](PATCH_NOTES.md), et la bêta reste servie à [une adresse à part](#installation-dans-grist).
+> Essayez le widget sur une copie de votre document avant de l'utiliser sur des données importantes : des défauts peuvent subsister. Les [limites connues](#limites-connues) et la [roadmap](#roadmap) disent ce qui manque encore.
 
-| Mode édition | Mode lecture |
+**[Installer](#installation-dans-grist)** · [Visite en images](#visite-en-images) · [Toutes les fonctions](#toutes-les-fonctions) · [Sécurité](#sécurité-et-permissions) · [Limites connues](#limites-connues) · [Contribuer](#contribuer)
+
+## En bref
+
+| | |
 |---|---|
-| ![Édition d'un modèle avec des variables sous forme de badges](screenshots/edition-variables.png) | ![Le même document en lecture, variables résolues avec la ligne sélectionnée](screenshots/lecture-resolue.png) |
-
-## Sommaire
-
-- [Fonctionnalités](#fonctionnalités)
-- [Installation dans Grist](#installation-dans-grist)
-- [Configuration](#configuration)
-- [Sécurité et permissions](#sécurité-et-permissions)
-- [Dépendances](#dépendances)
-- [Limites connues](#limites-connues)
-- [Note sur l'IA](#note-sur-lia)
-- [Roadmap](#roadmap)
-- [Contribuer](#contribuer)
-- [Licence](#licence)
-
-Moteur d'édition : [TipTap](https://tiptap.dev/)/ProseMirror. Le widget est une simple page statique
-hébergée sur GitHub Pages, sans backend ni étape de build.
-
-## Fonctionnalités
-
-**Cinq types de modèles**
-- Document : texte riche sur une page A3, A4, A5 ou A6, en portrait ou en paysage (une page peut être
-  tournée seule, au milieu des autres), avec des marges réglables par modèle
-- E-mail : objet, destinataires et corps avec les mêmes variables, ouvert dans votre messagerie par un
-  lien `mailto:`
-- Grille : un tableau de type tableur à la place de la page, où l'on peut coller un tableau d'Excel, de
-  Google Sheets ou de LibreOffice Calc, importer un classeur `.xlsx`, puis l'exporter en Excel
-- Macro-modèle : une page de garde toujours incluse, suivie d'annexes (d'autres modèles) choisies selon
-  des règles évaluées sur la même ligne ; des modèles en portrait, en paysage, des modèles Grille et des
-  présentations s'y mêlent, chacun sur une page de son sens (ou un seul sens est imposé à tous), jusque dans
-  le PDF ; une présentation (avec Grist Factory Suite) y garde sa page de diapositive 16:9 au milieu des pages A4 (Lecture, Word,
-  impression et PDF, un seul fichier ; seul le PDF protégé ne peut pas mêler les formats)
-- Présentation (avec Grist Factory Suite, « Nouvelle présentation » du menu « + ») : le même éditeur que le
-  Document, sur une page 16:9 en paysage (le menu Page propose aussi le 4:3, le 16:10 et le carré) ; chaque saut de page commence une diapositive, et une bande de
-  miniatures à gauche du texte mène à chacune, l'ajoute, la duplique, la déplace ou la supprime (« Ajouter »,
-  « Importer » sont deux boutons d'une icône sur une ligne au bas de la bande, leur nom en info-bulle) ; « Objets », dans la barre d'outils du haut (derrière « Image »),
-  y pose un cadre de texte libre, un tableau dans un cadre (local, ou la copie liée en direct d'un modèle Grille) ou une forme (rectangle, ellipse, triangle, losange, flèches, étoile, chevron,
-  pentagone, hexagone, parallélogramme, croix, bulle...) ou une ligne (avec ou sans flèche, d'une forme et d'une taille au choix à chaque bout), qu'on
-  place où l'on veut sur la diapositive, qu'on fait pivoter (sauf une ligne), avec le fond et le trait de son choix (couleur, épaisseur, style du trait : tirets, bouts, trait double ou triple, transparence) ; le menu ⋯ d'une
-  miniature règle sa transition (fondu, poussée, balayage, recouvrement, dévoilement, zoom), que le
-  diaporama joue en y arrivant, son fond (une couleur unie derrière le texte) et ses notes de l'intervenant
-  (un texte par diapositive, gardé dans le modèle, que la vue intervenant du diaporama montre à qui présente et que l'export PowerPoint emporte) ; un lien (Ctrl+K, « Dans ce document ») mène à n'importe quelle diapositive, au diaporama avec la transition de la diapositive visée ; un objet (bouton, forme, image) a son propre lien, y compris une action du diaporama (suivante, précédente, fin...), que le PowerPoint garde à l'export comme à l'import ; un lien vers une diapositive peut jouer l'effet de son choix au clic (« Animation au clic » : un effet, son côté, sa durée), à la place de celui de la diapositive visée, que PowerPoint rejoue ; « Vue… » (menu « Objets ») pose un cadre qui montre en petit et en direct une autre diapositive, un clic y mène avec l'animation choisie ; dans un document, la ligne
-  « Diapositive d'une présentation… » du menu « Lien et blocs de contenu » (ou Ctrl+C sur une miniature, puis Ctrl+V dans le texte) pose
-  une diapositive en texte du document, à la taille du document (une case garde celle de la diapositive) : son texte, ses listes,
-  ses images et ses variables, les cadres lus de haut en bas ; une forme n'y garde que son texte, un trait, les notes et la
-  transition n'y entrent pas, et le coin d'état dit combien ; cochée, la case « Garder liée » retient ce texte : il suit sa diapositive quand elle change et ne s'écrit plus dans le document, jusqu'à « Détacher » ; dans l'autre sens, le volet « Importer » d'une présentation prend aussi
-  un document pour source : un clic sur l'une de ses pages la pose en diapositives, le texte aux tailles d'une diapositive (une
-  case garde celles du document), une page trop longue en plusieurs, coupées entre deux blocs (un tableau, entre deux lignes),
-  et Ctrl+C dans un document puis Ctrl+V sur la bande en fait autant ; cochée, la case « Garder liée » garde les diapositives
-  d'une page liées à elle : elles la suivent quand elle change et ne s'écrivent plus dans la présentation, jusqu'à « Détacher »
-  ; le thème (ligne « Thème… » du menu Page, une présentation seulement) donne à toutes les diapositives la police et la couleur
-  du texte et des titres, le fond et six accents : sept thèmes prêts (Océan, Hélianthe, Forêt, Bordeaux, Soleil, Ardoise,
-  Éditorial) ou neuf couleurs et deux polices (parmi les six du menu de police) composées dans une fenêtre à brouillon,
-  avec un aperçu et un avertissement quand le texte se lirait mal sur le fond ; « Aspect d'origine » est l'absence de thème ; « Enregistrer
-  comme thème… » range un thème composé dans la liste du document (douze au plus, retrouvés par toutes ses présentations, retirables,
-  chaque geste défait d'un Ctrl+Z).
-  Il est gardé dans le modèle et se montre dans l'éditeur, la bande, la Lecture, le diaporama, le PDF, le Word, le HTML et le
-  PowerPoint (le thème du fichier) ; son fond est celui de la page, sous chaque diapositive qui n'a pas le sien (une page
-  foncée, la vide de la fin comprise) ; une couleur ou une police choisie sur un mot, le style d'un niveau de titre et un bloc
-  de code gardent les leurs. Changer de thème recolore ce qui avait une couleur de l'ancien thème, jamais une couleur composée à
-  la main, et un seul Ctrl+Z rend le thème et les couleurs ; les menus de couleur ont une rangée « Couleurs du thème » et une
-  forme neuve prend l'aspect du premier accent. Le bouton « Décor… » de la fenêtre règle un décor commun, derrière le texte de
-  toutes les diapositives : un bandeau de couleur sur un bord (sa couleur est un réglage du thème, il le suit), un logo dans un
-  coin (une image choisie dans le sélecteur de fichier, ramenée à un poids que le modèle peut garder), le numéro de la
-  diapositive et un texte de pied, avec une case « ni numéro ni texte de pied sur la première » ; un thème prêt garde le décor
-  réglé, un thème du document garde le sien. Il se montre dans l'éditeur (sans changer la pagination), la bande, la Lecture, le
-  diaporama, le PDF et le Word, et sur le masque du fichier PowerPoint. Pas encore : le décor n'est pas peint sur la page de plus
-  d'une diapositive trop longue ni dans l'export HTML ; les liens gardent leur bleu d'origine (peu lisible sur un fond foncé) et
-  le texte d'un en-tête ou d'un pied de page garde sa couleur.
-
-**Mise en page**
-- Mise en forme complète : gras, italique, souligné, barré, exposant et indice, couleurs et surlignage, six
-  polices en tailles réelles de 8 à 72 points, alignement, retraits et tabulations (Tab, Maj+Tab), titres numérotés, un style par niveau de titre pris d'après la sélection (celui du modèle, et celui de tout le document Grist, partagé par tous ses modèles : les deux sont visibles dans le menu « Titre »),
-  pinceau de mise en forme (son menu garde trois mises en forme dans le modèle et trois partagées par tous les modèles du document, renommables)
-- Interligne, espace avant, espace après, retrait à gauche et retrait de la première ligne de chaque paragraphe (« Paragraphe… », menu Alignement), repris dans la Lecture, le PDF, le Word, le PowerPoint et le HTML
-- Listes à puces, numérotées et de tâches à cocher ; le rond, le tiret ou le numéro prend la couleur et la taille du début du texte de son point
-- Tableaux (fusion et scission de cases, fond de case, légende), zones 2 colonnes
-- Images, y compris flottantes (habillage de texte, calque devant ou derrière, opacité, légende),
-  collées, ajoutées par adresse ou prises dans une colonne Pièces jointes de Grist ; une image
-  hébergée sur un autre site n'apparaît qu'après un clic sur « Afficher »
-- Graphiques créés (avec Grist Factory Suite ; « Créer un graphique… », au menu de l'image) : barres, courbe, aire, nuage de points, secteurs,
-  anneau, radar, entonnoir, cascade et jauge, tracés d'après les colonnes d'une table de Grist, dans un document, une grille ou une diapositive ;
-  un titre, cinq jeux de couleurs, la couleur de chaque série, les valeurs affichées et des barres mêlées à une courbe ;
-  dans le Word, le PowerPoint et l'Excel, un graphique natif que l'on modifie dans l'application (ses données s'ouvrent dans Excel ; l'entonnoir et la jauge y restent des images ; la cascade y est un graphique en colonnes empilées dont une seule colonne, les montants, se modifie : le reste se calcule)
-- En-têtes et pieds de page (première page différente, numéro de page, QR code), notes de bas de page, sommaire
-  généré, sauts de page, filigrane
-- Citation, bloc de code, encadré (Note, Attention, Important), bloc de signature, QR code, graphique de la
-  page (avec Grist Factory Suite : un graphique réglé dans Grist, redessiné dans le document)
-- Rechercher / remplacer (casse, mot entier, expression régulière, texte des bulles, en-tête et pied de page), abréviations qui se développent à la frappe
-- Aperçu « format A4 » fidèle, WYSIWYG (ce que vous voyez est ce que vous obtenez)
-- Zoom de la page à l'écran, en Édition comme en Lecture (pastille du coin, Ajuster, Ctrl + molette) : le
-  PDF, le Word et l'impression gardent les dimensions réelles
-
-**Variables Grist intelligentes**
-- Autocomplétion `#Table.Colonne` sur toutes les tables du document, avec une clé de correspondance à
-  configurer une fois pour les tables liées
-- Fiches citées : `@` ouvre la liste des lignes de toutes les tables (« Rédigé par @Marie Martin ») ; le
-  nom se relit à chaque affichage, renommer la personne dans Grist la renomme dans les modèles
-- Mise en forme sur mesure des nombres (écriture française ou américaine, décimales, devise, en toutes
-  lettres), des dates (formats prédéfinis, en toutes lettres, avec l'heure d'une colonne « Date et
-  heure ») et des Oui/Non (texte ou case cochée)
-- Puces intelligentes (date du jour, heure, e-mail de la personne connectée, numéro de ligne d'une
-  boucle) et calculs (SOMME, MOYENNE, MIN, MAX, NB, ARRONDI)
-- Conditions d'affichage (variable, bloc de texte, valeur dans la phrase, case cochée) et boucles sur
-  les lignes liées (ligne de tableau, élément de liste, paragraphe), avec filtre, tri et séparateurs, y
-  compris une boucle dans une boucle (les lignes de chaque facture, puis les étapes de chaque ligne),
-  ou sur toutes les lignes d'une table (celles que la vue Grist du widget montre, ou toute la table)
-- Renommages suivis : quand une table ou une colonne est renommée dans Grist, les modèles suivent
-
-**Lecture, enregistrement et collaboration**
-- Mode lecture (le document rempli avec la ligne sélectionnée) et lecture épurée, sans barre d'outils (le menu du bouton Mode lecture coche « Lecture simple » ou « Lecture épurée », comme celui du bouton Exporter : le bouton fait ce que la ligne cochée dit)
-- Enregistrement automatique avec détection d'un conflit si quelqu'un d'autre a enregistré le modèle
-  entre-temps
-- Historique des versions d'un modèle (menu du bouton Enregistrer) : qui a changé quoi et quand, aperçu de
-  chaque version, « Comparer » avec la version actuelle (en vert ce que la version a en plus, en rouge barré
-  ce qu'une restauration retirerait), « Nommer… » (une version nommée n'est jamais effacée par les plafonds)
-  et « Restaurer cette version » (l'état remplacé reste dans la liste), dans une table à part que le widget
-  ne lit qu'à l'ouverture de la fenêtre
-- Commentaires sur le texte sélectionné, avec réponses et résolution, partagés entre les personnes qui
-  ouvrent le document
-- Suivi des modifications (bêta) : les changements sont proposés dans le texte, puis acceptés ou
-  refusés un par un ou tous ensemble ; la barre Accepter / Refuser dit qui a proposé la modification
-  (son nom, à défaut son adresse e-mail) ; le suivi, « Tout accepter » et « Tout refuser » sont
-  rangés sous le bouton « Édition collaborative » de la barre d'outils
-- Écriture en direct (avec Grist Factory Suite, ligne « Écriture en direct » du même menu) : plusieurs personnes
-  écrivent en même temps le texte d'un même modèle Document, avec le curseur et le nom de chacune et une barre qui
-  dit qui est là ; Annuler et Rétablir ne défont que les frappes de la personne, et une seule personne enregistre
-  le modèle pour tout le monde
-- Droits par personne (lecture seule, export, commentaires), lus dans une table du document
-- Rangement personnel des modèles : épingles et dossiers que les autres personnes ne voient pas
-
-**Export PDF, Word, PowerPoint, Excel, Markdown, HTML**
-- Export en PDF vectorisé, nom de fichier composé avec des variables
-- Impression par le navigateur : la Lecture imprimée page pour page par la fenêtre d'impression (« Enregistrer
-  au format PDF » ou une imprimante), avec la mise en page de la Lecture
-- PDF « Léger » : le même PDF vectoriel dont les images sont ramenées à 150 points par pouce (une photo
-  devient un JPEG, un logo transparent reste un PNG, une petite image et un code QR ne sont pas touchés), pour
-  une ligne comme pour les lots
-- PDF protégé : le même PDF vectoriel chiffré en AES-256, avec un mot de passe pour l'ouvrir (facultatif),
-  des autorisations (imprimer, copier, modifier) et l'auteur, le sujet et les mots-clés du fichier, pour une
-  ligne comme pour l'archive ZIP. Le mot de passe se donne de trois façons, au choix : saisi à chaque export
-  (recommandé, il n'est écrit nulle part), le même pour tous les PDF et enregistré dans le document (en clair,
-  table « Publipostage_Modeles », colonne « MotDePassePdf » : la fenêtre dit où et le risque), ou un par ligne,
-  lu dans une colonne de la table (une ligne sans mot de passe utilisable n'est pas exportée et un lot la liste)
-- Export en lot en un clic : un PDF par ligne dans une archive ZIP, ou toutes les lignes dans un seul
-  PDF. Il suit les lignes que le widget affiche dans Grist (ses filtres, son tri, le lien « Sélectionner
-  par ») : quand il n'en affiche qu'une partie, il demande s'il faut exporter celles-ci ou toute la table
-- Assemblage avant impression : les pages de chaque ligne posées sur des feuilles A4 ou A3, avec ou
-  sans traits de coupe, et une marge réglable autour de chaque page (quatre A6 sur une A4, par exemple)
-- Date du dernier export PDF : une colonne de la table, choisie dans Réglages > Vue (Date, Date et heure
-  ou Texte, sans formule), garde le moment du dernier export PDF de chaque ligne ; elle est écrite une
-  fois le PDF produit, pour les lignes qui sont dans le fichier
-- Word (`.docx`, bêta) et Excel (`.xlsx`, pour les grilles)
-- PowerPoint (`.pptx`, bêta, pour les présentations, avec Grist Factory Suite) : une diapositive par saut de page, en objets que PowerPoint modifie (titre, texte mis en forme, listes,
-  tableaux, images, formes et traits à leur place et pivotés, fond), avec la transition et les notes de l'intervenant de chaque diapositive ; un fichier, ou un par ligne dans une archive ZIP
-- Markdown (`.md`, CommonMark et GFM) : le document de la ligne avec les valeurs de ses variables ; ce que le Markdown écrit
-  s'écrit en Markdown (titres, gras, italique, barré, liens, listes imbriquées, numérotées et à cases, citations, code,
-  tableaux, notes de bas de page, sommaire en liens, encadrés en alertes GitHub), le reste (souligné, couleur, taille,
-  police, alignement, saut de page, largeur d'une image) reste en HTML dans le fichier ; un fichier, ou un par ligne dans
-  une archive ZIP
-- Markdown (modèle) : le modèle lui-même, variables comprises, pour qu'il revienne intact par l'import. Un seul fichier,
-  nommé d'après le modèle ; rien n'est lu dans Grist. Une variable sans réglage s'écrit `{{Table.Colonne}}` ; une variable
-  réglée (format, condition, boucle, texte autour), un calcul, une puce de date, une pastille « @ », un numéro de page, une case ou un texte
-  conditionnel, une image liée à une colonne, un code QR et un graphique s'écrivent en HTML en ligne avec leurs réglages ;
-  l'en-tête et le pied de page sont écrits entre des commentaires. Les marges, le format de page, le filigrane, les images
-  derrière le texte ou sur toutes les pages, le style des niveaux de titre et le lien d'un tableau avec un modèle Grille ne sont pas gardés. Pas dans une
-  grille ni dans un macro-modèle
-- HTML (`.html`), pour un site web : le document de la ligne avec les valeurs de ses variables, qui coule comme une page web (ni feuilles A4, ni marges, ni
-  numéros de page, ni filigrane ; l'en-tête et le pied de page sont écrits une fois). Deux lignes du menu « Type d'export » : « HTML (fichier à déposer) » écrit
-  une page complète à poser telle quelle sur un site ; « HTML (contenu à coller) » écrit le seul contenu (`-fragment.html` : un `<style>` et un bloc
-  `<div class="pp-doc">`) à coller dans un bloc HTML d'un gestionnaire de contenu, sa feuille de style ne touchant que ce bloc. La mise en forme du document est
-  gardée (titres, gras, italique, couleur, taille, listes, tableaux, encadrés, colonnes, notes de bas de page, sommaire) ; les images venues d'une pièce jointe de
-  Grist, d'un graphique ou d'un code QR partent dans le fichier, celles d'un autre site gardent leur adresse. Aucun script n'est écrit. Les polices ne sont pas
-  emportées (une police nommée reste nommée, avec des polices de repli), ni les marges, le format de page, les sauts de page, les images derrière le texte ou sur
-  toutes les pages ; un fichier, ou un par ligne dans une archive ZIP. Pas dans une grille
-- Avant un export, une fenêtre liste les sites externes dont des images seraient téléchargées
-
-**Modèles**
-- Gestion multi-modèles, sauvegardés directement dans le document Grist
-- Import d'un fichier Markdown (`.md`, ligne « Importer un Markdown… » du menu « + ») : il devient un nouveau
-  document ; les alertes GitHub deviennent des encadrés, les listes à cases des listes à cases, et le sommaire,
-  les notes de bas de page, les sauts de page, l'en-tête et le pied de page que l'export écrit sont relus ; les
-  variables `{{Table.Colonne}}` et les éléments de fusion que « Markdown (modèle) » écrit en HTML redeviennent ce qu'ils
-  étaient (une clé qui n'est pas une variable du document reste du texte, et le coin d'état la compte) ; une
-  image qui n'est ni en ligne ni dans le fichier n'est pas reprise (un mot le dit à sa place)
-- Galerie de 22 modèles prêts à l'emploi (21 sans Grist Factory Suite) : facture, contrat de prestation de services, attestation,
-  courrier de relance, quittance de loyer, bulletin scolaire, fiche recette, émargement, bon de commande,
-  fiche d'inventaire, des modèles à imprimer (flyer A6, invitation, affiche A3, carte de visite, badge,
-  étiquettes) et une présentation commerciale de trente-neuf diapositives (formes, tableaux, douze graphiques lus
-  dans des tables, liens et vues en direct entre diapositives, transitions et animations, thème avec décor ; avec les extensions « diapositives » et « graphique » de
-  Grist Factory Suite). Un modèle peut créer ses tables, vides, avec leurs colonnes de calcul et leurs liens, et son
-  aperçu montre le document rempli en images (voir l'[avertissement](#limites-connues) à leur sujet)
-
-**Autres**
-- Interface bilingue français/anglais, thème clair, sombre ou celui du système
-- Dans Grist Factory Suite, la barre d'outils, les menus et les fenêtres prennent l'ambiance choisie dans GFS (Pop, Papier, Brut, Néon, et sa couleur) ; la page, le PDF, l'e-mail et les exports gardent l'aspect du modèle
-- 58 raccourcis clavier personnalisables
-- Choix de la touche utilisée pour déclencher les variables (`#` par défaut)
-- Barre d'outils pensée pour un petit panneau (testée à 700×400)
+| **Écrire** | Un éditeur complet : mise en forme, tableaux, images, en-têtes et pieds de page, notes de bas de page, sommaire, aperçu A4 fidèle (ce que vous voyez est ce que vous obtenez). |
+| **Remplir** | Des variables de toutes les tables du document, des conditions « Et » / « Ou », des boucles, des calculs et des puces (date du jour, heure, e-mail de la personne connectée). |
+| **Lire** | Le document rempli avec la ligne choisie dans Grist, en lecture simple ou épurée. |
+| **Exporter** | PDF vectoriel (le texte reste sélectionnable), PDF protégé, Word, Excel, Markdown, HTML, ou e-mail prérempli : une ligne à la fois ou en lot. |
+| **Réutiliser** | Plusieurs modèles par document Grist, une galerie de 21 modèles prêts à l'emploi, des macro-modèles qui assemblent une page de garde et des annexes. |
+| **Travailler à plusieurs** | Enregistrement automatique avec détection de conflit, historique des versions, commentaires, droits par personne. |
 
 ## Installation dans Grist
 
-1. Dans une page Grist, ajoutez un widget personnalisé et collez cette URL :
+1. Dans une page Grist, ajoutez un widget personnalisé et collez cette adresse :
    **`https://grist-factory.github.io/Publipostage-Plus/`**
-   (toute copie de ce dépôt hébergée en HTTPS sur un serveur statique convient aussi)
-2. Dans le panneau de configuration du widget, réglez **Select by** (« Sélectionner par ») sur la
-   table dont les lignes serviront de source de données. C'est ce réglage qui permet au widget de
-   suivre la ligne sélectionnée : sans lui, le mode lecture n'a pas de ligne à résoudre.
-3. Grist demande une autorisation d'accès au chargement du widget (voir
-   [Sécurité et permissions](#sécurité-et-permissions) plus bas) : elle est nécessaire au bon
-   fonctionnement du widget.
-4. Au premier lancement dans un document, le widget demande s'il peut y créer ses tables internes
-   `Publipostage_*` (« Créer les tables du widget dans ce document ? ») : il faut donc avoir le droit de
-   le modifier. Refusé, rien n'est créé ni enregistré, et la question revient à l'action suivante. Leurs
-   pages sont rangées sous celle des modèles, repliée.
-5. Après une mise à jour du widget, rechargez la page du document Grist, sans quoi le navigateur peut
-   garder l'ancienne version.
+   (toute copie de ce dépôt hébergée en HTTPS sur un serveur statique convient aussi).
+2. Dans le panneau de configuration du widget, réglez **Select by** (« Sélectionner par ») sur la table dont les lignes serviront de source de données. C'est ce réglage qui permet au widget de suivre la ligne sélectionnée : sans lui, le mode lecture n'a pas de ligne à remplir.
+3. Grist demande une autorisation d'accès au chargement du widget : acceptez-la (voir [Sécurité et permissions](#sécurité-et-permissions)), elle est nécessaire au bon fonctionnement du widget.
+4. Au premier lancement dans un document, le widget demande s'il peut y créer ses tables internes `Publipostage_*` (« Créer les tables du widget dans ce document ? »). Il faut donc avoir le droit de modifier le document. Refusé, rien n'est créé ni enregistré, et la question revient à l'action suivante. Ces tables sont rangées sous la page des modèles, repliée.
+5. Après une mise à jour du widget, rechargez la page du document Grist, sans quoi le navigateur peut garder l'ancienne version.
 
 Ouvert seul dans un onglet du navigateur, le widget ne fonctionne pas : il le dit et rappelle ces étapes.
 
-**Garder la bêta** : si un ancien modèle ne se rouvre pas bien dans la V1, la bêta 1.0.0-beta.1 reste
-servie, telle quelle et sans correctif, à `https://grist-factory.github.io/Publipostage-Plus/beta/` (dans
-Grist, changez l'adresse du widget personnalisé). Le retour est sûr tant que le modèle n'a pas été
-enregistré avec la V1 : la bêta efface ce qu'elle ne connaît pas (signets, exposants et indices, « Sinon
-afficher »). Elle ne reçoit plus de mise à jour.
+**Premiers pas** : ouvrez le menu « Nouveau modèle » puis « Nouveau document » (ou « Créer à partir d'un modèle… » pour partir de la galerie), écrivez votre texte et tapez `#` pour insérer une variable. Passez en mode lecture pour voir le document rempli avec la ligne sélectionnée, puis exportez-le.
 
-**Premiers pas** : ouvrez le menu « Nouveau modèle » puis « Nouveau document » (ou « Créer à partir
-d'un modèle… » pour partir de la galerie), écrivez le texte et tapez `#` pour insérer une variable.
-Passez en mode lecture pour voir le document rempli avec la ligne sélectionnée, puis exportez-le.
+**Garder la bêta** : si un ancien modèle ne se rouvre pas bien dans la V1, la bêta 1.0.0-beta.1 reste servie, telle quelle et sans correctif, à `https://grist-factory.github.io/Publipostage-Plus/beta/` (dans Grist, changez l'adresse du widget personnalisé). Le retour est sûr tant que le modèle n'a pas été enregistré avec la V1 : la bêta efface ce qu'elle ne connaît pas (signets, exposants et indices, « Sinon afficher »). Elle ne reçoit plus de mise à jour.
 
-## Configuration
+## Visite en images
 
-- **Créer ou éditer un modèle** : bouton "Nouveau modèle", ou sélecteur de modèle en haut de
-  l'éditeur. Chaque modèle est stocké dans une table Grist interne, créée avec votre accord (préfixée
-  `Publipostage_`), qui n'apparaît pas dans les sélecteurs de table habituels.
-- **Variables d'une autre table** : le panneau `#` propose un bouton dédié (« Tables liées ») pour
-  configurer une fois pour toutes la correspondance entre deux tables (la « clé de correspondance »),
-  retenue pour la table de la page où vous la réglez et valable pour tous les modèles de cette table ;
-  une autre table de la page garde la sienne.
-- **En-tête et pied de page** : cliquez sur une marge en haut ou en bas de la page pour entrer dans
-  l'édition dédiée. La zone garde sa taille (60 px de contenu) mais ne refuse rien : du texte, une image de n'importe quelle taille, un tableau (d'une ligne au départ) ou un QR code
-  (adresse ou colonne, posé à 36 px) s'y posent comme dans le corps. Ce qui dépasse la bande est marqué d'un trait rouge en tirets, une note sous la feuille dit de combien (en
-  millimètres) et, pour une image, propose « Réduire l'image » ; ce qui est sous le trait est coupé à l'impression, dans le PDF, dans Word et à la Lecture, et le texte de la page ne bouge jamais.
-  Dans une zone, « Sommaire » et « Saut de page » sont grisés (une bande n'a ni liste de titres ni page à ouvrir) et un trait (« --- » puis Espace) reste même seul, avec le même aspect (fin, gris clair) ouvert, fermé et à la Lecture.
-- **Réglages** (bouton de la barre du haut) : langue (celle du navigateur au premier lancement ; avec Grist Factory Suite, celle de GFS, que les cases ne changent pas), thème, touche déclenchant le panneau `#`,
-  raccourcis clavier, marges du modèle, modèle par défaut de la vue, colonne de la date du dernier export PDF,
-  droits par personne, crédits (et, sous la version, les nouveautés : un carrousel de captures qui s'ouvre à la demande).
-  Les réglages « Vue » et « Accès » sont des options du widget : Grist ne les partage avec les autres
-  personnes qu'une fois la vue enregistrée.
-- **Nom du fichier PDF** : champ dédié, qui accepte lui aussi des variables.
+Ces images montrent le vrai widget, avec des données fictives. L'interface est ici en français ; elle existe aussi en anglais. Cliquez sur une image pour l'agrandir.
+
+### Lire le document rempli
+
+Le même modèle, en mode lecture : chaque variable est remplacée par la valeur de la ligne sélectionnée dans Grist (ici, Atelier Lumière et Maison Berthier & Associés). Le bloc conditionnel « Si Clients.SIRET non vide » ne s'affiche que si le SIRET du client est renseigné.
+
+![Le contrat en mode lecture, rempli avec une ligne de la table](screenshots/02-lecture-document-rempli.png)
+
+### Partir d'un modèle de la galerie
+
+« Créer à partir d'un modèle… » propose 21 modèles prêts à l'emploi : facture, contrat, attestation, courrier de relance, quittance de loyer, bon de commande, bulletin scolaire, flyer, affiche, badge, carte de visite, étiquettes… Certains créent aussi les tables dont ils ont besoin.
+
+![La galerie de modèles](screenshots/03-galerie-de-modeles.png)
+
+### Mettre en forme le texte
+
+Le menu « Aa » règle le caractère (exposant, indice, petites capitales, ombre, contour, espacement des lettres) et la fenêtre « Paragraphe… » règle l'interligne, les espaces avant et après et les retraits, dont le retrait suspendu.
+
+| Le menu « Aa » | La fenêtre « Paragraphe… » |
+|---|---|
+| ![Le menu Caractère ouvert depuis le bouton Aa](screenshots/11-menu-caractere-aa.png) | ![La fenêtre Paragraphe](screenshots/12-fenetre-paragraphe.png) |
+
+![Le résultat dans le document : titre espacé en petites capitales avec ombre, soulignements, paragraphe à retrait suspendu](screenshots/13-resultat-caractere-et-paragraphe.png)
+
+### Tableaux
+
+Un tableau de document peut se lire « comme une grille » : lettres de colonnes, numéros de lignes, fusion de cases, bordures de la couleur voulue, alignement vertical.
+
+![Un tableau comme une grille et le menu des bordures](screenshots/20-tableau-bordures-comme-une-grille.png)
+
+### Conditions et boucles
+
+Une variable, un bloc de texte, une valeur dans la phrase ou une case cochée peuvent ne s'afficher que si des règles sont remplies, avec « Et » / « Ou », des groupes et un « Sinon afficher ». Une boucle répète une ligne de tableau, un élément de liste ou un paragraphe pour chaque ligne liée, avec filtre, tri et séparateurs.
+
+![La fenêtre des conditions : un groupe « Et » / « Ou », « Sinon afficher »](screenshots/30-condition-et-ou-groupes.png)
+
+![Une boucle : en haut la ligne du modèle dans l'éditeur, en bas le même tableau en lecture, une ligne par ligne liée](screenshots/31-boucle-ligne-de-tableau.png)
+
+### Macro-modèles
+
+Un macro-modèle assemble une page de garde toujours incluse et des annexes choisies par des règles sur la ligne. Portrait, paysage et grilles s'y mêlent, jusque dans le PDF.
+
+| La composition | Le résultat en lecture |
+|---|---|
+| ![La composition d'un macro-modèle : page de garde et deux annexes conditionnelles](screenshots/40-macro-modele-composition.png) | ![Le macro-modèle en lecture : couverture en portrait, annexe en paysage](screenshots/41-macro-modele-lecture.png) |
+
+### Historique des versions
+
+Chaque modèle garde ses versions : qui a changé quoi et quand. On compare avec la version actuelle (en vert ce que la version a en plus, en rouge barré ce qu'une restauration retirerait), on nomme une version pour qu'elle ne soit jamais effacée, on la restaure d'un clic.
+
+![L'historique des versions et la comparaison avec la version actuelle](screenshots/42-historique-des-versions.png)
+
+### Rechercher et remplacer
+
+Avec casse, mot entier ou expression régulière (ici `(Prestataire|Client)` remplacé par `$1 (Partie)`) ; les bulles de variables et les en-têtes et pieds de page sont inclus.
+
+![Rechercher / Remplacer avec une expression régulière](screenshots/60-rechercher-remplacer-regex.png)
+
+### Exporter
+
+Le menu « Type d'export » propose PDF, PDF protégé, Word (bêta), Excel (pour les grilles), Markdown et HTML. L'assemblage avant impression pose les pages de chaque ligne sur des feuilles A4 ou A3, avec traits de coupe : quatre A6 sur une A4, par exemple.
+
+| Le type d'export | L'assemblage avant impression |
+|---|---|
+| ![Le menu Type d'export et la qualité du PDF](screenshots/50-type-export.png) | ![La fenêtre Assemblage avant impression](screenshots/51-assemblage-avant-impression.png) |
+
+### Lire sans distraction
+
+La lecture épurée montre le document seul, dans tout le panneau.
+
+| Le menu Mode lecture | La lecture épurée |
+|---|---|
+| ![Le menu Mode lecture : lecture simple ou épurée](screenshots/70-menu-mode-lecture.png) | ![La lecture épurée](screenshots/71-lecture-epuree.png) |
+
+## Toutes les fonctions
+
+La [note de version](PATCH_NOTES.md) en donne la liste complète, une puce par fonction. Voici l'essentiel, par domaine.
+
+### Écrire
+
+- **Texte** : gras, italique, souligné (simple, double, pointillé, tireté, ondulé), barré, exposant, indice, petites capitales, ombre, contour, espacement des lettres, couleur et surlignage, six polices de 8 à 72 points, pinceau de mise en forme.
+- **Paragraphes** : alignements, texte de droite à gauche, retraits et tabulations, interligne, espaces avant et après, retrait suspendu.
+- **Structure** : titres numérotés (dont « Article 1 »), un style par niveau de titre, sommaire cliquable, sauts de page, notes de bas de page, signets, filigrane.
+- **Listes** à puces, numérotées et de tâches à cocher.
+- **Tableaux** : fusion et scission de cases, bordures, alignement vertical, fond de case, légende, lettres et numéros comme dans une grille. Zones à deux colonnes.
+- **Images** collées, ajoutées par adresse ou prises dans une colonne Pièces jointes de Grist ; flottantes, devant ou derrière le texte, avec opacité et légende. Une image hébergée sur un autre site n'apparaît qu'après un clic sur « Afficher ».
+- **En-têtes et pieds de page** (première page différente, numéro de page, QR code).
+- **Blocs** : citation, bloc de code, encadré (Note, Attention, Important), bloc de signature, QR code.
+- **Rechercher / remplacer** (casse, mot entier, expressions régulières), abréviations qui se développent à la frappe.
+- **Confort** : aperçu A4 fidèle, zoom de la page, Ctrl+Z et Ctrl+Y presque partout, 58 raccourcis clavier personnalisables, barre d'outils pensée pour un petit panneau (testée à 700 × 400).
+
+### Remplir avec les données de Grist
+
+- **Variables** `#Table.Colonne` avec autocomplétion sur toutes les tables du document ; pour une table liée, une clé de correspondance à régler une fois.
+- **Fiches citées** : `@` ouvre la liste des lignes de toutes les tables (« Rédigé par @Marie Martin »). Le nom se relit à chaque affichage : renommer la personne dans Grist la renomme dans les modèles.
+- **Mise en forme des variables** : nombres (écriture française ou américaine, décimales, devise, en toutes lettres), dates (formats prédéfinis, en toutes lettres, avec l'heure d'une colonne « Date et heure »), Oui / Non (texte ou case cochée). « Comme dans Grist » reprend le format de la colonne.
+- **Puces intelligentes** : date du jour, heure, e-mail de la personne connectée, numéro de ligne d'une boucle. **Calculs** : SOMME, MOYENNE, MIN, MAX, NB, ARRONDI.
+- **Conditions** : « Et » / « Ou », groupes, « Sinon afficher », sur une variable, un bloc de texte, une valeur dans la phrase ou une case cochée.
+- **Boucles** sur les lignes liées, avec filtre, tri et séparateurs, y compris une boucle dans une boucle (les lignes de chaque facture, puis les étapes de chaque ligne) ou sur toutes les lignes d'une table.
+- **Renommages suivis** : quand une table ou une colonne est renommée dans Grist, les modèles suivent.
+
+### Les modèles
+
+- **Quatre types** : Document (page A3, A4, A5 ou A6, portrait ou paysage, marges par modèle ; une page peut être tournée seule), E-mail (objet, destinataires et corps avec les mêmes variables, ouvert dans votre messagerie par un lien `mailto:`), Grille (un tableur à la place de la page : collage depuis Excel, Google Sheets ou LibreOffice Calc, import `.xlsx`, export Excel) et Macro-modèle.
+- **Galerie** de 21 modèles prêts à l'emploi ; certains créent leurs tables, vides, avec leurs colonnes de calcul et leurs liens.
+- **Plusieurs modèles par document Grist**, enregistrés dans le document lui-même, rangés avec des épingles et des dossiers que les autres personnes ne voient pas.
+- **Import Markdown** (menu « + ») : un fichier `.md` devient un nouveau document, y compris un modèle exporté en « Markdown (modèle) ».
+
+### Lire, enregistrer, collaborer
+
+- **Mode lecture** simple ou épuré (Alt+L).
+- **Enregistrement automatique** avec détection d'un conflit si quelqu'un d'autre a enregistré le modèle entre-temps.
+- **Historique des versions** : aperçu, comparaison, nom, restauration (l'état remplacé reste dans la liste).
+- **Commentaires** sur le texte sélectionné, avec réponses et résolution, partagés entre les personnes qui ouvrent le document.
+- **Suivi des modifications** (bêta) : les changements sont proposés dans le texte, puis acceptés ou refusés.
+- **Droits par personne** (lecture seule, export, commentaires), lus dans une table du document : un verrou d'interface, pas une protection des données.
+
+### Exporter
+
+- **PDF vectoriel** : texte sélectionnable, polices embarquées, nom de fichier composé avec des variables. Trois qualités : « Vectoriel », « Impression par le navigateur » (la lecture imprimée page pour page par la fenêtre d'impression du navigateur) et PDF « Léger » (images ramenées à 150 points par pouce).
+- **PDF protégé** : chiffré en AES-256, avec un mot de passe pour l'ouvrir (facultatif), des autorisations (imprimer, copier, modifier) et les propriétés du fichier.
+- **En lot** : un PDF par ligne dans une archive ZIP, ou toutes les lignes dans un seul PDF. Un lot suit les lignes que le widget affiche dans Grist (filtres et tri compris) ; quand il n'en affiche qu'une partie, il demande s'il faut exporter celles-ci ou toute la table.
+- **Assemblage avant impression** : les pages de chaque ligne sur des feuilles A4 ou A3, avec ou sans traits de coupe.
+- **Date du dernier export** : une colonne de votre table, choisie dans Réglages > Vue, garde le moment du dernier export PDF de chaque ligne.
+- **Word** (`.docx`, bêta), **Excel** (`.xlsx`, pour les grilles), **Markdown** (`.md`, CommonMark et GFM, ou le modèle lui-même, variables comprises), **HTML** (une page complète, ou le seul contenu à coller dans un gestionnaire de contenu).
+- **E-mail** prérempli par un lien `mailto:` (Standard ou Zimbra).
+- Avant un export, une fenêtre liste les sites externes dont des images seraient téléchargées.
+
+## Réglages
+
+Le bouton **Réglages** de la barre du haut ouvre neuf onglets :
+
+| Onglet | Rôle |
+|---|---|
+| Langue | Français ou English (celle du navigateur au premier lancement). |
+| Thème | Système, clair ou sombre. |
+| Insertion | La touche qui ouvre la liste des variables et des puces (`#` par défaut). |
+| Raccourcis | Les touches du clavier, une par action, et les abréviations avec leur caractère déclencheur. |
+| Email | La messagerie qui ouvre le lien du mode E-mail : Standard ou Zimbra. |
+| Marges | Les marges du modèle ouvert, avec quatre préréglages (Aucune, Étroites, Classiques, Larges). |
+| Vue | Le modèle par défaut de la vue, le choix du modèle selon la ligne, la colonne de la date du dernier export PDF. |
+| Accès | La table qui donne à chaque personne ses droits. |
+| Crédits | Auteur, site, licence, version et nouveautés. |
+
+Les réglages « Vue » et « Accès » sont des options du widget : Grist ne les partage avec les autres personnes qu'une fois la vue enregistrée. Deux gestes à connaître : le bouton « Tables liées » du panneau `#` règle une fois pour toutes la clé de correspondance entre deux tables, et un clic dans la marge du haut ou du bas de la page ouvre l'édition de l'en-tête ou du pied de page.
 
 ## Sécurité et permissions
 
-Le widget demande le niveau d'accès `requiredAccess: 'full'`, c'est-à-dire un accès à l'ensemble du
-document Grist et pas seulement à la table à laquelle il est lié. Ce niveau est nécessaire dans
-l'architecture actuelle : la résolution de variables vers une autre table, l'autocomplétion sur tout le
-document et la gestion des tables internes du widget en ont besoin dès le chargement. L'API des widgets
-personnalisés Grist ne propose pas de niveau intermédiaire entre l'accès à une seule table et l'accès
-complet.
+**En résumé**
 
-Cet accès s'applique au widget, pas directement à chaque utilisateur : les Règles d'accès natives de
-Grist, configurées sur le document par son propriétaire, continuent de s'appliquer normalement. Un
-utilisateur restreint à certaines tables ou colonnes le reste en utilisant le widget. C'est donc au
-niveau du document Grist lui-même que doit se faire une éventuelle restriction fine des données, pas
-dans la configuration du widget. Les « droits par personne » du widget (Réglages > Accès) ne sont qu'un
-verrou d'interface : ils grisent des commandes, ils ne protègent aucune donnée. Pour la même raison, un mot
-de passe de PDF protégé écrit dans le document (« Le même pour tous, enregistré dans le document », ou les mots de
-passe d'une colonne avec « Un par ligne ») y est lisible en clair par toute personne qui l'ouvre, sauf
-permissions avancées de Grist sur cette colonne : « Saisi à chaque export » est la façon la plus sûre, et la
-fenêtre le dit.
+- Le widget demande l'**accès complet** au document Grist, faute de niveau intermédiaire dans l'API des widgets.
+- Vos **données restent dans Grist** : page statique, aucun serveur, rien n'est stocké ailleurs.
+- Il écrit dans ses propres tables `Publipostage_*`, **avec votre accord**, et dans aucune colonne de vos tables, sauf celle que vous choisissez pour la date du dernier export.
+- Il charge des bibliothèques tierces, à versions figées, depuis quatre adresses (voir [Dépendances](#dépendances)).
 
-Le widget écrit dans neuf tables du document, toutes préfixées `Publipostage_` : `Publipostage_Modeles`
-(les modèles, et une ligne « Réglages du document » qui garde les couleurs partagées par tous les
-modèles et, seulement si vous choisissez « Le même pour tous, enregistré dans le document » pour un PDF protégé,
-ce mot de passe commun, en clair, dans sa colonne `MotDePassePdf`), `Publipostage_Commentaires` (les fils de commentaires, ceux des modèles et ceux des PDF lus dans la Lecture : les colonnes d'un PDF n'arrivent qu'avec son premier fil publié), `Publipostage_PreferencesModeles` (épingles, dossiers et choix d'export
-de chaque personne), `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables`
-(les clés de correspondance entre tables), `Publipostage_Versions` (les versions gardées de chaque
-modèle, créée à la première version gardée et lue seulement à l'ouverture de l'historique), `Publipostage_Direct` (le tuyau de l'écriture en direct, créée au premier
-direct : les frappes en cours, une ligne par envoi, que la dernière personne qui part vide ; l'historique des actions de Grist, lui,
-garde ce qui y a été écrit) et `Publipostage_UserProbe` (qui sert à lire l'e-mail de la
-personne connectée). Il ne les crée qu'avec l'accord de la personne : avant la première création, une
-fenêtre demande « Créer les tables du widget dans ce document ? » (« Créer les tables » ou « Ne pas
-créer »). Un oui vaut jusqu'à la fermeture de la page ; un refus n'écrit rien, n'est jamais gardé, et la
-question revient à l'action suivante de la personne. Un document qui porte déjà une table du widget ne
-pose aucune question.
+### L'accès demandé
 
-Dans les tables qui portent vos données, le widget n'écrit dans aucune colonne existante, sauf celle que
-vous choisissez dans Réglages > Vue > « Date du dernier export PDF ». Il y écrit alors, après chaque PDF
-réussi, le moment de l'export pour les lignes dont le PDF vient d'être produit (une seule écriture par
-export) ; sans colonne choisie, il n'y écrit rien. Un compte Lecteur de Grist n'écrit rien.
+Le widget demande le niveau d'accès `requiredAccess: 'full'` : l'ensemble du document Grist, pas seulement la table à laquelle il est lié. C'est nécessaire dans l'architecture actuelle : la résolution de variables vers une autre table, l'autocomplétion sur tout le document et la gestion des tables internes du widget en ont besoin dès le chargement. L'API des widgets personnalisés de Grist ne propose pas de niveau entre l'accès à une seule table et l'accès complet.
 
-Le widget charge des bibliothèques tierces à l'exécution, depuis `esm.sh` (moteur d'édition
-TipTap/ProseMirror), `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` (exports PDF, Word, PowerPoint, Excel, lecteur de
-l'import Markdown et QR code, chargés au premier usage) et `docs.getgrist.com` (API de Grist), à des versions figées, sauf le
-script de l'API de Grist, que Grist sert dans sa version courante. Les fichiers venant de `cdnjs` et
-de `jsDelivr` sont protégés par une intégrité SRI, qui empêche le navigateur d'exécuter un fichier
-altéré ; ce n'est techniquement pas possible pour l'import map `esm.sh`. Aucune police ni feuille de
-style ne vient d'un autre site. Le graphique de la page est une extension de Grist Factory Suite (le graphique de la page comme le graphique créé) : ses bibliothèques (Plotly et ECharts)
-ne sont pas chargées par le widget seul, c'est Grist Factory Suite qui les fournit.
+Cet accès s'applique au widget, pas directement à chaque personne : les Règles d'accès natives de Grist, configurées sur le document par son propriétaire, continuent de s'appliquer. Une personne restreinte à certaines tables ou colonnes le reste en utilisant le widget. Une éventuelle restriction fine des données se fait donc dans le document Grist, pas dans la configuration du widget. Les « droits par personne » du widget (Réglages > Accès) ne sont qu'un verrou d'interface : ils grisent des commandes, ils ne protègent aucune donnée.
 
-La page porte une politique de sécurité du contenu (CSP) : seuls s'exécutent les scripts du widget,
-ceux des adresses ci-dessus et trois scripts en ligne cités par leur empreinte. Les gestionnaires
-d'événements en ligne, les adresses `javascript:`, les cadres, les objets et les formulaires sont
-refusés. `'unsafe-eval'` y reste faute de mieux : le script d'API que sert Grist en a besoin. Le
-HTML d'un modèle relu depuis le document, qu'une autre personne a pu modifier, est assaini avant
-d'être affiché, et les formules de calcul ne passent jamais par `eval`. Les images et les connexions ne
-sont pas limitées par la CSP : le widget lit des images et des pièces jointes de n'importe quel site.
-Mais une image hébergée sur un autre site que le widget ou Grist ne se charge qu'après un clic sur
-« Afficher » (dans l'éditeur, la Lecture, les en-têtes et pieds de page et la galerie), car la charger
-apprend à ce site l'adresse IP de la personne et l'heure d'ouverture du document : le clic affiche toutes
-les images de ce site jusqu'à la fermeture de la page, et rien n'est retenu, ni dans le navigateur ni dans
-le document. Avant un export qui téléchargerait de telles images, une fenêtre liste les sites et demande
-confirmation.
+Pour la même raison, un mot de passe de PDF protégé écrit dans le document (« Le même pour tous, enregistré dans le document », ou les mots de passe d'une colonne avec « Un par ligne ») y est lisible en clair par toute personne qui ouvre le document, sauf permissions avancées de Grist sur cette colonne. « Saisi à chaque export » est la façon la plus sûre, et la fenêtre le dit.
 
-Aucune donnée n'est stockée hors de Grist. Les seules informations conservées dans le navigateur
-(`localStorage`) sont des préférences d'interface (langue, thème, mise en forme des bulles et des puces dans l'éditeur,
-touches, raccourcis et vue de leur panneau, messagerie du mode Email, état de l'enregistrement automatique, dernier choix de l'assemblage avant impression, destination des PDF exportés (téléchargés, rangés dans Grist Factory Suite, ou les deux), autorisations
-et auteur du PDF protégé, façon de donner son mot de passe et colonne des mots de passe - jamais un mot de passe), la dernière
-version dont la fenêtre des nouveautés a été fermée (elle s'ouvre d'elle-même une fois par navigateur, à la première ouverture
-après une version qui a des nouveautés), le niveau
-de zoom de la page des derniers modèles ouverts (avec leur numéro et leur nom), la liste courte des modèles dont la place des images devant ou derrière le texte a déjà été relue (des signatures, jamais le contenu d'un modèle) et, pour suivre les
-renommages, les noms des tables et des colonnes de chaque document ouvert, jamais de donnée de ligne.
-Dans Grist Factory Suite, ces préférences, cette version et cette liste (pas la langue, que Grist Factory Suite donne elle-même)
-ne sont pas gardées par le navigateur de l'application, dont le cadre isolé le refuse : Grist Factory Suite les
-garde pour ce navigateur, dans l'espace qu'elle réserve à l'application ; un réglage fait d'un côté ne suit pas
-de l'autre. La fenêtre des nouveautés ne s'ouvre d'elle-même que si l'application peut retenir qu'elle l'a montrée
-(navigation privée, espace refusé : seul le bouton « Voir les nouveautés » de Réglages > Crédits l'ouvre).
+### Ce que le widget écrit
 
-Pour signaler une vulnérabilité, merci de ne pas ouvrir d'issue publique : suivez
-[SECURITY.md](SECURITY.md).
+Dans le document, le widget écrit dans neuf tables, toutes préfixées `Publipostage_`. Il ne les crée qu'avec l'accord de la personne : avant la première création, une fenêtre demande « Créer les tables du widget dans ce document ? » (« Créer les tables » ou « Ne pas créer »). Un oui vaut jusqu'à la fermeture de la page ; un refus n'écrit rien, n'est jamais gardé, et la question revient à l'action suivante. Un document qui porte déjà une table du widget ne pose aucune question.
+
+| Table | Contenu |
+|---|---|
+| `Publipostage_Modeles` | Les modèles, et une ligne « Réglages du document » qui garde les couleurs partagées par tous les modèles et, seulement si vous choisissez « Le même pour tous, enregistré dans le document » pour un PDF protégé, ce mot de passe commun, en clair, dans sa colonne `MotDePassePdf`. |
+| `Publipostage_Commentaires` | Les fils de commentaires. |
+| `Publipostage_PreferencesModeles` | Les épingles, dossiers et choix d'export de chaque personne. |
+| `Publipostage_Abreviations` | Les abréviations qui se développent à la frappe. |
+| `Publipostage_FormatsPage` | Les formats de page enregistrés, partagés par tout le document. |
+| `Publipostage_LiensTables` | Les clés de correspondance entre tables. |
+| `Publipostage_Versions` | Les versions gardées de chaque modèle : créée à la première version gardée, lue seulement à l'ouverture de l'historique. |
+| `Publipostage_Direct` | Le tuyau de l'écriture en direct, que seul Grist Factory Suite utilise (voir [À part](#à-part--grist-factory-suite)). |
+| `Publipostage_UserProbe` | Sert à lire l'e-mail de la personne connectée. |
+
+Dans les tables qui portent vos données, le widget n'écrit dans aucune colonne existante, sauf celle que vous choisissez dans Réglages > Vue > « Date du dernier export PDF ». Il y écrit alors, après chaque PDF réussi, le moment de l'export pour les lignes dont le PDF vient d'être produit (une seule écriture par export) ; sans colonne choisie, il n'y écrit rien. Un compte Lecteur de Grist n'écrit rien.
+
+### Bibliothèques externes et politique de sécurité
+
+Le widget charge des bibliothèques tierces à l'exécution, depuis `esm.sh` (moteur d'édition TipTap/ProseMirror), `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` (exports PDF, Word, Excel, lecteur de l'import Markdown et QR code, chargés au premier usage) et `docs.getgrist.com` (API de Grist), à des versions figées, sauf le script de l'API de Grist, que Grist sert dans sa version courante. Les fichiers venant de `cdnjs` et de `jsDelivr` sont protégés par une intégrité SRI, qui empêche le navigateur d'exécuter un fichier altéré ; ce n'est techniquement pas possible pour l'import map `esm.sh`. Aucune police ni feuille de style ne vient d'un autre site.
+
+La page porte une politique de sécurité du contenu (CSP) : seuls s'exécutent les scripts du widget, ceux des adresses ci-dessus et trois scripts en ligne cités par leur empreinte. Les gestionnaires d'événements en ligne, les adresses `javascript:`, les cadres, les objets et les formulaires sont refusés. `'unsafe-eval'` y reste faute de mieux : le script d'API que sert Grist en a besoin. Le HTML d'un modèle relu depuis le document, qu'une autre personne a pu modifier, est assaini avant d'être affiché, et les formules de calcul ne passent jamais par `eval`.
+
+### Images d'autres sites
+
+Les images et les connexions ne sont pas limitées par la CSP : le widget lit des images et des pièces jointes de n'importe quel site. Mais une image hébergée sur un autre site que le widget ou Grist ne se charge qu'après un clic sur « Afficher » (dans l'éditeur, la lecture, les en-têtes et pieds de page et la galerie), car la charger apprend à ce site l'adresse IP de la personne et l'heure d'ouverture du document. Le clic affiche toutes les images de ce site jusqu'à la fermeture de la page, et rien n'est retenu, ni dans le navigateur ni dans le document. Avant un export qui téléchargerait de telles images, une fenêtre liste les sites et demande confirmation.
+
+### Ce que garde le navigateur
+
+Aucune donnée n'est stockée hors de Grist. Le navigateur ne garde (`localStorage`) que des préférences d'interface : la langue, le thème, la mise en forme des bulles et des puces dans l'éditeur, les touches, les raccourcis et la vue de leur panneau, la messagerie du mode E-mail, l'état de l'enregistrement automatique, le dernier choix de l'assemblage avant impression, la destination des PDF exportés, les autorisations et l'auteur du PDF protégé, la façon de donner son mot de passe et la colonne des mots de passe (jamais un mot de passe), la dernière version dont la fenêtre des nouveautés a été fermée, le niveau de zoom de la page des derniers modèles ouverts, la liste courte des modèles dont la place des images devant ou derrière le texte a déjà été relue (des signatures, jamais le contenu d'un modèle) et, pour suivre les renommages, les noms des tables et des colonnes de chaque document ouvert. Aucune donnée de ligne n'y est copiée.
+
+La fenêtre des nouveautés s'ouvre d'elle-même une fois par navigateur, à la première ouverture après une version qui en a. En navigation privée, ou si le stockage est refusé, seul le bouton « Voir les nouveautés » de Réglages > Crédits l'ouvre.
+
+Pour signaler une vulnérabilité, merci de ne pas ouvrir d'issue publique : suivez [SECURITY.md](SECURITY.md).
 
 ## Dépendances
 
-Aucune étape de build : tous les fichiers sont servis tels quels. Les bibliothèques tierces sont
-chargées à l'exécution, à des versions toujours figées (sauf le script de l'API de Grist) :
+Aucune étape de build : tous les fichiers sont servis tels quels. Les bibliothèques tierces sont chargées à l'exécution, à des versions toujours figées (sauf le script de l'API de Grist) :
 
 | Bibliothèque | Usage | Origine |
 |---|---|---|
@@ -365,110 +252,56 @@ chargées à l'exécution, à des versions toujours figées (sauf le script de l
 | `@handlewithcare/prosemirror-suggest-changes` 0.1.8 | Suivi des modifications | `esm.sh` |
 | pdfmake 0.2.7 + `vfs_fonts` | Export PDF vectoriel | `cdnjs.cloudflare.com` |
 | pdf-lib 1.17.1 | Un seul PDF pour toutes les lignes, assemblage avant impression | `cdnjs.cloudflare.com` |
-| JSZip 3.10.1 | Export en lot (archive zip) | `cdnjs.cloudflare.com` |
+| JSZip 3.10.1 | Export en lot (archive ZIP) | `cdnjs.cloudflare.com` |
 | ExcelJS 4.4.0 | Export Excel | `cdnjs.cloudflare.com` |
 | qrcode-generator 1.4.4 | QR code | `cdnjs.cloudflare.com` |
 | marked 15.0.12 | Import Markdown | `cdnjs.cloudflare.com` |
 | docx 9.15.1 (+ `docx/charts`) | Export Word | `cdn.jsdelivr.net` |
 
-Le graphique (celui de la page, importé de Grist, et celui qu'on crée) est une extension de Grist Factory Suite (GFS) : son code est dans `extensions/graphique/`, mais
-ses bibliothèques, Plotly 2.13.2 (le graphique de la page) et ECharts 6.1.0 (le graphique créé), ne sont pas dans cette liste : GFS les porte et les donne à l'extension, avec leur empreinte. Le
-widget seul (l'adresse de ce dépôt dans une fenêtre de Grist) grise la fonction, avec une fenêtre qui dit qu'il faut
-passer par GFS. Seule la politique de sécurité du contenu de la page (décrite plus haut) garde les adresses exactes de Plotly et d'ECharts sur
-`cdn.jsdelivr.net`, celles du catalogue de GFS, et rien d'autre pour le graphique : GFS ne peut imposer aucune politique à
-un sous-cadre, et sans ces adresses le navigateur refuserait les scripts qu'il donne. Le widget seul ne les charge jamais.
-
-L'écriture en direct est l'autre extension (code dans `extensions/edition/`) : sa bibliothèque, Yjs et les extensions de
-TipTap qui s'en servent, n'est ni dans cette liste ni dans la carte d'importation. GFS la porte en un seul fichier
-assemblé, qu'il sert à l'adresse de la page avec son empreinte et que le widget charge par `<script type="module">` :
-la politique de sécurité du contenu n'a rien à y nommer. Le widget seul ne la charge jamais.
-
-L'interface prend la police du système. Les polices des documents sont dans le dépôt : Roboto pour
-l'éditeur, et pour le PDF Roboto, Arimo, Tinos, Cousine, Gelasio et Carlito, les équivalents libres de
-même métrique d'Arial, Times New Roman, Courier New, Georgia et Calibri. Les licences de toutes ces
-bibliothèques et polices sont dans [NOTICE](NOTICE).
+L'interface prend la police du système. Les polices des documents sont dans le dépôt : Roboto pour l'éditeur, et pour le PDF Roboto, Arimo, Tinos, Cousine, Gelasio et Carlito, les équivalents libres de même métrique d'Arial, Times New Roman, Courier New, Georgia et Calibri. Les licences de toutes ces bibliothèques et polices sont dans [NOTICE](NOTICE).
 
 ## Limites connues
 
-- **Accès complet au document** : faute de niveau intermédiaire dans Grist, le widget demande
-  `requiredAccess: 'full'` (voir [Sécurité et permissions](#sécurité-et-permissions)). Il n'existe pas
-  de version avec les dépendances embarquées, pour éviter tout appel externe.
-- **Réseau** : `esm.sh` (éditeur) et `docs.getgrist.com` (API de Grist) sont nécessaires au démarrage ;
-  `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` le sont au premier export ou au premier import Markdown. Un pare-feu qui bloque l'un d'eux empêche le widget de démarrer ou l'export de se faire : il faut
-  les autoriser. Au démarrage, le widget le dit dans une fenêtre qui liste ces adresses.
-- **Audit externe** : un audit du code (outil gwaudit, 4 octobre 2026, refait le 4 novembre 2026 sur la V1) conclut « NON CONFORME » et compte
-  69 points bloquants. Tous tiennent à un seul choix : l'éditeur (TipTap et ProseMirror) se charge depuis
-  `esm.sh`, un site tiers, sans intégrité SRI (ce qu'un import map ne permet pas ; voir
-  [Dépendances](#dépendances)). Ce choix est gardé pour la V1, donc le verdict reste « NON CONFORME », et
-  l'outil en tire qu'un hébergement sur une instance officielle (DINUM, ANCT) est exclu en l'état. Le
-  widget reste installable ailleurs : à chaque personne de juger si ce risque convient à son usage.
-- **Navigateurs** : les tests automatisés tournent sur Chromium (Chrome, Edge), avec un simulateur de
-  Grist ; Firefox et Safari ne sont pas testés automatiquement.
-- **Enregistrement** : deux personnes qui modifient le même modèle en même temps ne sont pas fusionnées.
-  L'enregistrement automatique détecte qu'une autre personne a enregistré entre-temps et propose de
-  recharger la dernière version ; le bouton « Enregistrer » écrase la version enregistrée sans le
-  vérifier. Il n'y a pas de co-édition en temps réel, sauf l'écriture en direct (avec Grist Factory Suite), qui ne couvre
-  que le texte d'un modèle Document.
-- **Écriture en direct** (avec Grist Factory Suite) : elle couvre le texte d'un modèle Document ou d'une présentation, et la page (son format, son sens, ses marges, le thème et son décor, le filigrane, les couleurs et mises en forme gardées ; Ctrl+Z ne défait que le dernier geste de page de la personne) ; dans une présentation, la bande des diapositives montre une pastille de la couleur de chaque autre personne sous la miniature de la diapositive où elle écrit. Tant qu'elle
-  dure, l'en-tête et le pied de page, le suivi des modifications, les tableaux liés et la restauration d'une version sont
-  grisés, avec leur raison ; un modèle e-mail, une grille ou un macro-modèle ne s'écrit pas en direct. Une seule personne
-  enregistre le modèle pour tout le monde (la première de la liste, parmi les pages visibles ; si elle ferme sa page, la
-  suivante prend le relais). Une frappe apparaît chez l'autre en quelques dixièmes de seconde (mesuré sans réseau :
-  environ 90 ms avec la prévenance de Grist, environ 125 ms de plus quand la table du direct n'est pas celle de la
-  section, relue toutes les 250 ms) ; le réseau réel d'un Grist en ligne, deux navigateurs et les plafonds de l'offre ne
-  sont pas mesurés. Les frappes passent par la table `Publipostage_Direct` : l'historique des actions de Grist grossit
-  pendant qu'on écrit et garde ce qui y a été écrit.
+**Accès, réseau et sécurité**
+
+- **Accès complet au document** : faute de niveau intermédiaire dans Grist, le widget demande `requiredAccess: 'full'` (voir [Sécurité et permissions](#sécurité-et-permissions)). Il n'existe pas de version avec les dépendances embarquées, pour éviter tout appel externe.
+- **Réseau** : `esm.sh` (éditeur) et `docs.getgrist.com` (API de Grist) sont nécessaires au démarrage ; `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` le sont au premier export ou au premier import Markdown. Un pare-feu qui bloque l'un d'eux empêche le widget de démarrer ou l'export de se faire : il faut les autoriser. Au démarrage, le widget le dit dans une fenêtre qui liste ces adresses.
+- **Audit externe** : un audit du code (outil gwaudit, 4 octobre 2026, refait le 4 novembre 2026 sur la V1) conclut « NON CONFORME » et compte 69 points bloquants. Tous tiennent à un seul choix : l'éditeur (TipTap et ProseMirror) se charge depuis `esm.sh`, un site tiers, sans intégrité SRI (ce qu'un import map ne permet pas ; voir [Dépendances](#dépendances)). Ce choix est gardé pour la V1, donc le verdict reste « NON CONFORME », et l'outil en tire qu'un hébergement sur une instance officielle (DINUM, ANCT) est exclu en l'état. Le widget reste installable ailleurs : à chaque personne de juger si ce risque convient à son usage.
+- **Droits par personne** : un verrou d'interface, pas une protection des données (voir [Sécurité et permissions](#sécurité-et-permissions)).
+
+**Navigateurs et travail à plusieurs**
+
+- **Navigateurs** : les tests automatisés tournent sur Chromium (Chrome, Edge), avec un simulateur de Grist ; Firefox et Safari ne sont pas testés automatiquement.
+- **Enregistrement** : deux personnes qui modifient le même modèle en même temps ne sont pas fusionnées. L'enregistrement automatique détecte qu'une autre personne a enregistré entre-temps et propose de recharger la dernière version ; le bouton « Enregistrer » écrase la version enregistrée sans le vérifier.
 - **Suivi des modifications** (bêta) : la version complète reste à venir (voir la [roadmap](#roadmap)).
-- **PDF** : les caractères chinois, arabes, hébreux, thaï et la plupart des émojis ne sont pas pris en
-  charge (une case vide les remplace) ; le grec, le cyrillique, le vietnamien, les flèches, coches,
-  étoiles et monnaies le sont. Le menu « Type d'export » propose PDF, PDF protégé, Word, PowerPoint (pour une présentation seulement), Excel, Markdown, Markdown (modèle) et les deux HTML (fichier à déposer, contenu à coller), puis, pour le PDF, « Vectoriel », « Impression navigateur » et « Léger » (le PDF
-  vectoriel aux images ramenées à 150 points par pouce). L'impression navigateur imprime une
-  ligne à la fois, sur 60 pages au plus, et suppose que le navigateur ouvre sa fenêtre d'impression depuis le
-  cadre du widget : si rien ne s'ouvre, choisissez « Vectoriel ». Un PDF protégé n'existe ni en un seul PDF pour
-  toutes les lignes, ni en assemblage avant impression, ni par l'impression navigateur (ces sorties ne se
-  chiffrent pas) ; sans mot de passe pour l'ouvrir, ses autorisations (imprimer, copier, modifier) ne tiennent que
-  chez les visionneuses qui les respectent.
-- **Word** (bêta) : les images devant ou derrière le texte et celles alignées à gauche ou à droite y
-  gardent leur place, le sommaire est un vrai sommaire Word dont les numéros de page ne s'écrivent que
-  quand Word le met à jour, et les polices ne sont pas embarquées.
-- **PowerPoint** (bêta) : ni en-têtes, pieds de page ni filigrane, ni notes de bas de page ni sommaire ; un encadré perd son cadre (son texte part) ; le texte qui déborde d'une diapositive reste hors d'elle ;
-  le texte ne contourne pas une image flottante ; les polices ne sont pas embarquées (sans la police du document, PowerPoint en met une autre et les retours à la ligne peuvent changer) ; le sens d'une
-  transition n'est pas vérifié dans PowerPoint lui-même.
-- **E-mail** : le corps est du texte brut (l'éditeur d'un modèle e-mail n'écrit ni gras, ni couleur, ni
-  niveau de titre, ni image : le texte du lien a les lignes de l'éditeur), sans pièce jointe ; le lien
-  `mailto:` est limité à environ 2 000 caractères, une jauge prévient quand il les dépasse.
+- **Accessibilité** : pas d'audit RGAA complet à ce jour ; les contrastes, le focus et les fenêtres (Tab, Échap) ont été travaillés.
+
+**Exports**
+
+- **PDF** : les caractères chinois, arabes, hébreux, thaï et la plupart des émojis ne sont pas pris en charge (une case vide les remplace) ; le grec, le cyrillique, le vietnamien, les flèches, coches, étoiles et monnaies le sont. L'« Impression par le navigateur » imprime une ligne à la fois, sur 60 pages au plus, et suppose que le navigateur ouvre sa fenêtre d'impression depuis le cadre du widget : si rien ne s'ouvre, choisissez « Vectoriel ». Un PDF protégé n'existe ni en un seul PDF pour toutes les lignes, ni en assemblage avant impression, ni par l'impression du navigateur (ces sorties ne se chiffrent pas) ; sans mot de passe pour l'ouvrir, ses autorisations (imprimer, copier, modifier) ne tiennent que chez les visionneuses qui les respectent.
+- **Word** (bêta) : les images devant ou derrière le texte et celles alignées à gauche ou à droite y gardent leur place, le sommaire est un vrai sommaire Word dont les numéros de page ne s'écrivent que quand Word le met à jour, et les polices ne sont pas embarquées.
+- **E-mail** : le corps est du texte brut (l'éditeur d'un modèle e-mail n'écrit ni gras, ni couleur, ni niveau de titre, ni image), sans pièce jointe ; le lien `mailto:` est limité à environ 2 000 caractères, une jauge prévient quand il les dépasse.
 - **Excel** : le fichier contient des valeurs, jamais de formule.
-- **Accessibilité** : pas d'audit RGAA complet à ce jour ; les contrastes, le focus et les fenêtres
-  (Tab, Échap) ont été travaillés.
-- **Droits par personne** : un verrou d'interface, pas une protection des données (voir
-  [Sécurité et permissions](#sécurité-et-permissions)).
-- **Modèles de la galerie** : ce sont des exemples de mise en page, écrits pour le droit français. Ils
-  ne constituent ni un avis ni un conseil juridique et ne sont pas garantis conformes à la loi en
-  vigueur (mentions obligatoires, pénalités de retard, clauses…) : faites-les relire avant tout usage.
-- **Import Markdown** : seules les variables écrites `{{Table.Colonne}}` sont reconnues (un `#Table.Colonne` écrit
-  à la main dans le fichier reste du texte, comme une clé `{{…}}` qui n'est pas une variable du document) ; la
-  numérotation des titres, écrite dans leur texte par l'export (« 1) Titre »), revient comme du texte ; les marges,
-  le format de page, le filigrane, le style des niveaux de titre, l'objet et les destinataires d'un e-mail ne sont pas écrits dans un fichier
-  Markdown, donc ne reviennent pas ; une image qui n'est ni en ligne ni dans le fichier n'est pas reprise ; un fichier de plus de 10 Mo est
-  refusé. Le lecteur lit des fichiers de confiance : un texte fait pour le piéger (des milliers de crochets ou
-  d'étoiles jamais fermés) peut bloquer la page de longues secondes.
-- **Pas encore faits** : remplissage des tables d'un modèle avec des lignes d'exemple (l'aperçu de la
-  galerie en montre en images, mais les tables créées restent vides), variantes multilingues d'un
-  modèle, codes-barres (le QR code est livré).
+- **Import Markdown** : seules les variables écrites `{{Table.Colonne}}` sont reconnues (un `#Table.Colonne` écrit à la main dans le fichier reste du texte) ; la numérotation des titres, écrite dans leur texte par l'export (« 1) Titre »), revient comme du texte ; les marges, le format de page, le filigrane, le style des niveaux de titre, l'objet et les destinataires d'un e-mail ne sont pas écrits dans un fichier Markdown, donc ne reviennent pas ; une image qui n'est ni en ligne ni dans le fichier n'est pas reprise ; un fichier de plus de 10 Mo est refusé. Le lecteur lit des fichiers de confiance : un texte fait pour le piéger (des milliers de crochets ou d'étoiles jamais fermés) peut bloquer la page de longues secondes.
+
+**Contenu**
+
+- **Modèles de la galerie** : ce sont des exemples de mise en page, écrits pour le droit français. Ils ne constituent ni un avis ni un conseil juridique et ne sont pas garantis conformes à la loi en vigueur (mentions obligatoires, pénalités de retard, clauses…) : faites-les relire avant tout usage.
+- **Pas encore faits** : remplissage des tables d'un modèle avec des lignes d'exemple (l'aperçu de la galerie en montre en images, mais les tables créées restent vides), variantes multilingues d'un modèle, codes-barres (le QR code est livré).
+
+## À part : Grist Factory Suite
+
+Publipostage+ peut aussi tourner dans Grist Factory Suite (GFS), la suite d'applications de Grist Factory. Les présentations, les graphiques, l'écriture en direct et la lecture de PDF y sont réservés, car ils demandent des bibliothèques en plus : le widget seul ne les charge pas et grise leurs commandes, avec une fenêtre qui renvoie vers GFS. Ce document décrit le widget seul ; le détail de ces fonctions et leurs limites sont dans le [journal des changements](CHANGELOG.md).
 
 ## Note sur l'IA
 
-Ce widget a été réalisé avec l'aide de Claude Code, avec le modèle Claude Sonnet 5 en mode Ultra Code.
-Le code a été relu par un humain (moi), mais je manque de tokens pour être aussi efficace que Claude.
+Ce widget a été réalisé avec l'aide de Claude Code, avec le modèle Claude Sonnet 5 en mode Ultra Code. Le code a été relu par un humain (moi), mais je manque de tokens pour être aussi efficace que Claude.
 
-Les prochaines versions seront aussi l'occasion de corriger ou refacto certains éléments si nécessaire : le
-dépôt est ouvert à la collaboration (cf. ci-après).
+Les prochaines versions seront aussi l'occasion de corriger ou refacto certains éléments si nécessaire : le dépôt est ouvert à la collaboration (voir [Contribuer](#contribuer)).
 
 ## Roadmap
 
-De nombreuses fonctionnalités sont prévues et seront ajoutées progressivement dans les prochaines
-semaines. N'hésitez pas à réagir aux issues de ce dépôt, ou à m'écrire sur Tchap, pour m'aider à les
-prioriser.
+De nombreuses fonctionnalités sont prévues et seront ajoutées progressivement dans les prochaines semaines. N'hésitez pas à réagir aux issues de ce dépôt, ou à m'écrire sur Tchap, pour m'aider à les prioriser.
 
 **Édition collaborative**
 - Suivi des modifications : version complète
@@ -485,16 +318,11 @@ prioriser.
 - Optimisation du chargement
 
 **Sécurité**
-- Version lecture seule : préparer un modèle sur Docs, puis exporter/importer pour une session en
-  lecture seule, avant export
+- Version lecture seule : préparer un modèle sur Docs, puis exporter/importer pour une session en lecture seule, avant export
 
 ## Contribuer
 
-Les contributions sont bienvenues : signaler un défaut, proposer une fonction, envoyer une correction.
-Commencez par [CONTRIBUTING.md](CONTRIBUTING.md) ; le [code de conduite](CODE_OF_CONDUCT.md) s'applique à
-tous les échanges. Pour vous repérer dans le code (quel fichier fait quoi, par où commencer), lisez la
-[carte du code](CARTE_DU_CODE.md). Les changements de chaque version sont dans
-[CHANGELOG.md](CHANGELOG.md).
+Les contributions sont bienvenues : signaler un défaut, proposer une fonction, envoyer une correction. Commencez par [CONTRIBUTING.md](CONTRIBUTING.md) ; le [code de conduite](CODE_OF_CONDUCT.md) s'applique à tous les échanges. Pour vous repérer dans le code (quel fichier fait quoi, par où commencer), lisez la [carte du code](CARTE_DU_CODE.md). Les changements de chaque version sont dans [CHANGELOG.md](CHANGELOG.md).
 
 ## Licence
 
@@ -502,9 +330,7 @@ Ce projet est distribué sous licence [GNU General Public License v3.0](LICENSE)
 
 Copyright (C) 2026 Grist Factory
 
-Les bibliothèques et les polices tierces gardent leurs propres licences : voir [NOTICE](NOTICE).
-« Grist » est un produit de Grist Labs ; Publipostage+ est un widget tiers, qui n'est pas publié par
-Grist Labs.
+Les bibliothèques et les polices tierces gardent leurs propres licences : voir [NOTICE](NOTICE). « Grist » est un produit de Grist Labs ; Publipostage+ est un widget tiers, qui n'est pas publié par Grist Labs.
 
 ---
 ---
@@ -513,326 +339,248 @@ Grist Labs.
 
 *🇫🇷 Une version française de ce document est disponible [en haut de cette page](#publipostage-pour-grist).*
 
-> **Version {{VERSION}}**, released on {{DATE_EN}}. It succeeds the beta: what changes for anyone coming from it is in the
-> [release notes](PATCH_NOTES.md), and the beta is still served at [a separate address](#installing-in-grist).
-> The features described below are delivered; those that need Grist Factory Suite say so. Defects may remain:
-> try the widget on a copy of your document before using it on important data.
-> The [known limitations](#known-limitations) and the [roadmap](#roadmap-1) say what is still missing.
+![The "Service agreement" template in the editor: variables as badges, a conditional block, a header and the toolbar](screenshots/01-edition-modele-avec-variables.png)
 
-This is a text editor with mail merge and smart chips. It lets anyone write contracts, invoices or
-labels without writing a single line of code, while being able to reference a variable from any table
-in the document and reformat it on display if needed!
+**Publipostage+ is a full text editor for [Grist](https://www.getgrist.com/), with mail merge and smart chips.** You write contracts, invoices, letters or labels without writing a single line of code. You drop **variables** from any table of the document into the text (`#Table.Column`), reformat them on display if needed, then read the document filled with a row of Grist and download it, or send it by e-mail.
 
-It is a custom widget for [Grist](https://www.getgrist.com/), made by
-[Grist Factory](https://grist-factory.fr). A document is read filled with the data of one row, then
-downloaded as a vector PDF (selectable text), as Word, PowerPoint (a presentation, with Grist Factory Suite), Excel, Markdown or HTML, or sent in a pre-filled e-mail, row by
-row or in batch.
+It is a custom widget made by [Grist Factory](https://grist-factory.fr), free software (GPL v3) with no server: a plain static page.
 
-## Preview
+> **Version {{VERSION}}**, released on {{DATE_EN}}. It succeeds the beta: what changes for anyone coming from it is in the [release notes](PATCH_NOTES.md), and the beta is still served at [a separate address](#installing-in-grist).
+> Try the widget on a copy of your document before using it on important data: defects may remain. The [known limitations](#known-limitations) and the [roadmap](#roadmap-1) say what is still missing.
 
-| Editing mode | Reading mode |
+**[Install](#installing-in-grist)** · [Tour in pictures](#tour-in-pictures) · [All the features](#all-the-features) · [Security](#security-and-permissions) · [Known limitations](#known-limitations) · [Contributing](#contributing)
+
+## At a glance
+
+| | |
 |---|---|
-| ![Editing a template with variables shown as badges](screenshots/edition-variables.png) | ![The same document in reading mode, variables resolved with the selected row](screenshots/lecture-resolue.png) |
-
-## Table of contents
-
-- [Features](#features)
-- [Installing in Grist](#installing-in-grist)
-- [Configuration](#configuration-1)
-- [Security and permissions](#security-and-permissions)
-- [Dependencies](#dependencies)
-- [Known limitations](#known-limitations)
-- [A note on AI](#a-note-on-ai)
-- [Roadmap](#roadmap-1)
-- [Contributing](#contributing)
-- [License](#license)
-
-Editing engine: [TipTap](https://tiptap.dev/)/ProseMirror. The widget is a plain static page hosted on
-GitHub Pages, with no backend and no build step.
-
-## Features
-
-**Five template types**
-- Document: rich text on an A3, A4, A5 or A6 page, portrait or landscape (a single page can be turned
-  on its own, among the others), with margins you can set per template
-- E-mail: subject, recipients and body with the same variables, opened in your mail client through a
-  `mailto:` link
-- Grid: a spreadsheet-like table in place of the page, where you can paste a table from Excel, Google
-  Sheets or LibreOffice Calc, import an `.xlsx` workbook, then export it to Excel
-- Macro template: a cover page that is always included, followed by appendices (other templates) chosen
-  by rules evaluated on the same row; portrait, landscape and Grid templates and presentations can be mixed
-  in it, each on a page of its own orientation (or one orientation imposed on all), down to the PDF; a
-  presentation (with Grist Factory Suite) keeps its 16:9 slide page among the A4 pages (Reading, Word, printing and PDF, in a single
-  file; only a protected PDF cannot mix formats)
-- Presentation (with Grist Factory Suite, "New presentation" in the "+" menu): the same editor as the Document,
-  on a 16:9 page in landscape (the Page menu also offers 4:3, 16:10 and square); each page break starts a slide, and a strip of thumbnails to the left of the
-  text leads to each one, adds, duplicates, moves or deletes it ("Add" and "Import" are two one-icon buttons on a
-  single row at the bottom of the strip, their name in the tooltip); the "Import" panel copies a slide from another
-  presentation, or keeps it linked to its original ("Keep linked"): what changes on one side reaches the other,
-  both ways or one way only, as its menu chooses; "Objects", in the top toolbar (after "Image"), puts a free text frame or a shape (rectangle, ellipse,
-  triangle, diamond, arrows, star, chevron, pentagon, hexagon, parallelogram, cross, speech bubble...) or a line (with or without arrows, of a shape and a size of your choice at each end) on the slide, which you place wherever you want and rotate (except a line), with the fill and the line of
-  your choice (color, weight, line style: dashes, caps, double or triple line, transparency); a thumbnail's ⋯ menu sets its transition (fade, push, wipe, cover, uncover, zoom),
-  which the slide show plays when you arrive at it, its background (a solid color behind the text) and its
-  speaker notes (one text per slide, kept in the template, which the slide show's presenter view shows to whoever is presenting and the PowerPoint export carries); a link (Ctrl+K, "In this document") goes to any slide, in the slide show with the transition of the slide it reaches; an object (button, shape, picture) has its own link, including a slide show action (next, previous, end...), which PowerPoint keeps on export and on import; a link to a slide can play the effect of your choice on click ("Animation on click": an effect, its side, its duration) in place of the target slide's own, which PowerPoint replays; "Slide view…" ("Objects" menu) puts in a frame that shows another slide, small and live, a click on which leads there with the chosen animation; in a document, the
-  "Slide from a presentation..." row of the "Link and content blocks" menu (or Ctrl+C on a thumbnail, then Ctrl+V in the text) puts
-  a slide in as text of the document, at the size of the document (a box keeps the slide's own): its text, lists,
-  images and variables, the frames read from top to bottom; a shape keeps only its text, a line, the notes and the
-  transition do not come in, and the status corner says how many; checked, the "Keep linked" box keeps hold of that text: it follows its slide when it changes and can no longer be written in the document, until "Detach"; the other way round, a presentation's "Import" panel also takes
-  a document as its source: a click on one of its pages puts it in as slides, the text at a slide's sizes (a box keeps
-  the document's), a page that is too long as several, cut between two blocks (a table, between two rows),
-  and Ctrl+C in a document then Ctrl+V on the strip does the same; checked, the "Keep linked" box keeps a page's slides
-  linked to it: they follow it when it changes and can no longer be written in the presentation, until "Detach"
-
-**Layout**
-- Full formatting: bold, italic, underline, strikethrough, superscript and subscript, colors and highlighting,
-  six fonts in real point sizes from 8 to 72, alignment, indents and tabs (Tab, Shift+Tab), numbered headings, a style per heading level taken from the selection (the template's own, and one for the whole Grist document shared by all its templates: both are shown in the Heading menu), format painter (its menu keeps three formats in the template and three shared by every template of the document, renamable)
-- Line spacing, space before, space after, left indent and first-line indent for each paragraph ("Paragraph…", Alignment menu), carried into Reading mode, PDF, Word, PowerPoint and HTML
-- Bullet lists, numbered lists and checkable task lists; the bullet, dash or number takes the color and size of the start of its item's text
-- Tables (merging and splitting cells, cell background, caption), two-column zones
-- Images, including floating ones (text wrap, layered in front of/behind, opacity, caption), pasted,
-  added by address or taken from a Grist Attachments column; an image hosted on another site only
-  appears after a click on "Show"
-- Created charts (with Grist Factory Suite; "Create a chart…", in the image menu): bars, line, area, scatter, pie, donut and radar, drawn
-  from the columns of a Grist table, in a document, a grid or a slide; a title, five color sets, the color of each
-  series, shown values and bars mixed with a line; in Word, PowerPoint and Excel, a native chart you edit in the application (its data opens in Excel)
-- Headers and footers (different first page, page number, QR code), footnotes, generated table of contents,
-  page breaks, watermark
-- Quote, code block, callout (Note, Warning, Important), signature block, QR code, chart from the page (with Grist Factory Suite: a
-  chart set up in Grist, redrawn in the document)
-- Find / replace (match case, whole word, regular expression, bubble text, header and footer), abbreviations that expand as you type
-- Faithful "A4 format" preview, WYSIWYG (what you see is what you get)
-- On-screen page zoom, in Edit and Reading modes (corner pill, Fit, Ctrl + wheel): the PDF, the Word file
-  and printing keep the real dimensions
-
-**Smart Grist variables**
-- `#Table.Column` autocomplete across every table in the document, with a matching key to set up once
-  for linked tables
-- Cited records: `@` opens the list of rows from every table ("Written by @Marie Martin"); the name is
-  read again each time the document is shown, so renaming the person in Grist renames them in templates
-- Tailored formatting for numbers (French or US notation, decimals, currency, spelled out), dates
-  (predefined formats, spelled out, with the time of a "Date and time" column) and Yes/No values
-  (text or checked box)
-- Smart chips (today's date, time, connected user's e-mail) and calculations (SUM, AVERAGE, MIN, MAX,
-  COUNT, ROUND)
-- Display conditions (variable, text block, value in a sentence, checked box) and loops over linked
-  rows or over all the rows of a table (the ones the widget's Grist view shows, or the whole table)
-  (table row, list item, paragraph), with filter, sort and separators
-- Tracked renames: when a table or a column is renamed in Grist, templates follow
-
-**Reading, saving and collaboration**
-- Reading mode (the document filled with the selected row) and clean reading, without the toolbar (the Reading mode button's menu ticks "Standard reading" or "Clean reading", like the Export button's: the button does what the ticked row says)
-- Autosave with conflict detection if someone else saved the template in the meantime
-- Version history of a template (Save button menu): who changed what and when, a preview of each version,
-  "Compare" with the current version (green for what the version has in addition, struck-through red for
-  what a restore would remove), "Name…" (a named version is never erased by the caps) and "Restore this
-  version" (the replaced state stays in the list), in a table of its own that the widget only reads when
-  the window is opened
-- Comments on the selected text, with replies and resolution, shared between the people who open the
-  document
-- Track changes (beta): changes are proposed in the text, then accepted or rejected one by one or all
-  together; the Accept / Reject bar says who proposed the change (their name, or their e-mail address
-  when there is no name); track changes, "Accept all" and "Reject all" sit under the "Collaborative
-  editing" button of the toolbar
-- Live editing (with Grist Factory Suite, "Live editing" row of the same menu): several people write the text of the
-  same Document template or presentation at the same time, with each person's cursor and name and a bar saying who is there; Undo and
-  Redo only undo the person's own typing, and one person saves the template for everyone
-- Per-person rights (read-only, export, comments), read from a table of the document
-- Personal organization of templates: pins and folders that other people don't see
-
-**PDF, Word, PowerPoint, Excel, Markdown, HTML export**
-- Vector PDF export, file name built with variables
-- Browser print: the Reading view printed page by page through the print window ("Save as PDF" or a printer),
-  with the layout of the Reading view
-- Light PDF: the same vector PDF with its images brought down to 150 points per inch (a photo becomes a JPEG,
-  a transparent logo stays a PNG, a small image and a QR code are left alone), for one row and for batches
-- Protected PDF: the same vector PDF encrypted with AES-256, with a password to open it (optional),
-  permissions (print, copy, edit) and the file's author, subject and keywords, for one row and for the ZIP
-  archive. The password comes in three ways, your choice: typed at each export (recommended, it is written
-  nowhere), the same for all the PDFs and saved in the document (in plain text, table "Publipostage_Modeles",
-  column "MotDePassePdf": the window says where and the risk), or one per row, read from a column of the table (a
-  row with no usable password is not exported and a batch lists it)
-- Batch export in one click: one PDF per row in a ZIP archive, or all rows in a single PDF. It follows
-  the rows the widget shows in Grist (its filters, its sort, the "Select by" link): when it only shows
-  part of the table, it asks whether to export those or the whole table
-- Sheet assembly before printing: each row's pages laid out on A4 or A3 sheets, with or without crop
-  marks, and an adjustable margin around each page (four A6 on one A4, for example)
-- Date of the last PDF export: a column of the table, chosen in Settings > View (Date, Date and time or
-  Text, no formula), keeps the moment of each row's last PDF export; it is written once the PDF is made,
-  for the rows that are in the file
-- Word (`.docx`, beta) and Excel (`.xlsx`, for grids)
-- PowerPoint (`.pptx`, beta, for presentations, with Grist Factory Suite): one slide per page break, as objects that PowerPoint can edit (title, formatted text, lists, tables, images,
-  shapes and lines in place and rotated, background), with each slide's transition and speaker notes; one file, or one per row in a ZIP archive
-- Markdown (`.md`, CommonMark and GFM): the row's document with the values of its variables; what Markdown can write
-  is written in Markdown (headings, bold, italic, strikethrough, links, nested, numbered and task lists, quotes, code,
-  tables, footnotes, a linked table of contents, callouts as GitHub alerts), the rest (underline, colour, size, font,
-  alignment, page break, image width) stays as HTML in the file; one file, or one per row in a ZIP archive
-- Markdown (template): the template itself, variables included, so that it comes back intact through the import. One
-  file, named after the template; nothing is read from Grist. A variable with no settings is written `{{Table.Column}}`;
-  a variable with settings (format, condition, loop, surrounding text), a calculation, a date chip, an "@" chip, a page number, a
-  conditional checkbox or text, an image linked to a column, a QR code and a chart are written as inline HTML with their
-  settings; the header and footer are written between comments. Margins, page format, watermark, images behind the text
-  or on every page, the heading level styles and the link of a table with a Grid template are not kept. Not available in a grid or a
-  macro-template
-- HTML (`.html`), for a website: the row's document with the values of its variables, flowing like a web page (no A4 sheets, no margins, no page numbers, no
-  watermark; the header and the footer are written once). Two rows of the "Export type" menu: "HTML (file to upload)" writes a complete page to put on a
-  site as it is; "HTML (content to paste)" writes the content alone (`-fragment.html`: a `<style>` and a `<div class="pp-doc">` block) to paste into an HTML block of a
-  content manager, its stylesheet only touching that block. The document's formatting is kept (headings, bold, italic, colour, size, lists, tables, callouts,
-  columns, footnotes, table of contents); images coming from a Grist attachment, a chart or a QR code go into the file, those from another site keep their
-  address. No script is written. Fonts are not carried along (a named font stays named, with fallback fonts), nor are the margins, the page format, page
-  breaks, images behind the text or on every page; one file, or one per row in a ZIP archive. Not available in a grid
-- Before an export, a window lists the external sites that images would be downloaded from
-
-**Templates**
-- Multi-template management, saved directly in the Grist document
-- Import of a Markdown file (`.md`, the "Import from Markdown…" line of the "+" menu): it becomes a new document;
-  GitHub alerts become callouts, task lists become task lists, and the table of contents, footnotes, page breaks,
-  header and footer that the export writes are read back; the `{{Table.Column}}` variables and the merge elements that
-  "Markdown (template)" writes as HTML come back as they were (a key that is not a variable of the document stays
-  text, and the status corner counts it); an image that is neither online nor in the file is not
-  imported (a word says so in its place)
-- Gallery of 22 ready-to-use templates (21 without Grist Factory Suite): invoice, service agreement, certificate, payment reminder letter,
-  rent receipt, school report, recipe sheet, attendance sheet, purchase order, inventory sheet, templates
-  to print (A6 flyer, invitation, A3 poster, business card, badge, labels) and a sales
-  presentation of thirty-nine slides (shapes, tables, twelve charts read from tables, links and live views between
-  slides, transitions and animations, a theme with its decor; with the Grist Factory Suite "diapositives" and
-  "graphique" extensions). A template can create
-  its tables, empty, with their calculated columns and links, and its preview shows the filled document as
-  images (see the [warning](#known-limitations) about them)
-
-**Other**
-- Bilingual French/English interface, light, dark or system theme
-- Inside Grist Factory Suite, the toolbar, menus and windows follow the ambiance chosen in GFS (Pop, Papier, Brut, Néon, and its colour); the page, the PDF, the e-mail and the exports keep the template's look
-- 58 customizable keyboard shortcuts
-- Choice of key used to trigger variables (`#` by default)
-- Toolbar designed for a small panel (tested at 700×400)
+| **Write** | A full editor: formatting, tables, images, headers and footers, footnotes, table of contents, a faithful A4 preview (what you see is what you get). |
+| **Fill in** | Variables from every table of the document, "And" / "Or" conditions, loops, calculations and chips (today's date, time, the connected user's e-mail). |
+| **Read** | The document filled with the row selected in Grist, in standard or clean reading. |
+| **Export** | Vector PDF (the text stays selectable), protected PDF, Word, Excel, Markdown, HTML, or a pre-filled e-mail: one row at a time or in batch. |
+| **Reuse** | Several templates per Grist document, a gallery of 21 ready-to-use templates, macro templates that assemble a cover page and appendices. |
+| **Work together** | Autosave with conflict detection, version history, comments, per-person rights. |
 
 ## Installing in Grist
 
 1. In a Grist page, add a custom widget and paste this URL:
    **`https://grist-factory.github.io/Publipostage-Plus/`**
-   (any copy of this repository hosted over HTTPS on a static server works too)
-2. In the widget's configuration panel, set **Select by** to the table whose rows will be the data
-   source. This is what lets the widget follow the selected row: without it, reading mode has no row to
-   resolve against.
-3. Grist will ask for an access permission when the widget loads (see
-   [Security and permissions](#security-and-permissions) below): granting it is required for the widget
-   to work.
-4. On first launch in a document, the widget asks whether it may create its internal `Publipostage_*`
-   tables there ("Create the widget’s tables in this document?"), so you need the right to edit it. If
-   you decline, nothing is created or saved, and the question comes back at your next action. Their pages
-   are filed under the templates page, collapsed.
-5. After a widget update, reload the Grist document's page, otherwise the browser may keep the old
-   version.
+   (any copy of this repository hosted over HTTPS on a static server works too).
+2. In the widget's configuration panel, set **Select by** to the table whose rows will be the data source. This is what lets the widget follow the selected row: without it, reading mode has no row to fill in.
+3. Grist will ask for an access permission when the widget loads: grant it (see [Security and permissions](#security-and-permissions)), it is required for the widget to work.
+4. On first launch in a document, the widget asks whether it may create its internal `Publipostage_*` tables there ("Create the widget's tables in this document?"), so you need the right to edit the document. Refused, nothing is created or saved, and the question comes back at the next action. These tables are filed under the templates page, collapsed.
+5. After a widget update, reload the Grist document's page, otherwise the browser may keep the old version.
 
 Opened alone in a browser tab, the widget does not work: it says so and recalls these steps.
 
-**Keeping the beta**: if an old template does not reopen well in the V1, the 1.0.0-beta.1 beta is still
-served, as it was and without fixes, at `https://grist-factory.github.io/Publipostage-Plus/beta/` (in Grist,
-change the address of the custom widget). Going back is safe as long as the template has not been saved with
-the V1: the beta erases what it does not know (bookmarks, superscripts and subscripts, "Otherwise show"). It
-no longer receives updates.
+**First steps**: open the "New template" menu then "New document" (or "Create from a template…" to start from the gallery), write your text and type `#` to insert a variable. Switch to reading mode to see the document filled with the selected row, then export it.
 
-**Getting started**: open the "New template" menu then "New document" (or "Create from a template…" to
-start from the gallery), write the text and type `#` to insert a variable. Switch to reading mode to
-see the document filled with the selected row, then export it.
+**Keeping the beta**: if an old template does not reopen well in the V1, the 1.0.0-beta.1 beta is still served, as it was and with no fixes, at `https://grist-factory.github.io/Publipostage-Plus/beta/` (in Grist, change the custom widget's address). Going back is safe as long as the template has not been saved with the V1: the beta erases what it does not know (bookmarks, superscripts and subscripts, "Otherwise show"). It no longer receives updates.
 
-## Configuration
+## Tour in pictures
 
-- **Create or edit a template**: the "New template" button, or the template picker at the top of the
-  editor. Each template is stored in an internal Grist table, created with your consent (prefixed
-  `Publipostage_`), which doesn't show up in the usual table pickers.
-- **Variables from another table**: the `#` panel has a dedicated button ("Linked tables") to set up the
-  relationship between two tables once, for good (the "matching key"), remembered for the page table
-  where you set it and valid for every template of that table; another page table keeps its own.
-- **Header and footer**: click a margin at the top or bottom of the page to enter dedicated editing. The zone keeps its size (60 px of content) but refuses nothing: text, an image of any
-  size, a table (one row to start with) or a QR code (an address or a column, placed at 36 px) go in like in the body. Whatever goes beyond the band is marked with a red dashed line, a
-  note under the sheet says by how much (in millimetres) and, for an image, offers "Shrink the image"; what is below the line is cut when printed, in the PDF, in Word and in Reading
-  mode, and the text of the page never moves. In a zone, "Insert a table of contents" and "Page break" are greyed out (a band has no list of headings and no page to open) and a line
-  ("---" then Space) stays even on its own, with the same look (thin, light grey) open, closed and in Reading mode.
-- **Settings** (button in the top bar): language (the browser's at first launch; with Grist Factory Suite, GFS's, which the boxes do not change), theme, the key that triggers the `#` panel, keyboard
-  shortcuts, the template's margins (four presets, and a chain button that links the four), the view's default template, the column that keeps the date of the
-  last PDF export, per-person rights, credits (and, under the version, what's new: a carousel of screenshots that opens on request). The
-  "View" and "Access" settings are widget options: Grist only shares them with other people once the
-  view is saved.
-- **PDF file name**: its own field, which also accepts variables.
+These pictures show the real widget, with made-up data. The interface is shown in French here; it is also available in English. Click a picture to enlarge it.
+
+### Reading the filled document
+
+The same template, in reading mode: every variable is replaced by the value of the row selected in Grist (here, Atelier Lumière and Maison Berthier & Associés). The conditional block "If Clients.SIRET is not empty" only shows when the client's SIRET number is filled in.
+
+![The agreement in reading mode, filled with a row of the table](screenshots/02-lecture-document-rempli.png)
+
+### Starting from a gallery template
+
+"Create from a template…" offers 21 ready-to-use templates: invoice, agreement, certificate, payment reminder letter, rent receipt, purchase order, school report, flyer, poster, badge, business card, labels… Some also create the tables they need.
+
+![The template gallery](screenshots/03-galerie-de-modeles.png)
+
+### Formatting text
+
+The "Aa" menu sets the character (superscript, subscript, small caps, shadow, outline, letter spacing) and the "Paragraph…" window sets line spacing, space before and after, and indents, including the hanging indent.
+
+| The "Aa" menu | The "Paragraph…" window |
+|---|---|
+| ![The Character menu opened from the Aa button](screenshots/11-menu-caractere-aa.png) | ![The Paragraph window](screenshots/12-fenetre-paragraphe.png) |
+
+![The result in the document: a spaced small-caps title with shadow, underlines, a hanging-indent paragraph](screenshots/13-resultat-caractere-et-paragraphe.png)
+
+### Tables
+
+A document table can be read "like a grid": column letters, row numbers, merged cells, borders of any color, vertical alignment.
+
+![A table like a grid and the borders menu](screenshots/20-tableau-bordures-comme-une-grille.png)
+
+### Conditions and loops
+
+A variable, a text block, a value in a sentence or a checked box can show only when rules are met, with "And" / "Or", groups and an "Otherwise show". A loop repeats a table row, a list item or a paragraph for each linked row, with filter, sort and separators.
+
+![The conditions window: an "And" / "Or" group, "Otherwise show"](screenshots/30-condition-et-ou-groupes.png)
+
+![A loop: the template's row in the editor above, the same table in reading mode below, one line per linked row](screenshots/31-boucle-ligne-de-tableau.png)
+
+### Macro templates
+
+A macro template assembles a cover page that is always included and appendices chosen by rules on the row. Portrait, landscape and grids can be mixed in it, down to the PDF.
+
+| The composition | The result in reading mode |
+|---|---|
+| ![A macro template's composition: a cover page and two conditional appendices](screenshots/40-macro-modele-composition.png) | ![The macro template in reading mode: portrait cover, landscape appendix](screenshots/41-macro-modele-lecture.png) |
+
+### Version history
+
+Each template keeps its versions: who changed what and when. You compare with the current version (green for what the version has in addition, struck-through red for what a restore would remove), name a version so it is never erased, and restore it in one click.
+
+![The version history and the comparison with the current version](screenshots/42-historique-des-versions.png)
+
+### Find and replace
+
+With match case, whole word or regular expression (here `(Prestataire|Client)` replaced by `$1 (Partie)`); variable bubbles and headers and footers are included.
+
+![Find / Replace with a regular expression](screenshots/60-rechercher-remplacer-regex.png)
+
+### Exporting
+
+The "Export type" menu offers PDF, Protected PDF, Word (beta), Excel (for grids), Markdown and HTML. Sheet assembly before printing lays out each row's pages on A4 or A3 sheets, with crop marks: four A6 on one A4, for example.
+
+| The export type | Sheet assembly before printing |
+|---|---|
+| ![The Export type menu and the PDF quality](screenshots/50-type-export.png) | ![The Sheet assembly before printing window](screenshots/51-assemblage-avant-impression.png) |
+
+### Reading without distraction
+
+Clean reading shows the document alone, across the whole panel.
+
+| The Reading mode menu | Clean reading |
+|---|---|
+| ![The Reading mode menu: standard or clean reading](screenshots/70-menu-mode-lecture.png) | ![Clean reading](screenshots/71-lecture-epuree.png) |
+
+## All the features
+
+The [release notes](PATCH_NOTES.md) give the complete list, one bullet per feature. Here is the essentials, by area.
+
+### Writing
+
+- **Text**: bold, italic, underline (single, double, dotted, dashed, wavy), strikethrough, superscript, subscript, small caps, shadow, outline, letter spacing, colors and highlighting, six fonts from 8 to 72 points, format painter.
+- **Paragraphs**: alignment, right-to-left text, indents and tabs, line spacing, space before and after, hanging indent.
+- **Structure**: numbered headings (including "Article 1"), a style per heading level, clickable table of contents, page breaks, footnotes, bookmarks, watermark.
+- **Lists**: bullet, numbered and checkable task lists.
+- **Tables**: merging and splitting cells, borders, vertical alignment, cell background, caption, letters and numbers like in a grid. Two-column zones.
+- **Images** pasted, added by address or taken from a Grist Attachments column; floating, in front of or behind the text, with opacity and caption. An image hosted on another site only appears after a click on "Show".
+- **Headers and footers** (different first page, page number, QR code).
+- **Blocks**: quote, code block, callout (Note, Warning, Important), signature block, QR code.
+- **Find / replace** (match case, whole word, regular expressions), abbreviations that expand as you type.
+- **Comfort**: faithful A4 preview, page zoom, Ctrl+Z and Ctrl+Y almost everywhere, 58 customizable keyboard shortcuts, a toolbar designed for a small panel (tested at 700 × 400).
+
+### Filling in with Grist data
+
+- **Variables** `#Table.Column` with autocomplete across every table in the document; for a linked table, a matching key to set up once.
+- **Cited records**: `@` opens the list of rows from every table ("Written by @Marie Martin"). The name is read again each time the document is shown: renaming the person in Grist renames them in templates.
+- **Variable formatting**: numbers (French or US notation, decimals, currency, spelled out), dates (predefined formats, spelled out, with the time of a "Date and time" column), Yes / No (text or checked box). "Like in Grist" takes over the column's format.
+- **Smart chips**: today's date, time, the connected user's e-mail, a loop's row number. **Calculations**: SUM, AVERAGE, MIN, MAX, COUNT, ROUND.
+- **Conditions**: "And" / "Or", groups, "Otherwise show", on a variable, a text block, a value in a sentence or a checked box.
+- **Loops** over linked rows, with filter, sort and separators, including a loop inside a loop (the rows of each invoice, then the steps of each row) or over all the rows of a table.
+- **Tracked renames**: when a table or a column is renamed in Grist, templates follow.
+
+### Templates
+
+- **Four types**: Document (A3, A4, A5 or A6 page, portrait or landscape, margins per template; a single page can be turned on its own), E-mail (subject, recipients and body with the same variables, opened in your mail client through a `mailto:` link), Grid (a spreadsheet in place of the page: paste from Excel, Google Sheets or LibreOffice Calc, import `.xlsx`, export to Excel) and Macro template.
+- **Gallery** of 21 ready-to-use templates; some create their tables, empty, with their calculated columns and links.
+- **Several templates per Grist document**, saved in the document itself, organized with pins and folders that other people don't see.
+- **Markdown import** ("+" menu): a `.md` file becomes a new document, including a template exported as "Markdown (template)".
+
+### Reading, saving, collaborating
+
+- **Reading mode**, standard or clean (Alt+L).
+- **Autosave** with conflict detection if someone else saved the template in the meantime.
+- **Version history**: preview, comparison, naming, restoring (the replaced state stays in the list).
+- **Comments** on the selected text, with replies and resolution, shared between the people who open the document.
+- **Track changes** (beta): changes are proposed in the text, then accepted or rejected.
+- **Per-person rights** (read-only, export, comments), read from a table of the document: an interface lock, not data protection.
+
+### Exporting
+
+- **Vector PDF**: selectable text, embedded fonts, file name built with variables. Three qualities: "Vector", "Browser print" (the Reading view printed page by page through the browser's print window) and Light PDF (images brought down to 150 points per inch).
+- **Protected PDF**: encrypted with AES-256, with a password to open it (optional), permissions (print, copy, edit) and the file's properties.
+- **Batch**: one PDF per row in a ZIP archive, or all rows in a single PDF. A batch follows the rows the widget shows in Grist (filters and sort included); when it only shows part of the table, it asks whether to export those or the whole table.
+- **Sheet assembly before printing**: each row's pages on A4 or A3 sheets, with or without crop marks.
+- **Date of the last export**: a column of your table, chosen in Settings > View, keeps the moment of each row's last PDF export.
+- **Word** (`.docx`, beta), **Excel** (`.xlsx`, for grids), **Markdown** (`.md`, CommonMark and GFM, or the template itself, variables included), **HTML** (a complete page, or the content alone to paste into a content manager).
+- **E-mail** pre-filled through a `mailto:` link (Standard or Zimbra).
+- Before an export, a window lists the external sites that images would be downloaded from.
+
+## Settings
+
+The **Settings** button in the top bar opens nine tabs:
+
+| Tab | Purpose |
+|---|---|
+| Language | French or English (the browser's at first launch). |
+| Theme | System, light or dark. |
+| Insertion | The key that opens the list of variables and chips (`#` by default). |
+| Shortcuts | The keyboard keys, one per action, and the abbreviations with their trigger character. |
+| Email | The mail client that opens the E-mail mode link: Standard or Zimbra. |
+| Margins | The open template's margins, with four presets (None, Narrow, Classic, Wide). |
+| View | The view's default template, the choice of template by row, the column of the date of the last PDF export. |
+| Access | The table that gives each person their rights. |
+| Credits | Author, site, license, version and what's new. |
+
+The "View" and "Access" settings are widget options: Grist only shares them with other people once the view is saved. Two gestures worth knowing: the "Linked tables" button of the `#` panel sets the matching key between two tables once and for all, and a click in the top or bottom margin of the page opens the header or footer editing.
 
 ## Security and permissions
 
-The widget requests `requiredAccess: 'full'`, meaning access to the whole Grist document rather than
-just the table it's linked to. This is needed by the current architecture: resolving variables from
-another table, autocompleting across the whole document, and managing the widget's own internal tables
-all need it from the moment the widget loads. Grist's custom widget API doesn't offer a middle ground
-between single-table access and full access.
+**In short**
 
-This access applies to the widget, not directly to each user: Grist's native Access Rules, set on the
-document by its owner, still apply as normal. A user restricted to certain tables or columns stays
-restricted while using the widget. Any fine-grained restriction of the data should therefore happen at
-the Grist document level, not in the widget's configuration. The widget's "per-person rights"
-(Settings > Access) are only an interface lock: they grey out commands, they don't protect any data. For the same reason, a protected PDF's
-password written in the document ("Same for all, saved in the document", or the passwords of a column with "One
-per row") can be read there in plain text by anyone who opens it, unless advanced Grist permissions cover that
-column: "Typed at each export" is the safest way, and the window says so.
+- The widget requests **full access** to the Grist document, for lack of a middle level in the widgets API.
+- Your **data stays in Grist**: a static page, no server, nothing is stored elsewhere.
+- It writes to its own `Publipostage_*` tables, **with your consent**, and to no column of your tables, except the one you choose for the date of the last export.
+- It loads third-party libraries, at pinned versions, from four addresses (see [Dependencies](#dependencies)).
 
-The widget writes to nine tables of the document, all prefixed `Publipostage_`: `Publipostage_Modeles`
-(the templates, and a "Réglages du document" row that keeps the colors shared by every template and, only if
-you choose "Same for all, saved in the document" for a protected PDF, that shared password, in plain text, in its
-`MotDePassePdf` column), `Publipostage_Commentaires` (the comment threads, those of templates and those of PDFs read in Reading: a PDF's columns only arrive with its first published thread), `Publipostage_PreferencesModeles` (each person's pins, folders and
-export choices), `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables` (the
-matching keys between tables), `Publipostage_Versions` (the versions kept for each template, created
-when the first version is kept and only read when the history is opened), `Publipostage_Direct` (the pipe of live editing, created at the first live
-session: the typing in progress, one row per send, emptied by the last person to leave; Grist's action history, for its part, keeps
-what was written in it) and `Publipostage_UserProbe` (used to read the connected user's e-mail). It
-only creates them with the person's consent: before the first creation, a window asks "Create the
-widget’s tables in this document?" ("Create the tables" or "Don’t create"). A yes holds until the page
-is closed; a refusal writes nothing, is never remembered, and the question comes back at the person's
-next action. A document that already has one of the widget's tables is never asked.
+### The access requested
 
-In the tables that hold your data, the widget writes to no existing column, except the one you choose in
-Settings > View > "Date of the last PDF export". It then writes there, after each successful PDF, the
-moment of the export for the rows whose PDF has just been made (a single write per export); with no
-column chosen, it writes nothing there. A Grist Viewer account writes nothing.
+The widget requests `requiredAccess: 'full'`: the whole Grist document, not just the table it is linked to. This is needed by the current architecture: resolving variables from another table, autocompleting across the whole document and managing the widget's own internal tables all need it from the moment the widget loads. Grist's custom widget API doesn't offer a middle ground between single-table access and full access.
 
-The widget loads third-party libraries at runtime, from `esm.sh` (the TipTap/ProseMirror editing
-engine), `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` (PDF, Word, PowerPoint, Excel, the Markdown import reader and QR code,
-loaded on first use) and `docs.getgrist.com` (the Grist API), at pinned versions, except the Grist API script, which
-Grist serves in its current version. Files from `cdnjs` and `jsDelivr` are protected by SRI integrity
-hashes, which stop the browser from running a tampered file; this isn't technically possible for the
-`esm.sh` import map. No font or stylesheet comes from another site. The chart from the page is a Grist Factory Suite
-extension (the chart from the page and the created chart alike): its libraries (Plotly and ECharts) are not loaded by the widget alone, Grist Factory Suite provides them.
+This access applies to the widget, not directly to each person: Grist's native Access Rules, set on the document by its owner, still apply as normal. A person restricted to certain tables or columns stays restricted while using the widget. Any fine-grained restriction of the data should therefore happen in the Grist document, not in the widget's configuration. The widget's "per-person rights" (Settings > Access) are only an interface lock: they grey out commands, they don't protect any data.
 
-The page carries a Content Security Policy (CSP): only the widget's own scripts, those of the addresses
-above and three inline scripts cited by their hash are allowed to run. Inline event handlers,
-`javascript:` addresses, frames, objects and forms are refused. `'unsafe-eval'` remains for lack of a
-better option: the API script that Grist serves needs it. The HTML of a template read back from the
-document, which another person may have edited, is sanitized before being displayed, and calculation
-formulas never go through `eval`. Images and connections are not limited by the CSP: the widget reads
-images and attachments from any site. Still, an image hosted on a site other than the widget's or
-Grist's only loads after a click on "Show" (in the editor, Reading mode, headers and footers and the
-gallery), because loading it tells that site the person's IP address and when the document was opened:
-the click shows every image from that site until the page is closed, and nothing is remembered, neither
-in the browser nor in the document. Before an export that would download such images, a window lists the
-sites and asks for confirmation.
+For the same reason, a protected PDF's password written in the document ("Same for all, saved in the document", or the passwords of a column with "One per row") can be read there in plain text by anyone who opens the document, unless advanced Grist permissions cover that column. "Typed at each export" is the safest way, and the window says so.
 
-No data is ever stored outside of Grist. The only things kept in the browser (`localStorage`) are
-interface preferences (language, theme, formatting of bubbles and chips in the editor, keys, shortcuts and the view of their panel, mail program of the Email mode, autosave state, last
-choice in the sheet assembly before printing, PDF destination (downloaded, saved to Grist Factory Suite, or both), permissions and author of the protected PDF, the way its
-password is given and the password column - never a password), the last version whose news window was closed
-(the window opens by itself once per browser, the first time the widget is opened after a version that has news), the page zoom
-level of the last templates opened (with
-their number and name), a short list of the templates whose images in front of or behind the text have already had their position checked (signatures, never a template's content) and, to follow renames, the names of the tables and columns of each open
-document, never any row data.
-Inside Grist Factory Suite, these preferences, this version and this list (not the language, which Grist Factory Suite gives itself)
-are not kept by the app's own browser storage, which its isolated frame refuses: Grist Factory Suite keeps them
-for this browser, in the space it reserves for the app; a setting made on one side does not follow to the other.
-The news window only opens by itself if the app can remember having shown it (in a private window, or where the space is
-refused, only the “See what’s new” button of Settings > Credits opens it).
+### What the widget writes
+
+In the document, the widget writes to nine tables, all prefixed `Publipostage_`. It only creates them with the person's consent: before the first creation, a window asks "Create the widget's tables in this document?" ("Create the tables" or "Don't create"). A yes holds until the page is closed; a refusal writes nothing, is never remembered, and the question comes back at the next action. A document that already has one of the widget's tables is never asked.
+
+| Table | Content |
+|---|---|
+| `Publipostage_Modeles` | The templates, and a "Réglages du document" row that keeps the colors shared by every template and, only if you choose "Same for all, saved in the document" for a protected PDF, that shared password, in plain text, in its `MotDePassePdf` column. |
+| `Publipostage_Commentaires` | The comment threads. |
+| `Publipostage_PreferencesModeles` | Each person's pins, folders and export choices. |
+| `Publipostage_Abreviations` | The abbreviations that expand as you type. |
+| `Publipostage_FormatsPage` | The saved page formats, shared by the whole document. |
+| `Publipostage_LiensTables` | The matching keys between tables. |
+| `Publipostage_Versions` | The versions kept for each template: created when the first version is kept, only read when the history is opened. |
+| `Publipostage_Direct` | The pipe of live editing, which only Grist Factory Suite uses (see [Set apart: Grist Factory Suite](#set-apart-grist-factory-suite)). |
+| `Publipostage_UserProbe` | Used to read the connected user's e-mail. |
+
+In the tables that hold your data, the widget writes to no existing column, except the one you choose in Settings > View > "Date of the last PDF export". It then writes there, after each successful PDF, the moment of the export for the rows whose PDF has just been made (a single write per export); with no column chosen, it writes nothing there. A Grist Viewer account writes nothing.
+
+### External libraries and security policy
+
+The widget loads third-party libraries at runtime, from `esm.sh` (the TipTap/ProseMirror editing engine), `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` (PDF, Word and Excel exports, the Markdown import reader and QR code, loaded on first use) and `docs.getgrist.com` (the Grist API), at pinned versions, except the Grist API script, which Grist serves in its current version. Files from `cdnjs` and `jsDelivr` are protected by SRI integrity hashes, which stop the browser from running a tampered file; this isn't technically possible for the `esm.sh` import map. No font or stylesheet comes from another site.
+
+The page carries a Content Security Policy (CSP): only the widget's own scripts, those of the addresses above and three inline scripts cited by their hash are allowed to run. Inline event handlers, `javascript:` addresses, frames, objects and forms are refused. `'unsafe-eval'` remains for lack of a better option: the API script that Grist serves needs it. The HTML of a template read back from the document, which another person may have edited, is sanitized before being displayed, and calculation formulas never go through `eval`.
+
+### Images from other sites
+
+Images and connections are not limited by the CSP: the widget reads images and attachments from any site. Still, an image hosted on a site other than the widget's or Grist's only loads after a click on "Show" (in the editor, Reading mode, headers and footers and the gallery), because loading it tells that site the person's IP address and when the document was opened. The click shows every image from that site until the page is closed, and nothing is remembered, neither in the browser nor in the document. Before an export that would download such images, a window lists the sites and asks for confirmation.
+
+### What the browser keeps
+
+No data is ever stored outside of Grist. The only things kept in the browser (`localStorage`) are interface preferences: the language, the theme, the formatting of bubbles and chips in the editor, the keys, the shortcuts and the view of their panel, the mail program of the Email mode, the autosave state, the last choice in the sheet assembly before printing, the PDF destination, the permissions and author of the protected PDF, the way its password is given and the password column (never a password), the last version whose news window was closed, the page zoom level of the last templates opened, a short list of the templates whose images in front of or behind the text have already had their position checked (signatures, never a template's content) and, to follow renames, the names of the tables and columns of each open document. No row data is ever copied there.
+
+The news window opens by itself once per browser, the first time the widget is opened after a version that has news. In a private window, or where the storage is refused, only the "See what's new" button of Settings > Credits opens it.
 
 To report a vulnerability, please don't open a public issue: follow [SECURITY.md](SECURITY.md).
 
 ## Dependencies
 
-No build step: every file is served as-is. Third-party libraries are loaded at runtime, always at
-pinned versions (except the Grist API script):
+No build step: every file is served as-is. Third-party libraries are loaded at runtime, always at pinned versions (except the Grist API script):
 
 | Library | Purpose | Source |
 |---|---|---|
@@ -847,104 +595,50 @@ pinned versions (except the Grist API script):
 | marked 15.0.12 | Markdown import | `cdnjs.cloudflare.com` |
 | docx 9.15.1 (+ `docx/charts`) | Word export | `cdn.jsdelivr.net` |
 
-The chart (the one from the page, imported from Grist, and the created one) is a Grist Factory Suite (GFS) extension: its code is in `extensions/graphique/`, but its
-libraries, Plotly 2.13.2 (the chart from the page) and ECharts 6.1.0 (the created chart), are not in this list: GFS carries them and gives them to the extension, with their integrity hashes. The
-widget alone (this repository's address in a Grist window) greys the feature out, with a window saying it must be used
-through GFS. Only the page's Content Security Policy (described above) keeps the exact addresses of Plotly and ECharts on `cdn.jsdelivr.net`,
-the ones in GFS's catalogue, and nothing else for the chart: GFS cannot impose a policy on a sub-frame, and without those
-addresses the browser would refuse the scripts it provides. The widget alone never loads them.
-
-Live editing is the other extension (code in `extensions/edition/`): its library, Yjs and the TipTap extensions that use
-it, is neither in this list nor in the import map. GFS carries it as a single assembled file, which it serves at the
-page's address with its integrity hash and which the widget loads with `<script type="module">`: the Content Security
-Policy has nothing to name for it. The widget alone never loads it.
-
-The interface uses the system font. The documents' fonts are in the repository: Roboto for the editor,
-and for the PDF Roboto, Arimo, Tinos, Cousine, Gelasio and Carlito, the free metric-compatible
-equivalents of Arial, Times New Roman, Courier New, Georgia and Calibri. The licenses of all these
-libraries and fonts are in [NOTICE](NOTICE).
+The interface uses the system font. The documents' fonts are in the repository: Roboto for the editor, and for the PDF Roboto, Arimo, Tinos, Cousine, Gelasio and Carlito, the free metric-compatible equivalents of Arial, Times New Roman, Courier New, Georgia and Calibri. The licenses of all these libraries and fonts are in [NOTICE](NOTICE).
 
 ## Known limitations
 
-- **Full access to the document**: for lack of a middle level in Grist, the widget requests
-  `requiredAccess: 'full'` (see [Security and permissions](#security-and-permissions)). There is no
-  version with bundled dependencies to avoid any external call.
-- **Network**: `esm.sh` (editor) and `docs.getgrist.com` (Grist API) are needed at startup;
-  `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` are needed at the first export or the first Markdown import. A firewall that blocks one of them prevents the widget from starting or the export from working:
-  they must be allowed. At startup, the widget says so in a window that lists these addresses.
-- **External audit**: an audit of the code (gwaudit tool, October 4, 2026, redone on November 4, 2026 on the V1) concludes "NON CONFORME"
-  (non-compliant) and counts 69 blocking points. They all come down to one choice: the editor (TipTap and
-  ProseMirror) is loaded from `esm.sh`, a third-party site, without an SRI integrity hash (which an import
-  map doesn't allow; see [Dependencies](#dependencies)). That choice is kept for the V1, so the verdict
-  stays "NON CONFORME", and the tool concludes that hosting the widget on an official instance (DINUM,
-  ANCT) is ruled out as it stands. The widget remains installable elsewhere: it is up to each person to
-  judge whether this risk suits their use.
-- **Browsers**: automated tests run on Chromium (Chrome, Edge), with a Grist simulator; Firefox and
-  Safari are not tested automatically.
-- **Saving**: two people editing the same template at the same time are not merged. Autosave detects
-  that someone else saved in the meantime and offers to reload the latest version; the "Save" button
-  overwrites the saved version without checking. There is no real-time co-editing, except live editing (with Grist
-  Factory Suite), which only covers the text of a Document template or a presentation.
-- **Live editing** (with Grist Factory Suite): it only covers the text of a Document template or a presentation (in a
-  presentation: also the free frames - position, size, text -, the slides of the strip and their background,
-  transition and notes; the object another person has chosen carries their outline and name; for a document or a presentation, the page
-  too: its format, direction, margins, the theme and its decor, the watermark and the saved colors and formats, with an Undo
-  that only reverts the person's own last page gesture); in a presentation, the slide strip shows a dot of each other person's color under the thumbnail of the slide where they write. While it lasts, the
-  header and footer, track changes, linked tables and restoring a version are greyed out, with their reason; an e-mail
-  template, a grid or a macro-template cannot be written live. One person saves the template for everyone (the first in
-  the list, among the visible pages; if they close their page, the next one takes over). A keystroke shows up for the
-  other person within a few tenths of a second (measured without a network: about 90 ms with Grist's own change
-  notification, about 125 ms more when the live table is not the one of the section and is re-read every 250 ms); the
-  real network of an online Grist, two browsers and the plan's limits are not measured. The typing goes through the
-  `Publipostage_Direct` table: Grist's action history grows while people type and keeps what was written in it.
+**Access, network and security**
+
+- **Full access to the document**: for lack of a middle level in Grist, the widget requests `requiredAccess: 'full'` (see [Security and permissions](#security-and-permissions)). There is no version with bundled dependencies to avoid any external call.
+- **Network**: `esm.sh` (editor) and `docs.getgrist.com` (Grist API) are needed at startup; `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` are needed at the first export or the first Markdown import. A firewall that blocks one of them prevents the widget from starting or the export from working: they must be allowed. At startup, the widget says so in a window that lists these addresses.
+- **External audit**: an audit of the code (gwaudit tool, October 4, 2026, redone on November 4, 2026 on the V1) concludes "NON CONFORME" (non-compliant) and counts 69 blocking points. They all come down to one choice: the editor (TipTap and ProseMirror) is loaded from `esm.sh`, a third-party site, without an SRI integrity hash (which an import map doesn't allow; see [Dependencies](#dependencies)). That choice is kept for the V1, so the verdict stays "NON CONFORME", and the tool concludes that hosting the widget on an official instance (DINUM, ANCT) is ruled out as it stands. The widget remains installable elsewhere: it is up to each person to judge whether this risk suits their use.
+- **Per-person rights**: an interface lock, not data protection (see [Security and permissions](#security-and-permissions)).
+
+**Browsers and working together**
+
+- **Browsers**: automated tests run on Chromium (Chrome, Edge), with a Grist simulator; Firefox and Safari are not tested automatically.
+- **Saving**: two people editing the same template at the same time are not merged. Autosave detects that someone else saved in the meantime and offers to reload the latest version; the "Save" button overwrites the saved version without checking.
 - **Track changes** (beta): the complete version is still to come (see the [roadmap](#roadmap-1)).
-- **PDF**: Chinese, Arabic, Hebrew and Thai characters and most emoji are not supported (an empty box
-  replaces them); Greek, Cyrillic, Vietnamese, arrows, check marks, stars and currencies are. The
-  "Export type" menu offers PDF, Protected PDF, Word, PowerPoint (for a presentation only), Excel, Markdown, Markdown (template) and the two HTML rows (file to upload, content to paste) and, for the PDF, "Vector", "Browser print" and "Light" (the vector PDF with its images brought
-  down to 150 points per inch). Browser print prints one row at a time, up to 60 pages, and assumes the browser opens its
-  print window from the widget's frame: if nothing opens, choose "Vector". A protected PDF does not exist as a
-  single PDF for all rows, as a sheet assembly or through browser print (those outputs cannot be encrypted); with
-  no password to open it, its permissions (print, copy, edit) only bind the viewers that honour them.
-- **Word** (beta): images in front of or behind the text, and images aligned left or right, keep their
-  place; the table of contents is a real Word table of contents whose page numbers are written only
-  when Word updates it, and fonts are not embedded.
-- **PowerPoint** (beta): no headers, footers or watermark, no footnotes and no table of contents; a callout loses its frame (its text is kept); text that overflows a slide stays off it;
-  text does not wrap around a floating image; fonts are not embedded (without the document's font, PowerPoint picks another and line breaks may change); the direction of a
-  transition has not been checked in PowerPoint itself.
-- **E-mail**: the body is plain text (the editor of an e-mail template writes no bold, colour, heading level or
-  image: the text of the link has the editor's lines), with no attachment; the `mailto:` link is limited to about
-  2,000 characters, and a gauge warns when it goes over.
+- **Accessibility**: no full RGAA audit to date; contrasts, focus and windows (Tab, Esc) have been worked on.
+
+**Exports**
+
+- **PDF**: Chinese, Arabic, Hebrew and Thai characters and most emoji are not supported (an empty box replaces them); Greek, Cyrillic, Vietnamese, arrows, check marks, stars and currencies are. "Browser print" prints one row at a time, up to 60 pages, and assumes the browser opens its print window from the widget's frame: if nothing opens, choose "Vector". A protected PDF does not exist as a single PDF for all rows, as a sheet assembly or through browser print (those outputs cannot be encrypted); with no password to open it, its permissions (print, copy, edit) only bind the viewers that honour them.
+- **Word** (beta): images in front of or behind the text, and images aligned left or right, keep their place; the table of contents is a real Word table of contents whose page numbers are written only when Word updates it, and fonts are not embedded.
+- **E-mail**: the body is plain text (the editor of an e-mail template writes no bold, colour, heading level or image), with no attachment; the `mailto:` link is limited to about 2,000 characters, and a gauge warns when it goes over.
 - **Excel**: the file holds values, never formulas.
-- **Accessibility**: no full RGAA audit to date; contrasts, focus and windows (Tab, Esc) have been worked
-  on.
-- **Per-person rights**: an interface lock, not data protection (see
-  [Security and permissions](#security-and-permissions)).
-- **Gallery templates**: these are layout examples, written for French law. They are neither legal
-  advice nor guaranteed to comply with current law (mandatory mentions, late-payment penalties,
-  clauses…): have them reviewed before any real use.
-- **Markdown import**: only variables written `{{Table.Column}}` are recognized (a `#Table.Column` typed by hand in
-  the file stays text, like a `{{…}}` key that is not a variable of the document); the heading numbering, written in
-  their text by the export ("1) Title"), comes back as text; margins, page format, watermark, the heading level styles, and an e-mail's subject
-  and recipients are not written in a Markdown file, so they do not come back; an image
-  that is neither online nor in the file is not imported; a file over 10 MB is refused. The reader is meant for
-  trusted files: a text built to trap it (thousands of brackets or asterisks never closed) can freeze the page for
-  long seconds.
-- **Not done yet**: filling a template's tables with sample rows (the gallery preview shows some as
-  images, but the tables created stay empty), multilingual variants of a template,
-  barcodes (the QR code is delivered).
+- **Markdown import**: only variables written `{{Table.Column}}` are recognized (a `#Table.Column` typed by hand in the file stays text); the heading numbering, written in their text by the export ("1) Title"), comes back as text; margins, page format, watermark, the heading level styles, and an e-mail's subject and recipients are not written in a Markdown file, so they do not come back; an image that is neither online nor in the file is not imported; a file over 10 MB is refused. The reader is meant for trusted files: a text built to trap it (thousands of brackets or asterisks never closed) can freeze the page for long seconds.
+
+**Content**
+
+- **Gallery templates**: these are layout examples, written for French law. They are neither legal advice nor guaranteed to comply with current law (mandatory mentions, late-payment penalties, clauses…): have them reviewed before any real use.
+- **Not done yet**: filling a template's tables with sample rows (the gallery preview shows some as images, but the tables created stay empty), multilingual variants of a template, barcodes (the QR code is delivered).
+
+## Set apart: Grist Factory Suite
+
+Publipostage+ can also run inside Grist Factory Suite (GFS), Grist Factory's suite of applications. Presentations, charts, live editing and PDF reading are reserved to it, because they need extra libraries: the widget alone does not load them and greys out their commands, with a window that points to GFS. This document describes the widget alone; the detail of those features and their limits is in the [changelog](CHANGELOG.md).
 
 ## A note on AI
 
-This widget was built with the help of Claude Code, using the Claude Sonnet 5 model in Ultra Code mode.
-The code was reviewed by a human (me), but I don't have enough tokens to be as thorough as Claude.
+This widget was built with the help of Claude Code, using the Claude Sonnet 5 model in Ultra Code mode. The code was reviewed by a human (me), but I don't have enough tokens to be as thorough as Claude.
 
-Upcoming releases will also be a chance to fix or refactor certain parts if needed: this repository is
-open to collaboration (see below).
+Upcoming releases will also be a chance to fix or refactor certain parts if needed: this repository is open to collaboration (see [Contributing](#contributing)).
 
 ## Roadmap
 
-Plenty of features are planned and will be rolled out gradually over the coming weeks. Feel free to
-react to this repository's issues, or write to me on Tchap, to help me prioritize them.
+Plenty of features are planned and will be rolled out gradually over the coming weeks. Feel free to react to this repository's issues, or write to me on Tchap, to help me prioritize them.
 
 **Collaborative editing**
 - Track changes: complete version
@@ -961,16 +655,11 @@ react to this repository's issues, or write to me on Tchap, to help me prioritiz
 - Loading time optimization
 
 **Security**
-- Read-only version: prepare a template in Docs, then export/import for a read-only session, before
-  exporting
+- Read-only version: prepare a template in Docs, then export/import for a read-only session, before exporting
 
 ## Contributing
 
-Contributions are welcome: reporting a defect, suggesting a feature, sending a fix. Start with
-[CONTRIBUTING.md](CONTRIBUTING.md); the [code of conduct](CODE_OF_CONDUCT.md) applies to every exchange.
-To find your way around the code (which file does what, where to start), read the
-[code map](CARTE_DU_CODE.md#publipostage-code-map). The changes of each version are in
-[CHANGELOG.md](CHANGELOG.md).
+Contributions are welcome: reporting a defect, suggesting a feature, sending a fix. Start with [CONTRIBUTING.md](CONTRIBUTING.md); the [code of conduct](CODE_OF_CONDUCT.md) applies to every exchange. To find your way around the code (which file does what, where to start), read the [code map](CARTE_DU_CODE.md#publipostage-code-map). The changes of each version are in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
@@ -978,5 +667,4 @@ This project is distributed under the [GNU General Public License v3.0](LICENSE)
 
 Copyright (C) 2026 Grist Factory
 
-Third-party libraries and fonts keep their own licenses: see [NOTICE](NOTICE). "Grist" is a product of
-Grist Labs; Publipostage+ is a third-party widget, not published by Grist Labs.
+Third-party libraries and fonts keep their own licenses: see [NOTICE](NOTICE). "Grist" is a product of Grist Labs; Publipostage+ is a third-party widget, not published by Grist Labs.

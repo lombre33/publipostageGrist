@@ -5,3 +5,6 @@ test-output/
 # pour ne jamais risquer qu'une version périmée dérive silencieusement de
 # index.html - cf. dev-tests/README.md).
 _test-harness.html
+
+# Images brutes des scènes de capture du README (outils/depot-propre/captures/lancer-tout.sh) : seules les images finales de public/screenshots/ se commitent.
+outils/depot-propre/captures/out/

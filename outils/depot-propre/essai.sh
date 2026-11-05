@@ -66,7 +66,7 @@ HTML
 git init -q -b main "$T/propre-src"
 (
   cd "$T/propre-src"
-  mkdir -p screenshots; echo png > screenshots/edition-variables.png; echo png > screenshots/lecture-resolue.png; echo png > screenshots/ancienne.png
+  mkdir -p screenshots; echo png > screenshots/01-edition-modele-avec-variables.png; echo png > screenshots/02-lecture-document-rempli.png; echo png > screenshots/ancienne.png
   echo '# alpha' > README.md; echo old > index.html
   # La bêta figée : beta/ porte les fichiers du site de la bêta (une page, sa feuille de style, sa version, une image, un catalogue, la licence). L'étiquette de la bêta les porte à la racine :
   # son arbre est celui de beta/ (un commit orphelin, comme l'étiquette v1.0.0-beta.1 du vrai dépôt public, dont l'arbre est celui du site).
@@ -133,7 +133,7 @@ vrai "les documents publics sont là, README du dépôt de développement absent
 # Un gabarit resté en place s'écrit {{MAJUSCULES}} (comme le cherche controles.mjs) : la carte décrit aussi des {{variables}} de modèle, qui sont du texte.
 vrai "la carte du code part avec les documents publics, version et date remplacées" bash -c "grep -q '^# Carte du code de Publipostage+' '$P/CARTE_DU_CODE.md' && ! grep -qE '\{\{[A-Z_]+\}\}' '$P/CARTE_DU_CODE.md'"
 vrai "la note de version part avec les documents publics, version et dates remplacées, en français puis en anglais" bash -c "grep -q '^# Publipostage+ : notes de version' '$P/PATCH_NOTES.md' && grep -q '^# Publipostage+: release notes (English)' '$P/PATCH_NOTES.md' && ! grep -qE '\{\{[A-Z_]+\}\}' '$P/PATCH_NOTES.md' && grep -qF '**Publipostage+ 1.0.0-beta.1**, publiée le 4 octobre 2026' '$P/PATCH_NOTES.md' && grep -qF '**Publipostage+ 1.0.0-beta.1**, released on October 4, 2026' '$P/PATCH_NOTES.md'"
-vrai "les captures de public/screenshots/ sont posées dans screenshots/ du dépôt public, identiques" bash -c "cmp -s '$T/dev/outils/depot-propre/public/screenshots/edition-variables.png' '$P/screenshots/edition-variables.png' && cmp -s '$T/dev/outils/depot-propre/public/screenshots/lecture-resolue.png' '$P/screenshots/lecture-resolue.png'"
+vrai "les captures de public/screenshots/ sont posées dans screenshots/ du dépôt public, identiques" bash -c "cmp -s '$T/dev/outils/depot-propre/public/screenshots/01-edition-modele-avec-variables.png' '$P/screenshots/01-edition-modele-avec-variables.png' && cmp -s '$T/dev/outils/depot-propre/public/screenshots/02-lecture-document-rempli.png' '$P/screenshots/02-lecture-document-rempli.png'"
 vrai "une capture que seul le dépôt public porte est gardée" test "$(cat "$P/screenshots/ancienne.png")" = png
 kit_en_fichiers() { # css, js et licence du kit, en fichiers ordinaires, sans .gitmodules ni lien de sous-module (le dépôt public n'a pas de sous-module)
   [ -s "$P/kit/js/ambiance-pose.js" ] && [ -s "$P/kit/js/ambiance-message.js" ] && [ -s "$P/kit/js/once.js" ] && [ -s "$P/kit/css/tokens.css" ] && [ -s "$P/kit/LICENSE" ] \
@@ -149,11 +149,11 @@ vrai "la bêta figée n'a pas bougé : beta/ est toujours, octet pour octet, ce 
 echo "publier.sh : garde contre l'écrasement"
 (cd "$T/dev" && sed -i 's/beta\.1/beta.2/' js/version.js && G commit -qam "version" && git push -q origin main)
 git -C "$P" push -q origin main v1.0.0-beta.1
-echo '// reçu côté public' >> "$P/js/main.js"; echo 'retouchée côté public' >> "$P/screenshots/lecture-resolue.png"; G -C "$P" commit -qam "contribution"; git -C "$P" push -q origin main
+echo '// reçu côté public' >> "$P/js/main.js"; echo 'retouchée côté public' >> "$P/screenshots/02-lecture-document-rempli.png"; G -C "$P" commit -qam "contribution"; git -C "$P" push -q origin main
 SORTIE="$(publier --version 1.0.0-beta.2 --sortie "$T/sortie2")"
 attend "refuse d'écraser un changement reçu côté public" "a reçu des changements depuis v1.0.0-beta.1" "$SORTIE"
 attend "nomme le fichier concerné" "js/main.js" "$SORTIE"
-attend "nomme aussi la capture retouchée côté public" "screenshots/lecture-resolue.png" "$SORTIE"
+attend "nomme aussi la capture retouchée côté public" "screenshots/02-lecture-document-rempli.png" "$SORTIE"
 SORTIE="$(publier --version 1.0.0-beta.1 --sortie "$T/sortie3")"
 attend "refuse une étiquette déjà prise" "existe déjà" "$SORTIE"
 SORTIE="$(env PP_DATE=2026-10-04 bash "$T/dev/outils/depot-propre/publier.sh" --propre "$P" --version 1.0.0-beta.2 --sortie "$T/sortie4" --ecraser 2>&1)"
