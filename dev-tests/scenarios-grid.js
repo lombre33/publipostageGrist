@@ -2123,6 +2123,80 @@
     },
   });
 
+  // === Collage d'une variable sous Windows : pas de saut de ligne en trop (Antoine, 05/11 : « dans un tableau, dans une ligne classique sans saut de ligne, je clique sur une variable, je la copie, je
+  // clique sur une autre ligne, je colle, et ça rajoute en dessous deux sauts de ligne non voulus ») =========================================================================================================
+
+  // Ce que Chrome, Edge et Firefox donnent sous Windows à `getData('text/html')` : le HTML copié est entouré de `<html><body>`, de `<!--StartFragment-->` et `<!--EndFragment-->`, avec un retour à
+  // la ligne (\r\n) avant et après chaque balise. ProseMirror lit un HTML qui porte `data-pm-slice` en gardant les blancs, et un retour à la ligne laissé après une bulle seule en fait un saut de
+  // ligne forcé : deux en tout (après `<!--EndFragment-->`, après `</body>`). Une bulle sélectionnée seule est une sélection de nœud : son HTML n'a pas de paragraphe autour qui avale ces blancs.
+  const copiedBadge = '<span class="var-badge" contenteditable="false" data-table="Collage" data-column="Nom" data-key="Collage.Nom" data-pm-slice="0 0 []">#Collage.Nom</span>';
+  const windowsClipboard = (fragment, eol) => '<html>' + eol + '<body>' + eol + '<!--StartFragment-->' + fragment + '<!--EndFragment-->' + eol + '</body>' + eol + '</html>';
+  // Un tableau de document (hors grille) de deux lignes de deux cases, suivi d'un paragraphe : la première case garde son texte, les autres sont vides.
+  async function inDocumentTable(h, body) {
+    await h.resetEditor();
+    ed().commands.setContent('<table><tbody><tr><td><p>Nom</p></td><td><p></p></td></tr><tr><td><p></p></td><td><p></p></td></tr></tbody></table><p>après</p>');
+    await sleep(120);
+    return body();
+  }
+
+  cases.push({
+    id: 'grid_paste_of_a_variable_copied_alone_adds_no_line_break_after_windows_clipboard_wrapping',
+    description: 'Collage dans une case de grille d\'une variable copiée seule, avec le HTML que Windows donne (retours à la ligne autour de StartFragment / EndFragment, \\n comme \\r\\n) : la case a la bulle, sans saut de ligne forcé derrière - avant, deux `<br>` la suivaient.',
+    run: async (h) => inGrid(h, async () => {
+      await pasteInto(0, 0, { html: windowsClipboard(copiedBadge, '\r\n') });
+      await pasteInto(1, 1, { html: windowsClipboard(copiedBadge, '\n') });
+      await pasteInto(2, 0, { html: windowsClipboard(copiedBadge, '\r\n'), plain: '' });
+      await pasteInto(3, 0, { html: '<meta charset="utf-8">' + windowsClipboard(copiedBadge, '\r\n\r\n') });
+      const got = [cellLines(0, 0), cellLines(1, 1), cellLines(2, 0), cellLines(3, 0)];
+      return { pass: got.join('|') === '#Nom|#Nom|#Nom|#Nom' && rowsNow() === 15, notes: JSON.stringify({ got, rows: rowsNow() }) };
+    }),
+  });
+
+  cases.push({
+    id: 'document_table_paste_of_a_variable_copied_alone_adds_no_line_break_after_windows_clipboard_wrapping',
+    description: 'Même collage dans un tableau de DOCUMENT (hors grille) : la bulle copiée seule et collée au début d\'une case vide ou d\'une case qui a du texte ne fait suivre aucun saut de ligne forcé ni paragraphe, \\r\\n comme \\n.',
+    run: async (h) => inDocumentTable(h, async () => {
+      await pasteInto(0, 0, { html: windowsClipboard(copiedBadge, '\r\n') });
+      await pasteInto(0, 1, { html: windowsClipboard(copiedBadge, '\n') });
+      await pasteInto(1, 0, { html: windowsClipboard(copiedBadge, '\r\n'), plain: '' });
+      const got = [cellLines(0, 0), cellLines(0, 1), cellLines(1, 0)];
+      return { pass: got.join('|') === '#NomNom|#Nom|#Nom' && doc().childCount === 2, notes: JSON.stringify({ got, blocks: doc().childCount }) };
+    }),
+  });
+
+  cases.push({
+    id: 'document_paragraph_paste_of_a_variable_copied_alone_adds_no_line_break_after_windows_clipboard_wrapping',
+    description: 'Le même collage dans un paragraphe du document (pas dans un tableau) : la bulle copiée seule ne fait suivre aucun saut de ligne forcé.',
+    run: async (h) => {
+      await h.resetEditor();
+      ed().commands.setContent('<p>début</p><p>fin</p>');
+      ed().chain().focus().setTextSelection(doc().child(0).nodeSize + 1).run();
+      await sleep(60);
+      const dt = new DataTransfer();
+      dt.setData('text/html', windowsClipboard(copiedBadge, '\r\n'));
+      ed().view.dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+      await sleep(150);
+      const lines = [];
+      doc().forEach(block => { const parts = []; block.forEach(inline => parts.push(inline.type.name === 'varBadge' ? '#' + inline.attrs.column : inline.type.name === 'hardBreak' ? '<br>' : inline.text)); lines.push(parts.join('') || '-'); });
+      return { pass: lines.join('|') === 'début|#Nomfin', notes: JSON.stringify(lines) };
+    },
+  });
+
+  cases.push({
+    id: 'paste_with_windows_clipboard_wrapping_keeps_what_was_really_copied',
+    description: 'Ce que le presse-papiers de Windows ajoute autour du HTML copié est retiré, rien d\'autre : un saut de ligne forcé qui fait partie de ce qui a été copié (entre deux bulles, ou à la fin) est collé, un paragraphe copié ne laisse aucun paragraphe vide derrière lui, et un HTML dont les repères sont incomplets passe tel quel.',
+    run: async (h) => inDocumentTable(h, async () => {
+      // Deux bulles séparées par un saut de ligne forcé, le dernier saut copié aussi : les deux sont à eux.
+      await pasteInto(0, 1, { html: windowsClipboard(copiedBadge + '<br>' + copiedBadge + '<br>', '\r\n') });
+      // Un paragraphe copié (une sélection de texte) : un seul paragraphe, comme avant.
+      await pasteInto(1, 0, { html: windowsClipboard('<p data-pm-slice="1 1 []">Texte ' + copiedBadge + '</p>', '\r\n') });
+      // Les repères de début sans ceux de fin : le HTML n\'est pas touché (il fait ce qu\'il faisait).
+      await pasteInto(1, 1, { html: '<html><body>\r\n<!--StartFragment-->' + copiedBadge + '\r\n</body></html>' });
+      const got = [cellLines(0, 1), cellLines(1, 0), cellLines(1, 1)];
+      return { pass: got[0] === '#Nom<br>#Nom<br>' && got[1] === 'Texte #Nom' && got[2].startsWith('#Nom'), notes: JSON.stringify(got) };
+    }),
+  });
+
   // === Entrée : la case du dessous (Antoine, 02/10 : « l'appui sur entrer doit descendre d'une cellule, shift entrer ou ctrl entrer pour ajouter une ligne ») =========================
 
   // [ligne, colonne] de la case du curseur (index dans la ligne, une case fusionnée compte pour une) ; pour des cases choisies, celle d'où la sélection est partie.
