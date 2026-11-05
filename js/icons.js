@@ -146,6 +146,9 @@ const Icons = (function () {
       // Barre flottante d'une bulle #Variable (js/floating-toolbars.js) : condition d'affichage (embranchement) et autres attributs de la même ligne
       // (maillons de chaîne).
       varCondition: '<path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/>',
+      // Mise en forme conditionnelle (js/conditional-style-window.js) : une lettre « A » et une étincelle, le texte qui change d'aspect. Ni le « A » de la couleur du texte de la
+      // barre d'outils, ni le seau du fond : une icône = une fonction.
+      varStyle: '<path d="M3 20 8 7l5 13"/><path d="M4.9 15.5h6.2"/><path d="M18 3l1.2 3.3L22.5 7.5l-3.3 1.2L18 12l-1.2-3.3L13.5 7.5l3.3-1.2z"/>',
       varLinked: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
       varLoop: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
       // Bouton « Colonne… » de la même barre (js/variable-column.js : changer ou réparer la colonne d'une bulle) : une colonne de tableau avec sa case

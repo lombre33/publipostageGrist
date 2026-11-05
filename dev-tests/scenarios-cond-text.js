@@ -502,8 +502,12 @@
       const withCondition = barState();
       const tagRect = tag.getBoundingClientRect();
       const barRect = toolbar().getBoundingClientRect();
-      // Posée au-dessus de l'étiquette, centrée dessus (pas au milieu de la largeur du bloc).
-      const anchored = Math.abs((barRect.left + barRect.width / 2) - (tagRect.left + tagRect.width / 2)) <= 12 && barRect.bottom <= tagRect.top + 2;
+      // Posée au-dessus de l'étiquette, centrée dessus (pas au milieu de la largeur du bloc). Une étiquette près du bord gauche du panneau : la barre, trop large pour être centrée
+      // (son bouton « Mise en forme conditionnelle » l'a élargie d'un bouton), glisse au bord visible (8 px) mais reste au-dessus de l'étiquette, qu'elle recouvre en largeur.
+      const tagCenter = tagRect.left + tagRect.width / 2;
+      const centered = Math.abs((barRect.left + barRect.width / 2) - tagCenter) <= 12;
+      const clampedAtEdge = barRect.left <= 9 && barRect.left <= tagCenter && barRect.right >= tagCenter;
+      const anchored = (centered || clampedAtEdge) && barRect.bottom <= tagRect.top + 2;
       const selectedFirst = isBlockSelected();
       await clickTag(h, 1);
       const withoutCondition = barState();

@@ -52,13 +52,17 @@ const ReaderMode = (function () {
   // autour d'elle ne s'additionnent pas (js/space-gap.js) : « Bonjour #Prénom #Nom » sans prénom ne laisse pas deux espaces.
   function putValue(badge, node) {
     carryBoxLines(badge, node);
-    badge.replaceWith(node);
-    return SpaceGap.settle(node);
+    // La mise en forme selon la ligne (js/conditional-style.js) enveloppe la valeur écrite ; une valeur qui n'écrit rien reste telle quelle.
+    const shown = ConditionalStyle.carry(badge, node);
+    badge.replaceWith(shown);
+    return SpaceGap.settle(shown);
   }
   // Les nœuds à condition du modèle, défaits ou retirés avant que les bulles soient remplacées par leur valeur : les blocs de texte (js/conditional-text.js)
   // - les bulles d'un bloc retiré n'ont rien à résoudre -, les valeurs, les cases, puis le sinon des bulles (js/variable-otherwise.js : une bulle dont la
   // condition n'est pas remplie devient la variable de son sinon, sa seule valeur à lire ensuite). Une seule fois, pour la Lecture comme pour tous les exports.
   async function resolveConditionalNodes(wrapper, tableId, record) {
+    // La mise en forme selon la ligne d'abord : les blocs et les valeurs conditionnels ont encore leur cadre (js/conditional-style.js:prepare).
+    await ConditionalStyle.prepare(wrapper, tableId, record);
     await ConditionalText.resolve(wrapper, tableId, record);
     await ConditionalValue.resolve(wrapper, tableId, record);
     await ConditionalCheckbox.resolve(wrapper, tableId, record);

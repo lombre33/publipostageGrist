@@ -1,0 +1,43 @@
+/* Fenêtre « Mise en forme conditionnelle » (js/conditional-style-window.js) : la liste des règles en cartes - un en-tête par règle (son numéro, sa condition en une ligne, un
+   échantillon du style) et, pour la carte ouverte seule, la condition puis les contrôles du style. Les lignes de condition viennent de css/variable-actions.css, les pastilles
+   (.cp-swatch, leur coche) de css/color-palette.css : ici, seulement la mise en page des cartes. Des jetons seulement. À 700 × 400 une seule carte est ouverte à la fois ; le
+   contenu défile, le titre et les boutons restent visibles (css/modal-base.css). */
+.cond-style-order { margin: 10px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--text-muted); }
+.cond-style-list { display: flex; flex-direction: column; gap: 6px; }
+.cond-style-card { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.cond-style-card.is-open { border-color: var(--border-strong); }
+.cond-style-head { display: flex; align-items: center; gap: 4px; padding-right: 6px; }
+.cond-style-toggle { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border: 0; background: transparent; color: var(--text); font-family: var(--font-ui); font-size: 12px; text-align: left; cursor: pointer; border-radius: var(--radius-sm); }
+.cond-style-toggle:hover { background: var(--surface-sunken); }
+.cond-style-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cond-style-num { flex: none; font-weight: 700; }
+.cond-style-summary { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); }
+.cond-style-sample { flex: none; padding: 0 5px; border-radius: 3px; line-height: 1.5; }
+.cond-style-sample-big { font-size: 13px; padding: 1px 7px; }
+.cond-style-body { display: flex; flex-direction: column; gap: 6px; padding: 2px 10px 10px; }
+.cond-style-label { margin-top: 2px; font-size: 11.5px; font-weight: 700; color: var(--text); }
+.cond-style-looks { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 6px 10px; }
+.cond-style-looks .cond-style-label { margin-top: 0; }
+.cond-style-colors { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.cond-style-chip { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-xs, 5px); background: var(--surface); color: var(--text-muted); font-family: var(--font-ui); font-size: 14px; font-weight: 600; line-height: 1; cursor: pointer; }
+.cond-style-chip svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; }
+.cond-style-chip:hover { color: var(--accent-ink); border-color: var(--accent); }
+.cond-style-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cond-style-marks-line { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cond-style-marks { display: inline-flex; gap: 4px; }
+.cond-style-mark { width: 28px; height: 26px; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 13px; cursor: pointer; }
+.cond-style-mark:hover { border-color: var(--accent); }
+.cond-style-mark:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cond-style-mark.is-active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.cond-style-mark-bold { font-weight: 700; }
+.cond-style-mark-italic { font-style: italic; }
+.cond-style-mark-underline { text-decoration: underline; }
+.cond-style-mark-strike { text-decoration: line-through; }
+.cond-style-add { margin-top: 8px; }
+.cond-style-add:disabled { opacity: .45; cursor: default; }
+.cond-style-ignored { margin: 8px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--text-muted); }
+.cond-style-ignored[hidden] { display: none; }
+@media (max-width: 480px) {
+  .cond-style-looks { grid-template-columns: 1fr; gap: 2px; }
+  .cond-style-looks .cond-style-label { margin-top: 4px; }
+}

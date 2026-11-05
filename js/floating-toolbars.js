@@ -937,7 +937,7 @@ const FloatingToolbars = (function () {
   // elle ne cache pas sa propre barre ; la fenêtre de condition ouverte par-dessus elle, pour une variable du champ, la cache. 'condition' : la fenêtre de condition ; 'loop' :
   // la fenêtre de la boucle (le texte « Si aucune ligne », js/variable-loop.js).
   function variableWindowOpen(except) {
-    return VariableCondition.isOpen(except === 'condition' ? 1 : 0) || VariableLinkedAttrs.isOpen() || (except !== 'loop' && VariableLoop.isOpen()) || VariableList.isOpen() || VariableCalc.isOpen();
+    return VariableCondition.isOpen(except === 'condition' ? 1 : 0) || VariableLinkedAttrs.isOpen() || (except !== 'loop' && VariableLoop.isOpen()) || VariableList.isOpen() || VariableCalc.isOpen() || ConditionalStyleWindow.isOpen();
   }
 
   // La barre flottante d'une bulle #Variable pour UN éditeur : celui du document (wireVariableFloatingToolbar) ou celui d'un champ texte (Objet, À, Cc,
@@ -966,13 +966,13 @@ const FloatingToolbars = (function () {
 
     const { onVariableAction, onVariableInput } = createVariableHandlers({ editor, inField, loopWindowTaken, isFormatKind, variableTarget, patchVariableFormat, applyVariableFormat });
 
-    const { setLabeled, greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit } = createVariableButtons({ editor });
+    const { setLabeled, greyOut, syncColumnButton, syncListButton, syncConditionButton, syncStyleButton, showCalcEdit } = createVariableButtons({ editor, inField });
 
     const { syncConditionalState, syncBoolButtons } = createConditionalState({ greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit });
 
     const { syncVariableState } = createVariableState({ editor, rawText, loopWindowTaken, variableColumnType, gristFormatOf, setLabeled, greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit, syncBoolButtons });
 
-    const { wireToolbar } = createVariableToolbarWiring({ editor, options, inField, rawText, setRefreshToolbar: value => { refreshToolbar = value; }, variableToolbarHtml, isFormatKind, variableTarget, variableColumnType, onVariableAction, onVariableInput, syncConditionalState, syncBoolButtons, syncVariableState });
+    const { wireToolbar } = createVariableToolbarWiring({ editor, options, inField, rawText, setRefreshToolbar: value => { refreshToolbar = value; }, variableToolbarHtml, isFormatKind, variableTarget, variableColumnType, onVariableAction, onVariableInput, syncConditionalState, syncBoolButtons, syncVariableState, syncStyleButton });
 
     return { wire: wireToolbar };
   }
@@ -988,6 +988,7 @@ const FloatingToolbars = (function () {
         '<div class="v2-varbadge-actions">',
         `<button data-action="calc-edit" title="${I18n.t('varToolbar.calcEdit')}" aria-label="${I18n.t('varToolbar.calcEdit')}" hidden>${Icons.svg('calc')}</button>`,
         `<button data-action="var-condition" title="${I18n.t('varToolbar.condition')}" aria-label="${I18n.t('varToolbar.condition')}">${Icons.svg('varCondition')}</button>`,
+        `<button data-action="var-style" title="${I18n.t('varToolbar.style')}" aria-label="${I18n.t('varToolbar.style')}">${Icons.svg('varStyle')}</button>`,
         `<button data-action="var-linked" title="${I18n.t('varToolbar.linked')}" aria-label="${I18n.t('varToolbar.linked')}">${Icons.svg('varLinked')}</button>`,
         `<button data-action="var-loop" title="${I18n.t('varToolbar.loop')}" aria-label="${I18n.t('varToolbar.loop')}">${Icons.svg('varLoop')}</button>`,
         `<button data-action="var-list" title="${I18n.t('varToolbar.list')}" aria-label="${I18n.t('varToolbar.list')}">${Icons.svg('varList')}</button>`,
@@ -1148,6 +1149,7 @@ const FloatingToolbars = (function () {
     // ou colonne Référence de la table de la page, règle tenue par js/variable-linked-attrs.js.
     const WINDOWS = {
       'var-condition': (node, pos) => VariableCondition.openAt(editor, pos),
+      'var-style': (node, pos) => ConditionalStyleWindow.openAt(editor, pos),
       'var-linked': (node, pos) => { if (VariableLinkedAttrs.isAvailable(node.attrs)) VariableLinkedAttrs.openAt(editor, pos); },
       'var-loop': (node, pos) => { if (VariableLoop.status(editor, pos, node).enabled && !loopWindowTaken()) VariableLoop.openAt(editor, pos, { inlineOnly: inField }); },
       'var-list': (node, pos) => { if (VariableList.status(node).enabled) VariableList.openAt(editor, pos, { field: inField }); },
@@ -1160,8 +1162,10 @@ const FloatingToolbars = (function () {
       if (action === 'calc-edit') { if (kind === 'calc') VariableCalc.openAt(editor, pos); return; }
       const open = WINDOWS[action];
       if (open) {
-        // Un bloc, une valeur et une case n'ont que la condition ; un calcul aucun de ces boutons (grisés par syncVariableState).
-        if (kind === 'badge' || (kind !== 'calc' && action === 'var-condition')) open(node, pos);
+        // Un bloc, une valeur et une case n'ont que la condition ; un calcul aucun de ces boutons (grisés par syncVariableState). La mise en forme selon la ligne : tous sauf la
+        // case, et ni dans un champ texte (grisé par syncStyleButton).
+        const styled = action === 'var-style' && kind !== 'checkbox' && !inField;
+        if (kind === 'badge' || (kind !== 'calc' && action === 'var-condition') || styled) open(node, pos);
       } else if (kind === 'checkbox') {
         if (action.indexOf('bool-style:') === 0 && VariableFormat.isCheckboxStyle(action.slice(11))) {
           EditorCore.patchNodeAndReselect(editor, pos, Object.assign({}, node.attrs, { style: action.slice(11) }));
@@ -1183,7 +1187,7 @@ const FloatingToolbars = (function () {
     return { onVariableAction, onVariableInput };
   }
 
-  function createVariableButtons({ editor }) {
+  function createVariableButtons({ editor, inField }) {
     // Les boutons de gauche de la barre d'une bulle : grisés, actifs ou cachés selon la sélection. `ui` : les contrôles de la barre
 
     // Bouton grisé ou actif dont le nom accessible suit l'info-bulle.
@@ -1229,13 +1233,22 @@ const FloatingToolbars = (function () {
       const set = !!ConditionRules.normalizeCondition(node.attrs.condition) || !!VariableFormat.affixes(node.attrs.before, node.attrs.after);
       ui.setActive('var-condition', !reasonKey && set);
     }
+    // « Mise en forme conditionnelle » (js/conditional-style.js) : allumée quand l'élément a au moins une règle. Grisée - jamais retirée - avec sa raison pour une case
+    // conditionnelle (une case n'a ni texte ni couleur à régler ici) et dans un champ texte (objet d'un e-mail, « Sinon afficher » : il écrit une ligne de texte).
+    function syncStyleButton(ui, node, kind) {
+      const btn = ui.button('var-style');
+      if (!btn) return;
+      const reasonKey = inField ? 'varToolbar.styleInField' : (kind === 'checkbox' ? 'varToolbar.styleCheckbox' : null);
+      setLabeled(ui, 'var-style', !!reasonKey, I18n.t(reasonKey || 'varToolbar.style'));
+      ui.setActive('var-style', !reasonKey && ConditionalStyle.isSet(node.attrs.condStyle));
+    }
     // « Modifier le calcul » n'est là que pour un calcul : un calcul choisi juste avant l'a montré, l'autre sélection le cache.
     function showCalcEdit(ui, shown) {
       const btn = ui.button('calc-edit');
       if (btn) btn.hidden = !shown;
     }
 
-    return { setLabeled, greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit };
+    return { setLabeled, greyOut, syncColumnButton, syncListButton, syncConditionButton, syncStyleButton, showCalcEdit };
   }
 
   function createConditionalState({ greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit }) {
@@ -1369,7 +1382,7 @@ const FloatingToolbars = (function () {
     return { syncVariableState };
   }
 
-  function createVariableToolbarWiring({ editor, options, inField, rawText, setRefreshToolbar, variableToolbarHtml, isFormatKind, variableTarget, variableColumnType, onVariableAction, onVariableInput, syncConditionalState, syncBoolButtons, syncVariableState }) {
+  function createVariableToolbarWiring({ editor, options, inField, rawText, setRefreshToolbar, variableToolbarHtml, isFormatKind, variableTarget, variableColumnType, onVariableAction, onVariableInput, syncConditionalState, syncBoolButtons, syncVariableState, syncStyleButton }) {
     // Barre flottante d'une bulle #Variable : ce qu'elle montre selon la sélection, où elle se pose, et son câblage
 
     function showVariableFormatPanels(ui, panel, kind, node) {
@@ -1412,6 +1425,7 @@ const FloatingToolbars = (function () {
         if (!dom || !dom.getClientRects().length) { panel.hide(); return; }
         if (isFormatKind(kind)) syncVariableState(ui, node, pos);
         else syncConditionalState(ui, node, kind);
+        syncStyleButton(ui, node, kind);
         if (kind === 'checkbox') syncBoolButtons(ui, ConditionalCheckbox.styleOf(node.attrs.style));
         // Un bloc de texte conditionnel : la barre s'ancre sur son étiquette (en haut à gauche), pas au milieu de sa largeur.
         panel.show(kind === 'block' ? (dom.querySelector && dom.querySelector(':scope > .conditional-text-tag')) || dom : dom, inField ? undefined : anchoredBarOptions);
