@@ -47,6 +47,11 @@ const MainToolbar = (function () {
     });
     return imageVarPickerBox;
   }
+  // La variable d'une clé « Table.Colonne » ou « Table.Référence.Colonne » (null sans point).
+  const itemOfKey = key => {
+    const cut = String(key).indexOf('.');
+    return cut === -1 ? null : { table: key.slice(0, cut), column: key.slice(cut + 1), key };
+  };
   // La clé refusée ne pose rien : le focus revient alors à l'éditeur, où la personne était.
   const insertVariableImage = async v => { if (!(await Variables.insertAttachmentImage(editor, v))) editor.commands.focus(); };
   // Liste avec recherche (js/search-select.js), comme chaque choix de colonne de l'interface : elle s'ouvre à côté de la ligne « Image depuis une
@@ -79,6 +84,12 @@ const MainToolbar = (function () {
         option.value = v.key;
         option.textContent = v.key;
         option.dataset.search = Variables.columnSearchText(v.table, v.column);
+        // Une colonne Référence qui mène à une pièce jointe : grisée (elle ne se choisit pas), sa flèche › ouvre les colonnes de sa table.
+        const through = Variables.isAttachmentColumn(v) ? null : Variables.attachmentReference(v.table, v.column);
+        if (through) {
+          option.dataset.expand = through;
+          option.dataset.unavailable = I18n.t('imageVarPicker.viaReference', { table: through });
+        }
         select.appendChild(option);
       });
       host.appendChild(select);
@@ -87,6 +98,7 @@ const MainToolbar = (function () {
       const search = SearchSelect.attachColumns(select, {
         popup: true,
         anchor: () => anchorRectOf(anchorEl),
+        expand: item => Variables.attachmentColumnsBelow(item.value),
         // Défait après l'évènement en cours : un blur ou un clic qui ferme le panneau ne doit pas retirer l'élément qui le porte. Le focus revient à
         // l'éditeur après Échap, pas après un clic ailleurs ; après un choix, c'est l'insertion qui le rend (insertVariableImage) : la clé de
         // correspondance peut ouvrir une fenêtre qui prend le focus, et celui de l'éditeur, différé d'une image, le lui reprendrait (Échap n'y fermerait plus rien).
@@ -95,7 +107,9 @@ const MainToolbar = (function () {
       instance = { host, search };
       imageVarSearch = instance;
       select.addEventListener('change', () => {
-        const v = candidates.find(c => c.key === select.value);
+        // Une colonne trouvée en descendant de Référence en Référence (« Badge.Personne.Structure.Logo ») n'est pas dans `candidates` : sa table est celle d'où l'on
+        // est parti, sa colonne est le chemin (comme une bulle d'« Autres attributs »).
+        const v = candidates.find(c => c.key === select.value) || itemOfKey(select.value);
         if (v) insertVariableImage(v);
       });
       search.open();
@@ -109,7 +123,11 @@ const MainToolbar = (function () {
   async function openImageVariablePicker(anchorEl) {
     await GristAPI.refreshSchema().catch(() => {});
     // Colonnes de la table de la page en tête (celles de la table parcourue par la zone répétée où est le curseur avant elles), comme la liste « # ».
-    const candidates = Variables.prioritizeTables(GristAPI.getAllVariables().filter(Variables.isAttachmentColumn), Variables.currentTables(editor));
+    // Avec, grisées, les colonnes Référence de ces tables « en cours » qui mènent à une pièce jointe : leur flèche › ouvre la table suivante, jusqu'à la colonne
+    // (liste avec recherche seulement). Pas celles des autres tables : leur chemin n'a de sens qu'une fois la table liée à la page, et la liste se noierait de lignes grisées.
+    const current = Variables.currentTables(editor);
+    const reachable = v => Variables.isAttachmentColumn(v) || (current.indexOf(v.table) !== -1 && !!Variables.attachmentReference(v.table, v.column));
+    const candidates = Variables.prioritizeTables(GristAPI.getAllVariables().filter(reachable), current);
     // Liste avec recherche d'abord ; la liste simple sert au message « aucune colonne » et quand le composant est indisponible.
     if (candidates.length) {
       if (imageVarPickerBox) imageVarPickerBox.style.display = 'none';
@@ -123,7 +141,7 @@ const MainToolbar = (function () {
       empty.textContent = I18n.t('imageVarPicker.empty');
       box.appendChild(empty);
     } else {
-      candidates.forEach(v => {
+      candidates.filter(Variables.isAttachmentColumn).forEach(v => {
         const item = document.createElement('div');
         item.className = 'v2-image-var-picker-item';
         item.textContent = v.key;

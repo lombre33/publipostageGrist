@@ -1096,6 +1096,80 @@
     },
   });
 
+  // Le chemin Badge › Personne › Structure › Logo (retour d'Antoine du 05/11) : la table de la page est CsBadge, dont la colonne Référence Personne mène à CsPers, puis Structure à CsStruct
+  // (Logo : Pièces jointes). CsBadge.Ailleurs mène à une table sans pièce jointe : elle n'a pas de ligne dans le menu.
+  const BADGE_TABLES = ['CsBadge', 'CsPers', 'CsStruct', 'CsSansPj'];
+  async function seedBadgePath(h) {
+    const ed = await seedImages(h);
+    const stub = window.__gristStub;
+    stub.setVariables('CsStruct', { Nom: 'Text', Logo: 'Attachments' });
+    stub.setRows('CsStruct', [{ id: 1, Nom: 'Mairie', Logo: ['L', 55] }]);
+    stub.setVariables('CsPers', { Nom: 'Text', Structure: 'Ref:CsStruct', gristHelper_Display: 'Text' }, null, { Structure: 'gristHelper_Display' });
+    stub.setRows('CsPers', [{ id: 7, Nom: 'Dupont Jean', Structure: 1, gristHelper_Display: 'Mairie' }]);
+    stub.setVariables('CsSansPj', { Nom: 'Text' });
+    stub.setRows('CsSansPj', [{ id: 1, Nom: 'Rien' }]);
+    stub.setVariables('CsBadge', { Personne: 'Ref:CsPers', Ailleurs: 'Ref:CsSansPj', gristHelper_Display: 'Text', gristHelper_Display2: 'Text' }, null, { Personne: 'gristHelper_Display', Ailleurs: 'gristHelper_Display2' });
+    stub.setRows('CsBadge', [{ id: 1, Personne: 7, Ailleurs: 1, gristHelper_Display: 'Dupont Jean', gristHelper_Display2: 'Rien' }]);
+    await GristAPI.refreshSchema();
+    for (const table of ['CsPers', 'CsStruct', 'CsSansPj']) await GristAPI.deleteLinkRule(table);
+    stub.fireRecord({ id: 1, Personne: 'Dupont Jean', Ailleurs: 'Rien' }, 'CsBadge');
+    await h.sleep(80);
+    document.querySelector('.tiptap').focus();
+    ed.commands.setTextSelection(9);
+    await h.sleep(30);
+    return ed;
+  }
+  async function dropBadgePath(h) {
+    const stub = window.__gristStub;
+    for (const table of BADGE_TABLES) { await GristAPI.deleteLinkRule(table); stub.dropTable(table); }
+    await GristAPI.refreshSchema();
+    await h.sleep(20);
+  }
+  const namesOf = panel => Array.from(panel.querySelectorAll('.ss-option .ss-name')).map(n => n.textContent);
+  const rowNamed = (panel, name) => Array.from(panel.querySelectorAll('.ss-option')).find(r => r.querySelector('.ss-name').textContent === name);
+
+  cases.push({
+    id: 'colsearch_image_menu_descends_from_a_reference_of_the_page_to_an_attachment_column',
+    description: 'Menu « Image depuis une variable » : la colonne Référence de la page qui mène à une pièce jointe (CsBadge.Personne) est proposée GRISÉE, avec sa raison, et sa flèche › ouvre les colonnes de CsPers sans ses colonnes de texte ; Structure (grisée, avec sa flèche) ouvre CsStruct où Logo se choisit : l’image posée est liée à CsBadge.Personne.Structure.Logo et la Lecture y lit la pièce jointe 55 ; cliquer une ligne grisée ne pose rien ; une Référence qui ne mène à aucune pièce jointe n’est pas listée',
+    run: async (h) => {
+      const ed = await seedBadgePath(h);
+      try {
+        const panel = await openImagePicker(h);
+        if (!panel) return { pass: false, notes: 'panneau jamais ouvert' };
+        const root = namesOf(panel);
+        const personne = rowNamed(panel, 'CsBadge.Personne');
+        const grey = !!personne && personne.getAttribute('aria-disabled') === 'true' && personne.querySelector('.ss-reason').textContent === I18n.t('imageVarPicker.viaReference', { table: 'CsPers' });
+        personne.click();
+        await h.sleep(80);
+        const greyClickPlacesNothing = imageNodes(ed).length === 0 && !!document.querySelector('#v2-image-var-search .ss-panel:not([hidden])');
+        personne.querySelector('.ss-descend').click();
+        await h.sleep(80);
+        const level1 = namesOf(panel);
+        rowNamed(panel, 'Structure').querySelector('.ss-descend').click();
+        await h.sleep(80);
+        const level2 = namesOf(panel);
+        rowNamed(panel, 'Logo').click();
+        await h.sleep(250);
+        const images = imageNodes(ed);
+        const attrs = images.length ? images[0].attrs : null;
+        const ids = attrs ? await Variables.resolveAttachmentIds(attrs.varTable, attrs.varColumn, 'CsBadge', { id: 1, Personne: 'Dupont Jean' }) : null;
+        const checks = {
+          rootHasTheGreyReferenceAndTheAttachments: root.indexOf('CsBadge.Personne') !== -1 && KEYS.every(k => root.indexOf(k) !== -1),
+          noReferenceWithoutAttachment: root.indexOf('CsBadge.Ailleurs') === -1 && root.indexOf('CsPers.Structure') === -1,
+          greyedWithItsReason: grey,
+          greyedRowPlacesNothing: greyClickPlacesNothing,
+          levelOneKeepsOnlyTheReference: JSON.stringify(level1) === JSON.stringify(['Structure']),
+          levelTwoKeepsOnlyTheAttachment: JSON.stringify(level2) === JSON.stringify(['Logo']),
+          imageLinkedToThePath: images.length === 1 && attrs.varTable === 'CsBadge' && attrs.varColumn === 'Personne.Structure.Logo' && attrs.varKey === 'CsBadge.Personne.Structure.Logo' && attrs.width === '320px',
+          readerReadsTheAttachment: JSON.stringify(ids) === JSON.stringify([55]),
+          menuClosed: !imageHost(),
+        };
+        const failed = Object.keys(checks).filter(k => !checks[k]);
+        return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, root, level1, level2, attrs, ids }) : 'ok' };
+      } finally { await dropBadgePath(h); }
+    },
+  });
+
   cases.push({
     id: 'colsearch_image_menu_escape_and_click_elsewhere_close_it_without_inserting_and_it_reopens_once',
     description: 'Menu « Image depuis une variable » : Échap le ferme (focus rendu à l’éditeur), un clic ailleurs aussi, sans rien insérer ; rouvert deux fois de suite il n’y a qu’un seul menu, et l’image est insérée par un clic sur une ligne',

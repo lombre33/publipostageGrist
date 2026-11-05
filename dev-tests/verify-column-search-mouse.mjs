@@ -1699,6 +1699,86 @@ const SECTIONS = {
     await parkMouse();
   },
 
+  // Le menu « Image depuis une variable » descend de Référence en Référence (retour d'Antoine du 05/11 : Badge › Nom prénom › Structure › Logo) à la vraie souris à 700×400 : la page est sur
+  // CsBadge, dont Personne (Référence, grisée dans le menu : elle ne se choisit pas) mène à CsPers, puis Structure à CsStruct, où Logo (Pièces jointes) se choisit. Les flèches ›, les lignes
+  // grisées et la ligne Logo sont atteignables et au premier plan dans le panneau ; l'image posée est liée à CsBadge.Personne.Structure.Logo.
+  async imagePath() {
+    const scope = '#v2-image-var-search';
+    await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      stub.setVariables('CsStruct', { Nom: 'Text', Logo: 'Attachments' });
+      stub.setRows('CsStruct', [{ id: 1, Nom: 'Mairie', Logo: ['L', 55] }]);
+      stub.setVariables('CsPers', { Nom: 'Text', Structure: 'Ref:CsStruct', gristHelper_Display: 'Text' }, null, { Structure: 'gristHelper_Display' });
+      stub.setRows('CsPers', [{ id: 7, Nom: 'Dupont Jean', Structure: 1, gristHelper_Display: 'Mairie' }]);
+      stub.setVariables('CsBadge', { Personne: 'Ref:CsPers', gristHelper_Display: 'Text' }, null, { Personne: 'gristHelper_Display' });
+      stub.setRows('CsBadge', [{ id: 1, Personne: 7, gristHelper_Display: 'Dupont Jean' }]);
+      await GristAPI.refreshSchema();
+      for (const table of ['CsPers', 'CsStruct']) await GristAPI.deleteLinkRule(table);
+      stub.fireRecord({ id: 1, Personne: 'Dupont Jean' }, 'CsBadge');
+      Editor.setHTML('<p>Bonjour Marie</p><p>Fin</p>');
+    });
+    await page.waitForTimeout(300);
+    const first = await hitTest('.tiptap p:nth-of-type(1)');
+    await page.mouse.click(first.right - 6, first.y);
+    await page.waitForTimeout(150);
+    const button = await hitTest('#v2-btn-image');
+    await page.mouse.move(button.x, button.y);
+    await page.waitForTimeout(250);
+    const row = await hitTest('#v2-btn-image-from-variable');
+    await page.mouse.move(row.left + 10, row.y);
+    await page.mouse.click(row.left + 10, row.y);
+    await page.waitForSelector(scope + ' .ss-panel:not([hidden])', { timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(150);
+    // Le centre d'une ligne de la liste ouverte, ou de sa flèche : la liste doit l'avoir entière dans le panneau et au premier plan.
+    const point = (name, arrow) => page.evaluate(({ scope, name, arrow }) => {
+      const found = Array.from(document.querySelectorAll(scope + ' .ss-panel:not([hidden]) .ss-option')).find(r => r.querySelector('.ss-name').textContent === name);
+      const target = found && (arrow ? found.querySelector('.ss-descend') : found);
+      if (!target) return null;
+      const r = target.getBoundingClientRect();
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, onTop: !!top && target.contains(top), inViewport: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5,
+        grey: found.getAttribute('aria-disabled') === 'true', reason: found.querySelector('.ss-reason') ? found.querySelector('.ss-reason').textContent : '' };
+    }, { scope, name, arrow });
+    const names = () => page.evaluate(sel => Array.from(document.querySelectorAll(sel + ' .ss-panel:not([hidden]) .ss-option .ss-name')).map(n => n.textContent), scope);
+    const images = () => page.evaluate(() => {
+      const out = [];
+      EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'editorImage') out.push({ table: node.attrs.varTable, column: node.attrs.varColumn, key: node.attrs.varKey }); });
+      return out;
+    });
+    const open = await panelInfo(scope);
+    const personne = await point('CsBadge.Personne', false);
+    const personneArrow = await point('CsBadge.Personne', true);
+    check('image par chemin : la liste du menu s\'ouvre dans le panneau et propose CsBadge.Personne, grisée avec sa raison, avec sa flèche atteignable au premier plan',
+      !!open && open.inside && !!personne && personne.grey && personne.reason.indexOf('CsPers') !== -1 && !!personneArrow && personneArrow.onTop && personneArrow.inViewport, { open, personne, personneArrow });
+    // Un vrai clic sur la ligne grisée ne pose rien et laisse la liste ouverte.
+    if (personne) await page.mouse.click(personne.x - 40, personne.y);
+    await page.waitForTimeout(150);
+    check('image par chemin : un vrai clic sur la ligne grisée ne pose rien, la liste reste ouverte', (await images()).length === 0 && !!(await panelInfo(scope)), await images());
+    if (personneArrow) await page.mouse.click(personneArrow.x, personneArrow.y);
+    await page.waitForTimeout(200);
+    const level1 = await names();
+    const structureArrow = await point('Structure', true);
+    check('image par chemin : la flèche ouvre CsPers sans sa colonne de texte, Structure (grisée) a sa flèche, atteignable', JSON.stringify(level1) === JSON.stringify(['Structure']) && !!structureArrow && structureArrow.grey && structureArrow.onTop && structureArrow.inViewport, { level1, structureArrow });
+    if (structureArrow) await page.mouse.click(structureArrow.x, structureArrow.y);
+    await page.waitForTimeout(200);
+    const level2 = await names();
+    const logo = await point('Logo', false);
+    check('image par chemin : la flèche de Structure ouvre CsStruct : seule la pièce jointe Logo, choisissable, atteignable au premier plan', JSON.stringify(level2) === JSON.stringify(['Logo']) && !!logo && !logo.grey && logo.onTop && logo.inViewport, { level2, logo });
+    if (logo) await page.mouse.click(logo.x, logo.y);
+    await page.waitForTimeout(350);
+    const placed = await images();
+    const hostGone = await page.evaluate(() => !document.getElementById('v2-image-var-search'));
+    check('image par chemin : le vrai clic sur Logo pose l\'image liée à CsBadge.Personne.Structure.Logo et ferme la liste',
+      placed.length === 1 && placed[0].table === 'CsBadge' && placed[0].column === 'Personne.Structure.Logo' && placed[0].key === 'CsBadge.Personne.Structure.Logo' && hostGone, { placed, hostGone });
+    await page.evaluate(async () => {
+      const stub = window.__gristStub;
+      stub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200, Echeance: 631152000, Actif: true }, 'CsDossiers');
+      for (const table of ['CsBadge', 'CsPers', 'CsStruct']) { await GristAPI.deleteLinkRule(table); stub.dropTable(table); }
+      await GristAPI.refreshSchema();
+    });
+    await parkMouse();
+  },
+
   // Le menu « Image depuis une variable » demande la clé de correspondance comme la liste « # » (Antoine, 2026-10-20, carte « Demander la clé de correspondance aussi dans le menu Image ? » : « Demander la clé » ;
   // avant, l'image d'une colonne Pièces jointes d'une autre table se posait sans clé, puis disparaissait à la Lecture) à la vraie souris à 700×400 : la page est sur CsSites, la colonne CsExpos.Affiche
   // vient d'une table sans règle ; la fenêtre de la clé s'ouvre entière dans le panneau et au premier plan, l'image n'est posée qu'à Valider, Annuler et Échap ne posent rien et rendent le focus à l'éditeur,

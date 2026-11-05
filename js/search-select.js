@@ -24,8 +24,8 @@
 // vaut vrai si la fermeture vient du clavier ou d'un choix. À l'appelant de défaire ensuite le <select> (destroy()), de préférence après la fin de
 // l'évènement en cours.
 // Descendre (une colonne Référence ouvre les colonnes de sa table, comme la flèche d'« Autres attributs ») : `expand(item)` rend les lignes où mène la
-// flèche d'une ligne, sous la forme `{ value, name, hint, search, expand }` (mêmes sens que `data-value`, `data-name`, `data-hint`, `data-search` et
-// `data-expand` plus bas), ou null quand elle ne mène nulle part. Une <option> porte `data-expand` (le nom de la destination, dit dans l'info-bulle de
+// flèche d'une ligne, sous la forme `{ value, name, hint, search, expand, unavailable }` (mêmes sens que `data-value`, `data-name`, `data-hint`, `data-search`,
+// `data-expand` et `data-unavailable` plus bas : une ligne grisée garde sa flèche), ou null quand elle ne mène nulle part. Une <option> porte `data-expand` (le nom de la destination, dit dans l'info-bulle de
 // la flèche) pour que la liste montre sa flèche sans rien demander à `expand` ; sans l'option `expand`, `data-expand` est ignoré. Un clic sur la ligne la
 // choisit, un clic sur sa flèche (ou → quand la saisie est vide ou que le curseur est à sa fin) ouvre ses lignes sous un fil d'Ariane ; ← (saisie vide),
 // Retour arrière (saisie vide) et un clic sur un niveau du fil remontent. Le choix d'une ligne de ces niveaux n'a pas d'<option> dans le <select> : la liste
@@ -134,7 +134,7 @@ const SearchSelect = (function () {
     const name = entry.name == null ? String(entry.value) : String(entry.name);
     const hint = entry.hint || '';
     const search = entry.search || '';
-    return { value: String(entry.value), name, hint, search, haystack: searchKey(name, hint, search), group: '', pinned: false, empty: false, expand: entry.expand || '', unavailable: '' };
+    return { value: String(entry.value), name, hint, search, haystack: searchKey(name, hint, search), group: '', pinned: false, empty: false, expand: entry.expand || '', unavailable: entry.unavailable || '' };
   }
 
   // Textes de la zone de recherche et du message « aucun résultat » : une chaîne, ou une fonction relue à chaque ouverture quand le texte dépend de l'état de

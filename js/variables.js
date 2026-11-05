@@ -109,7 +109,7 @@ const Variables = (function () {
     return { SMART_CHIP_ITEMS, displayKey, ensureBox };
   })();
 
-  const { currentTables, prioritizeTables, matchingVariables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow, refreshSchemaOnce, computeItems, fieldItems } = (function () {
+  const { currentTables, prioritizeTables, matchingVariables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow, attachmentReference, attachmentColumnsBelow, refreshSchemaOnce, computeItems, fieldItems } = (function () {
     // Les entrées de la liste : tables en cours, variables qui correspondent, onglet actif
 
     // Tables « en cours », la plus proche d'abord : celles que parcourent les zones répétées où est le curseur, de la plus proche à la plus large
@@ -195,6 +195,40 @@ const Variables = (function () {
       }));
     }
 
+    // Les listes de colonnes d'une IMAGE (le menu « Image depuis une variable » de la barre, « Colonne… » de l'image) n'ont que des colonnes Pièces jointes, au bout
+    // d'un chemin de colonnes Référence comme celui des bulles (« Badge.Personne.Structure.Logo ») : pour y descendre, elles proposent aussi les colonnes Référence
+    // qui mènent à une colonne Pièces jointes, sans qu'on puisse les choisir (ligne grisée qui dit d'ouvrir la flèche). Au plus MAX_IMAGE_REFS références de suite.
+    const MAX_IMAGE_REFS = 4;
+    // Vrai quand `table` a une colonne Pièces jointes, ou une colonne Référence (simple) qui mène, en `depth` références de plus, à une table qui en a une.
+    function leadsToAttachments(table, depth, seen) {
+      return GristAPI.getVisibleColumns(table).some(column => {
+        if (GristAPI.getColumnType(table, column) === 'Attachments') return true;
+        const target = depth > 0 ? referencedTable(table, column) : null;
+        return !!target && seen.indexOf(target) === -1 && leadsToAttachments(target, depth - 1, seen.concat(target));
+      });
+    }
+    // La table où mène la colonne Référence `column` de `table` (ou le chemin qui y mène) quand une colonne Pièces jointes l'attend, null sinon.
+    function attachmentReference(table, column) {
+      const target = referencedTable(table, column);
+      return target && leadsToAttachments(target, MAX_IMAGE_REFS - 1, [table, target]) ? target : null;
+    }
+    // Les lignes où mène la flèche de `key` (comme columnsBelow) dans la liste d'une image : les colonnes Pièces jointes de la table qu'elle désigne, qui se
+    // choisissent, et ses colonnes Référence qui mènent à d'autres, grisées avec leur raison (`unavailable`, js/search-select.js) mais ouvertes par leur flèche.
+    function attachmentColumnsBelow(key) {
+      const rows = columnsBelow(key);
+      if (!rows) return null;
+      const cut = String(key).indexOf('.');
+      const root = key.slice(0, cut);
+      const out = [];
+      rows.forEach(row => {
+        const path = row.value.slice(cut + 1);
+        if (GristAPI.getColumnType(root, path) === 'Attachments') { out.push(Object.assign({}, row, { expand: '' })); return; }
+        const target = attachmentReference(root, path);
+        if (target) out.push(Object.assign({}, row, { unavailable: I18n.t('imageVarPicker.viaReference', { table: target }) }));
+      });
+      return out;
+    }
+
     // Le test d'un nom pour la saisie `query` de la liste « # » : tous ses mots (js/search-select.js:searchWords) dans `search` (les noms de l'entrée, d'un
     // seul tenant) et, pour un mot qui finit par un point, ce point-là dans `key`, tel quel. Un point ne compte pas dans un nom (« Porteur.3 » vaut
     // « Porteur 3 »), sauf tout à la fin d'un mot, où il peut finir la phrase : « #Projets. » propose les colonnes de Projets, comme avant, mais « Voir
@@ -248,7 +282,7 @@ const Variables = (function () {
       if (!items.length || (items.length === 1 && SearchSelect.normalize(items[0].key) === typed)) return [];
       return items;
     }
-    return { currentTables, prioritizeTables, matchingVariables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow, refreshSchemaOnce, computeItems, fieldItems };
+    return { currentTables, prioritizeTables, matchingVariables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow, attachmentReference, attachmentColumnsBelow, refreshSchemaOnce, computeItems, fieldItems };
   })();
 
   const { setTabsVisible, render, select, moveSelection, position, preferChipsTab } = (function () {
@@ -1585,7 +1619,7 @@ const Variables = (function () {
   // (le coin d'état d'Annuler, js/link-rule-history.js, nomme un lien comme « Tables liées »).
   return {
     createExtension, createFieldExtension, isAttachmentColumn, becomesImage, attachmentImageNode, insertAttachmentImage, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
-    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, linkRuleLabel, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, listItems, decodeShown, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow,
+    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, linkRuleLabel, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, listItems, decodeShown, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow, attachmentReference, attachmentColumnsBelow,
     resolveCalcResult, resolveCalc, badgeProblem, pageReferencesTo, isUnlinked, calcProblem, formulaErrorText,
   };
 })();

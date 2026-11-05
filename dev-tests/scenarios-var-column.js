@@ -1034,10 +1034,12 @@
       const undone = imageAttrsOf(0);
       const checks = {
         wasOrange,
-        listOnlyHasAttachmentColumns: listed.length >= 4 && listed.every(k => ['VcoNotifications.Logo', 'VcoNotifications.Photo', 'VcoProjet.Emblem', 'VcoTest.Scan'].indexOf(k) !== -1),
+        // Les colonnes Pièces jointes, et la seule colonne Référence de la page qui mène à l'une d'elles (Projet → VcoProjet.Emblem), grisée.
+        listOnlyHasAttachmentColumns: listed.length >= 4 && listed.every(k => ['VcoNotifications.Logo', 'VcoNotifications.Photo', 'VcoProjet.Emblem', 'VcoTest.Scan', 'VcoNotifications.Projet'].indexOf(k) !== -1),
         listHasThePageColumnsFirst: listed.slice(0, 2).every(k => k.indexOf(PAGE + '.') === 0),
         noTextColumnNorHelper: listed.every(k => !/Titre|Montant|gristHelper_/.test(k)),
-        noDescendArrowOnAnImage: !panel || !panel.querySelector('.ss-descend, .ss-expand'),
+        arrowOnlyOnTheReferenceThatLeadsToAnAttachment: !panel || JSON.stringify(Array.from(panel.querySelectorAll('.ss-option')).filter(r => r.querySelector('.ss-descend')).map(r => r.querySelector('.ss-name').textContent)) === JSON.stringify(['VcoNotifications.Projet']),
+        theReferenceRowIsGreyedWithItsReason: !panel || (() => { const r = Array.from(panel.querySelectorAll('.ss-option')).find(row => row.querySelector('.ss-name').textContent === 'VcoNotifications.Projet'); return !!r && r.getAttribute('aria-disabled') === 'true' && r.querySelector('.ss-reason').textContent === I18n.t('imageVarPicker.viaReference', { table: 'VcoProjet' }); })(),
         replaced: after.varTable === PAGE && after.varColumn === 'Photo' && after.varKey === PAGE + '.Photo',
         settingsKept: after.width === before.width && after.height === before.height && after.align === before.align && after.opacity === before.opacity && after.layer === before.layer,
         notOrangeAnymore: !stillOrange,
@@ -1049,6 +1051,44 @@
       };
       const failed = Object.keys(checks).filter(k => !checks[k]);
       return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, listed, before, after }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'varcolumn_image_column_list_descends_through_references_to_an_attachment_column',
+    description: 'La liste « Colonne… » d’une image a la flèche › sur la colonne Référence de la page qui mène à une pièce jointe (Projet, grisée : elle ne se choisit pas) ; la flèche ouvre VcoProjet sans ses colonnes de texte, Emblem (pièce jointe) se choisit : l’image prend le chemin Projet.Emblem (table de la page, clé VcoNotifications.Projet.Emblem), garde sa taille, et un seul Annuler rend l’ancienne colonne ; cliquer la ligne grisée ne choisit rien',
+    run: async (h) => {
+      await seedImages(h, `<p><img class="editor-image" data-align="center" data-var-table="${PAGE}" data-var-column="Ancien" data-var-key="${PAGE}.Ancien" style="width: 200px; height: 150px; opacity: 0.6"></p>`);
+      await selectImage(h, 0);
+      const before = imageAttrsOf(0);
+      pressImageColumn();
+      await h.sleep(250);
+      const panel = openPanel();
+      const rowOf = name => Array.from(panel.querySelectorAll('.ss-option')).find(r => r.querySelector('.ss-name').textContent === name);
+      if (!panel || !rowOf('VcoNotifications.Projet')) return { pass: false, notes: 'la ligne Projet n’est pas dans la liste' };
+      rowOf('VcoNotifications.Projet').click();
+      await h.sleep(100);
+      const afterGreyClick = { attrs: JSON.stringify(imageAttrsOf(0)) === JSON.stringify(before), stillOpen: !!openPanel() };
+      rowOf('VcoNotifications.Projet').querySelector('.ss-descend').click();
+      await h.sleep(100);
+      const below = optionNames(openPanel());
+      const arrowsBelow = Array.from(openPanel().querySelectorAll('.ss-option')).filter(r => r.querySelector('.ss-descend')).length;
+      await pickRow(h, 'Emblem');
+      await h.sleep(250);
+      const after = imageAttrsOf(0);
+      ed().commands.undo();
+      await h.sleep(150);
+      const undone = imageAttrsOf(0);
+      const checks = {
+        greyedRowChoosesNothing: afterGreyClick.attrs && afterGreyClick.stillOpen,
+        belowHasOnlyTheAttachmentColumn: same(below, ['Emblem']) && arrowsBelow === 0,
+        pathTaken: after.varTable === PAGE && after.varColumn === 'Projet.Emblem' && after.varKey === PAGE + '.Projet.Emblem',
+        settingsKept: after.width === before.width && after.height === before.height && after.align === before.align && after.opacity === before.opacity,
+        listClosed: !openPanel(),
+        undoGivesTheOldColumn: undone.varColumn === 'Ancien' && undone.varKey === PAGE + '.Ancien' && undone.width === before.width,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, below, after }) : 'ok' };
     },
   });
 

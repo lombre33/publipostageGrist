@@ -79,8 +79,20 @@ const VariableColumn = (function () {
     if (target) option.dataset.expand = target;
     return option;
   }
+  // Une ligne de la liste d'une image : une colonne Pièces jointes, ou - grisée, avec sa flèche - une colonne Référence d'une table « en cours » (la page, la zone
+  // répétée : `leadsThrough`) qui mène à l'une d'elles.
+  function imageOptionOf(variable, leadsThrough) {
+    const option = flatOptionOf(variable);
+    const through = Variables.isAttachmentColumn(variable) || !leadsThrough(variable) ? null : Variables.attachmentReference(variable.table, variable.column);
+    if (through) {
+      option.dataset.expand = through;
+      option.dataset.unavailable = I18n.t('imageVarPicker.viaReference', { table: through });
+    }
+    return option;
+  }
   // Les lignes où mène la flèche d'une ligne de ces listes : option `expand` de SearchSelect.attachColumns.
   const expand = item => Variables.columnsBelow(item.value);
+  const imageExpand = item => Variables.attachmentColumnsBelow(item.value);
   // Le choix `key` d'une de ces listes : une variable de `choices`, ou - en descendant dans une colonne Référence (« Projet.Accompagnateur.Email ») - une
   // variable dont la colonne est le chemin, comme celles que pose Autres attributs (js/variables.js:pathItems).
   function itemOf(choices, key) {
@@ -145,8 +157,11 @@ const VariableColumn = (function () {
     const node = editor && editor.state.doc.nodeAt(pos);
     const image = isImageSource(node);
     if (!node || (node.type.name !== 'varBadge' && !image) || isOpen()) return false;
-    // Une image ne prend qu'une colonne Pièces jointes, à plat : la liste des images de la barre du haut (js/main-toolbar.js) n'a pas de flèche non plus.
-    const choices = image ? candidates(editor).filter(Variables.isAttachmentColumn) : candidates(editor);
+    // Une image ne prend qu'une colonne Pièces jointes, au bout d'un chemin de références comme celui de la liste des images de la barre du haut
+    // (js/main-toolbar.js) : les colonnes Référence qui y mènent sont grisées, leur flèche › ouvre la table suivante (Variables.attachmentColumnsBelow).
+    const current = Variables.currentTables(editor);
+    const leadsThrough = v => current.indexOf(v.table) !== -1 && !!Variables.attachmentReference(v.table, v.column);
+    const choices = image ? candidates(editor).filter(v => Variables.isAttachmentColumn(v) || leadsThrough(v)) : candidates(editor);
     if (!choices.length) return false;
     let host = null;
     let instance = null;
@@ -154,7 +169,7 @@ const VariableColumn = (function () {
       host = Dom.el('div');
       host.id = 'v2-var-column-search';
       const select = Dom.el('select');
-      select.append(...choices.map(image ? flatOptionOf : optionOf));
+      select.append(...choices.map(image ? v => imageOptionOf(v, leadsThrough) : optionOf));
       host.appendChild(select);
       document.body.appendChild(host);
       select.selectedIndex = -1; // rien de choisi au départ : même la première ligne déclenche `change`
@@ -166,7 +181,7 @@ const VariableColumn = (function () {
       const search = SearchSelect.attachColumns(select, {
         popup: true,
         anchor,
-        expand: image ? undefined : expand,
+        expand: image ? imageExpand : expand,
         // Défait après la fin de l'évènement en cours (un blur ou un clic qui ferme le panneau ne doit pas retirer l'élément qui le porte). Le focus
         // revient à l'éditeur quand la fermeture vient du clavier (Échap) ou d'un choix ; après un clic ailleurs, il est déjà là où la personne a
         // cliqué.

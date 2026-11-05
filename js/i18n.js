@@ -3149,6 +3149,8 @@ const I18n = (function () {
 
     // --- Picker "Image depuis une variable" (js/editor.js) ---
     'imageVarPicker.empty': { fr: 'Aucune colonne Pièce jointe trouvée dans ce document.', en: 'No attachment column found in this document.' },
+    // Dans la liste d'une image, une colonne Référence qui mène à une colonne Pièces jointes : grisée, on l'ouvre par sa flèche ›.
+    'imageVarPicker.viaReference': { fr: 'Pas une pièce jointe : la flèche › ouvre les colonnes de « {table} ».', en: 'Not an attachment: the › arrow opens the columns of “{table}”.' },
 
     // --- Popup d'édition du texte d'une note de bas de page ---
     'footnotePopup.delete': { fr: 'Supprimer', en: 'Delete' },
