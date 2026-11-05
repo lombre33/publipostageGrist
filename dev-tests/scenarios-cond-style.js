@@ -37,7 +37,26 @@
     await h.resetEditor();
     const stub = window.__gristStub;
     stub.setVariables(TABLE, { Titre: 'Text', Statut: 'Text', Montant: 'Numeric' });
+    stub.setColumnRules(TABLE, { Montant: null, Titre: null });
     stub.setRows(TABLE, ROWS.map(row => Object.assign({}, row)));
+    await GristAPI.refreshSchema();
+    stub.fireRecord(Object.assign({}, ROWS[(rowId || 1) - 1]), TABLE);
+    await h.sleep(50);
+  }
+  // La même table avec la mise en forme conditionnelle de Grist sur « Montant » : deux règles, chacune avec sa colonne d'aide (Booléen) dont chaque ligne porte le verdict que Grist a calculé
+  // - la première (texte bleu) quand Montant > 1000, la seconde (fond jaune et gras) quand le statut est Urgent. `verdicts` : { id: [règle 1, règle 2] } pour les surcharger.
+  const HELPER1 = 'gristHelper_ConditionalRule';
+  const HELPER2 = 'gristHelper_ConditionalRule2';
+  const GRIST_RULES = [{ helper: HELPER1, style: { color: BLUE } }, { helper: HELPER2, style: { fill: FILL, bold: true } }];
+  async function seedGrist(h, rowId, verdicts) {
+    await h.resetEditor();
+    const stub = window.__gristStub;
+    stub.setVariables(TABLE, { Titre: 'Text', Statut: 'Text', Montant: 'Numeric', [HELPER1]: 'Bool', [HELPER2]: 'Bool' });
+    stub.setRows(TABLE, ROWS.map(row => {
+      const own = verdicts && verdicts[row.id];
+      return Object.assign({}, row, { [HELPER1]: own ? own[0] : row.Montant > 1000, [HELPER2]: own ? own[1] : row.Statut === 'Urgent' });
+    }));
+    stub.setColumnRules(TABLE, { Montant: GRIST_RULES });
     await GristAPI.refreshSchema();
     stub.fireRecord(Object.assign({}, ROWS[(rowId || 1) - 1]), TABLE);
     await h.sleep(50);
@@ -448,6 +467,148 @@
     },
   });
 
+  // === « Comme dans Grist » (lot 2) ===
+  const GRIST_ONLY = { grist: true, rules: [] };
+  cases.push({
+    id: 'condstyle_grist_rules_are_read_from_the_column_metadata',
+    description: 'Les règles de mise en forme conditionnelle d’une colonne de Grist (_grist_Tables_column.rules + rulesOptions) sont lues dans l’ordre : colonne d’aide et style de chacune (couleur du texte, fond, gras, italique, souligné, barré) ; une colonne sans règle, un chemin qui ne mène nulle part et une couleur illisible ne donnent rien ou rien de la couleur',
+    run: async (h) => {
+      await seedGrist(h, 1);
+      const stub = window.__gristStub;
+      const read = GristAPI.getColumnConditionalRules(TABLE, 'Montant');
+      const noRules = GristAPI.getColumnConditionalRules(TABLE, 'Titre');
+      stub.setColumnRules(TABLE, { Montant: [{ helper: HELPER1, style: { color: 'rouge', fill: '#FA0', bold: true, italic: true, underline: true, strike: true } }, { helper: HELPER2, style: {} }] });
+      await GristAPI.refreshSchema();
+      const odd = GristAPI.getColumnConditionalRules(TABLE, 'Montant');
+      const viaPath = ConditionalStyle.gristRulesOf(TABLE, 'Montant');
+      const nowhere = ConditionalStyle.gristRulesOf(TABLE, 'Inconnue.Colonne');
+      const pass = JSON.stringify(read) === JSON.stringify(GRIST_RULES) && noRules === null
+        && JSON.stringify(odd) === JSON.stringify([{ helper: HELPER1, style: { fill: '#ffaa00', bold: true, italic: true, underline: true, strike: true } }, { helper: HELPER2, style: {} }])
+        && viaPath && viaPath.length === 2 && nowhere === null;
+      return { pass, notes: JSON.stringify({ read, noRules, odd, nowhere }) };
+    },
+  });
+
+  cases.push({
+    id: 'condstyle_comme_dans_grist_follows_the_column_rules_live_in_reader_and_exports',
+    description: 'Avec « Comme dans Grist » (`grist: true`), la bulle prend la mise en forme que Grist donne à sa colonne pour la ligne affichée - texte bleu quand la règle 1 est vraie, fond et gras quand la règle 2 l’est, les deux ensemble quand les deux le sont - à la Lecture et dans les exports ; en direct (un verdict qui change dans Grist change la lecture suivante) ; sans la case rien ne change ; les règles du widget passent par-dessus (leur couleur l’emporte, les traits s’ajoutent) ; une colonne sans règle dans Grist ne prend rien',
+    run: async (h) => {
+      const html = (style, column) => `<p>${badgeHtml(column || 'Montant', style)}</p>`;
+      const run = async (rowId, style, column) => {
+        await seedGrist(h, rowId);
+        const reader = await renderReader(html(style, column));
+        const found = styled(reader).map(styleOf);
+        const preview = styled(await previewBox(html(style, column))).map(styleOf);
+        closeReader();
+        return { found, preview };
+      };
+      const both = await run(1, GRIST_ONLY);
+      const urgentOnly = await run(3, GRIST_ONLY);
+      const neither = await run(2, GRIST_ONLY);
+      const off = await run(1, null);
+      const noGristRules = await run(1, GRIST_ONLY, 'Titre');
+      // Les règles du widget par-dessus : rouge en plus sur Montant > 1000, la couleur remplace le bleu de Grist, le fond et le gras de Grist restent, l'italique s'ajoute.
+      const onTop = await run(1, { grist: true, rules: [{ condition: BIG, style: { color: RED, italic: true } }] });
+      // En direct : la règle 1 devient fausse dans Grist sur cette ligne, sans toucher au document.
+      await seedGrist(h, 1, { 1: [false, true] });
+      const reader = await renderReader(html(GRIST_ONLY));
+      const live = styled(reader).map(styleOf);
+      closeReader();
+      const one = r => r.found.length === 1 && r.preview.length === 1 ? r.found[0] : null;
+      const pass = !!one(both) && one(both).color === BLUE && one(both).fill === FILL && one(both).bold === true && !one(both).italic && digits(one(both).text) === '1200' && JSON.stringify(both.preview[0]) === JSON.stringify(both.found[0])
+        && !!one(urgentOnly) && !one(urgentOnly).color && one(urgentOnly).fill === FILL && one(urgentOnly).bold === true
+        && neither.found.length === 0 && off.found.length === 0 && noGristRules.found.length === 0
+        && !!one(onTop) && one(onTop).color === RED && one(onTop).fill === FILL && one(onTop).bold === true && one(onTop).italic === true
+        && live.length === 1 && !live[0].color && live[0].fill === FILL && live[0].bold === true;
+      return { pass, notes: JSON.stringify({ both, urgentOnly, neither, off, noGristRules, onTop, live }) };
+    },
+  });
+
+  cases.push({
+    id: 'condstyle_comme_dans_grist_is_for_variables_only_and_follows_renames',
+    description: '`grist: true` est gardé tel quel à l’enregistrement (même sans règle du widget) et par un renommage de colonne ; un bloc, une valeur ou un calcul qui le porte n’en tire rien (la fenêtre ne le propose que sur une variable) ; une ligne illisible ou plusieurs lignes lues ne donnent aucune mise en forme de Grist, sans erreur',
+    run: async (h) => {
+      await seedGrist(h, 1);
+      const kept = ConditionalStyle.normalize({ grist: true, rules: [] });
+      const dropped = ConditionalStyle.normalize({ grist: false, rules: [] });
+      const mixed = ConditionalStyle.normalize({ grist: true, rules: [{ condition: BIG, style: { color: RED } }] });
+      const m = SchemaRenames.createMapper(OLD, NEW, {});
+      const ctx = { page: m.tableContext('Dossiers'), trigger: Variables.triggerChar() };
+      const style = { grist: true, rules: [{ condition: { mode: 'all', rules: [{ column: 'Montant', operator: '>', value: '100' }] }, style: { bold: true } }] };
+      const named = `<span class="var-badge" data-table="Dossiers" data-column="Titre" data-key="Dossiers.Titre"${attr('data-cond-style', style)}></span>`;
+      const renamed = SchemaRenames.rewriteHtml(`<p>${named}</p>`, m, ctx);
+      const tpl = document.createElement('template');
+      tpl.innerHTML = renamed.html;
+      const after = JSON.parse(tpl.content.querySelector('[data-cond-style]').getAttribute('data-cond-style'));
+      // Un bloc qui porte `grist: true` : aucune mise en forme.
+      const block = await renderReader(blockHtml('<p>texte</p>', null, GRIST_ONLY));
+      const blockStyled = styled(block).length;
+      closeReader();
+      const unread = await ConditionalStyle.gristStyleOf(TABLE, 'Montant', TABLE, { id: 999 });
+      const noRow = await ConditionalStyle.gristStyleOf(TABLE, 'Montant', TABLE, null);
+      const pass = JSON.stringify(kept) === JSON.stringify(GRIST_ONLY) && dropped === null && mixed.grist === true && mixed.rules.length === 1
+        && after.grist === true && after.rules[0].condition.rules[0].column === 'Total' && blockStyled === 0
+        && unread.style === null && unread.why === 'noRow' && noRow.style === null && noRow.why === null;
+      return { pass, notes: JSON.stringify({ kept, dropped, mixed, after, blockStyled, unread, noRow }) };
+    },
+  });
+
+  cases.push({
+    id: 'condstyle_window_comme_dans_grist_checkbox_enabled_greyed_with_reason_and_saved',
+    description: 'La case « Comme dans Grist » n’est que sur une variable, éteinte au départ ; elle se coche quand la colonne a des règles dans Grist (la phrase dit combien), se grise avec sa raison sinon ; cochée puis « Enregistrer » écrit `grist: true` (sans règle du widget), le bouton de la barre s’allume, l’aperçu dit ce que Grist donne sur la ligne ; rouverte la case est cochée ; la décocher retire tout',
+    run: async (h) => {
+      await seedGrist(h, 1);
+      Editor.setHTML(`<p>${badgeHtml('Montant', null)} ${badgeHtml('Titre', null)}</p>${blockHtml('<p>texte</p>', URGENT, null)}`);
+      await h.sleep(60);
+      const grist = () => modal().querySelector('.cond-style-grist');
+      const box = () => grist().querySelector('input');
+      const note = () => grist().querySelector('.cond-style-grist-note').textContent;
+      const out = {};
+      await selectNode(h, 'varBadge', 1);
+      pressToolbarButton('var-style');
+      await h.sleep(150);
+      out.noRules = { disabled: box().disabled, checked: box().checked, grey: grist().classList.contains('is-disabled'), note: note(), title: grist().title };
+      cancelBtn().click();
+      await h.sleep(60);
+      await selectNode(h, 'conditionalText', 0);
+      pressToolbarButton('var-style');
+      await h.sleep(150);
+      out.block = { hidden: grist().hidden };
+      cancelBtn().click();
+      await h.sleep(60);
+      await selectNode(h, 'varBadge', 0);
+      pressToolbarButton('var-style');
+      await h.sleep(150);
+      out.rules = { hidden: grist().hidden, disabled: box().disabled, checked: box().checked, note: note() };
+      box().checked = true;
+      box().dispatchEvent(new Event('change', { bubbles: true }));
+      await h.sleep(700);
+      out.checked = { note: note(), lines: Array.from(modal().querySelectorAll('.var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent) };
+      saveBtn().click();
+      await h.sleep(80);
+      out.saved = savedStyle('varBadge', 0);
+      await selectNode(h, 'varBadge', 0);
+      out.lit = barButton('var-style');
+      pressToolbarButton('var-style');
+      await h.sleep(150);
+      out.reopened = { checked: box().checked, remove: !removeBtn().hidden, cards: cards().length };
+      box().checked = false;
+      box().dispatchEvent(new Event('change', { bubbles: true }));
+      await h.sleep(40);
+      saveBtn().click();
+      await h.sleep(80);
+      out.cleared = savedStyle('varBadge', 0);
+      const pass = out.noRules.disabled && !out.noRules.checked && out.noRules.grey && /pas de mise en forme conditionnelle dans Grist/.test(out.noRules.note) && out.noRules.title === out.noRules.note
+        && out.block.hidden === true
+        && out.rules.hidden === false && !out.rules.disabled && !out.rules.checked && /2 règles/.test(out.rules.note)
+        && /Grist, ligne 1 : règles n° 1, 2 remplies/.test(out.checked.lines[0] || '') && /^Ligne 1 : résultat :/.test(out.checked.lines[1] || '') && /Sur les 4 lignes/.test(out.checked.lines[2] || '')
+        && /suit|appliqu|direct/i.test(out.checked.note)
+        && JSON.stringify(out.saved) === JSON.stringify(GRIST_ONLY) && out.lit && out.lit.active
+        && out.reopened.checked && out.reopened.remove && out.reopened.cards === 1 && out.cleared == null;
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
   // === Les renommages de colonnes ===
   const OLD = { f: 1, t: { 1: ['Dossiers', { 1: 'Titre', 2: 'Montant', 3: 'Statut' }], 3: ['Annuaire', { 8: 'NomPrenom', 9: 'Email' }] } };
   const NEW = { f: 1, t: { 1: ['Dossiers', { 1: 'Titre', 2: 'Total', 3: 'Statut' }], 3: ['Annuaire', { 8: 'NomPrenom', 9: 'Courriel' }] } };
@@ -487,6 +648,8 @@
     'condStyle.noneFillTitle', 'condStyle.customTitle', 'condStyle.bold', 'condStyle.italic', 'condStyle.underline', 'condStyle.strike', 'condStyle.glyph.bold',
     'condStyle.glyph.italic', 'condStyle.glyph.underline', 'condStyle.glyph.strike', 'condStyle.sample', 'condStyle.addRule', 'condStyle.addRuleMax', 'condStyle.removeRule', 'condStyle.remove',
     'condStyle.ignored', 'condStyle.saveLost', 'condStyle.debug.chooseCondition', 'condStyle.debug.noRecord', 'condStyle.debug.computing', 'condStyle.debug.met', 'condStyle.debug.none', 'condStyle.debug.count',
+    'condStyle.debug.result', 'condStyle.grist', 'condStyle.gristOn', 'condStyle.gristOff', 'condStyle.gristNone', 'condStyle.gristGone', 'condStyle.debug.gristMet', 'condStyle.debug.gristNone',
+    'condStyle.debug.gristMulti', 'condStyle.debug.gristUnread',
   ];
   const stylePassCase = {
     id: 'condstyle_texts_exist_in_both_languages_and_the_window_speaks_the_page_language',

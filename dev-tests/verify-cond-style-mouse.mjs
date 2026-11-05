@@ -208,6 +208,10 @@ async function seedPage(page, html, row) {
   }, { table: TABLE, html, row });
   await page.waitForTimeout(400);
 }
+async function seedPageHtml(page, html) {
+  await page.evaluate(html => Editor.setHTML(html), html);
+  await page.waitForTimeout(300);
+}
 const modalState = page => page.evaluate(sel => {
   const overlay = document.querySelector(sel);
   if (!overlay || getComputedStyle(overlay).display === 'none') return { open: false };
@@ -234,6 +238,55 @@ async function barButtons(page) {
     });
     return { visible: bar.classList.contains('visible'), left: r.left, right: r.right, top: r.top, bottom: r.bottom, buttons };
   });
+}
+
+// « Comme dans Grist » : la colonne Montant a deux règles dans Grist (texte bleu au-dessus de 1 000, fond jaune pour « Urgent ») ; la case se coche à la vraie souris, tient dans le
+// panneau, « Enregistrer » écrit `grist: true` et la Lecture montre le bleu sur la ligne où la règle de Grist tient, pas sur l'autre.
+async function grist(page, scheme) {
+  await page.evaluate(async table => {
+    const stub = window.__gristStub;
+    stub.setVariables(table, { Titre: 'Text', Statut: 'Text', Montant: 'Numeric', gristHelper_ConditionalRule: 'Bool', gristHelper_ConditionalRule2: 'Bool' });
+    const rows = [{ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Montant: 1200 }, { id: 2, Titre: 'Dossier B', Statut: 'Normal', Montant: 50 }];
+    stub.setRows(table, rows.map(r => Object.assign({}, r, { gristHelper_ConditionalRule: r.Montant > 1000, gristHelper_ConditionalRule2: r.Statut === 'Urgent' })));
+    stub.setColumnRules(table, { Montant: [{ helper: 'gristHelper_ConditionalRule', style: { color: '#1d4ed8' } }, { helper: 'gristHelper_ConditionalRule2', style: { fill: '#fff2a8' } }] });
+    await GristAPI.refreshSchema();
+    stub.fireRecord(Object.assign({}, rows[0]), table);
+  }, TABLE);
+  await seedPageHtml(page, `<p>Le montant est ${badge('Montant')} euros.</p>`);
+  await realClick(page, await hitTest(page, '.tiptap .var-badge'));
+  await page.waitForTimeout(300);
+  await realClick(page, await hitTest(page, `${BAR} button[data-action="var-style"]`));
+  await page.waitForTimeout(500);
+  const box = await hitTest(page, `${MODAL} .cond-style-grist input`);
+  const before = await page.evaluate(() => ({ checked: document.querySelector('#cond-style-modal .cond-style-grist input').checked, disabled: document.querySelector('#cond-style-modal .cond-style-grist input').disabled }));
+  check(`${scheme} - « Comme dans Grist » est dans le panneau, au premier plan, cochable et éteinte au départ`, box.found && box.inViewport && box.onTop && !before.checked && !before.disabled, { box, before });
+  await shot(page, `${scheme}-comme-dans-grist-eteinte`);
+  await realClick(page, box);
+  await page.waitForTimeout(500);
+  const after = await page.evaluate(() => ({ checked: document.querySelector('#cond-style-modal .cond-style-grist input').checked, lines: Array.from(document.querySelectorAll('#cond-style-modal .var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent) }));
+  const modal = await modalState(page);
+  check(`${scheme} - la case se coche à la vraie souris, l'aperçu cite Grist et la fenêtre reste entière`, after.checked && /Grist/.test(after.lines[0] || '') && modal.open && insideBox(modal, WIDTH, HEIGHT), { after, modal });
+  await shot(page, `${scheme}-comme-dans-grist-cochee`);
+  await clickSel(page, `${MODAL} .pp-modal-actions .var-modal-primary`);
+  await page.waitForTimeout(300);
+  const written = await page.evaluate(() => { let found = null; EditorCore.getEditor().state.doc.descendants(node => { if (!found && node.type.name === 'varBadge') found = node.attrs.condStyle; }); return found; });
+  check(`${scheme} - « Enregistrer » écrit \`grist: true\` sans règle du widget`, written && written.grist === true && written.rules.length === 0, written);
+  const seen = [];
+  for (const row of [1, 2]) {
+    await page.evaluate(async ({ table, row }) => {
+      const rows = [{ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Montant: 1200 }, { id: 2, Titre: 'Dossier B', Statut: 'Normal', Montant: 50 }];
+      window.__gristStub.fireRecord(Object.assign({}, rows[row - 1]), table);
+      await new Promise(r => setTimeout(r, 80));
+      const reader = document.getElementById('reader-container');
+      reader.style.display = 'block';
+      await ReaderMode.render(Editor.getHTML(), table, GristAPI.getCurrentRecord(), { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } });
+    }, { table: TABLE, row });
+    await page.waitForTimeout(250);
+    const rect = await page.evaluate(() => { const p = document.querySelector('.reader-content p'); const r = p.getBoundingClientRect(); return { left: r.left, top: r.top, w: r.width, h: r.height }; });
+    seen.push({ row, blueish: await pixelsWhere(page, rect, (r, g, b) => b > 150 && r < 90 && g < 120), yellowish: await pixelsWhere(page, rect, (r, g, b) => r > 240 && g > 235 && b < 190) });
+    await page.evaluate(() => { document.getElementById('reader-container').style.display = ''; document.getElementById('editor-container').style.display = ''; });
+  }
+  check(`${scheme} - en Lecture, la mise en forme de Grist se voit sur une vraie capture sur la ligne où ses règles tiennent (texte bleu et fond jaune sur 1 200) et pas sur l'autre`, seen[0].blueish > 15 && seen[0].yellowish > 40 && seen[1].blueish < 3 && seen[1].yellowish < 3, seen);
 }
 
 async function runTheme(scheme) {
@@ -326,6 +379,7 @@ async function runTheme(scheme) {
     await page.evaluate(() => { document.getElementById('reader-container').style.display = ''; document.getElementById('editor-container').style.display = ''; });
   }
   check(`${scheme} - en Lecture, la couleur se voit sur une vraie capture sur la ligne où la règle tient (1 200) et pas sur l'autre (50)`, seen[0].styledSpan && seen[0].blueish > 15 && !seen[1].styledSpan && seen[1].blueish < 3, seen);
+  await grist(page, scheme);
   await context.close();
 }
 

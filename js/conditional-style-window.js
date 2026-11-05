@@ -2,6 +2,8 @@
 // une liste de règles « quand cette condition est remplie, alors cette couleur de texte, ce fond, ce gras, cet italique, ce souligné, ce barré ». Le réglage vit dans l'attribut
 // `condStyle` du nœud : { rules: [{ condition, style }] }. Les règles se lisent dans l'ordre, comme celles de Grist : la couleur du texte et le fond de la dernière règle
 // remplie l'emportent, le gras, l'italique, le souligné et le barré s'additionnent.
+// Pour une variable, une case « Comme dans Grist » (éteinte au départ) fait suivre en direct la mise en forme conditionnelle de sa colonne dans Grist, avant les règles de la
+// fenêtre qui passent par-dessus (`grist: true` du réglage) ; grisée, avec sa raison, quand la colonne n'en a pas.
 // Chaque règle est une carte : un en-tête (son numéro, sa condition en une ligne, un échantillon du style) et, pour la carte ouverte seule, le style (deux rangées de pastilles,
 // « Aucune », « Autre… » qui ouvre js/color-dialog.js, et les quatre traits) puis la condition (les mêmes lignes Colonne / Opérateur / Valeur et les mêmes groupes que la fenêtre
 // « Condition d'affichage », js/condition-fields.js) : le style d'abord, pour qu'il se voie dès l'ouverture dans un panneau de 400 px de haut. Une seule carte ouverte à la fois : à 700 × 400 la fenêtre ne devient pas un long formulaire. Une règle sans condition
@@ -28,8 +30,8 @@ const ConditionalStyleWindow = (function () {
 
   let win = null;
   let refs = null;
-  // { editor, pos, node, hadStyle, working: [{ condition: { mode, rules }, style }], open } - `working` est une copie : rien n'est écrit dans le nœud avant « Enregistrer ».
-  // `open` : l'index de la carte ouverte (-1 : aucune).
+  // { editor, pos, node, hadStyle, grist, working: [{ condition: { mode, rules }, style }], open } - `working` est une copie : rien n'est écrit dans le nœud avant « Enregistrer ».
+  // `open` : l'index de la carte ouverte (-1 : aucune). `grist` : la case « Comme dans Grist ».
   let state = null;
 
   const isOpen = () => !!state;
@@ -38,6 +40,28 @@ const ConditionalStyleWindow = (function () {
   const savedRule = rule => { const spec = ConditionalStyle.normalize({ rules: [rule] }); return spec ? spec.rules[0] : null; };
 
   const previewRun = VariableModal.previewRunner(() => updatePreview());
+
+  // { table, column } de la variable réglée, null pour tout ce qui n'est pas une bulle de variable : « Comme dans Grist » ne s'y propose pas.
+  const sourceOf = () => (state && state.node.type.name === 'varBadge' && state.node.attrs.table && state.node.attrs.column ? { table: state.node.attrs.table, column: state.node.attrs.column } : null);
+
+  // La case « Comme dans Grist » : cachée hors d'une variable ; cochable quand la colonne a des règles dans Grist ; grisée avec sa raison sinon (elle reste décochable si elle était
+  // cochée et que les règles ont disparu de Grist depuis).
+  function syncGrist() {
+    if (!state || !refs) return;
+    const source = sourceOf();
+    const rules = source ? ConditionalStyle.gristRulesOf(source.table, source.column) : null;
+    const { gristRow, gristBox, gristNote } = refs;
+    gristRow.hidden = !source;
+    gristBox.checked = state.grist;
+    const blocked = !rules && !state.grist;
+    gristBox.disabled = blocked;
+    gristRow.classList.toggle('is-disabled', blocked);
+    let key = 'condStyle.gristOff';
+    if (!rules) key = state.grist ? 'condStyle.gristGone' : 'condStyle.gristNone';
+    else if (state.grist) key = 'condStyle.gristOn';
+    gristNote.textContent = I18n.t(key, { count: rules ? rules.length : 0 });
+    gristRow.title = blocked ? gristNote.textContent : '';
+  }
 
   // La condition d'une règle en une ligne, pour son en-tête ; « Condition à choisir » tant qu'aucune ligne n'est complète.
   function summaryOf(rule) {
@@ -238,41 +262,53 @@ const ConditionalStyleWindow = (function () {
     if (!state || !refs) return;
     const outdated = previewRun.begin();
     const stale = () => outdated() || !state;
-    const { currentLine, countLine } = refs;
+    const { gristLine, currentLine, countLine } = refs;
     const kept = state.working.filter(savedRule);
-    const spec = ConditionalStyle.normalize({ rules: kept });
+    const source = sourceOf();
+    const spec = ConditionalStyle.normalize({ grist: state.grist && !!source, rules: kept });
     const tableId = GristAPI.getCurrentTableId();
     const record = GristAPI.getCurrentRecord();
     setLine(countLine, '', false);
+    setLine(gristLine, '', false);
     if (!spec) { setLine(currentLine, I18n.t('condStyle.debug.chooseCondition'), false); return; }
     if (!record || !tableId) { setLine(currentLine, I18n.t('condStyle.debug.noRecord'), false); return; }
     setLine(currentLine, I18n.t('condStyle.debug.computing'), false);
     try {
-      const result = await ConditionalStyle.evaluate(spec, tableId, record);
+      const result = await ConditionalStyle.resolve(spec, source, tableId, record);
       if (stale()) return;
+      if (result.grist) setLine(gristLine, gristSummary(result.grist, record.id), false);
       const holding = result.verdicts.map((holds, at) => (holds ? state.working.indexOf(kept[at]) + 1 : 0)).filter(Boolean);
       if (result.style) {
-        setLine(currentLine, I18n.t('condStyle.debug.met', { id: record.id, count: holding.length, rules: holding.join(', ') }), true);
+        const key = holding.length ? 'condStyle.debug.met' : 'condStyle.debug.result';
+        setLine(currentLine, I18n.t(key, { id: record.id, count: holding.length, rules: holding.join(', ') }), true);
         const sample = el('span', 'cond-style-sample', I18n.t('condStyle.sample'));
         paintSample(sample, result.style);
         currentLine.appendChild(sample);
       } else {
         setLine(currentLine, I18n.t('condStyle.debug.none', { id: record.id }), false);
       }
-      await previewAllRows(spec, tableId, stale);
+      await previewAllRows(spec, source, tableId, stale);
     } catch (e) {
       console.warn('[ConditionalStyleWindow] aperçu indisponible', e);
       if (!stale()) setLine(currentLine, I18n.t('linkConfig.previewUnavailable'), false);
     }
   }
-  async function previewAllRows(spec, tableId, stale) {
+  // Ce que Grist donne sur la ligne affichée : les règles de la colonne qui sont remplies, ou pourquoi rien n'en est repris.
+  function gristSummary(grist, id) {
+    if (grist.why === 'multi') return I18n.t('condStyle.debug.gristMulti');
+    if (grist.why) return I18n.t('condStyle.debug.gristUnread', { id });
+    if (!grist.rules) return I18n.t('condStyle.gristGone');
+    const holding = grist.verdicts.map((holds, at) => (holds ? at + 1 : 0)).filter(Boolean);
+    return holding.length ? I18n.t('condStyle.debug.gristMet', { id, count: holding.length, rules: holding.join(', ') }) : I18n.t('condStyle.debug.gristNone', { id });
+  }
+  async function previewAllRows(spec, source, tableId, stale) {
     const { fetchRows } = LoopRules.createContext();
     const rows = await fetchRows(tableId);
     if (stale()) return;
     if (!rows.length) { setLine(refs.countLine, I18n.t('linkConfig.previewTableEmpty', { table: tableId }), false); return; }
     let count = 0;
     for (let i = 0; i < rows.length; i++) {
-      if ((await ConditionalStyle.evaluate(spec, tableId, rows[i], { fetchRows })).style) count += 1;
+      if ((await ConditionalStyle.resolve(spec, source, tableId, rows[i], { fetchRows })).style) count += 1;
       // Rend la main au navigateur de temps en temps sur une grande table, et abandonne si le réglage a changé entre-temps.
       if (i % 250 === 249) { await new Promise(r => setTimeout(r, 0)); if (stale()) return; }
     }
@@ -293,7 +329,7 @@ const ConditionalStyleWindow = (function () {
   }
   function save() {
     if (!state) return;
-    applyStyle(ConditionalStyle.normalize({ rules: state.working }));
+    applyStyle(ConditionalStyle.normalize({ grist: state.grist && !!sourceOf(), rules: state.working }));
     close();
   }
   function close() {
@@ -313,7 +349,16 @@ const ConditionalStyleWindow = (function () {
     addBtn.type = 'button';
     const ignored = el('p', 'cond-style-ignored');
     ignored.hidden = true;
-    const { box: previewArea, lines: [currentLine, countLine] } = VariableModal.previewBox(2);
+    // « Comme dans Grist » : une case et, dessous, ce que la colonne a dans Grist (ou pourquoi la case est grisée).
+    const gristRow = el('div', 'cond-style-grist');
+    const gristLabel = el('label', 'cond-style-grist-label');
+    const gristBox = el('input');
+    gristBox.type = 'checkbox';
+    const gristText = el('span', 'cond-style-grist-text');
+    gristLabel.append(gristBox, gristText);
+    const gristNote = el('p', 'cond-style-grist-note');
+    gristRow.append(gristLabel, gristNote);
+    const { box: previewArea, lines: [gristLine, currentLine, countLine] } = VariableModal.previewBox(3);
     const removeBtn = button('var-modal-danger');
     const cancelBtn = button();
     const saveBtn = button('var-modal-primary');
@@ -322,8 +367,8 @@ const ConditionalStyleWindow = (function () {
     const endGroup = el('div', 'var-modal-actions-end');
     endGroup.append(cancelBtn, saveBtn);
     win.actions.append(startGroup, endGroup);
-    win.body.append(intro, list, addBtn, ignored, previewArea, hint);
-    refs = { title: win.title, intro, hint, list, addBtn, ignored, currentLine, countLine, removeBtn, cancelBtn, saveBtn };
+    win.body.append(intro, gristRow, list, addBtn, ignored, previewArea, hint);
+    refs = { title: win.title, intro, hint, gristRow, gristBox, gristText, gristNote, list, addBtn, ignored, gristLine, currentLine, countLine, removeBtn, cancelBtn, saveBtn };
 
     addBtn.addEventListener('click', () => {
       if (!state || state.working.length >= ConditionalStyle.MAX_RULES) return;
@@ -334,6 +379,7 @@ const ConditionalStyleWindow = (function () {
       if (select) select.focus();
       previewRun.schedule();
     });
+    gristBox.addEventListener('change', () => { if (!state) return; state.grist = gristBox.checked; syncGrist(); previewRun.schedule(); });
     removeBtn.addEventListener('click', () => { if (state) { applyStyle(null); close(); } });
     cancelBtn.addEventListener('click', close);
     saveBtn.addEventListener('click', save);
@@ -349,12 +395,14 @@ const ConditionalStyleWindow = (function () {
     if (!node || !INTRO[node.type.name]) return;
     ensureModal();
     const existing = ConditionalStyle.normalize(node.attrs.condStyle);
-    state = { editor, pos, node, hadStyle: !!existing, working: existing ? existing.rules : [newRule()], open: 0 };
+    state = { editor, pos, node, hadStyle: !!existing, grist: !!(existing && existing.grist), working: existing && existing.rules.length ? existing.rules : [newRule()], open: 0 };
     const r = refs;
     r.title.textContent = I18n.t('condStyle.title');
     if (node.type.name === 'varBadge') r.intro.replaceChildren(el('span', 'var-badge', VariableModal.badgeText(node)), document.createTextNode(' ' + I18n.t(INTRO.varBadge)));
     else r.intro.textContent = I18n.t(INTRO[node.type.name]);
     r.hint.textContent = I18n.t('condStyle.order');
+    r.gristText.textContent = I18n.t('condStyle.grist');
+    syncGrist();
     r.addBtn.textContent = I18n.t('condStyle.addRule');
     r.ignored.textContent = I18n.t('condStyle.ignored');
     r.removeBtn.textContent = I18n.t('condStyle.remove');
@@ -365,6 +413,8 @@ const ConditionalStyleWindow = (function () {
     // La barre flottante reste masquée tant que la fenêtre est ouverte ; elle est sous le voile de toute façon (--z-floating-toolbar, css/style.css).
     EditorCore.hideFloatingContextToolbars();
     win.show(() => r.list.querySelector('.cond-style-toggle'));
+    // Le focus donné à la première carte fait défiler le contenu jusqu'à elle ; la fenêtre s'ouvre pourtant toujours en haut, sur l'introduction et « Comme dans Grist ».
+    win.body.scrollTop = 0;
     updatePreview();
   }
 

@@ -47,6 +47,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     visibleCols: {}, // { tableId: { colId: colonne de la table liée } } - « Colonne à afficher » d'une Référence (visibleCol, cf. setVariables)
     labels: {}, // { tableId: { colId: libellé } } - le nom de l'en-tête quand il diffère de l'identifiant (label de _grist_Tables_column, cf. setColumnLabels) ; absent = le libellé est l'identifiant
     formats: {}, // { tableId: { colId: réglages d'affichage } } - ce que Grist range dans widgetOptions d'une colonne nombre ou date (numMode, decimals, currency, dateFormat, timeFormat... cf. setColumnFormats) ; absent = une colonne sans réglage
+    condRules: {}, // { tableId: { colId: [{ helper, style }] } } - la mise en forme conditionnelle d'une colonne dans Grist (setColumnRules) : la colonne d'aide de chaque règle et ce qu'elle pose
     formulas: {}, // { tableId: { colId: texte de la formule } } - colonnes dont isFormula est vrai (setFormulaColumn, AddColumn d'un modèle de la galerie) et formules des colonnes d'aide de SetDisplayFormula : le stub ne les calcule pas, il les garde pour qu'un test lise ce que le widget a demandé ; absent = colonne de données
     rows: {}, // { tableId: { id: [...], col: [...] } } forme columnaire Grist
     // Un widget réel ne peut jamais désinscrire un onRecord (pas d'"offRecord" dans l'API publique) et PLUSIEURS souscriptions coexistent, chacune
@@ -189,6 +190,14 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     rebuildColumnMeta();
   }
 
+  // La mise en forme conditionnelle des colonnes de `tableId`, comme Grist la range : { colId: [{ helper, style: { color, fill, bold, italic, underline, strike } }] } - `helper` est le nom
+  // d'une colonne Booléen de la même table (« gristHelper_ConditionalRule ») dont chaque ligne porte le verdict de la règle (setRows). `null` à la place des règles d'une colonne les retire.
+  function setColumnRules(tableId, rules) {
+    state.condRules[tableId] = Object.assign({}, state.condRules[tableId]);
+    Object.keys(rules).forEach(colId => { if (rules[colId] == null) delete state.condRules[tableId][colId]; else state.condRules[tableId][colId] = JSON.parse(JSON.stringify(rules[colId])); });
+    rebuildColumnMeta();
+  }
+
   // Les réglages d'affichage de colonnes nombre ou date de `tableId`, comme Grist les range dans leur widgetOptions : { colId: { numMode: 'currency', currency: 'EUR', decimals: 2, ... } }
   // (numMode, numSign, decimals, maxDecimals, currency pour Numeric et Int ; dateFormat, timeFormat pour Date et DateTime). Sans appel, une colonne n'a aucun réglage (widgetOptions vide).
   // Gardé d'un setVariables à l'autre de la même table ; `null` à la place des réglages d'une colonne les retire.
@@ -224,7 +233,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
   // (refreshColumnTypes, cf. js/grist-api.js) - un seul appel idempotent suffit,
   // reconstruit tout à chaque fois à partir de state.tables/columns/choices, avec les identifiants de ligne de metaIds ci-dessus.
   function rebuildColumnMeta() {
-    const gtc = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions', 'displayCol', 'visibleCol', 'label', 'isFormula', 'formula']);
+    const gtc = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions', 'displayCol', 'visibleCol', 'label', 'isFormula', 'formula', 'rules']);
     const rowIdOf = {}; // "table.colonne" -> id de ligne dans _grist_Tables_column, pour displayCol
     state.tables.forEach(t => Object.keys(state.columns[t] || {}).forEach(colId => { rowIdOf[t + '.' + colId] = columnRowId(t, colId); }));
     state.tables.forEach(t => {
@@ -233,7 +242,12 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
         const helper = state.displayCols[t] && state.displayCols[t][colId];
         gtc.id.push(rowIdOf[t + '.' + colId]); gtc.parentId.push(tableRowId(t)); gtc.colId.push(colId); gtc.type.push(state.columns[t][colId]);
         const formats = state.formats[t] && state.formats[t][colId];
-        const widgetOptions = Object.assign({}, formats, choices ? { choices } : null);
+        // La mise en forme conditionnelle, comme Grist la range : `rules` (RefList : ['L', identifiants des colonnes d'aide, dans l'ordre]) et `rulesOptions` du widgetOptions, même ordre.
+        const conditional = (state.condRules[t] && state.condRules[t][colId]) || [];
+        const widgetOptions = Object.assign({}, formats, choices ? { choices } : null, conditional.length ? { rulesOptions: conditional.map(rule => ({
+          fillColor: rule.style.fill, textColor: rule.style.color, fontBold: rule.style.bold, fontItalic: rule.style.italic, fontUnderline: rule.style.underline, fontStrikethrough: rule.style.strike,
+        })) } : null);
+        gtc.rules.push(conditional.length ? ['L'].concat(conditional.map(rule => rowIdOf[t + '.' + rule.helper])) : null);
         gtc.widgetOptions.push(Object.keys(widgetOptions).length ? JSON.stringify(widgetOptions) : '');
         gtc.displayCol.push((helper && rowIdOf[t + '.' + helper]) || 0);
         const shown = state.visibleCols[t] && state.visibleCols[t][colId];
@@ -281,7 +295,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     delete metaIds.columns[prefix + oldId];
     state.columns[tableId] = renameKey(columns, oldId, newId);
     if (state.rows[tableId] && oldId in state.rows[tableId]) state.rows[tableId] = renameKey(state.rows[tableId], oldId, newId);
-    ['choices', 'displayCols', 'visibleCols', 'labels', 'formulas', 'formats'].forEach(bag => { if (state[bag][tableId]) state[bag][tableId] = renameKey(state[bag][tableId], oldId, newId); });
+    ['choices', 'displayCols', 'visibleCols', 'labels', 'formulas', 'formats', 'condRules'].forEach(bag => { if (state[bag][tableId]) state[bag][tableId] = renameKey(state[bag][tableId], oldId, newId); });
     Object.keys(state.displayCols[tableId] || {}).forEach(k => { if (state.displayCols[tableId][k] === oldId) state.displayCols[tableId][k] = newId; });
     state.tables.forEach(t => Object.keys(state.visibleCols[t] || {}).forEach(k => {
       const linked = /^Ref(?:List)?:(.+)$/.exec((state.columns[t] || {})[k] || '');
@@ -298,7 +312,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     metaIds.tables[newId] = tableRowId(oldId);
     delete metaIds.tables[oldId];
     state.tables[at] = newId;
-    ['columns', 'choices', 'displayCols', 'visibleCols', 'labels', 'formulas', 'formats', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => {
+    ['columns', 'choices', 'displayCols', 'visibleCols', 'labels', 'formulas', 'formats', 'condRules', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => {
       if (state[bag] && oldId in state[bag]) { state[bag][newId] = state[bag][oldId]; delete state[bag][oldId]; }
     });
     state.tables.forEach(t => Object.keys(state.columns[t] || {}).forEach(k => {
@@ -315,7 +329,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     if (!state.columns[tableId] || !(colId in state.columns[tableId])) return false;
     delete state.columns[tableId][colId];
     if (state.rows[tableId]) delete state.rows[tableId][colId];
-    ['choices', 'displayCols', 'visibleCols', 'labels', 'formulas', 'formats'].forEach(bag => { if (state[bag][tableId]) delete state[bag][tableId][colId]; });
+    ['choices', 'displayCols', 'visibleCols', 'labels', 'formulas', 'formats', 'condRules'].forEach(bag => { if (state[bag][tableId]) delete state[bag][tableId][colId]; });
     rebuildColumnMeta();
     return true;
   }
@@ -325,7 +339,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     const at = state.tables.indexOf(tableId);
     if (at === -1) return false;
     state.tables.splice(at, 1);
-    ['columns', 'choices', 'displayCols', 'visibleCols', 'labels', 'formulas', 'formats', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => { if (state[bag]) delete state[bag][tableId]; });
+    ['columns', 'choices', 'displayCols', 'visibleCols', 'labels', 'formulas', 'formats', 'condRules', 'rows', 'nextRowId', 'primaryViewOf'].forEach(bag => { if (state[bag]) delete state[bag][tableId]; });
     rebuildColumnMeta();
     return true;
   }
@@ -940,7 +954,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     },
   };
 
-  window.__gristStub = { state, setViewer, setVariables, setColumnLabels, setColumnFormats, setDocumentSettings, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, countSaves, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure, fireViewChange, denyTable, denyStructure };
+  window.__gristStub = { state, setViewer, setVariables, setColumnLabels, setColumnFormats, setColumnRules, setDocumentSettings, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, countSaves, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure, fireViewChange, denyTable, denyStructure };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.

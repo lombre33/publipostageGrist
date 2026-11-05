@@ -3807,6 +3807,16 @@ const I18n = (function () {
     'condStyle.debug.met': { fr: 'Ligne {id} : {count|règle|règles} n° {rules} {count|remplie|remplies}. Résultat :', en: 'Row {id}: {count|rule|rules} {rules} {count|is|are} met. Result:' },
     'condStyle.debug.none': { fr: 'Ligne {id} : aucune règle remplie, rien ne change.', en: 'Row {id}: no rule is met, nothing changes.' },
     'condStyle.debug.count': { fr: 'Sur les {total} lignes de {table}, {count} {count|prend|prennent} une mise en forme.', en: 'Of the {total} rows of {table}, {count} {count|gets|get} formatted.' },
+    'condStyle.debug.result': { fr: 'Ligne {id} : résultat :', en: 'Row {id}: result:' },
+    'condStyle.grist': { fr: 'Comme dans Grist', en: 'Like in Grist' },
+    'condStyle.gristOn': { fr: 'La mise en forme conditionnelle de cette colonne dans Grist s’applique d’abord, en direct ; vos règles passent par-dessus.', en: 'This column’s conditional formatting in Grist applies first, live; your rules go on top.' },
+    'condStyle.gristOff': { fr: 'Cette colonne a {count} {count|règle|règles} de mise en forme conditionnelle dans Grist : cochez pour les suivre.', en: 'This column has {count} conditional formatting {count|rule|rules} in Grist: check to follow {count|it|them}.' },
+    'condStyle.gristNone': { fr: 'Indisponible : cette colonne n’a pas de mise en forme conditionnelle dans Grist.', en: 'Not available: this column has no conditional formatting in Grist.' },
+    'condStyle.gristGone': { fr: 'Cette colonne n’a plus de mise en forme conditionnelle dans Grist : rien n’est repris. Décochez la case pour la retirer.', en: 'This column no longer has conditional formatting in Grist: nothing is picked up. Uncheck the box to remove it.' },
+    'condStyle.debug.gristMet': { fr: 'Grist, ligne {id} : {count|règle|règles} n° {rules} {count|remplie|remplies}.', en: 'Grist, row {id}: {count|rule|rules} {rules} {count|is|are} met.' },
+    'condStyle.debug.gristNone': { fr: 'Grist, ligne {id} : aucune règle remplie.', en: 'Grist, row {id}: no rule is met.' },
+    'condStyle.debug.gristMulti': { fr: 'Cette variable lit plusieurs lignes : la mise en forme de Grist ne s’applique pas.', en: 'This variable reads several rows: Grist’s formatting does not apply.' },
+    'condStyle.debug.gristUnread': { fr: 'Grist, ligne {id} : la ligne de la variable ne se lit pas, rien n’est repris.', en: 'Grist, row {id}: the variable’s row cannot be read, nothing is picked up.' },
   };
 
   // Hébergé par GFS (`gfs=<n>` dans l'adresse), la langue est celle de GFS : un seul choix par personne pour toutes ses apps (consigne 019, contrats de GFS 5.2 point 6). Celle que la page s'est donnée

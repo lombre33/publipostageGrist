@@ -7,6 +7,13 @@
 // « #rrggbb », indicateurs à vrai (un indicateur faux ne s'écrit pas). Les règles se lisent dans l'ordre, comme celles de Grist : la couleur du texte et le fond de la
 // dernière règle vraie l'emportent, le gras, l'italique, le souligné et le barré s'additionnent.
 //
+// « Comme dans Grist » (variables seulement) : `grist: true` dans le même réglage - { grist: true, rules: […] }. La bulle suit alors, EN DIRECT, la mise en forme conditionnelle de sa
+// colonne dans Grist (GristAPI.getColumnConditionalRules : chaque règle de la colonne, dans l'ordre, avec le style qu'elle pose ; le verdict d'une ligne est lu dans la colonne
+// d'aide de la règle, `gristHelper_ConditionalRule…`, que Grist calcule lui-même - ses formules sont du Python, le widget ne les rejoue pas). Les règles de Grist passent d'abord,
+// celles du widget par-dessus : la couleur et le fond des secondes l'emportent, les traits s'additionnent. Une bulle qui lit plusieurs lignes (table liée en « plusieurs »,
+// liste de références) n'a pas de mise en forme de Grist : une seule mise en forme ne dirait rien de chaque valeur. Ne sont pas reprises : la mise en forme conditionnelle
+// d'un champ de la vue (réglage propre à une page de Grist), les couleurs des choix d'une colonne Choix, le style de base de la colonne.
+//
 // Résolution : js/reader-mode.js appelle `prepare` une fois, avant les conditions d'affichage des blocs, des valeurs et des cases - la Lecture, le PDF, le Word, l'Excel, le
 // HTML, l'e-mail et les en-têtes et pieds passent donc tous par là. Un bloc ou une valeur dont la condition d'affichage est remplie garde sa mise en forme : son contenu est
 // enveloppé de <span style="…"> (le style en ligne que lisent le PDF, le Word et l'Excel, comme pour un texte coloré) avant que le cadre soit défait. Une bulle de variable ou de
@@ -33,8 +40,8 @@ const ConditionalStyle = (function () {
     return Object.keys(clean).length ? clean : null;
   }
 
-  // Le réglage sous sa forme enregistrée : une copie neuve, sans les règles dont la condition n'a aucune ligne complète ou dont le style est vide, au plus MAX_RULES ;
-  // null quand il n'en reste aucune.
+  // Le réglage sous sa forme enregistrée : une copie neuve, sans les règles dont la condition n'a aucune ligne complète ou dont le style est vide, au plus MAX_RULES, avec
+  // `grist: true` quand « Comme dans Grist » est coché ; null quand il n'en reste rien.
   function normalize(spec) {
     const source = spec && Array.isArray(spec.rules) ? spec.rules : [];
     const rules = [];
@@ -43,6 +50,7 @@ const ConditionalStyle = (function () {
       const style = cleanStyle(rule && rule.style);
       if (condition && style && rules.length < MAX_RULES) rules.push({ condition, style });
     }
+    if (spec && spec.grist === true) return { grist: true, rules };
     return rules.length ? { rules } : null;
   }
 
@@ -92,13 +100,53 @@ const ConditionalStyle = (function () {
     return { verdicts, style: combine(rules.filter((rule, at) => verdicts[at]).map(rule => rule.style)) };
   }
 
+  // Les règles de Grist de la colonne où mène la colonne `path` d'une bulle (« Colonne » ou « Référence.Colonne ») à partir de `table` : [{ helper, style }], null quand cette
+  // colonne n'a aucune mise en forme conditionnelle dans Grist (ou que le chemin ne mène nulle part).
+  function gristRulesOf(table, path) {
+    const end = GristAPI.resolveColumnPath(table, path);
+    return (end && GristAPI.getColumnConditionalRules(end.table, end.column)) || null;
+  }
+
+  // La mise en forme de Grist de la bulle `table` / `path` pour la ligne `record` : { rules, verdicts, style, why }. `rules` : celles de Grist (null sans règle) ; `verdicts[i]`
+  // vrai quand la règle i est remplie sur la ligne ; `style` : leur combinaison (null sans règle remplie) ; `why` : 'multi' quand la bulle lit plusieurs lignes, 'noRow' quand
+  // aucune ligne n'est liée, 'failed' quand la ligne ne se lit pas - toujours sans style, jamais d'exception. `opts` : celles de Variables.resolveRows (`loop`, `fetchRows`).
+  async function gristStyleOf(table, path, tableId, record, opts) {
+    const rules = gristRulesOf(table, path);
+    const none = why => ({ rules, verdicts: [], style: null, why });
+    if (!rules || !record) return none(null);
+    try {
+      const hops = String(path).split('.');
+      hops.pop();
+      const found = await Variables.resolveRows(table, hops, tableId, record, opts);
+      if (found.error) return none('failed');
+      if (found.multi) return none('multi');
+      const row = found.rows[0];
+      if (!row) return none('noRow');
+      const verdicts = rules.map(rule => row[rule.helper] === true);
+      return { rules, verdicts, style: combine(rules.filter((rule, at) => verdicts[at]).map(rule => rule.style)), why: null };
+    } catch (e) {
+      console.error('[ConditionalStyle] échec de la lecture de la mise en forme de Grist', e);
+      return none('failed');
+    }
+  }
+
+  // Le style que donne `spec` à la bulle / au bloc pour la ligne `record` : { style, verdicts (ceux des règles du widget), grist (gristStyleOf, null sans « Comme dans Grist ») }.
+  // `source` : { table, column } d'une bulle de variable, null pour tout le reste (« Comme dans Grist » n'a de sens que sur une variable). Grist d'abord, les règles du widget
+  // par-dessus (combine).
+  async function resolve(spec, source, tableId, record, opts) {
+    const grist = spec.grist && source && source.table && source.column ? await gristStyleOf(source.table, source.column, tableId, record, opts) : null;
+    const own = await evaluate(spec, tableId, record, opts);
+    return { style: combine([grist && grist.style, own.style]), verdicts: own.verdicts, grist };
+  }
+
   // Le style que prend l'élément `el` pour la ligne `record` : la ligne du tour d'une zone répétée est celle que lit une condition (LoopRules.bindingOf). null quand
   // aucune règle n'est vraie.
   async function styleFor(el, tableId, record) {
     const spec = parse(el.getAttribute(ATTR));
     if (!spec) return null;
     const binding = LoopRules.bindingOf(el);
-    return (await evaluate(spec, tableId, record, binding ? { loop: binding } : undefined)).style;
+    const source = el.matches('.var-badge') ? { table: el.getAttribute('data-table'), column: el.getAttribute('data-column') } : null;
+    return (await resolve(spec, source, tableId, record, binding ? { loop: binding } : undefined)).style;
   }
 
   // Enveloppe le contenu de `el` dans un <span style> : chaque suite de texte et d'éléments en ligne qui se touchent, à tous les étages (un paragraphe, un élément de
@@ -162,8 +210,8 @@ const ConditionalStyle = (function () {
     return count ? { spec: Object.assign({}, spec, { rules }), count } : { spec, count: 0 };
   }
 
-  // Vrai quand le réglage a au moins une règle complète (le bouton de la barre s'allume).
+  // Vrai quand le réglage a au moins une règle complète ou « Comme dans Grist » coché (le bouton de la barre s'allume).
   const isSet = spec => !!normalize(spec);
 
-  return { ATTR, MAX_RULES, FLAGS, normalize, cleanStyle, parse, combine, cssOf, evaluate, styleFor, prepare, carry, rewriteConditions, isSet };
+  return { ATTR, MAX_RULES, FLAGS, normalize, cleanStyle, parse, combine, cssOf, evaluate, gristRulesOf, gristStyleOf, resolve, styleFor, prepare, carry, rewriteConditions, isSet };
 })();

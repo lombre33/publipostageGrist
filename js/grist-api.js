@@ -30,6 +30,10 @@ const GristAPI = (function () {
   // { tableId: { colId: réglages d'affichage } } - pour une colonne Numérique, Entier, Date ou Date et heure, ce que son widgetOptions dit de l'écriture de ses valeurs
   // (formatOptionsOf) : {} quand elle n'a rien de réglé, absente quand ses réglages sont illisibles. Cf. getColumnFormatOptions.
   let _columnFormatsByTable = {};
+  // { tableId: { colId: [{ helper, style }] } } - la mise en forme conditionnelle d'une colonne dans Grist (panneau « Mise en forme conditionnelle »), dans l'ordre : `helper` est la
+  // colonne d'aide (« gristHelper_ConditionalRule… ») dont chaque ligne de fetchTable porte le verdict de la règle (vrai ou faux), `style` ce qu'elle pose { color, fill, bold,
+  // italic, underline, strike }. Seulement les colonnes qui ont au moins une règle ; cf. getColumnConditionalRules, conditionalRulesOf.
+  let _conditionalRulesByTable = {};
   // Les réglages du document (langue, devise : _grist_DocInfo.documentSettings), null tant qu'ils ne sont pas lus ou quand ils sont illisibles, cf. getDocumentSettings.
   let _documentSettings = null;
   // { tableId: { colId: { table, column } } } - pour une colonne Référence / liste de références, la colonne de la table liée que Grist affiche à la
@@ -623,6 +627,37 @@ const GristAPI = (function () {
       return null;
     }
   }
+  // Les règles de mise en forme conditionnelle de la colonne `i` : `rules` (schema.ts : RefList:_grist_Tables_column, « ['L', 36, 37] » : les colonnes d'aide, dans l'ordre) et,
+  // dans le même ordre, `rulesOptions` du widgetOptions (JSON : { fillColor, textColor, fontBold, fontItalic, fontUnderline, fontStrikethrough } par règle ; mesuré dans un vrai Grist
+  // le 05/11, app/common/Styles.ts). [] sans règle, quand les métadonnées ne portent pas `rules` (accès restreint) ou quand widgetOptions est illisible. Une couleur qui n'est pas
+  // #rgb ou #rrggbb est laissée de côté.
+  function conditionalRulesOf(colsMeta, i, colIdByRowId) {
+    const listed = Array.isArray(colsMeta.rules) ? colsMeta.rules[i] : null;
+    const helpers = Array.isArray(listed) && listed[0] === 'L' ? listed.slice(1).map(id => colIdByRowId[id]).filter(Boolean) : [];
+    if (!helpers.length) return [];
+    let options = [];
+    try {
+      const parsed = JSON.parse((Array.isArray(colsMeta.widgetOptions) && colsMeta.widgetOptions[i]) || '{}');
+      options = parsed && Array.isArray(parsed.rulesOptions) ? parsed.rulesOptions : [];
+    } catch (e) { /* réglages illisibles : les règles restent, sans style */ }
+    const hex = value => {
+      const found = typeof value === 'string' ? /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value.trim()) : null;
+      if (!found) return null;
+      const digits = found[1].length === 3 ? found[1].replace(/./g, d => d + d) : found[1];
+      return '#' + digits.toLowerCase();
+    };
+    return helpers.map((helper, at) => {
+      const option = options[at] && typeof options[at] === 'object' ? options[at] : {};
+      const style = {};
+      if (hex(option.textColor)) style.color = hex(option.textColor);
+      if (hex(option.fillColor)) style.fill = hex(option.fillColor);
+      if (option.fontBold === true) style.bold = true;
+      if (option.fontItalic === true) style.italic = true;
+      if (option.fontUnderline === true) style.underline = true;
+      if (option.fontStrikethrough === true) style.strike = true;
+      return { helper, style };
+    });
+  }
   // displayCol (schema.ts : Ref:_grist_Tables_column) : la colonne dont Grist affiche la valeur, la colonne elle-même si 0
   // (ColumnRec.displayColModel, grist-core). L'identifiant de colonne de l'aide d'affichage de la colonne `i`, null si elle s'affiche elle-même.
   function displayColIdOf(colsMeta, i, colIdByRowId) {
@@ -652,6 +687,7 @@ const GristAPI = (function () {
     const labels = {};
     const formulaColumns = {};
     const formats = {};
+    const conditionalRules = {};
     try {
       const [tablesMeta, colsMeta, docInfo] = await (metaRead || readColumnMeta());
       const tableIdByRowId = tableIdsByRowId(tablesMeta);
@@ -674,6 +710,8 @@ const GristAPI = (function () {
         if (hasFormulaOf(colsMeta, i)) rowOf(formulaColumns, tableId)[colId] = true;
         const formatOptions = formatOptionsOf(colsMeta, i);
         if (formatOptions) rowOf(formats, tableId)[colId] = formatOptions;
+        const rules = conditionalRulesOf(colsMeta, i, colIdByRowId);
+        if (rules.length) rowOf(conditionalRules, tableId)[colId] = rules;
       }
       _columnTypesByTable = types;
       _columnChoicesByTable = choices;
@@ -682,10 +720,17 @@ const GristAPI = (function () {
       _columnLabelsByTable = labels;
       _formulaColumnsByTable = formulaColumns;
       _columnFormatsByTable = formats;
+      _conditionalRulesByTable = conditionalRules;
       _documentSettings = documentSettingsOf(docInfo);
     } catch (e) {
       console.warn('[GristAPI] refreshColumnTypes: échec', e);
     }
+  }
+
+  // La mise en forme conditionnelle de la colonne `colId` de `tableId` dans Grist : [{ helper, style }] dans l'ordre des règles, null quand la colonne n'en a aucune (js/conditional-style.js :
+  // « Comme dans Grist »). Pas de chemin « Réf.Colonne » ici : l'appelant descend d'abord jusqu'à la table de la colonne.
+  function getColumnConditionalRules(tableId, colId) {
+    return (_conditionalRulesByTable[tableId] && _conditionalRulesByTable[tableId][colId]) || null;
   }
 
   // La table que vise un type Référence (« Ref:Annuaire ») ou Liste de références (« RefList:Annuaire ») : { table, list }, `list` vrai pour la
@@ -1243,5 +1288,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnChoices, getColumnLabel, isFormulaColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();
