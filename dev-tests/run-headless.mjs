@@ -125,6 +125,7 @@ const GROUPS = {
   varTextPath: 'scenarios-var-text-path',
   fieldEditor: 'scenarios-field-editor', // champs texte à bulles (Objet, À, Cc, Cci, nom du PDF ; js/field-editor.js, js/field-codec.js) : interface d'<input>, valeur enregistrée, compatibilité des modèles déjà enregistrés, réglages d'une bulle (condition, format, boucle, liste), liste #, Lecture, barre et fenêtres (celles des bulles et la barre de la puce « Heure actuelle »)
   varColumn: 'scenarios-var-column', // bouton « Colonne… » de la barre d'une bulle : changer ou réparer la colonne d'une variable (js/variable-column.js)
+  imageCondition: 'scenarios-image-condition', // condition d'affichage d'une image liée à une colonne Pièces jointes : attribut du nœud et data-condition, bouton grisé ou allumé de sa barre, fenêtre de condition, cadre en pointillés bleus, Lecture qui retire l'image, renommage d'une colonne
   schemaRenames: 'scenarios-schema-renames', // suivi des renommages de tables et de colonnes faits dans Grist : mappeur, réécriture des modèles et des clés de correspondance, lecture seule, modèle affiché (js/schema-renames.js)
   settingsColumns: 'scenarios-settings-columns', // avertissement d'ouverture : Réglages > Accès ou > Selon la ligne cite une colonne (ou la table des droits) qui n'existe plus dans Grist (js/settings-columns.js)
   varZero: 'scenarios-var-zero',

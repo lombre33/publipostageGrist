@@ -67,6 +67,13 @@ const ReaderMode = (function () {
     await ConditionalValue.resolve(wrapper, tableId, record);
     await ConditionalCheckbox.resolve(wrapper, tableId, record);
     await VariableOtherwise.resolve(wrapper, tableId, record);
+    await resolveImageConditions(wrapper, tableId, record);
+  }
+  // La condition d'affichage d'une image de colonne Pièces jointes (data-condition de son <img>, fenêtre de js/variable-condition.js) : l'image dont la condition n'est pas remplie
+  // pour la ligne affichée - ou celle du tour d'une zone répétée - disparaît de la Lecture et des exports, le texte autour reste ; sans condition, ou sans règle complète, elle reste.
+  // Avant resolveVariableImages : une image retirée ne lit pas ses pièces jointes.
+  function resolveImageConditions(wrapper, tableId, record) {
+    return ConditionRules.resolveElements(wrapper, 'img.editor-image[data-var-table][data-condition]', tableId, record, true, (img, holds) => { if (!holds) img.remove(); });
   }
   // === Aperçu paginé réel - mode Lecture ===
   // Parallèle à l'aperçu de l'éditeur (js/header-footer-preview.js:computePageBreaks, renderPaginationOverlay), sur du contenu statique déjà résolu :

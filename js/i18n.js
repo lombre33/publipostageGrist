@@ -3022,6 +3022,7 @@ const I18n = (function () {
     'imgToolbar.delete': { fr: 'Supprimer', en: 'Delete' },
     // Bouton « Colonne… » (js/variable-column.js) de la barre d'une image liée à une colonne Pièces jointes : n'y est que quand la colonne (ou sa table) a disparu de Grist ; le cadre de l'image est alors orange.
     'imgToolbar.columnBroken': { fr: 'Cette image ne trouve plus sa colonne de pièces jointes : choisir la bonne…', en: 'This image can no longer find its attachments column: pick the right one…' },
+    'imgToolbar.conditionNeedsColumn': { fr: 'La condition d’affichage est réservée à une image liée à une colonne de pièces jointes', en: 'A display condition is only for an image linked to an attachments column' },
 
     // --- Toolbar flottante de tableau (js/editor.js:wireTableFloatingToolbar) ---
     'table.rowBefore': { fr: 'Ligne avant', en: 'Row before' },
@@ -3409,6 +3410,11 @@ const I18n = (function () {
     'varCond.debug.currentMetCheckbox': { fr: 'Ligne sélectionnée (n° {id}) : condition remplie, la case est cochée.', en: 'Selected row (#{id}): condition met, the checkbox is checked.' },
     'varCond.debug.currentNotMetCheckbox': { fr: 'Ligne sélectionnée (n° {id}) : condition non remplie, la case est décochée.', en: 'Selected row (#{id}): condition not met, the checkbox is unchecked.' },
     'varCond.saveLostCheckbox': { fr: 'La case conditionnelle a été déplacée ou supprimée pendant l’édition : la condition n’a pas été enregistrée.', en: 'The conditional checkbox was moved or deleted while editing: the condition was not saved.' },
+    'varCond.introImage': { fr: 'Cette image n’apparaît en lecture et à l’export que si la condition est remplie. En édition, son cadre reste visible, en pointillés bleus.', en: 'This image only appears in Read mode and in exports when the condition is met. While editing, its frame stays visible with a dashed blue border.' },
+    'varCond.debug.currentMetImage': { fr: 'Ligne sélectionnée (n° {id}) : condition remplie, l’image s’affiche.', en: 'Selected row (#{id}): condition met, the image is shown.' },
+    'varCond.debug.currentNotMetImage': { fr: 'Ligne sélectionnée (n° {id}) : condition non remplie, l’image est masquée.', en: 'Selected row (#{id}): condition not met, the image is hidden.' },
+    'varCond.saveLostImage': { fr: 'L’image a été déplacée ou supprimée pendant l’édition : la condition n’a pas été enregistrée.', en: 'The image was moved or deleted while editing: the condition was not saved.' },
+    'varCond.clip.pastedStatusImage': { fr: 'Condition collée. Enregistrez pour l’appliquer à l’image.', en: 'Condition pasted. Save to apply it to the image.' },
     'varCond.clip.pastedStatusCheckbox': { fr: 'Condition collée. Enregistrez pour l’appliquer à la case.', en: 'Condition pasted. Save to apply it to the checkbox.' },
 
     // --- Fenêtre « Autres attributs » d'une variable (js/variable-linked-attrs.js) ---

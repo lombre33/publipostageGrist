@@ -12,8 +12,8 @@
 // Aperçu en direct : la ligne sélectionnée, puis combien de lignes de la table remplissent la condition et la
 // première d'entre elles. « Copier » / « Coller » recolle la condition d'une fenêtre dans une autre, comme un brouillon : « Enregistrer » l'applique.
 // Ouverte depuis la barre flottante (js/floating-toolbars.js:wireVariableFloatingToolbar). La même fenêtre sert aux nœuds conditionnels - bloc de
-// texte (js/conditional-text.js), valeur dans la phrase (js/conditional-value.js), case à cocher (js/conditional-checkbox.js) - avec leurs propres
-// phrases ; « Défaire le bloc » / « Défaire la valeur » retire le cadre et la condition, le texte reste.
+// texte (js/conditional-text.js), valeur dans la phrase (js/conditional-value.js), case à cocher (js/conditional-checkbox.js) et image d'une colonne
+// Pièces jointes (barre de l'image, js/floating-toolbars.js ; la Lecture la retire, js/reader-mode.js:resolveImageConditions) - avec leurs propres phrases ; « Défaire le bloc » / « Défaire la valeur » retire le cadre et la condition, le texte reste.
 // Une bulle a en plus deux petits champs, « Avant » et « Après » : le texte collé à sa valeur (une virgule, une parenthèse), écrit seulement quand
 // la variable s'affiche avec une valeur (attributs `before` et `after` du nœud, VariableFormat.withAffixes ; js/reader-mode.js les écrit). Ils se règlent
 // ici parce que le cas d'usage est la virgule d'une variable conditionnelle, mais valent aussi pour une bulle sans condition.
@@ -47,6 +47,12 @@ const VariableCondition = (function () {
       met: 'varCond.debug.currentMetValue', notMet: 'varCond.debug.currentNotMetValue', first: 'varCond.debug.firstBlock',
       notMetOtherwise: 'varCond.debug.currentNotMetValueOtherwise',
       unwrap: { label: 'varCond.unwrapValue', title: 'varCond.unwrapValueTitle', lost: 'varCond.unwrapLostValue' },
+    },
+    // L'image d'une colonne Pièces jointes (barre de l'image, js/floating-toolbars.js) : comme un bloc, sans sinon ni « Défaire » - l'image disparaît en lecture quand la condition
+    // n'est pas remplie.
+    editorImage: {
+      title: 'varCond.title', intro: 'varCond.introImage', modeBefore: 'varCond.modeBefore', saveLost: 'varCond.saveLostImage', pasted: 'varCond.clip.pastedStatusImage',
+      met: 'varCond.debug.currentMetImage', notMet: 'varCond.debug.currentNotMetImage', first: 'varCond.debug.firstBlock',
     },
     conditionalCheckbox: {
       title: 'varCond.titleCheckbox', intro: 'varCond.introCheckbox', modeBefore: 'varCond.modeBeforeCheckbox', saveLost: 'varCond.saveLostCheckbox',

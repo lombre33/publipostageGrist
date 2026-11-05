@@ -97,6 +97,7 @@ const VariableModal = (function () {
     const sameAttrs = keys => keys.every(key => node.attrs[key] === original.attrs[key]);
     const same = node && node.type.name === name
       && (name !== 'varBadge' || sameAttrs(['table', 'column']))
+      && (name !== 'editorImage' || sameAttrs(['varTable', 'varColumn']))
       && (name !== 'mention' || sameAttrs(['table', 'row', 'column']));
     if (same) return node;
     console.warn('[' + tag + '] nœud introuvable à sa position d\'origine - rien n\'est écrit.');

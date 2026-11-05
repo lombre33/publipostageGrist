@@ -2770,6 +2770,82 @@ check('un vrai clic sur la ligne : l\'image prend la colonne Photo en gardant sa
   !!repairedImage.second && repairedImage.second.varColumn === 'Photo' && repairedImage.second.varKey === 'VcDossiers.Photo' && repairedImage.second.varTable === 'VcDossiers' && repairedImage.second.width === '160px' && repairedImage.second.height === '100px'
   && repairedImage.orange.every(o => !o) && repairedImage.selected && repairedImage.barOpen && repairedImage.buttonHidden && !repairedImage.listOpen, repairedImage);
 
+// Condition d'affichage d'une image de colonne Pièces jointes (retour d'Antoine du 05/11 : « on manque des outils de gestion d'une variable quand c'est une image (conditions...) », lot 2 de sa
+// réponse « Condition, boucle, ligne liée ») : le bouton « Condition d'affichage » de la barre de l'image, atteignable et non recouvert à 700x400, la barre tient dans la fenêtre ; un vrai clic
+// ouvre la fenêtre de condition (entière dans le panneau, la barre de l'image masquée derrière elle) ; une colonne et une valeur choisies à la vraie souris, Enregistrer pose la condition, le
+// cadre passe en pointillés bleus avec sa ligne « Si … » et la barre revient avec le bouton allumé ; sur une image ordinaire le bouton est grisé et un vrai clic n'ouvre rien.
+await page.evaluate(() => {
+  document.querySelector('.tiptap').blur();
+  Editor.setHTML('<p>Logo : <img class="editor-image" data-var-table="VcDossiers" data-var-column="Logo" data-var-key="VcDossiers.Logo" style="width: 160px; height: 100px"></p><p>Ordinaire : <img class="editor-image" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" style="width: 40px; height: 24px"></p>');
+});
+await page.waitForTimeout(500);
+const imageConditionButton = () => page.evaluate(() => {
+  const bar = Array.from(document.querySelectorAll('.v2-floating-toolbar.visible')).find(el => el.querySelector('button[data-action="layer-front"]'));
+  if (!bar) return { bar: false };
+  const b = bar.querySelector('button[data-action="var-condition"]');
+  const r = b ? b.getBoundingClientRect() : null;
+  const bb = bar.getBoundingClientRect();
+  const top = r && r.width ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+  return { bar: true, present: !!b, boxes: b ? b.getClientRects().length : -1, disabled: !!b && b.getAttribute('aria-disabled') === 'true', active: !!b && b.classList.contains('is-active'), title: b ? b.title : null,
+    x: r ? r.left + r.width / 2 : 0, y: r ? r.top + r.height / 2 : 0, onTop: !!top && (top === b || b.contains(top)), barLeft: bb.left, barRight: bb.right, barTop: bb.top, barBottom: bb.bottom, viewport: innerWidth, height: innerHeight };
+});
+const conditionFrames = await imageFrames();
+await page.mouse.click(conditionFrames[0].x, conditionFrames[0].y);
+await page.waitForTimeout(500);
+const conditionButtonBefore = await imageConditionButton();
+check('image de colonne à la vraie souris : « Condition d\'affichage » est dans sa barre, atteignable, non recouvert, actif (pas grisé), éteint, et la barre tient dans la fenêtre de 700 px',
+  conditionButtonBefore.bar && conditionButtonBefore.present && conditionButtonBefore.boxes > 0 && conditionButtonBefore.onTop && !conditionButtonBefore.disabled && !conditionButtonBefore.active
+  && conditionButtonBefore.title === 'Condition d’affichage' && conditionButtonBefore.barLeft >= 0 && conditionButtonBefore.barRight <= conditionButtonBefore.viewport + 0.5 && conditionButtonBefore.barTop >= 0, conditionButtonBefore);
+await page.screenshot({ path: '/tmp/claude-0/image-condition-barre-700x400.png' });
+if (conditionButtonBefore.onTop) await page.mouse.click(conditionButtonBefore.x, conditionButtonBefore.y);
+await page.waitForTimeout(300);
+const imageConditionBox = await hitTest('#var-condition-modal .var-modal-content');
+const imageConditionWindow = await page.evaluate(() => ({
+  title: document.getElementById('var-condition-title') ? document.getElementById('var-condition-title').textContent : null,
+  intro: (document.querySelector('#var-condition-modal .var-modal-intro') || {}).textContent || '',
+  barHidden: !Array.from(document.querySelectorAll('.v2-floating-toolbar.visible')).some(el => el.querySelector('button[data-action="layer-front"]')),
+}));
+check('un vrai clic sur le bouton : la fenêtre de condition s\'ouvre entière dans le panneau, parle de l\'image, et la barre de l\'image reste masquée derrière elle',
+  imageConditionBox.found && imageConditionBox.inViewport && /^Cette image/.test(imageConditionWindow.intro) && imageConditionWindow.title === 'Condition d’affichage' && imageConditionWindow.barHidden, { imageConditionBox, imageConditionWindow });
+check('colonne Statut choisie à la vraie souris pour la condition de l\'image', await pickColumn('#var-condition-modal', 'Statut'));
+const imageValueField = await hitTest('#var-condition-modal .macro-rule-value');
+if (imageValueField.found) { await page.mouse.click(imageValueField.x, imageValueField.y); await page.keyboard.type('Urgent'); }
+await page.waitForTimeout(700);
+const imageDebug = await page.evaluate(() => Array.from(document.querySelectorAll('#var-condition-modal .var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent));
+check('aperçu : la ligne sélectionnée remplit la condition et dit que l\'image s\'affiche', imageDebug.length > 0 && /l’image s’affiche/.test(imageDebug[0]), imageDebug);
+const imageSave = await hitTest('#var-condition-modal .var-modal-primary');
+check('Enregistrer visible et non recouvert à 700x400', imageSave.found && imageSave.inViewport && imageSave.onTop, imageSave);
+if (imageSave.found) await page.mouse.click(imageSave.x, imageSave.y);
+await page.waitForTimeout(400);
+const imageConditioned = await page.evaluate(() => {
+  const attrs = [];
+  EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'editorImage') attrs.push(node.attrs); });
+  const views = Array.from(document.querySelectorAll('.tiptap .editor-image-view'));
+  const label = views[0].querySelector('.editor-image-var-label');
+  const cs = getComputedStyle(views[0]);
+  return { condition: attrs[0].condition, width: attrs[0].width, height: attrs[0].height, modalOpen: document.getElementById('var-condition-modal').style.display !== 'none', conditional: views[0].classList.contains('editor-image-conditional'),
+    border: cs.borderTopColor, style: cs.borderTopStyle, line: label.dataset.condition, plainConditional: views[1].classList.contains('editor-image-conditional') };
+});
+check('Enregistrer (vrai clic) pose la condition sur l\'image en gardant sa taille, ferme la fenêtre, et le cadre passe en pointillés bleus avec « Si Statut = Urgent »',
+  !imageConditioned.modalOpen && !!imageConditioned.condition && imageConditioned.condition.rules.length === 1 && imageConditioned.condition.rules[0].column === 'Statut' && imageConditioned.condition.rules[0].value === 'Urgent'
+  && imageConditioned.width === '160px' && imageConditioned.height === '100px' && imageConditioned.conditional && imageConditioned.border === 'rgb(91, 127, 192)' && imageConditioned.style === 'dashed'
+  && imageConditioned.line === 'Si Statut = Urgent' && !imageConditioned.plainConditional, imageConditioned);
+const conditionButtonAfter = await imageConditionButton();
+check('la barre de l\'image est revenue (fenêtre fermée) avec le bouton allumé, toujours dans la fenêtre', conditionButtonAfter.bar && conditionButtonAfter.present && conditionButtonAfter.active && !conditionButtonAfter.disabled
+  && conditionButtonAfter.barLeft >= 0 && conditionButtonAfter.barRight <= conditionButtonAfter.viewport + 0.5, conditionButtonAfter);
+await page.screenshot({ path: '/tmp/claude-0/image-condition-cadre-700x400.png' });
+// L'image ordinaire est dans le paragraphe d'en dessous : la barre de l'image de colonne, posée au-dessus de celle-ci, ne la recouvre pas.
+const plainFrames = await imageFrames();
+await page.mouse.click(plainFrames[1].x, plainFrames[1].y);
+await page.waitForTimeout(500);
+const conditionButtonPlain = await imageConditionButton();
+check('image ordinaire à la vraie souris : « Condition d\'affichage » est grisé, sa raison en info-bulle, atteignable', conditionButtonPlain.bar && conditionButtonPlain.present && conditionButtonPlain.disabled && !conditionButtonPlain.active
+  && /réservée à une image liée à une colonne de pièces jointes/.test(conditionButtonPlain.title || '') && conditionButtonPlain.onTop, conditionButtonPlain);
+if (conditionButtonPlain.onTop) await page.mouse.click(conditionButtonPlain.x, conditionButtonPlain.y);
+await page.waitForTimeout(300);
+const openedOnPlain = await page.evaluate(() => { const m = document.getElementById('var-condition-modal'); return !!m && m.style.display !== 'none' && m.getClientRects().length > 0; });
+check('... et un vrai clic sur le bouton grisé n\'ouvre aucune fenêtre', !openedOnPlain, { openedOnPlain });
+
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();

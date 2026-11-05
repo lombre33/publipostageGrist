@@ -272,6 +272,14 @@
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='3' y='4' width='18' height='16' rx='2'/%3E%3Ccircle cx='9' cy='10' r='1.5' fill='%23000' stroke='none'/%3E%3Cpath d='m21 16-5-5-4 4-3-3-6 6'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='3' y='4' width='18' height='16' rx='2'/%3E%3Ccircle cx='9' cy='10' r='1.5' fill='%23000' stroke='none'/%3E%3Cpath d='m21 16-5-5-4 4-3-3-6 6'/%3E%3C/svg%3E");
 }
+/* Image de colonne avec une condition d'affichage (js/variable-condition.js) : classe `editor-image-conditional` posée par applyImageAttrs (js/editor-nodes.js), jamais
+   enregistrée. Les pointillés bleus #5b7fc0 d'une bulle ou d'un bloc conditionnels (css/variable-actions.css, css/conditional-text.css) ; la seconde ligne du libellé, « Si … »,
+   vient de `data-condition` du libellé, en `--text` comme le libellé (4,5:1 sur le gris du cadre) et coupée à la largeur du cadre. L'orange d'une colonne disparue (ci-dessous)
+   l'emporte sur le bleu : il est après. */
+.tiptap .editor-image-view.editor-image-var-placeholder.editor-image-conditional { border-color: #5b7fc0; }
+.editor-image-conditional .editor-image-var-label::after {
+  content: attr(data-condition); max-width: 100%; font-size: 10.5px; font-weight: 400; line-height: 1.25; color: var(--text, #1b2430); overflow-wrap: anywhere;
+}
 /* Image dont la colonne Pièces jointes (ou la table) n'existe plus dans Grist : classe `editor-image-broken` posée et retirée par Editor.markBadgeValidity à chaque
    mise à jour, jamais enregistrée ; le message est dans l'info-bulle du cadre, et sa barre a « Colonne… » (js/variable-column.js). Les mêmes couleurs et le même triangle
    que l'ambre d'une bulle sans lien (`.var-badge-unlinked`, css/style.css : texte #873600 sur #ffe6c7, 6,8:1) ; le cadre garde ses pointillés, sa taille et ses poignées. */

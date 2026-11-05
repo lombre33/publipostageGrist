@@ -570,6 +570,9 @@ const FloatingToolbars = (function () {
       return [
         // « Colonne… » : là seulement sur une image dont la colonne Pièces jointes a disparu (syncImageColumnButton), comme sur une variable cassée ; cachée sinon, pas grisée.
         `<button data-action="var-column" title="${I18n.t('imgToolbar.columnBroken')}" aria-label="${I18n.t('imgToolbar.columnBroken')}" hidden>${Icons.svg('varColumn')}</button>`,
+        // Condition d'affichage : grisée, avec sa raison, sur une image qui n'est pas celle d'une colonne Pièces jointes (syncImageConditionButton) ; allumée quand une condition est posée.
+        `<button data-action="var-condition" title="${I18n.t('varToolbar.condition')}" aria-label="${I18n.t('varToolbar.condition')}">${Icons.svg('varCondition')}</button>`,
+        '<span class="v2-floating-sep"></span>',
         `<button data-action="zoom-out" title="${I18n.t('imgToolbar.shrink')}">${Icons.svg('zoomOut')}</button>`,
         `<button data-action="zoom-in" title="${I18n.t('imgToolbar.grow')}">${Icons.svg('zoomIn')}</button>`,
         `<button data-action="reset" title="${I18n.t('imgToolbar.originalSize')}">${Icons.svg('resetSize')}</button>`,
@@ -846,6 +849,8 @@ const FloatingToolbars = (function () {
         caption: () => Caption.run(editor, 'image'),
         // Choisir une autre colonne Pièces jointes pour l'image dont la colonne a disparu (js/variable-column.js) ; sans effet sur une image saine (bouton caché).
         'var-column': () => { if (VariableColumn.isImageBroken(attrs)) VariableColumn.openAt(editor, editor.state.selection.from); },
+        // La condition d'affichage de l'image d'une colonne Pièces jointes (js/variable-condition.js) ; sans effet sur une autre image (bouton grisé).
+        'var-condition': () => { if (attrs.varTable) VariableCondition.openAt(editor, editor.state.selection.from); },
         delete: () => {
           const pos = editor.state.selection.from;
           editor.chain().focus().deleteRange({ from: pos, to: pos + selNode.nodeSize }).run();
@@ -875,6 +880,7 @@ const FloatingToolbars = (function () {
       syncImageLayerLocks(controls);
       syncImageRepeatButton(controls, attrs);
       syncImageColumnButton(controls, attrs);
+      syncImageConditionButton(controls, attrs);
       Caption.syncButton(controls.button('caption'), editor, 'image');
     }
     // « Colonne… » : n'est dans la barre que d'une image dont la colonne Pièces jointes (ou sa table) a disparu de Grist - la même lecture que le orange de son cadre
@@ -889,6 +895,16 @@ const FloatingToolbars = (function () {
         controls.setDisabled('var-column', false, title);
         btn.setAttribute('aria-label', title);
       }
+    }
+    // « Condition d'affichage » : réservée à l'image d'une colonne Pièces jointes - grisée avec sa raison pour une autre image (une photo, un QR code, un graphique), jamais retirée ;
+    // allumée (bleue) quand l'image a une condition.
+    function syncImageConditionButton(controls, attrs) {
+      const btn = controls.button('var-condition');
+      if (!btn) return;
+      const title = I18n.t(attrs.varTable ? 'varToolbar.condition' : 'imgToolbar.conditionNeedsColumn');
+      controls.setDisabled('var-condition', !attrs.varTable, title);
+      controls.setActive('var-condition', !!attrs.varTable && !!ConditionRules.normalizeCondition(attrs.condition));
+      btn.setAttribute('aria-label', title);
     }
     function syncImageWrapButton(controls, node) {
       // Grisé (jamais retiré) quand la bascule ne change rien ; .v2-hf-locked : css/toolbar-v2.css.
@@ -930,6 +946,8 @@ const FloatingToolbars = (function () {
         // hideFloatingContextToolbars (js/editor-core.js) ; ici, seule la sélection décide.
         document.querySelectorAll('.tiptap .editor-image-view.editor-image-selected').forEach(el => el.classList.remove('editor-image-selected'));
         if (!selectedImageNode()) { panel.hide(); return; }
+        // La fenêtre de condition ouverte sur l'image garde sa barre masquée, comme celle d'une bulle (variableWindowOpen).
+        if (variableWindowOpen()) { panel.hide(); return; }
         const dom = editor.view.nodeDOM(editor.state.selection.from);
         const img = dom && dom.querySelector && dom.querySelector('img');
         if (!img) { panel.hide(); return; }

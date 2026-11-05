@@ -1729,6 +1729,10 @@ const EditorNodes = (function () {
         varTable: { default: null, parseHTML: el => el.getAttribute('data-var-table') || null, renderHTML: noBareRender },
         varColumn: { default: null, parseHTML: el => el.getAttribute('data-var-column') || null, renderHTML: noBareRender },
         varKey: { default: null, parseHTML: el => el.getAttribute('data-var-key') || null, renderHTML: noBareRender },
+        // La condition d'affichage de l'image d'une colonne Pièces jointes (js/variable-condition.js, bouton « Condition d'affichage » de sa barre) : { mode, rules }, la même que celle
+        // d'une bulle. Écrite en data-condition sur l'<img> d'une image de variable seulement (renderHTML) ; la Lecture et les exports retirent l'image quand elle n'est pas remplie
+        // (js/reader-mode.js:resolveImageConditions). `null` = toujours affichée.
+        condition: { default: null, parseHTML: el => jsonAttr(el, 'data-condition'), renderHTML: noBareRender },
         // QR code (js/qr-code.js) : le texte à encoder, « #Table.Colonne » compris. Posé avec un `src`, l'image est le QR code déjà dessiné ; sans
         // `src`, le texte contient une colonne et le QR code n'est dessiné qu'à la Lecture et à l'export, pour la ligne affichée
         // (reader-mode.js:resolveQrCodes).
@@ -1862,6 +1866,12 @@ const EditorNodes = (function () {
       // Le dessin est prêt : il prend la place du cadre pointillé et de son libellé (css/chart-frame.css).
       wrap.classList.toggle('editor-image-chart-drawn', !!drawn);
       varLabel.textContent = isVarBox ? ('#' + (attrs.varKey || '')) : (isQrBox ? attrs.qrText : (isChartBox ? (attrs.chartName || I18n.t('chart.frame')) : ''));
+      // Une condition d'affichage posée (images de colonne seulement) : le cadre passe en pointillés bleus, comme une bulle ou un bloc conditionnels, et sa seconde ligne dit « Si … » ;
+      // l'image reste visible en édition. Rien n'est écrit dans le nœud : le cadre se relit à chaque mise à jour.
+      const condition = isVarBox ? ConditionRules.normalizeCondition(attrs.condition) : null;
+      wrap.classList.toggle('editor-image-conditional', !!condition);
+      if (condition) varLabel.dataset.condition = I18n.t('condText.tag.if', { condition: VariableCondition.describe(condition) });
+      else delete varLabel.dataset.condition;
       const layered = attrs.layer !== 'normal';
       wrap.classList.toggle('editor-image-layered', layered);
       wrap.classList.toggle('editor-image-repeated', PageLayer.isRepeatedAttrs(attrs));
@@ -2071,6 +2081,7 @@ const EditorNodes = (function () {
             attrs['data-var-table'] = nodeAttrs.varTable;
             attrs['data-var-column'] = nodeAttrs.varColumn;
             attrs['data-var-key'] = nodeAttrs.varKey;
+            if (nodeAttrs.condition) attrs['data-condition'] = JSON.stringify(nodeAttrs.condition);
           }
           if (nodeAttrs.qrText) attrs['data-qr-text'] = nodeAttrs.qrText;
           if (ChartEntry.isChartAttrs(nodeAttrs)) {
