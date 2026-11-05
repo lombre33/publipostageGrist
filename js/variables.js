@@ -364,7 +364,7 @@ const Variables = (function () {
     return { updateItems, hide, suggestionRender };
   })();
 
-  const { createExtension, createFieldExtension, isAttachmentColumn, insertAttachmentImage } = (function () {
+  const { createExtension, createFieldExtension, isAttachmentColumn, becomesImage, attachmentImageNode, insertAttachmentImage } = (function () {
     // Les insertions (puces, note de bas de page, variable, image d'une colonne Pièces jointes) et l'extension TipTap
 
     // Les puces qui ouvrent leur propre insertion. Appelées à l'usage : ces modules sont chargés après celui-ci.
@@ -408,18 +408,23 @@ const Variables = (function () {
     // autre table se poserait puis ne s'afficherait ni à la Lecture ni à l'export. `range` : ce que l'image remplace (le « #requête » de la liste) ; sans lui, la
     // sélection. Faux quand la clé est refusée.
     const isAttachmentColumn = item => GristAPI.getColumnType(item.table, item.column) === 'Attachments';
+    // Là où une image peut vivre : un modèle d'e-mail (texte brut) et les champs texte (Objet, À, Cc, Cci, nom du PDF : leur document n'a pas de nœud image)
+    // gardent la bulle. Partagé avec « Autres attributs » (js/variable-linked-attrs.js), où une pièce jointe cochée se pose en image elle aussi.
+    const becomesImage = (editor, item) => isAttachmentColumn(item) && !!editor.schema.nodes.editorImage && !EmailPlainText.isActive();
+    // Le nœud de l'image liée à la colonne `item` ({ table, column, key } ; `column` peut être un chemin « Personne.Structure.Logo ») : le cadre de 320 × 240 px.
+    const attachmentImageNode = item => ({ type: 'editorImage', attrs: { varTable: item.table, varColumn: item.column, varKey: item.key, width: '320px', height: '240px' } });
     async function insertAttachmentImage(editor, item, range) {
       if (!(await ensureLinkedAt(editor, range ? range.from : editor.state.selection.from, item))) return false;
       const chain = editor.chain().focus();
       if (range) chain.setTextSelection(range);
-      chain.insertImage({ varTable: item.table, varColumn: item.column, varKey: item.key, width: '320px', height: '240px' }).run();
+      chain.insertContent(attachmentImageNode(item)).run();
       return true;
     }
     // `range` reste valide pendant l'attente de la fenêtre de liaison (position ProseMirror, pas liée au focus DOM).
     async function insertVariable(editor, range, item) {
       // Là où une image peut vivre, une colonne Pièces jointes devient l'image du menu Image. Pas dans un champ texte (Objet, À, Cc, Cci, nom du PDF : son document
       // n'a pas de nœud image) ni dans un modèle d'e-mail (texte brut, menu Image grisé) : la bulle d'avant, qui n'y écrit rien.
-      if (isAttachmentColumn(item) && editor.schema.nodes.editorImage && !EmailPlainText.isActive()) { await insertAttachmentImage(editor, item, range); return; }
+      if (becomesImage(editor, item)) { await insertAttachmentImage(editor, item, range); return; }
       if (!(await ensureLinkedAt(editor, range.from, item))) return;
       editor.chain().focus().insertContentAt(range, { type: 'varBadge', attrs: { table: item.table, column: item.column, key: item.key } }).run();
     }
@@ -482,7 +487,7 @@ const Variables = (function () {
         },
       });
     }
-    return { createExtension, createFieldExtension, isAttachmentColumn, insertAttachmentImage };
+    return { createExtension, createFieldExtension, isAttachmentColumn, becomesImage, attachmentImageNode, insertAttachmentImage };
   })();
 
   const { checkForFilenameTrigger, pathItems } = (function () {
@@ -1516,11 +1521,11 @@ const Variables = (function () {
   // la boucle sur une liste de références, js/loop-rules.js, lit aussi) ; zeroHidden (la barre flottante d'une bulle nombre,
   // js/floating-toolbars.js, lit la même règle que le rendu) ; currentTables et prioritizeTables (le menu Image de la barre, js/main-toolbar.js,
   // classe ses colonnes comme la liste « # ») ; isAttachmentColumn et insertAttachmentImage (le même menu en tire ses colonnes Pièces jointes et pose
-  // l'image que la liste « # » pose pour l'une d'elles) ; crossedListTable et writesList (la fenêtre « Liste » d'une bulle, js/variable-list.js, et
+  // l'image que la liste « # » pose pour l'une d'elles) ; becomesImage et attachmentImageNode (« Autres attributs », js/variable-linked-attrs.js, pose la même image pour une pièce jointe cochée) ; crossedListTable et writesList (la fenêtre « Liste » d'une bulle, js/variable-list.js, et
   // « Remplacer » d'Autres attributs, js/variable-linked-attrs.js : un chemin qui traverse une liste de références s'écrit en liste) ; linkRuleLabel
   // (le coin d'état d'Annuler, js/link-rule-history.js, nomme un lien comme « Tables liées »).
   return {
-    createExtension, createFieldExtension, isAttachmentColumn, insertAttachmentImage, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
+    createExtension, createFieldExtension, isAttachmentColumn, becomesImage, attachmentImageNode, insertAttachmentImage, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
     preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, linkRuleLabel, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, listItems, decodeShown, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow,
     resolveCalcResult, resolveCalc, badgeProblem, pageReferencesTo, isUnlinked, calcProblem, formulaErrorText,
   };

@@ -888,6 +888,106 @@
     },
   }));
 
+  // --- Une pièce jointe choisie dans « Autres attributs » se pose en image liée, pas en bulle (retour d'Antoine du 05/11 : la page est sur VpBadge, dont Personne est une
+  // Référence vers VpAnnuaire, qui a une Référence vers VpStructure, dont Logo est une colonne Pièces jointes). La ligne courante est celle du badge n° 2 (Martin Anne, structure
+  // « Région », logo 22). Aucune règle de liaison au départ. ---
+  async function seedBadges(h) {
+    VariableLinkedAttrs.close({ keepFocus: true });
+    await h.resetEditor();
+    const stub = window.__gristStub;
+    stub.setVariables('VpStructure', { Logo: 'Attachments', Nom: 'Text' });
+    stub.setRows('VpStructure', [{ id: 1, Logo: ['L', 11], Nom: 'Mairie' }, { id: 2, Logo: ['L', 22], Nom: 'Région' }]);
+    stub.setVariables('VpPersonnes', { NomPrenom: 'Text', Structure: 'Ref:VpStructure', gristHelper_Display: 'Text' }, null, { Structure: 'gristHelper_Display' });
+    stub.setRows('VpPersonnes', [
+      { id: 7, NomPrenom: 'Dupont Jean', Structure: 1, gristHelper_Display: 'Mairie' },
+      { id: 8, NomPrenom: 'Martin Anne', Structure: 2, gristHelper_Display: 'Région' },
+    ]);
+    stub.setVariables('VpBadge', { Personne: 'Ref:VpPersonnes', gristHelper_Display: 'Text' }, null, { Personne: 'gristHelper_Display' });
+    stub.setRows('VpBadge', [{ id: 1, Personne: 7, gristHelper_Display: 'Dupont Jean' }, { id: 2, Personne: 8, gristHelper_Display: 'Martin Anne' }]);
+    await GristAPI.refreshSchema();
+    for (const t of ['VpPersonnes', 'VpStructure']) await GristAPI.deleteLinkRule(t);
+    stub.fireRecord({ id: 2, Personne: 'Martin Anne' }, 'VpBadge');
+    await h.sleep(50);
+  }
+  const imageNodes = ed => {
+    const out = [];
+    ed.state.doc.descendants(node => { if (node.type.name === 'editorImage') out.push(node.attrs); });
+    return out;
+  };
+  // Ce que le paragraphe montre, dans l'ordre : « image » pour une image liée, « #clé » pour une bulle, le texte sinon.
+  const sequenceOf = ed => {
+    const seq = [];
+    ed.state.doc.firstChild.forEach(n => seq.push(n.type.name === 'editorImage' ? 'image:' + n.attrs.varKey : n.type.name === 'varBadge' ? '#' + n.attrs.key : n.text));
+    return seq;
+  };
+  const logoIdIn = async html => {
+    const reader = await renderReader(html, 'VpBadge');
+    const img = reader.querySelector('.reader-content img');
+    return img ? img.dataset.attachmentId || null : 'aucune image';
+  };
+
+  cases.push({
+    id: 'varpath_attachment_checked_in_other_attributes_inserts_an_image',
+    description: 'Dans « Autres attributs » de #VpBadge.Personne, descendre par Structure et cocher Logo (pièce jointe) puis « Insérer » pose une IMAGE liée à VpPersonnes.Structure.Logo (cadre 320 × 240, pas une bulle) ; la Lecture montre le logo de la structure de la personne de la ligne',
+    run: async (h) => {
+      await seedBadges(h);
+      Editor.setHTML(`<p>${badgeHtml('VpBadge', 'Personne')}</p>`);
+      const ed = await openWindow(h, 'VpBadge', 'Personne');
+      if (!modal()) return { pass: false, notes: 'la fenêtre ne s’est pas ouverte' };
+      await descend(h, 'Structure');
+      tick('Logo');
+      insertButton().click();
+      await h.sleep(200);
+      const seq = sequenceOf(ed);
+      const images = imageNodes(ed);
+      const logo = await logoIdIn(Editor.getHTML());
+      const logoBubbles = badgeNodes(ed).filter(b => /Logo$/.test(b.node.attrs.column)).length;
+      const pass = JSON.stringify(seq) === JSON.stringify(['#VpBadge.Personne', ' ', 'image:VpPersonnes.Structure.Logo']) && images.length === 1
+        && images[0].varTable === 'VpPersonnes' && images[0].varColumn === 'Structure.Logo' && images[0].width === '320px' && images[0].height === '240px'
+        && logoBubbles === 0 && logo === '22';
+      return { pass, notes: JSON.stringify({ seq, images, logo, logoBubbles }) };
+    },
+  });
+
+  cases.push({
+    id: 'varpath_attachment_replace_turns_the_bubble_into_an_image_and_undoes_in_one_step',
+    description: '« Remplacer » sur #VpBadge.Personne.Structure.Nom avec Logo coché met l’image liée à VpBadge.Personne.Structure.Logo à la place de la bulle (le chemin tout entier, sans règle de liaison) et, si Nom est coché aussi, la bulle Nom la suit ; l’image reste sélectionnée ; un seul Annuler rend la bulle d’origine',
+    run: async (h) => {
+      await seedBadges(h);
+      Editor.setHTML(`<p>${badgeHtml('VpBadge', 'Personne.Structure.Nom')}</p>`);
+      const ed = await openWindow(h, 'VpBadge', 'Personne.Structure.Nom');
+      if (!modal()) return { pass: false, notes: 'la fenêtre ne s’est pas ouverte' };
+      tick('Logo');
+      tick('Nom');
+      modal().querySelector('button.var-linked-replace').click();
+      await h.sleep(200);
+      const seq = sequenceOf(ed);
+      const selected = ed.state.selection.node ? ed.state.selection.node.type.name : null;
+      const logo = await logoIdIn(Editor.getHTML());
+      const rules = ['VpPersonnes', 'VpStructure'].map(t => GristAPI.getLinkRule(t));
+      ed.commands.undo();
+      await h.sleep(150);
+      const undone = sequenceOf(ed);
+      const pass = JSON.stringify(seq) === JSON.stringify(['image:VpBadge.Personne.Structure.Logo', ' ', '#VpBadge.Personne.Structure.Nom']) && selected === 'editorImage' && logo === '22'
+        && rules.every(r => !r) && JSON.stringify(undone) === JSON.stringify(['#VpBadge.Personne.Structure.Nom']);
+      return { pass, notes: JSON.stringify({ seq, selected, logo, rules, undone }) };
+    },
+  });
+
+  cases.push({
+    id: 'varpath_attachment_stays_a_bubble_where_no_image_can_live',
+    description: 'Variables.becomesImage : vrai pour une colonne Pièces jointes (ou le chemin qui y mène) dans l’éditeur du document, faux pour une autre colonne, et faux là où le document n’a pas de nœud image (champs texte Objet, À, Cc, Cci, nom du PDF) - la bulle reste alors',
+    run: async (h) => {
+      await seedBadges(h);
+      const ed = EditorCore.getEditor();
+      const logoPath = { table: 'VpBadge', column: 'Personne.Structure.Logo', key: 'VpBadge.Personne.Structure.Logo' };
+      const name = { table: 'VpBadge', column: 'Personne.Structure.Nom', key: 'VpBadge.Personne.Structure.Nom' };
+      const noImageNode = { schema: { nodes: {} } };
+      const got = { logo: Variables.becomesImage(ed, logoPath), name: Variables.becomesImage(ed, name), field: Variables.becomesImage(noImageNode, logoPath) };
+      return { pass: got.logo === true && got.name === false && got.field === false, notes: JSON.stringify(got) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varPath = cases;
 })();

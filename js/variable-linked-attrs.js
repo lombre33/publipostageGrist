@@ -451,6 +451,9 @@ const VariableLinkedAttrs = (function () {
     const inherits = !refs.inheritRow.hidden && refs.inheritBox.checked;
     return picks.flatMap(p => {
       const attrs = pickAttrs(p);
+      // Une pièce jointe cochée se pose en image liée à la colonne (cadre, barre de l'image), comme la liste « # » : la bulle d'avant ne montrait qu'une pile de
+      // photos sans cadre ni outils. Elle n'a pas de condition à reprendre.
+      if (Variables.becomesImage(state.editor, attrs)) return [{ type: 'text', text: ' ' }, Variables.attachmentImageNode(attrs)];
       if (inherits) attrs.condition = ConditionRules.plainCondition(node.attrs.condition);
       return [{ type: 'text', text: ' ' }, { type: 'varBadge', attrs }];
     });
@@ -489,6 +492,9 @@ const VariableLinkedAttrs = (function () {
     const node = originalBadge();
     if (!node) return;
     const [first, ...others] = orderedPicks();
+    // Une pièce jointe en premier : la bulle devient l'image (un autre nœud : ses réglages de texte - format, boucle, condition - ne s'y appliquent pas) ; les autres
+    // cochés suivent comme d'habitude.
+    if (Variables.becomesImage(editor, pickAttrs(first))) { replaceWithImage(editor, pos, node, first, others); return; }
     const attrs = Object.assign({}, node.attrs, pickAttrs(first));
     // Sans condition, le sinon (js/variable-otherwise.js) n'a plus rien à remplacer.
     if (!refs.inheritRow.hidden && !refs.inheritBox.checked) { attrs.condition = null; attrs.otherwise = null; attrs.otherwiseText = null; }
@@ -503,6 +509,19 @@ const VariableLinkedAttrs = (function () {
     close({ keepFocus: true });
     const chain = editor.chain().command(({ tr }) => { tr.setNodeMarkup(pos, undefined, attrs); return true; });
     if (content.length) chain.insertContentAt(after, content);
+    chain.setNodeSelection(pos).run();
+    editor.view.focus();
+  }
+
+  // « Remplacer » par une pièce jointe : l'image liée prend la place de la bulle, les autres attributs cochés la suivent. Une seule transaction (un seul Annuler rend la
+  // bulle) ; l'image reste sélectionnée, sa barre s'ouvre.
+  function replaceWithImage(editor, pos, node, first, others) {
+    const image = editor.schema.nodeFromJSON(Variables.attachmentImageNode(pickAttrs(first)));
+    const after = pos + node.nodeSize;
+    const content = badgesContent(others, node);
+    close({ keepFocus: true });
+    const chain = editor.chain().command(({ tr }) => { tr.replaceWith(pos, after, image); return true; });
+    if (content.length) chain.insertContentAt(pos + image.nodeSize, content);
     chain.setNodeSelection(pos).run();
     editor.view.focus();
   }

@@ -2846,6 +2846,52 @@ await page.waitForTimeout(300);
 const openedOnPlain = await page.evaluate(() => { const m = document.getElementById('var-condition-modal'); return !!m && m.style.display !== 'none' && m.getClientRects().length > 0; });
 check('... et un vrai clic sur le bouton grisé n\'ouvre aucune fenêtre', !openedOnPlain, { openedOnPlain });
 
+// 8) Une pièce jointe cochée dans « Autres attributs » se pose en IMAGE liée (retour d'Antoine du 05/11 : « ça reste une ligne, ça ne bascule pas en mode image »).
+// VcFiches est liée à la page par sa ligne fixe ; sa colonne Référence Entite mène à VcEntites, dont Logo est une colonne Pièces jointes. Tout à la vraie souris à 700x400 :
+// l'icône de la barre, la flèche d'Entite, la case Logo, « Insérer », puis le cadre posé dans le document, visible et à sa place.
+await page.evaluate(async () => {
+  const stub = window.__gristStub;
+  document.getElementById('editor-container').classList.remove('a4-preview');
+  stub.setVariables('VcEntites', { Logo: 'Attachments', Nom: 'Text' });
+  stub.setRows('VcEntites', [{ id: 1, Logo: ['L', 31], Nom: 'Mairie' }]);
+  stub.setVariables('VcFiches', { NomPrenom: 'Text', Entite: 'Ref:VcEntites', gristHelper_Display: 'Text' }, null, { Entite: 'gristHelper_Display' });
+  stub.setRows('VcFiches', [{ id: 1, NomPrenom: 'Dupont Jean', Entite: 1, gristHelper_Display: 'Mairie' }]);
+  await GristAPI.refreshSchema();
+  await GristAPI.saveLinkRule('VcFiches', { mode: 'singleton' });
+  Editor.setHTML('<p>Badge de <span class="var-badge" data-table="VcFiches" data-column="NomPrenom" data-key="VcFiches.NomPrenom"></span> :</p>');
+});
+await page.waitForTimeout(300);
+await openLinkedFor('NomPrenom');
+const attachWindow = await linkedState();
+check('Autres attributs sur #VcFiches.NomPrenom : la colonne Référence Entite a une flèche, la fenêtre tient dans le panneau',
+  attachWindow.open && JSON.stringify(attachWindow.arrows) === JSON.stringify(['Entite']) && attachWindow.inViewport, attachWindow);
+const entiteArrow = await hitTest('#var-linked-modal .var-linked-row[data-col="Entite"] .var-linked-descend');
+if (entiteArrow.found) await page.mouse.click(entiteArrow.x, entiteArrow.y);
+await page.waitForTimeout(350);
+const logoRow = await hitTest('#var-linked-modal .var-linked-row[data-col="Logo"] .var-linked-pick');
+check('au niveau de VcEntites, la ligne Logo (pièce jointe) est visible et au premier plan', logoRow.found && logoRow.inViewport && logoRow.onTop, logoRow);
+if (logoRow.found) await page.mouse.click(logoRow.x, logoRow.y);
+await page.waitForTimeout(80);
+const insertLogo = await hitTest('#var-linked-modal .var-modal-primary');
+if (insertLogo.found) await page.mouse.click(insertLogo.x, insertLogo.y);
+await page.waitForTimeout(400);
+const attachResult = await page.evaluate(async () => {
+  const ed = EditorCore.getEditor();
+  const seq = [];
+  ed.state.doc.firstChild.forEach(n => seq.push(n.type.name === 'editorImage' ? 'image:' + n.attrs.varKey : n.type.name === 'varBadge' ? '#' + n.attrs.key : n.text));
+  const frame = document.querySelector('.tiptap .editor-image-view[data-image-var-table="VcFiches"]');
+  const rect = frame && frame.getBoundingClientRect();
+  const read = document.createElement('div');
+  read.innerHTML = await ReaderMode.preview(Editor.getHTML(), 'VcDossiers', GristAPI.getCurrentRecord());
+  const img = read.querySelector('img');
+  return { seq, framed: !!frame, visible: !!rect && rect.width > 0 && rect.height > 0 && rect.right <= innerWidth + 0.5, column: frame && frame.dataset.imageVarColumn,
+    logoBubbles: Array.from(document.querySelectorAll('.tiptap .var-badge')).filter(b => /Logo$/.test(b.dataset.column)).length, readAttachment: img ? img.getAttribute('data-attachment-id') : null,
+    modalOpen: document.getElementById('var-linked-modal').style.display !== 'none' };
+});
+check('Insérer (vrai clic) pose une IMAGE liée à VcFiches.Entite.Logo (cadre visible dans le panneau, aucune bulle Logo), fenêtre fermée, et la Lecture en tire la pièce jointe 31',
+  JSON.stringify(attachResult.seq) === JSON.stringify(['Badge de ', '#VcFiches.NomPrenom', ' ', 'image:VcFiches.Entite.Logo', ' :']) && attachResult.framed && attachResult.visible
+  && attachResult.column === 'Entite.Logo' && attachResult.logoBubbles === 0 && attachResult.readAttachment === '31' && !attachResult.modalOpen, attachResult);
+
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();
