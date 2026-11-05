@@ -1853,6 +1853,10 @@ const EditorNodes = (function () {
       img.alt = attrs.alt || '';
       img.setAttribute('style', imageInnerStyle(attrs, isVarBox, isQrBox, isChartBox));
       wrap.classList.toggle('editor-image-var-placeholder', isVarBox || isQrBox || isChartBox);
+      // La colonne Pièces jointes du cadre, lue par Editor.markBadgeValidity pour l'orange d'une colonne disparue (jamais un attribut du nœud : le cadre n'écrit pas ces
+      // clés dans le HTML du modèle, c'est renderHTML qui le fait, sur l'<img>).
+      if (isVarBox) { wrap.dataset.imageVarTable = attrs.varTable; wrap.dataset.imageVarColumn = attrs.varColumn || ''; }
+      else { delete wrap.dataset.imageVarTable; delete wrap.dataset.imageVarColumn; wrap.classList.remove('editor-image-broken'); wrap.removeAttribute('title'); }
       wrap.classList.toggle('editor-image-qr-placeholder', isQrBox);
       wrap.classList.toggle('editor-image-chart-placeholder', isChartBox);
       // Le dessin est prêt : il prend la place du cadre pointillé et de son libellé (css/chart-frame.css).

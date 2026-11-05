@@ -857,6 +857,267 @@
     },
   });
 
+  // ---- Image liée à une colonne Pièces jointes dont la colonne a disparu : orange, avec « Colonne… » dans sa barre, comme une variable cassée (retour d'Antoine du 05/11 : « sur une image
+  // lorsque l'on supprime la colonne pj ça ne passe pas en orange et je n'ai pas l'icône pour sélectionner une nouvelle colonne source, contrairement aux variables »). ----
+  const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  const imageHtml = (table, column, extra) => `<img class="editor-image" data-var-table="${table}" data-var-column="${column}" data-var-key="${table}.${column}" style="width: 200px; height: 150px"${extra || ''}>`;
+  // Les colonnes du faux document, avec les colonnes Pièces jointes que l'image peut prendre : deux dans la table de la page, une dans une table liée (VcoProjet), une dans la table sans lien (VcoTest).
+  const IMAGE_COLUMNS = {
+    [PAGE]: { Titre: 'Text', Montant: 'Numeric', Echeance: 'Date', Actif: 'Bool', Projet: 'Ref:VcoProjet', Responsable: 'Ref:VcoAnnuaire', Logo: 'Attachments', Photo: 'Attachments', gristHelper_Display: 'Text', gristHelper_Display2: 'Text' },
+    VcoProjet: { Nom: 'Text', Budget: 'Numeric', Emblem: 'Attachments' },
+    VcoTest: { Nom: 'Text', Notification: 'Ref:' + PAGE, Scan: 'Attachments' },
+  };
+  const IMAGE_ROWS = {
+    [PAGE]: [{ id: 1, Titre: 'Notif 1', Montant: 1200, Echeance: 631152000, Actif: true, Projet: 1, Responsable: 7, gristHelper_Display: 'Projet Alpha', gristHelper_Display2: 'Dupont Jean', Logo: ['L', 11], Photo: ['L', 12] }],
+    VcoProjet: [{ id: 1, Nom: 'Projet Alpha', Budget: 5000, Emblem: ['L', 13] }],
+    VcoTest: [{ id: 1, Nom: 'Essai', Notification: 1, Scan: ['L', 14] }],
+  };
+  const defineImageColumns = (only) => {
+    const stub = window.__gristStub;
+    Object.keys(IMAGE_COLUMNS).forEach(table => {
+      const cols = Object.assign({}, IMAGE_COLUMNS[table]);
+      (only && only[table] ? only[table] : []).forEach(name => { delete cols[name]; });
+      if (table === PAGE) stub.setVariables(table, cols, null, { Projet: 'gristHelper_Display', Responsable: 'gristHelper_Display2' });
+      else stub.setVariables(table, cols);
+      // Les lignes suivent les colonnes (le faux Grist ne rend que les colonnes de ses lignes) : une colonne supprimée n'y est plus, une colonne ajoutée y a sa valeur.
+      stub.setRows(table, IMAGE_ROWS[table]);
+    });
+  };
+  async function seedImages(h, html) {
+    await seed(h, '<p></p>');
+    defineImageColumns();
+    await GristAPI.refreshSchema();
+    Editor.setHTML(html);
+    await h.sleep(150);
+  }
+  const imageNodes = () => { const out = []; ed().state.doc.descendants((node, pos) => { if (node.type.name === 'editorImage') out.push({ node, pos }); }); return out; };
+  const imageAttrsOf = index => { const f = imageNodes()[index || 0]; return f ? f.node.attrs : null; };
+  const imageViews = () => Array.from(document.querySelectorAll('.tiptap .editor-image-view'));
+  async function selectImage(h, index) {
+    document.querySelector('.tiptap').focus();
+    const found = imageNodes()[index || 0];
+    if (!found) throw new Error('pas d’image n° ' + (index || 0));
+    ed().commands.setNodeSelection(found.pos);
+    await h.sleep(150);
+    return found;
+  }
+  // La barre de l'image : celle qui porte le calque « Devant le texte ».
+  const imageBar = () => Array.from(document.querySelectorAll('.v2-floating-toolbar')).find(el => el.querySelector('button[data-action="layer-front"]'));
+  const imageColumnButton = () => { const bar = imageBar(); return bar ? bar.querySelector('button[data-action="var-column"]') : null; };
+  const imageButtonState = () => {
+    const bar = imageBar();
+    const b = imageColumnButton();
+    return {
+      bar: !!bar && bar.classList.contains('visible'),
+      shown: !!b && !!bar && bar.classList.contains('visible') && b.getClientRects().length > 0,
+      hidden: !!b && b.hidden, disabled: !!b && b.getAttribute('aria-disabled') === 'true', title: b ? b.title : null, label: b ? b.getAttribute('aria-label') : null,
+    };
+  };
+  const pressImageColumn = () => imageColumnButton().dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+  const ORANGE_BG = 'rgb(255, 230, 199)';
+  const frameLook = view => { const cs = getComputedStyle(view); return { orange: view.classList.contains('editor-image-broken'), bg: cs.backgroundColor, title: view.getAttribute('title') || '' }; };
+  const IMG_BROKEN = { fr: 'Cette image ne trouve plus sa colonne de pièces jointes : choisir la bonne…', en: 'This image can no longer find its attachments column: pick the right one…' };
+  const COLUMN_GONE = { fr: 'La colonne « Ancien » n’existe plus dans la table « ' + PAGE + ' ».', en: 'Column “Ancien” no longer exists in table “' + PAGE + '”.' };
+  const TABLE_GONE = { fr: 'La table « VcoDisparue » n’existe plus dans ce document.', en: 'Table “VcoDisparue” no longer exists in this document.' };
+
+  cases.push({
+    id: 'varcolumn_image_of_a_deleted_attachment_column_is_orange_with_its_message',
+    description: 'Une image liée à une colonne Pièces jointes dont la colonne ou la table n’existe plus dans Grist a son cadre orange (comme l’ambre d’une bulle), avec le message en info-bulle dans la langue de l’interface ; une image saine, une image ordinaire n’ont ni l’orange ni info-bulle ; la colonne supprimée dans Grist puis recréée, le cadre devient orange puis reprend son aspect sans toucher au document',
+    run: async (h) => {
+      const html = `<p>${imageHtml(PAGE, 'Logo')} ${imageHtml(PAGE, 'Ancien')} ${imageHtml('VcoDisparue', 'Logo')} <img class="editor-image" src="${PIXEL}" style="width: 40px"></p>`;
+      const looks = {};
+      for (const lang of ['fr', 'en']) {
+        await inLang(lang, async () => {
+          await seedImages(h, html);
+          looks[lang] = imageViews().map(frameLook);
+        });
+      }
+      // La colonne « Logo » disparaît de Grist (supprimée), puis revient : le cadre suit sans aucune modification du document.
+      await inLang('fr', async () => {
+        await seedImages(h, html);
+        const htmlBefore = Editor.getHTML();
+        defineImageColumns({ [PAGE]: ['Logo'] });
+        await GristAPI.refreshSchema();
+        Editor.refreshLinkState();
+        await h.sleep(150);
+        looks.deleted = frameLook(imageViews()[0]);
+        const htmlWhileBroken = Editor.getHTML();
+        defineImageColumns();
+        await GristAPI.refreshSchema();
+        Editor.refreshLinkState();
+        await h.sleep(150);
+        looks.recreated = frameLook(imageViews()[0]);
+        looks.documentUntouched = htmlBefore === htmlWhileBroken && htmlBefore === Editor.getHTML();
+      });
+      const wrong = [];
+      for (const lang of ['fr', 'en']) {
+        const [ok, col, table, plain] = looks[lang];
+        if (!ok || ok.orange || ok.bg === ORANGE_BG || ok.title) wrong.push(lang + ' saine : ' + JSON.stringify(ok));
+        if (!col || !col.orange || col.bg !== ORANGE_BG || col.title !== COLUMN_GONE[lang]) wrong.push(lang + ' colonne disparue : ' + JSON.stringify(col));
+        if (!table || !table.orange || table.bg !== ORANGE_BG || table.title !== TABLE_GONE[lang]) wrong.push(lang + ' table disparue : ' + JSON.stringify(table));
+        if (!plain || plain.orange || plain.title) wrong.push(lang + ' image ordinaire : ' + JSON.stringify(plain));
+      }
+      if (!looks.deleted.orange || looks.deleted.bg !== ORANGE_BG) wrong.push('colonne supprimée dans Grist : le cadre ne devient pas orange ' + JSON.stringify(looks.deleted));
+      if (looks.recreated.orange || looks.recreated.title) wrong.push('colonne recréée : le cadre reste orange ' + JSON.stringify(looks.recreated));
+      if (!looks.documentUntouched) wrong.push('le HTML du modèle a changé avec l’orange (rien ne doit s’enregistrer)');
+      return { pass: wrong.length === 0, notes: wrong.join(' | ') || 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'varcolumn_image_bar_has_the_column_button_only_when_the_source_is_gone',
+    description: 'La barre d’une image liée à une colonne Pièces jointes qui n’existe plus a le bouton « Colonne… » (info-bulle et nom accessible dans la langue de l’interface) ; celle d’une image saine, d’une image ordinaire, ou d’une image dont la colonne revient ne l’a pas',
+    run: async (h) => {
+      const html = `<p>${imageHtml(PAGE, 'Logo')} ${imageHtml(PAGE, 'Ancien')} ${imageHtml('VcoDisparue', 'Logo')} <img class="editor-image" src="${PIXEL}" style="width: 40px"></p>`;
+      const states = {};
+      const kinds = ['valid', 'brokenColumn', 'brokenTable', 'plain'];
+      for (const lang of ['fr', 'en']) {
+        await inLang(lang, async () => {
+          await seedImages(h, html);
+          for (let i = 0; i < kinds.length; i++) {
+            await selectImage(h, i);
+            states[lang + '_' + kinds[i]] = imageButtonState();
+          }
+        });
+      }
+      // La colonne revient (recréée dans Grist) pendant que l'image est sélectionnée : à la prochaine ouverture de sa barre, plus de bouton.
+      await inLang('fr', async () => {
+        await seedImages(h, html);
+        await selectImage(h, 1);
+        defineImageColumns({ [PAGE]: ['Logo'] });
+        await GristAPI.refreshSchema();
+        // « Ancien » n'existe toujours pas : l'image 1 reste cassée ; l'image 0 (Logo supprimée) devient cassée à son tour.
+        await selectImage(h, 0);
+        states.logoDeleted = imageButtonState();
+        defineImageColumns();
+        await GristAPI.refreshSchema();
+        Editor.refreshLinkState();
+        await selectImage(h, 1);
+        await selectImage(h, 0);
+        states.logoBack = imageButtonState();
+      });
+      const wrong = [];
+      for (const lang of ['fr', 'en']) {
+        ['valid', 'plain'].forEach(kind => { const s = states[lang + '_' + kind]; if (!(s.bar && !s.shown && s.hidden)) wrong.push(lang + '_' + kind + ' : ' + JSON.stringify(s)); });
+        ['brokenColumn', 'brokenTable'].forEach(kind => {
+          const s = states[lang + '_' + kind];
+          if (!(s.bar && s.shown && !s.hidden && !s.disabled && s.title === IMG_BROKEN[lang] && s.label === IMG_BROKEN[lang])) wrong.push(lang + '_' + kind + ' : ' + JSON.stringify(s));
+        });
+      }
+      if (!(states.logoDeleted.bar && states.logoDeleted.shown)) wrong.push('Logo supprimée : ' + JSON.stringify(states.logoDeleted));
+      if (!(states.logoBack.bar && !states.logoBack.shown && states.logoBack.hidden)) wrong.push('Logo recréée : ' + JSON.stringify(states.logoBack));
+      return { pass: wrong.length === 0, notes: wrong.join(' | ') || 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'varcolumn_image_takes_another_attachment_column_and_keeps_its_settings_with_one_undo',
+    description: 'Sur une image dont la colonne a disparu, « Colonne… » ouvre la liste des seules colonnes Pièces jointes (celles de la table de la page en tête, sans colonne de texte ni colonne d’aide) ; la colonne choisie remplace la source de l’image - taille, alignement, calque et opacité restent, le cadre n’est plus orange, la barre perd le bouton et l’image reste sélectionnée - et un seul Annuler rend l’ancienne colonne',
+    run: async (h) => {
+      // Une image centrée, à moitié transparente, de 200 × 150 px : ce que la colonne choisie ne doit pas toucher.
+      await seedImages(h, `<p><img class="editor-image" data-align="center" data-var-table="${PAGE}" data-var-column="Ancien" data-var-key="${PAGE}.Ancien" style="width: 200px; height: 150px; opacity: 0.6"></p>`);
+      await selectImage(h, 0);
+      const before = imageAttrsOf(0);
+      const wasOrange = imageViews()[0].classList.contains('editor-image-broken');
+      pressImageColumn();
+      await h.sleep(250);
+      const panel = openPanel();
+      const listed = panel ? optionNames(panel) : [];
+      await pickRow(h, PAGE + '.Photo');
+      await h.sleep(250);
+      const after = imageAttrsOf(0);
+      const stillOrange = imageViews()[0].classList.contains('editor-image-broken');
+      const barAfter = imageButtonState();
+      const reselected = !!ed().state.selection.node && ed().state.selection.node.type.name === 'editorImage';
+      ed().commands.undo();
+      await h.sleep(150);
+      const undone = imageAttrsOf(0);
+      const checks = {
+        wasOrange,
+        listOnlyHasAttachmentColumns: listed.length >= 4 && listed.every(k => ['VcoNotifications.Logo', 'VcoNotifications.Photo', 'VcoProjet.Emblem', 'VcoTest.Scan'].indexOf(k) !== -1),
+        listHasThePageColumnsFirst: listed.slice(0, 2).every(k => k.indexOf(PAGE + '.') === 0),
+        noTextColumnNorHelper: listed.every(k => !/Titre|Montant|gristHelper_/.test(k)),
+        noDescendArrowOnAnImage: !panel || !panel.querySelector('.ss-descend, .ss-expand'),
+        replaced: after.varTable === PAGE && after.varColumn === 'Photo' && after.varKey === PAGE + '.Photo',
+        settingsKept: after.width === before.width && after.height === before.height && after.align === before.align && after.opacity === before.opacity && after.layer === before.layer,
+        notOrangeAnymore: !stillOrange,
+        barLostTheButton: barAfter.bar && !barAfter.shown && barAfter.hidden,
+        stillSelected: reselected,
+        listClosed: !openPanel(),
+        undoGivesTheOldColumn: undone.varColumn === 'Ancien' && undone.varKey === PAGE + '.Ancien' && undone.width === before.width && undone.opacity === before.opacity,
+        undoRestoresTheOrange: imageViews()[0].classList.contains('editor-image-broken'),
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, listed, before, after }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'varcolumn_image_of_another_unlinked_table_asks_for_the_key_and_refusal_changes_nothing',
+    description: 'Choisir la colonne Pièces jointes d’une table pas encore liée ouvre d’abord la fenêtre de la clé, comme à l’insertion de l’image : refusée, l’image et les règles ne changent pas ; confirmée, la règle est enregistrée et l’image prend la colonne ; une table déjà liée n’ouvre rien',
+    run: async (h) => {
+      const html = `<p>${imageHtml(PAGE, 'Ancien')}</p>`;
+      await seedImages(h, html);
+      await selectImage(h, 0);
+      const before = JSON.stringify(imageAttrsOf(0));
+      pressImageColumn();
+      await h.sleep(200);
+      await pickRow(h, 'VcoTest.Scan');
+      await h.sleep(250);
+      const opened = keyWindowOpen();
+      const duringWindow = JSON.stringify(imageAttrsOf(0));
+      await closeKeyWindow(h);
+      const afterRefusal = { attrs: JSON.stringify(imageAttrsOf(0)), rule: ruleOf('VcoTest') };
+      await selectImage(h, 0);
+      pressImageColumn();
+      await h.sleep(200);
+      await pickRow(h, 'VcoTest.Scan');
+      await h.sleep(250);
+      document.getElementById('link-config-confirm').click();
+      await h.sleep(300);
+      const confirmed = { attrs: imageAttrsOf(0), rule: ruleOf('VcoTest'), windowClosed: !keyWindowOpen() };
+      // Une table déjà liée (VcoProjet) : rien à demander.
+      Editor.setHTML(html);
+      await h.sleep(150);
+      await selectImage(h, 0);
+      pressImageColumn();
+      await h.sleep(200);
+      await pickRow(h, 'VcoProjet.Emblem');
+      await h.sleep(250);
+      const linked = { asked: keyWindowOpen(), attrs: imageAttrsOf(0) };
+      await closeKeyWindow(h);
+      const checks = {
+        windowOpened: opened,
+        imageUntouchedWhileAsking: duringWindow === before,
+        refusalChangesNothing: afterRefusal.attrs === before && afterRefusal.rule === null,
+        confirmedSavesTheRule: same(confirmed.rule, ['match', 'Notification', 'id']) && confirmed.windowClosed,
+        confirmedReplacesTheColumn: confirmed.attrs.varTable === 'VcoTest' && confirmed.attrs.varColumn === 'Scan' && confirmed.attrs.varKey === 'VcoTest.Scan',
+        linkedTableAsksNothing: !linked.asked && linked.attrs.varTable === 'VcoProjet' && linked.attrs.varColumn === 'Emblem',
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, confirmed, linked }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'varcolumn_image_frame_loses_the_orange_when_the_node_is_no_longer_a_column_image',
+    description: 'Le cadre orange d’une image de colonne disparue ne garde ni la classe ni l’info-bulle quand le même nœud devient une image ordinaire (la vue du nœud est réutilisée, pas recréée)',
+    run: async (h) => {
+      await seedImages(h, `<p>${imageHtml(PAGE, 'Ancien')}</p>`);
+      const view = () => imageViews()[0];
+      const wasOrange = view().classList.contains('editor-image-broken') && !!view().getAttribute('title');
+      const found = imageNodes()[0];
+      ed().view.dispatch(ed().state.tr.setNodeMarkup(found.pos, undefined, Object.assign({}, found.node.attrs, { varTable: null, varColumn: null, varKey: null, src: PIXEL })));
+      // Aussitôt, avant tout autre relevé de validité : c'est la vue qui doit se défaire de l'orange.
+      const right = { orange: view().classList.contains('editor-image-broken'), title: view().getAttribute('title'), source: view().hasAttribute('data-image-var-table') };
+      await h.sleep(150);
+      const later = { orange: view().classList.contains('editor-image-broken'), title: view().getAttribute('title') };
+      const checks = { wasOrange, rightAway: !right.orange && !right.title && !right.source, later: !later.orange && !later.title };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, right, later }) : 'ok' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varColumn = cases;
 })();

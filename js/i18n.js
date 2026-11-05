@@ -3020,6 +3020,8 @@ const I18n = (function () {
     'imgToolbar.repeatNeedsBehind': { fr: 'Sur toutes les pages (pour une image derrière le texte)', en: 'On every page (for an image behind the text)' },
     'imgToolbar.repeatNeedsPage': { fr: 'Sur toutes les pages (active l’Aperçu A4 pour placer l’image sur la page)', en: 'On every page (turn on the A4 preview to place the image on the page)' },
     'imgToolbar.delete': { fr: 'Supprimer', en: 'Delete' },
+    // Bouton « Colonne… » (js/variable-column.js) de la barre d'une image liée à une colonne Pièces jointes : n'y est que quand la colonne (ou sa table) a disparu de Grist ; le cadre de l'image est alors orange.
+    'imgToolbar.columnBroken': { fr: 'Cette image ne trouve plus sa colonne de pièces jointes : choisir la bonne…', en: 'This image can no longer find its attachments column: pick the right one…' },
 
     // --- Toolbar flottante de tableau (js/editor.js:wireTableFloatingToolbar) ---
     'table.rowBefore': { fr: 'Ligne avant', en: 'Row before' },

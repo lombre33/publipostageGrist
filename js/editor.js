@@ -762,6 +762,14 @@ const Editor = (function () {
       const title = problem || unlinked;
       if (title) badge.title = title; else badge.removeAttribute('title');
     });
+    // Le cadre d'une image liée à une colonne Pièces jointes (js/editor-nodes.js : `data-image-var-table` / `-column` sur le cadre) : orange (`editor-image-broken`) quand sa table ou sa
+    // colonne n'existe plus, avec le message de la bulle en info-bulle ; sa barre a alors « Colonne… » (js/variable-column.js). Comme une bulle, la classe et le titre ne sont jamais
+    // enregistrés (le cadre n'a aucune autre info-bulle).
+    root.querySelectorAll('.editor-image-view[data-image-var-table]').forEach(view => {
+      const problem = badgeProblemText(view.dataset.imageVarTable, view.dataset.imageVarColumn);
+      view.classList.toggle('editor-image-broken', !!problem);
+      if (problem) view.title = problem; else view.removeAttribute('title');
+    });
     // Les pastilles « @ » : rouges quand leur fiche n'existe plus, nom à jour (js/mention.js).
     Mention.markChips(root);
   }
@@ -823,7 +831,7 @@ const Editor = (function () {
     // bulle n'est rouge, celle d'il y a moins d'une minute suffit (js/main.js la demande de même à l'ouverture) ; une bulle rouge peut venir d'un
     // schéma périmé (une colonne ajoutée depuis), la passe repart alors comme avant.
     refreshVariableBadgeValidity();
-    const looksBroken = !!editor.view.dom.querySelector('.var-badge-broken, .var-badge-unlinked, .calc-badge-broken, .calc-badge-unlinked');
+    const looksBroken = !!editor.view.dom.querySelector('.var-badge-broken, .var-badge-unlinked, .calc-badge-broken, .calc-badge-unlinked, .editor-image-broken');
     GristAPI.refreshSchema(looksBroken ? undefined : { maxAgeMs: SCHEMA_MAX_AGE_MS }).then(refreshVariableBadgeValidity)
       .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));
   }

@@ -1058,7 +1058,7 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   jamais effacée par les plafonds (30 versions par modèle, 3 millions de signes) : seule la suppression du modèle l'efface ; l'info-bulle et la question le disent. « Nommer… » est grisé sur une version
   illisible et tant qu'une version se lit, se nomme ou se restaure, actif sur « Version actuelle » ; il n'écrit rien en lecture seule. Un nom qui n'a pas pu s'écrire se dit dans la fenêtre, qui reste
   ouverte ; un modèle trop lourd pour être gardé comme version le dit aussi. Les libellés s'écrivent à la construction, dans la langue de la page.
-- Variables : cliquer une variable ouvre sa barre flottante (Condition, Autres attributs, Boucle, Liste, réglages nombre/date, et « Colonne… » sur une variable cassée ou sans lien seulement) ;
+- Variables : cliquer une variable ouvre sa barre flottante (Condition, Autres attributs, Boucle, Liste, réglages nombre/date, et « Colonne… » sur une variable cassée ou sans lien seulement, et aussi sur l'image d'une colonne Pièces jointes disparue, dont le cadre est alors orange) ;
   en édition, une bulle à condition est en pointillés ; les fenêtres correspondantes reposent sur la base commune. Dans
   une règle, « = » sur une colonne à choix multiples ou une liste de références veut dire « contient ce choix » (arbitré
   le 29/09).

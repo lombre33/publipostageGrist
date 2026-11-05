@@ -2692,6 +2692,84 @@ const readChipColon = await readBubbleInReaderMode('p');
 check('« 23:30 » retire le réglage de la puce et la Lecture écrit « Reçu à 23:30 et le 12/09/2026. »', (await chipTimeOf()) === null && readChipColon.text === 'Reçu à 23:30 et le 12/09/2026.' && readChipColon.backToEdit, { time: await chipTimeOf(), readChipColon });
 await page.evaluate(() => { window.Date = window.__RealDate; });
 
+// Image liée à une colonne Pièces jointes dont la colonne a disparu (retour d'Antoine du 05/11 : « sur une image lorsque l'on supprime la colonne pj ça ne passe pas en orange et je n'ai pas l'icône
+// pour sélectionner une nouvelle colonne source, contrairement aux variables ») : son cadre est ORANGE (comme une bulle sans lien), sa barre a « Colonne… », la liste ne propose que des colonnes
+// Pièces jointes ; à la vraie souris et à 700x400 : le bouton est atteignable et non recouvert, la liste s'ouvre entière dans le panneau, un vrai clic sur une ligne remplace la source de l'image
+// (taille gardée), le cadre n'est plus orange et la barre revenue n'a plus le bouton.
+await page.evaluate(async () => {
+  document.querySelector('.tiptap').blur();
+  const stub = window.__gristStub;
+  stub.setVariables('VcDossiers', { Titre: 'Text', Statut: 'Text', Responsable: 'Ref:VcAnnuaire', Montant: 'Numeric', Logo: 'Attachments', Photo: 'Attachments' });
+  stub.setRows('VcDossiers', [
+    { id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 7, Montant: 1200, Logo: ['L', 11], Photo: ['L', 12] },
+    { id: 2, Titre: 'Dossier B', Statut: 'Normal', Responsable: 8, Montant: 50, Logo: null, Photo: null },
+  ]);
+  await GristAPI.refreshSchema();
+  Editor.setHTML('<p>Logo : <img class="editor-image" data-var-table="VcDossiers" data-var-column="Logo" data-var-key="VcDossiers.Logo" style="width: 160px; height: 100px"> et <img class="editor-image" data-var-table="VcDossiers" data-var-column="Ancien" data-var-key="VcDossiers.Ancien" style="width: 160px; height: 100px"></p>');
+});
+await page.waitForTimeout(500);
+const imageFrames = () => page.evaluate(() => Array.from(document.querySelectorAll('.tiptap .editor-image-view')).map(v => {
+  const r = v.getBoundingClientRect();
+  return { orange: v.classList.contains('editor-image-broken'), background: getComputedStyle(v).backgroundColor, color: getComputedStyle(v.querySelector('.editor-image-var-label')).color, title: v.title, x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height, inViewport: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5 };
+}));
+const imageBarButton = () => page.evaluate(() => {
+  const bar = Array.from(document.querySelectorAll('.v2-floating-toolbar.visible')).find(el => el.querySelector('button[data-action="layer-front"]'));
+  const b = bar && bar.querySelector('button[data-action="var-column"]');
+  if (!bar) return { bar: false };
+  const r = b ? b.getBoundingClientRect() : null;
+  const bb = bar.getBoundingClientRect();
+  const top = r && r.width ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+  return { bar: true, present: !!b, hidden: !!b && b.hidden, boxes: b ? b.getClientRects().length : -1, title: b ? b.title : null, x: r ? r.left + r.width / 2 : 0, y: r ? r.top + r.height / 2 : 0,
+    onTop: !!top && (top === b || b.contains(top)), barLeft: bb.left, barRight: bb.right, barTop: bb.top, barBottom: bb.bottom, viewport: innerWidth };
+});
+const framesBefore = await imageFrames();
+check('image : le cadre de la colonne qui existe garde son aspect, celui de la colonne disparue est orange (ambre #ffe6c7, texte #873600) avec le message en info-bulle',
+  framesBefore.length === 2 && !framesBefore[0].orange && framesBefore[0].background !== 'rgb(255, 230, 199)' && framesBefore[0].title === '' && framesBefore[1].orange && framesBefore[1].background === 'rgb(255, 230, 199)'
+  && framesBefore[1].color === 'rgb(135, 54, 0)' && /La colonne « Ancien » n’existe plus dans la table « VcDossiers »/.test(framesBefore[1].title) && framesBefore.every(f => f.inViewport), framesBefore);
+await page.mouse.click(framesBefore[0].x, framesBefore[0].y);
+await page.waitForTimeout(500);
+const saneImageBar = await imageBarButton();
+check('700 px : la barre de l\'image saine n\'a pas « Colonne… » (bouton caché, sans boîte) et reste dans la fenêtre', saneImageBar.bar && saneImageBar.present && saneImageBar.hidden && saneImageBar.boxes === 0 && saneImageBar.barLeft >= 0 && saneImageBar.barRight <= saneImageBar.viewport + 0.5, saneImageBar);
+await page.mouse.click(framesBefore[1].x, framesBefore[1].y);
+await page.waitForTimeout(500);
+const brokenImageBar = await imageBarButton();
+check('image cassée à la vraie souris : « Colonne… » est atteignable, non recouvert, dans la barre qui tient dans la fenêtre, son info-bulle propose de choisir la bonne',
+  brokenImageBar.bar && brokenImageBar.present && !brokenImageBar.hidden && brokenImageBar.boxes > 0 && brokenImageBar.onTop && /pièces jointes : choisir la bonne/.test(brokenImageBar.title || '') && brokenImageBar.barLeft >= 0 && brokenImageBar.barRight <= brokenImageBar.viewport + 0.5 && brokenImageBar.barTop >= 0, brokenImageBar);
+await page.screenshot({ path: '/tmp/claude-0/image-orange-barre-700x400.png' });
+if (brokenImageBar.onTop) await page.mouse.click(brokenImageBar.x, brokenImageBar.y);
+await page.waitForTimeout(400);
+const imageColumnList = await page.evaluate(() => {
+  const panel = Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden);
+  if (!panel) return null;
+  const r = panel.getBoundingClientRect();
+  return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: innerWidth, height: innerHeight, names: Array.from(panel.querySelectorAll('.ss-option .ss-name')).map(n => n.textContent), focusInSearch: document.activeElement === panel.querySelector('.ss-input'), arrows: panel.querySelectorAll('.ss-descend, .ss-expand').length };
+});
+check('un vrai clic sur « Colonne… » de l\'image : la liste s\'ouvre entière dans la fenêtre, ne propose que les colonnes Pièces jointes (Logo, Photo), sans flèche, la recherche a le focus', !!imageColumnList && imageColumnList.left >= 0 && imageColumnList.top >= 0
+  && imageColumnList.right <= imageColumnList.width + 0.5 && imageColumnList.bottom <= imageColumnList.height + 0.5 && JSON.stringify(imageColumnList.names) === JSON.stringify(['VcDossiers.Logo', 'VcDossiers.Photo']) && imageColumnList.arrows === 0 && imageColumnList.focusInSearch, imageColumnList);
+await page.keyboard.type('Photo');
+await page.waitForTimeout(200);
+const photoRow = await page.evaluate(() => {
+  const panel = Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden);
+  const row = panel && Array.from(panel.querySelectorAll('.ss-option')).find(r => r.querySelector('.ss-name').textContent === 'VcDossiers.Photo');
+  if (!row) return null;
+  const r = row.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+});
+if (photoRow) await page.mouse.click(photoRow.x, photoRow.y);
+await page.waitForTimeout(500);
+const repairedImage = await page.evaluate(() => {
+  const nodes = [];
+  EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'editorImage') nodes.push(node.attrs); });
+  const views = Array.from(document.querySelectorAll('.tiptap .editor-image-view'));
+  const bar = Array.from(document.querySelectorAll('.v2-floating-toolbar.visible')).find(el => el.querySelector('button[data-action="layer-front"]'));
+  const b = bar && bar.querySelector('button[data-action="var-column"]');
+  return { second: nodes[1], orange: views.map(v => v.classList.contains('editor-image-broken')), selected: views[1].classList.contains('editor-image-selected'), barOpen: !!bar, buttonHidden: !!b && b.hidden,
+    listOpen: !!Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden) };
+});
+check('un vrai clic sur la ligne : l\'image prend la colonne Photo en gardant sa taille, plus aucun cadre orange, l\'image reste sélectionnée, la liste se ferme et la barre revient sans « Colonne… »',
+  !!repairedImage.second && repairedImage.second.varColumn === 'Photo' && repairedImage.second.varKey === 'VcDossiers.Photo' && repairedImage.second.varTable === 'VcDossiers' && repairedImage.second.width === '160px' && repairedImage.second.height === '100px'
+  && repairedImage.orange.every(o => !o) && repairedImage.selected && repairedImage.barOpen && repairedImage.buttonHidden && !repairedImage.listOpen, repairedImage);
+
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();

@@ -991,7 +991,8 @@
   function viewSnapshot(wrap) {
     const img = wrap.querySelector('img.editor-image');
     return {
-      cls: Array.from(wrap.classList).filter(c => c !== 'editor-image-selected').sort().join(' '),
+      // Ni la sélection ni l'orange d'une colonne disparue (`editor-image-broken`, posé par Editor.markBadgeValidity : la table « Docs » de ces essais n'existe pas dans le faux Grist) ne viennent des attributs du nœud.
+      cls: Array.from(wrap.classList).filter(c => c !== 'editor-image-selected' && c !== 'editor-image-broken').sort().join(' '),
       wrapStyle: wrap.getAttribute('style') || '',
       src: img.getAttribute('src'), alt: img.getAttribute('alt'), imgStyle: img.getAttribute('style'),
       label: wrap.querySelector('.editor-image-var-label').textContent,
