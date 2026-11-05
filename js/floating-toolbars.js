@@ -950,7 +950,7 @@ const FloatingToolbars = (function () {
     function wireImageFloatingToolbar() {
       const html = imageToolbarHtml();
       wireImageArrowKeys();
-      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar', html, imageToolbarAction, imageToolbarInput);
+      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-image-toolbar', html, imageToolbarAction, imageToolbarInput);
       const controls = controlsOf(panel);
       // Sélection visuelle recalculée ici (pas via selectNode/deselectNode, peu fiable après un setNodeMarkup) : source de vérité unique.
       EditorCore.registerFloatingPanel(panel);

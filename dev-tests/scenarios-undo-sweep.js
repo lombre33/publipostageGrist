@@ -136,6 +136,8 @@ window.EditorTestSuites.undoSweep = (function () {
     { name: 'tableCells', markup: TABLE, sel: 'cells' },
     { name: 'tableVar', markup: '<table><tbody><tr><td><p>' + badge('Titre') + '</p></td><td><p>Beta</p></td></tr></tbody></table><p>Après</p>', sel: 'cellBeta', variables: true },
     { name: 'image', markup: '<p>Texte</p><p><img class="editor-image" src="' + DATA_PNG + '" alt=""></p>', sel: 'image' },
+    { name: 'imageVar', markup: '<p>Texte</p><p><img class="editor-image" data-var-table="' + VAR_TABLE + '" data-var-column="Photo" data-var-key="' + VAR_TABLE + '.Photo" alt=""></p>', sel: 'image', variables: true },
+    { name: 'imageBroken', markup: '<p>Texte</p><p><img class="editor-image" data-var-table="' + VAR_TABLE + '" data-var-column="Disparue" data-var-key="' + VAR_TABLE + '.Disparue" alt=""></p>', sel: 'image', variables: true },
     { name: 'imageInline', markup: '<p>Texte <img class="editor-image" src="' + DATA_PNG + '" alt=""> suite</p>', sel: 'image' },
     { name: 'variable', markup: '<p>Dossier ' + badge('Titre') + ' fin</p>', sel: 'badge', variables: true },
     { name: 'varNum', markup: '<p>Dossier ' + badge('Montant') + ' fin</p>', sel: 'badge', variables: true },
@@ -235,6 +237,14 @@ window.EditorTestSuites.undoSweep = (function () {
       mouseGesture(await shown('.pp-modal button.ss-trigger', 'Choisir une colonne')); await sleep(200);
       mouseGesture(await shown('.ss-panel .ss-option', 'Statut')); await sleep(200);
       setValue(await shown('.pp-modal input.macro-rule-value'), 'Urgent'); await sleep(100);
+      mouseGesture(await shown('.var-modal-primary'));
+    },
+    // La fenêtre « Mise en forme selon la ligne » : une règle (Statut = Urgent) dont le style est le gras.
+    async style() {
+      mouseGesture(await shown('.pp-modal button.ss-trigger', 'Choisir une colonne')); await sleep(200);
+      mouseGesture(await shown('.ss-panel .ss-option', 'Statut')); await sleep(200);
+      setValue(await shown('.pp-modal input.macro-rule-value'), 'Urgent'); await sleep(100);
+      mouseGesture(await shown('.pp-modal .cond-style-mark[data-mark="bold"]')); await sleep(100);
       mouseGesture(await shown('.var-modal-primary'));
     },
   };

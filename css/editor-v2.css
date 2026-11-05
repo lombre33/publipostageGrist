@@ -926,6 +926,10 @@
    d'une bulle ou d'une image, créée après celle du tableau, reste dessus quand un seul clic ouvre les deux (js/layers.js). */
 .v2-floating-toolbar { display: none; position: absolute; top: 0; left: 0; z-index: var(--z-floating-toolbar); gap: 2px; padding: 3px; background: var(--surface, #fff); border: 1px solid var(--border, #d7dde3); border-radius: var(--radius-md, 6px); box-shadow: 0 4px 16px rgba(20, 28, 46, .18); }
 .v2-floating-toolbar.visible { display: flex; }
+/* La barre d'une image (js/floating-toolbars.js:wireImageFloatingToolbar) a dix-huit boutons et la glissière d'opacité (573 px depuis les boutons « Condition » et « Boucle » de l'image d'une colonne
+   Pièces jointes) : dans un cadre plus étroit (GFS à 560 px) elle passe à la ligne au lieu de déborder à droite, hors d'atteinte. Même règle que la barre d'un tableau (css/grid.css) ; la barre de GFS,
+   à gauche ou à droite, prend sa profondeur sur cette largeur (`--gfs-bar-inset-*`, 0px ailleurs et sans barre). */
+.v2-floating-toolbar.v2-image-toolbar { flex-wrap: wrap; row-gap: 2px; max-width: calc(100vw - var(--gfs-bar-inset-left, 0px) - var(--gfs-bar-inset-right, 0px) - 16px); }
 .v2-floating-toolbar button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; border: none; background: transparent; border-radius: var(--radius-xs, 4px); padding: 0; cursor: pointer; color: var(--text, #3a4452); }
 .v2-floating-toolbar button svg { width: 15px; height: 15px; }
 .v2-floating-toolbar button:hover { background: var(--surface-sunken, #f2f4f7); }
