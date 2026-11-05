@@ -975,6 +975,40 @@
   });
 
   cases.push({
+    id: 'varpath_attachment_image_keeps_the_display_condition_of_the_bubble',
+    description: '« Remplacer » et « Insérer » sur une bulle qui a une condition d’affichage : avec « Reprendre la condition d’affichage » cochée (d’office) l’image posée porte la même condition (l’image en a une, comme une bulle) ; décochée, l’image n’en a pas',
+    run: async (h) => {
+      await seedBadges(h);
+      const condition = { mode: 'all', rules: [{ column: 'Nom', operator: '=', value: 'Région' }] };
+      const html = `<p><span class="var-badge" data-table="VpBadge" data-column="Personne.Structure.Nom" data-key="VpBadge.Personne.Structure.Nom" data-condition="${JSON.stringify(condition).replace(/"/g, '&quot;')}"></span></p>`;
+      const conditionsOf = ed => imageNodes(ed).map(a => a.condition);
+      Editor.setHTML(html);
+      let ed = await openWindow(h, 'VpBadge', 'Personne.Structure.Nom');
+      const inheritShown = !modal().querySelector('.var-linked-inherit').hidden;
+      tick('Logo');
+      modal().querySelector('button.var-linked-replace').click();
+      await h.sleep(200);
+      const replaced = conditionsOf(ed);
+      Editor.setHTML(html);
+      ed = await openWindow(h, 'VpBadge', 'Personne.Structure.Nom');
+      tick('Logo');
+      insertButton().click();
+      await h.sleep(200);
+      const inserted = conditionsOf(ed);
+      Editor.setHTML(html);
+      ed = await openWindow(h, 'VpBadge', 'Personne.Structure.Nom');
+      modal().querySelector('.var-linked-inherit input').click();
+      tick('Logo');
+      modal().querySelector('button.var-linked-replace').click();
+      await h.sleep(200);
+      const without = conditionsOf(ed);
+      const same = c => JSON.stringify(c) === JSON.stringify(condition);
+      const pass = inheritShown && replaced.length === 1 && same(replaced[0]) && inserted.length === 1 && same(inserted[0]) && without.length === 1 && !without[0];
+      return { pass, notes: JSON.stringify({ inheritShown, replaced, inserted, without }) };
+    },
+  });
+
+  cases.push({
     id: 'varpath_attachment_stays_a_bubble_where_no_image_can_live',
     description: 'Variables.becomesImage : vrai pour une colonne Pièces jointes (ou le chemin qui y mène) dans l’éditeur du document, faux pour une autre colonne, et faux là où le document n’a pas de nœud image (champs texte Objet, À, Cc, Cci, nom du PDF) - la bulle reste alors',
     run: async (h) => {
