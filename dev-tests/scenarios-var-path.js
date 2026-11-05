@@ -1022,6 +1022,96 @@
     },
   });
 
+  // ---- Une pièce jointe qui n'est pas une image (retour d'Antoine du 05/11, carte « Un message clair ») : à la Lecture et dans les exports, un petit message avec le nom du fichier
+  // prend la place de l'image (un PDF ou un Word ne se dessine pas) ; rien d'autre ne change. Les pièces jointes sont celles de seedBadges (11 : Mairie, 22 : Région).
+  const LOGO_IMAGE = '<img class="editor-image" data-var-table="VpBadge" data-var-column="Personne.Structure.Logo" data-var-key="VpBadge.Personne.Structure.Logo" style="width: 200px; height: 150px">';
+  const LOGO_BUBBLE = '<span class="var-badge" data-table="VpBadge" data-column="Personne.Structure.Logo" data-key="VpBadge.Personne.Structure.Logo"></span>';
+  const NOT_AN_IMAGE = { fr: name => 'Pièce jointe non affichée (ce n’est pas une image) : ' + name, en: name => 'Attachment not shown (not an image): ' + name };
+  const noticesIn = root => Array.from(root.querySelectorAll('em.attachment-notice')).map(n => n.textContent);
+  const previewBox = async (html, row) => { const box = document.createElement('div'); box.innerHTML = await ReaderMode.preview(html, 'VpBadge', row); return box; };
+
+  cases.push({
+    id: 'varpath_a_pdf_attachment_is_replaced_by_a_message_with_its_file_name',
+    description: 'Une image liée à une colonne Pièces jointes dont la pièce jointe est un PDF (Dupont Jean → Mairie → contrat.pdf) est remplacée, à la Lecture et dans l’aperçu des exports (ligne lue en lot), par « Pièce jointe non affichée (ce n’est pas une image) : contrat.pdf » en italique, dans les deux langues ; la même colonne en bulle fait de même ; la ligne dont la pièce jointe est une image (Région) garde son image ; sans rien dire de plus Grist, une pièce jointe reste tenue pour une image',
+    run: async (h) => {
+      await seedBadges(h);
+      const stub = window.__gristStub;
+      try {
+        stub.setAttachments([{ id: 11, fileName: 'contrat.pdf', fileType: 'application/pdf' }, { id: 22, fileName: 'logo.png', fileType: 'image/png' }]);
+        stub.fireRecord({ id: 1, Personne: 'Dupont Jean' }, 'VpBadge');
+        await h.sleep(40);
+        const wrong = [];
+        const check = (name, got, expected) => { if (JSON.stringify(got) !== JSON.stringify(expected)) wrong.push(name + ' : ' + JSON.stringify(got) + ' au lieu de ' + JSON.stringify(expected)); };
+        const rows = await GristAPI.fetchTableRows('VpBadge');
+        for (const lang of ['fr', 'en']) {
+          const before = I18n.getLang();
+          I18n.setLang(lang);
+          try {
+            const reader = await renderReader(`<p>${LOGO_IMAGE}</p>`, 'VpBadge');
+            check(lang + ' Lecture : message', noticesIn(reader), [NOT_AN_IMAGE[lang]('contrat.pdf')]);
+            check(lang + ' Lecture : plus d’image', reader.querySelectorAll('.reader-content img').length, 0);
+            const bubble = await renderReader(`<p>${LOGO_BUBBLE}</p>`, 'VpBadge');
+            check(lang + ' bulle : message', noticesIn(bubble), [NOT_AN_IMAGE[lang]('contrat.pdf')]);
+            const exported = await previewBox(`<p>${LOGO_IMAGE}</p>`, rows[0]);
+            check(lang + ' export : message', noticesIn(exported), [NOT_AN_IMAGE[lang]('contrat.pdf')]);
+            check(lang + ' export : plus d’image', exported.querySelectorAll('img').length, 0);
+            const italic = exported.querySelector('em.attachment-notice');
+            check(lang + ' export : en italique dans le paragraphe', !!italic && italic.parentElement.tagName === 'P', true);
+          } finally { I18n.setLang(before); }
+        }
+        // La ligne dont la pièce jointe est une image : rien ne change.
+        stub.fireRecord({ id: 2, Personne: 'Martin Anne' }, 'VpBadge');
+        await h.sleep(40);
+        const image = await renderReader(`<p>${LOGO_IMAGE}</p>`, 'VpBadge');
+        check('ligne Région : image 22 sans message', [image.querySelector('.reader-content img') ? image.querySelector('.reader-content img').dataset.attachmentId : null, noticesIn(image)], ['22', []]);
+        // Grist ne dit rien de cette pièce jointe (table vide) : tenue pour une image, comme avant.
+        stub.setAttachments([]);
+        stub.fireRecord({ id: 1, Personne: 'Dupont Jean' }, 'VpBadge');
+        await h.sleep(40);
+        const unknown = await renderReader(`<p>${LOGO_IMAGE}</p>`, 'VpBadge');
+        check('type inconnu : image 11', [unknown.querySelector('.reader-content img') ? unknown.querySelector('.reader-content img').dataset.attachmentId : null, noticesIn(unknown)], ['11', []]);
+        return { pass: wrong.length === 0, notes: wrong.join(' | ') || 'ok' };
+      } finally { stub.setAttachments([]); }
+    },
+  });
+
+  cases.push({
+    id: 'varpath_the_first_attachment_that_is_an_image_is_the_one_drawn',
+    description: 'Une cellule de pièces jointes qui en porte plusieurs, la première étant un PDF (11) puis une image (22) : l’image liée dessine la première image (22), sans message ; avec seulement des fichiers qui ne sont pas des images, le message nomme le premier ; un type vide avec une extension d’image (« .PNG ») ou des dimensions reste une image',
+    run: async (h) => {
+      await seedBadges(h);
+      const stub = window.__gristStub;
+      try {
+        stub.setRows('VpStructure', [{ id: 1, Logo: ['L', 11, 22], Nom: 'Mairie' }, { id: 2, Logo: ['L', 11, 33], Nom: 'Région' }]);
+        await GristAPI.refreshSchema();
+        stub.fireRecord({ id: 1, Personne: 'Dupont Jean' }, 'VpBadge');
+        await h.sleep(40);
+        const idOf = reader => (reader.querySelector('.reader-content img') ? reader.querySelector('.reader-content img').dataset.attachmentId : null);
+        const wrong = [];
+        const check = (name, got, expected) => { if (JSON.stringify(got) !== JSON.stringify(expected)) wrong.push(name + ' : ' + JSON.stringify(got) + ' au lieu de ' + JSON.stringify(expected)); };
+        stub.setAttachments([{ id: 11, fileName: 'contrat.pdf', fileType: 'application/pdf' }, { id: 22, fileName: 'logo.png', fileType: 'image/png' }, { id: 33, fileName: 'notes.docx', fileType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }]);
+        const first = await renderReader(`<p>${LOGO_IMAGE}</p>`, 'VpBadge');
+        check('PDF puis image : l’image 22', [idOf(first), noticesIn(first)], ['22', []]);
+        stub.fireRecord({ id: 2, Personne: 'Martin Anne' }, 'VpBadge');
+        await h.sleep(40);
+        const none = await renderReader(`<p>${LOGO_IMAGE}</p>`, 'VpBadge');
+        check('PDF puis Word : aucune image, le message nomme le premier', [idOf(none), noticesIn(none)], [null, [NOT_AN_IMAGE.fr('contrat.pdf')]]);
+        // Des types que Grist ne donne pas toujours : l'extension, ou les dimensions de l'image.
+        stub.setAttachments([{ id: 11, fileName: 'contrat.pdf', fileType: '' }, { id: 22, fileName: 'LOGO.PNG', fileType: '' }, { id: 33, fileName: 'sans-extension', fileType: 'application/octet-stream', imageWidth: 40, imageHeight: 30 }]);
+        stub.fireRecord({ id: 1, Personne: 'Dupont Jean' }, 'VpBadge');
+        await h.sleep(40);
+        check('type vide : l’extension .PNG est une image', idOf(await renderReader(`<p>${LOGO_IMAGE}</p>`, 'VpBadge')), '22');
+        stub.fireRecord({ id: 2, Personne: 'Martin Anne' }, 'VpBadge');
+        await h.sleep(40);
+        check('dimensions d’image : une image', idOf(await renderReader(`<p>${LOGO_IMAGE}</p>`, 'VpBadge')), '33');
+        return { pass: wrong.length === 0, notes: wrong.join(' | ') || 'ok' };
+      } finally {
+        stub.setAttachments([]);
+        stub.setRows('VpStructure', [{ id: 1, Logo: ['L', 11], Nom: 'Mairie' }, { id: 2, Logo: ['L', 22], Nom: 'Région' }]);
+      }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varPath = cases;
 })();

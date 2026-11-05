@@ -125,10 +125,13 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
   state.rows._grist_Pages = columnarEmpty(['viewRef', 'indentation', 'pagePos', 'options']);
   state.primaryViewOf = {}; // tableId -> id de sa vue principale (primaryViewId)
   state.rows._grist_Tables_column = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions']);
+  // _grist_Attachments : ce que Grist sait de chaque pièce jointe (mesuré dans un vrai Grist le 05/11, grist-static 0.1.6 : fileIdent, fileName, fileType - le type MIME -, fileSize, fileExt,
+  // imageHeight, imageWidth, timeDeleted, timeUploaded). Vide au départ : le widget tient alors toute pièce jointe pour une image ; setAttachments en pose.
+  state.rows._grist_Attachments = columnarEmpty(['fileIdent', 'fileName', 'fileType', 'fileSize', 'fileExt', 'imageHeight', 'imageWidth', 'timeDeleted', 'timeUploaded']);
   // _grist_DocInfo : la ligne unique des réglages du document, dont documentSettings (JSON) porte la langue et la devise - celle d'un document neuf, « en-US » (setDocumentSettings pour une autre).
   state.rows._grist_DocInfo = { id: [1], documentSettings: [JSON.stringify({ locale: 'en-US', engine: 'python3' })] };
 
-  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_Commentaires', '_grist_Tables', '_grist_Tables_column', '_grist_DocInfo'];
+  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_Commentaires', '_grist_Tables', '_grist_Tables_column', '_grist_DocInfo', '_grist_Attachments'];
 
   // Grist représente en réalité un DateTime comme un timestamp Unix NUMÉRIQUE (secondes depuis
   // l'epoch, cf. documentation/grist-data-format.md du projet grist-core) - jamais la chaîne ISO que
@@ -205,6 +208,19 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     state.formats[tableId] = Object.assign({}, state.formats[tableId]);
     Object.keys(formats).forEach(colId => { if (formats[colId] == null) delete state.formats[tableId][colId]; else state.formats[tableId][colId] = JSON.parse(JSON.stringify(formats[colId])); });
     rebuildColumnMeta();
+  }
+
+  // Les pièces jointes que Grist connaît : [{ id, fileName, fileType, fileExt?, imageWidth?, imageHeight? }]. `fileType` est le type MIME (« image/png », « application/pdf ») ; une image
+  // a des dimensions, tout autre fichier 0. `null` : Grist ne rend pas la table (illisible).
+  function setAttachments(files) {
+    if (files == null) { delete state.rows._grist_Attachments; return; }
+    const column = (name, fallback) => files.map(f => (f[name] === undefined ? (typeof fallback === 'function' ? fallback(f) : fallback) : f[name]));
+    const extOf = f => (String(f.fileName || '').lastIndexOf('.') !== -1 ? String(f.fileName).slice(String(f.fileName).lastIndexOf('.')) : '');
+    state.rows._grist_Attachments = {
+      id: files.map(f => f.id), fileIdent: column('fileIdent', f => 'ident' + f.id), fileName: column('fileName', ''), fileType: column('fileType', ''), fileSize: column('fileSize', 1024),
+      fileExt: column('fileExt', extOf), imageHeight: column('imageHeight', f => (String(f.fileType || '').indexOf('image/') === 0 ? 10 : 0)),
+      imageWidth: column('imageWidth', f => (String(f.fileType || '').indexOf('image/') === 0 ? 10 : 0)), timeDeleted: column('timeDeleted', null), timeUploaded: column('timeUploaded', 1700000000),
+    };
   }
 
   // Les réglages du document (_grist_DocInfo.documentSettings) : { locale: 'fr-FR', currency: 'EUR' } (la devise est facultative). `null` : Grist ne les rend pas (table illisible).
@@ -954,7 +970,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     },
   };
 
-  window.__gristStub = { state, setViewer, setVariables, setColumnLabels, setColumnFormats, setColumnRules, setDocumentSettings, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, countSaves, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure, fireViewChange, denyTable, denyStructure };
+  window.__gristStub = { state, setViewer, setVariables, setColumnLabels, setColumnFormats, setColumnRules, setDocumentSettings, setAttachments, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, countSaves, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure, fireViewChange, denyTable, denyStructure };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.

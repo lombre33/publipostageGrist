@@ -1170,6 +1170,31 @@ const GristAPI = (function () {
     return `${info.baseUrl}/attachments/${id}/download?auth=${info.token}`;
   }
 
+  // Ce que Grist sait de ces pièces jointes (sa table interne _grist_Attachments : le nom du fichier, son type MIME, son extension, les dimensions d'une image) : une Map
+  // « numéro → { fileName, isImage } » pour celles qu'elle connaît. Pour savoir, avant de dessiner une image, si la pièce jointe en est une : un PDF ou un Word n'en est pas
+  // une, la Lecture et les exports écrivent alors son nom (js/reader-mode.js:attachmentNotice). Une pièce jointe est une image quand Grist lui donne un type « image/… »
+  // ou des dimensions, ou à défaut une extension d'image. Table illisible (accès, réseau) : la Map est vide - toute pièce jointe est alors tenue pour une image, comme avant.
+  const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.avif', '.ico', '.heic', '.heif', '.tif', '.tiff'];
+  async function getAttachmentInfos(ids) {
+    const infos = new Map();
+    const wanted = new Set((ids || []).map(Number));
+    if (!wanted.size) return infos;
+    try {
+      const table = await readTable('_grist_Attachments');
+      (table.id || []).forEach((id, index) => {
+        if (!wanted.has(Number(id))) return;
+        const at = column => (table[column] ? table[column][index] : undefined);
+        const type = String(at('fileType') || '').toLowerCase();
+        const extension = String(at('fileExt') || '').toLowerCase();
+        const name = String(at('fileName') || '');
+        const dotted = extension ? (extension.charAt(0) === '.' ? extension : '.' + extension) : (name.lastIndexOf('.') !== -1 ? name.slice(name.lastIndexOf('.')).toLowerCase() : '');
+        const isImage = type.indexOf('image/') === 0 || Number(at('imageWidth')) > 0 || (!type && IMAGE_EXTENSIONS.indexOf(dotted) !== -1);
+        infos.set(Number(id), { fileName: name, isImage });
+      });
+    } catch (e) { console.warn('[GristAPI] getAttachmentInfos: _grist_Attachments illisible, toute pièce jointe est tenue pour une image', e); }
+    return infos;
+  }
+
   // Email et nom de la personne (chips #Variable) : le jeton de getAccessTokenCached() renvoie toujours « anon@getgrist.com » (identité scopée au
   // document, pas à la session navigateur). Contournement : une formule déclenchée sur `user.Email`, dans une table interne dédiée, attribue la vraie
   // valeur (ligne ajoutée puis retirée). `user.Name` se lit de la même ligne, dans une seconde colonne ajoutée à la première demande de nom
@@ -1292,5 +1317,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

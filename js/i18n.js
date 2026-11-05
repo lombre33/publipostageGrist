@@ -3148,6 +3148,8 @@ const I18n = (function () {
     'image.urlPrompt': { fr: 'Adresse de l’image', en: 'Image address' },
 
     // --- Picker "Image depuis une variable" (js/editor.js) ---
+    // À la Lecture et dans les exports, à la place d'une pièce jointe qui n'est pas une image (PDF, Word…) posée dans une image ou une variable de colonne Pièces jointes.
+    'reader.attachmentNotImage': { fr: 'Pièce jointe non affichée (ce n’est pas une image) : {name}', en: 'Attachment not shown (not an image): {name}' },
     'imageVarPicker.empty': { fr: 'Aucune colonne Pièce jointe trouvée dans ce document.', en: 'No attachment column found in this document.' },
     // Dans la liste d'une image, une colonne Référence qui mène à une colonne Pièces jointes : grisée, on l'ouvre par sa flèche ›.
     'imageVarPicker.viaReference': { fr: 'Pas une pièce jointe : la flèche › ouvre les colonnes de « {table} ».', en: 'Not an attachment: the › arrow opens the columns of “{table}”.' },

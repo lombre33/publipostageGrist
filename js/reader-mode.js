@@ -1387,6 +1387,15 @@ const ReaderMode = (function () {
       });
     });
   }
+  // Une pièce jointe se dessine quand Grist ne dit pas qu'elle n'est pas une image (info inconnue : comme avant, tenue pour une image).
+  const isDrawable = info => !info || info.isImage;
+  // Le message qui prend la place d'une pièce jointe qui n'est pas une image (PDF, Word…) à la Lecture et dans tous les exports : en italique, le nom du fichier. Rien d'autre ne change.
+  function attachmentNotice(info, id) {
+    const notice = document.createElement('em');
+    notice.className = 'attachment-notice';
+    notice.textContent = I18n.t('reader.attachmentNotImage', { name: (info && info.fileName) || '#' + id });
+    return notice;
+  }
   async function resolveVariableImages(wrapper, tableId, record) {
     // Rattache le placeholder <img.editor-image> à la bonne pièce jointe pour que hydrateAttachmentImages lui pose un vrai src ; le retire s'il n'y
     // en a aucune.
@@ -1398,10 +1407,14 @@ const ReaderMode = (function () {
       try { ids = await Variables.resolveAttachmentIds(table, column, tableId, record, loopOpts(LoopRules.bindingOf(img))); }
       catch (e) { ids = []; }
       if (!ids.length) { img.remove(); return; }
+      // La première pièce jointe qui est une image : un PDF ou un Word n'en est pas une, le cadre est alors remplacé par un petit message qui dit le nom du fichier.
+      const infos = await GristAPI.getAttachmentInfos(ids);
+      const shown = ids.find(id => isDrawable(infos.get(Number(id))));
+      if (shown === undefined) { img.replaceWith(attachmentNotice(infos.get(Number(ids[0])), ids[0])); return; }
       // data-var-table/-column/-key restent posés : c'est le marqueur que pdf-export.js:pdfImageFromNode lit pour choisir `fit` (boîte fixe, image
       // mise à l'échelle sans déformation) plutôt que `width` seul.
       img.dataset.source = 'attachment';
-      img.dataset.attachmentId = String(ids[0]);
+      img.dataset.attachmentId = String(shown);
       img.style.objectFit = 'contain';
     }));
   }
@@ -1542,11 +1555,13 @@ const ReaderMode = (function () {
     span.textContent = text;
     return span;
   }
-  function attachmentImages(ids) {
+  async function attachmentImages(ids) {
     // Résout un badge #Variable en texte, ou en <img> si la colonne est de type Attachments ; les <img> produites réutilisent les classes/attributs
-    // déjà lus par GristAPI.hydrateAttachmentImages, appelé juste après.
+    // déjà lus par GristAPI.hydrateAttachmentImages, appelé juste après. Une pièce jointe qui n'est pas une image devient le message qui dit son nom (attachmentNotice).
     const frag = document.createDocumentFragment();
+    const infos = await GristAPI.getAttachmentInfos(ids);
     ids.forEach(id => {
+      if (!isDrawable(infos.get(Number(id)))) { frag.appendChild(attachmentNotice(infos.get(Number(id)), id)); return; }
       const img = document.createElement('img');
       img.className = 'editor-image';
       img.dataset.source = 'attachment';
@@ -1591,7 +1606,7 @@ const ReaderMode = (function () {
         });
         if (!res) return null;
         if (res.node) await resolveEmptyLoopText(res.node, tableId, record, loopCtx, textOpts);
-        return { node: res.node || attachmentImages(ids), isError: false };
+        return { node: res.node || await attachmentImages(ids), isError: false };
       }
       const res = await LoopRules.resolveInline(badge, loop, tableId, record, loopCtx,
         binding => Variables.resolveVariable(table, column, tableId, record, format, Object.assign({}, textOpts, loopOpts(binding))));
@@ -1633,7 +1648,7 @@ const ReaderMode = (function () {
       try { ids = await Variables.resolveAttachmentIds(table, column, tableId, record, loopOpts(binding)); }
       catch (e) { return { node: document.createTextNode(''), isError: true }; }
       if (!ids.length) return { node: document.createTextNode(''), isError: false };
-      return { node: attachmentImages(ids), isError: false };
+      return { node: await attachmentImages(ids), isError: false };
     }
     try {
       // isError vient de Variables.resolveVariableResult, jamais des premiers mots du texte : le message d'erreur suit la langue de l'interface.

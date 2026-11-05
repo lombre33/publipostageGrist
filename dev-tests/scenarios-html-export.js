@@ -424,6 +424,41 @@
       return result(bad);
     });
 
+  // Une image liée à une colonne Pièces jointes dont le fichier n'est pas une image (retour d'Antoine du 05/11, carte « Un message clair ») : le fichier écrit le nom du fichier, en italique,
+  // à la place de l'image - la Lecture et tous les exports passent par la même résolution (js/reader-mode.js:resolveVariableImages).
+  add('html_a_pdf_attachment_is_written_as_a_message_with_its_file_name',
+    'L’export d’une image liée à une colonne Pièces jointes dont le fichier est un PDF écrit « Pièce jointe non affichée (ce n’est pas une image) : contrat.pdf » en italique dans le paragraphe, sans image ; celui d’une image (png) garde son image',
+    async (h) => {
+      await h.resetEditor();
+      const stub = window.__gristStub;
+      const bad = [];
+      const frame = column => `<p><img class="editor-image" data-var-table="ExpHtmlPj" data-var-column="${column}" data-var-key="ExpHtmlPj.${column}" style="width: 200px; height: 150px"></p>`;
+      const realFetch = ImageIo.fetchBlob;
+      ImageIo.fetchBlob = async () => png();
+      try {
+        stub.setVariables('ExpHtmlPj', { Titre: 'Text', Contrat: 'Attachments', Logo: 'Attachments' });
+        stub.setRows('ExpHtmlPj', [{ id: 1, Titre: 'Fiche', Contrat: ['L', 901], Logo: ['L', 902] }]);
+        stub.setAttachments([{ id: 901, fileName: 'contrat.pdf', fileType: 'application/pdf' }, { id: 902, fileName: 'logo.png', fileType: 'image/png' }]);
+        await GristAPI.refreshSchema();
+        await GristAPI.saveLinkRule('ExpHtmlPj', { mode: 'singleton' });
+        const record = { id: 1, Titre: 'Fiche' };
+        const pdf = await html(h, frame('Contrat'), { record, tableId: 'ExpHtmlPj' });
+        const notice = pageOf(pdf).querySelector('.pp-doc em');
+        if (!notice || notice.textContent !== 'Pièce jointe non affichée (ce n’est pas une image) : contrat.pdf') bad.push('message=' + (notice && notice.textContent));
+        if (notice && notice.parentElement.tagName !== 'P') bad.push('le message n’est pas dans le paragraphe : ' + notice.parentElement.tagName);
+        if (pageOf(pdf).querySelectorAll('.pp-doc img').length) bad.push('une image est écrite pour le PDF');
+        const logo = await html(h, frame('Logo'), { record, tableId: 'ExpHtmlPj' });
+        if (pageOf(logo).querySelectorAll('.pp-doc img').length !== 1 || pageOf(logo).querySelector('.pp-doc em')) bad.push('le logo png a perdu son image : ' + markup(logo).slice(0, 120));
+      } finally {
+        ImageIo.fetchBlob = realFetch;
+        stub.setAttachments([]);
+        await GristAPI.deleteLinkRule('ExpHtmlPj');
+        stub.dropTable('ExpHtmlPj');
+        await GristAPI.refreshSchema();
+      }
+      return result(bad);
+    });
+
   add('html_captions_footnotes_callouts_and_columns',
     'Une légende garde sa classe ; les notes de bas de page sont numérotées, liées dans les deux sens (le numéro mène à la note, une flèche ramène au texte) et rangées en fin de texte, leurs ancres portant le jeton du document ; un encadré garde sa couleur et son icône (seules les clés connues, aucune autre n\'est écrite) ; deux colonnes gardent leur répartition et leur contenu',
     async (h) => {
