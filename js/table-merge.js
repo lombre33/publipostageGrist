@@ -14,7 +14,7 @@ const TableMerge = (function () {
     return sel && typeof sel.forEachCell === 'function' ? sel : null;
   }
 
-  // Les rangs des lignes du tableau qu'une boucle répète : js/loop-rules.js clone le <tr> de la bulle dont la boucle répète « la ligne du tableau » (`repeat: 'row'`). Une ligne de
+  // Les rangs des lignes du tableau qu'une boucle répète : js/loop-rules.js clone le <tr> de la bulle - ou de l'image de colonne Pièces jointes - dont la boucle répète « la ligne du tableau » (`repeat: 'row'`). Une ligne de
   // tableau imbriqué dans une case a ses propres boucles : on ne descend pas dans les <tr>.
   function loopRows(tableNode) {
     const rows = new Set();
@@ -22,7 +22,7 @@ const TableMerge = (function () {
       let found = false;
       row.descendants((node) => {
         if (found || node.type.name === 'tableRow') return false;
-        if (node.type.name === 'varBadge') {
+        if (node.type.name === 'varBadge' || node.type.name === 'editorImage') {
           const loop = LoopRules.normalizeLoop(node.attrs.loop);
           if (loop && loop.repeat === 'row') found = true;
         }

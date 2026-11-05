@@ -572,6 +572,9 @@ const FloatingToolbars = (function () {
         `<button data-action="var-column" title="${I18n.t('imgToolbar.columnBroken')}" aria-label="${I18n.t('imgToolbar.columnBroken')}" hidden>${Icons.svg('varColumn')}</button>`,
         // Condition d'affichage : grisée, avec sa raison, sur une image qui n'est pas celle d'une colonne Pièces jointes (syncImageConditionButton) ; allumée quand une condition est posée.
         `<button data-action="var-condition" title="${I18n.t('varToolbar.condition')}" aria-label="${I18n.t('varToolbar.condition')}">${Icons.svg('varCondition')}</button>`,
+        // Boucle : une image par ligne liée, ou la ligne, l'élément ou le paragraphe qui la contient (js/variable-loop.js) ; grisée avec sa raison hors image de colonne, allumée quand
+        // une boucle est posée (syncImageLoopButton).
+        `<button data-action="var-loop" title="${I18n.t('varToolbar.loop')}" aria-label="${I18n.t('varToolbar.loop')}">${Icons.svg('varLoop')}</button>`,
         '<span class="v2-floating-sep"></span>',
         `<button data-action="zoom-out" title="${I18n.t('imgToolbar.shrink')}">${Icons.svg('zoomOut')}</button>`,
         `<button data-action="zoom-in" title="${I18n.t('imgToolbar.grow')}">${Icons.svg('zoomIn')}</button>`,
@@ -851,6 +854,8 @@ const FloatingToolbars = (function () {
         'var-column': () => { if (VariableColumn.isImageBroken(attrs)) VariableColumn.openAt(editor, editor.state.selection.from); },
         // La condition d'affichage de l'image d'une colonne Pièces jointes (js/variable-condition.js) ; sans effet sur une autre image (bouton grisé).
         'var-condition': () => { if (attrs.varTable) VariableCondition.openAt(editor, editor.state.selection.from); },
+        // La boucle de l'image d'une colonne Pièces jointes (js/variable-loop.js) ; sans effet sur une autre image ou quand ses lignes ne se parcourent pas (bouton grisé).
+        'var-loop': () => { if (attrs.varTable && VariableLoop.status(editor, editor.state.selection.from, selNode).enabled) VariableLoop.openAt(editor, editor.state.selection.from); },
         delete: () => {
           const pos = editor.state.selection.from;
           editor.chain().focus().deleteRange({ from: pos, to: pos + selNode.nodeSize }).run();
@@ -881,6 +886,7 @@ const FloatingToolbars = (function () {
       syncImageRepeatButton(controls, attrs);
       syncImageColumnButton(controls, attrs);
       syncImageConditionButton(controls, attrs);
+      syncImageLoopButton(controls, node);
       Caption.syncButton(controls.button('caption'), editor, 'image');
     }
     // « Colonne… » : n'est dans la barre que d'une image dont la colonne Pièces jointes (ou sa table) a disparu de Grist - la même lecture que le orange de son cadre
@@ -905,6 +911,17 @@ const FloatingToolbars = (function () {
       controls.setDisabled('var-condition', !attrs.varTable, title);
       controls.setActive('var-condition', !!attrs.varTable && !!ConditionRules.normalizeCondition(attrs.condition));
       btn.setAttribute('aria-label', title);
+    }
+    // « Boucle » : allumée quand l'image a une boucle ; grisée, avec sa raison, hors image de colonne Pièces jointes et quand ses lignes ne se parcourent pas (VariableLoop.status :
+    // colonne disparue, table sans lien, zone répétée par une autre variable sans rattachement).
+    function syncImageLoopButton(controls, node) {
+      const btn = controls.button('var-loop');
+      if (!btn) return;
+      const column = !!node.attrs.varTable;
+      const status = column ? VariableLoop.status(editor, editor.state.selection.from, node) : { active: false, enabled: false, title: I18n.t('imgToolbar.loopNeedsColumn') };
+      controls.setDisabled('var-loop', !status.enabled, status.title);
+      controls.setActive('var-loop', status.enabled && status.active);
+      btn.setAttribute('aria-label', status.title);
     }
     function syncImageWrapButton(controls, node) {
       // Grisé (jamais retiré) quand la bascule ne change rien ; .v2-hf-locked : css/toolbar-v2.css.

@@ -2824,7 +2824,7 @@ const imageConditioned = await page.evaluate(() => {
   const label = views[0].querySelector('.editor-image-var-label');
   const cs = getComputedStyle(views[0]);
   return { condition: attrs[0].condition, width: attrs[0].width, height: attrs[0].height, modalOpen: document.getElementById('var-condition-modal').style.display !== 'none', conditional: views[0].classList.contains('editor-image-conditional'),
-    border: cs.borderTopColor, style: cs.borderTopStyle, line: label.dataset.condition, plainConditional: views[1].classList.contains('editor-image-conditional') };
+    border: cs.borderTopColor, style: cs.borderTopStyle, line: label.dataset.note, plainConditional: views[1].classList.contains('editor-image-conditional') };
 });
 check('Enregistrer (vrai clic) pose la condition sur l\'image en gardant sa taille, ferme la fenêtre, et le cadre passe en pointillés bleus avec « Si Statut = Urgent »',
   !imageConditioned.modalOpen && !!imageConditioned.condition && imageConditioned.condition.rules.length === 1 && imageConditioned.condition.rules[0].column === 'Statut' && imageConditioned.condition.rules[0].value === 'Urgent'
@@ -2891,6 +2891,95 @@ const attachResult = await page.evaluate(async () => {
 check('Insérer (vrai clic) pose une IMAGE liée à VcFiches.Entite.Logo (cadre visible dans le panneau, aucune bulle Logo), fenêtre fermée, et la Lecture en tire la pièce jointe 31',
   JSON.stringify(attachResult.seq) === JSON.stringify(['Badge de ', '#VcFiches.NomPrenom', ' ', 'image:VcFiches.Entite.Logo', ' :']) && attachResult.framed && attachResult.visible
   && attachResult.column === 'Entite.Logo' && attachResult.logoBubbles === 0 && attachResult.readAttachment === '31' && !attachResult.modalOpen, attachResult);
+
+// Boucle d'une image de colonne Pièces jointes (retour d'Antoine du 05/11, lot 3 de sa réponse « Condition, boucle, ligne liée ») : le bouton « Boucle » de la barre de l'image, atteignable et non
+// recouvert à 700x400 ; un vrai clic ouvre la fenêtre (entière dans le panneau, sans séparateurs, la barre de l'image masquée derrière elle) ; « Le paragraphe » choisi à la vraie souris, Enregistrer pose
+// la boucle, le cadre dit ce qu'il répète, le paragraphe est teinté et la barre revient avec le bouton allumé ; sur une image ordinaire le bouton est grisé et un vrai clic n'ouvre rien.
+await page.evaluate(async () => {
+  document.querySelector('.tiptap').blur();
+  const stub = window.__gristStub;
+  stub.setVariables('VcTaches', { Dossier: 'Ref:VcDossiers', Libelle: 'Text', Echeance: 'Date', Piece: 'Attachments' });
+  stub.setRows('VcTaches', [
+    { id: 1, Dossier: 1, Libelle: 'Relancer le client', Echeance: 1790208000, Piece: ['L', 21] },
+    { id: 2, Dossier: 1, Libelle: 'Préparer l’audience', Echeance: 1790812800, Piece: ['L', 22] },
+    { id: 3, Dossier: 2, Libelle: 'Archiver', Echeance: 1791417600, Piece: ['L', 23] },
+  ]);
+  await GristAPI.refreshSchema();
+  document.getElementById('editor-container').classList.remove('a4-preview');
+  Editor.setHTML('<p>Pièces : <img class="editor-image" data-var-table="VcTaches" data-var-column="Piece" data-var-key="VcTaches.Piece" style="width: 120px; height: 80px"></p><p>Ordinaire : <img class="editor-image" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" style="width: 40px; height: 24px"></p>');
+});
+await page.waitForTimeout(500);
+const imageLoopButton = () => page.evaluate(() => {
+  const bar = Array.from(document.querySelectorAll('.v2-floating-toolbar.visible')).find(el => el.querySelector('button[data-action="layer-front"]'));
+  if (!bar) return { bar: false };
+  const b = bar.querySelector('button[data-action="var-loop"]');
+  const r = b ? b.getBoundingClientRect() : null;
+  const bb = bar.getBoundingClientRect();
+  const top = r && r.width ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+  return { bar: true, present: !!b, boxes: b ? b.getClientRects().length : -1, disabled: !!b && b.getAttribute('aria-disabled') === 'true', active: !!b && b.classList.contains('is-active'), title: b ? b.title : null,
+    x: r ? r.left + r.width / 2 : 0, y: r ? r.top + r.height / 2 : 0, onTop: !!top && (top === b || b.contains(top)), barLeft: bb.left, barRight: bb.right, barTop: bb.top, viewport: innerWidth };
+});
+const loopFrames = await imageFrames();
+await page.mouse.click(loopFrames[0].x, loopFrames[0].y);
+await page.waitForTimeout(500);
+const loopButtonBefore = await imageLoopButton();
+check('image de colonne à la vraie souris : « Boucle » est dans sa barre, atteignable, non recouvert, actif (pas grisé), éteint, et la barre tient dans la fenêtre de 700 px',
+  loopButtonBefore.bar && loopButtonBefore.present && loopButtonBefore.boxes > 0 && loopButtonBefore.onTop && !loopButtonBefore.disabled && !loopButtonBefore.active && /^Boucle/.test(loopButtonBefore.title || '')
+  && loopButtonBefore.barLeft >= 0 && loopButtonBefore.barRight <= loopButtonBefore.viewport + 0.5 && loopButtonBefore.barTop >= 0, loopButtonBefore);
+await page.screenshot({ path: '/tmp/claude-0/image-boucle-barre-700x400.png' });
+if (loopButtonBefore.onTop) await page.mouse.click(loopButtonBefore.x, loopButtonBefore.y);
+await page.waitForTimeout(600);
+const imageLoopBox = await hitTest('#var-loop-modal .var-modal-content');
+const imageLoopWindow = await page.evaluate(() => {
+  const m = document.getElementById('var-loop-modal');
+  return {
+    title: document.getElementById('var-loop-title') ? document.getElementById('var-loop-title').textContent : null,
+    intro: (m.querySelector('.var-modal-intro') || {}).textContent || '',
+    choices: Array.from(m.querySelectorAll('.var-loop-seg button')).map(b => b.dataset.repeat + (b.getAttribute('aria-pressed') === 'true' ? '*' : '')),
+    separators: Array.from(m.querySelectorAll('.var-loop-seps')).some(r => !r.hidden && r.getClientRects().length > 0),
+    preview: Array.from(m.querySelectorAll('.var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent),
+    barHidden: !Array.from(document.querySelectorAll('.v2-floating-toolbar.visible')).some(el => el.querySelector('button[data-action="layer-front"]')),
+  };
+});
+check('un vrai clic sur le bouton : la fenêtre Boucle s\'ouvre entière dans le panneau, parle de l\'image, ne propose que « dans la phrase » ou « le paragraphe », sans séparateurs, et la barre de l\'image reste masquée derrière elle',
+  imageLoopBox.found && imageLoopBox.inViewport && /^#VcTaches\.Piece est copiée pour chaque ligne/.test(imageLoopWindow.intro) && JSON.stringify(imageLoopWindow.choices) === JSON.stringify(['inline*', 'paragraph']) && !imageLoopWindow.separators && imageLoopWindow.barHidden
+  && imageLoopWindow.preview.length > 0 && /image/.test(imageLoopWindow.preview[0]), { imageLoopBox, imageLoopWindow });
+const paragraphChoice = await hitTest('#var-loop-modal .var-loop-seg button[data-repeat="paragraph"]');
+check('« Le paragraphe » visible et non recouvert à 700x400', paragraphChoice.found && paragraphChoice.inViewport && paragraphChoice.onTop, paragraphChoice);
+if (paragraphChoice.found) await page.mouse.click(paragraphChoice.x, paragraphChoice.y);
+await page.waitForTimeout(300);
+const imageLoopSave = await hitTest('#var-loop-modal .var-modal-primary');
+check('Enregistrer visible et non recouvert à 700x400', imageLoopSave.found && imageLoopSave.inViewport && imageLoopSave.onTop, imageLoopSave);
+if (imageLoopSave.found) await page.mouse.click(imageLoopSave.x, imageLoopSave.y);
+await page.waitForTimeout(400);
+const imageLooped = await page.evaluate(() => {
+  const attrs = [];
+  EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'editorImage') attrs.push(node.attrs); });
+  const views = Array.from(document.querySelectorAll('.tiptap .editor-image-view'));
+  const label = views[0].querySelector('.editor-image-var-label');
+  const paragraph = views[0].closest('p');
+  return { loop: attrs[0].loop, width: attrs[0].width, height: attrs[0].height, modalOpen: document.getElementById('var-loop-modal').style.display !== 'none', looped: views[0].classList.contains('editor-image-looped'),
+    repeat: views[0].dataset.loopRepeat, line: label.dataset.note, tint: getComputedStyle(paragraph).backgroundColor, plainLooped: views[1].classList.contains('editor-image-looped'),
+    editorLeft: document.getElementById('editor-container').getBoundingClientRect().left, paragraphLeft: paragraph.getBoundingClientRect().left };
+});
+check('Enregistrer (vrai clic) pose la boucle « paragraphe » sur l\'image en gardant sa taille, ferme la fenêtre, le cadre dit « Paragraphe répété pour chaque ligne de « VcTaches » » et le paragraphe est teinté',
+  !imageLooped.modalOpen && !!imageLooped.loop && imageLooped.loop.repeat === 'paragraph' && imageLooped.loop.table === 'VcTaches' && imageLooped.width === '120px' && imageLooped.height === '80px'
+  && imageLooped.looped && imageLooped.repeat === 'paragraph' && imageLooped.line === 'Paragraphe répété pour chaque ligne de « VcTaches »' && imageLooped.tint === 'rgb(245, 249, 255)' && !imageLooped.plainLooped
+  && imageLooped.paragraphLeft >= imageLooped.editorLeft, imageLooped);
+const loopButtonAfter = await imageLoopButton();
+check('la barre de l\'image est revenue (fenêtre fermée) avec le bouton « Boucle » allumé, toujours dans la fenêtre', loopButtonAfter.bar && loopButtonAfter.present && loopButtonAfter.active && !loopButtonAfter.disabled
+  && loopButtonAfter.barLeft >= 0 && loopButtonAfter.barRight <= loopButtonAfter.viewport + 0.5, loopButtonAfter);
+await page.screenshot({ path: '/tmp/claude-0/image-boucle-cadre-700x400.png' });
+const plainLoopFrames = await imageFrames();
+await page.mouse.click(plainLoopFrames[1].x, plainLoopFrames[1].y);
+await page.waitForTimeout(500);
+const loopButtonPlain = await imageLoopButton();
+check('image ordinaire à la vraie souris : « Boucle » est grisé, sa raison en info-bulle, atteignable', loopButtonPlain.bar && loopButtonPlain.present && loopButtonPlain.disabled && !loopButtonPlain.active
+  && /réservée à une image liée à une colonne de pièces jointes/.test(loopButtonPlain.title || '') && loopButtonPlain.onTop, loopButtonPlain);
+if (loopButtonPlain.onTop) await page.mouse.click(loopButtonPlain.x, loopButtonPlain.y);
+await page.waitForTimeout(300);
+const loopOpenedOnPlain = await page.evaluate(() => { const m = document.getElementById('var-loop-modal'); return !!m && m.style.display !== 'none' && m.getClientRects().length > 0; });
+check('... et un vrai clic sur le bouton grisé n\'ouvre aucune fenêtre', !loopOpenedOnPlain, { loopOpenedOnPlain });
 
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 

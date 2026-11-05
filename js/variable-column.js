@@ -25,9 +25,21 @@ const VariableColumn = (function () {
   // son cadre devient orange (Editor.markBadgeValidity) et sa barre a le même bouton « Colonne… », qui ne propose que les colonnes Pièces jointes.
   const isImageSource = node => !!node && node.type.name === 'editorImage' && !!node.attrs.varTable;
   const isImageBroken = attrs => !!(attrs && attrs.varTable && Variables.badgeProblem(attrs.varTable, attrs.varColumn));
-  const replacementImageAttrs = (node, item) => Object.assign({}, node.attrs, { varTable: item.table, varColumn: item.column, varKey: item.key });
-
   const sameVia = (a, b) => (!a && !b) || (!!a && !!b && a.table === b.table && a.column === b.column);
+  // Vrai quand la boucle `rawLoop` d'une bulle ou d'une image suit sa variable une fois celle-ci remplacée par `target` ({ table, column, key }) : une boucle sur toutes les lignes suit tant
+  // que la nouvelle colonne est de la même table, une boucle sur les lignes rattachées tant qu'elles se rattachent de la même façon.
+  function loopFollows(rawLoop, target) {
+    const loop = LoopRules.normalizeLoop(rawLoop);
+    const page = GristAPI.getCurrentTableId();
+    const source = loop && (loop.all ? LoopRules.allSourceFor(target, page, null) : LoopRules.sourceFor(target, page, LoopRules.enclosingOf(loop, page)));
+    return !(!source || source.table !== loop.table || (!loop.all && !sameVia(source.via, loop.via)));
+  }
+  // Les attributs de l'image une fois sa colonne remplacée par `item` : sa taille, son opacité, sa condition sont gardées, sa boucle aussi tant qu'elle y trouve ses lignes.
+  function replacementImageAttrs(node, item) {
+    const attrs = Object.assign({}, node.attrs, { varTable: item.table, varColumn: item.column, varKey: item.key });
+    if (node.attrs.loop && !loopFollows(node.attrs.loop, { table: item.table, column: item.column, key: item.key })) attrs.loop = null;
+    return attrs;
+  }
 
   // Les attributs de la bulle une fois sa colonne remplacée par `item` ({ table, column, key }) : tout le reste de la bulle est gardé, sauf ce qui ne
   // vaut plus.
@@ -35,13 +47,7 @@ const VariableColumn = (function () {
     const attrs = Object.assign({}, node.attrs, { table: item.table, column: item.column, key: item.key });
     const kind = VariableFormat.formatKindOf(node.attrs.format);
     if (kind && kind !== VariableFormat.columnKind(GristAPI.getColumnType(item.table, item.column))) attrs.format = null;
-    if (node.attrs.loop) {
-      const loop = LoopRules.normalizeLoop(node.attrs.loop);
-      const page = GristAPI.getCurrentTableId();
-      // Une boucle sur toutes les lignes suit la bulle tant que sa nouvelle colonne est de la même table.
-      const source = loop && (loop.all ? LoopRules.allSourceFor(attrs, page, null) : LoopRules.sourceFor(attrs, page, LoopRules.enclosingOf(loop, page)));
-      if (!source || source.table !== loop.table || (!loop.all && !sameVia(source.via, loop.via))) attrs.loop = null;
-    }
+    if (node.attrs.loop && !loopFollows(node.attrs.loop, attrs)) attrs.loop = null;
     return attrs;
   }
 
@@ -182,5 +188,5 @@ const VariableColumn = (function () {
     }
   }
 
-  return { openAt, isBroken, isImageBroken, isUnlinkedAt, replacementAttrs, ensureLinked };
+  return { openAt, isBroken, isImageBroken, isUnlinkedAt, replacementAttrs, replacementImageAttrs, ensureLinked };
 })();

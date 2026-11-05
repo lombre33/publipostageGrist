@@ -250,7 +250,7 @@
         const label = view.querySelector('.editor-image-var-label');
         return {
           conditional: view.classList.contains('editor-image-conditional'), border: cs.borderTopColor, style: cs.borderTopStyle, bg: cs.backgroundColor,
-          line: label ? label.dataset.condition || null : null, after: label ? getComputedStyle(label, '::after').content : null,
+          line: label ? label.dataset.note || null : null, after: label ? getComputedStyle(label, '::after').content : null,
         };
       };
       const looks = {};

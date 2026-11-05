@@ -1,10 +1,10 @@
-// Fenêtre « Boucle » d'une bulle #Variable : répéter la ligne du tableau, l'élément de liste ou le paragraphe qui contient la bulle - ou la bulle
-// seule, dans la phrase - pour chaque ligne rattachée à la ligne de la page, ou pour toutes les lignes de sa table (la vue Grist du widget, ou toute
+// Fenêtre « Boucle » d'une bulle #Variable ou d'une image liée à une colonne Pièces jointes (sans séparateurs : des images n'en ont pas besoin) : répéter la
+// ligne du tableau, l'élément de liste ou le paragraphe qui contient la bulle - ou la bulle seule, dans la phrase - pour chaque ligne rattachée à la ligne de la page, ou pour toutes les lignes de sa table (la vue Grist du widget, ou toute
 // la table). La boucle vit dans l'attribut `loop` de la bulle (js/editor-nodes.js) ; son moteur (lignes parcourues, filtre, tri, déroulé en lecture
 // et à l'export) est js/loop-rules.js. Même gabarit que la fenêtre de condition (js/variable-condition.js), mêmes lignes de filtre
 // (js/condition-fields.js, sur les colonnes de la table parcourue), aperçu en direct sur la ligne sélectionnée puis sur toutes les lignes de la page
 // (sur les lignes parcourues seules pour toutes les lignes : elles ne dépendent pas de la ligne de la page). Ouverte depuis la barre flottante de la
-// bulle (js/floating-toolbars.js:wireVariableFloatingToolbar), ou, pour la ligne d'un tableau, depuis « Répéter la ligne » de la barre du tableau (rowStatus et
+// bulle ou de l'image (js/floating-toolbars.js:wireVariableFloatingToolbar, syncImageToolbar), ou, pour la ligne d'un tableau, depuis « Répéter la ligne » de la barre du tableau (rowStatus et
 // openRow choisissent la bulle de la ligne) ; les repères de la zone répétée dans l'éditeur sont en CSS seul (css/variable-actions.css).
 const VariableLoop = (function () {
   const { el, option } = Dom;
@@ -13,6 +13,14 @@ const VariableLoop = (function () {
   const ZONE_NODES = { row: ['tableRow'], item: ['listItem', 'taskItem'], paragraph: ['paragraph', 'heading'] };
   // Les bulles qui lisent une ligne de table : « La ligne du tableau » les fait toutes suivre, une boucle « dans sa cellule » ne répète que celle qui la porte.
   const BUBBLE_NODES = ['varBadge', 'calcBadge'];
+  // Les nœuds qui portent la boucle d'une zone : la bulle d'une variable et l'image d'une colonne Pièces jointes (attribut `loop` de l'un comme de l'autre).
+  const LOOP_NODES = ['varBadge', 'editorImage'];
+  // Ce que la fenêtre lit de la variable de `node` : { table, column, format, loop } - les attributs d'une bulle, ceux de la colonne d'une image (varTable, varColumn).
+  function loopAttrs(node) {
+    const attrs = node.attrs;
+    return node.type.name === 'editorImage' ? { table: attrs.varTable, column: attrs.varColumn, key: attrs.varKey, format: null, loop: attrs.loop } : attrs;
+  }
+  const isImageNode = node => !!node && node.type.name === 'editorImage';
   // Valeurs citées dans l'aperçu d'une zone répétée : les premières seulement, la suite en « … ».
   const PREVIEW_VALUES = 3;
 
@@ -40,7 +48,7 @@ const VariableLoop = (function () {
     let owner = null;
     zoneNode.descendants((child, rel) => {
       if (owner) return false;
-      if (child.type.name !== 'varBadge') return true;
+      if (LOOP_NODES.indexOf(child.type.name) === -1) return true;
       const loop = LoopRules.normalizeLoop(child.attrs.loop);
       if (loop && loop.repeat === repeat) {
         const $badge = doc.resolve(start + 1 + rel);
@@ -150,7 +158,7 @@ const VariableLoop = (function () {
   function sourcesAt(editorState, pos, node) {
     const existing = LoopRules.normalizeLoop(node.attrs.loop);
     const zone = existing ? null : enclosingAt(editorState, pos, pos);
-    const found = sourcesFor(node.attrs, existing ? LoopRules.enclosingOf(existing, GristAPI.getCurrentTableId()) : zone && zone.owner.loop.table);
+    const found = sourcesFor(loopAttrs(node), existing ? LoopRules.enclosingOf(existing, GristAPI.getCurrentTableId()) : zone && zone.owner.loop.table);
     if (existing && existing.all) found.all = { table: existing.table, via: null, all: existing.all };
     else if (existing) found.linked = { table: existing.table, via: existing.via, within: existing.within, by: existing.by };
     found.existing = existing;
@@ -162,11 +170,12 @@ const VariableLoop = (function () {
   function status(editor, pos, node) {
     if (LoopRules.normalizeLoop(node.attrs.loop)) return { active: true, enabled: true, title: I18n.t('varToolbar.loop') };
     const zone = enclosingAt(editor.state, pos, pos);
-    const sources = sourcesFor(node.attrs, zone && zone.owner.loop.table);
+    const attrs = loopAttrs(node);
+    const sources = sourcesFor(attrs, zone && zone.owner.loop.table);
     if (sources.linked || sources.all) return { active: false, enabled: true, title: I18n.t('varToolbar.loop') };
     if (!zone) return { active: false, enabled: false, title: I18n.t('varToolbar.loopDisabled') };
     const within = zone.owner.loop.table;
-    return { active: false, enabled: false, title: I18n.t(node.attrs.table === within ? 'varToolbar.loopNested' : 'varToolbar.loopNestedNone', { table: node.attrs.table, within }) };
+    return { active: false, enabled: false, title: I18n.t(attrs.table === within ? 'varToolbar.loopNested' : 'varToolbar.loopNestedNone', { table: attrs.table, within }) };
   }
   // Où est la bulle : décide des choix « Ce qui se répète » (le plus proche l'emporte : une liste dans une cellule propose l'élément de liste).
   // `rowMerged` : une case fusionnée sur plusieurs lignes traverse la ligne de la bulle (js/table-merge.js) ; la copier pour chaque ligne liée
@@ -269,7 +278,10 @@ const VariableLoop = (function () {
 
   // === Libellés ===
   function repeatLabel(repeat, place) {
-    if (repeat === 'inline') return I18n.t(place.kind === 'table' ? 'varLoop.repeat.cell' : 'varLoop.repeat.inline');
+    if (repeat === 'inline') {
+      const image = isImageNode(state && state.node);
+      return I18n.t(place.kind === 'table' ? (image ? 'varLoop.repeat.imageCell' : 'varLoop.repeat.cell') : (image ? 'varLoop.repeat.imageInline' : 'varLoop.repeat.inline'));
+    }
     if (repeat === 'paragraph') return I18n.t(place.kind === 'heading' ? 'varLoop.repeat.heading' : 'varLoop.repeat.paragraph');
     return I18n.t('varLoop.repeat.' + repeat);
   }
@@ -285,7 +297,7 @@ const VariableLoop = (function () {
     if (loop.repeat === 'row') return loop.empty === 'text' ? I18n.t('varLoop.effect.rowText', { text }) : I18n.t('varLoop.effect.header');
     if (loop.repeat === 'item') return loop.empty === 'text' ? I18n.t('varLoop.effect.itemText', { text }) : I18n.t('varLoop.effect.none');
     if (loop.empty === 'hide') return I18n.t(place.kind === 'heading' ? 'varLoop.effect.hideHeading' : 'varLoop.effect.hide');
-    if (loop.repeat === 'inline') return loop.empty === 'text' && text ? I18n.t('varLoop.preview.inline', { text }) : I18n.t('varLoop.effect.inlineBlank');
+    if (loop.repeat === 'inline') return loop.empty === 'text' && text ? I18n.t('varLoop.preview.inline', { text }) : I18n.t(isImageNode(state && state.node) ? 'varLoop.effect.inlineBlankImage' : 'varLoop.effect.inlineBlank');
     return loop.empty === 'text' ? I18n.t('varLoop.effect.text', { text }) : I18n.t('varLoop.effect.blank');
   }
   // Tri d'une colonne de texte (ou de choix, de référence) : A → Z ; nombres, dates, cases à cocher : croissant.
@@ -436,7 +448,8 @@ const VariableLoop = (function () {
     const badge = el('span', 'var-badge', VariableModal.badgeText(state.node));
     const inline = state.working.repeat === 'inline';
     if (inline) badge.setAttribute('data-loop-repeat', 'inline');
-    refs.intro.replaceChildren(badge, document.createTextNode(' ' + I18n.t(inline ? 'varLoop.intro.inline' : 'varLoop.intro.zone', { table: state.source.table })));
+    const introKey = inline ? (isImageNode(state.node) ? 'varLoop.intro.inlineImage' : 'varLoop.intro.inline') : 'varLoop.intro.zone';
+    refs.intro.replaceChildren(badge, document.createTextNode(' ' + I18n.t(introKey, { table: state.source.table })));
   }
   // « Lignes de « Lignes » trouvées via Lignes.Facture · Modifier le lien » : le lien de la table (un par table et par document, js/variables.js), ou
   // la colonne Liste de références qui fournit les lignes (rien à modifier : c'est la cellule de la page, ou celle de la ligne de la zone englobante),
@@ -580,7 +593,8 @@ const VariableLoop = (function () {
       btn.addEventListener('click', () => setRepeat(repeat));
       repeatSeg.appendChild(btn);
     });
-    separators.row.hidden = state.working.repeat !== 'inline';
+    // Les copies d'une image « dans la phrase » sont côte à côte : pas de séparateur à régler.
+    separators.row.hidden = state.working.repeat !== 'inline' || isImageNode(state.node);
     renderRepeatNote();
   }
   // « La variable, dans sa cellule » dans une ligne de tableau qui porte d'autres variables : elles ne suivent pas, seule cette cellule est répétée. La note le dit
@@ -696,7 +710,7 @@ const VariableLoop = (function () {
     if (w.sortColumn || w.sortDirection === 'desc') loop.sort = { column: w.sortColumn, direction: w.sortDirection };
     loop.empty = w.empty;
     if (w.empty === 'text') loop.emptyText = w.emptyText;
-    if (w.repeat === 'inline') { loop.separator = w.separator; loop.lastSeparator = w.lastSeparator; }
+    if (w.repeat === 'inline' && !isImageNode(state.node)) { loop.separator = w.separator; loop.lastSeparator = w.lastSeparator; }
     return loop;
   }
 
@@ -704,7 +718,7 @@ const VariableLoop = (function () {
   // en ne lisant chaque table qu'une fois (LoopRules.createContext). Valeur de la bulle pour une ligne parcourue, telle que la lecture l'affichera
   // (format compris).
   async function badgeValue(loop, item, tableId, record) {
-    const { table, column, format } = state.node.attrs;
+    const { table, column, format } = loopAttrs(state.node);
     if (GristAPI.getColumnType(table, column) === 'Attachments') return I18n.t('varCond.debug.imageValue');
     return Variables.resolveVariable(table, column, tableId, record, format, { loop: LoopRules.itemBinding(loop, item, null) });
   }
@@ -755,6 +769,7 @@ const VariableLoop = (function () {
         if (value !== '' && value != null) values.push(String(value));
       }
       if (!values.length) return { text: head + ' ' + emptyEffect(loop, state.place), good };
+      if (isImageNode(state.node)) return { text: head + ' ' + I18n.t('varLoop.preview.inlineImage', { count: values.length }), good };
       const text = LoopRules.joinValues(values, loop.separator, loop.lastSeparator);
       return { text: head + ' ' + I18n.t('varLoop.preview.inline', { text: shorten(text, 240) }), good };
     }
@@ -904,7 +919,7 @@ const VariableLoop = (function () {
   // `options.inlineOnly` : la bulle d'un champ texte, cf. placeOf. `options.repeat` : le choix « Ce qui se répète » demandé, cf. repeatFor.
   function openAt(editor, pos, options) {
     const node = editor && editor.state.doc.nodeAt(pos);
-    if (!node || node.type.name !== 'varBadge') return;
+    if (!node || LOOP_NODES.indexOf(node.type.name) === -1) return;
     const found = sourcesAt(editor.state, pos, node);
     const { existing, source } = found;
     if (!source) return;

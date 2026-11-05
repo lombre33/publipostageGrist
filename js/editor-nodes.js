@@ -1738,6 +1738,10 @@ const EditorNodes = (function () {
         // d'une bulle. Écrite en data-condition sur l'<img> d'une image de variable seulement (renderHTML) ; la Lecture et les exports retirent l'image quand elle n'est pas remplie
         // (js/reader-mode.js:resolveImageConditions). `null` = toujours affichée.
         condition: { default: null, parseHTML: el => jsonAttr(el, 'data-condition'), renderHTML: noBareRender },
+        // La boucle de l'image d'une colonne Pièces jointes (fenêtre « Boucle » de js/variable-loop.js, bouton « Boucle » de sa barre) : celle d'une bulle, { repeat, table, via, filter, sort, ... }
+        // (js/loop-rules.js). Écrite en data-loop sur l'<img> d'une image de variable seulement (renderHTML) : l'image est copiée pour chaque ligne en « dans la phrase », sinon c'est
+        // sa ligne de tableau, son élément de liste ou son paragraphe qui l'est. `null` = pas de boucle.
+        loop: { default: null, parseHTML: el => jsonAttr(el, 'data-loop'), renderHTML: noBareRender },
         // QR code (js/qr-code.js) : le texte à encoder, « #Table.Colonne » compris. Posé avec un `src`, l'image est le QR code déjà dessiné ; sans
         // `src`, le texte contient une colonne et le QR code n'est dessiné qu'à la Lecture et à l'export, pour la ligne affichée
         // (reader-mode.js:resolveQrCodes).
@@ -1832,6 +1836,8 @@ const EditorNodes = (function () {
       wrap.setAttribute('data-wrap', attrs.wrap || 'inline');
     }
 
+    // La ligne du libellé pour chaque sorte de boucle ; les clés s'écrivent en toutes lettres, pour que la recherche des clés sans usage (dev-tests/verify-code-hygiene.mjs) les voie.
+    const IMAGE_LOOP_TAGS = { inline: 'imgLoop.tag.inline', row: 'imgLoop.tag.row', item: 'imgLoop.tag.item', paragraph: 'imgLoop.tag.paragraph' };
     function applyImageAttrs(view, attrs) {
       // Le z-index négatif ("derrière le texte") est posé sur l'<img> seule, pas le wrapper : sinon la poignée de déplacement (enfant du wrapper)
       // serait entraînée derrière le texte avec lui, devenant impossible à re-sélectionner une fois cachée.
@@ -1871,12 +1877,18 @@ const EditorNodes = (function () {
       // Le dessin est prêt : il prend la place du cadre pointillé et de son libellé (css/chart-frame.css).
       wrap.classList.toggle('editor-image-chart-drawn', !!drawn);
       varLabel.textContent = isVarBox ? ('#' + (attrs.varKey || '')) : (isQrBox ? attrs.qrText : (isChartBox ? (attrs.chartName || I18n.t('chart.frame')) : ''));
-      // Une condition d'affichage posée (images de colonne seulement) : le cadre passe en pointillés bleus, comme une bulle ou un bloc conditionnels, et sa seconde ligne dit « Si … » ;
-      // l'image reste visible en édition. Rien n'est écrit dans le nœud : le cadre se relit à chaque mise à jour.
+      // Une condition d'affichage posée (images de colonne seulement) : le cadre passe en pointillés bleus, comme une bulle ou un bloc conditionnels ; une boucle posée dit ce qu'elle
+      // répète. Le libellé a une ligne de plus pour chacune (« Si … », « Une image par ligne de … »), `data-note` ; l'image reste visible. Rien n'est écrit dans le nœud : le cadre se
+      // relit à chaque mise à jour. `data-loop-repeat` du cadre : les repères de la zone répétée (css/variable-actions.css), les mêmes que ceux d'une bulle en boucle.
       const condition = isVarBox ? ConditionRules.normalizeCondition(attrs.condition) : null;
+      const loop = isVarBox ? LoopRules.normalizeLoop(attrs.loop) : null;
       wrap.classList.toggle('editor-image-conditional', !!condition);
-      if (condition) varLabel.dataset.condition = I18n.t('condText.tag.if', { condition: VariableCondition.describe(condition) });
-      else delete varLabel.dataset.condition;
+      wrap.classList.toggle('editor-image-looped', !!loop);
+      if (loop) wrap.dataset.loopRepeat = loop.repeat; else delete wrap.dataset.loopRepeat;
+      const notes = [];
+      if (condition) notes.push(I18n.t('condText.tag.if', { condition: VariableCondition.describe(condition) }));
+      if (loop) notes.push(I18n.t(IMAGE_LOOP_TAGS[loop.repeat], { table: loop.table }));
+      if (notes.length) varLabel.dataset.note = notes.join('\n'); else delete varLabel.dataset.note;
       const layered = attrs.layer !== 'normal';
       wrap.classList.toggle('editor-image-layered', layered);
       wrap.classList.toggle('editor-image-repeated', PageLayer.isRepeatedAttrs(attrs));
@@ -2087,6 +2099,7 @@ const EditorNodes = (function () {
             attrs['data-var-column'] = nodeAttrs.varColumn;
             attrs['data-var-key'] = nodeAttrs.varKey;
             if (nodeAttrs.condition) attrs['data-condition'] = JSON.stringify(nodeAttrs.condition);
+            if (nodeAttrs.loop) attrs['data-loop'] = JSON.stringify(nodeAttrs.loop);
           }
           if (nodeAttrs.qrText) attrs['data-qr-text'] = nodeAttrs.qrText;
           if (ChartEntry.isChartAttrs(nodeAttrs)) {

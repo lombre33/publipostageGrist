@@ -2,7 +2,7 @@
 // tri, déroulé de la zone répétée en Lecture et à l'export (js/reader-mode.js, point d'entrée commun du mode Lecture, du PDF, du Word et de l'export
 // en lot). Aucune dépendance à l'éditeur.
 //
-// La boucle vit dans l'attribut `loop` du nœud varBadge (js/editor-nodes.js, sérialisé en data-loop), comme la condition d'affichage :
+// La boucle vit dans l'attribut `loop` du nœud varBadge - ou editorImage, l'image d'une colonne Pièces jointes, pour sa propre boucle - (js/editor-nodes.js, sérialisé en data-loop), comme la condition d'affichage :
 //   { repeat: 'inline'|'row'|'item'|'paragraph', table, via: null|{ table, column }, within: null|'Table', by: null|'Colonne', all: null|'view'|'table'|'linked',
 //     filter: null|{ mode, rules }, sort: { column, direction }, empty, emptyText, separator, lastSeparator }
 // - `table` : la table dont les lignes sont parcourues. `via` : une colonne Liste de références de la table de la page (les fiches qu'elle référence,
@@ -348,6 +348,10 @@ const LoopRules = (function () {
     clone.querySelectorAll(BOUND_SELECTOR).forEach((el, i) => bindings.set(el, itemBinding(loop, item, src[i] ? bindings.get(src[i]) : null, turn)));
   }
 
+  // Ce qui peut porter la boucle d'une zone : une bulle #Variable, ou l'image d'une colonne Pièces jointes (data-loop sur son <img>). Une image en boucle « dans la phrase » ne
+  // répète pas de zone : ses copies se font après le déroulé des zones (expandInlineImages).
+  const LOOP_OWNER_SELECTOR = '.var-badge[data-loop], img.editor-image[data-var-table][data-loop]';
+  const IMAGE_LOOP_SELECTOR = 'img.editor-image[data-var-table][data-loop]';
   function zoneOf(badge, repeat, root) {
     let zone = null;
     if (repeat === 'row') zone = badge.closest('tr');
@@ -359,7 +363,7 @@ const LoopRules = (function () {
   // bulle redevient ordinaire).
   function zoneOwners(root) {
     const owners = [];
-    for (const badge of root.querySelectorAll('.var-badge[data-loop]')) {
+    for (const badge of root.querySelectorAll(LOOP_OWNER_SELECTOR)) {
       const loop = parseLoop(badge.getAttribute('data-loop'));
       if (!loop) { badge.removeAttribute('data-loop'); continue; }
       if (loop.repeat === 'inline') continue;
@@ -437,7 +441,7 @@ const LoopRules = (function () {
   // zone telle quelle.
   async function expandZone({ badge, loop, zone }, tableId, record, root, context) {
     // Une seule boucle par zone : celle-ci. Une autre bulle de la même zone qui en porte une (copiée-collée) redevient une bulle ordinaire.
-    zone.querySelectorAll('.var-badge[data-loop]').forEach(b => {
+    zone.querySelectorAll(LOOP_OWNER_SELECTOR).forEach(b => {
       const other = parseLoop(b.getAttribute('data-loop'));
       if (other && other.repeat === loop.repeat && zoneOf(b, other.repeat, root) === zone) b.removeAttribute('data-loop');
     });
@@ -466,11 +470,39 @@ const LoopRules = (function () {
     const context = ctx || createContext();
     for (let level = 0; level < MAX_NESTING; level++) {
       const owners = outermost(zoneOwners(root));
-      if (!owners.length) return;
+      if (!owners.length) break;
       for (const owner of owners) {
         // Une bulle de la même zone a pu déjà la dérouler (une seule boucle par zone) : sa boucle n'est plus là.
         if (owner.badge.hasAttribute('data-loop') && root.contains(owner.zone)) await expandZone(owner, tableId, record, root, context);
       }
+    }
+    // Les images en boucle « dans la phrase » en dernier : chacune lit la ligne du tour de la zone qui l'entoure, une fois cette zone déroulée.
+    await expandInlineImages(root, tableId, record, context);
+  }
+  // Une image de colonne Pièces jointes en boucle « dans la phrase » : copiée pour chaque ligne retenue, les copies côte à côte (une espace entre elles), chacune associée à sa
+  // ligne (bindingOf) - js/reader-mode.js:resolveVariableImages lit alors sa pièce jointe dans cette ligne. Sans ligne retenue : ce que dit « Si aucune ligne » (emptyInlineNode).
+  // Une boucle qui ne trouve plus sa source laisse l'image seule, comme avant la boucle. L'attribut s'en va avec la boucle déroulée : les copies n'en portent pas.
+  async function expandInlineImages(root, tableId, record, context) {
+    for (const img of Array.from(root.querySelectorAll(IMAGE_LOOP_SELECTOR))) {
+      if (!root.contains(img)) continue;
+      const loop = parseLoop(img.getAttribute('data-loop'));
+      img.removeAttribute('data-loop');
+      if (!loop || loop.repeat !== 'inline') continue;
+      const scope = scopeOf(loop, img, tableId, record);
+      let result;
+      try { result = await iterate(loop, scope.tableId, scope.record, context); }
+      catch (e) { console.error('[LoopRules] échec du calcul des lignes de la boucle d\'une image', loop, e); continue; }
+      if (result.error) { console.warn('[LoopRules] boucle d\'une image sur « ' + loop.table + ' » sans source (' + result.error + ') : image affichée une fois.'); continue; }
+      if (!result.items.length) { img.replaceWith(emptyInlineNode(loop, img)); continue; }
+      const inherited = bindingOf(img);
+      const copies = document.createDocumentFragment();
+      result.items.forEach((item, index) => {
+        const clone = img.cloneNode(true);
+        bindings.set(clone, itemBinding(loop, item, inherited));
+        if (index) copies.appendChild(document.createTextNode(' '));
+        copies.appendChild(clone);
+      });
+      img.replaceWith(copies);
     }
   }
 

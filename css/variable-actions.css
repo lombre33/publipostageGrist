@@ -310,7 +310,7 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
 
 /* Repères de boucle dans l'éditeur : la zone répétée (ligne de tableau, élément de liste, paragraphe ou titre qui contient une bulle en boucle)
    est teintée, avec un onglet dans la marge de gauche ; une bulle en boucle « dans la phrase » porte une petite icône. CSS seul, lu sur l'attribut
-   data-loop-repeat de la bulle (js/editor-nodes.js) : rien n'est ajouté au document, et la Lecture comme l'export remplacent la bulle, donc aucun
+   data-loop-repeat de la bulle - ou du cadre d'une image de colonne Pièces jointes, `.editor-image-view` (js/editor-nodes.js) : rien n'est ajouté au document, et la Lecture comme l'export remplacent la bulle, donc aucun
    repère. :where() garde la spécificité basse : la couleur choisie pour une cellule et la cellule sélectionnée l'emportent. L'onglet ne prend
    aucune place (flottant de largeur extérieure nulle, ou position absolue dans la cellule, déjà position:relative) : la mise en page de l'aperçu
    A4 ne bouge pas. */
@@ -318,30 +318,30 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
   --pp-loop-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2312406b' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m17 2 4 4-4 4'/%3E%3Cpath d='M3 11v-1a4 4 0 0 1 4-4h14'/%3E%3Cpath d='m7 22-4-4 4-4'/%3E%3Cpath d='M21 13v1a4 4 0 0 1-4 4H3'/%3E%3C/svg%3E");
   --pp-loop-icon-accent: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232f6fed' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m17 2 4 4-4 4'/%3E%3Cpath d='M3 11v-1a4 4 0 0 1 4-4h14'/%3E%3Cpath d='m7 22-4-4 4-4'/%3E%3Cpath d='M21 13v1a4 4 0 0 1-4 4H3'/%3E%3C/svg%3E");
 }
-.tiptap :where(tr:has(> td .var-badge[data-loop-repeat="row"], > th .var-badge[data-loop-repeat="row"])) > :where(td, th) { background-color: #f5f9ff; box-shadow: inset 0 1px 0 #b7cdf2, inset 0 -1px 0 #b7cdf2; }
-.tiptap :where(tr:has(> td .var-badge[data-loop-repeat="row"], > th .var-badge[data-loop-repeat="row"])) > :where(td, th):first-child { box-shadow: inset 1px 0 0 #b7cdf2, inset 0 1px 0 #b7cdf2, inset 0 -1px 0 #b7cdf2; }
-.tiptap :where(tr:has(> td .var-badge[data-loop-repeat="row"], > th .var-badge[data-loop-repeat="row"])) > :where(td, th):last-child { box-shadow: inset -1px 0 0 #b7cdf2, inset 0 1px 0 #b7cdf2, inset 0 -1px 0 #b7cdf2; }
-.tiptap :where(tr:has(> td .var-badge[data-loop-repeat="row"], > th .var-badge[data-loop-repeat="row"])) > :where(td, th):only-child { box-shadow: inset 0 0 0 1px #b7cdf2; }
-.tiptap :where(li:has(> p .var-badge[data-loop-repeat="item"], > div > p .var-badge[data-loop-repeat="item"])),
-.tiptap :where(p, h1, h2, h3, h4, h5, h6):has(.var-badge[data-loop-repeat="paragraph"]) { background-color: #f5f9ff; box-shadow: inset 0 0 0 1px #b7cdf2; border-radius: 2px; }
+.tiptap :where(tr:has(> td :is(.var-badge, .editor-image-view)[data-loop-repeat="row"], > th :is(.var-badge, .editor-image-view)[data-loop-repeat="row"])) > :where(td, th) { background-color: #f5f9ff; box-shadow: inset 0 1px 0 #b7cdf2, inset 0 -1px 0 #b7cdf2; }
+.tiptap :where(tr:has(> td :is(.var-badge, .editor-image-view)[data-loop-repeat="row"], > th :is(.var-badge, .editor-image-view)[data-loop-repeat="row"])) > :where(td, th):first-child { box-shadow: inset 1px 0 0 #b7cdf2, inset 0 1px 0 #b7cdf2, inset 0 -1px 0 #b7cdf2; }
+.tiptap :where(tr:has(> td :is(.var-badge, .editor-image-view)[data-loop-repeat="row"], > th :is(.var-badge, .editor-image-view)[data-loop-repeat="row"])) > :where(td, th):last-child { box-shadow: inset -1px 0 0 #b7cdf2, inset 0 1px 0 #b7cdf2, inset 0 -1px 0 #b7cdf2; }
+.tiptap :where(tr:has(> td :is(.var-badge, .editor-image-view)[data-loop-repeat="row"], > th :is(.var-badge, .editor-image-view)[data-loop-repeat="row"])) > :where(td, th):only-child { box-shadow: inset 0 0 0 1px #b7cdf2; }
+.tiptap :where(li:has(> p :is(.var-badge, .editor-image-view)[data-loop-repeat="item"], > div > p :is(.var-badge, .editor-image-view)[data-loop-repeat="item"])),
+.tiptap :where(p, h1, h2, h3, h4, h5, h6):has(:is(.var-badge, .editor-image-view)[data-loop-repeat="paragraph"]) { background-color: #f5f9ff; box-shadow: inset 0 0 0 1px #b7cdf2; border-radius: 2px; }
 /* Onglet : ligne de tableau, dans la marge à gauche de la première cellule, centré sur la ligne. */
-.tiptap :where(tr:has(> td .var-badge[data-loop-repeat="row"], > th .var-badge[data-loop-repeat="row"])) > :where(td, th):first-child::before,
-.tiptap :where(ul:not([data-type="taskList"]), ol) > li:has(> p .var-badge[data-loop-repeat="item"])::before,
-.tiptap p:has(.var-badge[data-loop-repeat="paragraph"])::before,
-.tiptap :where(h1, h2, h3, h4, h5, h6):has(.var-badge[data-loop-repeat="paragraph"])::after {
+.tiptap :where(tr:has(> td :is(.var-badge, .editor-image-view)[data-loop-repeat="row"], > th :is(.var-badge, .editor-image-view)[data-loop-repeat="row"])) > :where(td, th):first-child::before,
+.tiptap :where(ul:not([data-type="taskList"]), ol) > li:has(> p :is(.var-badge, .editor-image-view)[data-loop-repeat="item"])::before,
+.tiptap p:has(:is(.var-badge, .editor-image-view)[data-loop-repeat="paragraph"])::before,
+.tiptap :where(h1, h2, h3, h4, h5, h6):has(:is(.var-badge, .editor-image-view)[data-loop-repeat="paragraph"])::after {
   content: ''; width: 20px; height: 20px; box-sizing: border-box; border: 1px solid #b7cdf2; border-radius: 4px;
   background: #eaf2ff var(--pp-loop-icon) center / 12px 12px no-repeat; pointer-events: none;
 }
-.tiptap :where(tr:has(> td .var-badge[data-loop-repeat="row"], > th .var-badge[data-loop-repeat="row"])) > :where(td, th):first-child::before { position: absolute; left: -30px; top: 50%; margin-top: -10px; }
+.tiptap :where(tr:has(> td :is(.var-badge, .editor-image-view)[data-loop-repeat="row"], > th :is(.var-badge, .editor-image-view)[data-loop-repeat="row"])) > :where(td, th):first-child::before { position: absolute; left: -30px; top: 50%; margin-top: -10px; }
 /* Paragraphe et élément de liste : flottant « suspendu » dans la marge (marge gauche négative compensée à droite, largeur extérieure nulle : le
    texte ne bouge pas). Le titre prend ::after, son ::before étant la numérotation des titres (css/editor-v2.css). Élément de liste : à gauche de
    sa puce. */
-.tiptap p:has(.var-badge[data-loop-repeat="paragraph"])::before,
-.tiptap :where(h1, h2, h3, h4, h5, h6):has(.var-badge[data-loop-repeat="paragraph"])::after { float: left; margin: 0 10px 0 -30px; }
-.tiptap :where(ul:not([data-type="taskList"]), ol) > li:has(> p .var-badge[data-loop-repeat="item"])::before { float: left; margin: 0 calc(1.4em + 6px) 0 calc(-1.4em - 26px); }
+.tiptap p:has(:is(.var-badge, .editor-image-view)[data-loop-repeat="paragraph"])::before,
+.tiptap :where(h1, h2, h3, h4, h5, h6):has(:is(.var-badge, .editor-image-view)[data-loop-repeat="paragraph"])::after { float: left; margin: 0 10px 0 -30px; }
+.tiptap :where(ul:not([data-type="taskList"]), ol) > li:has(> p :is(.var-badge, .editor-image-view)[data-loop-repeat="item"])::before { float: left; margin: 0 calc(1.4em + 6px) 0 calc(-1.4em - 26px); }
 /* Mode classique (sans aperçu A4) : pas de marge de page, l'onglet serait coupé - un peu de place à gauche, seulement si le document a une zone
    répétée, et le cadre défilant d'un tableau répété s'étend dans cette place. */
-#editor-container:not(.a4-preview) .tiptap:has(.var-badge[data-loop-repeat="row"], .var-badge[data-loop-repeat="item"], .var-badge[data-loop-repeat="paragraph"]) { padding-left: 22px; }
-#editor-container:not(.a4-preview) .tiptap .tableWrapper:has(.var-badge[data-loop-repeat="row"]) { padding-left: 32px; margin-left: -32px; }
+#editor-container:not(.a4-preview) .tiptap:has(:is(.var-badge, .editor-image-view)[data-loop-repeat="row"], :is(.var-badge, .editor-image-view)[data-loop-repeat="item"], :is(.var-badge, .editor-image-view)[data-loop-repeat="paragraph"]) { padding-left: 22px; }
+#editor-container:not(.a4-preview) .tiptap .tableWrapper:has(:is(.var-badge, .editor-image-view)[data-loop-repeat="row"]) { padding-left: 32px; margin-left: -32px; }
 /* Bulle en boucle « dans la phrase » : petite icône bleue à droite dans la bulle (fond, pour laisser ::after aux autres repères de la bulle). */
 :is(.tiptap, .pp-field-editor) .var-badge[data-loop-repeat="inline"], .var-modal-intro .var-badge[data-loop-repeat="inline"] { padding-right: 17px; background-image: var(--pp-loop-icon-accent); background-repeat: no-repeat; background-position: right 3px center; background-size: 10px 10px; }

@@ -274,11 +274,11 @@
 }
 /* Image de colonne avec une condition d'affichage (js/variable-condition.js) : classe `editor-image-conditional` posée par applyImageAttrs (js/editor-nodes.js), jamais
    enregistrée. Les pointillés bleus #5b7fc0 d'une bulle ou d'un bloc conditionnels (css/variable-actions.css, css/conditional-text.css) ; la seconde ligne du libellé, « Si … »,
-   vient de `data-condition` du libellé, en `--text` comme le libellé (4,5:1 sur le gris du cadre) et coupée à la largeur du cadre. L'orange d'une colonne disparue (ci-dessous)
+   vient de `data-note` du libellé (« Si … », puis la boucle), en `--text` comme le libellé (4,5:1 sur le gris du cadre) et coupée à la largeur du cadre. L'orange d'une colonne disparue (ci-dessous)
    l'emporte sur le bleu : il est après. */
 .tiptap .editor-image-view.editor-image-var-placeholder.editor-image-conditional { border-color: #5b7fc0; }
-.editor-image-conditional .editor-image-var-label::after {
-  content: attr(data-condition); max-width: 100%; font-size: 10.5px; font-weight: 400; line-height: 1.25; color: var(--text, #1b2430); overflow-wrap: anywhere;
+.editor-image-var-placeholder .editor-image-var-label[data-note]::after {
+  content: attr(data-note); max-width: 100%; font-size: 10.5px; font-weight: 400; line-height: 1.25; color: var(--text, #1b2430); overflow-wrap: anywhere; white-space: pre-line;
 }
 /* Image dont la colonne Pièces jointes (ou la table) n'existe plus dans Grist : classe `editor-image-broken` posée et retirée par Editor.markBadgeValidity à chaque
    mise à jour, jamais enregistrée ; le message est dans l'info-bulle du cadre, et sa barre a « Colonne… » (js/variable-column.js). Les mêmes couleurs et le même triangle
