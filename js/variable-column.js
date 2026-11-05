@@ -22,7 +22,7 @@ const VariableColumn = (function () {
   const isBroken = attrs => !!(attrs && attrs.column && Variables.badgeProblem(attrs.table, attrs.column));
 
   // Une image liée à une colonne Pièces jointes (nœud `editorImage` aux attributs varTable / varColumn / varKey) se lit de même : sa table ou sa colonne a disparu dans Grist,
-  // son cadre devient orange (Editor.markBadgeValidity) et sa barre a le même bouton « Colonne… », qui ne propose que les colonnes Pièces jointes.
+  // son cadre devient rouge (Editor.markBadgeValidity) et sa barre a le même bouton « Colonne… », qui ne propose que les colonnes Pièces jointes.
   const isImageSource = node => !!node && node.type.name === 'editorImage' && !!node.attrs.varTable;
   const isImageBroken = attrs => !!(attrs && attrs.varTable && Variables.badgeProblem(attrs.varTable, attrs.varColumn));
   const sameVia = (a, b) => (!a && !b) || (!!a && !!b && a.table === b.table && a.column === b.column);

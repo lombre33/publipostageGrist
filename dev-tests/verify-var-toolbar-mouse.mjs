@@ -2718,7 +2718,7 @@ await page.evaluate(async () => {
 await page.waitForTimeout(500);
 const imageFrames = () => page.evaluate(() => Array.from(document.querySelectorAll('.tiptap .editor-image-view')).map(v => {
   const r = v.getBoundingClientRect();
-  return { orange: v.classList.contains('editor-image-broken'), background: getComputedStyle(v).backgroundColor, color: getComputedStyle(v.querySelector('.editor-image-var-label')).color, title: v.title, x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height, inViewport: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5 };
+  return { broken: v.classList.contains('editor-image-broken'), background: getComputedStyle(v).backgroundColor, color: getComputedStyle(v.querySelector('.editor-image-var-label')).color, title: v.title, x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height, inViewport: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5 };
 }));
 const imageBarButton = () => page.evaluate(() => {
   const bar = Array.from(document.querySelectorAll('.v2-floating-toolbar.visible')).find(el => el.querySelector('button[data-action="layer-front"]'));
@@ -2731,9 +2731,9 @@ const imageBarButton = () => page.evaluate(() => {
     onTop: !!top && (top === b || b.contains(top)), barLeft: bb.left, barRight: bb.right, barTop: bb.top, barBottom: bb.bottom, viewport: innerWidth };
 });
 const framesBefore = await imageFrames();
-check('image : le cadre de la colonne qui existe garde son aspect, celui de la colonne disparue est orange (ambre #ffe6c7, texte #873600) avec le message en info-bulle',
-  framesBefore.length === 2 && !framesBefore[0].orange && framesBefore[0].background !== 'rgb(255, 230, 199)' && framesBefore[0].title === '' && framesBefore[1].orange && framesBefore[1].background === 'rgb(255, 230, 199)'
-  && framesBefore[1].color === 'rgb(135, 54, 0)' && /La colonne « Ancien » n’existe plus dans la table « VcDossiers »/.test(framesBefore[1].title) && framesBefore.every(f => f.inViewport), framesBefore);
+check('image : le cadre de la colonne qui existe garde son aspect, celui de la colonne disparue est rouge (comme une bulle cassée : fond #fbe9e9, texte #a4231c) avec le message en info-bulle',
+  framesBefore.length === 2 && !framesBefore[0].broken && framesBefore[0].background !== 'rgb(251, 233, 233)' && framesBefore[0].title === '' && framesBefore[1].broken && framesBefore[1].background === 'rgb(251, 233, 233)'
+  && framesBefore[1].color === 'rgb(164, 35, 28)' && /La colonne « Ancien » n’existe plus dans la table « VcDossiers »/.test(framesBefore[1].title) && framesBefore.every(f => f.inViewport), framesBefore);
 await page.mouse.click(framesBefore[0].x, framesBefore[0].y);
 await page.waitForTimeout(500);
 const saneImageBar = await imageBarButton();
@@ -2771,12 +2771,12 @@ const repairedImage = await page.evaluate(() => {
   const views = Array.from(document.querySelectorAll('.tiptap .editor-image-view'));
   const bar = Array.from(document.querySelectorAll('.v2-floating-toolbar.visible')).find(el => el.querySelector('button[data-action="layer-front"]'));
   const b = bar && bar.querySelector('button[data-action="var-column"]');
-  return { second: nodes[1], orange: views.map(v => v.classList.contains('editor-image-broken')), selected: views[1].classList.contains('editor-image-selected'), barOpen: !!bar, buttonHidden: !!b && b.hidden,
+  return { second: nodes[1], broken: views.map(v => v.classList.contains('editor-image-broken')), selected: views[1].classList.contains('editor-image-selected'), barOpen: !!bar, buttonHidden: !!b && b.hidden,
     listOpen: !!Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden) };
 });
-check('un vrai clic sur la ligne : l\'image prend la colonne Photo en gardant sa taille, plus aucun cadre orange, l\'image reste sélectionnée, la liste se ferme et la barre revient sans « Colonne… »',
+check('un vrai clic sur la ligne : l\'image prend la colonne Photo en gardant sa taille, plus aucun cadre rouge, l\'image reste sélectionnée, la liste se ferme et la barre revient sans « Colonne… »',
   !!repairedImage.second && repairedImage.second.varColumn === 'Photo' && repairedImage.second.varKey === 'VcDossiers.Photo' && repairedImage.second.varTable === 'VcDossiers' && repairedImage.second.width === '160px' && repairedImage.second.height === '100px'
-  && repairedImage.orange.every(o => !o) && repairedImage.selected && repairedImage.barOpen && repairedImage.buttonHidden && !repairedImage.listOpen, repairedImage);
+  && repairedImage.broken.every(o => !o) && repairedImage.selected && repairedImage.barOpen && repairedImage.buttonHidden && !repairedImage.listOpen, repairedImage);
 
 // Condition d'affichage d'une image de colonne Pièces jointes (retour d'Antoine du 05/11 : « on manque des outils de gestion d'une variable quand c'est une image (conditions...) », lot 2 de sa
 // réponse « Condition, boucle, ligne liée ») : le bouton « Condition d'affichage » de la barre de l'image, atteignable et non recouvert à 700x400, la barre tient dans la fenêtre ; un vrai clic

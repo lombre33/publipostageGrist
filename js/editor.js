@@ -762,7 +762,7 @@ const Editor = (function () {
       const title = problem || unlinked;
       if (title) badge.title = title; else badge.removeAttribute('title');
     });
-    // Le cadre d'une image liée à une colonne Pièces jointes (js/editor-nodes.js : `data-image-var-table` / `-column` sur le cadre) : orange (`editor-image-broken`) quand sa table ou sa
+    // Le cadre d'une image liée à une colonne Pièces jointes (js/editor-nodes.js : `data-image-var-table` / `-column` sur le cadre) : rouge (`editor-image-broken`, le rouge d'une bulle cassée) quand sa table ou sa
     // colonne n'existe plus, avec le message de la bulle en info-bulle ; sa barre a alors « Colonne… » (js/variable-column.js). Comme une bulle, la classe et le titre ne sont jamais
     // enregistrés (le cadre n'a aucune autre info-bulle).
     root.querySelectorAll('.editor-image-view[data-image-var-table]').forEach(view => {

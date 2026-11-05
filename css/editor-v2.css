@@ -281,12 +281,13 @@
   content: attr(data-note); max-width: 100%; font-size: 10.5px; font-weight: 400; line-height: 1.25; color: var(--text, #1b2430); overflow-wrap: anywhere; white-space: pre-line;
 }
 /* Image dont la colonne Pièces jointes (ou la table) n'existe plus dans Grist : classe `editor-image-broken` posée et retirée par Editor.markBadgeValidity à chaque
-   mise à jour, jamais enregistrée ; le message est dans l'info-bulle du cadre, et sa barre a « Colonne… » (js/variable-column.js). Les mêmes couleurs et le même triangle
-   que l'ambre d'une bulle sans lien (`.var-badge-unlinked`, css/style.css : texte #873600 sur #ffe6c7, 6,8:1) ; le cadre garde ses pointillés, sa taille et ses poignées. */
-.tiptap .editor-image-view.editor-image-var-placeholder.editor-image-broken { background: #ffe6c7; border-color: #ee9d4d; }
-.tiptap .editor-image-view.editor-image-broken .editor-image-var-label { color: #873600; }
+   mise à jour, jamais enregistrée ; le message est dans l'info-bulle du cadre, et sa barre a « Colonne… » (js/variable-column.js). Le rouge d'une bulle dont la colonne a
+   disparu (`.var-badge-broken`, css/style.css : texte #a4231c sur #fbe9e9, bordure #f0b3b3) - « même couleur partout » - et le même triangle ; le cadre garde ses
+   pointillés, sa taille et ses poignées. L'ambre (`.var-badge-unlinked`) reste celui d'une bulle SANS LIEN : une image n'a pas cet état. */
+.tiptap .editor-image-view.editor-image-var-placeholder.editor-image-broken { background: #fbe9e9; border-color: #f0b3b3; }
+.tiptap .editor-image-view.editor-image-broken .editor-image-var-label { color: #a4231c; }
 .tiptap .editor-image-view.editor-image-broken .editor-image-var-label::before {
-  color: #873600;
+  color: #a4231c;
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4'%3E%3Cpath d='M12 3 2 20h20Z'/%3E%3Cpath d='M12 10v4M12 17h.01'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4'%3E%3Cpath d='M12 3 2 20h20Z'/%3E%3Cpath d='M12 10v4M12 17h.01'/%3E%3C/svg%3E");
 }

@@ -271,7 +271,7 @@
         lineIsShown: looks.fr.conditional.line === 'Si Titre = Notif 1' && looks.en.conditional.line === 'If Titre = Notif 1'
           && looks.fr.conditional.after.indexOf('Si Titre = Notif 1') !== -1 && looks.en.conditional.after.indexOf('If Titre = Notif 1') !== -1,
         plainKeepsItsLook: ['fr', 'en'].every(l => !looks[l].plain.conditional && looks[l].plain.border !== BLUE && looks[l].plain.line == null),
-        orangeBeatsBlue: ['fr', 'en'].every(l => looks[l].broken.conditional && looks[l].broken.bg === 'rgb(255, 230, 199)' && looks[l].broken.border === 'rgb(238, 157, 77)'),
+        brokenBeatsBlue: ['fr', 'en'].every(l => looks[l].broken.conditional && looks[l].broken.bg === 'rgb(251, 233, 233)' && looks[l].broken.border === 'rgb(240, 179, 179)'),
       };
       const failed = failedOf(checks);
       return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, looks }) : 'ok' };

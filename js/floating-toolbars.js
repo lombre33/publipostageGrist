@@ -889,7 +889,7 @@ const FloatingToolbars = (function () {
       syncImageLoopButton(controls, node);
       Caption.syncButton(controls.button('caption'), editor, 'image');
     }
-    // « Colonne… » : n'est dans la barre que d'une image dont la colonne Pièces jointes (ou sa table) a disparu de Grist - la même lecture que le orange de son cadre
+    // « Colonne… » : n'est dans la barre que d'une image dont la colonne Pièces jointes (ou sa table) a disparu de Grist - la même lecture que le rouge de son cadre
     // (VariableColumn.isImageBroken) - ; relue à chaque ouverture de la barre : une image réparée la perd.
     function syncImageColumnButton(controls, attrs) {
       const btn = controls.button('var-column');

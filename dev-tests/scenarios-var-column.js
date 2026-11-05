@@ -914,15 +914,15 @@
     };
   };
   const pressImageColumn = () => imageColumnButton().dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-  const ORANGE_BG = 'rgb(255, 230, 199)';
+  const BROKEN_BG = 'rgb(251, 233, 233)'; // le rouge d'une bulle cassée (`.var-badge-broken`), « même couleur partout » (Antoine, 05/11)
   const frameLook = view => { const cs = getComputedStyle(view); return { orange: view.classList.contains('editor-image-broken'), bg: cs.backgroundColor, title: view.getAttribute('title') || '' }; };
   const IMG_BROKEN = { fr: 'Cette image ne trouve plus sa colonne de pièces jointes : choisir la bonne…', en: 'This image can no longer find its attachments column: pick the right one…' };
   const COLUMN_GONE = { fr: 'La colonne « Ancien » n’existe plus dans la table « ' + PAGE + ' ».', en: 'Column “Ancien” no longer exists in table “' + PAGE + '”.' };
   const TABLE_GONE = { fr: 'La table « VcoDisparue » n’existe plus dans ce document.', en: 'Table “VcoDisparue” no longer exists in this document.' };
 
   cases.push({
-    id: 'varcolumn_image_of_a_deleted_attachment_column_is_orange_with_its_message',
-    description: 'Une image liée à une colonne Pièces jointes dont la colonne ou la table n’existe plus dans Grist a son cadre orange (comme l’ambre d’une bulle), avec le message en info-bulle dans la langue de l’interface ; une image saine, une image ordinaire n’ont ni l’orange ni info-bulle ; la colonne supprimée dans Grist puis recréée, le cadre devient orange puis reprend son aspect sans toucher au document',
+    id: 'varcolumn_image_of_a_deleted_attachment_column_is_red_with_its_message',
+    description: 'Une image liée à une colonne Pièces jointes dont la colonne ou la table n’existe plus dans Grist a son cadre rouge (comme une bulle cassée), avec le message en info-bulle dans la langue de l’interface ; une image saine, une image ordinaire n’ont ni le rouge ni info-bulle ; la colonne supprimée dans Grist puis recréée, le cadre devient orange puis reprend son aspect sans toucher au document',
     run: async (h) => {
       const html = `<p>${imageHtml(PAGE, 'Logo')} ${imageHtml(PAGE, 'Ancien')} ${imageHtml('VcoDisparue', 'Logo')} <img class="editor-image" src="${PIXEL}" style="width: 40px"></p>`;
       const looks = {};
@@ -952,12 +952,12 @@
       const wrong = [];
       for (const lang of ['fr', 'en']) {
         const [ok, col, table, plain] = looks[lang];
-        if (!ok || ok.orange || ok.bg === ORANGE_BG || ok.title) wrong.push(lang + ' saine : ' + JSON.stringify(ok));
-        if (!col || !col.orange || col.bg !== ORANGE_BG || col.title !== COLUMN_GONE[lang]) wrong.push(lang + ' colonne disparue : ' + JSON.stringify(col));
-        if (!table || !table.orange || table.bg !== ORANGE_BG || table.title !== TABLE_GONE[lang]) wrong.push(lang + ' table disparue : ' + JSON.stringify(table));
+        if (!ok || ok.orange || ok.bg === BROKEN_BG || ok.title) wrong.push(lang + ' saine : ' + JSON.stringify(ok));
+        if (!col || !col.orange || col.bg !== BROKEN_BG || col.title !== COLUMN_GONE[lang]) wrong.push(lang + ' colonne disparue : ' + JSON.stringify(col));
+        if (!table || !table.orange || table.bg !== BROKEN_BG || table.title !== TABLE_GONE[lang]) wrong.push(lang + ' table disparue : ' + JSON.stringify(table));
         if (!plain || plain.orange || plain.title) wrong.push(lang + ' image ordinaire : ' + JSON.stringify(plain));
       }
-      if (!looks.deleted.orange || looks.deleted.bg !== ORANGE_BG) wrong.push('colonne supprimée dans Grist : le cadre ne devient pas orange ' + JSON.stringify(looks.deleted));
+      if (!looks.deleted.orange || looks.deleted.bg !== BROKEN_BG) wrong.push('colonne supprimée dans Grist : le cadre ne devient pas rouge ' + JSON.stringify(looks.deleted));
       if (looks.recreated.orange || looks.recreated.title) wrong.push('colonne recréée : le cadre reste orange ' + JSON.stringify(looks.recreated));
       if (!looks.documentUntouched) wrong.push('le HTML du modèle a changé avec l’orange (rien ne doit s’enregistrer)');
       return { pass: wrong.length === 0, notes: wrong.join(' | ') || 'ok' };
