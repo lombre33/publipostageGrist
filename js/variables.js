@@ -779,6 +779,7 @@ const Variables = (function () {
     async function ruleSourceValue(rule, record, currentTableId, fetchRows) {
       const { colonneSource, colonneCible } = rule;
       if (colonneSource === 'id') return record.id;
+      if (colonneSource.indexOf('.') !== -1) return pathSourceValue(rule, record, currentTableId, fetchRows);
       // Une ligne de fetchTable : l'id brut pour une comparaison à l'identifiant de ligne, sinon la valeur affichée, que compare la même règle en
       // Lecture (grist.onRecord la livre déjà).
       const fromRawRow = row => (colonneCible === 'id' ? unwrapRefValue(row[colonneSource]) : cellValue(currentTableId, colonneSource, row));
@@ -795,6 +796,18 @@ const Variables = (function () {
       if (!reference || reference.list) return value;
       const raw = (await fetchRows(currentTableId)).find(r => r.id === record.id);
       return raw ? raw[colonneSource] : value;
+    }
+    // La valeur d'une colonne source qui est un chemin de références (« Personne.Structure ») : la colonne finale (Structure) lue sur la ligne où mène le chemin
+    // (resolveRows, comme une bulle #Badge.Personne.Structure) - l'identifiant de la ligne référencée pour une règle qui la compare à l'identifiant de ligne,
+    // sinon la valeur affichée. null quand le chemin s'arrête sur une référence vide ou une ligne disparue. Pour une liste de références traversée, la première valeur.
+    async function pathSourceValue(rule, record, currentTableId, fetchRows) {
+      const hops = rule.colonneSource.split('.');
+      const column = hops.pop();
+      const found = await resolveRows(currentTableId, hops, currentTableId, record, { fetchRows });
+      if (found.error) return null;
+      const row = found.rows.find(Boolean);
+      if (!row) return null;
+      return rule.colonneCible === 'id' ? unwrapRefValue(row[column]) : cellValue(found.table, column, row);
     }
     // La ligne d'identifiant le plus petit (la « ligne fixe » d'une règle « singleton »), null pour une table vide.
     const lowestRow = rows => rows.reduce((min, r) => (!min || r.id < min.id ? r : min), null);
@@ -1200,7 +1213,7 @@ const Variables = (function () {
   // === Règles de liaison entre tables ===
   // Configurées à l'insertion d'une variable d'une autre table et dans le panneau de gestion (#link-rules-modal), deux fenêtres de index.html.
 
-  const { fillColumnSelect, describeRule, linkRuleLabel, guessLinkRule, linkRulePreview } = (function () {
+  const { fillColumnSelect, columnHint, describeRule, linkRuleLabel, guessLinkRule, referencePaths, linkRulePreview } = (function () {
     // Fenêtre de liaison : indications de colonne, listes, règle devinée, aperçu
 
     // Où se trouve la donnée réelle d'une colonne, pour les listes de la fenêtre de liaison, entre parenthèses derrière son nom. Une Référence ou une
@@ -1221,7 +1234,9 @@ const Variables = (function () {
     // que personne n'a touché reste sur « Auto » (la première option), pour une règle qui a l'air valide mais compare deux identifiants
     // de ligne sans rapport. Les options sont construites par le DOM (du texte, jamais du HTML) : un identifiant créé par l'API REST de Grist ne peut
     // rien injecter. Le nom et l'indice sont aussi en data-name et data-hint, pour SearchSelect ; « Auto » garde son ancien nom cherchable (data-search).
-    function fillColumnSelect(select, tableId) {
+    // `descend` : une colonne Référence (simple) porte la table qu'elle désigne (`data-expand`), pour que la liste lui montre la flèche qui en ouvre les colonnes : la
+    // colonne source d'une règle peut être un chemin de références (« Personne › Structure »), lu comme une bulle #Badge.Personne.Structure.
+    function fillColumnSelect(select, tableId, descend) {
       select.textContent = '';
       const placeholder = Dom.option('', I18n.t('linkConfig.columnPlaceholder'));
       placeholder.disabled = true;
@@ -1235,7 +1250,11 @@ const Variables = (function () {
         select.appendChild(option);
       };
       add('id', I18n.t('linkConfig.rowId'), tableId, I18n.t('linkConfig.rowIdSearch'));
-      GristAPI.getColumns(tableId).forEach(colId => add(colId, colId, columnHint(tableId, colId), columnSearchText(tableId, colId)));
+      GristAPI.getColumns(tableId).forEach(colId => {
+        add(colId, colId, columnHint(tableId, colId), columnSearchText(tableId, colId));
+        const target = descend ? referencedTable(tableId, colId) : null;
+        if (target) select.lastChild.dataset.expand = target;
+      });
     }
     function describeRule(rule) {
       if (rule.mode === 'singleton') return I18n.t('linkConfig.describeSingleton');
@@ -1254,7 +1273,27 @@ const Variables = (function () {
       const forward = await GristAPI.findReferenceColumns(currentTableId, targetTable);
       if (forward.length === 1) return { colonneCible: 'id', colonneSource: forward[0] };
       const reverse = await GristAPI.findReferenceColumns(targetTable, currentTableId);
-      return reverse.length === 1 ? { colonneCible: reverse[0], colonneSource: 'id' } : null;
+      if (reverse.length === 1) return { colonneCible: reverse[0], colonneSource: 'id' };
+      // Aucune colonne Référence ne relie directement les deux tables : le seul chemin de références qui y mène (Badge.Personne › Annuaire.Structure vers Structure),
+      // quand il n'y en a qu'un.
+      const paths = forward.length || reverse.length ? [] : referencePaths(currentTableId, targetTable);
+      return paths.length === 1 ? { colonneCible: 'id', colonneSource: paths[0].join('.') } : null;
+    }
+    // Les chemins de colonnes Référence (simples) qui mènent de `from` à `to` en passant par d'autres tables, au plus MAX_PATH_HOPS colonnes : chacun finit par la colonne
+    // qui désigne `to` (« Personne », « Structure » pour Badge › Annuaire › Structure). Une table déjà traversée ne l'est pas deux fois. Sans appel à Grist : les types
+    // des colonnes sont déjà lus. Les chemins d'un seul maillon (une Référence directe) sont ceux de findReferenceColumns, pas d'ici.
+    const MAX_PATH_HOPS = 3;
+    function referencePaths(from, to) {
+      const found = [];
+      (function walk(table, path, seen) {
+        GristAPI.getColumns(table).forEach(column => {
+          const reference = GristAPI.referenceOf(GristAPI.getColumnType(table, column));
+          if (!reference || reference.list || path.length >= MAX_PATH_HOPS) return;
+          if (reference.table === to) { if (path.length) found.push(path.concat(column)); return; }
+          if (seen.indexOf(reference.table) === -1) walk(reference.table, path.concat(column), seen.concat(reference.table));
+        });
+      })(from, [], [from]);
+      return found;
     }
     // L'aperçu d'une règle : ce qu'elle donnerait pour la ligne actuellement sélectionnée, { text, good } (`good` : une issue positive, que la fenêtre
     // marque en vert). La colonne source est lue comme la résolution réelle (ruleSourceValue) : sans cela l'aperçu annoncerait « aucune ligne » pour
@@ -1273,7 +1312,7 @@ const Variables = (function () {
         ? { text: I18n.t('linkConfig.previewMatches', { count: matches.length, table: targetTable, ids: matches.map(r => r.id).join(', ') }), good: true }
         : { text: I18n.t('linkConfig.previewNoMatch', { table: targetTable, value: sourceVal }) };
     }
-    return { fillColumnSelect, describeRule, linkRuleLabel, guessLinkRule, linkRulePreview };
+    return { fillColumnSelect, columnHint, describeRule, linkRuleLabel, guessLinkRule, referencePaths, linkRulePreview };
   })();
   const { showLinkConfigModal } = (function () {
     // La fenêtre d'une règle de liaison : ouverture, remplissage, listes à recherche
@@ -1290,6 +1329,7 @@ const Variables = (function () {
       // Le mode « match » est le cas normal ; « singleton » doit être un choix actif, pas un état dans lequel on tombe sans le réaliser.
       const initial = existingRule || { mode: 'match', ...(await guessLinkRule(targetTable, currentTableId)) };
       if (initial.colonneCible) form.selectCible.value = initial.colonneCible;
+      addSavedSourcePath(form.selectSource, initial.colonneSource, currentTableId);
       if (initial.colonneSource) form.selectSource.value = initial.colonneSource;
       attachColumnSearch(form);
       form.mode = initial.mode;
@@ -1309,14 +1349,33 @@ const Variables = (function () {
       $('table-cible-name').textContent = targetTable;
       $('table-source-name').textContent = currentTableId;
       fillColumnSelect(selectCible, targetTable);
-      fillColumnSelect(selectSource, currentTableId);
+      fillColumnSelect(selectSource, currentTableId, true);
+    }
+    // Les lignes où mène la flèche d'une colonne Référence de la liste source : les colonnes de la table qu'elle désigne, chacune sous son chemin depuis la table de
+    // la page (« Personne.Structure »), avec leur indice de table, comme le fait la flèche des listes de colonnes des conditions (Variables.columnsBelow).
+    function sourceColumnsBelow(item, currentTableId) {
+      const prefix = currentTableId + '.';
+      const rows = columnsBelow(prefix + item.value, (table, column) => columnHint(table, column));
+      return rows && rows.map(row => Object.assign({}, row, { value: row.value.slice(prefix.length) }));
+    }
+    // Une colonne source enregistrée qui est un chemin (« Personne.Structure ») n'a pas de ligne dans la liste : elle en reçoit une, comme à son choix, pour
+    // s'afficher comme une colonne de la liste. Un chemin dont un maillon a disparu reste sans ligne : la liste n'a alors aucun choix, comme pour toute colonne disparue.
+    function addSavedSourcePath(select, saved, currentTableId) {
+      if (!saved || saved.indexOf('.') === -1) return;
+      const hops = saved.split('.');
+      const column = hops.pop();
+      const end = GristAPI.resolveColumnPath(currentTableId, saved);
+      if (!end) return;
+      SearchSelect.addDynamicOption(select, { value: saved, hint: columnHint(end.table, column), search: columnSearchText(end.table, column) }, hops[0]);
     }
     // Des listes avec recherche (js/search-select.js) par-dessus les deux <select>, qui restent la source des valeurs et des évènements `change` ; si
     // le composant échoue, les <select> natifs servent.
     function attachColumnSearch(form) {
       [[form.selectSource, 'link-config-table-source-name'], [form.selectCible, 'link-config-table-cible-name']].forEach(([select, labelId]) => {
         try {
-          form.searchLists.push(SearchSelect.attach(select, { labelledBy: labelId, searchPlaceholder: I18n.t('linkConfig.searchColumns'), emptyText: I18n.t('linkConfig.noColumnMatch') }));
+          // Seule la liste de la table de la page descend de Référence en Référence : la table cible est lue par une de ses colonnes ou son identifiant.
+          const expand = select === form.selectSource ? item => sourceColumnsBelow(item, form.currentTableId) : undefined;
+          form.searchLists.push(SearchSelect.attach(select, { labelledBy: labelId, searchPlaceholder: I18n.t('linkConfig.searchColumns'), emptyText: I18n.t('linkConfig.noColumnMatch'), expand }));
         } catch (e) {
           console.warn('[variables] recherche de colonne indisponible, liste native conservée', e);
         }

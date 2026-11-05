@@ -798,6 +798,158 @@
     },
   });
 
+  // ---- La clé d'un lien peut être un chemin de références (demande d'Antoine du 05/11 : Badge › Nom prénom › Structure › Logo, sans colonne formule) ----
+  // La page est sur LpBadge (Personne → LpPersonnes), LpPersonnes a sa Structure (→ LpStructure, qui porte le Logo, une pièce jointe). Aucune colonne ne relie
+  // directement LpBadge à LpStructure : le lien de LpStructure se lit par Personne.Structure.
+  const LP_TABLES = ['LpBadge', 'LpPersonnes', 'LpStructure'];
+  const LP_ROW = { id: 2, Personne: 'Martin Anne' };
+  async function seedPath(h, extraBadgeColumns) {
+    await h.resetEditor();
+    const stub = window.__gristStub;
+    stub.setVariables('LpStructure', { Nom: 'Text', Logo: 'Attachments' });
+    stub.setRows('LpStructure', [{ id: 1, Nom: 'Mairie', Logo: ['L', 11] }, { id: 2, Nom: 'Région', Logo: ['L', 22] }]);
+    stub.setVariables('LpPersonnes', { NomPrenom: 'Text', Structure: 'Ref:LpStructure', gristHelper_Display: 'Text' }, null, { Structure: 'gristHelper_Display' });
+    stub.setRows('LpPersonnes', [
+      { id: 7, NomPrenom: 'Dupont Jean', Structure: 1, gristHelper_Display: 'Mairie' },
+      { id: 8, NomPrenom: 'Martin Anne', Structure: 2, gristHelper_Display: 'Région' },
+    ]);
+    stub.setVariables('LpBadge', Object.assign({ Personne: 'Ref:LpPersonnes', gristHelper_Display: 'Text' }, extraBadgeColumns), null, { Personne: 'gristHelper_Display' });
+    stub.setRows('LpBadge', [{ id: 1, Personne: 7, gristHelper_Display: 'Dupont Jean' }, { id: 2, Personne: 8, gristHelper_Display: 'Martin Anne' }]);
+    await GristAPI.refreshSchema();
+    for (const t of LP_TABLES) await GristAPI.deleteLinkRule(t);
+    stub.fireRecord(Object.assign({}, LP_ROW), 'LpBadge');
+    await h.sleep(50);
+  }
+  async function dropPath(h) {
+    const stub = window.__gristStub;
+    for (const t of LP_TABLES) { await GristAPI.deleteLinkRule(t); stub.dropTable(t); }
+    await GristAPI.refreshSchema();
+    await h.sleep(20);
+  }
+  const PATH_RULE = { mode: 'match', colonneCible: 'id', colonneSource: 'Personne.Structure', tableSource: 'LpBadge' };
+  const openStructureWindow = async (h) => {
+    const closed = Variables.ensureLinkConfigured({ table: 'LpStructure' });
+    await h.sleep(150);
+    return { closed, opened: modal().style.display !== 'none' };
+  };
+
+  cases.push({
+    id: 'linkcfg_a_link_through_references_reads_the_variable_of_the_row_it_leads_to',
+    description: 'Un lien dont la colonne source est un chemin (Personne.Structure) donne, pour la ligne 2 de LpBadge, la structure de la personne qu’elle désigne : #LpStructure.Nom = Région (ligne seule), Mairie sur la ligne 1 lue en lot (fetchTableRows), et les pièces jointes du Logo suivent le même chemin (22 et 11)',
+    run: async (h) => {
+      await seedPath(h);
+      try {
+        await GristAPI.saveLinkRule('LpStructure', PATH_RULE);
+        const rows = await GristAPI.fetchTableRows('LpBadge');
+        const single = await Variables.resolveVariable('LpStructure', 'Nom', 'LpBadge', LP_ROW);
+        const batch = [await Variables.resolveVariable('LpStructure', 'Nom', 'LpBadge', rows[0]), await Variables.resolveVariable('LpStructure', 'Nom', 'LpBadge', rows[1])];
+        const logos = [await Variables.resolveAttachmentIds('LpStructure', 'Logo', 'LpBadge', rows[0]), await Variables.resolveAttachmentIds('LpStructure', 'Logo', 'LpBadge', LP_ROW)];
+        const pass = single === 'Région' && JSON.stringify(batch) === JSON.stringify(['Mairie', 'Région']) && JSON.stringify(logos) === JSON.stringify([[11], [22]]);
+        return { pass, notes: JSON.stringify({ single, batch, logos }) };
+      } finally { await dropPath(h); }
+    },
+  });
+
+  cases.push({
+    id: 'linkcfg_a_link_through_references_stops_applying_when_a_reference_is_gone',
+    description: 'Le lien par chemin ne vaut que tant que chaque maillon existe : si Personne n’est plus une Référence de LpBadge, la règle ne s’applique plus (getLinkRule rend null, la colonne source est dite introuvable) au lieu de lire une valeur au hasard',
+    run: async (h) => {
+      await seedPath(h);
+      try {
+        await GristAPI.saveLinkRule('LpStructure', PATH_RULE);
+        const before = ruleOf('LpStructure', 'LpBadge');
+        const stub = window.__gristStub;
+        stub.setVariables('LpBadge', { Personne: 'Text' });
+        await GristAPI.refreshSchema();
+        const after = GristAPI.getLinkRule('LpStructure', 'LpBadge');
+        const read = await Variables.resolveVariable('LpStructure', 'Nom', 'LpBadge', LP_ROW);
+        const pass = JSON.stringify(before) === JSON.stringify(['Personne.Structure', 'id']) && after === null && read !== 'Région';
+        return { pass, notes: JSON.stringify({ before, after, read }) };
+      } finally { await dropPath(h); }
+    },
+  });
+
+  cases.push({
+    id: 'linkcfg_the_key_window_proposes_the_only_path_of_references_and_saves_it',
+    description: 'Aucune colonne ne relie LpBadge à LpStructure mais un seul chemin y mène (Personne › Structure) : la fenêtre de la clé le propose seule (source Personne.Structure, cible Auto), l’aperçu trouve la structure 2 pour la ligne 2, Valider enregistre le lien par chemin pour LpBadge, et le rouvrir (Tables liées) montre le chemin choisi',
+    run: async (h) => {
+      await seedPath(h);
+      try {
+        const { closed, opened } = await openStructureWindow(h);
+        const shown = opened ? { source: select('source').value, cible: select('cible').value, trigger: trigger('source').textContent, preview: preview() } : null;
+        if (opened) document.getElementById('link-config-confirm').click();
+        const answer = await settled(closed);
+        const saved = ruleOf('LpStructure', 'LpBadge');
+        const second = await openEditWindow(h);
+        const pass = opened && !!shown
+          && shown.source === 'Personne.Structure' && shown.cible === 'id' && shown.trigger.indexOf('Personne.Structure') === 0
+          && shown.preview.indexOf('LpStructure') !== -1 && /\b2\b/.test(shown.preview)
+          && answer === true && JSON.stringify(saved) === JSON.stringify(['Personne.Structure', 'id'])
+          && second.opened && second.source === 'Personne.Structure' && second.trigger.indexOf('Personne.Structure') === 0;
+        return { pass, notes: JSON.stringify({ opened, shown, answer, saved, second }) };
+      } finally { await dropPath(h); }
+    },
+  });
+  // Rouvre le lien de LpStructure pour le modifier (panneau « Tables liées »), rend ce que la fenêtre montre.
+  async function openEditWindow(h) {
+    const closed = Variables.editLinkRule('LpStructure');
+    await h.sleep(150);
+    const opened = modal().style.display !== 'none';
+    const out = { opened, source: opened ? select('source').value : null, trigger: opened ? trigger('source').textContent : null };
+    if (opened) await closeWindow(h);
+    await settled(closed);
+    return out;
+  }
+
+  cases.push({
+    id: 'linkcfg_two_paths_of_references_propose_nothing',
+    description: 'Si deux chemins mènent à la table (LpBadge.Personne et LpBadge.Autre, tous deux vers LpPersonnes puis Structure), la fenêtre ne choisit pas à la place de la personne : la liste source n’a rien de sélectionné et rien n’est enregistré',
+    run: async (h) => {
+      await seedPath(h, { Autre: 'Ref:LpPersonnes' });
+      try {
+        const { closed, opened } = await openStructureWindow(h);
+        const shown = opened ? { source: select('source').value, cible: select('cible').value } : null;
+        await closeWindow(h);
+        const answer = await settled(closed);
+        const pass = opened && shown.source === '' && shown.cible === '' && answer === false && GristAPI.getLinkRule('LpStructure', 'LpBadge') === null;
+        return { pass, notes: JSON.stringify({ opened, shown, answer }) };
+      } finally { await dropPath(h); }
+    },
+  });
+
+  cases.push({
+    id: 'linkcfg_the_arrow_of_a_reference_column_opens_the_columns_below_and_picks_a_path',
+    description: 'Dans la liste source, la colonne Personne (Référence) porte une flèche qui ouvre les colonnes de LpPersonnes (avec leur indice de table) ; choisir Structure donne la source Personne.Structure, l’aperçu suit, et une colonne qui n’est pas une Référence (gristHelper_Display) n’a pas de flèche',
+    run: async (h) => {
+      await seedPath(h, { Autre: 'Ref:LpPersonnes' });
+      try {
+        const { closed, opened } = await openStructureWindow(h);
+        if (!opened) return { pass: false, notes: 'la fenêtre ne s’est pas ouverte' };
+        trigger('source').click();
+        await h.sleep(30);
+        const optionRows = () => Array.from(panel('source').querySelectorAll('.ss-option'));
+        const nameOf = li => li.querySelector('.ss-name').textContent;
+        const rowNamed = name => optionRows().find(li => nameOf(li) === name);
+        const arrows = optionRows().filter(li => li.querySelector('.ss-descend')).map(nameOf);
+        rowNamed('Personne').querySelector('.ss-descend').click();
+        await h.sleep(30);
+        const below = rows('source');
+        const structureHasArrow = !!rowNamed('Structure').querySelector('.ss-descend');
+        rowNamed('Structure').click();
+        await h.sleep(60);
+        await choose(h, 'cible', 'id');
+        await h.sleep(30);
+        const chosen = { source: select('source').value, trigger: trigger('source').textContent, preview: preview() };
+        await closeWindow(h);
+        await settled(closed);
+        const pass = JSON.stringify(arrows) === JSON.stringify(['Personne', 'Autre'])
+          && below.indexOf('NomPrenom (LpPersonnes)') !== -1 && below.indexOf('Structure (' + refHint('LpStructure') + ')') !== -1 && structureHasArrow
+          && chosen.source === 'Personne.Structure' && chosen.trigger.indexOf('Personne.Structure') === 0 && chosen.preview.indexOf('LpStructure') !== -1;
+        return { pass, notes: JSON.stringify({ arrows, below, structureHasArrow, chosen }) };
+      } finally { await dropPath(h); }
+    },
+  });
+
   cases.push({
     id: 'searchselect_filter_ignores_case_accents_and_word_order',
     description: 'SearchSelect.filterItems : sans accents ni casse, tous les mots requis dans n’importe quel ordre, ordre d’origine conservé, recherche vide = tout',

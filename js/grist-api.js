@@ -1033,9 +1033,13 @@ const GristAPI = (function () {
   // vraiment les deux tables : des champs vides, sans un mot (consigne 038 de GFS). La règle reste telle quelle dans « Tables liées » (getAllLinkRules, findLinkRule),
   // seule sa portée change. L'identifiant de ligne (« Auto », `id`) et la règle « singleton » ne lisent aucune colonne de la page : ils s'appliquent à toute page.
   // Tant que le schéma de la page n'est pas lu (métadonnées illisibles, table pas encore connue), la règle s'applique comme avant.
+  // La colonne source peut être un chemin de références (« Personne.Structure » : la colonne Structure de la ligne de l'annuaire que désigne Personne, comme une bulle
+  // #Badge.Personne.Structure) : la règle s'applique tant que chaque maillon existe encore. Une copie plus ancienne de l'app ne connaît pas ces chemins : la colonne
+  // « Personne.Structure » n'est pas une colonne de la page pour elle, la règle ne s'y applique pas (la colonne Référence de la page, sinon la bulle orange).
   function linkRuleApplies(rule, page) {
     if (!rule || rule.mode !== 'match' || rule.colonneSource === 'id') return !!rule;
     const columns = page && _columnTypesByTable[page];
+    if (String(rule.colonneSource).indexOf('.') !== -1) return !columns || !!resolveColumnPath(page, rule.colonneSource);
     return !columns || Object.prototype.hasOwnProperty.call(columns, rule.colonneSource);
   }
 

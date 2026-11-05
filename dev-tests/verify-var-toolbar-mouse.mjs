@@ -2981,6 +2981,121 @@ await page.waitForTimeout(300);
 const loopOpenedOnPlain = await page.evaluate(() => { const m = document.getElementById('var-loop-modal'); return !!m && m.style.display !== 'none' && m.getClientRects().length > 0; });
 check('... et un vrai clic sur le bouton grisé n\'ouvre aucune fenêtre', !loopOpenedOnPlain, { loopOpenedOnPlain });
 
+// 10) La clé d'un lien peut être un chemin de références (retour d'Antoine du 05/11 : page Badge, Nom prénom → Annuaire, Structure → Structure, sans colonne formule). La page est VcBadges
+// (Personne → VcPersons), VcPersons a sa Structure (→ VcStructs, dont Nom est du texte) : aucune colonne ne relie VcBadges à VcStructs. Tout à la vraie souris à 700x400 : une bulle
+// #VcStructs.Nom (orange, sans lien), « Colonne… », la fenêtre de la clé s'ouvre avec le chemin Personne.Structure déjà posé (un seul chemin y mène), Valider ; puis, avec un second chemin (Autre),
+// la fenêtre ne propose rien : la flèche de Personne ouvre les colonnes de VcPersons, Structure se choisit, Auto à droite, Valider.
+await page.evaluate(async () => {
+  const stub = window.__gristStub;
+  stub.setVariables('VcStructs', { Nom: 'Text', Logo: 'Attachments' });
+  stub.setRows('VcStructs', [{ id: 1, Nom: 'Mairie', Logo: ['L', 41] }, { id: 2, Nom: 'Région', Logo: ['L', 42] }]);
+  stub.setVariables('VcPersons', { NomPrenom: 'Text', Structure: 'Ref:VcStructs', gristHelper_Display: 'Text' }, null, { Structure: 'gristHelper_Display' });
+  stub.setRows('VcPersons', [{ id: 7, NomPrenom: 'Dupont Jean', Structure: 1, gristHelper_Display: 'Mairie' }, { id: 8, NomPrenom: 'Martin Anne', Structure: 2, gristHelper_Display: 'Région' }]);
+  stub.setVariables('VcBadges', { Personne: 'Ref:VcPersons', gristHelper_Display: 'Text' }, null, { Personne: 'gristHelper_Display' });
+  stub.setRows('VcBadges', [{ id: 1, Personne: 7, gristHelper_Display: 'Dupont Jean' }, { id: 2, Personne: 8, gristHelper_Display: 'Martin Anne' }]);
+  await GristAPI.refreshSchema();
+  for (const t of ['VcStructs', 'VcPersons']) await GristAPI.deleteLinkRule(t);
+  stub.fireRecord({ id: 2, Personne: 'Martin Anne' }, 'VcBadges');
+  document.querySelector('.tiptap').blur();
+  Editor.setHTML('<p>Structure : <span class="var-badge" data-table="VcStructs" data-column="Nom" data-key="VcStructs.Nom"></span></p>');
+});
+await page.waitForTimeout(400);
+const STRUCT_BADGE = '.tiptap .var-badge[data-table="VcStructs"]';
+async function openKeyThroughColumnButton() {
+  const box = await hitTest(STRUCT_BADGE);
+  await page.mouse.click(box.x, box.y);
+  await page.waitForTimeout(400);
+  const button = await hitTest(COLUMN_BUTTON);
+  if (button.found) await page.mouse.click(button.x, button.y);
+  await page.waitForTimeout(400);
+  await page.keyboard.type('VcStructs.Nom');
+  await page.waitForTimeout(200);
+  const row = await page.evaluate(() => {
+    const panel = Array.from(document.querySelectorAll('.ss-panel')).find(p => !p.hidden);
+    const found = panel && Array.from(panel.querySelectorAll('.ss-option')).find(r => r.querySelector('.ss-name').textContent === 'VcStructs.Nom');
+    if (!found) return null;
+    const r = found.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  if (row) await page.mouse.click(row.x, row.y);
+  await page.waitForTimeout(500);
+  return !!row;
+}
+const keyState = () => page.evaluate(() => ({
+  open: document.getElementById('link-config-modal').style.display !== 'none',
+  source: document.getElementById('link-config-col-source').value, cible: document.getElementById('link-config-col-cible').value,
+  shown: (document.querySelector('#link-config-modal .link-config-bridge-col:first-child .ss-trigger') || { textContent: null }).textContent,
+  preview: document.getElementById('link-config-preview').textContent,
+}));
+check('bulle #VcStructs.Nom sans lien : « Colonne… » puis la colonne VcStructs.Nom ouvrent le choix de la clé', await openKeyThroughColumnButton());
+const keyPrefilled = await keyState();
+const pathConfirm = await hitTest('#link-config-confirm');
+const pathSourceField = await hitTest('#link-config-modal .link-config-bridge-col:first-child .ss-trigger');
+check('la fenêtre propose seule le chemin Personne.Structure (cible Auto), l’aperçu trouve la structure 2, champ et Valider visibles dans le panneau',
+  keyPrefilled.open && keyPrefilled.source === 'Personne.Structure' && keyPrefilled.cible === 'id' && keyPrefilled.shown.indexOf('Personne.Structure') === 0
+  && /VcStructs/.test(keyPrefilled.preview) && /\b2\b/.test(keyPrefilled.preview) && pathConfirm.found && pathConfirm.inViewport && pathConfirm.onTop && pathSourceField.inViewport && pathSourceField.onTop, { keyPrefilled, pathConfirm, pathSourceField });
+if (pathConfirm.found) await page.mouse.click(pathConfirm.x, pathConfirm.y);
+await page.waitForTimeout(600);
+const pathLinked = await page.evaluate(async () => {
+  const r = GristAPI.getLinkRule('VcStructs', 'VcBadges');
+  const badge = document.querySelector('.tiptap .var-badge[data-table="VcStructs"]');
+  const read = document.createElement('div');
+  read.innerHTML = await ReaderMode.preview(Editor.getHTML(), 'VcBadges', GristAPI.getCurrentRecord());
+  return { rule: r ? [r.mode, r.colonneSource, r.colonneCible] : null, orange: !!badge && badge.classList.contains('var-badge-unlinked'), read: read.textContent.trim(), modalOpen: document.getElementById('link-config-modal').style.display !== 'none' };
+});
+check('Valider (vrai clic) enregistre le lien par chemin : la bulle n’est plus orange, la Lecture écrit la structure de la personne de la ligne (Région)',
+  !pathLinked.modalOpen && JSON.stringify(pathLinked.rule) === JSON.stringify(['match', 'Personne.Structure', 'id']) && !pathLinked.orange && /Région/.test(pathLinked.read), pathLinked);
+
+// Deux chemins (Personne et Autre) : rien n'est proposé, la flèche de Personne mène à Structure.
+await page.evaluate(async () => {
+  const stub = window.__gristStub;
+  await GristAPI.deleteLinkRule('VcStructs');
+  stub.setVariables('VcBadges', { Personne: 'Ref:VcPersons', gristHelper_Display: 'Text', Autre: 'Ref:VcPersons' }, null, { Personne: 'gristHelper_Display' });
+  stub.setRows('VcBadges', [{ id: 1, Personne: 7, Autre: 8, gristHelper_Display: 'Dupont Jean' }, { id: 2, Personne: 8, Autre: 7, gristHelper_Display: 'Martin Anne' }]);
+  await GristAPI.refreshSchema();
+  stub.fireRecord({ id: 2, Personne: 'Martin Anne' }, 'VcBadges');
+  document.querySelector('.tiptap').blur();
+  Editor.setHTML('<p>Structure : <span class="var-badge" data-table="VcStructs" data-column="Nom" data-key="VcStructs.Nom"></span></p>');
+});
+await page.waitForTimeout(400);
+check('deux chemins mènent à VcStructs : le même parcours ouvre la fenêtre de la clé', await openKeyThroughColumnButton());
+const keyEmpty = await keyState();
+check('rien n’est choisi à la place de la personne (source et cible vides, pas d’aperçu)', keyEmpty.open && keyEmpty.source === '' && keyEmpty.cible === '', keyEmpty);
+const pathSourceField2 = await hitTest('#link-config-modal .link-config-bridge-col:first-child .ss-trigger');
+if (pathSourceField2.found) await page.mouse.click(pathSourceField2.x, pathSourceField2.y);
+await page.waitForTimeout(200);
+const rowPoint = (name, inner) => page.evaluate(({ name, inner }) => {
+  const panel = Array.from(document.querySelectorAll('#link-config-modal .ss-panel')).find(p => !p.hidden);
+  const li = panel && Array.from(panel.querySelectorAll('.ss-option')).find(r => r.querySelector('.ss-name').textContent === name);
+  const target = li && (inner ? li.querySelector(inner) : li);
+  if (!target) return null;
+  const r = target.getBoundingClientRect();
+  const x = r.left + r.width / 2, y = r.top + r.height / 2;
+  const top = document.elementFromPoint(x, y);
+  return { x, y, inViewport: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5, onTop: !!top && (top === target || target.contains(top)) };
+}, { name, inner });
+const personneArrow = await rowPoint('Personne', '.ss-descend');
+check('la flèche de la colonne Personne (Référence) est dans la liste, atteignable et au premier plan', !!personneArrow && personneArrow.inViewport && personneArrow.onTop, personneArrow);
+if (personneArrow) await page.mouse.click(personneArrow.x, personneArrow.y);
+await page.waitForTimeout(250);
+const structureRow = await rowPoint('Structure');
+check('la flèche ouvre les colonnes de VcPersons : la ligne Structure est atteignable', !!structureRow && structureRow.inViewport && structureRow.onTop, structureRow);
+if (structureRow) await page.mouse.click(structureRow.x, structureRow.y);
+await page.waitForTimeout(250);
+const cibleField2 = await hitTest('#link-config-modal .link-config-bridge-col:last-child .ss-trigger');
+if (cibleField2.found) await page.mouse.click(cibleField2.x, cibleField2.y);
+await page.waitForTimeout(200);
+const autoRow = await rowPoint('Auto');
+if (autoRow) await page.mouse.click(autoRow.x, autoRow.y);
+await page.waitForTimeout(300);
+const keyChosen = await keyState();
+check('Structure sous Personne puis Auto à droite : la source est Personne.Structure et l’aperçu trouve la structure 2', keyChosen.open && keyChosen.source === 'Personne.Structure' && keyChosen.cible === 'id' && /\b2\b/.test(keyChosen.preview), keyChosen);
+const arrowConfirm = await hitTest('#link-config-confirm');
+if (arrowConfirm.found) await page.mouse.click(arrowConfirm.x, arrowConfirm.y);
+await page.waitForTimeout(600);
+const arrowLinked = await page.evaluate(() => { const r = GristAPI.getLinkRule('VcStructs', 'VcBadges'); return { rule: r ? [r.colonneSource, r.colonneCible] : null, modalOpen: document.getElementById('link-config-modal').style.display !== 'none' }; });
+check('Valider (vrai clic) enregistre le même lien par chemin', !arrowLinked.modalOpen && JSON.stringify(arrowLinked.rule) === JSON.stringify(['Personne.Structure', 'id']), arrowLinked);
+
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 
 await browser.close();
