@@ -10,7 +10,7 @@ Widget personnalisé conçu par [Grist Factory](https://grist-factory.fr). Moteu
 
 > **Ce dépôt est celui du développement.** La version publiée (V1.1, 1.1.0) est sur [grist-factory/Publipostage-Plus](https://github.com/grist-factory/Publipostage-Plus), dont le README, lui, s'adresse aux personnes qui utilisent le widget. Ici, `main` est servie en continu à `https://lombre33.github.io/publipostageGrist/` : c'est la version en cours, qui peut avoir de l'avance sur la V1.1.
 
-**[Démarrage rapide](#démarrage-rapide)** · [En images](#en-images) · [Les fonctions](#les-fonctions) · [Installation](#installation-dans-grist) · [Sécurité](#sécurité-et-permissions) · [Développer](#organisation-du-dépôt) · [Tests](#tests)
+**[Démarrage rapide](#démarrage-rapide)** · [En images](#en-images) · [Fonctionnalités](#fonctionnalités) · [Installation](#installation-dans-grist) · [Sécurité](#sécurité-et-permissions) · [Développer](#organisation-du-dépôt) · [Tests](#tests)
 
 ## Démarrage rapide
 
@@ -32,7 +32,7 @@ Le vrai widget, avec des données fictives (interface en français ; elle existe
 |---|---|
 | ![L'historique des versions et la comparaison](outils/depot-propre/public/screenshots/42-historique-des-versions.png) | ![Le menu Type d'export](outils/depot-propre/public/screenshots/50-type-export.png) |
 
-## Les fonctions
+## Fonctionnalités
 
 Le détail, fonction par fonction, noms de fichiers compris, est dans [`planning/reference-fonctions-securite-dependances.md`](planning/reference-fonctions-securite-dependances.md). L'essentiel :
 
@@ -143,7 +143,7 @@ A custom widget made by [Grist Factory](https://grist-factory.fr). Editing engin
 
 The [full tour in pictures](outils/depot-propre/public/README.md#tour-in-pictures) is in the public README.
 
-## The features
+## Features
 
 The complete, feature-by-feature detail, file names included, is in [`planning/reference-fonctions-securite-dependances.md`](planning/reference-fonctions-securite-dependances.md) (in French). In short:
 
