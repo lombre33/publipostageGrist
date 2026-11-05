@@ -8,7 +8,7 @@
 
 Widget personnalisé conçu par [Grist Factory](https://grist-factory.fr). Moteur d'édition : [TipTap](https://tiptap.dev/)/ProseMirror. Le widget est une page statique unique, servie par GitHub Pages : aucune étape de build.
 
-> **Ce dépôt est celui du développement.** La version publiée (V1, 1.0.0) est sur [grist-factory/Publipostage-Plus](https://github.com/grist-factory/Publipostage-Plus), dont le README, lui, s'adresse aux personnes qui utilisent le widget. Ici, `main` est servie en continu à `https://lombre33.github.io/publipostageGrist/` : c'est la version en cours, qui peut avoir de l'avance sur la V1.
+> **Ce dépôt est celui du développement.** La version publiée (V1.1, 1.1.0) est sur [grist-factory/Publipostage-Plus](https://github.com/grist-factory/Publipostage-Plus), dont le README, lui, s'adresse aux personnes qui utilisent le widget. Ici, `main` est servie en continu à `https://lombre33.github.io/publipostageGrist/` : c'est la version en cours, qui peut avoir de l'avance sur la V1.1.
 
 **[Démarrage rapide](#démarrage-rapide)** · [En images](#en-images) · [Les fonctions](#les-fonctions) · [Installation](#installation-dans-grist) · [Sécurité](#sécurité-et-permissions) · [Développer](#organisation-du-dépôt) · [Tests](#tests)
 
@@ -106,7 +106,7 @@ Les tests tournent sur un simulateur de Grist : la résolution réelle des varia
 
 ## État du projet
 
-La V1 (1.0.0) est publiée sur le dépôt public. Ici, le développement continue : chaque évolution est publiée sur `main` puis servie par GitHub Pages. Les notes de conception de [`planning/`](planning/) disent, pour la plupart en tête de fichier, ce qui est livré et ce qui reste à faire ; [`planning/ROADMAP.md`](planning/ROADMAP.md) est la feuille de route.
+La V1.1 (1.1.0) est publiée sur le dépôt public. Ici, le développement continue : chaque évolution est publiée sur `main` puis servie par GitHub Pages. Les notes de conception de [`planning/`](planning/) disent, pour la plupart en tête de fichier, ce qui est livré et ce qui reste à faire ; [`planning/ROADMAP.md`](planning/ROADMAP.md) est la feuille de route.
 
 Un audit de code complet (qualité, sécurité, conformité aux exigences de publication) a été réalisé le 12 septembre 2026, puis complété le 14 par un passage sur la performance et le code mort : voir [`AUDIT_CODE.md`](AUDIT_CODE.md). C'est un instantané : le code a beaucoup évolué depuis.
 
@@ -131,7 +131,7 @@ Copyright (C) 2026 lombre33
 
 A custom widget made by [Grist Factory](https://grist-factory.fr). Editing engine: [TipTap](https://tiptap.dev/)/ProseMirror. The widget is a single static page served by GitHub Pages: no build step.
 
-> **This is the development repository.** The published version (V1, 1.0.0) is at [grist-factory/Publipostage-Plus](https://github.com/grist-factory/Publipostage-Plus), whose README is written for the people who use the widget. Here, `main` is served continuously at `https://lombre33.github.io/publipostageGrist/`: it is the work in progress, which may be ahead of the V1.
+> **This is the development repository.** The published version (V1.1, 1.1.0) is at [grist-factory/Publipostage-Plus](https://github.com/grist-factory/Publipostage-Plus), whose README is written for the people who use the widget. Here, `main` is served continuously at `https://lombre33.github.io/publipostageGrist/`: it is the work in progress, which may be ahead of V1.1.
 
 ## Quick start
 
