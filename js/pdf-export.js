@@ -9,7 +9,7 @@ const PdfExport = (function () {
     { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js', integrity: 'sha384-dWs4+zGqy/KS6giKxiK+6iowhidQwjVFaiE1lMar36QwIulE44VyBSQp0brMCx4D' },
     // Chemins relatifs à index.html, même origine que la page : pas de SRI nécessaire (une compromission serait déjà celle du dépôt lui-même).
     { src: 'js/pdf-fonts.js?v=0.68' },
-    { src: 'js/pdf-fonts-extra.js?v=0.67' },
+    { src: 'js/pdf-fonts-extra.js?v=0.68' },
     // Les deux polices de cases à cocher des variables Oui / Non (dev-tests/build-pdf-boxes-font.py) : ~3 Ko, lues par inlineRuns.
     { src: 'js/pdf-fonts-boxes.js?v=0.1' },
     // PPSymbols (dev-tests/build-pdf-fonts-fallback.py) : ✓ → ★ ① ₿ ✅... que ni Roboto ni les cinq autres familles n'ont ; js/pdf-glyph-fallback.js
