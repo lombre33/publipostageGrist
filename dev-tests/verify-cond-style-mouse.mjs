@@ -289,6 +289,68 @@ async function grist(page, scheme) {
   check(`${scheme} - en Lecture, la mise en forme de Grist se voit sur une vraie capture sur la ligne où ses règles tiennent (texte bleu et fond jaune sur 1 200) et pas sur l'autre`, seen[0].blueish > 15 && seen[0].yellowish > 40 && seen[1].blueish < 3 && seen[1].yellowish < 3, seen);
 }
 
+// Les puces : un vrai clic sur la puce « Date du jour » ouvre sa barre (« Mise en forme conditionnelle » seul : la liste « Heure » est cachée), dans le panneau et au premier plan ; le bouton
+// ouvre la fenêtre, entière dans 700x400, sans la case « Comme dans Grist » ; un vrai clic sur une pastille bleue puis « Enregistrer » écrit le style et la Lecture le montre sur la
+// ligne où la règle tient (1 200), pas sur l'autre (50).
+async function chips(page, scheme) {
+  await page.evaluate(table => {
+    const stub = window.__gristStub;
+    stub.setVariables(table, { Titre: 'Text', Statut: 'Text', Montant: 'Numeric' });
+    stub.setColumnRules(table, { Montant: null });
+    const rows = [{ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Montant: 1200 }, { id: 2, Titre: 'Dossier B', Statut: 'Normal', Montant: 50 }];
+    stub.setRows(table, rows);
+    stub.fireRecord(Object.assign({}, rows[0]), table);
+  }, TABLE);
+  await page.evaluate(async () => { await GristAPI.refreshSchema(); });
+  const chipHtml = await page.evaluate(spec => EditorNodes.smartChipHtml({ kind: 'date', condStyle: spec }), STYLE_SPEC);
+  await seedPageHtml(page, `<p>Édité le ${chipHtml}.</p>`);
+  const chip = await hitTest(page, '.tiptap .smart-chip');
+  check(`${scheme} - la puce est dans le panneau et au premier plan`, chip.found && chip.inViewport && chip.onTop, chip);
+  await realClick(page, chip);
+  await page.waitForTimeout(300);
+  const bar = await page.evaluate(() => {
+    const el = document.querySelector('.v2-timechip-toolbar.visible');
+    if (!el) return { visible: false };
+    const r = el.getBoundingClientRect();
+    const btn = el.querySelector('button[data-action="chip-style"]');
+    const br = btn.getBoundingClientRect();
+    const top = document.elementFromPoint(br.left + br.width / 2, br.top + br.height / 2);
+    return { visible: true, left: r.left, right: r.right, top: r.top, bottom: r.bottom, selectHidden: el.querySelector('select').hidden, active: btn.classList.contains('is-active'), btnOnTop: !!top && (top === btn || btn.contains(top)) };
+  });
+  check(`${scheme} - la barre de la puce tient dans le panneau, le bouton de mise en forme est allumé et au premier plan, la liste « Heure » est cachée`,
+    bar.visible && bar.left >= 0 && bar.right <= WIDTH + 0.5 && bar.top >= 0 && bar.selectHidden && bar.active && bar.btnOnTop, bar);
+  await shot(page, `${scheme}-puce-barre`);
+  await realClick(page, await hitTest(page, '.v2-timechip-toolbar.visible button[data-action="chip-style"]'));
+  await page.waitForTimeout(500);
+  let modal = await modalState(page);
+  const intro = await page.evaluate(() => { const c = document.querySelector('#cond-style-modal .var-modal-intro .smart-chip'); return { chip: c ? c.textContent : null, grist: document.querySelector('#cond-style-modal .cond-style-grist').hidden }; });
+  check(`${scheme} - la fenêtre de la puce s'ouvre entière dans le panneau, cite la puce et n'a pas « Comme dans Grist »`, modal.open && insideBox(modal, WIDTH, HEIGHT) && !!intro.chip && intro.grist === true, { modal, intro });
+  await shot(page, `${scheme}-puce-fenetre`);
+  const BLUE = '#1d4ed8';
+  await clickSel(page, `${MODAL} .cond-style-colors[data-style-key="color"] .cp-swatch[data-color="${BLUE}"]`);
+  await page.waitForTimeout(120);
+  await clickSel(page, `${MODAL} .pp-modal-actions .var-modal-primary`);
+  await page.waitForTimeout(300);
+  const written = await page.evaluate(() => { let found = null; EditorCore.getEditor().state.doc.descendants(node => { if (!found && node.type.name === 'smartChip') found = node.attrs.condStyle; }); return found; });
+  check(`${scheme} - « Enregistrer » écrit le style choisi à la vraie souris sur la puce`, written && written.rules.length === 1 && written.rules[0].style.color === BLUE && written.rules[0].style.bold === true, written);
+  const seen = [];
+  for (const row of [1, 2]) {
+    await page.evaluate(async ({ table, row }) => {
+      const rows = [{ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Montant: 1200 }, { id: 2, Titre: 'Dossier B', Statut: 'Normal', Montant: 50 }];
+      window.__gristStub.fireRecord(Object.assign({}, rows[row - 1]), table);
+      await new Promise(r => setTimeout(r, 80));
+      const reader = document.getElementById('reader-container');
+      reader.style.display = 'block';
+      await ReaderMode.render(Editor.getHTML(), table, GristAPI.getCurrentRecord(), { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } });
+    }, { table: TABLE, row });
+    await page.waitForTimeout(250);
+    const rect = await page.evaluate(() => { const p = document.querySelector('.reader-content p'); const r = p.getBoundingClientRect(); return { left: r.left, top: r.top, w: r.width, h: r.height }; });
+    seen.push({ row, blueish: await pixelsWhere(page, rect, (r, g, b) => b > 150 && r < 90 && g < 120) });
+    await page.evaluate(() => { document.getElementById('reader-container').style.display = ''; document.getElementById('editor-container').style.display = ''; });
+  }
+  check(`${scheme} - en Lecture, la date se voit en bleu sur une vraie capture sur la ligne où la règle tient (1 200) et pas sur l'autre (50)`, seen[0].blueish > 10 && seen[1].blueish < 3, seen);
+}
+
 async function runTheme(scheme) {
   console.log(`\n=== Mise en forme conditionnelle, ${WIDTH}x${HEIGHT}, ${scheme} ===`);
   const { context, page } = await openWidget(scheme);
@@ -380,6 +442,7 @@ async function runTheme(scheme) {
   }
   check(`${scheme} - en Lecture, la couleur se voit sur une vraie capture sur la ligne où la règle tient (1 200) et pas sur l'autre (50)`, seen[0].styledSpan && seen[0].blueish > 15 && !seen[1].styledSpan && seen[1].blueish < 3, seen);
   await grist(page, scheme);
+  await chips(page, scheme);
   await context.close();
 }
 

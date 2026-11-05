@@ -1,4 +1,4 @@
-// Fenêtre « Mise en forme conditionnelle » d'une bulle de variable, d'un calcul, d'un bloc de texte conditionnel ou d'une valeur dans la phrase (js/conditional-style.js) :
+// Fenêtre « Mise en forme conditionnelle » d'une bulle de variable, d'un calcul, d'une puce, d'un bloc de texte conditionnel ou d'une valeur dans la phrase (js/conditional-style.js) :
 // une liste de règles « quand cette condition est remplie, alors cette couleur de texte, ce fond, ce gras, cet italique, ce souligné, ce barré ». Le réglage vit dans l'attribut
 // `condStyle` du nœud : { rules: [{ condition, style }] }. Les règles se lisent dans l'ordre, comme celles de Grist : la couleur du texte et le fond de la dernière règle
 // remplie l'emportent, le gras, l'italique, le souligné et le barré s'additionnent.
@@ -14,7 +14,7 @@ const ConditionalStyleWindow = (function () {
   const { setLine, shorten } = VariableModal;
 
   // La phrase d'introduction selon le nœud réglé. Les clés s'écrivent en toutes lettres, pour que la recherche des clés sans usage (dev-tests/verify-code-hygiene.mjs) les voie.
-  const INTRO = { varBadge: 'condStyle.intro.badge', calcBadge: 'condStyle.intro.calc', conditionalText: 'condStyle.intro.block', conditionalValue: 'condStyle.intro.value' };
+  const INTRO = { varBadge: 'condStyle.intro.badge', smartChip: 'condStyle.intro.badge', calcBadge: 'condStyle.intro.calc', conditionalText: 'condStyle.intro.block', conditionalValue: 'condStyle.intro.value' };
   // Les quatre traits, dans l'ordre de la rangée : la clé du style, sa classe, sa lettre (G I S B en français, B I U S en anglais) et sa phrase.
   const MARKS = [
     { key: 'bold', cls: 'cond-style-mark-bold', glyph: 'condStyle.glyph.bold', label: 'condStyle.bold' },
@@ -399,6 +399,7 @@ const ConditionalStyleWindow = (function () {
     const r = refs;
     r.title.textContent = I18n.t('condStyle.title');
     if (node.type.name === 'varBadge') r.intro.replaceChildren(el('span', 'var-badge', VariableModal.badgeText(node)), document.createTextNode(' ' + I18n.t(INTRO.varBadge)));
+    else if (node.type.name === 'smartChip') r.intro.replaceChildren(el('span', 'smart-chip', EditorNodes.smartChipLabel(node.attrs.kind)), document.createTextNode(' ' + I18n.t(INTRO.smartChip)));
     else r.intro.textContent = I18n.t(INTRO[node.type.name]);
     r.hint.textContent = I18n.t('condStyle.order');
     r.gristText.textContent = I18n.t('condStyle.grist');

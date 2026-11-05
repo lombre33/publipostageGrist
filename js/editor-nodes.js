@@ -357,16 +357,21 @@ const EditorNodes = (function () {
     // (js/field-codec.js) écrivent la même puce que l'éditeur.
     // `time` : l'écriture de l'heure d'une puce « Heure actuelle » (une clé de VariableFormat.TIME_STYLES, `data-chip-time`) ; absente, la puce écrit l'heure sur 24 heures comme avant ce réglage.
     // Aucune autre puce n'en porte.
-    const smartChipAttributes = (kind, time) => Object.assign({ class: 'smart-chip', contenteditable: 'false', 'data-chip-kind': kind }, kind === 'time' && time ? { 'data-chip-time': time } : {});
-    // Sans réglage, `time` n'est pas dans le résultat : la forme d'une puce d'avant ce réglage ({ kind }) ne change pas.
+    // `condStyle` : la mise en forme selon la ligne (js/conditional-style.js, `data-cond-style`), propre au document : un champ texte ne l'écrit pas.
+    const smartChipAttributes = (kind, time, condStyle) => Object.assign({ class: 'smart-chip', contenteditable: 'false', 'data-chip-kind': kind }, kind === 'time' && time ? { 'data-chip-time': time } : {},
+      condStyle ? { 'data-cond-style': JSON.stringify(condStyle) } : {});
+    // Sans réglage, ni `time` ni `condStyle` ne sont dans le résultat : la forme d'une puce d'avant ces réglages ({ kind }) ne change pas.
     function smartChipAttrsOf(el) {
       const attrs = { kind: el.getAttribute('data-chip-kind') || 'date' };
       const time = attrs.kind === 'time' && el.getAttribute('data-chip-time');
-      return time ? Object.assign(attrs, { time }) : attrs;
+      if (time) attrs.time = time;
+      const condStyle = ConditionalStyle.parse(el.getAttribute('data-cond-style'));
+      if (condStyle) attrs.condStyle = condStyle;
+      return attrs;
     }
     function smartChipElement(nodeAttrs) {
       const span = document.createElement('span');
-      setAttrs(span, smartChipAttributes(nodeAttrs.kind, nodeAttrs.time));
+      setAttrs(span, smartChipAttributes(nodeAttrs.kind, nodeAttrs.time, nodeAttrs.condStyle));
       span.textContent = smartChipLabel(nodeAttrs.kind);
       return span;
     }
@@ -377,13 +382,13 @@ const EditorNodes = (function () {
       return inlineAtom(Node, {
         name: 'smartChip',
         addAttributes() {
-          return { kind: internalAttr('date'), time: internalAttr(null) };
+          return { kind: internalAttr('date'), time: internalAttr(null), condStyle: internalAttr(null) };
         },
         parseHTML() {
           return [{ tag: 'span.smart-chip', getAttrs: smartChipAttrsOf }];
         },
         renderHTML({ node }) {
-          return ['span', mergeAttributes(smartChipAttributes(node.attrs.kind, node.attrs.time)), smartChipLabel(node.attrs.kind)];
+          return ['span', mergeAttributes(smartChipAttributes(node.attrs.kind, node.attrs.time, node.attrs.condStyle)), smartChipLabel(node.attrs.kind)];
         },
         // Vue de l'éditeur seulement : la même puce, avec la couleur, le surlignage, le souligné et le barré de ses marques (showTextMarks, que
         // css/variable-actions.css montre sous « Mise en forme » de Réglages). Pas de `update` : ProseMirror garde la vue tant que le nœud est

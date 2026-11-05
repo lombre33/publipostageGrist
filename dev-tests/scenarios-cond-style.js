@@ -609,6 +609,124 @@
     },
   });
 
+  // === Les puces (lot 3) ===
+  const chipHtml = (kind, style, time) => EditorNodes.smartChipHtml(Object.assign({ kind }, time ? { time } : null, style ? { condStyle: style } : null));
+  const CHIP_KINDS = ['date', 'time', 'name', 'email', 'rowNumber'];
+  cases.push({
+    id: 'condstyle_chips_take_the_style_of_a_met_rule_in_reader_and_exports',
+    description: 'Chaque puce (date, heure, nom, email, n° de ligne) qui porte une mise en forme conditionnelle s’écrit dans un <span style> à la Lecture et dans le HTML des exports quand sa règle tient sur la ligne affichée (rouge et gras sur 1 200), et rien n’est enveloppé sur l’autre ligne ; une puce sans réglage et la pastille « @ » ne changent pas',
+    run: async (h) => {
+      const stub = window.__gristStub;
+      stub.setUserEmail('jean@exemple.fr');
+      stub.setUserName('Jean Dupont');
+      const html = style => '<p>' + CHIP_KINDS.map(kind => chipHtml(kind, style, kind === 'time' ? 'ampm' : null)).join(' / ') + '</p>';
+      await seed(h, 1);
+      const reader1 = await renderReader(html(BIG_RED));
+      const spans1 = styled(reader1).map(styleOf);
+      const text1 = reader1.textContent.trim();
+      closeReader();
+      const preview1 = styled(await previewBox(html(BIG_RED))).map(styleOf);
+      const plain = await renderReader(html(null));
+      const plainText = plain.textContent.trim();
+      const plainStyled = styled(plain).length;
+      closeReader();
+      await setRow(h, 2);
+      const reader2 = await renderReader(html(BIG_RED));
+      const spans2 = styled(reader2).length;
+      const text2 = reader2.textContent.trim();
+      closeReader();
+      const red = list => list.length === 5 && list.every(span => span.color === RED && span.bold === true && !span.italic);
+      const pass = red(spans1) && red(preview1) && text1 === plainText && /jean@exemple\.fr/.test(text1) && /Jean Dupont/.test(text1) && plainStyled === 0 && spans2 === 0;
+      return { pass, notes: JSON.stringify({ spans1: spans1.map(s => s.text), preview1: preview1.length, text1, plainText, plainStyled, spans2, text2 }) };
+    },
+  });
+
+  cases.push({
+    id: 'condstyle_chip_attribute_round_trips_and_a_plain_chip_keeps_its_shape',
+    description: 'Le réglage d’une puce s’écrit dans data-cond-style et se relit à l’identique (puce « Heure actuelle » : son écriture reste) ; une puce sans réglage garde la forme d’avant ({ kind }, sans data-cond-style) ; un attribut illisible est ignoré',
+    run: async (h) => {
+      await seed(h, 1);
+      Editor.setHTML(`<p>${chipHtml('date', BIG_RED)} ${chipHtml('time', BIG_RED, 'ampm')} ${chipHtml('name', null)}</p>`);
+      await h.sleep(60);
+      const nodes = nodesOf('smartChip').map(found => found.node.attrs);
+      const html = Editor.getHTML();
+      const written = (html.match(/data-cond-style="[^"]*"/g) || []).length;
+      const again = document.createElement('div');
+      again.innerHTML = html;
+      const reread = Array.from(again.querySelectorAll('span.smart-chip')).map(chip => EditorNodes.smartChipAttrsOf(chip));
+      const broken = document.createElement('span');
+      broken.setAttribute('class', 'smart-chip');
+      broken.setAttribute('data-chip-kind', 'email');
+      broken.setAttribute('data-cond-style', '{pas du json');
+      const pass = nodes.length === 3 && JSON.stringify(nodes[0].condStyle) === JSON.stringify(BIG_RED) && nodes[1].time === 'ampm' && JSON.stringify(nodes[1].condStyle) === JSON.stringify(BIG_RED) && nodes[2].condStyle == null
+        && written === 2 && JSON.stringify(reread) === JSON.stringify([{ kind: 'date', condStyle: BIG_RED }, { kind: 'time', time: 'ampm', condStyle: BIG_RED }, { kind: 'name' }])
+        && JSON.stringify(EditorNodes.smartChipAttrsOf(broken)) === JSON.stringify({ kind: 'email' }) && EditorNodes.smartChipHtml({ kind: 'date' }).indexOf('data-cond-style') === -1;
+      return { pass, notes: JSON.stringify({ nodes, written, reread }) };
+    },
+  });
+
+  cases.push({
+    id: 'condstyle_chip_toolbar_has_the_style_button_the_time_list_only_on_the_time_chip_and_the_window_saves',
+    description: 'Une puce choisie ouvre une barre avec « Mise en forme conditionnelle » (allumée quand elle a un réglage) ; la liste « Heure » n’est là que pour la puce « Heure actuelle » ; le bouton ouvre la fenêtre (la puce citée en introduction, pas de case « Comme dans Grist »), « Enregistrer » écrit le réglage et la puce garde son écriture de l’heure',
+    run: async (h) => {
+      await seed(h, 1);
+      Editor.setHTML(`<p>${chipHtml('date', null)} ${chipHtml('time', BIG_RED, 'ampm')}</p>`);
+      await h.sleep(60);
+      const bar = () => document.querySelector('.v2-timechip-toolbar.visible');
+      const state = () => { const b = bar(); if (!b) return null; const btn = b.querySelector('button[data-action="chip-style"]'); const select = b.querySelector('select[data-role="chip-time"]'); return { disabled: btn.classList.contains('is-disabled'), active: btn.classList.contains('is-active'), title: btn.title, selectHidden: select.hidden, selectValue: select.value }; };
+      const out = {};
+      await selectNode(h, 'smartChip', 0);
+      out.date = state();
+      await selectNode(h, 'smartChip', 1);
+      out.time = state();
+      await selectNode(h, 'smartChip', 0);
+      document.querySelector('.v2-timechip-toolbar.visible button[data-action="chip-style"]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      await h.sleep(150);
+      out.window = { open: !!modal() && getComputedStyle(modal()).display !== 'none', intro: modal().querySelector('.var-modal-intro .smart-chip') ? modal().querySelector('.var-modal-intro .smart-chip').textContent : null, grist: modal().querySelector('.cond-style-grist').hidden, cards: cards().length, bar: !!bar() };
+      const row = modal().querySelector('.macro-rule-row');
+      await pickColumn(h, row, 'Montant');
+      row.querySelector('select:not(.macro-rule-column)').value = '>';
+      row.querySelector('select:not(.macro-rule-column)').dispatchEvent(new Event('change', { bubbles: true }));
+      setInput(row.querySelector('.macro-rule-value'), '1000');
+      swatchIn(openCard(), 'color', RED).click();
+      await h.sleep(60);
+      saveBtn().click();
+      await h.sleep(100);
+      out.saved = nodesOf('smartChip')[0].node.attrs.condStyle;
+      await selectNode(h, 'smartChip', 0);
+      out.litAfter = state();
+      // Retirer la mise en forme depuis la fenêtre : la puce « Heure actuelle » garde son écriture.
+      await selectNode(h, 'smartChip', 1);
+      document.querySelector('.v2-timechip-toolbar.visible button[data-action="chip-style"]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      await h.sleep(150);
+      removeBtn().click();
+      await h.sleep(100);
+      out.removed = { style: nodesOf('smartChip')[1].node.attrs.condStyle, time: nodesOf('smartChip')[1].node.attrs.time };
+      const pass = out.date && !out.date.disabled && !out.date.active && out.date.selectHidden && out.date.title === I18n.t('varToolbar.style')
+        && out.time && out.time.active && !out.time.selectHidden && out.time.selectValue === 'ampm'
+        && out.window.open && out.window.intro === EditorNodes.smartChipLabel('date') && out.window.grist === true && out.window.cards === 1
+        && out.saved && out.saved.rules.length === 1 && JSON.stringify(out.saved.rules[0].style) === JSON.stringify({ color: RED }) && out.litAfter && out.litAfter.active
+        && out.removed.style == null && out.removed.time === 'ampm';
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'condstyle_chip_rules_follow_a_column_rename',
+    description: 'Une colonne renommée dans Grist est réécrite dans les règles d’une puce comme dans celles d’une bulle (js/schema-renames.js lit aussi les puces)',
+    run: async () => {
+      const m = SchemaRenames.createMapper(OLD, NEW, {});
+      const ctx = { page: m.tableContext('Dossiers'), trigger: Variables.triggerChar() };
+      const style = { rules: [{ condition: { mode: 'all', rules: [{ column: 'Montant', operator: '>', value: '100' }] }, style: { bold: true } }] };
+      const out = SchemaRenames.rewriteHtml('<p>' + EditorNodes.smartChipHtml({ kind: 'date', condStyle: style }) + '</p>', m, ctx);
+      const tpl = document.createElement('template');
+      tpl.innerHTML = out.html;
+      const spec = JSON.parse(tpl.content.querySelector('span.smart-chip').getAttribute('data-cond-style'));
+      const pass = out.count >= 1 && spec.rules[0].condition.rules[0].column === 'Total' && JSON.stringify(spec.rules[0].style) === JSON.stringify({ bold: true });
+      return { pass, notes: JSON.stringify({ count: out.count, spec }) };
+    },
+  });
+
   // === Les renommages de colonnes ===
   const OLD = { f: 1, t: { 1: ['Dossiers', { 1: 'Titre', 2: 'Montant', 3: 'Statut' }], 3: ['Annuaire', { 8: 'NomPrenom', 9: 'Email' }] } };
   const NEW = { f: 1, t: { 1: ['Dossiers', { 1: 'Titre', 2: 'Total', 3: 'Statut' }], 3: ['Annuaire', { 8: 'NomPrenom', 9: 'Courriel' }] } };

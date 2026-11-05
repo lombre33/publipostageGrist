@@ -346,6 +346,34 @@
     },
   });
 
+  // La mise en forme conditionnelle d'une puce (js/conditional-style.js, lot 3 : « puces ») dans une zone répétée lit la ligne du TOUR (la liaison de la zone, LoopRules.bindingOf) :
+  // la puce « N° de ligne » rouge sur les lignes de plus de 500 €, la puce « Date du jour » aussi - toutes les puces sont liées au tour, pas seulement le numéro de ligne.
+  cases.push({
+    id: 'loop_chip_conditional_style_reads_the_row_of_the_turn',
+    description: 'Une puce (N° de ligne, Date du jour) qui porte une mise en forme conditionnelle dans une ligne de tableau répétée prend son style d’après la ligne du tour : rouge sur la ligne de 1 200 €, pas sur celles de 180 € et 90 €, en Lecture et dans l’aperçu des exports',
+    run: async (h) => {
+      await seed(h);
+      const style = { rules: [{ condition: { mode: 'all', rules: [{ column: 'LpLignes.Montant', operator: '>', value: '500' }] }, style: { color: '#b91c1c', bold: true } }] };
+      const chip = kind => EditorNodes.smartChipHtml({ kind, condStyle: style });
+      const html = '<table><tbody>'
+        + `<tr>${cell('N°', 'th')}${cell('Date', 'th')}${cell('Désignation', 'th')}</tr>`
+        + `<tr>${cell(chip('rowNumber'))}${cell(chip('date'))}${cell(badgeHtml('LpLignes', 'Designation', ROW_LOOP))}</tr>`
+        + '</tbody></table>';
+      const read = root => Array.from(root.querySelectorAll('tbody tr, tr')).filter(tr => tr.querySelector('td')).map(tr => Array.from(tr.querySelectorAll('td')).map(td => {
+        const span = td.querySelector('span[style*="color"]');
+        return td.textContent.trim().slice(0, 12) + (span ? '*' : '');
+      }).join(' | '));
+      const content = await renderReader(html);
+      const reading = read(content);
+      const box = await preview(html, GristAPI.getCurrentRecord());
+      const exported = read(box);
+      const pass = reading.length === 3 && exported.length === 3
+        && /^1 \|/.test(reading[0]) && !/\*/.test(reading[0]) && /^2\*/.test(reading[1]) && /\*.*\|.*\*/.test(reading[1]) && /^3 \|/.test(reading[2]) && !/\*/.test(reading[2])
+        && JSON.stringify(reading) === JSON.stringify(exported);
+      return { pass, notes: JSON.stringify({ reading, exported }) };
+    },
+  });
+
   cases.push({
     id: 'loop_row_number_chip_counts_after_the_filter_in_list_items_and_paragraphs',
     description: 'Puce « N° de ligne » dans un élément de liste et dans un paragraphe répétés : le rang compte les lignes retenues, après le filtre et le tri de la boucle (1, 2, 3 sans trou), pas les identifiants des lignes de la table',

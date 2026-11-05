@@ -1500,38 +1500,53 @@ const FloatingToolbars = (function () {
     return panel;
   }
 
-  // La barre flottante de la puce « Heure actuelle » pour UN éditeur (celui du document ou celui d'un champ texte, comme createVariableToolbar) : la liste « Heure » d'une bulle sur une colonne
-  // « Date et heure » (VariableFormat.timeChoices : 14:30, 14 h 30, 2:30 PM, 2:30pm), sans « Sans heure » - une puce écrit toujours une heure. Une puce sans réglage écrit sur 24 heures
-  // (« 14:30 »), comme avant ce choix : choisir cette écriture retire le réglage (`data-chip-time`) au lieu de l'enregistrer, le modèle garde sa forme d'avant. Aucune autre puce n'a de barre.
+  // La barre flottante d'une puce (date, heure, email, nom, n° de ligne) pour UN éditeur (celui du document ou celui d'un champ texte, comme createVariableToolbar) : « Mise en forme
+  // conditionnelle » (js/conditional-style-window.js), et pour la puce « Heure actuelle » seule la liste « Heure » d'une bulle sur une colonne « Date et heure » (VariableFormat.timeChoices :
+  // 14:30, 14 h 30, 2:30 PM, 2:30pm), sans « Sans heure » - une puce écrit toujours une heure. Une puce sans réglage écrit sur 24 heures (« 14:30 »), comme avant ce choix : choisir cette écriture
+  // retire le réglage (`data-chip-time`) au lieu de l'enregistrer, le modèle garde sa forme d'avant. Dans un champ texte (Objet, À…), qui écrit une ligne sans mise en forme, seule la puce
+  // « Heure actuelle » a une barre, avec son bouton de mise en forme grisé et sa raison ; les autres puces n'y en ont pas.
   function createTimeChipToolbar(editor, options) {
     const inField = !!(options && options.field);
     const DEFAULT_STYLE = 'colon';
-    function selectedTimeChip() {
+    function selectedChip() {
       const node = editor.state.selection.node;
-      return node && node.type.name === 'smartChip' && node.attrs.kind === 'time' ? { node, pos: editor.state.selection.from } : null;
+      return node && node.type.name === 'smartChip' && (!inField || node.attrs.kind === 'time') ? { node, pos: editor.state.selection.from } : null;
     }
-    function timeChipToolbarHtml() {
+    function chipToolbarHtml() {
       const items = VariableFormat.timeChoices().map(t => `<option value="${t.key}">${VariableFormat.timeLabel(t)}</option>`).join('');
-      return `<select data-role="chip-time" title="${I18n.t('varFmt.time')}" aria-label="${I18n.t('varFmt.time')}">${items}</select>`;
+      const title = I18n.t('varToolbar.style');
+      return `<select data-role="chip-time" title="${I18n.t('varFmt.time')}" aria-label="${I18n.t('varFmt.time')}">${items}</select>`
+        + `<button data-action="chip-style" title="${title}" aria-label="${title}">${Icons.svg('varStyle')}</button>`;
     }
     function onTimeChipInput(role, value) {
-      const chip = selectedTimeChip();
-      if (!chip || role !== 'chip-time') return;
+      const chip = selectedChip();
+      if (!chip || chip.node.attrs.kind !== 'time' || role !== 'chip-time') return;
       EditorCore.patchNodeAndReselect(editor, chip.pos, Object.assign({}, chip.node.attrs, { time: value === DEFAULT_STYLE ? null : value }));
     }
+    function onAction(action) {
+      const chip = selectedChip();
+      if (chip && action === 'chip-style' && !inField) ConditionalStyleWindow.openAt(editor, chip.pos);
+    }
     function wire() {
-      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-timechip-toolbar', timeChipToolbarHtml(), () => {}, onTimeChipInput);
+      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-timechip-toolbar', chipToolbarHtml(), onAction, onTimeChipInput);
       EditorCore.registerFloatingPanel(panel, inField ? options.ownerEl : null);
+      const ui = controlsOf(panel);
       const select = panel.el.querySelector('select[data-role="chip-time"]');
       const check = ({ transaction } = {}) => {
         // Le blur de l'éditeur ne change ni la sélection ni le document : cf. wireImageFloatingToolbar.
         if (transaction && transaction.getMeta('blur')) return;
-        const chip = selectedTimeChip();
-        if (!chip) { panel.hide(); return; }
+        const chip = selectedChip();
+        if (!chip || variableWindowOpen()) { panel.hide(); return; }
         const dom = editor.view.nodeDOM(chip.pos);
         // Éditeur masqué (Lecture, résumé d'un macro-modèle) : cf. createVariableToolbar.
         if (!dom || !dom.getClientRects().length) { panel.hide(); return; }
-        select.value = VariableFormat.timeChoiceOf(chip.node.attrs.time) || DEFAULT_STYLE;
+        const isTime = chip.node.attrs.kind === 'time';
+        select.hidden = !isTime;
+        if (isTime) select.value = VariableFormat.timeChoiceOf(chip.node.attrs.time) || DEFAULT_STYLE;
+        const title = I18n.t(inField ? 'varToolbar.styleInField' : 'varToolbar.style');
+        ui.setDisabled('chip-style', inField, title);
+        ui.button('chip-style').setAttribute('aria-label', title);
+        ui.setActive('chip-style', !inField && ConditionalStyle.isSet(chip.node.attrs.condStyle));
         panel.show(dom, inField ? undefined : anchoredBarOptions);
       };
       editor.on('selectionUpdate', check);

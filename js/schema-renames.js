@@ -537,7 +537,7 @@ const SchemaRenames = (function () {
     const root = tpl.content;
     // Tout ce que le widget range dans un modèle et qui nomme une table ou une colonne : comme BOUND_SELECTOR de js/loop-rules.js, mais sans
     // restreindre les images.
-    const ELEMENT_SELECTOR = '.var-badge, .calc-badge, .mention-chip, img.editor-image, .conditional-text, .conditional-value, .conditional-checkbox';
+    const ELEMENT_SELECTOR = '.var-badge, .calc-badge, .mention-chip, img.editor-image, .smart-chip, .conditional-text, .conditional-value, .conditional-checkbox';
     // Un modèle qui nomme d'autres tables que celle de la page, et jamais celle-ci, n'est pas lu comme un modèle de cette page : ses colonnes sans
     // nom de table restent.
     const elements = root.querySelectorAll(ELEMENT_SELECTOR);

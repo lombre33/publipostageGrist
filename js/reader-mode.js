@@ -1469,7 +1469,8 @@ const ReaderMode = (function () {
       span.textContent = text;
       span.className = 'resolved-var' + (isError ? ' error-msg' : '');
       carryReaderAtom(chip, span);
-      chip.replaceWith(span);
+      // La mise en forme selon la ligne d'une puce (js/conditional-style.js), calculée avant par `prepare` ; une pastille « @ » n'en a pas.
+      chip.replaceWith(ConditionalStyle.carry(chip, span));
     }));
   }
   function carryReaderAtom(from, to) {

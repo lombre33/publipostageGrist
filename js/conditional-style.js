@@ -1,4 +1,4 @@
-// Mise en forme conditionnelle (demande du 05/11) : une variable, un calcul, un bloc de texte conditionnel ou une valeur dans la phrase prend une couleur de
+// Mise en forme conditionnelle (demande du 05/11) : une variable, un calcul, une puce (date, heure, email, nom, n° de ligne), un bloc de texte conditionnel ou une valeur dans la phrase prend une couleur de
 // texte, un fond, du gras, de l'italique, du souligné ou du barré selon la ligne affichée - « en rouge quand le montant dépasse 1 000 ». Le réglage est facultatif :
 // sans lui, rien ne change dans la lecture ni dans les exports.
 //
@@ -179,7 +179,7 @@ const ConditionalStyle = (function () {
     elements.forEach((el, at) => {
       const css = cssOf(styles[at]);
       if (!css) return;
-      if (el.matches('.var-badge, .calc-badge')) el.setAttribute(COMPUTED_ATTR, css);
+      if (el.matches('.var-badge, .calc-badge, .smart-chip')) el.setAttribute(COMPUTED_ATTR, css);
       else dress(el, css);
     });
   }

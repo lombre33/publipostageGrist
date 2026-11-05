@@ -600,7 +600,7 @@
 
   cases.push({
     id: 'chip_time_bar_opens_on_the_chip_and_sets_the_writing',
-    description: 'Un clic sur la puce « Heure actuelle » ouvre sa barre : la liste « Heure » (23:30, 23 h 30, 11:30 PM, 11:30pm), sur « 23:30 » tant que rien n\'est réglé, sans « Sans heure » ; choisir « 11:30 PM » ou « 11:30pm » pose le réglage sans fermer la barre, la Lecture l\'écrit, « 23 h 30 » aussi, choisir « 23:30 » retire l\'attribut, un seul « Annuler » rend le réglage d\'avant ; la barre d\'une bulle ne s\'ouvre pas, et ni la date du jour ni l\'e-mail n\'ont de barre',
+    description: 'Un clic sur la puce « Heure actuelle » ouvre sa barre : la liste « Heure » (23:30, 23 h 30, 11:30 PM, 11:30pm), sur « 23:30 » tant que rien n\'est réglé, sans « Sans heure » ; choisir « 11:30 PM » ou « 11:30pm » pose le réglage sans fermer la barre, la Lecture l\'écrit, « 23 h 30 » aussi, choisir « 23:30 » retire l\'attribut, un seul « Annuler » rend le réglage d\'avant ; la barre d\'une bulle ne s\'ouvre pas, et la date du jour et l\'e-mail ont leur propre barre sans la liste « Heure »',
     run: async (h) => {
       const ed = await selectChip(h, 'time');
       if (!ed) return { pass: false, notes: 'puce introuvable' };
@@ -623,9 +623,9 @@
       await h.sleep(120);
       steps.undone = { time: chipTime(), value: timeSelect() ? timeSelect().value : null };
       const dateEd = await selectChip(h, 'date');
-      steps.dateChip = { bars: timeBars().length, selected: !!dateEd && !!dateEd.state.selection.node };
+      steps.dateChip = { bars: timeBars().length, selected: !!dateEd && !!dateEd.state.selection.node, timeList: timeSelect() ? !timeSelect().hidden : null };
       const mailEd = await selectChip(h, 'email');
-      steps.emailChip = { bars: timeBars().length, selected: !!mailEd && !!mailEd.state.selection.node };
+      steps.emailChip = { bars: timeBars().length, selected: !!mailEd && !!mailEd.state.selection.node, timeList: timeSelect() ? !timeSelect().hidden : null };
       await selectChip(h, 'time');
       const aside = EditorCore.getEditor();
       aside.commands.setTextSelection(1);
@@ -639,7 +639,8 @@
         natural: steps.natural.time === 'natural' && steps.natural.value === 'natural' && steps.readNatural.startsWith('Le 23 h 30 et 12/09/2026 et '),
         colon: steps.colon.time === null && steps.colon.value === 'colon' && !steps.colon.stored,
         undo: steps.undone.time === null && steps.undone.value === 'colon',
-        noBarOnOthers: steps.dateChip.selected && steps.dateChip.bars === 0 && steps.emailChip.selected && steps.emailChip.bars === 0,
+        // Les autres puces ont aussi une barre (« Mise en forme conditionnelle », js/conditional-style-window.js), mais sans la liste « Heure ».
+        noTimeListOnOthers: steps.dateChip.selected && steps.dateChip.bars === 1 && steps.dateChip.timeList === false && steps.emailChip.selected && steps.emailChip.bars === 1 && steps.emailChip.timeList === false,
         closes: steps.deselected.bars === 0,
       };
       return { pass: Object.values(checks).every(Boolean), notes: json({ checks, steps }) };
