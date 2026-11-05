@@ -562,7 +562,8 @@ async function clickEndOf(page, text) {
     const r = el.getBoundingClientRect();
     return { x: r.left + Math.min(r.width / 2, 12), y: r.top + r.height / 2 };
   }, text);
-  await page.mouse.move(p.x, p.y, { steps: 2 });
+  // Un seul saut depuis le coin de la page : en deux pas, la souris passait sur le bouton du pinceau, dont le menu au survol s'ouvrait sur la case et recevait le clic (« Mise en forme 1 » gardée dans le modèle).
+  await page.mouse.move(p.x, p.y, { steps: 1 });
   await page.mouse.click(p.x, p.y);
   await page.waitForTimeout(120);
   await page.keyboard.press('End');

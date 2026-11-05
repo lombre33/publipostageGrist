@@ -212,7 +212,8 @@ const untouched = await alone.page.evaluate(() => {
 });
 check('rien d\'autre ne change : pas de barre, pas de classe sur la page, rien chargé, aucune table du direct, l\'historique de l\'éditeur en place et aucune synchronisation',
   untouched.live === 'off' && !untouched.bar && !untouched.bodyOn && untouched.packages === 'undefined' && !untouched.loaded && untouched.tables.length === 0 && untouched.history && !untouched.sync && untouched.undo === false && untouched.blocks === false, untouched);
-check('le suivi des modifications, l\'en-tête et le pied, les tableaux liés ne sont pas touchés : aucune raison, aucun estompage', untouched.trackRows.every(title => title === '') && untouched.zoneOpacity === '1' && untouched.place === null && untouched.lock === null, untouched);
+// « Tout accepter » et « Tout refuser » portent, hors du direct aussi, la raison de leur grisé quand aucune modification suivie n'attend (js/lock-reasons.js, V1) : c'est la seule raison permise ici, aucune ne vient du direct.
+check('le suivi des modifications, l\'en-tête et le pied, les tableaux liés ne sont pas touchés : aucune raison, aucun estompage', untouched.trackRows.every(title => title === '' || /aucune modification suivie n’attend/.test(title)) && untouched.zoneOpacity === '1' && untouched.place === null && untouched.lock === null, untouched);
 const trackWorks = await alone.page.evaluate(async () => {
   const pause = () => new Promise(done => setTimeout(done, 250));
   document.getElementById('v2-btn-track-changes').click();

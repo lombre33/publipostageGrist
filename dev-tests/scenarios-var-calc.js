@@ -115,8 +115,11 @@
       const isAtom = calcNodes().length === 1 && calcNodes()[0].node.isAtom && calcNodes()[0].node.attrs.formula === stored;
       const before = I18n.getLang();
       I18n.setLang('en');
+      // Un document vidé d'abord : écrit deux fois à l'identique, ProseMirror garde la vue de la bulle, dont le texte s'écrit à la construction, dans la langue du moment (la page ne se retraduit plus depuis le 14/10).
+      Editor.setHTML('<p></p>'); await h.sleep(30);
       try { Editor.setHTML(`<p>Total ${calc(stored)} fin</p>`); await h.sleep(60); out.en = label(); } finally { I18n.setLang(before); }
       localStorage.setItem('pp_trigger_char', '§');
+      Editor.setHTML('<p></p>'); await h.sleep(30);
       try { Editor.setHTML(`<p>Total ${calc(stored)} fin</p>`); await h.sleep(60); out.trigger = label(); } finally { localStorage.removeItem('pp_trigger_char'); }
       const expected = {
         fr: '= #VcFactures.HT × 0,2 + SOMME(#VcLignes.Prix; 10)',

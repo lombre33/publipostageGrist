@@ -776,6 +776,8 @@ async function run(lang, colorScheme, full) {
   await click('.v2-color-dropdown.visible [data-color="#0369a1"]');
   state = await docState(page);
   check(tag + 'le choix d\'une couleur de trait (#0369a1) pose le trait avec l\'épaisseur d\'une forme neuve (1,5 pt)', state.frames[0].line === '#0369a1' && state.frames[0].lw === 1.5 && state.frames[0].fill === '#c8e6ff', state.frames[0]);
+  // La souris du clic précédent (la couleur du trait) peut reposer sur le menu « Souligné » de la barre du haut, ouvert au survol : il recouvre alors le bouton de l'épaisseur. On la pose à l'écart d'abord.
+  await leave();
   await click('#v2-frame-width-open');
   const widthMenu = await page.evaluate(() => {
     const m = document.querySelector('.v2-frame-width-menu.visible');

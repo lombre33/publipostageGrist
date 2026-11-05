@@ -27,6 +27,8 @@ const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
 const PORT = Number(process.env.LAYERS_MOUSE_PORT || 8917);
 const WIDTH = 700;
 const HEIGHT = 400;
+// Le menu de la barre du haut que la souris survole, juste à gauche de la liste # à 700x400 : « Aa » (menu Caractère) depuis que la barre a gagné des boutons (« Alignement », qui était là, est passé SOUS la liste : la souris n'y atteignait plus son bouton).
+const HOVER_MENU = '#v2-btn-char-main';
 const SHOTS = process.env.LAYERS_MOUSE_SHOTS || mkdtempSync(join(tmpdir(), 'layers-mouse-'));
 mkdirSync(SHOTS, { recursive: true });
 
@@ -255,7 +257,7 @@ check('la liste # est au-dessus de la barre dans leurs niveaux', !!menu && !!bar
 await shot('1-table-diese');
 
 console.log('\n== 2) le dernier ouvert est au-dessus : un menu de la barre du haut au survol de la liste # ==');
-// La liste # reste ouverte (le focus est resté dans la cellule). À 700x400 elle s'ouvre AU-DESSUS de la ligne, sur la barre du haut : la souris va sur « Alignement », juste à gauche d'elle, dont le
+// La liste # reste ouverte (le focus est resté dans la cellule). À 700x400 elle s'ouvre AU-DESSUS de la ligne, sur la barre du haut : la souris va sur « Aa », juste à gauche d'elle, dont le
 // menu s'ouvre au survol PAR-DESSUS la liste, qu'il recouvre en partie.
 const flyoutOf = (buttonSel) => page.evaluate((sel) => {
   const fl = document.querySelector(sel).closest('.v2-hover-group').querySelector(':scope > .v2-hover-flyout');
@@ -267,24 +269,24 @@ const flyoutOf = (buttonSel) => page.evaluate((sel) => {
   return { l: r.left, t: r.top, r: r.right, b: r.bottom, z: getComputedStyle(fl).zIndex, rows: rows.length, covered };
 }, buttonSel);
 await park();
-const align = await rectOf('#v2-btn-align-main');
+const align = await rectOf(HOVER_MENU);
 await page.mouse.move(align.x, align.y - 6, { steps: 5 });
 await page.mouse.move(align.x, align.y, { steps: 3 });
 await wait(450);
-const alignFlyout = await flyoutOf('#v2-btn-align-main');
+const alignFlyout = await flyoutOf(HOVER_MENU);
 const menuStill = await hashMenu();
-check('le menu « Alignement » s\'ouvre au survol, la liste # toujours ouverte', !!alignFlyout && !!menuStill, { alignFlyout, menuStill });
-check('le menu « Alignement » recouvre la liste # (la mesure porte sur un vrai recouvrement)', intersects(alignFlyout, menuStill), { alignFlyout, menuStill });
-check('aucune ligne du menu « Alignement », ouvert en dernier, ne passe sous la liste # ni sous la barre du tableau', !!alignFlyout && alignFlyout.rows > 0 && alignFlyout.covered.length === 0, alignFlyout);
+check('le menu « Aa » s\'ouvre au survol, la liste # toujours ouverte', !!alignFlyout && !!menuStill, { alignFlyout, menuStill });
+check('le menu « Aa » recouvre la liste # (la mesure porte sur un vrai recouvrement)', intersects(alignFlyout, menuStill), { alignFlyout, menuStill });
+check('aucune ligne du menu « Aa », ouvert en dernier, ne passe sous la liste # ni sous la barre du tableau', !!alignFlyout && alignFlyout.rows > 0 && alignFlyout.covered.length === 0, alignFlyout);
 await shot('2-menu-sur-liste-diese');
-// La souris reste sur « Alignement » et on retape dans le texte : la liste # redevient le menu qu'on utilise, elle reprend le dessus.
+// La souris reste sur « Aa » et on retape dans le texte : la liste # redevient le menu qu'on utilise, elle reprend le dessus.
 await page.keyboard.type('N', { delay: 60 });
 await wait(350);
 const menuTyped = await hashMenu();
-const flyoutTyped = await flyoutOf('#v2-btn-align-main');
-check('la liste # et le menu « Alignement » sont encore ouverts, et se recouvrent', !!menuTyped && !!flyoutTyped && intersects(flyoutTyped, menuTyped), { menuTyped, flyoutTyped });
+const flyoutTyped = await flyoutOf(HOVER_MENU);
+check('la liste # et le menu « Aa » sont encore ouverts, et se recouvrent', !!menuTyped && !!flyoutTyped && intersects(flyoutTyped, menuTyped), { menuTyped, flyoutTyped });
 const hashOverFlyout = await coveredRows('#autocomplete-box', MENU_ROWS);
-check('la liste # retapée repasse au-dessus du menu « Alignement » : aucune de ses lignes n\'est cachée', hashOverFlyout.found && hashOverFlyout.rows > 0 && hashOverFlyout.covered.length === 0, hashOverFlyout);
+check('la liste # retapée repasse au-dessus du menu « Aa » : aucune de ses lignes n\'est cachée', hashOverFlyout.found && hashOverFlyout.rows > 0 && hashOverFlyout.covered.length === 0, hashOverFlyout);
 await shot('2-liste-diese-retapee');
 await page.keyboard.press('Escape');
 await wait(150);
@@ -364,12 +366,12 @@ await click('.tiptap table tr:nth-child(2) td:nth-child(2)');
 await page.keyboard.press('End');
 await page.keyboard.type(' #', { delay: 60 });
 await wait(350);
-const alignWin = await rectOf('#v2-btn-align-main');
+const alignWin = await rectOf(HOVER_MENU);
 await page.mouse.move(alignWin.x, alignWin.y - 6, { steps: 5 });
 await page.mouse.move(alignWin.x, alignWin.y, { steps: 3 });
 await wait(450);
-const openedBefore = { bar: await floatingBar(), list: await hashMenu(), flyout: await flyoutOf('#v2-btn-align-main') };
-check('avant la fenêtre : la barre du tableau, la liste # de l\'éditeur et le menu « Alignement » sont ouverts', !!openedBefore.bar && openedBefore.bar.actions.includes('table-del') && !!openedBefore.list && !!openedBefore.flyout, openedBefore);
+const openedBefore = { bar: await floatingBar(), list: await hashMenu(), flyout: await flyoutOf(HOVER_MENU) };
+check('avant la fenêtre : la barre du tableau, la liste # de l\'éditeur et le menu « Aa » sont ouverts', !!openedBefore.bar && openedBefore.bar.actions.includes('table-del') && !!openedBefore.list && !!openedBefore.flyout, openedBefore);
 await park();
 await click('#autocomplete-box .ac-tab[data-tab="chips"]');
 const calcRow = await page.evaluate(() => {

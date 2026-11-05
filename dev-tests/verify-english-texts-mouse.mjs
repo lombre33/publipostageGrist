@@ -169,7 +169,8 @@ async function clickOn(selector) {
   const at = await locate(selector);
   if (!at.found) return at;
   await page.mouse.move(2, 2);
-  await page.mouse.move(at.x, at.y, { steps: 4 });
+  // Un seul saut : en quatre pas, la souris passait sur le menu « Aa » de la barre, dont le menu au survol s'ouvrait sur le bouton visé et recevait le clic.
+  await page.mouse.move(at.x, at.y, { steps: 1 });
   await page.mouse.down();
   await page.mouse.up();
   return at;
@@ -269,7 +270,8 @@ console.log('4. Sommaire : dans l\'éditeur, dans le HTML enregistré et dans le
 await loadDoc('<p>Dear customer,</p>');
 // Curseur dans le paragraphe (vrai clic), puis le bouton Sommaire de la barre.
 const para = await locate('.tiptap p');
-await page.mouse.move(para.x, para.y, { steps: 3 });
+// Un seul saut : en trois pas depuis le menu des polices, la souris passait sur le bouton du pinceau, dont le menu au survol s'ouvrait sur le paragraphe et recevait le clic.
+await page.mouse.move(para.x, para.y, { steps: 1 });
 await page.mouse.down(); await page.mouse.up();
 const tocBtn = await clickOn('#v2-btn-toc');
 await settle();

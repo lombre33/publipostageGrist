@@ -1842,4 +1842,23 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('noms : un fichier sorti de la liste des lots restants (PENDING) n\'y reste pas', stale.length === 0, stale.join(', '));
 }
 
+// ============================================================================
+// 33. Le README dit ce que fait le widget, comment le configurer et ses dépendances (gw audit du 05/11, point B-DOC-02)
+// ============================================================================
+// Le guide Grist.Gouv veut trois rubriques dans le README : ce que fait le widget, comment le configurer, ses dépendances. Le nouvel audit (1.1, `d8125a4`) ne retrouvait plus la première dans le README du
+// dépôt de développement depuis sa réécriture du 05/11 (la section « Fonctionnalités » était devenue « Les fonctions ») : même motif que l'outil (`b-lisibilite.js`, `analyserReadme`), un titre qui COMMENCE par
+// « Fonctionnalités », « Description », « Présentation », « Objectif », « Usage »... Le README public est lu avec ses deux langues, comme l'outil lit tous les README de la racine.
+{
+  const RUBRICS = [
+    ['ce que fait le widget', /(^|#|=|\*|\n)[^\S\n]*(à quoi|a quoi|description|présentation|presentation|what|objectif|fonctionnalit|usage|utilisation)/i],
+    ['comment le configurer', /(configur|installation|install|paramétr|parametr|mise en place|setup|requiredaccess|niveau d'accès|colonnes)/i],
+    ['ses dépendances', /(dépendance|dependance|dependenc|prérequis|prerequis|requirements|librairie|bibliothèque|aucune dépendance)/i],
+  ];
+  const missing = rel => { const text = read(rel).toLowerCase(); return RUBRICS.filter(([, motif]) => !motif.test(text)).map(([name]) => name); };
+  check('README : l\'analyse des trois rubriques lit bien un titre (un titre « Fonctionnalités » est vu, une phrase qui contient « les fonctions » ne l\'est pas)',
+    RUBRICS[0][1].test('# titre\n\n## fonctionnalités\n') && RUBRICS[0][1].test('## description') && !RUBRICS[0][1].test('# titre\n\n## les fonctions\n\nle détail, fonction par fonction'));
+  check('README du dépôt de développement : les trois rubriques du guide Grist.Gouv (ce que fait le widget, comment le configurer, ses dépendances) y sont', missing('README.md').length === 0, missing('README.md').join(', '));
+  check('README public : les trois rubriques du guide Grist.Gouv y sont (les deux langues lues ensemble, comme l\'outil)', missing('outils/depot-propre/public/README.md').length === 0, missing('outils/depot-propre/public/README.md').join(', '));
+}
+
 summarizeAndExit();

@@ -185,6 +185,9 @@ async function focusEnd() {
     const r = last.getBoundingClientRect();
     return { x: r.left + Math.min(40, r.width / 2), y: r.top + r.height / 2 };
   });
+  // La souris du pas d'avant peut reposer sur le bouton du pinceau (menu au survol, juste au-dessus du texte) : son menu ouvert couvre alors le point du clic. On la pose hors de la barre et on laisse le menu se fermer.
+  await page.mouse.move(680, 250);
+  await page.waitForTimeout(250);
   await page.mouse.click(box.x, box.y);
   await page.keyboard.press('Control+End');
   await page.waitForTimeout(80);

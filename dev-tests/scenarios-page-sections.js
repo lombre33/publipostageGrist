@@ -123,7 +123,7 @@ window.EditorTestSuites.pageSections = (function () {
   const wordText = node => Array.from(node.getElementsByTagName('w:t')).map(t => t.textContent).join('').replace(/ du modèle de test\.$/, '');
   const wordOpensPage = node => node.nodeName === 'w:p' && node.getElementsByTagName('w:pageBreakBefore').length > 0;
   const numberOf = (el, name) => (el && el.getAttribute(name) !== null ? Number(el.getAttribute(name)) : null);
-  // Les sections du document.xml, dans l'ordre : la page de chacune (taille, sens) et ses blocs. Le <w:sectPr> d'une section est dans un paragraphe vide à sa fin : pas du contenu.
+  // Les sections du document.xml, dans l'ordre : la page de chacune (taille, sens) et ses blocs. Le <w:sectPr> d'une section est dans le dernier paragraphe de son texte (docx 9.15.1), ou dans un paragraphe vide à sa fin : ce paragraphe-là est du contenu seulement s'il porte du texte ou ouvre une page (comme dans scenarios-mixed-orientation.js).
   function wordSections(parts) {
     const rels = {};
     Array.from(parts.part('word/_rels/document.xml.rels').getElementsByTagName('Relationship')).forEach(rel => { rels[rel.getAttribute('Id')] = 'word/' + rel.getAttribute('Target'); });
@@ -139,7 +139,7 @@ window.EditorTestSuites.pageSections = (function () {
       if (node.nodeName === 'w:sectPr') { close(node); return; }
       const pPr = node.nodeName === 'w:p' ? Array.from(node.children).find(child => child.nodeName === 'w:pPr') : null;
       const sect = pPr && Array.from(pPr.children).find(child => child.nodeName === 'w:sectPr');
-      if (sect) close(sect); else blocks.push(node);
+      if (sect) { if (wordText(node) || wordOpensPage(node)) blocks.push(node); close(sect); } else blocks.push(node);
     });
     return sections;
   }
