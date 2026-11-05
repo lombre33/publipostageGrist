@@ -294,9 +294,10 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
 .var-loop-filter-empty .var-condition-add { margin-top: 0; }
 .var-loop-two { display: grid; grid-template-columns: minmax(0, 1fr) max-content; gap: 12px; }
 .var-loop-sort-row { display: flex; gap: 6px; }
-.var-loop-two select { height: 26px; min-width: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.var-loop-two select, .var-loop-pick select { height: 26px; min-width: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .var-loop-sort-row select:first-child { flex: 1; }
 .var-loop-two .var-loop-empty-select { width: 100%; }
+.var-loop-pick select { width: 100%; }
 .var-loop-empty-text { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--text); }
 .var-loop-empty-text[hidden] { display: none; }
 /* Le texte « Si aucune ligne » est un champ à variables (js/field-editor.js, celui du « Sinon afficher » d'une valeur : mêmes bordure, police et fond que les champs d'une ligne

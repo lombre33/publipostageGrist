@@ -1838,6 +1838,8 @@ const EditorNodes = (function () {
 
     // La ligne du libellé pour chaque sorte de boucle ; les clés s'écrivent en toutes lettres, pour que la recherche des clés sans usage (dev-tests/verify-code-hygiene.mjs) les voie.
     const IMAGE_LOOP_TAGS = { inline: 'imgLoop.tag.inline', row: 'imgLoop.tag.row', item: 'imgLoop.tag.item', paragraph: 'imgLoop.tag.paragraph' };
+    // Une seule ligne (« Lignes affichées » de la fenêtre Boucle) : la ligne dit laquelle, à la place de « une image par ligne ».
+    const IMAGE_PICK_TAGS = { first: 'imgLoop.tag.onlyFirst', last: 'imgLoop.tag.onlyLast' };
     function applyImageAttrs(view, attrs) {
       // Le z-index négatif ("derrière le texte") est posé sur l'<img> seule, pas le wrapper : sinon la poignée de déplacement (enfant du wrapper)
       // serait entraînée derrière le texte avec lui, devenant impossible à re-sélectionner une fois cachée.
@@ -1887,7 +1889,7 @@ const EditorNodes = (function () {
       if (loop) wrap.dataset.loopRepeat = loop.repeat; else delete wrap.dataset.loopRepeat;
       const notes = [];
       if (condition) notes.push(I18n.t('condText.tag.if', { condition: VariableCondition.describe(condition) }));
-      if (loop) notes.push(I18n.t(IMAGE_LOOP_TAGS[loop.repeat], { table: loop.table }));
+      if (loop) notes.push(I18n.t(loop.pick ? IMAGE_PICK_TAGS[loop.pick] : IMAGE_LOOP_TAGS[loop.repeat], { table: loop.table }));
       if (notes.length) varLabel.dataset.note = notes.join('\n'); else delete varLabel.dataset.note;
       const layered = attrs.layer !== 'normal';
       wrap.classList.toggle('editor-image-layered', layered);

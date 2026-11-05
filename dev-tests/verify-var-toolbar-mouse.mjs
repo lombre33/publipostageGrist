@@ -2978,6 +2978,42 @@ const loopButtonAfter = await imageLoopButton();
 check('la barre de l\'image est revenue (fenêtre fermée) avec le bouton « Boucle » allumé, toujours dans la fenêtre', loopButtonAfter.bar && loopButtonAfter.present && loopButtonAfter.active && !loopButtonAfter.disabled
   && loopButtonAfter.barLeft >= 0 && loopButtonAfter.barRight <= loopButtonAfter.viewport + 0.5, loopButtonAfter);
 await page.screenshot({ path: '/tmp/claude-0/image-boucle-cadre-700x400.png' });
+// « Lignes affichées » (choix « Une seule ligne » d'Antoine pour la boucle de l'image) : le champ est dans la fenêtre, atteignable et non recouvert à 700x400, « Enregistrer » reste visible avec lui,
+// choisir « la première » puis Enregistrer pose le choix et le cadre le dit ; rouverte, la fenêtre le propose.
+const pickButton = await imageLoopButton();
+if (pickButton.onTop) await page.mouse.click(pickButton.x, pickButton.y);
+await page.waitForTimeout(600);
+await page.locator('#var-loop-pick').scrollIntoViewIfNeeded();
+await page.waitForTimeout(200);
+const pickField = await hitTest('#var-loop-pick');
+const pickBox = await hitTest('#var-loop-modal .var-modal-content');
+const pickSave = await hitTest('#var-loop-modal .var-modal-primary');
+check('fenêtre Boucle de l\'image : « Lignes affichées » est atteignable (défilement du corps), non recouvert, dans le panneau, et Enregistrer reste visible et non recouvert à 700x400',
+  pickBox.found && pickBox.inViewport && pickField.found && pickField.inViewport && pickField.onTop && pickSave.found && pickSave.inViewport && pickSave.onTop, { pickBox, pickField, pickSave });
+await page.screenshot({ path: '/tmp/claude-0/image-boucle-lignes-affichees-700x400.png' });
+await page.selectOption('#var-loop-pick', 'first');
+await page.waitForTimeout(700);
+const pickPreview = await page.evaluate(() => Array.from(document.querySelectorAll('#var-loop-modal .var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent));
+check('aperçu : une seule ligne retenue, le paragraphe se répète une seule fois', pickPreview.length > 0 && /se répète 1 fois/.test(pickPreview[0]), pickPreview);
+const pickSaveNow = await hitTest('#var-loop-modal .var-modal-primary');
+if (pickSaveNow.found) await page.mouse.click(pickSaveNow.x, pickSaveNow.y);
+await page.waitForTimeout(400);
+const picked = await page.evaluate(() => {
+  const attrs = [];
+  EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'editorImage') attrs.push(node.attrs); });
+  const label = document.querySelector('.tiptap .editor-image-view .editor-image-var-label');
+  return { loop: attrs[0].loop, line: label.dataset.note, modalOpen: document.getElementById('var-loop-modal').style.display !== 'none' };
+});
+check('Enregistrer (vrai clic) pose « la première » (zone « paragraphe » gardée), ferme la fenêtre, et le cadre dit « Seulement la première ligne de « VcTaches » »',
+  !picked.modalOpen && !!picked.loop && picked.loop.pick === 'first' && picked.loop.repeat === 'paragraph' && picked.line === 'Seulement la première ligne de « VcTaches »', picked);
+const pickAgain = await imageLoopButton();
+if (pickAgain.onTop) await page.mouse.click(pickAgain.x, pickAgain.y);
+await page.waitForTimeout(600);
+const pickReopened = await page.evaluate(() => ({ value: (document.getElementById('var-loop-pick') || {}).value, hidden: (document.querySelector('#var-loop-modal .var-loop-pick') || {}).hidden }));
+check('rouverte, la fenêtre propose « la première »', pickReopened.value === 'first' && pickReopened.hidden === false, pickReopened);
+const pickCancel = await hitTest('#var-loop-modal .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)');
+if (pickCancel.found) await page.mouse.click(pickCancel.x, pickCancel.y);
+await page.waitForTimeout(300);
 const plainLoopFrames = await imageFrames();
 await page.mouse.click(plainLoopFrames[1].x, plainLoopFrames[1].y);
 await page.waitForTimeout(500);

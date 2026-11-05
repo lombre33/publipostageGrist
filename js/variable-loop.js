@@ -355,6 +355,13 @@ const VariableLoop = (function () {
     const filterLabel = el('div', 'var-loop-label');
     const filterBox = el('div', 'var-loop-filter');
 
+    // « Lignes affichées » : réservé à l'image (toutes les lignes, ou une seule - la première ou la dernière - après le filtre et le tri), cf. renderPick.
+    const pickLabel = el('label', 'var-loop-label');
+    pickLabel.htmlFor = 'var-loop-pick';
+    const pickSelect = el('select');
+    pickSelect.id = 'var-loop-pick';
+    const pickRow = el('div', 'var-loop-pick');
+    pickRow.append(pickLabel, pickSelect);
     const sortLabel = el('label', 'var-loop-label');
     sortLabel.htmlFor = 'var-loop-sort';
     const sortColumn = el('select');
@@ -386,9 +393,9 @@ const VariableLoop = (function () {
     const { box: previewArea, lines: [currentLine, statsLine] } = VariableModal.previewBox(2);
     const { first: removeBtn, cancel: cancelBtn, ok: saveBtn } = win.addButtons('var-modal-danger');
 
-    win.body.append(intro, sourceLabel, sourceMode, sourceBox, repeatLabelEl, repeatSeg, repeatNote, separators.row, filterLabel, filterBox, two, emptyTextRow, previewArea);
+    win.body.append(intro, sourceLabel, sourceMode, sourceBox, repeatLabelEl, repeatSeg, repeatNote, separators.row, filterLabel, filterBox, two, emptyTextRow, pickRow, previewArea);
     refs = {
-      title: win.title, intro, sourceLabel, sourceMode, sourceText, sourceEdit, sourceBy, sourceByBox, scopeSelect, scopeBox, repeatLabelEl, repeatSeg, repeatNote, separators, filterLabel, filterBox, sortLabel,
+      title: win.title, intro, sourceLabel, sourceMode, sourceText, sourceEdit, sourceBy, sourceByBox, scopeSelect, scopeBox, repeatLabelEl, repeatSeg, repeatNote, separators, filterLabel, filterBox, pickRow, pickLabel, pickSelect, sortLabel,
       sortColumn, sortDirection, emptyLabelEl, emptySelect, emptyTextRow, emptyText, currentLine, statsLine, removeBtn, cancelBtn, saveBtn,
     };
 
@@ -408,7 +415,7 @@ const VariableLoop = (function () {
 
   // Les réactions de la fenêtre.
   function wireModal() {
-    const { sourceEdit, sourceBy, scopeSelect, sortColumn, sortDirection, emptySelect, emptyText, removeBtn, cancelBtn, saveBtn } = refs;
+    const { sourceEdit, sourceBy, scopeSelect, pickSelect, sortColumn, sortDirection, emptySelect, emptyText, removeBtn, cancelBtn, saveBtn } = refs;
     sourceEdit.addEventListener('click', async () => {
       if (!state) return;
       const changed = await Variables.editLinkRule(state.source.table);
@@ -421,6 +428,7 @@ const VariableLoop = (function () {
       state.source = activeSource();
       renderSort();
     });
+    pickSelect.addEventListener('change', () => { if (state) state.working.pick = pickSelect.value === 'first' || pickSelect.value === 'last' ? pickSelect.value : 'all'; });
     sortColumn.addEventListener('change', () => {
       if (!state) return;
       state.working.sortColumn = sortColumn.value;
@@ -662,6 +670,13 @@ const VariableLoop = (function () {
     rulesBox.appendChild(foot);
     filterBox.append(modeRow, rulesBox);
   }
+  // « Lignes affichées » : seulement pour l'image (la fenêtre d'une bulle écrit toujours toutes les lignes) ; le choix s'applique après le filtre et le tri.
+  function renderPick() {
+    const { pickRow, pickSelect } = refs;
+    pickRow.hidden = !isImageNode(state.node);
+    pickSelect.replaceChildren(option('all', I18n.t('varLoop.pick.all')), option('first', I18n.t('varLoop.pick.first')), option('last', I18n.t('varLoop.pick.last')));
+    pickSelect.value = state.working.pick;
+  }
   function renderSort() {
     const { sortColumn } = refs;
     const table = state.source.table;
@@ -708,6 +723,7 @@ const VariableLoop = (function () {
     const filter = ConditionRules.plainCondition({ mode: w.filterMode, rules: w.rules });
     if (filter) loop.filter = filter;
     if (w.sortColumn || w.sortDirection === 'desc') loop.sort = { column: w.sortColumn, direction: w.sortDirection };
+    if (w.pick !== 'all') loop.pick = w.pick;
     loop.empty = w.empty;
     if (w.empty === 'text') loop.emptyText = w.emptyText;
     if (w.repeat === 'inline' && !isImageNode(state.node)) { loop.separator = w.separator; loop.lastSeparator = w.lastSeparator; }
@@ -906,6 +922,7 @@ const VariableLoop = (function () {
       by: byColumn(source),
       filterMode: filter ? filter.mode : 'all',
       rules: filter ? JSON.parse(JSON.stringify(filter.rules)) : [],
+      pick: existing && existing.pick ? existing.pick : 'all',
       sortColumn: existing ? existing.sort.column : '',
       sortDirection: existing ? existing.sort.direction : 'asc',
       empty: keepEmpty ? existing.empty : LoopRules.defaultEmpty(repeat, place.inCell),
@@ -943,6 +960,7 @@ const VariableLoop = (function () {
     r.separators.sepInput.value = state.working.separator;
     r.separators.lastInput.value = state.working.lastSeparator;
     r.filterLabel.textContent = I18n.t('varLoop.section.filter');
+    r.pickLabel.textContent = I18n.t('varLoop.section.pick');
     r.sortLabel.textContent = I18n.t('varLoop.section.sort');
     r.emptyLabelEl.textContent = I18n.t('varLoop.section.empty');
     r.emptyText.label.textContent = I18n.t('varLoop.empty.textLabel');
@@ -958,6 +976,7 @@ const VariableLoop = (function () {
     renderSource();
     renderRepeat();
     renderFilter();
+    renderPick();
     renderSort();
     renderEmpty();
     // La barre flottante de la bulle reste masquée tant que la fenêtre est ouverte ; elle est sous le voile de toute façon (--z-floating-toolbar,

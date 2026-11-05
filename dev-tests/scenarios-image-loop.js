@@ -362,6 +362,89 @@
     },
   });
 
+  cases.push({
+    id: 'imageloop_pick_one_row_keeps_the_first_or_the_last_after_the_filter_and_the_sort',
+    description: 'Le choix « Une seule ligne » de la boucle d’une image garde la première ou la dernière ligne APRÈS le filtre et le tri (sans tri : l’ordre des lignes liées), en Lecture : une seule image dans la phrase, une seule copie du paragraphe ; « Si aucune ligne » vaut toujours quand rien n’est retenu ; une boucle sans ce choix, ou avec un choix inconnu, garde toutes les lignes',
+    run: async (h) => {
+      await seed(h, '<p></p>');
+      const sentence = loop => '<p>Avant ' + imageHtml(LINKED, 'Logo', loop) + ' après</p>';
+      const sortedAsc = { column: 'Ordre', direction: 'asc' };
+      const firstRaw = await readBox(sentence(Object.assign({ pick: 'first' }, LOOP_INLINE)));
+      const lastRaw = await readBox(sentence(Object.assign({ pick: 'last' }, LOOP_INLINE)));
+      const firstSorted = await readBox(sentence(Object.assign({ pick: 'first', sort: sortedAsc }, LOOP_INLINE)));
+      const lastSorted = await readBox(sentence(Object.assign({ pick: 'last', sort: sortedAsc }, LOOP_INLINE)));
+      const filtered = await readBox(sentence(Object.assign({ pick: 'first', filter: { mode: 'all', rules: [{ column: 'Nom', operator: '=', value: 'Alpha' }] } }, LOOP_INLINE)));
+      const unknown = await readBox(sentence(Object.assign({ pick: 'middle' }, LOOP_INLINE)));
+      const all = await readBox(sentence(Object.assign({ pick: 'all' }, LOOP_INLINE)));
+      const zone = await readBox('<p>Partenaire ' + nameBadge + ' : ' + imageHtml(LINKED, 'Logo', Object.assign({ pick: 'last', sort: sortedAsc }, LOOP_PARAGRAPH)) + '</p>');
+      await setRecord(h, NO_PARTNER);
+      const none = await readBox(sentence(Object.assign({ pick: 'first', empty: 'hide' }, LOOP_INLINE)) + '<p>Suite</p>');
+      await setRecord(h, RECORDS[0]);
+      const stored = LoopRules.normalizeLoop({ repeat: 'inline', table: LINKED, pick: 'last' });
+      const checks = {
+        firstWithoutSort: same(attachmentsOf(firstRaw), ['31']),
+        lastWithoutSort: same(attachmentsOf(lastRaw), ['32']),
+        sortFirst: same(attachmentsOf(firstSorted), ['32']),
+        sortLast: same(attachmentsOf(lastSorted), ['31']),
+        filterThenPick: same(attachmentsOf(filtered), ['31']),
+        unknownKeepsAll: same(attachmentsOf(unknown), ['31', '32']) && same(attachmentsOf(all), ['31', '32']),
+        oneCopyOfTheParagraph: Array.from(zone.querySelectorAll('p')).map(p => p.textContent.trim()).join('|') === 'Partenaire Alpha :' && same(attachmentsOf(zone), ['31']),
+        emptyStillApplies: attachmentsOf(none).length === 0 && textOf(none) === 'Suite',
+        readBack: stored.pick === 'last' && !('pick' in LoopRules.normalizeLoop({ repeat: 'inline', table: LINKED })) && !('pick' in LoopRules.normalizeLoop({ repeat: 'inline', table: LINKED, pick: 'all' })),
+      };
+      const failed = failedOf(checks);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, firstRaw: attachmentsOf(firstRaw), lastRaw: attachmentsOf(lastRaw), zone: zone.innerHTML }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'imageloop_window_has_the_rows_shown_choice_for_an_image_only_and_saves_it_in_one_undo',
+    description: 'La fenêtre Boucle d’une image a le champ « Lignes affichées » (toutes, la première, la dernière ; toutes par défaut) ; choisir « la première » puis Enregistrer le pose en un seul Annuler, l’aperçu compte une seule image, le cadre dit « Seulement la première ligne de … » (français et anglais) ; la fenêtre d’une bulle n’a pas ce champ',
+    run: async (h) => {
+      await seed(h, '<p>Logos : ' + imageHtml(LINKED, 'Logo', LOOP_INLINE) + '</p><p>' + nameBadge + '</p>');
+      await selectImage(h, 0);
+      pressLoop();
+      await h.sleep(400);
+      const row = document.querySelector('#var-loop-modal .var-loop-pick');
+      const select = document.getElementById('var-loop-pick');
+      const shown = windowShown() && !!row && !row.hidden && row.getClientRects().length > 0;
+      const choices = select ? Array.from(select.options).map(o => o.value) : [];
+      const before = select ? select.value : null;
+      if (select) { select.value = 'first'; select.dispatchEvent(new Event('change', { bubbles: true })); }
+      await h.sleep(700);
+      const preview = Array.from(document.querySelectorAll('#var-loop-modal .var-condition-debug-line')).filter(l => !l.hidden).map(l => l.textContent);
+      if (windowShown()) loopModal().querySelector('.var-modal-primary').click();
+      await h.sleep(200);
+      const saved = attrsOf(0);
+      const notes = {};
+      for (const lang of ['fr', 'en']) {
+        await inLang(lang, async () => { Editor.setHTML('<p></p>'); await h.sleep(100); Editor.setHTML('<p>' + imageHtml(LINKED, 'Logo', Object.assign({ pick: 'first' }, LOOP_INLINE)) + '</p>'); await h.sleep(250); notes[lang] = imageViews()[0].querySelector('.editor-image-var-label').dataset.note; });
+      }
+      Editor.setHTML('<p>Logos : ' + imageHtml(LINKED, 'Logo', Object.assign({ pick: 'last' }, LOOP_INLINE)) + '</p><p>' + nameBadge + '</p>');
+      await h.sleep(250);
+      const kept = attrsOf(0).loop.pick;
+      await selectImage(h, 0);
+      ed().commands.undo();
+      await h.sleep(100);
+      // La fenêtre d'une bulle : pas de champ « Lignes affichées ».
+      let badgePos = -1;
+      ed().state.doc.descendants((node, pos) => { if (node.type.name === 'varBadge' && badgePos < 0) badgePos = pos; });
+      VariableLoop.openAt(ed(), badgePos);
+      await h.sleep(400);
+      const badgeRow = document.querySelector('#var-loop-modal .var-loop-pick');
+      const badgeHidden = !badgeRow || badgeRow.hidden || badgeRow.getClientRects().length === 0;
+      const checks = {
+        shown, threeChoices: same(choices, ['all', 'first', 'last']), allByDefault: before === 'all',
+        previewOneImage: preview.some(l => /1 image/.test(l)),
+        savedFirst: !!saved && !!saved.loop && saved.loop.pick === 'first' && saved.loop.repeat === 'inline',
+        frameFr: notes.fr === 'Seulement la première ligne de « ' + LINKED + ' »', frameEn: notes.en === 'Only the first “' + LINKED + '” row',
+        existingPickIsOffered: kept === 'last', badgeWindowHasNoPickField: badgeHidden,
+      };
+      const failed = failedOf(checks);
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, choices, before, preview, saved: saved && saved.loop, notes }) : 'ok' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.imageLoop = cases;
 })();

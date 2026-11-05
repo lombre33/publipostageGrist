@@ -4,7 +4,7 @@
 //
 // La boucle vit dans l'attribut `loop` du nœud varBadge - ou editorImage, l'image d'une colonne Pièces jointes, pour sa propre boucle - (js/editor-nodes.js, sérialisé en data-loop), comme la condition d'affichage :
 //   { repeat: 'inline'|'row'|'item'|'paragraph', table, via: null|{ table, column }, within: null|'Table', by: null|'Colonne', all: null|'view'|'table'|'linked',
-//     filter: null|{ mode, rules }, sort: { column, direction }, empty, emptyText, separator, lastSeparator }
+//     filter: null|{ mode, rules }, sort: { column, direction }, pick?: 'first'|'last', empty, emptyText, separator, lastSeparator }
 // - `table` : la table dont les lignes sont parcourues. `via` : une colonne Liste de références de la table de la page (les fiches qu'elle référence,
 //   dans l'ordre de la cellule) ; sans `via`, les lignes de `table` trouvées par la règle de liaison du document (Variables.resolveLinkedRows, la
 //   même que celle qui affiche aujourd'hui toutes les valeurs jointes par des virgules).
@@ -33,6 +33,8 @@
 // ligne » écrit (js/reader-mode.js:resolveSmartChips) ; dans une zone répétée dans une autre, celui de la zone la plus proche.
 const LoopRules = (function () {
   const REPEATS = ['inline', 'row', 'item', 'paragraph'];
+  // Les lignes retenues APRÈS le filtre et le tri : toutes (par défaut, rien n'est écrit), ou la première / la dernière seule (le choix « Une seule ligne » de la fenêtre d'une image).
+  const PICKS = ['first', 'last'];
   const ALL_SCOPES = ['view', 'table', 'linked'];
   // Choix « Si aucune ligne » proposés pour chaque zone, le premier étant celui par défaut (sauf 'inline' dans une cellule de tableau, cf.
   // defaultEmpty).
@@ -58,12 +60,15 @@ const LoopRules = (function () {
     // Choix absent ou inconnu (document modifié à la main) : 'blank' pour une bulle seule, le choix par défaut de la zone sinon - jamais un
     // paragraphe masqué que personne n'a demandé.
     const empty = EMPTY_MODES[repeat].indexOf(raw.empty) !== -1 ? raw.empty : defaultEmpty(repeat, repeat === 'inline');
-    return {
+    const loop = {
       repeat, table: String(raw.table), via, within, by: within && raw.by ? String(raw.by) : null, all, filter: ConditionRules.normalizeCondition(raw.filter), sort, empty,
       emptyText: raw.emptyText == null ? '' : String(raw.emptyText),
       separator: typeof raw.separator === 'string' ? raw.separator : ', ',
       lastSeparator: typeof raw.lastSeparator === 'string' ? raw.lastSeparator : null,
     };
+    // Absent pour « toutes les lignes » : une boucle d'avant ce choix se relit à l'identique.
+    if (PICKS.indexOf(raw.pick) !== -1) loop.pick = raw.pick;
+    return loop;
   }
   function parseLoop(json) {
     if (!json) return null;
@@ -312,7 +317,8 @@ const LoopRules = (function () {
       : await linkedItems(loop, tableId, record, fetchRows);
     if (found.error) return { error: found.error, items: [], total: 0 };
     const kept = loop.filter ? found.items.filter(item => filterHolds(loop, item.row)) : found.items;
-    const result = { items: sortItems(loop, kept), total: found.items.length };
+    const sorted = sortItems(loop, kept);
+    const result = { items: loop.pick === 'first' ? sorted.slice(0, 1) : loop.pick === 'last' ? sorted.slice(-1) : sorted, total: found.items.length };
     if (loop.all) { result.tableTotal = found.tableTotal; if (found.linked) result.linked = found.linked; }
     return result;
   }
