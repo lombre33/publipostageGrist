@@ -8,7 +8,7 @@
 
 C'est un widget personnalisé conçu par [Grist Factory](https://grist-factory.fr), libre (GPL v3) et sans serveur : une simple page statique.
 
-> **Version {{VERSION}}**, publiée le {{DATE_FR}}. Elle succède à la version 1.0.0 du 4 novembre 2026, la première version stable : ce qui change est dans la [note de version](PATCH_NOTES.md), et la bêta reste servie à [une adresse à part](#installation-dans-grist).
+> **Version {{VERSION}}**, publiée le {{DATE_FR}}. Elle succède à la version 1.1.0 du 5 novembre 2026, qui suivait la première version stable, la 1.0.0 du 4 novembre : ce qui change est dans la [note de version](PATCH_NOTES.md), et la bêta reste servie à [une adresse à part](#installation-dans-grist).
 > Essayez le widget sur une copie de votre document avant de l'utiliser sur des données importantes : des défauts peuvent subsister. Les [limites connues](#limites-connues) et la [roadmap](#roadmap) disent ce qui manque encore.
 
 **[Installer](#installation-dans-grist)** · [Visite en images](#visite-en-images) · [Toutes les fonctions](#toutes-les-fonctions) · [Sécurité](#sécurité-et-permissions) · [Limites connues](#limites-connues) · [Contribuer](#contribuer)
@@ -346,7 +346,7 @@ Les bibliothèques et les polices tierces gardent leurs propres licences : voir 
 
 It is a custom widget made by [Grist Factory](https://grist-factory.fr), free software (GPL v3) with no server: a plain static page.
 
-> **Version {{VERSION}}**, released on {{DATE_EN}}. It succeeds version 1.0.0 of November 4, 2026, the first stable version: what changes is in the [release notes](PATCH_NOTES.md), and the beta is still served at [a separate address](#installing-in-grist).
+> **Version {{VERSION}}**, released on {{DATE_EN}}. It succeeds version 1.1.0 of November 5, 2026, which followed the first stable version, 1.0.0 of November 4: what changes is in the [release notes](PATCH_NOTES.md), and the beta is still served at [a separate address](#installing-in-grist).
 > Try the widget on a copy of your document before using it on important data: defects may remain. The [known limitations](#known-limitations) and the [roadmap](#roadmap-1) say what is still missing.
 
 **[Install](#installing-in-grist)** · [Tour in pictures](#tour-in-pictures) · [All the features](#all-the-features) · [Security](#security-and-permissions) · [Known limitations](#known-limitations) · [Contributing](#contributing)

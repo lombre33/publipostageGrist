@@ -7,6 +7,21 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et les v
 
 ## [{{VERSION}}] - {{DATE}}
 
+Correctifs de la version 1.1.0, issus de l'audit de la 1.1 du 5 novembre : le cadre grisé d'un graphique retrouve son info-bulle, la barre d'une image tient dans un cadre étroit, et l'aperçu du sommaire suit le modèle ouvert. Aucune fonction n'est ajoutée. La [note de version](PATCH_NOTES.md) en donne la liste, une puce par correction.
+
+*🇬🇧 Fixes to version 1.1.0, from the audit of 1.1 on November 5: the greyed frame of a chart gets its tooltip back, an image's toolbar fits in a narrow frame, and the table of contents preview follows the opened template. No feature is added. The [release notes](PATCH_NOTES.md) list them, one bullet per fix.*
+
+### Corrigé
+
+- **Le cadre grisé d'un graphique retrouve son info-bulle** (audit de la 1.1, 05/11) : sans l'extension des graphiques (hors Grist Factory Suite), le graphique d'un modèle reste un cadre grisé qui dit, en info-bulle, quelle extension lui manque ; depuis la 1.1.0, ce texte avait disparu. Le rouge d'une image dont la colonne a disparu garde le sien.
+  *🇬🇧 The greyed frame of a chart gets its tooltip back (audit of 1.1, 05/11): without the charts extension (outside Grist Factory Suite), a template's chart stays a greyed frame that says, in a tooltip, which extension it lacks; since 1.1.0 that text had disappeared. The red of an image whose column has disappeared keeps its own.*
+- **La barre d'une image liée à une colonne tient dans un cadre étroit** (audit de la 1.1, 05/11) : avec les boutons « Condition d'affichage » et « Boucle » de la 1.1, la barre mesurait 573 px et débordait à droite d'un cadre plus étroit (celui de 560 px de Grist Factory Suite, par exemple). Elle passe maintenant à la ligne, comme la barre d'un tableau, et reste dans le cadre.
+  *🇬🇧 The toolbar of an image linked to a column fits in a narrow frame (audit of 1.1, 05/11): with the 1.1 "Display condition" and "Loop" buttons, the toolbar was 573 px wide and ran past the right edge of a narrower frame (Grist Factory Suite's 560 px one, for instance). It now wraps onto a second row, like a table's toolbar, and stays inside the frame.*
+- **L'aperçu du sommaire suit le modèle ouvert** (audit de la 1.1, 05/11) : quand on ouvrait un modèle à la place d'un autre qui avait déjà un sommaire, l'aperçu du sommaire dans l'éditeur gardait le texte d'attente ou les titres du modèle d'avant. Il se redessine dès que le document change et montre les titres du modèle ouvert.
+  *🇬🇧 The table of contents preview follows the opened template (audit of 1.1, 05/11): when you opened a template in place of another that already had a table of contents, the preview in the editor kept the waiting text or the previous template's headings. It now redraws as soon as the document changes and shows the opened template's headings.*
+
+## [1.1.0] - 2026-11-05
+
 Mise à jour de la version stable 1.0.0 : la mise en forme conditionnelle, les images liées à une colonne Pièces jointes (condition d'affichage, boucle, colonne disparue, pièce jointe qui n'est pas une image), les références entre tables (un lien entre deux tables qui passe par plusieurs références, une image choisie de Référence en Référence) et deux corrections (le gras du PDF, le collage d'une variable sous Windows). La [note de version](PATCH_NOTES.md) en donne la liste, une puce par fonction.
 
 *🇬🇧 An update to the stable version 1.0.0: conditional formatting, images linked to an attachments column (display condition, loop, disappeared column, an attachment that is not an image), references between tables (a link between two tables that goes through several references, an image picked from Reference to Reference) and two fixes (bold in the PDF, pasting a variable on Windows). The [release notes](PATCH_NOTES.md) list them, one bullet per feature.*
@@ -2765,6 +2780,10 @@ vectoriel et en lot, gestion multi-modèles, galerie, interface bilingue.
 ## [{{VERSION}}] - {{DATE}} (English)
 
 The English text of each entry of this version is the italic line that follows its French entry, in the section of this version at the top of the file.
+
+## [1.1.0] - 2026-11-05 (English)
+
+The English text of each entry of this version is the italic line that follows its French entry, in the [1.1.0] section of this file.
 
 ## [1.0.0] - 2026-11-04 (English)
 

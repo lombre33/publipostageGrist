@@ -2,12 +2,13 @@
 
 *🇬🇧 An English version of this document is available [below](#publipostage-release-notes-english).*
 
-**Publipostage+ {{VERSION}}**, publiée le {{DATE_FR}} : une mise à jour de la version stable 1.0.0 du 4 novembre 2026. La première partie liste ce qui change depuis la 1.0.0, une puce par fonction ; la seconde garde la note de la 1.0.0, pour qui vient de la bêta 1.0.0-beta.1 du 5 octobre 2026. Le [journal des modifications](CHANGELOG.md) donne le détail de chaque entrée.
+**Publipostage+ {{VERSION}}**, publiée le {{DATE_FR}} : une mise à jour de la version 1.1.0 du 5 novembre 2026, elle-même une mise à jour de la version stable 1.0.0 du 4 novembre 2026. La première partie liste ce que la 1.1.2 corrige dans la 1.1.0, une puce par correction ; la deuxième garde la note de la 1.1, ce qu'elle ajoute à la 1.0.0, une puce par fonction ; la troisième garde la note de la 1.0.0, pour qui vient de la bêta 1.0.0-beta.1 du 5 octobre 2026. Le [journal des modifications](CHANGELOG.md) donne le détail de chaque entrée.
 
 Elle décrit le widget seul, installé dans Grist. Ce qui demande en plus Grist Factory Suite est à part, dans la dernière section.
 
 ## Sommaire
 
+- [Corrections de la version 1.1.2](#corrections-de-la-version-112)
 - [Nouveautés de la version 1.1](#nouveautés-de-la-version-11)
   - [Mise en forme conditionnelle](#mise-en-forme-conditionnelle)
   - [Images et pièces jointes](#images-et-pièces-jointes)
@@ -31,6 +32,14 @@ Elle décrit le widget seul, installé dans Grist. Ce qui demande en plus Grist 
   - [Ce qui change pour qui vient de la bêta](#ce-qui-change-pour-qui-vient-de-la-bêta)
   - [Corrections](#corrections)
 - [À part : Grist Factory Suite](#à-part--grist-factory-suite)
+
+## Corrections de la version 1.1.2
+
+Ce que la 1.1.2 corrige dans la 1.1.0, une puce par correction. Aucune fonction n'est ajoutée.
+
+- **Le cadre grisé d'un graphique** : sans l'extension des graphiques (hors Grist Factory Suite), le graphique d'un modèle reste un cadre grisé qui dit, en info-bulle, quelle extension lui manque ; depuis la 1.1.0, ce texte avait disparu. Le rouge d'une image dont la colonne a disparu garde le sien.
+- **La barre d'une image liée à une colonne** : avec les boutons « Condition d'affichage » et « Boucle » de la 1.1, la barre mesurait 573 px et débordait à droite d'un cadre plus étroit (celui de 560 px de Grist Factory Suite, par exemple). Elle passe maintenant à la ligne, comme la barre d'un tableau, et reste dans le cadre.
+- **L'aperçu du sommaire** : en ouvrant un modèle à la place d'un autre qui avait déjà un sommaire, l'aperçu du sommaire dans l'éditeur gardait le texte d'attente ou les titres du modèle d'avant. Il se redessine dès que le document change et montre les titres du modèle ouvert.
 
 ## Nouveautés de la version 1.1
 
@@ -334,12 +343,13 @@ Quelques fonctions ne marchent que lorsque le widget tourne dans Grist Factory S
 
 *🇫🇷 La version française de ce document est [au début de cette page](#publipostage--notes-de-version).*
 
-**Publipostage+ {{VERSION}}**, released on {{DATE_EN}}: an update to the stable version 1.0.0 of 4 November 2026. The first part lists what changes since 1.0.0, one bullet per feature; the second keeps the 1.0.0 note, for anyone coming from the beta 1.0.0-beta.1 of 5 October 2026. The [changelog](CHANGELOG.md) gives the detail of each entry.
+**Publipostage+ {{VERSION}}**, released on {{DATE_EN}}: an update to version 1.1.0 of 5 November 2026, itself an update to the stable version 1.0.0 of 4 November 2026. The first part lists what 1.1.2 fixes in 1.1.0, one bullet per fix; the second keeps the 1.1 note, what it adds to 1.0.0, one bullet per feature; the third keeps the 1.0.0 note, for anyone coming from the beta 1.0.0-beta.1 of 5 October 2026. The [changelog](CHANGELOG.md) gives the detail of each entry.
 
 It describes the widget on its own, installed in Grist. What also needs Grist Factory Suite is set apart, in the last section.
 
 ## Contents
 
+- [Fixes in version 1.1.2](#fixes-in-version-112)
 - [What's new in version 1.1](#whats-new-in-version-11)
   - [Conditional formatting](#conditional-formatting)
   - [Images and attachments](#images-and-attachments)
@@ -363,6 +373,14 @@ It describes the widget on its own, installed in Grist. What also needs Grist Fa
   - [What changes if you come from the beta](#what-changes-if-you-come-from-the-beta)
   - [Fixes](#fixes)
 - [Set apart: Grist Factory Suite](#set-apart-grist-factory-suite)
+
+## Fixes in version 1.1.2
+
+What 1.1.2 fixes in 1.1.0, one bullet per fix. No feature is added.
+
+- **The greyed frame of a chart**: without the charts extension (outside Grist Factory Suite), a template's chart stays a greyed frame that says, in a tooltip, which extension it lacks; since 1.1.0 that text had disappeared. The red of an image whose column has disappeared keeps its own.
+- **The toolbar of an image linked to a column**: with the 1.1 "Display condition" and "Loop" buttons, the toolbar was 573 px wide and ran past the right edge of a narrower frame (Grist Factory Suite's 560 px one, for instance). It now wraps onto a second row, like a table's toolbar, and stays inside the frame.
+- **The table of contents preview**: when you opened a template in place of another that already had a table of contents, the preview in the editor kept the waiting text or the previous template's headings. It now redraws as soon as the document changes and shows the opened template's headings.
 
 ## What's new in version 1.1
 
