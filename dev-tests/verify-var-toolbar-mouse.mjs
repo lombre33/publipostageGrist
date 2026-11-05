@@ -2631,7 +2631,7 @@ check('Lecture : « 120 000,00 % » (1200 fois cent, deux décimales)', readPerc
 
 // Puce « Heure actuelle » (carte « Les deux » d'Antoine, 21/10) : sa barre dans le document, à la vraie souris et à 700x400. Un clic sur la puce ouvre la liste « Heure » (23:30, 23 h 30,
 // 11:30 PM, 11:30pm), atteignable dans le panneau et sans recouvrir la puce ; le choix se range dans la puce (data-chip-time), la barre reste ouverte et la Lecture écrit l'heure ainsi ;
-// « 23:30 » retire le réglage ; la puce « Date du jour » n'a pas de barre. L'heure de la page est figée à 23 h 30 pour que la Lecture ait un texte sûr.
+// « 23:30 » retire le réglage ; la puce « Date du jour » n'a que le bouton de mise en forme conditionnelle, sans la liste « Heure ». L'heure de la page est figée à 23 h 30 pour que la Lecture ait un texte sûr.
 await page.evaluate(() => {
   const RealDate = Date;
   const frozen = new RealDate(2026, 8, 12, 23, 30, 0).getTime();
@@ -2658,7 +2658,15 @@ const chipBar = () => page.evaluate(() => {
 const dateChipBox = await hitTest(DATE_CHIP);
 await page.mouse.click(dateChipBox.x, dateChipBox.y);
 await page.waitForTimeout(400);
-check('clic sur la puce « Date du jour » : aucune barre', (await chipBar()) === null && (await page.evaluate(() => !document.querySelector('.v2-varfmt-toolbar.visible'))));
+// La date du jour n'a pas la liste « Heure », mais sa barre porte le bouton « Mise en forme conditionnelle » (lot 3 : puces) ; la barre d'une bulle ne s'ouvre pas.
+const dateChipBar = await page.evaluate(() => {
+  const bar = document.querySelector('.v2-timechip-toolbar.visible');
+  if (!bar) return null;
+  const select = bar.querySelector('select[data-role="chip-time"]');
+  const button = bar.querySelector('button[data-action="chip-style"]');
+  return { selectHidden: select.hidden, button: !!button && button.getClientRects().length > 0, bubbleBars: document.querySelectorAll('.v2-varfmt-toolbar.visible').length };
+});
+check('clic sur la puce « Date du jour » : sa barre n\'a que « Mise en forme conditionnelle » (pas de liste « Heure »), sans la barre d\'une bulle', !!dateChipBar && dateChipBar.selectHidden && dateChipBar.button && dateChipBar.bubbleBars === 0, dateChipBar);
 const timeChipBox = await hitTest(TIME_CHIP);
 await page.mouse.click(timeChipBox.x, timeChipBox.y);
 await page.waitForTimeout(500);
