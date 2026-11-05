@@ -8,7 +8,7 @@
 
 C'est un widget personnalisé conçu par [Grist Factory](https://grist-factory.fr), libre (GPL v3) et sans serveur : une simple page statique.
 
-> **Version {{VERSION}}**, publiée le {{DATE_FR}}. Elle succède à la bêta : ce qui change pour qui en vient est dans la [note de version](PATCH_NOTES.md), et la bêta reste servie à [une adresse à part](#installation-dans-grist).
+> **Version {{VERSION}}**, publiée le {{DATE_FR}}. Elle succède à la version 1.0.0 du 4 novembre 2026, la première version stable : ce qui change est dans la [note de version](PATCH_NOTES.md), et la bêta reste servie à [une adresse à part](#installation-dans-grist).
 > Essayez le widget sur une copie de votre document avant de l'utiliser sur des données importantes : des défauts peuvent subsister. Les [limites connues](#limites-connues) et la [roadmap](#roadmap) disent ce qui manque encore.
 
 **[Installer](#installation-dans-grist)** · [Visite en images](#visite-en-images) · [Toutes les fonctions](#toutes-les-fonctions) · [Sécurité](#sécurité-et-permissions) · [Limites connues](#limites-connues) · [Contribuer](#contribuer)
@@ -18,7 +18,7 @@ C'est un widget personnalisé conçu par [Grist Factory](https://grist-factory.f
 | | |
 |---|---|
 | **Écrire** | Un éditeur complet : mise en forme, tableaux, images, en-têtes et pieds de page, notes de bas de page, sommaire, aperçu A4 fidèle (ce que vous voyez est ce que vous obtenez). |
-| **Remplir** | Des variables de toutes les tables du document, des conditions « Et » / « Ou », des boucles, des calculs et des puces (date du jour, heure, e-mail de la personne connectée). |
+| **Remplir** | Des variables de toutes les tables du document, des conditions « Et » / « Ou », une mise en forme conditionnelle (couleur, fond, gras… selon la ligne), des boucles, des calculs et des puces (date du jour, heure, e-mail de la personne connectée). |
 | **Lire** | Le document rempli avec la ligne choisie dans Grist, en lecture simple ou épurée. |
 | **Exporter** | PDF vectoriel (le texte reste sélectionnable), PDF protégé, Word, Excel, Markdown, HTML, ou e-mail prérempli : une ligne à la fois ou en lot. |
 | **Réutiliser** | Plusieurs modèles par document Grist, une galerie de 21 modèles prêts à l'emploi, des macro-modèles qui assemblent une page de garde et des annexes. |
@@ -38,7 +38,7 @@ Ouvert seul dans un onglet du navigateur, le widget ne fonctionne pas : il le di
 
 **Premiers pas** : ouvrez le menu « Nouveau modèle » puis « Nouveau document » (ou « Créer à partir d'un modèle… » pour partir de la galerie), écrivez votre texte et tapez `#` pour insérer une variable. Passez en mode lecture pour voir le document rempli avec la ligne sélectionnée, puis exportez-le.
 
-**Garder la bêta** : si un ancien modèle ne se rouvre pas bien dans la V1, la bêta 1.0.0-beta.1 reste servie, telle quelle et sans correctif, à `https://grist-factory.github.io/Publipostage-Plus/beta/` (dans Grist, changez l'adresse du widget personnalisé). Le retour est sûr tant que le modèle n'a pas été enregistré avec la V1 : la bêta efface ce qu'elle ne connaît pas (signets, exposants et indices, « Sinon afficher »). Elle ne reçoit plus de mise à jour.
+**Garder la bêta** : si un ancien modèle ne se rouvre pas bien dans la version actuelle, la bêta 1.0.0-beta.1 reste servie, telle quelle et sans correctif, à `https://grist-factory.github.io/Publipostage-Plus/beta/` (dans Grist, changez l'adresse du widget personnalisé). Le retour est sûr tant que le modèle n'a pas été enregistré avec la version actuelle : la bêta efface ce qu'elle ne connaît pas (signets, exposants et indices, « Sinon afficher »). Elle ne reçoit plus de mise à jour.
 
 ## Visite en images
 
@@ -127,7 +127,7 @@ La [note de version](PATCH_NOTES.md) en donne la liste complète, une puce par f
 - **Structure** : titres numérotés (dont « Article 1 »), un style par niveau de titre, sommaire cliquable, sauts de page, notes de bas de page, signets, filigrane.
 - **Listes** à puces, numérotées et de tâches à cocher.
 - **Tableaux** : fusion et scission de cases, bordures, alignement vertical, fond de case, légende, lettres et numéros comme dans une grille. Zones à deux colonnes.
-- **Images** collées, ajoutées par adresse ou prises dans une colonne Pièces jointes de Grist ; flottantes, devant ou derrière le texte, avec opacité et légende. Une image hébergée sur un autre site n'apparaît qu'après un clic sur « Afficher ».
+- **Images** collées, ajoutées par adresse ou prises dans une colonne Pièces jointes de Grist (d'une table liée aussi, avec une condition d'affichage ou une boucle, une image par ligne liée ; un fichier qui n'est pas une image est remplacé par un message qui dit son nom) ; flottantes, devant ou derrière le texte, avec opacité et légende. Une image hébergée sur un autre site n'apparaît qu'après un clic sur « Afficher ».
 - **En-têtes et pieds de page** (première page différente, numéro de page, QR code).
 - **Blocs** : citation, bloc de code, encadré (Note, Attention, Important), bloc de signature, QR code.
 - **Rechercher / remplacer** (casse, mot entier, expressions régulières), abréviations qui se développent à la frappe.
@@ -135,11 +135,12 @@ La [note de version](PATCH_NOTES.md) en donne la liste complète, une puce par f
 
 ### Remplir avec les données de Grist
 
-- **Variables** `#Table.Colonne` avec autocomplétion sur toutes les tables du document ; pour une table liée, une clé de correspondance à régler une fois.
+- **Variables** `#Table.Colonne` avec autocomplétion sur toutes les tables du document ; pour une table liée, une clé de correspondance à régler une fois, qui peut passer par plusieurs références (Badge › Nom prénom › Structure).
 - **Fiches citées** : `@` ouvre la liste des lignes de toutes les tables (« Rédigé par @Marie Martin »). Le nom se relit à chaque affichage : renommer la personne dans Grist la renomme dans les modèles.
 - **Mise en forme des variables** : nombres (écriture française ou américaine, décimales, devise, en toutes lettres), dates (formats prédéfinis, en toutes lettres, avec l'heure d'une colonne « Date et heure »), Oui / Non (texte ou case cochée). « Comme dans Grist » reprend le format de la colonne.
 - **Puces intelligentes** : date du jour, heure, e-mail de la personne connectée, numéro de ligne d'une boucle. **Calculs** : SOMME, MOYENNE, MIN, MAX, NB, ARRONDI.
 - **Conditions** : « Et » / « Ou », groupes, « Sinon afficher », sur une variable, un bloc de texte, une valeur dans la phrase ou une case cochée.
+- **Mise en forme conditionnelle** : une couleur de texte, un fond, du gras, de l'italique, du souligné ou du barré selon la ligne (« en rouge quand le montant dépasse 1 000 »), sur une variable, un calcul, un bloc de texte, une valeur dans la phrase ou une puce ; huit règles au plus, ou « Comme dans Grist » pour suivre en direct celles de la colonne dans Grist.
 - **Boucles** sur les lignes liées, avec filtre, tri et séparateurs, y compris une boucle dans une boucle (les lignes de chaque facture, puis les étapes de chaque ligne) ou sur toutes les lignes d'une table.
 - **Renommages suivis** : quand une table ou une colonne est renommée dans Grist, les modèles suivent.
 
@@ -345,7 +346,7 @@ Les bibliothèques et les polices tierces gardent leurs propres licences : voir 
 
 It is a custom widget made by [Grist Factory](https://grist-factory.fr), free software (GPL v3) with no server: a plain static page.
 
-> **Version {{VERSION}}**, released on {{DATE_EN}}. It succeeds the beta: what changes for anyone coming from it is in the [release notes](PATCH_NOTES.md), and the beta is still served at [a separate address](#installing-in-grist).
+> **Version {{VERSION}}**, released on {{DATE_EN}}. It succeeds version 1.0.0 of November 4, 2026, the first stable version: what changes is in the [release notes](PATCH_NOTES.md), and the beta is still served at [a separate address](#installing-in-grist).
 > Try the widget on a copy of your document before using it on important data: defects may remain. The [known limitations](#known-limitations) and the [roadmap](#roadmap-1) say what is still missing.
 
 **[Install](#installing-in-grist)** · [Tour in pictures](#tour-in-pictures) · [All the features](#all-the-features) · [Security](#security-and-permissions) · [Known limitations](#known-limitations) · [Contributing](#contributing)
@@ -355,7 +356,7 @@ It is a custom widget made by [Grist Factory](https://grist-factory.fr), free so
 | | |
 |---|---|
 | **Write** | A full editor: formatting, tables, images, headers and footers, footnotes, table of contents, a faithful A4 preview (what you see is what you get). |
-| **Fill in** | Variables from every table of the document, "And" / "Or" conditions, loops, calculations and chips (today's date, time, the connected user's e-mail). |
+| **Fill in** | Variables from every table of the document, "And" / "Or" conditions, conditional formatting (color, fill, bold… depending on the row), loops, calculations and chips (today's date, time, the connected user's e-mail). |
 | **Read** | The document filled with the row selected in Grist, in standard or clean reading. |
 | **Export** | Vector PDF (the text stays selectable), protected PDF, Word, Excel, Markdown, HTML, or a pre-filled e-mail: one row at a time or in batch. |
 | **Reuse** | Several templates per Grist document, a gallery of 21 ready-to-use templates, macro templates that assemble a cover page and appendices. |
@@ -375,7 +376,7 @@ Opened alone in a browser tab, the widget does not work: it says so and recalls 
 
 **First steps**: open the "New template" menu then "New document" (or "Create from a template…" to start from the gallery), write your text and type `#` to insert a variable. Switch to reading mode to see the document filled with the selected row, then export it.
 
-**Keeping the beta**: if an old template does not reopen well in the V1, the 1.0.0-beta.1 beta is still served, as it was and with no fixes, at `https://grist-factory.github.io/Publipostage-Plus/beta/` (in Grist, change the custom widget's address). Going back is safe as long as the template has not been saved with the V1: the beta erases what it does not know (bookmarks, superscripts and subscripts, "Otherwise show"). It no longer receives updates.
+**Keeping the beta**: if an old template does not reopen well in the current version, the 1.0.0-beta.1 beta is still served, as it was and with no fixes, at `https://grist-factory.github.io/Publipostage-Plus/beta/` (in Grist, change the custom widget's address). Going back is safe as long as the template has not been saved with the current version: the beta erases what it does not know (bookmarks, superscripts and subscripts, "Otherwise show"). It no longer receives updates.
 
 ## Tour in pictures
 
@@ -464,7 +465,7 @@ The [release notes](PATCH_NOTES.md) give the complete list, one bullet per featu
 - **Structure**: numbered headings (including "Article 1"), a style per heading level, clickable table of contents, page breaks, footnotes, bookmarks, watermark.
 - **Lists**: bullet, numbered and checkable task lists.
 - **Tables**: merging and splitting cells, borders, vertical alignment, cell background, caption, letters and numbers like in a grid. Two-column zones.
-- **Images** pasted, added by address or taken from a Grist Attachments column; floating, in front of or behind the text, with opacity and caption. An image hosted on another site only appears after a click on "Show".
+- **Images** pasted, added by address or taken from a Grist Attachments column (from a linked table too, with a display condition or a loop, one image per linked row; a file that is not an image is replaced by a message that says its name); floating, in front of or behind the text, with opacity and caption. An image hosted on another site only appears after a click on "Show".
 - **Headers and footers** (different first page, page number, QR code).
 - **Blocks**: quote, code block, callout (Note, Warning, Important), signature block, QR code.
 - **Find / replace** (match case, whole word, regular expressions), abbreviations that expand as you type.
@@ -472,11 +473,12 @@ The [release notes](PATCH_NOTES.md) give the complete list, one bullet per featu
 
 ### Filling in with Grist data
 
-- **Variables** `#Table.Column` with autocomplete across every table in the document; for a linked table, a matching key to set up once.
+- **Variables** `#Table.Column` with autocomplete across every table in the document; for a linked table, a matching key to set up once, which can go through several references (Badge › Full name › Structure).
 - **Cited records**: `@` opens the list of rows from every table ("Written by @Marie Martin"). The name is read again each time the document is shown: renaming the person in Grist renames them in templates.
 - **Variable formatting**: numbers (French or US notation, decimals, currency, spelled out), dates (predefined formats, spelled out, with the time of a "Date and time" column), Yes / No (text or checked box). "Like in Grist" takes over the column's format.
 - **Smart chips**: today's date, time, the connected user's e-mail, a loop's row number. **Calculations**: SUM, AVERAGE, MIN, MAX, COUNT, ROUND.
 - **Conditions**: "And" / "Or", groups, "Otherwise show", on a variable, a text block, a value in a sentence or a checked box.
+- **Conditional formatting**: a text color, a fill, bold, italic, underline or strikethrough depending on the row ("in red when the amount exceeds 1,000"), on a variable, a calculation, a text block, a value in a sentence or a chip; at most eight rules, or "Like in Grist" to follow, live, the column's own rules in Grist.
 - **Loops** over linked rows, with filter, sort and separators, including a loop inside a loop (the rows of each invoice, then the steps of each row) or over all the rows of a table.
 - **Tracked renames**: when a table or a column is renamed in Grist, templates follow.
 

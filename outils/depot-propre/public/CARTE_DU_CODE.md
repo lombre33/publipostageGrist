@@ -36,9 +36,9 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 191 fichiers dans `js/` (87 800 lignes : 66 200 de code, 17 100 de commentaires, 4 500 de
+- **Le volume** : 193 fichiers dans `js/` (89 000 lignes : 67 100 de code, 17 300 de commentaires, 4 600 de
   blanc), 47 dans `extensions/` (13 400 lignes, dont 2 900 dans `graphique/`, 1 700 dans `edition/`, 7 400 dans
-  `diapositives/` et 1 400 dans `lecture-pdf/`), 57 feuilles de style (4 700 lignes), une page de 1 100 lignes.
+  `diapositives/` et 1 400 dans `lecture-pdf/`), 58 feuilles de style (4 800 lignes), une page de 1 100 lignes.
   Quatre fichiers de polices du PDF pèsent 2,5 Mo en quelques lignes (des données) ; `js/i18n.js` est du texte à
   traduire, pas de la logique.
 
@@ -79,7 +79,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 
 ## La carte, famille par famille
 
-### Grist et les données du document (22 fichiers, 8 100 lignes)
+### Grist et les données du document (22 fichiers, 8 200 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -109,7 +109,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/html-sanitize.js` | Filtre à liste blanche, lu dans un document inerte, pour le HTML des colonnes Grist, des modèles importés et de la galerie. Toute déclaration de style qui porte une `url(...)` ou un `image-set(...)` en est retirée, même dans une variable : la seule image qui passe est celle du trait en tirets d'un cadre libre (`--ff-art`, `--ff-art-nine` : `ART_PROPS`, `isSafeArt`, un `data:image/svg+xml` qui ne contient que des `path` aux attributs connus, rien d'autre derrière). |
 | `js/external-images.js` | Images d'un autre site : un cadre « Afficher » à leur place jusqu'au clic (rien n'est retenu), signalées ensuite en permanence, et une fenêtre avant tout export qui les lirait. |
 
-### L'éditeur (47 fichiers, 18 000 lignes)
+### L'éditeur (47 fichiers, 18 100 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -146,7 +146,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/bookmark-dialog.js` | La fenêtre « Signet » : poser, renommer ou retirer le signet du bloc où est le curseur. |
 | `js/email-plain-text.js` | Le modèle e-mail n'écrit que ce que le lien `mailto:` porte : les touches de gras, d'italique, de souligné, d'alignement et de niveau de titre ne font rien, les signes de Markdown tapés (« # » compris) restent du texte, un collage perd sa mise en forme (un titre devient une ligne simple, un texte brut garde ses lignes vides), une ancienne mise en forme ne s'affiche plus. |
 
-### Variables et conditions (21 fichiers, 8 800 lignes)
+### Variables et conditions (23 fichiers, 9 700 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -238,7 +238,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/pdf-protection.js` | Le « PDF protégé » (type du menu « Type d'export ») sans interface : les réglages propres (les trois façons de donner le mot de passe - saisi, commun enregistré dans le document, ou celui de chaque ligne -, trois droits, propriétés du fichier), le mot de passe d'une ligne lu dans sa cellule, le mot de passe « propriétaire » tiré au hasard quand seuls des droits sont posés, et les champs de document que pdfmake lit (chiffrement AES-256). |
 | `js/pdf-protection-dialog.js` | La fenêtre « PDF protégé » (sur la fenêtre commune), ouverte avant l'export d'une ligne et d'une archive ZIP : elle rend les réglages ou rien. Elle propose les trois façons de donner le mot de passe, dit où le mot de passe commun s'écrit dans le document et le risque d'un mot de passe en clair, et lit puis écrit ce mot de passe commun par `js/templates.js`. Aucun mot de passe n'est gardé dans le navigateur ; seuls la façon choisie, les droits, l'auteur et la colonne des mots de passe le sont. |
 
-### Socle de l'interface et réglages (18 fichiers, 7 900 lignes)
+### Socle de l'interface et réglages (18 fichiers, 8 000 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -319,7 +319,7 @@ fichier, un lot), câblage de la galerie et de Grist. C'est le fichier qui conna
 ### Les feuilles de style
 
 `css/style.css` (jetons de couleur, thème clair et sombre, `--font-ui`), `css/toolbar-v2.css` (la barre du
-haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 53 autres vont chacune avec un module ou une
+haut), `css/editor-v2.css` (le texte de l'éditeur) ; les 54 autres vont chacune avec un module ou une
 fenêtre de `js/` (`css/callout.css` pour `js/callout.js`, `css/gfs-ambiance.css` pour `js/gfs-ambiance.js`) et le disent dans leur premier commentaire ;
 `css/roboto-fonts.css` embarque la police des documents.
 
@@ -467,9 +467,9 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 191 files in `js/` (87,800 lines: 66,200 of code, 17,100 of comments, 4,500 blank), 47 in
+- **The size**: 193 files in `js/` (89,000 lines: 67,100 of code, 17,300 of comments, 4,600 blank), 47 in
   `extensions/` (13,400 lines, 2,900 of them in `graphique/`, 1,700 in `edition/`, 7,400 in `diapositives/` and 1,400 in
-  `lecture-pdf/`), 57 stylesheets (4,700 lines), a 1,100-line page. Four PDF font files weigh 2.5 MB in a few lines
+  `lecture-pdf/`), 58 stylesheets (4,800 lines), a 1,100-line page. Four PDF font files weigh 2.5 MB in a few lines
   (data); `js/i18n.js` is text to translate, not logic.
 
 ## Where to start
@@ -508,7 +508,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 
 ## The map, family by family
 
-### Grist and the document's data (22 files, 8,100 lines)
+### Grist and the document's data (22 files, 8,200 lines)
 
 | File | Role |
 |---|---|
@@ -538,7 +538,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/html-sanitize.js` | Allow-list filter, parsed in an inert document, for the HTML of Grist columns, imported templates and the gallery. Every style declaration that carries a `url(...)` or an `image-set(...)` is removed from it, even in a variable: the only image that passes is a free frame's dashed line (`--ff-art`, `--ff-art-nine`: `ART_PROPS`, `isSafeArt`, a `data:image/svg+xml` that holds only `path` elements with known attributes, nothing else behind it). |
 | `js/external-images.js` | Images from another site: a "Show" frame in their place until the click (nothing is remembered), flagged at all times afterwards, and a window before any export that would read them. |
 
-### The editor (47 files, 18,000 lines)
+### The editor (47 files, 18,100 lines)
 
 | File | Role |
 |---|---|
@@ -575,7 +575,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/bookmark-dialog.js` | The "Bookmark" window: place, rename or remove the bookmark of the block where the cursor is. |
 | `js/email-plain-text.js` | The e-mail template only writes what the `mailto:` link carries: the bold, italic, underline, alignment and heading-level keys do nothing, typed Markdown signs (« # » included) stay text, pasting drops the formatting (a heading becomes a plain line, pasted plain text keeps its blank lines), formatting left over from an older template is no longer shown. |
 
-### Variables and conditions (21 files, 8,800 lines)
+### Variables and conditions (23 files, 9,700 lines)
 
 | File | Role |
 |---|---|
@@ -667,7 +667,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/pdf-protection.js` | The "Protected PDF" (a type of the "Export type" menu) without any interface: the cleaned settings (the three ways to give the password - typed, a shared one saved in the document, or one per row -, three permissions, file properties), the password of a row read from its cell, the random "owner" password drawn when only permissions are set, and the document fields pdfmake reads (AES-256 encryption). |
 | `js/pdf-protection-dialog.js` | The "Protected PDF" window (on top of the shared window), opened before the export of one row and of a ZIP archive: it returns the settings or nothing. It offers the three ways to give the password, says where the shared password is written in the document and the risk of a plain-text password, and reads then writes that shared password through `js/templates.js`. No password is kept in the browser; only the chosen way, the permissions, the author and the password column are. |
 
-### Interface foundations and settings (18 files, 7,900 lines)
+### Interface foundations and settings (18 files, 8,000 lines)
 
 | File | Role |
 |---|---|
@@ -748,7 +748,7 @@ wiring of the gallery and of Grist. It is the file that knows all the others.
 ### Stylesheets
 
 `css/style.css` (color tokens, light and dark theme, `--font-ui`), `css/toolbar-v2.css` (the top bar),
-`css/editor-v2.css` (the editor's text); the other 53 each go with a module or a window of `js/`
+`css/editor-v2.css` (the editor's text); the other 54 each go with a module or a window of `js/`
 (`css/callout.css` for `js/callout.js`, `css/gfs-ambiance.css` for `js/gfs-ambiance.js`) and say so in their first comment; `css/roboto-fonts.css` embeds
 the documents' font.
 

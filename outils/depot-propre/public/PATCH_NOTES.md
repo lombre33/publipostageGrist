@@ -2,33 +2,73 @@
 
 *🇬🇧 An English version of this document is available [below](#publipostage-release-notes-english).*
 
-**Publipostage+ {{VERSION}}**, publiée le {{DATE_FR}} : la première version stable, après la bêta 1.0.0-beta.1 du 5 octobre 2026. Cette note liste ce qui change depuis la bêta, une puce par fonction ; le [journal des modifications](CHANGELOG.md) donne le détail de chaque entrée.
+**Publipostage+ {{VERSION}}**, publiée le {{DATE_FR}} : une mise à jour de la version stable 1.0.0 du 4 novembre 2026. La première partie liste ce qui change depuis la 1.0.0, une puce par fonction ; la seconde garde la note de la 1.0.0, pour qui vient de la bêta 1.0.0-beta.1 du 5 octobre 2026. Le [journal des modifications](CHANGELOG.md) donne le détail de chaque entrée.
 
 Elle décrit le widget seul, installé dans Grist. Ce qui demande en plus Grist Factory Suite est à part, dans la dernière section.
 
 ## Sommaire
 
-- [Nouveautés](#nouveautés)
-  - [Mise en forme du texte](#mise-en-forme-du-texte)
-  - [Titres, signets, liens et sommaire](#titres-signets-liens-et-sommaire)
-  - [Tableaux d'un document](#tableaux-dun-document)
-  - [Grilles](#grilles)
-  - [En-têtes, pieds de page et page](#en-têtes-pieds-de-page-et-page)
-  - [Variables, conditions et boucles](#variables-conditions-et-boucles)
-  - [Modèles, macro-modèles et galerie](#modèles-macro-modèles-et-galerie)
-  - [Exports et imports](#exports-et-imports)
-  - [Rechercher / Remplacer](#rechercher--remplacer)
-  - [Lecture et enregistrement](#lecture-et-enregistrement)
-  - [Annuler et Rétablir (Ctrl+Z, Ctrl+Y)](#annuler-et-rétablir-ctrlz-ctrly)
-  - [Interface, langue et accessibilité](#interface-langue-et-accessibilité)
-  - [Vitesse](#vitesse)
-- [Ce qui change pour qui vient de la bêta](#ce-qui-change-pour-qui-vient-de-la-bêta)
-- [Corrections](#corrections)
+- [Nouveautés de la version 1.1](#nouveautés-de-la-version-11)
+  - [Mise en forme conditionnelle](#mise-en-forme-conditionnelle)
+  - [Images et pièces jointes](#images-et-pièces-jointes)
+  - [Références entre tables](#références-entre-tables)
+  - [Corrections de la version 1.1](#corrections-de-la-version-11)
+- [Notes de la version 1.0.0](#notes-de-la-version-100)
+  - [Nouveautés](#nouveautés)
+    - [Mise en forme du texte](#mise-en-forme-du-texte)
+    - [Titres, signets, liens et sommaire](#titres-signets-liens-et-sommaire)
+    - [Tableaux d'un document](#tableaux-dun-document)
+    - [Grilles](#grilles)
+    - [En-têtes, pieds de page et page](#en-têtes-pieds-de-page-et-page)
+    - [Variables, conditions et boucles](#variables-conditions-et-boucles)
+    - [Modèles, macro-modèles et galerie](#modèles-macro-modèles-et-galerie)
+    - [Exports et imports](#exports-et-imports)
+    - [Rechercher / Remplacer](#rechercher--remplacer)
+    - [Lecture et enregistrement](#lecture-et-enregistrement)
+    - [Annuler et Rétablir (Ctrl+Z, Ctrl+Y)](#annuler-et-rétablir-ctrlz-ctrly)
+    - [Interface, langue et accessibilité](#interface-langue-et-accessibilité)
+    - [Vitesse](#vitesse)
+  - [Ce qui change pour qui vient de la bêta](#ce-qui-change-pour-qui-vient-de-la-bêta)
+  - [Corrections](#corrections)
 - [À part : Grist Factory Suite](#à-part--grist-factory-suite)
 
-## Nouveautés
+## Nouveautés de la version 1.1
 
-### Mise en forme du texte
+Ce que la 1.1 ajoute à la 1.0.0, une puce par fonction.
+
+### Mise en forme conditionnelle
+
+- **Une couleur, un fond ou un trait selon la ligne** : une variable, un calcul, un bloc de texte conditionnel ou une valeur dans la phrase prend une couleur de texte, un fond, du gras, de l'italique, du souligné ou du barré quand une condition est remplie (« en rouge quand le montant dépasse 1 000 »). Le bouton est sur la barre flottante, à côté de « Condition d'affichage » ; il ouvre une fenêtre de huit règles au plus, lues dans l'ordre, avec un aperçu sur la ligne sélectionnée et sur toutes les lignes.
+- **Dans toutes les sorties** : la Lecture, le PDF, le Word, l'Excel, le HTML et l'e-mail écrivent la mise en forme ; une colonne renommée dans Grist est suivie dans les règles. Sans règle, rien ne change.
+- **« Comme dans Grist »** : une case de la fenêtre, éteinte au départ, fait suivre à une variable, en direct, la mise en forme conditionnelle de sa colonne dans Grist (couleur du texte, fond, gras, italique, souligné, barré) ; les règles du widget passent par-dessus. La case est grisée, avec sa raison, quand la colonne n'a aucune mise en forme conditionnelle dans Grist.
+- **Les puces aussi** : les puces date, heure, nom, e-mail et n° de ligne prennent la mise en forme conditionnelle, avec le même bouton sur leur barre ; dans une zone répétée, les règles lisent la ligne du tour. Dans un champ de texte de l'e-mail (Objet, À…), le bouton est grisé, avec sa raison.
+
+### Images et pièces jointes
+
+- **Condition d'affichage d'une image** : une image liée à une colonne Pièces jointes a un bouton « Condition d'affichage » dans sa barre, qui ouvre la même fenêtre qu'une variable ; à la Lecture et à l'export (PDF, Word, HTML, e-mail), elle n'apparaît que si la condition est remplie pour la ligne affichée, le texte autour reste. En édition, l'image reste visible, avec un cadre en pointillés bleus.
+- **Boucle d'une image** : un bouton « Boucle » répète l'image, une par ligne d'une table liée : l'image dans la phrase (les copies côte à côte), le paragraphe, la ligne du tableau ou l'élément de liste. Le tri, le filtre et « Si aucune ligne » se règlent comme pour une variable.
+- **« Lignes affichées » d'une image** : garder toutes les lignes ou une seule, la première ou la dernière après le filtre et le tri (« la dernière partenaire créée », « le premier logo selon l'ordre »).
+- **Une pièce jointe qui n'est pas une image** (PDF, Word…) : la Lecture et tous les exports écrivent, en italique, « Pièce jointe non affichée (ce n'est pas une image) : contrat.pdf » à la place d'un cadre vide ou cassé. Quand une cellule porte plusieurs pièces jointes, c'est la première image qui est dessinée.
+
+### Références entre tables
+
+- **Le lien entre deux tables peut passer par plusieurs références** : la clé du lien peut être un chemin (Badge › Nom prénom › Structure). Quand un seul chemin de références relie les deux tables (jusqu'à trois colonnes de suite), la fenêtre le propose d'elle-même ; sinon, la flèche › de chaque colonne Référence ouvre les colonnes de la table qu'elle désigne. Toute variable de la table du bout (texte, image, calcul, condition, boucle) se lit alors par ce chemin, sans colonne formule. Une version plus ancienne du widget ne connaît pas ces chemins et ignore ce lien.
+- **Choisir une image de Référence en Référence** : dans « Image depuis une variable » et dans la liste « Colonne… » d'une image, la flèche › descend de Référence en Référence jusqu'à la colonne Pièces jointes (« Badge.Nom prénom.Structure.Logo ») ; l'image est liée au chemin entier, garde sa taille, son alignement et son opacité quand elle change de colonne, et un seul Annuler rend l'ancienne.
+
+### Corrections de la version 1.1
+
+- **Le gras du PDF** : dans le PDF et dans l'assemblage avant impression, un texte en Arial ou en Georgia n'est plus tout en gras (ou tout maigre) à cause de son premier mot : le poste d'une carte, maigre dans le modèle, sortait en gras. Les lettres, les largeurs et la pagination ne changent pas.
+- **Coller une variable copiée seule, sous Windows** : elle ne laisse plus deux sauts de ligne derrière elle, dans un tableau, une grille ou un paragraphe ; un seul Annuler défait le collage.
+- **Une image dont la colonne Pièces jointes a disparu** : son cadre devient rouge, comme une variable cassée, avec en info-bulle ce qui manque, et sa barre propose « Colonne… » pour en choisir une autre en gardant la taille, l'alignement, le calque et l'opacité ; un seul Annuler rend l'ancienne colonne. Le rouge et l'icône disparaissent d'eux-mêmes quand la colonne revient dans Grist.
+- **Une pièce jointe cochée dans « Autres attributs » devient une image** : « Insérer » pose une image liée à la colonne (avec le chemin entier quand on est descendu de référence en référence) et « Remplacer » la met à la place de la bulle ; l'image reprend la condition d'affichage de la bulle.
+
+## Notes de la version 1.0.0
+
+Cette partie reprend la note de la 1.0.0, la première version stable : ce qui changeait depuis la bêta 1.0.0-beta.1. Elle s'adresse à qui passe directement de la bêta à la 1.1.
+
+### Nouveautés
+
+#### Mise en forme du texte
 
 - **Texte de droite à gauche** : une ligne à cocher du menu Alignement (au survol du bouton) écrit un paragraphe, un titre ou une liste de droite à gauche, pour l'hébreu, l'arabe ou une mise en page en miroir. Les puces, les numéros et les retraits passent à droite, et la Lecture, l'impression, le PDF, le Word et le HTML exporté gardent le sens.
 - **« Paragraphe… » : interligne et espaces** (menu Alignement) : l'interligne, en multiple de la ligne simple comme dans Word et PowerPoint, et l'espace avant et après le paragraphe ; « Par défaut » retire les trois réglages.
@@ -43,7 +83,7 @@ Elle décrit le widget seul, installé dans Grist. Ce qui demande en plus Grist 
 - **Une seule palette de couleurs** : le texte, le surlignage, le fond de case et le trait des bordures ouvrent la même palette (dix colonnes sur cinq rangées, dont des tons foncés lisibles en texte, contraste d'au moins 4,5:1), avec « Personnalisé… » pour une couleur précise.
 - **Bulles et puces de l'éditeur : « Par défaut » ou « Mise en forme »** (Réglages > Thème) : les bulles de variable, de calcul, les puces et les fiches « @ » gardent leur fond pâle repérable, ou montrent la couleur, le surlignage, le souligné et le barré choisis. Le numéro de page, la note de bas de page et la case conditionnelle suivent aussi ce choix, et la Lecture, le PDF et le Word écrivent leur mise en forme.
 
-### Titres, signets, liens et sommaire
+#### Titres, signets, liens et sommaire
 
 - **Styles de titres du modèle et du document** : le menu « Titre » (au survol) montre « Styles de titres du modèle » et « Styles de titres partagés », ces derniers valant pour tous les modèles du document Grist.
 - **Style d'un niveau de titre pris d'après la sélection** : « Mettre à jour « Titre N » d'après la sélection » retient la mise en forme du texte choisi pour tous les titres de ce niveau ; « Rétablir le style d'origine » revient en arrière.
@@ -52,7 +92,7 @@ Elle décrit le widget seul, installé dans Grist. Ce qui demande en plus Grist 
 - **Liens vers un titre ou un signet du document** : « Lien… > Dans ce document » liste, avec recherche, les titres et les signets.
 - **Sommaire cliquable** : une ligne du sommaire mène à son titre dans l'éditeur, dans la Lecture (clic, Entrée ou Espace) et dans le PDF (texte et numéro de page en liens).
 
-### Tableaux d'un document
+#### Tableaux d'un document
 
 - **Plusieurs lignes ou colonnes d'un coup** : avec plusieurs cases choisies, « Ligne avant », « Ligne après », « Colonne avant » et « Colonne après » en ajoutent autant que la sélection en couvre, en un seul Annuler.
 - **Bordures, alignement vertical et quadrillage** : la barre du tableau a « Bordures » (tous les traits, le pourtour, l'intérieur, un côté ou aucun, dans la couleur choisie, avec la case « Quadrillage » pour la Lecture et les exports) et « Aligner en haut », « au milieu », « en bas ».
@@ -65,12 +105,12 @@ Elle décrit le widget seul, installé dans Grist. Ce qui demande en plus Grist 
 - **Saut de page avant une ligne** : le bouton « Saut de page » (ou Alt+Entrée) ouvre une nouvelle page avant la ligne du curseur, dans l'aperçu A4, la Lecture, le PDF et le Word ; les lignes de titre du tableau reviennent en haut de la page.
 - **Tableau lié à un modèle Grille** : « Tableau d'un modèle Grille… », au menu du bouton « Tableau », pose dans le document une copie du tableau d'une grille, qui reste liée à elle (un filet de couleur dans la marge le montre) et dont les cases suivent les règles de la grille.
 
-### Grilles
+#### Grilles
 
 - **Quadrillage de la Lecture et des exports** : une ligne à cocher du menu « Bordures » retire les traits gris de départ de la Lecture, du PDF et de l'Excel d'une grille, en gardant ceux qu'on a posés.
 - **Taille commune des lignes et des colonnes choisies** : tirer le trait d'une ligne (ou d'une colonne) parmi plusieurs choisies les règle toutes à la même hauteur (largeur), comme dans un tableur.
 
-### En-têtes, pieds de page et page
+#### En-têtes, pieds de page et page
 
 - **QR code dans l'en-tête et le pied de page** : « QR code… » reste actif dans ces zones (son texte peut contenir une colonne).
 - **Échap termine l'édition de l'en-tête et du pied de page**, comme « Terminer ».
@@ -79,7 +119,7 @@ Elle décrit le widget seul, installé dans Grist. Ce qui demande en plus Grist 
 - **Marges prédéfinies** : « Aucune », « Étroites », « Classiques » (25,4 mm, le « Normal » de Word) et « Larges » dans l'onglet Marges des Réglages, avec un bouton qui lie les quatre marges.
 - **Marge autour de chaque page dans l'assemblage avant impression** : un champ « Marge » (en millimètres) laisse de la place autour de chaque page posée sur la feuille, et les traits de coupe passent au milieu de l'espace entre deux pages.
 
-### Variables, conditions et boucles
+#### Variables, conditions et boucles
 
 - **Boucle sur toutes les lignes d'une table** : l'icône Boucle n'est plus grisée sur une colonne de la table de la page, et « Lignes de la table à utiliser » propose « Comme le widget (son filtre et son tri) », « Comme la vue liée au widget » et « Toute la table ».
 - **Boucle dans une boucle** : pour chaque facture ses lignes, puis pour chaque ligne ses étapes (en tableau, en liste ou en paragraphes).
@@ -103,7 +143,7 @@ Elle décrit le widget seul, installé dans Grist. Ce qui demande en plus Grist 
 - **Format de date sur une colonne « Date et heure »** : le format de date d'une variable marche aussi sur ces colonnes, et sa barre gagne la liste « Heure ».
 - **Colonnes retrouvées par mots** : les mots d'une colonne se tapent dans n'importe quel ordre, avec ou sans « _ », « . » et « - », dans toutes les listes avec recherche ; la même règle vaut pour « Organiser mes modèles » et la galerie.
 
-### Modèles, macro-modèles et galerie
+#### Modèles, macro-modèles et galerie
 
 - **Galerie de 21 modèles** au lieu de 4 : les quatre d'avant refaits, des modèles à imprimer (flyer, invitation, affiche, badge, carte de visite, étiquettes d'adresse et de produit), un e-mail, deux grilles pour Excel et des documents de métier (quittance de loyer, bulletin scolaire, fiche recette, feuille d'émargement, bon de commande, fiche d'inventaire, bon de mouvement de stock).
 - **« Créer avec ses tables »** : un modèle de la galerie peut créer ses tables vides, avec leurs colonnes de calcul et leurs liens ; l'aperçu montre le document rempli de lignes d'exemple, sans en écrire aucune.
@@ -114,7 +154,7 @@ Elle décrit le widget seul, installé dans Grist. Ce qui demande en plus Grist 
 - **Nommer une version** : « Nommer… » donne un nom à une version (« Avant envoi »), qui n'est plus jamais effacée par les plafonds.
 - **Modèle de la vue : un e-mail ou un macro-modèle** : Réglages > Vue accepte aussi un e-mail ou un macro-modèle comme modèle d'une vue.
 
-### Exports et imports
+#### Exports et imports
 
 - **PDF « Léger »** : le même PDF vectoriel, dont les images sont ramenées à 150 points par pouce (une photo de 4 Mo ne pèse plus que quelques dizaines de Ko).
 - **PDF protégé** : chiffré en AES-256, avec mot de passe d'ouverture, droits (imprimer, copier, modifier ou annoter) et auteur, sujet et mots-clés.
@@ -131,18 +171,18 @@ Elle décrit le widget seul, installé dans Grist. Ce qui demande en plus Grist 
 - **Export HTML** : « HTML (fichier à déposer) » écrit une page complète pour un site, « HTML (contenu à coller) » écrit le seul contenu, à coller dans un bloc HTML d'un gestionnaire de contenu.
 - **Zimbra pour « Créer l'email »** : Réglages > Email choisit le logiciel de messagerie, « Standard » ou « Zimbra » (dont le client web relit mal le lien).
 
-### Rechercher / Remplacer
+#### Rechercher / Remplacer
 
 - **Expressions régulières** : le bouton « .* » lit ce qu'on tape comme un motif, `$1`, `$2`… reprenant les groupes dans « Remplacer par ».
 - **Bulles** : une bulle de variable ou de calcul est un résultat quand son nom, son « Avant », son « Après », son « sinon » ou sa formule contient le texte cherché.
 - **En-tête et pied de page** : la recherche les parcourt aussi, dans l'ordre de la page, et le compteur les compte (« 2 sur 4 »).
 
-### Lecture et enregistrement
+#### Lecture et enregistrement
 
 - **Comptes Lecteur de Grist** : une personne que Grist ouvre en lecture seule voit le widget en Lecture d'emblée, barre grisée, commentaires fermés et exports libres.
 - **Rappel « Enregistrer »** dans les Réglages Vue et Accès : une ligne colorée rappelle que ces réglages ne sont donnés aux autres qu'après un clic sur « Enregistrer ».
 
-### Annuler et Rétablir (Ctrl+Z, Ctrl+Y)
+#### Annuler et Rétablir (Ctrl+Z, Ctrl+Y)
 
 Ctrl+Z défait et Ctrl+Y rend, en plus du texte :
 
@@ -168,19 +208,19 @@ La langue reste volontairement hors d'Annuler.
 
 - **Raccourcis d'annulation plus sûrs** : Ctrl+Z, Ctrl+Y et Ctrl+Maj+Z n'agissent plus derrière une fenêtre ouverte, même dans Chrome, et fonctionnent aussi quand le focus est resté sur une liste ou une glissière de la barre flottante.
 
-### Interface, langue et accessibilité
+#### Interface, langue et accessibilité
 
 - **Fenêtre des nouveautés** : Réglages > Crédits > « Nouveautés » ouvre un carrousel de onze écrans avec de vraies captures : huit nouveautés de la version, un écran « Et aussi » (les titres et leurs styles, Rechercher / Remplacer, les pages, les dates et les heures, les exports), ce que devient un modèle fait avec la bêta et les habitudes qui changent ; le dernier écran mène, par « Voir en détail », à une seconde fenêtre, « Exporter, en détail » (cinq écrans).
 - **Un bouton ou une ligne de menu grisé dit pourquoi** : au survol, l'info-bulle donne la raison (dans un modèle e-mail, par exemple, que le modèle s'écrit en texte brut) ; au clic, le coin d'état écrit la même phrase. Rien n'est retiré ni caché. Les raisons couvrent les droits du document, le mode Lecture, le modèle e-mail, le macro-modèle, la grille, l'en-tête et le pied de page, et les types d'export qui ne vont pas au modèle ouvert.
 - **201 textes de fenêtres réécrits**, en français et en anglais : introductions, aides, erreurs, confirmations, messages de la barre d'état et info-bulles disent ce qu'on obtient dans le document.
 - **58 raccourcis clavier** personnalisables (54 en bêta).
 
-### Vitesse
+#### Vitesse
 
 - **Pages d'un long document calculées quatre fois plus vite** : les coupures de page se posent d'un coup, les pages restent exactement les mêmes (un texte de 117 pages s'ouvre en 1,0 s au lieu de 1,5 s, sous Chromium).
 - **Lecture et enregistrement automatique allégés** : l'entrée en Lecture dessine la page une seule fois, et l'enregistrement automatique ne refait plus tout le texte à chaque passage.
 
-## Ce qui change pour qui vient de la bêta
+### Ce qui change pour qui vient de la bêta
 
 Ces changements touchent des habitudes de la bêta.
 
@@ -201,15 +241,15 @@ Ces changements touchent des habitudes de la bêta.
 - **Galerie** : les quatre modèles d'avant sont refaits avec les fonctions récentes ; les modèles déjà créés à partir d'eux ne changent pas.
 - **La bêta reste disponible** : si un ancien modèle ne se rouvre pas bien dans la V1, la bêta 1.0.0-beta.1 reste servie, telle quelle et sans correctif, à `https://grist-factory.github.io/Publipostage-Plus/beta/` (dans Grist, changer l'adresse du widget personnalisé). Le retour est sûr tant que le modèle n'a pas été enregistré avec la V1 : la bêta efface ce qu'elle ne connaît pas (signets, exposants et indices, « Sinon afficher »).
 
-### Retiré
+#### Retiré
 
 - **« Basse qualité » et « Ultra HD »** : ces deux lignes du menu de qualité du PDF, grisées (« bientôt ») depuis le retrait de html2pdf.js, ne sont plus dans l'interface. Pour alléger un PDF, la ligne « Léger » réduit les images ; pour une affiche, le PDF vectoriel et « Format libre ».
 
-## Corrections
+### Corrections
 
 Ces corrections touchent ce que la bêta faisait déjà, regroupées par sujet ; le [journal des modifications](CHANGELOG.md) les détaille une à une.
 
-### Fidélité entre l'éditeur, la Lecture, le PDF, le Word et le HTML
+#### Fidélité entre l'éditeur, la Lecture, le PDF, le Word et le HTML
 
 - **Les lignes de tableau de l'écran ont la hauteur de celles du PDF**, aussi dans un panneau étroit : un long tableau se coupe au même endroit à l'écran et au PDF, et la marge d'un tableau compte partout dans la pagination (plus aucune page à tableau ne grandit).
 - **Les pages qui portent un tableau court, une citation, un bloc de code ou un bloc de texte conditionnel ne grandissent plus.**
@@ -226,7 +266,7 @@ Ces corrections touchent ce que la bêta faisait déjà, regroupées par sujet ;
 - **Word** : le bout, le trait double et les lignes fusionnées d'un tableau retrouvent leur place, un tableau étroit garde sa largeur, un tableau de la largeur de la page aussi.
 - **La couleur d'une note de bas de page et le souligné ou le barré d'une case se retrouvent dans les autres exports** : le HTML les écrit, et la case Oui / Non les reçoit à la Lecture, au PDF et au Word.
 
-### Listes, citations, titres et blocs
+#### Listes, citations, titres et blocs
 
 - **Une puce, un numéro, une tâche ou une citation centrés, à droite ou justifiés le sont aussi** dans le Word et dans le PDF (point de liste, citation).
 - **Une liste a, dans le PDF, la case, la puce et le texte de l'éditeur** : une liste de tâches avec sa case, un texte de liste qui commence au même endroit, une liste dans une citation avec ses puces et son trait, une citation ou une liste dans une case de tableau bien placées dans toutes les colonnes.
@@ -239,14 +279,14 @@ Ces corrections touchent ce que la bêta faisait déjà, regroupées par sujet ;
 - **« 1er »** dans les dates en lettres : le premier du mois s'écrit « 1er janvier 1990 » dans la Lecture, le PDF, le Word et l'e-mail.
 - **Un lot d'une seule ligne parle au singulier** (« 1 PDF généré »).
 
-### En-têtes et pieds de page
+#### En-têtes et pieds de page
 
 - **Un logo aligné à gauche ou à droite reste à côté du texte** dans la Lecture, le PDF et le Word ; le logo aligné d'un pied de page figure dans le PDF.
 - **Les listes à puces et numérotées d'un en-tête ou d'un pied gardent leurs puces et leurs numéros dans le Word**, et les lignes vides n'y descendent plus le texte de la page.
 - **Un en-tête ou un pied plus haut que sa zone ne repousse plus le texte de la page.**
 - **Passer du corps à l'en-tête ou au pied ne propose plus rien en suivi des modifications** et ne mélange plus l'historique d'Annuler.
 
-### Données, dates et Références
+#### Données, dates et Références
 
 - **Devises, dates et nombres s'écrivent comme dans Grist** : une devise en anglais, une colonne « Any » qui calcule une date, une Référence qui montre un prix décimal (virgule) ou un numéro, un identifiant de ligne, un Oui / Non ou une date, et une cellule dont la formule a échoué s'écrivent pareil dans l'éditeur, la Lecture, le PDF, le Word et l'e-mail.
 - **L'Excel d'une seule ligne écrit de vraies dates.**
@@ -260,7 +300,7 @@ Ces corrections touchent ce que la bêta faisait déjà, regroupées par sujet ;
 - **Les boutons jour, mois et année d'une date** suivent la langue (« D », « M », « Y » en anglais).
 - **Les lignes SIRET et TVA du client s'affichent** dans la facture et le contrat de la galerie (les modèles déjà créés ne changent pas).
 
-### Enregistrement, noms et Réglages
+#### Enregistrement, noms et Réglages
 
 - **Entrée valide le nom d'un modèle partout où on le saisit**, et un nom effacé ne fait plus perdre l'enregistrement.
 - **« Abandonner » abandonne vraiment ce qui vient d'être tapé**, même quand l'enregistrement automatique était en train d'écrire.
@@ -272,13 +312,13 @@ Ces corrections touchent ce que la bêta faisait déjà, regroupées par sujet ;
 - **La barre d'une image restée sélectionnée ne revient plus sur la barre du haut** quand on passe en Lecture et qu'on change le type d'export.
 - **La barre du tableau reste affichée après un réglage de « Bordures ».**
 
-### E-mail
+#### E-mail
 
 - **Le texte du lien « Créer l'email » est fidèle à l'éditeur** : un paragraphe vide, deux de suite ou un retour à la ligne donnent des lignes vides, des paragraphes qui se suivent restent collés.
 - **Un modèle e-mail n'écrit que du texte brut** : les raccourcis de mise en forme et les signes de Markdown tapés ne font plus rien dans un e-mail (le gras et le souligné ne partent pas encore dans un e-mail).
 - **Un retour à la ligne dans l'objet ou dans une adresse n'ajoute plus rien au lien « Créer l'email »** : l'objet, le destinataire, le Cc et le Cci viennent d'une colonne, et une cellule à plusieurs lignes mettait son retour à la ligne tel quel dans le lien, où une messagerie peut le lire comme le début d'un autre champ. Le retour à la ligne de l'objet devient une espace et celui d'une adresse sépare deux destinataires ; le corps garde ses lignes.
 
-### Interface et accessibilité
+#### Interface et accessibilité
 
 - **La zone où l'on écrit le document a un nom** pour un lecteur d'écran.
 - **Les info-bulles des boutons sont lisibles en thème sombre**, la ligne ou l'onglet choisi sous la souris garde un contraste suffisant, et les champs, les boutons et les libellés prennent la police du système (le texte des en-têtes et des pieds s'écrit en Roboto dans la feuille).
@@ -294,33 +334,73 @@ Quelques fonctions ne marchent que lorsque le widget tourne dans Grist Factory S
 
 *🇫🇷 La version française de ce document est [au début de cette page](#publipostage--notes-de-version).*
 
-**Publipostage+ {{VERSION}}**, released on {{DATE_EN}}: the first stable version, after the beta 1.0.0-beta.1 of 5 October 2026. This note lists what changes since the beta, one bullet per feature; the [changelog](CHANGELOG.md) gives the detail of each entry.
+**Publipostage+ {{VERSION}}**, released on {{DATE_EN}}: an update to the stable version 1.0.0 of 4 November 2026. The first part lists what changes since 1.0.0, one bullet per feature; the second keeps the 1.0.0 note, for anyone coming from the beta 1.0.0-beta.1 of 5 October 2026. The [changelog](CHANGELOG.md) gives the detail of each entry.
 
 It describes the widget on its own, installed in Grist. What also needs Grist Factory Suite is set apart, in the last section.
 
 ## Contents
 
-- [What's new](#whats-new)
-  - [Text formatting](#text-formatting)
-  - [Headings, bookmarks, links and table of contents](#headings-bookmarks-links-and-table-of-contents)
-  - [Tables in a document](#tables-in-a-document)
-  - [Grids](#grids)
-  - [Headers, footers and page](#headers-footers-and-page)
-  - [Variables, conditions and loops](#variables-conditions-and-loops)
-  - [Templates, macro-templates and gallery](#templates-macro-templates-and-gallery)
-  - [Exports and imports](#exports-and-imports)
-  - [Find / Replace](#find--replace)
-  - [Reading and saving](#reading-and-saving)
-  - [Undo and Redo (Ctrl+Z, Ctrl+Y)](#undo-and-redo-ctrlz-ctrly)
-  - [Interface, language and accessibility](#interface-language-and-accessibility)
-  - [Speed](#speed)
-- [What changes if you come from the beta](#what-changes-if-you-come-from-the-beta)
-- [Fixes](#fixes)
+- [What's new in version 1.1](#whats-new-in-version-11)
+  - [Conditional formatting](#conditional-formatting)
+  - [Images and attachments](#images-and-attachments)
+  - [References between tables](#references-between-tables)
+  - [Fixes in version 1.1](#fixes-in-version-11)
+- [Notes for version 1.0.0](#notes-for-version-100)
+  - [What's new](#whats-new)
+    - [Text formatting](#text-formatting)
+    - [Headings, bookmarks, links and table of contents](#headings-bookmarks-links-and-table-of-contents)
+    - [Tables in a document](#tables-in-a-document)
+    - [Grids](#grids)
+    - [Headers, footers and page](#headers-footers-and-page)
+    - [Variables, conditions and loops](#variables-conditions-and-loops)
+    - [Templates, macro-templates and gallery](#templates-macro-templates-and-gallery)
+    - [Exports and imports](#exports-and-imports)
+    - [Find / Replace](#find--replace)
+    - [Reading and saving](#reading-and-saving)
+    - [Undo and Redo (Ctrl+Z, Ctrl+Y)](#undo-and-redo-ctrlz-ctrly)
+    - [Interface, language and accessibility](#interface-language-and-accessibility)
+    - [Speed](#speed)
+  - [What changes if you come from the beta](#what-changes-if-you-come-from-the-beta)
+  - [Fixes](#fixes)
 - [Set apart: Grist Factory Suite](#set-apart-grist-factory-suite)
 
-## What's new
+## What's new in version 1.1
 
-### Text formatting
+What 1.1 adds to 1.0.0, one bullet per feature.
+
+### Conditional formatting
+
+- **A color, a fill or a mark depending on the row**: a variable, a calculation, a conditional text block or a value in the sentence takes a text color, a fill, bold, italic, underline or strikethrough when a condition is met ("in red when the amount exceeds 1,000"). The button is on the floating toolbar, next to "Display condition"; it opens a window of at most eight rules, read in order, with a preview on the selected row and on every row.
+- **In every output**: Read mode, PDF, Word, Excel, HTML and e-mail all write the formatting; a column renamed in Grist is followed in the rules. Without a rule, nothing changes.
+- **"Like in Grist"**: a box in the window, unchecked by default, makes a variable follow, live, its column's conditional formatting in Grist (text color, fill, bold, italic, underline, strikethrough); the widget's own rules go on top. The box is greyed out, with its reason, when the column has no conditional formatting in Grist.
+- **Chips too**: the date, time, name, e-mail and row-number chips take conditional formatting, with the same button on their toolbar; in a repeated zone the rules read the row of the turn. In a text field of the e-mail (Subject, To…), the button is greyed out, with its reason.
+
+### Images and attachments
+
+- **Display condition of an image**: an image linked to an attachments column has a "Display condition" button on its toolbar, which opens the same window as for a variable; in Read mode and in exports (PDF, Word, HTML, e-mail) it only appears when the condition is met for the displayed row, the text around it stays. While editing, the image stays visible, with a dashed blue border.
+- **Loop on an image**: a "Loop" button repeats the image, one per row of a linked table: the image in the sentence (the copies side by side), the paragraph, the table row or the list item. Sort, filter and "If no row" are set as for a variable.
+- **"Rows shown" of an image**: keep all the rows or just one, the first or the last after the filter and the sort ("the last partner created", "the first logo in the order").
+- **An attachment that is not an image** (PDF, Word…): Read mode and every export write, in italics, "Attachment not shown (not an image): contrat.pdf" instead of an empty or broken frame. When a cell carries several attachments, the first image is the one drawn.
+
+### References between tables
+
+- **The link between two tables can go through several references**: the link's key can be a path (Badge › Full name › Structure). When only one path of references joins the two tables (up to three columns in a row), the window proposes it by itself; otherwise the › arrow of each Reference column opens the columns of the table it points to. Any variable of the table at the end (text, image, calculation, condition, loop) is then read through this path, without a formula column. An older version of the widget does not know these paths and ignores this link.
+- **Pick an image from Reference to Reference**: in "Image from a variable" and in an image's "Column…" list, the › arrow goes down from Reference to Reference to the attachments column ("Badge.Full name.Structure.Logo"); the image is linked to the whole path, keeps its size, alignment and opacity when it changes column, and one Undo gives the old one back.
+
+### Fixes in version 1.1
+
+- **Bold in the PDF**: in the PDF and in the sheet assembly before printing, text in Arial or Georgia is no longer all bold (or all regular) because of its first word: a card's job title, regular in the template, came out bold. The letter shapes, the widths and the pagination do not change.
+- **Pasting a variable copied on its own, on Windows**: it no longer leaves two line breaks behind it, in a table, a grid or a paragraph; a single Undo removes the paste.
+- **An image whose attachments column has disappeared**: its frame turns red, like a broken variable, with what is missing in the tooltip, and its toolbar offers "Column…" to pick another one, keeping the size, alignment, layer and opacity; a single Undo gives the old column back. The red and the icon go away by themselves when the column is back in Grist.
+- **An attachment checked in "Other attributes" becomes an image**: "Insert" places an image linked to the column (with the whole path when you went down from Reference to Reference) and "Replace" puts it in place of the bubble; the image keeps the bubble's display condition.
+
+## Notes for version 1.0.0
+
+This part keeps the 1.0.0 note, the first stable version: what changed since the 1.0.0-beta.1 beta. It is for anyone moving straight from the beta to 1.1.
+
+### What's new
+
+#### Text formatting
 
 - **Right-to-left text**: a checkable row of the Alignment menu (hover the button) writes a paragraph, a heading or a list from right to left, for Hebrew, Arabic or a mirrored layout. Bullets, numbers and indents move to the right, and Reading mode, printing, the PDF, Word and the exported HTML keep the direction.
 - **"Paragraph…": line spacing and spaces** (Alignment menu): line spacing, as a multiple of single spacing like in Word and PowerPoint, and the space before and after the paragraph; "Default" removes the three settings.
@@ -335,7 +415,7 @@ It describes the widget on its own, installed in Grist. What also needs Grist Fa
 - **One single color palette**: text, highlight, cell fill and border line open the same palette (ten columns over five rows, including dark tones that read well as text, with a contrast of at least 4.5:1), with "Custom…" for a precise color.
 - **Bubbles and chips in the editor: "Default" or "Formatting"** (Settings > Theme): variable bubbles, calculation bubbles, chips and "@" records either keep their pale, easy-to-spot background, or show the chosen color, highlight, underline and strikethrough. The page number, the footnote and the conditional checkbox follow this choice too, and Reading mode, the PDF and Word write their formatting.
 
-### Headings, bookmarks, links and table of contents
+#### Headings, bookmarks, links and table of contents
 
 - **Template and document heading styles**: the "Heading" menu (on hover) shows "Template heading styles" and "Shared heading styles"; the latter apply to all the templates of the Grist document.
 - **Style of a heading level taken from the selection**: "Update 'Heading N' to match the selection" keeps the formatting of the chosen text for every heading of that level; "Restore the original style" goes back.
@@ -344,7 +424,7 @@ It describes the widget on its own, installed in Grist. What also needs Grist Fa
 - **Links to a heading or a bookmark of the document**: "Link… > In this document" lists the headings and the bookmarks, with a search.
 - **Clickable table of contents**: a line of the table of contents leads to its heading in the editor, in Reading mode (click, Enter or Space) and in the PDF (text and page number as links).
 
-### Tables in a document
+#### Tables in a document
 
 - **Several rows or columns at once**: with several cells selected, "Row before", "Row after", "Column before" and "Column after" add as many as the selection covers, in a single Undo step.
 - **Borders, vertical alignment and gridlines**: the table bar has "Borders" (all lines, the outside, the inside, one side or none, in the chosen color, with a "Gridlines" checkbox for Reading mode and the exports) and "Align to top", "Align to middle" and "Align to bottom".
@@ -357,12 +437,12 @@ It describes the widget on its own, installed in Grist. What also needs Grist Fa
 - **Page break before a row**: the "Page break" button (or Alt+Enter) starts a new page before the row of the cursor, in the A4 preview, Reading mode, the PDF and Word; the header rows of the table come back at the top of the page.
 - **Table linked to a Grid template**: "Table from a Grid template…", in the menu of the "Table" button, places in the document a copy of a grid's table that stays linked to it (a colored strip in the margin shows it) and whose cells follow the rules of the grid.
 
-### Grids
+#### Grids
 
 - **Gridlines in Reading mode and the exports**: a checkable row of the "Borders" menu removes the default gray lines from Reading mode, the PDF and the Excel file of a grid, while keeping the ones you set.
 - **Same size for the selected rows and columns**: dragging the line of one row (or column) among several selected sets them all to the same height (width), as in a spreadsheet.
 
-### Headers, footers and page
+#### Headers, footers and page
 
 - **QR code in the header and footer**: "QR code…" stays available in these zones (its text can contain a column).
 - **Esc ends the editing of the header and footer**, like "Done".
@@ -371,7 +451,7 @@ It describes the widget on its own, installed in Grist. What also needs Grist Fa
 - **Preset margins**: "None", "Narrow", "Classic" (25.4 mm, Word's "Normal") and "Wide" in the Margins tab of Settings, with a button that links the four margins.
 - **Margin around each page in "Assemble before printing"**: a "Margin" field (in millimeters) leaves room around each page placed on the sheet, and the cut marks run through the middle of the gap between two pages.
 
-### Variables, conditions and loops
+#### Variables, conditions and loops
 
 - **Loop over all the rows of a table**: the Loop icon is no longer greyed out on a column of the page's table, and "Table rows to use" offers "As the widget (its filter and sort)", "As the view linked to the widget" and "The whole table".
 - **Loop inside a loop**: for each invoice its lines, then for each line its steps (as a table, a list or paragraphs).
@@ -395,7 +475,7 @@ It describes the widget on its own, installed in Grist. What also needs Grist Fa
 - **Date format on a "Date and time" column**: the date format of a variable also works on these columns, and its bar gains the "Time" list.
 - **Columns found by words**: the words of a column can be typed in any order, with or without "_", "." and "-", in every list with a search; the same rule applies to "Organize my templates" and the gallery.
 
-### Templates, macro-templates and gallery
+#### Templates, macro-templates and gallery
 
 - **A gallery of 21 templates** instead of 4: the previous four redone, templates to print (flyer, invitation, poster, badge, business card, address and product labels), an email, two grids for Excel, and business documents (rent receipt, school report, recipe sheet, attendance sheet, purchase order, inventory sheet, stock movement slip).
 - **"Create with its tables"**: a gallery template can create its empty tables, with their calculated columns and their links; the preview shows the document filled with sample rows, without writing any.
@@ -406,7 +486,7 @@ It describes the widget on its own, installed in Grist. What also needs Grist Fa
 - **Naming a version**: "Name…" gives a version a name ("Before sending"), which the limits on the number of versions never delete.
 - **Template of the view: an email or a macro-template**: Settings > View also accepts an email or a macro-template as the template of a view.
 
-### Exports and imports
+#### Exports and imports
 
 - **"Light" PDF**: the same vector PDF, with its images brought down to 150 points per inch (a 4 MB photo weighs only a few dozen KB).
 - **Protected PDF**: encrypted with AES-256, with an opening password, permissions (print, copy, edit or annotate) and author, subject and keywords.
@@ -423,18 +503,18 @@ It describes the widget on its own, installed in Grist. What also needs Grist Fa
 - **HTML export**: "HTML (file to upload)" writes a complete page for a website, "HTML (content to paste)" writes only the content, to paste into an HTML block of a content manager.
 - **Zimbra for "Create email"**: Settings > Email chooses the mail program, "Standard" or "Zimbra" (whose web client misreads the link).
 
-### Find / Replace
+#### Find / Replace
 
 - **Regular expressions**: the ".*" button reads what is typed as a pattern, `$1`, `$2`… taking the groups in "Replace with".
 - **Bubbles**: a variable or calculation bubble is a result when its name, its "Before", its "After", its "otherwise" or its formula contains the searched text.
 - **Header and footer**: the search goes through them too, in the order of the page, and the counter counts them ("2 of 4").
 
-### Reading and saving
+#### Reading and saving
 
 - **Grist Viewer accounts**: a person whom Grist opens read-only sees the widget in Reading mode right away, with a greyed-out bar, comments closed and free exports.
 - **"Save" reminder** in the View and Access settings: a colored line reminds that these settings reach other people only after a click on "Save".
 
-### Undo and Redo (Ctrl+Z, Ctrl+Y)
+#### Undo and Redo (Ctrl+Z, Ctrl+Y)
 
 Ctrl+Z undoes and Ctrl+Y redoes, in addition to the text:
 
@@ -460,19 +540,19 @@ The language is deliberately left out of Undo.
 
 - **Safer undo shortcuts**: Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z no longer act behind an open window, even in Chrome, and also work when the focus stayed on a list or a slider of the floating bar.
 
-### Interface, language and accessibility
+#### Interface, language and accessibility
 
 - **"What's new" window**: Settings > Credits > "What's new" opens an eleven-screen carousel with real screenshots: eight new features of the version, an "And also" screen (headings and their styles, Find / Replace, pages, dates and times, exports), what becomes of a template made with the beta, and the habits that change; the last screen leads, through "See details", to a second window, "Exporting, in detail" (five screens).
 - **A greyed-out button or menu row says why**: on hover, the tooltip gives the reason (in an email template, for example, that the template is written in plain text); on click, the status corner writes the same sentence. Nothing is removed or hidden. The reasons cover the document's rights, Reading mode, the email template, the macro-template, the grid, the header and the footer, and the export types that do not fit the open template.
 - **201 window texts rewritten**, in French and in English: introductions, help, errors, confirmations, status bar messages and tooltips say what you get in the document.
 - **58 customizable keyboard shortcuts** (54 in the beta).
 
-### Speed
+#### Speed
 
 - **Pages of a long document computed four times faster**: page breaks are placed in one go, and the pages stay exactly the same (a 117-page text opens in 1.0 s instead of 1.5 s, on Chromium).
 - **Lighter Reading mode and auto-save**: entering Reading mode draws the page only once, and auto-save no longer rebuilds the whole text on each pass.
 
-## What changes if you come from the beta
+### What changes if you come from the beta
 
 These changes affect habits from the beta.
 
@@ -493,15 +573,15 @@ These changes affect habits from the beta.
 - **Gallery**: the four previous templates are redone with the recent features; the templates already created from them do not change.
 - **The beta stays available**: if an old template does not reopen well in the V1, the 1.0.0-beta.1 beta is still served, as it was and without fixes, at `https://grist-factory.github.io/Publipostage-Plus/beta/` (in Grist, change the address of the custom widget). Going back is safe as long as the template has not been saved with the V1: the beta erases what it does not know (bookmarks, superscripts and subscripts, "Otherwise show").
 
-### Removed
+#### Removed
 
 - **"Low quality" and "Ultra HD"**: these two rows of the PDF quality menu, greyed out ("soon") since html2pdf.js was removed, are no longer in the interface. To lighten a PDF, the "Light" row reduces the images; for a poster, use the vector PDF and "Custom size".
 
-## Fixes
+### Fixes
 
 These fixes affect what the beta already did, grouped by topic; the [changelog](CHANGELOG.md) details them one by one.
 
-### Fidelity between the editor, Reading mode, the PDF, Word and HTML
+#### Fidelity between the editor, Reading mode, the PDF, Word and HTML
 
 - **The table rows on screen have the height of those in the PDF**, in a narrow panel too: a long table is cut at the same place on screen and in the PDF, and the margin of a table counts everywhere in pagination (no page with a table grows any more).
 - **Pages that carry a short table, a quote, a code block or a conditional text block no longer grow.**
@@ -518,7 +598,7 @@ These fixes affect what the beta already did, grouped by topic; the [changelog](
 - **Word**: the cap, the double line and the merged rows of a table find their place again, a narrow table keeps its width, and so does a table as wide as the page.
 - **A footnote's color and a checkbox's underline and strikethrough carry over to the other exports**: HTML writes them, and the Yes / No checkbox gets them in Reading mode, the PDF and Word.
 
-### Lists, quotes, headings and blocks
+#### Lists, quotes, headings and blocks
 
 - **A centered, right-aligned or justified bullet, number, task or quote stays so** in Word and in the PDF (list item, quote).
 - **A list has, in the PDF, the checkbox, the bullet and the text of the editor**: a task list with its checkbox, a list text that starts at the same place, a list in a quote with its bullets and its bar, a quote or a list in a table cell well placed in every column.
@@ -531,14 +611,14 @@ These fixes affect what the beta already did, grouped by topic; the [changelog](
 - **"1er" in dates written out in French**: the first of the month is written "1er janvier 1990" in Reading mode, the PDF, Word and the email.
 - **A batch of a single row speaks in the singular** ("1 PDF generated").
 
-### Headers and footers
+#### Headers and footers
 
 - **A logo aligned left or right stays next to the text** in Reading mode, the PDF and Word; the aligned logo of a footer appears in the PDF.
 - **Bulleted and numbered lists of a header or footer keep their bullets and numbers in Word**, and empty lines no longer push the text of the page down there.
 - **A header or footer taller than its zone no longer pushes the text of the page.**
 - **Moving from the body to the header or footer no longer records anything in track changes** and no longer mixes up the Undo history.
 
-### Data, dates and References
+#### Data, dates and References
 
 - **Currencies, dates and numbers are written as in Grist**: a currency in English, an "Any" column that computes a date, a Reference that shows a decimal price (comma) or a number, a row ID, a Yes / No or a date, and a cell whose formula failed are written the same in the editor, Reading mode, the PDF, Word and the email.
 - **The Excel file of a single row writes real dates.**
@@ -552,7 +632,7 @@ These fixes affect what the beta already did, grouped by topic; the [changelog](
 - **The day, month and year buttons of a date** follow the language ("D", "M", "Y" in English).
 - **The client's SIRET and VAT lines show** in the invoice and the contract of the gallery (templates already created do not change).
 
-### Saving, names and Settings
+#### Saving, names and Settings
 
 - **Enter validates the name of a template wherever it is typed**, and an erased name no longer loses the save.
 - **"Discard" really discards what was just typed**, even when auto-save was in the middle of writing.
@@ -564,13 +644,13 @@ These fixes affect what the beta already did, grouped by topic; the [changelog](
 - **The bar of an image left selected no longer comes back over the top bar** when you switch to Reading mode and change the export type.
 - **The table bar stays shown after a "Borders" setting.**
 
-### Email
+#### Email
 
 - **The text of the "Create email" link is faithful to the editor**: an empty paragraph, two in a row or a line break give empty lines, and paragraphs that follow each other stay stuck together.
 - **An email template writes plain text only**: formatting shortcuts and typed Markdown signs no longer do anything in an email (bold and underline do not go into an email yet).
 - **A line break in the subject or in an address no longer adds anything to the "Create email" link**: the subject, recipient, Cc and Bcc come from a column, and a multi-line cell used to put its line break into the link as it was, where a mail program may read it as the start of another field. The subject's line break becomes a space and an address's line break separates two recipients; the body keeps its lines.
 
-### Interface and accessibility
+#### Interface and accessibility
 
 - **The area where the document is written has a name** for a screen reader.
 - **Button tooltips are readable in the dark theme**, the row or tab chosen under the mouse keeps enough contrast, and fields, buttons and labels use the system font (the text of headers and footers is written in Roboto in the sheet).
