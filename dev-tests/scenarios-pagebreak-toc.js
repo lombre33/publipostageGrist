@@ -620,6 +620,29 @@
     },
   });
 
+  // L'aperçu du sommaire quand un document chargé (Editor.setHTML, qui n'émet pas 'update') garde le nœud du sommaire du document d'avant (gw audit 1.1 du 05/11, essai englishTextsMouse) : le même bloc
+  // au même rang n'est pas recréé, son NodeView ne se redessinait pas, et l'aperçu restait sur son texte d'attente - ou sur les titres du document d'avant - jusqu'à la première frappe.
+  cases.push({
+    id: 'toc_editor_preview_follows_headings_of_a_document_that_replaces_one_with_a_toc',
+    description: 'Un document chargé qui remplace un document déjà doté d\'un sommaire redessine l\'aperçu du sommaire d\'après ses propres titres, sans rien taper : texte d\'attente, puis « Alpha », puis de nouveau le texte d\'attente',
+    run: async (h) => {
+      await h.resetEditor();
+      const state = () => { const marker = h.tiptap().querySelector('.toc-marker'); return { lines: Array.from(h.tiptap().querySelectorAll('.toc-entry-preview')).map(el => el.textContent), text: marker ? marker.textContent : null }; };
+      Editor.setHTML('<p>Dear</p><div class="toc-marker"></div>');
+      await h.sleep(120);
+      const first = state();
+      Editor.setHTML('<h1>Alpha</h1><div class="toc-marker"></div><p>Dear customer,</p>');
+      await h.sleep(120);
+      const second = state();
+      Editor.setHTML('<p>Dear</p><div class="toc-marker"></div>');
+      await h.sleep(120);
+      const third = state();
+      const waiting = I18n.t('toc.placeholder');
+      const pass = first.lines.length === 0 && first.text === waiting && JSON.stringify(second.lines) === JSON.stringify(['Alpha']) && third.lines.length === 0 && third.text === waiting;
+      return { pass, notes: JSON.stringify({ first, second, third, waiting }) };
+    },
+  });
+
   // L'aperçu du sommaire à la sortie d'un en-tête ou d'un pied (carte d'Antoine du 27/10, « Corriger le sommaire qui garde son texte d'attente après « Terminer » »). « Terminer » remet le
   // corps par `loadTrackedDocument`, qui n'émet pas 'update' ; le NodeView du sommaire naît PENDANT la mise à jour de la vue, quand ProseMirror n'a pas encore attaché les titres du corps à la
   // page : il y lisait ceux de la zone qu'on quitte, ou aucun, et gardait son texte d'attente jusqu'à la première frappe dans un titre. Les lignes se lisent dès le retour de la sortie

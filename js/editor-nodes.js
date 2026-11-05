@@ -1873,7 +1873,12 @@ const EditorNodes = (function () {
       // La colonne Pièces jointes du cadre, lue par Editor.markBadgeValidity pour le rouge d'une colonne disparue (jamais un attribut du nœud : le cadre n'écrit pas ces
       // clés dans le HTML du modèle, c'est renderHTML qui le fait, sur l'<img>).
       if (isVarBox) { wrap.dataset.imageVarTable = attrs.varTable; wrap.dataset.imageVarColumn = attrs.varColumn || ''; }
-      else { delete wrap.dataset.imageVarTable; delete wrap.dataset.imageVarColumn; wrap.classList.remove('editor-image-broken'); wrap.removeAttribute('title'); }
+      else {
+        // L'info-bulle du rouge d'une colonne disparue (Editor.markBadgeValidity) ne reste pas sur une image qui n'est plus celle d'une colonne ; mais celle d'un cadre grisé (le graphique sans
+        // son extension, ChartEntry.setOff) n'est pas à elle : seule la classe du rouge dit que le `title` est le sien.
+        if (wrap.classList.contains('editor-image-broken')) wrap.removeAttribute('title');
+        delete wrap.dataset.imageVarTable; delete wrap.dataset.imageVarColumn; wrap.classList.remove('editor-image-broken');
+      }
       wrap.classList.toggle('editor-image-qr-placeholder', isQrBox);
       wrap.classList.toggle('editor-image-chart-placeholder', isChartBox);
       // Le dessin est prêt : il prend la place du cadre pointillé et de son libellé (css/chart-frame.css).
@@ -2255,6 +2260,10 @@ const EditorNodes = (function () {
               nodeViewEditor.chain().focus(null, { scrollIntoView: false }).setTextSelection(nodeViewEditor.view.posAtDOM(heading, 0)).run();
             };
             let renderedStyle = null;
+            // Les titres tels que l'aperçu les a dessinés (leur niveau et leur texte) : un document chargé sans 'update' (Editor.setHTML) qui garde CE nœud de sommaire (le même bloc au même rang)
+            // ne le recrée pas, et son aperçu gardait les titres - ou le texte d'attente - du document d'avant jusqu'à la première frappe.
+            let renderedHeadings = null;
+            const headingsKey = () => headingElements().map(el => el.tagName + ' ' + el.textContent).join('\n');
             // Vrai dès que l'aperçu a été dessiné sur une page À JOUR. Le NodeView naît PENDANT la mise à jour de la vue : ProseMirror n'attache les nœuds du nouveau contenu à la page qu'à la fin,
             // et l'aperçu y lit ses titres - ceux d'avant (la zone qu'on vient de quitter) ou aucun. Un chargement qui n'émet pas 'update' (Editor.loadTrackedDocument : « Terminer » d'un en-tête ou
             // d'un pied, qui remet le corps) laissait ainsi l'aperçu sur son texte d'attente, ou sur un seul titre, jusqu'à la première frappe dans un titre.
@@ -2263,6 +2272,7 @@ const EditorNodes = (function () {
               const headingEls = headingElements();
               dom.innerHTML = '';
               renderedStyle = styleOnRoot();
+              renderedHeadings = headingsKey();
               if (!headingEls.length) { dom.textContent = I18n.t('toc.placeholder'); return; }
               HeadingNumbering.entriesFor(headingEls, renderedStyle).forEach((entry, index) => {
                 const line = document.createElement('div');
@@ -2280,7 +2290,7 @@ const EditorNodes = (function () {
             // comparaison ne coûte qu'une chaîne par transaction, et l'aperçu ne se redessine que si le style a changé. 'transaction' vient aussi juste après la mise à jour de la vue qui a créé le
             // NodeView, la page y est à jour : le premier passage redessine l'aperçu (drawnOnUpdatedPage), avant tout ce qui mesure la page ensuite (la pagination).
             const redraw = () => { drawnOnUpdatedPage = true; refresh(); };
-            const redrawIfStale = () => { if (!drawnOnUpdatedPage || styleOnRoot() !== renderedStyle) redraw(); };
+            const redrawIfStale = ({ transaction } = {}) => { if (!drawnOnUpdatedPage || styleOnRoot() !== renderedStyle || (transaction && transaction.docChanged && headingsKey() !== renderedHeadings)) redraw(); };
             refresh();
             nodeViewEditor.on('update', redraw);
             nodeViewEditor.on('transaction', redrawIfStale);
