@@ -55,6 +55,18 @@ vulnérabilités, mais des améliorations sont les bienvenues sous forme d'issue
   connexions ;
 - les « droits par personne » du widget sont un verrou d'interface, pas une protection des données.
 
+## Si un site tiers ou un compte est compromis
+
+Le widget charge son code depuis son propre site (GitHub Pages), depuis `esm.sh` (l'éditeur), depuis `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` (les exports, chacun avec une empreinte d'intégrité SRI que le navigateur vérifie), et le script d'API de Grist depuis `docs.getgrist.com`. Avec l'accès complet au document, un script piégé servi par l'un d'eux, ou publié depuis un compte volé, pourrait lire et écrire tout le document. Voici ce que l'équipe prévoit de faire, dans cet ordre, dès qu'un de ces cas est signalé :
+
+1. **Prévenir.** Un avis en tête du README dit ce qui est touché et ce que chaque personne doit faire, en premier lieu retirer le widget de ses pages Grist le temps de la correction.
+2. **Couper la source.** Pour un site tiers : retirer son adresse de la politique de sécurité du contenu (la balise `<meta http-equiv="Content-Security-Policy">` de `index.html`) et republier. Le navigateur refuse alors tout script venu de ce site, même si une balise le demande ; le widget peut ne plus démarrer, ce qui est voulu. Pour le compte qui publie : remettre en ligne la dernière version saine (une étiquette `vX.Y.Z` du dépôt) avant toute autre chose.
+3. **Reprendre la main sur le compte.** Changer le mot de passe, fermer toutes les sessions, révoquer les clés d'accès et les jetons personnels, vérifier les branches, l'historique et les réglages de Pages du dépôt.
+4. **Mesurer.** Relire les commits publiés depuis la dernière version saine et noter la période pendant laquelle un code piégé a pu être servi.
+5. **Corriger et informer.** Publier la correction, puis un avis qui donne cette période : les personnes concernées relisent, sur ces dates, l'historique d'activité de leurs documents Grist.
+
+Un fichier modifié sur `cdnjs.cloudflare.com` ou `cdn.jsdelivr.net` est déjà refusé par le navigateur (SRI). Le cas qui demande cette fiche est surtout celui d'`esm.sh`, dont l'éditeur est chargé sans empreinte (voir « Choix connus, documentés »).
+
 ---
 
 # Security policy
@@ -111,3 +123,15 @@ vulnerabilities, but improvements are welcome as an issue:
 - the CSP keeps `'unsafe-eval'`, which Grist's API script requires, and limits neither images nor
   connections;
 - the widget's "per-person rights" are an interface lock, not data protection.
+
+## If a third-party site or an account is compromised
+
+The widget loads its code from its own site (GitHub Pages), from `esm.sh` (the editor), from `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` (the exports, each with an SRI integrity hash that the browser checks), and Grist's API script from `docs.getgrist.com`. With full access to the document, a booby-trapped script served by any of them, or published from a stolen account, could read and write the whole document. This is what the team plans to do, in this order, as soon as one of these cases is reported:
+
+1. **Warn.** A notice at the top of the README says what is affected and what each person should do, first of all remove the widget from their Grist pages while the fix is made.
+2. **Cut the source.** For a third-party site: remove its address from the content security policy (the `<meta http-equiv="Content-Security-Policy">` tag of `index.html`) and republish. The browser then refuses any script coming from that site, even if a tag asks for it; the widget may stop starting, which is intended. For the publishing account: put the last sound version back online (a `vX.Y.Z` tag of the repository) before anything else.
+3. **Take the account back.** Change the password, end all sessions, revoke access keys and personal tokens, check the repository's branches, history and Pages settings.
+4. **Measure.** Review the commits published since the last sound version and note the period during which booby-trapped code may have been served.
+5. **Fix and inform.** Publish the fix, then a notice giving that period: affected people review their Grist documents' activity history over those dates.
+
+A file altered on `cdnjs.cloudflare.com` or `cdn.jsdelivr.net` is already refused by the browser (SRI). The case this sheet is mainly for is `esm.sh`, whose editor is loaded without a hash (see "Known, documented choices").

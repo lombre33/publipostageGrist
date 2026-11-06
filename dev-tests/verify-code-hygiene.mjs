@@ -1860,4 +1860,24 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('README public : les trois rubriques du guide Grist.Gouv y sont (les deux langues lues ensemble, comme l\'outil)', missing('outils/depot-propre/public/README.md').length === 0, missing('outils/depot-propre/public/README.md').join(', '));
 }
 
+// ============================================================================
+// 34. La fiche de crise de SECURITY.md nomme chaque site d'où le widget charge du code (point sécurité du 06/11)
+// ============================================================================
+// Si `esm.sh`, un CDN ou le compte qui publie est compromis, le widget (accès complet au document) devient un moyen de lire et d'écrire tout le document : SECURITY.md dit ce que l'équipe fait, dans l'ordre.
+// La fiche doit rester juste quand la politique de sécurité du contenu (index.html) change : chaque site qu'elle laisse charger un script y est nommé, en français et en anglais.
+{
+  const policy = (read('index.html').match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/) || [])[1] || '';
+  const hosts = [...new Set((policy.match(/https:\/\/[a-z0-9.-]+/g) || []).map(url => url.slice('https://'.length)))];
+  const sheet = read('outils/depot-propre/public/SECURITY.md');
+  const frStart = sheet.indexOf('## Si un site tiers ou un compte est compromis');
+  const frEnd = sheet.indexOf('# Security policy');
+  const enStart = sheet.indexOf('## If a third-party site or an account is compromised');
+  const french = frStart >= 0 && frEnd > frStart ? sheet.slice(frStart, frEnd) : '';
+  const english = enStart >= 0 ? sheet.slice(enStart) : '';
+  check('fiche de crise : SECURITY.md porte la section « Si un site tiers ou un compte est compromis » et son pendant anglais, avec leurs cinq étapes numérotées (prévenir, couper la source, reprendre le compte, mesurer, corriger)',
+    [french, english].every(text => text.length > 800 && /^1\. /m.test(text) && /^5\. /m.test(text)), `${french.length} / ${english.length} caractères`);
+  check(`fiche de crise : elle nomme chaque site que la politique de sécurité du contenu laisse charger du code (${hosts.join(', ')}), en français et en anglais`,
+    hosts.length >= 4 && hosts.every(host => french.includes(host) && english.includes(host)), hosts.filter(host => !french.includes(host) || !english.includes(host)).join(', '));
+}
+
 summarizeAndExit();
