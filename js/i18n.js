@@ -861,7 +861,7 @@ const I18n = (function () {
     'caption.gridLocked': { fr: 'Pas de légende dans une grille', en: 'No caption in a grid' },
     // --- Texte alternatif d'une image (js/alt-text.js) : le bouton de la barre de l'image, la touche (Réglages > Raccourcis), la petite fenêtre et sa case « Image décorative » ---
     'altText.button': { fr: 'Texte alternatif…', en: 'Alternative text…' },
-    'altText.shortcut': { fr: 'Texte alternatif de l’image', en: 'Alternative text of the image' },
+    'altText.shortcut': { fr: 'Texte alternatif de l’image ou de l’objet', en: 'Alternative text of the image or object' },
     'altText.title': { fr: 'Texte alternatif', en: 'Alternative text' },
     'altText.label': { fr: 'Description de l’image', en: 'Image description' },
     'altText.placeholder': { fr: 'Ex. : Photo d’identité de la personne', en: 'E.g. ID photo of the person' },
@@ -869,6 +869,11 @@ const I18n = (function () {
     'altText.count': { fr: '{n} / {max}', en: '{n} / {max}' },
     'altText.decorative': { fr: 'Image décorative (rien à lire)', en: 'Decorative image (nothing to read)' },
     'altText.decorativeHint': { fr: 'Un lecteur d’écran passe l’image sans la lire : un filet, un fond, un motif qui n’apporte aucune information.', en: 'A screen reader skips the image: a rule, a background, a pattern that carries no information.' },
+    'altText.objectLabel': { fr: 'Description de l’objet', en: 'Object description' },
+    'altText.objectPlaceholder': { fr: 'Ex. : Flèche qui relie les deux étapes', en: 'E.g. Arrow linking the two steps' },
+    'altText.objectHint': { fr: 'Dites ce que montre l’objet ou à quoi il sert, en une ou deux phrases : un lecteur d’écran la lira à la place de l’objet.', en: 'Say what the object shows or what it is for, in a sentence or two: a screen reader will read it in place of the object.' },
+    'altText.objectDecorative': { fr: 'Objet décoratif (rien à lire)', en: 'Decorative object (nothing to read)' },
+    'altText.objectDecorativeHint': { fr: 'Un lecteur d’écran n’annonce pas l’objet : un filet, un fond, un motif qui n’apporte aucune information.', en: 'A screen reader does not announce the object: a rule, a background, a pattern that carries no information.' },
     // --- Fenêtre du lien (js/link-dialog.js) : « hyperlink » et pas « link », préfixe déjà pris par les tables liées (linkRules, linkConfig) ---
     'hyperlink.title.new': { fr: 'Insérer un lien', en: 'Insert a link' },
     'hyperlink.title.edit': { fr: 'Modifier le lien', en: 'Edit the link' },

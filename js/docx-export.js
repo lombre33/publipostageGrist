@@ -800,10 +800,14 @@ const DocxExport = (function () {
   // « décorative » de Word, que finishDocxDecorative pose après coup sur les images dont le titre est DECORATIVE_TITLE (`ctx.decorative` dit qu'il y en a).
   const DECORATIVE_TITLE = 'pp-decorative';
   function imageAltText(node, id, ctx) {
-    const alt = AltText.ofImage(node);
+    return altTextOf(AltText.ofImage(node), id, ctx);
+  }
+  function altTextOf(alt, id, ctx) {
     if (alt.decorative) ctx.decorative = true;
     return { id, name: '', description: alt.text, title: alt.decorative ? DECORATIVE_TITLE : '' };
   }
+  // Celui d'un objet de diapositive (un cadre, une forme, un trait : `attrs` de FreeFrame.normalized).
+  const frameAltText = (attrs, id, ctx) => altTextOf({ decorative: !!attrs.decorative, text: attrs.decorative ? '' : attrs.alt || '' }, id, ctx);
   async function imageRunsFrom(node, style, ctx) {
     if (node.hasAttribute('data-pdf-skip')) return [];
     // « Sur toutes les pages » (js/page-layer.js) : ancrée dans l'en-tête de chaque page (buildDocxDocument), pas dans le paragraphe qui la porte.
@@ -1396,7 +1400,7 @@ const DocxExport = (function () {
     const run = new docx.WpsShapeRun({
       type: 'wps',
       transformation: { width: attrs.w / ptPerPx, height: attrs.h / ptPerPx, flip: { horizontal: flip.includes('h') || undefined, vertical: flip.includes('v') || undefined } },
-      altText: { id: ctx.imageIdCounter, name: '', description: attrs.alt || '', title: '' },
+      altText: frameAltText(attrs, ctx.imageIdCounter, ctx),
       nonVisualProperties: {},
       outline: { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: Math.round(FreeFrame.lineWidthOf(attrs) * EMU_PER_PT), cap: LINE_CAPS[attrs.cap], compoundLine: COMPOUND_LINES[attrs.cmpd] },
       children: [new docx.Paragraph('')],
@@ -1467,7 +1471,7 @@ const DocxExport = (function () {
       type: 'wps',
       // En pixels, non arrondis : la bibliothèque en tire des EMU (9 525 par pixel), le cadre garde ainsi sa taille au point près.
       transformation: { width: Math.max(1, place.w / ptPerPx), height: Math.max(1, place.h / ptPerPx), rotation: attrs.rot || undefined },
-      altText: { id: ctx.imageIdCounter, name: '', description: attrs.alt || '', title: '' },
+      altText: frameAltText(attrs, ctx.imageIdCounter, ctx),
       nonVisualProperties: attrs.shape || isBackground ? {} : { txBox: '1' },
       outline: edgePt ? { type: 'solidFill', solidFillType: 'rgb', value: rgbHex(attrs.line), width: emu(edgePt), cap: LINE_CAPS[attrs.cap], compoundLine: COMPOUND_LINES[attrs.cmpd] } : { type: 'noFill' },
       solidFill: attrs.fill ? { type: 'rgb', value: rgbHex(attrs.fill) } : undefined,

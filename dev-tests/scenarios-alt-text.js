@@ -3,7 +3,8 @@
 // reprennent le texte, et la marque « décorative » de Word et de PowerPoint est écrite. Deux moitiés :
 //  1) l'ÉDITEUR : les assistants (nettoyage, « Image » d'avant), le nœud (défaut vide, aller-retour du HTML), le bouton (allumé quand l'image est décrite), la fenêtre (texte, case, Annuler, un seul
 //     Ctrl+Z), la touche ;
-//  2) les SORTIES : HTML, Markdown, Word (OOXML dézippé : `descr`, extension décorative), PowerPoint (export, puis réimport).
+//  2) les SORTIES : HTML, Markdown, Word (OOXML dézippé : `descr`, extension décorative), PowerPoint (export, puis réimport) ;
+//  3) les OBJETS de diapositive (lot 2 : cadre, forme, trait) : le modèle (`alt`, `decorative`), la fenêtre sur l'objet, Word et PowerPoint (export et réimport).
 // La vraie souris et le vrai clavier à 700x400 sont dans dev-tests/verify-alt-text-mouse.mjs.
 (function () {
   const cases = [];
@@ -51,13 +52,13 @@
         placeholder: AltText.textOf('Image'), placeholderSpaced: AltText.textOf('  Image '), real: AltText.textOf('Image du site'),
         describedByText: AltText.isDescribed({ alt: 'Un chat', decorative: false }), describedByCase: AltText.isDescribed({ alt: '', decorative: true }),
         notDescribed: AltText.isDescribed({ alt: '', decorative: false }), notDescribedLegacy: AltText.isDescribed({ alt: 'Image' }), noAttrs: AltText.isDescribed(null),
-        decorativeValues: [true, 'true', false, 'false', undefined, 1].map(AltText.isDecorative).join(),
+        decorativeValues: [true, 'true', false, 'false', undefined, 2, '1', 1].map(AltText.isDecorative).join(),
         plain: JSON.stringify(AltText.ofImage(made('<img alt="Un chat">'))), decor: JSON.stringify(AltText.ofImage(made('<img alt="Un chat" data-decorative="true">'))),
         legacy: JSON.stringify(AltText.ofImage(made('<img alt="Image">'))), bare: JSON.stringify(AltText.ofImage(made('<img>'))), missing: JSON.stringify(AltText.ofImage(null)),
         max: AltText.MAX,
       };
       const pass = seen.spaced === 'Un chat noir' && seen.long === 500 && seen.notText === '' && seen.controls === 'a b c' && seen.placeholder === '' && seen.placeholderSpaced === '' && seen.real === 'Image du site'
-        && seen.describedByText && seen.describedByCase && !seen.notDescribed && !seen.notDescribedLegacy && !seen.noAttrs && seen.decorativeValues === 'true,true,false,false,false,false'
+        && seen.describedByText && seen.describedByCase && !seen.notDescribed && !seen.notDescribedLegacy && !seen.noAttrs && seen.decorativeValues === 'true,true,false,false,false,false,true,true'
         && seen.plain === '{"decorative":false,"text":"Un chat"}' && seen.decor === '{"decorative":true,"text":""}' && seen.legacy === '{"decorative":false,"text":""}'
         && seen.bare === '{"decorative":false,"text":""}' && seen.missing === '{"decorative":false,"text":""}' && seen.max === 500;
       return { pass, notes: JSON.stringify(seen) };
@@ -320,6 +321,175 @@
       };
       const pass = written.count === 3 && written.described && written.decorative && written.plain && read.count === 3 && read.described && read.decorative && read.noPlaceholder;
       return { pass, notes: JSON.stringify({ written, read, props: props.map(p => p.slice(0, 420)) }) };
+    },
+  });
+
+  // === 3) Les objets de diapositive (lot 2 : cadres, formes, traits) ==============================================================================================
+  const frame = (y, extra, content) => FreeFrame.html(Object.assign({ x: 60, y, w: 220, h: 70 }, extra), content === undefined ? '<p>Texte</p>' : content);
+  const OBJECTS = () => frame(40, { alt: 'Une flèche vers l’étape 2', shape: 'rect', fill: '#ddeeff' }, '<p></p>') + frame(130, { decorative: '1', alt: 'Ignoré', shape: 'rect', fill: '#eeeeee' }, '<p></p>')
+    + frame(220, { alt: 'Le titre du bloc' }) + frame(310, { shape: 'line', line: '#0369a1', lw: 2, alt: 'Un filet bleu', h: 0 }, '') + frame(400, { shape: 'line', line: '#999999', lw: 1, decorative: '1', h: 0 }, '');
+  // Les objets du document, dans l'ordre : { node, pos }.
+  function objects() {
+    const found = [];
+    ed().state.doc.forEach((node, pos) => { if (node.type.name === 'freeFrame' || node.type.name === 'freeLine') found.push({ node, pos }); });
+    return found;
+  }
+  const selectObject = async index => { FreeFrame.select(ed(), objects()[index].pos); await sleep(150); };
+  const objectAttrs = index => FreeFrame.normalized(objects()[index].node.attrs);
+
+  cases.push({
+    id: 'alttext_object_model_keeps_the_text_drops_it_for_a_decorative_object_and_round_trips_the_html',
+    description: 'Un objet de diapositive (cadre, forme, trait) a `alt` (500 signes au plus) et `decorative` (« 1 ») : une marque décorative n\'a pas de texte, le HTML écrit `data-ff-alt` / `data-ff-decorative` seulement pour ceux qui en ont, `role="presentation"` et pas d\'`aria-label` pour un objet décoratif, et l\'éditeur relit tout',
+    run: async (h) => {
+      await h.resetEditor();
+      const normal = FreeFrame.normalized({ alt: '  Une \n flèche  ', decorative: '' });
+      const long = FreeFrame.normalized({ alt: 'a'.repeat(900) });
+      const decorative = FreeFrame.normalized({ alt: 'Ignoré', decorative: '1' });
+      const wordy = FreeFrame.normalized({ alt: 'Dit', decorative: 'true' });
+      const odd = FreeFrame.normalized({ alt: 'Dit', decorative: 'oui' });
+      Editor.setHTML(OBJECTS());
+      await sleep(250);
+      const saved = Editor.getHTML();
+      const doc = new DOMParser().parseFromString(saved, 'text/html');
+      const frames = Array.from(doc.querySelectorAll('.pp-free-frame'));
+      const rows = frames.map(el => ({ alt: el.getAttribute('data-ff-alt'), decorative: el.getAttribute('data-ff-decorative'), role: el.getAttribute('role'), label: el.getAttribute('aria-label') }));
+      const after = objects().map((one, i) => objectAttrs(i)).map(a => ({ alt: a.alt, decorative: a.decorative }));
+      const pass = normal.alt === 'Une flèche' && normal.decorative === '' && long.alt.length === 500 && decorative.alt === '' && decorative.decorative === '1' && wordy.decorative === '1' && wordy.alt === '' && odd.decorative === '' && odd.alt === 'Dit'
+        && frames.length === 5
+        && rows[0].alt === 'Une flèche vers l’étape 2' && rows[0].decorative === null && rows[0].role === 'group' && rows[0].label === 'Une flèche vers l’étape 2'
+        && rows[1].alt === null && rows[1].decorative === '1' && rows[1].role === 'presentation' && rows[1].label === null
+        && rows[2].alt === 'Le titre du bloc' && rows[3].alt === 'Un filet bleu' && rows[3].decorative === null && rows[4].decorative === '1' && rows[4].alt === null && rows[4].role === 'presentation'
+        && after.length === 5 && after[0].alt === 'Une flèche vers l’étape 2' && after[1].decorative === '1' && after[1].alt === '' && after[4].decorative === '1';
+      return { pass, notes: JSON.stringify({ normal: normal.alt, long: long.alt.length, decorative: [decorative.alt, decorative.decorative], wordy: [wordy.alt, wordy.decorative], odd: [odd.alt, odd.decorative], rows, after }) };
+    },
+  });
+
+  cases.push({
+    id: 'alttext_object_window_edits_the_selected_object_in_one_history_step_with_the_objects_words',
+    description: 'Ctrl+Alt+Y (AltText.open) sur un objet sélectionné ou dont le texte a le curseur : la fenêtre dit « Description de l\'objet » et « Objet décoratif », se remplit du texte de l\'objet, Entrée valide en UN pas d\'historique (un Ctrl+Z le défait), la case décorative grise le champ et efface le texte, rien ne change quand rien n\'est changé, et le curseur dans le texte y reste',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML(OBJECTS());
+      await sleep(250);
+      const seen = {};
+      await selectObject(0);
+      seen.canOpen = AltText.canOpen();
+      seen.opened = AltText.open() === true;
+      await sleep(120);
+      seen.words = { label: (document.querySelector('#pp-alt-modal label[for="pp-alt-text"]') || {}).textContent, decorative: (document.querySelector('.pp-alt-decorative span') || {}).textContent, value: input().value };
+      // Un texte nouveau, Entrée : un pas.
+      input().value = '  Une flèche  vers l’étape 3 ';
+      input().dispatchEvent(new Event('input', { bubbles: true }));
+      input().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      await sleep(150);
+      seen.written = objectAttrs(0).alt;
+      seen.closed = !modalOpen();
+      seen.stillSelected = !!ed().state.selection.node && ed().state.selection.from === objects()[0].pos;
+      ed().commands.undo();
+      await sleep(100);
+      seen.undone = objectAttrs(0).alt;
+      ed().commands.redo();
+      await sleep(100);
+      seen.redone = objectAttrs(0).alt;
+      // Rien de changé : le document n'est pas touché.
+      await selectObject(0);
+      AltText.open();
+      await sleep(100);
+      const before = ed().state.doc;
+      confirm().click();
+      await sleep(100);
+      seen.unchanged = ed().state.doc === before;
+      // La case décorative : le champ se grise, le texte s'efface.
+      await selectObject(2);
+      AltText.open();
+      await sleep(100);
+      seen.third = input().value;
+      decorativeBox().click();
+      await sleep(60);
+      seen.disabled = input().disabled;
+      confirm().click();
+      await sleep(120);
+      seen.decorativeSet = [objectAttrs(2).alt, objectAttrs(2).decorative];
+      AltText.open();
+      await sleep(100);
+      seen.reopened = { checked: decorativeBox().checked, disabled: input().disabled, value: input().value };
+      await closeModal();
+      // Une ligne : même fenêtre.
+      await selectObject(3);
+      AltText.open();
+      await sleep(100);
+      seen.line = input().value;
+      await closeModal();
+      // Le curseur dans le texte d'un cadre : la fenêtre s'ouvre sur lui, le curseur y reste.
+      const at = objects()[2];
+      ed().chain().focus().setTextSelection(at.pos + 3).run();
+      await sleep(100);
+      seen.cursorOpens = AltText.canOpen() && AltText.open() === true;
+      await sleep(100);
+      input().value = '';
+      input().dispatchEvent(new Event('input', { bubbles: true }));
+      decorativeBox().click();
+      confirm().click();
+      await sleep(120);
+      seen.cursorKept = !ed().state.selection.node && ed().state.selection.from > at.pos && ed().state.selection.from < at.pos + at.node.nodeSize;
+      seen.cleared = [objectAttrs(2).alt, objectAttrs(2).decorative];
+      // Hors d'un objet ou d'une image : rien.
+      await h.resetEditor();
+      Editor.setHTML('<p>Texte</p>');
+      await sleep(100);
+      seen.nothing = [AltText.canOpen(), AltText.open()];
+      const pass = seen.canOpen && seen.opened && /objet/.test(seen.words.label) && /Objet décoratif/.test(seen.words.decorative) && seen.words.value === 'Une flèche vers l’étape 2'
+        && seen.written === 'Une flèche vers l’étape 3' && seen.closed && seen.stillSelected && seen.undone === 'Une flèche vers l’étape 2' && seen.redone === 'Une flèche vers l’étape 3' && seen.unchanged
+        && seen.third === 'Le titre du bloc' && seen.disabled && seen.decorativeSet.join('|') === '|1' && seen.reopened.checked && seen.reopened.disabled && seen.reopened.value === ''
+        && seen.line === 'Un filet bleu' && seen.cursorOpens && seen.cursorKept && seen.cleared.join('|') === '|' && seen.nothing[0] === false && seen.nothing[1] === false;
+      return { pass, notes: JSON.stringify(seen) };
+    },
+  });
+
+  cases.push({
+    id: 'alttext_object_word_export_writes_the_description_and_the_decorative_mark',
+    description: 'Word (OOXML dézippé) : une forme, un cadre de texte et un trait portent `descr` ; un objet décoratif (forme, trait) a l\'extension « décorative » de Microsoft dans son `wp:docPr`, sans description ni titre de repère',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML(OBJECTS());
+      await sleep(250);
+      const out = await h.exportDocxParts(Editor.getHTML());
+      const docPrs = Array.from(out.doc.getElementsByTagName('wp:docPr'));
+      const marked = node => Array.from(node.getElementsByTagName('*')).some(el => el.localName === 'decorative' && el.getAttribute('val') === '1' && el.parentNode.getAttribute('uri') === DECORATIVE_URI);
+      const rows = docPrs.map(node => ({ descr: node.getAttribute('descr') || '', title: node.getAttribute('title') || '', decorative: marked(node) }));
+      const everything = Object.keys(out.parts).filter(name => /^word\/(document|header\d*|footer\d*)\.xml$/.test(name)).map(name => out.parts[name]).join('\n');
+      const described = ['Une flèche vers l’étape 2', 'Le titre du bloc', 'Un filet bleu'].map(text => rows.filter(row => row.descr === text).length);
+      const decoratives = rows.filter(row => row.decorative);
+      const pass = described.join() === '1,1,1' && decoratives.length === 2 && decoratives.every(row => row.descr === '' && row.title === '') && rows.every(row => row.title === '') && !/pp-decorative/.test(everything) && !/Ignoré/.test(everything);
+      return { pass, notes: JSON.stringify({ rows, described, decoratives: decoratives.length, titleLeft: /pp-decorative/.test(everything) }) };
+    },
+  });
+
+  cases.push({
+    id: 'alttext_object_powerpoint_export_writes_descr_and_the_decorative_extension_and_the_import_reads_them_back',
+    description: 'PowerPoint exporté : `descr` sur les formes, cadres de texte et traits ; extension « décorative » dans `p:cNvPr` d\'une forme (après son lien) ou d\'un trait décoratif ; relu par l\'import, `data-ff-alt` et `data-ff-decorative` reviennent sur les mêmes objets',
+    run: async () => {
+      await ExportEngines.ensure('pptx');
+      const html = OBJECTS() + frame(480, { decorative: '1', shape: 'rect', fill: '#cccccc', link: 'https://exemple.fr/page' }, '<p></p>');
+      const blob = await PptxExport.fromHtml(html, { title: 'x' });
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const xml = await zip.file('ppt/slides/slide1.xml').async('string');
+      const props = Array.from(xml.matchAll(/<p:nv(?:Sp|CxnSp)Pr>(<p:cNvPr [^>]*?(?:\/>|>[\s\S]*?<\/p:cNvPr>))/g), match => match[1]);
+      const decorativeMark = new RegExp('<a:extLst><a:ext uri="' + DECORATIVE_URI.replace(/[{}]/g, m => '\\' + m) + '"><adec:decorative [^>]*val="1"/></a:ext></a:extLst>');
+      const written = {
+        count: props.length,
+        described: [/descr="Une flèche vers l’étape 2"/, /descr="Le titre du bloc"/, /descr="Un filet bleu"/].map(re => props.filter(one => re.test(one) && !/decorative/.test(one)).length).join(),
+        decoratives: props.filter(one => decorativeMark.test(one) && !/descr="[^"]/.test(one)).length,
+        linkThenMark: props.some(one => /<a:hlinkClick[^>]*\/>.*<\/a:extLst><\/p:cNvPr>$/.test(one) && decorativeMark.test(one)),
+        ignored: /Ignoré/.test(xml),
+      };
+      const imported = await PptxImport.fromBuffer(await blob.arrayBuffer());
+      const doc = new DOMParser().parseFromString(imported.html, 'text/html');
+      const read = Array.from(doc.querySelectorAll('.pp-free-frame')).map(el => ({ alt: el.getAttribute('data-ff-alt') || '', decorative: el.getAttribute('data-ff-decorative') || '', role: el.getAttribute('role') }));
+      const pass = written.count === 6 && written.described === '1,1,1' && written.decoratives === 3 && written.linkThenMark && !written.ignored
+        && read.length === 6 && read.filter(one => one.alt === 'Une flèche vers l’étape 2' && !one.decorative).length === 1 && read.filter(one => one.alt === 'Le titre du bloc').length === 1 && read.filter(one => one.alt === 'Un filet bleu').length === 1
+        && read.filter(one => one.decorative === '1' && one.alt === '' && one.role === 'presentation').length === 3;
+      return { pass, notes: JSON.stringify({ written, read, props: props.map(one => one.slice(0, 300)) }) };
     },
   });
 

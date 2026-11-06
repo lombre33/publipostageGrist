@@ -7,6 +7,9 @@
 //
 // L'ancien texte « Image » (le mot que l'insertion posait à toute image sans rien dire de ce qu'elle montre) ne compte pas comme une description : le champ s'ouvre vide, et les exports
 // l'écrivent vide, un lecteur d'écran ne lit donc plus « Image » pour une image qu'il ne sait pas décrire.
+//
+// Les OBJETS de diapositive (cadre, forme, trait : js/free-frame.js, `alt` et `decorative`) ont la même fenêtre (leurs mots : « Description de l'objet », « Objet décoratif »), ouverte par le bouton de leur
+// barre ou par la même touche, que l'objet soit sélectionné ou que le curseur soit dans son texte : l'image sélectionnée passe avant.
 const AltText = (function () {
   // Au plus 500 signes, comme le texte alternatif d'un cadre de diapositive (js/free-frame.js) : c'est la limite de PowerPoint.
   const MAX = 500;
@@ -16,7 +19,8 @@ const AltText = (function () {
   const clean = raw => (typeof raw === 'string' ? raw.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX) : '');
   // Le texte qui décrit vraiment l'image : '' pour l'ancien « Image ».
   const textOf = raw => { const text = clean(raw); return text === PLACEHOLDER ? '' : text; };
-  const isDecorative = value => value === true || value === 'true';
+  // `true` / « true » (une image : data-decorative) ou « 1 » (un objet de diapositive : data-ff-decorative).
+  const isDecorative = value => value === true || value === 'true' || value === '1' || value === 1;
   // Une image décrite : décorative, ou avec un texte.
   const isDescribed = attrs => !!attrs && (isDecorative(attrs.decorative) || !!textOf(attrs.alt));
   // Ce que le HTML d'une <img> dit (la Lecture, les exports) : `decorative`, et `text` - vide pour une image décorative, comme dans PowerPoint et Word.
@@ -25,17 +29,28 @@ const AltText = (function () {
     return { decorative, text: decorative || !img ? '' : textOf(img.getAttribute('alt')) };
   }
 
+  // Les mots de la fenêtre : ceux d'une image, ceux d'un objet de diapositive (cadre, forme, trait).
+  const IMAGE_WORDS = { label: 'altText.label', placeholder: 'altText.placeholder', hint: 'altText.hint', decorative: 'altText.decorative', decorativeHint: 'altText.decorativeHint' };
+  const OBJECT_WORDS = { label: 'altText.objectLabel', placeholder: 'altText.objectPlaceholder', hint: 'altText.objectHint', decorative: 'altText.objectDecorative', decorativeHint: 'altText.objectDecorativeHint' };
+
   // La fenêtre
   let win = null;
   let refs = null;
   let state = null;
 
-  // L'image sélectionnée : { node, pos }, sinon null.
-  function selectedNode(ed) {
-    const node = ed && ed.state.selection.node;
-    return node && node.type && node.type.name === 'editorImage' ? { node, pos: ed.state.selection.from } : null;
+  // Ce qui porte le texte alternatif : l'image sélectionnée, sinon l'objet de diapositive (cadre, forme, trait) sélectionné ou dont le texte a le curseur (js/free-frame.js). { kind, pos, alt,
+  // decorative, selected }, sinon null.
+  function target(ed) {
+    if (!ed) return null;
+    const selection = ed.state.selection;
+    const node = selection.node;
+    if (node && node.type && node.type.name === 'editorImage') return { kind: 'image', pos: selection.from, alt: node.attrs.alt, decorative: node.attrs.decorative, selected: true };
+    const frame = typeof FreeFrame === 'object' ? FreeFrame.currentFrame(ed.state) : null;
+    if (!frame) return null;
+    const attrs = FreeFrame.normalized(frame.node.attrs);
+    return { kind: 'object', pos: frame.pos, alt: attrs.alt, decorative: attrs.decorative, selected: frame.pos === selection.from && !!node };
   }
-  const canOpen = () => { const ed = EditorCore.getEditor(); return !!ed && ed.isEditable && !!selectedNode(ed); };
+  const canOpen = () => { const ed = EditorCore.getEditor(); return !!ed && ed.isEditable && !!target(ed); };
 
   function ensure() {
     if (win) return;
@@ -98,19 +113,21 @@ const AltText = (function () {
   // Ouvre la fenêtre sur l'image sélectionnée. Faux quand aucune image n'est sélectionnée ou que l'éditeur n'est pas modifiable (la Lecture, un document en lecture seule).
   function open() {
     const ed = EditorCore.getEditor();
-    const found = ed && ed.isEditable ? selectedNode(ed) : null;
+    const found = ed && ed.isEditable ? target(ed) : null;
     if (!found) return false;
     ensure();
-    state = { pos: found.pos };
+    state = { pos: found.pos, kind: found.kind, selected: found.selected };
+    const object = found.kind === 'object';
     const { label, input, hint, decorative, decorativeText, decorativeHint, cancel, ok } = refs;
     win.title.textContent = I18n.t('altText.title');
-    label.textContent = I18n.t('altText.label');
-    input.placeholder = I18n.t('altText.placeholder');
-    input.value = textOf(found.node.attrs.alt);
-    hint.textContent = I18n.t('altText.hint');
-    decorative.checked = isDecorative(found.node.attrs.decorative);
-    decorativeText.textContent = I18n.t('altText.decorative');
-    decorativeHint.textContent = I18n.t('altText.decorativeHint');
+    const words = object ? OBJECT_WORDS : IMAGE_WORDS;
+    label.textContent = I18n.t(words.label);
+    input.placeholder = I18n.t(words.placeholder);
+    input.value = textOf(found.alt);
+    hint.textContent = I18n.t(words.hint);
+    decorative.checked = isDecorative(found.decorative);
+    decorativeText.textContent = I18n.t(words.decorative);
+    decorativeHint.textContent = I18n.t(words.decorativeHint);
     cancel.textContent = I18n.t('common.cancel');
     ok.textContent = I18n.t('common.confirm');
     syncCount();
@@ -124,11 +141,15 @@ const AltText = (function () {
   function apply() {
     const ed = EditorCore.getEditor();
     const current = ed && state ? ed.state.doc.nodeAt(state.pos) : null;
-    if (!current || current.type.name !== 'editorImage') { closeWindow(); return; }
     const decorative = refs.decorative.checked;
     const alt = decorative ? '' : clean(refs.input.value);
-    const unchanged = alt === textOf(current.attrs.alt) && decorative === isDecorative(current.attrs.decorative);
-    if (!unchanged) EditorCore.patchNodeAndReselect(ed, state.pos, Object.assign({}, current.attrs, { alt, decorative }));
+    if (current && state.kind === 'image' && current.type.name === 'editorImage') {
+      const unchanged = alt === textOf(current.attrs.alt) && decorative === isDecorative(current.attrs.decorative);
+      if (!unchanged) EditorCore.patchNodeAndReselect(ed, state.pos, Object.assign({}, current.attrs, { alt, decorative }));
+    } else if (current && state.kind === 'object') {
+      // FreeFrame.patch ne pose rien quand rien ne change ; l'objet reste sélectionné s'il l'était (le curseur dans son texte y reste).
+      FreeFrame.patch(ed, state.pos, { alt, decorative: decorative ? '1' : '' }, state.selected);
+    }
     closeWindow();
   }
 

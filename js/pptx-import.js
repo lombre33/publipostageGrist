@@ -1004,7 +1004,7 @@ const PptxImport = (function () {
     return FreeFrame.html({
       x: Math.min(start[0], end[0]), y: Math.min(start[1], end[1]), w: Math.abs(end[0] - start[0]), h: Math.abs(end[1] - start[1]),
       shape: ShapeGeometry.LINE, flip, line: '#' + look.color, lw: look.width, lineTr: look.tr || 0, dash: look.dash || '', cap: look.cap || '', cmpd: look.cmpd || '',
-      head: look.head || '', headW: look.headW || '', headLen: look.headLen || '', tail: look.tail || '', tailW: look.tailW || '', tailLen: look.tailLen || '', layer: layer || '', alt: look.alt || '',
+      head: look.head || '', headW: look.headW || '', headLen: look.headLen || '', tail: look.tail || '', tailW: look.tailW || '', tailLen: look.tailLen || '', layer: layer || '', alt: look.alt || '', decorative: look.decorative || '',
     }, '');
   }
 
@@ -1596,7 +1596,7 @@ const PptxImport = (function () {
     const name = ShapePresets.freeze({ a: '', g: '', p: specs, r: '' }, box.w, box.h, { h: box.flipH, v: box.flipV });
     if (!name) return '';
     const frame = { x: box.x, y: box.y, w: box.w, h: box.h, shape: name, fill: heads.length ? '#' + ink.hex : '', line: '#' + ink.hex, lw, fillTr: heads.length ? ink.tr : 0, lineTr: ink.tr,
-      dash: look.dash || '', cap: look.cap || '', cmpd: look.cmpd || '', rot: box.rot, layer: env.decor || '', alt: look.alt || '' };
+      dash: look.dash || '', cap: look.cap || '', cmpd: look.cmpd || '', rot: box.rot, layer: env.decor || '', alt: look.alt || '', decorative: look.decorative || '' };
     Object.assign(frame, frameOfShape(name, box, lw, '', frame.cap));
     return FreeFrame.html(frame, '<p></p>');
   }
@@ -1608,6 +1608,7 @@ const PptxImport = (function () {
     const look = lineOf(spPr, kid(node, 'style'), env);
     if (!look) return;
     look.alt = altOfObject(node);
+    look.decorative = decorativeOfObject(node) ? '1' : '';
     const box = inPoints(place(xf, groups), env.ctx.k);
     const ink = inkOf(look.color, look.kind, env.bgRgb);
     const routed = BENT_PRESETS.test(prst) ? routedConnector(prst, kid(spPr, 'prstGeom'), box, look, ink, env) : '';
@@ -1615,7 +1616,7 @@ const PptxImport = (function () {
     else {
       const [start, end] = lineEnds(box);
       out.push(lineHtml(start, end, { color: ink.hex, tr: ink.tr, width: clamp(look.width, 0.25, ShapeGeometry.MAX_LINE_PT), dash: look.dash, cap: look.cap, cmpd: look.cmpd,
-        head: look.head, headW: look.headW, headLen: look.headLen, tail: look.tail, tailW: look.tailW, tailLen: look.tailLen, alt: look.alt }, env.decor));
+        head: look.head, headW: look.headW, headLen: look.headLen, tail: look.tail, tailW: look.tailW, tailLen: look.tailLen, alt: look.alt, decorative: look.decorative }, env.decor));
     }
     const losses = new Set();
     if (look.dashLost) losses.add('dashes');
@@ -1734,7 +1735,7 @@ const PptxImport = (function () {
       // Sans fond d'épaisseur, le trait est celui du contour : il en garde le tiret et le bout.
       const outlined = !((hasFill && thickness > 0) || !lineHex);
       out.push(lineHtml([cx - Math.cos(turn) * half, cy - Math.sin(turn) * half], [cx + Math.cos(turn) * half, cy + Math.sin(turn) * half],
-        { color: outlined ? lineHex : fillHex, tr: outlined ? lineInk.tr : fillInk.tr, width: clamp(Math.max(thickness, edge), 0.25, ShapeGeometry.MAX_LINE_PT), dash: outlined ? look.dash : '', cap: outlined ? look.cap : '', cmpd: outlined ? look.cmpd : '', head: '', tail: '', alt: altOfObject(sp) }, env.decor));
+        { color: outlined ? lineHex : fillHex, tr: outlined ? lineInk.tr : fillInk.tr, width: clamp(Math.max(thickness, edge), 0.25, ShapeGeometry.MAX_LINE_PT), dash: outlined ? look.dash : '', cap: outlined ? look.cap : '', cmpd: outlined ? look.cmpd : '', head: '', tail: '', alt: altOfObject(sp), decorative: decorativeOfObject(sp) ? '1' : '' }, env.decor));
       return;
     }
 
@@ -1743,7 +1744,7 @@ const PptxImport = (function () {
     const anchor = bodyAttr(bodies, 'anchor') || 't';
     // Le texte d'une forme est centré dans sa boîte : un objet à fond ou à trait dont le texte est centré ou en bas devient une forme (un rectangle) ; un texte en haut reste un cadre de texte. Un texte posé (sans fond ni trait)
     // reste un cadre de texte : c'est sa boîte qui descend là où le texte est (plus bas), la hauteur du texte étant mesurée. Un objet sans texte est une forme (une forme vide se voit par son dessin, un cadre vide par ses tirets).
-    const frame = { x: box.x, y: box.y, w: box.w, h: box.h, shape: rectLike ? (hasText && (anchor === 't' || (plain && !box.rot)) ? '' : 'rect') : kind, fill: fillHex ? '#' + fillHex : '', line: lineHex ? '#' + lineHex : '', lw: edge, fillTr: fillInk.tr, lineTr: lineInk.tr, dash: lineHex && edge > 0 ? look.dash : '', cap: lineHex && edge > 0 ? look.cap : '', cmpd: lineHex && edge > 0 ? look.cmpd : '', rot: box.rot, layer: env.decor || '', alt: altOfObject(sp) };
+    const frame = { x: box.x, y: box.y, w: box.w, h: box.h, shape: rectLike ? (hasText && (anchor === 't' || (plain && !box.rot)) ? '' : 'rect') : kind, fill: fillHex ? '#' + fillHex : '', line: lineHex ? '#' + lineHex : '', lw: edge, fillTr: fillInk.tr, lineTr: lineInk.tr, dash: lineHex && edge > 0 ? look.dash : '', cap: lineHex && edge > 0 ? look.cap : '', cmpd: lineHex && edge > 0 ? look.cmpd : '', rot: box.rot, layer: env.decor || '', alt: altOfObject(sp), decorative: decorativeOfObject(sp) ? '1' : '' };
     Object.assign(frame, frameOfShape(frame.shape, box, lineHex && edge > 0 ? edge : 0, adj, frame.cap));
     if (frameLink) frame.link = frameLink;
     // Les colonnes de texte (`numCol`) et l'écart entre elles (`spcCol`, 0 sans autre mot), à l'échelle du texte posé comme les marges.

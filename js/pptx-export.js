@@ -536,16 +536,18 @@ const PptxExport = (function () {
   }
   // Le texte alternatif d'un objet (`descr`), vide quand il n'en a pas.
   const descrXml = alt => (alt ? ` descr="${esc(alt)}"` : '');
-  // « Marquer comme décorative » de PowerPoint (js/alt-text.js : la case « Image décorative ») : l'extension de Microsoft que PowerPoint écrit dans les propriétés de l'objet ; un lecteur
-  // d'écran passe l'image et le vérificateur d'accessibilité ne la compte plus parmi celles sans texte alternatif.
+  // « Marquer comme décorative » de PowerPoint (js/alt-text.js : la case « Image décorative » ou « Objet décoratif ») : l'extension de Microsoft que PowerPoint écrit dans les propriétés de l'objet ; un lecteur
+  // d'écran passe l'objet et le vérificateur d'accessibilité ne le compte plus parmi ceux sans texte alternatif.
   const DECORATIVE_XML = '<a:extLst><a:ext uri="{C183D7F6-B498-43B3-948B-1728B52AA6E4}"><adec:decorative xmlns:adec="http://schemas.microsoft.com/office/drawing/2017/decorative" val="1"/></a:ext></a:extLst>';
+  // Les propriétés (`p:cNvPr`) d'un objet : son nom, son texte alternatif, puis ce qu'il porte (le lien) et la marque « décorative » - l'ordre de PowerPoint : lien, puis extension.
+  const cNvPrXml = (id, name, alt, decorative, inner) => `<p:cNvPr id="${id}" name="${name}"${descrXml(alt)}${inner || decorative ? `>${inner || ''}${decorative ? DECORATIVE_XML : ''}</p:cNvPr>` : '/>'}`;
   // Un trait droit (connecteur) de (x1, y1) à (x2, y2), en points sur la diapositive : la ligne prédéfinie de PowerPoint va du coin haut gauche au coin bas droit de sa boîte, `flip` la retourne.
-  function connectorXml(slide, box, hex, widthPt, flip, ends, key, tr, style, alt) {
+  function connectorXml(slide, box, hex, widthPt, flip, ends, key, tr, style, alt, decorative) {
     const id = slide.takeId();
     const flips = (flip.includes('h') ? ' flipH="1"' : '') + (flip.includes('v') ? ' flipV="1"' : '');
     const tip = (name, type, w, len) => (type ? `<a:${name} type="${type}" w="${w || 'med'}" len="${len || 'med'}"/>` : '');
     const tips = ends ? tip('headEnd', ends.head, ends.headW, ends.headLen) + tip('tailEnd', ends.tail, ends.tailW, ends.tailLen) : '';
-    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="${nameOf(slide, key || 'line', id)}"${descrXml(alt)}/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>`
+    return `<p:cxnSp><p:nvCxnSpPr>${cNvPrXml(id, nameOf(slide, key || 'line', id), alt, decorative)}<p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>`
       + `<p:spPr>${xfrmXml(emu(box.x), emu(box.y), emu(box.w), emu(box.h), flips)}<a:prstGeom prst="line"><a:avLst/></a:prstGeom>${lineXml(hex, widthPt, tips, tr, style)}</p:spPr></p:cxnSp>`;
   }
   function pictureXml(slide, media, box, img, rot) {
@@ -604,7 +606,7 @@ const PptxExport = (function () {
     const number = ctx.charts.length + 1;
     ctx.charts.push({ name: 'chart' + number, workbook: 'Microsoft_Excel_Worksheet' + number + '.xlsx', part });
     const id = slide.takeId();
-    return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${nameOf(slide, 'chart', id)}"${descrXml(AltText.ofImage(img).text)}/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>`
+    return `<p:graphicFrame><p:nvGraphicFramePr>${cNvPrXml(id, nameOf(slide, 'chart', id), AltText.ofImage(img).text, AltText.ofImage(img).decorative)}<p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>`
       + `<p:xfrm><a:off x="${emu(box.x)}" y="${emu(box.y)}"/><a:ext cx="${emu(box.w)}" cy="${emu(box.h)}"/></p:xfrm>`
       + `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="${slide.relFor(REL + 'chart', '../charts/chart' + number + '.xml')}"/></a:graphicData></a:graphic></p:graphicFrame>`;
   }
@@ -809,7 +811,7 @@ const PptxExport = (function () {
     // « Derrière le texte » : la forme passe avant le texte dans la diapositive, donc derrière lui (slideXml) ; les images que le cadre porte la suivent.
     const out = attrs.layer === FreeFrame.LAYER_BEHIND ? slide.shapes.behindFrames : slide.shapes.frames;
     if (attrs.shape === ShapeGeometry.LINE) {
-      out.push(connectorXml(slide, { x: attrs.x, y: attrs.y, w: attrs.w, h: attrs.h }, String(attrs.line).replace('#', '').toUpperCase(), FreeFrame.lineWidthOf(attrs), ShapeGeometry.flipOf(attrs.flip), { head: attrs.head, tail: attrs.tail, headW: attrs.headW, headLen: attrs.headLen, tailW: attrs.tailW, tailLen: attrs.tailLen }, 'line', attrs.lineTr, attrs, attrs.alt));
+      out.push(connectorXml(slide, { x: attrs.x, y: attrs.y, w: attrs.w, h: attrs.h }, String(attrs.line).replace('#', '').toUpperCase(), FreeFrame.lineWidthOf(attrs), ShapeGeometry.flipOf(attrs.flip), { head: attrs.head, tail: attrs.tail, headW: attrs.headW, headLen: attrs.headLen, tailW: attrs.tailW, tailLen: attrs.tailLen }, 'line', attrs.lineTr, attrs, attrs.alt, !!attrs.decorative));
       slide.animate(attrs.anim, firstId, slide.nextShapeId - 1, 0);
       return;
     }
@@ -849,7 +851,7 @@ const PptxExport = (function () {
       const place = preset ? ShapeGeometry.presetPlace(attrs, heightPt, edge) : { x: attrs.x + half + turnedX, y: attrs.y + half + turnedY, w: attrs.w - edge, h: bodyPt - edge };
       const id = slide.takeId();
       const objectLink = attrs.link ? slide.objectLinkXml(attrs.link) : '';
-      out.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${nameOf(slide, attrs.shape ? 'shape' : 'text', id)}"${descrXml(attrs.alt)}${objectLink ? `>${objectLink}</p:cNvPr>` : '/>'}<p:cNvSpPr${attrs.shape ? '' : ' txBox="1"'}/><p:nvPr/></p:nvSpPr>`
+      out.push(`<p:sp><p:nvSpPr>${cNvPrXml(id, nameOf(slide, attrs.shape ? 'shape' : 'text', id), attrs.alt, !!attrs.decorative, objectLink)}<p:cNvSpPr${attrs.shape ? '' : ' txBox="1"'}/><p:nvPr/></p:nvSpPr>`
         + `<p:spPr>${xfrmXml(emu(place.x), emu(place.y), emu(place.w), emu(place.h), attrs.rot ? ` rot="${Math.round(attrs.rot * 60000)}"` : '')}`
         + `${geometryXml(attrs.shape, preset ? attrs.adj : '')}${attrs.fill ? fillXml(attrs.fill.replace('#', '').toUpperCase(), attrs.fillTr) : '<a:noFill/>'}${edge ? lineXml(attrs.line.replace('#', '').toUpperCase(), edge, preset ? MITER_XML : '', attrs.lineTr, attrs) : '<a:ln><a:noFill/></a:ln>'}</p:spPr>`
         + `<p:txBody><a:bodyPr ${insetsXml(insets[0], insets[1], insets[2], insets[3])} ${attrs.vert ? ` vert="${attrs.vert}"` : ''} anchor="${attrs.shape ? 'ctr' : 't'}"${attrs.cols ? ` numCol="${attrs.cols}" spcCol="${emu(attrs.colGap)}"` : ''}>${attrs.shape || attrs.vert ? '<a:noAutofit/>' : '<a:spAutoFit/>'}</a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`);

@@ -73,7 +73,7 @@ const FreeFrame = (function () {
   // et celle du trait en pour cent (0 : opaque, 100 : invisible ; celle d'un fond ou d'un trait absent vaut 0), le tiret du trait ('' : plein), son bout ('' : plat, 'round', 'square') et son
   // type composé ('' : simple, 'dbl', 'thinThick', 'thickThin', 'tri'). Une ligne a de plus, à chaque bout, sa pointe (`head` au début, `tail` à la fin : '' aucune, ou 'triangle', 'arrow', 'stealth', 'diamond', 'oval')
   // et la largeur et la longueur de celle-ci (`headW`, `headLen`, `tailW`, `tailLen` : '' moyenne, 'sm' petite, 'lg' grande).
-  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '', anim: '', cols: 0, colGap: 0, vert: '', alt: '', link: '', linkTrans: '', view: '', video: '', hidden: '', group: '' };
+  const LOOK = { shape: '', fill: '', line: '', lw: 0, flip: '', head: '', tail: '', headW: '', headLen: '', tailW: '', tailLen: '', rot: 0, layer: '', fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', adj: '', geo: '', anim: '', cols: 0, colGap: 0, vert: '', alt: '', decorative: '', link: '', linkTrans: '', view: '', video: '', hidden: '', group: '' };
   // L'aspect d'une forme neuve : un fond clair, un trait plus foncé de la même teinte (le texte noir y reste lisible).
   const SHAPE_LOOK = { fill: '#d9e2f3', line: '#2f5597', lw: 1.5 };
   // L'aspect d'une ligne neuve : le trait de PowerPoint des formes, un peu plus épais (sa pointe en grandit avec lui : trois fois l'épaisseur). Une ligne a toujours une couleur et une épaisseur.
@@ -108,7 +108,7 @@ const FreeFrame = (function () {
   // Ce qui marque, dans le HTML des sorties, un cadre du DÉCOR commun d'une présentation (js/slide-theme.js:decorItems : le bandeau, le logo, le numéro et le texte de pied) : le cadre est un cadre derrière le texte, sans
   // rôle pour un lecteur d'écran, et l'éditeur ne le relit jamais (parseHTML), comme le fond d'une diapositive.
   const DECOR_ATTR = 'data-ff-decor';
-  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim', cols: 'data-ff-cols', colGap: 'data-ff-col-gap', vert: 'data-ff-vert', alt: 'data-ff-alt', link: 'data-ff-link', linkTrans: 'data-ff-link-trans', view: 'data-ff-view', video: 'data-ff-video', hidden: 'data-ff-hidden', group: 'data-ff-group' };
+  const DOM_ATTRS = { x: 'data-ff-x', y: 'data-ff-y', w: 'data-ff-w', h: 'data-ff-h', shape: 'data-ff-shape', fill: 'data-ff-fill', line: 'data-ff-line', lw: 'data-ff-lw', flip: 'data-ff-flip', head: 'data-ff-head', tail: 'data-ff-tail', headW: 'data-ff-head-w', headLen: 'data-ff-head-len', tailW: 'data-ff-tail-w', tailLen: 'data-ff-tail-len', rot: 'data-ff-rot', layer: 'data-ff-layer', fillTr: 'data-ff-fill-tr', lineTr: 'data-ff-line-tr', dash: 'data-ff-dash', cap: 'data-ff-cap', cmpd: 'data-ff-cmpd', adj: 'data-ff-adj', geo: 'data-ff-geo', anim: 'data-ff-anim', cols: 'data-ff-cols', colGap: 'data-ff-col-gap', vert: 'data-ff-vert', alt: 'data-ff-alt', decorative: 'data-ff-decorative', link: 'data-ff-link', linkTrans: 'data-ff-link-trans', view: 'data-ff-view', video: 'data-ff-video', hidden: 'data-ff-hidden', group: 'data-ff-group' };
   // Les variables CSS du dessin d'un cadre (css/free-frame.css) : écrites seulement pour un cadre qui a un aspect, retirées sinon.
   const LOOK_VARS = ['--ff-fill', '--ff-fill-op', '--ff-fill-inset', '--ff-fill-radius', '--ff-line', '--ff-line-op', '--ff-edge', '--ff-radius', '--ff-clip', '--ff-ring', '--ff-ring-bg', '--ff-pt', '--ff-pr', '--ff-pb', '--ff-pl', '--ff-bleed', '--ff-grab', '--ff-art', '--ff-art-nine', '--ff-fill-art', '--ff-slice', '--ff-sx', '--ff-sy', '--ff-ex', '--ff-ey', '--ff-rot', '--ff-cols', '--ff-col-gap'];
   const EDGES = ['n', 'e', 's', 'w'];
@@ -150,13 +150,10 @@ const FreeFrame = (function () {
   const VERTICALS = ['vert', 'vert270'];
   const verticalOf = raw => (VERTICALS.indexOf(String(raw || '').trim()) >= 0 ? String(raw).trim() : '');
   const columnsOf = (raw) => { const n = Math.round(toNumber(raw, 0)); return n >= 2 ? Math.min(n, COLUMNS_MAX) : 0; };
-  // Un texte alternatif : une ligne de 500 signes au plus, les blancs ramenés à une espace, sans signe de commande ; '' quand il n'y en a pas.
-  const ALT_MAX = 500;
   // L'adresse du repère d'une diapositive (`slide-3` : la même forme que SlideProps, anchorId) : celle de la diapositive qu'une vue montre.
   const viewOf = raw => (typeof raw === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(raw) ? raw : '');
   // L'identifiant du groupe où l'objet est rangé (js/frame-multi.js) : des lettres et des chiffres, '' quand il n'est dans aucun. Il ne vaut que parmi les objets d'une même diapositive.
   const groupOf = raw => (typeof raw === 'string' && /^[a-z0-9]{3,16}$/.test(raw) ? raw : '');
-  const altOf = raw => (typeof raw === 'string' ? raw.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, ALT_MAX) : '');
   const columnGapOf = raw => tidy(clamp(toNumber(raw, COLUMN_GAP_PT), 0, COLUMN_GAP_MAX_PT));
   // Une transparence, en pour cent entier de 0 (opaque) à 100 (invisible) ; une valeur absente ou illisible vaut 0.
   const transparencyOf = raw => clamp(Math.round(toNumber(raw, 0)), 0, 100);
@@ -171,6 +168,7 @@ const FreeFrame = (function () {
     const fill = line ? '' : colorOf(a.fill);
     const stroke = line ? colorOf(a.line) || LINE_LOOK.line : colorOf(a.line);
     const adj = !line && shape && typeof ShapePresets === 'object' ? ShapePresets.adjText(shape, a.adj) : '';
+    const decorative = AltText.isDecorative(a.decorative) || a.decorative === '1' || a.decorative === 1;
     const out = {
       x: tidy(clamp(toNumber(a.x, DEFAULTS.x), -LIMITS.pos, LIMITS.pos)),
       y: tidy(clamp(toNumber(a.y, DEFAULTS.y), -LIMITS.pos, LIMITS.pos)),
@@ -203,8 +201,10 @@ const FreeFrame = (function () {
       cols: line ? 0 : columnsOf(a.cols),
       colGap: 0,
       vert: line ? '' : verticalOf(a.vert),
-      // Son texte alternatif (demande du 24/10, « Import PowerPoint sans perte », chantier 10 : `descr` de l'objet) : ce que lit un lecteur d'écran à la place du nom de la sorte.
-      alt: altOf(a.alt),
+      // Son texte alternatif (demande du 24/10, « Import PowerPoint sans perte », chantier 10 : `descr` de l'objet) : ce que lit un lecteur d'écran à la place du nom de la sorte (js/alt-text.js : une ligne de
+      // 500 signes au plus, '' quand il n'y en a pas). « Objet décoratif » (demande du 06/11) : rien à lire - un filet, un fond, un motif - ; il n'a alors pas de texte.
+      alt: decorative ? '' : AltText.clean(a.alt),
+      decorative: decorative ? '1' : '',
       // Son lien (js/frame-link.js) : une adresse, un signet du document ou une action du diaporama ; '' quand il n'en a pas (ou que ce qu'il dit n'est rien de cela). Une ligne n'en a pas : sa boîte ne prend aucun clic.
       link: line ? '' : FrameLink.text(a.link),
       // Son animation au clic (js/frame-link.js:transText) : ce que joue le diaporama en suivant le lien, ni plus ni moins que sur un lien qui mène à une diapositive ; '' : l'effet de la diapositive visée.
@@ -344,6 +344,7 @@ const FreeFrame = (function () {
     if (a.cols && a.colGap !== COLUMN_GAP_PT) out[DOM_ATTRS.colGap] = String(a.colGap);
     if (a.vert) out[DOM_ATTRS.vert] = a.vert;
     if (a.alt) out[DOM_ATTRS.alt] = a.alt;
+    if (a.decorative) out[DOM_ATTRS.decorative] = '1';
     if (a.link) out[DOM_ATTRS.link] = a.link;
     if (a.linkTrans) out[DOM_ATTRS.linkTrans] = a.linkTrans;
     if (a.view) out[DOM_ATTRS.view] = a.view;
@@ -354,7 +355,8 @@ const FreeFrame = (function () {
   }
   function domAttrs(a) {
     // Son texte alternatif est son nom pour un lecteur d'écran dans le HTML écrit aussi (la Lecture ne passe pas par la vue de l'éditeur qui le pose).
-    return Object.assign({ class: CLASS, role: 'group', style: styleOf(a) }, a.alt ? { 'aria-label': a.alt } : {}, dataAttrsOf(a));
+    // Un objet décoratif n'a pas de nom à lire : `presentation` (le texte qu'il porte reste lu).
+    return Object.assign({ class: CLASS, role: a.decorative ? 'presentation' : 'group', style: styleOf(a) }, a.alt ? { 'aria-label': a.alt } : {}, dataAttrsOf(a));
   }
   // Le fond d'une diapositive, tel que les sorties le lisent (js/slide-props.js:forOutput) : un cadre de la page entière, à son coin, plein de `color` (#rrggbb), sans trait ni texte. Le CSS
   // le peint SOUS le texte et à la taille de la page (css/free-frame.css), le PDF et le Word le posent derrière lui à la taille de la leur ; l'éditeur ne le relit jamais (parseHTML).
@@ -1527,6 +1529,7 @@ const FreeFrame = (function () {
       '<span class="v2-floating-sep"></span>',
       button('animate', 'frameAnimation', 'frame.animation'),
       button('link', 'link', 'frame.link'),
+      button('alt', 'altText', 'altText.button'),
       chip('orient-open', 'frameOrientDown', 'frame.orientation'),
       chip('columns-open', 'frameColumns', 'frame.columns'),
       chip('align-open', 'alignObjLeft', 'frame.align'),
@@ -1900,6 +1903,7 @@ const FreeFrame = (function () {
       if (!found) return;
       if (action === 'animate') openAnimation(ed, found);
       else if (action === 'link') openLink(ed, found);
+      else if (action === 'alt') AltText.open();
       else if (action === 'hide') patch(ed, found.pos, { hidden: normalized(found.node.attrs).hidden ? '' : '1' }, true);
       else if (action === 'duplicate') duplicate(ed, found);
       else if (action === 'delete') remove(ed, found);
@@ -1912,6 +1916,7 @@ const FreeFrame = (function () {
     const orderChip = panel.el.querySelector('#v2-frame-order-open');
     const animateButton = panel.el.querySelector('[data-action="animate"]');
     const linkButton = panel.el.querySelector('[data-action="link"]');
+    const altButton = panel.el.querySelector('[data-action="alt"]');
     const hideButton = panel.el.querySelector('[data-action="hide"]');
     EditorCore.registerFloatingPanel(panel);
     const check = ({ transaction } = {}) => {
@@ -1944,6 +1949,12 @@ const FreeFrame = (function () {
         const tip = a && a.link ? I18n.t('frame.linkOn', { name: FrameLink.describe(ed, a.link) }) : I18n.t('frame.link');
         linkButton.title = tip;
         linkButton.setAttribute('aria-label', tip);
+      }
+      // « Texte alternatif… » est enfoncé quand l'objet est décrit (un texte, ou « Objet décoratif »).
+      if (altButton) {
+        const described = !!a && AltText.isDescribed(a);
+        altButton.classList.toggle('is-active', described);
+        altButton.setAttribute('aria-pressed', described ? 'true' : 'false');
       }
       // « Masquer l'objet » est enfoncé quand l'objet est masqué.
       if (hideButton) {

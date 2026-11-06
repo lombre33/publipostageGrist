@@ -233,6 +233,7 @@
     ".v2-frame-toolbar button[action=duplicate]": {"class": "covered", "cases": ["undoFramesMouse"]},
     ".v2-frame-toolbar button[action=delete]": {"class": "covered", "cases": ["undoFramesMouse"]},
     ".v2-frame-toolbar button[action=link]": {"class": "covered", "cases": ["frameLink"], "note": "le lien d'un objet : « Lien… » (poser, changer) et « Retirer le lien » sont UN pas d'historique chacun ; UN Ctrl+Z rend le lien d'avant (touche vraie)"},
+    ".v2-frame-toolbar button[action=alt]": { "class": "covered", "cases": ["altTextObjects", "altText"], "note": "Texte alternatif d'un objet de diapositive (cadre, forme, trait) : la même petite fenêtre que celle de l'image (js/alt-text.js) ; le texte écrit, la case « Objet décoratif » sont UN pas d'historique, UN Ctrl+Z (touche vraie) rend l'objet tel qu'avant" },
     "#v2-frame-order-open": {"class": "covered", "cases": ["undoFramesMouse", "frameLayer"], "note": "l'ordre d'un cadre : le menu « Ordre » s'ouvre sans rien changer ; chacune de ses lignes est UN pas d'historique"},
     ".v2-format-panel button[action=order:front]": {"class": "covered", "cases": ["undoFramesMouse"], "note": "Premier plan : UN Ctrl + Z rend le cadre à sa place, sélectionné (touche vraie)"},
     ".v2-format-panel button[action=order:back]": {"class": "covered", "cases": ["undoFramesMouse"], "note": "Arrière-plan : UN Ctrl + Z rend le cadre à sa place, sélectionné (touche vraie)"},
