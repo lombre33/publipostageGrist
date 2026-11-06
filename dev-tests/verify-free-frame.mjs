@@ -257,11 +257,11 @@ async function run(lang, colorScheme, full) {
   const imageButton = await rectOf('#v2-btn-image');
   check(tag + 'le bouton « Objets » est dans la barre d\'outils du haut, sur la même ligne qu\'« Image » et juste après lui, entier dans le panneau', !!button && !!imageButton && button.left >= imageButton.right - 1 && button.left - imageButton.right < 12 && Math.abs(button.top - imageButton.top) < 0.6 && inPanel(button) && await onTop(OBJECTS_BUTTON), { button, imageButton });
   const gone = await page.evaluate(() => ({ oldButton: !!document.querySelector('.pp-slide-objects-open'), oldMenu: !!document.querySelector('.pp-slide-objects'), stripButtons: document.querySelectorAll('.pp-slide-strip > .pp-slide-actions > .pp-slide-add').length }));
-  check(tag + 'plus rien sous les miniatures : la bande n\'a que ses deux boutons « Ajouter » et « Importer », pas de bouton ni de menu « Objets »', !gone.oldButton && !gone.oldMenu && gone.stripButtons === 2, gone);
+  check(tag + 'plus rien sous les miniatures : la bande n\'a que ses trois boutons « Ajouter », « Importer » et « Vue d\'ensemble », pas de bouton ni de menu « Objets »', !gone.oldButton && !gone.oldMenu && gone.stripButtons === 3, gone);
   const contrast = await contrastOf(page, OBJECTS_BUTTON);
   check(tag + 'l\'icône du bouton est lisible (>= 4,5:1)', contrast >= 4.5, contrast);
-  // À 700x400 sous la barre d'outils, la bande a 249 px : la rangée de ses deux boutons (30 px de haut, 6 de rembourrage) laisse à la liste trois miniatures entières (51 px, 6 d'écart, 8 de
-  // rembourrage), comme avec trois boutons sur une ligne (carte du 22/10 : « Trois icônes sur une ligne »).
+  // À 700x400 sous la barre d'outils, la bande a 249 px : la rangée de ses trois boutons (30 px de haut, 6 de rembourrage) laisse à la liste trois miniatures entières (51 px, 6 d'écart, 8 de
+  // rembourrage), les trois boutons sur une ligne (carte du 22/10 : « Trois icônes sur une ligne » ; le troisième est la vue d'ensemble, demande du 06/11).
   const stripFit = await page.evaluate(() => {
     const list = document.querySelector('.pp-slide-list');
     list.scrollTop = 0;
@@ -270,8 +270,8 @@ async function run(lang, colorScheme, full) {
     const buttons = Array.from(document.querySelectorAll('.pp-slide-strip > .pp-slide-actions > .pp-slide-add')).map((b) => { const r = b.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) }; });
     return { whole: rows.filter(r => r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5).length, listBottom: Math.round(box.bottom), buttons, inner: window.innerHeight };
   });
-  check(tag + 'à 700x400 la bande garde trois miniatures entières au-dessus de ses deux boutons (« Ajouter », « Importer »), côte à côte sur une ligne sans se recouvrir, entiers dans le panneau',
-    stripFit.whole >= 3 && stripFit.buttons.length === 2 && stripFit.buttons[0].top >= stripFit.listBottom - 1 && stripFit.buttons.every((b, i) => b.top === stripFit.buttons[0].top && (i === 0 || b.left >= stripFit.buttons[i - 1].right)) && stripFit.buttons[1].bottom <= stripFit.inner, stripFit);
+  check(tag + 'à 700x400 la bande garde trois miniatures entières au-dessus de ses trois boutons (« Ajouter », « Importer », « Vue d\'ensemble »), côte à côte sur une ligne sans se recouvrir, entiers dans le panneau',
+    stripFit.whole >= 3 && stripFit.buttons.length === 3 && stripFit.buttons[0].top >= stripFit.listBottom - 1 && stripFit.buttons.every((b, i) => b.top === stripFit.buttons[0].top && (i === 0 || b.left >= stripFit.buttons[i - 1].right)) && stripFit.buttons[1].bottom <= stripFit.inner, stripFit);
   // Le survol du bouton ouvre son menu, au-dessous (comme celui de l'Image) : la ligne « Cadre de texte » (info-bulle : la diapositive du curseur), puis les seize formes et les trois lignes.
   const closedLook = await page.evaluate(() => { const b = document.querySelector('#v2-btn-objects'); const m = document.querySelector('#v2-objects-flyout'); return { expanded: b.getAttribute('aria-expanded'), shown: m.getBoundingClientRect().width > 0 }; });
   await hoverObject(page, 'textFrame');
