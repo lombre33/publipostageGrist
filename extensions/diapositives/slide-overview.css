@@ -1,0 +1,58 @@
+/* La vue d'ensemble des diapositives (extensions/diapositives/slide-overview.js) : par-dessus tout le cadre du widget, comme la console de la vue intervenant (slide-speaker.css), un en-tête (son nom,
+   le nombre de diapositives, la taille des miniatures, « Fermer ») et la grille de toutes les diapositives, une miniature par carte avec son numéro et ses pastilles. Pensée pour le panneau de Grist
+   (~700 x 400) : la grille défile, la taille des miniatures se choisit (`--pp-ov-w`, posée par le script). Les miniatures sont celles de la bande en plus grand (slide-strip.css : `.pp-slide-thumb`,
+   `.pp-slide-page`) ; les pastilles aussi (`.pp-slide-*-badge`). Au niveau des barres flottantes (--z-floating-toolbar), sous les menus : le menu d'une diapositive (--z-menu) passe devant. Couleurs :
+   jetons de css/style.css (texte ≥ 4,5:1, clair et sombre) ; la page d'une miniature reste blanche : c'est du papier. Ce fichier ne se charge qu'avec l'extension. */
+.pp-overview { position: fixed; inset: 0; z-index: var(--z-floating-toolbar); display: flex; flex-direction: column; box-sizing: border-box; background: var(--bg); color: var(--text); outline: none; font-family: var(--font-ui); font-size: 13px; }
+.pp-overview[hidden] { display: none; }
+
+.pp-ov-head { flex: 0 0 auto; display: flex; align-items: center; gap: 6px 8px; box-sizing: border-box; min-height: 38px; padding: 5px 10px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.pp-ov-title { font-weight: 600; white-space: nowrap; }
+.pp-ov-count { color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pp-ov-hint { min-width: 0; overflow: hidden; color: var(--text-muted); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.pp-ov-spacer { flex: 1 1 0; }
+.pp-ov-btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; box-sizing: border-box; min-width: 28px; height: 26px; margin: 0; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 6px); background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); font: inherit; line-height: 1; cursor: pointer; }
+.pp-ov-btn:hover { background: var(--surface-sunken); }
+.pp-ov-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-ov-btn[aria-disabled="true"] { opacity: .45; cursor: default; }
+.pp-ov-size { padding: 0; }
+.pp-ov-size svg { width: 16px; height: 16px; }
+
+/* La grille : autant de colonnes que la largeur en laisse, des miniatures de la taille choisie. */
+.pp-ov-grid { position: relative; flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(auto-fill, var(--pp-ov-w, 150px)); gap: 16px 14px; align-content: start; justify-content: center; box-sizing: border-box; padding: 14px 16px 18px; overflow-x: hidden; overflow-y: auto; user-select: none; }
+.pp-ov-card { position: relative; width: var(--pp-ov-w, 150px); cursor: pointer; outline: none; }
+.pp-ov-thumb { width: var(--pp-ov-w, 150px); }
+.pp-ov-card:hover .pp-ov-thumb { box-shadow: 0 0 0 2px var(--border-strong); }
+.pp-ov-card[aria-selected="true"] .pp-ov-thumb { box-shadow: 0 0 0 2px var(--accent); }
+.pp-ov-card:focus-visible .pp-ov-thumb { outline: 2px solid var(--accent); outline-offset: 3px; }
+.pp-ov-card.pp-slide-is-hidden .pp-ov-thumb { opacity: .5; }
+
+/* Sous la miniature : le numéro (celui du curseur est en accent) puis les pastilles de la bande (dépasse, lien, transition, notes, masquée), côte à côte. */
+.pp-ov-meta { display: flex; align-items: center; gap: 6px; min-height: 16px; margin-top: 4px; color: var(--text-muted); font-size: 11px; }
+.pp-ov-num { font-variant-numeric: tabular-nums; }
+.pp-ov-card.pp-ov-current .pp-ov-num { color: var(--accent-ink); font-weight: 600; }
+.pp-ov-badges { display: inline-flex; align-items: center; gap: 5px; }
+
+/* « ⋯ » : le menu de la diapositive, sur sa miniature, au survol et sur celle du curseur (un écran tactile, sans survol, l'y trouve). Pour la souris : le clavier ouvre le même menu par Maj+F10 ou la touche Menu. */
+.pp-ov-more { position: absolute; top: 5px; right: 5px; display: none; align-items: center; justify-content: center; box-sizing: border-box; width: 22px; height: 18px; margin: 0; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-xs, 4px); background: var(--surface); color: var(--text); cursor: pointer; }
+.pp-ov-more svg { width: 14px; height: 14px; }
+.pp-ov-more:hover { background: var(--surface-sunken); }
+.pp-ov-card:hover .pp-ov-more, .pp-ov-card.pp-ov-menu-open .pp-ov-more, .pp-ov-card[aria-selected="true"] .pp-ov-more { display: inline-flex; }
+/* Les personnes du direct : une pastille de leur couleur, à cheval sur le bord bas de la miniature (les mêmes que dans la bande, slide-strip.css). */
+.pp-ov-card .pp-ov-people { left: 4px; bottom: 14px; }
+
+/* Glisser une miniature : celles qu'on emporte s'estompent à leur place, leur copie suit la souris (les classes de la bande, slide-strip.css), une ligne d'accent dit où elles se poseront. */
+.pp-ov-grid.pp-ov-dragging { cursor: grabbing; }
+.pp-ov-grid.pp-ov-dragging .pp-ov-more { display: none; }
+.pp-ov-grid.pp-ov-dragging .pp-ov-card:hover .pp-ov-thumb { box-shadow: 0 0 0 1px var(--border-strong); }
+.pp-ov-card.pp-ov-drag-source { opacity: .4; }
+.pp-ov-drop { position: absolute; width: 3px; border-radius: 2px; background: var(--accent); pointer-events: none; }
+.pp-ov-drop[hidden] { display: none; }
+
+@media (forced-colors: active) {
+  .pp-ov-card[aria-selected="true"] .pp-ov-thumb { outline: 2px solid Highlight; }
+  .pp-ov-drop { forced-color-adjust: none; background: Highlight; }
+}
+@media print {
+  .pp-overview { display: none; }
+}

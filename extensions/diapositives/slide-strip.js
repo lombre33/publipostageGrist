@@ -85,6 +85,8 @@ const SlideStrip = (function () {
   let actionsRow = null;           // la rangée des deux boutons du bas : « Ajouter » et « Importer » (l'ancre de leurs menus)
   let addButton = null;
   let importButton = null;         // « Importer », qui ouvre et ferme le volet d'import (SlideImport)
+  let overviewButton = null;       // « Vue d'ensemble », qui ouvre la grille de toutes les diapositives (SlideOverview)
+  let guest = null;                // la vue d'ensemble ouverte (SlideOverview.open la déclare : bande.overview.attach) : elle emprunte les gestes de la bande, le clavier lui revient
   let menu = null;                // le menu d'une diapositive : { panel, index, open, pointer }
   let layoutMenu = null;           // le menu des mises en page de « Ajouter » : { panel, open, pointer }
   let drag = null;                 // la miniature glissée (onDragStart), de l'appui au relâchement
@@ -315,12 +317,18 @@ const SlideStrip = (function () {
     Dom.setMarkup(importButton, Icons.svg('slideImport'));
     importButton.setAttribute('aria-expanded', 'false');
     hideIcon(importButton);
-    actionsRow.append(addButton, importButton);
+    overviewButton = Dom.button('pp-slide-add pp-slide-overview-open');
+    Dom.setMarkup(overviewButton, Icons.svg('slideOverview'));
+    overviewButton.setAttribute('aria-haspopup', 'dialog');
+    overviewButton.setAttribute('aria-expanded', 'false');
+    hideIcon(overviewButton);
+    actionsRow.append(addButton, importButton, overviewButton);
     strip.append(list, actionsRow);
     document.body.appendChild(strip);
     wireList();
     wireAddButton();
     wireImportButton();
+    wireOverviewButton();
   }
   const hideIcon = button => { const svg = button.querySelector('svg'); if (svg) svg.setAttribute('aria-hidden', 'true'); };
 
@@ -799,6 +807,9 @@ const SlideStrip = (function () {
     importButton.setAttribute('aria-disabled', off ? 'true' : 'false');
     importButton.setAttribute('aria-label', I18n.t('slides.import.buttonTip'));
     importButton.title = off ? SlidesEntry.reason() : I18n.t('slides.import.buttonTip');
+    // « Vue d'ensemble » n'est jamais grisée : la regarder ne change rien (ses gestes, eux, suivent ceux de la bande).
+    overviewButton.setAttribute('aria-label', I18n.t('slides.overview.buttonTip'));
+    overviewButton.title = I18n.t('slides.overview.buttonTip');
     // « Présenter » (slide-show.js), à côté de la pastille du zoom : montré avec la bande, grisé avec elle, et son info-bulle dit la diapositive du curseur.
     if (typeof SlideShow !== 'undefined') SlideShow.sync(true, off);
   }
@@ -831,8 +842,13 @@ const SlideStrip = (function () {
     box.scrollTop += first.getBoundingClientRect().top - box.getBoundingClientRect().top - box.clientTop - gap;
   }
   function focusItem(index) {
+    if (guest) { guest.focusBack(index); return; }
     const r = rows[index];
     if (r) r.item.focus();
+  }
+  // Le clavier après un geste : à la souris il va au document (la bande ne le garde pas), au clavier il reste sur la miniature ; dans la vue d'ensemble il reste sur la diapositive, quel que soit le geste.
+  function giveFocus(index, byKeyboard) {
+    if (guest || byKeyboard) focusItem(index); else editor.view.focus();
   }
 
   // Les gestes
@@ -840,12 +856,12 @@ const SlideStrip = (function () {
   // montre, et les diapositives déplacées ou dupliquées restent choisies. `byKeyboard` : le clavier reste dans la bande, sur elle ; à la souris, il va au document. `extra` : ce que le
   // geste précise (planOf).
   function act(action, index, byKeyboard, extra) {
-    if (off) { SlidesEntry.explainOff(); return; }
+    if (off) { SlidesEntry.explainOff(); return null; }
     Editor.exitHeaderFooterModeIfActive();
     refresh(false);
     // « Ajouter » ajoute après la diapositive visée, même dans un choix ; les autres gestes s'appliquent à tout le choix dont elle fait partie.
     const plan = planOf(action, action === 'addAfter' ? [index] : setFor(index), extra);
-    if (!plan) return;
+    if (!plan) return null;
     const { state, view } = editor;
     const tr = state.tr;
     plan.apply(tr, state.schema);
@@ -865,8 +881,11 @@ const SlideStrip = (function () {
     // La pagination tout de suite, pas après sa minuterie : le défilement vise la page que la diapositive occupe maintenant (comme le bouton « Saut de page », js/main-toolbar.js).
     Editor.refreshPaginationPreview();
     refresh(true);
+    // La vue d'ensemble couvre le document : il ne défile pas, et le clavier reste sur la diapositive de la grille.
+    if (guest) { focusItem(target); return plan; }
     scrollToSlide(target);
     if (byKeyboard) focusItem(target); else view.focus();
+    return plan;
   }
   // Ce que fait le geste sur les diapositives `set` (leurs indices, rangés ; une seule le plus souvent) : { target (la diapositive à montrer ensuite), picked (celles qui restent
   // choisies), apply(tr, schema), selectText (le texte posé par une mise en page est sélectionné : on écrit par-dessus) }, ou null quand il ne s'applique pas (monter la première,
@@ -1018,6 +1037,8 @@ const SlideStrip = (function () {
   // laisse un widget lire le presse-papiers que pendant un Ctrl+V). Écoutés sur tout le document, avant l'éditeur, tant que la bande est montrée.
   // Où vise un copier ou un coller : la miniature qui a le clavier (`inStrip`), ou le texte de l'éditeur et la diapositive du curseur ; null ailleurs (un champ, une fenêtre).
   function clipboardTarget(event) {
+    const seen = guest ? guest.indexAt(event.target) : -1;
+    if (seen >= 0) return { index: seen, inStrip: true };
     const r = list.contains(event.target) ? rowOf(event.target) : null;
     if (r) return { index: rows.indexOf(r), inStrip: true };
     if (editor.view.dom.contains(event.target)) return { index: current, inStrip: false };
@@ -1283,7 +1304,8 @@ const SlideStrip = (function () {
     });
     syncLinkMenu(index, many);
     r.row.classList.add('pp-slide-menu-open');
-    menu.panel.show(r.thumb, { placement: 'right-start', offset: 6 });
+    if (guest) guest.menuOpen(index, true);
+    menu.panel.show(guest ? guest.anchorOf(index) : r.thumb, { placement: 'right-start', offset: 6 });
     if (byKeyboard) menuButtons()[0].focus();
     document.addEventListener('mousedown', onPressOutsideMenu, true);
   }
@@ -1294,6 +1316,7 @@ const SlideStrip = (function () {
     document.removeEventListener('mousedown', onPressOutsideMenu, true);
     const r = rows[menu.index];
     if (r) r.row.classList.remove('pp-slide-menu-open');
+    if (guest) guest.menuOpen(menu.index, false);
     if (returnFocus) focusItem(menu.index);
   }
   const menuButtons = () => Array.from(menu.panel.el.querySelectorAll('[data-action]')).filter(button => !button.hidden && !button.closest('[hidden]'));
@@ -1322,7 +1345,7 @@ const SlideStrip = (function () {
   }
   // Un appui hors du menu le referme ; celui d'un bouton « ⋯ » est laissé à son clic, qui ouvre ou referme.
   function onPressOutsideMenu(event) {
-    if (menu.panel.el.contains(event.target) || event.target.closest('.pp-slide-more')) return;
+    if (menu.panel.el.contains(event.target) || event.target.closest('.pp-slide-more, .pp-ov-more')) return;
     closeMenu(false);
   }
   function onMenuKey(event) {
@@ -1352,7 +1375,7 @@ const SlideStrip = (function () {
     const { index, pointer } = menu;
     closeMenu(false);
     if (LINK_MENU.includes(action)) {
-      if (!pointer) focusItem(index); else editor.view.focus();
+      giveFocus(index, !pointer);
       SlideLinksUi.act(action, index);
       return;
     }
@@ -1362,7 +1385,7 @@ const SlideStrip = (function () {
       const indexes = setFor(index);
       const hide = !allHidden(indexes);
       const changed = SlideProps.applyHidden(editor, indexes, hide);
-      if (!pointer) focusItem(index); else editor.view.focus();
+      giveFocus(index, !pointer);
       if (changed > 0) SlidesEntry.status(I18n.t(hide ? 'slides.hidden.set' : 'slides.hidden.cleared', { n: changed }));
       return;
     }
@@ -1372,7 +1395,7 @@ const SlideStrip = (function () {
       Editor.exitHeaderFooterModeIfActive();
       refresh(false);
       const dialog = { transition: SlideTransitionsUi, background: SlideBackgroundUi, notes: SlideNotesUi }[action];
-      dialog.open(action === 'notes' ? [index] : setFor(index), () => { if (!pointer) focusItem(index); else editor.view.focus(); });
+      dialog.open(action === 'notes' ? [index] : setFor(index), () => giveFocus(index, !pointer));
       return;
     }
     act(action, index, !pointer);
@@ -1691,6 +1714,14 @@ const SlideStrip = (function () {
     });
   }
 
+  // « Vue d'ensemble » ouvre la grille de toutes les diapositives, ou la ferme ; au clavier, le clavier va dans la grille.
+  function wireOverviewButton() {
+    overviewButton.addEventListener('mousedown', event => event.preventDefault());
+    overviewButton.addEventListener('click', (event) => {
+      if (typeof SlideOverview !== 'undefined') SlideOverview.toggle(overviewButton, event.detail === 0);
+    });
+  }
+
   // L'éditeur et la page
   function onTransaction({ transaction }) {
     if (!shown || editingHeaderFooter()) return;
@@ -1807,6 +1838,7 @@ const SlideStrip = (function () {
   }
   function hide() {
     if (!shown) return;
+    if (guest && typeof SlideOverview !== 'undefined') SlideOverview.close(false);
     shown = false;
     closeMenu(false);
     closeLayoutMenu(false);
@@ -1844,7 +1876,79 @@ const SlideStrip = (function () {
     if (typeof SlideView !== 'undefined') SlideView.schedule(0);
   }
 
+  // Ce que la vue d'ensemble (extensions/diapositives/slide-overview.js) emprunte à la bande : le choix de plusieurs diapositives, les gestes (les mêmes, en une transaction), le menu d'une diapositive, les
+  // copies des miniatures et les pastilles. La bande reste la seule à écrire dans le texte ; la vue d'ensemble la déclare (attach) pendant qu'elle est ouverte et lui rend le clavier de la diapositive (focusBack).
+  const overview = {
+    attach(who) {
+      guest = who;
+      closeMenu(false);
+      closeLayoutMenu(false);
+      overviewButton.setAttribute('aria-expanded', 'true');
+    },
+    detach() {
+      closeMenu(false);
+      guest = null;
+      if (overviewButton) overviewButton.setAttribute('aria-expanded', 'false');
+    },
+    // Le nombre de diapositives, celle du curseur, le choix (rangé) et si les gestes sont grisés ; null quand la bande n'est pas montrée.
+    state() {
+      if (!shown || !editor) return null;
+      refresh(false);
+      return { count: slides.length, current, chosen: chosen().slice(), off };
+    },
+    select(index, how) {
+      refresh(false);
+      if (how === 'toggle') { togglePick(index); return; }
+      if (how === 'range') { pick(range(Math.min(anchor, slides.length - 1), index)); goTo(index, false); return; }
+      picked = [];
+      anchor = index;
+      goTo(index, false);
+    },
+    selectAll() { refresh(false); pick(range(0, slides.length - 1)); syncCurrent(false); },
+    clearChoice(index) { picked = []; anchor = index; syncCurrent(false); },
+    openSlide(index) { picked = []; anchor = index; goTo(index, true); },
+    act: (action, index, extra) => act(action, index, false, extra),
+    plan: (action, set, extra) => planOf(action, set, extra),
+    unavailable,
+    openMenu: (index, byKeyboard) => openMenu(index, byKeyboard),
+    closeMenu: () => closeMenu(false),
+    menuOpenFor: index => !!menu && menu.open && menu.index === index,
+    undoRedo,
+    explainOff: () => SlidesEntry.explainOff(),
+    // Les pastilles et le nom accessible d'une diapositive, tels que la bande les a posés sur sa miniature : { label, badges (des copies des pastilles montrées, sans le numéro), people (une copie ou null) }.
+    rowInfo(index) {
+      const r = rows[index];
+      const side = r && r.item.querySelector('.pp-slide-side');
+      if (!side) return null;
+      return {
+        label: r.item.getAttribute('aria-label') || '',
+        badges: Array.from(side.children).filter(child => !child.hidden && !child.classList.contains('pp-slide-num')).map(child => child.cloneNode(true)),
+        people: r.people.hidden ? null : r.people.cloneNode(true),
+      };
+    },
+    // Ce que la copie de la diapositive `index` montrerait, sans la faire : { nodes, key } (voir thumb), ou null.
+    peek(index) {
+      if (!shown || !editor) return null;
+      const slide = slides[index];
+      if (!slide) return null;
+      const decor = SlideTheme.decorKey(index);
+      const key = pageGeometry().key;
+      return { nodes: slide.nodes.map(entry => entry.node), key: decor ? key + '|' + decor : key };
+    },
+    // La copie du rendu de la diapositive `index`, à la taille de la page : { nodes (ses blocs, pour savoir quand la refaire), key (la page et son décor), width, height, elements } ; null quand elle n'existe plus.
+    thumb(index) {
+      if (!shown || !editor || editingHeaderFooter()) return null;
+      refresh(false);
+      const slide = slides[index];
+      if (!slide) return null;
+      const geometry = pageGeometry();
+      const decor = SlideTheme.decorKey(index);
+      return { nodes: slide.nodes.map(entry => entry.node), key: decor ? geometry.key + '|' + decor : geometry.key, width: geometry.width, height: geometry.height, elements: withDecor(copiesOf(slide, geometry), decor ? SlideTheme.decorElementFor(index) : null) };
+    },
+    geometry: () => pageGeometry(),
+  };
+
   SlidesEntry.register({ show, hide });
 
-  return { show, hide, slidesOf, pageCopy, redrawViews, importAfterCurrent, settleLinked, syncLinks: () => syncLinks(false), current: () => current, isOff: () => off, isShown: () => shown };
+  return { show, hide, overview, slidesOf, pageCopy, redrawViews, importAfterCurrent, settleLinked, syncLinks: () => syncLinks(false), current: () => current, isOff: () => off, isShown: () => shown };
 })();
