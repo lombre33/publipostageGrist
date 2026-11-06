@@ -1998,6 +1998,31 @@
     }, { lang: 'en' });
 
 
+  // La façade (js/find-replace.js) pose la requête et le remplacement dans l'état de la recherche (js/find-replace-view.js) ET dans les champs du panneau (js/find-replace-panel.js, dont
+  // elle ne voit pas les éléments) : ouvert, puis refermé (ses champs restent dans la page). Ajouté à la découpe de js/find-replace.js en quatre morceaux : il passe avant et après.
+  scenario('fr_facade_setters_fill_the_panel_fields',
+    'Façade : setQuery et setReplacement écrivent dans les champs du panneau, ouvert puis refermé, et la recherche suit la requête posée',
+    async h => {
+      await begin(h, '<p>foo un</p><p>deux foo</p>');
+      FindReplace.open({ replace: true });
+      FindReplace.setQuery('foo');
+      FindReplace.setReplacement('bar');
+      await sleep(60);
+      const opened = { query: findInput().value, replacement: replacementInput().value, count: countText(), open: FindReplace.isOpen() };
+      FindReplace.close({ focus: false });
+      FindReplace.setQuery('deux');
+      FindReplace.setReplacement('trois');
+      await sleep(40);
+      const closed = { query: findInput().value, replacement: replacementInput().value, open: FindReplace.isOpen() };
+      FindReplace.open({ replace: true });
+      await sleep(60);
+      const reopened = { query: findInput().value, replacement: replacementInput().value, count: countText() };
+      const pass = opened.query === 'foo' && opened.replacement === 'bar' && opened.count === '1 sur 2' && opened.open
+        && closed.query === 'deux' && closed.replacement === 'trois' && !closed.open
+        && reopened.query === 'deux' && reopened.replacement === 'trois' && reopened.count === '1 sur 1';
+      return { pass, notes: JSON.stringify({ opened, closed, reopened }) };
+    });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.findReplace = cases;
 })();
