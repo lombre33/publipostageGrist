@@ -26,11 +26,12 @@ const RowAttachment = (function () {
   const COLUMN_OPTION = 'pp_attach_column';
   const MODE_OPTION = 'pp_attach_mode';
   const PERSON_KEY = 'pp_export_attach';
-  // Chez Grist Factory Suite (GFS), l'envoi est refusé tant que GFS n'a pas déclaré deux choses : le jeton d'ÉCRITURE (son manifeste garde le jeton en lecture seule, `jeton.lectureSeule`) et les deux options du
-  // widget `pp_attach_column` et `pp_attach_mode` (`setOption` refuse une clé non déclarée). Choix du porteur du 06/11, « Griser dans GFS pour l'instant » : la case du menu Exporter et la section de Réglages sont
-  // grisées, avec leur raison, dans GFS ; l'app seule n'en change pas. LE point à lever le jour où GFS annonce qu'elle a déclaré les deux (page GFS-ETAT.md, fil Liaison) : passer cette constante à `true`.
-  const GFS_DECLARES_WRITE = false;
-  const blockedByGfs = () => !GFS_DECLARES_WRITE && typeof GfsLink !== 'undefined' && GfsLink.hosted === true;
+  // Chez Grist Factory Suite (GFS), l'envoi de l'app est refusé : son jeton reste en LECTURE seule (`jeton.lectureSeule`) et `setOption` refuse les deux options `pp_attach_column` et `pp_attach_mode` (non déclarées).
+  // Consigne 052 de GFS (06/11, lue par le fil Liaison) : le porteur a choisi que GFS joigne LUI-MÊME le fichier ; GFS ne déclarera donc ni le jeton d'écriture ni les deux clés. Choix du porteur du 06/11, « Griser dans GFS
+  // pour l'instant » : la case du menu Exporter et la section de Réglages sont grisées, avec leur raison, dans GFS ; l'app seule n'en change pas. LE point à lever le jour où GFS annonce son geste (page GFS-ETAT.md, fil Liaison) :
+  // brancher `attachAll` sur l'appel de GFS (par `js/gfs-link.js`), puis passer cette constante à `true`. Elle ne se lève PAS sur une déclaration du jeton ou des clés : elle n'arrivera pas.
+  const GFS_ATTACH_WIRED = false;
+  const blockedByGfs = () => !GFS_ATTACH_WIRED && typeof GfsLink !== 'undefined' && GfsLink.hosted === true;
   const MODES = ['replace', 'add'];
   const ORIGIN_MODE = 'replace';
   const COLUMN_TYPE = 'Attachments';
@@ -72,7 +73,7 @@ const RowAttachment = (function () {
   function candidates(table) {
     return GristAPI.getVisibleColumns(table).filter(col => columnState(table, col) === 'ok');
   }
-  // Pourquoi la case est grisée ('' : elle ne l'est pas) : un compte en lecture seule, GFS qui n'a pas encore déclaré l'écriture, pas de colonne utilisable, ou une option de lignes qui réunit plusieurs lignes dans un seul fichier.
+  // Pourquoi la case est grisée ('' : elle ne l'est pas) : un compte en lecture seule, GFS dont le geste de jonction n'existe pas encore, pas de colonne utilisable, ou une option de lignes qui réunit plusieurs lignes dans un seul fichier.
   function offReason(lines) {
     const table = GristAPI.getCurrentTableId();
     if (isReadOnly()) return 'readOnly';
