@@ -1814,7 +1814,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // renommer doit en sortir.
 {
   const PENDING = new Set([
-    'js/frame-anim.js', 'js/frame-link.js', 'js/frame-multi.js', 'js/free-frame.js', 'js/shape-geometry.js', 'js/shape-presets.js', 'js/slide-links-live.js', 'js/slide-links.js', 'js/slide-props.js', 'js/slide-theme.js',
+    'js/frame-anim.js', 'js/frame-link.js', 'js/frame-multi.js', 'js/free-frame.js', 'js/free-frame-box-menus.js', 'js/free-frame-line-menus.js', 'js/free-frame-toolbar.js', 'js/shape-geometry.js', 'js/shape-presets.js', 'js/slide-links-live.js', 'js/slide-links.js', 'js/slide-props.js', 'js/slide-theme.js',
     'js/whats-new.js', 'js/gfs-link.js',
     // Hors de ce que l'audit lit (chargés à la demande : moteurs d'export et d'import, comparaison des versions, extensions de Grist Factory Suite) : à passer dans un lot à part, avec leurs groupes d'essais.
     'js/docx-export.js', 'js/html-export.js', 'js/markdown-export.js', 'js/pdf-export.js', 'js/pptx-export.js', 'js/pptx-import.js', 'js/sheet-layout.js', 'js/versions-compare.js', 'js/xlsx-export.js', 'js/xlsx-number-format.js',
