@@ -6,7 +6,8 @@
 //    sélectionnée, son bouton allumé ;
 //  - un seul Ctrl+Z défait le texte ; Ctrl+Alt+Y (la vraie touche) rouvre la fenêtre sur l'image sélectionnée ; Échap la ferme sans rien écrire ;
 //  - la case « Image décorative », cochée à la souris, grise le champ ; valider la pose et allume le bouton ;
-//  - les textes d'aide de la fenêtre sont lisibles (4,5:1 au moins).
+//  - les textes d'aide de la fenêtre sont lisibles (4,5:1 au moins) ;
+//  - les colonnes (lot 3) : « # » ouvre la liste des colonnes devant la fenêtre, Entrée en choisit une sans valider la fenêtre, le texte garde sa clé dans le modèle.
 // Lancé par run-headless.mjs (groupe Node "altTextMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-alt-text-mouse.mjs
 // ALT_TEXT_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { createServer } from 'node:http';
@@ -277,6 +278,40 @@ async function run(theme) {
   await page.waitForTimeout(250);
   const a7 = await attrs(), w7 = await windowState();
   check(`${T}, annuler : le bouton « Annuler » ferme la fenêtre sans rien changer`, !w7.open && a7.decorative === true && a7.alt === '', { a7, open: w7.open });
+
+  // 8) Les colonnes (lot 3) : « # » ouvre la liste des colonnes devant la fenêtre ; Entrée choisit sans valider la fenêtre ; le texte à colonne s'écrit tel quel dans le modèle.
+  await page.evaluate(async () => { window.__gristStub.setVariables('AltClients', { Prenom: 'Text', Nom: 'Text' }); await GristAPI.refreshSchema(); });
+  await setDoc(await imageDoc());
+  await clickImage();
+  await clickAltButton();
+  await page.keyboard.type('Photo de #');
+  await page.waitForTimeout(350);
+  const listState = () => page.evaluate(() => {
+    const box = document.getElementById('autocomplete-box');
+    if (!box || getComputedStyle(box).display === 'none') return { open: false };
+    const r = box.getBoundingClientRect();
+    const item = box.querySelector('.ac-item');
+    const ir = item ? item.getBoundingClientRect() : null;
+    const top = ir ? document.elementFromPoint(ir.left + ir.width / 2, ir.top + ir.height / 2) : null;
+    return { open: true, items: box.querySelectorAll('.ac-item').length, onTop: !!top && box.contains(top), inPanel: r.left >= -0.5 && r.top >= -0.5 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5 };
+  });
+  const l8 = await listState();
+  check(`${T}, colonnes : « # » ouvre la liste des colonnes, au premier plan devant la fenêtre et dans le panneau`, l8.open && l8.items >= 2 && l8.onTop && l8.inPanel, l8);
+  await snap(`${T}-8-colonnes`);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  const w8 = await windowState(), a8 = await attrs(), l8b = await listState();
+  check(`${T}, colonnes : Entrée choisit la colonne (le texte s'écrit « #AltClients.… »), ferme la liste, la fenêtre reste ouverte et rien n'est encore écrit sur l'image`, w8.open && /^Photo de #AltClients\.(Prenom|Nom)$/.test(w8.value) && !l8b.open && a8.alt === '' && w8.focusInField, { w8: w8.value, l8b, a8 });
+  await page.keyboard.type(' (portrait)');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  const a8b = await attrs(), w8b = await windowState();
+  check(`${T}, colonnes : le second Entrée valide ; le modèle garde le texte avec sa colonne`, !w8b.open && /^Photo de #AltClients\.(Prenom|Nom) \(portrait\)$/.test(a8b.alt), { alt: a8b.alt, open: w8b.open });
+  await clickAltButton();
+  const w8c = await windowState();
+  check(`${T}, colonnes : rouverte, la fenêtre montre le texte avec sa colonne, pas une valeur`, w8c.open && w8c.value === a8b.alt && /#AltClients\./.test(w8c.hint) === false, { value: w8c.value });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
 }
 
 await run('light');

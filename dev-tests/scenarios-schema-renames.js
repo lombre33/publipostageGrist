@@ -749,6 +749,31 @@
   );
 
   scenario(
+    'schemarenames_alt_texts_of_images_and_objects_follow_a_renamed_column',
+    'Le texte alternatif d’une image et celui d’un objet de diapositive qui nomment une colonne (« Photo de #Dossier.Montant ») suivent le renommage de la colonne, comme le texte d’un QR code ; la copie `aria-label` de l’objet aussi, et un texte sans colonne n’est pas touché',
+    async (h) => {
+      const img = `<img class="editor-image" alt="${text('Photo de §SrDossiers.Montant')}" style="width: 80px">`;
+      const plain = '<img class="editor-image" alt="Logo de l’entreprise" style="width: 80px">';
+      const frame = `<div class="pp-free-frame" role="group" aria-label="${text('Plan §SrDossiers.Titre')}" data-ff-x="40" data-ff-y="40" data-ff-w="200" data-ff-h="60" data-ff-alt="${text('Plan §SrDossiers.Titre')}"><div class="pp-free-frame-box"><div class="pp-free-frame-content"><p>Texte</p></div></div></div>`;
+      const id = await addTemplate({ nom: 'Sr alt', html: `<p>${img}${plain}</p>${frame}` });
+      await bootstrap(h);
+      await renamed(s => { s.renameColumn(PAGE, 'Montant', 'Total'); s.renameColumn(PAGE, 'Titre', 'Intitule'); });
+      const res = await pass(h);
+      const row = rowOf(id);
+      const [imgOut, plainOut] = all(row.Contenu, 'img.editor-image');
+      const [frameOut] = all(row.Contenu, '.pp-free-frame');
+      const checks = {
+        image: imgOut.getAttribute('alt') === text('Photo de §SrDossiers.Total') && imgOut.getAttribute('style') === 'width: 80px',
+        plain: plainOut.getAttribute('alt') === 'Logo de l’entreprise',
+        frame: frameOut.getAttribute('data-ff-alt') === text('Plan §SrDossiers.Intitule') && frameOut.getAttribute('aria-label') === text('Plan §SrDossiers.Intitule'),
+        summary: res.renames === 2 && res.templates === 1,
+      };
+      const v = verdict(checks);
+      return { pass: v.pass, notes: v.failed.join(', ') || 'ok' };
+    },
+  );
+
+  scenario(
     'schemarenames_email_and_file_name_fields_written_as_html_follow_a_renamed_column_table_and_loop',
     'Objet et nom du PDF écrits en HTML (js/field-codec.js : une bulle à condition ou à format, une boucle dans la phrase) suivent un renommage de colonne puis de table comme les bulles du corps - colonne, clé et texte de la bulle, colonne de sa condition, format, table et filtre de la boucle -, le champ À resté en texte brut suit comme avant ; une puce de l’Objet (date du jour) n’est pas touchée ; un champ vide reste vide',
     async (h) => {

@@ -503,6 +503,17 @@ const SchemaRenames = (function () {
       const next = rewriteText(qr, m, trigger);
       if (next.count) { el.setAttribute('data-qr-text', next.text); count += next.count; }
     }
+    // Le texte alternatif d'une image ou d'un objet de diapositive (js/alt-text.js : « Photo de #Prénom ») nomme ses colonnes comme le texte d'un QR code ; la copie `aria-label` d'un objet suit.
+    const altName = el.tagName === 'IMG' ? 'alt' : 'data-ff-alt';
+    const alt = el.getAttribute(altName);
+    if (alt && alt.indexOf(trigger) !== -1) {
+      const next = rewriteText(alt, m, trigger);
+      if (next.count) {
+        if (altName === 'data-ff-alt' && el.getAttribute('aria-label') === alt) el.setAttribute('aria-label', next.text);
+        el.setAttribute(altName, next.text);
+        count += next.count;
+      }
+    }
     // Le sinon d'un bloc, d'une valeur (js/conditional-text.js) ou d'une bulle (js/variable-otherwise.js) : un champ à variables, comme l'objet d'un e-mail. Du texte
     // brut, où une clé « #Table.Colonne » se réécrit comme dans le nom du PDF, ou du HTML, dont les bulles se réécrivent comme celles du corps.
     const rawOtherwise = el.matches(TYPED_OTHERWISE) ? el.getAttribute('data-otherwise') : null;
@@ -532,12 +543,13 @@ const SchemaRenames = (function () {
   // `ctx` : { page, trigger } - `page` est le contexte des colonnes sans nom de table (la table de la page), null pour ne pas les lire.
   function rewriteHtml(html, m, ctx) {
     const src = String(html == null ? '' : html);
-    if (src.indexOf('data-') === -1) return { html: src, count: 0 };
+    // `alt=` : le texte alternatif d'une image (js/alt-text.js) peut nommer une colonne sans qu'aucun attribut `data-` ne soit là.
+    if (src.indexOf('data-') === -1 && src.indexOf('alt=') === -1) return { html: src, count: 0 };
     const tpl = Dom.inertTemplate(src);
     const root = tpl.content;
     // Tout ce que le widget range dans un modèle et qui nomme une table ou une colonne : comme BOUND_SELECTOR de js/loop-rules.js, mais sans
     // restreindre les images.
-    const ELEMENT_SELECTOR = '.var-badge, .calc-badge, .mention-chip, img.editor-image, .smart-chip, .conditional-text, .conditional-value, .conditional-checkbox';
+    const ELEMENT_SELECTOR = '.var-badge, .calc-badge, .mention-chip, img.editor-image, .pp-free-frame[data-ff-alt], .smart-chip, .conditional-text, .conditional-value, .conditional-checkbox';
     // Un modèle qui nomme d'autres tables que celle de la page, et jamais celle-ci, n'est pas lu comme un modèle de cette page : ses colonnes sans
     // nom de table restent.
     const elements = root.querySelectorAll(ELEMENT_SELECTOR);

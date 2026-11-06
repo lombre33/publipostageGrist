@@ -4,7 +4,8 @@
 //  1) l'ÉDITEUR : les assistants (nettoyage, « Image » d'avant), le nœud (défaut vide, aller-retour du HTML), le bouton (allumé quand l'image est décrite), la fenêtre (texte, case, Annuler, un seul
 //     Ctrl+Z), la touche ;
 //  2) les SORTIES : HTML, Markdown, Word (OOXML dézippé : `descr`, extension décorative), PowerPoint (export, puis réimport) ;
-//  3) les OBJETS de diapositive (lot 2 : cadre, forme, trait) : le modèle (`alt`, `decorative`), la fenêtre sur l'objet, Word et PowerPoint (export et réimport).
+//  3) les OBJETS de diapositive (lot 2 : cadre, forme, trait) : le modèle (`alt`, `decorative`), la fenêtre sur l'objet, Word et PowerPoint (export et réimport) ;
+//  4) les COLONNES dans le texte (lot 3 : « Photo de #Prénom #Nom ») : résolues par ligne à la Lecture, dans une zone répétée, et dans les exports.
 // La vraie souris et le vrai clavier à 700x400 sont dans dev-tests/verify-alt-text-mouse.mjs.
 (function () {
   const cases = [];
@@ -490,6 +491,112 @@
         && read.length === 6 && read.filter(one => one.alt === 'Une flèche vers l’étape 2' && !one.decorative).length === 1 && read.filter(one => one.alt === 'Le titre du bloc').length === 1 && read.filter(one => one.alt === 'Un filet bleu').length === 1
         && read.filter(one => one.decorative === '1' && one.alt === '' && one.role === 'presentation').length === 3;
       return { pass, notes: JSON.stringify({ written, read, props: props.map(one => one.slice(0, 300)) }) };
+    },
+  });
+
+  // === 4) Les colonnes dans le texte (lot 3 : « Photo de #Prénom #Nom », comme le texte d'un QR code) =====================================================================
+  const TABLE = 'AltClients';
+  const NO_HF = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
+  // Trois clients (la table de la page) : tout rempli, sans ville, sans nom ; leurs lignes de commande (liées par Client) pour une zone répétée.
+  async function seedClients(h) {
+    await h.resetEditor();
+    const stub = window.__gristStub;
+    stub.setVariables(TABLE, { Prenom: 'Text', Nom: 'Text', Ville: 'Text' });
+    stub.setVariables('AltLignes', { Client: 'Ref:AltClients', Produit: 'Text' });
+    const rows = [
+      { id: 1, Prenom: 'Alice', Nom: 'Durand', Ville: 'Lyon' },
+      { id: 2, Prenom: 'Bob', Nom: 'Roy', Ville: '' },
+      { id: 3, Prenom: '', Nom: '', Ville: 'Nice' },
+    ];
+    stub.setRows(TABLE, rows);
+    stub.setRows('AltLignes', [{ id: 1, Client: 1, Produit: 'Perceuse' }, { id: 2, Client: 1, Produit: 'Scie' }, { id: 3, Client: 2, Produit: 'Clé' }]);
+    await GristAPI.refreshSchema();
+    await GristAPI.deleteLinkRule('AltLignes');
+    await GristAPI.saveLinkRule('AltLignes', { mode: 'match', colonneCible: 'Client', colonneSource: 'id' });
+    await GristAPI.refreshSchema();
+    stub.fireRecord(Object.assign({}, rows[0]), TABLE);
+    await sleep(60);
+    return rows;
+  }
+  const recordOf = (rows, id) => Object.assign({}, rows.find(row => row.id === id));
+  const TEMPLATE = '<p>' + image(' alt="Photo de #AltClients.Prenom #AltClients.Nom"') + '</p><p>' + image(' alt="Photo n°1 : #1 en vente"') + '</p><p>' + image(' alt="" data-decorative="true"') + '</p>'
+    + FreeFrame.html({ x: 60, y: 300, w: 220, h: 70, alt: 'Plan de #AltClients.Ville', shape: 'rect', fill: '#ddeeff' }, '<p></p>')
+    + FreeFrame.html({ x: 60, y: 400, w: 220, h: 70, alt: '#AltClients.Ville' }, '<p>Ville</p>');
+  const altsOfReader = reader => ({
+    images: Array.from(reader.querySelectorAll('img.editor-image')).map(img => img.getAttribute('alt')),
+    frames: Array.from(reader.querySelectorAll('.pp-free-frame')).map(el => [el.getAttribute('data-ff-alt'), el.getAttribute('aria-label')]),
+  });
+  async function readerFor(html, record) {
+    const reader = document.getElementById('reader-container');
+    reader.style.display = 'block';
+    await ReaderMode.render(html, TABLE, record, NO_HF);
+    return reader.querySelector('.reader-content');
+  }
+
+  cases.push({
+    id: 'alttext_columns_are_resolved_for_each_row_at_reading_images_and_objects',
+    description: 'Le texte alternatif d\'une image ou d\'un objet qui nomme des colonnes (« Photo de #Prenom #Nom ») prend les valeurs de la ligne lue, à la Lecture : une colonne vide n\'écrit rien (le reste demeure), un texte qui devient vide ne laisse ni `data-ff-alt` ni nom, un « # » qui ne nomme pas une colonne reste tel quel, une image décorative n\'est pas touchée, et le modèle garde sa clé',
+    run: async (h) => {
+      const rows = await seedClients(h);
+      const seen = {};
+      for (const id of [1, 2, 3]) seen['row' + id] = altsOfReader(await readerFor(TEMPLATE, recordOf(rows, id)));
+      const raw = FreeFrame.normalized({ alt: 'Plan de #AltClients.Ville' }).alt;
+      const pass = JSON.stringify(seen.row1) === JSON.stringify({ images: ['Photo de Alice Durand', 'Photo n°1 : #1 en vente', ''], frames: [['Plan de Lyon', 'Plan de Lyon'], ['Lyon', 'Lyon']] })
+        && JSON.stringify(seen.row2) === JSON.stringify({ images: ['Photo de Bob Roy', 'Photo n°1 : #1 en vente', ''], frames: [['Plan de', 'Plan de'], [null, null]] })
+        && JSON.stringify(seen.row3) === JSON.stringify({ images: ['Photo de', 'Photo n°1 : #1 en vente', ''], frames: [['Plan de Nice', 'Plan de Nice'], ['Nice', 'Nice']] })
+        && raw === 'Plan de #AltClients.Ville';
+      return { pass, notes: JSON.stringify(seen) };
+    },
+  });
+
+  cases.push({
+    id: 'alttext_columns_in_a_repeated_row_zone_take_the_line_of_their_turn',
+    description: 'Dans une ligne de tableau répétée par une boucle, le texte alternatif d\'une image prend la ligne de son tour : deux commandes, deux textes différents ; une seule commande, un seul',
+    run: async (h) => {
+      const rows = await seedClients(h);
+      const loop = { repeat: 'row', table: 'AltLignes', empty: 'hide' };
+      const badge = '<span class="var-badge" data-table="AltLignes" data-column="Produit" data-key="AltLignes.Produit" data-loop="' + JSON.stringify(loop).replace(/"/g, '&quot;') + '" data-loop-repeat="row"></span>';
+      const html = '<table><tbody><tr><td><p>' + badge + '</p></td><td><p>' + image(' alt="Photo du produit #AltLignes.Produit"') + '</p></td></tr></tbody></table>';
+      const one = altsOfReader(await readerFor(html, recordOf(rows, 1))).images;
+      const two = altsOfReader(await readerFor(html, recordOf(rows, 2))).images;
+      return { pass: JSON.stringify(one) === JSON.stringify(['Photo du produit Perceuse', 'Photo du produit Scie']) && JSON.stringify(two) === JSON.stringify(['Photo du produit Clé']), notes: JSON.stringify({ one, two }) };
+    },
+  });
+
+  cases.push({
+    id: 'alttext_columns_reach_the_html_markdown_and_word_exports_of_each_row',
+    description: 'Les exports d\'une ligne écrivent le texte alternatif résolu : HTML (`alt`, `aria-label` d\'un objet), Markdown (`![texte](…)`), Word et PowerPoint (`descr` de l\'image et de la forme) ; la ligne d\'à côté a son propre texte',
+    run: async (h) => {
+      const rows = await seedClients(h);
+      const out = {};
+      for (const id of [1, 2]) {
+        const record = recordOf(rows, id);
+        const html = await h.exportHtml(TEMPLATE, null, record, TABLE);
+        const markdown = await h.exportMarkdown(TEMPLATE, null, record, TABLE);
+        await ExportCommon.ensureJsZipLoaded();
+        await DocxExport.ensureDocxLibLoaded();
+        const { blob } = await DocxExport.getDocxBlobForRecord(TEMPLATE, TABLE, record, '', null, null);
+        const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+        const doc = new DOMParser().parseFromString(await zip.file('word/document.xml').async('string'), 'application/xml');
+        await ExportEngines.ensure('pptx');
+        const slides = await PptxExport.getPptxBlobForRecord(TEMPLATE, TABLE, record, '', null, null);
+        const pptxZip = await JSZip.loadAsync(await slides.blob.arrayBuffer());
+        const pptxXml = await pptxZip.file('ppt/slides/slide1.xml').async('string');
+        out['row' + id] = {
+          pptx: Array.from(pptxXml.matchAll(/<p:cNvPr [^>]*?descr="([^"]*)"/g), match => match[1]),
+          html: altsOf(html.text), htmlFrame: (/aria-label="([^"]*)"/.exec(html.text) || [])[1] || null,
+          markdown: Array.from(markdown.text.matchAll(/!\[([^\]]*)\]\(|<img\b[^>]*?\salt="([^"]*)"/g)).map(match => (match[1] !== undefined ? match[1] : match[2])),
+          word: Array.from(doc.getElementsByTagName('wp:docPr')).map(node => node.getAttribute('descr') || ''),
+        };
+      }
+      const one = out.row1;
+      const two = out.row2;
+      const pass = one.html.slice(0, 2).join('|') === 'Photo de Alice Durand|Photo n°1 : #1 en vente' && one.htmlFrame === 'Plan de Lyon'
+        && one.markdown.slice(0, 2).join('|') === 'Photo de Alice Durand|Photo n°1 : #1 en vente'
+        && one.word.indexOf('Photo de Alice Durand') >= 0 && one.word.indexOf('Plan de Lyon') >= 0 && !one.word.some(text => text.indexOf('#') >= 0 && text !== 'Photo n°1 : #1 en vente')
+        && one.pptx.indexOf('Photo de Alice Durand') >= 0 && one.pptx.indexOf('Plan de Lyon') >= 0 && !one.pptx.some(text => text.indexOf('AltClients') >= 0)
+        && two.html[0] === 'Photo de Bob Roy' && two.htmlFrame === 'Plan de' && two.word.indexOf('Photo de Bob Roy') >= 0 && two.word.indexOf('Plan de') >= 0 && two.pptx.indexOf('Plan de') >= 0;
+      return { pass, notes: JSON.stringify(out) };
     },
   });
 

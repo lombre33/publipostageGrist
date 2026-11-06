@@ -387,6 +387,7 @@ const ReaderMode = (function () {
     LoopRules.removeHiddenBlocks(wrapper);
     // Un QR code dont le texte contient une colonne : dessiné pour la ligne affichée, comme dans le corps.
     await resolveQrCodes(wrapper, tableId, record);
+    await resolveAltTexts(wrapper, tableId, record);
     // La note de bas de page n'est volontairement pas insérable en en-tête ni en pied (aucun repère de page dans une zone répétée sur chaque page) :
     // resolveSmartChips ne trouve donc jamais de .footnote-ref-marker ici.
     await resolveSmartChips(wrapper);
@@ -1262,11 +1263,12 @@ const ReaderMode = (function () {
     if (stale()) return null;
     for (const r of results) { if (r.isError) hasError = true; carryReaderAtom(r.badge, r.node); putValue(r.badge, r.node); }
     LoopRules.removeHiddenBlocks(wrapper);
-    // Ensemble : ces quatre résolutions touchent chacune ses propres éléments (images de variable, codes QR, graphiques, puces) et lisent le document par la même lecture partagée du rendu
+    // Ensemble : ces cinq résolutions touchent chacune ses propres éléments (images de variable, codes QR, textes alternatifs, graphiques, puces) et lisent le document par la même lecture partagée du rendu
     // (GristAPI.withReadPass) ; l'une après l'autre, chaque série de lectures de Grist attendait la fin de la précédente, quatre allers-retours de suite avant la première image.
     await Promise.all([
       resolveVariableImages(wrapper, tableId, record),
       resolveQrCodes(wrapper, tableId, record),
+      resolveAltTexts(wrapper, tableId, record),
       resolveCharts(wrapper, tableId, record),
       resolveSmartChips(wrapper),
     ]);
@@ -1427,6 +1429,12 @@ const ReaderMode = (function () {
     // répétée ; sans valeur, le QR code disparaît comme une image sans pièce jointe. Celui d'un texte seul est déjà une image du modèle.
     const nodes = Array.from(wrapper.querySelectorAll('img.editor-image[data-qr-text]')).filter(QrCode.needsImage);
     await Promise.all(nodes.map(img => QrCode.resolveImage(img, tableId, record, loopOpts(LoopRules.bindingOf(img)))));
+  }
+  async function resolveAltTexts(wrapper, tableId, record) {
+    // Les textes alternatifs qui nomment une colonne (js/alt-text.js : « Photo de #Prénom ») : rendus pour la ligne affichée, avec la ligne du tour dans une zone répétée. Une image ou un objet
+    // sans colonne dans son texte n'est pas touché.
+    const nodes = Array.from(wrapper.querySelectorAll('img.editor-image[alt], .pp-free-frame[data-ff-alt]')).filter(AltText.hasColumnsIn);
+    await Promise.all(nodes.map(el => AltText.resolveElement(el, tableId, record, loopOpts(LoopRules.bindingOf(el)))));
   }
   async function resolveCharts(wrapper, tableId, record) {
     // Graphiques de la page (js/chart-entry.js, extensions/graphique/chart-block.js) : dessinés ici pour la ligne affichée (dans une zone répétée, le même à chaque tour) ; sans ligne à
@@ -1718,6 +1726,7 @@ const ReaderMode = (function () {
     LoopRules.removeHiddenBlocks(wrapper);
     await resolveVariableImages(wrapper, tableId || lastCurrentTableId, record);
     await resolveQrCodes(wrapper, tableId || lastCurrentTableId, record);
+    await resolveAltTexts(wrapper, tableId || lastCurrentTableId, record);
     await resolveCharts(wrapper, tableId || lastCurrentTableId, record);
     await resolveSmartChips(wrapper);
     await GristAPI.hydrateAttachmentImages(wrapper);

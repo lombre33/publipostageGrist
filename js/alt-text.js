@@ -33,6 +33,33 @@ const AltText = (function () {
   const IMAGE_WORDS = { label: 'altText.label', placeholder: 'altText.placeholder', hint: 'altText.hint', decorative: 'altText.decorative', decorativeHint: 'altText.decorativeHint' };
   const OBJECT_WORDS = { label: 'altText.objectLabel', placeholder: 'altText.objectPlaceholder', hint: 'altText.objectHint', decorative: 'altText.objectDecorative', decorativeHint: 'altText.objectDecorativeHint' };
 
+  // Les colonnes dans le texte (choix du 06/11, « comme le texte d'un QR code ») : « Photo de #Prénom #Nom » donne à chaque ligne son texte, à la Lecture et dans les exports (js/reader-mode.js :
+  // resolveAltTexts). Une colonne illisible ou vide n'écrit rien ; le reste du texte demeure. Le texte reste tel quel dans le modèle (et dans l'éditeur : un lecteur d'écran y lit la clé).
+  const hasColumns = text => { try { return typeof text === 'string' && Variables.findTextVariables(text).length > 0; } catch (e) { return false; } };
+  async function resolveText(text, tableId, record, opts) {
+    if (!hasColumns(text)) return clean(text);
+    const filled = await Variables.replaceTextVariables(text, async (found) => {
+      try {
+        const result = await Variables.resolveVariableResult(found.table, found.column, tableId, record, null, opts);
+        return result.isError || result.text == null ? '' : String(result.text);
+      } catch (e) { return ''; }
+    });
+    return clean(filled);
+  }
+  // Le texte alternatif d'un élément d'un document lu (une <img> de l'éditeur, un objet de diapositive : `data-ff-alt`), rendu pour la ligne `record` ; `opts` : la ligne du tour d'une zone répétée.
+  const isFrameEl = el => el.classList.contains('pp-free-frame');
+  const rawOf = el => el.getAttribute(isFrameEl(el) ? 'data-ff-alt' : 'alt');
+  const hasColumnsIn = el => hasColumns(rawOf(el));
+  async function resolveElement(el, tableId, record, opts) {
+    const text = await resolveText(rawOf(el), tableId, record, opts);
+    if (!isFrameEl(el)) { el.setAttribute('alt', text); return; }
+    // Un objet dont le texte devient vide n'est plus décrit : ni `data-ff-alt`, ni nom pour un lecteur d'écran.
+    ['data-ff-alt', 'aria-label'].forEach((name) => {
+      if (!text) el.removeAttribute(name);
+      else if (name === 'data-ff-alt' || el.hasAttribute(name)) el.setAttribute(name, text);
+    });
+  }
+
   // La fenêtre
   let win = null;
   let refs = null;
@@ -85,8 +112,10 @@ const AltText = (function () {
     const { cancel, ok } = win.addButtons();
     refs = { label, input, hint, count, decorative, decorativeText, decorativeHint, cancel, ok };
 
+    // « # » ouvre la liste des colonnes (js/variables.js), comme dans l'objet d'un e-mail ou le texte d'un QR code.
+    Variables.initFilenameInput(input);
     input.addEventListener('input', syncCount);
-    // Entrée valide (un texte alternatif tient sur une ligne) ; Maj+Entrée ne fait rien de plus.
+    // Entrée valide (un texte alternatif tient sur une ligne), sauf quand la liste des colonnes est ouverte : elle a déjà pris la touche pour choisir. Maj+Entrée ne fait rien de plus.
     input.addEventListener('keydown', event => {
       if (event.key !== 'Enter' || event.isComposing || event.defaultPrevented) return;
       event.preventDefault();
@@ -124,7 +153,7 @@ const AltText = (function () {
     label.textContent = I18n.t(words.label);
     input.placeholder = I18n.t(words.placeholder);
     input.value = textOf(found.alt);
-    hint.textContent = I18n.t(words.hint);
+    hint.textContent = I18n.t(words.hint) + ' ' + I18n.t('altText.columnHint', { key: Variables.triggerChar() });
     decorative.checked = isDecorative(found.decorative);
     decorativeText.textContent = I18n.t(words.decorative);
     decorativeHint.textContent = I18n.t(words.decorativeHint);
@@ -153,5 +182,5 @@ const AltText = (function () {
     closeWindow();
   }
 
-  return { MAX, PLACEHOLDER, clean, textOf, isDecorative, isDescribed, ofImage, canOpen, open };
+  return { MAX, PLACEHOLDER, clean, textOf, isDecorative, isDescribed, ofImage, hasColumns, hasColumnsIn, resolveText, resolveElement, canOpen, open };
 })();

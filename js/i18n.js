@@ -869,6 +869,7 @@ const I18n = (function () {
     'altText.count': { fr: '{n} / {max}', en: '{n} / {max}' },
     'altText.decorative': { fr: 'Image décorative (rien à lire)', en: 'Decorative image (nothing to read)' },
     'altText.decorativeHint': { fr: 'Un lecteur d’écran passe l’image sans la lire : un filet, un fond, un motif qui n’apporte aucune information.', en: 'A screen reader skips the image: a rule, a background, a pattern that carries no information.' },
+    'altText.columnHint': { fr: 'Tapez {key} pour y mettre une colonne : « Photo de {key}Prénom ».', en: 'Type {key} to add a column: “Photo of {key}First name”.' },
     'altText.objectLabel': { fr: 'Description de l’objet', en: 'Object description' },
     'altText.objectPlaceholder': { fr: 'Ex. : Flèche qui relie les deux étapes', en: 'E.g. Arrow linking the two steps' },
     'altText.objectHint': { fr: 'Dites ce que montre l’objet ou à quoi il sert, en une ou deux phrases : un lecteur d’écran la lira à la place de l’objet.', en: 'Say what the object shows or what it is for, in a sentence or two: a screen reader will read it in place of the object.' },
