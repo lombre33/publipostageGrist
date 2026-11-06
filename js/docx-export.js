@@ -142,6 +142,9 @@ const DocxExport = (function () {
   // Bloc de code : Courier New, que Word trouve partout (Cousine, de même métrique, dans le PDF). Word multiplie la hauteur propre de la police et
   // non la taille du corps : l'interligne est rapporté au rapport naturel de la police.
   const CODE_FONT = 'Courier New';
+  // La police d'un texte qui n'en a pas choisi : celle de l'éditeur (css/editor-v2.css), celle aussi du PDF. Écrite dans les valeurs par défaut du document, sans elle le Word laisse le
+  // lecteur choisir la sienne et le modèle change d'aspect d'un poste à l'autre. Un poste qui n'a pas Roboto la remplace, comme pour toute police choisie qu'il n'a pas.
+  const BODY_FONT = 'Roboto';
   const CODE_HALF_PT = STYLE.codePt * 2;
   const CODE_TEXT_HEX = hexOf(STYLE.codeTextColor);
   const CODE_FILL_HEX = hexOf(STYLE.codeFillColor);
@@ -2179,7 +2182,8 @@ const DocxExport = (function () {
     } finally { applyPage(documentOrientation); anchorBookmarks = null; }
     const doc = { sections, footnotes: ctx.footnotes, defaultTabStop: TabIndent.STOP_TWIPS };
     if (ctx.numberingConfigs.length) doc.numbering = { config: ctx.numberingConfigs };
-    if (ctx.hasToc) doc.styles = { paragraphStyles: tocParagraphStyles() };
+    doc.styles = { default: { document: { run: { font: BODY_FONT } } } };
+    if (ctx.hasToc) doc.styles.paragraphStyles = tocParagraphStyles();
     const file = new docx.Document(doc);
     // docx.js écrit numbering.xml AVANT les en-têtes et les pieds : l'instance d'une liste posée dans l'un d'eux n'y serait pas déclarée, le paragraphe
     // pointerait vers un numId inconnu et Word n'afficherait ni puce ni numéro. Chaque instance est donc créée ici, avant la mise en fichier

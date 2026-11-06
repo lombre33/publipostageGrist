@@ -1027,6 +1027,28 @@
       return { pass, notes: JSON.stringify({ rows, couleurs: Array.from(new Set(colors)), fonds: fills }) };
     });
 
+  add('docx_text_without_a_chosen_font_gets_the_editor_font_in_the_document_defaults',
+    'Le Word déclare la police de l\'éditeur (Roboto) dans les valeurs par défaut du document, pour le texte qui n\'en a pas choisi ; une police choisie (Georgia) et le bloc de code (Courier New) gardent la leur, avec ou sans sommaire',
+    async (h) => {
+      const fontsOf = (parts) => {
+        const defaults = parts.part('word/styles.xml').getElementsByTagName('w:rPrDefault')[0];
+        const fonts = defaults ? defaults.getElementsByTagName('w:rFonts')[0] : null;
+        return fonts ? ['w:ascii', 'w:hAnsi', 'w:cs', 'w:eastAsia'].map(a => fonts.getAttribute(a)) : null;
+      };
+      const html = '<h1>Titre</h1><p>Sans police choisie</p><p><span style="font-family: Georgia, serif">Avec Georgia</span></p><pre>code</pre>';
+      const plain = await h.exportDocxParts(html);
+      const runFonts = Array.from(plain.doc.getElementsByTagName('w:r')).map(r => {
+        const f = r.getElementsByTagName('w:rFonts')[0];
+        return (r.textContent || '').trim() + '=' + (f ? f.getAttribute('w:ascii') : '-');
+      });
+      const withToc = await h.exportDocxParts('<div class="toc-marker"></div><h1>Titre</h1><p>Texte</p>');
+      const got = { plain: fontsOf(plain), toc: fontsOf(withToc), tocStyle: withToc.part('word/styles.xml').getElementsByTagName('w:style').length > 0 && !!tocOf(withToc), runFonts };
+      const ROBOTO = ['Roboto', 'Roboto', 'Roboto', 'Roboto'];
+      const pass = JSON.stringify(got.plain) === JSON.stringify(ROBOTO) && JSON.stringify(got.toc) === JSON.stringify(ROBOTO)
+        && got.tocStyle && runFonts.includes('Titre=-') && runFonts.includes('Sans police choisie=-') && runFonts.includes('Avec Georgia=Georgia') && runFonts.some(r => /^code=Courier New/.test(r));
+      return { pass, notes: JSON.stringify(got) };
+    });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.docx = cases;
 })();
