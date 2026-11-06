@@ -9,3 +9,6 @@
 .offline-cache/pdfjs-deps/
 .offline-cache/esm-map.json
 .offline-cache/package-lock.json
+
+# Empreintes des exports (dev-tests/verify-export-fingerprints.mjs) : relevé local d une refactorisation, jamais commité (le rendu dépend un peu du Chromium).
+.export-fingerprints/
