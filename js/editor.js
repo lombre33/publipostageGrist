@@ -21,7 +21,7 @@ const Editor = (function () {
   async function insertImageAtDefaultSize(src) {
     // Partagée par le bouton toolbar et le collage presse-papiers (src = URL ou data URI). Dans un en-tête ou un pied de page l'image se pose à la même taille que
     // dans le texte, quelle que soit celle de la zone : si elle la dépasse, la zone le dit (HeaderFooterPreview.refreshZoneOverflow) et propose de la réduire.
-    editor.chain().focus().insertImage({ src, alt: 'Image', width: '320px' }).run();
+    editor.chain().focus().insertImage({ src, width: '320px' }).run();
   }
 
   // Popup d'édition d'une note de bas de page. Une seule est active à la fois : en ouvrir une valide celle qui était ouverte (commitFootnotePopup).

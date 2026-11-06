@@ -381,8 +381,10 @@ const QrCode = (function () {
     catch (e) { showError(I18n.t(e.tooLong ? 'qr.preview.tooLong' : 'qr.preview.unavailable')); return; }
     const current = state.editing ? ed.state.doc.nodeAt(state.pos) : null;
     if (current && current.type.name === 'editorImage') {
-      // Le QR code garde sa taille, sa place et son habillage : seuls son texte et son image changent.
-      EditorCore.patchNodeAndReselect(ed, state.pos, Object.assign({}, current.attrs, attrs, { height: null }));
+      // Le QR code garde sa taille, sa place et son habillage : seuls son texte et son image changent. Le texte alternatif que la personne a écrit (js/alt-text.js) reste le sien, et un
+      // QR code décoratif reste sans texte.
+      const wrote = AltText.textOf(current.attrs.alt) && current.attrs.alt !== ALT ? { alt: current.attrs.alt } : {};
+      EditorCore.patchNodeAndReselect(ed, state.pos, Object.assign({}, current.attrs, attrs, AltText.isDecorative(current.attrs.decorative) ? { alt: '' } : wrote, { height: null }));
     } else {
       // Jamais à la place de ce qui est sélectionné (une image, du texte) : le QR code s'ajoute derrière.
       const selection = ed.state.selection;

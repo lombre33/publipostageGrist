@@ -594,6 +594,8 @@ const FloatingToolbars = (function () {
         `<button data-action="repeat" title="${I18n.t('imgToolbar.repeat')}" aria-pressed="false">${Icons.svg('layerRepeat')}</button>`,
         '<span class="v2-floating-sep"></span>',
         `<button data-action="caption" title="${I18n.t('caption.addImage')}" aria-label="${I18n.t('caption.addImage')}">${Icons.svg('caption')}</button>`,
+        // Texte alternatif (js/alt-text.js) : la fenêtre du texte lu à la place de l'image, avec la case « Image décorative » ; allumé quand l'image est décrite (syncImageToolbar).
+        `<button data-action="alt" title="${I18n.t('altText.button')}" aria-label="${I18n.t('altText.button')}">${Icons.svg('altText')}</button>`,
         '<span class="v2-floating-sep"></span>',
         `<button data-action="delete" title="${I18n.t('imgToolbar.delete')}">${Icons.svg('trash')}</button>`,
       ].join('');
@@ -850,6 +852,8 @@ const FloatingToolbars = (function () {
         // Légende (js/caption.js) : pose la légende sous l'image et y met le curseur, ou y ramène le curseur ; grisé (cf. syncImageToolbar) pour
         // une image en calque ou habillée.
         caption: () => Caption.run(editor, 'image'),
+        // Le texte alternatif de l'image sélectionnée (js/alt-text.js) : sa petite fenêtre.
+        alt: () => AltText.open(),
         // Choisir une autre colonne Pièces jointes pour l'image dont la colonne a disparu (js/variable-column.js) ; sans effet sur une image saine (bouton caché).
         'var-column': () => { if (VariableColumn.isImageBroken(attrs)) VariableColumn.openAt(editor, editor.state.selection.from); },
         // La condition d'affichage de l'image d'une colonne Pièces jointes (js/variable-condition.js) ; sans effet sur une autre image (bouton grisé).
@@ -888,6 +892,7 @@ const FloatingToolbars = (function () {
       syncImageConditionButton(controls, attrs);
       syncImageLoopButton(controls, node);
       Caption.syncButton(controls.button('caption'), editor, 'image');
+      controls.setActive('alt', AltText.isDescribed(attrs));
     }
     // « Colonne… » : n'est dans la barre que d'une image dont la colonne Pièces jointes (ou sa table) a disparu de Grist - la même lecture que le rouge de son cadre
     // (VariableColumn.isImageBroken) - ; relue à chaque ouverture de la barre : une image réparée la perd.

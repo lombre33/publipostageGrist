@@ -485,6 +485,11 @@ const PptxImport = (function () {
     if (kid(props, 'hlinkClick') && !linked) losses.add('objectLinks');
   }
   const altOfObject = node => (attr(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr']), 'cNvPr'), 'descr') || '').trim();
+  // « Marquer comme décorative » (l'extension `decorative` de Microsoft dans les propriétés de l'objet, `cNvPr/extLst/ext`) : l'objet que PowerPoint dit sans texte à lire.
+  const decorativeOfObject = node => {
+    const props = kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr']), 'cNvPr');
+    return kids(kid(props, 'extLst'), 'ext').some(ext => kids(ext, 'decorative').some(mark => attr(mark, 'val') !== '0' && attr(mark, 'val') !== 'false'));
+  };
   // Le lien d'un objet vers une adresse (`hlinkClick` de `cNvPr`, adresse web, courrier ou téléphone) ou une autre diapositive : { el, href }, ou null (aucun lien, ou un lien vers un fichier, un programme).
   function objectLinkOf(node, env) {
     const el = kid(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr']), 'cNvPr'), 'hlinkClick');
@@ -1174,9 +1179,10 @@ const PptxImport = (function () {
   }
   // Un cadre qui porte une image : sa boîte est élargie des marges d'un cadre (le cadre pose l'image à l'intérieur de ses marges) pour que l'image soit à sa place. L'image est celle de l'éditeur (classe `editor-image`), réglée par sa largeur.
   // `href` (facultatif) : l'adresse du lien que l'image porte (`hlinkClick` de l'image) ; l'image est alors enveloppée d'un lien, comme le fait « Lien » de l'éditeur.
-  function pictureFrame(box, data, alt, opacity, layer, href, link) {
+  // `decorative` : l'image que PowerPoint marque « décorative » (js/alt-text.js : la case « Image décorative ») ; elle n'a alors pas de texte alternatif.
+  function pictureFrame(box, data, alt, opacity, layer, href, link, decorative) {
     const widthPx = fixed(box.w * PX_PER_PT);
-    let img = '<img class="editor-image" src="' + escAttr(data) + '" alt="' + escAttr(alt || 'Image') + '" style="width: ' + widthPx + 'px' + (opacity < 1 ? '; opacity: ' + fixed(opacity) : '') + '">';
+    let img = '<img class="editor-image" src="' + escAttr(data) + '" alt="' + escAttr(decorative ? '' : AltText.textOf(alt)) + '"' + (decorative ? ' data-decorative="true"' : '') + ' style="width: ' + widthPx + 'px' + (opacity < 1 ? '; opacity: ' + fixed(opacity) : '') + '">';
     if (href) img = '<a href="' + escAttr(href) + '">' + img + '</a>';
     return FreeFrame.html({ x: box.x - FRAME_PAD_X_PT, y: box.y - FRAME_PAD_Y_PT, w: box.w + 2 * FRAME_PAD_X_PT, h: box.h + 2 * FRAME_PAD_Y_PT, rot: box.rot, layer: layer || '', link: link || '' }, '<p>' + img + '</p>');
   }
@@ -1498,7 +1504,7 @@ const PptxImport = (function () {
     const frameLink = env.decor ? '' : frameLinkOf(pic, env);
     const showAction = !!FrameLink.actionOf(frameLink);
     const link = env.decor || showAction ? null : objectLinkOf(pic, env);
-    out.push(pictureFrame(finished ? finished.box : box, finished ? finished.data : data, attr(at(pic, 'nvPicPr/cNvPr'), 'descr'), alpha, env.decor, link && link.href, showAction ? frameLink : ''));
+    out.push(pictureFrame(finished ? finished.box : box, finished ? finished.data : data, attr(at(pic, 'nvPicPr/cNvPr'), 'descr'), alpha, env.decor, link && link.href, showAction ? frameLink : '', decorativeOfObject(pic)));
     // Ce que l'éditeur ne garde pas de l'image : ce que finishedPicture n'a pas fait (une forme inconnue, un réglage ou un effet qu'il ne dessine pas), son lien.
     const losses = new Set();
     const geometry = kid(spPr, ['prstGeom', 'custGeom']);
@@ -1703,7 +1709,7 @@ const PptxImport = (function () {
       }
       if (data && env.decor) data = await copiedImage(env, data, 'masterObjects');
       if (data) {
-        out.push(pictureFrame(box, data, altOfObject(sp), 1, env.decor, '', env.decor ? '' : frameLink));
+        out.push(pictureFrame(box, data, altOfObject(sp), 1, env.decor, '', env.decor ? '' : frameLink, decorativeOfObject(sp)));
         // L'image garde la boîte du rectangle ; celle d'une autre forme (une ellipse, une étoile) ou en mosaïque est posée en rectangle, étirée.
         if (kind !== 'rect' || kid(fill.el, 'tile')) losses.add('shapePictures');
         if (!hasText && !look) return;

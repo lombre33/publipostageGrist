@@ -99,6 +99,7 @@
     ".v2-image-toolbar button[action=layer-front]": {"class": "model", "start": "image"},
     ".v2-image-toolbar button[action=layer-behind]": {"class": "model", "start": "image"},
     ".v2-image-toolbar button[action=caption]": {"class": "model", "start": "image"},
+    ".v2-image-toolbar button[action=alt]": {"class": "window", "start": "image", "drive": [["type", "#pp-alt-text", "Un chat noir"], ["click", "#pp-alt-modal .var-modal-primary"]], "note": "Texte alternatif de l'image : sa petite fenêtre (js/alt-text.js), le texte écrit se pose d'un pas d'historique"},
     ".v2-image-toolbar button[action=delete]": {"class": "model", "start": "image"},
     ".v2-image-toolbar button[action=reset]": {"class": "model", "start": "image", "setup": [["control", ".v2-image-toolbar button[action=zoom-in]"]]},
     ".v2-image-toolbar button[action=layer-normal]": {"class": "model", "start": "image", "setup": [["control", ".v2-image-toolbar button[action=layer-front]"]]},

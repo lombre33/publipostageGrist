@@ -322,6 +322,8 @@ const Shortcuts = (function () {
       // Commenter : Ctrl+Alt+M (⌥⌘M sur Mac), la touche de Google Docs, depuis le 03/11, à la place d'Alt+Maj+M. Ce module la prend lui-même (`ctrlAlt`), et non l'éditeur comme Ctrl+Alt+C : Commenter agit aussi dans la
       // Lecture et dans un document en lecture seule, où l'éditeur est caché.
       { id: 'comment', group: 'insert', label: 'insert.comment.tip', key: 'Mod+Alt+m', ctrlAlt: true, scope: 'editor', hint: tip('v2-btn-comment'), run: click('v2-btn-comment') },
+      // Texte alternatif de l'image sélectionnée (js/alt-text.js) : Ctrl+Alt+Y (⌥⌘Y sur Mac), la touche de Google Docs. Rien ne se passe sans image sélectionnée. Comme Commenter, ce module prend la touche lui-même (`ctrlAlt`).
+      { id: 'altText', group: 'insert', label: 'altText.shortcut', key: 'Mod+Alt+y', ctrlAlt: true, scope: 'editor', aria: '.v2-image-toolbar button[data-action="alt"]', run: () => AltText.open() },
       { id: 'link', group: 'insert', label: 'insert.link.row', key: 'Mod+k', native: true, scope: 'editor', aria: '#v2-btn-link, #v2-row-link', run: click('v2-btn-link') },
       { id: 'citation', group: 'insert', label: 'insert.citation.tip', key: 'Mod+Shift+b', native: true, cells: true, scope: 'editor', hint: tip('v2-btn-citation'), run: click('v2-btn-citation') },
       { id: 'codeBlock', group: 'insert', label: 'insert.codeBlock.tip', key: 'Mod+Alt+c', native: true, scope: 'editor', hint: tip('v2-btn-code-block'), run: click('v2-btn-code-block') },

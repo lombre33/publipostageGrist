@@ -536,6 +536,9 @@ const PptxExport = (function () {
   }
   // Le texte alternatif d'un objet (`descr`), vide quand il n'en a pas.
   const descrXml = alt => (alt ? ` descr="${esc(alt)}"` : '');
+  // « Marquer comme décorative » de PowerPoint (js/alt-text.js : la case « Image décorative ») : l'extension de Microsoft que PowerPoint écrit dans les propriétés de l'objet ; un lecteur
+  // d'écran passe l'image et le vérificateur d'accessibilité ne la compte plus parmi celles sans texte alternatif.
+  const DECORATIVE_XML = '<a:extLst><a:ext uri="{C183D7F6-B498-43B3-948B-1728B52AA6E4}"><adec:decorative xmlns:adec="http://schemas.microsoft.com/office/drawing/2017/decorative" val="1"/></a:ext></a:extLst>';
   // Un trait droit (connecteur) de (x1, y1) à (x2, y2), en points sur la diapositive : la ligne prédéfinie de PowerPoint va du coin haut gauche au coin bas droit de sa boîte, `flip` la retourne.
   function connectorXml(slide, box, hex, widthPt, flip, ends, key, tr, style, alt) {
     const id = slide.takeId();
@@ -550,7 +553,8 @@ const PptxExport = (function () {
     const link = img.closest ? img.closest('a[href]') : null;
     // Une image du cadre d'un objet à lien (ou posée sur lui) mène où mène l'objet quand elle n'a pas son propre lien : PowerPoint ne passe pas le clic à l'objet dessous.
     const owner = !link && img.closest ? img.closest('.pp-free-frame[data-ff-link]') : null;
-    return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="${nameOf(slide, 'picture', id)}" descr="${esc(img.getAttribute('alt') || '')}">${link ? slide.linkXml(link) : owner ? slide.objectLinkXml(owner.getAttribute('data-ff-link')) : ''}</p:cNvPr>`
+    const alt = AltText.ofImage(img);
+    return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="${nameOf(slide, 'picture', id)}" descr="${esc(alt.text)}">${link ? slide.linkXml(link) : owner ? slide.objectLinkXml(owner.getAttribute('data-ff-link')) : ''}${alt.decorative ? DECORATIVE_XML : ''}</p:cNvPr>`
       + '<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>'
       + `<p:blipFill><a:blip r:embed="${slide.relFor(REL + 'image', '../media/' + media.name)}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>`
       + `<p:spPr>${xfrmXml(emu(box.x), emu(box.y), emu(box.w), emu(box.h), rot ? ` rot="${Math.round(rot * 60000)}"` : '')}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
@@ -600,7 +604,7 @@ const PptxExport = (function () {
     const number = ctx.charts.length + 1;
     ctx.charts.push({ name: 'chart' + number, workbook: 'Microsoft_Excel_Worksheet' + number + '.xlsx', part });
     const id = slide.takeId();
-    return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${nameOf(slide, 'chart', id)}"${descrXml((img.getAttribute('alt') || '').trim())}/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>`
+    return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${nameOf(slide, 'chart', id)}"${descrXml(AltText.ofImage(img).text)}/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>`
       + `<p:xfrm><a:off x="${emu(box.x)}" y="${emu(box.y)}"/><a:ext cx="${emu(box.w)}" cy="${emu(box.h)}"/></p:xfrm>`
       + `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="${slide.relFor(REL + 'chart', '../charts/chart' + number + '.xml')}"/></a:graphicData></a:graphic></p:graphicFrame>`;
   }

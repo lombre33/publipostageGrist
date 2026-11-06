@@ -611,6 +611,27 @@ const DocxExport = (function () {
       return blob;
     }
   }
+  // La marque « décorative » de Word (la case « Image décorative » de js/alt-text.js) : l'extension de Microsoft dans les propriétés de l'objet (`wp:docPr`) de chaque image au titre DECORATIVE_TITLE,
+  // dont le titre est alors retiré (il ne servait que de repère). Dans le corps, les en-têtes et les pieds. Sans la bibliothèque des archives, le fichier reste tel qu'écrit : l'image a alors un
+  // titre « pp-decorative » dans Word, sans autre mal.
+  const DECORATIVE_EXT = '<a:extLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:ext uri="{C183D7F6-B498-43B3-948B-1728B52AA6E4}"><adec:decorative xmlns:adec="http://schemas.microsoft.com/office/drawing/2017/decorative" val="1"/></a:ext></a:extLst>';
+  async function finishDocxDecorative(blob, decorative) {
+    if (!decorative) return blob;
+    try {
+      await ExportCommon.ensureJsZipLoaded();
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const marked = new RegExp('<wp:docPr([^>]*?)\\s+title="' + DECORATIVE_TITLE + '"([^>]*?)\\s*/>', 'g');
+      for (const name of Object.keys(zip.files).filter(one => /^word\/(document|header\d*|footer\d*)\.xml$/.test(one))) {
+        const xml = await zip.file(name).async('string');
+        const done = xml.replace(marked, '<wp:docPr$1$2>' + DECORATIVE_EXT + '</wp:docPr>');
+        if (done !== xml) zip.file(name, done, { createFolders: false });
+      }
+      return await zip.generateAsync({ type: 'blob', mimeType: blob.type, compression: 'DEFLATE' });
+    } catch (e) {
+      console.warn('[DocxExport] images décoratives : la marque de Word n\'a pas pu être posée :', e);
+      return blob;
+    }
+  }
   // Les options de docx.ChartRun d'un modèle d'Office (fonction pure, vérifiée seule par dev-tests/scenarios-chart-office.js). Les couleurs sont celles du dessin ; les valeurs affichées s'écrivent sans décimale
   // quand toutes sont entières, avec deux sinon ; le titre d'un axe est le nom de sa colonne (celui de l'unique série pour l'axe des valeurs), comme dans le dessin ; la légende est en haut quand il y a
   // plusieurs séries, en bas pour les secteurs et l'anneau, et absente d'une série seule (l'axe porte son nom). Barres couchées : la première étiquette est en haut, comme dans le dessin et dans la table, et
@@ -722,7 +743,7 @@ const DocxExport = (function () {
   // La `ChartRun` d'un modèle d'Office : ses options, la taille du dessin (px), son identifiant et le texte alternatif de l'image `node` (la bibliothèque en écrit un d'elle-même, en anglais, quand l'image n'en a pas).
   function newChartRun(model, node, transformation, id, floating, tag) {
     // Une cascade sans texte alternatif en reçoit un court (« Graphique : Marge », ou « Graphique : Cascade » sans titre) : la description que la bibliothèque tire des séries parlerait de la « Base » et des colonnes de calcul.
-    const alt = (node.getAttribute('alt') || '').trim() || (model.kind === 'waterfall' ? I18n.t('chart.alt', { name: model.title || I18n.t('chart.make.kind.waterfall') }) : '');
+    const alt = AltText.ofImage(node).text || (model.kind === 'waterfall' ? I18n.t('chart.alt', { name: model.title || I18n.t('chart.make.kind.waterfall') }) : '');
     const options = Object.assign(chartOptionsFromModel(model, tag), { transformation, altText: Object.assign({ id, name: '', title: '' }, alt ? { description: alt } : {}) });
     if (floating) options.floating = floating;
     return new docxCharts.ChartRun(options);
@@ -775,6 +796,14 @@ const DocxExport = (function () {
     }
   }
 
+  // Le texte alternatif d'une image (`altText` de docx.js : id, nom, description, titre) - js/alt-text.js. Une image décorative n'a pas de description ; docx.js ne sait pas écrire la marque
+  // « décorative » de Word, que finishDocxDecorative pose après coup sur les images dont le titre est DECORATIVE_TITLE (`ctx.decorative` dit qu'il y en a).
+  const DECORATIVE_TITLE = 'pp-decorative';
+  function imageAltText(node, id, ctx) {
+    const alt = AltText.ofImage(node);
+    if (alt.decorative) ctx.decorative = true;
+    return { id, name: '', description: alt.text, title: alt.decorative ? DECORATIVE_TITLE : '' };
+  }
   async function imageRunsFrom(node, style, ctx) {
     if (node.hasAttribute('data-pdf-skip')) return [];
     // « Sur toutes les pages » (js/page-layer.js) : ancrée dans l'en-tête de chaque page (buildDocxDocument), pas dans le paragraphe qui la porte.
@@ -785,7 +814,7 @@ const DocxExport = (function () {
     // bibliothèque) : sans id explicite, deux images prennent id="1", ce que Word refuse d'ouvrir sans signaler un contenu illisible. altText.id
     // donne un id unique par image du document.
     ctx.imageIdCounter += 1;
-    const runOptions = { type: imgData.type, data: imgData.data, transformation: { width: imgData.width, height: imgData.height }, altText: { id: ctx.imageIdCounter, name: '', description: '', title: '' } };
+    const runOptions = { type: imgData.type, data: imgData.data, transformation: { width: imgData.width, height: imgData.height }, altText: imageAltText(node, ctx.imageIdCounter, ctx) };
     const floatingOptions = docxFloatingOptionsFrom(node, ctx.imageIdCounter, ctx);
     if (floatingOptions) runOptions.floating = floatingOptions;
     const imgRun = (await chartRunFrom(node, runOptions, ctx)) || new docx.ImageRun(runOptions);
@@ -1903,7 +1932,7 @@ const DocxExport = (function () {
       layerObjectId += 1;
       const floating = docxFloatingOptionsFrom(img, layerObjectId, ctx);
       if (!floating) continue;
-      runs.push(new docx.ImageRun({ type: imgData.type, data: imgData.data, transformation: { width: imgData.width, height: imgData.height }, altText: { id: layerObjectId, name: '', description: '', title: '' }, floating }));
+      runs.push(new docx.ImageRun({ type: imgData.type, data: imgData.data, transformation: { width: imgData.width, height: imgData.height }, altText: imageAltText(img, layerObjectId, ctx), floating }));
     }
     return runs.length ? new docx.Paragraph({ spacing: { before: 0, after: 0, line: 20, lineRule: 'exact' }, children: runs }) : null;
   }
@@ -2190,6 +2219,7 @@ const DocxExport = (function () {
     // (docx.js ignore un doublon : celles du corps, créées à leur tour à l'écriture du document, ne changent pas).
     ctx.numberingConfigs.forEach(config => file.Numbering.createConcreteNumberingInstance(config.reference, 0));
     file.ppWaterfalls = ctx.waterfalls;
+    file.ppDecorative = !!ctx.decorative;
     return file;
   }
 
@@ -2201,7 +2231,7 @@ const DocxExport = (function () {
     await ensureDocxLibLoaded();
     const { resolvedHtml, filename, resolvedHeaderFooterData } = await ExportCommon.resolveRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData);
     const doc = await buildDocxDocument(resolvedHtml, resolvedHeaderFooterData);
-    const blob = await finishDocxWaterfalls(await docx.Packer.toBlob(doc), doc.ppWaterfalls || []);
+    const blob = await finishDocxDecorative(await finishDocxWaterfalls(await docx.Packer.toBlob(doc), doc.ppWaterfalls || []), doc.ppDecorative);
     return { blob, filename };
   }
   async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsTwip) {

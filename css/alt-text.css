@@ -1,0 +1,11 @@
+/* Fenêtre « Texte alternatif » d'une image (js/alt-text.js) : le champ, son aide et la case « Image décorative ». Le libellé et le champ viennent de css/modal-base.css
+   (.pp-dialog-label, .pp-dialog-input), les boutons de css/variable-actions.css (.var-modal-actions) ; ne reste ici que ce qui est propre à cette fenêtre. Tout tient dans les
+   376 px de haut du panneau de 700x400, sans défiler. */
+.pp-alt-input { height: auto; min-height: 66px; padding: 6px 8px; line-height: 1.45; resize: vertical; }
+.pp-alt-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-alt-input:disabled { background: var(--surface-sunken); color: var(--text-muted); }
+.pp-alt-note { margin: 6px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-muted); overflow-wrap: anywhere; }
+.pp-alt-count { margin-top: 2px; text-align: right; }
+.pp-alt-decorative { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; font-size: 13px; font-weight: 700; color: var(--text); cursor: pointer; }
+.pp-alt-decorative input { flex: none; margin: 0; }
+.pp-alt-decorative-hint { margin-top: 2px; padding-left: 20px; }

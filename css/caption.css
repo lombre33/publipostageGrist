@@ -9,6 +9,7 @@
    curseur dans le vrai paragraphe. Même gris que ce texte d'attente (`--paper-text-faint`, #667085 : 5,0:1 sur la feuille). */
 .tiptap p[data-caption="true"].caption-empty::before { content: attr(data-caption-placeholder); float: left; height: 0; pointer-events: none; color: var(--paper-text-faint, #667085); }
 /* Le bouton « Légende » ajoute 32 px à la barre flottante de l'image (bouton de 28 px et deux écarts de 2 px) : la glissière d'opacité rend ces 32
-   px (129 px d'origine) pour que la barre garde sa largeur. À ~700 px, quand l'image est tout en haut de la page, la barre recouvre la bande du
-   suivi des modifications : plus large, elle passerait sur le milieu de « Tout accepter » et le clic n'y arriverait plus. */
-.v2-floating-toolbar input[type="range"][data-role="opacity"] { width: 97px; }
+   px (129 px d'origine) pour que la barre garde sa largeur ; le bouton « Texte alternatif… » (js/alt-text.js) en ajoute 30 de plus, rendus de même
+   (97 px puis 67 px). À ~700 px, quand l'image est tout en haut de la page, la barre recouvre la bande du suivi des modifications : plus large,
+   elle passerait sur le milieu de « Tout accepter » et le clic n'y arriverait plus. */
+.v2-floating-toolbar input[type="range"][data-role="opacity"] { width: 67px; }

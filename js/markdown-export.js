@@ -187,7 +187,7 @@ const MarkdownExport = (function () {
     if (img.getAttribute('data-layer') === 'behind' || PageLayer.isRepeatedEl(img)) return [];
     const info = ctx.images.get(img);
     if (!info || info.skip) return [];
-    const alt = img.getAttribute('alt') || '';
+    const alt = AltText.ofImage(img).text;
     const width = shownWidthOf(img);
     if (width) return [{ t: 'raw', s: '<img src="' + escapeAttr(info.src) + '" alt="' + escapeAttr(alt) + '" width="' + escapeAttr(width) + '">' }];
     const title = img.getAttribute('title') || '';
@@ -552,7 +552,7 @@ const MarkdownExport = (function () {
       const info = ctx.images.get(node);
       if (!info || info.skip) return '';
       const width = shownWidthOf(node);
-      return '<img src="' + escapeAttr(info.src) + '" alt="' + escapeAttr(node.getAttribute('alt') || '') + '"' + (width ? ' width="' + escapeAttr(width) + '"' : '') + '>';
+      return '<img src="' + escapeAttr(info.src) + '" alt="' + escapeAttr(AltText.ofImage(node).text) + '"' + (width ? ' width="' + escapeAttr(width) + '"' : '') + '>';
     }
     if (tag === 'PRE') return '\n<pre>' + escapeHtml(ExportCommon.codeLinesOf(node).join('\n')).replace(/\n/g, '&#10;') + '</pre>\n';
     if (tag === 'CODE' || tag === 'KBD' || tag === 'SAMP' || tag === 'TT') return '<code>' + escapeHtml(collapse(node.textContent)) + '</code>';

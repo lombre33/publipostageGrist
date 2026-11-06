@@ -37,6 +37,8 @@ const Icons = (function () {
       // Légende : un cadre large (l'image ou le tableau) et, dessous, deux lignes de texte alignées à gauche (un cadre plus haut, avec un pied centré,
       // se lisait comme un écran).
       caption: '<rect x="3" y="3" width="18" height="9" rx="1.5"/><path d="M3 16.5h18M3 20.5h11"/>',
+      // Texte alternatif (js/alt-text.js) : un petit cadre d'image (colline et soleil) et, dessous, le mot « alt » - deux traits de texte seraient la légende.
+      altText: '<rect x="3" y="3" width="18" height="11" rx="2"/><circle cx="8" cy="7" r="1.2" fill="currentColor" stroke="none"/><path d="m21 11-4-3.5-4 4-2-2L3 12.5"/><text x="12" y="22" text-anchor="middle" font-size="7.5" font-weight="700" fill="currentColor" stroke="none">alt</text>',
       // Page traversée par une ligne de coupe pointillée.
       pageBreak: '<rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M4 12h16" stroke-dasharray="2 2"/><path d="M2.5 12h1.5M20 12h1.5"/>',
       // Pastille du numéro d'une ligne de grille qui porte un saut de page : deux pages face à face, la coupure en tirets entre elles.

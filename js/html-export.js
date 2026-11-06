@@ -642,7 +642,8 @@ const HtmlExport = (function () {
     ctx.uses.add('image');
     const out = make(ctx, 'img');
     out.setAttribute('src', info.src);
-    out.setAttribute('alt', el.getAttribute('alt') || '');
+    // Le texte alternatif (js/alt-text.js) : vide pour une image décorative et pour l'ancien « Image » ; `alt=""` est, en HTML, l'image que le lecteur d'écran passe.
+    out.setAttribute('alt', AltText.ofImage(el).text);
     if (el.getAttribute('title')) out.setAttribute('title', el.getAttribute('title'));
     const align = el.getAttribute('data-align');
     if (align === 'left' || align === 'right' || align === 'center') out.className = PREFIX + align;

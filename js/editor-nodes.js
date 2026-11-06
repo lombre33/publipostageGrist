@@ -1711,7 +1711,10 @@ const EditorNodes = (function () {
     function imageAttributes() {
       return {
         src: { default: null },
-        alt: { default: 'Image' },
+        // Le texte alternatif (js/alt-text.js) : vide tant que personne ne l'a écrit. Il valait « Image » avant la 1.2 (l'insertion le posait sans rien dire de l'image) : AltText.textOf le lit comme vide.
+        alt: { default: '' },
+        // « Image décorative » (js/alt-text.js) : rien à lire pour un lecteur d'écran, le texte alternatif reste vide. Écrit en data-decorative sur l'<img> (renderHTML), lu par la Lecture et les exports.
+        decorative: { default: false, parseHTML: el => el.getAttribute('data-decorative') === 'true', renderHTML: noBareRender },
         width: { default: '320px', parseHTML: el => el.style.width || null, renderHTML: noBareRender },
         height: { default: null, parseHTML: el => el.style.height || null, renderHTML: noBareRender },
         layer: { default: 'normal', parseHTML: el => el.getAttribute('data-layer') || 'normal', renderHTML: noBareRender },
@@ -2101,6 +2104,7 @@ const EditorNodes = (function () {
           if (nodeAttrs.pageLeftPt != null) attrs['data-page-left-pt'] = String(nodeAttrs.pageLeftPt);
           if (nodeAttrs.pageTopPt != null) attrs['data-page-top-pt'] = String(nodeAttrs.pageTopPt);
           if (nodeAttrs.repeat) attrs['data-repeat'] = 'true';
+          if (AltText.isDecorative(nodeAttrs.decorative)) attrs['data-decorative'] = 'true';
           if (nodeAttrs.varTable) {
             attrs['data-var-table'] = nodeAttrs.varTable;
             attrs['data-var-column'] = nodeAttrs.varColumn;

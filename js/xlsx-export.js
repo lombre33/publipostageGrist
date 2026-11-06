@@ -475,7 +475,7 @@ const XlsxExport = (function () {
     if (!rows.length) return false;
     chartListOf(workbook).push({
       sheetName: sheet.name, col: entry.col, row: entry.row, width: Math.round(size.width), height: Math.round(size.height),
-      alt: (img.getAttribute('alt') || '').trim(), title: part.model.title || '', chartXml: part.chartXml, rows, img,
+      alt: AltText.ofImage(img).text, title: part.model.title || '', chartXml: part.chartXml, rows, img,
     });
     return true;
   }
