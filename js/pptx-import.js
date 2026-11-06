@@ -1985,7 +1985,7 @@ const PptxImport = (function () {
         const down = Math.max(1, numAttr(tc, 'rowSpan', 1));
         const skipped = bool(attr(tc, 'hMerge')) || bool(attr(tc, 'vMerge'));
         const col = c;
-        c += skipped ? 1 : span;
+        c += 1; // une colonne par `tc` : la case qui s'étend sur `gridSpan` colonnes est suivie, dans le fichier, d'autant de cases `hMerge` moins une, qui comptent aussi
         if (skipped) continue;
         const parts = style ? stylePartsFor(style, flags, r, col, rows, cols) : [];
         const tcPr = kid(tc, 'tcPr');

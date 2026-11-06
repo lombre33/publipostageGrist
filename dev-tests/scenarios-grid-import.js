@@ -50,7 +50,7 @@
           const cell = typeof raw === 'object' ? raw : { v: raw };
           const ref = colName(c + 1) + (r + 1);
           const s = cell.s ? ` s="${cell.s}"` : '';
-          if (cell.f !== undefined) return `<c r="${ref}"${s}${typeof cell.v === 'string' ? ' t="str"' : ''}><f>${esc(cell.f)}</f><v>${esc(cell.v)}</v></c>`;
+          if (cell.f !== undefined) return `<c r="${ref}"${s}${typeof cell.v === 'string' ? ' t="str"' : typeof cell.v === 'boolean' ? ' t="b"' : ''}><f>${esc(cell.f)}</f><v>${typeof cell.v === 'boolean' ? (cell.v ? 1 : 0) : esc(cell.v)}</v></c>`;
           if (cell.t === 'e') return `<c r="${ref}"${s} t="e"><v>${esc(cell.v)}</v></c>`;
           if (cell.rich || typeof cell.v === 'string') return `<c r="${ref}"${s} t="s"><v>${stringIndex(cell)}</v></c>`;
           if (typeof cell.v === 'boolean') return `<c r="${ref}"${s} t="b"><v>${cell.v ? 1 : 0}</v></c>`;
@@ -1297,6 +1297,82 @@
         nothingChanged: Editor.getHTML() === htmlBefore && !GridEditor.isActive(),
       };
       return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, fr: viaMenu.status, en: viaMenuEn.status, bomb: bombError && { code: bombError.code, size: bombError.size }, heavy: heavyError && heavyError.code }) };
+    },
+  });
+
+  // Chantier du 06/11 (fiabiliser les imports Office) : une formule dont le résultat est 0, FAUX ou vide perdait son résultat (ExcelJS le tait dans `cell.value`, seul `cell.result` le garde).
+  cases.push({
+    id: 'gridImport_a_formula_whose_result_is_zero_or_false_keeps_that_result',
+    description: 'Une formule dont le résultat enregistré vaut 0, FAUX ou 0,00 € s\'importe avec ce résultat (et non une case vide), en français comme en anglais ; une formule au résultat texte vide reste vide, une formule au résultat non nul est inchangée',
+    run: async () => {
+      const spec = { xfs: [{}, { numFmtId: 4 }], sheets: [{ name: 'Zéros', rows: [[5, 5, { v: 0, f: 'A1-B1' }, { v: false, f: 'A1>B1' }, { v: '', f: '""' }, { v: 0, f: 'A1*0', s: 1 }, { v: 2, f: 'A1-B1+2' }, { v: true, f: 'A1=B1' }]] }] };
+      const textsOf = out => out.model.rows[0].cells.map(cell => cell.html.replace(/<[^>]+>/g, ''));
+      const fr = textsOf(await importModel(spec));
+      const en = textsOf(await importModel(spec, { lang: 'en' }));
+      const FR = ['5', '5', '0', 'FAUX', '', '0,00', '2', 'VRAI'];
+      const EN = ['5', '5', '0', 'FALSE', '', '0.00', '2', 'TRUE'];
+      return { pass: JSON.stringify(fr) === JSON.stringify(FR) && JSON.stringify(en) === JSON.stringify(EN), notes: JSON.stringify({ fr, en }) };
+    },
+  });
+
+  // Les classeurs d'openpyxl, de pandas et de leurs semblables écrivent leurs dessins, commentaires et tableaux autrement qu'Excel (espace de noms sans préfixe, cibles absolues « /xl/... ») : ExcelJS les
+  // refuse comme illisibles alors qu\'ils sont valides. `objects` : ceux qu'on ajoute au classeur de base, parmi 'image', 'comment', 'table'.
+  async function withOpenpyxlObjects(bytes, objects) {
+    await ExportCommon.ensureJsZipLoaded();
+    const zip = await JSZip.loadAsync(bytes);
+    const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const rels = [];
+    let tags = '';
+    const type = name => `${REL}/${name}`;
+    const addRel = (name, target) => { rels.push(`<Relationship Type="${type(name)}" Target="${target}" Id="rId${rels.length + 1}"/>`); return `rId${rels.length}`; };
+    let types = (await zip.file('[Content_Types].xml').async('string')).replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>');
+    if (objects.includes('image')) {
+      const id = addRel('drawing', '/xl/drawings/drawing1.xml');
+      tags += `<drawing xmlns:r="${REL}" r:id="${id}"/>`;
+      zip.file('xl/drawings/drawing1.xml', `<wsDr xmlns="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"><oneCellAnchor><from><col>4</col><colOff>0</colOff><row>1</row><rowOff>0</rowOff></from><ext cx="1143000" cy="571500"/><pic><nvPicPr><cNvPr id="1" name="Image 1" descr="Picture"/><cNvPicPr/></nvPicPr><blipFill><a:blip xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="${REL}" cstate="print" r:embed="rId1"/><a:stretch xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:fillRect/></a:stretch></blipFill><spPr><a:prstGeom xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" prst="rect"/></spPr></pic><clientData/></oneCellAnchor></wsDr>`);
+      zip.file('xl/drawings/_rels/drawing1.xml.rels', `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Type="${type('image')}" Target="/xl/media/image1.png" Id="rId1"/></Relationships>`);
+      zip.file('xl/media/image1.png', PNG, { base64: true });
+      types = types.replace('</Types>', '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');
+    }
+    if (objects.includes('comment')) {
+      addRel('comments', '/xl/comments/comment1.xml');
+      const vml = addRel('vmlDrawing', '/xl/drawings/commentsDrawing1.vml');
+      tags += `<legacyDrawing xmlns:r="${REL}" r:id="${vml}"/>`;
+      zip.file('xl/comments/comment1.xml', '<comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><authors><author>moi</author></authors><commentList><comment ref="B1" authorId="0" shapeId="0"><text><t>note</t></text></comment></commentList></comments>');
+      zip.file('xl/drawings/commentsDrawing1.vml', '<xml xmlns:v="urn:schemas-microsoft-com:vml"><v:shape id="s1" type="#_x0000_t202"/></xml>');
+      types = types.replace('</Types>', '<Override PartName="/xl/comments/comment1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml"/></Types>');
+    }
+    if (objects.includes('table')) {
+      const id = addRel('table', '/xl/tables/table1.xml');
+      tags += `<tableParts xmlns:r="${REL}" count="1"><tablePart r:id="${id}"/></tableParts>`;
+      zip.file('xl/tables/table1.xml', '<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="1" name="Tableau1" displayName="Tableau1" ref="A1:B2"><autoFilter ref="A1:B2"/><tableColumns count="2"><tableColumn id="1" name="a"/><tableColumn id="2" name="b"/></tableColumns><tableStyleInfo name="TableStyleMedium9" showRowStripes="1"/></table>');
+      types = types.replace('</Types>', '<Override PartName="/xl/tables/table1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/></Types>');
+    }
+    zip.file('[Content_Types].xml', types);
+    zip.file('xl/worksheets/_rels/sheet1.xml.rels', `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels.join('')}</Relationships>`);
+    const sheet = await zip.file('xl/worksheets/sheet1.xml').async('string');
+    zip.file('xl/worksheets/sheet1.xml', sheet.replace('</worksheet>', tags + '</worksheet>'));
+    return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+  }
+
+  cases.push({
+    id: 'gridImport_a_valid_workbook_with_pictures_comments_or_tables_written_by_openpyxl_is_read_not_refused',
+    description: 'Un classeur valide dont les dessins, commentaires et tableaux sont écrits à la façon d\'openpyxl (espace de noms sans préfixe, cibles absolues) s\'importe avec les mêmes cases que le classeur sans eux, que ce soit une image, un commentaire, un tableau Excel ou les trois ensemble ; un fichier qui n\'est pas un classeur reste « illisible »',
+    run: async () => {
+      const spec = { sheets: [{ name: 'Données', rows: [['a', 'b'], ['c', { v: 12.5 }]] }] };
+      const base = await buildXlsx(spec);
+      const textsOf = out => out.model.rows.map(row => row.cells.map(cell => cell.html.replace(/<[^>]+>/g, '')).join('|')).join(' / ');
+      const read = async (objects) => {
+        try { return textsOf(await GridXlsxImport.fromArrayBuffer(asBuffer(await withOpenpyxlObjects(base, objects)), { lang: 'fr' })); } catch (e) { return 'ERREUR ' + e.code; }
+      };
+      const WANT = 'a|b / c|12.5';
+      const got = { plain: await read([]), image: await read(['image']), comment: await read(['comment']), table: await read(['table']), all: await read(['image', 'comment', 'table']) };
+      const notAWorkbook = await (async () => { const z = new JSZip(); z.file('bonjour.txt', 'pas un classeur'); return z.generateAsync({ type: 'uint8array' }); })();
+      let garbage = null;
+      try { await GridXlsxImport.fromArrayBuffer(asBuffer(notAWorkbook), { lang: 'fr' }); } catch (e) { garbage = e.code; }
+      const bad = Object.keys(got).filter(k => got[k] !== WANT.replace('12.5', '12,5'));
+      return { pass: !bad.length && garbage === 'unreadable', notes: JSON.stringify({ got, bad, garbage }) };
     },
   });
 

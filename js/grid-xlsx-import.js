@@ -145,7 +145,7 @@ const GridXlsxImport = (function () {
       case T.Null: case T.Merge: return { runs: [], kind: 'text' };
       case T.RichText: return { runs: runsOf(value.richText || []), kind: 'text' };
       case T.Hyperlink: return { runs: link(value && value.hyperlink, hyperlinkText(value)), kind: 'text' };
-      case T.Formula: return scalar(value && value.result);
+      case T.Formula: return scalar(cell.result); // `cell.value.result` perd un résultat nul, faux ou vide ; `cell.result` le garde
       case T.Error: return { runs: [{ text: String(value && value.error !== undefined ? value.error : '') }], kind: 'error' };
       default: return scalar(value);
     }
@@ -396,8 +396,45 @@ const GridXlsxImport = (function () {
     await ExportEngines.ensure('xlsx', 'xlsxFormat');
     await XlsxExport.ensureExcelLibLoaded();
     const workbook = new ExcelJS.Workbook();
-    try { await workbook.xlsx.load(buffer); } catch (e) { throw fail('unreadable', 'Fichier illisible.', { cause: e }); }
-    return workbook;
+    try { await workbook.xlsx.load(buffer); return workbook; } catch (e) {
+      // Un classeur valide qu'ExcelJS ne sait pas lire parce que son auteur (openpyxl, pandas...) a écrit ses dessins, commentaires ou tableaux autrement qu'Excel :
+      // la Grille n'en reprend aucun objet, on relit les cases dans le classeur sans eux.
+      try {
+        const plain = new ExcelJS.Workbook();
+        await plain.xlsx.load(await withoutObjects(buffer));
+        return plain;
+      } catch (_) { throw fail('unreadable', 'Fichier illisible.', { cause: e }); }
+    }
+  }
+
+  // Le même classeur sans ses objets (dessins, images, graphiques, commentaires, schémas), et dont les cibles de relations sont toutes relatives : les cases, les styles, les
+  // fusions, les liens et les tableaux n'en dépendent pas. Les parties se reconnaissent à leur dossier et au type de leur relation, pas à leur nom.
+  const OBJECT_PARTS = /^xl\/(drawings|comments|charts|media|diagrams|embeddings|ctrlProps|threadedComments)\/|^xl\/(comments|persons)[^/]*\.xml$/;
+  const OBJECT_RELATION = /\/(drawing|vmlDrawing|comments|chart|image|diagramData|diagramLayout|diagramQuickStyle|diagramColors|oleObject|ctrlProp|threadedComment|person)"/;
+  const SHEET_OBJECT_TAGS = /<(?:\w+:)?(?:drawing|legacyDrawing|legacyDrawingHF|picture|oleObjects|controls)\b[^>]*?(?:\/>|>[\s\S]*?<\/(?:\w+:)?(?:oleObjects|controls)>)/g;
+  function relativeTarget(relsPath, target) {
+    const from = relsPath.split('/').slice(0, -2); // le dossier de la partie qui porte les relations
+    const to = target.replace(/^\//, '').split('/');
+    let common = 0;
+    while (common < from.length && common < to.length - 1 && from[common] === to[common]) common++;
+    return '../'.repeat(from.length - common) + to.slice(common).join('/');
+  }
+  async function withoutObjects(buffer) {
+    const zip = await JSZip.loadAsync(buffer);
+    for (const name of Object.keys(zip.files)) {
+      if (zip.files[name].dir) continue;
+      if (OBJECT_PARTS.test(name)) { zip.remove(name); continue; }
+      if (/^xl\/worksheets\/sheet[^/]*\.xml$/.test(name)) {
+        zip.file(name, (await zip.file(name).async('string')).replace(SHEET_OBJECT_TAGS, ''));
+      } else if (/\.rels$/.test(name)) {
+        const xml = await zip.file(name).async('string');
+        zip.file(name, xml.replace(/<Relationship\b[^>]*?\/>/g, (rel) => {
+          if (OBJECT_RELATION.test(rel)) return '';
+          return /TargetMode="External"/.test(rel) ? rel : rel.replace(/Target="(\/[^"]*)"/, (_, target) => 'Target="' + relativeTarget(name, target) + '"');
+        }));
+      }
+    }
+    return zip.generateAsync({ type: 'arraybuffer' });
   }
 
   async function fromArrayBuffer(buffer, options) {

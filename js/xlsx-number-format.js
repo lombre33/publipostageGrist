@@ -6,11 +6,12 @@
 //     vide) ; lang : 'fr' (virgule décimale, espace insécable entre les milliers, jours et mois en français) ou 'en' (point décimal, virgule entre
 //     les milliers).
 // Géré : les sections `positif;négatif;zéro;texte`, `General`, les chiffres `0 # ?` avec point décimal, milliers et pourcentage, les textes entre
-// guillemets, les caractères échappés (`\ `), `[$€-40C]` (le symbole), les couleurs et conditions entre crochets (ignorées), `_x` et `*x` (ignorés :
-// ce sont des espaces de mise en page), les chiffres répartis entre des textes (`00 00 00 00 00`), les dates et heures (`yyyy mm dd hh mm ss AM/PM`,
-// `mmm`, `mmmm`, `ddd`, `dddd`, `[h]:mm`), les formats de date « système » d'Excel qui dépendent de la langue (`mm-dd-yy`, `[$-F800]`). Pas géré,
-// rendu comme `General` : la notation scientifique (`0.00E+00`) et les fractions (`# ?/?`). Pur : Intl seulement, ni DOM ni éditeur. Script
-// classique, portée globale comme TableBorders.
+// guillemets, les caractères échappés (`\ `), `[$€-40C]` (le symbole), les couleurs et conditions entre crochets (ignorées), `_x` (ignoré : une
+// espace de mise en page) et `* ` (la cellule remplie d'espaces : une seule espace, `$* #,##0.00` donne « $ 1 234,50 », et celles du début et de la fin
+// tombent), les chiffres répartis entre des textes (`00 00 00 00 00`), la notation scientifique (`0.00E+00`, `##0.0E+0`), les fractions (`# ?/?`,
+// `# ??/??`, `# ?/8`), les dates et heures (`yyyy mm dd hh mm ss AM/PM`, `mmm`, `mmmm`, `ddd`, `dddd`, `[h]:mm`), les formats de date « système »
+// d'Excel qui dépendent de la langue (`mm-dd-yy`, `[$-F800]`). Les numéros de série de 1 à 60 suivent Excel, qui compte un 29/02/1900 qui n'a pas
+// existé (le 1er janvier 1900 est le numéro 1). Pur : Intl seulement, ni DOM ni éditeur. Script classique, portée globale comme TableBorders.
 const XlsxNumberFormat = (function () {
   const LOCALES = { fr: 'fr-FR', en: 'en-US' };
   // Un Intl.NumberFormat ou DateTimeFormat met des dizaines de microsecondes à se construire, un format de case à se découper : une feuille répète
@@ -22,7 +23,8 @@ const XlsxNumberFormat = (function () {
     if (!formatter) { formatter = new Kind(locale, options); formatters.set(key, formatter); }
     return formatter;
   }
-  // le jour 0 des numéros de série d'Excel (le jour 1 est le 31/12/1899 : l'erreur de 1900 d'Excel reste en deçà du 01/03/1900)
+  // le jour 0 des numéros de série d'Excel pour tout ce qui est au 01/03/1900 ou après (le numéro 61). Avant, Excel compte un 29/02/1900 qui n'a pas existé :
+  // le numéro 1 est le 01/01/1900, le 59 le 28/02/1900 et le 60 ce 29/02 (voir dateOfSerial).
   const EPOCH_UTC_MS = Date.UTC(1899, 11, 30);
   const DAY_MS = 86400000;
   // Les formats « système » d'Excel (la date courte de la machine) : ExcelJS les nomme `mm-dd-yy` (n° 14) et `m/d/yy "h":mm` (n° 22) ; ils s'écrivent
@@ -80,7 +82,7 @@ const XlsxNumberFormat = (function () {
   function readWord(section, i, tokens) {
     const rest = section.slice(i);
     if (/^general/i.test(rest)) { tokens.push({ k: 'gen' }); return i + 7; }
-    if (/^e[+-]/i.test(rest)) { tokens.push({ k: 'sci' }); return i + 2; }
+    if (/^e[+-]/i.test(rest)) { tokens.push({ k: 'sci', plus: rest[1] === '+' }); return i + 2; }
     const ampm = /^(AM\/PM|am\/pm|A\/P|a\/p)/.exec(rest);
     if (ampm) { tokens.push({ k: 'ap', short: ampm[1].length === 3, lower: ampm[1] === ampm[1].toLowerCase() }); return i + ampm[1].length; }
     const unit = Object.keys(DATE_RUNS).find(k => DATE_RUNS[k].test(section[i]));
@@ -93,7 +95,8 @@ const XlsxNumberFormat = (function () {
     const ch = section[i];
     if (ch === '"') return readQuoted(section, i, tokens);
     if (ch === '\\') { pushLiteral(tokens, section[i + 1] || ''); return i + 2; }
-    if (ch === '_' || ch === '*') return i + 2;
+    if (ch === '_') return i + 2;
+    if (ch === '*') { if (section[i + 1] === ' ') tokens.push({ k: 'lit', s: ' ', fill: true }); return i + 2; } // la cellule se remplit d'espaces : une seule suffit à un texte
     if (ch === '[') return readBracket(section, i, tokens);
     if (ch === '0' || ch === '#' || ch === '?') { tokens.push({ k: 'dig', c: ch }); return i + 1; }
     if (SIMPLE_TOKENS[ch]) { tokens.push({ k: SIMPLE_TOKENS[ch] }); return i + 1; }
@@ -168,8 +171,87 @@ const XlsxNumberFormat = (function () {
 
   const plain = t => (t.k === 'lit' ? t.s : t.k === 'pct' ? '%' : ''); // ce qu'écrit un jeton qui n'est pas un chiffre
 
+  // La notation scientifique (`0.00E+00`, `0.0E-0`, `##0.0E+0`) : la mantisse prend le format des chiffres d'avant le `E`, l'exposant celui des chiffres d'après
+  // (ses zéros sont ses chiffres obligatoires). Avec un seul chiffre avant la virgule, c'est 1 <= mantisse < 10 ; `##0` donne des exposants multiples de 3.
+  function renderScientific(value, tokens, lang, negativeShown) {
+    const at = tokens.findIndex(t => t.k === 'sci');
+    const head = tokens.slice(0, at);
+    const tail = tokens.slice(at + 1);
+    const point = head.findIndex(t => t.k === 'pt');
+    const ints = head.filter((t, i) => t.k === 'dig' && (point < 0 || i < point));
+    const maxFrac = point < 0 ? 0 : head.filter((t, i) => t.k === 'dig' && i > point).length;
+    const engineering = ints.length === 3 && ints[0].c === '#';
+    const abs = Math.abs(value);
+    let exponent = 0;
+    let mantissa = 0;
+    if (abs > 0 && Number.isFinite(abs)) {
+      let tens = Math.floor(Math.log10(abs));
+      if (abs / Math.pow(10, tens) >= 10) tens++;
+      if (abs / Math.pow(10, tens) < 1) tens--;
+      const shift = engineering ? 3 : 1;
+      exponent = engineering ? Math.floor(tens / 3) * 3 : tens - (Math.max(1, ints.length) - 1);
+      const limit = engineering ? 1000 : Math.pow(10, Math.max(1, ints.length));
+      mantissa = Number((abs / Math.pow(10, exponent)).toPrecision(15));
+      if (Number(mantissa.toFixed(maxFrac)) >= limit) { exponent += shift; mantissa = Number((abs / Math.pow(10, exponent)).toPrecision(15)); }
+    }
+    const digits = tail.filter(t => t.k === 'dig');
+    const body = renderNumberSection(mantissa, head, lang, false);
+    const exp = String(Math.abs(exponent)).padStart(digits.filter(t => t.c === '0').length, '0');
+    const sign = exponent < 0 ? '-' : (tokens[at].plus ? '+' : '');
+    return (negativeShown ? '-' : '') + body + 'E' + sign + exp + tail.map(plain).join('');
+  }
+
+  // Une fraction (`# ?/?`, `# ??/??`, `?/?`, `# ?/8`) : la partie entière (s'il y a des chiffres devant), puis la meilleure fraction dont le dénominateur
+  // tient dans les chiffres de la barre (`?` : 9 au plus, `??` : 99...), ou le dénominateur écrit (`8`). Sans partie entière la fraction est impropre
+  // (1,5 en `?/?` donne 3/2). Une fraction nulle ne s'écrit pas.
+  function renderFraction(value, tokens, lang, negativeShown) {
+    const bar = tokens.findIndex(t => t.k === 'frac');
+    let first = bar;
+    while (first > 0 && tokens[first - 1].k === 'dig') first--;
+    let end = bar + 1;
+    while (end < tokens.length && tokens[end].k === 'dig') end++;
+    const width = end - bar - 1;
+    let fixed = '';
+    if (!width) while (end < tokens.length && tokens[end].k === 'lit' && /^\d$/.test(tokens[end].s)) fixed += tokens[end++].s;
+    if (first === bar || (!width && !fixed)) return null;
+    const lead = tokens.slice(0, first);
+    const intDigits = lead.filter(t => t.k === 'dig');
+    const abs = Math.abs(value);
+    let whole = intDigits.length ? Math.floor(abs) : 0;
+    const rest = abs - whole;
+    let num = 0;
+    let den = 1;
+    if (fixed) { den = Number(fixed) || 1; num = Math.round(rest * den); }
+    else {
+      let best = Infinity;
+      for (let d = 1; d <= Math.min(Math.pow(10, width) - 1, 9999); d++) {
+        const n = Math.round(rest * d);
+        const err = Math.abs(rest - n / d);
+        if (err < best - 1e-12) { best = err; num = n; den = d; }
+      }
+    }
+    if (intDigits.length && num === den) { whole++; num = 0; }
+    const lastDig = lead.map(t => t.k).lastIndexOf('dig');
+    const prefix = lead.slice(0, lead.findIndex(t => t.k === 'dig')).map(plain).join('');
+    const between = lead.slice(lastDig + 1).map(plain).join('');
+    const showWhole = intDigits.length && (whole > 0 || num === 0 || intDigits.some(t => t.c === '0'));
+    const wholeText = showWhole ? String(whole).padStart(intDigits.filter(t => t.c === '0').length, '0') : '';
+    const fraction = num || !intDigits.length ? num + '/' + den : '';
+    const middle = wholeText && fraction ? between : '';
+    return (negativeShown ? '-' : '') + prefix + wholeText + middle + fraction + tokens.slice(end).map(plain).join('');
+  }
+
   function renderNumberSection(value, tokens, lang, negativeShown) {
-    if (tokens.some(t => t.k === 'sci' || t.k === 'frac')) return null;
+    const filled = tokens.some(t => t.fill);
+    const text = renderPlainNumber(value, tokens, lang, negativeShown);
+    // `* ` remplit la cellule d'espaces : celles du début et de la fin ne comptent pas dans un texte, ni celles qui suivent un moins ou une parenthèse
+    // du début (le signe reste contre le nombre).
+    return filled && text !== null ? text.replace(/^ +| +$/g, '').replace(/^([-(]) +/, '$1') : text;
+  }
+
+  function renderPlainNumber(value, tokens, lang, negativeShown) {
+    if (tokens.some(t => t.k === 'sci')) return renderScientific(value, tokens, lang, negativeShown);
+    if (tokens.some(t => t.k === 'frac')) return renderFraction(value, tokens, lang, negativeShown);
     const sign = negativeShown ? '-' : '';
     if (tokens.some(t => t.k === 'gen')) {
       const text = general(Math.abs(value), lang);
@@ -189,7 +271,19 @@ const XlsxNumberFormat = (function () {
   }
 
   function serialOf(date) { return (date.getTime() - EPOCH_UTC_MS) / DAY_MS; }
-  function dateOfSerial(serial) { return new Date(EPOCH_UTC_MS + Math.round(serial * DAY_MS)); }
+  // Le 29/02/1900 d'Excel : une date qui sait son jour, son mois et son année, et qui garde le reste (l'heure) du 28/02.
+  class LeapDay1900 extends Date {
+    getUTCDate() { return 29; }
+    getUTCMonth() { return 1; }
+    getUTCFullYear() { return 1900; }
+  }
+  function dateOfSerial(serial) {
+    const ms = EPOCH_UTC_MS + Math.round(serial * DAY_MS);
+    const day = Math.floor(serial);
+    if (day >= 1 && day < 60) return new Date(ms + DAY_MS);
+    if (day === 60) return new LeapDay1900(ms); // le 28/02 pour l'heure et les noms ; le jour est dit par la classe
+    return new Date(ms);
+  }
   const two = n => String(n).padStart(2, '0');
 
   // « m » est une minute juste après les heures ou juste avant les secondes, un mois sinon.
@@ -233,12 +327,12 @@ const XlsxNumberFormat = (function () {
     dig: (t, c) => (c.afterSeconds ? (c.millis[c.fractionAt++] || '0') : ''),
   };
 
-  function renderDateSection(date, tokens, lang) {
+  function renderDateSection(date, tokens, lang, serial) {
     const locale = LOCALES[lang] || LOCALES.fr;
     const c = {
       date,
       names: opts => intl(Intl.DateTimeFormat, locale, Object.assign({ timeZone: 'UTC' }, opts)).format(date),
-      serial: serialOf(date),
+      serial: serial === undefined ? serialOf(date) : serial,
       twelve: tokens.some(t => t.k === 'ap'),
       hour24: date.getUTCHours(),
       kinds: tokens.filter(t => t.k !== 'lit'),
@@ -298,7 +392,7 @@ const XlsxNumberFormat = (function () {
     const { tokens, negativeShown } = pickSection(number, sections);
     if (isDateSection(tokens)) {
       if (!date && number < 0) return '';
-      return renderDateSection(date || dateOfSerial(number), tokens, lang);
+      return renderDateSection(dateOfSerial(number), tokens, lang, number);
     }
     if (date && tokens.some(t => t.k === 'gen')) return renderGeneralDate(date, lang);
     const rendered = renderNumberSection(number, tokens, lang, negativeShown);

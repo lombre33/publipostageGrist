@@ -84,8 +84,8 @@ eq('booléen vrai (français)', fmt(true, 'General'), 'VRAI');
 eq('booléen faux (français)', fmt(false, 'General'), 'FAUX');
 eq('booléen vrai (anglais)', fmt(true, 'General', 'en'), 'TRUE');
 eq('valeur vide : rien', fmt(null, '0.00') + fmt(undefined, '0.00') + fmt('', '0.00'), '');
-eq('notation scientifique (non gérée) : Standard', fmt(12.5, '0.00E+00'), '12,5');
-eq('fraction (non gérée) : Standard', fmt(0.75, '# ?/?'), '0,75');
+eq('notation scientifique « 0.00E+00 » : 12,5 → 1,25E+01', fmt(12.5, '0.00E+00'), '1,25E+01');
+eq('fraction « # ?/? » : 0,75 → 3/4 (pas de partie entière à écrire)', fmt(0.75, '# ?/?'), '3/4');
 
 // 8. Reconnaître un format de date.
 check('isDateFormat : dates et heures', ['dd/mm/yyyy', 'mm-dd-yy', 'h:mm', '[h]:mm', 'd mmmm yyyy', 'yyyy-mm-dd hh:mm'].every(isDate));
@@ -126,8 +126,40 @@ eq('un format écrit avec des espaces autour : coupé', fmt(12.5, '  0.00  '), '
 eq('un format fait d\'espaces seulement : Standard', fmt(12.5, '   '), '12,5');
 eq('un format écrit en minuscules « general » : Standard', fmt(3.5, 'general'), '3,5');
 eq('le mot « Standard » collé à des textes : « General » reconnu, les textes gardés', fmt(3.5, '"≈ "General" €"'), '≈ 3,5 €');
-eq('« E+ » dans un format est la notation scientifique, non gérée : Standard', fmt(1234.5, '0.00E+00'), '1234,5');
+eq('« E+ » dans un format est la notation scientifique : 1234,5 → 1,23E+03', fmt(1234.5, '0.00E+00'), '1,23E+03');
 eq('guillemet jamais fermé : le texte va jusqu\'à la fin', fmt(12.5, '0.0" m'), '12,5 m');
 eq('un caractère échappé en fin de format : rien ne lève', fmt(12.5, '0.0\\'), '12,5');
+
+// 11. Chantier du 06/11 (import Excel plus fidèle) : ce qu'Excel écrit pour la notation scientifique, les fractions, la comptabilité et les dates de 1900. Les
+// attendus sont ceux d'Excel (relevés sur un classeur enregistré par LibreOffice puis relu), pas ceux de la fonction.
+eq('scientifique « 0.00E+00 » : 12345,678 → 1,23E+04 (le cas du classeur d\'essai)', fmt(12345.678, '0.00E+00'), '1,23E+04');
+eq('scientifique en anglais : le point décimal', fmt(12345.678, '0.00E+00', 'en'), '1.23E+04');
+eq('scientifique négatif : le signe devant la mantisse', fmt(-1234.5, '0.00E+00'), '-1,23E+03');
+eq('scientifique d\'un petit nombre « 0.00E+00 » : 0,000123 → 1,23E-04', fmt(0.000123, '0.00E+00'), '1,23E-04');
+eq('scientifique « 0.00E-00 » : pas de plus devant un exposant positif', fmt(12345.678, '0.00E-00'), '1,23E04');
+eq('scientifique de zéro : 0,00E+00', fmt(0, '0.00E+00'), '0,00E+00');
+eq('scientifique qui arrondit à 10 : 99999 en « 0.0E+0 » → 1,0E+5 (pas 10,0E+4)', fmt(99999, '0.0E+0'), '1,0E+5');
+eq('scientifique d\'ingénieur « ##0.0E+0 » : 12345 → 12,3E+3', fmt(12345, '##0.0E+0'), '12,3E+3');
+eq('scientifique avec un texte autour « 0.0E+0" m" »', fmt(1500, '0.0E+0" m"'), '1,5E+3 m');
+eq('fraction « # ?/? » : 1,5 → 1 1/2', fmt(1.5, '# ?/?'), '1 1/2');
+eq('fraction « # ?/? » : un entier n\'écrit aucune fraction', fmt(2, '# ?/?'), '2');
+eq('fraction « # ?/? » : -2,25 → -2 1/4', fmt(-2.25, '# ?/?'), '-2 1/4');
+eq('fraction « # ??/?? » : pi → 3 14/99 (le dénominateur tient dans deux chiffres)', fmt(3.14159, '# ??/??'), '3 14/99');
+eq('fraction « # ?/? » : pi → 3 1/7 (un seul chiffre)', fmt(3.14159, '# ?/?'), '3 1/7');
+eq('fraction impropre « ?/? » : 1,5 → 3/2', fmt(1.5, '?/?'), '3/2');
+eq('fraction à dénominateur écrit « # ?/8 » : 0,5 → 4/8', fmt(0.5, '# ?/8'), '4/8');
+eq('fraction qui arrondit à l\'entier suivant : 1,999 → 2', fmt(1.999, '# ?/?'), '2');
+eq('comptabilité américaine « _($* #,##0.00_) » : une espace entre le symbole et le nombre', fmt(1234.5, '_($* #,##0.00_)'), `$ 1${NB}234,50`);
+eq('comptabilité américaine en anglais', fmt(1234.5, '_($* #,##0.00_)', 'en'), '$ 1,234.50');
+eq('comptabilité avec symbole entre guillemets « _("$"* #,##0.00_) »', fmt(1234.5, '_("$"* #,##0.00_)', 'en'), '$ 1,234.50');
+eq('comptabilité : l\'espace de remplissage qui suit un moins ne compte pas', fmt(-1234.5, '_($* #,##0.00_);\\-* #,##0.00'), `-1${NB}234,50`);
+eq('date de série 1 : 01/01/1900 (Excel compte 1900 bissextile)', fmt(1, 'dd/mm/yyyy'), '01/01/1900');
+eq('date de série 59 : 28/02/1900', fmt(59, 'dd/mm/yyyy'), '28/02/1900');
+eq('date de série 60 : le 29/02/1900 que le calendrier n\'a pas eu', fmt(60, 'dd/mm/yyyy'), '29/02/1900');
+eq('date de série 60 en toutes lettres : février, vingt-neuf', fmt(60, 'd mmmm yyyy'), '29 février 1900');
+eq('date de série 61 : 01/03/1900 (le jour 0 reste le 30/12/1899)', fmt(61, 'dd/mm/yyyy'), '01/03/1900');
+eq('date de série 60,5 : le 29/02/1900 à midi', fmt(60.5, 'dd/mm/yyyy hh:mm'), '29/02/1900 12:00');
+eq('heures cumulées d\'une date de 1900 : [h] ne bouge pas avec le décalage', fmt(2.5, '[h]:mm'), '60:00');
+eq('une Date (ExcelJS) du numéro 1 : 01/01/1900 aussi', fmt(utc(1899, 12, 31), 'dd/mm/yyyy'), '01/01/1900');
 
 summarizeAndExit();

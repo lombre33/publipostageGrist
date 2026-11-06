@@ -1560,6 +1560,30 @@
       return result(bad);
     });
 
+  add('pptx_import_cells_after_a_merged_cell_keep_their_own_column',
+    'Dans un tableau de PowerPoint, la case qui s\'étend sur deux colonnes est suivie dans le fichier d\'une case de remplissage (hMerge) ; les cases d\'après gardent leur colonne : ni décalées d\'un cran ni perdues (quatre colonnes, la fusion en deuxième position, puis une fusion à la fin de la ligne)',
+    async () => {
+      const r = await run1({
+        slides: [{ shapes: table({ x: 60, y: 100, cols: [100, 150, 200, 250], rows: [
+          { h: 30, cells: [{ text: 'A' }, { text: 'BC', span: 2 }, { hMerge: true }, { text: 'D' }] },
+          { h: 30, cells: [{ text: 'E', span: 2 }, { hMerge: true }, { text: 'G' }, { text: 'H' }] },
+          { h: 30, cells: [{ text: 'I' }, { text: 'J' }, { text: 'KL', span: 2 }, { hMerge: true }] },
+          { h: 30, cells: [{ text: 'M' }, { text: 'N' }, { text: 'O' }, { text: 'P' }] },
+        ] }) }],
+      });
+      const { bad, expect } = checker();
+      const [first] = slidesOf(r.html);
+      const t = first.tables[0];
+      const row = n => Array.from(t.rows[n].cells).map(cell => cell.textContent + (cell.colSpan > 1 ? '/' + cell.colSpan : '') + ':' + cell.getAttribute('colwidth'));
+      const px = pt => String(Math.round(pt / 0.75));
+      // 100 + 150 + 200 + 250 pt = 700 pt, ramenés à la largeur du tableau (un tableau de 700 pt n\'est pas réduit) : chaque case porte la largeur de SA colonne.
+      expect('la ligne 1 : A (colonne 1), BC sur les colonnes 2 et 3, D (colonne 4)', JSON.stringify(row(0)) === JSON.stringify(['A:' + px(100), 'BC/2:' + px(150) + ',' + px(200), 'D:' + px(250)]), row(0));
+      expect('la ligne 2 : E sur les colonnes 1 et 2, G (colonne 3), H (colonne 4)', JSON.stringify(row(1)) === JSON.stringify(['E/2:' + px(100) + ',' + px(150), 'G:' + px(200), 'H:' + px(250)]), row(1));
+      expect('la ligne 3 : I, J, puis KL sur les colonnes 3 et 4 (la fusion finit la ligne)', JSON.stringify(row(2)) === JSON.stringify(['I:' + px(100), 'J:' + px(150), 'KL/2:' + px(200) + ',' + px(250)]), row(2));
+      expect('la ligne 4, sans fusion, est inchangée : quatre cases', JSON.stringify(row(3)) === JSON.stringify(['M:' + px(100), 'N:' + px(150), 'O:' + px(200), 'P:' + px(250)]), row(3));
+      return result(bad);
+    });
+
   // --- Le rapport et les limites ----------------------------------------------------------------------------------------------------------------------------------------------------------
   // Un fichier qui porte un objet de chaque genre que l'import ne reprend pas tel quel (le rapport en compte dix-huit) : le cas du rapport l'importe, le test à la vraie souris (window.PptxFixtures)
   // le donne à choisir pour voir la fenêtre au rapport le plus long.
