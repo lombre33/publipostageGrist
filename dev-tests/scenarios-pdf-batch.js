@@ -2059,6 +2059,114 @@
     },
   });
 
+  // Un PNG dont la data URI est tronquée (une image collée ou importée coupée en route) : le décodeur de pdfkit lève « Incomplete or corrupt PNG file » DANS un rappel de pdfmake, hors de portée
+  // des try/catch de `renderOnce` : la promesse du PDF ne se réglait jamais et l'export tournait sans fin (signalé le 06/11 par le fil refactorisation, reproduit sur getNativePdfBlobForRecord).
+  const truncatedPng = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 48; canvas.height = 48;
+    const context = canvas.getContext('2d');
+    for (let i = 0; i < 48; i += 1) { context.fillStyle = 'rgb(' + ((i * 53) % 256) + ',' + ((i * 97) % 256) + ',' + ((i * 29) % 256) + ')'; context.fillRect(i, 0, 1, 48); }
+    const whole = canvas.toDataURL('image/png');
+    return whole.slice(0, Math.floor(whole.length * 0.6));
+  };
+  const withinSeconds = (promise, seconds) => Promise.race([
+    promise.then(value => ({ settled: 'resolved', value }), error => ({ settled: 'rejected', error })),
+    new Promise(resolve => setTimeout(() => resolve({ settled: 'never' }), seconds * 1000)),
+  ]);
+
+  cases.push({
+    id: 'pdfbatch_corrupt_png_pdf_of_a_row_settles_instead_of_hanging',
+    description: 'Un PNG corrompu (data URI tronquée) dans le document : le PDF d’une ligne REND LA MAIN en quelques secondes, en erreur qui dit l’image (jamais une promesse qui reste en attente), et le PDF d’une ligne saine juste après se produit toujours',
+    run: async (h) => {
+      await seed(h, '<p>Bonjour</p>');
+      const broken = '<p>Bonjour</p><img class="editor-image" src="' + truncatedPng() + '" alt="Image" style="width: 120px;">';
+      const pageErrors = [];
+      const onError = event => pageErrors.push(String(event.message || event.reason));
+      window.addEventListener('error', onError); window.addEventListener('unhandledrejection', onError);
+      let outcome; let healthy;
+      try {
+        outcome = await withinSeconds(PdfExport.getNativePdfBlobForRecord(broken, TABLE, { id: 1, Nom: NAMES[0] }, '', null, undefined), 20);
+        healthy = await withinSeconds(PdfExport.getNativePdfBlobForRecord('<p>Bonjour</p>', TABLE, { id: 1, Nom: NAMES[0] }, '', null, undefined), 20);
+      } finally { window.removeEventListener('error', onError); window.removeEventListener('unhandledrejection', onError); }
+      const problems = [];
+      if (outcome.settled !== 'rejected') problems.push('PDF à l’image corrompue : ' + outcome.settled);
+      else if (!/image/i.test(String(outcome.error && outcome.error.message)) || outcome.error.imageProblem !== true) problems.push('erreur=' + (outcome.error && outcome.error.message) + ' imageProblem=' + (outcome.error && outcome.error.imageProblem));
+      if (healthy.settled !== 'resolved' || !healthy.value || !healthy.value.blob) problems.push('PDF sain juste après : ' + healthy.settled);
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems, pageErrors: pageErrors.slice(0, 3) }) };
+    },
+  });
+
+  const brokenImage = () => '<img class="editor-image" src="' + truncatedPng() + '" alt="Image" style="width: 120px;">';
+  const settledSoon = (h, fn) => withinSeconds(fn(), 40);
+
+  cases.push({
+    id: 'pdfbatch_corrupt_png_single_export_says_the_image_and_ends_without_a_file',
+    description: '« Exporter en PDF » d’un document dont une image est un PNG tronqué : l’export se termine (jamais sans fin) avec la phrase rouge qui dit l’image illisible, aucun fichier n’est téléchargé, et l’export suivant d’un document sain marche',
+    run: async (h) => {
+      await seed(h, '<p>Bonjour ' + badge('Nom') + '</p>' + brokenImage());
+      const failed = await settledSoon(h, () => clickSinglePdf(h, { until: () => document.getElementById('status-msg').className.includes('error') || document.getElementById('status-msg').textContent === I18n.t('status.pdfImageProblem') }));
+      const problems = [];
+      if (failed.settled !== 'resolved') problems.push('l’export n’a pas fini : ' + failed.settled);
+      else {
+        if (failed.value.downloads.length) problems.push('fichiers=' + failed.value.downloads.length);
+        if (failed.value.status !== I18n.t('status.pdfImageProblem')) problems.push('état=' + failed.value.status);
+        if (!document.getElementById('status-msg').className.includes('error')) problems.push('l’état n’est pas rouge : ' + document.getElementById('status-msg').className);
+      }
+      await seed(h, '<p>Bonjour ' + badge('Nom') + '</p>');
+      const healthy = await clickSinglePdf(h);
+      if (healthy.downloads.length !== 1) problems.push('l’export sain d’après : fichiers=' + healthy.downloads.length + ' état=' + healthy.status);
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_corrupt_png_in_one_row_fails_that_row_only_and_the_batch_goes_on',
+    description: 'Un lot dont le PDF d’UNE ligne porte un PNG tronqué : la ligne est dite en échec (fenêtre de fin de lot), les autres sont dans l’archive, le lot ne tourne pas sans fin',
+    run: async (h) => {
+      await seed(h, '<p>Bonjour ' + badge('Nom') + '</p>');
+      const real = PdfExport.getNativePdfBlobForRecord;
+      const broken = '<p>Bonjour</p>' + brokenImage();
+      PdfExport.getNativePdfBlobForRecord = function (html, tableId, row) {
+        if (row && row.id === 2) return real.call(this, broken, tableId, row, ...Array.prototype.slice.call(arguments, 3));
+        return real.apply(this, arguments);
+      };
+      const asked = h.choosePrompts.length;
+      let outcome;
+      try { outcome = await settledSoon(h, () => clickExportRow(h, 'v2-btn-export-pdf-batch')); } finally { PdfExport.getNativePdfBlobForRecord = real; }
+      const problems = [];
+      if (outcome.settled !== 'resolved') problems.push('le lot n’a pas fini : ' + outcome.settled);
+      else {
+        if (outcome.value.downloads.length !== 1) problems.push('fichiers=' + outcome.value.downloads.length);
+        if (outcome.value.status !== I18n.t('status.batchExportDoneWithFailures', { ok: 2, failed: 1 })) problems.push('état=' + outcome.value.status);
+        if (h.choosePrompts.length - asked !== 1) problems.push('fenêtre de fin de lot=' + (h.choosePrompts.length - asked));
+      }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_corrupt_png_in_a_document_measured_first_also_settles',
+    description: 'Un document dont la mise en page se mesure d’abord dans un PDF jeté (ici un sommaire) et dont une image est un PNG tronqué : la mesure rend la main elle aussi, en erreur qui dit l’image',
+    run: async (h) => {
+      await seed(h, '<h1>Titre Alpha</h1><p>Bonjour</p>' + brokenImage());
+      await h.focusInElement(h.tiptap().firstElementChild, true);
+      await h.clickButton('v2-btn-toc');
+      await h.sleep(80);
+      const html = Editor.getHTML();
+      await PdfExport.ensurePdfLibsLoaded();
+      const original = window.pdfMake.createPdf;
+      let renders = 0;
+      window.pdfMake.createPdf = function () { renders += 1; return original.apply(window.pdfMake, arguments); };
+      let outcome;
+      try { outcome = await withinSeconds(PdfExport.getNativePdfBlobForRecord(html, TABLE, { id: 1, Nom: NAMES[0] }, '', null, undefined), 25); } finally { window.pdfMake.createPdf = original; }
+      const problems = [];
+      if (!/data-type="toc"|class="[^"]*toc/i.test(html)) problems.push('le sommaire n’est pas dans le document : ' + html.slice(0, 200));
+      if (outcome.settled !== 'rejected' || !outcome.error || outcome.error.imageProblem !== true) problems.push('PDF mesuré à l’image corrompue : ' + outcome.settled + ' ' + (outcome.error && outcome.error.message));
+      if (renders !== 1) problems.push('rendus de pdfmake avant l’échec=' + renders + ' (la mesure seule devait échouer)');
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pdfBatch = cases;
 })();

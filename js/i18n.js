@@ -2794,6 +2794,7 @@ const I18n = (function () {
     'status.pdfLibsLoadError': { fr: 'Échec de chargement des bibliothèques PDF.', en: 'Failed to load PDF libraries.' },
     'status.batchExportProgress': { fr: 'Export PDF en lot : {current}/{total}…', en: 'Batch PDF export: {current}/{total}…' },
     'status.exportError': { fr: 'Échec de l’export : aucun PDF généré.', en: 'Export failed: no PDF generated.' },
+    'status.pdfImageProblem': { fr: 'Échec de l’export : une image du document est illisible ou incomplète. Remplacez-la dans le modèle ; aucun PDF généré.', en: 'Export failed: an image in the document is unreadable or incomplete. Replace it in the template; no PDF generated.' },
     'status.zipCompressing': { fr: 'Compression de l’archive ZIP…', en: 'Compressing the ZIP archive…' },
     'status.batchExportDoneWithFailures': { fr: '{ok} {ok|PDF généré|PDF générés}, {failed} {failed|échec|échecs} — archive ZIP téléchargée.', en: '{ok} {ok|PDF|PDFs} generated, {failed} {failed|failure|failures} — ZIP archive downloaded.' },
     'status.batchExportDone': { fr: '{ok} {ok|PDF généré|PDF générés} — archive ZIP téléchargée.', en: '{ok} {ok|PDF|PDFs} generated — ZIP archive downloaded.' },

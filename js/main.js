@@ -2409,6 +2409,8 @@
       if (ExternalImages.isCancel(e)) { setStatus(I18n.t('status.exportCancelled')); return; }
       // « Un par ligne » : la cellule de mot de passe de cette ligne ne sert pas (vide, trop longue...) - la phrase dit laquelle et quelle colonne, rien n'a été généré.
       if (e && e.passwordProblem) { setStatus(I18n.t('status.pdfPasswordProblem.' + e.passwordProblem, { column: e.column }), true); return; }
+      // Une image du document illisible ou incomplète (un PNG tronqué) : pdfmake ne peut pas la mettre dans le PDF ; la phrase dit quoi faire, plutôt que l'échec sans cause.
+      if (e && e.imageProblem) { console.error(e); setStatus(I18n.t('status.pdfImageProblem'), true); return; }
       // Un document de plus de PrintExport.MAX_PAGES pages : l'impression navigateur le refuse (son coût croît avec le carré du nombre de pages) ; ce n'est
       // pas une panne, la phrase dit quoi choisir à la place.
       if (PrintExport.isTooLong(e)) { setStatus(I18n.t('status.printTooLong', { n: e.pages, max: PrintExport.MAX_PAGES }), true); return; }

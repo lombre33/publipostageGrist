@@ -4709,7 +4709,7 @@ const PdfExport = (function () {
     const measure = (toMeasure) => {
       giveWholeIds(toMeasure);
       if (runsOf(toMeasure)) return layoutRuns(toMeasure, filename, headerFooterChunks);
-      return new Promise(resolve => { window.pdfMake.createPdf(buildNativeDocDefinition(toMeasure, filename, headerFooterChunks)).getBuffer(() => resolve()); });
+      return guardedPdfmake(resolve => { window.pdfMake.createPdf(buildNativeDocDefinition(toMeasure, filename, headerFooterChunks)).getBuffer(() => resolve()); });
     };
     // Les lignes justifiées posées à la main sont étirées sur une largeur estimée dans le navigateur : une première mise en page en mesure l'écart,
     // la seconde l'annule (learnStretchedLines).
@@ -5318,6 +5318,30 @@ const PdfExport = (function () {
     return blank;
   }
 
+  // pdfmake rend la main par un rappel, et ce qu'il lève dans ses propres promesses ne remonte à personne : une image PNG tronquée (une data URI coupée en route) fait lever à pdfkit « Invalid
+  // image : Incomplete or corrupt PNG file » dans la promesse qui précède le rappel, le rappel n'est jamais appelé, la promesse du PDF ne se règle jamais et l'export tourne sans fin (signalé
+  // le 06/11, reproduit sur getNativePdfBlobForRecord). Tant qu'un rendu est en cours, une erreur de page qui vient de pdfmake - une chaîne, sa façon de lever, ou une erreur dont la trace passe par
+  // pdfmake ou pdfkit - fait donc échouer CE rendu ; une erreur de la page qui n'est pas la sienne n'y touche pas. Une image illisible porte `imageProblem` (main.js en fait sa phrase).
+  function pdfmakeFailureOf(reason) {
+    const lifted = typeof reason === 'string';
+    if (!lifted && !(reason && /pdfmake|pdfkit/i.test(String(reason.stack || '')))) return null;
+    const error = new Error(lifted ? reason : String(reason.message || reason));
+    if (/Invalid image/i.test(error.message)) error.imageProblem = true;
+    return error;
+  }
+  function guardedPdfmake(start) {
+    return new Promise((resolve, reject) => {
+      let over = false;
+      const stop = () => { over = true; window.removeEventListener('unhandledrejection', onRejection); window.removeEventListener('error', onError); };
+      const fail = error => { if (over) return; stop(); reject(error); };
+      const onRejection = event => { const error = pdfmakeFailureOf(event.reason); if (error) { event.preventDefault(); fail(error); } };
+      const onError = event => { const error = pdfmakeFailureOf(event.error != null ? event.error : event.message); if (error) { event.preventDefault(); fail(error); } };
+      window.addEventListener('unhandledrejection', onRejection);
+      window.addEventListener('error', onError);
+      try { start(value => { if (over) return; stop(); resolve(value); }); } catch (e) { fail(e); }
+    });
+  }
+
   // Le PDF fini d'un coup, avec ses pages blanches. pdfmake ne rend ses pages que dans `_flushDoc` (et ne les garde pas) : `getBlob`, `download` ou `getBase64`
   // les refont de zéro à chaque appel. Le document les fait donc une fois ici ; ses `getBuffer` rendent ensuite ces mêmes octets, et le téléchargement, le blob
   // et les tests (qui relisent le PDF par getBase64) passent tous par eux. Le repérage ne doit jamais empêcher l'export : en cas d'échec ou si pdfmake n'a pas ces
@@ -5326,23 +5350,19 @@ const PdfExport = (function () {
   // (0 sans ces deux fonctions) : un document qui mêle des formats se met en page suite par suite et en a besoin pour numéroter ses pages (layoutRuns, renderRuns).
   function renderOnce(pdf, docDefinition, everyPageWanted) {
     if (typeof pdf._createDoc !== 'function' || typeof pdf._flushDoc !== 'function') return Promise.resolve({ blankPages: [], pageCount: 0 });
-    return new Promise((resolve, reject) => {
-      try {
-        pdf._createDoc(undefined, kit => {
-          pdf._flushDoc(kit, (buffer, pages) => {
-            pdf.getBuffer = callback => callback(buffer);
-            let blankPages = [];
-            try { if (!everyPageWanted) blankPages = blankPagesOf(pages, docDefinition); } catch (e) { console.warn('[PdfExport] pages blanches non repérées :', e); }
-            resolve({ blankPages, pageCount: (pages || []).length });
-          });
+    return guardedPdfmake(resolve => {
+      pdf._createDoc(undefined, kit => {
+        pdf._flushDoc(kit, (buffer, pages) => {
+          pdf.getBuffer = callback => callback(buffer);
+          let blankPages = [];
+          try { if (!everyPageWanted) blankPages = blankPagesOf(pages, docDefinition); } catch (e) { console.warn('[PdfExport] pages blanches non repérées :', e); }
+          resolve({ blankPages, pageCount: (pages || []).length });
         });
-      } catch (e) { reject(e); }
+      });
     });
   }
 
-  const blobOf = pdf => new Promise((resolve, reject) => {
-    try { pdf.getBlob(resolve); } catch (e) { reject(e); }
-  });
+  const blobOf = pdf => guardedPdfmake(resolve => { pdf.getBlob(resolve); });
 
   // Le PDF fini d'un document qui mêle des formats (documentOfRuns) : chaque suite de pages dans son PDF, l'une après l'autre, puis les PDF réunis en un seul (PdfMerge.joinParts, qui garde les liens
   // d'une suite à l'autre). La numérotation du document entier vient de la mesure ; si une suite rend un autre nombre de pages que celui qu'elle avait mesuré, le document est rendu une fois de plus
