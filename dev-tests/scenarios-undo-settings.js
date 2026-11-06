@@ -46,10 +46,11 @@ window.EditorTestSuites.undoSettings = (function () {
   const html = document.documentElement;
   const shownTheme = () => html.getAttribute('data-theme') || 'system';
   const shownBubbles = () => (html.getAttribute('data-bubble-marks') === 'marks' ? 'marks' : 'default');
-  const KEYS = { theme: 'pp_theme', bubbles: 'pp_bubble_marks', trigger: 'pp_trigger_char', mail: 'pp_mail_client', shortcuts: 'pp_shortcuts', expansion: 'pp_expansion_char' };
+  const KEYS = { theme: 'pp_theme', bubbles: 'pp_bubble_marks', altReminder: 'pp_alt_reminder', trigger: 'pp_trigger_char', mail: 'pp_mail_client', shortcuts: 'pp_shortcuts', expansion: 'pp_expansion_char' };
   const said = (label, value) => I18n.t('status.settingSet', { setting: label, value });
   const themeSaid = theme => said(I18n.t('settings.tab.theme'), I18n.t('settings.theme.' + theme));
   const bubblesSaid = value => said(I18n.t('settings.bubbleMarks.title'), I18n.t('settings.bubbleMarks.' + value));
+  const altSaid = value => said(I18n.t('settings.accessibility.title'), I18n.t('settings.accessibility.' + value));
   const triggerSaid = char => said(I18n.t('settings.triggerKey.name'), char);
   const mailSaid = client => said(I18n.t('settings.tab.mailClient'), I18n.t('settings.mailClient.' + client));
 
@@ -78,6 +79,7 @@ window.EditorTestSuites.undoSettings = (function () {
     Settings.setTheme('light');
     Settings.setBubbleMarks('default');
     MailtoExport.setMailClient('standard');
+    PersonStore.remove(KEYS.altReminder);
     PersonStore.remove(KEYS.trigger);
     PersonStore.remove(KEYS.expansion);
     Shortcuts.resetAll();
@@ -192,6 +194,37 @@ window.EditorTestSuites.undoSettings = (function () {
         await settle(h);
         check(problems, 'bouton Rétablir : mise en forme', [shownBubbles(), status()], ['marks', bubblesSaid('marks')]);
         return verdict(problems, { bubbles: shownBubbles(), status: status() });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_settings_the_alt_text_reminder_checkbox_goes_back_and_forth',
+    description: 'La case « Prévenir à l\'export des images sans texte alternatif » (Réglages > Thème > Accessibilité) : éteinte au départ ; la cocher la garde (pp_alt_reminder) et allume le rappel ; Ctrl + Z l\'éteint et la case suit à la réouverture, Ctrl + Y la rallume ; le coin d\'état dit le choix',
+    async run(h) {
+      const problems = [];
+      try {
+        await seed(h);
+        check(problems, 'éteint au départ', [AltReminder.isOn(), PersonStore.get(KEYS.altReminder)], [false, null]);
+        await openTab(h, 'theme');
+        const box = byId('settings-alt-reminder');
+        check(problems, 'la case est dans l\'onglet Thème, décochée', [!!box && !!box.closest('[data-settings-panel="theme"]'), box && box.checked], [true, false]);
+        box.click();
+        await h.sleep(60);
+        await closeSettings(h);
+        check(problems, 'cochée : le rappel est allumé et la clé gardée', [AltReminder.isOn(), PersonStore.get(KEYS.altReminder), reserve().count()], [true, 'on', 1]);
+        await undo(h);
+        check(problems, 'Ctrl + Z : éteint, la clé dit « off »', [AltReminder.isOn(), PersonStore.get(KEYS.altReminder)], [false, 'off']);
+        check(problems, 'Ctrl + Z : le coin d\'état dit le choix', status(), altSaid('off'));
+        await openTab(h, 'theme');
+        check(problems, 'à la réouverture la case suit', byId('settings-alt-reminder').checked, false);
+        await closeSettings(h);
+        await redo(h);
+        check(problems, 'Ctrl + Y : rallumé', [AltReminder.isOn(), status()], [true, altSaid('on')]);
+        await openTab(h, 'theme');
+        check(problems, 'à la réouverture la case est cochée', byId('settings-alt-reminder').checked, true);
+        await closeSettings(h);
+        return verdict(problems, { on: AltReminder.isOn(), stored: PersonStore.get(KEYS.altReminder) });
       } finally { await leave(h); }
     },
   });

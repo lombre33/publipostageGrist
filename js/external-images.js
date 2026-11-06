@@ -19,7 +19,8 @@
 //   ExternalImages.confirmExport(html, headerFooterData) -> Promise<void> ; rejette (isCancel) quand la fenêtre est refusée
 //   ExternalImages.beginRun() / endRun() -> un lancement d'export (un clic, un lot entier : js/main.js:withExportLock) : un site déjà accepté n'est
 //   pas redemandé, un refus arrête tout le lot ; sans lancement ouvert, chaque appel demande pour lui seul
-//   ExternalImages.isCancel(error)
+//   ExternalImages.isCancel(error) ; ExternalImages.cancelError() -> l'erreur d'un export que la personne arrête (js/alt-reminder.js la lève aussi : un seul « Export annulé » pour toutes les fenêtres d'avant l'export)
+//   ExternalImages.fragmentsOf(html, headerFooterData) -> le corps, puis l'en-tête et le pied réellement exportés (js/alt-reminder.js compte les images à décrire dans les mêmes morceaux)
 //   ExternalImages.siteOf(src) -> l'hôte d'une adresse d'image qui sort du widget (http(s) vers un autre site), sinon ''
 //   ExternalImages.blockedSiteOf(src) -> le même hôte tant que la personne n'a pas affiché ce site, sinon '' (l'image peut charger)
 //   ExternalImages.block(html, { zoom }) / blockIn(élément inerte, { zoom }) -> le HTML à afficher : les images des sites pas encore affichés y sont remplacées par leur cadre, celles dont le site
@@ -296,5 +297,5 @@ const ExternalImages = (function () {
   }
   watchDisplay();
 
-  return { beginRun, endRun, confirmExport, isCancel, siteOf, blockedSiteOf, block, blockIn, unblockIn, allow, isAllowed, onReveal, hintOf };
+  return { beginRun, endRun, confirmExport, isCancel, cancelError, fragmentsOf, siteOf, blockedSiteOf, block, blockIn, unblockIn, allow, isAllowed, onReveal, hintOf };
 })();

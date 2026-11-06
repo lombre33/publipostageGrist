@@ -318,6 +318,7 @@ if (has('README.md')) {
     pp_lang: ['langue', 'language'],
     pp_theme: ['thème', 'theme'],
     pp_bubble_marks: ['mise en forme des bulles', 'formatting of bubbles'],
+    pp_alt_reminder: ['rappel des images sans texte alternatif', 'reminder about images without alternative text'],
     pp_trigger_char: ['touches', 'keys'],
     pp_expansion_char: ['touches', 'keys'],
     pp_shortcuts: ['raccourcis', 'shortcuts'],

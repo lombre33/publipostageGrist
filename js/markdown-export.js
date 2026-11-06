@@ -772,6 +772,8 @@ const MarkdownExport = (function () {
     // nœud de la page) : la fenêtre liste ces sites et peut tout arrêter (js/external-images.js), comme pour le PDF, le Word et l'Excel. Un seul passage pour l'export d'une
     // ligne comme pour chaque ligne d'un lot (exportCurrentRecord passe par ici).
     await ExternalImages.confirmExport(htmlContent, headerFooterData);
+    // Réglage « Accessibilité » allumé : les images sans texte alternatif, que ce fichier écrit, sont signalées une fois (js/alt-reminder.js).
+    await AltReminder.confirmExport(htmlContent, headerFooterData);
     const { resolvedHtml, filename, resolvedHeaderFooterData } = await ExportCommon.resolveRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData);
     const text = await htmlToMarkdown(resolvedHtml, resolvedHeaderFooterData);
     return { blob: new Blob([text], { type: 'text/markdown;charset=utf-8' }), filename };

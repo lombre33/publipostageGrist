@@ -9,3 +9,7 @@
 .pp-alt-decorative { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; font-size: 13px; font-weight: 700; color: var(--text); cursor: pointer; }
 .pp-alt-decorative input { flex: none; margin: 0; }
 .pp-alt-decorative-hint { margin-top: 2px; padding-left: 20px; }
+
+/* Réglages > Thème > Accessibilité (js/alt-reminder.js) : la case du rappel « images sans texte alternatif » à l'export. */
+.settings-alt-reminder { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); margin: 10px 0 0; cursor: pointer; }
+.settings-alt-reminder input { margin: 0; flex: none; cursor: inherit; }

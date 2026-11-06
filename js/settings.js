@@ -68,6 +68,12 @@ const Settings = (function () {
     write: setBubbleMarks,
     say: said('settings.bubbleMarks.title', value => I18n.t('settings.bubbleMarks.' + value)),
   };
+  // Le rappel « images sans texte alternatif » à l'export (js/alt-reminder.js, qui garde la préférence) : une case de l'onglet Thème, défaite par Ctrl + Z comme les autres choix.
+  const ALT_REMINDER_SETTING = {
+    read: () => (AltReminder.isOn() ? 'on' : 'off'),
+    write: value => AltReminder.setOn(value === 'on'),
+    say: said('settings.accessibility.title', value => I18n.t('settings.accessibility.' + value)),
+  };
   const TRIGGER_SETTING = {
     read: () => Variables.triggerChar(),
     write: value => PersonStore.set(TRIGGER_KEY_STORAGE, value),
@@ -241,6 +247,7 @@ const Settings = (function () {
   function wireOpenAndClose(modal, openBtn, closeBtn, marginInputs) {
     const themeRadios = all('input[name="settings-theme"]');
     const bubbleMarksRadios = all('input[name="settings-bubble-marks"]');
+    const altReminderBox = byId('settings-alt-reminder');
     const mailClientRadios = all('input[name="settings-mail-client"]');
     const triggerSelect = byId('settings-trigger-char');
     const reloadNotice = byId('settings-trigger-reload-notice');
@@ -249,6 +256,7 @@ const Settings = (function () {
       applyLanguageLock();
       themeRadios.forEach(r => { r.checked = (r.value === getTheme()); });
       bubbleMarksRadios.forEach(r => { r.checked = (r.value === getBubbleMarks()); });
+      if (altReminderBox) altReminderBox.checked = AltReminder.isOn();
       mailClientRadios.forEach(r => { r.checked = (r.value === MailtoExport.getMailClient()); });
       if (triggerSelect) triggerSelect.value = Variables.triggerChar();
       if (reloadNotice) reloadNotice.hidden = true;
@@ -378,6 +386,12 @@ const Settings = (function () {
     wireRadios('settings-lang', value => changeLanguage(value, leave));
     wireRadios('settings-theme', value => SettingsHistory.track(THEME_SETTING, () => setTheme(value)));
     wireRadios('settings-bubble-marks', value => SettingsHistory.track(BUBBLE_MARKS_SETTING, () => setBubbleMarks(value)));
+    const altReminderBox = byId('settings-alt-reminder');
+    // Stockage refusé (le choix ne serait pas retenu) : la case revient à ce qui est en vigueur, comme les radios de langue.
+    if (altReminderBox) altReminderBox.addEventListener('change', () => {
+      SettingsHistory.track(ALT_REMINDER_SETTING, () => AltReminder.setOn(altReminderBox.checked));
+      altReminderBox.checked = AltReminder.isOn();
+    });
     wireRadios('settings-mail-client', value => SettingsHistory.track(MAIL_CLIENT_SETTING, () => MailtoExport.setMailClient(value)));
     wireTriggerChar();
     // Hébergée, un changement de langue fait dans GFS est suivi ici (followGfsLanguage) ; js/main.js le rappelle une fois le modèle de départ ouvert.

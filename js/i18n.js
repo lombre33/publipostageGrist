@@ -2114,6 +2114,28 @@ const I18n = (function () {
       en: 'Default: they keep their pale look, easy to spot on any background. Formatting: they take the chosen color, highlight, underline and strikethrough. This choice only changes the editor: Read mode, the PDF and Word stay as they are.',
     },
     'settings.bubbleMarks.perBrowser': { fr: 'Ce choix est propre à ce navigateur, comme la langue et le thème.', en: 'This choice is specific to this browser, like the language and the theme.' },
+    // Accessibilité (js/alt-reminder.js) : une section de l'onglet Thème, la barre des onglets étant pleine.
+    'settings.accessibility.title': { fr: 'Accessibilité', en: 'Accessibility' },
+    'settings.accessibility.intro': {
+      fr: 'Un texte alternatif dit ce que montre une image à qui ne la voit pas : lecteur d’écran, fichier Word, PowerPoint, HTML ou Markdown.',
+      en: 'Alternative text tells people who cannot see an image what it shows: screen readers, Word, PowerPoint, HTML and Markdown files.',
+    },
+    'settings.accessibility.altReminder': { fr: 'Prévenir à l’export des images sans texte alternatif', en: 'Warn on export about images without alternative text' },
+    'settings.accessibility.altReminderHint': {
+      fr: 'Éteint, rien ne change. Allumé, un export Word, PowerPoint, HTML ou Markdown s’arrête une fois pour dire combien d’images n’ont pas de texte alternatif (une image décorative n’en a pas besoin), même pour un lot entier. Le PDF n’écrit pas de texte alternatif : il n’est pas concerné.',
+      en: 'Off, nothing changes. On, a Word, PowerPoint, HTML or Markdown export stops once to say how many images have no alternative text (a decorative image does not need one), even for a whole batch. The PDF does not carry alternative text: it is not concerned.',
+    },
+    'settings.accessibility.perBrowser': { fr: 'Ce choix est propre à ce navigateur, comme la langue et le thème.', en: 'This choice is specific to this browser, like the language and the theme.' },
+    'settings.accessibility.on': { fr: 'allumé', en: 'on' },
+    'settings.accessibility.off': { fr: 'éteint', en: 'off' },
+    // Le rappel à l'export (js/alt-reminder.js), réglage « Accessibilité » allumé.
+    'altReminder.title': { fr: 'Images sans texte alternatif', en: 'Images without alternative text' },
+    'altReminder.message': {
+      fr: '{count} {count|image n’a|images n’ont} pas de texte alternatif : dans le fichier exporté, un lecteur d’écran ne dira pas {count|ce qu’elle montre|ce qu’elles montrent}.\n\nAnnuler arrête l’export.',
+      en: '{count} {count|image has|images have} no alternative text: in the exported file, a screen reader will not say what {count|it shows|they show}.\n\nCancel stops the export.',
+    },
+    'altReminder.describe': { fr: '{count|Décrire l’image|Décrire la première}', en: '{count|Describe the image|Describe the first one}' },
+    'altReminder.exportAnyway': { fr: 'Exporter quand même', en: 'Export anyway' },
     'settings.tab.credits': { fr: 'Crédits', en: 'Credits' },
     'settings.tab.access': { fr: 'Accès', en: 'Access' },
     'settings.tab.rowTemplate': { fr: 'Vue', en: 'View' },

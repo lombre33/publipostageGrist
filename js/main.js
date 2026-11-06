@@ -2255,11 +2255,14 @@
       // Un clic = un lancement (un lot entier compris) : les sites d'images déjà acceptés ne sont pas redemandés, un refus arrête tout
       // (js/external-images.js).
       ExternalImages.beginRun();
+      // Réglage « Accessibilité » : le rappel des images sans texte alternatif ne se pose qu'une fois par lancement (js/alt-reminder.js).
+      AltReminder.beginRun();
       ExportCommon.resetUnreadImages();
       try {
         await fn(...args);
       } finally {
         ExternalImages.endRun();
+        AltReminder.endRun();
         exportOperationInProgress = false;
         OrientationToggle.setBusy(false);
         controls.forEach(el => setExportControlLocked(el, false));

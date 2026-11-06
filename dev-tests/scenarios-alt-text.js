@@ -5,7 +5,8 @@
 //     Ctrl+Z), la touche ;
 //  2) les SORTIES : HTML, Markdown, Word (OOXML dézippé : `descr`, extension décorative), PowerPoint (export, puis réimport) ;
 //  3) les OBJETS de diapositive (lot 2 : cadre, forme, trait) : le modèle (`alt`, `decorative`), la fenêtre sur l'objet, Word et PowerPoint (export et réimport) ;
-//  4) les COLONNES dans le texte (lot 3 : « Photo de #Prénom #Nom ») : résolues par ligne à la Lecture, dans une zone répétée, et dans les exports.
+//  4) les COLONNES dans le texte (lot 3 : « Photo de #Prénom #Nom ») : résolues par ligne à la Lecture, dans une zone répétée, et dans les exports ;
+//  5) le RAPPEL à l'export (lot 4 : réglage « Accessibilité », js/alt-reminder.js) : le décompte, éteint par défaut, la question une fois par lancement, « Décrire la première », les quatre exports.
 // La vraie souris et le vrai clavier à 700x400 sont dans dev-tests/verify-alt-text-mouse.mjs.
 (function () {
   const cases = [];
@@ -596,6 +597,202 @@
         && one.word.indexOf('Photo de Alice Durand') >= 0 && one.word.indexOf('Plan de Lyon') >= 0 && !one.word.some(text => text.indexOf('#') >= 0 && text !== 'Photo n°1 : #1 en vente')
         && one.pptx.indexOf('Photo de Alice Durand') >= 0 && one.pptx.indexOf('Plan de Lyon') >= 0 && !one.pptx.some(text => text.indexOf('AltClients') >= 0)
         && two.html[0] === 'Photo de Bob Roy' && two.htmlFrame === 'Plan de' && two.word.indexOf('Photo de Bob Roy') >= 0 && two.word.indexOf('Plan de') >= 0 && two.pptx.indexOf('Plan de') >= 0;
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  // === 5) Le rappel à l'export (lot 4 : réglage « Accessibilité », js/alt-reminder.js) ==============================================================================
+  const REMINDER_KEY = 'pp_alt_reminder';
+  const dialog = () => document.getElementById('pp-dialog-modal');
+  const dialogOpen = () => !!dialog() && dialog().style.display !== 'none';
+  // Les boutons que la personne voit (« Valider » reste dans la fenêtre, caché, pendant une question à choix).
+  const visibleButtons = () => Array.from(dialog().querySelectorAll('.var-modal-actions button')).filter(button => !button.hidden && button.getClientRects().length > 0);
+  const dialogButton = label => visibleButtons().find(button => button.textContent.trim() === label);
+  const dialogButtons = () => visibleButtons().map(button => button.textContent.trim());
+  async function waitDialog(open) { for (let i = 0; i < 80 && dialogOpen() !== open; i++) await sleep(25); return dialogOpen() === open; }
+  // Une demande qui peut ne jamais aboutir (une fenêtre ouverte sur l'export) ne bloque pas le cas : 'pending' au bout de 400 ms.
+  const settled = promise => Promise.race([promise.then(() => 'resolved', error => (ExternalImages.isCancel(error) ? 'cancelled' : 'failed: ' + (error && error.message))), sleep(400).then(() => 'pending')]);
+  async function dismissDialog() { if (dialogOpen()) { dialog().querySelector('.var-modal-actions button').click(); await sleep(60); } }
+  // Le harnais répond tout seul aux questions « Enregistrer / Abandonner » (helpers.js) : la vraie fenêtre est rendue le temps du cas, le cas clique ses boutons.
+  async function withReminder(h, on, work) {
+    const before = PersonStore.get(REMINDER_KEY);
+    AltReminder.setOn(on);
+    try { return await h.withRealChoose(work); } finally {
+      await dismissDialog();
+      AltReminder.endRun();
+      if (before === null) PersonStore.remove(REMINDER_KEY); else PersonStore.set(REMINDER_KEY, before);
+    }
+  }
+  const TWO_MISSING = '<p>' + image() + '</p><p>' + image(' alt="Image"') + '</p><p>' + image(' alt="Le plan de la salle"') + '</p><p>' + image(' alt="" data-decorative="true"') + '</p>';
+  const ALL_DESCRIBED = '<p>' + image(' alt="Le plan de la salle"') + '</p><p>' + image(' alt="" data-decorative="true"') + '</p><p>' + image(' alt="Photo de #AltClients.Prenom"') + '</p>';
+
+  cases.push({
+    id: 'alttext_reminder_counts_only_the_images_that_still_need_a_description',
+    description: 'AltReminder.missingIn compte les images ni décorées ni décrites : sans alt, avec l\'ancien « Image » ou un alt blanc ; pas une image décrite, décorative ou à #colonnes, ni un objet de diapositive, ni une autre <img> (QR code) ; l\'en-tête et le pied comptent, la liste vide aussi',
+    run: async () => {
+      const got = {
+        two: AltReminder.missingIn([TWO_MISSING]),
+        none: AltReminder.missingIn([ALL_DESCRIBED]),
+        blank: AltReminder.missingIn(['<p>' + image(' alt="   "') + '</p>']),
+        frames: AltReminder.missingIn([FreeFrame.html({ x: 10, y: 10, w: 100, h: 60, shape: 'rect', fill: '#ddeeff' }, '<p></p>')]),
+        otherImg: AltReminder.missingIn(['<p><img src="' + DATA + '" alt=""></p>']),
+        withZones: AltReminder.missingIn([TWO_MISSING, '<p>' + image() + '</p>', '<p>' + image(' alt="Logo"') + '</p>']),
+        empty: AltReminder.missingIn(['', null, '<p>Texte</p>']),
+        listed: ExternalImages.fragmentsOf('<p>corps</p>', { enabled: true, differentFirstPage: false, header: { default: '<p>haut</p>' }, footer: { default: '<p>bas</p>' } }).length,
+      };
+      const pass = got.two === 2 && got.none === 0 && got.blank === 1 && got.frames === 0 && got.otherImg === 0 && got.withZones === 3 && got.empty === 0 && got.listed === 3;
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'alttext_reminder_is_off_by_default_and_the_four_exports_ask_nothing',
+    description: 'Le réglage « Accessibilité » est éteint au départ : un export HTML, Markdown, Word et PowerPoint d\'un document aux images sans texte alternatif ne pose aucune question et rend son fichier (aucun repère non plus sur l\'image)',
+    run: async (h) => {
+      const before = PersonStore.get(REMINDER_KEY);
+      PersonStore.remove(REMINDER_KEY);
+      try {
+        const result = { off: AltReminder.isOn(), stored: PersonStore.get(REMINDER_KEY) };
+        await setDoc(h, TWO_MISSING);
+        const marks = document.querySelectorAll('.tiptap img.editor-image[data-alt-missing], .tiptap img.editor-image.is-alt-missing').length;
+        const done = {};
+        done.html = await settled(HtmlExport.getHtmlBlobForRecord(TWO_MISSING, null, {}, '', null));
+        done.markdown = await settled(MarkdownExport.getMarkdownBlobForRecord(TWO_MISSING, null, {}, '', null));
+        await DocxExport.ensureDocxLibLoaded();
+        done.word = await settled(DocxExport.getDocxBlobForRecord(TWO_MISSING, null, {}, '', null, null));
+        await ExportEngines.ensure('pptx');
+        done.pptx = await settled(PptxExport.getPptxBlobForRecord(TWO_MISSING, null, {}, '', null, null));
+        const pass = result.off === false && result.stored === null && marks === 0 && !dialogOpen() && Object.values(done).every(state => state === 'resolved');
+        return { pass, notes: JSON.stringify({ result, marks, done, dialog: dialogOpen() }) };
+      } finally {
+        await dismissDialog();
+        if (before !== null) PersonStore.set(REMINDER_KEY, before);
+      }
+    },
+  });
+
+  cases.push({
+    id: 'alttext_reminder_on_asks_once_for_a_whole_run_and_a_refusal_stops_the_run',
+    description: 'Allumé : la fenêtre dit le nombre d\'images sans texte alternatif (singulier et pluriel), propose « Décrire la première », « Exporter quand même » et « Annuler » ; « Exporter quand même » vaut pour tout le lancement (aucune seconde fenêtre) ; « Annuler » rejette avec l\'annulation d\'export et les appels suivants du lancement aussi, sans fenêtre ; un document entièrement décrit ne demande rien',
+    run: async (h) => {
+      const out = {};
+      await setDoc(h, TWO_MISSING);
+      await withReminder(h, true, async () => {
+        // 1) « Exporter quand même », puis un second appel du même lancement.
+        AltReminder.beginRun();
+        const first = settled(AltReminder.confirmExport(TWO_MISSING, null));
+        out.opened = await waitDialog(true);
+        out.title = dialog().querySelector('h3, .pp-modal-title') ? dialog().querySelector('h3, .pp-modal-title').textContent.trim() : '';
+        out.message = (dialog().querySelector('#pp-dialog-message') || {}).textContent;
+        out.buttons = dialogButtons();
+        dialogButton(I18n.t('altReminder.exportAnyway')).click();
+        out.first = await first;
+        out.second = await settled(AltReminder.confirmExport(TWO_MISSING, null));
+        out.secondDialog = dialogOpen();
+        AltReminder.endRun();
+        // 2) Un lancement où l'on annule : le même appel, puis la suite du lot, sans fenêtre.
+        AltReminder.beginRun();
+        const cancelled = settled(AltReminder.confirmExport(TWO_MISSING, null));
+        await waitDialog(true);
+        dialogButton(I18n.t('common.cancel')).click();
+        out.cancelled = await cancelled;
+        out.next = await settled(AltReminder.confirmExport(TWO_MISSING, null));
+        out.nextDialog = dialogOpen();
+        AltReminder.endRun();
+        // 3) Un seul appel sans lancement ouvert demande pour lui seul, une image : le singulier.
+        const one = settled(AltReminder.confirmExport('<p>' + image() + '</p>', null));
+        await waitDialog(true);
+        out.singular = (dialog().querySelector('#pp-dialog-message') || {}).textContent;
+        dialog().querySelector('.var-modal-actions button').click();
+        out.alone = await one;
+        // 4) Un document entièrement décrit ne demande rien.
+        out.described = await settled(AltReminder.confirmExport(ALL_DESCRIBED, null));
+        out.describedDialog = dialogOpen();
+      });
+      const pass = out.opened && out.title === I18n.t('altReminder.title') && /^2 images n’ont pas de texte alternatif/.test(out.message || '') && /Annuler arrête l’export/.test(out.message || '')
+        && out.buttons.join('|') === [I18n.t('common.cancel'), I18n.t('altReminder.describe', { count: 2 }), I18n.t('altReminder.exportAnyway')].join('|')
+        && out.first === 'resolved' && out.second === 'resolved' && out.secondDialog === false
+        && out.cancelled === 'cancelled' && out.next === 'cancelled' && out.nextDialog === false
+        && /^1 image n’a pas de texte alternatif/.test(out.singular || '') && out.alone === 'cancelled'
+        && out.described === 'resolved' && out.describedDialog === false;
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'alttext_reminder_describe_first_selects_the_image_and_opens_the_window_and_stops_the_export',
+    description: '« Décrire la première » : l\'export s\'arrête (annulation d\'export), la première image NON décrite de l\'éditeur est sélectionnée (pas la première du document si elle est décrite) et la fenêtre du texte alternatif s\'ouvre sur elle ; sans éditeur à l\'écran pour la montrer, le bouton n\'est pas proposé',
+    run: async (h) => {
+      const out = {};
+      const html = '<p>' + image(' alt="Déjà décrite"') + '</p><p>' + image() + '</p><p>' + image() + '</p>';
+      await setDoc(h, html);
+      await withReminder(h, true, async () => {
+        const asked = settled(AltReminder.confirmExport(html, null));
+        await waitDialog(true);
+        dialogButton(I18n.t('altReminder.describe', { count: 2 })).click();
+        out.result = await asked;
+        await sleep(150);
+        const selection = ed().state.selection;
+        out.selectedIsSecondImage = !!selection.node && selection.node.type.name === 'editorImage' && selection.from === images()[1].pos;
+        out.windowOpen = modalOpen();
+        out.field = document.activeElement === input();
+        await closeModal();
+      });
+      // Éditeur caché (la Lecture) : rien à montrer, le bouton « Décrire » n'est pas proposé.
+      const host = ed().view.dom;
+      const container = host.closest('#editor-container') || host.parentElement;
+      const shown = container.style.display;
+      container.style.display = 'none';
+      await withReminder(h, true, async () => {
+        const asked = settled(AltReminder.confirmExport(html, null));
+        await waitDialog(true);
+        out.hiddenButtons = dialogButtons();
+        dialog().querySelector('.var-modal-actions button').click();
+        await asked;
+      });
+      container.style.display = shown;
+      const pass = out.result === 'cancelled' && out.selectedIsSecondImage && out.windowOpen && out.field
+        && out.hiddenButtons.join('|') === [I18n.t('common.cancel'), I18n.t('altReminder.exportAnyway')].join('|');
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'alttext_reminder_stops_the_html_markdown_word_and_powerpoint_exports_and_lets_them_through',
+    description: 'Allumé, chacun des quatre exports qui écrivent le texte alternatif s\'arrête sur la fenêtre : « Annuler » le rejette (rien n\'est produit), « Exporter quand même » rend le fichier ; l\'en-tête exporté compte (HTML, Markdown et Word), et un document décrit passe sans fenêtre',
+    run: async (h) => {
+      const out = {};
+      await setDoc(h, TWO_MISSING);
+      const exporters = {
+        html: html => HtmlExport.getHtmlBlobForRecord(html, null, {}, '', null),
+        markdown: html => MarkdownExport.getMarkdownBlobForRecord(html, null, {}, '', null),
+        word: async (html) => { await DocxExport.ensureDocxLibLoaded(); return DocxExport.getDocxBlobForRecord(html, null, {}, '', null, null); },
+        pptx: async (html) => { await ExportEngines.ensure('pptx'); return PptxExport.getPptxBlobForRecord(html, null, {}, '', null, null); },
+      };
+      await withReminder(h, true, async () => {
+        for (const [name, run] of Object.entries(exporters)) {
+          const cancel = settled(run(TWO_MISSING));
+          out[name + 'Asked'] = await waitDialog(true);
+          dialogButton(I18n.t('common.cancel')).click();
+          out[name + 'Cancelled'] = await cancel;
+          const through = run(TWO_MISSING).then(result => result.blob.size > 0, () => false);
+          await waitDialog(true);
+          dialogButton(I18n.t('altReminder.exportAnyway')).click();
+          out[name + 'Through'] = await Promise.race([through, sleep(8000).then(() => 'slow')]);
+          out[name + 'Described'] = await Promise.race([settled(run(ALL_DESCRIBED.replace(/#AltClients\.Prenom/, 'Alice'))), sleep(8000).then(() => 'slow')]);
+          out[name + 'DescribedDialog'] = dialogOpen();
+        }
+        // L'image de l'en-tête compte : un corps décrit, un en-tête qui ne l'est pas.
+        const headerFooter = { enabled: true, differentFirstPage: false, header: { default: '<p>' + image() + '</p>' }, footer: { default: '' } };
+        const zone = settled(HtmlExport.getHtmlBlobForRecord(ALL_DESCRIBED.replace(/#AltClients\.Prenom/, 'Alice'), null, {}, '', headerFooter));
+        out.headerAsked = await waitDialog(true);
+        out.headerCount = /^1 image n’a pas/.test((dialog().querySelector('#pp-dialog-message') || {}).textContent || '');
+        dialogButton(I18n.t('common.cancel')).click();
+        out.headerResult = await zone;
+      });
+      const names = Object.keys(exporters);
+      const pass = names.every(name => out[name + 'Asked'] === true && out[name + 'Cancelled'] === 'cancelled' && out[name + 'Through'] === true && out[name + 'Described'] === 'resolved' && out[name + 'DescribedDialog'] === false)
+        && out.headerAsked === true && out.headerCount === true && out.headerResult === 'cancelled';
       return { pass, notes: JSON.stringify(out) };
     },
   });
