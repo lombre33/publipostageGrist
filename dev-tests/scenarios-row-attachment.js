@@ -221,6 +221,42 @@
       return verdict(problems, {});
     });
 
+  // Choix d'Antoine du 06/11 (« Griser dans GFS pour l'instant ») : chez GFS l'envoi est refusé tant que GFS n'a pas déclaré le jeton d'écriture et les deux options (GFS-ETAT.md) ; `GfsLink.hosted` joue GFS.
+  scenario('rowattachment_inside_gfs_the_box_and_the_panel_are_greyed_and_nothing_is_attached_until_gfs_declares_the_write',
+    'Hébergé par Grist Factory Suite, tant que GFS n’a pas déclaré le jeton d’écriture et les deux options : la case du menu Exporter est grisée (jamais retirée) avec sa raison, la liste et le mode de Réglages sont grisés avec leur mention propre (pas celle de la lecture seule), et rien ne part - aucun jeton demandé, aucun envoi, aucune écriture - même si la case était cochée dans l’app seule ; dans l’app seule rien ne change.',
+    async () => {
+      const problems = [];
+      const server = useServer();
+      await pickType('pdf');
+      PersonStore.set(KEY, '1');
+      syncMenus();
+      check(problems, 'app seule : la case est vivante et cochée, la jointure s’applique', [live(row()), row().getAttribute('aria-checked'), RowAttachment.active(), PdfDelivery.plan().attach], [true, 'true', true, true]);
+      const realHosted = GfsLink.hosted;
+      try {
+        GfsLink.hosted = true;
+        RowAttachment.render(); syncMenus();
+        check(problems, 'dans GFS : la case est grisée, décochée, et dit pourquoi',
+          [greyed(row()), row().getAttribute('aria-checked'), LockReasons.reasonOf(row())],
+          [true, 'false', 'Pas encore disponible dans Grist Factory Suite : GFS doit d’abord autoriser l’écriture dans les pièces jointes.']);
+        check(problems, 'dans GFS : la section de Réglages est grisée avec la mention de GFS, pas celle de la lecture seule',
+          [el('settings-rowattachment-column').disabled, el('settings-rowattachment-mode').disabled, el('settings-rowattachment-locked').hidden, el('settings-rowattachment-locked-gfs').hidden],
+          [true, true, true, false]);
+        check(problems, 'dans GFS : la jointure ne s’applique pas, même cochée', [RowAttachment.active(), PdfDelivery.plan().attach], [false, false]);
+        const report = await RowAttachment.attachAll(TABLE, [item(0, 1, 'a.pdf')]);
+        check(problems, 'dans GFS : rien ne part (aucun jeton, aucun envoi, aucune écriture)', [report, server.requests.length, stub().state.tokenCalls.length, writes().length], [null, 0, 0, 0]);
+        // Un choix forcé dans la liste grisée n'écrit rien.
+        const select = el('settings-rowattachment-column');
+        select.value = 'Autre'; select.dispatchEvent(new Event('change', { bubbles: true })); await sleep(80);
+        check(problems, 'dans GFS : un changement forcé de la colonne n’est pas écrit', [stub().state.options[COLUMN_OPTION], RowAttachment.getColumn()], ['Pdf', 'Pdf']);
+        I18n.setLang('en'); syncMenus();
+        check(problems, 'en anglais : la raison', LockReasons.reasonOf(row()), 'Not yet available in Grist Factory Suite: GFS must first allow writing to attachments.');
+        I18n.setLang('fr');
+      } finally { GfsLink.hosted = realHosted; }
+      RowAttachment.render(); syncMenus();
+      check(problems, 'hors de GFS de nouveau : tout est rendu', [live(row()), RowAttachment.active(), el('settings-rowattachment-column').disabled, el('settings-rowattachment-locked-gfs').hidden], [true, true, false, true]);
+      return verdict(problems, {});
+    }, { [COLUMN_OPTION]: 'Pdf' });
+
   scenario('rowattachment_menu_box_is_kept_for_the_person_undone_by_ctrl_z_and_answers_the_keyboard',
     'Un clic coche la case (clé pp_export_attach = 1, un pas d’Annuler), un second la décoche (clé retirée) ; Ctrl + Z / Ctrl + Y le disent au coin d’état ; Entrée et Espace font de même ; grisée, la case ne change rien et un clic dit sa raison ; cochée puis colonne retirée, elle s’affiche décochée mais le choix reste gardé.',
     async () => {

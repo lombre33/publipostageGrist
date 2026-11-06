@@ -26,6 +26,11 @@ const RowAttachment = (function () {
   const COLUMN_OPTION = 'pp_attach_column';
   const MODE_OPTION = 'pp_attach_mode';
   const PERSON_KEY = 'pp_export_attach';
+  // Chez Grist Factory Suite (GFS), l'envoi est refusé tant que GFS n'a pas déclaré deux choses : le jeton d'ÉCRITURE (son manifeste garde le jeton en lecture seule, `jeton.lectureSeule`) et les deux options du
+  // widget `pp_attach_column` et `pp_attach_mode` (`setOption` refuse une clé non déclarée). Choix du porteur du 06/11, « Griser dans GFS pour l'instant » : la case du menu Exporter et la section de Réglages sont
+  // grisées, avec leur raison, dans GFS ; l'app seule n'en change pas. LE point à lever le jour où GFS annonce qu'elle a déclaré les deux (page GFS-ETAT.md, fil Liaison) : passer cette constante à `true`.
+  const GFS_DECLARES_WRITE = false;
+  const blockedByGfs = () => !GFS_DECLARES_WRITE && typeof GfsLink !== 'undefined' && GfsLink.hosted === true;
   const MODES = ['replace', 'add'];
   const ORIGIN_MODE = 'replace';
   const COLUMN_TYPE = 'Attachments';
@@ -67,10 +72,11 @@ const RowAttachment = (function () {
   function candidates(table) {
     return GristAPI.getVisibleColumns(table).filter(col => columnState(table, col) === 'ok');
   }
-  // Pourquoi la case est grisée ('' : elle ne l'est pas) : pas de colonne utilisable, un compte en lecture seule, ou une option de lignes qui réunit plusieurs lignes dans un seul fichier.
+  // Pourquoi la case est grisée ('' : elle ne l'est pas) : un compte en lecture seule, GFS qui n'a pas encore déclaré l'écriture, pas de colonne utilisable, ou une option de lignes qui réunit plusieurs lignes dans un seul fichier.
   function offReason(lines) {
     const table = GristAPI.getCurrentTableId();
     if (isReadOnly()) return 'readOnly';
+    if (blockedByGfs()) return 'gfs';
     if (!column || !table || columnState(table, column) === 'missing' || columnState(table, column) === 'unusable') return 'column';
     if (lines === 'merged' || lines === 'sheets') return 'merged';
     return '';
@@ -163,7 +169,7 @@ const RowAttachment = (function () {
   async function attachAll(tableId, items, progress) {
     const target = column;
     const wanted = (items || []).filter(item => item && item.rowId != null);
-    if (!target || !tableId || !wanted.length || isReadOnly()) return null;
+    if (!target || !tableId || !wanted.length || isReadOnly() || blockedByGfs()) return null;
     const report = { column: target, problem: null, attached: [], failed: [] };
     const fail = (problem) => { report.problem = problem; report.failed = wanted.map(item => ({ index: item.index, reason: problem })); return report; };
     // Le type et les formules ont pu changer dans Grist depuis la dernière lecture du schéma : deux petites lectures de métadonnées, pas de relecture des tables.
@@ -329,7 +335,8 @@ const RowAttachment = (function () {
     const table = GristAPI.getCurrentTableId();
     const choices = table ? candidates(table) : [];
     fillColumns(select, table, choices);
-    const locked = isReadOnly();
+    const readOnly = isReadOnly();
+    const locked = readOnly || blockedByGfs();
     select.disabled = locked;
     if (search) search.sync();
     const modeSelect = el(MODE_SELECT_ID);
@@ -342,19 +349,21 @@ const RowAttachment = (function () {
       status.classList.toggle('is-problem', info.problem);
     }
     const lockedHint = el('settings-rowattachment-locked');
-    if (lockedHint) lockedHint.hidden = !locked;
+    if (lockedHint) lockedHint.hidden = !readOnly;
+    const gfsHint = el('settings-rowattachment-locked-gfs');
+    if (gfsHint) gfsHint.hidden = readOnly || !locked;
   }
 
   function wirePanel() {
     const select = el(COLUMN_SELECT_ID);
     if (!select) return;
     select.addEventListener('change', () => {
-      if (isReadOnly()) { renderPanel(true); return; }
+      if (isReadOnly() || blockedByGfs()) { renderPanel(true); return; }
       SettingsHistory.track(COLUMN_SETTING, () => writeColumn(select.value));
     });
     const modeSelect = el(MODE_SELECT_ID);
     if (modeSelect) modeSelect.addEventListener('change', () => {
-      if (isReadOnly()) { renderPanel(true); return; }
+      if (isReadOnly() || blockedByGfs()) { renderPanel(true); return; }
       SettingsHistory.track(MODE_SETTING, () => writeMode(modeSelect.value));
     });
     // Composant indisponible : la liste native reste, inchangée.

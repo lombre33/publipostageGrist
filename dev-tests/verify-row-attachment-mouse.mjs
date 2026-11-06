@@ -320,7 +320,7 @@ async function pass(colorScheme, lang) {
     ok: I18n.t('settings.rowAttachment.status.ok', { column: 'Pdf' }), missing: I18n.t('settings.rowAttachment.status.missing', { column: 'Pdf' }),
     locked: I18n.t('settings.rowAttachment.locked'), label: I18n.t('attach.label'),
     offColumn: I18n.t('attach.off.column'), offMerged: I18n.t('attach.off.merged'), offReadOnly: I18n.t('attach.off.readOnly'),
-    one: I18n.t('attach.one', { column: 'Pdf' }), generated: I18n.t('status.pdfGenerated'), replace: I18n.t('settings.rowAttachment.mode.replace'), add: I18n.t('settings.rowAttachment.mode.add'),
+    offGfs: I18n.t('attach.off.gfs'), lockedGfs: I18n.t('settings.rowAttachment.lockedGfs'), one: I18n.t('attach.one', { column: 'Pdf' }), generated: I18n.t('status.pdfGenerated'), replace: I18n.t('settings.rowAttachment.mode.replace'), add: I18n.t('settings.rowAttachment.mode.add'),
   }));
   // La ligne courante du widget : la deuxième (« Martin »). Le faux serveur d'envoi de grist-stub.js (rien de mesuré dans un vrai Grist).
   await page.evaluate(() => { window.__gristStub.fireRecord({ id: 2, Nom: 'Martin' }, 'Clients'); window.__ra_server = window.__gristStub.installUploadServer(); });
@@ -442,6 +442,39 @@ async function pass(colorScheme, lang) {
   const exp3 = await realPdfExport(page);
   const w6 = await widgetState(page);
   check(`${tag} : compte Lecteur : le PDF est produit sans alerte, rien n'est envoyé ni écrit`, exp3.downloaded && w6.uploads === before2 && w6.writes.length === 0 && w6.statusClass === '' && w6.status === T.generated, { exp3, w6 });
+
+  // === Hébergé par GFS (choix du 06/11, « Griser dans GFS pour l'instant ») : la case et la section sont grisées avec leur raison, rien n'est envoyé ===
+  await page.evaluate(async () => { window.__gristStub.setViewer(false); await AccessRights.refresh(); GfsLink.hosted = true; RowAttachment.render(); });
+  await page.waitForTimeout(400);
+  await leaveMenu(page);   // le survol relit la case : le pointeur quitte d'abord le bouton, qu'il survolait encore après le dernier export
+  const m6 = await menuState(page);
+  check(`${tag} : dans GFS : la case est grisée (jamais retirée), décochée, entière dans le panneau, et dit « ${T.offGfs} »`,
+    m6.shown && m6.disabled === true && m6.checked === 'false' && m6.title === T.offGfs && m6.inViewport && m6.onTop && m6.flyout.bottom <= HEIGHT, m6);
+  await page.mouse.click(m6.row.x, m6.row.y);
+  await page.waitForTimeout(300);
+  const w7 = await widgetState(page);
+  check(`${tag} : dans GFS : un vrai clic sur la case grisée dit la raison au coin d'état et ne change pas la clé de la personne`, w7.status === T.offGfs && w7.stored === '1', w7);
+  await shot(page, `${colorScheme}-${lang}-8-gfs-menu`);
+  await leaveMenu(page);
+  await clearLog(page);
+  const before3 = (await widgetState(page)).uploads;
+  const exp4 = await realPdfExport(page);
+  const w8 = await widgetState(page);
+  check(`${tag} : dans GFS : le PDF est téléchargé, rien n'est envoyé ni écrit, aucun jeton d'écriture demandé`,
+    exp4.downloaded && exp4.magic === '%PDF' && w8.uploads === before3 && w8.writes.length === 0 && w8.statusClass === '' && !/joint|attached/i.test(w8.status), { exp4, w8 });
+  await openViewTab(page);
+  const hint = await reveal(page, '#settings-rowattachment-locked-gfs');
+  const sec2g = await sectionState(page);
+  const hintText = await page.evaluate(() => document.getElementById('settings-rowattachment-locked-gfs').textContent);
+  check(`${tag} : dans GFS : Réglages > Vue : la liste et le mode sont grisés, la mention de GFS se lit entière dans le panneau, pas celle de la lecture seule`,
+    sec2g.disabled === true && sec2g.modeDisabled === true && hint.found && hint.shown && hint.inViewport && hint.onTop && hintText === T.lockedGfs && sec2g.lockedShown === false, { sec2g, hint, hintText });
+  const hintRatio = await ratioOf(page, '#settings-rowattachment-locked-gfs');
+  check(`${tag} : dans GFS : la mention se lit (contraste ≥ 4,5:1)`, hintRatio >= 4.5, hintRatio);
+  await shot(page, `${colorScheme}-${lang}-9-gfs-reglages`);
+  const closeBox = await hitTest(page, '#settings-close');
+  await page.mouse.click(closeBox.x, closeBox.y);
+  await page.waitForTimeout(350);
+  await page.evaluate(() => { GfsLink.hosted = false; RowAttachment.render(); });
   await context.close();
 }
 
