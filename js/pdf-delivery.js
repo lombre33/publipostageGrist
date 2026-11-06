@@ -19,7 +19,7 @@
 //    personne ne veut pas (`ignore`, « Annuler » chez GFS) n'est pas téléchargé : elle l'a refusé.
 // À côté de la destination, la jointure à la ligne Grist (js/row-attachment.js, case « Joindre à la ligne » du menu Exporter) : le PDF de chaque ligne s'ajoute AUSSI à la cellule de sa ligne, dans la colonne choisie
 // (`plan().attach`). Elle ne remplace ni le téléchargement ni le rangement : c'est une sortie de plus, que `deliver` fait après le rangement (`files[i].rowId` dit à quelle ligne ; un fichier sans ligne - le PDF réuni - n'est
-// pas joint ; `options.table` dit dans quelle table), et `report.attach` en garde le compte rendu. Un PDF joint est parti quelque part (`delivered`) comme un PDF rangé.
+// pas joint ; `options.table` dit dans quelle table), et `report.attach` en garde le compte rendu. Un PDF joint est parti quelque part (`delivered`) comme un PDF rangé. Chez GFS (consigne 053), c'est GFS qui joint (`RowAttachment.attachAll` appelle `joindre`) et `report.attach.gfs` dit son refus de l'appel quand il y en a un.
 // Rend un rapport (`describe` en tire les phrases du coin d'état) : combien de fichiers rangés, remplacés, copiés (et sous quel nom), ignorés, ceux que GFS n'a pas gardés, ce qui a été téléchargé, et `delivered` - les rangs des fichiers qui sont
 // partis quelque part, téléchargés ou rangés -, de quoi ne dater (js/export-date.js) que les lignes dont le PDF existe. `keep(rapport)` puis `takeReport()` le rendent une fois, pour le PDF d'une ligne (js/pdf-export.js ne rend que vrai ou faux).
 const PdfDelivery = (function () {
@@ -175,6 +175,14 @@ const PdfDelivery = (function () {
     return out;
   }
 
+  // Le refus de GFS lui-même quand il ne joint pas (consigne 053) : une phrase par code de GFS, avec sa propre phrase en plus pour un refus ou un échec ; un code inconnu dit l'échec. Un GFS d'avant ce geste (`GFS_INCONNU`) : le PDF n'est pas joint, le reste de l'export est intact.
+  const GFS_ATTACH_NOTES = { GFS_INCONNU: 'unknown', GFS_REFUSE: 'refused', GFS_LECTURE_SEULE: 'readOnly', GFS_INACTIF: 'inactive' };
+  function gfsAttachNote(gfs) {
+    const kind = Object.prototype.hasOwnProperty.call(GFS_ATTACH_NOTES, gfs.code) ? GFS_ATTACH_NOTES[gfs.code] : 'failed';
+    const message = typeof gfs.message === 'string' ? gfs.message.trim() : '';
+    return I18n.t('attach.gfs.' + kind, { detail: message ? I18n.t('attach.gfs.detail', { message }) : '' });
+  }
+
   // La jointure à la ligne (js/row-attachment.js) en une ou deux phrases : `text` ce qui est joint (et combien ont remplacé le PDF d'avant), `note` - rouge, en tête - ce qui ne l'est pas et pourquoi : la colonne qui a
   // disparu ou n'a plus le bon type (une phrase pour tout le lot), sinon la raison du premier échec. Vides quand rien n'était à joindre.
   function describeAttach(attach) {
@@ -187,7 +195,8 @@ const PdfDelivery = (function () {
         ? I18n.t('attach.one', { column: attach.column })
         : I18n.t('attach.many', { n: done, column: attach.column }) + (replaced ? ' (' + I18n.t('attach.replaced', { n: replaced }) + ')' : '') + '.';
     }
-    if (attach.problem === 'missing' || attach.problem === 'unusable') out.note = I18n.t('attach.problem.' + attach.problem, { column: attach.column });
+    if (attach.gfs) out.note = gfsAttachNote(attach.gfs);
+    else if (attach.problem === 'missing' || attach.problem === 'unusable') out.note = I18n.t('attach.problem.' + attach.problem, { column: attach.column });
     else if (attach.failed.length) out.note = I18n.t('attach.failed', { n: attach.failed.length, reason: I18n.t('attach.reason.' + attach.failed[0].reason) });
     return out;
   }

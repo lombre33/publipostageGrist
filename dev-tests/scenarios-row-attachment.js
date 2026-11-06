@@ -506,6 +506,19 @@
       return verdict(problems, {});
     }, { [COLUMN_OPTION]: 'Pdf' });
 
+  scenario('rowattachment_alone_gfslink_attach_rejects_without_sending_and_attachall_never_calls_it',
+    'Page seule (non hébergée) : `GfsLink.attach` rejette « GFS absent » sans code et sans rien envoyer (aucun appel `joindre` n’existe), et `attachAll` garde le chemin de toujours : un jeton d’écriture, l’envoi à Grist, une écriture de la cellule.',
+    async () => {
+      const problems = [];
+      const server = useServer();
+      let refusal = null;
+      try { await GfsLink.attach({ table: TABLE, colonne: 'Pdf', fichiers: [{ ligne: 1, fichier: pdfBlob('a'), nom: 'a.pdf' }] }); } catch (e) { refusal = [e.message, e.code]; }
+      check(problems, 'seule : GFS absent, sans code', [GfsLink.hosted, refusal], [false, ['GFS absent', undefined]]);
+      const report = await RowAttachment.attachAll(TABLE, [item(0, 1, 'a.pdf')], null);
+      check(problems, 'attachAll : le chemin de toujours', [report.attached.length, server.requests.length, writes().length, stub().state.tokenCalls], [1, 1, 1, [{ readOnly: false }]]);
+      return verdict(problems, {});
+    }, { [COLUMN_OPTION]: 'Pdf' });
+
   // --- 4) la livraison et les phrases ---
   scenario('rowattachment_plan_follows_the_box_and_deliver_attaches_after_the_download_choice',
     'PdfDelivery.plan() porte `attach` : faux tant que la case n’est pas cochée, vrai cochée avec une colonne ; deliver() avec attach joint chaque fichier à sa ligne ET garde le téléchargement (tout, d’un bloc), compte les fichiers joints comme partis (`delivered`) et laisse le compte rendu dans `report.attach`.',

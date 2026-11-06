@@ -27,12 +27,15 @@
 //  - `installer`, quand la personne clique une fonction grisée dans GFS : GFS ouvre sa fenêtre d'installation ;
 //  - l'appel `ranger { fichier, nom, type, lot?, suivants? }` (consigne 043), que l'app envoie pour qu'un PDF qu'elle vient de fabriquer se range parmi les fichiers de GFS, un fichier par appel, sans délai (GFS pose lui-même la
 //    question du nom pris) : la réponse est `{ statut, id, nom }` et une erreur de GFS garde son `code` (`GFS_ANNULE`, `GFS_ECHEC`…), de quoi js/pdf-delivery.js, le seul à s'en servir, décide de la suite ;
+//  - l'appel `joindre { table, colonne, mode?, fichiers: [{ ligne, fichier, nom }] }` (consigne 053, contrats 5.4 point 12), que l'app envoie pour que GFS joigne lui-même chaque PDF à la cellule « Pièces jointes » de sa ligne : l'app ne reçoit
+//    aucun jeton d'écriture, elle donne les octets (`fichier` : un `File` ou un `Blob`), au plus 200 entrées par appel, sans délai (GFS envoie les fichiers un à un) ; la réponse est `{ colonne, probleme, joints, echecs }` (ce que Grist refuse est dans
+//    `probleme` et `echecs`, pas une erreur de l'appel) et un refus de l'appel lui-même garde son `code` (`GFS_REFUSE`, `GFS_LECTURE_SEULE`, `GFS_INACTIF`, `GFS_INCONNU` pour un GFS d'avant ce geste) : js/row-attachment.js, le seul à s'en servir, traduit le rapport ;
 //  - l'appel `ouvrir`, que GFS envoie à l'app déjà ouverte quand la personne double-clique un autre fichier (consigne 010) ou choisit « Nouveau > Importer » (consigne 035, avec le fichier) ou « Lire » sur un PDF (consigne 040, avec le PDF) : l'abonné de `onOpen` répond, ce fichier lui rend la réponse ;
 //  - l'appel `fermer { raison }` (consigne 047), que GFS envoie à l'app active avant de la remplacer par une autre app ou de lui faire laisser la place au fichier d'une autre app (`raison` : `app`, `explorateur`, `nouveau`,
 //    `importer`, `lire` ou `lien`) et dont il attend `{ ferme: true | false }` avant de détruire son cadre : l'abonné de `onClose` répond (js/gfs-open.js : ce qui attend est enregistré avant le `oui`). Une réponse qui
 //    échoue est une erreur (`GFS_ECHEC`, GFS demande alors à la personne), jamais un `oui`. Tout autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3).
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
-// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `players()` rend [], `player()` rend faux, `settingsSaved()` rend null, `ambiance()` rend null, `hideBar()` rend faux, `opensInNewTab()` rend faux et `deposit()` rejette sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
+// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `players()` rend [], `player()` rend faux, `settingsSaved()` rend null, `ambiance()` rend null, `hideBar()` rend faux, `opensInNewTab()` rend faux et `deposit()` et `attach()` rejettent sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
 // qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js, js/gfs-open.js, js/person-store.js et js/gfs-bar.js, jamais par ce fichier (sauf `opensInNewTab`, que trois liens consultent, consigne 011).
 const GfsLink = (function () {
   const CONTRACT = 0;                // le contrat que parle l'app, celui de son manifeste
@@ -443,6 +446,38 @@ const GfsLink = (function () {
     return call('ranger', args).then(normalizeDeposit);
   }
 
+  const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+  const asText = value => (typeof value === 'string' ? value : '');
+  const isBlob = value => typeof Blob === 'function' && value instanceof Blob;
+  const failure = (message, code) => Promise.reject(Object.assign(new Error(message), { code }));
+
+  // Ce que GFS répond à `joindre` : `{ colonne, probleme, joints, echecs }` (contrats 5.4, point 12). Un mot d'un GFS plus récent que cette app est rendu tel quel : le lecteur (js/row-attachment.js) le prend pour `echec` plutôt que pour un autre.
+  function normalizeAttach(raw) {
+    const data = isObject(raw) ? raw : {};
+    const entries = value => (Array.isArray(value) ? value : []).filter(each => isObject(each) && Number.isInteger(each.index));
+    return {
+      colonne: asText(data.colonne),
+      probleme: typeof data.probleme === 'string' && data.probleme !== '' ? data.probleme : null,
+      joints: entries(data.joints).map(each => ({ index: each.index, remplace: each.remplace === true })),
+      echecs: entries(data.echecs).map(each => ({ index: each.index, raison: asText(each.raison) })),
+    };
+  }
+
+  // Demande à GFS de joindre des fichiers à la cellule « Pièces jointes » de leur ligne (consigne 053, contrats 5.4 point 12) : `table` et `colonne` (identifiants de Grist), `fichiers` (une liste de { ligne (un entier d'au moins 1), fichier (un `File` ou
+  // un `Blob`), nom }) et `mode` (`remplacer` par défaut, ou `ajouter`) ; GFS en vérifie les limites (`GFS_REFUSE`, avec sa phrase). Sans délai : GFS envoie les fichiers un à un et ne rend son rapport qu'à la fin. Rend `{ colonne, probleme, joints, echecs }` ;
+  // rejette avec le `code` de GFS quand il refuse l'appel. Seule, rejette sans rien envoyer.
+  function attach(request) {
+    if (!hosted) return Promise.reject(new Error('GFS absent'));
+    const asked = isObject(request) ? request : {};
+    const entries = Array.isArray(asked.fichiers) ? asked.fichiers : [];
+    const valid = entry => isObject(entry) && Number.isInteger(entry.ligne) && entry.ligne >= 1 && isBlob(entry.fichier) && typeof entry.nom === 'string' && entry.nom.trim() !== '';
+    const named = key => typeof asked[key] === 'string' && asked[key].trim() !== '';
+    if (!named('table') || !named('colonne') || entries.length === 0 || !entries.every(valid)) return failure('attach : { table, colonne, fichiers: [{ ligne, fichier (un File ou un Blob), nom }] } est attendu', 'GFS_REFUSE');
+    const args = { table: asked.table, colonne: asked.colonne, fichiers: entries.map(({ ligne, fichier, nom }) => ({ ligne, fichier, nom })) };
+    if (asked.mode !== undefined) args.mode = asked.mode;
+    return call('joindre', args).then(normalizeAttach);
+  }
+
   if (hosted) {
     window.addEventListener('message', onMessage);
     // `ready` attend aussi le lecteur du kit (1,5 seconde au plus) quand le contexte porte une ambiance : elle est lue avant que l'app ne s'affiche. Sans ambiance, rien à attendre.
@@ -450,5 +485,5 @@ const GfsLink = (function () {
     call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(readerIfNeeded).then(settleReady);
   } else settleReady();
 
-  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, players: getPlayers, player, onChange, onLanguage, onSettings, onBar, onAmbiance, onPlayerEvent, onOpen, onClose, install, deposit };
+  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, players: getPlayers, player, onChange, onLanguage, onSettings, onBar, onAmbiance, onPlayerEvent, onOpen, onClose, install, deposit, attach };
 })();

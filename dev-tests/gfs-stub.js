@@ -43,6 +43,14 @@
 //   window.__gfsStub.fermer(raison) : l'appel `fermer { raison }` de GFS vers l'app active (contrats 5.4, point 3, consigne 047), envoyé avant qu'une autre app prenne sa place : la promesse rend la réponse (`{ ferme }`) ou l'erreur de l'app,
 //   et le stub ne détruit rien (la page reste là, comme un GFS dont la personne a répondu « Annuler »). Une app qui ne connaît pas l'appel rend l'erreur `GFS_INCONNU`.
 //   window.__gfsStub.answers : tout ce que l'app répond aux appels de GFS ({ type, id, data | code, message }), dans l'ordre.
+//   window.__gfsStub.joindre : l'appel `joindre { table, colonne, mode?, fichiers: [{ ligne, fichier, nom }] }` (contrats 5.4 point 12, consigne 053 : GFS joint lui-même le PDF à la cellule « Pièces jointes » de sa ligne, l'app ne reçoit aucun jeton
+//   d'écriture) - null : un GFS d'avant ce geste, dont l'appel reçoit `GFS_INCONNU` (par défaut) ; sinon un objet de réglage qui rejoue GFS (attach.js de GFS) : `delai` (ms), `erreur` / `erreurs[rang]` ({ code, message } : l'appel est refusé), `lignes` (les
+//   lignes qui existent : une autre est un échec `ligne` ; toutes par défaut), `etatColonne` (`absente` ou `inutilisable` : rien n'est envoyé, chaque fichier est un échec de ce mot) et `arret(rang, args)` (rend `{ mot, aPartirDe? }` : à partir de l'entrée `aPartirDe`
+//   (0 par défaut) Grist refuse avec ce mot du contrat - `refus`, `trop-gros`, `injoignable`, `echec` -, les suivantes sont des échecs du même mot, jamais essayées). La forme est vérifiée comme GFS le fait (`GFS_REFUSE` : table, colonne, mode, 1 à 200 entrées, ligne
+//   entière d'au moins 1, `fichier` un Blob non vide qui porte `%PDF-` dans ses 1 024 premiers octets, nom de 1 à 200 signes) ; `mode: 'remplacer'` (par défaut) retire la pièce de même nom (blancs rognés, casse ignorée) de la même ligne et de la même colonne.
+//   `reponse` (une valeur, ou une fonction `(rang, args) => valeur`) remplace le rapport tel quel après la vérification de la forme : de quoi essayer une réponse mal formée ou un GFS plus récent.
+//   `joindreAppels` dit chaque appel reçu ({ rang, table, colonne, mode, cles, entrees: [{ ligne, nom, taille, type, instance, cles }] }), `joindreEnCours` et `joindreMax` (1 : un appel à la fois) et `pieces` ce que GFS a joint ({ table, colonne, ligne, nom, taille,
+//   octets, rang }).
 //   window.__gfsStub.lecteurs : les sites dont GFS sait jouer le lecteur que rend le contexte (demande du 06/11, objet vidéo de Slides+, js/video-frame.js) : `['youtube', 'vimeo']`, ou undefined : un GFS d'avant la demande
 //   (par défaut), dont le contexte n'a pas de `lecteurs` et qui répond `GFS_INCONNU` aux appels `lecteur.*`. setLecteurs(liste) la change et envoie l'événement `lecteurs`. Les appels `lecteur.afficher { id, fournisseur, video, debut?, rect,
 //   zone }`, `lecteur.deplacer { id, rect, zone }`, `lecteur.masquer { id, masque }` et `lecteur.fermer { id }` tiennent le contrat (un `id` de la forme `^[a-z][a-z0-9_-]{0,63}$`, un `video` qui passe le motif du site, des nombres
@@ -90,6 +98,11 @@
     lecteurRefus: [],
     installReply: null,
     ranger: null,
+    joindre: null,
+    joindreAppels: [],
+    joindreEnCours: 0,
+    joindreMax: 0,
+    pieces: [],
     fichiers: [],
     rangerAppels: [],
     rangerEnCours: 0,
@@ -223,6 +236,86 @@
         stub.rangerEnCours -= 1;
       }
     },
+    // L'appel `joindre` (consigne 053) : voir `joindre` ci-dessus.
+    async attach(message) {
+      const answers = Number.isInteger(message.id);
+      const fail = (code, text) => { if (answers) stub.post({ type: 'erreur', id: message.id, code, message: text }); };
+      const options = stub.joindre;
+      if (!options) { fail('GFS_INCONNU', 'appel inconnu : joindre'); return; }
+      const args = message.args && typeof message.args === 'object' ? message.args : {};
+      stub.joindreEnCours += 1;
+      stub.joindreMax = Math.max(stub.joindreMax, stub.joindreEnCours);
+      try {
+        const rank = stub.joindreAppels.length + 1;
+        const entries = Array.isArray(args.fichiers) ? args.fichiers : [];
+        const heads = await Promise.all(entries.map(async (entry) => {
+          const file = entry && entry.fichier;
+          const isBlob = typeof Blob === 'function' && file instanceof Blob;
+          return isBlob ? new Uint8Array(await file.arrayBuffer()) : null;
+        }));
+        stub.joindreAppels.push({
+          rang: rank, table: args.table, colonne: args.colonne, mode: args.mode, cles: Object.keys(args),
+          entrees: entries.map((entry, i) => {
+            const file = entry && entry.fichier;
+            const isBlob = typeof Blob === 'function' && file instanceof Blob;
+            return {
+              ligne: entry && entry.ligne, nom: entry && entry.nom, taille: heads[i] ? heads[i].length : 0, type: isBlob ? file.type : '',
+              instance: isBlob ? (typeof File === 'function' && file instanceof File ? 'File' : 'Blob') : typeof file, cles: entry && typeof entry === 'object' ? Object.keys(entry) : [],
+            };
+          }),
+        });
+        if (options.delai) await new Promise(resolve => setTimeout(resolve, options.delai));
+        const failure = (options.erreurs && options.erreurs[rank]) || options.erreur;
+        if (failure) { fail(failure.code, failure.message || failure.code); return; }
+        const mode = args.mode === undefined ? 'remplacer' : args.mode;
+        const clean = value => (typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim() : '');
+        const pdfStart = bytes => { const head = Array.from(bytes.slice(0, 1024)); for (let i = 0; i + 5 <= head.length; i += 1) if (head.slice(i, i + 5).join() === [37, 80, 68, 70, 45].join()) return true; return false; };
+        let refusal = '';
+        if (typeof args.table !== 'string' || !args.table) refusal = 'joindre : table doit être l’identifiant d’une table.';
+        else if (typeof args.colonne !== 'string' || !args.colonne) refusal = 'joindre : colonne doit être l’identifiant d’une colonne.';
+        else if (mode !== 'remplacer' && mode !== 'ajouter') refusal = 'joindre : mode doit valoir « remplacer » ou « ajouter ».';
+        else if (!entries.length || entries.length > 200) refusal = 'joindre : fichiers doit être une liste de 1 à 200 entrées.';
+        else {
+          entries.some((entry, i) => {
+            const given = entry && typeof entry === 'object' ? entry : {};
+            const name = clean(given.nom);
+            const named = /\.pdf$/i.test(name) ? name : name + '.pdf';
+            if (!Number.isInteger(given.ligne) || given.ligne < 1) refusal = 'joindre : fichiers[' + i + '].ligne doit être un numéro de ligne (un entier d’au moins 1).';
+            else if (!heads[i]) refusal = 'joindre : fichiers[' + i + '].fichier doit être un File ou un Blob.';
+            else if (!heads[i].length) refusal = 'joindre : fichiers[' + i + '].fichier est vide.';
+            else if (!name || named.length > 200) refusal = 'joindre : fichiers[' + i + '].nom doit être un texte de 1 à 200 signes.';
+            else if (!pdfStart(heads[i])) refusal = 'joindre : fichiers[' + i + '].fichier n’est pas un PDF.';
+            return !!refusal;
+          });
+        }
+        if (refusal) { fail('GFS_REFUSE', refusal); return; }
+        if (options.reponse !== undefined) { if (answers) stub.post({ type: 'reponse', id: message.id, data: typeof options.reponse === 'function' ? options.reponse(rank, args) : options.reponse }); return; }
+        const report = { colonne: args.colonne, probleme: null, joints: [], echecs: [] };
+        if (options.etatColonne) {
+          report.probleme = options.etatColonne;
+          report.echecs = entries.map((entry, index) => ({ index, raison: options.etatColonne }));
+        } else {
+          const known = Array.isArray(options.lignes) ? new Set(options.lignes) : null;
+          const stop = typeof options.arret === 'function' ? options.arret(rank, args) : null;
+          let word = null;
+          entries.forEach((entry, index) => {
+            if (known && !known.has(entry.ligne)) { report.echecs.push({ index, raison: 'ligne' }); return; }
+            if (!word && stop && index >= (stop.aPartirDe || 0)) { word = stop.mot; report.probleme = word; }
+            if (word) { report.echecs.push({ index, raison: word }); return; }
+            const name = clean(entry.nom);
+            const named = /\.pdf$/i.test(name) ? name : name + '.pdf';
+            const same = piece => piece.table === args.table && piece.colonne === args.colonne && piece.ligne === entry.ligne && piece.nom.trim().toLowerCase() === named.toLowerCase();
+            const replaced = mode === 'remplacer' && stub.pieces.some(same);
+            if (replaced) stub.pieces = stub.pieces.filter(piece => !same(piece));
+            stub.pieces.push({ table: args.table, colonne: args.colonne, ligne: entry.ligne, nom: named, taille: heads[index].length, octets: heads[index], rang: rank });
+            report.joints.push({ index, remplace: replaced });
+          });
+        }
+        if (answers) stub.post({ type: 'reponse', id: message.id, data: report });
+      } finally {
+        stub.joindreEnCours -= 1;
+      }
+    },
     // Les appels `lecteur.*` (voir `lecteurs` ci-dessus).
     setLecteurs(next) {
       stub.lecteurs = next === undefined ? undefined : next.slice();
@@ -351,6 +444,8 @@
       stub.player(message);
     } else if (message.nom === 'ranger') {
       stub.deposit(message).catch((e) => { console.error('[gfs-stub] ranger en échec', e); if (Number.isInteger(message.id)) stub.post({ type: 'erreur', id: message.id, code: 'GFS_ECHEC', message: String(e && e.message || e) }); });
+    } else if (message.nom === 'joindre') {
+      stub.attach(message).catch((e) => { console.error('[gfs-stub] joindre en échec', e); if (Number.isInteger(message.id)) stub.post({ type: 'erreur', id: message.id, code: 'GFS_ECHEC', message: String(e && e.message || e) }); });
     } else if (message.nom === 'installer') {
       const reply = stub.installReply || { actives: stub.extensions.slice() };
       if (reply.error) stub.post({ type: 'erreur', id: message.id, code: 'GFS_REFUSE', message: reply.error });

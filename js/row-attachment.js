@@ -5,8 +5,8 @@
 //  - une cellule qui a déjà un PDF : un réglage « Remplacer le PDF de même nom » (par défaut) ou « Toujours ajouter », à côté de la colonne (options du widget `pp_attach_column` et `pp_attach_mode`,
 //    lues avec le widget et partagées par tout le monde une fois la vue enregistrée, même mécanique que js/export-date.js) ;
 //  - le jeton d'écriture est demandé à Grist au début d'un export et jeté à la fin (GristAPI.getWriteAccess : jamais gardé, jamais mis en cache) ;
-//  - Grist Factory Suite aura sa propre fonction sur ce sujet : le widget fait la jointure seul, avec ou sans GFS, et `attachAll` est le SEUL point de branchement. Le jour où GFS annonce la sienne,
-//    c'est ce corps-là qu'on aiguille vers lui (GfsLink), sans toucher aux appelants ni aux réglages.
+//  - Grist Factory Suite a sa propre fonction sur ce sujet (consigne 053) : le widget fait la jointure seul hors de GFS, et `attachAll` est le SEUL point de branchement. Hébergée (`GfsLink.hosted`) et le jour où GFS_ATTACH_WIRED est levé,
+//    `attachAll` ne demande plus de jeton d'écriture et n'envoie rien à Grist : elle donne les octets à GFS (`GfsLink.attach`, l'appel `joindre`, au plus 200 fichiers par appel) et traduit son rapport dans le même rapport, sans toucher aux appelants ni aux réglages.
 // Qui joint quoi : le PDF d'une ligne, le PDF protégé, chaque PDF d'une archive ZIP (un par ligne ; « Un document par valeur » : tous, dans la même cellule). Jamais le PDF réuni ni l'assemblage
 // avant impression : plusieurs lignes dans un seul fichier, il n'y a pas de ligne à qui le donner (la case est grisée, avec sa raison, quand l'option de lignes cochée est l'une des deux).
 // Comment (méthode de la communauté de Grist, « Upload attachment from custom widget » : rien n'en est mesuré chez nous, voir dev-tests/scenarios-row-attachment.js) : un POST multipart
@@ -19,7 +19,8 @@
 //   RowAttachment.isOn() / setOn(bool) -> la case de la personne (gardée par PersonStore) ; RowAttachment.active() -> la jointure vaut pour le prochain export (case cochée ET colonne utilisable ET écriture permise)
 //   RowAttachment.attachAll(tableId, items, progress) -> Promise<null | rapport> : joint ces fichiers { index, rowId, name, blob } ; null quand il n'y a rien à faire ; `progress(rang, total)` est appelé avant chaque envoi. Le rapport :
 //     { column, problem: null | 'missing' | 'unusable' | 'denied' | 'tooLarge' | 'unreachable' | 'failed', attached: [{ index, replaced }], failed: [{ index, reason }] }
-//     (`problem` : ce qui a arrêté tout le lot ; `failed[].reason` : pourquoi CETTE ligne, 'row' si elle n'existe plus)
+//     (`problem` : ce qui a arrêté tout le lot ; `failed[].reason` : pourquoi CETTE ligne, 'row' si elle n'existe plus). Chez GFS, le rapport peut porter en plus `gfs: { code, message }` quand GFS a refusé l'appel lui-même
+//     (`GFS_REFUSE`, `GFS_LECTURE_SEULE`, `GFS_INACTIF`, `GFS_INCONNU`…) : les fichiers pas encore joints sont des échecs de raison 'gfs'.
 //   RowAttachment.sync(flyout, lines) / wire(flyout, after) -> la case du menu Exporter (grisée avec sa raison, jamais retirée)
 //   RowAttachment.wirePanel() / render() -> la section de Réglages > Vue
 const RowAttachment = (function () {
@@ -29,7 +30,8 @@ const RowAttachment = (function () {
   // Chez Grist Factory Suite (GFS), l'envoi de l'app est refusé : son jeton reste en LECTURE seule (`jeton.lectureSeule`) et `setOption` refuse les deux options `pp_attach_column` et `pp_attach_mode` (non déclarées).
   // Consigne 052 de GFS (06/11, lue par le fil Liaison) : le porteur a choisi que GFS joigne LUI-MÊME le fichier ; GFS ne déclarera donc ni le jeton d'écriture ni les deux clés. Choix du porteur du 06/11, « Griser dans GFS
   // pour l'instant » : la case du menu Exporter et la section de Réglages sont grisées, avec leur raison, dans GFS ; l'app seule n'en change pas. LE point à lever le jour où GFS annonce son geste (page GFS-ETAT.md, fil Liaison) :
-  // brancher `attachAll` sur l'appel de GFS (par `js/gfs-link.js`), puis passer cette constante à `true`. Elle ne se lève PAS sur une déclaration du jeton ou des clés : elle n'arrivera pas.
+  // passer cette constante à `true` : `attachAll` est DÉJÀ branché sur l'appel `joindre` de GFS (`GfsLink.attach`, attachViaGfs ci-dessous), il ne manque que la levée du grisé, après la déclaration `actions.joindre` de GFS, l'essai dans le Grist réel du porteur
+  // et sa réponse sur où garder la colonne et le mode sous GFS. Elle ne se lève PAS sur une déclaration du jeton ou des clés : elle n'arrivera pas.
   const GFS_ATTACH_WIRED = false;
   const blockedByGfs = () => !GFS_ATTACH_WIRED && typeof GfsLink !== 'undefined' && GfsLink.hosted === true;
   const MODES = ['replace', 'add'];
@@ -178,6 +180,7 @@ const RowAttachment = (function () {
     const state = columnState(tableId, target);
     if (state === 'missing' || state === 'unusable') return fail(state);
     if (state !== 'ok') return fail('failed');
+    if (viaGfs()) return attachViaGfs(tableId, target, wanted, progress);
     let access = null;
     try {
       try { access = await GristAPI.getWriteAccess(); }
@@ -205,6 +208,88 @@ const RowAttachment = (function () {
     } finally {
       access = null;   // le jeton d'écriture est jeté avec l'export
     }
+  }
+
+  // === Chez GFS : GFS joint lui-même (consigne 053) ===
+  // Hébergée, le jeton d'écriture n'existe pas : `attachAll` donne à GFS les octets de chaque PDF et la ligne d'où il vient (`joindre`, contrats 5.4 point 12), GFS les envoie à Grist un à un, relit la colonne juste avant
+  // d'écrire et écrit UN lot par appel ; son rapport est traduit dans le rapport de `attachAll`. Quatre écarts avec le chemin de l'app seule, à connaître : (1) un seul défaut de forme (une ligne qui n'est pas un entier d'au moins 1, un nom hors
+  // de 1 à 200 signes, un fichier vide ou qui n'est pas un PDF) fait refuser TOUT l'appel : chaque entrée est donc vérifiée ici avant l'envoi, et celle qui ne passe pas est un échec à elle seule ; (2) un envoi que Grist refuse arrête le lot
+  // chez GFS (les fichiers pas encore envoyés sont des échecs du même mot, jamais essayés), alors que l'app seule continue ; (3) au plus 200 entrées par appel, les appels un après l'autre (la progression : avant chaque appel) ; (4) `remplace` est
+  // un booléen, il compte pour un remplacement.
+  const GFS_BATCH_MAX = 200;
+  const GFS_PROBLEMS = new Map([['absente', 'missing'], ['inutilisable', 'unusable'], ['refus', 'denied'], ['trop-gros', 'tooLarge'], ['injoignable', 'unreachable'], ['echec', 'failed']]);
+  // Un mot de GFS dans ceux du rapport ; un mot inconnu (un GFS plus récent) est `failed`.
+  const problemOfGfs = word => GFS_PROBLEMS.get(word) || 'failed';
+  // Le GFS qui répond : hébergée et la levée du grisé faite. Hébergée mais muette, l'appel attendrait pour toujours (pas de délai) : `attachViaGfs` le dit sans rien envoyer.
+  const viaGfs = () => GFS_ATTACH_WIRED && typeof GfsLink !== 'undefined' && GfsLink.hosted === true;
+  // Un PDF que GFS acceptera : non vide, avec `%PDF-` dans ses 1 024 premiers octets (contrats 5.4, point 12).
+  async function looksLikePdf(blob) {
+    if (!blob || typeof blob.slice !== 'function' || !blob.size) return false;
+    const head = new Uint8Array(await blob.slice(0, 1024).arrayBuffer());
+    for (let i = 0; i + 5 <= head.length; i += 1) if (head[i] === 37 && head[i + 1] === 80 && head[i + 2] === 68 && head[i + 3] === 70 && head[i + 4] === 45) return true;
+    return false;
+  }
+
+  async function attachViaGfs(tableId, target, wanted, progress) {
+    const report = { column: target, problem: null, attached: [], failed: [] };
+    const failedAs = (item, reason) => report.failed.push({ index: item.index, reason });
+    if (!GfsLink.isAnswering()) {
+      wanted.forEach(item => failedAs(item, 'unreachable'));
+      report.problem = 'unreachable';
+      return report;
+    }
+    // Ce que GFS refuserait en bloc est écarté ici, entrée par entrée.
+    const ready = [];
+    for (const item of wanted) {
+      const row = Number(item.rowId);
+      if (!Number.isInteger(row) || row < 1) { failedAs(item, 'row'); continue; }
+      const name = String(item.name == null ? '' : item.name).trim();
+      let file = null;
+      try {
+        const blob = typeof item.blob === 'function' ? await item.blob() : item.blob;
+        if (name && (/\.pdf$/i.test(name) ? name : name + '.pdf').length <= 200 && await looksLikePdf(blob)) file = typeof File === 'function' ? new File([blob], name, { type: 'application/pdf' }) : blob;
+      } catch (e) { console.error('[RowAttachment] PDF illisible', e); }
+      if (!file) { failedAs(item, 'failed'); continue; }
+      ready.push({ item, row, file, name });
+    }
+    const mode = getMode() === 'add' ? 'ajouter' : 'remplacer';
+    for (let offset = 0; offset < ready.length; offset += GFS_BATCH_MAX) {
+      const chunk = ready.slice(offset, offset + GFS_BATCH_MAX);
+      const rest = ready.slice(offset + chunk.length);
+      if (progress) progress(offset + 1, ready.length);
+      let answer;
+      try { answer = await GfsLink.attach({ table: tableId, colonne: target, mode, fichiers: chunk.map(entry => ({ ligne: entry.row, fichier: entry.file, nom: entry.name })) }); }
+      catch (e) {
+        console.error('[RowAttachment] GFS refuse de joindre', e);
+        report.gfs = { code: e && typeof e.code === 'string' ? e.code : '', message: e && e.message ? String(e.message) : '' };
+        chunk.concat(rest).forEach(entry => failedAs(entry.item, 'gfs'));
+        break;
+      }
+      const seen = new Set();
+      answer.joints.forEach(({ index, remplace }) => {
+        if (!chunk[index] || seen.has(index)) return;
+        seen.add(index);
+        report.attached.push({ index: chunk[index].item.index, replaced: remplace ? 1 : 0 });
+      });
+      const stopped = answer.probleme ? problemOfGfs(answer.probleme) : 'failed';
+      answer.echecs.forEach(({ index, raison }) => {
+        if (!chunk[index] || seen.has(index)) return;
+        seen.add(index);
+        failedAs(chunk[index].item, raison === 'ligne' ? 'row' : problemOfGfs(raison));
+      });
+      // Une entrée que le rapport ne cite pas n'est pas jointe : un échec, du mot du lot s'il en a un.
+      chunk.forEach((entry, index) => { if (!seen.has(index)) failedAs(entry.item, stopped); });
+      // La colonne absente ou inutilisable vaut pour tous les appels : rien d'autre ne part.
+      if (stopped === 'missing' || stopped === 'unusable') { rest.forEach(entry => failedAs(entry.item, stopped)); break; }
+    }
+    report.attached.sort((a, b) => a.index - b.index);
+    report.failed.sort((a, b) => a.index - b.index);
+    // `problem` : ce qui a arrêté TOUT le lot, donc seulement quand rien n'est joint ; une ligne supprimée n'en est pas un, le refus de l'appel est dit par `gfs`.
+    if (!report.attached.length && !report.gfs) {
+      const reasons = new Set(report.failed.map(f => f.reason).filter(reason => reason !== 'row'));
+      report.problem = reasons.size === 1 ? Array.from(reasons)[0] : reasons.size > 1 ? 'failed' : null;
+    }
+    return report;
   }
 
   // Écrit les cellules : la colonne est relue ICI (juste avant), pour ne rien défaire de ce qui y a été posé pendant les envois. En mode « Remplacer », les pièces jointes de la cellule qui portent le même nom
