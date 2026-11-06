@@ -59,7 +59,7 @@ Le bouton **Réglages** de la barre du haut ouvre neuf onglets (langue, thème, 
 ## Sécurité et permissions
 
 - **Accès complet** (`requiredAccess: 'full'`) : l'API des widgets personnalisés de Grist n'a pas de niveau entre « lecture d'une seule table » et « accès complet », et la résolution de variables vers une autre table, l'autocomplétion et les tables internes en ont besoin dès le chargement. Les Règles d'accès natives de Grist continuent de s'appliquer ; les « droits par personne » du widget (Réglages > Accès) ne sont qu'un verrou d'interface.
-- **Aucune donnée n'est stockée hors de Grist** : le widget écrit dans ses neuf tables `Publipostage_*` et, dans vos tables, seulement dans la colonne que vous choisissez pour la date du dernier export PDF. Le navigateur ne garde que des préférences d'interface.
+- **Aucune donnée n'est stockée hors de Grist** : le widget écrit dans ses neuf tables `Publipostage_*` et, dans vos tables, seulement dans les deux colonnes que vous choisissez : la date du dernier export PDF et les PDF joints à la ligne (jeton d'écriture demandé à chaque export, jeté à la fin). Le navigateur ne garde que des préférences d'interface.
 - **Bibliothèques tierces** à versions figées, chargées depuis `esm.sh` (éditeur), `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` (exports, avec intégrité SRI) et `docs.getgrist.com` (API de Grist). Politique de sécurité du contenu, HTML assaini, images d'autres sites seulement après un clic.
 - **Signaler une vulnérabilité** : ne pas ouvrir d'issue publique, contacter l'équipe de maintenance directement.
 

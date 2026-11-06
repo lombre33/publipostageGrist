@@ -232,7 +232,7 @@ const sectionState = page => page.evaluate(() => {
 const widgetState = page => page.evaluate(() => {
   const s = window.__gristStub;
   return {
-    column: RowAttachment.getColumn(), mode: RowAttachment.getMode(), optionColumn: (s.state.options || {}).pdfJointColonne, optionMode: (s.state.options || {}).pdfJointMode,
+    column: RowAttachment.getColumn(), mode: RowAttachment.getMode(), optionColumn: (s.state.options || {}).pp_attach_column, optionMode: (s.state.options || {}).pp_attach_mode,
     cells: [1, 2, 3].map(id => { const r = s.getRow('Clients', id); return r ? r.Pdf : undefined; }),
     writes: s.getActionLog().filter(a => a[0] === 'BulkUpdateRecord' && a[1] === 'Clients').map(a => a[2]),
     stored: PersonStore.get('pp_export_attach'),

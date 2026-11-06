@@ -334,9 +334,12 @@ if (has('README.md')) {
     pp_schema_: ['renommages', 'renames'],
   };
   const entryOf = key => Object.keys(STORED).find(name => key === name || (name.endsWith('_') && key.startsWith(name)));
+  // Des OPTIONS DU WIDGET, gardées par Grist avec le widget (pas dans le navigateur) mais nommées `pp_*` : Grist Factory Suite ne déclare, et donc ne retient, que des clés `pp_*` (consigne 001, règle 2).
+  // Elles ne sont pas du stockage du navigateur : le README n'a pas à les nommer dans son paragraphe sur le `localStorage`.
+  const IN_GRIST = new Set(['pp_attach_column', 'pp_attach_mode']);
   const used = new Map();
   for (const file of textFiles.filter(file => file.rel.startsWith('js/') || file.rel === 'index.html')) {
-    for (const match of readFileSync(file.abs, 'utf8').matchAll(/['"`](pp_[A-Za-z0-9_]+)/g)) if (!used.has(match[1])) used.set(match[1], file.rel);
+    for (const match of readFileSync(file.abs, 'utf8').matchAll(/['"`](pp_[A-Za-z0-9_]+)/g)) if (!used.has(match[1]) && !IN_GRIST.has(match[1])) used.set(match[1], file.rel);
   }
   const readme = read('README.md');
   const paragraphs = { fr: /Aucune donnée n'est stockée hors de Grist[\s\S]*?\n\s*\n/, en: /No data is ever stored outside of Grist[\s\S]*?\n\s*\n/ };

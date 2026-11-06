@@ -1051,6 +1051,13 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     rawStorage.length === 0, rawStorage.join(', '));
   const unused = KEYS.filter(key => !jsFiles.some(rel => rel !== 'js/person-store.js' && new RegExp("'" + key + "'").test(noCommentsJs(read(rel))) && /\bPersonStore\.(?:get|set|remove)\(/.test(noCommentsJs(read(rel)))));
   check('stockage de chaque personne : chacune des quatorze clés (les dix de la consigne 024, `pp_news_seen` la fenêtre des nouveautés, `pp_bubble_marks` le choix des bulles et des puces, `pp_export_destination` la destination des PDF exportés et `pp_layer_checks` les relectures des images en calque déjà faites) est lue ou écrite par PersonStore dans le module qui la nomme', unused.length === 0, unused.join(', '));
+  // Les options du widget de « PDF joint à la ligne » : Grist Factory Suite ne retient que des clés déclarées dans son manifeste, toutes `pp_*` (consigne 001, règle 2) ; `setOption` refuse une clé
+  // non déclarée (GFS_CLE_NON_DECLAREE) : sans préfixe, le choix de la colonne et du mode ne serait pas retenu chez elle. Les quatre clés plus anciennes des réglages de la vue (`modeleDeLaVue`,
+  // `modeleSelonLigne`, `droitsAcces`, `dateDernierExport`) sont un écart connu de GFS-ETAT.md ; aucune clé nouvelle ne s'y ajoute.
+  const attachment = noCommentsJs(read('js/row-attachment.js'));
+  const optionKeys = [...attachment.matchAll(/const (?:COLUMN|MODE)_OPTION = '([^']+)';/g)].map(match => match[1]);
+  check('PDF joint à la ligne : les deux options du widget (la colonne, le mode) portent le préfixe pp_ - GFS refuse une clé non déclarée, et il ne déclare que des clés pp_*',
+    optionKeys.length === 2 && optionKeys.every(key => /^pp_[a-z0-9_]+$/.test(key)), JSON.stringify(optionKeys));
   check('stockage de chaque personne : js/person-store.js suit la règle de GFS pour une clé (1 à 64 caractères A-Z a-z 0-9 _ . : -) et un texte pour valeur, lit l’espace de GFS (GfsLink.storageGet) quand il y en a un et le navigateur sinon, et n’écrit RIEN avant que le contexte soit arrivé (lire ne doit jamais écrire : aucune file d’attente qui irait écraser ce que GFS garde)',
     /const KEY = \/\^\[A-Za-z0-9_\.:-\]\{1,64\}\$\/;/.test(store) && /sharedSpace \? GfsLink\.storageGet\(key\) : browserGet\(key\)/.test(store) && /if \(sharedSpace\) return GfsLink\.storageSet\(key, value\);\s*if \(GfsLink\.hosted && !loaded\) return false;\s*return browserWrite\(key, value\);/.test(store)
       && /value !== null && typeof value !== 'string'/.test(store) && !/\bwaiting\b|\bqueue\b/.test(store) && /sharedSpace = GfsLink\.hasStorage\(\);/.test(store) && /const ready = GfsLink\.ready\.then\(load\);/.test(store), 'js/person-store.js');

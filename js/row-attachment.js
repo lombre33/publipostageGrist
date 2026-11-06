@@ -2,7 +2,7 @@
 // reçoit le PDF de chaque ligne exportée, dans la cellule de CETTE ligne. Quatre décisions du porteur (06/11) :
 //  - le déclenchement est une case « Joindre à la ligne » du menu Exporter, un réglage de la personne (PersonStore, clé pp_export_attach) montré pour les deux PDF : rien ne se joint si elle n'est pas
 //    cochée, et le PDF est téléchargé (ou rangé dans GFS) comme avant, la jointure vient EN PLUS ;
-//  - une cellule qui a déjà un PDF : un réglage « Remplacer le PDF de même nom » (par défaut) ou « Toujours ajouter », à côté de la colonne (options du widget `pdfJointColonne` et `pdfJointMode`,
+//  - une cellule qui a déjà un PDF : un réglage « Remplacer le PDF de même nom » (par défaut) ou « Toujours ajouter », à côté de la colonne (options du widget `pp_attach_column` et `pp_attach_mode`,
 //    lues avec le widget et partagées par tout le monde une fois la vue enregistrée, même mécanique que js/export-date.js) ;
 //  - le jeton d'écriture est demandé à Grist au début d'un export et jeté à la fin (GristAPI.getWriteAccess : jamais gardé, jamais mis en cache) ;
 //  - Grist Factory Suite aura sa propre fonction sur ce sujet : le widget fait la jointure seul, avec ou sans GFS, et `attachAll` est le SEUL point de branchement. Le jour où GFS annonce la sienne,
@@ -23,8 +23,8 @@
 //   RowAttachment.sync(flyout, lines) / wire(flyout, after) -> la case du menu Exporter (grisée avec sa raison, jamais retirée)
 //   RowAttachment.wirePanel() / render() -> la section de Réglages > Vue
 const RowAttachment = (function () {
-  const COLUMN_OPTION = 'pdfJointColonne';
-  const MODE_OPTION = 'pdfJointMode';
+  const COLUMN_OPTION = 'pp_attach_column';
+  const MODE_OPTION = 'pp_attach_mode';
   const PERSON_KEY = 'pp_export_attach';
   const MODES = ['replace', 'add'];
   const ORIGIN_MODE = 'replace';

@@ -1,5 +1,5 @@
 // Suite "rowAttachment" - le PDF joint à la ligne Grist (js/row-attachment.js, js/pdf-delivery.js ; demande du 06/11, point 2 des retours d'Antoine). Une colonne de type Pièces jointes, choisie dans Réglages > Vue (options
-// `pdfJointColonne` et `pdfJointMode`), reçoit le PDF de chaque ligne exportée quand la case « Joindre à la ligne » du menu Exporter est cochée (clé de la personne pp_export_attach). Quatre décisions d'Antoine (06/11) : la
+// `pp_attach_column` et `pp_attach_mode`), reçoit le PDF de chaque ligne exportée quand la case « Joindre à la ligne » du menu Exporter est cochée (clé de la personne pp_export_attach). Quatre décisions d'Antoine (06/11) : la
 // case du menu, « Remplacer le PDF de même nom » ou « Toujours ajouter » (réglage), un jeton d'écriture demandé à chaque export et jeté, Grist Factory Suite décidée plus tard.
 // ATTENTION - ce que cette suite ne prouve pas : l'envoi d'un fichier à Grist (POST multipart `…/attachments?auth=…`, champ `upload`, réponse = la liste des numéros, cellule `['L', ...]`) est décrit par la communauté de Grist
 // (« Upload attachment from custom widget ») et JOUÉ ICI par le faux serveur de dev-tests/grist-stub.js (installUploadServer) : il encode ce que nous avons décidé de croire, rien n'en est mesuré dans un vrai Grist (le labo
@@ -16,8 +16,8 @@
   const cases = [];
   const stub = () => window.__gristStub;
   const TABLE = 'RaClients';
-  const COLUMN_OPTION = 'pdfJointColonne';
-  const MODE_OPTION = 'pdfJointMode';
+  const COLUMN_OPTION = 'pp_attach_column';
+  const MODE_OPTION = 'pp_attach_mode';
   const KEY = 'pp_export_attach';
   const FLYOUT = '#v2-export-pdf-flyout';
   const el = id => document.getElementById(id);
@@ -106,7 +106,7 @@
     });
 
   scenario('rowattachment_options_are_read_and_a_foreign_value_falls_back',
-    'Les options `pdfJointColonne` et `pdfJointMode` se lisent avec le widget ; une valeur étrangère (un mode inconnu, un nombre, un texte vide) vaut l’origine : aucune colonne, « Remplacer ».',
+    'Les options `pp_attach_column` et `pp_attach_mode` se lisent avec le widget ; une valeur étrangère (un mode inconnu, un nombre, un texte vide) vaut l’origine : aucune colonne, « Remplacer ».',
     async () => {
       const problems = [];
       stub().setWidgetOptions({ [COLUMN_OPTION]: 'Pdf', [MODE_OPTION]: 'add' }); await sleep(60);

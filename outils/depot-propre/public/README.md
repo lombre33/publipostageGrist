@@ -167,6 +167,7 @@ La [note de version](PATCH_NOTES.md) en donne la liste complète, une puce par f
 - **En lot** : un PDF par ligne dans une archive ZIP, ou toutes les lignes dans un seul PDF. Un lot suit les lignes que le widget affiche dans Grist (filtres et tri compris) ; quand il n'en affiche qu'une partie, il demande s'il faut exporter celles-ci ou toute la table.
 - **Assemblage avant impression** : les pages de chaque ligne sur des feuilles A4 ou A3, avec ou sans traits de coupe.
 - **Date du dernier export** : une colonne de votre table, choisie dans Réglages > Vue, garde le moment du dernier export PDF de chaque ligne.
+- **PDF joint à la ligne** : la case « Joindre à la ligne » du menu Exporter ajoute le PDF à la colonne Pièces jointes choisie dans Réglages > Vue, sur la ligne dont il vient (le PDF d'une ligne, ou chaque PDF d'une archive ZIP). Il est joint en plus d'être téléchargé.
 - **Word** (`.docx`, bêta), **Excel** (`.xlsx`, pour les grilles), **Markdown** (`.md`, CommonMark et GFM, ou le modèle lui-même, variables comprises), **HTML** (une page complète, ou le seul contenu à coller dans un gestionnaire de contenu).
 - **E-mail** prérempli par un lien `mailto:` (Standard ou Zimbra).
 - Avant un export, une fenêtre liste les sites externes dont des images seraient téléchargées.
@@ -183,7 +184,7 @@ Le bouton **Réglages** de la barre du haut ouvre neuf onglets :
 | Raccourcis | Les touches du clavier, une par action, et les abréviations avec leur caractère déclencheur. |
 | Email | La messagerie qui ouvre le lien du mode E-mail : Standard ou Zimbra. |
 | Marges | Les marges du modèle ouvert, avec quatre préréglages (Aucune, Étroites, Classiques, Larges). |
-| Vue | Le modèle par défaut de la vue, le choix du modèle selon la ligne, la colonne de la date du dernier export PDF. |
+| Vue | Le modèle par défaut de la vue, le choix du modèle selon la ligne, la colonne de la date du dernier export PDF, la colonne des PDF joints. |
 | Accès | La table qui donne à chaque personne ses droits. |
 | Crédits | Auteur, site, licence, version et nouveautés. |
 
@@ -195,7 +196,7 @@ Les réglages « Vue » et « Accès » sont des options du widget : Grist ne le
 
 - Le widget demande l'**accès complet** au document Grist, faute de niveau intermédiaire dans l'API des widgets.
 - Vos **données restent dans Grist** : page statique, aucun serveur, rien n'est stocké ailleurs.
-- Il écrit dans ses propres tables `Publipostage_*`, **avec votre accord**, et dans aucune colonne de vos tables, sauf celle que vous choisissez pour la date du dernier export.
+- Il écrit dans ses propres tables `Publipostage_*`, **avec votre accord**, et dans aucune colonne de vos tables, sauf les deux que vous choisissez : celle de la date du dernier export et celle des PDF joints.
 - Il charge des bibliothèques tierces, à versions figées, depuis quatre adresses (voir [Dépendances](#dépendances)).
 
 ### L'accès demandé
@@ -222,7 +223,7 @@ Dans le document, le widget écrit dans neuf tables, toutes préfixées `Publipo
 | `Publipostage_Direct` | Le tuyau de l'écriture en direct, que seul Grist Factory Suite utilise (voir [À part](#à-part--grist-factory-suite)). |
 | `Publipostage_UserProbe` | Sert à lire l'e-mail de la personne connectée. |
 
-Dans les tables qui portent vos données, le widget n'écrit dans aucune colonne existante, sauf celle que vous choisissez dans Réglages > Vue > « Date du dernier export PDF ». Il y écrit alors, après chaque PDF réussi, le moment de l'export pour les lignes dont le PDF vient d'être produit (une seule écriture par export) ; sans colonne choisie, il n'y écrit rien. Un compte Lecteur de Grist n'écrit rien.
+Dans les tables qui portent vos données, le widget n'écrit dans aucune colonne existante, sauf deux que vous choisissez dans Réglages > Vue, et seulement quand vous l'avez demandé. « Date du dernier export PDF » : il y écrit, après chaque PDF réussi, le moment de l'export pour les lignes dont le PDF vient d'être produit (une seule écriture par export). « PDF joint à la ligne » (une colonne de type Pièces jointes, cochée dans le menu Exporter) : il y ajoute le PDF de la ligne, ou remplace celui de même nom selon votre réglage, et laisse les autres pièces jointes de la cellule ; pour envoyer le fichier, il demande à Grist, à chaque export seulement, un jeton qui peut écrire dans le document, ne le garde pas et le jette à la fin de l'export. Sans colonne choisie, il n'écrit rien. Un compte Lecteur de Grist n'écrit rien.
 
 ### Bibliothèques externes et politique de sécurité
 
@@ -505,6 +506,7 @@ The [release notes](PATCH_NOTES.md) give the complete list, one bullet per featu
 - **Batch**: one PDF per row in a ZIP archive, or all rows in a single PDF. A batch follows the rows the widget shows in Grist (filters and sort included); when it only shows part of the table, it asks whether to export those or the whole table.
 - **Sheet assembly before printing**: each row's pages on A4 or A3 sheets, with or without crop marks.
 - **Date of the last export**: a column of your table, chosen in Settings > View, keeps the moment of each row's last PDF export.
+- **PDF attached to the row**: the “Attach to the row” box of the Export menu adds the PDF to the Attachments column chosen in Settings > View, on the row it comes from (a single row's PDF, or each PDF of a ZIP archive). It is attached in addition to being downloaded.
 - **Word** (`.docx`, beta), **Excel** (`.xlsx`, for grids), **Markdown** (`.md`, CommonMark and GFM, or the template itself, variables included), **HTML** (a complete page, or the content alone to paste into a content manager).
 - **E-mail** pre-filled through a `mailto:` link (Standard or Zimbra).
 - Before an export, a window lists the external sites that images would be downloaded from.
@@ -521,7 +523,7 @@ The **Settings** button in the top bar opens nine tabs:
 | Shortcuts | The keyboard keys, one per action, and the abbreviations with their trigger character. |
 | Email | The mail client that opens the E-mail mode link: Standard or Zimbra. |
 | Margins | The open template's margins, with four presets (None, Narrow, Classic, Wide). |
-| View | The view's default template, the choice of template by row, the column of the date of the last PDF export. |
+| View | The view's default template, the choice of template by row, the column of the date of the last PDF export, the column of the attached PDFs. |
 | Access | The table that gives each person their rights. |
 | Credits | Author, site, license, version and what's new. |
 
@@ -533,7 +535,7 @@ The "View" and "Access" settings are widget options: Grist only shares them with
 
 - The widget requests **full access** to the Grist document, for lack of a middle level in the widgets API.
 - Your **data stays in Grist**: a static page, no server, nothing is stored elsewhere.
-- It writes to its own `Publipostage_*` tables, **with your consent**, and to no column of your tables, except the one you choose for the date of the last export.
+- It writes to its own `Publipostage_*` tables, **with your consent**, and to no column of your tables, except the two you choose: the one for the date of the last export and the one for the attached PDFs.
 - It loads third-party libraries, at pinned versions, from four addresses (see [Dependencies](#dependencies)).
 
 ### The access requested
@@ -560,7 +562,7 @@ In the document, the widget writes to nine tables, all prefixed `Publipostage_`.
 | `Publipostage_Direct` | The pipe of live editing, which only Grist Factory Suite uses (see [Set apart: Grist Factory Suite](#set-apart-grist-factory-suite)). |
 | `Publipostage_UserProbe` | Used to read the connected user's e-mail. |
 
-In the tables that hold your data, the widget writes to no existing column, except the one you choose in Settings > View > "Date of the last PDF export". It then writes there, after each successful PDF, the moment of the export for the rows whose PDF has just been made (a single write per export); with no column chosen, it writes nothing there. A Grist Viewer account writes nothing.
+In the tables that hold your data, the widget writes to no existing column, except two that you choose in Settings > View, and only when you asked for it. "Date of the last PDF export": it writes there, after each successful PDF, the moment of the export for the rows whose PDF has just been made (a single write per export). "PDF attached to the row" (an Attachments column, ticked in the Export menu): it adds the row's PDF there, or replaces the one with the same name according to your setting, and leaves the cell's other attachments alone; to send the file, it asks Grist, for each export only, for a token that can write to the document, does not keep it and drops it at the end of the export. With no column chosen, it writes nothing. A Grist Viewer account writes nothing.
 
 ### External libraries and security policy
 
