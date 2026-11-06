@@ -404,7 +404,7 @@ const VariableLoop = (function () {
 
   // Monte le champ du texte « Si aucune ligne » : à la première ouverture, quand les classes de TipTap sont chargées (le document dont la fenêtre règle une boucle a déjà chargé
   // l'éditeur). Son texte s'écrit à la place de la zone répétée : ses variables lisent la ligne du tour des zones qui l'entourent - celle de cette boucle exceptée, qui n'a ici aucune
-  // ligne -, comme le « Sinon afficher » d'une valeur (js/variable-condition.js:mountTextFields).
+  // ligne -, comme le « Sinon afficher » d'une valeur (js/variable-condition-otherwise.js:mountTextFields).
   function mountEmptyField() {
     const libs = Editor.loadedLibraries();
     if (!libs || refs.emptyMounted) return;

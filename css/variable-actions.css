@@ -187,7 +187,7 @@
    place des champs « Avant » / « Après » ; 288 px au plus, moins quand la fenêtre est étroite : son conteneur peut alors rétrécir sous la largeur du champ. Mêmes bordure, police et fond
    que les champs d'une ligne (`.var-condition-affix input`), pour une bulle, une valeur (une ligne) et un bloc (plusieurs). Grisé sans règle complète : il laisse passer la souris,
    pour que l'info-bulle du conteneur dise pourquoi. `scroll-margin` : quand l'aperçu grandit pendant la frappe, le champ ramené dans la fenêtre garde un peu d'air sous lui
-   (js/variable-condition.js:keepTypedFieldInView). */
+   (js/variable-condition-otherwise.js:keepTypedFieldInView). */
 .var-condition-affix .var-condition-otherwise-field { grid-column: 2 / -1; display: flex; max-width: 288px; }
 .var-condition-otherwise-text-row .var-condition-otherwise-field, .var-condition-otherwise-area-row .var-condition-otherwise-field { min-width: 0; }
 .var-condition-affix .var-condition-otherwise-text-input, .var-condition-affix .var-condition-otherwise-area-input {

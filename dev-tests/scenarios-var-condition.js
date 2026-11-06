@@ -3187,6 +3187,36 @@
     },
   });
 
+  // Le presse-papier est un seul pour toutes les fenêtres, et chaque fenêtre en tient les boutons : le vider (VariableCondition.clearClipboard, la façade) regrise « Coller » dans la fenêtre restée
+  // ouverte sans qu'elle se rouvre, et le « Copiée » du bouton Copier se remet de lui-même après un instant. Le presse-papier, son minuteur et les boutons n'ont pas le même fichier que la fenêtre
+  // (js/variable-condition-clipboard.js) : ce cas garde leur raccord - la façade, le morceau et l'état de la fenêtre.
+  cases.push({
+    id: 'varcond_clearing_the_clipboard_greys_paste_in_an_open_window_and_the_copied_flash_resets',
+    description: 'Copier emporte la condition à l’écran et affiche « Copiée » ; vider le presse-papier (clearClipboard) regrise « Coller » dans la fenêtre restée ouverte, avec l’info-bulle « rien de copié » ; le « Copiée » revient à « Copier » après un instant.',
+    run: async (h) => {
+      await seed(h);
+      VariableCondition.clearClipboard();
+      Editor.setHTML(`<p>${badgeHtml('VcDossiers', 'Titre')}</p>`);
+      const modal = await openWindow(h, 'Titre');
+      const { copy, paste } = clipButtons(modal);
+      if (!copy || !paste) { if (modal) cancelWindow(modal); return NO_CLIP_BUTTONS; }
+      await fillRule(h, modal.querySelector('.macro-rule-row'), { column: 'Statut', operator: '=', value: 'Urgent' });
+      await h.sleep(60);
+      copy.click();
+      const copied = { copy: clipInfo(copy), paste: clipInfo(paste) };
+      VariableCondition.clearClipboard();
+      const cleared = { copy: clipInfo(copy), paste: clipInfo(paste) };
+      await h.sleep(1900);
+      const afterWait = { copy: clipInfo(copy), paste: clipInfo(paste) };
+      cancelWindow(modal);
+      VariableCondition.clearClipboard();
+      const pass = copied.copy.text === I18n.t('varCond.clip.copied') && copied.copy.done && copied.paste.disabled === 'false'
+        && cleared.paste.disabled === 'true' && cleared.paste.title === I18n.t('varCond.clip.pasteEmpty')
+        && afterWait.copy.text === I18n.t('varCond.clip.copy') && !afterWait.copy.done && afterWait.paste.disabled === 'true';
+      return { pass, notes: pass ? 'ok' : JSON.stringify({ copied, cleared, afterWait }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varCondition = cases;
 })();
