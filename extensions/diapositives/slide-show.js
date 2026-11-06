@@ -354,14 +354,20 @@ const SlideShow = (function () {
     const title = heading || first;
     return title.length > TITLE_MAX ? title.slice(0, TITLE_MAX - 1).trimEnd() + '…' : title;
   }
-  // Ce que la console sait de chaque diapositive, lu sur l'éditeur au départ : son titre, ses notes (js/slide-props.js) et si elle est masquée.
+  // Ce que la console sait de chaque diapositive, lu sur l'éditeur au départ : son titre, ses notes (js/slide-props.js), si elle est masquée et sa section (`section` : son nom, '' avant la première ; `sectionAt` : son rang, pour que deux
+  // sections de même nom ne se fondent pas) - la liste « Aller à… » les groupe.
   function speakerSlides() {
     const ed = EditorCore.getEditor();
     if (!ed) return [];
     const doc = ed.state.doc;
     const notes = SlideProps.notesOf(doc);
     const timings = SlideProps.timingsOf(doc);
-    return SlideProps.slidesOf(doc).map((slide, k) => ({ title: titleOf(doc, slide), notes: notes[k] || '', hidden: !!(timings[k] && timings[k].hidden) }));
+    const sections = SlideProps.sectionsOf(doc);
+    return SlideProps.slidesOf(doc).map((slide, k) => {
+      const at = SlideProps.sectionIndexAt(sections, k);
+      const named = at >= 0 && !sections[at].lead;
+      return { title: titleOf(doc, slide), notes: notes[k] || '', hidden: !!(timings[k] && timings[k].hidden), section: named ? sections[at].name : '', sectionAt: named ? at : -1 };
+    });
   }
 
   async function start(fromCurrent) {
@@ -489,5 +495,5 @@ const SlideShow = (function () {
   const state = () => (run && run.player ? run.player.state() : null);
   const speaker = () => (run && run.speaker ? run.speaker : null);
 
-  return { sync, start, stop, state, speaker, isRunning: () => !!run };
+  return { sync, start, stop, state, speaker, speakerSlides, isRunning: () => !!run };
 })();

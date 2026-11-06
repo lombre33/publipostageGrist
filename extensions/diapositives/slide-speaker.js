@@ -432,14 +432,7 @@ const SlideSpeaker = (function () {
       if (s.picker || !s.ready || s.destroyed) return;
       const host = el('div');
       host.id = 'pp-speaker-goto-search';
-      const select = el('select');
-      slides.forEach((slide, k) => {
-        const name = (k + 1) + '. ' + (slide.title || labels.untitled.replace('{n}', String(k + 1)));
-        const option = Dom.option(String(k), slide.hidden ? name + ' (' + labels.hiddenSlide + ')' : name);
-        option.setAttribute('data-name', name);
-        if (slide.hidden) option.setAttribute('data-hint', labels.hiddenSlide);
-        select.appendChild(option);
-      });
+      const select = goToSelect(slides, labels);
       host.appendChild(select);
       document.body.appendChild(host);
       select.selectedIndex = -1;
@@ -553,5 +546,28 @@ const SlideSpeaker = (function () {
     };
   }
 
-  return { create };
+  // La liste « Aller à… » : un <select> d'une option par diapositive (son rang, son titre ; « masquée » en indice), GROUPÉES par section quand la présentation en a (demande du 06/11, carte « PowerPoint et
+  // diaporama ») : l'intitulé du groupe est le nom de la section. Les diapositives d'avant la première section restent en tête, sans intitulé. Deux sections qui se suivent ne se fondent jamais en un seul groupe.
+  function goToSelect(slides, labels) {
+    const select = el('select');
+    let group = null;
+    let groupAt = -1;
+    slides.forEach((slide, k) => {
+      const name = (k + 1) + '. ' + (slide.title || labels.untitled.replace('{n}', String(k + 1)));
+      const option = Dom.option(String(k), slide.hidden ? name + ' (' + labels.hiddenSlide + ')' : name);
+      option.setAttribute('data-name', name);
+      if (slide.hidden) option.setAttribute('data-hint', labels.hiddenSlide);
+      if (!slide.section) { group = null; groupAt = -1; select.appendChild(option); return; }
+      if (!group || groupAt !== slide.sectionAt) {
+        group = el('optgroup');
+        group.label = slide.section;
+        select.appendChild(group);
+        groupAt = slide.sectionAt;
+      }
+      group.appendChild(option);
+    });
+    return select;
+  }
+
+  return { create, goToSelect };
 })();

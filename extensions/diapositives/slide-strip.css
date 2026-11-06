@@ -57,6 +57,25 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 .pp-slide-row:hover .pp-slide-more, .pp-slide-row.pp-slide-menu-open .pp-slide-more, .pp-slide-item[aria-selected="true"] + .pp-slide-more { display: inline-flex; }
 .pp-slide-more:hover { background: var(--surface-sunken); }
 
+/* Les sections (slide-strip.js : makeHead, syncSections) : l'en-tête de chaque section nommée, juste au-dessus de sa première miniature, dans la bande et sur sa propre rangée de la grille (slide-overview.css).
+   La flèche qui replie, le nom, le nombre de diapositives, le « ⋯ » de son menu (au survol) ; une section repliée cache ses miniatures et tourne sa flèche. Le champ du nom prend la place du nom. */
+.pp-slide-row[hidden] { display: none; }
+.pp-slide-section { position: relative; flex: none; display: flex; align-items: center; gap: 2px; box-sizing: border-box; min-height: 22px; padding: 2px 2px 2px 0; border-radius: var(--radius-xs, 4px); color: var(--text); font-size: 11.5px; font-weight: 600; cursor: pointer; }
+.pp-slide-section:hover { background: var(--surface-sunken); }
+.pp-slide-section-fold { flex: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 18px; height: 18px; margin: 0; padding: 0; border: none; border-radius: var(--radius-xs, 4px); background: transparent; color: var(--text); cursor: pointer; }
+.pp-slide-section-fold svg { width: 14px; height: 14px; transition: transform .12s ease; }
+.pp-slide-section-folded .pp-slide-section-fold svg { transform: rotate(-90deg); }
+.pp-slide-section-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-slide-section-name[hidden], .pp-slide-section-input[hidden] { display: none; }
+.pp-slide-section-count { flex: none; color: var(--text-muted); font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.pp-slide-section-input { flex: 1 1 auto; min-width: 0; box-sizing: border-box; height: 20px; margin: 0; padding: 0 4px; border: 1px solid var(--accent); border-radius: var(--radius-xs, 4px); background: var(--surface); color: var(--text); font: inherit; font-weight: 400; outline: none; }
+.pp-slide-section-more { flex: none; display: none; align-items: center; justify-content: center; box-sizing: border-box; width: 20px; height: 18px; margin: 0; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-xs, 4px); background: var(--surface); color: var(--text); cursor: pointer; }
+.pp-slide-section-more svg { width: 14px; height: 14px; }
+.pp-slide-section-more:hover { background: var(--surface-sunken); }
+.pp-slide-section:hover .pp-slide-section-more { display: inline-flex; }
+.pp-slide-section:hover .pp-slide-section-count { display: none; }
+.pp-slide-section-renaming .pp-slide-section-count, .pp-slide-section-renaming .pp-slide-section-more { display: none; }
+
 /* Les personnes du direct (slide-strip.js:syncPeople) : une pastille de leur couleur (--pp-live-color, posée par le script) SOUS la miniature de la diapositive où elles sont, à cheval sur son bord bas, hors
    de la mise en page (la bande ne bouge pas quand quelqu'un arrive, part ou change de diapositive). Un liseré blanc la détache de la miniature comme du fond de la bande, clair ou sombre ; son nom est
    son info-bulle. Au-delà de quatre sur la même diapositive, un « +N ». 21 px : le rembourrage de la miniature (3), son numéro (14) et l'écart (4). */

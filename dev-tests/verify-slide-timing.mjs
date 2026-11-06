@@ -99,7 +99,7 @@ const pills = page => page.evaluate(() => Array.from(document.querySelectorAll('
 const menuRows = page => page.evaluate(() => {
   const menu = document.querySelector('.pp-slide-menu.visible');
   if (!menu) return null;
-  return Array.from(menu.children).map(c => (c.dataset && c.dataset.action) || (c.getAttribute('role') === 'separator' ? '-' : '?')).filter(a => a !== '?' && !/^link/.test(a)).join(',');
+  return Array.from(menu.children).filter(c => !c.hidden).map(c => (c.dataset && c.dataset.action) || (c.getAttribute('role') === 'separator' ? '-' : '?')).filter(a => a !== '?' && !/^link/.test(a)).join(',');
 });
 const rowText = (page, action) => page.evaluate(a => { const r = document.querySelector(`.pp-slide-menu.visible [data-action="${a}"]`); return r ? { text: r.textContent.trim(), disabled: r.getAttribute('aria-disabled') } : null; }, action);
 const windowGroup = page => page.evaluate(() => {
@@ -172,7 +172,7 @@ async function run(lang, colorScheme, full) {
   await menuOf(0);
   const rows = await menuRows(page);
   const hideRow = await rowText(page, 'hide');
-  check(tag + `la ligne « ${T.hide} » suit « Notes… » et précède « Supprimer », séparée de lui par un filet`, /notes,hide,-,delete/.test(rows || '') && !!hideRow && hideRow.text === T.hide && hideRow.disabled === 'false', { rows, hideRow });
+  check(tag + `la ligne « ${T.hide} » suit « Notes… » et précède « Supprimer », séparée de lui par un filet`, /notes,hide,-,section,-,delete/.test(rows || '') && !!hideRow && hideRow.text === T.hide && hideRow.disabled === 'false', { rows, hideRow });
   await page.keyboard.press('Escape');
   await sleep(200);
   await open(9, 3);

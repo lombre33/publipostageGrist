@@ -50,7 +50,7 @@ const TEXTS = {
     report: ['2 animations d’objets non reprises', '1 graphique non repris', '1 dégradé remplacé par sa couleur moyenne',
       '2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '1 objet dont la liste de tirets est trop longue ou illisible (son trait est dessiné plein)'],
     manyFirst: '3 animations d’objets non reprises', manyLast: '1 objet illisible non repris', lostLast: '3 objets illisibles non repris',
-    lostSamples: ['2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '2 sections de diapositives non reprises (noms sans place dans les notes)', '2 textes verticaux écrits à l’horizontale'],
+    lostSamples: ['2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '1 section de diapositives non reprise (aucune de ses diapositives n’est importée)', '2 textes verticaux écrits à l’horizontale'],
     offTitle: 'Cette fonction demande Grist Factory Suite', offMessage: /Diapositives/,
   },
   en: {
@@ -65,7 +65,7 @@ const TEXTS = {
     report: ['2 object animations not imported', '1 chart not imported', '1 gradient replaced by its average color',
       '2 fonts missing from the editor, replaced by the nearest available', '1 object with a dash list too long or unreadable (its line drawn solid)'],
     manyFirst: '3 object animations not imported', manyLast: '1 unreadable object not imported', lostLast: '3 unreadable objects not imported',
-    lostSamples: ['2 fonts missing from the editor, replaced by the nearest available', '2 slide sections not imported (name does not fit in the notes)', '2 vertical texts written horizontally'],
+    lostSamples: ['2 fonts missing from the editor, replaced by the nearest available', '1 slide section not imported (none of its slides is imported)', '2 vertical texts written horizontally'],
     offTitle: 'This feature needs Grist Factory Suite', offMessage: /Slides/,
   },
 };
@@ -460,7 +460,7 @@ async function run(lang, scheme) {
     check(tag + `le rapport le plus long de tous : ${wanted.length} genres, un par ligne, dans l'ordre et dans la langue de l'interface, du premier (animations) au dernier (objet illisible), aucune clé laissée telle quelle`,
       lost.shown && lost.title === T.reportTitle && lostLines[0] === T.reportIntro && wanted.length >= keys - 3 && JSON.stringify(lostLines.slice(1)) === JSON.stringify(wanted) && lostLines[1] === '• ' + T.manyFirst
         && lostLines[lostLines.length - 1] === '• ' + T.lostLast && !lost.message.includes('pptx.import.report.'), { title: lost.title, count: lostLines.length - 1, wanted: wanted.length, first: lostLines[1], last: lostLines[lostLines.length - 1] });
-    check(tag + 'des lignes à lire telles quelles, au singulier et au pluriel : ' + T.lostSamples.map(line => '« ' + line + ' »').join(', '), T.lostSamples.every(line => lostLines.includes('• ' + line)), lostLines.filter(line => /polices|fonts|sections|verticaux|vertical/.test(line)));
+    check(tag + 'des lignes à lire telles quelles, au singulier et au pluriel : ' + T.lostSamples.map(line => '« ' + line + ' »').join(', '), T.lostSamples.every(line => lostLines.includes('• ' + line)), lostLines.filter(line => /polices|fonts|sections?|verticaux|vertical/.test(line)));
     check(tag + 'la fenêtre tient dans le panneau : titre et bouton « ' + T.close + ' » à l\'écran sans défiler la page, le texte défile dans la fenêtre', lost.boxInPanel && lost.titleInPanel && lost.buttonsInPanel && lost.scrolls && lost.scrollMax > long.scrollMax, { box: lost.box, scrolls: lost.scrolls, scrollMax: lost.scrollMax, longScrollMax: long.scrollMax });
     await snap('report-lost');
     await wheelToTheEnd(lost, T.lostLast, 'report-lost-end');

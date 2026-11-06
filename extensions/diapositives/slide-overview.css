@@ -49,6 +49,11 @@
 .pp-ov-drop { position: absolute; width: 3px; border-radius: 2px; background: var(--accent); pointer-events: none; }
 .pp-ov-drop[hidden] { display: none; }
 
+/* Les sections : l'en-tête de chacune (celui de la bande, slide-strip.css) sur sa propre rangée de la grille, pleine largeur ; une section repliée cache ses cartes. */
+.pp-ov-card[hidden] { display: none; }
+.pp-ov-section { grid-column: 1 / -1; font-size: 13px; padding: 4px 4px 4px 0; border-bottom: 1px solid var(--border); border-radius: 0; }
+.pp-ov-section .pp-slide-section-count { font-size: 12px; }
+
 @media (forced-colors: active) {
   .pp-ov-card[aria-selected="true"] .pp-ov-thumb { outline: 2px solid Highlight; }
   .pp-ov-drop { forced-color-adjust: none; background: Highlight; }

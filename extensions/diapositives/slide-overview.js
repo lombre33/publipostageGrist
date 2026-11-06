@@ -37,6 +37,8 @@ const SlideOverview = (function () {
   let opener = null;               // le bouton qui l'a ouverte : « Fermer » lui rend le clavier
   let sizeIndex = DEFAULT_SIZE;
   let cards = [];                  // une carte par diapositive : { card, thumb, page, num, badges, people, more, nodes, key, near, label }
+  let heads = [];                  // l'en-tête de chaque section nommée (SlideStrip.overview.makeHead), sur sa propre rangée de la grille
+  let sections = [];               // les sections du texte, lues à la dernière mise à jour (SlideStrip.overview.sections)
   let state = null;                // ce que la bande dit : { count, current, chosen, off }
   let geometry = null;             // la page des miniatures (SlideStrip.overview.geometry)
     let editor = null;
@@ -179,11 +181,12 @@ const SlideOverview = (function () {
       else { page.replaceChildren(); c.nodes = null; c.key = ''; }
     });
     // L'ordre dans la grille est celui des diapositives.
-    let at = grid.firstElementChild;
+    let at = nextCard(grid.firstElementChild);
     cards.forEach((c) => {
-      if (c.card === at) { at = at.nextElementSibling; return; }
+      if (c.card === at) { at = nextCard(at.nextElementSibling); return; }
       grid.insertBefore(c.card, at);
     });
+    syncHeads();
     sizeCards();
     const chosen = new Set(next.chosen);
     cards.forEach((c, i) => {
@@ -198,6 +201,27 @@ const SlideOverview = (function () {
     smallerButton.setAttribute('aria-disabled', sizeIndex === 0 ? 'true' : 'false');
     largerButton.setAttribute('aria-disabled', sizeIndex === SIZES.length - 1 ? 'true' : 'false');
     drawThumbs();
+  }
+  // La première carte à partir de `node` : les en-têtes de section, entre les cartes, ne comptent pas.
+  const nextCard = (node) => { let at = node; while (at && !at.classList.contains('pp-ov-card')) at = at.nextElementSibling; return at; };
+  // Les en-têtes de section, chacun sur sa rangée juste avant la première carte de sa section, et les cartes des sections repliées cachées. Les en-têtes sont ceux de la bande (makeHead) : ils se replient,
+  // se renomment et ouvrent leur menu par ses gestes.
+  function syncHeads() {
+    sections = host().sections();
+    const named = sections.filter(section => !section.lead);
+    while (heads.length > named.length) heads.pop().el.remove();
+    named.forEach((section, n) => {
+      if (!heads[n]) heads.push(host().makeHead());
+      const head = heads[n];
+      host().updateHead(head, section, sections.indexOf(section));
+      const first = cards[section.from];
+      if (first && head.el.nextElementSibling !== first.card) grid.insertBefore(head.el, first.card);
+    });
+    cards.forEach((c, i) => {
+      const section = sections[SlideProps.sectionIndexAt(sections, i)];
+      const hide = !!section && host().isFolded(section);
+      if (c.card.hidden !== hide) c.card.hidden = hide;
+    });
   }
   const sameBlocks = (entry, peek) => !!entry.nodes && entry.key === peek.key && entry.nodes.length === peek.nodes.length && entry.nodes.every((node, k) => node === peek.nodes[k]);
   // Les pastilles et le nom accessible de la diapositive `i`, repris de sa miniature dans la bande.
@@ -276,7 +300,7 @@ const SlideOverview = (function () {
   // La carte `index` en vue dans la grille.
   function scrollTo(index) {
     const c = cards[index];
-    if (!c) return;
+    if (!c || c.card.hidden) return;
     const top = c.card.offsetTop;
     const bottom = top + c.card.offsetHeight;
     if (top < grid.scrollTop) grid.scrollTop = Math.max(0, top - 10);
@@ -298,6 +322,16 @@ const SlideOverview = (function () {
     indexAt,
     anchorOf: index => (cards[index] ? cards[index].thumb : document.body),
     menuOpen(index, on) { if (cards[index]) cards[index].card.classList.toggle('pp-ov-menu-open', on); },
+    // La bande a changé un pli ou un nom de section : la grille se met d'accord tout de suite. Les en-têtes de la grille (pour le renommer sur place).
+    sync,
+    heads: () => heads,
+    // Le clavier va sur la carte `index` sans faire défiler la grille ; sur la flèche de son en-tête quand sa section est repliée (la carte n'a pas de place).
+    focus(index) {
+      const c = cards[index];
+      if (c && !c.card.hidden) { c.card.focus({ preventScroll: true }); return; }
+      const head = heads.find(candidate => { const section = sections[candidate.k]; return !!section && index >= section.from && index <= section.to; });
+      if (head) head.fold.focus({ preventScroll: true });
+    },
   };
   function openOverview(from) {
     if (open) return;
@@ -321,7 +355,7 @@ const SlideOverview = (function () {
     // Les cartes sont posées : la diapositive du curseur en vue, et le clavier sur elle (l'anneau ne se montre qu'au clavier : `byKeyboard` n'y change rien d'autre).
     scrollTo(initial.current);
     const c = cards[initial.current];
-    if (c) c.card.focus({ preventScroll: true });
+    if (c && !c.card.hidden) c.card.focus({ preventScroll: true });
   }
   function close(returnFocus) {
     if (!open) return;
@@ -340,6 +374,9 @@ const SlideOverview = (function () {
     // Les cartes ne restent pas : la grille de la prochaine ouverture part de la présentation d'alors.
     cards.forEach(removeCard);
     cards = [];
+    heads.forEach(head => head.el.remove());
+    heads = [];
+    sections = [];
     state = null;
     geometry = null;
     const back = opener;
@@ -441,6 +478,7 @@ const SlideOverview = (function () {
     let best = -1;
     let bestDistance = Infinity;
     cards.forEach((c, i) => {
+      if (c.card.hidden) return;
       const rect = c.card.getBoundingClientRect();
       const dx = x - (rect.left + rect.width / 2);
       const dy = y - (rect.top + rect.height / 2);
@@ -450,14 +488,17 @@ const SlideOverview = (function () {
     });
     const rect = cards[best].card.getBoundingClientRect();
     const after = x >= rect.left + rect.width / 2;
-    return { gap: after ? best + 1 : best, card: best, after };
+    const gap = after ? best + 1 : best;
+    // Déposée à gauche de la première carte d'une section (sous son titre), elle l'ouvre ('next') ; à droite de la dernière de la section d'avant, elle la finit ('prev').
+    const opener = sections.some(section => !section.lead && section.from === gap && gap > 0);
+    return { gap, card: best, after, side: opener && best === gap && !after ? 'next' : 'prev' };
   }
   // La ligne d'accent, au bord de la carte la plus proche ; cachée là où rien ne bougerait (juste avant ou juste après la diapositive emportée, ou hors de la grille).
   function placeDrop() {
     const at = gapAt(drag.x, drag.y);
     const set = drag.group.map(c => cards.indexOf(c)).sort((a, b) => a - b);
     drag.gap = at.gap;
-    const still = at.gap < 0 || set.some(i => i < 0) || !host().plan('moveTo', set, at.gap);
+    const still = at.gap < 0 || set.some(i => i < 0) || !host().plan('moveTo', set, { gap: at.gap, side: at.side });
     drop.hidden = still;
     if (still) return;
     const c = cards[at.card].card;
@@ -503,7 +544,7 @@ const SlideOverview = (function () {
     if (cancelled || !open || editor.state.doc !== doc) return;
     const at = gapAt(event.clientX, event.clientY);
     if (at.gap < 0) return;
-    host().act('moveTo', index, at.gap);
+    host().act('moveTo', index, { gap: at.gap, side: at.side });
     sync();
   }
   function onDragAbort() {
@@ -540,12 +581,17 @@ const SlideOverview = (function () {
   const cancelDrag = () => { if (drag) endDrag(); };
 
   // Le clavier
-  // Combien de cartes tiennent sur une rangée de la grille (↑ et ↓ sautent d'autant).
-  function columns() {
-    if (!cards.length) return 1;
-    const top = cards[0].card.offsetTop;
-    const n = cards.findIndex(c => c.card.offsetTop !== top);
-    return n < 0 ? cards.length : Math.max(1, n);
+  // Les cartes que la grille montre (celles d'une section repliée n'ont pas de place), dans l'ordre.
+  const shownIndexes = () => cards.map((c, i) => i).filter(i => !cards[i].card.hidden);
+  // La carte au-dessus (`dir` -1) ou au-dessous (1) de la carte `index`, dans la rangée voisine, la plus proche en largeur : une rangée peut être celle d'une autre section. Sans rangée plus loin, la première ou la dernière.
+  function vertical(index, dir) {
+    const here = cards[index].card;
+    const middle = here.offsetLeft + here.offsetWidth / 2;
+    const others = shownIndexes().filter(i => i !== index && (dir > 0 ? cards[i].card.offsetTop > here.offsetTop : cards[i].card.offsetTop < here.offsetTop));
+    if (!others.length) { const all = shownIndexes(); return dir > 0 ? all[all.length - 1] : all[0]; }
+    const rowTop = dir > 0 ? Math.min(...others.map(i => cards[i].card.offsetTop)) : Math.max(...others.map(i => cards[i].card.offsetTop));
+    const row = others.filter(i => cards[i].card.offsetTop === rowTop);
+    return row.reduce((best, i) => (Math.abs(cards[i].card.offsetLeft + cards[i].card.offsetWidth / 2 - middle) < Math.abs(cards[best].card.offsetLeft + cards[best].card.offsetWidth / 2 - middle) ? i : best), row[0]);
   }
   function onRootKey(event) {
     if (event.key === 'Escape' && !event.defaultPrevented) {
@@ -572,8 +618,10 @@ const SlideOverview = (function () {
     if (mod || event.altKey) return;
     if (toward || key === 'Home' || key === 'End') {
       event.preventDefault();
-      const step = key === 'ArrowUp' || key === 'ArrowDown' ? toward * columns() : toward;
-      const next = key === 'Home' ? 0 : key === 'End' ? cards.length - 1 : Math.max(0, Math.min(cards.length - 1, index + step));
+      const visible = shownIndexes();
+      const at = visible.indexOf(index);
+      const next = key === 'Home' ? visible[0] : key === 'End' ? visible[visible.length - 1]
+        : key === 'ArrowUp' || key === 'ArrowDown' ? vertical(index, toward) : visible[Math.max(0, Math.min(visible.length - 1, (at < 0 ? 0 : at) + toward))];
       host().select(next, event.shiftKey ? 'range' : 'one');
       sync();
       focusBack(next);

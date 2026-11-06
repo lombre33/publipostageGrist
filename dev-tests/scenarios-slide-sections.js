@@ -165,6 +165,67 @@
     } finally { await h.resetEditor(); }
   });
 
+  add('move', 'monter ou descendre une SECTION : elle change de place avec sa voisine, avec toutes ses diapositives et son nom, jamais au-dessus de la section du début', async () => {
+    const bad = [];
+    const check = (label, ok, detail) => { if (!ok) bad.push(label + (detail === undefined ? '' : ' : ' + JSON.stringify(detail).slice(0, 200))); };
+    const move = (names, index, dir) => SlideProps.sectionMove(names, index, dir);
+    // A (0-1), B (2-3), C (4-5)
+    const abc = ['A', '', 'B', '', 'C', ''];
+    let m = move(abc, 2, -1);
+    check('B monte au-dessus de A : B A C, les diapositives de chaque section restent ensemble et dans l\'ordre', m && same(m.order, [2, 3, 0, 1, 4, 5]) && same(m.names, ['B', '', 'A', '', 'C', '']), m);
+    check('la première diapositive de la section qui monte est à la place 0, sa section a deux diapositives', m && m.target === 0 && m.count === 2, m);
+    m = move(abc, 3, 1);
+    check('n\'importe quelle diapositive de B la descend : A C B', m && same(m.order, [0, 1, 4, 5, 2, 3]) && same(m.names, ['A', '', 'C', '', 'B', '']) && m.target === 4, m);
+    check('la première ne monte pas, la dernière ne descend pas', move(abc, 1, -1) === null && move(abc, 5, 1) === null);
+    // Des sections de tailles différentes : A (0), B (1-3), C (4)
+    m = move(['A', 'B', '', '', 'C'], 4, -1);
+    check('tailles différentes : C monte au-dessus de B : A C B', m && same(m.order, [0, 4, 1, 2, 3]) && same(m.names, ['A', 'C', 'B', '', '']) && m.target === 1 && m.count === 1, m);
+    // La section du début (sans nom) ne bouge pas, et rien ne passe au-dessus d'elle.
+    const lead = ['', '', 'B', '', 'C', ''];
+    check('la section du début ne descend pas', move(lead, 0, 1) === null && move(lead, 1, 1) === null);
+    check('la première section nommée ne passe pas au-dessus de la section du début', move(lead, 2, -1) === null);
+    m = move(lead, 4, -1);
+    check('mais la suivante monte au-dessus de la première : le début reste en tête', m && same(m.order, [0, 1, 4, 5, 2, 3]) && same(m.names, ['', '', 'C', '', 'B', '']), m);
+    check('aucune section : rien ne bouge', move(['', '', ''], 1, 1) === null && move([], 0, 1) === null);
+    check('un sens qui n\'est ni -1 ni 1 ne bouge rien', move(abc, 2, 2) === null && move(abc, 2, 0) === null);
+    check('sectionIndexAt : la section d\'une diapositive', SlideProps.sectionIndexAt(SlideProps.sectionsFrom(abc), 3) === 1 && SlideProps.sectionIndexAt(SlideProps.sectionsFrom(abc), 9) === -1 && SlideProps.sectionIndexAt([], 0) === -1);
+    return result(bad);
+  });
+
+  add('pptx', 'PowerPoint : l\'export écrit les sections (`p14:sectionLst`, la section par défaut pour les diapositives d\'avant la première), l\'import les relit : un aller-retour rend les mêmes sections', async () => {
+    const bad = [];
+    const check = (label, ok, detail) => { if (!ok) bad.push(label + (detail === undefined ? '' : ' : ' + JSON.stringify(detail).slice(0, 260))); };
+    await ExportEngines.ensure('pptx');
+    await ExportEngines.ensure('pptxImport');
+    const html = deck({ 2: 'Offre', 4: 'Conclusion & suite' });
+    const blob = await PptxExport.fromHtml(html, { title: 'x' });
+    const buffer = await blob.arrayBuffer();
+    const zip = await JSZip.loadAsync(buffer);
+    const xml = await zip.file('ppt/presentation.xml').async('string');
+    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+    check('presentation.xml se lit', !doc.getElementsByTagName('parsererror').length);
+    const sections = Array.from(doc.getElementsByTagName('p14:section')).map(node => ({ name: node.getAttribute('name'), id: node.getAttribute('id'), slides: Array.from(node.getElementsByTagName('p14:sldId')).map(id => id.getAttribute('id')) }));
+    const listed = Array.from(doc.getElementsByTagName('p:sldId')).map(id => id.getAttribute('id'));
+    check('trois sections : la section par défaut (avant la première), « Offre », « Conclusion & suite »', sections.length === 3 && sections[0].name === I18n.t('pptx.export.defaultSection') && sections[1].name === 'Offre' && sections[2].name === 'Conclusion & suite', sections.map(section => section.name));
+    check('chaque section range ses diapositives (2, 2, 2), dans l\'ordre de la présentation', same(sections.map(section => section.slides.length), [2, 2, 2]) && same(sections.flatMap(section => section.slides), listed), { sections: sections.map(section => section.slides), listed });
+    check('toutes les diapositives sont dans une section, une seule fois', new Set(sections.flatMap(section => section.slides)).size === listed.length, listed);
+    check('les identifiants des sections sont des GUID tous différents', sections.every(section => /^\{[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\}$/.test(section.id)) && new Set(sections.map(section => section.id)).size === 3, sections.map(section => section.id));
+    check('l\'extension est déclarée à la fin de la présentation, avec l\'identifiant de PowerPoint', /<p:extLst><p:ext uri="\{521415D9-36F7-43E2-AB2F-B90AF26B5E84\}">/.test(xml) && xml.indexOf('<p:extLst>') > xml.indexOf('</p:defaultTextStyle>'), xml.slice(-300));
+    const back = await PptxImport.fromBuffer(buffer);
+    const names = [];
+    let first = true;
+    Array.from(Dom.inertTemplate(back.html).content.children).forEach((node) => {
+      if (node.classList.contains('page-break-marker')) { first = true; return; }
+      if (node.classList.contains('pp-slide-props') && first) { names.push(SlideProps.attrsOf(node).section); first = false; return; }
+      if (first && !node.classList.contains('pp-slide-props')) { names.push(''); first = false; }
+    });
+    check('l\'import relit les sections (celle des diapositives du début garde le nom que l\'export lui a donné)', same(names, [I18n.t('pptx.export.defaultSection'), '', 'Offre', '', 'Conclusion & suite', '']), names);
+    const plain = await PptxExport.fromHtml(deck({}), { title: 'x' });
+    const plainXml = await (await JSZip.loadAsync(await plain.arrayBuffer())).file('ppt/presentation.xml').async('string');
+    check('sans aucune section, rien n\'est écrit', !/sectionLst|p:extLst/.test(plainXml), plainXml.slice(-200));
+    return result(bad);
+  });
+
   add('outputs', 'les sections ne sortent nulle part : la Lecture, le PDF et le Word ne les voient pas', async (h) => {
     try {
       const bad = [];

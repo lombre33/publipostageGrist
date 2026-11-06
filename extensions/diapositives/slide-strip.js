@@ -66,7 +66,10 @@ const SlideStrip = (function () {
   const DRAG_SCROLL_PX = 14;       // ce défilement, au plus, à chaque image
   const PT_TO_PX = PageLayout.MM_TO_PX / PageLayout.MM_TO_PT;
   // Les lignes du menu d'une diapositive, dans l'ordre ; null : un filet.
-  const MENU = ['addAfter', 'duplicate', null, 'moveUp', 'moveDown', null, 'transition', 'background', 'notes', 'hide', null, 'delete'];
+  const MENU = ['addAfter', 'duplicate', null, 'moveUp', 'moveDown', null, 'transition', 'background', 'notes', 'hide', null, 'section', null, 'delete'];
+  // Le menu de la SECTION d'une diapositive (la ligne « Section… » ci-dessus, ou un clic droit sur l'en-tête d'une section) : il prend la place des lignes de la diapositive dans le même panneau.
+  const SECTION_MENU = ['sectionNew', 'sectionRename', 'sectionFold', 'sectionUp', 'sectionDown', 'sectionRemove'];
+  const SECTION_KEYS = { sectionNew: 'new', sectionRename: 'rename', sectionUp: 'up', sectionDown: 'down', sectionRemove: 'remove' };
   const NOTES_EXCERPT = 60;        // le début des notes que dit la pastille de la miniature, en caractères
   const MAX_PEOPLE = 4;            // les pastilles de personnes du direct montrées sous une miniature ; les autres se comptent dans un « +N »
   // Puis, sous un filet, les lignes du lien d'une diapositive liée (slide-links-ui.js), montrées pour elle seule ; les trois premières sont les sens du lien (js/slide-links.js:MODES).
@@ -101,6 +104,11 @@ const SlideStrip = (function () {
   let current = 0;                 // la diapositive du curseur
   let picked = [];                 // les diapositives choisies ensemble, dans l'ordre (Ctrl+clic, Maj+clic, Maj+↑ ↓, Ctrl+A) ; vide ou une seule : celle du curseur
   let anchor = 0;                  // d'où part un Maj+clic ou un Maj+↑ ↓ : la dernière miniature cliquée ou atteinte sans Maj
+  let sectionList = [];            // les sections du texte (SlideProps.sectionsFrom) : { name, from, to, lead } ; le nom est celui du repère de la diapositive qui ouvre la section
+  let heads = [];                  // l'en-tête de chaque section nommée dans la bande (makeHead), dans l'ordre
+  let folded = new Set();          // les noms des sections repliées : l'état dure le temps de la page et suit la présentation ouverte (foldedFor) ; deux sections de même nom se replient ensemble
+  let foldedFor = '';              // la présentation dont `folded` est l'état
+  let keepFolded = false;          // vrai pendant qu'un clic sur un en-tête mène le curseur dans une section repliée : elle ne se déplie pas
   let overflowing = new Set();     // les diapositives qui dépassent de leur page
   let framesOut = new Set();       // celles dont un cadre dépasse de la page (le CSS l'y rogne)
   let redrawTimer = null;
@@ -380,6 +388,8 @@ const SlideStrip = (function () {
     r.row.remove();
   }
   const rowOf = target => rows.find(r => r.row.contains(target)) || null;
+  // La première rangée de miniature à partir de `node` : les en-têtes de section, entre les rangées, ne comptent pas.
+  const nextRow = (node) => { let at = node; while (at && !at.classList.contains('pp-slide-row')) at = at.nextElementSibling; return at; };
   // La rangée `r` montre-t-elle les blocs `nodes` (les mêmes objets) ?
   const shows = (r, nodes) => !!r.nodes && r.nodes.length === nodes.length && r.nodes.every((node, k) => node === nodes[k]);
 
@@ -425,9 +435,9 @@ const SlideStrip = (function () {
     // Dans l'ordre des diapositives, en ne déplaçant que les rangées qui ne sont pas à leur place. Une rangée déplacée perd le clavier (le navigateur le rend à la page) : la
     // miniature qui l'avait le reprend, elle suit sa diapositive.
     const focused = list.contains(document.activeElement) ? document.activeElement : null;
-    let at = list.firstElementChild;
+    let at = nextRow(list.firstElementChild);
     next.forEach((r) => {
-      if (r.row === at) { at = at.nextElementSibling; return; }
+      if (r.row === at) { at = nextRow(at.nextElementSibling); return; }
       list.insertBefore(r.row, at);
       changed = true;
     });
@@ -435,6 +445,143 @@ const SlideStrip = (function () {
     rows = next;
     return changed;
   }
+
+  // Les SECTIONS (demande du 06/11, cartes « Dans la bande et dans la grille » et « PowerPoint et diaporama »). Une section est un nom que porte la diapositive qui l'ouvre (js/slide-props.js) : la bande
+  // montre l'en-tête de chaque section nommée au-dessus de sa première miniature, la vue d'ensemble le même sur sa propre rangée. L'en-tête : la flèche qui REPLIE la section (ses miniatures se cachent, le
+  // nombre de diapositives reste), le nom (un clic choisit ses diapositives, un double-clic le renomme), le bouton « ⋯ » de son menu (un clic droit aussi). Les diapositives d'avant la première section n'ont
+  // pas d'en-tête. L'état replié ne dure que le temps de la page (il suit le nom de la section) ; une diapositive où le curseur arrive déplie sa section.
+  function makeHead(inGrid) {
+    const head = { el: el('div', 'pp-slide-section' + (inGrid ? ' pp-ov-section' : '')), k: -1, renaming: null };
+    head.el.setAttribute('role', 'presentation');
+    head.fold = Dom.button('pp-slide-section-fold');
+    head.fold.tabIndex = -1;
+    Dom.setMarkup(head.fold, Icons.svg('chevronDown'));
+    hideIcon(head.fold);
+    head.name = el('span', 'pp-slide-section-name');
+    head.count = el('span', 'pp-slide-section-count');
+    head.count.setAttribute('aria-hidden', 'true');
+    head.input = document.createElement('input');
+    head.input.type = 'text';
+    head.input.className = 'pp-slide-section-input';
+    head.input.maxLength = SlideProps.SECTION_MAX;
+    head.input.hidden = true;
+    head.input.setAttribute('aria-label', I18n.t('slides.section.nameLabel'));
+    head.more = Dom.button('pp-slide-section-more');
+    head.more.tabIndex = -1;
+    head.more.title = I18n.t('slides.section.more');
+    head.more.setAttribute('aria-label', I18n.t('slides.section.more'));
+    Dom.setMarkup(head.more, Icons.svg('more'));
+    hideIcon(head.more);
+    head.el.append(head.fold, head.name, head.input, head.count, head.more);
+    // Ni focus sur l'en-tête ni sélection de texte (comme une miniature), sauf dans le champ du nom.
+    head.el.addEventListener('mousedown', (event) => { if (event.target !== head.input) event.preventDefault(); });
+    head.el.addEventListener('click', (event) => {
+      if (event.target === head.input || dragJustEnded) return;
+      if (event.target.closest('.pp-slide-section-fold')) { toggleFold(head.k); return; }
+      if (event.target.closest('.pp-slide-section-more')) {
+        if (menu && menu.open && menu.head === head) closeMenu(false); else openSectionMenuFor(head, false);
+        return;
+      }
+      pickSection(head.k);
+    });
+    head.el.addEventListener('dblclick', (event) => { if (event.target.closest('.pp-slide-section-name, .pp-slide-section-count')) startRename(head); });
+    head.el.addEventListener('contextmenu', (event) => { event.preventDefault(); if (event.target !== head.input) openSectionMenuFor(head, false); });
+    head.input.addEventListener('keydown', (event) => {
+      event.stopPropagation();
+      if (event.key === 'Enter') { event.preventDefault(); finishRename(head, true, true); }
+      else if (event.key === 'Escape') { event.preventDefault(); finishRename(head, false, true); }
+    });
+    head.input.addEventListener('blur', () => finishRename(head, true, false));
+    return head;
+  }
+  // L'en-tête `head` dit la section `section` (le rang `k` dans sectionList) : son nom, ses diapositives, replié ou non.
+  function updateHead(head, section, k) {
+    head.k = k;
+    const isFolded = folded.has(section.name);
+    const count = section.to - section.from + 1;
+    if (head.name.textContent !== section.name) head.name.textContent = section.name;
+    head.name.title = section.name;
+    head.count.textContent = String(count);
+    head.el.classList.toggle('pp-slide-section-folded', isFolded);
+    const text = I18n.t('slides.section.head', { name: section.name, n: count });
+    head.fold.setAttribute('aria-label', text);
+    head.fold.setAttribute('aria-expanded', isFolded ? 'false' : 'true');
+    head.fold.title = I18n.t(isFolded ? 'slides.section.unfoldTip' : 'slides.section.foldTip');
+  }
+  const foldedAt = index => { const section = sectionList[SlideProps.sectionIndexAt(sectionList, index)]; return !!section && !section.lead && folded.has(section.name); };
+  // Les en-têtes de la bande et les rangées repliées d'accord avec les sections du texte ; `notify` : la vue d'ensemble ouverte se met à jour aussi (un pli, pas un changement du texte : elle suit déjà celui-ci).
+  function syncSections(notify) {
+    const id = typeof Templates !== 'undefined' ? String(Templates.getCurrentId()) : '';
+    if (id !== foldedFor) { foldedFor = id; folded = new Set(); }
+    const named = sectionList.filter(section => !section.lead);
+    while (heads.length > named.length) heads.pop().el.remove();
+    named.forEach((section, n) => {
+      if (!heads[n]) heads.push(makeHead(false));
+      const head = heads[n];
+      updateHead(head, section, sectionList.indexOf(section));
+      const first = rows[section.from];
+      if (first && head.el.nextElementSibling !== first.row) list.insertBefore(head.el, first.row);
+    });
+    rows.forEach((r, i) => { const hide = foldedAt(i); if (r.row.hidden !== hide) r.row.hidden = hide; });
+    if (notify && guest) guest.sync();
+  }
+  function toggleFold(k) {
+    const section = sectionList[k];
+    if (!section || section.lead) return;
+    if (folded.has(section.name)) folded.delete(section.name); else folded.add(section.name);
+    syncSections(true);
+  }
+  // Un clic sur le nom d'une section : ses diapositives sont choisies (les gestes de la bande s'y appliquent : monter, dupliquer, supprimer…), le curseur va à la première.
+  function pickSection(k) {
+    refresh(false);
+    const section = sectionList[k];
+    if (!section) return;
+    closeMenu(false);
+    anchor = section.from;
+    // Le curseur d'abord (goTo remet le choix à la diapositive du curseur tant qu'elle n'en fait pas partie), puis le choix.
+    keepFolded = true;
+    try { goTo(section.from, !guest); } finally { keepFolded = false; }
+    pick(range(section.from, section.to));
+    syncCurrent(false);
+    // Dans la grille, le clavier va sur la première carte sans la faire défiler : l'en-tête cliqué ne bouge pas sous la souris.
+    if (guest) { guest.sync(); guest.focus(section.from); }
+  }
+  // Le nom d'une section se change sur place, dans l'en-tête : Entrée l'écrit (un seul Ctrl+Z), Échap le laisse, quitter le champ l'écrit. Un nom vide ne change rien (« Retirer la section » est dans son menu).
+  function startRename(head) {
+    if (off) { SlidesEntry.explainOff(); return; }
+    const section = sectionList[head.k];
+    if (!section || section.lead || head.renaming) return;
+    closeMenu(false);
+    head.renaming = { from: section.from, name: section.name };
+    head.input.value = section.name;
+    head.input.hidden = false;
+    head.name.hidden = true;
+    head.input.focus();
+    head.input.select();
+  }
+  // `apply` : le nom saisi est écrit ; `focus` : le clavier revient à la diapositive (Entrée, Échap), pas quand la personne est allée cliquer ailleurs.
+  function finishRename(head, apply, focus) {
+    const state = head.renaming;
+    if (!state) return;
+    head.renaming = null;
+    const typed = head.input.value;
+    head.input.hidden = true;
+    head.name.hidden = false;
+    if (apply) {
+      const name = SlideProps.normalized({ section: typed }).section;
+      if (name && name !== state.name) {
+        Editor.exitHeaderFooterModeIfActive();
+        if (folded.delete(state.name)) folded.add(name);
+        SlideProps.applySection(editor, state.from, name);
+        refresh(false);
+        if (guest) guest.sync();
+      }
+    }
+    if (!focus) return;
+    if (guest) guest.focusBack(state.from); else editor.view.focus();
+  }
+  // L'en-tête de la section de rang `k` dans l'écran qui a la main (la grille quand elle est ouverte).
+  const headOf = k => (guest ? guest.heads() : heads).find(head => head.k === k) || null;
 
   // Relit les diapositives quand le texte a changé et met les rangées d'accord (nombre, numéros, ce qui dépasse) ; puis la diapositive du curseur et le grisé. `thumbs` : refait aussi
   // les miniatures qui ont changé. Rien pendant l'écriture d'un en-tête : l'éditeur porte alors son texte.
@@ -447,6 +594,8 @@ const SlideStrip = (function () {
       readDoc = doc;
       moved = matchRows();
       rows.forEach((r, i) => { const n = String(i + 1); if (r.num.textContent !== n) r.num.textContent = n; });
+      sectionList = SlideProps.sectionsFrom(SlideProps.sectionNamesOf(doc));
+      syncSections();
       syncLinks(true);
       syncTransitions();
       syncNotes();
@@ -635,6 +784,8 @@ const SlideStrip = (function () {
     rows.forEach((r, i) => {
       const parts = [I18n.t('slides.strip.item', { n: i + 1, total: rows.length })];
       parts.push(...overflowWhy(i));
+      const section = sectionList[SlideProps.sectionIndexAt(sectionList, i)];
+      if (section && !section.lead) parts.push(I18n.t('slides.section.in', { name: section.name }));
       if (r.linkLook) parts.push(r.link.title);
       if (r.transLook) parts.push(r.trans.title);
       if (r.notesLook) parts.push(r.notes.title);
@@ -773,6 +924,8 @@ const SlideStrip = (function () {
   function syncCurrent(moved) {
     const before = current;
     current = slideAt(editor.state.selection.from);
+    // Le curseur arrive dans une section repliée (une flèche, une frappe, un lien) : elle se déplie, la diapositive du curseur reste visible. Pas pour un clic sur son en-tête.
+    if (current !== before && !keepFolded && foldedAt(current)) { folded.delete(sectionList[SlideProps.sectionIndexAt(sectionList, current)].name); syncSections(true); }
     // Le curseur parti hors du choix (un clic dans le texte d'une autre diapositive) : le choix revient à la sienne.
     if (picked.length && (!picked.includes(current) || picked.some(i => i >= slides.length))) picked = [];
     const set = chosen();
@@ -793,7 +946,7 @@ const SlideStrip = (function () {
   }
   const range = (from, to) => Array.from({ length: Math.abs(to - from) + 1 }, (_, k) => Math.min(from, to) + k);
   function keepInView(r) {
-    if (!r) return;
+    if (!r || r.row.hidden) return;
     const top = r.row.offsetTop;
     const bottom = top + r.row.offsetHeight;
     if (top < list.scrollTop) list.scrollTop = Math.max(0, top - 8);
@@ -860,7 +1013,7 @@ const SlideStrip = (function () {
     Editor.exitHeaderFooterModeIfActive();
     refresh(false);
     // « Ajouter » ajoute après la diapositive visée, même dans un choix ; les autres gestes s'appliquent à tout le choix dont elle fait partie.
-    const plan = planOf(action, action === 'addAfter' ? [index] : setFor(index), extra);
+    const plan = planOf(action, action === 'addAfter' || action === 'moveSection' ? [index] : setFor(index), extra);
     if (!plan) return null;
     const { state, view } = editor;
     const tr = state.tr;
@@ -922,11 +1075,26 @@ const SlideStrip = (function () {
         return { target: order.indexOf(set[0]), picked: at(order, set), order, joiners: at(order, set), apply: tr => arrange(tr, order) };
       }
       case 'moveTo': {
-        const to = extra;
+        // `extra` : l'intervalle où elles se posent (0 avant la première, slides.length après la dernière), ou { gap, side } - 'next' : déposées sous le titre d'une section, elles la rejoignent.
+        const to = extra && typeof extra === 'object' ? extra.gap : extra;
+        const side = extra && typeof extra === 'object' ? extra.side : undefined;
         if (!(to >= 0 && to <= slides.length)) return null;
-        const order = moved([...all.slice(0, to).filter(i => !inSet(i)), ...set, ...all.slice(to).filter(i => !inSet(i))]);
-        if (!order) return null;
-        return { target: order.indexOf(set[0]), picked: at(order, set), order, joiners: at(order, set), apply: tr => arrange(tr, order) };
+        const arranged = [...all.slice(0, to).filter(i => !inSet(i)), ...set, ...all.slice(to).filter(i => !inSet(i))];
+        const order = moved(arranged);
+        if (!order) {
+          // L'ordre ne change pas, mais déposée sous le titre de la section d'après, la diapositive qui finit une section la quitte (et au-dessus du titre, celle qui en ouvre une rejoint la section d'avant) : seuls les noms changent.
+          const before = SlideProps.sectionNamesOf(editor.state.doc);
+          const names = before.some(Boolean) ? SlideProps.sectionNamesAfter(before, arranged, new Set(at(arranged, set)), side) : before;
+          if (names.every((name, i) => name === before[i])) return null;
+          return { target: set[0], picked: set, order: arranged, joiners: at(arranged, set), side, apply: () => {} };
+        }
+        return { target: order.indexOf(set[0]), picked: at(order, set), order, joiners: at(order, set), side, apply: tr => arrange(tr, order) };
+      }
+      case 'moveSection': {
+        // La section de la diapositive visée change de place avec sa voisine, toutes ses diapositives avec elle ; `extra` : -1 monte, 1 descend.
+        const found = SlideProps.sectionMove(SlideProps.sectionNamesOf(editor.state.doc), set[0], extra);
+        if (!found) return null;
+        return { target: found.target, picked: range(found.target, found.target + found.count - 1), order: found.order, names: found.names, apply: tr => arrange(tr, found.order) };
       }
       case 'delete': {
         // Une présentation garde au moins une diapositive ; le curseur va à celle qui prend la place de la première supprimée.
@@ -943,6 +1111,8 @@ const SlideStrip = (function () {
   // noms sont écrits dans la transaction du geste, un seul Ctrl+Z défait tout. Rien à faire quand aucune diapositive n'ouvre de section.
   function keepSections(tr, plan) {
     if (!plan.order) return;
+    // Monter ou descendre une section écrit ses noms d'après : ce sont ceux de sectionMove, pas ceux de la règle des gestes.
+    if (plan.names) { SlideProps.writeSections(tr, plan.names); return; }
     const before = SlideProps.sectionNamesOf(editor.state.doc);
     if (!before.some(Boolean)) return;
     SlideProps.writeSections(tr, SlideProps.sectionNamesAfter(before, plan.order, new Set(plan.joiners || []), plan.side));
@@ -1272,15 +1442,21 @@ const SlideStrip = (function () {
     const linkRows = LINK_MENU.map(action => '<button type="button" role="' + (LINK_MODES[action] ? 'menuitemradio' : 'menuitem') + '" data-action="' + action + '"></button>').join('');
     const html = MENU.map(action => (action ? '<button type="button" role="menuitem" data-action="' + action + '"></button>' : '<div class="pp-slide-menu-sep" role="separator"></div>')).join('')
       + '<div class="pp-slide-menu-sep pp-slide-menu-link-sep" role="separator" hidden></div>'
-      + '<div class="pp-slide-menu-link" role="group" hidden><div class="pp-slide-menu-note" aria-hidden="true"></div>' + linkRows + '</div>';
+      + '<div class="pp-slide-menu-link" role="group" hidden><div class="pp-slide-menu-note" aria-hidden="true"></div>' + linkRows + '</div>'
+      + SECTION_MENU.map(action => '<button type="button" role="menuitem" data-action="' + action + '" data-mode="section" hidden></button>').join('');
     const panel = EditorCore.createFloatingPanel('pp-slide-menu', html, onMenuAction);
     panel.el.setAttribute('role', 'menu');
-    panel.el.querySelectorAll('[data-action]').forEach((button) => { button.textContent = I18n.t('slides.menu.' + button.dataset.action); });
+    panel.el.querySelectorAll('[data-action]:not([data-mode])').forEach((button) => { button.textContent = I18n.t('slides.menu.' + button.dataset.action); });
     // Le geste qui choisit une ligne : à la souris, le clavier va ensuite au document ; au clavier, il reste dans la bande.
     panel.el.addEventListener('mousedown', () => { menu.pointer = true; }, true);
     panel.el.addEventListener('keydown', (event) => { menu.pointer = false; onMenuKey(event); });
-    menu = { panel, index: 0, open: false, pointer: true };
+    menu = { panel, index: 0, open: false, pointer: true, mode: 'slide', head: null };
     return menu;
+  }
+  // Le panneau montre les lignes d'une diapositive ('slide') ou celles de sa section ('section') : les unes cachent les autres.
+  function setMenuMode(mode) {
+    menu.mode = mode;
+    Array.from(menu.panel.el.children).forEach((child) => { child.hidden = (child.dataset.mode === 'section') !== (mode === 'section'); });
   }
   function openMenu(index, byKeyboard) {
     const r = rows[index];
@@ -1288,12 +1464,14 @@ const SlideStrip = (function () {
     ensureMenu();
     closeMenu(false);
     closeLayoutMenu(false);
+    setMenuMode('slide');
+    menu.head = null;
     // Le menu d'une miniature hors du choix : le choix revient à elle seule (ce que fait tout éditeur de diapositives au clic droit).
     if (picked.length > 1 && !picked.includes(index)) { picked = []; syncCurrent(false); }
     const many = setFor(index).length;
     Object.assign(menu, { index, open: true, pointer: !byKeyboard });
     menu.panel.el.setAttribute('aria-label', many > 1 ? I18n.t('slides.menu.labelMany', { n: many }) : I18n.t('slides.menu.label', { n: index + 1 }));
-    menu.panel.el.querySelectorAll('[data-action]').forEach((button) => {
+    menu.panel.el.querySelectorAll('[data-action]:not([data-mode])').forEach((button) => {
       const action = button.dataset.action;
       const key = action === 'hide' ? 'slides.menu.' + (allHidden(setFor(index)) ? 'show' : 'hide') + (many > 1 ? 'Many' : '')
         : many > 1 && (action === 'duplicate' || action === 'delete') ? 'slides.menu.' + action + 'Many' : 'slides.menu.' + action;
@@ -1345,7 +1523,7 @@ const SlideStrip = (function () {
   }
   // Un appui hors du menu le referme ; celui d'un bouton « ⋯ » est laissé à son clic, qui ouvre ou referme.
   function onPressOutsideMenu(event) {
-    if (menu.panel.el.contains(event.target) || event.target.closest('.pp-slide-more, .pp-ov-more')) return;
+    if (menu.panel.el.contains(event.target) || event.target.closest('.pp-slide-more, .pp-ov-more, .pp-slide-section-more')) return;
     closeMenu(false);
   }
   function onMenuKey(event) {
@@ -1373,7 +1551,10 @@ const SlideStrip = (function () {
       return;
     }
     const { index, pointer } = menu;
+    const anchorHead = menu.head;
     closeMenu(false);
+    if (action === 'section') { openSectionMenu(index, null, !pointer, null); return; }
+    if (SECTION_MENU.includes(action)) { runSectionAction(action, index, !pointer, anchorHead); return; }
     if (LINK_MENU.includes(action)) {
       giveFocus(index, !pointer);
       SlideLinksUi.act(action, index);
@@ -1399,6 +1580,90 @@ const SlideStrip = (function () {
       return;
     }
     act(action, index, !pointer);
+  }
+
+  // Le menu de la section de la diapositive `index` : « Commencer une section ici », « Renommer », « Replier » / « Déplier », « Monter », « Descendre », « Retirer la section » (elle garde ses diapositives,
+  // qui rejoignent la section d'avant). Chaque ligne grisée dit pourquoi. `anchorEl` : où le poser (l'en-tête d'où il vient ; sinon la miniature, comme le menu de la diapositive) ; `head` : cet en-tête.
+  function openSectionMenu(index, anchorEl, byKeyboard, head) {
+    ensureMenu();
+    closeMenu(false);
+    closeLayoutMenu(false);
+    refresh(false);
+    const k = SlideProps.sectionIndexAt(sectionList, index);
+    const section = sectionList[k];
+    const named = !!section && !section.lead;
+    setMenuMode('section');
+    Object.assign(menu, { index, open: true, pointer: !byKeyboard, head: head || null });
+    menu.panel.el.setAttribute('aria-label', named ? I18n.t('slides.section.menuLabel', { name: section.name }) : I18n.t('slides.section.menuLabelNone'));
+    menu.panel.el.querySelectorAll('[data-mode="section"]').forEach((button) => {
+      const action = button.dataset.action;
+      button.textContent = I18n.t(action === 'sectionFold' ? (named && folded.has(section.name) ? 'slides.section.unfold' : 'slides.section.fold') : 'slides.section.' + SECTION_KEYS[action]);
+      const why = sectionWhy(action, index);
+      button.setAttribute('aria-disabled', why ? 'true' : 'false');
+      if (why) button.title = why; else button.removeAttribute('title');
+    });
+    const r = rows[index];
+    if (r && !r.row.hidden) r.row.classList.add('pp-slide-menu-open');
+    if (guest) guest.menuOpen(index, true);
+    // Celui d'un en-tête : à droite de l'en-tête dans la bande, sous la flèche dans la grille (l'en-tête y tient toute la largeur).
+    menu.panel.show(anchorEl || (guest ? guest.anchorOf(index) : (r && !r.row.hidden ? r.thumb : list)), { placement: anchorEl && guest ? 'bottom-start' : 'right-start', offset: 6 });
+    if (byKeyboard) menuButtons()[0].focus();
+    document.addEventListener('mousedown', onPressOutsideMenu, true);
+  }
+  // Le menu d'un en-tête de section (sa première diapositive pour la ligne « Commencer une section ici » : grisée, elle l'ouvre déjà).
+  function openSectionMenuFor(head, byKeyboard) {
+    refresh(false);
+    const section = sectionList[head.k];
+    if (section) openSectionMenu(section.from, guest ? head.fold : head.el, byKeyboard, head);
+  }
+  // Pourquoi la ligne `action` du menu de section de la diapositive `index` est grisée, '' quand elle ne l'est pas. Replier ne change pas le texte : l'extension éteinte ne le grise pas.
+  function sectionWhy(action, index) {
+    const section = sectionList[SlideProps.sectionIndexAt(sectionList, index)];
+    const named = !!section && !section.lead;
+    const none = I18n.t('slides.section.none');
+    if (action === 'sectionFold') return named ? '' : none;
+    if (off) return SlidesEntry.reason();
+    const names = SlideProps.sectionNamesOf(editor.state.doc);
+    if (action === 'sectionNew') return names[index] ? I18n.t('slides.section.opensAlready') : '';
+    if (!named) return none;
+    if (action === 'sectionUp' || action === 'sectionDown') {
+      const up = action === 'sectionUp';
+      return SlideProps.sectionMove(names, index, up ? -1 : 1) ? '' : I18n.t(up ? 'slides.section.first' : 'slides.section.last');
+    }
+    return '';
+  }
+  // Une ligne du menu de section : chaque écriture est UNE transaction (un seul Ctrl+Z).
+  function runSectionAction(action, index, byKeyboard, head) {
+    Editor.exitHeaderFooterModeIfActive();
+    refresh(false);
+    const k = SlideProps.sectionIndexAt(sectionList, index);
+    const section = sectionList[k];
+    const named = !!section && !section.lead;
+    if (action === 'sectionFold') {
+      if (named) toggleFold(k);
+      if (rows[index] && !rows[index].row.hidden) giveFocus(index, byKeyboard);
+      return;
+    }
+    if (sectionWhy(action, index)) { if (off) SlidesEntry.explainOff(); return; }
+    if (action === 'sectionUp' || action === 'sectionDown') { act('moveSection', index, byKeyboard, action === 'sectionUp' ? -1 : 1); return; }
+    if (action === 'sectionRename') {
+      const target = head || headOf(k);
+      if (target) startRename(target); else giveFocus(index, byKeyboard);
+      return;
+    }
+    if (action === 'sectionRemove') {
+      SlideProps.applySection(editor, section.from, '');
+      refresh(false);
+      if (guest) guest.sync();
+      giveFocus(index, byKeyboard);
+      return;
+    }
+    // « Commencer une section ici » : une section au nom d'attente qu'on renomme tout de suite.
+    const changed = SlideProps.applySection(editor, index, I18n.t('slides.section.defaultName'));
+    refresh(false);
+    if (guest) guest.sync();
+    const created = changed > 0 ? headOf(SlideProps.sectionIndexAt(sectionList, index)) : null;
+    if (created) startRename(created); else giveFocus(index, byKeyboard);
   }
 
   // Le menu des mises en page de « Ajouter » (au-dessus de l'existant, à droite de la bande, au bas, devant la rangée des deux boutons) : une ligne par mise en page, son dessin et son nom ; le choix ajoute une diapositive après
@@ -1569,19 +1834,37 @@ const SlideStrip = (function () {
   function gapAt(x, y) {
     const box = list.getBoundingClientRect();
     if (x < box.left || x > box.right) return -1;
-    const at = rows.findIndex((r) => { const rect = r.row.getBoundingClientRect(); return y < rect.top + rect.height / 2; });
+    const at = rows.findIndex((r) => { if (r.row.hidden) return false; const rect = r.row.getBoundingClientRect(); return y < rect.top + rect.height / 2; });
     return at < 0 ? rows.length : at;
   }
-  // La ligne d'accent, au milieu de l'intervalle ; cachée là où rien ne bougerait (juste avant ou juste après la diapositive emportée, ou hors de la bande).
+  // L'en-tête de section juste avant la miniature de l'intervalle `gap` (l'intervalle d'entre deux sections), ou null.
+  function headAtGap(gap) {
+    const k = sectionList.findIndex(section => !section.lead && section.from === gap && gap > 0);
+    return k < 0 ? null : (heads.find(head => head.k === k) || null);
+  }
+  // Déposée sur le titre d'une section : au-dessus de la moitié du titre, elle finit la section d'avant ('prev') ; au-dessous, elle ouvre celle d'après ('next').
+  function sideAt(gap, y) {
+    const head = headAtGap(gap);
+    if (!head) return 'prev';
+    const rect = head.el.getBoundingClientRect();
+    return y >= rect.top + rect.height / 2 ? 'next' : 'prev';
+  }
+  // La ligne d'accent, au milieu de l'intervalle (au-dessus ou au-dessous du titre d'une section, selon le côté) ; cachée là où rien ne bougerait (juste avant ou juste après la diapositive emportée, ou hors de la bande).
   function placeDropLine() {
     const gap = gapAt(drag.x, drag.y);
     const set = drag.group.map(r => rows.indexOf(r)).sort((a, b) => a - b);
     drag.gap = gap;
-    const still = gap < 0 || set.some(i => i < 0) || !planOf('moveTo', set, gap);
+    const side = sideAt(gap, drag.y);
+    const still = gap < 0 || set.some(i => i < 0) || !planOf('moveTo', set, { gap, side });
     drag.line.hidden = still;
     if (still) return;
     const before = rows[gap - 1];
     const after = rows[gap];
+    const head = headAtGap(gap);
+    if (head) {
+      drag.line.style.top = Math.round(side === 'next' ? after.row.offsetTop - 2 : head.el.offsetTop - 2) + 'px';
+      return;
+    }
     const bottom = before ? before.row.offsetTop + before.row.offsetHeight : after.row.offsetTop - 6;
     const top = after ? after.row.offsetTop : bottom + 6;
     drag.line.style.top = Math.round((bottom + top) / 2 - 1) + 'px';
@@ -1627,7 +1910,7 @@ const SlideStrip = (function () {
     let index = nodes.length ? slides.findIndex(slide => slide.nodes.some(entry => nodes.includes(entry.node))) : -1;
     if (index < 0 && editor.state.doc === doc) index = rows.indexOf(row);
     const gap = gapAt(event.clientX, event.clientY);
-    if (index >= 0 && gap >= 0) act('moveTo', index, false, gap);
+    if (index >= 0 && gap >= 0) act('moveTo', index, false, { gap, side: sideAt(gap, event.clientY) });
   }
   function onDragAbort() {
     if (!drag) return;
@@ -1676,7 +1959,10 @@ const SlideStrip = (function () {
     if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'Home' || key === 'End') {
       event.preventDefault();
       const step = key === 'ArrowUp' ? -1 : 1;
-      const next = key === 'Home' ? 0 : key === 'End' ? rows.length - 1 : Math.max(0, Math.min(rows.length - 1, index + step));
+      // Les miniatures d'une section repliée sont sautées.
+      const visible = rows.map((r, i) => i).filter(i => !rows[i].row.hidden);
+      const at = visible.indexOf(index);
+      const next = !visible.length ? index : key === 'Home' ? visible[0] : key === 'End' ? visible[visible.length - 1] : visible[Math.max(0, Math.min(visible.length - 1, (at < 0 ? 0 : at) + step))];
       // Maj : le choix s'étend de la dernière miniature atteinte sans Maj jusqu'à celle-ci ; sans Maj, il revient à elle seule.
       if (event.shiftKey) pick(range(Math.min(anchor, slides.length - 1), next));
       else { picked = []; anchor = next; }
@@ -1864,6 +2150,11 @@ const SlideStrip = (function () {
     gutter = 0;
     rows.forEach(r => r.row.remove());
     rows = [];
+    heads.forEach(head => head.el.remove());
+    heads = [];
+    sectionList = [];
+    folded = new Set();
+    foldedFor = '';
     slides = [];
     picked = [];
     anchor = 0;
@@ -1907,6 +2198,12 @@ const SlideStrip = (function () {
     selectAll() { refresh(false); pick(range(0, slides.length - 1)); syncCurrent(false); },
     clearChoice(index) { picked = []; anchor = index; syncCurrent(false); },
     openSlide(index) { picked = []; anchor = index; goTo(index, true); },
+    // Les sections du texte ({ name, from, to, lead }, lues, à ne pas changer) et le moyen d'en faire l'en-tête : la grille a les siens (makeHead) qu'elle dit (updateHead) et que la bande sait faire plier,
+    // renommer, ouvrir (leurs gestes sont ceux de la bande).
+    sections() { refresh(false); return sectionList; },
+    isFolded: section => !section.lead && folded.has(section.name),
+    makeHead: () => makeHead(true),
+    updateHead,
     act: (action, index, extra) => act(action, index, false, extra),
     plan: (action, set, extra) => planOf(action, set, extra),
     unavailable,
