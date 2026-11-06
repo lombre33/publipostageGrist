@@ -15,7 +15,8 @@
 // Codes d'erreur : 'oldFormat' (un .xls ou un classeur protégé par mot de passe : le fichier est un conteneur OLE, pas un zip), 'unreadable' (pas un
 // classeur), 'empty' (aucune case utile), 'tooBig' (plus de MAX_ROWS lignes, MAX_COLS colonnes ou MAX_CELLS cases : la grille serait inutilisable,
 // rien n'est coupé en silence), 'fileTooBig' (le fichier pèse plus de MAX_FILE_BYTES, ou plus de MAX_UNPACKED_BYTES une fois défait d'après son répertoire : `size` et `max` en octets).
-// Les feuilles, lignes et colonnes masquées ne sont pas importées. Un classeur qui a plusieurs feuilles visibles demande laquelle devient la grille
+// `report` (un tableau [{ key, n }]) dit ce que l'import n'a pas repris tel quel : formules remplacées par leur résultat, mise en forme conditionnelle, images, graphiques, formes,
+// commentaires, lignes et colonnes masquées, motifs et dégradés de fond, styles de trait (épais, pointillé, double) et textes tournés. Les feuilles, lignes et colonnes masquées ne sont pas importées. Un classeur qui a plusieurs feuilles visibles demande laquelle devient la grille
 // (une liste avec recherche) : une seule est importée, les autres ne le sont pas. Pas importés : formules (le résultat calculé est écrit), images,
 // graphiques, commentaires, mise en forme conditionnelle, police, retrait, orientation du texte. Dépend de GridTable (js/grid-table.js), TableBorders
 // (js/table-borders.js), XlsxNumberFormat (js/xlsx-number-format.js) et XlsxExport (chargement paresseux d'ExcelJS), deux moteurs que
@@ -116,6 +117,9 @@ const GridXlsxImport = (function () {
     if (font.underline !== undefined) fmt.underline = underlineOn(font.underline);
     if (font.strike !== undefined) fmt.strike = !!font.strike;
     if (font.size !== undefined) fmt.size = font.size;
+    if (font.name) fmt.font = String(font.name);
+    if (font.vertAlign === 'superscript') fmt.sup = true;
+    else if (font.vertAlign === 'subscript') fmt.sub = true;
     if (font.color) { const hex = color(font.color); fmt.color = hex === '#000000' ? null : hex; }
     return fmt;
   }
@@ -153,12 +157,13 @@ const GridXlsxImport = (function () {
 
   // Le contenu d'une case en HTML d'éditeur : les plages avec leurs marques, un retour à la ligne dans la case = `<br>`. `baseSize` : la taille du
   // texte « de départ » du classeur, qu'on n'écrit pas.
-  function runsToHtml(runs, base, baseSize) {
+  function runsToHtml(runs, base, baseSize, baseFont) {
     const parts = [];
     runs.forEach((run) => {
       const fmt = Object.assign({}, base, run.fmt || {});
       const size = fmt.size && Math.abs(fmt.size - baseSize) > 0.05 ? Math.round(fmt.size * 2) / 2 : null;
-      const mark = { bold: fmt.bold, italic: fmt.italic, underline: fmt.underline, strike: fmt.strike, color: fmt.color || null, size, href: run.href };
+      const font = fmt.font && fmt.font !== baseFont ? fmt.font : null; // la police « de départ » du classeur est celle de l'éditeur : on n'écrit que les autres
+      const mark = { bold: fmt.bold, italic: fmt.italic, underline: fmt.underline, strike: fmt.strike, sup: fmt.sup, sub: fmt.sub, color: fmt.color || null, size, font, href: run.href };
       String(run.text).split(/\r\n|\r|\n/).forEach((line, i) => {
         if (i) parts.push('<br>');
         if (line) parts.push(GridTable.markHtml(GridTable.escapeHtml(line), mark));
@@ -284,6 +289,26 @@ const GridXlsxImport = (function () {
     return common;
   }
 
+  // La police la plus courante parmi les cases qui ont du texte : celle de départ du classeur (Calibri, Arial...), qu'on n'écrit pas, comme sa taille.
+  function commonFont(cells) {
+    const counts = new Map();
+    cells.forEach(({ content, base }) => {
+      if (base.font && content.runs.some(run => String(run.text).trim())) counts.set(base.font, (counts.get(base.font) || 0) + 1);
+    });
+    let common = '';
+    let best = 0;
+    counts.forEach((count, font) => { if (count > best) { best = count; common = font; } });
+    return common;
+  }
+
+  // Un retrait d'Excel (`indent` : un cran = trois espaces de la police de départ, 7,5 pt) en points. Il vaut pour un texte aligné à gauche, écrit ou « Standard » ; aligné à droite il
+  // part de la droite, et la grille n'a de retrait qu'à gauche : il n'est pas repris.
+  const INDENT_PT = 7.5;
+  function indentOf(style, align) {
+    const level = style.alignment && style.alignment.indent;
+    return level > 0 && !align ? level * INDENT_PT : 0;
+  }
+
   // La feuille à lire : `options.sheetIndex`, un rang parmi les feuilles visibles (au-delà, la dernière).
   function pickSheet(workbook, options) {
     const sheets = visibleSheets(workbook);
@@ -305,7 +330,30 @@ const GridXlsxImport = (function () {
     if (shownRows.length > MAX_ROWS || shownCols.length > MAX_COLS || shownRows.length * shownCols.length > MAX_CELLS) {
       throw fail('tooBig', 'La feuille est trop grande pour une grille.', { rows: shownRows.length, cols: shownCols.length, maxRows: MAX_ROWS, maxCols: MAX_COLS, maxCells: MAX_CELLS });
     }
-    return { shownRows, shownCols };
+    return { shownRows, shownCols, extent };
+  }
+
+  // Ce que l'import n'a pas repris tel quel, pour la fenêtre qui le dit : [{ key, n }] dans l'ordre de REPORT_KEYS, sans les genres absents du classeur. Les clés sont celles de
+  // `xlsx.import.report.<genre>` (js/i18n.js). Les objets (images, graphiques, formes, commentaires) sont comptés dans le fichier (objectCounts), le reste case par case.
+  const REPORT_KEYS = ['formulas', 'conditional', 'images', 'charts', 'shapes', 'comments', 'hiddenRows', 'hiddenCols', 'patterns', 'gradients', 'borderStyles', 'rotated'];
+  function reportOf(sheet, cells, shown, objects) {
+    const n = Object.fromEntries(REPORT_KEYS.map(key => [key, 0]));
+    cells.forEach(({ formula, style }) => {
+      if (formula) n.formulas++;
+      const fill = style.fill;
+      if (fill && fill.type === 'pattern' && fill.pattern && fill.pattern !== 'solid' && fill.pattern !== 'none') n.patterns++;
+      if (fill && fill.type === 'gradient') n.gradients++;
+      // Un trait n'a qu'une couleur dans la grille (js/table-borders.js) : un trait épais, pointillé ou double devient un trait fin uni ; un texte tourné reste à l'horizontale.
+      const border = style.border || {};
+      if (['top', 'right', 'bottom', 'left'].some(side => border[side] && border[side].style && !/^(none|thin)$/.test(border[side].style))) n.borderStyles++;
+      const rotation = style.alignment && style.alignment.textRotation;
+      if (rotation && rotation !== 0) n.rotated++;
+    });
+    n.conditional = (sheet.conditionalFormattings || []).reduce((total, group) => total + ((group && group.rules && group.rules.length) || 1), 0);
+    Object.assign(n, objects || {});
+    n.hiddenRows = shown.extent.rows - shown.shownRows.length;
+    n.hiddenCols = shown.extent.cols - shown.shownCols.length;
+    return REPORT_KEYS.filter(key => n[key] > 0).map(key => ({ key, n: n[key] }));
   }
 
   // Première passe : le contenu de chaque case, pour connaître la taille de texte la plus courante.
@@ -323,6 +371,7 @@ const GridXlsxImport = (function () {
         col,
         anchor,
         style,
+        formula: source.type === T.Formula,
         content: contentOf(source, source.numFmt || style.numFmt, options),
         size: font.size || DEFAULT_SIZE_PT,
         base: Object.assign({ bold: false, italic: false, underline: false, strike: false, size: DEFAULT_SIZE_PT }, fontFormat(font, options.color)),
@@ -333,18 +382,20 @@ const GridXlsxImport = (function () {
 
   // Deuxième passe : les cases du modèle, rangées par ligne. Le pourtour d'une case fusionnée : le haut et la gauche de sa case d'angle, la droite
   // de la dernière colonne de sa première ligne, le bas de la dernière ligne de sa première colonne.
-  function buildGrid(sheet, cells, rowCount, baseSize, palette) {
+  function buildGrid(sheet, cells, rowCount, baseSize, baseFont, palette) {
     const borderOf = (r, c) => (sheet.getCell(r, c).style || {}).border || {};
     const grid = Array.from({ length: rowCount }, () => []);
     cells.forEach(({ row, col, anchor, style, content, base }) => {
       const border = style.border || {};
       const m = anchor && anchor.m;
+      const align = horizontalAlign(style, content.kind);
       grid[row].push({
         col,
         colspan: anchor ? anchor.colspan : 1,
         rowspan: anchor ? anchor.rowspan : 1,
-        html: runsToHtml(content.runs, base, baseSize),
-        align: horizontalAlign(style, content.kind),
+        html: runsToHtml(content.runs, base, baseSize, baseFont),
+        align,
+        indent: indentOf(style, align),
         valign: verticalAlign(style),
         fill: fillOf(style, palette),
         borders: {
@@ -366,7 +417,7 @@ const GridXlsxImport = (function () {
     const { shownRows, shownCols } = shown;
     const merges = ((sheet.model && sheet.model.merges) || []).map(rangeOf).filter(Boolean);
     const cells = readCells(sheet, shown, mergeLayout(merges, shownRows, shownCols), { lang, color: c => colorHex(c, palette) });
-    const grid = buildGrid(sheet, cells, shownRows.length, commonSize(cells), palette);
+    const grid = buildGrid(sheet, cells, shownRows.length, commonSize(cells), commonFont(cells), palette);
     resolveBorders(grid, shownCols.length);
 
     const props = sheet.properties || {};
@@ -380,6 +431,7 @@ const GridXlsxImport = (function () {
     };
     return {
       model, html: GridTable.toHtml(model, { sizes: true }), sheetName: sheet.name, sheetIndex, sheetCount: sheets.length || 1, rows: shownRows.length, cols: shownCols.length,
+      report: reportOf(sheet, cells, shown, workbook.ppObjects && workbook.ppObjects[sheet.name]),
     };
   }
 
@@ -391,17 +443,20 @@ const GridXlsxImport = (function () {
     if (bytes.length > MAX_FILE_BYTES) throw fail('fileTooBig', 'Ce classeur est trop volumineux pour être importé.', { size: bytes.length, max: MAX_FILE_BYTES });
     await ExportCommon.ensureJsZipLoaded();
     let unpacked;
-    try { unpacked = ExportCommon.zipUnpackedBytes(await JSZip.loadAsync(buffer)); } catch (e) { throw fail('unreadable', 'Fichier illisible.', { cause: e }); }
+    let zip;
+    try { zip = await JSZip.loadAsync(buffer); unpacked = ExportCommon.zipUnpackedBytes(zip); } catch (e) { throw fail('unreadable', 'Fichier illisible.', { cause: e }); }
     if (unpacked > MAX_UNPACKED_BYTES) throw fail('fileTooBig', 'Ce classeur est trop volumineux une fois défait.', { size: unpacked, max: MAX_UNPACKED_BYTES });
     await ExportEngines.ensure('xlsx', 'xlsxFormat');
     await XlsxExport.ensureExcelLibLoaded();
+    const objects = await objectCounts(zip).catch(() => ({})); // comptés dans le fichier lui-même : ExcelJS n'en lit que les images, et rien du tout d'un classeur qu'il refuse
     const workbook = new ExcelJS.Workbook();
-    try { await workbook.xlsx.load(buffer); return workbook; } catch (e) {
+    try { await workbook.xlsx.load(buffer); workbook.ppObjects = objects; return workbook; } catch (e) {
       // Un classeur valide qu'ExcelJS ne sait pas lire parce que son auteur (openpyxl, pandas...) a écrit ses dessins, commentaires ou tableaux autrement qu'Excel :
       // la Grille n'en reprend aucun objet, on relit les cases dans le classeur sans eux.
       try {
         const plain = new ExcelJS.Workbook();
         await plain.xlsx.load(await withoutObjects(buffer));
+        plain.ppObjects = objects;
         return plain;
       } catch (_) { throw fail('unreadable', 'Fichier illisible.', { cause: e }); }
     }
@@ -412,6 +467,57 @@ const GridXlsxImport = (function () {
   const OBJECT_PARTS = /^xl\/(drawings|comments|charts|media|diagrams|embeddings|ctrlProps|threadedComments)\/|^xl\/(comments|persons)[^/]*\.xml$/;
   const OBJECT_RELATION = /\/(drawing|vmlDrawing|comments|chart|image|diagramData|diagramLayout|diagramQuickStyle|diagramColors|oleObject|ctrlProp|threadedComment|person)"/;
   const SHEET_OBJECT_TAGS = /<(?:\w+:)?(?:drawing|legacyDrawing|legacyDrawingHF|picture|oleObjects|controls)\b[^>]*?(?:\/>|>[\s\S]*?<\/(?:\w+:)?(?:oleObjects|controls)>)/g;
+  // Ce que chaque feuille porte d'objets que la Grille ne reprend pas : { nom de la feuille : { images, charts, shapes, comments } }, d'après les dessins et les commentaires du fichier.
+  // Les parties se suivent par leurs relations (classeur -> feuille -> dessin, commentaires), pas par leur nom.
+  const unescapeXml = text => text.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  function resolvePart(fromPart, target) {
+    const segments = (target.startsWith('/') ? target.slice(1) : fromPart.split('/').slice(0, -1).concat(target).join('/')).split('/');
+    const out = [];
+    segments.forEach((segment) => { if (segment === '..') out.pop(); else if (segment && segment !== '.') out.push(segment); });
+    return out.join('/');
+  }
+  async function relationsOf(zip, part) {
+    const file = zip.file(part.replace(/([^/]+)$/, '_rels/$1.rels'));
+    if (!file) return [];
+    const xml = await file.async('string');
+    return (xml.match(/<Relationship\b[^>]*?\/>/g) || []).map((rel) => {
+      const attr = name => { const m = new RegExp('\\b' + name + '="([^"]*)"').exec(rel); return m ? unescapeXml(m[1]) : ''; };
+      return { id: attr('Id'), type: attr('Type').replace(/^.*\//, ''), target: /TargetMode="External"/.test(rel) ? '' : attr('Target') };
+    });
+  }
+  async function objectCounts(zip) {
+    const book = zip.file('xl/workbook.xml');
+    if (!book) return {};
+    const sheets = ((await book.async('string')).match(/<sheet\b[^>]*?\/>/g) || []).map((tag) => {
+      const name = /\bname="([^"]*)"/.exec(tag);
+      const id = /\b(?:\w+:)?id="([^"]*)"/.exec(tag);
+      return { name: name ? unescapeXml(name[1]) : '', id: id ? id[1] : '' };
+    });
+    const bookRelations = await relationsOf(zip, 'xl/workbook.xml');
+    const counts = {};
+    const count = (xml, re) => (xml.match(re) || []).length;
+    for (const sheet of sheets) {
+      const link = bookRelations.find(rel => rel.id === sheet.id && rel.target);
+      const part = link && resolvePart('xl/workbook.xml', link.target);
+      const own = { images: 0, charts: 0, shapes: 0, comments: 0 };
+      if (part && zip.file(part)) {
+        for (const rel of await relationsOf(zip, part)) {
+          const target = rel.target && resolvePart(part, rel.target);
+          const file = target && zip.file(target);
+          if (!file) continue;
+          if (rel.type === 'drawing') {
+            const xml = await file.async('string');
+            own.images += count(xml, /<(?:\w+:)?pic\b/g);
+            own.charts += count(xml, /<(?:\w+:)?chart\b[^>]*\bid="/g);
+            own.shapes += count(xml, /<(?:\w+:)?sp\b/g);
+          } else if (rel.type === 'comments') own.comments += count(await file.async('string'), /<comment\b/g);
+        }
+      }
+      counts[sheet.name] = own;
+    }
+    return counts;
+  }
+
   function relativeTarget(relsPath, target) {
     const from = relsPath.split('/').slice(0, -2); // le dossier de la partie qui porte les relations
     const to = target.replace(/^\//, '').split('/');

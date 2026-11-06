@@ -1376,6 +1376,148 @@
     },
   });
 
+  // Le compte rendu de l'import (choix d'Antoine du 06/11, « Oui, comme pour PowerPoint ») : ce que le classeur avait et que la grille n'a pas repris tel quel. Un classeur « comme Excel l'écrit »
+  // (dessin et commentaires préfixés, cibles relatives) avec de tout : 2 formules, 1 règle conditionnelle, 2 images, 1 graphique, 1 forme, 2 commentaires, 1 ligne et 1 colonne masquées,
+  // 1 motif et 1 dégradé de fond.
+  async function withExcelObjects(bytes) {
+    await ExportCommon.ensureJsZipLoaded();
+    const zip = await JSZip.loadAsync(bytes);
+    const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    const XDR = 'http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing';
+    const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+    const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const anchor = inner => `<xdr:oneCellAnchor><xdr:from><xdr:col>5</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="100000" cy="100000"/>${inner}<xdr:clientData/></xdr:oneCellAnchor>`;
+    const pic = id => anchor(`<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${id}" name="Image ${id}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>`);
+    const chart = anchor(`<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="5" name="Graphique 1"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId2"/></a:graphicData></a:graphic></xdr:graphicFrame>`);
+    const shape = anchor(`<xdr:sp macro="" textlink=""><xdr:nvSpPr><xdr:cNvPr id="6" name="Zone de texte 1"/><xdr:cNvSpPr txBox="1"/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr><xdr:txBody><a:bodyPr/><a:p><a:r><a:t>note</a:t></a:r></a:p></xdr:txBody></xdr:sp>`);
+    zip.file('xl/drawings/drawing1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="${XDR}" xmlns:a="${A}" xmlns:r="${REL}">${pic(2)}${pic(3)}${chart}${shape}</xdr:wsDr>`);
+    zip.file('xl/drawings/_rels/drawing1.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/image" Target="../media/image1.png"/><Relationship Id="rId2" Type="${REL}/chart" Target="../charts/chart1.xml"/></Relationships>`);
+    zip.file('xl/media/image1.png', PNG, { base64: true });
+    zip.file('xl/charts/chart1.xml', '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea><c:layout/></c:plotArea></c:chart></c:chartSpace>');
+    zip.file('xl/comments1.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><authors><author>moi</author></authors><commentList><comment ref="A1" authorId="0"><text><r><t>un</t></r></text></comment><comment ref="B1" authorId="0"><text><r><t>deux</t></r></text></comment></commentList></comments>');
+    zip.file('xl/drawings/vmlDrawing1.vml', '<xml xmlns:v="urn:schemas-microsoft-com:vml"><v:shape id="s1" type="#_x0000_t202"/></xml>');
+    zip.file('xl/worksheets/_rels/sheet1.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/drawing" Target="../drawings/drawing1.xml"/><Relationship Id="rId2" Type="${REL}/comments" Target="../comments1.xml"/><Relationship Id="rId3" Type="${REL}/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/></Relationships>`);
+    const types = (await zip.file('[Content_Types].xml').async('string')).replace('</Types>', '<Default Extension="png" ContentType="image/png"/><Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/><Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/><Override PartName="/xl/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/><Override PartName="/xl/comments1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml"/></Types>');
+    zip.file('[Content_Types].xml', types);
+    const sheet = await zip.file('xl/worksheets/sheet1.xml').async('string');
+    const cf = '<conditionalFormatting sqref="B2:B3"><cfRule type="cellIs" priority="1" operator="greaterThan"><formula>1</formula></cfRule></conditionalFormatting>';
+    zip.file('xl/worksheets/sheet1.xml', sheet.replace('</sheetData>', '</sheetData>' + cf).replace('</worksheet>', `<drawing r:id="rId1"/><legacyDrawing r:id="rId3"/></worksheet>`));
+    return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+  }
+  async function withNotice(fn) {
+    const before = Dialogs.notice;
+    const told = [];
+    Dialogs.notice = async (opts) => { told.push(opts); };
+    try { await fn(); } finally { Dialogs.notice = before; }
+    return told;
+  }
+
+  cases.push({
+    id: 'gridImport_the_report_says_what_the_workbook_had_that_the_grid_did_not_take',
+    description: 'Un classeur qui a de tout (2 formules, 1 règle conditionnelle, 2 images, 1 graphique, 1 forme, 2 commentaires, 1 ligne et 1 colonne masquées, 1 motif et 1 dégradé de fond) rend un compte rendu à dix genres, dans l\'ordre, que la fenêtre dit en français puis en anglais avec les bons pluriels ; un classeur ordinaire n\'ouvre aucune fenêtre ; le classeur refusé comme illisible par ExcelJS est compté pareil (les objets sont comptés dans le fichier)',
+    run: async (h) => {
+      const spec = {
+        fills: ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>', '<fill><patternFill patternType="lightGrid"><fgColor rgb="FF0000FF"/></patternFill></fill>',
+          '<fill><gradientFill degree="90"><stop position="0"><color rgb="FFFF0000"/></stop><stop position="1"><color rgb="FF0000FF"/></stop></gradientFill></fill>'],
+        xfs: [{}, { fillId: 2 }, { fillId: 3 }],
+        sheets: [{
+          name: 'Tout',
+          cols: [{ min: 4, max: 4, hidden: true }],
+          rowMeta: { 5: { hidden: true } },
+          rows: [['a', { v: 3, f: '1+2' }, { v: 'x', s: 1 }, 'caché', { v: 'y', s: 2 }], ['b', { v: 'ab', f: 'A1&A2' }, 'z'], ['c', 5, 'w'], ['d', 6, 'v'], ['masquée', 1, 1]],
+        }],
+      };
+      const bytes = await withExcelObjects(await buildXlsx(spec));
+      const out = await GridXlsxImport.fromArrayBuffer(asBuffer(bytes), { lang: 'fr' });
+      const KEYS = [['formulas', 2], ['conditional', 1], ['images', 2], ['charts', 1], ['shapes', 1], ['comments', 2], ['hiddenRows', 1], ['hiddenCols', 1], ['patterns', 1], ['gradients', 1]];
+      const modelOk = JSON.stringify(out.report.map(item => [item.key, item.n])) === JSON.stringify(KEYS);
+      const plain = await GridXlsxImport.fromArrayBuffer(asBuffer(await buildXlsx({ sheets: [{ name: 'Simple', rows: [['a', 1]] }] })), { lang: 'fr' });
+      // Les traits et le texte tourné : trois cases au trait épais, pointillé ou double (la quatrième à trait fin n'est pas comptée), deux au texte tourné.
+      const styled = await importModel({
+        borders: ['<border><left/><right/><top/><bottom/><diagonal/></border>', '<border><left/><right/><top/><bottom style="thick"><color rgb="FF000000"/></bottom><diagonal/></border>', '<border><left style="dotted"><color rgb="FF000000"/></left><right/><top/><bottom/><diagonal/></border>',
+          '<border><left/><right/><top style="double"><color rgb="FF000000"/></top><bottom/><diagonal/></border>', '<border><left/><right/><top/><bottom style="thin"><color rgb="FF000000"/></bottom><diagonal/></border>'],
+        xfs: [{}, { borderId: 1 }, { borderId: 2 }, { borderId: 3 }, { borderId: 4 }, { align: 'textRotation="90"' }, { align: 'textRotation="255"' }],
+        sheets: [{ name: 'Traits', rows: [[{ v: 'a', s: 1 }, { v: 'b', s: 2 }, { v: 'c', s: 3 }, { v: 'd', s: 4 }, { v: 'e', s: 5 }, { v: 'f', s: 6 }]] }],
+      });
+      const styledReport = JSON.stringify(styled.report.map(item => [item.key, item.n]));
+      // Le même classeur avec des dessins à la façon d'openpyxl : ExcelJS le refuse, la lecture de repli compte pourtant les mêmes objets.
+      const refused = await GridXlsxImport.fromArrayBuffer(asBuffer(await withOpenpyxlObjects(await buildXlsx({ sheets: [{ name: 'Simple', rows: [['a', 1]] }] }), ['image', 'comment'])), { lang: 'fr' });
+      await settle(h);
+      await h.resetEditor();
+      const fr = await withNotice(() => importThroughMenu(h, bytes, 'tout.xlsx'));
+      const none = await withNotice(() => importThroughMenu(h, null, 'rien.xlsx'));
+      await settle(h);
+      await h.resetEditor();
+      const before = I18n.getLang();
+      I18n.setLang('en');
+      let en;
+      try { en = await withNotice(() => importThroughMenu(h, bytes, 'tout.xlsx')); } finally { I18n.setLang(before); }
+      const FR = [
+        'Ce que l’import n’a pas repris tel quel',
+        'Le classeur est importé. Il avait ceci, que la grille n’a pas pu reprendre tel quel :\n• 2 formules remplacées par leur résultat\n• 1 règle de mise en forme conditionnelle non reprise\n• 2 images non reprises\n• 1 graphique non repris\n• 1 forme ou zone de texte non reprise\n• 2 commentaires non repris\n• 1 ligne masquée non reprise\n• 1 colonne masquée non reprise\n• 1 case dont le motif de fond n’est pas repris\n• 1 case dont le dégradé de fond est remplacé par sa première couleur',
+      ];
+      const EN = [
+        'What the import did not carry over as is',
+        'The workbook is imported. It had the following, which the grid could not carry over as is:\n• 2 formulas replaced by their results\n• 1 conditional formatting rule not imported\n• 2 pictures not imported\n• 1 chart not imported\n• 1 shape or text box not imported\n• 2 comments not imported\n• 1 hidden row not imported\n• 1 hidden column not imported\n• 1 cell whose background pattern is not imported\n• 1 cell whose background gradient is replaced by its first color',
+      ];
+      const checks = {
+        modelOk,
+        plainSaysNothing: plain.report.length === 0,
+        stylesCounted: styledReport === JSON.stringify([['borderStyles', 3], ['rotated', 2]]),
+        refusedStillCounted: JSON.stringify(refused.report.map(item => [item.key, item.n])) === JSON.stringify([['images', 1], ['comments', 1]]),
+        oneWindowInFrench: fr.length === 1 && JSON.stringify([fr[0].title, fr[0].message]) === JSON.stringify(FR),
+        oneWindowInEnglish: en.length === 1 && JSON.stringify([en[0].title, en[0].message]) === JSON.stringify(EN),
+        noWindowWithoutFile: none.length === 0,
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, report: out.report, fr: fr[0] && fr[0].message, en: en[0] && en[0].message }) };
+    },
+  });
+
+  // Choix d'Antoine du 06/11 (« Police, exposant, retrait, trait ») : la police des cases (sauf celle de départ du classeur, qui est la plus courante), l'exposant et l'indice, le retrait.
+  cases.push({
+    id: 'gridImport_font_superscript_subscript_and_indent_of_the_workbook_come_with_it',
+    description: 'La police d\'une case ou d\'une plage de texte riche qui n\'est pas celle de départ du classeur (la plus courante) s\'écrit en font-family, celle de départ jamais ; un nom de police qui ouvrirait une valeur CSS est laissé ; l\'exposant et l\'indice deviennent <sup> et <sub> ; le retrait d\'une case alignée à gauche (7,5 pt le cran) s\'écrit en data-indent-left et padding-left, celui d\'une case alignée à droite ou au centre n\'est pas repris ; et la grille ouverte dans l\'éditeur garde tout',
+    run: async (h) => {
+      const font = (name, extra) => `<font>${extra || ''}<sz val="11"/><color theme="1"/><name val="${name}"/><family val="2"/></font>`;
+      const spec = {
+        fonts: [font('Calibri'), font('Times New Roman'), font('Evil\';x'), font('Calibri', '<vertAlign val="superscript"/>'), font('Calibri', '<vertAlign val="subscript"/>')],
+        xfs: [{}, { fontId: 1 }, { fontId: 2 }, { fontId: 3 }, { fontId: 4 }, { align: 'horizontal="left" indent="2"' }, { align: 'horizontal="right" indent="1"' }, { align: 'horizontal="center" indent="1"' }, { align: 'indent="1"' }],
+        sheets: [{
+          name: 'Polices',
+          rows: [
+            [{ v: 'Calibri' }, { v: 'Times', s: 1 }, { v: 'Piège', s: 2 }, { v: 'm2', s: 3 }, { v: 'H2O', s: 4 }],
+            [{ rich: [{ t: 'a ' }, { t: 'rouge', rPr: '<b/><sz val="11"/><color rgb="FFFF0000"/><rFont val="Courier New"/>' }, { t: ' b' }] }, { v: 'gauche', s: 5 }, { v: 'droite', s: 6 }, { v: 'centre', s: 7 }, { v: 'standard', s: 8 }],
+            [{ v: 'Un autre Calibri' }, { v: 'et un autre' }, { v: 'et encore' }],
+          ],
+        }],
+      };
+      const out = await importModel(spec);
+      const htmls = out.model.rows.map(row => row.cells.map(cell => cell.html));
+      const cellOf = (r, c) => out.model.rows[r].cells[c];
+      const html = out.html;
+      const checks = {
+        startFontNotWritten: htmls[0][0] === 'Calibri' && htmls[2].every(t => !/font-family/.test(t)),
+        otherFontWritten: /font-family: 'Times New Roman'/.test(htmls[0][1]),
+        unsafeNameLeft: !/Evil/.test(html),
+        superAndSub: htmls[0][3] === '<sup>m2</sup>' && htmls[0][4] === '<sub>H2O</sub>',
+        richRunKeepsItsFont: /a <span style="color: #ff0000; font-family: 'Courier New'"><strong>rouge<\/strong><\/span> b/.test(htmls[1][0]),
+        indentLeft: cellOf(1, 1).indent === 15 && /<p data-indent-left="15" style="padding-left: 15pt">gauche/.test(html),
+        indentRightOrCenterIgnored: !cellOf(1, 2).indent && !cellOf(1, 3).indent,
+        indentStandardText: cellOf(1, 4).indent === 7.5 && /<p data-indent-left="7.5" style="padding-left: 7.5pt">standard/.test(html),
+      };
+      // Dans l'éditeur : la police, l'exposant, l'indice et le retrait sont encore là après le chargement.
+      await settle(h);
+      await h.resetEditor();
+      const bytes = await buildXlsx(spec);
+      await importThroughMenu(h, bytes, 'polices.xlsx');
+      await sleep(300);
+      const editorHtml = Editor.getHTML();
+      checks.editorKeepsIt = /font-family: (?:'|&quot;)Times New Roman/.test(editorHtml) && /<sup>m2<\/sup>/.test(editorHtml) && /<sub>H2O<\/sub>/.test(editorHtml) && /data-indent-left="15"/.test(editorHtml) && !/Evil/.test(editorHtml);
+      await settle(h);
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, htmls, indents: out.model.rows[1].cells.map(c => c.indent), editor: editorHtml.slice(editorHtml.indexOf('gauche') - 160, editorHtml.indexOf('gauche') + 20) }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.gridImport = cases;
 })();

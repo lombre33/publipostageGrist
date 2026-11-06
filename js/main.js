@@ -773,7 +773,7 @@
     GridXlsxImport.chooseFile(importXlsxFile);
   }
 
-  // Le classeur choisi, par le sélecteur du menu « + » ou donné par GFS (importFileFromGfs). true : la grille importée est à l'écran ; false : le classeur est refusé (l'erreur est dite dans le coin d'état), la liste
+  // Le classeur choisi, par le sélecteur du menu « + » ou donné par GFS (importFileFromGfs). true : la grille importée est à l'écran (et le compte rendu de ce qui n'a pas été repris, s'il y en a un, a été lu) ; false : le classeur est refusé (l'erreur est dite dans le coin d'état), la liste
   // des feuilles a été fermée ou la personne a répondu « Annuler » à la question d'enregistrement : rien n'a changé.
   async function importXlsxFile(file) {
     setStatus(I18n.t('status.xlsxImporting'));
@@ -781,7 +781,16 @@
     if (!imported) return false;
     if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) { updateSaveStatus(); return false; }
     openImportedGrid(imported);
+    await tellXlsxImportReport(imported.report);
     return true;
+  }
+
+  // Ce que l'import n'a pas repris tel quel, une ligne par genre ; rien à dire quand tout est arrivé. Comme celui de l'import PowerPoint (tellPptxImportReport).
+  async function tellXlsxImportReport(report) {
+    if (!report || !report.length) return;
+    const lines = report.map(item => '• ' + I18n.t('xlsx.import.report.' + item.key, { n: item.n }));
+    await Dialogs.notice({ title: I18n.t('xlsx.import.reportTitle'), message: I18n.t('xlsx.import.reportIntro') + '\n' + lines.join('\n') });
+    refocusEditorIfLost();
   }
 
   // Lit le classeur et construit la grille. null : la liste des feuilles a été fermée sans choix, ou le classeur est refusé (l'erreur est dite

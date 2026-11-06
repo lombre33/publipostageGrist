@@ -240,6 +240,22 @@ const dialogState = page => page.evaluate(() => {
   return { shown, title: shown ? (overlay.querySelector('.pp-modal-title, h2, h3') || {}).textContent || '' : '', buttons: shown ? Array.from(overlay.querySelectorAll('.pp-modal-actions button')).filter(b => !b.hidden).map(b => b.textContent.trim()) : [] };
 });
 
+// Le compte rendu de l'import (choix d'Antoine du 06/11) : la feuille « Facture » a une formule, donc la fenêtre s'ouvre APRÈS l'arrivée de la grille ; on la lit puis on la ferme au vrai clic.
+async function closeReport(page, label, T) {
+  await page.waitForFunction(() => { const ov = document.getElementById('pp-dialog-modal'); return !!ov && getComputedStyle(ov).display !== 'none'; }, null, { timeout: 20000 }).catch(() => {});
+  await page.waitForTimeout(300);
+  const told = await page.evaluate(() => {
+    const ov = document.getElementById('pp-dialog-modal');
+    const shown = !!ov && getComputedStyle(ov).display !== 'none';
+    const message = shown ? ov.querySelector('.pp-dialog-message') : null;
+    return { shown, title: shown ? (ov.querySelector('.pp-modal-title, h2, h3') || {}).textContent || '' : '', message: message ? message.textContent : '' };
+  });
+  check(`${label} - le classeur importé, la fenêtre du compte rendu s'ouvre, titrée « ${T.reportTitle} », avec la formule remplacée par son résultat`, told.shown && told.title === T.reportTitle && told.message === T.reportMessage, told);
+  const closed = await clickDialogButton(page, T.close);
+  check(`${label} - « ${T.close} » est atteignable à la souris dans le panneau, et la fenêtre se ferme`, !!closed && closed.reachable && closed.inViewport && !(await dialogState(page)).shown, closed);
+  await page.mouse.move(WIDTH - 10, HEIGHT - 10);
+}
+
 // « + » puis « Nouveau document » au vrai clic (la grille importée est « à enregistrer » : la confirmation s'ouvre, on abandonne).
 async function newDocument(page, discardLabel) {
   const plus = await boxOf(page, '#btn-new');
@@ -305,9 +321,11 @@ const statusOf = page => page.evaluate(() => {
 });
 
 const TEXTS = {
-  fr: { row: 'Importer un Excel…', placeholder: 'Rechercher une feuille…', noMatch: 'Aucune feuille ne correspond.', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler',
+  fr: { row: 'Importer un Excel…', placeholder: 'Rechercher une feuille…', noMatch: 'Aucune feuille ne correspond.', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler', close: 'Fermer',
+    reportTitle: 'Ce que l’import n’a pas repris tel quel', reportMessage: 'Le classeur est importé. Il avait ceci, que la grille n’a pas pu reprendre tel quel :\n• 1 formule remplacée par son résultat',
     imported: /^Feuille « Facture » \(1 sur 2\) importée : 5 lignes, 5 colonnes\./, unreadable: 'Ce fichier n’est pas un classeur Excel (.xlsx) lisible.', euro: /^12,50\s€$/, total: /^20,50\s€$/ },
-  en: { row: 'Import from Excel…', placeholder: 'Search for a sheet…', noMatch: 'No sheet matches.', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel',
+  en: { row: 'Import from Excel…', placeholder: 'Search for a sheet…', noMatch: 'No sheet matches.', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
+    reportTitle: 'What the import did not carry over as is', reportMessage: 'The workbook is imported. It had the following, which the grid could not carry over as is:\n• 1 formula replaced by its result',
     imported: /^Sheet “Facture” \(1 of 2\) imported: 5 rows, 5 columns\./, unreadable: 'This file is not a readable Excel (.xlsx) workbook.', euro: /^12\.50\s€$/, total: /^20\.50\s€$/ },
 };
 
@@ -413,6 +431,7 @@ async function run(theme, lang) {
     check(`${label} - un vrai clic sur « Facture » dans la liste`, !!picked && picked.reachable && picked.inPanel, picked);
     await page.waitForFunction(() => GridEditor.isActive() && document.querySelectorAll('.v2-grid-colhead').length > 0, null, { timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(600);
+    await closeReport(page, label, T);
   }
   const grid = await page.evaluate(() => {
     const ed = EditorCore.getEditor();
@@ -501,6 +520,7 @@ async function run(theme, lang) {
     check(`${label} - « ${T.discard} » est atteignable à la souris dans le panneau`, !!discard && discard.reachable && discard.inViewport, discard);
     await page.waitForFunction(() => GridEditor.isActive() && document.querySelectorAll('.v2-grid-colhead').length === 5, null, { timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(400);
+    await closeReport(page, label, T);
     const text = await page.evaluate(() => EditorCore.getEditor().state.doc.textContent);
     check(`${label} - « ${T.discard} » : le brouillon est abandonné, la grille du classeur arrive`, (await gridActive(page)) && text.includes('Facture Alpha') && !text.includes('Brouillon'), { text: text.slice(0, 60) });
   }

@@ -210,11 +210,15 @@ const GridTable = (function () {
     return items.map(item => (item.br ? '<br>' : markHtml(escapeHtml(item.text), item.fmt))).join('');
   }
 
+  // Le nom d'une police écrit tel quel dans un style : des lettres, des chiffres, des espaces, un point, un tiret ou un souligné, rien qui ouvre une valeur CSS.
+  const SAFE_FONT_NAME = /^[\p{L}\p{N} ._-]{1,60}$/u;
   function markHtml(escaped, fmt) {
-    // Un texte déjà échappé dans ses marques : gras, italique, souligné, barré, couleur et taille du texte (un <span style> que l'éditeur relit en
+    // Un texte déjà échappé dans ses marques : gras, italique, souligné, barré, exposant, indice, police, couleur et taille du texte (un <span style> que l'éditeur relit en
     // `textStyle`), lien.
     let html = escaped;
     if (!fmt) return html;
+    if (fmt.sup) html = `<sup>${html}</sup>`;
+    else if (fmt.sub) html = `<sub>${html}</sub>`;
     if (fmt.strike) html = `<s>${html}</s>`;
     if (fmt.underline) html = `<u>${html}</u>`;
     if (fmt.italic) html = `<em>${html}</em>`;
@@ -222,6 +226,7 @@ const GridTable = (function () {
     const css = [];
     if (fmt.color) css.push(`color: ${fmt.color}`);
     if (fmt.size) css.push(`font-size: ${fmt.size}pt`);
+    if (fmt.font && SAFE_FONT_NAME.test(fmt.font)) css.push(`font-family: '${fmt.font}'`);
     if (css.length) html = `<span style="${css.join('; ')}">${html}</span>`;
     if (fmt.href) html = `<a href="${escapeAttr(fmt.href)}">${html}</a>`;
     return html;
@@ -378,8 +383,13 @@ const GridTable = (function () {
       if (cell.valign) attrs.push(`data-valign="${cell.valign}"`);
       ['top', 'right', 'bottom', 'left'].forEach((side) => { if (cell.borders && cell.borders[side]) attrs.push(`data-border-${side}="${cell.borders[side]}"`); });
       if (cell.fill) attrs.push(`style="background-color: ${cell.fill}"`);
-      const align = cell.align ? ` style="text-align: ${cell.align}"` : '';
-      return `<td${attrs.length ? ' ' + attrs.join(' ') : ''}><p${align}>${cell.html || ''}</p></td>`;
+      // Le retrait (en points) : `data-indent-left` pour l'éditeur, `padding-left` pour tout lecteur du HTML (js/paragraph-format.js).
+      const indent = cell.indent > 0 ? Math.round(cell.indent * 100) / 100 : 0;
+      const look = [];
+      if (cell.align) look.push(`text-align: ${cell.align}`);
+      if (indent) look.push(`padding-left: ${indent}pt`);
+      const para = (indent ? ` data-indent-left="${indent}"` : '') + (look.length ? ` style="${look.join('; ')}"` : '');
+      return `<td${attrs.length ? ' ' + attrs.join(' ') : ''}><p${para}>${cell.html || ''}</p></td>`;
     };
     const rows = model.rows.map((row) => {
       const height = sizes && row.height ? Math.round(row.height) : 0;
