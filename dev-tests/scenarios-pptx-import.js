@@ -1650,12 +1650,12 @@
         ],
       });
 
-  // Les sections d'un PowerPoint (`p14:sectionLst`) : l'éditeur n'en a pas, le nom de chacune s'écrit en tête des notes de sa première diapositive.
+  // Les sections d'un PowerPoint (`p14:sectionLst`) : de vraies sections de l'éditeur (demande du 06/11, carte « PowerPoint et diaporama ») - le nom de chacune est celui de la section que sa première diapositive ouvre.
   const sectionList = (...sections) => '<p:extLst><p:ext uri="{521415D9-36F7-43E2-AB2F-B90AF26B5E84}"><p14:sectionLst xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main">'
     + sections.map(([name, ...ids]) => `<p14:section name="${name}" id="{6F1A0001-0000-4000-8000-00000000000${ids[0] || 0}}"><p14:sldIdLst>${ids.map(id => `<p14:sldId id="${id}"/>`).join('')}</p14:sldIdLst></p14:section>`).join('')
     + '</p14:sectionLst></p:ext></p:extLst>';
-  add('pptx_import_section_names_head_the_notes_of_their_first_slide',
-    'Le nom de chaque section d\'un PowerPoint s\'écrit en tête des notes de sa première diapositive (« Section PowerPoint : nom »), avant les notes de l\'intervenant ; les autres diapositives de la section n\'ont rien ; une section sans diapositive, ou dont le nom ne tient plus dans les notes, est comptée',
+  add('pptx_import_sections_become_real_sections_of_the_deck',
+    'Chaque section d\'un PowerPoint devient une vraie section de la présentation : sa première diapositive porte son nom (`data-section`), les autres diapositives de la section n\'ont rien, les notes de l\'intervenant ne reçoivent plus de ligne « Section PowerPoint : nom » ; les sections se relisent comme l\'éditeur les lit (SlideProps.sectionsFrom) ; une section sans diapositive est comptée ; un nom de plus de 80 signes est coupé',
     async () => {
       await ready();
       const { bad, expect } = checker();
@@ -1664,12 +1664,19 @@
         slides: [{ notes: ['Dire bonjour'] }, {}, {}, {}],
       });
       const props = slidesOf(r.html).map(slide => slide.props);
-      expect('la première diapositive de la section : son titre, une ligne vide, puis ses notes', props[0] && props[0].notes === I18n.t('pptx.import.sectionHeading', { name: 'Introduction' }) + '\n\nDire bonjour', props[0]);
-      expect('une diapositive sans notes qui ouvre une section ne reçoit que le titre', props[2] && props[2].notes === I18n.t('pptx.import.sectionHeading', { name: 'Résultats' }), props[2]);
-      expect('les autres diapositives de la section n\'ont rien', !props[1] && !props[3], [props[1], props[3]]);
+      expect('la première diapositive de la section porte son nom', props[0] && props[0].section === 'Introduction', props[0]);
+      expect('ses notes restent celles de l\'intervenant, sans ligne de section en tête', props[0] && props[0].notes === 'Dire bonjour', props[0]);
+      expect('la diapositive qui ouvre la deuxième section en porte le nom', props[2] && props[2].section === 'Résultats' && !props[2].notes, props[2]);
+      expect('les autres diapositives de la section n\'ont pas de section', (!props[1] || props[1].section === '') && (!props[3] || props[3].section === ''), [props[1], props[3]]);
+      const read = SlideProps.sectionsFrom(slidesOf(r.html).map(slide => (slide.props ? slide.props.section : '')));
+      expect('l\'éditeur les lit : Introduction (1-2), Résultats (3-4)', JSON.stringify(read) === JSON.stringify([{ name: 'Introduction', from: 0, to: 1 }, { name: 'Résultats', from: 2, to: 3 }]), read);
       expect('la section sans diapositive est comptée, les autres non', sameReport(reportOf(r), { sections: 1 }), r.report);
-      const full = await run1({ presentationExt: sectionList(['Longue', 256]), slides: [{ notes: ['x'.repeat(SlideProps.NOTES_MAX - 4)] }] });
-      expect('un nom qui ne tient plus dans les notes : les notes restent entières et la section est comptée', slidesOf(full.html)[0].props.notes === 'x'.repeat(SlideProps.NOTES_MAX - 4) && sameReport(reportOf(full), { sections: 1 }), reportOf(full));
+      const long = await run1({ presentationExt: sectionList(['L' + 'o'.repeat(120), 256]), slides: [{ notes: ['x'.repeat(SlideProps.NOTES_MAX - 4)] }] });
+      const longProps = slidesOf(long.html)[0].props;
+      expect('un nom de plus de ' + SlideProps.SECTION_MAX + ' signes est coupé, la section est reprise et les notes restent entières',
+        longProps.section.length === SlideProps.SECTION_MAX && longProps.notes === 'x'.repeat(SlideProps.NOTES_MAX - 4) && sameReport(reportOf(long), {}), { section: longProps.section.length, report: reportOf(long) });
+      const plain = await run1({ slides: [{ notes: ['Dire bonjour'] }, {}] });
+      expect('un fichier sans section n\'en écrit aucune', slidesOf(plain.html).every(slide => !slide.props || !slide.props.section), slidesOf(plain.html).map(slide => slide.props));
       return result(bad);
     });
 
@@ -1878,7 +1885,7 @@
       lossCase('fond de diapositive en motif', { slidePatterns: 1 }, '', { slide: { bg: `<p:bg><p:bgPr>${PATTERN}<a:effectLst/></p:bgPr></p:bg>` } }),
       lossCase('minutage et effet de transition inconnu : le minutage est repris, seul l\'effet est compté', { transitions: 1 }, '', { slide: { transition: '<p:transition advTm="2000"><p:checker/></p:transition>' } }),
       lossCase('passage seul sans clic (advClick="0") : le temps est repris, le rapport dit que le clic fait aussi passer', { advanceClick: 1 }, '', { slide: { transition: '<p:transition advTm="5000" advClick="0"/>' } }),
-      lossCase('sections de diapositives : celle qui a une diapositive arrive dans les notes, celle qui n\'en a aucune est comptée', { sections: 1 }, '', { options: { presentationExt: SECTIONS } }),
+      lossCase('sections de diapositives : celle qui a une diapositive devient une vraie section, celle qui n\'en a aucune est comptée', { sections: 1 }, '', { options: { presentationExt: SECTIONS } }),
       lossCase('police du thème : comptée sous son vrai nom, le thème n\'a plus de ligne à lui (il devient celui de la présentation)', { fonts: 1 }, lone(para(sm('Titre', '', '<a:latin typeface="+mj-lt"/>')))),
       lossCase('couleurs du thème : rien au rapport que la perte de l\'objet', { dashes: 1 }, card({ fill: scheme('accent1'), line: unreadable })),
     ];

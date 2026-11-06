@@ -232,6 +232,26 @@ const SlideProps = (function () {
     return found;
   }
   const sectionsOf = doc => sectionsFrom(sectionNamesOf(doc));
+  // La section de `sections` (celles de sectionsFrom) qui contient la diapositive `index` : son rang, ou -1 quand il n'y en a pas.
+  const sectionIndexAt = (sections, index) => sections.findIndex(section => index >= section.from && index <= section.to);
+  // « Monter » ou « Descendre » la section qui contient la diapositive `index` (`dir` : -1 monte, 1 descend) : elle change de place avec sa voisine, avec toutes ses diapositives, chacune dans sa section.
+  // `names` : les noms d'avant (un par diapositive). Rend { order (le nouvel ordre, en rangs d'avant, comme arrange), names (les noms d'après, un par place), target (la place de la première diapositive
+  // de la section qui a bougé), count (ses diapositives) }, ou null quand la section ne bouge pas : elle n'a pas de nom, elle est déjà la première ou la dernière, ou sa voisine est la section du début
+  // (les diapositives d'avant la première section n'ont pas de nom à emporter : rien ne passe au-dessus d'elles).
+  function sectionMove(names, index, dir) {
+    const sections = sectionsFrom(names);
+    const at = sectionIndexAt(sections, index);
+    const other = at + dir;
+    if (at < 0 || !sections[other] || sections[at].lead || sections[other].lead || (dir !== 1 && dir !== -1)) return null;
+    const groups = sections.map(section => Array.from({ length: section.to - section.from + 1 }, (_, k) => section.from + k));
+    const heads = sections.map(section => section.name);
+    [groups[at], groups[other]] = [groups[other], groups[at]];
+    [heads[at], heads[other]] = [heads[other], heads[at]];
+    const order = [];
+    const after = [];
+    groups.forEach((group, g) => group.forEach((k, place) => { order.push(k); after.push(place === 0 ? heads[g] : ''); }));
+    return { order, names: after, target: order.indexOf(groups[other][0]), count: groups[other].length };
+  }
   // Les noms de section d'après un geste qui réarrange les diapositives. `before` : les noms d'avant (un par diapositive, '' : aucune section ouverte) ; `order` : le nouvel ordre, en rangs d'avant (un rang
   // absent est supprimé, un rang répété est dupliqué : comme arrange, extensions/diapositives/slide-strip.js) ; `joiners` : les places du nouvel ordre qui REJOIGNENT une section (les diapositives
   // déplacées ou les copies d'une duplication) au lieu de garder la leur ; `side` : 'next' les rattache à la section de la diapositive qui les suit (déposées juste sous le titre d'une section), sinon à celle de
@@ -651,7 +671,7 @@ const SlideProps = (function () {
   }
 
   return {
-    NODE, CLASS, CLAIM_META, KINDS, OPTIONS, SIDED, SIDES, SIDE_CHOICES, choicesOf, DURATION_CHOICES, DEFAULTS, DURATION, NOTES_MAX, createNode, createExtension, normalized, attrsOf: attrsOfEl, isNone, hasBackground, hasNotes, isBlank, slidesOf, listOf, backgroundsOf, timingsOf, notesOf, anchorsOf, titlesOf, SECTION_MAX, sectionNamesOf, sectionsOf, sectionsFrom, sectionNamesAfter, applySection, writeSections,
+    NODE, CLASS, CLAIM_META, KINDS, OPTIONS, SIDED, SIDES, SIDE_CHOICES, choicesOf, DURATION_CHOICES, DEFAULTS, DURATION, NOTES_MAX, createNode, createExtension, normalized, attrsOf: attrsOfEl, isNone, hasBackground, hasNotes, isBlank, slidesOf, listOf, backgroundsOf, timingsOf, notesOf, anchorsOf, titlesOf, SECTION_MAX, sectionNamesOf, sectionsOf, sectionsFrom, sectionIndexAt, sectionMove, sectionNamesAfter, applySection, writeSections,
     apply: applyTransition, applyTransition, applyHidden, ADVANCE, applyBackground, applyNotes, strip, forOutput, forOutputTree, html,
   };
 })();

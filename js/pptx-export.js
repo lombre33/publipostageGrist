@@ -165,12 +165,26 @@ const PptxExport = (function () {
   const PRESENTATION_PROPERTIES = XML_HEAD + `<p:presentationPr ${ROOT_NS}/>`;
   const VIEW_PROPERTIES = XML_HEAD + `<p:viewPr ${ROOT_NS}><p:normalViewPr><p:restoredLeft sz="15620"/><p:restoredTop sz="94660"/></p:normalViewPr><p:slideViewPr><p:cSldViewPr><p:cViewPr varScale="1"><p:scale><a:sx n="100" d="100"/><a:sy n="100" d="100"/></p:scale><p:origin x="0" y="0"/></p:cViewPr><p:guideLst/></p:cSldViewPr></p:slideViewPr><p:notesTextViewPr><p:cViewPr><p:scale><a:sx n="1" d="1"/><a:sy n="1" d="1"/></p:scale><p:origin x="0" y="0"/></p:cViewPr></p:notesTextViewPr><p:gridSpacing cx="76200" cy="76200"/></p:viewPr>`;
   const TABLE_STYLES = XML_HEAD + `<a:tblStyleLst xmlns:a="${NS.a}" def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"/>`;
+  // Les sections de la présentation (`p14:sectionLst`, l'extension de PowerPoint 2010 : demande du 06/11, carte « PowerPoint et diaporama ») : le nom que porte la diapositive qui ouvre chacune. PowerPoint veut que
+  // chaque diapositive soit dans une section dès qu'il y en a une : les diapositives d'avant la première, qui n'ont pas de nom, forment la « section par défaut ». Rien quand aucune diapositive n'ouvre de section.
+  const SECTION_EXT = '{521415D9-36F7-43E2-AB2F-B90AF26B5E84}';
+  function sectionListXml(slides) {
+    const found = SlideProps.sectionsFrom(slides.map(slide => (slide.props && slide.props.section) || ''));
+    if (!found.length) return '';
+    const guid = n => '{B5E0A7C1-4F2D-4A6B-8C3E-' + String(n + 1).padStart(12, '0') + '}';
+    const list = found.map((section, n) => {
+      const ids = [];
+      for (let i = section.from; i <= section.to; i += 1) ids.push(`<p14:sldId id="${FIRST_SLIDE_ID + i}"/>`);
+      return `<p14:section name="${esc(section.lead ? I18n.t('pptx.export.defaultSection') : section.name)}" id="${guid(n)}"><p14:sldIdLst>${ids.join('')}</p14:sldIdLst></p14:section>`;
+    }).join('');
+    return `<p:extLst><p:ext uri="${SECTION_EXT}"><p14:sectionLst xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main">${list}</p14:sectionLst></p:ext></p:extLst>`;
+  }
   function presentationXml(slides, size, hasNotes, relIds) {
     const defaults = levelStyles(n => ` marL="${(n - 1) * 457200}" algn="l" defTabSz="914400" rtl="0" eaLnBrk="1" latinLnBrk="0" hangingPunct="1">${DEF_RPR(1800)}`);
     return XML_HEAD + `<p:presentation ${ROOT_NS} saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="${relIds.master}"/></p:sldMasterIdLst>`
       + (hasNotes ? `<p:notesMasterIdLst><p:notesMasterId r:id="${relIds.notesMaster}"/></p:notesMasterIdLst>` : '')
       + `<p:sldIdLst>${slides.map((slide, i) => `<p:sldId id="${FIRST_SLIDE_ID + i}" r:id="${relIds.slides[i]}"/>`).join('')}</p:sldIdLst>`
-      + `<p:sldSz cx="${size.cx}" cy="${size.cy}"/><p:notesSz cx="${NOTES_SIZE.cx}" cy="${NOTES_SIZE.cy}"/><p:defaultTextStyle><a:defPPr><a:defRPr lang="en-US"/></a:defPPr>${defaults}</p:defaultTextStyle></p:presentation>`;
+      + `<p:sldSz cx="${size.cx}" cy="${size.cy}"/><p:notesSz cx="${NOTES_SIZE.cx}" cy="${NOTES_SIZE.cy}"/><p:defaultTextStyle><a:defPPr><a:defRPr lang="en-US"/></a:defPPr>${defaults}</p:defaultTextStyle>${sectionListXml(slides)}</p:presentation>`;
   }
   function corePropertiesXml(title, when) {
     return XML_HEAD + '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'

@@ -2436,21 +2436,16 @@ const PptxImport = (function () {
     await walkTree(at(root, 'cSld/spTree'), env, [], 0, frames);
     settleAnimations(frames, env.animations, ctx.report);
     const bgHex = background.rgb ? toHex(background.rgb) : '';
-    let spoken = await notesOf(env);
-    const section = ctx.sectionHeads && ctx.sectionHeads.get(path);
-    if (section) {
-      const heading = I18n.t('pptx.import.sectionHeading', { name: section });
-      const withHeading = heading + (spoken ? '\n\n' + spoken : '');
-      if (withHeading.length <= SlideProps.NOTES_MAX) spoken = withHeading;
-      else ctx.report.sections += 1;
-    }
+    const spoken = await notesOf(env);
+    // Une diapositive qui ouvre une section de PowerPoint (`p14:sectionLst`) en porte le nom : c'est une vraie section de l'éditeur (js/slide-props.js), plus une ligne dans les notes.
+    const section = (ctx.sectionHeads && ctx.sectionHeads.get(path)) || '';
     const noted = await commentsOf(env, spoken);
     ctx.report.comments += noted.left;
     // Le fond du thème est celui de la page sous chaque diapositive qui n'écrit pas le sien : une diapositive qui montre ce fond ne l'écrit pas (elle suit le thème, texte et page changent ensemble), une autre l'écrit,
     // le blanc d'une diapositive d'un fichier au thème sombre aussi.
     const paper = ctx.theme ? ctx.theme.colors.bg.slice(1) : 'ffffff';
     const shown = bgHex || 'ffffff';
-    const props = Object.assign({ bg: shown === paper ? '' : '#' + shown, notes: noted.text, hidden: attr(root, 'show') === '0' }, transitionOf(root, ctx.report));
+    const props = Object.assign({ bg: shown === paper ? '' : '#' + shown, notes: noted.text, hidden: attr(root, 'show') === '0', section }, transitionOf(root, ctx.report));
     return { props, frames: frames.join(''), tail: '<p></p>' };
   }
 
@@ -2498,8 +2493,8 @@ const PptxImport = (function () {
     const size = kid(presentation, 'sldSz');
     const page = pageFor(Math.max(numAttr(size, 'cx', 12192000), 1), Math.max(numAttr(size, 'cy', 6858000), 1));
     const report = blankReport();
-    // Les sections de la bande des diapositives (`p14:sectionLst`) : l'éditeur n'en a pas, le nom de chacune s'écrit en tête des notes de sa première diapositive (slideHtml) ; celle qui n'a aucune
-    // diapositive reprise, ou dont le nom ne tient plus dans les notes, est comptée.
+    // Les sections de la bande des diapositives (`p14:sectionLst`) : le nom de chacune devient celui de la section que sa première diapositive ouvre (slideHtml ; SlideProps.SECTION_MAX caractères au plus) ;
+    // celle qui n'a aucune diapositive reprise est comptée.
     const idPaths = new Map(kids(kid(presentation, 'sldIdLst'), 'sldId').map(el => [attr(el, 'id'), (presentationRels.byId.get(relAttr(el, 'id')) || {}).target]));
     const sectionHeads = new Map();
     descendants(presentation, 'sectionLst').forEach((list) => {
