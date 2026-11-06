@@ -217,6 +217,12 @@ async function parkMouse() {
   await page.mouse.move(WIDTH - 14, HEIGHT - 14);
   await page.waitForTimeout(300);
 }
+// Le haut du document : les sections qui posent un document neuf puis cliquent sur son premier paragraphe le font après une section qui a posé des images plus bas
+// (imagePicker) - `#editor-container` restait défilé et le paragraphe se retrouvait au-dessus de la zone visible : le clic tombait sur le corps de la page.
+async function scrollToTop() {
+  await page.evaluate(() => { const container = document.getElementById('editor-container'); if (container) container.scrollTop = 0; });
+  await page.waitForTimeout(100);
+}
 async function openWindowFor(column, action, modalSelector) {
   await clickBadge(column);
   await clickCenter(`.v2-varfmt-toolbar.visible button[data-action="${action}"]`);
@@ -1589,6 +1595,7 @@ const SECTIONS = {
       Editor.setHTML('<p>Bonjour Marie</p><p>Fin</p>');
     });
     await page.waitForTimeout(300);
+    await scrollToTop();
     const inserted = () => page.evaluate(() => {
       const ed = EditorCore.getEditor();
       const out = [];
@@ -1718,6 +1725,7 @@ const SECTIONS = {
       Editor.setHTML('<p>Bonjour Marie</p><p>Fin</p>');
     });
     await page.waitForTimeout(300);
+    await scrollToTop();
     const first = await hitTest('.tiptap p:nth-of-type(1)');
     await page.mouse.click(first.right - 6, first.y);
     await page.waitForTimeout(150);
@@ -1797,6 +1805,7 @@ const SECTIONS = {
       Editor.setHTML('<p>Bonjour Marie</p><p>Fin</p>');
     });
     await page.waitForTimeout(300);
+    await scrollToTop();
     const placed = () => page.evaluate(() => {
       const ed = EditorCore.getEditor();
       const out = [];
@@ -1907,6 +1916,7 @@ const SECTIONS = {
       return out;
     });
     await page.evaluate(() => Editor.setHTML('<p></p>'));
+    await scrollToTop();
     await parkMouse();
     const paragraph = await hitTest('.tiptap p');
     check('« # » : le paragraphe vide, où le clic va tomber, est au premier plan (aucun menu de la barre resté ouvert dessus)', paragraph.found && paragraph.inViewport && paragraph.onTop, paragraph);
@@ -3116,6 +3126,7 @@ const SECTIONS = {
       Editor.setHTML('<p>Bonjour Marie</p><p>Fin</p>');
     });
     await page.waitForTimeout(300);
+    await scrollToTop();
     const firstLine = await hitTest('.tiptap p:nth-of-type(1)');
     await page.mouse.click(firstLine.right - 6, firstLine.y);
     await page.waitForTimeout(150);
