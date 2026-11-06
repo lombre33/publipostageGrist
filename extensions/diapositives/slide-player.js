@@ -316,8 +316,9 @@ const SlidePlayer = (function () {
       const count = s.windows.length;
       // Changer de page rend la diapositive à qui voyait un écran noir ou blanc (l'état suit, plus bas) et efface le tracé : il n'a de sens que sur la page où il a été fait.
       leaveScreen(true);
-      // Une vidéo qui jouait (js/video-frame.js, lecteur de GFS par-dessus le cadre de l'app) s'arrête avec la page : le son ne passe pas sur la diapositive suivante.
-      if (typeof VideoFrame !== 'undefined') VideoFrame.stop();
+      // Une vidéo qui jouait (js/video-frame.js, lecteur de GFS par-dessus le cadre de l'app) s'arrête avec la page : le son ne passe pas sur la diapositive suivante. La fenêtre à part (present.html) ne charge pas
+      // ce module, et `VideoFrame` y est alors la classe native du navigateur (WebCodecs) : sans `stop`, d'où le test de la fonction et non du seul nom.
+      if (typeof VideoFrame !== 'undefined' && typeof VideoFrame.stop === 'function') VideoFrame.stop();
       endTransition(true);
       clearTimeout(s.advanceTimer);
       s.advanceTimer = 0;
