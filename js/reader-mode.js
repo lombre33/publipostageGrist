@@ -1086,6 +1086,8 @@ const ReaderMode = (function () {
     const framed = FrameLink.frameAt(document, event.clientX, event.clientY);
     if (!framed || !container.contains(framed.el) || framed.link.kind === 'action') return;
     event.preventDefault();
+    // Une vidéo (js/video-frame.js) se lit sur place quand GFS sait jouer son lecteur ; sinon son lien s'ouvre comme tout autre.
+    if (framed.link.kind === 'url' && VideoFrame.play(framed.el)) return;
     if (framed.link.kind === 'url') { FrameLink.openUrl(framed.link.url); return; }
     const mark = container.querySelector('[data-anchor="' + framed.link.id + '"]');
     if (mark) TocLinks.reveal(mark);
@@ -1283,6 +1285,8 @@ const ReaderMode = (function () {
     HeadingStyles.apply(wrapper);
     // Les vues de diapositive (js/slide-view.js) : le calque de chaque cadre à vue reçoit une copie de la diapositive montrée, prise dans ce texte résolu, avant la mise en page de la Lecture, de l'impression et du diaporama.
     SlideView.fill(wrapper);
+    // Les vidéos (js/video-frame.js) : la vignette de chaque cadre vidéo, par-dessus son texte de repli ; le lecteur de GFS la remplace au clic.
+    VideoFrame.fill(wrapper);
     if (stale()) return null;
     return { hasError, readsAll: loopCtx.readsAll };
   }

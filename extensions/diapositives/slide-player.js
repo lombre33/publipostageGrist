@@ -316,6 +316,8 @@ const SlidePlayer = (function () {
       const count = s.windows.length;
       // Changer de page rend la diapositive à qui voyait un écran noir ou blanc (l'état suit, plus bas) et efface le tracé : il n'a de sens que sur la page où il a été fait.
       leaveScreen(true);
+      // Une vidéo qui jouait (js/video-frame.js, lecteur de GFS par-dessus le cadre de l'app) s'arrête avec la page : le son ne passe pas sur la diapositive suivante.
+      if (typeof VideoFrame !== 'undefined') VideoFrame.stop();
       endTransition(true);
       clearTimeout(s.advanceTimer);
       s.advanceTimer = 0;
@@ -662,6 +664,8 @@ const SlidePlayer = (function () {
       const framed = s.ready && !s.ended && s.stage ? FrameLink.frameAt(s.stage.getRootNode(), event.clientX, event.clientY) : null;
       if (framed) {
         event.preventDefault();
+        // Une vidéo (js/video-frame.js) se lit sur place quand GFS sait jouer son lecteur ; la fenêtre à part, qui ne charge pas ce fichier, ouvre son lien.
+        if (framed.link.kind === 'url' && typeof VideoFrame !== 'undefined' && VideoFrame.play(framed.el)) return;
         followFrame(framed.link, FrameLink.transOf(framed.el.getAttribute(FrameLink.TRANS_ATTR)));
         return;
       }

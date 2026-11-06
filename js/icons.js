@@ -225,6 +225,9 @@ const Icons = (function () {
         + '<g transform="translate(11.2 11.2) scale(.5)" stroke-width="3.4"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></g>',
       // La vue d'une diapositive (js/slide-view.js, menu « Objets ») : une diapositive qui en porte une plus petite, avec ses lignes de texte.
       slideView: '<rect x="2.5" y="4.5" width="19" height="15" rx="1.5"/><rect x="7" y="8.5" width="10" height="7" rx="1"/><path d="M9.5 11h5M9.5 13.2h3"/>',
+      // L'objet vidéo (js/video-frame.js, menu « Objets ») : un écran et son triangle de lecture ; `videoPlay`, le disque ▶ de la vignette (un triangle plein).
+      video: '<rect x="2.5" y="4.5" width="19" height="15" rx="1.5"/><path d="M10 9v6l5-3z"/>',
+      videoPlay: '<path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>',
       unlink: '<path d="m18.84 12.25 1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="m5.17 11.75-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/><path d="M8 2v3M2 8h3M16 19v3M19 16h3"/>',
       // Les deux sens d'un tableau lié (menu du lien) : une flèche qui descend dans un bac (« Mettre à jour depuis le modèle » : les cases du modèle arrivent) et la même qui
       // en sort (« Envoyer au modèle »).

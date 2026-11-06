@@ -269,6 +269,19 @@
 .pp-ff-view .pp-ff-ui { display: none; }
 .pp-free-frame.pp-ff-has-view > .pp-free-frame-box > .pp-free-frame-content { visibility: hidden; }
 
+/* L'objet VIDÉO (`data-ff-video`, js/video-frame.js) : le calque `.pp-ff-video` couvre la boîte du cadre (dans son trait : `--ff-edge`) et porte la vignette, un disque ▶ au centre et le nom du site en bas à gauche.
+   Le texte du cadre (son titre) reste dessous, lisible : sans calque - le PDF, le Word, le HTML, le PowerPoint - il est tout ce qu'on voit. Le calque ne prend pas la souris, sauf dans l'éditeur : le disque lit la
+   vidéo, ailleurs un clic choisit le cadre et un glisser le déplace. À la Lecture et au diaporama, le clic de l'objet (son lien) la lit. Les couleurs sont celles des jetons, la vignette est la même dans les deux thèmes. */
+.pp-ff-video { position: absolute; inset: var(--ff-edge, 0pt); z-index: 1; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.pp-ff-video .pp-ff-video-play {
+  width: 18%; min-width: 28px; max-width: 80px; aspect-ratio: 1; margin: 0; padding: 0; border: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--solid-neutral, #1b2430); color: var(--on-accent, #fff); pointer-events: none;
+}
+.pp-ff-video .pp-ff-video-play svg { width: 55%; height: 55%; margin-left: 6%; }
+.pp-ff-video .pp-ff-video-name { position: absolute; left: .5em; bottom: .4em; padding: .1em .5em; border-radius: .25em; background: var(--solid-neutral, #1b2430); color: var(--on-accent, #fff); font: 600 11px/1.4 var(--font-ui); }
+.ProseMirror .pp-ff-video { pointer-events: auto; cursor: move; }
+.ProseMirror .pp-ff-video .pp-ff-video-play { pointer-events: auto; cursor: pointer; }
+
 /* Les repères d'un glissé (js/frame-multi.js:snapper) : des traits roses sur la feuille, au premier plan, que la souris traverse. Les couleurs sont ici (une seule teinte, claire sur fond sombre). */
 .pp-ff-guides { position: fixed; inset: 0; z-index: var(--z-tip); pointer-events: none; --pp-ff-guide: #d6336c; }
 :root[data-theme="dark"] .pp-ff-guides { --pp-ff-guide: #ff6f9c; }

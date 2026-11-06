@@ -328,9 +328,12 @@ async function run(lang, colorScheme) {
   const third = await page.evaluate(() => document.activeElement && document.activeElement.dataset.action);
   await key('ArrowDown', 150);
   const below = await page.evaluate(() => document.activeElement && document.activeElement.dataset.action);
+  await key('ArrowLeft', 150);
+  const left = await page.evaluate(() => document.activeElement && document.activeElement.dataset.action);
   await key('ArrowUp', 150);
   const above = await page.evaluate(() => document.activeElement && document.activeElement.dataset.action);
-  check(tag + 'au clavier : ↓ donne le clavier à « Cadre de texte », → → mène à « ' + T.row + ' », ↓ à « Tableau d\'un modèle Grille… », ↑ revient à la même place en largeur (« Cadre de texte »)', first === 'textFrame' && third === 'slideView' && below === 'linkedTable' && above === 'textFrame', { first, third, below, above });
+  // La ligne du dessous porte deux boutons depuis l'objet vidéo (06/11) : « Tableau d'un modèle Grille… » à gauche, « Vidéo… » à droite, juste sous « Vue… ».
+  check(tag + 'au clavier : ↓ donne le clavier à « Cadre de texte », → → mène à « ' + T.row + ' », ↓ au bouton juste dessous (« Vidéo… »), ← à « Tableau d\'un modèle Grille… », ↑ revient à la même place en largeur (« Cadre de texte »)', first === 'textFrame' && third === 'slideView' && below === 'video' && left === 'linkedTable' && above === 'textFrame', { first, third, below, left, above });
   await key('ArrowRight', 150);
   await key('ArrowRight', 150);
   const again = await page.evaluate(() => document.activeElement && document.activeElement.dataset.action);

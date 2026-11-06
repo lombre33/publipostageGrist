@@ -43,6 +43,12 @@
 //   window.__gfsStub.fermer(raison) : l'appel `fermer { raison }` de GFS vers l'app active (contrats 5.4, point 3, consigne 047), envoyé avant qu'une autre app prenne sa place : la promesse rend la réponse (`{ ferme }`) ou l'erreur de l'app,
 //   et le stub ne détruit rien (la page reste là, comme un GFS dont la personne a répondu « Annuler »). Une app qui ne connaît pas l'appel rend l'erreur `GFS_INCONNU`.
 //   window.__gfsStub.answers : tout ce que l'app répond aux appels de GFS ({ type, id, data | code, message }), dans l'ordre.
+//   window.__gfsStub.lecteurs : les sites dont GFS sait jouer le lecteur que rend le contexte (demande du 06/11, objet vidéo de Slides+, js/video-frame.js) : `['youtube', 'vimeo']`, ou undefined : un GFS d'avant la demande
+//   (par défaut), dont le contexte n'a pas de `lecteurs` et qui répond `GFS_INCONNU` aux appels `lecteur.*`. setLecteurs(liste) la change et envoie l'événement `lecteurs`. Les appels `lecteur.afficher { id, fournisseur, video, debut?, rect,
+//   zone }`, `lecteur.deplacer { id, rect, zone }`, `lecteur.masquer { id, masque }` et `lecteur.fermer { id }` tiennent le contrat (un `id` de la forme `^[a-z][a-z0-9_-]{0,63}$`, un `video` qui passe le motif du site, des nombres
+//   finis, un seul lecteur à la fois) ou sont ignorés et rangés dans `lecteurRefus` ; les autres sont dans `lecteurAppels` ({ nom, args }, dans l'ordre). `lecteur` est le lecteur en cours ({ id, fournisseur, video, debut, rect, zone, masque,
+//   adresse }, `adresse` : celle que GFS monterait d'après ses gabarits, jamais chargée) ou null ; dans une page PARENTE (`__gfsStubParent`) un cadre de couleur franche (#ff00ff, `#gfs-lecteur`) est posé par-dessus le cadre de l'app,
+//   rogné à `zone` et à ce cadre, caché par `masque` : de quoi mesurer où le lecteur tombe. setEtatLecteur(etat) envoie l'événement `lecteur { id, etat }` du lecteur en cours.
 //   window.__gfsStubParent = 'nom' (posé avant ce script) : le stub est chargé par la page PARENTE d'un <iframe name="nom"> qui porte l'app dans un cadre isolé (dev-tests/verify-gfs-frame.mjs) et joue
 //   GFS pour ce cadre, par `postMessage` dans les deux sens, comme le vrai GFS.
 (function () {
@@ -78,6 +84,10 @@
     refusBarre: [],
     ignoreContext: false,
     contextDelayMs: 0,
+    lecteurs: undefined,
+    lecteur: null,
+    lecteurAppels: [],
+    lecteurRefus: [],
     installReply: null,
     ranger: null,
     fichiers: [],
@@ -107,6 +117,7 @@
       if (stub.stockage) data.stockage = Object.assign({}, stub.stockage);
       if (stub.barre !== undefined) data.barre = stub.shownBar();
       if (stub.ambiance !== undefined) data.ambiance = JSON.parse(JSON.stringify(stub.ambiance));
+      if (stub.lecteurs !== undefined) data.lecteurs = stub.lecteurs.slice();
       return data;
     },
     // La barre que GFS montre à l'app : null quand il n'y en a pas (explorateur ouvert) ou que l'app l'a masquée.
@@ -212,6 +223,87 @@
         stub.rangerEnCours -= 1;
       }
     },
+    // Les appels `lecteur.*` (voir `lecteurs` ci-dessus).
+    setLecteurs(next) {
+      stub.lecteurs = next === undefined ? undefined : next.slice();
+      stub.post({ type: 'evenement', nom: 'lecteurs', data: { lecteurs: next === undefined ? [] : next.slice() } });
+    },
+    setEtatLecteur(etat) { if (stub.lecteur) stub.post({ type: 'evenement', nom: 'lecteur', data: { id: stub.lecteur.id, etat } }); },
+    playerAddress(provider, video, start) {
+      if (provider === 'youtube') return 'https://www.youtube-nocookie.com/embed/' + video + '?autoplay=1&rel=0' + (start ? '&start=' + start : '');
+      const parts = video.split('/');
+      return 'https://player.vimeo.com/video/' + parts[0] + '?autoplay=1' + (parts[1] ? '&h=' + parts[1] : '') + (start ? '#t=' + start + 's' : '');
+    },
+    // Le rectangle { x, y, largeur, hauteur } d'un appel : quatre nombres finis, largeur et hauteur positives, à plus d'un cadre de l'app des bords au plus.
+    validBox(box) {
+      return !!box && typeof box === 'object' && ['x', 'y', 'largeur', 'hauteur'].every(key => typeof box[key] === 'number' && Number.isFinite(box[key])) && box.largeur > 0 && box.hauteur > 0 && Math.abs(box.x) < 20000 && Math.abs(box.y) < 20000;
+    },
+    // Pose, déplace, cache ou retire le cadre de couleur franche par-dessus le cadre de l'app (page parente seulement).
+    layoutPlayer() {
+      const frame = appFrame();
+      let overlay = document.getElementById('gfs-lecteur');
+      const p = stub.lecteur;
+      if (!frame || !p) { if (overlay) overlay.remove(); return; }
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'gfs-lecteur';
+        overlay.style.cssText = 'position:fixed;overflow:hidden;z-index:99999;';
+        const inner = document.createElement('iframe');
+        inner.style.cssText = 'position:absolute;border:0;';
+        inner.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
+        inner.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+        inner.srcdoc = '<!doctype html><body style="margin:0;background:#ff00ff">';
+        overlay.appendChild(inner);
+        document.body.appendChild(overlay);
+      }
+      const inner = overlay.firstChild;
+      inner.setAttribute('data-adresse', p.adresse);
+      const box = frame.getBoundingClientRect();
+      const left = Math.max(p.rect.x, p.zone.x, 0);
+      const top = Math.max(p.rect.y, p.zone.y, 0);
+      const right = Math.min(p.rect.x + p.rect.largeur, p.zone.x + p.zone.largeur, box.width);
+      const bottom = Math.min(p.rect.y + p.rect.hauteur, p.zone.y + p.zone.hauteur, box.height);
+      overlay.style.left = (box.left + left) + 'px';
+      overlay.style.top = (box.top + top) + 'px';
+      overlay.style.width = Math.max(0, right - left) + 'px';
+      overlay.style.height = Math.max(0, bottom - top) + 'px';
+      overlay.style.visibility = p.masque || right <= left || bottom <= top ? 'hidden' : 'visible';
+      inner.style.left = (p.rect.x - left) + 'px';
+      inner.style.top = (p.rect.y - top) + 'px';
+      inner.style.width = p.rect.largeur + 'px';
+      inner.style.height = p.rect.hauteur + 'px';
+    },
+    player(message) {
+      const answers = Number.isInteger(message.id);
+      const action = String(message.nom).slice('lecteur.'.length);
+      if (stub.lecteurs === undefined) {
+        if (answers) stub.post({ type: 'erreur', id: message.id, code: 'GFS_INCONNU', message: 'appel inconnu : ' + message.nom });
+        return;
+      }
+      const args = message.args && typeof message.args === 'object' ? message.args : {};
+      stub.lecteurAppels.push({ nom: action, args: JSON.parse(JSON.stringify(args)) });
+      const idOk = typeof args.id === 'string' && /^[a-z][a-z0-9_-]{0,63}$/.test(args.id);
+      const refuse = (why) => { stub.lecteurRefus.push({ nom: action, args, why }); };
+      if (!idOk) { refuse('id'); return; }
+      if (action === 'afficher') {
+        const rules = { youtube: /^[A-Za-z0-9_-]{11}$/, vimeo: /^\d{1,12}(?:\/[0-9a-f]{6,20})?$/ };
+        if (stub.lecteurs.indexOf(args.fournisseur) === -1 || !rules[args.fournisseur] || typeof args.video !== 'string' || !rules[args.fournisseur].test(args.video)) { refuse('fournisseur ou video'); return; }
+        if (args.debut !== undefined && !(Number.isInteger(args.debut) && args.debut >= 0)) { refuse('debut'); return; }
+        if (!stub.validBox(args.rect) || !stub.validBox(args.zone)) { refuse('rect ou zone'); return; }
+        stub.lecteur = { id: args.id, fournisseur: args.fournisseur, video: args.video, debut: args.debut || 0, rect: args.rect, zone: args.zone, masque: false, adresse: stub.playerAddress(args.fournisseur, args.video, args.debut || 0) };
+      } else if (action === 'deplacer') {
+        if (!stub.lecteur || stub.lecteur.id !== args.id) { refuse('id inconnu'); return; }
+        if (!stub.validBox(args.rect) || !stub.validBox(args.zone)) { refuse('rect ou zone'); return; }
+        stub.lecteur.rect = args.rect;
+        stub.lecteur.zone = args.zone;
+      } else if (action === 'masquer') {
+        if (!stub.lecteur || stub.lecteur.id !== args.id || typeof args.masque !== 'boolean') { refuse('id inconnu ou masque'); return; }
+        stub.lecteur.masque = args.masque;
+      } else if (action === 'fermer') {
+        if (stub.lecteur && stub.lecteur.id === args.id) stub.lecteur = null;
+      } else { refuse('action'); return; }
+      if (parentOf) stub.layoutPlayer();
+    },
     post(message) { deliver(Object.assign({ gfs: CONTRACT }, message), '*'); },
     // Un appel de GFS vers l'app (contrats 5.1) : la promesse rend la réponse ou l'erreur de l'app.
     call(nom, args) {
@@ -255,6 +347,8 @@
       stub.writeStorage(message);
     } else if (message.nom === 'barre.masquer') {
       stub.hideBar(message);
+    } else if (/^lecteur\.(afficher|deplacer|masquer|fermer)$/.test(message.nom)) {
+      stub.player(message);
     } else if (message.nom === 'ranger') {
       stub.deposit(message).catch((e) => { console.error('[gfs-stub] ranger en échec', e); if (Number.isInteger(message.id)) stub.post({ type: 'erreur', id: message.id, code: 'GFS_ECHEC', message: String(e && e.message || e) }); });
     } else if (message.nom === 'installer') {

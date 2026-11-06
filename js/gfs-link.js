@@ -1,6 +1,6 @@
 // Le lien avec Grist Factory Suite (GFS) : ce que le widget en sait quand GFS l'héberge, et rien quand il tourne seul (une fenêtre de Grist qui charge l'adresse de ce dépôt).
 // Les messages de GFS ont leur enveloppe (contrats de GFS, section 5) : { gfs: <contrat>, type: 'appel' | 'reponse' | 'erreur' | 'evenement', id, nom, args | data }, sans le `mtype` du
-// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Onze choses seulement :
+// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Douze choses seulement :
 //  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }),
 //    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre),
 //    `ouverture`, ce que GFS demande d'ouvrir au démarrage (consigne 010 ; pour « Nouveau > Importer », le fichier à importer que GFS donne, consigne 035), `langue`, la langue qui vaut maintenant (`fr` ou `en`, consigne 019), `stockage`, l'espace de cette app chez GFS
@@ -20,6 +20,10 @@
 //    de la personne, un seul pour GFS et toutes ses apps, `{ id, couleur, ajustee, clair, sombre, forme }` ou `null` (rien n'est choisi : l'app garde ses couleurs). Il est lu par `normalizeAmbiance` du kit
 //    (kit/js/ambiance-message.js, une carte d'importation de index.html le nomme) : les jetons que l'app connaît et des valeurs vérifiées, rien d'autre. Le dernier est gardé (`ambiance()`, une copie),
 //    les abonnés de `onAmbiance` sont rappelés quand il change vraiment (js/gfs-ambiance.js, le seul à s'en servir : il pose les jetons sur la page) ;
+//  - `lecteurs` (demande du 06/11, objet vidéo de Slides+, js/video-frame.js), au contexte puis par l'événement `lecteurs` `{ lecteurs }` : les sites dont GFS sait jouer le lecteur (`youtube`, `vimeo`), qu'il pose lui-même par-dessus
+//    le cadre de l'app (le cadre isolé n'a pas d'identité et un lecteur posé dedans échoue) ; l'app lui dit quoi et où par les appels `lecteur.afficher { id, fournisseur, video, debut?, rect, zone }`, `lecteur.deplacer { id, rect, zone }`,
+//    `lecteur.masquer { id, masque }` et `lecteur.fermer { id }`, sans `id` d'appel (GFS ne répond rien), et GFS dit où en est son lecteur par l'événement `lecteur { id, etat }` (`lecture`, `pause`, `fin`, `erreur`). Sans la clé, la liste est vide
+//    et l'app n'appelle rien (js/video-frame.js ouvre la vidéo sur son site) ;
 //  - `installer`, quand la personne clique une fonction grisée dans GFS : GFS ouvre sa fenêtre d'installation ;
 //  - l'appel `ranger { fichier, nom, type, lot?, suivants? }` (consigne 043), que l'app envoie pour qu'un PDF qu'elle vient de fabriquer se range parmi les fichiers de GFS, un fichier par appel, sans délai (GFS pose lui-même la
 //    question du nom pris) : la réponse est `{ statut, id, nom }` et une erreur de GFS garde son `code` (`GFS_ANNULE`, `GFS_ECHEC`…), de quoi js/pdf-delivery.js, le seul à s'en servir, décide de la suite ;
@@ -28,7 +32,7 @@
 //    `importer`, `lire` ou `lien`) et dont il attend `{ ferme: true | false }` avant de détruire son cadre : l'abonné de `onClose` répond (js/gfs-open.js : ce qui attend est enregistré avant le `oui`). Une réponse qui
 //    échoue est une erreur (`GFS_ECHEC`, GFS demande alors à la personne), jamais un `oui`. Tout autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3).
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
-// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `settingsSaved()` rend null, `ambiance()` rend null, `hideBar()` rend faux, `opensInNewTab()` rend faux et `deposit()` rejette sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
+// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `players()` rend [], `player()` rend faux, `settingsSaved()` rend null, `ambiance()` rend null, `hideBar()` rend faux, `opensInNewTab()` rend faux et `deposit()` rejette sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
 // qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js, js/gfs-open.js, js/person-store.js et js/gfs-bar.js, jamais par ce fichier (sauf `opensInNewTab`, que trois liens consultent, consigne 011).
 const GfsLink = (function () {
   const CONTRACT = 0;                // le contrat que parle l'app, celui de son manifeste
@@ -38,6 +42,9 @@ const GfsLink = (function () {
   const BAR_EDGES = { gauche: 'left', haut: 'top', droite: 'right', bas: 'bottom' };   // contrats 5.2, point 7 : les quatre bords où GFS pose sa barre, nommés comme le reste de l'app
   const IMPORT_REASON = 'importer';   // contrats 5.2, point 3 (consigne 035) : la raison d'une ouverture qui porte `importation`
   const READ_REASON = 'lire';         // contrats 5.2, point 3 (consigne 040) : la raison d'une ouverture qui porte `lecture`
+  const PLAYER_PROVIDERS = ['youtube', 'vimeo'];   // les sites dont l'app sait monter l'identifiant (js/video-frame.js) : un autre nom que GFS annoncerait n'est pas gardé
+  const PLAYER_CALLS = ['afficher', 'deplacer', 'masquer', 'fermer'];   // les quatre appels `lecteur.<nom>` que l'app envoie
+  const PLAYER_STATES = ['lecture', 'pause', 'fin', 'erreur'];
   const AMBIANCE_WAIT_MS = 1500;      // le contexte porte une ambiance et le lecteur du kit n'est pas encore là : `ready` l'attend ce temps au plus (l'ambiance se pose alors avant l'affichage)
 
   const hostContract = (function () {
@@ -54,6 +61,8 @@ const GfsLink = (function () {
   let opening = null;          // `ouverture` du contexte : null, ou { fichier: null | { id, type }, type, dossier, raison[, importation: { valeur, fichier: File }][, lecture: { id, fichier: File }] }
   let language = null;         // `langue` du contexte, puis de l'événement `langue` : 'fr' ou 'en' (null : seul, ou GFS ne la donne pas)
   let storage = null;          // `stockage` du contexte (consigne 024) : Map clé -> texte, l'espace de cette app chez GFS (null : seul, GFS ne répond pas ou ne le donne pas)
+  let players = [];            // `lecteurs` du contexte, puis de l'événement `lecteurs` : les sites que GFS sait jouer (vide : seul, ou GFS ne les donne pas)
+  const playerListeners = new Set();
   const languageListeners = new Set();
   let settingsSaved = null;    // `enregistres` du dernier événement `reglages` (consigne 039) : true (les réglages écrits sont dans la vue), false (restés un brouillon de Grist) ; null : aucun événement (seul, GFS ne l'envoie pas, ou pas encore)
   const settingsListeners = new Set();
@@ -136,6 +145,12 @@ const GfsLink = (function () {
     return { edge: BAR_EDGES[raw.bord], depth, zone };
   }
 
+  // `lecteurs` du contexte ou de l'événement `lecteurs` : la liste des sites que GFS sait jouer, réduite à ceux que l'app connaît, sans doublon ; vide quand ce n'est pas une liste.
+  function normalizePlayers(raw) {
+    const list = Array.isArray(raw) ? raw.filter(name => typeof name === 'string' && PLAYER_PROVIDERS.indexOf(name) !== -1) : [];
+    return list.filter((name, at) => list.indexOf(name) === at);
+  }
+
   // Ce que GFS donne (contexte ou événement `extensions`) : une liste d'identifiants, des sources, l'adresse du widget, l'ouverture demandée, la langue, l'espace de l'app, la barre et l'ambiance, rien d'autre n'est gardé. L'événement
   // `extensions` n'a ni adresse, ni ouverture, ni langue, ni espace, ni barre, ni ambiance : il ne les efface pas. La langue du contexte (`fr` ou `en`) fait foi à chaque appel `contexte` ; elle est gardée sans rappeler personne
   // (applyLanguage rappelle ceux qui suivent l'événement `langue`). Il en va de même de la barre : celle du contexte est gardée sans rappeler personne (le départ lit `bar()`), applyBar rappelle ceux qui suivent
@@ -148,6 +163,7 @@ const GfsLink = (function () {
     if ('stockage' in data) storage = normalizeStorage(data.stockage);
     if ('barre' in data) bar = normalizeBar(data.barre);
     if ('ambiance' in data) setAmbiance(data.ambiance);
+    if ('lecteurs' in data) players = normalizePlayers(data.lecteurs);
     const nextExtensions = (Array.isArray(data.extensions) ? data.extensions : []).filter(id => typeof id === 'string' && ID_PATTERN.test(id));
     const nextLibraries = new Map();
     const given = data.bibliotheques && typeof data.bibliotheques === 'object' ? data.bibliotheques : {};
@@ -196,6 +212,23 @@ const GfsLink = (function () {
     barListeners.forEach((fn) => { try { fn(getBar()); } catch (e) { console.warn('[GfsLink] abonné de la barre en échec', e); } });
   }
 
+  // L'événement `lecteurs` : `{ lecteurs }`, la liste des sites que GFS sait jouer, à chaque changement (rien ne rappelle personne quand elle reste la même).
+  function applyPlayers(data) {
+    known = true;
+    if (!data || typeof data !== 'object' || !('lecteurs' in data)) return;
+    const next = normalizePlayers(data.lecteurs);
+    if (JSON.stringify(next) === JSON.stringify(players)) return;
+    players = next;
+  }
+
+  // L'événement `lecteur` : `{ id, etat }`, où en est le lecteur que GFS joue pour l'app (`lecture`, `pause`, `fin`, `erreur`). Les abonnés de `onPlayerEvent` reçoivent `{ id, etat }` ; un événement sans `id` de l'app
+  // (une chaîne de la forme des siens) ou d'un état hors de la liste ne rappelle personne.
+  function applyPlayerEvent(data) {
+    known = true;
+    if (!data || typeof data !== 'object' || typeof data.id !== 'string' || !ID_PATTERN.test(data.id) || PLAYER_STATES.indexOf(data.etat) === -1) return;
+    playerListeners.forEach((fn) => { try { fn({ id: data.id, etat: data.etat }); } catch (e) { console.warn('[GfsLink] abonné du lecteur en échec', e); } });
+  }
+
   // L'ambiance du contexte ou de l'événement `ambiance` (contrats 5.2, point 10, consigne 041) : le message est gardé tel que GFS l'a dit puis lu par `normalizeAmbiance` du kit, qui ne retient que les jetons que l'app
   // connaît et des valeurs vérifiées (une couleur `#rrggbb`, une forme sans `;`, `{`, `}`, `url(` ni `@import`) et rend null pour tout ce qui n'est pas un message d'ambiance. Les abonnés de `onAmbiance` sont rappelés
   // (`fn(ambiance())`) quand le message lu change vraiment, au contexte comme à l'événement ; un message qui, lu, donne le même résultat que le précédent ne rappelle personne. Tant que le lecteur du kit n'est
@@ -238,6 +271,8 @@ const GfsLink = (function () {
     else if (message.type === 'evenement' && message.nom === 'barre') applyBar(message.data);
     else if (message.type === 'evenement' && message.nom === 'reglages') applySettings(message.data);
     else if (message.type === 'evenement' && message.nom === 'ambiance') applyAmbiance(message.data);
+    else if (message.type === 'evenement' && message.nom === 'lecteurs') applyPlayers(message.data);
+    else if (message.type === 'evenement' && message.nom === 'lecteur') applyPlayerEvent(message.data);
     else if (message.type === 'appel') receiveCall(message);
   }
 
@@ -335,6 +370,17 @@ const GfsLink = (function () {
   // L'ambiance que la personne a choisie pour GFS et ses apps (consigne 041) : celle du contexte, puis celle du dernier événement `ambiance`, lue par le kit : { id, couleur, ajustee, clair, sombre, forme } (voir
   // setAmbiance), une copie que l'appelant peut garder. null seul, si GFS ne répond pas ou ne la donne pas (un GFS d'avant la consigne 041), quand rien n'est choisi, ou quand le lecteur du kit ne s'est pas chargé.
   function getAmbiance() { return ambiance === null ? null : JSON.parse(JSON.stringify(ambiance)); }
+  // Les sites que GFS sait jouer (`['youtube', 'vimeo']`), une copie ; vide seul ou quand GFS ne les donne pas.
+  function getPlayers() { return players.slice(); }
+  // Un appel `lecteur.<action>` vers GFS (`afficher`, `deplacer`, `masquer`, `fermer`), sans `id` d'appel : GFS ne répond rien. `args` est un objet simple (js/video-frame.js en fait la forme : identifiants et nombres, jamais
+  // une adresse). Faux, sans rien envoyer, seul ou pour une action hors de la liste.
+  function player(action, args) {
+    if (!hosted || PLAYER_CALLS.indexOf(action) === -1 || !args || typeof args !== 'object') return false;
+    try { window.parent.postMessage({ gfs: CONTRACT, type: 'appel', nom: 'lecteur.' + action, args }, '*'); } catch (e) { return false; }
+    return true;
+  }
+  // Un abonné est rappelé (`fn({ id, etat })`) à chaque événement `lecteur` de GFS. Rend de quoi se désabonner.
+  function onPlayerEvent(fn) { playerListeners.add(fn); return () => playerListeners.delete(fn); }
   // Un abonné est rappelé à chaque changement des extensions actives ou de leurs sources, et une fois quand le contexte arrive. Rend de quoi se désabonner.
   function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
   // Un abonné de la barre est rappelé (`fn(bar)`, ce que rend `bar()`) à chaque événement `barre` qui change l'état, jamais à l'arrivée du contexte : le départ lit `bar()`. Rend de quoi se désabonner.
@@ -404,5 +450,5 @@ const GfsLink = (function () {
     call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(readerIfNeeded).then(settleReady);
   } else settleReady();
 
-  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, onChange, onLanguage, onSettings, onBar, onAmbiance, onOpen, onClose, install, deposit };
+  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, players: getPlayers, player, onChange, onLanguage, onSettings, onBar, onAmbiance, onPlayerEvent, onOpen, onClose, install, deposit };
 })();
