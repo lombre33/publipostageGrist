@@ -849,6 +849,7 @@ const SlideStrip = (function () {
     const { state, view } = editor;
     const tr = state.tr;
     plan.apply(tr, state.schema);
+    keepSections(tr, plan);
     // Supprimer envoie la prévision des images en calque après, dans une seconde transaction (placePredictedLayers) ; les autres gestes la gardent dans la leur (une seule mise à jour).
     const later = action === 'delete';
     if (!later) predictLayers(tr);
@@ -887,7 +888,7 @@ const SlideStrip = (function () {
         // Les copies, dans l'ordre, après la dernière : choisies, le curseur sur la première.
         const last = set[set.length - 1];
         const order = [...range(0, last), ...set, ...all.slice(last + 1)];
-        return { target: last + 1, picked: range(last + 1, last + set.length), apply: tr => arrange(tr, order) };
+        return { target: last + 1, picked: range(last + 1, last + set.length), order, joiners: range(last + 1, last + set.length), apply: tr => arrange(tr, order) };
       }
       case 'moveUp':
       case 'moveDown': {
@@ -899,24 +900,33 @@ const SlideStrip = (function () {
           if (inSet(order[i]) && !inSet(order[other])) [order[i], order[other]] = [order[other], order[i]];
         }
         if (!moved(order)) return null;
-        return { target: order.indexOf(set[0]), picked: at(order, set), apply: tr => arrange(tr, order) };
+        return { target: order.indexOf(set[0]), picked: at(order, set), order, joiners: at(order, set), apply: tr => arrange(tr, order) };
       }
       case 'moveTo': {
         const to = extra;
         if (!(to >= 0 && to <= slides.length)) return null;
         const order = moved([...all.slice(0, to).filter(i => !inSet(i)), ...set, ...all.slice(to).filter(i => !inSet(i))]);
         if (!order) return null;
-        return { target: order.indexOf(set[0]), picked: at(order, set), apply: tr => arrange(tr, order) };
+        return { target: order.indexOf(set[0]), picked: at(order, set), order, joiners: at(order, set), apply: tr => arrange(tr, order) };
       }
       case 'delete': {
         // Une présentation garde au moins une diapositive ; le curseur va à celle qui prend la place de la première supprimée.
         const order = all.filter(i => !inSet(i));
         if (!order.length) return null;
-        return { target: Math.min(set[0], order.length - 1), apply: tr => arrange(tr, order) };
+        return { target: Math.min(set[0], order.length - 1), order, apply: tr => arrange(tr, order) };
       }
       default:
         return null;
     }
+  }
+  // Les sections suivent leurs diapositives (js/slide-props.js : sectionNamesAfter) : le repère d'une diapositive qui change de place emporte son nom de section, et la règle dit où chaque nom doit être
+  // après le geste (le nom d'une section qui perd sa première diapositive passe à la suivante, une diapositive déplacée rejoint la section où elle se pose, une copie reste dans celle de l'original). Les
+  // noms sont écrits dans la transaction du geste, un seul Ctrl+Z défait tout. Rien à faire quand aucune diapositive n'ouvre de section.
+  function keepSections(tr, plan) {
+    if (!plan.order) return;
+    const before = SlideProps.sectionNamesOf(editor.state.doc);
+    if (!before.some(Boolean)) return;
+    SlideProps.writeSections(tr, SlideProps.sectionNamesAfter(before, plan.order, new Set(plan.joiners || []), plan.side));
   }
   // Les blocs d'une diapositive de la mise en page `layout` : des titres, un paragraphe, une liste ou une zone à deux colonnes, déjà écrits (des mots à remplacer, que la Lecture et les
   // exports montrent tels quels s'ils restent). « blank » : un paragraphe vide, comme avant. Le texte de chaque bloc y est à la taille d'une diapositive (SlidesEntry.textMarks).
