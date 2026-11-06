@@ -295,6 +295,19 @@
 
   const asBuffer = bytes => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 
+  // Un zip dont le répertoire central annonce `claimed` octets pour sa première entrée : un fichier forgé, ou une « bombe » de compression qui dit vrai (quelques Ko qui se défont en
+  // Go). On trouve le répertoire par l'enregistrement de fin (signature 06054b50, décalage du répertoire à +16), puis on écrit la taille défaite (+24) de son premier enregistrement.
+  function claimUnpacked(bytes, claimed) {
+    const copy = new Uint8Array(bytes);
+    const view = new DataView(copy.buffer);
+    let end = copy.length - 22;
+    while (end >= 0 && view.getUint32(end, true) !== 0x06054b50) end -= 1;
+    const directory = view.getUint32(end + 16, true);
+    if (end < 0 || view.getUint32(directory, true) !== 0x02014b50) throw new Error('zip sans répertoire central');
+    view.setUint32(directory + 24, claimed, true);
+    return copy;
+  }
+
   // --- 1) Le menu --------------------------------------------------------------------------------------------------------------------------------------------------------------
 
   // Le libellé de la ligne est écrit dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
@@ -1251,6 +1264,39 @@
       };
       const EXPECTED = { tall: '2x2', wide: '2x2', valueless: 'empty : La feuille ne contient aucune case.' };
       return { pass: JSON.stringify(got) === JSON.stringify(EXPECTED), notes: JSON.stringify(got) };
+    },
+  });
+
+  // Point sécurité du 06/11 : un classeur qui se défait en bombe de compression est refusé AVANT qu'ExcelJS ne le lise (il remplirait la mémoire de l'onglet).
+  cases.push({
+    id: 'gridImport_a_workbook_too_heavy_or_unpacking_to_a_bomb_is_refused_before_it_is_read',
+    description: 'Un classeur de plus de 100 Mo, ou dont le répertoire zip annonce plus de 600 Mo une fois défait, est refusé avec le code `fileTooBig` avant toute lecture, et le coin d\'état le dit en rouge (français et anglais) sans rien changer au document ; un classeur ordinaire s\'importe toujours',
+    run: async (h) => {
+      const good = await buildXlsx({ sheets: [{ name: 'Devis', rows: [['a', 'b']] }] });
+      const bomb = claimUnpacked(good, GridXlsxImport.MAX_UNPACKED_BYTES + 1);
+      const refused = async (buffer) => { try { await GridXlsxImport.fromArrayBuffer(buffer, { lang: 'fr' }); return null; } catch (e) { return e; } };
+      const bombError = await refused(asBuffer(bomb));
+      const heavyError = await refused(new ArrayBuffer(GridXlsxImport.MAX_FILE_BYTES + 1));
+      const still = await GridXlsxImport.fromArrayBuffer(asBuffer(good), { lang: 'fr' });
+      await settle(h);
+      await h.resetEditor();
+      Editor.setHTML('<p>Mon document</p>');
+      await sleep(150);
+      const htmlBefore = Editor.getHTML();
+      const viaMenu = await importThroughMenu(h, bomb, 'bombe.xlsx');
+      const before = I18n.getLang();
+      I18n.setLang('en');
+      let viaMenuEn;
+      try { viaMenuEn = await importThroughMenu(h, bomb, 'bombe.xlsx'); } finally { I18n.setLang(before); }
+      const checks = {
+        bombCode: !!bombError && bombError.code === 'fileTooBig' && bombError.size > bombError.max && bombError.max === GridXlsxImport.MAX_UNPACKED_BYTES,
+        heavyCode: !!heavyError && heavyError.code === 'fileTooBig' && heavyError.size === GridXlsxImport.MAX_FILE_BYTES + 1 && heavyError.max === GridXlsxImport.MAX_FILE_BYTES,
+        ordinaryStillImports: still.rows === 1 && still.cols === 2,
+        redInFrench: viaMenu.error && /^Ce classeur est trop volumineux pour être importé : 600,\d Mo \(au plus 600 Mo\)\.$/.test(viaMenu.status),
+        redInEnglish: viaMenuEn.error && /^This workbook is too big to import: 600\.\d MB \(at most 600 MB\)\.$/.test(viaMenuEn.status),
+        nothingChanged: Editor.getHTML() === htmlBefore && !GridEditor.isActive(),
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, fr: viaMenu.status, en: viaMenuEn.status, bomb: bombError && { code: bombError.code, size: bombError.size }, heavy: heavyError && heavyError.code }) };
     },
   });
 

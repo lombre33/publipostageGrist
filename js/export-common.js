@@ -93,6 +93,19 @@ const ExportCommon = (function () {
     return jsZipPromise;
   }
 
+  // Ce qu'un paquet zip (.pptx, .xlsx) pèse une fois défait, d'après les tailles que son répertoire central annonce : rien n'est décompressé pour le savoir (JSZip.loadAsync ne lit que ce
+  // répertoire). Les imports refusent un paquet qui annonce plus que leur plafond : une « bombe » de compression tient en quelques Ko et remplirait la mémoire de l'onglet.
+  // Une entrée dont l'en-tête annonce MOINS que ce qu'elle contient (un fichier forgé exprès) n'est vue qu'une fois défaite : ce plafond arrête les fichiers qui disent vrai.
+  function zipUnpackedBytes(zip) {
+    let total = 0;
+    Object.keys(zip.files).forEach((name) => {
+      const entry = zip.files[name];
+      if (entry.dir) return;
+      total += entry._data && Number.isFinite(entry._data.uncompressedSize) ? entry._data.uncompressedSize : 0;
+    });
+    return total;
+  }
+
   // Télécharge un Blob par un <a download> synthétique : window.location.href se comporte moins bien dans l'iframe sandboxée d'un widget Grist.
   function downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
@@ -381,6 +394,6 @@ const ExportCommon = (function () {
   // en HTML en ligne, et par son import, qui la reprend telle quelle.
   const isMergeImage = img => img.hasAttribute('data-var-table') || img.hasAttribute('data-chart-section') || img.hasAttribute('data-chart-spec') || (img.hasAttribute('data-qr-text') && !(img.getAttribute('src') || '').trim());
 
-  return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, downloadBlob, attachMeasureHost, fillEmptyBlocks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
+  return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, fillEmptyBlocks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
     resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages, isMergeImage };
 })();

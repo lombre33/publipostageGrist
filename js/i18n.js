@@ -2688,6 +2688,7 @@ const I18n = (function () {
     'status.pptxImportUnreadable': { fr: 'Ce fichier n’est pas une présentation PowerPoint (.pptx) lisible.', en: 'This file is not a readable PowerPoint (.pptx) presentation.' },
     'status.pptxImportLegacy': { fr: 'Format .ppt d’avant 2007 ou fichier protégé : enregistrez-le en .pptx sans mot de passe.', en: 'Pre-2007 .ppt format or password-protected file: save it as .pptx without a password.' },
     'status.pptxImportEmpty': { fr: 'Cette présentation n’a aucune diapositive à importer.', en: 'This presentation has no slides to import.' },
+    'status.xlsxImportFileTooBig': { fr: 'Ce classeur est trop volumineux pour être importé : {size} Mo (au plus {max} Mo).', en: 'This workbook is too big to import: {size} MB (at most {max} MB).' },
     'status.pptxImportTooBig': { fr: 'Ce fichier est trop gros pour être importé : {size} Mo (au plus {max} Mo).', en: 'This file is too big to import: {size} MB (at most {max} MB).' },
     'status.pptxImportLibrary': { fr: 'Le lecteur PowerPoint n’a pas pu se charger : vérifiez la connexion, puis réessayez.', en: 'The PowerPoint reader could not be loaded: check the connection, then try again.' },
     'pptx.import.reportTitle': { fr: 'Ce que l’import n’a pas repris tel quel', en: 'What the import did not carry over as is' },

@@ -766,7 +766,8 @@
   // plusieurs feuilles visibles, une liste avec recherche demande laquelle devient la grille. On ne demande de quitter le modèle courant (s'il a des
   // modifications non enregistrées) qu'après ce choix : « Annuler » dans le sélecteur, une liste fermée, un fichier illisible ou une feuille vide ne
   // coûtent rien. Le résultat est une nouvelle grille, sans nom et pas encore enregistrée, comme « Nouvelle grille ».
-  const XLSX_IMPORT_ERRORS = { oldFormat: 'status.xlsxImportOldFormat', unreadable: 'status.xlsxImportUnreadable', empty: 'status.xlsxImportEmpty', tooBig: 'status.xlsxImportTooBig' };
+  const XLSX_IMPORT_ERRORS = { oldFormat: 'status.xlsxImportOldFormat', unreadable: 'status.xlsxImportUnreadable', empty: 'status.xlsxImportEmpty', tooBig: 'status.xlsxImportTooBig', fileTooBig: 'status.xlsxImportFileTooBig' };
+  const importMegabytes = bytes => (Math.ceil(bytes / 104857.6) / 10).toLocaleString(I18n.getLang()); // vers le haut : « 100,1 Mo (au plus 100 Mo) », jamais « 100 Mo (au plus 100 Mo) »
   function onImportXlsx() {
     if (isReadOnly()) return;
     GridXlsxImport.chooseFile(importXlsxFile);
@@ -809,7 +810,7 @@
   function reportXlsxImportError(e, chosen) {
     console.warn('[main] import Excel impossible', e); // une erreur de la personne (mauvais fichier), pas du widget
     const key = e && e.code === 'empty' && chosen !== null ? 'status.xlsxImportEmptySheet' : (XLSX_IMPORT_ERRORS[e && e.code] || XLSX_IMPORT_ERRORS.unreadable);
-    setStatus(I18n.t(key, { sheet: chosen, rows: e && e.rows, cols: e && e.cols, maxRows: e && e.maxRows, maxCols: e && e.maxCols, maxCells: e && e.maxCells }), true);
+    setStatus(I18n.t(key, { sheet: chosen, rows: e && e.rows, cols: e && e.cols, maxRows: e && e.maxRows, maxCols: e && e.maxCols, maxCells: e && e.maxCells, size: e && e.size ? importMegabytes(e.size) : '', max: e && e.max ? importMegabytes(e.max) : '' }), true);
   }
 
   function openImportedGrid(imported) {
@@ -926,9 +927,8 @@
 
   function reportPptxImportError(e) {
     console.warn('[main] import PowerPoint impossible', e); // une erreur de la personne (mauvais fichier) ou du réseau, pas du widget
-    const megabytes = bytes => (Math.ceil(bytes / 104857.6) / 10).toLocaleString(I18n.getLang()); // vers le haut : « 150,1 Mo (au plus 150 Mo) », jamais « 150 Mo (au plus 150 Mo) »
     const key = PPTX_IMPORT_ERRORS[e && e.code] || PPTX_IMPORT_ERRORS.unreadable;
-    setStatus(I18n.t(key, { size: e && e.size ? megabytes(e.size) : '', max: e && e.max ? megabytes(e.max) : '' }), true);
+    setStatus(I18n.t(key, { size: e && e.size ? importMegabytes(e.size) : '', max: e && e.max ? importMegabytes(e.max) : '' }), true);
   }
 
   function openImportedPresentation(imported) {

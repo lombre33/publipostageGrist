@@ -184,13 +184,10 @@ const PptxImport = (function () {
       throw fail('unreadable', 'Ce fichier n’est pas une présentation PowerPoint lisible.', { cause: e });
     }
     const names = new Map();
-    let unpacked = 0;
     Object.keys(zip.files).forEach((name) => {
-      const entry = zip.files[name];
-      if (entry.dir) return;
-      names.set(name.toLowerCase(), name);
-      unpacked += entry._data && Number.isFinite(entry._data.uncompressedSize) ? entry._data.uncompressedSize : 0;
+      if (!zip.files[name].dir) names.set(name.toLowerCase(), name);
     });
+    const unpacked = ExportCommon.zipUnpackedBytes(zip);
     if (unpacked > MAX_UNPACKED_BYTES) throw fail('tooBig', 'Cette présentation est trop volumineuse une fois défaite.', { size: unpacked, max: MAX_UNPACKED_BYTES });
     const docs = new Map();
     const relsCache = new Map();
@@ -2565,5 +2562,5 @@ const PptxImport = (function () {
     return fromBuffer(buffer);
   }
 
-  return { fromFile, fromBuffer, MAX_FILE_BYTES, MAX_SLIDES, REPORT_KEYS };
+  return { fromFile, fromBuffer, MAX_FILE_BYTES, MAX_UNPACKED_BYTES, MAX_SLIDES, REPORT_KEYS };
 })();

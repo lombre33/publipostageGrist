@@ -256,6 +256,28 @@
       return result(bad);
     });
 
+  // Point sécurité du 06/11 : la mesure de ce que le paquet pèse une fois défait est maintenant partagée avec l'import Excel (ExportCommon.zipUnpackedBytes) ; ce cas garde le chemin déplacé.
+  add('pptx_import_a_package_unpacking_to_a_bomb_is_refused_by_its_directory',
+    'Une présentation dont le répertoire zip annonce plus que MAX_UNPACKED_BYTES une fois défaite est refusée (tooBig, avec la taille annoncée et la limite) avant toute lecture ; la même présentation honnête s\'importe',
+    async () => {
+      await ready();
+      const { bad, expect } = checker();
+      const honest = await pptx({ slides: [{ shapes: textBox(10, 10, 200, 40, para(run('Reste', 'sz="2000"'))) }] });
+      const view = new Uint8Array(honest);
+      const forged = new Uint8Array(view);
+      const dv = new DataView(forged.buffer);
+      let end = forged.length - 22;
+      while (end >= 0 && dv.getUint32(end, true) !== 0x06054b50) end -= 1;
+      const directory = dv.getUint32(end + 16, true);
+      expect('le répertoire central est trouvé', end >= 0 && dv.getUint32(directory, true) === 0x02014b50);
+      dv.setUint32(directory + 24, PptxImport.MAX_UNPACKED_BYTES + 1, true);
+      const e = await failure(() => PptxImport.fromBuffer(forged.buffer));
+      expect('annonce trop lourde : tooBig, taille annoncée au-dessus de la limite', !!e && e.code === 'tooBig' && e.size > PptxImport.MAX_UNPACKED_BYTES && e.max === PptxImport.MAX_UNPACKED_BYTES, e && { code: e.code, size: e.size, max: e.max });
+      const ok = await PptxImport.fromBuffer(honest);
+      expect('la présentation honnête s\'importe : une diapositive', ok.slideCount === 1, ok.slideCount);
+      return result(bad);
+    });
+
   // --- L'héritage : la place, le style et les puces d'un espace réservé -------------------------------------------------------------------------------------------------------------------
   add('pptx_import_placeholders_inherit_place_style_and_bullets',
     'Un titre et un texte sans position ni style prennent leur place, leur taille, leur gras, leur couleur du thème, leur alignement et leurs puces de la mise en page puis du masque ; les niveaux de puces sont emboîtés',

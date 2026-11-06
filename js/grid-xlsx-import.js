@@ -14,7 +14,7 @@
 //   GridXlsxImport.chooseFile(onFile[, accept]) -> ouvre le sélecteur de fichier (celui des classeurs, ou des types `accept`) ; `onFile(file)` n'est appelé que si un fichier est choisi
 // Codes d'erreur : 'oldFormat' (un .xls ou un classeur protégé par mot de passe : le fichier est un conteneur OLE, pas un zip), 'unreadable' (pas un
 // classeur), 'empty' (aucune case utile), 'tooBig' (plus de MAX_ROWS lignes, MAX_COLS colonnes ou MAX_CELLS cases : la grille serait inutilisable,
-// rien n'est coupé en silence).
+// rien n'est coupé en silence), 'fileTooBig' (le fichier pèse plus de MAX_FILE_BYTES, ou plus de MAX_UNPACKED_BYTES une fois défait d'après son répertoire : `size` et `max` en octets).
 // Les feuilles, lignes et colonnes masquées ne sont pas importées. Un classeur qui a plusieurs feuilles visibles demande laquelle devient la grille
 // (une liste avec recherche) : une seule est importée, les autres ne le sont pas. Pas importés : formules (le résultat calculé est écrit), images,
 // graphiques, commentaires, mise en forme conditionnelle, police, retrait, orientation du texte. Dépend de GridTable (js/grid-table.js), TableBorders
@@ -23,6 +23,8 @@
 const GridXlsxImport = (function () {
   const MAX_ROWS = 1000;
   const MAX_COLS = 100;
+  const MAX_FILE_BYTES = 100 * 1024 * 1024;       // un classeur plus lourd n'est pas lu
+  const MAX_UNPACKED_BYTES = 600 * 1024 * 1024;   // ce qu'il pèse une fois défait, d'après son répertoire : plus, c'est une bombe de compression (même mesure que l'import PowerPoint)
   const MAX_CELLS = 5000; // la frappe dans une grille coûte à proportion de son nombre de cases : au-delà, elle devient pénible
   const MIN_COL_PX = 24; // la plus petite colonne d'une grille
   const DEFAULT_COL_PX = 64; // 8,43 caractères : la largeur d'une colonne sans largeur écrite
@@ -386,6 +388,11 @@ const GridXlsxImport = (function () {
     const bytes = new Uint8Array(buffer);
     // Un .xls (ou un classeur protégé par un mot de passe) est un conteneur OLE (D0 CF 11 E0), pas un zip (50 4B).
     if (bytes.length >= 4 && bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0) throw fail('oldFormat', 'Format .xls ou classeur protégé.');
+    if (bytes.length > MAX_FILE_BYTES) throw fail('fileTooBig', 'Ce classeur est trop volumineux pour être importé.', { size: bytes.length, max: MAX_FILE_BYTES });
+    await ExportCommon.ensureJsZipLoaded();
+    let unpacked;
+    try { unpacked = ExportCommon.zipUnpackedBytes(await JSZip.loadAsync(buffer)); } catch (e) { throw fail('unreadable', 'Fichier illisible.', { cause: e }); }
+    if (unpacked > MAX_UNPACKED_BYTES) throw fail('fileTooBig', 'Ce classeur est trop volumineux une fois défait.', { size: unpacked, max: MAX_UNPACKED_BYTES });
     await ExportEngines.ensure('xlsx', 'xlsxFormat');
     await XlsxExport.ensureExcelLibLoaded();
     const workbook = new ExcelJS.Workbook();
@@ -468,5 +475,5 @@ const GridXlsxImport = (function () {
     input.click();
   }
 
-  return { openFile, chooseSheet, importFile, fromArrayBuffer, chooseFile };
+  return { openFile, chooseSheet, importFile, fromArrayBuffer, chooseFile, MAX_FILE_BYTES, MAX_UNPACKED_BYTES };
 })();
