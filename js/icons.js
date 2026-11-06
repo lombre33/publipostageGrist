@@ -241,6 +241,8 @@ const Icons = (function () {
       // « Importer », le même écran où descend une flèche (une diapositive qui arrive d'ailleurs) ; les actions d'une diapositive, trois points.
       slideAdd: '<rect x="2.5" y="5" width="19" height="13" rx="1.5"/><path d="M12 8.5v6M9 11.5h6"/>',
       slideImport: '<rect x="2.5" y="5" width="19" height="13" rx="1.5"/><path d="M12 8v6.5"/><path d="m9.2 11.8 2.8 2.8 2.8-2.8"/>',
+      // « Vue d'ensemble » (extensions/diapositives/slide-overview.js), au bas de la bande : quatre diapositives en grille.
+      slideOverview: '<rect x="3" y="4.5" width="8" height="6" rx="1"/><rect x="13" y="4.5" width="8" height="6" rx="1"/><rect x="3" y="13.5" width="8" height="6" rx="1"/><rect x="13" y="13.5" width="8" height="6" rx="1"/>',
       // Les mises en page de « Ajouter » (extensions/diapositives/slide-strip.js) : la page, puis ses titres et ses lignes de texte.
       slideLayoutBlank: '<rect x="2.5" y="5" width="19" height="13" rx="1.5"/>',
       slideLayoutTitle: '<rect x="2.5" y="5" width="19" height="13" rx="1.5"/><path d="M7 10h10M9.5 13h5"/>',
