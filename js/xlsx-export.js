@@ -766,7 +766,7 @@ const XlsxExport = (function () {
     // les bulles ont déjà pris leur valeur (ReaderMode.preview avec typedCellHook, qui laisse leurs marques data-xl-* sur les cases à nombre ou
     // date). Le tableau est rendu hors écran le temps de la mesure (largeur des colonnes et hauteur des lignes telles que l'éditeur les affiche).
     const root = document.createElement('div');
-    root.innerHTML = HtmlSanitize.clean(resolvedHtml || '');
+    Dom.setMarkup(root, HtmlSanitize.clean(resolvedHtml || ''));
     const table = root.querySelector('table');
     const widthPx = table ? Math.max(100, Math.round(parseFloat(table.style.width) || table.getBoundingClientRect().width || 800)) : 800;
     const detach = ExportCommon.attachMeasureHost(root, widthPx + 24);

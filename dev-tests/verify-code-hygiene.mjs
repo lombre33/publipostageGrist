@@ -1546,10 +1546,9 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // qu'un littéral (vider un élément : `''`), `insertAdjacentHTML`, `createContextualFragment`, `document.write`. `PENDING` : les fichiers pas encore passés par Dom (lots suivants), vide à la fin ; un fichier
 // qui n'y a plus rien à convertir doit en sortir.
 {
-  const PENDING = new Set([
-    // Hors de ce que l'audit lit (moteurs d'export chargés à la demande, historique des versions, bandeau des diapositives) : à passer par Dom dans un lot à part, avec leurs groupes d'export.
-    'js/docx-export.js', 'js/pdf-export.js', 'js/xlsx-export.js', 'js/versions-history.js', 'extensions/diapositives/slide-strip.js',
-  ]);
+  // Vide depuis le 06/11 (point sécurité) : les moteurs d'export Word, PDF et Excel, l'historique des versions et le bandeau des diapositives lisent eux aussi leur HTML par `Dom.setMarkup(élément, HtmlSanitize.clean(html))`.
+  // Un fichier qui y revient doit y être nommé ici, avec la raison.
+  const PENDING = new Set([]);
   const LITERAL_AFTER_EQUALS = /^\s*(?:(['"])(?:(?!\1)[^\\\n])*\1|`[^`$\\]*`)\s*(?:;|\n|\)|,|\}|$)/;
   const sinksIn = code => {
     const found = [];

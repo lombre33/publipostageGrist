@@ -368,6 +368,35 @@
     },
   });
 
+  // Point sécurité du 06/11 : les moteurs d'export Word, PDF et Excel lisaient leur HTML par `innerHTML` sur un nœud de la page (même détaché, le navigateur y charge les images et fait courir leur
+  // `onerror`) en comptant sur le filtre posé en amont (ReaderMode.preview). Ils le lisent maintenant par Dom.setMarkup(HtmlSanitize.clean(...)) : si un chemin d'amont oubliait un jour de filtrer,
+  // rien de ce HTML ne court. Le test simule cet oubli : ReaderMode.preview rend du HTML brut piégé, pour le corps et pour l'en-tête.
+  cases.push({
+    id: 'hs_export_engines_run_nothing_on_unfiltered_html',
+    description: 'Word et PDF (corps, en-tête et pied) : du HTML brut piégé rendu par l\'amont ne fait rien courir (image à onerror, script, attribut on*), et le fichier est quand même fabriqué avec le texte',
+    run: async () => {
+      window.__hsHits = {};
+      const trap = key => `<img src="x" onerror="${hit(key)}"><p onclick="${hit(key + '_click')}">piege</p><script>${hit(key + '_script')}</script>`;
+      const HF = { enabled: true, differentFirstPage: false, header: { default: '<p>ZONE-HAUT</p>', first: '' }, footer: { default: '<p>ZONE-BAS</p>', first: '' } };
+      const real = ReaderMode.preview;
+      ReaderMode.preview = async (html) => (String(html).indexOf('ZONE-') !== -1 ? '<p>Zone propre</p>' + trap('zone') : '<p>Corps propre</p>' + trap('corps'));
+      const out = {};
+      try {
+        await DocxExport.ensureDocxLibLoaded();
+        const docx = await DocxExport.getDocxBlobForRecord('<p>a</p>', null, {}, '', HF, null);
+        out.docxBytes = docx.blob.size;
+        out.docxHits = hits().slice();
+        window.__hsHits = {};
+        const pdf = await PdfExport.getNativePdfBlobForRecord('<p>a</p>', null, {}, '', HF, undefined);
+        out.pdfBytes = pdf.blob.size;
+        await sleep(600);
+        out.pdfHits = hits().slice();
+      } catch (e) { out.error = String(e && e.message || e); } finally { ReaderMode.preview = real; }
+      await sleep(300);
+      return { pass: !out.error && out.docxBytes > 1000 && out.pdfBytes > 1000 && out.docxHits.length === 0 && out.pdfHits.length === 0, notes: JSON.stringify(out) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.htmlSanitize = cases;
 })();

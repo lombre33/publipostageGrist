@@ -4215,7 +4215,7 @@ const PdfExport = (function () {
   // une colonne ou un encadré. `availableWidthPt` : la largeur réelle quand ce n'est pas celle de la page (colonne reconstruite dans un hôte de
   // mesure à part). `opts.floatsOverflow` : une image habillée dépasse le dernier bloc au lieu de lui donner sa hauteur (encadré).
   async function htmlToPdfContent(html, isTopLevel, availableWidthPt, opts) {
-    const root = document.createElement('div'); root.innerHTML = html || '';
+    const root = document.createElement('div'); Dom.setMarkup(root, HtmlSanitize.clean(html || ''));
     // Une colonne de zone à deux colonnes : ses tableaux se règlent sur sa largeur (columnWidthsPt), pas sur celle de la page.
     if (opts && opts.zoneColumn) root.dataset.zoneColumn = '1';
     // Un en-tête ou un pied de page : ses images habillées se placent d'après la zone (floatParagraphBlocksFrom, zoneFloatsFrom).
@@ -4295,7 +4295,7 @@ const PdfExport = (function () {
   // (ImageIo.lighten) ; le code QR garde la sienne : adoucir ses modules le rendrait plus dur à lire.
   async function inlineEditorImagesAsDataUri(html) {
     const wrapper = document.createElement('div');
-    wrapper.innerHTML = html || '';
+    Dom.setMarkup(wrapper, HtmlSanitize.clean(html || ''));
     const images = Array.from(wrapper.querySelectorAll('img'));
     await Promise.all(images.map(async img => {
       let src = img.getAttribute('src') || '';
@@ -5155,7 +5155,7 @@ const PdfExport = (function () {
       content._zoneFloats = zoneFloatsFrom(content);
       markFurniture(content);
       const measureRoot = document.createElement('div');
-      measureRoot.innerHTML = html;
+      Dom.setMarkup(measureRoot, HtmlSanitize.clean(html));
       insertTrailingBreaksForEmptyBlocks(measureRoot);
       const detach = attachPdfMeasureHost(measureRoot, CONTENT_WIDTH_PX);
       // measureRoot est un arbre DOM séparé du root de htmlToPdfContent ci-dessus (reparsing indépendant) : son propre décodage d'image doit être

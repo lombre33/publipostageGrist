@@ -262,7 +262,7 @@ const VersionsHistory = (function () {
       summary.skipped = compare.result.skipped;
     }
     // Un aperçu s'affiche : une image d'un autre site y prend son cadre « Afficher » (le modèle enregistré garde son HTML).
-    tiptap.innerHTML = ExternalImages.block(HtmlSanitize.clean(html), { zoom: 1 });
+    Dom.setMarkup(tiptap, ExternalImages.block(HtmlSanitize.clean(html), { zoom: 1 }));
     // Une image de pièce jointe ne garde que son identifiant : son adresse (un jeton qui expire) est demandée à Grist.
     Promise.resolve(GristAPI.hydrateAttachmentImages(tiptap)).catch(() => {});
     return summary;

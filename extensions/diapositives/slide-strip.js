@@ -309,7 +309,7 @@ const SlideStrip = (function () {
     addButton = Dom.button('pp-slide-add');
     addButton.setAttribute('aria-haspopup', 'menu');
     addButton.setAttribute('aria-expanded', 'false');
-    addButton.innerHTML = Icons.svg('slideAdd');
+    Dom.setMarkup(addButton, Icons.svg('slideAdd'));
     hideIcon(addButton);
     importButton = Dom.button('pp-slide-add pp-slide-import-open');
     Dom.setMarkup(importButton, Icons.svg('slideImport'));
@@ -359,7 +359,7 @@ const SlideStrip = (function () {
     more.tabIndex = -1;
     more.title = I18n.t('slides.strip.more');
     more.setAttribute('aria-hidden', 'true');
-    more.innerHTML = Icons.svg('more');
+    Dom.setMarkup(more, Icons.svg('more'));
     hideIcon(more);
     row.append(item, more, people);
     list.appendChild(row);

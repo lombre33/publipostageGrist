@@ -1814,7 +1814,7 @@ const DocxExport = (function () {
   // Mesurée comme le fait js/pdf-export.js:resolveZone, images décodées d'abord (sinon elles mesurent 0).
   async function measureZoneHeightTwip(html) {
     if (!PageLayout.hasZoneContent(html)) return 0;
-    const root = document.createElement('div'); root.innerHTML = html;
+    const root = document.createElement('div'); Dom.setMarkup(root, HtmlSanitize.clean(html));
     // Les lignes vides comptent : Word les écrit, et un en-tête de dix retours à la ligne descendrait le corps de la page s'il passait pour une seule ligne.
     ExportCommon.fillEmptyBlocks(root);
     const detach = ExportCommon.attachMeasureHost(root, Math.round(CONTENT_WIDTH_TWIP / PX_TO_TWIP));
@@ -1909,7 +1909,7 @@ const DocxExport = (function () {
   // `clipped` : le contenu dépasse la zone (zoneOverflows), il est enfermé dans la ligne à hauteur exacte de clippedZoneBlocks.
   async function headerFooterBlocksFrom(html, ctx, clipped) {
     if (!html) return [];
-    const root = document.createElement('div'); root.innerHTML = html;
+    const root = document.createElement('div'); Dom.setMarkup(root, HtmlSanitize.clean(html));
     await groupFloatedImages(root);
     const blocks = await blocksFromContainer(root, ctx, false);
     // Word veut un paragraphe après un tableau placé en fin de zone (le tableau d'un logo et de son texte en est un), comme à la fin du corps (bodyBlocksFrom) :
@@ -2120,7 +2120,7 @@ const DocxExport = (function () {
   }
 
   async function buildDocxDocument(resolvedHtml, headerFooterData) {
-    const root = document.createElement('div'); root.innerHTML = resolvedHtml || '';
+    const root = document.createElement('div'); Dom.setMarkup(root, HtmlSanitize.clean(resolvedHtml || ''));
     // Ni ligne vide ni saut de page orphelin en fin de document : quand le texte arrive à la marge du bas, ils ouvrent une page blanche.
     ReaderMode.trimTrailingBlankBlocks(root);
     const ctx = { footnotes: {}, footnoteCounter: 0, headingBlocks: [], numberingConfigs: [], numberingCounter: 0, imageIdCounter: 0, measureRoot: root, waterfalls: [] };
