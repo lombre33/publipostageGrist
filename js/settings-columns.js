@@ -5,7 +5,7 @@
 // verrou d'interface, une règle « Selon la ligne » ne correspond plus à rien.
 // À l'ouverture et une fois le modèle affiché, le coin d'état dit donc quel réglage cite quoi qui n'existe plus ; rien n'est réécrit, la personne
 // re-choisit dans les Réglages. Sans réglage activé, ce n'est qu'un test : aucun appel à Grist.
-// - SettingsColumns.problems() -> Promise<{ access, rowTemplate, exportDate }> : access = { table } (la table des droits a disparu) ou { columns: [noms] } ;
+// - SettingsColumns.problems() -> Promise<{ access, rowTemplate, exportDate, rowAttachment }> : access = { table } (la table des droits a disparu) ou { columns: [noms] } ;
 //   rowTemplate = { columns: [noms tels que la règle les cite] } ; exportDate = { columns: [le nom de la colonne choisie] } ; null pour un réglage sain, coupé ou
 //   incomplet.
 // - SettingsColumns.message(found) -> le texte du coin d'état, dans la langue de l'interface ('' sans problème).
@@ -96,8 +96,17 @@ const SettingsColumns = (function () {
     return GristAPI.getColumnType(table, column) ? null : { columns: [column] };
   }
 
+  // Réglage PDF joint à la ligne : la même chose pour la colonne de pièces jointes choisie (js/row-attachment.js ; un autre type ou une formule est dit à l'export).
+  async function rowAttachmentProblem() {
+    const column = RowAttachment.getColumn();
+    if (!column || !schemaKnown()) return null;
+    const table = GristAPI.getCurrentTableId() || await GristAPI.detectTableId(null, 'settingsColumns').catch(() => null);
+    if (!table || !tableExists(table) || !columnsKnown(table)) return null;
+    return GristAPI.getColumnType(table, column) ? null : { columns: [column] };
+  }
+
   async function problems() {
-    return { access: await accessProblem(), rowTemplate: await rowTemplateProblem(), exportDate: await exportDateProblem() };
+    return { access: await accessProblem(), rowTemplate: await rowTemplateProblem(), exportDate: await exportDateProblem(), rowAttachment: await rowAttachmentProblem() };
   }
 
   const quoted = list => list.map(name => I18n.t('settingsColumns.quoted', { name })).join(', ');
@@ -111,6 +120,7 @@ const SettingsColumns = (function () {
     if (found && found.access) parts.push(part('settings.tab.access', found.access));
     if (found && found.rowTemplate) parts.push(part('settings.rowTemplate.title', found.rowTemplate));
     if (found && found.exportDate) parts.push(part('settings.exportDate.title', found.exportDate));
+    if (found && found.rowAttachment) parts.push(part('settings.rowAttachment.title', found.rowAttachment));
     return parts.length ? I18n.t('settingsColumns.status', { parts: parts.join(' ') }) : '';
   }
 

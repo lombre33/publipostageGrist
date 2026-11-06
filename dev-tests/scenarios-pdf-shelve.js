@@ -71,7 +71,7 @@
       await setup(h);
       const problems = [];
       const origin = { destination: PdfDelivery.destination(), chosen: PdfDelivery.chosen(), plan: PdfDelivery.plan(), stored: PersonStore.get(KEY) };
-      check(problems, 'sans choix', origin, { destination: 'download', chosen: 'download', plan: { download: true, shelve: false }, stored: null });
+      check(problems, 'sans choix', origin, { destination: 'download', chosen: 'download', plan: { download: true, shelve: false, attach: false }, stored: null });
       check(problems, 'GFS peut ranger', PdfDelivery.available(), true);
       const plans = {};
       ['gfs', 'both', 'download'].forEach((value) => {
@@ -79,9 +79,9 @@
         plans[value] = { wrote, stored: PersonStore.get(KEY), destination: PdfDelivery.destination(), plan: PdfDelivery.plan() };
       });
       check(problems, 'les trois choix', plans, {
-        gfs: { wrote: true, stored: 'gfs', destination: 'gfs', plan: { download: false, shelve: true } },
-        both: { wrote: true, stored: 'both', destination: 'both', plan: { download: true, shelve: true } },
-        download: { wrote: true, stored: 'download', destination: 'download', plan: { download: true, shelve: false } },
+        gfs: { wrote: true, stored: 'gfs', destination: 'gfs', plan: { download: false, shelve: true, attach: false } },
+        both: { wrote: true, stored: 'both', destination: 'both', plan: { download: true, shelve: true, attach: false } },
+        download: { wrote: true, stored: 'download', destination: 'download', plan: { download: true, shelve: false, attach: false } },
       });
       PdfDelivery.choose('gfs');
       check(problems, 'un choix hors des trois n’écrit rien', [PdfDelivery.choose('zip'), PdfDelivery.choose(''), PdfDelivery.choose(undefined), PersonStore.get(KEY)], [false, false, false, 'gfs']);
@@ -93,15 +93,15 @@
       const realHosted = GfsLink.hosted;
       try {
         GfsLink.isAnswering = () => false;
-        check(problems, 'GFS muet', [PdfDelivery.available(), PdfDelivery.destination(), PdfDelivery.chosen(), PdfDelivery.plan()], [false, 'download', 'both', { download: true, shelve: false }]);
+        check(problems, 'GFS muet', [PdfDelivery.available(), PdfDelivery.destination(), PdfDelivery.chosen(), PdfDelivery.plan()], [false, 'download', 'both', { download: true, shelve: false, attach: false }]);
         GfsLink.isAnswering = realAnswering;
         GfsLink.hosted = false;
-        check(problems, 'seule', [PdfDelivery.available(), PdfDelivery.destination(), PdfDelivery.chosen(), PdfDelivery.plan()], [false, 'download', 'both', { download: true, shelve: false }]);
+        check(problems, 'seule', [PdfDelivery.available(), PdfDelivery.destination(), PdfDelivery.chosen(), PdfDelivery.plan()], [false, 'download', 'both', { download: true, shelve: false, attach: false }]);
       } finally {
         GfsLink.isAnswering = realAnswering;
         GfsLink.hosted = realHosted;
       }
-      check(problems, 'le choix revient avec GFS', [PdfDelivery.destination(), PdfDelivery.plan()], ['both', { download: true, shelve: true }]);
+      check(problems, 'le choix revient avec GFS', [PdfDelivery.destination(), PdfDelivery.plan()], ['both', { download: true, shelve: true, attach: false }]);
       finish();
       return verdict(problems, { plans });
     },

@@ -2629,6 +2629,8 @@
       el.hidden = el.dataset.exportFor.split(' ').indexOf(type) === -1;
     }));
     const lines = selectedExportLines(type);
+    // La case « Joindre à la ligne » (js/row-attachment.js) : grisée, avec sa raison, sans colonne utilisable, en lecture seule ou pour un PDF qui réunit plusieurs lignes.
+    RowAttachment.sync(exportFlyout, lines);
     exportFlyout.querySelectorAll('.v2-hover-row[data-export-lines]').forEach(row => {
       row.setAttribute('aria-checked', row.dataset.exportLines === lines ? 'true' : 'false');
       const protectedOff = greyedFor(row, 'exportLines.protectedOff');
@@ -3091,10 +3093,11 @@
   async function finishBatchExport(cfg, sink, { only, tableId, rows, openSource, splitting, ok, failed, exportedIds }) {
     // Archive d'un export seul : nommée comme la ligne ; sinon comme la table.
     const baseName = async () => (only ? (sanitizeFilenamePart(await ReaderMode.resolveFilename(openSource.filenameTemplate, tableId, rows[0])) || sanitizeFilenamePart(tableId)) : sanitizeFilenamePart(tableId));
-    const how = cfg.shelvable ? PdfDelivery.plan() : { download: true, shelve: false };
+    // La jointure à la ligne ne vaut que pour un PDF par ligne (l'archive ZIP) : un PDF réuni ou posé sur des planches n'a pas de ligne à lui (la case du menu est grisée alors).
+    const how = cfg.shelvable ? Object.assign(PdfDelivery.plan(), cfg.merged ? { attach: false } : {}) : { download: true, shelve: false, attach: false };
     let delivery = null;
     let stampIds = exportedIds;
-    if (!how.shelve) {
+    if (!how.shelve && !how.attach) {
       setStatus(I18n.t(sink.finishing));
       const outBlob = await sink.finish();
       ExportCommon.downloadBlob(outBlob, (await baseName()) + cfg.fileSuffix);
@@ -3106,7 +3109,7 @@
       const files = cfg.merged ? [{ name: base + cfg.fileSuffix, blob: async () => merged || (merged = await sink.finish()) }] : sink.files;
       delivery = await PdfDelivery.deliver(files, async subset => {
         ExportCommon.downloadBlob(cfg.merged ? await files[0].blob() : await sink.finish(subset), base + cfg.fileSuffix);
-      }, { plan: how, lot: PdfDelivery.lotFor(tableId) });
+      }, { plan: how, lot: PdfDelivery.lotFor(tableId), table: tableId });
       // Un seul fichier (réuni ou posé sur des planches) : ses lignes sont datées s'il est parti ; une archive : les lignes dont chaque PDF est parti.
       if (cfg.merged) stampIds = delivery.delivered.size ? exportedIds : [];
       else {
@@ -3226,6 +3229,9 @@
     // La destination du PDF est un réglage de la personne (PersonStore), pas du modèle : son pas d'Annuler est celui de SettingsHistory, et le rangement dit au coin d'état où il en est.
     PdfDelivery.wire(exportFlyout, syncExportMenus);
     PdfDelivery.onProgress((current, total) => setStatus(I18n.t(total > 1 ? 'shelve.progress' : 'shelve.progressOne', { current, total })));
+    // La case « Joindre à la ligne » est un réglage de la personne aussi (js/row-attachment.js) ; la jointure dit où elle en est au coin d'état.
+    RowAttachment.wire(exportFlyout, syncExportMenus);
+    PdfDelivery.onAttachProgress((current, total) => setStatus(I18n.t(total > 1 ? 'attach.progress' : 'attach.progressOne', { current, total })));
     exportFlyout.querySelectorAll('.v2-hover-row[data-export-lines]').forEach(row => {
       onRow(row, linesSelect, row.dataset.exportLines);
       row.addEventListener('keydown', e => {
@@ -3612,6 +3618,7 @@
     RowTemplatePanel.wire();
     ViewTemplate.wirePanel();
     ExportDate.wirePanel();
+    RowAttachment.wirePanel();
     wirePageModals();
     wireSaveShortcut();
     wirePageFitZoom();
@@ -3666,6 +3673,7 @@
     };
     ViewTemplate.init();
     ExportDate.init();
+    RowAttachment.init();
     SaveReminder.init();
     RowTemplate.init({
       // La ligne de la table qui change ne remplace pas le PDF que la personne lit.

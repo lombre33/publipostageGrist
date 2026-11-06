@@ -1234,6 +1234,28 @@ Dans Firefox, le widget (seul puis hébergé par GFS, l'extension « Diapositive
 
 ---
 
+## 43. PDF joint à la ligne Grist (Réglages > Vue et case « Joindre à la ligne » du menu Exporter)
+
+**Couverture automatisée** : groupe `rowAttachment` (`scenarios-row-attachment.js`, 25 cas : le réglage, la case du menu, la requête d'envoi et son jeton, remplacer / ajouter, les refus de Grist, la colonne disparue, les phrases, les vrais exports), le groupe `pdfShelve` (le plan porte `attach`) et le script Node `rowAttachmentMouse` (vraie souris et vrai export PDF à 700×400, clair, sombre et anglais).
+**Non couvert, et c'est le but de cette section** : tout ce qui se passe dans un VRAI Grist. Le faux serveur d'envoi rejoue ce qu'un fil de la communauté décrit (`POST <adresse de l'API>/attachments?auth=<jeton>`, champ `upload`, en-tête `X-Requested-With: XMLHttpRequest`), il ne l'a jamais mesuré : l'envoi lui-même, le jeton d'ÉCRITURE (`getAccessToken({ readOnly: false })`), la taille maximale d'une pièce jointe, et surtout les comptes qui ne sont pas propriétaires (des bogues de droits sont connus côté Grist pour l'envoi d'une pièce jointe).
+
+### Protocole
+À faire dans le Grist d'Antoine, dans Firefox, panneau d'environ 700×400, d'abord avec le compte propriétaire, puis avec un compte qui a des règles d'accès, puis avec un compte Lecteur.
+1. Dans la table du widget, une colonne « Pdf » de type Pièces jointes (et, pour l'essai, une colonne Texte, une colonne Numérique, une colonne Pièces jointes à formule). Réglages > Vue : la section « PDF joint à la ligne » propose « — Aucune — » puis SEULEMENT les colonnes Pièces jointes sans formule. Menu Exporter : la case « Joindre à la ligne » est GRISÉE, son info-bulle dit de choisir d'abord une colonne.
+2. Choisir « Pdf » : la phrase dit « Les PDF joints vont dans « Pdf ». » et le rappel « Enregistrer » apparaît ; cliquer « Enregistrer » en haut du widget, dans Grist. Cocher la case : elle se coche (la ligne du menu reste entière dans le panneau).
+3. Sur une ligne, « Exporter en PDF » : le PDF est téléchargé ET la cellule « Pdf » de CETTE ligne montre le PDF (le nom est celui du fichier téléchargé, il s'ouvre dans Grist) ; les autres lignes ne changent pas ; le coin d'état dit « PDF joint à la ligne, colonne « Pdf ». ». **À noter** : l'envoi a-t-il marché, ou Grist a-t-il refusé (le coin d'état est alors rouge et dit pourquoi) ?
+4. Refaire l'export de la MÊME ligne : avec « Remplacer le PDF de même nom » (par défaut), la cellule garde UN seul PDF de ce nom (le nouveau), et une autre pièce jointe posée à la main dans la cellule reste. Passer le réglage sur « Toujours ajouter » : le même export ajoute un deuxième PDF. Vérifier aussi que la pièce jointe remplacée ne traîne pas dans la liste des pièces jointes du document (pas de PDF orphelin qui s'accumule : c'est un comportement de Grist, à noter, le widget ne peut que retirer le lien).
+5. « Toutes les lignes de la vue (ZIP) » : l'archive est téléchargée ET chaque PDF est dans SA ligne. « Un document par valeur » (modèle réglé sur une variable à plusieurs valeurs) : tous les PDF de la ligne dans la même cellule. « Un seul PDF » et « Assemblage avant impression » : la case est GRISÉE avec sa raison et rien n'est envoyé.
+6. Un PDF protégé par mot de passe : joint tel quel (le fichier de la cellule demande le mot de passe).
+7. Un gros PDF (plusieurs dizaines de Mo, des images en haute qualité) : noter la limite de Grist ; au refus, le PDF est quand même téléchargé et le coin d'état dit en rouge « fichier trop gros pour Grist ».
+8. Compte avec règles d'accès (colonne « Pdf » en lecture seule pour lui) : Grist refuse l'écriture ; le coin d'état dit « Grist a refusé l'écriture » en rouge, le PDF est téléchargé. **À noter** : le fichier envoyé a-t-il quand même été posé dans les pièces jointes du document ?
+9. Compte Lecteur : la case est grisée (« lecture seule »), l'export ne demande aucun jeton et n'envoie rien.
+10. Dans Grist Factory Suite : la case marche pareil, EN PLUS du choix « Destination du PDF » (« Ranger dans GFS » + joint à la ligne : le PDF est rangé chez GFS ET joint). Rien n'est demandé à GFS pour la pièce jointe.
+11. Supprimer la colonne « Pdf » dans Grist, rouvrir Réglages > Vue : la liste la garde, la phrase en rouge dit qu'elle n'existe plus ; la case du menu est grisée avec la raison ; un export produit quand même le PDF.
+12. Ctrl + Z après avoir choisi la colonne ou le mode dans Réglages, ou coché la case du menu : le réglage revient (Ctrl + Y le rend).
+
+---
+
 ## Prochaines étapes (pistes d'amélioration de la suite automatisée)
 
 **Fait le 2026-09-14** : étage 2 (mode Lecture) comblé pour un premier socle de cas

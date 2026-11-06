@@ -1140,8 +1140,8 @@ const GristAPI = (function () {
   }
 
   // Jeton d'accès court terme (quelques minutes) réutilisé pour télécharger des pièces jointes, avec une marge de sécurité avant expiration. En
-  // lecture seule : le widget ne fait que lire des pièces jointes, il n'en envoie aucune, et un jeton capable d'écrire serait un risque inutile s'il
-  // sortait du widget.
+  // lecture seule : ce jeton ne sert qu'à LIRE des pièces jointes, et un jeton capable d'écrire serait un risque inutile s'il sortait du widget. L'envoi
+  // d'un PDF en pièce jointe a son propre jeton, demandé à chaque export et jamais gardé (getWriteAccess).
   async function getAccessTokenCached() {
     const now = Date.now();
     if (_tokenCache && _tokenCache.expiresAt - now > 15000) return _tokenCache;
@@ -1150,6 +1150,14 @@ const GristAPI = (function () {
     if (baseUrl !== info.baseUrl) console.warn('[GristAPI] baseUrl corrigé:', info.baseUrl, '->', baseUrl);
     _tokenCache = { token: info.token, baseUrl, expiresAt: now + (info.ttlMsecs || 120000) };
     return _tokenCache;
+  }
+
+  // Un jeton d'accès capable d'ÉCRIRE, pour envoyer un fichier en pièce jointe (js/row-attachment.js, le seul à s'en servir) : { token, baseUrl, expiresAt }. Le seul de tout le widget qui puisse écrire par
+  // l'adresse de l'interface de programmation. Il n'est JAMAIS gardé ici : pas de cache comme getAccessTokenCached (un jeton capable d'écrire ne reste pas en mémoire plus longtemps que l'export qui
+  // l'a demandé), l'appelant le tient pour la durée d'un export et le jette à la fin ; un export plus long que `expiresAt` en redemande un autre. Rejette quand Grist refuse d'en donner un.
+  async function getWriteAccess() {
+    const info = await grist.docApi.getAccessToken({ readOnly: false });
+    return { token: info.token, baseUrl: fixBaseUrl(info.baseUrl), expiresAt: Date.now() + (info.ttlMsecs || 120000) };
   }
 
   // L'identifiant d'une pièce jointe de Grist est un numéro de ligne : des chiffres, rien d'autre. Un modèle écrit `data-attachment-id` comme il
@@ -1317,5 +1325,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

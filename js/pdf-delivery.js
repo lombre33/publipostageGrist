@@ -17,6 +17,9 @@
 //    `GFS_INACTIF` ; `GFS_LECTURE_SEULE` ; `GFS_ACCES`…) arrête les appels de cet export : les fichiers déjà rangés restent rangés.
 //  - L'export ne se perd jamais : quand le rangement n'a pas gardé un fichier (erreur, appels arrêtés) et que la personne n'a pas choisi « Télécharger » aussi, ce fichier est téléchargé comme avant, et le coin d'état le dit. Un fichier que la
 //    personne ne veut pas (`ignore`, « Annuler » chez GFS) n'est pas téléchargé : elle l'a refusé.
+// À côté de la destination, la jointure à la ligne Grist (js/row-attachment.js, case « Joindre à la ligne » du menu Exporter) : le PDF de chaque ligne s'ajoute AUSSI à la cellule de sa ligne, dans la colonne choisie
+// (`plan().attach`). Elle ne remplace ni le téléchargement ni le rangement : c'est une sortie de plus, que `deliver` fait après le rangement (`files[i].rowId` dit à quelle ligne ; un fichier sans ligne - le PDF réuni - n'est
+// pas joint ; `options.table` dit dans quelle table), et `report.attach` en garde le compte rendu. Un PDF joint est parti quelque part (`delivered`) comme un PDF rangé.
 // Rend un rapport (`describe` en tire les phrases du coin d'état) : combien de fichiers rangés, remplacés, copiés (et sous quel nom), ignorés, ceux que GFS n'a pas gardés, ce qui a été téléchargé, et `delivered` - les rangs des fichiers qui sont
 // partis quelque part, téléchargés ou rangés -, de quoi ne dater (js/export-date.js) que les lignes dont le PDF existe. `keep(rapport)` puis `takeReport()` le rendent une fois, pour le PDF d'une ligne (js/pdf-export.js ne rend que vrai ou faux).
 const PdfDelivery = (function () {
@@ -28,6 +31,7 @@ const PdfDelivery = (function () {
   const STATUSES = ['ajoute', 'remplace', 'copie', 'ignore'];
   let last = null;
   let progressHook = null;
+  let attachProgressHook = null;
 
   // Le choix gardé pour la personne (jamais autre chose qu'une des trois destinations : une valeur étrangère vaut l'origine).
   function chosen() {
@@ -40,10 +44,10 @@ const PdfDelivery = (function () {
   const destination = () => (available() ? chosen() : ORIGIN);
   // Garde le choix (vrai quand le navigateur ou l'espace de GFS l'a retenu). Une valeur qui n'est pas une destination n'écrit rien.
   const choose = value => DESTINATIONS.indexOf(value) !== -1 && PersonStore.set(KEY, value);
-  // Ce que l'export fait de ses PDF : les télécharge, les range, ou les deux.
+  // Ce que l'export fait de ses PDF : les télécharge, les range, ou les deux - et les joint, ou non, à leur ligne Grist (la case « Joindre à la ligne »).
   function plan() {
     const where = destination();
-    return { download: where !== 'gfs', shelve: where !== 'download' };
+    return { download: where !== 'gfs', shelve: where !== 'download', attach: RowAttachment.active() };
   }
 
   // Le nom du PDF pour GFS : 1 à 200 signes, un retour à la ligne devenu une espace, « .pdf » au bout (GFS l'ajouterait, la longueur se compte avec lui).
@@ -67,7 +71,7 @@ const PdfDelivery = (function () {
     const given = options || {};
     const how = given.plan || plan();
     const report = {
-      shelved: how.shelve, total: files.length, counts: { ajoute: 0, remplace: 0, copie: 0, ignore: 0 }, copies: [], failed: [], skipped: 0, stopped: '', downloaded: 0, fellBack: false, delivered: new Set(),
+      shelved: how.shelve, total: files.length, counts: { ajoute: 0, remplace: 0, copie: 0, ignore: 0 }, copies: [], failed: [], skipped: 0, stopped: '', downloaded: 0, fellBack: false, delivered: new Set(), attach: null,
     };
     const outcome = new Array(files.length).fill('');   // le mot de GFS pour chaque fichier, 'failed' ou '' (pas essayé)
     if (how.shelve) {
@@ -90,6 +94,13 @@ const PdfDelivery = (function () {
         }
       }
     }
+    // La jointure à la ligne, après le rangement (GFS pose ses questions d'abord) : le jeton d'écriture se demande et se jette dans RowAttachment.attachAll, une fois par export.
+    if (how.attach && given.table) {
+      const items = files.map((file, i) => ({ index: i, rowId: file.rowId, name: nameFor(file.name), blob: file.blob }));
+      try { report.attach = await RowAttachment.attachAll(given.table, items, given.attachProgress || attachProgressHook); }
+      catch (e) { console.error('[PdfDelivery] jointure à la ligne impossible', e); report.attach = { column: RowAttachment.getColumn(), problem: 'failed', attached: [], failed: items.filter(item => item.rowId != null).map(item => ({ index: item.index, reason: 'failed' })) }; }
+      if (report.attach) report.attach.attached.forEach(done => report.delivered.add(done.index));
+    }
     // Ce qui se télécharge : tout, si la personne a choisi « Télécharger » (ou « les deux », ou si rien ne se range) ; sinon les seuls fichiers que le rangement n'a pas gardés.
     const rest = files.filter((file, i) => how.download || outcome[i] === 'failed' || outcome[i] === '');
     if (rest.length) {
@@ -103,6 +114,9 @@ const PdfDelivery = (function () {
 
   // Inscrit celui qui dit au coin d'état où en est le rangement (js/main.js) : `fn(rang, total)` avant chaque dépôt, quand l'appelant n'a pas donné le sien (`options.progress`). Un seul abonné.
   function onProgress(fn) { progressHook = typeof fn === 'function' ? fn : null; }
+
+  // Inscrit celui qui dit au coin d'état où en est la jointure à la ligne (js/main.js) : `fn(rang, total)` avant chaque envoi. Un seul abonné.
+  function onAttachProgress(fn) { attachProgressHook = typeof fn === 'function' ? fn : null; }
 
   // Garde le rapport d'un export pour son appelant, qui le reprend par `takeReport` : le PDF d'une ligne (js/pdf-export.js) ne rend que vrai ou faux. Rend le rapport.
   function keep(report) {
@@ -129,30 +143,52 @@ const PdfDelivery = (function () {
   // alors). Vides quand rien ne se rangeait.
   function describe(report, rowsFailed) {
     const out = { text: '', note: '' };
-    if (!report || !report.shelved) return out;
-    const counts = report.counts;
-    if (counts.ajoute + counts.remplace + counts.copie + counts.ignore) {
-      if (report.total === 1) {
-        const only = STATUSES.filter(status => counts[status])[0];
-        out.text = I18n.t('shelve.one.' + only, { name: I18n.t('shelve.quoted', { name: report.copies[0] || '' }) });
-      } else {
-        const kept = counts.ajoute + counts.remplace + counts.copie;
-        const detail = [];
-        if (counts.remplace) detail.push(I18n.t('shelve.replaced', { n: counts.remplace }));
-        if (counts.copie) detail.push(I18n.t('shelve.copied', { n: counts.copie }));
-        const pieces = [];
-        if (kept) pieces.push(I18n.t('shelve.kept', { n: kept }) + (detail.length ? ' (' + detail.join(', ') + ')' : ''));
-        if (counts.ignore) pieces.push(I18n.t('shelve.ignored', { n: counts.ignore }));
-        if (rowsFailed && !report.downloaded) pieces.push(I18n.t('shelve.rowsFailed', { failed: rowsFailed }));
-        out.text = pieces.join(', ') + '.';
+    if (!report) return out;
+    if (report.shelved) {
+      const counts = report.counts;
+      if (counts.ajoute + counts.remplace + counts.copie + counts.ignore) {
+        if (report.total === 1) {
+          const only = STATUSES.filter(status => counts[status])[0];
+          out.text = I18n.t('shelve.one.' + only, { name: I18n.t('shelve.quoted', { name: report.copies[0] || '' }) });
+        } else {
+          const kept = counts.ajoute + counts.remplace + counts.copie;
+          const detail = [];
+          if (counts.remplace) detail.push(I18n.t('shelve.replaced', { n: counts.remplace }));
+          if (counts.copie) detail.push(I18n.t('shelve.copied', { n: counts.copie }));
+          const pieces = [];
+          if (kept) pieces.push(I18n.t('shelve.kept', { n: kept }) + (detail.length ? ' (' + detail.join(', ') + ')' : ''));
+          if (counts.ignore) pieces.push(I18n.t('shelve.ignored', { n: counts.ignore }));
+          if (rowsFailed && !report.downloaded) pieces.push(I18n.t('shelve.rowsFailed', { failed: rowsFailed }));
+          out.text = pieces.join(', ') + '.';
+        }
+      }
+      const lost = report.failed.length + report.skipped;
+      if (lost) {
+        // La cause d'un arrêt est le dernier échec ; sans arrêt, le premier suffit à dire pourquoi.
+        const cause = report.stopped ? report.failed[report.failed.length - 1] : report.failed[0];
+        out.note = I18n.t(report.fellBack ? 'shelve.failedDownloaded' : 'shelve.failed', { n: lost, reason: reasonOf(cause) });
       }
     }
-    const lost = report.failed.length + report.skipped;
-    if (lost) {
-      // La cause d'un arrêt est le dernier échec ; sans arrêt, le premier suffit à dire pourquoi.
-      const cause = report.stopped ? report.failed[report.failed.length - 1] : report.failed[0];
-      out.note = I18n.t(report.fellBack ? 'shelve.failedDownloaded' : 'shelve.failed', { n: lost, reason: reasonOf(cause) });
+    const joined = describeAttach(report.attach);
+    out.text = [out.text, joined.text].filter(Boolean).join(' ');
+    out.note = [out.note, joined.note].filter(Boolean).join(' ');
+    return out;
+  }
+
+  // La jointure à la ligne (js/row-attachment.js) en une ou deux phrases : `text` ce qui est joint (et combien ont remplacé le PDF d'avant), `note` - rouge, en tête - ce qui ne l'est pas et pourquoi : la colonne qui a
+  // disparu ou n'a plus le bon type (une phrase pour tout le lot), sinon la raison du premier échec. Vides quand rien n'était à joindre.
+  function describeAttach(attach) {
+    const out = { text: '', note: '' };
+    if (!attach) return out;
+    const done = attach.attached.length;
+    if (done) {
+      const replaced = attach.attached.reduce((sum, one) => sum + one.replaced, 0);
+      out.text = done === 1 && !replaced
+        ? I18n.t('attach.one', { column: attach.column })
+        : I18n.t('attach.many', { n: done, column: attach.column }) + (replaced ? ' (' + I18n.t('attach.replaced', { n: replaced }) + ')' : '') + '.';
     }
+    if (attach.problem === 'missing' || attach.problem === 'unusable') out.note = I18n.t('attach.problem.' + attach.problem, { column: attach.column });
+    else if (attach.failed.length) out.note = I18n.t('attach.failed', { n: attach.failed.length, reason: I18n.t('attach.reason.' + attach.failed[0].reason) });
     return out;
   }
 
@@ -203,5 +239,5 @@ const PdfDelivery = (function () {
     });
   }
 
-  return { KEY, DESTINATIONS, chosen, destination, available, choose, plan, lotFor, nameFor, deliver, onProgress, keep, takeReport, describe, sync, wire };
+  return { KEY, DESTINATIONS, chosen, destination, available, choose, plan, lotFor, nameFor, deliver, onProgress, onAttachProgress, keep, takeReport, describe, sync, wire };
 })();

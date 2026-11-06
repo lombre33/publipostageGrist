@@ -951,7 +951,12 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
       },
       // Le document, par l'adresse de son interface de programmation (…/api/docs/<identifiant>) : js/schema-renames.js y lit l'identifiant du document pour ranger son instantané.
       // Un identifiant tiré à chaque chargement de la page : deux pages de test ne partagent jamais un instantané (setDocId pour jouer « le même document, rouvert »).
-      getAccessToken: async function () { return { token: 'stub-token', baseUrl: 'http://localhost/api/docs/' + state.docId }; },
+      // Chaque demande est gardée (state.tokenCalls : { readOnly }) ; state.tokenFailure refuse d'en donner ; state.tokenTtlMs fixe la durée de vie annoncée (js/row-attachment.js redemande un jeton qui expire).
+      getAccessToken: async function (options) {
+        state.tokenCalls.push({ readOnly: !!(options && options.readOnly) });
+        if (state.tokenFailure) throw new Error(state.tokenFailure);
+        return { token: options && options.readOnly === false ? 'stub-write-token' + state.tokenCalls.length : 'stub-token', baseUrl: 'http://localhost/api/docs/' + state.docId, ttlMsecs: state.tokenTtlMs };
+      },
       // La vraie fetchSelectedRecord (GristView, jamais GristDocAPI - exposée ici via docApi comme grist-plugin-api.ts le fait, cf. son export
       // `docApi = {...coreDocApi, ...viewApi, fetchSelectedTable, fetchSelectedRecord}`) ne prend PAS de tableId : elle opère sur la section liée à
       // CE widget, state.lastTableId ci-dessus en tient lieu. Même filtrage que fireRecord (filterRecordForIncludeColumns), même refus d'accès
@@ -970,7 +975,55 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     },
   };
 
-  window.__gristStub = { state, setViewer, setVariables, setColumnLabels, setColumnFormats, setColumnRules, setDocumentSettings, setAttachments, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, countSaves, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure, fireViewChange, denyTable, denyStructure };
+  state.tokenCalls = [];
+  state.tokenFailure = '';
+  state.tokenTtlMs = 120000;
+
+  // Le faux envoi d'une pièce jointe (js/row-attachment.js) : le POST multipart `…/attachments?auth=…` que la communauté de Grist décrit (« Upload attachment from custom widget » : champ `upload`, réponse = la liste
+  // des numéros créés). RIEN n'en est mesuré dans un vrai Grist (le labo grist-static ne reçoit pas de fichier) : ce faux serveur encode ce que nous avons décidé de croire, jamais une preuve. Il remplace window.fetch pour cette
+  // adresse seule, garde chaque requête (server.requests), range le fichier dans _grist_Attachments (id suivant) et rend [id]. Options : `failures` { rang(1,2…) : statut HTTP } pour refuser le énième envoi, `maxBytes`
+  // (413 au-delà), `networkDown` (fetch lève), `onRequest(rang)` (appelé avant la réponse : un scénario y modifie le document pendant l'export), `status` (statut de tout envoi). `uninstall()` rend le vrai fetch.
+  function installUploadServer(options) {
+    const settings = Object.assign({ failures: {}, maxBytes: Infinity, networkDown: false, onRequest: null, status: 200 }, options);
+    const realFetch = window.fetch;
+    const server = { requests: [], active: 0, maxActive: 0, uninstall() { window.fetch = realFetch; } };
+    window.fetch = async function (input, init) {
+      const url = String(input && input.url ? input.url : input);
+      const prefix = 'http://localhost/api/docs/' + state.docId + '/attachments';
+      if (url.indexOf(prefix) !== 0) return realFetch.apply(this, arguments);
+      const rank = server.requests.length + 1;
+      const body = init && init.body;
+      const file = body && typeof body.get === 'function' ? body.get('upload') : null;
+      const query = new URL(url).searchParams;
+      const record = {
+        rank, url, method: init && init.method, headers: Object.assign({}, init && init.headers), auth: query.get('auth'), fields: body && typeof body.keys === 'function' ? Array.from(body.keys()) : [],
+        fileName: file && file.name, size: file && file.size, type: file && file.type,
+      };
+      server.requests.push(record);
+      server.active += 1;
+      server.maxActive = Math.max(server.maxActive, server.active);
+      try {
+        await new Promise(resolve => setTimeout(resolve, 5));
+        if (settings.onRequest) await settings.onRequest(rank, record);
+        if (settings.networkDown) throw new TypeError('Failed to fetch');
+        const status = settings.failures[rank] || (record.size > settings.maxBytes ? 413 : settings.status);
+        if (status !== 200) return new Response('{"error":"refused"}', { status, headers: { 'Content-Type': 'application/json' } });
+        if (!state.rows._grist_Attachments) setAttachments([]);
+        const table = state.rows._grist_Attachments;
+        const id = Math.max(0, ...table.id.map(Number)) + 1;
+        const ext = String(record.fileName || '').lastIndexOf('.') !== -1 ? String(record.fileName).slice(String(record.fileName).lastIndexOf('.')) : '';
+        const row = { id, fileIdent: 'ident' + id, fileName: record.fileName || '', fileType: record.type || '', fileSize: record.size || 0, fileExt: ext, imageHeight: 0, imageWidth: 0, timeDeleted: null, timeUploaded: 1700000000 + id };
+        Object.keys(row).forEach(k => { if (table[k]) table[k].push(row[k]); });
+        record.id = id;
+        return new Response(JSON.stringify([id]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      } finally {
+        server.active -= 1;
+      }
+    };
+    return server;
+  }
+
+  window.__gristStub = { installUploadServer, state, setViewer, setVariables, setColumnLabels, setColumnFormats, setColumnRules, setDocumentSettings, setAttachments, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, countSaves, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure, fireViewChange, denyTable, denyStructure };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.

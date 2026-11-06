@@ -295,6 +295,9 @@
           <span class="v2-hover-row v2-hover-row-check-start" role="menuitemradio" aria-checked="true" tabindex="0" data-destination="download" data-export-for="pdf pdfProtected" data-i18n="destination.download">Télécharger</span>
           <span class="v2-hover-row v2-hover-row-check-start" role="menuitemradio" aria-checked="false" tabindex="0" data-destination="gfs" data-export-for="pdf pdfProtected" data-i18n="destination.gfs">Ranger dans GFS</span>
           <span class="v2-hover-row v2-hover-row-check-start" role="menuitemradio" aria-checked="false" tabindex="0" data-destination="both" data-export-for="pdf pdfProtected" data-i18n="destination.both">Télécharger et ranger dans GFS</span>
+          <!-- Joindre le PDF à sa ligne Grist (js/row-attachment.js) : une case de la personne (PersonStore, clé pp_export_attach), EN PLUS de la destination ci-dessus. La colonne de pièces jointes se choisit dans Réglages > Vue ; sans colonne, en lecture seule ou pour un PDF qui réunit plusieurs lignes la case est grisée, jamais retirée, et dit pourquoi. -->
+          <span class="v2-hover-hsep" data-export-for="pdf pdfProtected"></span>
+          <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-attach" role="menuitemcheckbox" aria-checked="false" tabindex="0" data-export-for="pdf pdfProtected" data-i18n="attach.label">Joindre à la ligne</span>
           <!-- Les neuf lignes d'export d'avant (et « Exporter en PDF ») ne sont plus montrées : le bouton Exporter lance le même export selon l'option cochée ci-dessus (demande du 12/10). Elles restent dans la page, masquées, avec leur identifiant, leur gestionnaire et leur grisé selon le modèle (js/main.js:syncExportRowsForModelType) : rien n'est retiré. -->
           <span id="v2-export-legacy-rows" hidden>
             <span class="v2-hover-row" id="v2-btn-export-pdf" data-i18n="toolbar.exportPdf">Exporter en PDF</span>
@@ -843,6 +846,22 @@
           <p class="settings-access-locked" id="settings-exportdate-locked" data-i18n="settings.exportDate.locked" hidden>Vous êtes en lecture seule : ce réglage est verrouillé.</p>
           <p class="settings-access-hint" data-i18n="settings.exportDate.hint">La date s’écrit pour chaque ligne dont le PDF est dans le fichier téléchargé : « Exporter en PDF », « Exporter les lignes (ZIP) », « Exporter les lignes en un seul PDF » et « Assemblage avant impression ». Une ligne en échec n’est pas datée ; Word, Excel, Markdown, HTML et « Impression navigateur » n’écrivent rien (le navigateur ne dit pas si la personne a imprimé). Un compte en lecture seule dans Grist ne peut rien écrire.</p>
         </section>
+        <!-- PDF joint à la ligne (js/row-attachment.js) : la colonne de pièces jointes qui reçoit le PDF de chaque ligne quand « Joindre à la ligne » est cochée dans le menu Exporter, et ce qui se passe quand la cellule a déjà un PDF. -->
+        <section class="settings-section settings-view-section" id="settings-rowattachment-section">
+          <h4 class="settings-section-title" data-i18n="settings.rowAttachment.title">PDF joint à la ligne</h4>
+          <p class="settings-panel-intro" data-i18n="settings.rowAttachment.intro">Quand « Joindre à la ligne » est coché dans le menu Exporter, chaque PDF s’ajoute à la colonne choisie, sur la ligne dont il vient. La colonne doit être de type Pièces jointes et ne pas porter de formule.</p>
+          <div class="settings-access-grid">
+            <label for="settings-rowattachment-column" data-i18n="settings.rowAttachment.column">Colonne</label><select id="settings-rowattachment-column"></select>
+            <label for="settings-rowattachment-mode" data-i18n="settings.rowAttachment.mode">Si la ligne a déjà un PDF</label>
+            <select id="settings-rowattachment-mode">
+              <option value="replace" data-i18n="settings.rowAttachment.mode.replace">Remplacer le PDF de même nom</option>
+              <option value="add" data-i18n="settings.rowAttachment.mode.add">Toujours ajouter</option>
+            </select>
+          </div>
+          <p class="settings-rowattachment-status" id="settings-rowattachment-status" role="status" hidden></p>
+          <p class="settings-access-locked" id="settings-rowattachment-locked" data-i18n="settings.rowAttachment.locked" hidden>Vous êtes en lecture seule : ce réglage est verrouillé.</p>
+          <p class="settings-access-hint" data-i18n="settings.rowAttachment.hint">La case se coche dans le menu Exporter, pour les deux PDF. Le PDF d’une ligne et chaque PDF d’une archive ZIP vont dans leur propre ligne ; le PDF réuni et l’assemblage avant impression n’ont pas de ligne à eux, la case est alors grisée. Le PDF reste téléchargé (ou rangé dans GFS) comme d’habitude. Un compte en lecture seule dans Grist ne peut rien joindre.</p>
+        </section>
       </div>
       <div class="settings-panel" data-settings-panel="access" hidden>
         <p class="settings-panel-intro" data-i18n="settings.access.intro">Droits par personne, lus dans une table du document : une ligne par personne, repérée par son email Grist, et une case à cocher par droit.</p>
@@ -1052,6 +1071,7 @@
 <script src="js/macro-editor.js?v=0.56"></script>
 <script src="js/view-template.js?v=0.11"></script>
 <script src="js/export-date.js?v=0.4"></script>
+<script src="js/row-attachment.js?v=0.1"></script>
 <script src="js/row-template.js?v=0.10"></script>
 <script src="js/row-template-panel.js?v=0.7"></script>
 <script src="js/template-organizer.js?v=0.4"></script>

@@ -5383,7 +5383,7 @@ const PdfExport = (function () {
 
   // Résout à `false` quand la personne renonce à l'export à cause d'une page blanche (rien n'est enregistré) ; `undefined` quand il n'y avait pas de ligne.
   // `everyPageWanted` : le PDF d'une présentation, qui ne pose pas la question (renderOnce).
-  // Où part le PDF (js/pdf-delivery.js) : téléchargé comme avant, rangé dans GFS, ou les deux. Rangé, il est mis en Blob une seule fois (le téléchargement de « les deux » reprend ce Blob) et l'appelant reprend le rapport du rangement
+  // Où part le PDF (js/pdf-delivery.js) : téléchargé comme avant, rangé dans GFS, ou les deux - et joint à sa ligne Grist quand la case « Joindre à la ligne » est cochée. Rangé ou joint, il est mis en Blob une seule fois (le téléchargement de « les deux » reprend ce Blob) et l'appelant reprend le rapport du rangement
   // (PdfDelivery.takeReport) pour le dire et pour ne dater la ligne que si le fichier est parti quelque part.
   async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields, everyPageWanted) {
     if (!record) { alert(I18n.t('alert.noRecordForExport')); return; }
@@ -5392,9 +5392,9 @@ const PdfExport = (function () {
     if (rendered.blankPages.length && !(await BatchFailures.confirmBlankPages(rendered.blankPages))) return false;
     const name = (filename || 'publipostage') + '.pdf';
     const how = PdfDelivery.plan();
-    if (!how.shelve) { rendered.save(name); return true; }
+    if (!how.shelve && !how.attach) { rendered.save(name); return true; }
     const blob = await rendered.blob();
-    PdfDelivery.keep(await PdfDelivery.deliver([{ name, blob }], () => ExportCommon.downloadBlob(blob, name), { plan: how }));
+    PdfDelivery.keep(await PdfDelivery.deliver([{ name, blob, rowId: record.id }], () => ExportCommon.downloadBlob(blob, name), { plan: how, table: tableId }));
     return true;
   }
 
