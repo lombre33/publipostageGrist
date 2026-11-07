@@ -725,15 +725,17 @@
   }
 
   // « Nouveau > Importer » demandé par GFS (js/gfs-open.js, consigne GFS 035) : GFS a ouvert le sélecteur de fichier lui-même (le cadre isolé de l'app n'a pas le geste de la personne) et donne le fichier choisi, que
-  // `valeur` nomme : `excel` (une grille), `markdown` (un document), `powerpoint` (une présentation, l'extension « diapositives » étant active). Il est lu par le chemin de la ligne du même nom du menu « + » - mêmes
+  // `valeur` nomme : `excel` (une grille), `markdown` (un document), `powerpoint` (une présentation, l'extension « diapositives » étant active), `word` (un document). Il est lu par le chemin de la ligne du même nom du menu « + » - mêmes
   // lectures, mêmes refus et mêmes phrases du coin d'état, même question d'enregistrement après une lecture réussie, même résultat : un modèle sans nom et pas encore enregistré, rien d'écrit avant son premier
   // « Enregistrer » - sans le sélecteur. true : le modèle importé est à l'écran ; false : le document est en lecture seule, la valeur est inconnue, le fichier est refusé, ou la personne a annulé.
+  // `word` (choix du porteur du 07/11) n'est proposé par GFS qu'une fois qu'il le déclare dans `actions.importer` de son manifeste : tant qu'il ne le fait pas, aucune valeur `word` n'arrive, et rien ne change.
   async function importFileFromGfs(kind, file) {
     if (isReadOnly()) return false;
     switch (kind) {
       case 'excel': return importXlsxFile(file);
       case 'markdown': return importMdFile(file);
       case 'powerpoint': return importPptxFile(file);
+      case 'word': return importDocxFile(file);
       default: return false;
     }
   }
@@ -966,7 +968,7 @@
     GridXlsxImport.chooseFile(importDocxFile, DOCX_IMPORT_ACCEPT);
   }
 
-  // Le fichier Word choisi par le sélecteur du menu « + ». true : le document importé est à l'écran (et le compte rendu de ce qui n'a pas été repris, s'il y en a un, a été lu) ; false : le fichier est refusé (l'erreur
+  // Le fichier Word choisi, par le sélecteur du menu « + » ou donné par GFS (importFileFromGfs). true : le document importé est à l'écran (et le compte rendu de ce qui n'a pas été repris, s'il y en a un, a été lu) ; false : le fichier est refusé (l'erreur
   // est dite dans le coin d'état) ou la personne a répondu « Annuler » à la question d'enregistrement : rien n'a changé.
   async function importDocxFile(file) {
     setStatus(I18n.t('status.docxImporting'));

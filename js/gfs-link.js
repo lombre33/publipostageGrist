@@ -104,7 +104,7 @@ const GfsLink = (function () {
 
   // `ouverture` (contrats 5.2, point 3) ou `args` de l'appel `ouvrir` (5.4) : { fichier, type, dossier, raison } où `fichier` est null ou { id, type }, l'`id` pris comme texte (le numéro de
   // ligne du modèle). Pour la raison `importer` (« Nouveau > Importer », consigne 035 : GFS a ouvert le sélecteur lui-même et donne le fichier choisi, une seule fois), s'y ajoute
-  // `importation: { valeur, fichier }` : `valeur` un texte (`excel`, `markdown` ou `powerpoint`) et `fichier` un `File`. Pour toute autre raison, ou si `valeur` n'est pas un texte ou `fichier` pas un
+  // `importation: { valeur, fichier }` : `valeur` un texte (`excel`, `markdown`, `powerpoint` ou `word`) et `fichier` un `File`. Pour toute autre raison, ou si `valeur` n'est pas un texte ou `fichier` pas un
   // `File`, l'ouverture est lue sans importation. Pour la raison `lire` (« Lire » sur un PDF, consigne 040 : GFS garde le PDF, le télécharge lui-même et le donne, une seule fois), s'y ajoute
   // `lecture: { id, fichier }` : `id` un texte (l'identifiant du PDF chez GFS) et `fichier` un `File` (le PDF, à son nom) ; pour toute autre raison, ou si `id` n'est pas un texte ou `fichier` pas un `File`,
   // l'ouverture est lue sans lecture. Rien d'autre n'est gardé ; null quand ce n'est pas un objet.

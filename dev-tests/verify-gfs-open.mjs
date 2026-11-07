@@ -12,7 +12,7 @@
 //   rouvre pas son modèle ; le macro-modèle garde l'ordre habituel et ouvre par-dessus son écran de composition, vide, dans le panneau ; `dossier` n'y change rien ; un type absent, refusé par la garde, une présentation
 //   sans l'extension, un document en lecture seule : l'ordre habituel, sans message.
 //  « NOUVEAU > IMPORTER » (consigne 035 : `raison` `importer` et `importation: { valeur, fichier: File }`, js/gfs-link.js `normalizeOpening`, js/gfs-open.js, js/main.js `importFileFromGfs`) : l'importation est gardée pour cette
-//   raison seule (un `File` et une valeur en texte), jamais pour une autre ; GFS a déjà ouvert le sélecteur, donc aucun sélecteur ne s'ouvre ; chacune des trois valeurs (Excel, Markdown, PowerPoint) lit SON fichier par le chemin
+//   raison seule (un `File` et une valeur en texte), jamais pour une autre ; GFS a déjà ouvert le sélecteur, donc aucun sélecteur ne s'ouvre ; chacune des quatre valeurs (Excel, Markdown, PowerPoint, Word) lit SON fichier par le chemin
 //   du menu « + » (mêmes phrases du coin d'état, mêmes refus, même question d'enregistrement après une lecture réussie) et le modèle importé est sans nom, sans rien d'écrit, JAMAIS remplacé par un modèle vierge ; un fichier
 //   refusé, une valeur inconnue, une importation illisible, une personne qui annule ou un document en lecture seule : `{ ouvert: false }` ; au démarrage, le modèle habituel s'ouvre, « Widget prêt. » se dit, puis l'import suit
 //   (avant les appels `ouvrir` reçus pendant le démarrage) ; seule, rien ne change.
@@ -92,20 +92,25 @@ const answers = page => page.evaluate(() => window.__gfsStub.answers.slice());
 // « Nouveau > Importer » (consigne 035) : GFS a fait choisir le fichier et le donne à l'app, `importation: { valeur, fichier: File }`. Un `File` ne passe ni par `page.evaluate` ni par le JSON du stub : il est fabriqué dans
 // la page (`window.__makeFile`), les octets d'un classeur ou d'une présentation y voyagent en base64. Les aides comptent aussi les ouvertures du sélecteur de fichier (un clic sur un champ de fichier : aucune
 // ne doit avoir lieu, GFS a déjà ouvert le sien) et les lectures du lecteur Markdown (celles de ce fichier).
-const IMPORT_TYPE = { excel: 'grille', markdown: 'document', powerpoint: 'presentation' };
+const IMPORT_TYPE = { excel: 'grille', markdown: 'document', powerpoint: 'presentation', word: 'document' };
 const MIME = {
   markdown: 'text/markdown',
   excel: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   powerpoint: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  word: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 };
 const MARKDOWN = { name: 'note.md', mime: MIME.markdown, text: '# Titre importé\n\nTexte du fichier de GFS.' };
 const MARKDOWN_TEXT = 'Titre importéTexte du fichier de GFS.';
 const EMPTY_MARKDOWN = { name: 'vide.md', mime: MIME.markdown, text: '' };
 const NOT_A_BOOK = { name: 'faux.xlsx', mime: MIME.excel, text: 'ceci n’est pas un classeur' };
 const NOT_A_DECK = { name: 'faux.pptx', mime: MIME.powerpoint, text: 'ceci n’est pas une présentation' };
+const NOT_A_DOC = { name: 'faux.docx', mime: MIME.word, text: 'ceci n’est pas un document Word' };
+const WORD_TEXT = 'Texte du fichier Word de GFS.';
 const IMPORT_HELPERS = `
   window.__makeFile = (src) => new File([src.base64 ? Uint8Array.from(atob(src.base64), c => c.charCodeAt(0)) : src.text], src.name, { type: src.mime });
-  window.__picker = 0; window.__mdReads = [];
+  window.__picker = 0; window.__mdReads = []; window.__docxReads = [];
+  const blobBuffer = Blob.prototype.arrayBuffer;
+  Blob.prototype.arrayBuffer = function (...args) { if (this instanceof File && /\\.docx$/i.test(this.name)) window.__docxReads.push({ name: this.name, size: this.size }); return blobBuffer.apply(this, args); };
   const nativeClick = HTMLInputElement.prototype.click;
   HTMLInputElement.prototype.click = function (...args) { if (this.type === 'file') window.__picker += 1; return nativeClick.apply(this, args); };
   document.addEventListener('DOMContentLoaded', () => {
@@ -150,11 +155,13 @@ const IMPORTED = {
   markdown: { fr: 'Markdown importé. Nommez le modèle puis enregistrez-le.', en: 'Markdown imported. Name the template, then save it.' },
   excel: { fr: 'Excel importé : 3 lignes, 2 colonnes. Nommez le modèle puis enregistrez-le.', en: 'Excel imported: 3 rows, 2 columns. Name the template, then save it.' },
   powerpoint: { fr: 'PowerPoint importé : 2 diapositives. Nommez le modèle puis enregistrez-le.', en: 'PowerPoint imported: 2 slides. Name the template, then save it.' },
+  word: { fr: 'Word importé. Nommez le modèle puis enregistrez-le.', en: 'Word imported. Name the template, then save it.' },
 };
 const REFUSED = {
   markdown: 'Ce fichier Markdown est vide : il n’y a rien à importer.',
   excel: 'Ce fichier n’est pas un classeur Excel (.xlsx) lisible.',
   powerpoint: 'Ce fichier n’est pas une présentation PowerPoint (.pptx) lisible.',
+  word: 'Ce fichier n’est pas un document Word (.docx) lisible.',
 };
 
 async function startWith(label, { stub, options, record, lang = 'fr', colorScheme = 'light', hosted = true, search = '' } = {}, expectName, expectId, expectStatus) {
@@ -633,7 +640,7 @@ console.log('\n== « Nouveau > Importer » : ce que l’app garde de l’ouvertu
       numberValue: { valeur: 3, fichier: file },
       noValue: { fichier: file },
       extra: { valeur: 'excel', fichier: file, extra: 1, chemin: '/tmp/x' },
-      unknown: { valeur: 'word', fichier: file },
+      unknown: { valeur: 'keynote', fichier: file },
       none: null,
       text: 'markdown',
     };
@@ -666,13 +673,15 @@ console.log('\n== « Nouveau > Importer » : ce que l’app garde de l’ouvertu
   got = await read({}, 'extra');
   check('rien d’autre que `valeur` et `fichier` n’est gardé dans l’importation', got.importation && JSON.stringify(got.importation.keys) === JSON.stringify(['valeur', 'fichier']) && got.importation.valeur === 'excel', got);
   got = await read({}, 'unknown');
-  check('une valeur que l’app ne connaît pas est gardée telle quelle : c’est js/gfs-open.js puis js/main.js qui la refusent', got.importation && got.importation.valeur === 'word', got);
+  check('une valeur que l’app ne connaît pas est gardée telle quelle : c’est js/gfs-open.js puis js/main.js qui la refusent', got.importation && got.importation.valeur === 'keynote', got);
   await o.context.close();
 }
 
-// Les octets d'un classeur (ExcelJS, la bibliothèque que le widget charge lui-même) et d'une présentation (les briques de dev-tests/scenarios-pptx-import.js) : fabriqués dans une page, rejoués dans les pages de démarrage.
+// Les octets d'un classeur (ExcelJS, la bibliothèque que le widget charge lui-même), d'une présentation (les briques de dev-tests/scenarios-pptx-import.js) et d'un document Word (celles de
+// dev-tests/scenarios-docx-import.js) : fabriqués dans une page, rejoués dans les pages de démarrage.
 async function buildFixtures(page) {
   await page.addScriptTag({ url: '/dev-tests/scenarios-pptx-import.js' });
+  await page.addScriptTag({ url: '/dev-tests/scenarios-docx-import.js' });
   return page.evaluate(async () => {
     const base64 = (buffer) => {
       const bytes = new Uint8Array(buffer);
@@ -689,10 +698,12 @@ async function buildFixtures(page) {
     sheet.addRow(['Clou', 7]);
     const { pptx, textBox, para, run } = window.PptxFixtures;
     const slide = text => ({ shapes: textBox(60, 40, 840, 80, para(run(text, 'sz="4000"')), { id: 2 }) });
-    return { xlsx: base64(await book.xlsx.writeBuffer()), deck: base64(await pptx({ slides: [slide('Bilan GFS'), slide('Suite')] })) };
+    const { docx, p, pStyle } = window.DocxFixtures;
+    const word = await docx({ body: p('Bilan Word GFS', pStyle('Title')) + p('Texte du fichier Word de GFS.') });
+    return { xlsx: base64(await book.xlsx.writeBuffer()), deck: base64(await pptx({ slides: [slide('Bilan GFS'), slide('Suite')] })), word: base64(word) };
   });
 }
-let SOURCES = null;   // les trois fichiers de l'essai, une fois fabriqués : { markdown, excel, powerpoint }
+let SOURCES = null;   // les quatre fichiers de l'essai, une fois fabriqués : { markdown, excel, powerpoint, word }
 
 console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier de GFS (l’app est déjà ouverte) ==');
 {
@@ -700,7 +711,7 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   const page = o.page;
   await started(page);
   const fixtures = await buildFixtures(page);
-  SOURCES = { markdown: MARKDOWN, excel: { name: 'ventes.xlsx', mime: MIME.excel, base64: fixtures.xlsx }, powerpoint: { name: 'bilan.pptx', mime: MIME.powerpoint, base64: fixtures.deck } };
+  SOURCES = { markdown: MARKDOWN, excel: { name: 'ventes.xlsx', mime: MIME.excel, base64: fixtures.xlsx }, powerpoint: { name: 'bilan.pptx', mime: MIME.powerpoint, base64: fixtures.deck }, word: { name: 'bilan.docx', mime: MIME.word, base64: fixtures.word } };
   const installs = () => page.evaluate(() => window.__gfsStub.calls.filter(c => c.nom === 'installer').map(c => c.args));
   const nothingWritten = async () => { const w = await writes(page); return w.models === 0 && w.options === 'null'; };
   const blanksOpened = state => state.opened.filter(id => id === 'null').length;
@@ -766,7 +777,7 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   // Ce que l'app ne sait pas importer : rien ne s'ouvre, et JAMAIS un modèle vierge à la place (il ferait perdre le fichier sans un mot).
   before = await importState(page);
   for (const [label, valeur, patch] of [
-    ['une valeur que l’app ne connaît pas (`word`)', 'word', {}],
+    ['une valeur que l’app ne connaît pas (`keynote`)', 'keynote', {}],
     ['une ouverture `importer` sans importation', 'markdown', { importation: null }],
     ['une importation dont le fichier n’en est pas un', 'markdown', { importation: { valeur: 'markdown', fichier: 'note.md' } }],
   ]) {
@@ -794,6 +805,41 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   }, { empty: EMPTY_MARKDOWN, good: MARKDOWN, type: 'document' });
   check('deux appels de suite sont traités l’un après l’autre : le fichier vide est refusé, puis le bon est importé (les réponses suivent cet ordre)', JSON.stringify(both) === JSON.stringify({ first: false, second: true, ordered: true, text: MARKDOWN_TEXT }), both);
   check('aucune boîte native (confirm / alert / prompt) n’a été posée', o.natives.length === 0, o.natives);
+
+  // Word (choix du porteur du 07/11 : « Nouveau > Importer » propose aussi Word, GFS déclare la valeur `word`) : lu par le chemin de la ligne « Importer un Word… » du menu « + », sans extension à installer. Le document
+  // du Markdown importé attend d'être enregistré : la question se pose APRÈS la lecture du fichier.
+  const wordReads = () => page.evaluate(() => window.__docxReads.slice());
+  const wordSize = Buffer.from(SOURCES.word.base64, 'base64').length;
+  const answeredBefore = (await answers(page)).length;
+  const blanksBefore = blanksOpened(await importState(page));
+  pending = askImport(page, 'word', SOURCES.word);
+  await waitDialog(page);
+  d = await dialogOf(page);
+  got = await importState(page);
+  await sleep(600);
+  check('word, avec le document importé qui attend d’être enregistré : la question se pose APRÈS la lecture du fichier, dans le panneau, sans « Enregistrer » (le modèle n’a pas de nom), le document reste', d.open && d.inPanel && d.buttons.map(b => b.label).join('|') === 'Annuler|Ne pas enregistrer' && got.text === MARKDOWN_TEXT, { d, got });
+  check('… et le fichier reçu est lu tel quel, une seule fois, sans sélecteur', JSON.stringify(await wordReads()) === JSON.stringify([{ name: 'bilan.docx', size: wordSize }]) && got.picker === 0 && got.fileInputs === 0, { reads: await wordReads(), got });
+  check('GFS n’a pas de réponse tant que la personne n’a pas choisi (pas de délai)', (await answers(page)).length === answeredBefore, await answers(page));
+  await pressDialog(page, 'Annuler');
+  reply = await pending;
+  got = await importState(page);
+  check('« Annuler » : `{ ouvert: false }`, le document est resté (rien n’a changé), aucun sélecteur, aucun modèle vierge', reply.type === 'reponse' && reply.data.ouvert === false && got.text === MARKDOWN_TEXT && got.picker === 0 && blanksOpened(got) === blanksBefore && !(await dialogOf(page)).open, { reply, got });
+
+  pending = askImport(page, 'word', SOURCES.word);
+  await waitDialog(page);
+  await pressDialog(page, 'Ne pas enregistrer');
+  reply = await pending;
+  got = await importState(page);
+  check('« Ne pas enregistrer » : `{ ouvert: true }`, le document du fichier Word est à l’écran (son titre et son texte), sans nom ni modèle courant', reply.type === 'reponse' && reply.data.ouvert === true && got.current == null && got.list === '' && got.name === '' && !got.grid && got.slides === 0 && got.text.includes('Bilan Word GFS') && got.text.includes(WORD_TEXT), { reply, got });
+  check('le coin d’état dit la phrase du menu « + » : « Word importé. Nommez le modèle puis enregistrez-le. »', got.status === IMPORTED.word.fr, got);
+  check('aucun sélecteur de fichier, aucune fenêtre de rapport (le fichier est repris en entier), rien d’écrit', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(page)).open && await nothingWritten(), got);
+  check('un seul modèle sans identifiant de plus est passé par `setCurrentId` (celui de l’import) : « Nouveau » du type n’est pas ce que GFS demande', blanksOpened(got) === blanksBefore + 1, got.opened);
+
+  // Un fichier Word refusé : `{ ouvert: false }`, la phrase du menu « + » en erreur, aucune question même quand le document attend d'être enregistré.
+  reply = await askImport(page, 'word', NOT_A_DOC);
+  got = await importState(page);
+  check(`un fichier qui n’est pas un document Word : \`{ ouvert: false }\`, le coin d’état dit « ${REFUSED.word} » en erreur, le document Word reste, aucune question`, reply.type === 'reponse' && reply.data.ouvert === false && got.status === REFUSED.word && got.statusClass === 'error-msg' && got.text.includes(WORD_TEXT) && !(await dialogOf(page)).open, { reply, got });
+  check('aucun sélecteur de fichier, rien d’écrit, aucune boîte native', got.picker === 0 && await nothingWritten() && o.natives.length === 0, o.natives);
   await o.context.close();
 
   // Un document en lecture seule refuse, sans même lire le fichier.
@@ -802,6 +848,9 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   reply = await askImport(readonly.page, 'markdown', MARKDOWN);
   got = await importState(readonly.page);
   check('un document en lecture seule : `{ ouvert: false }`, rien ne change, le fichier n’est même pas lu, aucun sélecteur', reply.type === 'reponse' && reply.data.ouvert === false && got.status === before.status && got.name === 'Départ A défaut' && got.mdReads.length === 0 && got.picker === 0, { reply, before, got });
+  reply = await askImport(readonly.page, 'word', SOURCES.word);
+  got = await importState(readonly.page);
+  check('… et pour un fichier Word : `{ ouvert: false }`, rien ne change, le fichier n’est même pas lu, aucun sélecteur', reply.type === 'reponse' && reply.data.ouvert === false && got.status === before.status && got.name === 'Départ A défaut' && JSON.stringify(await readonly.page.evaluate(() => window.__docxReads)) === '[]' && got.picker === 0, { reply, before, got });
   await readonly.context.close();
 }
 
@@ -842,10 +891,26 @@ console.log('\n== « Nouveau > Importer » au démarrage : le fichier est dans l
   check('aucun sélecteur de fichier, rien d’écrit', got.picker === 0 && got.fileInputs === 0 && await nothingWritten(o.page), got);
   await o.context.close();
 
+  // Word (choix du porteur du 07/11) : aucune extension à installer, le document du fichier suit le ★ comme les autres.
+  o = await startImporting('word', SOURCES.word);
+  await waitStatus(o.page, /^Word importé/);
+  got = await importState(o.page);
+  check('word : le document du fichier est à l’écran (son titre et son texte), sans nom ni modèle courant (le ★ s’était ouvert avant, l’import a suivi)', got.current == null && got.name === '' && got.list === '' && got.text.includes('Bilan Word GFS') && got.text.includes(WORD_TEXT) && got.opened.join() === '1,null', got);
+  check('le coin d’état dit « Word importé. Nommez le modèle puis enregistrez-le. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', got.status === IMPORTED.word.fr, got);
+  check('le fichier reçu est lu tel quel, une fois, sans sélecteur, aucune fenêtre de rapport, rien d’écrit', JSON.stringify(await o.page.evaluate(() => window.__docxReads)) === JSON.stringify([{ name: 'bilan.docx', size: Buffer.from(SOURCES.word.base64, 'base64').length }]) && got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(o.page)).open && await nothingWritten(o.page), got);
+  check('`GfsLink.opening()` garde l’importation (la valeur `word`, un `File`)', await o.page.evaluate(() => { const i = GfsLink.opening().importation; return !!i && i.valeur === 'word' && i.fichier instanceof File && i.fichier.name === 'bilan.docx'; }));
+  await o.context.close();
+
   o = await startImporting('markdown', SOURCES.markdown, { lang: 'en' });
   await waitStatus(o.page, /^Markdown imported/);
   got = await importState(o.page);
   check('en anglais : « Markdown imported. Name the template, then save it. », le document du fichier est à l’écran', got.status === IMPORTED.markdown.en && got.text === MARKDOWN_TEXT && got.current == null, got);
+  await o.context.close();
+
+  o = await startImporting('word', SOURCES.word, { lang: 'en' });
+  await waitStatus(o.page, /^Word imported/);
+  got = await importState(o.page);
+  check('en anglais : « Word imported. Name the template, then save it. », le document du fichier Word est à l’écran', got.status === IMPORTED.word.en && got.text.includes(WORD_TEXT) && got.current == null, got);
   await o.context.close();
 
   // Un fichier refusé : le modèle habituel reste, l'erreur reste à l'écran (« Widget prêt. » ne la recouvre pas), jamais un modèle vierge.
@@ -863,6 +928,13 @@ console.log('\n== « Nouveau > Importer » au démarrage : le fichier est dans l
   check('… et le coin d’état dit sa phrase du menu « + » en erreur', got.status === REFUSED.excel && got.statusClass === 'error-msg', got);
   await o.context.close();
 
+  o = await startImporting('word', NOT_A_DOC);
+  await waitStatus(o.page, /n’est pas un document Word/);
+  got = await importState(o.page);
+  usualOrder(got, 'un fichier qui n’est pas un document Word');
+  check('… et le coin d’état dit « Ce fichier n’est pas un document Word (.docx) lisible. » en erreur', got.status === REFUSED.word && got.statusClass === 'error-msg', got);
+  await o.context.close();
+
   // Ce que l'app ne peut pas importer : le modèle habituel, sans vierge à la place.
   o = await startImporting('markdown', MARKDOWN, { patch: { importation: null } });
   await sleep(2500);
@@ -871,17 +943,17 @@ console.log('\n== « Nouveau > Importer » au démarrage : le fichier est dans l
   check('… et le coin d’état dit seulement « Widget prêt. »', got.status === READY.fr && got.statusClass === '', got);
   await o.context.close();
 
-  o = await startImporting('markdown', MARKDOWN, { patch: { importation: { valeur: 'word', fichier: null } } });
+  o = await startImporting('markdown', MARKDOWN, { patch: { importation: { valeur: 'markdown', fichier: null } } });
   await sleep(2500);
   got = await importState(o.page);
   usualOrder(got, 'une importation dont le fichier n’en est pas un');
   await o.context.close();
 
-  o = await t.openPage({ hosted: true, seed: seedModels(), ready: false, init: TRACK + IMPORT_HELPERS + `window.__gfsStub.ouverture = { fichier: null, type: 'document', dossier: '', raison: 'importer', importation: { valeur: 'word', fichier: window.__makeFile(${JSON.stringify(MARKDOWN)}) } };` });
+  o = await t.openPage({ hosted: true, seed: seedModels(), ready: false, init: TRACK + IMPORT_HELPERS + `window.__gfsStub.ouverture = { fichier: null, type: 'document', dossier: '', raison: 'importer', importation: { valeur: 'keynote', fichier: window.__makeFile(${JSON.stringify(MARKDOWN)}) } };` });
   await started(o.page);
   await sleep(2500);
   got = await importState(o.page);
-  usualOrder(got, 'une valeur que l’app ne connaît pas (`word`)');
+  usualOrder(got, 'une valeur que l’app ne connaît pas (`keynote`)');
   check('… sans lire le fichier ni ouvrir de sélecteur', got.mdReads.length === 0 && got.picker === 0, got);
   await o.context.close();
 
