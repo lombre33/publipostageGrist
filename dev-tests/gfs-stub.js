@@ -46,7 +46,7 @@
 //   window.__gfsStub.joindre : l'appel `joindre { table, colonne, mode?, fichiers: [{ ligne, fichier, nom }] }` (contrats 5.4 point 12, consigne 053 : GFS joint lui-même le PDF à la cellule « Pièces jointes » de sa ligne, l'app ne reçoit aucun jeton
 //   d'écriture) - null : un GFS d'avant ce geste, dont l'appel reçoit `GFS_INCONNU` (par défaut) ; sinon un objet de réglage qui rejoue GFS (attach.js de GFS) : `delai` (ms), `erreur` / `erreurs[rang]` ({ code, message } : l'appel est refusé), `lignes` (les
 //   lignes qui existent : une autre est un échec `ligne` ; toutes par défaut), `etatColonne` (`absente` ou `inutilisable` : rien n'est envoyé, chaque fichier est un échec de ce mot) et `arret(rang, args)` (rend `{ mot, aPartirDe? }` : à partir de l'entrée `aPartirDe`
-//   (0 par défaut) Grist refuse avec ce mot du contrat - `refus`, `trop-gros`, `injoignable`, `echec` -, les suivantes sont des échecs du même mot, jamais essayées). La forme est vérifiée comme GFS le fait (`GFS_REFUSE` : table, colonne, mode, 1 à 200 entrées, ligne
+//   (0 par défaut) Grist refuse avec ce mot du contrat - `refus`, `injoignable`, `echec` -, les suivantes sont des échecs du même mot, jamais essayées) ; `tropGros(rang, args)` rend la liste des entrées trop grosses pour Grist (413) : chacune est un échec `trop-gros` à elle seule (`probleme` reste null, les autres sont jointes : réponse de GFS, consigne 054). La forme est vérifiée comme GFS le fait (`GFS_REFUSE` : table, colonne, mode, 1 à 200 entrées, ligne
 //   entière d'au moins 1, `fichier` un Blob non vide qui porte `%PDF-` dans ses 1 024 premiers octets, nom de 1 à 200 signes) ; `mode: 'remplacer'` (par défaut) retire la pièce de même nom (blancs rognés, casse ignorée) de la même ligne et de la même colonne.
 //   `reponse` (une valeur, ou une fonction `(rang, args) => valeur`) remplace le rapport tel quel après la vérification de la forme : de quoi essayer une réponse mal formée ou un GFS plus récent.
 //   `joindreAppels` dit chaque appel reçu ({ rang, table, colonne, mode, cles, entrees: [{ ligne, nom, taille, type, instance, cles }] }), `joindreEnCours` et `joindreMax` (1 : un appel à la fois) et `pieces` ce que GFS a joint ({ table, colonne, ligne, nom, taille,
@@ -297,11 +297,13 @@
         } else {
           const known = Array.isArray(options.lignes) ? new Set(options.lignes) : null;
           const stop = typeof options.arret === 'function' ? options.arret(rank, args) : null;
+          const tooLarge = typeof options.tropGros === 'function' ? options.tropGros(rank, args) : [];
           let word = null;
           entries.forEach((entry, index) => {
             if (known && !known.has(entry.ligne)) { report.echecs.push({ index, raison: 'ligne' }); return; }
             if (!word && stop && index >= (stop.aPartirDe || 0)) { word = stop.mot; report.probleme = word; }
             if (word) { report.echecs.push({ index, raison: word }); return; }
+            if (tooLarge.includes(index)) { report.echecs.push({ index, raison: 'trop-gros' }); return; }
             const name = clean(entry.nom);
             const named = /\.pdf$/i.test(name) ? name : name + '.pdf';
             const same = piece => piece.table === args.table && piece.colonne === args.colonne && piece.ligne === entry.ligne && piece.nom.trim().toLowerCase() === named.toLowerCase();

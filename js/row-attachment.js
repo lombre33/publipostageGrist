@@ -213,8 +213,8 @@ const RowAttachment = (function () {
   // === Chez GFS : GFS joint lui-même (consigne 053) ===
   // Hébergée, le jeton d'écriture n'existe pas : `attachAll` donne à GFS les octets de chaque PDF et la ligne d'où il vient (`joindre`, contrats 5.4 point 12), GFS les envoie à Grist un à un, relit la colonne juste avant
   // d'écrire et écrit UN lot par appel ; son rapport est traduit dans le rapport de `attachAll`. Quatre écarts avec le chemin de l'app seule, à connaître : (1) un seul défaut de forme (une ligne qui n'est pas un entier d'au moins 1, un nom hors
-  // de 1 à 200 signes, un fichier vide ou qui n'est pas un PDF) fait refuser TOUT l'appel : chaque entrée est donc vérifiée ici avant l'envoi, et celle qui ne passe pas est un échec à elle seule ; (2) un envoi que Grist refuse arrête le lot
-  // chez GFS (les fichiers pas encore envoyés sont des échecs du même mot, jamais essayés), alors que l'app seule continue ; (3) au plus 200 entrées par appel, les appels un après l'autre (la progression : avant chaque appel) ; (4) `remplace` est
+  // de 1 à 200 signes, un fichier vide ou qui n'est pas un PDF) fait refuser TOUT l'appel : chaque entrée est donc vérifiée ici avant l'envoi, et celle qui ne passe pas est un échec à elle seule ; (2) un envoi que Grist refuse (`refus`, `injoignable`, `echec`) arrête le lot
+  // chez GFS (les fichiers pas encore envoyés sont des échecs du même mot, jamais essayés), alors que l'app seule continue ; la taille fait exception (réponse de GFS, consigne 054) : un fichier trop gros (`trop-gros`) échoue seul, les autres sont joints ; (3) au plus 200 entrées par appel, les appels un après l'autre (la progression : avant chaque appel) ; (4) `remplace` est
   // un booléen, il compte pour un remplacement.
   const GFS_BATCH_MAX = 200;
   const GFS_PROBLEMS = new Map([['absente', 'missing'], ['inutilisable', 'unusable'], ['refus', 'denied'], ['trop-gros', 'tooLarge'], ['injoignable', 'unreachable'], ['echec', 'failed']]);

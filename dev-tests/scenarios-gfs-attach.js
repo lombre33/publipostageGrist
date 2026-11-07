@@ -179,7 +179,8 @@
       const words = { absente: 'missing', inutilisable: 'unusable', refus: 'denied', 'trop-gros': 'tooLarge', injoignable: 'unreachable', echec: 'failed', 'mot-du-futur': 'failed' };
       const got = {};
       for (const [word, expected] of Object.entries(words)) {
-        gfs().joindre = word === 'absente' || word === 'inutilisable' ? { etatColonne: word } : { arret: () => ({ mot: word }) };
+        // `trop-gros` n'arrête pas le lot chez GFS (consigne 054) : il échoue fichier par fichier, comme dans le vrai GFS.
+        gfs().joindre = word === 'absente' || word === 'inutilisable' ? { etatColonne: word } : word === 'trop-gros' ? { tropGros: () => [0, 1] } : { arret: () => ({ mot: word }) };
         const report = await RowAttachment.attachAll(TABLE, [item(0, 1, 'a.pdf'), item(1, 2, 'b.pdf')], null);
         got[word] = [report.problem, report.failed.map(f => f.reason), report.attached.length, report.gfs === undefined];
         check(problems, word, got[word], [expected, [expected, expected], 0, true]);
@@ -188,21 +189,33 @@
     }, WITH_COLUMN);
 
   scenario('gfsattach_a_deleted_row_a_stopped_batch_and_a_missing_column_are_told_as_they_happen',
-    'Une ligne supprimée pendant l’export (`ligne`) est `row` et ne gêne pas les autres ; un envoi que Grist refuse au milieu laisse joints ceux d’avant (aucun `problem`, les suivants échouent du même mot) ; une colonne `absente` au premier appel arrête les appels suivants (un seul appel pour 250 fichiers).',
+    'Une ligne supprimée pendant l’export (`ligne`) est `row` et ne gêne pas les autres ; un envoi que Grist refuse (`refus`) au milieu laisse joints ceux d’avant (aucun `problem`, les suivants échouent du même mot) ; un fichier trop gros (`trop-gros`) échoue SEUL, les autres sont joints, y compris un par appel sur trois appels ; une colonne `absente` au premier appel arrête les appels suivants (un seul appel pour 250 fichiers).',
     async () => {
       const problems = [];
       gfs().joindre = { lignes: [1, 3] };
       const gone = await RowAttachment.attachAll(TABLE, [item(0, 1, 'a.pdf'), item(1, 2, 'b.pdf'), item(2, 3, 'c.pdf')], null);
       check(problems, 'ligne supprimée', [gone.problem, gone.attached.map(a => a.index), gone.failed], [null, [0, 2], [{ index: 1, reason: 'row' }]]);
-      gfs().joindre = { arret: () => ({ mot: 'trop-gros', aPartirDe: 1 }) };
+      gfs().joindre = { arret: () => ({ mot: 'refus', aPartirDe: 1 }) };
       const stopped = await RowAttachment.attachAll(TABLE, [item(0, 1, 'a.pdf'), item(1, 2, 'b.pdf'), item(2, 3, 'c.pdf')], null);
-      check(problems, 'lot arrêté au milieu', [stopped.problem, stopped.attached.map(a => a.index), stopped.failed], [null, [0], [{ index: 1, reason: 'tooLarge' }, { index: 2, reason: 'tooLarge' }]]);
+      check(problems, 'lot arrêté au milieu', [stopped.problem, stopped.attached.map(a => a.index), stopped.failed], [null, [0], [{ index: 1, reason: 'denied' }, { index: 2, reason: 'denied' }]]);
+      // Un fichier trop gros n'arrête rien : il échoue seul (consigne 054), les autres sont joints ; tous trop gros : tous échouent, `problem` dit la taille.
+      gfs().joindre = { tropGros: () => [1] };
+      const big = await RowAttachment.attachAll(TABLE, [item(0, 1, 'a.pdf'), item(1, 2, 'b.pdf'), item(2, 3, 'c.pdf')], null);
+      check(problems, 'un fichier trop gros échoue seul', [big.problem, big.attached.map(a => a.index), big.failed, gfs().pieces.length], [null, [0, 2], [{ index: 1, reason: 'tooLarge' }], 2]);
+      gfs().joindre = { tropGros: () => [0, 1] };
+      const allBig = await RowAttachment.attachAll(TABLE, [item(0, 1, 'd.pdf'), item(1, 2, 'e.pdf')], null);
+      check(problems, 'tous trop gros', [allBig.problem, allBig.attached.length, allBig.failed.map(f => f.reason)], ['tooLarge', 0, ['tooLarge', 'tooLarge']]);
       // Un lot de plusieurs appels : le deuxième se heurte à un refus de Grist, le troisième part quand même (comme l'app seule : un fichier qui échoue ne fait pas perdre les autres).
       gfs().joindreAppels = [];
-      gfs().joindre = { arret: rank => (rank === 2 ? { mot: 'trop-gros' } : null) };
+      gfs().joindre = { arret: rank => (rank === 2 ? { mot: 'refus' } : null) };
       const many = Array.from({ length: 450 }, (_, i) => item(i, (i % 4) + 1, 'n' + i + '.pdf'));
       const mid = await RowAttachment.attachAll(TABLE, many, null);
-      check(problems, 'le deuxième appel refusé, le troisième part', [calls().length, mid.attached.length, mid.failed.length, mid.failed[0], mid.failed[199], mid.problem], [3, 250, 200, { index: 200, reason: 'tooLarge' }, { index: 399, reason: 'tooLarge' }, null]);
+      check(problems, 'le deuxième appel refusé, le troisième part', [calls().length, mid.attached.length, mid.failed.length, mid.failed[0], mid.failed[199], mid.problem], [3, 250, 200, { index: 200, reason: 'denied' }, { index: 399, reason: 'denied' }, null]);
+      // Un fichier trop gros par appel (le premier de chacun) : trois échecs seuls, 447 joints.
+      gfs().joindreAppels = [];
+      gfs().joindre = { tropGros: () => [0] };
+      const spread = await RowAttachment.attachAll(TABLE, many, null);
+      check(problems, 'un trop gros par appel', [calls().length, spread.attached.length, spread.failed.map(f => [f.index, f.reason]), spread.problem], [3, 447, [[0, 'tooLarge'], [200, 'tooLarge'], [400, 'tooLarge']], null]);
       // La colonne absente vaut pour tous les appels.
       gfs().joindreAppels = [];
       gfs().joindre = { etatColonne: 'absente' };
