@@ -14,7 +14,7 @@ const ConditionalStyleWindow = (function () {
   const { setLine, shorten } = VariableModal;
 
   // La phrase d'introduction selon le nœud réglé. Les clés s'écrivent en toutes lettres, pour que la recherche des clés sans usage (dev-tests/verify-code-hygiene.mjs) les voie.
-  const INTRO = { varBadge: 'condStyle.intro.badge', smartChip: 'condStyle.intro.badge', calcBadge: 'condStyle.intro.calc', conditionalText: 'condStyle.intro.block', conditionalValue: 'condStyle.intro.value' };
+  const INTRO = { varBadge: 'condStyle.intro.badge', smartChip: 'condStyle.intro.badge', mention: 'condStyle.intro.badge', calcBadge: 'condStyle.intro.calc', conditionalText: 'condStyle.intro.block', conditionalValue: 'condStyle.intro.value' };
   // Les quatre traits, dans l'ordre de la rangée : la clé du style, sa classe, sa lettre (G I S B en français, B I U S en anglais) et sa phrase.
   const MARKS = [
     { key: 'bold', cls: 'cond-style-mark-bold', glyph: 'condStyle.glyph.bold', label: 'condStyle.bold' },
@@ -41,8 +41,30 @@ const ConditionalStyleWindow = (function () {
 
   const previewRun = VariableModal.previewRunner(() => updatePreview());
 
-  // { table, column } de la variable réglée, null pour tout ce qui n'est pas une bulle de variable : « Comme dans Grist » ne s'y propose pas.
-  const sourceOf = () => (state && state.node.type.name === 'varBadge' && state.node.attrs.table && state.node.attrs.column ? { table: state.node.attrs.table, column: state.node.attrs.column } : null);
+  // La première bulle de variable d'un nœud (la case d'un tableau) : celle que « Comme dans Grist » suit, comme à la Lecture (js/conditional-style.js:sourceElement).
+  function firstBadge(node) {
+    let found = null;
+    node.descendants((child) => {
+      if (found) return false;
+      if (child.type.name === 'varBadge') { found = child; return false; }
+      return true;
+    });
+    return found;
+  }
+  // { table, column } de la variable réglée, null pour tout ce qui n'est pas une bulle de variable : « Comme dans Grist » ne s'y propose pas. Pour des cases de tableau, la première
+  // bulle de variable de la première case qui en a une ; jamais pour une ligne (elle en lit plusieurs).
+  function sourceOf() {
+    if (!state) return null;
+    if (state.table) {
+      if (state.scope !== 'cells') return null;
+      for (const cell of state.table.cells) {
+        const badge = firstBadge(cell.node);
+        if (badge && badge.attrs.table && badge.attrs.column) return { table: badge.attrs.table, column: badge.attrs.column };
+      }
+      return null;
+    }
+    return state.node.type.name === 'varBadge' && state.node.attrs.table && state.node.attrs.column ? { table: state.node.attrs.table, column: state.node.attrs.column } : null;
+  }
 
   // La case « Comme dans Grist » : cachée hors d'une variable ; cochable quand la colonne a des règles dans Grist ; grisée avec sa raison sinon (elle reste décochable si elle était
   // cochée et que les règles ont disparu de Grist depuis).
@@ -51,13 +73,14 @@ const ConditionalStyleWindow = (function () {
     const source = sourceOf();
     const rules = source ? ConditionalStyle.gristRulesOf(source.table, source.column) : null;
     const { gristRow, gristBox, gristNote } = refs;
-    gristRow.hidden = !source;
+    // Sur des cases et des lignes, la case se montre toujours (grisée, avec sa raison, sans variable à suivre) ; hors tableau, seulement pour une variable.
+    gristRow.hidden = !source && !state.table;
     gristBox.checked = state.grist;
     const blocked = !rules && !state.grist;
     gristBox.disabled = blocked;
     gristRow.classList.toggle('is-disabled', blocked);
     let key = 'condStyle.gristOff';
-    if (!rules) key = state.grist ? 'condStyle.gristGone' : 'condStyle.gristNone';
+    if (!rules) key = state.grist ? 'condStyle.gristGone' : !source && state.table ? (state.scope === 'rows' ? 'condStyle.gristRow' : 'condStyle.gristNoVar') : 'condStyle.gristNone';
     else if (state.grist) key = 'condStyle.gristOn';
     gristNote.textContent = I18n.t(key, { count: rules ? rules.length : 0 });
     gristRow.title = blocked ? gristNote.textContent : '';
@@ -321,11 +344,30 @@ const ConditionalStyleWindow = (function () {
   // sur elle ferait remplacer la valeur entière par la prochaine frappe.
   function applyStyle(spec) {
     const { editor, pos } = state;
+    if (state.table) { applyToTable(spec); return; }
     const node = VariableModal.nodeAtOrigin(state, 'condStyle.saveLost', 'ConditionalStyleWindow');
     if (!node) return;
     const attrs = Object.assign({}, node.attrs, { condStyle: spec });
     if (node.type.name === 'conditionalValue') editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, attrs));
     else EditorCore.patchNodeAndReselect(editor, pos, attrs);
+  }
+  // Les cases (ou les lignes) du réglage, chacune retrouvée à sa position capturée à l'ouverture : une seule transaction, un seul Annuler. Une cellule ou une ligne qui a bougé ou
+  // disparu depuis n'écrit rien du tout. setNodeMarkup ne déplace aucune position : celles d'après restent justes.
+  function applyToTable(spec) {
+    const { editor } = state;
+    const targets = state.table[state.scope];
+    const tr = editor.state.tr;
+    const lost = targets.some(({ pos, node }) => { const now = editor.state.doc.nodeAt(pos); return !now || now.type.name !== node.type.name; });
+    if (lost) {
+      console.warn('[ConditionalStyleWindow] case ou ligne introuvable à sa position d\'origine - rien n\'est écrit.');
+      alert(I18n.t('condStyle.saveLost'));
+      return;
+    }
+    targets.forEach(({ pos }) => {
+      const now = editor.state.doc.nodeAt(pos);
+      tr.setNodeMarkup(pos, undefined, Object.assign({}, now.attrs, { condStyle: spec }));
+    });
+    if (tr.docChanged) editor.view.dispatch(tr);
   }
   function save() {
     if (!state) return;
@@ -343,6 +385,16 @@ const ConditionalStyleWindow = (function () {
       id: 'cond-style-modal', titleId: 'cond-style-title', boxClass: 'var-modal-content cond-style-modal-content', actionsClass: 'var-modal-actions', onEscape: close, restoreFocus: false,
     });
     const intro = el('p', 'var-modal-intro');
+    // Cases d'un tableau : « Cases choisies » ou « Toute la ligne » - deux réglages distincts (un sur la case, un sur la ligne), montrés l'un ou l'autre.
+    const scopeRow = el('div', 'cond-style-scope');
+    scopeRow.setAttribute('role', 'group');
+    const scopeButtons = { cells: button('cond-style-scope-btn'), rows: button('cond-style-scope-btn') };
+    Object.keys(scopeButtons).forEach((scope) => {
+      scopeButtons[scope].type = 'button';
+      scopeButtons[scope].addEventListener('click', () => setScope(scope));
+      scopeRow.appendChild(scopeButtons[scope]);
+    });
+    scopeRow.hidden = true;
     const hint = el('p', 'cond-style-order');
     const list = el('div', 'cond-style-list');
     const addBtn = el('button', 'var-condition-add cond-style-add');
@@ -367,8 +419,8 @@ const ConditionalStyleWindow = (function () {
     const endGroup = el('div', 'var-modal-actions-end');
     endGroup.append(cancelBtn, saveBtn);
     win.actions.append(startGroup, endGroup);
-    win.body.append(intro, gristRow, list, addBtn, ignored, previewArea, hint);
-    refs = { title: win.title, intro, hint, gristRow, gristBox, gristText, gristNote, list, addBtn, ignored, gristLine, currentLine, countLine, removeBtn, cancelBtn, saveBtn };
+    win.body.append(intro, scopeRow, gristRow, list, addBtn, ignored, previewArea, hint);
+    refs = { title: win.title, intro, scopeRow, scopeButtons, hint, gristRow, gristBox, gristText, gristNote, list, addBtn, ignored, gristLine, currentLine, countLine, removeBtn, cancelBtn, saveBtn };
 
     addBtn.addEventListener('click', () => {
       if (!state || state.working.length >= ConditionalStyle.MAX_RULES) return;
@@ -389,27 +441,99 @@ const ConditionalStyleWindow = (function () {
     win.box.addEventListener('change', edited);
   }
 
-  // `pos` : position du nœud dans le document, capturée au clic sur le bouton de la barre flottante (la sélection de l'éditeur est une NodeSelection sur lui).
-  function openAt(editor, pos) {
-    const node = editor && editor.state.doc.nodeAt(pos);
-    if (!node || !INTRO[node.type.name]) return;
-    ensureModal();
-    const existing = ConditionalStyle.normalize(node.attrs.condStyle);
-    state = { editor, pos, node, hadStyle: !!existing, grist: !!(existing && existing.grist), working: existing && existing.rules.length ? existing.rules : [newRule()], open: 0 };
+  // === Cases et lignes d'un tableau ===
+  // Les cases que vise la barre du tableau (toutes celles d'une sélection de cases, sinon celle du curseur) et les lignes qui les portent : { cells, rows }, chacune { node, pos }, dans
+  // l'ordre du document ; null hors d'un tableau. La sélection de cases est reconnue par duck-typing sur `forEachCell` (deux exemplaires de prosemirror-tables peuvent coexister).
+  function tableTargets(editor) {
+    if (!editor) return null;
+    const { state: edState } = editor;
+    const cells = [];
+    const sel = edState.selection;
+    if (sel && typeof sel.forEachCell === 'function') {
+      sel.forEachCell((node, pos) => cells.push({ node, pos }));
+    } else if (sel) {
+      const $head = sel.$head;
+      for (let depth = $head.depth; depth > 0; depth--) {
+        const name = $head.node(depth).type.name;
+        if (name === 'tableCell' || name === 'tableHeader') { cells.push({ node: $head.node(depth), pos: $head.before(depth) }); break; }
+      }
+    }
+    if (!cells.length) return null;
+    cells.sort((a, b) => a.pos - b.pos);
+    const rows = [];
+    cells.forEach(({ pos }) => {
+      const $pos = edState.doc.resolve(pos);
+      const at = $pos.before();
+      if (!rows.some(row => row.pos === at)) rows.push({ node: $pos.parent, pos: at });
+    });
+    return { cells, rows };
+  }
+  // Le bouton de la barre du tableau est allumé quand une case visée ou sa ligne porte un réglage.
+  function tableIsSet(editor) {
+    const found = tableTargets(editor);
+    return !!found && found.cells.concat(found.rows).some(({ node }) => ConditionalStyle.isSet(node.attrs.condStyle));
+  }
+  // Le réglage de départ d'un volet : celui de la première case (ou ligne) qui en porte un.
+  const existingOf = scope => {
+    const holder = state.table[scope].find(({ node }) => ConditionalStyle.isSet(node.attrs.condStyle));
+    return holder ? ConditionalStyle.normalize(holder.node.attrs.condStyle) : null;
+  };
+  const stamp = () => JSON.stringify(state.working) + (state.grist ? '+' : '-');
+  // Charge le volet `scope` : son réglage actuel, ou une règle vide.
+  function loadScope(scope) {
+    state.scope = scope;
+    const existing = existingOf(scope);
+    state.hadStyle = state.table[scope].some(({ node }) => ConditionalStyle.isSet(node.attrs.condStyle));
+    state.grist = scope === 'cells' && !!(existing && existing.grist);
+    state.working = existing && existing.rules.length ? existing.rules : [newRule()];
+    state.open = 0;
+    state.loaded = stamp();
+  }
+  // Passe de « Cases choisies » à « Toute la ligne » (et retour). Ce que la personne vient d'écrire dans la fenêtre se garde et s'applique au volet choisi ; sans rien d'écrit,
+  // le volet montre son propre réglage.
+  function setScope(scope) {
+    if (!state || !state.table || state.scope === scope) return;
+    const touched = stamp() !== state.loaded;
+    const keep = { working: state.working, open: state.open, grist: state.grist };
+    loadScope(scope);
+    if (touched) {
+      state.working = keep.working;
+      state.open = keep.open;
+      state.grist = scope === 'cells' && keep.grist;
+    }
+    refreshTableShell();
+    renderRules();
+    previewRun.schedule();
+  }
+  // Ce qui change avec le volet : l'introduction, les deux boutons, la case de Grist, « Retirer ».
+  function refreshTableShell() {
+    const r = refs;
+    r.intro.textContent = I18n.t(state.scope === 'rows' ? 'condStyle.intro.row' : 'condStyle.intro.cell');
+    Object.keys(r.scopeButtons).forEach((scope) => {
+      const on = scope === state.scope;
+      r.scopeButtons[scope].classList.toggle('is-active', on);
+      r.scopeButtons[scope].setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    r.removeBtn.hidden = !state.hadStyle;
+    syncGrist();
+  }
+
+  // Les textes et l'affichage communs aux deux entrées.
+  function present() {
     const r = refs;
     r.title.textContent = I18n.t('condStyle.title');
-    if (node.type.name === 'varBadge') r.intro.replaceChildren(el('span', 'var-badge', VariableModal.badgeText(node)), document.createTextNode(' ' + I18n.t(INTRO.varBadge)));
-    else if (node.type.name === 'smartChip') r.intro.replaceChildren(el('span', 'smart-chip', EditorNodes.smartChipLabel(node.attrs.kind)), document.createTextNode(' ' + I18n.t(INTRO.smartChip)));
-    else r.intro.textContent = I18n.t(INTRO[node.type.name]);
     r.hint.textContent = I18n.t('condStyle.order');
     r.gristText.textContent = I18n.t('condStyle.grist');
-    syncGrist();
+    r.scopeButtons.cells.textContent = I18n.t('condStyle.scopeCells');
+    r.scopeButtons.rows.textContent = I18n.t('condStyle.scopeRow');
+    r.scopeRow.hidden = !state.table;
     r.addBtn.textContent = I18n.t('condStyle.addRule');
     r.ignored.textContent = I18n.t('condStyle.ignored');
     r.removeBtn.textContent = I18n.t('condStyle.remove');
     r.removeBtn.hidden = !state.hadStyle;
     r.cancelBtn.textContent = I18n.t('common.cancel');
     r.saveBtn.textContent = I18n.t('common.save');
+    if (state.table) refreshTableShell(); else syncGrist();
     renderRules();
     // La barre flottante reste masquée tant que la fenêtre est ouverte ; elle est sous le voile de toute façon (--z-floating-toolbar, css/style.css).
     EditorCore.hideFloatingContextToolbars();
@@ -419,5 +543,32 @@ const ConditionalStyleWindow = (function () {
     updatePreview();
   }
 
-  return { openAt, isOpen, close };
+  // Ouverte depuis la barre du tableau (js/floating-toolbars.js, « cell-style ») : sur les cases visées ou sur leur ligne. Sans tableau sous le curseur, ne fait rien.
+  function openTable(editor) {
+    const targets = tableTargets(editor);
+    if (!targets) return;
+    ensureModal();
+    state = { editor, pos: targets.cells[0].pos, node: targets.cells[0].node, table: targets, scope: 'cells', grist: false, working: [], open: 0, hadStyle: false, loaded: '' };
+    const cellsSet = targets.cells.some(({ node }) => ConditionalStyle.isSet(node.attrs.condStyle));
+    const rowsSet = targets.rows.some(({ node }) => ConditionalStyle.isSet(node.attrs.condStyle));
+    loadScope(!cellsSet && rowsSet ? 'rows' : 'cells');
+    present();
+  }
+
+  // `pos` : position du nœud dans le document, capturée au clic sur le bouton de la barre flottante (la sélection de l'éditeur est une NodeSelection sur lui).
+  function openAt(editor, pos) {
+    const node = editor && editor.state.doc.nodeAt(pos);
+    if (!node || !INTRO[node.type.name]) return;
+    ensureModal();
+    const existing = ConditionalStyle.normalize(node.attrs.condStyle);
+    state = { editor, pos, node, hadStyle: !!existing, grist: !!(existing && existing.grist), working: existing && existing.rules.length ? existing.rules : [newRule()], open: 0 };
+    const r = refs;
+    if (node.type.name === 'varBadge') r.intro.replaceChildren(el('span', 'var-badge', VariableModal.badgeText(node)), document.createTextNode(' ' + I18n.t(INTRO.varBadge)));
+    else if (node.type.name === 'mention') r.intro.replaceChildren(el('span', 'mention-chip', node.attrs.label || ''), document.createTextNode(' ' + I18n.t(INTRO.mention)));
+    else if (node.type.name === 'smartChip') r.intro.replaceChildren(el('span', 'smart-chip', EditorNodes.smartChipLabel(node.attrs.kind)), document.createTextNode(' ' + I18n.t(INTRO.smartChip)));
+    else r.intro.textContent = I18n.t(INTRO[node.type.name]);
+    present();
+  }
+
+  return { openAt, openTable, tableTargets, tableIsSet, isOpen, close };
 })();

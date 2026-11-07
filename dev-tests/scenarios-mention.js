@@ -749,8 +749,8 @@
   const closeWindow = () => { VariableLinkedAttrs.close(); };
 
   cases.push({
-    id: 'mention_toolbar_has_one_button_on_a_selected_chip_and_greys_it_when_the_fiche_is_gone',
-    description: 'Une pastille sélectionnée a sa barre flottante, avec un seul bouton « Autres colonnes de la même fiche » ; il se grise - sans disparaître - quand la ligne ou la table de la fiche n\'existe plus, avec le message de la pastille rouge, et reste actif quand seule la colonne a disparu (« Remplacer » la répare) ; un curseur dans le texte ferme la barre',
+    id: 'mention_toolbar_has_the_linked_button_on_a_selected_chip_and_greys_it_when_the_fiche_is_gone',
+    description: 'Une pastille sélectionnée a sa barre flottante, avec le bouton « Autres colonnes de la même fiche » (et, après lui, « Mise en forme conditionnelle ») ; il se grise - sans disparaître - quand la ligne ou la table de la fiche n\'existe plus, avec le message de la pastille rouge, et reste actif quand seule la colonne a disparu (« Remplacer » la répare) ; un curseur dans le texte ferme la barre',
     run: async (h) => {
       await seedWide();
       await h.resetEditor();
@@ -780,7 +780,7 @@
         { grey: true, aria: 'true', title: 'La table « MnAbsente » de cette fiche n’existe plus dans ce document.' },
         { grey: false, aria: 'false', title: usual },
       ];
-      const same = got.every((g, i) => g.shown && g.buttons === 1 && g.grey === wanted[i].grey && g.aria === wanted[i].aria && g.title === wanted[i].title && g.label === wanted[i].title);
+      const same = got.every((g, i) => g.shown && g.buttons === 2 && g.grey === wanted[i].grey && g.aria === wanted[i].aria && g.title === wanted[i].title && g.label === wanted[i].title);
       return { pass: same && !greyOpened && !afterCaret, notes: JSON.stringify({ got, greyOpened, afterCaret }) };
     },
   });

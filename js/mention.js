@@ -258,11 +258,16 @@ const Mention = (function () {
   // Les attributs DOM d'une pastille (HTML enregistré, presse-papiers) et l'inverse : la fiche (table, numéro de ligne, colonne lue), sans son nom, qui est le
   // texte de la pastille (régénéré à chaque rendu depuis l'attribut `label` du nœud, jamais stocké en double). Le « @ » n'est pas dans le texte : le CSS le
   // dessine (css/mention.css), le nom reste donc seul dans le presse-papiers, les lecteurs d'écran et les enregistrements.
-  const refAttributes = attrs => ({ 'data-mention-table': attrs.table, 'data-mention-row': attrs.row, 'data-mention-column': attrs.column });
+  // `data-cond-style` : la mise en forme selon la ligne de la page (js/conditional-style.js), écrite seulement quand elle est posée - une pastille sans réglage garde le HTML d'avant.
+  const refAttributes = attrs => Object.assign({ 'data-mention-table': attrs.table, 'data-mention-row': attrs.row, 'data-mention-column': attrs.column },
+    attrs.condStyle ? { 'data-cond-style': JSON.stringify(attrs.condStyle) } : {});
   function refOf(element) {
     return { table: element.getAttribute('data-mention-table'), row: Number(element.getAttribute('data-mention-row')), column: element.getAttribute('data-mention-column') };
   }
-  const attrsOf = element => Object.assign(refOf(element), { label: element.textContent });
+  const attrsOf = (element) => {
+    const condStyle = ConditionalStyle.parse(element.getAttribute('data-cond-style'));
+    return Object.assign(refOf(element), { label: element.textContent }, condStyle ? { condStyle } : {});
+  };
 
   // Nœud atome en ligne et sélectionnable comme une bulle : <span class="mention-chip" data-mention-table data-mention-row data-mention-column>Nom</span>.
   function createNode(Node, mergeAttributes) {
@@ -272,7 +277,7 @@ const Mention = (function () {
       name: 'mention',
       addAttributes() {
         // `label` : le nom de la fiche quand elle a été posée - le seul texte d'une pastille dont la table ne se lit plus, jamais celui qu'un export écrit.
-        return { table: EditorNodes.internalAttr(null), row: EditorNodes.internalAttr(null), column: EditorNodes.internalAttr(null), label: EditorNodes.internalAttr('') };
+        return { table: EditorNodes.internalAttr(null), row: EditorNodes.internalAttr(null), column: EditorNodes.internalAttr(null), label: EditorNodes.internalAttr(''), condStyle: EditorNodes.internalAttr(null) };
       },
       parseHTML() {
         return [{ tag: 'span.mention-chip', getAttrs: attrsOf }];

@@ -226,6 +226,8 @@
     ".v2-linked-menu button[action=linked-push]": {"class": "covered", "cases": ["linkedTable", "linkedTableMouse"]},
     ".v2-linked-menu button[action=linked-detach]": {"class": "covered", "cases": ["linkedTable", "linkedTableMouse"]},
     ".v2-linked-menu button[action=linked-open]": {"class": "navigation", "note": "ouvre la table dans Grist : rien à défaire"},
+    ".v2-table-toolbar button[action=cell-style]": {"class": "covered", "cases": ["condStyleTable"], "note": "la fenêtre « Mise en forme conditionnelle » d'une case ou d'une ligne : « Enregistrer » écrit toutes les cases visées dans UNE transaction, Ctrl+Z les défait d'un pas"},
+    ".v2-mention-toolbar button[action=mention-style]": {"class": "covered", "cases": ["condStyleTable"], "note": "la même fenêtre sur une pastille « @ » : Ctrl+Z défait le réglage d'un pas"},
     ".v2-mention-toolbar button[action=mention-linked]": {"class": "covered", "cases": ["mention"], "note": "la fenêtre « Autres colonnes de la même fiche » : Remplacer est UN pas d'historique (ed.commands.undo)"},
     ".v2-copy-toolbar button[action=copy-detach]": {"class": "covered", "cases": ["slideCopies"], "note": "Détacher : un Ctrl+Z rend le lien (touche vraie)"},
     ".v2-frame-toolbar button[action=animate]": {"class": "covered", "cases": ["frameAnim"]},

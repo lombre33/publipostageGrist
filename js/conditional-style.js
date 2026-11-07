@@ -26,6 +26,8 @@ const ConditionalStyle = (function () {
   // Au plus ce nombre de règles par élément : une fenêtre de 700 × 400 ne montre pas davantage sans que la liste devienne un tableau de bord.
   const MAX_RULES = 8;
   const FLAGS = ['bold', 'italic', 'underline', 'strike'];
+  // Une case de tableau et une ligne : le réglage d'une ligne vaut pour chacune de ses cases (`prepare`), celui d'une case passe par-dessus.
+  const CELL_SELECTOR = 'td, th';
   const HEX_COLOR = /^#[0-9a-f]{6}$/i;
   // Les éléments dont le contenu contient d'autres blocs : leur mise en forme descend jusqu'au texte (`dress`).
   const CONTAINER_TAGS = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'UL', 'OL', 'DIV', 'BLOCKQUOTE', 'PRE', 'FIGURE', 'FIGCAPTION',
@@ -145,8 +147,14 @@ const ConditionalStyle = (function () {
     const spec = parse(el.getAttribute(ATTR));
     if (!spec) return null;
     const binding = LoopRules.bindingOf(el);
-    const source = el.matches('.var-badge') ? { table: el.getAttribute('data-table'), column: el.getAttribute('data-column') } : null;
-    return (await resolve(spec, source, tableId, record, binding ? { loop: binding } : undefined)).style;
+    return (await resolve(spec, sourceElement(el), tableId, record, binding ? { loop: binding } : undefined)).style;
+  }
+
+  // La variable que « Comme dans Grist » suit pour `el` : la bulle elle-même, ou la PREMIÈRE bulle de variable d'une case de tableau (une ligne n'en a pas : la mise en forme de
+  // Grist est celle d'une colonne, une ligne en lit plusieurs). null sinon.
+  function sourceElement(el) {
+    const badge = el.matches('.var-badge') ? el : (el.matches(CELL_SELECTOR) ? el.querySelector('.var-badge') : null);
+    return badge ? { table: badge.getAttribute('data-table'), column: badge.getAttribute('data-column') } : null;
   }
 
   // Enveloppe le contenu de `el` dans un <span style> : chaque suite de texte et d'éléments en ligne qui se touchent, à tous les étages (un paragraphe, un élément de
@@ -169,19 +177,34 @@ const ConditionalStyle = (function () {
     flush();
   }
 
+  // Pose le style `style` sur une case de tableau : le fond remplit toute la case (le style en ligne `background-color` que lisent la Lecture et les exports, à la place du fond posé à la
+  // main), la couleur et les traits suivent le texte (`dress`) - une couleur posée à la main sur un mot reste la sienne, le span de la règle est autour d'elle.
+  function dressCell(cell, style) {
+    if (!style) return;
+    if (style.fill) cell.style.backgroundColor = style.fill;
+    const css = cssOf(Object.assign({}, style, { fill: null }));
+    if (css) dress(cell, css);
+  }
+
   // Calcule la mise en forme de chaque élément de `root` qui en a une et la pose : sur la bulle (variable ou calcul) pour `carry`, autour du contenu pour un bloc et une valeur
-  // conditionnels. À appeler avant la résolution des blocs et des valeurs (js/reader-mode.js:resolveConditionalNodes) : leur cadre en est encore là.
+  // conditionnels, sur la case pour une case de tableau, et sur chaque case d'une ligne (la ligne d'abord, la règle de la case par-dessus : elle est plus précise). À appeler avant la
+  // résolution des blocs et des valeurs (js/reader-mode.js:resolveConditionalNodes) : leur cadre en est encore là.
   async function prepare(root, tableId, record) {
     if (!root) return;
     const elements = Array.from(root.querySelectorAll('[' + ATTR + ']'));
     if (!elements.length) return;
     const styles = await Promise.all(elements.map(el => styleFor(el, tableId, record)));
+    const cells = new Map();
+    const slot = cell => { if (!cells.has(cell)) cells.set(cell, {}); return cells.get(cell); };
     elements.forEach((el, at) => {
+      if (el.matches('tr')) { Array.from(el.children).filter(child => child.matches(CELL_SELECTOR)).forEach(cell => { slot(cell).row = styles[at]; }); return; }
+      if (el.matches(CELL_SELECTOR)) { slot(el).own = styles[at]; return; }
       const css = cssOf(styles[at]);
       if (!css) return;
-      if (el.matches('.var-badge, .calc-badge, .smart-chip')) el.setAttribute(COMPUTED_ATTR, css);
+      if (el.matches('.var-badge, .calc-badge, .smart-chip, .mention-chip')) el.setAttribute(COMPUTED_ATTR, css);
       else dress(el, css);
     });
+    cells.forEach((found, cell) => dressCell(cell, combine([found.row, found.own])));
   }
 
   // La valeur `node` qui prend la place de `badge` : enveloppée de la mise en forme que `prepare` a calculée pour la bulle, sauf si elle n'écrit rien. Rend le nœud à poser.

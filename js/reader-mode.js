@@ -1494,7 +1494,7 @@ const ReaderMode = (function () {
       span.textContent = text;
       span.className = 'resolved-var' + (isError ? ' error-msg' : '');
       carryReaderAtom(chip, span);
-      // La mise en forme selon la ligne d'une puce (js/conditional-style.js), calculée avant par `prepare` ; une pastille « @ » n'en a pas.
+      // La mise en forme selon la ligne d'une puce (js/conditional-style.js), calculée avant par `prepare` (la pastille « @ » aussi : la mise en forme lit la ligne de la page, pas la fiche qu'elle cite).
       chip.replaceWith(ConditionalStyle.carry(chip, span));
     }));
   }

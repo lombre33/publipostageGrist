@@ -545,7 +545,7 @@ const EditorNodes = (function () {
     };
   })();
 
-  const { withCellBackground, parseColwidthOnce, withFastColwidth, createTableView, findTwoColumnsContext } = (function () {
+  const { withCellBackground, withCondStyle, parseColwidthOnce, withFastColwidth, createTableView, findTwoColumnsContext } = (function () {
     // Les cellules et les tableaux : fond, largeur de colonne, vue, zone à deux colonnes autour
 
     // Fond de cellule - augmente TableCell/TableHeader du même backgroundColor que le surlignage de texte (lu par pdf-export.js:tableFrom, pas
@@ -554,6 +554,23 @@ const EditorNodes = (function () {
       return CellExtension.extend({
         addAttributes() {
           return Object.assign({}, this.parent(), { backgroundColor: inlineStyleAttribute('backgroundColor') });
+        },
+      });
+    }
+    // Mise en forme conditionnelle d'une case ou d'une ligne de tableau (js/conditional-style.js) : l'attribut `condStyle`, `data-cond-style` dans le HTML enregistré. Nul pour tout
+    // tableau que personne n'a réglé : aucun changement de rendu ni de HTML. Le fond posé à la main (`backgroundColor`) ne bouge pas ; la Lecture et les exports y posent le fond de la règle
+    // remplie, à la place du sien.
+    function withCondStyle(Extension) {
+      return Extension.extend({
+        addAttributes() {
+          const parent = this.parent ? this.parent() : {};
+          return Object.assign({}, parent, {
+            condStyle: {
+              default: null,
+              parseHTML: el => ConditionalStyle.parse(el.getAttribute('data-cond-style')),
+              renderHTML: attrs => (attrs.condStyle ? { 'data-cond-style': JSON.stringify(attrs.condStyle) } : {}),
+            },
+          });
         },
       });
     }
@@ -615,7 +632,7 @@ const EditorNodes = (function () {
       if (zoneDepth < 1 || $from.node(zoneDepth).type.name !== 'twoColumnsZone') return null;
       return { columnDepth, zoneDepth, colIndex: $from.index(zoneDepth) };
     }
-    return { withCellBackground, parseColwidthOnce, withFastColwidth, createTableView, findTwoColumnsContext };
+    return { withCellBackground, withCondStyle, parseColwidthOnce, withFastColwidth, createTableView, findTwoColumnsContext };
   })();
 
   const { createTabNavigationExtension, createClearHistoryExtension } = (function () {
@@ -2367,7 +2384,7 @@ const EditorNodes = (function () {
     createVarBadgeNode, varBadgeAttributes, varBadgeAttrsOf, varBadgeHtml, createCalcBadgeNode, createCalcBadgeKeysExtension, calcBadgeLabel, showTextMarks, createPageNumberBadgeNode, createSmartChipNode, smartChipAttrsOf, smartChipHtml, smartChipLabel, createFootnoteRefNode, createCommentMark,
     createFontSizeExtension, createTextColorExtension, createHighlightExtension,
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
-    withCellBackground, withFastColwidth, parseColwidthOnce, createTableView, createTabNavigationExtension, createClearHistoryExtension,
+    withCellBackground, withCondStyle, withFastColwidth, parseColwidthOnce, createTableView, createTabNavigationExtension, createClearHistoryExtension,
     createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createConditionalValueNode, createConditionalValueKeysExtension, createFloatingImageKeysExtension, createBehindImageClickThroughExtension, createEditorImageNode, moveImageNode, createPageBreakNode,
     createHeadingNumberingConfigNode, createTocNode, createSlideLinkNode, splitBadgeLabel,
     createInlineMarksCarrier, INLINE_MARKS_ATTR, INLINE_LEAF_NODES,

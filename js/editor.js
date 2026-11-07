@@ -447,7 +447,7 @@ const Editor = (function () {
   }) {
     // Les touches, les variables, les liens, la recherche, les tableaux, les colonnes, les blocs conditionnels, la légende, les images et les pages,
     // puis la grille.
-    const withCellStyle = Cell => EditorNodes.withCellBackground(GridEditor.withCellAttributes(EditorNodes.withFastColwidth(Cell)));
+    const withCellStyle = Cell => EditorNodes.withCondStyle(EditorNodes.withCellBackground(GridEditor.withCellAttributes(EditorNodes.withFastColwidth(Cell))));
     const { TwoColumnsColumn, TwoColumnsZone } = EditorNodes.createTwoColumnsNodes(Node, mergeAttributes);
     return [
       // Entrée d'une case de tableau, de grille ou de document (descend d'une case), rangée à cet endroit : après StarterKit et avant Variables et
@@ -475,7 +475,7 @@ const Editor = (function () {
       tracked(LinkedTable.withAttributes(GridEditor.withTableAttributes(Table))).configure({ resizable: true, View: EditorNodes.createTableView(TableView) }),
       // La ligne aussi : « Colonne avant / après » et « Supprimer la colonne » posent une marque sur chaque case de la colonne, des enfants directs
       // d'une ligne.
-      tracked(GridEditor.withRowAttributes(TableRow)),
+      tracked(EditorNodes.withCondStyle(GridEditor.withRowAttributes(TableRow))),
       tracked(withCellStyle(TableHeader)),
       tracked(withCellStyle(TableCell)),
       tracked(TwoColumnsColumn),

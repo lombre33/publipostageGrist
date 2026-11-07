@@ -326,8 +326,8 @@ const LoopRules = (function () {
   const bindings = new WeakMap();
   // Tout ce qui lit la ligne du tour dans une zone copiée : les bulles #Variable, les images liées à une variable, les bulles « Calcul » (« Prix ×
   // Quantité » dans une ligne répétée donne le total de cette ligne), les QR codes (le texte de leurs colonnes), les textes alternatifs d'une image ou d'un objet (js/alt-text.js, leurs colonnes aussi) et les blocs, valeurs et cases
-  // conditionnels (leur condition), et les puces (le rang du tour pour « N° de ligne », la ligne que lit la mise en forme conditionnelle d'une puce).
-  const BOUND_SELECTOR = '.var-badge, .calc-badge, img.editor-image[data-var-table], img.editor-image[data-qr-text], img.editor-image[alt], .pp-free-frame[data-ff-alt], .conditional-text, .conditional-value, .conditional-checkbox, .smart-chip';
+  // conditionnels (leur condition), et les puces (le rang du tour pour « N° de ligne », la ligne que lit la mise en forme conditionnelle d'une puce), les cases et les lignes de tableau à mise en forme conditionnelle (la ligne du tour d'une ligne répétée).
+  const BOUND_SELECTOR = '.var-badge, .calc-badge, img.editor-image[data-var-table], img.editor-image[data-qr-text], img.editor-image[alt], .pp-free-frame[data-ff-alt], .conditional-text, .conditional-value, .conditional-checkbox, .smart-chip, .mention-chip[data-cond-style], td[data-cond-style], th[data-cond-style], tr[data-cond-style]';
   function bindingOf(el) { return (el && bindings.get(el)) || null; }
   // Les éléments qui prennent la place d'un autre APRÈS le déroulé des zones (le sinon d'un bloc ou d'une valeur conditionnels, qui porte des variables) lisent la
   // même ligne du tour que lui : ils reprennent sa liaison. Rien à faire hors d'une zone répétée.
@@ -350,8 +350,10 @@ const LoopRules = (function () {
     return next;
   }
   function bindClone(source, clone, loop, item, turn) {
-    const src = source.querySelectorAll(BOUND_SELECTOR);
-    clone.querySelectorAll(BOUND_SELECTOR).forEach((el, i) => bindings.set(el, itemBinding(loop, item, src[i] ? bindings.get(src[i]) : null, turn)));
+    // La racine de la zone compte aussi : une ligne de tableau répétée (<tr>) qui porte sa propre mise en forme conditionnelle lit la ligne du tour.
+    const bound = root => (root.matches(BOUND_SELECTOR) ? [root] : []).concat(Array.from(root.querySelectorAll(BOUND_SELECTOR)));
+    const src = bound(source);
+    bound(clone).forEach((el, i) => bindings.set(el, itemBinding(loop, item, src[i] ? bindings.get(src[i]) : null, turn)));
   }
 
   // Ce qui peut porter la boucle d'une zone : une bulle #Variable, ou l'image d'une colonne Pièces jointes (data-loop sur son <img>). Une image en boucle « dans la phrase » ne

@@ -179,6 +179,8 @@ const FloatingToolbars = (function () {
         // Alignement vertical des cases : le même dans la barre d'une grille et dans celle d'un tableau de document (js/grid-editor.js). La fusion et
         // la scission de cases aussi (js/table-merge.js pour un document, js/grid-editor.js pour une grille).
         valign: [['valign-top', 'valignTop', 'top', I18n.t('table.valignTop')], ['valign-middle', 'valignMiddle', 'middle', I18n.t('table.valignMiddle')], ['valign-bottom', 'valignBottom', 'bottom', I18n.t('table.valignBottom')]],
+        // Mise en forme conditionnelle des cases visées ou de leur ligne (js/conditional-style-window.js:openTable), après le fond de cellule.
+        cellStyle: ['cell-style', 'varStyle', I18n.t('table.cellStyle')],
         // « Répéter la ligne » : la Boucle de la ligne du curseur (js/variable-loop.js:rowStatus), après les alignements.
         repeat: ['row-repeat', 'varLoop', I18n.t('table.rowRepeat')],
         // Menu « Bordures » d'une grille et d'un tableau de document : les huit réglages (icône, info-bulle).
@@ -199,6 +201,7 @@ const FloatingToolbars = (function () {
         + `<button data-action="fill-open" class="v2-fill-chip" id="v2-table-fill-btn" title="${I18n.t('table.fillOpen')}">`
         + Icons.svg('fill') + '<span class="v2-fill-bar" id="v2-table-fill-bar"></span>' + Icons.svg('caretDown')
         + '</button>'
+        + barButton(...spec.cellStyle)
         + `<button data-action="borders-open" class="v2-fill-chip v2-borders-chip" id="v2-table-borders-btn" title="${I18n.t('table.bordersOpen')}" aria-haspopup="true" aria-expanded="false">`
         + Icons.svg('borders') + Icons.svg('caretDown') + '</button>'
         + '<span class="v2-floating-sep"></span>'
@@ -363,6 +366,11 @@ const FloatingToolbars = (function () {
         'row-repeat': () => { const link = LinkedTable.status(editor.state); if (!(link && link.locked)) VariableLoop.openRow(editor); },
         caption: () => Caption.run(editor, 'table'),
         'fill-open': () => openFillMenu(menus),
+        // Grisé (cf. tableButtonSync) sous le suivi des modifications et dans un tableau lié verrouillé : la fenêtre ne s'ouvrirait que pour ne rien enregistrer.
+        'cell-style': () => {
+          const link = LinkedTable.status(editor.state);
+          if (!GridEditor.tableSettingsBlocked() && !(link && link.locked)) ConditionalStyleWindow.openTable(editor);
+        },
         'linked-open': () => openLinkedMenu(menus),
       };
     }
@@ -427,6 +435,13 @@ const FloatingToolbars = (function () {
       // « Répéter la ligne » (js/variable-loop.js:rowStatus) : allumé quand la ligne du curseur est déjà répétée par une Boucle ; grisé, sa raison en info-bulle comme
       // « Égaliser », quand aucune variable de la ligne ne peut la répéter, qu'une case fusionnée la traverse ou que la sélection couvre plusieurs lignes - dans une
       // grille comme dans un document (jamais retiré).
+      // Mise en forme conditionnelle : allumé quand une case visée, ou sa ligne, porte un réglage ; grisé sous le suivi des modifications dans un document (un changement d'attribut que
+      // le suivi ne verrait pas, comme les bordures).
+      const syncStyleButton = () => {
+        const blocked = GridEditor.tableSettingsBlocked();
+        setDisabled('cell-style', blocked, I18n.t(blocked ? 'table.settingTracked' : 'table.cellStyle'));
+        setActive('cell-style', !blocked && ConditionalStyleWindow.tableIsSet(editor));
+      };
       const syncRepeatButton = () => {
         const row = VariableLoop.rowStatus(editor);
         setDisabled('row-repeat', !row.enabled, row.title);
@@ -436,7 +451,7 @@ const FloatingToolbars = (function () {
       // cases se grise avec la raison - le garde-fou (js/linked-table.js) refuserait de toute façon ; les boutons que les autres synchronisations ne regrisent pas (ligne,
       // colonne, supprimer, fond) retrouvent leur titre au dégrisage. Le bouton du lien reste ouvert : son menu dit pourquoi le tableau est verrouillé. Le menu, s'il est
       // ouvert, suit le tableau sous le curseur et se referme quand il n'est plus lié.
-      const LINK_LOCKED = ['row-before', 'row-after', 'row-del', 'rows-equalize', 'col-before', 'col-after', 'col-del', 'cols-equalize', 'table-del', 'cell-merge', 'cell-split', 'fill-open', 'row-repeat'];
+      const LINK_LOCKED = ['row-before', 'row-after', 'row-del', 'rows-equalize', 'col-before', 'col-after', 'col-del', 'cols-equalize', 'table-del', 'cell-merge', 'cell-split', 'fill-open', 'cell-style', 'row-repeat'];
       const LINK_UNMANAGED = ['row-before', 'row-after', 'col-before', 'col-after', 'table-del', 'fill-open'];
       const plainTitles = { 'fill-open': I18n.t('table.fillOpen') };
       spec.buttons.forEach(([action, , title]) => { plainTitles[action] = title; });
@@ -472,6 +487,7 @@ const FloatingToolbars = (function () {
         setLocked('cell-merge', !GridEditor.canMerge(editor));
         setLocked('cell-split', !GridEditor.canSplit(editor));
         syncSettingButtons();
+        syncStyleButton();
         syncRepeatButton();
       };
       const syncDocumentButtons = () => {
@@ -483,6 +499,7 @@ const FloatingToolbars = (function () {
         syncEqualizeButtons();
         syncDocumentMergeButtons();
         syncSettingButtons();
+        syncStyleButton();
         syncRepeatButton();
         Caption.syncButton(button('caption'), editor, 'table');
         syncFillBar();
@@ -1584,9 +1601,9 @@ const FloatingToolbars = (function () {
     return panel;
   }
 
-  // La barre flottante d'une pastille « @ » (js/mention.js) sélectionnée, comme celle d'une bulle de variable : un seul bouton, « Autres colonnes de la même fiche », qui ouvre la fenêtre des bulles
+  // La barre flottante d'une pastille « @ » (js/mention.js) sélectionnée, comme celle d'une bulle de variable : « Autres colonnes de la même fiche », qui ouvre la fenêtre des bulles
   // (js/variable-linked-attrs.js) sur la ligne de la fiche - et non sur celle que la page affiche - pour changer la colonne que la pastille lit ou en citer d'autres à la suite. Grisé, jamais retiré,
-  // quand la table ou la ligne de la fiche n'existe plus : sa raison en info-bulle est le message de la pastille rouge. Masquée tant qu'une fenêtre de bulle est ouverte, comme celle d'une bulle.
+  // quand la table ou la ligne de la fiche n'existe plus : sa raison en info-bulle est le message de la pastille rouge. Un second bouton, « Mise en forme conditionnelle » (js/conditional-style-window.js), allumé quand la pastille en porte une. Masquée tant qu'une fenêtre de bulle est ouverte, comme celle d'une bulle.
   // Pour le document seulement : les champs texte (Objet, À, Cc…) n'ont pas de pastille « @ ».
   function createMentionToolbar(editor) {
     function selectedMention() {
@@ -1596,10 +1613,14 @@ const FloatingToolbars = (function () {
     function onAction(action) {
       const chip = selectedMention();
       if (action === 'mention-linked' && chip && Mention.columnsStatus(chip.node.attrs).enabled) VariableLinkedAttrs.openAt(editor, chip.pos);
+      // Mise en forme conditionnelle (js/conditional-style-window.js) : selon la ligne de la page, comme celle d'une puce.
+      if (action === 'mention-style' && chip) ConditionalStyleWindow.openAt(editor, chip.pos);
     }
     function wire() {
       const label = I18n.t('mention.toolbar.linked');
-      const html = `<button data-action="mention-linked" title="${label}" aria-label="${label}">${Icons.svg('varLinked')}</button>`;
+      const styleLabel = I18n.t('varToolbar.style');
+      const html = `<button data-action="mention-linked" title="${label}" aria-label="${label}">${Icons.svg('varLinked')}</button>`
+        + `<button data-action="mention-style" title="${styleLabel}" aria-label="${styleLabel}">${Icons.svg('varStyle')}</button>`;
       const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-mention-toolbar', html, onAction);
       EditorCore.registerFloatingPanel(panel);
       const ui = controlsOf(panel);
@@ -1614,6 +1635,7 @@ const FloatingToolbars = (function () {
         const status = Mention.columnsStatus(chip.node.attrs);
         ui.setDisabled('mention-linked', !status.enabled, status.title);
         ui.button('mention-linked').setAttribute('aria-label', status.title);
+        ui.setActive('mention-style', ConditionalStyle.isSet(chip.node.attrs.condStyle));
         panel.show(dom, anchoredBarOptions);
       };
       editor.on('selectionUpdate', check);

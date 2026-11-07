@@ -3194,6 +3194,7 @@ const I18n = (function () {
     'table.colsEqualize': { fr: 'Égaliser la largeur des colonnes (moyenne)', en: 'Make columns the same width (average)' },
     'table.colsEqualizeNeed': { fr: 'Égaliser la largeur des colonnes : sélectionnez-en au moins deux, en glissant sur le tableau', en: 'Make columns the same width: select at least two, by dragging across the table' },
     'table.tableDel': { fr: 'Supprimer le tableau', en: 'Delete table' },
+    'table.cellStyle': { fr: 'Mise en forme conditionnelle des cases ou de la ligne', en: 'Conditional formatting of the cells or the row' },
     'table.fillOpen': { fr: 'Fond de cellule (remplir)', en: 'Cell background (fill)' },
     // Fusion et scission de cases (js/floating-toolbars.js : grille et tableau de document), puis l'alignement vertical, de la barre d'une grille comme de
     // celle d'un tableau de document. Les six phrases d'après sont les raisons du grisé, en info-bulle (js/table-merge.js ; `table.settingTracked` :
@@ -3946,6 +3947,10 @@ const I18n = (function () {
     'condStyle.intro.calc': { fr: 'Le résultat du calcul prend la couleur, le fond ou le style que vous choisissez quand une condition est remplie.', en: 'The result of the calculation takes the color, fill or style you choose when a condition is met.' },
     'condStyle.intro.block': { fr: 'Le texte du bloc prend la couleur, le fond ou le style que vous choisissez quand une condition est remplie.', en: 'The text of the block takes the color, fill or style you choose when a condition is met.' },
     'condStyle.intro.value': { fr: 'La valeur prend la couleur, le fond ou le style que vous choisissez quand une condition est remplie.', en: 'The value takes the color, fill or style you choose when a condition is met.' },
+    'condStyle.intro.cell': { fr: 'Les cases choisies prennent le fond, la couleur ou le style que vous choisissez quand une condition est remplie. Le fond remplit toute la case.', en: 'The chosen cells take the fill, color or style you choose when a condition is met. The fill covers the whole cell.' },
+    'condStyle.intro.row': { fr: 'Toutes les cases de la ligne prennent le fond, la couleur ou le style que vous choisissez quand une condition est remplie. Une règle posée sur une case passe par-dessus.', en: 'Every cell of the row takes the fill, color or style you choose when a condition is met. A rule set on a cell goes on top.' },
+    'condStyle.scopeCells': { fr: 'Cases choisies', en: 'Chosen cells' },
+    'condStyle.scopeRow': { fr: 'Toute la ligne', en: 'Whole row' },
     'condStyle.order': { fr: 'Les règles se lisent dans l’ordre : la couleur et le fond de la dernière règle remplie l’emportent ; le gras, l’italique, le souligné et le barré s’ajoutent.', en: 'Rules are read in order: the color and fill of the last rule that is met win; bold, italic, underline and strikethrough add up.' },
     'condStyle.rule': { fr: 'Règle {n}', en: 'Rule {n}' },
     'condStyle.summaryNone': { fr: 'Condition à choisir', en: 'Choose a condition' },
@@ -3985,6 +3990,8 @@ const I18n = (function () {
     'condStyle.gristOn': { fr: 'La mise en forme conditionnelle de cette colonne dans Grist s’applique d’abord, en direct ; vos règles passent par-dessus.', en: 'This column’s conditional formatting in Grist applies first, live; your rules go on top.' },
     'condStyle.gristOff': { fr: 'Cette colonne a {count} {count|règle|règles} de mise en forme conditionnelle dans Grist : cochez pour les suivre.', en: 'This column has {count} conditional formatting {count|rule|rules} in Grist: check to follow {count|it|them}.' },
     'condStyle.gristNone': { fr: 'Indisponible : cette colonne n’a pas de mise en forme conditionnelle dans Grist.', en: 'Not available: this column has no conditional formatting in Grist.' },
+    'condStyle.gristNoVar': { fr: 'Indisponible : ces cases ne contiennent aucune variable à suivre dans Grist.', en: 'Not available: these cells hold no variable to follow in Grist.' },
+    'condStyle.gristRow': { fr: 'Indisponible sur une ligne : Grist règle une colonne, pas une ligne. Choisissez une case qui contient une variable.', en: 'Not available on a row: Grist formats a column, not a row. Pick a cell that holds a variable.' },
     'condStyle.gristGone': { fr: 'Cette colonne n’a plus de mise en forme conditionnelle dans Grist : rien n’est repris. Décochez la case pour la retirer.', en: 'This column no longer has conditional formatting in Grist: nothing is picked up. Uncheck the box to remove it.' },
     'condStyle.debug.gristMet': { fr: 'Grist, ligne {id} : {count|règle|règles} n° {rules} {count|remplie|remplies}.', en: 'Grist, row {id}: {count|rule|rules} {rules} {count|is|are} met.' },
     'condStyle.debug.gristNone': { fr: 'Grist, ligne {id} : aucune règle remplie.', en: 'Grist, row {id}: no rule is met.' },
