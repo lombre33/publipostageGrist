@@ -1,8 +1,7 @@
 // Suite "gfsAttach" - le PDF joint à la ligne CHEZ GFS (consigne 053 de GFS, contrats 5.4 point 12 : « joindre »). Hébergée, `RowAttachment.attachAll` ne demande plus de jeton d'écriture et n'envoie plus rien à Grist :
 // elle donne à GFS les octets de chaque PDF et la ligne d'où il vient (`GfsLink.attach`, l'appel `joindre`, au plus 200 fichiers par appel), GFS les joint lui-même, et le rapport qu'il rend est traduit dans le rapport
-// de toujours. Joué « hébergé » (HOSTED_GROUPS de dev-tests/run-headless.mjs : la page s'ouvre avec `?gfs=0`, dev-tests/gfs-stub.js joue GFS, dont `joindre`) ET avec le grisé levé (WIRED_GROUPS : le coureur
-// sert js/row-attachment.js avec `GFS_ATTACH_WIRED = true`, le seul changement) : en production la constante reste à `false` tant que GFS n'a pas déclaré `actions.joindre` et que l'essai dans le Grist réel du porteur n'est
-// pas passé ; le grisé lui-même est gardé par le groupe rowAttachment. ATTENTION - ce que la suite ne prouve pas : le faux GFS de dev-tests/gfs-stub.js rejoue ce que le contrat et le code de GFS (attach.js) disent,
+// de toujours. Joué « hébergé » (HOSTED_GROUPS de dev-tests/run-headless.mjs : la page s'ouvre avec `?gfs=0`, dev-tests/gfs-stub.js joue GFS, dont `joindre`) avec js/row-attachment.js tel qu'il
+// est en production (`GFS_ATTACH_WIRED = true` depuis le 07/11 : GFS a déclaré `actions.joindre` et les deux clés) ; remettre la constante à `false` regrise tout, et ce grisé est gardé par le groupe rowAttachment (le coureur le joue constante à `false`). ATTENTION - ce que la suite ne prouve pas : le faux GFS de dev-tests/gfs-stub.js rejoue ce que le contrat et le code de GFS (attach.js) disent,
 // pas ce que GFS fait dans un vrai Grist (GFS l'a mesuré de son côté : faits vérifiés 48). Ce que la suite garde :
 //  1) le grisé levé : la case et la section de Réglages ne sont plus grisées par GFS ;
 //  2) l'appel : UN appel `joindre` qui porte `table`, `colonne`, `mode` (`remplacer` / `ajouter`) et les fichiers (`ligne`, `fichier` : un File PDF aux octets du PDF, `nom`) - rien d'autre -, aucun jeton

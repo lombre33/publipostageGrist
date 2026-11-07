@@ -144,7 +144,7 @@ const GROUPS = {
   nameSearch: 'scenarios-name-search', // recherche d'une colonne par son nom (js/search-select.js:searchWords), la même partout : « porteur 3 », « Porteur3 » et les mots dans un autre ordre retrouvent Projets.Porteur_3 dans la liste « # » du corps et des champs texte, les listes avec recherche, l'onglet des puces ; le libellé Grist se cherche aussi
   pdfBatch: 'scenarios-pdf-batch',
   rowAttachment: 'scenarios-row-attachment', // le PDF joint à la ligne Grist (js/row-attachment.js, js/pdf-delivery.js, case « Joindre à la ligne » du menu Exporter, Réglages > Vue ; le faux serveur d'envoi de grist-stub.js encode ce que la communauté de Grist décrit, rien n'en est mesuré dans un vrai Grist) : les colonnes proposées, les options, Ctrl + Z, la case grisée avec sa raison, la requête, le jeton d'écriture demandé une fois par export et jeté, Remplacer / Ajouter, une pièce jointe posée pendant l'export non perdue, les refus, les phrases du coin d'état et les vrais exports (PDF d'une ligne, archive ZIP, PDF réuni)
-  gfsAttach: 'scenarios-gfs-attach', // le PDF joint à la ligne CHEZ GFS (consigne GFS 053, js/row-attachment.js : attachViaGfs, js/gfs-link.js : attach, l'appel `joindre` ; joué hébergé ET avec le grisé levé : voir HOSTED_GROUPS et WIRED_GROUPS, le faux GFS sait `joindre`) : le grisé levé, UN appel qui porte la table, la colonne, le mode et les octets de chaque PDF sans jeton d'écriture ni envoi à Grist, la découpe à 200 par appel, les six mots du contrat et un mot inconnu dans le rapport de l'app, ce que GFS refuserait en bloc écarté fichier par fichier, les refus de l'appel (GFS_INCONNU, GFS_REFUSE, GFS_LECTURE_SEULE, GFS_INACTIF) dits en français et en anglais, un GFS muet, seule, GfsLink.attach, et les vrais exports (un PDF, l'archive ZIP)
+  gfsAttach: 'scenarios-gfs-attach', // le PDF joint à la ligne CHEZ GFS (consigne GFS 053, js/row-attachment.js : attachViaGfs, js/gfs-link.js : attach, l'appel `joindre` ; joué hébergé, grisé levé comme en production : voir HOSTED_GROUPS, le faux GFS sait `joindre`) : le grisé levé, UN appel qui porte la table, la colonne, le mode et les octets de chaque PDF sans jeton d'écriture ni envoi à Grist, la découpe à 200 par appel, les six mots du contrat et un mot inconnu dans le rapport de l'app, ce que GFS refuserait en bloc écarté fichier par fichier, les refus de l'appel (GFS_INCONNU, GFS_REFUSE, GFS_LECTURE_SEULE, GFS_INACTIF) dits en français et en anglais, un GFS muet, seule, GfsLink.attach, et les vrais exports (un PDF, l'archive ZIP)
   pdfShelve: 'scenarios-pdf-shelve', // ranger dans GFS les PDF que l'app exporte (js/pdf-delivery.js, GfsLink.deposit, js/pdf-export.js, finishBatchExport et exportRecordAs de js/main.js, consigne GFS 043 ; joué hébergé : voir HOSTED_GROUPS, le faux GFS sait `ranger`) : la destination « Télécharger » / « Ranger dans GFS » / « Télécharger et ranger dans GFS » (gardée par personne, « Télécharger » sans GFS), le nom et le lot, l'appel `ranger` (File PDF, `suivants` qui décroît, jamais de `dossier`, un fichier à la fois), les quatre réponses de GFS (ajouté, remplacé, copie « (1) », refusé), un fichier non gardé téléchargé avec sa raison, les phrases du coin d'état en français et en anglais, le menu (trois lignes, grisées sans GFS, Ctrl + Z) et les vrais exports (PDF d'une ligne, archive ZIP, PDF réuni, planches)
   pdfGlyphs: 'scenarios-pdf-glyphs', // un caractère que la police n'a pas ne s'imprime plus en case vide dans le PDF (js/pdf-glyph-fallback.js, js/pdf-fonts.js, js/pdf-fonts-symbols.js, inlineRuns et glyphText de js/pdf-export.js) : PDF relu par pdf.js, glyphes .notdef comptés
   sheetAssembly: 'scenarios-sheet-assembly', // « Assemblage avant impression » (js/sheet-layout.js, js/sheet-assembly-dialog.js, js/pdf-merge.js:createSheets) : géométrie des planches, fenêtre de réglage, PDF relu par pdf.js (feuilles, texte par emplacement, traits de coupe tracés et peints), menu, droits d'export, grille
@@ -633,9 +633,10 @@ const DEV_FILES = ['helpers', 'runner'];
 // de la page est une extension (extensions/graphique/) : seule, la page ne la charge pas, et ses scénarios ne trouveraient ni ChartBlock, ni ChartPlot, ni ChartSource. Une fois la page prête, le lanceur
 // charge les extensions actives (Extensions.loadAll, comme ExportEngines.loadAll pour les moteurs d'export). Les scénarios « seule » du graphique sont dans dev-tests/verify-chart-extension.mjs.
 const HOSTED_GROUPS = new Set(['chart', 'chartMake', 'chartOffice', 'saveReminderGfs', 'pdfShelve', 'gfsAttach']);
-// Les groupes joués avec le grisé du PDF joint levé chez GFS : js/row-attachment.js est servi avec `GFS_ATTACH_WIRED = true`, le seul changement (en production la constante reste à `false` tant que GFS n'a pas déclaré
-// `actions.joindre` et que l'essai dans le Grist réel du porteur n'est pas passé). Si le texte à changer n'est plus là, le groupe s'arrête : il ne jouerait plus que le grisé.
-const WIRED_GROUPS = new Set(['gfsAttach']);
+// Les groupes joués avec le COMMUTATEUR DE RETOUR du PDF joint chez GFS : js/row-attachment.js est servi avec `GFS_ATTACH_WIRED = false`, le seul changement (en production la constante est à `true` depuis le 07/11 : GFS
+// a déclaré `actions.joindre` et les deux clés, le grisé est levé). `rowAttachment` joue ce qui se passe quand on remet la constante à `false` : la case et la section grisées dans GFS, rien d'envoyé. Le groupe `gfsAttach`
+// joue le fichier tel qu'il est en production (constante à `true`). Si le texte à changer n'est plus là, le groupe s'arrête : il ne jouerait plus que l'état de production.
+const GREYED_GROUPS = new Set(['rowAttachment']);
 
 async function runGroup(name, probeExpr, lang) {
   const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
@@ -686,11 +687,11 @@ async function runGroup(name, probeExpr, lang) {
   if (onlyCases.length) await page.addInitScript(words => { window.__onlyCases = words; }, onlyCases);
   if (preseedCode) await page.addInitScript({ content: preseedCode });
   const hosted = HOSTED_GROUPS.has(name);
-  if (WIRED_GROUPS.has(name)) {
+  if (GREYED_GROUPS.has(name)) {
     const source = await readFile(join(ROOT, 'js', 'row-attachment.js'), 'utf8');
-    const lifted = source.replace('const GFS_ATTACH_WIRED = false;', 'const GFS_ATTACH_WIRED = true;');
-    if (lifted === source) throw new Error('« const GFS_ATTACH_WIRED = false; » est introuvable dans js/row-attachment.js : le groupe ' + name + ' ne peut pas lever le grisé');
-    await page.route('**/js/row-attachment.js*', route => route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: lifted }));
+    const greyed = source.replace('const GFS_ATTACH_WIRED = true;', 'const GFS_ATTACH_WIRED = false;');
+    if (greyed === source) throw new Error('« const GFS_ATTACH_WIRED = true; » est introuvable dans js/row-attachment.js : le groupe ' + name + ' ne peut pas rejouer le grisé');
+    await page.route('**/js/row-attachment.js*', route => route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: greyed }));
   }
   if (hosted) await page.addInitScript({ path: join(ROOT, 'dev-tests', 'gfs-stub.js') });
   await page.goto(`${BASE}/_test-harness.html${hosted ? '?gfs=0' : ''}`, { waitUntil: 'load' });

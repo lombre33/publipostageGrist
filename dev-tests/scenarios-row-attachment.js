@@ -221,9 +221,9 @@
       return verdict(problems, {});
     });
 
-  // Choix d'Antoine du 06/11 (« Griser dans GFS pour l'instant ») : chez GFS l'envoi de l'app est refusé (jeton en lecture seule, options non déclarées) et c'est GFS qui joindra le fichier lui-même (consigne 052) ; `GfsLink.hosted` joue GFS.
-  scenario('rowattachment_inside_gfs_the_box_and_the_panel_are_greyed_and_nothing_is_attached_until_gfs_has_its_own_attach_step',
-    'Hébergé par Grist Factory Suite, tant que GFS n’a pas déclaré le jeton d’écriture et les deux options : la case du menu Exporter est grisée (jamais retirée) avec sa raison, la liste et le mode de Réglages sont grisés avec leur mention propre (pas celle de la lecture seule), et rien ne part - aucun jeton demandé, aucun envoi, aucune écriture - même si la case était cochée dans l’app seule ; dans l’app seule rien ne change.',
+  // Le COMMUTATEUR DE RETOUR (choix d'Antoine du 06/11, « Griser dans GFS pour l'instant », levé le 07/11 : GFS a déclaré `actions.joindre` et les deux clés) : le coureur (GREYED_GROUPS de run-headless.mjs) sert js/row-attachment.js avec `GFS_ATTACH_WIRED = false` ; `GfsLink.hosted` joue GFS. Le grisé levé, tel qu'en production, est joué par le groupe gfsAttach.
+  scenario('rowattachment_inside_gfs_with_the_return_switch_off_the_box_and_the_panel_are_greyed_and_nothing_is_attached',
+    'Hébergé par Grist Factory Suite, la constante GFS_ATTACH_WIRED remise à false (le commutateur de retour ; en production elle est à true) : la case du menu Exporter est grisée (jamais retirée) avec sa raison, la liste et le mode de Réglages sont grisés avec leur mention propre (pas celle de la lecture seule), et rien ne part - aucun jeton demandé, aucun envoi, aucune écriture - même si la case était cochée dans l’app seule ; dans l’app seule rien ne change.',
     async () => {
       const problems = [];
       const server = useServer();
@@ -237,7 +237,7 @@
         RowAttachment.render(); syncMenus();
         check(problems, 'dans GFS : la case est grisée, décochée, et dit pourquoi',
           [greyed(row()), row().getAttribute('aria-checked'), LockReasons.reasonOf(row())],
-          [true, 'false', 'Pas encore disponible dans Grist Factory Suite : c’est GFS qui joindra le PDF à la ligne, et ce geste n’existe pas encore.']);
+          [true, 'false', 'Désactivé pour le moment dans Grist Factory Suite : le PDF n’y est pas joint à la ligne.']);
         check(problems, 'dans GFS : la section de Réglages est grisée avec la mention de GFS, pas celle de la lecture seule',
           [el('settings-rowattachment-column').disabled, el('settings-rowattachment-mode').disabled, el('settings-rowattachment-locked').hidden, el('settings-rowattachment-locked-gfs').hidden],
           [true, true, true, false]);
@@ -249,7 +249,7 @@
         select.value = 'Autre'; select.dispatchEvent(new Event('change', { bubbles: true })); await sleep(80);
         check(problems, 'dans GFS : un changement forcé de la colonne n’est pas écrit', [stub().state.options[COLUMN_OPTION], RowAttachment.getColumn()], ['Pdf', 'Pdf']);
         I18n.setLang('en'); syncMenus();
-        check(problems, 'en anglais : la raison', LockReasons.reasonOf(row()), 'Not yet available in Grist Factory Suite: GFS will attach the PDF to the row itself, and that step does not exist yet.');
+        check(problems, 'en anglais : la raison', LockReasons.reasonOf(row()), 'Turned off for now in Grist Factory Suite: the PDF is not attached to the row there.');
         I18n.setLang('fr');
       } finally { GfsLink.hosted = realHosted; }
       RowAttachment.render(); syncMenus();

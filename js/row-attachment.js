@@ -3,9 +3,9 @@
 //  - le déclenchement est une case « Joindre à la ligne » du menu Exporter, un réglage de la personne (PersonStore, clé pp_export_attach) montré pour les deux PDF : rien ne se joint si elle n'est pas
 //    cochée, et le PDF est téléchargé (ou rangé dans GFS) comme avant, la jointure vient EN PLUS ;
 //  - une cellule qui a déjà un PDF : un réglage « Remplacer le PDF de même nom » (par défaut) ou « Toujours ajouter », à côté de la colonne (options du widget `pp_attach_column` et `pp_attach_mode`,
-//    lues avec le widget et partagées par tout le monde une fois la vue enregistrée, même mécanique que js/export-date.js) ;
+//    lues avec le widget et partagées par tout le monde une fois la vue enregistrée, même mécanique que js/export-date.js ; chez GFS, qui les déclare dans les `reglages` de son manifeste, elles s'écrivent dans la section de la vue SANS barre « Enregistrer ») ;
 //  - le jeton d'écriture est demandé à Grist au début d'un export et jeté à la fin (GristAPI.getWriteAccess : jamais gardé, jamais mis en cache) ;
-//  - Grist Factory Suite a sa propre fonction sur ce sujet (consigne 053) : le widget fait la jointure seul hors de GFS, et `attachAll` est le SEUL point de branchement. Hébergée (`GfsLink.hosted`) et le jour où GFS_ATTACH_WIRED est levé,
+//  - Grist Factory Suite a sa propre fonction sur ce sujet (consigne 053) : le widget fait la jointure seul hors de GFS, et `attachAll` est le SEUL point de branchement. Hébergée (`GfsLink.hosted`) et GFS_ATTACH_WIRED levé (c'est le cas depuis le 07/11),
 //    `attachAll` ne demande plus de jeton d'écriture et n'envoie rien à Grist : elle donne les octets à GFS (`GfsLink.attach`, l'appel `joindre`, au plus 200 fichiers par appel) et traduit son rapport dans le même rapport, sans toucher aux appelants ni aux réglages.
 // Qui joint quoi : le PDF d'une ligne, le PDF protégé, chaque PDF d'une archive ZIP (un par ligne ; « Un document par valeur » : tous, dans la même cellule). Jamais le PDF réuni ni l'assemblage
 // avant impression : plusieurs lignes dans un seul fichier, il n'y a pas de ligne à qui le donner (la case est grisée, avec sa raison, quand l'option de lignes cochée est l'une des deux).
@@ -27,12 +27,12 @@ const RowAttachment = (function () {
   const COLUMN_OPTION = 'pp_attach_column';
   const MODE_OPTION = 'pp_attach_mode';
   const PERSON_KEY = 'pp_export_attach';
-  // Chez Grist Factory Suite (GFS), l'envoi de l'app est refusé : son jeton reste en LECTURE seule (`jeton.lectureSeule`) et `setOption` refuse les deux options `pp_attach_column` et `pp_attach_mode` (non déclarées).
-  // Consigne 052 de GFS (06/11, lue par le fil Liaison) : le porteur a choisi que GFS joigne LUI-MÊME le fichier ; GFS ne déclarera donc ni le jeton d'écriture ni les deux clés. Choix du porteur du 06/11, « Griser dans GFS
-  // pour l'instant » : la case du menu Exporter et la section de Réglages sont grisées, avec leur raison, dans GFS ; l'app seule n'en change pas. LE point à lever le jour où GFS annonce son geste (page GFS-ETAT.md, fil Liaison) :
-  // passer cette constante à `true` : `attachAll` est DÉJÀ branché sur l'appel `joindre` de GFS (`GfsLink.attach`, attachViaGfs ci-dessous), il ne manque que la levée du grisé, après la déclaration `actions.joindre` de GFS, l'essai dans le Grist réel du porteur
-  // et sa réponse sur où garder la colonne et le mode sous GFS. Elle ne se lève PAS sur une déclaration du jeton ou des clés : elle n'arrivera pas.
-  const GFS_ATTACH_WIRED = false;
+  // Chez Grist Factory Suite (GFS), l'envoi de l'app reste refusé : son jeton est en LECTURE seule (`jeton.lectureSeule`), GFS ne déclare pas le jeton d'écriture. Consignes 052 et 053 de GFS : GFS joint LUI-MÊME le fichier, l'app lui donne les octets
+  // par l'appel `joindre` (attachViaGfs ci-dessous, `GfsLink.attach`), déclaré dans le manifeste (`actions.joindre: ["pdf"]`, GFS `45c0ff9`). Choix du porteur (07/11, « Déclarer chez GFS ») : GFS déclare aussi `pp_attach_column` et `pp_attach_mode`
+  // dans les `reglages` du manifeste (GFS `3b2b95a`), donc `setOption` les accepte et la colonne et le mode s'écrivent dans la section de la vue sans barre « Enregistrer » (mesuré par GFS dans un vrai Grist, consigne 056) ; le choix est partagé par
+  // tout le monde dans le document. GRISÉ LEVÉ le 07/11 (il datait du choix du 06/11, « Griser dans GFS pour l'instant ») : la constante est à `true`. Elle reste le COMMUTATEUR DE RETOUR, un seul endroit : à `false`, la case du menu Exporter et la section
+  // de Réglages sont de nouveau grisées dans GFS, avec leur raison, et `attachAll` n'y envoie rien (dev-tests/run-headless.mjs et dev-tests/verify-row-attachment-mouse.mjs jouent encore ce grisé, avec la constante à `false`).
+  const GFS_ATTACH_WIRED = true;
   const blockedByGfs = () => !GFS_ATTACH_WIRED && typeof GfsLink !== 'undefined' && GfsLink.hosted === true;
   const MODES = ['replace', 'add'];
   const ORIGIN_MODE = 'replace';
@@ -75,7 +75,7 @@ const RowAttachment = (function () {
   function candidates(table) {
     return GristAPI.getVisibleColumns(table).filter(col => columnState(table, col) === 'ok');
   }
-  // Pourquoi la case est grisée ('' : elle ne l'est pas) : un compte en lecture seule, GFS dont le geste de jonction n'existe pas encore, pas de colonne utilisable, ou une option de lignes qui réunit plusieurs lignes dans un seul fichier.
+  // Pourquoi la case est grisée ('' : elle ne l'est pas) : un compte en lecture seule, GFS tant que le commutateur GFS_ATTACH_WIRED est à `false`, pas de colonne utilisable, ou une option de lignes qui réunit plusieurs lignes dans un seul fichier.
   function offReason(lines) {
     const table = GristAPI.getCurrentTableId();
     if (isReadOnly()) return 'readOnly';
@@ -220,7 +220,7 @@ const RowAttachment = (function () {
   const GFS_PROBLEMS = new Map([['absente', 'missing'], ['inutilisable', 'unusable'], ['refus', 'denied'], ['trop-gros', 'tooLarge'], ['injoignable', 'unreachable'], ['echec', 'failed']]);
   // Un mot de GFS dans ceux du rapport ; un mot inconnu (un GFS plus récent) est `failed`.
   const problemOfGfs = word => GFS_PROBLEMS.get(word) || 'failed';
-  // Le GFS qui répond : hébergée et la levée du grisé faite. Hébergée mais muette, l'appel attendrait pour toujours (pas de délai) : `attachViaGfs` le dit sans rien envoyer.
+  // Le GFS qui répond : hébergée et le grisé levé (GFS_ATTACH_WIRED). Hébergée mais muette, l'appel attendrait pour toujours (pas de délai) : `attachViaGfs` le dit sans rien envoyer.
   const viaGfs = () => GFS_ATTACH_WIRED && typeof GfsLink !== 'undefined' && GfsLink.hosted === true;
   // Un PDF que GFS acceptera : non vide, avec `%PDF-` dans ses 1 024 premiers octets (contrats 5.4, point 12).
   async function looksLikePdf(blob) {

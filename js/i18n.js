@@ -2240,7 +2240,7 @@ const I18n = (function () {
     'settings.rowAttachment.status.unusable': { fr: '« {column} » n’est plus de type Pièces jointes, ou porte une formule : aucun PDF ne peut y être joint.', en: '“{column}” is no longer an Attachments column, or has a formula: no PDF can be attached to it.' },
     'settings.rowAttachment.status.noColumns': { fr: 'La table « {table} » n’a aucune colonne de type Pièces jointes : ajoutez-en une dans Grist.', en: 'The table “{table}” has no Attachments column: add one in Grist.' },
     'settings.rowAttachment.locked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé.', en: 'You are read-only: this setting is locked.' },
-    'settings.rowAttachment.lockedGfs': { fr: 'Pas encore disponible dans Grist Factory Suite : c’est GFS qui joindra le PDF à la ligne, et ce geste n’existe pas encore. Ce réglage est verrouillé.', en: 'Not yet available in Grist Factory Suite: GFS will attach the PDF to the row itself, and that step does not exist yet. This setting is locked.' },
+    'settings.rowAttachment.lockedGfs': { fr: 'Désactivé pour le moment dans Grist Factory Suite : le PDF n’y est pas joint à la ligne. Ce réglage est verrouillé.', en: 'Turned off for now in Grist Factory Suite: the PDF is not attached to the row there. This setting is locked.' },
     'settings.rowAttachment.hint': {
       fr: 'La case se coche dans le menu Exporter, pour les deux PDF. Le PDF d’une ligne et chaque PDF d’une archive ZIP vont dans leur propre ligne ; le PDF réuni et l’assemblage avant impression n’ont pas de ligne à eux, la case est alors grisée. Le PDF reste téléchargé (ou rangé dans GFS) comme d’habitude. Un compte en lecture seule dans Grist ne peut rien joindre.',
       en: 'The box is checked in the Export menu, for both PDFs. The PDF of a row and each PDF of a ZIP archive go to their own row; the combined PDF and the assembly before printing have no row of their own, so the box is grayed out. The PDF is still downloaded (or saved to GFS) as usual. A read-only account in Grist cannot attach anything.',
@@ -3010,7 +3010,7 @@ const I18n = (function () {
     'attach.off.column': { fr: 'Choisissez d’abord une colonne de type Pièces jointes dans Réglages > Vue.', en: 'First choose an Attachments column in Settings > View.' },
     'attach.off.readOnly': { fr: 'Vous êtes en lecture seule : rien ne peut être joint.', en: 'You are read-only: nothing can be attached.' },
     'attach.off.merged': { fr: 'Ce PDF réunit plusieurs lignes : il n’est joint à aucune.', en: 'This PDF combines several rows: it is not attached to any.' },
-    'attach.off.gfs': { fr: 'Pas encore disponible dans Grist Factory Suite : c’est GFS qui joindra le PDF à la ligne, et ce geste n’existe pas encore.', en: 'Not yet available in Grist Factory Suite: GFS will attach the PDF to the row itself, and that step does not exist yet.' },
+    'attach.off.gfs': { fr: 'Désactivé pour le moment dans Grist Factory Suite : le PDF n’y est pas joint à la ligne.', en: 'Turned off for now in Grist Factory Suite: the PDF is not attached to the row there.' },
     'attach.progress': { fr: 'Envoi des PDF dans Grist : {current}/{total}…', en: 'Sending PDFs to Grist: {current}/{total}…' },
     'attach.progressOne': { fr: 'Envoi du PDF dans Grist…', en: 'Sending the PDF to Grist…' },
     'attach.one': { fr: 'PDF joint à la ligne, colonne « {column} ».', en: 'PDF attached to the row, column “{column}”.' },

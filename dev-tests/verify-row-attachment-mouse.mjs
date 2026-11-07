@@ -48,7 +48,14 @@ const server = createServer(async (req, res) => {
     if (!filePath.startsWith(ROOT)) { res.writeHead(403).end(); return; }
     const info = await stat(filePath);
     const target = info.isDirectory() ? join(filePath, 'index.html') : filePath;
-    const body = await readFile(target);
+    let body = await readFile(target);
+    // Le COMMUTATEUR DE RETOUR du PDF joint chez GFS : en production GFS_ATTACH_WIRED est à `true` (grisé levé le 07/11) ; l'étape « hébergé par GFS » ci-dessous rejoue le grisé, la constante servie à `false`, le seul changement.
+    if (target === join(ROOT, 'js', 'row-attachment.js')) {
+      const text = body.toString('utf8');
+      const greyed = text.replace('const GFS_ATTACH_WIRED = true;', 'const GFS_ATTACH_WIRED = false;');
+      if (greyed === text) throw new Error('« const GFS_ATTACH_WIRED = true; » est introuvable dans js/row-attachment.js : l\'étape GFS ne pourrait pas rejouer le grisé');
+      body = Buffer.from(greyed, 'utf8');
+    }
     res.writeHead(200, { 'Content-Type': MIME[extname(target)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
     res.end(body);
   } catch { res.writeHead(404).end('not found'); }
@@ -443,7 +450,7 @@ async function pass(colorScheme, lang) {
   const w6 = await widgetState(page);
   check(`${tag} : compte Lecteur : le PDF est produit sans alerte, rien n'est envoyé ni écrit`, exp3.downloaded && w6.uploads === before2 && w6.writes.length === 0 && w6.statusClass === '' && w6.status === T.generated, { exp3, w6 });
 
-  // === Hébergé par GFS (choix du 06/11, « Griser dans GFS pour l'instant ») : la case et la section sont grisées avec leur raison, rien n'est envoyé ===
+  // === Le commutateur de retour chez GFS (choix du 06/11, « Griser dans GFS pour l'instant », levé le 07/11 ; ici la constante est servie à `false`) : la case et la section sont grisées avec leur raison, rien n'est envoyé ===
   await page.evaluate(async () => { window.__gristStub.setViewer(false); await AccessRights.refresh(); GfsLink.hosted = true; RowAttachment.render(); });
   await page.waitForTimeout(400);
   await leaveMenu(page);   // le survol relit la case : le pointeur quitte d'abord le bouton, qu'il survolait encore après le dernier export
