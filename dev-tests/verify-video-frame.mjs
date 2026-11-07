@@ -14,7 +14,7 @@
 //  LE CADRE DE GFS : l'app dans un cadre isolé, le lecteur de GFS tombe sur le calque, rogné à la zone qui défile.
 // Lancé par run-headless.mjs (groupe Node "videoFrame", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-video-frame.mjs
 import { readFileSync } from 'node:fs';
-import { start, seedModels, WIDTH, HEIGHT, hoverObjectsButton, chooseObject, OBJECTS_MENU } from './gfs-page.mjs';
+import { start, seedModels, WIDTH, HEIGHT, hoverObjectsButton, OBJECTS_MENU } from './gfs-page.mjs';
 
 const t = await start({ name: 'verify-video-frame', port: Number(process.env.VIDEO_FRAME_PORT || 9397) });
 const { check } = t;
@@ -40,8 +40,8 @@ const SEED = seedModels({ record: RECORD }) + `
 const [Y, V, P, Q, N] = [0, 1, 2, 3, 4];
 
 const TEXTS = {
-  fr: { row: 'Vidéo…', dialog: 'Insérer une vidéo', invalid: /n’est pas une vidéo YouTube ou Vimeo/, play: 'Lire la vidéo YouTube', title: 'Vidéo YouTube', slide: n => `diapositive ${n}`, own: 'Ma vidéo' },
-  en: { row: 'Video…', dialog: 'Insert a video', invalid: /is not a YouTube or Vimeo video/, play: 'Play the YouTube video', title: 'YouTube video', slide: n => `slide ${n}`, own: 'Ma vidéo' },
+  fr: { row: 'Vidéo…', aria: 'YouTube.*Vimeo', dialog: 'Insérer une vidéo', invalid: /n’est pas une vidéo YouTube ou Vimeo/, play: 'Lire la vidéo YouTube', title: 'Vidéo YouTube', slide: n => `diapositive ${n}`, own: 'Ma vidéo' },
+  en: { row: 'Video…', aria: 'YouTube.*Vimeo', dialog: 'Insert a video', invalid: /is not a YouTube or Vimeo video/, play: 'Play the YouTube video', title: 'YouTube video', slide: n => `slide ${n}`, own: 'Ma vidéo' },
 };
 
 async function run(lang, colorScheme) {
@@ -67,6 +67,23 @@ async function run(lang, colorScheme) {
   };
   const leave = async () => { await page.mouse.move(WIDTH - 40, HEIGHT - 60); await sleep(200); };
   const key = async (name, wait = 250) => { await page.keyboard.press(name); await sleep(wait); };
+  // Le menu « Lien et blocs de contenu » à la vraie souris : le volet s'ouvre au survol de l'icône, puis la main descend de l'icône sur la ligne (sans quitter le volet) et clique.
+  const openBlocks = async () => {
+    const c = await rectOf('#v2-btn-link');
+    await page.mouse.move(c.x, c.y + 150);
+    await page.mouse.move(c.x, c.y, { steps: 4 });
+    await sleep(350);
+    return c;
+  };
+  const chooseBlock = async (selector = '#v2-btn-video') => {
+    const c = await openBlocks();
+    const r = await rectOf(selector);
+    const x = Math.min(Math.max(c.x, r.left + 8), r.right - 8);
+    await page.mouse.move(x, r.y, { steps: 8 });
+    await sleep(100);
+    await page.mouse.click(x, r.y);
+    await sleep(300);
+  };
   const near = (a, b, tolerance = 1.5) => typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) <= tolerance;
   await Promise.race([
     page.evaluate(() => window.__gfsStub.ouvrir({ fichier: { id: '7', type: 'modele' }, type: '', dossier: '', raison: 'explorateur' })),
@@ -340,25 +357,31 @@ async function run(lang, colorScheme) {
   check(tag + 'GFS dit « erreur » (la vidéo refuse d\'être intégrée) : l\'app ferme le lecteur et ouvre la vidéo sur son site', !(await stubPlayer()) && urls.length === openedBefore + 1 && urls[urls.length - 1] === 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=90s', { urls, player: await stubPlayer() });
   check(tag + 'de tout ce parcours, GFS n\'a refusé aucun appel de l\'app (identifiants, nombres, rectangles tous valides)', (await refusals()) === 0, await page.evaluate(() => window.__gfsStub.lecteurRefus));
 
-  // --- 5. Le menu « Objets » et la pose d'une vidéo.
-  console.log('\n' + tag + '5) Le menu « Objets » : « ' + T.row + ' »');
+  // --- 5. « Vidéo… » du menu « Lien et blocs de contenu » (demande d'Antoine du 07/11 : la ligne n'est plus dans « Objets », elle est la même en diapositive et en document) et la pose d'une vidéo.
+  console.log('\n' + tag + '5) Le menu « Lien et blocs de contenu » : « ' + T.row + ' »');
   await page.evaluate(() => { const ed = EditorCore.getEditor(); ed.chain().setTextSelection(1).focus().run(); });
   await leave();
   await hoverObjectsButton(page);
-  const menu = await page.evaluate((sel) => {
-    const m = document.querySelector(sel);
-    const r = m.getBoundingClientRect();
-    const rows = ['textFrame', 'table', 'slideView', 'linkedTable', 'video'].map((id) => { const b = m.querySelector('[data-action="' + id + '"]'); const q = b.getBoundingClientRect(); const label = b.querySelector('span:not(.v2-menu-row-icon)'); const lr = label.getBoundingClientRect(); return { id, top: q.top, bottom: q.bottom, left: q.left, right: q.right, height: q.height, text: label.textContent, labelIn: lr.left >= q.left - 0.5 && lr.right <= q.right + 0.5, tip: b.getAttribute('data-tip') || '', disabled: b.disabled, icon: !!b.querySelector('svg') }; });
-    return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, rows, vh: innerHeight, vw: innerWidth };
-  }, OBJECTS_MENU);
-  const [mText, mTable, mView, mLinked, mVideo] = menu.rows;
-  check(tag + '« ' + T.row + ' » est à droite de « Tableau d\'un modèle Grille… » (deux boutons côte à côte, sous la ligne du haut) ; la ligne du haut garde ses trois boutons', Math.abs(mView.top - mText.top) < 1 && Math.abs(mTable.top - mText.top) < 1 && Math.abs(mVideo.top - mLinked.top) < 1 && mLinked.right <= mVideo.left + 1 && mLinked.top > mView.top + 20 && mVideo.height > 20 && mVideo.icon && mVideo.text === T.row && mVideo.right <= menu.right + 0.5, menu.rows);
-  check(tag + 'le menu tient dans le panneau de 700 x 400 (il finit au-dessus du bas) et aucun nom n\'est coupé', menu.bottom <= menu.vh - 4 && menu.right <= menu.vw && menu.width <= 300 && menu.rows.every(r => r.labelIn), menu);
-  check(tag + 'l\'info-bulle de « ' + T.row + ' » dit où la vidéo se posera (' + T.slide(1) + ') et la ligne n\'est pas grisée', mVideo.tip.indexOf(T.slide(1)) >= 0 && !mVideo.disabled, mVideo);
+  const objects = await page.evaluate((sel) => Array.from(document.querySelector(sel).querySelectorAll('[data-action]')).map(b => b.dataset.action), OBJECTS_MENU);
+  check(tag + 'le menu « Objets » ne propose plus la vidéo : ses quatre premières lignes sont le cadre de texte, le tableau, la vue d\'une diapositive et le tableau d\'un modèle Grille', objects.slice(0, 4).join() === 'textFrame,table,slideView,linkedTable' && objects.indexOf('video') === -1, objects);
+  await leave();
+  await openBlocks();
+  const blocks = await page.evaluate(() => {
+    const flyout = document.getElementById('v2-blocks-flyout');
+    const row = document.getElementById('v2-btn-video');
+    const r = row.getBoundingClientRect();
+    const f = flyout.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + 12, r.top + r.height / 2);
+    const label = row.querySelector('span:not(.v2-menu-row-icon)');
+    const ids = Array.from(flyout.querySelectorAll('.v2-menu-row')).map(b => b.id);
+    return { text: label.textContent.trim(), aria: row.getAttribute('aria-label'), icon: !!row.querySelector('.v2-menu-row-icon svg'), locked: row.classList.contains('v2-hf-locked'), inPanel: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth, onTop: !!hit && row.contains(hit), flyoutBottom: f.bottom, ids, vh: innerHeight };
+  });
+  check(tag + '« ' + T.row + ' » est une ligne du menu « Lien et blocs de contenu » (après « Graphique de la page… »), avec son icône, entière dans le panneau de 700 x 400, au premier plan et active', blocks.text === T.row && blocks.icon && !blocks.locked && blocks.inPanel && blocks.onTop && blocks.ids.indexOf('v2-btn-video') === blocks.ids.indexOf('v2-btn-chart') + 1, blocks);
+  check(tag + 'son nom pour un lecteur d\'écran dit YouTube et Vimeo', new RegExp(T.aria).test(blocks.aria), blocks.aria);
   // Grist ne laisse passer ni la lecture automatique ni le plein écran au lecteur de GFS (consigne 057, faits vérifiés 50) : rien, dans les textes de l'objet, ne promet une vidéo qui démarre seule, un plein écran, ni qu'UN clic la lit (le lecteur du site s'ouvre, la personne y lance la lecture).
-  const texts = await page.evaluate(() => ['slides.objects.videoTip', 'slides.objects.video', 'video.dialog.title', 'video.dialog.label', 'video.dialog.message', 'video.dialog.placeholder', 'video.dialog.confirm', 'video.dialog.invalid', 'video.play', 'video.title'].map(k => I18n.t(k, { n: 1, provider: 'YouTube' })));
-  check(tag + 'aucun texte de l\'objet vidéo ne promet une lecture automatique ni le plein écran, et l\'info-bulle du menu dit qu\'un clic ouvre le lecteur (il ne promet pas que la vidéo démarre)', texts.every(x => typeof x === 'string' && x.length > 0 && !/automati|auto-?play|plein[ -]écran|full[ -]?screen/i.test(x)) && /ouvre son lecteur|opens its player/.test(texts[0]) && !/ la lit\b|plays it/.test(texts[0]), texts);
-  await chooseObject(page, 'video');
+  const texts = await page.evaluate(() => ['insert.video.row', 'insert.video.aria', 'video.dialog.title', 'video.dialog.label', 'video.dialog.message', 'video.dialog.placeholder', 'video.dialog.confirm', 'video.dialog.invalid', 'video.play', 'video.title'].map(k => I18n.t(k, { n: 1, provider: 'YouTube' })));
+  check(tag + 'aucun texte de l\'objet vidéo ne promet une lecture automatique ni le plein écran, ni qu\'un clic lit la vidéo', texts.every(x => typeof x === 'string' && x.length > 0 && !/automati|auto-?play|plein[ -]écran|full[ -]?screen/i.test(x)) && !/ la lit\b|plays it/.test(texts.join(' ')), texts);
+  await chooseBlock();
   await sleep(500);
   const dialog = () => page.evaluate(() => {
     const modal = document.getElementById('pp-dialog-modal');
@@ -374,7 +397,7 @@ async function run(lang, colorScheme) {
   check(tag + 'Échap referme la fenêtre sans rien poser', !(await dialog()).open && (await framesOf()).length === 5, await framesOf());
   // Une adresse qui n'en est pas une : la fenêtre le dit, puis revient avec ce qu'on avait collé.
   await leave();
-  await chooseObject(page, 'video');
+  await chooseBlock();
   await sleep(450);
   await page.keyboard.type('https://example.com/une-video.mp4');
   await key('Enter', 500);
@@ -404,25 +427,19 @@ async function run(lang, colorScheme) {
   await key('Control+z', 500);
   // Le code « Intégrer » collé tel quel.
   await leave();
-  await chooseObject(page, 'video');
+  await chooseBlock();
   await sleep(450);
   await page.keyboard.insertText('<iframe width="560" height="315" src="https://player.vimeo.com/video/76979871?h=abcdef0123&amp;badge=0" frameborder="0" allowfullscreen></iframe>');
   await key('Enter', 700);
   list = await framesOf();
   check(tag + 'le code « Intégrer » de Vimeo, collé tel quel, pose la vidéo (on n\'y lit que son adresse) : le cadre ne garde ni balise, ni attribut du code', list.length === 6 && list.some(f => f.video === 'vimeo:76979871/abcdef0123' && f.link === WATCH_V) && !/<iframe|frameborder/i.test(await page.evaluate(() => Editor.getHTML())), list.map(f => f.video));
   await key('Control+z', 500);
-  // Au clavier : le bouton, ↓ ↓ ↓ ↓ jusqu'à la ligne.
+  // Au clavier : « Vidéo… » est un vrai bouton du menu « Lien et blocs de contenu » (Tab, Entrée) : Entrée ouvre la fenêtre, le clavier dans son champ.
   await leave();
-  await page.evaluate(() => { const ed = EditorCore.getEditor(); ed.chain().setTextSelection(1).focus().run(); document.querySelector('#v2-btn-objects').focus(); });
-  await key('ArrowDown', 250);
-  await key('ArrowDown', 150);
-  const second_ = await page.evaluate(() => document.activeElement && document.activeElement.dataset.action);
-  await key('ArrowRight', 150);
-  const third_ = await page.evaluate(() => document.activeElement && document.activeElement.dataset.action);
-  await key('ArrowLeft', 150);
-  const back_ = await page.evaluate(() => document.activeElement && document.activeElement.dataset.action);
-  await key('ArrowRight', 150);
-  check(tag + 'au clavier : ↓ ↓ mène à « Tableau d\'un modèle Grille… » (sous « Cadre de texte »), → à « ' + T.row + ' », ← revient', second_ === 'linkedTable' && third_ === 'video' && back_ === 'linkedTable', { second_, third_, back_ });
+  await page.evaluate(() => { const ed = EditorCore.getEditor(); ed.chain().setTextSelection(1).focus().run(); document.querySelector('#v2-btn-link').focus(); });
+  await sleep(250);
+  await page.evaluate(() => document.querySelector('#v2-btn-video').focus());
+  await sleep(150);
   await key('Enter', 600);
   dlg = await dialog();
   check(tag + 'Entrée sur « ' + T.row + ' » ouvre la fenêtre, le clavier dans son champ', dlg.open && dlg.focus && dlg.title === T.dialog, dlg);
@@ -567,6 +584,164 @@ async function run(lang, colorScheme) {
   check(tag + 'le PowerPoint écrit les titres et le lien de chaque vidéo vers son site (YouTube, Vimeo), sans le texte de la vignette',
     /Ma vidéo/.test(pptx.text) && /Autre vidéo/.test(pptx.text) && !/YouTube|Vimeo/.test(pptx.text) && pptx.targets.some(x => /youtube\.com\/watch\?v=dQw4w9WgXcQ&amp;t=90s|youtube\.com\/watch\?v=dQw4w9WgXcQ&t=90s/.test(x)) && pptx.targets.some(x => /vimeo\.com\/76979871\/abcdef0123/.test(x)) && !pptx.ext, pptx);
   await page.evaluate(() => { const s = document.getElementById('v2-export-type'); s.value = 'pdf'; s.dispatchEvent(new Event('change', { bubbles: true })); });
+
+  {
+  // --- 8b. La vidéo d'un DOCUMENT (demande d'Antoine du 07/11 : « les vidéos doivent aussi être dispo dans les documents », « comme une image on peut la bouger dans et sur le texte ») : « Vidéo… » du même menu,
+  // une image du modèle (l'identifiant seul), vignette ▶, le lecteur de GFS à sa place, et tous les réglages d'une image : taille, habillage à gauche, devant le texte.
+  console.log('\n' + tag + '8b) Dans un document : une vidéo qui se pose, se règle et se lit comme une image');
+  await page.evaluate(() => window.__gfsStub.setLecteurs(['youtube', 'vimeo']));
+  await Promise.race([
+    page.evaluate(() => window.__gfsStub.ouvrir({ fichier: { id: '1', type: 'modele' }, type: '', dossier: '', raison: 'explorateur' })),
+    sleep(20000),
+  ]);
+  await page.waitForFunction(() => String(Templates.getCurrentId()) === '1', null, { timeout: 8000 }).catch(() => {});
+  await sleep(1500);
+  const FIRST = 'Avant la vidéo.';
+  await page.evaluate(([first]) => {
+    const ed = EditorCore.getEditor();
+    ed.commands.setContent('<p>' + first + '</p><p>Après la vidéo : un texte assez long pour passer autour de l\'image quand elle est habillée à gauche, puis revenir dessous sur plusieurs lignes de suite, à la file.</p>');
+    ed.chain().setTextSelection(first.length + 1).focus().run();
+  }, [FIRST]);
+  await sleep(300);
+  const docVideos = () => page.evaluate(() => {
+    const out = [];
+    EditorCore.getEditor().state.doc.descendants((node, pos) => { if (node.type.name === 'editorImage' && node.attrs.video) out.push({ pos, video: node.attrs.video, src: node.attrs.src || '', alt: node.attrs.alt || '', width: node.attrs.width, wrap: node.attrs.wrap, align: node.attrs.align, layer: node.attrs.layer }); });
+    return out;
+  });
+  const IMG = '#editor-container .ProseMirror .editor-image-video img';
+  const PLAY = '#editor-container .ProseMirror .editor-image-video .editor-image-video-play';
+  const docPlayer = async () => { await sleep(350); return { calls: await countOf('afficher'), last: await lastOf('afficher'), player: await stubPlayer() }; };
+  await chooseBlock();
+  await sleep(400);
+  dlg = await dialog();
+  check(tag + 'dans un document, « ' + T.row + ' » ouvre la même fenêtre (' + T.dialog + '), le clavier dans son champ', dlg.open && dlg.title === T.dialog && dlg.focus, dlg);
+  await page.keyboard.type('https://youtu.be/9bZkp7q19f0?t=42');
+  await key('Enter', 700);
+  let docs = await docVideos();
+  check(tag + 'Entrée pose UNE vidéo dans le texte : l\'image du modèle porte le réglage (départ à 42 s), sans adresse (`src`), sur sa ligne, centrée, large de 480 px, avec son titre pour texte alternatif',
+    docs.length === 1 && docs[0].video === 'youtube:9bZkp7q19f0@42' && docs[0].src === '' && docs[0].wrap === 'block' && docs[0].align === 'center' && docs[0].width === '480px' && docs[0].alt === T.title && docs[0].layer === 'normal', docs);
+  const savedHtml = await page.evaluate(() => Editor.getHTML());
+  check(tag + 'le modèle enregistré ne contient ni adresse, ni lecteur : ni `youtube.com`, ni <iframe>, <video>, <object>, <embed>, ni `src` sur l\'image de la vidéo', !/youtube\.com|youtu\.be|<iframe|<video|<object|<embed/i.test(savedHtml) && /<img[^>]*data-video="youtube:9bZkp7q19f0@42"/.test(savedHtml) && !/<img[^>]*data-video[^>]*\ssrc=/.test(savedHtml), savedHtml);
+  await page.evaluate(() => { document.querySelector('#editor-container .ProseMirror .editor-image-video').scrollIntoView({ block: 'center' }); });
+  await sleep(400);
+  const box = await rectOf(IMG);
+  const leaked = requests.filter(u => /youtube|youtu\.be|ytimg|vimeo|googlevideo/i.test(u));
+  check(tag + 'la vignette (un rectangle gris, ▶ et le nom du site) est une image 16/9 dessinée dans l\'éditeur, entière dans le panneau, sans rien demander à YouTube', !!box && near(box.height / box.width, 9 / 16, 0.01) && box.left >= 0 && box.right <= WIDTH && box.top >= 0 && box.bottom <= HEIGHT && leaked.length === 0, { box, leaked });
+  const playBox = await rectOf(PLAY);
+  const label = await page.evaluate((sel) => document.querySelector(sel).getAttribute('aria-label'), PLAY);
+  check(tag + 'le disque ▶ est un vrai bouton « ' + T.play + ' », au milieu de la vignette', !!playBox && label === T.play && near(playBox.x, box.x, 3) && Math.abs(playBox.y - box.y) < box.height * 0.1 && playBox.width >= 22, { playBox, label, box });
+  const callsBefore = await countOf('afficher');
+  await reach(playBox);
+  await page.mouse.click(playBox.x, playBox.y);
+  let got = await docPlayer();
+  const sentBox = got.last && got.last.args && got.last.args.rect;
+  check(tag + 'un clic sur ▶ demande le lecteur à GFS : YouTube, l\'identifiant seul (jamais une adresse), le départ à 42 s, à la place exacte de la vignette', got.calls === callsBefore + 1 && got.last.args.fournisseur === 'youtube' && got.last.args.video === '9bZkp7q19f0' && got.last.args.debut === 42
+    && !!sentBox && near(sentBox.x, box.left, 2) && near(sentBox.y, box.top, 2) && near(sentBox.largeur, box.width, 2) && near(sentBox.hauteur, box.height, 2) && !/https?:|youtube\.com/i.test(JSON.stringify(got.last.args)), got);
+  const noSelection = await page.evaluate(() => { const sel = EditorCore.getEditor().state.selection; return { node: !!sel.node, selectedClass: !!document.querySelector('.editor-image-selected') }; });
+  check(tag + 'le clic sur ▶ lit la vidéo sans sélectionner l\'image', !noSelection.node && !noSelection.selectedClass, noSelection);
+  await key('Escape', 400);
+  check(tag + 'Échap ferme le lecteur', !(await stubPlayer()) && (await lastOf('fermer')) !== null, await stubNames());
+  // Le reste de l'image se clique pour la sélectionner : ses poignées, sa barre ; aucun lecteur.
+  const poster = await rectOf(IMG);
+  await reach({ x: poster.left + 24, y: poster.top + 20 });
+  await page.mouse.click(poster.left + 24, poster.top + 20);
+  await sleep(450);
+  const picked = await page.evaluate(() => { const sel = EditorCore.getEditor().state.selection; const bar = document.querySelector('.v2-image-toolbar'); return { node: sel.node ? sel.node.type.name : '', video: sel.node ? sel.node.attrs.video : '', cls: !!document.querySelector('.editor-image-video.editor-image-selected'), toolbar: !!bar && getComputedStyle(bar).display !== 'none', calls: window.__gfsStub.lecteurAppels.filter(c => c.nom === 'afficher').length }; });
+  check(tag + 'un clic ailleurs sur la vignette sélectionne l\'image (barre des images affichée) et ne lit rien', picked.node === 'editorImage' && picked.video === 'youtube:9bZkp7q19f0@42' && picked.cls && picked.toolbar && picked.calls === callsBefore + 1, picked);
+  // « Dans le texte » : habillée à gauche, le texte la contourne.
+  await click('.v2-image-toolbar button[data-action="align-left"]');
+  await sleep(450);
+  docs = await docVideos();
+  const wrapped = await page.evaluate(() => {
+    const img = document.querySelector('#editor-container .ProseMirror .editor-image-video img').getBoundingClientRect();
+    const second = document.querySelectorAll('#editor-container .ProseMirror > p')[1];
+    const range = document.createRange();
+    range.setStart(second.firstChild, 0); range.setEnd(second.firstChild, 5);
+    const text = range.getBoundingClientRect();
+    return { imgRight: img.right, imgTop: img.top, imgBottom: img.bottom, textLeft: text.left, textTop: text.top };
+  });
+  check(tag + 'habillée à gauche (barre des images), la vidéo laisse le texte la contourner : le début du paragraphe suivant est à sa droite', docs[0].align === 'left' && wrapped.textLeft >= wrapped.imgRight - 1 && wrapped.textTop < wrapped.imgBottom, { docs, wrapped });
+  // Elle se redimensionne à la poignée, en gardant ses proportions.
+  await click('.v2-image-toolbar button[data-action="align-center"]');
+  await sleep(350);
+  await page.evaluate(() => { document.querySelector('#editor-container .ProseMirror .editor-image-video').scrollIntoView({ block: 'center' }); });
+  await sleep(300);
+  const corner = await rectOf('#editor-container .ProseMirror .editor-image-video .editor-image-handle-se');
+  const before = await rectOf(IMG);
+  await reach(corner);
+  await page.mouse.down();
+  await page.mouse.move(corner.x - 60, corner.y - 20, { steps: 6 });
+  await page.mouse.up();
+  await sleep(450);
+  const after = await rectOf(IMG);
+  docs = await docVideos();
+  check(tag + 'la poignée en bas à droite la réduit en gardant le 16/9, et le modèle garde la nouvelle largeur', after.width < before.width - 20 && near(after.height / after.width, 9 / 16, 0.01) && parseFloat(docs[0].width) < 480 && Math.abs(parseFloat(docs[0].width) * (before.width / 480) - after.width) < 4, { before, after, docs });
+  // Devant le texte : elle sort du texte, son lecteur la suit toujours.
+  await click('.v2-image-toolbar button[data-action="layer-front"]');
+  await sleep(500);
+  docs = await docVideos();
+  const front = await rectOf(IMG);
+  const playFront = await rectOf(PLAY);
+  const frontBefore = await countOf('afficher');
+  await reach(playFront);
+  await page.mouse.click(playFront.x, playFront.y);
+  got = await docPlayer();
+  const frontSent = got.last && got.last.args && got.last.args.rect;
+  check(tag + 'devant le texte (calque), la vidéo se lit toujours à sa place : le rectangle envoyé à GFS est celui de la vignette', docs[0].layer === 'front' && got.calls === frontBefore + 1 && !!frontSent && near(frontSent.x, front.left, 2) && near(frontSent.y, front.top, 2) && near(frontSent.largeur, front.width, 2), { docs, front, frontSent });
+  await key('Escape', 400);
+  await click('.v2-image-toolbar button[data-action="layer-normal"]');
+  await sleep(400);
+  // Annuler : un Ctrl+Z défait la pose d'une seconde vidéo en entier.
+  await page.evaluate(() => { const ed = EditorCore.getEditor(); ed.chain().setTextSelection(1).focus().run(); });
+  await chooseBlock();
+  await sleep(400);
+  await page.keyboard.type('https://vimeo.com/76979871/abcdef0123');
+  await key('Enter', 700);
+  docs = await docVideos();
+  const twoVideos = docs.map(d => d.video);
+  await key('Control+z', 600);
+  const afterUndo = (await docVideos()).map(d => d.video);
+  await key('Control+y', 600);
+  const afterRedo = (await docVideos()).map(d => d.video);
+  check(tag + 'UN Ctrl+Z retire la seconde vidéo (Vimeo, avec sa clé), UN Ctrl+Y la remet', twoVideos.length === 2 && twoVideos.indexOf('vimeo:76979871/abcdef0123') >= 0 && afterUndo.length === 1 && afterUndo[0] === 'youtube:9bZkp7q19f0@42' && afterRedo.length === 2, { twoVideos, afterUndo, afterRedo });
+  await key('Control+z', 500);
+  // La Lecture : la vignette est là, un clic lit la vidéo à sa place, Entrée aussi ; sans GFS qui sache jouer le site, la vidéo s'ouvre sur son site.
+  await leave();
+  await click('#btn-mode-read');
+  await sleep(1500);
+  const readImg = () => page.evaluate(() => {
+    const root = document.getElementById('reader-container');
+    return Array.from(root.querySelectorAll('img[data-video]')).map(i => { const r = i.getBoundingClientRect(); return { video: i.getAttribute('data-video'), src: (i.getAttribute('src') || '').slice(0, 24), ready: i.hasAttribute('data-pp-video-ready'), role: i.getAttribute('role'), label: i.getAttribute('aria-label'), tab: i.getAttribute('tabindex'), x: r.left + r.width / 2, y: r.top + r.height / 2, left: r.left, top: r.top, width: r.width, height: r.height };
+    });
+  });
+  await page.evaluate(() => { document.querySelector('#reader-container img[data-video]').scrollIntoView({ block: 'center' }); });
+  await sleep(400);
+  const reads = await readImg();
+  check(tag + 'à la Lecture, la vidéo est une image avec sa vignette, un nom « ' + T.play + ' », focalisable ; rien n\'est demandé à YouTube', reads.length === 1 && reads[0].video === 'youtube:9bZkp7q19f0@42' && /^data:image\/svg\+xml/.test(reads[0].src) && reads[0].ready && reads[0].role === 'button' && reads[0].label === T.play && reads[0].tab === '0' && near(reads[0].height / reads[0].width, 9 / 16, 0.01) && !requests.some(u => /youtube|ytimg|googlevideo/i.test(u)), reads);
+  const readBefore = await countOf('afficher');
+  await reach(reads[0]);
+  await page.mouse.click(reads[0].x, reads[0].y);
+  got = await docPlayer();
+  const readSent = got.last && got.last.args && got.last.args.rect;
+  check(tag + 'un clic sur la vignette, à la Lecture, demande le lecteur de GFS à sa place (rectangle de la vignette, identifiant seul)', got.calls === readBefore + 1 && got.last.args.video === '9bZkp7q19f0' && got.last.args.debut === 42 && !!readSent && near(readSent.x, reads[0].left, 2) && near(readSent.largeur, reads[0].width, 2), { got, reads });
+  await key('Escape', 400);
+  await page.evaluate(() => document.querySelector('#reader-container img[data-video]').focus());
+  await key('Enter', 400);
+  got = await docPlayer();
+  check(tag + 'au clavier, Entrée sur la vignette focalisée lit la vidéo aussi', got.calls === readBefore + 2 && !!got.player, got);
+  await key('Escape', 400);
+  await page.evaluate(() => window.__gfsStub.setLecteurs([]));
+  await sleep(250);
+  const openedBefore = (await opened()).length;
+  await reach(reads[0]);
+  await page.mouse.click(reads[0].x, reads[0].y);
+  await sleep(350);
+  const urlsRead = await opened();
+  check(tag + 'GFS ne sait rien jouer : le clic sur la vignette ouvre la vidéo sur YouTube (au départ de 42 s), sans rien demander à GFS', urlsRead.length === openedBefore + 1 && urlsRead[urlsRead.length - 1] === 'https://www.youtube.com/watch?v=9bZkp7q19f0&t=42s' && (await countOf('afficher')) === readBefore + 2, { urlsRead });
+  await page.evaluate(() => window.__gfsStub.setLecteurs(['youtube', 'vimeo']));
+  await click('#btn-mode-edit');
+  await sleep(800);
+  }
   check(tag + 'aucune erreur de page pendant tout le parcours', errors.length === 0, errors);
   await page.close();
 }

@@ -2,8 +2,8 @@
 // Une diapositive en texte de document (js/slide-text.js, extensions/diapositives/slide-import.js en mode « texte », SlidesEntry.openTextImport et pastedInDocument ; demande du 22/10 :
 // « importer des slide dans des documents » ; cartes « En texte, dans les deux sens » et « Celle d'arrivée, avec une case »), à la vraie souris et au vrai clavier, 700x400, français clair
 // puis anglais sombre, hébergé par GFS comme pour de vrai : l'app dans le cadre isolé de GFS (sans `allow-same-origin`), l'extension « diapositives » active, un DOCUMENT « Devis » à l'écran.
-//  LE MENU : « Lien et blocs de contenu » a neuf lignes, la dernière « Diapositive d'une présentation… » (icône, texte lisible ≥ 4,5:1) ; à 700x400 elles tiennent toutes dans la fenêtre, sans
-//   défilement. Elle est grisée dans un e-mail et dans une présentation (le volet « Importer » de la bande y copie une diapositive entière).
+//  LE MENU : « Lien et blocs de contenu » a dix lignes, la dernière « Diapositive d'une présentation… » (icône, texte lisible ≥ 4,5:1) ; à 700x400 le menu défile : les neuf premières sont visibles, la
+//   dernière se montre à la molette. Elle est grisée dans un e-mail et dans une présentation (le volet « Importer » de la bande y copie une diapositive entière).
 //  LE VOLET : un clic sur la ligne l'ouvre à droite du document, comme celui d'« Importer » (la page se réduit, la pastille du zoom passe à sa gauche), le clavier reste dans le texte ; Tab puis
 //   Entrée l'ouvre avec le clavier dans le volet. Le menu de la ligne se referme dès que le volet s'ouvre (comme « Objets »), la souris encore dessus : le champ du volet est libre tout de suite, sans
 //   ligne du menu au-dessus de lui. La liste avec recherche propose TOUTES les présentations du document, par nom, et rien d'autre. Les miniatures gardent la page de la
@@ -56,7 +56,7 @@ const SEED = seedModels({ record: { id: 1, Nom: 'Alice', Statut: 'Urgent' } }) +
   stub.state.nextRowId.Publipostage_Modeles = 11;
 `;
 const READING = ['paragraph:Bonjour,', 'heading:Notre offre', 'paragraph:Un texte gras', 'bulletList:Rapide', 'paragraph:Dans la forme', 'paragraph:Cadre gauche', 'paragraph:Cadre droit', 'paragraph:Cadre bas', 'paragraph:Cordialement'];
-const ROWS = ['v2-row-link', 'v2-row-bookmark', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart', 'v2-btn-slide-text'];
+const ROWS = ['v2-row-link', 'v2-row-bookmark', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart', 'v2-btn-video', 'v2-btn-slide-text'];
 const NAME = 'Présentation commerciale';
 const TEXTS = {
   fr: {
@@ -118,6 +118,19 @@ function toolsOf(tab) {
   // Une ligne du menu, à la vraie souris : la main descend de l'icône sur la ligne, sans quitter le volet, et clique.
   const clickRow = async (id, settle = 700) => {
     const c = await openMenu();
+    // Le menu a dix lignes et défile à 700x400 : la molette, la souris posée sur le menu, amène la ligne voulue dans sa partie visible.
+    for (let i = 0; i < 6; i++) {
+      const hidden = await app.evaluate((rowId) => {
+        const f = document.getElementById('v2-blocks-flyout').getBoundingClientRect();
+        const r = document.getElementById(rowId).getBoundingClientRect();
+        return r.bottom > f.bottom - 1 || r.top < f.top;
+      }, id);
+      if (!hidden) break;
+      const spot = await inPage(await centerOf('#v2-row-link'));
+      await page.mouse.move(spot.x, spot.y + 40, { steps: 3 });
+      await page.mouse.wheel(0, 120);
+      await sleep(150);
+    }
     const r = await inPage(await centerOf('#' + id));
     const x = Math.min(Math.max(c.x, r.left + 8), r.right - 8);
     await page.mouse.move(x, r.y, { steps: 8 });
@@ -302,15 +315,16 @@ async function run(lang, colorScheme) {
   await a.clickText('Bonjour,');
   const original = (await state(app)).html;
 
-  // --- Le menu : neuf lignes, la dernière est la nouvelle.
+  // --- Le menu : dix lignes, la dernière est la nouvelle.
   await a.openMenu();
   let menu = await menuOf(app);
   const last = menu.rows[menu.rows.length - 1];
-  check(tag + 'le menu « Lien et blocs de contenu » a neuf lignes, la dernière « ' + T.row + ' » (après « Graphique de la page… »), avec son icône',
+  check(tag + 'le menu « Lien et blocs de contenu » a dix lignes, la dernière « ' + T.row + ' » (après « Graphique de la page… »), avec son icône',
     sameList(menu.rows.map(r => r.id), ROWS) && last.text === T.row && last.icon && !last.locked, { rows: menu.rows.map(r => r.id), last });
   await shot(A, lang + '-' + colorScheme + '-1-menu');
-  check(tag + 'à 700x400 les neuf lignes tiennent dans la fenêtre (le menu finit au-dessus du bas), sans défilement, chacune assez haute pour la souris (≥ 24 px)',
-    menu.flyout.bottom <= menu.innerHeight && menu.rows.every(r => r.top >= 0 && r.bottom <= menu.innerHeight && r.height >= 24) && menu.noScroll, { bottom: menu.flyout.bottom, heights: menu.rows.map(r => r.height), noScroll: menu.noScroll });
+  // Dix lignes ne tiennent plus dans 400 px : le menu finit au-dessus du bas de la fenêtre et défile (« Vidéo… » a pris une ligne) ; la dernière se montre à la molette.
+  check(tag + 'à 700x400 le menu finit au-dessus du bas de la fenêtre et défile (dix lignes) : les neuf premières sont visibles, chacune assez haute pour la souris (≥ 24 px)',
+    menu.flyout.bottom <= menu.innerHeight && menu.rows.slice(0, 9).every(r => r.top >= 0 && r.bottom <= menu.flyout.bottom + 1) && menu.rows.every(r => r.height >= 24) && !menu.noScroll, { bottom: menu.flyout.bottom, heights: menu.rows.map(r => r.height), noScroll: menu.noScroll });
   check(tag + 'le texte de la ligne se lit (contraste ≥ 4,5:1)', (await contrastOf(app, '#v2-btn-slide-text')) >= 4.5, await contrastOf(app, '#v2-btn-slide-text'));
   await a.leaveMenu();
 

@@ -289,3 +289,15 @@
 .pp-ff-guide { position: fixed; background: var(--pp-ff-guide); pointer-events: none; }
 .pp-ff-guide-x { width: 1px; }
 .pp-ff-guide-y { height: 1px; }
+
+/* La VIDÉO d'un DOCUMENT (`img[data-video]`, js/video-frame.js) : une image du modèle sans adresse ; sa vignette (un rectangle gris 16/9, un disque ▶ et le nom du site) est l'image que dessine
+   `VideoFrame.poster`. Dans l'éditeur, le disque est un vrai bouton posé sur celui du dessin (14,4 % de la largeur, à 47,2 % de la hauteur : la place du disque dans le dessin) ; le reste de l'image se
+   clique pour la sélectionner, la déplacer et la redimensionner comme toute image. À la Lecture et à l'impression, l'image entière se clique pour lire. */
+.tiptap .editor-image-view .editor-image-video-play { display: none; }
+.tiptap .editor-image-view.editor-image-video .editor-image-video-play {
+  display: block; position: absolute; z-index: 6; left: 50%; top: 47.2%; width: 14.4%; min-width: 22px; aspect-ratio: 1; transform: translate(-50%, -50%);
+  padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer;
+}
+.tiptap .editor-image-view.editor-image-video .editor-image-video-play:focus-visible { outline: 2px solid var(--accent, #2f6fed); outline-offset: 2px; }
+img[data-video][data-pp-video-ready] { cursor: pointer; }
+img[data-video][data-pp-video-ready]:focus-visible { outline: 2px solid var(--accent, #2f6fed); outline-offset: 2px; }

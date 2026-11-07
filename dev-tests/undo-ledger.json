@@ -135,6 +135,7 @@
     "#v2-row-bookmark": {"class": "window", "start": "paraEnd", "drive": [["type", "#pp-bookmark-name", "Ancre"], ["click", ".var-modal-primary"]]},
     "#v2-btn-callout": {"class": "window", "start": "para", "drive": [["click", ".var-modal-primary"]]},
     "#v2-btn-qr": {"class": "window", "start": "para", "drive": [["type", "#pp-qr-text", "https://exemple.fr"], ["click", ".var-modal-primary"]]},
+    "#v2-btn-video": {"class": "window", "start": "para", "drive": [["prompt", "https://youtu.be/dQw4w9WgXcQ"], ["wait", 400]]},
     "#v2-table-fill-btn": {"class": "window", "start": "table", "drive": [["clickText", ".v2-color-dropdown.visible .cp-swatch", "#B91C1C"]]},
     "#v2-table-borders-btn": {"class": "view", "start": "tableCells", "note": "ouvre le menu Bordures : chacun de ses réglages a son entrée (.v2-borders-dropdown)"},
     ".v2-varfmt-toolbar button[action=var-condition]": {"class": "window", "start": "variable", "drive": [["@condition"]]},

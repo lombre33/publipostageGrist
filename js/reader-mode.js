@@ -1076,6 +1076,20 @@ const ReaderMode = (function () {
     ExternalImages.onReveal(() => { if (geometryWatch && geometryWatch.schedule) geometryWatch.schedule(); });
     document.addEventListener('click', followInternalLink);
     document.addEventListener('click', followFrameLink);
+    document.addEventListener('click', followVideoImage);
+    document.addEventListener('keydown', followVideoImage);
+  }
+  // La vidéo d'un document (js/video-frame.js : une image `data-video` dont la Lecture a posé la vignette) se lit au clic, ou à Entrée et Espace quand elle a le focus : le lecteur de GFS à sa place, sinon la vidéo
+  // sur son site. Un clic dans un lien (<a>) du texte passe avant.
+  function followVideoImage(event) {
+    const container = document.getElementById('reader-container');
+    const target = event.target;
+    if (!container || !target || !target.closest || !container.contains(target)) return;
+    if (event.type === 'keydown' ? (event.key !== 'Enter' && event.key !== ' ') : event.button !== 0) return;
+    const img = target.closest('img[data-video][data-pp-video-ready]');
+    if (!img || img.closest('a[href]')) return;
+    event.preventDefault();
+    VideoFrame.activate(img);
   }
   // Un objet de diapositive à lien (js/frame-link.js : un bouton, une forme, une image) suit son lien au clic, comme au diaporama : un titre, un signet ou une diapositive du document amène sa cible en haut de la zone
   // qui défile, une adresse web, de courrier ou de téléphone s'ouvre (dans un nouvel onglet). Les actions du diaporama (suivante, précédente...) n'ont pas de sens ici. Un lien du texte de l'objet passe avant
@@ -1730,6 +1744,8 @@ const ReaderMode = (function () {
     await resolveCharts(wrapper, tableId || lastCurrentTableId, record);
     await resolveSmartChips(wrapper);
     await GristAPI.hydrateAttachmentImages(wrapper);
+    // Une vidéo de document (js/video-frame.js) devient un rectangle gris 16/9 qui porte son titre, cliquable : un tableau d'une case, que tous les formats savent écrire.
+    VideoFrame.forExport(wrapper);
     // Le style de chaque niveau de titre (js/heading-styles.js) : en ligne sur les <h1> à <h6>, que le PDF, le Word, le HTML et le PowerPoint lisent comme celui d'un texte.
     HeadingStyles.apply(wrapper);
     return wrapper.innerHTML;

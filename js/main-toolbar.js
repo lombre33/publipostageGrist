@@ -20,14 +20,14 @@ const MainToolbar = (function () {
   function setGridMode(active) { inGridMode = !!active; }
   const GRID_LOCKED_IDS = [
     'v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc',
-    'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-linked-table', 'v2-btn-slide-text',
+    'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-linked-table', 'v2-btn-slide-text', 'v2-btn-video',
     'v2-btn-track-changes', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-collab-group',
   ];
   const gridLockedIds = new Set();
   // Les cases d'un tableau lié à un modèle Grille suivent les règles d'une grille (js/linked-table.js) : le curseur dans l'un d'eux, ce qui poserait un tableau, des
   // colonnes, un sommaire, une citation, un bloc de code ou un encadré dans la case se grise, comme dans une grille. Pas le bloc de signature : il se pose SOUS le
   // tableau (Callout.insertSignature, au premier niveau du document), hors de la case, comme sous n'importe quel tableau.
-  const LINKED_LOCKED_IDS = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-slide-text'];
+  const LINKED_LOCKED_IDS = ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-slide-text', 'v2-btn-video'];
   const linkedLockedIds = new Set();
 
   // Liste simple des colonnes Attachments (message « aucune colonne » et repli de la liste avec recherche) : un choix insère une image liée à la
@@ -220,7 +220,7 @@ const MainToolbar = (function () {
     set('v2-btn-link', 'blocks');
     const setRowIcon = (id, icon) => { const slot = document.querySelector('#' + id + ' .v2-menu-row-icon'); if (slot) Dom.setMarkup(slot, Icons.svg(icon)); };
     setRowIcon('v2-row-link', 'link'); setRowIcon('v2-row-bookmark', 'bookmark'); setRowIcon('v2-btn-citation', 'blockquote'); setRowIcon('v2-btn-code-block', 'codeBlock');
-    setRowIcon('v2-btn-callout', 'callout'); setRowIcon('v2-btn-signature', 'signature'); setRowIcon('v2-btn-qr', 'qr'); setRowIcon('v2-btn-chart', 'chart'); setRowIcon('v2-btn-chart-make', 'chartMake');
+    setRowIcon('v2-btn-callout', 'callout'); setRowIcon('v2-btn-signature', 'signature'); setRowIcon('v2-btn-qr', 'qr'); setRowIcon('v2-btn-chart', 'chart'); setRowIcon('v2-btn-chart-make', 'chartMake'); setRowIcon('v2-btn-video', 'video');
     setRowIcon('v2-btn-linked-table', 'linkedTable'); setRowIcon('v2-btn-slide-text', 'slideImport');
     // « Aa » (js/character-format.js) : le menu des réglages de caractère, après Barré ; Exposant et Indice (js/script-marks.js) en tête de ce menu.
     set('v2-btn-char-main', 'character');
@@ -421,6 +421,8 @@ const MainToolbar = (function () {
       // la ligne reste active : l'image se pose sur sa case, résolue par ReaderMode.preview comme à la Lecture.
       [inEmailMode || inHfMode, ['v2-btn-callout', 'v2-btn-signature', 'v2-btn-chart', 'v2-btn-chart-make'], () => (inEmailMode ? plain() : zone())],
       [inEmailMode, ['v2-btn-qr'], plain],
+      // Une vidéo (js/video-frame.js) : un cadre dans une diapositive, un bloc dans un document - une vignette et un lien, sans objet dans un e-mail (texte brut) ni dans un en-tête ou un pied de page.
+      [inEmailMode || inHfMode, ['v2-btn-video'], () => (inEmailMode ? plain() : zone())],
       // Une diapositive en texte (js/slide-text.js) : des blocs de texte du document, sans objet dans un e-mail (texte brut), dans un en-tête ou un pied de page, ni dans une présentation (son volet
       // « Importer » copie une diapositive entière).
       [inEmailMode || inHfMode || SlidesEntry.presentationShown(), ['v2-btn-slide-text'], () => (inEmailMode ? plain() : inHfMode ? zone() : I18n.t('lock.slides'))],
@@ -792,6 +794,12 @@ const MainToolbar = (function () {
     bind('v2-btn-signature', () => Callout.insertSignature(editor));
     // QR code : une fenêtre (adresse ou texte, colonnes comprises) pour l'insérer ou, quand il est sélectionné, le modifier.
     bind('v2-btn-qr', () => QrCode.open());
+    // Vidéo : la fenêtre du lien, puis la pose (un cadre dans une diapositive, js/video-frame.js). Le menu se referme une fois la vidéo posée, comme « Objets ».
+    bind('v2-btn-video', async () => {
+      if (!(await VideoFrame.openDialog(editor))) return;
+      EditorCore.closeHoverMenu(byId('v2-btn-video').closest('.v2-hover-group'));
+      editor.commands.focus();
+    });
     // Graphique de la page : une fenêtre (quel graphique de Grist, quelles lignes) pour l'insérer ou, quand il est sélectionné, le changer ; sans l'extension, la ligne est grisée et le clic explique.
     bind('v2-btn-chart', () => ChartEntry.open());
     // Créer un graphique : la fenêtre (forme, table, colonnes, lignes) pour en poser un dans le modèle ou, quand il est sélectionné, le changer ; grisée sans l'extension comme la ligne qui précède.

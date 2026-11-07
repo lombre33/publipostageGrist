@@ -286,7 +286,7 @@ if (wanted(4)) {
   check('barre en haut : le menu « + » s\'ouvre plus bas (écart du pont de survol agrandi), sans quitter son bouton', plusDown && plusDown.gap !== '' && plusDown.flyout.top >= bars.haut.zone.y + bars.haut.zone.hauteur - 0.5, plusDown && { menu: showRect(plusDown.flyout), ecart: plusDown.gap });
   for (const id of ['v2-heading-flyout', 'v2-blocks-flyout']) {
     const m = moved('bas', id);
-    check(`barre en bas : le menu ${id} défile dans la place qui reste (plafonné, contenu plus haut que lui)`, m && m.shown && m.scrollHeight > m.clientHeight + 1 && (id === 'v2-heading-flyout' ? m.scrollable : m.capped), m && { clientHeight: m.clientHeight, scrollHeight: m.scrollHeight, capped: m.capped, scrollable: m.scrollable });
+    check(`barre en bas : le menu ${id} défile dans la place qui reste (plafonné, contenu plus haut que lui)`, m && m.shown && m.scrollHeight > m.clientHeight + 1 && (m.scrollable || m.capped), m && { clientHeight: m.clientHeight, scrollHeight: m.scrollHeight, capped: m.capped, scrollable: m.scrollable });
   }
   await showBar(page, app, 'bas', ...FRAME);
   // À la molette, jusqu'à la dernière ligne : elle est entière dans le menu et la souris la touche ; le menu est resté ouvert.

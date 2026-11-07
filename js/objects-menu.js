@@ -16,16 +16,13 @@
 const ObjectsMenu = (function () {
   // Les lignes du menu, dans l'ordre : l'icône (js/icons.js), le nom et l'info-bulle (js/i18n.js), et ce qu'elles font de l'éditeur et du début de la diapositive du curseur.
   const ROWS = [
-    { id: 'textFrame', pair: 1, icon: 'textFrame', label: 'slides.objects.textFrame', tip: 'slides.objects.textFrameTip', place: (ed, slideStart) => FreeFrame.insert(ed, slideStart) },
+    { id: 'textFrame', pair: true, icon: 'textFrame', label: 'slides.objects.textFrame', tip: 'slides.objects.textFrameTip', place: (ed, slideStart) => FreeFrame.insert(ed, slideStart) },
     // « Tableau » (demande du 02/11, « pareil que sur un document ») : un tableau local de deux lignes et deux colonnes dans un cadre, ou « Tableau d'un modèle Grille… », la copie liée d'un modèle
     // Grille (js/linked-table.js : sa liste avec recherche, puis le tableau posé dans un cadre). Le curseur y va, la barre du tableau s'ouvre, avec le lien pour un tableau lié.
-    { id: 'table', pair: 1, icon: 'table', label: 'slides.objects.table', tip: 'slides.objects.tableTip', place: (ed, slideStart) => FreeFrame.insertTable(ed, slideStart) },
+    { id: 'table', pair: true, icon: 'table', label: 'slides.objects.table', tip: 'slides.objects.tableTip', place: (ed, slideStart) => FreeFrame.insertTable(ed, slideStart) },
     // « Vue… » (demande du 02/11, « Lien, puis aperçu animé d'affilée », troisième niveau) : la liste avec recherche des diapositives, puis un cadre qui montre la choisie en direct et y mène au clic (js/slide-view.js).
-    { id: 'slideView', pair: 1, icon: 'slideView', label: 'slides.objects.slideView', tip: 'slides.objects.slideViewTip', picker: true },
-    { id: 'linkedTable', pair: 2, icon: 'linkedTable', label: 'slides.objects.linkedTable', tip: 'slides.objects.linkedTableTip', picker: true },
-    // « Vidéo… » (demande du 06/11, point 7 des retours du 06/11) : une fenêtre où l'on colle le lien d'une vidéo YouTube ou Vimeo, puis un cadre 16/9 qui la porte (js/video-frame.js). À droite de « Tableau d'un
-    // modèle Grille… » : la ligne du haut garde ses trois boutons (un quatrième couperait leurs noms) et une ligne de plus ferait sortir le menu sous le bas d'un panneau de 400 px.
-    { id: 'video', pair: 2, icon: 'video', label: 'slides.objects.video', tip: 'slides.objects.videoTip', dialog: true },
+    { id: 'slideView', pair: true, icon: 'slideView', label: 'slides.objects.slideView', tip: 'slides.objects.slideViewTip', picker: true },
+    { id: 'linkedTable', icon: 'linkedTable', label: 'slides.objects.linkedTable', tip: 'slides.objects.linkedTableTip', picker: true },
   ];
   // Les formes, en grille sous les onglets : le nom est `shape.<sorte>` ; l'icône des seize d'avant est dessinée à la main (`shape<Sorte>`, js/icons.js), celle des autres vient de leur dessin
   // (ShapeGeometry.presetIcon) ; une forme se pose sélectionnée (sa barre propose le fond et le trait).
@@ -50,11 +47,10 @@ const ObjectsMenu = (function () {
   // Les parties du menu dans l'ordre des boutons qu'on voit : la ligne « Cadre de texte », les onglets, la grille de l'onglet choisi, la rangée des lignes (le clavier y passe de l'une à l'autre à la
   // même place en largeur : la colonne, ramenée au nombre de colonnes de la partie d'arrivée).
   const shownShapes = () => (TABS.find(tab => tab.id === currentTab) || TABS[0]).shapes.length;
-  const PAIRED = ROWS.filter(row => row.pair === 1).length;   // « Cadre de texte », « Tableau » et « Vue… » : trois colonnes
-  const PAIRED_2 = ROWS.filter(row => row.pair === 2).length; // « Tableau d'un modèle Grille… » et « Vidéo… » : deux colonnes
+  const PAIRED = ROWS.filter(row => row.pair).length;   // « Cadre de texte » et « Tableau » : deux colonnes ; les autres lignes, une
   const sections = () => [
     { from: 0, count: PAIRED, columns: PAIRED },
-    { from: PAIRED, count: PAIRED_2, columns: PAIRED_2 },
+    { from: PAIRED, count: ROWS.length - PAIRED, columns: 1 },
     { from: ROWS.length, count: TABS.length, columns: TABS.length },
     { from: ROWS.length + TABS.length, count: shownShapes(), columns: GRID_COLUMNS },
     { from: ROWS.length + TABS.length + shownShapes(), count: LINES.length, columns: GRID_COLUMNS },
@@ -113,7 +109,7 @@ const ObjectsMenu = (function () {
     if (!trigger || !flyout) return;
     const frag = document.createDocumentFragment();
     // « Cadre de texte » et « Tableau » côte à côte, « Tableau d'un modèle Grille… » dessous : à 700 x 400 trois lignes pleines et leur titre feraient sortir le menu sous le bas du panneau.
-    const pairs = {};
+    const pair = Dom.el('span', 'v2-objects-pair');
     ROWS.forEach((row) => {
       const button = Dom.button('v2-menu-row');
       button.setAttribute('role', 'menuitem');
@@ -122,8 +118,8 @@ const ObjectsMenu = (function () {
       Dom.setMarkup(icon, Icons.svg(row.icon));
       hideIcon(icon);
       button.append(icon, Dom.el('span', null, I18n.t(row.label)));
-      if (row.pair && !pairs[row.pair]) { pairs[row.pair] = Dom.el('span', 'v2-objects-pair'); frag.append(pairs[row.pair]); }
-      (row.pair ? pairs[row.pair] : frag).append(button);
+      if (row.pair && !pair.parentNode) frag.append(pair);
+      (row.pair ? pair : frag).append(button);
     });
     const gridOf = (list) => {
       const grid = Dom.el('span', 'v2-objects-grid');
@@ -263,11 +259,9 @@ const ObjectsMenu = (function () {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       list[verticalMove(at, event.key === 'ArrowDown' ? 1 : -1)].focus();
-    } else if ((event.key === 'ArrowRight' || event.key === 'ArrowLeft') && at >= 0 && at < PAIRED + PAIRED_2) {
+    } else if ((event.key === 'ArrowRight' || event.key === 'ArrowLeft') && at >= 0 && at < PAIRED) {
       event.preventDefault();
-      const from = at < PAIRED ? 0 : PAIRED;
-      const count = at < PAIRED ? PAIRED : PAIRED_2;
-      list[from + (at - from + (event.key === 'ArrowRight' ? 1 : -1) + count) % count].focus();   // chaque ligne de boutons côte à côte se parcourt d'un trait, ← → bouclent
+      list[(at + (event.key === 'ArrowRight' ? 1 : -1) + PAIRED) % PAIRED].focus();   // la paire « Cadre de texte » · « Tableau » se parcourt d'un trait, ← → bouclent
     } else if ((event.key === 'ArrowRight' || event.key === 'ArrowLeft') && at >= first) {
       event.preventDefault();
       const step = event.key === 'ArrowRight' ? 1 : -1;
@@ -297,7 +291,6 @@ const ObjectsMenu = (function () {
     Editor.exitHeaderFooterModeIfActive();
     const ed = EditorCore.getEditor();
     if (!ed) return;
-    if (spec.dialog) { VideoFrame.openDialog(ed); return; }
     if (spec.picker) { (spec.id === 'slideView' ? SlideView : LinkedTable).openPicker(ed, flyout.querySelector('[data-action="' + spec.id + '"]'), true); return; }
     spec.place(ed, FreeFrame.slideStartOf(ed.state.doc, ed.state.selection.from));
     // La barre du cadre posé se montre une fois la transaction passée (js/editor-core.js ferme les barres flottantes au geste qui vient d'avoir lieu).

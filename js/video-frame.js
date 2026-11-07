@@ -7,6 +7,10 @@
 //    son `src`). Tout le reste - un autre site, un `javascript:`, une adresse avec identifiants, une liste de lecture - n'est pas une vidéo : rien ne se pose.
 //  - LE CALQUE (`.pp-ff-video`) : une vignette posée sur le cadre dans l'éditeur, la Lecture, l'impression et le diaporama (`fill`, appelée avec les vues de diapositive) : un disque ▶ et le nom du site. Rien ne
 //    se charge chez le fournisseur avant le clic : ni image, ni lecteur, ni cookie. La vignette n'est jamais enregistrée.
+//  - DANS UN DOCUMENT (demande du 07/11 : « les vidéos doivent aussi être dispo dans les documents », « comme une image on peut la bouger dans et sur le texte ») : la vidéo est une IMAGE du document
+//    (js/editor-nodes.js : `video`, `data-video`, la même valeur que ci-dessus, jamais de `src` dans le modèle). Elle se déplace, s'habille, se redimensionne, passe devant ou derrière le texte comme toute image ;
+//    l'éditeur, la Lecture et l'impression lui donnent une vignette (`poster` : un rectangle gris, ▶ et le nom du site, une image dessinée ici, rien chargé chez le fournisseur) et le même lecteur de GFS.
+//    Le PDF, le Word, le HTML et le Markdown la reçoivent de `forExport` (js/reader-mode.js:preview) : un rectangle gris 16/9 qui porte le titre, cliquable (carte du 07/11, « un rectangle gris avec le titre »).
 //  - LA LECTURE : le cadre de l'app est isolé par GFS (pas d'`allow-same-origin`, consigne 011) et un lecteur posé DEDANS n'a pas d'identité : YouTube y échoue (étude du 06/11, `video-slides-2026-11-06`). C'est
 //    donc GFS qui pose le lecteur, par-dessus le cadre de l'app, à la place du calque : l'app lui dit QUOI (`fournisseur`, `video` : l'identifiant) et OÙ (le rectangle du calque et la zone où il se voit), et le
 //    suit (js/gfs-link.js : `lecteur.afficher`, `deplacer`, `masquer`, `fermer`). Elle ne lui donne jamais une adresse. Le lecteur s'efface quand quelque chose passe par-dessus (un menu, une fenêtre), se ferme
@@ -17,6 +21,9 @@ const VideoFrame = (function () {
   const HOST = 'pp-ff-video';
   const PLAY = 'pp-ff-video-play';
   const FRAME = '.pp-free-frame';
+  const IMAGE = 'img[data-video]';              // la vidéo d'un document : une image du modèle
+  const IMAGE_ATTR = 'data-video';
+  const DOC_WIDTH_PX = 480;     // la largeur d'une vidéo qu'on vient de poser dans un document (une image se pose à 320, un QR code à 120)
   const MAX_START = 359999;     // 99 h 59 min 59 s
   const MIN_SIDE = 8;           // en dessous, le calque n'est pas un lecteur possible
   const OUT_MS = 2000;          // hors de vue (une autre diapositive, un autre bout de la page) plus longtemps : la lecture s'arrête
@@ -118,9 +125,44 @@ const VideoFrame = (function () {
     node.append(button, el('span', HOST + '-name', nameOf(video.provider)));
     return node;
   }
-  // Pose le calque de chaque cadre vidéo de `wrapper` (le texte résolu de la Lecture, de l'impression et du diaporama) qui n'en a pas ; rend le nombre posé.
+  // ---- La vignette d'une vidéo de document ------------------------------------------------------------------------------------------------------------------------------------------
+  // Un rectangle gris 16/9, un disque ▶ et le nom du site : une image SVG dessinée ici, jamais enregistrée dans le modèle, qui ne demande rien au fournisseur. Les mêmes couleurs que la vignette d'un cadre
+  // (css/free-frame.css) : la feuille est blanche quel que soit le thème de l'écran.
+  const posters = new Map();
+  function poster(raw) {
+    const video = decode(raw);
+    if (!video) return '';
+    const key = video.provider;
+    if (!posters.has(key)) {
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360">'
+        + '<rect width="640" height="360" fill="#f1f3f6"/><rect x="0.75" y="0.75" width="638.5" height="358.5" fill="none" stroke="#bfbfbf" stroke-width="1.5"/>'
+        + '<circle cx="320" cy="170" r="46" fill="#1f2328" fill-opacity="0.85"/><path d="M306 146v48l40-24z" fill="#ffffff"/>'
+        + '<text x="320" y="268" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" fill="#4a4f57">' + nameOf(video.provider) + '</text></svg>';
+      posters.set(key, 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
+    }
+    return posters.get(key);
+  }
+  // La vidéo d'une image de `root` (l'<img> elle-même ou son habillage dans l'éditeur) : { img, value } ou null.
+  function imageOf(root) {
+    const img = root && root.matches && root.matches(IMAGE) ? root : (root && root.querySelector ? root.querySelector(IMAGE) : null);
+    const value = img ? valueOf(img.getAttribute(IMAGE_ATTR)) : '';
+    return value ? { img, value } : null;
+  }
+
+  // Pose le calque de chaque cadre vidéo de `wrapper` (le texte résolu de la Lecture, de l'impression et du diaporama) qui n'en a pas, et la vignette de chaque vidéo de document ; rend le nombre posé.
   function fill(wrapper) {
     let placed = 0;
+    wrapper.querySelectorAll(IMAGE).forEach((img) => {
+      const value = valueOf(img.getAttribute(IMAGE_ATTR));
+      if (!value || img.hasAttribute('data-pp-video-ready')) return;
+      const video = decode(value);
+      img.setAttribute('src', poster(value));
+      img.setAttribute('data-pp-video-ready', '');
+      img.setAttribute('role', 'button');
+      img.setAttribute('tabindex', '0');
+      img.setAttribute('aria-label', I18n.t('video.play', { provider: nameOf(video.provider) }));
+      placed += 1;
+    });
     wrapper.querySelectorAll(FRAME + '[' + ATTR + ']').forEach((frame) => {
       const value = valueOf(frame.getAttribute(ATTR));
       const box = frame.querySelector(':scope > .pp-free-frame-box');
@@ -131,7 +173,74 @@ const VideoFrame = (function () {
     return placed;
   }
 
-  // ---- Poser une vidéo : « Vidéo… » du menu « Objets » -------------------------------------------------------------------------------------------------------------------------------
+  // ---- Les exports ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // Le PDF, le Word, le HTML et le Markdown partent du texte résolu de `ReaderMode.preview` : chaque vidéo de document y devient ce qui s'y exporte déjà partout, un tableau d'une case - un rectangle gris
+  // 16/9 de la largeur de la vidéo, le titre de la vidéo (son texte alternatif, sinon « Vidéo YouTube ») centré et cliquable vers la vidéo sur son site - et non une image : un lien de texte survit à
+  // tous les formats, pas celui d'une image. Rien n'est appelé chez le fournisseur (carte du 07/11, « un rectangle gris avec le titre »). Le paragraphe qui portait la vidéo est coupé autour du tableau.
+  const FILL = '#f1f3f6';
+  const TEXT_BLOCK = /^(P|H[1-6])$/;
+  const hasContent = node => node.textContent.trim() !== '' || !!node.querySelector(':scope > :not(br)');
+  function exportBox(video, width, title) {
+    const height = Math.round(width * 9 / 16);
+    const table = el('table');
+    table.setAttribute('style', 'width: ' + width + 'px;');
+    table.setAttribute('data-pp-video', video.provider);
+    const col = el('col');
+    col.setAttribute('style', 'width: ' + width + 'px; min-width: 25px;');
+    table.append(el('colgroup'), el('tbody'));
+    table.firstChild.append(col);
+    const row = el('tr');
+    row.setAttribute('data-row-height', String(height));
+    const cell = el('td');
+    cell.setAttribute('colspan', '1');
+    cell.setAttribute('rowspan', '1');
+    cell.setAttribute('colwidth', String(width));
+    cell.setAttribute('data-valign', 'middle');
+    cell.setAttribute('style', 'background-color: ' + FILL + '; vertical-align: middle;');
+    const line = el('p');
+    line.setAttribute('style', 'text-align: center;');
+    const link = el('a', '', title);
+    link.setAttribute('href', watchUrl(encode(video)));
+    link.setAttribute('rel', 'noopener noreferrer');
+    link.setAttribute('target', '_blank');
+    line.append(link);
+    cell.append(line);
+    row.append(cell);
+    table.lastChild.append(row);
+    return table;
+  }
+  // Le tableau à la place de l'image : le paragraphe ou le titre qui la porte est coupé autour (un tableau n'entre pas dans un paragraphe) ; une image dans un lien ou un style en ligne passe après son bloc.
+  function placeBlock(img, table) {
+    const block = img.closest('p, h1, h2, h3, h4, h5, h6');
+    if (!block) { img.replaceWith(table); return; }
+    if (img.parentNode === block && TEXT_BLOCK.test(block.nodeName)) {
+      const after = block.cloneNode(false);
+      while (img.nextSibling) after.appendChild(img.nextSibling);
+      img.remove();
+      block.after(table);
+      table.after(after);
+      if (!hasContent(block)) block.remove();
+      if (!hasContent(after)) after.remove();
+      return;
+    }
+    img.remove();
+    block.after(table);
+  }
+  // Remplace chaque vidéo de document de `wrapper` ; rend le nombre remplacé. Une vidéo dont le réglage n'est pas lisible n'a rien à montrer : elle est retirée, comme une image sans adresse.
+  function forExport(wrapper) {
+    let replaced = 0;
+    Array.from(wrapper.querySelectorAll(IMAGE)).forEach((img) => {
+      const video = decode(img.getAttribute(IMAGE_ATTR));
+      if (!video) { img.remove(); return; }
+      const width = Math.max(60, Math.round(parseFloat(img.style.width) || DOC_WIDTH_PX));
+      const title = (img.getAttribute('alt') || '').trim() || I18n.t('video.title', { provider: nameOf(video.provider) });
+      placeBlock(img, exportBox(video, width, title));
+      replaced += 1;
+    });
+    return replaced;
+  }
+
+  // ---- Poser une vidéo : « Vidéo… » du menu « Lien et blocs de contenu » -------------------------------------------------------------------------------------------------------------------------------
   // La fenêtre où l'on colle l'adresse (ou le code « Intégrer »), puis le cadre posé sur la diapositive du curseur. Une adresse qui n'est pas une vidéo YouTube ou Vimeo est dite, et la fenêtre revient avec ce
   // qu'on avait collé ; Annuler et Échap ne posent rien. Rend (une promesse de) vrai quand le cadre est posé.
   async function openDialog(ed, value) {
@@ -147,9 +256,20 @@ const VideoFrame = (function () {
       return openDialog(ed, text);
     }
     const title = I18n.t('video.title', { provider: nameOf(found.provider) });
-    const placed = FreeFrame.insertVideo(ed, FreeFrame.slideStartOf(ed.state.doc, ed.state.selection.from), { video: encode(found), title, alt: title });
-    if (placed) setTimeout(FreeFrame.syncToolbar, 0);
-    return placed;
+    // Dans une présentation, un cadre libre sur la diapositive du curseur ; dans un document, une image au curseur.
+    if (SlidesEntry.presentationShown()) {
+      const placed = FreeFrame.insertVideo(ed, FreeFrame.slideStartOf(ed.state.doc, ed.state.selection.from), { video: encode(found), title, alt: title });
+      if (placed) setTimeout(FreeFrame.syncToolbar, 0);
+      return placed;
+    }
+    return insertImage(ed, encode(found), title);
+  }
+  // La vidéo `value` posée comme une image du document, à la suite du curseur (jamais à la place de ce qui est sélectionné : texte ou image) ; elle se déplace, s'habille et se redimensionne comme toute image.
+  function insertImage(ed, value, title) {
+    if (!ed || !ed.isEditable || !valueOf(value)) return false;
+    const chain = ed.chain().focus();
+    if (!ed.state.selection.empty) chain.setTextSelection(ed.state.selection.to);
+    return chain.insertImage({ video: valueOf(value), alt: title || '', width: DOC_WIDTH_PX + 'px', wrap: 'block', align: 'center' }).run();
   }
 
   // ---- Jouer ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -248,29 +368,42 @@ const VideoFrame = (function () {
     });
   }
 
-  // Joue la vidéo du cadre `frame` (l'élément `.pp-free-frame` : celui de l'éditeur, de la Lecture ou du diaporama) à sa place, par le lecteur de GFS. Faux - et rien n'a changé - quand GFS ne sait pas jouer ce site,
-  // que le cadre n'a pas de calque ou de vidéo, qu'il est pivoté (le lecteur de GFS ne tourne pas) ou qu'il n'a pas de taille.
-  function play(frame) {
-    const node = frame && frame.querySelector ? frame.querySelector(':scope > .pp-free-frame-box > .' + HOST) : null;
-    const video = frame && frame.getAttribute ? decode(frame.getAttribute(ATTR)) : null;
-    if (!node || !video || !canPlay(video.provider) || frame.getAttribute('data-ff-rot')) return false;
+  // Ce que `target` désigne : un cadre libre (`.pp-free-frame` : celui de l'éditeur, de la Lecture ou du diaporama) ou une vidéo de document (l'<img data-video>, ou son habillage dans l'éditeur).
+  // { node (ce qu'on mesure et suit), frame (ce qui est « la vidéo » quand on cherche ce qui la recouvre), video, address (son lien) } ; null quand ce n'est ni l'un ni l'autre.
+  function targetOf(target) {
+    if (!target || !target.matches) return null;
+    if (target.matches(FRAME)) {
+      const node = target.querySelector(':scope > .pp-free-frame-box > .' + HOST);
+      const video = decode(target.getAttribute(ATTR));
+      return node && video ? { node, frame: target, video, rotated: !!target.getAttribute('data-ff-rot') } : null;
+    }
+    const found = imageOf(target);
+    const video = found ? decode(found.value) : null;
+    return video ? { node: found.img, frame: target.matches('img') ? target : (target.closest('.editor-image-view') || target), video } : null;
+  }
+  // Joue la vidéo de `target` (un cadre libre ou une vidéo de document) à sa place, par le lecteur de GFS. Faux - et rien n'a changé - quand GFS ne sait pas jouer ce site, que la cible n'a pas de vidéo ou de
+  // calque, qu'elle est pivotée (le lecteur de GFS ne tourne pas) ou qu'elle n'a pas de taille.
+  function play(target) {
+    const found = targetOf(target);
+    if (!found || found.rotated || !canPlay(found.video.provider)) return false;
+    const { node, frame, video } = found;
     const where = measure(node);
     if (!where) return false;
     stop();
     counter += 1;
-    const found = { id: 'v' + counter, node, frame, video, sent: JSON.stringify([where.rect, where.zone]), hidden: false, outSince: null, coverSince: null, raf: 0 };
-    current = found;
-    GfsLink.player('afficher', Object.assign({ id: found.id, fournisseur: video.provider, video: video.id }, video.start ? { debut: video.start } : {}, { rect: where.rect, zone: where.zone }));
+    const running = { id: 'v' + counter, node, frame, video, sent: JSON.stringify([where.rect, where.zone]), hidden: false, outSince: null, coverSince: null, raf: 0 };
+    current = running;
+    GfsLink.player('afficher', Object.assign({ id: running.id, fournisseur: video.provider, video: video.id }, video.start ? { debut: video.start } : {}, { rect: where.rect, zone: where.zone }));
     document.addEventListener('mousedown', onAway, true);
     document.addEventListener('keydown', onKey, true);
-    follow(found);
+    follow(running);
     return true;
   }
   // Un clic sur la vidéo : le lecteur de GFS s'il sait la jouer, sinon la vidéo sur son site, dans un nouvel onglet.
-  function activate(frame) {
-    if (play(frame)) return true;
-    const address = frame && frame.getAttribute ? watchUrl(frame.getAttribute(ATTR)) : '';
-    return address ? FrameLink.openUrl(address) : false;
+  function activate(target) {
+    if (play(target)) return true;
+    const found = targetOf(target);
+    return found ? FrameLink.openUrl(watchUrl(encode(found.video))) : false;
   }
   // GFS dit où en est son lecteur (`lecteur { id, etat }`) : à la fin il se ferme ; s'il n'a pas pu démarrer (la vidéo refuse d'être intégrée, un site injoignable), la personne qui a cliqué voit la vidéo sur son site.
   function onPlayerState(event) {
@@ -283,5 +416,5 @@ const VideoFrame = (function () {
 
   const playing = () => (current ? { id: current.id, provider: current.video.provider, video: current.video.id } : null);
 
-  return { ATTR, HOST, PLAY, PROVIDERS, decode, encode, valueOf, nameOf, watchUrl, parseLink, host, fill, openDialog, canPlay, play, activate, stop, playing };
+  return { ATTR, IMAGE_ATTR, HOST, PLAY, PROVIDERS, decode, encode, valueOf, nameOf, watchUrl, parseLink, host, poster, imageOf, fill, forExport, openDialog, insertImage, canPlay, play, activate, stop, playing };
 })();

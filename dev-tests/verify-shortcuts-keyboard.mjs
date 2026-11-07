@@ -27,8 +27,8 @@ const WIDTH = 700;
 const HEIGHT = 400;
 // Le nombre d'actions de js/shortcuts.js, une ligne chacune dans la liste. Une action ajoutée ou retirée le change : le dire ici et, pour une action
 // ajoutée, la nommer dans ADDED_ACTIONS (remapPart) pour qu'elle soit lue une à une et pas seulement comptée. 54 jusqu'au 09/10, 57 depuis « Graphique
-// de la page… » (chartBlock), l'exposant et l'indice, ajoutés ce jour-là sans que ce compte suive ; 58 depuis « Créer un graphique… » (chartMake).
-const ACTION_COUNT = 58;
+// de la page… » (chartBlock), l'exposant et l'indice, ajoutés ce jour-là sans que ce compte suive ; 58 depuis « Créer un graphique… » (chartMake), 59 depuis « Texte alternatif » (altText, ajoutée sans que ce compte suive), 60 depuis « Vidéo… » (videoBlock).
+const ACTION_COUNT = 60;
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
 
 // Même régénération du harnais et même miroir hors-ligne que dev-tests/verify-text-expansion-keyboard.mjs.
@@ -380,6 +380,7 @@ async function remapPart(T, fr) {
   const ADDED_ACTIONS = [
     { id: 'chartBlock', group: 'insert', name: fr ? 'Graphique de la page…' : 'Chart from the page…', key: L.none },
     { id: 'chartMake', group: 'insert', name: fr ? 'Créer un graphique…' : 'Create a chart…', key: L.none },
+    { id: 'videoBlock', group: 'insert', name: fr ? 'Vidéo…' : 'Video…', key: L.none },
     { id: 'superscript', group: 'format', name: fr ? 'Exposant' : 'Superscript', key: 'Ctrl+.' },
     { id: 'subscript', group: 'format', name: fr ? 'Indice' : 'Subscript', key: 'Ctrl+,' },
   ];

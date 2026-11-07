@@ -84,9 +84,9 @@ async function part(lang, colorScheme) {
     id: b.dataset.action, text: b.textContent.trim(), tip: b.getAttribute('data-tip') || '', off: b.getAttribute('aria-disabled') === 'true' || b.disabled,
     rect: (() => { const r = b.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width }; })(),
   })), OBJECTS_MENU);
-  const labels = lang === 'fr' ? ['Cadre de texte', 'Tableau', 'Vue…', 'Tableau d’un modèle Grille…', 'Vidéo…'] : ['Text frame', 'Table', 'Slide view…', 'Table from a Grid template…', 'Video…'];
-  check(tag + 'le menu a cinq lignes dans l\'ordre : le cadre de texte, le tableau, la vue d\'une diapositive, le tableau d\'un modèle Grille, la vidéo', JSON.stringify(names.map(n => n.text)) === JSON.stringify(labels), names.map(n => n.text));
-  check(tag + 'les cinq lignes sont dans le panneau et aucune n\'est grisée', names.length === 5 && names.every(n => inPanel(n.rect) && !n.off), names);
+  const labels = lang === 'fr' ? ['Cadre de texte', 'Tableau', 'Vue…', 'Tableau d’un modèle Grille…'] : ['Text frame', 'Table', 'Slide view…', 'Table from a Grid template…'];
+  check(tag + 'le menu a quatre lignes dans l\'ordre : le cadre de texte, le tableau, la vue d\'une diapositive, le tableau d\'un modèle Grille', JSON.stringify(names.map(n => n.text)) === JSON.stringify(labels), names.map(n => n.text));
+  check(tag + 'les quatre lignes sont dans le panneau et aucune n\'est grisée', names.length === 4 && names.every(n => inPanel(n.rect) && !n.off), names);
   check(tag + 'l\'info-bulle de « Tableau » et celle de « Tableau d\'un modèle Grille… » disent où le tableau se pose : la diapositive 2', /\b2\b/.test(names[1].tip) && /\b2\b/.test(names[3].tip), names.map(n => n.tip));
   await page.mouse.move(WIDTH / 2, HEIGHT - 20, { steps: 4 });
   await sleep(300);

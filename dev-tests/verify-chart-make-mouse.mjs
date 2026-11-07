@@ -3,7 +3,7 @@
 // souris (page.mouse) et au VRAI clavier (frappe, flèches, Tab, Entrée, Échap, Ctrl+Z), hébergé par GFS (simulé par dev-tests/gfs-stub.js), les extensions « graphique » et « diapositives » actives, en français
 // clair puis en anglais sombre. Ce que dev-tests/scenarios-chart-make.js ne peut pas voir depuis la page :
 //  - le survol de l'Image ouvre son menu : la ligne « Créer un graphique… » y est, entière dans le panneau et au premier plan, sous « Image depuis une variable… » ; le menu « Lien et blocs de contenu »
-//    garde ses neuf lignes, la dernière entière dans le panneau (une dixième n'y tiendrait pas : c'est pourquoi la ligne est dans le menu de l'Image) ;
+//    garde les siennes (neuf, plus « Vidéo… » depuis la demande du 07/11 : la dixième défile, le volet est réglé comme celui des titres) ; la ligne « Créer un graphique… » reste dans le menu de l'Image ;
 //  - un clic sur la ligne ouvre la fenêtre : elle tient dans 700x400 sans défiler, les dix formes tiennent sur deux rangées, le focus est dans le champ de la table, « Insérer » est grisé ;
 //    tous les textes (titre, libellés, formes choisie et non choisie, notes, ligne grisée, « Annuler ») ont un contraste d'au moins 4,5:1 ;
 //  - une forme se choisit au clic (celle d'avant se décoche, « Empilées » et « Horizontales » ne restent que pour les barres) et aux flèches du clavier ;
@@ -157,7 +157,7 @@ async function runPass(lang, scheme) {
   await sleep(150);
   const before = await page.evaluate(() => Editor.getHTML());
 
-  // 1) Le menu de l'Image : la ligne est dedans, entière dans le panneau et au premier plan ; le menu des blocs garde ses neuf lignes.
+  // 1) Le menu de l'Image : la ligne est dedans, entière dans le panneau et au premier plan ; le menu des blocs garde ses lignes.
   await hoverRow(page, '#v2-btn-image', '#v2-btn-chart-make');
   const menu = await page.evaluate(() => {
     const row = document.getElementById('v2-btn-chart-make');
@@ -175,14 +175,15 @@ async function runPass(lang, scheme) {
   await snap(page, `${T}-1-menu-image`);
   await page.mouse.move(WIDTH - 30, HEIGHT - 30, { steps: 3 });
   await sleep(300);
-  await hoverRow(page, '#v2-btn-link', '#v2-btn-slide-text');
+  await hoverRow(page, '#v2-btn-link', '#v2-btn-video');
   const blocks = await page.evaluate(() => {
     const rows = Array.from(document.querySelectorAll('#v2-blocks-flyout .v2-menu-row'));
-    const last = rows[rows.length - 1].getBoundingClientRect();
-    return { ids: rows.map(r => r.id), lastBottom: last.bottom, chart: (document.getElementById('v2-btn-chart') || {}).textContent.trim() };
+    const last = document.getElementById('v2-btn-video').getBoundingClientRect();
+    const flyout = document.getElementById('v2-blocks-flyout');
+    return { ids: rows.map(r => r.id), lastBottom: last.bottom, flyoutBottom: flyout.getBoundingClientRect().bottom, scrolls: flyout.scrollHeight > flyout.clientHeight, chart: (document.getElementById('v2-btn-chart') || {}).textContent.trim() };
   });
-  check(`${T}, menu des blocs : il garde ses neuf lignes (celle du graphique de la page comprise), la dernière entière dans le panneau`,
-    blocks.ids.length === 9 && !blocks.ids.includes('v2-btn-chart-make') && blocks.chart === X.pageRow && blocks.lastBottom <= HEIGHT + 0.5 && blocks.ids[8] === 'v2-btn-slide-text', blocks);
+  check(`${T}, menu des blocs : il garde ses lignes (celle du graphique de la page comprise) plus « Vidéo… », entière dans le panneau, le volet défilant pour la dernière`,
+    blocks.ids.length === 10 && !blocks.ids.includes('v2-btn-chart-make') && blocks.chart === X.pageRow && blocks.lastBottom <= HEIGHT + 0.5 && blocks.flyoutBottom <= HEIGHT + 0.5 && blocks.scrolls && blocks.ids[8] === 'v2-btn-video' && blocks.ids[9] === 'v2-btn-slide-text', blocks);
   await page.mouse.move(WIDTH - 30, HEIGHT - 30, { steps: 3 });
   await sleep(300);
 

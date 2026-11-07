@@ -1511,7 +1511,7 @@ const EditorNodes = (function () {
   const { keepImagesOfReplacedText } = (function () {
     // Images en calque : du texte remplacé
 
-    const sameImage = (a, b) => ['src', 'varTable', 'varColumn', 'varKey', 'qrText', 'chartSection', 'chartSpec'].every(name => a.attrs[name] === b.attrs[name]);
+    const sameImage = (a, b) => ['src', 'varTable', 'varColumn', 'varKey', 'qrText', 'chartSection', 'chartSpec', 'video'].every(name => a.attrs[name] === b.attrs[name]);
     const imagesOf = doc => { const found = []; doc.descendants((node, pos) => { if (node.type.name === 'editorImage') found.push({ node, pos }); }); return found; };
     const wholeDocReplaced = trs => trs.some(tr => tr.steps.some((step, i) => typeof step.from === 'number' && typeof step.to === 'number' && step.from <= 0 && step.to >= tr.docs[i].content.size));
     function replacedTextRange(root, selection, doc) {
@@ -1775,6 +1775,9 @@ const EditorNodes = (function () {
         chartSpec: { default: null, parseHTML: el => el.getAttribute('data-chart-spec') || null, renderHTML: noBareRender },
         chartScope: { default: null, parseHTML: el => el.getAttribute('data-chart-scope') || null, renderHTML: noBareRender },
         chartName: { default: null, parseHTML: el => el.getAttribute('data-chart-name') || null, renderHTML: noBareRender },
+        // Une vidéo YouTube ou Vimeo (js/video-frame.js, ligne « Vidéo… » du menu « Lien et blocs de contenu ») : son identifiant (`youtube:dQw4w9WgXcQ[@90]`), jamais une adresse ni un lecteur. Jamais de `src` :
+        // l'éditeur et la Lecture dessinent la vignette (VideoFrame.poster), les exports un rectangle gris qui porte le titre. La vidéo se déplace, s'habille et se redimensionne comme toute image.
+        video: { default: null, parseHTML: el => el.getAttribute('data-video') || null, renderHTML: noBareRender },
       };
     }
     return { moveImageNode, imageAttributes };
@@ -1816,6 +1819,12 @@ const EditorNodes = (function () {
       moveHandle.className = 'editor-image-move-handle';
       moveHandle.title = I18n.t('image.moveHandle');
       wrap.appendChild(moveHandle);
+      // Une vidéo (js/video-frame.js) : le disque ▶ de la vignette est un vrai bouton ; son clic lit la vidéo (le lecteur de GFS, sinon le site de la vidéo) sans sélectionner l'image. Caché pour une image.
+      const playButton = document.createElement('button');
+      playButton.type = 'button';
+      playButton.className = 'editor-image-video-play';
+      playButton.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); VideoFrame.activate(wrap); });
+      wrap.appendChild(playButton);
       const corners = {};
       ['nw', 'ne', 'sw', 'se'].forEach(corner => {
         const h = document.createElement('span');
@@ -1823,14 +1832,15 @@ const EditorNodes = (function () {
         wrap.appendChild(h);
         corners[corner] = h;
       });
-      return { wrap, img, varLabel, blockedSiteLabel, revealButton, moveHandle, corners };
+      return { wrap, img, varLabel, blockedSiteLabel, revealButton, moveHandle, playButton, corners };
     }
 
-    function imageInnerStyle(attrs, isVarBox, isQrBox, isChartBox) {
+    function imageInnerStyle(attrs, isVarBox, isQrBox, isChartBox, isVideoBox) {
       const imgStyle = [];
       if (attrs.width) imgStyle.push(`width: ${attrs.width}`);
       if (isVarBox && attrs.height) imgStyle.push(`height: ${attrs.height}`);
       if (isQrBox) imgStyle.push('aspect-ratio: 1 / 1');
+      if (isVideoBox) imgStyle.push('aspect-ratio: 16 / 9');
       // Un graphique : la largeur réglée et les proportions réglées (la hauteur sur la largeur), comme la Lecture et les exports (js/chart-entry.js, extensions/graphique/chart-block.js,
       // resolveImage) : dans une case plus étroite que lui, le cadre rétrécit sans se déformer.
       if (isChartBox) { const size = ChartEntry.sizeOfAttrs(attrs); imgStyle.push(`aspect-ratio: ${size.width} / ${size.height}`); }
@@ -1871,11 +1881,14 @@ const EditorNodes = (function () {
       const isChartBox = ChartEntry.isChartAttrs(attrs) && !attrs.src && !isVarBox && !isQrBox;
       // Le dessin du graphique, quand il est prêt (extensions/graphique/chart-block.js, paintFrame, par js/chart-entry.js) : l'adresse de l'image du cadre à l'écran, jamais un attribut du
       // nœud. Sans l'extension qui le dessine, le cadre reste, grisé, avec son nom.
+      // Une vidéo (js/video-frame.js) : l'image est sa vignette, dessinée ici d'après le réglage ; sans réglage lisible, un cadre vide comme une image sans adresse.
+      const isVideoBox = !!attrs.video && !attrs.src && !isVarBox && !isQrBox && !ChartEntry.isChartAttrs(attrs);
+      const posterSrc = isVideoBox ? VideoFrame.poster(attrs.video) : '';
       const drawn = isChartBox ? ChartEntry.paintFrame(view, attrs, () => applyImageAttrs(view, attrs)) : '';
       if (!isChartBox) ChartEntry.releaseFrame(view);
       // Une image d'un autre site que la personne n'a pas affiché : pas d'adresse donnée au navigateur (le modèle, lui, la garde), un cadre à la place.
       const blockedSite = isVarBox ? '' : ExternalImages.blockedSiteOf(attrs.src);
-      const shownSrc = (isVarBox || blockedSite) ? '' : (attrs.src || drawn);
+      const shownSrc = (isVarBox || blockedSite) ? '' : (attrs.src || drawn || posterSrc);
       // Le dessin d'un graphique change (il arrive après coup, une autre ligne le change, l'extension part) : à la fin, l'éditeur le dit (ChartEntry.PAINTED_EVENT), pour que la bande des diapositives recopie sa miniature.
       const repainted = isChartBox && (img.getAttribute('src') || '') !== shownSrc;
       if (img.getAttribute('src') !== shownSrc) img.src = shownSrc;
@@ -1888,7 +1901,17 @@ const EditorNodes = (function () {
         view.revealButton.setAttribute('aria-label', I18n.t('image.blocked.alt', { site: blockedSite }));
       } else delete wrap.dataset.blockedSite;
       img.alt = attrs.alt || '';
-      img.setAttribute('style', imageInnerStyle(attrs, isVarBox, isQrBox, isChartBox));
+      img.setAttribute('style', imageInnerStyle(attrs, isVarBox, isQrBox, isChartBox, isVideoBox));
+      wrap.classList.toggle('editor-image-video', isVideoBox);
+      // La vue n'écrit pas les attributs du nœud sur son <img> (renderHTML ne sert qu'à l'enregistrement) : la vidéo, que VideoFrame lit sur l'<img>, y est posée à la main.
+      if (isVideoBox) img.setAttribute('data-video', attrs.video); else img.removeAttribute('data-video');
+      if (isVideoBox) {
+        const provider = VideoFrame.nameOf((VideoFrame.decode(attrs.video) || {}).provider);
+        view.playButton.setAttribute('aria-label', I18n.t('video.play', { provider }));
+        view.playButton.title = I18n.t('video.play', { provider });
+        // Derrière le texte, la vidéo ne se clique pas (le texte est dessus) : pas de bouton ▶ par-dessus lui.
+        view.playButton.style.display = attrs.layer === 'behind' ? 'none' : '';
+      } else VideoFrame.stop(wrap);
       wrap.classList.toggle('editor-image-var-placeholder', isVarBox || isQrBox || isChartBox);
       // La colonne Pièces jointes du cadre, lue par Editor.markBadgeValidity pour le rouge d'une colonne disparue (jamais un attribut du nœud : le cadre n'écrit pas ces
       // clés dans le HTML du modèle, c'est renderHTML qui le fait, sur l'<img>).
@@ -2076,10 +2099,11 @@ const EditorNodes = (function () {
         selectNode: () => { wrap.classList.add('editor-image-selected'); ChartEntry.refreshFrame(view); },
         deselectNode: () => wrap.classList.remove('editor-image-selected'),
         // Le bouton « Afficher » d'une image bloquée est à lui : ni sélection de l'image, ni glissé, ni autre geste de l'éditeur sur son clic.
-        stopEvent: event => !!event.target.closest && !!event.target.closest('.editor-image-blocked-box'),
+        stopEvent: event => !!event.target.closest && !!event.target.closest('.editor-image-blocked-box, .editor-image-video-play'),
         destroy: () => {
           revealHooks.delete(redraw);
           behindImageViews.delete(wrap);
+          VideoFrame.stop(wrap);
           ChartEntry.releaseFrame(view);
           resize.release();
           move.release();
@@ -2102,6 +2126,7 @@ const EditorNodes = (function () {
         if ((a.varTable || (ChartEntry.isChartAttrs(a) && !a.src)) && a.height) parts.push(`height: ${a.height}`);
         // QR code sans image (une colonne dans son texte, js/qr-code.js) : un cadre carré, quelle que soit la largeur.
         if (a.qrText && !a.src) parts.push('aspect-ratio: 1 / 1');
+        if (a.video && !a.src) parts.push('aspect-ratio: 16 / 9');
         if (a.layer !== 'normal') {
           parts.push('position: absolute', `left: ${a.left || 0}px`, `top: ${a.top || 0}px`, `z-index: ${a.layer === 'front' ? 5 : -1}`);
         }
@@ -2130,6 +2155,7 @@ const EditorNodes = (function () {
             if (nodeAttrs.loop) attrs['data-loop'] = JSON.stringify(nodeAttrs.loop);
           }
           if (nodeAttrs.qrText) attrs['data-qr-text'] = nodeAttrs.qrText;
+          if (nodeAttrs.video) attrs['data-video'] = nodeAttrs.video;
           if (ChartEntry.isChartAttrs(nodeAttrs)) {
             if (nodeAttrs.chartSection) attrs['data-chart-section'] = String(nodeAttrs.chartSection);
             if (nodeAttrs.chartSpec) attrs['data-chart-spec'] = nodeAttrs.chartSpec;

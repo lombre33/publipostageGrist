@@ -498,6 +498,12 @@ const MarkdownExport = (function () {
     return blocks.map(b => b.lines.join('<br>')).join('<br>');
   }
   function tableBlock(table, ctx) {
+    // La vidéo d'un document (js/video-frame.js:forExport) est ici un tableau d'une case gris dont le lien est le titre : en Markdown, une ligne de texte, ce lien.
+    if (table.hasAttribute('data-pp-video')) {
+      const link = table.querySelector('a[href]');
+      const line = link ? inlineMarkdown(Array.from(link.parentNode.childNodes), ctx).trim() : '';
+      return line ? [{ type: 'p', lines: [line] }] : [];
+    }
     const rows = ExportCommon.tableRows(table);
     if (!rows.length) return [];
     if (!isSimpleTable(rows)) return [{ type: 'html', lines: htmlOf(table, ctx).split('\n').map(l => l.trim()).filter(Boolean) }];

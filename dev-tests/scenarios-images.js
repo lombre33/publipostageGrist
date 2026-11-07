@@ -1008,7 +1008,7 @@
 
   cases.push({
     id: 'image_view_builds_its_dom',
-    description: 'La vue de l\'image : le cadre, l\'<img>, le libellé, le cadre « Afficher » d\'une image d\'un autre site pas encore affichée (masqué sinon), la poignée de déplacement puis les quatre poignées de coin',
+    description: 'La vue de l\'image : le cadre, l\'<img>, le libellé, le cadre « Afficher » d\'une image d\'un autre site pas encore affichée (masqué sinon), la poignée de déplacement, le bouton ▶ d\'une vidéo (caché pour une image) puis les quatre poignées de coin',
     run: async (h) => {
       const wrap = await imageSetup(h, imageHtml(' data-layer="normal" data-wrap="inline"', 'width: 120px'));
       const kids = Array.from(wrap.children);
@@ -1022,7 +1022,7 @@
       };
       const expected = {
         frame: 'SPAN editor-image-view',
-        order: 'IMG.editor-image SPAN.editor-image-var-label SPAN.editor-image-blocked-box SPAN.editor-image-move-handle SPAN.editor-image-handle.editor-image-handle-nw SPAN.editor-image-handle.editor-image-handle-ne SPAN.editor-image-handle.editor-image-handle-sw SPAN.editor-image-handle.editor-image-handle-se',
+        order: 'IMG.editor-image SPAN.editor-image-var-label SPAN.editor-image-blocked-box SPAN.editor-image-move-handle BUTTON.editor-image-video-play SPAN.editor-image-handle.editor-image-handle-nw SPAN.editor-image-handle.editor-image-handle-ne SPAN.editor-image-handle.editor-image-handle-sw SPAN.editor-image-handle.editor-image-handle-se',
         draggable: false, moveTitle: true, selected: false,
       };
       await h.selectAtomNode(wrap.querySelector('img'));
