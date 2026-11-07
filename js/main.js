@@ -956,6 +956,64 @@
     refocusEditorIfLost();
   }
 
+  // Import d'un fichier Word (js/docx-import.js), « Importer un Word… » du menu « + », sur le modèle de l'import PowerPoint : le sélecteur s'ouvre dans le clic, le fichier est lu ensuite, et ce n'est qu'après (un fichier
+  // refusé ne coûte rien) qu'on demande de quitter le modèle courant s'il a des modifications non enregistrées. Le résultat est un nouveau document, sans nom et pas encore enregistré, avec la page, les en-têtes
+  // et les pieds de page du fichier ; ce que l'éditeur n'a pas pu reprendre tel quel est dit dans une fenêtre, une ligne par genre.
+  const DOCX_IMPORT_ACCEPT = '.docx,.docm,.dotx,.dotm,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  const DOCX_IMPORT_ERRORS = { unreadable: 'status.docxImportUnreadable', legacy: 'status.docxImportLegacy', empty: 'status.docxImportEmpty', tooBig: 'status.docxImportTooBig', library: 'status.docxImportLibrary' };
+  function onImportDocx() {
+    if (isReadOnly()) return;
+    GridXlsxImport.chooseFile(importDocxFile, DOCX_IMPORT_ACCEPT);
+  }
+
+  // Le fichier Word choisi par le sélecteur du menu « + ». true : le document importé est à l'écran (et le compte rendu de ce qui n'a pas été repris, s'il y en a un, a été lu) ; false : le fichier est refusé (l'erreur
+  // est dite dans le coin d'état) ou la personne a répondu « Annuler » à la question d'enregistrement : rien n'a changé.
+  async function importDocxFile(file) {
+    setStatus(I18n.t('status.docxImporting'));
+    const imported = await readDocxForImport(file);
+    if (!imported) return false;
+    if (hasEditsToConfirmBeforeLeaving()) {
+      updateSaveStatus(); // la lecture est finie : « Lecture… » serait faux pendant la question
+      if (!(await askBeforeLeaving())) return false;
+    }
+    openImportedDocx(imported);
+    await tellDocxImportReport(imported.report);
+    return true;
+  }
+
+  // Lit le fichier et construit le document. null : le fichier est refusé (l'erreur est dite dans le coin d'état) ; rien d'autre ne se passe.
+  async function readDocxForImport(file) {
+    try {
+      await ExportEngines.ensure('docxImport').catch((e) => { throw Object.assign(new Error('moteur d’import indisponible'), { code: 'library', cause: e }); });
+      return await DocxImport.fromFile(file);
+    } catch (e) {
+      reportDocxImportError(e);
+      return null;
+    }
+  }
+
+  function reportDocxImportError(e) {
+    console.warn('[main] import Word impossible', e); // une erreur de la personne (mauvais fichier) ou du réseau, pas du widget
+    const key = DOCX_IMPORT_ERRORS[e && e.code] || DOCX_IMPORT_ERRORS.unreadable;
+    setStatus(I18n.t(key, { size: e && e.size ? importMegabytes(e.size) : '', max: e && e.max ? importMegabytes(e.max) : '' }), true);
+  }
+
+  function openImportedDocx(imported) {
+    // Un nouveau document, sans nom et pas encore enregistré, comme « Nouveau document » ; sa page (format, sens, marges) et ses en-têtes et pieds de page sont ceux du fichier.
+    templateSelect.value = '';
+    loadTemplateIntoEditor({ id: null, nom: '', contenu: imported.html, typeModele: 'document', marginsMm: imported.page, suiviModifications: null, headerFooter: imported.headerFooter }, 'document');
+    markAutosaveDirty();
+    setStatus(I18n.t('status.docxImported'));
+  }
+
+  // Ce que l'import n'a pas repris tel quel, une ligne par genre ; rien à dire quand tout est arrivé.
+  async function tellDocxImportReport(report) {
+    if (!report || !report.length) return;
+    const lines = report.map(item => '• ' + I18n.t('docx.import.report.' + item.key, { n: item.n }));
+    await Dialogs.notice({ title: I18n.t('docx.import.reportTitle'), message: I18n.t('docx.import.reportIntro') + '\n' + lines.join('\n') });
+    refocusEditorIfLost();
+  }
+
   // Un nouveau macro-modèle n'a rien à charger avant d'avoir été composé et enregistré : contrairement aux autres types, il ne vide pas l'éditeur, il
   // ouvre l'écran de composition, vide. true : cet écran est ouvert (GFS le demande, openBlankOfType) ; false : le document est en lecture seule.
   function onNewMacro() {
@@ -3574,6 +3632,8 @@
     if (btnImportXlsx) btnImportXlsx.addEventListener('click', onImportXlsx);
     const btnImportMd = document.getElementById('v2-btn-import-md');
     if (btnImportMd) btnImportMd.addEventListener('click', onImportMd);
+    const btnImportDocx = document.getElementById('v2-btn-import-docx');
+    if (btnImportDocx) btnImportDocx.addEventListener('click', onImportDocx);
     const btnImportPptx = document.getElementById('v2-btn-import-pptx');
     if (btnImportPptx) btnImportPptx.addEventListener('click', onImportPptx);
     MacroEditor.wire(onMacroSaved, macroSettingsOnScreen, openTemplateFromMacro, onMacroModelVisibility);

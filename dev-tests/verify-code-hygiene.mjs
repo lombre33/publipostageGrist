@@ -789,8 +789,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // ce que le banc dev-tests/verify-lazy-engines.mjs ne voit pas d'un coup d'œil : un des fichiers de moteur qui redevient une balise ordinaire (chargé à l'ouverture, comme avant), un nom de moteur
 // écrit de travers dans un export, et un script qui appelle un moteur sans le faire charger (une erreur « PdfExport n'est pas défini » au premier clic, que seul cet export-là montre).
 {
-  const ENGINE_FILES = { pdf: 'pdf-export', sheets: 'sheet-layout', merge: 'pdf-merge', docx: 'docx-export', pptx: 'pptx-export', pptxImport: 'pptx-import', xlsx: 'xlsx-export', xlsxFormat: 'xlsx-number-format', md: 'markdown-export', html: 'html-export' };
-  const ENGINE_GLOBALS = { PdfExport: 'pdf-export', SheetLayout: 'sheet-layout', PdfMerge: 'pdf-merge', DocxExport: 'docx-export', PptxExport: 'pptx-export', PptxImport: 'pptx-import', XlsxExport: 'xlsx-export', XlsxNumberFormat: 'xlsx-number-format', MarkdownExport: 'markdown-export', HtmlExport: 'html-export' };
+  const ENGINE_FILES = { pdf: 'pdf-export', sheets: 'sheet-layout', merge: 'pdf-merge', docx: 'docx-export', pptx: 'pptx-export', pptxImport: 'pptx-import', docxImport: 'docx-import', xlsx: 'xlsx-export', xlsxFormat: 'xlsx-number-format', md: 'markdown-export', html: 'html-export' };
+  const ENGINE_GLOBALS = { PdfExport: 'pdf-export', SheetLayout: 'sheet-layout', PdfMerge: 'pdf-merge', DocxExport: 'docx-export', PptxExport: 'pptx-export', PptxImport: 'pptx-import', DocxImport: 'docx-import', XlsxExport: 'xlsx-export', XlsxNumberFormat: 'xlsx-number-format', MarkdownExport: 'markdown-export', HtmlExport: 'html-export' };
   // Les fichiers qui nomment un moteur sans nommer ExportEngines : la fenêtre des planches, que js/main.js (onExportBatch) n'ouvre qu'après avoir chargé « sheets ».
   const CALLED_AFTER_ENSURE = ['js/sheet-assembly-dialog.js'];
   const page = read('index.html').replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
@@ -1817,7 +1817,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     'js/frame-anim.js', 'js/frame-link.js', 'js/frame-multi.js', 'js/free-frame.js', 'js/free-frame-box-menus.js', 'js/free-frame-line-menus.js', 'js/free-frame-toolbar.js', 'js/shape-geometry.js', 'js/shape-presets.js', 'js/slide-links-live.js', 'js/slide-links.js', 'js/slide-props.js', 'js/slide-theme.js',
     'js/whats-new.js', 'js/gfs-link.js',
     // Hors de ce que l'audit lit (chargés à la demande : moteurs d'export et d'import, comparaison des versions, extensions de Grist Factory Suite) : à passer dans un lot à part, avec leurs groupes d'essais.
-    'js/docx-export.js', 'js/html-export.js', 'js/markdown-export.js', 'js/pdf-export.js', 'js/pptx-export.js', 'js/pptx-import.js', 'js/sheet-layout.js', 'js/versions-compare.js', 'js/xlsx-export.js', 'js/xlsx-number-format.js',
+    'js/docx-export.js', 'js/html-export.js', 'js/markdown-export.js', 'js/pdf-export.js', 'js/pptx-export.js', 'js/pptx-import.js', 'js/docx-import.js', 'js/sheet-layout.js', 'js/versions-compare.js', 'js/xlsx-export.js', 'js/xlsx-number-format.js',
     'extensions/edition/live-control.js', 'extensions/edition/live-sync.js', 'extensions/graphique/chart-make.js', 'extensions/graphique/chart-plot.js', 'extensions/lecture-pdf/pdf-comments.js',
   ]);
   const POOR = 'a|b|c|d|f|z|i2|tmp|temp|val|val2|data\\d?|obj|arr|foo|bar|baz|res2|ret|thing|stuff|truc|machin|toto';
