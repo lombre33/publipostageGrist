@@ -81,6 +81,11 @@ const GristAPI = (function () {
     return error;
   }
   function isTablesDeclined(error) { return !!error && error.tablesDeclined === true; }
+  // Grist refuse l'écriture à cause d'une règle d'accès (« Blocked by row update access rules », « Only owners can... ») : la personne lit ce qu'elle ne peut pas modifier, par exemple un fichier que GFS lui partage en lecture
+  // (consigne 060 de GFS ; contrats 11.6, points 2 et 3). Ce n'est pas une panne (réseau coupé, Grist qui ne répond pas) : la même écriture serait refusée de nouveau, l'appelant la dit et ne la redemande pas.
+  function isAccessRefusal(error) {
+    return !!error && /\bBlocked by\b|\bOnly owners\b/i.test(String(error.message || error));
+  }
   // Un document que Grist ouvre en lecture seule pour cette personne (compte Lecteur du document, ou instantané de son historique) : Grist ajoute
   // `readonly=true` à l'adresse du cadre du widget (WidgetFrame.ts, `gristDoc.isReadonly`, faux pour qui peut modifier le document). Il l'ajoute après les
   // paramètres de l'adresse du widget : la dernière valeur est la sienne. Absent (Grist plus ancien) ou autre que `true` : personne n'est tenu pour
@@ -1325,5 +1330,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

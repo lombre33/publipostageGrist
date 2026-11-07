@@ -1983,6 +1983,17 @@ Deux options utiles :
   doit écrire ; trois variantes fautives du code sont prises : le repos qui saute aussi la lecture d'une modification (le cas 2 échoue), l'horloge qu'une lecture ne remet pas à l'heure et
   celle que le chargement d'un modèle ne remet pas à l'heure (le cas 1 échoue). Deux tests de la course attendaient un passage de l'auto-save au repos dans les 8 à 10 s
   (`race_switching_template_while_a_pass_is_reading…` et la section 3 de `autosaveRaceMouse`) : ils attendent maintenant jusqu'à 20 s le passage de repos, qui vient 15 s après le chargement.
+- `writeRefused` (`dev-tests/scenarios-write-refused.js`, 6 cas, ~45 s : de VRAIS minuteurs, l'enregistrement automatique passe toutes les 2,5 s) - consigne 060 de GFS (« Partager » marche pour
+  `Publipostage_Modeles` : Grist répond « Blocked by row update access rules » à qui ne fait que LIRE un fichier, et la 060 veut que l'app DISE ce refus plutôt que de planter ou de réessayer ;
+  contrats de GFS 11.6, points 2, 3 et 6). Le refus est simulé en enveloppant `grist.docApi.applyUserActions` le temps du cas (la table des modèles refuse, avec le texte exact de Grist ; chaque appel
+  refusé est compté). (1) `GristAPI.isAccessRefusal` reconnaît « Blocked by … » et « Only owners … » et rien d'autre (une panne de réseau n'en est pas un). (2) Enregistrement automatique : le premier
+  passage dit la phrase du refus dans le coin d'état (en rouge), les suivants ne redemandent plus l'écriture (aucun nouvel appel refusé en trois passages, ni après une frappe de plus ; la table ne se relit
+  plus qu'au rythme du repos) - avant : la même écriture refusée repartait toutes les 2,5 s, avec une relecture de la table, sous « Échec de l'enregistrement automatique » ; un Enregistrer réussi remet
+  l'automatique en marche. (3) Enregistrer à la main, refusé : la même phrase, et l'automatique ne redemande pas ensuite la même écriture.
+  (4) Une vraie panne (« Failed to fetch ») n'est PAS un refus : elle garde sa phrase et est redemandée au passage suivant. (5) Supprimer un modèle que Grist refuse de supprimer dit la phrase du refus
+  (avant : rien, la promesse rejetée restait sans message), garde le modèle dans la liste et à l'écran, et le supprime une fois permis. (6) Le stub pose `GFS_Auteur` (colonne à formule que Grist remplit)
+  et une colonne d'aide dans la table : l'app les tolère, ne les écrit pas, et n'écrit aucune colonne `Auteur`, `Visibilite`, `Personnes` ni `Espace` dans `Publipostage_Modeles`. Contre l'ancien
+  code (`52cca076`) les cas (1), (2), (3) et (5) échouent ; (4) et (6) passent : ce sont les garde-fous (la vraie panne qu'une correction trop large ferait taire, les colonnes que l'app ne doit pas écrire).
 - `schemaAtDisplay` (`dev-tests/scenarios-schema-at-display.js`, 3 cas, ~5 s) - lot « Lectures de fond » de « Tests de charge » (04/10) : l'affichage d'un modèle (`Editor.setHTML`) lançait la passe de schéma EXACT,
   qui lit chaque table du document en entier (43 lectures et 1,4 million de cases dans un document de 40 tables de 2 000 lignes, à chaque modèle choisi) pour ne valider que les bulles #Variable.
   Désormais, sans bulle rouge, une passe commencée il y a moins d'une minute suffit (`SCHEMA_MAX_AGE_MS`, la même qu'au démarrage). Les lectures se comptent en enveloppant `grist.docApi.fetchTable`.

@@ -2681,6 +2681,10 @@ const I18n = (function () {
     'status.saveError': { fr: 'Échec de l’enregistrement.', en: 'Save failed.' },
     // Les tables du widget n'ont pas été créées (réponse de la personne à la fenêtre « tableConsent ») : Enregistrer ne peut rien écrire, et le dit.
     'status.saveDeclined': { fr: 'Non enregistré : les tables du widget n’ont pas été créées dans ce document.', en: 'Not saved: the widget’s tables were not created in this document.' },
+    // Grist refuse d'écrire ou de supprimer (« Blocked by row update access rules » : un fichier que la personne lit sans pouvoir le modifier, par exemple partagé en lecture par GFS, consigne 060) : le début du texte tient dans le coin, la suite se lit au survol.
+    'status.saveRefused': { fr: 'Non enregistré : Grist refuse l’écriture dans ce modèle (règle d’accès, lecture seule pour vous). Voyez avec son auteur ou un propriétaire du document.', en: 'Not saved: Grist refuses writing to this template (access rule, read-only for you). Ask its author or a document owner.' },
+    'status.deleteRefused': { fr: 'Non supprimé : Grist refuse la suppression de ce modèle (règle d’accès, lecture seule pour vous). Voyez avec son auteur ou un propriétaire du document.', en: 'Not deleted: Grist refuses deleting this template (access rule, read-only for you). Ask its author or a document owner.' },
+    'status.deleteError': { fr: 'Échec de la suppression du modèle.', en: 'Deleting the template failed.' },
     'status.noTemplateSelected': { fr: 'Aucun modèle sélectionné.', en: 'No template selected.' },
     'status.defaultTemplateSet': { fr: 'Modèle par défaut défini : « {name} » s’ouvrira au démarrage du widget.', en: 'Default template set: “{name}” will open when the widget starts.' },
     'status.defaultTemplateCleared': { fr: 'Modèle par défaut retiré : « {name} » ne s’ouvrira plus au démarrage.', en: 'Default template removed: “{name}” will no longer open at startup.' },

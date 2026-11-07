@@ -1276,6 +1276,7 @@
       // en cours en faveur de cette version : pas besoin de recharger.
       if (epoch === autosaveEpoch) {
         autosaveLastKnownDateModif = dateModif;
+        autosaveRefusedEpoch = -1; // Grist vient d'écrire : l'arrêt de l'enregistrement automatique après un refus est levé
         noteSaved(editVersion);
         hideConflictBanner();
         if (send) send.commit(); // Grist a écrit le document et les modèles ensemble : les tableaux partis prennent leur base
@@ -1285,6 +1286,12 @@
       // La personne a refusé de créer les tables du widget : rien n'est enregistré, et le coin d'état le dit (ni échec ni journal d'erreur : elle a
       // répondu elle-même, et Enregistrer lui reposera la question).
       if (GristAPI.isTablesDeclined(e)) { setStatus(I18n.t('status.saveDeclined'), true); return; }
+      // Grist refuse d'écrire dans ce modèle (règle d'accès, par exemple un fichier que GFS partage en lecture, consigne 060) : le coin le dit, et l'enregistrement automatique n'essaie plus pour ce modèle (autosaveRefusedEpoch).
+      if (GristAPI.isAccessRefusal(e)) {
+        console.warn('[main] enregistrement manuel : Grist refuse l’écriture (règle d’accès)', e);
+        if (epoch === autosaveEpoch) { autosaveRefusedEpoch = epoch; setStatus(I18n.t('status.saveRefused'), true); }
+        return;
+      }
       // Un échec ici (par exemple une colonne Grist manquante) doit se voir : sans ce traitement, la fonction s'interromprait sans message, la liste
       // et le coin d'état ne seraient pas mis à jour, et rien ne dirait que « Enregistrer » n'a rien enregistré.
       console.error('[main] échec de l’enregistrement manuel', e);
@@ -1490,7 +1497,16 @@
     // La ligne telle que Grist la garde, lue avant de la supprimer : Annuler la rend. Une lecture qui échoue ne retient pas la suppression, que la personne a confirmée : seul Annuler n'en saura rien.
     let kept = null;
     try { kept = await Templates.snapshotRow(id); } catch (e) { console.warn('[main] ligne du modèle non gardée pour Annuler', e); }
-    await Templates.remove(id);
+    try {
+      await Templates.remove(id);
+    } catch (e) {
+      // Grist refuse la suppression (règle d'accès : la personne lit ce modèle sans pouvoir le supprimer, par exemple un fichier que GFS lui partage en lecture, consigne 060) ou ne répond pas : le modèle reste, à l'écran et dans
+      // la liste, et le coin d'état le dit. Sans ce rattrapage la question était fermée et rien ne se passait, sans un mot.
+      const refused = GristAPI.isAccessRefusal(e);
+      if (refused) console.warn('[main] suppression du modèle : Grist refuse (règle d’accès)', e); else console.error('[main] suppression du modèle impossible', e);
+      setStatus(I18n.t(refused ? 'status.deleteRefused' : 'status.deleteError'), true);
+      return;
+    }
     await refreshTemplateList();
     startBlankDocument();
     setStatus(I18n.t('status.templateDeleted'));
@@ -1796,6 +1812,11 @@
   // changé, le modèle de l'écran n'est plus celui sur lequel il a commencé, et ni la date lue ni l'état « enregistré » qu'il s'apprête à poser ne lui
   // appartiennent plus.
   let autosaveEpoch = 0;
+  // Grist a refusé d'écrire dans le modèle de l'écran (une règle d'accès : la personne le lit sans pouvoir le modifier, par exemple un fichier que GFS lui partage en lecture, consigne 060 de GFS) : le numéro de modèle
+  // (autosaveEpoch) du refus. L'enregistrement automatique n'écrit plus pour ce modèle, il redemanderait la même écriture toutes les 2,5 s, et ne relit la table qu'au rythme du repos ; un Enregistrer à la main
+  // redemande, et un Enregistrer réussi ou un autre modèle chargé lève l'arrêt.
+  let autosaveRefusedEpoch = -1;
+  const autosaveRefused = () => autosaveRefusedEpoch === autosaveEpoch;
   // Un passage de l'auto-save est en cours (autosaveTick) : celui de l'intervalle suivant ne s'empile pas derrière - sauf s'il dure depuis plus d'une
   // minute (un appel à Grist qui ne revient jamais ne doit pas arrêter l'enregistrement automatique pour de bon).
   let autosaveTickPending = false;
@@ -1859,6 +1880,8 @@
     // « if (!id) return »). Un statut vide laisserait croire que tout est protégé. Même alerte que templateNameRequired (onSave) : même cause, pas
     // encore de nom ni de ligne.
     if (!Templates.getCurrentId()) { setStatus(I18n.t('status.unsavedTemplateWarning'), true); return; }
+    // Grist a refusé d'écrire dans ce modèle (autosaveRefusedEpoch) : le coin le redit tant que ce qui est tapé n'est pas enregistré, au lieu de se vider comme avant une écriture qui va partir (rien ne repart tout seul).
+    if (autosaveDirty && autosaveRefused()) { setStatus(I18n.t('status.saveRefused'), true); return; }
     // Enregistrement automatique coupé (son réglage ne se voit plus que dans le menu d'Enregistrer) : rien ne partira tout seul, ce qui vient d'être
     // tapé n'est que dans l'éditeur, et le coin d'état le dit jusqu'au prochain Enregistrer. Seulement dans ce cas : avec l'enregistrement
     // automatique actif, le délai avant le passage suivant ne dure que 2,5 s et le coin reste vide. Avant le test de DateModif : un modèle sans date
@@ -1984,6 +2007,13 @@
         LinkedTable.tell(synced, send); // « Enregistré à… » ne doit pas effacer ce que la synchro et l'envoi viennent de dire
       }
     } catch (e) {
+      // Un refus de Grist (règle d'accès) n'est pas une panne : redemander la même écriture n'y change rien. Le passage s'arrête pour ce modèle (autosaveRefusedEpoch), le coin d'état le dit, et un Enregistrer à la main
+      // redemande. Un modèle chargé pendant l'écriture (autosaveEpoch) n'est pas celui qui a été refusé : ni arrêt ni message pour lui.
+      if (GristAPI.isAccessRefusal(e)) {
+        console.warn('[main] auto-save : Grist refuse l’écriture (règle d’accès)', e);
+        if (epoch === autosaveEpoch) { autosaveRefusedEpoch = epoch; setStatus(I18n.t('status.saveRefused'), true); }
+        return;
+      }
       console.error('[main] auto-save : échec d’enregistrement', e);
       // autosaveDirty reste vrai : retenté au passage suivant. Affiché, pas seulement journalisé : un échec répété doit se voir dans le coin d'état
       // plutôt que de laisser croire que tout est enregistré.
@@ -1998,7 +2028,8 @@
     // Au repos, une lecture toutes les autosaveIdleIntervalMs(), à une demi-période près (un passage un peu en avance lit déjà, au lieu de
     // repousser la lecture d'une période de plus).
     const checkStartedAt = performance.now();
-    if (!autosaveDirty && checkStartedAt - autosaveLastCheckAt < autosaveIdleIntervalMs() - AUTOSAVE_INTERVAL_MS / 2) return;
+    // Un modèle que Grist a refusé d'écrire (autosaveRefused) attend comme un modèle au repos : ce qui est tapé ne peut pas partir, le relire à chaque passage ne servirait qu'à charger Grist.
+    if ((!autosaveDirty || autosaveRefused()) && checkStartedAt - autosaveLastCheckAt < autosaveIdleIntervalMs() - AUTOSAVE_INTERVAL_MS / 2) return;
     const epoch = autosaveEpoch;
     let remote;
     try { remote = await readRemoteTemplate(id, epoch); }
@@ -2019,6 +2050,7 @@
     // Les modèles viennent d'être relus : les tableaux liés du document suivent les leurs, document modifié ou non, en lecture seule aussi (rien n'est écrit).
     const synced = followLinkedModels();
     if (!autosaveDirty) return;
+    if (autosaveRefused()) return; // Grist a refusé d'écrire dans ce modèle : rien ne repart tout seul (autosaveRefusedEpoch)
     // Lecture seule : la vérification de conflit ci-dessus garde son bandeau (le modèle a changé ailleurs), mais rien n'est écrit. Un commentaire
     // posé en Lecture passe par saveReaderCommentAnchors, jamais par ici.
     if (isReadOnly()) return;
