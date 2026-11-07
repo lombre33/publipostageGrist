@@ -1603,7 +1603,7 @@ const I18n = (function () {
     'slides.objects.slideView': { fr: 'Vue…', en: 'Slide view…' },
     'slides.objects.slideViewTip': { fr: 'La vue en direct d’une autre diapositive, dans un cadre au centre de la diapositive {n} : un clic y mène', en: 'A live view of another slide, in a frame in the middle of slide {n}: a click goes to it' },
     'slides.objects.video': { fr: 'Vidéo…', en: 'Video…' },
-    'slides.objects.videoTip': { fr: 'Une vidéo YouTube ou Vimeo, dans un cadre au centre de la diapositive {n} : un clic la lit', en: 'A YouTube or Vimeo video, in a frame in the middle of slide {n}: a click plays it' },
+    'slides.objects.videoTip': { fr: 'Une vidéo YouTube ou Vimeo, dans un cadre au centre de la diapositive {n} : un clic ouvre son lecteur', en: 'A YouTube or Vimeo video, in a frame in the middle of slide {n}: a click opens its player' },
     'video.dialog.title': { fr: 'Insérer une vidéo', en: 'Insert a video' },
     'video.dialog.label': { fr: 'Adresse de la vidéo', en: 'Video address' },
     'video.dialog.message': { fr: 'Collez le lien d’une vidéo YouTube ou Vimeo, ou le code « Intégrer » du site. Rien n’est chargé chez eux avant le clic sur ▶.', en: 'Paste the link of a YouTube or Vimeo video, or the site’s “Embed” code. Nothing is loaded from them before ▶ is clicked.' },
