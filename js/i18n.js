@@ -864,7 +864,7 @@ const I18n = (function () {
     'caption.gridLocked': { fr: 'Pas de légende dans une grille', en: 'No caption in a grid' },
     // --- Texte alternatif d'une image (js/alt-text.js) : le bouton de la barre de l'image, la touche (Réglages > Raccourcis), la petite fenêtre et sa case « Image décorative » ---
     'altText.button': { fr: 'Texte alternatif…', en: 'Alternative text…' },
-    'altText.shortcut': { fr: 'Texte alternatif de l’image ou de l’objet', en: 'Alternative text of the image or object' },
+    'altText.shortcut': { fr: 'Texte alternatif (image ou objet)', en: 'Alternative text of the image or object' },
     'altText.title': { fr: 'Texte alternatif', en: 'Alternative text' },
     'altText.label': { fr: 'Description de l’image', en: 'Image description' },
     'altText.placeholder': { fr: 'Ex. : Photo d’identité de la personne', en: 'E.g. ID photo of the person' },

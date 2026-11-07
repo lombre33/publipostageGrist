@@ -336,7 +336,8 @@ const VideoFrame = (function () {
     GfsLink.player('fermer', { id: found.id });
     return true;
   }
-  // Un clic ailleurs dans l'app, ou Échap : le lecteur se ferme (le clic dans le lecteur lui-même ne passe jamais par ici : il est dans la page de GFS).
+  // Un clic ailleurs dans l'app, ou Échap : le lecteur se ferme (le clic dans le lecteur lui-même ne passe jamais par ici : il est dans la page de GFS). Échap ne vaut que tant que le clavier est
+  // dans l'app : une fois la personne cliquée dans la vidéo, la touche va au cadre du fournisseur et à lui seul (mesuré par GFS, consigne 059) ; aucun texte de l'interface ne promet « Échap ferme ».
   function onAway() { stop(); }
   function onKey(event) { if (event.key === 'Escape') stop(); }
 

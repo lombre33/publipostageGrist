@@ -9,7 +9,7 @@
 //   l'app envoie `lecteur.afficher` (l'identifiant et le rectangle du calque, jamais une adresse), le suit au défilement (`deplacer`), l'efface quand un menu le recouvre (`masquer`) et le ferme (`fermer`) à Échap, au clic
 //   ailleurs, hors de vue, au clic sur une autre vidéo, à la suppression du cadre ; un état `fin` ferme, un état `erreur` ouvre la vidéo sur son site.
 //  LE MENU « OBJETS » : « Vidéo… » (ligne pleine sous « Tableau d'un modèle Grille… »), la fenêtre où l'on colle l'adresse, un cadre 16/9 posé sélectionné ; une adresse qui n'en est pas une est dite ; UN Ctrl+Z le retire.
-//  LA LECTURE ET LE DIAPORAMA : la vignette est là, un clic lit la vidéo à sa place ; changer de page du diaporama, quitter la Lecture ou Échap ferme le lecteur ; les exports ne montrent que le titre du cadre (le PDF)
+//  LA LECTURE ET LE DIAPORAMA : la vignette est là, un clic lit la vidéo à sa place ; changer de page du diaporama, quitter la Lecture ou Échap (clavier encore dans l'app : une fois cliqué dans la vidéo, la touche va au cadre du fournisseur, consigne 059) ferme le lecteur ; les exports ne montrent que le titre du cadre (le PDF)
 //   et le lien (le PowerPoint).
 //  LE CADRE DE GFS : l'app dans un cadre isolé, le lecteur de GFS tombe sur le calque, rogné à la zone qui défile.
 // Lancé par run-headless.mjs (groupe Node "videoFrame", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-video-frame.mjs
