@@ -27,6 +27,8 @@ const GristAPI = (function () {
   // { tableId: { colId: true } } - les colonnes à formule (isFormula vrai et formule non vide), que Grist refuse d'écrire, cf. isFormulaColumn. Une colonne « vide »
   // (isFormula vrai, formule vide : celle que l'on vient d'ajouter dans Grist) n'en est pas une : la première écriture en fait une colonne de données.
   let _formulaColumnsByTable = {};
+  // { tableId: { colId: true } } - les colonnes « vides » (isFormula vrai, formule vide), cf. isEmptyColumn : le jeu de métadonnées doit porter les DEUX champs, sinon on ne sait pas.
+  let _emptyColumnsByTable = {};
   // { tableId: { colId: réglages d'affichage } } - pour une colonne Numérique, Entier, Date ou Date et heure, ce que son widgetOptions dit de l'écriture de ses valeurs
   // (formatOptionsOf) : {} quand elle n'a rien de réglé, absente quand ses réglages sont illisibles. Cf. getColumnFormatOptions.
   let _columnFormatsByTable = {};
@@ -596,6 +598,10 @@ const GristAPI = (function () {
   function hasFormulaOf(colsMeta, i) {
     return !!(colsMeta.isFormula && colsMeta.isFormula[i] && String((colsMeta.formula && colsMeta.formula[i]) || '').trim());
   }
+  // La colonne `i` est-elle une colonne « vide » (isFormula vrai, formule vide : celle que l'on vient d'ajouter dans Grist, même typée ensuite) ? Il faut les deux champs : sans eux, on ne le sait pas.
+  function isEmptyOf(colsMeta, i) {
+    return Array.isArray(colsMeta.isFormula) && Array.isArray(colsMeta.formula) && !!colsMeta.isFormula[i] && !String(colsMeta.formula[i] || '').trim();
+  }
   // Les réglages d'affichage d'une colonne Numérique, Entier, Date ou Date et heure, tirés de son widgetOptions (JSON stocké en Text, comme les choix) : numMode
   // (« currency », « decimal », « percent », « scientific » ; absent : nombre brut), numSign (« parens »), decimals (au moins) et maxDecimals (au plus) des chiffres
   // après la virgule, currency (le code ISO d'une devise propre à la colonne), dateFormat et timeFormat (écrits comme moment.js ; timeFormat vide : pas d'heure).
@@ -691,6 +697,7 @@ const GristAPI = (function () {
     const referenceCols = {};
     const labels = {};
     const formulaColumns = {};
+    const emptyColumns = {};
     const formats = {};
     const conditionalRules = {};
     try {
@@ -713,6 +720,7 @@ const GristAPI = (function () {
         const label = labelOf(colsMeta, i);
         if (label) rowOf(labels, tableId)[colId] = label;
         if (hasFormulaOf(colsMeta, i)) rowOf(formulaColumns, tableId)[colId] = true;
+        if (isEmptyOf(colsMeta, i)) rowOf(emptyColumns, tableId)[colId] = true;
         const formatOptions = formatOptionsOf(colsMeta, i);
         if (formatOptions) rowOf(formats, tableId)[colId] = formatOptions;
         const rules = conditionalRulesOf(colsMeta, i, colIdByRowId);
@@ -724,6 +732,7 @@ const GristAPI = (function () {
       _referenceColumnByTable = referenceCols;
       _columnLabelsByTable = labels;
       _formulaColumnsByTable = formulaColumns;
+      _emptyColumnsByTable = emptyColumns;
       _columnFormatsByTable = formats;
       _conditionalRulesByTable = conditionalRules;
       _documentSettings = documentSettingsOf(docInfo);
@@ -831,6 +840,11 @@ const GristAPI = (function () {
   // Vrai pour une colonne à formule : Grist n'y accepte aucune écriture (le lot entier est refusé), la date du dernier export (js/export-date.js) ne la propose pas.
   function isFormulaColumn(tableId, colId) {
     return !!(_formulaColumnsByTable[tableId] && _formulaColumnsByTable[tableId][colId]);
+  }
+  // Vrai pour une colonne « vide » de Grist : isFormula vrai et formule vide, l'état d'une colonne que l'on vient d'ajouter, qui le reste même une fois typée Pièces jointes ; la première écriture en fait une
+  // colonne de données. Grist l'accepte (et l'app seule) ; GFS la refuse pour l'instant (`inutilisable`), d'où la phrase de js/pdf-delivery.js.
+  function isEmptyColumn(tableId, colId) {
+    return !!(_emptyColumnsByTable[tableId] && _emptyColumnsByTable[tableId][colId]);
   }
   // Les réglages d'affichage d'une colonne nombre ou date tels que Grist les garde (formatOptionsOf), {} quand elle n'a rien de réglé, null quand ils sont
   // inconnus ou illisibles. Un chemin « Ref.Colonne » (cf. resolveColumnPath) se lit sur sa dernière colonne, comme getColumnType.
@@ -1330,5 +1344,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

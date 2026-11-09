@@ -291,9 +291,22 @@
         if (refusal) { fail('GFS_REFUSE', refusal); return; }
         if (options.reponse !== undefined) { if (answers) stub.post({ type: 'reponse', id: message.id, data: typeof options.reponse === 'function' ? options.reponse(rank, args) : options.reponse }); return; }
         const report = { colonne: args.colonne, probleme: null, joints: [], echecs: [] };
-        if (options.etatColonne) {
-          report.probleme = options.etatColonne;
-          report.echecs = entries.map((entry, index) => ({ index, raison: options.etatColonne }));
+        // Le verdict de GFS sur la colonne (prototype/js/attach.js, #columnState, relu le 09/11) : `absente` si la table ou la colonne n'existe pas, `inutilisable` si ce n'est pas EXACTEMENT une colonne de type
+        // Attachments dont `isFormula` est faux et la formule vide - donc une colonne « vide » de Grist (isFormula vrai, formule vide, même typée Pièces jointes) est refusée, alors que Grist et l'app seule l'acceptent.
+        // `etatColonne` le force ; sinon il se lit dans le faux Grist de la page.
+        const columnWord = () => {
+          if (options.etatColonne) return options.etatColonne;
+          const grist = window.__gristStub;
+          if (!grist || !grist.state) return '';
+          const columns = grist.state.columns && grist.state.columns[args.table];
+          if (!columns || !(args.colonne in columns)) return 'absente';
+          const formula = grist.state.formulas && grist.state.formulas[args.table] ? grist.state.formulas[args.table][args.colonne] : undefined;
+          return columns[args.colonne] === 'Attachments' && formula === undefined ? '' : 'inutilisable';
+        };
+        const word = columnWord();
+        if (word) {
+          report.probleme = word;
+          report.echecs = entries.map((entry, index) => ({ index, raison: word }));
         } else {
           const known = Array.isArray(options.lignes) ? new Set(options.lignes) : null;
           const stop = typeof options.arret === 'function' ? options.arret(rank, args) : null;

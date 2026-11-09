@@ -196,7 +196,7 @@ const PdfDelivery = (function () {
         : I18n.t('attach.many', { n: done, column: attach.column }) + (replaced ? ' (' + I18n.t('attach.replaced', { n: replaced }) + ')' : '') + '.';
     }
     if (attach.gfs) out.note = gfsAttachNote(attach.gfs);
-    else if (attach.problem === 'missing' || attach.problem === 'unusable') out.note = I18n.t('attach.problem.' + attach.problem, { column: attach.column });
+    else if (attach.problem === 'missing' || attach.problem === 'unusable') out.note = I18n.t('attach.problem.' + (attach.problem === 'unusable' && attach.emptyColumn ? 'unusableEmpty' : attach.problem), { column: attach.column });
     else if (attach.failed.length) out.note = I18n.t('attach.failed', { n: attach.failed.length, reason: I18n.t('attach.reason.' + attach.failed[0].reason) });
     return out;
   }

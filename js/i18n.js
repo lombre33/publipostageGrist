@@ -3060,6 +3060,7 @@ const I18n = (function () {
     'attach.many': { fr: '{n} {n|PDF joint|PDF joints} à {n|sa ligne|leur ligne}, colonne « {column} »', en: '{n} {n|PDF|PDFs} attached to {n|its row|their rows}, column “{column}”' },
     'attach.replaced': { fr: '{n} {n|remplacé|remplacés}', en: '{n} replaced' },
     'attach.problem.missing': { fr: 'PDF non joint : la colonne « {column} » n’existe plus.', en: 'PDF not attached: the column “{column}” no longer exists.' },
+    'attach.problem.unusableEmpty': { fr: 'PDF non joint : « {column} » est une colonne vide de Grist (rien n’y a encore été mis) et GFS ne la prend pas encore. Déposez une pièce jointe à la main dans l’une de ses cellules, ou choisissez une autre colonne.', en: 'PDF not attached: “{column}” is an empty Grist column (nothing has been put in it yet) and GFS does not accept it yet. Drop an attachment into one of its cells by hand, or pick another column.' },
     'attach.problem.unusable': { fr: 'PDF non joint : « {column} » doit être de type Pièces jointes, sans formule.', en: 'PDF not attached: “{column}” must be an Attachments column with no formula.' },
     'attach.failed': { fr: '{n} {n|PDF non joint|PDF non joints} à leur ligne ({reason}).', en: '{n} {n|PDF|PDFs} not attached to the row ({reason}).' },
     'attach.reason.denied': { fr: 'Grist a refusé l’écriture', en: 'Grist refused the write' },

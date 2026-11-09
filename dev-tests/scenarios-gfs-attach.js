@@ -187,6 +187,37 @@
       return verdict(problems, { got });
     }, WITH_COLUMN);
 
+  // Bug d'Antoine (09/11, dans GFS) : une colonne NEUVE typée Pièces jointes (« colonne vide » de Grist : isFormula vrai, formule vide) est acceptée par l'app et par Grist, refusée par GFS (`inutilisable`, prototype/js/attach.js) ;
+  // l'app disait « sans formule », ce qui n'est pas ce qui se passe. Le correctif de fond est chez GFS (consigne via le fil Liaison) ; ici l'app dit la vraie chose.
+  scenario('gfsattach_an_empty_grist_column_that_gfs_refuses_is_told_as_an_empty_column_not_as_a_formula',
+    'Une colonne « vide » de Grist (isFormula vrai, formule vide) de type Pièces jointes, choisie dans Réglages : l’app la propose et l’accepte, le faux GFS (qui juge comme le vrai) la refuse `inutilisable` ; le rapport porte `emptyColumn` et la phrase dit « colonne vide de Grist », en français et en anglais, avec quoi faire ; une colonne ordinaire que GFS refuse garde la phrase d’origine ; une colonne de données de type Pièces jointes passe.',
+    async () => {
+      const problems = [];
+      stub().setFormulaColumn(TABLE, 'Autre', '');
+      await GristAPI.refreshSchema();
+      stub().setWidgetOptions({ [COLUMN_OPTION]: 'Autre' });
+      await sleep(80);
+      check(problems, 'l’app propose et accepte la colonne vide', [RowAttachment.getColumn(), RowAttachment.offReason()], ['Autre', '']);
+      const report = await RowAttachment.attachAll(TABLE, [item(0, 1, 'a.pdf'), item(1, 2, 'b.pdf')], null);
+      check(problems, 'GFS la refuse, le rapport le dit', [report.problem, report.emptyColumn, report.attached.length, report.failed.map(f => f.reason), calls().length], ['unusable', true, 0, ['unusable', 'unusable'], 1]);
+      I18n.setLang('fr');
+      check(problems, 'la phrase en français', PdfDelivery.describe(make(report)).note,
+        'PDF non joint : « Autre » est une colonne vide de Grist (rien n’y a encore été mis) et GFS ne la prend pas encore. Déposez une pièce jointe à la main dans l’une de ses cellules, ou choisissez une autre colonne.');
+      I18n.setLang('en');
+      check(problems, 'la phrase en anglais', PdfDelivery.describe(make(report)).note,
+        'PDF not attached: “Autre” is an empty Grist column (nothing has been put in it yet) and GFS does not accept it yet. Drop an attachment into one of its cells by hand, or pick another column.');
+      I18n.setLang('fr');
+      // La première pièce jointe posée à la main en fait une colonne de données : elle passe.
+      stub().setFormulaColumn(TABLE, 'Autre', null);
+      const filled = await RowAttachment.attachAll(TABLE, [item(0, 1, 'a.pdf')], null);
+      check(problems, 'colonne de données : jointe', [filled.problem, filled.emptyColumn, filled.attached.length], [null, undefined, 1]);
+      // Une colonne ordinaire que GFS refuse (forcée) : la phrase d’origine, pas celle de la colonne vide.
+      gfs().joindre = { etatColonne: 'inutilisable' };
+      const plain = await RowAttachment.attachAll(TABLE, [item(0, 1, 'a.pdf')], null);
+      check(problems, 'colonne ordinaire refusée : phrase d’origine', [plain.problem, plain.emptyColumn, PdfDelivery.describe(make(plain)).note], ['unusable', undefined, 'PDF non joint : « Autre » doit être de type Pièces jointes, sans formule.']);
+      return verdict(problems, {});
+    });
+
   scenario('gfsattach_a_deleted_row_a_stopped_batch_and_a_missing_column_are_told_as_they_happen',
     'Une ligne supprimée pendant l’export (`ligne`) est `row` et ne gêne pas les autres ; un envoi que Grist refuse (`refus`) au milieu laisse joints ceux d’avant (aucun `problem`, les suivants échouent du même mot) ; un fichier trop gros (`trop-gros`) échoue SEUL, les autres sont joints, y compris un par appel sur trois appels ; une colonne `absente` au premier appel arrête les appels suivants (un seul appel pour 250 fichiers).',
     async () => {

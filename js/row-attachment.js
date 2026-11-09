@@ -19,7 +19,7 @@
 //   RowAttachment.isOn() / setOn(bool) -> la case de la personne (gardée par PersonStore) ; RowAttachment.active() -> la jointure vaut pour le prochain export (case cochée ET colonne utilisable ET écriture permise)
 //   RowAttachment.attachAll(tableId, items, progress) -> Promise<null | rapport> : joint ces fichiers { index, rowId, name, blob } ; null quand il n'y a rien à faire ; `progress(rang, total)` est appelé avant chaque envoi. Le rapport :
 //     { column, problem: null | 'missing' | 'unusable' | 'denied' | 'tooLarge' | 'unreachable' | 'failed', attached: [{ index, replaced }], failed: [{ index, reason }] }
-//     (`problem` : ce qui a arrêté tout le lot ; `failed[].reason` : pourquoi CETTE ligne, 'row' si elle n'existe plus). Chez GFS, le rapport peut porter en plus `gfs: { code, message }` quand GFS a refusé l'appel lui-même
+//     (`emptyColumn: true`, chez GFS seulement : GFS a refusé la colonne, qui est une colonne « vide » de Grist, jamais remplie.) (`problem` : ce qui a arrêté tout le lot ; `failed[].reason` : pourquoi CETTE ligne, 'row' si elle n'existe plus). Chez GFS, le rapport peut porter en plus `gfs: { code, message }` quand GFS a refusé l'appel lui-même
 //     (`GFS_REFUSE`, `GFS_LECTURE_SEULE`, `GFS_INACTIF`, `GFS_INCONNU`…) : les fichiers pas encore joints sont des échecs de raison 'gfs'.
 //   RowAttachment.sync(flyout, lines) / wire(flyout, after) -> la case du menu Exporter (grisée avec sa raison, jamais retirée)
 //   RowAttachment.wirePanel() / render() -> la section de Réglages > Vue
@@ -289,6 +289,8 @@ const RowAttachment = (function () {
       const reasons = new Set(report.failed.map(f => f.reason).filter(reason => reason !== 'row'));
       report.problem = reasons.size === 1 ? Array.from(reasons)[0] : reasons.size > 1 ? 'failed' : null;
     }
+    // GFS refuse (`inutilisable`) une colonne que l'app et Grist acceptent : la colonne « vide » (jamais remplie), pas encore une colonne de données. Le dire, pour que la phrase ne parle pas de formule.
+    if (report.problem === 'unusable' && GristAPI.isEmptyColumn(tableId, target)) report.emptyColumn = true;
     return report;
   }
 
