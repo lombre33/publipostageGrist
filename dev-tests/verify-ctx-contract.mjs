@@ -6,6 +6,8 @@
 //    (`return { … }` de son `create`) ou par `Object.assign(ctx, { … })` de la fenêtre ;
 //  - js/free-frame-toolbar.js lit `api` (`const { … } = api;`) et js/free-frame-{line,box}-menus.js `ctx.api` : donnés par l'objet que `wireToolbar` de js/free-frame.js passe à
 //    `FrameToolbar.wire(ed, { … })` ; les menus lisent aussi `ctx` (`const { … } = ctx;`) : donné par le littéral `const ctx = { ed, api, … }` de la barre.
+//  - js/main-import.js (découpe 5, l'import d'un fichier sorti de js/main.js) lit `api` (`const { … } = api;`) : donné par l'objet que js/main.js passe à `MainImport.create({ … })` ; main.js
+//    reprend ce que le morceau rend (`return { … }` de son `create`).
 //  Les détecteurs eux-mêmes : un nom retiré de ce qui est donné est vu (cas fabriqués).
 // Lancé par run-headless.mjs (groupe Node « ctxContract », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-ctx-contract.mjs
 import { readFileSync } from 'node:fs';
@@ -77,9 +79,22 @@ for (const file of FF_MENUS) {
 }
 check('free-frame : la façade range ce que `wire` rend (la barre et son rafraîchissement)', /toolbar = wired\.panel;/.test(ffFacade) && /syncBar = wired\.sync;/.test(ffFacade) && /return \{ panel, sync \};/.test(ffToolbar), null);
 
+// ---- main-import --------------------------------------------------------------------------------------------------------------------------------------------------------
+const miMain = read('js/main.js');
+const miPiece = read('js/main-import.js');
+const miGiven = literalKeys(miMain, 'MainImport.create({') || [];
+const miWanted = destructured(miPiece, 'api');
+const miReturned = piecesReturn(miPiece) || [];
+const miTaken = names((/const \{([^}]*)\} = MainImport\.create\(/.exec(miMain) || [, ''])[1]);
+check('main-import : ce que main.js donne à MainImport.create, ce que le morceau en lit et ce qu\'il rend sont lisibles', miGiven.length >= 8 && miWanted.length >= 8 && miReturned.length >= 4 && miTaken.length >= 4, { given: miGiven.length, wanted: miWanted.length, returned: miReturned.length, taken: miTaken.length });
+check('main-import : le morceau ne lit de `api` que des noms donnés par main.js', missing(miWanted, miGiven).length === 0, missing(miWanted, miGiven));
+check('main-import : main.js ne reprend que des noms que le morceau rend', missing(miTaken, miReturned).length === 0, missing(miTaken, miReturned));
+check('main-import : chaque nom que le morceau lit de `api` est utilisé (aucun nom donné pour rien)', missing(miGiven, miWanted).length === 0, missing(miGiven, miWanted));
+
 // ---- les détecteurs eux-mêmes ---------------------------------------------------------------------------------------------------------------------------------------------
 check('détecteur : un nom retiré de ce que donne wireToolbar est vu', missing(destructured(ffToolbar, 'api'), ffGiven.filter(name => name !== 'selectedFrame')).includes('selectedFrame'), null);
 check('détecteur : un nom retiré de ce que donne la fenêtre est vu', missing(contextUsed(vcWindow + ' ctx.nomQuePersonneNeDonne'), vcGiven).includes('nomQuePersonneNeDonne'), null);
+check('détecteur : un nom retiré de ce que donne main.js au morceau d\'import est vu', missing(miWanted, miGiven.filter(name => name !== 'setStatus')).includes('setStatus'), null);
 check('détecteur : une destructuration sur plusieurs lignes est lue', destructured('const {\n  a, b,\n  c,\n} = api;', 'api').join() === 'a,b,c', destructured('const {\n  a, b,\n  c,\n} = api;', 'api'));
 check('détecteur : le littéral de ctx est lu avec ses valeurs', literalKeys('const ctx = { level, win: null, refs: null };', 'const ctx = {').join() === 'level,win,refs', null);
 
