@@ -420,6 +420,36 @@ const EditorCore = (function () {
   const CLOSED_AWAY = 'v2-hover-closed-away';
   // Une vraie entrée ou sortie du groupe : ignore un simple passage entre deux de ses descendants (relatedTarget encore ou déjà dans le groupe).
   function realCrossing(event, group) { return !event.relatedTarget || !group.contains(event.relatedTarget); }
+  // Un menu que la barre de GFS (ou le bord du cadre) a fait glisser de côté ne recouvre plus son bouton : positionFlyout lui pose `v2-hover-offset`. Il ne touche alors son bouton que par un
+  // coin (le pont de survol, 3 px sous le bouton, n'y mène qu'au ras du coin) : la souris qui va de l'icône au menu, en biais, sort du groupe en chemin et le menu se ferme sous elle
+  // (« Exporter » passé à la deuxième ligne d'un petit panneau, tout à gauche contre la barre). Un pont plus large volerait le survol des boutons voisins, et aucun ne suit tous les chemins :
+  // la sortie du groupe de ce menu, par son BOUTON, le laisse ouvert `GRACE_MS` (classe `v2-hover-grace`, css/editor-v2.css), le temps d'atteindre le menu, où `:hover` reprend la main. Le menu quitté
+  // par lui-même, un menu qui recouvre son bouton (les autres, et tous sans barre) et la sortie vers un autre menu ne gardent aucun délai.
+  const OFFSET = 'v2-hover-offset';
+  const GRACE = 'v2-hover-grace';
+  const GRACE_MS = 400;
+  const graceTimers = new Map();
+  function endGrace(group, close) {
+    if (!graceTimers.has(group)) return;
+    clearTimeout(graceTimers.get(group));
+    graceTimers.delete(group);
+    group.classList.remove(GRACE);
+    // Le délai écoulé sans que la souris soit revenue (ni le clavier) : le menu se ferme, et le bouton le dit. Revenue, `:hover` tient le menu ouvert et `mouseover` a déjà tout remis en place.
+    if (close && !group.matches(':hover, :focus-within')) setGroupExpanded(group, false);
+  }
+  function endOtherGraces(group) { Array.from(graceTimers.keys()).forEach(other => { if (other !== group) endGrace(other, true); }); }
+  // La souris sort du groupe d'un menu décalé, ouvert, ailleurs que par le menu lui-même (le bouton, ou le pont de survol qu'il porte) : le menu reste ouvert un instant. Rend vrai quand le délai
+  // est pris (le menu garde son état « ouvert », aria-expanded compris).
+  function startGrace(group, event) {
+    const trigger = group.querySelector(':scope > button');
+    const flyout = group.querySelector(':scope > .v2-hover-flyout');
+    if (!trigger || (flyout && flyout.contains(event.target)) || !group.classList.contains(OFFSET) || trigger.getAttribute('aria-expanded') !== 'true') return false;
+    if (group.classList.contains(CLOSED_BY_CLICK) || group.closest('[data-pp-lock-blocks]')) return false;
+    endGrace(group, false);
+    group.classList.add(GRACE);
+    graceTimers.set(group, setTimeout(() => endGrace(group, true), GRACE_MS));
+    return true;
+  }
   function positionFlyout(group, opening) {
     // positionFlyout : même principe que positionPopup() de TemplateTreeSelect (js/template-tree-select.js). Un flyout `.v2-hover-flyout`
     // (position:absolute; top:100%; left:0, CSS) suppose une barre d'outils toujours à peu près à la même hauteur et largeur, ce qui est faux dans un
@@ -471,6 +501,9 @@ const EditorCore = (function () {
       rect = flyout.getBoundingClientRect();
       room = GfsBar.limits(rect);
     }
+    // Le menu qui ne recouvre plus son bouton que sur un trait (moins de 16 px, ou de la largeur du bouton s'il est plus étroit) : voir `OFFSET`. Posé et retiré à chaque calcul : sans décalage, aucune trace.
+    // Un menu sans boîte (`display: none`, pas encore survolé : l'ouverture n'est pas celle de la souris) n'est pas décalé, il n'a pas de place.
+    group.classList.toggle(OFFSET, rect.width > 0 && Math.min(groupRect.right, rect.right) - Math.max(groupRect.left, rect.left) < Math.min(groupRect.width, 16));
     const gap = parseFloat(getComputedStyle(group).getPropertyValue('--v2-flyout-gap')) || 0;
     let dropped = 0;
     if (room.top > 0 && rect.top < room.top) {
@@ -517,12 +550,17 @@ const EditorCore = (function () {
   document.addEventListener('mouseover', (event) => {
     const group = groupOf(event.target);
     if (!group || !realCrossing(event, group)) return;
+    // La souris entre dans un menu : celui qui attendait encore son délai se ferme tout de suite (pas deux menus ouverts), et ce groupe-ci reprend la main (`:hover`).
+    endOtherGraces(group);
+    endGrace(group, false);
     if (group.classList.contains(CLOSED_AWAY)) group.classList.remove(CLOSED_BY_CLICK, CLOSED_AWAY);
     setGroupExpanded(group, true);
   });
   document.addEventListener('mouseout', (event) => {
     const group = groupOf(event.target);
-    if (group && realCrossing(event, group)) setGroupExpanded(group, false);
+    if (!group || !realCrossing(event, group)) return;
+    if (startGrace(group, event)) return;
+    setGroupExpanded(group, false);
   });
   document.addEventListener('focusin', (event) => {
     const group = groupOf(event.target);

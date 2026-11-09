@@ -16,6 +16,9 @@
 //     touchait pas reste où elle était.
 //  6) LA BARRE CHANGE, MENU OUVERT AU CLAVIER (focus du bouton) : le menu reste ouvert, se recale à chaque bord, puis rend tout ce qu'il avait posé quand la barre part.
 //  7) UN CADRE BAS (700 × 260) : posée une barre, tout menu reste dans le cadre et hors de la zone (un menu plus haut que la place défile, 8 px avant le bas du cadre au moins, descendu sous une barre en haut compris).
+//  8) UN MENU DÉCALÉ DE CÔTÉ (600 × 400, barre à gauche : « Exporter » passe à la deuxième ligne, tout à gauche, et son menu glisse à droite de la barre, sans recouvrement horizontal avec son bouton) : du bouton au menu, à la vraie
+//     souris, par plusieurs chemins (vers le haut, le milieu et le bas du menu, d'un saut et en 3 à 30 pas, au pas lent d'une main), le menu reste ouvert et sous le pointeur ; un menu qui garde le pointeur ne se referme pas
+//     tout seul ; laissé sans geste, ou quitté pour un autre menu, il se referme ; un menu qui recouvre son bouton (sans barre, ou au bord de la page) se referme tout de suite, comme avant.
 // GFS_BAR_FIT_ONLY=1,3 ne joue que ces scénarios (mise au point) ; GFS_BAR_FIT_VERBOSE=1 écrit les rectangles mesurés ; rien d'écrit sinon. Lancé par run-headless.mjs (groupe Node « gfsBarFit », cf. NODE_SCRIPTS),
 // ou seul : node dev-tests/verify-gfs-bar-fit.mjs
 import { start, seedModels } from './gfs-page.mjs';
@@ -463,6 +466,132 @@ if (wanted(7)) {
     }
     check(`cadre 700 × 260, barre ${bord} : plus de dix menus examinés`, examined >= 10, examined);
     await park(page);
+  }
+  parkAt = PARK;
+  await page.context().close();
+}
+
+// Un menu que la barre de GFS a fait glisser de côté ne touche plus son bouton que par un coin : la souris qui va de l'icône au menu sort du groupe en chemin, et le menu se ferme sous elle (« Exporter », passé à la deuxième
+// ligne d'un petit panneau, tout à gauche contre la barre). Le menu ne reste ouvert qu'un court instant après la sortie de son bouton (`GRACE_MS` de js/editor-core.js, 400 ms) ; un menu qui recouvre son bouton n'est pas concerné.
+if (wanted(8)) {
+  console.log('\n8) Un menu décalé de côté, du bouton au menu, 600 × 400');
+  const size = [600, 400];
+  const GRACE_WAIT = 400 + 350;   // le délai du menu décalé, plus une marge pour la minuterie
+  const ctx = await t.openPage({ framed: true, seed: SEED, lang: 'fr', stub: { barre: null }, width: size[0], height: size[1] });
+  const { page, app } = ctx;
+  parkAt = { x: 350, y: size[1] - 4 };
+  const bar = await showBar(page, app, 'gauche', ...size);
+  const id = 'v2-export-pdf-flyout';
+  const walk = async (from, to, steps, pause) => {
+    for (let i = 1; i <= steps; i += 1) {
+      await page.mouse.move(from.x + (to.x - from.x) * i / steps, from.y + (to.y - from.y) * i / steps);
+      if (pause) await sleep(pause);
+    }
+  };
+  const readMenu = (x, y) => app.evaluate(([fid, px, py]) => {
+    const fly = document.getElementById(fid);
+    const el = px === undefined ? null : document.elementFromPoint(px, py);
+    return { open: getComputedStyle(fly).display !== 'none' && fly.getBoundingClientRect().width > 0, under: !!el && fly.contains(el), hover: fly.matches(':hover'), expanded: fly.parentElement.querySelector(':scope > button').getAttribute('aria-expanded') };
+  }, [id, x, y]);
+
+  const m0 = await hoverMenu(ctx, id);
+  check('« Exporter » est passé à la deuxième ligne, dans la colonne de la barre, et son menu glisse à droite : aucun recouvrement horizontal avec son bouton', m0 && m0.shown && m0.trigger.top > 30 && m0.trigger.right <= bar.zone.x + bar.zone.largeur + 0.5 && m0.flyout.left > m0.group.right - 0.5, m0 && { bouton: showRect(m0.trigger), menu: showRect(m0.flyout) });
+  check('« Exporter » décalé : le menu ne recouvre pas la zone de la barre et reste dans le cadre', !!m0 && !hits(m0.flyout, bar) && m0.flyout.right <= size[0] + 0.5 && m0.flyout.bottom <= size[1] + 0.5, m0 && showRect(m0.flyout));
+  const center0 = { x: (m0.trigger.left + m0.trigger.right) / 2, y: (m0.trigger.top + m0.trigger.bottom) / 2 };
+  const f = m0.flyout;
+  // Le bas du menu s'atteint en deux gestes (d'abord l'entrée du menu, par le haut, puis la descente dedans) : en ligne droite depuis l'icône, le chemin traverse « Normal », juste dessous, dont le menu s'ouvre
+  // et prend la place (un autre menu qui s'ouvre referme celui-ci aussitôt, plus bas).
+  const targets = [
+    ['le haut du menu', { x: f.left + 6, y: f.top + 6 }],
+    ['la première ligne, plus loin', { x: f.left + 60, y: f.top + 20 }],
+    ['le bas du menu', { x: f.left + 60, y: Math.min(f.top + 200, f.bottom - 10) }, { x: f.left + 6, y: f.top + 6 }],
+  ];
+  let failed = 0; let tried = 0;
+  for (const [label, to, via] of targets) {
+    for (const steps of [1, 3, 6, 12, 30]) {
+      const m = await hoverMenu(ctx, id);
+      const from = { x: (m.trigger.left + m.trigger.right) / 2, y: (m.trigger.top + m.trigger.bottom) / 2 };
+      if (via) { await walk(from, via, steps, 0); await walk(via, to, steps, 0); } else await walk(from, to, steps, 0);
+      await sleep(100);
+      const after = await readMenu(to.x, to.y);
+      tried += 1;
+      const ok = after.open && after.under && after.hover && after.expanded === 'true';
+      if (!ok) { failed += 1; console.log(`   x de l'icône à ${label} en ${steps} pas :`, JSON.stringify(after)); }
+    }
+  }
+  check(`de l'icône « Exporter » au menu décalé, à la vraie souris (${tried} chemins : haut, première ligne et bas du menu, d'un saut et en 3 à 30 pas), le menu reste ouvert et sous le pointeur`, tried === 15 && failed === 0, { echecs: failed, chemins: tried });
+
+  // Au pas lent d'une main (20 pas de 10 ms), vers la première ligne : le menu est atteint, et la minuterie ne le ferme pas ensuite, la souris dessus.
+  {
+    const m = await hoverMenu(ctx, id);
+    const to = { x: f.left + 60, y: f.top + 20 };
+    await walk({ x: (m.trigger.left + m.trigger.right) / 2, y: (m.trigger.top + m.trigger.bottom) / 2 }, to, 20, 10);
+    await sleep(100);
+    const reached = await readMenu(to.x, to.y);
+    check('au pas lent d\'une main (20 pas de 10 ms), le menu décalé est atteint : ouvert, sous le pointeur', reached.open && reached.under && reached.hover && reached.expanded === 'true', reached);
+    await sleep(GRACE_WAIT);
+    const later = await readMenu(to.x, to.y);
+    check('une fois le pointeur dans le menu décalé, il reste ouvert après le délai (la minuterie de sortie ne le ferme pas) et le bouton le dit (aria-expanded)', later.open && later.under && later.hover && later.expanded === 'true', later);
+    // Quitté par le menu lui-même : il se referme tout de suite, sans délai.
+    await page.mouse.move(parkAt.x, parkAt.y, { steps: 4 });
+    await sleep(120);
+    const left = await readMenu();
+    check('le menu décalé quitté par le menu lui-même se referme tout de suite (le délai ne vaut que pour la sortie du bouton)', !left.open && left.expanded === 'false', left);
+  }
+
+  // Sorti du bouton vers le vide, sans arriver au menu : il reste un instant (le temps de l'atteindre) puis se referme, et le bouton le dit.
+  {
+    const m = await hoverMenu(ctx, id);
+    const start = { x: (m.trigger.left + m.trigger.right) / 2, y: (m.trigger.top + m.trigger.bottom) / 2 };
+    const gap = { x: m.group.right + 1, y: m.group.bottom + 6 };       // juste sous le coin du bouton, avant le menu
+    await walk(start, gap, 6, 0);
+    await sleep(100);
+    const soon = await readMenu();
+    check('sorti du bouton vers le vide, sans toucher le menu décalé : il reste ouvert un court instant (le temps d\'y arriver)', soon.open && soon.expanded === 'true', soon);
+    await sleep(GRACE_WAIT);
+    const gone = await readMenu();
+    check('puis, la souris restée dans le vide, le menu décalé se referme tout seul et le bouton le dit (aria-expanded « false »)', !gone.open && gone.expanded === 'false', gone);
+  }
+
+  // Un autre menu qui s'ouvre prend la place : le menu décalé se referme tout de suite, il ne reste pas deux menus.
+  {
+    const other = await app.evaluate(() => {
+      const groups = Array.from(document.querySelectorAll('.v2-hover-group'));
+      const here = document.getElementById('v2-export-pdf-group');
+      const after = groups.slice(groups.indexOf(here) + 1).concat(groups.slice(0, groups.indexOf(here)).reverse());
+      const visible = after.find(g => { const b = g.querySelector(':scope > button'); if (!b || g.querySelector(':scope > .v2-hover-flyout') === null) return false; const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0 && g.getBoundingClientRect().top > 30; });
+      if (!visible) return null;
+      const b = visible.querySelector(':scope > button').getBoundingClientRect();
+      const fly = visible.querySelector(':scope > .v2-hover-flyout');
+      if (!fly.id) fly.id = 'pp-fit-other-flyout';
+      return { id: fly.id, x: (b.left + b.right) / 2, y: (b.top + b.bottom) / 2 };
+    });
+    check('un autre menu est sur la même ligne que « Exporter » (de quoi essayer le passage de l\'un à l\'autre)', !!other, other);
+    if (other) {
+      const m = await hoverMenu(ctx, id);
+      await walk({ x: (m.trigger.left + m.trigger.right) / 2, y: (m.trigger.top + m.trigger.bottom) / 2 }, { x: other.x, y: other.y }, 8, 0);
+      await app.waitForFunction(fid => getComputedStyle(document.getElementById(fid)).display !== 'none', other.id, { timeout: 3000 }).catch(() => {});
+      await sleep(100);
+      const first = await readMenu();
+      const second = await app.evaluate(fid => getComputedStyle(document.getElementById(fid)).display !== 'none', other.id);
+      check('du bouton « Exporter » à un autre bouton de menu : l\'autre menu s\'ouvre et le menu décalé se referme aussitôt (pas deux menus ouverts)', second && !first.open && first.expanded === 'false', { exporter: first, autre: second });
+    }
+  }
+  await park(page);
+
+  // Un menu qui recouvre son bouton n'a aucun délai : sans barre, puis avec la barre à gauche dans un cadre large (le bouton est alors sur la première ligne, le menu dessous).
+  for (const [label, wide] of [['sans barre', null], ['barre à gauche, cadre de 700 × 400', 'gauche']]) {
+    const ctxWide = await t.openPage({ framed: true, seed: SEED, lang: 'fr', stub: { barre: null }, width: 700, height: 400 });
+    parkAt = { x: 350, y: 396 };
+    if (wide) await showBar(ctxWide.page, ctxWide.app, wide, 700, 400);
+    const m = await hoverMenu(ctxWide, id);
+    check(`${label} : le menu d'« Exporter » recouvre son bouton (aucun décalage de côté)`, !!m && m.shown && m.flyout.left < m.group.right - 16 && m.flyout.right > m.group.left + 16, m && { bouton: showRect(m.trigger), menu: showRect(m.flyout) });
+    await ctxWide.page.mouse.move((m.trigger.left + m.trigger.right) / 2, m.trigger.bottom + 40, { steps: 4 });
+    await ctxWide.page.mouse.move(parkAt.x, parkAt.y, { steps: 4 });
+    await sleep(120);
+    const closed = await ctxWide.app.evaluate(fid => ({ open: getComputedStyle(document.getElementById(fid)).display !== 'none', expanded: document.getElementById(fid).parentElement.querySelector(':scope > button').getAttribute('aria-expanded') }), id);
+    check(`${label} : sorti du bouton, ce menu se referme tout de suite, comme avant (aucun délai)`, !closed.open && closed.expanded === 'false', closed);
+    await ctxWide.page.context().close();
   }
   parkAt = PARK;
   await page.context().close();
