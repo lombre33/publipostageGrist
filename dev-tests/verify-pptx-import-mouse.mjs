@@ -4,7 +4,7 @@
 // (~700x400), hébergé par GFS (simulé par dev-tests/gfs-stub.js) avec l'extension « diapositives » active : français clair, puis anglais sombre.
 // dev-tests/scenarios-pptx-import.js (groupe « pptxImport ») vérifie, DANS la page, ce que l'import écrit ; une page.evaluate ne déclenche ni le survol d'un menu, ni un geste « trusted », ni un vrai
 // sélecteur de fichier : c'est ici qu'on s'assure que
-//  - le menu « + » montre « Importer un PowerPoint… » (« Import from PowerPoint… ») juste après « Importer un Markdown… », entière dans le panneau, que rien ne recouvre, lisible (F5), au repos et sous la souris ;
+//  - le menu « + » montre « Importer un PowerPoint… » (« Import from PowerPoint… ») juste après « Importer un Word… » (qui suit « Importer un Markdown… »), entière dans le panneau, que rien ne recouvre, lisible (F5), au repos et sous la souris ;
 //  - un vrai clic ouvre le vrai sélecteur, réduit aux présentations (.pptx, .ppsx, .potx), pour un seul fichier ; annuler ne change rien ; le moteur (js/pptx-import.js) n'est demandé au réseau qu'au premier
 //    import, une seule fois ;
 //  - le fichier choisi devient une NOUVELLE présentation, sans nom : une miniature par diapositive, la page du fichier (960 x 540 points), le texte, la forme, l'image, le trait et le tableau à leur place et
@@ -272,8 +272,8 @@ async function run(lang, scheme) {
     await page.waitForFunction(sel => { const el = document.querySelector(sel); return !!el && el.getAttribute('aria-disabled') === 'false'; }, ROW, { timeout: 15000 }).catch(() => {});
     await hoverRow(page, PLUS, ROW);
     const [row] = await rowsState(page, [ROW]);
-    check(tag + `le menu « + » montre « ${T.row} » juste après « Importer un Markdown… », entière dans le panneau, atteignable, active, sans texte coupé`,
-      !row.missing && row.text === T.row && row.previous === 'v2-btn-import-md' && row.inside && row.reachable && !row.cut && row.live && row.ariaDisabled === 'false', row);
+    check(tag + `le menu « + » montre « ${T.row} » juste après « Importer un Word… » (qui suit « Importer un Markdown… »), entière dans le panneau, atteignable, active, sans texte coupé`,
+      !row.missing && row.text === T.row && row.previous === 'v2-btn-import-docx' && row.inside && row.reachable && !row.cut && row.live && row.ariaDisabled === 'false', row);
     check(tag + 'le texte de la ligne tient les contrastes de la charte (>= 4,5:1), au repos et sous la souris', row.contrast >= 4.5, row.contrast);
     const hovered = await hoveredState(page, ROW);
     check(tag + 'sous la souris, la ligne se peint de son fond de survol et reste lisible (>= 4,5:1)', hovered.hovered && hovered.painted && hovered.contrast >= 4.5, hovered);
