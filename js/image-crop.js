@@ -166,6 +166,8 @@ const ImageCrop = (function () {
     ok.addEventListener('click', apply);
     // Le panneau change de taille (le cadre de GFS, la fenêtre du navigateur) : la hauteur permise à l'aperçu suit, le cadre reste en parts de l'image.
     window.addEventListener('resize', () => { if (win.isOpen()) fit(); });
+    // La barre de GFS change de bord ou de profondeur, fenêtre ouverte : les marges du voile ont déjà bougé quand on le dit.
+    GfsBar.onChange(() => { if (win.isOpen()) fit(); });
     preview.addEventListener('load', () => { fit(); render(); });
     preview.addEventListener('error', () => {
       closeWindow();
@@ -173,9 +175,13 @@ const ImageCrop = (function () {
     });
   }
 
-  // La hauteur permise à l'aperçu : ce qui reste du panneau sous le titre, les deux lignes de texte et les boutons (css/image-crop.css la lit dans --pp-crop-max-h).
+  // La hauteur permise à l'aperçu : ce qui reste du panneau sous le titre, les deux lignes de texte et les boutons (css/image-crop.css la lit dans --pp-crop-max-h). La barre de GFS en haut ou en bas
+  // (js/gfs-bar.js) prend sa profondeur au voile de la fenêtre en marge intérieure (css/modal-base.css, --gfs-bar-inset-*) : le cadre de la fenêtre se mesure dans ce qui reste, l'aperçu aussi ;
+  // sans quoi le contenu défilait de la profondeur de la barre (35 px) dès qu'elle était là.
   function fit() {
-    const room = Math.max(96, Math.min(360, window.innerHeight - 240));
+    const overlay = getComputedStyle(win.overlay);
+    const barDepth = (parseFloat(overlay.paddingTop) || 0) + (parseFloat(overlay.paddingBottom) || 0);
+    const room = Math.max(96, Math.min(360, window.innerHeight - barDepth - 240));
     refs.stage.style.setProperty('--pp-crop-max-h', room + 'px');
   }
 

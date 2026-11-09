@@ -9,7 +9,10 @@
 //  - un vrai glissé d'une poignée de bord, d'une poignée de coin et du cadre lui-même règle le cadre, qui ne sort jamais de l'image même quand la souris sort de la fenêtre ;
 //  - « Rogner » (un vrai clic) redessine l'image, ferme la fenêtre, laisse l'image sélectionnée à l'échelle de la partie gardée ; Ctrl+Z (la vraie touche) rend l'image d'avant, Ctrl+Y la remet ;
 //  - au clavier : Tab fait le tour de la fenêtre (les quatre bords, Annuler, Rogner) sans en sortir, les flèches règlent le bord, Entrée rogne, Échap ferme sans toucher l'image ;
-//  - une image vectorielle et une image de colonne grisent « Rogner… » avec leur raison et n'ouvrent rien.
+//  - une image vectorielle et une image de colonne grisent « Rogner… » avec leur raison et n'ouvrent rien ;
+//  - devant la barre de GFS, aux quatre bords (cadre isolé qui joue GFS, comme `gfsBarFit`) : la fenêtre reste entière dans le cadre de l'app, ne recouvre pas la zone de la barre, ses boutons sont
+//    au premier plan et son contenu NE DÉFILE PAS (retour de la Liaison sur 7476409 : l'aperçu ne comptait pas la barre, le contenu défilait de 35 px quand elle était en haut ou en bas) ; la barre qui
+//    change de bord fenêtre ouverte, l'aperçu suit.
 // Lancé par run-headless.mjs (groupe Node « imageCropMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-image-crop-mouse.mjs
 // IMAGE_CROP_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans lui, rien n'est écrit.
 import { mkdir } from 'node:fs/promises';
@@ -235,6 +238,75 @@ async function run(lang, scheme) {
   await context.close();
 }
 
+// Devant la barre de GFS : un cadre isolé de 700x400 qui joue GFS (dev-tests/gfs-stub.js), la barre à chacun des quatre bords puis sans barre.
+const EDGES = ['gauche', 'haut', 'droite', 'bas'];
+const EN_EDGE = { gauche: 'left', haut: 'top', droite: 'right', bas: 'bottom' };
+async function runBar() {
+  const { page, app, context } = await t.openPage({ framed: true, lang: 'fr', stub: { barre: null } });
+  await app.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 400;
+    canvas.height = 200;
+    const g = canvas.getContext('2d');
+    [['#ff0000', 0, 0], ['#0000ff', 200, 0], ['#00ff00', 0, 100], ['#ffff00', 200, 100]].forEach(([color, x, y]) => { g.fillStyle = color; g.fillRect(x, y, 200, 100); });
+    Editor.setHTML('<p>Avant</p><p><img class="editor-image" src="' + canvas.toDataURL('image/png') + '" alt="" style="width: 240px"></p><p>Après</p>');
+  });
+  await sleep(500);
+  const showBar = async (edge) => {
+    const bar = edge === null ? null : await page.evaluate(([b, w, h]) => window.__gfsStub.zoneDe(b, w, h), [edge, 700, 400]);
+    await page.evaluate(next => window.__gfsStub.setBarre(next), bar);
+    await app.waitForFunction(want => document.documentElement.getAttribute('data-gfs-bar') === want, edge === null ? null : EN_EDGE[edge], { timeout: 5000 });
+    await sleep(150);
+    return bar;
+  };
+  const clickIn = async (selector) => {
+    const r = await rectOf(app, selector);
+    await page.mouse.move(r.cx, r.cy);
+    await page.mouse.down();
+    await page.mouse.up();
+    await sleep(350);
+  };
+  const measure = () => app.evaluate(() => {
+    const overlay = document.getElementById('pp-crop-modal');
+    const box = overlay.querySelector('.pp-modal-box');
+    const body = box.querySelector('.pp-modal-body');
+    const rc = el => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; };
+    const onTop = sel => { const el = overlay.querySelector(sel); const r = el.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!hit && (hit === el || el.contains(hit)); };
+    return {
+      shown: getComputedStyle(overlay).display !== 'none', box: rc(box), scrollH: body.scrollHeight, clientH: body.clientHeight, scrollW: body.scrollWidth, clientW: body.clientWidth,
+      okOnTop: onTop('.var-modal-primary'), cancelOnTop: onTop('.pp-modal-actions button:not(.var-modal-primary)'), maxH: overlay.querySelector('.pp-crop-stage').style.getPropertyValue('--pp-crop-max-h'),
+    };
+  });
+  const hitsZone = (r, bar) => !!bar && r.left < bar.zone.x + bar.zone.largeur - 0.02 && r.right > bar.zone.x + 0.02 && r.top < bar.zone.y + bar.zone.hauteur - 0.02 && r.bottom > bar.zone.y + 0.02;
+  for (const edge of [null, ...EDGES]) {
+    const tag = '[barre de GFS ' + (edge === null ? 'absente' : edge) + '] ';
+    const bar = await showBar(edge);
+    await clickIn('.tiptap img.editor-image');
+    await clickIn(OPENER);
+    await sleep(400);
+    const m = await measure();
+    check(tag + 'la fenêtre s\'ouvre, entière dans le cadre de l\'app et hors de la zone de la barre', m.shown && m.box.left >= -0.5 && m.box.top >= -0.5 && m.box.right <= 700.5 && m.box.bottom <= 400.5 && !hitsZone(m.box, bar), { m, bar: bar && bar.zone });
+    check(tag + 'son contenu ne défile pas (l\'aperçu laisse la place de la barre)', m.scrollH <= m.clientH + 1 && m.scrollW <= m.clientW + 1, { scrollH: m.scrollH, clientH: m.clientH, maxH: m.maxH });
+    check(tag + 'les boutons « Annuler » et « Rogner » sont au premier plan', m.okOnTop && m.cancelOnTop);
+    await page.keyboard.press('Escape');
+    await sleep(300);
+  }
+  // La barre change de bord, fenêtre ouverte : l'aperçu suit, le contenu ne défile toujours pas.
+  await showBar(null);
+  await clickIn('.tiptap img.editor-image');
+  await clickIn(OPENER);
+  await sleep(400);
+  for (const edge of ['haut', 'bas', null]) {
+    await showBar(edge);
+    await sleep(250);
+    const m = await measure();
+    check('[barre de GFS changée fenêtre ouverte : ' + (edge === null ? 'retirée' : edge) + '] le contenu ne défile pas', m.shown && m.scrollH <= m.clientH + 1, { scrollH: m.scrollH, clientH: m.clientH, maxH: m.maxH });
+  }
+  await page.keyboard.press('Escape');
+  await context.close();
+}
+
 await run('fr', 'light');
 await run('en', 'dark');
+await runBar();
 await t.finish();
