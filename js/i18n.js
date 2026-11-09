@@ -998,6 +998,20 @@ const I18n = (function () {
       fr: 'Commentaire non enregistré : le modèle a changé ailleurs ou l’enregistrement a échoué. Rechargez-le puis réessayez.',
       en: 'Comment not saved: the template changed elsewhere or saving failed. Reload it and try again.',
     },
+    // Les discussions d'un Word importé n'ont pas pu entrer dans la table des commentaires au premier enregistrement (js/comments.js, writeStaged) : le modèle est enregistré, les marques sont dans le texte, les messages attendent.
+    'comments.adoptFailed.title': { fr: 'Discussions du Word non enregistrées', en: 'Word discussions not saved' },
+    'comments.adoptFailed.refused': {
+      fr: 'Grist refuse d’écrire les discussions de ce Word dans la table des commentaires (règle d’accès, lecture seule pour vous). Le modèle est enregistré et les passages commentés restent marqués, mais leurs messages seront perdus si vous fermez ce modèle. Voyez avec un propriétaire du document, puis enregistrez de nouveau pour réessayer.',
+      en: 'Grist refuses to write this Word’s discussions to the comments table (access rule, read-only for you). The template is saved and the commented passages stay marked, but their messages will be lost if you close this template. Ask a document owner, then save again to retry.',
+    },
+    'comments.adoptFailed.declined': {
+      fr: 'La table des commentaires n’a pas été créée dans ce document : les discussions de ce Word n’ont pas pu y être écrites. Le modèle est enregistré et les passages commentés restent marqués, mais leurs messages seront perdus si vous fermez ce modèle. Enregistrez de nouveau et acceptez la création des tables pour réessayer.',
+      en: 'The comments table was not created in this document, so this Word’s discussions could not be written to it. The template is saved and the commented passages stay marked, but their messages will be lost if you close this template. Save again and accept creating the tables to retry.',
+    },
+    'comments.adoptFailed.error': {
+      fr: 'L’écriture des discussions de ce Word dans la table des commentaires a échoué. Le modèle est enregistré et les passages commentés restent marqués, mais leurs messages seront perdus si vous fermez ce modèle. Enregistrez de nouveau pour réessayer.',
+      en: 'Writing this Word’s discussions to the comments table failed. The template is saved and the commented passages stay marked, but their messages will be lost if you close this template. Save again to retry.',
+    },
     'comments.readerChanged': { fr: 'Le document vient de changer : sélectionnez de nouveau le texte à commenter.', en: 'The document just changed: select the text to comment on again.' },
     // Annuler ou Rétablir n'a pas pu écrire dans la table des fils (js/comments.js, restore) : le texte a changé, les messages non.
     'comments.updateFailed.title': { fr: 'Commentaires non mis à jour', en: 'Comments not updated' },

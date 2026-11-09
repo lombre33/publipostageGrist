@@ -33,7 +33,7 @@ const MAX_MIB = 150;
 
 const TEXTS = {
   fr: {
-    row: 'Importer un Word…', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler', close: 'Fermer',
+    row: 'Importer un Word…', adoptTitle: 'Discussions du Word non enregistrées', adoptReason: /Grist refuse d’écrire/, unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler', close: 'Fermer',
     imported: 'Word importé. Nommez le modèle puis enregistrez-le.', importedPattern: /Word importé/,
     reading: /^Lecture du fichier Word/,
     unreadable: 'Ce fichier n’est pas un document Word (.docx) lisible.', unreadablePattern: /n’est pas un document Word/,
@@ -47,7 +47,7 @@ const TEXTS = {
     samples: ['1 police que l’éditeur n’a pas, remplacée par la plus proche', '1 note de fin reprise comme note de bas de page', '2 modifications suivies de mise en forme ou de structure acceptées telles quelles (l’éditeur ne suit que les ajouts et les suppressions de texte)'],
   },
   en: {
-    row: 'Import from Word…', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
+    row: 'Import from Word…', adoptTitle: 'Word discussions not saved', adoptReason: /Grist refuses to write/, unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
     imported: 'Word imported. Name the template, then save it.', importedPattern: /Word imported/,
     reading: /^Reading the Word file/,
     unreadable: 'This file is not a readable Word (.docx) document.', unreadablePattern: /not a readable Word/,
@@ -458,6 +458,48 @@ async function run(lang, scheme) {
     refusal(`un fichier de plus de ${MAX_MIB} Mo (jamais lu : sa taille suffit)`, await refused(huge, T.tooBigPattern), T.tooBig);
     await snap('refused');
     check(tag + 'aucun de ces refus n\'a demandé le moindre rechargement du moteur ni laissé un champ de fichier dans la page', engineRequests() === 1 && (await page.evaluate(() => document.querySelectorAll('input[type="file"]').length)) === 0, { engine: engineRequests() });
+    // 7) Grist refuse d'écrire dans la table des commentaires au premier enregistrement d'un Word importé : une fenêtre le dit (entière dans le panneau), le fil s'ouvre encore au vrai clic sur sa marque,
+    // et l'enregistrement suivant, l'écriture permise, écrit les messages.
+    await pickFile(page, wordFile('relu-refus.docx', await buildFile(page, 'reviewed')));
+    await settle(page, /^$/);
+    await clickDialogButton(page, T.discard);
+    await settle(page, T.importedPattern);
+    await sleep(500);
+    const realSave = async () => {
+      const box = await page.evaluate(() => { const b = document.getElementById('btn-save'); const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+      await page.mouse.move(box.x - 6, box.y, { steps: 2 });
+      await page.mouse.click(box.x, box.y);
+      await sleep(1500);
+      await parkMouse(page);
+    };
+    const threadRows = () => page.evaluate(() => { const rows = window.__gristStub.state.rows.Publipostage_Commentaires; return rows ? rows.id.length : 0; });
+    await page.evaluate(() => {
+      const rows = window.__gristStub.state.rows.Publipostage_Commentaires;
+      if (rows) Object.keys(rows).forEach(column => { rows[column] = []; });
+      window.__gristStub.denyTable('Publipostage_Commentaires', true);
+      document.getElementById('template-name').value = 'Word relu';
+    });
+    await realSave();
+    const adopt = await dialogState(page);
+    check(tag + `Grist refuse les fils : une fenêtre « ${T.adoptTitle} » le dit, avec la raison, entière dans le panneau, et « ${T.close} » en bas`, adopt.shown && adopt.title === T.adoptTitle && T.adoptReason.test(adopt.message) && adopt.boxInPanel && adopt.titleInPanel && adopt.buttonsInPanel && adopt.buttons.includes(T.close), { title: adopt.title, buttons: adopt.buttons, box: adopt.box });
+    check(tag + 'le modèle est enregistré malgré tout, aucun message n\'est écrit dans la table des fils', (await page.evaluate(() => Templates.getCurrentId())) != null && (await threadRows()) === 0);
+    await snap('adopt-refused');
+    await clickDialogButton(page, T.close);
+    check(tag + 'la fenêtre se ferme au vrai clic', !(await dialogState(page)).shown);
+    const keptBox = await page.evaluate(() => { const m = document.querySelector('#editor-container .tiptap .comment-mark'); m.scrollIntoView({ block: 'center' }); const r = m.getBoundingClientRect(); return { x: r.left + Math.min(r.width / 2, 40), y: r.top + r.height / 2 }; });
+    await page.mouse.move(keptBox.x - 6, keptBox.y, { steps: 2 });
+    await page.mouse.click(keptBox.x, keptBox.y);
+    await sleep(500);
+    const stillThere = await page.evaluate(() => { const popup = document.getElementById('v2-comment-popup'); return popup && popup.style.display !== 'none' ? popup.querySelectorAll('.v2-comment-popup-message').length : 0; });
+    check(tag + 'un vrai clic sur le passage commenté ouvre encore le fil, avec ses deux messages : rien n\'est perdu', stillThere === 2, stillThere);
+    const keptClose = await page.evaluate(() => { const b = document.querySelector('#v2-comment-popup .v2-comment-popup-close'); const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+    await page.mouse.move(keptClose.x, keptClose.y, { steps: 3 });
+    await page.mouse.down();
+    await page.mouse.up();
+    await sleep(300);
+    await page.evaluate(() => window.__gristStub.denyTable('Publipostage_Commentaires', false));
+    await realSave();
+    check(tag + 'l\'enregistrement suivant, l\'écriture permise, écrit les deux messages du fil, sans fenêtre', (await threadRows()) === 2 && !(await dialogState(page)).shown, { rows: await threadRows() });
     check(tag + 'aucune boîte native (alert, confirm, prompt) ne s\'est ouverte pendant tout le parcours', natives.length === 0, natives);
   } finally {
     await rm(tmp, { recursive: true, force: true });

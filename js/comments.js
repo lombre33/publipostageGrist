@@ -143,18 +143,33 @@ const Comments = (function () {
       threadsByCommentId[thread.id] = thread.messages.map(m => ({ id: null, uid: newMessageUid(), auteur: m.auteur || '', texte: m.texte || '', creeLe: m.creeLe || '' }));
     });
   }
-  async function adoptStaged(modeleId) {
+  // Vrai : les messages sont dans la table. Nul : rien n'attendait. Faux : l'écriture est refusée ou a échoué : la personne en est avertie, les fils restent ouverts au clic et attendent encore (un
+  // enregistrement de plus les réessaie : `hasStaged`). Deux appels en même temps (Enregistrer deux fois de suite) partagent la même écriture.
+  let adopting = null;
+  function hasStaged() { return staged.length > 0; }
+  function adoptStaged(modeleId) {
+    if (adopting) return adopting;
+    if (!staged.length || !modeleId) return Promise.resolve(null);
+    adopting = writeStaged(modeleId).finally(() => { adopting = null; });
+    return adopting;
+  }
+  function tellAdoptFailed(reason) {
+    Dialogs.notice({ title: I18n.t('comments.adoptFailed.title'), message: I18n.t('comments.adoptFailed.' + reason), closeLabel: I18n.t('common.close') });
+  }
+  async function writeStaged(modeleId) {
     const threads = staged;
-    staged = [];
-    if (!threads.length || !modeleId) return false;
-    if (!(await ensureTableExists())) return false;
+    // Le modèle a son numéro : « Commenter » marche dès maintenant, même si l'écriture des fils d'abord échoue.
+    currentModeleId = modeleId;
+    if (!(await ensureTableExists())) { tellAdoptFailed('declined'); return false; }
     const actions = [];
     threads.forEach(thread => thread.messages.forEach(m => actions.push(['AddRecord', TABLE_NAME, null, { ModeleId: modeleId, CommentId: thread.id, Auteur: m.auteur || '', Texte: m.texte || '', CreeLe: m.creeLe || '' }])));
     try {
       await grist.docApi.applyUserActions(actions);
+      if (staged === threads) staged = [];
       return true;
     } catch (e) {
       console.error('[Comments] Erreur enregistrement des fils importés', e);
+      tellAdoptFailed(GristAPI.isAccessRefusal(e) ? 'refused' : 'error');
       return false;
     }
   }
@@ -791,7 +806,7 @@ const Comments = (function () {
   };
 
   return {
-    setEditor, loadForTemplate, stageImported, adoptStaged, insertCommentAtSelection, wireClickToOpen,
+    setEditor, loadForTemplate, stageImported, adoptStaged, hasStaged, insertCommentAtSelection, wireClickToOpen,
     setPermissions, isReaderMode, setReaderHooks, buildReaderHtml, wireReader,
     snapshot, restore, whenIdle,
     TABLE_NAME, TABLE_COLUMNS, PDF_COLUMNS, kit,

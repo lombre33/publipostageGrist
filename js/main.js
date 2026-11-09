@@ -1318,9 +1318,13 @@
     // modèle n'a rien à recharger, et loadForTemplate referme le panneau ouvert.
     if (sameTemplate && String(id) !== String(savedId)) {
       // Les fils d'un Word importé entrent dans la table avec le numéro du modèle, puis ils sont relus avec lui.
-      Comments.adoptStaged(savedId).then(() => Comments.loadForTemplate(savedId)).catch(e => console.error('[main] chargement des commentaires impossible après création du modèle', e));
+      // Un refus (faux) n'est pas relu : loadForTemplate effacerait les fils qui attendent encore, la personne en est avertie par Comments.
+      Comments.adoptStaged(savedId).then(adopted => (adopted === false ? null : Comments.loadForTemplate(savedId))).catch(e => console.error('[main] chargement des commentaires impossible après création du modèle', e));
       forgetMacroOriginUnless(null); // une copie n'est pas un modèle du macro-modèle d'où l'on venait : le bandeau n'a plus de sens
       forgetLinkedOriginUnless(null); // ni le modèle que le tableau du document désigne : le retour n'a plus de sens non plus
+    } else if (sameTemplate && Comments.hasStaged()) {
+      // Les fils d'un Word importé attendaient encore (écriture refusée au premier enregistrement) : cet enregistrement les réessaie.
+      Comments.adoptStaged(savedId).then(adopted => (adopted === true ? Comments.loadForTemplate(savedId) : null)).catch(e => console.error('[main] nouvel essai des commentaires du Word importé impossible', e));
     }
     updateSaveStatus();
     if (sameTemplate) LinkedTable.tell(synced, send);

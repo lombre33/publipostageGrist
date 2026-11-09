@@ -690,6 +690,54 @@
     return result(bad);
   });
 
+  add('docxImport_threads_refused_by_grist_are_said_kept_and_retried_at_the_next_save', 'Grist refuse d\'écrire dans la table des commentaires au premier enregistrement d\'un Word importé : une fenêtre le dit (le modèle, lui, est enregistré), les fils restent ouverts au clic, rien n\'est perdu ; l\'enregistrement suivant, une fois l\'écriture permise, les écrit', async (h) => {
+    const { bad, expect } = checker();
+    const TABLE = 'Publipostage_Commentaires';
+    const out = await imported(Object.assign({ body: COMMENT_BODY() }, COMMENT_PARTS()));
+    await h.resetEditor();
+    Editor.setHTML(out.html, out.suiviModifications);
+    Comments.stageImported(out.comments);
+    await sleep(250);
+    const rowsOf = (modeleId) => {
+      const t = window.__gristStub.state.rows[TABLE];
+      const rows = [];
+      if (t) for (let i = 0; i < t.id.length; i++) if (Number(t.ModeleId[i]) === Number(modeleId)) rows.push({ cid: t.CommentId[i], auteur: t.Auteur[i], texte: t.Texte[i] });
+      return rows;
+    };
+    const dialog = () => { const el = document.getElementById('pp-dialog-modal'); return el && el.style.display !== 'none' && el.getBoundingClientRect().width > 0 ? el : null; };
+    const closeDialog = async () => { const b = document.querySelector('#pp-dialog-modal .var-modal-actions button'); if (b) b.click(); await sleep(250); };
+    // Les numéros de modèle repartent à chaque cas : une table des fils laissée pleine par un cas d'avant donnerait des messages à ce numéro-ci.
+    const filled = window.__gristStub.state.rows[TABLE];
+    if (filled) Object.keys(filled).forEach(column => { filled[column] = []; });
+    window.__gristStub.denyTable(TABLE, true);
+    document.getElementById('template-name').value = 'Word refusé';
+    await h.clickButton('btn-save');
+    await sleep(900);
+    const modeleId = Templates.getCurrentId();
+    expect('le modèle est enregistré malgré le refus des fils', !!modeleId, modeleId);
+    expect('aucun message n\'est entré dans la table des fils', rowsOf(modeleId).length === 0, rowsOf(modeleId));
+    const told = dialog();
+    expect('une fenêtre dit que les discussions du Word n\'ont pas été enregistrées, et pourquoi (Grist refuse, règle d\'accès)', !!told && /Discussions du Word non enregistrées|Word discussions not saved/.test(told.textContent) && /refuse|refuses/.test(told.textContent), told && told.textContent);
+    await closeDialog();
+    expect('« Fermer » ferme la fenêtre', !dialog(), dialog() && dialog().textContent);
+    const mark = document.querySelector('.tiptap .comment-mark[data-comment-id="' + out.comments[0].id + '"]');
+    mark.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    await sleep(300);
+    const popup = document.getElementById('v2-comment-popup');
+    expect('le fil s\'ouvre toujours au clic sur sa marque, avec ses deux messages : rien n\'a été perdu', !!popup && popup.style.display !== 'none' && popup.querySelectorAll('.v2-comment-popup-message').length === 2, popup && popup.textContent);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await sleep(150);
+    window.__gristStub.denyTable(TABLE, false);
+    await h.clickButton('btn-save');
+    await sleep(900);
+    expect('l\'enregistrement suivant, l\'écriture permise, écrit les trois messages au numéro du modèle', rowsOf(modeleId).length === 3, rowsOf(modeleId));
+    expect('plus aucune fenêtre', !dialog(), dialog() && dialog().textContent);
+    await h.clickButton('btn-save');
+    await sleep(700);
+    expect('un enregistrement de plus n\'écrit pas deux fois les mêmes messages', rowsOf(modeleId).length === 3, rowsOf(modeleId));
+    return result(bad);
+  });
+
   add('docxImport_sections_page_breaks_columns_and_page_borders', 'une section de plus se termine par un saut de page ; une autre mise en page, des colonnes et une bordure de page sont comptées ; le texte reste lisible', async () => {
     const { bad, expect } = checker();
     const first = '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417"/></w:sectPr>';
