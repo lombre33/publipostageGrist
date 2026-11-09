@@ -134,5 +134,92 @@ const ImageIo = (function () {
     return lightResults.get(key);
   }
 
-  return { fetchBlob, toDataUri, load, draw, pngBlob, lighten };
+  // --- Rogner, tourner, retourner une image ---
+  // Une image du document se règle par sa largeur et garde ses proportions : rogner, tourner ou retourner REDESSINE ses points (un canvas), l'image qui en sort est une image ordinaire
+  // que tous les exports reprennent déjà. L'import PowerPoint (js/pptx-import.js) et l'import Word (js/docx-import.js) s'en servent pour rendre l'image comme le fichier la montre ; les
+  // boutons « Pivoter », « Retourner » et « Rogner » de la barre de l'image (js/image-reshape.js) aussi.
+  const RESHAPE_MAX_PIXELS = 16000000;     // une image redessinée ne dépasse pas 16 millions de points
+  const RESHAPE_STRETCH_TOLERANCE = 0.01;  // un écart de proportions sous 1 % n'est pas corrigé
+  const RESHAPE_JPEG_QUALITY = 0.92;
+  // Le sens horaire en degrés, ramené à [0, 360[ ; un tour entier, ou un écart sous un centième de degré, ne tourne rien.
+  function turnOf(degrees) {
+    const turn = ((Number(degrees) || 0) % 360 + 360) % 360;
+    return turn < 0.01 || turn > 359.99 ? 0 : turn;
+  }
+  // Les quatre marges rognées en parts de l'image (de 0 à 1) : une part négative (Word agrandit alors l'image de vide) ne rogne rien ; ce qui reste ne tombe jamais à zéro.
+  function cropOf(crop) {
+    const part = value => Math.min(0.99, Math.max(0, Number(value) || 0));
+    const out = { l: part(crop && crop.l), t: part(crop && crop.t), r: part(crop && crop.r), b: part(crop && crop.b) };
+    if (out.l + out.r > 0.99) { const k = 0.99 / (out.l + out.r); out.l *= k; out.r *= k; }
+    if (out.t + out.b > 0.99) { const k = 0.99 / (out.t + out.b); out.t *= k; out.b *= k; }
+    return out;
+  }
+  // `source` : l'adresse (data:, blob:), le Blob ou l'image décodée à redessiner ; `spec` : { crop: { l, t, r, b } (parts de 0 à 1 ôtées de chaque bord), flipH, flipV (miroir), turn (degrés, sens
+  // horaire, tout angle), ratio (largeur / hauteur voulue de la partie gardée, avant la rotation : l'image est alors étirée dans la dimension qui grandit, rien n'est perdu ; 0 : telle quelle),
+  // quality (JPEG) }. Le miroir se fait avant la rotation, comme dans Word et PowerPoint. Rend { src, width, height } (l'image redessinée en adresse de données et ses points) ou `null`
+  // quand il n'y a rien à faire (aucun réglage, ou une image vectorielle qu'un canvas ne rendrait qu'en perdant son dessin) ; lève une erreur quand l'image ne se décode pas. Un JPEG reste
+  // JPEG tant que l'image ne reçoit pas de coins vides (un tour d'un autre angle qu'un quart de tour) ; le reste sort en PNG.
+  async function reshape(source, spec) {
+    const options = spec || {};
+    if (typeof source === 'string' && /^data:image\/svg/i.test(source)) return null;
+    if (source instanceof Blob && /svg/i.test(source.type)) return null;
+    const crop = cropOf(options.crop);
+    const cropped = crop.l > 0 || crop.t > 0 || crop.r > 0 || crop.b > 0;
+    const turn = turnOf(options.turn);
+    const flipH = !!options.flipH;
+    const flipV = !!options.flipV;
+    const img = await load(source);
+    const sw = img.naturalWidth;
+    const sh = img.naturalHeight;
+    if (!sw || !sh) return null;
+    const sx = Math.round(sw * crop.l);
+    const sy = Math.round(sh * crop.t);
+    const cw = Math.max(1, Math.round(sw * (1 - crop.l - crop.r)));
+    const ch = Math.max(1, Math.round(sh * (1 - crop.t - crop.b)));
+    let outW = cw;
+    let outH = ch;
+    const ratio = Number(options.ratio) || 0;
+    if (ratio > 0 && Math.abs(cw / ch / ratio - 1) > RESHAPE_STRETCH_TOLERANCE) {
+      if (cw / ch > ratio) outH = Math.round(cw / ratio);
+      else outW = Math.round(ch * ratio);
+    }
+    if (!cropped && !flipH && !flipV && !turn && outW === cw && outH === ch) return null;
+    // La taille de l'image tournée : un quart de tour échange la largeur et la hauteur, un autre angle donne la boîte qui enveloppe l'image (ses coins restent vides).
+    const radians = turn * Math.PI / 180;
+    const quarter = turn % 90 === 0;
+    let fullW = outW;
+    let fullH = outH;
+    if (turn && quarter) {
+      if (turn === 90 || turn === 270) { fullW = outH; fullH = outW; }
+    } else if (turn) {
+      const cos = Math.abs(Math.cos(radians));
+      const sin = Math.abs(Math.sin(radians));
+      fullW = Math.ceil(outW * cos + outH * sin - 1e-6);
+      fullH = Math.ceil(outW * sin + outH * cos - 1e-6);
+    }
+    const shrink = Math.min(1, Math.sqrt(RESHAPE_MAX_PIXELS / (fullW * fullH)));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(fullW * shrink));
+    canvas.height = Math.max(1, Math.round(fullH * shrink));
+    const g = canvas.getContext('2d');
+    if (!turn) {
+      g.translate(flipH ? canvas.width : 0, flipV ? canvas.height : 0);
+      g.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+      g.drawImage(img, sx, sy, cw, ch, 0, 0, canvas.width, canvas.height);
+    } else {
+      const drawW = Math.max(1, Math.round(outW * shrink));
+      const drawH = Math.max(1, Math.round(outH * shrink));
+      g.imageSmoothingQuality = 'high';
+      g.translate(canvas.width / 2, canvas.height / 2);
+      g.rotate(radians);
+      g.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+      g.drawImage(img, sx, sy, cw, ch, -drawW / 2, -drawH / 2, drawW, drawH);
+    }
+    const jpeg = typeof source === 'string' ? /^data:image\/jpe?g/i.test(source) : (source instanceof Blob && /jpe?g/i.test(source.type));
+    const keepsJpeg = jpeg && (!turn || quarter);
+    const src = keepsJpeg ? canvas.toDataURL('image/jpeg', options.quality || RESHAPE_JPEG_QUALITY) : canvas.toDataURL('image/png');
+    return { src, width: canvas.width, height: canvas.height };
+  }
+
+  return { fetchBlob, toDataUri, load, draw, pngBlob, lighten, reshape, turnOf };
 })();

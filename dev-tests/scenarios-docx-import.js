@@ -106,9 +106,9 @@
   };
   const RED_BLUE = () => png(20, 10, (g) => { g.fillStyle = '#ff0000'; g.fillRect(0, 0, 10, 10); g.fillStyle = '#0000ff'; g.fillRect(10, 0, 10, 10); });
   const emu = pt => Math.round(pt * 12700);
-  const drawing = ({ rid = 'rIdImg1', w = 100, h = 50, anchor = false, descr = '', crop = '', rot = 0 } = {}) =>
+  const drawing = ({ rid = 'rIdImg1', w = 100, h = 50, anchor = false, descr = '', crop = '', rot = 0, flip = '' } = {}) =>
     `<w:r><w:drawing><wp:${anchor ? 'anchor behindDoc="0"' : 'inline'}>${anchor ? '<wp:simplePos x="0" y="0"/>' : ''}<wp:extent cx="${emu(w)}" cy="${emu(h)}"/><wp:docPr id="1" name="Image" descr="${esc(descr)}"/><a:graphic><a:graphicData uri="${PIC_NS}">`
-    + `<pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="i"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rid}"/>${crop}<a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm${rot ? ` rot="${rot}"` : ''}><a:off x="0" y="0"/><a:ext cx="${emu(w)}" cy="${emu(h)}"/></a:xfrm></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:${anchor ? 'anchor' : 'inline'}></w:drawing></w:r>`;
+    + `<pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="i"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rid}"/>${crop}<a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm${rot ? ` rot="${rot}"` : ''}${flip}><a:off x="0" y="0"/><a:ext cx="${emu(w)}" cy="${emu(h)}"/></a:xfrm></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:${anchor ? 'anchor' : 'inline'}></w:drawing></w:r>`;
   const IMAGE_REL = (id, name) => ({ id, type: 'image', target: `media/${name}` });
 
   // Le fichier importé : `{ html, page, headerFooter, report }`.
@@ -395,7 +395,97 @@
     expect('trois images posées (la quatrième, EMF, ne l\'est pas)', imgs.length === 3, out.html.slice(0, 600));
     expect('la première : 150 px de large (150 pt = 200 px à 96 dpi), texte alternatif repris', /width: 266\.67px|width: 200px/.test(imgs[0].getAttribute('style')) && imgs[0].getAttribute('alt') === 'Logo rouge et bleu', imgs[0].outerHTML.slice(0, 160));
     expect('adresse de données PNG', /^data:image\/png;base64,/.test(imgs[0].getAttribute('src')), imgs[0].getAttribute('src').slice(0, 40));
-    expect('rapport : une flottante, une illisible, une rognée', countOf(out.report, 'floatingImages') === 1 && countOf(out.report, 'images') === 1 && countOf(out.report, 'imageEffects') === 1, out.report);
+    expect('rapport : une flottante, une illisible ; la rognée est redessinée, plus comptée', countOf(out.report, 'floatingImages') === 1 && countOf(out.report, 'images') === 1 && countOf(out.report, 'imageEffects') === 0, out.report);
+    return result(bad);
+  });
+
+  // Les points d'une image de l'import : sa taille et la couleur d'un point (r, g, b, alpha).
+  const pixelsOf = async (src) => {
+    const img = await ImageIo.load(src);
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const g = canvas.getContext('2d');
+    g.drawImage(img, 0, 0);
+    return { w: canvas.width, h: canvas.height, at: (x, y) => Array.from(g.getImageData(x, y, 1, 1).data) };
+  };
+  const RED = [255, 0, 0], BLUE = [0, 0, 255], GREEN = [0, 255, 0], YELLOW = [255, 255, 0];
+  const isColor = (pixel, rgb) => pixel[3] === 255 && rgb.every((v, i) => Math.abs(pixel[i] - v) < 40);
+  // Quatre quarts de couleurs différentes, 20 x 10 : en haut rouge puis bleu, en bas vert puis jaune.
+  const QUADS = () => png(20, 10, (g) => { g.fillStyle = '#ff0000'; g.fillRect(0, 0, 10, 5); g.fillStyle = '#0000ff'; g.fillRect(10, 0, 10, 5); g.fillStyle = '#00ff00'; g.fillRect(0, 5, 10, 5); g.fillStyle = '#ffff00'; g.fillRect(10, 5, 10, 5); });
+  const quadrants = async (src) => {
+    const px = await pixelsOf(src);
+    return { px, tl: px.at(Math.floor(px.w / 4), Math.floor(px.h / 4)), tr: px.at(Math.floor(px.w * 3 / 4), Math.floor(px.h / 4)), bl: px.at(Math.floor(px.w / 4), Math.floor(px.h * 3 / 4)), br: px.at(Math.floor(px.w * 3 / 4), Math.floor(px.h * 3 / 4)) };
+  };
+  const importedImage = async ({ crop = '', rot = 0, flip = '', w = 100, h = 50, name = 'image1.png', data = QUADS() } = {}) => {
+    const out = await imported({ body: p(drawing({ rid: 'rIdImg1', w, h, crop, rot, flip })), media: { [name]: data }, docRels: [IMAGE_REL('rIdImg1', name)] });
+    const img = sectionOf(out).querySelector('img.editor-image');
+    return { out, img, width: img ? parseFloat((/width:\s*([\d.]+)px/.exec(img.getAttribute('style')) || [])[1]) : NaN };
+  };
+
+  add('docxImport_a_cropped_image_is_redrawn_as_word_shows_it', 'une image rognée dans Word (`a:srcRect`) est redessinée sans la partie rognée, à la largeur que Word lui donne, sans rien compter au compte rendu ; sans rognage, l\'image reste celle du fichier', async () => {
+    const { bad, expect } = checker();
+    const kept = await importedImage({ crop: '<a:srcRect r="50000"/>', w: 50, h: 50 });
+    const q = await quadrants(kept.img.getAttribute('src'));
+    expect('la moitié droite est ôtée : 10 x 10 points', q.px.w === 10 && q.px.h === 10, [q.px.w, q.px.h]);
+    expect('en haut le rouge, en bas le vert', isColor(q.tl, RED) && isColor(q.bl, GREEN) && isColor(q.tr, RED) && isColor(q.br, GREEN), q);
+    expect('50 pt de large (66,67 px)', near(kept.width, 66.67, 0.05), kept.width);
+    expect('rien n\'est compté', !countOf(kept.out.report, 'imageEffects') && !countOf(kept.out.report, 'images'), kept.out.report);
+    const plain = await importedImage({ crop: '<a:srcRect l="0" t="0" r="0" b="0"/>' });
+    expect('un rognage à zéro ne redessine rien : l\'image du fichier, telle quelle', plain.img.getAttribute('src') === 'data:image/png;base64,' + QUADS(), plain.img.getAttribute('src').slice(0, 60));
+    const trimmed = await importedImage({ crop: '<a:srcRect t="50000" b="0"/>', w: 100, h: 25 });
+    const half = await quadrants(trimmed.img.getAttribute('src'));
+    expect('le haut ôté : il reste le bas, 20 x 5', half.px.w === 20 && half.px.h === 5 && isColor(half.tl, GREEN) && isColor(half.tr, YELLOW), [half.px.w, half.px.h, half.tl, half.tr]);
+    const stretched = await importedImage({ crop: '<a:srcRect r="50000"/>', w: 100, h: 50 });
+    const wide = await pixelsOf(stretched.img.getAttribute('src'));
+    expect('la partie gardée, étirée aux proportions de la boîte de Word (2 pour 1), reste entière : 20 x 10', wide.w === 20 && wide.h === 10, [wide.w, wide.h]);
+    const back = await inEditor(kept.out.html);
+    expect('posée dans l\'éditeur réel, l\'image redessinée est relue telle quelle', back.indexOf(kept.img.getAttribute('src').slice(0, 80)) >= 0, back.slice(0, 200));
+    return result(bad);
+  });
+
+  add('docxImport_a_turned_or_flipped_image_is_redrawn_as_word_shows_it', 'une image tournée (`rot`) d\'un quart de tour est redessinée sur le côté, à la largeur de sa boîte tournée ; un miroir (`flipH`, `flipV`) la retourne avant le tour ; un tour de 45 degrés laisse des coins vides', async () => {
+    const { bad, expect } = checker();
+    const quarter = await importedImage({ rot: 5400000 });
+    const q = await quadrants(quarter.img.getAttribute('src'));
+    expect('90 degrés dans le sens horaire : 10 x 20, le vert en haut à gauche, le rouge à sa droite, le jaune en dessous', q.px.w === 10 && q.px.h === 20 && isColor(q.tl, GREEN) && isColor(q.tr, RED) && isColor(q.bl, YELLOW) && isColor(q.br, BLUE), q);
+    expect('la boîte tournée prend la hauteur de l\'image droite : 50 pt (66,67 px)', near(quarter.width, 66.67, 0.05), quarter.width);
+    const half = await quadrants((await importedImage({ rot: 10800000 })).img.getAttribute('src'));
+    expect('180 degrés : le jaune en haut à gauche, le vert à sa droite', half.px.w === 20 && half.px.h === 10 && isColor(half.tl, YELLOW) && isColor(half.tr, GREEN) && isColor(half.bl, BLUE) && isColor(half.br, RED), half);
+    const back = await quadrants((await importedImage({ rot: 16200000 })).img.getAttribute('src'));
+    expect('270 degrés : le bleu en haut à gauche, le jaune en dessous', back.px.w === 10 && back.px.h === 20 && isColor(back.tl, BLUE) && isColor(back.bl, RED), back);
+    const mirror = await quadrants((await importedImage({ flip: ' flipH="1"' })).img.getAttribute('src'));
+    expect('miroir gauche-droite : le bleu et le rouge échangés, le jaune et le vert aussi', isColor(mirror.tl, BLUE) && isColor(mirror.tr, RED) && isColor(mirror.bl, YELLOW) && isColor(mirror.br, GREEN), mirror);
+    const upside = await quadrants((await importedImage({ flip: ' flipV="1"' })).img.getAttribute('src'));
+    expect('miroir haut-bas : le vert au-dessus du rouge', isColor(upside.tl, GREEN) && isColor(upside.tr, YELLOW) && isColor(upside.bl, RED) && isColor(upside.br, BLUE), upside);
+    const both = await quadrants((await importedImage({ flip: ' flipH="1"', rot: 5400000 })).img.getAttribute('src'));
+    expect('miroir PUIS quart de tour (l\'ordre de Word) : le jaune en haut à gauche, le bleu à sa droite', both.px.w === 10 && both.px.h === 20 && isColor(both.tl, YELLOW) && isColor(both.tr, BLUE) && isColor(both.bl, GREEN) && isColor(both.br, RED), both);
+    const slanted = await importedImage({ rot: 2700000 });
+    const px = await pixelsOf(slanted.img.getAttribute('src'));
+    expect('45 degrés : une boîte de 22 x 22 qui enveloppe l\'image', px.w === 22 && px.h === 22, [px.w, px.h]);
+    expect('les coins sont vides (transparents), le centre est plein', px.at(0, 0)[3] === 0 && px.at(21, 21)[3] === 0 && px.at(11, 11)[3] === 255, [px.at(0, 0), px.at(11, 11)]);
+    expect('sortie PNG (les coins vides demandent la transparence)', /^data:image\/png/.test(slanted.img.getAttribute('src')));
+    expect('la largeur est celle de la boîte qui l\'enveloppe : 106,07 pt (141,42 px)', near(slanted.width, 141.42, 0.05), slanted.width);
+    return result(bad);
+  });
+
+  add('docxImport_an_image_that_cannot_be_redrawn_stays_whole_and_is_counted', 'une image rognée que le navigateur ne sait pas redessiner (SVG, octets illisibles) reste entière et droite et est comptée une fois par emploi ; la même image rognée deux fois n\'est redessinée qu\'une fois', async () => {
+    const { bad, expect } = checker();
+    const svg = btoa('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"><rect width="20" height="10" fill="red"/></svg>');
+    const vector = await importedImage({ crop: '<a:srcRect l="10000"/>', rot: 5400000, name: 'image1.svg', data: svg });
+    expect('SVG : l\'image du fichier, telle quelle', vector.img.getAttribute('src') === 'data:image/svg+xml;base64,' + svg, vector.img.getAttribute('src').slice(0, 60));
+    expect('SVG : une image rognée ou tournée comptée', countOf(vector.out.report, 'imageEffects') === 1, vector.out.report);
+    expect('SVG : la largeur de l\'image droite (100 pt, 133,33 px), pas celle d\'une boîte tournée', near(vector.width, 133.33, 0.05), vector.width);
+    const broken = await importedImage({ crop: '<a:srcRect l="10000"/>', name: 'image1.png', data: 'AAAA' });
+    expect('octets illisibles : l\'image du fichier, comptée', broken.img.getAttribute('src') === 'data:image/png;base64,AAAA' && countOf(broken.out.report, 'imageEffects') === 1, [broken.img.getAttribute('src'), broken.out.report]);
+    const calls = [];
+    const reshape = ImageIo.reshape;
+    ImageIo.reshape = function (...args) { calls.push(args[1]); return reshape.apply(this, args); };
+    try {
+      const twice = await imported({ body: p(drawing({ rid: 'rIdImg1', crop: '<a:srcRect r="50000"/>' }) + drawing({ rid: 'rIdImg1', crop: '<a:srcRect r="50000"/>' })), media: { 'image1.png': QUADS() }, docRels: [IMAGE_REL('rIdImg1', 'image1.png')] });
+      const imgs = Array.from(sectionOf(twice).querySelectorAll('img.editor-image'));
+      expect('la même image rognée deux fois : deux images posées, une seule redessinée', imgs.length === 2 && calls.length === 1 && imgs[0].getAttribute('src') === imgs[1].getAttribute('src'), [imgs.length, calls.length]);
+    } finally { ImageIo.reshape = reshape; }
     return result(bad);
   });
 

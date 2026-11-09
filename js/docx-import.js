@@ -539,12 +539,83 @@ const DocxImport = (function () {
     return images;
   }
   const GRAPHIC = { picture: /\/picture$/, chart: /\/chart$/, diagram: /\/diagram$/, shape: /\/wordprocessingShape$/, group: /\/wordprocessingGroup$/, canvas: /\/wordprocessingCanvas$/ };
-  function imageHtml(st, rId, widthPx, alt, effects) {
+  // Une image de Word rognée (`a:srcRect`), tournée (`rot`) ou retournée (`flipH`, `flipV`) est REDESSINÉE comme Word la montre (ImageIo.reshape, le même redessin que l'import PowerPoint et que les
+  // boutons de la barre de l'image) : le balisage ne porte d'abord qu'un repère à sa place (`REDRAW_MARK` + son rang), les images se redessinent ensemble une fois le paquet lu (`settleRedraws`).
+  const REDRAW_MARK = 'pp-redraw:';
+  // `straightPx` (avec `reshape`) : la largeur de l'image restée droite, que reprend une image qu'on n'a pas pu redessiner.
+  function imageHtml(st, rId, widthPx, alt, reshape, straightPx) {
     const image = st.part.images.get(rId);
     if (!image || image.unsupported) { count(st.ctx, 'images'); return ''; }
-    if (effects) count(st.ctx, 'imageEffects');
     const style = widthPx > 0 ? ' style="width: ' + fixed(widthPx) + 'px"' : '';
-    return '<img class="editor-image" src="' + image.src + '" alt="' + escAttr(alt || '') + '"' + style + '>';
+    return '<img class="editor-image" src="' + (reshape ? redrawMark(st, rId, image.src, reshape, straightPx) : image.src) + '" alt="' + escAttr(alt || '') + '"' + style + '>';
+  }
+  // Le repère d'une image à redessiner : une même image redessinée de la même façon (le logo d'un en-tête, repris en première page) ne se redessine qu'une fois.
+  function redrawMark(st, rId, src, reshape, straightPx) {
+    const ctx = st.ctx;
+    const key = st.part.path + '|' + rId + '|' + JSON.stringify(reshape) + '|' + straightPx;
+    let rank = ctx.redrawKeys.get(key);
+    if (rank === undefined) {
+      rank = ctx.redraws.length;
+      ctx.redrawKeys.set(key, rank);
+      ctx.redraws.push({ src, reshape, straightPx, uses: 0 });
+    }
+    ctx.redraws[rank].uses += 1;
+    return REDRAW_MARK + rank;
+  }
+  // Les images à redessiner, une à une (le canvas d'une grande photo pèse : pas deux à la fois), puis posées à la place de leur repère dans chaque texte. Une image que le navigateur ne sait pas
+  // redessiner (vectorielle, illisible) ou qui, redessinée, dépasserait le poids permis reste entière et droite, et le compte rendu le dit (`imageEffects`).
+  async function settleRedraws(ctx, texts) {
+    if (!ctx.redraws.length) return texts;
+    const results = [];
+    for (const job of ctx.redraws) {
+      let out = null;
+      try {
+        out = await ImageIo.reshape(job.src, job.reshape);
+      } catch (e) {
+        out = null;
+      }
+      const before = job.src.length * 0.75;
+      const after = out ? out.src.length * 0.75 : 0;
+      if (!out || after > MAX_IMAGE_BYTES || ctx.imageBytes + Math.max(0, after - before) > MAX_IMAGES_BYTES) {
+        count(ctx, 'imageEffects', job.uses);
+        results.push(null);
+      } else {
+        ctx.imageBytes += Math.max(0, after - before);
+        results.push(out.src);
+      }
+    }
+    // Une image redessinée prend la place de son repère ; une image qui ne l'a pas été reprend son adresse, et la largeur de l'image droite.
+    const marked = new RegExp('<img class="editor-image" src="' + REDRAW_MARK + '(\\d+)"([^>]*)>', 'g');
+    return texts.map(text => text.replace(marked, (found, rank, rest) => {
+      const job = ctx.redraws[Number(rank)];
+      const done = results[Number(rank)];
+      if (done) return '<img class="editor-image" src="' + done + '"' + rest + '>';
+      const style = job.straightPx > 0 ? ' style="width: ' + fixed(job.straightPx) + 'px"' : '';
+      return '<img class="editor-image" src="' + job.src + '"' + rest.replace(/ style="[^"]*"/, '') + style + '>';
+    }));
+  }
+  // Ce que Word demande de l'image d'un dessin : les marges rognées (`srcRect`, en cent-millièmes de l'image), le tour (`rot`, en soixantièmes de degré, sens horaire), le miroir, et les proportions
+  // de la boîte où elle est étirée (`ratio`) ; null quand l'image est posée telle quelle.
+  function reshapeOf(crop, xfrm, widthPx, heightPx) {
+    const part = side => Math.max(0, numAttr(crop, side, 0) / 100000);
+    const margins = { l: part('l'), t: part('t'), r: part('r'), b: part('b') };
+    const cropped = margins.l > 0 || margins.t > 0 || margins.r > 0 || margins.b > 0;
+    const turn = ImageIo.turnOf(numAttr(xfrm, 'rot', 0) / 60000);
+    const flip = name => /^(1|true|on)$/i.test(String(attr(xfrm, name) || ''));
+    const flipH = flip('flipH');
+    const flipV = flip('flipV');
+    if (!cropped && !turn && !flipH && !flipV) return null;
+    const out = { turn, flipH, flipV };
+    if (cropped) out.crop = margins;
+    if (widthPx > 0 && heightPx > 0) out.ratio = round2(widthPx / heightPx);
+    return out;
+  }
+  // La largeur que l'image prend à l'écran une fois tournée : celle de la boîte qui l'enveloppe (Word garde l'étendue de l'image droite et met la place du tour dans `effectExtent`).
+  function turnedWidth(widthPx, heightPx, turn) {
+    if (!turn || !(widthPx > 0) || !(heightPx > 0)) return widthPx;
+    if (turn % 90 === 0) return turn === 90 || turn === 270 ? heightPx : widthPx;
+    const radians = turn * Math.PI / 180;
+    return Math.abs(widthPx * Math.cos(radians)) + Math.abs(heightPx * Math.sin(radians));
   }
   // Un dessin (`w:drawing`) : une image en ligne ou flottante (posée en ligne, comptée), sinon un objet que l'éditeur ne sait pas reprendre, compté.
   function drawingHtml(st, drawing) {
@@ -555,16 +626,14 @@ const DocxImport = (function () {
     const uri = attr(data, 'uri') || '';
     const extent = kid(holder, 'extent');
     const widthPx = numAttr(extent, 'cx', 0) * PX_PER_EMU;
+    const heightPx = numAttr(extent, 'cy', 0) * PX_PER_EMU;
     const docPr = kid(holder, 'docPr');
     if (GRAPHIC.picture.test(uri)) {
       const blip = descendants(data, 'blip')[0];
       const rId = relAttr(blip, 'embed') || relAttr(blip, 'link');
-      const crop = descendants(data, 'srcRect')[0];
-      const cropped = crop && ['l', 't', 'r', 'b'].some(side => numAttr(crop, side, 0) !== 0);
-      const xfrm = descendants(data, 'xfrm')[0];
-      const rotated = xfrm && numAttr(xfrm, 'rot', 0) !== 0;
+      const reshape = reshapeOf(descendants(data, 'srcRect')[0], descendants(data, 'xfrm')[0], widthPx, heightPx);
       if (holder.localName === 'anchor') count(ctx, 'floatingImages');
-      return imageHtml(st, rId, widthPx, attr(docPr, 'descr') || attr(docPr, 'title') || '', cropped || rotated);
+      return imageHtml(st, rId, reshape ? turnedWidth(widthPx, heightPx, reshape.turn) : widthPx, attr(docPr, 'descr') || attr(docPr, 'title') || '', reshape, widthPx);
     }
     if (GRAPHIC.chart.test(uri)) count(ctx, 'charts');
     else if (GRAPHIC.diagram.test(uri)) count(ctx, 'diagrams');
@@ -1318,6 +1387,7 @@ const DocxImport = (function () {
       endnotes: await readNotes(pkg, byType('endnotes') || 'word/endnotes.xml', 'endnote'),
       tabStop: null, revisions: new Map(), revisionAnon: 0, suivi: {}, comments: new Map(), threads: [], openComments: new Set(),
       mergeField: (options && options.mergeField) || defaultMergeField,
+      redraws: [], redrawKeys: new Map(),
     };
     const tab = settings ? numAttr(descendants(settings.documentElement, 'defaultTabStop')[0], 'val', 0) : 0;
     if (tab > 0) ctx.tabStop = round2(tab * PT_PER_TWIP);
@@ -1333,7 +1403,7 @@ const DocxImport = (function () {
     if (finalSect) ctx.sections.length = 0;
     // Un saut de page de fin de section en fin de document n'ouvre pas de page vide.
     while (items.length && items[items.length - 1].raw === '<div class="page-break-marker"></div>') items.pop();
-    const html = assemble(items);
+    let html = assemble(items);
     const first = sections[0] || finalSect;
     const page = first ? pageOf(first) : null;
     let different = 0;
@@ -1350,6 +1420,8 @@ const DocxImport = (function () {
       zones.footer.default = await zoneHtml(ctx, docRels, holder, 'footerReference', 'default');
       zones.footer.first = await zoneHtml(ctx, docRels, holder, 'footerReference', 'first');
     }
+    // Les images rognées, tournées ou retournées se redessinent ici, dans le document et dans chaque zone, avant que le compte rendu soit établi.
+    [html, zones.header.default, zones.header.first, zones.footer.default, zones.footer.first] = await settleRedraws(ctx, [html, zones.header.default, zones.header.first, zones.footer.default, zones.footer.first]);
     const different1 = !!kid(holder, 'titlePg') && (PageLayout.hasZoneContent(zones.header.first) || PageLayout.hasZoneContent(zones.footer.first));
     if (!different1) { zones.header.first = ''; zones.footer.first = ''; }
     const filled = [zones.header.default, zones.header.first, zones.footer.default, zones.footer.first].some(PageLayout.hasZoneContent);

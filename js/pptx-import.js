@@ -47,7 +47,6 @@ const PptxImport = (function () {
   const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
   const MAX_IMAGES_BYTES = 80 * 1024 * 1024;       // le poids des images reprises, au total : le modèle s'écrit dans une case de Grist
   const MAX_PIXELS = 16000000;                     // une image redessinée (rognée, retournée, étirée) ne dépasse pas 16 millions de points
-  const STRETCH_TOLERANCE = 0.01;                  // un écart de proportions sous 1 % n'est pas corrigé
   const MAX_SLIDES = 500;
   const MAX_OBJECTS = 20000;
   const MAX_DECOR_OBJECTS = 150;                   // le décor d'un masque ou d'une mise en page (recopié sur chaque diapositive) : au delà, il n'est pas repris
@@ -1145,34 +1144,9 @@ const PptxImport = (function () {
   // L'image rognée, retournée et amenée aux proportions de sa boîte comme le fichier le demande (un canvas), ou telle quelle quand il n'y a rien à faire. L'image de l'éditeur ne se règle que par sa largeur et garde
   // ses proportions, alors qu'une image de PowerPoint est étirée dans sa boîte : l'étirement est fait ici, sur les pixels, dans la dimension qui grandit (rien n'est perdu).
   async function cropped(data, crop, flipH, flipV, ratio) {
-    if (/^data:image\/svg/.test(data)) return data;
-    const same = !crop || !(crop.l || crop.t || crop.r || crop.b);
     try {
-      const img = await ImageIo.load(data);
-      const sw = img.naturalWidth;
-      const sh = img.naturalHeight;
-      if (!sw || !sh) return data;
-      const c = same ? { l: 0, t: 0, r: 0, b: 0 } : crop;
-      const sx = Math.round(sw * c.l);
-      const sy = Math.round(sh * c.t);
-      const cw = Math.max(1, Math.round(sw * (1 - c.l - c.r)));
-      const ch = Math.max(1, Math.round(sh * (1 - c.t - c.b)));
-      let outW = cw;
-      let outH = ch;
-      if (ratio > 0 && Math.abs(cw / ch / ratio - 1) > STRETCH_TOLERANCE) {
-        if (cw / ch > ratio) outH = Math.round(cw / ratio);
-        else outW = Math.round(ch * ratio);
-      }
-      if (same && !flipH && !flipV && outW === cw && outH === ch) return data;
-      const shrink = Math.min(1, Math.sqrt(MAX_PIXELS / (outW * outH)));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(outW * shrink));
-      canvas.height = Math.max(1, Math.round(outH * shrink));
-      const g = canvas.getContext('2d');
-      g.translate(flipH ? canvas.width : 0, flipV ? canvas.height : 0);
-      g.scale(flipH ? -1 : 1, flipV ? -1 : 1);
-      g.drawImage(img, sx, sy, cw, ch, 0, 0, canvas.width, canvas.height);
-      return /^data:image\/jpe?g/.test(data) ? canvas.toDataURL('image/jpeg', 0.92) : canvas.toDataURL('image/png');
+      const out = await ImageIo.reshape(data, { crop, flipH, flipV, ratio });
+      return out ? out.src : data;
     } catch (e) {
       return data;
     }

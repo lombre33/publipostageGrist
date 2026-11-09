@@ -223,6 +223,83 @@
     },
   });
 
+  // --- reshape : rogner, tourner, retourner (js/image-io.js) ---
+  // Une image de quatre quarts de couleurs (40 x 20 : rouge, bleu en haut ; vert, jaune en bas), en PNG ou en JPEG.
+  const quarters = (type) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 40;
+    canvas.height = 20;
+    const g = canvas.getContext('2d');
+    [['#ff0000', 0, 0], ['#0000ff', 20, 0], ['#00ff00', 0, 10], ['#ffff00', 20, 10]].forEach(([color, x, y]) => { g.fillStyle = color; g.fillRect(x, y, 20, 10); });
+    return canvas.toDataURL(type || 'image/png', 1);
+  };
+  const colorAt = async (src, fx, fy) => {
+    const canvas = await ImageIo.draw(src);
+    return { w: canvas.width, h: canvas.height, px: Array.from(canvas.getContext('2d').getImageData(Math.floor(canvas.width * fx), Math.floor(canvas.height * fy), 1, 1).data) };
+  };
+  const near = (px, rgb) => px[3] === 255 && rgb.every((v, i) => Math.abs(px[i] - v) < 40);
+
+  cases.push({
+    id: 'imageio_reshape_crops_flips_and_turns_in_word_order',
+    description: 'reshape rogne (parts ôtées de chaque bord), retourne puis tourne, dans l\'ordre de Word et de PowerPoint : le miroir avant le tour ; un quart de tour échange la largeur et la hauteur',
+    run: async () => {
+      const bad = [];
+      const src = quarters();
+      const cropped = await ImageIo.reshape(src, { crop: { l: 0.5, t: 0, r: 0, b: 0.5 } });
+      const c = await colorAt(cropped.src, 0.25, 0.5);
+      if (!(cropped.width === 20 && cropped.height === 10 && near(c.px, [0, 0, 255]))) bad.push('rognage : ' + JSON.stringify([cropped.width, cropped.height, c.px]));
+      const mirrored = await ImageIo.reshape(src, { flipH: true });
+      const m = await colorAt(mirrored.src, 0.25, 0.25);
+      if (!near(m.px, [0, 0, 255])) bad.push('miroir : ' + JSON.stringify(m.px));
+      const turned = await ImageIo.reshape(src, { turn: 90 });
+      const t = await colorAt(turned.src, 0.25, 0.25);
+      if (!(turned.width === 20 && turned.height === 40 && near(t.px, [0, 255, 0]))) bad.push('quart de tour : ' + JSON.stringify([turned.width, turned.height, t.px]));
+      const both = await ImageIo.reshape(src, { flipH: true, turn: 90 });
+      const b = await colorAt(both.src, 0.25, 0.25);
+      if (!near(b.px, [255, 255, 0])) bad.push('miroir puis tour : ' + JSON.stringify(b.px));
+      const upright = await ImageIo.reshape(src, { turn: 360 + 0.001 });
+      if (upright !== null) bad.push('un tour entier ne tourne rien : ' + JSON.stringify(upright && [upright.width, upright.height]));
+      return { pass: !bad.length, notes: bad.join(' | ') || 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'imageio_reshape_does_nothing_to_vector_images_and_says_so',
+    description: 'reshape rend null quand il n\'y a rien à faire (aucun réglage, ou des réglages à zéro) et pour une image vectorielle (SVG : le dessin se perdrait) ; il lève pour une image illisible',
+    run: async () => {
+      const bad = [];
+      if (await ImageIo.reshape(quarters()) !== null) bad.push('sans réglage');
+      if (await ImageIo.reshape(quarters(), { crop: { l: 0, t: 0, r: 0, b: 0 }, turn: 0, ratio: 2 }) !== null) bad.push('réglages à zéro, proportions déjà bonnes');
+      const svg = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="2"><rect width="4" height="2"/></svg>');
+      if (await ImageIo.reshape(svg, { turn: 90 }) !== null) bad.push('SVG');
+      let refused = false;
+      try { await ImageIo.reshape('data:image/png;base64,AAAA', { turn: 90 }); } catch (e) { refused = true; }
+      if (!refused) bad.push('image illisible acceptée');
+      return { pass: !bad.length, notes: bad.join(' | ') || 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'imageio_reshape_stretches_to_the_ratio_and_keeps_jpeg_when_it_can',
+    description: 'reshape étire la partie gardée aux proportions demandées dans la dimension qui grandit ; un JPEG reste JPEG après un quart de tour ou un miroir, et devient PNG (coins transparents) après un autre angle',
+    run: async () => {
+      const bad = [];
+      const wide = await ImageIo.reshape(quarters(), { crop: { l: 0.5, t: 0, r: 0, b: 0 }, ratio: 2 });
+      if (!(wide.width === 40 && wide.height === 20)) bad.push('étirement : ' + JSON.stringify([wide.width, wide.height]));
+      const jpeg = quarters('image/jpeg');
+      const quarter = await ImageIo.reshape(jpeg, { turn: 270 });
+      const mirror = await ImageIo.reshape(jpeg, { flipV: true });
+      const slanted = await ImageIo.reshape(jpeg, { turn: 30 });
+      if (!/^data:image\/jpeg/.test(quarter.src)) bad.push('quart de tour : ' + quarter.src.slice(0, 20));
+      if (!/^data:image\/jpeg/.test(mirror.src)) bad.push('miroir : ' + mirror.src.slice(0, 20));
+      if (!/^data:image\/png/.test(slanted.src)) bad.push('30 degrés : ' + slanted.src.slice(0, 20));
+      const corner = await colorAt(slanted.src, 0, 0);
+      if (corner.px[3] !== 0) bad.push('coin plein : ' + JSON.stringify(corner.px));
+      if (!(slanted.width === Math.ceil(40 * Math.cos(Math.PI / 6) + 20 * Math.sin(Math.PI / 6) - 1e-6) && slanted.height === Math.ceil(40 * Math.sin(Math.PI / 6) + 20 * Math.cos(Math.PI / 6) - 1e-6))) bad.push('boîte : ' + JSON.stringify([slanted.width, slanted.height]));
+      return { pass: !bad.length, notes: bad.join(' | ') || 'ok' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.imageIo = cases;
 })();
