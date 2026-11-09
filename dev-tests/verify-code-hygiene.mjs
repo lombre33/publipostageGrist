@@ -143,6 +143,11 @@ const LIBRARY_CLASSES = new Set([
 
 // Le code du widget : js/ et css/, et le code des extensions de Grist Factory Suite (extensions/<identifiant>/, chargé au premier usage, js/extensions.js) - il est publié et soumis aux mêmes règles.
 const jsFiles = [...listFiles('js', /\.js$/), ...listFiles('extensions', /\.js$/)];
+// Les textes de l'interface : js/i18n-texts-<domaine>.js (une table { clé: { fr, en } } par domaine, chargée avant js/i18n.js qui les assemble) ; les essais qui lisent « les textes » lisent
+// les fichiers ensemble (i18nAll), ceux qui lisent la langue et `t()` lisent js/i18n.js seul.
+const I18N_TEXT_FILES = jsFiles.filter(f => /^js\/i18n-texts-[a-z]+\.js$/.test(f));
+const I18N_FILES = [...I18N_TEXT_FILES, 'js/i18n.js'];
+const i18nAll = () => I18N_FILES.map(read).join('\n');
 // Les bibliothèques des extensions de Grist Factory Suite (consigne GFS 007) : GFS les porte et l'app ne les charge jamais seule (le graphique y est grisé). Seule la politique de sécurité du contenu d'index.html
 // garde l'adresse exacte de leur mode CDN, telle que le catalogue de GFS la donne (GFS ne peut imposer aucune politique à un sous-cadre) : une adresse par bibliothèque, écrite ICI et nulle part dans le code du widget.
 // La section « politique » ne la prend pas pour une adresse oubliée ; la section 25 garde qu'elle est là, seule et exacte.
@@ -162,17 +167,29 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // 1. Clés i18n
 // ============================================================================
 {
-  const i18nSource = read('js/i18n.js');
+  const i18nSource = i18nAll();
   const keys = [...i18nSource.matchAll(/^\s*'([A-Za-z0-9_.-]+)'\s*:\s*\{/gm)].map(m => m[1]);
-  const consumerText = ['index.html', ...jsFiles.filter(f => f !== 'js/i18n.js'), ...galleryFiles].map(read).join('\n');
+  const consumerText = ['index.html', ...jsFiles.filter(f => !I18N_FILES.includes(f)), ...galleryFiles].map(read).join('\n');
   // 'varLoop.repeat.' + kind  ou  `varLoop.repeat.${kind}` : le préfixe couvre toutes les clés de la famille.
   const dynamicPrefixes = [...consumerText.matchAll(/['"`]([A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)*\.)(?:['"`]|\$\{)/g)].map(m => m[1]);
   const isUsed = k => consumerText.includes(`'${k}'`) || consumerText.includes(`"${k}"`) || consumerText.includes('`' + k + '`') || dynamicPrefixes.some(p => k.startsWith(p));
   const unused = keys.filter(k => !isUsed(k));
   check('i18n : les clés se lisent bien (garde-fou de l\'analyse elle-même)', keys.length > 400, `${keys.length} clés trouvées`);
-  check('i18n : aucune clé de js/i18n.js sans usage', unused.length === 0, unused.join(', '));
+  check('i18n : aucune clé de js/i18n.js ni de js/i18n-texts-*.js sans usage', unused.length === 0, unused.join(', '));
   const dupes = keys.filter((k, i) => keys.indexOf(k) !== i);
-  check('i18n : aucune clé déclarée deux fois', dupes.length === 0, dupes.join(', '));
+  check('i18n : aucune clé déclarée deux fois (ni dans un fichier, ni entre deux fichiers de textes : Object.assign laisserait la dernière écraser l\'autre en silence)', dupes.length === 0, dupes.join(', '));
+  // Les fichiers de textes : chacun déclare son module (`const I18nTextsNom = {`), index.html les charge TOUS avant js/i18n.js (qui lit ces globaux en s'ouvrant) et js/i18n.js les assemble TOUS : un
+  // fichier de textes de plus, ou un oublié dans l'une des trois listes, laisserait des clés « inconnues » (t() écrit alors la clé dans la page) sans qu'aucun autre contrôle ne le voie.
+  {
+    const moduleOf = file => 'I18nTexts' + file.replace(/^js\/i18n-texts-/, '').replace(/\.js$/, '').replace(/^./, c => c.toUpperCase());
+    const declares = file => new RegExp(`^const ${moduleOf(file)} = \\{$`, 'm').test(read(file));
+    const page = read('index.html').replace(/<!--[\s\S]*?-->/g, '');
+    const order = [...page.matchAll(/<script src="(js\/i18n[^"?]*\.js)\?v=/g)].map(m => m[1]);
+    const assembled = [...(/const STRINGS = Object\.assign\(\{\},([^)]*)\)/.exec(read('js/i18n.js')) || [, ''])[1].matchAll(/I18nTexts[A-Za-z]+/g)].map(m => m[0]);
+    check('i18n : chaque js/i18n-texts-*.js déclare son module (const I18nTextsNom = {), à la marge', I18N_TEXT_FILES.length >= 10 && I18N_TEXT_FILES.every(declares), I18N_TEXT_FILES.filter(file => !declares(file)).join(', ') || `${I18N_TEXT_FILES.length} fichiers`);
+    check('i18n : index.html charge chaque js/i18n-texts-*.js, une fois, AVANT js/i18n.js', JSON.stringify([...order].sort()) === JSON.stringify([...I18N_FILES].sort()) && order[order.length - 1] === 'js/i18n.js', order.join(', '));
+    check('i18n : js/i18n.js assemble chaque js/i18n-texts-*.js, une fois', JSON.stringify([...assembled].sort()) === JSON.stringify(I18N_TEXT_FILES.map(moduleOf).sort()), assembled.join(', '));
+  }
 }
 
 // ============================================================================
@@ -281,7 +298,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // 6. Vocabulaire des textes de l'interface
 // ============================================================================
 {
-  const i18nSource = read('js/i18n.js');
+  const i18nSource = i18nAll();
   // Une entrée par ligne : 'clé': { fr: '…', en: '…' } (guillemets simples, apostrophes typographiques dans le texte, `\'` échappé au besoin).
   const quoted = "'((?:[^'\\\\]|\\\\.)*)'";
   const entries = [...i18nSource.matchAll(new RegExp(`^\\s*'([A-Za-z0-9_.-]+)'\\s*:\\s*\\{\\s*fr:\\s*${quoted}\\s*,\\s*en:\\s*${quoted}`, 'gm'))]
@@ -955,6 +972,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 {
   const settings = noCommentsJs(read('js/settings.js'));
   const i18n = noCommentsJs(read('js/i18n.js'));
+  const i18nTexts = noCommentsJs(i18nAll()); // les textes (js/i18n-texts-*.js) avec la langue et t() : `i18n` seul ne porte que la langue
   const main = noCommentsJs(read('js/main.js'));
   const fn = (settings.match(/async function changeLanguage\(next, leave\) \{[\s\S]*?\n  \}/) || [''])[0];
   const at = needle => fn.indexOf(needle);
@@ -1019,11 +1037,11 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const noteTag = (page.match(/<p [^>]*id="settings-language-gfs-note"[^>]*>/) || [''])[0];
   check('langue de GFS : la phrase des cases grisées est dans index.html, cachée au départ et traduite (français et anglais), après les deux cases ; une case grisée a son style (opacité, curseur) dans css/toolbar-v2.css',
     /\bhidden\b/.test(noteTag) && noteTag.indexOf('data-i18n="settings.language.gfsNote"') !== -1 && page.indexOf('id="settings-language-gfs-note"') > page.indexOf('name="settings-lang" value="en"')
-      && /'settings\.language\.gfsNote': \{ fr: '[^']+', en: '[^']+' \}/.test(i18n) && /\.settings-radio-row label\.is-disabled \{[^}]*opacity: \.45;[^}]*cursor: default;/.test(read('css/toolbar-v2.css')), noteTag);
+      && /'settings\.language\.gfsNote': \{ fr: '[^']+', en: '[^']+' \}/.test(i18nTexts) && /\.settings-radio-row label\.is-disabled \{[^}]*opacity: \.45;[^}]*cursor: default;/.test(read('css/toolbar-v2.css')), noteTag);
   // Consigne GFS 049 : l'explorateur de GFS n'a plus de bouton « Langue » (un seul bouton « Réglages », puis la ligne « Langue »). Les trois textes de la phrase (français et anglais de js/i18n.js, repli
   // d'index.html) disent le même chemin, et aucun ne nomme un bouton « Langue ».
   const noteFallback = ((page.match(/<p [^>]*id="settings-language-gfs-note"[^>]*>([^<]*)<\/p>/) || [])[1] || '').trim();
-  const noteTexts = (i18n.match(/'settings\.language\.gfsNote': \{ fr: '([^']+)', en: '([^']+)' \}/) || []).slice(1);
+  const noteTexts = (i18nTexts.match(/'settings\.language\.gfsNote': \{ fr: '([^']+)', en: '([^']+)' \}/) || []).slice(1);
   check('langue de GFS : la phrase des cases grisées nomme le bouton « Réglages » de l\u2019explorateur et la ligne « Langue » (« Settings » et « Language » en anglais), jamais un bouton « Langue » ; le repli d\u2019index.html est le français de js/i18n.js',
     noteTexts.length === 2 && noteFallback === noteTexts[0] && /bouton Réglages de l.explorateur, ligne Langue/.test(noteTexts[0]) && /Settings button in the explorer, Language row/.test(noteTexts[1])
       && !/bouton Langue|Language button/.test(noteTexts.join(' ') + ' ' + noteFallback), { noteFallback, noteTexts });
@@ -1600,7 +1618,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const nodes = noCommentsJs(read('js/editor-nodes.js'));
   const mention = noCommentsJs(read('js/mention.js'));
   const page = read('index.html').replace(/<!--[\s\S]*?-->/g, '');
-  const i18n = read('js/i18n.js');
+  const i18n = i18nAll();
   check('bulles et puces : js/settings.js lit et écrit le choix par PersonStore (`pp_bubble_marks`, « marks » ou « default » seulement), pose ou retire `data-bubble-marks` sur <html> au chargement, le relit quand l’espace de GFS arrive (PersonStore.onLoaded) et câble les deux cases de Réglages',
     /const BUBBLE_MARKS_STORAGE = 'pp_bubble_marks';/.test(settings) && /PersonStore\.get\(BUBBLE_MARKS_STORAGE\) === 'marks' \? 'marks' : 'default'/.test(settings)
       && /const next = value === 'marks' \? 'marks' : 'default';\s*PersonStore\.set\(BUBBLE_MARKS_STORAGE, next\);\s*applyBubbleMarks\(next\);/.test(settings)

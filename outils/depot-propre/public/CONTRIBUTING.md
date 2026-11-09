@@ -58,7 +58,7 @@ contribution de leur côté : elle paraît alors dans la version suivante (voir 
 
 ## Règles du code
 
-- **Français et anglais ensemble** : tout texte affiché est dans `js/i18n.js`, avec sa version française
+- **Français et anglais ensemble** : tout texte affiché est dans un fichier de `js/i18n-texts-*.js` (celui de son domaine), avec sa version française
   et sa version anglaise dans la même contribution. Le vocabulaire français dit « modèle », jamais
   « template ». Les pluriels passent par `I18n.t` (`{n|singulier|pluriel}`).
 - **Cache du navigateur** : un fichier de `css/` ou de `js/` modifié monte son numéro `?v=` dans
@@ -137,7 +137,7 @@ the next version (see the [CHANGELOG](CHANGELOG.md)).
 
 ## Code rules
 
-- **French and English together**: every displayed text lives in `js/i18n.js`, with its French and its
+- **French and English together**: every displayed text lives in a `js/i18n-texts-*.js` file (the one of its domain), with its French and its
   English version in the same contribution. French wording says "modèle", never "template". Plurals go
   through `I18n.t` (`{n|singular|plural}`).
 - **Browser cache**: a modified file in `css/` or `js/` bumps its `?v=` number in `index.html`,

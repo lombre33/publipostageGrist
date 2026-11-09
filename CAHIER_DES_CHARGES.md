@@ -103,7 +103,8 @@ publipostageGrist/
 │   ├── toc-links.js              #   lignes du sommaire cliquables (éditeur, Lecture)
 │   ├── anchors.js                #   signets (attributs, cibles) et liens « Dans ce document »
 │   ├── bookmark-dialog.js        #   fenêtre « Signet »
-│   ├── i18n.js                   #   dictionnaire de traduction FR/EN
+│   ├── i18n.js                   #   langue de départ, t() et assemblage des textes
+│   ├── i18n-texts-*.js           #   dictionnaire de traduction FR/EN, un fichier par domaine
 │   ├── icons.js                  #   icônes SVG de la barre d'outils
 │   ├── settings.js               #   panneau de réglages
 │   ├── template-gallery.js       #   galerie de modèles pré-remplis

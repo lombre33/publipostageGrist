@@ -108,6 +108,9 @@ export function stripCode(src, keepStrings = false) {
   return out;
 }
 
+// Les tables de textes de l'interface (js/i18n-texts-<domaine>.js) : des données, hors du relevé de l'API.
+export const isTextTable = file => /^js\/i18n-texts-[a-z]+\.js$/.test(file);
+
 // Les modules globaux d'un fichier : `const Nom = …` / `let` / `var` / `class Nom` à la marge (colonne 0), nom en capitales de tête.
 export function declaredGlobals(src) {
   const names = [];
@@ -227,7 +230,8 @@ if (!isMain) { /* importé par un autre essai : seules les fonctions ci-dessus s
   check('extensions : chaque fichier de js/extensions.js se charge', extErrors.length === 0, extErrors.join('\n'));
   const loaded = [...scripts, ...extScripts].filter(s => files[s] !== undefined);
   const declared = new Set();
-  for (const s of loaded) for (const name of declaredGlobals(files[s])) declared.add(name);
+  // Les tables de textes (js/i18n-texts-*.js) ne sont pas une API : des milliers de clés { fr, en } qui gonfleraient le relevé ; les gardes d'i18n (codeHygiene, section 1) lisent leurs clés.
+  for (const s of loaded) if (!isTextTable(s)) for (const name of declaredGlobals(files[s])) declared.add(name);
   const live = await w.page.evaluate(names => {
     const g = (0, eval);
     const hidden = new Set(['length', 'name', 'prototype', 'caller', 'arguments']);
@@ -293,6 +297,7 @@ if (!isMain) { /* importé par un autre essai : seules les fonctions ci-dessus s
   check('détecteur : un fichier que personne ne nomme est un orphelin', orphans({ 'js/a.js': 'A.run(); load(\'js/d.js\')', 'js/b-part.js': 'x', 'js/c.js': '// voir b-part.js', 'js/d.js': 'y' }, ['js/a.js']).join() === 'js/b-part.js,js/c.js');
   check('détecteur : un appel sur un module inconnu est relevé, pas une variable locale', (() => { const c = calledModules('const Local = {}; Local.a(); Ghost.run(); // Fake.x\nconst s = "Str.y";'); return c.has('Ghost') && !c.has('Local') && !c.has('Fake') && !c.has('Str'); })());
   check('détecteur : les fichiers d\'une extension sont lus dans js/extensions.js', extensionScripts("a: { scripts: ['x.js', 'y.js'], styles: [] }, 'lecture-pdf': { nameKey: 'k', scripts: ['z.js'] }").join() === 'extensions/a/x.js,extensions/a/y.js,extensions/lecture-pdf/z.js');
+  check('détecteur : une table de textes (js/i18n-texts-*.js) n\'est pas un module du relevé, un autre fichier de js/ l\'est', isTextTable('js/i18n-texts-export.js') && !isTextTable('js/i18n.js') && !isTextTable('js/export-menu.js'), null);
   check('détecteur : les modules déclarés à la marge sont relevés', declaredGlobals('const Alpha = (function () {})();\n  const inner = 1;\nclass Beta {}\nlet Gamma;').join() === 'Alpha,Beta,Gamma');
   report();
 }

@@ -30,6 +30,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createContext, loadScript, evalIn, check, summarizeAndExit } from './unit-harness.mjs';
+import { I18N_FILES, i18nTexts } from './i18n-files.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MODELS = 'Publipostage_Modeles';
@@ -670,14 +671,14 @@ async function main() {
 
   // === 11. Les textes de la fonction, en français et en anglais ===
   {
-    const lines = readFileSync(join(ROOT, 'js/i18n.js'), 'utf8').split('\n').filter(line => /^\s*'(?:versions\.|status\.version|toolbar\.versionsRow')/.test(line));
+    const lines = i18nTexts().split('\n').filter(line => /^\s*'(?:versions\.|status\.version|toolbar\.versionsRow')/.test(line));
     const entries = {};
     for (const line of lines) {
       const m = line.match(/^\s*'([^']+)':\s*\{\s*fr:\s*'((?:[^'\\]|\\.)*)',\s*en:\s*'((?:[^'\\]|\\.)*)'\s*\},?\s*$/);
       if (m) entries[m[1]] = { fr: m[2], en: m[3] };
     }
     const keys = Object.keys(entries);
-    check('les textes de la fonction se lisent tous dans js/i18n.js (une entrée = une ligne, fr puis en)', keys.length === lines.length && keys.length >= 25, keys.length + ' lus sur ' + lines.length + ' lignes');
+    check('les textes de la fonction se lisent tous dans js/i18n-texts-*.js (une entrée = une ligne, fr puis en)', keys.length === lines.length && keys.length >= 25, keys.length + ' lus sur ' + lines.length + ' lignes');
     // Un {trou} ou un pluriel {n|un|plusieurs} : le même dans les deux langues.
     const holes = (text) => (text.match(/\{[A-Za-z]+(?:\|[^}]*)?\}/g) || []).map(h => h.replace(/\|.*\}$/, '}')).sort();
     const lonely = keys.filter(k => !entries[k].fr.trim() || !entries[k].en.trim());
@@ -685,14 +686,14 @@ async function main() {
     const gaps = keys.filter(k => json(holes(entries[k].fr)) !== json(holes(entries[k].en)));
     check('les {trous} sont les mêmes en français et en anglais', gaps.length === 0, gaps.map(k => k + ' ' + json(holes(entries[k].fr)) + ' / ' + json(holes(entries[k].en))).join(' ; '));
     // Le code qui les demande : une clé entre guillemets (I18n.t('clé'), say('clé'), une erreur qui porte sa clé) ou une clé de data-i18n.
-    const files = ['index.html', ...readdirSync(join(ROOT, 'js')).filter(f => f.endsWith('.js') && f !== 'i18n.js').map(f => 'js/' + f)];
+    const files = ['index.html', ...readdirSync(join(ROOT, 'js')).map(f => 'js/' + f).filter(f => f.endsWith('.js') && !I18N_FILES.includes(f))];
     const used = new Set();
     for (const file of files) {
       const source = readFileSync(join(ROOT, file), 'utf8');
       for (const m of source.matchAll(/['"]((?:versions\.|status\.version|toolbar\.versionsRow)[A-Za-z.]*)['"]/g)) used.add(m[1]);
     }
     const missing = [...used].filter(k => !entries[k]);
-    check('tout texte que le code demande existe dans js/i18n.js', used.size >= 20 && missing.length === 0, 'demandés ' + used.size + ', absents : ' + missing.join(', '));
+    check('tout texte que le code demande existe dans js/i18n-texts-*.js', used.size >= 20 && missing.length === 0, 'demandés ' + used.size + ', absents : ' + missing.join(', '));
     const orphans = keys.filter(k => !used.has(k));
     check('aucun texte de la fonction n\'est orphelin (tous sont demandés quelque part)', orphans.length === 0, orphans.join(', '));
   }

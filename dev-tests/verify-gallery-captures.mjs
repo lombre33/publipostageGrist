@@ -18,6 +18,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { entryFiles, inputsHash, pngSize, readJson } from './gallery-captures-lib.mjs';
+import { i18nTexts } from './i18n-files.mjs';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 let total = 0, failures = 0;
@@ -28,7 +29,7 @@ function check(name, pass, notes) {
 }
 
 // ---- Les libellés de js/i18n.js : { clé: { fr, en } } pour gallery.shows.* ----
-const i18n = readFileSync(join(ROOT, 'js', 'i18n.js'), 'utf8');
+const i18n = i18nTexts();
 const labels = {};
 for (const m of i18n.matchAll(/'gallery\.shows\.([A-Za-z0-9]+)':\s*\{\s*fr:\s*'((?:[^'\\]|\\.)*)',\s*en:\s*'((?:[^'\\]|\\.)*)'\s*\}/g)) labels[m[1]] = { fr: m[2], en: m[3] };
 // Les noms (gallery.name.<id>) et les mots-clés (gallery.tag.<mot-clé sans accent ni capitale>) du catalogue, dans les deux langues. tagKey est celui de js/template-gallery-modal.js.
