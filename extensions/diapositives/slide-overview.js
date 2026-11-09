@@ -36,7 +36,7 @@ const SlideOverview = (function () {
   let open = false;
   let opener = null;               // le bouton qui l'a ouverte : « Fermer » lui rend le clavier
   let sizeIndex = DEFAULT_SIZE;
-  let cards = [];                  // une carte par diapositive : { card, thumb, page, num, badges, people, more, nodes, key, near, label }
+  let cards = [];                  // une carte par diapositive : { card, thumb, page, num, badges, people, more, nodes, key, base, decorEl, near, label, sizedFor }
   let heads = [];                  // l'en-tête de chaque section nommée (SlideStrip.overview.makeHead), sur sa propre rangée de la grille
   let sections = [];               // les sections du texte, lues à la dernière mise à jour (SlideStrip.overview.sections)
   let state = null;                // ce que la bande dit : { count, current, chosen, off }
@@ -125,7 +125,7 @@ const SlideOverview = (function () {
     card.append(thumb, meta, more, people);
     grid.appendChild(card);
     if (nearObserver) nearObserver.observe(card);
-    return { card, thumb, page, num, badges, people, more, nodes: null, key: '', near: !nearObserver, label: '', sizedFor: '' };
+    return { card, thumb, page, num, badges, people, more, nodes: null, key: '', base: '', decorEl: null, near: !nearObserver, label: '', sizedFor: '' };
   }
   function removeCard(c) {
     if (nearObserver) nearObserver.unobserve(c.card);
@@ -152,40 +152,7 @@ const SlideOverview = (function () {
     if (!next) { close(false); return; }
     state = next;
     geometry = host().geometry();
-    // Une carte par diapositive. Les copies des miniatures suivent leurs diapositives : une page copiée est reprise par la carte de la diapositive qui montre les mêmes blocs, où qu'elle soit allée.
-    const spare = cards.slice(next.count);
-    while (cards.length < next.count) cards.push(makeCard());
-    if (cards.length > next.count) cards.length = next.count;
-    const old = cards.map(c => ({ page: c.page, nodes: c.nodes, key: c.key }));
-    spare.forEach((c) => old.push({ page: c.page, nodes: c.nodes, key: c.key }));
-    spare.forEach(removeCard);
-    const free = new Set(old);
-    const peeks = cards.map((c, i) => host().peek(i));
-    const taken = new Array(cards.length).fill(null);
-    // À sa place d'abord, puis ailleurs.
-    peeks.forEach((peek, i) => {
-      const here = old[i];
-      if (peek && here && free.has(here) && sameBlocks(here, peek)) { taken[i] = here; free.delete(here); }
-    });
-    peeks.forEach((peek, i) => {
-      if (taken[i] || !peek) return;
-      const found = Array.from(free).find(candidate => sameBlocks(candidate, peek));
-      if (found) { taken[i] = found; free.delete(found); }
-    });
-    const leftovers = Array.from(free);
-    cards.forEach((c, i) => {
-      const reuse = taken[i] || leftovers.shift() || null;
-      const page = reuse ? reuse.page : c.page;
-      if (page !== c.page || page.parentNode !== c.thumb) { c.thumb.replaceChildren(page); c.page = page; }
-      if (taken[i]) { c.nodes = taken[i].nodes; c.key = taken[i].key; }
-      else { page.replaceChildren(); c.nodes = null; c.key = ''; }
-    });
-    // L'ordre dans la grille est celui des diapositives.
-    let at = nextCard(grid.firstElementChild);
-    cards.forEach((c) => {
-      if (c.card === at) { at = nextCard(at.nextElementSibling); return; }
-      grid.insertBefore(c.card, at);
-    });
+    matchCards(next.count);
     syncHeads();
     sizeCards();
     const chosen = new Set(next.chosen);
@@ -202,8 +169,52 @@ const SlideOverview = (function () {
     largerButton.setAttribute('aria-disabled', sizeIndex === SIZES.length - 1 ? 'true' : 'false');
     drawThumbs();
   }
-  // La première carte à partir de `node` : les en-têtes de section, entre les cartes, ne comptent pas.
-  const nextCard = (node) => { let at = node; while (at && !at.classList.contains('pp-ov-card')) at = at.nextElementSibling; return at; };
+  // Une carte par diapositive, dans l'ordre. La carte qui montre déjà les blocs d'une diapositive la garde, où qu'elle soit allée : une diapositive qui ne fait que changer de place (glissée, montée, descendue, la
+  // précédente supprimée) garde sa carte et sa miniature, et seule cette carte change de place dans la grille. Avant, les cartes restaient et leurs miniatures passaient de l'une à l'autre : glisser une
+  // diapositive de vingt-huit places déplaçait vingt-huit miniatures (neuf mille éléments au style revu) et refaisait les copies d'entre-deux (leur rang, dans la clé du décor, avait changé).
+  // Une diapositive sans carte (ses blocs ont changé, ou sa miniature n'est pas encore copiée) prend la première carte libre qui vient après, dans la grille d'aujourd'hui, celle de la diapositive d'avant : aucune
+  // carte ne se déplace. Faute d'une carte libre plus loin, la dernière d'avant, ou une carte neuve.
+  function matchCards(count) {
+    const peeks = [];
+    for (let i = 0; i < count; i++) peeks.push(host().peek(i));
+    const wanted = peeks.map(() => null);
+    const free = new Set(cards);
+    // À sa place d'abord, puis ailleurs.
+    peeks.forEach((peek, i) => {
+      const c = cards[i];
+      if (peek && c && free.has(c) && sameBlocks(c, peek)) { wanted[i] = c; free.delete(c); }
+    });
+    peeks.forEach((peek, i) => {
+      if (wanted[i] || !peek) return;
+      const found = cards.find(c => free.has(c) && sameBlocks(c, peek));
+      if (found) { wanted[i] = found; free.delete(found); }
+    });
+    const spare = cards.filter(c => free.has(c));
+    const place = new Map(cards.map((c, k) => [c, k]));
+    const focusAt = cards.findIndex(c => c.card.contains(document.activeElement));
+    let after = -1;
+    const next = wanted.map((c) => {
+      let card = c;
+      if (!card) {
+        let k = spare.findIndex(candidate => place.get(candidate) > after);
+        if (k < 0) k = spare.length - 1;
+        card = k < 0 ? makeCard() : spare.splice(k, 1)[0];
+        // Sa miniature montrait une autre diapositive : elle se refait (drawThumbs), à son tour si la grille la montre.
+        card.page.replaceChildren();
+        card.nodes = null;
+        card.key = '';
+        card.base = '';
+        card.decorEl = null;
+      }
+      if (place.has(card)) after = place.get(card);
+      return card;
+    });
+    spare.forEach(removeCard);
+    cards = next;
+    host().placeInOrder(grid, cards.map(c => c.card));
+    // La carte qui avait le clavier n'est plus (sa diapositive a été supprimée) : le clavier reste à sa place dans la grille.
+    if (focusAt >= 0 && cards.length && !grid.contains(document.activeElement)) cards[Math.min(focusAt, cards.length - 1)].card.focus({ preventScroll: true });
+  }
   // Les en-têtes de section, chacun sur sa rangée juste avant la première carte de sa section, et les cartes des sections repliées cachées. Les en-têtes sont ceux de la bande (makeHead) : ils se replient,
   // se renomment et ouvrent leur menu par ses gestes.
   function syncHeads() {
@@ -223,7 +234,8 @@ const SlideOverview = (function () {
       if (c.card.hidden !== hide) c.card.hidden = hide;
     });
   }
-  const sameBlocks = (entry, peek) => !!entry.nodes && entry.key === peek.key && entry.nodes.length === peek.nodes.length && entry.nodes.every((node, k) => node === peek.nodes[k]);
+  // La carte montre-t-elle les blocs de la diapositive et sa page (base : la clé de la copie sans le rang de la diapositive) ? Son décor, qui porte le rang, est à part (drawThumbs).
+  const sameBlocks = (entry, peek) => !!entry.nodes && entry.base === peek.base && entry.nodes.length === peek.nodes.length && entry.nodes.every((node, k) => node === peek.nodes[k]);
   // Les pastilles et le nom accessible de la diapositive `i`, repris de sa miniature dans la bande.
   function syncInfo(c, i) {
     const info = host().rowInfo(i);
@@ -253,13 +265,21 @@ const SlideOverview = (function () {
     });
   }
   // Copie les miniatures qui manquent, seulement pour les cartes que la grille montre, ou presque. Toutes les copies d'abord, puis toutes les écritures : copier lit la mise en page de l'éditeur.
+  // Une diapositive qui ne fait que changer de rang (une autre a été glissée, supprimée, ajoutée avant elle) a les mêmes blocs et le même décor, à son numéro et à son pied près : seul l'élément du décor se
+  // remplace, à sa place (même ordre de peinture), au lieu de recopier la diapositive entière (comme la bande, slide-strip.js : drawThumbs).
   function drawThumbs() {
     if (!open || !geometry) return;
     const due = [];
+    const swaps = [];
     cards.forEach((c, i) => {
       if (!c.near) return;
       const peek = host().peek(i);
-      if (peek && !sameBlocks(c, peek)) due.push({ c, i });
+      if (!peek) return;
+      if (!sameBlocks(c, peek)) due.push({ c, i });
+      else if (c.key !== peek.key) {
+        if (c.decorEl && c.decorEl.parentNode === c.page) swaps.push({ c, i, key: peek.key });
+        else due.push({ c, i });
+      }
     });
     const copies = due.map(({ i }) => host().thumb(i));
     due.forEach(({ c }, k) => {
@@ -268,6 +288,14 @@ const SlideOverview = (function () {
       c.page.replaceChildren(...copy.elements);
       c.nodes = copy.nodes;
       c.key = copy.key;
+      c.base = copy.base;
+      c.decorEl = copy.decor;
+    });
+    swaps.forEach(({ c, i, key }) => {
+      const fresh = host().decorOf(i);
+      if (fresh) c.decorEl.replaceWith(fresh); else c.decorEl.remove();
+      c.decorEl = fresh;
+      c.key = key;
     });
   }
   function resize(step) {

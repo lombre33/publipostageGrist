@@ -807,6 +807,57 @@
     },
   });
 
+  // Le premier enregistrement automatique après l'ouverture d'un document. La mémoire des blocs était vide : il relisait le document en entier (125 ms pour 39 diapositives, 410 ms pour 117 ; environ quatre
+  // fois plus sur un poste lent), deux secondes après le geste qui venait de figer la page (déplacer une diapositive). La page au repos, quelques millisecondes à la fois, la remplit d'avance.
+  cases.push({
+    id: 'autosave_html_is_prepared_while_the_page_is_idle_after_a_document_opens_and_writes_the_same_bytes',
+    description: "Un document ouvert, la page au repos, la première lecture du HTML ne rend aucun bloc (la mémoire s'est remplie d'avance) et le texte reste celui de TipTap octet pour octet ; une lettre tapée avant la fin de la préparation ne la gêne pas",
+    run: async (h) => {
+      // Les rendus d'un paragraphe, comptés sur le sérialiseur du schéma de l'éditeur d'alors.
+      const spy = () => {
+        const editor = EditorCore.getEditor();
+        if (!editor.schema.cached.domSerializer) editor.getHTML();
+        const serializer = editor.schema.cached.domSerializer;
+        const real = serializer.nodes.paragraph;
+        const counter = { calls: 0, restore: () => { serializer.nodes.paragraph = real; } };
+        serializer.nodes.paragraph = function () { counter.calls++; return real.apply(this, arguments); };
+        return counter;
+      };
+      await setup(h, lines(80));
+      await h.sleep(2500);
+      const idle = spy();
+      let first;
+      let firstCalls;
+      let full;
+      try {
+        first = Editor.getHTML();
+        firstCalls = idle.calls;
+        full = EditorCore.getEditor().getHTML();
+      } finally { idle.restore(); }
+      // Un autre document, une lettre tapée tout de suite : la préparation reprend sur le texte d'alors, et la lecture d'après ne rend rien.
+      await setup(h, lines(80));
+      let pos = -1;
+      let seen = 0;
+      EditorCore.getEditor().state.doc.forEach((node, offset) => { if (node.type.name === 'paragraph' && ++seen === 10) pos = offset + 1; });
+      EditorCore.getEditor().view.dispatch(EditorCore.getEditor().state.tr.insertText('x', pos));
+      await h.sleep(2500);
+      const typedSpy = spy();
+      let typed;
+      let typedCalls;
+      let typedFull;
+      try {
+        typed = Editor.getHTML();
+        typedCalls = typedSpy.calls;
+        typedFull = EditorCore.getEditor().getHTML();
+      } finally { typedSpy.restore(); }
+      const shown = typed.indexOf('<p>xLigne 10 ') >= 0;
+      return {
+        pass: firstCalls === 0 && first === full && typedCalls === 0 && typed === typedFull && shown,
+        notes: 'blocs rendus par la 1re lecture après 2,5 s de repos : ' + firstCalls + ' (attendu 0) ; mêmes octets=' + (first === full) + ' (' + first.length + ' caractères) ; avec une lettre tapée : ' + typedCalls + ' (attendu 0), mêmes octets=' + (typed === typedFull) + ', lettre dans le texte=' + shown,
+      };
+    },
+  });
+
   cases.push({
     id: 'autosave_html_follows_the_interface_language_and_the_trigger_key_like_the_full_serialization',
     description: "Quand la langue de l'interface ou la touche de déclenchement du panneau « # » change sans que le texte change, le HTML lu reste celui de TipTap octet pour octet (puce d'une date, sommaire, bulle d'une variable, bulle d'un calcul) : la mémoire des blocs repart à neuf",

@@ -641,31 +641,80 @@ const Editor = (function () {
   const BLOCK_HTML_KEPT_MAX = 65536;
   let blockHtml = new WeakMap();
   let blockHtmlSetup = '';
+  // La mémoire repart à neuf quand ce qui change le rendu sans changer le nœud a changé.
+  function syncBlockHtmlSetup() {
+    const setup = I18n.getLang() + '|' + Variables.triggerChar();
+    if (setup !== blockHtmlSetup) { blockHtml = new WeakMap(); blockHtmlSetup = setup; }
+  }
+  // Le HTML d'un bloc de premier niveau : celui de la mémoire, sinon rendu par `serializer` dans le conteneur de `hold` (créé au premier besoin, gardé d'un bloc à l'autre) et gardé.
+  function htmlOfBlock(node, serializer, hold) {
+    let html = blockHtml.get(node);
+    if (html === undefined) {
+      if (!hold.div) hold.div = document.implementation.createHTMLDocument().createElement('div');
+      hold.div.appendChild(serializer.serializeNode(node));
+      html = hold.div.innerHTML;
+      hold.div.textContent = '';
+      if (html.length <= BLOCK_HTML_KEPT_MAX) blockHtml.set(node, html);
+    }
+    return html;
+  }
   function documentHtml(content, schema) {
     let plain = !!domSerializerClass;
     content.forEach(node => { if (node.marks.length) plain = false; });
     if (!plain) return htmlOfFragment(content, schema);
     try {
-      const setup = I18n.getLang() + '|' + Variables.triggerChar();
-      if (setup !== blockHtmlSetup) { blockHtml = new WeakMap(); blockHtmlSetup = setup; }
+      syncBlockHtmlSetup();
       const serializer = domSerializerClass.fromSchema(schema);
-      let holder = null;
+      const hold = { div: null };
       const parts = [];
-      content.forEach(node => {
-        let html = blockHtml.get(node);
-        if (html === undefined) {
-          if (!holder) holder = document.implementation.createHTMLDocument().createElement('div');
-          holder.appendChild(serializer.serializeNode(node));
-          html = holder.innerHTML;
-          holder.textContent = '';
-          if (html.length <= BLOCK_HTML_KEPT_MAX) blockHtml.set(node, html);
-        }
-        parts.push(html);
-      });
+      content.forEach(node => { parts.push(htmlOfBlock(node, serializer, hold)); });
       return parts.join('');
     } catch (e) {
       return htmlOfFragment(content, schema);
     }
+  }
+  // La mémoire se remplit d'avance, page au repos, quelques millisecondes à la fois, après l'ouverture d'un document : le premier enregistrement automatique qui suit une modification n'a plus que les blocs
+  // touchés à rendre. Avant, il relisait tout le document d'un coup (125 ms pour 39 diapositives, 410 ms pour 117 ; environ quatre fois plus sur un poste lent), deux secondes après le geste qui venait de
+  // figer la page (déplacer une diapositive, par exemple). Même sérialiseur, même mémoire : l'enregistrement écrit les mêmes octets. Une modification pendant ce temps : le travail reprend sur le texte
+  // d'alors, les blocs déjà rendus se retrouvent d'un coup. Un bloc de premier niveau qui porte une marque : documentHtml n'utilise pas la mémoire, rien à préparer.
+  const WARM_START_MS = 600;
+  const WARM_SLICE_MS = 6;
+  let warmHandle = 0;
+  let warmIdle = false;
+  function stopWarmingHtml() {
+    if (!warmHandle) return;
+    if (warmIdle) cancelIdleCallback(warmHandle); else clearTimeout(warmHandle);
+    warmHandle = 0;
+  }
+  function warmDocumentHtml() {
+    stopWarmingHtml();
+    if (!editor || !domSerializerClass) return;
+    let doc = null;
+    let index = 0;
+    const hold = { div: null };
+    const wait = () => {
+      warmIdle = typeof requestIdleCallback === 'function';
+      warmHandle = warmIdle ? requestIdleCallback(step, { timeout: 3000 }) : setTimeout(step, 50);
+    };
+    const step = () => {
+      warmHandle = 0;
+      if (!editor || !editor.view || editor.view.isDestroyed) return;
+      if (editor.state.doc !== doc) { doc = editor.state.doc; index = 0; }
+      const until = performance.now() + WARM_SLICE_MS;
+      try {
+        syncBlockHtmlSetup();
+        const serializer = domSerializerClass.fromSchema(editor.schema);
+        while (index < doc.childCount && performance.now() < until) {
+          const node = doc.child(index);
+          if (node.marks.length) return;
+          htmlOfBlock(node, serializer, hold);
+          index += 1;
+        }
+      } catch (e) { return; }
+      if (index < doc.childCount) wait();
+    };
+    warmIdle = false;
+    warmHandle = setTimeout(wait, WARM_START_MS);
   }
   // Une grille s'enregistre et s'exporte sans le paragraphe vide caché sous son tableau (GridEditor.serialize). `doc` : le HTML d'un état à venir du document, jamais posé dans l'éditeur,
   // écrit par le même sérialiseur que celui de l'éditeur (js/linked-table.js:prepareSend écrit le document avec les bases d'après un envoi aux modèles, que l'éditeur ne prend qu'une fois
@@ -834,6 +883,7 @@ const Editor = (function () {
     const looksBroken = !!editor.view.dom.querySelector('.var-badge-broken, .var-badge-unlinked, .calc-badge-broken, .calc-badge-unlinked, .editor-image-broken');
     GristAPI.refreshSchema(looksBroken ? undefined : { maxAgeMs: SCHEMA_MAX_AGE_MS }).then(refreshVariableBadgeValidity)
       .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));
+    warmDocumentHtml();
   }
 
   // La pagination se refait à l'échelle que la feuille vient de prendre (changement de taille du panneau, de zoom, de page), puis le zoom du contenu se revérifie à l'image suivante :

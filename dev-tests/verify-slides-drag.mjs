@@ -7,7 +7,10 @@
 //   (rien ne se recopie) ; un seul Ctrl+Z remet tout.
 //  RIEN NE BOUGE : un appui qui bouge à peine est un clic (il va à la diapositive) ; lâchée à sa place, la ligne ne se montre pas ; Échap pendant le glisser, puis le relâchement ; lâchée
 //   sur le document, à côté de la bande ; l'extension éteinte, la miniature ne part pas.
-//  DÉFILER : glissée près du bas de la bande, la bande défile jusqu'en bas ; lâchée là, la première diapositive devient la dernière.
+//  DÉFILER : glissée près du bas de la bande, la bande défile jusqu'en bas ; lâchée là, la première diapositive devient la dernière, en ne déplaçant que sa rangée (demande du 09/11 : « glisser déposer
+//   une slide pour changer l'ordre freeze encore plusieurs secondes quand on relâche la souris » : chaque rangée d'entre-deux passait devant elle, une à une, et le navigateur refaisait leur style).
+//  LE TEXTE : une diapositive de sept blocs qui descend jusqu'au bout ne fait recréer que ses propres blocs dans l'éditeur ; ceux des diapositives qu'elle traverse gardent leurs éléments (avant, ProseMirror
+//   les recréait tous : plus de la moitié du relâchement) ; le texte est le même, dans le bon ordre, et un Ctrl+Z le remet.
 // Lancé par run-headless.mjs (groupe Node "slidesDrag", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slides-drag.mjs
 import { start, seedModels, HEIGHT } from './gfs-page.mjs';
 
@@ -21,9 +24,13 @@ const FRONT = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwk
 const SHAPE = `<img class="editor-image" src="${FRONT}" alt="" style="width: 60px; height: 40px; position: absolute; left: 120px; top: 0px; z-index: 5" data-layer="front" data-wrap="inline" data-page-index="0" data-page-left-pt="40" data-page-top-pt="30">`;
 const NAMES = ['Un', 'Deux', 'Trois', 'Quatre', 'Cinq', 'Six', 'Sept', 'Huit'];
 const BODY = NAMES.map((name, i) => `<p>${name}</p>` + (i === 0 ? `<p>${SHAPE}</p>` : '')).join(BR);
+// Trois diapositives de sept paragraphes : ProseMirror cherche un bloc neuf parmi les cinq premiers anciens, une diapositive de sept blocs qui descend n'y est pas retrouvée à sa place.
+const LONG = [1, 2, 3].map(k => [1, 2, 3, 4, 5, 6, 7].map(j => `<p>S${k}-${j}</p>`).join('')).join(BR);
+const LONG_TEXTS = [1, 2, 3].map(k => [1, 2, 3, 4, 5, 6, 7].map(j => `S${k}-${j}`));
 const SEED = seedModels({ record: { id: 1, Nom: 'Alice', Statut: 'Urgent' } }) + `
   add(8, 'Huit', ${JSON.stringify(BODY)}, false, 'presentation');
-  stub.state.nextRowId.Publipostage_Modeles = 11;
+  add(9, 'Longues', ${JSON.stringify(LONG)}, false, 'presentation');
+  stub.state.nextRowId.Publipostage_Modeles = 12;
 `;
 
 // L'ordre des diapositives (le texte de chacune), la page de la forme, la diapositive du curseur, la bande (ses rangées, sa ligne d'accent, la copie qui suit la souris).
@@ -58,6 +65,22 @@ function state(app) {
 }
 const mark = app => app.evaluate(() => document.querySelectorAll('.pp-slide-strip .pp-slide-row').forEach((r, i) => { r.dataset.testMark = String(i); }));
 const toTop = app => app.evaluate(() => { document.querySelector('.pp-slide-list').scrollTop = 0; });
+// Les rangées que le navigateur reçoit de nouveau dans la liste (une insertion, déplacée ou neuve), repérées par leur marque : de `watchRows` à `rowMoves`.
+const watchRows = app => app.evaluate(() => {
+  const note = records => records.forEach(r => r.addedNodes.forEach((n) => { if (n.classList && n.classList.contains('pp-slide-row')) window.__rowMoves.push(n.dataset.testMark || '?'); }));
+  window.__rowMoves = [];
+  window.__rowNote = note;
+  window.__rowWatch = new MutationObserver(note);
+  window.__rowWatch.observe(document.querySelector('.pp-slide-list'), { childList: true });
+});
+const rowMoves = app => app.evaluate(() => { window.__rowNote(window.__rowWatch.takeRecords()); window.__rowWatch.disconnect(); return window.__rowMoves.slice(); });
+// Les paragraphes « S1-1 »… de l'éditeur, dans l'ordre où le navigateur les montre, et lesquels sont encore l'élément marqué par `tagEditor` avec le texte qu'il avait (un élément gardé tel quel n'a été ni
+// recréé ni réécrit avec le texte d'un autre bloc : ProseMirror met à jour sur place le premier bloc qui lui ressemble quand il ne retrouve pas celui qu'il cherche).
+const tagEditor = app => app.evaluate(() => { Array.from(EditorCore.getEditor().view.dom.children).forEach((el, i) => { el.__before = i; el.__text = el.textContent; }); });
+const editorText = app => app.evaluate(() => {
+  const kids = Array.from(EditorCore.getEditor().view.dom.children).filter(el => el.tagName === 'P' && /^S\d-\d$/.test(el.textContent));
+  return { texts: kids.map(el => el.textContent), kept: kids.map(el => el.__before !== undefined && el.__text === el.textContent) };
+});
 
 function toolsOf(tab) {
   const { page, app } = tab;
@@ -229,10 +252,17 @@ async function run(lang, colorScheme) {
   await sleep(1200);
   s = await state(app);
   const scrolled = { top: s.scrollTop, max: s.scrollMax };
+  await mark(app);
+  await watchRows(app);
   await a.up();
+  const inserted = await rowMoves(app);
   s = await state(app);
   check(tag + 'près du bas, la bande défile jusqu’en bas ; lâchée là, la première diapositive devient la dernière',
     scrolled.max > 0 && scrolled.top >= scrolled.max - 1 && same(s.order, moved(0, 8)) && s.current === 7, { scrolled, order: s.order, current: s.current });
+  // Une rangée déplacée est une rangée dont le navigateur refait le style et la mise en page (près de 140 éléments chacune dans une longue présentation) : descendre la première de sept places ne déplace
+  // que sa rangée (une insertion), pas les sept d'entre-deux devant elle.
+  check(tag + 'la première, descendue de sept places, est la seule rangée déplacée : une insertion dans la bande, pas une par diapositive d’entre-deux ; chacune garde sa rangée',
+    same(inserted, ['0']) && same(s.rows.map(r => r.mark), ['1', '2', '3', '4', '5', '6', '7', '0']), { inserted, marks: s.rows.map(r => r.mark) });
   await a.press('Control+z', 600);
   s = await state(app);
   check(tag + 'Ctrl+Z la remet en tête', same(s.order, NAMES), s.order);
@@ -251,6 +281,41 @@ async function run(lang, colorScheme) {
   s = await state(app);
   check(tag + 'extension éteinte : la miniature ne part pas, rien ne bouge', !ghostOff && same(s.order, NAMES), { ghost: ghostOff, order: s.order });
   await page.evaluate(list => window.__gfsStub.setExtensions(list), ACTIVE);
+
+  // --- Le texte de l'éditeur : la première de trois diapositives de sept blocs descend au bout.
+  await app.waitForFunction(() => { const b = document.querySelector('.pp-slide-add'); return !!b && b.getAttribute('aria-disabled') === 'false'; }, null, { timeout: 8000 }).catch(() => {});
+  await open(A, 9, 3);
+  await toTop(app);
+  await sleep(200);
+  await a.click(0);
+  await tagEditor(app);
+  await a.down(0);
+  await a.moveTo(await a.gapPoint(3));
+  await a.up(900);
+  s = await state(app);
+  let long = await editorText(app);
+  check(tag + 'sept blocs par diapositive : la première, lâchée après la dernière, finit en dernier ; le texte de l’éditeur suit, dans le bon ordre, sans bloc en double',
+    same(s.order.map(text => text.slice(0, 2)), ['S2', 'S3', 'S1']) && same(long.texts, [...LONG_TEXTS[1], ...LONG_TEXTS[2], ...LONG_TEXTS[0]]), { order: s.order, texts: long.texts });
+  // L'éditeur ne refait que ce qui a bougé : les quatorze blocs des deux diapositives traversées gardent leurs éléments, tels quels, ceux de la diapositive déplacée sont neufs. (Avant : ProseMirror ne retrouvait
+  // pas la diapositive à sa place, et tout ce qu'elle traversait se refaisait, bloc par bloc, ce qui était plus de la moitié du relâchement dans une longue présentation.)
+  check(tag + 'les quatorze blocs des diapositives traversées sont les mêmes éléments, avec le même texte ; seuls les sept de la diapositive déplacée sont neufs',
+    same(long.kept, [...Array(14).fill(true), ...Array(7).fill(false)]), long.kept);
+  await a.press('Control+z', 700);
+  s = await state(app);
+  long = await editorText(app);
+  check(tag + 'Ctrl+Z remet l’ordre et le texte de l’éditeur', same(s.order.map(text => text.slice(0, 2)), ['S1', 'S2', 'S3']) && same(long.texts, LONG_TEXTS.flat()), { order: s.order, texts: long.texts });
+  // Vers le haut, puis Ctrl+Z : défaire la montée de la dernière est, pour l'éditeur, la même descente de la dernière vers sa place d'avant, la diapositive d'au-dessus passant devant ; les deux autres gardent leurs éléments.
+  await a.down(2);
+  await a.moveTo(await a.gapPoint(0));
+  await a.up(900);
+  s = await state(app);
+  check(tag + 'la dernière, lâchée avant la première, passe en tête', same(s.order.map(text => text.slice(0, 2)), ['S3', 'S1', 'S2']), s.order);
+  await tagEditor(app);
+  await a.press('Control+z', 900);
+  s = await state(app);
+  long = await editorText(app);
+  check(tag + 'Ctrl+Z la remet en dernier : les quatorze blocs des deux autres diapositives sont les mêmes éléments, avec le même texte ; seuls les sept de la dernière sont neufs',
+    same(s.order.map(text => text.slice(0, 2)), ['S1', 'S2', 'S3']) && same(long.texts, LONG_TEXTS.flat()) && same(long.kept, [...Array(14).fill(true), ...Array(7).fill(false)]), { order: s.order, kept: long.kept });
 
   check(tag + 'aucune boîte native du navigateur', A.natives.length === 0, A.natives);
   await A.context.close();

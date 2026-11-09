@@ -95,6 +95,7 @@ const SlideStrip = (function () {
   let drag = null;                 // la miniature glissée (onDragStart), de l'appui au relâchement
   let dragJustEnded = false;       // le clic qui suit un glisser ne va pas à la miniature lâchée
   let editor = null;               // l'éditeur suivi tant que la bande est montrée
+  let stopLight = null;            // éteint lightRedraw (le dessin léger d'un état qui ne fait que changer des blocs de place)
   let chartDom = null;             // le texte de l'éditeur, où l'on écoute le dessin des graphiques (onChartPainted)
   let shown = false;
   let off = false;                 // l'extension est éteinte : les gestes sont grisés
@@ -388,8 +389,42 @@ const SlideStrip = (function () {
     r.row.remove();
   }
   const rowOf = target => rows.find(r => r.row.contains(target)) || null;
-  // La première rangée de miniature à partir de `node` : les en-têtes de section, entre les rangées, ne comptent pas.
-  const nextRow = (node) => { let at = node; while (at && !at.classList.contains('pp-slide-row')) at = at.nextElementSibling; return at; };
+  // Les indices de `pos` (des places d'avant, -1 pour « neuf » : ignoré) qui forment la plus longue suite croissante, sous forme d'ensemble. `tails[n]` est l'indice de la dernière des meilleures
+  // suites de n + 1 éléments, `back` relie chaque élément à celui d'avant dans sa suite.
+  function risingRun(pos) {
+    const tails = [];
+    const back = pos.map(() => -1);
+    pos.forEach((p, i) => {
+      if (p < 0) return;
+      let low = 0;
+      let high = tails.length;
+      while (low < high) { const middle = (low + high) >> 1; if (pos[tails[middle]] < p) low = middle + 1; else high = middle; }
+      back[i] = low > 0 ? tails[low - 1] : -1;
+      tails[low] = i;
+    });
+    const stay = new Set();
+    for (let i = tails.length ? tails[tails.length - 1] : -1; i >= 0; i = back[i]) stay.add(i);
+    return stay;
+  }
+  // Met les éléments `nodes` (des enfants de `parent`, dans l'ordre voulu) dans cet ordre en ne déplaçant que le strict nécessaire : ceux qui forment la plus longue suite déjà dans le bon ordre restent où
+  // ils sont (les autres enfants de `parent`, les en-têtes de section par exemple, ne comptent pas), chacun des autres passe devant le suivant. Descendre une diapositive de vingt-huit places ne déplace
+  // que sa rangée ; avant, chaque rangée d'entre-deux passait devant elle, une à une, et le navigateur refaisait le style et la mise en page de chacune (près de 4 000 éléments au relâchement du glisser).
+  // Un élément déplacé perd le clavier (le navigateur le rend à la page) : celui qui l'avait le reprend. Vrai quand un élément a été déplacé.
+  function placeInOrder(parent, nodes) {
+    const at = new Map();
+    let k = 0;
+    for (let child = parent.firstElementChild; child; child = child.nextElementSibling) at.set(child, k++);
+    const stay = risingRun(nodes.map(node => (at.has(node) ? at.get(node) : -1)));
+    const focused = parent.contains(document.activeElement) ? document.activeElement : null;
+    let moved = false;
+    let before = null;
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      if (!stay.has(i)) { parent.insertBefore(nodes[i], before); moved = true; }
+      before = nodes[i];
+    }
+    if (moved && focused && focused.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
+    return moved;
+  }
   // La rangée `r` montre-t-elle les blocs `nodes` (les mêmes objets) ?
   const shows = (r, nodes) => !!r.nodes && r.nodes.length === nodes.length && r.nodes.every((node, k) => node === nodes[k]);
 
@@ -432,16 +467,8 @@ const SlideStrip = (function () {
       if (place.has(next[i])) after = place.get(next[i]);
     });
     spare.forEach(removeRow);
-    // Dans l'ordre des diapositives, en ne déplaçant que les rangées qui ne sont pas à leur place. Une rangée déplacée perd le clavier (le navigateur le rend à la page) : la
-    // miniature qui l'avait le reprend, elle suit sa diapositive.
-    const focused = list.contains(document.activeElement) ? document.activeElement : null;
-    let at = nextRow(list.firstElementChild);
-    next.forEach((r) => {
-      if (r.row === at) { at = nextRow(at.nextElementSibling); return; }
-      list.insertBefore(r.row, at);
-      changed = true;
-    });
-    if (focused && focused.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
+    // Dans l'ordre des diapositives, en ne déplaçant que les rangées qui ne sont pas à leur place (placeInOrder : la miniature qui avait le clavier le reprend, elle suit sa diapositive).
+    if (placeInOrder(list, next.map(r => r.row))) changed = true;
     rows = next;
     return changed;
   }
@@ -623,10 +650,8 @@ const SlideStrip = (function () {
   }
   // Supprimer, ajouter ou déplacer une diapositive renumérote celles d'après : leurs blocs sont les mêmes, seul leur rang a changé, et la clé du décor ne diffère que par son dernier terme (`thème:page:rang`).
   // Le décor seul se remplace alors, à sa place, au lieu de recopier toute la diapositive (une suppression refaisait ainsi huit miniatures d'un coup, près de 1 900 éléments).
-  const canSwapDecor = (r, decor) => {
-    const base = key => key.slice(0, key.lastIndexOf(':'));
-    return !!decor && !!r.decorKey && !!r.decorEl && r.decorEl.parentNode === r.page && base(r.decorKey) === base(decor);
-  };
+  const decorBase = key => key.slice(0, key.lastIndexOf(':'));
+  const canSwapDecor = (r, decor) => !!decor && !!r.decorKey && !!r.decorEl && r.decorEl.parentNode === r.page && decorBase(r.decorKey) === decorBase(decor);
   // Refait la miniature des diapositives dont les blocs ont changé (un bloc que le texte n'a pas touché reste le même objet d'une transaction à l'autre), toutes quand la page a changé ;
   // seulement celles que la bande montre, ou presque (`near`) : les autres se copient quand elle défile jusqu'à elles (onNear). Chaque rangée prend la hauteur de la page, copiée ou non.
   function drawThumbs() {
@@ -1177,6 +1202,65 @@ const SlideStrip = (function () {
     else if (middle.length) tr.replaceWith(slides[from].start, slides[until].end, content);
     else if (slides[until].breakAfter != null) tr.delete(slides[from].start, slides[until].breakAfter + 1);
     else tr.delete(slides[from].breakBefore, slides[until].end);
+  }
+  // Une diapositive qui DESCEND (ou un Ctrl+Z qui remonte celle qu'on avait fait monter) faisait redessiner tout ce qu'elle traverse. ProseMirror cherche chaque bloc du nouvel état parmi les cinq premiers anciens
+  // qu'il n'a pas repris : une diapositive de douze blocs n'est pas retrouvée à sa place, et celles d'entre-deux se recréent, bloc par bloc (339 éléments neufs pour vingt-huit diapositives traversées, plus de
+  // la moitié du relâchement du glisser) ; dans l'autre sens, seule celle qui bouge se refait. Tant que la bande est montrée, juste avant que l'éditeur dessine un état qui ne fait que changer des blocs de place,
+  // les vues de ceux qui ont changé de place (tous sauf la plus longue suite restée dans l'ordre) sont retirées de sa liste et défaites, comme s'il les avait supprimées lui-même : il garde alors tout le reste tel
+  // quel et ne recrée que ces blocs. Le texte dessiné est le même. Sans l'une des pièces dont cela dépend (la liste des vues de l'éditeur, le bloc de chacune, de quoi la défaire), rien n'est retiré et le dessin
+  // d'avant se fait ; un bloc retiré qui resterait dans la page (la transaction refusée, par exemple) est effacé au dessin suivant. Retourne de quoi l'éteindre.
+  const REDRAW_WINDOW = 5;
+  function lightRedraw(view) {
+    const original = view && view.updateState;
+    if (typeof original !== 'function' || Object.prototype.hasOwnProperty.call(view, 'updateState')) return () => {};
+    let live = true;
+    const wrapper = function updateStateLight(state) {
+      const gone = [];
+      if (live && this.state && this.state.doc !== state.doc) {
+        try { detachMoved(this, state.doc, gone); } catch (error) { /* ce qui est déjà retiré est vérifié plus bas ; le reste, l'éditeur le dessine */ }
+      }
+      const result = original.call(this, state);
+      // Une vue retirée dont l'élément est resté dans la page : l'éditeur le retire de la page au prochain dessin de ses blocs, qu'on lui demande.
+      if (gone.length && gone.some(desc => desc.dom && desc.dom.parentNode === this.dom) && this.docView && typeof this.docView.markDirty === 'function') {
+        this.docView.markDirty(0, 0);
+        original.call(this, this.state);
+      }
+      return result;
+    };
+    view.updateState = wrapper;
+    return () => { live = false; if (view.updateState === wrapper) delete view.updateState; };
+  }
+  // Retire de la liste des vues de l'éditeur celles des blocs de premier niveau qui, de `view.state.doc` à `next`, ont changé de place ; `gone` reçoit chaque vue retirée.
+  function detachMoved(view, next, gone) {
+    const root = view.docView;
+    const prev = view.state.doc;
+    const count = prev.childCount;
+    if (!root || !Array.isArray(root.children) || next.childCount !== count) return;
+    // Ce qui change est entre les blocs restés les mêmes au début et à la fin : une frappe n'en touche qu'un, et en deçà de cinq blocs l'éditeur retrouve seul ce qui bouge.
+    let head = 0;
+    while (head < count && prev.child(head) === next.child(head)) head += 1;
+    let tail = 0;
+    while (tail < count - head && prev.child(count - 1 - tail) === next.child(count - 1 - tail)) tail += 1;
+    const span = count - head - tail;
+    if (span <= REDRAW_WINDOW) return;
+    const was = new Map();
+    for (let i = head; i < head + span; i += 1) was.set(prev.child(i), i);
+    if (was.size !== span) return;
+    const pos = [];
+    for (let i = head; i < head + span; i += 1) { const k = was.get(next.child(i)); pos.push(k === undefined ? -1 : k); }
+    const stay = risingRun(pos);
+    const away = new Set();
+    pos.forEach((k, i) => { if (k >= 0 && !stay.has(i)) away.add(prev.child(k)); });
+    // Plus de blocs déplacés que de blocs restés : l'éditeur fait aussi bien.
+    if (!away.size || away.size > stay.size) return;
+    const views = root.children;
+    let kept = 0;
+    for (let i = 0; i < views.length; i += 1) {
+      const desc = views[i];
+      if (desc.node && away.has(desc.node) && typeof desc.destroy === 'function') gone.push(desc); else views[kept++] = desc;
+    }
+    views.length = kept;
+    gone.forEach((desc) => { try { desc.destroy(); } catch (error) { /* l'éditeur en aurait fait autant en les supprimant */ } });
   }
   // Vrai quand toutes les diapositives `indexes` sont masquées : la ligne « Masquer » devient « Afficher ».
   function allHidden(indexes) {
@@ -2100,6 +2184,7 @@ const SlideStrip = (function () {
       shown = true;
       editor = EditorCore.getEditor();
       editor.on('transaction', onTransaction);
+      stopLight = lightRedraw(editor.view);
       chartDom = editor.view.dom;
       chartDom.addEventListener(ChartEntry.PAINTED_EVENT, onChartPainted);
       stopPaginated = HeaderFooterPreview.onPaginated(onPaginated);
@@ -2135,6 +2220,7 @@ const SlideStrip = (function () {
     clearTimeout(redrawTimer);
     redrawTimer = null;
     if (editor) editor.off('transaction', onTransaction);
+    if (stopLight) { stopLight(); stopLight = null; }
     if (chartDom) { chartDom.removeEventListener(ChartEntry.PAINTED_EVENT, onChartPainted); chartDom = null; }
     if (stopPaginated) { stopPaginated(); stopPaginated = null; }
     if (stopPeers) { stopPeers(); stopPeers = null; }
@@ -2223,25 +2309,31 @@ const SlideStrip = (function () {
         people: r.people.hidden ? null : r.people.cloneNode(true),
       };
     },
-    // Ce que la copie de la diapositive `index` montrerait, sans la faire : { nodes, key } (voir thumb), ou null.
+    // Ce que la copie de la diapositive `index` montrerait, sans la faire : { nodes, key, base } (voir thumb), ou null.
     peek(index) {
       if (!shown || !editor) return null;
       const slide = slides[index];
       if (!slide) return null;
       const decor = SlideTheme.decorKey(index);
       const key = pageGeometry().key;
-      return { nodes: slide.nodes.map(entry => entry.node), key: decor ? key + '|' + decor : key };
+      return { nodes: slide.nodes.map(entry => entry.node), key: decor ? key + '|' + decor : key, base: decor ? key + '|' + decorBase(decor) : key };
     },
-    // La copie du rendu de la diapositive `index`, à la taille de la page : { nodes (ses blocs, pour savoir quand la refaire), key (la page et son décor), width, height, elements } ; null quand elle n'existe plus.
+    // La copie du rendu de la diapositive `index`, à la taille de la page : { nodes (ses blocs, pour savoir quand la refaire), key (la page et son décor), base (cette clé sans le rang de la diapositive : la copie
+    // d'une diapositive qui n'a changé que de rang ne se refait pas, seul son décor se remplace, voir decorOf), decor (l'élément du décor dans elements, ou null), width, height, elements } ; null quand elle n'existe plus.
     thumb(index) {
       if (!shown || !editor || editingHeaderFooter()) return null;
       refresh(false);
       const slide = slides[index];
       if (!slide) return null;
       const geometry = pageGeometry();
-      const decor = SlideTheme.decorKey(index);
-      return { nodes: slide.nodes.map(entry => entry.node), key: decor ? geometry.key + '|' + decor : geometry.key, width: geometry.width, height: geometry.height, elements: withDecor(copiesOf(slide, geometry), decor ? SlideTheme.decorElementFor(index) : null) };
+      const key = SlideTheme.decorKey(index);
+      const decor = key ? SlideTheme.decorElementFor(index) : null;
+      return { nodes: slide.nodes.map(entry => entry.node), key: key ? geometry.key + '|' + key : geometry.key, base: key ? geometry.key + '|' + decorBase(key) : geometry.key, width: geometry.width, height: geometry.height, decor, elements: withDecor(copiesOf(slide, geometry), decor) };
     },
+    // Le décor que la diapositive `index` a à son rang (un élément neuf, ou null sans décor à ce rang).
+    decorOf: index => SlideTheme.decorElementFor(index),
+    // Les enfants `nodes` de `parent` dans cet ordre, en ne déplaçant que ceux qui sont hors de place (placeInOrder).
+    placeInOrder,
     geometry: () => pageGeometry(),
   };
 

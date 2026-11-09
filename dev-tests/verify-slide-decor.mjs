@@ -520,6 +520,38 @@ async function run(lang, colorScheme, full) {
     afterRestore.length === 3 && allMarked(afterRestore[1].kept, 2) && allMarked(afterRestore[2].kept, 3) && afterRestore.every(x => x.decors === 1) && afterRestore[0].texts.length === 0 && sameWords(afterRestore[1].texts, [T.footer, '2']) && sameWords(afterRestore[2].texts, [T.footer, '3']),
     { afterRestore });
 
+  // La vue d'ensemble suit le même chemin (demande du 09/11, « glisser déposer une slide … freeze encore plusieurs secondes ») : une carte garde sa miniature, et son décor seul se remplace, quand la
+  // diapositive change de rang ; avant, ses cartes gardaient leur place et les miniatures passaient de l'une à l'autre, toutes recopiées (la clé du décor porte le rang).
+  await page.evaluate(() => document.querySelector('.pp-slide-overview-open').click());
+  await sleep(1200);
+  await page.evaluate(() => document.querySelectorAll('.pp-ov-card').forEach((card, i) => {
+    Array.from(card.querySelector('.pp-slide-page').children).forEach((child) => { if (!child.classList.contains('pp-slide-decor')) child.__kept = i + 1; });
+  }));
+  const cardMarks = () => page.evaluate(() => Array.from(document.querySelectorAll('.pp-ov-card')).map((card) => {
+    const kids = Array.from(card.querySelector('.pp-slide-page').children);
+    return {
+      kept: kids.filter(child => !child.classList.contains('pp-slide-decor')).map(child => child.__kept || 0),
+      decors: kids.filter(child => child.classList.contains('pp-slide-decor')).length,
+      texts: Array.from(card.querySelectorAll('.pp-slide-decor-text')).map(x => x.textContent),
+    };
+  }));
+  const ovBefore = await cardMarks();
+  await page.evaluate(() => document.querySelector('.pp-ov-card').focus());
+  await page.keyboard.press('Delete');
+  await sleep(900);
+  const ovDeleted = await cardMarks();
+  check(tag + 'vue d\'ensemble : Suppr efface la première diapositive, les deux autres cartes gardent leurs blocs (les mêmes éléments) et changent de décor : la nouvelle première n\'a plus ni pied ni numéro, la suivante passe au numéro 2',
+    ovBefore.length === 3 && ovDeleted.length === 2 && allMarked(ovDeleted[0].kept, 2) && allMarked(ovDeleted[1].kept, 3) && ovDeleted.every(x => x.decors === 1) && ovDeleted[0].texts.length === 0 && sameWords(ovDeleted[1].texts, [T.footer, '2']),
+    { ovBefore, ovDeleted });
+  await page.keyboard.press('Control+z');
+  await sleep(900);
+  const ovRestored = await cardMarks();
+  check(tag + 'vue d\'ensemble : Ctrl+Z rend la première diapositive, les deux cartes d\'avant gardent leurs blocs et reprennent leur numéro (2 et 3), la première n\'a ni pied ni numéro',
+    ovRestored.length === 3 && allMarked(ovRestored[1].kept, 2) && allMarked(ovRestored[2].kept, 3) && ovRestored.every(x => x.decors === 1) && ovRestored[0].texts.length === 0 && sameWords(ovRestored[1].texts, [T.footer, '2']) && sameWords(ovRestored[2].texts, [T.footer, '3']),
+    { ovRestored });
+  await page.keyboard.press('Escape');
+  await sleep(500);
+
   // 8) Un Ctrl+Z (vrai clavier) rend le thème sans décor, un Ctrl+Y le remet.
   await selectWord(page, 'Titre');
   await page.keyboard.press('Control+z');
