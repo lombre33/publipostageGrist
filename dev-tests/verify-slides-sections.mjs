@@ -10,7 +10,7 @@
 //   ses diapositives et son nom, un seul Ctrl+Z), « Retirer la section » (les diapositives restent) ; chaque ligne grisée dit pourquoi.
 //  GLISSER : une miniature déposée sous le titre d'une section l'ouvre, déposée au-dessus de ce titre elle finit la section d'avant ; la ligne d'accent dit où.
 // Lancé par run-headless.mjs (groupe Node "slidesSections", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slides-sections.mjs
-import { start, seedModels, HEIGHT } from './gfs-page.mjs';
+import { start, seedModels, HEIGHT, markItems, listNow, watchLanding, landing, landedFirst } from './gfs-page.mjs';
 
 const t = await start({ name: 'verify-slides-sections', port: Number(process.env.SLIDES_SECTIONS_PORT || 9202) });
 const { check } = t;
@@ -29,6 +29,20 @@ const NO_SECTION = ['', '', '', '', '', ''];
 const START = ['', '', 'Milieu', '', 'Fin', ''];
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+// Une diapositive glissée sur le titre d'une section est posée d'avance (dropAfterPaint) : à la peinture, la liste est dans l'ordre final, du bon côté du titre. `prev` : au-dessus du titre, elle finit la section d'avant
+// (la même rangée, la même place après le geste) ; sinon elle ouvre l'autre : le texte de la diapositive et de celle d'après change, les rangées sont reprises à leur place, seules les places comptent.
+// `slot` : la place qu'elle prend, comptée en rangées et en titres.
+const kindsOf = order => order.map(x => (x === 'H' ? 'H' : 'R'));
+const landedRight = (landed, final, prev) => {
+  const slot = prev ? 5 : 6;
+  return landedFirst(landed)
+    && same(kindsOf(landed.order), prev ? ['R', 'R', 'H', 'R', 'R', 'R', 'H', 'R'] : ['R', 'R', 'H', 'R', 'R', 'H', 'R', 'R'])
+    && same(kindsOf(final.order), kindsOf(landed.order))
+    && (!prev || same(landed.order, final.order))
+    && landed.texts[slot].startsWith('Six') && final.texts[slot].startsWith('Six')
+    && same(landed.nums, ['1', '2', '3', '4', '5', '6']) && same(final.nums, ['1', '2', '3', '4', '5', '6']);
+};
 
 // L'état du texte : l'ordre des diapositives (le titre de chacune), les noms de section, la diapositive du curseur.
 const doc = app => app.evaluate(() => {
@@ -309,6 +323,29 @@ async function run(lang, colorScheme) {
   d = await doc(app);
   check(tag + '« Quatre », déjà la dernière de « Milieu », déposée au-dessus du titre « Fin » : rien ne bougerait, pas de ligne', noLine && same(d.names, START) && same(d.order, NAMES), { noLine, names: d.names });
 
+  // --- Posée d'abord (slide-strip.js : dropAfterPaint) : la diapositive qui change de place est déjà posée du bon côté du titre quand le texte change - au-dessus du titre, elle finit « Milieu » ;
+  // au-dessous, elle ouvre « Fin » -, sans que la liste bouge ensuite.
+  for (const [where, side] of [['above', 'finit'], ['below', 'ouvre']]) {
+    await markItems(app, 'strip');
+    await a.down(await a.pointOf('.pp-slide-item', 5));
+    await centerHead();
+    await a.moveTo(await dropAt(1, where), 10);
+    await watchLanding(app, 'strip');
+    await a.up(900);
+    const landed = await landing(app);
+    const final = await listNow(app, 'strip');
+    d = await doc(app);
+    const prev = where === 'above';
+    check(tag + `« Six », glissée ${prev ? 'au-dessus du' : 'sous le'} titre « Fin » : elle ${side} ${prev ? '« Milieu »' : '« Fin »'}, posée d’avance ${prev ? 'avant' : 'après'} le titre ; la liste ne bouge plus quand le texte change`,
+      same(d.order, ['Un', 'Deux', 'Trois', 'Quatre', 'Six', 'Cinq']) && same(d.names, prev ? ['', '', 'Milieu', '', '', 'Fin'] : ['', '', 'Milieu', '', 'Fin', '']) && landedRight(landed, final, prev),
+      { order: d.order, names: d.names, landed, final });
+    await a.press('Control+z', 800);
+    d = await doc(app);
+    check(tag + 'un seul Ctrl+Z la remet', same(d.names, START) && same(d.order, NAMES), { order: d.order, names: d.names });
+    await app.evaluate(() => { document.querySelector('.pp-slide-list').scrollTop = 0; });
+    await sleep(200);
+  }
+
   // --- La vue d'ensemble : mêmes sections, même pli.
   await app.evaluate(() => document.querySelectorAll('.pp-slide-actions .pp-slide-add')[2].focus());
   await a.press('Enter', 800);
@@ -387,6 +424,28 @@ async function run(lang, colorScheme) {
   await a.press('Control+z', 800);
   d = await doc(app);
   check(tag + 'un seul Ctrl+Z la remet', same(d.names, START), d.names);
+  // Posée d'abord, dans la grille : « Six » à droite de « Quatre » (la dernière de « Milieu ») la finit, posée avant le titre « Fin » ; à gauche de « Cinq » (la première de « Fin ») elle l'ouvre, posée après.
+  for (const side of ['right', 'left']) {
+    const prev = side === 'right';
+    await markItems(app, 'grid');
+    await app.evaluate(() => document.querySelectorAll('.pp-ov-card')[5].scrollIntoView({ block: 'nearest' }));
+    await a.down(await a.pointOf('.pp-ov-thumb', 5));
+    const target = prev
+      ? await app.evaluate(() => { document.querySelectorAll('.pp-ov-card')[3].scrollIntoView({ block: 'nearest' }); const r = document.querySelectorAll('.pp-ov-thumb')[3].getBoundingClientRect(); return { x: r.right - 6, y: r.top + r.height / 2 }; })
+      : await a.pointOf('.pp-ov-thumb', 4, 'left');
+    await a.moveTo(target, 10);
+    await watchLanding(app, 'grid');
+    await a.up(900);
+    const landed = await landing(app);
+    const final = await listNow(app, 'grid');
+    d = await doc(app);
+    check(tag + `« Six », glissée ${prev ? 'à droite de « Quatre »' : 'à gauche de « Cinq »'} dans la grille : elle ${prev ? 'finit « Milieu »' : 'ouvre « Fin »'}, posée d’avance ${prev ? 'avant' : 'après'} le titre ; la grille ne bouge plus quand le texte change`,
+      same(d.order, ['Un', 'Deux', 'Trois', 'Quatre', 'Six', 'Cinq']) && same(d.names, prev ? ['', '', 'Milieu', '', '', 'Fin'] : ['', '', 'Milieu', '', 'Fin', '']) && landedRight(landed, final, prev),
+      { order: d.order, names: d.names, landed, final });
+    await a.press('Control+z', 800);
+    d = await doc(app);
+    check(tag + 'un seul Ctrl+Z la remet', same(d.names, START) && same(d.order, NAMES), { order: d.order, names: d.names });
+  }
   await a.press('Escape', 500);
   g = await grid(app);
   check(tag + 'Échap referme la grille', g === null);

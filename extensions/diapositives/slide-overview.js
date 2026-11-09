@@ -572,8 +572,20 @@ const SlideOverview = (function () {
     if (cancelled || !open || editor.state.doc !== doc) return;
     const at = gapAt(event.clientX, event.clientY);
     if (at.gap < 0) return;
-    host().act('moveTo', index, { gap: at.gap, side: at.side });
-    sync();
+    // La carte se pose d'abord dans la grille, le geste vient après la peinture (SlideStrip.overview.drop) ; la grille se met d'accord avec le texte quand il est fini.
+    const extra = { gap: at.gap, side: at.side };
+    host().drop(index, extra, { land: (order, set) => landCards(order, set, extra), after: sync });
+  }
+  // Pose d'avance les cartes dans le nouvel ordre `order` (order[i] : le rang d'avant de la diapositive qui sera la i-ième) avec leurs numéros ; `cards` garde l'ordre d'avant jusqu'à ce que sync() la mette d'accord avec
+  // le texte. Déposée à gauche de la première carte d'une section, une carte l'ouvre ; à droite de la dernière de la section d'avant ('prev'), elle la finit : ses cartes passent devant le titre.
+  function landCards(order, set, extra) {
+    host().placeInOrder(grid, order.map(k => cards[k].card));
+    order.forEach((k, i) => { const n = String(i + 1); if (cards[k].num.textContent !== n) cards[k].num.textContent = n; });
+    if (extra.side !== 'prev') return;
+    const named = sections.filter(section => !section.lead);
+    const opener = named.find(section => section.from === extra.gap && extra.gap > 0);
+    const head = opener ? heads[named.indexOf(opener)] : null;
+    if (head && head.el.parentNode === grid) set.forEach(k => grid.insertBefore(cards[k].card, head.el));
   }
   function onDragAbort() {
     if (!drag) return;

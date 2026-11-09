@@ -13,7 +13,7 @@
 //   glissée change de place dans la grille, les miniatures des autres ne passent pas d'une carte à l'autre (demande du 09/11 : le relâchement figeait plusieurs secondes).
 //  TAILLE : plus petites / plus grandes (cinq tailles, grisé aux bouts). L'extension éteinte : la grille se lit, Suppr explique et n'efface rien.
 // Lancé par run-headless.mjs (groupe Node "slidesOverview", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slides-overview.mjs
-import { start, seedModels, HEIGHT } from './gfs-page.mjs';
+import { start, seedModels, HEIGHT, watchLanding, landing, landedFirst, listNow } from './gfs-page.mjs';
 
 const t = await start({ name: 'verify-slides-overview', port: Number(process.env.SLIDES_OVERVIEW_PORT || 9201) });
 const { check } = t;
@@ -302,14 +302,23 @@ async function run(lang, colorScheme) {
   await a.down(await a.cardCenter(0));
   await a.moveTo(target, 10);
   await watchGrid(app);
+  await watchLanding(app, 'grid');
   await a.up(800);
   const moves = await gridMoves(app);
+  const landed = await landing(app);
+  const finalList = await listNow(app, 'grid');
   d = await doc(app);
   o = await ov(app);
   check(tag + 'lâchée après la quatrième, « Un » y va : « Deux Trois Quatre Un Cinq Six », la grille à jour', same(d.order, ['Deux', 'Trois', 'Quatre', 'Un', 'Cinq', 'Six']) && !!o && o.cards[3].text.startsWith('Un') && o.cards[3].selected, { order: d.order });
   // Déplacer une carte, c'est le navigateur qui refait le style et la mise en page de sa miniature entière (trois cents éléments, davantage avec un décor) : seule la carte glissée change de place,
   // les miniatures des trois autres ne passent pas de l'une à l'autre (avant, une page entrait dans chaque carte d'entre-deux).
   check(tag + 'seule la carte glissée change de place dans la grille, et aucune miniature ne passe d’une carte à l’autre', same(moves.cards, ['0']) && moves.pages === 0, moves);
+  // Le geste coûte (la transaction, le calcul des pages, les miniatures) et, dans la tâche du relâchement, le navigateur ne peint rien : la copie qui suivait la souris restait figée à l'écran (demande du 09/11 :
+  // « freeze encore plusieurs secondes quand on relâche la souris »). La carte se pose d'abord dans la grille, une image est peinte, puis vient le geste.
+  check(tag + 'au relâchement, la carte est posée dans la grille avant que le texte ne change, et le navigateur a le temps de peindre une image entre les deux',
+    landedFirst(landed), landed);
+  check(tag + 'posée d’avance, la carte est déjà à sa place finale, avec les numéros d’après le geste',
+    same(landed.order, ['1', '2', '3', '0', '4', '5']) && same(landed.order, finalList.order) && same(landed.nums, ['1', '2', '3', '4', '5', '6']), { landed, finalList });
   await a.press('Control+z', 700);
   d = await doc(app);
   check(tag + 'un seul Ctrl+Z la remet', same(d.order, NAMES), d.order);

@@ -278,3 +278,53 @@ export const contrastOf = (page, selector) => page.evaluate((sel) => {
   const a = lumin(fg), b = lumin(base);
   return Math.round(((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)) * 100) / 100;
 }, selector);
+
+// Lâcher une miniature glissée (la bande de gauche ou la vue d'ensemble) se fait en deux temps (extensions/diapositives/slide-strip.js : dropAfterPaint ; demande du 09/11 : « glisser déposer une slide pour
+// changer l'ordre freeze encore plusieurs secondes quand on relâche la souris ») : la rangée ou la carte se pose d'abord à sa place, le navigateur peint une image, puis le texte change. Ces trois fonctions le
+// observent. `kind` : 'strip' (les rangées de la bande) ou 'grid' (les cartes de la grille).
+const LISTS = {
+  strip: { list: '.pp-slide-list', item: 'pp-slide-row', head: 'pp-slide-section', num: 'pp-slide-num' },
+  grid: { list: '.pp-ov-grid', item: 'pp-ov-card', head: 'pp-ov-section', num: 'pp-ov-num' },
+};
+// Marque chaque rangée ou carte de son rang d'avant (data-test-mark) : le navigateur la garde d'un geste à l'autre, on la retrouve à sa nouvelle place.
+export const markItems = (app, kind) => app.evaluate((k) => {
+  document.querySelectorAll(k.list + ' > .' + k.item).forEach((el, i) => { el.dataset.testMark = String(i); });
+}, LISTS[kind]);
+// La liste telle qu'elle est maintenant : `order` (la marque de chaque rangée ou carte, « H » pour un titre de section, dans l'ordre où le navigateur les montre), `texts` (le début du texte de chaque miniature
+// copiée, « H » pour un titre) et `nums` (les numéros affichés).
+export const listNow = (app, kind) => app.evaluate((k) => {
+  const list = document.querySelector(k.list);
+  const kids = Array.from(list.children).filter(el => el.classList.contains(k.item) || el.classList.contains(k.head));
+  const isItem = el => el.classList.contains(k.item);
+  return {
+    order: kids.map(el => (isItem(el) ? el.dataset.testMark || '?' : 'H')),
+    texts: kids.map(el => (isItem(el) ? ((el.querySelector('.pp-slide-page') || {}).textContent || '').replace(/\s+/g, ' ').trim().slice(0, 12) : 'H')),
+    nums: kids.filter(isItem).map(el => (el.querySelector('.' + k.num) || {}).textContent),
+  };
+}, LISTS[kind]);
+// À lancer avant le relâchement. Quand la liste reçoit une rangée ou une carte, note la liste telle qu'elle est alors (`order`, `texts`, `nums` : comme `listNow`), et dans quel ordre la liste (`items`) et le texte
+// (`doc`) ont changé ; `frames` : combien d'images le navigateur a eu l'occasion de peindre entre les deux.
+export const watchLanding = (app, kind) => app.evaluate((k) => {
+  const ed = EditorCore.getEditor();
+  const doc0 = ed.state.doc;
+  const list = document.querySelector(k.list);
+  const seen = window.__landing = { n: 0, items: 0, doc: 0, frames: 0, order: [], texts: [], nums: [] };
+  const observer = new MutationObserver((records) => {
+    if (seen.items || !records.some(r => Array.from(r.addedNodes).some(node => node.classList && node.classList.contains(k.item)))) return;
+    seen.items = ++seen.n;
+    observer.disconnect();
+    const kids = Array.from(list.children).filter(el => el.classList.contains(k.item) || el.classList.contains(k.head));
+    const isItem = el => el.classList.contains(k.item);
+    seen.order = kids.map(el => (isItem(el) ? el.dataset.testMark || '?' : 'H'));
+    seen.texts = kids.map(el => (isItem(el) ? ((el.querySelector('.pp-slide-page') || {}).textContent || '').replace(/\s+/g, ' ').trim().slice(0, 12) : 'H'));
+    seen.nums = kids.filter(isItem).map(el => (el.querySelector('.' + k.num) || {}).textContent);
+    const count = () => { if (seen.doc) return; seen.frames += 1; requestAnimationFrame(count); };
+    requestAnimationFrame(count);
+  });
+  observer.observe(list, { childList: true });
+  const onTransaction = () => { if (ed.state.doc !== doc0 && !seen.doc) { seen.doc = ++seen.n; ed.off('transaction', onTransaction); } };
+  ed.on('transaction', onTransaction);
+}, LISTS[kind]);
+export const landing = app => app.evaluate(() => ({ ...window.__landing }));
+// Posée d'abord, texte ensuite, une image peinte entre les deux.
+export const landedFirst = seen => seen.items > 0 && seen.doc > 0 && seen.items < seen.doc && seen.frames >= 1;

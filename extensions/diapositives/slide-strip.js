@@ -1034,6 +1034,7 @@ const SlideStrip = (function () {
   // montre, et les diapositives déplacées ou dupliquées restent choisies. `byKeyboard` : le clavier reste dans la bande, sur elle ; à la souris, il va au document. `extra` : ce que le
   // geste précise (planOf).
   function act(action, index, byKeyboard, extra) {
+    flushDrop();
     if (off) { SlidesEntry.explainOff(); return null; }
     Editor.exitHeaderFooterModeIfActive();
     refresh(false);
@@ -1064,6 +1065,67 @@ const SlideStrip = (function () {
     scrollToSlide(target);
     if (byKeyboard) focusItem(target); else view.focus();
     return plan;
+  }
+  // Lâcher une diapositive glissée en deux temps (demande du 09/11 : « freeze encore plusieurs secondes quand on relâche la souris »). Le geste coûte (la transaction, le calcul des pages, les miniatures), et
+  // tant qu'il s'exécute dans la tâche du relâchement le navigateur ne peint rien : la copie qui suivait la souris reste figée à l'écran, la liste telle qu'avant. La diapositive se pose donc d'abord à sa
+  // place dans l'écran qui la montre (`parts.land(order, set)` : la bande ou la grille ne déplacent que la rangée ou la carte emportée et refont les numéros ; `rows` garde l'ordre d'avant jusqu'à ce que
+  // le texte change), puis, l'image peinte, le geste lui-même. Un autre geste qui arrive entre les deux termine celui-ci d'abord (`flushDrop`, en tête de `act`) ; si le texte a changé entre-temps (une
+  // autre personne qui écrit), la diapositive est retrouvée par ses blocs. `parts` : { land, unland (remet la liste dans l'ordre du texte quand le geste n'a rien changé), after (le geste est fini), nodes
+  // (les blocs de la diapositive emportée) }. Rien n'est posé d'avance quand le geste ne change pas l'ordre (un titre de section seul) ou quand il est refusé.
+  let pendingDrop = null;
+  function dropAfterPaint(index, extra, parts) {
+    flushDrop();
+    // Pendant l'écriture d'un en-tête, l'éditeur porte son texte : le geste passe par act (qui sort de ce mode) sans pose d'avance.
+    const idle = !off && !!editor && !editingHeaderFooter();
+    if (idle) refresh(false);
+    const set = idle ? setFor(index) : [];
+    const plan = set.length ? planOf('moveTo', set, extra) : null;
+    const early = !!plan && Array.isArray(plan.order) && plan.order.length === slides.length && !!parts && typeof parts.land === 'function' && plan.order.some((k, i) => k !== i);
+    if (!early) {
+      act('moveTo', index, false, extra);
+      if (parts && parts.after) parts.after();
+      return;
+    }
+    parts.land(plan.order, set);
+    const drop = { index, extra, parts, doc: editor.state.doc, frame: 0, timer: 0, fallback: 0 };
+    pendingDrop = drop;
+    const run = () => { if (pendingDrop === drop) flushDrop(); };
+    drop.frame = requestAnimationFrame(() => { drop.frame = 0; drop.timer = setTimeout(run, 0); });
+    // Un onglet caché ne peint pas d'images : le geste vient tout de même.
+    drop.fallback = setTimeout(run, 250);
+  }
+  function flushDrop() {
+    const drop = pendingDrop;
+    if (!drop) return;
+    pendingDrop = null;
+    cancelAnimationFrame(drop.frame);
+    clearTimeout(drop.timer);
+    clearTimeout(drop.fallback);
+    const { parts } = drop;
+    if (!shown || !editor || editor.isDestroyed) return;
+    let index = drop.index;
+    if (editor.state.doc !== drop.doc) {
+      refresh(false);
+      const nodes = parts.nodes || [];
+      index = nodes.length ? slides.findIndex(slide => slide.nodes.some(entry => nodes.includes(entry.node))) : -1;
+    }
+    const before = editor.state.doc;
+    if (index >= 0) act('moveTo', index, false, drop.extra);
+    // Le geste n'a rien changé (la diapositive a disparu, l'écriture a été refusée) : la liste reprend l'ordre du texte.
+    if (editor.state.doc === before && parts.unland) parts.unland();
+    if (parts.after) parts.after();
+  }
+  // La bande pose d'avance les rangées dans le nouvel ordre `order` (order[i] : le rang d'avant de celle qui sera la i-ième) avec leurs numéros ; déposée au-dessus du titre d'une section, elle finit la section d'avant :
+  // ses rangées passent devant le titre.
+  function landRows(order, set, extra) {
+    placeInOrder(list, order.map(k => rows[k].row));
+    order.forEach((k, i) => { const n = String(i + 1); if (rows[k].num.textContent !== n) rows[k].num.textContent = n; });
+    const head = extra && extra.side === 'prev' ? headAtGap(extra.gap) : null;
+    if (head && head.el.parentNode === list) set.forEach(k => list.insertBefore(rows[k].row, head.el));
+  }
+  function unlandRows() {
+    placeInOrder(list, rows.map(r => r.row));
+    rows.forEach((r, i) => { const n = String(i + 1); if (r.num.textContent !== n) r.num.textContent = n; });
   }
   // Ce que fait le geste sur les diapositives `set` (leurs indices, rangés ; une seule le plus souvent) : { target (la diapositive à montrer ensuite), picked (celles qui restent
   // choisies), apply(tr, schema), selectText (le texte posé par une mise en page est sélectionné : on écrit par-dessus) }, ou null quand il ne s'applique pas (monter la première,
@@ -1994,7 +2056,9 @@ const SlideStrip = (function () {
     let index = nodes.length ? slides.findIndex(slide => slide.nodes.some(entry => nodes.includes(entry.node))) : -1;
     if (index < 0 && editor.state.doc === doc) index = rows.indexOf(row);
     const gap = gapAt(event.clientX, event.clientY);
-    if (index >= 0 && gap >= 0) act('moveTo', index, false, { gap, side: sideAt(gap, event.clientY) });
+    if (index < 0 || gap < 0) return;
+    const extra = { gap, side: sideAt(gap, event.clientY) };
+    dropAfterPaint(index, extra, { land: (order, set) => landRows(order, set, extra), unland: unlandRows, nodes });
   }
   function onDragAbort() {
     if (!drag) return;
@@ -2210,6 +2274,7 @@ const SlideStrip = (function () {
   function hide() {
     if (!shown) return;
     if (guest && typeof SlideOverview !== 'undefined') SlideOverview.close(false);
+    flushDrop();
     shown = false;
     closeMenu(false);
     closeLayoutMenu(false);
@@ -2291,6 +2356,8 @@ const SlideStrip = (function () {
     makeHead: () => makeHead(true),
     updateHead,
     act: (action, index, extra) => act(action, index, false, extra),
+    // Une carte lâchée : elle se pose d'abord (parts.land), le geste vient après la peinture (voir dropAfterPaint).
+    drop: (index, extra, parts) => dropAfterPaint(index, extra, parts),
     plan: (action, set, extra) => planOf(action, set, extra),
     unavailable,
     openMenu: (index, byKeyboard) => openMenu(index, byKeyboard),

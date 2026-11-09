@@ -11,7 +11,7 @@
 //  AU CLAVIER : Maj+↓ étend le choix, Échap le défait (le clavier reste dans la bande), un second Échap rend le clavier au document ; Ctrl+A choisit tout.
 //  LE CHOIX SE DÉFAIT : un clic simple, une frappe dans le texte. L'extension éteinte, Suppr sur le choix demande l'installation et n'efface rien.
 // Lancé par run-headless.mjs (groupe Node "slidesSelect", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slides-select.mjs
-import { start, seedModels, HEIGHT } from './gfs-page.mjs';
+import { start, seedModels, HEIGHT, markItems, listNow, watchLanding, landing, landedFirst } from './gfs-page.mjs';
 
 const t = await start({ name: 'verify-slides-select', port: Number(process.env.SLIDES_SELECT_PORT || 8943) });
 const { check } = t;
@@ -227,10 +227,17 @@ async function run(lang, colorScheme) {
   s = await state(app);
   check(tag + 'glisser une miniature du choix : les deux s’estompent, la copie porte « 2 » ; entre elles, pas de ligne ; au-dessus de la première, la ligne',
     still.ghost && !still.line && same(s.sources, [1, 2]) && s.ghostCount === '2' && !!s.line, { still, sources: s.sources, count: s.ghostCount, line: s.line });
+  await markItems(app, 'strip');
+  await watchLanding(app, 'strip');
   await a.up();
+  const landed = await landing(app);
+  const finalList = await listNow(app, 'strip');
   s = await state(app);
   check(tag + 'lâchées en tête : « Deux » et « Trois » ouvrent la présentation, toujours choisies, la forme sur la première page',
     same(s.order, ['Deux', 'Trois', 'Un', 'Quatre', 'Cinq', 'Six']) && same(s.selected, [0, 1]) && same(s.shapes, [0]) && !s.ghost && !s.line, { order: s.order, selected: s.selected, shapes: s.shapes });
+  // Les deux emportées se posent ensemble, d'avance : la liste est déjà dans l'ordre final, avec ses numéros, avant que le texte ne change.
+  check(tag + 'posées d’avance, les deux rangées sont déjà en tête avant que le texte ne change, avec les numéros d’après le geste',
+    landedFirst(landed) && same(landed.order, ['1', '2', '0', '3', '4', '5']) && same(landed.order, finalList.order) && same(landed.nums, ['1', '2', '3', '4', '5', '6']), { landed, finalList });
   await a.press('Control+z', 700);
   s = await state(app);
   check(tag + 'un seul Ctrl+Z les remet', same(s.order, NAMES) && same(s.shapes, [1]), { order: s.order, shapes: s.shapes });

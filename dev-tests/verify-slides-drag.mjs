@@ -8,11 +8,12 @@
 //  RIEN NE BOUGE : un appui qui bouge à peine est un clic (il va à la diapositive) ; lâchée à sa place, la ligne ne se montre pas ; Échap pendant le glisser, puis le relâchement ; lâchée
 //   sur le document, à côté de la bande ; l'extension éteinte, la miniature ne part pas.
 //  DÉFILER : glissée près du bas de la bande, la bande défile jusqu'en bas ; lâchée là, la première diapositive devient la dernière, en ne déplaçant que sa rangée (demande du 09/11 : « glisser déposer
-//   une slide pour changer l'ordre freeze encore plusieurs secondes quand on relâche la souris » : chaque rangée d'entre-deux passait devant elle, une à une, et le navigateur refaisait leur style).
+//   une slide pour changer l'ordre freeze encore plusieurs secondes quand on relâche la souris » : chaque rangée d'entre-deux passait devant elle, une à une, et le navigateur refaisait leur style) ; elle
+//   est posée dans la bande avant que le texte ne change, avec une image peinte entre les deux (le geste lui-même vient après).
 //  LE TEXTE : une diapositive de sept blocs qui descend jusqu'au bout ne fait recréer que ses propres blocs dans l'éditeur ; ceux des diapositives qu'elle traverse gardent leurs éléments (avant, ProseMirror
 //   les recréait tous : plus de la moitié du relâchement) ; le texte est le même, dans le bon ordre, et un Ctrl+Z le remet.
 // Lancé par run-headless.mjs (groupe Node "slidesDrag", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slides-drag.mjs
-import { start, seedModels, HEIGHT } from './gfs-page.mjs';
+import { start, seedModels, HEIGHT, watchLanding, landing, landedFirst } from './gfs-page.mjs';
 
 const t = await start({ name: 'verify-slides-drag', port: Number(process.env.SLIDES_DRAG_PORT || 8940) });
 const { check } = t;
@@ -254,8 +255,10 @@ async function run(lang, colorScheme) {
   const scrolled = { top: s.scrollTop, max: s.scrollMax };
   await mark(app);
   await watchRows(app);
+  await watchLanding(app, 'strip');
   await a.up();
   const inserted = await rowMoves(app);
+  const dropped = await landing(app);
   s = await state(app);
   check(tag + 'près du bas, la bande défile jusqu’en bas ; lâchée là, la première diapositive devient la dernière',
     scrolled.max > 0 && scrolled.top >= scrolled.max - 1 && same(s.order, moved(0, 8)) && s.current === 7, { scrolled, order: s.order, current: s.current });
@@ -263,6 +266,13 @@ async function run(lang, colorScheme) {
   // que sa rangée (une insertion), pas les sept d'entre-deux devant elle.
   check(tag + 'la première, descendue de sept places, est la seule rangée déplacée : une insertion dans la bande, pas une par diapositive d’entre-deux ; chacune garde sa rangée',
     same(inserted, ['0']) && same(s.rows.map(r => r.mark), ['1', '2', '3', '4', '5', '6', '7', '0']), { inserted, marks: s.rows.map(r => r.mark) });
+  // Le geste coûte (la transaction, le calcul des pages, les miniatures) et, dans la tâche du relâchement, le navigateur ne peint rien : la copie qui suivait la souris restait figée à l'écran, la liste telle
+  // qu'avant (demande du 09/11 : « freeze encore plusieurs secondes quand on relâche la souris »). La diapositive se pose d'abord dans la bande, une image est peinte, puis vient le geste.
+  check(tag + 'au relâchement, la diapositive est posée dans la bande avant que le texte ne change, et le navigateur a le temps de peindre une image entre les deux',
+    landedFirst(dropped), dropped);
+  // Posée d'avance, elle est déjà là où le geste la met : la même place, les mêmes numéros (rien ne saute quand le texte change).
+  check(tag + 'posée d’avance, la rangée est déjà à sa place finale, avec les numéros d’après le geste',
+    same(dropped.order, ['1', '2', '3', '4', '5', '6', '7', '0']) && same(dropped.order, s.rows.map(r => r.mark)) && same(dropped.nums, ['1', '2', '3', '4', '5', '6', '7', '8']), { dropped, marks: s.rows.map(r => r.mark) });
   await a.press('Control+z', 600);
   s = await state(app);
   check(tag + 'Ctrl+Z la remet en tête', same(s.order, NAMES), s.order);
