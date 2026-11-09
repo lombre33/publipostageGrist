@@ -134,12 +134,38 @@ const Comments = (function () {
     return threads;
   }
 
+  // Les fils d'un fichier importé (Word) : leurs marques sont déjà dans le texte, leurs messages (auteur, texte, date) attendent que le modèle ait un numéro pour entrer dans la table. En attendant, le fil s'ouvre
+  // au clic sur sa marque comme n'importe quel fil ; répondre demande d'abord d'enregistrer le modèle. `loadForTemplate` oublie ce qui attend (un autre modèle est affiché), `adoptStaged` l'écrit.
+  let staged = [];
+  function stageImported(threads) {
+    staged = (Array.isArray(threads) ? threads : []).filter(thread => thread && thread.id && Array.isArray(thread.messages) && thread.messages.length);
+    staged.forEach((thread) => {
+      threadsByCommentId[thread.id] = thread.messages.map(m => ({ id: null, uid: newMessageUid(), auteur: m.auteur || '', texte: m.texte || '', creeLe: m.creeLe || '' }));
+    });
+  }
+  async function adoptStaged(modeleId) {
+    const threads = staged;
+    staged = [];
+    if (!threads.length || !modeleId) return false;
+    if (!(await ensureTableExists())) return false;
+    const actions = [];
+    threads.forEach(thread => thread.messages.forEach(m => actions.push(['AddRecord', TABLE_NAME, null, { ModeleId: modeleId, CommentId: thread.id, Auteur: m.auteur || '', Texte: m.texte || '', CreeLe: m.creeLe || '' }])));
+    try {
+      await grist.docApi.applyUserActions(actions);
+      return true;
+    } catch (e) {
+      console.error('[Comments] Erreur enregistrement des fils importés', e);
+      return false;
+    }
+  }
+
   async function loadForTemplate(modeleId, tpl) {
     // Appelé par js/main.js à chaque changement de modèle (chargement, nouveau, suppression), sans rafraîchissement continu : un commentaire est bien
     // moins sensible à la latence que le contenu du document, pas besoin d'un deuxième polling par-dessus l'enregistrement automatique.
     // La table des fils est celle de tout le document (60 000 cases pour 10 000 commentaires) : un modèle qui ne porte aucune marque ne la lit pas,
     // et ne la crée pas non plus - postMessage la crée au premier message.
     currentModeleId = modeleId || null;
+    staged = [];
     threadsByCommentId = {};
     knownUids.clear();
     closePopup();
@@ -765,7 +791,7 @@ const Comments = (function () {
   };
 
   return {
-    setEditor, loadForTemplate, insertCommentAtSelection, wireClickToOpen,
+    setEditor, loadForTemplate, stageImported, adoptStaged, insertCommentAtSelection, wireClickToOpen,
     setPermissions, isReaderMode, setReaderHooks, buildReaderHtml, wireReader,
     snapshot, restore, whenIdle,
     TABLE_NAME, TABLE_COLUMNS, PDF_COLUMNS, kit,

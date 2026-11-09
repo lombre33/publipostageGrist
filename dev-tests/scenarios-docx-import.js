@@ -496,6 +496,110 @@
     return result(bad);
   });
 
+  // ============================================================================================================================================================================================
+  // 6 bis. Les modifications suivies et les commentaires : repris, avec leur auteur et leur date
+  // ============================================================================================================================================================================================
+  const ins = (id, author, date, inner) => `<w:ins w:id="${id}" w:author="${author}" w:date="${date}">${inner}</w:ins>`;
+  const del = (id, author, date, text) => `<w:del w:id="${id}" w:author="${author}" w:date="${date}"><w:r><w:delText xml:space="preserve">${esc(text)}</w:delText></w:r></w:del>`;
+
+  add('docxImport_tracked_changes_stay_pending_with_author_and_date', 'une insertion et une suppression suivies de Word restent des modifications EN ATTENTE de l\'éditeur (<ins> et <del> numérotés), avec l\'auteur et la date du fichier ; deux séries d\'une même révision n\'en font qu\'une ; la mise en forme suivie est acceptée et comptée', async () => {
+    const { bad, expect } = checker();
+    const body = p(r('Début ') + ins(1, 'Marie Dupont', '2026-11-05T09:30:00Z', r('ajout ', '<w:b/>') + r('simple')) + r(' milieu ') + del(2, 'Paul Martin', '2026-11-06T14:00:00Z', 'supprimé') + r(' fin'))
+      + p(r('Ici ') + `<w:moveFrom w:id="3" w:author="Marie Dupont" w:date="2026-11-07T08:00:00Z"><w:r><w:delText>déplacé</w:delText></w:r></w:moveFrom>`, '')
+      + p(r('Forme', '<w:rPrChange w:id="4" w:author="A"><w:rPr/></w:rPrChange>'));
+    const out = await imported({ body });
+    const root = sectionOf(out);
+    const adds = Array.from(root.querySelectorAll('ins'));
+    const gone = Array.from(root.querySelectorAll('del'));
+    expect('l\'insertion : deux séries (gras, puis simple) du même numéro 1', adds.length === 2 && adds.every(el => el.getAttribute('data-id') === '1') && adds.map(el => el.textContent).join('') === 'ajout simple', adds.map(el => el.outerHTML));
+    expect('la suppression garde son texte, sous le numéro 2, et le déplacement est une suppression de plus (numéro 3)', gone.length === 2 && gone[0].getAttribute('data-id') === '2' && gone[0].textContent === 'supprimé' && gone[1].getAttribute('data-id') === '3' && gone[1].textContent === 'déplacé', gone.map(el => el.outerHTML));
+    const meta = out.suiviModifications || {};
+    expect('l\'auteur et la date de chaque révision', meta['1'] && meta['1'].authorName === 'Marie Dupont' && meta['1'].createdAt === '2026-11-05T09:30:00.000Z' && meta['1'].author === null && meta['2'].authorName === 'Paul Martin' && meta['2'].createdAt === '2026-11-06T14:00:00.000Z' && meta['3'].authorName === 'Marie Dupont', meta);
+    expect('seule la mise en forme suivie est comptée (acceptée telle quelle), ni les ajouts ni les suppressions', countOf(out.report, 'trackedChanges') === 1, out.report);
+    const plainDoc = await imported({ body: p('Rien de suivi') });
+    expect('un fichier sans modification suivie : aucune métadonnée', plainDoc.suiviModifications === null, plainDoc.suiviModifications);
+    // Dans le VRAI éditeur : les modifications sont en attente, avec leur auteur.
+    Editor.setHTML(out.html, out.suiviModifications);
+    await sleep(250);
+    const kept = Editor.getHTML();
+    expect('l\'éditeur garde les insertions et les suppressions numérotées', /<ins data-id="1">/.test(kept) && /<del data-id="2">/.test(kept) && /<del data-id="3">/.test(kept), kept.slice(0, 500));
+    let saved = null;
+    try { saved = await Editor.getSuiviModificationsForSave(); } catch (e) { saved = { error: String(e) }; }
+    const savedText = JSON.stringify(saved);
+    expect('à l\'enregistrement, les auteurs du fichier sont gardés', /Marie Dupont/.test(savedText) && /Paul Martin/.test(savedText), savedText.slice(0, 300));
+    return result(bad);
+  });
+
+  const COMMENT_NS = 'xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"';
+  const commentXml = (id, author, date, paraId, paragraphs) => `<w:comment ${COMMENT_NS} w:id="${id}" w:author="${author}" w:date="${date}" w:initials="X">${paragraphs.map((text, i) => `<w:p w14:paraId="${paraId}${i === paragraphs.length - 1 ? '' : '0'}"><w:r><w:t>${esc(text)}</w:t></w:r></w:p>`).join('')}</w:comment>`;
+  const COMMENT_PARTS = () => ({
+    comments: [
+      commentXml(0, 'Marie Dupont', '2026-11-05T09:30:00Z', '0000000A', ['Premier paragraphe', 'Second paragraphe']),
+      commentXml(1, 'Paul Martin', '2026-11-05T10:00:00Z', '0000000C', ['Je réponds']),
+      commentXml(2, 'Marie Dupont', '2026-11-05T11:00:00Z', '0000000D', ['À revoir']),
+      commentXml(3, 'Marie Dupont', '2026-11-05T12:00:00Z', '0000000E', ['Sans passage']),
+    ].join(''),
+    docRels: [{ id: 'rIdExt', type: 'commentsExtended', target: 'commentsExtended.xml' }],
+    parts: { 'word/commentsExtended.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w15:commentsEx ${COMMENT_NS}><w15:commentEx w15:paraId="0000000A" w15:done="0"/><w15:commentEx w15:paraId="0000000C" w15:paraIdParent="0000000A" w15:done="0"/><w15:commentEx w15:paraId="0000000D" w15:done="1"/><w15:commentEx w15:paraId="0000000E" w15:done="0"/></w15:commentsEx>` },
+  });
+  const COMMENT_BODY = () => {
+    const ref = id => `<w:r><w:commentReference w:id="${id}"/></w:r>`;
+    return p(r('Avant ') + '<w:commentRangeStart w:id="0"/><w:commentRangeStart w:id="1"/>' + r('passage commenté') + '<w:commentRangeEnd w:id="0"/>' + ref(0) + '<w:commentRangeEnd w:id="1"/>' + ref(1) + r(' puis ') + '<w:commentRangeStart w:id="2"/>' + r('début d\'un passage'))
+      + p(r('suite du passage') + '<w:commentRangeEnd w:id="2"/>' + ref(2) + r(' et ') + '<w:commentRangeStart w:id="3"/><w:commentRangeEnd w:id="3"/>' + ref(3));
+  };
+
+  add('docxImport_comments_become_threads_with_author_date_replies_and_resolved', 'les commentaires de Word deviennent des fils de l\'éditeur : la marque sur le passage (aussi sur deux paragraphes), les messages (auteur, texte sur plusieurs paragraphes, date), la réponse dans le fil de son commentaire, l\'état résolu ; un commentaire sans passage est compté', async () => {
+    const { bad, expect } = checker();
+    const out = await imported(Object.assign({ body: COMMENT_BODY() }, COMMENT_PARTS()));
+    const root = sectionOf(out);
+    const marks = Array.from(root.querySelectorAll('span.comment-mark'));
+    const ids = Array.from(new Set(marks.map(el => el.getAttribute('data-comment-id'))));
+    expect('deux fils marqués (le commentaire et sa réponse n\'en font qu\'un)', ids.length === 2 && out.comments.length === 2, [ids, out.comments.map(t => t.id)]);
+    const [first, second] = out.comments;
+    expect('le premier fil : deux messages dans l\'ordre des dates, le commentaire sur deux paragraphes puis la réponse', first.messages.length === 2 && first.messages[0].auteur === 'Marie Dupont' && first.messages[0].texte === 'Premier paragraphe\nSecond paragraphe'
+      && first.messages[0].creeLe === '2026-11-05T09:30:00.000Z' && first.messages[1].auteur === 'Paul Martin' && first.messages[1].texte === 'Je réponds' && first.resolved === false, first);
+    expect('sa marque couvre « passage commenté »', marks.filter(el => el.getAttribute('data-comment-id') === first.id).map(el => el.textContent).join('') === 'passage commenté', marks.map(el => el.outerHTML));
+    expect('le second fil est résolu (marque data-resolved) et sa marque court sur les deux paragraphes', second.resolved === true && marks.filter(el => el.getAttribute('data-comment-id') === second.id).length === 2 && marks.filter(el => el.getAttribute('data-comment-id') === second.id).every(el => el.getAttribute('data-resolved') === 'true'), marks.map(el => el.outerHTML));
+    expect('le commentaire sans passage de texte est compté, non repris', countOf(out.report, 'comments') === 1, out.report);
+    const kept = await inEditor(out.html);
+    expect('l\'éditeur garde les marques des deux fils', ids.every(id => kept.indexOf('data-comment-id="' + id + '"') >= 0), kept.slice(0, 400));
+    const none = await imported({ body: p('Rien à commenter') });
+    expect('sans commentaire : aucun fil', none.comments.length === 0, none.comments);
+    return result(bad);
+  });
+
+  add('docxImport_imported_threads_enter_the_comments_table_at_the_first_save', 'les fils d\'un Word importé s\'ouvrent au clic sur leur marque avant l\'enregistrement ; au premier enregistrement leurs messages entrent dans la table des fils, au numéro du modèle', async (h) => {
+    const { bad, expect } = checker();
+    const TABLE = 'Publipostage_Commentaires';
+    const out = await imported(Object.assign({ body: COMMENT_BODY() }, COMMENT_PARTS()));
+    await h.resetEditor();
+    Editor.setHTML(out.html, out.suiviModifications);
+    Comments.stageImported(out.comments);
+    await sleep(250);
+    const rowsOf = (modeleId) => {
+      const t = window.__gristStub.state.rows[TABLE];
+      const rows = [];
+      if (t) for (let i = 0; i < t.id.length; i++) if (Number(t.ModeleId[i]) === Number(modeleId)) rows.push({ cid: t.CommentId[i], auteur: t.Auteur[i], texte: t.Texte[i] });
+      return rows;
+    };
+    const mark = document.querySelector('.tiptap .comment-mark[data-comment-id="' + out.comments[0].id + '"]');
+    mark.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    await sleep(300);
+    const popup = document.getElementById('v2-comment-popup');
+    expect('avant l\'enregistrement, un clic sur la marque ouvre le fil et montre ses deux messages', !!popup && popup.style.display !== 'none' && popup.querySelectorAll('.v2-comment-popup-message').length === 2, popup && popup.textContent.slice(0, 200));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await sleep(150);
+    document.getElementById('template-name').value = 'Word avec commentaires';
+    await h.clickButton('btn-save');
+    await sleep(900);
+    const modeleId = Templates.getCurrentId();
+    const rows = rowsOf(modeleId);
+    expect('le modèle est enregistré et la table des fils a les trois messages, au numéro du modèle', !!modeleId && rows.length === 3, { modeleId, rows });
+    expect('les auteurs et textes du fichier', rows.some(r => r.auteur === 'Marie Dupont' && r.texte === 'Premier paragraphe\nSecond paragraphe') && rows.some(r => r.auteur === 'Paul Martin' && r.texte === 'Je réponds') && rows.some(r => r.texte === 'À revoir'), rows);
+    expect('chaque fil de la table a sa marque dans le texte', Array.from(new Set(rows.map(r => r.cid))).every(cid => Editor.getHTML().indexOf('data-comment-id="' + cid + '"') >= 0), rows.map(r => r.cid));
+    return result(bad);
+  });
+
   add('docxImport_sections_page_breaks_columns_and_page_borders', 'une section de plus se termine par un saut de page ; une autre mise en page, des colonnes et une bordure de page sont comptées ; le texte reste lisible', async () => {
     const { bad, expect } = checker();
     const first = '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417"/></w:sectPr>';
@@ -514,7 +618,8 @@
     const chart = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Graphique"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"/></a:graphic></wp:inline></w:drawing></w:r>`;
     const diagram = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="3" name="Schéma"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/diagram"/></a:graphic></wp:inline></w:drawing></w:r>`;
     const body = p(shape + chart + diagram) + p('<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:r><m:t>x=1</m:t></m:r></m:oMath>')
-      + p(r('Ajout') + '<w:del w:id="9" w:author="A"><w:r><w:delText>Retiré</w:delText></w:r></w:del>' + '<w:ins w:id="8" w:author="A">' + r(' inséré') + '</w:ins>')
+      // Une mise en forme suivie et une marque de paragraphe supprimée : l'éditeur ne suit pas ces genres de modification, elles sont acceptées et comptées.
+      + p(r('Mise en forme', '<w:b/><w:rPrChange w:id="7" w:author="A"><w:rPr/></w:rPrChange>'), '<w:rPr><w:del w:id="6" w:author="A"/></w:rPr>')
       + `<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="2000"/></w:tabs></w:pPr>${r('Tabulée')}<w:r><w:tab/></w:r>${r('suite')}</w:p>`
       + p('Tabulations déclarées mais jamais utilisées', '<w:tabs><w:tab w:val="right" w:pos="9000"/></w:tabs>') + p('Retrait droit', '<w:ind w:right="720"/>') + p('Encadré', '<w:pBdr><w:top w:val="single" w:sz="4" w:color="000000"/></w:pBdr>')
       + p(r('Police rare', '<w:rFonts w:ascii="Segoe Script" w:hAnsi="Segoe Script"/>')) + p(r('Ombre', '<w:shadow/>'));
@@ -522,7 +627,7 @@
     const out = await imported({ body, comments });
     const expected = { shapes: 1, charts: 1, diagrams: 1, equations: 1, comments: 1, trackedChanges: 2, tabs: 1, rightIndent: 1, paragraphBorders: 1, fonts: 1, textEffects: 1 };
     Object.keys(expected).forEach(key => expect('« ' + key + ' » compté ' + expected[key], countOf(out.report, key) === expected[key], out.report));
-    expect('les ajouts sont gardés, les suppressions retirées', /inséré/.test(out.html) && !/Retiré/.test(out.html), out.html);
+    expect('la mise en forme suivie est acceptée telle quelle (le texte reste, en gras)', /Mise en forme/.test(out.html) && !/<ins|<del/.test(out.html), out.html);
     expect('l\'équation est reprise comme texte', /x=1/.test(out.html), out.html);
     expect('le rapport suit l\'ordre de DocxImport.REPORT_KEYS', JSON.stringify(keysOf(out.report)) === JSON.stringify(DocxImport.REPORT_KEYS.filter(key => expected[key])), keysOf(out.report));
     const calm = await imported({ body: p('Rien à dire') + p(r('Du gras', '<w:b/>')) });

@@ -42,9 +42,9 @@ const TEXTS = {
     tooBig: 'Ce fichier est trop gros pour être importé : 150,1 Mo (au plus 150 Mo).', tooBigPattern: /trop gros/,
     reportTitle: 'Ce que l’import n’a pas repris tel quel', reportIntro: 'Le document est importé. Le fichier avait ceci, que l’éditeur n’a pas pu reprendre tel quel :',
     report: ['1 police que l’éditeur n’a pas, remplacée par la plus proche', '1 paragraphe avec un retrait à droite, non repris', '1 forme, zone de texte ou objet incorporé non repris',
-      '1 graphique non repris', '1 commentaire non repris', '2 modifications suivies acceptées : les ajouts sont gardés, les suppressions retirées'],
+      '1 graphique non repris', '1 commentaire sans passage de texte à marquer, non repris'],
     longFirst: '1 section avec une autre mise en page : seule la page de la première est reprise',
-    samples: ['1 police que l’éditeur n’a pas, remplacée par la plus proche', '2 modifications suivies acceptées : les ajouts sont gardés, les suppressions retirées', '1 note de fin reprise comme note de bas de page'],
+    samples: ['1 police que l’éditeur n’a pas, remplacée par la plus proche', '1 note de fin reprise comme note de bas de page', '2 modifications suivies de mise en forme ou de structure acceptées telles quelles (l’éditeur ne suit que les ajouts et les suppressions de texte)'],
   },
   en: {
     row: 'Import from Word…', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
@@ -56,9 +56,9 @@ const TEXTS = {
     tooBig: 'This file is too big to import: 150.1 MB (at most 150 MB).', tooBigPattern: /too big/,
     reportTitle: 'What the import did not carry over as is', reportIntro: 'The document is imported. The file had the following, which the editor could not carry over as is:',
     report: ['1 font the editor does not have, replaced by the closest one', '1 paragraph with a right indent, not kept', '1 shape, text box or embedded object not kept',
-      '1 chart not kept', '1 comment not kept', '2 tracked changes accepted: additions are kept, deletions removed'],
+      '1 chart not kept', '1 comment with no text passage to mark, not kept'],
     longFirst: '1 section with a different page layout: only the first one’s page is kept',
-    samples: ['1 font the editor does not have, replaced by the closest one', '2 tracked changes accepted: additions are kept, deletions removed', '1 endnote kept as a footnote'],
+    samples: ['1 font the editor does not have, replaced by the closest one', '1 endnote kept as a footnote', '2 tracked formatting or structure changes accepted as is (the editor only tracks text additions and deletions)'],
   },
 };
 
@@ -100,6 +100,7 @@ const buildFile = async (page, kind) => Buffer.from(await page.evaluate(async (w
         body: p(r('Police ') + r('rare', '<w:rFonts w:ascii="Segoe Script" w:hAnsi="Segoe Script"/>') + shape + chart + diagram)
           + p('<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:r><m:t>x=1</m:t></m:r></m:oMath>')
           + p(r('Ajout') + '<w:del w:id="9" w:author="A"><w:r><w:delText>Retiré</w:delText></w:r></w:del><w:ins w:id="8" w:author="A">' + r(' inséré') + '</w:ins>')
+          + p(r('Forme', '<w:rPrChange w:id="17" w:author="A"><w:rPr/></w:rPrChange>')) + p(r('Forme deux', '<w:rPrChange w:id="18" w:author="A"><w:rPr/></w:rPrChange>'))
           + `<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="2000"/></w:tabs></w:pPr>${r('Tab')}<w:r><w:tab/></w:r>${r('ulée')}</w:p>`
           + p('Retrait droit', '<w:ind w:right="720"/>') + p('Encadré', '<w:pBdr><w:top w:val="single" w:sz="4" w:color="000000"/></w:pBdr>')
           + p(r('Ombre', '<w:shadow/>')) + p(r('Caché', '<w:vanish/>') + r('visible'))
@@ -115,6 +116,16 @@ const buildFile = async (page, kind) => Buffer.from(await page.evaluate(async (w
         numbering: '<w:abstractNum w:abstractNumId="5"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="upperLetter"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/></w:lvl></w:abstractNum><w:num w:numId="7"><w:abstractNumId w:val="5"/></w:num>',
       };
     },
+    // Un Word relu par deux personnes : un ajout et une suppression suivis, un commentaire sur un passage et la réponse d'une seconde personne.
+    reviewed: () => ({
+      body: p(r('Le contrat ') + '<w:ins w:id="1" w:author="Marie Dupont" w:date="2026-11-05T09:30:00Z">' + r('révisé ') + '</w:ins>'
+        + '<w:del w:id="2" w:author="Paul Martin" w:date="2026-11-06T14:00:00Z"><w:r><w:delText xml:space="preserve">ancien </w:delText></w:r></w:del>'
+        + '<w:commentRangeStart w:id="0"/><w:commentRangeStart w:id="1"/>' + r('prend effet le 1er janvier') + '<w:commentRangeEnd w:id="0"/><w:r><w:commentReference w:id="0"/></w:r><w:commentRangeEnd w:id="1"/><w:r><w:commentReference w:id="1"/></w:r>' + r('.')),
+      comments: '<w:comment xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" w:id="0" w:author="Marie Dupont" w:date="2026-11-05T09:30:00Z"><w:p w14:paraId="0000000A"><w:r><w:t>Vérifier la date.</w:t></w:r></w:p></w:comment>'
+        + '<w:comment xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" w:id="1" w:author="Paul Martin" w:date="2026-11-05T10:00:00Z"><w:p w14:paraId="0000000B"><w:r><w:t>C’est confirmé.</w:t></w:r></w:p></w:comment>',
+      docRels: [{ id: 'rIdExt', type: 'commentsExtended', target: 'commentsExtended.xml' }],
+      parts: { 'word/commentsExtended.xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w15:commentsEx xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"><w15:commentEx w15:paraId="0000000A" w15:done="0"/><w15:commentEx w15:paraId="0000000B" w15:paraIdParent="0000000A" w15:done="0"/></w15:commentsEx>' },
+    }),
     empty: () => ({ body: '<w:p/>', headers: {}, footers: {} }),
   };
   let buffer;
@@ -348,8 +359,45 @@ async function run(lang, scheme) {
     check(tag + `« ${T.close} » est atteignable à la souris dans le panneau`, !!closed && closed.reachable && closed.inPanel, closed);
     const afterClose = await page.evaluate(() => ({ editorFocused: !!document.activeElement && !!document.activeElement.closest('.tiptap'), open: getComputedStyle(document.getElementById('pp-dialog-modal')).display !== 'none' }));
     check(tag + 'la fenêtre se ferme et rend la main à l\'éditeur (le curseur est dans le texte)', !afterClose.open && afterClose.editorFocused, afterClose);
-    const inserted = await page.evaluate(() => document.querySelector('#editor-container .tiptap').textContent);
-    check(tag + 'les modifications suivies sont acceptées : l\'ajout est là, la suppression est partie', /inséré/.test(inserted) && !/Retiré/.test(inserted), inserted.slice(0, 120));
+    const tracked = await page.evaluate(() => ({ adds: Array.from(document.querySelectorAll('#editor-container .tiptap ins')).map(e => e.textContent), dels: Array.from(document.querySelectorAll('#editor-container .tiptap del')).map(e => e.textContent) }));
+    check(tag + 'les modifications suivies du fichier restent à valider : l\'ajout est dans une insertion, la suppression dans une suppression, rien n\'est accepté en silence', tracked.adds.join('').includes('inséré') && tracked.dels.join('').includes('Retiré'), tracked);
+
+    // 4 bis) Un Word relu par deux personnes : les modifications suivies et le commentaire sont dans le document, le fil s'ouvre au VRAI clic sur sa marque avec ses deux messages ; rien à dire : aucune fenêtre.
+    await pickFile(page, wordFile('relu.docx', await buildFile(page, 'reviewed')));
+    await settle(page, /^$/);
+    await clickDialogButton(page, T.discard);
+    await settle(page, T.importedPattern);
+    await sleep(500);
+    const reviewed = await page.evaluate(() => {
+      const box = el => { const r = el.getBoundingClientRect(); return { shown: r.width > 0 && r.height > 0, x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+      const mark = document.querySelector('#editor-container .tiptap .comment-mark');
+      const ins = document.querySelector('#editor-container .tiptap ins');
+      const del = document.querySelector('#editor-container .tiptap del');
+      if (mark) mark.scrollIntoView({ block: 'center' });
+      return { mark: mark ? { text: mark.textContent, resolved: mark.getAttribute('data-resolved'), box: box(mark) } : null, ins: ins ? { text: ins.textContent, box: box(ins) } : null, del: del ? { text: del.textContent, box: box(del) } : null };
+    });
+    check(tag + 'le Word relu : l\'ajout « révisé », la suppression « ancien » et le passage commenté sont dans le document, visibles', !!reviewed.ins && reviewed.ins.text.includes('révisé') && reviewed.ins.box.shown && !!reviewed.del && reviewed.del.text.includes('ancien') && reviewed.del.box.shown
+      && !!reviewed.mark && reviewed.mark.text === 'prend effet le 1er janvier' && reviewed.mark.box.shown && reviewed.mark.resolved === 'false', reviewed);
+    check(tag + 'rien à dire pour ce fichier : aucune fenêtre de rapport', !(await dialogState(page)).shown);
+    const markBox = await page.evaluate(() => { const m = document.querySelector('#editor-container .tiptap .comment-mark'); const r = m.getBoundingClientRect(); return { x: r.left + Math.min(r.width / 2, 40), y: r.top + r.height / 2 }; });
+    await page.mouse.move(markBox.x - 6, markBox.y, { steps: 2 });
+    await page.mouse.click(markBox.x, markBox.y);
+    await sleep(500);
+    const thread = await page.evaluate(() => {
+      const popup = document.getElementById('v2-comment-popup');
+      if (!popup || popup.style.display === 'none') return null;
+      const r = popup.getBoundingClientRect();
+      return { texts: Array.from(popup.querySelectorAll('.v2-comment-popup-message')).map(m => m.textContent), inPanel: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight };
+    });
+    check(tag + 'un vrai clic sur le passage commenté ouvre le fil, entier dans le panneau, avec les deux messages (Marie Dupont, puis la réponse de Paul Martin)', !!thread && thread.inPanel && thread.texts.length === 2 && /Vérifier la date/.test(thread.texts[0]) && /Marie Dupont/.test(thread.texts[0]) && /C’est confirmé/.test(thread.texts[1]) && /Paul Martin/.test(thread.texts[1]), thread);
+    await snap('reviewed');
+    const closeBox = await page.evaluate(() => { const b = document.querySelector('#v2-comment-popup .v2-comment-popup-close'); const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+    await page.mouse.move(closeBox.x, closeBox.y, { steps: 3 });
+    await page.mouse.down();
+    await page.mouse.up();
+    await sleep(300);
+    check(tag + 'la croix du fil le referme à la vraie souris', await page.evaluate(() => { const p = document.getElementById('v2-comment-popup'); return !p || p.style.display === 'none' || p.getBoundingClientRect().width === 0; }));
+    await parkMouse(page);
 
     // 5) Un fichier qui a presque tous les genres : la fenêtre du rapport le plus long tient dans le panneau, titre et bouton fixes, le texte défile jusqu'à sa dernière ligne, dans la langue de l'interface.
     const manyFile = await buildFile(page, 'many');

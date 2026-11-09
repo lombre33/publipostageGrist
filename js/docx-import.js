@@ -410,9 +410,9 @@ const DocxImport = (function () {
     if ((look.sup || look.sub) && !align) look.style = look.style.filter(rule => !/^font-size:/.test(rule));
     return look;
   }
-  function lookKey(look, link) { return [look.style.join(';'), look.b, look.i, look.u, look.uLine, look.s, look.sup, look.sub, link || ''].join('|'); }
+  function lookKey(look, link, track, comments) { return [look.style.join(';'), look.b, look.i, look.u, look.uLine, look.s, look.sup, look.sub, link || '', track ? track.kind + track.id : '', comments ? comments.map(c => c.id).join(',') : ''].join('|'); }
   // Le texte `inner` (déjà en balisage) avec les marques de la série de caractères, dans l'ordre de l'éditeur (js/pptx-import.js:runMarkup).
-  function wrapRun(inner, look, link) {
+  function wrapRun(inner, look, link, track, comments) {
     let html = look.style.length ? '<span style="' + look.style.join('; ') + '">' + inner + '</span>' : inner;
     if (look.b) html = '<strong>' + html + '</strong>';
     if (look.i) html = '<em>' + html + '</em>';
@@ -421,8 +421,12 @@ const DocxImport = (function () {
     if (look.sup) html = '<sup>' + html + '</sup>';
     else if (look.sub) html = '<sub>' + html + '</sub>';
     if (link) html = '<a href="' + escAttr(link) + '">' + html + '</a>';
+    // Les marques de l'éditeur qui ne changent pas l'aspect : le fil de commentaire (js/comments.js), puis la modification suivie (js/track-changes.js : `<ins>` ou `<del>` et son numéro).
+    if (comments) comments.forEach((c) => { html = '<span class="comment-mark" data-comment-id="' + escAttr(c.id) + '" data-resolved="' + (c.resolved ? 'true' : 'false') + '">' + html + '</span>'; });
+    if (track) html = trackWrap(html, track);
     return html;
   }
+  const trackWrap = (html, track) => '<' + (track.kind === 'del' ? 'del' : 'ins') + ' data-id="' + track.id + '">' + html + '</' + (track.kind === 'del' ? 'del' : 'ins') + '>';
   // Les séries de caractères qui se suivent avec le même aspect ne font qu'un (Word en coupe à chaque correction ou révision) ; un élément `raw` (image, note, numéro de page) reste seul.
   function itemsHtml(items) {
     let out = '';
@@ -432,7 +436,7 @@ const DocxImport = (function () {
       let text = item.text;
       let j = i + 1;
       while (j < items.length && items[j].raw === undefined && items[j].key === item.key) { text += items[j].text; j += 1; }
-      out += wrapRun(spaced(item.caps ? text.toLocaleUpperCase() : text), item.look, item.link);
+      out += wrapRun(spaced(item.caps ? text.toLocaleUpperCase() : text), item.look, item.link, item.track, item.comments);
       i = j;
     }
     return out;
@@ -446,7 +450,7 @@ const DocxImport = (function () {
   // --- Le texte d'un paragraphe ---------------------------------------------------------------------------------------------------------------------------------------------------
   // L'état d'un paragraphe en cours de lecture : `r` (propriétés de caractère du paragraphe), `baseSize` (la taille que l'éditeur donne à ce paragraphe sans réglage), `items`, `link`.
   function newState(ctx, part, resolved, baseSize, depth) {
-    return { ctx, part, r: resolved.r, baseSize, items: [], link: '', losses: new Set(), blocks: null, pendingBreaks: 0, depth };
+    return { ctx, part, r: resolved.r, baseSize, items: [], link: '', track: null, losses: new Set(), blocks: null, pendingBreaks: 0, depth };
   }
   function pushText(st, r, text, linked) {
     if (text === '') return;
@@ -455,10 +459,14 @@ const DocxImport = (function () {
     // Un titre de l'éditeur est déjà en gras : le gras du style « Titre » de Word n'ajoute pas de balise.
     if (st.heading) look.b = false;
     const last = st.items[st.items.length - 1];
-    st.items.push({ key: lookKey(look, st.link) + (look.caps ? '|C' : ''), look, link: st.link, caps: look.caps, text });
+    const comments = openComments(st.ctx);
+    st.items.push({ key: lookKey(look, st.link, st.track, comments) + (look.caps ? '|C' : ''), look, link: st.link, caps: look.caps, text, track: st.track, comments });
     return last;
   }
-  function pushRaw(st, html) { st.items.push({ raw: html }); }
+  function pushRaw(st, html) {
+    // Une image écrite dans une insertion suivie est suivie comme elle (js/track-changes.js sait marquer une image).
+    st.items.push({ raw: st.track && /^<img\b/.test(html) ? trackWrap(html, st.track) : html });
+  }
 
   const FIELD_NAME = /^\s*([A-Za-z=]+)/;
   const FROZEN_FIELDS = new Set(['DATE', 'TIME', 'SAVEDATE', 'PRINTDATE', 'CREATEDATE', 'NUMPAGES', 'SECTIONPAGES', 'NUMWORDS', 'NUMCHARS', 'FILENAME', 'AUTHOR', 'TITLE', 'DOCPROPERTY', 'USERNAME', 'IF', 'FORMULA', '=', 'COMPARE', 'INFO']);
@@ -615,7 +623,110 @@ const DocxImport = (function () {
     return '<sup class="footnote-ref-marker" data-note-id="fn-' + Date.now().toString(36) + 'w' + ctx.noteCounter + '" data-note-text="' + escAttr(text) + '"></sup>';
   };
 
+  // --- Modifications suivies et commentaires ------------------------------------------------------------------------------------------------------------------------------------------------
+  // Une insertion ou une suppression suivie de Word (`w:ins`, `w:del`, et leurs déplacements) reste une modification EN ATTENTE de l'éditeur (js/track-changes.js : `<ins data-id>` / `<del data-id>`), avec son
+  // auteur et sa date dans les métadonnées du suivi ; une même révision de Word (même numéro) n'est qu'une modification. Les modifications de mise en forme ou de structure, que l'éditeur ne suit pas, sont acceptées
+  // et comptées (`countLostRevisions`).
+  const MAX_REVISIONS = 5000;
+  function trackOf(ctx, el, kind) {
+    const wordId = attr(el, 'id');
+    const key = kind + ':' + (wordId === null ? 'n' + (ctx.revisionAnon += 1) : wordId);
+    let id = ctx.revisions.get(key);
+    if (!id) {
+      if (ctx.revisions.size >= MAX_REVISIONS) { count(ctx, 'trackedChanges'); return null; }
+      id = ctx.revisions.size + 1;
+      ctx.revisions.set(key, id);
+      const meta = { author: null };
+      const name = String(attr(el, 'author') || '').trim();
+      if (name) meta.authorName = name.slice(0, 120);
+      const time = Date.parse(attr(el, 'date') || '');
+      meta.createdAt = Number.isFinite(time) ? new Date(time).toISOString() : null;
+      ctx.suivi[id] = meta;
+    }
+    return { kind, id };
+  }
+  const LOST_REVISIONS = ['rPrChange', 'pPrChange', 'sectPrChange', 'tblPrChange', 'tcPrChange', 'trPrChange', 'tblGridChange', 'tblPrExChange', 'numberingChange', 'cellIns', 'cellDel', 'cellMerge'];
+  function countLostRevisions(ctx, body) {
+    let lost = 0;
+    LOST_REVISIONS.forEach((name) => { lost += descendants(body, name).length; });
+    ['ins', 'del', 'moveFrom', 'moveTo'].forEach((name) => descendants(body, name).forEach((el) => { const parent = el.parentNode && el.parentNode.localName; if (parent === 'rPr' || parent === 'trPr') lost += 1; }));
+    if (lost) count(ctx, 'trackedChanges', lost);
+  }
+  // Un commentaire de Word (`word/comments.xml`) et ses réponses (`commentsExtended.xml` : le parent d'une réponse, l'état « résolu ») : un FIL de l'éditeur (js/comments.js) - la marque `comment-mark` sur le passage,
+  // les messages (auteur, texte, date) rangés pour la table des fils quand le document aura un numéro. Les réponses rejoignent le fil du commentaire qu'elles suivent. Un commentaire sans passage de texte n'a rien à marquer :
+  // il est compté.
+  const MAX_THREADS = 1000;
+  const plainText = (paragraph) => {
+    let out = '';
+    const walk = (el) => kids(el).forEach((c) => {
+      if (c.localName === 't') out += c.textContent; else if (c.localName === 'tab') out += '\t'; else if (c.localName === 'br' || c.localName === 'cr') out += '\n'; else walk(c);
+    });
+    walk(paragraph);
+    return out;
+  };
+  async function readComments(ctx, pkg, commentsPath, extendedPath) {
+    const doc = commentsPath ? await pkg.xml(commentsPath) : null;
+    if (!doc) return;
+    const entries = [];
+    kids(doc.documentElement, 'comment').forEach((el) => {
+      const paragraphs = descendants(el, 'p');
+      const time = Date.parse(attr(el, 'date') || '');
+      const last = paragraphs[paragraphs.length - 1];
+      entries.push({
+        wordId: attr(el, 'id'), auteur: String(attr(el, 'author') || '').trim(), creeLe: new Date(Number.isFinite(time) ? time : Date.now()).toISOString(),
+        texte: paragraphs.map(plainText).join('\n').replace(/\s+$/, '').replace(/^\s+/, ''), paraId: last ? attr(last, 'paraId') : null,
+      });
+    });
+    const extended = new Map();
+    const ext = extendedPath ? await pkg.xml(extendedPath) : null;
+    if (ext) descendants(ext.documentElement, 'commentEx').forEach((x) => extended.set(attr(x, 'paraId'), { parent: attr(x, 'paraIdParent'), done: /^(1|true)$/i.test(String(attr(x, 'done') || '')) }));
+    const byPara = new Map(entries.filter(e => e.paraId).map(e => [e.paraId, e]));
+    const rootOf = (entry) => {
+      let cur = entry;
+      for (let guard = 0; guard < 50; guard++) {
+        const info = extended.get(cur.paraId);
+        const parent = info && info.parent ? byPara.get(info.parent) : null;
+        if (!parent || parent === cur) break;
+        cur = parent;
+      }
+      return cur;
+    };
+    const stamp = Date.now().toString(36);
+    const threads = new Map();
+    entries.forEach((entry) => {
+      if (entry.wordId === null || !entry.texte) return;
+      const root = rootOf(entry);
+      let thread = threads.get(root);
+      if (!thread) {
+        if (threads.size >= MAX_THREADS) { count(ctx, 'comments'); return; }
+        const info = extended.get(root.paraId);
+        thread = { id: 'cm-' + stamp + 'w' + (threads.size + 1), resolved: !!(info && info.done), messages: [], anchored: false };
+        threads.set(root, thread);
+        ctx.threads.push(thread);
+      }
+      thread.messages.push({ auteur: entry.auteur, texte: entry.texte, creeLe: entry.creeLe });
+      ctx.comments.set(entry.wordId, { thread });
+    });
+    ctx.threads.forEach(thread => thread.messages.sort((a, b) => String(a.creeLe).localeCompare(String(b.creeLe))));
+  }
+  // Les fils dont le passage est ouvert à cet endroit du texte (`w:commentRangeStart` lu, `w:commentRangeEnd` pas encore) : [{ id, resolved }] dans l'ordre des numéros, ou null.
+  function openComments(ctx) {
+    if (!ctx.openComments.size) return null;
+    const seen = new Map();
+    ctx.openComments.forEach((wordId) => {
+      const info = ctx.comments.get(wordId);
+      if (info && !seen.has(info.thread.id)) { seen.set(info.thread.id, { id: info.thread.id, resolved: info.thread.resolved }); info.thread.anchored = true; }
+    });
+    return seen.size ? Array.from(seen.values()).sort((a, b) => (a.id < b.id ? -1 : 1)) : null;
+  }
+  function commentRange(ctx, el) {
+    const id = attr(el, 'id');
+    if (id === null) return;
+    if (el.localName === 'commentRangeStart') { if (ctx.comments.has(id)) ctx.openComments.add(id); } else ctx.openComments.delete(id);
+  }
+
   // Une série de caractères (`w:r`).
+  const DELETED_PARTS = new Set(['delText', 't', 'tab', 'br', 'cr', 'noBreakHyphen', 'softHyphen']);
   function readRun(st, run) {
     const ctx = st.ctx;
     const rPr = kid(run, 'rPr');
@@ -624,8 +735,12 @@ const DocxImport = (function () {
     let buffer = '';
     const flush = () => { if (buffer) { pushText(st, r, buffer, false); buffer = ''; } };
     const openField = () => ctx.fields[ctx.fields.length - 1];
+    const deleted = !!st.track && st.track.kind === 'del';
     kids(run).forEach((c) => {
+      // Une série supprimée (suivi des modifications) ne garde que son texte, ses tabulations et ses retours à la ligne.
+      if (deleted && !DELETED_PARTS.has(c.localName)) return;
       switch (c.localName) {
+        case 'delText': buffer += c.textContent; break;
         case 't': { const open = openField(); if (!(open && open.phase === 'instr')) buffer += c.textContent; break; }
         case 'instrText': { flush(); const open = openField(); if (open) open.instr += c.textContent; break; }
         case 'tab': case 'ptab': buffer += '\t'; break;
@@ -695,8 +810,17 @@ const DocxImport = (function () {
           if (field.sink) closeField(st, field); else if (FROZEN_FIELDS.has(field.kind)) count(ctx, 'fields');
           break;
         }
-        case 'ins': case 'moveTo': count(ctx, 'trackedChanges'); readInline(st, c, depth + 1); break;
-        case 'del': case 'moveFrom': count(ctx, 'trackedChanges'); break;
+        case 'ins': case 'moveTo': case 'del': case 'moveFrom': {
+          const kind = c.localName === 'ins' || c.localName === 'moveTo' ? 'ins' : 'del';
+          const track = trackOf(ctx, c, kind);
+          if (!track && kind === 'del') break; // trop de révisions : la suppression est acceptée
+          const kept = st.track;
+          st.track = track;
+          readInline(st, c, depth + 1);
+          st.track = kept;
+          break;
+        }
+        case 'commentRangeStart': case 'commentRangeEnd': commentRange(ctx, c); break;
         case 'smartTag': case 'customXml': case 'bdo': case 'dir': case 'sdtContent': case 'subDoc': readInline(st, c, depth + 1); break;
         case 'sdt': readInline(st, kid(c, 'sdtContent'), depth + 1); break;
         case 'oMath': case 'oMathPara': {
@@ -931,6 +1055,7 @@ const DocxImport = (function () {
           break;
         case 'sdt': blocksOf(ctx, part, kid(c, 'sdtContent'), layers, depth).forEach(item => out.push(item)); break;
         case 'sdtContent': case 'customXml': case 'smartTag': blocksOf(ctx, part, c, layers, depth).forEach(item => out.push(item)); break;
+        case 'commentRangeStart': case 'commentRangeEnd': commentRange(ctx, c); break;
         case 'ins': case 'moveTo': count(ctx, 'trackedChanges'); blocksOf(ctx, part, c, layers, depth).forEach(item => out.push(item)); break;
         case 'del': case 'moveFrom': count(ctx, 'trackedChanges'); break;
         default: break;
@@ -1191,20 +1316,18 @@ const DocxImport = (function () {
       pkg, theme, styles, numbering, report: new Map(), fontsSeen: new Set(), imageBytes: 0, fields: [], sections: [], counters: new Map(), started: new Set(), noteCounter: 0,
       footnotes: await readNotes(pkg, byType('footnotes') || 'word/footnotes.xml', 'footnote'),
       endnotes: await readNotes(pkg, byType('endnotes') || 'word/endnotes.xml', 'endnote'),
-      tabStop: null,
+      tabStop: null, revisions: new Map(), revisionAnon: 0, suivi: {}, comments: new Map(), threads: [], openComments: new Set(),
       mergeField: (options && options.mergeField) || defaultMergeField,
     };
     const tab = settings ? numAttr(descendants(settings.documentElement, 'defaultTabStop')[0], 'val', 0) : 0;
     if (tab > 0) ctx.tabStop = round2(tab * PT_PER_TWIP);
-    const commentsPath = byType('comments');
-    if (commentsPath) {
-      const comments = await pkg.xml(commentsPath);
-      if (comments) count(ctx, 'comments', kids(comments.documentElement, 'comment').length);
-    }
+    await readComments(ctx, pkg, byType('comments'), byType('commentsExtended'));
     const body = kid(doc.documentElement, 'body');
     if (!body) throw fail('empty', 'Ce document Word est vide.');
     const part = { path: mainPath, rels: docRels, images: await loadImages(ctx, docRels), body: true };
     const items = blocksOf(ctx, part, body, [], 0);
+    ctx.openComments.clear();
+    countLostRevisions(ctx, body);
     const finalSect = kid(body, 'sectPr');
     const sections = ctx.sections.concat(finalSect ? [finalSect] : []);
     if (finalSect) ctx.sections.length = 0;
@@ -1233,8 +1356,12 @@ const DocxImport = (function () {
     const headerFooter = filled ? { enabled: true, differentFirstPage: different1, header: zones.header, footer: zones.footer } : null;
     if (ctx.watermark) { if (page) page.watermark = ctx.watermark; else count(ctx, 'watermark'); }
     if (!html.replace(/<p[^>]*><\/p>/g, '').trim() && !filled) throw fail('empty', 'Ce document Word est vide.');
+    // Les fils dont aucun passage de texte n'a été marqué n'ont rien à quoi s'accrocher : comptés, non repris.
+    const unanchored = ctx.threads.filter(thread => !thread.anchored).length;
+    if (unanchored) count(ctx, 'comments', unanchored);
+    const comments = ctx.threads.filter(thread => thread.anchored).map(thread => ({ id: thread.id, resolved: thread.resolved, messages: thread.messages }));
     const report = REPORT_KEYS.filter(key => ctx.report.get(key)).map(key => ({ key, n: ctx.report.get(key) }));
-    return { html, page, headerFooter, report };
+    return { html, page, headerFooter, report, suiviModifications: ctx.revisions.size ? ctx.suivi : null, comments };
   }
   // Un champ de fusion de Word devient la variable de la colonne du même nom dans la table courante, quand elle existe et qu'une seule colonne porte ce nom ('' : il reste son texte). Le nom se compare
   // sans tenir compte des majuscules ni des accents, un blanc valant un trait bas (Word écrit « Prénom_du_client » pour « Prénom du client »).

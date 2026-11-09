@@ -1003,7 +1003,10 @@
   function openImportedDocx(imported) {
     // Un nouveau document, sans nom et pas encore enregistré, comme « Nouveau document » ; sa page (format, sens, marges) et ses en-têtes et pieds de page sont ceux du fichier.
     templateSelect.value = '';
-    loadTemplateIntoEditor({ id: null, nom: '', contenu: imported.html, typeModele: 'document', marginsMm: imported.page, suiviModifications: null, headerFooter: imported.headerFooter }, 'document');
+    // Les modifications suivies du fichier (auteur et date) restent en attente de validation ; ses commentaires sont marqués dans le texte, leurs messages attendent le premier enregistrement (ils vont dans la table
+    // des fils, qui a besoin du numéro du modèle : adoptStaged, plus bas).
+    loadTemplateIntoEditor({ id: null, nom: '', contenu: imported.html, typeModele: 'document', marginsMm: imported.page, suiviModifications: imported.suiviModifications || null, headerFooter: imported.headerFooter }, 'document');
+    Comments.stageImported(imported.comments);
     markAutosaveDirty();
     setStatus(I18n.t('status.docxImported'));
   }
@@ -1314,7 +1317,8 @@
     // quelqu'un qui vient de l'enregistrer, jusqu'à un changement de modèle. Seulement quand l'identifiant change : un nouvel enregistrement du même
     // modèle n'a rien à recharger, et loadForTemplate referme le panneau ouvert.
     if (sameTemplate && String(id) !== String(savedId)) {
-      Comments.loadForTemplate(savedId).catch(e => console.error('[main] chargement des commentaires impossible après création du modèle', e));
+      // Les fils d'un Word importé entrent dans la table avec le numéro du modèle, puis ils sont relus avec lui.
+      Comments.adoptStaged(savedId).then(() => Comments.loadForTemplate(savedId)).catch(e => console.error('[main] chargement des commentaires impossible après création du modèle', e));
       forgetMacroOriginUnless(null); // une copie n'est pas un modèle du macro-modèle d'où l'on venait : le bandeau n'a plus de sens
       forgetLinkedOriginUnless(null); // ni le modèle que le tableau du document désigne : le retour n'a plus de sens non plus
     }
