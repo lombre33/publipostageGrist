@@ -14,7 +14,11 @@
 //  - LA LECTURE : le cadre de l'app est isolé par GFS (pas d'`allow-same-origin`, consigne 011) et un lecteur posé DEDANS n'a pas d'identité : YouTube y échoue (étude du 06/11, `video-slides-2026-11-06`). C'est
 //    donc GFS qui pose le lecteur, par-dessus le cadre de l'app, à la place du calque : l'app lui dit QUOI (`fournisseur`, `video` : l'identifiant) et OÙ (le rectangle du calque et la zone où il se voit), et le
 //    suit (js/gfs-link.js : `lecteur.afficher`, `deplacer`, `masquer`, `fermer`). Elle ne lui donne jamais une adresse. Le lecteur s'efface quand quelque chose passe par-dessus (un menu, une fenêtre), se ferme
-//    quand le calque disparaît ou reste hors de vue, au clic ailleurs et à Échap. Sans GFS ou si GFS ne sait pas jouer ce site (`GfsLink.players`), un clic ouvre la vidéo sur son site, dans un nouvel onglet.
+//    quand le calque disparaît ou reste hors de vue, au clic ailleurs et à Échap. Si GFS ne sait pas jouer ce site (`GfsLink.players`), un clic ouvre la vidéo sur son site, dans un nouvel onglet.
+//  - L'APP SEULE (demande du 09/11 : « en standalone pourquoi je ne peux pas lire la vidéo dans le document ? », carte « Lecteur sur place, deux sites nommés » : une baisse de sécurité voulue) :
+//    sans GFS, l'app est le cadre du widget de Grist et a sa vraie origine ; le lecteur du fournisseur se pose donc ICI, au clic sur ▶ seulement, dans un cadre que la politique de sécurité (index.html,
+//    `frame-src`) n'autorise que pour youtube-nocookie.com et player.vimeo.com. Même suivi que pour GFS (même rectangle, même zone, mêmes arrêts), le calque `.pp-video-layer` jouant le rôle du lecteur de GFS.
+//    L'adresse du cadre est montée d'après l'identifiant relu (`embedUrl`), jamais d'après ce qui a été collé. Hébergée par GFS, l'app ne pose JAMAIS de cadre : GFS joue le sien, ou la vidéo s'ouvre sur son site.
 const VideoFrame = (function () {
   const el = Dom.el;
   const ATTR = 'data-ff-video';
@@ -275,7 +279,76 @@ const VideoFrame = (function () {
   // ---- Jouer ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   const round = number => Math.round(number * 10) / 10;
   const hosted = () => typeof GfsLink !== 'undefined' && GfsLink.hosted;
-  const canPlay = provider => hosted() && GfsLink.players().indexOf(provider) !== -1;
+  // Hébergée : le lecteur de GFS, s'il sait jouer ce site. Seule : le cadre du fournisseur, posé ici (`local`), pour les deux sites que la politique de sécurité nomme.
+  const canPlay = provider => (hosted() ? GfsLink.players().indexOf(provider) !== -1 : !!PROVIDERS[provider]);
+
+  // ---- Le lecteur de l'app seule -------------------------------------------------------------------------------------------------------------------------------------------------------
+  // L'adresse du cadre du fournisseur, montée d'après l'identifiant (relu contre sa forme) et les secondes de départ : '' quand l'identifiant n'est pas de la forme du site. Le seul endroit où l'app écrit une
+  // adresse de fournisseur pour un cadre ; elle commence toujours par l'un des deux hôtes que `frame-src` (index.html) autorise. YouTube : le domaine sans cookie. Vimeo : `dnt=1` (ni suivi, ni cookie).
+  function embedUrl(provider, ident, start) {
+    const known = PROVIDERS[provider];
+    if (!known || typeof ident !== 'string' || !known.id.test(ident)) return '';
+    const at = Math.min(Math.max(Math.floor(Number(start)) || 0, 0), MAX_START);
+    if (provider === 'youtube') return 'https://www.youtube-nocookie.com/embed/' + ident + '?autoplay=1&rel=0&playsinline=1' + (at ? '&start=' + at : '');
+    const parts = ident.split('/');
+    return 'https://player.vimeo.com/video/' + parts[0] + '?autoplay=1&dnt=1' + (parts[1] ? '&h=' + parts[1] : '') + (at ? '#t=' + at + 's' : '');
+  }
+  // Le lecteur de l'app seule, avec les quatre appels de celui de GFS (`afficher`, `deplacer`, `masquer`, `fermer` : mêmes arguments, js/gfs-link.js) : un calque fixe qui ne montre que la part du lecteur
+  // dans sa zone (la feuille qui défile, la boîte du cadre), et dedans le cadre du fournisseur à la taille du rectangle. Un seul à la fois ; rien n'existe avant `afficher`.
+  const local = (function () {
+    const layers = new Map();   // id -> { box, frame }
+    function place(entry, rect, zone) {
+      if (!rect || !zone) return;
+      const left = Math.max(rect.x, zone.x);
+      const top = Math.max(rect.y, zone.y);
+      const right = Math.min(rect.x + rect.largeur, zone.x + zone.largeur);
+      const bottom = Math.min(rect.y + rect.hauteur, zone.y + zone.hauteur);
+      const box = entry.box.style;
+      box.left = left + 'px';
+      box.top = top + 'px';
+      box.width = Math.max(right - left, 0) + 'px';
+      box.height = Math.max(bottom - top, 0) + 'px';
+      const frame = entry.frame.style;
+      frame.left = (rect.x - left) + 'px';
+      frame.top = (rect.y - top) + 'px';
+      frame.width = rect.largeur + 'px';
+      frame.height = rect.hauteur + 'px';
+    }
+    function call(action, args) {
+      if (!args || typeof args.id !== 'string') return false;
+      const entry = layers.get(args.id);
+      if (action === 'afficher') {
+        const address = embedUrl(args.fournisseur, args.video, args.debut);
+        if (!address || entry) return false;
+        const box = el('div', 'pp-video-layer');
+        const frame = document.createElement('iframe');
+        frame.className = 'pp-video-layer-frame';
+        frame.setAttribute('title', I18n.t('video.title', { provider: nameOf(args.fournisseur) }));
+        // Le cadre du fournisseur n'a de droits que chez lui : ses scripts, sa propre origine, la présentation et les fenêtres qu'il ouvre ; ni formulaire, ni accès à la page de l'app. Pas de plein écran ni de
+        // lecture automatique promis (Grist ne délègue à l'app que `clipboard-write`) : si le navigateur refuse la lecture, le lecteur montre son propre bouton.
+        frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox');
+        frame.setAttribute('allow', 'autoplay; encrypted-media');
+        frame.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+        frame.setAttribute('src', address);
+        box.appendChild(frame);
+        const added = { box, frame };
+        layers.set(args.id, added);
+        place(added, args.rect, args.zone);
+        document.body.appendChild(box);
+        return true;
+      }
+      if (!entry) return false;
+      if (action === 'deplacer') place(entry, args.rect, args.zone);
+      else if (action === 'masquer') entry.box.style.visibility = args.masque ? 'hidden' : '';
+      else if (action === 'fermer') { entry.box.remove(); layers.delete(args.id); } else return false;
+      return true;
+    }
+    // Le calque de la lecture `id` (null quand il n'y en a pas) : ce que le suivi ne doit pas prendre pour quelque chose qui recouvre la vidéo.
+    const boxOf = id => (layers.has(id) ? layers.get(id).box : null);
+    return { call, boxOf };
+  })();
+  // Un appel du lecteur : celui de GFS quand l'app est hébergée, le nôtre sinon.
+  const send = (action, args) => (hosted() ? GfsLink.player(action, args) : local.call(action, args));
 
   const parentOf = node => node.parentElement || (node.getRootNode && node.getRootNode().host) || null;
   // La zone où le calque peut se voir : la fenêtre du cadre de l'app, rognée par chaque ancêtre qui coupe ce qui déborde (la zone qui défile, la feuille, la boîte du cadre).
@@ -312,13 +385,13 @@ const VideoFrame = (function () {
     }
     return top;
   }
-  // Quelque chose d'autre que le cadre recouvre-t-il la part visible du calque ? Un lecteur posé par GFS passerait par-dessus.
-  function covered(frame, seen) {
+  // Quelque chose d'autre que le cadre recouvre-t-il la part visible du calque ? Un lecteur posé par GFS passerait par-dessus. Le calque du lecteur de l'app seule (`layer`) n'est pas « quelque chose d'autre ».
+  function covered(frame, seen, layer) {
     const width = seen.right - seen.left;
     const height = seen.bottom - seen.top;
     return SAMPLES.some(([fx, fy]) => {
       const top = deepHit(seen.left + width * fx, seen.top + height * fy);
-      return !!top && !frame.contains(top);
+      return !!top && !frame.contains(top) && !(layer && layer.contains(top));
     });
   }
 
@@ -333,7 +406,7 @@ const VideoFrame = (function () {
     cancelAnimationFrame(found.raf);
     document.removeEventListener('mousedown', onAway, true);
     document.removeEventListener('keydown', onKey, true);
-    GfsLink.player('fermer', { id: found.id });
+    send('fermer', { id: found.id });
     return true;
   }
   // Un clic ailleurs dans l'app, ou Échap : le lecteur se ferme (le clic dans le lecteur lui-même ne passe jamais par ici : il est dans la page de GFS). Échap ne vaut que tant que le clavier est
@@ -348,18 +421,18 @@ const VideoFrame = (function () {
     const where = measure(found.node);
     if (!where) {
       if (found.outSince === null) found.outSince = now;
-      if (now - found.outSince > OUT_MS) stop(); else if (!found.hidden) { found.hidden = true; GfsLink.player('masquer', { id: found.id, masque: true }); }
+      if (now - found.outSince > OUT_MS) stop(); else if (!found.hidden) { found.hidden = true; send('masquer', { id: found.id, masque: true }); }
       return;
     }
     const out = !where.visible;
-    const over = !out && covered(found.frame, where.seen);
+    const over = !out && covered(found.frame, where.seen, hosted() ? null : local.boxOf(found.id));
     found.outSince = out ? (found.outSince === null ? now : found.outSince) : null;
     found.coverSince = over ? (found.coverSince === null ? now : found.coverSince) : null;
     if ((found.outSince !== null && now - found.outSince > OUT_MS) || (found.coverSince !== null && now - found.coverSince > COVER_MS)) { stop(); return; }
     const hide = out || over;
-    if (hide !== found.hidden) { found.hidden = hide; GfsLink.player('masquer', { id: found.id, masque: hide }); }
+    if (hide !== found.hidden) { found.hidden = hide; send('masquer', { id: found.id, masque: hide }); }
     const key = JSON.stringify([where.rect, where.zone]);
-    if (key !== found.sent) { found.sent = key; GfsLink.player('deplacer', { id: found.id, rect: where.rect, zone: where.zone }); }
+    if (key !== found.sent) { found.sent = key; send('deplacer', { id: found.id, rect: where.rect, zone: where.zone }); }
   }
   function follow(found) {
     found.raf = requestAnimationFrame(() => {
@@ -382,8 +455,8 @@ const VideoFrame = (function () {
     const video = found ? decode(found.value) : null;
     return video ? { node: found.img, frame: target.matches('img') ? target : (target.closest('.editor-image-view') || target), video } : null;
   }
-  // Joue la vidéo de `target` (un cadre libre ou une vidéo de document) à sa place, par le lecteur de GFS. Faux - et rien n'a changé - quand GFS ne sait pas jouer ce site, que la cible n'a pas de vidéo ou de
-  // calque, qu'elle est pivotée (le lecteur de GFS ne tourne pas) ou qu'elle n'a pas de taille.
+  // Joue la vidéo de `target` (un cadre libre ou une vidéo de document) à sa place : par le lecteur de GFS, ou, seule, par le cadre du fournisseur posé ici. Faux - et rien n'a changé - quand GFS ne sait pas
+  // jouer ce site, que la cible n'a pas de vidéo ou de calque, qu'elle est pivotée (un lecteur ne tourne pas) ou qu'elle n'a pas de taille.
   function play(target) {
     const found = targetOf(target);
     if (!found || found.rotated || !canPlay(found.video.provider)) return false;
@@ -394,13 +467,14 @@ const VideoFrame = (function () {
     counter += 1;
     const running = { id: 'v' + counter, node, frame, video, sent: JSON.stringify([where.rect, where.zone]), hidden: false, outSince: null, coverSince: null, raf: 0 };
     current = running;
-    GfsLink.player('afficher', Object.assign({ id: running.id, fournisseur: video.provider, video: video.id }, video.start ? { debut: video.start } : {}, { rect: where.rect, zone: where.zone }));
+    // Refusé (un identifiant qui n'est pas de la forme du site, un lecteur déjà là) : rien n'a changé.
+    if (!send('afficher', Object.assign({ id: running.id, fournisseur: video.provider, video: video.id }, video.start ? { debut: video.start } : {}, { rect: where.rect, zone: where.zone }))) { current = null; return false; }
     document.addEventListener('mousedown', onAway, true);
     document.addEventListener('keydown', onKey, true);
     follow(running);
     return true;
   }
-  // Un clic sur la vidéo : le lecteur de GFS s'il sait la jouer, sinon la vidéo sur son site, dans un nouvel onglet.
+  // Un clic sur la vidéo : le lecteur (celui de GFS s'il sait la jouer, ou, seule, le cadre du fournisseur), sinon la vidéo sur son site, dans un nouvel onglet.
   function activate(target) {
     if (play(target)) return true;
     const found = targetOf(target);
@@ -417,5 +491,5 @@ const VideoFrame = (function () {
 
   const playing = () => (current ? { id: current.id, provider: current.video.provider, video: current.video.id } : null);
 
-  return { ATTR, IMAGE_ATTR, HOST, PLAY, PROVIDERS, decode, encode, valueOf, nameOf, watchUrl, parseLink, host, poster, imageOf, fill, forExport, openDialog, insertImage, canPlay, play, activate, stop, playing };
+  return { ATTR, IMAGE_ATTR, HOST, PLAY, PROVIDERS, decode, encode, valueOf, nameOf, watchUrl, parseLink, host, poster, imageOf, fill, forExport, openDialog, insertImage, embedUrl, canPlay, play, activate, stop, playing };
 })();

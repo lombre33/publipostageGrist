@@ -738,7 +738,12 @@ async function run(lang, colorScheme) {
   await sleep(350);
   const urlsRead = await opened();
   check(tag + 'GFS ne sait rien jouer : le clic sur la vignette ouvre la vidéo sur YouTube (au départ de 42 s), sans rien demander à GFS', urlsRead.length === openedBefore + 1 && urlsRead[urlsRead.length - 1] === 'https://www.youtube.com/watch?v=9bZkp7q19f0&t=42s' && (await countOf('afficher')) === readBefore + 2, { urlsRead });
+  // Hébergée par GFS, l'app ne pose JAMAIS de cadre de fournisseur, ni quand GFS joue, ni quand il ne sait rien jouer : seul le lecteur de GFS ou le site de la vidéo.
+  const hostedFrames = await page.evaluate(() => ({ frames: document.querySelectorAll('iframe, .pp-video-layer').length, canPlay: VideoFrame.canPlay('youtube') }));
+  check(tag + 'hébergée, l\'app ne pose aucun cadre de fournisseur (ni <iframe>, ni calque de lecteur) et ne sait pas jouer ce que GFS ne joue pas', hostedFrames.frames === 0 && hostedFrames.canPlay === false, hostedFrames);
   await page.evaluate(() => window.__gfsStub.setLecteurs(['youtube', 'vimeo']));
+  const hostedPlays = await page.evaluate(() => VideoFrame.canPlay('youtube') && VideoFrame.canPlay('vimeo') && !VideoFrame.canPlay('dailymotion'));
+  check(tag + 'hébergée, GFS qui joue YouTube et Vimeo suffit : le lecteur est le sien, pas un cadre de l\'app', hostedPlays && (await page.evaluate(() => document.querySelectorAll('iframe, .pp-video-layer').length)) === 0, hostedPlays);
   await click('#btn-mode-edit');
   await sleep(800);
   }
@@ -806,8 +811,210 @@ async function runFramed() {
   await page.close();
 }
 
+// --- 10. L'app SEULE (sans GFS) : le lecteur du fournisseur se pose ici, au clic sur ▶, dans un cadre que la politique de sécurité n'autorise que pour YouTube (domaine sans cookie) et Vimeo (player.vimeo.com).
+// Demande d'Antoine du 09/11 (« en standalone pourquoi je ne peux pas lire la vidéo dans le document ? »), carte « Lecteur sur place, deux sites nommés ». La page est servie SOUS sa politique (`bypassCSP: false`) :
+// un cadre refusé le serait vraiment. Les deux sites sont des faux (une page de couleur franche) : le vrai YouTube et le vrai Vimeo ne sont pas joints d'ici.
+async function runStandalone(lang, colorScheme) {
+  const T = TEXTS[lang];
+  const tag = `[${lang} ${colorScheme} app seule] `;
+  console.log('\n' + tag + '10) L\'app seule : le lecteur du fournisseur sur place, dans un cadre nommé par la politique');
+  const providerHits = [];
+  const { page, requests } = await t.openPage({
+    hosted: false, seed: SEED, lang, colorScheme, bypassCSP: false,
+    init: 'window.__csp = []; document.addEventListener("securitypolicyviolation", e => window.__csp.push(e.effectiveDirective + " " + e.blockedURI), true);',
+    before: async (pg, context) => {
+      for (const pattern of ['https://www.youtube-nocookie.com/**', 'https://player.vimeo.com/**']) {
+        await context.route(pattern, route => { providerHits.push(route.request().url()); route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<!doctype html><title>faux lecteur</title><body style="margin:0;background:#c0392b;color:#fff"><p>faux lecteur</p>' }); });
+      }
+    },
+  });
+  const errors = [];
+  page.on('pageerror', e => errors.push(String(e)));
+  const refused = [];
+  page.on('console', m => { if (/Content Security Policy|Refused to/i.test(m.text())) refused.push(m.text().slice(0, 140)); });
+  const rectOf = (selector, index = 0) => page.evaluate(([sel, i]) => {
+    const el = document.querySelectorAll(sel)[i];
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height, left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+  }, [selector, index]);
+  const reach = async (c) => { await page.mouse.move(c.x - 10, c.y); await page.mouse.move(c.x, c.y, { steps: 2 }); await sleep(80); };
+  const key = async (name, wait = 250) => { await page.keyboard.press(name); await sleep(wait); };
+  const near = (a, b, tolerance = 2) => typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) <= tolerance;
+  const openBlocks = async () => {
+    const c = await rectOf('#v2-btn-link');
+    await page.mouse.move(c.x, c.y + 150);
+    await page.mouse.move(c.x, c.y, { steps: 4 });
+    await sleep(350);
+    return c;
+  };
+  const chooseBlock = async (selector = '#v2-btn-video') => {
+    const c = await openBlocks();
+    const r = await rectOf(selector);
+    const x = Math.min(Math.max(c.x, r.left + 8), r.right - 8);
+    await page.mouse.move(x, r.y, { steps: 8 });
+    await sleep(100);
+    await page.mouse.click(x, r.y);
+    await sleep(300);
+  };
+  const IMG = '#editor-container .ProseMirror .editor-image-video img';
+  const PLAY = '#editor-container .ProseMirror .editor-image-video .editor-image-video-play';
+  const layer = () => page.evaluate(() => {
+    const boxes = Array.from(document.querySelectorAll('.pp-video-layer'));
+    const box = boxes[0] || null;
+    const frame = box ? box.querySelector('iframe') : null;
+    const r = box ? box.getBoundingClientRect() : null;
+    const f = frame ? frame.getBoundingClientRect() : null;
+    return {
+      count: boxes.length, frames: document.querySelectorAll('iframe').length,
+      src: frame ? frame.getAttribute('src') : '', sandbox: frame ? frame.getAttribute('sandbox') : '', referrer: frame ? frame.getAttribute('referrerpolicy') : '', title: frame ? frame.getAttribute('title') : '',
+      allow: frame ? frame.getAttribute('allow') : '', z: box ? getComputedStyle(box).zIndex : '', position: box ? getComputedStyle(box).position : '', hidden: box ? getComputedStyle(box).visibility === 'hidden' : false,
+      box: r && { left: r.left, top: r.top, width: r.width, height: r.height }, frameBox: f && { left: f.left, top: f.top, width: f.width, height: f.height },
+    };
+  });
+  const csp = () => page.evaluate(() => window.__csp.slice());
+
+  // L'app seule n'a pas d'extension active (Slides+ est grisé) : un document, et « Vidéo… » du menu Blocs, qui n'est pas grisée.
+  await page.evaluate(() => {
+    const ed = EditorCore.getEditor();
+    ed.commands.setContent('<p>Avant la vidéo.</p><p>Après la vidéo : un texte assez long pour que le panneau défile quand on le fait glisser, à la file, sur plusieurs lignes de suite, encore et encore, jusqu\'en bas.</p>' + '<p>Ligne</p>'.repeat(14));
+    ed.chain().setTextSelection(16).focus().run();
+  });
+  await sleep(300);
+  const rowState = await page.evaluate(() => { const row = document.getElementById('v2-btn-video'); return { locked: row.classList.contains('v2-hf-locked'), aria: row.getAttribute('aria-disabled') }; });
+  check(tag + '« ' + T.row + ' » du menu Blocs n\'est pas grisée sans GFS', !rowState.locked && rowState.aria !== 'true', rowState);
+  await chooseBlock();
+  await sleep(400);
+  await page.keyboard.type('https://youtu.be/9bZkp7q19f0?t=42');
+  await key('Enter', 700);
+  const docs = await page.evaluate(() => { const out = []; EditorCore.getEditor().state.doc.descendants((node) => { if (node.type.name === 'editorImage' && node.attrs.video) out.push({ video: node.attrs.video, src: node.attrs.src || '' }); }); return out; });
+  check(tag + 'Entrée pose UNE vidéo, l\'image du modèle ne porte que son réglage (YouTube, départ à 42 s), sans adresse', docs.length === 1 && docs[0].video === 'youtube:9bZkp7q19f0@42' && docs[0].src === '', docs);
+  await page.evaluate(() => { document.querySelector('#editor-container .ProseMirror .editor-image-video').scrollIntoView({ block: 'center' }); });
+  await sleep(400);
+
+  // Rien n'est chargé avant le clic.
+  let state = await layer();
+  check(tag + 'avant le clic sur ▶ : aucun cadre dans la page, aucune demande à YouTube ni à Vimeo, aucune violation', state.frames === 0 && state.count === 0 && providerHits.length === 0 && !requests.some(u => /youtube|youtu\.be|vimeo|ytimg/i.test(u)) && (await csp()).length === 0, { state, providerHits });
+
+  // Un clic sur ▶ pose le lecteur du fournisseur à la place exacte de la vignette.
+  const poster = await rectOf(IMG);
+  const playBox = await rectOf(PLAY);
+  await reach(playBox);
+  await page.mouse.click(playBox.x, playBox.y);
+  await sleep(700);
+  state = await layer();
+  check(tag + 'un clic sur ▶ pose UN cadre YouTube (domaine sans cookie), adresse montée d\'après l\'identifiant : départ à 42 s, lecture au clic',
+    state.count === 1 && state.frames === 1 && state.src === 'https://www.youtube-nocookie.com/embed/9bZkp7q19f0?autoplay=1&rel=0&playsinline=1&start=42' && providerHits.length === 1 && providerHits[0] === state.src, { state, providerHits });
+  check(tag + 'le cadre est isolé : bac à sable (scripts, sa propre origine, présentation, fenêtres) sans formulaire ni navigation de la page, référent d\'origine seule, titre « ' + T.title + ' »',
+    /allow-scripts/.test(state.sandbox) && /allow-same-origin/.test(state.sandbox) && !/allow-forms|allow-top-navigation|allow-modals/.test(state.sandbox) && state.referrer === 'strict-origin-when-cross-origin' && state.title === T.title && !/fullscreen/.test(state.allow), state);
+  check(tag + 'le lecteur est à la place exacte de la vignette (même rectangle, au pixel près) et sous les barres et les menus (couche --z-video-player)',
+    !!state.box && near(state.box.left, poster.left) && near(state.box.top, poster.top) && near(state.box.width, poster.width) && near(state.box.height, poster.height) && near(state.frameBox.width, poster.width) && state.position === 'fixed' && state.z === '1200', { state, poster });
+  check(tag + 'la politique de sécurité laisse faire : aucune violation, aucun refus du navigateur', (await csp()).length === 0 && refused.length === 0, { violations: await csp(), refused });
+  const noSelection = await page.evaluate(() => { const sel = EditorCore.getEditor().state.selection; return { node: !!sel.node, selectedClass: !!document.querySelector('.editor-image-selected') }; });
+  check(tag + 'le clic sur ▶ lit la vidéo sans sélectionner l\'image', !noSelection.node && !noSelection.selectedClass, noSelection);
+
+  // Il suit la vignette au défilement.
+  await page.evaluate(() => { const zone = document.getElementById('editor-container'); const scroller = Array.from(document.querySelectorAll('*')).filter(e => e.contains(zone.querySelector('.editor-image-video')) && e.scrollHeight > e.clientHeight + 5 && /(auto|scroll)/.test(getComputedStyle(e).overflowY)).pop(); if (scroller) scroller.scrollTop += 40; });
+  await sleep(450);
+  state = await layer();
+  const poster2 = await rectOf(IMG);
+  check(tag + 'quand le panneau défile, le lecteur suit la vignette (même rectangle, rogné à la zone visible)', state.count === 1 && !!state.frameBox && near(state.frameBox.left, poster2.left) && near(state.frameBox.top, poster2.top) && near(state.frameBox.width, poster2.width), { frameBox: state.frameBox, poster2 });
+  await sleep(100);
+
+  // Il reste (le calque du lecteur n'est pas « quelque chose qui le recouvre ») : en français seulement, une attente de dix secondes.
+  if (lang === 'fr') {
+    await sleep(9500);
+    state = await layer();
+    check(tag + 'dix secondes plus tard, le lecteur est toujours là, visible : il ne se prend pas pour ce qui le recouvre', state.count === 1 && state.frames === 1 && !state.hidden, state);
+  }
+
+  // Échap le ferme (clavier encore dans l'app) ; un clic ailleurs aussi.
+  await key('Escape', 450);
+  state = await layer();
+  check(tag + 'Échap ferme le lecteur : plus de calque ni de cadre dans la page', state.count === 0 && state.frames === 0, state);
+  await reach(await rectOf(PLAY));
+  await page.mouse.click((await rectOf(PLAY)).x, (await rectOf(PLAY)).y);
+  await sleep(600);
+  check(tag + 'un second clic sur ▶ le repose', (await layer()).count === 1, await layer());
+  // Un clic dans l'app, à côté du lecteur (la marge de la feuille) : le lecteur lui-même prend ses clics, il n'est pas « ailleurs ».
+  const beside = (await layer()).box;
+  await reach({ x: Math.max(beside.left - 24, 6), y: beside.top + 30 });
+  await page.mouse.click(Math.max(beside.left - 24, 6), beside.top + 30);
+  await sleep(450);
+  state = await layer();
+  check(tag + 'un clic ailleurs dans l\'app ferme le lecteur', state.count === 0 && state.frames === 0, { state, beside });
+
+  // Une vidéo Vimeo (avec sa clé et son départ) : le lecteur de Vimeo, et une seule lecture à la fois.
+  await page.evaluate(() => { const ed = EditorCore.getEditor(); ed.chain().setTextSelection(1).focus().run(); VideoFrame.insertImage(ed, 'vimeo:76979871/abcdef0123@30', 'Vimeo'); });
+  await sleep(600);
+  await page.evaluate(() => { document.querySelectorAll('#editor-container .ProseMirror .editor-image-video')[0].scrollIntoView({ block: 'center' }); });
+  await sleep(400);
+  const vimeoPlay = await rectOf(PLAY, 0);
+  await reach(vimeoPlay);
+  await page.mouse.click(vimeoPlay.x, vimeoPlay.y);
+  await sleep(600);
+  state = await layer();
+  check(tag + 'une vidéo Vimeo pose le lecteur de Vimeo (clé et départ à 30 s), jamais d\'adresse prise ailleurs que dans le réglage', state.count === 1 && state.src === 'https://player.vimeo.com/video/76979871?autoplay=1&dnt=1&h=abcdef0123#t=30s', state);
+  await page.evaluate(() => { document.querySelectorAll('#editor-container .ProseMirror .editor-image-video')[1].scrollIntoView({ block: 'center' }); });
+  await sleep(400);
+  const second = await rectOf(PLAY, 1);
+  await reach(second);
+  await page.mouse.click(second.x, second.y);
+  await sleep(600);
+  state = await layer();
+  check(tag + 'la lecture d\'une autre vidéo ferme la première : un seul lecteur à la fois (YouTube, le cadre de Vimeo est parti)', state.count === 1 && state.frames === 1 && /youtube-nocookie\.com/.test(state.src), state);
+  await key('Escape', 400);
+
+  // Hors de vue : le lecteur est retiré après deux secondes.
+  await reach(await rectOf(PLAY, 1));
+  await page.mouse.click((await rectOf(PLAY, 1)).x, (await rectOf(PLAY, 1)).y);
+  await sleep(500);
+  await page.evaluate(() => { const zone = document.querySelector('#editor-container .ProseMirror'); const scroller = Array.from(document.querySelectorAll('*')).filter(e => e.contains(zone) && e.scrollHeight > e.clientHeight + 5 && /(auto|scroll)/.test(getComputedStyle(e).overflowY)).pop(); if (scroller) scroller.scrollTop = scroller.scrollHeight; });
+  await sleep(2600);
+  state = await layer();
+  check(tag + 'la vignette sortie de vue plus de deux secondes, le lecteur est retiré (le son ne continue pas hors de l\'écran)', state.count === 0 && state.frames === 0, state);
+
+  // La Lecture : un clic sur la vignette, Entrée aussi.
+  await page.evaluate(() => { const ed = EditorCore.getEditor(); ed.chain().setTextSelection(1).focus().run(); });
+  await page.mouse.move(WIDTH - 40, HEIGHT - 60);
+  await sleep(200);
+  const modeRead = await rectOf('#btn-mode-read');
+  await reach(modeRead);
+  await page.mouse.click(modeRead.x, modeRead.y);
+  await sleep(1500);
+  await page.evaluate(() => { document.querySelector('#reader-container img[data-video]').scrollIntoView({ block: 'center' }); });
+  await sleep(400);
+  const readImg = await page.evaluate(() => { const r = document.querySelector('#reader-container img[data-video]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, left: r.left, top: r.top, width: r.width, height: r.height }; });
+  await reach(readImg);
+  await page.mouse.click(readImg.x, readImg.y);
+  await sleep(600);
+  state = await layer();
+  check(tag + 'à la Lecture, un clic sur la vignette pose le lecteur à sa place', state.count === 1 && !!state.frameBox && near(state.frameBox.left, readImg.left) && near(state.frameBox.top, readImg.top) && near(state.frameBox.width, readImg.width), { state, readImg });
+  await key('Escape', 400);
+  await page.evaluate(() => document.querySelector('#reader-container img[data-video]').focus());
+  await key('Enter', 600);
+  check(tag + 'au clavier, Entrée sur la vignette focalisée le lit aussi', (await layer()).count === 1, await layer());
+  const printed = await (async () => { await page.emulateMedia({ media: 'print' }); const d = await page.evaluate(() => getComputedStyle(document.querySelector('.pp-video-layer')).display); await page.emulateMedia({ media: 'screen' }); return d; })();
+  check(tag + 'à l\'impression, le lecteur n\'est jamais imprimé (display: none)', printed === 'none', printed);
+  await key('Escape', 400);
+
+  // L'adresse du cadre n'est montée que d'un identifiant de la bonne forme.
+  const hardening = await page.evaluate(() => ({
+    short: VideoFrame.embedUrl('youtube', 'abc'), path: VideoFrame.embedUrl('youtube', 'dQw4w9WgXcQ/../..'), query: VideoFrame.embedUrl('youtube', 'dQw4w9WgXc?&'), other: VideoFrame.embedUrl('dailymotion', 'x7tgad0'),
+    vimeoWord: VideoFrame.embedUrl('vimeo', '12/zz'), vimeoPath: VideoFrame.embedUrl('vimeo', '123/../x'), number: VideoFrame.embedUrl('youtube', 'dQw4w9WgXcQ', 'x'), huge: VideoFrame.embedUrl('youtube', 'dQw4w9WgXcQ', 9999999999),
+    types: [VideoFrame.embedUrl('youtube', null), VideoFrame.embedUrl('youtube', 5), VideoFrame.embedUrl(null, 'dQw4w9WgXcQ')],
+  }));
+  check(tag + 'une adresse de cadre ne se monte pas d\'un identifiant mal formé, d\'un autre site ou d\'un chemin ; le départ est borné',
+    !hardening.short && !hardening.path && !hardening.query && !hardening.other && !hardening.vimeoWord && !hardening.vimeoPath && hardening.types.every(x => x === '')
+    && hardening.number === 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&rel=0&playsinline=1' && /&start=359999$/.test(hardening.huge), hardening);
+  check(tag + 'aucune violation de la politique de sécurité pendant tout le parcours', (await csp()).length === 0 && refused.length === 0, { violations: await csp(), refused });
+  check(tag + 'aucune erreur de page pendant tout le parcours', errors.length === 0, errors);
+  await page.close();
+}
+
 const only = process.env.VIDEO_FRAME_ONLY || '';
 if (!only || only === 'fr') await run('fr', 'light');
 if (!only || only === 'en') await run('en', 'dark');
 if (!only || only === 'framed') await runFramed();
+if (!only || only === 'seule') { await runStandalone('fr', 'light'); await runStandalone('en', 'dark'); }
 await t.finish();

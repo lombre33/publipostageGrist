@@ -6,7 +6,7 @@
 //      navigateur refuse quoi que ce soit. Le graphique est une extension de Grist Factory Suite (extensions/graphique/) : la page s'ouvre « hébergée » (`?gfs=0`) avec un GFS simulé
 //      (dev-tests/gfs-stub.js) qui donne l'extension et la source de Plotly, ici en copie vendorisée : un fichier de l'origine de la page, que `'self'` laisse passer sans que la politique le nomme ;
 //   2) ce que du HTML piégé, posé tel quel dans la page (comme si le filtre avait laissé passer), n'arrive plus à faire : gestionnaire en ligne, script en ligne, script d'une autre
-//      adresse ou d'une bibliothèque non figée, balise de base, cadre, objet, formulaire, adresse javascript: ; et dans le conteneur de l'impression par le navigateur (arbre ombre de la page : plus de cadre à bac à sable, c'est la politique de la page qui le protège) ;
+//      adresse ou d'une bibliothèque non figée, balise de base, cadre (hors les deux lecteurs vidéo que nomme frame-src), objet, formulaire, adresse javascript: ; et dans le conteneur de l'impression par le navigateur (arbre ombre de la page : plus de cadre à bac à sable, c'est la politique de la page qui le protège) ;
 //   3) le VRAI fichier d'API de Grist (docs.getgrist.com/grist-plugin-api.js) s'évalue sous la politique : c'est un bundle de développement dont chaque module passe par eval(), le faux
 //      Grist des autres tests n'en a pas besoin, et une politique sans 'unsafe-eval' laisserait le widget sans objet grist, donc mort, chez Antoine ; ce contrôle demande le réseau ;
 //   4) le widget démarre dans un cadre à bac à sable comme celui d'un document Grist, avec et sans allow-same-origin ;
@@ -88,7 +88,9 @@ const directives = Object.fromEntries(policy.split(';').map(d => d.trim().split(
 
 check('index.html porte une politique, avant son premier script', !!policy && html.indexOf('Content-Security-Policy') < html.indexOf('<script'), { found: !!policy });
 check('script-src : ni script en ligne sans empreinte, ni joker, ni schéma entier', directives['script-src'] && !directives['script-src'].some(s => /^'unsafe-inline'$|^\*$|^https?:$|^data:$|^blob:$/.test(s)), directives['script-src']);
-check('object-src, base-uri, frame-src, form-action : « none »', ['object-src', 'base-uri', 'frame-src', 'form-action'].every(d => (directives[d] || []).join(' ') === "'none'"), directives);
+check('object-src, base-uri, form-action : « none »', ['object-src', 'base-uri', 'form-action'].every(d => (directives[d] || []).join(' ') === "'none'"), directives);
+// Le lecteur d'une vidéo que l'app seule pose au clic sur ▶ (js/video-frame.js, choix d'Antoine du 09/11) est la seule ouverture de `frame-src` : deux hôtes nommés, en https, ni joker ni schéma entier.
+check('frame-src : seulement youtube-nocookie.com et player.vimeo.com, en https (ni joker, ni schéma entier, ni \'self\')', JSON.stringify([...(directives['frame-src'] || [])].sort()) === JSON.stringify(['https://player.vimeo.com', 'https://www.youtube-nocookie.com']), directives['frame-src']);
 check('la politique ne limite ni les styles, ni les polices, ni les images, ni les connexions', !['default-src', 'style-src', 'font-src', 'img-src', 'connect-src', 'media-src'].some(d => d in directives), Object.keys(directives));
 
 const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
@@ -143,6 +145,8 @@ const servePlotly = async route => {
 await context.addInitScript({ path: join(ROOT, 'dev-tests', 'gfs-stub.js') });
 await context.addInitScript(() => { window.__gfsStub.mode = 'vendorise'; });
 await context.route('**/vendor/plotly/2.13.2/plotly-basic.min.js', servePlotly);
+// Un faux lecteur pour les deux sites que `frame-src` nomme : rien n'est demandé aux vrais (le cloud ne les joint pas, et l'essai ne regarde que la politique).
+for (const pattern of ['https://www.youtube-nocookie.com/**', 'https://player.vimeo.com/**']) await context.route(pattern, route => route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<!doctype html><title>faux lecteur</title><p>faux lecteur</p>' }));
 await context.route(PLOTLY_CDN, servePlotly);
 
 await page.goto(`${BASE}/index.html?gfs=0`, { waitUntil: 'load' });
@@ -236,7 +240,25 @@ await attempt('un script d\'une autre adresse ne se charge pas', 'script-src', a
 await attempt('un script d\'une bibliothèque non figée du même CDN ne se charge pas', 'script-src', async () => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.8.3/angular.min.js'; document.body.appendChild(s); });
 await attempt('une adresse javascript: ne court pas', 'script-src', async host => { host.innerHTML = '<a href="javascript:window.__csp.href=1">x</a>'; host.firstChild.click(); });
 await attempt('une balise de base ne change pas l\'adresse de base', 'base-uri', async host => { host.innerHTML = '<base href="https://exemple.invalid/">'; });
-await attempt('un cadre ne s\'ouvre pas', 'frame-src', async host => { host.innerHTML = '<iframe src="https://exemple.invalid/"></iframe>'; });
+await attempt('un cadre d\'un autre site ne s\'ouvre pas', 'frame-src', async host => { host.innerHTML = '<iframe src="https://exemple.invalid/"></iframe>'; });
+await attempt('le lecteur YouTube à cookies (youtube.com) ne s\'ouvre pas : seul le domaine sans cookie est nommé', 'frame-src', async host => { host.innerHTML = '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>'; });
+await attempt('une page de vimeo.com ne s\'ouvre pas en cadre : seul son lecteur (player.vimeo.com) est nommé', 'frame-src', async host => { host.innerHTML = '<iframe src="https://vimeo.com/76979871"></iframe>'; });
+await attempt('un lecteur nommé en http (sans chiffrement) ne s\'ouvre pas', 'frame-src', async host => { host.innerHTML = '<iframe src="http://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"></iframe>'; });
+// Les deux lecteurs nommés s'ouvrent : aucune violation (le contenu est celui d'un faux lecteur, servi par la route ci-dessus).
+const allowedFrames = await page.evaluate(async () => {
+  window.__cspViolations.length = 0;
+  const out = [];
+  for (const address of ['https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1', 'https://player.vimeo.com/video/76979871?dnt=1']) {
+    const frame = document.createElement('iframe');
+    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+    frame.src = address;
+    await new Promise(resolve => { frame.addEventListener('load', resolve); frame.addEventListener('error', resolve); document.body.appendChild(frame); setTimeout(resolve, 3000); });
+    out.push(address.slice(0, 32));
+    frame.remove();
+  }
+  return { opened: out, violations: window.__cspViolations.map(v => v.directive + ' ' + v.blocked) };
+});
+check('les deux lecteurs nommés (youtube-nocookie.com, player.vimeo.com) s\'ouvrent sans violation', allowedFrames.opened.length === 2 && allowedFrames.violations.length === 0, allowedFrames);
 await attempt('un objet ne se charge pas', 'object-src', async host => { host.innerHTML = '<object data="https://exemple.invalid/a"></object>'; });
 await attempt('un formulaire ne part pas', 'form-action', async host => { host.innerHTML = '<form action="https://exemple.invalid/" method="post"></form>'; host.firstChild.submit(); });
 

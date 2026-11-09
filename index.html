@@ -5,8 +5,8 @@
 <meta name="description" content="Publipostage+ : un widget Grist pour écrire des courriers, contrats et e-mails types, les remplir avec les lignes d'une table et les exporter en PDF, Word ou Excel. / A Grist widget to write template letters, contracts and e-mails, fill them with a table's rows and export them as PDF, Word or Excel.">
 <link rel="icon" type="image/jpeg" href="img/grist-factory-logo.jpg">
 <!-- Politique de sécurité du contenu (contrôle du 04/10, AUDIT_CODE.md §3.2) : même si du HTML piégé échappait au filtre (js/html-sanitize.js), le navigateur refuse tout script en ligne, tout
-     gestionnaire d'événement, toute adresse javascript:, tout script d'une autre adresse que celles-ci (l'adresse entière quand la bibliothèque est figée), tout cadre, objet, formulaire et toute
-     balise de base. Les trois scripts en ligne de cette page y sont cités par leur empreinte : en modifier un (la carte d'importation comprise) change son empreinte, et dev-tests/verify-code-hygiene.mjs
+     gestionnaire d'événement, toute adresse javascript:, tout script d'une autre adresse que celles-ci (l'adresse entière quand la bibliothèque est figée), tout cadre sauf ceux de YouTube (youtube-nocookie.com) et de Vimeo (player.vimeo.com), tout objet, formulaire et toute
+     balise de base. Ces deux cadres sont la SEULE ouverture de `frame-src` : le lecteur d'une vidéo que l'app seule (sans GFS) pose au clic sur ▶ (js/video-frame.js, choix du 09/11 : une baisse de sécurité voulue, deux sites nommés) ; hébergée par GFS, l'app ne pose aucun cadre. Les trois scripts en ligne de cette page y sont cités par leur empreinte : en modifier un (la carte d'importation comprise) change son empreinte, et dev-tests/verify-code-hygiene.mjs
      (groupe codeHygiene) dit laquelle écrire. esm.sh est ouvert en entier : le chemin de ses modules change à chaque nouvelle version de leur fabrication. 'unsafe-eval' reste, faute de mieux : le fichier
      que Grist sert (docs.getgrist.com/grist-plugin-api.js) est un bundle de développement dont chaque module s'évalue par eval(), et sans lui l'objet grist n'existe pas (dev-tests/verify-csp.mjs charge
      le vrai fichier). Styles, polices, images et connexions ne sont pas limités : le widget lit des images et des pièces jointes de n'importe quel site. Aucune feuille de style ni police ne vient
@@ -25,7 +25,7 @@
     https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/index.iife.js https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/charts.iife.js https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js
     https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js
     'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-CaAwaFvFWX8VFbPi3uUKphIC57YjuRgG0kV2S56pK9w=' 'sha256-dr2nJ9qlSEpVpFpN01rgQ3bZHAcSZWrebqvX0xSlX7I=';
-  object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
+  object-src 'none'; base-uri 'none'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; form-action 'none'">
 <!-- Enregistrement automatique coupé (pp_autosave_enabled = 'false', cf. js/main.js:isAutosaveEnabled) : le bouton Enregistrer est noir et blanc dès le PREMIER affichage, pas bleu le temps que
      les scripts finissent de se charger puis en fondu vers le noir. La classe est posée ICI, sur <html>, avant les feuilles de style et le corps : un script placé après le bouton attend que les
      feuilles de style soient chargées, et une image bleue passait parfois avant lui. js/main.js:syncSaveButtonLook garde ensuite cette classe et celle du bouton à jour (css/style.css). -->
@@ -112,7 +112,7 @@
 }
 </script>
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.69">
-<link rel="stylesheet" href="css/style.css?v=0.103">
+<link rel="stylesheet" href="css/style.css?v=0.104">
 <link rel="stylesheet" href="css/reader-guide.css?v=0.5">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.138">
 <link rel="stylesheet" href="css/toolbar-v2.css?v=0.81">
@@ -131,7 +131,7 @@
 <link rel="stylesheet" href="css/variable-calc.css?v=0.5">
 <link rel="stylesheet" href="css/conditional-style.css?v=0.3">
 <link rel="stylesheet" href="css/callout.css?v=0.2">
-<link rel="stylesheet" href="css/free-frame.css?v=0.25">
+<link rel="stylesheet" href="css/free-frame.css?v=0.26">
 <link rel="stylesheet" href="css/caption.css?v=0.4">
 <link rel="stylesheet" href="css/script-marks.css?v=0.2">
 <link rel="stylesheet" href="css/tab-indent.css?v=0.1">
@@ -996,7 +996,7 @@
 <script src="js/free-frame-toolbar.js?v=0.1"></script>
 <script src="js/free-frame.js?v=0.45"></script>
 <script src="js/slide-view.js?v=0.1"></script>
-<script src="js/video-frame.js?v=0.3"></script>
+<script src="js/video-frame.js?v=0.4"></script>
 <script src="js/slide-props.js?v=0.15"></script>
 <script src="js/slide-text.js?v=0.3"></script>
 <script src="js/slide-copies.js?v=0.1"></script>

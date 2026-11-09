@@ -301,3 +301,9 @@
 .tiptap .editor-image-view.editor-image-video .editor-image-video-play:focus-visible { outline: 2px solid var(--accent, #2f6fed); outline-offset: 2px; }
 img[data-video][data-pp-video-ready] { cursor: pointer; }
 img[data-video][data-pp-video-ready]:focus-visible { outline: 2px solid var(--accent, #2f6fed); outline-offset: 2px; }
+
+/* Le LECTEUR d'une vidéo posé par l'app seule (`.pp-video-layer`, js/video-frame.js : sans GFS, hors de son lecteur) : un calque fixe qui ne montre que la part du lecteur dans sa zone, et dedans le cadre du
+   fournisseur, à la taille du rectangle de la vidéo (placé en ligne par le suivi). Sous les bandeaux, le zoom, les barres, les menus et les fenêtres (jeton --z-video-player, css/style.css). Jamais imprimé. */
+.pp-video-layer { position: fixed; overflow: hidden; z-index: var(--z-video-player); background: var(--solid-neutral, #1b2430); }
+.pp-video-layer .pp-video-layer-frame { position: absolute; max-width: none; border: 0; background: var(--solid-neutral, #1b2430); }
+@media print { .pp-video-layer { display: none; } }
