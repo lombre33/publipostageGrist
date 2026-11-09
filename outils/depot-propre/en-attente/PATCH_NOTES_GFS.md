@@ -104,7 +104,7 @@ Ces fonctions chargent des bibliothèques que le widget seul ne charge pas, et G
 
 - **Ranger les PDF parmi les fichiers de GFS** : la section « Destination du PDF » du menu « Exporter » choisit de télécharger, de ranger dans GFS ou les deux.
 - **Ambiances de GFS** : la barre d'outils, les menus et les fenêtres prennent l'ambiance choisie dans GFS (Grist Factory, Pop, Papier, Brut, Néon) et sa couleur ; la page, le PDF et les exports gardent l'aspect du modèle.
-- **Ouvrir ou créer un modèle depuis l'explorateur de GFS** : un double-clic ouvre le modèle désigné ; « Nouveau » ouvre un modèle vierge du type choisi, et « Nouveau > Importer » importe le fichier Excel, Markdown ou PowerPoint que GFS donne.
+- **Ouvrir ou créer un modèle depuis l'explorateur de GFS** : un double-clic ouvre le modèle désigné ; « Nouveau » ouvre un modèle vierge du type choisi, et « Nouveau > Importer » importe le fichier Excel, Markdown, PowerPoint ou Word que GFS donne.
 - **Changer d'application ou de fichier dans GFS n'oublie rien** : GFS demande d'abord à l'application si elle peut se fermer ; avec l'enregistrement automatique allumé, ce qui attend est enregistré avant de partir, sans question ; sinon la question « Enregistrer / Ne pas enregistrer / Annuler » se pose, et « Annuler » garde la personne sur son document.
 - **Langue et préférences de GFS** : la langue est celle de GFS (un seul choix pour toutes ses applications) et les préférences de chaque personne sont gardées par GFS.
 - **La barre de GFS** : les fenêtres, la bande des diapositives, les menus, les info-bulles, le logo et la sortie de la Lecture épurée se placent à côté de la barre de GFS, à quelque bord qu'elle soit posée.
