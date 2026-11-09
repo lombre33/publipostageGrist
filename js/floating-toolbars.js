@@ -597,6 +597,10 @@ const FloatingToolbars = (function () {
         `<button data-action="zoom-in" title="${I18n.t('imgToolbar.grow')}">${Icons.svg('zoomIn')}</button>`,
         `<button data-action="reset" title="${I18n.t('imgToolbar.originalSize')}">${Icons.svg('resetSize')}</button>`,
         '<span class="v2-floating-sep"></span>',
+        // « Pivoter et retourner » (js/image-reshape.js) : un bouton qui ouvre un petit menu (pivoter à gauche, à droite, retourner) - quatre boutons de plus ne tiendraient pas dans la barre d'un panneau de
+        // 700 px ; grisé, avec sa raison, pour une image qui ne se redessine pas (syncImageReshapeButtons).
+        `<button data-action="reshape" class="v2-fill-chip v2-image-reshape-btn" title="${I18n.t('imgToolbar.reshape')}" aria-label="${I18n.t('imgToolbar.reshape')}" aria-haspopup="true" aria-expanded="false">${Icons.svg('imageReshape')}${Icons.svg('caretDown')}</button>`,
+        '<span class="v2-floating-sep"></span>',
         `<button data-action="align-left" title="${I18n.t('align.left')}">${Icons.svg('alignLeft')}</button>`,
         `<button data-action="align-center" title="${I18n.t('align.center')}">${Icons.svg('alignCenter')}</button>`,
         `<button data-action="align-right" title="${I18n.t('align.right')}">${Icons.svg('alignRight')}</button>`,
@@ -840,8 +844,35 @@ const FloatingToolbars = (function () {
     return { repeatUnavailableReason, toggleRepeat, wrapUnavailableReason };
   })();
 
-  const { imageToolbarAction, imageToolbarInput } = (function () {
+  const { imageToolbarAction, imageToolbarInput, closeReshapeMenu } = (function () {
     // Ce que fait un clic dans la barre de l'image, et son curseur d'opacité
+
+    // Le menu de « Pivoter et retourner » : trois lignes (à gauche, à droite, retourner) qui redessinent l'image (ImageReshape.run, un pas d'historique) et ferment le menu. Il est de la barre de l'image :
+    // un appui dedans ne la ferme pas (EditorCore.setOpenDropdownPanel avec son bouton). Fait au premier besoin.
+    let reshapeMenu = null;
+    function imageReshapeMenu() {
+      if (reshapeMenu) return reshapeMenu;
+      const rows = [['turn-left', 'imageTurnLeft', 'imgToolbar.turnLeft'], ['turn-right', 'imageTurnRight', 'imgToolbar.turnRight'], ['flip', 'imageFlip', 'imgToolbar.flip']]
+        .map(([action, icon, key]) => `<button type="button" class="v2-image-menu-row" data-action="${action}">${Icons.svg(icon)}<span>${I18n.t(key)}</span></button>`).join('');
+      reshapeMenu = EditorCore.createFloatingPanel('v2-color-dropdown v2-image-menu', rows, (action) => {
+        EditorCore.closeDropdownPanel();
+        ImageReshape.run(editor, action);
+      });
+      return reshapeMenu;
+    }
+    function toggleReshapeMenu() {
+      const btn = document.querySelector('.v2-image-toolbar button[data-action="reshape"]');
+      const menu = imageReshapeMenu();
+      if (EditorCore.getOpenDropdownPanel() === menu) { EditorCore.closeDropdownPanel(); return; }
+      if (!btn || btn.getAttribute('aria-disabled') === 'true') return;
+      EditorCore.closeDropdownPanel();
+      menu.show(btn);
+      EditorCore.setOpenDropdownPanel(menu, btn);
+    }
+    // La barre de l'image se referme (une autre sélection, un autre geste) : son menu avec elle.
+    function closeReshapeMenu() {
+      if (reshapeMenu && EditorCore.getOpenDropdownPanel() === reshapeMenu) EditorCore.closeDropdownPanel();
+    }
 
     function imageToolbarAction(action) {
       const selNode = selectedImageNode();
@@ -855,6 +886,8 @@ const FloatingToolbars = (function () {
         'zoom-out': () => updateSelectedImage({ width: Math.round((parseFloat(attrs.width) || 320) * 0.75) + 'px' }),
         'zoom-in': () => updateSelectedImage({ width: Math.round((parseFloat(attrs.width) || 320) * 1.25) + 'px' }),
         reset: () => updateSelectedImage({ width: '320px', align: null }),
+        // Le menu « Pivoter et retourner » (js/image-reshape.js) ; sans effet sur une image grisée (syncImageReshapeButtons).
+        reshape: toggleReshapeMenu,
         'align-left': () => alignOrSnap('left'),
         'align-center': () => alignOrSnap('center'),
         'align-right': () => alignOrSnap('right'),
@@ -888,7 +921,7 @@ const FloatingToolbars = (function () {
       if (role === 'opacity') updateSelectedImage({ opacity: Math.max(0.1, parseInt(value, 10) / 100) });
     }
 
-    return { imageToolbarAction, imageToolbarInput };
+    return { imageToolbarAction, imageToolbarInput, closeReshapeMenu };
   })();
 
   const { wireImageFloatingToolbar } = (function () {
@@ -903,6 +936,7 @@ const FloatingToolbars = (function () {
       ['left', 'center', 'right'].forEach(side => controls.setActive('align-' + side, attrs.align === side));
       ['normal', 'front', 'behind'].forEach(name => controls.setActive('layer-' + name, layer === name));
       syncImageWrapButton(controls, node);
+      syncImageReshapeButtons(controls, attrs);
       syncImageLayerLocks(controls);
       syncImageRepeatButton(controls, attrs);
       syncImageColumnButton(controls, attrs);
@@ -945,6 +979,15 @@ const FloatingToolbars = (function () {
       controls.setActive('var-loop', status.enabled && status.active);
       btn.setAttribute('aria-label', status.title);
     }
+    // « Pivoter et retourner » : grisé, avec sa raison, pour une image qui ne se redessine pas (ImageReshape.unavailableKey) ; jamais retiré.
+    function syncImageReshapeButtons(controls, attrs) {
+      const reason = ImageReshape.unavailableKey(attrs);
+      const btn = controls.button('reshape');
+      if (!btn) return;
+      const title = I18n.t(reason || 'imgToolbar.reshape');
+      controls.setDisabled('reshape', reason, title);
+      btn.setAttribute('aria-label', title);
+    }
     function syncImageWrapButton(controls, node) {
       // Grisé (jamais retiré) quand la bascule ne change rien ; .v2-hf-locked : css/toolbar-v2.css.
       const wrapReason = wrapUnavailableReason(node);
@@ -984,12 +1027,12 @@ const FloatingToolbars = (function () {
         // d'opacité), voir wireVariableFloatingToolbar pour le détail. La fermeture au clic hors du panneau est gérée par
         // hideFloatingContextToolbars (js/editor-core.js) ; ici, seule la sélection décide.
         document.querySelectorAll('.tiptap .editor-image-view.editor-image-selected').forEach(el => el.classList.remove('editor-image-selected'));
-        if (!selectedImageNode()) { panel.hide(); return; }
+        if (!selectedImageNode()) { closeReshapeMenu(); panel.hide(); return; }
         // La fenêtre de condition ouverte sur l'image garde sa barre masquée, comme celle d'une bulle (variableWindowOpen).
-        if (variableWindowOpen()) { panel.hide(); return; }
+        if (variableWindowOpen()) { closeReshapeMenu(); panel.hide(); return; }
         const dom = editor.view.nodeDOM(editor.state.selection.from);
         const img = dom && dom.querySelector && dom.querySelector('img');
-        if (!img) { panel.hide(); return; }
+        if (!img) { closeReshapeMenu(); panel.hide(); return; }
         dom.classList.add('editor-image-selected');
         // Éditeur masqué (Lecture, résumé d'un macro-modèle) : l'image reste la sélection mais n'a plus de boîte, et floating-ui poserait la barre en
         // haut à gauche (8, 8), par-dessus la barre du haut et son bouton « Exporter ». Une transaction qui arrive alors - le choix du type d'export

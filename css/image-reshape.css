@@ -1,0 +1,8 @@
+/* Le menu « Pivoter et retourner » de la barre de l'image (js/floating-toolbars.js, js/image-reshape.js). `.v2-color-dropdown` pose la boîte : fond, filet, ombre, empilement ; ici seulement ses
+   lignes, une icône et son nom, comme celles du menu d'un tableau lié (css/linked-table.css). */
+.v2-image-menu { box-sizing: border-box; width: 240px; padding: 4px; }
+.v2-image-menu-row { display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; padding: 5px 6px; border: 1px solid transparent; border-radius: var(--radius-xs, 4px); background: transparent; color: var(--text); font: 12.5px/1.3 var(--font-ui); text-align: left; cursor: pointer; }
+.v2-image-menu-row svg { flex: none; width: 15px; height: 15px; }
+.v2-image-menu-row:hover, .v2-image-menu-row:focus-visible { background: var(--surface-sunken); }
+/* Son bouton (`.v2-fill-chip`, comme « Bordures » : un appui dessus n'est pas un appui hors du menu) : l'icône et son chevron, plus petit. */
+.v2-image-reshape-btn svg:last-child { width: 10px; height: 10px; }
