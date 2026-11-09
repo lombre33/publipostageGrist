@@ -327,7 +327,7 @@ async function pass(colorScheme, lang) {
     ok: I18n.t('settings.rowAttachment.status.ok', { column: 'Pdf' }), missing: I18n.t('settings.rowAttachment.status.missing', { column: 'Pdf' }),
     locked: I18n.t('settings.rowAttachment.locked'), label: I18n.t('attach.label'),
     offColumn: I18n.t('attach.off.column'), offMerged: I18n.t('attach.off.merged'), offReadOnly: I18n.t('attach.off.readOnly'),
-    offGfs: I18n.t('attach.off.gfs'), lockedGfs: I18n.t('settings.rowAttachment.lockedGfs'), one: I18n.t('attach.one', { column: 'Pdf' }), generated: I18n.t('status.pdfGenerated'), replace: I18n.t('settings.rowAttachment.mode.replace'), add: I18n.t('settings.rowAttachment.mode.add'),
+    createLabel: I18n.t('settings.rowAttachment.create', { column: 'Pdf', table: 'Clients' }), offGfs: I18n.t('attach.off.gfs'), lockedGfs: I18n.t('settings.rowAttachment.lockedGfs'), one: I18n.t('attach.one', { column: 'Pdf' }), generated: I18n.t('status.pdfGenerated'), replace: I18n.t('settings.rowAttachment.mode.replace'), add: I18n.t('settings.rowAttachment.mode.add'),
   }));
   // La ligne courante du widget : la deuxième (« Martin »). Le faux serveur d'envoi de grist-stub.js (rien de mesuré dans un vrai Grist).
   await page.evaluate(() => { window.__gristStub.fireRecord({ id: 2, Nom: 'Martin' }, 'Clients'); window.__ra_server = window.__gristStub.installUploadServer(); });
@@ -343,10 +343,25 @@ async function pass(colorScheme, lang) {
   await page.waitForTimeout(300);
   const w0 = await widgetState(page);
   check(`${tag} : un vrai clic sur la case grisée ne coche rien et dit la raison au coin d'état`, w0.stored === null && w0.status === T.offColumn, w0);
+  // Choix d'Antoine du 09/11 : ce même clic ouvre Réglages sur l'onglet Vue, à la section « PDF joint à la ligne », le champ de la colonne au focus, le bouton « Créer la colonne » à portée.
+  const opened = await page.evaluate(() => {
+    const modal = document.getElementById('settings-modal');
+    const tab = document.querySelector('.settings-tab.active');
+    const panel = document.querySelector('.settings-panel[data-settings-panel="rowTemplate"]');
+    const section = document.getElementById('settings-rowattachment-section');
+    const top = section.getBoundingClientRect().top;
+    return { open: modal.style.display === 'flex', tab: tab && tab.getAttribute('data-settings-tab'), panelShown: !!panel && !panel.hidden, sectionTop: top, modalTop: modal.getBoundingClientRect().top, height: innerHeight, focusIn: section.contains(document.activeElement) };
+  });
+  check(`${tag} : ce même clic ouvre Réglages sur l'onglet Vue, la section « ${T.title} » en haut du panneau, le champ de la colonne au focus`,
+    opened.open && opened.tab === 'rowTemplate' && opened.panelShown && opened.sectionTop >= opened.modalTop - 1 && opened.sectionTop < opened.height && opened.focusIn, opened);
+  await shot(page, `${colorScheme}-${lang}-1b-reglages-ouverts-par-la-case`);
   await leaveMenu(page);
 
-  // === Réglages > Vue : la section ===
-  await openViewTab(page);
+  // === Réglages > Vue : la section (déjà ouverte par le clic ci-dessus) ===
+  const createBox = await reveal(page, '#settings-rowattachment-create');
+  const createFit = await page.evaluate(() => { const b = document.getElementById('settings-rowattachment-create'); return { text: b.textContent, clipped: b.scrollWidth > b.clientWidth + 1 || b.scrollHeight > b.clientHeight + 1, disabled: b.disabled }; });
+  check(`${tag} : le bouton « ${T.createLabel} » est entier dans le panneau, au premier plan, vivant, son texte n'est pas coupé`,
+    createBox.found && createBox.inViewport && createBox.onTop && createFit.text === T.createLabel && !createFit.clipped && !createFit.disabled, { createBox, createFit });
   const triggerBox = await reveal(page, '#settings-rowattachment-column + .ss-wrap .ss-trigger');
   const sec0 = await sectionState(page);
   check(`${tag} : Réglages > Vue : la section « ${T.title} » existe et sa liste s'atteint à la molette, entière dans le panneau et au premier plan`,
@@ -482,6 +497,32 @@ async function pass(colorScheme, lang) {
   await page.mouse.click(closeBox.x, closeBox.y);
   await page.waitForTimeout(350);
   await page.evaluate(() => { GfsLink.hosted = false; RowAttachment.render(); });
+
+  // === « Créer la colonne » sous la liste, au vrai clic (choix d'Antoine du 09/11) : une colonne de données Pièces jointes, choisie ===
+  await openViewTab(page);
+  await clearLog(page);
+  const createButton = await reveal(page, '#settings-rowattachment-create');
+  await page.mouse.click(createButton.x, createButton.y);
+  await page.waitForTimeout(700);
+  const made = await page.evaluate(() => {
+    const s = window.__gristStub;
+    const status = document.getElementById('settings-rowattachment-status');
+    const column = RowAttachment.getColumn();
+    return {
+      adds: s.getActionLog().filter(a => a[0] === 'AddVisibleColumn'), column, selectValue: document.getElementById('settings-rowattachment-column').value, optionColumn: (s.state.options || {}).pp_attach_column,
+      type: GristAPI.getColumnType('Clients', column), formula: GristAPI.isFormulaColumn('Clients', column), empty: GristAPI.isEmptyColumn('Clients', column),
+      statusText: status.textContent, statusShown: !status.hidden && status.getClientRects().length > 0, statusProblem: status.classList.contains('is-problem'),
+      wanted: I18n.t('settings.rowAttachment.created', { column, table: 'Clients' }),
+    };
+  });
+  check(`${tag} : « Créer la colonne » au vrai clic : UNE action AddVisibleColumn d'une colonne de données Pièces jointes dans « Clients »`,
+    made.adds.length === 1 && made.adds[0][1] === 'Clients' && made.adds[0][2] === 'Pdf' && made.adds[0][3].type === 'Attachments' && made.adds[0][3].isFormula === false, made);
+  check(`${tag} : la colonne créée est de données (ni formule ni colonne vide) et elle est choisie : liste, option du widget, phrase sous la liste`,
+    made.type === 'Attachments' && made.formula === false && made.empty === false && !!made.column && made.selectValue === made.column && made.optionColumn === made.column && made.statusShown && !made.statusProblem && made.statusText === made.wanted, made);
+  const madeRatio = await ratioOf(page, '#settings-rowattachment-status');
+  check(`${tag} : la phrase de la colonne créée se lit (contraste ≥ 4,5:1)`, madeRatio >= 4.5, madeRatio);
+  await shot(page, `${colorScheme}-${lang}-10-colonne-creee`);
+  await closeSettings(page);
   await context.close();
 }
 

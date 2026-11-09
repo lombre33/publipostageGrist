@@ -21,3 +21,8 @@
    La liste elle-même reprend la grille et la hauteur de celles de l'onglet Accès (css/access-rights.css). */
 .settings-exportdate-status, .settings-rowattachment-status { font-size: 12.5px; color: var(--text); margin: 10px 0 0; overflow-wrap: anywhere; }
 .settings-exportdate-status.is-problem, .settings-rowattachment-status.is-problem { color: var(--danger-ink); }
+/* « Créer la colonne … dans … » (js/row-attachment.js), sous la liste : la mesure des boutons de la section « Modèle par défaut de cette vue », mais le nom de la table peut être long : le texte se replie, il n'est jamais coupé. */
+.settings-rowattachment-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; }
+.settings-rowattachment-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; min-height: 26px; padding: 4px 10px; min-width: 0; max-width: 100%; text-align: left; overflow-wrap: anywhere; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-btn, var(--radius-sm)); cursor: pointer; }
+.settings-rowattachment-actions button:hover:not(:disabled) { background: var(--surface-sunken); }
+.settings-rowattachment-actions button:disabled { opacity: .55; cursor: default; }

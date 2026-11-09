@@ -155,7 +155,7 @@
       I18n.setLang('fr');
       stub().setVariables(TABLE, { Nom: 'Text' });
       await GristAPI.refreshSchema();
-      check(problems, 'aucune colonne de pièces jointes dans la table', await say(''), ['La table « ' + TABLE + ' » n’a aucune colonne de type Pièces jointes : ajoutez-en une dans Grist.', false]);
+      check(problems, 'aucune colonne de pièces jointes dans la table', await say(''), ['La table « ' + TABLE + ' » n’a aucune colonne de type Pièces jointes : créez-en une avec le bouton ci-dessous, ou ajoutez-en une dans Grist.', false]);
       return verdict(problems, {});
     });
 
@@ -195,11 +195,11 @@
       await pickType('pdfProtected');
       check(problems, 'PDF protégé : montrée', hidden(), false);
       await pickType('pdf');
-      check(problems, 'sans colonne : grisée et dit pourquoi', [greyed(row()), reason()], [true, 'Choisissez d’abord une colonne de type Pièces jointes dans Réglages > Vue.']);
+      check(problems, 'sans colonne : grisée et dit pourquoi', [greyed(row()), reason()], [true, 'Choisissez d’abord une colonne de type Pièces jointes dans Réglages > Vue : un clic ici ouvre Réglages.']);
       stub().setWidgetOptions({ [COLUMN_OPTION]: 'Pdf' }); await sleep(60); syncMenus();
       check(problems, 'avec une colonne : vivante, décochée', [live(row()), row().getAttribute('aria-checked'), reason()], [true, 'false', '']);
       stub().setWidgetOptions({ [COLUMN_OPTION]: 'Calcul' }); await sleep(60); syncMenus();
-      check(problems, 'colonne à formule : grisée', [greyed(row()), reason()], [true, 'Choisissez d’abord une colonne de type Pièces jointes dans Réglages > Vue.']);
+      check(problems, 'colonne à formule : grisée', [greyed(row()), reason()], [true, 'Choisissez d’abord une colonne de type Pièces jointes dans Réglages > Vue : un clic ici ouvre Réglages.']);
       stub().setWidgetOptions({ [COLUMN_OPTION]: 'Pdf' }); await sleep(60);
       const lines = value => { const select = el('v2-export-lines'); select.value = value; syncMenus(); };
       lines('zip');
@@ -215,9 +215,135 @@
       stub().setViewer(false); syncMenus();
       // En anglais (la page se recharge pour changer de langue : les textes de la page ne sont pas relus ici, seuls ceux que le code écrit à chaque synchro le sont).
       I18n.setLang('en'); stub().setWidgetOptions(null); await sleep(60); syncMenus();
-      check(problems, 'en anglais : la case et la raison', [I18n.t('attach.label'), LockReasons.reasonOf(row())], ['Attach to the row', 'First choose an Attachments column in Settings > View.']);
+      check(problems, 'en anglais : la case et la raison', [I18n.t('attach.label'), LockReasons.reasonOf(row())], ['Attach to the row', 'First choose an Attachments column in Settings > View: a click here opens Settings.']);
       I18n.setLang('fr'); syncMenus();
       lines('one');
+      return verdict(problems, {});
+    });
+
+  // --- Choix d'Antoine du 09/11 : la case grisée faute de colonne mène aux Réglages, et « Créer la colonne » sous la liste ---
+  const REASON_COLUMN = 'Choisissez d’abord une colonne de type Pièces jointes dans Réglages > Vue : un clic ici ouvre Réglages.';
+  const settingsState = () => {
+    const modal = el('settings-modal');
+    const tab = document.querySelector('.settings-tab.active');
+    const panel = document.querySelector('.settings-panel[data-settings-panel="rowTemplate"]');
+    const section = el('settings-rowattachment-section');
+    const top = section.getBoundingClientRect().top;
+    const frame = modal.getBoundingClientRect();
+    return { open: modal.style.display === 'flex', tab: tab && tab.getAttribute('data-settings-tab'), panelShown: !!panel && !panel.hidden, sectionIn: top >= frame.top - 1 && top < frame.bottom, focusIn: section.contains(document.activeElement) };
+  };
+  const OPENED = { open: true, tab: 'rowTemplate', panelShown: true, sectionIn: true, focusIn: true };
+  const closeSettings = async () => { if (el('settings-modal').style.display === 'flex') { el('settings-close').click(); await sleep(400); } };
+
+  scenario('rowattachment_greyed_box_without_a_usable_column_says_why_and_opens_settings_at_the_column_list_other_greys_only_say_why',
+    'Grisée faute de colonne utilisable (aucune choisie, colonne disparue, colonne à formule), la case « Joindre à la ligne » dit sa raison au coin d’état ET le clic (souris, Entrée) ouvre Réglages sur l’onglet Vue, à la section « PDF joint à la ligne », le champ de la colonne au focus ; elle reste grisée et décochée, rien n’est gardé. Lecture seule et PDF réuni disent leur raison sans ouvrir Réglages.',
+    async () => {
+      const problems = [];
+      await pickType('pdf');
+      check(problems, 'avant : Réglages fermés', settingsState().open, false);
+      el('status-msg').textContent = '';
+      row().click(); await sleep(150);
+      check(problems, 'sans colonne : la raison, et Réglages ouvert à la section avec le champ au focus', [statusText(), settingsState()], [REASON_COLUMN, OPENED]);
+      check(problems, 'sans colonne : grisée, décochée, rien de gardé', [greyed(row()), row().getAttribute('aria-checked'), PersonStore.get(KEY)], [true, 'false', null]);
+      await closeSettings();
+      // Une colonne disparue, puis une colonne à formule : même geste.
+      for (const gone of ['Disparue', 'Calcul']) {
+        stub().setWidgetOptions({ [COLUMN_OPTION]: gone }); await sleep(60); syncMenus();
+        el('status-msg').textContent = '';
+        row().click(); await sleep(150);
+        check(problems, gone + ' : la raison et Réglages ouvert', [greyed(row()), statusText(), settingsState()], [true, REASON_COLUMN, OPENED]);
+        await closeSettings();
+      }
+      // Le clavier : Entrée sur la case grisée fait comme le clic.
+      stub().setWidgetOptions(null); await sleep(60); syncMenus();
+      row().focus();
+      row().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await sleep(150);
+      check(problems, 'Entrée : Réglages ouvert à la section', settingsState(), OPENED);
+      await closeSettings();
+      // Réglages déjà ouvert sur un autre onglet : le clic le ramène à la section.
+      el('v2-btn-settings').click(); await sleep(60);
+      document.querySelector('.settings-tab[data-settings-tab="theme"]').click();
+      row().click(); await sleep(150);
+      check(problems, 'Réglages ouvert ailleurs : ramené à la section', settingsState(), OPENED);
+      await closeSettings();
+      // Les autres raisons disent seulement pourquoi.
+      stub().setWidgetOptions({ [COLUMN_OPTION]: 'Pdf' }); await sleep(60); syncMenus();
+      const lines = value => { const select = el('v2-export-lines'); select.value = value; syncMenus(); };
+      lines('merged');
+      el('status-msg').textContent = '';
+      row().click(); await sleep(150);
+      check(problems, 'PDF réuni : la raison, Réglages reste fermé', [statusText(), settingsState().open], ['Ce PDF réunit plusieurs lignes : il n’est joint à aucune.', false]);
+      lines('one');
+      stub().setViewer(true); syncMenus();
+      el('status-msg').textContent = '';
+      row().click(); await sleep(150);
+      check(problems, 'compte Lecteur : la raison, Réglages reste fermé', [statusText(), settingsState().open], ['Vous êtes en lecture seule : rien ne peut être joint.', false]);
+      return verdict(problems, {});
+    });
+
+  scenario('rowattachment_create_column_button_makes_a_data_attachments_column_in_the_table_and_chooses_it',
+    'Le bouton « Créer la colonne « Pdf » dans « {table} » » sous la liste de Réglages > Vue (français et anglais, avec le nom de la table) : UNE action AddVisibleColumn d’une colonne de DONNÉES de type Pièces jointes (isFormula faux, jamais une colonne vide), la colonne est choisie (option du widget, liste, case du menu vivante), le coin sous la liste le dit, Ctrl + Z défait le choix ; « Pdf » déjà pris : Grist rend « Pdf2 », c’est lui qui est choisi.',
+    async () => {
+      const problems = [];
+      // Une table sans colonne Pièces jointes.
+      stub().dropTable(TABLE);
+      stub().setVariables(TABLE, { Nom: 'Text', Texte: 'Text' });
+      stub().setRows(TABLE, ROWS);
+      await GristAPI.refreshSchema();
+      RowAttachment.render();
+      const button = el('settings-rowattachment-create');
+      check(problems, 'le bouton dit la colonne et la table, et il est vivant', [button.textContent, button.disabled, el('settings-rowattachment-status').textContent],
+        ['Créer la colonne « Pdf » dans « ' + TABLE + ' »', false, 'La table « ' + TABLE + ' » n’a aucune colonne de type Pièces jointes : créez-en une avec le bouton ci-dessous, ou ajoutez-en une dans Grist.']);
+      I18n.setLang('en'); RowAttachment.render();
+      check(problems, 'en anglais', button.textContent, 'Create the “Pdf” column in “' + TABLE + '”');
+      I18n.setLang('fr'); RowAttachment.render();
+      stub().clearActionLog();
+      ActionHistory.reset();
+      button.click(); await sleep(300);
+      const adds = stub().getActionLog().filter(a => a[0] === 'AddVisibleColumn');
+      check(problems, 'UNE action : une colonne de données de type Pièces jointes', adds, [['AddVisibleColumn', TABLE, 'Pdf', { type: 'Attachments', isFormula: false, label: 'Pdf' }]]);
+      check(problems, 'la colonne est de données, pas vide', [GristAPI.getColumnType(TABLE, 'Pdf'), GristAPI.isFormulaColumn(TABLE, 'Pdf'), GristAPI.isEmptyColumn(TABLE, 'Pdf')], ['Attachments', false, false]);
+      check(problems, 'elle est choisie : option, liste, état', [RowAttachment.getColumn(), stub().state.options[COLUMN_OPTION], el('settings-rowattachment-column').value, el('settings-rowattachment-status').textContent, el('settings-rowattachment-status').classList.contains('is-problem')],
+        ['Pdf', 'Pdf', 'Pdf', 'La colonne « Pdf » est créée dans « ' + TABLE + ' » et choisie : les PDF joints iront dedans.', false]);
+      await pickType('pdf');
+      check(problems, 'la case du menu Exporter est vivante', [live(row()), RowAttachment.offReason('')], [true, '']);
+      check(problems, 'un pas d’Annuler : le choix', ActionHistory.count(), 1);
+      ed().commands.focus('end'); await sleep(60);
+      ed().view.dom.dispatchEvent(keyEvent('z')); await ActionHistory.whenIdle(); await sleep(150);
+      check(problems, 'Ctrl + Z défait le choix, pas la colonne', [RowAttachment.getColumn(), GristAPI.getColumnType(TABLE, 'Pdf')], [null, 'Attachments']);
+      // « Pdf » est pris : Grist rend « Pdf2 ».
+      stub().setWidgetOptions(null); await sleep(60);
+      stub().setRows(TABLE, ROWS.map(r => Object.assign({}, r, { Pdf: ['L'] })));
+      RowAttachment.render();
+      stub().clearActionLog();
+      button.click(); await sleep(300);
+      check(problems, '« Pdf » pris : « Pdf2 » créée et choisie', [stub().getActionLog().filter(a => a[0] === 'AddVisibleColumn').length, RowAttachment.getColumn(), GristAPI.getColumnType(TABLE, 'Pdf2')], [1, 'Pdf2', 'Attachments']);
+      return verdict(problems, {});
+    });
+
+  scenario('rowattachment_create_column_button_tells_a_refusal_and_creates_nothing_and_is_greyed_when_read_only',
+    'Sans droit sur la structure du document (Grist : « Blocked by… ») le bouton le dit en rouge sous la liste, rien n’est choisi ; une autre panne dit que la colonne n’a pas pu être créée et le bouton redevient cliquable ; sur un compte Lecteur le bouton est grisé et ne fait rien.',
+    async () => {
+      const problems = [];
+      stub().setVariables(TABLE, { Nom: 'Text' });
+      await GristAPI.refreshSchema();
+      RowAttachment.render();
+      const button = el('settings-rowattachment-create');
+      const status = () => [el('settings-rowattachment-status').textContent, el('settings-rowattachment-status').classList.contains('is-problem'), RowAttachment.getColumn()];
+      stub().denyStructure(true);
+      button.click(); await sleep(250);
+      check(problems, 'refus des droits : dit en rouge, rien de choisi', status(), ['Grist refuse de créer la colonne dans « ' + TABLE + ' » : les droits sur la structure du document manquent. Demandez à un propriétaire du document.', true, null]);
+      check(problems, 'aucune colonne écrite', stub().getActionLog().filter(a => a[0] === 'AddVisibleColumn').length, 0);
+      stub().denyStructure(false);
+      const real = grist.docApi.applyUserActions;
+      grist.docApi.applyUserActions = async () => { throw new Error('panne'); };
+      try { button.click(); await sleep(250); } finally { grist.docApi.applyUserActions = real; }
+      check(problems, 'autre panne : la colonne n’a pas pu être créée, le bouton redevient vivant', [status(), button.disabled], [['La colonne n’a pas pu être créée dans « ' + TABLE + ' ».', true, null], false]);
+      stub().setViewer(true); RowAttachment.render();
+      stub().clearActionLog();
+      check(problems, 'compte Lecteur : bouton grisé', button.disabled, true);
+      button.click(); await sleep(150);
+      check(problems, 'compte Lecteur : rien n’est écrit', stub().getActionLog().length, 0);
       return verdict(problems, {});
     });
 
@@ -239,8 +365,8 @@
           [greyed(row()), row().getAttribute('aria-checked'), LockReasons.reasonOf(row())],
           [true, 'false', 'Désactivé pour le moment dans Grist Factory Suite : le PDF n’y est pas joint à la ligne.']);
         check(problems, 'dans GFS : la section de Réglages est grisée avec la mention de GFS, pas celle de la lecture seule',
-          [el('settings-rowattachment-column').disabled, el('settings-rowattachment-mode').disabled, el('settings-rowattachment-locked').hidden, el('settings-rowattachment-locked-gfs').hidden],
-          [true, true, true, false]);
+          [el('settings-rowattachment-column').disabled, el('settings-rowattachment-mode').disabled, el('settings-rowattachment-locked').hidden, el('settings-rowattachment-locked-gfs').hidden, el('settings-rowattachment-create').disabled],
+          [true, true, true, false, true]);
         check(problems, 'dans GFS : la jointure ne s’applique pas, même cochée', [RowAttachment.active(), PdfDelivery.plan().attach], [false, false]);
         const report = await RowAttachment.attachAll(TABLE, [item(0, 1, 'a.pdf')]);
         check(problems, 'dans GFS : rien ne part (aucun jeton, aucun envoi, aucune écriture)', [report, server.requests.length, stub().state.tokenCalls.length, writes().length], [null, 0, 0, 0]);
@@ -267,7 +393,7 @@
       // Sans colonne : grisée, le clic ne coche rien et dit pourquoi.
       ActionHistory.reset();
       row().click(); await sleep(40);
-      check(problems, 'grisée : rien de gardé, la raison au coin d’état', [PersonStore.get(KEY), ActionHistory.count(), statusText()], [null, 0, 'Choisissez d’abord une colonne de type Pièces jointes dans Réglages > Vue.']);
+      check(problems, 'grisée : rien de gardé, la raison au coin d’état', [PersonStore.get(KEY), ActionHistory.count(), statusText()], [null, 0, 'Choisissez d’abord une colonne de type Pièces jointes dans Réglages > Vue : un clic ici ouvre Réglages.']);
       stub().setWidgetOptions({ [COLUMN_OPTION]: 'Pdf' }); await sleep(60); syncMenus();
       row().click(); await sleep(40);
       check(problems, 'coché', [PersonStore.get(KEY), row().getAttribute('aria-checked'), RowAttachment.isOn(), RowAttachment.active(), ActionHistory.count()], ['1', 'true', true, true, 1]);
@@ -291,7 +417,7 @@
       // Grisée, Entrée dit la raison comme le clic.
       stub().state.options = stub().state.options; el('status-msg').textContent = '';
       pressRow('Enter'); await sleep(40);
-      check(problems, 'grisée : Entrée dit la raison', statusText(), 'Choisissez d’abord une colonne de type Pièces jointes dans Réglages > Vue.');
+      check(problems, 'grisée : Entrée dit la raison', statusText(), 'Choisissez d’abord une colonne de type Pièces jointes dans Réglages > Vue : un clic ici ouvre Réglages.');
       stub().setWidgetOptions({ [COLUMN_OPTION]: 'Pdf' }); await sleep(60); syncMenus();
       check(problems, 'colonne revenue : cochée de nouveau', [row().getAttribute('aria-checked'), RowAttachment.active(), PdfDelivery.plan().attach], ['true', true, true]);
       ActionHistory.reset();

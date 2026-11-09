@@ -23,6 +23,8 @@
 //     (`GFS_REFUSE`, `GFS_LECTURE_SEULE`, `GFS_INACTIF`, `GFS_INCONNU`…) : les fichiers pas encore joints sont des échecs de raison 'gfs'.
 //   RowAttachment.sync(flyout, lines) / wire(flyout, after) -> la case du menu Exporter (grisée avec sa raison, jamais retirée)
 //   RowAttachment.wirePanel() / render() -> la section de Réglages > Vue
+//   RowAttachment.createColumn() -> crée une colonne Pièces jointes de données (AddVisibleColumn « Pdf ») dans la table de la vue et la choisit (le bouton sous la liste) ; RowAttachment.showColumnSetting() -> ouvre Réglages > Vue sur la section
+//     (le clic de la case du menu Exporter grisée faute de colonne)
 const RowAttachment = (function () {
   const COLUMN_OPTION = 'pp_attach_column';
   const MODE_OPTION = 'pp_attach_mode';
@@ -41,10 +43,16 @@ const RowAttachment = (function () {
   const MODE_SELECT_ID = 'settings-rowattachment-mode';
   const TOKEN_MARGIN_MS = 15000;    // un jeton qui expire dans moins que cela est redemandé avant l'envoi suivant (le même export)
   const MENU_ROW_ID = 'v2-export-attach';
+  const CREATE_BUTTON_ID = 'settings-rowattachment-create';
+  const NEW_COLUMN = 'Pdf';          // le nom demandé à Grist pour la colonne créée ; pris, Grist rend « Pdf2 » : c'est l'identifiant rendu qui est choisi
+  const SETTINGS_TAB = 'rowTemplate';   // l'onglet « Vue » de Réglages (data-settings-tab)
 
   let column = null;               // identifiant de la colonne choisie (texte) ou null
   let mode = ORIGIN_MODE;          // 'replace' ou 'add'
   let search = null;               // la liste avec recherche de la colonne (SearchSelect), absente quand le composant ne s'est pas attaché
+  let creating = false;            // « Créer la colonne » est en cours (le bouton est grisé, un second clic ne part pas)
+  let notice = null;               // { text, problem } : ce que « Créer la colonne » vient de dire sous la liste, jusqu'au prochain changement ; sinon l'état se lit dans la colonne choisie
+  let greyReason = '';             // la raison du grisé de la case du menu Exporter à la dernière synchro ('' : elle n'est pas grisée)
   // Ce que cet écran vient d'écrire dans les options : Grist le renvoie par onOptions, parfois après un choix plus récent (même garde que js/export-date.js).
   const columnEchoes = GristAPI.createEchoGuard();
   const modeEchoes = GristAPI.createEchoGuard();
@@ -363,22 +371,50 @@ const RowAttachment = (function () {
     const row = flyout && flyout.querySelector('#' + MENU_ROW_ID);
     if (!row) return;
     const reason = offReason(lines);
+    greyReason = reason;
     row.setAttribute('aria-checked', isOn() && !reason ? 'true' : 'false');
     row.classList.toggle('v2-hover-row-disabled', !!reason);
     if (reason) row.setAttribute('aria-disabled', 'true'); else row.removeAttribute('aria-disabled');
-    LockReasons.set(row, 'mode', reason ? I18n.t('attach.off.' + reason) : '');
+    // Grisée faute de colonne, la case est cliquable : son clic dit la raison ET mène à la liste des colonnes de Réglages (cause « explain » de js/lock-reasons.js : elle dit, elle n'arrête rien ; choix du porteur du
+    // 09/11). Les autres raisons (lecture seule, GFS, PDF réuni) arrêtent le clic et se disent seulement.
+    const explains = reason === 'column';
+    row.toggleAttribute('data-explains', explains);
+    LockReasons.set(row, 'mode', reason && !explains ? I18n.t('attach.off.' + reason) : '');
+    LockReasons.set(row, 'explain', explains ? I18n.t('attach.off.column') : '');
   }
   // Le menu se redessine à chaque survol (js/main.js:syncExportMenus) ; un changement de colonne ou de droits le tient d'accord sans attendre.
   let menuSync = null;
   const syncMenu = () => { if (menuSync) menuSync(); };
 
+  // Ouvre Réglages sur l'onglet Vue, à la section « PDF joint à la ligne », le champ de la colonne au focus : le geste de la personne, par les vrais boutons (comme js/shortcuts.js:openKeysList). Rend faux quand Réglages n'est pas là.
+  function showColumnSetting() {
+    const openButton = el('v2-btn-settings');
+    const tab = document.querySelector('.settings-tab[data-settings-tab="' + SETTINGS_TAB + '"]');
+    if (!openButton || !tab) return false;
+    if (!settingsOpen()) openButton.click();
+    tab.click();
+    renderPanel(true);
+    const section = el('settings-rowattachment-section');
+    if (section && typeof section.scrollIntoView === 'function') section.scrollIntoView({ block: 'start' });
+    const select = el(COLUMN_SELECT_ID);
+    if (search) search.focus(); else if (select && !select.disabled) select.focus();
+    return true;
+  }
+
   // Le clic sur la case, ou Entrée ou Espace : grisée, il ne change rien (la raison est dite par LockReasons) ; sinon la case se coche ou se décoche, un pas d'Annuler / Rétablir, et `after()` redessine les menus.
-  function wire(flyout, after) {
+  // Grisée faute de colonne, il dit la raison (`say`, le coin d'état) puis ouvre Réglages à la liste des colonnes. `say(texte)` : le coin d'état de la page.
+  function wire(flyout, after, say) {
     const row = flyout && flyout.querySelector('#' + MENU_ROW_ID);
     if (!row) return;
     menuSync = after;
     const toggle = () => {
-      if (row.classList.contains('v2-hover-row-disabled')) return;
+      if (row.classList.contains('v2-hover-row-disabled')) {
+        if (greyReason === 'column') {
+          if (typeof say === 'function') say(I18n.t('attach.off.column'));
+          showColumnSetting();
+        }
+        return;
+      }
       SettingsHistory.track(PERSON_SETTING, () => setOn(!isOn()));
       after();
     };
@@ -389,6 +425,39 @@ const RowAttachment = (function () {
       // Grisée, la case dit sa raison comme au clic (js/lock-reasons.js arrête le clic et la dit).
       if (row.classList.contains('v2-hover-row-disabled')) row.click(); else toggle();
     });
+  }
+
+  // === Créer la colonne (Réglages > Vue, le bouton sous la liste ; choix du porteur du 09/11) ===
+  // Crée dans la table de la vue une colonne Pièces jointes et la choisit pour recevoir les PDF. Une colonne de DONNÉES (`isFormula` faux), jamais une colonne « vide » de Grist, que GFS refuse (js/pdf-delivery.js) ;
+  // `AddVisibleColumn` (et non `AddColumn`, masquée dans les sections) pour que la personne la voie dans ses vues. Chez GFS, le manifeste de l'app permet d'écrire dans toutes les tables de la personne et le courtier laisse passer
+  // `AddVisibleColumn` (contrat 3.3, points 2, 3 et 8) ; en lecture seule, ou sans droit sur la structure du document, Grist refuse : c'est dit sous la liste, rien n'est choisi. Grist peut renommer la colonne (« Pdf2 » si « Pdf » existe) :
+  // l'identifiant rendu est lu, puis relu dans le schéma, avant d'être choisi. Le choix est UN pas d'Annuler ; la colonne, elle, est une écriture dans la structure du document (l'Annuler de Grist la retire).
+  async function createColumn() {
+    const table = GristAPI.getCurrentTableId();
+    if (creating || !table || isReadOnly() || blockedByGfs()) return;
+    creating = true;
+    notice = null;
+    renderPanel(true);
+    let created = null;
+    try {
+      const before = GristAPI.getColumns(table).slice();
+      const result = await grist.docApi.applyUserActions([['AddVisibleColumn', table, NEW_COLUMN, { type: COLUMN_TYPE, isFormula: false, label: NEW_COLUMN }]]);
+      const given = result && result.retValues && result.retValues[0];
+      await GristAPI.refreshSchema();
+      const now = GristAPI.getColumns(table);
+      created = given && typeof given.colId === 'string' && now.indexOf(given.colId) !== -1 ? given.colId : (now.find(colId => before.indexOf(colId) === -1) || null);
+      if (!created) notice = { text: I18n.t('settings.rowAttachment.createFailed', { table }), problem: true };
+    } catch (e) {
+      console.error('[RowAttachment] colonne non créée', e);
+      notice = { text: I18n.t(GristAPI.isAccessRefusal(e) ? 'settings.rowAttachment.createDenied' : 'settings.rowAttachment.createFailed', { table }), problem: true };
+    }
+    creating = false;
+    if (created) {
+      SettingsHistory.track(COLUMN_SETTING, () => writeColumn(created));
+      notice = { text: I18n.t('settings.rowAttachment.created', { column: created, table }), problem: false };
+    }
+    renderPanel(true);
+    syncMenu();
   }
 
   // === Réglages > Vue > PDF joint à la ligne ===
@@ -429,9 +498,14 @@ const RowAttachment = (function () {
     if (search) search.sync();
     const modeSelect = el(MODE_SELECT_ID);
     if (modeSelect) { modeSelect.value = mode; modeSelect.disabled = locked; }
+    const createButton = el(CREATE_BUTTON_ID);
+    if (createButton) {
+      createButton.textContent = table ? I18n.t('settings.rowAttachment.create', { column: NEW_COLUMN, table }) : I18n.t('settings.rowAttachment.createNoTable');
+      createButton.disabled = locked || !table || creating;
+    }
     const status = el('settings-rowattachment-status');
     if (status) {
-      const info = statusOf(table, choices);
+      const info = notice || statusOf(table, choices);
       status.textContent = info.text;
       status.hidden = !info.text;
       status.classList.toggle('is-problem', info.problem);
@@ -447,8 +521,11 @@ const RowAttachment = (function () {
     if (!select) return;
     select.addEventListener('change', () => {
       if (isReadOnly() || blockedByGfs()) { renderPanel(true); return; }
+      notice = null;
       SettingsHistory.track(COLUMN_SETTING, () => writeColumn(select.value));
     });
+    const createButton = el(CREATE_BUTTON_ID);
+    if (createButton) createButton.addEventListener('click', createColumn);
     const modeSelect = el(MODE_SELECT_ID);
     if (modeSelect) modeSelect.addEventListener('change', () => {
       if (isReadOnly() || blockedByGfs()) { renderPanel(true); return; }
@@ -460,6 +537,7 @@ const RowAttachment = (function () {
     // Relue à chaque ouverture des Réglages : une colonne a pu être ajoutée, retirée ou renommée dans Grist depuis.
     const openBtn = el('v2-btn-settings');
     if (openBtn) openBtn.addEventListener('click', () => {
+      notice = null;
       renderPanel(true);
       GristAPI.refreshSchema().then(() => { renderPanel(true); syncMenu(); }).catch(() => {});
     });
@@ -468,5 +546,5 @@ const RowAttachment = (function () {
     renderPanel(true);
   }
 
-  return { init, getColumn, getMode, isOn, setOn, active, offReason, attachAll, sync, wire, wirePanel, render: () => renderPanel(true) };
+  return { init, getColumn, getMode, isOn, setOn, active, offReason, attachAll, sync, wire, wirePanel, createColumn, showColumnSetting, render: () => renderPanel(true) };
 })();

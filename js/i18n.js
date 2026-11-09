@@ -2239,7 +2239,12 @@ const I18n = (function () {
     'settings.rowAttachment.status.ok': { fr: 'Les PDF joints vont dans « {column} ».', en: 'Attached PDFs go to “{column}”.' },
     'settings.rowAttachment.status.missing': { fr: 'La colonne « {column} » n’existe plus : choisissez-en une autre ou aucune.', en: 'The column “{column}” no longer exists: pick another one or none.' },
     'settings.rowAttachment.status.unusable': { fr: '« {column} » n’est plus de type Pièces jointes, ou porte une formule : aucun PDF ne peut y être joint.', en: '“{column}” is no longer an Attachments column, or has a formula: no PDF can be attached to it.' },
-    'settings.rowAttachment.status.noColumns': { fr: 'La table « {table} » n’a aucune colonne de type Pièces jointes : ajoutez-en une dans Grist.', en: 'The table “{table}” has no Attachments column: add one in Grist.' },
+    'settings.rowAttachment.status.noColumns': { fr: 'La table « {table} » n’a aucune colonne de type Pièces jointes : créez-en une avec le bouton ci-dessous, ou ajoutez-en une dans Grist.', en: 'The table “{table}” has no Attachments column: create one with the button below, or add one in Grist.' },
+    'settings.rowAttachment.create': { fr: 'Créer la colonne « {column} » dans « {table} »', en: 'Create the “{column}” column in “{table}”' },
+    'settings.rowAttachment.createNoTable': { fr: 'Créer une colonne Pièces jointes', en: 'Create an Attachments column' },
+    'settings.rowAttachment.created': { fr: 'La colonne « {column} » est créée dans « {table} » et choisie : les PDF joints iront dedans.', en: 'The “{column}” column is created in “{table}” and chosen: attached PDFs will go there.' },
+    'settings.rowAttachment.createDenied': { fr: 'Grist refuse de créer la colonne dans « {table} » : les droits sur la structure du document manquent. Demandez à un propriétaire du document.', en: 'Grist refuses to create the column in “{table}”: you lack the rights on the document structure. Ask a document owner.' },
+    'settings.rowAttachment.createFailed': { fr: 'La colonne n’a pas pu être créée dans « {table} ».', en: 'The column could not be created in “{table}”.' },
     'settings.rowAttachment.locked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé.', en: 'You are read-only: this setting is locked.' },
     'settings.rowAttachment.lockedGfs': { fr: 'Désactivé pour le moment dans Grist Factory Suite : le PDF n’y est pas joint à la ligne. Ce réglage est verrouillé.', en: 'Turned off for now in Grist Factory Suite: the PDF is not attached to the row there. This setting is locked.' },
     'settings.rowAttachment.hint': {
@@ -3050,7 +3055,7 @@ const I18n = (function () {
     'status.exportDate.failed': { fr: 'Date non écrite dans « {column} » : Grist a refusé l’écriture.', en: 'Date not written to “{column}”: Grist refused the write.' },
     // La jointure du PDF à sa ligne Grist (js/row-attachment.js, js/pdf-delivery.js) : la case du menu Exporter, ses raisons de grisé, le coin d'état.
     'attach.label': { fr: 'Joindre à la ligne', en: 'Attach to the row' },
-    'attach.off.column': { fr: 'Choisissez d’abord une colonne de type Pièces jointes dans Réglages > Vue.', en: 'First choose an Attachments column in Settings > View.' },
+    'attach.off.column': { fr: 'Choisissez d’abord une colonne de type Pièces jointes dans Réglages > Vue : un clic ici ouvre Réglages.', en: 'First choose an Attachments column in Settings > View: a click here opens Settings.' },
     'attach.off.readOnly': { fr: 'Vous êtes en lecture seule : rien ne peut être joint.', en: 'You are read-only: nothing can be attached.' },
     'attach.off.merged': { fr: 'Ce PDF réunit plusieurs lignes : il n’est joint à aucune.', en: 'This PDF combines several rows: it is not attached to any.' },
     'attach.off.gfs': { fr: 'Désactivé pour le moment dans Grist Factory Suite : le PDF n’y est pas joint à la ligne.', en: 'Turned off for now in Grist Factory Suite: the PDF is not attached to the row there.' },

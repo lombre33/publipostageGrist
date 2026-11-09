@@ -3331,7 +3331,7 @@
     PdfDelivery.wire(exportFlyout, syncExportMenus);
     PdfDelivery.onProgress((current, total) => setStatus(I18n.t(total > 1 ? 'shelve.progress' : 'shelve.progressOne', { current, total })));
     // La case « Joindre à la ligne » est un réglage de la personne aussi (js/row-attachment.js) ; la jointure dit où elle en est au coin d'état.
-    RowAttachment.wire(exportFlyout, syncExportMenus);
+    RowAttachment.wire(exportFlyout, syncExportMenus, setStatus);
     PdfDelivery.onAttachProgress((current, total) => setStatus(I18n.t(total > 1 ? 'attach.progress' : 'attach.progressOne', { current, total })));
     exportFlyout.querySelectorAll('.v2-hover-row[data-export-lines]').forEach(row => {
       onRow(row, linesSelect, row.dataset.exportLines);
