@@ -389,6 +389,37 @@
     },
   });
 
+  cases.push({
+    id: 'comment_pose_resolve_and_delete_leave_no_suggestion_while_tracking',
+    description: "Suivi des modifications allumé (et option « Suivre la mise en forme » allumée aussi) : poser, résoudre, rouvrir puis supprimer un fil ne laisse aucune suggestion - le passage commenté n'est ni barré ni réinséré : un commentaire n'est pas une modification du texte",
+    run: async (h) => {
+      await savedTemplateWithText(h, 'Commentaires et suivi', 'Texte commenté sous suivi');
+      Editor.setFormatTracking(true);
+      Editor.setTrackChanges(true);
+      const clean = () => !Editor.hasPendingTrackedChanges() && !/<ins\b|<del\b|data-type="modification"/.test(Editor.getHTML());
+      const out = {};
+      const dialogs = h.stubDialogs({ confirm: true });
+      try {
+        const id = await commentFirstParagraph(h);
+        if (!id) return { pass: false, notes: 'aucune marque posée' };
+        out.posed = clean() && !!document.querySelector('.tiptap .comment-mark[data-comment-id="' + id + '"]');
+        await postFirstMessage(h, 'À traiter');
+        await pressPopupButton(h, '.v2-comment-popup-resolve');
+        out.resolved = clean() && /data-resolved="true"/.test(Editor.getHTML());
+        await pressPopupButton(h, '.v2-comment-popup-resolve');
+        out.reopened = clean() && !/data-resolved="true"/.test(Editor.getHTML());
+        await pressPopupButton(h, '.v2-comment-popup-delete');
+        out.deleted = clean() && Editor.getHTML().indexOf(id) === -1 && Editor.getHTML().indexOf('Texte commenté sous suivi') !== -1;
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + Editor.getHTML() };
+      } finally {
+        dialogs.restore();
+        await closePopupIfOpen(h);
+        Editor.setTrackChanges(false);
+        PersonStore.remove('pp_track_format');
+      }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.comments = cases;
 })();

@@ -203,6 +203,7 @@
       window.addEventListener('error', onError);
       const out = {};
       try {
+        Editor.setFormatTracking(true);   // un réglage de paragraphe suivi : l'option « Suivre la mise en forme » est éteinte par défaut
         for (const verdict of ['accept', 'reject']) {
           await setDoc(h, '<p>Aa</p><p>Bb</p>');
           const original = Editor.getHTML();
@@ -218,6 +219,7 @@
         }
       } finally {
         window.removeEventListener('error', onError);
+        PersonStore.remove('pp_track_format');
         if (Editor.isTrackChangesOn()) await h.clickButton('v2-btn-track-changes');
       }
       const pass = out.accept.tracked.list === 'Aa|Bb*' && out.accept.tracked.pending && out.accept.list === 'Aa|Bb*' && !/<ins|<del|data-type="modification"/.test(out.accept.html)

@@ -157,7 +157,7 @@ La [note de version](PATCH_NOTES.md) en donne la liste complète, une puce par f
 - **Enregistrement automatique** avec détection d'un conflit si quelqu'un d'autre a enregistré le modèle entre-temps.
 - **Historique des versions** : aperçu, comparaison, nom, restauration (l'état remplacé reste dans la liste).
 - **Commentaires** sur le texte sélectionné, avec réponses et résolution, partagés entre les personnes qui ouvrent le document.
-- **Suivi des modifications** (bêta) : les changements sont proposés dans le texte, puis acceptés ou refusés.
+- **Suivi des modifications** (bêta) : les changements sont proposés dans le texte, puis acceptés ou refusés. La mise en forme (gras, couleur, alignement, titres, listes) n'est suivie que si l'option « Suivre la mise en forme » du menu est allumée : éteinte, elle s'applique sans trace.
 - **Droits par personne** (lecture seule, export, commentaires), lus dans une table du document : un verrou d'interface, pas une protection des données.
 
 ### Exporter
@@ -237,7 +237,7 @@ Les images et les connexions ne sont pas limitées par la CSP : le widget lit de
 
 ### Ce que garde le navigateur
 
-Aucune donnée n'est stockée hors de Grist. Le navigateur ne garde (`localStorage`) que des préférences d'interface : la langue, le thème, la mise en forme des bulles et des puces dans l'éditeur, le rappel des images sans texte alternatif à l'export, les touches, les raccourcis et la vue de leur panneau, la messagerie du mode E-mail, l'état de l'enregistrement automatique, le dernier choix de l'assemblage avant impression, la destination des PDF exportés, la case « Joindre à la ligne » du menu Exporter, les autorisations et l'auteur du PDF protégé, la façon de donner son mot de passe et la colonne des mots de passe (jamais un mot de passe), la dernière version dont la fenêtre des nouveautés a été fermée, le niveau de zoom de la page des derniers modèles ouverts, la liste courte des modèles dont la place des images devant ou derrière le texte a déjà été relue (des signatures, jamais le contenu d'un modèle) et, pour suivre les renommages, les noms des tables et des colonnes de chaque document ouvert. Aucune donnée de ligne n'y est copiée.
+Aucune donnée n'est stockée hors de Grist. Le navigateur ne garde (`localStorage`) que des préférences d'interface : la langue, le thème, la mise en forme des bulles et des puces dans l'éditeur, le rappel des images sans texte alternatif à l'export, les touches, les raccourcis et la vue de leur panneau, la messagerie du mode E-mail, l'état de l'enregistrement automatique, l'option « Suivre la mise en forme » du suivi des modifications, le dernier choix de l'assemblage avant impression, la destination des PDF exportés, la case « Joindre à la ligne » du menu Exporter, les autorisations et l'auteur du PDF protégé, la façon de donner son mot de passe et la colonne des mots de passe (jamais un mot de passe), la dernière version dont la fenêtre des nouveautés a été fermée, le niveau de zoom de la page des derniers modèles ouverts, la liste courte des modèles dont la place des images devant ou derrière le texte a déjà été relue (des signatures, jamais le contenu d'un modèle) et, pour suivre les renommages, les noms des tables et des colonnes de chaque document ouvert. Aucune donnée de ligne n'y est copiée.
 
 La fenêtre des nouveautés s'ouvre d'elle-même une fois par navigateur, à la première ouverture après une version qui en a. En navigation privée, ou si le stockage est refusé, seul le bouton « Voir les nouveautés » de Réglages > Crédits l'ouvre.
 
@@ -496,7 +496,7 @@ The [release notes](PATCH_NOTES.md) give the complete list, one bullet per featu
 - **Autosave** with conflict detection if someone else saved the template in the meantime.
 - **Version history**: preview, comparison, naming, restoring (the replaced state stays in the list).
 - **Comments** on the selected text, with replies and resolution, shared between the people who open the document.
-- **Track changes** (beta): changes are proposed in the text, then accepted or rejected.
+- **Track changes** (beta): changes are proposed in the text, then accepted or rejected. Formatting (bold, color, alignment, headings, lists) is only tracked when the “Track formatting” option of the menu is on: when it is off, formatting applies without a trace.
 - **Per-person rights** (read-only, export, comments), read from a table of the document: an interface lock, not data protection.
 
 ### Exporting
@@ -576,7 +576,7 @@ Images and connections are not limited by the CSP: the widget reads images and a
 
 ### What the browser keeps
 
-No data is ever stored outside of Grist. The only things kept in the browser (`localStorage`) are interface preferences: the language, the theme, the formatting of bubbles and chips in the editor, the reminder about images without alternative text on export, the keys, the shortcuts and the view of their panel, the mail program of the Email mode, the autosave state, the last choice in the sheet assembly before printing, the PDF destination, the “Attach to the row” box of the Export menu, the permissions and author of the protected PDF, the way its password is given and the password column (never a password), the last version whose news window was closed, the page zoom level of the last templates opened, a short list of the templates whose images in front of or behind the text have already had their position checked (signatures, never a template's content) and, to follow renames, the names of the tables and columns of each open document. No row data is ever copied there.
+No data is ever stored outside of Grist. The only things kept in the browser (`localStorage`) are interface preferences: the language, the theme, the formatting of bubbles and chips in the editor, the reminder about images without alternative text on export, the keys, the shortcuts and the view of their panel, the mail program of the Email mode, the autosave state, the “Track formatting” option of track changes, the last choice in the sheet assembly before printing, the PDF destination, the “Attach to the row” box of the Export menu, the permissions and author of the protected PDF, the way its password is given and the password column (never a password), the last version whose news window was closed, the page zoom level of the last templates opened, a short list of the templates whose images in front of or behind the text have already had their position checked (signatures, never a template's content) and, to follow renames, the names of the tables and columns of each open document. No row data is ever copied there.
 
 The news window opens by itself once per browser, the first time the widget is opened after a version that has news. In a private window, or where the storage is refused, only the "See what's new" button of Settings > Credits opens it.
 

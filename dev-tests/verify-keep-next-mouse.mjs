@@ -338,6 +338,8 @@ async function run(theme) {
   await page.hover('#v2-btn-collab');
   await page.click('#v2-btn-track-changes');
   await page.waitForTimeout(250);
+  // « Suivre la mise en forme » est éteint par défaut : un réglage de paragraphe ne laisse alors aucune trace. Ici on teste le réglage suivi, l'option est allumée.
+  await page.evaluate(() => Editor.setFormatTracking(true));
   await clickText('Total HT');
   await pressRow();
   await closeMenu();
@@ -372,7 +374,7 @@ async function run(theme) {
   await page.waitForTimeout(300);
   const undoneTracked = await page.evaluate(() => ({ html: Editor.getHTML(), pending: Editor.hasPendingTrackedChanges() }));
   check(`${T}, suivi : un seul Ctrl+Z remet le réglage en attente`, /data-keep-next="true"/.test(undoneTracked.html) && /data-type="modification"/.test(undoneTracked.html) && undoneTracked.pending, undoneTracked);
-  await page.evaluate(() => { Editor.setTrackChanges(false); });
+  await page.evaluate(() => { Editor.setTrackChanges(false); PersonStore.remove('pp_track_format'); });
 }
 
 // La page ne change plus de langue en route : Réglages garde le choix et la recharge. Le script fait pareil - il garde la langue, recharge, attend le widget.

@@ -166,6 +166,8 @@ async function loadDoc(html) {
   await settle();
 }
 async function trackOn() {
+  // « Suivre la mise en forme » est éteint par défaut : le fond de case, la largeur de colonne et l'alignement ne laissent alors aucune trace. Ces essais portent sur la mise en forme suivie.
+  await page.evaluate(() => Editor.setFormatTracking(true));
   if (await page.evaluate(() => Editor.isTrackChangesOn())) return;
   await collabClick('#v2-btn-track-changes');
   await sleep(250);

@@ -325,6 +325,7 @@ if (has('README.md')) {
     pp_shortcuts_view: ['vue de leur panneau', 'view of their panel'],
     pp_mail_client: ['messagerie', 'mail program'],
     pp_autosave_enabled: ['enregistrement automatique', 'autosave'],
+    pp_track_format: ['suivre la mise en forme', 'track formatting'],
     pp_sheet_assembly: ['assemblage avant impression', 'sheet assembly before printing'],
     pp_export_destination: ['destination des pdf', 'pdf destination'],
     pp_export_attach: ['joindre à la ligne', 'attach to the row'],

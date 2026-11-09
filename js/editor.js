@@ -948,6 +948,10 @@ const Editor = (function () {
     trackChangesApi.toggleSuggestMode(editor);
   }
 
+  // L'option « Suivre la mise en forme » du menu « Édition collaborative » (js/track-changes.js) : éteinte, une mise en forme seule ne laisse aucune suggestion.
+  const isFormatTrackingOn = () => TrackChanges.isFormatTracking();
+  const setFormatTracking = on => TrackChanges.setFormatTracking(on);
+
   function selectedColumnsCrossMergedCell() {
     // La ou les colonnes de la sélection sont-elles traversées par une case fusionnée en largeur ? Les supprimer revient à réduire la largeur de
     // cette case et à retirer les autres cases de la colonne ; avec le suivi, le premier changement s'applique tout de suite et le second seulement à
@@ -1051,7 +1055,7 @@ const Editor = (function () {
     // Aperçu A4 rallumé, facteur d'ajustement changé... : la pagination est refaite, et la position des images d'un modèle chargé sans mise en page
     // se relit sur leur grille.
     refreshPaginationPreview,
-    refreshLayout, fitTablesToPage, openFootnoteEditorAt, isEditingHeaderFooter: HeaderFooterPreview.isEditingHeaderFooter, isTrackChangesOn, setTrackChanges,
+    refreshLayout, fitTablesToPage, openFootnoteEditorAt, isEditingHeaderFooter: HeaderFooterPreview.isEditingHeaderFooter, isTrackChangesOn, setTrackChanges, isFormatTrackingOn, setFormatTracking,
     hasPendingTrackedChanges, selectedColumnsCrossMergedCell, selectedRowsCrossMergedCell, getSuiviModificationsForSave, getSuggestionAuthors,
     onSuggestionAuthorsChange,
   };

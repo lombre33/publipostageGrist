@@ -7,7 +7,10 @@
 //   2) un vrai clic sur « Suivi des modifications » allume le suivi - la ligne ET le bouton, menu refermé -, le curseur reste dans le texte, un second clic l'éteint ;
 //   3) sans modification en attente « Tout accepter » et « Tout refuser » sont grisés ; une frappe en suivi les dégrise ; « Tout refuser » rend le texte d'origine, « Tout accepter » garde la frappe ;
 //   4) le clavier : Tab arrive sur le bouton (le menu s'ouvre), puis sur « Suivi des modifications » ; Entrée l'allume ;
-//   5) le texte de chaque ligne se lit (4,5:1 au moins sur le fond du menu), les deux thèmes.
+//   5) le texte de chaque ligne se lit (4,5:1 au moins sur le fond du menu), les deux thèmes ;
+//   6) « Suivre la mise en forme » (choix d'Antoine du 09/11, « Un seul interrupteur », éteinte par défaut) : entre « Suivi des modifications » et « Tout accepter » ; suivi allumé et option éteinte, Ctrl+B sur
+//      un mot ne laisse aucune suggestion ; un vrai clic sur la ligne l'allume (ligne enfoncée, menu refermé, curseur dans le texte), le même geste est alors suivi (passage barré, passage mis en gras) ; Tout refuser
+//      rend l'original ; un second clic l'éteint ; au clavier, Tab arrive sur la ligne après « Suivi des modifications » et Entrée la bascule.
 // Lancé par run-headless.mjs (groupe Node "collabMenuMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-collab-menu-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -175,16 +178,16 @@ for (const dark of [false, true]) {
   const fly = await rectOf(page, '#v2-collab-flyout');
   const title = await page.evaluate(() => document.querySelector('#v2-collab-flyout .v2-hover-flyout-label').textContent.trim());
   const rows = {};
-  for (const id of ['v2-btn-track-changes', 'v2-btn-accept-all', 'v2-btn-reject-all']) rows[id] = await rectOf(page, '#' + id);
+  for (const id of ['v2-btn-track-changes', 'v2-btn-track-format', 'v2-btn-accept-all', 'v2-btn-reject-all']) rows[id] = await rectOf(page, '#' + id);
   await page.screenshot({ path: `${SHOTS}/menu-ouvert-${theme}.png`, clip: { x: 0, y: 0, width: WIDTH, height: 260 } });
   check(`${theme} : le bouton « Édition collaborative » est dans la barre, visible, au premier plan`, !!btn && btn.onTop && btn.w > 10 && btn.h > 10 && btn.b < 200, btn);
   check(`${theme} : le survol du bouton ouvre le menu, titré « Édition collaborative »`, open1 && title === 'Édition collaborative', { open1, title });
   check(`${theme} : le menu tient tout entier dans le panneau (rien de coupé à droite ni en bas)`, !!fly && fly.l >= 0 && fly.r <= WIDTH && fly.b <= HEIGHT, fly && { l: fly.l, r: fly.r, b: fly.b });
-  check(`${theme} : les trois lignes sont dans le menu, dans l'ordre suivi, tout accepter, tout refuser, et reçoivent le clic au centre`,
-    Object.values(rows).every(r => r && r.onTop) && rows['v2-btn-track-changes'].y < rows['v2-btn-accept-all'].y && rows['v2-btn-accept-all'].y < rows['v2-btn-reject-all'].y, rows);
+  check(`${theme} : les quatre lignes sont dans le menu, dans l'ordre suivi, mise en forme, tout accepter, tout refuser, et reçoivent le clic au centre`,
+    Object.values(rows).every(r => r && r.onTop) && rows['v2-btn-track-changes'].y < rows['v2-btn-track-format'].y && rows['v2-btn-track-format'].y < rows['v2-btn-accept-all'].y && rows['v2-btn-accept-all'].y < rows['v2-btn-reject-all'].y, rows);
   const colors = await page.evaluate(() => {
     const bg = getComputedStyle(document.getElementById('v2-collab-flyout')).backgroundColor;
-    return ['v2-btn-track-changes', 'v2-btn-accept-all', 'v2-btn-reject-all'].map(id => ({ id, color: getComputedStyle(document.getElementById(id)).color, disabled: document.getElementById(id).disabled, bg }));
+    return ['v2-btn-track-changes', 'v2-btn-track-format', 'v2-btn-accept-all', 'v2-btn-reject-all'].map(id => ({ id, color: getComputedStyle(document.getElementById(id)).color, disabled: document.getElementById(id).disabled, bg }));
   });
   const ratios = colors.map(c => ({ id: c.id, ratio: Math.round(contrast(c.color, c.bg) * 100) / 100 }));
   check(`${theme} : le texte des lignes se lit sur le fond du menu (4,5:1 au moins)`, ratios.every(r => r.ratio >= 4.5), ratios);
@@ -228,7 +231,63 @@ for (const dark of [false, true]) {
   const s5 = await state(page);
   check(`${theme} : un second clic éteint le suivi, la ligne et le bouton`, !s5.on && !s5.rowLit && !s5.buttonLit, s5);
 
-  // 6) le clavier : Tab depuis la loupe arrive sur le bouton (le menu s'ouvre), puis sur « Suivi des modifications » ; Entrée l'allume
+  // 6) « Suivre la mise en forme » : éteinte au départ ; le suivi allumé, Ctrl+B sur un mot ne laisse aucune suggestion ; un vrai clic sur la ligne l'allume, et le même geste est suivi
+  const fmtState = () => page.evaluate(() => {
+    const row = document.getElementById('v2-btn-track-format');
+    return {
+      on: Editor.isFormatTrackingOn(), pressed: row.getAttribute('aria-pressed'), lit: row.classList.contains('is-active'), stored: PersonStore.get('pp_track_format'),
+      pending: Editor.hasPendingTrackedChanges(), html: Editor.getHTML(),
+      inEditor: !!document.activeElement && !!document.activeElement.closest && !!document.activeElement.closest('.ProseMirror'),
+    };
+  });
+  const wordCenter = (word) => page.evaluate((w) => {
+    const walker = document.createTreeWalker(document.querySelector('.ProseMirror p'), NodeFilter.SHOW_TEXT);
+    for (let n; (n = walker.nextNode());) {
+      const i = n.textContent.indexOf(w);
+      if (i < 0) continue;
+      const range = document.createRange(); range.setStart(n, i); range.setEnd(n, i + w.length);
+      const r = range.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+    return null;
+  }, word);
+  const boldWord = async (word) => {
+    await away(page);
+    const c = await wordCenter(word);
+    await page.mouse.dblclick(c.x, c.y);
+    await page.waitForTimeout(150);
+    await page.keyboard.press('Control+b');
+    await page.waitForTimeout(250);
+  };
+  await page.evaluate(() => { PersonStore.remove('pp_track_format'); Editor.setTrackChanges(false); Editor.setHTML('<p>Bonjour monde et fin</p>'); });
+  await page.waitForTimeout(350);
+  const f0 = await fmtState();
+  check(`${theme} : au départ « Suivre la mise en forme » est éteinte (ligne non enfoncée, rien de gardé)`, !f0.on && f0.pressed === 'false' && !f0.lit && f0.stored === null, f0);
+  await clickRow(page, '#v2-btn-track-changes');
+  await boldWord('monde');
+  const f1 = await fmtState();
+  check(`${theme} : option éteinte, suivi allumé : Ctrl+B sur un mot le met en gras sans aucune suggestion`, !f1.pending && /<strong>monde<\/strong>/.test(f1.html) && !/<ins|<del/.test(f1.html), f1);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(250);
+  await clickRow(page, '#v2-btn-track-format');
+  await away(page);
+  const f2 = await fmtState();
+  check(`${theme} : un vrai clic sur « Suivre la mise en forme » l'allume (ligne enfoncée, aria-pressed, réglage gardé), menu refermé, curseur resté dans le texte`, f2.on && f2.pressed === 'true' && f2.lit && f2.stored === '1' && f2.inEditor && !(await flyoutOpen(page)), f2);
+  await boldWord('monde');
+  const f3 = await fmtState();
+  check(`${theme} : option allumée, le même Ctrl+B est suivi : le mot barré, le mot mis en gras inséré`, f3.pending && /<del data-id="(\d+)">monde<\/del><ins data-id="\1"><strong>monde<\/strong><\/ins>/.test(f3.html), f3);
+  await clickRow(page, '#v2-btn-reject-all', 400);
+  await away(page);
+  const f4 = await fmtState();
+  check(`${theme} : « Tout refuser » rend le mot d'origine, sans gras ni suggestion`, !f4.pending && /^<p>Bonjour monde et fin<\/p>$/.test(f4.html), f4);
+  await clickRow(page, '#v2-btn-track-format');
+  await away(page);
+  const f5 = await fmtState();
+  check(`${theme} : un second clic éteint l'option (ligne relevée, réglage gardé à 0)`, !f5.on && f5.pressed === 'false' && !f5.lit && f5.stored === '0', f5);
+  await clickRow(page, '#v2-btn-track-changes');
+  await away(page);
+
+  // 7) le clavier : Tab depuis la loupe arrive sur le bouton (le menu s'ouvre), puis sur « Suivi des modifications », puis sur « Suivre la mise en forme » ; Entrée bascule
   await page.focus('#v2-btn-find');
   await page.keyboard.press('Tab');
   const k1 = await page.evaluate(() => ({ active: document.activeElement.id, open: getComputedStyle(document.getElementById('v2-collab-flyout')).display, expanded: document.getElementById('v2-btn-collab').getAttribute('aria-expanded') }));
@@ -240,7 +299,19 @@ for (const dark of [false, true]) {
   await page.waitForTimeout(250);
   const k3 = await state(page);
   check(`${theme} : Entrée allume le suivi`, k3.on && k3.buttonLit, k3);
-  await page.evaluate(() => { if (Editor.isTrackChangesOn()) document.getElementById('v2-btn-track-changes').click(); document.activeElement && document.activeElement.blur(); });
+  await page.evaluate(() => { if (Editor.isTrackChangesOn()) document.getElementById('v2-btn-track-changes').click(); PersonStore.remove('pp_track_format'); });
+  await away(page);
+  await page.focus('#v2-btn-find');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  const k4 = await page.evaluate(() => ({ active: document.activeElement.id, open: getComputedStyle(document.getElementById('v2-collab-flyout')).display }));
+  check(`${theme} : Tab suivant arrive sur « Suivre la mise en forme »`, k4.active === 'v2-btn-track-format' && k4.open === 'flex', k4);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  const k5 = await fmtState();
+  check(`${theme} : Entrée allume l'option, la ligne s'enfonce`, k5.on && k5.pressed === 'true' && k5.lit, k5);
+  await page.evaluate(() => { PersonStore.remove('pp_track_format'); if (Editor.isTrackChangesOn()) document.getElementById('v2-btn-track-changes').click(); document.activeElement && document.activeElement.blur(); });
   await away(page);
 
   await page.context().close();

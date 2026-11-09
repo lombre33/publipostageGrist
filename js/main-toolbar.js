@@ -21,7 +21,7 @@ const MainToolbar = (function () {
   const GRID_LOCKED_IDS = [
     'v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc',
     'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-linked-table', 'v2-btn-slide-text', 'v2-btn-video',
-    'v2-btn-track-changes', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-collab-group',
+    'v2-btn-track-changes', 'v2-btn-track-format', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-collab-group',
   ];
   const gridLockedIds = new Set();
   // Les cases d'un tableau lié à un modèle Grille suivent les règles d'une grille (js/linked-table.js) : le curseur dans l'un d'eux, ce qui poserait un tableau, des
@@ -231,6 +231,7 @@ const MainToolbar = (function () {
     // Menu « Édition collaborative » : le bouton porte l'icône des deux personnes, chaque ligne celle de l'ancien bouton qu'elle remplace.
     set('v2-btn-collab', 'collab');
     setRowIcon('v2-btn-track-changes', 'trackChanges');
+    setRowIcon('v2-btn-track-format', 'trackFormat');
     setRowIcon('v2-btn-accept-all', 'acceptAll'); setRowIcon('v2-btn-reject-all', 'rejectAll');
     setRowIcon('v2-btn-live', 'liveWrite');
     set('v2-highlight-icon', 'highlight');
@@ -345,6 +346,7 @@ const MainToolbar = (function () {
     // menu fermé, on voit qu'il est en marche.
     const tracking = Editor.isTrackChangesOn();
     setActive('v2-btn-track-changes', tracking);
+    syncTrackFormatRow();
     setActive('v2-btn-collab', tracking || LiveEntry.isLive());
     const hasPending = Editor.hasPendingTrackedChanges();
     setDisabled('v2-btn-accept-all', !hasPending, 'lock.noPending');
@@ -406,7 +408,7 @@ const MainToolbar = (function () {
       // Un macro-modèle grise aussi ce que l'e-mail laisse actif - le menu « Aa » en entier, donc l'exposant et l'indice que le lien écrit en caractères Unicode
       // (js/script-marks.js:toUnicode) -, et le menu « Lien et blocs de contenu » en entier. Annuler et Rétablir restent actifs : l'historique d'un macro-modèle
       // garde sa page et sa composition (js/history-markers.js, domaines « page » et « macro »).
-      [inMacroMode, ['v2-char-group', 'v2-btn-comment', 'v2-btn-insert-variable', 'v2-btn-find', 'v2-btn-track-changes',
+      [inMacroMode, ['v2-char-group', 'v2-btn-comment', 'v2-btn-insert-variable', 'v2-btn-find', 'v2-btn-track-changes', 'v2-btn-track-format',
         'v2-blocks-group', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-collab-group'], plain],
       // En-tête ou pied de page : un niveau de titre a un sens, pas la numérotation (titres du flux principal seul). Le sommaire et le saut de page y sont
       // grisés aussi, plus haut (ils ont déjà une condition pour l'e-mail et la grille).
@@ -602,10 +604,17 @@ const MainToolbar = (function () {
     // La raison est l'info-bulle de la ligne ; son clic, lui, explique (cause « explain » de js/lock-reasons.js : elle dit, elle n'arrête rien).
     LockReasons.set(row, 'explain', reason || '');
   }
+  // Ligne « Suivre la mise en forme » du menu « Édition collaborative » : enfoncée quand l'option est allumée (éteinte par défaut, js/track-changes.js).
+  function syncTrackFormatRow() {
+    const on = Editor.isFormatTrackingOn();
+    setActive('v2-btn-track-format', on);
+    const row = byId('v2-btn-track-format');
+    if (row) row.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
   // Ligne « Écriture en direct » du menu « Édition collaborative » (js/live-entry.js) : grisée avec sa raison quand elle n'a pas de sens ici (l'extension de GFS absente, un modèle pas encore enregistré
   // ou qui n'est pas un document, le document en lecture seule), cliquable pour l'expliquer ; allumée, elle s'enfonce et se lit « Arrêter l'écriture en direct ». Pendant le direct, le suivi des modifications
   // est fermé (ses marques ne se partagent pas) : ses trois lignes se grisent de la même façon, et leur clic le dit.
-  const LIVE_CLOSED_ROWS = ['v2-btn-track-changes', 'v2-btn-accept-all', 'v2-btn-reject-all'];
+  const LIVE_CLOSED_ROWS = ['v2-btn-track-changes', 'v2-btn-track-format', 'v2-btn-accept-all', 'v2-btn-reject-all'];
   function syncLiveRow() {
     const live = LiveEntry.isLive();
     document.body.classList.toggle('pp-live-on', live);
@@ -834,6 +843,7 @@ const MainToolbar = (function () {
     bind('v2-btn-redo', () => { HistoryMarkers.flush(); if (LiveEntry.redo()) editor.commands.focus(); else editor.chain().focus().redo().run(); });
     const unlessLive = action => () => { if (LiveEntry.isLive()) LiveEntry.explainLocked('trackChanges'); else action(); };
     bind('v2-btn-track-changes', unlessLive(() => editor.chain().focus().toggleSuggestMode().run()));
+    bind('v2-btn-track-format', unlessLive(() => { Editor.setFormatTracking(!Editor.isFormatTrackingOn()); syncTrackFormatRow(); editor.commands.focus(); }));
     // Variante découpée : celle de la bibliothèque est en O(N²) pour « tout accepter ou refuser » (js/track-changes.js).
     bind('v2-btn-accept-all', unlessLive(() => editor.chain().focus().acceptAllSuggestionsChunked().run()));
     bind('v2-btn-reject-all', unlessLive(() => editor.chain().focus().rejectAllSuggestionsChunked().run()));

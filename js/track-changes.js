@@ -6,7 +6,7 @@
 // (les résoudre), -reading.js (la Lecture et les exports) et -commands.js (les commandes de la lib). Celui-ci garde les métadonnées de chaque modification (qui, quand, quel numéro),
 // le pont avec Tiptap (createExtensions) et l'API que le reste du widget appelle : TrackChanges.
 const TrackChanges = (function () {
-  const { lib, extendForTracking, skipTracking, isSkipped, hasPendingSuggestions, collectPendingIds, suggestionMarksOf } = TrackChangesCore;
+  const { lib, extendForTracking, skipTracking, isSkipped, isFormattingOnly, hasPendingSuggestions, collectPendingIds, suggestionMarksOf } = TrackChangesCore;
   const { createMarks, createSerializerClass } = TrackChangesCore;
   const { selectionSuggestionIds } = TrackChangesSelection;
   const { keepOriginalNodeSettings } = TrackChangesResolve;
@@ -77,6 +77,20 @@ const TrackChanges = (function () {
     knownSuggestionIds().forEach(take);
     if (doc) doc.descendants(node => { suggestionMarksOf(node).forEach(mark => take(mark.attrs.id)); });
     return highest + 1;
+  }
+
+  // L'option « Suivre la mise en forme » (menu « Édition collaborative »), éteinte par défaut : suivie, une mise en forme de caractères écrit le passage deux fois (l'ancien barré, le nouveau remis en forme) et le document grossit du
+  // double sur un texte entier ; éteinte, gras, couleur, taille, alignement, titres, listes, fonds de case... s'appliquent sans trace, seuls le texte et les objets restent suivis. Un réglage par navigateur (PersonStore, ou
+  // GFS quand elle héberge le widget), pas par document ; une copie de session ne sert que si le stockage refuse (un clic doit toujours agir).
+  const FORMAT_TRACKING_KEY = 'pp_track_format';
+  let formatTrackingChosen = null;
+  function isFormatTracking() {
+    if (formatTrackingChosen !== null) return formatTrackingChosen;
+    return typeof PersonStore !== 'undefined' && PersonStore.get(FORMAT_TRACKING_KEY) === '1';
+  }
+  function setFormatTracking(on) {
+    const kept = typeof PersonStore !== 'undefined' && PersonStore.set(FORMAT_TRACKING_KEY, on ? '1' : '0');
+    formatTrackingChosen = kept ? null : !!on;
   }
 
   // Charge la bibliothèque et ses compagnons dans `lib` (cf. TrackChangesCore).
@@ -155,6 +169,8 @@ const TrackChanges = (function () {
           && !transaction.getMeta('history$')
           && !(skipMeta && 'skip' in skipMeta);
         if (!enabled) { next(transaction); return; }
+        // Option « Suivre la mise en forme » éteinte : une transaction de mise en forme seule passe telle quelle, sans suggestion.
+        if (isFormattingOnly(transaction) && !isFormatTracking()) { next(transaction); return; }
         try {
           const tracked = transformToSuggestionTransaction(transaction, editor.state, nextSuggestionId);
           keepOriginalNodeSettings(tracked, transaction);
@@ -200,6 +216,6 @@ const TrackChanges = (function () {
 
   return {
     extendForTracking, hasPendingSuggestions, collectPendingIds, computeMetadata, seedMetadata, authorsOfSuggestions, setKnownSuggestionIds, createExtensions, skipTracking,
-    isSkipped, selectionSuggestionIds, acceptedView, isBulkResolution,
+    isSkipped, selectionSuggestionIds, acceptedView, isBulkResolution, isFormatTracking, setFormatTracking,
   };
 })();

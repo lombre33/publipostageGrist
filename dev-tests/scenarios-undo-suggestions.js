@@ -44,6 +44,7 @@ window.EditorTestSuites.undoSuggestions = (function () {
     await h.sleep(300);
   }
   async function leave(h) {
+    PersonStore.remove('pp_track_format');
     if (Editor.isTrackChangesOn()) Editor.setTrackChanges(false);
     await h.resetEditor();
   }
@@ -152,6 +153,7 @@ window.EditorTestSuites.undoSuggestions = (function () {
       const tail = '<p>Un</p>' + Array.from({ length: 25 }, () => '<p>' + 'x'.repeat(100) + '</p>').join('') + '<p>Deux</p>';
       await fresh(h, ADDS(200) + tail);
       Editor.setTrackChanges(true);
+      Editor.setFormatTracking(true);   // un alignement suivi : l'option « Suivre la mise en forme » est éteinte par défaut
       await h.sleep(100);
       for (const text of ['Un', 'Deux']) {
         await caretIn(h, text, 2);

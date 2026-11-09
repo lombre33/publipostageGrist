@@ -1,6 +1,6 @@
 // Commentaires : sélectionner du texte et l'entourer d'un fil de discussion (façon Google Docs), le résoudre, le supprimer, y répondre. Un
 // commentaire s'ajoute par-dessus le texte sans jamais le modifier (une simple marque ProseMirror, comme le gras), là où le suivi des modifications
-// doit intercepter chaque frappe de l'éditeur.
+// doit intercepter chaque frappe de l'éditeur : poser, résoudre ou retirer la marque d'un fil passe donc hors suivi (TrackChanges.skipTracking), sinon le passage commenté ressortirait en texte supprimé puis réinséré.
 //
 // L'ancrage (quelle portée de texte est commentée, son état résolu ou actif) vit dans le document lui-même, par la marque `commentMark`
 // (js/editor-nodes.js:createCommentMark) : ProseMirror la déplace, l'étend et la découpe au fil des modifications, sans code de suivi. Le contenu du
@@ -321,14 +321,14 @@ const Comments = (function () {
       tr.removeMark(r.start, r.end, r.mark);
       tr.addMark(r.start, r.end, r.mark.type.create(Object.assign({}, r.mark.attrs, { resolved })));
     });
-    editor.view.dispatch(tr);
+    editor.view.dispatch(TrackChanges.skipTracking(tr));
   }
   function removeMarkFromDoc(commentId) {
     const ranges = findMarkRanges(commentId);
     if (!ranges.length) return false;
     const tr = editor.state.tr;
     ranges.forEach(r => tr.removeMark(r.start, r.end, r.mark));
-    editor.view.dispatch(tr);
+    editor.view.dispatch(TrackChanges.skipTracking(tr));
     return true;
   }
   function restoreMarkRanges(ranges) {
@@ -337,7 +337,7 @@ const Comments = (function () {
     if (!ranges.length) return;
     const tr = editor.state.tr;
     ranges.forEach(r => tr.addMark(r.start, r.end, r.mark));
-    editor.view.dispatch(tr);
+    editor.view.dispatch(TrackChanges.skipTracking(tr));
   }
 
   // Popup : mêmes mécaniques d'ouverture et de positionnement que #v2-footnote-popup (js/editor.js) ; il ne se ferme que par une action explicite,
@@ -584,7 +584,7 @@ const Comments = (function () {
     if (editor.state.selection.empty) { alert(I18n.t('comments.selectTextFirst')); return; }
     if (!currentModeleId) { alert(I18n.t('comments.saveTemplateFirst')); return; }
     const id = newCommentId();
-    startComposer(id, () => editor.chain().focus().setMark('commentMark', { id, resolved: false }).run());
+    startComposer(id, () => editor.chain().focus().command(({ tr }) => { TrackChanges.skipTracking(tr); return true; }).setMark('commentMark', { id, resolved: false }).run());
     openComposer(id, markElement(id) || editor.view.dom);
   }
 
@@ -743,7 +743,7 @@ const Comments = (function () {
     if (!currentModeleId) { alert(I18n.t('comments.saveTemplateFirst')); return; }
     if (popupCommentId) closePopup();
     const id = newCommentId();
-    startComposer(id, () => editor.view.dispatch(editor.state.tr.addMark(target.from, target.to, editor.schema.marks.commentMark.create({ id, resolved: false }))));
+    startComposer(id, () => editor.view.dispatch(TrackChanges.skipTracking(editor.state.tr.addMark(target.from, target.to, editor.schema.marks.commentMark.create({ id, resolved: false })))));
     readerRange = null;
     const sel = window.getSelection();
     if (sel) sel.removeAllRanges();

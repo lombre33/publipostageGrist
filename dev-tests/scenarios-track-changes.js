@@ -2740,6 +2740,208 @@
     },
   });
 
+  // --- L'option « Suivre la mise en forme » (menu « Édition collaborative », éteinte par défaut, Editor.setFormatTracking) ---
+  // Éteinte, une mise en forme seule (gras, couleur, alignement, titre, liste, citation, fond de case) s'applique sans suggestion ; le texte et les objets restent suivis. Allumée : comme avant (le passage barré puis réécrit mis
+  // en forme, une marque « modification » sur un réglage de bloc). Un document sans suggestion en HTML : ni <ins>, ni <del>, ni marque « modification ».
+  const FORMAT_KEY = 'pp_track_format';
+  const noSuggestion = () => !Editor.hasPendingTrackedChanges() && !/<ins\b|<del\b|data-type="modification"|data-tc-/.test(Editor.getHTML());
+  const formatOptionsOff = async (h, html) => {
+    PersonStore.remove(FORMAT_KEY);
+    await h.resetEditor();
+    await disableTrackChangesIfOn(h);
+    Editor.setHTML(html);
+    await h.sleep(200);
+    Editor.setTrackChanges(true);
+  };
+
+  cases.push({
+    id: 'trackchanges_format_option_is_off_by_default_and_the_menu_row_turns_it_on_and_off',
+    description: "L'option « Suivre la mise en forme » est éteinte tant que rien n'est choisi ; sa ligne du menu « Édition collaborative » la bascule (enfoncée, aria-pressed) et le choix est gardé (pp_track_format) ; éteindre le suivi ne l'éteint pas",
+    run: async (h) => {
+      try {
+        const out = {};
+        PersonStore.remove(FORMAT_KEY);
+        Editor.setHTML('<p>Texte</p>');
+        await selectDoc(h, 2);   // la barre d'outils relit l'option à chaque transaction
+        const row = () => document.getElementById('v2-btn-track-format');
+        out.rowExists = !!row() && /mise en forme|formatting/i.test(row().textContent);
+        out.defaultOff = Editor.isFormatTrackingOn() === false && PersonStore.get(FORMAT_KEY) === null && row().getAttribute('aria-pressed') === 'false' && !row().classList.contains('is-active');
+        await h.clickButton('v2-btn-track-format');
+        out.on = Editor.isFormatTrackingOn() === true && PersonStore.get(FORMAT_KEY) === '1' && row().getAttribute('aria-pressed') === 'true' && row().classList.contains('is-active');
+        await h.clickButton('v2-btn-track-format');
+        out.off = Editor.isFormatTrackingOn() === false && PersonStore.get(FORMAT_KEY) === '0' && row().getAttribute('aria-pressed') === 'false' && !row().classList.contains('is-active');
+        await h.clickButton('v2-btn-track-format');
+        await enableTrackChanges(h);
+        await disableTrackChangesIfOn(h);
+        out.keptWithTracking = Editor.isFormatTrackingOn() === true;
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { PersonStore.remove(FORMAT_KEY); await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_format_option_off_applies_character_formatting_without_suggestion',
+    description: 'Option éteinte, suivi allumé : gras, couleur et taille sur un mot ne laissent ni passage barré ni insertion (le document ne grossit pas), le mot reste écrit une fois, un seul Annuler défait le gras',
+    run: async (h) => {
+      try {
+        const out = {};
+        await formatOptionsOff(h, '<p>Un mot important ici</p>');
+        const ed = EditorCore.getEditor();
+        const from = textPos('important', 0);
+        const size = Editor.getHTML().length;
+        await selectDoc(h, from, from + 'important'.length);
+        ed.chain().focus().toggleBold().run();
+        await h.sleep(120);
+        out.bold = noSuggestion() && Editor.getHTML() === '<p>Un mot <strong>important</strong> ici</p>';
+        ed.chain().focus().setTextColor('#d9480f').run();
+        ed.chain().focus().setFontSize('24px').run();
+        await h.sleep(120);
+        const html = Editor.getHTML();
+        out.colorAndSize = noSuggestion() && /color: rgb\(217, 72, 15\)/.test(html) && /font-size: 24px/.test(html) && (html.match(/important/g) || []).length === 1;
+        out.noGrowth = html.length < size + 160;
+        for (let i = 0; i < 3; i++) { ed.commands.undo(); await h.sleep(60); }
+        out.undone = Editor.getHTML() === '<p>Un mot important ici</p>' && noSuggestion();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + html };
+      } finally { PersonStore.remove(FORMAT_KEY); await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_format_option_off_applies_block_formatting_without_suggestion',
+    description: 'Option éteinte, suivi allumé : alignement, titre, liste à puces, citation et « Garder avec le suivant » s\'appliquent sans suggestion, le texte de chaque bloc reste écrit une seule fois',
+    run: async (h) => {
+      try {
+        const out = {};
+        await formatOptionsOff(h, '<p>Premier bloc</p><p>Deuxième bloc</p><p>Troisième bloc</p><p>Quatrième bloc</p>');
+        const ed = EditorCore.getEditor();
+        const once = text => (Editor.getHTML().match(new RegExp(text, 'g')) || []).length === 1;
+        await caretIn(h, 'Premier', 2);
+        ed.chain().focus().setTextAlign('center').run();
+        await h.sleep(100);
+        out.align = noSuggestion() && /<p style="text-align: center;">Premier bloc<\/p>/.test(Editor.getHTML());
+        await caretIn(h, 'Deuxième', 2);
+        ed.chain().focus().setHeading({ level: 2 }).run();
+        await h.sleep(100);
+        out.heading = noSuggestion() && /<h2[^>]*>Deuxième bloc<\/h2>/.test(Editor.getHTML()) && once('Deuxième');
+        await caretIn(h, 'Troisième', 2);
+        ed.chain().focus().toggleBulletList().run();
+        await h.sleep(100);
+        out.list = noSuggestion() && /<ul[^>]*><li[^>]*><p[^>]*>Troisième bloc<\/p><\/li><\/ul>/.test(Editor.getHTML()) && once('Troisième');
+        await caretIn(h, 'Quatrième', 2);
+        ed.chain().focus().toggleBlockquote().run();
+        await h.sleep(100);
+        out.quote = noSuggestion() && /<blockquote[^>]*><p[^>]*>Quatrième bloc<\/p><\/blockquote>/.test(Editor.getHTML()) && once('Quatrième');
+        await caretIn(h, 'Premier', 2);
+        ed.chain().focus().updateAttributes('paragraph', { keepNext: true }).run();
+        await h.sleep(100);
+        out.keepNext = noSuggestion() && /data-keep-next|data-keepnext/i.test(Editor.getHTML());
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + Editor.getHTML() };
+      } finally { PersonStore.remove(FORMAT_KEY); await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_format_option_off_applies_a_cell_background_without_suggestion',
+    description: 'Option éteinte, suivi allumé : le fond d\'une case de tableau s\'applique sans marque « modification » ; allumée, la marque est posée comme avant',
+    run: async (h) => {
+      try {
+        const out = {};
+        const table = '<table><tbody><tr><td><p>A1</p></td><td><p>B1</p></td></tr></tbody></table>';
+        await formatOptionsOff(h, table);
+        const ed = EditorCore.getEditor();
+        await caretIn(h, 'A1', 1);
+        ed.chain().focus().setCellAttribute('backgroundColor', '#ffe066').run();
+        await h.sleep(100);
+        out.offNoSuggestion = noSuggestion() && /background-color: rgb\(255, 224, 102\)/.test(Editor.getHTML());
+        Editor.setFormatTracking(true);
+        Editor.setHTML(table);
+        await h.sleep(200);
+        await caretIn(h, 'A1', 1);
+        ed.chain().focus().setCellAttribute('backgroundColor', '#ffe066').run();
+        await h.sleep(100);
+        out.onSuggested = Editor.hasPendingTrackedChanges() && /data-tc-modification|data-type="modification"/.test(Editor.getHTML());
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { PersonStore.remove(FORMAT_KEY); await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_format_option_off_keeps_text_and_objects_tracked',
+    description: 'Option éteinte : taper, supprimer un mot, insérer une bulle ou un saut de page restent des suggestions ; un texte tapé puis mis en gras reste une seule insertion',
+    run: async (h) => {
+      try {
+        const out = {};
+        await formatOptionsOff(h, '<p>Garder ceci, retirer cela, fin.</p>');
+        const ed = EditorCore.getEditor();
+        ed.chain().focus('end').insertContent(' Ajout suivi.').run();
+        await h.sleep(100);
+        out.typed = /<ins\b[^>]*> Ajout suivi\.<\/ins>/.test(Editor.getHTML());
+        const from = textPos('retirer cela', 0);
+        await selectDoc(h, from, from + 'retirer cela'.length);
+        ed.chain().focus().deleteSelection().run();
+        await h.sleep(150);
+        out.deleted = /<del\b[^>]*>retirer cela<\/del>/.test(Editor.getHTML());
+        const added = textPos('Ajout suivi', 0);
+        await selectDoc(h, added, added + 'Ajout suivi'.length);
+        ed.chain().focus().toggleBold().run();
+        await h.sleep(120);
+        const html = Editor.getHTML();
+        out.boldInsertion = (html.match(/<ins\b/g) || []).length === 1 && /<strong>Ajout suivi<\/strong>/.test(html) && !/<del\b[^>]*>[^<]*Ajout/.test(html);
+        ed.chain().focus().setTextSelection(1).insertContent({ type: 'varBadge', attrs: { table: 'T', column: 'Nom', key: 'Nom' } }).run();
+        await h.sleep(120);
+        out.variable = /<ins\b[^>]*><span class="var-badge"/.test(Editor.getHTML());
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + Editor.getHTML() };
+      } finally { PersonStore.remove(FORMAT_KEY); await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_format_option_on_tracks_character_formatting_as_before',
+    description: 'Option allumée : un mot mis en gras est suivi comme avant (l\'ancien passage barré, le même passage mis en forme inséré, de même id) et « Tout refuser » rend l\'original',
+    run: async (h) => {
+      try {
+        const out = {};
+        await formatOptionsOff(h, '<p>Un mot important ici</p>');
+        Editor.setFormatTracking(true);
+        const ed = EditorCore.getEditor();
+        const from = textPos('important', 0);
+        await selectDoc(h, from, from + 'important'.length);
+        ed.chain().focus().toggleBold().run();
+        await h.sleep(120);
+        out.suggested = Editor.hasPendingTrackedChanges() && /<del data-id="(\d+)">important<\/del><ins data-id="\1"><strong>important<\/strong><\/ins>/.test(Editor.getHTML());
+        ed.chain().focus().rejectAllSuggestionsChunked().run();
+        await h.sleep(250);
+        out.rejected = Editor.getHTML() === '<p>Un mot important ici</p>' && noSuggestion();
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + Editor.getHTML() };
+      } finally { PersonStore.remove(FORMAT_KEY); await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_format_option_turned_off_leaves_pending_formatting_suggestions_resolvable',
+    description: 'Une mise en forme suivie avec l\'option allumée reste une suggestion quand on l\'éteint ensuite : « Tout refuser » rend l\'alignement d\'origine, « Tout accepter » le garde',
+    run: async (h) => {
+      try {
+        const out = {};
+        for (const accept of [false, true]) {
+          await formatOptionsOff(h, '<p>Un paragraphe à aligner</p>');
+          Editor.setFormatTracking(true);
+          const ed = EditorCore.getEditor();
+          await caretIn(h, 'paragraphe', 2);
+          ed.chain().focus().setTextAlign('right').run();
+          await h.sleep(100);
+          const pending = Editor.hasPendingTrackedChanges();
+          Editor.setFormatTracking(false);
+          if (accept) ed.chain().focus().acceptAllSuggestionsChunked().run(); else ed.chain().focus().rejectAllSuggestionsChunked().run();
+          await h.sleep(250);
+          const html = Editor.getHTML();
+          out[accept ? 'accepted' : 'rejected'] = pending && noSuggestion() && (accept ? /text-align: right/.test(html) : html === '<p>Un paragraphe à aligner</p>');
+        }
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { PersonStore.remove(FORMAT_KEY); await disableTrackChangesIfOn(h); }
+    },
+  });
+
   cases.push({
     id: 'trackchanges_macro_template_excluded_from_suivi',
     description: "Un macro-modèle (TypeModele='macro') n'a jamais de suiviModifications exploitable (null, jamais un objet) et verrouille les 3 boutons de suivi dans la barre - son JSON de composition ne passe jamais par l'éditeur suivi",
@@ -2767,6 +2969,17 @@
         notes: 'suiviModifications=' + JSON.stringify(cached && cached.suiviModifications) + ', editorUntouched=' + editorUntouched + ', verrouillé=' + locked,
       };
     },
+  });
+
+  // Les cas du reste de cette suite testent la mise en forme SUIVIE (gras, alignement, fond de case, largeur de colonne, « Garder avec le suivant »...) : l'option est allumée avant chacun, remise à son défaut après. Les cas de
+  // l'option elle-même (trackchanges_format_option_...) la règlent eux-mêmes.
+  cases.forEach((c) => {
+    if (/^trackchanges_format_option_/.test(c.id)) return;
+    const run = c.run;
+    c.run = async (h) => {
+      Editor.setFormatTracking(true);
+      try { return await run(h); } finally { PersonStore.remove(FORMAT_KEY); }
+    };
   });
 
   window.EditorTestSuites = window.EditorTestSuites || {};

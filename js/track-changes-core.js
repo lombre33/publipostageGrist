@@ -47,6 +47,26 @@ const TrackChangesCore = (function () {
     return !!meta && 'skip' in meta;
   }
 
+  // La mise en forme, pour l'option « Suivre la mise en forme » (js/track-changes.js) : les pas d'une transaction qui ne changent ni le texte ni un objet (image, bulle, puce, note), seulement la façon dont il est
+  // posé - une marque de caractère (gras, couleur, taille, police, lien), une marque ou un réglage de bloc (alignement, interligne, fond de case), un bloc qui change de type (titre, bloc de code) ou qui s'enveloppe
+  // ou se déballe (liste, citation). La bibliothèque suit une marque de caractère en supprimant le passage pour le réinsérer mis en forme (le texte est écrit deux fois), un bloc enveloppé de même :
+  // c'est ce poids que l'option évite. `jsonID` est posé par prosemirror-transform sur chaque classe de pas (Step.jsonID) : pas besoin d'importer les classes.
+  const FORMAT_STEP_IDS = ['addMark', 'removeMark', 'addNodeMark', 'removeNodeMark', 'attr'];
+  const holdsLeaf = fragment => {
+    let found = false;
+    fragment.descendants(node => { if (node.isLeaf) found = true; return !found; });
+    return found;
+  };
+  // `before` : le document avant le pas. Un pas qui entoure (replaceAround) ne change que des enveloppes quand ce qu'il retire ou ajoute autour du passage gardé ne contient ni texte ni objet ; une marque de
+  // suivi posée à la main n'est pas de la mise en forme.
+  function isFormattingStep(step, before) {
+    if (FORMAT_STEP_IDS.includes(step.jsonID)) return !step.mark || !isSuggestionMark(step.mark);
+    if (step.jsonID !== 'replaceAround') return false;
+    return !holdsLeaf(before.slice(step.from, step.gapFrom).content) && !holdsLeaf(before.slice(step.gapTo, step.to).content) && !holdsLeaf(step.slice.content);
+  }
+  // Vrai pour une transaction faite de mise en forme seule : un seul pas de texte (frappe, collage, Entrée, suppression) ou d'objet la rend suivie comme toujours.
+  const isFormattingOnly = transaction => transaction.steps.length > 0 && transaction.steps.every((step, index) => isFormattingStep(step, transaction.docs[index]));
+
   function lastNodeCarriesSuggestionMark(state) {
     const last = state.doc.lastChild;
     return !!last && last.marks.some(isSuggestionMark);
@@ -157,7 +177,7 @@ const TrackChangesCore = (function () {
   }
 
   return {
-    MARK_NAMES, isSuggestionMark, suggestionMarksOf, CELL_NODE_TYPES, cellMarkAttribute, cellMarkValue, lib, extendForTracking, skipTracking, isSkipped, lastNodeCarriesSuggestionMark,
+    MARK_NAMES, isSuggestionMark, suggestionMarksOf, CELL_NODE_TYPES, cellMarkAttribute, cellMarkValue, lib, extendForTracking, skipTracking, isSkipped, isFormattingOnly, lastNodeCarriesSuggestionMark,
     hasPendingSuggestions, hasInsertionOrDeletion, collectPendingIds, createMarks, createSerializerClass,
   };
 })();

@@ -1909,6 +1909,8 @@ const I18n = (function () {
     'trackChanges.acceptAll.aria': { fr: 'Accepter toutes les suggestions du document', en: 'Accept all suggestions in the document' },
     'trackChanges.rejectAll.tip': { fr: 'Tout refuser', en: 'Reject all' },
     'trackChanges.rejectAll.aria': { fr: 'Refuser toutes les suggestions du document', en: 'Reject all suggestions in the document' },
+    'trackFormat.tip': { fr: 'Suivre la mise en forme', en: 'Track formatting' },
+    'trackFormat.aria': { fr: 'Suivre aussi la mise en forme (gras, couleur, alignement, titres, listes) dans le suivi des modifications', en: 'Also track formatting (bold, color, alignment, headings, lists) in track changes' },
     // Barre flottante d'une modification (js/floating-toolbars.js:wireSuggestionFloatingToolbar) : le libellé du bouton, et son info-bulle, qui dit
     // combien de modifications il traite ({n} : celles de la sélection).
     'trackChanges.accept.label': { fr: 'Accepter', en: 'Accept' },

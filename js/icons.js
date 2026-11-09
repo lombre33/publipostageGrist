@@ -148,6 +148,8 @@ const Icons = (function () {
       variable: '<line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>',
       // Suivi des modifications : crayon (bouton bascule) + coche/croix (tout accepter/tout refuser), même style trait que le reste de la barre.
       trackChanges: '<path d="M4 20l1-4L15.5 5.5a2 2 0 0 1 3 0l0 0a2 2 0 0 1 0 3L8 19l-4 1z"/><path d="M13.5 7.5l3 3"/>',
+      // Suivre la mise en forme (js/main-toolbar.js, menu « Édition collaborative ») : un « A » et un crayon, le suivi appliqué à l'aspect du texte. Ni le crayon seul du suivi, ni le « A » de la couleur du texte.
+      trackFormat: '<path d="M3 19 8 6l5 13M5.2 15h5.6"/><path d="M15 20l.8-2.6 3.9-3.9a1.3 1.3 0 0 1 1.8 1.8l-3.9 3.9z"/>',
       acceptAll: '<path d="M5 13l4 4L19 7"/>',
       rejectAll: '<path d="M6 6l12 12M18 6L6 18"/>',
       // Édition collaborative (js/main-toolbar.js, le bouton qui range le suivi, « Tout accepter » et « Tout refuser ») : deux personnes, de profil.
