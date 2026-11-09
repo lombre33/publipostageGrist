@@ -239,6 +239,13 @@ window.EditorTestSuites.undoSweep = (function () {
       setValue(await shown('.pp-modal input.macro-rule-value'), 'Urgent'); await sleep(100);
       mouseGesture(await shown('.var-modal-primary'));
     },
+    // La fenêtre « Rogner l'image » : le bord de gauche du cadre avancé de 15 % au clavier (Maj + flèche droite, trois fois), puis « Rogner ».
+    async crop() {
+      const handle = await shown('#pp-crop-modal .pp-crop-handle[data-handle="w"]');
+      for (let i = 0; i < 3; i++) handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', shiftKey: true, bubbles: true, cancelable: true }));
+      await sleep(100);
+      mouseGesture(await shown('#pp-crop-modal .var-modal-primary'));
+    },
     // La fenêtre « Mise en forme selon la ligne » : une règle (Statut = Urgent) dont le style est le gras.
     async style() {
       mouseGesture(await shown('.pp-modal button.ss-trigger', 'Choisir une colonne')); await sleep(200);

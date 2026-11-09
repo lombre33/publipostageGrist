@@ -1,9 +1,11 @@
-// Suite "imageReshape" - « Pivoter à gauche », « Pivoter à droite » et « Retourner » du menu « Pivoter et retourner » de la barre de l'image (js/image-reshape.js, js/floating-toolbars.js ; demande d'Antoine du
-// 09/11 : « rogner et tourner les images », carte « Import + boutons Pivoter et Rogner »). Chaque cas relit ce que l'éditeur garde : les points de l'image (un canvas), sa largeur à l'écran, l'historique. Une image de quatre quarts
+// Suite "imageReshape" - « Pivoter à gauche », « Pivoter à droite » et « Retourner » du menu « Pivoter et retourner » de la barre de l'image, puis la fenêtre « Rogner l'image » (js/image-reshape.js,
+// js/image-crop.js, js/floating-toolbars.js ; demande d'Antoine du 09/11 : « rogner et tourner les images », carte « Import + boutons Pivoter et Rogner »). Chaque cas relit ce que l'éditeur garde : les points de l'image (un canvas), sa largeur à l'écran, l'historique. Une image de quatre quarts
 // de couleurs différentes (rouge et bleu en haut, vert et jaune en bas, 40 x 20) montre le sens de chaque geste. Ce que les cas gardent : le quart de tour dans les deux sens (l'image garde sa taille à l'écran,
 // tournée : une image de 200 px de large et 2 pour 1 devient 100 px de large et 1 pour 2), le miroir (la largeur ne bouge pas), UN pas d'historique par geste (un Ctrl + Z rend l'image et sa largeur), quatre
 // quarts de tour qui redonnent l'image, deux clics rapides qui font deux gestes, le grisé avec sa raison (colonne, QR code, graphique, vidéo, SVG, autre site) sans qu'un clic ne change rien, une image que
-// la personne a quittée entre-temps qui n'est pas touchée.
+// la personne a quittée entre-temps qui n'est pas touchée. Le rognage : la fenêtre s'ouvre sur l'image avec « Rogner » grisé tant que le cadre couvre tout, les flèches sur les poignées de bord le règlent
+// (Maj : par cinq centièmes), il ne passe ni le bord d'en face ni celui de l'image, « Rogner » redessine l'image sur la partie gardée en gardant son échelle (largeur à l'écran de la partie gardée),
+// un JPEG reste un JPEG, un Ctrl + Z rend l'image et sa largeur, Échap n'y touche pas, une image remplacée pendant que la fenêtre est ouverte n'est pas rognée.
 (function () {
   const cases = [];
   const GAP = 700;
@@ -53,6 +55,25 @@
     return btn;
   }
   const undo = async (h) => { await h.sleep(GAP); ed().commands.undo(); await h.sleep(150); };
+  // La fenêtre « Rogner l'image » : ouverte, ses poignées, son bouton « Rogner », sa ligne de taille.
+  const cropOverlay = () => document.getElementById('pp-crop-modal');
+  const cropWindowShown = () => { const el = cropOverlay(); return !!el && getComputedStyle(el).display !== 'none'; };
+  const cropHandle = name => document.querySelector('#pp-crop-modal .pp-crop-handle[data-handle="' + name + '"]');
+  const cropOk = () => document.querySelector('#pp-crop-modal .var-modal-primary');
+  const cropSize = () => (document.querySelector('#pp-crop-modal .pp-crop-size') || { textContent: '' }).textContent;
+  const arrow = (handle, key, times, shiftKey) => { for (let i = 0; i < (times || 1); i++) handle.dispatchEvent(new KeyboardEvent('keydown', { key, shiftKey: !!shiftKey, bubbles: true, cancelable: true })); };
+  const near = (a, b) => Math.abs(a - b) < 0.0005;
+  // Ouvre la fenêtre du rognage par le bouton de la barre.
+  async function openCrop(h, html) {
+    const bar = await start(h, html);
+    const opener = buttonOf(bar, 'crop');
+    if (!opener) throw new Error('bouton « crop » introuvable');
+    press(opener);
+    await h.sleep(350);
+    if (!cropWindowShown()) throw new Error('la fenêtre du rognage ne s\'ouvre pas');
+    return bar;
+  }
+  const closeCrop = async (h) => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await h.sleep(150); };
 
   cases.push({
     id: 'imagereshape_turn_right_swaps_the_size_and_one_undo_brings_it_back',
@@ -148,6 +169,15 @@
         await h.sleep(200);
         if (opener.getAttribute('aria-expanded') === 'true' || [...document.querySelectorAll('.v2-image-menu')].some(el => el.classList.contains('visible'))) bad.push(label + ' : le menu s\'est ouvert sur un bouton grisé');
         if (JSON.stringify(attrs()) !== keep) bad.push(label + ' : un clic sur le bouton grisé a changé l\'image');
+        // « Rogner… » : le même grisé, la même raison, et un clic n'ouvre pas la fenêtre.
+        const cropBtn = buttonOf(bar, 'crop');
+        if (!cropBtn) { bad.push(label + ' : bouton « crop » retiré'); continue; }
+        if (cropBtn.getAttribute('aria-disabled') !== 'true') bad.push(label + ' : « Rogner… » n\'est pas grisé');
+        if (cropBtn.title !== I18n.t(key)) bad.push(label + ' : « Rogner… » ne dit pas pourquoi : ' + cropBtn.title);
+        press(cropBtn);
+        await h.sleep(200);
+        if (cropWindowShown()) bad.push(label + ' : la fenêtre du rognage s\'est ouverte sur un bouton grisé');
+        if (JSON.stringify(attrs()) !== keep) bad.push(label + ' : un clic sur « Rogner… » grisé a changé l\'image');
       }
       // Une image saine : le bouton est allumé et porte son nom, le menu s'ouvre avec ses trois lignes, chacune avec son nom, et se referme à un second appui.
       const healthy = await start(h);
@@ -166,6 +196,8 @@
       press(opener);
       await h.sleep(150);
       if ([...document.querySelectorAll('.v2-image-menu')].some(el => el.classList.contains('visible'))) bad.push('un second appui ne referme pas le menu');
+      const cropOk = buttonOf(healthy, 'crop');
+      if (!cropOk || cropOk.getAttribute('aria-disabled') === 'true' || cropOk.title !== I18n.t('imgToolbar.crop')) bad.push('image saine : « Rogner… » ' + (cropOk ? cropOk.title + ' / ' + cropOk.getAttribute('aria-disabled') : 'absent'));
       return { pass: !bad.length, notes: bad.join(' | ') || 'ok' };
     },
   });
@@ -195,6 +227,140 @@
       const html = Editor.getHTML();
       const tag = (/<img[^>]*class="editor-image"[^>]*>/.exec(html) || [''])[0];
       if (!(/src="data:image\/png;base64,[^"]+"/.test(tag) && /width: 100px/.test(tag))) bad.push('HTML : ' + tag.slice(0, 160));
+      return { pass: !bad.length, notes: bad.join(' | ') || 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'imagecrop_window_opens_greyed_until_the_frame_moves_and_keeps_the_frame_inside_the_image',
+    description: 'le bouton « Rogner… » ouvre la fenêtre sur l\'image : le cadre couvre tout, « Rogner » est grisé et la ligne dit « Rien à rogner » ; les flèches sur les poignées de bord règlent le cadre (une flèche : un centième, Maj : cinq centièmes ; la flèche droite sur le bord de gauche le fait avancer, sur le bord de droite elle l\'écarte) et « Rogner » s\'allume avec la taille gardée ; un bord ne passe ni le bord d\'en face (il reste au moins 5 %) ni le bord de l\'image ; revenir au cadre entier regrise « Rogner »',
+    run: async (h) => {
+      const bad = [];
+      await openCrop(h);
+      if (!cropOk().disabled) bad.push('« Rogner » n\'est pas grisé sur un cadre entier');
+      if (cropSize() !== I18n.t('crop.nothing')) bad.push('ligne de taille au départ : ' + cropSize());
+      const handles = [...document.querySelectorAll('#pp-crop-modal .pp-crop-handle')].map(el => el.dataset.handle + (el.tabIndex >= 0 ? '' : '(souris)'));
+      if (handles.join(',') !== 'n,e,s,w,nw(souris),ne(souris),se(souris),sw(souris)') bad.push('poignées : ' + handles.join(','));
+      const named = [...document.querySelectorAll('#pp-crop-modal .pp-crop-handle')].every(el => el.title && el.getAttribute('aria-label') === el.title);
+      if (!named) bad.push('une poignée n\'a pas de nom');
+      const w = cropHandle('w');
+      arrow(w, 'ArrowRight', 1, false);
+      let c = ImageCrop.current();
+      if (!near(c.l, 0.01)) bad.push('une flèche : ' + c.l);
+      arrow(w, 'ArrowRight', 3, true);
+      c = ImageCrop.current();
+      if (!near(c.l, 0.16)) bad.push('trois flèches avec Maj : ' + c.l);
+      if (cropOk().disabled) bad.push('« Rogner » reste grisé après un réglage');
+      if (!/{?\d+/.test(cropSize()) || cropSize() === I18n.t('crop.nothing')) bad.push('ligne de taille après réglage : ' + cropSize());
+      // Le bord de droite : la flèche gauche le fait avancer vers l'intérieur, la droite l'écarte (jamais au-delà de l'image).
+      const e = cropHandle('e');
+      arrow(e, 'ArrowLeft', 2, true);
+      c = ImageCrop.current();
+      if (!near(c.r, 0.1)) bad.push('bord de droite avancé : ' + c.r);
+      arrow(e, 'ArrowRight', 5, true);
+      c = ImageCrop.current();
+      if (!near(c.r, 0)) bad.push('bord de droite écarté au-delà de l\'image : ' + c.r);
+      // Le bord de gauche poussé très loin : il s'arrête avant le bord d'en face (au moins 5 % restent).
+      arrow(w, 'ArrowRight', 40, true);
+      c = ImageCrop.current();
+      if (1 - c.l - c.r < 0.0499) bad.push('le cadre est passé sous 5 % : ' + JSON.stringify(c));
+      // Le bord du haut et celui du bas : les flèches haut et bas.
+      const n = cropHandle('n');
+      const s = cropHandle('s');
+      arrow(n, 'ArrowDown', 3, true);
+      arrow(s, 'ArrowUp', 2, true);
+      c = ImageCrop.current();
+      if (!(near(c.t, 0.15) && near(c.b, 0.1))) bad.push('bords du haut et du bas : ' + JSON.stringify(c));
+      // Une flèche qui ne dit rien à cette poignée (haut sur le bord de gauche) ne la bouge pas.
+      const before = JSON.stringify(ImageCrop.current());
+      arrow(w, 'ArrowUp', 3, true);
+      if (JSON.stringify(ImageCrop.current()) !== before) bad.push('une flèche haut a bougé le bord de gauche');
+      // Retour au cadre entier : « Rogner » se grise de nouveau.
+      arrow(w, 'ArrowLeft', 40, true);
+      arrow(n, 'ArrowUp', 40, true);
+      arrow(s, 'ArrowDown', 40, true);
+      c = ImageCrop.current();
+      if (!(near(c.l, 0) && near(c.t, 0) && near(c.r, 0) && near(c.b, 0))) bad.push('retour au cadre entier : ' + JSON.stringify(c));
+      if (!cropOk().disabled || cropSize() !== I18n.t('crop.nothing')) bad.push('« Rogner » ne se grise pas au retour au cadre entier');
+      await closeCrop(h);
+      return { pass: !bad.length, notes: bad.join(' | ') || 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'imagecrop_crop_redraws_on_the_kept_part_keeps_the_scale_and_one_undo_brings_it_back',
+    description: '« Rogner » redessine l\'image sur la partie gardée (un quart de la gauche et la moitié du bas ôtés d\'une image de 40 x 20 : 30 x 10 points, le rouge à gauche et le bleu à droite) ; l\'image garde son échelle (200 px de large pour toute l\'image : 150 px pour les trois quarts gardés), reste sélectionnée, la fenêtre est fermée ; un Ctrl + Z rend l\'image d\'avant et sa largeur, un Ctrl + Y la remet ; un JPEG reste un JPEG ; ce qu\'on garde sort dans le HTML comme une image ordinaire',
+    run: async (h) => {
+      const bad = [];
+      await openCrop(h);
+      const before = attrs();
+      arrow(cropHandle('w'), 'ArrowRight', 5, true);
+      arrow(cropHandle('s'), 'ArrowUp', 10, true);
+      cropOk().click();
+      await h.sleep(500);
+      const now = attrs();
+      if (cropWindowShown()) bad.push('la fenêtre reste ouverte après « Rogner »');
+      const q = await look(now.src);
+      if (!(q.w === 30 && q.h === 10 && isColor(q.tl, RED) && isColor(q.tr, BLUE) && isColor(q.bl, RED) && isColor(q.br, BLUE))) bad.push('image rognée : ' + JSON.stringify(q));
+      if (now.width !== '150px') bad.push('largeur à l\'écran : ' + now.width);
+      if (!ed().state.selection.node || ed().state.selection.node.type.name !== 'editorImage') bad.push('l\'image n\'est plus sélectionnée');
+      if (!/^data:image\/png/.test(now.src)) bad.push('une image PNG devrait rester PNG : ' + now.src.slice(0, 24));
+      const html = Editor.getHTML();
+      const tag = (/<img[^>]*class="editor-image"[^>]*>/.exec(html) || [''])[0];
+      if (!(/src="data:image\/png;base64,[^"]+"/.test(tag) && /width: 150px/.test(tag))) bad.push('HTML : ' + tag.slice(0, 160));
+      await undo(h);
+      if (attrs().src !== before.src || attrs().width !== '200px') bad.push('un Ctrl + Z ne rend pas l\'image : ' + attrs().width);
+      ed().commands.redo();
+      await h.sleep(150);
+      if (attrs().src !== now.src || attrs().width !== '150px') bad.push('un Ctrl + Y ne la remet pas');
+      // Un JPEG reste un JPEG.
+      const canvas = document.createElement('canvas');
+      canvas.width = 40; canvas.height = 20;
+      const g = canvas.getContext('2d');
+      g.fillStyle = '#336699'; g.fillRect(0, 0, 40, 20);
+      await openCrop(h, '<p>Avant</p><p><img class="editor-image" src="' + canvas.toDataURL('image/jpeg', 0.9) + '" alt="" style="width: 200px"></p><p>Après</p>');
+      arrow(cropHandle('n'), 'ArrowDown', 2, true);
+      cropOk().click();
+      await h.sleep(500);
+      if (!/^data:image\/jpeg/.test(attrs().src)) bad.push('un JPEG rogné ne reste pas JPEG : ' + attrs().src.slice(0, 24));
+      if (attrs().width !== '200px') bad.push('rognage par le haut seul : la largeur ne doit pas bouger : ' + attrs().width);
+      return { pass: !bad.length, notes: bad.join(' | ') || 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'imagecrop_escape_and_a_replaced_image_leave_the_picture_untouched',
+    description: 'Échap ferme la fenêtre du rognage sans toucher l\'image (même cadre réglé) ; « Annuler » du bas de la fenêtre aussi ; Entrée sur une poignée rogne ; une image remplacée pendant que la fenêtre est ouverte n\'est pas rognée par le bouton « Rogner » ; le focus revient à l\'éditeur',
+    run: async (h) => {
+      const bad = [];
+      await openCrop(h);
+      const keep = JSON.stringify(attrs());
+      arrow(cropHandle('w'), 'ArrowRight', 5, true);
+      await closeCrop(h);
+      if (cropWindowShown()) bad.push('Échap ne ferme pas la fenêtre');
+      if (JSON.stringify(attrs()) !== keep) bad.push('Échap a changé l\'image');
+      if (!ed().view.hasFocus()) bad.push('le focus n\'est pas revenu à l\'éditeur');
+      await openCrop(h);
+      if (ImageCrop.current().l !== 0) bad.push('la fenêtre rouverte garde l\'ancien cadre : ' + JSON.stringify(ImageCrop.current()));
+      arrow(cropHandle('w'), 'ArrowRight', 5, true);
+      document.querySelector('#pp-crop-modal .pp-modal-actions button:not(.var-modal-primary)').click();
+      await h.sleep(150);
+      if (cropWindowShown() || JSON.stringify(attrs()) !== keep) bad.push('« Annuler » a laissé la fenêtre ouverte ou changé l\'image');
+      // Entrée sur une poignée rogne.
+      await openCrop(h);
+      arrow(cropHandle('w'), 'ArrowRight', 2, true);
+      cropHandle('w').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      await h.sleep(500);
+      if (cropWindowShown() || attrs().width !== '180px') bad.push('Entrée n\'a pas rogné : ' + attrs().width + (cropWindowShown() ? ' (fenêtre ouverte)' : ''));
+      // Une image remplacée sous la fenêtre ouverte.
+      await openCrop(h);
+      const found = imageNode();
+      const other = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      arrow(cropHandle('w'), 'ArrowRight', 5, true);
+      ed().view.dispatch(ed().state.tr.setNodeMarkup(found.pos, undefined, Object.assign({}, found.node.attrs, { src: other })));
+      cropOk().click();
+      await h.sleep(500);
+      if (attrs().src !== other || attrs().width !== '200px') bad.push('l\'image remplacée a été rognée : ' + attrs().width);
       return { pass: !bad.length, notes: bad.join(' | ') || 'ok' };
     },
   });

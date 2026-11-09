@@ -1,0 +1,34 @@
+/* Fenêtre « Rogner l'image » (js/image-crop.js) : l'image en entier, un cadre à huit poignées par-dessus, la taille gardée et une ligne d'aide. Le cadre de la fenêtre, le titre et les boutons
+   viennent de css/modal-base.css et de css/variable-actions.css (.var-modal-actions) ; ne reste ici que ce qui est propre à celle-ci. Tout tient dans les 376 px de haut du panneau de 700x400
+   sans défiler : la hauteur de l'aperçu (--pp-crop-max-h, posée par le script d'après la hauteur du panneau) laisse la place du titre, des deux lignes de texte et des boutons.
+   Que des jetons de css/style.css : les couleurs de la fenêtre suivent le thème clair et sombre. */
+.pp-crop-wrap { display: flex; justify-content: center; padding: 14px 0 8px; }
+/* La scène colle à l'image (rien autour : le cadre et ses parts se mesurent sur elle) ; les poignées de bord dépassent d'un demi-pas, la marge du haut et du bas les garde dans la zone de contenu. */
+.pp-crop-stage { position: relative; flex: none; max-width: 100%; line-height: 0; user-select: none; -webkit-user-select: none; touch-action: none; }
+.pp-crop-preview { display: block; width: auto; height: auto; max-width: 100%; max-height: var(--pp-crop-max-h, 195px); min-width: 96px; background: var(--surface-sunken); }
+/* Ce qui est hors du cadre s'assombrit : un trou de la taille du cadre dont l'ombre immense couvre le reste, coupée aux bords de l'image. */
+.pp-crop-shade { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.pp-crop-hole { position: absolute; box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--text) 55%, transparent); }
+.pp-crop-frame { position: absolute; box-sizing: border-box; border: 2px solid var(--accent); box-shadow: inset 0 0 0 1px var(--surface); cursor: move; }
+.pp-crop-frame.is-dragging { cursor: grabbing; }
+/* Une poignée : un bouton de 24 px (la cible de la souris), un point de 10 px dedans, posé sur le bord ou le coin du cadre. */
+.pp-crop-handle { position: absolute; width: 24px; height: 24px; margin: -12px 0 0 -12px; padding: 0; border: 0; background: transparent; line-height: 0; }
+.pp-crop-handle::before { content: ""; position: absolute; left: 7px; top: 7px; width: 10px; height: 10px; box-sizing: border-box; border: 2px solid var(--accent); border-radius: var(--radius-xs, 4px); background: var(--surface); }
+.pp-crop-handle:focus { outline: none; }
+.pp-crop-handle:focus-visible::before { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pp-crop-handle-n { left: 50%; top: 0; cursor: ns-resize; }
+.pp-crop-handle-s { left: 50%; top: 100%; cursor: ns-resize; }
+.pp-crop-handle-w { left: 0; top: 50%; cursor: ew-resize; }
+.pp-crop-handle-e { left: 100%; top: 50%; cursor: ew-resize; }
+.pp-crop-handle-nw { left: 0; top: 0; cursor: nwse-resize; }
+.pp-crop-handle-se { left: 100%; top: 100%; cursor: nwse-resize; }
+.pp-crop-handle-ne { left: 100%; top: 0; cursor: nesw-resize; }
+.pp-crop-handle-sw { left: 0; top: 100%; cursor: nesw-resize; }
+.pp-crop-size { margin: 6px 0 0; font-size: 12.5px; font-weight: 700; line-height: 1.4; color: var(--text); text-align: center; font-variant-numeric: tabular-nums; }
+.pp-crop-hint { margin: 2px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-muted); overflow-wrap: anywhere; text-align: center; }
+/* Couleurs forcées : le cadre, ses poignées et le fond restent lisibles avec les couleurs du système. */
+@media (forced-colors: active) {
+  .pp-crop-frame { border-color: Highlight; box-shadow: none; }
+  .pp-crop-handle::before { border-color: Highlight; background: Canvas; }
+  .pp-crop-hole { box-shadow: 0 0 0 100vmax CanvasText; opacity: 0.55; }
+}

@@ -1,11 +1,14 @@
-// Pivoter, retourner et rogner l'image sélectionnée (les boutons « Pivoter à gauche », « Pivoter à droite », « Retourner » et « Rogner… » de la barre de l'image, js/floating-toolbars.js).
+// Pivoter, retourner et rogner l'image sélectionnée (le menu « Pivoter et retourner » et le bouton « Rogner… » de la barre de l'image, js/floating-toolbars.js ; la fenêtre du rognage est à js/image-crop.js).
 // Une image du document se règle par sa largeur et garde ses proportions : chaque geste REDESSINE ses points (ImageIo.reshape, un canvas) et remplace l'image par la nouvelle, dans UN pas de
 // l'historique (Annuler rend l'image d'avant). L'image qui en sort est une image ordinaire, que la Lecture, le PDF, le Word, le PowerPoint, le HTML et le courriel reprennent déjà : rien d'autre
 // ne change dans les exports. Ce que le geste fait à la taille : un quart de tour échange la largeur et la hauteur de l'image à l'écran (une photo de 300 sur 200 devient 200 sur 300, comme dans
 // Word) ; un miroir ne la change pas.
 //   ImageReshape.unavailableKey(attrs) -> la clé du texte qui dit pourquoi cette image ne se tourne ni ne se rogne pas, ou '' (la barre grise ses boutons avec ce texte, elle n'en retire aucun)
-//   ImageReshape.run(editor, action) -> Promise<boolean> ; `action` : 'turn-left', 'turn-right', 'flip'. Les gestes s'enchaînent un à un (deux clics rapides font deux gestes), chacun lit
-//     l'image au moment où il passe ; il ne fait rien quand l'image a changé ou quitté la sélection entre-temps. Vrai quand l'image a été remplacée.
+//   ImageReshape.run(editor, action, extra) -> Promise<boolean> ; `action` : 'turn-left', 'turn-right', 'flip', 'crop' (`extra` : { crop: { l, t, r, b } les parts de l'image ôtées de chaque
+//     bord, de 0 à 1 ; pos, src : l'image visée, que la fenêtre « Rogner » (js/image-crop.js) retient à l'ouverture - sans eux, l'image sélectionnée }). Un rognage garde l'échelle : l'image
+//     rognée est aussi large à l'écran que la partie gardée l'était. Les gestes s'enchaînent un à un (deux clics rapides font deux gestes), chacun lit l'image au moment où il passe ; il
+//     ne fait rien quand l'image a changé ou quitté la sélection entre-temps. Vrai quand l'image a été remplacée.
+//   ImageReshape.selected(editor) -> { node, pos } de l'image sélectionnée, ou null
 const ImageReshape = (function () {
   const MOVES = {
     'turn-left': { turn: 270 },
@@ -49,9 +52,24 @@ const ImageReshape = (function () {
     }
   }
 
-  async function apply(editor, action) {
-    const move = MOVES[action];
-    const found = move ? selectedImage(editor) : null;
+  // L'image que vise un geste : celle que `extra` désigne (sa place et son adresse d'origine), sinon la sélectionnée.
+  function targetOf(editor, extra) {
+    if (extra && extra.pos != null) {
+      const node = editor.state.doc.nodeAt(extra.pos);
+      return node && node.type.name === 'editorImage' && node.attrs.src === extra.src ? { node, pos: extra.pos } : null;
+    }
+    return selectedImage(editor);
+  }
+
+  // La part de la largeur que garde un rognage (jamais zéro : ImageIo.reshape garde au moins un centième).
+  function widthShare(crop) {
+    const part = value => Math.min(0.99, Math.max(0, Number(value) || 0));
+    return Math.max(0.01, 1 - part(crop.l) - part(crop.r));
+  }
+
+  async function apply(editor, action, extra) {
+    const move = action === 'crop' ? (extra && extra.crop ? { crop: extra.crop } : null) : MOVES[action];
+    const found = move ? targetOf(editor, extra) : null;
     if (!found || unavailableKey(found.node.attrs)) return false;
     const { pos } = found;
     const attrs = found.node.attrs;
@@ -69,15 +87,17 @@ const ImageReshape = (function () {
     const patch = { src: out.src };
     // Un quart de tour : l'image garde sa taille à l'écran, tournée - sa nouvelle largeur est son ancienne hauteur.
     if (move.turn === 90 || move.turn === 270) patch.width = Math.round(width * out.width / out.height * 100) / 100 + 'px';
+    // Un rognage : la partie gardée garde sa taille à l'écran - l'image rognée est aussi large que cette partie l'était.
+    if (move.crop) patch.width = Math.round(width * widthShare(move.crop) * 100) / 100 + 'px';
     replace(editor, pos, Object.assign({}, now.attrs, patch));
     return true;
   }
 
   let queue = Promise.resolve();
-  function run(editor, action) {
-    queue = queue.then(() => apply(editor, action)).catch(() => false);
+  function run(editor, action, extra) {
+    queue = queue.then(() => apply(editor, action, extra)).catch(() => false);
     return queue;
   }
 
-  return { unavailableKey, run };
+  return { unavailableKey, run, selected: selectedImage };
 })();

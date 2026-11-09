@@ -600,6 +600,8 @@ const FloatingToolbars = (function () {
         // « Pivoter et retourner » (js/image-reshape.js) : un bouton qui ouvre un petit menu (pivoter à gauche, à droite, retourner) - quatre boutons de plus ne tiendraient pas dans la barre d'un panneau de
         // 700 px ; grisé, avec sa raison, pour une image qui ne se redessine pas (syncImageReshapeButtons).
         `<button data-action="reshape" class="v2-fill-chip v2-image-reshape-btn" title="${I18n.t('imgToolbar.reshape')}" aria-label="${I18n.t('imgToolbar.reshape')}" aria-haspopup="true" aria-expanded="false">${Icons.svg('imageReshape')}${Icons.svg('caretDown')}</button>`,
+        // « Rogner… » (js/image-crop.js) : la fenêtre où l'on tire le cadre de la partie à garder ; grisé, avec sa raison, comme « Pivoter et retourner » (syncImageReshapeButtons).
+        `<button data-action="crop" title="${I18n.t('imgToolbar.crop')}" aria-label="${I18n.t('imgToolbar.crop')}" aria-haspopup="dialog">${Icons.svg('imageCrop')}</button>`,
         '<span class="v2-floating-sep"></span>',
         `<button data-action="align-left" title="${I18n.t('align.left')}">${Icons.svg('alignLeft')}</button>`,
         `<button data-action="align-center" title="${I18n.t('align.center')}">${Icons.svg('alignCenter')}</button>`,
@@ -888,6 +890,8 @@ const FloatingToolbars = (function () {
         reset: () => updateSelectedImage({ width: '320px', align: null }),
         // Le menu « Pivoter et retourner » (js/image-reshape.js) ; sans effet sur une image grisée (syncImageReshapeButtons).
         reshape: toggleReshapeMenu,
+        // La fenêtre du rognage (js/image-crop.js) ; sans effet sur une image grisée (ImageCrop.open le refuse).
+        crop: () => { ImageCrop.open(); },
         'align-left': () => alignOrSnap('left'),
         'align-center': () => alignOrSnap('center'),
         'align-right': () => alignOrSnap('right'),
@@ -987,6 +991,12 @@ const FloatingToolbars = (function () {
       const title = I18n.t(reason || 'imgToolbar.reshape');
       controls.setDisabled('reshape', reason, title);
       btn.setAttribute('aria-label', title);
+      // « Rogner… » : la même raison, le même grisé.
+      const crop = controls.button('crop');
+      if (!crop) return;
+      const cropTitle = I18n.t(reason || 'imgToolbar.crop');
+      controls.setDisabled('crop', reason, cropTitle);
+      crop.setAttribute('aria-label', cropTitle);
     }
     function syncImageWrapButton(controls, node) {
       // Grisé (jamais retiré) quand la bascule ne change rien ; .v2-hf-locked : css/toolbar-v2.css.

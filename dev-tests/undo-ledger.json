@@ -94,6 +94,7 @@
     ".v2-image-toolbar button[action=zoom-out]": {"class": "model", "start": "image"},
     ".v2-image-toolbar button[action=zoom-in]": {"class": "model", "start": "image"},
     ".v2-image-toolbar button[action=reshape]": {"class": "view", "start": "image", "note": "ouvre le menu « Pivoter et retourner » : chacune de ses lignes a son entrée (.v2-image-menu)"},
+    ".v2-image-toolbar button[action=crop]": {"class": "window", "start": "image", "drive": [["@crop"]], "note": "« Rogner… » : la fenêtre du cadre (js/image-crop.js), le bord de gauche avancé de 15 % au clavier puis « Rogner » : l'image est redessinée sur la partie gardée, un pas d'historique"},
     ".v2-image-menu button[action=turn-left]": {"class": "model", "start": "image", "dynamic": true, "open": ".v2-image-toolbar button[action=reshape]", "note": "l'image est redessinée (js/image-reshape.js), un pas d'historique ; le menu n'est dessiné qu'à sa première ouverture : `dynamic`"},
     ".v2-image-menu button[action=turn-right]": {"class": "model", "start": "image", "dynamic": true, "open": ".v2-image-toolbar button[action=reshape]"},
     ".v2-image-menu button[action=flip]": {"class": "model", "start": "image", "dynamic": true, "open": ".v2-image-toolbar button[action=reshape]"},

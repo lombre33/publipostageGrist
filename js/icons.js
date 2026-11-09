@@ -109,6 +109,8 @@ const Icons = (function () {
       imageFlip: '<path d="M12 3v18" stroke-dasharray="2.4 2.4"/><path d="M9 7 3.5 17H9z"/><path d="M15 7l5.5 10H15z"/>',
       // Le bouton « Pivoter et retourner » de la barre de l'image : une photo (un rectangle) et la flèche circulaire qui la fait pivoter.
       imageReshape: '<rect x="3" y="11" width="11.5" height="9" rx="1.4"/><path d="M11 3.8a8 8 0 0 1 9 7.2"/><path d="M21.2 5.6 20 11l-5.3-1.4"/>',
+      // Le bouton « Rogner… » de la barre de l'image (js/image-crop.js) : les deux équerres d'un cadre de rognage qui se croisent.
+      imageCrop: '<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M2 6h14a2 2 0 0 1 2 2v14"/>',
       // Distinct de alignJustify : un petit carré (l'image) à côté de lignes courtes (texte qui l'habille) puis des lignes pleines en dessous (le flux
       // qui reprend).
       wrapToggle: '<rect x="4" y="4" width="7" height="7" rx="1"/><path d="M13 6h7M13 9h7M4 16h16M4 20h11"/>',
