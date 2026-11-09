@@ -2942,6 +2942,422 @@
     },
   });
 
+  // --- La liste des modifications (le volet « Modifications » : Editor.getSuggestionEntries, resolveSuggestionEntry, goToSuggestion ; js/track-changes-list.js) ---
+  // Une entrée par modification, dans l'ordre du document : ce qu'elle fait (action : insert, delete, replace, format), sur quoi (subject : text, object, column, row, block), un extrait, l'étendue,
+  // la personne et la date des métadonnées. Les identifiants qui se résolvent ensemble (une colonne ajoutée : une marque par case) ne font qu'une entrée.
+  const entriesOf = () => Editor.getSuggestionEntries();
+  const shapeOf = entry => entry.action + '/' + entry.subject;
+
+  cases.push({
+    id: 'trackchanges_list_has_one_entry_per_modification_in_document_order_with_author_and_date',
+    description: "Un document chargé avec trois modifications de deux personnes : la liste en rend trois, dans l'ordre du texte (pas celui des numéros), avec l'action, l'extrait, le nom (l'adresse à défaut de nom) et la date de chacune",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        useMarie();
+        await disableTrackChangesIfOn(h);
+        Editor.setHTML('<p>Alpha <ins data-id="3">ajouté</ins> bêta <del data-id="1">retiré</del> gamma <del data-id="2">ancien</del><ins data-id="2">nouveau</ins> fin.</p>', { 1: JEAN, 2: PAUL, 3: JEAN });
+        await h.sleep(150);
+        const entries = entriesOf();
+        const [a, b, c] = entries;
+        const out = {
+          three: entries.length === 3,
+          order: entries.map(e => e.id).join() === '3,1,2' && entries.every((e, i) => e.from < e.to && (i === 0 || e.from >= entries[i - 1].to)),
+          shapes: entries.map(shapeOf).join() === 'insert/text,delete/text,replace/text',
+          extracts: !!a && a.inserted === 'ajouté' && !!b && b.deleted === 'retiré' && !!c && c.deleted === 'ancien' && c.inserted === 'nouveau',
+          authors: !!a && a.author && a.author.name === 'Jean Dupont' && a.author.email === JEAN.author && !!c && c.author && c.author.name === '' && c.author.email === PAUL.author,
+          dates: !!a && a.createdAt === JEAN.createdAt && !!c && c.createdAt === PAUL.createdAt && entries.every(e => e.fresh === false && e.authorPending === false),
+        };
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + JSON.stringify(entries) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_list_names_the_person_at_the_screen_for_a_suggestion_typed_in_this_session',
+    description: "Une modification tapée dans la session (sans métadonnées) est « fraîche », sans date, et celle de la personne devant l'écran dès que son identité est lue ; une modification sans auteur connu ne nomme personne",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        useMarie();
+        await enableTrackChanges(h);
+        Editor.setHTML('<p>Texte neuf.</p>');
+        await h.focusAtEnd();
+        await h.typeText(' Ajout neuf.');
+        entriesOf();   // la première lecture lance celle de l'identité
+        await h.sleep(600);
+        const [typed] = entriesOf();
+        const out = {
+          fresh: !!typed && typed.fresh === true && typed.createdAt === null,
+          marie: !!typed && typed.authorPending === false && typed.author && typed.author.name === MARIE.name && typed.author.email === MARIE.email,
+        };
+        await disableTrackChangesIfOn(h);
+        Editor.setHTML('<p>Ancien <ins data-id="1">ajout</ins>.</p>', { 1: { author: null, createdAt: null } });
+        await h.sleep(150);
+        const [old] = entriesOf();
+        out.nobody = !!old && old.author === null && old.createdAt === null && old.fresh === false;
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + JSON.stringify(typed) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_list_says_what_each_gesture_did',
+    description: "Pour chaque geste suivi (ajout, suppression, remplacement, gras, saut de paragraphe, paragraphe supprimé, alignement, titre, colonne, ligne, fond de case) la liste rend UNE entrée, de la bonne action et du bon sujet, avec un extrait lisible (jamais les espaces invisibles des sauts de paragraphe)",
+    run: async (h) => {
+      try {
+        const table = '<table><tbody><tr><td><p>A1</p></td><td><p>B1</p></td></tr><tr><td><p>A2</p></td><td><p>B2</p></td></tr><tr><td><p>A3</p></td><td><p>B3</p></td></tr></tbody></table>';
+        const scenarios = [
+          { name: 'ajout', html: '<p>Bonjour monde et fin.</p>', word: 'monde', run: ed => ed.chain().focus().setTextSelection(ed.state.selection.to).insertContent(' tout').run(), shape: 'insert/text', inserted: 'tout' },
+          { name: 'suppression', html: '<p>Bonjour monde et fin.</p>', word: 'monde', run: ed => ed.chain().focus().deleteSelection().run(), shape: 'delete/text', deleted: 'monde' },
+          { name: 'remplacement', html: '<p>Bonjour monde et fin.</p>', word: 'monde', run: ed => ed.chain().focus().insertContent('terre').run(), shape: 'replace/text', deleted: 'monde', inserted: 'terre' },
+          { name: 'gras', html: '<p>Bonjour monde et fin.</p>', word: 'monde', run: ed => ed.chain().focus().toggleBold().run(), shape: 'format/text', inserted: 'monde' },
+          { name: 'saut de paragraphe', html: '<p>Bonjour monde et fin.</p>', word: 'monde', run: ed => ed.chain().focus().setTextSelection(ed.state.selection.to).splitBlock().run(), shape: 'insert/block', inserted: '' },
+          { name: 'alignement', html: '<p>Bonjour monde et fin.</p>', word: 'monde', run: ed => ed.chain().focus().setTextAlign('center').run(), shape: 'format/block', settings: 'textAlign' },
+          { name: 'titre', html: '<p>Bonjour monde et fin.</p>', word: 'monde', run: ed => ed.chain().focus().setHeading({ level: 2 }).run(), shape: 'format/block', settings: 'nodeType', nodeType: 'heading', level: 2 },
+          { name: 'colonne', html: table, word: 'A1', run: ed => ed.chain().focus().addColumnAfter().run(), shape: 'insert/column', count: 3 },
+          { name: 'ligne', html: table, word: 'A1', run: ed => ed.chain().focus().addRowAfter().run(), shape: 'insert/row' },
+          { name: 'fond de case', html: table, word: 'A1', run: ed => ed.chain().focus().setCellAttribute('backgroundColor', '#ffe066').run(), shape: 'format/block', settings: 'backgroundColor' },
+        ];
+        const failures = [];
+        for (const sc of scenarios) {
+          await h.resetEditor();
+          await disableTrackChangesIfOn(h);
+          Editor.setHTML(sc.html);
+          await h.sleep(150);
+          await enableTrackChanges(h);
+          const from = textPos(sc.word, 0);
+          await selectDoc(h, from, from + sc.word.length);
+          sc.run(EditorCore.getEditor());
+          await h.sleep(200);
+          const entries = entriesOf();
+          const e = entries[0] || {};
+          const ok = entries.length === 1 && shapeOf(e) === sc.shape
+            && (sc.inserted === undefined || e.inserted === sc.inserted) && (sc.deleted === undefined || e.deleted === sc.deleted)
+            && (sc.settings === undefined || e.settings.join() === sc.settings) && (sc.nodeType === undefined || e.nodeType === sc.nodeType)
+            && (sc.level === undefined || e.level === sc.level) && (sc.count === undefined || e.count === sc.count);
+          if (!ok) failures.push(sc.name + ' : ' + JSON.stringify(entries));
+          await disableTrackChangesIfOn(h);
+        }
+        return { pass: failures.length === 0, notes: failures.join(' || ') || scenarios.length + ' gestes' };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_list_cuts_a_long_extract_and_keeps_it_cheap',
+    description: "Un paragraphe de 20 000 signes supprimé donne un extrait de 80 signes au plus, coupé à un mot et fermé par « … » ; 1 500 modifications se listent en moins de 1,5 s",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        await disableTrackChangesIfOn(h);
+        const long = Array.from({ length: 3000 }, (_, i) => 'mot' + i).join(' ');
+        Editor.setHTML('<p><del data-id="1">' + long + '</del></p>');
+        await h.sleep(200);
+        const [cut] = entriesOf();
+        const out = { shortened: !!cut && cut.deleted.length <= 81 && cut.deleted.startsWith('mot0 mot1 ') && / mot\d+…$/.test(cut.deleted) };
+        let many = '';
+        for (let i = 1; i <= 1500; i++) many += '<p>Ligne ' + i + ' <ins data-id="' + i + '">ajout ' + i + '</ins></p>';
+        Editor.setHTML(many);
+        await h.sleep(500);
+        const t0 = performance.now();
+        const entries = entriesOf();
+        const ms = performance.now() - t0;
+        out.many = entries.length === 1500 && entries[0].inserted === 'ajout 1' && entries[1499].inserted === 'ajout 1500';
+        out.fast = ms < 1500;
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + Math.round(ms) + ' ms ' + (cut && cut.deleted) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_list_entry_accept_and_refuse_resolve_only_that_modification_in_one_undo_step',
+    description: "Refuser la 2e entrée d'une liste de trois ne touche que celle-là (les deux autres restent en attente), un seul Annuler la ramène ; accepter la 1re garde son texte sans marque",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        useMarie();
+        await disableTrackChangesIfOn(h);
+        Editor.setHTML('<p>Alpha <ins data-id="3">ajouté</ins> bêta <del data-id="1">retiré</del> gamma <del data-id="2">ancien</del><ins data-id="2">nouveau</ins> fin.</p>', { 1: JEAN, 2: PAUL, 3: JEAN });
+        await h.sleep(150);
+        const out = {};
+        out.refused = Editor.resolveSuggestionEntry(entriesOf()[1], false) === true;
+        await h.sleep(150);
+        out.refusedHtml = Editor.getHTML() === '<p>Alpha <ins data-id="3">ajouté</ins> bêta retiré gamma <del data-id="2">ancien</del><ins data-id="2">nouveau</ins> fin.</p>';
+        out.twoLeft = entriesOf().map(e => e.id).join() === '3,2';
+        EditorCore.getEditor().commands.undo();
+        await h.sleep(150);
+        out.undoneOnce = entriesOf().map(e => e.id).join() === '3,1,2';
+        out.accepted = Editor.resolveSuggestionEntry(entriesOf()[0], true) === true;
+        await h.sleep(150);
+        out.acceptedHtml = /^<p>Alpha ajouté bêta <del data-id="1">retiré<\/del> gamma/.test(Editor.getHTML()) && entriesOf().length === 2;
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + Editor.getHTML() };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_list_a_column_is_one_entry_and_refusing_it_removes_the_whole_column',
+    description: "Une colonne ajoutée porte une marque par case : la liste n'en fait qu'une entrée, et la refuser retire la colonne entière (le tableau retrouve ses deux colonnes, sans marque)",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        await disableTrackChangesIfOn(h);
+        const table = '<table><tbody><tr><td><p>A1</p></td><td><p>B1</p></td></tr><tr><td><p>A2</p></td><td><p>B2</p></td></tr><tr><td><p>A3</p></td><td><p>B3</p></td></tr></tbody></table>';
+        Editor.setHTML(table);
+        await h.sleep(150);
+        await enableTrackChanges(h);
+        await caretIn(h, 'A1', 1);
+        EditorCore.getEditor().chain().focus().addColumnAfter().run();
+        await h.sleep(200);
+        const before = entriesOf();
+        const out = { oneEntry: before.length === 1 && before[0].subject === 'column' && before[0].ids.length === 3 };
+        out.refused = Editor.resolveSuggestionEntry(before[0], false) === true;
+        await h.sleep(200);
+        const html = Editor.getHTML();
+        out.twoColumns = (html.match(/<td\b/g) || []).length === 6 && !/data-tc-|<ins\b|<del\b/.test(html) && entriesOf().length === 0;
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + html };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_list_next_and_previous_walk_the_modifications_and_wrap_around',
+    description: "Suivant et Précédent posent le curseur au début de la modification d'après ou d'avant, dans l'ordre du texte, et reprennent de l'autre côté au bout de la liste ; la liste vide ne fait rien",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        useMarie();
+        await disableTrackChangesIfOn(h);
+        Editor.setHTML('<p>Alpha <ins data-id="3">ajouté</ins> bêta <del data-id="1">retiré</del> gamma <del data-id="2">ancien</del><ins data-id="2">nouveau</ins> fin.</p>', { 1: JEAN, 2: PAUL, 3: JEAN });
+        await h.sleep(150);
+        const ed = EditorCore.getEditor();
+        await selectDoc(h, 1);
+        const entries = entriesOf();
+        const visited = [];
+        for (let i = 0; i < 4; i++) { const e = Editor.goToSuggestion(1); visited.push(e && e.id + '@' + (ed.state.selection.from === e.from || ed.state.selection.from === e.from + 1)); }
+        const out = { forward: visited.join() === '3@true,1@true,2@true,3@true' };
+        const backward = [];
+        for (let i = 0; i < 4; i++) { const e = Editor.goToSuggestion(-1); backward.push(e && e.id); }
+        out.backward = backward.join() === '2,1,3,2';   // du premier, « Précédent » reprend par le dernier
+        // Le curseur dans le milieu d'une modification : « Précédent » va à son début, « Suivant » à la suivante.
+        const mid = entries[0].from + 3;
+        await selectDoc(h, mid);
+        out.indexAtMiddle = TrackChanges.entryIndexAt(entries, mid) === 0;
+        out.previousFromMiddle = Editor.goToSuggestion(-1).id === '3';
+        await selectDoc(h, mid);
+        out.nextFromMiddle = Editor.goToSuggestion(1).id === '1';
+        Editor.setHTML('<p>Rien à suivre.</p>');
+        await h.sleep(150);
+        out.empty = Editor.goToSuggestion(1) === null && Editor.goToSuggestion(-1) === null && entriesOf().length === 0;
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + visited.join() + ' / ' + backward.join() };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  // --- Le volet « Modifications » (js/track-changes-pane.js), dans la page : sa ligne du menu, ses lignes, ses boutons. La vraie souris, à 700x400, est dans dev-tests/verify-track-pane-mouse.mjs. ---
+  const paneEl = () => document.getElementById('pp-track-pane');
+  const paneRows = () => Array.from(paneEl().querySelectorAll('.pp-trackpane-item'));
+  const LIST_DOC = '<p>Alpha <ins data-id="3">ajouté</ins> bêta <del data-id="1">retiré</del> gamma <del data-id="2">ancien</del><ins data-id="2">nouveau</ins> fin.</p>';
+  const closePaneIfOpen = () => { if (TrackChangesPane.isOpen()) TrackChangesPane.closePane({ focus: false }); };
+
+  cases.push({
+    id: 'trackchanges_pane_row_opens_and_closes_the_list_beside_the_text',
+    description: "La ligne « Liste des modifications » du menu « Édition collaborative » ouvre le volet (ligne enfoncée) : une ligne par modification, le conteneur du texte lui laisse sa place ; un second clic, le bouton de fermeture et Échap le ferment et rendent la place",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        useMarie();
+        await disableTrackChangesIfOn(h);
+        Editor.setHTML(LIST_DOC, { 1: JEAN, 2: PAUL, 3: JEAN });
+        await h.sleep(150);
+        const row = () => document.getElementById('v2-btn-track-pane');
+        const box = document.getElementById('editor-container');
+        const out = {};
+        out.rowFirst = !!row() && row().getAttribute('aria-pressed') === 'false' && !paneEl();
+        await h.clickButton('v2-btn-track-pane');
+        await h.sleep(250);
+        out.opened = TrackChangesPane.isOpen() && !paneEl().hidden && row().getAttribute('aria-pressed') === 'true' && row().classList.contains('is-active');
+        out.rows = paneRows().length === 3 && paneRows().map(item => item.querySelector('.pp-trackpane-what').textContent).join() === 'Ajout,Suppression,Remplacement';
+        out.room = box.style.marginRight === paneEl().offsetWidth + 'px' && paneEl().offsetWidth > 100;
+        out.title = paneEl().querySelector('.pp-trackpane-title').textContent === 'Modifications' && paneEl().querySelector('.pp-trackpane-count').textContent === '3 modifications';
+        await h.clickButton('v2-btn-track-pane');
+        await h.sleep(150);
+        out.closedByRow = !TrackChangesPane.isOpen() && paneEl().hidden && box.style.marginRight === '' && row().getAttribute('aria-pressed') === 'false';
+        await h.clickButton('v2-btn-track-pane');
+        await h.sleep(250);
+        paneEl().querySelector('.pp-trackpane-close').click();
+        await h.sleep(150);
+        out.closedByButton = !TrackChangesPane.isOpen() && paneEl().hidden && box.style.marginRight === '';
+        await h.clickButton('v2-btn-track-pane');
+        await h.sleep(250);
+        paneEl().querySelector('.pp-trackpane-next').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        await h.sleep(150);
+        out.closedByEscape = !TrackChangesPane.isOpen() && box.style.marginRight === '';
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { closePaneIfOpen(); await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_pane_follows_the_document_and_says_when_nothing_is_pending',
+    description: "Le volet suit le document : une frappe en suivi ajoute une ligne, accepter la modification la retire ; sans modification il le dit (le suivi éteint ou allumé n'y change que la phrase)",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        useMarie();
+        await disableTrackChangesIfOn(h);
+        Editor.setHTML('<p>Texte de départ.</p>');
+        await h.sleep(150);
+        const out = {};
+        await h.clickButton('v2-btn-track-pane');
+        await h.sleep(250);
+        out.emptyOff = paneRows().length === 0 && /éteint/.test(paneEl().querySelector('.pp-trackpane-empty').textContent) && !paneEl().querySelector('.pp-trackpane-empty').hidden;
+        await enableTrackChanges(h);
+        Editor.setHTML('<p>Texte de départ.</p>');
+        await h.sleep(300);
+        out.emptyOn = paneRows().length === 0 && /Aucune modification/.test(paneEl().querySelector('.pp-trackpane-empty').textContent);
+        await h.focusAtEnd();
+        await h.typeText(' Ajout neuf.');
+        await h.sleep(600);
+        const typedRows = JSON.stringify(paneRows().map(row => row.textContent));
+        out.typed = paneRows().length === 1 && /Ajout neuf/.test(paneRows()[0].textContent) && /^(À l'instant|\d{1,2} \S+,? \d{2}:\d{2})$/.test(paneRows()[0].querySelector('.pp-trackpane-when').textContent) && paneRows()[0].querySelector('.pp-trackpane-who').textContent === MARIE.name;   // « À l'instant » tant que la sauvegarde n'a pas daté la modification, sa date ensuite
+        paneRows()[0].querySelector('.pp-trackpane-accept').click();
+        await h.sleep(500);
+        out.accepted = paneRows().length === 0 && !Editor.hasPendingTrackedChanges() && /Ajout neuf/.test(Editor.getHTML()) && !/<ins/.test(Editor.getHTML());
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + typedRows };
+      } finally { closePaneIfOpen(); await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_pane_buttons_go_to_resolve_and_walk_the_modifications',
+    description: "Un clic sur une ligne amène le curseur au début de la modification (la ligne est la courante, « 2 sur 3 ») ; Suivant et Précédent font le tour ; Accepter et Refuser d'une ligne ne résolvent que celle-là, un seul Annuler la ramène",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        useMarie();
+        await disableTrackChangesIfOn(h);
+        Editor.setHTML(LIST_DOC, { 1: JEAN, 2: PAUL, 3: JEAN });
+        await h.sleep(150);
+        const ed = EditorCore.getEditor();
+        await selectDoc(h, 1);
+        await h.clickButton('v2-btn-track-pane');
+        await h.sleep(250);
+        const out = {};
+        const startOfId = id => Editor.getSuggestionEntries().find(e => e.id === id).from;
+        paneRows()[1].querySelector('.pp-trackpane-go').click();
+        await h.sleep(250);
+        out.clicked = ed.state.selection.from === startOfId('1') && paneRows()[1].classList.contains('is-current') && paneRows()[1].querySelector('.pp-trackpane-go').getAttribute('aria-current') === 'true' && paneEl().querySelector('.pp-trackpane-count').textContent === '2 sur 3';
+        paneEl().querySelector('.pp-trackpane-next').click();
+        await h.sleep(200);
+        out.next = paneRows()[2].classList.contains('is-current');
+        paneEl().querySelector('.pp-trackpane-next').click();
+        await h.sleep(200);
+        out.wrapsToFirst = paneRows()[0].classList.contains('is-current');
+        paneEl().querySelector('.pp-trackpane-prev').click();
+        await h.sleep(200);
+        out.previousWraps = paneRows()[2].classList.contains('is-current');
+        paneRows()[1].querySelector('.pp-trackpane-reject').click();
+        await h.sleep(300);
+        out.refusedOne = paneRows().length === 2 && /bêta retiré gamma/.test(Editor.getHTML()) && /<ins data-id="3">ajouté<\/ins>/.test(Editor.getHTML());
+        ed.commands.undo();
+        await h.sleep(300);
+        out.undoneOnce = paneRows().length === 3;
+        paneRows()[0].querySelector('.pp-trackpane-accept').click();
+        await h.sleep(300);
+        out.acceptedOne = paneRows().length === 2 && /Alpha ajouté bêta/.test(Editor.getHTML()) && /<del data-id="1">retiré<\/del>/.test(Editor.getHTML());
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + Editor.getHTML() };
+      } finally { closePaneIfOpen(); await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  // --- Couleur et filtre par personne (lot 3 du volet) ---
+  const MULTI_DOC = '<p>Alpha <ins data-id="3">ajouté</ins> bêta <del data-id="1">retiré</del> gamma <del data-id="2">ancien</del><ins data-id="2">nouveau</ins> fin <ins data-id="4">encore</ins>.</p>';
+  const MULTI_META = { 1: JEAN, 2: PAUL, 3: JEAN, 4: { author: null, createdAt: null } };
+  const filterOf = () => paneEl().querySelector('.pp-trackpane-filter');
+  const pickPerson = (value) => { filterOf().value = value; filterOf().dispatchEvent(new Event('change', { bubbles: true })); };
+
+  cases.push({
+    id: 'trackchanges_list_gives_each_person_a_stable_colour_and_a_list_of_people',
+    description: "Chaque personne présente a une couleur, la même à chaque lecture et pour toutes les entrées d'une même personne ; deux personnes n'ont jamais la même ; les modifications sans auteur connu n'ont pas de couleur et font la dernière « personne » ; dix personnes, dix couleurs",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        useMarie();
+        await disableTrackChangesIfOn(h);
+        Editor.setHTML(MULTI_DOC, MULTI_META);
+        await h.sleep(150);
+        const entries = entriesOf();
+        const people = Editor.getSuggestionPeople ? Editor.getSuggestionPeople() : TrackChanges.entryPeople(entries);
+        const byId = id => entries.find(e => e.id === id);
+        const again = entriesOf();
+        const keys = Array.from({ length: 10 }, (_, i) => 'personne' + i + '@example.org');
+        const colours = TrackChangesList.assignColors(keys);
+        const reversed = TrackChangesList.assignColors(keys.slice().reverse());
+        const out = {
+          sameColourForSamePerson: byId('3').color === byId('1').color && !!byId('3').color && byId('3').personKey === JEAN.author,
+          differentPeople: byId('3').color !== byId('2').color && !!byId('2').color,
+          stable: entries.every((e, i) => e.color === again[i].color),
+          unknownHasNone: byId('4').color === null && byId('4').personKey === '',
+          peopleList: people.map(p => (p.key || '-') + ':' + p.count).join() === JEAN.author + ':2,' + PAUL.author + ':1,-:1',
+          peopleNames: people[0].name === 'Jean Dupont' && people[1].name === PAUL.author,
+          tenDistinct: new Set(Array.from(colours.values())).size === 10,
+          orderIndependent: keys.every(key => colours.get(key) === reversed.get(key)),
+        };
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + JSON.stringify(people) };
+      } finally { await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_pane_filters_by_person_and_resolves_only_that_persons_changes_in_one_undo',
+    description: "Le choix de la personne n'apparaît qu'à partir de deux personnes ; choisir l'une ne garde que ses lignes, sa phrase de compte et son tour de Suivant/Précédent ; « Refuser » (tout ce qu'elle a fait) ne résout que ses modifications en un seul Annuler ; quand elle n'a plus rien, le choix retombe sur tout le monde",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        useMarie();
+        await disableTrackChangesIfOn(h);
+        const ed = EditorCore.getEditor();
+        const out = {};
+        Editor.setHTML('<p>Alpha <ins data-id="3">ajouté</ins> bêta <del data-id="1">retiré</del>.</p>', { 1: JEAN, 3: JEAN });
+        await h.sleep(150);
+        await h.clickButton('v2-btn-track-pane');
+        await h.sleep(250);
+        out.hiddenForOnePerson = paneEl().querySelector('.pp-trackpane-filterrow').hidden && paneEl().querySelector('.pp-trackpane-bulk').hidden;
+        Editor.setHTML(MULTI_DOC, MULTI_META);
+        await h.sleep(400);
+        out.shownForSeveral = !paneEl().querySelector('.pp-trackpane-filterrow').hidden && Array.from(filterOf().options).map(o => o.textContent).join('|') === 'Toutes les personnes|Jean Dupont (2)|' + PAUL.author + ' (1)|Auteur inconnu (1)';
+        out.dots = paneRows().length === 4 && paneRows().filter(row => row.querySelector('.pp-trackpane-dot') && !row.querySelector('.pp-trackpane-dot').classList.contains('is-unknown')).length === 3 && paneRows()[3].querySelector('.pp-trackpane-dot').classList.contains('is-unknown');
+        out.sameDot = paneRows()[0].querySelector('.pp-trackpane-dot').style.background === paneRows()[1].querySelector('.pp-trackpane-dot').style.background;
+        pickPerson(JEAN.author);
+        await h.sleep(200);
+        out.filtered = paneRows().length === 2 && paneRows().every(row => row.querySelector('.pp-trackpane-who').textContent === 'Jean Dupont') && paneEl().querySelector('.pp-trackpane-count').textContent === '2 modifications';
+        out.bulkLabels = !paneEl().querySelector('.pp-trackpane-bulk').hidden && paneEl().querySelectorAll('.pp-trackpane-bulkbtn')[1].textContent === 'Refuser (2)' && /Jean Dupont/.test(paneEl().querySelectorAll('.pp-trackpane-bulkbtn')[0].getAttribute('aria-label'));
+        await selectDoc(h, 1);
+        const walk = [];
+        for (let i = 0; i < 3; i++) { paneEl().querySelector('.pp-trackpane-next').click(); await h.sleep(150); walk.push(Editor.getSuggestionEntries().find(e => ed.state.selection.from >= e.from && ed.state.selection.from <= e.to).id); }
+        out.walkSkipsOthers = walk.join() === '3,1,3';
+        out.positionInFiltered = /^\d sur 2$/.test(paneEl().querySelector('.pp-trackpane-count').textContent);
+        const before = Editor.getHTML();
+        paneEl().querySelectorAll('.pp-trackpane-bulkbtn')[1].click();
+        await h.sleep(400);
+        out.refusedHis = !/data-id="[13]"/.test(Editor.getHTML()) && /<del data-id="2">ancien<\/del>/.test(Editor.getHTML()) && /<ins data-id="4">encore<\/ins>/.test(Editor.getHTML());
+        out.backToEveryone = filterOf().value === '' && paneRows().length === 2;
+        ed.commands.undo();
+        await h.sleep(400);
+        out.oneUndo = Editor.getHTML() === before && Editor.getSuggestionEntries().length === 4;
+        pickPerson('*');
+        await h.sleep(200);
+        out.unknownPerson = paneRows().length === 1 && paneRows()[0].querySelector('.pp-trackpane-who').textContent === 'Auteur inconnu' && paneEl().querySelectorAll('.pp-trackpane-bulkbtn')[0].textContent === 'Accepter (1)';
+        paneEl().querySelectorAll('.pp-trackpane-bulkbtn')[0].click();
+        await h.sleep(400);
+        out.acceptedUnknown = /encore/.test(Editor.getHTML()) && !/data-id="4"/.test(Editor.getHTML()) && /data-id="3"/.test(Editor.getHTML());
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + walk.join() + ' ' + Editor.getHTML() };
+      } finally { closePaneIfOpen(); await disableTrackChangesIfOn(h); }
+    },
+  });
+
   cases.push({
     id: 'trackchanges_macro_template_excluded_from_suivi',
     description: "Un macro-modèle (TypeModele='macro') n'a jamais de suiviModifications exploitable (null, jamais un objet) et verrouille les 3 boutons de suivi dans la barre - son JSON de composition ne passe jamais par l'éditeur suivi",
@@ -2963,7 +3379,8 @@
       const editorUntouched = html.indexOf('slots') === -1 && html.indexOf('macroSlots') === -1;
       const locked = toggleBtn().classList.contains('v2-hf-locked')
         && acceptBtn().classList.contains('v2-hf-locked')
-        && rejectBtn().classList.contains('v2-hf-locked');
+        && rejectBtn().classList.contains('v2-hf-locked')
+        && document.getElementById('v2-btn-track-pane').classList.contains('v2-hf-locked');
       return {
         pass: suiviNull && editorUntouched && locked,
         notes: 'suiviModifications=' + JSON.stringify(cached && cached.suiviModifications) + ', editorUntouched=' + editorUntouched + ', verrouillé=' + locked,

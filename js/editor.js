@@ -621,6 +621,7 @@ const Editor = (function () {
     FloatingToolbars.wireMentionFloatingToolbar();
     FloatingToolbars.wireCopyFloatingToolbar();
     FloatingToolbars.wireSuggestionFloatingToolbar({ of: getSuggestionAuthors, onChange: onSuggestionAuthorsChange });
+    TrackChangesPane.wireEditor(editor, { onAuthorsChange: onSuggestionAuthorsChange });
     FreeFrame.wireToolbar(editor);
     Comments.setEditor(editor);
     Comments.wireClickToOpen();
@@ -1025,6 +1026,46 @@ const Editor = (function () {
     if (typeof fn === 'function') authorListeners.push(fn);
   }
 
+  // La liste des modifications en attente (le volet « Modifications ») : TrackChanges.suggestionEntries, avec les personnes et les dates des métadonnées. Une modification que
+  // les métadonnées ne connaissent pas est celle de la personne devant l'écran : tant qu'on ne l'a pas lue (`authorPending`), sa lecture part et les écouteurs de
+  // onSuggestionAuthorsChange sont prévenus quand elle arrive.
+  function getSuggestionEntries() {
+    if (!editor) return [];
+    const entries = TrackChanges.suggestionEntries(editor.state.doc, suiviMetadataCache, currentAuthor);
+    if (entries.some(entry => entry.authorPending) && !currentAuthorRead && Date.now() - currentAuthorFailedAt > AUTHOR_RETRY_MS) readCurrentAuthor();
+    return entries;
+  }
+  // Accepte (`accept` vrai) ou refuse une modification de la liste, avec tout ce qui se résout avec elle, en un seul pas d'historique.
+  function resolveSuggestionEntry(entry, accept) {
+    return !!editor && !!entry && TrackChanges.resolveIds(editor, entry.ids, accept);
+  }
+  // Les modifications de plusieurs entrées d'un coup (« Tout accepter de Marie »), en UNE transaction : un seul Annuler.
+  function resolveSuggestionEntries(entries, accept) {
+    const ids = [];
+    entries.forEach(entry => entry.ids.forEach(id => ids.push(id)));
+    return !!editor && ids.length > 0 && TrackChanges.resolveIds(editor, ids, accept);
+  }
+  // Pose le curseur au début d'une modification de la liste et l'amène à l'écran. Le focus reste où il est : le volet garde la main (Suivant, Précédent, Accepter au clavier).
+  function revealSuggestion(entry) {
+    if (!editor || !entry) return false;
+    // L'entrée a pu vieillir depuis que la liste l'a lue (le texte a changé avant son redessin) : sa place se relit.
+    const current = getSuggestionEntries().find(other => other.id === entry.id) || entry;
+    const { doc } = editor.state;
+    const $from = doc.resolve(Math.max(0, Math.min(current.from, doc.content.size)));
+    const selection = EditorCore.getTextSelectionClass().near($from, 1);
+    editor.view.dispatch(editor.state.tr.setSelection(selection).scrollIntoView());
+    return true;
+  }
+  // Va à la modification suivante (`step` 1) ou précédente (-1) de celle où est le curseur, en reprenant de l'autre côté au bout de la liste ; `keep(entry)`, quand il est donné, ne laisse
+  // passer que certaines modifications (celles d'une personne). Rend l'entrée atteinte, ou null sans modification.
+  function goToSuggestion(step, keep) {
+    const entries = getSuggestionEntries().filter(entry => !keep || keep(entry));
+    const index = TrackChanges.entryNeighbor(entries, editor.state.selection.from, step);
+    if (index === -1) return null;
+    revealSuggestion(entries[index]);
+    return entries[index];
+  }
+
   async function getSuiviModificationsForSave() {
     // Auteur et horodatage par suggestion en attente (colonne Grist SuiviModifications, cf. suiviMetadataCache plus haut). Appelée juste avant chaque
     // Templates.save() (enregistrement manuel et automatique, js/main.js), jamais séparément : cette colonne ne s'écrit jamais hors du même
@@ -1057,6 +1098,6 @@ const Editor = (function () {
     refreshPaginationPreview,
     refreshLayout, fitTablesToPage, openFootnoteEditorAt, isEditingHeaderFooter: HeaderFooterPreview.isEditingHeaderFooter, isTrackChangesOn, setTrackChanges, isFormatTrackingOn, setFormatTracking,
     hasPendingTrackedChanges, selectedColumnsCrossMergedCell, selectedRowsCrossMergedCell, getSuiviModificationsForSave, getSuggestionAuthors,
-    onSuggestionAuthorsChange,
+    onSuggestionAuthorsChange, getSuggestionEntries, resolveSuggestionEntry, resolveSuggestionEntries, revealSuggestion, goToSuggestion,
   };
 })();

@@ -1,0 +1,66 @@
+/* Le volet « Modifications » (js/track-changes-pane.js) : la liste des modifications en attente, collée à droite du texte. Il se pose en `position: fixed` sur la hauteur de #editor-container,
+   que le script réduit d'autant (marge à droite) : la page garde sa largeur, seule la fenêtre sur elle rétrécit. Les couleurs viennent des jetons de css/style.css (clair et sombre, 4,5:1 au
+   moins) ; le volet est monochrome, l'ajout et la suppression se lisent à leur signe (+ / −) et à leur soulignement ou barré, pas à la couleur seule. */
+.pp-trackpane {
+  position: fixed;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(248px, 42vw);
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+.pp-trackpane[hidden] { display: none; }
+
+.pp-trackpane-header { flex: none; display: flex; align-items: center; gap: 2px; padding: 4px 6px 4px 10px; border-bottom: 1px solid var(--border); }
+.pp-trackpane-heading { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.pp-trackpane-title { margin: 0; font-size: 13px; font-weight: 600; }
+.pp-trackpane-count { min-height: 15px; color: var(--text-muted); font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Boutons icône : nus au repos, fond et bordure discrets au survol (comme ceux du panneau Rechercher, css/find-replace.css). */
+.pp-trackpane-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-xs, 5px); background: transparent; color: var(--text); cursor: pointer; }
+.pp-trackpane-btn svg { width: 15px; height: 15px; pointer-events: none; }
+.pp-trackpane-btn:hover { background: var(--surface-sunken); border-color: var(--border); }
+.pp-trackpane-btn:focus-visible, .pp-trackpane-go:focus-visible, .pp-trackpane-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Grisé, jamais retiré, et toujours atteignable au clavier (aria-disabled), comme dans le panneau Rechercher. */
+.pp-trackpane [aria-disabled="true"] { opacity: .35; cursor: default; }
+.pp-trackpane [aria-disabled="true"]:hover { background: transparent; border-color: transparent; }
+
+.pp-trackpane-list { flex: 1 1 auto; min-height: 0; margin: 0; padding: 0; list-style: none; overflow-y: auto; }
+.pp-trackpane-list[hidden] { display: none; }
+.pp-trackpane-item { display: flex; align-items: flex-start; gap: 2px; padding: 2px 4px 2px 0; border-bottom: 1px solid var(--border); }
+.pp-trackpane-item.is-current { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.pp-trackpane-go { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 5px 4px 5px 10px; border: 0; border-radius: var(--radius-xs, 5px); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.pp-trackpane-item:not(.is-current) .pp-trackpane-go:hover { background: var(--surface-sunken); }
+.pp-trackpane-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; min-width: 0; }
+/* La personne : un point de sa couleur (propre à chaque personne, posée par le script) puis son nom, toujours écrit ; sans auteur connu, un point creux. */
+.pp-trackpane-person { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 5px; }
+.pp-trackpane-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.pp-trackpane-dot.is-unknown { border: 1.5px solid var(--text-muted); box-sizing: border-box; background: transparent; }
+.pp-trackpane-who { min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-trackpane-when { flex: none; color: var(--text-muted); font-size: 11px; white-space: nowrap; }
+.pp-trackpane-what { color: var(--text-muted); }
+.pp-trackpane-extract { display: flex; align-items: baseline; gap: 4px; min-width: 0; }
+.pp-trackpane-sign { flex: none; width: 1ch; font-weight: 700; }
+.pp-trackpane-text { min-width: 0; overflow-wrap: anywhere; }
+.pp-trackpane-extract.is-inserted .pp-trackpane-text { text-decoration: underline; text-underline-offset: 2px; }
+.pp-trackpane-extract.is-deleted .pp-trackpane-text { text-decoration: line-through; }
+.pp-trackpane-actions { flex: none; display: flex; flex-direction: column; gap: 2px; padding-top: 3px; }
+
+.pp-trackpane-empty { margin: 0; padding: 12px 10px; color: var(--text-muted); }
+.pp-trackpane-empty[hidden], .pp-trackpane-more[hidden] { display: none; }
+.pp-trackpane-more { flex: none; margin: 6px 10px; height: 28px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-btn, var(--radius-sm)); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+.pp-trackpane-more:hover { background: var(--surface-sunken); }
+
+/* Le choix de la personne (à partir de deux), sous l'en-tête ; et, en bas, « Tout accepter » et « Tout refuser » de la personne choisie. */
+.pp-trackpane-filterrow { flex: none; padding: 4px 10px; border-bottom: 1px solid var(--border); }
+.pp-trackpane-filterrow[hidden], .pp-trackpane-bulk[hidden] { display: none; }
+.pp-trackpane-filter { width: 100%; height: 26px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-xs, 5px); background: var(--surface); color: var(--text); font: inherit; }
+.pp-trackpane-filter:focus-visible, .pp-trackpane-bulkbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-trackpane-bulk { flex: none; display: flex; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--border); }
+.pp-trackpane-bulkbtn { flex: 1 1 0; min-width: 0; height: 28px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-btn, var(--radius-sm)); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.pp-trackpane-bulkbtn:hover { background: var(--surface-sunken); }

@@ -214,5 +214,5 @@ const TrackChangesCommands = (function () {
     return true;
   };
 
-  return { runGuardedLibCommand, resolveAtSelection, chunkedCommand, refuseAttributes, releaseWidthsRefusedBy, isBulkResolution };
+  return { runGuardedLibCommand, resolveAtSelection, resolveSuggestionIds, chunkedCommand, refuseAttributes, releaseWidthsRefusedBy, isBulkResolution };
 })();

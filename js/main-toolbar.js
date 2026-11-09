@@ -17,11 +17,11 @@ const MainToolbar = (function () {
   // menu « Lien et blocs de contenu » s'ajoute à cette liste, sauf une image. Le saut de page n'en fait pas partie : il se pose avant la ligne
   // sélectionnée (GridEditor.togglePageBreak) et ne se grise que là où il n'a pas de sens (syncLocks). Il fait de même dans un tableau de document.
   let inGridMode = false;
-  function setGridMode(active) { inGridMode = !!active; }
+  function setGridMode(active) { inGridMode = !!active; if (inGridMode) TrackChangesPane.closePane({ focus: false }); }
   const GRID_LOCKED_IDS = [
     'v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc',
     'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-linked-table', 'v2-btn-slide-text', 'v2-btn-video',
-    'v2-btn-track-changes', 'v2-btn-track-format', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-collab-group',
+    'v2-btn-track-changes', 'v2-btn-track-format', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-btn-track-pane', 'v2-collab-group',
   ];
   const gridLockedIds = new Set();
   // Les cases d'un tableau lié à un modèle Grille suivent les règles d'une grille (js/linked-table.js) : le curseur dans l'un d'eux, ce qui poserait un tableau, des
@@ -232,6 +232,7 @@ const MainToolbar = (function () {
     set('v2-btn-collab', 'collab');
     setRowIcon('v2-btn-track-changes', 'trackChanges');
     setRowIcon('v2-btn-track-format', 'trackFormat');
+    setRowIcon('v2-btn-track-pane', 'trackList');
     setRowIcon('v2-btn-accept-all', 'acceptAll'); setRowIcon('v2-btn-reject-all', 'rejectAll');
     setRowIcon('v2-btn-live', 'liveWrite');
     set('v2-highlight-icon', 'highlight');
@@ -409,7 +410,7 @@ const MainToolbar = (function () {
       // (js/script-marks.js:toUnicode) -, et le menu « Lien et blocs de contenu » en entier. Annuler et Rétablir restent actifs : l'historique d'un macro-modèle
       // garde sa page et sa composition (js/history-markers.js, domaines « page » et « macro »).
       [inMacroMode, ['v2-char-group', 'v2-btn-comment', 'v2-btn-insert-variable', 'v2-btn-find', 'v2-btn-track-changes', 'v2-btn-track-format',
-        'v2-blocks-group', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-collab-group'], plain],
+        'v2-blocks-group', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-btn-track-pane', 'v2-collab-group'], plain],
       // En-tête ou pied de page : un niveau de titre a un sens, pas la numérotation (titres du flux principal seul). Le sommaire et le saut de page y sont
       // grisés aussi, plus haut (ils ont déjà une condition pour l'e-mail et la grille).
       [inHfMode, ['v2-numbering-seg'], zone],
@@ -843,6 +844,7 @@ const MainToolbar = (function () {
     bind('v2-btn-redo', () => { HistoryMarkers.flush(); if (LiveEntry.redo()) editor.commands.focus(); else editor.chain().focus().redo().run(); });
     const unlessLive = action => () => { if (LiveEntry.isLive()) LiveEntry.explainLocked('trackChanges'); else action(); };
     bind('v2-btn-track-changes', unlessLive(() => editor.chain().focus().toggleSuggestMode().run()));
+    bind('v2-btn-track-pane', () => { TrackChangesPane.toggle(); });
     bind('v2-btn-track-format', unlessLive(() => { Editor.setFormatTracking(!Editor.isFormatTrackingOn()); syncTrackFormatRow(); editor.commands.focus(); }));
     // Variante découpée : celle de la bibliothèque est en O(N²) pour « tout accepter ou refuser » (js/track-changes.js).
     bind('v2-btn-accept-all', unlessLive(() => editor.chain().focus().acceptAllSuggestionsChunked().run()));

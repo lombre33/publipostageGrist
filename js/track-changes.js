@@ -11,7 +11,8 @@ const TrackChanges = (function () {
   const { selectionSuggestionIds } = TrackChangesSelection;
   const { keepOriginalNodeSettings } = TrackChangesResolve;
   const { acceptedView } = TrackChangesReading;
-  const { runGuardedLibCommand, resolveAtSelection, chunkedCommand, refuseAttributes, releaseWidthsRefusedBy, isBulkResolution } = TrackChangesCommands;
+  const { runGuardedLibCommand, resolveAtSelection, resolveSuggestionIds, chunkedCommand, refuseAttributes, releaseWidthsRefusedBy, isBulkResolution } = TrackChangesCommands;
+  const { collect: collectEntries, indexAt, neighbor, personKey, assignColors, peopleOf } = TrackChangesList;
 
   // Qui a proposé quoi : { [id]: { author, authorName, createdAt } }, la colonne Grist SuiviModifications (Editor.getSuiviModificationsForSave). `author` est l'adresse de la
   // personne (null quand le document ne la connaît pas), `authorName` son nom (absent quand Grist n'en donne pas), `createdAt` la date de l'enregistrement.
@@ -60,6 +61,27 @@ const TrackChanges = (function () {
       else if (!known.name && who.name) known.name = who.name;
     });
     return Array.from(people.values());
+  }
+
+  // La liste des modifications en attente, pour le volet « Modifications » : une entrée par modification, dans l'ordre du document (TrackChangesList.collect), avec la personne
+  // et la date que les métadonnées donnent. `author` : { name, email }, ou null quand le document ne la connaît pas ; une modification que les métadonnées ne connaissent pas est
+  // celle de la personne devant l'écran (`current`, null tant que son identité n'est pas lue : `authorPending` le dit). `createdAt` : la date de l'enregistrement, null avant le
+  // premier (la modification vient d'être tapée).
+  function suggestionEntries(doc, metadata, current) {
+    const entries = collectEntries(doc).map((entry) => {
+      const known = entry.keys.map(key => metadata && metadata[key]).find(Boolean);
+      const who = known ? { email: known.author || '', name: known.authorName || '' } : current;
+      const author = who && (who.email || who.name) ? { name: who.name || '', email: who.email || '' } : null;
+      return Object.assign(entry, { author, authorPending: !known && !current, createdAt: known ? known.createdAt || null : null, fresh: !known, personKey: personKey(author), color: null });
+    });
+    // `personKey` : qui (vide quand on ne sait pas), `color` : la couleur de cette personne parmi celles du document (null sans personne).
+    const colors = assignColors(entries.map(entry => entry.personKey));
+    entries.forEach((entry) => { entry.color = colors.get(entry.personKey) || null; });
+    return entries;
+  }
+  // Accepte ou refuse les modifications d'ids donnés (et tout ce qui se résout avec elles), en une seule transaction : un seul Annuler. Rend vrai quand le document a changé.
+  function resolveIds(editor, ids, accept) {
+    return resolveSuggestionIds(editor, ids, accept);
   }
 
   // Les numéros que la session connaît hors du document : ceux des métadonnées, y compris les modifications résolues depuis (« Annuler » peut les ramener, avec leur auteur).
@@ -216,6 +238,6 @@ const TrackChanges = (function () {
 
   return {
     extendForTracking, hasPendingSuggestions, collectPendingIds, computeMetadata, seedMetadata, authorsOfSuggestions, setKnownSuggestionIds, createExtensions, skipTracking,
-    isSkipped, selectionSuggestionIds, acceptedView, isBulkResolution, isFormatTracking, setFormatTracking,
+    isSkipped, selectionSuggestionIds, acceptedView, isBulkResolution, isFormatTracking, setFormatTracking, suggestionEntries, resolveIds, entryIndexAt: indexAt, entryNeighbor: neighbor, entryPeople: peopleOf,
   };
 })();

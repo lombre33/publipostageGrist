@@ -157,7 +157,7 @@ La [note de version](PATCH_NOTES.md) en donne la liste complète, une puce par f
 - **Enregistrement automatique** avec détection d'un conflit si quelqu'un d'autre a enregistré le modèle entre-temps.
 - **Historique des versions** : aperçu, comparaison, nom, restauration (l'état remplacé reste dans la liste).
 - **Commentaires** sur le texte sélectionné, avec réponses et résolution, partagés entre les personnes qui ouvrent le document.
-- **Suivi des modifications** (bêta) : les changements sont proposés dans le texte, puis acceptés ou refusés. La mise en forme (gras, couleur, alignement, titres, listes) n'est suivie que si l'option « Suivre la mise en forme » du menu est allumée : éteinte, elle s'applique sans trace.
+- **Suivi des modifications** (bêta) : les changements sont proposés dans le texte, puis acceptés ou refusés. La mise en forme (gras, couleur, alignement, titres, listes) n'est suivie que si l'option « Suivre la mise en forme » du menu est allumée : éteinte, elle s'applique sans trace. La ligne « Liste des modifications » du même menu ouvre, à droite du texte, la liste de toutes les modifications en attente (qui, quand, un extrait), avec « Précédent » et « Suivant » pour les parcourir et « Accepter » et « Refuser » sur chaque ligne. À partir de deux personnes, chacune a sa couleur (un point devant chaque ligne), et un choix en tête de la liste ne garde que ses modifications, que « Accepter » et « Refuser » du bas résolvent d'un coup.
 - **Droits par personne** (lecture seule, export, commentaires), lus dans une table du document : un verrou d'interface, pas une protection des données.
 
 ### Exporter
@@ -496,7 +496,7 @@ The [release notes](PATCH_NOTES.md) give the complete list, one bullet per featu
 - **Autosave** with conflict detection if someone else saved the template in the meantime.
 - **Version history**: preview, comparison, naming, restoring (the replaced state stays in the list).
 - **Comments** on the selected text, with replies and resolution, shared between the people who open the document.
-- **Track changes** (beta): changes are proposed in the text, then accepted or rejected. Formatting (bold, color, alignment, headings, lists) is only tracked when the “Track formatting” option of the menu is on: when it is off, formatting applies without a trace.
+- **Track changes** (beta): changes are proposed in the text, then accepted or rejected. Formatting (bold, color, alignment, headings, lists) is only tracked when the “Track formatting” option of the menu is on: when it is off, formatting applies without a trace. The “Changes list” row of the same menu opens, beside the text, the list of every pending change (who, when, an excerpt), with “Previous” and “Next” to walk through them and “Accept” and “Reject” on each line. From two people on, each has a colour (a dot before each line), and a choice at the top of the list keeps only that person's changes, which the “Accept” and “Reject” buttons at the bottom resolve in one go.
 - **Per-person rights** (read-only, export, comments), read from a table of the document: an interface lock, not data protection.
 
 ### Exporting
