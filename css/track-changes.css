@@ -49,13 +49,13 @@
 .tiptap tr > span[data-type="modification"] {
   display: contents;
 }
-.tiptap tr > ins[data-id] > td,
-.tiptap tr > ins[data-id] > th {
+.tiptap:not([data-track-view]) tr > ins[data-id] > td,
+.tiptap:not([data-track-view]) tr > ins[data-id] > th {
   color: #146c48;
   background-color: #e5f6ee !important;
 }
-.tiptap tr > del[data-id] > td,
-.tiptap tr > del[data-id] > th {
+.tiptap:not([data-track-view]) tr > del[data-id] > td,
+.tiptap:not([data-track-view]) tr > del[data-id] > th {
   color: #b42318;
   background-color: #fbe9e9 !important;
   text-decoration: line-through;
@@ -71,16 +71,50 @@
 .tiptap tbody > span[data-type="modification"] {
   display: contents;
 }
-.tiptap tbody > ins[data-id] > tr > td,
-.tiptap tbody > ins[data-id] > tr > th {
+.tiptap:not([data-track-view]) tbody > ins[data-id] > tr > td,
+.tiptap:not([data-track-view]) tbody > ins[data-id] > tr > th {
   color: #146c48;
   background-color: #e5f6ee !important;
 }
-.tiptap tbody > del[data-id] > tr > td,
-.tiptap tbody > del[data-id] > tr > th {
+.tiptap:not([data-track-view]) tbody > del[data-id] > tr > td,
+.tiptap:not([data-track-view]) tbody > del[data-id] > tr > th {
   color: #b42318;
   background-color: #fbe9e9 !important;
   text-decoration: line-through;
+}
+
+/* Les quatre affichages du texte suivi (le volet « Modifications », js/track-changes-pane.js, pose data-track-view sur l'éditeur ; sans l'attribut, « Toutes les marques » : les règles
+   ci-dessus, dont les teintes de case et de ligne, que `:not([data-track-view])` réserve à cet affichage). « simple » et « final » montrent le résultat final : le texte inséré perd sa
+   teinte, le texte supprimé (et la colonne ou la ligne supprimée) disparaît ; « simple » y ajoute un trait à gauche de chaque bloc où quelque chose a changé (rouge de la suppression
+   plus haut, 5,6:1 sur la page blanche ; dans la marge, le texte ne bouge pas). « original » montre le texte d'avant : l'inséré disparaît, le supprimé se lit comme du texte ordinaire.
+   Une mise en forme suivie (marque « modification ») ne s'y défait pas : seul son pointillé s'efface. L'éditeur n'est pas modifiable dans ces trois affichages (le volet le fige) : ce que
+   l'on ne voit pas ne peut ni s'effacer ni se retaper. */
+.tiptap:is([data-track-view="simple"], [data-track-view="final"]) ins[data-id],
+.tiptap[data-track-view="original"] del[data-id] {
+  text-decoration: none;
+  color: inherit;
+  background: none;
+  border-bottom: 0;
+}
+.tiptap:is([data-track-view="simple"], [data-track-view="final"]) del[data-id],
+.tiptap[data-track-view="original"] ins[data-id] {
+  display: none;
+}
+.tiptap:is([data-track-view="simple"], [data-track-view="final"], [data-track-view="original"]) span[data-type="modification"] {
+  text-decoration: none;
+}
+.tiptap:is([data-track-view="simple"], [data-track-view="final"]) ins[data-id] img.editor-image,
+.tiptap[data-track-view="original"] del[data-id] img.editor-image {
+  outline: 0;
+  opacity: 1 !important;
+}
+.tiptap[data-track-view="simple"] :is(p, h1, h2, h3, h4, h5, h6):has(> ins[data-id], > del[data-id], > span[data-type="modification"]) {
+  box-shadow: -4px 0 0 #b42318;
+}
+.tiptap[data-track-view="simple"] :is(td, th):has(ins[data-id], del[data-id], span[data-type="modification"]),
+.tiptap[data-track-view="simple"] tr > ins[data-id] > :is(td, th),
+.tiptap[data-track-view="simple"] tbody > ins[data-id] > tr > :is(td, th) {
+  box-shadow: inset 3px 0 0 #b42318;
 }
 
 /* Barre « Accepter / Refuser » d'une modification suivie (js/floating-toolbars.js:wireSuggestionFloatingToolbar) : deux boutons à libellé, de la

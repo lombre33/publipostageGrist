@@ -1,20 +1,25 @@
 // Suivi des modifications : le volet « Modifications » - la liste de toutes les modifications en attente à droite du texte (qui, quand, un extrait), un clic pour aller à l'une, « Accepter » et
 // « Refuser » sur sa ligne, « Précédent » et « Suivant » pour les parcourir. Ouvert par la ligne « Liste des modifications » du menu « Édition collaborative » (js/main-toolbar.js). Le contenu
-// vient de Editor.getSuggestionEntries (js/track-changes-list.js) ; le volet ne change jamais le document par lui-même, seules ses boutons résolvent une modification. Façade : TrackChangesPane.
-// Styles : css/track-changes-pane.css. Hébergé par GFS, le volet cède ce que la barre de GFS en recouvre (GfsBar.bite, comme la bande des diapositives et le volet « Importer » de extensions/diapositives) :
-// la largeur de la barre à droite, la hauteur d'une barre en haut ou en bas qui passe devant lui, et le texte lui laisse la même place.
+// vient de Editor.getSuggestionEntries (js/track-changes-list.js) ; le volet ne change jamais le document par lui-même, seules ses boutons résolvent une modification. Il choisit aussi l'affichage
+// du texte suivi (VIEWS : toutes les marques, marques simples, sans marque, original) : les trois derniers ne servent qu'à relire, le texte n'y est plus modifiable. Façade : TrackChangesPane.
+// Styles : css/track-changes-pane.css (le volet) et css/track-changes.css (les affichages, par l'attribut data-track-view de l'éditeur). Hébergé par GFS, le volet cède ce que la barre de GFS en recouvre
+// (GfsBar.bite, comme la bande des diapositives et le volet « Importer » de extensions/diapositives) : la largeur de la barre à droite, la hauteur d'une barre en haut ou en bas qui passe devant lui, et le texte lui laisse la même place.
 const TrackChangesPane = (function () {
   const el = Dom.el;
   const PAGE_SIZE = 200;          // lignes montrées d'un coup ; « Afficher la suite » en ajoute autant
   const REFRESH_MS = 150;         // la liste se redessine une fois la frappe calmée
+  // Les affichages du texte suivi : « all » (tout est marqué, le texte se modifie), « simple » (le résultat final, un trait à gauche de ce qui a changé), « final » (le résultat final sans
+  // marque), « original » (le texte d'avant, sans les ajouts). Seul « all » laisse taper : un texte supprimé caché ne se laisse pas effacer ni retaper sans qu'on le voie.
+  const VIEWS = ['all', 'simple', 'final', 'original'];
   // `filter` : null pour tout le monde, sinon la clé d'une personne (TrackChangesList.personKey ; '' pour les modifications sans auteur connu).
-  const state = { open: false, entries: [], people: [], filter: null, current: -1, shown: PAGE_SIZE };
+  const state = { open: false, entries: [], people: [], filter: null, view: 'all', current: -1, shown: PAGE_SIZE };
   let editor = null;
   let pane = null;
   let refs = null;
   let timer = 0;
   let observer = null;
   let stopBar = null;             // l'abonnement aux changements de la barre de GFS (le volet ouvert seulement)
+  let editableBefore = true;      // l'éditeur se laissait modifier avant qu'un affichage en lecture seule ne le fige
 
   const t = (key, params) => I18n.t(key, params);
   const container = () => document.getElementById('editor-container');
@@ -22,6 +27,15 @@ const TrackChangesPane = (function () {
   const visibleEntries = () => state.entries.filter(matchesFilter);
   const filteredPerson = () => state.people.find(person => person.key === state.filter) || null;
   const personName = person => person.key === '' ? t('trackList.author.unknown') : person.name;
+
+  // Pose l'affichage : l'attribut que lit css/track-changes.css, et l'éditeur figé (ni frappe ni collage) hors « Toutes les marques ». Sans émettre de mise à jour : rien n'a changé dans le document.
+  function applyView(view) {
+    if (!editor || !VIEWS.includes(view)) return;
+    if (state.view === 'all' && view !== 'all') editableBefore = editor.isEditable;
+    state.view = view;
+    if (view === 'all') delete editor.view.dom.dataset.trackView; else editor.view.dom.dataset.trackView = view;
+    editor.setEditable(view === 'all' ? editableBefore : false, false);
+  }
 
   // Ce que fait une modification, en mots : « Ajout », « Suppression », « Remplacement », « Colonne ajoutée »... ; pour un réglage, son nom quand on le connaît (l'alignement, l'interligne...).
   const SETTING_KEYS = {
@@ -112,6 +126,13 @@ const TrackChangesPane = (function () {
     refs.empty.hidden = false;
     refs.empty.textContent = t(Editor.isTrackChangesOn() ? 'trackList.empty' : 'trackList.emptyOff');
   }
+  // L'affichage : la liste déroulante dit celui en vigueur, la ligne dessous dit ce qu'il montre et que le texte ne s'y modifie plus (vide pour « Toutes les marques »).
+  function renderView() {
+    refs.view.value = state.view;
+    refs.viewNote.hidden = state.view === 'all';
+    refs.viewNote.textContent = state.view === 'all' ? '' : t('trackList.view.note.' + state.view);
+    refs.view.title = t('trackList.view.label');
+  }
   // Le choix de la personne : montré à partir de deux personnes (une seule n'a rien à départager) ou tant qu'un filtre est posé ; « Accepter » et « Refuser » toutes les modifications de la personne choisie.
   function renderFilter() {
     const needed = state.people.length >= 2 || state.filter !== null;
@@ -140,6 +161,7 @@ const TrackChangesPane = (function () {
     refs.count.textContent = countLabel(total);
     refs.prev.setAttribute('aria-disabled', total ? 'false' : 'true');
     refs.next.setAttribute('aria-disabled', total ? 'false' : 'true');
+    renderView();
     renderFilter();
     const focused = pane.contains(document.activeElement) && document.activeElement.closest('.pp-trackpane-item');
     const focusedId = focused ? focused.dataset.id : null;
@@ -250,6 +272,16 @@ const TrackChangesPane = (function () {
     next.addEventListener('click', () => step(1));
     close.addEventListener('click', () => closePane());
     header.append(heading, prev, next, close);
+    const viewRow = el('div', 'pp-trackpane-viewrow');
+    const view = el('select', 'pp-trackpane-view');
+    view.setAttribute('aria-label', t('trackList.view.label'));
+    VIEWS.forEach((name) => view.append(Dom.option(name, t('trackList.view.' + name))));
+    const viewNote = el('p', 'pp-trackpane-viewnote');
+    viewNote.id = 'pp-track-view-note';
+    viewNote.hidden = true;
+    view.setAttribute('aria-describedby', viewNote.id);
+    view.addEventListener('change', () => { applyView(view.value); render(); });
+    viewRow.append(view, viewNote);
     const filterRow = el('div', 'pp-trackpane-filterrow');
     const filter = el('select', 'pp-trackpane-filter');
     filter.setAttribute('aria-label', t('trackList.filter.label'));
@@ -273,12 +305,12 @@ const TrackChangesPane = (function () {
     rejectPerson.addEventListener('click', () => resolveShown(false));
     bulk.append(acceptPerson, rejectPerson);
     bulk.hidden = true;
-    pane.append(header, filterRow, list, empty, more, bulk);
+    pane.append(header, viewRow, filterRow, list, empty, more, bulk);
     pane.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); closePane(); }
     });
     document.body.append(pane);
-    refs = { header, title, close, prev, next, count, filterRow, filter, list, empty, more, bulk, acceptPerson, rejectPerson };
+    refs = { header, title, close, prev, next, count, viewRow, view, viewNote, filterRow, filter, list, empty, more, bulk, acceptPerson, rejectPerson };
   }
 
   function syncToolbarRow() {
@@ -307,6 +339,7 @@ const TrackChangesPane = (function () {
     clearTimeout(timer);
     timer = 0;
     if (stopBar) { stopBar(); stopBar = null; }
+    applyView('all');   // sans le volet, plus rien ne ramène à « Toutes les marques » : le texte redevient modifiable
     layout();
     syncToolbarRow();
     if (!options || options.focus !== false) editor.commands.focus();

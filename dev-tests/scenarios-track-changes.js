@@ -3000,7 +3000,8 @@
         await h.sleep(600);
         const [typed] = entriesOf();
         const out = {
-          fresh: !!typed && typed.fresh === true && typed.createdAt === null,
+          // « fraîche » (sans date) tant que la sauvegarde ne l'a pas datée, datée ensuite : l'un ou l'autre selon l'instant où l'enregistrement automatique passe.
+          fresh: !!typed && (typed.fresh ? typed.createdAt === null : typeof typed.createdAt === 'string' && !Number.isNaN(Date.parse(typed.createdAt))),
           marie: !!typed && typed.authorPending === false && typed.author && typed.author.name === MARIE.name && typed.author.email === MARIE.email,
         };
         await disableTrackChangesIfOn(h);
@@ -3369,6 +3370,102 @@
         await h.sleep(400);
         out.acceptedUnknown = /encore/.test(Editor.getHTML()) && !/data-id="4"/.test(Editor.getHTML()) && /data-id="3"/.test(Editor.getHTML());
         return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + walk.join() + ' ' + Editor.getHTML() };
+      } finally { closePaneIfOpen(); await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  // --- Les quatre affichages du texte suivi (lot 4 du volet : la liste déroulante « Affichage », data-track-view sur l'éditeur, css/track-changes.css) ---
+  const viewSelect = () => paneEl().querySelector('.pp-trackpane-view');
+  const pickView = (name) => { viewSelect().value = name; viewSelect().dispatchEvent(new Event('change', { bubbles: true })); };
+  const shown = element => !!element && element.getClientRects().length > 0 && getComputedStyle(element).display !== 'none';
+  const NO_FILL = 'rgba(0, 0, 0, 0)';
+
+  cases.push({
+    id: 'trackchanges_view_four_displays_show_marks_final_text_or_original_and_freeze_the_editor',
+    description: "Les quatre affichages : « Toutes les marques » (inséré teinté, supprimé barré, texte modifiable), « Marques simples » (résultat final, supprimé caché, inséré sans teinte, un trait à gauche du bloc changé), « Sans marque » (idem sans trait), « Original » (inséré caché, supprimé en texte ordinaire) ; hors le premier le texte n'est plus modifiable ; fermer le volet rend tout",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        useMarie();
+        await disableTrackChangesIfOn(h);
+        Editor.setHTML(LIST_DOC, { 1: JEAN, 2: PAUL, 3: JEAN });
+        await h.sleep(150);
+        const ed = EditorCore.getEditor();
+        await h.clickButton('v2-btn-track-pane');
+        await h.sleep(250);
+        const ins = () => ed.view.dom.querySelector('ins[data-id="3"]');
+        const del = () => ed.view.dom.querySelector('del[data-id="1"]');
+        const paragraph = () => ed.view.dom.querySelector('p');
+        const out = {};
+        out.options = Array.from(viewSelect().options).map(o => o.value + ':' + o.textContent).join('|') === 'all:Toutes les marques|simple:Marques simples|final:Sans marque|original:Original' && viewSelect().value === 'all';
+        out.allMarked = shown(ins()) && shown(del()) && getComputedStyle(ins()).backgroundColor === 'rgb(229, 246, 238)' && getComputedStyle(del()).textDecorationLine === 'line-through' && ed.isEditable && !ed.view.dom.hasAttribute('data-track-view') && paneEl().querySelector('.pp-trackpane-viewnote').hidden;
+        const before = Editor.getHTML();
+        pickView('simple');
+        await h.sleep(120);
+        out.simple = ed.view.dom.dataset.trackView === 'simple' && !shown(del()) && shown(ins()) && getComputedStyle(ins()).backgroundColor === NO_FILL && getComputedStyle(paragraph()).boxShadow !== 'none' && !ed.isEditable && ed.view.dom.getAttribute('contenteditable') === 'false';
+        out.simpleNote = !paneEl().querySelector('.pp-trackpane-viewnote').hidden && paneEl().querySelector('.pp-trackpane-viewnote').textContent === 'Résultat final avec trait. Lecture seule.';
+        out.noTyping = (document.execCommand('insertText', false, 'XYZ'), await h.sleep(60), Editor.getHTML() === before);
+        pickView('final');
+        await h.sleep(120);
+        out.final = ed.view.dom.dataset.trackView === 'final' && !shown(del()) && getComputedStyle(ins()).backgroundColor === NO_FILL && getComputedStyle(paragraph()).boxShadow === 'none' && !ed.isEditable && paneEl().querySelector('.pp-trackpane-viewnote').textContent === 'Résultat final. Lecture seule.';
+        pickView('original');
+        await h.sleep(120);
+        out.original = ed.view.dom.dataset.trackView === 'original' && !shown(ins()) && shown(del()) && getComputedStyle(del()).textDecorationLine === 'none' && getComputedStyle(del()).backgroundColor === NO_FILL && getComputedStyle(del()).color === getComputedStyle(paragraph()).color && !ed.isEditable;
+        out.documentUntouched = Editor.getHTML() === before;
+        pickView('all');
+        await h.sleep(120);
+        out.backToAll = shown(ins()) && shown(del()) && getComputedStyle(ins()).backgroundColor === 'rgb(229, 246, 238)' && ed.isEditable && !ed.view.dom.hasAttribute('data-track-view') && paneEl().querySelector('.pp-trackpane-viewnote').hidden;
+        pickView('original');
+        await h.sleep(120);
+        paneEl().querySelector('.pp-trackpane-close').click();
+        await h.sleep(200);
+        out.closeRestores = ed.isEditable && !ed.view.dom.hasAttribute('data-track-view') && ed.view.dom.getAttribute('contenteditable') === 'true' && shown(ins()) && getComputedStyle(ins()).backgroundColor === 'rgb(229, 246, 238)';
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { closePaneIfOpen(); await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  cases.push({
+    id: 'trackchanges_view_displays_apply_to_a_tracked_column_and_row_and_keep_the_cell_colours',
+    description: "Colonne ajoutée et ligne supprimée en suivi : « Toutes les marques » les teinte, « Sans marque » garde la colonne sans teinte et cache la ligne, « Marques simples » y ajoute un trait, « Original » cache la colonne et montre la ligne sans teinte ; la couleur propre d'une case reste la sienne dans tous les affichages",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        useMarie();
+        await disableTrackChangesIfOn(h);
+        const table = '<table><tbody><tr><td><p>A1</p></td><td><p>B1</p></td></tr><tr><td style="background-color: rgb(255, 238, 170)"><p>A2</p></td><td><p>B2</p></td></tr><tr><td><p>A3</p></td><td><p>B3</p></td></tr></tbody></table>';
+        Editor.setHTML(table);
+        await h.sleep(150);
+        await enableTrackChanges(h);
+        const ed = EditorCore.getEditor();
+        await caretIn(h, 'A1', 1);
+        ed.chain().focus().addColumnAfter().run();
+        await h.sleep(200);
+        await caretIn(h, 'A3', 1);
+        ed.chain().focus().deleteRow().run();
+        await h.sleep(250);
+        await h.clickButton('v2-btn-track-pane');
+        await h.sleep(250);
+        const cells = () => Array.from(ed.view.dom.querySelectorAll('td'));
+        const cellOf = text => cells().find(cell => cell.textContent.trim() === text);
+        const added = () => cells().filter(cell => cell.parentElement.tagName === 'INS');   // les cases de la colonne ajoutée (la ligne supprimée a la sienne, sans marque propre)
+        const fill = cell => getComputedStyle(cell).backgroundColor;
+        const out = {};
+        out.entries = entriesOf().map(shapeOf).join() === 'insert/column,delete/row' && added().length === 2;
+        out.allTinted = added().every(cell => fill(cell) === 'rgb(229, 246, 238)') && shown(cellOf('A3')) && fill(cellOf('A3')) === 'rgb(251, 233, 233)' && fill(cellOf('A2')) === 'rgb(255, 238, 170)';
+        pickView('final');
+        await h.sleep(150);
+        out.finalColumnPlain = added().every(cell => shown(cell) && fill(cell) === NO_FILL) && !shown(cellOf('A3')) && !shown(cellOf('B3')) && shown(cellOf('A2')) && fill(cellOf('A2')) === 'rgb(255, 238, 170)';
+        pickView('simple');
+        await h.sleep(150);
+        out.simpleBar = added().every(cell => getComputedStyle(cell).boxShadow !== 'none') && !shown(cellOf('A3')) && fill(cellOf('A2')) === 'rgb(255, 238, 170)';
+        pickView('original');
+        await h.sleep(150);
+        out.originalRowBack = shown(cellOf('A3')) && fill(cellOf('A3')) === NO_FILL && shown(cellOf('B3')) && added().every(cell => !shown(cell)) && fill(cellOf('A2')) === 'rgb(255, 238, 170)';
+        pickView('all');
+        await h.sleep(150);
+        out.allAgain = added().every(cell => fill(cell) === 'rgb(229, 246, 238)') && shown(cellOf('A3')) && fill(cellOf('A3')) === 'rgb(251, 233, 233)';
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
       } finally { closePaneIfOpen(); await disableTrackChangesIfOn(h); }
     },
   });

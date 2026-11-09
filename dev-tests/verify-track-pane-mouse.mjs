@@ -8,7 +8,9 @@
 //   5) une frappe en suivi ajoute une ligne sans rien rouvrir ; Échap ferme le volet, rend le focus au texte et la place à la page ;
 //   6) le texte du volet se lit (4,5:1 au moins) dans les deux thèmes ; le clavier ouvre le volet depuis le menu (Tab, Entrée) et le focus arrive sur « Modification suivante » ;
 //   7) à partir de deux personnes : un point de couleur par ligne (3:1 au moins sur le fond du volet), le choix de la personne ne garde que ses lignes, « Suivant » n'en sort pas, et « Refuser »
-//      (vrai clic) ne résout que les siennes ; le volet reste utilisable (au moins une ligne entière à la vue) avec le choix et les deux boutons.
+//      (vrai clic) ne résout que les siennes ; le volet reste utilisable (au moins une ligne entière à la vue) avec le choix et les deux boutons ;
+//   8) les quatre affichages (liste déroulante « Affichage », au clavier) : « Sans marque » cache le supprimé et ôte la teinte de l'inséré, « Marques simples » y met un trait à gauche, « Original » cache
+//      l'inséré et lit le supprimé en texte ordinaire ; hors « Toutes les marques » une frappe au vrai clavier ne change rien ; « Suivant » va jusqu'à une suppression cachée ; fermer le volet rend la frappe.
 // Lancé par run-headless.mjs (groupe Node "trackPaneMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-track-pane-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -337,8 +339,10 @@ for (const mode of ['clair', 'sombre', 'anglais']) {
   // Le choix se fait au clavier sur la liste déroulante (le menu natif d'un <select> n'est pas atteignable à la souris en test) : le focus y arrive par Tab depuis le bouton de fermeture.
   await page.focus('.pp-trackpane-close');
   await page.keyboard.press('Tab');
+  const onView = await page.evaluate(() => document.activeElement.className);
+  await page.keyboard.press('Tab');
   const onSelect = await page.evaluate(() => document.activeElement.className);
-  check(`${mode} : au clavier, Tab depuis « Fermer » arrive sur le choix de la personne`, /pp-trackpane-filter/.test(onSelect), onSelect);
+  check(`${mode} : au clavier, Tab depuis « Fermer » arrive sur l'affichage, puis sur le choix de la personne`, /pp-trackpane-view/.test(onView) && /pp-trackpane-filter/.test(onSelect), { onView, onSelect });
   await page.selectOption('.pp-trackpane-filter', 'jean.dupont@example.org');
   await page.waitForTimeout(300);
   const p2 = await people();
@@ -356,6 +360,100 @@ for (const mode of ['clair', 'sombre', 'anglais']) {
   check(`${mode} : « ${F.rej} » (vrai clic) ne résout que ses deux modifications ; les autres restent en attente et le choix retombe sur tout le monde`, !/data-id="[13]"/.test(p5.html) && /<del data-id="2">ancien<\/del>/.test(p5.html) && /<ins data-id="4">encore<\/ins>/.test(p5.html) && p5.value === '' && p5.rows.length === 2 && !p5.bulkShown, { html: p5.html, value: p5.value, rows: p5.rows.length });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
+
+  // 8) les quatre affichages
+  await page.evaluate(([html, meta]) => { Editor.setTrackChanges(false); Editor.setHTML(html, meta); }, [DOC, META]);
+  await page.waitForTimeout(350);
+  await clickRow(page, '#v2-btn-track-pane');
+  await away(page);
+  const look = () => page.evaluate(() => {
+    const dom = EditorCore.getEditor().view.dom;
+    const pane = document.getElementById('pp-track-pane');
+    const ins = dom.querySelector('ins[data-id="3"]');
+    const del = dom.querySelector('del[data-id="1"]');
+    const para = dom.querySelector('p');
+    const boxOf = el => { const r = el.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)]; };
+    const note = pane.querySelector('.pp-trackpane-viewnote');
+    const view = pane.querySelector('.pp-trackpane-view');
+    const list = pane.querySelector('.pp-trackpane-list');
+    const rows = Array.from(pane.querySelectorAll('.pp-trackpane-item'));
+    return {
+      attr: dom.dataset.trackView || '', editable: EditorCore.getEditor().isEditable, contenteditable: dom.getAttribute('contenteditable'),
+      insShown: ins.getClientRects().length > 0, delShown: del.getClientRects().length > 0,
+      insFill: getComputedStyle(ins).backgroundColor, delLine: getComputedStyle(del).textDecorationLine, delColor: getComputedStyle(del).color, paraColor: getComputedStyle(para).color, bar: getComputedStyle(para).boxShadow,
+      noteShown: !note.hidden && note.getBoundingClientRect().height > 0, noteText: note.textContent, noteBox: boxOf(note), viewBox: boxOf(view), pane: boxOf(pane),
+      listHeight: list.getBoundingClientRect().height, firstRowFits: rows.length ? rows[0].getBoundingClientRect().bottom <= list.getBoundingClientRect().bottom + 0.5 : true,
+      html: Editor.getHTML(), selFrom: EditorCore.getEditor().state.selection.from, selTo: EditorCore.getEditor().state.selection.to,
+      noteColor: getComputedStyle(note).color, paneBg: getComputedStyle(pane).backgroundColor,
+    };
+  });
+  const V = en
+    ? { options: 'All markup|Simple markup|No markup|Original', simple: 'Simple markup', final: 'No markup', original: 'Original' }
+    : { options: 'Toutes les marques|Marques simples|Sans marque|Original', simple: 'Marques simples', final: 'Sans marque', original: 'Original' };
+  const v0 = await look();
+  const options = await page.evaluate(() => Array.from(document.querySelector('.pp-trackpane-view').options).map(o => o.textContent).join('|'));
+  check(`${mode} : « Toutes les marques » est l'affichage de départ (liste : ${V.options}) : inséré teinté, supprimé barré, texte modifiable, aucune note`, options === V.options && v0.attr === '' && v0.editable && v0.insFill === 'rgb(229, 246, 238)' && v0.delLine === 'line-through' && !v0.noteShown, { options, v0 });
+  await page.focus('.pp-trackpane-view');
+  await page.selectOption('.pp-trackpane-view', 'final');
+  await page.waitForTimeout(250);
+  const v1 = await look();
+  check(`${mode} : « ${V.final} » : le supprimé disparaît, l'inséré perd sa teinte, aucun trait, le texte n'est plus modifiable, la note le dit dans le volet`, v1.attr === 'final' && !v1.delShown && v1.insShown && v1.insFill === 'rgba(0, 0, 0, 0)' && v1.bar === 'none' && !v1.editable && v1.contenteditable === 'false' && v1.noteShown && v1.noteBox[2] <= v1.pane[2] && v1.noteBox[0] >= v1.pane[0], v1);
+  check(`${mode} : le texte de la note se lit sur le fond du volet (4,5:1 au moins) et la liste garde une ligne entière à la vue (au moins 40 px)`, contrast(v1.noteColor, v1.paneBg) >= 4.5 && v1.listHeight >= 40 && v1.firstRowFits, { ratio: contrast(v1.noteColor, v1.paneBg), list: v1.listHeight, fits: v1.firstRowFits });
+  check(`${mode} : la note tient sur une ligne (le volet garde sa place pour la liste)`, v1.noteBox[3] - v1.noteBox[1] <= 16, v1.noteBox);
+  await page.selectOption('.pp-trackpane-filter', 'jean.dupont@example.org');
+  await page.waitForTimeout(250);
+  const crowded = await look();
+  await page.screenshot({ path: `${SHOTS}/volet-sans-marque-${mode}.png` });
+  check(`${mode} : au plus serré (affichage hors « Toutes les marques », une personne choisie, ses deux boutons) la liste garde une ligne entière à la vue (au moins 40 px)`, crowded.listHeight >= 40 && crowded.firstRowFits, { list: crowded.listHeight, fits: crowded.firstRowFits });
+  await page.selectOption('.pp-trackpane-filter', '');
+  await page.waitForTimeout(200);
+  const firstPara = await rectOf(page, '.ProseMirror p');
+  await page.mouse.click(firstPara.l + 40, firstPara.y);
+  await page.keyboard.type('ZZZ');
+  await page.waitForTimeout(300);
+  const typed = await look();
+  check(`${mode} : au vrai clavier, une frappe dans le texte ne change rien dans cet affichage`, typed.html === v1.html && !/ZZZ/.test(typed.html), { html: typed.html });
+  await page.selectOption('.pp-trackpane-view', 'simple');
+  await page.waitForTimeout(250);
+  const v2 = await look();
+  await page.screenshot({ path: `${SHOTS}/volet-marques-simples-${mode}.png` });
+  check(`${mode} : « ${V.simple} » : comme le résultat final, avec un trait à gauche du paragraphe où quelque chose a changé`, v2.attr === 'simple' && !v2.delShown && v2.insFill === 'rgba(0, 0, 0, 0)' && v2.bar !== 'none' && !v2.editable, { attr: v2.attr, bar: v2.bar });
+  await page.selectOption('.pp-trackpane-view', 'original');
+  await page.waitForTimeout(250);
+  const v3 = await look();
+  await page.screenshot({ path: `${SHOTS}/volet-original-${mode}.png` });
+  check(`${mode} : « ${V.original} » : l'inséré disparaît, le supprimé se lit comme du texte ordinaire (ni barré, ni coloré), le document est inchangé`, v3.attr === 'original' && !v3.insShown && v3.delShown && v3.delLine === 'none' && v3.delColor === v3.paraColor && v3.html === v1.html && !v3.editable, v3);
+  // Un long texte, la suppression tout en bas : en « Sans marque » elle est cachée, la ligne du volet doit tout de même y amener la vue.
+  const LONG = Array.from({ length: 40 }, (_, i) => `<p>Paragraphe numéro ${i + 1} du texte.</p>`).join('') + '<p>Fin <del data-id="1">retirée</del> du texte.</p>';
+  await page.evaluate(([html, meta]) => { Editor.setHTML(html, meta); }, [LONG, META]);
+  await page.waitForTimeout(500);
+  await page.selectOption('.pp-trackpane-view', 'final');
+  await page.waitForTimeout(250);
+  await page.evaluate(() => { document.getElementById('editor-container').scrollTop = 0; });
+  await clickAt(page, '.pp-trackpane-item:nth-child(1) .pp-trackpane-go', 600);
+  const hidden = await page.evaluate(() => {
+    const ed = EditorCore.getEditor();
+    const last = ed.view.dom.querySelector('p:last-child');
+    const r = last.getBoundingClientRect(); const c = document.getElementById('editor-container').getBoundingClientRect();
+    return { delShown: ed.view.dom.querySelector('del[data-id="1"]').getClientRects().length > 0, scrolled: document.getElementById('editor-container').scrollTop, visible: r.top >= c.top - 1 && r.bottom <= c.bottom + 1, selFrom: ed.state.selection.from, from: Editor.getSuggestionEntries()[0].from };
+  });
+  check(`${mode} : « Sans marque » : un clic sur la ligne d'une suppression cachée tout en bas du texte pose le curseur à sa place et fait défiler jusqu'au paragraphe qui l'entoure`, !hidden.delShown && hidden.selFrom === hidden.from && hidden.scrolled > 0 && hidden.visible, hidden);
+  await page.evaluate(([html, meta]) => { Editor.setHTML(html, meta); }, [DOC, META]);
+  await page.waitForTimeout(500);
+  await page.selectOption('.pp-trackpane-view', 'all');
+  await page.waitForTimeout(250);
+  const v5 = await look();
+  check(`${mode} : retour à « Toutes les marques » : texte modifiable, teintes revenues, note retirée`, v5.attr === '' && v5.editable && v5.contenteditable === 'true' && v5.delShown && v5.insFill === 'rgb(229, 246, 238)' && !v5.noteShown, v5);
+  await page.selectOption('.pp-trackpane-view', 'original');
+  await page.waitForTimeout(200);
+  await page.focus('.pp-trackpane-next');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  const v6 = await look();
+  await page.keyboard.type('Q');
+  await page.waitForTimeout(250);
+  const v7 = await look();
+  check(`${mode} : fermer le volet (Échap) depuis « Original » rend le texte modifiable, ses marques et la frappe`, v6.attr === '' && v6.editable && v6.contenteditable === 'true' && v6.insShown && v6.delShown && v7.html !== v6.html && /Q/.test(v7.html), { attr: v6.attr, editable: v6.editable, avant: v6.html, apres: v7.html });
 
   await page.context().close();
 }

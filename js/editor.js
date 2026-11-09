@@ -1213,7 +1213,18 @@ const Editor = (function () {
     const $from = doc.resolve(Math.max(0, Math.min(current.from, doc.content.size)));
     const selection = EditorCore.getTextSelectionClass().near($from, 1);
     editor.view.dispatch(editor.state.tr.setSelection(selection).scrollIntoView());
+    scrollToHidden(selection.from);
     return true;
+  }
+  // Une modification cachée par l'affichage « Sans marque », « Marques simples » ou « Original » (js/track-changes-pane.js) n'a pas de place à l'écran : ProseMirror n'y trouve aucune coordonnée et
+  // ne fait pas défiler. On amène alors à la vue le premier bloc visible qui l'entoure.
+  function scrollToHidden(pos) {
+    const rect = editor.view.coordsAtPos(pos);
+    if (rect.top !== 0 || rect.bottom !== 0) return;
+    const { node } = editor.view.domAtPos(pos);
+    let target = node.nodeType === 1 ? node : node.parentElement;
+    while (target && target !== editor.view.dom && target.getClientRects().length === 0) target = target.parentElement;
+    if (target && target !== editor.view.dom) target.scrollIntoView({ block: 'nearest' });
   }
   // Va à la modification suivante (`step` 1) ou précédente (-1) de celle où est le curseur, en reprenant de l'autre côté au bout de la liste ; `keep(entry)`, quand il est donné, ne laisse
   // passer que certaines modifications (celles d'une personne). Rend l'entrée atteinte, ou null sans modification.
