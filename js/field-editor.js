@@ -66,9 +66,10 @@ const FieldEditor = (function () {
 
     // Le HTML collé, réduit à ce qu'un champ garde : le texte, sur une ligne (un changement de bloc ou de ligne devient une espace), les bulles - une
     // bulle copiée dans un autre champ ou dans le document arrive avec ses réglages - et les puces. Un <template> est inerte : rien ne s'exécute ni ne se charge.
+    // Un emoji collé comme une image (Teams, Outlook sur le web, Gmail : `<img alt="😀">`) redevient son caractère d'abord (js/emoji-paste.js), sans quoi il disparaîtrait.
     // `lines` : un champ de plusieurs lignes, où un changement de bloc ou de ligne est un changement de paragraphe.
     function inlineHtml(html, lines) {
-      const template = Dom.inertTemplate(html);
+      const template = Dom.inertTemplate(EmojiPaste.textFromImages(html));
       let out = '';
       const walk = parent => parent.childNodes.forEach(node => {
         if (node.nodeType === Node.TEXT_NODE) { out += FieldCodec.escapeText(node.nodeValue.replace(/\s+/g, ' ')); return; }

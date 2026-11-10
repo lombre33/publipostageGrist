@@ -61,6 +61,7 @@ const GROUPS = {
   images: 'scenarios-images',
   pageBreakToc: 'scenarios-pagebreak-toc',
   headerFooter: 'scenarios-headerfooter',
+  emojiPaste: 'scenarios-emoji-paste', // un emoji collé comme une image (Teams, Gmail, WhatsApp Web, Outlook sur le web : `<img alt="😀">`) se colle comme son caractère (js/emoji-paste.js) dans le document, une grille, un tableau et les champs texte, et arrive dans la Lecture, le HTML, le Markdown, le PDF et le Word ; ce qui n'est pas un emoji est laissé tel quel
   chips: 'scenarios-chips', // les puces (note de bas de page, date, heure, nom, email, n° de ligne) ; la puce « Heure actuelle » à 24 ou 12 heures : sa lecture dans chaque écriture, son HTML, sa barre au clic (js/floating-toolbars.js:createTimeChipToolbar), le vrai PDF et le vrai Word
   varFormat: 'scenarios-varformat',
   pdfFidelity: 'scenarios-pdf-fidelity',
