@@ -310,7 +310,7 @@
         $('toggle-match').click();
         await h.sleep(30);
         same('matchAgainParts', parts(), { fields: true, toSingleton: true, toMatch: false });
-        same('emptyTableMatch', [preview(), good()], [I18n.t('linkConfig.previewNoMatch', { table: 'LcContacts', value: 1 }), false]);
+        same('emptyTableMatch', [preview(), good()], [I18n.t('linkMiss.general', { table: 'LcContacts', page: 'LcDossiers', value: 1 }), false]);
         $('toggle-singleton').click();
         await h.sleep(30);
         same('emptyTableSingleton', [preview(), good()], [I18n.t('linkConfig.previewTableEmpty', { table: 'LcContacts' }), false]);
@@ -318,7 +318,7 @@
         $('toggle-match').click();
         await h.sleep(30);
         await pick('source', 'Statut');
-        same('noMatch', [preview(), good()], [I18n.t('linkConfig.previewNoMatch', { table: 'LcContacts', value: 'Urgent' }), false]);
+        same('noMatch', [preview(), good()], [I18n.t('linkMiss.general', { table: 'LcContacts', page: 'LcDossiers', value: 'Urgent' }), false]);
 
         await pick('source', '');
         same('chooseColumns', [preview(), good()], [I18n.t('linkConfig.previewChooseColumns'), false]);
@@ -402,7 +402,9 @@
       const { closed } = await openKeyWindow(h);
       const pick = async (which, value) => { select(which).value = value; select(which).dispatchEvent(new Event('change', { bubbles: true })); await h.sleep(30); };
       const found = (count, ids) => I18n.t('linkConfig.previewMatches', { count, table: 'LcContacts', ids });
-      const none = value => I18n.t('linkConfig.previewNoMatch', { table: 'LcContacts', value });
+      const none = value => I18n.t('linkMiss.general', { table: 'LcContacts', page: 'LcDossiers', value });
+      // Une cellule vide n'a rien à chercher : l'aperçu le dit au lieu de chercher « rien » (choix du porteur du 10/11, consigne 062 de GFS).
+      const emptyCell = I18n.t('linkMiss.empty', { column: 'Statut', table: 'LcContacts' });
       const seen = {};
       await pick('source', 'Titre');
       seen.byTitle = preview();
@@ -427,7 +429,7 @@
       const resolved = (await Variables.resolveLinkedRows('LcContacts', rule, GristAPI.getCurrentRecord(), 'LcDossiers')).map(r => r.id);
       await GristAPI.deleteLinkRule('LcContacts');
       const pass = seen.byTitle === found(2, '1, 3') && seen.byId === found(2, '1, 3') && seen.byOtherText === none('Urgent') && seen.byNumber === found(1, '2')
-        && seen.byEmptyText === none('') && seen.secondDossier === found(1, '2')
+        && seen.byEmptyText === emptyCell && seen.secondDossier === found(1, '2')
         && confirmed === true && !!rule && rule.colonneSource === 'Titre' && rule.colonneCible === 'Dossier' && JSON.stringify(resolved) === '[1,3]';
       return { pass, notes: JSON.stringify({ seen, confirmed, rule, resolved }) };
     },
@@ -457,7 +459,8 @@
       await h.sleep(150);
       const pick = async (which, value) => { select(which).value = value; select(which).dispatchEvent(new Event('change', { bubbles: true })); await h.sleep(30); };
       const found = (count, ids) => I18n.t('linkConfig.previewMatches', { count, table: 'LcSuivis', ids });
-      const none = value => I18n.t('linkConfig.previewNoMatch', { table: 'LcSuivis', value });
+      const none = value => I18n.t('linkMiss.general', { table: 'LcSuivis', page: 'LcDossiers', value });
+      const emptyCell = I18n.t('linkMiss.empty', { column: 'Statut', table: 'LcSuivis' });
       const seen = {};
       await pick('cible', 'Dossiers');
       await pick('source', 'id');
@@ -483,7 +486,7 @@
       const resolved = (await Variables.resolveLinkedRows('LcSuivis', rule, GristAPI.getCurrentRecord(), 'LcDossiers')).map(r => r.id);
       await GristAPI.deleteLinkRule('LcSuivis');
       const pass = seen.byId === found(2, '1, 2') && seen.byTitle === found(2, '1, 2') && seen.byOtherText === none('Urgent')
-        && seen.lastOneById === found(1, '3') && seen.lastOneByTitle === found(1, '3') && seen.byEmptyText === none('')
+        && seen.lastOneById === found(1, '3') && seen.lastOneByTitle === found(1, '3') && seen.byEmptyText === emptyCell
         && confirmed === true && !!rule && rule.colonneSource === 'Titre' && rule.colonneCible === 'Dossiers' && JSON.stringify(resolved) === '[1,2]';
       return { pass, notes: JSON.stringify({ seen, confirmed, rule, resolved }) };
     },

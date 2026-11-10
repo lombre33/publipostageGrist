@@ -75,6 +75,9 @@
 .v2-varfmt-toolbar .v2-varbadge-actions { display: flex; align-items: center; gap: 2px; }
 .v2-varfmt-toolbar .v2-floating-sep[data-var-sep] { align-self: stretch; width: 1px; margin: 3px 4px; background: var(--border, #d7dde3); }
 .v2-varfmt-toolbar .v2-floating-sep[data-var-sep][hidden] { display: none; }
+/* « Lien… » (js/floating-toolbars.js:variableToolbarHtml), le bouton d'une bulle dont le lien ne trouve aucune ligne : un mot dans la rangée d'icônes, à la largeur de son texte
+   (`.v2-floating-toolbar button`, css/editor-v2.css, pose celle d'une icône). */
+.v2-varfmt-toolbar .v2-varbadge-actions button[data-action="var-link"] { width: auto; padding: 0 8px; font: 600 12px/1 var(--font-ui); }
 .v2-floating-toolbar button.is-disabled { opacity: .35; cursor: default; }
 .v2-floating-toolbar button.is-disabled:hover { background: transparent; }
 

@@ -50,7 +50,14 @@ const I18nTextsVariables = {
   'linkConfig.previewTableEmpty': { fr: '« {table} » est vide.', en: '“{table}” is empty.' },
   'linkConfig.previewSingleton': { fr: 'Toujours la ligne n° {id} de « {table} », quelle que soit la ligne sélectionnée.', en: 'Always row #{id} of “{table}”, whichever row is selected.' },
   'linkConfig.previewMatches': { fr: '{count} {count|ligne trouvée|lignes trouvées} dans « {table} » (n° {ids}).', en: '{count} {count|row|rows} found in “{table}” (# {ids}).' },
-  'linkConfig.previewNoMatch': { fr: 'Aucune ligne de « {table} » ne correspond à la ligne sélectionnée (valeur cherchée : {value}).', en: 'No row in “{table}” matches the selected row (searched value: {value}).' },
+  // Un lien qui ne trouve aucune ligne pour la ligne sélectionnée (js/variables.js:judgeLink) : la phrase d'aide, la même dans l'aperçu de cette fenêtre et dans l'info-bulle de la
+  // bulle orange (consigne 062 de GFS). La première qui s'applique, du plus précis au plus général : la colonne de la page est une Référence qui montre une autre colonne ; elle
+  // désigne une ligne qui n'existe plus ; une ligne s'approche de la valeur cherchée ; sinon la phrase générale. Une cellule vide n'a rien à chercher (aperçu seulement).
+  'linkMiss.column': { fr: 'La colonne « {column} » de « {table} » est une Référence qui montre la colonne « {shown} » de « {target} », mais la règle la compare à la colonne « {compared} ». Comparez plutôt « {shown} » ou « Auto » (la ligne désignée).', en: 'Column “{column}” of “{table}” is a Reference that shows column “{shown}” of “{target}”, but the rule compares it to column “{compared}”. Compare “{shown}” or “Auto” (the row it points to) instead.' },
+  'linkMiss.gone': { fr: 'La Référence « {column} » désigne une ligne qui n’existe plus dans « {target} ».', en: 'The Reference “{column}” points to a row that no longer exists in “{target}”.' },
+  'linkMiss.near': { fr: 'Aucune ligne n’a exactement « {value} », mais « {near} » s’en approche : vérifiez la casse, les accents et les espaces.', en: 'No row has exactly “{value}”, but “{near}” comes close: check the case, the accents and the spaces.' },
+  'linkMiss.general': { fr: 'Aucune ligne de « {table} » ne correspond à « {page} » pour la valeur « {value} ». Vérifiez la règle dans « Tables liées ».', en: 'No row of “{table}” matches “{page}” for the value “{value}”. Check the rule in “Linked tables”.' },
+  'linkMiss.empty': { fr: 'La cellule « {column} » de la ligne sélectionnée est vide : le lien n’a rien à chercher dans « {table} ».', en: 'The cell “{column}” of the selected row is empty: the link has nothing to look for in “{table}”.' },
   'linkConfig.previewUnavailable': { fr: 'Aperçu indisponible.', en: 'Preview unavailable.' },
   'linkConfig.chooseBeforeConfirm': { fr: 'Choisissez les deux colonnes avant de valider.', en: 'Choose both columns before confirming.' },
   'linkConfig.scope': { fr: 'Ce lien vaut pour la table « {table} » seulement : les autres tables gardent le leur.', en: 'This link applies to the table “{table}” only: other tables keep their own.' },
@@ -458,6 +465,9 @@ const I18nTextsVariables = {
   'varToolbar.columnBroken': { fr: 'Cette variable ne trouve plus sa colonne : choisir la bonne…', en: 'This variable can no longer find its column: pick the right one…' },
   // Le même bouton sur une variable sans lien avec la table de la page : choisir sa colonne rouvre la fenêtre de la clé.
   'varToolbar.columnUnlinked': { fr: 'Cette variable n’a plus de lien avec sa table : choisir sa colonne pour refaire le lien…', en: 'This variable no longer has a link with its table: pick its column to set the link again…' },
+  // Le bouton « Lien… » (js/floating-toolbars.js:syncColumnButton) : là seulement sur une variable orange dont le lien existe mais ne trouve aucune ligne pour la ligne sélectionnée ; il ouvre la fenêtre du lien.
+  'varToolbar.linkButton': { fr: 'Lien…', en: 'Link…' },
+  'varToolbar.linkMiss': { fr: 'Le lien de cette variable ne trouve aucune ligne pour la ligne sélectionnée : revoir le lien…', en: 'This variable’s link finds no row for the selected row: review the link…' },
   // Suivi des renommages de Grist (js/schema-renames.js) : le coin d'état, une fois les modèles réécrits.
   'schemaRenames.status': { fr: 'Mis à jour après un renommage dans Grist : {parts}.', en: 'Updated after a rename in Grist: {parts}.' },
   'schemaRenames.part.variables': { fr: '{count} {count|variable|variables} dans {models} {models|modèle|modèles}', en: '{count} {count|variable|variables} in {models} {models|template|templates}' },

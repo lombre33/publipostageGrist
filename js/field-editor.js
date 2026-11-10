@@ -395,11 +395,16 @@ const FieldEditor = (function () {
     fields.forEach(field => field.editor.view.dispatch(field.editor.state.tr));
   }
 
+  // Le DOM de chaque champ à bulles : Editor.badgeTables y lit les tables dont une bulle attend le verdict de son lien (Variables.scanLinkMisses).
+  function badgeRoots() {
+    return Array.from(fields.values(), field => field.editor.view.dom);
+  }
+
   // Cache les barres des bulles d'un champ (la fenêtre qui le porte se ferme alors que l'une de ses bulles est choisie).
   function hidePanels(host) {
     const field = fields.get(host);
     if (field) field.panels.forEach(panel => panel.hide());
   }
 
-  return { attach, of: fieldEditorOf, hidePanels, refreshBadgeValidity, resyncBars, snapshot, restore, settle };
+  return { attach, of: fieldEditorOf, hidePanels, refreshBadgeValidity, resyncBars, badgeRoots, snapshot, restore, settle };
 })();

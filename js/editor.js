@@ -574,8 +574,18 @@ const Editor = (function () {
       content: '',
     });
     wireEditor();
-    // La table de la page change avec le widget : les bulles reprennent alors la couleur qu'elle leur donne.
-    GristAPI.onRecord(() => { if (GristAPI.getCurrentTableId() !== markedPage) refreshLinkState(); });
+    // La table de la page change avec le widget : les bulles reprennent alors la couleur qu'elle leur donne. La ligne sélectionnée change plus souvent : un lien qui ne trouve aucune
+    // ligne ne se juge que pour elle, le verdict est donc à relire (page au repos, scheduleLinkMisses). Une cellule retouchée sur la même ligne laisse le verdict affiché jusqu'à
+    // cette relecture ; une autre ligne le retire tout de suite, sa phrase citerait la valeur de la ligne d'avant.
+    let selectedRowId = null;
+    GristAPI.onRecord(() => {
+      const record = GristAPI.getCurrentRecord();
+      const sameRow = !!record && record.id != null && record.id === selectedRowId;
+      selectedRowId = record && record.id != null ? record.id : null;
+      if (GristAPI.getCurrentTableId() !== markedPage) { refreshLinkState(); return; }
+      Variables.forgetLinkMisses(sameRow);
+      refreshVariableBadgeValidity();
+    });
     return editor;
   }
 
@@ -746,20 +756,24 @@ const Editor = (function () {
 
   // Message en info-bulle d'une bulle #Variable dont la table n'a plus de lien avec la page (Variables.isUnlinked) : la Lecture et les exports écrivent
   // « aucune correspondance configurée » à sa place. Sauf dans une zone répétée qui lui donne sa ligne (VariableColumn.isUnlinkedAt, d'après la position
-  // de la bulle dans `owner`, l'éditeur du DOM marqué) ; '' quand tout va bien.
+  // de la bulle dans `owner`, l'éditeur du DOM marqué) ; '' quand tout va bien. Le même orange dit aussi un lien qui existe mais ne trouve aucune ligne pour
+  // la ligne sélectionnée : la phrase d'aide est celle que la dernière lecture a rangée pour la table (Variables.linkMissText, lue page au repos), et la zone répétée
+  // qui donne sa ligne à la bulle l'écarte de même (VariableColumn.isMissAt).
   function badgeUnlinkedText(badge, owner) {
     const table = badge.dataset.table;
-    if (!Variables.isUnlinked(table)) return '';
+    const unlinked = Variables.isUnlinked(table);
+    const miss = unlinked ? '' : Variables.linkMissText(table);
+    if (!unlinked && !miss) return '';
     try {
       if (owner) {
         // Les attributs du nœud, avec sa boucle : « toutes les lignes » posée sur la bulle seule lui donne ses lignes.
         const pos = owner.view.posAtDOM(badge, 0);
         const node = owner.state.doc.nodeAt(pos);
         const attrs = node && node.type.name === 'varBadge' ? node.attrs : { table, column: badge.dataset.column };
-        if (!VariableColumn.isUnlinkedAt(owner, pos, attrs)) return '';
+        if (!(unlinked ? VariableColumn.isUnlinkedAt(owner, pos, attrs) : VariableColumn.isMissAt(owner, pos, attrs))) return '';
       }
     } catch (e) { /* bulle hors de la vue : sans zone connue autour d'elle, le lien manque bel et bien */ }
-    return I18n.t('varBadge.unlinked', { table, page: GristAPI.getCurrentTableId() });
+    return unlinked ? I18n.t('varBadge.unlinked', { table, page: GristAPI.getCurrentTableId() }) : miss;
   }
 
   // Message en info-bulle d'une bulle « Calcul » dont la formule lit une table sans lien avec la page : la Lecture et les exports écrivent à sa place l'erreur de
@@ -802,6 +816,9 @@ const Editor = (function () {
       badge.classList.toggle('var-badge-otherwise-broken', !!otherwise);
       badge.classList.toggle('var-badge-broken', !!problem);
       badge.classList.toggle('var-badge-unlinked', !!unlinked);
+      // Orange parce que le lien existe mais ne trouve aucune ligne (et non parce qu'il manque) : la classe en plus ne change aucun style, elle dit à setHTML que ce n'est pas un schéma
+      // périmé (sa phrase vient de la dernière lecture des lignes, Variables.linkMissText) : afficher un modèle n'en relit pas tout le schéma.
+      badge.classList.toggle('var-badge-linkmiss', !!unlinked && unlinked === Variables.linkMissText(badge.dataset.table));
       const title = problem || unlinked || (otherwise ? I18n.t('varBadge.brokenOtherwise', { problem: otherwise }) : '');
       if (title) badge.title = title; else badge.removeAttribute('title');
     });
@@ -833,14 +850,59 @@ const Editor = (function () {
     markedPage = GristAPI.getCurrentTableId();
     markBadgeValidity(editor.view.dom, editor);
     FieldEditor.refreshBadgeValidity();
+    // Un lien qui ne trouve aucune ligne ne se sait qu'en lisant sa table : la lecture est demandée seulement quand il y a du neuf à lire (une ligne, un lien, une
+    // table de bulle encore jamais lue), jamais à chaque frappe.
+    if (Variables.linkMissesStale(badgeTables())) scheduleLinkMisses();
   }
   // Un lien vient de changer - une règle enregistrée ou supprimée, la table de la page - : les bulles reprennent leur couleur, et la barre de la bulle
   // sélectionnée relit ses boutons (« Colonne… » n'y est plus une fois le lien refait). Une transaction vide suffit : chaque barre se relit à toutes.
   function refreshLinkState() {
     if (!editor) return;
+    Variables.forgetLinkMisses();
     refreshVariableBadgeValidity();
     editor.view.dispatch(editor.state.tr);
     FieldEditor.resyncBars();
+  }
+
+  // === Un lien qui ne trouve aucune ligne (consigne 062 de GFS) ===
+  // Les tables que citent les bulles #Variable ouvertes : celles du modèle et celles des champs texte à bulles (Objet, À, Cc, Cci, nom du PDF).
+  function badgeTables() {
+    const tables = new Set();
+    const collect = root => root.querySelectorAll('span.var-badge').forEach(badge => { if (badge.dataset.table) tables.add(badge.dataset.table); });
+    collect(editor.view.dom);
+    FieldEditor.badgeRoots().forEach(collect);
+    return Array.from(tables);
+  }
+  // La lecture de ces tables (Variables.scanLinkMisses) part page au repos, comme la passe qui relit le schéma, et pas avant que la ligne, le lien ou le schéma ait fini de
+  // bouger : chaque demande repousse la précédente. Le verdict rangé, les bulles reprennent leur couleur et les barres relisent leurs boutons (« Lien… »).
+  const LINK_MISS_DELAY_MS = 600;
+  let linkMissTimer = 0;
+  function scheduleLinkMisses() {
+    clearTimeout(linkMissTimer);
+    linkMissTimer = setTimeout(readLinkMisses, LINK_MISS_DELAY_MS);
+  }
+  // Le schéma vient d'être relu : le verdict garde sa phrase affichée, mais il est à relire (la colonne qu'une Référence montre a pu changer).
+  function readLinkMissesAgain() {
+    if (!editor) return;
+    Variables.forgetLinkMisses(true);
+    scheduleLinkMisses();
+  }
+  async function readLinkMisses() {
+    linkMissTimer = 0;
+    const open = () => !!editor && !!editor.view && !editor.view.isDestroyed;
+    if (!open() || !Variables.linkMissesStale(badgeTables())) return;
+    let changed = false;
+    try { changed = await Variables.scanLinkMisses(badgeTables()); }
+    catch (e) { console.warn('[Editor] lecture du lien des bulles impossible', e); return; }
+    if (!open()) return;
+    if (changed) {
+      markBadgeValidity(editor.view.dom, editor);
+      FieldEditor.refreshBadgeValidity();
+      editor.view.dispatch(editor.state.tr);
+      FieldEditor.resyncBars();
+    }
+    // Un changement arrivé pendant la lecture n'est pas dans son verdict : elle repart.
+    if (Variables.linkMissesStale(badgeTables())) scheduleLinkMisses();
   }
 
   // Âge au-delà duquel l'affichage d'un modèle relit le schéma exact même sans bulle rouge (setHTML) ; le même qu'au démarrage (js/main.js).
@@ -882,8 +944,11 @@ const Editor = (function () {
     // bulle n'est rouge, celle d'il y a moins d'une minute suffit (js/main.js la demande de même à l'ouverture) ; une bulle rouge peut venir d'un
     // schéma périmé (une colonne ajoutée depuis), la passe repart alors comme avant.
     refreshVariableBadgeValidity();
-    const looksBroken = !!editor.view.dom.querySelector('.var-badge-broken, .var-badge-unlinked, .calc-badge-broken, .calc-badge-unlinked, .editor-image-broken');
-    GristAPI.refreshSchema(looksBroken ? undefined : { maxAgeMs: SCHEMA_MAX_AGE_MS }).then(refreshVariableBadgeValidity)
+    // L'orange d'un lien qui ne trouve aucune ligne (`var-badge-linkmiss`) ne compte pas : ce n'est pas le signe d'un schéma périmé. Et le schéma relu peut changer la colonne qu'une Référence
+    // montre, donc la phrase d'aide de ce lien : le verdict est à relire (readLinkMissesAgain), sans le retirer d'ici là (un schéma qui n'a pas bougé ne doit pas faire clignoter l'orange à
+    // chaque ouverture d'un modèle).
+    const looksBroken = !!editor.view.dom.querySelector('.var-badge-broken, .var-badge-unlinked:not(.var-badge-linkmiss), .calc-badge-broken, .calc-badge-unlinked, .editor-image-broken');
+    GristAPI.refreshSchema(looksBroken ? undefined : { maxAgeMs: SCHEMA_MAX_AGE_MS }).then(refreshVariableBadgeValidity).then(readLinkMissesAgain)
       .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));
     warmDocumentHtml();
   }

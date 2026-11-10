@@ -1121,6 +1121,9 @@ const FloatingToolbars = (function () {
         `<button data-action="var-loop" title="${I18n.t('varToolbar.loop')}" aria-label="${I18n.t('varToolbar.loop')}">${Icons.svg('varLoop')}</button>`,
         `<button data-action="var-list" title="${I18n.t('varToolbar.list')}" aria-label="${I18n.t('varToolbar.list')}">${Icons.svg('varList')}</button>`,
         `<button data-action="var-column" title="${I18n.t('varToolbar.columnBroken')}" aria-label="${I18n.t('varToolbar.columnBroken')}" hidden>${Icons.svg('varColumn')}</button>`,
+        // « Lien… » : le bouton d'une bulle dont le lien ne trouve aucune ligne pour la ligne sélectionnée (orange, VariableColumn.isMissAt). Un mot et non une icône : aucune icône ne dit
+        // « revoir la règle de liaison » sans faire doublon avec « Colonne… », et une icône est une fonction.
+        `<button data-action="var-link" title="${I18n.t('varToolbar.linkMiss')}" aria-label="${I18n.t('varToolbar.linkMiss')}" hidden>${I18n.t('varToolbar.linkButton')}</button>`,
         '</div>',
         '<span class="v2-floating-sep" data-var-sep></span>',
         // « Comme dans Grist » : pour une colonne nombre ou date seulement (showVariableFormatPanels) ; son info-bulle dit ce que le bouton écrirait, ou pourquoi il est
@@ -1282,6 +1285,8 @@ const FloatingToolbars = (function () {
       'var-loop': (node, pos) => { if (VariableLoop.status(editor, pos, node).enabled && !loopWindowTaken()) VariableLoop.openAt(editor, pos, { inlineOnly: inField }); },
       'var-list': (node, pos) => { if (VariableList.status(node).enabled) VariableList.openAt(editor, pos, { field: inField }); },
       'var-column': (node, pos) => VariableColumn.openAt(editor, pos),
+      // La fenêtre du lien de la table de la bulle : la règle enregistrée, Editor.refreshLinkState relit alors le verdict (Variables.editLinkRule).
+      'var-link': node => { Variables.editLinkRule(node.attrs.table).catch(e => console.warn('[floating-toolbars] fenêtre du lien impossible', e)); },
     };
     function onVariableAction(action) {
       const t = variableTarget();
@@ -1342,6 +1347,13 @@ const FloatingToolbars = (function () {
       const unlinked = isVariable && pos != null && VariableColumn.isUnlinkedAt(editor, pos, node.attrs);
       btn.hidden = !broken && !unlinked;
       if (broken || unlinked) setLabeled(ui, 'var-column', false, I18n.t(broken ? 'varToolbar.columnBroken' : 'varToolbar.columnUnlinked'));
+      // « Lien… » : là seulement quand la bulle est orange parce que son lien ne trouve aucune ligne pour la ligne sélectionnée (VariableColumn.isMissAt) ; la raison précise, elle, est
+      // l'info-bulle de la bulle.
+      const link = ui.button('var-link');
+      if (!link) return;
+      const miss = isVariable && pos != null && VariableColumn.isMissAt(editor, pos, node.attrs);
+      link.hidden = !miss;
+      if (miss) setLabeled(ui, 'var-link', false, I18n.t('varToolbar.linkMiss'));
     }
     // « Liste… » : active (bleue) quand la bulle a un réglage de liste, grisée pour une colonne qui n'est pas une liste, une bulle en boucle, un
     // calcul, un bloc de texte, une valeur et une case conditionnelle, avec sa raison en info-bulle. `status` : { active, enabled, title }, comme

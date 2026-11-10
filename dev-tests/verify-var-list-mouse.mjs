@@ -219,7 +219,7 @@ async function run(theme) {
   check(`${T} - la bulle Liste de choix se trouve et se clique`, badge.found && badge.inViewport, badge);
   const bar = await barState();
   check(`${T} - clic sur la bulle : barre ouverte, entière dans le panneau, bouton « Liste » après « Boucle », « Colonne » absente (bulle saine), « Liste » ni grisé ni bleu`,
-    bar.visible && bar.left >= 0 && bar.right <= WIDTH + 0.5 && bar.top >= 0 && JSON.stringify(bar.order.slice(-3)) === JSON.stringify(['var-loop', 'var-list', 'var-column']) && bar.columnHidden && !bar.disabled && !bar.active, bar);
+    bar.visible && bar.left >= 0 && bar.right <= WIDTH + 0.5 && bar.top >= 0 && JSON.stringify(bar.order.slice(-4)) === JSON.stringify(['var-loop', 'var-list', 'var-column', 'var-link']) && bar.columnHidden && !bar.disabled && !bar.active, bar);
   const button = await hitTest(LIST_BUTTON);
   check(`${T} - le bouton « Liste » est dans le panneau, au premier plan et assez grand pour un vrai clic (au moins 24 px)`, button.found && button.inViewport && button.onTop && button.w >= 24 && button.h >= 24, button);
   await shot(`${theme}-1-barre`);

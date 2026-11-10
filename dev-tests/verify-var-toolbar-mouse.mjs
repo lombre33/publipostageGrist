@@ -128,6 +128,9 @@ await page.evaluate(async () => {
     { id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 7, Montant: 1200 },
     { id: 2, Titre: 'Dossier B', Statut: 'Normal', Responsable: 8, Montant: 50 },
   ]);
+  // Un contact pour le dossier sélectionné (n° 1) : une fois le lien de VcContacts fait (Dossier = Auto), il trouve cette ligne et la bulle redevient bleue. Sans elle le lien ne
+  // trouverait aucune ligne et la bulle resterait orange avec sa phrase d'aide (consigne 062), ce que dit verify-link-miss-mouse.mjs.
+  stub.setRows('VcContacts', [{ id: 1, Dossier: 1, Role: 'Référent', Telephone: '06 00 00 00 00' }]);
   await GristAPI.refreshSchema();
   await GristAPI.saveLinkRule('VcAnnuaire', { mode: 'match', colonneCible: 'id', colonneSource: 'Responsable' });
   stub.fireRecord({ id: 1, Titre: 'Dossier A', Statut: 'Urgent', Responsable: 'Dupont Jean', Montant: 1200 }, 'VcDossiers');

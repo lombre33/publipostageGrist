@@ -116,6 +116,11 @@ const VariableColumn = (function () {
   // écrivent « aucune correspondance configurée » à sa place - et rien, à cet endroit, ne lui donne de ligne (readsTurnRow, avec la boucle de la bulle). Une
   // bulle rouge ne l'est pas : sa colonne ou sa table a disparu, c'est un autre défaut.
   const isUnlinkedAt = (editor, pos, attrs) => !!attrs && !isBroken(attrs) && Variables.isUnlinked(attrs.table) && !readsTurnRow(editor, pos, attrs, attrs.loop);
+  // L'autre orange de la bulle : sa table a un lien, mais il ne trouve aucune ligne pour la ligne que la page a sélectionnée (Variables.linkMissText, lue page au repos).
+  // Rien à dire quand, à cet endroit, ce n'est pas cette ligne qui est lue : la zone répétée qui parcourt la table de la bulle lui donne la ligne du tour (readsTurnRow),
+  // celle qui parcourt la table de la page donne au lien la ligne du tour de la page, pas la ligne sélectionnée.
+  const isMissAt = (editor, pos, attrs) => !!attrs && !isBroken(attrs) && !Variables.isUnlinked(attrs.table) && !!Variables.linkMissText(attrs.table)
+    && !readsTurnRow(editor, pos, attrs, attrs.loop) && !VariableLoop.feedsAt(editor.state, pos, GristAPI.getCurrentTableId(), attrs.loop);
 
   async function pick(editor, pos, node, item) {
     picking = true;
@@ -203,5 +208,5 @@ const VariableColumn = (function () {
     }
   }
 
-  return { openAt, isBroken, isImageBroken, isUnlinkedAt, replacementAttrs, replacementImageAttrs, ensureLinked };
+  return { openAt, isBroken, isImageBroken, isUnlinkedAt, isMissAt, replacementAttrs, replacementImageAttrs, ensureLinked };
 })();

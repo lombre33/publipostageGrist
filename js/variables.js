@@ -1244,6 +1244,127 @@ const Variables = (function () {
     return { replaceTextVariables, resolveTextVariables, resolveAttachmentIds };
   })();
 
+  // === Le lien qui ne trouve aucune ligne ===
+  // Une bulle d'une autre table que celle de la page, liée par une règle « match » qui cherche une valeur que NULLE ligne de sa table ne porte : la Lecture et les
+  // exports écrivent à sa place une erreur ou un champ vide, et la bulle de l'éditeur le dit - orange, avec une phrase d'aide - au lieu de rester bleue jusqu'à
+  // là (consigne 062 de GFS, demande du porteur du 10/11). La phrase est écrite par une seule fonction, pour l'info-bulle de la bulle comme pour l'aperçu de la
+  // fenêtre de liaison. Le verdict ne vaut que pour la ligne que la page a sélectionnée, et se lit page au repos (Editor.scheduleLinkMisses).
+
+  const { judgeLink, linkMissText, linkMissesStale, forgetLinkMisses, scanLinkMisses } = (function () {
+    // La phrase d'aide, le verdict d'un lien pour la ligne sélectionnée, et sa lecture table par table
+
+    // Un texte ramené à ce que l'œil tient pour le même : sans casse, sans accent, « œ » et « æ » écrits en deux lettres, toute suite d'espaces (insécable
+    // comprise) pour une seule. Ne sert qu'à la phrase d'aide : matchingRows compare toujours les textes tels quels.
+    const fold = value => String(value).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/œ/g, 'oe').replace(/æ/g, 'ae').replace(/\s+/g, ' ').trim();
+    // La valeur cherchée, telle que la phrase la cite (une Référence qui montre un nombre arrive en objet { rowId }).
+    const searchedText = value => String(value !== null && typeof value === 'object' && 'rowId' in value ? value.rowId : value).trim();
+    // Les textes que matchingRows compare pour une ligne de la table liée : son identifiant, la valeur de la colonne, ou - pour une Référence - le texte qu'elle montre.
+    function comparedTexts(row, rule, targetTable) {
+      const column = rule.colonneCible;
+      if (column === 'id') return [row.id];
+      if (!GristAPI.referenceOf(GristAPI.getColumnType(targetTable, column))) return [unwrapRefValue(row[column])];
+      const shown = cellValue(targetTable, column, row);
+      return shown == null ? [] : Array.isArray(shown) ? shown : [shown];
+    }
+    // Le texte d'une ligne qui ne diffère de la valeur cherchée que par la casse, les accents, « œ » contre « oe » ou les espaces ; null quand aucune ne s'en approche.
+    function nearText(rows, rule, targetTable, wanted) {
+      const key = fold(wanted);
+      for (const row of rows) {
+        const text = comparedTexts(row, rule, targetTable).find(t => (typeof t === 'string' || typeof t === 'number') && fold(t) === key);
+        if (text !== undefined) return String(text).trim();
+      }
+      return null;
+    }
+    // Vrai quand la cellule de la ligne sélectionnée est vide : le lien n'a rien à chercher, c'est la donnée et non le lien (choix du porteur du 10/11). `end` : la colonne
+    // source lue sur la page ({ type, … }), pour la Référence qui ne désigne aucune ligne (0, quand la règle compare l'identifiant de ligne).
+    function isEmptySearch(value, rule, end) {
+      if (value === undefined || value === null) return true;
+      if (typeof value === 'string') return value.trim() === '';
+      if (Array.isArray(value)) return listItems(value).length === 0;
+      return value === 0 && rule.colonneCible === 'id' && !!end && !!GristAPI.referenceOf(end.type);
+    }
+    // Vrai quand la colonne de la page est une Référence vers `targetTable` dont la ligne désignée n'existe plus : l'identifiant brut, relu sur la ligne de la page.
+    async function pointsToGoneRow(end, targetTable, pageTable, record, rows) {
+      const reference = end && end.table === pageTable ? GristAPI.referenceOf(end.type) : null;
+      if (!reference || reference.list || reference.table !== targetTable) return false;
+      const raw = await rawRowOf(pageTable, record);
+      const id = raw ? unwrapRefValue(raw[end.column]) : 0;
+      return typeof id === 'number' && id > 0 && !rows.some(row => row.id === id);
+    }
+    // La phrase qui guide la correction d'un lien qui ne trouve rien, la première qui s'applique, du plus précis au plus général : (1) la colonne de la page est une
+    // Référence qui montre une autre colonne que celle que la règle compare, (2) cette Référence désigne une ligne qui n'existe plus, (3) une ligne ne diffère de la
+    // valeur cherchée que par la casse, les accents ou les espaces, (4) la phrase générale. `end` : la colonne source lue sur la page ({ table, column, type }), null
+    // pour l'identifiant de ligne.
+    async function missHint(rule, targetTable, pageTable, record, value, rows, end) {
+      const shown = end && GristAPI.getReferenceColumn(end.table, end.column);
+      if (shown && shown.table === targetTable && rule.colonneCible !== 'id' && rule.colonneCible !== shown.column) {
+        return I18n.t('linkMiss.column', { column: end.column, table: end.table, shown: shown.column, target: targetTable, compared: rule.colonneCible });
+      }
+      if (await pointsToGoneRow(end, targetTable, pageTable, record, rows)) return I18n.t('linkMiss.gone', { column: end.column, target: targetTable });
+      const wanted = searchedText(value);
+      const near = nearText(rows, rule, targetTable, wanted);
+      if (near !== null) return I18n.t('linkMiss.near', { value: wanted, near });
+      return I18n.t('linkMiss.general', { table: targetTable, page: pageTable, value: wanted });
+    }
+    // Ce que le lien `rule` (de la table liée `targetTable`) donne pour la ligne `record` de la page : { matches } les lignes trouvées ; { matches: [], empty: true } quand
+    // la cellule qu'il lit est vide ; { matches: [], hint } la phrase d'aide d'un lien qui cherche une valeur et ne la trouve nulle part. `fetchRows` : la lecture des tables.
+    async function judgeLink(rule, targetTable, pageTable, record, fetchRows) {
+      const value = await ruleSourceValue(rule, record, pageTable, fetchRows);
+      const end = rule.colonneSource === 'id' ? null : GristAPI.resolveColumnPath(pageTable, rule.colonneSource);
+      if (isEmptySearch(value, rule, end)) return { matches: [], empty: true };
+      const rows = await fetchRows(targetTable);
+      const matches = matchingRows(rows, rule, value, targetTable);
+      if (matches.length) return { matches };
+      return { matches, hint: await missHint(rule, targetTable, pageTable, record, value, rows, end) };
+    }
+
+    // Le verdict de la dernière lecture : la phrase d'aide des tables dont le lien ne trouve rien, et les tables lues. `generation` monte à chaque événement qui l'invalide
+    // (la ligne sélectionnée, un lien, le schéma) : une lecture partie avant ne lève pas le besoin d'une nouvelle, et ce qu'elle lit après un tel événement est jeté.
+    let verdict = { misses: new Map(), read: new Set(), generation: -1 };
+    let generation = 0;
+    let lastScan = 0;
+    // Le verdict est périmé. `keepShown` : il reste affiché jusqu'à la lecture qui le remplace (un schéma relu, une cellule retouchée sur la même ligne ne changent presque jamais la
+    // phrase : rien ne clignote) ; sinon il est retiré tout de suite - la phrase d'une autre ligne ou d'un lien refait citerait une valeur qui n'est plus celle du lien.
+    function forgetLinkMisses(keepShown) {
+      generation += 1;
+      if (!keepShown && verdict.misses.size) verdict = { misses: new Map(), read: verdict.read, generation: verdict.generation };
+    }
+    const linkMissText = table => verdict.misses.get(table) || '';
+    // Vrai quand une lecture est à faire : le verdict date d'avant un changement, ou l'une de ces `tables` (celles des bulles) n'a pas encore été lue.
+    const linkMissesStale = tables => verdict.generation !== generation || tables.some(table => !verdict.read.has(table));
+    // La phrase d'aide du lien de `table` pour la ligne sélectionnée, '' quand il trouve une ligne, n'a rien à chercher ou n'est pas une règle « match ».
+    async function missTextOf(table, page, record) {
+      if (!table || table === page || GristAPI.getTables().indexOf(table) === -1) return '';
+      const rule = GristAPI.getLinkRule(table, page);
+      if (!rule || rule.mode !== 'match') return '';
+      return (await judgeLink(rule, table, page, record, GristAPI.fetchTableRows)).hint || '';
+    }
+    // Lit le lien de chacune des `tables` pour la ligne sélectionnée de la page, en une seule passe de lecture : chaque table n'est lue qu'une fois, quel que soit le nombre de
+    // bulles qui la citent. Rend vrai quand le verdict a changé ; une lecture qui échoue ne marque rien, et une lecture dépassée - par une plus récente ou par un événement qui a
+    // périmé le verdict pendant qu'elle lisait - est jetée.
+    async function scanLinkMisses(tables) {
+      const wanted = Array.from(new Set(tables));
+      const page = GristAPI.getCurrentTableId();
+      const record = GristAPI.getCurrentRecord();
+      const mine = ++lastScan;
+      const started = generation;
+      const misses = new Map();
+      if (page && record) {
+        await GristAPI.withReadPass(() => Promise.all(wanted.map(async table => {
+          try {
+            const text = await missTextOf(table, page, record);
+            if (text) misses.set(table, text);
+          } catch (e) { console.warn('[variables] lecture du lien de « ' + table + ' » impossible', e); }
+        })));
+      }
+      if (mine !== lastScan || started !== generation) return false;
+      const changed = misses.size !== verdict.misses.size || Array.from(misses).some(([table, text]) => verdict.misses.get(table) !== text);
+      verdict = { misses, read: new Set(wanted), generation: started };
+      return changed;
+    }
+    return { judgeLink, linkMissText, linkMissesStale, forgetLinkMisses, scanLinkMisses };
+  })();
+
   // === Règles de liaison entre tables ===
   // Configurées à l'insertion d'une variable d'une autre table et dans le panneau de gestion (#link-rules-modal), deux fenêtres de index.html.
 
@@ -1331,20 +1452,19 @@ const Variables = (function () {
     }
     // L'aperçu d'une règle : ce qu'elle donnerait pour la ligne actuellement sélectionnée, { text, good } (`good` : une issue positive, que la fenêtre
     // marque en vert). La colonne source est lue comme la résolution réelle (ruleSourceValue) : sans cela l'aperçu annoncerait « aucune ligne » pour
-    // une colonne Référence que la variable, elle, trouve.
+    // une colonne Référence que la variable, elle, trouve. Sans ligne trouvée, la phrase est celle que l'info-bulle de la bulle orange dit (judgeLink).
     async function linkRulePreview(rule, targetTable, currentTableId, record) {
-      const rows = await GristAPI.fetchTableRows(targetTable);
       if (rule.mode === 'singleton') {
-        const first = lowestRow(rows);
+        const first = lowestRow(await GristAPI.fetchTableRows(targetTable));
         return first
           ? { text: I18n.t('linkConfig.previewSingleton', { id: first.id, table: targetTable }), good: true }
           : { text: I18n.t('linkConfig.previewTableEmpty', { table: targetTable }) };
       }
-      const sourceVal = await ruleSourceValue(rule, record, currentTableId, GristAPI.fetchTableRows);
-      const matches = matchingRows(rows, rule, sourceVal, targetTable);
-      return matches.length
-        ? { text: I18n.t('linkConfig.previewMatches', { count: matches.length, table: targetTable, ids: matches.map(r => r.id).join(', ') }), good: true }
-        : { text: I18n.t('linkConfig.previewNoMatch', { table: targetTable, value: sourceVal }) };
+      const judged = await judgeLink(rule, targetTable, currentTableId, record, GristAPI.fetchTableRows);
+      if (judged.matches.length) {
+        return { text: I18n.t('linkConfig.previewMatches', { count: judged.matches.length, table: targetTable, ids: judged.matches.map(r => r.id).join(', ') }), good: true };
+      }
+      return { text: judged.empty ? I18n.t('linkMiss.empty', { column: rule.colonneSource, table: targetTable }) : judged.hint };
     }
     return { fillColumnSelect, columnHint, describeRule, linkRuleLabel, guessLinkRule, referencePaths, linkRulePreview };
   })();
@@ -1374,7 +1494,7 @@ const Variables = (function () {
     // fermeture.
     function linkConfigForm(modal, targetTable, currentTableId) {
       const $ = id => document.getElementById('link-config-' + id);
-      return { modal, $, targetTable, currentTableId, selectCible: $('col-cible'), selectSource: $('col-source'), preview: $('preview'), mode: null, searchLists: [], listeners: [] };
+      return { modal, $, targetTable, currentTableId, selectCible: $('col-cible'), selectSource: $('col-source'), preview: $('preview'), mode: null, previewRun: 0, searchLists: [], listeners: [] };
     }
     function fillLinkConfigForm(form) {
       const { $, selectCible, selectSource, targetTable, currentTableId } = form;
@@ -1430,8 +1550,11 @@ const Variables = (function () {
       if (form.mode === 'singleton') return { mode: form.mode };
       return form.selectCible.value && form.selectSource.value ? { mode: form.mode, colonneCible: form.selectCible.value, colonneSource: form.selectSource.value } : null;
     }
+    // Seul l'aperçu du DERNIER choix s'écrit : choisir la colonne de gauche puis celle de droite lance deux aperçus, et le premier - la phrase d'aide d'une règle qui ne trouve rien lit
+    // davantage - peut finir après le second ; il ne recouvre pas alors le résultat de la règle que la personne vient de choisir.
     async function updateLinkPreview(form) {
       const { preview, targetTable, currentTableId } = form;
+      const mine = ++form.previewRun;
       preview.classList.remove('is-good');
       const rule = linkRuleOfForm(form);
       if (!rule) { preview.textContent = I18n.t('linkConfig.previewChooseColumns'); return; }
@@ -1440,11 +1563,12 @@ const Variables = (function () {
       preview.textContent = I18n.t('linkConfig.previewComputing');
       try {
         const { text, good } = await linkRulePreview(rule, targetTable, currentTableId, record);
+        if (mine !== form.previewRun) return;
         preview.textContent = text;
         preview.classList.toggle('is-good', !!good);
       } catch (e) {
         console.warn('[variables] aperçu de la règle indisponible', e);
-        preview.textContent = I18n.t('linkConfig.previewUnavailable');
+        if (mine === form.previewRun) preview.textContent = I18n.t('linkConfig.previewUnavailable');
       }
     }
     function onLinkForm(form, target, type, handler) {
@@ -1616,10 +1740,12 @@ const Variables = (function () {
   // classe ses colonnes comme la liste « # ») ; isAttachmentColumn et insertAttachmentImage (le même menu en tire ses colonnes Pièces jointes et pose
   // l'image que la liste « # » pose pour l'une d'elles) ; becomesImage et attachmentImageNode (« Autres attributs », js/variable-linked-attrs.js, pose la même image pour une pièce jointe cochée) ; crossedListTable et writesList (la fenêtre « Liste » d'une bulle, js/variable-list.js, et
   // « Remplacer » d'Autres attributs, js/variable-linked-attrs.js : un chemin qui traverse une liste de références s'écrit en liste) ; linkRuleLabel
-  // (le coin d'état d'Annuler, js/link-rule-history.js, nomme un lien comme « Tables liées »).
+  // (le coin d'état d'Annuler, js/link-rule-history.js, nomme un lien comme « Tables liées ») ; linkMissText, linkMissesStale, forgetLinkMisses et scanLinkMisses (l'orange d'un
+  // lien qui ne trouve aucune ligne, js/editor.js et js/variable-column.js).
   return {
     createExtension, createFieldExtension, isAttachmentColumn, becomesImage, attachmentImageNode, insertAttachmentImage, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
     preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, linkRuleLabel, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, listItems, decodeShown, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow, attachmentReference, attachmentColumnsBelow,
     resolveCalcResult, resolveCalc, badgeProblem, pageReferencesTo, isUnlinked, calcProblem, formulaErrorText,
+    linkMissText, linkMissesStale, forgetLinkMisses, scanLinkMisses,
   };
 })();

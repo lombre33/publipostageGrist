@@ -376,7 +376,7 @@
       got.back = buttonState();
       const T = key => I18n.t(key);
       const checks = {
-        order: JSON.stringify(order) === JSON.stringify(['calc-edit', 'var-condition', 'var-style', 'var-linked', 'var-loop', 'var-list', 'var-column']),
+        order: JSON.stringify(order) === JSON.stringify(['calc-edit', 'var-condition', 'var-style', 'var-linked', 'var-loop', 'var-list', 'var-column', 'var-link']),
         choiceEnabled: got.choice.visible && got.choice.enabled && !got.choice.active && got.choice.title === 'Liste : quelles valeurs écrire' && got.choice.aria === got.choice.title && got.icon,
         refSetActive: got.refSet.visible && got.refSet.enabled && got.refSet.active,
         linkedChoiceEnabled: got.linkedChoice.visible && got.linkedChoice.enabled && !got.linkedChoice.active,
