@@ -50,6 +50,9 @@ const PptxImport = (function () {
   const MAX_SLIDES = 500;
   const MAX_OBJECTS = 20000;
   const MAX_DECOR_OBJECTS = 150;                   // le décor d'un masque ou d'une mise en page (recopié sur chaque diapositive) : au delà, il n'est pas repris
+  const HEAVY_FILE_BYTES = 15 * 1024 * 1024;       // un fichier de cette taille ou plus est « lourd » : ses images sont ramenées à TARGET_PPI et leur poids total est plafonné (un fichier plus léger est lu comme avant, image pour image)
+  const TARGET_PPI = 220;                          // la définition utile d'une image : celle que PowerPoint garde par défaut ; au delà, une image d'un fichier lourd est ramenée à deux fois et demie (220 / 96) la taille de sa boîte
+  const MAX_EMBEDDED_CHARS = 64 * 1024 * 1024;     // fichier lourd : le poids de toutes les images écrites dans le texte (une par objet, même quand deux objets montrent la même) ; au delà, les suivantes ne sont pas reprises (le rapport le dit)
   const MAX_DECOR_IMAGE = 400 * 1024;              // une image du décor (en caractères de son adresse de données) : plus lourde, elle est réduite, puis laissée
   const MAX_DECOR_BYTES = 16 * 1024 * 1024;        // le poids de toutes les images du décor, recopiées sur chaque diapositive
   const BACKGROUND_SIDE_PX = 1600;                 // un fond en image est ramené à 1 600 points sur son grand côté
@@ -58,6 +61,30 @@ const PptxImport = (function () {
   const MIN_FIT_SCALE = 0.6;                       // un texte n'est pas réduit au delà de 60 % de sa taille
   const BLEED_PT = 6;                              // un objet qui dépasse la page de moins de 6 points est ramené à son bord
   const MAX_DEPTH = 12;                            // groupes imbriqués
+  // --- Avancer sans figer la page ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // La lecture d'un gros fichier (des centaines de diapositives, des formes par milliers, des photos) est un seul long calcul : sans pause, la page ne répond plus à rien pendant des dizaines de secondes. Le
+  // travail est donc coupé en tranches de SLICE_MS : entre deux, la page respire (clics, défilement, coin d'état qui se peint). La pause passe par `scheduler.yield` (le navigateur sert d'abord les clics et la
+  // frappe, puis reprend ici) ; sans lui, par un minuteur à 0 ms. Toutes les PAINT_MS, la pause attend aussi une image (elle ne dure jamais plus de 60 ms : un onglet caché n'en peint pas).
+  const SLICE_MS = 30;
+  const PAINT_MS = 250;
+  const breathe = () => (typeof scheduler !== 'undefined' && scheduler && typeof scheduler.yield === 'function' ? scheduler.yield() : new Promise(resolve => setTimeout(resolve, 0)));
+  const breatheAndPaint = () => new Promise((resolve) => {
+    let done = false;
+    const go = () => { if (!done) { done = true; resolve(); } };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(go);
+    setTimeout(go, 60);
+  });
+  // Rend la fonction `pace()` d'un import : à appeler souvent, elle ne fait une pause que si la tranche en cours dure depuis SLICE_MS.
+  function pacer() {
+    let sliceStart = performance.now();
+    let lastPaint = sliceStart;
+    return async function pace() {
+      const now = performance.now();
+      if (now - sliceStart < SLICE_MS) return;
+      if (now - lastPaint >= PAINT_MS) { await breatheAndPaint(); lastPaint = performance.now(); } else await breathe();
+      sliceStart = performance.now();
+    };
+  }
   const BUILT_IN_PAGE_MM_MAX = 558.8;              // la plus grande page que l'éditeur accepte (PageLayout.CUSTOM_MAX_MM)
   const DEFAULT_SIZE_PT = 18;
   const FRAME_PAD_X_PT = 7.2;                      // les marges d'un cadre de texte (css/free-frame.css), celles par défaut de PowerPoint
@@ -1141,11 +1168,15 @@ const PptxImport = (function () {
     ctx.images.set(path, data);
     return data;
   }
+  // La plus grande taille utile, en points d'image, d'une image posée dans `box` (en points de la page) : TARGET_PPI points par pouce de la boîte.
+  // Rend la taille utile d'une image posée dans `box`, ou null : un fichier léger (ctx.heavy faux) et le décor d'un masque gardent l'image telle quelle.
+  const fitFor = (ctx, env, box) => (ctx.heavy && !env.decor ? fitOf(box) : null);
+  const fitOf = box => (box && box.w > 0 && box.h > 0 ? { w: Math.max(32, Math.ceil(box.w * TARGET_PPI / 72)), h: Math.max(32, Math.ceil(box.h * TARGET_PPI / 72)) } : null);
   // L'image rognée, retournée et amenée aux proportions de sa boîte comme le fichier le demande (un canvas), ou telle quelle quand il n'y a rien à faire. L'image de l'éditeur ne se règle que par sa largeur et garde
   // ses proportions, alors qu'une image de PowerPoint est étirée dans sa boîte : l'étirement est fait ici, sur les pixels, dans la dimension qui grandit (rien n'est perdu).
-  async function cropped(data, crop, flipH, flipV, ratio) {
+  async function cropped(data, crop, flipH, flipV, ratio, fit) {
     try {
-      const out = await ImageIo.reshape(data, { crop, flipH, flipV, ratio });
+      const out = await ImageIo.reshape(data, { crop, flipH, flipV, ratio, fit });
       return out ? out.src : data;
     } catch (e) {
       return data;
@@ -1178,7 +1209,7 @@ const PptxImport = (function () {
         const jpeg = /^data:image\/jpe?g/.test(data);
         if (jpeg) { g.fillStyle = '#ffffff'; g.fillRect(0, 0, canvas.width, canvas.height); }
         g.drawImage(img, 0, 0, canvas.width, canvas.height);
-        out = jpeg ? canvas.toDataURL('image/jpeg', 0.82) : canvas.toDataURL('image/png');
+        out = jpeg ? await ImageIo.canvasDataUri(canvas, 'image/jpeg', 0.82) : await ImageIo.canvasDataUri(canvas, 'image/png');
       }
     } catch (e) {
       out = null;
@@ -1238,7 +1269,7 @@ const PptxImport = (function () {
     if (data) {
       const src = at(pic, 'blipFill/srcRect');
       const crop = src ? { l: numAttr(src, 'l', 0) / 100000, t: numAttr(src, 't', 0) / 100000, r: numAttr(src, 'r', 0) / 100000, b: numAttr(src, 'b', 0) / 100000 } : null;
-      data = await cropped(data, crop, box.flipH, box.flipV, box.w / box.h);
+      data = await cropped(data, crop, box.flipH, box.flipV, box.w / box.h, fitFor(ctx, env, box));
     }
     if (env.decor) ctx.prepared.set(pic, data);
     return data;
@@ -1455,7 +1486,7 @@ const PptxImport = (function () {
       transparent = true;
     }
     const wasJpeg = /^data:image\/jpe?g/.test(data) && !transparent;
-    const out = wasJpeg ? canvas.toDataURL('image/jpeg', 0.92) : canvas.toDataURL('image/png');
+    const out = wasJpeg ? await ImageIo.canvasDataUri(canvas, 'image/jpeg', 0.92) : await ImageIo.canvasDataUri(canvas, 'image/png');
     return { data: out, box: wide, done: { shape: hasShape, adjust: !adjust.others, frame: !effects.other } };
   }
   async function pictureObject(pic, env, groups, out) {
@@ -1474,6 +1505,12 @@ const PptxImport = (function () {
     const alpha = numAttr(kid(blip, 'alphaModFix'), 'amt', 100000) / 100000;
     // Les réglages, la forme, la bordure et l'ombre de l'image sont faits dans ses points (finishedPicture) ; l'image d'un décor de masque reste telle quelle.
     const finished = env.decor ? null : await finishedPicture(data, pic, xf, box, env);
+    // Le poids des images écrites dans le texte a un plafond : une présentation faite de photos lourdes remplirait la mémoire de la page (et la case de Grist) bien avant la fin.
+    if (ctx.heavy && !env.decor) {
+      const written = (finished ? finished.data : data).length;
+      if (ctx.embedded + written > MAX_EMBEDDED_CHARS) { ctx.report.images += 1; return; }
+      ctx.embedded += written;
+    }
     // Une action du diaporama (suivante, précédente...) ne tient pas dans le lien d'une image du texte : seul le cadre la porte. Une adresse ou une diapositive enveloppe l'image d'un lien, comme « Lien » de l'éditeur.
     const frameLink = env.decor ? '' : frameLinkOf(pic, env);
     const showAction = !!FrameLink.actionOf(frameLink);
@@ -1679,7 +1716,7 @@ const PptxImport = (function () {
       let data = env.decor && ctx.prepared.has(fill.el) ? ctx.prepared.get(fill.el) : undefined;
       if (data === undefined) {
         data = await blipData(fill.el, env, env.slideRels);
-        if (data) data = await cropped(data, null, false, false, box.w / box.h);
+        if (data) data = await cropped(data, null, false, false, box.w / box.h, fitFor(ctx, env, box));
         if (env.decor) ctx.prepared.set(fill.el, data);
       }
       if (data && env.decor) data = await copiedImage(env, data, 'masterObjects');
@@ -2083,6 +2120,7 @@ const PptxImport = (function () {
     const nodes = kids(tree);
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i];
+      await ctx.pace();
       if (ctx.objects >= MAX_OBJECTS) { ctx.report.unreadable += 1; return; }
       if (!env.decor && /^(sp|cxnSp|pic|grpSp|graphicFrame)$/.test(node.localName)) ctx.objects += 1;
       const from = out.length;
@@ -2452,7 +2490,7 @@ const PptxImport = (function () {
   }
   const PAGE_BREAK = '<div class="page-break-marker"></div>';
   // Le texte d'une présentation d'après le contenu d'un fichier .pptx : { html, page: { orientation, format, theme }, slideCount, report: [{ key, n }] } ; `theme` : celui du fichier (themeOf), absent sans thème lisible.
-  async function fromBuffer(buffer) {
+  async function fromBuffer(buffer, options) {
     if (!buffer || buffer.byteLength > MAX_FILE_BYTES) throw fail('tooBig', 'Ce fichier est trop gros pour être importé.', { size: buffer ? buffer.byteLength : 0, max: MAX_FILE_BYTES });
     const pkg = await openPackage(buffer);
     const rootRels = await pkg.xml('_rels/.rels');
@@ -2481,8 +2519,9 @@ const PptxImport = (function () {
     });
     const ctx = {
       pkg, k: page.k, report, realReport: report, images: new Map(), imageBytes: 0, decorBytes: 0, prepared: new Map(), skipped: new Set(), objects: 0, masters: new Map(), layouts: new Map(), counted: new Set(),
-      defaultText: kid(presentation, 'defaultTextStyle'), presentationRels,
+      defaultText: kid(presentation, 'defaultTextStyle'), presentationRels, pace: pacer(), embedded: 0, heavy: buffer.byteLength >= HEAVY_FILE_BYTES,
     };
+    const onProgress = options && typeof options.onProgress === 'function' ? options.onProgress : null;
     if (paths.length > MAX_SLIDES) {
       report.slidesCut = paths.length - MAX_SLIDES;
       paths.length = MAX_SLIDES;
@@ -2502,12 +2541,14 @@ const PptxImport = (function () {
     if (document.fonts && document.fonts.ready) await document.fonts.ready;
     try {
       for (let i = 0; i < paths.length; i++) {
+        await ctx.pace();
         try {
           slides.push(await slideHtml(paths[i], ctx, { w: page.widthPt, h: page.heightPt }));
         } catch (e) {
           report.unreadable += 1;
           slides.push({ props: {}, frames: '', tail: '<p></p>' });
         }
+        if (onProgress) { try { onProgress({ done: i + 1, total: paths.length }); } catch (e) { /* l'affichage de l'avancement ne fait jamais échouer l'import */ } }
       }
     } finally {
       if (ctx.host) ctx.host.remove();
@@ -2527,7 +2568,7 @@ const PptxImport = (function () {
       report: said.map(key => ({ key, n: report[key] })),
     };
   }
-  async function fromFile(file) {
+  async function fromFile(file, options) {
     if (!file || file.size > MAX_FILE_BYTES) throw fail('tooBig', 'Ce fichier est trop gros pour être importé.', { size: file ? file.size : 0, max: MAX_FILE_BYTES });
     let buffer;
     try {
@@ -2535,7 +2576,7 @@ const PptxImport = (function () {
     } catch (e) {
       throw fail('unreadable', 'Ce fichier n’a pas pu être lu.', { cause: e });
     }
-    return fromBuffer(buffer);
+    return fromBuffer(buffer, options);
   }
 
   return { fromFile, fromBuffer, MAX_FILE_BYTES, MAX_UNPACKED_BYTES, MAX_SLIDES, REPORT_KEYS };

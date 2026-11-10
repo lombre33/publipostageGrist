@@ -21,12 +21,18 @@ const ImageIo = (function () {
 
   // L'image décodée de `source`, une adresse ou un Blob. L'adresse temporaire d'un Blob est libérée dès que l'image est lue ou refusée : sinon le
   // Blob resterait en mémoire jusqu'à la fermeture de la page.
+  // `decode()` fait décoder l'image HORS du fil principal : sans lui, le premier `drawImage` d'une photo de 12 Mpx la décode sur place et fige la page (un import PowerPoint de 150 diapositives
+  // photographiques en faisait des arrêts de plusieurs centaines de millisecondes). Un refus de `decode()` (SVG sans dimensions...) ne change rien : l'image est rendue comme avant.
   function load(source) {
     return new Promise((resolve, reject) => {
       const url = typeof source === 'string' ? source : URL.createObjectURL(source);
       const release = () => { if (url !== source) URL.revokeObjectURL(url); };
       const img = new Image();
-      img.onload = () => { release(); resolve(img); };
+      img.onload = () => {
+        const finish = () => { release(); resolve(img); };
+        if (typeof img.decode === 'function') img.decode().then(finish, finish);
+        else finish();
+      };
       img.onerror = () => { release(); reject(new Error('image illisible')); };
       img.src = url;
     });
@@ -42,6 +48,16 @@ const ImageIo = (function () {
     canvas.height = img.naturalHeight || 512;
     canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
     return canvas;
+  }
+
+  // Le contenu d'un <canvas> en data URI. `toBlob` encode HORS du fil principal, puis FileReader relit le Blob : un `toDataURL` d'une photo de plusieurs Mpx fige la page une demi-seconde en JPEG et plusieurs
+  // secondes en PNG. `toDataURL` ne sert que si le navigateur refuse l'encodage asynchrone. Mêmes octets que `toDataURL` (même encodeur, même qualité).
+  async function canvasDataUri(canvas, type, quality) {
+    const blob = await new Promise((resolve) => {
+      try { canvas.toBlob(resolve, type, quality); } catch (e) { resolve(null); }
+    });
+    if (blob && blob.size > 0) return toDataUri(blob);
+    return canvas.toDataURL(type, quality);
   }
 
   // Le contenu d'un <canvas> en Blob PNG.
@@ -140,6 +156,7 @@ const ImageIo = (function () {
   // boutons « Pivoter », « Retourner » et « Rogner » de la barre de l'image (js/image-reshape.js) aussi.
   const RESHAPE_MAX_PIXELS = 16000000;     // une image redessinée ne dépasse pas 16 millions de points
   const RESHAPE_STRETCH_TOLERANCE = 0.01;  // un écart de proportions sous 1 % n'est pas corrigé
+  const RESHAPE_FIT_TRIGGER = 0.8;         // `fit` : une image qui dépasse sa taille maximale de moins d'un quart est laissée telle quelle (la recoder abîmerait pour quelques octets)
   const RESHAPE_JPEG_QUALITY = 0.92;
   // Le sens horaire en degrés, ramené à [0, 360[ ; un tour entier, ou un écart sous un centième de degré, ne tourne rien.
   function turnOf(degrees) {
@@ -156,7 +173,7 @@ const ImageIo = (function () {
   }
   // `source` : l'adresse (data:, blob:), le Blob ou l'image décodée à redessiner ; `spec` : { crop: { l, t, r, b } (parts de 0 à 1 ôtées de chaque bord), flipH, flipV (miroir), turn (degrés, sens
   // horaire, tout angle), ratio (largeur / hauteur voulue de la partie gardée, avant la rotation : l'image est alors étirée dans la dimension qui grandit, rien n'est perdu ; 0 : telle quelle),
-  // quality (JPEG) }. Le miroir se fait avant la rotation, comme dans Word et PowerPoint. Rend { src, width, height } (l'image redessinée en adresse de données et ses points) ou `null`
+  // quality (JPEG), fit ({ w, h } : la taille MAXIMALE en points de l'image rendue ; une image plus grande d'au moins un quart y est ramenée, jamais agrandie, sauf un GIF qu'un canvas aplatirait) }. Le miroir se fait avant la rotation, comme dans Word et PowerPoint. Rend { src, width, height } (l'image redessinée en adresse de données et ses points) ou `null`
   // quand il n'y a rien à faire (aucun réglage, ou une image vectorielle qu'un canvas ne rendrait qu'en perdant son dessin) ; lève une erreur quand l'image ne se décode pas. Un JPEG reste
   // JPEG tant que l'image ne reçoit pas de coins vides (un tour d'un autre angle qu'un quart de tour) ; le reste sort en PNG.
   async function reshape(source, spec) {
@@ -183,7 +200,12 @@ const ImageIo = (function () {
       if (cw / ch > ratio) outH = Math.round(cw / ratio);
       else outW = Math.round(ch * ratio);
     }
-    if (!cropped && !flipH && !flipV && !turn && outW === cw && outH === ch) return null;
+    // `fit` : la plus grande définition utile (l'import PowerPoint la donne : deux fois et demie celle de la boîte de l'image) ; une photo de 12 millions de points posée dans une vignette pèse sinon
+    // des mégaoctets pour rien, en mémoire comme dans le modèle enregistré.
+    const fit = options.fit;
+    const fitScale = fit && fit.w > 0 && fit.h > 0 && !(typeof source === 'string' && /^data:image\/gif/i.test(source)) ? Math.min(1, fit.w / outW, fit.h / outH) : 1;
+    const resized = fitScale < RESHAPE_FIT_TRIGGER;
+    if (!cropped && !flipH && !flipV && !turn && outW === cw && outH === ch && !resized) return null;
     // La taille de l'image tournée : un quart de tour échange la largeur et la hauteur, un autre angle donne la boîte qui enveloppe l'image (ses coins restent vides).
     const radians = turn * Math.PI / 180;
     const quarter = turn % 90 === 0;
@@ -197,11 +219,12 @@ const ImageIo = (function () {
       fullW = Math.ceil(outW * cos + outH * sin - 1e-6);
       fullH = Math.ceil(outW * sin + outH * cos - 1e-6);
     }
-    const shrink = Math.min(1, Math.sqrt(RESHAPE_MAX_PIXELS / (fullW * fullH)));
+    const shrink = Math.min(1, Math.sqrt(RESHAPE_MAX_PIXELS / (fullW * fullH)), resized ? fitScale : 1);
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.round(fullW * shrink));
     canvas.height = Math.max(1, Math.round(fullH * shrink));
     const g = canvas.getContext('2d');
+    if (shrink < 1) g.imageSmoothingQuality = 'high'; // une forte réduction sans lissage crénelle
     if (!turn) {
       g.translate(flipH ? canvas.width : 0, flipV ? canvas.height : 0);
       g.scale(flipH ? -1 : 1, flipV ? -1 : 1);
@@ -217,9 +240,13 @@ const ImageIo = (function () {
     }
     const jpeg = typeof source === 'string' ? /^data:image\/jpe?g/i.test(source) : (source instanceof Blob && /jpe?g/i.test(source.type));
     const keepsJpeg = jpeg && (!turn || quarter);
-    const src = keepsJpeg ? canvas.toDataURL('image/jpeg', options.quality || RESHAPE_JPEG_QUALITY) : canvas.toDataURL('image/png');
-    return { src, width: canvas.width, height: canvas.height };
+    const src = keepsJpeg ? await canvasDataUri(canvas, 'image/jpeg', options.quality || RESHAPE_JPEG_QUALITY) : await canvasDataUri(canvas, 'image/png');
+    const result = { src, width: canvas.width, height: canvas.height };
+    // La mémoire du canvas est rendue tout de suite : sans cela elle attend le prochain ramasse-miettes (64 Mo pour 16 millions de points), et des centaines d'images à la suite l'accumulent.
+    canvas.width = 0;
+    canvas.height = 0;
+    return result;
   }
 
-  return { fetchBlob, toDataUri, load, draw, pngBlob, lighten, reshape, turnOf };
+  return { fetchBlob, toDataUri, canvasDataUri, load, draw, pngBlob, lighten, reshape, turnOf };
 })();

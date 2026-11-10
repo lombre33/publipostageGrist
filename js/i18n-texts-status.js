@@ -351,4 +351,8 @@ const I18nTextsStatus = {
   'condStyle.debug.gristNone': { fr: 'Grist, ligne {id} : aucune règle remplie.', en: 'Grist, row {id}: no rule is met.' },
   'condStyle.debug.gristMulti': { fr: 'Cette variable lit plusieurs lignes : la mise en forme de Grist ne s’applique pas.', en: 'This variable reads several rows: Grist’s formatting does not apply.' },
   'condStyle.debug.gristUnread': { fr: 'Grist, ligne {id} : la ligne de la variable ne se lit pas, rien n’est repris.', en: 'Grist, row {id}: the variable’s row cannot be read, nothing is picked up.' },
+  // --- Suivi du lag, temporaire (js/perf-trace.js : à retirer avec lui) ---
+  'perfTrace.title': { fr: 'Rapport de fluidité', en: 'Smoothness report' },
+  'perfTrace.saved': { fr: 'Le rapport est enregistré dans « {name} » (dossier des téléchargements). Joignez ce fichier à votre message.', en: 'The report is saved as “{name}” (downloads folder). Attach that file to your message.' },
+  'perfTrace.savedAndCopied': { fr: 'Le rapport est copié dans le presse-papiers et enregistré dans « {name} ». Collez-le dans votre message.', en: 'The report is copied to the clipboard and saved as “{name}”. Paste it into your message.' },
 };

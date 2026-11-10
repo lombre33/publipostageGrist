@@ -1260,11 +1260,21 @@ const FreeFrame = (function () {
   // Le nœud et son extension
   // Les attributs d'un nœud : les mesures et l'aspect d'un cadre, avec leurs valeurs par défaut (`overrides`, celles de la ligne) ; une valeur du HTML enregistré est bornée (normalized) et la sorte que
   // le nœud impose (`overrides.shape`) remplace celle que le HTML ne dirait pas.
+  // ProseMirror demande les attributs d'un élément UN PAR UN (une quarantaine par cadre) : sans mémoire, chaque demande relisait et bornait tous les attributs de l'élément, soit une quarantaine de lectures
+  // complètes par cadre (une seconde sur les 11 800 cadres d'une présentation de 150 diapositives). Le dernier élément lu est gardé le temps de la tâche en cours : les quarante demandes d'un même cadre se
+  // suivent, et un élément modifié plus tard (autre tâche) est relu.
+  let lastRead = null;
+  function attrsOfElOnce(dom, shape) {
+    if (lastRead && lastRead.dom === dom && lastRead.shape === shape) return lastRead.attrs;
+    if (!lastRead) queueMicrotask(() => { lastRead = null; });
+    lastRead = { dom, shape, attrs: attrsOfEl(dom, shape) };
+    return lastRead.attrs;
+  }
   function attributeSpecs(overrides) {
     const out = {};
     Object.keys(DEFAULTS).concat(Object.keys(LOOK)).forEach((key) => {
       const fallback = key in overrides ? overrides[key] : (key in DEFAULTS ? DEFAULTS[key] : LOOK[key]);
-      out[key] = { default: fallback, parseHTML: dom => attrsOfEl(dom, overrides.shape)[key], renderHTML: () => ({}) };
+      out[key] = { default: fallback, parseHTML: dom => attrsOfElOnce(dom, overrides.shape)[key], renderHTML: () => ({}) };
     });
     return out;
   }

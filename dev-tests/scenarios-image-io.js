@@ -300,6 +300,101 @@
     },
   });
 
+  // --- fit : la définition utile d'une image (import PowerPoint d'un gros fichier) ; canvasDataUri : l'encodage hors du fil principal ---
+  // Une photo de `w` x `h` points : rouge à gauche, bleu à droite.
+  const photo = (w, h, type) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const g = canvas.getContext('2d');
+    g.fillStyle = '#ff0000'; g.fillRect(0, 0, w / 2, h);
+    g.fillStyle = '#0000ff'; g.fillRect(w / 2, 0, w / 2, h);
+    return canvas.toDataURL(type || 'image/png', 0.9);
+  };
+  cases.push({
+    id: 'imageio_reshape_fit_brings_a_large_image_down_to_its_useful_size',
+    description: 'reshape avec `fit` ramène une image plus grande d\'un quart que la taille donnée à cette taille (ratio gardé, couleurs gardées), ne grandit jamais une image, laisse une image à peine plus grande telle quelle, garde un JPEG en JPEG et rogne avant de ramener',
+    run: async () => {
+      const bad = [];
+      const big = photo(1200, 600);
+      const small = await ImageIo.reshape(big, { fit: { w: 300, h: 150 } });
+      if (!small || small.width !== 300 || small.height !== 150) bad.push('1200x600 dans 300x150 : ' + JSON.stringify(small && [small.width, small.height]));
+      else {
+        const left = await colorAt(small.src, 0.25, 0.5);
+        const right = await colorAt(small.src, 0.75, 0.5);
+        if (!near(left.px, [255, 0, 0]) || !near(right.px, [0, 0, 255])) bad.push('couleurs : ' + JSON.stringify([left.px, right.px]));
+      }
+      const wide = await ImageIo.reshape(big, { fit: { w: 300, h: 1000 } });
+      if (!wide || wide.width !== 300 || wide.height !== 150) bad.push('la plus petite des deux bornes gagne : ' + JSON.stringify(wide && [wide.width, wide.height]));
+      const never = await ImageIo.reshape(photo(100, 50), { fit: { w: 400, h: 200 } });
+      if (never !== null) bad.push('une image plus petite que sa taille utile n\'est pas touchée : ' + JSON.stringify(never && [never.width, never.height]));
+      const slightly = await ImageIo.reshape(photo(110, 55), { fit: { w: 100, h: 50 } });
+      if (slightly !== null) bad.push('une image à peine plus grande (moins d\'un quart) reste telle quelle : ' + JSON.stringify(slightly && [slightly.width, slightly.height]));
+      const without = await ImageIo.reshape(big, {});
+      if (without !== null) bad.push('sans `fit` ni réglage, rien ne change : ' + JSON.stringify(without && [without.width, without.height]));
+      const jpeg = await ImageIo.reshape(photo(1200, 600, 'image/jpeg'), { fit: { w: 300, h: 150 } });
+      if (!jpeg || !/^data:image\/jpeg/.test(jpeg.src) || jpeg.width !== 300) bad.push('un JPEG reste un JPEG : ' + JSON.stringify(jpeg && [jpeg.src.slice(0, 20), jpeg.width]));
+      const cropped = await ImageIo.reshape(big, { crop: { l: 0.5, t: 0, r: 0, b: 0 }, fit: { w: 150, h: 150 } });
+      if (!cropped || cropped.width !== 150 || cropped.height !== 150) bad.push('rogné puis ramené à la taille utile : ' + JSON.stringify(cropped && [cropped.width, cropped.height]));
+      return { pass: !bad.length, notes: bad.join(' | ') || 'ok' };
+    },
+  });
+  cases.push({
+    id: 'imageio_canvas_data_uri_writes_the_same_bytes_as_to_data_url_without_blocking',
+    description: 'canvasDataUri rend la même adresse de données que toDataURL (PNG, JPEG), sans créer d\'adresse temporaire, et la page continue de répondre pendant l\'encodage d\'une grande image',
+    run: async () => {
+      const bad = [];
+      const urls = watchObjectUrls();
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 32;
+        const g = canvas.getContext('2d');
+        g.fillStyle = '#336699'; g.fillRect(0, 0, 64, 32);
+        g.fillStyle = '#ffcc00'; g.fillRect(10, 10, 20, 8);
+        const png = await ImageIo.canvasDataUri(canvas, 'image/png');
+        if (png !== canvas.toDataURL('image/png')) bad.push('PNG différent de toDataURL');
+        const jpeg = await ImageIo.canvasDataUri(canvas, 'image/jpeg', 0.8);
+        if (jpeg !== canvas.toDataURL('image/jpeg', 0.8)) bad.push('JPEG différent de toDataURL');
+        const huge = document.createElement('canvas');
+        huge.width = 4000;
+        huge.height = 3000;
+        const h = huge.getContext('2d');
+        for (let i = 0; i < 300; i++) { h.fillStyle = 'hsl(' + (i * 37 % 360) + ',70%,50%)'; h.fillRect((i * 97) % 4000, (i * 53) % 3000, 400, 300); }
+        let turns = 0;
+        let last = performance.now();
+        let worst = 0;
+        const beat = setInterval(() => { const now = performance.now(); turns += 1; worst = Math.max(worst, now - last); last = now; }, 5);
+        const encoded = await ImageIo.canvasDataUri(huge, 'image/png');
+        clearInterval(beat);
+        if (!/^data:image\/png;base64,/.test(encoded) || encoded.length < 1000) bad.push('grande image : ' + encoded.slice(0, 30));
+        if (turns < 3) bad.push('la page n\'a pas respiré pendant l\'encodage : ' + turns + ' tour(s), arrêt de ' + Math.round(worst) + ' ms');
+        if (urls.leaked.length) bad.push('adresses temporaires non libérées : ' + urls.leaked.length);
+      } finally { urls.restore(); }
+      return { pass: !bad.length, notes: bad.join(' | ') || 'ok' };
+    },
+  });
+  cases.push({
+    id: 'imageio_load_decodes_the_image_before_resolving',
+    description: 'load ne rend l\'image qu\'une fois décodée hors du fil principal (`decode()`), que ce soit une adresse ou un Blob ; une image refusée par `decode()` est rendue quand même',
+    run: async () => {
+      const bad = [];
+      const decode = HTMLImageElement.prototype.decode;
+      let decoded = 0;
+      HTMLImageElement.prototype.decode = function () { decoded += 1; return decode.call(this); };
+      try {
+        const img = await ImageIo.load(photo(40, 20));
+        if (!img.complete || img.naturalWidth !== 40 || decoded !== 1) bad.push('adresse : ' + JSON.stringify({ complete: img.complete, w: img.naturalWidth, decoded }));
+        const fromBlob = await ImageIo.load(pngBlob());
+        if (!fromBlob.complete || fromBlob.naturalWidth !== 1 || decoded !== 2) bad.push('Blob : ' + JSON.stringify({ complete: fromBlob.complete, w: fromBlob.naturalWidth, decoded }));
+        HTMLImageElement.prototype.decode = function () { decoded += 1; return Promise.reject(new Error('refus')); };
+        const refused = await ImageIo.load(photo(40, 20));
+        if (!refused.complete || refused.naturalWidth !== 40) bad.push('decode refusé : ' + JSON.stringify({ complete: refused.complete, w: refused.naturalWidth }));
+      } finally { HTMLImageElement.prototype.decode = decode; }
+      return { pass: !bad.length, notes: bad.join(' | ') || 'ok' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.imageIo = cases;
 })();

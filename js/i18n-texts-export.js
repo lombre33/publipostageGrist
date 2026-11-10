@@ -179,6 +179,9 @@ const I18nTextsExport = {
   'docx.import.report.textEffects': { fr: '{n} {n|paragraphe avec ombre, relief ou contour sur les lettres, non repris|paragraphes avec ombre, relief ou contour sur les lettres, non repris}', en: '{n} {n|paragraph|paragraphs} with shadow, emboss or outline on the letters, not kept' },
   // Import d'un fichier PowerPoint (js/pptx-import.js, js/main.js:onImportPptx) : lecture, fin, fichier refusé, puis la fenêtre de ce que l'éditeur n'a pas repris tel quel (une ligne par genre, `pptx.import.report.<genre>`, dans l'ordre de `REPORT_KEYS` de js/pptx-import.js : ce qui n'arrive pas, puis ce que le fichier demande et que l'éditeur ne sait pas encore faire, famille par famille).
   'status.pptxImporting': { fr: 'Lecture du fichier PowerPoint…', en: 'Reading the PowerPoint file…' },
+  'status.pptxImportingProgress': { fr: 'Lecture du fichier PowerPoint… {done} / {total}', en: 'Reading the PowerPoint file… {done} / {total}' },
+  'status.pptxPlacing': { fr: 'Mise en place de {n} {n|diapositive|diapositives}…', en: 'Setting up {n} {n|slide|slides}…' },
+  'status.pptxImportBusy': { fr: 'Un import PowerPoint est déjà en cours : attendez qu’il finisse.', en: 'A PowerPoint import is already running: wait for it to finish.' },
   'status.pptxImported': { fr: 'PowerPoint importé : {n} {n|diapositive|diapositives}. Nommez le modèle puis enregistrez-le.', en: 'PowerPoint imported: {n} {n|slide|slides}. Name the template, then save it.' },
   'status.pptxImportUnreadable': { fr: 'Ce fichier n’est pas une présentation PowerPoint (.pptx) lisible.', en: 'This file is not a readable PowerPoint (.pptx) presentation.' },
   'status.pptxImportLegacy': { fr: 'Format .ppt d’avant 2007 ou fichier protégé : enregistrez-le en .pptx sans mot de passe.', en: 'Pre-2007 .ppt format or password-protected file: save it as .pptx without a password.' },

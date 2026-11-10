@@ -167,26 +167,52 @@ const MainImport = (function () {
     // Le fichier PowerPoint choisi, par le sélecteur du menu « + » ou donné par GFS (importFileFromGfs). true : la présentation importée est à l'écran (et le rapport de ce qui n'a pas été repris, s'il y en a un, a été
     // lu) ; false : l'extension « diapositives » manque ou ne se charge pas (la fenêtre qui l'explique s'est ouverte, comme au clic de la ligne grisée), le fichier est refusé (l'erreur est dite dans le coin d'état) ou la
     // personne a répondu « Annuler » à la question d'enregistrement : rien n'a changé.
+    // La lecture d'un gros fichier avance par tranches (js/pptx-import.js : la page répond pendant ce temps) : un second import lancé en route est refusé en le disant, et le compteur du coin d'état
+    // suit les diapositives lues.
+    let pptxImporting = false;
     async function importPptxFile(file) {
-      // Le code de l'extension (la bande des diapositives) arrive avant que la présentation s'ouvre : un échec le dit, et rien n'a changé.
-      if (!(await SlidesEntry.ensureFor(SlidesEntry.TYPE))) return false;
-      setStatus(I18n.t('status.pptxImporting'));
-      const imported = await readPptxForImport(file);
-      if (!imported) return false;
-      if (hasEditsToConfirmBeforeLeaving()) {
-        updateSaveStatus(); // la lecture est finie : « Lecture… » serait faux pendant la question
-        if (!(await askBeforeLeaving())) return false;
+      if (pptxImporting) { setStatus(I18n.t('status.pptxImportBusy'), true); return false; }
+      pptxImporting = true;
+      try {
+        // Le code de l'extension (la bande des diapositives) arrive avant que la présentation s'ouvre : un échec le dit, et rien n'a changé.
+        if (!(await SlidesEntry.ensureFor(SlidesEntry.TYPE))) return false;
+        setStatus(I18n.t('status.pptxImporting'));
+        PerfTrace.mark('import PowerPoint : lecture', { octets: file.size });
+        const imported = await readPptxForImport(file);
+        if (!imported) return false;
+        PerfTrace.mark('import PowerPoint : lu', { diapositives: imported.slideCount, texteMo: Math.round(imported.html.length / 104857.6) / 10 });
+        if (hasEditsToConfirmBeforeLeaving()) {
+          updateSaveStatus(); // la lecture est finie : « Lecture… » serait faux pendant la question
+          if (!(await askBeforeLeaving())) return false;
+        }
+        // La pose du texte dans l'éditeur est un seul bloc (quelques secondes pour des centaines de diapositives) : le coin d'état le dit AVANT, et se peint avant que la page soit prise.
+        setStatus(I18n.t('status.pptxPlacing', { n: imported.slideCount }));
+        await afterPaint();
+        PerfTrace.mark('import PowerPoint : mise en place');
+        openImportedPresentation(imported);
+        PerfTrace.mark('import PowerPoint : en place');
+        await tellPptxImportReport(imported.report);
+        return true;
+      } finally {
+        pptxImporting = false;
       }
-      openImportedPresentation(imported);
-      await tellPptxImportReport(imported.report);
-      return true;
+    }
+
+    // Rend la main au navigateur le temps d'une image (le message d'état posé juste avant se peint) ; ne dépasse jamais 100 ms (un onglet caché ne peint rien).
+    function afterPaint() {
+      return new Promise((resolve) => {
+        let done = false;
+        const go = () => { if (!done) { done = true; resolve(); } };
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(go, 0));
+        setTimeout(go, 100);
+      });
     }
 
     // Lit le fichier et construit la présentation. null : le fichier est refusé (l'erreur est dite dans le coin d'état) ; rien d'autre ne se passe.
     async function readPptxForImport(file) {
       try {
         await ExportEngines.ensure('pptxImport').catch((e) => { throw Object.assign(new Error('moteur d’import indisponible'), { code: 'library', cause: e }); });
-        return await PptxImport.fromFile(file);
+        return await PptxImport.fromFile(file, { onProgress: ({ done, total }) => setStatus(I18n.t('status.pptxImportingProgress', { done, total })) });
       } catch (e) {
         reportPptxImportError(e);
         return null;
