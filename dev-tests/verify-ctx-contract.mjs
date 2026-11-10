@@ -8,6 +8,8 @@
 //    `FrameToolbar.wire(ed, { … })` ; les menus lisent aussi `ctx` (`const { … } = ctx;`) : donné par le littéral `const ctx = { ed, api, … }` de la barre.
 //  - js/main-import.js et js/main-export.js (découpes 5 et 6, l'import d'un fichier et les exports sortis de js/main.js) lisent `api` (`const { … } = api;`) : donné par l'objet que js/main.js passe
 //    à `MainImport.create({ … })` / `MainExport.create({ … })` ; main.js reprend ce que le morceau rend (`return { … }` de son `create`) ; le verrou d'export est au morceau.
+//  - js/main.js (découpe 7, première voie de l'autosave) : l'état partagé par l'enregistrement manuel, l'enregistrement automatique et la sortie d'un modèle est UN objet `persist` ; une faute de
+//    frappe (`persist.autosaveDrity`) lit `undefined` sans erreur, donc : chaque `persist.nom` lu ou écrit est une clé du littéral, chaque clé est utilisée, et plus aucun de ces noms n'est lu seul.
 //  Les détecteurs eux-mêmes : un nom retiré de ce qui est donné est vu (cas fabriqués).
 // Lancé par run-headless.mjs (groupe Node « ctxContract », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-ctx-contract.mjs
 import { readFileSync } from 'node:fs';
@@ -96,10 +98,22 @@ for (const { module, file, given, wanted, returned, taken } of mainPieces) {
 check('js/main-export.js : le verrou d\'export est à lui (déclaré dans le morceau, rendu par isExportRunning, jamais lu par son nom dans main.js)',
   /\n {4}let exportOperationInProgress = false;/.test(read('js/main-export.js')) && /const isExportRunning = \(\) => exportOperationInProgress;/.test(read('js/main-export.js')) && !/\bexportOperationInProgress\b/.test(miMain), null);
 
+// ---- l'état de l'enregistrement (objet `persist` de js/main.js) ---------------------------------------------------------------------------------------------------------------
+const PERSIST_FILES = ['js/main.js']; // les fichiers qui lisent l'objet (la voie suivante y ajoutera les trois fichiers de l'autosave)
+const persistKeys = literalKeys(miMain, 'const persist = {') || [];
+const persistUsed = text => [...new Set([...text.matchAll(/(?<![\w$.])persist\.([A-Za-z_$][\w$]*)/g)].map(m => m[1]))];
+const persistBare = (text, keys) => keys.filter(key => new RegExp('(?<![\\w$.])' + key + '\\b(?!\\s*:)').test(text));
+const persistRead = PERSIST_FILES.map(file => read(file)).join('\n');
+check('js/main.js : le littéral `persist` est lisible (les 19 variables de l\'enregistrement, sans doublon)', persistKeys.length === 19 && new Set(persistKeys).size === persistKeys.length, persistKeys);
+check('l\'objet `persist` : chaque `persist.nom` lu ou écrit est une clé du littéral (une faute de frappe lirait `undefined` sans rien casser)', missing(persistUsed(persistRead), persistKeys).length === 0, missing(persistUsed(persistRead), persistKeys));
+check('l\'objet `persist` : chaque clé du littéral est utilisée ailleurs (aucune clé pour rien)', missing(persistKeys, persistUsed(persistRead)).length === 0, missing(persistKeys, persistUsed(persistRead)));
+check('l\'objet `persist` : aucun de ses noms n\'est plus lu seul dans main.js (ni `let`, ni variable libre)', persistBare(miMain, persistKeys).length === 0, persistBare(miMain, persistKeys));
+
 // ---- les détecteurs eux-mêmes ---------------------------------------------------------------------------------------------------------------------------------------------
 check('détecteur : un nom retiré de ce que donne wireToolbar est vu', missing(destructured(ffToolbar, 'api'), ffGiven.filter(name => name !== 'selectedFrame')).includes('selectedFrame'), null);
 check('détecteur : un nom retiré de ce que donne la fenêtre est vu', missing(contextUsed(vcWindow + ' ctx.nomQuePersonneNeDonne'), vcGiven).includes('nomQuePersonneNeDonne'), null);
 check('détecteur : un nom retiré de ce que donne main.js à un morceau (import, exports) est vu', mainPieces.every(piece => missing(piece.wanted, piece.given.filter(name => name !== 'setStatus')).includes('setStatus')), null);
+check('détecteur : une faute de frappe sur `persist.` et un nom lu seul sont vus', missing(persistUsed(persistRead + ' persist.autosaveDrity = 1;'), persistKeys).join() === 'autosaveDrity' && persistBare(persistRead + ' if (autosaveDirty) {}', persistKeys).join() === 'autosaveDirty' && persistBare(persistRead, persistKeys).length === 0, null);
 check('détecteur : une destructuration sur plusieurs lignes est lue', destructured('const {\n  a, b,\n  c,\n} = api;', 'api').join() === 'a,b,c', destructured('const {\n  a, b,\n  c,\n} = api;', 'api'));
 check('détecteur : le littéral de ctx est lu avec ses valeurs', literalKeys('const ctx = { level, win: null, refs: null };', 'const ctx = {').join() === 'level,win,refs', null);
 

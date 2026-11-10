@@ -283,9 +283,9 @@
   // enregistrer » reste celui d'avant, sinon un simple retour au Mode édition ou un Aperçu A4 rallumé réécrirait le modèle à la passe
   // d'enregistrement suivante (loadTemplateIntoEditor remet cet état à zéro en dernier, pour la même raison).
   function withoutMarkingDirty(action) {
-    const wasDirty = autosaveDirty;
+    const wasDirty = persist.autosaveDirty;
     action();
-    if (!wasDirty && autosaveDirty) { autosaveDirty = false; autosaveSettingsDirty = false; updateSaveStatus(); }
+    if (!wasDirty && persist.autosaveDirty) { persist.autosaveDirty = false; persist.autosaveSettingsDirty = false; updateSaveStatus(); }
   }
 
   // Affiche l'éditeur, le résumé du macro-modèle, la carte de l'accès ou la Lecture selon le mode, l'accès du widget et le type du modèle chargé.
@@ -581,7 +581,7 @@
   // fenêtre). Les appelants gardent leur chemin synchrone quand il n'y a rien à demander : `if (hasEditsToConfirmBeforeLeaving() && !(await
   // askBeforeLeaving())) return;`.
   function hasEditsToConfirmBeforeLeaving() {
-    return autosaveDirty && !isReadOnly() && currentTypeModele !== 'macro';
+    return persist.autosaveDirty && !isReadOnly() && currentTypeModele !== 'macro';
   }
 
   // true : on peut continuer (« Abandonner », ou « Enregistrer » réussi) ; false : la personne reste (« Annuler », Échap, enregistrement refusé : le
@@ -591,13 +591,13 @@
     const name = templateNameInput ? templateNameInput.value.trim() : '';
     const choices = [{ value: 'discard', label: I18n.t('dialog.unsaved.discard') }];
     if (name) choices.push({ value: 'save', label: I18n.t('common.save'), primary: true });
-    leavePromptCount++; // plusieurs demandes peuvent se chevaucher (un deuxième clic pendant l'attente ci-dessous) : le drapeau ne retombe qu'avec la dernière
-    leavePromptOpen = true; // plus aucun passage de l'enregistrement automatique ne part
+    persist.leavePromptCount++; // plusieurs demandes peuvent se chevaucher (un deuxième clic pendant l'attente ci-dessous) : le drapeau ne retombe qu'avec la dernière
+    persist.leavePromptOpen = true; // plus aucun passage de l'enregistrement automatique ne part
     let choice;
     try {
       // Un passage déjà parti finit d'écrire pendant la question, que le drapeau ci-dessus n'arrête pas (il n'est regardé qu'au départ d'un passage) : « Abandonner » ne laisserait rien à
       // abandonner. Il est donc attendu d'abord ; s'il a tout enregistré, il n'y a plus rien à demander.
-      if (autosaveTickPending) {
+      if (persist.autosaveTickPending) {
         await whenAutosaveTickDone(LEAVE_PROMPT_TICK_WAIT_MS);
         if (!hasEditsToConfirmBeforeLeaving()) return true;
       }
@@ -606,11 +606,11 @@
         message: name ? I18n.t('dialog.unsaved.message', { name }) : I18n.t('dialog.unsaved.messageNoName'),
         choices,
       });
-    } finally { if (--leavePromptCount === 0) leavePromptOpen = false; }
+    } finally { if (--persist.leavePromptCount === 0) persist.leavePromptOpen = false; }
     if (choice === 'discard') return true;
     if (choice === 'save') {
       await onSave();
-      return !autosaveDirty;
+      return !persist.autosaveDirty;
     }
     // Annuler : la personne reprend où elle en était.
     refocusEditorIfLost();
@@ -626,17 +626,17 @@
   // Contrairement à la question de départ (LEAVE_PROMPT_TICK_WAIT_MS : la personne attend une fenêtre), l'attente va jusqu'au garde-fou d'un passage : GFS a sa propre fenêtre « ne répond pas » au bout de 10 secondes, et un
   // Grist lent (la première écriture d'un document crée des tables) ne doit pas faire écrire deux fois en même temps.
   async function saveBeforeGfsLeaves() {
-    leavePromptCount++;
-    leavePromptOpen = true;
+    persist.leavePromptCount++;
+    persist.leavePromptOpen = true;
     try {
       const giveUpAt = Date.now() + AUTOSAVE_TICK_WATCHDOG_MS;
       await whenAutosaveTickDone();
-      while (restoringVersion && Date.now() < giveUpAt) await new Promise(resolve => setTimeout(resolve, 40));
-      while (saveIsRunning() || saveWaiting) await (saveWaiting || whenSaveFinished());
+      while (persist.restoringVersion && Date.now() < giveUpAt) await new Promise(resolve => setTimeout(resolve, 40));
+      while (saveIsRunning() || persist.saveWaiting) await (persist.saveWaiting || whenSaveFinished());
       if (!hasEditsToConfirmBeforeLeaving()) return;
       const named = !!(templateNameInput && templateNameInput.value.trim());
-      if (isAutosaveEnabled() && named && !autosaveConflictActive && !restoringVersion) await onSave();
-    } finally { if (--leavePromptCount === 0) leavePromptOpen = false; }
+      if (isAutosaveEnabled() && named && !persist.autosaveConflictActive && !persist.restoringVersion) await onSave();
+    } finally { if (--persist.leavePromptCount === 0) persist.leavePromptOpen = false; }
   }
 
   // L'appel `fermer` de GFS (js/gfs-open.js) : vrai, l'app peut laisser la place - rien n'attendait, tout est enregistré, ou la personne a répondu « Abandonner » ; faux, la personne reste (« Annuler », Échap, un enregistrement
@@ -876,10 +876,10 @@
     if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return;
     const templateId = Templates.getCurrentId();
     const macro = macroOrigin;
-    const epoch = autosaveEpoch;
+    const epoch = persist.autosaveEpoch;
     try { await refreshTemplateList(); } catch (e) { console.warn('[main] relecture des modèles impossible', e); }
     // Un autre modèle s'est chargé pendant la relecture (un choix dans la liste) : celui-là gagne.
-    if (epoch !== autosaveEpoch) return;
+    if (epoch !== persist.autosaveEpoch) return;
     const model = Templates.byId(id);
     if (!model || model.typeModele !== GridEditor.TYPE) { setStatus(I18n.t('linkedTable.gone', { name }), true); return; }
     templateSelect.value = model.id;
@@ -917,26 +917,23 @@
   // pendant la même écriture n'en font qu'un, qui lit l'état au moment où il part. Un enregistrement qui ne revient jamais (connexion perdue) ne
   // bloque pas le bouton au-delà de SAVE_WATCHDOG_MS, comme les écritures de js/templates.js.
   const SAVE_WATCHDOG_MS = 60000;
-  let saveRunning = null; // la promesse de l'enregistrement en cours
-  let saveStartedAt = 0;
-  let saveWaiting = null; // celle du geste qui attend sa fin : un seul, quel que soit le nombre de clics
-  const saveIsRunning = () => saveRunning !== null && Date.now() - saveStartedAt < SAVE_WATCHDOG_MS;
+  const saveIsRunning = () => persist.saveRunning !== null && Date.now() - persist.saveStartedAt < SAVE_WATCHDOG_MS;
   // Rend la main quand l'enregistrement en cours est fini, ou passé SAVE_WATCHDOG_MS.
   function whenSaveFinished() {
     return new Promise(resolve => {
-      const timer = setTimeout(resolve, Math.max(0, SAVE_WATCHDOG_MS - (Date.now() - saveStartedAt)));
-      saveRunning.finally(() => clearTimeout(timer)).then(resolve, resolve);
+      const timer = setTimeout(resolve, Math.max(0, SAVE_WATCHDOG_MS - (Date.now() - persist.saveStartedAt)));
+      persist.saveRunning.finally(() => clearTimeout(timer)).then(resolve, resolve);
     });
   }
   function onSave() {
     if (currentTypeModele === 'macro') return runSave(); // le bouton n'y fait qu'ouvrir la fenêtre du macro-modèle : rien à écrire
     if (!saveIsRunning()) {
-      saveStartedAt = Date.now();
-      const run = saveRunning = runSave().finally(() => { if (saveRunning === run) saveRunning = null; });
+      persist.saveStartedAt = Date.now();
+      const run = persist.saveRunning = runSave().finally(() => { if (persist.saveRunning === run) persist.saveRunning = null; });
       return run;
     }
-    if (!saveWaiting) saveWaiting = whenSaveFinished().then(() => { saveWaiting = null; return onSave(); });
-    return saveWaiting;
+    if (!persist.saveWaiting) persist.saveWaiting = whenSaveFinished().then(() => { persist.saveWaiting = null; return onSave(); });
+    return persist.saveWaiting;
   }
 
   // Écrit dans Grist le modèle tel que l'écran le montre : `html` (celui de l'éditeur par défaut), ses en-têtes, sa page, son type et ses champs
@@ -945,9 +942,9 @@
   // le nom que GFS ou une autre personne lui a donné depuis (consigne GFS 029). Ce qui part devient le nom que le titre tient de la table.
   function saveScreenAs(id, nom, suiviModifications, html = Editor.getHTML(), alsoWrite = null) {
     const written = id != null && titleNameBase !== null && nom === titleNameBase ? null : nom;
-    const epoch = autosaveEpoch;
+    const epoch = persist.autosaveEpoch;
     return Templates.save(id, written, html, getPdfFilenameTemplate(), Editor.getHeaderFooterData(), PageLayout.getMarginsMm(), currentTypeModele, getEmailFieldsFromInputs(), suiviModifications, alsoWrite).then(saved => {
-      if (written !== null && epoch === autosaveEpoch) titleNameBase = written; // un autre modèle ouvert pendant l'écriture a pris le sien (showTemplateNames)
+      if (written !== null && epoch === persist.autosaveEpoch) titleNameBase = written; // un autre modèle ouvert pendant l'écriture a pris le sien (showTemplateNames)
       return saved;
     });
   }
@@ -986,23 +983,23 @@
     const nom = settleTemplateName(); // nom déjà pris : « nom (2) »... (la saisie du crayon, une copie, un modèle de la galerie passent tous par ici)
     if (!nom) { setStatus(I18n.t('status.templateNameRequired'), true); return; }
     let savedId, dateModif, send = null, synced = null;
-    const epoch = autosaveEpoch;
+    const epoch = persist.autosaveEpoch;
     try {
       const suiviModifications = await Editor.getSuiviModificationsForSave();
       // Cette attente (l'identification de la personne : une écriture et une lecture de Grist quand elle n'est pas encore connue, des secondes quand
       // Grist est lent) a pu laisser choisir un autre modèle : l'éditeur montre alors celui-là, et l'écrire sous l'identifiant de ce modèle-ci le
       // remplacerait. Le choisir en répondant « Abandonner » renonce à cet enregistrement.
-      if (epoch !== autosaveEpoch) return;
+      if (epoch !== persist.autosaveEpoch) return;
       // Un tableau lié est à envoyer à son modèle : les modèles sont relus d'abord (un passage de l'enregistrement automatique vient de le faire, pas un Enregistrer à la main, surtout quand le passage est coupé),
       // sans quoi un modèle changé ailleurs depuis serait écrasé sans que personne ne le voie. Une relecture qui échoue renonce à l'envoi, pas à l'enregistrement du document.
       let modelsFresh = true;
       if (LinkedTable.hasPending(EditorCore.getEditor()) || SlideLinks.hasPending(EditorCore.getEditor())) {
         modelsFresh = await LinkedTable.refreshModels();
-        if (epoch !== autosaveEpoch) return;
+        if (epoch !== persist.autosaveEpoch) return;
         // Les modèles sont frais : les tableaux suivent les leurs comme à un passage de l'enregistrement automatique (un modèle changé ailleurs en même temps que le tableau : l'écart se dit, rien ne part).
         if (modelsFresh) synced = followLinkedModels();
       }
-      const editVersion = autosaveEditVersion;
+      const editVersion = persist.autosaveEditVersion;
       send = modelsFresh ? linkedSendFor(false) : null;
       const token = LiveEntry.saveToken(); // l'état du texte juste avant qu'il soit lu (écriture en direct)
       ({ id: savedId, dateModif } = await saveScreenAs(id, nom, suiviModifications, send ? send.html : undefined, send ? send.writes : null));
@@ -1011,9 +1008,9 @@
       // lent) : un passage de l'enregistrement automatique entre les deux verrait cette date sans la connaître et conclurait « modifié ailleurs »
       // (cf. autosaveTick). Un modèle chargé pendant l'écriture (autosaveEpoch) garde son propre état. Un enregistrement manuel tranche tout conflit
       // en cours en faveur de cette version : pas besoin de recharger.
-      if (epoch === autosaveEpoch) {
-        autosaveLastKnownDateModif = dateModif;
-        autosaveRefusedEpoch = -1; // Grist vient d'écrire : l'arrêt de l'enregistrement automatique après un refus est levé
+      if (epoch === persist.autosaveEpoch) {
+        persist.autosaveLastKnownDateModif = dateModif;
+        persist.autosaveRefusedEpoch = -1; // Grist vient d'écrire : l'arrêt de l'enregistrement automatique après un refus est levé
         noteSaved(editVersion);
         hideConflictBanner();
         if (send) send.commit(); // Grist a écrit le document et les modèles ensemble : les tableaux partis prennent leur base
@@ -1026,7 +1023,7 @@
       // Grist refuse d'écrire dans ce modèle (règle d'accès, par exemple un fichier que GFS partage en lecture, consigne 060) : le coin le dit, et l'enregistrement automatique n'essaie plus pour ce modèle (autosaveRefusedEpoch).
       if (GristAPI.isAccessRefusal(e)) {
         console.warn('[main] enregistrement manuel : Grist refuse l’écriture (règle d’accès)', e);
-        if (epoch === autosaveEpoch) { autosaveRefusedEpoch = epoch; setStatus(I18n.t('status.saveRefused'), true); }
+        if (epoch === persist.autosaveEpoch) { persist.autosaveRefusedEpoch = epoch; setStatus(I18n.t('status.saveRefused'), true); }
         return;
       }
       // Un échec ici (par exemple une colonne Grist manquante) doit se voir : sans ce traitement, la fonction s'interromprait sans message, la liste
@@ -1035,12 +1032,12 @@
       setStatus(I18n.t('status.saveError'), true);
       return;
     }
-    if (epoch === autosaveEpoch) { Templates.setCurrentId(savedId); ExportChoices.adopt(savedId); LiveEntry.changed(); } // un modèle neuf enregistré peut s'écrire en direct
+    if (epoch === persist.autosaveEpoch) { Templates.setCurrentId(savedId); ExportChoices.adopt(savedId); LiveEntry.changed(); } // un modèle neuf enregistré peut s'écrire en direct
     await refreshTemplateList();
     // L'écriture et la relecture de la liste durent des secondes quand Grist est lent : un autre modèle a pu être choisi entre-temps (autosaveEpoch).
     // L'écran, la liste et le modèle courant sont alors les siens : ce geste ne les remet pas sur le modèle qu'il vient d'écrire (l'enregistrement
     // automatique y écrirait ensuite ce que l'écran montre), il ne fait que rafraîchir la liste.
-    const sameTemplate = epoch === autosaveEpoch;
+    const sameTemplate = epoch === persist.autosaveEpoch;
     const shownId = sameTemplate ? savedId : Templates.getCurrentId();
     templateSelect.value = shownId == null ? '' : shownId;
     syncDefaultTemplateButton();
@@ -1097,9 +1094,9 @@
     await LiveEntry.stop();
     // Un enregistrement encore en cours (Grist lent) rendrait, à sa fin, son identifiant au modèle courant (cf. runSave) : la copie, qui part d'un
     // modèle sans identifiant, attend qu'il soit fini, celui d'un deuxième clic compris.
-    const epoch = autosaveEpoch;
-    while (saveIsRunning() || saveWaiting) await (saveWaiting || whenSaveFinished());
-    if (epoch !== autosaveEpoch) return; // un autre modèle a été choisi pendant l'attente : la copie n'a plus d'objet
+    const epoch = persist.autosaveEpoch;
+    while (saveIsRunning() || persist.saveWaiting) await (persist.saveWaiting || whenSaveFinished());
+    if (epoch !== persist.autosaveEpoch) return; // un autre modèle a été choisi pendant l'attente : la copie n'a plus d'objet
     if (templateNameInput) templateNameInput.value = nom;
     Templates.setCurrentId(null);
     ExportChoices.detach();
@@ -1111,9 +1108,9 @@
   // `withTables` : la galerie a créé des tables avec lui. Rien n'est rangé quand l'enregistrement n'a créé aucun modèle (nom manquant, refus, erreur : le coin d'état le dit) ni quand un autre modèle a été choisi pendant qu'il
   // durait (l'identifiant courant est alors le sien).
   async function saveAsNewTemplate(from, withTables) {
-    const epoch = autosaveEpoch;
+    const epoch = persist.autosaveEpoch;
     await onSave();
-    if (epoch !== autosaveEpoch) return;
+    if (epoch !== persist.autosaveEpoch) return;
     const id = Templates.getCurrentId();
     if (id != null && Templates.byId(id)) ActionHistory.add(copiedTemplateAction(id, from, !!withTables));
   }
@@ -1141,7 +1138,7 @@
   // restauration, ou le texte que la question de départ demande d'abandonner. `limitMs` : la question de départ n'attend pas plus que cela un Grist qui ne répond pas.
   async function whenAutosaveTickDone(limitMs = AUTOSAVE_TICK_WATCHDOG_MS) {
     const giveUpAt = Date.now() + limitMs;
-    while (autosaveTickPending && Date.now() - autosaveTickStartedAt < AUTOSAVE_TICK_WATCHDOG_MS && Date.now() < giveUpAt) await new Promise(resolve => setTimeout(resolve, 40));
+    while (persist.autosaveTickPending && Date.now() - persist.autosaveTickStartedAt < AUTOSAVE_TICK_WATCHDOG_MS && Date.now() < giveUpAt) await new Promise(resolve => setTimeout(resolve, 40));
   }
 
   // Donne (ou retire, avec '') un nom à une version de l'historique ; refusé en lecture seule, comme une restauration. `target` : { rowId } (une version gardée) ou { state, at, author } (l'état enregistré que
@@ -1163,15 +1160,15 @@
     if (isReadOnly()) throw versionError('versions.restoreError');
     // Une version remplacerait le texte que les autres personnes écrivent en ce moment : l'écriture en direct s'arrête d'abord, de la main de la personne.
     if (LiveEntry.isLive()) throw versionError('versions.restoreLive');
-    restoringVersion = true;
+    persist.restoringVersion = true;
     try {
       await whenAutosaveTickDone();
-      while (saveIsRunning() || saveWaiting) await (saveWaiting || whenSaveFinished());
+      while (saveIsRunning() || persist.saveWaiting) await (persist.saveWaiting || whenSaveFinished());
       if (String(Templates.getCurrentId()) !== String(id)) throw versionError('versions.restoreError');
       // Un macro-modèle n'a rien dans l'éditeur : son Enregistrer rouvre sa fenêtre.
-      if (autosaveDirty && currentTypeModele !== 'macro') {
+      if (persist.autosaveDirty && currentTypeModele !== 'macro') {
         await onSave();
-        if (autosaveDirty) throw versionError('versions.restoreNeedsSave');
+        if (persist.autosaveDirty) throw versionError('versions.restoreNeedsSave');
       }
       await Templates.whenIdle();
       await Templates.restoreVersion(id, snapshot);
@@ -1187,7 +1184,7 @@
       if (e && e.versionsKey) throw e;
       throw versionError('versions.restoreError');
     } finally {
-      restoringVersion = false;
+      persist.restoringVersion = false;
     }
   }
 
@@ -1199,7 +1196,7 @@
     let row = kept;
     let rowId = kept.id;
     // L'écran est resté le document vierge que la suppression a laissé : rien n'y a été tapé, ou ce qui l'a été est défait (texte vide, aucun réglage de page touché). Sinon la personne perdrait ce qu'elle a devant elle.
-    const screenLeftBlank = () => !autosaveDirty || (!autosaveSettingsDirty && EditorCore.getEditor().isEmpty);
+    const screenLeftBlank = () => !persist.autosaveDirty || (!persist.autosaveSettingsDirty && EditorCore.getEditor().isEmpty);
     async function restore() {
       if (isReadOnly()) throw new Error('lecture seule');
       const back = await Templates.restoreRow(row);
@@ -1266,21 +1263,21 @@
     let reopened = false; // la copie était à l'écran quand elle a été retirée : l'écran a changé avec elle
     // L'écran est resté ce que Annuler a laissé : le modèle d'où venait la copie sans rien de tapé depuis, ou le document vierge.
     const screenLeftAsUndone = () => (Templates.getCurrentId() == null
-      ? (!autosaveDirty || (!autosaveSettingsDirty && EditorCore.getEditor().isEmpty))
-      : Templates.isCurrent(from) && !autosaveDirty);
+      ? (!persist.autosaveDirty || (!persist.autosaveSettingsDirty && EditorCore.getEditor().isEmpty))
+      : Templates.isCurrent(from) && !persist.autosaveDirty);
     async function remove(entryId) {
       if (isReadOnly()) throw new Error('lecture seule');
       const named = Templates.byId(rowId);
       if (!named) throw ActionHistory.conflict(I18n.t('history.templateGone'));
       // Pas d'écriture automatique ni de texte qui en remplace un autre tant que la question est posée et que l'écran change (comme la question de départ, askBeforeLeaving).
-      leavePromptCount++;
-      leavePromptOpen = true;
+      persist.leavePromptCount++;
+      persist.leavePromptOpen = true;
       try {
         const sure = await Dialogs.confirm({ title: I18n.t('history.removeCopyTitle', { name: named.nom }), message: I18n.t(withTables ? 'history.removeCopyTables' : 'history.removeCopyMessage'), confirmLabel: I18n.t('history.removeCopyConfirm'), danger: true });
         if (!sure) throw ActionHistory.conflict(I18n.t('history.copyKept', { name: named.nom }));
         // Un passage de l'enregistrement automatique, ou un enregistrement, encore en route finit d'écrire la copie avant qu'elle parte.
         await whenAutosaveTickDone();
-        while (saveIsRunning() || saveWaiting) await (saveWaiting || whenSaveFinished());
+        while (saveIsRunning() || persist.saveWaiting) await (persist.saveWaiting || whenSaveFinished());
         const now = await Templates.snapshotRow(rowId);
         if (!now) throw ActionHistory.conflict(I18n.t('history.templateGone'));
         const shown = Templates.isCurrent(rowId);
@@ -1303,7 +1300,7 @@
         }
         return I18n.t('status.templateRemoved', { name: String(now.values.Nom || named.nom) });
       } finally {
-        if (--leavePromptCount === 0) leavePromptOpen = false;
+        if (--persist.leavePromptCount === 0) persist.leavePromptOpen = false;
       }
     }
     async function bringBack() {
@@ -1525,44 +1522,51 @@
   // Préférence par navigateur (comme la touche de déclenchement #Variable, cf. js/settings.js), pas par document : chacun choisit s'il veut
   // l'enregistrement automatique, indépendamment des autres personnes qui ouvrent le même widget.
   const AUTOSAVE_ENABLED_STORAGE = 'pp_autosave_enabled';
-  let autosaveDirty = false;
-  // Ce qui est « à enregistrer » comprend un RÉGLAGE de cette personne (nom, e-mail, marges...), pas seulement du texte. Pendant l'écriture en direct, c'est ce qui fait écrire aussi une personne autre
-  // que celle qui enregistre le modèle pour tout le monde (autosaveTickBlocked, js/live-entry.js).
-  let autosaveSettingsDirty = false;
-  // La date d'un enregistrement venu d'ailleurs, déjà attendue une fois : celui qui l'a fait, s'il écrit en direct, l'annonce dans la seconde (runAutosaveTick).
-  let conflictDeferredFor = null;
-  let autosaveLastKnownDateModif = null;
-  // Dernière fois que le modèle ouvert a été comparé à Grist (performance.now : l'horloge du système peut reculer) : un passage qui a lu, ou le
-  // chargement du modèle, qui vient de Grist.
-  let autosaveLastCheckAt = -Infinity;
-  let autosaveConflictActive = false;
-  let autosaveConflictTpl = null;
-  let autosaveTimer = null;
-  // La question « Enregistrer / Abandonner / Annuler » est posée (askBeforeLeaving) : l'enregistrement automatique n'écrit rien pendant ce temps,
-  // sinon « Abandonner » ne laisserait rien à abandonner - ce que la personne a tapé serait déjà enregistré. `leavePromptCount` : les demandes en route
-  // (la question attend d'abord le passage en cours) ; le drapeau ne retombe qu'avec la dernière.
-  let leavePromptOpen = false;
-  let leavePromptCount = 0;
-  // Une restauration de version est en cours (restoreVersionOnScreen) : l'enregistrement automatique ne part pas, il écrirait l'ancien écran par-dessus la version restaurée.
-  let restoringVersion = false;
-  // Numéro de la dernière modification (frappe ou réglage, cf. markAutosaveDirty). Un drapeau « à enregistrer » remis à zéro au retour de l'écriture
-  // effacerait aussi ce qui a été tapé pendant qu'elle durait (des secondes quand Grist est lent) : ces mots ne seraient pas enregistrés tant qu'une
-  // autre frappe ne rallumerait pas le drapeau, alors que « Enregistré à… » s'afficherait. noteSaved(numéro) ne rend « enregistré » que ce qui n'a
-  // pas bougé depuis le numéro que l'écriture portait au départ.
-  let autosaveEditVersion = 0;
-  // Monte à chaque chargement d'un modèle (resetAutosaveState). Un passage ou un enregistrement qui attend Grist le relit à son retour : s'il a
-  // changé, le modèle de l'écran n'est plus celui sur lequel il a commencé, et ni la date lue ni l'état « enregistré » qu'il s'apprête à poser ne lui
-  // appartiennent plus.
-  let autosaveEpoch = 0;
-  // Grist a refusé d'écrire dans le modèle de l'écran (une règle d'accès : la personne le lit sans pouvoir le modifier, par exemple un fichier que GFS lui partage en lecture, consigne 060 de GFS) : le numéro de modèle
-  // (autosaveEpoch) du refus. L'enregistrement automatique n'écrit plus pour ce modèle, il redemanderait la même écriture toutes les 2,5 s, et ne relit la table qu'au rythme du repos ; un Enregistrer à la main
-  // redemande, et un Enregistrer réussi ou un autre modèle chargé lève l'arrêt.
-  let autosaveRefusedEpoch = -1;
-  const autosaveRefused = () => autosaveRefusedEpoch === autosaveEpoch;
-  // Un passage de l'auto-save est en cours (autosaveTick) : celui de l'intervalle suivant ne s'empile pas derrière - sauf s'il dure depuis plus d'une
-  // minute (un appel à Grist qui ne revient jamais ne doit pas arrêter l'enregistrement automatique pour de bon).
-  let autosaveTickPending = false;
-  let autosaveTickStartedAt = 0;
+  // L'état de l'enregistrement - manuel (saveRunning, saveStartedAt, saveWaiting), automatique (autosave...) - et de la sortie d'un modèle (leavePrompt..., restoringVersion), en UN objet : les gestes
+  // qui s'en partagent les variables le lisent et l'écrivent ici, et pourront être rangés dans d'autres fichiers qui le reçoivent.
+  const persist = {
+    saveRunning: null, // la promesse de l'enregistrement en cours
+    saveStartedAt: 0,
+    saveWaiting: null, // celle du geste qui attend sa fin : un seul, quel que soit le nombre de clics
+    autosaveDirty: false,
+    // Ce qui est « à enregistrer » comprend un RÉGLAGE de cette personne (nom, e-mail, marges...), pas seulement du texte. Pendant l'écriture en direct, c'est ce qui fait écrire aussi une personne autre
+    // que celle qui enregistre le modèle pour tout le monde (autosaveTickBlocked, js/live-entry.js).
+    autosaveSettingsDirty: false,
+    // La date d'un enregistrement venu d'ailleurs, déjà attendue une fois : celui qui l'a fait, s'il écrit en direct, l'annonce dans la seconde (runAutosaveTick).
+    conflictDeferredFor: null,
+    autosaveLastKnownDateModif: null,
+    // Dernière fois que le modèle ouvert a été comparé à Grist (performance.now : l'horloge du système peut reculer) : un passage qui a lu, ou le
+    // chargement du modèle, qui vient de Grist.
+    autosaveLastCheckAt: -Infinity,
+    autosaveConflictActive: false,
+    autosaveConflictTpl: null,
+    autosaveTimer: null,
+    // La question « Enregistrer / Abandonner / Annuler » est posée (askBeforeLeaving) : l'enregistrement automatique n'écrit rien pendant ce temps,
+    // sinon « Abandonner » ne laisserait rien à abandonner - ce que la personne a tapé serait déjà enregistré. `leavePromptCount` : les demandes en route
+    // (la question attend d'abord le passage en cours) ; le drapeau ne retombe qu'avec la dernière.
+    leavePromptOpen: false,
+    leavePromptCount: 0,
+    // Une restauration de version est en cours (restoreVersionOnScreen) : l'enregistrement automatique ne part pas, il écrirait l'ancien écran par-dessus la version restaurée.
+    restoringVersion: false,
+    // Numéro de la dernière modification (frappe ou réglage, cf. markAutosaveDirty). Un drapeau « à enregistrer » remis à zéro au retour de l'écriture
+    // effacerait aussi ce qui a été tapé pendant qu'elle durait (des secondes quand Grist est lent) : ces mots ne seraient pas enregistrés tant qu'une
+    // autre frappe ne rallumerait pas le drapeau, alors que « Enregistré à… » s'afficherait. noteSaved(numéro) ne rend « enregistré » que ce qui n'a
+    // pas bougé depuis le numéro que l'écriture portait au départ.
+    autosaveEditVersion: 0,
+    // Monte à chaque chargement d'un modèle (resetAutosaveState). Un passage ou un enregistrement qui attend Grist le relit à son retour : s'il a
+    // changé, le modèle de l'écran n'est plus celui sur lequel il a commencé, et ni la date lue ni l'état « enregistré » qu'il s'apprête à poser ne lui
+    // appartiennent plus.
+    autosaveEpoch: 0,
+    // Grist a refusé d'écrire dans le modèle de l'écran (une règle d'accès : la personne le lit sans pouvoir le modifier, par exemple un fichier que GFS lui partage en lecture, consigne 060 de GFS) : le numéro de modèle
+    // (autosaveEpoch) du refus. L'enregistrement automatique n'écrit plus pour ce modèle, il redemanderait la même écriture toutes les 2,5 s, et ne relit la table qu'au rythme du repos ; un Enregistrer à la main
+    // redemande, et un Enregistrer réussi ou un autre modèle chargé lève l'arrêt.
+    autosaveRefusedEpoch: -1,
+    // Un passage de l'auto-save est en cours (autosaveTick) : celui de l'intervalle suivant ne s'empile pas derrière - sauf s'il dure depuis plus d'une
+    // minute (un appel à Grist qui ne revient jamais ne doit pas arrêter l'enregistrement automatique pour de bon).
+    autosaveTickPending: false,
+    autosaveTickStartedAt: 0,
+  };
+  const autosaveRefused = () => persist.autosaveRefusedEpoch === persist.autosaveEpoch;
   const AUTOSAVE_TICK_WATCHDOG_MS = 60000;
   // Le temps que la question « Enregistrer / Abandonner / Annuler » laisse à un passage déjà parti pour finir d'écrire (askBeforeLeaving) : un passage normal dure bien moins, Grist lent quelques secondes.
   const LEAVE_PROMPT_TICK_WAIT_MS = 8000;
@@ -1588,21 +1592,21 @@
     if (saveBtn) saveBtn.classList.toggle('is-autosave-off', off);
   }
 
-  function markAutosaveDirty() { autosaveEditVersion++; autosaveDirty = true; autosaveSettingsDirty = true; updateSaveStatus(); }
+  function markAutosaveDirty() { persist.autosaveEditVersion++; persist.autosaveDirty = true; persist.autosaveSettingsDirty = true; updateSaveStatus(); }
   // Du texte tapé ici, ou reçu d'une autre personne de l'écriture en direct : à enregistrer, sans que ce soit un réglage de cette personne.
-  function markTextDirty() { autosaveEditVersion++; autosaveDirty = true; updateSaveStatus(); }
+  function markTextDirty() { persist.autosaveEditVersion++; persist.autosaveDirty = true; updateSaveStatus(); }
   // Une écriture vient de partir avec l'état de l'éditeur tel qu'il était à la version `editVersion` : ce qui a été tapé depuis reste « à
   // enregistrer » pour le passage suivant.
-  function noteSaved(editVersion) { if (editVersion === autosaveEditVersion) { autosaveDirty = false; autosaveSettingsDirty = false; } }
+  function noteSaved(editVersion) { if (editVersion === persist.autosaveEditVersion) { persist.autosaveDirty = false; persist.autosaveSettingsDirty = false; } }
 
   function resetAutosaveState(tpl) {
-    autosaveEpoch++;
-    autosaveDirty = false;
-    autosaveSettingsDirty = false;
-    conflictDeferredFor = null;
-    autosaveLastKnownDateModif = tpl ? tpl.dateModif : null;
+    persist.autosaveEpoch++;
+    persist.autosaveDirty = false;
+    persist.autosaveSettingsDirty = false;
+    persist.conflictDeferredFor = null;
+    persist.autosaveLastKnownDateModif = tpl ? tpl.dateModif : null;
     SlideLinks.noteKnown(tpl);
-    autosaveLastCheckAt = performance.now();
+    persist.autosaveLastCheckAt = performance.now();
     hideConflictBanner();
     updateSaveStatus();
   }
@@ -1623,19 +1627,19 @@
     // encore de nom ni de ligne.
     if (!Templates.getCurrentId()) { setStatus(I18n.t('status.unsavedTemplateWarning'), true); return; }
     // Grist a refusé d'écrire dans ce modèle (autosaveRefusedEpoch) : le coin le redit tant que ce qui est tapé n'est pas enregistré, au lieu de se vider comme avant une écriture qui va partir (rien ne repart tout seul).
-    if (autosaveDirty && autosaveRefused()) { setStatus(I18n.t('status.saveRefused'), true); return; }
+    if (persist.autosaveDirty && autosaveRefused()) { setStatus(I18n.t('status.saveRefused'), true); return; }
     // Enregistrement automatique coupé (son réglage ne se voit plus que dans le menu d'Enregistrer) : rien ne partira tout seul, ce qui vient d'être
     // tapé n'est que dans l'éditeur, et le coin d'état le dit jusqu'au prochain Enregistrer. Seulement dans ce cas : avec l'enregistrement
     // automatique actif, le délai avant le passage suivant ne dure que 2,5 s et le coin reste vide. Avant le test de DateModif : un modèle sans date
     // connue doit pourtant le dire.
-    if (autosaveDirty && !autosaveConflictActive && !isAutosaveEnabled()) {
+    if (persist.autosaveDirty && !persist.autosaveConflictActive && !isAutosaveEnabled()) {
       setStatus(I18n.t('status.unsavedChanges'));
       statusMsg.classList.add('is-unsaved');
       return;
     }
-    if (!autosaveLastKnownDateModif) { setStatus(''); return; }
-    if (autosaveDirty || autosaveConflictActive) { setStatus(''); return; }
-    setStatus(I18n.t('status.savedAt', { time: formatSaveTime(autosaveLastKnownDateModif) }));
+    if (!persist.autosaveLastKnownDateModif) { setStatus(''); return; }
+    if (persist.autosaveDirty || persist.autosaveConflictActive) { setStatus(''); return; }
+    setStatus(I18n.t('status.savedAt', { time: formatSaveTime(persist.autosaveLastKnownDateModif) }));
   }
 
   // autosaveLastKnownDateModif vient de Templates.save et loadAll, qui relisent DateModif par fetchTable : Grist rend une colonne DateTime en
@@ -1653,14 +1657,14 @@
   }
 
   function showConflictBanner(remoteTpl) {
-    autosaveConflictActive = true;
-    autosaveConflictTpl = remoteTpl;
+    persist.autosaveConflictActive = true;
+    persist.autosaveConflictTpl = remoteTpl;
     if (conflictBanner) conflictBanner.style.display = '';
   }
 
   function hideConflictBanner() {
-    autosaveConflictActive = false;
-    autosaveConflictTpl = null;
+    persist.autosaveConflictActive = false;
+    persist.autosaveConflictTpl = null;
     if (conflictBanner) conflictBanner.style.display = 'none';
   }
 
@@ -1668,7 +1672,7 @@
   // celle de sa dernière écriture (Templates.lastWritten : un enregistrement fait par ce widget dont l'état d'ici n'est pas encore à jour, comme un
   // macro-modèle enregistré par sa fenêtre).
   function changedElsewhere(remoteTpl) {
-    const known = autosaveLastKnownDateModif;
+    const known = persist.autosaveLastKnownDateModif;
     if (!remoteTpl || !known || !remoteTpl.dateModif) return false;
     if (Templates.sameDateModif(remoteTpl.dateModif, known)) return false;
     return !Templates.sameDateModif(remoteTpl.dateModif, Templates.lastWritten(remoteTpl.id));
@@ -1682,7 +1686,7 @@
     if (Templates.isWriting()) return null;
     const seq = Templates.getWriteSeq();
     const fresh = await Templates.loadAll();
-    if (epoch !== autosaveEpoch || seq !== Templates.getWriteSeq()) return null;
+    if (epoch !== persist.autosaveEpoch || seq !== Templates.getWriteSeq()) return null;
     return { remoteTpl: fresh.find(t => String(t.id) === String(id)) };
   }
 
@@ -1691,22 +1695,22 @@
   // ailleurs » que ce chevauchement produit chez une personne seule. Le passage suivant est simplement sauté : un passage lit l'état du moment, il
   // n'y a rien à rattraper.
   async function autosaveTick() {
-    if (autosaveTickPending && Date.now() - autosaveTickStartedAt < AUTOSAVE_TICK_WATCHDOG_MS) return;
-    autosaveTickPending = true;
-    autosaveTickStartedAt = Date.now();
-    const startedAt = autosaveTickStartedAt;
+    if (persist.autosaveTickPending && Date.now() - persist.autosaveTickStartedAt < AUTOSAVE_TICK_WATCHDOG_MS) return;
+    persist.autosaveTickPending = true;
+    persist.autosaveTickStartedAt = Date.now();
+    const startedAt = persist.autosaveTickStartedAt;
     try { await runAutosaveTick(); }
-    finally { if (autosaveTickStartedAt === startedAt) autosaveTickPending = false; }
+    finally { if (persist.autosaveTickStartedAt === startedAt) persist.autosaveTickPending = false; }
   }
 
   // Les cas où un passage ne fait rien du tout, avant même de lire la table.
   function autosaveTickBlocked() {
-    if (leavePromptOpen || restoringVersion) return true;
+    if (persist.leavePromptOpen || persist.restoringVersion) return true;
     if (!isAutosaveEnabled()) return true;  // coupé par la personne (cf. wireSaveMenu) : ni vérification de conflit ni écriture en arrière-plan
     if (isExportRunning()) return true; // évite toute contention Grist avec un export en cours
-    if (autosaveConflictActive) return true; // gelé tant que l'utilisateur n'a pas choisi (recharger, ou Enregistrer manuellement pour garder sa version)
+    if (persist.autosaveConflictActive) return true; // gelé tant que l'utilisateur n'a pas choisi (recharger, ou Enregistrer manuellement pour garder sa version)
     // Écriture en direct : UNE personne enregistre le modèle pour tout le monde (js/live-entry.js) ; les autres n'écrivent que ce qui leur est propre (un réglage).
-    if (LiveEntry.blocksAutosave(autosaveSettingsDirty)) return true;
+    if (LiveEntry.blocksAutosave(persist.autosaveSettingsDirty)) return true;
     return false;
   }
 
@@ -1729,10 +1733,10 @@
     try {
       const suiviModifications = isMacro ? null : await Editor.getSuiviModificationsForSave();
       // un autre modèle a été choisi pendant l'attente de l'identification : l'éditeur n'est plus celui dont `id` est la ligne (cf. onSave)
-      if (epoch !== autosaveEpoch) return;
+      if (epoch !== persist.autosaveEpoch) return;
       // La question « Enregistrer / Abandonner / Annuler » s'est ouverte depuis le départ de ce passage (leavePromptOpen n'est regardé qu'au départ) : rien n'est écrit, ce qui attend reste à demander,
       // et le passage suivant l'écrira si la personne reste.
-      if (leavePromptOpen) return;
+      if (persist.leavePromptOpen) return;
       // Les modèles viennent d'être relus par ce passage : les tableaux liés que le document a changé et pas leur modèle partent dans le même lot que sa ligne.
       const send = linkedSendFor(isMacro);
       const token = isMacro ? null : LiveEntry.saveToken(); // l'état du texte juste avant qu'il soit lu (écriture en direct)
@@ -1740,8 +1744,8 @@
       const { dateModif } = await saveScreenAs(id, nom, suiviModifications, contenu, send ? send.writes : null);
       LiveEntry.published(token, dateModif);
       // Un autre modèle chargé pendant l'écriture (autosaveEpoch) a son propre état : rien de ceci ne lui appartient.
-      if (epoch === autosaveEpoch) {
-        autosaveLastKnownDateModif = dateModif;
+      if (epoch === persist.autosaveEpoch) {
+        persist.autosaveLastKnownDateModif = dateModif;
         noteSaved(editVersion);
         if (send) send.commit();
         noteKnownState(id);
@@ -1753,7 +1757,7 @@
       // redemande. Un modèle chargé pendant l'écriture (autosaveEpoch) n'est pas celui qui a été refusé : ni arrêt ni message pour lui.
       if (GristAPI.isAccessRefusal(e)) {
         console.warn('[main] auto-save : Grist refuse l’écriture (règle d’accès)', e);
-        if (epoch === autosaveEpoch) { autosaveRefusedEpoch = epoch; setStatus(I18n.t('status.saveRefused'), true); }
+        if (epoch === persist.autosaveEpoch) { persist.autosaveRefusedEpoch = epoch; setStatus(I18n.t('status.saveRefused'), true); }
         return;
       }
       console.error('[main] auto-save : échec d’enregistrement', e);
@@ -1771,27 +1775,27 @@
     // repousser la lecture d'une période de plus).
     const checkStartedAt = performance.now();
     // Un modèle que Grist a refusé d'écrire (autosaveRefused) attend comme un modèle au repos : ce qui est tapé ne peut pas partir, le relire à chaque passage ne servirait qu'à charger Grist.
-    if ((!autosaveDirty || autosaveRefused()) && checkStartedAt - autosaveLastCheckAt < autosaveIdleIntervalMs() - AUTOSAVE_INTERVAL_MS / 2) return;
-    const epoch = autosaveEpoch;
+    if ((!persist.autosaveDirty || autosaveRefused()) && checkStartedAt - persist.autosaveLastCheckAt < autosaveIdleIntervalMs() - AUTOSAVE_INTERVAL_MS / 2) return;
+    const epoch = persist.autosaveEpoch;
     let remote;
     try { remote = await readRemoteTemplate(id, epoch); }
     catch (e) { console.error('[main] auto-save : vérification de conflit impossible', e); return; }
     if (!remote) return; // lecture sans valeur (cf. readRemoteTemplate) : rien à comparer ce coup-ci, le passage suivant relira
-    autosaveLastCheckAt = checkStartedAt;
+    persist.autosaveLastCheckAt = checkStartedAt;
     adoptTableName(); // un nom donné ailleurs depuis l'ouverture (GFS) : le titre le prend avant que ce passage n'écrive
     const remoteTpl = remote.remoteTpl;
     if (changedElsewhere(remoteTpl)) {
       // Une personne du direct vient d'enregistrer : sa date est annoncée dans la seconde (adoptLiveSave), le conflit n'est dit qu'au passage d'après, une fois par date inconnue. Le passage suivant relit.
       const seen = String(remoteTpl.dateModif);
-      if (LiveEntry.expectsAnnouncement() && conflictDeferredFor !== seen) { conflictDeferredFor = seen; autosaveLastCheckAt = -Infinity; return; }
+      if (LiveEntry.expectsAnnouncement() && persist.conflictDeferredFor !== seen) { persist.conflictDeferredFor = seen; persist.autosaveLastCheckAt = -Infinity; return; }
       // Une présentation dont seules des diapositives à repère ont changé (l'envoi d'une présentation qui les a importées) les prend sans bandeau : sa date devient celle que ce widget connaît, et
       // ce qui était à enregistrer l'est toujours (js/slide-links.js:adopt).
       if (!SlideLinks.adopt(EditorCore.getEditor(), remoteTpl)) { showConflictBanner(remoteTpl); return; }
-      autosaveLastKnownDateModif = remoteTpl.dateModif;
+      persist.autosaveLastKnownDateModif = remoteTpl.dateModif;
     }
     // Les modèles viennent d'être relus : les tableaux liés du document suivent les leurs, document modifié ou non, en lecture seule aussi (rien n'est écrit).
     const synced = followLinkedModels();
-    if (!autosaveDirty) return;
+    if (!persist.autosaveDirty) return;
     if (autosaveRefused()) return; // Grist a refusé d'écrire dans ce modèle : rien ne repart tout seul (autosaveRefusedEpoch)
     // Lecture seule : la vérification de conflit ci-dessus garde son bandeau (le modèle a changé ailleurs), mais rien n'est écrit. Un commentaire
     // posé en Lecture passe par saveReaderCommentAnchors, jamais par ici.
@@ -1799,14 +1803,14 @@
     // getHTML() renverrait le fragment d'en-tête ou de pied chargé, pas le document principal (cf. header-footer-preview.js) : on saute ce passage
     // plutôt que de forcer la sortie de ce mode toutes les 2 à 3 s, bien plus gênant que d'attendre le suivant.
     if (Editor.isEditingHeaderFooter()) return;
-    const editVersion = autosaveEditVersion; // Avant de lire quoi que ce soit : ce qui est modifié après reste « à enregistrer » (cf. noteSaved)
+    const editVersion = persist.autosaveEditVersion; // Avant de lire quoi que ce soit : ce qui est modifié après reste « à enregistrer » (cf. noteSaved)
     const target = autosaveWriteTarget(remoteTpl);
     if (target) await writeAutosave(id, target, remoteTpl, epoch, editVersion, synced);
   }
 
   function startAutosaveLoop() {
-    if (autosaveTimer) return;
-    autosaveTimer = setInterval(autosaveTick, AUTOSAVE_INTERVAL_MS);
+    if (persist.autosaveTimer) return;
+    persist.autosaveTimer = setInterval(autosaveTick, AUTOSAVE_INTERVAL_MS);
   }
 
   // Menu « Enregistrer » : le bouton garde son geste (un clic, un enregistrement) et son survol ouvre « Enregistrer sous… » (une copie), « Historique des
@@ -1843,7 +1847,7 @@
       setStatus(I18n.t(enabled ? 'status.autosaveEnabled' : 'status.autosaveDisabled'));
       // Coupé avec des modifications déjà en attente : l'indicateur « Modifications non enregistrées » passe devant le message du geste, qui n'aurait
       // été lu qu'un instant.
-      if (!enabled && autosaveDirty) updateSaveStatus();
+      if (!enabled && persist.autosaveDirty) updateSaveStatus();
       // Réactiver ne remet rien à zéro : effacer autosaveDirty ferait perdre ce qui a été tapé pendant la coupure et passer sous silence un
       // changement fait ailleurs. Rien n'est à resynchroniser : onSave et le chargement d'un modèle tiennent autosaveLastKnownDateModif à jour même
       // éteint ; le prochain passage enregistre ce qui est en attente, ou ouvre le bandeau de conflit si le modèle a changé ailleurs.
@@ -1867,7 +1871,7 @@
     window.addEventListener('storage', (event) => {
       if (event.key !== null && event.key !== AUTOSAVE_ENABLED_STORAGE) return;
       syncAutosaveRow();
-      if (autosaveDirty) updateSaveStatus();
+      if (persist.autosaveDirty) updateSaveStatus();
     });
   }
 
@@ -1887,8 +1891,8 @@
   function wireAutosaveConflictBanner() {
     if (!conflictReloadBtn) return;
     conflictReloadBtn.addEventListener('click', () => {
-      if (!autosaveConflictTpl) return;
-      const tpl = autosaveConflictTpl;
+      if (!persist.autosaveConflictTpl) return;
+      const tpl = persist.autosaveConflictTpl;
       loadTemplateIntoEditor(tpl);
       refreshTemplateList();
       setStatus(I18n.t('status.autosaveConflictReloaded'));
@@ -1948,10 +1952,10 @@
   // annule alors son changement de marque.
   async function saveReaderCommentAnchors() {
     const id = Templates.getCurrentId();
-    if (!id || currentTypeModele === 'macro' || autosaveConflictActive) return false;
+    if (!id || currentTypeModele === 'macro' || persist.autosaveConflictActive) return false;
     const nom = templateNameInput ? templateNameInput.value.trim() : '';
     if (!nom) return false;
-    const epoch = autosaveEpoch;
+    const epoch = persist.autosaveEpoch;
     let remote;
     try {
       remote = await readRemoteTemplate(id, epoch);
@@ -1965,12 +1969,12 @@
     if (changedElsewhere(remoteTpl)) { showConflictBanner(remoteTpl); return false; }
     try {
       const suiviModifications = await Editor.getSuiviModificationsForSave();
-      const editVersion = autosaveEditVersion;
+      const editVersion = persist.autosaveEditVersion;
       const token = LiveEntry.saveToken(); // l'état du texte juste avant qu'il soit lu (écriture en direct)
       const { dateModif } = await saveScreenAs(id, nom, suiviModifications);
       LiveEntry.published(token, dateModif);
-      if (epoch === autosaveEpoch) {
-        autosaveLastKnownDateModif = dateModif;
+      if (epoch === persist.autosaveEpoch) {
+        persist.autosaveLastKnownDateModif = dateModif;
         noteSaved(editVersion);
         noteKnownState(id);
         updateSaveStatus();
@@ -2404,21 +2408,21 @@
   function adoptLiveSave({ modified, atState }) {
     if (!LiveEntry.isLive()) return;
     // Jamais en arrière : le dernier enregistrement que le salon garde peut être plus ancien que le modèle ouvert ici (enregistré depuis, hors du direct) ; sa date ferait voir un conflit qui n'en est pas un.
-    if (dateModifBefore(modified, autosaveLastKnownDateModif)) return;
-    autosaveLastKnownDateModif = modified;
+    if (dateModifBefore(modified, persist.autosaveLastKnownDateModif)) return;
+    persist.autosaveLastKnownDateModif = modified;
     // Une page ouverte hors du direct pendant que le groupe enregistrait montre le bandeau « modifié ailleurs » d'un enregistrement du groupe ; en rejoignant, elle prend le texte du groupe, qui est
     // celui de cet enregistrement ou d'un plus récent : le conflit est réglé. Un enregistrement fait depuis hors du direct (plus récent que celui du groupe) garde le bandeau.
-    if (autosaveConflictActive && autosaveConflictTpl && !dateModifBefore(modified, autosaveConflictTpl.dateModif)) hideConflictBanner();
-    if (atState && !autosaveSettingsDirty) autosaveDirty = false;
+    if (persist.autosaveConflictActive && persist.autosaveConflictTpl && !dateModifBefore(modified, persist.autosaveConflictTpl.dateModif)) hideConflictBanner();
+    if (atState && !persist.autosaveSettingsDirty) persist.autosaveDirty = false;
     updateSaveStatus();
   }
   // Le texte affiché peut-il être remplacé par celui d'un direct déjà en cours (l'entrée automatique, js/live-entry.js) sans que la personne s'y attende ? Pas quand l'écran est à autre chose qu'à ce
   // texte : la Lecture, la carte de l'accès, une question de départ, une restauration de version, un export, un conflit à trancher, l'en-tête ou le pied en édition.
   function textMayBeReplaced() {
-    return currentMode === 'edit' && !isAccessGuideShown() && !leavePromptOpen && !restoringVersion && !isExportRunning() && !autosaveConflictActive && !Editor.isEditingHeaderFooter();
+    return currentMode === 'edit' && !isAccessGuideShown() && !persist.leavePromptOpen && !persist.restoringVersion && !isExportRunning() && !persist.autosaveConflictActive && !Editor.isEditingHeaderFooter();
   }
   function wireLiveEditing() {
-    LiveEntry.setContext(() => ({ id: Templates.getCurrentId(), type: currentTypeModele, readOnly: isReadOnly(), dirty: autosaveDirty, modified: autosaveLastKnownDateModif, idle: textMayBeReplaced() }));
+    LiveEntry.setContext(() => ({ id: Templates.getCurrentId(), type: currentTypeModele, readOnly: isReadOnly(), dirty: persist.autosaveDirty, modified: persist.autosaveLastKnownDateModif, idle: textMayBeReplaced() }));
     LiveEntry.setHooks({ markUnsaved: markTextDirty });
     LiveEntry.onSaved(adoptLiveSave);
   }
