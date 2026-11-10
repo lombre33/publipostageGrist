@@ -112,6 +112,20 @@ function toolsOf(tab) {
   // Une ligne du menu, à la vraie souris : la main descend de l'icône sur la ligne, sans quitter le volet, et clique.
   const clickRow = async (id, settle = 700) => {
     const c = await openMenu();
+    // Le menu a dix lignes et défile à 700x400 (depuis « Vidéo », d2e0656, la dernière - « Diapositive d'une présentation… » - est sous le bas du menu) : la molette, la souris posée sur le menu, amène
+    // la ligne voulue dans sa partie visible. Sans cela le clic tombait sous le bas de la fenêtre et le volet ne s'ouvrait pas (« .pp-slide-import .ss-trigger » introuvable).
+    for (let i = 0; i < 6; i++) {
+      const hidden = await app.evaluate((rowId) => {
+        const f = document.getElementById('v2-blocks-flyout').getBoundingClientRect();
+        const r = document.getElementById(rowId).getBoundingClientRect();
+        return r.bottom > f.bottom - 1 || r.top < f.top;
+      }, id);
+      if (!hidden) break;
+      const spot = await inPage(await centerOf('#v2-row-link'));
+      await page.mouse.move(spot.x, spot.y + 40, { steps: 3 });
+      await page.mouse.wheel(0, 120);
+      await sleep(150);
+    }
     const r = await inPage(await centerOf('#' + id));
     const x = Math.min(Math.max(c.x, r.left + 8), r.right - 8);
     await page.mouse.move(x, r.y, { steps: 8 });
