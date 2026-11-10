@@ -86,14 +86,15 @@ check('free-frame : la façade range ce que `wire` rend (la barre et son rafraî
 // ---- les morceaux sortis de js/main.js (import, exports) -------------------------------------------------------------------------------------------------------------------
 const miMain = read('js/main.js');
 const MAIN_PIECES = [['MainImport', 'js/main-import.js'], ['MainExport', 'js/main-export.js'], ['MainAutosave', 'js/main-autosave.js'], ['MainSave', 'js/main-save.js'], ['MainLeave', 'js/main-leave.js'],
-  ['MainEmail', 'js/main-email.js'], ['MainPageZoom', 'js/main-page-zoom.js'], ['MainRename', 'js/main-rename.js'], ['MainMacroReturn', 'js/main-macro-return.js'], ['MainAccess', 'js/main-access.js']];
+  ['MainEmail', 'js/main-email.js'], ['MainPageZoom', 'js/main-page-zoom.js'], ['MainRename', 'js/main-rename.js'], ['MainMacroReturn', 'js/main-macro-return.js'], ['MainAccess', 'js/main-access.js'],
+  ['MainReader', 'js/main-reader.js'], ['MainLive', 'js/main-live.js'], ['MainSlides', 'js/main-slides.js']];
 const mainPieces = MAIN_PIECES.map(([module, file]) => {
   const piece = read(file);
   const taken = (new RegExp(`const \\{([^}]*)\\} = ${module}\\.create\\(`).exec(miMain) || [, ''])[1];
   return { module, file, given: literalKeys(miMain, `${module}.create({`) || [], wanted: destructured(piece, 'api'), returned: piecesReturn(piece) || [], taken: names(taken) };
 });
 for (const { module, file, given, wanted, returned, taken } of mainPieces) {
-  check(`${file} : ce que main.js donne à ${module}.create, ce que le morceau en lit et ce qu'il rend sont lisibles`, given.length >= 4 && wanted.length >= 4 && returned.length >= 4 && taken.length >= 4, { given: given.length, wanted: wanted.length, returned: returned.length, taken: taken.length });
+  check(`${file} : ce que main.js donne à ${module}.create, ce que le morceau en lit et ce qu'il rend sont lisibles`, given.length >= 4 && wanted.length >= 4 && returned.length >= 1 && taken.length >= 1, { given: given.length, wanted: wanted.length, returned: returned.length, taken: taken.length });
   check(`${file} : le morceau ne lit de \`api\` que des noms donnés par main.js`, missing(wanted, given).length === 0, missing(wanted, given));
   check(`${file} : main.js ne reprend que des noms que le morceau rend`, missing(taken, returned).length === 0, missing(taken, returned));
   check(`${file} : chaque nom que main.js donne au morceau est lu par lui (aucun nom donné pour rien)`, missing(given, wanted).length === 0, missing(given, wanted));
@@ -137,6 +138,16 @@ check('le type du modèle, le mode, la table et la ligne ne sont lus par les qua
 check('js/main.js : MainAccess est créé avant tous les autres morceaux (isReadOnly est pris par nom par presque tous)', miMain.indexOf('MainAccess.create(') > 0 && ['MainEmail', 'MainPageZoom', 'MainRename', 'MainMacroReturn', 'MainExport', 'MainAutosave', 'MainSave', 'MainLeave', 'MainImport'].every(module => miMain.indexOf('MainAccess.create(') < miMain.indexOf(module + '.create(')), null);
 check('MainAccess prend updateSaveStatus par un appel différé (l\'autosave, qui le rend, est créé après : sa valeur serait en zone morte)', /updateSaveStatus: \(\.\.\.args\) => updateSaveStatus\(\.\.\.args\)/.test(miMain.slice(miMain.indexOf('MainAccess.create('), miMain.indexOf('MainEmail.create('))), null);
 check('js/main-access.js ne lit le mode que par getCurrentMode et newsMayOpen que par son lecteur et son écriveur (jamais les variables de main.js)', !/(?<![\w$.])(currentMode|newsMayOpen)\b(?!\s*:)/.test(read('js/main-access.js')) && /getNewsMayOpen: \(\) => newsMayOpen/.test(miMain) && /setNewsMayOpen: value => \{ newsMayOpen = value; \}/.test(miMain), null);
+// ---- le lecteur, l'écriture en direct et les diapositives (découpe 11, dernier lot) ----
+const at = module => miMain.indexOf(module + '.create(');
+check('js/main.js : MainReader est créé juste après MainAccess et avant l\'e-mail (qui lui prend renderReader) ; MainLive et MainSlides après la sortie d\'un modèle et avant l\'import',
+  at('MainAccess') < at('MainReader') && at('MainReader') < at('MainEmail') && at('MainLeave') < at('MainLive') && at('MainLive') < at('MainSlides') && at('MainSlides') < at('MainImport'), ['MainAccess', 'MainReader', 'MainEmail', 'MainLeave', 'MainLive', 'MainSlides', 'MainImport'].map(at));
+const readerBody = miMain.slice(at('MainReader'), at('MainEmail'));
+const readerDeferred = ['changedElsewhere', 'noteKnownState', 'noteSaved', 'readRemoteTemplate', 'saveScreenAs', 'showConflictBanner', 'updateSaveStatus'];
+check('MainReader prend à l\'autosave (créé après lui) par des appels différés, jamais par leur valeur (zone morte)', readerDeferred.every(name => new RegExp(`${name}: \\(\\.\\.\\.args\\) => ${name}\\(\\.\\.\\.args\\)`).test(readerBody)), readerDeferred.filter(name => !new RegExp(`${name}: \\(\\.\\.\\.args\\) => ${name}\\(\\.\\.\\.args\\)`).test(readerBody)));
+check('`slidesRelayoutPending` est déclarée dans js/main-slides.js et plus dans main.js', /\n {4}let slidesRelayoutPending = /.test(read('js/main-slides.js')) && !/(?<![\w$.])slidesRelayoutPending\b/.test(miMain), null);
+check('le lecteur, l\'écriture en direct et les diapositives ne lisent le mode, le type du modèle, la table et la ligne que par leurs fonctions (jamais les variables de main.js)',
+  ['js/main-reader.js', 'js/main-live.js', 'js/main-slides.js'].every(file => !/(?<![\w$.])(currentTypeModele|currentMode|currentTableId|latestRecord|latestRecordTableId)\b(?!\s*:)/.test(read(file))) && /setCurrentTableId: value => \{ currentTableId = value; \}/.test(miMain), null);
 check('l\'objet `persist` est donné à chacun des trois fichiers (par son nom)', SAVE_MODULES.every(module => (literalKeys(miMain, module + '.create({') || []).includes('persist')), SAVE_MODULES.filter(module => !(literalKeys(miMain, module + '.create({') || []).includes('persist')));
 check('les trois fichiers ne lisent le type du modèle que par getCurrentTypeModele et le nom du titre que par getTitleNameBase / setTitleNameBase (jamais les variables de main.js)',
   SAVE_PIECES.every(file => !/(?<![\w$.])(currentTypeModele|titleNameBase)\b(?!\s*:)/.test(read(file))) && /getCurrentTypeModele: \(\) => currentTypeModele/.test(miMain) && /getTitleNameBase: \(\) => titleNameBase/.test(miMain) && /setTitleNameBase: value => \{ titleNameBase = value; \}/.test(miMain), null);

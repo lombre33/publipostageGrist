@@ -605,73 +605,6 @@
   // le HTML, d'où la Lecture, le PDF, le Word et l'impression tournent leurs pages ; un sens imposé n'ajoute rien.
   function perModelOption(perModel = PageLayout.isOrientationAuto()) { return { perModel }; }
 
-  async function renderReader(record, recordTableId) {
-    // Un PDF à l'écran (js/pdf-reading.js) : la Lecture montre le PDF, que la ligne de la table change ou non ; il se pose une fois, et seul un modèle qui s'ouvre le remplace.
-    if (PdfReading.isActive()) { await PdfReading.render(readerContainer); return; }
-    if (typeof record === 'undefined') record = latestRecord || GristAPI.getCurrentRecord();
-    let tableId = recordTableId || GristAPI.getCurrentTableId() || currentTableId;
-    // Sans ligne sélectionnée, ReaderMode.render() affiche tout de même son état vide : un simple `return` laisserait #reader-container vide, un
-    // écran blanc sans explication. onCreateEmail (mode email) appelle aussi renderReader() alors que currentMode reste 'edit', pour lire le corps
-    // résolu sans changer de mode : #reader-container reste display:none tant que currentMode !== 'read' (cf. switchMode).
-    if (!record) { await ReaderMode.render(await currentDocumentHtml(tableId, null, { anchors: true }), tableId, null, Editor.getHeaderFooterData()); return; }
-    if (!tableId) {
-      const ctx = await GristAPI.detectCurrentContext();
-      if (ctx && ctx.tableId) { currentTableId = ctx.tableId; tableId = ctx.tableId; }
-    }
-    readerContainer.classList.toggle('pp-reader-comments', readerCommentsActive());
-    // Le HTML est donné par une fonction : l'assemblage d'un macro-modèle (ses règles de slot) relit des tables, ce qui doit se faire dans les
-    // lectures partagées de ce rendu.
-    const html = async () => (readerCommentsActive() ? SlidesEntry.outputHtml(currentTypeModele, await Comments.buildReaderHtml(), { anchors: true, theme: PageLayout.getTheme() }) : currentDocumentHtml(tableId, record, { anchors: true }));
-    await ReaderMode.render(html, tableId, record, Editor.getHeaderFooterData());
-  }
-
-  // Mode Lecture affiché (imposé par la lecture seule ou choisi) avec droit de commenter (js/comments.js:readerMode, applyCommentsPermissions) : il
-  // montre les commentaires et en accepte de nouveaux, sur un HTML qui porte les positions du document. Jamais pour un macro-modèle : son contenu
-  // vient d'autres modèles, pas de l'éditeur.
-  function readerCommentsActive() { return Comments.isReaderMode() && currentTypeModele !== 'macro'; }
-
-  // Commentaire posé, résolu ou supprimé depuis le mode Lecture : l'auto-save n'écrit rien en lecture seule (et n'a peut-être pas encore tourné quand
-  // le mode Lecture est choisi), le modèle (sa marque de commentaire) est donc enregistré ici - et seulement s'il n'a pas changé ailleurs depuis son
-  // chargement, sinon la marque écraserait ce changement (même contrôle de DateModif que autosaveTick). false = rien d'enregistré, js/comments.js
-  // annule alors son changement de marque.
-  async function saveReaderCommentAnchors() {
-    const id = Templates.getCurrentId();
-    if (!id || currentTypeModele === 'macro' || persist.autosaveConflictActive) return false;
-    const nom = templateNameInput ? templateNameInput.value.trim() : '';
-    if (!nom) return false;
-    const epoch = persist.autosaveEpoch;
-    let remote;
-    try {
-      remote = await readRemoteTemplate(id, epoch);
-      // Une écriture de ce widget (un passage de l'enregistrement automatique) a croisé la lecture : on attend qu'elle finisse et on relit, plutôt
-      // que d'annuler le commentaire de la personne.
-      if (!remote) { await Templates.whenIdle(); remote = await readRemoteTemplate(id, epoch); }
-    }
-    catch (e) { console.error('[main] commentaire en lecture : vérification de conflit impossible', e); return false; }
-    if (!remote || !remote.remoteTpl) return false;
-    const remoteTpl = remote.remoteTpl;
-    if (changedElsewhere(remoteTpl)) { showConflictBanner(remoteTpl); return false; }
-    try {
-      const suiviModifications = await Editor.getSuiviModificationsForSave();
-      const editVersion = persist.autosaveEditVersion;
-      const token = LiveEntry.saveToken(); // l'état du texte juste avant qu'il soit lu (écriture en direct)
-      const { dateModif } = await saveScreenAs(id, nom, suiviModifications);
-      LiveEntry.published(token, dateModif);
-      if (epoch === persist.autosaveEpoch) {
-        persist.autosaveLastKnownDateModif = dateModif;
-        noteSaved(editVersion);
-        noteKnownState(id);
-        updateSaveStatus();
-      }
-      // Cache des modèles relu (Templates.save ne le touche pas) : revenir plus tard sur ce modèle doit montrer la marque qui vient d'être posée.
-      Templates.loadAll().catch(e => console.error('[main] relecture des modèles impossible', e));
-      return true;
-    } catch (e) {
-      console.error('[main] commentaire en lecture : échec d’enregistrement du modèle', e);
-      return false;
-    }
-  }
-
   // Les droits par personne (js/main-access.js) : créés en premier, presque tous les autres morceaux prennent isReadOnly ; updateSaveStatus, rendu par l'autosave créé plus bas, lui est donné par un appel différé.
   const {
     ACCESS_STARTUP_WAIT_MS, EXACT_SCHEMA_CHECK_MS, applyAccessRights, applyCommentsPermissions, applyFormattingBarLock, applyPdfLocks, isReadOnly,
@@ -679,6 +612,15 @@
   } = MainAccess.create({
     getCurrentMode: () => currentMode, getNewsMayOpen: () => newsMayOpen, isAccessGuideShown, setNewsMayOpen: value => { newsMayOpen = value; }, setStatus,
     switchMode, syncEditorVisibilityForMode, updateSaveStatus: (...args) => updateSaveStatus(...args),
+  });
+
+  // Le lecteur (js/main-reader.js) : créé en tête, l'e-mail, l'ajustement de la page et les diapositives lui prennent renderReader ; ce qu'il prend à l'autosave, créé plus bas, lui est donné par des appels différés.
+  const { renderReader, saveReaderCommentAnchors } = MainReader.create({
+    changedElsewhere: (...args) => changedElsewhere(...args), currentDocumentHtml, getCurrentTableId: () => currentTableId,
+    getCurrentTypeModele: () => currentTypeModele, getLatestRecord: () => latestRecord, noteKnownState: (...args) => noteKnownState(...args),
+    noteSaved: (...args) => noteSaved(...args), persist, readRemoteTemplate: (...args) => readRemoteTemplate(...args), readerContainer,
+    saveScreenAs: (...args) => saveScreenAs(...args), setCurrentTableId: value => { currentTableId = value; },
+    showConflictBanner: (...args) => showConflictBanner(...args), templateNameInput, updateSaveStatus: (...args) => updateSaveStatus(...args),
   });
 
   // Les champs e-mail et la jauge (js/main-email.js), l'ajustement de la page à la largeur (js/main-page-zoom.js), le renommage du modèle (js/main-rename.js) et l'ouverture d'un modèle depuis
@@ -733,6 +675,17 @@
   const { askBeforeLeaving, hasEditsToConfirmBeforeLeaving, leaveForGfs, saveBeforeGfsLeaves } = MainLeave.create({
     AUTOSAVE_TICK_WATCHDOG_MS, getCurrentTypeModele: () => currentTypeModele, isAutosaveEnabled, isReadOnly, onSave, persist, refocusEditorIfLost,
     saveIsRunning, templateNameInput, whenAutosaveTickDone, whenSaveFinished,
+  });
+
+  // L'écriture en direct et le suivi des modifications (js/main-live.js), les diapositives (js/main-slides.js) : créés après l'autosave, l'enregistrement et la sortie d'un modèle, dont ils prennent des noms.
+  const { wireEditTracking, wireLiveEditing } = MainLive.create({
+    eachEmailInput, emailCciInput, emailCciToggle, getCurrentMode: () => currentMode, getCurrentTypeModele: () => currentTypeModele, hideConflictBanner,
+    isAccessGuideShown, isExportRunning, isReadOnly, markAutosaveDirty, markTextDirty, onPageLayoutChanged, onWatermarkChanged, pdfFilenameInput, persist,
+    scheduleEmailLengthGauge, templateNameInput, updateSaveStatus, wireCciToggle,
+  });
+  const { wireSlides } = MainSlides.create({
+    applyPageFitZoomTo, editorContainer, getCurrentMode: () => currentMode, getCurrentTypeModele: () => currentTypeModele, isReadOnly, readerContainer,
+    renderReader, renderTemplateOptions, setStatus, startNewTemplate, templateSelect,
   });
 
   // L'import d'un fichier (Excel, Markdown, PowerPoint, Word : le menu « + » et le « Nouveau > Importer » de GFS) est dans js/main-import.js ; ce qu'il tire d'ici lui est donné.
@@ -958,111 +911,6 @@
       // `saveCreated` enregistre l'écran comme un modèle neuf et le range dans l'historique d'Annuler / Rétablir (saveAsNewTemplate) ; `currentTemplateId`, le modèle que l'écran montre avant que le nouveau le remplace.
       loadTemplateIntoEditor, saveCreated: saveAsNewTemplate, currentTemplateId: () => Templates.getCurrentId(), setStatus, hasEditsToConfirmBeforeLeaving, askBeforeLeaving, savedTemplateName,
       saveWatchdogMs: SAVE_WATCHDOG_MS,
-    });
-  }
-
-  // Tout ce qui marque le brouillon « modifié » ou rafraîchit la jauge de l'email : l'éditeur, les champs du modèle et les réglages de page.
-  function wireEditTracking() {
-    // 'update' et non 'transaction' : ne part que si le document a réellement changé (docChanged), jamais pour un simple déplacement du curseur ou de
-    // la sélection (cf. la section Enregistrement automatique plus haut). Couvre aussi l'édition de l'en-tête et du pied (même instance d'éditeur,
-    // contenu échangé par setContent).
-    // Hors la synchro des tableaux liés (js/linked-table.js:syncOpen) : un tableau qui suit son modèle n'est pas une modification de la personne, et ouvrir un document n'écrit rien.
-    // Le texte reçu d'une autre personne de l'écriture en direct compte, il reste à enregistrer jusqu'à ce que l'une d'elles l'ait fait ; l'accroche du texte au salon (au démarrage) non.
-    EditorCore.getEditor().on('update', ({ transaction }) => { if (!LinkedTable.isSyncTransaction(transaction) && !SlideLinks.isSyncTransaction(transaction) && !LiveEntry.isSettingUp()) markTextDirty(); });
-    EditorCore.getEditor().on('update', scheduleEmailLengthGauge);
-    if (templateNameInput) templateNameInput.addEventListener('input', markAutosaveDirty);
-    if (pdfFilenameInput) pdfFilenameInput.addEventListener('input', markAutosaveDirty);
-    // Annuler ou Rétablir rend une valeur à un champ (js/field-editor.js, domaine « fields ») : le crayon du nom du PDF et le bouton « + Cci » en montrent l'état, comme au chargement d'un modèle.
-    if (pdfFilenameInput) pdfFilenameInput.addEventListener('fieldrestored', () => { pdfFilenameInput.hidden = !pdfFilenameInput.value.trim(); });
-    if (emailCciInput) {
-      emailCciInput.addEventListener('fieldrestored', () => {
-        emailCciInput.hidden = !emailCciInput.value.trim();
-        if (emailCciToggle) emailCciToggle.classList.toggle('is-active', !emailCciInput.hidden);
-      });
-    }
-    // Les champs sont des éditeurs de bulles (js/field-editor.js) : la liste # n'y propose que des variables et les puces qui s'écrivent en texte (date,
-    // heure, email et nom de l'utilisateur) - une note de bas de page, un bloc conditionnel ou un calcul n'ont aucun sens dans un objet ou une liste
-    // d'adresses.
-    eachEmailInput(el => {
-      el.addEventListener('input', markAutosaveDirty);
-      el.addEventListener('input', scheduleEmailLengthGauge);
-    });
-    wireCciToggle();
-    // Émis par js/settings.js à chaque saisie dans les quatre champs de marge (onglet Réglages) : changer seulement les marges ne touche pas au
-    // texte, et sans cet évènement le brouillon ne serait jamais marqué « modifié ».
-    // En écriture en direct, la page est celle du groupe (extensions/edition/live-page.js) : changée ici, ou reçue d'une autre personne (`detail.remote`, rien à marquer, le modèle est déjà « à enregistrer »),
-    // elle n'est pas un réglage de cette personne. Le modèle est seulement « à enregistrer » et c'est la personne qui enregistre qui l'écrit, avec le texte : une personne qui n'enregistre pas ne réécrit
-    // jamais la page à sa place (une page restée en retard écraserait celle du groupe).
-    document.addEventListener('pp:marginsChanged', (event) => {
-      if (event.detail && event.detail.remote) return;
-      if (LiveEntry.isLive()) markTextDirty(); else markAutosaveDirty();
-    });
-    // Émis par PageLayout.setOrientation (bouton Portrait / Paysage) : la feuille change de largeur et de hauteur. Le bouton ne rafraîchit rien
-    // lui-même.
-    document.addEventListener('pp:pageLayoutChanged', onPageLayoutChanged);
-    // Émis par PageLayout.setWatermark (fenêtre « Filigrane… ») : la couche des pages est repeinte, la page ne change pas de forme.
-    document.addEventListener('pp:watermarkChanged', onWatermarkChanged);
-    // Émis par MailtoExport.setMailClient (Réglages > Email) : le lien de l'email, donc sa longueur, change avec la messagerie choisie.
-    document.addEventListener('pp:mailClientChanged', scheduleEmailLengthGauge);
-  }
-
-  // La date `a` d'un modèle est-elle antérieure à `b` ? (secondes de Grist, ou leur écriture ISO quand la relecture a échoué ; une date illisible n'est antérieure à rien)
-  function dateModifBefore(a, b) {
-    const seconds = value => (typeof value === 'number' ? value : Date.parse(value) / 1000);
-    const x = seconds(a), y = seconds(b);
-    return Number.isFinite(x) && Number.isFinite(y) && x < y && !Templates.sameDateModif(a, b);
-  }
-  // L'écriture en direct (extension « édition », js/live-entry.js) : ce que le socle lui dit du modèle ouvert, ce qu'elle peut lui demander, et l'enregistrement d'une autre personne du direct.
-  // Sa date est celle que ce widget connaît maintenant (le passage suivant n'y voit pas un conflit) et, si le texte d'ici est dans l'état qu'elle a enregistré, rien n'est plus « à enregistrer ».
-  function adoptLiveSave({ modified, atState }) {
-    if (!LiveEntry.isLive()) return;
-    // Jamais en arrière : le dernier enregistrement que le salon garde peut être plus ancien que le modèle ouvert ici (enregistré depuis, hors du direct) ; sa date ferait voir un conflit qui n'en est pas un.
-    if (dateModifBefore(modified, persist.autosaveLastKnownDateModif)) return;
-    persist.autosaveLastKnownDateModif = modified;
-    // Une page ouverte hors du direct pendant que le groupe enregistrait montre le bandeau « modifié ailleurs » d'un enregistrement du groupe ; en rejoignant, elle prend le texte du groupe, qui est
-    // celui de cet enregistrement ou d'un plus récent : le conflit est réglé. Un enregistrement fait depuis hors du direct (plus récent que celui du groupe) garde le bandeau.
-    if (persist.autosaveConflictActive && persist.autosaveConflictTpl && !dateModifBefore(modified, persist.autosaveConflictTpl.dateModif)) hideConflictBanner();
-    if (atState && !persist.autosaveSettingsDirty) persist.autosaveDirty = false;
-    updateSaveStatus();
-  }
-  // Le texte affiché peut-il être remplacé par celui d'un direct déjà en cours (l'entrée automatique, js/live-entry.js) sans que la personne s'y attende ? Pas quand l'écran est à autre chose qu'à ce
-  // texte : la Lecture, la carte de l'accès, une question de départ, une restauration de version, un export, un conflit à trancher, l'en-tête ou le pied en édition.
-  function textMayBeReplaced() {
-    return currentMode === 'edit' && !isAccessGuideShown() && !persist.leavePromptOpen && !persist.restoringVersion && !isExportRunning() && !persist.autosaveConflictActive && !Editor.isEditingHeaderFooter();
-  }
-  function wireLiveEditing() {
-    LiveEntry.setContext(() => ({ id: Templates.getCurrentId(), type: currentTypeModele, readOnly: isReadOnly(), dirty: persist.autosaveDirty, modified: persist.autosaveLastKnownDateModif, idle: textMayBeReplaced() }));
-    LiveEntry.setHooks({ markUnsaved: markTextDirty });
-    LiveEntry.onSaved(adoptLiveSave);
-  }
-
-  // L'ajustement de la page se refait tout de suite ; la pagination de l'éditeur une seule fois, en fin de tâche, et pas du tout si une autre a eu lieu entre-temps : l'ouverture d'un
-  // modèle montre la bande puis pagine elle-même, et une pagination coûte sur une présentation chargée (70 diapositives d'images : 0,3 s, mesure du 21/10).
-  let slidesRelayoutPending = false;
-  function relayoutForSlides() {
-    const [readerChanged] = applyPageFitZoomTo(readerContainer, editorContainer);
-    if (readerChanged && currentMode === 'read') renderReader();
-    if (slidesRelayoutPending) return;
-    slidesRelayoutPending = true;
-    queueMicrotask(() => {
-      if (!slidesRelayoutPending) return;
-      slidesRelayoutPending = false;
-      if (currentMode === 'edit') Editor.refreshPaginationPreview();
-    });
-  }
-
-  // Les présentations (extension « diapositives », js/slides-entry.js) : « Nouvelle présentation » ouvre un modèle vierge de ce type par le chemin des autres « Nouveau… ». Quand GFS allume ou
-  // éteint une extension (son contexte arrive au démarrage, ou la personne change d'avis), les modèles qui s'ouvrent ici changent : la liste se redessine tout de suite, en gardant le modèle
-  // qu'elle montre (même au démarrage, quand l'ouverture vient de le choisir). La bande des diapositives apprend ce que l'écran montre, et quand elle prend ou rend sa place à gauche du
-  // document, la page se réajuste à la largeur qui reste et sa pagination se refait (relayoutForSlides).
-  function wireSlides() {
-    SlidesEntry.setContext(() => ({ type: currentTypeModele, editing: currentMode === 'edit' && editorContainer.style.display !== 'none' && !isReadOnly() }));
-    SlidesEntry.setHooks({ startNew: startNewTemplate, relayout: relayoutForSlides, status: (msg, isError) => setStatus(msg, !!isError) });
-    HeaderFooterPreview.onPaginated(() => { slidesRelayoutPending = false; });
-    SlidesEntry.onChange(() => {
-      const shown = templateSelect.value;
-      renderTemplateOptions(Templates.getCached());
-      templateSelect.value = shown;
     });
   }
 
