@@ -328,16 +328,23 @@ const Editor = (function () {
   // (js/track-changes.js).
   function tracked(extension) { return TrackChanges.extendForTracking(extension); }
 
-  function onEditorUpdate({ editor: updatedEditor, transaction }) {
+  // Une lettre tapée ou effacée dans du texte HORS d'un tableau ne change la largeur d'aucune colonne : les deux corrections ci-dessous parcourent le document entier (et la seconde force une mise en page) à
+  // chaque lettre, pour ne rien trouver (2 ms par lettre dans un texte de 117 pages).
+  function typedOutsideTables(transaction, appendedTransactions) {
+    if (!EditorCore.isTextOnlyEdit(transaction, appendedTransactions)) return false;
+    return !transaction.steps.some((step, index) => EditorCore.isInsideNode(transaction.docs[index].resolve(step.from), 'table'));
+  }
+
+  function onEditorUpdate({ editor: updatedEditor, transaction, appendedTransactions }) {
     HeaderFooterPreview.scheduleZoneCheck();
     // Ce qu'une autre personne vient d'écrire (écriture en direct, js/live-entry.js) a déjà eu ses largeurs de colonnes corrigées chez elle, et la correction est revenue dans le texte partagé : la
     // refaire ici, d'après une autre fenêtre, ferait écrire les mêmes cases par tout le monde.
-    if (!LiveEntry.isRemote(transaction)) {
+    if (!LiveEntry.isRemote(transaction) && !typedOutsideTables(transaction, appendedTransactions)) {
       backfillAutoColumnWidths(updatedEditor, transaction);
       clampOverflowingTables(updatedEditor, transaction);
     }
     // Un texte dont seuls des cadres libres (de hauteur nulle) ont changé garde la pagination qu'il avait : rien à recalculer (HeaderFooterPreview.paginationHolds).
-    if (!HeaderFooterPreview.paginationHolds()) HeaderFooterPreview.schedulePaginationRecompute();
+    if (!HeaderFooterPreview.paginationHolds()) HeaderFooterPreview.schedulePaginationAfterEdit();
     refreshVariableBadgeValidity();
   }
 
@@ -637,9 +644,39 @@ const Editor = (function () {
     FreeFrame.wireToolbar(editor);
     Comments.setEditor(editor);
     Comments.wireClickToOpen();
-    editor.on('selectionUpdate', MainToolbar.syncToolbarState);
-    editor.on('transaction', MainToolbar.syncToolbarState);
+    editor.on('selectionUpdate', syncToolbarFromEditor);
+    editor.on('transaction', syncToolbarFromEditor);
     window.addEventListener('resize', HeaderFooterPreview.schedulePaginationRecompute);
+  }
+
+  // La barre d'outils se relit à chaque transaction ET à chaque changement de sélection : une lettre tapée la faisait relire deux fois pour le même état (2,3 ms chaque fois dans un texte de 117 pages, le
+  // tiers du travail d'une lettre). Deux économies, sans rien changer de ce qu'elle montre : (1) un état déjà relu ne l'est pas de nouveau ; (2) une lettre tapée ou effacée dans du texte, le curseur gardant
+  // le même contexte (mêmes blocs autour avec les mêmes attributs, mêmes marques sous le curseur, même sélection vide, même présence de modifications suivies), ne change rien à ce que la barre montre.
+  // Une dépendance que ce contexte oublierait ne reste pas fausse : une relecture complète suit la dernière lettre, une demi-seconde plus tard.
+  let toolbarState = null;
+  let toolbarContext = '';
+  let lateToolbarSync = 0;
+  const TOOLBAR_LATE_SYNC_MS = 500;
+  const markKey = marks => marks.map(mark => mark.type.name + JSON.stringify(mark.attrs)).join(',');
+  function toolbarContextOf(state) {
+    const { selection, storedMarks } = state;
+    const $from = selection.$from;
+    const parts = [selection.empty ? 'c' : 'r', storedMarks ? markKey(storedMarks) : '-', markKey($from.marks()), TrackChanges.hasPendingSuggestions(state) ? 'p' : '-'];
+    for (let depth = $from.depth; depth > 0; depth--) { const node = $from.node(depth); parts.push(node.type.name + JSON.stringify(node.attrs)); }
+    return parts.join('|');
+  }
+  function syncToolbarFromEditor({ editor: current, transaction, appendedTransactions }) {
+    if (!current || current.state === toolbarState) return;
+    toolbarState = current.state;
+    const context = toolbarContextOf(toolbarState);
+    if (context === toolbarContext && EditorCore.isTextOnlyEdit(transaction, appendedTransactions)) {
+      clearTimeout(lateToolbarSync);
+      lateToolbarSync = setTimeout(() => { if (editor) MainToolbar.syncToolbarState(); }, TOOLBAR_LATE_SYNC_MS);
+      return;
+    }
+    toolbarContext = context;
+    clearTimeout(lateToolbarSync);
+    MainToolbar.syncToolbarState();
   }
 
   let htmlOfFragment = null;

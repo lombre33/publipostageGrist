@@ -79,15 +79,28 @@ const ListMarkers = (function () {
       return known.get(item);
     };
     const decorate = (item, pos, style) => Decoration.node(pos, pos + item.nodeSize, { style: cssText(style) });
+    // Les points réglés d'un bloc de premier niveau, avec leur place depuis le début du bloc : un nœud ne change jamais, donc un texte de 1 000 blocs dont une frappe n'a touché qu'un seul ne relit que celui-là
+    // (le parcours du document entier coûtait 0,25 ms par lettre dans un texte de 117 pages, et grandit avec lui).
+    const blockPoints = new WeakMap();
+    function pointsOfBlock(block) {
+      let points = blockPoints.get(block);
+      if (!points) {
+        points = [];
+        const visit = (node, pos) => {
+          if (node.isTextblock) return false;   // le texte n'a pas de liste dedans : inutile d'y descendre
+          if (node.type.name !== 'listItem') return true;
+          const style = styleOfKnown(node);
+          if (style) points.push({ node, pos, style });
+          return true;
+        };
+        if (visit(block, 0)) block.descendants((node, pos) => visit(node, pos + 1));
+        blockPoints.set(block, points);
+      }
+      return points;
+    }
     function decorationsOf(doc) {
       const found = [];
-      doc.descendants((node, pos) => {
-        if (node.isTextblock) return false;   // le texte n'a pas de liste dedans : inutile d'y descendre
-        if (node.type.name !== 'listItem') return true;
-        const style = styleOfKnown(node);
-        if (style) found.push(decorate(node, pos, style));
-        return true;
-      });
+      doc.forEach((block, offset) => { pointsOfBlock(block).forEach(({ node, pos, style }) => found.push(decorate(node, offset + pos, style))); });
       return found.length ? DecorationSet.create(doc, found) : DecorationSet.empty;
     }
     // Le point encore vide où se trouve le curseur : sa puce prend déjà ce que la prochaine frappe portera (la couleur choisie sur une ligne vide, ou gardée par Entrée après une ligne colorée), pas au premier caractère.

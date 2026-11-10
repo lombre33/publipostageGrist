@@ -711,22 +711,34 @@ const HeaderFooterPreview = (function () {
   // La page (rang depuis 0) de la dernière pagination où tombe `el`, un élément de l'éditeur. Null sans pagination (Aperçu éteint, en-tête ou pied en cours d'écriture, Lecture), quand elle n'est plus
   // celle du document (le bloc d'une coupure n'y est plus) et quand `el` est dans une zone à deux colonnes que la coupure traverse : sa page dépend de la colonne et du bloc. Un élément d'un tableau coupé
   // entre deux lignes est de la page de sa ligne, comme pageStartFromBreaks.
-  function pageIndexOf(el) {
+  // Le même calcul pour plusieurs éléments à la suite (le sommaire demande la page de chacun de ses titres) : le rang de chaque bloc de premier niveau et celui du bloc de chaque coupure se lisent UNE fois,
+  // au premier élément. Sans cela, chaque élément refaisait un `indexOf` sur tous les blocs pour chaque coupure : 234 titres, 117 coupures et 1 084 blocs, 195 ms à chaque lettre tapée (le sommaire se redessinait
+  // à chaque modification du texte).
+  function pageIndexResolver() {
     const tiptapEl = editor && editor.view && editor.view.dom;
-    const top = lastPageLayout && tiptapShowsLayout(tiptapEl) && el ? topLevelAncestorIn(tiptapEl, el) : null;
-    if (!top) return null;
-    const children = Array.from(tiptapEl.children);
-    const elIdx = children.indexOf(top);
-    const rowRankIn = (wrapper) => rowRankOf(wrapper, el);
-    let pageIndex = 0;
-    for (const brk of lastBreaks) {
-      const afterIdx = children.indexOf(brk.afterEl);
-      if (afterIdx < 0) return null;
-      if (brk.zone && elIdx === afterIdx) return null;
-      if (elIdx > afterIdx || (brk.rowIndex != null && elIdx === afterIdx && rowRankIn(brk.afterEl) >= brk.rowIndex)) pageIndex++; else break;
-    }
-    return pageIndex;
+    const shown = !!lastPageLayout && tiptapShowsLayout(tiptapEl);
+    let rankOf = null;
+    let afterRanks = null;
+    return (el) => {
+      const top = shown && el ? topLevelAncestorIn(tiptapEl, el) : null;
+      if (!top) return null;
+      if (!rankOf) {
+        rankOf = new Map(Array.from(tiptapEl.children).map((child, index) => [child, index]));
+        afterRanks = lastBreaks.map(brk => (rankOf.has(brk.afterEl) ? rankOf.get(brk.afterEl) : -1));
+      }
+      const elIdx = rankOf.has(top) ? rankOf.get(top) : -1;
+      let pageIndex = 0;
+      for (let k = 0; k < lastBreaks.length; k++) {
+        const brk = lastBreaks[k];
+        const afterIdx = afterRanks[k];
+        if (afterIdx < 0) return null;
+        if (brk.zone && elIdx === afterIdx) return null;
+        if (elIdx > afterIdx || (brk.rowIndex != null && elIdx === afterIdx && rowRankOf(brk.afterEl, el) >= brk.rowIndex)) pageIndex++; else break;
+      }
+      return pageIndex;
+    };
   }
+  function pageIndexOf(el) { return pageIndexResolver()(el); }
   // Le haut du corps de chaque page de la dernière pagination, en pixels de mise en page depuis le haut de `.tiptap` (là où le `top` d'une image en calque posée sur la page la dessine,
   // comme reconcileLayerImagesWithGrid le relit) ; null sans pagination. La bande des diapositives y lit où va une image en calque quand sa diapositive change de page.
   function pageBodyTops() { return lastPageLayout ? lastPageLayout.pages.map(page => page.bodyTop - lastPageLayout.tiptapTop) : null; }
@@ -767,9 +779,24 @@ const HeaderFooterPreview = (function () {
   // Les règles de la pagination en cours (EditorCore.createStepSheets) : retirées avec la feuille des marges, au cas où un calcul s'interromprait en
   // route.
   let paginationSteps = null;
+  // Le calcul d'une pagination se lance après une pause de 200 ms, davantage quand le dernier a été long (1,5 fois sa durée, 700 ms au plus) : dans un texte de 117 pages il prend 0,2 s chez nous et plusieurs
+  // secondes chez qui a une machine lente, et une pause de réflexion de 200 ms au milieu d'une phrase le lançait au moment où la frappe reprenait (les lettres tapées pendant le calcul n'apparaissent
+  // qu'après lui).
+  const PAGINATION_PAUSE_MS = 200;
+  const PAGINATION_PAUSE_MAX_MS = 700;
+  let lastPaginationMs = 0;
+  const paginationPause = () => Math.min(PAGINATION_PAUSE_MAX_MS, Math.max(PAGINATION_PAUSE_MS, Math.round(lastPaginationMs * 1.5)));
+  // Vrai tant qu'un calcul COMPLET est demandé (un redimensionnement, un changement de marges, un en-tête, une image arrivée...) : le calcul que seule une modification du texte demande
+  // (schedulePaginationAfterEdit) se contente, quand la lettre tapée n'a changé la hauteur d'aucun bloc, de le constater (textEditsKeepPagination).
+  let paginationFullRequested = false;
   function schedulePaginationRecompute() {
+    paginationFullRequested = true;
     if (paginationRecomputeTimer) clearTimeout(paginationRecomputeTimer);
-    paginationRecomputeTimer = setTimeout(recomputeIfShown, 200);
+    paginationRecomputeTimer = setTimeout(recomputeIfShown, paginationPause());
+  }
+  function schedulePaginationAfterEdit() {
+    if (paginationRecomputeTimer) clearTimeout(paginationRecomputeTimer);
+    paginationRecomputeTimer = setTimeout(recomputeIfShown, paginationPause());
   }
   // L'éditeur masqué (Lecture, résumé d'un macro-modèle, carte de l'accès) n'a aucune mise en page à mesurer : le calcul ne trouverait que des rectangles vides, et prenait pourtant 0,2 s juste
   // après la première image de la Lecture (l'observateur de taille voit l'éditeur tomber à 0 et relance la minuterie). Rien n'est perdu : chaque retour de l'éditeur à l'écran
@@ -777,6 +804,8 @@ const HeaderFooterPreview = (function () {
   function recomputeIfShown() {
     const tiptapEl = editor && editor.view && editor.view.dom;
     if (tiptapEl && !tiptapEl.getClientRects().length) { paginationRecomputeTimer = null; return; }
+    // Une modification du texte qui n'a changé la hauteur d'aucun bloc ni rien à leur suite : la pagination d'avant est encore la bonne, elle ne se refait pas (0,2 s dans un texte de 117 pages).
+    if (!paginationFullRequested && textEditsKeepPagination()) { paginationRecomputeTimer = null; paginatedDoc = editor.state.doc; return; }
     renderPaginationOverlay();
   }
   // La couture suit la géométrie du contenu, pas seulement les frappes : onUpdate (js/editor.js) ne rappelle schedulePaginationRecompute que si le
@@ -827,6 +856,33 @@ const HeaderFooterPreview = (function () {
     }
     const blocks = tiptapEl.children;
     return blocks.length === paginatedBlocks.length && paginatedBlocks.every((block, i) => blocks[i] === block);
+  }
+  // Les hauteurs des blocs de premier niveau à la fin de la dernière pagination (pixels écran, comme `paginatedBlocks`) : ce qu'une lettre tapée ne doit pas avoir changé.
+  let paginatedHeights = [];
+  // Ce qui peut changer d'un bloc sans que la pagination change, tant que sa hauteur reste celle de la dernière : des blocs de texte ou de liste, de même type et mêmes attributs, avec du texte avant comme
+  // après (une ligne vide de fin de texte ne compte pas pour une page : trailingBlankStart), sans image en calque. Un tableau, une zone, une légende (un autre type de bloc) : le calcul se refait.
+  const PLAIN_TEXT_BLOCKS = new Set(['paragraph', 'heading', 'bulletList', 'orderedList', 'taskList']);
+  // La dernière pagination vaut-elle encore pour le texte d'à présent, malgré des modifications dans des blocs de texte ? Le nombre de blocs est le même, chaque bloc modifié est de la sorte ci-dessus, le DOM a
+  // les mêmes blocs aux mêmes rangs, et chaque bloc modifié a toujours la hauteur qu'il avait : rien ne glisse, les coupures, les réserves et les pages sont celles d'avant. Les cadres libres se traitent
+  // comme dans paginationHolds. Au moindre doute, non, et le calcul se refait.
+  function textEditsKeepPagination() {
+    const tiptapEl = editor && editor.view && editor.view.dom;
+    if (!tiptapEl || !paginatedDoc || paginatedHeights.length !== paginatedBlocks.length) return false;
+    const doc = editor.state.doc;
+    if (doc.childCount !== paginatedDoc.childCount) return false;
+    const blocks = tiptapEl.children;
+    if (blocks.length !== paginatedBlocks.length) return false;
+    const edited = [];
+    for (let i = 0; i < doc.childCount; i++) {
+      if (blocks[i] !== paginatedBlocks[i]) return false;
+      const now = doc.child(i);
+      const then = paginatedDoc.child(i);
+      if (now === then) continue;
+      if (isFrameAnchor(now) && isFrameAnchor(then) && !carriesPageImage(now) && !carriesPageImage(then)) continue;
+      if (!PLAIN_TEXT_BLOCKS.has(now.type.name) || !now.sameMarkup(then) || !now.textContent.trim() || !then.textContent.trim() || carriesPageImage(now) || carriesPageImage(then)) return false;
+      edited.push(i);
+    }
+    return edited.every(i => Math.abs(blocks[i].getBoundingClientRect().height - paginatedHeights[i]) < 0.01);
   }
   // Les réserves de la dernière pagination qui tenaient quand elle les a posées (placeReserve) : { next, bodyTopRel }.
   let lastReserves = [];
@@ -1724,6 +1780,8 @@ const HeaderFooterPreview = (function () {
     // bouton « Saut de page ») ne paie plus deux fois la même pagination.
     clearTimeout(paginationRecomputeTimer);
     paginationRecomputeTimer = null;
+    paginationFullRequested = false;
+    const startedAt = performance.now();
     const container = editorContainer();
     const tiptapEl = editor && editor.view && editor.view.dom;
     if (!container || !tiptapEl) return;
@@ -1777,6 +1835,8 @@ const HeaderFooterPreview = (function () {
     // Posé avant d'avertir les abonnés : ce qu'ils écrivent dans le texte (la bande des diapositives qui replace une image en calque) vaut alors un nouveau calcul, comme avant.
     paginatedDoc = editor.state.doc;
     paginatedBlocks = Array.from(tiptapEl.children);
+    paginatedHeights = paginatedBlocks.map(block => block.getBoundingClientRect().height);
+    lastPaginationMs = performance.now() - startedAt;
     notifyPaginated();
   }
 
@@ -1784,7 +1844,7 @@ const HeaderFooterPreview = (function () {
     setEditor, setEmailMode, getHfMode, mainDocumentHtml, scheduleZoneCheck, refreshZoneOverflow, shrinkZoneImage, createEscapeExtension,
     enterHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter, listStories, openStory, onStoriesChange,
     getHeaderFooterData, setHeaderFooterData, snapshot, restore,
-    schedulePaginationRecompute, paginationHolds, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, reconcileLayerImagesWithGrid, recaptureLayeredImageGrids,
-    rowPadOf, pageBreaks, pageIndexOf, pageBodyTops, onPaginated, scrollToPage, breaksOf,
+    schedulePaginationRecompute, schedulePaginationAfterEdit, paginationHolds, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, reconcileLayerImagesWithGrid, recaptureLayeredImageGrids,
+    rowPadOf, pageBreaks, pageIndexOf, pageIndexResolver, pageBodyTops, onPaginated, scrollToPage, breaksOf,
   };
 })();

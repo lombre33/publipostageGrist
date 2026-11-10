@@ -2356,9 +2356,10 @@ const EditorNodes = (function () {
             const paintPages = () => {
               if (!options.pages) return;
               const headingEls = headingElements();
+              const pageOf = HeaderFooterPreview.pageIndexResolver();
               dom.querySelectorAll('.toc-entry-preview[data-heading]').forEach(line => {
                 const heading = headingEls[Number(line.dataset.heading)];
-                const pageIndex = heading ? HeaderFooterPreview.pageIndexOf(heading) : null;
+                const pageIndex = heading ? pageOf(heading) : null;
                 line.dataset.page = pageIndex == null ? '–' : String(pageIndex + 1);
               });
             };
@@ -2370,15 +2371,23 @@ const EditorNodes = (function () {
             // comparaison ne coûte qu'une chaîne par transaction, et l'aperçu ne se redessine que si le style a changé. 'transaction' vient aussi juste après la mise à jour de la vue qui a créé le
             // NodeView, la page y est à jour : le premier passage redessine l'aperçu (drawnOnUpdatedPage), avant tout ce qui mesure la page ensuite (la pagination).
             const redraw = () => { drawnOnUpdatedPage = true; refresh(); };
-            const redrawIfStale = ({ transaction } = {}) => { if (!drawnOnUpdatedPage || styleOnRoot() !== renderedStyle || (transaction && transaction.docChanged && headingsKey() !== renderedHeadings)) redraw(); };
+            // Le texte des titres ne peut changer que si une modification touche un titre : une lettre tapée dans un paragraphe, une liste ou une case (du texte seul, hors d'un titre) laisse la liste telle qu'elle est, sans
+            // relire les 234 titres d'un long texte (0,7 ms par lettre).
+            const typedOutsideHeadings = (transaction, appendedTransactions) => EditorCore.isTextOnlyEdit(transaction, appendedTransactions)
+              && !transaction.steps.some((step, index) => transaction.docs[index].resolve(step.from).parent.type.name === 'heading');
+            const redrawIfStale = ({ transaction, appendedTransactions } = {}) => {
+              if (!drawnOnUpdatedPage || styleOnRoot() !== renderedStyle || (transaction && transaction.docChanged && !typedOutsideHeadings(transaction, appendedTransactions) && headingsKey() !== renderedHeadings)) redraw();
+            };
             refresh();
-            nodeViewEditor.on('update', redraw);
+            // Un changement du texte redessine l'aperçu seulement s'il a changé quelque chose à ce qu'il montre (les titres, leur niveau, le style de numérotation) : redessiné à chaque modification, il refaisait ses
+            // 234 lignes et la page de chacune à chaque lettre tapée, 195 ms dans un texte de 117 pages. Les pages de ses lignes se repeignent à chaque pagination (paintPages ci-dessus).
+            nodeViewEditor.on('update', redrawIfStale);
             nodeViewEditor.on('transaction', redrawIfStale);
             return {
               dom, ignoreMutation: () => true,
               // Ce qui se passe sur un lien du sommaire n'est pas l'affaire de l'éditeur (il y sélectionnerait le bloc) ; le reste du sommaire garde son geste.
               stopEvent: event => !!(event.target && event.target.closest && event.target.closest('.toc-link')),
-              destroy: () => { nodeViewEditor.off('update', redraw); nodeViewEditor.off('transaction', redrawIfStale); if (stopPages) stopPages(); },
+              destroy: () => { nodeViewEditor.off('update', redrawIfStale); nodeViewEditor.off('transaction', redrawIfStale); if (stopPages) stopPages(); },
             };
           };
         },

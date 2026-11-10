@@ -93,8 +93,11 @@
     description: 'une modification du texte recalcule la pagination et ce que la zone d\'en-tête ou de pied ouverte a de trop (trait et note de dépassement), puis les largeurs de colonnes (onUpdate)',
     run: () => {
       const calls = { pagination: 0, zones: 0 };
-      const { schedulePaginationRecompute, scheduleZoneCheck } = HeaderFooterPreview;
+      // La modification du texte demande le calcul « après une modification » (schedulePaginationAfterEdit : abrégé quand la lettre ne change la hauteur d'aucun bloc, voir `typingCost`) ; schedulePaginationRecompute
+      // est le calcul complet que demandent les autres gestes. L'un ou l'autre compte ici.
+      const { schedulePaginationRecompute, schedulePaginationAfterEdit, scheduleZoneCheck } = HeaderFooterPreview;
       HeaderFooterPreview.schedulePaginationRecompute = () => { calls.pagination++; };
+      HeaderFooterPreview.schedulePaginationAfterEdit = () => { calls.pagination++; };
       HeaderFooterPreview.scheduleZoneCheck = () => { calls.zones++; };
       try {
         editor().commands.setContent('<p>Bonjour</p>');
@@ -103,6 +106,7 @@
         editor().commands.insertContent('!');
       } finally {
         HeaderFooterPreview.schedulePaginationRecompute = schedulePaginationRecompute;
+        HeaderFooterPreview.schedulePaginationAfterEdit = schedulePaginationAfterEdit;
         HeaderFooterPreview.scheduleZoneCheck = scheduleZoneCheck;
       }
       return { pass: calls.pagination >= 1 && calls.zones >= 1, notes: JSON.stringify(calls) };

@@ -389,6 +389,8 @@ const PageCopies = (function () {
   function sparesMarkers(tr, state) {
     if (!tr.docChanged || SlidesEntry.presentationShown() || HeaderFooterPreview.getHfMode() || GridEditor.isActive()) return false;
     if (tr.getMeta('history$') || tr.getMeta('preventUpdate') || LiveEntry.isRemote(tr)) return false;
+    // Une lettre tapée ou effacée dans un bloc de texte n'ôte aucun bloc de premier niveau, donc aucun repère : le parcours des 1 000 blocs d'un long texte à chaque lettre (0,8 ms) n'a rien à y trouver.
+    if (EditorCore.isTextOnlyEdit(tr)) return false;
     const before = [];
     state.doc.forEach((node) => { if (isPageMarker(node)) before.push(node); });
     if (!before.length) return false;

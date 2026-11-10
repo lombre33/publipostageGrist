@@ -143,7 +143,14 @@ const TrackChanges = (function () {
     } = lib;
     return Extension.create({
       name: 'suggestChangesBridge',
-      addProseMirrorPlugins() { return [suggestChanges()]; },
+      addProseMirrorPlugins() {
+        // Les décorations de la bibliothèque (un pied-de-mouche aux paragraphes joints, un repère aux blocs entièrement insérés ou supprimés) se relisaient sur tout le document à CHAQUE mise à jour de la vue (une lettre, une
+        // flèche : 0,5 ms par lettre dans un texte de 117 pages), alors qu'elles ne dessinent rien tant qu'aucune marque de suivi n'est dans le texte. Sans marque : aucune décoration, comme la bibliothèque en rend.
+        const plugin = suggestChanges();
+        const decorate = plugin.props && plugin.props.decorations;
+        if (typeof decorate === 'function') plugin.props.decorations = state => (hasPendingSuggestions(state) ? decorate(state) : null);
+        return [plugin];
+      },
       addCommands() {
         return {
           toggleSuggestMode: () => ({ state, dispatch }) => toggleSuggestChanges(state, dispatch),

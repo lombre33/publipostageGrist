@@ -83,17 +83,28 @@ const ObjectsMenu = (function () {
   const tipOf = (spec, n) => (spec.kind ? I18n.t('slides.objects.shapeTip', { shape: I18n.t(spec.label), n }) : I18n.t(spec.tip, { n }));
 
   // Les noms qui disent sur quelle diapositive l'objet se posera : relus à l'ouverture du menu (le curseur a pu changer de diapositive depuis la dernière fois), pas à chaque frappe.
+  // Les noms ne dépendent que du numéro de la diapositive, de la langue et de la raison du grisé : réécrits seulement quand l'un des trois change. Relancés à chaque lettre par la barre d'outils, ils réécrivaient
+  // une cinquantaine d'attributs (et leurs recalculs de style) pour les mêmes mots (1,8 ms par lettre dans un texte de 117 pages).
+  let namesKey = '';
   function refreshNames() {
     if (!built) return;
     const n = currentSlide();
-    trigger.setAttribute('aria-label', I18n.t(state.reason ? 'slides.objects.label' : 'slides.objects.buttonTip', { n }));
-    allButtons().forEach((button) => {
-      const spec = SPECS.find(s => s.id === button.dataset.action);
-      if (spec) button.setAttribute('data-tip', tipOf(spec, n));
-    });
+    const linkedRow = flyout.querySelector('[data-action="linkedTable"]');
+    const key = n + '|' + I18n.getLang() + '|' + state.reason;
+    if (key !== namesKey) {
+      namesKey = key;
+      trigger.setAttribute('aria-label', I18n.t(state.reason ? 'slides.objects.label' : 'slides.objects.buttonTip', { n }));
+      allButtons().forEach((button) => {
+        const spec = SPECS.find(s => s.id === button.dataset.action);
+        if (spec) button.setAttribute('data-tip', tipOf(spec, n));
+      });
+    } else if (linkedRow) {
+      // Même nom : seule la ligne du tableau de modèle Grille reprend l'info-bulle de base, que sa raison de grisé ci-dessous remplace ou non selon l'état d'à présent.
+      const spec = SPECS.find(s => s.id === linkedRow.dataset.action);
+      if (spec) linkedRow.setAttribute('data-tip', tipOf(spec, n));
+    }
     // « Tableau d'un modèle Grille… » : grisée avec sa raison en info-bulle quand le suivi ou l'écriture en direct est allumé (jamais retirée, comme dans le menu du bouton Tableau).
     const ed = EditorCore.getEditor();
-    const linkedRow = flyout.querySelector('[data-action="linkedTable"]');
     if (ed && linkedRow) {
       LinkedTable.syncRow(linkedRow, ed, true);
       if (linkedRow.title) { linkedRow.setAttribute('data-tip', linkedRow.title); linkedRow.removeAttribute('title'); }

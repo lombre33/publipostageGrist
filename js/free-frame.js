@@ -1449,13 +1449,25 @@ const FreeFrame = (function () {
         // (elle ne regarde pas `inPresentation`, ni cette décoration : un cadre derrière dans le DOM suffit aux deux). Sans cadre derrière le texte, aucune classe n'est posée et rien ne se calcule de plus que la
         // recherche d'un tel cadre, faite une fois par texte (jamais pour un simple changement de sélection) et qui ne descend pas dans les blocs de texte.
         let flowOf = { doc: null, set: null };
+        // Chaque bloc de premier niveau est jugé une fois (un nœud ne change jamais : WeakMap) : une lettre tapée dans un texte de 1 000 blocs ne relit que le bloc touché, et non les 1 000 (0,7 ms par lettre).
+        const behindOfBlock = new WeakMap();
+        const blockHasBehindFrame = (block) => {
+          let known = behindOfBlock.get(block);
+          if (known === undefined) {
+            known = false;
+            const visit = (node) => {
+              if (known) return false;
+              if (isFrame(node) && node.attrs.layer === LAYER_BEHIND) { known = true; return false; }
+              return !node.isTextblock;
+            };
+            if (visit(block)) block.descendants(visit);
+            behindOfBlock.set(block, known);
+          }
+          return known;
+        };
         const hasBehindFrame = (doc) => {
           let found = false;
-          doc.descendants((node) => {
-            if (found) return false;
-            if (isFrame(node) && node.attrs.layer === LAYER_BEHIND) { found = true; return false; }
-            return !node.isTextblock;
-          });
+          doc.forEach((block) => { if (!found && blockHasBehindFrame(block)) found = true; });
           return found;
         };
         const flow = new Plugin({

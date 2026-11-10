@@ -93,6 +93,8 @@ const Anchors = (function () {
   // l'événement de la modification (Annuler la défait avec elle).
   function normalize(transactions, _oldState, state) {
     if (!transactions.some(tr => tr.docChanged)) return null;
+    // Du texte tapé ou effacé dans un bloc ne touche ni la place d'un signet, ni son nom, ni son adresse : rien à normaliser, et le parcours du document entier (0,4 ms par lettre dans un texte de 117 pages) est évité.
+    if (transactions.every(tr => !tr.docChanged || EditorCore.isTextOnlyEdit(tr))) return null;
     const doc = state.doc;
     const present = idsIn(doc, -1);
     const seen = new Set();

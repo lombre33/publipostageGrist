@@ -719,6 +719,28 @@ const EditorCore = (function () {
     for (let depth = $pos.depth; depth > 0; depth--) if ($pos.node(depth).type.name === typeName) return true;
     return false;
   }
+  // Une transaction qui n'écrit que du TEXTE dans un seul bloc de texte (une lettre tapée, un effacement, un mot collé au milieu d'une ligne) : chaque pas remplace du texte par du texte à l'intérieur d'un même
+  // paragraphe, titre ou case, sans qu'aucun nœud n'entre ni ne sorte, et rien d'autre n'a bougé (`appendedTransactions` : celles qu'un plugin a ajoutées derrière, qui ne doivent rien changer au document).
+  // Ni la liste des blocs de premier niveau, ni les signets, ni les largeurs de colonnes, ni les repères de page ne peuvent alors changer : tout ce qui les relit à chaque frappe (parcours du document entier,
+  // 0,5 à 2 ms par lettre dans un texte de 117 pages) peut s'en dispenser.
+  function isTextOnlyEdit(transaction, appendedTransactions) {
+    if (!transaction || !transaction.docChanged || !transaction.steps.length) return false;
+    if (appendedTransactions && appendedTransactions.some(appended => appended.docChanged)) return false;
+    return transaction.steps.every((step, index) => {
+      if (step.jsonID !== 'replace') return false;
+      const before = transaction.docs[index];
+      const $from = before.resolve(step.from);
+      const $to = before.resolve(step.to);
+      if (!$from.parent.isTextblock || !$from.sameParent($to)) return false;
+      const slice = step.slice;
+      if (slice.openStart || slice.openEnd) return false;
+      let textOnly = true;
+      slice.content.forEach((node) => { if (!node.isText) textOnly = false; });
+      if (!textOnly) return false;
+      $from.parent.nodesBetween($from.parentOffset, $to.parentOffset, (node) => { if (!node.isText) textOnly = false; return false; });
+      return textOnly;
+    });
+  }
   function toggleList(name, command) {
     // Pose la liste `name` (bulletList, orderedList...) avec la commande `command` de TipTap, ou la retire : ce que font le bouton « Liste à puces » et
     // les touches Ctrl+Maj+8 et Ctrl+Maj+7 (js/shortcuts.js). Sur une sélection de cases, dans toutes les cases, l'état voulu étant l'inverse de celui
@@ -822,7 +844,7 @@ const EditorCore = (function () {
     patchNodeAndReselect, editorContentWidthPx, pageScale, atPageScale, layoutZoom, contentZoom, settleContentZoom, createStepSheets, nextInFlow, gapAbove, opensPageAt, fitReserve, createFloatingPanel,
     registerFloatingPanel, hideFloatingContextToolbars, isFormFieldFocus, closeHoverMenu,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
-    setColorBar, setColorIcon, createSelectionPreserver, isCellSelection, runOnSelectedCells, isInsideNode,
+    setColorBar, setColorIcon, createSelectionPreserver, isCellSelection, runOnSelectedCells, isInsideNode, isTextOnlyEdit,
     toggleList, isQuoteActive, quoteSelectedCells, canShiftListsInSelectedCells, shiftListsInSelectedCells,
   };
 })();

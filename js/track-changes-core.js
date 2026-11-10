@@ -72,20 +72,36 @@ const TrackChangesCore = (function () {
     return !!last && last.marks.some(isSuggestionMark);
   }
 
-  // Vrai tant qu'un nœud du document porte une marque que `test` retient.
-  function docHasMark(doc, test) {
+  // Vrai tant qu'un nœud du document porte une marque que `test` retient. Un nœud ne change jamais : ce qu'un bloc de premier niveau en dit se garde par nœud (une mémoire par `test`, donc un `test`
+  // qui garde la même identité d'un appel à l'autre), et une frappe ne relit que le bloc qu'elle a touché, au lieu des 8 000 nœuds d'un texte de 117 pages (0,7 ms par lettre : la barre d'outils le demandait à
+  // chaque lettre).
+  const markMemos = new Map();
+  function nodeHasMark(node, test) {
+    if (node.marks.some(test)) return true;
     let found = false;
-    doc.descendants(node => {
+    node.descendants(child => {
       if (found) return false;
-      if (node.marks.some(test)) found = true;
+      if (child.marks.some(test)) found = true;
       return !found;
     });
     return found;
   }
+  function docHasMark(doc, test) {
+    let memo = markMemos.get(test);
+    if (!memo) { memo = new WeakMap(); markMemos.set(test, memo); }
+    for (let i = 0; i < doc.childCount; i++) {
+      const block = doc.child(i);
+      let has = memo.get(block);
+      if (has === undefined) { has = nodeHasMark(block, test); memo.set(block, has); }
+      if (has) return true;
+    }
+    return false;
+  }
   const hasPendingSuggestions = state => docHasMark(state.doc, isSuggestionMark);
   // Vrai tant qu'une insertion ou une suppression (un texte, un objet, une case, une colonne, une ligne) attend : les modifications seules ne
   // comptent pas.
-  const hasInsertionOrDeletion = doc => docHasMark(doc, mark => isSuggestionMark(mark) && mark.type.name !== 'modification');
+  const isInsertionOrDeletion = mark => isSuggestionMark(mark) && mark.type.name !== 'modification';
+  const hasInsertionOrDeletion = doc => docHasMark(doc, isInsertionOrDeletion);
 
   // L'ensemble des ids de suggestion présents dans le document, dédupliqués (un remplacement adjacent peut réutiliser le même id sur plusieurs
   // marques, cf. suggestReplaceStep dans planning/feature-track-changes.md). Convertis en chaîne : ce sont des clés d'objet JS, et
