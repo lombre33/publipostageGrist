@@ -882,6 +882,9 @@ const HeaderFooterPreview = (function () {
       if (!PLAIN_TEXT_BLOCKS.has(now.type.name) || !now.sameMarkup(then) || !now.textContent.trim() || !then.textContent.trim() || carriesPageImage(now) || carriesPageImage(then)) return false;
       edited.push(i);
     }
+    // Les blocs modifiés ont gardé leur hauteur, mais la géométrie d'ensemble doit être aussi celle de la dernière pagination : un style arrivé après coup (une marge tirée vers le haut) déplace des blocs, ou
+    // change la taille de `.tiptap`, sans qu'aucune hauteur ne change. Même contrôle que recomputeIfMoved : la taille d'avant et chaque bloc qui ouvre une page à sa place (reservesHold).
+    if (tiptapEl.offsetWidth + 'x' + tiptapEl.offsetHeight !== renderedSize || !reservesHold()) return false;
     return edited.every(i => Math.abs(blocks[i].getBoundingClientRect().height - paginatedHeights[i]) < 0.01);
   }
   // Les réserves de la dernière pagination qui tenaient quand elle les a posées (placeReserve) : { next, bodyTopRel }.

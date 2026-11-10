@@ -186,6 +186,43 @@
   });
 
   cases.push({
+    id: 'typing_letter_after_a_style_moved_blocks_without_changing_any_height_still_repaginates',
+    description: 'Un style arrivé après coup tire des blocs vers le haut sans changer ni une hauteur ni la taille du texte (une marge de -24 px, compensée plus loin) : la lettre tapée ensuite refait la pagination, la réserve de chaque page se corrige comme dans un calcul complet (slidesPages)',
+    run: async (h) => {
+      await setup(h, lines(700));
+      // Les vérifications différées d'une pagination (300 et 1 500 ms après elle : observeBlocks) relisent les réserves d'elles-mêmes : on les laisse passer avant de poser le style, pour que seule la lettre tapée demande le calcul.
+      HeaderFooterPreview.renderPaginationOverlay();
+      await sleep(1900);
+      const tiptap = document.querySelector('.tiptap');
+      const base = layoutOf();
+      const gap = parseFloat(getComputedStyle(blocks()[300]).marginTop) || 0;
+      const sizeBefore = tiptap.offsetWidth + 'x' + tiptap.offsetHeight;
+      const style = document.createElement('style');
+      style.id = 'pp-typing-test-shift';
+      // Les blocs 300 à 449 remontent de 24 px, ceux d'après retrouvent leur place : la taille de `.tiptap` ne change pas (les marges voisines se confondent : +24 - gap au bloc 450).
+      style.textContent = '#editor-container .tiptap > p:nth-child(300) { margin-top: -24px !important; } #editor-container .tiptap > p:nth-child(450) { margin-top: ' + (gap + 24) + 'px !important; }';
+      document.head.appendChild(style);
+      try {
+        await sleep(300);
+        const sizeAfter = tiptap.offsetWidth + 'x' + tiptap.offsetHeight;
+        // Une transaction, sans le défilement d'une vraie frappe (qui ferait relire les réserves au défilement : checkDrift) : seule la modification du texte demande le calcul.
+        const editor = EditorCore.getEditor();
+        const block = blocks()[10];
+        editor.view.dispatch(editor.state.tr.insertText('z', editor.view.posAtDOM(block, block.childNodes.length)));
+        await sleep(1200);
+        const got = layoutOf();
+        HeaderFooterPreview.renderPaginationOverlay();
+        const full = layoutOf();
+        const moved = full.sheet !== base.sheet;
+        return {
+          pass: sizeBefore === sizeAfter && moved && sameLayout(got, full),
+          notes: 'taille avant=' + sizeBefore + ' après=' + sizeAfter + ', la feuille a bougé=' + moved + ', pagination = calcul complet=' + sameLayout(got, full),
+        };
+      } finally { style.remove(); }
+    },
+  });
+
+  cases.push({
     id: 'typing_requested_full_calculation_is_not_skipped',
     description: 'Un calcul COMPLET demandé (schedulePaginationRecompute : redimensionnement, marges, images arrivées) se fait même si la dernière modification n\'a touché que du texte sans changer de hauteur',
     run: async (h) => {
