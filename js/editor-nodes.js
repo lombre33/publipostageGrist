@@ -172,7 +172,7 @@ const EditorNodes = (function () {
       // Le sinon (js/variable-otherwise.js) : cinq attributs simples, écrits seulement quand il existe - ou, en texte et variables, le seul `data-otherwise`.
       Object.assign(attrs, VariableOtherwise.toAttributes(nodeAttrs.otherwise), VariableOtherwise.typedToAttributes(nodeAttrs.otherwiseText));
       // `data-loop-repeat` à part : les repères de la zone répétée (css/variable-actions.css) la trouvent par sélecteur, sans lire le JSON.
-      if (nodeAttrs.loop) { attrs['data-loop'] = JSON.stringify(nodeAttrs.loop); attrs['data-loop-repeat'] = nodeAttrs.loop.repeat || 'inline'; }
+      if (nodeAttrs.loop) { LoopMarks.need(); attrs['data-loop'] = JSON.stringify(nodeAttrs.loop); attrs['data-loop-repeat'] = nodeAttrs.loop.repeat || 'inline'; }
       return attrs;
     }
     // Les attributs d'un nœud bulle d'après son <span> : l'inverse de varBadgeAttributes.
@@ -1934,7 +1934,7 @@ const EditorNodes = (function () {
       const loop = isVarBox ? LoopRules.normalizeLoop(attrs.loop) : null;
       wrap.classList.toggle('editor-image-conditional', !!condition);
       wrap.classList.toggle('editor-image-looped', !!loop);
-      if (loop) wrap.dataset.loopRepeat = loop.repeat; else delete wrap.dataset.loopRepeat;
+      if (loop) { LoopMarks.need(); wrap.dataset.loopRepeat = loop.repeat; } else delete wrap.dataset.loopRepeat;
       const notes = [];
       if (condition) notes.push(I18n.t('condText.tag.if', { condition: VariableCondition.describe(condition) }));
       if (loop) notes.push(I18n.t(loop.pick ? IMAGE_PICK_TAGS[loop.pick] : IMAGE_LOOP_TAGS[loop.repeat], { table: loop.table }));

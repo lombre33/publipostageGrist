@@ -134,6 +134,49 @@
     },
   });
 
+  // Les règles `:has()` des repères de la zone répétée (css/loop-marks.css) : celles de la feuille ACTIVE qui parlent de data-loop-repeat. Un texte sans boucle n'en doit avoir aucune (elles coûtent
+  // de plus en plus cher à chaque diapositive posée dans une présentation : 363 ms à la quarantième, 10/11), un texte avec une boucle les garde toutes.
+  function activeLoopHasRules() {
+    let count = 0;
+    const walk = (rules) => { for (const rule of Array.from(rules)) { if (rule.cssRules && !rule.selectorText) walk(rule.cssRules); else if (rule.selectorText && rule.selectorText.includes(':has(') && rule.selectorText.includes('data-loop-repeat')) count += 1; } };
+    for (const sheet of Array.from(document.styleSheets)) {
+      const media = sheet.media ? sheet.media.mediaText : '';
+      if (sheet.disabled || media === 'not all') continue;
+      try { walk(sheet.cssRules); } catch (e) { /* feuille d'une autre origine */ }
+    }
+    return count;
+  }
+
+  cases.push({
+    id: 'loop_marks_sheet_only_when_the_document_has_a_loop',
+    description: 'Les repères de la zone répétée (css/loop-marks.css, des règles :has() dont le prix grossit avec le texte) ne sont actifs que si le texte a une boucle : éteints pour un texte sans boucle, allumés dès qu\'une bulle en boucle est dans le texte (chargé ou écrit à la main), éteints de nouveau au chargement d\'un texte sans boucle - et le paragraphe répété est teinté comme avant',
+    run: async (h) => {
+      await seed(h);
+      const link = document.getElementById('pp-loop-marks-css');
+      const loop = { repeat: 'paragraph', table: 'LpParticipants', empty: 'hide' };
+      const tintOf = (el) => getComputedStyle(el).backgroundColor;
+      Editor.setHTML('<p>Texte simple</p><p>Un autre</p>');
+      await h.sleep(30);
+      const plain = { media: link && link.media, active: LoopMarks.isActive(), rules: activeLoopHasRules() };
+      Editor.setHTML(`<p>${badgeHtml('LpParticipants', 'NomComplet', loop)}</p><p>Autre paragraphe</p>`);
+      await h.sleep(30);
+      const [looped, other] = Array.from(document.querySelectorAll('.tiptap p'));
+      const withLoop = { media: link.media, active: LoopMarks.isActive(), rules: activeLoopHasRules() > 0, tint: tintOf(looped), tab: getComputedStyle(looped, '::before').content !== 'none', otherTint: tintOf(other) };
+      Editor.setHTML('<p>Encore du texte simple</p>');
+      await h.sleep(30);
+      const plainAgain = { media: link.media, active: LoopMarks.isActive(), rules: activeLoopHasRules() };
+      // Une boucle écrite à la main dans un texte sans boucle allume la feuille aussi : la bulle est rendue par l'éditeur, qui écrit l'attribut.
+      EditorCore.getEditor().commands.insertContent(`<p>${badgeHtml('LpParticipants', 'NomComplet', loop)}</p>`);
+      await h.sleep(30);
+      const typed = { media: link.media, active: LoopMarks.isActive(), rules: activeLoopHasRules() > 0 };
+      const pass = !!link && plain.media === 'not all' && !plain.active && plain.rules === 0
+        && withLoop.media === 'all' && withLoop.active && withLoop.rules && withLoop.tint === 'rgb(245, 249, 255)' && withLoop.tab && withLoop.otherTint !== withLoop.tint
+        && plainAgain.media === 'not all' && !plainAgain.active && plainAgain.rules === 0
+        && typed.media === 'all' && typed.active && typed.rules;
+      return { pass, notes: JSON.stringify({ plain, withLoop, plainAgain, typed }) };
+    },
+  });
+
   cases.push({
     id: 'loop_reader_repeats_table_row_per_linked_row',
     description: 'Mode Lecture : la ligne du tableau se répète pour chaque ligne liée, dans l’ordre de la table (manualSort) ; chaque variable de la table parcourue lit sa ligne, format et condition compris, celles de la page restent',

@@ -983,6 +983,8 @@ const Editor = (function () {
     if (!editor) return;
     suiviMetadataCache = suiviModifications || {};
     const wasTrackChangesOn = isTrackChangesOn();
+    // Les repères de la zone répétée d'une boucle (css/loop-marks.css) ne servent que si le texte chargé a une boucle : leur feuille s'éteint ici et se rallume pendant la pose s'il en a une (js/loop-marks.js).
+    LoopMarks.reset();
     editor.commands.loadTrackedDocument(html || '');
     // Sans cela, l'historique Annuler/Rétablir s'accumulerait à travers les changements de modèle : un Annuler après chargement pouvait faire
     // réapparaître le contenu d'un modèle précédent.

@@ -273,7 +273,7 @@ const MainImport = (function () {
       templateSelect.value = '';
       loadTemplateIntoEditor({ id: null, nom: keepName, contenu: texts.splice(0, first).join(ImportPlacing.PAGE_BREAK), typeModele: SlidesEntry.TYPE, marginsMm: imported.page, suiviModifications: null, headerFooter: null }, SlidesEntry.TYPE);
       note(first);
-      const failed = texts.length ? await ImportPlacing.appendSlides(texts, placed => note(first + placed)) : 0;
+      const failed = texts.length ? await ImportPlacing.appendSlides(texts, placed => note(first + placed), { covered: progress.isShown }) : 0;
       if (failed) {
         const item = imported.report.find(entry => entry.key === 'unreadable');
         if (item) item.n += failed; else imported.report.push({ key: 'unreadable', n: failed });

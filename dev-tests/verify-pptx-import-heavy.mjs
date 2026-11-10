@@ -339,7 +339,61 @@ async function placingCases(page, tag) {
   check(tag + `pendant la pose de ${COPIES * SLIDES} diapositives par morceaux la page ne s'arrête jamais plus de 400 ms, et moins longtemps que pour la pose d'un seul bloc`, r.chunkedGap <= 400 && r.chunkedGap < r.oneShotGap, { chunkedGap: r.chunkedGap, oneShotGap: r.oneShotGap });
   check(tag + 'une diapositive que l\'éditeur refuse est remplacée par une page vide et comptée : six diapositives restent six', r.failedOne === 1 && r.afterFailBreaks === 5, { failedOne: r.failedOne, afterFailBreaks: r.afterFailBreaks });
   check(tag + 'le texte préparé d\'avance par tranches (`Editor.prepareHTML`, une pause par bloc) est exactement celui de `getHTML`, et il n\'est jamais servi pour un document qui a changé depuis', r.prepSame && r.prepPauses >= 6 && r.prepStale, { prepSame: r.prepSame, prepPauses: r.prepPauses, prepStale: r.prepStale });
+  await lockCases(page, tag);
   await veilCases(page, tag);
+}
+
+// Le texte MASQUÉ pendant la pose d'un très gros fichier (js/import-placing.js, LOCK_AFTER_FRAMES, 10/11 : 120 diapositives de schémas posées en 14 s au lieu de 26 quand le voile cache le texte) : seulement quand le voile
+// est à l'écran ET que 2 500 cadres sont posés ; jamais pour un fichier ordinaire ; toujours remontré à la fin, même quand la pose échoue ; et les mesures prises pendant le masquage sont celles du texte montré (le
+// point rouge d'une diapositive dont un cadre sort de la page tombe sur la même diapositive).
+async function lockCases(page, tag) {
+  const r = await page.evaluate(async () => {
+    const tick = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const PB = ImportPlacing.PAGE_BREAK;
+    const hiddenNow = () => EditorCore.getEditor().view.dom.style.contentVisibility === 'hidden';
+    // 40 diapositives de 80 petits cadres (3 200 cadres) ; la septième a un cadre bien plus haut que la page.
+    const slide = (k, tall) => Array.from({ length: 80 }, (_, j) => FreeFrame.html({ x: 20 + (j % 10) * 55, y: 20 + Math.floor(j / 10) * 40, w: 50, h: 30 }, '<p>' + k + '-' + j + '</p>')).join('')
+      + (tall ? FreeFrame.html({ x: 10, y: 10, w: 100, h: 3000 }, '<p>trop haut</p>') : '');
+    const deck = () => Array.from({ length: 40 }, (_, k) => slide(k, k === 6));
+    const dots = () => Array.from(document.querySelectorAll('.pp-slide-item')).map((el, i) => { const d = el.querySelector('.pp-slide-overflow'); return d && !d.hidden ? i : -1; }).filter(i => i >= 0);
+    const out = {};
+    // 1. Voile à l'écran : masqué une fois 2 500 cadres posés (diapositive 32 sur 80 cadres), jamais avant ; remontré à la fin.
+    Editor.setHTML(deck().slice(0, 3).join(PB));
+    await tick(200);
+    let firstHidden = -1;
+    let hiddenWhileVeil = 0;
+    await ImportPlacing.appendSlides(deck().slice(3), (n) => { if (hiddenNow()) { hiddenWhileVeil += 1; if (firstHidden < 0) firstHidden = n; } }, { covered: () => true });
+    await tick(500);
+    out.firstHidden = firstHidden; out.hiddenWhileVeil = hiddenWhileVeil; out.hiddenAfter = hiddenNow(); out.styleAfter = EditorCore.getEditor().view.dom.style.contentVisibility;
+    out.dotsLocked = dots();
+    // 2. Sans voile (covered absent) : jamais masqué, mêmes points rouges.
+    Editor.setHTML(deck().slice(0, 3).join(PB));
+    await tick(200);
+    let hiddenNoVeil = 0;
+    await ImportPlacing.appendSlides(deck().slice(3), () => { if (hiddenNow()) hiddenNoVeil += 1; });
+    await tick(500);
+    out.hiddenNoVeil = hiddenNoVeil; out.dotsPlain = dots();
+    // 3. Un fichier ordinaire (240 cadres) avec le voile : jamais masqué.
+    Editor.setHTML(deck().slice(0, 3).join(PB));
+    await tick(200);
+    let hiddenSmall = 0;
+    await ImportPlacing.appendSlides(deck().slice(3, 6), () => { if (hiddenNow()) hiddenSmall += 1; }, { covered: () => true });
+    out.hiddenSmall = hiddenSmall;
+    // 4. Une pose qui échoue pendant le masquage remontre le texte.
+    Editor.setHTML(deck().slice(0, 3).join(PB));
+    await tick(200);
+    let wasHidden = false;
+    let rejected = false;
+    try {
+      await ImportPlacing.appendSlides(deck().slice(3), (n) => { if (hiddenNow()) wasHidden = true; if (wasHidden && n >= 36) throw new Error('arrêt voulu'); }, { covered: () => true });
+    } catch (e) { rejected = /arrêt voulu/.test(String(e && e.message)); }
+    out.failWasHidden = wasHidden; out.failRejected = rejected; out.failHiddenAfter = hiddenNow();
+    return out;
+  });
+  check(tag + 'le voile à l\'écran et 2 500 cadres posés : le texte est masqué (content-visibility: hidden) à partir de la trente-deuxième diapositive de 80 cadres, jamais avant, et remontré à la fin', r.firstHidden >= 31 && r.firstHidden <= 33 && r.hiddenWhileVeil >= 5 && !r.hiddenAfter && r.styleAfter === '', { firstHidden: r.firstHidden, hiddenWhileVeil: r.hiddenWhileVeil, hiddenAfter: r.hiddenAfter, styleAfter: r.styleAfter });
+  check(tag + 'sans voile à l\'écran, ou pour un fichier ordinaire (240 cadres), le texte n\'est jamais masqué', r.hiddenNoVeil === 0 && r.hiddenSmall === 0, { hiddenNoVeil: r.hiddenNoVeil, hiddenSmall: r.hiddenSmall });
+  check(tag + 'une pose qui échoue pendant le masquage remontre le texte (la personne ne reste pas devant un éditeur vide)', r.failWasHidden && r.failRejected && !r.failHiddenAfter, { failWasHidden: r.failWasHidden, failRejected: r.failRejected, failHiddenAfter: r.failHiddenAfter });
+  check(tag + 'les mesures prises pendant le masquage sont celles du texte montré : le point rouge de la diapositive au cadre trop haut tombe sur la septième, masquée ou non', JSON.stringify(r.dotsLocked) === JSON.stringify(r.dotsPlain) && r.dotsLocked.includes(6), { dotsLocked: r.dotsLocked, dotsPlain: r.dotsPlain });
 }
 
 // Le voile de la mise en place : absent d'un travail court, devant le panneau au bout d'une demi-seconde (texte et barre à jour), que ni Échap, ni la frappe, ni un clic n'atteignent ; il se retire pour une question

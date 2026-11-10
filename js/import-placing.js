@@ -12,10 +12,16 @@
 const ImportPlacing = (function () {
   const el = Dom.el;
   const PAGE_BREAK = '<div class="page-break-marker"></div>';
+  const FRAME_MARK = 'class="pp-free-frame"';
   const FIRST_SLIDES = 3;        // posées par le chemin habituel : de quoi voir la présentation derrière le voile
   const SLICE_MS = 12;           // une tranche de travail (une diapositive posée en demande 15 à 35 : la pause vient après chacune) ; entre deux tranches, la page répond
   const PAINT_MS = 250;          // toutes les 250 ms la pause attend aussi une image (le voile se peint)
   const SHOW_AFTER_MS = 500;     // le voile n'apparaît qu'après ce délai
+  // Un très gros texte (des dizaines de milliers de cadres) coûte, à CHAQUE diapositive posée, la mise en page et le dessin de tout ce qui est déjà là : 14 s de pose au lieu de 26 pour 120 diapositives de
+  // schémas quand le texte est masqué (mesuré le 10/11). Le voile le cache de toute façon à la personne : dès qu'il est affiché et que ce nombre de cadres est posé, le texte est MASQUÉ (`content-visibility:
+  // hidden` : le navigateur ne le met plus en page ni ne le dessine, mais une mesure demandée sur un de ses cadres le met en page à cet instant : `measureFrom` reste juste) et remontré avant la clôture.
+  // Un fichier ordinaire (2 400 cadres pour 57 diapositives) n'atteint jamais ce nombre : il suit le chemin d'avant, sans rien masquer.
+  const LOCK_AFTER_FRAMES = 2500;
 
   // La pause : une tâche ordinaire (scheduler.postTask, rang des minuteurs et des messages de GFS), jamais `scheduler.yield` - sa reprise passe devant tous les minuteurs, qui attendraient la fin de la pose ;
   // sans postTask, un minuteur à 0 ms.
@@ -114,6 +120,8 @@ const ImportPlacing = (function () {
         }
         draw();
       },
+      // Le voile est-il à l'écran à cet instant (affiché, ni suspendu ni retiré) ? Ce qui est dessous ne se voit alors pas.
+      isShown() { return shown && !ended && !suspended && !!win && win.isOpen(); },
       allowCancel(handler) { cancelHandler = typeof handler === 'function' ? handler : null; showCancel(); },
       suspend() { suspended = true; clearTimeout(timer); if (win && win.isOpen()) win.hide(); },
       end() { ended = true; clearTimeout(timer); cancelHandler = null; showCancel(); if (win && win.isOpen()) win.hide(); },
@@ -125,6 +133,25 @@ const ImportPlacing = (function () {
   // posés en sont retirés ou vidés, et aucun ne reste en mémoire une fois sa diapositive dans l'éditeur.
   const slidesOf = imported => (Array.isArray(imported.slideTexts) ? imported.slideTexts : String(imported.html || '').split(PAGE_BREAK));
 
+  // Le nombre de cadres libres d'un texte de diapositive (sans l'analyser : le texte est écrit par FreeFrame.html, la classe est toujours posée telle quelle).
+  function framesIn(text) {
+    let found = 0;
+    for (let at = text.indexOf(FRAME_MARK); at >= 0; at = text.indexOf(FRAME_MARK, at + FRAME_MARK.length)) found += 1;
+    return found;
+  }
+  // Le texte masqué pendant la pose d'un très gros fichier (LOCK_AFTER_FRAMES) : rien d'autre que le style en ligne de la racine du texte, remis dans `unlockDocument` (toujours appelé, `finally` de la pose).
+  let lockedDom = null;
+  function lockDocument() {
+    if (lockedDom) return;
+    lockedDom = EditorCore.getEditor().view.dom;
+    lockedDom.style.contentVisibility = 'hidden';
+  }
+  function unlockDocument() {
+    if (!lockedDom) return;
+    lockedDom.style.contentVisibility = '';
+    lockedDom = null;
+  }
+
   // Mesure les cadres posés depuis le bloc `from` : leur mise en page se fait ici, par morceaux, et FreeFrame garde la réponse que la bande relira à la fin.
   function measureFrom(from) {
     const children = EditorCore.getEditor().view.dom.children;
@@ -133,12 +160,15 @@ const ImportPlacing = (function () {
 
   // Ajoute les diapositives `pieces` à la suite du texte de l'éditeur, une par une ; `onPlaced(n)` à chaque pas. Les textes sont CONSOMMÉS : chacun est libéré dès que sa diapositive est posée (la liste que donne
   // l'import ne garde rien de ce qui est déjà dans l'éditeur). Une diapositive que l'éditeur refuse est remplacée par une page vide (les rangs ne bougent pas) et comptée ; rend ce compte.
-  async function appendSlides(pieces, onPlaced) {
+  async function appendSlides(pieces, onPlaced, options) {
+    const covered = options && typeof options.covered === 'function' ? options.covered : () => false;   // le voile est-il à l'écran ? (begin().isShown)
     const pace = pacer();
     let failed = 0;
+    let frames = 0;
     if (typeof SlideStrip !== 'undefined') SlideStrip.hold(true);
     try {
       for (let i = 0; i < pieces.length; i++) {
+        frames += framesIn(pieces[i]);
         let from;
         try {
           from = Editor.appendHTML(PAGE_BREAK + pieces[i]);
@@ -149,13 +179,16 @@ const ImportPlacing = (function () {
         }
         pieces[i] = '';
         measureFrom(from);
+        if (!lockedDom && frames >= LOCK_AFTER_FRAMES && covered()) lockDocument();
         onPlaced(i + 1);
         await pace();
       }
-      await breathe();                          // la clôture (colonnes, pagination) et la relecture de la bande sont deux tâches, pas une
-      Editor.settleAppended();
+      unlockDocument();
+      await breatheAndPaint();                  // la mise en page et le dessin de tout le texte d'un coup, dans leur propre tâche : le voile est encore là
+      Editor.settleAppended();                  // la clôture (colonnes, pagination) et la relecture de la bande sont deux tâches, pas une
       await breatheAndPaint();
     } finally {
+      unlockDocument();
       if (typeof SlideStrip !== 'undefined') SlideStrip.hold(false);
     }
     return failed;
