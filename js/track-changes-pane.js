@@ -1,7 +1,8 @@
 // Suivi des modifications : le volet « Modifications » - la liste de toutes les modifications en attente à droite du texte (qui, quand, un extrait), un clic pour aller à l'une, « Accepter » et
 // « Refuser » sur sa ligne, « Précédent » et « Suivant » pour les parcourir. Ouvert par la ligne « Liste des modifications » du menu « Édition collaborative » (js/main-toolbar.js). Le contenu
 // vient de Editor.getSuggestionEntries (js/track-changes-list.js) ; le volet ne change jamais le document par lui-même, seules ses boutons résolvent une modification. Façade : TrackChangesPane.
-// Styles : css/track-changes-pane.css.
+// Styles : css/track-changes-pane.css. Hébergé par GFS, le volet cède ce que la barre de GFS en recouvre (GfsBar.bite, comme la bande des diapositives et le volet « Importer » de extensions/diapositives) :
+// la largeur de la barre à droite, la hauteur d'une barre en haut ou en bas qui passe devant lui, et le texte lui laisse la même place.
 const TrackChangesPane = (function () {
   const el = Dom.el;
   const PAGE_SIZE = 200;          // lignes montrées d'un coup ; « Afficher la suite » en ajoute autant
@@ -13,6 +14,7 @@ const TrackChangesPane = (function () {
   let refs = null;
   let timer = 0;
   let observer = null;
+  let stopBar = null;             // l'abonnement aux changements de la barre de GFS (le volet ouvert seulement)
 
   const t = (key, params) => I18n.t(key, params);
   const container = () => document.getElementById('editor-container');
@@ -157,17 +159,29 @@ const TrackChangesPane = (function () {
   }
 
   // Place le volet à droite du texte : sous la barre, sur la hauteur de #editor-container, qui laisse sa place (marge à droite). Le document ne change pas : la page garde sa largeur, c'est
-  // la fenêtre sur elle qui se réduit. Appelé à chaque changement de taille du conteneur (le panneau, la barre de recherche qui s'ouvre, une barre d'outils qui passe sur deux lignes).
+  // la fenêtre sur elle qui se réduit. Appelé à chaque changement de taille du conteneur (le panneau, la barre de recherche qui s'ouvre, une barre d'outils qui passe sur deux lignes) et à chaque
+  // changement de la barre de GFS. Cette barre est posée par-dessus le cadre, au bord que la personne a choisi : le volet, collé au bord droit, lui cède ce qu'elle en recouvre (`GfsBar.bite`,
+  // calculé sur le volet sans cette cession, pour ne pas tourner en rond) : à droite il recule de sa profondeur, et le texte avec lui ; en haut ou en bas il se raccourcit. Sans barre, ou quand elle ne
+  // le recouvre pas, il n'y a rien à céder.
   function layout() {
     const box = container();
     if (!pane || !box) return;
     const visible = state.open && box.offsetParent !== null;
     pane.hidden = !visible;
-    box.style.marginRight = visible ? pane.offsetWidth + 'px' : '';
-    if (!visible) return;
+    if (!visible) {
+      box.style.marginRight = '';
+      pane.style.right = '';
+      return;
+    }
     const rect = box.getBoundingClientRect();
-    pane.style.top = rect.top + 'px';
-    pane.style.height = rect.height + 'px';
+    const width = pane.offsetWidth;
+    const edge = document.documentElement.clientWidth;
+    const bite = GfsBar.bite({ left: edge - width, top: rect.top, right: edge, bottom: rect.top + rect.height });
+    const gutter = Math.max(0, Math.ceil(bite.right));
+    box.style.marginRight = (width + gutter) + 'px';
+    pane.style.right = gutter ? gutter + 'px' : '';
+    pane.style.top = (rect.top + Math.ceil(bite.top)) + 'px';
+    pane.style.height = Math.max(0, rect.height - Math.ceil(bite.top) - Math.ceil(bite.bottom)) + 'px';
   }
 
   function refresh() {
@@ -283,6 +297,7 @@ const TrackChangesPane = (function () {
     syncToolbarRow();
     refresh();
     if (!observer && typeof ResizeObserver === 'function') { observer = new ResizeObserver(layout); observer.observe(box); }
+    if (!stopBar) stopBar = GfsBar.onChange(() => layout());
     refs.next.focus();
     return true;
   }
@@ -291,6 +306,7 @@ const TrackChangesPane = (function () {
     state.open = false;
     clearTimeout(timer);
     timer = 0;
+    if (stopBar) { stopBar(); stopBar = null; }
     layout();
     syncToolbarRow();
     if (!options || options.focus !== false) editor.commands.focus();

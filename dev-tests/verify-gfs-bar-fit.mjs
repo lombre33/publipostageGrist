@@ -19,6 +19,10 @@
 //  8) UN MENU DÉCALÉ DE CÔTÉ (600 × 400, barre à gauche : « Exporter » passe à la deuxième ligne, tout à gauche, et son menu glisse à droite de la barre, sans recouvrement horizontal avec son bouton) : du bouton au menu, à la vraie
 //     souris, par plusieurs chemins (vers le haut, le milieu et le bas du menu, d'un saut et en 3 à 30 pas, au pas lent d'une main), le menu reste ouvert et sous le pointeur ; un menu qui garde le pointeur ne se referme pas
 //     tout seul ; laissé sans geste, ou quitté pour un autre menu, il se referme ; un menu qui recouvre son bouton (sans barre, ou au bord de la page) se referme tout de suite, comme avant.
+//  9) LE VOLET « MODIFICATIONS » (js/track-changes-pane.js, collé au bord droit du cadre ; `GfsBar.bite`) : trois modifications, volet ouvert, la barre passe par les quatre bords puis s'en va (le volet ne se rouvre pas) : ni lui ni
+//     aucun de ses boutons ne recouvrent jamais la zone, et le texte lui laisse sa place ; sans barre, ou quand elle ne le touche pas, il est où il était, rien de posé en plus ; à droite il recule de la profondeur de la
+//     zone, en haut ou en bas il se raccourcit quand la barre passe devant lui (cadres de 560 × 300 et de 420 × 400) ; un <div> de la page parente fait la barre, pour que la vraie souris la rencontre : elle atteint chaque
+//     bouton (« Fermer » et « Accepter » étaient dessous), ferme le volet et rend sa marge au texte ; fermé, il ne pose plus rien.
 // GFS_BAR_FIT_ONLY=1,3 ne joue que ces scénarios (mise au point) ; GFS_BAR_FIT_VERBOSE=1 écrit les rectangles mesurés ; rien d'écrit sinon. Lancé par run-headless.mjs (groupe Node « gfsBarFit », cf. NODE_SCRIPTS),
 // ou seul : node dev-tests/verify-gfs-bar-fit.mjs
 import { start, seedModels } from './gfs-page.mjs';
@@ -595,6 +599,161 @@ if (wanted(8)) {
   }
   parkAt = PARK;
   await page.context().close();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+if (wanted(9)) {
+  console.log('\n9) Le volet « Modifications » (js/track-changes-pane.js, collé au bord droit du cadre) cède ce que la barre en recouvre');
+  // Trois modifications de deux personnes : le volet en liste trois lignes.
+  const DOC = '<p>Alpha <ins data-id="3">ajouté</ins> bêta <del data-id="1">retiré</del> gamma <del data-id="2">ancien</del><ins data-id="2">nouveau</ins> fin.</p><p>Un deuxième paragraphe, pour que le texte ait de la place.</p>';
+  const META = {
+    1: { author: 'jean.dupont@example.org', authorName: 'Jean Dupont', createdAt: '2026-11-03T09:00:00.000Z' },
+    2: { author: 'paul.martin@example.org', createdAt: '2026-11-04T10:00:00.000Z' },
+    3: { author: 'jean.dupont@example.org', authorName: 'Jean Dupont', createdAt: '2026-11-03T09:05:00.000Z' },
+  };
+  const AT = { gauche: 'à gauche', haut: 'en haut', droite: 'à droite', bas: 'en bas' };
+  const BAR_ID = 'essai-barre-gfs';
+  const labelOf = bord => (bord === null ? 'barre retirée' : 'barre ' + AT[bord]);
+
+  // Les pages d'essai ne dessinent pas la barre ; GFS, lui, la pose dans la page PARENTE, par-dessus le cadre : un clic dans sa zone est pour elle, pas pour l'app. Ici un <div> de la taille de la zone
+  // (42 × 132 px) joue la barre, pour que la vraie souris la rencontre ; il part avec elle.
+  const drawBar = (page, bar) => page.evaluate(([b, id]) => {
+    const old = document.getElementById(id);
+    if (old) old.remove();
+    if (!b) return;
+    const z = b.zone;
+    const div = document.createElement('div');
+    div.id = id;
+    div.style.cssText = `position:fixed;left:${z.x}px;top:${z.y}px;width:${z.largeur}px;height:${z.hauteur}px;z-index:2147483647;`;
+    document.body.append(div);
+  }, [bar, BAR_ID]);
+  const setBar = async (ctx, bord, width, height) => {
+    const bar = await showBar(ctx.page, ctx.app, bord, width, height);
+    await drawBar(ctx.page, bar);
+    return bar;
+  };
+
+  // Ce que le volet montre : son rectangle, celui du texte, ce que le volet a posé (marge du texte, décalage du volet) et chacun de ses boutons (`seen` : le bouton est bien ce qui se voit en son centre dans l'app).
+  const paneOf = app => app.evaluate(() => {
+    const rc = el => { if (!el) return null; const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; };
+    const pane = document.getElementById('pp-track-pane');
+    const box = document.getElementById('editor-container');
+    const controls = pane ? Array.from(pane.querySelectorAll('button, select')).filter(el => !el.closest('[hidden]')).map((el) => {
+      const r = el.getBoundingClientRect();
+      const x = r.left + r.width / 2;
+      const y = r.top + r.height / 2;
+      const under = document.elementFromPoint(x, y);
+      return { name: (el.getAttribute('aria-label') || el.textContent || el.className).trim().slice(0, 48), x, y, rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom }, seen: !!under && el.contains(under) };
+    }) : [];
+    return { open: TrackChangesPane.isOpen(), hidden: !!pane && pane.hidden, pane: rc(pane), header: rc(pane && pane.querySelector('.pp-trackpane-header')), box: rc(box), margin: box.style.marginRight, right: pane ? pane.style.right : '', items: pane ? pane.querySelectorAll('.pp-trackpane-item').length : 0, controls };
+  });
+  async function openPane(ctx) {
+    await ctx.app.evaluate(([doc, meta]) => { Editor.setHTML(doc, meta); }, [DOC, META]);
+    await ctx.app.evaluate(() => TrackChangesPane.open());
+    await ctx.app.waitForFunction(() => document.querySelectorAll('#pp-track-pane .pp-trackpane-item').length === 3, null, { timeout: 8000 });
+    await sleep(200);
+  }
+  // Les boutons que la souris n'atteint pas : au centre de chacun, ce qui reçoit le clic est la barre (la page parente) et non le bouton.
+  async function blockedControls(ctx) {
+    const m = await paneOf(ctx.app);
+    const seen = m.controls.filter(c => c.seen);
+    const blocked = [];
+    for (const c of seen) {
+      const id = await ctx.page.evaluate(([x, y]) => { const el = document.elementFromPoint(x, y); return el ? el.id : ''; }, [c.x, c.y]);
+      if (id === BAR_ID) blocked.push(c.name);
+    }
+    return { blocked, seen: seen.length };
+  }
+
+  // Ce que doit vérifier le volet ouvert devant `bar` (null : pas de barre) dans un cadre de width × height ; `ref` : le volet du même cadre sans barre (null pour cette référence elle-même). Le volet suit
+  // le texte (même haut, même bas : le texte peut bouger tout seul, la barre d'outils change de lignes quand la barre passe en haut) : sa place « naturelle » est donc tirée du texte de l'instant.
+  function judgePane(label, m, bar, [width, height], ref) {
+    const pane = m.pane;
+    const paneWidth = pane.right - pane.left;
+    const gutter = width - pane.right;
+    // Ce qu'un bouton montre : sa part dans le volet (la liste défile : un bouton à moitié sorti n'en montre qu'une moitié).
+    const shown = m.controls.filter(c => c.seen).map(c => ({ name: c.name, rect: { left: Math.max(c.rect.left, pane.left), top: Math.max(c.rect.top, pane.top), right: Math.min(c.rect.right, pane.right), bottom: Math.min(c.rect.bottom, pane.bottom) } }));
+    if (VERBOSE) console.log('     ', label, 'volet', showRect(pane), 'texte', showRect(m.box), 'marge', m.margin, 'droite', JSON.stringify(m.right), 'zone', bar ? JSON.stringify(bar.zone) : null);
+    check(`${label} : le volet est ouvert et entier dans le cadre`, m.open && !m.hidden && m.items >= 1 && pane.left >= -0.5 && pane.top >= -0.5 && pane.right <= width + 0.5 && pane.bottom <= height + 0.5, { volet: showRect(pane), cadre: [width, height] });
+    check(`${label} : ni le volet ni aucun de ses boutons ne recouvrent la zone de la barre`, !hits(pane, bar) && shown.every(c => !hits(c.rect, bar)), { volet: showRect(pane), zone: bar && bar.zone, recouverts: shown.filter(c => hits(c.rect, bar)).map(c => c.name) });
+    check(`${label} : le texte lui laisse sa place, sans rien recouvrir (marge à droite = largeur du volet + ce qu'il a cédé)`,
+      m.box.right <= pane.left + 0.5 && Math.abs(parseFloat(m.margin) - (paneWidth + gutter)) <= 0.5 && (gutter < 0.5 ? m.right === '' : Math.abs(parseFloat(m.right) - gutter) < 0.5), { texte: showRect(m.box), volet: showRect(pane), marge: m.margin, droite: m.right });
+    check(`${label} : le volet garde son en-tête (titre et boutons) à la vue`, m.header.bottom <= pane.bottom + 0.5 && pane.bottom - pane.top > 0, { entete: showRect(m.header), volet: showRect(pane) });
+    const natural = { left: width - paneWidth, top: m.box.top, right: width, bottom: m.box.bottom };
+    if (!hits(natural, bar)) {
+      const isNatural = Math.abs(pane.right - width) < 0.5 && Math.abs(pane.top - m.box.top) < 0.5 && Math.abs(pane.bottom - m.box.bottom) < 0.5 && Math.abs(parseFloat(m.margin) - paneWidth) <= 0.5 && m.right === '';
+      // Le texte n'a pas bougé depuis la référence : le volet est exactement celui d'alors.
+      const sameAsRef = !ref || !sameRect(m.box, ref.box) || (sameRect(pane, ref.pane) && m.margin === ref.margin);
+      check(`${label} : ${bar ? 'la barre ne touche pas le volet : il est' : 'le volet est'} où il a toujours été (bord droit du cadre, la hauteur du texte, marge = sa largeur, rien de posé en plus)`, isNatural && sameAsRef, { volet: showRect(pane), texte: showRect(m.box), marge: m.margin, droite: m.right, reference: ref && showRect(ref.pane) });
+    } else {
+      const z = bar.zone;
+      const gap = bar.bord === 'droite' ? z.x - pane.right : bar.bord === 'bas' ? z.y - pane.bottom : bar.bord === 'haut' ? pane.top - (z.y + z.hauteur) : pane.left - (z.x + z.largeur);
+      check(`${label} : la barre recouvre l'emplacement du volet : il ne cède que ce qu'elle en prend (il touche sa zone, à un pixel près)`, gap > -0.05 && gap < 1.01, { ecart: round(gap), volet: showRect(pane), naturel: showRect(natural), zone: z });
+    }
+  }
+
+  // --- 700 × 400 : le volet reste ouvert, la barre passe par les quatre bords puis s'en va.
+  {
+    const size = [700, 400];
+    const ctx = await t.openPage({ framed: true, lang: 'fr', stub: { barre: null }, width: size[0], height: size[1] });
+    const { page, app } = ctx;
+    await openPane(ctx);
+    const ref = await paneOf(app);
+    judgePane('sans barre, 700 × 400', ref, null, size, null);
+    await app.evaluate(() => { document.getElementById('pp-track-pane').dataset.essai = 'meme'; });
+    for (const bord of ['droite', null, 'gauche', 'haut', 'bas', 'droite']) {
+      const bar = await setBar(ctx, bord, ...size);
+      judgePane(`700 × 400, ${labelOf(bord)}`, await paneOf(app), bar, size, ref);
+    }
+    const kept = await app.evaluate(() => { const p = document.getElementById('pp-track-pane'); return { same: !!p && p.dataset.essai === 'meme', open: TrackChangesPane.isOpen(), count: document.querySelectorAll('#pp-track-pane').length }; });
+    check('la barre a changé de bord volet ouvert : c\'est le même volet, toujours ouvert, rien n\'a été rouvert', kept.same && kept.open && kept.count === 1, kept);
+
+    // La barre est à droite (et posée) : la souris atteint chaque bouton, « Accepter » et « Fermer » de la première ligne compris, qui étaient sous elle.
+    const reach = await blockedControls(ctx);
+    check('barre à droite : la vraie souris atteint chaque bouton du volet (aucun n\'est sous la barre)', reach.blocked.length === 0 && reach.seen >= 6, reach);
+    const accept = await center(app, '#pp-track-pane .pp-trackpane-item .pp-trackpane-accept');
+    await page.mouse.click(accept.x, accept.y);
+    const accepted = await app.waitForFunction(() => document.querySelectorAll('#pp-track-pane .pp-trackpane-item').length === 2, null, { timeout: 5000 }).then(() => true, () => false);
+    check('barre à droite : « Accepter » de la première ligne (vrai clic) résout cette modification, et elle seule', accepted);
+    const close = await center(app, '#pp-track-pane .pp-trackpane-close');
+    await page.mouse.click(close.x, close.y);
+    const closed = await app.waitForFunction(() => !TrackChangesPane.isOpen(), null, { timeout: 5000 }).then(() => true, () => false);
+    const after = await paneOf(app);
+    check('barre à droite : « Fermer » (vrai clic) ferme le volet et rend sa place au texte (marge et décalage retirés)', closed && after.hidden && after.margin === '' && after.right === '', { fermé: closed, marge: after.margin, droite: after.right, caché: after.hidden });
+
+    // Fermé, le volet ne se replace plus ; rouvert devant la barre, il se place tout de suite ; la barre partie, il revient au bord.
+    await setBar(ctx, 'bas', ...size);
+    await setBar(ctx, 'droite', ...size);
+    const stay = await paneOf(app);
+    check('volet fermé, la barre change de bord : le texte garde toute sa place (rien n\'est posé par un volet fermé)', stay.hidden && stay.margin === '' && stay.right === '', { marge: stay.margin, droite: stay.right });
+    const barAtRight = await barOf(page, 'droite', ...size);
+    await app.evaluate(() => TrackChangesPane.open());
+    await app.waitForFunction(() => TrackChangesPane.isOpen(), null, { timeout: 3000 });
+    await sleep(200);
+    judgePane('700 × 400, volet rouvert, barre à droite', await paneOf(app), barAtRight, size, ref);
+    await setBar(ctx, null, ...size);
+    judgePane('700 × 400, volet rouvert, barre retirée', await paneOf(app), null, size, ref);
+    await page.context().close();
+  }
+
+  // --- D'autres cadres : plus petit (560 × 300), étroit (420 × 400) et bas (700 × 260).
+  for (const [width, height, edges] of [[560, 300, ['droite', 'bas', 'haut', 'gauche']], [420, 400, ['bas', 'droite']], [700, 260, ['droite', 'haut', 'bas']]]) {
+    const size = [width, height];
+    const ctx = await t.openPage({ framed: true, lang: 'fr', stub: { barre: null }, width, height });
+    await openPane(ctx);
+    const ref = await paneOf(ctx.app);
+    judgePane(`sans barre, ${width} × ${height}`, ref, null, size, null);
+    for (const bord of edges) {
+      const bar = await setBar(ctx, bord, ...size);
+      const m = await paneOf(ctx.app);
+      judgePane(`${width} × ${height}, ${labelOf(bord)}`, m, bar, size, ref);
+      if (bord === 'droite' || bord === 'bas') {
+        const reach = await blockedControls(ctx);
+        check(`${width} × ${height}, ${labelOf(bord)} : la vraie souris atteint chaque bouton du volet`, reach.blocked.length === 0 && reach.seen >= 3, reach);
+      }
+    }
+    await ctx.page.context().close();
+  }
 }
 
 await t.finish();
