@@ -106,6 +106,7 @@
 "MacroEditor":"openModal:f restore:f showSummary:f snapshot:f wire:f",
 "MacroTemplates":"PAGE_BREAK_HTML:d buildConcatenatedHtml:f isModelHidden:f keepHidden:f pageOfTemplate:f pickModeleId:f senseOfTemplate:f slotBreakHtml:f slotModelIds:f withModelHidden:f",
 "MailtoExport":"buildMailtoUrl:f checkUrlLength:f getMailClient:f plainTextFromHtml:f setMailClient:f",
+"MainAccess":"create:f",
 "MainAutosave":"create:f",
 "MainEmail":"create:f",
 "MainExport":"create:f",

@@ -86,7 +86,7 @@ check('free-frame : la façade range ce que `wire` rend (la barre et son rafraî
 // ---- les morceaux sortis de js/main.js (import, exports) -------------------------------------------------------------------------------------------------------------------
 const miMain = read('js/main.js');
 const MAIN_PIECES = [['MainImport', 'js/main-import.js'], ['MainExport', 'js/main-export.js'], ['MainAutosave', 'js/main-autosave.js'], ['MainSave', 'js/main-save.js'], ['MainLeave', 'js/main-leave.js'],
-  ['MainEmail', 'js/main-email.js'], ['MainPageZoom', 'js/main-page-zoom.js'], ['MainRename', 'js/main-rename.js'], ['MainMacroReturn', 'js/main-macro-return.js']];
+  ['MainEmail', 'js/main-email.js'], ['MainPageZoom', 'js/main-page-zoom.js'], ['MainRename', 'js/main-rename.js'], ['MainMacroReturn', 'js/main-macro-return.js'], ['MainAccess', 'js/main-access.js']];
 const mainPieces = MAIN_PIECES.map(([module, file]) => {
   const piece = read(file);
   const taken = (new RegExp(`const \\{([^}]*)\\} = ${module}\\.create\\(`).exec(miMain) || [, ''])[1];
@@ -133,6 +133,10 @@ check('les variables modifiables du renommage, du retour macro / modèle lié et
   Object.entries(OWNED).every(([file, list]) => list.every(name => new RegExp(`\\n {4}let ${name} = `).test(read(file)) && !new RegExp(`\\blet ${name}\\b`).test(miMain) && !new RegExp(`(?<![\\w$.])${name}\\b`).test(miMain))), null);
 check('le type du modèle, le mode, la table et la ligne ne sont lus par les quatre fichiers que par leurs fonctions (jamais les variables de main.js)',
   ['js/main-email.js', 'js/main-page-zoom.js', 'js/main-rename.js', 'js/main-macro-return.js'].every(file => !/(?<![\w$.])(currentTypeModele|currentMode|currentTableId|latestRecord|latestRecordTableId|titleNameBase|emailFieldsRawCache)\b(?!\s*:)/.test(read(file))), null);
+// ---- les droits par personne (découpe 10) : créés AVANT tous les autres morceaux (presque tous prennent isReadOnly) ----
+check('js/main.js : MainAccess est créé avant tous les autres morceaux (isReadOnly est pris par nom par presque tous)', miMain.indexOf('MainAccess.create(') > 0 && ['MainEmail', 'MainPageZoom', 'MainRename', 'MainMacroReturn', 'MainExport', 'MainAutosave', 'MainSave', 'MainLeave', 'MainImport'].every(module => miMain.indexOf('MainAccess.create(') < miMain.indexOf(module + '.create(')), null);
+check('MainAccess prend updateSaveStatus par un appel différé (l\'autosave, qui le rend, est créé après : sa valeur serait en zone morte)', /updateSaveStatus: \(\.\.\.args\) => updateSaveStatus\(\.\.\.args\)/.test(miMain.slice(miMain.indexOf('MainAccess.create('), miMain.indexOf('MainEmail.create('))), null);
+check('js/main-access.js ne lit le mode que par getCurrentMode et newsMayOpen que par son lecteur et son écriveur (jamais les variables de main.js)', !/(?<![\w$.])(currentMode|newsMayOpen)\b(?!\s*:)/.test(read('js/main-access.js')) && /getNewsMayOpen: \(\) => newsMayOpen/.test(miMain) && /setNewsMayOpen: value => \{ newsMayOpen = value; \}/.test(miMain), null);
 check('l\'objet `persist` est donné à chacun des trois fichiers (par son nom)', SAVE_MODULES.every(module => (literalKeys(miMain, module + '.create({') || []).includes('persist')), SAVE_MODULES.filter(module => !(literalKeys(miMain, module + '.create({') || []).includes('persist')));
 check('les trois fichiers ne lisent le type du modèle que par getCurrentTypeModele et le nom du titre que par getTitleNameBase / setTitleNameBase (jamais les variables de main.js)',
   SAVE_PIECES.every(file => !/(?<![\w$.])(currentTypeModele|titleNameBase)\b(?!\s*:)/.test(read(file))) && /getCurrentTypeModele: \(\) => currentTypeModele/.test(miMain) && /getTitleNameBase: \(\) => titleNameBase/.test(miMain) && /setTitleNameBase: value => \{ titleNameBase = value; \}/.test(miMain), null);

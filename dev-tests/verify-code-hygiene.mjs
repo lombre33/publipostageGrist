@@ -1114,6 +1114,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
       && /tab\.addEventListener\('click', \(\) => showView\(name\)\)/.test(panel), 'js/shortcuts-panel.js');
   // La fenêtre des nouveautés qui s'ouvre toute seule, une fois par personne (js/whats-new.js : openOnFirstConnection ; js/main.js l'appelle à la fin du démarrage et à chaque changement de droits).
   const news = noCommentsJs(read('js/whats-new.js'));
+  const access = noCommentsJs(read('js/main-access.js')); // les droits par personne côté main.js (découpe 10) : onAccessRightsChange et openNewsForEditors y sont
   const stub = read('dev-tests/grist-stub.js');
   check('fenêtre des nouveautés : elle lit ce que la personne a gardé (`pp_news_seen`) par PersonStore, APRÈS PersonStore.ready (chez GFS, l\u2019espace n\u2019est lu qu\u2019à l\u2019arrivée du contexte : lue avant, elle s\u2019ouvrirait pour tout le monde), jamais par localStorage',
     /const SEEN_KEY = 'pp_news_seen';/.test(news) && /await PersonStore\.ready;[\s\S]*?const seen = PersonStore\.get\(SEEN_KEY\);/.test(news) && !/\b(?:localStorage|sessionStorage)\b/.test(news), 'js/whats-new.js');
@@ -1121,8 +1122,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     /if \(!PersonStore\.set\(SEEN_KEY, seen === null \? '0' : seen\)\) return false;\s*offered = true;\s*open\(\);/.test(news) && /if \(offered\) return false;\s*await PersonStore\.ready;\s*if \(offered\) return false;/.test(news)
       && /function noteSeen\(\) \{\s*if \(isUnseen\(PersonStore\.get\(SEEN_KEY\)\)\) PersonStore\.set\(SEEN_KEY, VERSION\);/.test(news) && /onClose: noteSeen,/.test(news), 'js/whats-new.js');
   check('fenêtre des nouveautés : js/main.js l\u2019offre à la fin d\u2019init() (après Settings.followGfsLanguage) et à chaque changement de droits, seulement pour qui écrit, droits confirmés, ni sur la Lecture épurée ni sur la carte de l\u2019accès (une personne que le verrou de précaution a mise sur la Lecture la reçoit à la réponse des droits) ; jamais avant la fin du démarrage',
-    /function onAccessRightsChange\(\) \{[\s\S]*?openCleanReadingForReadOnly\(\);\s*openNewsForEditors\(\);\s*\}/.test(main) && /Settings\.followGfsLanguage\(\);\s*newsMayOpen = true;\s*openNewsForEditors\(\);\s*\}/.test(main)
-      && /if \(!newsMayOpen\) return;\s*WhatsNew\.openOnFirstConnection\(\(\) => \(\{\s*answered: CleanReading\.isAnswered\(AccessRights\.getStatus\(\)\.state\),\s*readOnly: isReadOnly\(\),\s*usable: !CleanReading\.isActive\(\) && !ReaderGuide\.editorLacksAccess\(\),/.test(main), 'js/main.js');
+    /function onAccessRightsChange\(\) \{[\s\S]*?openCleanReadingForReadOnly\(\);\s*openNewsForEditors\(\);\s*\}/.test(access) && /Settings\.followGfsLanguage\(\);\s*newsMayOpen = true;\s*openNewsForEditors\(\);\s*\}/.test(main)
+      && /if \(!getNewsMayOpen\(\)\) return;\s*WhatsNew\.openOnFirstConnection\(\(\) => \(\{\s*answered: CleanReading\.isAnswered\(AccessRights\.getStatus\(\)\.state\),\s*readOnly: isReadOnly\(\),\s*usable: !CleanReading\.isActive\(\) && !ReaderGuide\.editorLacksAccess\(\),/.test(access), 'js/main.js, js/main-access.js');
   check('fenêtre des nouveautés : le faux Grist des tests sème `pp_news_seen` à une version plus récente que toutes (sinon la fenêtre recouvrirait chaque page de test) sauf pour un test de l\u2019ouverture (`window.__newsUnseen`)',
     /window\.__newsUnseen && localStorage\.getItem\('pp_news_seen'\) === null\) localStorage\.setItem\('pp_news_seen', '99'\)/.test(stub), 'dev-tests/grist-stub.js');
 }

@@ -84,6 +84,11 @@ const MainMacroReturn = (function () {
       if (button) button.addEventListener('click', returnToMacro);
     }
 
+    // Ouvrir le modèle d'un tableau lié, et revenir au document
+    // « Ouvrir le modèle » du menu du lien d'un tableau lié (js/linked-table.js:open) ouvre ce modèle Grille dans l'éditeur comme un choix de la liste ; tant qu'il est à l'écran, le bandeau
+    // « Revenir au document » (#linked-return-bar) ramène au document d'origine, le curseur dans la même case du tableau. linkedOrigin est remis à null dès qu'un autre modèle se charge
+    // (liste, « + », galerie, suppression, copie : forgetLinkedOriginUnless), jamais quand le même est rechargé (conflit d'enregistrement automatique).
+
     function syncLinkedReturnBar() {
       if (!linkedReturnBar) return;
       showReturnBar(linkedReturnBar, 'linked-return-text', 'linkedTable.return.text', linkedOrigin && Templates.byId(linkedOrigin.templateId));
