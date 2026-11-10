@@ -808,7 +808,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 {
   const ENGINE_FILES = { pdf: 'pdf-export', sheets: 'sheet-layout', merge: 'pdf-merge', docx: 'docx-export', pptx: 'pptx-export', pptxImport: 'pptx-import', docxImport: 'docx-import', xlsx: 'xlsx-export', xlsxFormat: 'xlsx-number-format', md: 'markdown-export', html: 'html-export' };
   const ENGINE_GLOBALS = { PdfExport: 'pdf-export', SheetLayout: 'sheet-layout', PdfMerge: 'pdf-merge', DocxExport: 'docx-export', PptxExport: 'pptx-export', PptxImport: 'pptx-import', DocxImport: 'docx-import', XlsxExport: 'xlsx-export', XlsxNumberFormat: 'xlsx-number-format', MarkdownExport: 'markdown-export', HtmlExport: 'html-export' };
-  // Les fichiers qui nomment un moteur sans nommer ExportEngines : la fenêtre des planches, que js/main.js (onExportBatch) n'ouvre qu'après avoir chargé « sheets ».
+  // Les fichiers qui nomment un moteur sans nommer ExportEngines : la fenêtre des planches, que js/main-export.js (onExportBatch) n'ouvre qu'après avoir chargé « sheets ».
   const CALLED_AFTER_ENSURE = ['js/sheet-assembly-dialog.js'];
   const page = read('index.html').replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
   const attr = (attrs, name) => (attrs.match(new RegExp(`\\b${name}="([^"]*)"`)) || [])[1];
@@ -834,8 +834,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     if (named.length) users.push({ rel, named, ensures: /\bExportEngines\b/.test(code) });
   }
   const unknown = asked.filter(([, name]) => !ENGINE_FILES[name]).map(([rel, name]) => `${rel} : « ${name} »`);
-  check('moteurs d\'export : l\'analyse lit bien le code (garde-fou de l\'analyse elle-même : au moins dix noms de moteur demandés, js/main.js et js/grid-xlsx-import.js parmi les fichiers qui en demandent)',
-    asked.length >= 10 && ['js/main.js', 'js/grid-xlsx-import.js'].every(rel => asked.some(([file]) => file === rel)), `${asked.length} noms`);
+  check('moteurs d\'export : l\'analyse lit bien le code (garde-fou de l\'analyse elle-même : au moins dix noms de moteur demandés, js/main-export.js et js/grid-xlsx-import.js parmi les fichiers qui en demandent)',
+    asked.length >= 10 && ['js/main-export.js', 'js/grid-xlsx-import.js'].every(rel => asked.some(([file]) => file === rel)), `${asked.length} noms`);
   check('moteurs d\'export : chaque nom de moteur demandé (engines: [...], ExportEngines.ensure(...)) est un moteur déclaré dans index.html', unknown.length === 0, unknown.join(', '));
   check('moteurs d\'export : chacun des moteurs est demandé quelque part (un moteur que rien ne charge ne s\'exécuterait jamais)', Object.keys(ENGINE_FILES).every(name => asked.some(([, asking]) => asking === name)), Object.keys(ENGINE_FILES).filter(name => !asked.some(([, asking]) => asking === name)).join(', '));
   const unguarded = users.filter(u => !u.ensures && !CALLED_AFTER_ENSURE.includes(u.rel)).map(u => `${u.rel} (${u.named.join(', ')})`);
