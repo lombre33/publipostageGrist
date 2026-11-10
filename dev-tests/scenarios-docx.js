@@ -804,6 +804,33 @@
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify({ instruction: toc.instructions[0], entrees: got }) };
     });
 
+  // Les réglages du sommaire (js/toc-options.js, la barre au-dessus de lui) : les niveaux listés sont ceux du champ (`\\o "de-à"`) ET des entrées posées ; sans numéros de page le champ porte `\\n`.
+  add('docx_toc_follows_levels_and_page_numbers_of_the_toc',
+    'Le sommaire du Word suit ses réglages : « H2 à H3 » écrit `\\o "2-3"` et ne pose que les entrées de ces niveaux (les quatre titres gardent leur signet) ; « sans numéro de page » ajoute `\\n` au champ ; sans réglage rien ne change (`\\o "1-6"`, pas de `\\n`)',
+    async (h) => {
+      const body = '<h1>Alpha</h1><h2>Beta</h2><h3>Gamma</h3><h4>Delta</h4>';
+      const bad = [];
+      const read = async (marker, label) => {
+        const parts = await h.exportDocxParts(marker + body);
+        const toc = tocOf(parts);
+        if (!toc) { bad.push(label + ' : aucun sommaire'); return null; }
+        if (Array.from(parts.doc.getElementsByTagName('w:bookmarkStart')).length !== 4) bad.push(label + ' : les quatre titres n\'ont pas tous leur signet');
+        return { instruction: toc.instructions[0], entries: toc.entries.map(e => e.style + '=' + e.text).join('|'), dirty: toc.dirty };
+      };
+      const plain = await read('<div class="toc-marker"></div>', 'sans réglage');
+      if (plain && (!plain.instruction.includes('\\o "1-6"') || /\\n\b/.test(plain.instruction) || plain.entries !== 'TOC1=Alpha|TOC2=Beta|TOC3=Gamma|TOC4=Delta')) bad.push('sans réglage : ' + JSON.stringify(plain));
+      const levels = await read('<div class="toc-marker" data-toc-from="2" data-toc-to="3" data-toc-pages="false"></div>', 'H2 à H3, sans numéros');
+      if (levels && (!levels.instruction.includes('\\o "2-3"') || !/\\n "2-3"/.test(levels.instruction) || levels.entries !== 'TOC2=Beta|TOC3=Gamma' || levels.dirty !== 'true')) bad.push('H2 à H3, sans numéros : ' + JSON.stringify(levels));
+      const withPages = await read('<div class="toc-marker" data-toc-to="3"></div>', 'jusqu\'à H3, avec numéros');
+      if (withPages && (!withPages.instruction.includes('\\o "1-3"') || /\\n\b/.test(withPages.instruction) || withPages.entries !== 'TOC1=Alpha|TOC2=Beta|TOC3=Gamma')) bad.push('jusqu\'à H3 : ' + JSON.stringify(withPages));
+      const noPagesAll = await read('<div class="toc-marker" data-toc-pages="false"></div>', 'tous niveaux, sans numéros');
+      if (noPagesAll && (!noPagesAll.instruction.includes('\\o "1-6"') || !/\\n "1-6"/.test(noPagesAll.instruction) || noPagesAll.entries !== 'TOC1=Alpha|TOC2=Beta|TOC3=Gamma|TOC4=Delta')) bad.push('tous niveaux, sans numéros : ' + JSON.stringify(noPagesAll));
+      // Aucun titre dans les niveaux choisis : la phrase « aucun titre » reste, rien à mettre à jour (pas de w:dirty).
+      const none = await read('<div class="toc-marker" data-toc-from="5" data-toc-to="6"></div>', 'H5 à H6');
+      if (none && (none.entries !== '' || none.dirty === 'true')) bad.push('H5 à H6 : ' + JSON.stringify(none));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify({ levels, noPagesAll }) };
+    });
+
   add('docx_toc_bookmarks_unique_and_paired',
     'Chaque titre du corps porte son signet (nom « _Toc… » et w:id propres, début et fin appariés) : Word apparie un signet par son w:id, et docx.js 9.7.1 donne sinon le même id à tous ; deux sommaires visent les mêmes signets',
     async (h) => {

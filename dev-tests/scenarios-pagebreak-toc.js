@@ -936,6 +936,290 @@
     },
   });
 
+  // --- Les réglages du sommaire (js/toc-options.js, la barre qui le surmonte) : les niveaux listés (de Hx à Hy) et le numéro de page de chaque titre ---
+  const TOC_DOC = (marker, extra) => marker + '<h1>Alpha</h1><h2>Beta</h2><h3>Gamma</h3><h2>Delta</h2><h1>Epsilon</h1>' + (extra || '');
+  const previewLines = h => Array.from(h.tiptap().querySelectorAll('.toc-entry-preview')).map(el => el.textContent);
+  const tocNode = () => { let found = null; EditorCore.getEditor().state.doc.descendants((node, pos) => { if (!found && node.type.name === 'toc') found = { node, pos }; }); return found; };
+
+  cases.push({
+    id: 'toc_options_are_written_in_the_html_and_read_back',
+    description: 'Les réglages du sommaire s\'écrivent dans le HTML du modèle (`data-toc-from`, `data-toc-to`, `data-toc-pages="false"`, chacun seulement quand il n\'est pas celui d\'avant) et se relisent à l\'identique ; un sommaire sans réglage s\'écrit comme avant ; une valeur absurde ou renversée est remise en ordre',
+    run: async (h) => {
+      await h.resetEditor();
+      const bad = [];
+      const written = html => (html.match(/<div class="toc-marker"[^>]*>/) || [''])[0];
+      const roundTrip = marker => { Editor.setHTML(marker + '<h1>Alpha</h1>'); return { html: written(Editor.getHTML()), options: tocNode() && tocNode().node.attrs.options }; };
+      const plain = roundTrip('<div class="toc-marker"></div>');
+      if (plain.html !== '<div class="toc-marker">' || plain.options !== null) bad.push('sans réglage=' + JSON.stringify(plain));
+      const all = roundTrip('<div class="toc-marker" data-toc-from="2" data-toc-to="3" data-toc-pages="false"></div>');
+      if (all.html !== '<div class="toc-marker" data-toc-from="2" data-toc-to="3" data-toc-pages="false">' || JSON.stringify(all.options) !== JSON.stringify({ from: 2, to: 3, pages: false })) bad.push('trois réglages=' + JSON.stringify(all));
+      const onlyPages = roundTrip('<div class="toc-marker" data-toc-pages="false"></div>');
+      if (onlyPages.html !== '<div class="toc-marker" data-toc-pages="false">') bad.push('sans numéros seul=' + JSON.stringify(onlyPages));
+      // Les valeurs d'avant écrites à la main s'effacent : le HTML redevient celui d'un sommaire sans réglage.
+      const explicitDefaults = roundTrip('<div class="toc-marker" data-toc-from="1" data-toc-to="6" data-toc-pages="true"></div>');
+      if (explicitDefaults.html !== '<div class="toc-marker">' || explicitDefaults.options !== null) bad.push('valeurs d\'avant=' + JSON.stringify(explicitDefaults));
+      const swapped = roundTrip('<div class="toc-marker" data-toc-from="5" data-toc-to="2"></div>');
+      if (JSON.stringify(swapped.options) !== JSON.stringify({ from: 2, to: 5, pages: true })) bad.push('niveaux renversés=' + JSON.stringify(swapped));
+      const absurd = roundTrip('<div class="toc-marker" data-toc-from="0" data-toc-to="abc"></div>');
+      if (absurd.html !== '<div class="toc-marker">' || absurd.options !== null) bad.push('valeurs absurdes=' + JSON.stringify(absurd));
+      // Un collage entre deux modèles garde les réglages (le HTML est ce que Ctrl + C emporte).
+      Editor.setHTML('<div class="toc-marker" data-toc-from="2" data-toc-to="4"></div><h1>Alpha</h1>');
+      const copied = written(Editor.getHTML());
+      Editor.setHTML('<p>autre</p>' + copied + '</div>');
+      const pasted = tocNode() && tocNode().node.attrs.options;
+      if (JSON.stringify(pasted) !== JSON.stringify({ from: 2, to: 4, pages: true })) bad.push('collage=' + JSON.stringify(pasted));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'toc_editor_preview_lists_only_the_chosen_levels_and_links_keep_their_heading',
+    description: 'L\'aperçu du sommaire dans l\'éditeur ne liste que les niveaux choisis (de H2 à H3 : « Beta », « Gamma », « Delta »), garde la numérotation de TOUS les titres (« Article » : « 1.a Beta ») et chaque ligne mène toujours à SON titre (le rang parmi tous les titres, pas parmi les lignes)',
+    run: async (h) => {
+      await h.resetEditor();
+      const bad = [];
+      Editor.setHTML(TOC_DOC('<div class="toc-marker" data-toc-from="2" data-toc-to="3"></div>'));
+      await h.sleep(200);
+      const lines = previewLines(h);
+      if (lines.join('|') !== 'Beta|Gamma|Delta') bad.push('H2 à H3=' + lines.join('|'));
+      const padding = Array.from(h.tiptap().querySelectorAll('.toc-entry-preview')).map(el => el.style.paddingLeft).join('|');
+      if (padding !== '14px|28px|14px') bad.push('retrait=' + padding);
+      // La ligne « Gamma » (la deuxième) mène au titre Gamma, la troisième à « Delta » : leur rang parmi TOUS les titres est le troisième et le quatrième.
+      const links = Array.from(h.tiptap().querySelectorAll('.toc-entry-preview a.toc-link'));
+      const clickLink = link => link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      const caret = () => { const { $from } = EditorCore.getEditor().state.selection; return $from.parent.type.name + ':' + $from.parent.textContent; };
+      clickLink(links[1]); await h.sleep(100);
+      const onGamma = caret();
+      clickLink(links[2]); await h.sleep(100);
+      const onDelta = caret();
+      clickLink(links[0]); await h.sleep(100);
+      const onBeta = caret();
+      if (onGamma !== 'heading:Gamma' || onDelta !== 'heading:Delta' || onBeta !== 'heading:Beta') bad.push('liens=' + [onBeta, onGamma, onDelta].join(','));
+      // La numérotation « Article » compte tous les titres : le sommaire qui commence à H2 garde « 1.a » pour Beta.
+      Editor.setHTML('<div class="heading-numbering-config" data-style="article"></div>' + TOC_DOC('<div class="toc-marker" data-toc-from="2"></div>'));
+      await h.sleep(200);
+      const numbered = previewLines(h);
+      if (numbered.join('|') !== '1.a Beta|1.a.1 Gamma|1.b Delta') bad.push('Article=' + numbered.join('|'));
+      // Aucun titre dans les niveaux : la phrase « aucun titre », comme les sorties.
+      Editor.setHTML(TOC_DOC('<div class="toc-marker" data-toc-from="5" data-toc-to="6"></div>'));
+      await h.sleep(200);
+      const marker = h.tiptap().querySelector('.toc-marker');
+      if (marker.textContent !== I18n.t('pdf.tocEmpty') || previewLines(h).length) bad.push('aucun titre=' + marker.textContent);
+      // Le sommaire sans réglage liste tout (cinq lignes), comme avant.
+      Editor.setHTML(TOC_DOC('<div class="toc-marker"></div>'));
+      await h.sleep(200);
+      if (previewLines(h).join('|') !== 'Alpha|Beta|Gamma|Delta|Epsilon') bad.push('sans réglage=' + previewLines(h).join('|'));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'toc_editor_preview_shows_the_page_number_of_each_heading_when_asked',
+    description: 'Dans l\'éditeur, l\'aperçu du sommaire écrit le numéro de page de chaque titre (celui de l\'aperçu de la page : Alpha 1, Beta 2, Gamma 2, Delta 3) sans changer le texte de la ligne ; sans le réglage « N° de page » aucun numéro ; sans aperçu de la page un tiret, jamais un numéro deviné',
+    run: async (h) => {
+      await h.resetEditor();
+      const bad = [];
+      const pageOf = () => Array.from(h.tiptap().querySelectorAll('.toc-entry-preview')).map(el => el.getAttribute('data-page'));
+      const drawn = async marker => {
+        Editor.setHTML(marker + '<h1>Alpha</h1><p>Texte un.</p>' + PDF_BREAK + '<h1>Beta</h1><h2>Gamma</h2><p>Texte deux.</p>' + PDF_BREAK + '<h1>Delta</h1><p>Fin.</p>');
+        await h.sleep(200);
+        HeaderFooterPreview.renderPaginationOverlay();
+        await h.sleep(250);
+      };
+      h.setA4Preview(true);
+      try {
+        await drawn('<div class="toc-marker"></div>');
+        if (pageOf().join() !== '1,2,2,3') bad.push('avec l\'aperçu de la page=' + pageOf().join());
+        if (previewLines(h).join('|') !== 'Alpha|Beta|Gamma|Delta') bad.push('texte des lignes=' + previewLines(h).join('|'));
+        const shown = Array.from(h.tiptap().querySelectorAll('.toc-entry-preview')).map(el => getComputedStyle(el, '::after').content);
+        if (shown.join() !== '"1","2","2","3"') bad.push('numéros peints=' + shown.join());
+        // Avec les niveaux H2 seuls, le numéro de Gamma reste celui de SON titre (page 2), pas celui du premier titre.
+        await drawn('<div class="toc-marker" data-toc-from="2" data-toc-to="2"></div>');
+        if (pageOf().join() !== '2' || previewLines(h).join('|') !== 'Gamma') bad.push('H2 seul=' + pageOf().join() + ' ' + previewLines(h).join('|'));
+        await drawn('<div class="toc-marker" data-toc-pages="false"></div>');
+        if (pageOf().some(value => value !== null) || previewLines(h).length !== 4) bad.push('sans numéros=' + pageOf().join());
+      } finally { h.setA4Preview(false); }
+      // Sans aperçu de la page, la pagination n'est pas connue : un tiret.
+      HeaderFooterPreview.renderPaginationOverlay();
+      Editor.setHTML('<div class="toc-marker"></div><h1>Alpha</h1><h1>Beta</h1>');
+      await h.sleep(250);
+      if (pageOf().join() !== '–,–') bad.push('sans aperçu de la page=' + pageOf().join());
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'toc_bar_changes_the_options_the_preview_keeps_the_selection_and_undoes',
+    description: 'Les contrôles de la barre du sommaire changent ses réglages : l\'aperçu se redessine, le sommaire reste sélectionné et la barre ouverte, un seul Ctrl + Z rend l\'état d\'avant ; monter le premier niveau au-dessus du dernier emmène le dernier (et inversement) ; revenir aux valeurs d\'avant efface les attributs du HTML ; un document en lecture seule n\'a pas de barre',
+    run: async (h) => {
+      await h.resetEditor();
+      const bad = [];
+      Editor.setHTML(TOC_DOC('<div class="toc-marker"></div>'));
+      await h.sleep(200);
+      const editor = EditorCore.getEditor();
+      editor.chain().setNodeSelection(tocNode().pos).run();
+      await h.sleep(150);
+      const bar = () => document.querySelector('.v2-toc-toolbar');
+      const options = () => tocNode().node.attrs.options;
+      // Une liste se règle comme la personne le fait : la valeur change, l'évènement « input » part ; le bouton répond à l'appui (js/editor-core.js:createFloatingPanel).
+      const pick = async (role, value) => { const select = bar().querySelector(`select[data-role="${role}"]`); select.value = String(value); select.dispatchEvent(new Event('input', { bubbles: true })); await h.sleep(120); };
+      const togglePages = async () => { bar().querySelector('button[data-action="toc-pages"]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); await h.sleep(120); };
+      const state = () => ({ from: bar().querySelector('select[data-role="toc-from"]').value, to: bar().querySelector('select[data-role="toc-to"]').value, pages: bar().querySelector('button[data-action="toc-pages"]').classList.contains('is-active'), open: bar().classList.contains('visible') });
+      const selectedToc = () => !!(editor.state.selection.node && editor.state.selection.node.type.name === 'toc');
+      if (!state().open) return { pass: false, notes: 'la barre du sommaire n\'est pas ouverte sur le sommaire sélectionné' };
+      await pick('toc-from', 2);
+      if (JSON.stringify(options()) !== JSON.stringify({ from: 2, to: 6, pages: true }) || previewLines(h).join('|') !== 'Beta|Gamma|Delta') bad.push('de H2=' + JSON.stringify(options()) + ' ' + previewLines(h).join('|'));
+      if (!selectedToc() || !state().open || state().from !== '2') bad.push('après de H2 : sélection=' + selectedToc() + ' barre=' + JSON.stringify(state()));
+      await pick('toc-to', 3);
+      if (JSON.stringify(options()) !== JSON.stringify({ from: 2, to: 3, pages: true })) bad.push('à H3=' + JSON.stringify(options()));
+      // Le dernier niveau choisi sous le premier emmène le premier ; le premier au-dessus du dernier emmène le dernier ; les listes le disent.
+      await pick('toc-to', 1);
+      if (JSON.stringify(options()) !== JSON.stringify({ from: 1, to: 1, pages: true }) || state().from !== '1' || state().to !== '1') bad.push('à H1 emmène le premier=' + JSON.stringify(options()) + JSON.stringify(state()));
+      await pick('toc-from', 4);
+      if (JSON.stringify(options()) !== JSON.stringify({ from: 4, to: 4, pages: true }) || state().to !== '4') bad.push('de H4 emmène le dernier=' + JSON.stringify(options()) + JSON.stringify(state()));
+      await togglePages();
+      if (options().pages !== false || !/data-toc-pages="false"/.test(Editor.getHTML()) || state().pages) bad.push('sans numéros=' + JSON.stringify(options()) + JSON.stringify(state()));
+      // Revenir aux valeurs d'avant : plus aucun réglage, plus aucun attribut.
+      await pick('toc-from', 1);
+      await pick('toc-to', 6);
+      await togglePages();
+      if (options() !== null || /data-toc-/.test(Editor.getHTML()) || !state().pages) bad.push('retour aux valeurs d\'avant=' + JSON.stringify(options()) + ' ' + Editor.getHTML().slice(0, 120));
+      // Ctrl + Z : un geste, un pas.
+      await pick('toc-to', 3);
+      editor.commands.undo();
+      await h.sleep(150);
+      if (options() !== null || previewLines(h).length !== 5 || state().to !== '6') bad.push('Ctrl+Z=' + JSON.stringify(options()) + ' ' + previewLines(h).length + ' lignes, barre ' + JSON.stringify(state()));
+      // En lecture seule la barre n'existe pas, et ses contrôles ne changent rien.
+      editor.setEditable(false);
+      editor.chain().setNodeSelection(tocNode().pos).run();
+      await h.sleep(150);
+      const hidden = !bar().classList.contains('visible');
+      await pick('toc-from', 3);
+      const unchanged = options() === null;
+      editor.setEditable(true);
+      if (!hidden || !unchanged) bad.push('lecture seule : barre cachée=' + hidden + ' réglages inchangés=' + unchanged);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'toc_insert_selects_the_new_toc_so_its_bar_opens',
+    description: 'Insérer un sommaire (le bouton) le laisse sélectionné et la barre de ses réglages s\'ouvre au-dessus de lui (« Titres H1 à H6 », « N° de page » allumé) ; un second sommaire inséré est celui qui est sélectionné ; la barre se ferme dès que le curseur quitte le sommaire',
+    run: async (h) => {
+      await h.resetEditor();
+      const bad = [];
+      Editor.setHTML('<h1>Alpha</h1><p>Texte</p><h2>Beta</h2><p>Fin</p>');
+      await h.sleep(150);
+      const editor = EditorCore.getEditor();
+      await h.focusInElement(h.tiptap().querySelectorAll('p')[0], true);
+      await h.clickButton('v2-btn-toc');
+      await h.sleep(250);
+      const bar = () => document.querySelector('.v2-toc-toolbar');
+      const open = () => !!bar() && bar().classList.contains('visible');
+      const selected = () => editor.state.selection.node && editor.state.selection.node.type.name;
+      if (selected() !== 'toc' || !open()) bad.push('après l\'insertion : sélection=' + selected() + ' barre=' + open());
+      if (open()) {
+        const state = { from: bar().querySelector('select[data-role="toc-from"]').value, to: bar().querySelector('select[data-role="toc-to"]').value, pages: bar().querySelector('button[data-action="toc-pages"]').classList.contains('is-active'), pressed: bar().querySelector('button[data-action="toc-pages"]').getAttribute('aria-pressed') };
+        if (state.from !== '1' || state.to !== '6' || !state.pages || state.pressed !== 'true') bad.push('barre=' + JSON.stringify(state));
+        const barBox = bar().getBoundingClientRect();
+        const tocBox = h.tiptap().querySelector('.toc-marker').getBoundingClientRect();
+        if (!(barBox.bottom <= tocBox.top + 1)) bad.push('la barre n\'est pas au-dessus du sommaire : ' + JSON.stringify({ barBottom: Math.round(barBox.bottom), tocTop: Math.round(tocBox.top) }));
+      }
+      // Un second sommaire : la sélection passe au nouveau, qui est celui dont la barre dit les réglages.
+      await h.focusInElement(h.tiptap().querySelectorAll('p')[h.tiptap().querySelectorAll('p').length - 1], true);
+      await h.clickButton('v2-btn-toc');
+      await h.sleep(250);
+      const tocs = []; editor.state.doc.descendants((node, pos) => { if (node.type.name === 'toc') tocs.push(pos); });
+      if (tocs.length !== 2 || editor.state.selection.from !== tocs[1]) bad.push('second sommaire : positions=' + tocs.join() + ' sélection=' + editor.state.selection.from);
+      // Le curseur dans le texte : la barre se ferme.
+      await h.focusInElement(h.tiptap().querySelectorAll('p')[0], true);
+      await h.sleep(200);
+      if (open()) bad.push('la barre reste ouverte hors du sommaire');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'toc_reader_lists_only_the_chosen_levels',
+    description: 'En Lecture, le sommaire ne liste que les niveaux choisis (de H2 à H3), chaque ligne mène à SON titre, et le numéro de page n\'y est pas (pas de pages) ; sans réglage, tout est listé comme avant',
+    run: async (h) => {
+      await h.resetEditor();
+      h.setA4Preview(true);
+      try {
+        const bad = [];
+        const read = async marker => {
+          await h.renderReaderMode(TOC_DOC(marker, FILLER(60)), null);
+          await h.sleep(300);
+          return Array.from(document.querySelectorAll('#reader-container .reader-content .toc-entry')).map(line => line.className.replace('toc-entry ', '') + '=' + line.textContent);
+        };
+        const levels = await read('<div class="toc-marker" data-toc-from="2" data-toc-to="3" data-toc-pages="false"></div>');
+        if (levels.join('|') !== 'toc-level-2=Beta|toc-level-3=Gamma|toc-level-2=Delta') bad.push('H2 à H3=' + levels.join('|'));
+        const links = Array.from(document.querySelectorAll('#reader-container .reader-content .toc-entry a.toc-link'));
+        const scroller = document.getElementById('reader-container');
+        const headings = Array.from(document.querySelectorAll('#reader-container .reader-content > h1, #reader-container .reader-content > h2, #reader-container .reader-content > h3'));
+        links[1].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        await h.sleep(150);
+        const gammaOffset = headings[2].getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+        if (headings[2].textContent !== 'Gamma' || Math.abs(gammaOffset - 12) > 3) bad.push('« Gamma » à ' + Math.round(gammaOffset) + ' px');
+        const none = await read('<div class="toc-marker" data-toc-from="5" data-toc-to="6"></div>');
+        const emptyText = (document.querySelector('#reader-container .reader-content .toc-empty') || {}).textContent;
+        if (none.length || emptyText !== I18n.t('pdf.tocEmpty')) bad.push('aucun titre=' + none.join('|') + ' / ' + emptyText);
+        const everything = await read('<div class="toc-marker"></div>');
+        if (everything.length !== 5) bad.push('sans réglage=' + everything.length + ' lignes');
+        return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+      } finally {
+        h.setA4Preview(false);
+        document.getElementById('editor-container').style.display = '';
+        document.getElementById('reader-container').style.display = '';
+        document.getElementById('btn-mode-edit').click();
+        await h.sleep(60);
+      }
+    },
+  });
+
+  cases.push({
+    id: 'toc_pdf_lists_only_the_chosen_levels_and_writes_page_numbers_only_when_asked',
+    description: 'Le sommaire du PDF ne liste que les niveaux choisis et son numéro de page est celui de SON titre (H2 seul : « Gamma 2 », pas le numéro du premier titre) ; sans « N° de page » aucun numéro n\'est écrit dans le sommaire et le titre prend toute la ligne ; sans réglage rien ne change (quatre lignes, quatre numéros)',
+    run: async (h) => {
+      await h.resetEditor();
+      const bad = [];
+      // Les lignes du sommaire sur la première page : le texte et le numéro de chaque ligne, lus dans les octets du PDF (les mots des titres sont des morceaux de texte pour pdf.js).
+      const page1 = async marker => {
+        const result = await h.exportPdfContent(PDF_DOC.replace('<div class="toc-marker"></div>', marker), null);
+        const truth = await h.extractPdfGroundTruth(result.base64);
+        const items = truth.pages[0].textItems.filter(it => it.str.trim());
+        // Combien de fois chaque titre est écrit sur la première page : le sommaire en ajoute une, et seul « Alpha » est aussi un titre de cette page (les autres sont sur les pages 2 et 3).
+        const words = ['Alpha', 'Beta', 'Gamma', 'Delta'].map(word => items.filter(it => it.str === word).length);
+        const numbers = items.filter(it => /^[0-9]+$/.test(it.str)).map(it => it.str);
+        return { result, truth, words, numbers, pages: truth.pages.length };
+      };
+      // Sans réglage : quatre titres, leurs numéros de page 1, 2, 2, 3 (rien de changé).
+      const plain = await page1('<div class="toc-marker"></div>');
+      if (plain.pages !== 3 || plain.words.join() !== '2,1,1,1' || plain.numbers.join() !== '1,2,2,3') bad.push('sans réglage=' + JSON.stringify({ words: plain.words, numbers: plain.numbers }));
+      // H2 seul : « Gamma » et son numéro de page, le deuxième (le rang du titre parmi tous, pas celui de la ligne).
+      const h2 = await page1('<div class="toc-marker" data-toc-from="2" data-toc-to="2"></div>');
+      if (h2.words.join() !== '1,0,1,0' || h2.numbers.join() !== '2') bad.push('H2 seul=' + JSON.stringify({ words: h2.words, numbers: h2.numbers }));
+      // H1 seul : trois lignes (Alpha, Beta, Delta), numéros 1, 2, 3.
+      const h1 = await page1('<div class="toc-marker" data-toc-to="1"></div>');
+      if (h1.words.join() !== '2,1,0,1' || h1.numbers.join() !== '1,2,3') bad.push('H1 seul=' + JSON.stringify({ words: h1.words, numbers: h1.numbers }));
+      // Sans numéro de page : les quatre titres, aucun nombre dans le sommaire.
+      const noPages = await page1('<div class="toc-marker" data-toc-pages="false"></div>');
+      if (noPages.words.join() !== '2,1,1,1' || noPages.numbers.length) bad.push('sans numéros=' + JSON.stringify({ words: noPages.words, numbers: noPages.numbers }));
+      // Les liens : un par ligne listée, et la ligne de H2 seul mène à « Gamma » (page 2).
+      const links = await h.extractPdfLinks(h2.result.base64);
+      const all = links.pages.flatMap(p => p.links);
+      if (all.length !== 2 || all.some(link => link.page !== 2)) bad.push('liens de H2 seul=' + JSON.stringify(all.map(link => link.page)));
+      const noPagesLinks = (await h.extractPdfLinks(noPages.result.base64)).pages.flatMap(p => p.links);
+      if (noPagesLinks.length !== 4) bad.push('liens sans numéros=' + noPagesLinks.length + ' (un par ligne, le numéro n\'est plus un lien)');
+      // Aucun titre dans les niveaux : la phrase « aucun titre », sans numéro.
+      const none = await h.exportPdfContent(PDF_DOC.replace('<div class="toc-marker"></div>', '<div class="toc-marker" data-toc-from="5" data-toc-to="6"></div>'), null);
+      const noneTruth = await h.extractPdfGroundTruth(none.base64);
+      const noneText = noneTruth.pages[0].textItems.map(it => it.str).join(' ');
+      if (noneText.indexOf(I18n.t('pdf.tocEmpty').split(' ')[0]) === -1) bad.push('aucun titre : ' + noneText.slice(0, 120));
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pageBreakToc = cases;
 })();

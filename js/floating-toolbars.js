@@ -1732,6 +1732,71 @@ const FloatingToolbars = (function () {
   }
   function wireCopyFloatingToolbar() { return createCopyToolbar(editor).wire(); }
 
+  // La barre flottante du sommaire (js/toc-options.js), au-dessus de lui tant qu'il est sélectionné - juste après l'avoir inséré, ou d'un clic sur lui : les niveaux de titres listés (du premier au
+  // dernier, deux listes « H1 » à « H6 ») et le numéro de page de chaque titre, qu'un bouton allume ou éteint. Elle ne prend aucune place dans la feuille : la pagination reste celle du PDF. Chaque
+  // réglage change le nœud (une transaction : Ctrl + Z le défait) et le sommaire se redessine ; le sommaire reste sélectionné, la barre aussi. Pour le document seulement : un champ texte (Objet,
+  // À, Cc…) n'a pas de sommaire.
+  function createTocToolbar(editor) {
+    const LEVELS = [1, 2, 3, 4, 5, 6];
+    function selectedToc() {
+      const node = editor.state.selection.node;
+      return node && node.type.name === 'toc' ? { node, pos: editor.state.selection.from } : null;
+    }
+    // Un réglage changé : un autre nœud (EditorCore.patchNodeAndReselect), le sommaire resélectionné - la barre reste ouverte. Le focus revient à l'éditeur : Ctrl + Z défait le réglage, même
+    // quand il vient d'une liste.
+    function apply(patch) {
+      const toc = selectedToc();
+      if (!toc || !editor.isEditable) return;
+      EditorCore.patchNodeAndReselect(editor, toc.pos, Object.assign({}, toc.node.attrs, { options: TocOptions.stored(TocOptions.change(toc.node.attrs.options, patch)) }));
+      editor.view.focus();
+    }
+    function html() {
+      const options = number => LEVELS.map(level => `<option value="${level}"${level === number ? ' selected' : ''}>H${level}</option>`).join('');
+      const levelsTip = I18n.t('toc.bar.levelsTip');
+      const fromTip = I18n.t('toc.bar.from');
+      const toTip = I18n.t('toc.bar.to');
+      const pagesTip = I18n.t('toc.bar.pagesTip');
+      return `<span class="v2-toc-label" title="${levelsTip}">${I18n.t('toc.bar.levels')}</span>`
+        + `<select data-role="toc-from" title="${fromTip}" aria-label="${fromTip}">${options(1)}</select>`
+        + `<span class="v2-toc-to">${I18n.t('toc.bar.upTo')}</span>`
+        + `<select data-role="toc-to" title="${toTip}" aria-label="${toTip}">${options(6)}</select>`
+        + '<span class="v2-toc-sep"></span>'
+        + `<button type="button" data-action="toc-pages" aria-pressed="true" title="${pagesTip}" aria-label="${pagesTip}">${I18n.t('toc.bar.pages')}</button>`;
+    }
+    function wire() {
+      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-toc-toolbar', html(), (action) => {
+        const toc = selectedToc();
+        if (action === 'toc-pages' && toc) apply({ pages: !TocOptions.normalize(toc.node.attrs.options).pages });
+      }, (role, value) => {
+        if (role === 'toc-from') apply({ from: Number(value) });
+        if (role === 'toc-to') apply({ to: Number(value) });
+      });
+      EditorCore.registerFloatingPanel(panel);
+      const ui = controlsOf(panel);
+      const check = ({ transaction } = {}) => {
+        // Le blur de l'éditeur ne change ni la sélection ni le document : cf. wireImageFloatingToolbar.
+        if (transaction && transaction.getMeta('blur')) return;
+        const toc = selectedToc();
+        // Un document en lecture seule garde son sommaire tel qu'il est : pas de barre.
+        if (!toc || !editor.isEditable) { panel.hide(); return; }
+        const dom = editor.view.nodeDOM(toc.pos);
+        // Éditeur masqué (Lecture, résumé d'un macro-modèle) : cf. createVariableToolbar.
+        if (!dom || !dom.getClientRects().length) { panel.hide(); return; }
+        const options = TocOptions.normalize(toc.node.attrs.options);
+        ui.setField('select[data-role="toc-from"]', options.from);
+        ui.setField('select[data-role="toc-to"]', options.to);
+        ui.setActive('toc-pages', options.pages);
+        ui.button('toc-pages').setAttribute('aria-pressed', options.pages ? 'true' : 'false');
+        panel.show(dom, anchoredBarOptions);
+      };
+      editor.on('selectionUpdate', check);
+      editor.on('transaction', check);
+      return panel;
+    }
+    return { wire };
+  }
+  function wireTocFloatingToolbar() { return createTocToolbar(editor).wire(); }
+
   const { suggestionToolbarHtml, wireSuggestionAuthors, createCaretAnchor } = (function () {
     // Barre flottante d'une modification suivie : son HTML, l'étiquette de l'auteur, l'ancre sous le curseur
 
@@ -1873,5 +1938,5 @@ const FloatingToolbars = (function () {
     return { wireSuggestionFloatingToolbar };
   })();
 
-  return { setEditor, wireColorPickers, wireTableFloatingToolbar, wireImageFloatingToolbar, wireVariableFloatingToolbar, attachVariableToolbar, wireTimeChipFloatingToolbar, attachTimeChipToolbar, wireMentionFloatingToolbar, wireCopyFloatingToolbar, variableWindowOpen, wireSuggestionFloatingToolbar };
+  return { setEditor, wireColorPickers, wireTableFloatingToolbar, wireImageFloatingToolbar, wireVariableFloatingToolbar, attachVariableToolbar, wireTimeChipFloatingToolbar, attachTimeChipToolbar, wireMentionFloatingToolbar, wireCopyFloatingToolbar, wireTocFloatingToolbar, variableWindowOpen, wireSuggestionFloatingToolbar };
 })();

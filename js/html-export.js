@@ -333,15 +333,18 @@ const HtmlExport = (function () {
   }
 
   // Le sommaire : une liste de liens vers les titres, le retrait suit la profondeur réelle (un titre 1 puis un titre 3 n'est qu'un cran plus loin).
-  function tocInto(parent, ctx) {
+  // `marker` : le repère du sommaire, dont les réglages (js/toc-options.js) disent les niveaux listés ; le numéro de page n'a pas de sens dans une page web.
+  function tocInto(parent, ctx, marker) {
     if (!ctx.toc) return;
     ctx.uses.add('toc');
+    const options = TocOptions.ofElement(marker);
+    const entries = ctx.toc.filter(entry => TocOptions.covers(options, entry.level));
     const nav = make(ctx, 'nav', PREFIX + 'toc');
     nav.setAttribute('aria-label', I18n.t('pdf.tocTitle'));
     const title = make(ctx, 'p', PREFIX + 'toc-title');
     title.textContent = I18n.t('pdf.tocTitle');
     nav.appendChild(title);
-    if (!ctx.toc.length) {
+    if (!entries.length) {
       const empty = make(ctx, 'p', PREFIX + 'toc-empty');
       empty.textContent = I18n.t('pdf.tocEmpty');
       nav.appendChild(empty);
@@ -350,7 +353,7 @@ const HtmlExport = (function () {
       const lists = [root];
       const stack = [];
       let lastItem = null;
-      ctx.toc.forEach(entry => {
+      entries.forEach(entry => {
         while (stack.length && stack[stack.length - 1] >= entry.level) stack.pop();
         const depth = stack.length;
         stack.push(entry.level);
@@ -743,7 +746,7 @@ const HtmlExport = (function () {
     if (cl.contains('heading-numbering-config') || cl.contains('page-break-marker') || cl.contains('page-number-badge')) return;
     // Le repère de départ d'un macro-modèle (js/page-sections.js) ne dit que la page du premier modèle : un fichier HTML n'a pas de pages, il n'y laisse pas un bloc vide.
     if (PageSections.isStart(el)) return;
-    if (cl.contains('toc-marker')) { tocInto(parent, ctx); return; }
+    if (cl.contains('toc-marker')) { tocInto(parent, ctx, el); return; }
     if (cl.contains('pp-slide-anchor')) { slideAnchorInto(el, parent, ctx); return; }
     if (cl.contains('footnote-ref-marker')) { footnoteRefInto(el, parent, ctx); return; }
     // Une tabulation (js/tab-indent.js) : son caractère, gardé tel quel dans son élément (`white-space: pre-wrap`), au cran de `tab-size`.

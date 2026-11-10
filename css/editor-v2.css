@@ -598,6 +598,11 @@
 
 /* Aperçu vivant du sommaire dans l'éditeur (Toc.addNodeView), purement visuel. */
 .tiptap .toc-entry-preview { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Le numéro de page d'une ligne du sommaire (js/editor-nodes.js : l'attribut `data-page`, posé d'après la pagination de l'éditeur ; un tiret quand elle ne le sait pas) : à droite de la ligne, le titre se coupe
+   par « … » avant lui. Le texte de la ligne reste celui du titre, et le vide entre le titre et le numéro n'est pas un lien (un clic y sélectionne le bloc). */
+.tiptap .toc-entry-preview[data-page] { display: flex; gap: 8px; }
+.tiptap .toc-entry-preview[data-page] .toc-link { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tiptap .toc-entry-preview[data-page]::after { content: attr(data-page); flex: none; margin-left: auto; font-variant-numeric: tabular-nums; }
 
 /* Le drapeau d'un signet (js/anchors.js:flagElement) : un repère de l'éditeur seulement, dans la marge à gauche du début du bloc qui porte le signet. `position: absolute` sans
    `top` ni `left` le laisse là où il serait dans la ligne (le début du bloc) et la marge négative le sort du texte : rien ne se décale, et aucun repère de position n'est posé sur

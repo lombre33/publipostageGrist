@@ -149,6 +149,7 @@ window.EditorTestSuites.undoSweep = (function () {
     { name: 'colors', markup: PARA, sel: 'all', savedColors: ['#1e8449'] },
     { name: 'formats', markup: PARA, sel: 'all', savedFormats: [{ name: 'Mon rouge', style: { bold: true, color: '#c00000' } }] },
     { name: 'suggestion', markup: '<p>Bonjour <ins data-id="1">monde</ins> fin</p><p>Autre <del data-id="2">texte</del> ligne</p>', sel: 'inSuggestion' },
+    { name: 'toc', markup: '<p>Texte</p><div class="toc-marker"></div><h1>Alpha</h1><h2>Beta</h2><h3>Gamma</h3>', sel: 'toc' },
     { name: 'timeChip', markup: '<p>Heure <span class="smart-chip" contenteditable="false" data-chip-kind="time"></span> fin</p>', sel: 'chip' },
   ];
   async function seedVariables() {
@@ -170,7 +171,7 @@ window.EditorTestSuites.undoSweep = (function () {
     await closeOverlays();
     if (Editor.isTrackChangesOn()) { document.getElementById('v2-btn-track-changes').click(); await sleep(100); }
   }
-  const NODE_OF = { image: 'editorImage', badge: 'varBadge', chip: 'smartChip', calc: 'calcBadge' };
+  const NODE_OF = { image: 'editorImage', badge: 'varBadge', chip: 'smartChip', calc: 'calcBadge', toc: 'toc' };
   async function load(h, fx) {
     await h.resetEditor();
     await restoreBaseline();

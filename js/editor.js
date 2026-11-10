@@ -620,6 +620,7 @@ const Editor = (function () {
     FloatingToolbars.wireTimeChipFloatingToolbar();
     FloatingToolbars.wireMentionFloatingToolbar();
     FloatingToolbars.wireCopyFloatingToolbar();
+    FloatingToolbars.wireTocFloatingToolbar();
     FloatingToolbars.wireSuggestionFloatingToolbar({ of: getSuggestionAuthors, onChange: onSuggestionAuthorsChange });
     TrackChangesPane.wireEditor(editor, { onAuthorsChange: onSuggestionAuthorsChange });
     FreeFrame.wireToolbar(editor);

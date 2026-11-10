@@ -370,25 +370,29 @@ const PdfExport = (function () {
   // Contenu pdfmake d'un sommaire, à partir des blocs-titre déjà rencontrés : texte et niveau sont connus tout de suite, pas le numéro de page (il
   // dépend d'une première passe de mise en page, cf. resolveNativePdfContent) ; chaque entrée réserve sa cellule vide, remplie après coup. Chaque entrée est un
   // lien vers son titre (le texte, et le numéro de page quand il est écrit : fillTocPageNumbers) ; la couleur et le trait des lignes restent ceux du sommaire.
-  function buildTocStack(headingBlocks) {
+  // `options` : les réglages du sommaire (js/toc-options.js) - les niveaux de titres listés et, ou non, la cellule du numéro de page. Le rang d'un titre parmi TOUS les titres reste celui de
+  // `headingBlocks` : la cellule le garde (`_headingIndex`), le numéro de page se lit à ce rang (fillTocPageNumbers).
+  function buildTocStack(headingBlocks, options) {
     const title = { text: I18n.t('pdf.tocTitle'), bold: true, fontSize: 16, margin: [0, 0, 0, 10] };
-    if (!headingBlocks.length) {
+    const withPages = TocOptions.normalize(options).pages;
+    const listed = headingBlocks.map((hb, index) => ({ hb, index })).filter(({ hb }) => TocOptions.covers(options, hb._headingLevel || 1));
+    if (!listed.length) {
       return { stack: [title, { text: I18n.t('pdf.tocEmpty'), italics: true, color: '#6b7280' }], pageNumberCells: [] };
     }
     const pageNumberCells = [];
-    const lines = headingBlocks.map(hb => {
+    const lines = listed.map(({ hb, index }) => {
       const level = hb._headingLevel || 1;
       const isH1 = level === 1;
       const fontSize = isH1 ? 11 : 10.5;
       const destination = headingDestination(hb);
-      const pageCell = { text: '', alignment: 'right', width: 30, bold: isH1, fontSize };
+      const text = glyphText(hb._headingText || '', Object.assign({ bold: isH1, fontSize }, destination ? { linkToDestination: destination } : {}));
+      const margin = [Math.max(0, level - 1) * 14, isH1 ? 6 : 2, 0, 2];
+      // Sans numéro de page, le titre prend toute la largeur de la ligne.
+      if (!withPages) return { columns: [text], margin };
+      const pageCell = { text: '', alignment: 'right', width: 30, bold: isH1, fontSize, _headingIndex: index };
       if (destination) pageCell._destination = destination;
       pageNumberCells.push(pageCell);
-      return {
-        columns: [glyphText(hb._headingText || '', Object.assign({ bold: isH1, fontSize }, destination ? { linkToDestination: destination } : {})), pageCell],
-        columnGap: 4,
-        margin: [Math.max(0, level - 1) * 14, isH1 ? 6 : 2, 0, 2],
-      };
+      return { columns: [text, pageCell], columnGap: 4, margin };
     });
     return { stack: [title].concat(lines), pageNumberCells };
   }
@@ -3855,6 +3859,8 @@ const PdfExport = (function () {
   function visitToc(st, node, run) {
     closeKeepRun(st, run);
     const tocBlock = { stack: [{ text: I18n.t('pdf.tocTitle'), bold: true, fontSize: 16 }], ...(st.pendingPageBreak ? { pageBreak: 'before' } : {}) };
+    // Les réglages de ce sommaire (js/toc-options.js), lus sur son repère : fillTocBlocks les applique quand tous les titres sont connus.
+    tocBlock._tocOptions = TocOptions.ofElement(node);
     pushWithSlideAnchor(st, tocBlock, node);
     st.tocBlocks.push(tocBlock);
     st.pendingPageBreak = false;
@@ -4065,7 +4071,7 @@ const PdfExport = (function () {
   function fillTocBlocks(tocBlocks, headingBlocks) {
     tocBlocks.forEach(tocBlock => {
       try {
-        const built = buildTocStack(headingBlocks);
+        const built = buildTocStack(headingBlocks, tocBlock._tocOptions);
         // Le titre du sommaire garde le nom d'une diapositive (placeSlideAnchor) que portait son titre d'avant.
         const named = firstTextOf(tocBlock);
         if (named && named.id) built.stack[0].id = named.id;
@@ -4917,8 +4923,10 @@ const PdfExport = (function () {
   function fillTocPageNumbers(content, headingPageNumbers) {
     (content._tocBlocks || []).forEach(tocBlock => {
       (tocBlock._pageNumberCells || []).forEach((cell, i) => {
-        if (headingPageNumbers[i] == null) return;
-        cell.text = String(headingPageNumbers[i]);
+        // Le numéro se lit au rang du titre parmi tous les titres : un sommaire qui ne liste que certains niveaux n'a pas une cellule par titre.
+        const page = headingPageNumbers[cell._headingIndex == null ? i : cell._headingIndex];
+        if (page == null) return;
+        cell.text = String(page);
         if (cell._destination) cell.linkToDestination = cell._destination;
       });
     });

@@ -1671,18 +1671,22 @@ const DocxExport = (function () {
   // champ est marqué à mettre à jour (`w:dirty`) : Word peut proposer de le faire à l'ouverture (pas essayé dans Word lui-même), et Oui donne les numéros
   // de page. Sans titre il n'y a rien à mettre à jour : la phrase « aucun titre » reste et Word ne demande rien. Le titre est un paragraphe à part, hors
   // du champ (une mise à jour ne l'efface pas) et sans style de titre (il ne se liste pas lui-même).
-  function buildTocBlocks(ctx, pageBreakBefore) {
+  // `options` : les réglages du sommaire (js/toc-options.js). Les niveaux listés sont ceux du champ (`\o "2-3"`) ET des entrées posées ici ; sans numéros de page, le champ porte `\n` (Word n'écrit
+  // alors aucun numéro en le mettant à jour).
+  function buildTocBlocks(ctx, pageBreakBefore, options) {
     const titleText = I18n.t('pdf.tocTitle');
+    const { from, to, pages } = TocOptions.normalize(options);
+    const range = from + '-' + to;
     const title = new docx.Paragraph({ children: [new docx.TextRun({ text: titleText, bold: true, size: 32 })], spacing: { after: 160 }, pageBreakBefore: !!pageBreakBefore });
-    const entries = ctx.headingBlocks.filter(hb => hb.text);
+    const entries = ctx.headingBlocks.filter(hb => hb.text && TocOptions.covers(options, hb.level));
     const result = entries.length
       ? entries.map(hb => new docx.Paragraph({ style: 'TOC' + hb.level, children: [new docx.InternalHyperlink({ anchor: hb.anchor, children: [new docx.TextRun(hb.text)] })] }))
       : [new docx.Paragraph({ children: [new docx.TextRun({ text: I18n.t('docx.tocEmpty'), italics: true })] })];
     ctx.hasToc = true;
-    const field = new docx.TableOfContents(titleText, {
-      hyperlink: true, headingStyleRange: '1-6', useAppliedParagraphOutlineLevel: true, hideTabAndPageNumbersInWebView: true,
+    const field = new docx.TableOfContents(titleText, Object.assign({
+      hyperlink: true, headingStyleRange: range, useAppliedParagraphOutlineLevel: true, hideTabAndPageNumbersInWebView: true,
       beginDirty: entries.length > 0, contentChildren: result,
-    });
+    }, pages ? {} : { pageNumbersEntryLevelsRange: range }));
     return [title, field];
   }
   // Les styles de sommaire des niveaux 1 à 6 (nom interne « toc N » : Word le reconnaît et l'affiche sous son propre nom) : l'indentation par niveau
@@ -1720,7 +1724,7 @@ const DocxExport = (function () {
     return isTopLevel && !ctx.deferToc ? withToc(blocks, ctx) : blocks;
   }
 
-  const withToc = (blocks, ctx) => blocks.flatMap(b => (b && b.__tocPlaceholder ? buildTocBlocks(ctx, b.pageBreakBefore) : [b]));
+  const withToc = (blocks, ctx) => blocks.flatMap(b => (b && b.__tocPlaceholder ? buildTocBlocks(ctx, b.pageBreakBefore, b.options) : [b]));
 
   function headingMarkersOf(container) {
     const config = container.querySelector(':scope > .heading-numbering-config');
@@ -1831,7 +1835,7 @@ const DocxExport = (function () {
   const CONTAINER_NODE_BLOCKS = [
     [node => node.classList.contains('page-break-marker'), markBreak],
     [node => node.classList.contains('heading-numbering-config'), () => []],
-    [node => node.classList.contains('toc-marker'), consumingBreak((node, flow) => (flow.isTopLevel ? [{ __tocPlaceholder: true, pageBreakBefore: flow.pendingPageBreak }] : []))],
+    [node => node.classList.contains('toc-marker'), consumingBreak((node, flow) => (flow.isTopLevel ? [{ __tocPlaceholder: true, pageBreakBefore: flow.pendingPageBreak, options: TocOptions.ofElement(node) }] : []))],
     [node => node.classList.contains('pp-slide-anchor'), (node, flow) => { const entry = flow.isTopLevel ? anchorEntryFor(node) : null; if (entry) flow.ctx.slideAnchor = entry; return []; }],
     [node => node.classList.contains('two-columns-zone'), carryingBreak(async (node, flow) => optionalBlock(await twoColumnsBlockFrom(node, flow.ctx)))],
     [node => node.classList.contains('hf-float-row'), consumingBreak(async (node, flow) => optionalBlock(await floatRowBlockFrom(node, flow.ctx)))],

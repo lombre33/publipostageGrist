@@ -319,6 +319,14 @@ const I18nTextsBlocks = {
   // --- Sommaire (placeholder avant résolution) : montré par l'éditeur (NodeView) ET écrit dans le HTML enregistré/copié (renderHTML,
   // js/editor-nodes.js) ---
   'toc.placeholder': { fr: 'Sommaire (généré automatiquement à partir des titres)', en: 'Table of contents (generated automatically from headings)' },
+  // La barre qui surmonte le sommaire sélectionné (js/floating-toolbars.js:createTocToolbar) : les niveaux de titres listés (« Titres H1 à H3 ») et le numéro de page de chaque titre.
+  'toc.bar.levels': { fr: 'Titres', en: 'Headings' },
+  'toc.bar.levelsTip': { fr: 'Niveaux de titres listés dans le sommaire', en: 'Heading levels listed in the table of contents' },
+  'toc.bar.from': { fr: 'Premier niveau de titre listé', en: 'First heading level listed' },
+  'toc.bar.to': { fr: 'Dernier niveau de titre listé', en: 'Last heading level listed' },
+  'toc.bar.upTo': { fr: 'à', en: 'to' },
+  'toc.bar.pages': { fr: 'N° de page', en: 'Page no.' },
+  'toc.bar.pagesTip': { fr: 'Écrire le numéro de page de chaque titre (PDF et Word)', en: 'Write the page number of each heading (PDF and Word)' },
 
   // --- Titre du sommaire, exporté en PDF (js/pdf-export.js:buildTocStack et son repli), en DOCX (js/docx-export.js:buildTocBlocks) et affiché
   // en mode Lecture (js/reader-mode.js:resolveTocMarkers) : tous disent la même chose, le mode Lecture étant l'aperçu de l'export ---

@@ -171,6 +171,23 @@
       ['titre dans une case', '<table><tbody><tr><td><h2>Titre en case</h2></td><td><p>a</p><p>b</p></td></tr></tbody></table>', doc('| **Titre en case** | a<br>b |', '| --- | --- |')],
     ]));
 
+  // Les réglages du sommaire (js/toc-options.js, la barre au-dessus de lui) : seuls les niveaux choisis sont listés, les cibles restent celles de TOUS les titres (le deuxième « Intro » est `#intro-1`
+  // même quand le premier n'est pas listé) ; le numéro de page n'a pas de sens en Markdown.
+  add('markdown_toc_lists_only_the_levels_chosen',
+    'Le sommaire Markdown ne liste que les niveaux choisis (de H2 à H3, jusqu\'à H1…), garde la cible de chaque titre (« -1 » derrière le deuxième titre identique, même si le premier n\'est pas listé), dit « aucun titre » quand aucun n\'est dans les niveaux, et « sans numéro de page » n\'y change rien',
+    async (h) => expectAll(h, [
+      ['H2 à H3', '<div class="toc-marker" data-toc-from="2" data-toc-to="3"></div><h1>Alpha</h1><h2>Beta</h2><h3>Gamma</h3><h4>Delta</h4>',
+        doc('**Sommaire**', '', '- [Beta](#beta)', '  - [Gamma](#gamma)', '', '# Alpha', '', '## Beta', '', '### Gamma', '', '#### Delta')],
+      ['jusqu\'à H1', '<div class="toc-marker" data-toc-to="1"></div><h1>Alpha</h1><h2>Beta</h2><h1>Gamma</h1>',
+        doc('**Sommaire**', '', '- [Alpha](#alpha)', '- [Gamma](#gamma)', '', '# Alpha', '', '## Beta', '', '# Gamma')],
+      ['la cible suit tous les titres', '<div class="toc-marker" data-toc-from="2"></div><h1>Intro</h1><h2>Intro</h2>',
+        doc('**Sommaire**', '', '- [Intro](#intro-1)', '', '# Intro', '', '## Intro')],
+      ['sans numéro de page, rien ne change', '<div class="toc-marker" data-toc-pages="false"></div><h1>Alpha</h1><h2>Beta</h2>',
+        doc('**Sommaire**', '', '- [Alpha](#alpha)', '  - [Beta](#beta)', '', '# Alpha', '', '## Beta')],
+      ['aucun titre dans ces niveaux', '<div class="toc-marker" data-toc-from="5" data-toc-to="6"></div><h1>Alpha</h1>',
+        doc('**Sommaire**', '', '*(aucun titre dans ce document)*', '', '# Alpha')],
+    ]));
+
   add('markdown_lists_nested_numbered_task_and_neighbours_stay_separate',
     'Listes à puces (- ), numérotées (depuis leur premier numéro) et à cases (- [x] / - [ ]), imbriquées avec le retrait de la largeur du signe ; deux listes de même sorte qui se suivent changent de signe (- puis *, 1. puis 1)) pour ne pas se fondre en une ; un item de deux paragraphes rend la liste « large » ; un item vide reste un item',
     async (h) => expectAll(h, [

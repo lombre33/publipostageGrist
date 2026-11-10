@@ -624,12 +624,15 @@ const MarkdownExport = (function () {
     });
     return { markerOf, entries };
   }
-  function tocBlocks(ctx) {
+  // `marker` : le repère du sommaire, dont les réglages (js/toc-options.js) disent les niveaux listés ; le numéro de page n'a pas de sens en Markdown.
+  function tocBlocks(ctx, marker) {
     const title = { type: 'p', lines: ['**' + I18n.t('pdf.tocTitle') + '**'] };
-    if (!ctx.toc.length) return [title, { type: 'p', lines: ['*' + I18n.t('markdown.tocEmpty') + '*'] }];
+    const options = TocOptions.ofElement(marker);
+    const entries = ctx.toc.filter(entry => TocOptions.covers(options, entry.level));
+    if (!entries.length) return [title, { type: 'p', lines: ['*' + I18n.t('markdown.tocEmpty') + '*'] }];
     // Le retrait suit la profondeur réelle (un titre 1 puis un titre 3 n'est qu'un cran plus loin), jamais l'écart des niveaux : quatre blancs de plus feraient un bloc de code.
     const stack = [];
-    const lines = ctx.toc.map(entry => {
+    const lines = entries.map(entry => {
       while (stack.length && stack[stack.length - 1] >= entry.level) stack.pop();
       const depth = stack.length;
       stack.push(entry.level);
@@ -645,7 +648,7 @@ const MarkdownExport = (function () {
     if (el.hasAttribute('data-pdf-skip')) return [];
     if (cl.contains('heading-numbering-config')) return [];
     if (cl.contains('page-break-marker')) return ctx.inCell ? [] : [{ type: 'html', lines: ['<div style="page-break-after: always;"></div>'] }];
-    if (cl.contains('toc-marker')) return ctx.inCell ? [] : tocBlocks(ctx);
+    if (cl.contains('toc-marker')) return ctx.inCell ? [] : tocBlocks(ctx, el);
     if (ctx.template && cl.contains('conditional-text')) return conditionalBlock(el, ctx);
     if (cl.contains('callout')) return calloutBlock(el, ctx);
     if (tag === 'TABLE') return tableBlock(el, ctx);

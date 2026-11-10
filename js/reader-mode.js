@@ -1394,13 +1394,16 @@ const ReaderMode = (function () {
     const numberingStyle = wrapper.dataset.headingStyle || 'none';
     const entries = HeadingNumbering.entriesFor(headings, numberingStyle);
     tocMarkers.forEach(marker => {
+      // Les niveaux que ce sommaire liste (js/toc-options.js) ; le numéro de page, lui, n'a pas de sens ici (pas de pages). Lus avant que le repère ne soit vidé.
+      const options = TocOptions.ofElement(marker);
+      const listed = entries.map((entry, index) => ({ entry, index })).filter(({ entry }) => TocOptions.covers(options, entry.level));
       marker.innerHTML = '';
       marker.classList.add('toc-resolved');
       const title = document.createElement('div'); title.className = 'toc-title'; title.textContent = I18n.t('pdf.tocTitle'); marker.appendChild(title);
-      if (!entries.length) { const empty = document.createElement('div'); empty.className = 'toc-empty'; empty.textContent = I18n.t('pdf.tocEmpty'); marker.appendChild(empty); return; }
+      if (!listed.length) { const empty = document.createElement('div'); empty.className = 'toc-empty'; empty.textContent = I18n.t('pdf.tocEmpty'); marker.appendChild(empty); return; }
       // Chaque ligne est un lien (js/toc-links.js) : un clic, ou Entrée sur la ligne atteinte au clavier, amène le titre en haut de la zone de lecture. Le titre est celui de
       // ce rang parmi les titres de ce document : `headings` garde les éléments eux-mêmes, que la mise en page de la Lecture déplace (feuilles, sections) sans les copier.
-      entries.forEach((entry, index) => {
+      listed.forEach(({ entry, index }) => {
         const line = document.createElement('div'); line.className = 'toc-entry toc-level-' + entry.level;
         line.appendChild(TocLinks.link(entry.text, () => headings[index], { focusable: true }));
         marker.appendChild(line);

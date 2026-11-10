@@ -267,6 +267,31 @@
       return result(bad);
     });
 
+  // Les réglages du sommaire (js/toc-options.js, la barre au-dessus de lui) : seuls les niveaux choisis sont listés, chaque lien garde la cible de son titre ; le numéro de page n'a pas de sens dans une page web.
+  add('html_toc_lists_only_the_levels_chosen',
+    'Le sommaire du fichier HTML ne liste que les niveaux choisis (de H2 à H3 : « Beta » puis « Gamma » sous lui), chaque lien mène à son titre, « sans numéro de page » n\'y change rien, et aucun titre dans les niveaux donne la phrase « aucun titre »',
+    async (h) => {
+      await seed(h);
+      const bad = [];
+      const body = marker => marker + '<h1>Alpha</h1><h2>Beta</h2><h3>Gamma</h3><h4>Delta</h4>';
+      const first = await html(h, body('<div class="toc-marker" data-toc-from="2" data-toc-to="3"></div>'));
+      const token = (markup(first).match(/<h1 id="pp-h-([0-9a-z]+)-1">/) || [])[1];
+      if (!token) return result(['pas de cible sur le premier titre : ' + JSON.stringify(markup(first))]);
+      const id = n => `pp-h-${token}-${n}`;
+      const nav = list => `<nav class="pp-toc" aria-label="Sommaire"><p class="pp-toc-title">Sommaire</p>${list}</nav>`;
+      const levels = markup(first).split('\n')[0];
+      if (levels !== nav(`<ul><li><a href="#${id(2)}">Beta</a><ul><li><a href="#${id(3)}">Gamma</a></li></ul></li></ul>`)) bad.push('H2 à H3=' + JSON.stringify(levels));
+      const page = pageOf(first);
+      page.querySelectorAll('.pp-toc a').forEach(a => { if (!page.getElementById(a.getAttribute('href').slice(1))) bad.push('lien sans cible : ' + a.getAttribute('href')); });
+      // Sans numéro de page : la même liste que sans réglage (une page web n'a pas de pages).
+      const plainList = markup(await html(h, body('<div class="toc-marker"></div>'))).split('\n')[0].replace(/pp-h-[0-9a-z]+-/g, 'pp-h-X-');
+      const noPages = markup(await html(h, body('<div class="toc-marker" data-toc-pages="false"></div>'))).split('\n')[0].replace(/pp-h-[0-9a-z]+-/g, 'pp-h-X-');
+      if (plainList !== noPages || plainList.indexOf('Delta') === -1) bad.push('sans numéro de page=' + JSON.stringify(noPages) + ' / sans réglage=' + JSON.stringify(plainList));
+      const none = markup(await html(h, '<div class="toc-marker" data-toc-from="5" data-toc-to="6"></div><h1>Alpha</h1>')).split('\n')[0];
+      if (none !== nav(`<p class="pp-toc-empty">${I18n.t('pdf.tocEmpty')}</p>`)) bad.push('aucun titre=' + JSON.stringify(none));
+      return result(bad);
+    });
+
   // --- Les blocs --------------------------------------------------------------------------------------------------------------------------------------
   const TASK_ITEM = (checked, body) => `<li data-checked="${checked}" data-type="taskItem"><label><input type="checkbox"${checked ? ' checked="checked"' : ''}><span></span></label><div><p>${body}</p></div></li>`;
 

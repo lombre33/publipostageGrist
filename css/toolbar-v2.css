@@ -485,6 +485,12 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(120px, calc(var(--gf
 .v2-timechip-toolbar, .v2-mention-toolbar { align-items: center; width: max-content; max-width: calc(100vw - 16px); }
 .v2-timechip-toolbar select { width: 96px; height: 26px; border: 1px solid var(--border, #d7dde3); border-radius: var(--radius-xs, 4px); font-size: 12px; padding: 0 6px; background: var(--surface, #fff); color: var(--text, #3a4452); }
 .v2-timechip-toolbar select[hidden] { display: none; }
+/* Barre flottante du sommaire (js/floating-toolbars.js:createTocToolbar) : « Titres H1 à H6 » et le bouton « N° de page ». Le chrome vient de `.v2-floating-toolbar` ; le bouton, qui porte un texte, remplace la largeur d'icône des boutons de la barre. */
+.v2-toc-toolbar { align-items: center; width: max-content; max-width: calc(100vw - 16px); }
+.v2-toc-toolbar .v2-toc-label, .v2-toc-toolbar .v2-toc-to { padding: 0 4px; font: 12px/1 var(--font-ui); color: var(--text-muted, #6b7482); }
+.v2-toc-toolbar select { width: 54px; height: 26px; border: 1px solid var(--border, #d7dde3); border-radius: var(--radius-xs, 4px); font-size: 12px; padding: 0 4px; background: var(--surface, #fff); color: var(--text, #3a4452); }
+.v2-toc-toolbar .v2-toc-sep { align-self: stretch; width: 1px; margin: 3px 4px; background: var(--border, #d7dde3); }
+.v2-toc-toolbar button[data-action="toc-pages"] { width: auto; padding: 0 8px; font: 600 12px/1 var(--font-ui); }
 .v2-varfmt-toolbar button[data-action="num-words"], .v2-varfmt-toolbar button[data-action="date-words"], .v2-varfmt-toolbar button[data-action="num-percent"] { width: auto; padding: 0 8px; font-size: 12px; font-weight: 600; }
 /* Écriture en lettres active : le style de séparateur (FR/US/aucun) n'a plus de sens, il est grisé et non retiré. Les décimales restent actives :
    la partie décimale s'écrit aussi en toutes lettres (« virgule cinquante-six »), sans arrondi silencieux ; la devise reste utilisable (« mille

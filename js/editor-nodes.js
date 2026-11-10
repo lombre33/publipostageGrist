@@ -2281,24 +2281,40 @@ const EditorNodes = (function () {
 
     // Sommaire - nœud atome de bloc. Le HTML sérialisé reste un placeholder (résolu par reader-mode.js/pdf-export.js) ; l'éditeur affiche un aperçu
     // vivant via un NodeView, isolé du modèle par `ignoreMutation`. Le texte du placeholder suit la langue de l'interface (même clé que le NodeView) :
-    // il n'est lu par personne au rechargement (`parseHTML` ne regarde que la classe), mais Ctrl+C le colle tel quel dans un autre document ou une
+    // il n'est lu par personne au rechargement (`parseHTML` ne lit que la classe et les réglages), mais Ctrl+C le colle tel quel dans un autre document ou une
     // autre application. Chaque ligne de l'aperçu est un lien (js/toc-links.js) : un clic amène le titre en haut de l'écran et y pose le curseur ; ailleurs sur
     // le sommaire (le vide à droite d'une ligne, le cadre), un clic sélectionne le bloc comme avant, pour le supprimer ou le copier.
+    // Ses réglages (les niveaux de titres listés, le numéro de page de chaque titre : js/toc-options.js) sont l'attribut `options`, nul tant qu'ils sont ceux d'avant ; la barre qui surmonte
+    // le sommaire sélectionné les pose (js/floating-toolbars.js:createTocToolbar). Un réglage changé fait un autre nœud : ProseMirror refait l'aperçu.
     function createTocNode(Node) {
       return Node.create({
         name: 'toc',
         group: 'block',
         atom: true,
         selectable: true,
-        parseHTML() { return [{ tag: 'div.toc-marker' }]; },
-        renderHTML() { return ['div', { class: 'toc-marker' }, I18n.t('toc.placeholder')]; },
+        addAttributes() { return { options: internalAttr(null) }; },
+        parseHTML() { return [{ tag: 'div.toc-marker', getAttrs: el => ({ options: TocOptions.stored(TocOptions.ofElement(el)) }) }]; },
+        renderHTML({ node }) { return ['div', Object.assign({ class: 'toc-marker' }, TocOptions.domAttrs(node.attrs.options)), I18n.t('toc.placeholder')]; },
         addCommands() {
-          return { insertToc: () => ({ chain }) => chain().insertContent({ type: this.name }).run() };
+          return {
+            // Le sommaire posé reste sélectionné : la barre de ses réglages (js/floating-toolbars.js:createTocToolbar) s'ouvre au-dessus de lui aussitôt. Il se reconnaît à son objet : un sommaire
+            // déjà là reste le même objet dans le document d'après, celui que l'insertion vient de créer est le seul nouveau.
+            insertToc: () => ({ chain, state }) => {
+              const before = new Set();
+              state.doc.descendants(node => { if (node.type.name === this.name) before.add(node); });
+              return chain().insertContent({ type: this.name }).command(({ tr, commands }) => {
+                let at = null;
+                tr.doc.descendants((node, pos) => { if (at === null && node.type.name === this.name && !before.has(node)) at = pos; });
+                return at === null ? true : commands.setNodeSelection(at);
+              }).run();
+            },
+          };
         },
         addNodeView() {
-          return ({ editor: nodeViewEditor }) => {
+          return ({ editor: nodeViewEditor, node }) => {
             const dom = document.createElement('div');
             dom.className = 'toc-marker';
+            const options = TocOptions.normalize(node.attrs.options);
             const styleOnRoot = () => nodeViewEditor.view.dom.dataset.headingStyle || 'none';
             const headingElements = () => Array.from(nodeViewEditor.view.dom.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'));
             // Le curseur au début du titre atteint. Sans lui, la personne verrait le titre mais taperait encore là où elle était ; un document en lecture seule garde son curseur.
@@ -2321,15 +2337,32 @@ const EditorNodes = (function () {
               renderedStyle = styleOnRoot();
               renderedHeadings = headingsKey();
               if (!headingEls.length) { dom.textContent = I18n.t('toc.placeholder'); return; }
-              HeadingNumbering.entriesFor(headingEls, renderedStyle).forEach((entry, index) => {
+              // Les titres que les réglages laissent : leur rang parmi TOUS les titres reste celui du document (le lien et le numéro de page cherchent le titre par ce rang).
+              const listed = HeadingNumbering.entriesFor(headingEls, renderedStyle).map((entry, index) => ({ entry, index })).filter(({ entry }) => TocOptions.covers(options, entry.level));
+              if (!listed.length) { dom.textContent = I18n.t('pdf.tocEmpty'); return; }
+              listed.forEach(({ entry, index }) => {
                 const line = document.createElement('div');
                 line.className = 'toc-entry-preview';
                 line.style.paddingLeft = ((entry.level - 1) * 14) + 'px';
                 // Le titre se cherche à chaque clic (le même rang parmi les titres de premier niveau d'alors) : l'aperçu ne garde aucun élément du document.
                 line.appendChild(TocLinks.link(entry.text, () => headingElements()[index], { onGo: placeCaretIn }));
+                if (options.pages) { line.dataset.heading = String(index); line.dataset.page = '–'; }
                 dom.appendChild(line);
               });
+              paintPages();
             };
+            // Le numéro de page de chaque titre, tel que l'aperçu de la page (la pagination de l'éditeur) le pose : un attribut que la feuille de style écrit à droite de la ligne (le texte de la
+            // ligne reste celui du titre). Sans pagination (aperçu de la page éteint, en-tête en cours d'écriture), le numéro n'est pas connu : un tiret, jamais un numéro deviné.
+            const paintPages = () => {
+              if (!options.pages) return;
+              const headingEls = headingElements();
+              dom.querySelectorAll('.toc-entry-preview[data-heading]').forEach(line => {
+                const heading = headingEls[Number(line.dataset.heading)];
+                const pageIndex = heading ? HeaderFooterPreview.pageIndexOf(heading) : null;
+                line.dataset.page = pageIndex == null ? '–' : String(pageIndex + 1);
+              });
+            };
+            const stopPages = options.pages ? HeaderFooterPreview.onPaginated(paintPages) : null;
             // Un appui sur un lien ne sélectionne pas le bloc et ne retire pas le focus de l'éditeur.
             dom.addEventListener('mousedown', event => { if (event.target.closest && event.target.closest('.toc-link')) event.preventDefault(); });
             // Le style de numérotation se pose sur la racine (data-heading-style) APRÈS le chargement d'un modèle (Editor.setHTML), puis une transaction vide passe : 'update' n'est émis que
@@ -2345,7 +2378,7 @@ const EditorNodes = (function () {
               dom, ignoreMutation: () => true,
               // Ce qui se passe sur un lien du sommaire n'est pas l'affaire de l'éditeur (il y sélectionnerait le bloc) ; le reste du sommaire garde son geste.
               stopEvent: event => !!(event.target && event.target.closest && event.target.closest('.toc-link')),
-              destroy: () => { nodeViewEditor.off('update', redraw); nodeViewEditor.off('transaction', redrawIfStale); },
+              destroy: () => { nodeViewEditor.off('update', redraw); nodeViewEditor.off('transaction', redrawIfStale); if (stopPages) stopPages(); },
             };
           };
         },
