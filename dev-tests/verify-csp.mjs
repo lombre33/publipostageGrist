@@ -24,6 +24,7 @@ import { extname, join, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
+import { floatingVersion } from '../outils/empreintes-editeur.mjs';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
@@ -102,7 +103,10 @@ page.on('pageerror', e => pageErrors.push(e.message));
 page.on('console', m => { if (/Content Security Policy|Refused to/i.test(m.text())) consoleRefusals.push(m.text().slice(0, 160)); });
 // Toute feuille de style ou police demandée à un autre site que le widget est notée (le type de la requête vient du navigateur : une feuille importée par @import est une `stylesheet`).
 const otherSiteStyles = [];
+// Toute adresse demandée à esm.sh (l'éditeur : TipTap, ProseMirror et leurs dépendances) est notée : le contrôle 9 vérifie qu'aucune n'est à version flottante et que toutes sont dans le relevé d'empreintes.
+const esmRequested = new Set();
 page.on('request', r => {
+  if (/^https:\/\/esm\.sh\//.test(r.url())) esmRequested.add(r.url());
   const type = r.resourceType();
   if ((type === 'stylesheet' || type === 'font') && /^https?:/i.test(r.url()) && new URL(r.url()).origin !== BASE) otherSiteStyles.push(type + ' ' + r.url().slice(0, 100));
 });
@@ -217,6 +221,17 @@ for (const [name, label] of [['moteurs', 'les moteurs du widget (PDF, fusion, fe
 }
 check('rien n\'a été refusé pendant tout ce parcours (aucune violation, aucun message du navigateur)', (await violations()).length === 0 && consoleRefusals.length === 0, { violations: await violations(), consoleRefusals });
 check('aucune feuille de style ni police n\'est demandée à un autre site pendant tout ce parcours (la police du système, choix d\'Antoine du 04/10)', otherSiteStyles.length === 0, otherSiteStyles);
+// 9) l'éditeur vient d'esm.sh en direct (réseau) : chaque adresse que le vrai navigateur lui demande est à version EXACTE (une version flottante serait résolue par esm.sh à chaque demande : une version publiée, ou
+//    volée, serait chargée dans l'éditeur le jour même) et figure dans le relevé outils/empreintes-editeur.json (le parcours de outils/empreintes-editeur.mjs résout les adresses comme le navigateur le fait).
+if (OFFLINE) {
+  console.log('  --   - éditeur d\'esm.sh : versions exactes et relevé d\'empreintes (réseau direct requis : le miroir hors-ligne répond à la place d\'esm.sh)');
+} else {
+  const manifest = JSON.parse(readFileSync(join(ROOT, 'outils', 'empreintes-editeur.json'), 'utf8'));
+  const requested = [...esmRequested];
+  check('éditeur d\'esm.sh : le navigateur a bien chargé l\'éditeur depuis esm.sh (garde-fou du contrôle lui-même)', requested.length >= 40, requested.length + ' adresses');
+  check('éditeur d\'esm.sh : aucune adresse demandée à esm.sh pendant le parcours n\'est à version flottante (@^1.0.0, @~2, @latest : résolue à chaque demande, une version volée serait chargée le jour même)', requested.filter(floatingVersion).length === 0, requested.filter(floatingVersion));
+  check('éditeur d\'esm.sh : toute adresse demandée à esm.sh pendant le parcours est dans le relevé d\'empreintes (outils/empreintes-editeur.json : sinon le relevé ne couvre pas ce que le navigateur charge)', requested.filter(address => !manifest.fichiers[address]).length === 0, requested.filter(address => !manifest.fichiers[address]));
+}
 
 // 2) Du HTML piégé posé tel quel, comme si le filtre l'avait laissé passer.
 async function attempt(label, expectedDirective, run) {

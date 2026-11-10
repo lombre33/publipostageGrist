@@ -1,0 +1,495 @@
+{
+  "lisezMoi": "Relevé produit par outils/empreintes-editeur.mjs --ecrire : ne pas modifier à la main. Une adresse, l'empreinte SHA-384 de ses octets (celle d'un attribut integrity), sa taille, et « fige » quand esm.sh la sert avec un cache immuable d'un an.",
+  "origine": "https://esm.sh",
+  "navigateurs": [
+    "chrome",
+    "firefox",
+    "safari"
+  ],
+  "carteImportEsmSha256": "aeb62fe4934a56d3c7859cc1889848fb0c0f654e56db0900766175374beb24c9",
+  "fichiers": {
+    "https://esm.sh/*orderedmap@2.1.1": {
+      "sri": "sha384-Pc/z+mp6ijMtbmOmv/KgfkG4fnKfRduxqJmpxATlEOsjvP/yhiq1lHX2PZt4Yo5i",
+      "octets": 158,
+      "fige": true
+    },
+    "https://esm.sh/*orderedmap@2.1.1/es2022/orderedmap.mjs": {
+      "sri": "sha384-rS8Ihhr017ThsStysQw/MFwbbUnKET68DySk8u9buL21m6g7jc88EX8dvbWzJwG3",
+      "octets": 1531,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-changeset@2.4.1": {
+      "sri": "sha384-69UXno3IuH/H6solUbovxd1b9fxxPppfKq0tuIQiqqwPX2h17R0315JW33vMstsw",
+      "octets": 123,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-changeset@2.4.1/es2022/prosemirror-changeset.mjs": {
+      "sri": "sha384-tU/J6kWw3gHZWU77iRQj5ObSrwOnvGWUY5KVY2XDpDI9yLrVjh4Lcj4PYkc5kDJk",
+      "octets": 8669,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-commands@1.7.1": {
+      "sri": "sha384-xBTKnu7tCIoTIyFKobgqZiPlAnx3DTRZTlSP1t5rW9EpTVK/0EF+7TCw70CAt4DR",
+      "octets": 120,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-commands@1.7.1/es2022/prosemirror-commands.mjs": {
+      "sri": "sha384-5qwXjVoDW4LMmHaHCrYS6vpnSqZp9FFR/fKaCVXYcZxb5k6HLUc8KVWzVtYux9wx",
+      "octets": 12826,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-dropcursor@1.8.2": {
+      "sri": "sha384-gsVBsQtD77Q4QqNPuaJMLCD6+1a7VQVXE7Skpt5XvoO+CJLUOluhZxLGlmy1a8XY",
+      "octets": 126,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-dropcursor@1.8.2/es2022/prosemirror-dropcursor.mjs": {
+      "sri": "sha384-58hLS68skgwf6t5Zj14xDR/IrGKl2Zqgu4QEHJhc8ueQO6nRJ3IFJ9aVyfLIoq/V",
+      "octets": 3248,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-gapcursor@1.4.1": {
+      "sri": "sha384-w6i6dxSNOxx4dXZ4NOu32HdZF8ThFXoDzL4YCP9PxQL5HQ3GnvzpTDA4cVR6r8Jr",
+      "octets": 123,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-gapcursor@1.4.1/es2022/prosemirror-gapcursor.mjs": {
+      "sri": "sha384-rcuwKAXKwje5gKTJYqwFYh6uAzM1ddZgpXbTzENUgJM6vCMIn4fHG9qZho5j1BFa",
+      "octets": 3909,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-history@1.5.0": {
+      "sri": "sha384-996COsZCz2v0mcE0RrpCV3EYC0bWfDlrb2nsEJelpGTm2lu3pObve3bqSWc8zWG4",
+      "octets": 117,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-history@1.5.0/es2022/prosemirror-history.mjs": {
+      "sri": "sha384-CnlV8nhTObAnFKJttm/Qo/fmTGY3nb+9tWnw4YYyJo3cN/nyy33a8yxNWAoa+lgl",
+      "octets": 6258,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-inputrules@1.5.1": {
+      "sri": "sha384-ZD+VtAIK2LJjaH31IuephA8Vqf0Dn/wepzQRfTBtWsx2mXKJDzwoTNwRbod41rMa",
+      "octets": 126,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-inputrules@1.5.1/es2022/prosemirror-inputrules.mjs": {
+      "sri": "sha384-nBAsvS621nCMOYniu18sESIDIB7kTE8/eFflu1Ix3mLqGGFlj8Wm6DxehSCUGS0h",
+      "octets": 3061,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-keymap@1.2.3": {
+      "sri": "sha384-rXCmiE2D2EDgzCmHkc+34i6TDfSNjfbEad6s5yVUidUrtre0HKeJZORb6SpRchDW",
+      "octets": 114,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-keymap@1.2.3/es2022/prosemirror-keymap.mjs": {
+      "sri": "sha384-Eu858LHNs5v/mEW11rT0k40uEzfW9oehYjvYdTGlPqn6dtRWyQBO6CGCD8DJNFSn",
+      "octets": 1417,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-model@1.25.11": {
+      "sri": "sha384-TrI6oe77uhthXRf/hnFP6BbjLJjSi8orELF/0MriRBXNIKwQhfRwiEnKz9+wOIfI",
+      "octets": 115,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-model@1.25.11/es2022/prosemirror-model.mjs": {
+      "sri": "sha384-Y588/Yzc8Mpo0BEpiPdtzjIq4SkTa0NmuBGjGzQlUuVH7+Z3X3eb7OO5+TwhXrnt",
+      "octets": 45128,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-schema-list@1.5.1": {
+      "sri": "sha384-/0hvjqHWdti2ULnLbw+Qg5oxCsMuI5PCed7iVY+P1c6weTdu+nDyAlLvXifrNKte",
+      "octets": 129,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-schema-list@1.5.1/es2022/prosemirror-schema-list.mjs": {
+      "sri": "sha384-XlcuFdwG8oJuSg+C1jPaP+Gfce2J96IqJpZUq2S1aVNI7fb7dfBGpVakJFSxLhQx",
+      "octets": 4932,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-state@1.4.4": {
+      "sri": "sha384-kSgiIgqcUmHUum5Hbjcfjc5I/QjkhXo9U0bAV4vpjY8M4nhmaf+ozLjoh0EP8b2l",
+      "octets": 111,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-state@1.4.4/es2022/prosemirror-state.mjs": {
+      "sri": "sha384-He5TTNt3OD4HRr0Mj8RpwePfwRMPPARLON937LPWczah959EY9LidUnlu3s638uK",
+      "octets": 12188,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-tables@1.8.5": {
+      "sri": "sha384-G1fI+NcO1WkFXnieRkkkGvvAk2bqSRB2tgGyQ4XhJdzo7i1OMdrT0UGgw587Gssw",
+      "octets": 114,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-tables@1.8.5/es2022/prosemirror-tables.mjs": {
+      "sri": "sha384-n/ogGHQftZRiOxTd3cefPMhHXzg0kOxEJj3XSRmvXA0vYzQ1UoVmuZ74n+krMz55",
+      "octets": 42529,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-transform@1.12.0": {
+      "sri": "sha384-22WMtpyP+c6GBx3Z/LaH+jh1hcB2U79ppbL1AyMRzFSBlr4lO2HVpmI+INOEaFiT",
+      "octets": 125,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-transform@1.12.0/es2022/prosemirror-transform.mjs": {
+      "sri": "sha384-pU7an/ZH40klW7VYEl2HJw4S+UPL6XRQcCu0wpiAg/67gizf9qoV//WM9RVNuiUC",
+      "octets": 31743,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-view@1.42.3": {
+      "sri": "sha384-TLSUgtzqvJE3eFPSc/EQMvseDYK684BP7wWbWpU/EyhtF0eHHyjFfJq4tMZt/YnU",
+      "octets": 110,
+      "fige": true
+    },
+    "https://esm.sh/*prosemirror-view@1.42.3/es2022/prosemirror-view.mjs": {
+      "sri": "sha384-bEbCFpYy2b8Huh3uYhpHvtPcRA6j/MZolo+O1i60BEdHL0yS9xOXdRiMPk8spaJG",
+      "octets": 98501,
+      "fige": true
+    },
+    "https://esm.sh/*rope-sequence@1.3.4": {
+      "sri": "sha384-kJb1BvwZuuL6nS+5v+dsloJsy/iauUp3X9GwGR7Ub4wfk2SsHJzJDtgQgCLm+jPA",
+      "octets": 173,
+      "fige": true
+    },
+    "https://esm.sh/*rope-sequence@1.3.4/es2022/rope-sequence.mjs": {
+      "sri": "sha384-GPR6eT5og2qHL9tUOVERjJixxRXCgwmXydIvXZqxosLrCjWjvOy13UXsa0+s9hxZ",
+      "octets": 3482,
+      "fige": true
+    },
+    "https://esm.sh/*w3c-keyname@2.2.8": {
+      "sri": "sha384-eil4Vy8wDkRvxNuu3q+z5hV/tVIZJo+WMz7EhoHQOKE5XxGWN8za5VoFIC6wQgiv",
+      "octets": 93,
+      "fige": true
+    },
+    "https://esm.sh/*w3c-keyname@2.2.8/es2022/w3c-keyname.mjs": {
+      "sri": "sha384-NWr6X2UI3d0LRRy3GLcMPyv/iTmNyNu0nkCJx0mLRVMIJXXiFpQJgq0i3SxLqrZS",
+      "octets": 1588,
+      "fige": true
+    },
+    "https://esm.sh/@floating-ui/core@1.8.0/es2022/core.mjs": {
+      "sri": "sha384-00MrlEOnbJ41BUpwYaK5zgze33SFING7rhLo3x4S8+4wkhXYNIOKBd8OKi/vRhSC",
+      "octets": 11258,
+      "fige": true
+    },
+    "https://esm.sh/@floating-ui/core@1.8.0?target=es2022": {
+      "sri": "sha384-wHF3IvCIaSwHrE1epX0qad8mNNvX9J+uS/FUKzVM2kj/8XIipAoHr9i/QnY2HdKK",
+      "octets": 149,
+      "fige": true
+    },
+    "https://esm.sh/@floating-ui/dom@1.6.12": {
+      "sri": "sha384-CKh7Sl9rAHBZz5T77PsuMrariUWc+IC1z3Ot2x1PjokhI0I2RPCwILgbhh55GWHt",
+      "octets": 252,
+      "fige": true
+    },
+    "https://esm.sh/@floating-ui/dom@1.6.12/es2022/dom.mjs": {
+      "sri": "sha384-uW18H32Z8xB2LUloLEyz9SFipIFNzE5qvm0R71rDoPmts75LySDp1Uy5eS6Drwov",
+      "octets": 7826,
+      "fige": true
+    },
+    "https://esm.sh/@floating-ui/dom@1.8.0/es2022/dom.mjs": {
+      "sri": "sha384-zRZglM/bkVqs16qY3wr8N2YZXuyJ2NCWHx55tlyDCMbJ/9vhavPHpajuHIaj87MR",
+      "octets": 8177,
+      "fige": true
+    },
+    "https://esm.sh/@floating-ui/dom@1.8.0?target=es2022": {
+      "sri": "sha384-klJjL2gWpBU5wu5R1hX81MFXDPh9hEzh1oRxXLhjAUGLM1M1ywPxlQ0ZcFa/PcxM",
+      "octets": 252,
+      "fige": true
+    },
+    "https://esm.sh/@floating-ui/utils@0.2.12/dom?target=es2022": {
+      "sri": "sha384-X1JiH53gZkkIT18dP4o0WE386rRNLonaCBg0fvht+Ryt21evG+UAD56VIgze3w30",
+      "octets": 104,
+      "fige": true
+    },
+    "https://esm.sh/@floating-ui/utils@0.2.12/es2022/dom.mjs": {
+      "sri": "sha384-Z/nT58XieEZk3MhDi49u6Uq2QJMAOpen1LQg+jFauT3EXqGNSGrbf5j0lNfM5r50",
+      "octets": 2722,
+      "fige": true
+    },
+    "https://esm.sh/@floating-ui/utils@0.2.12/es2022/utils.mjs": {
+      "sri": "sha384-bfqEh7P431jEIjIvZwpdDRcUER3o5L7OmQ/mblmbjjkOs1HQ90msbrev4T+5Rtex",
+      "octets": 2130,
+      "fige": true
+    },
+    "https://esm.sh/@floating-ui/utils@0.2.12?target=es2022": {
+      "sri": "sha384-ausCDS8pZ3CwYT7wFMuq37ZqQjdndCR6wFiwPoz0GI2ngBlm++IDLqSlpSrbpTtN",
+      "octets": 102,
+      "fige": true
+    },
+    "https://esm.sh/@handlewithcare/prosemirror-suggest-changes@0.1.8": {
+      "sri": "sha384-oE12SBiQeVB/dsB/0Hqkf1xsY3AID7cmYmdln5dsY6zTJaDP4rRrsJu8ercMtU3G",
+      "octets": 325,
+      "fige": true
+    },
+    "https://esm.sh/@handlewithcare/prosemirror-suggest-changes@0.1.8/es2022/prosemirror-suggest-changes.mjs": {
+      "sri": "sha384-aMY3SsFxi0CLY9mQJMH4cgCtobBBhs7lntKpaHd35KyOE/OkgPH3rpt/l3pkfcDg",
+      "octets": 15934,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/core@3.31.3": {
+      "sri": "sha384-5ApsAGIvD82Qjl/e3gpTyZPqOtafWOjl1KrSzb7/uLb9kTXVjnz+643t0NpRI5yX",
+      "octets": 452,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/core@3.31.3/es2022/core.mjs": {
+      "sri": "sha384-Qqd/09L5drg3kRx/MFhU+JqJvNRpFKcgtTHD6hnaO+Z4EXCjN2gCwGAfI1VGx0aO",
+      "octets": 116385,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/core@3.31.3/es2022/dist/jsx-runtime/jsx-runtime.mjs": {
+      "sri": "sha384-pHnebzXqAZJKW+1N7P413Q0i2LZUL/nQew1Fy4oGr956FWAu751F47uZakStsouh",
+      "octets": 930,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/core@3.31.3/es2022/jsx-runtime.mjs": {
+      "sri": "sha384-jojyzfkqCZ00psxT4eUzVvfxUvpL8AaSLiOR1l+BLIKfEpY5F5XB4uz0VKf2wJ8a",
+      "octets": 136,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-blockquote@3.31.3/es2022/extension-blockquote.mjs": {
+      "sri": "sha384-CDOqGm0APeAumIOwsCUh9ViptdMy6tc7YB5u4Al27nqL2caRiiM+M4VNbITqPMuO",
+      "octets": 2134,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-bold@3.31.3/es2022/extension-bold.mjs": {
+      "sri": "sha384-3f/1YuZK/i4eFD4jQmNKnc5sURujOdYn91C9830IQOKOwq39tUmW/3dP6059VRBk",
+      "octets": 1701,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-code-block@3.31.3/es2022/extension-code-block.mjs": {
+      "sri": "sha384-POIwuSVvK8WEt3MeoQsoYhPdA9riXYE7LbRlWVC5VXM1qFr8G513ueSJAgR4jmBa",
+      "octets": 5248,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-code@3.31.3/es2022/extension-code.mjs": {
+      "sri": "sha384-h6Tousjh+KAKDyMTadBYj9Sg/M6MAKl9BXCPe3pKob7fNJlShx8b+WaeIlOWxpYI",
+      "octets": 1411,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-document@3.31.3": {
+      "sri": "sha384-oIQxQ0+hZ6caDzefna8kDxFsf5P1p1Ik+q1zhSvV0XtSKdM/OewrJcIVmtL/g42Y",
+      "octets": 270,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-document@3.31.3/es2022/extension-document.mjs": {
+      "sri": "sha384-W6ZHgCPb12eWQ6CmvbUWZFsQt9UjNaDL23oobkHGVexPbYBLsDLrxTBV7X4XKcU8",
+      "octets": 321,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-font-family@3.31.3": {
+      "sri": "sha384-4mt6iWPMdBJwpd4uFefecUr+Dhl99SGINT8xgVgFRNKuAY5cZ5iiPfxvYVus7f8N",
+      "octets": 317,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-font-family@3.31.3/es2022/extension-font-family.mjs": {
+      "sri": "sha384-eEhspuPLa8GGZYC5zeLJTKeYFwqrjMXSecETVZTV2kQzhzxY03VWiPL0ECSP6Tkf",
+      "octets": 262,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-hard-break@3.31.3/es2022/extension-hard-break.mjs": {
+      "sri": "sha384-NqzRsFNqbM0b87AZYx4kZ2djnVG6LykbvNl3Iv9w7UM5kCr8BYYMnznTymNpUm9L",
+      "octets": 1231,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-heading@3.31.3/es2022/extension-heading.mjs": {
+      "sri": "sha384-oCrfVOxS/8bx/HrFAoyJk6XzBfkaS2eti3UvfM4eoFpPcEHEmntLn7deOD6qu+dn",
+      "octets": 1498,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-horizontal-rule@3.31.3/es2022/extension-horizontal-rule.mjs": {
+      "sri": "sha384-/iWAp78wf8laOos/9kIJcyxTJn+vZZ7FDHPZyyZsPTnnChNCEPIdAS5e5H95OfsX",
+      "octets": 1481,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-italic@3.31.3/es2022/extension-italic.mjs": {
+      "sri": "sha384-iIOMxj2DrIIkOEnCH734Sw7xL60JzEembTQa5Ni0y0YtSvnVJ3LsnvyKxZcZpgOL",
+      "octets": 1535,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-link@3.31.3/es2022/extension-link.mjs": {
+      "sri": "sha384-nVesDEwI9crFtj7vTDaS1IM0KRLN27yLM+pezaeHfotkjMxE2lAg4S4KQTVKDU2O",
+      "octets": 9768,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-list@3.31.3/es2022/extension-list.mjs": {
+      "sri": "sha384-cvODukux63hz7t6XLOvKnaoo5Gl4gOHP2DmlmfgTtSbCAMMmG1/eYd839Vms0Ar7",
+      "octets": 23005,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-paragraph@3.31.3/es2022/extension-paragraph.mjs": {
+      "sri": "sha384-fy3AD9iTgJnowtLU8YbNPsSolHF7T9Lzmc0Kowy+Nw8DLl6kL6psqYRmAFQCsqDf",
+      "octets": 1351,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-placeholder@3.31.3": {
+      "sri": "sha384-Pu5ngolqO1A4B8cMSzYpQ6nN4/odvTahpGoyqP2Nbm7IxL/XsM8WsjkiMDPgDWd/",
+      "octets": 297,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-placeholder@3.31.3/es2022/extension-placeholder.mjs": {
+      "sri": "sha384-D0dilJ+YgZZ3r6s82G/DRpfFd0XMhGRl/OcCVq7gWSoZ7CCy8fwvPTjNRkO4xIvD",
+      "octets": 245,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-strike@3.31.3/es2022/extension-strike.mjs": {
+      "sri": "sha384-Ui5hFuw2iH4ukgZPsobkO/MBAGtgMv45e2q1kq1y1F8cfiNRE9vkK3FR6eBWzHzj",
+      "octets": 1194,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-table-cell@3.31.3": {
+      "sri": "sha384-jfIHtdVuD/1q30NXyFOY6ox/q/wVVAuPHc7m+obD2c56Towm6pIo9vnAF69Q0VsG",
+      "octets": 302,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-table-cell@3.31.3/es2022/extension-table-cell.mjs": {
+      "sri": "sha384-1HhBOVEPJ4nZX8gcHcoegkOlYbW+2DXAN9GaAj7P994vyt1bPkyZBBDsfXN1wZ/C",
+      "octets": 247,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-table-header@3.31.3": {
+      "sri": "sha384-uGoXcpyPWZpU8X3D1a5SCVjGXVg40kWVRAp466moWiSMiATJ01xkaza2DlQI+CBQ",
+      "octets": 312,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-table-header@3.31.3/es2022/extension-table-header.mjs": {
+      "sri": "sha384-lNHAeHahTJdHPd5HxT56K17QzscOsTC3cYqgOxYmPWlQZB1cAyA3Q+5ILZIfctlS",
+      "octets": 257,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-table-row@3.31.3": {
+      "sri": "sha384-ZDyvZ3xfTBIL9FhYXmOvLQC0v/gHI3McSqqg4uET0jjsOgyFYYM2hU0OUMNAEkuE",
+      "octets": 297,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-table-row@3.31.3/es2022/extension-table-row.mjs": {
+      "sri": "sha384-VDlwrLqGcIZ+BArHzdkeuvrDUPLbdT6D1IEtr8AsBTHHi5smdKI6sziEPgrf1WVY",
+      "octets": 242,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-table@3.31.3": {
+      "sri": "sha384-39TlhBmjTNHZG+V7tmzPa4dteCwm8vtM0hp1oHfQ/4gJkZmrK00fbZwDadvPunoG",
+      "octets": 262,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-table@3.31.3/es2022/extension-table.mjs": {
+      "sri": "sha384-KuueSsN9CSm/koDPlrFDDD5eio2I2mgdpwjlJGGJRvfelRLDKwWE6kjqi9WoOr8H",
+      "octets": 12725,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-task-item@3.31.3": {
+      "sri": "sha384-KP1fjjegi6fgnWm/C/qGiiYJOPPrwS+vJLH5mnfJ28ua9y7CeouiqoZAQUkmX489",
+      "octets": 295,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-task-item@3.31.3/es2022/extension-task-item.mjs": {
+      "sri": "sha384-raV9CUHyep99Vb5nHNpeUlo+BS8f64VJDiZEi5ySIg5VsqXaFIWzemju7ZkrMROD",
+      "octets": 240,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-task-list@3.31.3": {
+      "sri": "sha384-ZK3iOZKa6CjMgVKznNNjLJrn5/xiMvGfEFCb5YId+zLJH66KfbxDjBG7tZ1aADlS",
+      "octets": 295,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-task-list@3.31.3/es2022/extension-task-list.mjs": {
+      "sri": "sha384-4CFQgASRfeH13gdy0d8TfKQTHu8Bc9w2PETDzSrkJ1e91mQVXwkxAgL3iRdHznZT",
+      "octets": 240,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-text-align@3.31.3": {
+      "sri": "sha384-zKFm+sI81MBt+9DmOkg7TLHsz9xjwqf8bebYfRSkkxDOjXWugIUTR8VG++/n/ysp",
+      "octets": 280,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-text-align@3.31.3/es2022/extension-text-align.mjs": {
+      "sri": "sha384-DRzVge5/8huT11QIpsIHvf0CxocpyOMaHQDS4E05US/bZLDj0B72ttoje1e8P8Od",
+      "octets": 1340,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-text-style@3.31.3": {
+      "sri": "sha384-Y9sETIjEs7BWc/I+PtV+07RIS7MXobxEZIgvEe2oj+rHS6B+3C8yv1hCw0thI54K",
+      "octets": 184,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-text-style@3.31.3/es2022/extension-text-style.mjs": {
+      "sri": "sha384-TwkpvW3qFh82G0drHcfg/Ibcm5qjZZUnuwq5pTlXoVe++JeH2DqUQt5+gGQbPFKs",
+      "octets": 4641,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-text@3.31.3/es2022/extension-text.mjs": {
+      "sri": "sha384-MLcPrB8FX6VpWvQPIlUFVHhyyCRQYI7BtXwAaj0HBvX4qkpAq0dC//eP815gCNf4",
+      "octets": 307,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-underline@3.31.3": {
+      "sri": "sha384-aLipe4cIalBn6deXfYjr822Pj9TQLFPOot36ueKXW/8hrAEDW0Q2Rkm3cWmW+ibB",
+      "octets": 275,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extension-underline@3.31.3/es2022/extension-underline.mjs": {
+      "sri": "sha384-jS+vfFdXanwuep5ik63wPwNXa3DIg+pADYP2GmNkWCR+/xm5zJuhWuAdLDR+xGx0",
+      "octets": 1201,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/extensions@3.31.3/es2022/extensions.mjs": {
+      "sri": "sha384-aTu4q9a0pN5E9EyBpEPIex2GFtnzKCKDqZXq3vZ6GVA2bZDCFgpRjRdxkhZGxAll",
+      "octets": 9752,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/pm@3.31.3": {
+      "statut": 404
+    },
+    "https://esm.sh/@tiptap/starter-kit@3.31.3": {
+      "sri": "sha384-uxp6AY9ZlMyDrQTLBciscEYAZlIWFf7xI6vCP5Aknn+LWkiPBrCDJ4SeJs+LH9bm",
+      "octets": 1399,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/starter-kit@3.31.3/es2022/starter-kit.mjs": {
+      "sri": "sha384-L4QNeO21RxlHHA7JWrkftYyxeyeYeC2oqfQ1Eg6VlqiYQTPsvxAQGZU3dVksrjWi",
+      "octets": 3521,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/suggestion@3.31.3": {
+      "sri": "sha384-yyA0XnlAAwLH7ZTKBgX2+DgyffDDBthQ09f94QPfzegLWtMdhzJ+HURCol8/0YcJ",
+      "octets": 370,
+      "fige": true
+    },
+    "https://esm.sh/@tiptap/suggestion@3.31.3/es2022/suggestion.mjs": {
+      "sri": "sha384-2tkcOjAMUAT3zECQsG35iTxDSVy/b6aOQ2dfx0M13+VGRt9ZapTikl8J8eSCFmrc",
+      "octets": 9849,
+      "fige": true
+    },
+    "https://esm.sh/linkifyjs@4.4.0/es2022/linkifyjs.mjs": {
+      "sri": "sha384-8FYUGsZPCyhJ4AgMd4xCXx9OxQIeDXs6e29ufguIGib8ydcPsCTVlmUMbY3Ezxrb",
+      "octets": 21466,
+      "fige": true
+    },
+    "https://esm.sh/linkifyjs@4.4.0?target=es2022": {
+      "sri": "sha384-/sf73SsQXQwLaTkO9imbyaDCPpBqO1FBBrCeXjHe8Cg3yuQwClIwvWFS8WdbV0l1",
+      "octets": 86,
+      "fige": true
+    },
+    "https://esm.sh/node/async_hooks.mjs": {
+      "sri": "sha384-hZODh/PQnvY3IF4FtNJuW8kv34D4KD12zn8PxDV/msb6KqlrEKUpEeiC2EfP9ezY",
+      "octets": 2938,
+      "fige": false
+    },
+    "https://esm.sh/node/events.mjs": {
+      "sri": "sha384-dwszbvTvRSGJ4nBlT4YJ6JG+pkZTOkgDTmChKqVSVRZ3kWt8IGUwM3TLfQcUEojH",
+      "octets": 12122,
+      "fige": false
+    },
+    "https://esm.sh/node/process.mjs": {
+      "sri": "sha384-rSvZxzbQlvnecvHZ7q2RoZAz4OR+c4t5H4NC7JNLYb6YxMjWbwnfBKxYC3H1N5tK",
+      "octets": 7836,
+      "fige": false
+    },
+    "https://esm.sh/node/tty.mjs": {
+      "sri": "sha384-DR5Ni3oJ346E4ymxfySw8VOMWcxgxPCo7jnsB+WzPi0LWP8PHqsttFCylJsUOH4g",
+      "octets": 685,
+      "fige": false
+    }
+  }
+}

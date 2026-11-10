@@ -74,6 +74,11 @@
 //      dev-tests/ambiance-exceptions.json (le papier, l'état, le type, les repères de capture : ce que l'ambiance ne doit pas changer).
 //  32. un nom que le guide Grist.Gouv juge pauvre : une variable déclarée `a`, `b`, `c`, `d`, `f`, `z`, `data`, `tmp`, `val`, `obj`, `arr`, `ret`... (`e`, `x`, `y`, `i`, `j`, `k`, `n` restent permis) ou une fonction
 //      déclarée d'une ou deux lettres, dans le code du widget (gw audit du 04/11, point B-NOM-01 ; les fichiers de Slides+, de la fenêtre « Nouveautés » et du pont GFS en sont exclus pour l'instant).
+//  35. le code de l'éditeur que le widget charge depuis esm.sh (TipTap, ProseMirror, leurs dépendances : une centaine de fichiers) sans que le navigateur le contrôle : le relevé outils/empreintes-editeur.json ne correspond
+//      plus à la carte d'importation d'index.html (une entrée changée sans refaire le relevé), contient une adresse à VERSION FLOTTANTE (`@^1.0.0` : esm.sh la résout à chaque demande, une version npm publiée ou volée
+//      se chargerait le jour même), un fichier non figé autre qu'une cale `node/*.mjs` d'esm.sh, ou une entrée de la carte que rien n'importe et qui ne répond pas (point sécurité du 06/11, risque « chaîne d'approvisionnement ») ;
+//  36. l'inventaire des écritures dans le document Grist (`applyUserActions`, le widget a l'accès complet) : un fichier de plus qui écrit, une action de plus dans un fichier qui écrit déjà, une écriture dans une table
+//      de Grist (`_grist_…`) ou une suppression de table hors des endroits connus, une écriture « widget » (tables Publipostage_*) qui vise autre chose que ses tables (point sécurité du 06/11, risque « accès complet »).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -88,6 +93,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { check, summarizeAndExit } from './unit-harness.mjs';
+import { esmImports, importMapDigest, floatingVersion } from '../outils/empreintes-editeur.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = rel => readFileSync(join(ROOT, rel), 'utf8');
@@ -1903,6 +1909,98 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     [french, english].every(text => text.length > 800 && /^1\. /m.test(text) && /^5\. /m.test(text)), `${french.length} / ${english.length} caractères`);
   check(`fiche de crise : elle nomme chaque site que la politique de sécurité du contenu laisse charger du code (${hosts.join(', ')}), en français et en anglais`,
     hosts.length >= 4 && hosts.every(host => french.includes(host) && english.includes(host)), hosts.filter(host => !french.includes(host) || !english.includes(host)).join(', '));
+}
+
+// ============================================================================
+// 35. Le code de l'éditeur chargé depuis esm.sh est relevé, et rien n'y flotte (point sécurité du 06/11, risque « chaîne d'approvisionnement »)
+// ============================================================================
+// L'éditeur (TipTap, ProseMirror et leurs dépendances) vient d'esm.sh, et s'exécute avec l'accès complet au document. L'héberger dans le dépôt est refusé (choix d'Antoine du 05/10), la politique de sécurité du
+// contenu ouvre l'hôte en entier et la carte d'importation ne porte aucune empreinte : esm.sh peut donc changer ce que le widget exécute sans qu'aucun contrôle ne le voie. Deux gardes :
+//   - rien ne FLOTTE : une adresse `@^1.0.0` (celles que TipTap et floating-ui demandent à leurs dépendances) est résolue par esm.sh à chaque demande ; sans entrée de la carte qui la renvoie vers la version
+//     exacte, une version publiée (ou volée) sur npm serait chargée dans l'éditeur le jour même. Le relevé de outils/empreintes-editeur.mjs (le parcours de ce que la carte fait charger, avec trois navigateurs)
+//     n'en contient aucune, et dev-tests/verify-csp.mjs vérifie dans un vrai navigateur, esm.sh en direct, que le widget n'en demande aucune ;
+//   - le relevé est celui de la carte : la carte change (une version, un module), le relevé se refait (`node outils/empreintes-editeur.mjs --ecrire`, réseau), sinon `--verifier` ne parlerait plus de ce que la
+//     page charge. Ce contrôle-ci ne demande aucun réseau : il garde le relevé ; c'est `--verifier` (à lancer de temps en temps, ou quand esm.sh a un incident) qui compare le relevé à ce qu'esm.sh sert.
+{
+  const index = read('index.html');
+  const imports = esmImports(index);
+  const manifestPath = join(ROOT, 'outils', 'empreintes-editeur.json');
+  const manifest = existsSync(manifestPath) ? JSON.parse(read('outils/empreintes-editeur.json')) : null;
+  check('éditeur d\'esm.sh : le relevé outils/empreintes-editeur.json existe et porte au moins quatre-vingts fichiers relevés avec trois navigateurs (`node outils/empreintes-editeur.mjs --ecrire` le refait)',
+    !!manifest && Object.keys(manifest.fichiers || {}).length >= 80 && (manifest.navigateurs || []).length >= 3, manifest ? `${Object.keys(manifest.fichiers).length} fichiers, ${(manifest.navigateurs || []).length} navigateurs` : 'relevé absent');
+  if (manifest) {
+    check('éditeur d\'esm.sh : le relevé est celui de la carte d\'importation d\'index.html (une entrée changée ou ajoutée : `node outils/empreintes-editeur.mjs --ecrire`, réseau, refait le relevé ; il refuse d\'écrire s\'il reste une adresse flottante)',
+      manifest.carteImportEsmSha256 === importMapDigest(imports), `relevé ${String(manifest.carteImportEsmSha256).slice(0, 12)}, carte ${importMapDigest(imports).slice(0, 12)}`);
+    const roots = [...new Set(Object.values(imports).filter(value => value.startsWith('https://esm.sh/')))].map(value => new URL(value).href);
+    check('éditeur d\'esm.sh : chaque adresse que la carte fait charger est dans le relevé', roots.every(root => manifest.fichiers[root]), roots.filter(root => !manifest.fichiers[root]).join(' '));
+    const floating = Object.keys(manifest.fichiers).filter(address => floatingVersion(address));
+    check('éditeur d\'esm.sh : aucune adresse du relevé n\'est à version flottante (`@^1.0.0`, `@~2`, `@latest` : esm.sh la résout à chaque demande, une version volée serait chargée dans l\'éditeur le jour même) - une entrée de la carte la renvoie vers la version exacte',
+      floating.length === 0, floating.join(' '));
+    const looseKeys = Object.entries(imports).filter(([key, value]) => key.startsWith('https://esm.sh/') && floatingVersion(key) && (!value.startsWith('https://esm.sh/') || floatingVersion(value))).map(([key]) => key);
+    check('éditeur d\'esm.sh : chaque entrée de la carte qui remplace une adresse flottante la renvoie vers une version exacte', looseKeys.length === 0, looseKeys.join(' '));
+    const loose = Object.entries(manifest.fichiers).filter(([, entry]) => entry.fige === false).map(([address]) => address);
+    check('éditeur d\'esm.sh : les seuls fichiers que esm.sh ne fige pas (cache immuable d\'un an) sont ses propres cales node/*.mjs - un fichier de paquet non figé change sans prévenir', loose.length > 0 && loose.every(address => new URL(address).pathname.startsWith('/node/')), loose.join(' '));
+    // Une entrée de la carte qui ne répond pas (@tiptap/pm : le paquet n'a que des sous-chemins) ne doit rester que si rien ne l'importe : le jour où du code l'importerait, l'éditeur ne démarrerait plus.
+    const dead = Object.entries(imports).filter(([, value]) => manifest.fichiers[new URL(value).href] && manifest.fichiers[new URL(value).href].statut).map(([key]) => key);
+    const importedDead = dead.filter(key => jsFiles.some(rel => new RegExp(`(?:from\\s*|import\\s*\\(?\\s*)['"]${key.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}['"]`).test(noCommentsJs(read(rel)))));
+    check('éditeur d\'esm.sh : une entrée de la carte dont l\'adresse ne répond pas (le relevé la note « statut ») n\'est importée par aucun fichier de js/ ni d\'extensions/', importedDead.length === 0, importedDead.join(' '));
+  }
+}
+
+// ============================================================================
+// 36. L'inventaire des écritures dans le document : le widget a l'accès complet, ce qu'il écrit est écrit ici (point sécurité du 06/11, risque « accès complet »)
+// ============================================================================
+// Grist n'a pas de niveau entre « lire une table » et « accès complet » : tout code qui s'exécute dans le widget lit et écrit toutes les tables. Rien dans le code ne le limite (un code piégé n'a qu'à appeler
+// grist.docApi lui-même) : ce contrôle borne ce que NOTRE code écrit, pour qu'une écriture de plus ne s'ajoute pas sans être vue. Chaque fichier qui appelle `applyUserActions` est ici, avec les actions qu'il
+// emploie et la nature de sa cible : « widget » = ses propres tables Publipostage_* (ou celles d'une extension), « document » = une table de la personne, pour une fonction qu'elle demande (l'écriture en direct,
+// la date d'export, le PDF joint à la ligne, une table créée depuis un modèle de la galerie), « métadonnées » = une table de Grist (_grist_…). Un fichier qui écrit en plus, une action en plus, une table de
+// Grist écrite ailleurs ou une suppression de table hors du retour arrière d'une installation de modèle de la galerie : le contrôle échoue, et la ligne à changer ici dit POURQUOI (puis README et SECURITY.md).
+{
+  const WIDGET_TABLE = /^(?:TABLE_NAME|TABLE|LINKS_TABLE_NAME|USER_PROBE_TABLE_NAME|Templates\.TABLE_NAME)$/;
+  const WRITERS = {
+    'extensions/edition/live-channel.js': { cible: 'document', actions: ['AddColumn', 'BulkAddOrUpdateRecord', 'BulkAddRecord', 'BulkRemoveRecord'], pourquoi: 'l\'écriture en direct : les lignes de la table que la personne édite dans le widget' },
+    'extensions/lecture-pdf/pdf-comments.js': { cible: 'widget', actions: ['AddColumn', 'AddRecord', 'RemoveRecord', 'UpdateRecord'] },
+    'js/comments.js': { cible: 'widget', actions: ['AddRecord', 'RemoveRecord'] },
+    'js/export-date.js': { cible: 'document', actions: ['BulkUpdateRecord'], pourquoi: 'la colonne de date d\'export que la personne a choisie dans sa table' },
+    'js/grist-api.js': { cible: 'widget', actions: ['AddColumn', 'AddRecord', 'AddTable', 'AddVisibleColumn', 'RemoveRecord', 'UpdateRecord'], pourquoi: 'AddTable : la porte addTableIfMissing, derrière la fenêtre de consentement du 05/10' },
+    'js/page-tree.js': { cible: 'métadonnées', actions: ['UpdateRecord'], tables: ['_grist_Pages'], pourquoi: 'l\'état plié du groupe de pages du widget' },
+    'js/row-attachment.js': { cible: 'document', actions: ['AddVisibleColumn', 'BulkUpdateRecord'], pourquoi: 'le PDF joint à la ligne : une colonne de pièces jointes de la table de la personne' },
+    'js/saved-page-formats.js': { cible: 'widget', actions: ['AddRecord', 'RemoveRecord'] },
+    'js/schema-renames.js': { cible: 'widget', actions: ['UpdateRecord'] },
+    'js/slide-links-live.js': { cible: 'widget', actions: ['AddColumn', 'BulkAddOrUpdateRecord', 'BulkRemoveRecord'] },
+    'js/template-gallery-modal.js': { cible: 'document', actions: ['AddTable'], pourquoi: 'la table de données que la personne crée depuis un modèle de la galerie' },
+    'js/template-pack.js': { cible: 'document', actions: ['AddColumn', 'AddTable', 'RemoveTable', 'SetDisplayFormula', 'UpdateRecord'], tables: ['_grist_Tables_column'], pourquoi: 'l\'installation d\'un modèle de la galerie : ses tables, les colonnes à afficher de CES tables, le retour arrière (RemoveTable) des tables qu\'elle vient de créer' },
+    'js/template-preferences.js': { cible: 'widget', actions: ['AddRecord', 'AddVisibleColumn', 'UpdateRecord'] },
+    'js/templates.js': { cible: 'widget', actions: ['AddRecord', 'AddVisibleColumn', 'RemoveRecord', 'UpdateRecord'] },
+    'js/text-expansion.js': { cible: 'widget', actions: ['AddRecord', 'RemoveRecord', 'UpdateRecord'] },
+    'js/versions-store.js': { cible: 'widget', actions: ['AddRecord', 'BulkRemoveRecord', 'UpdateRecord'] },
+  };
+  const VERB = /\[\s*'(Add\w*|Update\w*|Remove\w*|Bulk\w*|Rename\w*|Modify\w*|Copy\w*|Set\w*|Clear\w*|Delete\w*)'\s*,\s*([^,\]]+)/g;
+  const found = {};
+  for (const rel of jsFiles) {
+    const code = noCommentsJs(read(rel));
+    if (!/\bapplyUserActions\b/.test(code)) continue;
+    const actions = [...code.matchAll(VERB)].map(m => [m[1], m[2].trim()]);
+    found[rel] = { actions: [...new Set(actions.map(([verb]) => verb))].sort(), targets: actions, code };
+  }
+  const expectedFiles = Object.keys(WRITERS).sort();
+  check('écritures : les fichiers qui appellent applyUserActions sont exactement ceux de l\'inventaire (un fichier de plus qui écrit dans le document : l\'ajouter ici, avec sa raison)',
+    JSON.stringify(Object.keys(found).sort()) === JSON.stringify(expectedFiles), `en plus : ${Object.keys(found).filter(rel => !WRITERS[rel]).join(' ') || '-'} ; en moins : ${expectedFiles.filter(rel => !found[rel]).join(' ') || '-'}`);
+  const drift = expectedFiles.filter(rel => found[rel] && JSON.stringify(found[rel].actions) !== JSON.stringify(WRITERS[rel].actions)).map(rel => `${rel} : ${found[rel].actions.join(',')} (inventaire : ${WRITERS[rel].actions.join(',')})`);
+  check('écritures : chaque fichier n\'emploie que les actions de l\'inventaire (une action de plus, comme RemoveTable ou BulkUpdateRecord, change ce que le widget peut faire du document)', drift.length === 0, drift.join(' ; '));
+  // La seule exception : js/grist-api.js crée la table dont addTableIfMissing(name, colonnes) reçoit le nom (la porte unique de création des tables du widget, section « tables du widget » de ce fichier, derrière le consentement).
+  const stray = expectedFiles.filter(rel => found[rel] && WRITERS[rel].cible === 'widget').flatMap(rel => found[rel].targets.filter(([verb, table]) => !WIDGET_TABLE.test(table) && !(rel === 'js/grist-api.js' && verb === 'AddTable' && table === 'name')).map(([verb, table]) => `${rel} : ${verb} sur ${table}`));
+  check('écritures : un fichier « widget » n\'écrit que dans ses propres tables (TABLE_NAME, TABLE, LINKS_TABLE_NAME, USER_PROBE_TABLE_NAME, Templates.TABLE_NAME), jamais dans une table nommée autrement', stray.length === 0, stray.join(' ; '));
+  const unnamed = expectedFiles.filter(rel => WRITERS[rel].cible === 'widget' && found[rel]).filter(rel => {
+    const declared = [...found[rel].code.matchAll(/\bconst (?:TABLE_NAME|TABLE|LINKS_TABLE_NAME|USER_PROBE_TABLE_NAME)\s*=\s*['"]([^'"]+)['"]/g)].map(m => m[1]);
+    return declared.some(name => !/^Publipostage_/.test(name));
+  });
+  check('écritures : toute constante de table d\'un fichier « widget » (TABLE_NAME, TABLE, LINKS_TABLE_NAME, USER_PROBE_TABLE_NAME) écrite en littéral s\'appelle Publipostage_…', unnamed.length === 0, unnamed.join(' '));
+  const meta = Object.keys(found).filter(rel => found[rel].targets.some(([, table]) => /^['"]_grist_/.test(table) || table === 'PAGES')).sort();
+  const metaExpected = expectedFiles.filter(rel => (WRITERS[rel].tables || []).length).sort();
+  check('écritures : les tables de Grist (`_grist_Pages`, `_grist_Tables_column`) ne sont écrites que par js/page-tree.js (l\'état plié de son groupe de pages) et js/template-pack.js (les colonnes à afficher des tables qu\'il crée)', JSON.stringify(meta) === JSON.stringify(metaExpected), meta.join(' '));
+  const removers = Object.keys(found).filter(rel => found[rel].actions.some(verb => /^(RemoveTable|RenameTable|RemoveColumn|RenameColumn|ModifyColumn)$/.test(verb))).sort();
+  check('écritures : seul js/template-pack.js supprime une table, et jamais celle d\'un autre (le retour arrière de ce qu\'il vient de créer) ; rien ne renomme ni ne supprime une colonne de la personne', JSON.stringify(removers) === JSON.stringify(['js/template-pack.js']), removers.join(' '));
 }
 
 summarizeAndExit();

@@ -24,7 +24,7 @@
     https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js
     https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/index.iife.js https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/charts.iife.js https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js
     https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js
-    'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-CaAwaFvFWX8VFbPi3uUKphIC57YjuRgG0kV2S56pK9w=' 'sha256-dr2nJ9qlSEpVpFpN01rgQ3bZHAcSZWrebqvX0xSlX7I=';
+    'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-nDd0A18LVBZ7iCnEQ4MQhcz1XdRZfiW/jR2sexwA23w=' 'sha256-dr2nJ9qlSEpVpFpN01rgQ3bZHAcSZWrebqvX0xSlX7I=';
   object-src 'none'; base-uri 'none'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; form-action 'none'">
 <!-- Enregistrement automatique coupé (pp_autosave_enabled = 'false', cf. js/main.js:isAutosaveEnabled) : le bouton Enregistrer est noir et blanc dès le PREMIER affichage, pas bleu le temps que
      les scripts finissent de se charger puis en fondu vers le noir. La classe est posée ICI, sur <html>, avant les feuilles de style et le corps : un script placé après le bouton attend que les
@@ -50,6 +50,10 @@
      prosemirror-model", cf. commit qui a corrige cette regression).
      Un script classique (pas type="module") peut resoudre ces specifiers nus
      via import() dynamique - cf. commentaire en tete de js/editor.js.
+     Les huit dernieres entrees (@floating-ui, linkifyjs) figent des VERSIONS FLOTTANTES : les paquets de TipTap et de floating-ui les demandent sous la forme `@^1.0.0` ou `@^4.3.3`, qu'esm.sh resout
+     a chaque demande (cache de dix minutes) vers la derniere version publiee : sans ces entrees, une version nouvelle de linkifyjs ou de floating-ui, publiee OU VOLEE sur npm, se serait chargee
+     dans l'editeur le jour meme, avec l'acces complet au document. Chacune renvoie vers la version exacte que l'adresse flottante donnait le 10/11 (meme fichier final, meme texte, cache immuable).
+     outils/empreintes-editeur.mjs --verifier refuse toute adresse flottante du parcours ; dev-tests/verify-code-hygiene.mjs garde le releve hors ligne.
      Les deux premieres entrees sont celles du kit de Grist Factory (sous-module kit/, consigne 041 de GFS : l'ambiance choisie dans GFS) : un module du kit n'a qu'UNE adresse par page
      (kit/js/once.js le dit dans la console sinon), donc js/gfs-link.js et js/gfs-ambiance.js l'importent par ce nom, jamais par un chemin. Le ?v= est le debut du commit que le depot
      epingle (git ls-files -s kit) : il change avec lui, et l'empreinte de la carte dans la politique ci-dessus avec. -->
@@ -107,7 +111,15 @@
     "@handlewithcare/prosemirror-suggest-changes": "https://esm.sh/@handlewithcare/prosemirror-suggest-changes@0.1.8",
     "https://esm.sh/prosemirror-state@^1.0.0?target=es2022": "https://esm.sh/*prosemirror-state@1.4.4",
     "https://esm.sh/prosemirror-transform@^1.0.0?target=es2022": "https://esm.sh/*prosemirror-transform@1.12.0",
-    "https://esm.sh/prosemirror-view@^1.0.0?target=es2022": "https://esm.sh/*prosemirror-view@1.42.3"
+    "https://esm.sh/prosemirror-view@^1.0.0?target=es2022": "https://esm.sh/*prosemirror-view@1.42.3",
+    "https://esm.sh/@floating-ui/dom@^1.0.0?target=es2022": "https://esm.sh/@floating-ui/dom@1.8.0?target=es2022",
+    "https://esm.sh/@floating-ui/core@^1.6.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
+    "https://esm.sh/@floating-ui/core@^1.8.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
+    "https://esm.sh/@floating-ui/utils@^0.2.8?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12?target=es2022",
+    "https://esm.sh/@floating-ui/utils@^0.2.12?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12?target=es2022",
+    "https://esm.sh/@floating-ui/utils@^0.2.8/dom?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12/dom?target=es2022",
+    "https://esm.sh/@floating-ui/utils@^0.2.12/dom?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12/dom?target=es2022",
+    "https://esm.sh/linkifyjs@^4.3.3?target=es2022": "https://esm.sh/linkifyjs@4.4.0?target=es2022"
   }
 }
 </script>
