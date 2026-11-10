@@ -457,7 +457,8 @@ async function runTheme(theme, size, tag) {
   await setA4(page, true);
   await load(page, DOC);
   await clickCell(page, 'B2');
-  await page.evaluate(() => Editor.setTrackChanges(true));
+  // Une hauteur est de la mise en forme : le suivi ne la propose que si l'option « Suivre la mise en forme » est allumée (éteinte par défaut).
+  await page.evaluate(() => { Editor.setTrackChanges(true); Editor.setFormatTracking(true); });
   await page.waitForTimeout(300);
   await clickCell(page, 'B2');
   await drag(page, ROWHANDLE(2), 0, 50);
@@ -477,6 +478,21 @@ async function runTheme(theme, size, tag) {
   await page.evaluate(() => EditorCore.getEditor().chain().focus().rejectAllSuggestionsChunked().run());
   await page.waitForTimeout(800);
   check(`${label} - « Tout refuser » rend la hauteur d'origine (toutes les lignes à la hauteur de leur texte)`, allNull((await modelOf(page)).rows), await modelOf(page));
+  await page.evaluate(() => { Editor.setTrackChanges(false); Editor.setFormatTracking(false); });
+  await page.waitForTimeout(300);
+  // L'option éteinte (son état par défaut), suivi allumé : la hauteur se pose sans trace - aucune marque, rien en attente - et un Ctrl+Z la rend.
+  await load(page, DOC);
+  await clickCell(page, 'B2');
+  await page.evaluate(() => { Editor.setFormatTracking(false); Editor.setTrackChanges(true); });
+  await page.waitForTimeout(300);
+  await clickCell(page, 'B2');
+  await drag(page, ROWHANDLE(2), 0, 50);
+  const untracked = await modelOf(page);
+  const pendingOff = await page.evaluate(() => Editor.hasPendingTrackedChanges());
+  check(`${label} - suivi allumé, « Suivre la mise en forme » éteint : tirer le numéro 2 pose la hauteur sans marque et sans modification en attente`,
+    untracked.rows[1] > 0 && untracked.marks.every(m => m === '') && !pendingOff, { untracked, pendingOff });
+  await undoKey(page);
+  check(`${label} - suivi allumé, option éteinte : un Ctrl+Z rend la hauteur d'origine (toutes les lignes à la hauteur de leur texte)`, allNull((await modelOf(page)).rows), await modelOf(page));
   await page.evaluate(() => Editor.setTrackChanges(false));
   await page.waitForTimeout(300);
 

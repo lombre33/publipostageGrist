@@ -276,7 +276,7 @@
 
   cases.push({
     id: 'toolbar_every_menu_trigger_toggles_aria_expanded_while_open',
-    description: 'Pour CHAQUE bouton à menu réellement présent sur la page (découverte structurelle - tout .v2-hover-group, y compris un créé dynamiquement comme #v2-hf-pagenum-group, + tout [aria-haspopup] posé par wireDropdownButton/TemplateTreeSelect), aria-expanded bascule bien via son VRAI geste d\'ouverture/fermeture ; quand le bouton porte lui-même son data-tip, l\'info-bulle est en plus vérifiée en RENDU (avec un vrai :focus-visible établi au préalable, seule façon de rendre l\'assertion falsifiable) ; un bouton posé `hidden` n\'est offert à personne et passe son tour (celui du lien du tableau lié, #v2-table-linked-btn, n\'existe que sous le curseur dans un tableau lié : son aria-expanded se mesure là, suite linkedTable)',
+    description: 'Pour CHAQUE bouton à menu réellement présent sur la page (découverte structurelle - tout .v2-hover-group, y compris un créé dynamiquement comme #v2-hf-pagenum-group, + tout [aria-haspopup] posé par wireDropdownButton/TemplateTreeSelect), aria-expanded bascule bien via son VRAI geste d\'ouverture/fermeture ; quand le bouton porte lui-même son data-tip, l\'info-bulle est en plus vérifiée en RENDU (avec un vrai :focus-visible établi au préalable, seule façon de rendre l\'assertion falsifiable) ; un bouton posé `hidden` n\'est offert à personne et passe son tour (celui du lien du tableau lié, #v2-table-linked-btn, n\'existe que sous le curseur dans un tableau lié : son aria-expanded se mesure là, suite linkedTable) ; un bouton qui ouvre une FENÊTRE (aria-haspopup="dialog" : « Rogner l\'image… ») n\'est pas un menu et n\'a pas d\'aria-expanded ; les boutons à menu de la barre de l\'image (« Pivoter et retourner ») ne s\'ouvrent que sur une image choisie : ils sont mesurés dans un second temps, avec une image choisie',
     run: async (h) => {
       await goToNewDocument(h);
       await h.sleep(30);
@@ -300,11 +300,13 @@
       // Au moins les groupes au survol (titre/alignement/liste/image/qualité/export/nouveau) et les panneaux flottants (police/taille/couleurs) doivent
       // être détectés - un compte trop bas signalerait que ce test tourne avant que le DOM/le câblage ne soit prêt, pas un vrai succès.
       let pass = hfPagenumPresent && pagenumTriggerIncluded && triggers.length >= 6;
-      for (const trigger of triggers) {
-        // Un bouton posé `hidden` n'est offert à personne à cet instant : le bouton du lien d'un tableau lié (js/floating-toolbars.js) n'apparaît que sous le curseur dans un tableau lié et son
-        // menu ne s'ouvre que là (LinkedTable.status) ; ce geste-ci, fait dans un document vide, ne peut donc rien y ouvrir. Son aria-expanded (ouvert, refermé par un second appui, par la
-        // sortie du tableau, par « Détacher ») se mesure dans ce contexte, dans le cas de la barre de dev-tests/scenarios-linked-table.js.
-        if (trigger.hidden) { details.push({ id: trigger.id || trigger.className, skipped: 'hidden' }); continue; }
+      // Un bouton qui ouvre une FENÊTRE (aria-haspopup="dialog" : « Rogner l'image… ») n'est pas un menu : la fenêtre porte son état, le bouton n'a pas d'aria-expanded à basculer (son geste est
+      // mesuré par imageReshape et verify-image-crop-mouse.mjs). Les boutons à menu de la barre de l'image (« Pivoter et retourner ») n'ouvrent rien sans image choisie (imageToolbarAction) : ils
+      // se mesurent plus bas, une image choisie.
+      const opensDialog = trigger => trigger.getAttribute('aria-haspopup') === 'dialog';
+      const onImageBar = trigger => !!trigger.closest('.v2-image-toolbar');
+      // Le geste d'ouverture puis de fermeture du bouton, l'aria-expanded relevé pendant et après (et l'info-bulle d'un bouton qui porte la sienne).
+      const measure = async (trigger) => {
         const group = trigger.closest('.v2-hover-group');
         // `:hover` ne s'active jamais via dispatchEvent dans ce harnais (cf. openFlyout plus haut/dev-tests/helpers.js) - mouseover/mouseout sont les
         // VRAIS évènements DOM que la délégation de js/editor-core.js écoute pour ce même mécanisme. Les boutons à menu au clic (panneaux flottants,
@@ -341,9 +343,31 @@
           && (!ownTip || (beforeOpacity === '1' && opacityDuring === '0' && afterOpacity === '1'));
         details.push({ id: trigger.id || trigger.className, ownTip: !!ownTip, beforeOpacity, expandedDuring, opacityDuring, expandedAfter, afterOpacity });
         if (!entryPass) pass = false;
+      };
+      for (const trigger of triggers) {
+        // Un bouton posé `hidden` n'est offert à personne à cet instant : le bouton du lien d'un tableau lié (js/floating-toolbars.js) n'apparaît que sous le curseur dans un tableau lié et son
+        // menu ne s'ouvre que là (LinkedTable.status) ; ce geste-ci, fait dans un document vide, ne peut donc rien y ouvrir. Son aria-expanded (ouvert, refermé par un second appui, par la
+        // sortie du tableau, par « Détacher ») se mesure dans ce contexte, dans le cas de la barre de dev-tests/scenarios-linked-table.js.
+        if (trigger.hidden) { details.push({ id: trigger.id || trigger.className, skipped: 'hidden' }); continue; }
+        if (opensDialog(trigger)) { details.push({ id: trigger.id || trigger.className, skipped: 'dialog' }); continue; }
+        if (onImageBar(trigger)) { details.push({ id: trigger.id || trigger.className, skipped: 'image-bar' }); continue; }
+        await measure(trigger);
       }
       HeaderFooterPreview.exitHeaderFooterModeIfActive();
-      return { pass, notes: JSON.stringify({ hfPagenumPresent, pagenumTriggerIncluded, triggerCount: triggers.length, details }) };
+      // Une image choisie : sa barre est affichée, ses boutons à menu s'ouvrent et se referment par le même geste que les autres boutons à panneau (mousedown puis clic).
+      Editor.setHTML('<p>Avant</p><p><img class="editor-image" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" alt="" style="width: 120px"></p><p>Après</p>');
+      await h.sleep(250);
+      const editor = EditorCore.getEditor();
+      let imagePos = -1;
+      editor.state.doc.descendants((node, pos) => { if (imagePos < 0 && node.type.name === 'editorImage') imagePos = pos; });
+      editor.commands.focus();
+      editor.commands.setNodeSelection(imagePos);
+      await h.sleep(250);
+      const imageTriggers = Array.from(document.querySelectorAll('.v2-image-toolbar [aria-haspopup]')).filter(trigger => !trigger.hidden && !opensDialog(trigger));
+      // Au moins « Pivoter et retourner » : sans lui, ce second temps ne prouverait rien.
+      if (!imageTriggers.some(trigger => trigger.getAttribute('data-action') === 'reshape')) pass = false;
+      for (const trigger of imageTriggers) await measure(trigger);
+      return { pass, notes: JSON.stringify({ hfPagenumPresent, pagenumTriggerIncluded, triggerCount: triggers.length, imageBarTriggerCount: imageTriggers.length, details }) };
     },
   });
 

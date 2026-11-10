@@ -67,7 +67,7 @@
     Editor.setHTML(html);
     await sleep(200);
     ed().commands.focus();
-    try { return await body(); } finally { Editor.setTrackChanges(false); await sleep(30); }
+    try { return await body(); } finally { Editor.setTrackChanges(false); Editor.setFormatTracking(false); await sleep(30); }
   }
   async function cursorIn(t, row, col) {
     ed().commands.setTextSelection(cellPos(t, row, col) + 2);
@@ -1155,6 +1155,7 @@
       setRowHeights(0, [40, 80, 160]);
       await sleep(GROUP_GAP_MS);
       Editor.setTrackChanges(true);
+      Editor.setFormatTracking(true);   // une hauteur ou une largeur est de la mise en forme : suivie seulement quand l'option « Suivre la mise en forme » est allumée (éteinte par défaut)
       await sleep(100);
       await selectCells(0, 0, 0, 2, 2);
       GridEditor.equalizeLines(ed(), 'row');
@@ -1517,6 +1518,7 @@
           await sleep(250);
           await cursorIn(0, 0, 1);
           Editor.setTrackChanges(true);
+          Editor.setFormatTracking(true);   // une largeur de colonne est de la mise en forme : suivie seulement quand l'option « Suivre la mise en forme » est allumée
           await sleep(100);
           await dragColHandle(2, 60);
           await sleep(150);
@@ -1533,6 +1535,7 @@
           // Sans Aperçu A4 le panneau montre les colonnes plus larges (685 px ici) que la page : elles se figent à leur largeur sur la page.
           const before = EditorCore.atPageScale(ed(), () => layoutSizes(0).cols).map(w => Math.floor(w + 0.001));
           Editor.setTrackChanges(true);
+          Editor.setFormatTracking(true);   // une largeur de colonne est de la mise en forme : suivie seulement quand l'option « Suivre la mise en forme » est allumée
           await sleep(100);
           await dragColHandle(1, 40);
           await sleep(150);

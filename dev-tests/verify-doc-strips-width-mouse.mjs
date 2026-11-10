@@ -518,7 +518,8 @@ async function runTheme(theme, size, tag) {
   await setA4(page, true);
   await load(page, DOC);
   await clickCell(page, 'B2');
-  await page.evaluate(() => Editor.setTrackChanges(true));
+  // Une largeur est de la mise en forme : le suivi ne la propose que si l'option « Suivre la mise en forme » est allumée (éteinte par défaut).
+  await page.evaluate(() => { Editor.setTrackChanges(true); Editor.setFormatTracking(true); });
   await page.waitForTimeout(300);
   await clickCell(page, 'B2');
   await drag(page, COLHANDLE(2), narrow ? 30 : 50, 0);
@@ -538,7 +539,7 @@ async function runTheme(theme, size, tag) {
     const autoZoom = await sheetZoom(page);
     // Sans Aperçu A4, les colonnes que le glissé fige sont celles de la page (l'écran montre le panneau).
     const autoBase = a4 ? (await stripsState(page)).cols.map(c => Math.floor(c.width / autoZoom + 0.001)) : await pageColumns(page);
-    await page.evaluate(() => Editor.setTrackChanges(true));
+    await page.evaluate(() => { Editor.setTrackChanges(true); Editor.setFormatTracking(true); });
     await page.waitForTimeout(300);
     await clickCell(page, 'B2');
     await drag(page, COLHANDLE(1), narrow ? 20 : 30, 0);
@@ -551,9 +552,25 @@ async function runTheme(theme, size, tag) {
     await page.waitForTimeout(800);
     const refusedAuto = await modelOf(page);
     check(`${tag3} - « Tout refuser » (colonnes automatiques) rend les largeurs d'avant (${autoBase.join(', ')} px)`, refusedAuto.widths.every(line => line.join() === autoBase.join()), { refusedAuto: refusedAuto.widths, autoBase });
-    await page.evaluate(() => Editor.setTrackChanges(false));
+    await page.evaluate(() => { Editor.setTrackChanges(false); Editor.setFormatTracking(false); });
     await page.waitForTimeout(300);
   }
+  // L'option éteinte (son état par défaut), suivi allumé : la largeur se pose sans trace - aucune marque, rien en attente - et un Ctrl+Z la rend.
+  await setA4(page, true);
+  await load(page, DOC);
+  await clickCell(page, 'B2');
+  await page.evaluate(() => { Editor.setFormatTracking(false); Editor.setTrackChanges(true); });
+  await page.waitForTimeout(300);
+  await clickCell(page, 'B2');
+  await drag(page, COLHANDLE(2), narrow ? 30 : 50, 0);
+  const untracked = await modelOf(page);
+  const pendingOff = await page.evaluate(() => Editor.hasPendingTrackedChanges());
+  check(`${label} - suivi allumé, « Suivre la mise en forme » éteint : tirer la lettre B pose la largeur sans marque et sans modification en attente`,
+    untracked.first[1] > 190 && untracked.marks.every(line => line.every(m => m === '')) && !pendingOff, { untracked, pendingOff });
+  await undoKey(page);
+  check(`${label} - suivi allumé, option éteinte : un Ctrl+Z rend la largeur d'origine (140, 190 et 120 px)`, allRows(await modelOf(page), [140, 190, 120]), await modelOf(page));
+  await page.evaluate(() => Editor.setTrackChanges(false));
+  await page.waitForTimeout(300);
 
   // ---------- 10) Page agrandie : la largeur posée est celle de la mise en page, pas celle de l'écran ----------
   await load(page, DOC);

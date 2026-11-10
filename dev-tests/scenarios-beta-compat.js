@@ -3,7 +3,8 @@
 // s'exporter avec chaque version qui suit. `dev-tests/beta-compat-set.json` en garde une mesure légère, que rejouent les lots qui touchent l'éditeur (schéma, HTML enregistré) ou les exports
 // (PDF, Word, e-mail) :
 //  1) 90 des 2 637 textes HTML que les tests de la bêta passent à l'éditeur (chaque balise, attribut et style relevés, chacune des 85 séries de tests) : l'éditeur les relit et les réécrit
-//     comme la bêta, au caractère près ; le tableau collé d'Excel à case fusionnée bordée est le seul écart voulu (la V1 pose le trait partagé sur les cases voisines) ;
+//     comme la bêta, au caractère près (les styles se comparent propriété par propriété : `canonicalStyles`) ; les écarts voulus sont le tableau collé d'Excel à case fusionnée bordée (la V1 pose le
+//     trait partagé sur les cases voisines : son `out` est celui de la V1) et le texte alternatif vide d'une image que le HTML d'entrée ne décrit pas (la bêta écrivait « Image » : `INTENDED_SINCE_BETA`) ;
 //  2) 13 jeux d'en-tête et de pied de page : relus comme la bêta les relisait ;
 //  3) les 13 modèles d'usage du 04/10 (facture, bulletin, badge, émargement et sa grille, quittance, fiche recette, bon de commande, étiquette, inventaire, bon de mouvement, e-mail de
 //     réapprovisionnement, valorisation du stock en grille) : ouverts comme la bêta (HTML réécrit, en-tête et pied, marges), puis exportés SANS données (chaque bulle devient son texte,
@@ -45,6 +46,39 @@
   // Les écarts d'une série de textes ou de listes de lignes : ceux du début, avec leur nombre.
   function verdict(mismatches, total) {
     return { pass: mismatches.length === 0, notes: mismatches.length ? mismatches.length + ' écart(s) sur ' + total + ' : ' + JSON.stringify(mismatches.slice(0, 3)) : total + ' relus à l\'identique' };
+  }
+
+  // Les écarts VOULUS entre ce que la bêta réécrivait (le `out` du jeu, qui ne change jamais) et ce que la V1 réécrit : chacun reçoit le HTML d'entrée et le `out` de la bêta, et rend le `out`
+  // attendu de la V1, avec sa raison et sa date. Un écart de plus se déclare ici, jamais en retouchant les `out` de la bêta.
+  const INTENDED_SINCE_BETA = [
+    // 06/11, « Texte alternatif des images et des objets » (js/alt-text.js, `alt: { default: '' }` de js/editor-nodes.js) : la bêta posait « Image » comme texte alternatif de toute image qui n'en
+    // avait PAS (aucun attribut `alt` dans le HTML d'entrée), un lecteur d'écran lisait donc « Image » pour une image qu'il ne sait pas décrire ; la V1 écrit un texte vide. Une image dont le HTML
+    // d'entrée dit déjà « Image » (un modèle que la bêta avait enregistré) le garde à la réécriture, c'est AltText.textOf qui le lit comme vide aux exports ; un vrai texte est gardé.
+    (input, out) => {
+      const from = html => { const box = document.createElement('div'); box.innerHTML = html; return box; };
+      const source = from(input).querySelectorAll('img');
+      const wanted = from(out);
+      const images = wanted.querySelectorAll('img');
+      if (source.length !== images.length) return out;
+      source.forEach((img, i) => { if (!img.hasAttribute('alt') && images[i].getAttribute('alt') === 'Image') images[i].setAttribute('alt', ''); });
+      return wanted.innerHTML;
+    },
+  ];
+  const sinceBeta = (input, out) => INTENDED_SINCE_BETA.reduce((kept, change) => change(input, kept), out);
+  // Les styles écrits comme le navigateur les range : le même texte peut s'écrire `border-top: 1px solid red; border-right: …` ou `border-width: 1px 1px 1px medium; border-style: …` selon la version de
+  // Chromium (la forme courte qu'il choisit à la relecture de `style`). Ce que le test compare est ce que la case dit, pas l'écriture : chaque `style` devient la liste triée de ses propriétés une à une.
+  function canonicalStyles(html) {
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    box.querySelectorAll('[style]').forEach((el) => {
+      const declared = [];
+      for (let i = 0; i < el.style.length; i++) {
+        const name = el.style[i];
+        declared.push(name + ': ' + el.style.getPropertyValue(name) + (el.style.getPropertyPriority(name) ? ' !important' : ''));
+      }
+      el.setAttribute('style', declared.sort().join('; '));
+    });
+    return box.innerHTML;
   }
 
   // La page telle que le widget la montre : l'éditeur sur l'aperçu A4 (la classe que le bouton « Aperçu format A4 » pose, jamais posée toute seule dans ce harnais). Le HTML qu'il relit en
@@ -224,8 +258,8 @@
       const set = await loadSet();
       const mismatches = [];
       for (const doc of set.documents) {
-        const got = await reopen(doc.html);
-        const want = doc.out === undefined ? doc.html : doc.out;
+        const got = canonicalStyles(await reopen(doc.html));
+        const want = canonicalStyles(sinceBeta(doc.html, doc.out === undefined ? doc.html : doc.out));
         if (got !== want) mismatches.push(Object.assign({ id: doc.id, group: doc.group }, firstDifference(got, want)));
       }
       await endPage(h);
