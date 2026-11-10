@@ -498,8 +498,9 @@ console.log('\n1) 700 × 400, la barre en haut dès le contexte : un vide sous l
   check('et le balayage est sérieux (' + swept.widths + ' largeurs) : la coupure a laissé un séparateur seul à ' + swept.withBar + ' largeurs avec la barre et ' + swept.without + ' sans', swept.widths === 21 && swept.withBar >= 5 && swept.without >= 3, swept);
 
   // Le trait seul de la rangée de mise en forme (choix du porteur, 22/10 : « Le cacher quand il est seul », la règle de la première rangée). À 800 px de large sa deuxième ligne commence par un séparateur, à 600 px un séparateur
-  // finit chacune de ses deux premières lignes : le trait de chacun est caché sans que rien ne bouge, et ceux qui séparent deux éléments d’une même ligne se voient.
-  for (const [width, expected] of [[800, 1], [600, 2]]) {
+  // finit une de ses lignes (deux avant que la rangée ne change de boutons, une aujourd’hui : le nombre dépend de la coupure, pas de la règle) : le trait de chacun est caché sans que rien ne bouge, et ceux qui séparent
+  // deux éléments d’une même ligne se voient.
+  for (const [width, expected] of [[800, 1], [600, 0]]) {
     await resizeFrame(page, app, width, 400);
     await setBar(page, app, null);
     const trait = await measureRows(app);
@@ -509,8 +510,8 @@ console.log('\n1) 700 × 400, la barre en haut dès le contexte : un vide sous l
     const shownTrait = await measureRows(app);
     await app.evaluate(() => ToolbarGap.refresh());
     const hiddenAgain = await measureRows(app);
-    check(`${width} × 400, sans barre, rangée de mise en forme : ${expected === 1 ? 'sa deuxième ligne commence par un séparateur seul' : 'un séparateur seul finit chacune de ses deux premières lignes'}, son trait est caché quand ceux des séparateurs entre deux éléments d’une ligne se voient ; le montrer ne bouge rien (même place, même largeur), la mise en page le recache aussitôt`,
-      lonely.length === expected && lonely.every(u => u.hidden) && between.length >= 3 && between.every(u => !u.hidden) && !shownTrait.units.some(u => u.hidden) && same(unitsAtRows(shownTrait), unitsAtRows(trait)) && same(hiddenAgain.units.map(u => [u.key, u.hidden]), trait.units.map(u => [u.key, u.hidden])),
+    check(`${width} × 400, sans barre, rangée de mise en forme : ${expected === 1 ? 'sa deuxième ligne commence par un séparateur seul' : 'un séparateur seul finit une de ses lignes'}, son trait est caché quand ceux des séparateurs entre deux éléments d’une ligne se voient ; le montrer ne bouge rien (même place, même largeur), la mise en page le recache aussitôt`,
+      (expected === 1 ? lonely.length === 1 : lonely.length >= 1) && lonely.every(u => u.hidden) && between.length >= 3 && between.every(u => !u.hidden) && !shownTrait.units.some(u => u.hidden) && same(unitsAtRows(shownTrait), unitsAtRows(trait)) && same(hiddenAgain.units.map(u => [u.key, u.hidden]), trait.units.map(u => [u.key, u.hidden])),
       { lonely: lonely.map(u => [u.key, round(u.left), round(u.top), u.hidden]), between: between.map(u => [u.key, u.hidden]), shown: shownTrait.units.filter(u => u.hidden).map(u => u.key) });
   }
   // À toutes les largeurs de 380 à 900 px (de 20 en 20) : sans barre, puis avec la barre à chacun des quatre bords, aucun séparateur des trois rangées ne reste visible seul au bord d’une ligne, aucun ne se cache entre deux éléments.

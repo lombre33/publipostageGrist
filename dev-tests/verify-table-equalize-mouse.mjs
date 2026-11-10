@@ -407,7 +407,8 @@ async function runTheme(theme, size, tag) {
   await setHeights(page, HEIGHTS);
   await page.waitForTimeout(300);
   await clickCell(page, 'B2');
-  await page.evaluate(() => Editor.setTrackChanges(true));
+  // Les tailles sont une mise en forme : « Suivre la mise en forme » est éteint par défaut (41ad20a), on l'allume pour ce passage.
+  await page.evaluate(() => { Editor.setTrackChanges(true); Editor.setFormatTracking(true); });
   await page.waitForTimeout(300);
   await clickCell(page, 'B2');
   await chooseLines(page, DOC_STRIPS, 'row', 1, 3);
@@ -430,6 +431,21 @@ async function runTheme(theme, size, tag) {
   await page.waitForTimeout(800);
   const refused = await modelOf(page);
   check(`${label} - « Tout refuser » rend les tailles d'origine (lignes ${LIST} px, colonnes 140, 190 et 120 px)`, JSON.stringify(refused.rows) === JSON.stringify(HEIGHTS) && JSON.stringify(refused.widths) === '[140,190,120]', refused);
+  await page.evaluate(() => { Editor.setTrackChanges(false); Editor.setFormatTracking(false); });
+  await page.waitForTimeout(300);
+
+  // Option « Suivre la mise en forme » éteinte (le réglage de départ) : même suivi des modifications allumé, les hauteurs se posent sur place, sans marque.
+  await load(page, SIZED);
+  await setHeights(page, HEIGHTS);
+  await page.waitForTimeout(300);
+  await clickCell(page, 'B2');
+  await page.evaluate(() => { Editor.setFormatTracking(false); Editor.setTrackChanges(true); });
+  await page.waitForTimeout(300);
+  await clickCell(page, 'B2');
+  await chooseLines(page, DOC_STRIPS, 'row', 1, 3);
+  await pressBar(page, 'rows-equalize');
+  const untracked = await modelOf(page);
+  check(`${label} - suivi allumé, « Suivre la mise en forme » éteint : « Égaliser » pose les hauteurs sur place, sans marque de modification`, untracked.rows.every(v => v === MEAN) && untracked.marks.every(m => m === ''), untracked);
   await page.evaluate(() => Editor.setTrackChanges(false));
   await page.waitForTimeout(300);
 
