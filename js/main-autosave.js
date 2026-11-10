@@ -75,6 +75,34 @@ const MainAutosave = (function () {
       const byWeight = Math.ceil(Templates.getLoadedChars() / AUTOSAVE_IDLE_CHARS_PER_MS);
       return Math.min(AUTOSAVE_IDLE_MAX_INTERVAL_MS, Math.max(AUTOSAVE_IDLE_INTERVAL_MS, byWeight));
     }
+    // Un modèle LOURD - une présentation de 30 Mo importée, ou un document plein de photos : son texte pèse des dizaines de millions de signes - ne s'enregistre pas toutes les 2,5 s. Chaque passage relit la
+    // table des modèles, reconstruit le texte entier, l'écrit et relit sa date : plusieurs secondes de page prise (mesuré sur 150 diapositives de photos : 4 s sur 5), pendant lesquelles la frappe n'arrive plus et que
+    // la mémoire de la page gonfle de plusieurs centaines de Mo. Un tel modèle laisse donc une milliseconde par millier de signes entre deux passages (8 s pour 8 millions de signes, 30 s au plus), et attend que la
+    // personne ait cessé de taper (AUTOSAVE_QUIET_MS) tant que cela ne dure pas plus de AUTOSAVE_QUIET_MAX_DEFER_MS. Un modèle plus léger ne passe jamais par ici : son rythme (2,5 s) ne change pas.
+    const AUTOSAVE_HEAVY_CHARS = 8 * 1000 * 1000;
+    const AUTOSAVE_HEAVY_CHARS_PER_MS = 1000;
+    const AUTOSAVE_HEAVY_MAX_GAP_MS = 30000;
+    const AUTOSAVE_QUIET_MS = 1500;
+    const AUTOSAVE_QUIET_MAX_DEFER_MS = 45000;
+    let typingDeferredSince = 0;
+    // Le poids du modèle ouvert : le texte que le cache de js/templates.js tient de lui (lu ou écrit par ce widget).
+    function openModelChars() {
+      const open = Templates.byId(Templates.getCurrentId());
+      return open && typeof open.contenu === 'string' ? open.contenu.length : 0;
+    }
+    // Ce passage doit-il attendre ? Seulement pour un modèle lourd à enregistrer : trop tôt après le passage précédent, ou la personne est en train de taper (un passage reporté trop longtemps part quand même).
+    function heavyPassMustWait(now) {
+      const chars = openModelChars();
+      if (chars < AUTOSAVE_HEAVY_CHARS) { typingDeferredSince = 0; return false; }
+      const gap = Math.min(AUTOSAVE_HEAVY_MAX_GAP_MS, Math.ceil(chars / AUTOSAVE_HEAVY_CHARS_PER_MS));
+      if (now - persist.autosaveLastCheckAt < gap - AUTOSAVE_INTERVAL_MS / 2) return true;
+      if (now - persist.autosaveLastEditAt < AUTOSAVE_QUIET_MS) {
+        if (!typingDeferredSince) typingDeferredSince = now;
+        if (now - typingDeferredSince < AUTOSAVE_QUIET_MAX_DEFER_MS) return true;
+      }
+      typingDeferredSince = 0;
+      return false;
+    }
     // Préférence par navigateur (comme la touche de déclenchement #Variable, cf. js/settings.js), pas par document : chacun choisit s'il veut
     // l'enregistrement automatique, indépendamment des autres personnes qui ouvrent le même widget.
     const AUTOSAVE_ENABLED_STORAGE = 'pp_autosave_enabled';
@@ -103,9 +131,9 @@ const MainAutosave = (function () {
       if (saveBtn) saveBtn.classList.toggle('is-autosave-off', off);
     }
 
-    function markAutosaveDirty() { persist.autosaveEditVersion++; persist.autosaveDirty = true; persist.autosaveSettingsDirty = true; updateSaveStatus(); }
+    function markAutosaveDirty() { persist.autosaveEditVersion++; persist.autosaveLastEditAt = performance.now(); persist.autosaveDirty = true; persist.autosaveSettingsDirty = true; updateSaveStatus(); }
     // Du texte tapé ici, ou reçu d'une autre personne de l'écriture en direct : à enregistrer, sans que ce soit un réglage de cette personne.
-    function markTextDirty() { persist.autosaveEditVersion++; persist.autosaveDirty = true; updateSaveStatus(); }
+    function markTextDirty() { persist.autosaveEditVersion++; persist.autosaveLastEditAt = performance.now(); persist.autosaveDirty = true; updateSaveStatus(); }
     // Une écriture vient de partir avec l'état de l'éditeur tel qu'il était à la version `editVersion` : ce qui a été tapé depuis reste « à
     // enregistrer » pour le passage suivant.
     function noteSaved(editVersion) { if (editVersion === persist.autosaveEditVersion) { persist.autosaveDirty = false; persist.autosaveSettingsDirty = false; } }
@@ -287,6 +315,7 @@ const MainAutosave = (function () {
       const checkStartedAt = performance.now();
       // Un modèle que Grist a refusé d'écrire (autosaveRefused) attend comme un modèle au repos : ce qui est tapé ne peut pas partir, le relire à chaque passage ne servirait qu'à charger Grist.
       if ((!persist.autosaveDirty || autosaveRefused()) && checkStartedAt - persist.autosaveLastCheckAt < autosaveIdleIntervalMs() - AUTOSAVE_INTERVAL_MS / 2) return;
+      if (persist.autosaveDirty && !autosaveRefused() && heavyPassMustWait(checkStartedAt)) return; // un modèle lourd : espacé, et pas pendant la frappe (voir AUTOSAVE_HEAVY_CHARS)
       const epoch = persist.autosaveEpoch;
       let remote;
       try { remote = await readRemoteTemplate(id, epoch); }

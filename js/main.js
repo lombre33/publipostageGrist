@@ -712,6 +712,8 @@
     // Dernière fois que le modèle ouvert a été comparé à Grist (performance.now : l'horloge du système peut reculer) : un passage qui a lu, ou le
     // chargement du modèle, qui vient de Grist.
     autosaveLastCheckAt: -Infinity,
+    // Dernière modification du texte ou d'un réglage (performance.now) : un modèle lourd n'est pas enregistré pendant la frappe (js/main-autosave.js, heavyPassMustWait).
+    autosaveLastEditAt: -Infinity,
     autosaveConflictActive: false,
     autosaveConflictTpl: null,
     autosaveTimer: null,
@@ -898,7 +900,7 @@
   });
 
   // L'import d'un fichier (Excel, Markdown, PowerPoint, Word : le menu « + » et le « Nouveau > Importer » de GFS) est dans js/main-import.js ; ce qu'il tire d'ici lui est donné.
-  const { importFileFromGfs, onImportDocx, onImportMd, onImportPptx, onImportXlsx } = MainImport.create({ askBeforeLeaving, hasEditsToConfirmBeforeLeaving, isReadOnly, loadTemplateIntoEditor, markAutosaveDirty, refocusEditorIfLost, setStatus, templateSelect, updateSaveStatus });
+  const { importFileFromGfs, onImportDocx, onImportMd, onImportPptx, onImportXlsx } = MainImport.create({ askBeforeLeaving, hasEditsToConfirmBeforeLeaving, isReadOnly, loadTemplateIntoEditor, markAutosaveDirty, onSave, refocusEditorIfLost, setStatus, templateNameInput, templateSelect, updateSaveStatus });
 
   async function switchMode(mode) {
     // Lecture seule : le mode Lecture est le seul accessible, y compris depuis la dernière ligne d'init().

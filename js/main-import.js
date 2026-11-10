@@ -3,7 +3,7 @@
 // lui, ce qu'il en tire (la question « Enregistrer / Abandonner / Annuler », le coin d'état, le chargement d'un modèle dans l'éditeur...) lui est donné par `api`. Les corps sont ceux de main.js.
 const MainImport = (function () {
   function create(api) {
-    const { askBeforeLeaving, hasEditsToConfirmBeforeLeaving, isReadOnly, loadTemplateIntoEditor, markAutosaveDirty, refocusEditorIfLost, setStatus, templateSelect, updateSaveStatus } = api;
+    const { askBeforeLeaving, hasEditsToConfirmBeforeLeaving, isReadOnly, loadTemplateIntoEditor, markAutosaveDirty, onSave, refocusEditorIfLost, setStatus, templateNameInput, templateSelect, updateSaveStatus } = api;
 
     // « Nouveau > Importer » demandé par GFS (js/gfs-open.js, consigne GFS 035) : GFS a ouvert le sélecteur de fichier lui-même (le cadre isolé de l'app n'a pas le geste de la personne) et donne le fichier choisi, que
     // `valeur` nomme : `excel` (une grille), `markdown` (un document), `powerpoint` (une présentation, l'extension « diapositives » étant active), `word` (un document). Il est lu par le chemin de la ligne du même nom du menu « + » - mêmes
@@ -168,32 +168,51 @@ const MainImport = (function () {
     // lu) ; false : l'extension « diapositives » manque ou ne se charge pas (la fenêtre qui l'explique s'est ouverte, comme au clic de la ligne grisée), le fichier est refusé (l'erreur est dite dans le coin d'état) ou la
     // personne a répondu « Annuler » à la question d'enregistrement : rien n'a changé.
     // La lecture d'un gros fichier avance par tranches (js/pptx-import.js : la page répond pendant ce temps) : un second import lancé en route est refusé en le disant, et le compteur du coin d'état
-    // suit les diapositives lues.
+    // suit les diapositives lues. La pose dans l'éditeur se fait aussi par tranches (js/import-placing.js). Tout du long un voile verrouille le panneau et dit où en est l'import - lecture, mise en place,
+    // enregistrement - avec une barre ; il n'apparaît qu'après une demi-seconde (un petit fichier ne le voit pas), se retire devant la question d'enregistrement, et porte « Annuler l'import » tant que le
+    // fichier se lit (rien n'a encore changé).
     let pptxImporting = false;
+    // La part de la barre de chaque étape : la lecture est de loin la plus longue (150 diapositives de photos : 14 s de lecture, 5 de mise en place).
+    const PPTX_STEP_READ = 0.65;
+    const PPTX_STEP_PLACE = 0.3;
     async function importPptxFile(file) {
       if (pptxImporting) { setStatus(I18n.t('status.pptxImportBusy'), true); return false; }
       pptxImporting = true;
+      const progress = ImportPlacing.begin();
       try {
         // Le code de l'extension (la bande des diapositives) arrive avant que la présentation s'ouvre : un échec le dit, et rien n'a changé.
         if (!(await SlidesEntry.ensureFor(SlidesEntry.TYPE))) return false;
-        setStatus(I18n.t('status.pptxImporting'));
+        const reading = I18n.t('status.pptxImporting');
+        setStatus(reading);
+        progress.update(reading, 0);
         PerfTrace.mark('import PowerPoint : lecture', { octets: file.size });
-        const imported = await readPptxForImport(file);
+        const run = { cancelled: false, fraction: 0 };
+        progress.allowCancel(() => {
+          run.cancelled = true;
+          progress.allowCancel(null);
+          progress.update(I18n.t('importPlacing.cancelling'), run.fraction);
+        });
+        const imported = await readPptxForImport(file, progress, run);
+        progress.allowCancel(null);
+        if (run.cancelled && imported) { setStatus(I18n.t('status.pptxImportCancelled')); return false; } // « Annuler » arrivé avec la dernière diapositive : rien n'est posé
         if (!imported) return false;
-        PerfTrace.mark('import PowerPoint : lu', { diapositives: imported.slideCount, texteMo: Math.round(imported.html.length / 104857.6) / 10 });
+        PerfTrace.mark('import PowerPoint : lu', { diapositives: imported.slideCount, texteMo: Math.round(ImportPlacing.slidesOf(imported).reduce((sum, text) => sum + text.length, 0) / 104857.6) / 10 });
         if (hasEditsToConfirmBeforeLeaving()) {
+          progress.suspend();
           updateSaveStatus(); // la lecture est finie : « Lecture… » serait faux pendant la question
           if (!(await askBeforeLeaving())) return false;
         }
-        // La pose du texte dans l'éditeur est un seul bloc (quelques secondes pour des centaines de diapositives) : le coin d'état le dit AVANT, et se peint avant que la page soit prise.
-        setStatus(I18n.t('status.pptxPlacing', { n: imported.slideCount }));
-        await afterPaint();
         PerfTrace.mark('import PowerPoint : mise en place');
-        openImportedPresentation(imported);
+        await placeImportedPresentation(imported, progress, file);
         PerfTrace.mark('import PowerPoint : en place');
-        await tellPptxImportReport(imported.report);
+        progress.end();
+        await tellPptxImportReport(imported.report);   // la fenêtre du rapport prend le focus et le rend à l'éditeur en se fermant
         return true;
       } finally {
+        progress.end();
+        // Le voile, la question « Modifications non enregistrées » ou un fichier refusé ne rendent pas le focus à l'éditeur : c'est ici qu'il le retrouve, jamais avant la fenêtre du rapport (la reprise du focus
+        // de l'éditeur est différée d'une image, elle passerait devant le bouton « Fermer »).
+        refocusEditorIfLost();
         pptxImporting = false;
       }
     }
@@ -208,12 +227,21 @@ const MainImport = (function () {
       });
     }
 
-    // Lit le fichier et construit la présentation. null : le fichier est refusé (l'erreur est dite dans le coin d'état) ; rien d'autre ne se passe.
-    async function readPptxForImport(file) {
+    // Lit le fichier et construit la présentation. null : le fichier est refusé (l'erreur est dite dans le coin d'état) ou l'import est annulé ; rien d'autre ne se passe.
+    async function readPptxForImport(file, progress, run) {
       try {
         await ExportEngines.ensure('pptxImport').catch((e) => { throw Object.assign(new Error('moteur d’import indisponible'), { code: 'library', cause: e }); });
-        return await PptxImport.fromFile(file, { onProgress: ({ done, total }) => setStatus(I18n.t('status.pptxImportingProgress', { done, total })) });
+        return await PptxImport.fromFile(file, {
+          shouldStop: () => run.cancelled,
+          onProgress: ({ done, total }) => {
+            const text = I18n.t('status.pptxImportingProgress', { done, total });
+            setStatus(text);
+            run.fraction = PPTX_STEP_READ * done / Math.max(total, 1);
+            if (!run.cancelled) progress.update(text, run.fraction);
+          },
+        });
       } catch (e) {
+        if (e && e.code === 'cancelled') { setStatus(I18n.t('status.pptxImportCancelled')); return null; }
         reportPptxImportError(e);
         return null;
       }
@@ -225,12 +253,42 @@ const MainImport = (function () {
       setStatus(I18n.t(key, { size: e && e.size ? importMegabytes(e.size) : '', max: e && e.max ? importMegabytes(e.max) : '' }), true);
     }
 
-    function openImportedPresentation(imported) {
-      // Une nouvelle présentation, sans nom et pas encore enregistrée, comme « Nouvelle présentation » ; sa page est celle des diapositives du fichier (taille, sens, marges).
+    // Une nouvelle présentation, sans nom et pas encore enregistrée, comme « Nouvelle présentation » ; sa page est celle des diapositives du fichier (taille, sens, marges). Les premières diapositives se posent par
+    // le chemin habituel (type, page, bande), les autres À LA SUITE, une à une, la page reprenant la main entre deux (ImportPlacing) ; chaque texte est libéré dès que sa diapositive est posée.
+    // Un gros fichier (HEAVY_FILE_BYTES, 15 Mo) est enregistré dans Grist DÈS QUE sa mise en place est finie, sous le nom du fichier (10/11, « enregistrer le modèle au fil de l'import ») : le modèle est
+    // dans la liste avant que quoi que ce soit d'autre se passe, et l'enregistrement automatique prend le relais. Un fichier ordinaire garde son parcours : la personne nomme puis enregistre.
+    const baseNameOf = fileName => String(fileName || '').replace(/\.[^.]*$/, '').trim();
+    async function placeImportedPresentation(imported, progress, file) {
+      const keepName = file && file.size >= PptxImport.HEAVY_FILE_BYTES ? baseNameOf(file.name) : '';
+      const texts = ImportPlacing.slidesOf(imported);
+      const total = texts.length;
+      const first = Math.min(total, ImportPlacing.FIRST_SLIDES);
+      const note = (placed) => {
+        const text = I18n.t('status.pptxPlacingProgress', { done: placed, total });
+        setStatus(text);
+        progress.update(text, PPTX_STEP_READ + PPTX_STEP_PLACE * placed / Math.max(total, 1));
+      };
+      note(0);
+      await afterPaint();
       templateSelect.value = '';
-      loadTemplateIntoEditor({ id: null, nom: '', contenu: imported.html, typeModele: SlidesEntry.TYPE, marginsMm: imported.page, suiviModifications: null, headerFooter: null }, SlidesEntry.TYPE);
+      loadTemplateIntoEditor({ id: null, nom: keepName, contenu: texts.splice(0, first).join(ImportPlacing.PAGE_BREAK), typeModele: SlidesEntry.TYPE, marginsMm: imported.page, suiviModifications: null, headerFooter: null }, SlidesEntry.TYPE);
+      note(first);
+      const failed = texts.length ? await ImportPlacing.appendSlides(texts, placed => note(first + placed)) : 0;
+      if (failed) {
+        const item = imported.report.find(entry => entry.key === 'unreadable');
+        if (item) item.n += failed; else imported.report.push({ key: 'unreadable', n: failed });
+      }
       markAutosaveDirty();
       setStatus(I18n.t('status.pptxImported', { n: imported.slideCount }));
+      if (!keepName) return;
+      const saving = I18n.t('importPlacing.saving');
+      setStatus(saving);
+      progress.update(saving, PPTX_STEP_READ + PPTX_STEP_PLACE);
+      // le texte du document s'écrit d'avance, par tranches : l'enregistrement le trouve prêt ; s'il échoue, l'enregistrement le refait lui-même, d'un bloc
+      await ImportPlacing.prepareSave().catch(error => console.warn('[main] import PowerPoint : texte non préparé d’avance', error));
+      await onSave();     // dit lui-même son échec dans le coin d'état (tables refusées, Grist qui refuse, erreur) : le modèle reste alors « à enregistrer »
+      PerfTrace.mark('import PowerPoint : enregistré', { id: Templates.getCurrentId() });
+      if (Templates.getCurrentId() != null) setStatus(I18n.t('status.pptxImportedSaved', { n: imported.slideCount, name: templateNameInput ? templateNameInput.value : keepName }));
     }
 
     // Ce que l'import n'a pas repris tel quel, une ligne par genre d'objet ; rien à dire quand tout est arrivé.

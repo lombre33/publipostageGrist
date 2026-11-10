@@ -771,7 +771,36 @@ const Editor = (function () {
   // Grist d'accord).
   function getHTML(doc) {
     if (!editor) return '';
+    // Le texte écrit d'avance par `prepareHTML`, tant que le document n'a pas changé : rendu une fois, puis oublié (une copie de plus en mémoire n'a pas à rester).
+    if (!doc && preparedHtml) {
+      const prepared = preparedHtml;
+      preparedHtml = null;
+      if (prepared.doc === editor.state.doc) return prepared.html;
+    }
     return GridEditor.serialize(documentHtml(doc && doc.content ? doc.content : editor.state.doc.content, editor.schema));
+  }
+  // Écrit le texte du document d'avance, bloc après bloc, en rendant la main entre deux (`pause()` : js/import-placing.js) : l'enregistrement qui suit l'import d'un gros fichier le trouve prêt au lieu de
+  // tenir la page 600 ms d'un seul bloc (les blocs de plus de BLOCK_HTML_KEPT_MAX caractères - une photo - ne sont pas gardés par la mémoire des blocs, donc relus à chaque getHTML). Un document qui change
+  // pendant ce temps, ou dont un bloc porte une marque (documentHtml s'y passe de la mémoire) : rien n'est préparé, getHTML fait comme avant.
+  let preparedHtml = null;   // { doc, html } : le texte du document `doc`
+  async function prepareHTML(pause) {
+    if (!editor || !domSerializerClass) return;
+    const doc = editor.state.doc;
+    preparedHtml = null;
+    try {
+      syncBlockHtmlSetup();
+      const serializer = domSerializerClass.fromSchema(editor.schema);
+      const hold = { div: null };
+      const parts = [];
+      for (let i = 0; i < doc.childCount; i++) {
+        const node = doc.child(i);
+        if (node.marks.length) return;
+        parts.push(htmlOfBlock(node, serializer, hold));
+        await pause();
+        if (!editor || editor.state.doc !== doc) return;
+      }
+      preparedHtml = { doc, html: GridEditor.serialize(parts.join('')) };
+    } catch (e) { /* getHTML fera ce travail d'un seul bloc */ }
   }
 
   function getHeadingNumberingStyle() {
@@ -970,13 +999,19 @@ const Editor = (function () {
     // Force un rafraîchissement du NodeView du sommaire : son premier rendu (pendant setContent) a eu lieu avant que headingStyle soit posé
     // ci-dessus.
     editor.view.dispatch(editor.state.tr);
-    // Le dispatch ci-dessus ne déclenche pas onUpdate (pas de changement réel) : clampOverflowingTables ne tournerait donc pas seule pour un tableau
+    settleLoadedDocument(html || '');
+  }
+
+  // Ce que la pose d'un document fait une fois le texte en place : colonnes de tableau, pagination, images en calque, validité des bulles, copie du HTML au repos. `html` : le texte chargé (le verdict des
+  // images en calque s'y accroche) ; null après un chargement par morceaux (appendHTML : le texte entier n'est jamais réuni).
+  function settleLoadedDocument(html) {
+    // Le chargement ne déclenche pas onUpdate (pas de changement réel) : clampOverflowingTables ne tournerait donc pas seule pour un tableau
     // déjà trop large à l'import, d'où l'appel explicite.
     backfillAutoColumnWidths(editor);
     clampOverflowingTables(editor);
     HeaderFooterPreview.renderPaginationOverlay();
     const imagesRegridded = HeaderFooterPreview.migrateLegacyImagePositions();
-    HeaderFooterPreview.reconcileLayerImagesWithGrid({ layoutFresh: !imagesRegridded, verdictOf: html || '' });
+    HeaderFooterPreview.reconcileLayerImagesWithGrid(typeof html === 'string' ? { layoutFresh: !imagesRegridded, verdictOf: html } : { layoutFresh: !imagesRegridded });
     // Vérification immédiate (schéma en cache) puis après rafraîchissement explicite (couvre une table/colonne supprimée entretemps). La passe
     // exacte lit toutes les tables en entier (1,4 M de cases à chaque modèle affiché dans un document de 40 tables de 2 000 lignes) : quand aucune
     // bulle n'est rouge, celle d'il y a moins d'une minute suffit (js/main.js la demande de même à l'ouverture) ; une bulle rouge peut venir d'un
@@ -989,6 +1024,19 @@ const Editor = (function () {
     GristAPI.refreshSchema(looksBroken ? undefined : { maxAgeMs: SCHEMA_MAX_AGE_MS }).then(refreshVariableBadgeValidity).then(readLinkMissesAgain)
       .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));
     warmDocumentHtml();
+  }
+
+  // Un chargement par morceaux (js/import-placing.js) : `setHTML` pose le premier, `appendHTML` chacun des suivants À LA FIN, sans historique ni évènement `update` ; `settleAppended` clôt comme setHTML. Rend
+  // le nombre de blocs qu'avait l'éditeur avant ce morceau (là où commence le morceau).
+  function appendHTML(html) {
+    if (!editor) return 0;
+    const before = editor.view.dom.children.length;
+    editor.commands.appendTrackedDocument(html || '');
+    return before;
+  }
+  function settleAppended() {
+    if (!editor) return;
+    settleLoadedDocument(null);
   }
 
   // La pagination se refait à l'échelle que la feuille vient de prendre (changement de taille du panneau, de zoom, de page), puis le zoom du contenu se revérifie à l'image suivante :
@@ -1194,7 +1242,7 @@ const Editor = (function () {
   }
 
   return {
-    init, loadLibraries, loadedLibraries, markBadgeValidity, refreshLinkState, badgeProblemText, getHTML, setHTML, getHeadingNumberingStyle, insertImageAtDefaultSize,
+    init, loadLibraries, loadedLibraries, markBadgeValidity, refreshLinkState, badgeProblemText, getHTML, prepareHTML, setHTML, appendHTML, settleAppended, getHeadingNumberingStyle, insertImageAtDefaultSize,
     getHeaderFooterData: HeaderFooterPreview.getHeaderFooterData, setHeaderFooterData: HeaderFooterPreview.setHeaderFooterData,
     exitHeaderFooterModeIfActive: HeaderFooterPreview.exitHeaderFooterModeIfActive,
     // Aperçu A4 rallumé, facteur d'ajustement changé... : la pagination est refaite, et la position des images d'un modèle chargé sans mise en page

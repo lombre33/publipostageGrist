@@ -69,6 +69,8 @@ const PptxImport = (function () {
   const PAINT_MS = 250;
   const breathe = () => (typeof scheduler !== 'undefined' && scheduler && typeof scheduler.yield === 'function' ? scheduler.yield() : new Promise(resolve => setTimeout(resolve, 0)));
   const breatheAndPaint = () => new Promise((resolve) => {
+    // Un onglet caché ne peint rien et ses minuteurs sont ralentis (une seconde, puis une minute) : la pause est alors une simple tâche.
+    if (typeof document !== 'undefined' && document.hidden) { breathe().then(resolve); return; }
     let done = false;
     const go = () => { if (!done) { done = true; resolve(); } };
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(go);
@@ -2489,7 +2491,17 @@ const PptxImport = (function () {
     return { orientation, format, k: Math.abs(k - 1) < 0.002 ? 1 : k, widthPt: pt.width, heightPt: pt.height };
   }
   const PAGE_BREAK = '<div class="page-break-marker"></div>';
-  // Le texte d'une présentation d'après le contenu d'un fichier .pptx : { html, page: { orientation, format, theme }, slideCount, report: [{ key, n }] } ; `theme` : celui du fichier (themeOf), absent sans thème lisible.
+  // Le résultat d'un import. `slideTexts` : le texte de chaque diapositive, que js/import-placing.js pose une à une en les libérant (un gros fichier ne se réunit jamais en un seul texte) ; `html` : le texte
+  // entier, réuni À LA DEMANDE (un petit fichier, les essais) - il n'a plus rien à rendre une fois les diapositives posées. Construit HORS de `fromBuffer` : un accesseur écrit dans la fonction qui a lu le
+  // fichier garderait en vie tout son contexte - le paquet dézippé, les 450 documents XML de ses diapositives, le cache de toutes les images - aussi longtemps que le résultat existe (V8 partage un seul
+  // contexte entre les fonctions d'une même portée) : 110 000 nœuds et 85 Mo retenus pendant la mise en place et pendant que la personne lit le rapport.
+  function importResult(texts, page, report) {
+    return {
+      get html() { return texts.join(PAGE_BREAK); },
+      slideTexts: texts, page, slideCount: texts.length, report,
+    };
+  }
+  // Le texte d'une présentation d'après le contenu d'un fichier .pptx : { html, slideTexts, page: { orientation, format, theme }, slideCount, report: [{ key, n }] } ; `theme` : celui du fichier (themeOf), absent sans thème lisible.
   async function fromBuffer(buffer, options) {
     if (!buffer || buffer.byteLength > MAX_FILE_BYTES) throw fail('tooBig', 'Ce fichier est trop gros pour être importé.', { size: buffer ? buffer.byteLength : 0, max: MAX_FILE_BYTES });
     const pkg = await openPackage(buffer);
@@ -2522,6 +2534,8 @@ const PptxImport = (function () {
       defaultText: kid(presentation, 'defaultTextStyle'), presentationRels, pace: pacer(), embedded: 0, heavy: buffer.byteLength >= HEAVY_FILE_BYTES,
     };
     const onProgress = options && typeof options.onProgress === 'function' ? options.onProgress : null;
+    // `shouldStop()` : vrai quand la personne a annulé l'import (js/main-import.js) ; la lecture s'arrête entre deux diapositives, et rien n'a changé.
+    const shouldStop = options && typeof options.shouldStop === 'function' ? options.shouldStop : null;
     if (paths.length > MAX_SLIDES) {
       report.slidesCut = paths.length - MAX_SLIDES;
       paths.length = MAX_SLIDES;
@@ -2541,6 +2555,7 @@ const PptxImport = (function () {
     if (document.fonts && document.fonts.ready) await document.fonts.ready;
     try {
       for (let i = 0; i < paths.length; i++) {
+        if (shouldStop && shouldStop()) throw fail('cancelled', 'Import annulé.');
         await ctx.pace();
         try {
           slides.push(await slideHtml(paths[i], ctx, { w: page.widthPt, h: page.heightPt }));
@@ -2553,20 +2568,21 @@ const PptxImport = (function () {
     } finally {
       if (ctx.host) ctx.host.remove();
     }
-    const texts = slides.map((slide, i) => {
+    // Une diapositive après l'autre, et sa version « morceaux » libérée aussitôt : les textes de tout un gros fichier ne coexistent pas deux fois en mémoire.
+    const texts = new Array(slides.length);
+    for (let i = 0; i < slides.length; i++) {
+      const slide = slides[i];
       // Le signet d'une diapositive que vise un lien d'une autre (ou d'elle-même), dans son repère.
       const anchor = ctx.linkedSlides.has(i + 1) ? { anchorId: slideAnchorId(i + 1), anchorName: I18n.t('pptx.import.slideAnchor', { n: i + 1 }) } : {};
-      return SlideProps.html(Object.assign({}, slide.props, anchor)) + slide.frames + slide.tail;
-    });
+      texts[i] = SlideProps.html(Object.assign({}, slide.props, anchor)) + slide.frames + slide.tail;
+      slides[i] = null;
+    }
     // Le thème du fichier (couleurs, polices, fond) devient celui de la présentation : il se change d'un coup (« Thème… » du menu Page). Les couleurs d'un texte qui sont celles du thème le suivent ; une police posée
     // sur une série de caractères reste celle du fichier. Un fichier sans thème lisible n'en a pas (la présentation d'avant).
     const said = REPORT_KEYS.filter(key => report[key] > 0);
     const imported = { orientation: page.orientation, format: page.format };
     if (ctx.theme) imported.theme = ctx.theme;
-    return {
-      html: texts.join(PAGE_BREAK), page: imported, slideCount: slides.length,
-      report: said.map(key => ({ key, n: report[key] })),
-    };
+    return importResult(texts, imported, said.map(key => ({ key, n: report[key] })));
   }
   async function fromFile(file, options) {
     if (!file || file.size > MAX_FILE_BYTES) throw fail('tooBig', 'Ce fichier est trop gros pour être importé.', { size: file ? file.size : 0, max: MAX_FILE_BYTES });
@@ -2579,5 +2595,5 @@ const PptxImport = (function () {
     return fromBuffer(buffer, options);
   }
 
-  return { fromFile, fromBuffer, MAX_FILE_BYTES, MAX_UNPACKED_BYTES, MAX_SLIDES, REPORT_KEYS };
+  return { fromFile, fromBuffer, MAX_FILE_BYTES, MAX_UNPACKED_BYTES, MAX_SLIDES, HEAVY_FILE_BYTES, REPORT_KEYS };
 })();

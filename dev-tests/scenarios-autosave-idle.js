@@ -10,6 +10,9 @@
 //    affiche le bandeau et n'écrase rien (une horloge qui sauterait la lecture parce qu'elle date de moins de 15 s écraserait la version de l'autre) ;
 // 3. une table des modèles LOURDE attend plus longtemps (js/main.js, autosaveIdleIntervalMs : une milliseconde pour 100 caractères de la dernière lecture, 3 Mo : 30 s) : vingt modèles de
 //    1,6 Mo relus toutes les 15 s, c'étaient 118 Mo par minute (lot « Lectures de fond » de « Tests de charge »).
+// 4. un modèle LOURD (8 millions de signes et plus : une présentation importée de 30 Mo, un document plein de photos) ne s'enregistre pas toutes les 2,5 s (js/main-autosave.js, heavyPassMustWait) : chaque passage relit la
+//    table, reconstruit le texte entier et l'écrit, plusieurs secondes de page prise qui retardaient chaque touche (lot « Gros modèle » de « Auditer et optimiser les performances »). Il laisse une milliseconde par millier
+//    de signes entre deux passages et attend une pause de la frappe ; un passage reporté trop longtemps part quand même. Les modèles légers gardent leur rythme (cas des suites `autosave` et ci-dessus).
 // Les lectures se comptent en enveloppant grist.docApi.fetchTable le temps du cas : le stub journalise les écritures, pas les lectures.
 (function () {
   const cases = [];
@@ -195,6 +198,52 @@
         removeModel(heavyId);
         await Templates.loadAll();
       }
+    },
+  });
+
+  cases.push({
+    id: 'autosave_heavy_open_model_is_saved_less_often_and_never_while_typing',
+    description: "Un modèle ouvert de plus de 8 millions de signes n'est pas enregistré toutes les 2,5 s : pas de passage avant ~7 s après son chargement (une milliseconde par millier de signes), pas de passage pendant que la personne tape (une touche par seconde pendant 14 s), puis un passage dans les secondes qui suivent la dernière touche, qui écrit tout ce qui a été tapé",
+    run: async (h) => {
+      await clearConflictIfAny(h);
+      const HEAVY_OPEN_CHARS = 8200000;                   // = AUTOSAVE_HEAVY_CHARS (8 millions) et un peu plus : une milliseconde par millier de signes = 8,2 s entre deux passages
+      const html = '<p>Début</p><p><img class="editor-image" alt="Photo" src="data:image/png;base64,' + 'A'.repeat(HEAVY_OPEN_CHARS) + '" style="width: 80px" data-layer="normal" data-wrap="inline"></p><p>Fin</p>';
+      const id = await openSavedTemplate(h, 'AutoSave modèle lourd', html);
+      if (!id) return { pass: false, notes: 'modèle non rouvert par la liste' };
+      const loadedAt = performance.now();
+      const weight = (Templates.byId(id) || { contenu: '' }).contenu.length;
+      const writes = () => stub().countActions('UpdateRecord', TABLE);
+      try {
+        stub().clearActionLog();
+        await h.focusAtEnd();
+        await h.typeText('a');
+        const typedAt = performance.now();
+        // Un modèle léger s'enregistre au premier passage (2,5 s au plus après la frappe) : ici rien n'est parti 5,5 s après le chargement.
+        await h.sleep(4500);
+        const early = writes();
+        const first = await waitUntil(h, () => writes() >= 1, 9000, 100);
+        const firstAt = performance.now();
+        const afterLoad = Math.round(firstAt - loadedAt);
+        const firstContent = contentOf(id);
+        const firstHasEdit = firstContent.indexOf('a') !== -1 && /Début|aDébut|Débuta|Fin/.test(firstContent) && firstContent.length > HEAVY_OPEN_CHARS;
+        // Pendant la frappe suivie (une touche par seconde, jamais plus de 1,5 s d'écart), le passage dû depuis longtemps est reporté : aucune écriture. Le premier passage est parti : le suivant est dû 7 s plus tard.
+        const written = writes();
+        for (let i = 0; i < 14; i++) { await h.typeText('b'); await h.sleep(1000); }
+        const during = writes() - written;
+        const lastTypedAt = performance.now();
+        // La frappe s'arrête : le passage reporté part dans les secondes qui suivent (1,5 s de pause, plus un tour de 2,5 s, plus un autre de marge).
+        const after = await waitUntil(h, () => writes() > written, 8000, 100);
+        const afterDelay = Math.round(performance.now() - lastTypedAt);
+        const tail = contentOf(id);
+        const typedAll = (tail.match(/b/g) || []).length >= 14 && tail.length > HEAVY_OPEN_CHARS;
+        await clearConflictIfAny(h);
+        const pass = weight > HEAVY_OPEN_CHARS && early === 0 && first && afterLoad >= 6000 && afterLoad <= 13500 && firstHasEdit && during === 0 && after && afterDelay <= 8000 && typedAll;
+        return {
+          pass,
+          notes: 'modèle de ' + weight + ' signes ; écritures 5,5 s après le chargement=' + early + ' (attendu 0), premier passage ' + afterLoad + ' ms après le chargement (attendu 7 à 12 s), il porte la frappe=' + firstHasEdit
+            + ' ; écritures pendant 14 s de frappe=' + during + ' (attendu 0) ; passage après la dernière touche=' + after + ' en ' + afterDelay + ' ms, tout ce qui a été tapé y est=' + typedAll + ' (' + Math.round((typedAt - loadedAt)) + ' ms de la frappe au chargement)',
+        };
+      } finally { await clearConflictIfAny(h); }
     },
   });
 

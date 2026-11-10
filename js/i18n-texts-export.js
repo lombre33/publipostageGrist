@@ -180,7 +180,15 @@ const I18nTextsExport = {
   // Import d'un fichier PowerPoint (js/pptx-import.js, js/main.js:onImportPptx) : lecture, fin, fichier refusé, puis la fenêtre de ce que l'éditeur n'a pas repris tel quel (une ligne par genre, `pptx.import.report.<genre>`, dans l'ordre de `REPORT_KEYS` de js/pptx-import.js : ce qui n'arrive pas, puis ce que le fichier demande et que l'éditeur ne sait pas encore faire, famille par famille).
   'status.pptxImporting': { fr: 'Lecture du fichier PowerPoint…', en: 'Reading the PowerPoint file…' },
   'status.pptxImportingProgress': { fr: 'Lecture du fichier PowerPoint… {done} / {total}', en: 'Reading the PowerPoint file… {done} / {total}' },
-  'status.pptxPlacing': { fr: 'Mise en place de {n} {n|diapositive|diapositives}…', en: 'Setting up {n} {n|slide|slides}…' },
+  'status.pptxPlacingProgress': { fr: 'Mise en place des diapositives… {done} / {total}', en: 'Setting up the slides… {done} / {total}' },
+  'status.pptxImportedSaved': { fr: 'PowerPoint importé : {n} {n|diapositive|diapositives}, enregistré sous « {name} ».', en: 'PowerPoint imported: {n} {n|slide|slides}, saved as “{name}”.' },
+  // L'écran d'avancement d'un gros import (js/import-placing.js) : le panneau est verrouillé tout du long.
+  'importPlacing.cancel': { fr: 'Annuler l’import', en: 'Cancel the import' },
+  'importPlacing.cancelling': { fr: 'Annulation en cours…', en: 'Canceling…' },
+  'importPlacing.saving': { fr: 'Enregistrement du modèle dans Grist…', en: 'Saving the template to Grist…' },
+  'importPlacing.title': { fr: 'Import du PowerPoint', en: 'PowerPoint import' },
+  'importPlacing.hint': { fr: 'L’éditeur est verrouillé le temps de l’import : laissez cette page ouverte, elle avance seule. Une grosse présentation peut prendre plusieurs minutes.', en: 'The editor is locked during the import: leave this page open, it keeps going on its own. A large presentation can take several minutes.' },
+  'status.pptxImportCancelled': { fr: 'Import annulé : rien n’a changé.', en: 'Import canceled: nothing has changed.' },
   'status.pptxImportBusy': { fr: 'Un import PowerPoint est déjà en cours : attendez qu’il finisse.', en: 'A PowerPoint import is already running: wait for it to finish.' },
   'status.pptxImported': { fr: 'PowerPoint importé : {n} {n|diapositive|diapositives}. Nommez le modèle puis enregistrez-le.', en: 'PowerPoint imported: {n} {n|slide|slides}. Name the template, then save it.' },
   'status.pptxImportUnreadable': { fr: 'Ce fichier n’est pas une présentation PowerPoint (.pptx) lisible.', en: 'This file is not a readable PowerPoint (.pptx) presentation.' },

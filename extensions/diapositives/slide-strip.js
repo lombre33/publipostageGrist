@@ -98,6 +98,8 @@ const SlideStrip = (function () {
   let stopLight = null;            // éteint lightRedraw (le dessin léger d'un état qui ne fait que changer des blocs de place)
   let chartDom = null;             // le texte de l'éditeur, où l'on écoute le dessin des graphiques (onChartPainted)
   let shown = false;
+  // Tenue pendant qu'un gros document se pose par morceaux (js/import-placing.js) : la bande ne relit rien à chaque morceau (chaque relecture parcourt TOUTES les diapositives posées) ; `hold(false)` fait la relecture, une seule fois.
+  let held = false;
   let off = false;                 // l'extension est éteinte : les gestes sont grisés
   let slides = [];                 // les diapositives du texte (slidesOf)
   let readDoc = null;              // le texte d'où `slides` a été lu
@@ -2158,7 +2160,7 @@ const SlideStrip = (function () {
 
   // L'éditeur et la page
   function onTransaction({ transaction }) {
-    if (!shown || editingHeaderFooter()) return;
+    if (!shown || held || editingHeaderFooter()) return;
     // Une transaction qui n'est pas d'un geste de la bande (une frappe, un Ctrl+Z, un collage) : le choix revient à la diapositive du curseur.
     if (transaction.docChanged && !transaction.getMeta(STRIP_META) && !transaction.getMeta(LAYERS_META)) picked = [];
     const count = slides.length;
@@ -2188,7 +2190,7 @@ const SlideStrip = (function () {
   // Après chaque pagination : ce qui dépasse, et toutes les miniatures quand la page a changé (format, sens, marges) ; les images en calque suivent leur diapositive. Sortie de
   // l'en-tête : le texte des diapositives est revenu.
   function onPaginated() {
-    if (!shown || editingHeaderFooter()) return;
+    if (!shown || held || editingHeaderFooter()) return;
     if (editor.state.doc !== readDoc) refresh(true);
     else {
       const key = pageGeometry().key;
@@ -2270,6 +2272,14 @@ const SlideStrip = (function () {
     if (typeof SlideImport !== 'undefined') SlideImport.sync(true);
     // Les vues de diapositive (js/slide-view.js) que le texte porte déjà se remplissent des copies que la bande sait faire, dès qu'elle les sait faire.
     if (typeof SlideView !== 'undefined') SlideView.schedule(0);
+  }
+  // Tient la bande (`true`) ou la lâche (`false`) : lâchée, elle relit les diapositives et redessine ses miniatures d'un coup.
+  function hold(on) {
+    if (!!on === held) return;
+    held = !!on;
+    if (held || !shown) return;
+    readDoc = null;
+    refresh(true);
   }
   function hide() {
     if (!shown) return;
@@ -2406,5 +2416,5 @@ const SlideStrip = (function () {
 
   SlidesEntry.register({ show, hide });
 
-  return { show, hide, overview, slidesOf, pageCopy, redrawViews, importAfterCurrent, settleLinked, syncLinks: () => syncLinks(false), current: () => current, isOff: () => off, isShown: () => shown };
+  return { show, hide, hold, overview, slidesOf, pageCopy, redrawViews, importAfterCurrent, settleLinked, syncLinks: () => syncLinks(false), current: () => current, isOff: () => off, isShown: () => shown };
 })();

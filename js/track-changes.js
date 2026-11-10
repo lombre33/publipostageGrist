@@ -186,6 +186,21 @@ const TrackChanges = (function () {
             );
             return true;
           },
+          // La suite d'un document chargé par morceaux (js/import-placing.js : une grosse présentation importée se pose par tranches de diapositives, la page respire entre deux) : le même parcours que
+          // `loadTrackedDocument` - document inerte, nettoyé, jamais sérialisé ; ni suggestion, ni pas d'historique, ni évènement `update` - mais le texte vient À LA FIN de celui d'avant au lieu de le remplacer.
+          appendTrackedDocument: html => ({ editor, dispatch, tr }) => {
+            if (!dispatch) return true;
+            tr.setMeta('preventDispatch', true);
+            const docNode = PMDOMParser.fromSchema(editor.schema).parse(HtmlSanitize.parseInert(html));
+            editor.view.dispatch(
+              editor.state.tr
+                .setMeta(suggestChangesKey, { skip: true })
+                .setMeta('addToHistory', false)
+                .setMeta('preventUpdate', true)
+                .insert(editor.state.doc.content.size, docNode.content),
+            );
+            return true;
+          },
         };
       },
       dispatchTransaction({ transaction, next }) {

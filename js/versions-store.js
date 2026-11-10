@@ -37,12 +37,20 @@ const VersionsStore = (function () {
   const MAX_AUTO_PER_MODEL = 30;           // versions gardées toutes seules par modèle (les plus anciennes partent d'abord)
   const MAX_TOTAL_CHARS = 3 * 1000 * 1000; // taille de toutes les versions du document (les nommées ne partent jamais)
   const MAX_VERSION_CHARS = 1500 * 1000;   // un état plus lourd (images collées) n'est pas gardé
+  // Un état de plus de MAX_STATE_CHARS signes ne tient jamais sous MAX_VERSION_CHARS une fois compressé (il faudrait vingt contre un : des images en base64 ne se compressent presque pas) : il est écarté d'un coup d'oeil sur sa
+  // taille, sans rien calculer. Un modèle importé d'un gros PowerPoint pèse plus de 30 Mo : l'écarter ne coûte rien, alors que le trier coûtait à chaque enregistrement automatique - deux textes canoniques, une empreinte, la
+  // compression de tout le texte et son passage en base64, plus une lecture de la table pour le jeton - soit plusieurs secondes de page prise et plusieurs centaines de Mo de textes en mémoire à chaque passage.
+  const MAX_STATE_CHARS = 30 * 1000 * 1000;
+  const LIGHTER_THAN = 0.8;                // un état trouvé trop lourd qui a perdu plus de 20 % de son poids vaut un nouvel essai (des images retirées)
   const CLEANUP_EVERY_ROWS = 400;
   const CLEANUP_DELAY_MS = 3000;
   const NAME_MAX = 80;                     // caractères d'un nom de version
 
   // Ce que cette session a gardé, par numéro de ligne de modèle : { at (Date.now), key (empreinte de l'état gardé) }. Rien n'est lu dans la table pour le savoir.
   const kept = new Map();
+  // Les états trouvés trop lourds par cette session, par numéro de ligne de modèle : { at (Date.now), chars (poids du texte) }. Un modèle dont l'état est trop lourd n'est pas recompressé à chaque enregistrement : pas de nouvel essai
+  // avant KEEP_EVERY_MS tant que l'état remplacé ne s'est pas allégé (LIGHTER_THAN).
+  const tooHeavy = new Map();
   let tableKnown = false;
   let suspendedUntil = 0;
   let cleanupTimer = null;
@@ -190,10 +198,19 @@ const VersionsStore = (function () {
     let dateModif;
     let key;
     let last;
+    let weight = 0;
     try {
       // Tout ce qu'on retient de l'état remplacé est copié avant le premier await : l'entrée du cache peut être mise à jour par une autre écriture pendant qu'on prépare.
       modifiePar = stored.modifiePar || '';
       dateModif = stored.dateModif;
+      // Le poids d'abord, sans rien calculer : un état déjà trouvé trop lourd (ou trop lourd à coup sûr) n'est pas recompressé à chaque enregistrement. Une restauration (`force`) essaie toujours.
+      const chars = typeof stored.contenu === 'string' ? stored.contenu.length : 0;
+      if (!force) {
+        if (chars > MAX_STATE_CHARS) return null;
+        const heavy = tooHeavy.get(String(rowId));
+        if (heavy && Date.now() - heavy.at < KEEP_EVERY_MS && chars >= heavy.chars * LIGHTER_THAN) return null;
+      }
+      weight = chars;
       beforeText = stable(snapshotOf(stored));
       if (beforeText === stable(snapshotOf(next))) return null;
       key = keyOf(beforeText);
@@ -208,7 +225,7 @@ const VersionsStore = (function () {
       const token = await tokenFor();
       if (!token) return null;
       const packed = await pack(beforeText);
-      if (packed.length > MAX_VERSION_CHARS) return null;
+      if (packed.length > MAX_VERSION_CHARS) { tooHeavy.set(String(rowId), { at: Date.now(), chars: weight }); return null; }
       await ensureTable();
       const at = toMs(dateModif);
       const fields = { Jeton: token, Date: new Date(at === null ? Date.now() : at).toISOString(), Auteur: modifiePar, Nom: '', Genre: genre || '', Donnees: packed };
@@ -216,6 +233,7 @@ const VersionsStore = (function () {
         action: ['AddRecord', TABLE_NAME, null, fields],
         commit(addedRowId) {
           kept.set(String(rowId), { at: Date.now(), key });
+          tooHeavy.delete(String(rowId));
           noteAdded(addedRowId);
         },
       };
@@ -227,7 +245,7 @@ const VersionsStore = (function () {
   }
 
   // Les versions d'un modèle supprimé n'ont plus de raison d'être mémorisées pour la session.
-  function forget(rowId) { kept.delete(String(rowId)); }
+  function forget(rowId) { kept.delete(String(rowId)); tooHeavy.delete(String(rowId)); }
 
   // Lecture et plafonds
 
@@ -392,6 +410,7 @@ const VersionsStore = (function () {
   // Oublie ce que la session sait (tests, changement de document).
   function reset() {
     kept.clear();
+    tooHeavy.clear();
     tableKnown = false;
     suspendedUntil = 0;
     if (cleanupTimer) { clearTimeout(cleanupTimer); cleanupTimer = null; }

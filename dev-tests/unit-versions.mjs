@@ -174,6 +174,7 @@ class Doc {
 function fresh(doc, { compression = true, versions = true } = {}) {
   const warnings = [];
   const timers = [];
+  const compressions = { n: 0 };   // combien de textes ont été compressés (une version gardée, ou à garder, compresse son texte : un état trop lourd ne doit pas le refaire à chaque enregistrement)
   const globals = {
     grist: { docApi: doc, ready() {}, onRecord() {}, onOptions() {}, async getOptions() { return null; } },
     console: { log() {}, warn(...a) { warnings.push(a.map(String).join(' ')); }, error(...a) { warnings.push(a.map(String).join(' ')); } },
@@ -182,7 +183,10 @@ function fresh(doc, { compression = true, versions = true } = {}) {
     setTimeout: (fn, ms) => { timers.push({ fn, ms, cleared: false }); return timers.length; },
     clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].cleared = true; },
   };
-  if (compression) { globals.CompressionStream = CompressionStream; globals.DecompressionStream = DecompressionStream; }
+  if (compression) {
+    globals.CompressionStream = class extends CompressionStream { constructor(format) { compressions.n++; super(format); } };
+    globals.DecompressionStream = DecompressionStream;
+  }
   const ctx = createContext(globals);
   evalIn(ctx, `globalThis.__clock = { now: ${START} };
     (function () {
@@ -196,7 +200,7 @@ function fresh(doc, { compression = true, versions = true } = {}) {
   ['js/grist-api.js', 'js/templates.js'].concat(versions ? ['js/versions-store.js'] : []).forEach((s) => loadScript(ctx, s));
   const run = (expr) => evalIn(ctx, expr);
   const t = {
-    ctx, doc, warnings, timers, run,
+    ctx, doc, warnings, timers, run, compressions,
     advance: (ms) => { run(`__clock.now += ${ms}`); },
     now: () => run('__clock.now'),
     unpack: (text) => run(`VersionsStore.unpack(${json(text)})`),
@@ -474,6 +478,46 @@ async function main() {
     t.advance(30 * SEC);
     await t.save(id, '<p>léger</p>');
     check('6f. un état de plus de 1,5 million de caractères compressés n\'est pas gardé : modèle enregistré, table non créée, copies non suspendues', doc.row(MODELS, id).Contenu === '<p>léger</p>' && !doc.tables[VERSIONS] && t.run('VersionsStore.usable()') === true);
+  }
+  {
+    // 6f2. Un état trop lourd n'est pas recompressé à chaque enregistrement (un modèle importé d'un gros PowerPoint s'enregistre toutes les 2,5 s pendant la frappe) : essayé une fois, puis plus avant dix minutes,
+    //      tant que l'état remplacé ne s'est pas allégé ; un état de plus de 30 millions de signes n'est même pas essayé (6f3) ; une restauration essaie toujours.
+    const doc = new Doc();
+    const t = fresh(doc);
+    await t.identify({ email: 'moi@exemple.fr', name: 'Moi Même' });
+    const heavy = '<p>' + randomBytes(1300000).toString('base64') + '</p>';
+    const id = await t.create('Lourd', heavy);
+    t.advance(30 * SEC);
+    await t.save(id, heavy + '<p>un</p>');
+    const afterFirst = t.compressions.n;
+    check('6f2. le premier enregistrement sur un état trop lourd l\'essaie : une compression, aucune version, la table non créée', afterFirst === 1 && !doc.tables[VERSIONS] && doc.versionAdds() === 0, afterFirst);
+    for (let i = 2; i <= 6; i++) { t.advance(2 * SEC); await t.save(id, heavy + '<p>' + i + '</p>'); }
+    check('6f2. les enregistrements suivants (toutes les quelques secondes) ne recompressent rien', t.compressions.n === afterFirst, t.compressions.n);
+    check('6f2. ... et le modèle s\'enregistre à chaque fois, sans version ni pause des copies', doc.row(MODELS, id).Contenu === heavy + '<p>6</p>' && doc.versionAdds() === 0 && t.run('VersionsStore.usable()') === true);
+    t.advance(11 * MIN);
+    await t.save(id, heavy + '<p>sept</p>');
+    check('6f2. onze minutes plus tard, un nouvel essai a lieu (une seule compression de plus)', t.compressions.n === afterFirst + 1, t.compressions.n);
+    // L'état remplacé s'allège (les images sont retirées) : la copie reprend tout de suite, sans attendre les dix minutes.
+    t.advance(2 * SEC);
+    await t.save(id, '<p>léger</p>');
+    t.advance(2 * SEC);
+    await t.save(id, '<p>léger 2</p>');
+    check('6f2. un état qui s\'est allégé de plus de 20 % est de nouveau gardé sans attendre : la version de l\'état léger est écrite', doc.versionAdds() === 1 && (await t.contents())[0] === '<p>léger</p>', doc.versionAdds());
+  }
+  {
+    // 6f3. Un état de plus de 30 millions de signes est écarté sans rien calculer : aucune compression, aucune version, le modèle s'enregistre ; sa restauration (`force`) l'essaie quand même.
+    const doc = new Doc();
+    const t = fresh(doc);
+    await t.identify({ email: 'moi@exemple.fr', name: 'Moi Même' });
+    const huge = '<p>' + 'x'.repeat(31 * 1000 * 1000) + '</p>';
+    const id = await t.create('Énorme', huge);
+    t.advance(30 * SEC);
+    await t.save(id, huge + '<p>un</p>');
+    check('6f3. un état de plus de 30 millions de signes n\'est pas essayé : aucune compression, rien de gardé, et le modèle est bien enregistré', t.compressions.n === 0 && doc.versionAdds() === 0 && !doc.tables[VERSIONS] && doc.row(MODELS, id).Contenu === huge + '<p>un</p>', { compressions: t.compressions.n });
+    const old = { v: 1, typeModele: 'document', contenu: '<p>avant</p>', nomFichierPDF: '', headerFooter: null, margins: null };
+    t.advance(2 * SEC);
+    await t.run(`Templates.restoreVersion(${id}, ${json(old)})`);
+    check('6f3. une restauration essaie quand même de garder l\'état remplacé (une compression)', t.compressions.n === 1 && doc.versionAdds() === 1, { compressions: t.compressions.n, adds: doc.versionAdds() });
   }
   {
     // 6g. Un compte qui ne peut pas ajouter de colonne : la colonne « Modifié par » n'est ni écrite ni redemandée.

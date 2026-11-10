@@ -120,6 +120,17 @@ async function run(lang) {
   check(tag + 'un fichier léger garde la définition de ses images : 4 000 points de large et plus, comme avant', light.dims.length === 3 && light.dims.every(d => d && d[0] >= 4000), light.dims);
   check(tag + `les ${SLIDES} diapositives sont là, et le rapport ne dit rien d'une image perdue`, light.slideCount === SLIDES && !/"images"/.test(light.report), { slideCount: light.slideCount, report: light.report });
 
+  // 1b) Le résultat d'un import ne retient pas la lecture : gardé (pendant la mise en place, pendant que la personne lit le rapport), il n'ajoute presque aucun document au navigateur. Un accesseur écrit dans
+  // `fromBuffer` gardait en vie le paquet dézippé, les documents XML de chaque diapositive et le cache des images (450 documents et 110 000 nœuds pour 150 diapositives).
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('HeapProfiler.enable');
+  const documentsNow = async () => { await cdp.send('HeapProfiler.collectGarbage'); await sleep(300); await cdp.send('HeapProfiler.collectGarbage'); return (await cdp.send('Memory.getDOMCounters')).documents; };
+  const docsBefore = await documentsNow();
+  await page.evaluate(async () => { window.__held = await PptxImport.fromBuffer(window.__decks.light); });
+  const docsHeld = await documentsNow();
+  await page.evaluate(() => { window.__held = null; });
+  check(tag + `le résultat d'un import gardé ne retient pas la lecture (paquet, documents XML, cache d'images) : au plus 5 documents de plus après ramasse-miettes (${docsBefore} avant, ${docsHeld} avec le résultat)`, docsHeld - docsBefore <= 5, { docsBefore, docsHeld });
+
   // 2) Le même fichier, lourd : les images tiennent dans 220 points par pouce de leur boîte, le texte pèse bien moins, la structure et le rapport sont les mêmes.
   const heavyBytes = await makeDeck(page, 'heavy', 16);
   check(tag + 'le fichier lourd pèse 15 Mo ou plus', heavyBytes >= 15 * 1024 * 1024, heavyBytes);
@@ -149,44 +160,251 @@ async function run(lang) {
     if (chooser) await chooser.setFiles(what);
     return !!chooser;
   };
-  check(tag + 'le vrai sélecteur s\'ouvre pour le premier fichier', await pick(file));
   const during = Date.now();
-  await page.waitForFunction(() => window.__status.some(([, text]) => /^(Lecture du fichier PowerPoint… \d|Reading the PowerPoint file… \d)/.test(text)), null, { timeout: 15000 }).catch(() => {});
-  // Un clic sur « Réglages » pendant la lecture : la fenêtre s'ouvre sans attendre la fin de l'import.
+  // Le voile suit TOUT l'import : ses textes successifs sont gardés pour juger de ce que la personne a vu.
+  await page.evaluate(() => {
+    window.__veilTexts = [];
+    const note = () => {
+      const el = document.getElementById('pp-placing-modal');
+      const line = el && el.querySelector('.pp-placing-line');
+      if (el && line && getComputedStyle(el).display !== 'none' && line.textContent && window.__veilTexts[window.__veilTexts.length - 1] !== line.textContent) window.__veilTexts.push(line.textContent);
+    };
+    new MutationObserver(note).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['style'] });
+  });
+  const veilState = () => page.evaluate(() => {
+    const el = document.getElementById('pp-placing-modal');
+    if (!el || getComputedStyle(el).display === 'none') return { shown: false };
+    const cancel = el.querySelector('.pp-modal-actions button');
+    const r = cancel ? cancel.getBoundingClientRect() : null;
+    return { shown: true, line: el.querySelector('.pp-placing-line').textContent, percent: Number(el.querySelector('.pp-placing-bar').getAttribute('aria-valuenow')), cancelShown: !!r && r.width > 0 && getComputedStyle(cancel.closest('.pp-modal-actions')).display !== 'none', cancelLabel: cancel ? cancel.textContent : '' };
+  });
+  await page.evaluate(() => { window.__textBefore = Editor.getHTML(); window.__idBefore = Templates.getCurrentId(); });
+
+  // 3a) Le premier fichier est ANNULÉ en route : le voile est là dès la lecture avec « Annuler l'import », il couvre le panneau (un clic sur « Réglages » tombe sur lui), l'annulation arrête la lecture en moins de
+  // 2,5 s et rien n'a changé.
+  check(tag + 'le vrai sélecteur s\'ouvre pour le premier fichier', await pick(file));
+  const veilUp = await page.waitForFunction(() => { const el = document.getElementById('pp-placing-modal'); return !!el && getComputedStyle(el).display !== 'none' && /^(Lecture du fichier PowerPoint… \d|Reading the PowerPoint file… \d)/.test(el.querySelector('.pp-placing-line').textContent); }, null, { timeout: 25000 }).then(() => true, () => false);
+  const reading = await veilState();
+  check(tag + 'pendant la lecture le voile est là : « Lecture du fichier PowerPoint… n / 6 », une barre qui n\'a pas dépassé la part de la lecture (65 %), « Annuler l\'import »', veilUp && reading.shown && /^Lecture du fichier PowerPoint… \d \/ 6$/.test(reading.line) && reading.percent <= 65 && reading.cancelShown && reading.cancelLabel === 'Annuler l’import', reading);
   const settings = await page.evaluate(() => { const r = document.getElementById('v2-btn-settings').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
-  const clickedAt = Date.now();
   await page.mouse.move(settings.x - 6, settings.y, { steps: 2 });
   await page.mouse.click(settings.x, settings.y);
-  const opened = await page.waitForFunction(() => { const el = document.getElementById('settings-modal'); return !!el && getComputedStyle(el).display !== 'none'; }, null, { timeout: 3000 }).then(() => true, () => false);
-  const openedIn = Date.now() - clickedAt;
-  const importing = await page.evaluate(() => !/PowerPoint (importé|imported)/.test(document.getElementById('status-msg').textContent));
-  check(tag + 'un clic sur « Réglages » en pleine lecture ouvre la fenêtre en moins de 1,5 s, alors que l\'import n\'est pas fini', opened && openedIn < 1500 && importing, { opened, openedIn, importing });
-  await page.keyboard.press('Escape');
+  await sleep(500);
+  const settingsOpened = await page.evaluate(() => { const el = document.getElementById('settings-modal'); return !!el && getComputedStyle(el).display !== 'none'; });
+  check(tag + 'le voile couvre le panneau pendant la lecture : un clic sur « Réglages » n\'ouvre rien', settingsOpened === false, { settingsOpened });
+  const cancelAt = Date.now();
+  await page.locator('#pp-placing-modal .pp-modal-actions button').click();
+  const cancelled = await page.waitForFunction(() => /Import annulé|Import canceled/.test(document.getElementById('status-msg').textContent), null, { timeout: 8000 }).then(() => true, () => false);
+  const cancelMs = Date.now() - cancelAt;
   await sleep(300);
-  // Un second fichier choisi en route : refusé, dit dans le coin d'état ; un seul import arrive.
-  const second = await pick(file);
+  const afterCancel = await page.evaluate(() => ({ same: Editor.getHTML() === window.__textBefore, id: Templates.getCurrentId(), idBefore: window.__idBefore, veil: (() => { const el = document.getElementById('pp-placing-modal'); return !!el && getComputedStyle(el).display !== 'none'; })(), marks: PerfTrace.events().filter(e => e.kind === 'mark' && /^import PowerPoint/.test(e.label)).map(e => e.label), status: document.getElementById('status-msg').textContent }));
+  check(tag + 'Annuler l\'import arrête la lecture en moins de 2,5 s : « Import annulé : rien n\'a changé. », le voile est retiré, le texte est celui d\'avant, aucune mise en place', cancelled && cancelMs < 2500 && !afterCancel.veil && afterCancel.same && afterCancel.id === afterCancel.idBefore && afterCancel.marks.length === 1 && afterCancel.marks[0] === 'import PowerPoint : lecture' && /rien n’a changé/.test(afterCancel.status), { cancelled, cancelMs, afterCancel });
+
+  // 3b) Le même fichier, mené jusqu'au bout : le coin d'état et le voile disent les étapes, un second import lancé en route est refusé.
+  await page.evaluate(() => { window.__status.length = 0; window.__veilTexts.length = 0; });
+  check(tag + 'le vrai sélecteur s\'ouvre de nouveau : l\'import annulé a levé le garde', await pick(file));
+  await page.waitForFunction(() => window.__status.some(([, text]) => /^(Lecture du fichier PowerPoint… \d|Reading the PowerPoint file… \d)/.test(text)), null, { timeout: 15000 }).catch(() => {});
+  // Un second fichier lancé en route (sans passer par le menu, que le voile couvre) : refusé, dit dans le coin d'état ; un seul import arrive.
+  const secondStarted = await page.evaluate(() => {
+    const original = GridXlsxImport.chooseFile;
+    GridXlsxImport.chooseFile = (callback) => { callback(new File([window.__decks.light], 'second.pptx')); };
+    try { document.getElementById('v2-btn-import-pptx').click(); } finally { GridXlsxImport.chooseFile = original; }
+    return true;
+  });
   await sleep(500);
   const busyText = await page.evaluate(() => window.__status.map(([, text]) => text).filter(text => /déjà en cours|already running/.test(text)));
-  check(tag + 'un second fichier choisi pendant la lecture est refusé : « Un import PowerPoint est déjà en cours »', second && busyText.length >= 1, { second, busyText });
+  check(tag + 'un second fichier lancé pendant la lecture est refusé : « Un import PowerPoint est déjà en cours »', secondStarted && busyText.length >= 1, { secondStarted, busyText });
   await page.waitForFunction(() => /PowerPoint importé|PowerPoint imported/.test(document.getElementById('status-msg').textContent), null, { timeout: 60000 });
   await sleep(500);
   const log = await page.evaluate(() => window.__status.map(([, text]) => text));
   const firstRead = log.findIndex(text => /^Lecture du fichier PowerPoint… \d+ \/ 6$/.test(text));
-  const placing = log.findIndex(text => /^Mise en place de 6 diapositives…$/.test(text));
+  const placing = log.findIndex(text => /^Mise en place des diapositives… 0 \/ 6$/.test(text));
+  const placed = log.findIndex(text => /^Mise en place des diapositives… 6 \/ 6$/.test(text));
   const imported = log.findIndex(text => /^PowerPoint importé : 6 diapositives\./.test(text));
-  check(tag + 'le coin d\'état dit les étapes dans l\'ordre : « Lecture du fichier PowerPoint… n / 6 », « Mise en place de 6 diapositives… », puis « PowerPoint importé : 6 diapositives. »', firstRead >= 0 && placing > firstRead && imported > placing, { firstRead, placing, imported, log: log.slice(0, 12) });
+  check(tag + 'le coin d\'état dit les étapes dans l\'ordre : « Lecture du fichier PowerPoint… n / 6 », « Mise en place des diapositives… 0 / 6 » jusqu\'à « 6 / 6 », puis « PowerPoint importé : 6 diapositives. »', firstRead >= 0 && placing > firstRead && placed > placing && imported > placed, { firstRead, placing, placed, imported, log: log.slice(0, 16) });
+  const veilTexts = await page.evaluate(() => window.__veilTexts.slice());
+  check(tag + 'le voile a dit la lecture au fil des diapositives (au moins trois textes « Lecture du fichier PowerPoint… n / 6 » différents) puis, une fois fini, il est retiré', veilTexts.filter(text => /^Lecture du fichier PowerPoint… \d \/ 6$/.test(text)).length >= 3 && !(await veilState()).shown, veilTexts);
   const state = await page.evaluate(() => ({ slides: document.querySelectorAll('.pp-slide-item').length, marks: PerfTrace.events().filter(e => e.kind === 'mark' && /^import PowerPoint/.test(e.label)).map(e => e.label) }));
-  check(tag + 'un seul import est arrivé : 6 miniatures, et le suivi n\'a vu qu\'une lecture, une mise en place', state.slides === SLIDES && state.marks.filter(m => m === 'import PowerPoint : lecture').length === 1 && state.marks.filter(m => m === 'import PowerPoint : en place').length === 1, state);
+  check(tag + 'un seul import est arrivé : 6 miniatures, et le suivi n\'a vu que deux lectures (l\'annulée et celle-ci), une mise en place', state.slides === SLIDES && state.marks.filter(m => m === 'import PowerPoint : lecture').length === 2 && state.marks.filter(m => m === 'import PowerPoint : en place').length === 1, state);
   check(tag + 'après l\'import, un nouvel import est de nouveau possible (le garde est levé)', await page.evaluate(() => document.getElementById('v2-btn-import-pptx').getAttribute('aria-disabled') === 'false'));
   void during;
+
+  // 3b) Un fichier ordinaire importé n'est pas enregistré tout seul : sans identifiant ni nom, la personne nomme puis enregistre (comme avant).
+  check(tag + 'un fichier ordinaire (moins de 15 Mo) importé reste « à nommer » : ni identifiant ni nom, et le coin d\'état le dit', await page.evaluate(() => Templates.getCurrentId() == null && document.getElementById('template-name').value === '' && /Nommez le modèle puis enregistrez-le/.test(document.getElementById('status-msg').textContent)));
+  await placingCases(page, tag);
+
+  // 3c) Un gros fichier (15 Mo ou plus) est enregistré dans Grist dès que sa mise en place est finie, sous le nom du fichier (choix d'Antoine du 10/11, « enregistrer le modèle au fil de l'import »).
+  const rawHeavy = await page.evaluate(() => { const bytes = new Uint8Array(window.__decks.heavy); let text = ''; for (let at = 0; at < bytes.length; at += 8192) text += String.fromCharCode.apply(null, bytes.subarray(at, at + 8192)); return btoa(text); });
+  await page.evaluate(() => { window.__status.length = 0; });
+  check(tag + 'le vrai sélecteur s\'ouvre pour le gros fichier', await pick({ name: 'Ma grosse présentation.pptx', mimeType: MIME, buffer: Buffer.from(rawHeavy, 'base64') }));
+  // Le texte d'avant n'est pas enregistré : la question « Enregistrer / Ne pas enregistrer / Annuler » vient APRÈS la lecture, avant la mise en place (le voile n'est pas encore là) ; « Ne pas enregistrer » la lève.
+  const asked = await page.waitForFunction(() => { const ov = document.getElementById('pp-dialog-modal'); return !!ov && getComputedStyle(ov).display !== 'none'; }, null, { timeout: 90000 }).then(() => true, () => false);
+  const veilDuringQuestion = await page.evaluate(() => { const el = document.getElementById('pp-placing-modal'); return !!el && getComputedStyle(el).display !== 'none'; });
+  check(tag + 'avec un texte non enregistré à l\'écran, la question de départ est posée une fois le gros fichier lu, sans voile par-dessus', asked && !veilDuringQuestion, { asked, veilDuringQuestion });
+  if (asked) await page.locator('#pp-dialog-modal .pp-modal-actions button', { hasText: 'Ne pas enregistrer' }).click();
+  await page.waitForFunction(() => window.__status.some(([, text]) => /enregistré sous/.test(text)), null, { timeout: 120000 }).catch(() => {});
+  await sleep(500);
+  const kept = await page.evaluate(() => {
+    const id = Templates.getCurrentId();
+    const tpl = id == null ? null : Templates.byId(id);
+    return { id, nom: tpl && tpl.nom, type: tpl && tpl.typeModele, breaks: tpl ? (String(tpl.contenu).match(/page-break-marker/g) || []).length : -1, title: document.getElementById('template-name').value, selected: document.getElementById('template-select').value, log: window.__status.map(([, text]) => text).filter(text => /^Enregistrement|enregistré|Enregistré/.test(text)) };
+  });
+  check(tag + 'un gros fichier importé est enregistré dans Grist sous son nom : un identifiant, « Ma grosse présentation », type présentation, six diapositives dans le contenu écrit', kept.id != null && kept.nom === 'Ma grosse présentation' && kept.type === 'presentation' && kept.breaks === SLIDES - 1 && kept.title === 'Ma grosse présentation' && String(kept.selected) === String(kept.id), kept);
+  check(tag + 'le coin d\'état le dit : « PowerPoint importé : 6 diapositives, enregistré sous « Ma grosse présentation ». »', kept.log.some(text => text === 'PowerPoint importé : 6 diapositives, enregistré sous « Ma grosse présentation ».'), kept.log);
+  const noVeil = await page.evaluate(() => !document.getElementById('pp-placing-modal') || getComputedStyle(document.getElementById('pp-placing-modal')).display === 'none');
+  check(tag + 'le voile est retiré quand l\'import est fini : le texte se tape de nouveau', noVeil);
 
   // 4) Le suivi du lag.
   await traceCases(page, tag);
   await shortcutCase(page, tag, lang);
 }
 
+// La mise en place par morceaux (js/import-placing.js, 10/11, « ça freeze sur Mise en place de 57 diapositives : verrouiller l'éditeur sans figer, avec l'avancement ») : le texte posé par morceaux est celui d'un
+// seul bloc, la page respire entre deux, la bande ne se relit qu'à la fin, une diapositive refusée est remplacée par une page vide, le voile (après une demi-seconde) verrouille le panneau.
+async function placingCases(page, tag) {
+  const COPIES = 20;
+  const r = await page.evaluate(async ({ copies }) => {
+    const PB = ImportPlacing.PAGE_BREAK;
+    const imported = await PptxImport.fromBuffer(window.__decks.heavy);
+    const lazyOk = imported.html === imported.slideTexts.join(PB) && imported.slideTexts.length === imported.slideCount;
+    const many = [];
+    for (let k = 0; k < copies; k++) imported.slideTexts.forEach(text => many.push(text));
+    const beating = () => {
+      let last = performance.now();
+      let max = 0;
+      let on = true;
+      const beat = () => { const now = performance.now(); max = Math.max(max, now - last); last = now; if (on) setTimeout(beat, 10); };
+      setTimeout(beat, 10);
+      return { stop: () => { on = false; return Math.round(max); } };
+    };
+    const tick = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const stripCount = () => document.querySelectorAll('.pp-slide-item').length;
+    const breaks = html => (html.match(/page-break-marker/g) || []).length;
+    // D'un seul bloc (ce que faisait l'import).
+    let hb = beating();
+    Editor.setHTML(many.join(PB));
+    await tick(60);
+    const oneShotGap = hb.stop();
+    await tick(300);
+    const reference = Editor.getHTML();
+    // Par morceaux : trois diapositives par le chemin habituel, les autres à la suite.
+    Editor.setHTML(many.slice(0, 3).join(PB));
+    await tick(300);
+    const rest = many.slice(3);
+    const stripBefore = stripCount();
+    hb = beating();
+    let mid = null;
+    const failed = await ImportPlacing.appendSlides(rest, (n) => { if (n === 60) mid = stripCount(); });
+    await tick(60);
+    const chunkedGap = hb.stop();
+    await tick(300);
+    const chunked = Editor.getHTML();
+    const sameText = chunked === reference;
+    let firstDiff = -1;
+    if (!sameText) { const n = Math.min(chunked.length, reference.length); firstDiff = 0; while (firstDiff < n && chunked[firstDiff] === reference[firstDiff]) firstDiff++; }
+    const out = {
+      lazyOk, oneShotGap, chunkedGap, sameText, firstDiff, refLen: reference.length, chunkedLen: chunked.length, refBreaks: breaks(reference), chunkedBreaks: breaks(chunked),
+      consumed: rest.every(text => text === ''), failed, stripBefore, mid, stripAfter: stripCount(), total: many.length,
+    };
+    // Une diapositive refusée par l'éditeur : remplacée par une page vide, comptée, les rangs ne bougent pas.
+    Editor.setHTML(many.slice(0, 3).join(PB));
+    await tick(200);
+    const original = Editor.appendHTML;
+    let calls = 0;
+    Editor.appendHTML = function () { calls += 1; if (calls === 2) throw new Error('refusée'); return original.apply(this, arguments); };
+    const warn = console.warn;
+    console.warn = () => {};
+    let failedOne = -1;
+    try { failedOne = await ImportPlacing.appendSlides(many.slice(3, 6), () => {}); } finally { Editor.appendHTML = original; console.warn = warn; }
+    await tick(200);
+    out.failedOne = failedOne;
+    out.afterFailBreaks = breaks(Editor.getHTML());
+    // Le texte préparé d'avance (Editor.prepareHTML) : le même que celui de getHTML, rendu par tranches ; jamais servi pour un document qui a changé depuis.
+    const plain = Editor.getHTML();
+    let pauses = 0;
+    await Editor.prepareHTML(() => { pauses += 1; return new Promise(resolve => setTimeout(resolve, 0)); });
+    const prepared = Editor.getHTML();
+    out.prepSame = prepared === plain;
+    out.prepPauses = pauses;
+    await Editor.prepareHTML(() => Promise.resolve());
+    EditorCore.getEditor().chain().focus('end').insertContent('§§prépare§§').run();
+    const after = Editor.getHTML();
+    out.prepStale = after !== plain && after.indexOf('§§prépare§§') >= 0;
+    return out;
+  }, { copies: COPIES });
+  check(tag + 'les textes de l\'import sont donnés diapositive par diapositive (`slideTexts`), et `html` est leur réunion faite à la demande', r.lazyOk, r);
+  check(tag + `${COPIES * SLIDES} diapositives posées par morceaux donnent EXACTEMENT le texte posé d'un seul bloc (même longueur, mêmes ${r.refBreaks} sauts de page)`, r.sameText && r.refBreaks === COPIES * SLIDES - 1 && r.chunkedBreaks === r.refBreaks, { sameText: r.sameText, firstDiff: r.firstDiff, refLen: r.refLen, chunkedLen: r.chunkedLen, refBreaks: r.refBreaks, chunkedBreaks: r.chunkedBreaks });
+  check(tag + 'les textes posés sont libérés au fur et à mesure (la liste est vide à la fin), et aucune diapositive n\'est perdue', r.consumed && r.failed === 0, { consumed: r.consumed, failed: r.failed });
+  check(tag + 'la bande des diapositives est tenue pendant la pose (même nombre de miniatures à la soixantième qu\'au début) puis relue une fois à la fin (toutes les diapositives)', r.stripBefore === 3 && r.mid === r.stripBefore && r.stripAfter === r.total, { stripBefore: r.stripBefore, mid: r.mid, stripAfter: r.stripAfter, total: r.total });
+  check(tag + `pendant la pose de ${COPIES * SLIDES} diapositives par morceaux la page ne s'arrête jamais plus de 400 ms, et moins longtemps que pour la pose d'un seul bloc`, r.chunkedGap <= 400 && r.chunkedGap < r.oneShotGap, { chunkedGap: r.chunkedGap, oneShotGap: r.oneShotGap });
+  check(tag + 'une diapositive que l\'éditeur refuse est remplacée par une page vide et comptée : six diapositives restent six', r.failedOne === 1 && r.afterFailBreaks === 5, { failedOne: r.failedOne, afterFailBreaks: r.afterFailBreaks });
+  check(tag + 'le texte préparé d\'avance par tranches (`Editor.prepareHTML`, une pause par bloc) est exactement celui de `getHTML`, et il n\'est jamais servi pour un document qui a changé depuis', r.prepSame && r.prepPauses >= 6 && r.prepStale, { prepSame: r.prepSame, prepPauses: r.prepPauses, prepStale: r.prepStale });
+  await veilCases(page, tag);
+}
+
+// Le voile de la mise en place : absent d'un travail court, devant le panneau au bout d'une demi-seconde (texte et barre à jour), que ni Échap, ni la frappe, ni un clic n'atteignent ; il se retire pour une question
+// (`suspend`) et revient au pas suivant.
+async function veilCases(page, tag) {
+  const veil = () => page.evaluate(() => {
+    const el = document.getElementById('pp-placing-modal');
+    const shown = !!el && getComputedStyle(el).display !== 'none';
+    const fill = el && el.querySelector('.pp-placing-fill');
+    const bar = el && el.querySelector('.pp-placing-bar');
+    const box = el && el.querySelector('.pp-modal-box');
+    return { shown, line: shown ? el.querySelector('.pp-placing-line').textContent : '', width: fill ? fill.style.width : '', now: bar ? bar.getAttribute('aria-valuenow') : '', title: box ? el.querySelector('h3').textContent : '', hint: shown ? el.querySelector('.pp-placing-hint').textContent.length : 0 };
+  });
+  const short = await page.evaluate(async () => {
+    const progress = ImportPlacing.begin();
+    progress.update('court', 0.5);
+    await new Promise(resolve => setTimeout(resolve, 200));
+    progress.end();
+    return !!document.getElementById('pp-placing-modal') && getComputedStyle(document.getElementById('pp-placing-modal')).display !== 'none';
+  });
+  check(tag + 'un travail de moins d\'une demi-seconde ne montre aucun voile', short === false, short);
+  await page.evaluate(() => { window.__veil = ImportPlacing.begin(); window.__veil.update('Premier texte', 0.25); window.__textBefore = Editor.getHTML(); });
+  await sleep(700);
+  await page.evaluate(() => window.__veil.update('Mise en place des diapositives… 30 / 120', 0.25));
+  const shown = await veil();
+  check(tag + 'au bout d\'une demi-seconde le voile est là : titre, texte du pas, barre à 25 %, conseil de patience', shown.shown && shown.line === 'Mise en place des diapositives… 30 / 120' && shown.width === '25%' && shown.now === '25' && shown.title === 'Import du PowerPoint' && shown.hint > 30, shown);
+  const where = await page.evaluate(() => { const r = document.getElementById('editor-container').getBoundingClientRect(); const x = r.left + r.width / 2; const y = r.top + Math.min(r.height / 2, 120); const top = document.elementFromPoint(x, y); return { x, y, covered: !!top && !!top.closest('#pp-placing-modal') }; });
+  check(tag + 'le voile couvre le texte : un clic au milieu de l\'éditeur tombe sur lui', where.covered, where);
+  await page.mouse.click(where.x, where.y);
+  await page.keyboard.press('Escape');
+  await page.keyboard.type('zzz');
+  await sleep(200);
+  const unchanged = await page.evaluate(() => Editor.getHTML() === window.__textBefore);
+  check(tag + 'ni Échap, ni la frappe, ni un clic ne ferment le voile ni n\'écrivent dans le texte (le texte est le même, à l\'octet près)', (await veil()).shown && unchanged, { shown: (await veil()).shown, unchanged });
+  await page.evaluate(() => window.__veil.suspend());
+  const suspended = await veil();
+  await page.evaluate(() => window.__veil.update('Mise en place des diapositives… 60 / 120', 0.5));
+  const back = await veil();
+  check(tag + 'le voile se retire pour une question (`suspend`) et revient au pas suivant, la barre à 50 %', !suspended.shown && back.shown && back.width === '50%', { suspended, back });
+  await page.evaluate(() => window.__veil.end());
+  check(tag + 'à la fin du travail le voile disparaît', !(await veil()).shown);
+  // Un petit fichier à qui la question « Modifications non enregistrées » est posée : la lecture dure moins d'une demi-seconde, la personne répond bien plus tard, et la mise en place - courte - ne montre aucun voile
+  // (l'attente se compte depuis la reprise, pas depuis le début de l'import) ; si elle dure, il vient une demi-seconde plus tard, sans nouveau pas, et se retire à la fin.
+  const small = await page.evaluate(async () => {
+    const open = () => { const el = document.getElementById('pp-placing-modal'); return !!el && getComputedStyle(el).display !== 'none'; };
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const progress = ImportPlacing.begin();
+    progress.update('Lecture', 0.3);
+    progress.suspend();
+    await wait(800);                                 // la personne réfléchit à la question
+    progress.update('Mise en place', 0.7);
+    const atOnce = open();
+    await wait(250);
+    progress.update('Mise en place', 0.8);
+    const quick = open();                            // 250 ms de mise en place : pas de voile
+    await wait(450);                                 // ... mais 700 ms de pose, sans aucun pas entre-temps : le minuteur le montre
+    const later = open();
+    progress.end();
+    return { atOnce, quick, later, closed: !open() };
+  });
+  check(tag + 'après une question, un petit fichier ne voit pas le voile pendant sa mise en place courte ; une pose qui dure le fait venir au bout d\'une demi-seconde, et il se retire à la fin', !small.atOnce && !small.quick && small.later && small.closed, small);
+}
+
 async function traceCases(page, tag) {
-  const marks = await page.evaluate(() => PerfTrace.events().filter(e => e.kind === 'mark' && /^import PowerPoint/.test(e.label)));
+  const marks = (await page.evaluate(() => PerfTrace.events().filter(e => e.kind === 'mark' && /^import PowerPoint/.test(e.label)))).slice(1, 5);
   check(tag + 'le suivi a daté les quatre étapes de l\'import, dans l\'ordre, avec les diapositives lues',
     marks.map(m => m.label).join('|') === 'import PowerPoint : lecture|import PowerPoint : lu|import PowerPoint : mise en place|import PowerPoint : en place' && marks[1].diapositives === SLIDES && marks.every((m, i) => i === 0 || m.t >= marks[i - 1].t), marks);
   const gap = await page.evaluate(async () => {

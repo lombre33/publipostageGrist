@@ -108,7 +108,7 @@ const persistKeys = literalKeys(miMain, 'const persist = {') || [];
 const persistUsed = text => [...new Set([...text.matchAll(/(?<![\w$.])persist\.([A-Za-z_$][\w$]*)/g)].map(m => m[1]))];
 const persistBare = (text, keys) => keys.filter(key => new RegExp('(?<![\\w$.])' + key + '\\b(?!\\s*:)').test(text));
 const persistRead = PERSIST_FILES.map(file => read(file)).join('\n');
-check('js/main.js : le littéral `persist` est lisible (les 19 variables de l\'enregistrement, sans doublon)', persistKeys.length === 19 && new Set(persistKeys).size === persistKeys.length, persistKeys);
+check('js/main.js : le littéral `persist` est lisible (les 20 variables de l\'enregistrement, sans doublon)', persistKeys.length === 20 && new Set(persistKeys).size === persistKeys.length, persistKeys);
 check('l\'objet `persist` : chaque `persist.nom` lu ou écrit est une clé du littéral (une faute de frappe lirait `undefined` sans rien casser)', missing(persistUsed(persistRead), persistKeys).length === 0, missing(persistUsed(persistRead), persistKeys));
 check('l\'objet `persist` : chaque clé du littéral est utilisée ailleurs (aucune clé pour rien)', missing(persistKeys, persistUsed(persistRead)).length === 0, missing(persistKeys, persistUsed(persistRead)));
 check('l\'objet `persist` : aucun de ses noms n\'est plus lu seul dans main.js ni dans les trois fichiers (ni `let`, ni variable libre)', PERSIST_FILES.every(file => persistBare(read(file), persistKeys).length === 0), PERSIST_FILES.map(file => [file, persistBare(read(file), persistKeys)]).filter(([, bare]) => bare.length));
