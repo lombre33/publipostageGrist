@@ -85,14 +85,15 @@ check('free-frame : la façade range ce que `wire` rend (la barre et son rafraî
 
 // ---- les morceaux sortis de js/main.js (import, exports) -------------------------------------------------------------------------------------------------------------------
 const miMain = read('js/main.js');
-const MAIN_PIECES = [['MainImport', 'js/main-import.js'], ['MainExport', 'js/main-export.js'], ['MainAutosave', 'js/main-autosave.js'], ['MainSave', 'js/main-save.js'], ['MainLeave', 'js/main-leave.js']];
+const MAIN_PIECES = [['MainImport', 'js/main-import.js'], ['MainExport', 'js/main-export.js'], ['MainAutosave', 'js/main-autosave.js'], ['MainSave', 'js/main-save.js'], ['MainLeave', 'js/main-leave.js'],
+  ['MainEmail', 'js/main-email.js'], ['MainPageZoom', 'js/main-page-zoom.js'], ['MainRename', 'js/main-rename.js'], ['MainMacroReturn', 'js/main-macro-return.js']];
 const mainPieces = MAIN_PIECES.map(([module, file]) => {
   const piece = read(file);
   const taken = (new RegExp(`const \\{([^}]*)\\} = ${module}\\.create\\(`).exec(miMain) || [, ''])[1];
   return { module, file, given: literalKeys(miMain, `${module}.create({`) || [], wanted: destructured(piece, 'api'), returned: piecesReturn(piece) || [], taken: names(taken) };
 });
 for (const { module, file, given, wanted, returned, taken } of mainPieces) {
-  check(`${file} : ce que main.js donne à ${module}.create, ce que le morceau en lit et ce qu'il rend sont lisibles`, given.length >= 6 && wanted.length >= 6 && returned.length >= 4 && taken.length >= 4, { given: given.length, wanted: wanted.length, returned: returned.length, taken: taken.length });
+  check(`${file} : ce que main.js donne à ${module}.create, ce que le morceau en lit et ce qu'il rend sont lisibles`, given.length >= 4 && wanted.length >= 4 && returned.length >= 4 && taken.length >= 4, { given: given.length, wanted: wanted.length, returned: returned.length, taken: taken.length });
   check(`${file} : le morceau ne lit de \`api\` que des noms donnés par main.js`, missing(wanted, given).length === 0, missing(wanted, given));
   check(`${file} : main.js ne reprend que des noms que le morceau rend`, missing(taken, returned).length === 0, missing(taken, returned));
   check(`${file} : chaque nom que main.js donne au morceau est lu par lui (aucun nom donné pour rien)`, missing(given, wanted).length === 0, missing(given, wanted));
@@ -120,6 +121,18 @@ for (const module of MAIN_PIECES.map(([name]) => name)) for (const m of miMain.m
 const undeclaredGiven = mainPieces.flatMap(({ file, given }) => given.filter(name => !mainDeclared.has(name) && !/^(get|set)[A-Z]/.test(name)).map(name => `${file} : ${name}`));
 check('js/main.js : chaque nom donné à un morceau (import, exports, autosave, enregistrement, sortie) existe dans main.js', undeclaredGiven.length === 0, undeclaredGiven);
 check('js/main.js : l\'autosave, l\'enregistrement et la sortie d\'un modèle sont créés dans cet ordre, après les exports et avant l\'import (chacun tire du précédent)', savePositions.every(at => at > 0) && savePositions[0] < savePositions[1] && savePositions[1] < savePositions[2] && miMain.indexOf('MainExport.create(') < savePositions[0] && savePositions[2] < miMain.indexOf('MainImport.create('), savePositions);
+// ---- les quatre petits ensembles (découpe 9) : créés avant les exports ; ce qu'ils prennent aux morceaux créés après est un appel différé ; leurs variables sont à eux ----
+const SMALL_MODULES = ['MainEmail', 'MainPageZoom', 'MainRename', 'MainMacroReturn'];
+const smallPositions = SMALL_MODULES.map(module => miMain.indexOf(module + '.create('));
+check('js/main.js : l\'e-mail, l\'ajustement de la page, le renommage et le retour macro / modèle lié sont créés avant les exports (qui leur prennent des noms)', smallPositions.every(at => at > 0 && at < miMain.indexOf('MainExport.create(')), smallPositions);
+const deferredNames = { MainRename: ['isAutosaveEnabled', 'markAutosaveDirty'], MainMacroReturn: ['askBeforeLeaving', 'hasEditsToConfirmBeforeLeaving'] };
+check('les noms que MainRename et MainMacroReturn prennent à des morceaux créés après eux sont donnés par des appels différés (jamais par leur valeur : zone morte)',
+  Object.entries(deferredNames).every(([module, list]) => { const call = miMain.slice(miMain.indexOf(module + '.create(')); const body = call.slice(0, call.indexOf('});')); return list.every(name => new RegExp(`${name}: \\(\\.\\.\\.args\\) => ${name}\\(\\.\\.\\.args\\)`).test(body)); }), null);
+const OWNED = { 'js/main-email.js': ['emailGaugeRunId', 'emailGaugeDebounceTimer'], 'js/main-rename.js': ['nameBeforeEdit', 'nameSession'], 'js/main-macro-return.js': ['macroOrigin', 'linkedOrigin'] };
+check('les variables modifiables du renommage, du retour macro / modèle lié et de la jauge sont déclarées dans leur fichier et plus dans main.js',
+  Object.entries(OWNED).every(([file, list]) => list.every(name => new RegExp(`\\n {4}let ${name} = `).test(read(file)) && !new RegExp(`\\blet ${name}\\b`).test(miMain) && !new RegExp(`(?<![\\w$.])${name}\\b`).test(miMain))), null);
+check('le type du modèle, le mode, la table et la ligne ne sont lus par les quatre fichiers que par leurs fonctions (jamais les variables de main.js)',
+  ['js/main-email.js', 'js/main-page-zoom.js', 'js/main-rename.js', 'js/main-macro-return.js'].every(file => !/(?<![\w$.])(currentTypeModele|currentMode|currentTableId|latestRecord|latestRecordTableId|titleNameBase|emailFieldsRawCache)\b(?!\s*:)/.test(read(file))), null);
 check('l\'objet `persist` est donné à chacun des trois fichiers (par son nom)', SAVE_MODULES.every(module => (literalKeys(miMain, module + '.create({') || []).includes('persist')), SAVE_MODULES.filter(module => !(literalKeys(miMain, module + '.create({') || []).includes('persist')));
 check('les trois fichiers ne lisent le type du modèle que par getCurrentTypeModele et le nom du titre que par getTitleNameBase / setTitleNameBase (jamais les variables de main.js)',
   SAVE_PIECES.every(file => !/(?<![\w$.])(currentTypeModele|titleNameBase)\b(?!\s*:)/.test(read(file))) && /getCurrentTypeModele: \(\) => currentTypeModele/.test(miMain) && /getTitleNameBase: \(\) => titleNameBase/.test(miMain) && /setTitleNameBase: value => \{ titleNameBase = value; \}/.test(miMain), null);

@@ -8,12 +8,6 @@
   // Type du modèle à l'écran (planning/feature-email-mode.md) : « document » par défaut, avant même le premier chargement ; il ne devient « email »
   // que par un modèle de ce type ou « Nouvel email ».
   let currentTypeModele = 'document';
-  // Le macro-modèle d'où le modèle à l'écran a été ouvert par le stylo de son résumé, et ce modèle : { macroId, templateId }, null sinon (cf.
-  // openTemplateFromMacro).
-  let macroOrigin = null;
-  // Le document d'où le modèle Grille à l'écran a été ouvert par « Ouvrir le modèle » (menu du lien d'un tableau lié, js/linked-table.js), et ce qu'il faut pour y revenir : { templateId,
-  // modelId, place (la case du curseur dans le tableau), macroOrigin (celui du document, rendu au retour) }, null sinon (cf. openLinkedModel).
-  let linkedOrigin = null;
   // Valeurs brutes (gabarits #Variable) des quatre champs, capturées juste avant de passer en Lecture : la Lecture affiche les valeurs résolues dans
   // les mêmes champs, sans zone en double. Non nul seulement pendant la Lecture (cf. updateEmailFieldsDisplay).
   let emailFieldsRawCache = null;
@@ -41,38 +35,9 @@
   const btnCreateEmail = document.getElementById('btn-create-email');
   const emailCharCounter = document.getElementById('v2-email-char-counter');
 
-  // Résout Objet, À, Cc et Cci pour une ligne. Partagé par l'affichage en Lecture et par buildMailtoForRecord (jauge de longueur et création de
-  // l'email), pour que ces résolutions ne divergent pas.
-  async function resolveEmailFieldsForRecord(rawFields, tableId, record) {
-    const [objet, destinataires, cc, cci] = await Promise.all([
-      Variables.resolveTextVariables(rawFields.objet, tableId, record),
-      Variables.resolveTextVariables(rawFields.destinataires, tableId, record),
-      Variables.resolveTextVariables(rawFields.cc, tableId, record),
-      Variables.resolveTextVariables(rawFields.cci, tableId, record),
-    ]);
-    return { objet, destinataires, cc, cci };
-  }
-
   // Les quatre champs de l'email : leur clé, la même dans les réglages du modèle et dans les valeurs résolues, et leur champ (un champ texte à bulles,
   // js/field-editor.js : l'élément se lit et s'écrit comme un <input>).
   const EMAIL_FIELDS = [['objet', emailSubjectInput], ['destinataires', emailToInput], ['cc', emailCcInput], ['cci', emailCciInput]];
-  const eachEmailInput = fn => EMAIL_FIELDS.forEach(([key, input]) => { if (input) fn(input, key); });
-
-  function getEmailFieldsFromInputs() {
-    // En Lecture, les champs montrent des valeurs résolues, jamais ce qu'il faut enregistrer (Ctrl+S et l'enregistrement automatique ne regardent
-    // pas le mode) : le cache tient les gabarits bruts, dans la même forme, tant qu'il n'est pas nul.
-    if (emailFieldsRawCache) return emailFieldsRawCache;
-    return Object.fromEntries(EMAIL_FIELDS.map(([key, input]) => [key, input ? input.value.trim() : '']));
-  }
-
-  function wireCciToggle() {
-    if (!emailCciToggle || !emailCciInput) return;
-    emailCciToggle.addEventListener('click', () => {
-      emailCciInput.hidden = !emailCciInput.hidden;
-      emailCciToggle.classList.toggle('is-active', !emailCciInput.hidden);
-      if (!emailCciInput.hidden) emailCciInput.focus();
-    });
-  }
 
   // Les cinq champs texte à bulles (nom du fichier PDF, Objet, À, Cc, Cci) : des éditeurs d'une ligne montés dans leurs éléments (js/field-editor.js),
   // après celui du document - la barre d'une bulle réutilise ses réglages.
@@ -212,18 +177,6 @@
     const blank = templateSelect ? templateSelect.querySelector('option[value=""]') : null;
     const invite = I18n.t('template.newOption');
     if (blank && blank.textContent !== invite) blank.textContent = invite;
-  }
-
-  // Le nom du modèle et son nom de fichier PDF. Ce dernier est toujours replié au chargement, même quand un nom est déjà réglé : l'interface de base
-  // reste épurée, le crayon (wirePdfFilenameToggle) le déplie à la demande, et la valeur n'est jamais perdue.
-  function showTemplateNames(tpl) {
-    resetNewOptionText();
-    if (templateNameInput) templateNameInput.value = tpl ? tpl.nom : '';
-    titleNameBase = tpl && tpl.nom != null ? String(tpl.nom).trim() : null;
-    if (pdfFilenameInput) {
-      pdfFilenameInput.value = tpl ? (tpl.nomFichierPDF || '') : '';
-      pdfFilenameInput.hidden = true;
-    }
   }
 
   // Un macro-modèle n'a pas de contenu TipTap : son Contenu est le JSON de sa composition (planning/feature-macro-modeles.md), que Editor.setHTML()
@@ -418,20 +371,6 @@
     Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
   }
 
-  // Les champs d'e-mail (objet, destinataires, Cci…) repartent de ceux du modèle, vides pour un nouveau.
-  function loadEmailFields(tpl) {
-    if (emailFieldsRow) emailFieldsRow.hidden = currentTypeModele !== 'email';
-    // Un changement de modèle invalide le cache des valeurs brutes (cf. updateEmailFieldsDisplay) : on repart d'un état brut pour ce modèle, et la
-    // résolution est redemandée plus bas si l'on est en Lecture.
-    emailFieldsRawCache = null;
-    eachEmailInput((input, key) => { input.readOnly = false; input.value = tpl ? (tpl[key] || '') : ''; });
-    if (emailCciInput) {
-      // Contrairement au nom du fichier PDF, la Cci reste visible quand elle est déjà réglée.
-      emailCciInput.hidden = !emailCciInput.value.trim();
-      if (emailCciToggle) emailCciToggle.classList.toggle('is-active', !emailCciInput.hidden);
-    }
-  }
-
   // Le modèle devient le modèle courant ; ses commentaires se chargent en arrière-plan.
   function setCurrentTemplate(tpl) {
     Templates.setCurrentId(tpl ? tpl.id : null);
@@ -439,138 +378,9 @@
     Comments.loadForTemplate(tpl ? tpl.id : null, tpl).catch(e => console.error('[main] chargement des commentaires impossible', e));
   }
 
-  let nameBeforeEdit = null; // le nom du modèle quand le crayon a ouvert le champ ; null hors saisie
-  let nameSession = null; // le geste de renommage que le crayon a ouvert : son repère d'Annuler se pose à la validation (HistoryMarkers, domaine « name ») ; null hors saisie
   // Le nom que le titre tient de la table pour le modèle ouvert : celui qu'il y a lu à l'ouverture, ou que ce widget y a écrit depuis (saveScreenAs) ; null pour un modèle pas encore enregistré. La personne a changé
   // le nom ici quand le champ n'est plus celui-là. GFS renomme un fichier en n'écrivant que la colonne Nom de sa ligne (consigne GFS 029) : le nom d'un titre ouvert avant ne doit jamais repartir dans un lot.
   let titleNameBase = null;
-  // La liste choisit et affiche le modèle courant, le crayon fait apparaître le champ du nom à sa place : `hidden` sur le <select> réel suffit,
-  // js/template-tree-select.js masque alors son déclencheur (sinon le champ s'ouvrirait à côté de la liste). Le renommage ne touche que l'affichage ;
-  // il s'enregistre au prochain clic sur Enregistrer ou à l'enregistrement automatique, qui lit la saisie.
-  function closeTemplateRenameEditor() {
-    if (!templateNameInput || !templateSelect) return;
-    templateNameInput.hidden = true;
-    templateSelect.hidden = false;
-    nameBeforeEdit = null;
-    nameSession = null;
-  }
-
-  // Le nom que la liste montre pour le modèle ouvert, tant qu'il n'est pas enregistré (même libellé que refreshTemplateList : l'étoile du modèle par défaut reste). Un modèle neuf sans nom reprend l'invite.
-  function showNameInList(name) {
-    if (!name) { resetNewOptionText(); return; }
-    const opt = templateSelect.options[templateSelect.selectedIndex];
-    if (opt) opt.textContent = Templates.isDefault(opt.value) ? name + ' ★' : name;
-  }
-
-  // Le nom sous lequel le modèle vient d'être enregistré : celui de la galerie, ou « nom (2) » s'il existait déjà (les messages de la galerie disent
-  // le nom retenu).
-  function savedTemplateName(fallback) {
-    const name = templateNameInput ? templateNameInput.value.trim() : '';
-    return name || fallback;
-  }
-
-  // Un nom déjà pris par un autre modèle devient « nom (2) », « nom (3) »... Posé quand la saisie est validée (Entrée, clic ailleurs,
-  // enregistrement), jamais à chaque lettre : le champ ne change pas sous les doigts de la personne qui tape, et l'enregistrement automatique, qui
-  // n'écrit que le nom courant, n'y touche pas.
-  // Un modèle enregistré dont le nom n'a pas changé reste tel quel, même avec un doublon antérieur : seul un nom nouveau est vérifié (modèle pas
-  // encore enregistré, ou nom changé depuis l'ouverture du crayon). Rend le nom retenu ; s'il a changé, le champ le prend et le coin d'état le dit.
-  function settleTemplateName() {
-    if (!templateNameInput) return '';
-    const typed = templateNameInput.value.trim();
-    if (!typed) return typed;
-    const id = Templates.getCurrentId();
-    const stored = Templates.byId(id);
-    // Pas encore enregistré (id nul : nouveau modèle, copie, galerie) : le nom est toujours vérifié.
-    const previous = id == null ? null : (nameBeforeEdit != null ? nameBeforeEdit : (titleNameBase !== null ? titleNameBase : (stored ? stored.nom : null)));
-    if (previous != null && Templates.sameName(typed, previous)) return typed;
-    const unique = Templates.uniqueName(typed, id);
-    if (unique !== typed) {
-      templateNameInput.value = unique;
-      markAutosaveDirty(); // le nom a pu être écrit tel que tapé par un passage de l'enregistrement automatique : le prochain écrit le nouveau
-      // Enregistrement automatique coupé, le coin d'état garde « Modifications non enregistrées. » : ce message-là protège ce qui n'est écrit nulle
-      // part, le nouveau nom se lit dans le titre.
-      if (isAutosaveEnabled()) setStatus(I18n.t('status.nameExists', { name: unique }));
-    }
-    return unique;
-  }
-
-  // Le titre prend le nom que la table porte pour le modèle ouvert quand la personne n'a pas changé le sien et qu'un autre l'a renommé depuis (l'explorateur de GFS, consigne 029). Appelée quand le cache des modèles vient
-  // d'être relu : à chaque passage de l'enregistrement automatique qui lit la table, et à chaque rafraîchissement de la liste. Jamais pendant la saisie du crayon, ni sur un nom que la personne a tapé : c'est le sien
-  // qui part alors à l'enregistrement.
-  function adoptTableName() {
-    if (!templateNameInput || !templateSelect || titleNameBase === null || nameBeforeEdit !== null) return;
-    const id = Templates.getCurrentId();
-    const stored = id == null ? null : Templates.byId(id);
-    const name = stored && stored.nom != null ? String(stored.nom).trim() : '';
-    if (!name || name === titleNameBase || templateNameInput.value.trim() !== titleNameBase) return;
-    templateNameInput.value = name;
-    titleNameBase = name;
-    const option = templateSelect.options[templateSelect.selectedIndex];
-    if (option && option.value !== '' && String(option.value) === String(id)) option.textContent = Templates.isDefault(id) ? name + ' ★' : name;
-  }
-
-  function wireTemplateRename() {
-    const renameBtn = document.getElementById('btn-rename-template');
-    if (!renameBtn || !templateNameInput || !templateSelect) return;
-    function openEditor() {
-      // Le champ reprend la largeur du nom qu'il remplace (120 px au moins) : la barre ne bouge pas, et à 700 px elle ne passe pas sur une deuxième
-      // ligne.
-      const shown = document.querySelector('#v2-title-cluster .tts-wrap');
-      if (shown && shown.offsetWidth) templateNameInput.style.width = Math.max(120, shown.offsetWidth) + 'px';
-      nameBeforeEdit = templateNameInput.value.trim();
-      nameSession = HistoryMarkers.begin('name');
-      templateNameInput.hidden = false;
-      templateSelect.hidden = true;
-      templateNameInput.focus();
-      templateNameInput.select();
-    }
-    // Le nom d'avant l'ouverture du crayon revient dans le champ. Un passage de l'enregistrement automatique a pu écrire en route un nom tapé à moitié
-    // (cf. settleTemplateName) : le suivant réécrit celui-ci.
-    function restoreNameBeforeEdit() {
-      templateNameInput.value = nameBeforeEdit;
-      markAutosaveDirty();
-    }
-    function commitAndClose() {
-      if (nameBeforeEdit !== null) { // seulement une saisie ouverte par le crayon, pas un blur parasite
-        if (!templateNameInput.value.trim() && nameBeforeEdit) {
-          // Un nom effacé n'est pas un nom : le titre garderait l'ancien au-dessus d'un champ vide, et ni l'enregistrement automatique ni Enregistrer
-          // n'écrivent un modèle sans nom - plus rien ne serait gardé, sans un mot. Le champ reprend le nom d'avant et le coin d'état le dit, comme
-          // pour un nom déjà pris : seulement quand l'enregistrement automatique est actif (coupé, « Modifications non enregistrées. » protège ce
-          // qui n'est écrit nulle part). Un modèle neuf jamais nommé n'a rien à reprendre.
-          restoreNameBeforeEdit();
-          if (isAutosaveEnabled()) setStatus(I18n.t('status.nameKept', { name: nameBeforeEdit }));
-        } else settleTemplateName();
-      }
-      // La liste montre le modèle avec le nouveau nom jusqu'à l'enregistrement.
-      if (templateNameInput.value.trim()) showNameInList(templateNameInput.value.trim());
-      // Le renommage fini laisse son repère dans l'historique d'Annuler (rien si le nom n'a pas changé : Échap, un nom vide repris).
-      if (nameSession) nameSession.commit({ alone: true });
-      closeTemplateRenameEditor();
-    }
-    // Annuler et Rétablir (js/history-markers.js) rendent le nom d'avant ou d'après la validation. Si le modèle a été renommé depuis (l'explorateur de GFS, « Enregistrer sous » sous un autre nom), le champ ne montre plus
-    // celui que le geste avait laissé : rien n'est changé, le coin d'état le dit.
-    HistoryMarkers.define('name', {
-      read: () => ({ name: templateNameInput.value.trim() }),
-      write(next, prev) {
-        if (templateNameInput.value.trim() !== prev.name) { setStatus(I18n.t('history.nameChanged'), true); return; }
-        templateNameInput.value = next.name;
-        showNameInList(next.name);
-        markAutosaveDirty();
-      },
-    });
-    renameBtn.addEventListener('click', () => { templateNameInput.hidden ? openEditor() : commitAndClose(); });
-    templateNameInput.addEventListener('blur', commitAndClose);
-    templateNameInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter') templateNameInput.blur();
-      // Échap abandonne la frappe : le nom d'avant revient et le champ se referme. Pas pendant une composition de texte (accent mort, saisie asiatique) :
-      // Échap n'y annule que la composition.
-      else if (e.key === 'Escape' && !e.isComposing && nameBeforeEdit !== null) {
-        e.preventDefault();
-        if (templateNameInput.value.trim() !== nameBeforeEdit) restoreNameBeforeEdit();
-        templateNameInput.blur();
-      }
-    });
-  }
 
   // Une fenêtre ou une liste abandonnée (« Annuler », la liste des feuilles d'un Excel) : la personne reprend où elle en était. Ouverte depuis une
   // ligne de menu (une étiquette que la souris ne focalise pas), elle n'a aucun focus à rendre : le bouton cliqué, tout juste caché, le garde
@@ -707,132 +517,10 @@
     setStatus(I18n.t(hidden ? 'status.macroModelHidden' : 'status.macroModelShown', { name }));
   }
 
-  // Ouvrir un modèle d'un macro-modèle, et y revenir
-  // Le stylo d'une ligne du résumé d'un macro-modèle (js/macro-editor.js:showSummary) ouvre ce modèle dans l'éditeur comme un choix de la liste ;
-  // tant qu'il est à l'écran, le bandeau « Revenir au macro-modèle » (#macro-return-bar) ramène au macro-modèle d'origine. macroOrigin = { macroId,
-  // templateId } est remis à null dès qu'un autre modèle se charge (liste, « + », galerie, suppression : forgetMacroOriginUnless, en tête de
-  // loadTemplateIntoEditor), jamais quand le même est rechargé (conflit d'enregistrement automatique).
-
-  // Un bandeau « Revenir à… » (macro-modèle ou document) : montré tant que le modèle d'origine existe, avec son nom dans la phrase. Le nom d'un modèle long est coupé par « … » : la phrase se lit en
-  // entier au survol.
-  function showReturnBar(bar, textId, textKey, origin) {
-    bar.hidden = !origin;
-    const text = document.getElementById(textId);
-    if (!text) return;
-    text.textContent = origin ? I18n.t(textKey, { name: origin.nom }) : '';
-    text.title = text.textContent;
-  }
-
-  function syncMacroReturnBar() {
-    if (!macroReturnBar) return;
-    showReturnBar(macroReturnBar, 'macro-return-text', 'macro.return.text', macroOrigin && Templates.byId(macroOrigin.macroId));
-  }
-
-  function forgetMacroOriginUnless(tpl) {
-    if (!macroOrigin || (tpl && Templates.isCurrent(tpl.id))) return;
-    macroOrigin = null;
-    syncMacroReturnBar();
-  }
-
-  // Un macro-modèle n'a rien à enregistrer avant d'être quitté (il s'édite dans sa fenêtre) : pas de question ici, contrairement au retour
-  // (returnToMacro). La liste et le cache des modèles sont relus d'abord : un modèle créé ailleurs depuis le dernier passage n'a pas encore sa ligne
-  // dans le <select> (le choisir y laisserait « Nouveau modèle »), et le texte lu est celui de Grist.
-  async function openTemplateFromMacro(templateId) {
-    if (isReadOnly() || currentTypeModele !== 'macro') return;
-    const macroId = Templates.getCurrentId();
-    if (macroId == null) return;
-    await refreshTemplateList();
-    const tpl = Templates.byId(templateId);
-    // Un autre modèle s'est chargé pendant la relecture (deux clics de suite) : celui-là gagne. Modèle disparu : le macro-modèle reste, la liste le
-    // montre de nouveau.
-    if (!Templates.isCurrent(macroId)) return;
-    if (!tpl || tpl.typeModele === 'macro' || !Templates.isOpenableType(tpl.typeModele)) { templateSelect.value = macroId; return; }
-    templateSelect.value = tpl.id;
-    loadTemplateIntoEditor(tpl);
-    macroOrigin = { macroId, templateId: tpl.id };
-    syncMacroReturnBar();
-  }
-
-  // Même chemin qu'un choix du macro-modèle dans la liste : la question « Modifications non enregistrées » est posée si le modèle ouvert en a, et
-  // « Annuler » reste sur lui (le bandeau aussi). Le cache des modèles est relu d'abord : Templates.save ne touche pas à Contenu, et ce qui vient
-  // d'être modifié ici doit se lire dans le macro-modèle (Lecture, PDF, Word) sans attendre le prochain passage de l'enregistrement automatique.
-  async function returnToMacro() {
-    const origin = macroOrigin;
-    if (!origin) return;
-    try { await Templates.loadAll(); } catch (e) { console.error('[main] relecture des modèles impossible', e); }
-    // Macro-modèle supprimé depuis (par quelqu'un d'autre) : le modèle reste à l'écran, le bandeau s'efface (choisir une valeur absente de la liste
-    // ouvrirait un modèle vide).
-    if (!Templates.byId(origin.macroId)) { syncMacroReturnBar(); return; }
-    templateSelect.value = origin.macroId;
-    await onTemplateSelectChange();
-    if (currentTypeModele !== 'macro' || !Templates.isCurrent(origin.macroId)) return;
-    // Le stylo du modèle qu'on vient de quitter reprend le focus : le bouton « Revenir » a disparu avec le bandeau.
-    const pencil = document.querySelector('.macro-summary-edit[data-template-id="' + CSS.escape(String(origin.templateId)) + '"]');
-    if (pencil) pencil.focus();
-  }
-
-  function wireMacroReturn() {
-    const button = document.getElementById('btn-macro-return');
-    if (button) button.addEventListener('click', returnToMacro);
-  }
-
   // Ouvrir le modèle d'un tableau lié, et revenir au document
   // « Ouvrir le modèle » du menu du lien d'un tableau lié (js/linked-table.js:open) ouvre ce modèle Grille dans l'éditeur comme un choix de la liste ; tant qu'il est à l'écran, le bandeau
   // « Revenir au document » (#linked-return-bar) ramène au document d'origine, le curseur dans la même case du tableau. linkedOrigin est remis à null dès qu'un autre modèle se charge
   // (liste, « + », galerie, suppression, copie : forgetLinkedOriginUnless), jamais quand le même est rechargé (conflit d'enregistrement automatique).
-
-  function syncLinkedReturnBar() {
-    if (!linkedReturnBar) return;
-    showReturnBar(linkedReturnBar, 'linked-return-text', 'linkedTable.return.text', linkedOrigin && Templates.byId(linkedOrigin.templateId));
-  }
-
-  function forgetLinkedOriginUnless(tpl) {
-    if (!linkedOrigin || (tpl && Templates.isCurrent(tpl.id))) return;
-    linkedOrigin = null;
-    syncLinkedReturnBar();
-  }
-
-  // Le même chemin qu'un choix du modèle dans la liste : la question « Modifications non enregistrées » est posée au document qui en a (« Annuler » le garde à l'écran, tel quel). La
-  // liste et le cache des modèles sont relus d'abord, comme pour un modèle d'un macro-modèle : un modèle créé ailleurs depuis le dernier passage n'a pas encore sa ligne dans le <select>.
-  // Un document jamais enregistré, abandonné à la question, n'a plus où revenir : pas de bandeau.
-  async function openLinkedModel({ id, name, place }) {
-    if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) return;
-    const templateId = Templates.getCurrentId();
-    const macro = macroOrigin;
-    const epoch = persist.autosaveEpoch;
-    try { await refreshTemplateList(); } catch (e) { console.warn('[main] relecture des modèles impossible', e); }
-    // Un autre modèle s'est chargé pendant la relecture (un choix dans la liste) : celui-là gagne.
-    if (epoch !== persist.autosaveEpoch) return;
-    const model = Templates.byId(id);
-    if (!model || model.typeModele !== GridEditor.TYPE) { setStatus(I18n.t('linkedTable.gone', { name }), true); return; }
-    templateSelect.value = model.id;
-    loadTemplateIntoEditor(model);
-    linkedOrigin = templateId == null ? null : { templateId, modelId: model.id, place, macroOrigin: macro };
-    syncLinkedReturnBar();
-  }
-
-  // Même chemin que la liste aussi pour le retour : la question « Modifications non enregistrées » est posée si le modèle en a (« Annuler » le garde, et le bandeau aussi). Le cache des
-  // modèles est relu d'abord : ce que le modèle vient de recevoir est ce que le document lit. Le document revient avec son bandeau de macro-modèle s'il en avait un, le curseur dans la
-  // case du tableau qu'on avait quittée. Le document suit son modèle à son ouverture (followLinkedModels) : un tableau qui diffère encore du modèle - modifié ici, ou des deux côtés - le dit sur la ligne d'état.
-  async function returnFromLinkedModel() {
-    const origin = linkedOrigin;
-    if (!origin) return;
-    try { await Templates.loadAll(); } catch (e) { console.error('[main] relecture des modèles impossible', e); }
-    // Document supprimé depuis (par quelqu'un d'autre) : le modèle reste à l'écran, le bandeau s'efface.
-    if (!Templates.byId(origin.templateId)) { syncLinkedReturnBar(); return; }
-    templateSelect.value = origin.templateId;
-    await onTemplateSelectChange();
-    if (!Templates.isCurrent(origin.templateId)) return;
-    if (origin.macroOrigin && Templates.byId(origin.macroOrigin.macroId)) { macroOrigin = origin.macroOrigin; syncMacroReturnBar(); }
-    if (currentMode !== 'edit') return;
-    const shown = LinkedTable.reveal(EditorCore.getEditor(), origin.modelId, origin.place);
-    if (shown && shown.differs) setStatus(I18n.t('linkedTable.differs', { name: shown.name }));
-  }
-
-  function wireLinkedReturn() {
-    const button = document.getElementById('btn-linked-return');
-    if (button) button.addEventListener('click', returnFromLinkedModel);
-  }
 
   // Droits par personne (js/access-rights.js)
   // Verrou d'interface seulement : grise (classe pp-access-locked, jamais masqué ni retiré), et les gardes des fonctions d'action (onSave,
@@ -1155,68 +843,31 @@
     }
   }
 
-  // Bascule l'affichage d'Objet/À/Cc/Cci entre gabarit brut (édition) et valeurs résolues (lecture) sur les mêmes champs, jamais dupliqués (cf.
-  // emailFieldsRawCache ci-dessus). La valeur résolue s'écrit par showText : un texte, que le champ ne relit pas comme un modèle. Sans ligne sélectionnée, les gabarits bruts restent affichés (rien à résoudre) plutôt qu'un champ vidé sans
-  // explication.
-  async function updateEmailFieldsDisplay() {
-    if (!emailFieldsRow || currentTypeModele !== 'email') return;
-    if (currentMode !== 'read') {
-      if (!emailFieldsRawCache) return; // déjà en état brut, rien à restaurer
-      const raw = emailFieldsRawCache;
-      emailFieldsRawCache = null;
-      eachEmailInput((input, key) => { input.value = raw[key]; input.readOnly = false; });
-      return;
-    }
-    if (!emailFieldsRawCache) {
-      emailFieldsRawCache = getEmailFieldsFromInputs();
-      eachEmailInput(input => { input.readOnly = true; });
-    }
-    const record = latestRecord || GristAPI.getCurrentRecord();
-    if (!record) return;
-    const tableId = latestRecordTableId || GristAPI.getCurrentTableId() || currentTableId;
-    const raw = emailFieldsRawCache;
-    const resolved = await resolveEmailFieldsForRecord(raw, tableId, record);
-    // Repassé en édition (ou modèle changé) pendant la résolution : emailFieldsRawCache a déjà été traité par la branche ci-dessus, ne pas écraser
-    // son travail avec ce résultat maintenant obsolète.
-    if (currentMode !== 'read' || emailFieldsRawCache !== raw) return;
-    eachEmailInput((input, key) => { input.showText(resolved[key]); });
-  }
-
-  // L'URL mailto: de cette ligne : les champs résolus, et le corps lu dans le rendu de la Lecture (ReaderMode.render : mêmes bulles et chips que le
-  // PDF). `stale` (facultatif) rend vrai quand un résultat plus récent a pris le relais : l'URL n'est alors pas construite (null).
-  async function buildMailtoForRecord(record, tableId, stale) {
-    const fields = await resolveEmailFieldsForRecord(getEmailFieldsFromInputs(), tableId, record);
-    await renderReader(record, tableId);
-    if (stale && stale()) return null;
-    const content = readerContainer.querySelector('.reader-content');
-    const bodyText = MailtoExport.plainTextFromHtml(content ? content.innerHTML : readerContainer.innerHTML);
-    return MailtoExport.buildMailtoUrl({ to: fields.destinataires, cc: fields.cc, bcc: fields.cci, subject: fields.objet, bodyText, client: MailtoExport.getMailClient() });
-  }
-
-  // Jauge de longueur mailto:, permanente, sur l'URL résolue (to+cc+cci+objet+corps) et non sur le gabarit tapé : un accent ou un retour à la ligne
-  // coûte plus cher une fois encodé (cf. MailtoExport). Dépend de la ligne sélectionnée : appelée à chaque changement de ligne, de modèle ou de
-  // contenu (avec un debounce, cf. scheduleEmailLengthGauge) ; jamais bloquante, seulement informative.
-  let emailGaugeRunId = 0;
-  async function updateEmailLengthGauge() {
-    if (!emailCharCounter) return;
-    if (currentTypeModele !== 'email') { emailCharCounter.hidden = true; return; }
-    const runId = ++emailGaugeRunId;
-    const record = latestRecord || GristAPI.getCurrentRecord();
-    if (!record) { emailCharCounter.hidden = true; return; }
-    const tableId = latestRecordTableId || GristAPI.getCurrentTableId() || currentTableId;
-    const url = await buildMailtoForRecord(record, tableId, () => runId !== emailGaugeRunId);
-    if (url === null) return; // une résolution plus récente a déjà pris le relais
-    const check = MailtoExport.checkUrlLength(url);
-    emailCharCounter.hidden = false;
-    emailCharCounter.classList.toggle('is-over-limit', !check.safe);
-    emailCharCounter.textContent = I18n.t(check.safe ? 'email.charCount' : 'email.charCountOverLimit', { count: check.length, limit: check.limit });
-  }
-  let emailGaugeDebounceTimer = null;
-  function scheduleEmailLengthGauge() {
-    if (currentTypeModele !== 'email') return;
-    if (emailGaugeDebounceTimer) clearTimeout(emailGaugeDebounceTimer);
-    emailGaugeDebounceTimer = setTimeout(updateEmailLengthGauge, 500);
-  }
+  // Les champs e-mail et la jauge (js/main-email.js), l'ajustement de la page à la largeur (js/main-page-zoom.js), le renommage du modèle (js/main-rename.js) et l'ouverture d'un modèle depuis
+  // un macro-modèle ou un tableau lié (js/main-macro-return.js) : créés ici, avant les exports, l'autosave et l'enregistrement qui leur prennent des noms (buildMailtoForRecord,
+  // getEmailFieldsFromInputs, adoptTableName, settleTemplateName, forgetMacroOriginUnless...) ; ce qu'ils prennent aux morceaux créés plus bas (isAutosaveEnabled, markAutosaveDirty,
+  // askBeforeLeaving, hasEditsToConfirmBeforeLeaving) leur est donné par des appels différés.
+  const {
+    buildMailtoForRecord, eachEmailInput, getEmailFieldsFromInputs, loadEmailFields, scheduleEmailLengthGauge, updateEmailFieldsDisplay, updateEmailLengthGauge,
+    wireCciToggle,
+  } = MainEmail.create({
+    EMAIL_FIELDS, emailCciInput, emailCciToggle, emailCharCounter, emailFieldsRow, getCurrentMode: () => currentMode, getCurrentTableId: () => currentTableId,
+    getCurrentTypeModele: () => currentTypeModele, getEmailFieldsRawCache: () => emailFieldsRawCache, getLatestRecord: () => latestRecord,
+    getLatestRecordTableId: () => latestRecordTableId, readerContainer, renderReader, setEmailFieldsRawCache: value => { emailFieldsRawCache = value; },
+  });
+  const { applyPageFitZoom, applyPageFitZoomTo, applyPageFitZoomToBoth, refreshPageFitZoom, wirePageFitZoom } = MainPageZoom.create({
+    editorContainer, getCurrentMode: () => currentMode, readerContainer, renderReader, templateNameInput,
+  });
+  const { adoptTableName, closeTemplateRenameEditor, savedTemplateName, settleTemplateName, showTemplateNames, wireTemplateRename } = MainRename.create({
+    getTitleNameBase: () => titleNameBase, isAutosaveEnabled: (...args) => isAutosaveEnabled(...args),
+    markAutosaveDirty: (...args) => markAutosaveDirty(...args), pdfFilenameInput, resetNewOptionText, setStatus,
+    setTitleNameBase: value => { titleNameBase = value; }, templateNameInput, templateSelect,
+  });
+  const { forgetLinkedOriginUnless, forgetMacroOriginUnless, openLinkedModel, openTemplateFromMacro, wireLinkedReturn, wireMacroReturn } = MainMacroReturn.create({
+    askBeforeLeaving: (...args) => askBeforeLeaving(...args), getCurrentMode: () => currentMode, getCurrentTypeModele: () => currentTypeModele,
+    hasEditsToConfirmBeforeLeaving: (...args) => hasEditsToConfirmBeforeLeaving(...args), isReadOnly, linkedReturnBar, loadTemplateIntoEditor, macroReturnBar,
+    onTemplateSelectChange, persist, refreshTemplateList, setStatus, templateSelect,
+  });
 
   // Les exports (le verrou, l'export d'une ligne, les menus d'export, les exports en lot) sont dans js/main-export.js ; ce qu'il tire d'ici lui est donné, le type du modèle et la table à l'écran en lecture.
   const { isExportRunning, onCreateEmail, onExport, onExportBatch, onExportDocx, onExportPdf, onExportXlsx, syncExportMenus, syncExportRowsForModelType, withExportLock } = MainExport.create({
@@ -1368,60 +1019,6 @@
     syncExportMenus();
   }
 
-  // Ajustement de la page à la largeur disponible (cf. la règle `zoom` de css/editor-v2.css) : réduit la feuille juste ce qu'il faut pour
-  // qu'elle tienne dans le conteneur, jamais au-delà de 1 (une page A4 n'a pas à grossir sur un grand écran) et jamais en dessous de 0,5,
-  // sous lequel le texte deviendrait illisible ; le défilement horizontal reprend alors la main. Quand la feuille tient déjà, le facteur vaut 1 et
-  // rien ne change. C'est l'affichage d'origine : js/page-zoom.js (factorFor) calcule ce facteur et le remplace par le niveau que la personne a
-  // choisi (pastille de zoom, Ctrl + molette, « Ajuster »), le même pour l'éditeur et la Lecture.
-  // Deux temps, comme tout ce qui lit la mise en page puis la change : `planPageFitZoom` LIT (le facteur, et l'écart de hauteur des lignes de tableau que mesure la sonde de js/page-zoom.js),
-  // `commitPageFitZoom` ÉCRIT. Posé d'abord, le facteur obligeait la sonde à faire refaire le style de tout le document pour le lire (0,2 s sur une présentation de 39 diapositives), puis la
-  // variable de l'écart (`--pp-row-grow`) le faisait refaire une seconde fois ; et le conteneur suivant, lu après l'écriture du premier, payait encore ce que celui-là venait de défaire.
-  // La sonde est posée dans `body` : son résultat ne dépend que du facteur, jamais de l'état du document, qu'elle lise avant ou après.
-  function planPageFitZoom(container) {
-    if (!container) return null;
-    if (!container.classList.contains('a4-preview')) return { container, reset: true };
-    const zoom = PageZoom.factorFor(container);
-    if (zoom == null) return null;
-    // Arrondi au millième : sans ça, un redimensionnement continu réécrit la variable à chaque pixel et relance la pagination en boucle.
-    const next = String(Math.round(zoom * 1000) / 1000);
-    // L'écart de hauteur des lignes de tableau sous ce facteur (js/page-zoom.js:rowGrow) suit le facteur, et la densité de pixels de l'écran, qui peut changer seule : mesuré ici, gardé en mémoire
-    // pour `syncRowGrow` de l'écriture.
-    if (Number(next) > 0 && Number(next) !== 1) PageZoom.rowGrow(Number(next));
-    return { container, next };
-  }
-  function commitPageFitZoom(plan) {
-    if (!plan) return undefined;
-    const { container } = plan;
-    if (plan.reset) { container.style.removeProperty('--pp-fit-zoom'); PageZoom.syncRowGrow(container, 0); return undefined; }
-    const changed = container.style.getPropertyValue('--pp-fit-zoom') !== plan.next;
-    if (changed) container.style.setProperty('--pp-fit-zoom', plan.next);
-    return PageZoom.syncRowGrow(container, Number(plan.next)) || changed || undefined;
-  }
-  // Un seul conteneur (l'entrée en Lecture) : lit, puis écrit. Rend true quand le facteur ou l'écart de lignes a changé.
-  function applyPageFitZoom(container) {
-    return commitPageFitZoom(planPageFitZoom(container));
-  }
-  // Les deux conteneurs d'un coup : tout se lit, puis tout s'écrit, dans l'ordre donné. Rend, dans le même ordre, ce que chaque écriture dit (true quand le conteneur a changé).
-  function applyPageFitZoomTo(first, second) {
-    const plans = [planPageFitZoom(first), planPageFitZoom(second)];
-    return [commitPageFitZoom(plans[0]), commitPageFitZoom(plans[1])];
-  }
-
-  // Pose le facteur sur les deux conteneurs sans rien rafraîchir, pour les appelants qui rafraîchissent eux-mêmes juste après (chargement d'un
-  // modèle, changement d'orientation). Rend true si l'un des deux a changé.
-  function applyPageFitZoomToBoth() {
-    const [editorChanged, readerChanged] = applyPageFitZoomTo(editorContainer, readerContainer);
-    return !!(editorChanged || readerChanged);
-  }
-
-  function refreshPageFitZoom() {
-    const [editorChanged, readerChanged] = applyPageFitZoomTo(editorContainer, readerContainer);
-    // Les bandes de pagination sont positionnées à partir de mesures réelles : un changement de facteur les rend caduques tant qu'on n'a pas
-    // recalculé.
-    if (editorChanged && currentMode === 'edit') Editor.refreshPaginationPreview();
-    if (readerChanged && currentMode === 'read') renderReader();
-  }
-
   // Vrai quand l'orientation ou le format a changé à un moment où l'éditeur ne pouvait pas mesurer sa mise en page - masqué (Lecture, résumé d'un
   // macro-modèle) ou sans Aperçu A4 (pas de pagination, donc pas de grille page) : la grille page des images en calque reste à recapturer (cf.
   // onPageLayoutChanged).
@@ -1454,24 +1051,6 @@
   function onWatermarkChanged() {
     if (currentMode === 'read') renderReader();
     else if (currentTypeModele !== 'macro') Editor.refreshPaginationPreview();
-  }
-
-  function wirePageFitZoom() {
-    // La pastille de zoom (js/page-zoom.js) change le facteur sans que le conteneur change de taille : les bandes de pagination, mesurées sur l'ancien
-    // rendu, se refont ici - celles de l'éditeur, ou la Lecture.
-    PageZoom.wire({
-      apply: applyPageFitZoomToBoth,
-      refresh: () => (currentMode === 'read' ? renderReader() : Editor.refreshPaginationPreview()),
-      template: () => ({ id: Templates.getCurrentId(), name: templateNameInput ? templateNameInput.value.trim() : '' }),
-    });
-    refreshPageFitZoom();
-    if (typeof ResizeObserver === 'function') {
-      const ro = new ResizeObserver(() => refreshPageFitZoom());
-      if (editorContainer) ro.observe(editorContainer);
-      if (readerContainer) ro.observe(readerContainer);
-    } else {
-      window.addEventListener('resize', refreshPageFitZoom);
-    }
   }
 
   // Ctrl+S / Cmd+S : enregistre le modèle courant exactement comme le bouton Enregistrer (même onSave, donc mêmes contrôles : nom obligatoire, sortie
