@@ -246,10 +246,17 @@ async function run(lang, colorScheme) {
   await toTop(app);
   await a.click(0);
   await a.click(1, 'Shift');
-  // Le coin d'état lu aussitôt : l'enregistrement automatique y écrit ensuite « Enregistré à … ».
+  // Le coin d'état est lu aussitôt, et chaque texte qu'il prend est noté : l'enregistrement automatique y écrit ensuite « Enregistré à … », et sous charge (trois coureurs en parallèle) il passait
+  // avant la lecture (« Enregistré à 23:25:17. » relevé dans la passe complète du 10/11).
+  await app.evaluate(() => {
+    const el = document.getElementById('status-msg');
+    window.__statusSeen = [el.textContent];
+    new MutationObserver(() => window.__statusSeen.push(el.textContent)).observe(el, { childList: true, characterData: true, subtree: true });
+  });
   await a.press('Control+c', 30);
   s = await state(app);
-  check(tag + 'Ctrl+C sur « Un » et « Deux » : le coin d’état dit « 2 diapositives copiées. »', s.status === (en ? '2 slides copied.' : '2 diapositives copiées.'), s.status);
+  const statusSeen = await app.evaluate(() => window.__statusSeen);
+  check(tag + 'Ctrl+C sur « Un » et « Deux » : le coin d’état dit « 2 diapositives copiées. »', statusSeen.includes(en ? '2 slides copied.' : '2 diapositives copiées.'), { status: s.status, statusSeen });
   await a.click(2);
   await a.click(2, 'Control'); // le clavier va sur la miniature (un Ctrl+clic sur la seule choisie ne change rien)
   await a.press('Control+v', 1500);
