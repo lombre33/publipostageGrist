@@ -1077,6 +1077,31 @@
     },
   });
 
+  // Le repère « Saut de page » de l'éditeur (css/style.css, `.page-break-marker`) : axe-core l'a relevé à 3,18:1 (texte ambre #d97706 de 11,9 px sur la page blanche) au balayage du 10/11. Le texte
+  // prend l'ambre foncé, le filet pointillé garde l'ambre vif (un filet n'est pas un texte : 3:1 lui suffit). La page de l'éditeur reste blanche dans les deux thèmes ; un saut qui tourne la page
+  // (data-page-orientation) est le même repère, plus bas, avec la même couleur.
+  cases.push({
+    id: 'contrast_page_break_marker_text_reaches_4_5_and_its_dashed_rule_3_to_1_on_the_white_paper_in_light_and_dark',
+    description: 'Repère « Saut de page » de l’éditeur, avec ou sans sens de page : texte à 4,5:1 au moins sur la page blanche, filet pointillé à 3:1 au moins, en clair et en sombre',
+    run: async () => {
+      const markup = '<div class="tiptap"><div class="page-break-marker">Saut de page</div><div class="page-break-marker" data-page-orientation="landscape">Saut de page : paysage</div></div>';
+      const byTheme = inBothThemes(() => onPaper(markup, host => {
+        const out = {};
+        host.querySelectorAll('.page-break-marker').forEach((marker, i) => {
+          const name = i ? 'repère de page tournée' : 'repère simple';
+          const bg = backgroundOf(marker);
+          out[name + ' (texte)'] = round2(textRatio(marker));
+          out[name + ' (filet)'] = round2(ratio(over(parseColor(getComputedStyle(marker).borderTopColor), bg), bg));
+        });
+        return out;
+      }));
+      const under = (suffix, min) => Object.entries(byTheme).flatMap(([theme, values]) => Object.entries(values).filter(([name, value]) => name.endsWith(suffix) && !(value >= min)).map(([name, value]) => theme + ' ' + name + ' ' + value));
+      const textBad = under('(texte)', 4.5);
+      const ruleBad = under('(filet)', 3);
+      return { pass: textBad.length === 0 && ruleBad.length === 0, notes: JSON.stringify({ textBad, ruleBad, byTheme }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.contrast = cases;
 })();

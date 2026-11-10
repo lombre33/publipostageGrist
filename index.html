@@ -124,7 +124,7 @@
 }
 </script>
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.69">
-<link rel="stylesheet" href="css/style.css?v=0.104">
+<link rel="stylesheet" href="css/style.css?v=0.105">
 <link rel="stylesheet" href="css/reader-guide.css?v=0.5">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.140">
 <link rel="stylesheet" href="css/toolbar-v2.css?v=0.82">
@@ -597,7 +597,7 @@
           <option value="roman">I), II), III)…</option>
           <option value="article">Article 1, 1.a, 1.a.1…</option>
         </select>
-        <span class="v2-hover-flyout v2-hover-flyout-v v2-hover-flyout-scrollable" id="v2-heading-flyout">
+        <span class="v2-hover-flyout v2-hover-flyout-v v2-hover-flyout-scrollable" id="v2-heading-flyout" role="group" aria-label="Titre" data-i18n-aria="heading.tip">
           <span class="v2-hover-flyout-label" data-i18n="heading.tip">Titre</span>
           <span class="v2-hover-row" data-level="p" data-i18n="heading.normal">Normal</span>
           <span class="v2-hover-row" data-level="1" data-i18n="heading.level1">Titre 1</span>
@@ -637,7 +637,7 @@
       <!-- Souligné : le bouton garde son clic et Ctrl+U (le soulignement classique) ; son menu au survol offre les autres sortes, sans fenêtre (js/character-format.js, `wireMenus`). Chaque ligne est dessinée comme le trait qu'elle pose. -->
       <span class="v2-hover-group" id="v2-underline-group" data-close-on-click>
         <button id="v2-btn-underline" aria-label="Souligné" data-i18n-aria="fmt.underline"></button>
-        <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-underline-flyout">
+        <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-underline-flyout" role="group" aria-label="Soulignement" data-i18n-aria="charFormat.line.label">
           <span class="v2-hover-flyout-label" data-i18n="charFormat.line.label">Soulignement</span>
           <span class="v2-hover-row v2-hover-row-check-start" id="v2-underline-single" role="menuitemradio" aria-checked="false" tabindex="0" data-underline="single" aria-label="Souligné : un trait simple" data-i18n-aria="charFormat.line.singleAria"><span class="v2-underline-sample" data-i18n="fmt.underline">Souligné</span></span>
           <span class="v2-hover-hsep"></span>
@@ -651,7 +651,7 @@
       <!-- « Aa » : le menu des réglages de caractère, à la place de la fenêtre « Caractère… » du menu Alignement (demande du 04/11, carte « Placer le menu « Caractère », avec exposant et indice, à quel endroit ? » : « A — Bouton « Aa » après Barré »). Chaque réglage s'applique tout de suite (js/character-format.js, `wireMenus`). Exposant et indice gardent leurs identifiants et leurs touches (Ctrl+. et Ctrl+,). -->
       <span class="v2-hover-group" id="v2-char-group">
         <button type="button" id="v2-btn-char-main" aria-label="Caractère : exposant, indice, petites capitales, ombre, contour et espacement (survoler pour les options)" data-i18n-aria="charFormat.main.aria"></button>
-        <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-char-flyout">
+        <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-char-flyout" role="group" aria-label="Caractère" data-i18n-aria="charFormat.title">
           <span class="v2-hover-flyout-label" data-i18n="charFormat.title">Caractère</span>
           <span class="v2-hover-icon-row">
             <button type="button" id="v2-btn-superscript" data-tip="Exposant" aria-label="Exposant" aria-pressed="false" data-i18n-tip="fmt.superscript" data-i18n-aria="fmt.superscript"></button>
@@ -676,7 +676,7 @@
       <span class="v2-sep"></span>
       <span class="v2-hover-group" id="v2-align-group">
         <button id="v2-btn-align-main" aria-label="Alignement (survoler pour les options)" data-i18n-aria="align.main.aria"></button>
-        <span class="v2-hover-flyout v2-hover-flyout-v">
+        <span class="v2-hover-flyout v2-hover-flyout-v" role="group" aria-label="Alignement" data-i18n-aria="align.main.tip">
           <span class="v2-hover-flyout-label" data-i18n="align.main.tip">Alignement</span>
           <span class="v2-hover-icon-row">
             <button id="v2-btn-align-left" data-tip="Aligner à gauche" aria-label="Aligner à gauche" data-i18n-tip="align.left" data-i18n-aria="align.left"></button>

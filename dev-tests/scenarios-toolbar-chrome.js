@@ -885,6 +885,33 @@
     },
   });
 
+  // axe-core (règle aria-required-parent, « critique »), balayage du 10/11 : les menus « Titre », « Soulignement », « Aa » et « Alignement » de la barre posaient des lignes `role="menuitem"` / `menuitemcheckbox`
+  // dans un `<span>` sans rôle. Un lecteur d'écran n'annonce un élément de menu que dans un menu : chaque ligne de menu de la page vit dans un conteneur `menu`, `menubar` ou `group`, qui a un nom.
+  cases.push({
+    id: 'toolbar_every_menu_row_sits_in_a_named_menu_or_group',
+    description: 'Chaque ligne de menu (`role` menuitem, menuitemcheckbox, menuitemradio) de la page vit dans un conteneur `menu`, `menubar` ou `group` qui porte un nom (aria-label ou aria-labelledby) : les menus Titre, Soulignement, Aa et Alignement le perdaient',
+    run: async () => {
+      const rows = Array.from(document.querySelectorAll('[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]'));
+      const label = el => el.getAttribute('aria-label') || (el.getAttribute('aria-labelledby') && (document.getElementById(el.getAttribute('aria-labelledby')) || {}).textContent) || '';
+      const orphans = [];
+      const unnamed = [];
+      for (const row of rows) {
+        const holder = row.parentElement && row.parentElement.closest('[role="menu"], [role="menubar"], [role="group"]');
+        if (!holder) orphans.push(row.id || row.textContent.trim().slice(0, 30));
+        // Un groupe masqué (les formats de diapositive d'un document) ne prend son nom qu'à son affichage (js/orientation-toggle.js) : seul un groupe visible doit en avoir un.
+        else if (!holder.closest('[hidden]') && !label(holder).trim()) unnamed.push((holder.id || holder.className) + ' > ' + (row.id || row.textContent.trim().slice(0, 30)));
+      }
+      // Les quatre menus qui n'avaient aucun rôle : leur nom est celui de leur étiquette visible (Titre / Soulignement / Caractère / Alignement).
+      const named = ['#v2-heading-flyout', '#v2-underline-flyout', '#v2-char-flyout', '#v2-align-group .v2-hover-flyout'].map(selector => {
+        const flyout = document.querySelector(selector);
+        const visible = flyout && flyout.querySelector(':scope > .v2-hover-flyout-label');
+        return { selector, role: flyout && flyout.getAttribute('role'), name: flyout && flyout.getAttribute('aria-label'), sameAsLabel: !!(flyout && visible && flyout.getAttribute('aria-label') === visible.textContent.trim()) };
+      });
+      const pass = rows.length >= 10 && orphans.length === 0 && unnamed.length === 0 && named.every(item => item.role === 'group' && item.sameAsLabel);
+      return { pass, notes: JSON.stringify({ rows: rows.length, orphans, unnamed, named }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.toolbarChrome = cases;
 })();
