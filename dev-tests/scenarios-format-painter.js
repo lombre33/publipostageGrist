@@ -324,6 +324,8 @@
       let error = null;
       let viaPainter = '';
       let viaBold = '';
+      // Le suivi de la mise en forme est éteint par défaut (41ad20a) : sans lui une mise en forme se pose sans trace. Il est allumé ici, remis à l'état d'avant à la fin.
+      Editor.setFormatTracking(true);
       try {
         viaBold = await traced(async () => { await selectText('cible'); document.getElementById('v2-btn-bold').click(); });
         viaPainter = await traced(async () => {
@@ -333,10 +335,48 @@
           await selectText('cible');
           FormatPainter.apply();
         });
-      } catch (e) { error = String(e && e.message || e); }
+      } catch (e) { error = String(e && e.message || e); } finally { Editor.setFormatTracking(false); PersonStore.remove('pp_track_format'); }
       finish();
       const pass = error === null && viaPainter === viaBold && /<del[^>]*><span[^>]*comment-mark[^>]*>cible<\/span><\/del>/.test(viaPainter) && /<ins[^>]*><strong><span[^>]*comment-mark[^>]*>cible<\/span><\/strong><\/ins>/.test(viaPainter);
       return { pass, notes: JSON.stringify({ error, viaPainter, viaBold }) };
+    },
+  });
+
+  cases.push({
+    id: 'fp_with_track_changes_on_but_format_tracking_off_paints_in_place_like_the_bold_button',
+    description: 'Suivi des modifications allumé mais « Suivre la mise en forme » éteint (le réglage de départ), le pinceau pose la mise en forme sur place, comme le bouton Gras : ni texte barré ni texte inséré, le commentaire reste sur le texte',
+    run: async (h) => {
+      const tracking = document.getElementById('v2-btn-track-changes');
+      const start = '<p><strong>Gras</strong> et <span class="comment-mark" data-comment-id="c1">cible</span> fin</p>';
+      const normalized = () => Editor.getHTML().replace(/data-id="\d+"/g, 'data-id="n"');
+      const traced = async paint => {
+        await load(start);
+        if (!Editor.isTrackChangesOn()) tracking.click();
+        await sleep(80);
+        await paint();
+        await sleep(80);
+        const html = normalized();
+        if (Editor.isTrackChangesOn()) tracking.click();
+        await sleep(80);
+        return html;
+      };
+      let error = null;
+      let viaPainter = '';
+      let viaBold = '';
+      Editor.setFormatTracking(false);
+      try {
+        viaBold = await traced(async () => { await selectText('cible'); document.getElementById('v2-btn-bold').click(); });
+        viaPainter = await traced(async () => {
+          await selectText('Gras');
+          FormatPainter.copy();
+          FormatPainter.arm(false);
+          await selectText('cible');
+          FormatPainter.apply();
+        });
+      } catch (e) { error = String(e && e.message || e); } finally { PersonStore.remove('pp_track_format'); }
+      finish();
+      const inPlace = /<strong><span[^>]*comment-mark[^>]*>cible<\/span><\/strong>/.test(viaPainter) && !/<ins|<del/.test(viaPainter);
+      return { pass: error === null && viaPainter === viaBold && inPlace, notes: JSON.stringify({ error, viaPainter, viaBold }) };
     },
   });
 

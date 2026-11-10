@@ -160,7 +160,9 @@ await page.evaluate(async () => {
 const badge = (t, c) => `<span class="var-badge" data-table="${t}" data-column="${c}" data-key="${t}.${c}"></span>`;
 const para = (t, n) => Array.from({ length: n }, (_, i) => `<p>${t} ligne ${i + 1} : ${badge('RlClients', i % 2 ? 'Nom' : 'Ville')} suivi de ${badge('RlEmployes', 'Nom')} sur le dossier ${badge('RlDossiers', 'Nom')}</p>`).join('');
 // Courrier 1 : de quoi remplir une page et demie, l'image de la pièce jointe (grande) au milieu. Courrier 2 : l'annexe.
-const letter1 = `<h1>Courrier de garde</h1>${para('Garde', 16)}<p><img class="editor-image" data-source="attachment" data-attachment-id="7" src="" style="width: 560px"></p>${para('Suite', 44)}`;
+// Une pièce jointe PAR phase (numéros 7, 8, 9) : le navigateur garde une image déjà chargée dans la page et la rend tout de suite la fois d'après (une seule requête pour tout le parcours, mesurée le 10/11 sous Chromium 153), ce
+// qui ôtait aux phases « image lente » et « très lente » leur lenteur. Trois courriers identiques à l'image près, chacun dans son macro-modèle : la première vue d'une pièce jointe, à chaque phase.
+const letterWith = attachment => `<h1>Courrier de garde</h1>${para('Garde', 16)}<p><img class="editor-image" data-source="attachment" data-attachment-id="${attachment}" src="" style="width: 560px"></p>${para('Suite', 44)}`;
 const letter2 = `<h1>Annexe</h1>${para('Annexe', 28)}`;
 
 async function makeTemplate(name, html, type) {
@@ -172,9 +174,14 @@ async function makeTemplate(name, html, type) {
     return r.id;
   }, { name, html, type });
 }
-const id1 = await makeTemplate('Courrier de garde', letter1);
 const id2 = await makeTemplate('Annexe', letter2);
-const macroId = await makeTemplate('Macro lente', JSON.stringify({ slots: [{ type: 'fixed', modeleId: id1 }, { type: 'fixed', modeleId: id2 }] }), 'macro');
+async function makeMacroFor(attachment, name) {
+  const letterId = await makeTemplate('Courrier de garde ' + attachment, letterWith(attachment));
+  return makeTemplate(name, JSON.stringify({ slots: [{ type: 'fixed', modeleId: letterId }, { type: 'fixed', modeleId: id2 }] }), 'macro');
+}
+const macroId = await makeMacroFor(7, 'Macro lente');
+const macroSlowId = await makeMacroFor(8, 'Macro lente B');
+const macroLateId = await makeMacroFor(9, 'Macro lente C');
 
 // La liste des modèles à la vraie souris : ouvrir l'arbre, cliquer la ligne.
 async function pickTemplate(name, id) {
@@ -255,8 +262,10 @@ await closeReader();
 
 // === Image un peu lente (sous la limite d'attente de la Lecture) : la première mise en page est déjà la bonne ===
 imageDelayMs = 700;
-const t0 = Date.now();
+check('image lente : le macro-modèle à la pièce jointe neuve s\'ouvre dans la liste des modèles', await pickTemplate('Macro lente B', macroSlowId));
+const hitsBeforeSlow = imageHits;
 const slow = await openReader();
+check('image lente : la pièce jointe est demandée au réseau (requête neuve, pas l\'image d\'une phase d\'avant)', imageHits > hitsBeforeSlow, { before: hitsBeforeSlow, after: imageHits });
 check('image lente : la Lecture attend l\'image avant de se mettre en page (image arrivée à l\'affichage)', slow.first.imgComplete && slow.appearedAfterMs >= 600, { appearedAfterMs: slow.appearedAfterMs, first: slow.first });
 check('image lente : coupures identiques à la référence dès l\'affichage, aucune ligne coupée en deux',
   JSON.stringify(slow.first.cuts) === JSON.stringify(reference.cuts) && slow.first.straddle.length === 0 && slow.first.height === reference.height, { first: slow.first, reference });
@@ -266,8 +275,10 @@ await closeReader();
 
 // === Image très lente (au-delà de la limite) : affichée sans elle, puis les coupures sont refaites à son arrivée ===
 imageDelayMs = 3200;
-const veryHitsBefore = imageHits;
+check('image très lente : le macro-modèle à la pièce jointe neuve s\'ouvre dans la liste des modèles', await pickTemplate('Macro lente C', macroLateId));
+const hitsBeforeLate = imageHits;
 const late = await openReader();
+check('image très lente : la pièce jointe est demandée au réseau (requête neuve)', imageHits > hitsBeforeLate, { before: hitsBeforeLate, after: imageHits });
 check('image très lente : la Lecture s\'affiche sans attendre l\'image indéfiniment (moins de 2,6 s)', late.appearedAfterMs < 2600 && !late.first.imgComplete, { appearedAfterMs: late.appearedAfterMs, first: late.first });
 const lateFinal = await untilStable(10000);
 check('image très lente : une fois l\'image arrivée, coupures identiques à la référence, aucune ligne coupée en deux',
