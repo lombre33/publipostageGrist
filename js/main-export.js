@@ -831,7 +831,11 @@ const MainExport = (function () {
       const blankJobs = [];
       const doneRows = new Set();
       const failedRows = new Set();
+      // Un lot de documents rapides (Word, Excel, Markdown, HTML : une dizaine de ms par ligne, les lectures d'une même passe étant gardées en mémoire) ne rendait jamais la main : toute la boucle tenait la page
+      // (4,7 s pour 500 documents Word), « n/500 » ne se dessinait pas et aucun clic ne passait. Après 40 ms de travail d'affilée la page respire, et se repeint au moins toutes les 250 ms.
+      const pace = WorkPacer.create();
       for (let i = 0; i < jobs.length; i++) {
+        await pace();
         const { row, variant, source } = jobs[i];
         setStatus(I18n.t(cfg.progress, { current: i + 1, total: jobs.length }));
         const valueName = variant && variant.label ? sanitizeFilenamePart(variant.label) : '';

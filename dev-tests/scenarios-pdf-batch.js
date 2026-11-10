@@ -2167,6 +2167,61 @@
     },
   });
 
+  // Un lot de documents rapides ne tenait la page que d'un bloc (10/11, banc de charge : 500 documents Word = 4,7 s sans une image ni un minuteur, « n/500 » jamais dessiné, aucun clic possible) :
+  // la génération d'un document Word ne rend jamais la main et les lectures d'une même passe sont gardées en mémoire. La boucle de js/main-export.js:runBatchJobs fait maintenant une pause (js/work-pacer.js).
+  cases.push({
+    id: 'pdfbatch_docx_zip_gives_the_page_back_between_rows_instead_of_holding_it_to_the_end',
+    description: 'Pendant un lot de 300 documents Word, la page respire entre deux lignes : un minuteur de 10 ms ne reste jamais plus de 400 ms sans passer (avant : un seul arrêt de la durée du lot, 2,3 s) et la progression « n/300 » se dessine (une image au moins toutes les 600 ms) ; le lot va quand même jusqu\'au bout, un .docx par ligne',
+    run: async (h) => {
+      const many = Array.from({ length: 300 }, (_, index) => 'Client ' + String(index + 1).padStart(3, '0'));
+      await h.resetEditor();
+      const stub = window.__gristStub;
+      stub.setVariables(TABLE, { Nom: 'Text' });
+      stub.setRows(TABLE, many.map((Nom, index) => ({ id: index + 1, Nom })));
+      await GristAPI.refreshSchema();
+      stub.fireRecord({ id: 1, Nom: many[0] }, TABLE);
+      await h.sleep(50);
+      Editor.setHTML(`<p>Bonjour ${badge('Nom')}, voici votre courrier.</p><p>Cordialement.</p>`);
+      Editor.setHeaderFooterData(NO_HF);
+      await h.sleep(80);
+      // Les ressources du Word sont lues une première fois avant la mesure : le premier lot paie le chargement de la bibliothèque, qui n'est pas ce que ce cas regarde.
+      await clickExportRow(h, 'v2-btn-export-docx-batch');
+      let last = performance.now();
+      let longestGap = 0;
+      const frameTimes = [];
+      let frameRequest = 0;
+      const beat = setInterval(() => { const now = performance.now(); longestGap = Math.max(longestGap, now - last); last = now; }, 10);
+      const countFrames = () => { frameTimes.push(performance.now()); frameRequest = requestAnimationFrame(countFrames); };
+      let res = null;
+      let startedAt = 0;
+      let endedAt = 0;
+      try {
+        frameRequest = requestAnimationFrame(countFrames);
+        last = performance.now();
+        startedAt = last;
+        res = await clickExportRow(h, 'v2-btn-export-docx-batch');
+        endedAt = performance.now();
+      } finally {
+        clearInterval(beat);
+        cancelAnimationFrame(frameRequest);
+        stub.setRows(TABLE, NAMES.map((Nom, index) => ({ id: index + 1, Nom })));
+      }
+      const dl = res.downloads[0];
+      if (res.downloads.length !== 1 || !dl) return { pass: false, notes: 'téléchargements=' + res.downloads.length + ' états=' + JSON.stringify(res.statuses.slice(-3)) };
+      const zip = await JSZip.loadAsync(await dl.blob.arrayBuffer());
+      const files = Object.keys(zip.files).filter(name => /\.docx$/.test(name)).length;
+      let longestFrameGap = 0;
+      for (let index = 1; index < frameTimes.length; index++) longestFrameGap = Math.max(longestFrameGap, frameTimes[index] - frameTimes[index - 1]);
+      if (frameTimes.length) longestFrameGap = Math.max(longestFrameGap, frameTimes[0] - startedAt, endedAt - frameTimes[frameTimes.length - 1]);
+      else longestFrameGap = endedAt - startedAt;
+      const problems = [];
+      if (files !== many.length) problems.push('.docx dans l\'archive=' + files + ' au lieu de ' + many.length);
+      if (longestGap > 400) problems.push('la page est restée ' + Math.round(longestGap) + ' ms sans répondre (400 au plus)');
+      if (longestFrameGap > 600) problems.push('aucune image pendant ' + Math.round(longestFrameGap) + ' ms (600 au plus)');
+      return { pass: !problems.length, notes: problems.length ? problems.join(' | ') : 'ok : lot de ' + Math.round(endedAt - startedAt) + ' ms, le plus long arrêt ' + Math.round(longestGap) + ' ms, la plus longue attente d\'une image ' + Math.round(longestFrameGap) + ' ms' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pdfBatch = cases;
 })();
