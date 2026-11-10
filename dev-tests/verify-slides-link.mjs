@@ -55,11 +55,11 @@ const inPanel = r => !!r && r.width > 0 && r.left >= -0.5 && r.top >= -0.5 && r.
 // barre d'outils).
 function toolsOf(page) {
   const reach = async (c) => { await page.mouse.move(c.x - 10, c.y); await page.mouse.move(c.x, c.y, { steps: 2 }); await sleep(80); };
-  // Une miniature que sa liste ne montre pas entière : la molette, sur la liste, l'y amène d'abord.
+  // Une miniature (ou une ligne du menu ⋯, qui défile quand il est plus haut que le panneau) que sa liste ne montre pas entière : la molette, sur la liste, l'y amène d'abord.
   const showInList = async (selector, index) => {
     const need = await page.evaluate(([sel, i]) => {
       const el = document.querySelectorAll(sel)[i];
-      const list = el && el.closest('.pp-slide-list, .pp-slide-import-list');
+      const list = el && el.closest('.pp-slide-list, .pp-slide-import-list, .pp-slide-menu.visible');
       if (!list) return null;
       const r = el.getBoundingClientRect();
       const l = list.getBoundingClientRect();
@@ -87,10 +87,21 @@ function toolsOf(page) {
   const click = async (selector, index = 0, settle = 250) => { const c = await hover(selector, index); await page.mouse.click(c.x, c.y); await sleep(settle); return c; };
   // La ligne `label` du menu ⋯ de la miniature `index` : survol de la miniature, clic sur son « ⋯ », puis sur la ligne.
   const openMenu = async (index) => { await hover('.pp-slide-strip .pp-slide-thumb', index); await click('.pp-slide-strip .pp-slide-more', index, 300); };
-  const menuRow = async (label) => {
+  const menuRowAt = async (label) => {
     const at = await page.evaluate(text => Array.from(document.querySelectorAll('.pp-slide-menu.visible [data-action]')).findIndex(b => b.textContent === text && b.getBoundingClientRect().width > 0), label);
     if (at < 0) throw new Error('ligne introuvable : ' + label);
-    await click('.pp-slide-menu.visible [data-action]', at, 500);
+    return at;
+  };
+  const menuRow = async (label) => { await click('.pp-slide-menu.visible [data-action]', await menuRowAt(label), 500); };
+  // La souris sur la ligne `label` du menu ⋯ (la molette l'y amène si le menu défile) ; ce que le point sous la souris montre : la ligne même, et si elle tient entière dans le panneau.
+  const menuRowUnderMouse = async (label) => {
+    const c = await hover('.pp-slide-menu.visible [data-action]', await menuRowAt(label));
+    return page.evaluate(([text, x, y]) => {
+      const row = Array.from(document.querySelectorAll('.pp-slide-menu.visible [data-action]')).find(b => b.textContent === text && b.getBoundingClientRect().width > 0);
+      const r = row.getBoundingClientRect();
+      const under = document.elementFromPoint(x, y);
+      return { label: text, under: !!under && (under === row || row.contains(under)), top: Math.round(r.top), bottom: Math.round(r.bottom), inPanel: r.top >= -0.5 && r.bottom <= innerHeight + 0.5 };
+    }, [label, c.x, c.y]);
   };
   // Le texte `text` d'un bloc de l'éditeur (son texte entier), amené à l'écran : un clic sur sa première lettre (la forme posée sur la page, à droite, ne la couvre pas), puis Fin.
   const clickText = async (text) => {
@@ -115,7 +126,7 @@ function toolsOf(page) {
   const press = async (key) => { await page.keyboard.press(key); await sleep(220); };
   const type = async (text) => { await page.keyboard.type(text, { delay: 30 }); await sleep(250); };
   const leave = async () => { await page.mouse.move(WIDTH - 40, HEIGHT - 60); await sleep(200); };
-  return { hover, click, openMenu, menuRow, clickText, press, type, leave };
+  return { hover, click, openMenu, menuRow, menuRowUnderMouse, clickText, press, type, leave };
 }
 
 // Ce que montrent l'éditeur et la bande : le texte de chaque diapositive, son repère (le lien), la forme (sa page), les pastilles (montrée, info-bulle, couleur des versions qui
@@ -360,6 +371,15 @@ async function run(lang, colorScheme) {
 
   // --- « Suit la source » : la diapositive refuse la frappe ; le reste s'écrit.
   await a.openMenu(2);
+  // Quinze lignes (421 px, resserrées) sont plus hautes qu'un panneau de 400 px : le menu défile au lieu de perdre son bas. La molette amène la dernière ligne (« Détacher ») sous la souris, entière
+  // dans le panneau, puis la première ; le menu reste dans le panneau tout du long. (Posé ici, pas à la première ouverture : la suite de celle-ci dépend du tic de l'enregistrement automatique,
+  // que des secondes de plus feraient passer avant « elle reste à envoyer ».)
+  const firstLabel = await page.evaluate(() => Array.from(document.querySelectorAll('.pp-slide-menu.visible [data-action]')).find(b => b.getBoundingClientRect().width > 0).textContent);
+  const lastRow = await a.menuRowUnderMouse(T.links[4]);
+  const lastRect = await page.evaluate(() => { const m = document.querySelector('.pp-slide-menu.visible'); const r = m.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, scrolls: m.scrollHeight > m.clientHeight + 1, scrollTop: Math.round(m.scrollTop), horizontal: m.scrollWidth > m.clientWidth + 1 }; });
+  const firstRow = await a.menuRowUnderMouse(firstLabel);
+  check(tag + 'le menu ⋯ défile quand il est plus haut que le panneau : « ' + T.links[4] + ' » puis « ' + firstLabel + ' » se posent sous la souris, entières dans le panneau, sans défilement de côté',
+    lastRow.under && lastRow.inPanel && firstRow.under && firstRow.inPanel && inPanel(lastRect) && !lastRect.horizontal && (!lastRect.scrolls || lastRect.scrollTop > 0), { lastRow, firstRow, lastRect });
   await watchStatus(page);
   await a.menuRow(T.links[1]);
   s = await state(page);
