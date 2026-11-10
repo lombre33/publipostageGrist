@@ -569,6 +569,22 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const stale = cited.filter(hash => !inline.has(hash));
   check('politique : aucune empreinte de script-src ne correspond à plus aucun script en ligne (celle d\'un script modifié est à remplacer, pas à garder)', stale.length === 0, '\n    à retirer de script-src : ' + stale.join(' '));
 
+  // (a bis) Le préchargement : la politique est une balise <meta>, donc Chromium ne lit plus la page à l'avance et demande les 213 scripts un par un (un aller-retour chacun : 8,6 s à 30 ms de latence contre 1,0 s
+  // avec le bloc de `<link rel="preload" as="script">` écrit par outils/precharger-scripts.mjs). Le bloc doit nommer chaque script, avec sa version, dans l'ordre de la page, et rien d'autre.
+  {
+    const { scriptsOf, isCurrent, START, END } = await import('../outils/precharger-scripts.mjs');
+    const scripts = scriptsOf(raw);
+    const block = raw.includes(START) && raw.includes(END) ? raw.slice(raw.indexOf(START), raw.indexOf(END)) : '';
+    const preloaded = [...block.matchAll(/<link rel="preload" as="script" href="([^"]+)">/g)].map(m => m[1]);
+    const missing = scripts.filter(src => !preloaded.includes(src));
+    const extra = preloaded.filter(src => !scripts.includes(src));
+    check('chargement : index.html précharge (`<link rel="preload" as="script">`, bloc écrit par outils/precharger-scripts.mjs) chacun de ses scripts, avec la même version, une fois chacun, dans l\'ordre de la page, avant la fin de <head> - sans lui les scripts arrivent un par un (+8 s à 30 ms de latence)',
+      scripts.length > 150 && missing.length === 0 && extra.length === 0 && preloaded.join('|') === scripts.join('|') && isCurrent(raw) && raw.indexOf(END) < raw.indexOf('</head>'),
+      `lancer node outils/precharger-scripts.mjs ; manquent : ${missing.join(', ') || 'aucun'} ; en trop : ${extra.join(', ') || 'aucun'}`);
+    check('chargement : le bloc de préchargement vient APRÈS la balise <meta> de la politique (un `<link>` qui la précède serait chargé hors d\'elle), et aucun script de la page ne porte `async` ni `defer` (l\'ordre d\'exécution est celui de la page)',
+      raw.indexOf(START) > page.indexOf('<meta http-equiv="Content-Security-Policy"') && !/<script\b[^>]*\b(?:async|defer)\b/i.test(page));
+  }
+
   // (b) Chaque adresse de bibliothèque que le widget charge est permise ; (c) chaque adresse permise sert encore. Une source avec un chemin est exacte, une source sans chemin ouvre tout son hôte (esm.sh).
   const permits = (source, address) => {
     const s = new URL(source);

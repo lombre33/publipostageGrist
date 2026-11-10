@@ -220,7 +220,7 @@ async function traceCases(page, tag) {
   check(tag + 'une fonction n\'est jamais surveillée deux fois, et les fonctions d\'Editor le sont (Editor.setHTML)', watched.twice === false && watched.editorWrapped, watched);
   const report = await page.evaluate(() => PerfTrace.report());
   check(tag + 'le rapport est un texte lisible : titre, navigateur, machine (cœurs, mémoire), document, arrêts comptés, chronologie avec les étapes de l\'import et l\'arrêt de 700 ms',
-    /^Rapport de fluidité de Publipostage\+/.test(report) && /Navigateur : /.test(report) && /Machine : \d+ cœurs/.test(report) && /Mémoire JS maintenant : /.test(report) && /Document : éléments de la page \d+/.test(report) && /Arrêts de la page .* : [1-9]/.test(report)
+    /^Rapport de fluidité de Publipostage\+/.test(report) && /Navigateur : /.test(report) && /Machine : \d+ cœurs/.test(report) && /Mémoire JS maintenant : /.test(report) && /Chargement de la page : DOMContentLoaded \d+ ms, page chargée \d+ ms, \d+ fichiers lus/.test(report) && /Document : éléments de la page \d+/.test(report) && /Arrêts de la page .* : [1-9]/.test(report)
     && /Chronologie/.test(report) && /import PowerPoint : en place/.test(report) && /ARRÊT de la page : 0\.[5-9] s|ARRÊT de la page : 1\.\d s/.test(report) && /Essai\.slow : \d+ ms/.test(report), report.slice(0, 900));
   const summary = await page.evaluate(() => PerfTrace.summary('import PowerPoint'));
   check(tag + 'le résumé d\'une ligne (à coller dans un autre rapport) donne les arrêts, la mémoire et les étapes de l\'import', /^arrêts de la page \d+ \(.*\), longues tâches \d+/.test(summary) && /import PowerPoint : lecture à /.test(summary) && /import PowerPoint : en place à /.test(summary) && !/\n/.test(summary), summary);

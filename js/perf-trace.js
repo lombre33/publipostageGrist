@@ -148,6 +148,15 @@ const PerfTrace = (function () {
       return 'éléments de la page ' + document.getElementsByTagName('*').length + ', images du document ' + images.length + ' (' + Math.round(imageChars / 104857.6) / 10 + ' Mo d\'adresses de données), diapositives en bande ' + document.querySelectorAll('.pp-slide-item').length;
     } catch (e) { return 'document illisible'; }
   }
+  // Le chargement de la page, tel que le navigateur le chiffre (marche dans Firefox aussi) : de quoi mesurer le préchargement des scripts (outils/precharger-scripts.mjs) chez la personne.
+  function loadFacts() {
+    try {
+      const navigation = performance.getEntriesByType('navigation')[0];
+      if (!navigation) return 'non donné par ce navigateur';
+      const files = performance.getEntriesByType('resource').filter(entry => entry.initiatorType === 'script' || entry.initiatorType === 'link' || entry.initiatorType === 'css').length;
+      return 'DOMContentLoaded ' + Math.round(navigation.domContentLoadedEventEnd) + ' ms, page chargée ' + Math.round(navigation.loadEventEnd) + ' ms, ' + files + ' fichiers lus (scripts et feuilles)';
+    } catch (e) { return 'illisible'; }
+  }
   function report() {
     const nav = navigator;
     const heap = heapMb();
@@ -157,6 +166,7 @@ const PerfTrace = (function () {
       'Navigateur : ' + nav.userAgent,
       'Machine : ' + (nav.hardwareConcurrency || '?') + ' cœurs, mémoire annoncée ' + (nav.deviceMemory ? nav.deviceMemory + ' Go' : 'inconnue') + ', écran ' + screen.width + 'x' + screen.height + ' à ' + (window.devicePixelRatio || 1) + ', fenêtre ' + innerWidth + 'x' + innerHeight,
       'Mémoire JS maintenant : ' + (heap === null ? 'non donnée par ce navigateur' : heap + ' Mo'),
+      'Chargement de la page : ' + loadFacts(),
       'Document : ' + documentFacts(),
       'Arrêts de la page (retard de ' + GAP_MS + ' ms ou plus) : ' + totals.gaps + ', ' + seconds(totals.blockedMs) + ' au total, le plus long ' + seconds(totals.maxGapMs) + ' ; longues tâches ' + totals.longTasks + ' ; fonctions lentes ' + totals.slowCalls,
     ];
