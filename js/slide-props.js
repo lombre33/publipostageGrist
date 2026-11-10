@@ -80,8 +80,6 @@ const SlideProps = (function () {
   const NOTES_JOIN = '\n\n';        // ce qui sépare les notes de deux diapositives réunies
   const DURATION = { min: 100, max: 5000, step: 50 };
   const DOM_ATTRS = { transition: 'data-trans', from: 'data-trans-from', dur: 'data-trans-dur', bg: 'data-bg', notes: 'data-notes', hidden: 'data-hidden', advance: 'data-advance', anchorId: 'data-anchor', anchorName: 'data-anchor-name', section: 'data-section' };
-  // Ce que règle la fenêtre « Transition… » : un effet se pose en entier (sa sorte, son côté, sa durée), le fond d'une diapositive n'y est pour rien, et inversement.
-  const TRANSITION_KEYS = ['transition', 'from', 'dur'];
   // Le repère ne prend aucune place : la pagination le lit comme un bloc de hauteur nulle à sa place (comme celui d'une diapositive liée, js/slide-links.js). Celui qui porte un fond
   // ne rogne rien (`overflow`) : son fond est un pseudo-élément qui sort de lui (css/free-frame.css), et la couleur qu'il lit (`--pp-slide-bg`) est écrite avec lui.
   const STYLE = 'display:block;height:0;margin:0;padding:0;border:0;overflow:hidden';

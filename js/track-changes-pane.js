@@ -323,5 +323,5 @@ const TrackChangesPane = (function () {
     window.addEventListener('resize', () => { if (state.open) layout(); });
   }
 
-  return { wireEditor, open, closePane, toggle, isOpen: () => state.open, refreshNow: refresh };
+  return { wireEditor, open, closePane, toggle, isOpen: () => state.open };
 })();

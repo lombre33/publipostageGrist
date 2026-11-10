@@ -262,10 +262,6 @@ const ShapeGeometry = (function () {
     if (shape.type === 'polygon') return { type: 'polygon', points: inset(shape.points, half).map(p => [round(p[0]), round(p[1])]), half };
     return Object.assign({}, shape, { half });
   }
-  // Le trait à dessiner « au milieu » (comme le fait un PDF ou un Word) pour qu'il tienne dans la boîte : le contour rentré de la moitié de l'épaisseur. Rend le contour, même type.
-  function strokeOutline(kind, w, h, lineWidth) {
-    return outlineInset(kind, w, h, lineWidthFor(w, h, lineWidth) / 2);
-  }
 
   // Le sens d'une ligne : '', 'h', 'v' ou 'hv' (tout autre texte est lu pour ce qu'il contient : « vh » vaut « hv »).
   function flipOf(raw) {
@@ -746,7 +742,7 @@ const ShapeGeometry = (function () {
   }
 
   return {
-    KINDS, TABS, TEXT, LINE, MAX_LINE_PT, BUBBLE_BODY, GRAB_PT, DASHES, COMPOUNDS, END_TYPES, END_SIZES, isKind, isPreset, drawnByPresets, kindOf, defaults, outline, inset, look, strokeOutline, outlineInset, lineWidthFor, textInsets, ROUND_RATIO, flipOf, endOf, endSizeOf, lineEnds,
+    KINDS, TABS, TEXT, LINE, MAX_LINE_PT, BUBBLE_BODY, GRAB_PT, DASHES, COMPOUNDS, END_TYPES, END_SIZES, isKind, isPreset, drawnByPresets, kindOf, defaults, outline, inset, look, outlineInset, lineWidthFor, textInsets, ROUND_RATIO, flipOf, endOf, endSizeOf, lineEnds,
     endPolygon, lineOutline, lineLook, lineIsPlain, dashOf, dashPairs, capOf, cmpdOf, compoundBands, dashArray, dashPhase, dashDrawingMl, strokeArt, lineParts, lineArt, geoText, presetBox, presetLayout, presetFrame, presetPlace, presetSvg, presetArt, presetIcon,
   };
 })();

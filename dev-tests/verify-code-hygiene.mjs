@@ -2020,4 +2020,28 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('écritures : seul js/template-pack.js supprime une table, et jamais celle d\'un autre (le retour arrière de ce qu\'il vient de créer) ; rien ne renomme ni ne supprime une colonne de la personne', JSON.stringify(removers) === JSON.stringify(['js/template-pack.js']), removers.join(' '));
 }
 
+// ============================================================================
+// 37. Le code mort retiré ne revient pas (audit de maintenance du 10/11)
+// ============================================================================
+// Un balayage des modules (ESLint + une lecture de chaque clé que leur objet de retour expose) a relevé dix noms que plus rien ne lisait : trois constantes, une aide, quatre fonctions de modules et
+// deux clés d'objet de retour. Ils sont retirés ; si l'un d'eux revient dans le code livré (js/, extensions/, index.html), c'est qu'on l'a réécrit sans en avoir besoin, ou qu'on a recopié un ancien état.
+{
+  const DEAD = {
+    BUILT_IN_PAGE_MM_MAX: 'js/pptx-import.js',
+    MODIFIER_ORDER: 'js/shortcuts.js',
+    TRANSITION_KEYS: 'js/slide-props.js',
+    htmlAttrs: 'js/markdown-export.js',
+    elementFor: 'js/anchors.js',
+    strokeOutline: 'js/shape-geometry.js',
+    customParts: 'js/shape-presets.js',
+    slideIdsOf: 'js/slide-links.js',
+    gestureCount: 'js/table-consent.js',
+    refreshNow: 'js/track-changes-pane.js',
+  };
+  const code = [...jsFiles.map(rel => [rel, noCommentsJs(read(rel))]), ['index.html', read('index.html')]];
+  const back = Object.keys(DEAD).filter(name => code.some(([, text]) => new RegExp('(?<![\\w$])' + name + '(?![\\w$])').test(text)));
+  check('code mort : dix noms retirés de js/ n\'y reviennent pas (BUILT_IN_PAGE_MM_MAX, MODIFIER_ORDER, TRANSITION_KEYS, htmlAttrs, elementFor, strokeOutline, customParts, slideIdsOf, gestureCount, refreshNow)', back.length === 0,
+    back.map(name => `${name} (retiré de ${DEAD[name]})`).join(' ; '));
+}
+
 summarizeAndExit();

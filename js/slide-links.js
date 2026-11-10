@@ -981,11 +981,6 @@ const SlideLinks = (function () {
     if (editor) linkedSlides(editor.state.doc).forEach(({ attrs }) => { if (String(attrs.linkModel) === String(id)) found.add(attrs.linkSlide); });
     return found;
   }
-  // Le numéro de diapositive source de chaque diapositive de `html` (le texte d'une présentation), dans l'ordre ; null pour une diapositive sans numéro.
-  function slideIdsOf(editor, html) {
-    if (!libs || !editor) return [];
-    return parseHtml(editor, html).slides.map(slide => (slide.tag && slide.tag.node.attrs.slideId) || null);
-  }
 
   // ---- Les garde-fous ----------------------------------------------------------------------------------------------------------------------------------
 
@@ -1124,7 +1119,7 @@ const SlideLinks = (function () {
 
   return {
     NODE, CLASS, ATTRS, MODES, configure, wire, attrsOfEl, domAttrs, strip, forOutput, createExtension, isSyncTransaction, follow, hasPending, prepareSend, noteKnown, adopt,
-    infoAt, infoList, markSync, blockedReason, setMode, detach, versionsAt, resolve, anchorSource, tagImported, linkedFrom, slideIdsOf, hashOf, liveChannels, liveHashes, liveOut, liveIn,
+    infoAt, infoList, markSync, blockedReason, setMode, detach, versionsAt, resolve, anchorSource, tagImported, linkedFrom, hashOf, liveChannels, liveHashes, liveOut, liveIn,
     wantsRepublish: () => republish.size > 0,
     // Ce que js/slide-copies.js (la copie en texte d'une diapositive, dans un document) emprunte au module : la lecture d'une présentation et de ses diapositives, leurs empreintes, ce qui passe
     // d'un texte à l'autre. Une fonction, pour que `libs` soit lu à l'usage (il est posé à la création de l'éditeur).

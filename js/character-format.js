@@ -24,7 +24,6 @@
 // La Lecture et l'éditeur le montrent par le style. Le PDF (js/pdf-export.js), le Word (js/docx-export.js) et le PowerPoint (js/pptx-export.js) le lisent par `spacingPt` et `smallCapsOf` ;
 // l'import (js/pptx-import.js) l'écrit par `declarations`. Le PDF n'a pas de petites capitales : il les dessine (`smallCapsPieces`), comme le navigateur - des majuscules à 70 % de la taille.
 const CharacterFormat = (function () {
-  const el = Dom.el;
   const SPACING = { min: -50, max: 500, digits: 2 };
   const SMALL_CAPS = 'small-caps';
   // Le navigateur dessine une petite capitale à 70 % de la taille de la majuscule quand la police n'a pas les siennes.

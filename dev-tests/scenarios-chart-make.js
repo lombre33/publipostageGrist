@@ -4,7 +4,7 @@
 // le document de Grist est celui de dev-tests/scenarios-chart-block.js (`window.__chartFixture` : les clients, leurs ventes, la règle de liaison). Cinq parties :
 //  1) la DÉFINITION et le DESSIN : ce que le widget garde d'un graphique créé, l'option d'ECharts de chaque forme (barres, courbe, aire, nuage, secteurs, anneau, radar ; lot 6 : entonnoir, cascade, jauge), l'image PNG réellement tracée ;
 //  2) les LIGNES : les colonnes lues par leur identifiant dans l'ordre de la table, les lignes liées, la table ou la colonne disparue, une ligne sans valeur ;
-//  3) l'ÉDITEUR : la ligne du menu « Ajouter une image » (celui des blocs garde ses neuf lignes), son grisé, la fenêtre (formes, table, colonnes, lignes, aperçu), le nœud (`data-chart-spec`, jamais d'image),
+//  3) l'ÉDITEUR : la ligne du menu « Ajouter une image » (celui des blocs garde ses dix lignes), son grisé, la fenêtre (formes, table, colonnes, lignes, aperçu), le nœud (`data-chart-spec`, jamais d'image),
 //     le cadre dessiné, la modification, la relecture du modèle, la définition illisible, l'anglais, le mode lecture seule ;
 //  4) les RENDUS : Lecture et PDF montrent la même image que l'éditeur ; le Word, le PowerPoint et l'Excel sont des graphiques natifs (lots 3 à 5 : suite « chartOffice ») ;
 //  5) l'ASPECT (lot 2) : le titre, les cinq jeux de couleurs, la couleur de chaque série, les valeurs affichées, les barres mêlées à une courbe ; leur définition, leur dessin, l'onglet « Aspect » de la fenêtre,
@@ -720,8 +720,8 @@
   const drawnSrc = () => { const view = frameView(); const img = frameImg(); return view && img && view.classList.contains('editor-image-chart-drawn') ? (img.getAttribute('src') || '') : ''; };
 
   cases.push({
-    id: 'chart_make_row_is_in_the_image_menu_with_its_icon_and_the_blocks_menu_keeps_its_nine_rows',
-    description: 'La ligne « Créer un graphique… » est dans le menu de l\'Image (« Ajouter une image »), sous « Image depuis une variable… », avec une icône ; c\'est un vrai bouton, active avec l\'extension, et elle ouvre la fenêtre ; le menu « Lien et blocs de contenu » garde ses neuf lignes (il n\'en tient pas une de plus dans un panneau de 400 px) et la ligne « Graphique de la page… » reste la sienne ; aucune nouvelle icône dans la barre',
+    id: 'chart_make_row_is_in_the_image_menu_with_its_icon_and_the_blocks_menu_keeps_its_ten_rows',
+    description: 'La ligne « Créer un graphique… » est dans le menu de l\'Image (« Ajouter une image »), sous « Image depuis une variable… », avec une icône ; c\'est un vrai bouton, active avec l\'extension, et elle ouvre la fenêtre ; le menu « Lien et blocs de contenu » garde ses dix lignes (celle de la vidéo, posée le 07/11, y a pris place ; le menu défile dans un panneau de 400 px) et la ligne « Graphique de la page… » reste la sienne ; aucune nouvelle icône dans la barre',
     run: async (h) => {
       await seed(h);
       await setDoc(h, '<p>Texte</p>');
@@ -739,7 +739,7 @@
       return {
         pass: first.label === 'Créer un graphique…' && first.aria === 'Créer un graphique' && first.tag === 'BUTTON' && !first.greyed && first.disabled === 'false' && flyout.contains(row()) && !document.getElementById('v2-blocks-flyout').contains(row())
           && same(rows.slice(1), ['v2-btn-image-from-variable', 'v2-btn-chart-make']) && !!icon && icon.querySelectorAll('path').length > 0
-          && blocks.length === 9 && blocks.indexOf('v2-btn-chart') === 7 && blocks[8] === 'v2-btn-slide-text' && !blocks.includes('v2-btn-chart-make') && opened && title === 'Créer un graphique' && buttons > 0,
+          && blocks.length === 10 && blocks.indexOf('v2-btn-chart') === 7 && blocks[8] === 'v2-btn-video' && blocks[9] === 'v2-btn-slide-text' && !blocks.includes('v2-btn-chart-make') && opened && title === 'Créer un graphique' && buttons > 0,
         notes: JSON.stringify({ first, rows, blocks, opened, title }),
       };
     },

@@ -537,9 +537,6 @@ const MarkdownExport = (function () {
 
   // Le HTML d'un morceau qu'aucun Markdown n'écrit (un tableau aux cases fusionnées ou chargées) : les balises de structure et de mise en forme, des attributs en nombre
   // réduit, jamais de ligne vide (qui ferait finir le bloc HTML), les sauts de ligne d'un code en &#10;.
-  function htmlAttrs(el, names) {
-    return names.map(name => (el.hasAttribute(name) && el.getAttribute(name) ? ' ' + name + '="' + escapeAttr(el.getAttribute(name)) + '"' : '')).join('');
-  }
   function htmlOf(node, ctx) {
     // « {{ » du texte n'est pas une variable : une accolade en référence de caractère (la barre oblique inverse ne protège rien dans du HTML).
     if (node.nodeType === Node.TEXT_NODE) return escapeHtml(collapse(node.nodeValue)).replace(/\{\{/g, '&#123;{');

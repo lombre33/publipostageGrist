@@ -69,17 +69,25 @@
     run: async (h) => {
       await h.resetEditor();
       await disableTrackChangesIfOn(h);
+      // Les transitions sont coupées le temps de la mesure : le fond du bouton et la couleur de la ligne sont en transition, et une lecture juste après le clic rend la valeur de départ quand la machine
+      // est chargée (trois coureurs en parallèle : « bgOff = bgOn = transparent », vert seul ; relevé de la passe complète du 10/11).
+      const noMotion = document.createElement('style');
+      noMotion.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+      document.head.appendChild(noMotion);
       // Menu fermé on ne voit que le bouton : c'est son fond qui dit que le suivi est en marche ; la ligne, elle, se lit à sa couleur et à son poids.
       const trigger = document.getElementById('v2-btn-collab');
       const look = () => ({ bg: getComputedStyle(trigger).backgroundColor, color: getComputedStyle(toggleBtn()).color, weight: getComputedStyle(toggleBtn()).fontWeight });
-      const off = look();
-      await h.clickButton('v2-btn-track-changes');
-      const onNow = Editor.isTrackChangesOn();
-      const activeNow = toggleBtn().classList.contains('is-active') && trigger.classList.contains('is-active');
-      const on = look();
-      await h.clickButton('v2-btn-track-changes');
-      const offAgain = !Editor.isTrackChangesOn();
-      const inactiveAgain = !toggleBtn().classList.contains('is-active') && !trigger.classList.contains('is-active');
+      let off, onNow, activeNow, on, offAgain, inactiveAgain;
+      try {
+        off = look();
+        await h.clickButton('v2-btn-track-changes');
+        onNow = Editor.isTrackChangesOn();
+        activeNow = toggleBtn().classList.contains('is-active') && trigger.classList.contains('is-active');
+        on = look();
+        await h.clickButton('v2-btn-track-changes');
+        offAgain = !Editor.isTrackChangesOn();
+        inactiveAgain = !toggleBtn().classList.contains('is-active') && !trigger.classList.contains('is-active');
+      } finally { noMotion.remove(); }
       const rendered = on.bg !== off.bg && on.color !== off.color && on.weight !== off.weight;
       return {
         pass: onNow && activeNow && rendered && offAgain && inactiveAgain,
@@ -2977,6 +2985,10 @@
     id: 'trackchanges_list_names_the_person_at_the_screen_for_a_suggestion_typed_in_this_session',
     description: "Une modification tapée dans la session (sans métadonnées) est « fraîche », sans date, et celle de la personne devant l'écran dès que son identité est lue ; une modification sans auteur connu ne nomme personne",
     run: async (h) => {
+      // Un passage de l'enregistrement automatique (toutes les 2,5 s, dès qu'un scénario d'avant a laissé un nom de modèle) range la modification dans les métadonnées : elle n'est plus « fraîche » et
+      // porte une date. La frappe et l'attente d'ici durent assez, sous charge, pour qu'un passage tombe dedans (« fresh:false », passe complète du 10/11) : on le coupe le temps de l'essai.
+      const autosaveWas = PersonStore.get('pp_autosave_enabled');
+      PersonStore.set('pp_autosave_enabled', 'false');
       try {
         await h.resetEditor();
         useMarie();
@@ -2997,7 +3009,10 @@
         const [old] = entriesOf();
         out.nobody = !!old && old.author === null && old.createdAt === null && old.fresh === false;
         return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + JSON.stringify(typed) };
-      } finally { await disableTrackChangesIfOn(h); }
+      } finally {
+        await disableTrackChangesIfOn(h);
+        if (autosaveWas === null || autosaveWas === undefined) PersonStore.remove('pp_autosave_enabled'); else PersonStore.set('pp_autosave_enabled', autosaveWas);
+      }
     },
   });
 

@@ -87,7 +87,6 @@ const PptxImport = (function () {
       sliceStart = performance.now();
     };
   }
-  const BUILT_IN_PAGE_MM_MAX = 558.8;              // la plus grande page que l'éditeur accepte (PageLayout.CUSTOM_MAX_MM)
   const DEFAULT_SIZE_PT = 18;
   const FRAME_PAD_X_PT = 7.2;                      // les marges d'un cadre de texte (css/free-frame.css), celles par défaut de PowerPoint
   const FRAME_PAD_Y_PT = 3.6;

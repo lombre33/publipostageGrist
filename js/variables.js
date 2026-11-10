@@ -109,7 +109,7 @@ const Variables = (function () {
     return { SMART_CHIP_ITEMS, displayKey, ensureBox };
   })();
 
-  const { currentTables, prioritizeTables, matchingVariables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow, attachmentReference, attachmentColumnsBelow, refreshSchemaOnce, computeItems, fieldItems } = (function () {
+  const { currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow, attachmentReference, attachmentColumnsBelow, refreshSchemaOnce, computeItems, fieldItems } = (function () {
     // Les entrées de la liste : tables en cours, variables qui correspondent, onglet actif
 
     // Tables « en cours », la plus proche d'abord : celles que parcourent les zones répétées où est le curseur, de la plus proche à la plus large
@@ -282,7 +282,7 @@ const Variables = (function () {
       if (!items.length || (items.length === 1 && SearchSelect.normalize(items[0].key) === typed)) return [];
       return items;
     }
-    return { currentTables, prioritizeTables, matchingVariables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow, attachmentReference, attachmentColumnsBelow, refreshSchemaOnce, computeItems, fieldItems };
+    return { currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow, attachmentReference, attachmentColumnsBelow, refreshSchemaOnce, computeItems, fieldItems };
   })();
 
   const { setTabsVisible, render, select, moveSelection, position, preferChipsTab } = (function () {
@@ -1368,7 +1368,7 @@ const Variables = (function () {
   // === Règles de liaison entre tables ===
   // Configurées à l'insertion d'une variable d'une autre table et dans le panneau de gestion (#link-rules-modal), deux fenêtres de index.html.
 
-  const { fillColumnSelect, columnHint, describeRule, linkRuleLabel, guessLinkRule, referencePaths, linkRulePreview } = (function () {
+  const { fillColumnSelect, columnHint, linkRuleLabel, guessLinkRule, linkRulePreview } = (function () {
     // Fenêtre de liaison : indications de colonne, listes, règle devinée, aperçu
 
     // Où se trouve la donnée réelle d'une colonne, pour les listes de la fenêtre de liaison, entre parenthèses derrière son nom. Une Référence ou une
@@ -1466,7 +1466,7 @@ const Variables = (function () {
       }
       return { text: judged.empty ? I18n.t('linkMiss.empty', { column: rule.colonneSource, table: targetTable }) : judged.hint };
     }
-    return { fillColumnSelect, columnHint, describeRule, linkRuleLabel, guessLinkRule, referencePaths, linkRulePreview };
+    return { fillColumnSelect, columnHint, linkRuleLabel, guessLinkRule, linkRulePreview };
   })();
   const { showLinkConfigModal } = (function () {
     // La fenêtre d'une règle de liaison : ouverture, remplissage, listes à recherche

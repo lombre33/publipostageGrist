@@ -35,5 +35,5 @@ const TableConsent = (function () {
   }
 
   GristAPI.setTableConsent({ ask, gesture: () => gestures });
-  return { gestureCount: () => gestures };
+  return {};
 })();

@@ -63,7 +63,6 @@ const PrintExport = (function () {
   let live = null;   // ce que la dernière impression a posé (le conteneur, la règle @page, la classe de <html> et le titre), retiré à la suivante ou à la fermeture de sa fenêtre
 
   const attr = value => String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-  const text = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;');
   // Les dimensions en millimètres d'une page, pour `@page { size }` : trois décimales suffisent (un millième de millimètre), sans zéros inutiles.
   const mm = value => String(Math.round(value * 1000) / 1000) + 'mm';
 

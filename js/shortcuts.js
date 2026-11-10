@@ -38,7 +38,6 @@ const Shortcuts = (function () {
     const MODIFIER_KEYS = ['Shift', 'Control', 'Alt', 'AltGraph', 'Meta', 'OS', 'CapsLock', 'NumLock', 'ScrollLock', 'Fn', 'FnLock', 'Hyper', 'Super', 'Symbol', 'SymbolLock'];
     const NAMED_KEYS = { Enter: 'Enter', Tab: 'Tab', Escape: 'Escape', Backspace: 'Backspace', Delete: 'Delete', Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown',
       ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight', Insert: 'Insert', ' ': 'Space' };
-    const MODIFIER_ORDER = ['Mod', 'Ctrl', 'Alt', 'Shift'];
 
     // La touche seule, sans modificateurs : une lettre en minuscule, un chiffre (lu sur le code physique - sur un clavier AZERTY il faut Maj pour taper
     // « 1 », et c'est quand même la touche « 1 »), « F1 » à « F12 », une touche nommée, ou un signe de ponctuation ASCII. null : touche seule de

@@ -881,6 +881,8 @@
       let originalOk = false, acceptedHasCallout = false, rejected = '';
       try {
         await setDoc(h, '<p>Avant</p><p>Cible</p><p>Après</p>');
+        // Entourer un paragraphe est une mise en forme de structure : le suivi ne la marque que si l'option « Suivre la mise en forme » est allumée (éteinte par défaut depuis le 09/11, 41ad20a).
+        Editor.setFormatTracking(true);
         if (!Editor.isTrackChangesOn()) await h.clickButton('v2-btn-track-changes');
         await selectText('Cible', 1);
         await wrapWith('attention');
@@ -902,9 +904,35 @@
         originalOk = !rejected.includes('two-columns-zone') && !rejected.includes('<ins') && !rejected.includes('<del') && rejected.includes('Cible');
       } finally {
         window.removeEventListener('error', onError);
+        PersonStore.remove('pp_track_format');
         if (Editor.isTrackChangesOn()) await h.clickButton('v2-btn-track-changes');
       }
       return { pass: acceptedHasCallout && originalOk && errors.length === 0, notes: JSON.stringify({ acceptedHasCallout, originalOk, rejected: rejected.slice(0, 300), errors }) };
+    },
+  });
+
+  // L'option éteinte (le choix par défaut) : le même geste s'applique sans trace, rien n'attend d'être accepté ou refusé.
+  cases.push({
+    id: 'co_track_changes_wrap_leaves_no_mark_while_format_tracking_is_off',
+    description: 'Suivi des modifications actif et option « Suivre la mise en forme » éteinte : entourer un paragraphe pose l\'encadré sans <ins> ni <del> et sans modification en attente',
+    run: async (h) => {
+      let html = '', pending = null, tracking = false;
+      try {
+        await setDoc(h, '<p>Avant</p><p>Cible</p><p>Après</p>');
+        PersonStore.remove('pp_track_format');
+        Editor.setFormatTracking(false);
+        if (!Editor.isTrackChangesOn()) await h.clickButton('v2-btn-track-changes');
+        tracking = Editor.isTrackChangesOn();
+        await selectText('Cible', 1);
+        await wrapWith('attention');
+        html = Editor.getHTML();
+        pending = Editor.hasPendingTrackedChanges();
+      } finally {
+        PersonStore.remove('pp_track_format');
+        if (Editor.isTrackChangesOn()) await h.clickButton('v2-btn-track-changes');
+      }
+      const wrapped = parse(html).querySelector('.callout[data-color="amber"] > p');
+      return { pass: tracking && !!wrapped && !html.includes('<ins') && !html.includes('<del') && pending === false, notes: JSON.stringify({ tracking, wrapped: !!wrapped, pending, html: html.slice(0, 300) }) };
     },
   });
 

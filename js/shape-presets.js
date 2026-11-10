@@ -454,13 +454,6 @@ const ShapePresets = (function () {
     }
     return '';
   }
-  // Les parties d'une forme libre pour les exports (Word, PowerPoint), ses chemins dans leur repère : { rect: [gauche, haut, droite, bas] en dix-millièmes de la boîte, paths: [{ fill, stroke, w, h,
-  // commands }] } ; null pour toute autre forme.
-  function customParts(name) {
-    const def = customDef(name);
-    return def ? def.parts : null;
-  }
-
   // La géométrie d'une forme libre telle que Word et PowerPoint l'écrivent (`a:custGeom`), en arbre { n: nom, a: attributs, c: enfants } que chaque export écrit à sa façon : les quatre guides du
   // rectangle du texte (calculés sur la boîte, comme `freeze` les a mesurés) et les chemins dans leur repère. null pour toute autre forme.
   function customTree(name) {
@@ -491,5 +484,5 @@ const ShapePresets = (function () {
     ]);
   }
 
-  return { NAMES, MITER_LIMIT, isCustom, freeze, customParts, customTree, has, adjDefaults, adjOf, adjText, paths, pathData, flatten, inkBox, strokeBox, reach, fit, textRect, shade };
+  return { NAMES, MITER_LIMIT, isCustom, freeze, customTree, has, adjDefaults, adjOf, adjText, paths, pathData, flatten, inkBox, strokeBox, reach, fit, textRect, shade };
 })();

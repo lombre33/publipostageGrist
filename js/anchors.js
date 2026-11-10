@@ -354,12 +354,6 @@ const Anchors = (function () {
     return at;
   }
 
-  // Dans un arbre HTML (la Lecture, un export) : le bloc du premier niveau qui porte l'adresse `id`, ou null.
-  function elementFor(root, id) {
-    if (!isId(id) || !root) return null;
-    return Array.from(root.children).find(el => el.getAttribute(ATTR_ID) === id) || null;
-  }
-
   // Les cibles d'une suite de blocs du premier niveau : adresse -> bloc, pour les paragraphes et titres et le bloc d'adresse d'une diapositive (SlideProps.forOutput) (le premier d'un doublon, qui seul garde l'adresse).
   function indexElements(elements) {
     const map = new Map();
@@ -377,6 +371,6 @@ const Anchors = (function () {
 
   return {
     ATTR_ID, ATTR_NAME, MAX_NAME, slugify, uniqueId, cleanName, hrefOf, idOfHref, isId, createExtension, status, syncRow, blockAtSelection, save, nameTaken, previewId, idFor,
-    targets, labelOf, slideLabel, slideIdFor, find, goTo, linkCount, elementFor, elementsOf, indexElements,
+    targets, labelOf, slideLabel, slideIdFor, find, goTo, linkCount, elementsOf, indexElements,
   };
 })();
