@@ -2222,6 +2222,56 @@
     },
   });
 
+  cases.push({
+    id: 'pdfbatch_pdf_of_a_big_deck_gives_the_page_back_while_building_the_content_instead_of_holding_it_to_the_end',
+    description: 'Le PDF d\'un diaporama de 840 cadres libres sans image (6 diapositives de 140) : pendant la construction du contenu, un minuteur de 10 ms ne reste jamais plus de 400 ms sans passer (avant : un seul arrêt de la durée de la construction, 1,5 s à 2 s ici, 31 s pour 24 diapositives de 140 cadres - chaque cadre force la mise en page de toute la zone de mesure et rien n\'y attendait), et le PDF est le même : une page par diapositive, le premier et le dernier cadre à leur place',
+    run: async (h) => {
+      const SLIDES = 6;
+      const FRAMES = 140;
+      const MARK = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
+      let html = '';
+      for (let n = 1; n <= SLIDES; n++) {
+        if (n > 1) html += MARK;
+        for (let i = 0; i < FRAMES; i++) html += FreeFrame.html({ x: (i % 24) * 26, y: 10 + Math.floor(i / 24) * 12, w: 24, h: 10 }, `<p>Cadre ${n}.${i}</p>`);
+      }
+      await h.resetEditor();
+      await PdfExport.ensurePdfLibsLoaded();
+      // La construction du contenu finit quand pdfmake est appelé pour la première fois (la passe de mesure) : la suite - la mise en page de pdfmake, la seconde construction, l'écriture - n'est pas ce que ce cas regarde.
+      const original = window.pdfMake.createPdf;
+      let buildEndedAt = 0;
+      window.pdfMake.createPdf = function (...args) { if (!buildEndedAt) buildEndedAt = performance.now(); return original.apply(this, args); };
+      const beats = [];
+      const beat = setInterval(() => { beats.push(performance.now()); }, 10);
+      let result = null;
+      let startedAt = 0;
+      let endedAt = 0;
+      try {
+        await h.sleep(50);
+        startedAt = performance.now();
+        result = await h.exportPdfContent(html, null, PageLayout.getMarginsPt());
+        endedAt = performance.now();
+      } finally {
+        clearInterval(beat);
+        window.pdfMake.createPdf = original;
+      }
+      const gt = await h.extractPdfGroundTruth(result.base64);
+      // Les battements de la construction, bornés par son début et sa fin : un arrêt qui la couvre toute ne laisse aucun battement entre les deux (le minuteur ne passe qu'après), son plus grand écart est la construction elle-même.
+      const buildBeats = beats.filter(t => t > startedAt && t < buildEndedAt);
+      const marks = [startedAt, ...buildBeats, buildEndedAt];
+      let longestBuildGap = 0;
+      for (let index = 1; index < marks.length; index++) longestBuildGap = Math.max(longestBuildGap, marks[index] - marks[index - 1]);
+      // pdf.js lit ce PDF glyphe par glyphe : le texte d'une page est recollé sans espace.
+      const pageTexts = gt.pages.map(page => squash(page.textItems.map(item => item.str).join('')));
+      const problems = [];
+      if (!buildEndedAt) problems.push('pdfmake n\'a jamais été appelé');
+      if (gt.pages.length !== SLIDES) problems.push('pages=' + gt.pages.length + ' au lieu de ' + SLIDES);
+      if (!/Cadre1\.0Cadre1\.1/.test(pageTexts[0] || '')) problems.push('le premier cadre n\'est pas sur la première page');
+      if (!new RegExp('Cadre' + SLIDES + '\\.' + (FRAMES - 1) + '(?!\\d)').test(pageTexts[SLIDES - 1] || '')) problems.push('le dernier cadre n\'est pas sur la dernière page');
+      if (longestBuildGap > 400) problems.push('la page est restée ' + Math.round(longestBuildGap) + ' ms sans répondre pendant la construction (400 au plus ; ' + buildBeats.length + ' battements en ' + Math.round(buildEndedAt - startedAt) + ' ms)');
+      return { pass: !problems.length, notes: problems.length ? problems.join(' | ') : 'ok : PDF en ' + Math.round(endedAt - startedAt) + ' ms, construction ' + Math.round(buildEndedAt - startedAt) + ' ms avec le plus long arrêt ' + Math.round(longestBuildGap) + ' ms (' + buildBeats.length + ' battements)' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pdfBatch = cases;
 })();

@@ -3663,7 +3663,11 @@ const PdfExport = (function () {
       markerWidths.clear();
     }
     const st = contentStateFor(root, headingMarkers, availableWidthPt, isTopLevel, opts);
-    for (const child of Array.from(root.childNodes)) { await visitNode(st, child); }
+    // Un gros modèle (un diaporama de milliers de cadres) : chaque nœud de premier niveau force la mise en page de toute la zone de mesure, un diaporama sans image n'attend rien de réel
+    // (ni décodage ni écriture) et la page restait prise du premier au dernier cadre (11/11 : 24 diapositives de 140 cadres = un arrêt de 31 s) - sans clic, sans coin d'état qui se peint.
+    // Au premier niveau, la boucle rend donc la main entre deux nœuds quand la tranche dure plus de 40 ms (js/work-pacer.js) ; rien ailleurs (une colonne, un encadré, un cadre sont petits).
+    if (isTopLevel && typeof WorkPacer !== 'undefined') st.pace = WorkPacer.create();
+    for (const child of Array.from(root.childNodes)) { await visitNode(st, child); if (st.pace) await st.pace(); }
     closeKeepRun(st, st.keepRun);
     st.keepRun = null;
     fillTocBlocks(st.tocBlocks, st.headingBlocks);
@@ -3715,6 +3719,8 @@ const PdfExport = (function () {
       keepRun: null, keepHeadCount: 0,
       // Le bas, dans l'hôte de mesure, du dernier bloc posé.
       lastBlockBottomPx: null,
+      // La pause du premier niveau (buildPdfContentFromRoot) : la page respire entre deux nœuds d'un gros modèle. Nulle ailleurs.
+      pace: null,
     };
   }
 
@@ -3853,7 +3859,7 @@ const PdfExport = (function () {
     closeKeepRun(st, run);
     applyPage({ orientation: node.getAttribute(PageSections.ATTR), format: PageSections.formatOf(node) });
     st.sectionPage = modulePage();
-    for (const child of Array.from(node.childNodes)) { await visitNode(st, child); }
+    for (const child of Array.from(node.childNodes)) { await visitNode(st, child); if (st.pace) await st.pace(); }
   }
 
   function visitToc(st, node, run) {
