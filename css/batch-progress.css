@@ -1,0 +1,11 @@
+/* La pastille du lot en cours (js/batch-progress.js) : « Export PDF en lot : 12/300… » et le bouton « Arrêter ». Fixe au coin bas gauche du panneau, hors de la barre d'outils (gelée) et à l'opposé du contrôle de zoom de la
+   page (coin bas droit) ; la barre de GFS, centrée sur un bord, ne la recouvre pas. Niveau --z-menu (css/style.css) : au-dessus du document, de ses bandeaux et de ses barres flottantes, sous les fenêtres
+   (la fenêtre des images d'un site externe la couvre, elle demande d'abord). Couleurs : jetons de css/style.css (texte ≥ 4,5:1, clair et sombre), aucune couleur en dur ; monochrome. */
+.pp-batch-progress { position: fixed; left: 8px; bottom: 8px; z-index: var(--z-menu); box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; max-width: calc(100vw - 16px); padding: 3px 4px 3px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-pill, 999px); background: var(--surface); color: var(--text); box-shadow: var(--shadow-float); font-family: var(--font-ui); font-size: 12px; font-weight: 600; }
+/* Les chiffres de même chasse : le compteur ne fait pas danser la pastille d'un document à l'autre ; un texte plus long que la place est tronqué par « … » (rien ne passe à la ligne). */
+.pp-batch-progress-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pp-batch-progress-stop { flex: none; box-sizing: border-box; height: 22px; margin: 0; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-pill, 999px); background: var(--surface-sunken); color: inherit; font: inherit; cursor: pointer; }
+.pp-batch-progress-stop:hover:not(:disabled) { background: var(--surface); border-color: var(--text-muted); }
+.pp-batch-progress-stop:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-batch-progress-stop:disabled { cursor: default; opacity: .7; }
+@media print { .pp-batch-progress { display: none; } }

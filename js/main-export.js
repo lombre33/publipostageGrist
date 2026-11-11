@@ -792,8 +792,9 @@ const MainExport = (function () {
       }
 
       const sink = await openBatchSink(cfg, tableId, sheetSetup);
-      const { ok, failed, cancelled, failures, blankRows, exportedIds } = await runBatchJobs(cfg, sink, jobs, { tableId, openSource, templatesCache });
-      if (cancelled) { setStatus(I18n.t('status.exportCancelled')); return; }
+      const { ok, failed, cancelled, stoppedAt, failures, blankRows, exportedIds } = await runBatchJobs(cfg, sink, jobs, { tableId, openSource, templatesCache });
+      // « Arrêter » (la pastille du lot) dit où le lot s'est arrêté ; « Annuler » sur une fenêtre, simplement que l'export est annulé. Dans les deux cas rien n'est téléchargé ni daté.
+      if (cancelled) { setStatus(stoppedAt === null ? I18n.t('status.exportCancelled') : I18n.t('status.batchStopped', { done: stoppedAt, total: jobs.length })); return; }
       // Les lignes en échec, listées avec leur raison une fois le fichier téléchargé (ou, quand aucune n'a pu l'être, tout de suite) : la fenêtre se
       // referme avant que l'export libère ses contrôles.
       if (!ok) { setStatus(I18n.t(cfg.noFile), true); await BatchFailures.show(failures, { ok, format: cfg.label }); return; }
@@ -836,39 +837,48 @@ const MainExport = (function () {
       // Un lot de documents rapides (Word, Excel, Markdown, HTML : une dizaine de ms par ligne, les lectures d'une même passe étant gardées en mémoire) ne rendait jamais la main : toute la boucle tenait la page
       // (4,7 s pour 500 documents Word), « n/500 » ne se dessinait pas et aucun clic ne passait. Après 40 ms de travail d'affilée la page respire, et se repeint au moins toutes les 250 ms.
       const pace = WorkPacer.create();
-      for (let i = 0; i < jobs.length; i++) {
-        await pace();
-        const { row, variant, source } = jobs[i];
-        setStatus(I18n.t(cfg.progress, { current: i + 1, total: jobs.length }));
-        const valueName = variant && variant.label ? sanitizeFilenamePart(variant.label) : '';
-        // Le modèle d'une ligne (« Modèle selon la ligne ») peut ne pas être du genre de cet export - une grille en Word, un document en Excel : la
-        // ligne n'est pas générée, comme celle qui échoue.
-        if (source !== openSource && cfg.grid != null && cfg.grid !== GridEditor.isGridType(source.typeModele)) {
-          console.error('[main] export ' + cfg.label + ' en lot : le modèle de la ligne ' + row.id + ' (' + source.typeModele + ') ne se génère pas dans ce format');
-          failedJobs.push({ row, source, valueName, wrongKind: cfg.grid ? 'document' : 'grid' });
-          failedRows.add(row.id);
-          continue;
+      // « Arrêter » (js/batch-progress.js) abandonne tout le lot, comme « Annuler » sur la fenêtre des images d'un site externe : `stoppedAt` dit combien de documents étaient faits ou en échec.
+      const progress = BatchProgress.begin({ key: cfg.progress, total: jobs.length });
+      let stoppedAt = null;
+      try {
+        for (let i = 0; i < jobs.length; i++) {
+          await pace();
+          if (progress && progress.stopped()) { cancelled = true; stoppedAt = i; break; }
+          const { row, variant, source } = jobs[i];
+          setStatus(I18n.t(cfg.progress, { current: i + 1, total: jobs.length }));
+          if (progress) progress.update(i + 1);
+          const valueName = variant && variant.label ? sanitizeFilenamePart(variant.label) : '';
+          // Le modèle d'une ligne (« Modèle selon la ligne ») peut ne pas être du genre de cet export - une grille en Word, un document en Excel : la
+          // ligne n'est pas générée, comme celle qui échoue.
+          if (source !== openSource && cfg.grid != null && cfg.grid !== GridEditor.isGridType(source.typeModele)) {
+            console.error('[main] export ' + cfg.label + ' en lot : le modèle de la ligne ' + row.id + ' (' + source.typeModele + ') ne se génère pas dans ce format');
+            failedJobs.push({ row, source, valueName, wrongKind: cfg.grid ? 'document' : 'grid' });
+            failedRows.add(row.id);
+            continue;
+          }
+          try {
+            // Le document de cette valeur : les bulles réglées « Un document par valeur » y écrivent leur k-ième valeur (js/list-split.js) ; sans
+            // découpage, le HTML et les en-têtes sont ceux de la ligne, tels quels.
+            const html = ListSplit.pin(jobs[i].rowHtml !== undefined ? jobs[i].rowHtml : await sourceRowHtml(source, tableId, row, templatesCache), variant);
+            const added = await sink.add({ row, source, html, headerFooterData: ListSplit.pinHeaderFooter(source.headerFooterData, variant), valueName });
+            ok++;
+            doneRows.add(row.id);
+            if (added && added.blankPages && added.blankPages.length) blankJobs.push({ row, source, valueName, pages: added.blankPages });
+          } catch (e) {
+            // « Annuler » sur la fenêtre des images d'un site externe arrête tout le lot, pas seulement cette ligne : rien n'est téléchargé.
+            if (ExternalImages.isCancel(e)) { cancelled = true; break; }
+            console.error('[main] export ' + cfg.label + ' en lot : échec pour la ligne', row.id, e);
+            failedJobs.push({ row, source, valueName, message: e && e.message, passwordProblem: e && e.passwordProblem, column: e && e.column });
+            failedRows.add(row.id);
+          }
         }
-        try {
-          // Le document de cette valeur : les bulles réglées « Un document par valeur » y écrivent leur k-ième valeur (js/list-split.js) ; sans
-          // découpage, le HTML et les en-têtes sont ceux de la ligne, tels quels.
-          const html = ListSplit.pin(jobs[i].rowHtml !== undefined ? jobs[i].rowHtml : await sourceRowHtml(source, tableId, row, templatesCache), variant);
-          const added = await sink.add({ row, source, html, headerFooterData: ListSplit.pinHeaderFooter(source.headerFooterData, variant), valueName });
-          ok++;
-          doneRows.add(row.id);
-          if (added && added.blankPages && added.blankPages.length) blankJobs.push({ row, source, valueName, pages: added.blankPages });
-        } catch (e) {
-          // « Annuler » sur la fenêtre des images d'un site externe arrête tout le lot, pas seulement cette ligne : rien n'est téléchargé.
-          if (ExternalImages.isCancel(e)) { cancelled = true; break; }
-          console.error('[main] export ' + cfg.label + ' en lot : échec pour la ligne', row.id, e);
-          failedJobs.push({ row, source, valueName, message: e && e.message, passwordProblem: e && e.passwordProblem, column: e && e.column });
-          failedRows.add(row.id);
-        }
-      }
+        // « Arrêter » cliqué pendant le dernier document : la personne a voulu tout abandonner, le fichier ne part pas.
+        if (!cancelled && progress && progress.stopped()) { cancelled = true; stoppedAt = jobs.length; }
+      } finally { if (progress) progress.end(); }
       // Une ligne dont un document a échoué n'est pas datée, même si les autres sont dans le fichier (« Un document par valeur ») : la date dirait « exporté » d'une ligne
       // dont le PDF manque.
       const exportedIds = cancelled ? [] : Array.from(doneRows).filter(id => !failedRows.has(id));
-      return { ok, failed: failedJobs.length, cancelled, failures: cancelled ? [] : await describeBatchFailures(failedJobs, tableId), blankRows: cancelled ? [] : await describeBatchFailures(blankJobs, tableId), exportedIds };
+      return { ok, failed: failedJobs.length, cancelled, stoppedAt, failures: cancelled ? [] : await describeBatchFailures(failedJobs, tableId), blankRows: cancelled ? [] : await describeBatchFailures(blankJobs, tableId), exportedIds };
     }
 
     // Les lignes en échec (ou aux pages blanches : `pages`) telles que la fenêtre de fin de lot les liste (js/batch-failures.js) : leur n°, le nom que leur fichier aurait porté - celui du

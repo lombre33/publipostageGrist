@@ -321,6 +321,12 @@ const I18nTextsExport = {
   'status.tableCreatedSummary': { fr: 'Table « {table} » créée avec {count} {count|colonne|colonnes}, modèle « {name} » enregistré. Liez ce widget à cette table depuis le menu du widget dans Grist (⋮ → Sélectionner la source de données) pour l’utiliser.', en: 'Table “{table}” created with {count} {count|column|columns}, template “{name}” saved. Link this widget to that table from the widget menu in Grist (⋮ → Select Widget Data) to use it.' },
 
   // --- La liste des lignes qu'un export en lot n'a pas pu générer, ouverte à la fin du lot (js/batch-failures.js) ---
+  // La pastille du lot en cours (js/batch-progress.js) et la phrase d'un lot arrêté : « Arrêter » abandonne tout (rien n'est téléchargé ni rangé, aucune ligne n'est datée).
+  'batchProgress.aria': { fr: 'Lot en cours', en: 'Batch in progress' },
+  'batchProgress.stop': { fr: 'Arrêter', en: 'Stop' },
+  'batchProgress.stopAria': { fr: 'Arrêter le lot : rien ne sera téléchargé', en: 'Stop the batch: nothing will be downloaded' },
+  'batchProgress.stopping': { fr: 'Arrêt…', en: 'Stopping…' },
+  'status.batchStopped': { fr: 'Lot arrêté après {done} document{done||s} sur {total} : rien n’a été téléchargé.', en: 'Batch stopped after {done} of {total} documents: nothing was downloaded.' },
   'batchFailures.title': { fr: '{n|Un document n’a pas été généré|{n} documents n’ont pas été générés}', en: '{n|One document was not generated|{n} documents were not generated}' },
   'batchFailures.intro': { fr: 'Le fichier téléchargé contient {ok} {ok|autre document|autres documents}, mais {n|pas celui-ci|pas ceux-ci} :', en: 'The downloaded file has {ok} other {ok|document|documents}, but {n|not this one|not these}:' },
   'batchFailures.introNone': { fr: 'Aucun document n’a pu être généré, rien n’a été téléchargé :', en: 'No document could be generated, nothing was downloaded:' },

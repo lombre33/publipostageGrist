@@ -2272,6 +2272,123 @@
     },
   });
 
+  // === « Arrêter » : la pastille du lot en cours (js/batch-progress.js) ===
+  // Choix d'Antoine du 11/11 : « Arrêter, tout abandonner ». Un lot de deux documents ou plus pose une pastille (compteur et bouton « Arrêter ») ; le clic arrête la génération après le document en cours,
+  // rien n'est téléchargé, aucune ligne n'est datée, le coin d'état dit où le lot s'est arrêté, et le lot suivant repart normalement.
+  const pillOf = () => document.querySelector('.pp-batch-progress');
+  const pillCounter = () => { const m = /(\d+)\/(\d+)/.exec((pillOf() && pillOf().querySelector('.pp-batch-progress-text').textContent) || ''); return m ? { current: Number(m[1]), total: Number(m[2]) } : null; };
+
+  cases.push({
+    id: 'pdfbatch_stop_pill_only_for_two_documents_or_more_and_goes_away_with_end',
+    description: 'BatchProgress.begin ne pose rien pour un lot d’un seul document (rien à arrêter) ; pour deux ou plus, une pastille fixe au coin bas gauche du panneau porte le compteur et le bouton « Arrêter » ; update change le compteur, stopped() reste faux jusqu’au clic, un second begin retire la première pastille, end() la retire',
+    run: async (h) => {
+      const problems = [];
+      const alone = BatchProgress.begin({ key: 'status.batchExportProgress', total: 1 });
+      if (alone !== null || pillOf()) problems.push('un lot d’un document a posé une pastille');
+      const first = BatchProgress.begin({ key: 'status.batchExportProgress', total: 40 });
+      if (!first || !pillOf()) return { pass: false, notes: 'aucune pastille pour 40 documents' };
+      first.update(7);
+      const counter = pillCounter();
+      if (!counter || counter.current !== 7 || counter.total !== 40) problems.push('compteur=' + JSON.stringify(counter));
+      const box = pillOf().getBoundingClientRect();
+      if (!(box.left >= 0 && box.left <= 12 && box.bottom <= window.innerHeight && box.bottom >= window.innerHeight - 12)) problems.push('place=' + JSON.stringify({ left: box.left, bottom: box.bottom, h: window.innerHeight }));
+      if (getComputedStyle(pillOf()).position !== 'fixed') problems.push('la pastille n’est pas fixe');
+      if (first.stopped()) problems.push('stopped() vrai avant tout clic');
+      const second = BatchProgress.begin({ key: 'status.batchExportProgress', total: 3 });
+      if (document.querySelectorAll('.pp-batch-progress').length !== 1) problems.push('pastilles=' + document.querySelectorAll('.pp-batch-progress').length + ' après un second lot');
+      second.end();
+      if (pillOf()) problems.push('end() n’a pas retiré la pastille');
+      first.end();
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  // Pose la pastille d'un lot qui tourne : attend que son compteur atteigne `at`, puis clique « Arrêter » comme la personne (clic réel sur le bouton).
+  function stopWhenAt(at) {
+    const state = { clickedAt: null, labelBefore: '', labelAfter: '', disabledAfter: null, ariaAfter: '' };
+    const timer = setInterval(() => {
+      const counter = pillCounter();
+      const button = pillOf() && pillOf().querySelector('button');
+      if (state.clickedAt === null && counter && counter.current >= at && button) {
+        state.clickedAt = counter.current;
+        state.labelBefore = button.textContent;
+        button.click();
+        state.labelAfter = button.textContent;
+        state.disabledAfter = button.disabled;
+        state.ariaAfter = button.getAttribute('aria-label');
+        button.click(); // un second clic ne change rien
+      }
+    }, 5);
+    state.stop = () => clearInterval(timer);
+    return state;
+  }
+
+  cases.push({
+    id: 'pdfbatch_stop_abandons_the_zip_batch_nothing_downloaded_no_row_dated',
+    description: '120 lignes en lot PDF (ZIP), une colonne de date du dernier export choisie : « Arrêter » cliqué au 4e document arrête le lot après le document en cours - rien n’est téléchargé, aucune ligne n’est datée (aucune écriture de Grist), le coin d’état dit « Lot arrêté après N documents sur 120 », la pastille disparaît, les boutons d’export sont libres, et le lot suivant repart : 120 PDF dans l’archive, 120 lignes datées',
+    run: async (h) => {
+      const rows = Array.from({ length: 120 }, (_, i) => ({ id: i + 1, Nom: 'Client ' + String(i + 1).padStart(3, '0') }));
+      return dated(h, async stub => {
+        stub.setRows(TABLE, rows);
+        await GristAPI.refreshSchema();
+        // Le moteur PDF est chargé par un premier lot (le chargement n’est pas ce que ce cas regarde) sur trois lignes seulement.
+        stub.setRows(TABLE, rows.slice(0, 3));
+        await clickExportRow(h, 'v2-btn-export-pdf-batch');
+        stub.setRows(TABLE, rows);
+        stub.clearActionLog();
+        const watcher = stopWhenAt(4);
+        let res;
+        try { res = await clickExportRow(h, 'v2-btn-export-pdf-batch', null, () => watcher.clickedAt !== null && !pillOf() && /^Lot arrêté/.test(document.getElementById('status-msg').textContent)); } finally { watcher.stop(); }
+        const stopped = I18n.t('status.batchStopped', { done: 0, total: 0 });
+        const m = /Lot arrêté après (\d+) documents? sur (\d+)/.exec(res.status);
+        const problems = [];
+        if (watcher.clickedAt === null) problems.push('la pastille n’a jamais montré le 4e document');
+        if (watcher.labelAfter !== I18n.t('batchProgress.stopping') || watcher.disabledAfter !== true) problems.push('bouton après le clic=' + JSON.stringify({ label: watcher.labelAfter, disabled: watcher.disabledAfter }));
+        if (res.downloads.length !== 0) problems.push('téléchargements=' + res.downloads.length);
+        if (dateWrites().length || !datedValues().every(v => v == null)) problems.push('écritures de date=' + dateWrites().length);
+        if (!m || Number(m[2]) !== 120 || Number(m[1]) < 4 || Number(m[1]) >= 120) problems.push('état=' + res.status + ' (attendu : ' + stopped + ')');
+        if (pillOf()) problems.push('la pastille est restée');
+        const locked = ['v2-btn-export-pdf-batch', 'btn-export-pdf'].filter(id => { const el = document.getElementById(id); return el && (el.disabled || el.getAttribute('aria-disabled') === 'true'); });
+        if (locked.length) problems.push('contrôles encore bloqués=' + locked.join(','));
+        // Le lot suivant n’a gardé aucune trace de l’arrêt.
+        const from = Math.floor(Date.now() / 1000);
+        const again = await clickExportRow(h, 'v2-btn-export-pdf-batch');
+        const zip = again.downloads[0] && await JSZip.loadAsync(await again.downloads[0].blob.arrayBuffer());
+        const pdfs = zip ? Object.keys(zip.files).filter(name => /\.pdf$/i.test(name)).length : 0;
+        if (pdfs !== 120) problems.push('lot suivant : PDF dans l’archive=' + pdfs + ' état=' + again.status);
+        const dated120 = rows.filter(r => isDatedSince(window.__gristStub.getRow(TABLE, r.id).Dernier, from)).length;
+        if (dated120 !== 120) problems.push('lot suivant : lignes datées=' + dated120);
+        return { pass: problems.length === 0, notes: problems.length ? problems.join(' | ') : 'ok : arrêt cliqué au document ' + watcher.clickedAt + ' → « ' + res.status + ' »' };
+      }, { rows });
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_stop_abandons_the_docx_batch_in_english_too',
+    description: '300 lignes en lot Word : « Arrêter » (Stop en anglais) cliqué au 6e document, interface en anglais : aucune archive, « Batch stopped after N of 300 documents: nothing was downloaded. », la pastille dit « Stop » puis « Stopping… », elle disparaît ; la langue est remise ensuite',
+    run: async (h) => {
+      const many = Array.from({ length: 300 }, (_, i) => 'Client ' + String(i + 1).padStart(3, '0'));
+      await seed(h, `<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      const stub = window.__gristStub;
+      stub.setRows(TABLE, NAMES.map((Nom, i) => ({ id: i + 1, Nom })));
+      await clickExportRow(h, 'v2-btn-export-docx-batch'); // charge la bibliothèque Word
+      stub.setRows(TABLE, many.map((Nom, i) => ({ id: i + 1, Nom })));
+      const lang = I18n.getLang();
+      I18n.setLang('en');
+      const problems = [];
+      let res;
+      const watcher = stopWhenAt(6);
+      try { res = await clickExportRow(h, 'v2-btn-export-docx-batch', null, () => watcher.clickedAt !== null && !pillOf() && /^Batch stopped/.test(document.getElementById('status-msg').textContent)); }
+      finally { watcher.stop(); I18n.setLang(lang); stub.setRows(TABLE, NAMES.map((Nom, i) => ({ id: i + 1, Nom }))); }
+      if (watcher.clickedAt === null) problems.push('la pastille n’a jamais montré le 6e document');
+      if (watcher.labelBefore !== 'Stop' || watcher.labelAfter !== 'Stopping…') problems.push('boutons=' + JSON.stringify({ avant: watcher.labelBefore, après: watcher.labelAfter }));
+      if (res.downloads.length !== 0) problems.push('téléchargements=' + res.downloads.length);
+      if (!/^Batch stopped after \d+ of 300 documents: nothing was downloaded\.$/.test(res.status)) problems.push('état=' + res.status);
+      if (pillOf()) problems.push('la pastille est restée');
+      return { pass: problems.length === 0, notes: problems.length ? problems.join(' | ') : 'ok : ' + res.status };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pdfBatch = cases;
 })();
