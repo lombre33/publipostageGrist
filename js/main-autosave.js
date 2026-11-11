@@ -245,6 +245,7 @@ const MainAutosave = (function () {
     // Les cas où un passage ne fait rien du tout, avant même de lire la table.
     function autosaveTickBlocked() {
       if (persist.leavePromptOpen || persist.restoringVersion) return true;
+      if (ImportPlacing.isFilling()) return true; // un gros modèle se remplit par morceaux (js/main.js:fillOpenedPresentation) : l'éditeur n'a pas encore tout son texte, rien ne s'écrit avant la fin
       if (!isAutosaveEnabled()) return true;  // coupé par la personne (cf. wireSaveMenu) : ni vérification de conflit ni écriture en arrière-plan
       if (isExportRunning()) return true; // évite toute contention Grist avec un export en cours
       if (persist.autosaveConflictActive) return true; // gelé tant que l'utilisateur n'a pas choisi (recharger, ou Enregistrer manuellement pour garder sa version)

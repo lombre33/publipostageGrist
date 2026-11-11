@@ -270,11 +270,14 @@
   }
 
   // forcedTypeModele : seulement pour tpl = null (nouveau modèle vide, cf. startNewTemplate) ; un modèle existant porte son propre type, jamais
-  // réécrit ici.
-  function loadTemplateIntoEditor(tpl, forcedTypeModele) {
+  // réécrit ici. options.progressive : le choix d'un modèle dans la liste (onTemplateSelectChange) - un gros modèle de présentation enregistré s'ouvre alors par morceaux sous un voile (fillOpenedPresentation) ;
+  // les autres chemins (restauration d'une version, retours, conflit d'enregistrement) chargent le texte d'un bloc, comme avant.
+  function loadTemplateIntoEditor(tpl, forcedTypeModele, options) {
     // Le point de passage de toute ouverture (liste, modèle de la vue, règle de ligne, retours, restauration...) : un modèle d'un type que le widget ne sait pas ouvrir n'entre jamais
     // dans l'éditeur, quel que soit le chemin (garde « type inconnu », js/templates.js:isOpenableType). Avant tout le reste : rien de l'écran ne change.
     if (tpl && !Templates.isOpenableType(tpl.typeModele)) { keepOpenTemplate(tpl); return; }
+    // Un modèle qui se remplissait par morceaux (fillOpenedPresentation) cède l'éditeur : il ne pose plus rien, le voile est retiré.
+    ImportPlacing.stopFill();
     // Un PDF à l'écran (js/pdf-reading.js) se ferme dès qu'un modèle s'ouvre, quel que soit le chemin : le mode d'avant la lecture revient (onPdfReadingChange).
     PdfReading.close();
     // L'écriture en direct est celle du texte d'UN modèle : elle s'arrête avant que l'éditeur change de texte, quel que soit le chemin d'ouverture (js/live-entry.js).
@@ -295,7 +298,9 @@
     // bas si c'est une grille.
     GridEditor.setActive(false);
     const typeModele = typeModeleOf(tpl, forcedTypeModele);
-    loadContentIntoEditor(tpl, typeModele);
+    // Un gros modèle de présentation choisi dans la liste : seul le début du texte se charge ici, le reste se pose par morceaux à la fin de cette fonction.
+    const openPlan = options && options.progressive && typeModele === SlidesEntry.TYPE ? ImportPlacing.planOpen(tpl) : null;
+    loadContentIntoEditor(tpl, typeModele, openPlan);
     showTemplateNames(tpl);
     currentTypeModele = typeModele;
     loadEmailFields(tpl);
@@ -335,6 +340,43 @@
     resetAutosaveState(tpl);
     // Après la remise à zéro : ce que la synchro dit sur la ligne d'état n'est pas effacé par elle, et son tableau remplacé ne rend pas le document « à enregistrer ».
     followLinkedModels(true);
+    if (openPlan) fillOpenedPresentation(tpl, openPlan);
+  }
+
+  // Les diapositives d'un gros modèle de présentation qui n'étaient pas dans le premier morceau (js/import-placing.js:planOpen) se posent ici, à la suite, une par une, la page reprenant la main entre deux ; un voile couvre le
+  // panneau et dit où l'on en est. Tout du long l'éditeur ne montre que le début du modèle : ImportPlacing.isFilling retient l'enregistrement automatique, l'enregistrement, les exports et l'entrée automatique de l'écriture
+  // en direct jusqu'à la fin. Rien n'est « à enregistrer » à l'arrivée : le modèle est tel qu'il était dans Grist.
+  async function fillOpenedPresentation(tpl, plan) {
+    const total = plan.total;
+    const progress = ImportPlacing.begin({ opening: true });
+    // Le texte dit la diapositive où l'on en est (un saut de page posé en ouvre une), la barre suit le COÛT posé : une diapositive de milliers de cadres la fait avancer pas après pas.
+    const note = (slide, fraction) => {
+      const text = I18n.t('status.pptxOpeningProgress', { done: Math.min(slide, total), total });
+      setStatus(text);
+      progress.update(text, fraction);
+    };
+    PerfTrace.mark('ouverture par morceaux : début', { diapositives: total, signesMo: Math.round(tpl.contenu.length / 104857.6) / 10 });
+    note(plan.firstSlides, plan.firstShare);
+    try {
+      const outcome = await ImportPlacing.fillOpened(plan, { progress, covered: progress.isShown, onPlaced: (markers, fraction) => note(plan.firstSlides + markers, plan.firstShare + (1 - plan.firstShare) * fraction), finish: result => settleOpenedPresentation(tpl, result) });
+      PerfTrace.mark('ouverture par morceaux : ' + (outcome === 'done' ? 'fin' : outcome === 'broken' ? 'texte rechargé d’un bloc' : 'arrêtée'));
+    } finally {
+      progress.end();
+      refocusEditorIfLost();
+    }
+  }
+  // Le texte est complet (ou rechargé d'un bloc après un morceau refusé) : ce que loadTemplateIntoEditor remet d'aplomb à la fin d'une ouverture, pour tout le texte cette fois.
+  function settleOpenedPresentation(tpl, result) {
+    if (result === 'broken') {
+      Editor.setHTML(tpl.contenu, tpl.suiviModifications);
+      SlidesEntry.changed();
+    }
+    // Les tranches de la clôture sont des transactions de l'éditeur : elles ne rendent pas le modèle « à enregistrer » (même remise à zéro qu'à la fin de loadTemplateIntoEditor).
+    resetAutosaveState(tpl);
+    followLinkedModels(true);
+    if (currentMode === 'read') renderReader();
+    LiveEntry.changed();
+    updateSaveStatus();
   }
 
   // Les tableaux liés du document ouvert suivent leur modèle (js/linked-table.js:syncOpen), d'après les modèles du cache : à l'ouverture (`loading` : les désaccords déjà dits se redisent) et
@@ -357,7 +399,8 @@
   }
 
   // Le contenu du modèle dans l'éditeur : marges, grille des images, texte avec son suivi des modifications, en-tête et pied.
-  function loadContentIntoEditor(tpl, typeModele) {
+  // `plan` : l'ouverture par morceaux d'un gros modèle (js/import-placing.js:planOpen) - seul son début se charge ici.
+  function loadContentIntoEditor(tpl, typeModele, plan) {
     // Marges posées avant setHTML : les zones à deux colonnes en mm calculent --layout-left dès leur première construction, à partir de
     // PageLayout.getContentWidthMm() ; posées après, une première passe se ferait avec les marges du modèle précédent. Une présentation vierge, ou sans format à elle, prend la page
     // d'une diapositive (js/slides-entry.js).
@@ -367,7 +410,7 @@
     // chargement : venant d'un document, `setHTML` rognerait le tableau à la largeur d'une page (clampOverflowingTables ne mesure que sous cette
     // classe), et un classeur de 20 colonnes de 64 px arriverait à 36 px par colonne.
     if (GridEditor.isGridType(typeModele)) { editorContainer.classList.remove('a4-preview'); readerContainer.classList.remove('a4-preview'); }
-    Editor.setHTML(tpl ? tpl.contenu : '', tpl ? tpl.suiviModifications : null);
+    Editor.setHTML(plan ? plan.first : (tpl ? tpl.contenu : ''), tpl ? tpl.suiviModifications : null);
     Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
   }
 
@@ -410,7 +453,7 @@
     }
     if (!id) { loadTemplateIntoEditor(null); return; }
     const tpl = Templates.byId(id);
-    if (tpl) loadTemplateIntoEditor(tpl);
+    if (tpl) loadTemplateIntoEditor(tpl, undefined, { progressive: true });
   }
 
   // « Modèle selon la ligne » (js/row-template.js) : ouvre le modèle que la ligne désigne, par le chemin ordinaire de la liste - donc avec sa

@@ -1030,10 +1030,13 @@ const Editor = (function () {
 
   // Un chargement par morceaux (js/import-placing.js) : `setHTML` pose le premier, `appendHTML` chacun des suivants À LA FIN, sans historique ni évènement `update` ; `settleAppended` clôt comme setHTML. Rend
   // le nombre de blocs qu'avait l'éditeur avant ce morceau (là où commence le morceau).
-  function appendHTML(html) {
+  // `options.dropTrailing` : voir appendTrackedDocument (js/track-changes.js) ; le bloc retiré n'est plus compté dans « le nombre de blocs d'avant ».
+  function appendHTML(html, options) {
     if (!editor) return 0;
-    const before = editor.view.dom.children.length;
-    editor.commands.appendTrackedDocument(html || '');
+    const last = editor.state.doc.lastChild;
+    const dropped = !!(options && options.dropTrailing && last && last.type.name === 'paragraph' && last.content.size === 0);
+    const before = editor.view.dom.children.length - (dropped ? 1 : 0);
+    editor.commands.appendTrackedDocument(html || '', options);
     return before;
   }
   function settleAppended() {

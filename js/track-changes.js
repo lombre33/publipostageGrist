@@ -188,17 +188,21 @@ const TrackChanges = (function () {
           },
           // La suite d'un document chargé par morceaux (js/import-placing.js : une grosse présentation importée se pose par tranches de diapositives, la page respire entre deux) : le même parcours que
           // `loadTrackedDocument` - document inerte, nettoyé, jamais sérialisé ; ni suggestion, ni pas d'historique, ni évènement `update` - mais le texte vient À LA FIN de celui d'avant au lieu de le remplacer.
-          appendTrackedDocument: html => ({ editor, dispatch, tr }) => {
+          // `options.dropTrailing` : le paragraphe vide que TipTap range sous le dernier bloc d'un texte qui ne finit pas par un paragraphe (TrailingNode de StarterKit) n'est pas du texte du modèle : un texte chargé
+          // d'un bloc n'en a qu'un, tout à la fin. Posé morceau par morceau il en aurait un après CHAQUE morceau ; avec cette option, celui du morceau d'avant est retiré dans la même transaction que le morceau
+          // ajouté (js/import-placing.js : l'ouverture d'un modèle enregistré, qui doit rendre le texte de l'ouverture d'un bloc à l'octet près).
+          appendTrackedDocument: (html, options) => ({ editor, dispatch, tr }) => {
             if (!dispatch) return true;
             tr.setMeta('preventDispatch', true);
             const docNode = PMDOMParser.fromSchema(editor.schema).parse(HtmlSanitize.parseInert(html));
-            editor.view.dispatch(
-              editor.state.tr
-                .setMeta(suggestChangesKey, { skip: true })
-                .setMeta('addToHistory', false)
-                .setMeta('preventUpdate', true)
-                .insert(editor.state.doc.content.size, docNode.content),
-            );
+            const doc = editor.state.doc;
+            const last = doc.lastChild;
+            const next = editor.state.tr
+              .setMeta(suggestChangesKey, { skip: true })
+              .setMeta('addToHistory', false)
+              .setMeta('preventUpdate', true);
+            if (options && options.dropTrailing && last && last.type.name === 'paragraph' && last.content.size === 0) next.delete(doc.content.size - last.nodeSize, doc.content.size);
+            editor.view.dispatch(next.insert(next.doc.content.size, docNode.content));
             return true;
           },
         };

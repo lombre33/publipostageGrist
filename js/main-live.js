@@ -74,9 +74,9 @@ const MainLive = (function () {
       updateSaveStatus();
     }
     // Le texte affiché peut-il être remplacé par celui d'un direct déjà en cours (l'entrée automatique, js/live-entry.js) sans que la personne s'y attende ? Pas quand l'écran est à autre chose qu'à ce
-    // texte : la Lecture, la carte de l'accès, une question de départ, une restauration de version, un export, un conflit à trancher, l'en-tête ou le pied en édition.
+    // texte : la Lecture, la carte de l'accès, une question de départ, une restauration de version, un export, un conflit à trancher, l'en-tête ou le pied en édition, un gros modèle qui se remplit encore par morceaux (js/main.js:fillOpenedPresentation).
     function textMayBeReplaced() {
-      return getCurrentMode() === 'edit' && !isAccessGuideShown() && !persist.leavePromptOpen && !persist.restoringVersion && !isExportRunning() && !persist.autosaveConflictActive && !Editor.isEditingHeaderFooter();
+      return getCurrentMode() === 'edit' && !isAccessGuideShown() && !persist.leavePromptOpen && !persist.restoringVersion && !isExportRunning() && !persist.autosaveConflictActive && !Editor.isEditingHeaderFooter() && !ImportPlacing.isFilling();
     }
     function wireLiveEditing() {
       LiveEntry.setContext(() => ({ id: Templates.getCurrentId(), type: getCurrentTypeModele(), readOnly: isReadOnly(), dirty: persist.autosaveDirty, modified: persist.autosaveLastKnownDateModif, idle: textMayBeReplaced() }));

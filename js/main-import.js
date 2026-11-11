@@ -262,7 +262,6 @@ const MainImport = (function () {
       const keepName = file && file.size >= PptxImport.HEAVY_FILE_BYTES ? baseNameOf(file.name) : '';
       const texts = ImportPlacing.slidesOf(imported);
       const total = texts.length;
-      const first = Math.min(total, ImportPlacing.FIRST_SLIDES);
       const note = (placed) => {
         const text = I18n.t('status.pptxPlacingProgress', { done: placed, total });
         setStatus(text);
@@ -271,9 +270,11 @@ const MainImport = (function () {
       note(0);
       await afterPaint();
       templateSelect.value = '';
-      loadTemplateIntoEditor({ id: null, nom: keepName, contenu: texts.splice(0, first).join(ImportPlacing.PAGE_BREAK), typeModele: SlidesEntry.TYPE, marginsMm: imported.page, suiviModifications: null, headerFooter: null }, SlidesEntry.TYPE);
-      note(first);
-      const failed = texts.length ? await ImportPlacing.appendSlides(texts, placed => note(first + placed), { covered: progress.isShown }) : 0;
+      // Les premières diapositives (ou, si elles sont énormes, le début de la première) par le chemin habituel, le reste par pas : ImportPlacing.takeFirst.
+      const head = ImportPlacing.takeFirst(texts);
+      loadTemplateIntoEditor({ id: null, nom: keepName, contenu: head.first, typeModele: SlidesEntry.TYPE, marginsMm: imported.page, suiviModifications: null, headerFooter: null }, SlidesEntry.TYPE);
+      note(head.started);
+      const failed = head.pieces.length ? await ImportPlacing.appendSlides(head.pieces, () => {}, { covered: progress.isShown, markers: head.leads, tail: head.first, onStep: info => note(Math.min(total, head.started + info.markers)) }) : 0;
       if (failed) {
         const item = imported.report.find(entry => entry.key === 'unreadable');
         if (item) item.n += failed; else imported.report.push({ key: 'unreadable', n: failed });

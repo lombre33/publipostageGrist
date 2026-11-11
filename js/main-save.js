@@ -39,6 +39,8 @@ const MainSave = (function () {
     // écraserait sa composition par un contenu vide. « Enregistrer » rouvre donc la fenêtre au lieu d'enregistrer.
     async function runSave() {
       if (isReadOnly()) return; // Ctrl+S compris (wireSaveShortcut) : le bouton, lui, est déjà grisé
+      // Un gros modèle qui se remplit par morceaux (js/main.js:fillOpenedPresentation) n'a pas encore tout son texte : l'écrire maintenant remplacerait le modèle par son début. L'enregistrement attend la fin.
+      if (ImportPlacing.isFilling()) await ImportPlacing.whenFilled();
       if (getCurrentTypeModele() === 'macro') {
         MacroEditor.openModal(Templates.byId(Templates.getCurrentId()));
         return;

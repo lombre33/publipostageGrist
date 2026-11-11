@@ -37,6 +37,8 @@ const MainExport = (function () {
       'v2-btn-export-xlsx-batch', 'v2-btn-export-xlsx-single', 'btn-create-email'];
     function withExportLock(fn) {
       return async (...args) => {
+        // Un gros modèle qui se remplit par morceaux (js/main.js:fillOpenedPresentation) n'a pas encore tout son texte : l'export attend la fin.
+        if (ImportPlacing.isFilling()) await ImportPlacing.whenFilled();
         if (exportOperationInProgress || !AccessRights.get().canExport) return;
         exportOperationInProgress = true;
         const controls = EXPORT_CONTROL_IDS.map(id => document.getElementById(id));

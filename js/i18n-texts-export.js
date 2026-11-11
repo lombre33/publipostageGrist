@@ -188,6 +188,10 @@ const I18nTextsExport = {
   'importPlacing.saving': { fr: 'Enregistrement du modèle dans Grist…', en: 'Saving the template to Grist…' },
   'importPlacing.title': { fr: 'Import du PowerPoint', en: 'PowerPoint import' },
   'importPlacing.hint': { fr: 'L’éditeur est verrouillé le temps de l’import : laissez cette page ouverte, elle avance seule. Une grosse présentation peut prendre plusieurs minutes.', en: 'The editor is locked during the import: leave this page open, it keeps going on its own. A large presentation can take several minutes.' },
+  // L'ouverture d'un gros modèle de présentation déjà enregistré (js/main.js:fillOpenedPresentation) : le même voile, d'autres mots.
+  'importPlacing.openTitle': { fr: 'Ouverture de la présentation', en: 'Opening the presentation' },
+  'importPlacing.openHint': { fr: 'L’éditeur est verrouillé le temps de l’ouverture : laissez cette page ouverte, elle avance seule. Une très grosse présentation peut prendre quelques minutes.', en: 'The editor is locked while the presentation opens: leave this page open, it keeps going on its own. A very large presentation can take a few minutes.' },
+  'status.pptxOpeningProgress': { fr: 'Ouverture des diapositives… {done} / {total}', en: 'Opening the slides… {done} / {total}' },
   'status.pptxImportCancelled': { fr: 'Import annulé : rien n’a changé.', en: 'Import canceled: nothing has changed.' },
   'status.pptxImportBusy': { fr: 'Un import PowerPoint est déjà en cours : attendez qu’il finisse.', en: 'A PowerPoint import is already running: wait for it to finish.' },
   'status.pptxImported': { fr: 'PowerPoint importé : {n} {n|diapositive|diapositives}. Nommez le modèle puis enregistrez-le.', en: 'PowerPoint imported: {n} {n|slide|slides}. Name the template, then save it.' },
