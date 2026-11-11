@@ -370,6 +370,9 @@ const SlideShow = (function () {
     });
   }
 
+  // Les étapes du départ dans le rapport de fluidité (js/perf-trace.js, TEMPORAIRE : à retirer avec lui) : de quoi lire, chez la personne, où part le temps entre le geste et la première diapositive.
+  const trace = (label, extra) => { if (typeof PerfTrace !== 'undefined') PerfTrace.mark('diaporama : ' + label, extra); };
+
   async function start(fromCurrent) {
     if (run || launching) return;
     if (off) { SlidesEntry.explainOff(); return; }
@@ -377,13 +380,21 @@ const SlideShow = (function () {
     // Le geste ne part pas ; la phrase dit d'attendre la fin de l'ouverture (le voile dit où l'on en est), un nouveau geste lance alors le diaporama en plein écran, ce qu'une attente sans geste ne permettrait plus.
     if (typeof ImportPlacing !== 'undefined' && ImportPlacing.isFilling()) { SlidesEntry.status(I18n.t('slides.show.filling')); return; }
     closeMenu(false);
-    // Une présentation qui a des vues de diapositive (js/slide-view.js) garde le repère des diapositives que le texte vise : la copie que la vue montre se prend à cette adresse.
+    trace('départ');
     const source = Editor.getHTML();
-    const html = SlidesEntry.outputHtml('presentation', source, { theme: PageLayout.getTheme(), anchors: SlideView.shows(source) });
+    // LES IMAGES LOURDES SORTENT DU TEXTE LE TEMPS DU RENDU (js/heavy-images.js ; 11/11, un PowerPoint de 29 Mo : « l'ouverture du diaporama dans un nouvel onglet prend une éternité ») : chaque étape d'ici à la
+    // première diapositive relit ou réécrit le texte entier, 38 Mo dont 97 % de photos. Elles travaillent sur le texte sans ses images, qui restent les mêmes octets sous une adresse courte. Une présentation qui a
+    // une diapositive liée garde son texte entier : celle-là se compare à sa source, au caractère près (js/slide-links.js:forOutput). `light.release()` rend la mémoire quand le rendu quitte la page : à la sortie
+    // du diaporama du panneau ou de la console (`stop`), dès l'envoi pour la fenêtre à part, tout de suite quand rien ne part.
+    const light = source.indexOf('data-link-slide') === -1 ? HeavyImages.lighten(source) : null;
+    const text = light ? light.html : source;
+    // Une présentation qui a des vues de diapositive (js/slide-view.js) garde le repère des diapositives que le texte vise : la copie que la vue montre se prend à cette adresse.
+    const html = SlidesEntry.outputHtml('presentation', text, { theme: PageLayout.getTheme(), anchors: SlideView.shows(text) });
     const headerFooter = Editor.getHeaderFooterData();
     const how = { startPage: fromCurrent ? firstPageOf(currentSlide()) : 0, fromCurrent: !!fromCurrent };
     const focusBack = document.activeElement;
     launching = true;
+    let handed = false;   // un départ a pris le rendu : c'est lui (ou `stop`) qui libère les images
     try {
       // Une image d'un autre site se montre au diaporama comme dans un export : la même question d'abord (ExternalImages), « Annuler » ne lance rien.
       try { await ExternalImages.confirmExport(html, headerFooter); } catch (e) { return; }
@@ -392,36 +403,44 @@ const SlideShow = (function () {
       // Avec la vue intervenant, c'est une vraie fenêtre (non un onglet, qui cacherait le panneau) et le panneau devient la console ; une seule fenêtre s'ouvre, jamais deux au même geste.
       const route = routeOf();
       const link = route === 'panel' ? null : SlideWindow.open(windowInfo(route === 'speaker'), route === 'speaker' ? SPEAKER_WINDOW : undefined);
-      if (link && route === 'speaker') await playWithSpeaker(link, html, headerFooter, how, focusBack);
-      else if (link) await playInWindow(link, html, headerFooter, how);
-      else await playInPanel(html, headerFooter, how, focusBack, route === 'speaker' ? 'slides.speaker.blocked' : route === 'window' ? 'slides.show.window.blocked' : '');
+      trace(link ? 'fenêtre demandée' : 'dans le panneau', { signesMo: Math.round(source.length / 104857.6) / 10, rendusMo: Math.round(html.length / 104857.6) / 10, imagesAPart: light ? light.images.length : 0 });
+      handed = true;
+      if (link && route === 'speaker') await playWithSpeaker(link, html, headerFooter, how, focusBack, light);
+      else if (link) await playInWindow(link, html, headerFooter, how, light);
+      else await playInPanel(html, headerFooter, how, focusBack, route === 'speaker' ? 'slides.speaker.blocked' : route === 'window' ? 'slides.show.window.blocked' : '', light);
     } finally {
       launching = false;
+      if (light && !handed) light.release();
     }
   }
 
   // Dans la fenêtre à part : le rendu mesuré, le même que celui du panneau, part vers elle dès qu'il est prêt (slide-window.js). Rien ne se pose dans le panneau, ni la barre de GFS masquée.
-  async function playInWindow(link, html, headerFooter, how) {
+  // `light` (ou null) : les images lourdes sorties du texte (`start`) ; la fenêtre reçoit leurs fichiers avec le rendu, et celles de cette page sont libérées dès que le rendu l'a quittée.
+  async function playInWindow(link, html, headerFooter, how, light) {
     let job = null;
     try {
       const slides = readSlides();
       job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: document.body });
-      const payload = SlideWindow.pack(job, Object.assign({}, slides, how));
+      const payload = SlideWindow.pack(job, Object.assign({}, slides, how), light ? light.images : null);
       job.dispose();
       job = null;
       link.deliver(payload);
+      trace('rendu envoyé à la fenêtre');
     } catch (e) {
       if (job) job.dispose();
       link.cancel();
       SlidesEntry.status(I18n.t('slides.show.failed', { message: (e && e.message) || String(e) }));
+    } finally {
+      if (light) light.release();
     }
   }
 
   // Dans le panneau. `refusal` : la clé du texte qui dit que la fenêtre voulue (à part, ou celle de la vue intervenant) a été refusée par le navigateur, ou '' ; une ligne le dit.
-  async function playInPanel(html, headerFooter, how, focusBack, refusal) {
+  // `light` (ou null) : les images lourdes sorties du texte (`start`), que le diaporama montre jusqu'à sa sortie : `stop` les libère.
+  async function playInPanel(html, headerFooter, how, focusBack, refusal, light) {
     const player = SlidePlayer.create({ labels: labels(), onExit: stop });
     const slides = readSlides();
-    run = { player, root: player.root, focusBack };
+    run = { player, root: player.root, focusBack, light };
     const current = run;
     // Le diaporama prend tout le cadre : la barre de GFS ne reste pas par-dessus (rendue par `stop`, quelle que soit la sortie).
     GfsBar.hide(true);
@@ -434,6 +453,7 @@ const SlideShow = (function () {
       const job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: player.root });
       if (run !== current) { job.dispose(); return; }
       player.load(job, slides, how);
+      trace('première diapositive dans le panneau');
     } catch (e) {
       if (run !== current) return;
       stop();
@@ -443,10 +463,11 @@ const SlideShow = (function () {
 
   // La vue intervenant : le diaporama se joue dans la fenêtre `link` (rendu mesuré, comme pour la fenêtre à part), le panneau devient la console. Deux copies du rendu y sont posées, celle de la diapositive en cours et celle de la
   // suivante (SlideWindow.duplicate, prise avant que la console monte la première) ; la console suit la fenêtre (`follow`, avant l'envoi : la première réponse de la fenêtre ne doit pas se perdre) et prend fin avec elle.
-  async function playWithSpeaker(link, html, headerFooter, how, focusBack) {
+  // `light` (ou null) : les images lourdes sorties du texte (`start`) ; la fenêtre reçoit leurs fichiers avec le rendu, la console les montre jusqu'à sa sortie : `stop` les libère.
+  async function playWithSpeaker(link, html, headerFooter, how, focusBack, light) {
     const data = readSlides();
     const speaker = SlideSpeaker.create({ labels: speakerLabels(), slides: speakerSlides(), onCommand: (name, index, points) => link.command(name, index, points), onExit: stop });
-    run = { speaker, link, root: speaker.root, focusBack };
+    run = { speaker, link, root: speaker.root, focusBack, light };
     const current = run;
     // La console prend tout le cadre : la barre de GFS ne reste pas par-dessus (rendue par `stop`).
     GfsBar.hide(true);
@@ -456,7 +477,7 @@ const SlideShow = (function () {
     try {
       const job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: speaker.boxes.current });
       if (run !== current) return;
-      link.deliver(SlideWindow.pack(job, Object.assign({}, data, how)));
+      link.deliver(SlideWindow.pack(job, Object.assign({}, data, how), light ? light.images : null));
       const copy = await SlideWindow.duplicate(job, { id: UPCOMING_ID, parent: speaker.boxes.upcoming });
       if (run !== current) return;
       speaker.load(job, copy, data);
@@ -480,6 +501,8 @@ const SlideShow = (function () {
     }
     GfsBar.hide(false);
     current.root.remove();
+    // Le rendu a quitté la page : les images lourdes qu'il montrait rendent leur mémoire (js/heavy-images.js).
+    if (current.light) current.light.release();
     giveBackFocus(current.focusBack);
   }
   // Le clavier revient où il était. Dans le texte, par l'éditeur (`view.focus()` repose le curseur de l'état dans le document avant de le focaliser) : un simple `focus()` sur le texte, quand un clic de la

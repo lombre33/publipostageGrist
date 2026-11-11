@@ -15,7 +15,7 @@
 const SlideWindow = (function () {
   const PAGE = 'present.html';
   const TARGET = 'pp-slide-show';        // le nom de la fenêtre : « ▶ » la rouvre au lieu d'en empiler
-  const VERSION = 1;                     // la forme de ce qui s'envoie ; une page plus ancienne ou plus récente ne le lit pas
+  const VERSION = 2;                     // la forme de ce qui s'envoie ; une page plus ancienne ou plus récente ne le lit pas (2 : les images lourdes voyagent à part, `images`)
   const READY = 'pp-present-ready';      // la page -> l'app : « je suis là »
   const INFO = 'pp-present-info';        // l'app -> la page : la langue, le thème, le titre et les textes
   const SHOW = 'pp-present-show';        // l'app -> la page : le rendu mesuré
@@ -27,6 +27,8 @@ const SlideWindow = (function () {
 
   let link = null;                       // la fenêtre du dernier lancement
   let listening = false;
+  // Les étapes de la fenêtre dans le rapport de fluidité de l'app (js/perf-trace.js, TEMPORAIRE : à retirer avec lui). La page de la fenêtre ne le charge pas : rien ne s'y trace.
+  const trace = (label) => { if (typeof PerfTrace !== 'undefined') PerfTrace.mark('diaporama : ' + label); };
 
   // L'adresse de la page : à côté de ce fichier, avec sa version de cache (?v=) pour qu'une page restée en cache ne parle pas à un autre format.
   function address() {
@@ -51,7 +53,7 @@ const SlideWindow = (function () {
 
   function makeLink(popup, info) {
     const self = {
-      popup, info, ready: false, payload: null,
+      popup, info, ready: false, shown: false, payload: null,
       // Le rendu est prêt : il part tout de suite si la page l'attend, sinon à son premier signe. Il reste gardé tant que la fenêtre est ouverte (une page rechargée le redemande).
       deliver(payload) { self.payload = payload; if (self.ready) send(self, SHOW, { payload }); },
       // Rien à montrer (« Annuler », rendu raté) : la fenêtre se ferme.
@@ -103,11 +105,13 @@ const SlideWindow = (function () {
     if (event.origin !== 'null' && event.origin !== new URL(address()).origin) return;
     if (data.type === READY) {
       link.ready = true;
+      trace('fenêtre prête');
       send(link, INFO, { info: link.info });
       if (link.payload) send(link, SHOW, { payload: link.payload });
       if (link.onReady) link.onReady();
     } else if (data.type === STATE) {
       const seen = readState(data.state);
+      if (seen && !link.shown) { link.shown = true; trace('première diapositive dans la fenêtre'); }
       if (seen && link.onState) link.onState(seen);
     } else if (data.type === BYE) {
       link.gone();
@@ -125,7 +129,10 @@ const SlideWindow = (function () {
   // Ce que la fenêtre reçoit : le rendu mesuré de PrintExport.stage (`job`) sous forme de données - les feuilles de style de la page (adresses, et le texte des <style> de l'en-tête), l'emplacement du
   // rendu (`scope`, en HTML), les variables de page de <html> (--pp-margin-*, --pp-page-width... : la largeur des feuilles en dépend) et la découpe en pages - avec `data` (props, timings, starts, anchors, startPage,
   // fromCurrent : ce que le lecteur lit sur l'éditeur au départ). Rien n'y est de l'éditeur : c'est le rendu de la Lecture, résolu pour la ligne choisie.
-  function pack(job, data) {
+  // `images` (facultatif ; js/heavy-images.js) : les images lourdes que l'app a sorties du texte le temps du rendu, { url, blob } chacune. Le rendu les nomme par l'adresse `blob:` qu'elles ont dans l'app, que
+  // la fenêtre ne peut pas lire (elle a sa propre origine) : leurs fichiers partent avec lui - un fichier s'envoie sans être recopié, là où le texte de 38 Mo d'un gros diaporama l'était en entier - et la
+  // fenêtre leur donne une adresse à elle (`unpack`).
+  function pack(job, data, images) {
     const shadow = job.host.shadowRoot;
     const scope = shadow.querySelector('.pp-print-scope');
     const sheets = Array.from(shadow.children).filter(node => node.tagName === 'LINK' || node.tagName === 'STYLE')
@@ -137,6 +144,7 @@ const SlideWindow = (function () {
       v: VERSION, sheets, scope: scope.outerHTML, vars, hostClass: job.host.className, hostWidth: job.host.style.getPropertyValue('--pp-print-host-width'),
       windows: job.windows, pagePx: job.pagePx, sheetLeft: job.sheetLeft,
       props: data.props, timings: data.timings, starts: data.starts, anchors: data.anchors, startPage: data.startPage, fromCurrent: !!data.fromCurrent,
+      images: Array.isArray(images) ? images.map(image => ({ url: image.url, blob: image.blob })) : [],
     };
   }
 
@@ -156,6 +164,18 @@ const SlideWindow = (function () {
       });
     });
     return fragment;
+  }
+  // Les images lourdes du rendu reçu (`pack` : `images`) : chaque fichier prend une adresse de CETTE page, et les balises <img> de `content` qui portaient son adresse dans l'app la reçoivent. Rend ces
+  // adresses, que le rendu libère quand il est retiré. Ce qui arrive reste une donnée : seul un fichier d'image est pris (une image ne s'exécute pas, même vectorielle, dans une balise <img>), sous une
+  // adresse `blob:` annoncée, et seule une balise <img> qui porte exactement cette adresse change.
+  function adoptImages(content, images) {
+    const own = new Map();
+    (Array.isArray(images) ? images : []).forEach((image) => {
+      if (!image || typeof image.url !== 'string' || image.url.indexOf('blob:') !== 0 || !(image.blob instanceof Blob) || !/^image\/[\w.+-]+$/.test(image.blob.type) || own.has(image.url)) return;
+      own.set(image.url, URL.createObjectURL(image.blob));
+    });
+    if (own.size) content.querySelectorAll('img[src]').forEach((img) => { const mine = own.get(img.getAttribute('src')); if (mine) img.setAttribute('src', mine); });
+    return Array.from(own.values());
   }
   // Une feuille de style n'est lue que d'un site web : jamais d'une adresse javascript: ou data: venue d'un message.
   const isWebAddress = value => typeof value === 'string' && /^https?:\/\//i.test(value);
@@ -221,15 +241,18 @@ const SlideWindow = (function () {
       shadow.appendChild(node);
       if (node.tagName === 'LINK') inside.push(node);
     });
-    shadow.appendChild(clean(Dom.inertTemplate(payload.scope).content));
+    const content = clean(Dom.inertTemplate(payload.scope).content);
+    const own = adoptImages(content, payload.images);
+    shadow.appendChild(content);
+    const remove = () => { host.remove(); own.forEach((url) => { URL.revokeObjectURL(url); }); };
     parent.appendChild(host);
     await settleLinks(added.concat(inside), 8000);
     await loadFonts();
     const scope = shadow.querySelector('.pp-print-scope');
     const stage = shadow.getElementById('reader-container');
-    if (!scope || !stage) { host.remove(); throw new Error('rendu illisible'); }
+    if (!scope || !stage) { remove(); throw new Error('rendu illisible'); }
     return {
-      job: { host, root: scope, stage, windows: payload.windows, pagePx: payload.pagePx, sheetLeft: payload.sheetLeft, dispose: () => host.remove() },
+      job: { host, root: scope, stage, windows: payload.windows, pagePx: payload.pagePx, sheetLeft: payload.sheetLeft, dispose: remove },
       data: { props: payload.props, timings: payload.timings, starts: payload.starts, anchors: Array.isArray(payload.anchors) ? payload.anchors.filter(anchor => typeof anchor === 'string') : [] },
       how: { startPage: Number(payload.startPage) || 0, fromCurrent: !!payload.fromCurrent },
     };

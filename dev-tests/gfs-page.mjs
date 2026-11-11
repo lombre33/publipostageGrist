@@ -101,7 +101,10 @@ export async function start({ name, port, popupBlocker = false, scrollbars = fal
     ...(existsSync(join(CACHE, 'umd/echarts.min.js')) ? [[/^https:\/\/cdn\.jsdelivr\.net\/npm\/echarts@[\d.]+\/dist\/echarts\.min\.js$/, 'umd/echarts.min.js']] : []),
   ] : [];
   if (!offline) console.log(`[${name}] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.`);
-  const chunkBase = 'https://esm.sh/_offline-chunks/';
+  // Les morceaux du miroir hors-ligne (`chunk-….js`, qui n'existent pas chez le vrai esm.sh) sont servis depuis l'origine de la page : la politique resserrée (bd9f53e) n'autorise plus tout l'hôte esm.sh, seulement les
+  // dossiers des paquets de l'éditeur, et `'self'` couvre cette origine. Servis sous `https://esm.sh/_offline-chunks/`, ils étaient refusés à tout essai qui respecte la politique (`bypassCSP: false` : la fenêtre du
+  // diaporama, le mode présentateur, le cadre de GFS, la vidéo) : l'éditeur ne démarrait pas, délai de 60 s. Comme dans verify-csp.mjs et gallery-captures.mjs (fd06824).
+  const chunkBase = `${base}/_offline-chunks/`;
   const absoluteChunks = code => code.replace(/(from\s*|import\s*)"\.\/(chunk-[A-Z0-9]+\.js)"/g, (_, kw, file) => `${kw}"${chunkBase}${file}"`);
 
   const require = createRequire(import.meta.url);
@@ -136,10 +139,13 @@ export async function start({ name, port, popupBlocker = false, scrollbars = fal
     page.on('dialog', async d => { natives.push(d.type() + ' : ' + d.message()); await d.dismiss(); });
     page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
     if (offline) {
+      await page.route(`${chunkBase}*`, async route => {
+        const chunk = route.request().url().match(/\/(chunk-[A-Z0-9]+\.js)$/);
+        if (!chunk) return route.fulfill({ status: 404, body: '// morceau inconnu' });
+        route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', headers: { 'Access-Control-Allow-Origin': '*' }, body: absoluteChunks(await readFile(join(CACHE, 'esm', chunk[1]), 'utf8')) });
+      });
       await page.route('**://esm.sh/**', async route => {
         const url = route.request().url();
-        const chunk = url.match(/\/(chunk-[A-Z0-9]+\.js)$/);
-        if (chunk) return route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: absoluteChunks(await readFile(join(CACHE, 'esm', chunk[1]), 'utf8')) });
         const spec = Object.keys(esmMap).find(k => url === `https://esm.sh/${k}` || url === `https://esm.sh/*${k}` || url.startsWith(`https://esm.sh/${k}@`) || url.startsWith(`https://esm.sh/*${k}@`));
         if (!spec) return route.fulfill({ status: 404, body: `// pas de miroir local pour ${url}` });
         route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: absoluteChunks(await readFile(join(ROOT, esmMap[spec].replace(/^\//, '')), 'utf8')) });

@@ -1,6 +1,7 @@
 // SUIVI DU LAG, TEMPORAIRE (10/11 : de quoi mesurer le gel d'un gros import chez la personne qui l'observe, puis en lire le rapport). Il tourne sans rien changer à l'écran et se lit à la demande :
 // Ctrl + Alt + Maj + L (ou `PerfTrace.download()` dans la console) enregistre un rapport texte (`rapport-fluidite-….txt`) et le copie dans le presse-papiers quand le navigateur le permet.
-// À retirer une fois le gel compris : ce fichier, sa balise dans index.html, ses textes `perfTrace.*`, son groupe d'essais `perfTrace` et ses appels `PerfTrace.mark` (js/main-import.js).
+// À retirer une fois le gel compris : ce fichier, sa balise dans index.html, ses textes `perfTrace.*`, son groupe d'essais `perfTrace` et ses appels `PerfTrace.mark` (js/main-import.js, js/main.js, et le `trace` du
+// départ du diaporama : extensions/diapositives/slide-show.js et slide-window.js).
 //
 // Ce qu'il garde (les 600 derniers faits, en mémoire seulement : rien n'est envoyé ni écrit ailleurs) :
 //  - les ARRÊTS de la page : un battement toutes les 100 ms, un retard de 150 ms ou plus est un arrêt (marche dans tous les navigateurs, Firefox compris) ;
@@ -108,6 +109,18 @@ const PerfTrace = (function () {
     PageCopies: typeof PageCopies !== 'undefined' ? PageCopies : null,
     PageZoom: typeof PageZoom !== 'undefined' ? PageZoom : null,
     MainToolbar: typeof MainToolbar !== 'undefined' ? MainToolbar : null,
+    // Le départ du diaporama (11/11 : « l'ouverture dans un nouvel onglet prend une éternité ») : le texte, le rendu de la Lecture, l'envoi à la fenêtre.
+    SlideShow: typeof SlideShow !== 'undefined' ? SlideShow : null,
+    SlideWindow: typeof SlideWindow !== 'undefined' ? SlideWindow : null,
+    PrintExport: typeof PrintExport !== 'undefined' ? PrintExport : null,
+    HeavyImages: typeof HeavyImages !== 'undefined' ? HeavyImages : null,
+  });
+  // Les modules dont seules ces fonctions sont surveillées : les autres sont appelées dans des boucles (une par variable, par lien, par image), où la surveillance elle-même pèserait.
+  const functionsToWatch = () => ({
+    ReaderMode: [typeof ReaderMode !== 'undefined' ? ReaderMode : null, ['render', 'renderInto']],
+    HtmlSanitize: [typeof HtmlSanitize !== 'undefined' ? HtmlSanitize : null, ['clean', 'parseInert']],
+    FrameAnim: [typeof FrameAnim !== 'undefined' ? FrameAnim : null, ['stampSlides']],
+    ExternalImages: [typeof ExternalImages !== 'undefined' ? ExternalImages : null, ['confirmExport', 'blockIn', 'unblockIn']],
   });
   let watchesAt = 0;
   function installWatches() {
@@ -120,6 +133,11 @@ const PerfTrace = (function () {
         const descriptor = Object.getOwnPropertyDescriptor(owner, method);
         if (descriptor && typeof descriptor.value === 'function' && !/^(?:get|is|has)[A-Z_]/.test(method)) watch(owner, method, moduleName + '.' + method);
       });
+    });
+    const chosen = functionsToWatch();
+    Object.keys(chosen).forEach((moduleName) => {
+      const owner = chosen[moduleName][0];
+      if (owner) chosen[moduleName][1].forEach((method) => { watch(owner, method, moduleName + '.' + method); });
     });
   }
   window.addEventListener('load', () => setTimeout(installWatches, 0));

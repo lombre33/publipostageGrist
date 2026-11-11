@@ -627,11 +627,16 @@ async function standalone() {
   const trap = '<script>window.__pwned = 1<\/script><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" onerror="window.__pwned = 2" onload="window.__pwned = 3">'
     + '<a id="evil-a" href="java\tscript:window.__pwned = 4">lien</a><a id="evil-b" href=" JavaScript:window.__pwned = 5">lien</a><iframe src="javascript:window.__pwned = 6"></iframe><object data="x"></object><embed src="x">'
     + '<form id="evil-form" action="https://pp-window.test/"><button formaction="javascript:window.__pwned = 7">go</button></form><base href="https://pp-window.test/"><meta http-equiv="refresh" content="0;url=https://pp-window.test/">'
-    + '<link rel="stylesheet" href="https://pp-window.test/x.css"><svg><a xlink:href="javascript:window.__pwned = 8"><text y="10">svg</text></a></svg><div id="evil-div" onclick="window.__pwned = 9" style="width:10px;height:10px">y</div><p id="fine">reste</p>';
+    + '<link rel="stylesheet" href="https://pp-window.test/x.css"><svg><a xlink:href="javascript:window.__pwned = 8"><text y="10">svg</text></a></svg><div id="evil-div" onclick="window.__pwned = 9" style="width:10px;height:10px">y</div><p id="fine">reste</p>'
+    // Les images annoncées à part (`images`, js/heavy-images.js) : une vraie image, un fichier qui n'en est pas une, une adresse qui n'est pas `blob:`, une valeur qui n'est pas un fichier.
+    + '<img id="img-taken" src="blob:annoncee-a" alt=""><img id="img-html" src="blob:annoncee-b" alt=""><img id="img-script" src="javascript:window.__pwned = 12" alt=""><img id="img-text" src="blob:annoncee-c" alt=""><a id="link-kept" href="blob:annoncee-a">lien</a>';
   const scope = `<div class="pp-print-scope"><div id="reader-container"><div class="reader-content">${trap}</div></div></div>`;
-  await opener.evaluate(([html]) => {
-    window.__pop.postMessage({ type: 'pp-present-show', payload: { v: 1, sheets: [{ id: 'own', text: '.pp-print-scope{color:#000}' }, { href: 'javascript:window.__pwned = 10' }, { href: 'data:text/css,*{}' }], scope: html, vars: { '--pp-page-width': '800px', 'color': 'red', '--evil': '1' }, hostClass: 'pp-print-host', hostWidth: '800px', windows: [{ page: 0, top: 0, height: 100 }], pagePx: { w: 800, h: 450 }, sheetLeft: 0, props: [{}], timings: [{}], starts: [0], startPage: 0, fromCurrent: false } }, '*');
-  }, [scope]);
+  await opener.evaluate(([html, png]) => {
+    const bytes = Uint8Array.from(atob(png), c => c.charCodeAt(0));
+    const images = [{ url: 'blob:annoncee-a', blob: new Blob([bytes], { type: 'image/png' }) }, { url: 'blob:annoncee-b', blob: new Blob(['<script>window.__pwned = 11</' + 'script>'], { type: 'text/html' }) },
+      { url: 'javascript:window.__pwned = 12', blob: new Blob([bytes], { type: 'image/png' }) }, { url: 'blob:annoncee-c', blob: 'pas un fichier' }, null, 'rien'];
+    window.__pop.postMessage({ type: 'pp-present-show', payload: { v: 2, images, sheets: [{ id: 'own', text: '.pp-print-scope{color:#000}' }, { href: 'javascript:window.__pwned = 10' }, { href: 'data:text/css,*{}' }], scope: html, vars: { '--pp-page-width': '800px', 'color': 'red', '--evil': '1' }, hostClass: 'pp-print-host', hostWidth: '800px', windows: [{ page: 0, top: 0, height: 100 }], pagePx: { w: 800, h: 450 }, sheetLeft: 0, props: [{}], timings: [{}], starts: [0], startPage: 0, fromCurrent: false } }, '*');
+  }, [scope, TINY_PNG]);
   await sleep(1500);
   const safe = await pop.evaluate(() => {
     const host = document.getElementById('pp-slide-show-stage');
@@ -645,9 +650,15 @@ async function standalone() {
       fine: !!(shadow && shadow.getElementById('fine')), headLinks: Array.from(document.head.querySelectorAll('link[rel="stylesheet"]')).map(l => l.getAttribute('href')).filter(h => /^(javascript|data):/i.test(h)),
       rootVars: { evil: document.documentElement.style.getPropertyValue('--evil'), color: document.documentElement.style.color, width: document.documentElement.style.getPropertyValue('--pp-page-width') },
       baseHref: document.baseURI,
+      images: ['img-taken', 'img-html', 'img-script', 'img-text', 'link-kept'].map((id) => { const node = shadow ? shadow.getElementById(id) : null; return node ? (node.getAttribute('src') || node.getAttribute('href') || '') : null; }),
+      taken: (() => { const node = shadow ? shadow.getElementById('img-taken') : null; return node ? [node.complete, node.naturalWidth, node.naturalHeight] : null; })(),
     };
   });
-  check(tag + 'du HTML piégé reçu en message ne s’exécute pas : aucun des dix scripts, gestionnaires et adresses n’a tourné', safe.pwned, safe);
+  check(tag + 'du HTML piégé reçu en message ne s’exécute pas : aucun des douze scripts, gestionnaires et adresses n’a tourné', safe.pwned, safe);
+  check(tag + 'les images annoncées à part : seul un fichier d’image annoncé sous une adresse « blob: » prend une adresse de la page (et s’y charge) ; un fichier qui n’est pas une image, une adresse « javascript: », une valeur qui n’est pas un fichier et un lien restent sans effet',
+    !!safe.images && /^blob:/.test(safe.images[0] || '') && safe.images[0] !== 'blob:annoncee-a'
+      && !!safe.taken && safe.taken[0] === true && safe.taken[1] === 1 && safe.taken[2] === 1
+      && safe.images[1] === 'blob:annoncee-b' && (safe.images[2] === null || safe.images[2] === '') && safe.images[3] === 'blob:annoncee-c' && safe.images[4] === 'blob:annoncee-a', { images: safe.images, taken: safe.taken });
   check(tag + 'les balises et attributs qui s’exécuteraient sont retirés du rendu (script, cadre, objet, formulaire, base, meta, lien, gestionnaire on…, adresse javascript:), le texte reste', safe.forbidden.length === 0 && safe.handlers.length === 0 && safe.addresses.length === 0 && safe.fine, safe);
   check(tag + 'seules les variables « --pp- » passent, seules les feuilles de style de sites web (http, https) sont reprises', safe.rootVars.evil === '' && safe.rootVars.color === '' && safe.rootVars.width === '800px' && safe.headLinks.length === 0 && safe.baseHref.indexOf('pp-window.test') === -1, safe);
   // La politique de la page : script en ligne, gestionnaire en ligne et eval refusés pour de bon. L'eval part d'une minuterie de la page : une évaluation lancée par le banc d'essai passe outre la politique.
