@@ -921,13 +921,15 @@
           if (options.join() !== 'one,zip,merged,sheets') bad.push('options du menu : ' + options.join());
           const row = document.getElementById(ROW_ID);
           if (row.textContent.trim() !== 'Assemblage avant impression…') bad.push('texte de la ligne : ' + row.textContent);
+          // Le contrôle d'avant lot (js/batch-precheck.js) passe avant la fenêtre et écrit sa progression (« Contrôle avant l'export : 3/6… », puis la ligne d'état vidée) : ce n'est pas le chargement d'une bibliothèque, qui, lui, ne doit rien écrire.
+          const notCheck = list => list.filter(m => m !== '' && m.replace(/\d+/g, '#') !== I18n.t('batchPrecheck.progress', { current: '#', total: '#' }));
           const viaButton = await exportSheets(h, async () => { cancelButton().click(); }, false);
-          if (!viaButton.opened || viaButton.downloads.length || viaButton.statuses.length || viaButton.confirms.length) bad.push('Annuler : ' + JSON.stringify({ opened: viaButton.opened, downloads: viaButton.downloads.length, statuses: viaButton.statuses, confirms: viaButton.confirms.length }));
+          if (!viaButton.opened || viaButton.downloads.length || notCheck(viaButton.statuses).length || viaButton.confirms.length) bad.push('Annuler : ' + JSON.stringify({ opened: viaButton.opened, downloads: viaButton.downloads.length, statuses: viaButton.statuses, confirms: viaButton.confirms.length }));
           if (!viaButton.during || Object.values(viaButton.during).some(v => v !== 'none')) bad.push('lignes non verrouillées pendant la fenêtre : ' + JSON.stringify(viaButton.during));
           const after = ['v2-btn-export-pdf', 'v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged', ROW_ID].map(id => document.getElementById(id).style.pointerEvents);
           if (after.some(v => v !== '')) bad.push('lignes restées verrouillées après Annuler : ' + after.join());
           const viaEscape = await exportSheets(h, async () => { document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); }, false);
-          if (!viaEscape.opened || viaEscape.downloads.length || viaEscape.statuses.length) bad.push('Échap : ' + JSON.stringify({ opened: viaEscape.opened, downloads: viaEscape.downloads.length, statuses: viaEscape.statuses }));
+          if (!viaEscape.opened || viaEscape.downloads.length || notCheck(viaEscape.statuses).length) bad.push('Échap : ' + JSON.stringify({ opened: viaEscape.opened, downloads: viaEscape.downloads.length, statuses: viaEscape.statuses }));
           if (localStorage.getItem(SheetAssemblyDialog.STORAGE) !== null) bad.push('un choix a été gardé sans « Générer »');
         });
       } finally { I18n.setLang('fr'); closeIfOpen(); forgetChoice(); }

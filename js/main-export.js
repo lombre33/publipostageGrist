@@ -709,7 +709,7 @@ const MainExport = (function () {
     // L'accord avant un export en lot : `{}`, ou `{ layout }` pour les planches, qui se règlent dans leur propre fenêtre (feuille, emplacements, traits
     // de coupe) : elle tient lieu de confirmation. Un export seul n'en demande pas, son clic vaut accord, sauf quand sa ligne fait plus de
     // SPLIT_CONFIRM_FROM documents. null : la personne renonce.
-    async function confirmBatch(cfg, { only, tableId, rowCount, jobCount, splitting, protection, linkedView }) {
+    async function confirmBatch(cfg, { only, tableId, rowCount, jobCount, splitting, protection, linkedView, confirmed }) {
       // Un lot « PDF protégé » : la fenêtre du mot de passe tient lieu de confirmation (elle dit combien de PDF partent). Un document que « Un document par valeur » découpe l'a
       // déjà posée au départ de l'export (exportRecordAs, `protection`) : ici seule la question de ses nombreux documents peut encore se poser.
       if (cfg.protect && !protection) {
@@ -726,6 +726,8 @@ const MainExport = (function () {
         return proceed ? setup : null;
       }
       if (cfg.sheets) return (await SheetAssemblyDialog.open({ count: jobCount, table: tableId, grid: GridEditor.isGridType(getCurrentTypeModele()) })) || null;
+      // La fenêtre du contrôle d'avant lot vient de demander « Générer quand même » ou « sans ces lignes » : une seconde confirmation de suite ne ferait que répéter la question.
+      if (confirmed) return setup;
       const note = (splitting ? '\n\n' + I18n.t('confirm.splitNote', { documents: jobCount }) : '') + (linkedView ? '\n\n' + I18n.t('confirm.linkedViewNote', { name: linkedView }) : '');
       const proceed = await Dialogs.confirm({ title: exportText('dialog.batchExport.title'), message: exportText(cfg.confirm, { count: rowCount, table: tableId }) + note, confirmLabel: I18n.t('common.generate') });
       return proceed ? setup : null;
@@ -807,10 +809,22 @@ const MainExport = (function () {
       }
       const picked = await readBatchRows(cfg, tableId, only);
       if (!picked) return;
-      const { rows, linked } = picked;
+      const { linked } = picked;
+      let rows = picked.rows;
 
-      const { openSource, templatesCache, jobs, splitting } = await planBatchJobs(cfg, tableId, only, rows);
-      const sheetSetup = await confirmBatch(cfg, { only, tableId, rowCount: rows.length, jobCount: jobs.length, splitting, protection: preset && preset.protection, linkedView: linked });
+      const planned = await planBatchJobs(cfg, tableId, only, rows);
+      const { openSource, templatesCache } = planned;
+      let { jobs, splitting } = planned;
+      // Le contrôle des lignes d'avant lot : une fenêtre seulement quand une ligne a un problème. « Générer sans ces lignes » retire ces lignes du lot, que la confirmation compte ensuite.
+      const checked = await precheckBatch(cfg, tableId, only, jobs, { openSource, templatesCache });
+      if (!checked) return;
+      if (checked.jobs !== jobs) {
+        jobs = checked.jobs;
+        const kept = new Set(jobs.map(job => job.row.id));
+        rows = rows.filter(row => kept.has(row.id));
+        splitting = jobs.some(job => ListSplit.hasPins(job.variant));
+      }
+      const sheetSetup = await confirmBatch(cfg, { only, tableId, rowCount: rows.length, jobCount: jobs.length, splitting, protection: preset && preset.protection, linkedView: linked, confirmed: checked.confirmed });
       if (!sheetSetup) return;
 
       // Ni JSZip ni le lot PDF ne sont chargés d'office au démarrage du widget : `JSZip` n'existe pas tant que ceci n'a pas été attendu au moins une
@@ -855,6 +869,44 @@ const MainExport = (function () {
       return { openSource, templatesCache, jobs, splitting };
     }
 
+    // Le contrôle d'avant lot (js/batch-precheck.js) : les lignes sont parcourues sans rien générer, et la fenêtre ne s'ouvre que s'il y a un problème. Rend { jobs, confirmed } - les documents à générer (sans
+    // les lignes que la personne a laissées de côté) et `confirmed` : la fenêtre vient de poser la question, la confirmation ordinaire ne la redemande pas - ou null : la personne annule ou arrête le contrôle (le coin
+    // d'état le dit). Un export d'une seule ligne (`only`) et un lot d'un seul document ne sont pas contrôlés : la ligne est celle que la personne voit.
+    async function precheckBatch(cfg, tableId, only, jobs, { openSource, templatesCache }) {
+      if (only || jobs.length < 2) return { jobs, confirmed: false };
+      const nameOf = cfg.merged || cfg.single ? null : async job => {
+        if (!job.source.filenameTemplate) return null;
+        const filename = sanitizeFilenamePart(await ReaderMode.resolveFilename(job.source.filenameTemplate, tableId, job.row));
+        const valueName = job.variant && job.variant.label ? sanitizeFilenamePart(job.variant.label) : '';
+        return { base: (filename || ('document-' + job.row.id)) + (valueName ? ' - ' + valueName : ''), empty: !filename };
+      };
+      const { problems, stopped } = await BatchPrecheck.scan(jobs, {
+        tableId, nameOf,
+        htmlOf: async job => ListSplit.pin(job.rowHtml !== undefined ? job.rowHtml : await sourceRowHtml(job.source, tableId, job.row, templatesCache), job.variant),
+        wrongKindOf: job => wrongKindOf(cfg, openSource, job.source),
+        onProgress: (current, total) => setStatus(I18n.t('batchPrecheck.progress', { current, total })),
+      });
+      // « Contrôle avant l'export : 3/3… » ne reste pas affiché derrière la fenêtre qui suit (ni derrière un « Annuler » : la ligne d'état est vide, comme avant ce contrôle).
+      setStatus(stopped ? I18n.t('status.batchPrecheckStopped') : '');
+      if (stopped) return null;
+      if (!problems.length) return { jobs, confirmed: false };
+      const rowCount = new Set(jobs.map(job => job.row.id)).size;
+      const rowNameOf = async problem => {
+        const job = jobs[problem.jobIndex];
+        return job.source.filenameTemplate ? sanitizeFilenamePart(await ReaderMode.resolveFilename(job.source.filenameTemplate, tableId, job.row)) : '';
+      };
+      const { action, leftOut } = await BatchPrecheck.review(problems, { total: jobs.length, rowCount, format: cfg.label, rowNameOf });
+      if (action === 'cancel') { setStatus(I18n.t('status.exportCancelled')); return null; }
+      return { jobs: leftOut.size ? jobs.filter(job => !leftOut.has(job.row.id)) : jobs, confirmed: true };
+    }
+
+    // Le genre de modèle que cet export ne fait pas pour ce document (« Modèle selon la ligne » peut envoyer une ligne vers une grille dans un export Word, vers un document dans un export Excel) : 'document'
+    // (la ligne a un modèle de grille, l'export ne fait que des documents), 'grid' (l'inverse), null (rien à dire : le modèle de l'écran, ou du bon genre).
+    function wrongKindOf(cfg, openSource, source) {
+      if (source === openSource || cfg.grid == null || cfg.grid === GridEditor.isGridType(source.typeModele)) return null;
+      return cfg.grid ? 'document' : 'grid';
+    }
+
     // Génère les documents un par un dans `sink`. cancelled : « Annuler » sur la fenêtre des images d'un site externe a arrêté tout le lot ;
     // failed : le nombre de lignes que leur modèle ou une erreur a empêché de générer, et failures : ces lignes mêmes, de quoi les reconnaître et la
     // raison, pour la fenêtre de fin de lot (js/batch-failures.js) ; blankRows : les lignes dont le PDF a des pages blanches, dans le fichier mais à revoir, pour la même
@@ -883,9 +935,10 @@ const MainExport = (function () {
           const valueName = variant && variant.label ? sanitizeFilenamePart(variant.label) : '';
           // Le modèle d'une ligne (« Modèle selon la ligne ») peut ne pas être du genre de cet export - une grille en Word, un document en Excel : la
           // ligne n'est pas générée, comme celle qui échoue.
-          if (source !== openSource && cfg.grid != null && cfg.grid !== GridEditor.isGridType(source.typeModele)) {
+          const wrongKind = wrongKindOf(cfg, openSource, source);
+          if (wrongKind) {
             console.error('[main] export ' + cfg.label + ' en lot : le modèle de la ligne ' + row.id + ' (' + source.typeModele + ') ne se génère pas dans ce format');
-            failedJobs.push({ row, source, valueName, wrongKind: cfg.grid ? 'document' : 'grid' });
+            failedJobs.push({ row, source, valueName, wrongKind });
             failedRows.add(row.id);
             continue;
           }

@@ -244,7 +244,8 @@
         const res = await clickExportRow(h, 'v2-btn-export-docx-batch');
         const messages = [...res.confirms, ...res.statuses];
         const mentionsPdf = messages.filter(m => /pdf/i.test(m));
-        const progress = res.statuses.filter(m => /1\/3/.test(m));
+        // Le contrôle d'avant lot (« Contrôle avant l'export : 1/3… ») ne dit aucun format ; la progression de l'export, elle, doit dire DOCX.
+        const progress = res.statuses.filter(m => /1\/3/.test(m) && m !== I18n.t('batchPrecheck.progress', { current: 1, total: 3 }));
         const pass = res.downloads.length === 1 && res.confirms.length === 1 && /docx/i.test(res.confirms[0]) && mentionsPdf.length === 0
           && progress.length >= 1 && progress.every(m => /docx/i.test(m)) && /docx/i.test(res.status) && res.status.includes('3');
         return { pass, notes: JSON.stringify({ confirms: res.confirms, statuses: res.statuses, mentionsPdf }) };
@@ -718,19 +719,32 @@
         rules: ids => [rtRule('Grille', ids.grille)],
       });
       try {
-        const asked = h.choosePrompts.length;
-        const res = await clickExportRow(h, 'v2-btn-export-docx-batch');
+        // Le contrôle d'avant lot annonce la ligne avant de rien générer (js/batch-precheck.js) : « Générer quand même » garde ici le parcours d'avant - la ligne comptée en échec, dite par la fenêtre de fin de lot.
+        const res = await clickExportRow(h, 'v2-btn-export-docx-batch', null, null, answerWith('go'));
         const dl = res.downloads[0];
         const zip = dl && dl.blob ? await JSZip.loadAsync(await dl.blob.arrayBuffer()) : null;
         const files = zip ? Object.keys(zip.files).filter(n => !zip.files[n].dir).sort() : [];
         const expected = ['Facture_Alpha Durand.docx', 'publipostage.docx'];
         const problems = [];
+        const wrongKindLine = failureLine('Grille_Bravo Martin', 2, I18n.t('batchFailures.wrongKind.grid', { format: 'DOCX' }));
+        problems.push(...precheckWindowProblems(precheckWindows(res), {
+          title: I18n.t('batchPrecheck.title', { n: 1 }),
+          message: [I18n.t('batchPrecheck.intro', { n: 1, total: 3 }), I18n.t('batchPrecheck.introNothing'), I18n.t('batchPrecheck.introSkip')].join(' ') + '\n\n' + wrongKindLine,
+          choices: 'skip:' + I18n.t('batchPrecheck.skip') + ' | go:' + I18n.t('batchPrecheck.go'),
+        }));
         problems.push(...documentProblems('Facture_Alpha Durand.docx', zip && zip.file('Facture_Alpha Durand.docx') ? await docxFacts(await zip.file('Facture_Alpha Durand.docx').async('blob')) : null, FACTURE_OF('Alpha Durand')));
         const status = I18n.t('status.batchExportDoneWithFailuresDocx', { ok: 2, failed: 1 });
         if (res.status !== status) problems.push('fin=' + res.status);
         if (/console/i.test(res.status)) problems.push('la fin renvoie à la console : ' + res.status);
         // La fenêtre de fin de lot nomme la ligne qui manque (le nom que son fichier aurait porté, son n°) et dit pourquoi.
-        problems.push(...failureWindowProblems(h.choosePrompts.slice(asked), [failureLine('Grille_Bravo Martin', 2, I18n.t('batchFailures.wrongKind.grid', { format: 'DOCX' }))], 2));
+        problems.push(...failureWindowProblems(res.asked.slice(1), [wrongKindLine], 2));
+        // « Générer sans ces lignes » : la même archive, mais la ligne est laissée de côté d'avance - ni échec compté, ni fenêtre de fin de lot.
+        const left = await clickExportRow(h, 'v2-btn-export-docx-batch', null, null, answerWith('skip'));
+        const leftZip = left.downloads[0] && left.downloads[0].blob ? await JSZip.loadAsync(await left.downloads[0].blob.arrayBuffer()) : null;
+        const leftFiles = leftZip ? Object.keys(leftZip.files).filter(n => !leftZip.files[n].dir).sort() : [];
+        if (JSON.stringify(leftFiles) !== JSON.stringify(expected)) problems.push('sans ces lignes : fichiers=' + leftFiles.join(','));
+        if (left.status !== I18n.t('status.batchExportDoneDocx', { ok: 2 })) problems.push('sans ces lignes : fin=' + left.status);
+        if (left.asked.length !== 1 || left.confirms.length) problems.push('sans ces lignes : fenêtres=' + left.asked.length + ' confirmations=' + left.confirms.length);
         return { pass: res.downloads.length === 1 && JSON.stringify(files) === JSON.stringify(expected) && !problems.length, notes: JSON.stringify({ files, problems, status: res.status }) };
       } finally { await releaseRowTemplates(h, saved); }
     },
@@ -2387,6 +2401,274 @@
       if (pillOf()) problems.push('la pastille est restée');
       return { pass: problems.length === 0, notes: problems.length ? problems.join(' | ') : 'ok : ' + res.status };
     },
+  });
+
+  // === Contrôle des lignes avant un lot (js/batch-precheck.js, choix d'Antoine du 11/11 : « Auto, seulement si problème ») ===
+  // Avant de générer, le lot est parcouru sans fabriquer un seul fichier ; la fenêtre ne s'ouvre que s'il y a un problème, et sinon l'export continue avec sa seule confirmation d'avant.
+  const RATIO = '{' + TABLE + '.Total} / {' + TABLE + '.Qte}';
+  const ratioBody = `<p>${badge('Nom')} : <span class="calc-badge" data-formula="${RATIO}"></span></p>`;
+  const ratioColumns = { Qte: 'Int', Total: 'Numeric' };
+  const ratioRow = (id, qte) => ({ id, Nom: 'Client ' + String(id).padStart(3, '0'), Qte: qte, Total: 10 });
+  const answerWith = value => opts => (opts.choices && opts.choices.length ? value : null);
+  // Les fenêtres du contrôle parmi les fenêtres à choix reçues (leur phrase « Rien n'a encore été généré. » les distingue de celles de fin de lot).
+  const precheckWindows = res => res.asked.filter(a => typeof a.message === 'string' && a.message.includes(I18n.t('batchPrecheck.introNothing')));
+  const choicesOf = win => (win.choices || []).map(c => c.value + ':' + c.label).join(' | ');
+  const cancelledNow = () => document.getElementById('status-msg').textContent === I18n.t('status.exportCancelled');
+  // Combien de fois le contrôle a tourné, et sur combien de documents (un lot sans fenêtre n'a pas pour autant été « sauté »).
+  function spyOnScan() {
+    const orig = BatchPrecheck.scan;
+    const calls = [];
+    BatchPrecheck.scan = (jobs, opts) => { calls.push(jobs.length); return orig(jobs, opts); };
+    return { calls, restore() { BatchPrecheck.scan = orig; } };
+  }
+  async function pdfTextsInZip(h, download) {
+    const zip = await JSZip.loadAsync(await download.blob.arrayBuffer());
+    const texts = [];
+    for (const name of Object.keys(zip.files).sort()) {
+      if (!/\.pdf$/i.test(name)) continue;
+      texts.push(squash((await pdfPageTexts(h, await zip.files[name].async('blob'))).join(' ')));
+    }
+    return { names: Object.keys(zip.files).sort(), texts };
+  }
+  // La fenêtre attendue : son titre, son texte (introduction, ligne vide, une ligne par problème) et ses boutons.
+  function precheckWindowProblems(windows, wanted) {
+    if (windows.length !== 1) return ['fenêtres du contrôle : ' + windows.length];
+    const [win] = windows;
+    const problems = [];
+    if (win.title !== wanted.title) problems.push('titre=' + JSON.stringify(win.title) + ' au lieu de ' + JSON.stringify(wanted.title));
+    if (win.message !== wanted.message) problems.push('texte=' + JSON.stringify(win.message) + ' au lieu de ' + JSON.stringify(wanted.message));
+    if (choicesOf(win) !== wanted.choices) problems.push('boutons=' + choicesOf(win) + ' au lieu de ' + wanted.choices);
+    return problems;
+  }
+
+  cases.push({
+    id: 'pdfbatch_precheck_clean_lot_opens_no_window_and_asks_one_confirmation',
+    description: 'Lot PDF (ZIP) de trois lignes sans problème : le contrôle a tourné sur les trois documents, aucune fenêtre ne s’ouvre, la seule confirmation d’avant est posée, et l’archive a ses trois PDF',
+    run: async (h) => dated(h, async () => {
+      const spy = spyOnScan();
+      let res;
+      try { res = await clickExportRow(h, 'v2-btn-export-pdf-batch'); } finally { spy.restore(); }
+      const problems = [];
+      if (spy.calls.join() !== '3') problems.push('le contrôle a tourné sur ' + (spy.calls.join() || 'rien'));
+      if (res.asked.length) problems.push('fenêtres à choix=' + res.asked.length);
+      if (res.confirms.length !== 1) problems.push('confirmations=' + res.confirms.length);
+      const zip = res.downloads[0] && await pdfTextsInZip(h, res.downloads[0]);
+      if (!zip || zip.texts.length !== 3) problems.push('PDF dans l’archive=' + (zip ? zip.texts.length : 'aucune archive'));
+      // Un « Annuler » sur la confirmation : la ligne d’état est vide, la progression du contrôle (« Contrôle avant l’export : 3/3… ») ne reste pas affichée.
+      let confirmed = 0;
+      const declined = await clickExportRow(h, 'v2-btn-export-pdf-batch', null, () => confirmed > 0, null, () => { confirmed++; return false; });
+      if (declined.downloads.length || declined.status !== '') problems.push('confirmation refusée : téléchargements=' + declined.downloads.length + ' état=' + JSON.stringify(declined.status));
+      return { pass: problems.length === 0, notes: problems.length ? problems.join(' | ') : 'ok : contrôle sur 3 documents, aucune fenêtre, 1 confirmation, 3 PDF' };
+    }),
+  });
+
+  cases.push({
+    id: 'pdfbatch_precheck_broken_variable_is_listed_once_for_the_lot',
+    description: 'Une variable du modèle dont la colonne n’existe plus : une seule ligne dans la fenêtre pour tout le lot (pas une par document), un seul bouton « Générer quand même » ; « Annuler » ne génère rien ni ne date rien, « Générer quand même » génère les trois PDF sans seconde confirmation',
+    run: async (h) => dated(h, async () => {
+      const problems = [];
+      const gone = await clickExportRow(h, 'v2-btn-export-pdf-batch', null, cancelledNow, answerWith(null));
+      const broken = I18n.t('batchPrecheck.line.broken', { reason: I18n.t('batchPrecheck.reason.broken.column', { key: TABLE + '.Inconnue' }) });
+      problems.push(...precheckWindowProblems(precheckWindows(gone), {
+        title: I18n.t('batchPrecheck.title', { n: 1 }),
+        message: [I18n.t('batchPrecheck.introBroken', { n: 1 }), I18n.t('batchPrecheck.introNothing')].join(' ') + '\n\n' + broken,
+        choices: 'go:' + I18n.t('batchPrecheck.go'),
+      }));
+      if (gone.downloads.length || gone.confirms.length) problems.push('annulé : téléchargements=' + gone.downloads.length + ' confirmations=' + gone.confirms.length);
+      if (gone.status !== I18n.t('status.exportCancelled')) problems.push('annulé : état=' + gone.status);
+      if (dateWrites().length) problems.push('annulé : écritures de date=' + dateWrites().length);
+      const from = Math.floor(Date.now() / 1000);
+      const went = await clickExportRow(h, 'v2-btn-export-pdf-batch', null, null, answerWith('go'));
+      if (precheckWindows(went).length !== 1 || went.asked.length !== 1) problems.push('« quand même » : fenêtres=' + went.asked.length);
+      if (went.confirms.length) problems.push('« quand même » : une seconde confirmation a été posée (' + went.confirms.length + ')');
+      const zip = went.downloads[0] && await pdfTextsInZip(h, went.downloads[0]);
+      if (!zip || zip.texts.length !== 3) problems.push('« quand même » : PDF=' + (zip ? zip.texts.length : 'aucune archive'));
+      if (NAMES.some((_, i) => !isDatedSince(window.__gristStub.getRow(TABLE, i + 1).Dernier, from))) problems.push('« quand même » : lignes non datées');
+      return { pass: problems.length === 0, notes: problems.length ? problems.join(' | ') : 'ok : une ligne pour tout le lot, annuler / quand même' };
+    }, { body: `<p>Bonjour ${badge('Nom')} ${badge('Inconnue')}</p>` }),
+  });
+
+  cases.push({
+    id: 'pdfbatch_precheck_row_with_a_wrong_calculation_cancel_go_or_skip',
+    description: 'Un calcul qui divise par zéro sur la ligne 2 seulement : la fenêtre la nomme (ligne n° 2, la formule, ce que le document écrirait) et propose « Générer sans ces lignes » / « Générer quand même » ; Annuler ne génère rien, « quand même » fait trois PDF, « sans ces lignes » deux (la ligne 2 ni dans l’archive ni datée), sans seconde confirmation',
+    run: async (h) => dated(h, async () => {
+      const problems = [];
+      const cancel = await clickExportRow(h, 'v2-btn-export-pdf-batch', null, cancelledNow, answerWith(null));
+      const wording = I18n.t('batchFailures.line', { row: I18n.t('batchFailures.row.unnamed', { id: 2 }), reason: I18n.t('batchPrecheck.reason.errorCalc', { key: RATIO, text: '[ERREUR : Division par zéro.]' }) });
+      const win = precheckWindows(cancel)[0];
+      const wanted = [I18n.t('batchPrecheck.intro', { n: 1, total: 3 }), I18n.t('batchPrecheck.introNothing'), I18n.t('batchPrecheck.introSkip')].join(' ');
+      const lines = win ? win.message.split('\n\n')[1] : '';
+      if (precheckWindows(cancel).length !== 1) problems.push('annuler : fenêtres=' + precheckWindows(cancel).length);
+      else {
+        if (win.title !== I18n.t('batchPrecheck.title', { n: 1 })) problems.push('titre=' + win.title);
+        if (win.message.split('\n\n')[0] !== wanted) problems.push('introduction=' + win.message.split('\n\n')[0]);
+        if (choicesOf(win) !== 'skip:' + I18n.t('batchPrecheck.skip') + ' | go:' + I18n.t('batchPrecheck.go')) problems.push('boutons=' + choicesOf(win));
+        if (lines.split('\n').length !== 1 || !lines.startsWith('• ' + I18n.t('batchFailures.row.unnamed', { id: 2 }) + ' : ') || !lines.includes('« ' + RATIO + ' »') || !/« \[[^\]]+\] »$/.test(lines)) problems.push('ligne=' + JSON.stringify(lines) + ' (attendu de la forme ' + JSON.stringify(wording) + ')');
+      }
+      if (cancel.downloads.length || cancel.confirms.length || cancel.status !== I18n.t('status.exportCancelled') || dateWrites().length) problems.push('annuler : téléchargements=' + cancel.downloads.length + ' confirmations=' + cancel.confirms.length + ' état=' + cancel.status + ' écritures=' + dateWrites().length);
+      const anyway = await clickExportRow(h, 'v2-btn-export-pdf-batch', null, null, answerWith('go'));
+      const all = anyway.downloads[0] && await pdfTextsInZip(h, anyway.downloads[0]);
+      if (!all || all.texts.length !== 3 || anyway.confirms.length) problems.push('quand même : PDF=' + (all ? all.texts.length : 'aucune archive') + ' confirmations=' + anyway.confirms.length);
+      // Les dates posées par « quand même » sont effacées : l’horodatage est à la seconde, celles du lot suivant ne s’en distingueraient pas.
+      window.__gristStub.setRows(TABLE, [ratioRow(1, 2), ratioRow(2, 0), ratioRow(3, 5)]);
+      await GristAPI.refreshSchema();
+      window.__gristStub.clearActionLog();
+      const from = Math.floor(Date.now() / 1000);
+      const left = await clickExportRow(h, 'v2-btn-export-pdf-batch', null, null, answerWith('skip'));
+      const some = left.downloads[0] && await pdfTextsInZip(h, left.downloads[0]);
+      if (!some || some.texts.length !== 2 || some.texts.some(t => t.includes(squash('Client 002'))) || !some.texts.some(t => t.includes(squash('Client 001'))) || !some.texts.some(t => t.includes(squash('Client 003')))) problems.push('sans ces lignes : PDF=' + (some ? some.texts.length : 'aucune archive'));
+      if (left.confirms.length) problems.push('sans ces lignes : confirmations=' + left.confirms.length);
+      const stamped = [1, 2, 3].map(id => isDatedSince(window.__gristStub.getRow(TABLE, id).Dernier, from));
+      if (stamped.join() !== 'true,false,true') problems.push('lignes datées (1, 2, 3)=' + stamped.join());
+      return { pass: problems.length === 0, notes: problems.length ? problems.join(' | ') : 'ok : ' + lines };
+    }, { body: ratioBody, columns: ratioColumns, rows: [ratioRow(1, 2), ratioRow(2, 0), ratioRow(3, 5)] }),
+  });
+
+  cases.push({
+    id: 'pdfbatch_precheck_attachment_that_is_not_an_image_or_has_no_record_is_listed',
+    description: 'Une colonne de pièces jointes : un PDF joint (pas une image) et une pièce sans fiche dans Grist sont listés avec leur ligne ; la table des pièces jointes illisible ne prouve rien (aucune fenêtre) ; une image encadrée est contrôlée comme la bulle',
+    run: async (h) => {
+      const stub = window.__gristStub;
+      const files = [{ id: 901, fileName: 'contrat.pdf', fileType: 'application/pdf' }, { id: 902, fileName: 'logo.png', fileType: 'image/png' }];
+      return dated(h, async () => {
+        const problems = [];
+        stub.setAttachments(files);
+        const asked = await clickExportRow(h, 'v2-btn-export-pdf-batch', null, cancelledNow, answerWith(null));
+        const key = TABLE + '.Piece';
+        const wantedLines = [
+          I18n.t('batchFailures.line', { row: I18n.t('batchFailures.row.unnamed', { id: 2 }), reason: I18n.t('batchPrecheck.reason.image.notImage', { key, name: 'contrat.pdf' }) }),
+          I18n.t('batchFailures.line', { row: I18n.t('batchFailures.row.unnamed', { id: 3 }), reason: I18n.t('batchPrecheck.reason.image.unknown', { key }) }),
+        ];
+        problems.push(...precheckWindowProblems(precheckWindows(asked), {
+          title: I18n.t('batchPrecheck.title', { n: 2 }),
+          message: [I18n.t('batchPrecheck.intro', { n: 2, total: 4 }), I18n.t('batchPrecheck.introNothing'), I18n.t('batchPrecheck.introSkip')].join(' ') + '\n\n' + wantedLines.join('\n'),
+          choices: 'skip:' + I18n.t('batchPrecheck.skip') + ' | go:' + I18n.t('batchPrecheck.go'),
+        }));
+        // Le même contrôle pour une image encadrée (celle d’une colonne de pièces jointes).
+        const frame = '<p><img class="editor-image" src="" alt="" data-var-table="' + TABLE + '" data-var-column="Piece" data-var-key="' + key + '"></p>';
+        const found = await ReaderMode.inspect(frame, TABLE, { id: 2, Nom: 'x', Piece: ['L', 901] });
+        if (JSON.stringify(found.images) !== JSON.stringify([{ key, id: 901, name: 'contrat.pdf', reason: 'notImage' }])) problems.push('image encadrée=' + JSON.stringify(found.images));
+        // La table des pièces jointes illisible : aucune fiche pour aucune pièce, « introuvable » ne prouve rien - pas de fenêtre, la confirmation habituelle.
+        stub.setAttachments(null);
+        const unreadable = await clickExportRow(h, 'v2-btn-export-pdf-batch', null, cancelledNow, null, () => false);
+        if (precheckWindows(unreadable).length || unreadable.confirms.length !== 1) problems.push('table illisible : fenêtres=' + precheckWindows(unreadable).length + ' confirmations=' + unreadable.confirms.length);
+        return { pass: problems.length === 0, notes: problems.length ? problems.join(' | ') : 'ok : ' + wantedLines.join(' ; ') };
+      }, {
+        body: `<p>${badge('Nom')} ${badge('Piece')}</p>`, columns: { Piece: 'Attachments' },
+        rows: [{ id: 1, Nom: NAMES[0], Piece: ['L', 902] }, { id: 2, Nom: NAMES[1], Piece: ['L', 901] }, { id: 3, Nom: NAMES[2], Piece: ['L', 999] }, { id: 4, Nom: 'Delta Roux', Piece: null }],
+      }).finally(() => stub.setAttachments([]));
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_precheck_file_names_empty_or_duplicate_only_in_a_zip_with_a_name_template',
+    description: 'Une archive ZIP dont le modèle donne un nom de fichier : le nom vide (ligne 3) et le nom déjà pris (ligne 2) sont listés, sans bouton « sans ces lignes » (le document n’est pas faux), et l’archive prend « Alpha (2).pdf » / « document-3.pdf » ; sans nom de fichier choisi ou en PDF unique, aucune fenêtre',
+    run: async (h) => {
+      const input = document.getElementById('pdf-filename-template');
+      return dated(h, async () => {
+        const problems = [];
+        input.value = '#' + TABLE + '.Nom';
+        const spy = spyOnScan();
+        let asked;
+        try { asked = await clickExportRow(h, 'v2-btn-export-pdf-batch', null, cancelledNow, answerWith(null)); } finally { spy.restore(); }
+        const wantedLines = [
+          I18n.t('batchFailures.line', { row: I18n.t('batchFailures.row.named', { name: 'Alpha', id: 2 }), reason: I18n.t('batchPrecheck.reason.nameDuplicate', { other: 1 }) }),
+          I18n.t('batchFailures.line', { row: I18n.t('batchFailures.row.unnamed', { id: 3 }), reason: I18n.t('batchPrecheck.reason.nameEmpty', { name: 'document-3' }) }),
+        ];
+        problems.push(...precheckWindowProblems(precheckWindows(asked), {
+          title: I18n.t('batchPrecheck.title', { n: 2 }),
+          message: [I18n.t('batchPrecheck.intro', { n: 2, total: 4 }), I18n.t('batchPrecheck.introNothing')].join(' ') + '\n\n' + wantedLines.join('\n'),
+          choices: 'go:' + I18n.t('batchPrecheck.go'),
+        }));
+        const went = await clickExportRow(h, 'v2-btn-export-pdf-batch', null, null, answerWith('go'));
+        const zip = went.downloads[0] && await pdfTextsInZip(h, went.downloads[0]);
+        const names = zip ? zip.names.join(',') : 'aucune archive';
+        if (names !== 'Alpha (2).pdf,Alpha.pdf,Bravo.pdf,document-3.pdf') problems.push('archive=' + names);
+        // Pas de nom de fichier choisi : tous les fichiers s’appellent pareil par défaut, ce n’est pas un problème à signaler.
+        input.value = '';
+        const plain = await clickExportRow(h, 'v2-btn-export-pdf-batch');
+        if (precheckWindows(plain).length || plain.confirms.length !== 1) problems.push('sans nom choisi : fenêtres=' + precheckWindows(plain).length + ' confirmations=' + plain.confirms.length);
+        // Un PDF unique n’a pas de noms de fichiers.
+        input.value = '#' + TABLE + '.Nom';
+        const merged = await clickExportRow(h, 'v2-btn-export-pdf-merged');
+        if (precheckWindows(merged).length || merged.downloads.length !== 1) problems.push('PDF unique : fenêtres=' + precheckWindows(merged).length + ' téléchargements=' + merged.downloads.length);
+        return { pass: problems.length === 0, notes: problems.length ? problems.join(' | ') : 'ok : ' + names };
+      }, { rows: [{ id: 1, Nom: 'Alpha' }, { id: 2, Nom: 'Alpha' }, { id: 3, Nom: '' }, { id: 4, Nom: 'Bravo' }] }).finally(() => { input.value = ''; });
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_precheck_stop_during_the_check_generates_nothing',
+    description: '300 lignes : « Arrêter » cliqué sur la pastille du contrôle (« Contrôle avant l’export : n/300… ») arrête l’export - « Contrôle arrêté : rien n’a été généré. », ni fenêtre, ni confirmation, ni archive, ni date, plus de pastille',
+    run: async (h) => {
+      const rows = Array.from({ length: 300 }, (_, i) => ({ id: i + 1, Nom: 'Client ' + String(i + 1).padStart(3, '0') }));
+      return dated(h, async stub => {
+        stub.setRows(TABLE, rows);
+        await GristAPI.refreshSchema();
+        // Le contrôle d’un lot aussi simple va plus vite que le tour de la page (quelques ms pour 300 lignes) : chaque ligne y met 3 ms, comme un lot plus lourd, pour que la pastille se laisse cliquer.
+        const inspect = ReaderMode.inspect;
+        ReaderMode.inspect = async (...args) => { await h.sleep(3); return inspect.apply(ReaderMode, args); };
+        const watcher = stopWhenAt(4);
+        let res;
+        try { res = await clickExportRow(h, 'v2-btn-export-pdf-batch', null, () => watcher.clickedAt !== null && !pillOf() && document.getElementById('status-msg').textContent === I18n.t('status.batchPrecheckStopped')); } finally { watcher.stop(); ReaderMode.inspect = inspect; }
+        const problems = [];
+        if (watcher.clickedAt === null) problems.push('la pastille du contrôle n’a jamais montré le 4e document');
+        if (res.status !== I18n.t('status.batchPrecheckStopped')) problems.push('état=' + res.status);
+        if (res.downloads.length || res.confirms.length || res.asked.length) problems.push('téléchargements=' + res.downloads.length + ' confirmations=' + res.confirms.length + ' fenêtres=' + res.asked.length);
+        if (dateWrites().length) problems.push('écritures de date=' + dateWrites().length);
+        if (pillOf()) problems.push('la pastille est restée');
+        return { pass: problems.length === 0, notes: problems.length ? problems.join(' | ') : 'ok : arrêté au document ' + watcher.clickedAt + ' → « ' + res.status + ' »' };
+      }, { rows });
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_precheck_many_problems_are_capped_at_a_hundred_lines_in_english_too',
+    description: '106 lignes dont 105 au calcul faux, interface en anglais : la fenêtre dit « 105 things to check », liste cent lignes puis « … and 5 more problems. », propose « Generate without these rows » / « Generate anyway »',
+    run: async (h) => {
+      const rows = Array.from({ length: 106 }, (_, i) => ratioRow(i + 1, i === 105 ? 3 : 0));
+      const lang = I18n.getLang();
+      return dated(h, async () => {
+        I18n.setLang('en');
+        let res;
+        try { res = await clickExportRow(h, 'v2-btn-export-pdf-batch', null, cancelledNow, answerWith(null)); } finally { I18n.setLang(lang); }
+        const problems = [];
+        const win = res.asked[0];
+        if (res.asked.length !== 1 || !win) return { pass: false, notes: 'fenêtres=' + res.asked.length };
+        const [intro, list] = win.message.split('\n\n');
+        const lines = list.split('\n');
+        if (win.title !== '105 things to check before generating') problems.push('titre=' + win.title);
+        if (intro !== 'Of 106 documents, 105 rows have a problem. Nothing has been generated yet. “Generate without these rows” leaves out the rows whose document would be wrong or missing.') problems.push('introduction=' + intro);
+        if (lines.length !== 101) problems.push('lignes=' + lines.length);
+        if (lines[100] !== '… and 5 more problems.') problems.push('dernière ligne=' + lines[100]);
+        if (!/^• Row #1: the calculation “\{PbClients\.Total\} \/ \{PbClients\.Qte\}” would be written as “\[[^\]]+\]”$/.test(lines[0])) problems.push('première ligne=' + lines[0]);
+        if (choicesOf(win) !== 'skip:Generate without these rows | go:Generate anyway') problems.push('boutons=' + choicesOf(win));
+        return { pass: problems.length === 0, notes: problems.length ? problems.join(' | ') : 'ok : ' + lines[0] };
+      }, { body: ratioBody, columns: ratioColumns, rows });
+    },
+  });
+
+  cases.push({
+    id: 'pdfbatch_precheck_every_row_wrong_cannot_be_left_out_and_one_document_is_not_checked',
+    description: 'Toutes les lignes ont le calcul faux : seul « Générer quand même » est proposé (rien à laisser de côté sans tout abandonner) ; un lot d’un seul document n’est pas contrôlé du tout',
+    run: async (h) => dated(h, async stub => {
+      const problems = [];
+      const res = await clickExportRow(h, 'v2-btn-export-pdf-batch', null, cancelledNow, answerWith(null));
+      const win = precheckWindows(res)[0];
+      if (!win) problems.push('aucune fenêtre');
+      else {
+        if (choicesOf(win) !== 'go:' + I18n.t('batchPrecheck.go')) problems.push('boutons=' + choicesOf(win));
+        if (win.title !== I18n.t('batchPrecheck.title', { n: 3 })) problems.push('titre=' + win.title);
+        if (win.message.includes(I18n.t('batchPrecheck.introSkip'))) problems.push('l’introduction parle de « sans ces lignes »');
+      }
+      stub.setRows(TABLE, [ratioRow(1, 0)]);
+      await GristAPI.refreshSchema();
+      const spy = spyOnScan();
+      let one;
+      try { one = await clickExportRow(h, 'v2-btn-export-pdf-batch', null, cancelledNow, answerWith(null), () => false); } finally { spy.restore(); }
+      if (spy.calls.length || one.asked.length || one.confirms.length !== 1) problems.push('un seul document : contrôles=' + spy.calls.length + ' fenêtres=' + one.asked.length + ' confirmations=' + one.confirms.length);
+      return { pass: problems.length === 0, notes: problems.length ? problems.join(' | ') : 'ok' };
+    }, { body: ratioBody, columns: ratioColumns, rows: [ratioRow(1, 0), ratioRow(2, 0), ratioRow(3, 0)] }),
   });
 
   window.EditorTestSuites = window.EditorTestSuites || {};

@@ -1755,6 +1755,75 @@ const ReaderMode = (function () {
     HeadingStyles.apply(wrapper);
     return wrapper.innerHTML;
   }
+  async function inspect(htmlContent, tableId, record) {
+    // Ce qui serait faux dans le document de cette ligne (le contrôle d'avant lot, js/batch-precheck.js) : les mêmes bulles que preview(), lues une à une, mais ni images, ni codes QR, ni graphiques
+    // ni mise en page - de quoi parcourir toutes les lignes d'un lot sans fabriquer un seul PDF. Rend { errors, broken, images, seen, known } :
+    //  - errors : les bulles dont la valeur serait un message d'erreur dans le document (ligne introuvable, calcul faux) : [{ key, text, calc? }] - `key` est le nom de la variable, ou la formule d'un calcul (`calc` vrai) ;
+    //  - broken : les variables cassées - colonne, table ou chemin disparus (Variables.badgeProblem, le rouge de l'éditeur) : le document les écrit vides, sans un mot - : [{ key, reason }], une fois par variable ;
+    //  - images : les pièces jointes de colonne ou d'image de variable que le document ne dessinerait pas : [{ key, id, name, reason }], reason `notImage` (la pièce n'est pas une image : une note à
+    //    sa place, avec son nom) ou `unknown` (aucune fiche de cette pièce dans la table des pièces jointes de Grist : supprimée... ou table illisible, ce que seul le total dit - cf. seen et known) ;
+    //  - seen / known : combien de pièces jointes la ligne appelle, et combien ont une fiche. Aucune fiche pour aucune pièce dans tout le lot : la table est illisible, `unknown` ne prouve rien.
+    // Une bulle que sa condition cache, un champ vide ou une colonne sans image ne sont pas des problèmes : le document les écrit sans rien (ce que la personne a voulu). Tant que le schéma n'est pas lu
+    // (aucune table connue), rien n'est dit « cassé ».
+    const { wrapper, loopCtx } = await expandedWrapper(htmlContent, tableId, record);
+    const table = tableId || lastCurrentTableId;
+    const errors = [];
+    const broken = [];
+    const images = [];
+    let seen = 0;
+    let known = 0;
+    const noteBroken = (varTable, varColumn) => {
+      if (!GristAPI.getTables().length) return false;
+      const reason = Variables.badgeProblem(varTable, varColumn);
+      if (!reason) return false;
+      const key = varTable + '.' + varColumn;
+      if (!broken.some(b => b.key === key)) broken.push({ key, reason });
+      return true;
+    };
+    const noteAttachments = async (key, ids) => {
+      const infos = await GristAPI.getAttachmentInfos(ids);
+      ids.forEach(id => {
+        seen++;
+        const info = infos.get(Number(id));
+        if (!info) { images.push({ key, id, name: '#' + id, reason: 'unknown' }); return; }
+        known++;
+        if (!info.isImage) images.push({ key, id, name: info.fileName || '#' + id, reason: 'notImage' });
+      });
+    };
+    await Promise.all(Array.from(wrapper.querySelectorAll(BADGE_SELECTOR)).map(async badge => {
+      const varTable = badge.getAttribute('data-table');
+      const varColumn = badge.getAttribute('data-column');
+      const key = varTable + '.' + varColumn;
+      const binding = LoopRules.bindingOf(badge);
+      if (isCalcBadge(badge)) {
+        const { node, isError } = await resolveBadgeNode(badge, table, record, parseBadgeFormat(badge), loopCtx);
+        if (isError) errors.push({ key: badge.getAttribute('data-formula') || key, text: node.textContent, calc: true });
+        return;
+      }
+      if (!(await badgeConditionHolds(badge, table, record, binding))) return;
+      if (noteBroken(varTable, varColumn)) return;
+      if (GristAPI.getColumnType(varTable, varColumn) === 'Attachments') {
+        let ids = [];
+        try { ids = await Variables.resolveAttachmentIds(varTable, varColumn, table, record, loopOpts(binding)); }
+        catch (e) { errors.push({ key, text: I18n.t('variables.error.failed', { table: varTable, column: varColumn }) }); return; }
+        if (ids.length) await noteAttachments(key, ids);
+        return;
+      }
+      const { node, isError } = await resolveBadgeNode(badge, table, record, parseBadgeFormat(badge), loopCtx);
+      if (isError) errors.push({ key, text: node.textContent });
+    }));
+    await Promise.all(Array.from(wrapper.querySelectorAll('img.editor-image[data-var-table]')).map(async img => {
+      const varTable = img.getAttribute('data-var-table');
+      const varColumn = img.getAttribute('data-var-column');
+      const key = varTable + '.' + varColumn;
+      if (noteBroken(varTable, varColumn)) return;
+      let ids = [];
+      try { ids = await Variables.resolveAttachmentIds(varTable, varColumn, table, record, loopOpts(LoopRules.bindingOf(img))); }
+      catch (e) { errors.push({ key, text: I18n.t('variables.error.failed', { table: varTable, column: varColumn }) }); return; }
+      if (ids.length) await noteAttachments(key, ids);
+    }));
+    return { errors, broken, images, seen, known };
+  }
   // Un champ texte (Objet, À, Cc, Cci, nom du PDF) dont une bulle porte un réglage ou qui a une puce, enregistré en HTML (js/field-codec.js) : chaque
   // bulle devient son texte pour la ligne `record` - condition, autres attributs, boucle dans la phrase, liste, format de nombre ou de date comme dans le
   // corps d'un modèle (resolveBadgeNode) -, chaque puce sa valeur du moment (smartChipValue), le texte autour reste tel quel. Les champs gardent leurs
@@ -1795,5 +1864,5 @@ const ReaderMode = (function () {
       catch (e) { return ''; }
     });
   }
-  return { render, lend, renderInto, preview, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll };
+  return { render, lend, renderInto, preview, inspect, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll };
 })();
