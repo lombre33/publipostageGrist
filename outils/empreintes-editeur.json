@@ -6,7 +6,7 @@
     "firefox",
     "safari"
   ],
-  "carteImportEsmSha256": "aeb62fe4934a56d3c7859cc1889848fb0c0f654e56db0900766175374beb24c9",
+  "carteImportEsmSha256": "b6b9fb808792f27f0f874868f50521ef242e2957ba1d07a12565664394c796e0",
   "fichiers": {
     "https://esm.sh/*orderedmap@2.1.1": {
       "sri": "sha384-Pc/z+mp6ijMtbmOmv/KgfkG4fnKfRduxqJmpxATlEOsjvP/yhiq1lHX2PZt4Yo5i",
@@ -437,9 +437,6 @@
       "sri": "sha384-aTu4q9a0pN5E9EyBpEPIex2GFtnzKCKDqZXq3vZ6GVA2bZDCFgpRjRdxkhZGxAll",
       "octets": 9752,
       "fige": true
-    },
-    "https://esm.sh/@tiptap/pm@3.31.3": {
-      "statut": 404
     },
     "https://esm.sh/@tiptap/starter-kit@3.31.3": {
       "sri": "sha384-uxp6AY9ZlMyDrQTLBciscEYAZlIWFf7xI6vCP5Aknn+LWkiPBrCDJ4SeJs+LH9bm",

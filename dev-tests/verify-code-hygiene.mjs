@@ -93,7 +93,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { check, summarizeAndExit } from './unit-harness.mjs';
-import { esmImports, importMapDigest, floatingVersion } from '../outils/empreintes-editeur.mjs';
+import { esmImports, importMapDigest, floatingVersion, scriptSources } from '../outils/empreintes-editeur.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = rel => readFileSync(join(ROOT, rel), 'utf8');
@@ -595,7 +595,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const noteLoaded = (address, file) => { if (!loaded.has(address)) loaded.set(address, file); };
   // La politique cite ses propres adresses : sans la blanchir, chacune se compterait comme chargée par la page.
   const policyTag = meta ? page.slice(meta.index, page.indexOf('>', meta.index) + 1) : '';
-  const pageOutsidePolicy = page.replace(policyTag, policyTag.replace(/[^\n]/g, ' '));
+  // Les CLÉS de la carte d'importation (« https://esm.sh/prosemirror-state@^1.0.0?target=es2022 ») sont des adresses que la carte REMPLACE : le navigateur ne les demande jamais, la politique n'a pas à les permettre.
+  const pageOutsidePolicy = page.replace(policyTag, policyTag.replace(/[^\n]/g, ' ')).replace(/"https:\/\/esm\.sh\/[^"]*"\s*:/g, m => m.replace(/[^\n]/g, ' '));
   for (const m of pageOutsidePolicy.matchAll(new RegExp(`https://(?:${CDN_SCRIPT_HOSTS})/[^\\s"'<>)\\\\]*`, 'g'))) noteLoaded(m[0], 'index.html');
   for (const rel of jsFiles) {
     for (const m of noCommentsJs(read(rel)).matchAll(new RegExp(`https://(?:${CDN_SCRIPT_HOSTS})/[^\\s"'\`)\\\\]*\\.m?js`, 'g'))) noteLoaded(m[0], rel);
@@ -603,7 +604,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const refused = [...loaded].filter(([address]) => !hostSources.some(source => permits(source, address))).map(([address, file]) => `${file} : ${address}`);
   check('politique : chaque bibliothèque que le widget charge depuis un CDN (index.html, js/) est permise par script-src - sinon sa fonction échoue sans bruit chez Antoine', loaded.size >= 10 && refused.length === 0, '\n    ' + refused.join('\n    ') + '\n    à ajouter à script-src : l\'adresse entière (esm.sh : l\'hôte)');
   // Les adresses des bibliothèques d'extension (EXTENSION_LIBRARY_ADDRESSES) ne sont chargées par aucun script de l'app : GFS les donne à l'extension, la politique ne fait que les permettre.
-  const unused = hostSources.filter(source => !Object.values(EXTENSION_LIBRARY_ADDRESSES).includes(source) && ![...loaded.keys()].some(address => permits(source, address)));
+  // Les sources d'esm.sh (un chemin par paquet de l'éditeur, dont les dépendances que seul esm.sh nomme) ne sont pas toutes écrites dans index.html : la section 35 les compare au relevé, adresse pour adresse.
+  const unused = hostSources.filter(source => !Object.values(EXTENSION_LIBRARY_ADDRESSES).includes(source) && !source.startsWith('https://esm.sh') && ![...loaded.keys()].some(address => permits(source, address)));
   check('politique : aucune adresse de script-src que plus aucun script ne charge', unused.length === 0, '\n    à retirer de script-src : ' + unused.join(' '));
 
   // html2pdf.js 0.10.1 embarquait un jsPDF et un DOMPurify périmés (failles connues, rapport du 04/10) pour des qualités d'export grisées dans l'interface : il a été retiré avec elles.
@@ -1961,6 +1963,16 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     const dead = Object.entries(imports).filter(([, value]) => manifest.fichiers[new URL(value).href] && manifest.fichiers[new URL(value).href].statut).map(([key]) => key);
     const importedDead = dead.filter(key => jsFiles.some(rel => new RegExp(`(?:from\\s*|import\\s*\\(?\\s*)['"]${key.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}['"]`).test(noCommentsJs(read(rel)))));
     check('éditeur d\'esm.sh : une entrée de la carte dont l\'adresse ne répond pas (le relevé la note « statut ») n\'est importée par aucun fichier de js/ ni d\'extensions/', importedDead.length === 0, importedDead.join(' '));
+    // La politique de sécurité du contenu ne nomme PAS esm.sh en entier (choix d'Antoine du 11/11, « Resserrer la liste ») : sans cela, n'importe quel paquet d'npm ou dépôt de GitHub que sert esm.sh pourrait
+    // s'exécuter si un filtre cédait. Ses sources sont, une à une, celles que le relevé donne : un dossier par paquet de l'éditeur à sa version exacte, quatre cales d'esm.sh. Le relevé change (une version, un module) :
+    // `node outils/empreintes-editeur.mjs --ecrire` (réseau) ou `--poser-politique` (sans réseau) les remet à jour dans index.html.
+    const policy = (index.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/) || [])[1] || '';
+    const scriptTokens = ((policy.split(';').map(d => d.trim().split(/\s+/)).find(d => d[0] === 'script-src')) || []).slice(1);
+    const inPolicy = scriptTokens.filter(token => token === 'https://esm.sh' || token.startsWith('https://esm.sh/')).sort();
+    const wanted = scriptSources(Object.keys(manifest.fichiers).filter(address => !manifest.fichiers[address].statut));
+    check('éditeur d\'esm.sh : script-src ne nomme pas l\'hôte « https://esm.sh » en entier', !scriptTokens.includes('https://esm.sh'), 'https://esm.sh seul ouvre tout npm et tout GitHub');
+    check('éditeur d\'esm.sh : les sources d\'esm.sh de script-src sont exactement celles du relevé (`node outils/empreintes-editeur.mjs --poser-politique` les réécrit sans réseau)',
+      JSON.stringify(inPolicy) === JSON.stringify(wanted), `à ajouter : ${wanted.filter(source => !inPolicy.includes(source)).join(' ') || '-'} ; à retirer : ${inPolicy.filter(source => !wanted.includes(source)).join(' ') || '-'}`);
   }
 }
 

@@ -6,11 +6,13 @@
 //     (dont celles de paquets à portée `@tiptap/core@3.31.3`, d'un build externe `*prosemirror-model@1.25.11` et d'une préversion) n'en est pas une ;
 //  2) le parcours lit les imports comme le navigateur : minifiés (`import"/x.mjs"`, `export*from"/y.mjs"`, `import("/z.mjs")`), chemins absolus, relatifs et spécificateurs nus, et la carte d'importation
 //     qui REMPLACE une adresse (c'est ainsi qu'une adresse flottante est figée : une entrée de la carte qui la renvoie vers la version exacte) ;
-//  3) la vérification : rien n'a bougé = rien à dire ; un fichier figé chez esm.sh qui change d'un octet, un fichier nouveau, un fichier disparu, une adresse flottante qui revient, ou des navigateurs qui
+//  3) les sources d'esm.sh de la politique de sécurité du contenu (choix du 11/11, « Resserrer la liste ») : un dossier par paquet à version exacte (et son adresse nue quand elle est chargée aussi), les cales
+//     node/ une à une, JAMAIS l'hôte entier ; réécrites dans index.html d'un bloc, sans toucher aux autres sources ni aux empreintes, et le même texte à chaque relance ;
+//  4) la vérification : rien n'a bougé = rien à dire ; un fichier figé chez esm.sh qui change d'un octet, un fichier nouveau, un fichier disparu, une adresse flottante qui revient, ou des navigateurs qui
 //     reçoivent des octets différents (un serveur qui change de réponse selon le navigateur) = écart ; un fichier non figé (une cale `node/*.mjs`, un jour de cache) qui change = « à regarder » seulement.
 // Lancer : node dev-tests/unit-editor-fingerprints.mjs
 import { check, summarizeAndExit } from './unit-harness.mjs';
-import { floatingVersion, resolveSpecifier, specifiersOf, esmImports, importMapDigest, crawl, consolidate, buildManifest, compare } from '../outils/empreintes-editeur.mjs';
+import { floatingVersion, resolveSpecifier, specifiersOf, esmImports, importMapDigest, crawl, consolidate, buildManifest, compare, scriptSources, withEsmSources } from '../outils/empreintes-editeur.mjs';
 
 // ---- 1. Versions flottantes et versions exactes
 const exact = [
@@ -98,5 +100,31 @@ const html = `<script type="importmap">{"imports":{"kit/x":"./kit/js/x.js?v=1","
 const mine = esmImports(html);
 check('carte : seules les entrées qui touchent esm.sh sont retenues (le kit de GFS change avec son propre sous-module), triées', JSON.stringify(Object.keys(mine)) === JSON.stringify(['@a/b', 'https://esm.sh/c@^1.0.0?target=es2022']), JSON.stringify(Object.keys(mine)));
 check('carte : son empreinte change dès qu\'une entrée change (le relevé est alors à refaire), pas quand le kit change', importMapDigest(mine) === importMapDigest(esmImports(html.replace('x.js?v=1', 'x.js?v=2'))) && importMapDigest(mine) !== importMapDigest(esmImports(html.replace('c@1.2.3', 'c@1.2.4'))));
+
+// ---- 6. Les sources d'esm.sh de la politique de sécurité du contenu
+const addresses = [
+  'https://esm.sh/@tiptap/core@3.31.3', 'https://esm.sh/@tiptap/core@3.31.3/es2022/core.mjs', 'https://esm.sh/@tiptap/core@3.31.3/es2022/dist/jsx-runtime/jsx-runtime.mjs',
+  'https://esm.sh/*prosemirror-model@1.25.11', 'https://esm.sh/*prosemirror-model@1.25.11/es2022/prosemirror-model.mjs', 'https://esm.sh/@floating-ui/utils@0.2.12/dom?target=es2022',
+  'https://esm.sh/linkifyjs@4.4.0?target=es2022', 'https://esm.sh/node/process.mjs', 'https://autre.exemple/x.mjs',
+];
+const sources = scriptSources(addresses);
+const expectedSources = [
+  'https://esm.sh/*prosemirror-model@1.25.11', 'https://esm.sh/*prosemirror-model@1.25.11/', 'https://esm.sh/@floating-ui/utils@0.2.12/', 'https://esm.sh/@tiptap/core@3.31.3', 'https://esm.sh/@tiptap/core@3.31.3/',
+  'https://esm.sh/linkifyjs@4.4.0', 'https://esm.sh/node/process.mjs',
+];
+check('politique : un dossier par paquet à version exacte (portée, build externe « * » compris), son adresse nue quand elle est chargée aussi, la cale node/ telle quelle, rien d\'un autre site, la requête ?target ignorée', JSON.stringify(sources) === JSON.stringify(expectedSources), JSON.stringify(sources));
+check('politique : jamais l\'hôte entier ni la racine, et un paquet sans version exacte ne donne pas de dossier ouvert à toutes ses versions', !sources.includes('https://esm.sh') && !sources.includes('https://esm.sh/') && sources.every(source => /@\d+\.\d+\.\d+\/?$|\/node\/[a-z_]+\.mjs$/.test(source)), JSON.stringify(sources));
+const page = `<head>\n<meta http-equiv="Content-Security-Policy" content="\n  script-src 'self' 'unsafe-eval' https://esm.sh https://docs.getgrist.com/grist-plugin-api.js\n    https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js\n    'sha256-AAAA=' 'sha256-BBBB=';\n  object-src 'none'">\n</head>`;
+const written = withEsmSources(page, sources);
+const writtenPolicy = written.match(/content="([^"]*)"/)[1];
+const tokens = writtenPolicy.split(';')[0].trim().split(/\s+/).slice(1);
+check('réécriture : l\'hôte entier disparaît, les sources du relevé entrent, tout le reste (autres sites, empreintes, directives suivantes) est gardé dans le même ordre',
+  !tokens.includes('https://esm.sh') && expectedSources.every(source => tokens.includes(source)) && JSON.stringify(tokens.filter(t => !t.startsWith('https://esm.sh'))) === JSON.stringify(["'self'", "'unsafe-eval'", 'https://docs.getgrist.com/grist-plugin-api.js', 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', "'sha256-AAAA='", "'sha256-BBBB='"]) && /object-src 'none'$/.test(writtenPolicy), JSON.stringify(tokens));
+check('réécriture : relancée, elle donne le même texte ; une liste plus courte retire les sources qui ne sont plus au relevé', withEsmSources(written, sources) === written && !withEsmSources(written, expectedSources.slice(0, 2)).includes('linkifyjs'));
+const longList = scriptSources(Array.from({ length: 60 }, (_, i) => `https://esm.sh/paquet-numero-${i}@1.0.${i}/es2022/x.mjs`));
+check('réécriture : les sources sont rangées à la marge, 150 caractères par ligne au plus', withEsmSources(page, longList).split('\n').every(line => line.length <= 160), String(Math.max(...withEsmSources(page, longList).split('\n').map(line => line.length))));
+let threw = '';
+try { withEsmSources(page.replace('https://esm.sh ', ''), sources); } catch (error) { threw = error.message; }
+check('réécriture : une politique sans aucune adresse d\'esm.sh est une erreur, pas une écriture muette', /aucune adresse d'esm\.sh/.test(threw), threw);
 
 summarizeAndExit();

@@ -7,7 +7,7 @@
 <!-- Politique de sécurité du contenu (contrôle du 04/10, AUDIT_CODE.md §3.2) : même si du HTML piégé échappait au filtre (js/html-sanitize.js), le navigateur refuse tout script en ligne, tout
      gestionnaire d'événement, toute adresse javascript:, tout script d'une autre adresse que celles-ci (l'adresse entière quand la bibliothèque est figée), tout cadre sauf ceux de YouTube (youtube-nocookie.com) et de Vimeo (player.vimeo.com), tout objet, formulaire et toute
      balise de base. Ces deux cadres sont la SEULE ouverture de `frame-src` : le lecteur d'une vidéo que l'app seule (sans GFS) pose au clic sur ▶ (js/video-frame.js, choix du 09/11 : une baisse de sécurité voulue, deux sites nommés) ; hébergée par GFS, l'app ne pose aucun cadre. Les trois scripts en ligne de cette page y sont cités par leur empreinte : en modifier un (la carte d'importation comprise) change son empreinte, et dev-tests/verify-code-hygiene.mjs
-     (groupe codeHygiene) dit laquelle écrire. esm.sh est ouvert en entier : le chemin de ses modules change à chaque nouvelle version de leur fabrication. 'unsafe-eval' reste, faute de mieux : le fichier
+     (groupe codeHygiene) dit laquelle écrire. esm.sh n'est PAS ouvert en entier (choix du 11/11, « Resserrer la liste ») : seuls les paquets de l'éditeur, à leur version exacte, et quatre cales node/*.mjs d'esm.sh y sont nommés, un chemin par paquet, pris du relevé outils/empreintes-editeur.json (node outils/empreintes-editeur.mjs --ecrire les remet à jour, --politique les affiche) ; un autre paquet, un dépôt GitHub servi par esm.sh ou une autre version de TipTap ne se charge pas. 'unsafe-eval' reste, faute de mieux : le fichier
      que Grist sert (docs.getgrist.com/grist-plugin-api.js) est un bundle de développement dont chaque module s'évalue par eval(), et sans lui l'objet grist n'existe pas (dev-tests/verify-csp.mjs charge
      le vrai fichier). Styles, polices, images et connexions ne sont pas limités : le widget lit des images et des pièces jointes de n'importe quel site. Aucune feuille de style ni police ne vient
      pourtant d'un autre site : l'interface prend la police du système (--font-ui de css/style.css), et codeHygiene comme cspLoad refusent qu'une autre apparaisse.
@@ -17,14 +17,48 @@
      que GFS héberge (même origine) passe par 'self' sans rien nommer. ECharts (le graphique créé, même extension) est dans le même cas : echarts@6.1.0/dist/echarts.min.js, l'adresse exacte du catalogue de GFS pour
      son mode CDN. Une bibliothèque d'extension à venir : l'adresse exacte que GFS donne, une par bibliothèque, jamais écrite de la main de l'app. -->
 <meta http-equiv="Content-Security-Policy" content="
-  script-src 'self' 'unsafe-eval' https://esm.sh https://docs.getgrist.com/grist-plugin-api.js
+  script-src 'self' 'unsafe-eval'
+    https://esm.sh/*orderedmap@2.1.1 https://esm.sh/*orderedmap@2.1.1/ https://esm.sh/*prosemirror-changeset@2.4.1
+    https://esm.sh/*prosemirror-changeset@2.4.1/ https://esm.sh/*prosemirror-commands@1.7.1 https://esm.sh/*prosemirror-commands@1.7.1/
+    https://esm.sh/*prosemirror-dropcursor@1.8.2 https://esm.sh/*prosemirror-dropcursor@1.8.2/ https://esm.sh/*prosemirror-gapcursor@1.4.1
+    https://esm.sh/*prosemirror-gapcursor@1.4.1/ https://esm.sh/*prosemirror-history@1.5.0 https://esm.sh/*prosemirror-history@1.5.0/
+    https://esm.sh/*prosemirror-inputrules@1.5.1 https://esm.sh/*prosemirror-inputrules@1.5.1/ https://esm.sh/*prosemirror-keymap@1.2.3
+    https://esm.sh/*prosemirror-keymap@1.2.3/ https://esm.sh/*prosemirror-model@1.25.11 https://esm.sh/*prosemirror-model@1.25.11/
+    https://esm.sh/*prosemirror-schema-list@1.5.1 https://esm.sh/*prosemirror-schema-list@1.5.1/ https://esm.sh/*prosemirror-state@1.4.4
+    https://esm.sh/*prosemirror-state@1.4.4/ https://esm.sh/*prosemirror-tables@1.8.5 https://esm.sh/*prosemirror-tables@1.8.5/
+    https://esm.sh/*prosemirror-transform@1.12.0 https://esm.sh/*prosemirror-transform@1.12.0/ https://esm.sh/*prosemirror-view@1.42.3
+    https://esm.sh/*prosemirror-view@1.42.3/ https://esm.sh/*rope-sequence@1.3.4 https://esm.sh/*rope-sequence@1.3.4/ https://esm.sh/*w3c-keyname@2.2.8
+    https://esm.sh/*w3c-keyname@2.2.8/ https://esm.sh/@floating-ui/core@1.8.0 https://esm.sh/@floating-ui/core@1.8.0/
+    https://esm.sh/@floating-ui/dom@1.6.12 https://esm.sh/@floating-ui/dom@1.6.12/ https://esm.sh/@floating-ui/dom@1.8.0
+    https://esm.sh/@floating-ui/dom@1.8.0/ https://esm.sh/@floating-ui/utils@0.2.12 https://esm.sh/@floating-ui/utils@0.2.12/
+    https://esm.sh/@handlewithcare/prosemirror-suggest-changes@0.1.8 https://esm.sh/@handlewithcare/prosemirror-suggest-changes@0.1.8/
+    https://esm.sh/@tiptap/core@3.31.3 https://esm.sh/@tiptap/core@3.31.3/ https://esm.sh/@tiptap/extension-blockquote@3.31.3/
+    https://esm.sh/@tiptap/extension-bold@3.31.3/ https://esm.sh/@tiptap/extension-code-block@3.31.3/ https://esm.sh/@tiptap/extension-code@3.31.3/
+    https://esm.sh/@tiptap/extension-document@3.31.3 https://esm.sh/@tiptap/extension-document@3.31.3/ https://esm.sh/@tiptap/extension-font-family@3.31.3
+    https://esm.sh/@tiptap/extension-font-family@3.31.3/ https://esm.sh/@tiptap/extension-hard-break@3.31.3/
+    https://esm.sh/@tiptap/extension-heading@3.31.3/ https://esm.sh/@tiptap/extension-horizontal-rule@3.31.3/
+    https://esm.sh/@tiptap/extension-italic@3.31.3/ https://esm.sh/@tiptap/extension-link@3.31.3/ https://esm.sh/@tiptap/extension-list@3.31.3/
+    https://esm.sh/@tiptap/extension-paragraph@3.31.3/ https://esm.sh/@tiptap/extension-placeholder@3.31.3
+    https://esm.sh/@tiptap/extension-placeholder@3.31.3/ https://esm.sh/@tiptap/extension-strike@3.31.3/
+    https://esm.sh/@tiptap/extension-table-cell@3.31.3 https://esm.sh/@tiptap/extension-table-cell@3.31.3/
+    https://esm.sh/@tiptap/extension-table-header@3.31.3 https://esm.sh/@tiptap/extension-table-header@3.31.3/
+    https://esm.sh/@tiptap/extension-table-row@3.31.3 https://esm.sh/@tiptap/extension-table-row@3.31.3/ https://esm.sh/@tiptap/extension-table@3.31.3
+    https://esm.sh/@tiptap/extension-table@3.31.3/ https://esm.sh/@tiptap/extension-task-item@3.31.3 https://esm.sh/@tiptap/extension-task-item@3.31.3/
+    https://esm.sh/@tiptap/extension-task-list@3.31.3 https://esm.sh/@tiptap/extension-task-list@3.31.3/
+    https://esm.sh/@tiptap/extension-text-align@3.31.3 https://esm.sh/@tiptap/extension-text-align@3.31.3/
+    https://esm.sh/@tiptap/extension-text-style@3.31.3 https://esm.sh/@tiptap/extension-text-style@3.31.3/ https://esm.sh/@tiptap/extension-text@3.31.3/
+    https://esm.sh/@tiptap/extension-underline@3.31.3 https://esm.sh/@tiptap/extension-underline@3.31.3/ https://esm.sh/@tiptap/extensions@3.31.3/
+    https://esm.sh/@tiptap/starter-kit@3.31.3 https://esm.sh/@tiptap/starter-kit@3.31.3/ https://esm.sh/@tiptap/suggestion@3.31.3
+    https://esm.sh/@tiptap/suggestion@3.31.3/ https://esm.sh/linkifyjs@4.4.0 https://esm.sh/linkifyjs@4.4.0/ https://esm.sh/node/async_hooks.mjs
+    https://esm.sh/node/events.mjs https://esm.sh/node/process.mjs https://esm.sh/node/tty.mjs
+    https://docs.getgrist.com/grist-plugin-api.js
     https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js
     https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js
     https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
     https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js
     https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/index.iife.js https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/charts.iife.js https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js
     https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js
-    'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-nDd0A18LVBZ7iCnEQ4MQhcz1XdRZfiW/jR2sexwA23w=' 'sha256-dr2nJ9qlSEpVpFpN01rgQ3bZHAcSZWrebqvX0xSlX7I=';
+    'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-3oQdl4JORXgF7BPp6qEEe2I1+zczK0p/ub3iQwIxN9s=' 'sha256-dr2nJ9qlSEpVpFpN01rgQ3bZHAcSZWrebqvX0xSlX7I=';
   object-src 'none'; base-uri 'none'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; form-action 'none'">
 <!-- Enregistrement automatique coupé (pp_autosave_enabled = 'false', cf. js/main.js:isAutosaveEnabled) : le bouton Enregistrer est noir et blanc dès le PREMIER affichage, pas bleu le temps que
      les scripts finissent de se charger puis en fondu vers le noir. La classe est posée ICI, sur <html>, avant les feuilles de style et le corps : un script placé après le bouton attend que les
@@ -79,7 +113,6 @@
     "prosemirror-inputrules": "https://esm.sh/*prosemirror-inputrules@1.5.1",
     "prosemirror-changeset": "https://esm.sh/*prosemirror-changeset@2.4.1",
     "@tiptap/core": "https://esm.sh/@tiptap/core@3.31.3",
-    "@tiptap/pm": "https://esm.sh/@tiptap/pm@3.31.3",
     "https://esm.sh/@tiptap/pm@3.31.3/es2022/model.mjs": "https://esm.sh/*prosemirror-model@1.25.11",
     "https://esm.sh/@tiptap/pm@3.31.3/es2022/state.mjs": "https://esm.sh/*prosemirror-state@1.4.4",
     "https://esm.sh/@tiptap/pm@3.31.3/es2022/view.mjs": "https://esm.sh/*prosemirror-view@1.42.3",

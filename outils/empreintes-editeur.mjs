@@ -3,13 +3,15 @@
 //
 // Pourquoi : ce code s'exécute dans la page avec l'accès complet au document, et le navigateur ne le contrôle par aucune empreinte (la politique de sécurité du contenu ne cite que l'hôte `esm.sh`, la
 // carte d'importation de index.html ne porte pas de `integrity`). Hébergé chez nous : refusé (choix d'Antoine du 05/10). Ce qu'on peut faire sans rien changer au chargement, c'est SAVOIR :
-//   --ecrire    parcourt tout ce que la carte d'importation fait charger (les modules et, de proche en proche, tous ceux qu'ils importent), à la manière du navigateur, avec trois navigateurs
+//   --ecrire    (écrit aussi, dans index.html, les sources d'esm.sh de script-src : voir --politique) parcourt tout ce que la carte d'importation fait charger (les modules et, de proche en proche, tous ceux qu'ils importent), à la manière du navigateur, avec trois navigateurs
 //               (Chrome, Firefox, Safari), et écrit outils/empreintes-editeur.json : l'adresse de chaque fichier, son empreinte SHA-384 (celle d'un attribut `integrity`) et sa taille ;
 //   --verifier  refait le même parcours et le compare au relevé : code 1 si un fichier figé chez esm.sh a changé d'octets, s'il en manque ou s'il en vient un nouveau, si les trois navigateurs ne
 //               reçoivent pas les mêmes octets (un serveur qui change de réponse selon le navigateur est le signe d'une compromission), ou si une adresse du parcours porte une version FLOTTANTE
 //               (`@^1.0.0`, `@~2`, `@latest` : esm.sh la résout à chaque demande, une nouvelle version publiée, ou volée, serait chargée par le widget le jour même) ; code 2 si seuls les quelques
 //               fichiers d'esm.sh qui ne sont pas figés chez eux (leurs cales `node/*.mjs`, un jour de cache) ont changé ;
-//   --dire      parcourt et affiche, sans lire ni écrire le relevé.
+//   --dire      parcourt et affiche, sans lire ni écrire le relevé ;
+//   --politique affiche les sources d'esm.sh de la politique de sécurité du contenu (script-src d'index.html), prises du relevé : un chemin de paquet à version exacte par ligne, jamais l'hôte entier ;
+//   --poser-politique  les écrit dans index.html, sans réseau (le relevé est déjà là : index.html refait par un autre outil, une fusion).
 // Le relevé est gardé hors ligne par dev-tests/verify-code-hygiene.mjs : la carte d'importation ne peut plus changer sans que le relevé soit refait, et le relevé ne contient aucune version flottante.
 // Une alerte se lit « le code que le widget charge n'est plus celui que j'ai relevé » : voir la fiche de crise de SECURITY.md (couper la source, retirer le module de la carte, republier).
 //
@@ -164,6 +166,42 @@ export function compare(manifest, consolidated, divergences = []) {
   return { hard, soft };
 }
 
+// Les sources de `script-src` pour esm.sh, prises des adresses du relevé (celles qui répondent 200) : choix d'Antoine du 11/11 (« Resserrer la liste ») au lieu d'ouvrir l'hôte en entier, par lequel
+// n'importe quel paquet d'npm ou dépôt de GitHub servi par esm.sh pourrait s'exécuter si un filtre cédait. Une source qui finit par « / » couvre tout ce qui est dessous, une autre est EXACTE (la
+// politique compare le chemin, jamais la requête `?target=es2022`) : un paquet (`@tiptap/core@3.31.3`, `*prosemirror-model@1.25.11`) donne son dossier et, quand son adresse nue est chargée aussi, cette
+// adresse ; les cales `node/*.mjs` d'esm.sh, une par une.
+export function scriptSources(addresses, origin = ORIGIN) {
+  const sources = new Set();
+  for (const address of addresses) {
+    const url = new URL(address);
+    if (url.origin !== origin) continue;
+    const parts = url.pathname.split('/').filter(Boolean);
+    if (!parts.length) continue;
+    const rootLength = parts[0].startsWith('@') ? 2 : 1;
+    if (parts[0] === 'node' || parts.length === rootLength) sources.add(origin + url.pathname);
+    else sources.add(origin + '/' + parts.slice(0, rootLength).join('/') + '/');
+  }
+  return [...sources].sort();
+}
+
+// index.html avec les sources d'esm.sh de `script-src` remplacées par celles du relevé (la suite d'adresses d'esm.sh qui s'y trouve, d'une ligne ou de cent, est remplacée d'un bloc, à la marge de la
+// politique, 150 caractères par ligne) : on peut la relancer, elle donne le même texte.
+export function withEsmSources(html, sources, origin = ORIGIN) {
+  const policy = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/);
+  if (!policy) throw new Error('politique de sécurité du contenu introuvable dans index.html');
+  const run = new RegExp('\\s*(?:' + origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\S*\\s*)+');
+  if (!run.test(policy[1])) throw new Error('aucune adresse d\'esm.sh dans la politique : où poser les sources ?');
+  const lines = [];
+  let line = '';
+  for (const source of sources) {
+    if (line && line.length + 1 + source.length > 150) { lines.push(line); line = ''; }
+    line += (line ? ' ' : '') + source;
+  }
+  if (line) lines.push(line);
+  const content = policy[1].replace(run, '\n    ' + lines.join('\n    ') + '\n    ');
+  return html.replace(policy[0], policy[0].replace(policy[1], content));
+}
+
 async function liveFetch(address, userAgent) {
   const response = await fetch(address, { headers: { 'user-agent': userAgent } });
   return { status: response.status, bytes: Buffer.from(await response.arrayBuffer()), cacheControl: response.headers.get('cache-control') || '' };
@@ -171,9 +209,19 @@ async function liveFetch(address, userAgent) {
 
 async function main() {
   const mode = process.argv[2];
-  if (!['--ecrire', '--verifier', '--dire'].includes(mode)) {
-    console.error('Usage : node outils/empreintes-editeur.mjs --ecrire | --verifier | --dire');
+  if (!['--ecrire', '--verifier', '--dire', '--politique', '--poser-politique'].includes(mode)) {
+    console.error('Usage : node outils/empreintes-editeur.mjs --ecrire | --verifier | --dire | --politique | --poser-politique');
     process.exit(64);
+  }
+  if (mode === '--politique' || mode === '--poser-politique') { // hors ligne : les sources se lisent dans le relevé
+    const known = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')).fichiers;
+    const sources = scriptSources(Object.keys(known).filter(address => !known[address].statut));
+    if (mode === '--politique') { for (const source of sources) console.log(source); return; }
+    const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
+    const written = withEsmSources(html, sources);
+    if (written !== html) writeFileSync(join(ROOT, 'index.html'), written);
+    console.log(written !== html ? 'Sources d\'esm.sh de script-src remises à jour dans index.html' : 'Les sources d\'esm.sh de script-src sont déjà celles du relevé');
+    return;
   }
   const imports = esmImports(readFileSync(join(ROOT, 'index.html'), 'utf8'));
   const result = await crawl({ imports, fetchFn: liveFetch });
@@ -194,6 +242,10 @@ async function main() {
     }
     writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n');
     console.log('Relevé écrit : outils/empreintes-editeur.json');
+    const indexPath = join(ROOT, 'index.html');
+    const html = readFileSync(indexPath, 'utf8');
+    const written = withEsmSources(html, scriptSources(flat.filter(address => consolidated.files[address].status === 200)));
+    if (written !== html) { writeFileSync(indexPath, written); console.log('Sources d\'esm.sh de script-src remises à jour dans index.html'); }
     return;
   }
   const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
