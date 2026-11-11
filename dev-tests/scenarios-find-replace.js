@@ -174,7 +174,7 @@
     });
 
   scenario('fr_panel_ctrl_f_works_from_the_toolbar_but_not_over_a_window',
-    'Panneau : Ctrl+F ouvre le panneau même quand le clavier est resté sur un bouton de la barre d\'outils ; une fenêtre ouverte garde le clavier, l\'éditeur masqué (Lecture, macro-modèle) laisse la recherche du navigateur, Ctrl+Maj+F et Ctrl+Alt+F ne sont pas les nôtres',
+    'Panneau : Ctrl+F ouvre le panneau même quand le clavier est resté sur un bouton de la barre d\'outils ; une fenêtre ouverte garde le clavier, l\'éditeur masqué (Lecture, macro-modèle) laisse la recherche du navigateur, Ctrl+Maj+F est celle de la languette du panneau du haut (elle ne l\'ouvre pas) et Ctrl+Alt+F n\'est pas la nôtre',
     async h => {
       await begin(h, '<p>foo bar</p>');
       const button = document.getElementById('v2-btn-bold');
@@ -195,7 +195,11 @@
       const whileHidden = key(button, { key: 'f', code: 'KeyF', ctrlKey: true });
       const openedWhileHidden = barOpen();
       container.style.display = '';
-      const withShift = key(button, { key: 'f', code: 'KeyF', ctrlKey: true, shiftKey: true });
+      // Ctrl+Maj+F n'est pas la touche de la recherche : c'est celle de la languette du panneau du haut (js/bar-fold.js, la touche de Google Docs) ; elle la bascule et n'ouvre pas le panneau.
+      const foldedBefore = BarFold.isFolded();
+      const withShiftConsumed = key(button, { key: 'f', code: 'KeyF', ctrlKey: true, shiftKey: true });
+      const withShift = !(withShiftConsumed && BarFold.isFolded() !== foldedBefore && !barOpen());
+      BarFold.set(false);
       const withAlt = key(button, { key: 'f', code: 'KeyF', ctrlKey: true, altKey: true });
       const withoutCtrl = key(button, { key: 'f', code: 'KeyF' });
       await sleep(30);

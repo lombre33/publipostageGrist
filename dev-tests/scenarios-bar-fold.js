@@ -279,6 +279,52 @@
   });
 
   cases.push({
+    id: 'bar_fold_tab_never_covers_the_text_the_page_brings_into_view',
+    description: 'La languette pend sur les 14 px du haut du document (20 px quand elle porte une alerte) : un élément que la page ramène dans la fenêtre (recherche, ancre, commentaire, champ) est posé en dessous, jamais collé sous le panneau où la languette prendrait le clic au lieu du texte - panneau ouvert, replié, replié avec une alerte ; le document de la Lecture a le même dégagement.',
+    run: guarded(async (h) => {
+      await setup(h);
+      const long = Array.from({ length: 40 }, (_, i) => '<p>Paragraphe numéro ' + (i + 1) + ' du contrat de location.</p>').join('');
+      Editor.setHTML(long);
+      await sleep(400);
+      const box = editorBox();
+      const measure = async (label) => {
+        const paras = box.querySelectorAll('.tiptap p');
+        const p = paras[20];
+        box.scrollTop = 0;
+        await sleep(50);
+        // Le paragraphe est d'abord au-dessus de la fenêtre (défilé), puis ramené à la plus courte distance : il se colle au haut du document sans le dégagement.
+        box.scrollTop = p.offsetTop + 400;
+        await sleep(80);
+        p.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        await sleep(120);
+        const r = p.getBoundingClientRect();
+        const t = tab().getBoundingClientRect();
+        const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        const hit = document.elementFromPoint(cx, cy);
+        return { label, paraTop: Math.round(r.top), tabBottom: Math.round(t.bottom), clear: r.top >= t.bottom, hitIsText: !!hit && p.contains(hit) };
+      };
+      const open = await measure('ouvert');
+      BarFold.set(true);
+      await sleep(150);
+      const folded = await measure('replié');
+      const status = el('status-msg');
+      status.className = 'error-msg';
+      status.textContent = 'Grist a refusé d’écrire';
+      await sleep(200);
+      const alerted = await measure('replié avec alerte');
+      const alertHeight = Math.round(tab().getBoundingClientRect().height);
+      status.className = '';
+      status.textContent = '';
+      await sleep(100);
+      const padding = { editor: getComputedStyle(box).scrollPaddingTop, reader: getComputedStyle(el('reader-container')).scrollPaddingTop };
+      const paddingOk = parseFloat(padding.editor) >= 22 && parseFloat(padding.reader) >= 22;
+      const pass = [open, folded, alerted].every(m => m.clear && m.hitIsText) && alertHeight === 20 && paddingOk;
+      await finish();
+      return { pass, notes: JSON.stringify({ open, folded, alerted, alertHeight, padding }) };
+    }),
+  });
+
+  cases.push({
     id: 'bar_fold_writes_nothing_and_is_not_an_undo_step',
     description: 'Un état d’affichage de la session, comme la Lecture épurée : replier et déplier n’écrivent rien dans le navigateur (stockage), ne touchent ni Annuler ni Rétablir, ne changent pas le document, et le widget repart déplié (rien ne l’a gardé).',
     run: guarded(async (h) => {

@@ -36,5 +36,10 @@ body.pp-bar-folded .v2-bar-fold #v2-bar-fold-tab::before { transform: rotate(180
 .v2-bar-fold .v2-bar-fold-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .v2-bar-fold .v2-bar-fold-note[hidden] { display: none; }
 
+/* Le texte ne se range jamais sous la languette : quand la page ramène un élément dans la fenêtre (`scrollIntoView` : un résultat de recherche, une ancre du sommaire, un
+   commentaire, un champ), elle le pose à 22 px du haut du document au lieu de le coller sous le panneau, donc sous les 14 px de la languette, ou les 20 px quand elle porte une alerte (qui, au milieu du bord, aurait
+   pris le clic au lieu du texte). Le défilement à la main reste libre : le texte passe sous la languette comme sous n'importe quel bouton flottant. */
+#editor-container, #reader-container { scroll-padding-top: 22px; }
+
 /* Lecture épurée : le document seul à l'écran, la languette n'a pas sa place (la sortie de la Lecture épurée est le bouton du coin). */
 body.pp-clean-reading .v2-bar-fold { display: none; }

@@ -484,8 +484,11 @@ async function centerOf(selector) {
     const e = document.querySelector(sel);
     if (!e) return null;
     e.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // Le centre de la partie VISIBLE de l'élément : un paragraphe plus haut que la fenêtre a son centre hors de l'écran, et la page le pose à 22 px du haut du document
+    // (`scroll-padding-top`, css/bar-fold.css : le texte ne se range pas sous la languette du panneau), donc un peu plus bas que collé sous le panneau.
     const r = e.getBoundingClientRect();
-    const x = r.x + r.width / 2, y = r.y + r.height / 2;
+    const left = Math.max(r.left, 0), right = Math.min(r.right, innerWidth), top0 = Math.max(r.top, 0), bottom = Math.min(r.bottom, innerHeight);
+    const x = (left + right) / 2, y = (top0 + bottom) / 2;
     const top = document.elementFromPoint(x, y);
     return { x, y, onTop: !!top && (top === e || e.contains(top)) };
   }, selector);
