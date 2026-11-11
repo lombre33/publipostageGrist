@@ -2723,6 +2723,16 @@ const imageFrames = () => page.evaluate(() => Array.from(document.querySelectorA
   const r = v.getBoundingClientRect();
   return { broken: v.classList.contains('editor-image-broken'), background: getComputedStyle(v).backgroundColor, color: getComputedStyle(v.querySelector('.editor-image-var-label')).color, title: v.title, x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height, inViewport: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5 };
 }));
+// Choisir l'image ordinaire du paragraphe d'en dessous : la barre de l'image de colonne se pose SOUS elle quand elle n'a pas la place au-dessus (elle passerait sur la barre du haut, js/floating-toolbars.js) et
+// recouvre alors cette image ordinaire. Un vrai utilisateur clique d'abord la ligne de l'image là où la barre ne la couvre pas (la barre se ferme), puis l'image : le point libre est pris sur la page.
+const selectPlainImage = async (frame) => {
+  const free = await page.evaluate(({ y }) => {
+    for (let x = innerWidth - 4; x > 0; x -= 8) { const hit = document.elementFromPoint(x, y); if (hit && hit.closest('.tiptap') && !hit.closest('.v2-floating-toolbar')) return { x, y }; }
+    return null;
+  }, frame);
+  if (free) { await page.mouse.click(free.x, free.y); await page.waitForTimeout(400); }
+  await page.mouse.click(frame.x, frame.y);
+};
 const imageBarButton = () => page.evaluate(() => {
   const bar = Array.from(document.querySelectorAll('.v2-floating-toolbar.visible')).find(el => el.querySelector('button[data-action="layer-front"]'));
   const b = bar && bar.querySelector('button[data-action="var-column"]');
@@ -2845,9 +2855,9 @@ const conditionButtonAfter = await imageConditionButton();
 check('la barre de l\'image est revenue (fenêtre fermée) avec le bouton allumé, toujours dans la fenêtre', conditionButtonAfter.bar && conditionButtonAfter.present && conditionButtonAfter.active && !conditionButtonAfter.disabled
   && conditionButtonAfter.barLeft >= 0 && conditionButtonAfter.barRight <= conditionButtonAfter.viewport + 0.5, conditionButtonAfter);
 await page.screenshot({ path: '/tmp/claude-0/image-condition-cadre-700x400.png' });
-// L'image ordinaire est dans le paragraphe d'en dessous : la barre de l'image de colonne, posée au-dessus de celle-ci, ne la recouvre pas.
+// L'image ordinaire est dans le paragraphe d'en dessous (la barre de l'image de colonne la recouvre peut-être : voir selectPlainImage).
 const plainFrames = await imageFrames();
-await page.mouse.click(plainFrames[1].x, plainFrames[1].y);
+await selectPlainImage(plainFrames[1]);
 await page.waitForTimeout(500);
 const conditionButtonPlain = await imageConditionButton();
 check('image ordinaire à la vraie souris : « Condition d\'affichage » est grisé, sa raison en info-bulle, atteignable', conditionButtonPlain.bar && conditionButtonPlain.present && conditionButtonPlain.disabled && !conditionButtonPlain.active
@@ -3018,7 +3028,7 @@ const pickCancel = await hitTest('#var-loop-modal .var-modal-actions button:not(
 if (pickCancel.found) await page.mouse.click(pickCancel.x, pickCancel.y);
 await page.waitForTimeout(300);
 const plainLoopFrames = await imageFrames();
-await page.mouse.click(plainLoopFrames[1].x, plainLoopFrames[1].y);
+await selectPlainImage(plainLoopFrames[1]);
 await page.waitForTimeout(500);
 const loopButtonPlain = await imageLoopButton();
 check('image ordinaire à la vraie souris : « Boucle » est grisé, sa raison en info-bulle, atteignable', loopButtonPlain.bar && loopButtonPlain.present && loopButtonPlain.disabled && !loopButtonPlain.active

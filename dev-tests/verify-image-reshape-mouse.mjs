@@ -26,14 +26,14 @@ const TEXTS = {
   en: { opener: 'Rotate and flip', left: 'Rotate left', right: 'Rotate right', flip: 'Flip (mirror left to right)', vector: 'A vector image (SVG) cannot be rotated or cropped here: it would lose its sharpness', column: 'An image from a column, a QR code, a chart or a video cannot be rotated or cropped: it is set at its source' },
 };
 // Quatre quarts de couleurs (rouge, bleu / vert, jaune), 400 x 200, posés dans un document de deux lignes de texte.
-const loadImage = (page) => page.evaluate(() => {
+const loadImage = (page, head = '<p>Avant</p>') => page.evaluate((head) => {
   const canvas = document.createElement('canvas');
   canvas.width = 400;
   canvas.height = 200;
   const g = canvas.getContext('2d');
   [['#ff0000', 0, 0], ['#0000ff', 200, 0], ['#00ff00', 0, 100], ['#ffff00', 200, 100]].forEach(([color, x, y]) => { g.fillStyle = color; g.fillRect(x, y, 200, 100); });
-  Editor.setHTML('<p>Avant</p><p><img class="editor-image" src="' + canvas.toDataURL('image/png') + '" alt="" style="width: 240px"></p><p>Après</p>');
-});
+  Editor.setHTML(head + '<p><img class="editor-image" src="' + canvas.toDataURL('image/png') + '" alt="" style="width: 240px"></p><p>Après</p>');
+}, head);
 const imageBox = (page) => page.evaluate(() => { const r = document.querySelector('.tiptap img.editor-image').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, cx: r.x + r.width / 2, cy: r.y + r.height / 2 }; });
 const natural = (page) => page.evaluate(() => { const img = document.querySelector('.tiptap img.editor-image'); return { w: img.naturalWidth, h: img.naturalHeight }; });
 const colors = (page) => page.evaluate(async () => {
@@ -156,6 +156,27 @@ async function run(lang, scheme) {
   await clickAt(page, varBox);
   const greyedColumn = await page.evaluate((sel) => { const b = document.querySelector(sel); return b ? { title: b.title, disabled: b.getAttribute('aria-disabled') } : null; }, OPENER);
   check(tag + 'une image de colonne : le bouton est grisé et dit pourquoi', !!greyedColumn && greyedColumn.disabled === 'true' && greyedColumn.title === T.column, greyedColumn);
+  // Une image en TOUT HAUT du document (rien au-dessus) : la barre, large de 635 px à 700, n'a pas la place entre la dernière rangée de boutons de la barre du haut de la page et l'image ; posée au-dessus
+  // elle recouvrirait la rangée du bouton « Édition collaborative » (défaut du 11/11, js/floating-toolbars.js). Elle se pose sous l'image, et ce bouton reste atteignable. Une image qui a un paragraphe au-dessus
+  // (le cas du début de ce parcours) garde sa barre au-dessus : rien n'y est recouvert.
+  const covers = () => page.evaluate(() => {
+    const bar = document.querySelector('.v2-image-toolbar.visible').getBoundingClientRect();
+    const img = document.querySelector('.tiptap img.editor-image').getBoundingClientRect();
+    const hit = (b) => { const r = b.getBoundingClientRect(); const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!e && (e === b || b.contains(e)); };
+    const collab = document.getElementById('v2-btn-collab');
+    const covered = [...document.querySelectorAll('#toolbar-top button')].filter(b => { const r = b.getBoundingClientRect(); return b.getClientRects().length && !b.closest('.v2-hover-flyout') && r.left < bar.right && r.right > bar.left && r.top < bar.bottom && r.bottom > bar.top; }).map(b => b.id || b.className);
+    return { barTop: bar.top, barBottom: bar.bottom, imageTop: img.top, imageBottom: img.bottom, covered, collabReachable: !!collab && hit(collab) };
+  });
+  await loadImage(page);
+  await sleep(400);
+  await clickAt(page, await imageBox(page));
+  const second = await covers();
+  check(tag + 'image sous un paragraphe : la barre reste au-dessus de l\'image et ne recouvre aucun bouton de la barre du haut', second.barBottom <= second.imageTop && second.covered.length === 0 && second.collabReachable, second);
+  await loadImage(page, '');
+  await sleep(400);
+  await clickAt(page, await imageBox(page));
+  const first = await covers();
+  check(tag + 'image en tout haut de la page : la barre passe sous l\'image, ne recouvre aucun bouton de la barre du haut, « Édition collaborative » est atteignable', first.barTop >= first.imageBottom - 1 && first.covered.length === 0 && first.collabReachable, first);
   await page.context().close();
 }
 

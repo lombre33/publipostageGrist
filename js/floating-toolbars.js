@@ -153,12 +153,24 @@ const FloatingToolbars = (function () {
   // Dans un en-tête ou un pied de page ouvert, la pastille « Terminer » est collée en haut du plan de travail, juste au-dessus de la zone : une barre posée au-dessus d'un
   // tableau ou d'une image de la zone la recouvrirait (la barre du tableau qu'on vient d'insérer cachait « Terminer »). Elle passe dessous quand elle n'aurait pas la place
   // entre le haut de la fenêtre et la pastille : c'est le `padding` du retournement de floating-ui. Relu à chaque calcul de position, la pastille suit le défilement.
-  const zonePillClearance = () => {
+  // La barre de l'IMAGE est la plus large (635 px depuis « Pivoter » et « Rogner » du 09/11, presque tout le panneau de Grist à 700 px) : posée au-dessus d'une image tout en haut du document, elle se
+  // posait SUR la barre du haut de la page, sur la rangée du bouton « Édition collaborative », et le clic y tombait sur « Texte alternatif… ». Elle passe donc SOUS l'image quand elle n'a pas la place entre
+  // la dernière rangée de boutons de cette barre (`topBar` : le bas du plus bas de ses boutons, sans la marge de son cadre) et l'image. Les autres barres, plus étroites, gardent leur place : leur bulle ou leur tableau
+  // d'au-dessus ne cache pas la ligne d'en dessous.
+  const topBarRowsBottom = () => {
+    const top = document.getElementById('toolbar-top');
+    let bottom = 0;
+    if (top) top.querySelectorAll('button, select, input').forEach((el) => { if (el.getClientRects().length && !el.closest('.v2-hover-flyout')) bottom = Math.max(bottom, el.getBoundingClientRect().bottom); });
+    return bottom ? bottom + 4 : 0;
+  };
+  const zonePillClearance = (topBar) => {
     const pill = document.getElementById('v2-hf-pill');
-    return pill ? { padding: { top: pill.getBoundingClientRect().bottom + 6 } } : undefined;
+    const below = Math.max(pill ? pill.getBoundingClientRect().bottom + 6 : 0, topBar ? topBarRowsBottom() : 0);
+    return below > 0 ? { padding: { top: below } } : undefined;
   };
   // Les options d'une barre posée sur un élément du document : la grille garde les siennes (hors de ses bandeaux), une zone ouverte ne cache pas sa pastille.
   const anchoredBarOptions = () => GridEditor.floatingOptions() || { flip: zonePillClearance() };
+  const imageBarOptions = () => GridEditor.floatingOptions() || { flip: zonePillClearance(true) };
 
   const { tableToolbarSpec, tableToolbarHtml } = (function () {
     // La barre d'un tableau : ses boutons, lus au câblage (la langue d'alors), et son HTML
@@ -1050,7 +1062,7 @@ const FloatingToolbars = (function () {
         // (variableToolbarCheck). La classe de sélection, posée plus haut, reste : l'image est toujours sélectionnée au retour en Édition.
         if (!img.getClientRects().length) { panel.hide(); return; }
         syncImageToolbar(controls);
-        panel.show(img, anchoredBarOptions);
+        panel.show(img, imageBarOptions);
       };
       editor.on('selectionUpdate', check);
       editor.on('transaction', check);
