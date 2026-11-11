@@ -123,7 +123,11 @@ const ExportCommon = (function () {
     // Le rond ou le numéro de chaque point de liste a la couleur et la taille du début de son texte, comme à l'écran (js/list-markers.js) : les mesures et `getComputedStyle(li, '::marker')` le voient.
     ListMarkers.apply(root);
     root.classList.add(...extraClasses, 'tiptap');
-    root.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + widthPx + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;';
+    // `.tiptap` remet à zéro le compteur CSS des notes de bas de page (css/editor-v2.css). Sur un hôte posé à la fin du <body>, le navigateur retrouve la place de ce compteur parmi tous les éléments de la page : environ 7 ms
+    // pour un éditeur de 36 000 nœuds (0,5 ms quand il est vide), à CHAQUE hôte posé puis retiré. Le PDF d'un diaporama en pose un par cadre (11/11, 57 diapositives à photos : 62 s avant, 10 s depuis ; 21 s avec l'éditeur vidé). Sans note de
+    // bas de page dans son contenu, l'hôte n'a aucun besoin de ce compteur et ne le remet pas à zéro (0,1 ms) ; avec une note, il garde celui de la feuille de style, qui numérote ses renvois comme à l'écran.
+    const noteCounter = root.querySelector('.footnote-ref-marker') ? '' : ' counter-reset:none;';
+    root.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden; width:' + widthPx + 'px; min-height:0; padding:0; margin:0; box-sizing:border-box;' + noteCounter;
     document.body.appendChild(root);
     return () => { if (root.parentNode) root.parentNode.removeChild(root); };
   }

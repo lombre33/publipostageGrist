@@ -1274,6 +1274,48 @@
     },
   });
 
+  // L'hôte de mesure d'un export (ExportCommon.attachMeasureHost) porte la classe .tiptap, dont la feuille de style remet à zéro le compteur des notes de bas de page (`counter-reset: footnote-ref`). Posé à la fin du <body>,
+  // un élément qui remet un compteur à zéro oblige le navigateur à retrouver sa place parmi TOUS les éléments de la page : 7 ms dans un éditeur de 36 000 nœuds (0,5 ms vide), à chaque hôte posé puis retiré ; le PDF d'un
+  // diaporama en pose un par cadre (11/11 : 62 s pour 57 diapositives à photos, 10 s depuis).
+  cases.push({
+    id: 'pdffid_measure_host_without_footnote_leaves_the_footnote_counter_alone_so_posing_it_stays_cheap_in_a_big_page',
+    description: 'L\'hôte de mesure d\'un export ne remet pas à zéro le compteur des notes de bas de page quand son contenu n\'en a pas (poser puis retirer un hôte coûte quelques dixièmes de milliseconde dans une page de 36 000 nœuds, non 7 ms) ; avec une note, il garde son compteur',
+    run: async (h) => {
+      await h.resetEditor();
+      const ballast = document.createElement('div');
+      ballast.style.cssText = 'position:absolute; left:-99999px; top:0; width:100px;';
+      ballast.innerHTML = '<p><span>a</span><b>b</b></p>'.repeat(12000);
+      document.body.appendChild(ballast);
+      try {
+        const counterOf = (inner) => {
+          const host = document.createElement('div');
+          host.innerHTML = inner;
+          const detach = ExportCommon.attachMeasureHost(host, 600);
+          const value = getComputedStyle(host).counterReset;
+          detach();
+          return value;
+        };
+        const plain = counterOf('<p>Texte</p>');
+        const noted = counterOf('<p>Texte<sup class="footnote-ref-marker" data-note-id="n1" data-note-text="Note">1</sup></p>');
+        const times = [];
+        for (let i = 0; i < 40; i++) {
+          const host = document.createElement('div');
+          host.innerHTML = '<p>Texte</p>';
+          const startedAt = performance.now();
+          const detach = ExportCommon.attachMeasureHost(host, 600);
+          host.getBoundingClientRect();
+          detach();
+          document.body.getBoundingClientRect();
+          times.push(performance.now() - startedAt);
+        }
+        times.sort((a, b) => a - b);
+        const medianMs = Math.round(times[20] * 100) / 100;
+        const checks = { plainHasNoCounterReset: plain === 'none', notedKeepsItsCounter: /footnote-ref/.test(noted), medianUnderOneAndAHalfMs: medianMs < 1.5 };
+        return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ plain, noted, medianMs, nodes: document.getElementsByTagName('*').length, checks }) };
+      } finally { ballast.remove(); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pdfFidelity = cases;
 })();
