@@ -749,12 +749,19 @@ const HeaderFooterPreview = (function () {
   // défiler à sa façon.
   function scrollToPage(index) {
     const container = editorContainer();
-    const tiptapEl = editor && editor.view && editor.view.dom;
-    const page = lastPageLayout && lastPageLayout.pages[index];
-    if (!container || !tiptapEl || !page) return false;
-    const top = layerCoords(container, layoutZoom(tiptapEl)).screenY(page.top);
+    const top = pageScreenTop(index);
+    if (!container || top == null) return false;
     container.scrollTop += top - container.getBoundingClientRect().top - container.clientTop - (parseFloat(getComputedStyle(container).paddingTop) || 0);
     return true;
+  }
+  // Le haut de la page `index` (0 : la première) de la dernière pagination, en pixels d'ÉCRAN (là où la page est dessinée maintenant, le défilement compris) ; null sans cette page. La bande des diapositives y lit
+  // quelle diapositive l'éditeur montre (SlideStrip.shownSlide : celle qui tient le milieu de la zone qui défile).
+  function pageScreenTop(index) {
+    const container = editorContainer();
+    const tiptapEl = editor && editor.view && editor.view.dom;
+    const page = lastPageLayout && lastPageLayout.pages[index];
+    if (!container || !tiptapEl || !page) return null;
+    return layerCoords(container, layoutZoom(tiptapEl)).screenY(page.top);
   }
   // Feuille de style dédiée (règles `:nth-child`), pas un style inline : un style posé directement sur un nœud ProseMirror est silencieusement annulé
   // (ProseMirror répare toute mutation DOM qu'il n'a pas produite lui-même).
@@ -1835,6 +1842,6 @@ const HeaderFooterPreview = (function () {
     enterHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter, listStories, openStory, onStoriesChange,
     getHeaderFooterData, setHeaderFooterData, snapshot, restore,
     schedulePaginationRecompute, schedulePaginationAfterEdit, paginationHolds, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, reconcileLayerImagesWithGrid, recaptureLayeredImageGrids,
-    rowPadOf, pageBreaks, pageIndexOf, pageIndexResolver, pageBodyTops, onPaginated, scrollToPage, breaksOf,
+    rowPadOf, pageBreaks, pageIndexOf, pageIndexResolver, pageBodyTops, onPaginated, scrollToPage, pageScreenTop, breaksOf,
   };
 })();

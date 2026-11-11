@@ -1220,6 +1220,48 @@ const ReaderMode = (function () {
     }
     return GristAPI.withReadPass(() => renderRecord(renderId, container, htmlContent, tableId, record, headerFooterData));
   }
+  // ---- La diapositive où l'on est (demande du 11/11 : passer de l'Édition à la Lecture d'une présentation, et en revenir, sans retomber sur la première) ----
+  // Le haut de chaque diapositive de la Lecture affichée, en pixels d'ÉCRAN (le défilement compris), dans l'ordre : le haut de la feuille pour la première ; pour les suivantes, le haut de la page que leur saut de diapositive
+  // ouvre (la tête de la première couture qui le suit), ou, sans Aperçu A4 (ni page ni couture), le bas de ce saut. Vide quand la Lecture n'a aucun saut de diapositive (un document, un modèle sans ligne, un PDF).
+  function slideTops(container) {
+    const wrapper = container.querySelector(':scope > .reader-content');
+    const marks = wrapper ? Array.from(wrapper.querySelectorAll(':scope > .page-break-marker[data-slide-break]')) : [];
+    if (!marks.length) return [];
+    const seams = Array.from(container.querySelectorAll(':scope > .v2-pagination-overlay > .v2-page-band'))
+      .map(band => ({ top: band.getBoundingClientRect().top, head: band.querySelector('.v2-page-seam-head') }))
+      .filter(seam => seam.head)
+      .map(seam => ({ top: seam.top, headTop: seam.head.getBoundingClientRect().top }))
+      .sort((a, b) => a.top - b.top);
+    const paper = container.querySelector(':scope > .v2-reader-backdrop .v2-reader-paper');
+    const tops = [(paper || wrapper).getBoundingClientRect().top];
+    marks.forEach((mark) => {
+      const bottom = mark.getBoundingClientRect().bottom;
+      const next = seams.find(seam => seam.top >= bottom - 2);
+      tops.push(next ? next.headTop : bottom);
+    });
+    return tops;
+  }
+  // Le rang (depuis 0) de la diapositive que la Lecture montre : celle qui tient le milieu de la zone qui défile ; -1 quand la Lecture est masquée ou n'a pas de diapositives.
+  function slideShown() {
+    const container = document.getElementById('reader-container');
+    if (!container || !container.getClientRects().length) return -1;
+    const tops = slideTops(container);
+    if (!tops.length) return -1;
+    const middle = container.getBoundingClientRect().top + container.clientTop + container.clientHeight / 2;
+    let found = 0;
+    tops.forEach((top, index) => { if (top <= middle) found = index; });
+    return found;
+  }
+  // Fait défiler la Lecture jusqu'à la diapositive `index`, sa page en haut de la zone, à la même distance du bord que la première quand la Lecture s'ouvre en haut (la différence des deux hauts à l'écran est le
+  // défilement, quelle que soit la place de départ). Vrai si elle a défilé jusqu'à elle ; faux quand il n'y a pas de telle diapositive.
+  function showSlide(index) {
+    const container = document.getElementById('reader-container');
+    if (!container || !container.getClientRects().length || !(index >= 0)) return false;
+    const tops = slideTops(container);
+    if (index >= tops.length) return false;
+    container.scrollTop = Math.max(0, tops[index] - tops[0]);
+    return true;
+  }
   function readerWrapperFrom(htmlContent, acceptedOptions) {
     // Le <div class="reader-content"> du document, pas encore résolu : HTML nettoyé, suggestions du suivi acceptées, liens ouverts dans un nouvel
     // onglet, style de numérotation des titres.
@@ -1859,5 +1901,5 @@ const ReaderMode = (function () {
       catch (e) { return ''; }
     });
   }
-  return { render, lend, renderInto, preview, inspect, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll };
+  return { render, lend, renderInto, preview, inspect, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll, slideShown, showSlide };
 })();

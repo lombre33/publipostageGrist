@@ -37,7 +37,22 @@ const MainSlides = (function () {
       });
     }
 
-    return { wireSlides };
+    // La diapositive où l'on est, gardée d'un mode à l'autre (demande du 11/11 : « quand on passe en mode lecture, aller à la diapo où l'on était et pas au début ») : en passant de l'Édition à la Lecture d'une
+    // présentation, la Lecture s'ouvre sur la diapositive de l'éditeur ; en revenant, l'éditeur retrouve celle qu'on lisait. `slideToKeep(versMode)` se lit AVANT que l'écran change (l'éditeur ou la Lecture est encore à
+    // mesurer) et rend son rang, ou -1 (autre type de modèle, même mode, rien à mesurer) ; `keepSlide(versMode, rang)` la montre une fois le nouvel écran posé et rendu. Rien d'autre ne change pour un document.
+    function slideToKeep(toMode) {
+      const from = getCurrentMode();
+      if (toMode === from || !SlidesEntry.isPresentation(getCurrentTypeModele())) return -1;
+      if (from === 'edit' && toMode === 'read') return SlidesEntry.shownSlide();
+      if (from === 'read' && toMode === 'edit') return ReaderMode.slideShown();
+      return -1;
+    }
+    function keepSlide(toMode, index) {
+      if (!(index >= 0)) return false;
+      return toMode === 'read' ? ReaderMode.showSlide(index) : SlidesEntry.showSlide(index);
+    }
+
+    return { wireSlides, slideToKeep, keepSlide };
   }
 
   return { create };

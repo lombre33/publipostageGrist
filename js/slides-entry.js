@@ -19,6 +19,8 @@
 //    blanche (carte du 19/10, « Ne plus avertir ») : js/main.js le dit à js/pdf-export.js (showsEveryPage), un document gardant la question ;
 //  - le TEXTE NEUF d'une diapositive, à 20 pt et ses titres plus grands (demande du 21/10) : createTextExtension, câblée par js/editor.js, et textMarks pour les mises en page
 //    d'« Ajouter » ;
+//  - LA DIAPOSITIVE OÙ L'ON EST d'un mode à l'autre (demande du 11/11, « quand on passe en mode lecture, aller à la diapo où l'on était et pas au début ») : `shownSlide` dit celle que l'éditeur montre (le curseur s'il est à
+//    l'écran, sinon le milieu de la zone qui défile) pour que la Lecture s'ouvre dessus, `showSlide(index)` y ramène l'éditeur au retour de la Lecture ; js/main.js:switchMode les appelle (js/main-slides.js). Sans la bande : -1 / faux, la Lecture s'ouvre en haut comme avant ;
 //  - UNE DIAPOSITIVE EN TEXTE DE DOCUMENT (demande du 22/10) : la ligne « Diapositive d'une présentation… » du menu « Lien et blocs de contenu » ouvre le volet de l'extension (openTextImport ;
 //    grisée avec sa raison sans elle, son clic explique), et une diapositive copiée de la bande, collée dans un document, y devient du texte du document (pastedInDocument,
 //    js/slide-text.js : la conversion est du socle, elle n'attend pas le code de l'extension).
@@ -334,8 +336,13 @@ const SlidesEntry = (function () {
     if (marks) editor.view.dispatch(editor.state.tr.setStoredMarks(marks));
   }
 
-  // Posé par l'extension à son chargement (extensions/diapositives/slide-strip.js) : { show({ off }), hide() }. Elle ne se montre qu'une fois tous ses fichiers arrivés (sync).
+  // Posé par l'extension à son chargement (extensions/diapositives/slide-strip.js) : { show({ off }), hide(), shownSlide(), showSlide(index) }. Elle ne se montre qu'une fois tous ses fichiers arrivés (sync).
   function register(next) { strip = next; }
+  // La diapositive où l'on est dans l'éditeur (celle du curseur quand il est à l'écran, sinon celle du milieu de la zone qui défile), pour que la Lecture s'ouvre sur elle ; -1 sans bande montrée (extension
+  // absente ou pas encore chargée, éditeur masqué) : la Lecture s'ouvre alors en haut.
+  const shownSlide = () => (strip && typeof strip.shownSlide === 'function' ? strip.shownSlide() : -1);
+  // Mène l'éditeur à la diapositive `index` qu'on lisait (le retour de la Lecture) ; faux quand la bande n'est pas là pour le faire.
+  const showSlide = index => !!(strip && typeof strip.showSlide === 'function' && strip.showSlide(index));
 
   // Une diapositive en texte de document
   // Posé par l'extension à son chargement (extensions/diapositives/slide-import.js) : { open(byKeyboard), close(), isOpen(), syncScreen(shown), keepsFormat() } ; le volet des diapositives
@@ -392,6 +399,6 @@ const SlidesEntry = (function () {
   return {
     ID, TYPE, FEATURE_KEY, SLIDE_BREAK_ATTR, setHooks, setContext, isAvailable, isPresentation, reason, startNew, ensureFor, unavailableReason, pageFor, pageSizeOf, onChange: Extensions.onChange,
     changed: sync, register, explainOff, relayout, status, showsEveryPage, presentationShown, seamLabel, outputHtml, TEXT_SIZE, HEADING_SIZES, createTextExtension, textMarks,
-    registerTextImport, openTextImport, pastedInDocument, registerTheme, openTheme,
+    registerTextImport, openTextImport, pastedInDocument, registerTheme, openTheme, shownSlide, showSlide,
   };
 })();

@@ -1122,6 +1122,59 @@ const SlideStrip = (function () {
     const gap = parseFloat(getComputedStyle(box).paddingTop) || 0;
     box.scrollTop += first.getBoundingClientRect().top - box.getBoundingClientRect().top - box.clientTop - gap;
   }
+  // La diapositive que l'éditeur montre, pour la garder en passant à la Lecture (demande du 11/11, « quand on passe en mode lecture, aller à la diapo où l'on était et pas au début ») : celle du curseur quand
+  // il est à l'écran (la personne écrit là, la miniature cochée), sinon celle qui tient le milieu de la zone qui défile. -1 quand la bande n'est pas montrée, que l'éditeur est masqué ou que la page n'est pas
+  // mesurable : la Lecture s'ouvre alors en haut, comme avant.
+  function shownSlide() {
+    if (!shown || !editor || editor.isDestroyed || editingHeaderFooter()) return -1;
+    const box = container();
+    if (!box || !box.getClientRects().length) return -1;
+    refresh(false);
+    if (!slides.length) return -1;
+    const top = box.getBoundingClientRect().top + box.clientTop;
+    const bottom = top + box.clientHeight;
+    try {
+      const caret = editor.view.coordsAtPos(editor.state.selection.head);
+      if (caret.bottom > top && caret.top < bottom) return Math.min(current, slides.length - 1);
+    } catch (e) { /* le curseur est dans un bloc que le navigateur n'a pas peint : le milieu décide */ }
+    const middle = (top + bottom) / 2;
+    let found = -1;
+    for (let index = 0; index < slides.length; index++) {
+      const y = slideScreenTop(index);
+      if (y !== null && y > middle) break;
+      if (y !== null) found = index;
+    }
+    return found;
+  }
+  // La page où commence la diapositive `index` dans la pagination de l'éditeur (0 : la première), ou -1 quand sa pagination ne la dit pas.
+  function pageOfSlide(index) {
+    const slide = slides[index];
+    if (!slide) return -1;
+    const marker = slide.breakBefore == null ? null : editor.view.nodeDOM(slide.breakBefore);
+    if (!marker) return 0;
+    return HeaderFooterPreview.pageBreaks().findIndex(brk => brk.afterEl === marker) + 1 || -1;
+  }
+  // Le haut de la diapositive `index` à l'écran, en pixels : celui de sa page ; sans pagination, celui de son premier bloc. Null quand elle n'est pas mesurable.
+  function slideScreenTop(index) {
+    const slide = slides[index];
+    if (!slide) return null;
+    const page = pageOfSlide(index);
+    const paged = page < 0 ? null : HeaderFooterPreview.pageScreenTop(page);
+    if (paged !== null) return paged;
+    const view = editor.view;
+    const first = slide.nodes.length ? view.nodeDOM(slide.nodes[0].pos) : (slide.breakBefore == null ? null : view.nodeDOM(slide.breakBefore));
+    return first instanceof HTMLElement ? first.getBoundingClientRect().top : null;
+  }
+  // Mène l'éditeur à la diapositive `index` qu'on lisait (le retour de la Lecture) : le curseur y entre et la page se montre en haut, comme un clic sur sa miniature. Quand c'est déjà celle du curseur, ni le curseur ni
+  // le défilement ne bougent si elle est à l'écran (le navigateur a pu garder le défilement d'avant) ; sinon la page se montre. Faux quand il n'y a rien à faire (bande cachée, rang inconnu).
+  function showSlide(index) {
+    if (!shown || !editor || editor.isDestroyed || editingHeaderFooter() || !(index >= 0)) return false;
+    refresh(false);
+    if (index >= slides.length) return false;
+    if (index !== current) { goTo(index, false); return true; }
+    if (shownSlide() !== index) scrollToSlide(index);
+    return true;
+  }
   function focusItem(index) {
     if (guest) { guest.focusBack(index); return; }
     const r = rows[index];
@@ -2523,7 +2576,7 @@ const SlideStrip = (function () {
     geometry: () => pageGeometry(),
   };
 
-  SlidesEntry.register({ show, hide });
+  SlidesEntry.register({ show, hide, shownSlide, showSlide });
 
-  return { show, hide, hold, overview, slidesOf, pageCopy, redrawViews, importAfterCurrent, settleLinked, syncLinks: () => syncLinks(false), current: () => current, isOff: () => off, isShown: () => shown };
+  return { show, hide, hold, overview, slidesOf, pageCopy, redrawViews, importAfterCurrent, settleLinked, syncLinks: () => syncLinks(false), current: () => current, shownSlide, showSlide, isOff: () => off, isShown: () => shown };
 })();

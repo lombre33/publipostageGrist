@@ -738,7 +738,7 @@
     isAccessGuideShown, isExportRunning, isReadOnly, markAutosaveDirty, markTextDirty, onPageLayoutChanged, onWatermarkChanged, pdfFilenameInput, persist,
     scheduleEmailLengthGauge, templateNameInput, updateSaveStatus, wireCciToggle,
   });
-  const { wireSlides } = MainSlides.create({
+  const { keepSlide, slideToKeep, wireSlides } = MainSlides.create({
     applyPageFitZoomTo, editorContainer, getCurrentMode: () => currentMode, getCurrentTypeModele: () => currentTypeModele, isReadOnly, readerContainer,
     renderReader, renderTemplateOptions, setStatus, startNewTemplate, templateSelect,
   });
@@ -751,6 +751,8 @@
     if (isReadOnly()) mode = 'read';
     // Un PDF à l'écran (js/pdf-reading.js) ne s'édite pas : le mode Lecture est le seul accessible, le bouton Édition est grisé avec sa raison (applyPdfLocks).
     if (PdfReading.isActive()) mode = 'read';
+    // Une présentation garde sa diapositive d'un mode à l'autre (js/main-slides.js) : lue maintenant, avant que l'écran change.
+    const slideKept = slideToKeep(mode);
     // La Lecture épurée (js/clean-reading.js) n'existe que dans le mode Lecture : un autre mode la quitte, la barre du haut revient avec lui.
     CleanReading.onModeChange(mode);
     if (mode === 'read') Editor.exitHeaderFooterModeIfActive();
@@ -766,8 +768,8 @@
     // entrée suivante) le garde : le recalculer ici ferait mettre en page l'ancien contenu, qui est sur le point d'être remplacé.
     if (mode === 'read' && !readerContainer.style.getPropertyValue('--pp-fit-zoom')) applyPageFitZoom(readerContainer);
     // Les graphiques de l'éditeur se redessinent pour la ligne et les données d'aujourd'hui : la Lecture a pu les changer pendant qu'ils étaient cachés.
-    if (mode === 'edit') ChartEntry.refreshEditor();
-    if (mode === 'read') await renderReader(latestRecord || GristAPI.getCurrentRecord(), latestRecordTableId || GristAPI.getCurrentTableId());
+    if (mode === 'edit') { ChartEntry.refreshEditor(); keepSlide(mode, slideKept); }
+    if (mode === 'read') { await renderReader(latestRecord || GristAPI.getCurrentRecord(), latestRecordTableId || GristAPI.getCurrentTableId()); keepSlide(mode, slideKept); }
     await updateEmailFieldsDisplay();
     await updateEmailLengthGauge();
   }
