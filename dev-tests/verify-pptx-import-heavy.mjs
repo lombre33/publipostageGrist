@@ -362,36 +362,42 @@ async function lockCases(page, tag) {
     await tick(200);
     let firstHidden = -1;
     let hiddenWhileVeil = 0;
-    await ImportPlacing.appendSlides(deck().slice(3), (n) => { if (hiddenNow()) { hiddenWhileVeil += 1; if (firstHidden < 0) firstHidden = n; } }, { covered: () => true });
+    const closing = [];
+    await ImportPlacing.appendSlides(deck().slice(3), (n) => { if (hiddenNow()) { hiddenWhileVeil += 1; if (firstHidden < 0) firstHidden = n; } }, { covered: () => true, onClosing: () => closing.push(hiddenNow()) });
     await tick(500);
+    out.closing = closing;
     out.firstHidden = firstHidden; out.hiddenWhileVeil = hiddenWhileVeil; out.hiddenAfter = hiddenNow(); out.styleAfter = EditorCore.getEditor().view.dom.style.contentVisibility;
     out.dotsLocked = dots();
     // 2. Sans voile (covered absent) : jamais masqué, mêmes points rouges.
     Editor.setHTML(deck().slice(0, 3).join(PB));
     await tick(200);
     let hiddenNoVeil = 0;
-    await ImportPlacing.appendSlides(deck().slice(3), () => { if (hiddenNow()) hiddenNoVeil += 1; });
+    let closedNoVeil = 0;
+    await ImportPlacing.appendSlides(deck().slice(3), () => { if (hiddenNow()) hiddenNoVeil += 1; }, { onClosing: () => { closedNoVeil += 1; } });
     await tick(500);
-    out.hiddenNoVeil = hiddenNoVeil; out.dotsPlain = dots();
+    out.hiddenNoVeil = hiddenNoVeil; out.closedNoVeil = closedNoVeil; out.dotsPlain = dots();
     // 3. Un fichier ordinaire (240 cadres) avec le voile : jamais masqué.
     Editor.setHTML(deck().slice(0, 3).join(PB));
     await tick(200);
     let hiddenSmall = 0;
-    await ImportPlacing.appendSlides(deck().slice(3, 6), () => { if (hiddenNow()) hiddenSmall += 1; }, { covered: () => true });
-    out.hiddenSmall = hiddenSmall;
+    let closedSmall = 0;
+    await ImportPlacing.appendSlides(deck().slice(3, 6), () => { if (hiddenNow()) hiddenSmall += 1; }, { covered: () => true, onClosing: () => { closedSmall += 1; } });
+    out.hiddenSmall = hiddenSmall; out.closedSmall = closedSmall;
     // 4. Une pose qui échoue pendant le masquage remontre le texte.
     Editor.setHTML(deck().slice(0, 3).join(PB));
     await tick(200);
     let wasHidden = false;
     let rejected = false;
+    let closedFail = 0;
     try {
-      await ImportPlacing.appendSlides(deck().slice(3), (n) => { if (hiddenNow()) wasHidden = true; if (wasHidden && n >= 36) throw new Error('arrêt voulu'); }, { covered: () => true });
+      await ImportPlacing.appendSlides(deck().slice(3), (n) => { if (hiddenNow()) wasHidden = true; if (wasHidden && n >= 36) throw new Error('arrêt voulu'); }, { covered: () => true, onClosing: () => { closedFail += 1; } });
     } catch (e) { rejected = /arrêt voulu/.test(String(e && e.message)); }
-    out.failWasHidden = wasHidden; out.failRejected = rejected; out.failHiddenAfter = hiddenNow();
+    out.failWasHidden = wasHidden; out.failRejected = rejected; out.failHiddenAfter = hiddenNow(); out.closedFail = closedFail;
     return out;
   });
   check(tag + 'le voile à l\'écran et 2 500 cadres posés : le texte est masqué (content-visibility: hidden) à partir de la trente-deuxième diapositive de 80 cadres, jamais avant, et remontré à la fin', r.firstHidden >= 31 && r.firstHidden <= 33 && r.hiddenWhileVeil >= 5 && !r.hiddenAfter && r.styleAfter === '', { firstHidden: r.firstHidden, hiddenWhileVeil: r.hiddenWhileVeil, hiddenAfter: r.hiddenAfter, styleAfter: r.styleAfter });
   check(tag + 'sans voile à l\'écran, ou pour un fichier ordinaire (240 cadres), le texte n\'est jamais masqué', r.hiddenNoVeil === 0 && r.hiddenSmall === 0, { hiddenNoVeil: r.hiddenNoVeil, hiddenSmall: r.hiddenSmall });
+  check(tag + 'la mise en page finale d\'un texte masqué est annoncée AVANT qu\'il soit remontré (onClosing, une seule fois, texte encore masqué) ; jamais pour un texte qui n\'a pas été masqué (sans voile, 240 cadres), ni quand la pose échoue', JSON.stringify(r.closing) === '[true]' && r.closedNoVeil === 0 && r.closedSmall === 0 && r.closedFail === 0, { closing: r.closing, closedNoVeil: r.closedNoVeil, closedSmall: r.closedSmall, closedFail: r.closedFail });
   check(tag + 'une pose qui échoue pendant le masquage remontre le texte (la personne ne reste pas devant un éditeur vide)', r.failWasHidden && r.failRejected && !r.failHiddenAfter, { failWasHidden: r.failWasHidden, failRejected: r.failRejected, failHiddenAfter: r.failHiddenAfter });
   check(tag + 'les mesures prises pendant le masquage sont celles du texte montré : le point rouge de la diapositive au cadre trop haut tombe sur la septième, masquée ou non', JSON.stringify(r.dotsLocked) === JSON.stringify(r.dotsPlain) && r.dotsLocked.includes(6), { dotsLocked: r.dotsLocked, dotsPlain: r.dotsPlain });
 }
@@ -433,6 +439,21 @@ async function veilCases(page, tag) {
   await page.evaluate(() => window.__veil.update('Mise en place des diapositives… 60 / 120', 0.5));
   const back = await veil();
   check(tag + 'le voile se retire pour une question (`suspend`) et revient au pas suivant, la barre à 50 %', !suspended.shown && back.shown && back.width === '50%', { suspended, back });
+  // Le voile ne se redessine pas plus d'une fois par 80 ms (un pas par 40 ms n'y change rien) ; un mot qu'il faut montrer tout de suite (`force` : la mise en page finale) passe devant.
+  const forced = await page.evaluate(() => {
+    const line = () => document.querySelector('#pp-placing-modal .pp-placing-line').textContent;
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+    return wait(120).then(() => {
+      window.__veil.update('Pas A', 0.6);
+      const first = line();
+      window.__veil.update('Pas B (trop tôt)', 0.7);
+      const throttled = line();
+      window.__veil.update('Mot forcé', 1, true);
+      const forcedNow = line();
+      return { first, throttled, forcedNow, bar: document.querySelector('#pp-placing-modal .pp-placing-bar').getAttribute('aria-valuenow') };
+    });
+  });
+  check(tag + 'le voile ne se redessine pas deux fois en 80 ms, sauf pour un mot forcé (`update(texte, fraction, true)`) qui passe devant, barre à 100 %', forced.first === 'Pas A' && forced.throttled === 'Pas A' && forced.forcedNow === 'Mot forcé' && forced.bar === '100', forced);
   await page.evaluate(() => window.__veil.end());
   check(tag + 'à la fin du travail le voile disparaît', !(await veil()).shown);
   // Un petit fichier à qui la question « Modifications non enregistrées » est posée : la lecture dure moins d'une demi-seconde, la personne répond bien plus tard, et la mise en place - courte - ne montre aucun voile

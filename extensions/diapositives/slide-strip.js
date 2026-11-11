@@ -711,11 +711,26 @@ const SlideStrip = (function () {
     r.page.style.transform = 'scale(' + geometry.scale + ')';
   }
   // La miniature d'une diapositive : une copie du rendu de ses blocs dans l'éditeur, sans ce qui ne sert qu'à écrire (sélection, poignées, texte indicatif).
+  // `nodeDOM(pos)` cherche le bloc parmi tous ceux du texte, un à un : une diapositive de dix mille cadres dans un texte de soixante mille blocs en coûtait trois secondes (mesuré le 11/11). Les blocs d'une
+  // diapositive se suivent dans le texte, donc dans la page : seul le premier est cherché ainsi, chacun des autres est le frère du précédent - reconnu à son nœud, que ProseMirror garde dans la description
+  // de chaque bloc de la page - et `nodeDOM` reprend la main quand la suite n'est pas celle qu'on attend (un repère entre deux blocs, un bloc que la page ne montre pas).
+  const SIBLING_HOPS = 8;
+  function nextBlockDom(previous, node) {
+    let sibling = previous ? previous.nextSibling : null;
+    for (let hops = 0; sibling && hops < SIBLING_HOPS; hops += 1, sibling = sibling.nextSibling) {
+      const desc = sibling.pmViewDesc;
+      if (desc && desc.node === node) return { dom: sibling, element: desc.nodeDOM || sibling };
+    }
+    return null;
+  }
   function copiesOf(slide, geometry) {
     const view = editor.view;
     const copies = [];
+    let cursor = null;
     slide.nodes.forEach(({ node, pos }) => {
-      const original = view.nodeDOM(pos);
+      const near = nextBlockDom(cursor, node);
+      const original = near ? near.element : view.nodeDOM(pos);
+      if (near) cursor = near.dom; else if (original instanceof HTMLElement) cursor = original;
       if (!(original instanceof HTMLElement)) return;
       // Les graphiques de cette diapositive que l'éditeur n'a pas dessinés (il ne dessine que ceux qu'on voit) le sont : la miniature se recopie quand leur dessin arrive (onChartPainted).
       ChartEntry.demand(original);
@@ -753,13 +768,19 @@ const SlideStrip = (function () {
     rows.forEach((r, i) => { if (slides[i] && slides[i].nodes.some(({ node }) => node.type.name === 'freeFrame' && node.attrs.view)) r.nodes = null; });
     scheduleThumbs();
   }
+  // Une miniature de dix mille cadres a des dizaines de milliers d'éléments : chacun ne perd son adresse, son texte indicatif et ses classes d'édition que s'il en a (le premier coup d'œil à ses attributs ne coûte rien,
+  // le tableau de ses classes coûtait presque autant que sa copie).
+  const EDIT_CLASS_HINT = /selected|is-editor-empty|has-focus/i;
+  function tidyNode(node) {
+    if (node.hasAttribute('id')) node.removeAttribute('id');
+    if (node.hasAttribute('data-placeholder')) node.removeAttribute('data-placeholder');
+    const names = node.getAttribute('class');
+    if (names && EDIT_CLASS_HINT.test(names)) Array.from(node.classList).filter(name => /selected/i.test(name) || name === 'is-editor-empty' || name === 'has-focus').forEach(name => node.classList.remove(name));
+  }
   function tidyCopy(copy) {
     copy.querySelectorAll('.editor-image-handle, .editor-image-move-handle, .column-resize-handle, .ProseMirror-gapcursor').forEach(node => node.remove());
-    [copy, ...copy.querySelectorAll('*')].forEach((node) => {
-      node.removeAttribute('id');
-      node.removeAttribute('data-placeholder');
-      Array.from(node.classList).filter(name => /selected/i.test(name) || name === 'is-editor-empty' || name === 'has-focus').forEach(name => node.classList.remove(name));
-    });
+    tidyNode(copy);
+    copy.querySelectorAll('*').forEach(tidyNode);
   }
   // Une image en calque se place par son `top`, compté depuis le haut du texte entier de l'éditeur : dans la miniature, elle reprend sa place sur sa page, celle de sa grille (`pageTopPt`,
   // depuis le haut du corps de la page). Sans grille, ou posée dans un bloc qui la place lui-même (une case), elle garde son `top`.

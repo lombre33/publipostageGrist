@@ -62,6 +62,8 @@ async function buildTexts() {
     const alpha = saved(deck('Alpha', slides));
     return { alpha, beta: saved(deck('Beta', slides)), gamma: saved(deck('Gamma', slides, 40)), delta: saved(deck('Delta', slides, 3)), epsilon: saved(deck('Epsilon', slides, 2)), petit: saved(deck('Petit', 6)),
       giant: saved(giant('Géante', bigSlides, bigFrames)),
+      // assez de cadres (5 x 600) pour que le texte soit masqué derrière le voile (LOCK_AFTER_FRAMES : 2 500)
+      lock: saved(giant('Verrou', 5, bigFrames)),
       // un `<div` dans la valeur d'un attribut : le texte compte une ouverture de plus qu'il n'a de fermetures, l'éditeur ne le sait pas : le pas qui le porte est refusé
       broke: alpha.replace('Alpha 40</h1>', 'Alpha 40</h1><p title="<div">x</p>') };
   }, { slides: SLIDES, table: TABLE, cellChars: CELL_CHARS, bigSlides: BIG_SLIDES, bigFrames: BIG_FRAMES });
@@ -77,13 +79,13 @@ const slideTexts = texts.alpha.split(/<div class="page-break-marker"[^>]*>Saut d
 check('chaque diapositive d\'Alpha (sauf la dernière) finit par un cadre, pas par un paragraphe : TipTap range un paragraphe vide sous chaque pas posé, que l\'ouverture doit retirer pour rendre le texte d\'un bloc', slideTexts.length === SLIDES && slideTexts.slice(0, -1).every(x => /<\/div>$/.test(x)) && /<p><\/p>$/.test(slideTexts[SLIDES - 1]), slideTexts.slice(0, 3).map(x => x.slice(-30)));
 check('le texte « Broke » porte un `<div` dans un attribut (une ouverture de plus que de fermetures)', (texts.broke.match(/<div/g) || []).length === (texts.alpha.match(/<div/g) || []).length + 1 && (texts.broke.match(/<\/div>/g) || []).length === (texts.alpha.match(/<\/div>/g) || []).length, { divs: (texts.broke.match(/<div/g) || []).length });
 
-const IDS = { alpha: 7, beta: 8, gamma: 9, delta: 10, petit: 11, epsilon: 12, giant: 13, broke: 14 };
-const NAMES = { alpha: 'Alpha lourd', beta: 'Beta lourd', gamma: 'Gamma saut dans un tableau tardif', delta: 'Delta saut dans un tableau au debut', petit: 'Petit', epsilon: 'Epsilon saut dans un tableau tres tot', giant: 'Geante cadres par centaines', broke: 'Broke div dans un attribut' };
+const IDS = { alpha: 7, beta: 8, gamma: 9, delta: 10, petit: 11, epsilon: 12, giant: 13, broke: 14, lock: 15 };
+const NAMES = { alpha: 'Alpha lourd', beta: 'Beta lourd', gamma: 'Gamma saut dans un tableau tardif', delta: 'Delta saut dans un tableau au debut', petit: 'Petit', epsilon: 'Epsilon saut dans un tableau tres tot', giant: 'Geante cadres par centaines', broke: 'Broke div dans un attribut' , lock: 'Verrou masque' };
 const seedWith = () => seedModels() + `
   const mm = stub.state.rows.Publipostage_Modeles;
   const addPres = (id, nom, html) => { mm.id.push(id); mm.Nom.push(nom); mm.Contenu.push(html); mm.NomFichierPDF.push(''); mm.HeaderFooter.push(''); mm.DateModif.push(1790000100); mm.Margins.push(''); mm.EstParDefaut.push(false); mm.TypeModele.push('presentation'); };
   ${Object.keys(IDS).map(k => `addPres(${IDS[k]}, ${JSON.stringify(NAMES[k])}, ${JSON.stringify(texts[k])});`).join('\n  ')}
-  stub.state.nextRowId.Publipostage_Modeles = 15;
+  stub.state.nextRowId.Publipostage_Modeles = 16;
 `;
 const MODELS = Object.keys(IDS).length + 4;      // les quatre modèles de base du faux Grist
 
@@ -328,6 +330,40 @@ const giantClassic = await classicOf(page, IDS.giant);
 const giantDone = await stateOf(page);
 check('la présentation géante : à la fin ses ' + (BIG_SLIDES * BIG_FRAMES) + ' cadres et ' + (BIG_SLIDES - 1) + ' sauts de page sont là, le texte est IDENTIQUE à l\'ouverture d\'un bloc et au texte enregistré', giantDone.frames === BIG_SLIDES * BIG_FRAMES && giantDone.breaks === BIG_SLIDES - 1 && giantHtml === giantClassic.html && giantClassic.html === texts.giant, { frames: giantDone.frames, breaks: giantDone.breaks, same: giantHtml === giantClassic.html });
 check('la page reste fluide pendant l\'ouverture de la présentation géante (aucun arrêt de plus de 550 ms, et deux au plus de plus de 300 : la clôture met en page, pagine et relit tout le texte, chacun dans sa tâche ; l\'ouverture d\'un bloc : ' + giantClassic.ms + ' ms) et la barre avance au fil des pas (' + giantRun.percents.length + ' valeurs) alors que le texte dit toujours la diapositive en cours', giantRun.max <= 550 && giantRun.over300 <= 2 && giantRun.percents.length >= 8 && giantRun.percents.every((p, i) => i === 0 || p >= giantRun.percents[i - 1]) && giantRun.lines.length <= BIG_SLIDES, { maxGapMs: giantRun.max, over300: giantRun.over300, classicMs: giantClassic.ms, percents: giantRun.percents.slice(0, 12), lines: giantRun.lines });
+// ================= 7b) Un texte assez lourd pour être MASQUÉ derrière le voile : la mise en page finale est annoncée avant =================
+await watchOpening(page);
+await chooseAndLook(page, IDS.lock);
+await waitFilled(page, IDS.lock);
+const lockRun = await heartbeat(page);
+const lockDone = await stateOf(page);
+const lockHtml = await textOf(page);
+const closingLines = lockRun.lines.filter(l => /^Mise en page finale/.test(l));
+check('une présentation de 3 000 cadres (le texte est masqué derrière le voile) : le dernier mot du voile est « Mise en page finale de toutes les diapositives… » (une seule fois), après les « Ouverture des diapositives… »', closingLines.length === 1 && /^Mise en page finale/.test(lockRun.lines[lockRun.lines.length - 1]) && lockRun.lines.slice(0, -1).length >= 3 && lockRun.lines.slice(0, -1).every(l => /^Ouverture des diapositives… \d+ \/ 5$/.test(l)), { lines: lockRun.lines.slice(-4), closing: closingLines.length });
+check('et le texte est entier à la fin (3 000 cadres, 4 sauts de page), identique à ce que le modèle avait enregistré, le voile retiré', lockDone.frames === 5 * BIG_FRAMES && lockDone.breaks === 4 && lockDone.filling === false && lockHtml === texts.lock && (await veilOf(page)).shown === false, { frames: lockDone.frames, breaks: lockDone.breaks, same: lockHtml === texts.lock });
+
+// La copie d'une diapositive pour la bande (SlideStrip.pageCopy, comme ses miniatures : copiesOf) : `view.nodeDOM(pos)` cherche le bloc parmi tous ceux du texte, un à un, et coûtait 3 s pour une diapositive de dix mille
+// cadres dans un texte de soixante mille blocs (11/11). Les blocs d'une diapositive se suivent : seul le premier est cherché ainsi, les autres sont des frères. La copie est la même, à l'élément près.
+const stripCopy = await page.evaluate(() => {
+  const ed = EditorCore.getEditor();
+  const view = ed.view;
+  // Les diapositives de ce texte n'ont pas de signet : on en réclame un par diapositive (la demande de la personne qui copie le lien), pour pouvoir demander la copie de la dernière.
+  for (let k = 0; k < 5; k++) view.dispatch(ed.state.tr.setMeta(SlideProps.CLAIM_META, { index: k, id: 'diapo-' + k }));
+  const anchors = SlideProps.anchorsOf(ed.state.doc);
+  let calls = 0;
+  const real = view.nodeDOM;
+  view.nodeDOM = function (pos) { calls += 1; return real.call(this, pos); };
+  let copy;
+  try { copy = SlideStrip.pageCopy('diapo-4'); } finally { delete view.nodeDOM; }
+  const kids = Array.from(view.dom.children);
+  let from = 0;
+  kids.forEach((child, i) => { if (child.classList.contains('page-break-marker')) from = i + 1; });
+  const originals = kids.slice(from).filter(child => child.classList.contains('pp-free-frame'));
+  const copies = copy && copy.page ? Array.from(copy.page.children).filter(child => child.classList.contains('pp-free-frame')) : [];
+  return { anchors: anchors.length, calls, first: copies.length ? copies[0].textContent : '', originals: originals.length, copies: copies.length,
+    sameText: originals.length === copies.length && originals.every((child, i) => child.textContent === copies[i].textContent),
+    ids: copy && copy.page ? copy.page.querySelectorAll('[id]').length : -1, placeholders: copy && copy.page ? copy.page.querySelectorAll('[data-placeholder]').length : -1 };
+});
+check('la copie de la dernière diapositive géante pour la bande (' + BIG_FRAMES + ' cadres, la cinquième) cherche son premier bloc par nodeDOM et en suit les frères (au plus 3 appels de nodeDOM au lieu de ' + BIG_FRAMES + '), et reprend chaque cadre, dans l\'ordre, sans adresse ni texte indicatif', stripCopy.anchors === 5 && stripCopy.first === 'Verrou 5 cadre 0' && stripCopy.calls <= 3 && stripCopy.originals === BIG_FRAMES && stripCopy.copies === BIG_FRAMES && stripCopy.sameText && stripCopy.ids === 0 && stripCopy.placeholders === 0, stripCopy);
 // À l'import : une diapositive géante posée par appendSlides se coupe aussi en pas, sans perdre un octet.
 const importLike = await page.evaluate(async ({ frames }) => {
   const one = (n) => Array.from({ length: frames }, (_, i) => FreeFrame.html({ x: (i % 24) * 26, y: 10 + Math.floor(i / 24) * 12, w: 24, h: 10 }, `<p>Import ${n} cadre ${i}</p>`)).join('') + '<p></p>';

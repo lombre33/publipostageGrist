@@ -274,7 +274,13 @@ const MainImport = (function () {
       const head = ImportPlacing.takeFirst(texts);
       loadTemplateIntoEditor({ id: null, nom: keepName, contenu: head.first, typeModele: SlidesEntry.TYPE, marginsMm: imported.page, suiviModifications: null, headerFooter: null }, SlidesEntry.TYPE);
       note(head.started);
-      const failed = head.pieces.length ? await ImportPlacing.appendSlides(head.pieces, () => {}, { covered: progress.isShown, markers: head.leads, tail: head.first, onStep: info => note(Math.min(total, head.started + info.markers)) }) : 0;
+      // Un très gros texte (masqué derrière le voile pendant la pose) se met en page d'un coup à la fin, quelques secondes : le voile le dit avant (`closing`).
+      const closing = () => {
+        const text = I18n.t('status.pptxClosing');
+        setStatus(text);
+        progress.update(text, PPTX_STEP_READ + PPTX_STEP_PLACE, true);
+      };
+      const failed = head.pieces.length ? await ImportPlacing.appendSlides(head.pieces, () => {}, { covered: progress.isShown, markers: head.leads, tail: head.first, onStep: info => note(Math.min(total, head.started + info.markers)), onClosing: closing }) : 0;
       if (failed) {
         const item = imported.report.find(entry => entry.key === 'unreadable');
         if (item) item.n += failed; else imported.report.push({ key: 'unreadable', n: failed });

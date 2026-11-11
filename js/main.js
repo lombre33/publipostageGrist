@@ -355,10 +355,16 @@
       setStatus(text);
       progress.update(text, fraction);
     };
+    // Un très gros texte (masqué derrière le voile pendant la pose) se met en page d'un coup à la fin, quelques secondes : le voile le dit avant.
+    const closing = () => {
+      const text = I18n.t('status.pptxClosing');
+      setStatus(text);
+      progress.update(text, 1, true);
+    };
     PerfTrace.mark('ouverture par morceaux : début', { diapositives: total, signesMo: Math.round(tpl.contenu.length / 104857.6) / 10 });
     note(plan.firstSlides, plan.firstShare);
     try {
-      const outcome = await ImportPlacing.fillOpened(plan, { progress, covered: progress.isShown, onPlaced: (markers, fraction) => note(plan.firstSlides + markers, plan.firstShare + (1 - plan.firstShare) * fraction), finish: result => settleOpenedPresentation(tpl, result) });
+      const outcome = await ImportPlacing.fillOpened(plan, { progress, covered: progress.isShown, closing, onPlaced: (markers, fraction) => note(plan.firstSlides + markers, plan.firstShare + (1 - plan.firstShare) * fraction), finish: result => settleOpenedPresentation(tpl, result) });
       PerfTrace.mark('ouverture par morceaux : ' + (outcome === 'done' ? 'fin' : outcome === 'broken' ? 'texte rechargé d’un bloc' : 'arrêtée'));
     } finally {
       progress.end();

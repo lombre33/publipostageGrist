@@ -83,7 +83,7 @@ const ImportPlacing = (function () {
     showCancel();
   }
 
-  // Un suivi d'avancement : `update(texte, fraction)` à chaque pas (le texte dit où l'on en est, la barre suit la fraction de 0 à 1) ; `allowCancel(fonction)` pose « Annuler l'import » (la fonction est appelée au clic
+  // Un suivi d'avancement : `update(texte, fraction, force)` à chaque pas (le texte dit où l'on en est, la barre suit la fraction de 0 à 1 ; le voile ne se redessine pas plus d'une fois par 80 ms, `force` l'y oblige) ; `allowCancel(fonction)` pose « Annuler l'import » (la fonction est appelée au clic
   // et à Échap), `allowCancel(null)` le retire ; `suspend()` cache le voile jusqu'au pas suivant (une question à la personne, la fenêtre du rapport) ; `end()` le retire pour de bon (une seule fois : un suivi
   // déjà terminé ne touche plus au voile, qu'un autre suivi a pu remontrer). `options.opening` : l'OUVERTURE d'un modèle enregistré (titre et conseil à elle) ; le voile est là dès le premier pas - un modèle qui
   // s'ouvre par morceaux dure toujours plus d'une demi-seconde, et pendant son premier morceau le texte n'est que le début du modèle : rien ne s'y tape.
@@ -96,10 +96,10 @@ const ImportPlacing = (function () {
     let shown = false;
     let drawnAt = 0;
     let timer = 0;
-    function draw() {
+    function draw(force) {
       if (ended || suspended || !last) return;
       const now = performance.now();
-      if (now - quietFrom < SHOW_AFTER_MS || now - drawnAt < 80) return;
+      if (now - quietFrom < SHOW_AFTER_MS || (!force && now - drawnAt < 80)) return;
       drawnAt = now;
       shown = true;
       build();
@@ -119,14 +119,14 @@ const ImportPlacing = (function () {
     }
     arm();
     return {
-      update(text, fraction) {
+      update(text, fraction, force) {
         last = { text, fraction: fraction || 0 };
         if (suspended) {
           suspended = false;
           // Une question vient de se fermer : un petit fichier (le voile ne s'est pas montré) ne le voit toujours pas, un gros fichier le retrouve tout de suite.
           if (!shown) { quietFrom = performance.now(); arm(); }
         }
-        draw();
+        draw(force);
       },
       // Le voile est-il à l'écran à cet instant (affiché, ni suspendu ni retiré) ? Ce qui est dessous ne se voit alors pas.
       isShown() { return shown && !ended && !suspended && !!win && win.isOpen(); },
@@ -256,13 +256,15 @@ const ImportPlacing = (function () {
   // changé de texte : la pose s'arrête là sans rien poser de plus ni clore) ; `strict` (l'ouverture d'un modèle enregistré : un pas coupé en deux ou refusé fait lever l'erreur - une page vide à sa place ferait
   // perdre la diapositive à l'enregistrement suivant) ; `tail` : le texte qui précède le premier morceau (le premier morceau du plan), dont la fin dit si TipTap a rangé un paragraphe vide sous lui : ce
   // paragraphe est retiré avant le pas suivant, pour que le texte obtenu soit celui d'un chargement d'un bloc à l'octet près (entre deux pas d'une même diapositive, dans tous les cas) ;
-  // `onStep({ markers, fraction })` après chaque pas : le nombre de sauts de page posés jusqu'ici, et - avec `totalMs`, le coût de tout ce qui est à poser - la part du coût déjà posée.
+  // `onStep({ markers, fraction })` après chaque pas : le nombre de sauts de page posés jusqu'ici, et - avec `totalMs`, le coût de tout ce qui est à poser - la part du coût déjà posée ;
+  // `onClosing()` une fois, quand le texte masqué (LOCK_AFTER_FRAMES) va être remontré : la mise en page de tout le texte d'un coup tient la page quelques secondes (1 à 2 s pour 60 000 cadres), le voile le dit avant.
   const endsWithParagraph = text => /<\/p>\s*$/.test(text.length > 64 ? text.slice(-64) : text);
   async function appendSlides(pieces, onPlaced, options) {
     const opts = options || {};
     const covered = typeof opts.covered === 'function' ? opts.covered : () => false;
     const shouldStop = typeof opts.shouldStop === 'function' ? opts.shouldStop : () => false;
     const onStep = typeof opts.onStep === 'function' ? opts.onStep : null;
+    const onClosing = typeof opts.onClosing === 'function' ? opts.onClosing : null;
     const markers = Array.isArray(opts.markers) ? opts.markers : null;
     const strict = !!opts.strict;
     const totalMs = typeof opts.totalMs === 'number' && opts.totalMs > 0 ? opts.totalMs : 0;
@@ -318,6 +320,11 @@ const ImportPlacing = (function () {
         onPlaced(i + 1);
       }
       if (shouldStop()) return failed;
+      if (locked && onClosing) {
+        onClosing();
+        await breatheAndPaint();                // le mot du voile se peint avant la mise en page de tout le texte
+        if (shouldStop()) return failed;
+      }
       unlockDom();
       locked = false;
       await breatheAndPaint();                  // la mise en page et le dessin de tout le texte d'un coup, dans leur propre tâche : le voile est encore là
@@ -383,7 +390,7 @@ const ImportPlacing = (function () {
     run.stopped = true;
     if (run.progress) run.progress.end();
   }
-  // Pose la suite du plan à la suite de son début (`handlers.onPlaced(sauts de page posés, part du coût posée)` après chaque pas, `covered` : le voile est-il à l'écran) puis, une fois tout posé ET AVANT que ceux
+  // Pose la suite du plan à la suite de son début (`handlers.onPlaced(sauts de page posés, part du coût posée)` après chaque pas, `covered` : le voile est-il à l'écran, `closing` : avant la mise en page finale d'un texte masqué) puis, une fois tout posé ET AVANT que ceux
   // qui attendent soient libérés, appelle `handlers.finish(résultat)` : ce qu'il faut remettre d'aplomb (l'état « à enregistrer », les tableaux et diapositives liés, la Lecture). Résultat : 'done' ;
   // 'broken' (un pas coupé en deux ou refusé : `finish` recharge alors le texte d'un bloc, comme avant) ; 'stopped' (un autre texte a pris l'éditeur : `finish` n'est pas appelé).
   async function fillOpened(plan, handlers) {
@@ -394,7 +401,7 @@ const ImportPlacing = (function () {
     fillDone = new Promise(resolve => { release = resolve; });
     let outcome = 'done';
     try {
-      await appendSlides([plan.rest], () => {}, { covered: handlers.covered, markers: [''], shouldStop: () => run.stopped, strict: true, tail: plan.first, totalMs: plan.restMs, onStep: info => handlers.onPlaced(info.markers, info.fraction) });
+      await appendSlides([plan.rest], () => {}, { covered: handlers.covered, markers: [''], shouldStop: () => run.stopped, strict: true, tail: plan.first, totalMs: plan.restMs, onStep: info => handlers.onPlaced(info.markers, info.fraction), onClosing: handlers.closing });
       if (run.stopped) outcome = 'stopped';
     } catch (e) {
       if (run.stopped) outcome = 'stopped';
