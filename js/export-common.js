@@ -457,7 +457,77 @@ const ExportCommon = (function () {
       });
       return parts.join('/');
     }
-    return { fail, kids, kid, at, descendants, localAttr, relAttr, numAttrOf, round2, fixed, escText, escAttr, spaced, resolvePath };
+    // Le paquet OPC (un zip de parties XML) : refuse ce qui n'en est pas un (ancien format binaire ou protégé par un mot de passe, pas un zip, zip illisible, trop gros une fois défait), puis rend ses
+    // lectures : `xml(chemin)` (la partie en document, null si elle manque, passe `maxPart` ou ne se lit pas), `rels(partie)` (ses relations par identifiant : { type (le dernier mot), target (chemin dans
+    // le paquet, ou null), href (adresse extérieure), external }), `fileOf(chemin)` (le fichier du zip, sans tenir compte des majuscules), `has(chemin)`, `zip`. `limits` : { maxUnpacked, maxPart } ;
+    // `messages` : le texte de chaque refus, qui dit le genre de fichier (Word, PowerPoint) : { legacy, notPackage, unreadable, tooBig }.
+    async function openPackage(buffer, { limits, messages }) {
+      const head = new Uint8Array(buffer, 0, Math.min(8, buffer.byteLength));
+      if (head[0] === 0xD0 && head[1] === 0xCF && head[2] === 0x11 && head[3] === 0xE0) throw fail('legacy', messages.legacy);
+      if (head[0] !== 0x50 || head[1] !== 0x4B) throw fail('unreadable', messages.notPackage);
+      try {
+        await ensureJsZipLoaded();
+      } catch (e) {
+        throw fail('library', 'La bibliothèque de lecture des fichiers n’a pas pu être chargée.', { cause: e });
+      }
+      let zip;
+      try {
+        zip = await JSZip.loadAsync(buffer);
+      } catch (e) {
+        throw fail('unreadable', messages.unreadable, { cause: e });
+      }
+      const names = new Map();
+      Object.keys(zip.files).forEach((name) => { if (!zip.files[name].dir) names.set(name.toLowerCase(), name); });
+      const unpacked = zipUnpackedBytes(zip);
+      if (unpacked > limits.maxUnpacked) throw fail('tooBig', messages.tooBig, { size: unpacked, max: limits.maxUnpacked });
+      const docs = new Map();
+      const relsCache = new Map();
+      const fileOf = path => (path ? zip.file(names.get(String(path).toLowerCase()) || path) : null);
+      const parser = new DOMParser();
+      async function xml(path) {
+        if (!path) return null;
+        if (docs.has(path)) return docs.get(path);
+        let doc = null;
+        const file = fileOf(path);
+        if (file) {
+          try {
+            const text = await file.async('string');
+            if (text.length <= limits.maxPart) {
+              const parsed = parser.parseFromString(text, 'application/xml');
+              doc = parsed.getElementsByTagName('parsererror').length ? null : parsed;
+            }
+          } catch (e) {
+            doc = null;
+          }
+        }
+        docs.set(path, doc);
+        return doc;
+      }
+      async function rels(partPath) {
+        if (relsCache.has(partPath)) return relsCache.get(partPath);
+        const slash = partPath.lastIndexOf('/');
+        const doc = await xml(partPath.slice(0, slash + 1) + '_rels/' + partPath.slice(slash + 1) + '.rels');
+        const byId = new Map();
+        const list = [];
+        if (doc) {
+          descendants(doc.documentElement, 'Relationship').forEach((el) => {
+            const external = localAttr(el, 'TargetMode') === 'External';
+            const targetText = localAttr(el, 'Target') || '';
+            const entry = {
+              id: localAttr(el, 'Id'), type: String(localAttr(el, 'Type') || '').split('/').pop(), external,
+              target: external ? null : resolvePath(partPath, targetText), href: external ? targetText : null,
+            };
+            byId.set(entry.id, entry);
+            list.push(entry);
+          });
+        }
+        const result = { byId, list, ofType: type => list.filter(entry => entry.type === type) };
+        relsCache.set(partPath, result);
+        return result;
+      }
+      return { zip, fileOf, xml, rels, has: path => !!fileOf(path) };
+    }
+    return { fail, kids, kid, at, descendants, localAttr, relAttr, numAttrOf, round2, fixed, escText, escAttr, spaced, resolvePath, openPackage };
   })();
 
   return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, fillEmptyBlocks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,

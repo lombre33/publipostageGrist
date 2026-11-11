@@ -149,81 +149,22 @@ const PptxImport = (function () {
   // --- Le paquet ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   const resolvePath = ExportCommon.Ooxml.resolvePath;
   async function openPackage(buffer) {
-    const head = new Uint8Array(buffer, 0, Math.min(8, buffer.byteLength));
-    if (head[0] === 0xD0 && head[1] === 0xCF && head[2] === 0x11 && head[3] === 0xE0) throw fail('legacy', 'Fichier PowerPoint ancien ou protégé par un mot de passe.');
-    if (head[0] !== 0x50 || head[1] !== 0x4B) throw fail('unreadable', 'Ce fichier n’est pas une présentation PowerPoint.');
-    try {
-      await ExportCommon.ensureJsZipLoaded();
-    } catch (e) {
-      throw fail('library', 'La bibliothèque de lecture des fichiers n’a pas pu être chargée.', { cause: e });
-    }
-    let zip;
-    try {
-      zip = await JSZip.loadAsync(buffer);
-    } catch (e) {
-      throw fail('unreadable', 'Ce fichier n’est pas une présentation PowerPoint lisible.', { cause: e });
-    }
-    const names = new Map();
-    Object.keys(zip.files).forEach((name) => {
-      if (!zip.files[name].dir) names.set(name.toLowerCase(), name);
+    const pkg = await ExportCommon.Ooxml.openPackage(buffer, {
+      limits: { maxUnpacked: MAX_UNPACKED_BYTES, maxPart: MAX_PART_BYTES },
+      messages: {
+        legacy: 'Fichier PowerPoint ancien ou protégé par un mot de passe.', notPackage: 'Ce fichier n’est pas une présentation PowerPoint.',
+        unreadable: 'Ce fichier n’est pas une présentation PowerPoint lisible.', tooBig: 'Cette présentation est trop volumineuse une fois défaite.',
+      },
     });
-    const unpacked = ExportCommon.zipUnpackedBytes(zip);
-    if (unpacked > MAX_UNPACKED_BYTES) throw fail('tooBig', 'Cette présentation est trop volumineuse une fois défaite.', { size: unpacked, max: MAX_UNPACKED_BYTES });
-    const docs = new Map();
-    const relsCache = new Map();
-    const fileOf = path => (path ? zip.file(names.get(String(path).toLowerCase()) || path) : null);
-    const parser = new DOMParser();
-    async function xml(path) {
-      if (!path) return null;
-      if (docs.has(path)) return docs.get(path);
-      let doc = null;
-      const file = fileOf(path);
-      if (file) {
-        try {
-          const text = await file.async('string');
-          if (text.length <= MAX_PART_BYTES) {
-            const parsed = parser.parseFromString(text, 'application/xml');
-            doc = parsed.getElementsByTagName('parsererror').length ? null : parsed;
-          }
-        } catch (e) {
-          doc = null;
-        }
-      }
-      docs.set(path, doc);
-      return doc;
-    }
-    // Les relations d'une partie : par identifiant { type (le dernier mot), target (chemin dans le paquet, ou null), href (adresse extérieure), external }.
-    async function rels(partPath) {
-      if (relsCache.has(partPath)) return relsCache.get(partPath);
-      const slash = partPath.lastIndexOf('/');
-      const doc = await xml(partPath.slice(0, slash + 1) + '_rels/' + partPath.slice(slash + 1) + '.rels');
-      const byId = new Map();
-      const list = [];
-      if (doc) {
-        descendants(doc.documentElement, 'Relationship').forEach((el) => {
-          const external = attr(el, 'TargetMode') === 'External';
-          const targetText = attr(el, 'Target') || '';
-          const entry = {
-            id: attr(el, 'Id'), type: String(attr(el, 'Type') || '').split('/').pop(), external,
-            target: external ? null : resolvePath(partPath, targetText), href: external ? targetText : null,
-          };
-          byId.set(entry.id, entry);
-          list.push(entry);
-        });
-      }
-      const result = { byId, list, ofType: type => list.filter(entry => entry.type === type) };
-      relsCache.set(partPath, result);
-      return result;
-    }
     const base64 = async (path) => {
-      const file = fileOf(path);
+      const file = pkg.fileOf(path);
       return file ? file.async('base64') : null;
     };
     const sizeOf = (path) => {
-      const file = fileOf(path);
+      const file = pkg.fileOf(path);
       return file && file._data && Number.isFinite(file._data.uncompressedSize) ? file._data.uncompressedSize : 0;
     };
-    return { xml, rels, base64, sizeOf, has: path => !!fileOf(path) };
+    return { xml: pkg.xml, rels: pkg.rels, base64, sizeOf, has: pkg.has };
   }
 
   // --- Les couleurs ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
