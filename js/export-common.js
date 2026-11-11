@@ -394,6 +394,72 @@ const ExportCommon = (function () {
   // en HTML en ligne, et par son import, qui la reprend telle quelle.
   const isMergeImage = img => img.hasAttribute('data-var-table') || img.hasAttribute('data-chart-section') || img.hasAttribute('data-chart-spec') || img.hasAttribute('data-video') || (img.hasAttribute('data-qr-text') && !(img.getAttribute('src') || '').trim());
 
+  // La lecture des fichiers Office (OOXML) : ce que l'import Word (js/docx-import.js) et l'import PowerPoint (js/pptx-import.js) ont en commun, écrit une seule fois. Les noms XML se lisent par leur
+  // nom LOCAL (`w:val` et `val`, `a:solidFill` et `solidFill` y sont le même : les fichiers « strict » et « transitional » se lisent pareil) ; un texte devient du balisage de l'éditeur sans caractère
+  // illégal en XML, avec ses tabulations (js/tab-indent.js) et ses retours à la ligne. Les moteurs ne se lisent pas entre eux (js/export-engines.js) : le partage passe par ce fichier, chargé d'avance.
+  const Ooxml = (function () {
+    const NS_RELS = /relationships/;
+    function fail(code, message, extra) { return Object.assign(new Error(message), { code }, extra || {}); }
+    const matches = (el, names) => (Array.isArray(names) ? names.indexOf(el.localName) >= 0 : el.localName === names);
+    function kids(el, names) {
+      const out = [];
+      if (!el) return out;
+      for (let n = el.firstElementChild; n; n = n.nextElementSibling) if (!names || matches(n, names)) out.push(n);
+      return out;
+    }
+    function kid(el, names) {
+      if (!el) return null;
+      for (let n = el.firstElementChild; n; n = n.nextElementSibling) if (matches(n, names)) return n;
+      return null;
+    }
+    const at = (el, path) => path.split('/').reduce((node, name) => (node ? kid(node, name) : null), el);
+    function descendants(el, name) { return el ? Array.from(el.getElementsByTagNameNS('*', name)) : []; }
+    // Un attribut lu par son nom local, quel que soit son préfixe (`w:val`, `val`, `p14:dur`) ; null quand il manque.
+    function localAttr(el, name) {
+      if (!el) return null;
+      for (let i = 0; i < el.attributes.length; i++) if (el.attributes[i].localName === name) return el.attributes[i].value;
+      return null;
+    }
+    // Un attribut de relation (`r:embed`, `r:id`, `r:link`) : l'espace de noms le dit, pas le préfixe.
+    function relAttr(el, name) {
+      if (!el) return null;
+      for (let i = 0; i < el.attributes.length; i++) {
+        const attribute = el.attributes[i];
+        if (attribute.localName === name && NS_RELS.test(attribute.namespaceURI || '')) return attribute.value;
+      }
+      return null;
+    }
+    // Un nombre lu par la façon de lire un attribut du moteur (`attr`) ; `fallback` quand il manque ou n'est pas un nombre.
+    const numAttrOf = attr => (el, name, fallback) => {
+      const value = attr(el, name);
+      const n = value === null || value === '' ? NaN : Number(value);
+      return Number.isFinite(n) ? n : fallback;
+    };
+    const round2 = value => Math.round(value * 100) / 100;
+    const fixed = value => String(round2(value));
+    const ILLEGAL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g;
+    const escText = text => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const escAttr = text => escText(text).replace(/"/g, '&quot;');
+    // Lu à l'appel : le nœud-tabulation est celui de js/tab-indent.js, chargé avant ce fichier mais qu'aucun autre ne garantit à la lecture de celui-ci.
+    const tabMarkup = () => '<span class="' + TabIndent.CLASS + '" style="white-space: pre-wrap">' + TabIndent.TAB + '</span>';
+    // Un texte en balisage : les espaces qui se suivent restent (insécables), une tabulation devient le nœud-tabulation de l'éditeur, un retour à la ligne devient <br>.
+    function spaced(text) {
+      const tab = tabMarkup();
+      return escText(String(text).replace(ILLEGAL, '')).replace(/\t/g, tab).replace(/ {2,}/g, run => ' ' + ' '.repeat(run.length - 1)).replace(/\r\n?|\n|\u000b/g, '<br>');
+    }
+    // Le chemin d'une partie visée par une relation (`target`) depuis la partie qui la porte ; null pour une adresse extérieure.
+    function resolvePath(partPath, target) {
+      if (!target || /^[a-z][a-z0-9+.-]*:/i.test(target)) return null;
+      const parts = target.charAt(0) === '/' ? [] : partPath.split('/').slice(0, -1);
+      target.split('/').forEach((segment) => {
+        if (segment === '..') parts.pop();
+        else if (segment && segment !== '.') parts.push(segment);
+      });
+      return parts.join('/');
+    }
+    return { fail, kids, kid, at, descendants, localAttr, relAttr, numAttrOf, round2, fixed, escText, escAttr, spaced, resolvePath };
+  })();
+
   return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, fillEmptyBlocks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
-    resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages, isMergeImage };
+    resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages, isMergeImage, Ooxml };
 })();

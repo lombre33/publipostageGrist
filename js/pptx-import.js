@@ -97,7 +97,6 @@ const PptxImport = (function () {
   const THIN_H_PT = 23;                            // un rectangle sans texte plus bas devient un trait de son épaisseur : un cadre n'est jamais plus bas qu'une ligne de texte avec ses marges (22 pt) ni plus étroit que 24 pt
   const THIN_W_PT = 24;
   const NO_WRAP_SLACK = 0.15;                      // un texte qui ne se replie pas (wrap="none") : sa boîte est élargie de 15 %, la police de l'éditeur est un peu plus large
-  const NS_RELS = /relationships/;
   const EDITOR_TEXT = '1b2430';
   const SYSTEM_COLORS = { window: 'ffffff', windowText: '000000', windowFrame: '646464', highlight: '3399ff', highlightText: 'ffffff', btnFace: 'f0f0f0', btnText: '000000', grayText: '808080', menu: 'f0f0f0', menuText: '000000' };
   const PRESET_COLORS = {
@@ -139,66 +138,16 @@ const PptxImport = (function () {
 
   // --- Petites aides ---------------------------------------------------------------------------------------------------------------------------------------------------------------
   const clamp = (value, lo, hi) => Math.min(hi, Math.max(lo, value));
-  const round2 = value => Math.round(value * 100) / 100;
-  const fixed = value => String(round2(value));
-  function fail(code, message, extra) { return Object.assign(new Error(message), { code }, extra || {}); }
-  const ILLEGAL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g;
-  const escText = text => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const escAttr = text => escText(text).replace(/"/g, '&quot;');
-  // Un texte de série de caractères en balisage : les espaces qui se suivent restent (insécables), une tabulation devient le nœud-tabulation de l'éditeur (js/tab-indent.js), un retour à la ligne devient <br>.
-  function spaced(text) {
-    return escText(text.replace(ILLEGAL, '')).replace(/\t/g, TAB_MARKUP).replace(/ {2,}/g, run => ' ' + ' '.repeat(run.length - 1)).replace(/\r\n?|\n|\u000b/g, '<br>');
-  }
+  // Les petits outils sur le XML et sur le texte, communs avec js/docx-import.js (js/export-common.js:Ooxml). Les éléments se lisent par leur nom local (`a:solidFill` et `solidFill` y sont le même).
+  const { fail, kids, kid, at, descendants, relAttr, round2, fixed, escText, escAttr, spaced } = ExportCommon.Ooxml;
   const bool = value => value === '1' || value === 'true';
-  const TAB_MARKUP = '<span class="' + TabIndent.CLASS + '" style="white-space: pre-wrap">' + TabIndent.TAB + '</span>';
-
-  // --- XML : les éléments se lisent par leur nom local (`a:solidFill` et `solidFill` y sont le même) ----------------------------------------------------------------------------------------
-  function matches(el, names) { return Array.isArray(names) ? names.indexOf(el.localName) >= 0 : el.localName === names; }
-  function kids(el, names) {
-    const out = [];
-    if (!el) return out;
-    for (let n = el.firstElementChild; n; n = n.nextElementSibling) if (!names || matches(n, names)) out.push(n);
-    return out;
-  }
-  function kid(el, names) {
-    if (!el) return null;
-    for (let n = el.firstElementChild; n; n = n.nextElementSibling) if (matches(n, names)) return n;
-    return null;
-  }
-  const at = (el, path) => path.split('/').reduce((node, name) => (node ? kid(node, name) : null), el);
   const attr = (el, name) => (el && el.hasAttribute(name) ? el.getAttribute(name) : null);
-  function numAttr(el, name, fallback) {
-    const value = attr(el, name);
-    const n = value === null || value === '' ? NaN : Number(value);
-    return Number.isFinite(n) ? n : fallback;
-  }
+  const numAttr = ExportCommon.Ooxml.numAttrOf(attr);
   // Un attribut lu par son nom local, quel que soit son préfixe : la durée d'une transition de PowerPoint 2010 s'écrit `p14:dur`.
-  function localAttr(el, name) {
-    if (!el) return null;
-    for (let i = 0; i < el.attributes.length; i++) if (el.attributes[i].localName === name) return el.attributes[i].value;
-    return null;
-  }
-  // Un attribut de relation (`r:embed`, `r:id`, `r:link`) : l'espace de noms le dit, pas le préfixe.
-  function relAttr(el, name) {
-    if (!el) return null;
-    for (let i = 0; i < el.attributes.length; i++) {
-      const a = el.attributes[i];
-      if (a.localName === name && NS_RELS.test(a.namespaceURI || '')) return a.value;
-    }
-    return null;
-  }
-  function descendants(el, name) { return el ? Array.from(el.getElementsByTagNameNS('*', name)) : []; }
+  const localAttr = ExportCommon.Ooxml.localAttr;
 
   // --- Le paquet ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  function resolvePath(partPath, target) {
-    if (!target || /^[a-z][a-z0-9+.-]*:/i.test(target)) return null;
-    const parts = target.charAt(0) === '/' ? [] : partPath.split('/').slice(0, -1);
-    target.split('/').forEach((segment) => {
-      if (segment === '..') parts.pop();
-      else if (segment && segment !== '.') parts.push(segment);
-    });
-    return parts.join('/');
-  }
+  const resolvePath = ExportCommon.Ooxml.resolvePath;
   async function openPackage(buffer) {
     const head = new Uint8Array(buffer, 0, Math.min(8, buffer.byteLength));
     if (head[0] === 0xD0 && head[1] === 0xCF && head[2] === 0x11 && head[3] === 0xE0) throw fail('legacy', 'Fichier PowerPoint ancien ou protégé par un mot de passe.');

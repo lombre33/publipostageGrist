@@ -22,7 +22,6 @@ const DocxImport = (function () {
   const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
   const MAX_IMAGES_BYTES = 80 * 1024 * 1024;       // le poids des images reprises, au total : le modèle s'écrit dans une case de Grist
   const MAX_DEPTH = 24;                            // tableaux, contrôles et champs emboîtés
-  const NS_RELS = /relationships/;
   const PT_PER_TWIP = 1 / 20;
   const PX_PER_TWIP = 96 / 1440;
   const PX_PER_EMU = 1 / 9525;
@@ -39,50 +38,11 @@ const DocxImport = (function () {
     'comments', 'trackedChanges', 'hidden', 'fields', 'toc', 'endnotes', 'nestedTables', 'borderStyles', 'pageBorders', 'links', 'mergeFields', 'symbols', 'watermark', 'textEffects',
   ];
 
-  // --- Petits outils sur le XML --------------------------------------------------------------------------------------------------------------------------------------------------------
-  function fail(code, message, extra) { return Object.assign(new Error(message), { code }, extra || {}); }
-  function kids(el, names) {
-    const out = [];
-    if (!el) return out;
-    for (let n = el.firstElementChild; n; n = n.nextElementSibling) if (!names || (Array.isArray(names) ? names.indexOf(n.localName) >= 0 : n.localName === names)) out.push(n);
-    return out;
-  }
-  function kid(el, names) {
-    if (!el) return null;
-    for (let n = el.firstElementChild; n; n = n.nextElementSibling) if (Array.isArray(names) ? names.indexOf(n.localName) >= 0 : n.localName === names) return n;
-    return null;
-  }
-  const at = (el, path) => path.split('/').reduce((node, name) => (node ? kid(node, name) : null), el);
-  function descendants(el, name) { return el ? Array.from(el.getElementsByTagNameNS('*', name)) : []; }
+  // --- Petits outils sur le XML (js/export-common.js:Ooxml, communs avec js/pptx-import.js) --------------------------------------------------------------------------------------------------
+  const { fail, kids, kid, at, descendants, relAttr, round2, fixed, escText, escAttr, spaced } = ExportCommon.Ooxml;
   // Un attribut lu par son nom local, quel que soit son préfixe (`w:val`, `val`) ; null quand il manque.
-  function attr(el, name) {
-    if (!el) return null;
-    for (let i = 0; i < el.attributes.length; i++) if (el.attributes[i].localName === name) return el.attributes[i].value;
-    return null;
-  }
-  function relAttr(el, name) {
-    if (!el) return null;
-    for (let i = 0; i < el.attributes.length; i++) {
-      const a = el.attributes[i];
-      if (a.localName === name && NS_RELS.test(a.namespaceURI || '')) return a.value;
-    }
-    return null;
-  }
-  function numAttr(el, name, fallback) {
-    const value = attr(el, name);
-    const n = value === null || value === '' ? NaN : Number(value);
-    return Number.isFinite(n) ? n : fallback;
-  }
-  const round2 = value => Math.round(value * 100) / 100;
-  const fixed = value => String(round2(value));
-  const ILLEGAL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g;
-  const escText = text => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const escAttr = text => escText(text).replace(/"/g, '&quot;');
-  const TAB_MARKUP = '<span class="' + TabIndent.CLASS + '" style="white-space: pre-wrap">' + TabIndent.TAB + '</span>';
-  // Un texte en balisage : les espaces qui se suivent restent (insécables), une tabulation devient le nœud-tabulation de l'éditeur (js/tab-indent.js), un retour à la ligne devient <br>.
-  function spaced(text) {
-    return escText(String(text).replace(ILLEGAL, '')).replace(/\t/g, TAB_MARKUP).replace(/ {2,}/g, run => ' ' + ' '.repeat(run.length - 1)).replace(/\r\n?|\n|\u000b/g, '<br>');
-  }
+  const attr = ExportCommon.Ooxml.localAttr;
+  const numAttr = ExportCommon.Ooxml.numAttrOf(attr);
   // Une bascule de Word (`w:b`, `w:i`, `w:strike`...) : sans valeur ou à « 1 », « true », « on » elle est posée ; « 0 », « false », « off » elle est retirée.
   function isOn(prop) {
     if (!prop) return false;
@@ -110,15 +70,7 @@ const DocxImport = (function () {
   }
 
   // --- Le paquet -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  function resolvePath(partPath, target) {
-    if (!target || /^[a-z][a-z0-9+.-]*:/i.test(target)) return null;
-    const parts = target.charAt(0) === '/' ? [] : partPath.split('/').slice(0, -1);
-    target.split('/').forEach((segment) => {
-      if (segment === '..') parts.pop();
-      else if (segment && segment !== '.') parts.push(segment);
-    });
-    return parts.join('/');
-  }
+  const resolvePath = ExportCommon.Ooxml.resolvePath;
   async function openPackage(buffer) {
     const head = new Uint8Array(buffer, 0, Math.min(8, buffer.byteLength));
     if (head[0] === 0xD0 && head[1] === 0xCF && head[2] === 0x11 && head[3] === 0xE0) throw fail('legacy', 'Fichier Word ancien ou protégé par un mot de passe.');
