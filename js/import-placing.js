@@ -8,7 +8,7 @@
 //    du rapport (`suspend`), et porte « Annuler l'import » tant que le fichier se lit (`allowCancel` : rien n'a encore changé) ;
 //  - la bande des diapositives est tenue (SlideStrip.hold) : elle ne relit pas tout le texte à chaque diapositive posée, elle le fait une fois à la fin ;
 //  - chaque cadre posé est mesuré tout de suite (FreeFrame.overflowsPage garde sa réponse) : la mise en page se fait par morceaux et la relecture finale de la bande ne mesure plus rien.
-// À la fin, `Editor.settleAppended` fait ce que setHTML fait une fois pour tout le document (colonnes de tableau, pagination, copie du HTML au repos).
+// À la fin, la clôture fait, étape par étape, ce que setHTML fait une fois pour tout le document (Editor.settleAppendedSteps : colonnes de tableau, pagination, copie du HTML au repos) ; le voile dit chaque étape.
 // Une diapositive lourde (des centaines de cadres) se pose elle-même en plusieurs PAS, coupés entre deux blocs de premier niveau (`stepsOf`), et le début de l'import n'est lui-même que de quoi tenir en
 // quelques dizaines de millisecondes (`takeFirst`). La MÊME pose sert à l'OUVERTURE d'un gros modèle enregistré (`planOpen`, `fillOpened`, nuit du 10 au 11/11 : « zéro gel à l'ouverture ») : voir plus bas.
 const ImportPlacing = (function () {
@@ -257,7 +257,7 @@ const ImportPlacing = (function () {
   // perdre la diapositive à l'enregistrement suivant) ; `tail` : le texte qui précède le premier morceau (le premier morceau du plan), dont la fin dit si TipTap a rangé un paragraphe vide sous lui : ce
   // paragraphe est retiré avant le pas suivant, pour que le texte obtenu soit celui d'un chargement d'un bloc à l'octet près (entre deux pas d'une même diapositive, dans tous les cas) ;
   // `onStep({ markers, fraction })` après chaque pas : le nombre de sauts de page posés jusqu'ici, et - avec `totalMs`, le coût de tout ce qui est à poser - la part du coût déjà posée ;
-  // `onClosing()` une fois, quand le texte masqué (LOCK_AFTER_FRAMES) va être remontré : la mise en page de tout le texte d'un coup tient la page quelques secondes (1 à 2 s pour 60 000 cadres), le voile le dit avant.
+  // `onClosing(info)` avant chaque étape de la clôture (et pendant la mesure des cadres d'un texte masqué) : voir « LA CLÔTURE » plus bas, `closingText` et `closingShare`.
   const endsWithParagraph = text => /<\/p>\s*$/.test(text.length > 64 ? text.slice(-64) : text);
   async function appendSlides(pieces, onPlaced, options) {
     const opts = options || {};
@@ -320,9 +320,19 @@ const ImportPlacing = (function () {
         onPlaced(i + 1);
       }
       if (shouldStop()) return failed;
-      if (locked && onClosing) {
-        onClosing();
-        await breatheAndPaint();                // le mot du voile se peint avant la mise en page de tout le texte
+      // LA CLÔTURE, étape par étape (11/11, « ça freeze longtemps à ce moment-là, compliqué de savoir si bug en cours ou progression ») : remontrer le texte masqué (`show`), mesurer ses cadres (`measure`), puis
+      // ce que fait la fin d'un chargement (Editor.settleAppendedSteps : `tables`, `pages`, `images`) et la relecture de la bande (`strip`). Avant chaque étape, `onClosing({ kind, step, steps, done, total })`
+      // dit laquelle commence, et la mesure des cadres dit aussi où elle en est. Quand le voile est à l'écran, la page prend une image pour peindre ce mot avant le travail de l'étape, et chaque étape a ainsi
+      // sa propre tâche ; sans voile personne ne le lirait, et la clôture d'un petit import ne prend pas une image de plus par étape.
+      const settling = Editor.settleAppendedSteps();
+      const steps = (locked ? 1 : 0) + (unmeasured >= 0 ? 1 : 0) + settling.length + (stripHeld ? 1 : 0);
+      let stepNo = 0;
+      const tell = (kind, done, total) => { if (onClosing) onClosing({ kind, step: stepNo, steps, done: done || 0, total: total || 0 }); };
+      const paintWord = () => (covered() ? breatheAndPaint() : null);
+      if (locked) {
+        stepNo += 1;
+        tell('show');
+        await paintWord();
         if (shouldStop()) return failed;
       }
       unlockDom();
@@ -331,14 +341,30 @@ const ImportPlacing = (function () {
       if (unmeasured >= 0) {
         // Chaque mesure d'un cadre d'un texte masqué le met en page tout entier (400 ms de plus à chaque pas pour 20 000 cadres) : celles du texte masqué se font ici, par tranches, sur une mise en page qui est à jour.
         const children = EditorCore.getEditor().view.dom.children;
+        const total = children.length - unmeasured;
+        stepNo += 1;
+        tell('measure', 0, total);
+        await paintWord();
         for (let i = unmeasured; i < children.length; i++) {
           if (children[i].classList.contains(FreeFrame.CLASS)) FreeFrame.overflowsPage(children[i]);
-          if ((i & 63) === 0) { if (shouldStop()) return failed; await pace(); }
+          if ((i & 63) === 0) { if (shouldStop()) return failed; await pace(); tell('measure', i - unmeasured + 1, total); }
         }
       }
-      if (shouldStop()) return failed;
-      Editor.settleAppended();                  // la clôture (colonnes, pagination) et la relecture de la bande sont deux tâches, pas une
-      await breatheAndPaint();
+      for (const step of settling) {
+        if (shouldStop()) return failed;
+        stepNo += 1;
+        tell(step.kind);
+        await paintWord();
+        if (shouldStop()) return failed;
+        step.run();
+      }
+      if (stripHeld && activeRun === run && !shouldStop()) {
+        stepNo += 1;
+        tell('strip');
+        await breatheAndPaint();                // la clôture (colonnes, pagination) et la relecture de la bande sont deux tâches, pas une, voile ou non
+        if (activeRun === run && !shouldStop()) { stripHeld = false; SlideStrip.hold(false); }
+      }
+      await breatheAndPaint();                  // la bande relue se peint sous le voile, que l'appelant retire ensuite
     } finally {
       if (activeRun === run) {
         activeRun = null;
@@ -390,7 +416,7 @@ const ImportPlacing = (function () {
     run.stopped = true;
     if (run.progress) run.progress.end();
   }
-  // Pose la suite du plan à la suite de son début (`handlers.onPlaced(sauts de page posés, part du coût posée)` après chaque pas, `covered` : le voile est-il à l'écran, `closing` : avant la mise en page finale d'un texte masqué) puis, une fois tout posé ET AVANT que ceux
+  // Pose la suite du plan à la suite de son début (`handlers.onPlaced(sauts de page posés, part du coût posée)` après chaque pas, `covered` : le voile est-il à l'écran, `closing(info)` : avant chaque étape de la clôture) puis, une fois tout posé ET AVANT que ceux
   // qui attendent soient libérés, appelle `handlers.finish(résultat)` : ce qu'il faut remettre d'aplomb (l'état « à enregistrer », les tableaux et diapositives liés, la Lecture). Résultat : 'done' ;
   // 'broken' (un pas coupé en deux ou refusé : `finish` recharge alors le texte d'un bloc, comme avant) ; 'stopped' (un autre texte a pris l'éditeur : `finish` n'est pas appelé).
   async function fillOpened(plan, handlers) {
@@ -424,5 +450,14 @@ const ImportPlacing = (function () {
   // Prépare le texte du document pour l'enregistrement qui suit (Editor.prepareHTML) : par tranches, la page répond pendant ce temps.
   const prepareSave = () => Editor.prepareHTML(pacer());
 
-  return { begin, slidesOf, takeFirst, appendSlides, prepareSave, planOpen, fillOpened, stopFill, isFilling, whenFilled, stepsOf, profileOf, FIRST_SLIDES, FIRST_MS, STEP_MS, PAGE_BREAK };
+  // Une étape de la clôture d'une pose (`info` de `onClosing` : { kind, step, steps, done, total }) : ce que le voile en dit, et la part de la clôture déjà faite quand elle commence - ou, pour la mesure des
+  // cadres, là où elle en est - de 0 à 1 : la barre avance d'une étape à l'autre, et pendant la plus longue.
+  function closingText(info) {
+    return I18n.t('status.pptxClosing', { step: info.step, steps: info.steps, what: I18n.t('importPlacing.closing.' + info.kind, { done: info.done, total: info.total }) });
+  }
+  const closingShare = info => Math.max(0, Math.min(1, (info.step - 1 + (info.total ? info.done / info.total : 0)) / Math.max(1, info.steps)));
+  // Une pose est-elle en cours (import ou ouverture par morceaux) ? Le texte de l'éditeur n'est alors pas complet, ni sa mise en page à jour.
+  const isPlacing = () => !!activeRun;
+
+  return { begin, slidesOf, takeFirst, appendSlides, prepareSave, planOpen, fillOpened, stopFill, isFilling, isPlacing, whenFilled, closingText, closingShare, stepsOf, profileOf, FIRST_SLIDES, FIRST_MS, STEP_MS, PAGE_BREAK };
 })();

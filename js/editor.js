@@ -618,6 +618,7 @@ const Editor = (function () {
     editor.view.setProps({ attributes: editorAttributes });
     trackChangesApi.installSerializer(editor.schema);
     HeaderFooterPreview.setEditor(editor);
+    watchContentZoom();
 
     // Enveloppe posée une seule fois, jamais recréée ensuite (renderPaginationOverlay relit juste tiptapEl.parentElement) : porte le fond/liseré
     // "page" en Aperçu A4 pour que les zones d'en-tête/pied restent visuellement collées au corps.
@@ -699,11 +700,13 @@ const Editor = (function () {
     if (setup !== blockHtmlSetup) { blockHtml = new WeakMap(); blockHtmlSetup = setup; }
   }
   // Le HTML d'un bloc de premier niveau : celui de la mémoire, sinon rendu par `serializer` dans le conteneur de `hold` (créé au premier besoin, gardé d'un bloc à l'autre) et gardé.
+  // Les éléments du rendu sont créés dans le document du conteneur, qui n'est pas celui de la page : une image créée dans la page se charge dès que son adresse est posée, même hors de la page - le navigateur
+  // relisait ainsi chaque photo (une adresse de données de plusieurs Mo) à chaque passage de l'enregistrement automatique, pour un élément jeté aussitôt. Le texte écrit est le même.
   function htmlOfBlock(node, serializer, hold) {
     let html = blockHtml.get(node);
     if (html === undefined) {
       if (!hold.div) hold.div = document.implementation.createHTMLDocument().createElement('div');
-      hold.div.appendChild(serializer.serializeNode(node));
+      hold.div.appendChild(serializer.serializeNode(node, { document: hold.div.ownerDocument }));
       html = hold.div.innerHTML;
       hold.div.textContent = '';
       if (html.length <= BLOCK_HTML_KEPT_MAX) blockHtml.set(node, html);
@@ -1008,26 +1011,37 @@ const Editor = (function () {
 
   // Ce que la pose d'un document fait une fois le texte en place : colonnes de tableau, pagination, images en calque, validité des bulles, copie du HTML au repos. `html` : le texte chargé (le verdict des
   // images en calque s'y accroche) ; null après un chargement par morceaux (appendHTML : le texte entier n'est jamais réuni).
+  // Trois étapes, dans cet ordre, chacune avec son nom (`kind`) : un chargement d'un bloc les enchaîne (settleLoadedDocument) ; la pose par morceaux d'un gros fichier (js/import-placing.js) rend la main à la
+  // page entre deux et dit au voile laquelle est en cours (settleAppendedSteps).
+  function settleSteps(html) {
+    return [
+      { kind: 'tables', run() {
+        // Le chargement ne déclenche pas onUpdate (pas de changement réel) : clampOverflowingTables ne tournerait donc pas seule pour un tableau
+        // déjà trop large à l'import, d'où l'appel explicite.
+        backfillAutoColumnWidths(editor);
+        clampOverflowingTables(editor);
+      } },
+      { kind: 'pages', run() { HeaderFooterPreview.renderPaginationOverlay(); } },
+      { kind: 'images', run() {
+        const imagesRegridded = HeaderFooterPreview.migrateLegacyImagePositions();
+        HeaderFooterPreview.reconcileLayerImagesWithGrid(typeof html === 'string' ? { layoutFresh: !imagesRegridded, verdictOf: html } : { layoutFresh: !imagesRegridded });
+        // Vérification immédiate (schéma en cache) puis après rafraîchissement explicite (couvre une table/colonne supprimée entretemps). La passe
+        // exacte lit toutes les tables en entier (1,4 M de cases à chaque modèle affiché dans un document de 40 tables de 2 000 lignes) : quand aucune
+        // bulle n'est rouge, celle d'il y a moins d'une minute suffit (js/main.js la demande de même à l'ouverture) ; une bulle rouge peut venir d'un
+        // schéma périmé (une colonne ajoutée depuis), la passe repart alors comme avant.
+        refreshVariableBadgeValidity();
+        // L'orange d'un lien qui ne trouve aucune ligne (`var-badge-linkmiss`) ne compte pas : ce n'est pas le signe d'un schéma périmé. Et le schéma relu peut changer la colonne qu'une Référence
+        // montre, donc la phrase d'aide de ce lien : le verdict est à relire (readLinkMissesAgain), sans le retirer d'ici là (un schéma qui n'a pas bougé ne doit pas faire clignoter l'orange à
+        // chaque ouverture d'un modèle).
+        const looksBroken = !!editor.view.dom.querySelector('.var-badge-broken, .var-badge-unlinked:not(.var-badge-linkmiss), .calc-badge-broken, .calc-badge-unlinked, .editor-image-broken');
+        GristAPI.refreshSchema(looksBroken ? undefined : { maxAgeMs: SCHEMA_MAX_AGE_MS }).then(refreshVariableBadgeValidity).then(readLinkMissesAgain)
+          .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));
+        warmDocumentHtml();
+      } },
+    ];
+  }
   function settleLoadedDocument(html) {
-    // Le chargement ne déclenche pas onUpdate (pas de changement réel) : clampOverflowingTables ne tournerait donc pas seule pour un tableau
-    // déjà trop large à l'import, d'où l'appel explicite.
-    backfillAutoColumnWidths(editor);
-    clampOverflowingTables(editor);
-    HeaderFooterPreview.renderPaginationOverlay();
-    const imagesRegridded = HeaderFooterPreview.migrateLegacyImagePositions();
-    HeaderFooterPreview.reconcileLayerImagesWithGrid(typeof html === 'string' ? { layoutFresh: !imagesRegridded, verdictOf: html } : { layoutFresh: !imagesRegridded });
-    // Vérification immédiate (schéma en cache) puis après rafraîchissement explicite (couvre une table/colonne supprimée entretemps). La passe
-    // exacte lit toutes les tables en entier (1,4 M de cases à chaque modèle affiché dans un document de 40 tables de 2 000 lignes) : quand aucune
-    // bulle n'est rouge, celle d'il y a moins d'une minute suffit (js/main.js la demande de même à l'ouverture) ; une bulle rouge peut venir d'un
-    // schéma périmé (une colonne ajoutée depuis), la passe repart alors comme avant.
-    refreshVariableBadgeValidity();
-    // L'orange d'un lien qui ne trouve aucune ligne (`var-badge-linkmiss`) ne compte pas : ce n'est pas le signe d'un schéma périmé. Et le schéma relu peut changer la colonne qu'une Référence
-    // montre, donc la phrase d'aide de ce lien : le verdict est à relire (readLinkMissesAgain), sans le retirer d'ici là (un schéma qui n'a pas bougé ne doit pas faire clignoter l'orange à
-    // chaque ouverture d'un modèle).
-    const looksBroken = !!editor.view.dom.querySelector('.var-badge-broken, .var-badge-unlinked:not(.var-badge-linkmiss), .calc-badge-broken, .calc-badge-unlinked, .editor-image-broken');
-    GristAPI.refreshSchema(looksBroken ? undefined : { maxAgeMs: SCHEMA_MAX_AGE_MS }).then(refreshVariableBadgeValidity).then(readLinkMissesAgain)
-      .catch(e => console.warn('[Editor] refreshSchema pour la validation des #Variable a échoué', e));
-    warmDocumentHtml();
+    settleSteps(html).forEach((step) => { step.run(); });
   }
 
   // Un chargement par morceaux (js/import-placing.js) : `setHTML` pose le premier, `appendHTML` chacun des suivants À LA FIN, sans historique ni évènement `update` ; `settleAppended` clôt comme setHTML. Rend
@@ -1045,22 +1059,55 @@ const Editor = (function () {
     if (!editor) return;
     settleLoadedDocument(null);
   }
+  // Les mêmes étapes, une par une : [{ kind, run }] ; l'appelant rend la main à la page entre deux. Rien quand l'éditeur n'est plus là.
+  function settleAppendedSteps() {
+    return editor ? settleSteps(null) : [];
+  }
 
   // La pagination se refait à l'échelle que la feuille vient de prendre (changement de taille du panneau, de zoom, de page), puis le zoom du contenu se revérifie à l'image suivante :
   // `--pp-content-fix` (EditorCore.settleContentZoom) se règle sur la mise en page du moment, et un moteur qui n'a pas fini de tout redessiner à la nouvelle échelle la laisserait
   // sur l'ancienne - le contenu plus grand que la feuille, un tableau qui dépasse la page, jusqu'au prochain changement de mode. Sans écart, rien ne bouge.
   let contentZoomFrame = 0;
+  function recheckContentZoom() {
+    const tiptapEl = editor && editor.view && editor.view.dom;
+    const container = tiptapEl && tiptapEl.closest ? tiptapEl.closest('#editor-container.a4-preview') : null;
+    if (container && EditorCore.settleContentZoom(container, tiptapEl)) {
+      HeaderFooterPreview.renderPaginationOverlay();
+      GridEditor.refresh();
+    }
+  }
   function recheckContentZoomNextFrame() {
     if (contentZoomFrame || typeof requestAnimationFrame !== 'function') return;
     contentZoomFrame = requestAnimationFrame(() => {
       contentZoomFrame = 0;
-      const tiptapEl = editor && editor.view && editor.view.dom;
-      const container = tiptapEl && tiptapEl.closest ? tiptapEl.closest('#editor-container.a4-preview') : null;
-      if (container && EditorCore.settleContentZoom(container, tiptapEl)) {
-        HeaderFooterPreview.renderPaginationOverlay();
-        GridEditor.refresh();
-      }
+      recheckContentZoom();
     });
+  }
+  // L'échelle du contenu se revérifie aussi toute seule, toutes les CONTENT_ZOOM_WATCH_MS : chez une personne, sous Firefox (capture du 11/11, un PowerPoint de 57 diapositives tout juste importé), le
+  // contenu est passé au carré du zoom de la feuille APRÈS la dernière pagination - les diapositives à 20 % dans une feuille à 45 % - et rien ne relisait l'échelle avant la pagination suivante, des
+  // minutes plus tard : quand seul le dessin change d'échelle, ni taille ni réserve ne bougent, aucun observateur ne se réveille. La veille lit deux largeurs (EditorCore.contentZoomIsOff) ; sans écart
+  // elle ne touche à rien. Elle se tait pendant qu'un import ou une ouverture pose ses diapositives (le texte peut être masqué, la clôture pagine), page cachée ou éditeur masqué.
+  // Deux bornes, parce qu'une correction refait le style et la mise en page de tout le document (des secondes pour 40 000 éléments) : après CONTENT_ZOOM_WATCH_FAILS corrections qui laissent l'écart
+  // (un moteur que la correction ne ramène pas), plus rien tant qu'une mesure n'est pas redevenue juste ; et CONTENT_ZOOM_WATCH_PER_MINUTE corrections par minute au plus (un moteur qui change d'avis).
+  const CONTENT_ZOOM_WATCH_MS = 2000;
+  const CONTENT_ZOOM_WATCH_FAILS = 2;
+  const CONTENT_ZOOM_WATCH_PER_MINUTE = 3;
+  let contentZoomWatch = 0;
+  let contentZoomFails = 0;
+  let contentZoomFixedAt = [];
+  function watchContentZoom() {
+    if (contentZoomWatch) return;
+    contentZoomWatch = setInterval(() => {
+      const tiptapEl = editor && editor.view && editor.view.dom;
+      if (!tiptapEl || document.hidden || ImportPlacing.isPlacing() || !tiptapEl.getClientRects().length) return;
+      if (!EditorCore.contentZoomIsOff(tiptapEl)) { contentZoomFails = 0; return; }
+      const now = Date.now();
+      contentZoomFixedAt = contentZoomFixedAt.filter(at => now - at < 60000);
+      if (contentZoomFails >= CONTENT_ZOOM_WATCH_FAILS || contentZoomFixedAt.length >= CONTENT_ZOOM_WATCH_PER_MINUTE) return;
+      contentZoomFixedAt.push(now);
+      recheckContentZoom();
+      if (EditorCore.contentZoomIsOff(tiptapEl)) contentZoomFails += 1;
+    }, CONTENT_ZOOM_WATCH_MS);
   }
   function refreshPaginationPreview() {
     HeaderFooterPreview.renderPaginationOverlay();
@@ -1260,7 +1307,7 @@ const Editor = (function () {
   }
 
   return {
-    init, loadLibraries, loadedLibraries, markBadgeValidity, refreshLinkState, badgeProblemText, getHTML, prepareHTML, setHTML, appendHTML, settleAppended, getHeadingNumberingStyle, insertImageAtDefaultSize,
+    init, loadLibraries, loadedLibraries, markBadgeValidity, refreshLinkState, badgeProblemText, getHTML, prepareHTML, setHTML, appendHTML, settleAppended, settleAppendedSteps, getHeadingNumberingStyle, insertImageAtDefaultSize,
     getHeaderFooterData: HeaderFooterPreview.getHeaderFooterData, setHeaderFooterData: HeaderFooterPreview.setHeaderFooterData,
     exitHeaderFooterModeIfActive: HeaderFooterPreview.exitHeaderFooterModeIfActive,
     // Aperçu A4 rallumé, facteur d'ajustement changé... : la pagination est refaite, et la position des images d'un modèle chargé sans mise en page

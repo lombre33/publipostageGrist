@@ -42,7 +42,10 @@ body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.Prose
 .pp-slide-hidden-badge[hidden] { display: none; }
 .pp-slide-hidden-badge svg { width: 12px; height: 12px; }
 .pp-slide-row.pp-slide-is-hidden .pp-slide-thumb { opacity: .5; }
-.pp-slide-thumb { position: relative; flex: none; width: 80px; height: 45px; overflow: hidden; border-radius: 2px; background: #fff; box-shadow: 0 0 0 1px var(--border-strong); }
+/* `content-visibility: auto` : une miniature que la bande (ou la grille) ne montre pas n'est ni mise en page ni dessinée par le navigateur, tout en restant dans la page. Une présentation de 57 diapositives
+   garde 57 copies de ses diapositives dans la bande (autant de cadres que l'éditeur) : toutes vivantes, elles comptaient dans le dessin de chaque image, à chaque lettre tapée. Sa taille est posée
+   (largeur ici, hauteur par le script) : la masquer ne déplace rien. */
+.pp-slide-thumb { position: relative; flex: none; width: 80px; height: 45px; overflow: hidden; border-radius: 2px; background: #fff; box-shadow: 0 0 0 1px var(--border-strong); content-visibility: auto; }
 .pp-slide-item[aria-selected="true"] .pp-slide-thumb { box-shadow: 0 0 0 2px var(--accent); }
 /* La page de la miniature : la vraie taille de la page (posée par le script), réduite à la largeur de la miniature ; le texte s'y coupe donc aux mêmes endroits que dans l'éditeur, avec
    ses retours à la ligne et sans ligatures (ce que ProseMirror impose à `.tiptap`). Inerte : rien n'y prend la souris ni le clavier. */

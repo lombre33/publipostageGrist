@@ -194,8 +194,14 @@ const I18nTextsExport = {
   'importPlacing.openTitle': { fr: 'Ouverture de la présentation', en: 'Opening the presentation' },
   'importPlacing.openHint': { fr: 'L’éditeur est verrouillé le temps de l’ouverture : laissez cette page ouverte, elle avance seule. Une très grosse présentation peut prendre quelques minutes.', en: 'The editor is locked while the presentation opens: leave this page open, it keeps going on its own. A very large presentation can take a few minutes.' },
   'status.pptxOpeningProgress': { fr: 'Ouverture des diapositives… {done} / {total}', en: 'Opening the slides… {done} / {total}' },
-  // Le mot du voile avant la mise en page finale d'un très gros texte (js/import-placing.js : onClosing) : la page se fige quelques secondes, l'import comme l'ouverture le disent.
-  'status.pptxClosing': { fr: 'Mise en page finale de toutes les diapositives… la page se fige quelques secondes.', en: 'Final layout of all the slides… the page freezes for a few seconds.' },
+  // La mise en page finale d'une pose, import comme ouverture (js/import-placing.js : onClosing, closingText) : le voile et le coin d'état disent l'étape en cours, `what` est l'un des mots qui suivent.
+  'status.pptxClosing': { fr: 'Mise en page finale, étape {step} sur {steps} : {what}…', en: 'Final layout, step {step} of {steps}: {what}…' },
+  'importPlacing.closing.show': { fr: 'affichage des diapositives', en: 'showing the slides' },
+  'importPlacing.closing.measure': { fr: 'mesure des cadres ({done} sur {total})', en: 'measuring the frames ({done} of {total})' },
+  'importPlacing.closing.tables': { fr: 'tableaux', en: 'tables' },
+  'importPlacing.closing.pages': { fr: 'pages', en: 'pages' },
+  'importPlacing.closing.images': { fr: 'images et variables', en: 'images and variables' },
+  'importPlacing.closing.strip': { fr: 'miniatures', en: 'thumbnails' },
   'status.pptxImportCancelled': { fr: 'Import annulé : rien n’a changé.', en: 'Import canceled: nothing has changed.' },
   'status.pptxImportBusy': { fr: 'Un import PowerPoint est déjà en cours : attendez qu’il finisse.', en: 'A PowerPoint import is already running: wait for it to finish.' },
   'status.pptxImported': { fr: 'PowerPoint importé : {n} {n|diapositive|diapositives}. Nommez le modèle puis enregistrez-le.', en: 'PowerPoint imported: {n} {n|slide|slides}. Name the template, then save it.' },

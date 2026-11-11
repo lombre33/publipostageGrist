@@ -17,7 +17,8 @@
 //  LA LÉGÈRETÉ (demande du 21/10) : dans une présentation de quarante diapositives, la bande ne copie que les miniatures qu'elle montre, et un peu au-delà, chacune avec son texte ; Suppr
 //   y efface la 4e sans que la bande déplace une seule rangée (slide-strip.js : matchRows ne donne plus aux rangées d'après, sans miniature, la rangée de la diapositive supprimée : les
 //   rangées copiées d'entre les deux passaient devant elle, et chaque déplacement fait revoir le style de leur miniature) ; la molette la descend jusqu'au bout et les dernières se copient
-//   en arrivant ; Ctrl+↑ ne pagine l'éditeur qu'une fois et les deux miniatures échangées gardent leur copie.
+//   en arrivant, et celles qui sont sorties de la vue ne sont plus dessinées par le navigateur (`content-visibility: auto`, 11/11) ; Ctrl+↑ ne pagine l'éditeur qu'une fois et les deux miniatures échangées
+//   gardent leur copie.
 //  LES IMAGES EN CALQUE SUIVENT LEUR DIAPOSITIVE (défaut vu le 21/10) : une image passée « Devant le texte » (vrai clic sur sa barre) sur la diapositive 2 monte avec elle (Ctrl+↑ :
 //   page 1, dessinée avec son texte, une seule pagination), et la Lecture (vrai clic) la montre sur la page 1 ; un Ctrl+Z rend le texte d'avant à l'identique ; « Ajouter » avant
 //   elle l'envoie en page 3 (une seule pagination) ; la diapositive 1 qui dépasse (frappe au vrai clavier) l'envoie en page 3, et un Ctrl+Z la ramène ; enregistrée, elle garde sa page.
@@ -611,6 +612,15 @@ async function run(lang, colorScheme) {
   light = await thumbsState(page);
   check(tag + 'la molette descend la bande jusqu’au bout : les dernières miniatures se copient en arrivant, chacune avec son texte',
     light.visible.some(v => v.index === 39) && light.visible.every(v => v.text === textOf(v.index + 1)), light);
+  // Les miniatures déjà copiées que la bande ne montre plus restent dans la page, mais le navigateur ne les met plus en page ni ne les dessine (`content-visibility: auto` de `.pp-slide-thumb`, 11/11 : dans un
+  // diaporama de 57 diapositives chaque image repassait sur toutes les miniatures copiées) ; celles qu'on voit sont dessinées.
+  const drawnThumbs = await page.evaluate(() => Array.from(document.querySelectorAll('.pp-slide-thumb')).map((thumb) => {
+    const inner = thumb.firstElementChild;
+    return { filled: !!inner, drawn: !!inner && inner.checkVisibility({ contentVisibilityAuto: true }), mode: getComputedStyle(thumb).contentVisibility, width: Math.round(thumb.getBoundingClientRect().width) };
+  }));
+  check(tag + 'la bande au bout : les premières miniatures, copiées à l’ouverture et sorties de la vue, ne sont plus dessinées par le navigateur ; la dernière, qu’on voit, l’est ; toutes gardent leur taille',
+    drawnThumbs.length === 40 && drawnThumbs[0].filled && !drawnThumbs[0].drawn && drawnThumbs[39].filled && drawnThumbs[39].drawn && drawnThumbs.every(d => d.mode === 'auto' && d.width === drawnThumbs[0].width),
+    { premiere: drawnThumbs[0], derniere: drawnThumbs[39], modes: Array.from(new Set(drawnThumbs.map(d => d.mode))) });
   await click('.pp-slide-thumb', 37);
   await press('Escape');
   for (let i = 0; i < 10 && !/^item/.test((await stripState(page)).focus || ''); i++) await press('Tab');

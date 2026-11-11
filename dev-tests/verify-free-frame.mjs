@@ -17,7 +17,8 @@
 //   position ; une présentation sans cadre part en PDF comme avant.
 //  CE QUI DÉPASSE (sections 4b et 4c, carte du 22/10 « Un point rouge sur la miniature ») : la miniature d'une diapositive dont un cadre sort de la page porte le point rouge ; à chaque frappe la bande demande
 //   si un cadre sort (FreeFrame.overflowsPage) et sa réponse est gardée par cadre : une lettre tapée ne fait relire que son cadre (un sur trente-sept), et le point suit le texte du cadre qui grandit (Ctrl+Z l'éteint)
-//   comme la page qui change de format (4:3, 16:9).
+//   comme la page qui change de format (4:3, 16:9). Depuis le 11/11 la bande ne pose même plus la question aux cadres des AUTRES diapositives à chaque frappe (douze demandes au lieu de trente-sept) : leur verdict
+//   est gardé avec leurs blocs, et revu en entier à la pause de la frappe - un cadre qui grandit sans que son bloc change (une règle de style) allume son point rouge à cette pause.
 // Lancé par run-headless.mjs (groupe Node "freeFrame", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-free-frame.mjs
 // FREE_FRAME_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { mkdir } from 'node:fs/promises';
@@ -547,6 +548,41 @@ async function run(lang, colorScheme, full) {
   const reads = await page.evaluate(() => { const n = window.__ffReads; window.__ffRestore(); return n; });
   const typedText = (await docState(page)).frames[2].text;
   check(tag + 'une lettre tapée dans un cadre ne fait relire les réglages que de ce cadre, pas des trente-sept', typedText === 'Cadre 1-3x' && reads >= 1 && reads <= 3, { reads, crowd, typedText });
+  // La bande ne demande plus, à chaque frappe, « ce cadre dépasse-t-il ? » à TOUS les cadres du texte (2 400 dans une présentation de 57 diapositives : 8 ms par lettre, et autant de mises en page vérifiées) : seulement à
+  // ceux de la diapositive où la lettre tombe (extensions/diapositives/slide-strip.js : syncOverflow, `framesOutKnown`) ; les autres gardent leur verdict, revu en entier à la pause de la frappe.
+  await page.evaluate(() => {
+    const ask = FreeFrame.overflowsPage;
+    window.__ffAsked = [];
+    window.__ffAskRestore = () => { FreeFrame.overflowsPage = ask; };
+    FreeFrame.overflowsPage = (dom) => { window.__ffAsked.push(performance.now()); return ask(dom); };
+  });
+  await page.keyboard.type('y');
+  await sleep(700);
+  const askedAt = await page.evaluate(() => { const times = window.__ffAsked.slice(); window.__ffAskRestore(); return times; });
+  const askedAtKey = askedAt.filter(at => at - askedAt[0] < 100).length;       // dans la transaction de la frappe ; la pause des miniatures vient 200 ms après
+  check(tag + 'une lettre tapée ne fait demander à la bande « ce cadre dépasse-t-il ? » que pour les douze cadres de SA diapositive, pas pour les trente-sept', askedAtKey >= 1 && askedAtKey <= 12, { askedAtKey, crowd });
+  check(tag + 'et à la pause de la frappe la bande revoit tous les cadres (ce qui a pu changer sans que leur bloc change)', askedAt.length - askedAtKey >= crowd, { atKey: askedAtKey, afterPause: askedAt.length - askedAtKey, crowd });
+  // Un cadre de la diapositive 2 grandit SANS que son bloc change (une police ou une image qui arrive, le thème ; ici une règle de style) : la frappe d'après tombe dans la diapositive 1, qui seule se remesure, et la
+  // revue de la pause allume le point rouge de la diapositive 2. La règle retirée, la frappe suivante et sa pause l'éteignent.
+  const grownRank = await page.evaluate(() => {
+    const blocks = Array.from(EditorCore.getEditor().view.dom.children);
+    const secondSlide = blocks.findIndex(el => el.classList.contains('page-break-marker'));
+    const rank = blocks.findIndex((el, i) => i > secondSlide && el.classList.contains('pp-free-frame'));
+    const style = document.createElement('style');
+    style.id = 'pp-test-grown-frame';
+    style.textContent = '#editor-container .tiptap > :nth-child(' + (rank + 1) + ') > .pp-free-frame-box { min-height: 900px !important; }';
+    document.head.appendChild(style);
+    return rank;
+  });
+  await page.keyboard.type('z');
+  await sleep(700);
+  dotsNow = await dots();
+  check(tag + 'un cadre de la diapositive 2 grandit sans que son bloc change : après la frappe suivante (dans la diapositive 1) et sa pause, le point rouge de la diapositive 2 est allumé', grownRank > 0 && flagsOf(dotsNow) === '010' && dotsNow[1].title === T.frameOverflow, { grownRank, dotsNow });
+  await page.evaluate(() => { document.getElementById('pp-test-grown-frame').remove(); });
+  await page.keyboard.type('w');
+  await sleep(700);
+  dotsNow = await dots();
+  check(tag + 'le cadre retrouve sa hauteur : après la frappe suivante et sa pause, le point rouge est éteint', flagsOf(dotsNow) === '000', dotsNow);
   // Le cadre du bas de la diapositive 3 grandit avec son texte : deux lignes de plus lui font passer le bas de la page, le point rouge de cette miniature s'allume - le sien seul - ; Ctrl+Z l'éteint.
   const bottom = await page.evaluate(() => Array.from(document.querySelectorAll('#editor-container .pp-free-frame-content p')).findIndex(p => p.textContent === 'Cadre du bas'));
   await clickFrameText(bottom);

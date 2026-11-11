@@ -352,6 +352,18 @@ async function placingCases(page, tag) {
     EditorCore.getEditor().chain().focus('end').insertContent('§§prépare§§').run();
     const after = Editor.getHTML();
     out.prepStale = after !== plain && after.indexOf('§§prépare§§') >= 0;
+    // Écrire le texte ne crée aucune image dans le document de la page (11/11) : une image créée là se charge dès que son adresse est posée, même jamais montrée - une photo de plusieurs Mo relue à chaque
+    // passage de l'enregistrement automatique. Un bloc de plus de 64 Ko n'est jamais gardé en mémoire : il se réécrit à chaque fois.
+    const picture = 'data:image/png;base64,' + 'A'.repeat(70000);
+    Editor.setHTML('<p>Photo</p>' + FreeFrame.html({ x: 20, y: 20, w: 200, h: 100 }, '<p><img class="editor-image" src="' + picture + '" alt="photo"></p>') + '<p>Fin</p>');
+    await tick(300);
+    const create = Document.prototype.createElement;
+    let made = 0;
+    Document.prototype.createElement = function (name) { if (this === document && String(name).toLowerCase() === 'img') made += 1; return create.apply(this, arguments); };
+    let written = '';
+    try { written = Editor.getHTML(); written = Editor.getHTML(); } finally { Document.prototype.createElement = create; }
+    out.imagesMadeInPage = made;
+    out.writtenHasImage = written.indexOf(picture) >= 0 && written.indexOf('alt="photo"') >= 0;
     return out;
   }, { copies: COPIES });
   check(tag + 'les textes de l\'import sont donnés diapositive par diapositive (`slideTexts`), et `html` est leur réunion faite à la demande', r.lazyOk, r);
@@ -361,6 +373,7 @@ async function placingCases(page, tag) {
   check(tag + `pendant la pose de ${COPIES * SLIDES} diapositives par morceaux la page ne s'arrête jamais plus de 400 ms, et moins longtemps que pour la pose d'un seul bloc`, r.chunkedGap <= 400 && r.chunkedGap < r.oneShotGap, { chunkedGap: r.chunkedGap, oneShotGap: r.oneShotGap });
   check(tag + 'une diapositive que l\'éditeur refuse est remplacée par une page vide et comptée : six diapositives restent six', r.failedOne === 1 && r.afterFailBreaks === 5, { failedOne: r.failedOne, afterFailBreaks: r.afterFailBreaks });
   check(tag + 'le texte préparé d\'avance par tranches (`Editor.prepareHTML`, une pause par bloc) est exactement celui de `getHTML`, et il n\'est jamais servi pour un document qui a changé depuis', r.prepSame && r.prepPauses >= 6 && r.prepStale, { prepSame: r.prepSame, prepPauses: r.prepPauses, prepStale: r.prepStale });
+  check(tag + 'écrire le texte d\'un modèle (`Editor.getHTML`) ne crée aucune image dans le document de la page : la photo d\'un bloc de plus de 64 Ko, réécrit à chaque enregistrement, n\'est plus rechargée à chaque fois ; elle est bien dans le texte écrit', r.imagesMadeInPage === 0 && r.writtenHasImage, { imagesMadeInPage: r.imagesMadeInPage, writtenHasImage: r.writtenHasImage });
   await lockCases(page, tag);
   await veilCases(page, tag);
 }
@@ -385,25 +398,28 @@ async function lockCases(page, tag) {
     let firstHidden = -1;
     let hiddenWhileVeil = 0;
     const closing = [];
-    await ImportPlacing.appendSlides(deck().slice(3), (n) => { if (hiddenNow()) { hiddenWhileVeil += 1; if (firstHidden < 0) firstHidden = n; } }, { covered: () => true, onClosing: () => closing.push(hiddenNow()) });
+    await ImportPlacing.appendSlides(deck().slice(3), (n) => { if (hiddenNow()) { hiddenWhileVeil += 1; if (firstHidden < 0) firstHidden = n; } }, { covered: () => true, onClosing: info => closing.push(Object.assign({ hidden: hiddenNow() }, info)) });
     await tick(500);
     out.closing = closing;
+    out.shares = closing.map(c => ImportPlacing.closingShare(c));
+    out.firstText = ImportPlacing.closingText(closing[0] || {});
+    out.lang = I18n.getLang ? I18n.getLang() : '';
     out.firstHidden = firstHidden; out.hiddenWhileVeil = hiddenWhileVeil; out.hiddenAfter = hiddenNow(); out.styleAfter = EditorCore.getEditor().view.dom.style.contentVisibility;
     out.dotsLocked = dots();
     // 2. Sans voile (covered absent) : jamais masqué, mêmes points rouges.
     Editor.setHTML(deck().slice(0, 3).join(PB));
     await tick(200);
     let hiddenNoVeil = 0;
-    let closedNoVeil = 0;
-    await ImportPlacing.appendSlides(deck().slice(3), () => { if (hiddenNow()) hiddenNoVeil += 1; }, { onClosing: () => { closedNoVeil += 1; } });
+    const closedNoVeil = [];
+    await ImportPlacing.appendSlides(deck().slice(3), () => { if (hiddenNow()) hiddenNoVeil += 1; }, { onClosing: (info) => { closedNoVeil.push(info.kind + ' ' + info.step + '/' + info.steps); } });
     await tick(500);
     out.hiddenNoVeil = hiddenNoVeil; out.closedNoVeil = closedNoVeil; out.dotsPlain = dots();
     // 3. Un fichier ordinaire (240 cadres) avec le voile : jamais masqué.
     Editor.setHTML(deck().slice(0, 3).join(PB));
     await tick(200);
     let hiddenSmall = 0;
-    let closedSmall = 0;
-    await ImportPlacing.appendSlides(deck().slice(3, 6), () => { if (hiddenNow()) hiddenSmall += 1; }, { covered: () => true, onClosing: () => { closedSmall += 1; } });
+    const closedSmall = [];
+    await ImportPlacing.appendSlides(deck().slice(3, 6), () => { if (hiddenNow()) hiddenSmall += 1; }, { covered: () => true, onClosing: (info) => { closedSmall.push(info.kind + ' ' + info.step + '/' + info.steps); } });
     out.hiddenSmall = hiddenSmall; out.closedSmall = closedSmall;
     // 4. Une pose qui échoue pendant le masquage remontre le texte.
     Editor.setHTML(deck().slice(0, 3).join(PB));
@@ -419,7 +435,25 @@ async function lockCases(page, tag) {
   });
   check(tag + 'le voile à l\'écran et 2 500 cadres posés : le texte est masqué (content-visibility: hidden) à partir de la trente-deuxième diapositive de 80 cadres, jamais avant, et remontré à la fin', r.firstHidden >= 31 && r.firstHidden <= 33 && r.hiddenWhileVeil >= 5 && !r.hiddenAfter && r.styleAfter === '', { firstHidden: r.firstHidden, hiddenWhileVeil: r.hiddenWhileVeil, hiddenAfter: r.hiddenAfter, styleAfter: r.styleAfter });
   check(tag + 'sans voile à l\'écran, ou pour un fichier ordinaire (240 cadres), le texte n\'est jamais masqué', r.hiddenNoVeil === 0 && r.hiddenSmall === 0, { hiddenNoVeil: r.hiddenNoVeil, hiddenSmall: r.hiddenSmall });
-  check(tag + 'la mise en page finale d\'un texte masqué est annoncée AVANT qu\'il soit remontré (onClosing, une seule fois, texte encore masqué) ; jamais pour un texte qui n\'a pas été masqué (sans voile, 240 cadres), ni quand la pose échoue', JSON.stringify(r.closing) === '[true]' && r.closedNoVeil === 0 && r.closedSmall === 0 && r.closedFail === 0, { closing: r.closing, closedNoVeil: r.closedNoVeil, closedSmall: r.closedSmall, closedFail: r.closedFail });
+  // La clôture, étape par étape (11/11) : `show` (texte encore masqué), `measure` (avec son compte, qui avance jusqu'au bout), `tables`, `pages`, `images`, `strip` ; sans masquage, les quatre dernières seulement.
+  const kinds = r.closing.map(c => c.kind);
+  const distinct = kinds.filter((k, i) => i === 0 || k !== kinds[i - 1]);
+  const measures = r.closing.filter(c => c.kind === 'measure');
+  const PLAIN_CLOSING = ['tables 1/4', 'pages 2/4', 'images 3/4', 'strip 4/4'];
+  check(tag + 'la mise en page finale d\'un texte masqué s\'annonce étape par étape (onClosing) : « show » d\'abord, le texte ENCORE masqué, puis « measure », « tables », « pages », « images », « strip », le texte remontré ; chaque annonce dit son rang sur 6, sans retour en arrière',
+    JSON.stringify(distinct) === JSON.stringify(['show', 'measure', 'tables', 'pages', 'images', 'strip']) && r.closing[0].hidden === true && r.closing.slice(1).every(c => c.hidden === false)
+    && r.closing.every(c => c.steps === 6) && r.closing.every((c, i) => c.step === distinct.indexOf(c.kind) + 1),
+    { closing: r.closing.map(c => c.kind + ' ' + c.step + '/' + c.steps + (c.hidden ? ' masqué' : '')).slice(0, 12) });
+  check(tag + 'la mesure des cadres d\'un texte masqué dit où elle en est : un compte qui part de 0, ne recule jamais et ne dépasse pas son total',
+    measures.length >= 2 && measures[0].done === 0 && measures.every(c => c.total === measures[0].total && c.total > 0 && c.done <= c.total) && measures.every((c, i) => i === 0 || c.done > measures[i - 1].done),
+    { mesures: measures.map(c => c.done + '/' + c.total).slice(0, 8), nombre: measures.length });
+  check(tag + 'sans masquage (sans voile, ou 240 cadres) la clôture annonce ses quatre étapes (« tables », « pages », « images », « strip »), sans « show » ni « measure » ; rien quand la pose échoue',
+    JSON.stringify(r.closedNoVeil) === JSON.stringify(PLAIN_CLOSING) && JSON.stringify(r.closedSmall) === JSON.stringify(PLAIN_CLOSING) && r.closedFail === 0, { closedNoVeil: r.closedNoVeil, closedSmall: r.closedSmall, closedFail: r.closedFail });
+  const shares = r.shares;
+  check(tag + 'ce que le voile dit d\'une étape (ImportPlacing.closingText) : « Mise en page finale, étape 1 sur 6 : affichage des diapositives… » (« Final layout, step 1 of 6: showing the slides… » en anglais)',
+    r.firstText === (r.lang === 'en' ? 'Final layout, step 1 of 6: showing the slides…' : 'Mise en page finale, étape 1 sur 6 : affichage des diapositives…'), { texte: r.firstText, langue: r.lang });
+  check(tag + 'la part faite de la clôture (ImportPlacing.closingShare) va de 0 à moins de 1 sans jamais reculer : la barre avance d\'une étape à l\'autre et pendant la mesure',
+    shares.length > 0 && shares[0] === 0 && shares.every((x, i) => x >= 0 && x < 1 && (i === 0 || x >= shares[i - 1])) && shares[shares.length - 1] >= 0.8, { parts: shares.map(x => +x.toFixed(3)).slice(0, 12) });
   check(tag + 'une pose qui échoue pendant le masquage remontre le texte (la personne ne reste pas devant un éditeur vide)', r.failWasHidden && r.failRejected && !r.failHiddenAfter, { failWasHidden: r.failWasHidden, failRejected: r.failRejected, failHiddenAfter: r.failHiddenAfter });
   check(tag + 'les mesures prises pendant le masquage sont celles du texte montré : le point rouge de la diapositive au cadre trop haut tombe sur la septième, masquée ou non', JSON.stringify(r.dotsLocked) === JSON.stringify(r.dotsPlain) && r.dotsLocked.includes(6), { dotsLocked: r.dotsLocked, dotsPlain: r.dotsPlain });
 }

@@ -154,6 +154,11 @@ const EditorCore = (function () {
     }
     if (offBy(contentZoom(tiptapEl), CONTENT_ZOOM_REJECT)) container.style.removeProperty('--pp-content-fix');
   }
+  // Le contenu se dessine-t-il à une autre échelle que la feuille, au-delà du seuil de rejet ? Deux largeurs lues, rien de posé (la veille de js/editor.js:watchContentZoom).
+  function contentZoomIsOff(tiptapEl) {
+    const got = contentZoom(tiptapEl);
+    return got !== null && Math.abs(got / layoutZoom(tiptapEl) - 1) >= CONTENT_ZOOM_REJECT;
+  }
   // Rend true si `--pp-content-fix` a changé : la pagination, mesurée avec l'ancien rapport, est alors à refaire.
   function settleContentZoom(container, tiptapEl) {
     const before = container.style.getPropertyValue('--pp-content-fix');
@@ -841,7 +846,7 @@ const EditorCore = (function () {
 
   return {
     setEditor, getEditor, focusEditor, setFloatingUi, setNodeSelectionClass, getTextSelectionClass, setTextSelectionClass,
-    patchNodeAndReselect, editorContentWidthPx, pageScale, atPageScale, layoutZoom, contentZoom, settleContentZoom, createStepSheets, nextInFlow, gapAbove, opensPageAt, fitReserve, createFloatingPanel,
+    patchNodeAndReselect, editorContentWidthPx, pageScale, atPageScale, layoutZoom, contentZoom, contentZoomIsOff, settleContentZoom, createStepSheets, nextInFlow, gapAbove, opensPageAt, fitReserve, createFloatingPanel,
     registerFloatingPanel, hideFloatingContextToolbars, isFormFieldFocus, closeHoverMenu,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
     setColorBar, setColorIcon, createSelectionPreserver, isCellSelection, runOnSelectedCells, isInsideNode, isTextOnlyEdit,

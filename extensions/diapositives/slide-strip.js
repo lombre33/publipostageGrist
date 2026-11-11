@@ -114,6 +114,8 @@ const SlideStrip = (function () {
   let keepFolded = false;          // vrai pendant qu'un clic sur un en-tête mène le curseur dans une section repliée : elle ne se déplie pas
   let overflowing = new Set();     // les diapositives qui dépassent de leur page
   let framesOut = new Set();       // celles dont un cadre dépasse de la page (le CSS l'y rogne)
+  const framesOutKnown = new WeakMap();   // ce verdict tel qu'il a été mesuré, rangé au premier bloc de la diapositive : { nodes (ses blocs d'alors), page, out } (syncOverflow)
+  let overflowDue = false;         // des verdicts ont été repris sans mesure : la vérification complète attend la pause de la frappe (drawThumbs)
   let redrawTimer = null;
   let stopPaginated = null;
   let resizeObserver = null;
@@ -629,7 +631,9 @@ const SlideStrip = (function () {
       syncTransitions();
       syncNotes();
       syncHidden();
-      syncOverflow();
+      syncOverflow(false);
+      // Des verdicts repris sans mesure : leur vérification vient avec les miniatures, à la pause (elle ne reste jamais sans date, quel que soit l'appelant).
+      if (overflowDue && !thumbs && !redrawTimer) scheduleThumbs();
     }
     syncPeople();
     if (thumbs) drawThumbs();
@@ -661,6 +665,8 @@ const SlideStrip = (function () {
     redrawTimer = null;
     if (!editor || editingHeaderFooter()) return;
     if (editor.state.doc !== readDoc) refresh(false);
+    // La frappe a repris des verdicts « un cadre dépasse » sans les remesurer : ils se vérifient ici, à sa pause, avant toute écriture dans la bande (la mise en page de l'éditeur est à jour).
+    if (overflowDue) syncOverflow(true);
     const geometry = pageGeometry();
     const due = [];
     const swaps = [];
@@ -801,16 +807,36 @@ const SlideStrip = (function () {
 
   // Ce qui dépasse de sa page : une coupure de la pagination qui n'est pas un saut de page, et la diapositive où elle tombe (comptée par les sauts de page qui la précèdent) ; un cadre libre
   // dont la boîte sort de la page (FreeFrame.overflowsPage : l'ancre n'a aucune hauteur, la pagination ne le voit jamais). Le même point rouge, son info-bulle dit lequel des deux.
-  function syncOverflow() {
+  // Chaque frappe demandait la mesure de TOUS les cadres du texte (2 400 dans une présentation de 57 diapositives : 8 ms par lettre, quatre fois plus sur un poste lent, et autant de mises en page
+  // vérifiées). Une frappe ne change que les blocs de SA diapositive, et ProseMirror garde les autres tels quels (les mêmes objets) : le verdict d'une diapositive se garde donc avec ses blocs
+  // (`framesOutKnown`, rangé au premier d'entre eux) et seules celles dont un bloc a changé se remesurent. Ce qui change la hauteur d'un cadre sans toucher à son bloc (une police ou une image
+  // qui arrive, le thème) attend la vérification complète (`all`) : après chaque pagination, et à la pause de la frappe qui refait les miniatures (drawThumbs, `overflowDue`).
+  function knownFramesOut(slide, pageKey) {
+    if (!slide.nodes.length) return null;
+    const known = framesOutKnown.get(slide.nodes[0].node);
+    if (!known || known.page !== pageKey || known.nodes.length !== slide.nodes.length) return null;
+    for (let k = 0; k < known.nodes.length; k++) if (known.nodes[k] !== slide.nodes[k].node) return null;
+    return known;
+  }
+  function syncOverflow(all) {
     overflowing = new Set();
     framesOut = new Set();
+    const page = PageLayout.getPageSizePt();
+    const pageKey = page.width + 'x' + page.height;
+    const known = all ? [] : slides.map(slide => knownFramesOut(slide, pageKey));
     const slideOf = new Map();
     let index = 0;
     Array.from(editor.view.dom.children).forEach((child) => {
       if (child.classList.contains('page-break-marker')) { index += 1; return; }
       slideOf.set(child, index);
+      if (known[index]) return;
       if (child.classList.contains(FreeFrame.CLASS) && !framesOut.has(index) && FreeFrame.overflowsPage(child)) framesOut.add(index);
     });
+    slides.forEach((slide, i) => {
+      if (known[i]) { if (known[i].out) framesOut.add(i); return; }
+      if (slide.nodes.length) framesOutKnown.set(slide.nodes[0].node, { nodes: slide.nodes.map(entry => entry.node), page: pageKey, out: framesOut.has(i) });
+    });
+    overflowDue = !all && known.some(Boolean);
     HeaderFooterPreview.pageBreaks().forEach((brk) => { if (slideOf.has(brk.afterEl)) overflowing.add(slideOf.get(brk.afterEl)); });
     rows.forEach((r, i) => {
       const why = overflowWhy(i);
@@ -2216,7 +2242,7 @@ const SlideStrip = (function () {
     else {
       const key = pageGeometry().key;
       if (rows.some(r => r.sizedFor !== key)) drawThumbs();
-      syncOverflow();
+      syncOverflow(true);
     }
     followLayers();
     if (settling.length) placeArrived();

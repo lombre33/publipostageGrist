@@ -346,6 +346,7 @@
   // Les diapositives d'un gros modèle de présentation qui n'étaient pas dans le premier morceau (js/import-placing.js:planOpen) se posent ici, à la suite, une par une, la page reprenant la main entre deux ; un voile couvre le
   // panneau et dit où l'on en est. Tout du long l'éditeur ne montre que le début du modèle : ImportPlacing.isFilling retient l'enregistrement automatique, l'enregistrement, les exports et l'entrée automatique de l'écriture
   // en direct jusqu'à la fin. Rien n'est « à enregistrer » à l'arrivée : le modèle est tel qu'il était dans Grist.
+  const OPEN_STEP_PLACE = 0.9;   // la part de la barre que prend la pose des diapositives ; le reste est la mise en page finale
   async function fillOpenedPresentation(tpl, plan) {
     const total = plan.total;
     const progress = ImportPlacing.begin({ opening: true });
@@ -353,13 +354,13 @@
     const note = (slide, fraction) => {
       const text = I18n.t('status.pptxOpeningProgress', { done: Math.min(slide, total), total });
       setStatus(text);
-      progress.update(text, fraction);
+      progress.update(text, OPEN_STEP_PLACE * fraction);
     };
-    // Un très gros texte (masqué derrière le voile pendant la pose) se met en page d'un coup à la fin, quelques secondes : le voile le dit avant.
-    const closing = () => {
-      const text = I18n.t('status.pptxClosing');
+    // La mise en page finale, étape par étape : le voile dit laquelle est en cours et la barre finit avec elles (js/import-placing.js : la clôture de appendSlides).
+    const closing = (info) => {
+      const text = ImportPlacing.closingText(info);
       setStatus(text);
-      progress.update(text, 1, true);
+      progress.update(text, OPEN_STEP_PLACE + (1 - OPEN_STEP_PLACE) * ImportPlacing.closingShare(info), !info.done);
     };
     PerfTrace.mark('ouverture par morceaux : début', { diapositives: total, signesMo: Math.round(tpl.contenu.length / 104857.6) / 10 });
     note(plan.firstSlides, plan.firstShare);

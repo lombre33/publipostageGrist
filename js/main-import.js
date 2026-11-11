@@ -172,9 +172,11 @@ const MainImport = (function () {
     // enregistrement - avec une barre ; il n'apparaît qu'après une demi-seconde (un petit fichier ne le voit pas), se retire devant la question d'enregistrement, et porte « Annuler l'import » tant que le
     // fichier se lit (rien n'a encore changé).
     let pptxImporting = false;
-    // La part de la barre de chaque étape : la lecture est de loin la plus longue (150 diapositives de photos : 14 s de lecture, 5 de mise en place).
-    const PPTX_STEP_READ = 0.65;
-    const PPTX_STEP_PLACE = 0.3;
+    // La part de la barre de chaque étape : la lecture est de loin la plus longue (150 diapositives de photos : 14 s de lecture, 5 de mise en place) ; la mise en page finale a la sienne, qu'elle remplit
+    // étape après étape (ImportPlacing.closingText) ; le reste est l'enregistrement.
+    const PPTX_STEP_READ = 0.6;
+    const PPTX_STEP_PLACE = 0.25;
+    const PPTX_STEP_CLOSE = 0.1;
     async function importPptxFile(file) {
       if (pptxImporting) { setStatus(I18n.t('status.pptxImportBusy'), true); return false; }
       pptxImporting = true;
@@ -274,11 +276,11 @@ const MainImport = (function () {
       const head = ImportPlacing.takeFirst(texts);
       loadTemplateIntoEditor({ id: null, nom: keepName, contenu: head.first, typeModele: SlidesEntry.TYPE, marginsMm: imported.page, suiviModifications: null, headerFooter: null }, SlidesEntry.TYPE);
       note(head.started);
-      // Un très gros texte (masqué derrière le voile pendant la pose) se met en page d'un coup à la fin, quelques secondes : le voile le dit avant (`closing`).
-      const closing = () => {
-        const text = I18n.t('status.pptxClosing');
+      // La mise en page finale, étape par étape : le voile dit laquelle est en cours et la barre avance avec elles (une étape longue - remontrer un très gros texte masqué pendant la pose - se voit nommée).
+      const closing = (info) => {
+        const text = ImportPlacing.closingText(info);
         setStatus(text);
-        progress.update(text, PPTX_STEP_READ + PPTX_STEP_PLACE, true);
+        progress.update(text, PPTX_STEP_READ + PPTX_STEP_PLACE + PPTX_STEP_CLOSE * ImportPlacing.closingShare(info), !info.done);
       };
       const failed = head.pieces.length ? await ImportPlacing.appendSlides(head.pieces, () => {}, { covered: progress.isShown, markers: head.leads, tail: head.first, onStep: info => note(Math.min(total, head.started + info.markers)), onClosing: closing }) : 0;
       if (failed) {
@@ -290,7 +292,7 @@ const MainImport = (function () {
       if (!keepName) return;
       const saving = I18n.t('importPlacing.saving');
       setStatus(saving);
-      progress.update(saving, PPTX_STEP_READ + PPTX_STEP_PLACE);
+      progress.update(saving, PPTX_STEP_READ + PPTX_STEP_PLACE + PPTX_STEP_CLOSE);
       // le texte du document s'écrit d'avance, par tranches : l'enregistrement le trouve prêt ; s'il échoue, l'enregistrement le refait lui-même, d'un bloc
       await ImportPlacing.prepareSave().catch(error => console.warn('[main] import PowerPoint : texte non préparé d’avance', error));
       await onSave();     // dit lui-même son échec dans le coin d'état (tables refusées, Grist qui refuse, erreur) : le modèle reste alors « à enregistrer »

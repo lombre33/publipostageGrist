@@ -12,7 +12,9 @@
 //  - un tableau écrit par la bêta à 658 px s'ouvre tel quel dans une page de 657,65 px (18 mm de marges) : la largeur exacte de la page le rognait d'un pixel par colonne ;
 //  - un tableau ramené dans la page n'en sort pas (A4 et A5) : arrondies au plus près, ses colonnes la dépassaient d'un demi-pixel chacune ;
 //  - avec un moteur qui dessine le contenu au carré du zoom de la feuille (Firefox chez Antoine, capture du 21/10 ; émulé par une règle de style) ou qui combine le zoom autrement :
-//    le contenu retrouve le zoom de la feuille, les tableaux restent dans la page et ce qui s'enregistre ne change pas.
+//    le contenu retrouve le zoom de la feuille, les tableaux restent dans la page et ce qui s'enregistre ne change pas ;
+//  - avec un moteur qui change l'échelle du dessin APRÈS la dernière pagination, sans qu'aucune taille ne change (Firefox d'une personne le 11/11, après l'import d'un gros PowerPoint ; émulé par
+//    une transformation) : sans aucun geste, l'échelle se relit seule et le contenu retrouve le zoom de la feuille (js/editor.js:watchContentZoom), trois tentatives par minute au plus.
 // Les gestes de largeur (js/grid-editor.js:equalizeLines et startResize, js/page-zoom.js:readStartWidthOnPage) lisent la page à l'échelle 1 (EditorCore.atPageScale), comme les colonnes
 // figées ; une grille, qui n'a pas de page, se mesure là où elle est (js/editor-core.js:openPageScale).
 // Avant le correctif (js/editor-core.js:pageScale, js/editor.js, js/header-footer-preview.js), tout ce que le DOM mesurait pour l'écrire dans le document (colonnes figées,
@@ -346,6 +348,54 @@ for (const [label, css] of [['le contenu au carré du zoom de la feuille', SQUAR
 }
 await emulate('');
 await frame.evaluate(() => { const c = document.getElementById('editor-container'); c.style.removeProperty('--pp-content-fix'); });
+
+// 5) Un moteur qui change l'échelle du DESSIN après coup, sans qu'aucune taille ne change (Firefox d'une personne le 11/11 : un gros PowerPoint tout juste importé, les diapositives à 20 % dans une feuille à
+// 45 %, et rien ne relisait l'échelle avant la pagination suivante, des minutes plus tard). Émulé par une transformation du contenu : ni largeur de mise en page ni réserve ne bougent, aucun observateur
+// ne se réveille. Sans rien faire (ni souris, ni clavier, ni panneau), l'échelle se relit seule (js/editor.js:watchContentZoom) et le contenu retrouve le zoom de la feuille.
+// La page est rechargée : la veille compte ses corrections par minute, et les émulations d'avant ont pu en demander.
+const DRAWN_SMALLER = '#editor-container.a4-preview .v2-page-sheet > .tiptap { transform: scale(0.6); transform-origin: 0 0; }';
+// Un moteur que la correction ne ramène pas : le zoom du contenu n'y a aucun effet.
+const DRAWN_STUCK = '#editor-container.a4-preview .v2-page-sheet > .tiptap { transform: scale(0.6); transform-origin: 0 0; zoom: 1 !important; }';
+const PLAIN_DOC = '<h1>Titre</h1>' + lorem + lorem + '<p>Fin</p>';
+// L'émulation et la correction retirées d'un seul geste, puis la pagination : la veille ne voit jamais l'entre-deux.
+const saneEngine = () => frame.evaluate(() => {
+  const style = document.getElementById('pp-test-engine-zoom');
+  if (style) style.textContent = '';
+  document.getElementById('editor-container').style.removeProperty('--pp-content-fix');
+  Editor.refreshPaginationPreview();
+});
+await page.reload({ waitUntil: 'load' });
+frame = null;
+for (let i = 0; i < 300 && !frame; i++) { frame = page.frames().find(f => f !== page.mainFrame() && /_test-harness/.test(f.url())); if (!frame) await sleep(100); }
+await frame.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor() && /prêt|ready/i.test((document.getElementById('status-msg') || {}).textContent || ''), null, { timeout: 90000 });
+await loadDoc(PLAIN_DOC);
+await sleep(2600);                               // les vérifications différées de la dernière pagination sont passées : plus rien n'est en attente
+const plainHtml = await savedHtml();
+const ratioBefore = (await geometry()).ratio;
+await emulate(DRAWN_SMALLER);
+const ratioShrunk = (await geometry()).ratio;
+check('émulation : le dessin du contenu rapetisse sans que rien ne bouge dans la mise en page', Math.abs(ratioBefore - 1) < 0.015 && Math.abs(ratioShrunk - 0.6) < 0.02, { ratioBefore, ratioShrunk });
+const healed = await frame.waitForFunction(() => {
+  const tip = EditorCore.getEditor().view.dom;
+  return Math.abs((tip.getBoundingClientRect().width / tip.offsetWidth) / EditorCore.layoutZoom(tip) - 1) < 0.015;
+}, null, { timeout: 6000, polling: 100 }).then(() => true, () => false);
+check('le dessin change d\'échelle après coup : sans aucun geste, le contenu retrouve le zoom de la feuille en quelques secondes', healed, { contenuSurFeuille: +(await geometry()).ratio.toFixed(3) });
+check('le dessin change d\'échelle après coup : ce qui s\'enregistre ne change pas', (await savedHtml()) === plainHtml);
+// La correction qui n'aboutit pas ne se retente pas sans fin : chaque tentative refait le style et la mise en page de tout le document (trois réglages de `--pp-content-fix`, puis son retrait).
+await saneEngine();
+await sleep(2600);
+await frame.evaluate(() => {
+  const style = document.getElementById('editor-container').style;
+  const set = style.setProperty.bind(style);
+  window.__ppFixSets = 0;
+  style.setProperty = (name, ...rest) => { if (name === '--pp-content-fix') window.__ppFixSets += 1; return set(name, ...rest); };
+});
+await emulate(DRAWN_STUCK);
+await sleep(13000);
+const stuck = await frame.evaluate(() => ({ reglages: window.__ppFixSets, fix: document.getElementById('editor-container').style.getPropertyValue('--pp-content-fix') }));
+check('un moteur que la correction ne ramène pas : deux tentatives, puis plus rien (pas de mise en page de tout le document toutes les deux secondes)', stuck.reglages >= 3 && stuck.reglages <= 6 && stuck.fix === '', stuck);
+await frame.evaluate(() => { delete document.getElementById('editor-container').style.setProperty; });
+await saneEngine();
 
 check('aucune erreur JavaScript', pageErrors.length === 0, pageErrors.slice(0, 3));
 console.log(`\n${total - failures}/${total} passés`);
