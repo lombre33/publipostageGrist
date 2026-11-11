@@ -216,6 +216,11 @@ celui du bouton Exporter - « Lecture simple », cochée au départ, au-dessus d
 demande d'Antoine du 02/11, « harmoniser l'UI avec le bouton télécharger » ; la barre reste gelée, aucune icône de plus) et que rien ne garde d'une ouverture du widget à l'autre, le choix coché pas plus
 que l'état. On en sort par le bouton rond du coin haut droit ou par Échap (qui
 attend une fenêtre ou un fil de commentaire ouvert), et le mode d'où l'on venait revient. Elle ne modifie rien : une personne en lecture seule y a droit comme les autres.
+**Seconde exception, voulue par Antoine (10/11, « pouvoir, y compris en mode éditeur, replier le panneau d'en haut, n'avoir que le texte pour gagner de la place en hauteur »)** : le **panneau du haut replié**
+(`js/bar-fold.js`, `css/bar-fold.css`). Une languette (`#v2-bar-fold-tab`, 48 × 14 px, chevron ▲ / ▼) accrochée au bord du document, **hors de la barre** (elle reste gelée, aucune icône de plus), replie d'un clic - ou de
+Ctrl+Maj+F, la touche de Google Docs - TOUT le panneau (`#toolbar-top` : la barre du haut, les champs de l'email, la barre de mise en forme) et le rouvre ; le texte gagne toute la hauteur (151 px sur 400 à 700 × 400).
+Réversible en un geste, valable en Édition comme en Lecture, rien d'écrit ni d'annulable, gardé le temps de la session seulement. Replié, le panneau n'est pas retiré (`visibility: hidden`, hors du flux : les touches qui
+cliquent un bouton de la barre agissent encore) et ce que le coin d'état dit d'urgent (erreur, modifications non enregistrées) s'écrit dans la languette. La Lecture épurée cache la languette avec le reste et rend l'état d'avant.
 
 ### Non-régression stricte de l'UI existante
 Règle d'Antoine valable sur tous les widgets : **on ajoute des éléments d'UI, on ne modifie ni ne supprime ceux

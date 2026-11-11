@@ -165,6 +165,7 @@ window.EditorTestSuites.undoSweep = (function () {
   async function restoreBaseline() {
     document.getElementById('editor-container').classList.add('a4-preview');
     if (document.body.classList.contains('pp-clean-reading')) { document.getElementById('btn-exit-clean-reading').click(); await sleep(250); }
+    BarFold.set(false); // un essai de la languette qui a replié le panneau le laisserait replié au suivant (js/bar-fold.js)
     CleanReading.choose('simple'); // la ligne « Lecture épurée » cochée par un essai ferait entrer le bouton Mode lecture du suivant dans l'état épuré
     const edit = document.getElementById('btn-mode-edit');
     if (edit && !edit.classList.contains('active')) { edit.click(); await sleep(350); }

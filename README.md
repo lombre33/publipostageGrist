@@ -42,7 +42,7 @@ Le détail, fonction par fonction, noms de fichiers compris, est dans [`planning
 - **Lecture, enregistrement, collaboration** : mode lecture simple ou épuré, enregistrement automatique avec détection de conflit, historique des versions (comparer, nommer, restaurer), commentaires, suivi des modifications (bêta), droits par personne.
 - **Exports** : PDF vectoriel (en trois qualités), PDF protégé (AES-256), export en lot (ZIP ou un seul PDF), assemblage avant impression, Word (bêta), Excel, Markdown (document ou modèle), HTML, e-mail.
 - **Modèles** : plusieurs par document Grist, une galerie de 22 modèles prêts à l'emploi (21 sans Grist Factory Suite), import Markdown.
-- **Interface** : français et anglais, thème clair, sombre ou celui du système, 61 raccourcis personnalisables, barre d'outils pensée pour un petit panneau (testée à 700 × 400).
+- **Interface** : français et anglais, thème clair, sombre ou celui du système, 62 raccourcis personnalisables, barre d'outils pensée pour un petit panneau (testée à 700 × 400).
 
 **Avec Grist Factory Suite** (GFS, la suite d'applications de Grist Factory) : les présentations (diapositives, thèmes, diaporama avec vue intervenant, import et export PowerPoint), les graphiques, l'écriture en direct à plusieurs et la lecture de PDF se branchent au widget par des extensions (`extensions/`). Sans GFS, le widget grise leurs commandes et dit pourquoi. Où en est la liaison : [`GFS-ETAT.md`](GFS-ETAT.md).
 

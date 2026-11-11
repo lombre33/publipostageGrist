@@ -1,0 +1,40 @@
+/* Panneau du haut replié (js/bar-fold.js) : la languette qui le replie et le rouvre. Un seul interrupteur : la classe `pp-bar-folded` sur <body>, posée et retirée par le
+   script. #toolbar-top porte tout le panneau (la barre du haut, les champs de l'email, la barre de mise en forme).
+
+   Replié, le panneau sort du flux (`position: absolute`) et n'est plus visible (`visibility: hidden`), mais il garde ses boîtes : un `display: none` ôterait aux boutons
+   leur mise en page, et les touches de js/shortcuts.js qui cliquent un bouton de la barre (`usable()` demande une boîte) n'agiraient plus sur le texte. `visibility: hidden`
+   retire aussi la souris et la tabulation. Le document prend toute la hauteur (#editor-container et #reader-container sont en flex: 1, css/style.css). La Lecture épurée
+   (css/clean-reading.css, `display: none` sur le même panneau) l'emporte quand les deux états se superposent. */
+body.pp-bar-folded #toolbar-top { position: absolute; top: 0; left: 0; right: 0; visibility: hidden; }
+
+/* La ligne de la languette : dans le flux, juste avant le document, de hauteur nulle. La languette y est accrochée par le haut et déborde sur le document (sur le gris
+   au-dessus de la feuille quand le texte est tout en haut) sans lui prendre de place : elle est donc au même endroit par rapport au texte, que le panneau soit ouvert
+   (elle pend sous lui et sous ses bandeaux) ou replié (elle pend du haut du panneau de Grist). Niveau --z-floating-toolbar (css/style.css) : au-dessus du document et de la
+   pastille de zoom, sous les menus, le fil de commentaire et les fenêtres. Hors de #toolbar-top : le [data-tip] de la barre ne s'y applique pas, l'info-bulle est un title natif. */
+.v2-bar-fold { position: relative; flex: none; height: 0; z-index: var(--z-floating-toolbar); }
+.v2-bar-fold #v2-bar-fold-tab {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%); display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  box-sizing: border-box; width: 48px; max-width: min(92vw, 520px); height: 14px; margin: 0; padding: 0; border: 1px solid var(--border-strong); border-top: 0;
+  border-radius: 0 0 8px 8px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); font-family: var(--font-ui); font-size: 11px; font-weight: 600;
+  line-height: 1; white-space: nowrap; cursor: pointer;
+}
+.v2-bar-fold #v2-bar-fold-tab:hover { background: var(--surface-sunken); }
+.v2-bar-fold #v2-bar-fold-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Le chevron : vers le haut quand un clic replie, vers le bas quand un clic déplie. */
+.v2-bar-fold #v2-bar-fold-tab::before {
+  content: ""; display: block; flex: none; width: 12px; height: 12px; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 15l7-7 7 7'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 15l7-7 7 7'/%3E%3C/svg%3E");
+}
+body.pp-bar-folded .v2-bar-fold #v2-bar-fold-tab::before { transform: rotate(180deg); }
+
+/* Une alerte du coin d'état (erreur, modifications non enregistrées) que le panneau replié ne doit pas cacher : elle s'écrit dans la languette, qui s'élargit ; rouge pour une
+   erreur (--danger-ink, le rouge « cassé » de la barre, ≥ 4,5:1 en clair comme en sombre). */
+.v2-bar-fold #v2-bar-fold-tab.has-note { width: auto; height: 20px; padding: 0 12px; }
+.v2-bar-fold #v2-bar-fold-tab.is-error { color: var(--danger-ink); border-color: var(--danger-ink); }
+.v2-bar-fold .v2-bar-fold-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.v2-bar-fold .v2-bar-fold-note[hidden] { display: none; }
+
+/* Lecture épurée : le document seul à l'écran, la languette n'a pas sa place (la sortie de la Lecture épurée est le bouton du coin). */
+body.pp-clean-reading .v2-bar-fold { display: none; }

@@ -85,6 +85,11 @@ const I18nTextsTemplates = {
   'toolbar.readSimple': { fr: 'Lecture simple', en: 'Standard reading' },
   'toolbar.cleanReading': { fr: 'Lecture épurée', en: 'Clean reading' },
   'cleanReading.exit': { fr: 'Quitter la lecture épurée (Échap)', en: 'Exit clean reading (Esc)' },
+  // Languette du panneau du haut (js/bar-fold.js) : son nom accessible et son info-bulle (title natif, la languette est hors de la barre), qui disent l'action à faire.
+  'barFold.fold': { fr: 'Replier le panneau du haut', en: 'Collapse the top panel' },
+  'barFold.unfold': { fr: 'Déplier le panneau du haut', en: 'Expand the top panel' },
+  // Le repère (region) qui porte la languette : un bouton hors repère est du contenu hors repère pour un lecteur d'écran et pour l'audit (dev-tests/scenarios-landmarks.js).
+  'barFold.region': { fr: 'Affichage du panneau du haut', en: 'Top panel display' },
   // Zoom de la page (js/page-zoom.js) : la pastille du coin bas droit du document. {keys} : le raccourci,
   // « Ctrl » ou « ⌘ » selon la plateforme - le script compose ces textes, aucun attribut data-i18n-* ne les porte.
   'pageZoom.group': { fr: 'Zoom de la page', en: 'Page zoom' },

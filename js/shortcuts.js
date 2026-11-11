@@ -286,6 +286,8 @@ const Shortcuts = (function () {
       // Affichage
       { id: 'modeEdit', group: 'view', label: 'toolbar.modeEdit', key: 'Alt+e', scope: 'app', hint: tip('btn-mode-edit'), run: editMode },
       { id: 'modeRead', group: 'view', label: 'toolbar.modeRead', key: 'Alt+l', scope: 'app', hint: '#v2-read-flyout .v2-hover-flyout-label', aria: tip('btn-mode-read'), run: click('btn-mode-read') },
+      // Replier ou déplier le panneau du haut (js/bar-fold.js) : Ctrl+Maj+F (⌘⇧F sur Mac), la touche de Google Docs pour masquer les menus. Elle clique la languette, qui n'existe pas dans la Lecture épurée : rien n'y part alors.
+      { id: 'barFold', group: 'view', label: 'shortcuts.action.barFold', key: 'Mod+Shift+f', scope: 'app', hint: tip('v2-bar-fold-tab'), run: click('v2-bar-fold-tab') },
       { id: 'settings', group: 'view', label: 'settings.tooltip', key: '', scope: 'app', hint: tip('v2-btn-settings'), run: click('v2-btn-settings') },
       { id: 'keysList', group: 'view', label: 'shortcuts.action.keysList', key: 'Mod+/', scope: 'app', run: openKeysList },
       // Palette de commandes (js/command-palette.js) : chercher une commande par son nom et la lancer, comme « Rechercher dans les menus » de Google Docs - Alt+/ (⌥/ sur Mac). Ctrl+K reste « Lien… » : le lien garde sa touche, la palette prend celle de Google Docs.

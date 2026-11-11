@@ -166,6 +166,7 @@
     "#v2-btn-read-simple": {"class": "view", "start": "para"},
     "#v2-btn-clean-reading": {"class": "view", "start": "para"},
     "#btn-exit-clean-reading": {"class": "view", "start": "para"},
+    "#v2-bar-fold-tab": {"class": "view", "start": "para"},
     "#v2-btn-settings": {"class": "view", "start": "para"},
     "#v2-btn-collab": {"class": "view", "start": "para"},
     "#v2-btn-track-changes": {"class": "view", "start": "para"},

@@ -160,7 +160,8 @@ const FloatingToolbars = (function () {
   const topBarRowsBottom = () => {
     const top = document.getElementById('toolbar-top');
     let bottom = 0;
-    if (top) top.querySelectorAll('button, select, input').forEach((el) => { if (el.getClientRects().length && !el.closest('.v2-hover-flyout')) bottom = Math.max(bottom, el.getBoundingClientRect().bottom); });
+    // Panneau replié (js/bar-fold.js) : ses boutons gardent leur boîte mais ne sont plus à l'écran, la barre de l'image n'a plus rien à éviter.
+    if (top && !document.body.classList.contains('pp-bar-folded')) top.querySelectorAll('button, select, input').forEach((el) => { if (el.getClientRects().length && !el.closest('.v2-hover-flyout')) bottom = Math.max(bottom, el.getBoundingClientRect().bottom); });
     return bottom ? bottom + 4 : 0;
   };
   const zonePillClearance = (topBar) => {

@@ -131,7 +131,7 @@ La [note de version](PATCH_NOTES.md) en donne la liste complète, une puce par f
 - **En-têtes et pieds de page** (première page différente, numéro de page, QR code).
 - **Blocs** : citation, bloc de code, encadré (Note, Attention, Important), bloc de signature, QR code.
 - **Rechercher / remplacer** (casse, mot entier, expressions régulières), abréviations qui se développent à la frappe.
-- **Confort** : aperçu A4 fidèle, zoom de la page, Ctrl+Z et Ctrl+Y presque partout, 61 raccourcis clavier personnalisables, barre d'outils pensée pour un petit panneau (testée à 700 × 400).
+- **Confort** : aperçu A4 fidèle, zoom de la page, Ctrl+Z et Ctrl+Y presque partout, 62 raccourcis clavier personnalisables, barre d'outils pensée pour un petit panneau (testée à 700 × 400).
 
 ### Remplir avec les données de Grist
 

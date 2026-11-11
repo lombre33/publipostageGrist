@@ -1192,13 +1192,14 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     })(), 'js/viewport-fit.js, js/editor-core.js, js/template-tree-select.js, js/search-select.js, js/link-dialog.js, js/grid-editor.js, css/editor-v2.css, css/grid.css');
   // Le logo et la sortie de la Lecture épurée (consigne GFS 025, deuxième lot, dernier sujet) : posés à demeure dans un coin, ils s'écartent par GfsBar.keepClear (une propriété `translate`, jamais leur top ou leur right :
   // leur place d'origine reste celle de la feuille de style) ; le logo laisse son recul à la ligne de la barre d'outils (`--pp-logo-shift`, qui s'ajoute à la réserve de 34 px) ; aucun autre fichier n'appelle keepClear.
-  check('barre de GFS : le logo (js/toolbar-gap.js) et la sortie de la Lecture épurée (js/clean-reading.js) s’écartent de la zone par GfsBar.keepClear (une propriété `translate`, jamais leur top ou leur right), la ligne de la barre d’outils réserve le recul du logo (`--pp-logo-shift`, css/toolbar-v2.css) et aucun autre fichier n’appelle keepClear',
+  check('barre de GFS : le logo (js/toolbar-gap.js) et la sortie de la Lecture épurée (js/clean-reading.js) s’écartent de la zone par GfsBar.keepClear (une propriété `translate`, jamais leur top ou leur right), la ligne de la barre d’outils réserve le recul du logo (`--pp-logo-shift`, css/toolbar-v2.css) et aucun autre fichier que la languette du panneau replié (js/bar-fold.js) n’appelle keepClear',
     (() => {
       const gap = noCommentsJs(read('js/toolbar-gap.js'));
       const clean = noCommentsJs(read('js/clean-reading.js'));
       const barJs = noCommentsJs(read('js/gfs-bar.js'));
       const callers = jsFiles.filter(rel => rel !== 'js/gfs-bar.js' && /GfsBar\.keepClear\b/.test(noCommentsJs(read(rel))));
-      return callers.length === 2 && callers.includes('js/toolbar-gap.js') && callers.includes('js/clean-reading.js')
+      const fold = noCommentsJs(read('js/bar-fold.js'));
+      return callers.length === 3 && callers.includes('js/toolbar-gap.js') && callers.includes('js/clean-reading.js') && callers.includes('js/bar-fold.js') && /GfsBar\.keepClear\(tab\)/.test(fold)
         && /GfsBar\.keepClear\(logo, /.test(gap) && /setProperty\(LOGO_SHIFT, /.test(gap) && /GfsBar\.keepClear\(exitButton\)/.test(clean)
         && /el\.style\.translate = dx \+ 'px ' \+ dy \+ 'px';/.test(barJs) && /settle\(rect, null, false\)/.test(barJs)
         && /\.bar-row \{ padding-right: calc\(34px \+ var\(--pp-logo-shift, 0px\)\); \}/.test(read('css/toolbar-v2.css'));
