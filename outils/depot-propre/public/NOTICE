@@ -167,6 +167,19 @@ Les polices sous SIL Open Font License ne sont pas vendues seules ; le texte de 
 The fonts under the SIL Open Font License are not sold by themselves; the license text follows.
 
 ============================================================
+3 bis. Profil de couleur inclus dans ce dépôt / Color profile included in this repository
+============================================================
+
+Le profil de couleur sRGB est dans js/pdf-archive.js, sous forme de données encodées en base64 : le type d'export « PDF/A (archivage) » l'écrit dans chaque PDF/A, comme intention de rendu.
+The sRGB color profile is in js/pdf-archive.js, as base64-encoded data: the "PDF/A (archiving)" export type writes it into every PDF/A file, as its output intent.
+
+sRGB2014.icc (profil d'écran sRGB, version 2, 3 024 octets, repris tel quel / sRGB display profile, version 2, 3,024 bytes, used unmodified)
+  Copyright International Color Consortium, 2015
+  Licence / License : l'ICC autorise de copier, distribuer, incorporer dans un logiciel, fabriquer, utiliser et vendre ce profil sans restriction, à condition de ne pas le modifier
+  / the ICC allows this profile to be copied, distributed, embedded, made, used and sold without restriction, provided it is not modified.
+  Origine / Source : https://www.color.org/srgbprofiles.xicc
+
+============================================================
 4. SIL Open Font License 1.1
 ============================================================
 

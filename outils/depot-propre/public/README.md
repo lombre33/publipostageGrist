@@ -20,7 +20,7 @@ C'est un widget personnalisé conçu par [Grist Factory](https://grist-factory.f
 | **Écrire** | Un éditeur complet : mise en forme, tableaux, images, en-têtes et pieds de page, notes de bas de page, sommaire, aperçu A4 fidèle (ce que vous voyez est ce que vous obtenez). |
 | **Remplir** | Des variables de toutes les tables du document, des conditions « Et » / « Ou », une mise en forme conditionnelle (couleur, fond, gras… selon la ligne), des boucles, des calculs et des puces (date du jour, heure, e-mail de la personne connectée). |
 | **Lire** | Le document rempli avec la ligne choisie dans Grist, en lecture simple ou épurée. |
-| **Exporter** | PDF vectoriel (le texte reste sélectionnable), PDF protégé, Word, Excel, Markdown, HTML, ou e-mail prérempli : une ligne à la fois ou en lot. |
+| **Exporter** | PDF vectoriel (le texte reste sélectionnable), PDF protégé, PDF/A (archivage), Word, Excel, Markdown, HTML, ou e-mail prérempli : une ligne à la fois ou en lot. |
 | **Réutiliser** | Plusieurs modèles par document Grist, une galerie de 21 modèles prêts à l'emploi, des macro-modèles qui assemblent une page de garde et des annexes. |
 | **Travailler à plusieurs** | Enregistrement automatique avec détection de conflit, historique des versions, commentaires, droits par personne. |
 
@@ -102,7 +102,7 @@ Avec casse, mot entier ou expression régulière (ici `(Prestataire|Client)` rem
 
 ### Exporter
 
-Le menu « Type d'export » propose PDF, PDF protégé, Word (bêta), Excel (pour les grilles), Markdown et HTML. L'assemblage avant impression pose les pages de chaque ligne sur des feuilles A4 ou A3, avec traits de coupe : quatre A6 sur une A4, par exemple.
+Le menu « Type d'export » propose PDF, PDF protégé, PDF/A (archivage), Word (bêta), Excel (pour les grilles), Markdown et HTML. L'assemblage avant impression pose les pages de chaque ligne sur des feuilles A4 ou A3, avec traits de coupe : quatre A6 sur une A4, par exemple.
 
 | Le type d'export | L'assemblage avant impression |
 |---|---|
@@ -164,6 +164,7 @@ La [note de version](PATCH_NOTES.md) en donne la liste complète, une puce par f
 
 - **PDF vectoriel** : texte sélectionnable, polices embarquées, nom de fichier composé avec des variables. Trois qualités : « Vectoriel », « Impression par le navigateur » (la lecture imprimée page pour page par la fenêtre d'impression du navigateur) et PDF « Léger » (images ramenées à 150 points par pouce).
 - **PDF protégé** : chiffré en AES-256, avec un mot de passe pour l'ouvrir (facultatif), des autorisations (imprimer, copier, modifier) et les propriétés du fichier.
+- **PDF/A (archivage)** : le PDF vectoriel passé en PDF/A-2b, le format que les archives et les cabinets comptables demandent pour garder une facture lisible à l'identique des années plus tard (polices embarquées, description du document et profil de couleur sRGB ; mesuré conforme avec veraPDF). Une ligne, une archive ZIP ou un seul PDF ; un PDF/A ne se chiffre pas, c'est un type à part du PDF protégé, et l'assemblage avant impression comme l'impression par le navigateur n'y sont pas proposés.
 - **En lot** : un PDF par ligne dans une archive ZIP, ou toutes les lignes dans un seul PDF. Un lot suit les lignes que le widget affiche dans Grist (filtres et tri compris) ; quand il n'en affiche qu'une partie, il demande s'il faut exporter celles-ci ou toute la table.
 - **Assemblage avant impression** : les pages de chaque ligne sur des feuilles A4 ou A3, avec ou sans traits de coupe.
 - **Date du dernier export** : une colonne de votre table, choisie dans Réglages > Vue, garde le moment du dernier export PDF de chaque ligne.
@@ -441,7 +442,7 @@ With match case, whole word or regular expression (here `(Prestataire|Client)` r
 
 ### Exporting
 
-The "Export type" menu offers PDF, Protected PDF, Word (beta), Excel (for grids), Markdown and HTML. Sheet assembly before printing lays out each row's pages on A4 or A3 sheets, with crop marks: four A6 on one A4, for example.
+The "Export type" menu offers PDF, Protected PDF, PDF/A (archiving), Word (beta), Excel (for grids), Markdown and HTML. Sheet assembly before printing lays out each row's pages on A4 or A3 sheets, with crop marks: four A6 on one A4, for example.
 
 | The export type | Sheet assembly before printing |
 |---|---|
@@ -503,6 +504,7 @@ The [release notes](PATCH_NOTES.md) give the complete list, one bullet per featu
 
 - **Vector PDF**: selectable text, embedded fonts, file name built with variables. Three qualities: "Vector", "Browser print" (the Reading view printed page by page through the browser's print window) and Light PDF (images brought down to 150 points per inch).
 - **Protected PDF**: encrypted with AES-256, with a password to open it (optional), permissions (print, copy, edit) and the file's properties.
+- **PDF/A (archiving)**: the vector PDF turned into PDF/A-2b, the format archives and accounting firms ask for to keep an invoice readable exactly as it is years later (embedded fonts, document description and sRGB color profile; measured compliant with veraPDF). One row, a ZIP archive or a single PDF; a PDF/A cannot be encrypted, so it is a type apart from the protected PDF, and sheet assembly before printing and browser printing are not offered with it.
 - **Batch**: one PDF per row in a ZIP archive, or all rows in a single PDF. A batch follows the rows the widget shows in Grist (filters and sort included); when it only shows part of the table, it asks whether to export those or the whole table.
 - **Sheet assembly before printing**: each row's pages on A4 or A3 sheets, with or without crop marks.
 - **Date of the last export**: a column of your table, chosen in Settings > View, keeps the moment of each row's last PDF export.

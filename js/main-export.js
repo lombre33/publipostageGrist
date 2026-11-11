@@ -97,6 +97,9 @@ const MainExport = (function () {
       return { html: ListSplit.pin(html, plan.variants[0]), headerFooterData: ListSplit.pinHeaderFooter(headerFooterData, plan.variants[0]) };
     }
 
+    // Les champs de document d'un PDF/A (PdfExport.prepareRecord) : aucun mot de passe ni droit, seulement la marque qui fait passer le PDF fini en PDF/A-2b (js/pdf-archive.js).
+    const ARCHIVE_DOC_FIELDS = Object.freeze({ archive: true });
+
     // Les exports d'une seule ligne : le lot que prend son document quand « Un document par valeur » le découpe, l'alerte sans ligne, les textes du
     // coin d'état et l'export lui-même (`doc` : { html, headerFooterData }, cf. currentRecordDocument), et `stampsExportDate` pour le PDF seul : la date de son dernier
     // export s'écrit dans la colonne choisie (js/export-date.js). Word n'a ni sélecteur de qualité ni autre mode
@@ -118,6 +121,14 @@ const MainExport = (function () {
         batch: 'pdfProtectedZip', noRecord: 'alert.noRecordForExport', generating: 'status.pdfGenerating', generated: 'status.pdfProtectedGenerated', failed: 'status.pdfGenerationError',
         stampsExportDate: true,
         run: (doc, tableId, record, protection) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt(), undefined, pdfImageQuality(), PdfProtection.docFields(protection), SlidesEntry.showsEveryPage(getCurrentTypeModele())),
+      },
+      // « PDF/A (archivage) » (type du menu Type d'export) : le même PDF vectoriel, passé en PDF/A-2b une fois rendu (js/pdf-archive.js), le format que les archives et les cabinets comptables demandent pour une facture. « Impression
+      // navigateur » n'a pas de sens ici (le navigateur imprime un PDF ordinaire) ; « Léger » s'applique. Un PDF/A ne se chiffre pas : « PDF protégé » reste un type à part. Un document découpé « Un document par valeur » reste un lot (une archive ZIP).
+      pdfArchive: {
+        engines: ['pdf', 'archive'],
+        batch: 'pdfArchiveZip', noRecord: 'alert.noRecordForExport', generating: 'status.pdfGenerating', generated: 'status.pdfArchiveGenerated', failed: 'status.pdfGenerationError',
+        stampsExportDate: true,
+        run: (doc, tableId, record) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt(), undefined, pdfImageQuality(), ARCHIVE_DOC_FIELDS, SlidesEntry.showsEveryPage(getCurrentTypeModele())),
       },
       // « Impression navigateur » (qualité du bouton PDF) : la Lecture, imprimée par le navigateur (js/print-export.js), sans moteur à charger. Un document
       // découpé « Un document par valeur » reste un lot : le lot PDF (archive ZIP), une impression ne faisant qu'un document.
@@ -214,13 +225,13 @@ const MainExport = (function () {
         setStatus(I18n.t(spec.failed), true);
       }
     }
-    // Le type d'export (menu du bouton à gauche d'Exporter, ex-« Qualité PDF ») : PDF, PDF protégé, Word, Excel, Markdown, Markdown (modèle), HTML ou HTML (contenu à coller), gardé dans la liste cachée
+    // Le type d'export (menu du bouton à gauche d'Exporter, ex-« Qualité PDF ») : PDF, PDF protégé, PDF/A, Word, Excel, Markdown, Markdown (modèle), HTML ou HTML (contenu à coller), gardé dans la liste cachée
     // #v2-export-type comme la qualité du PDF l'est dans #v2-pdf-quality. Word, Markdown et HTML n'ont de sens que pour un document (un macro-modèle compris) et Excel que pour une
     // grille ; « Markdown (modèle) » écrit le contenu du modèle ouvert (ses variables comprises), donc ni une grille ni un macro-modèle, qui n'a pas de contenu à lui : un type
     // que le modèle ouvert ne sait pas faire n'est pas proposé (ligne grisée) et le bouton Exporter retombe sur le PDF, jamais sur une erreur.
     function exportTypeAvailable(type) {
       const grid = GridEditor.isGridType(getCurrentTypeModele());
-      return type === 'pdf' || type === 'pdfProtected' || ((type === 'docx' || type === 'md' || type === 'html' || type === 'htmlFragment') && !grid) || (type === 'xlsx' && grid)
+      return type === 'pdf' || type === 'pdfProtected' || type === 'pdfArchive' || ((type === 'docx' || type === 'md' || type === 'html' || type === 'htmlFragment') && !grid) || (type === 'xlsx' && grid)
         || (type === 'mdTemplate' && !grid && getCurrentTypeModele() !== 'macro') || (type === 'pptx' && getCurrentTypeModele() === 'presentation');
     }
     // Pourquoi une ligne du menu « Type d'export » est grisée pour le modèle ouvert (js/lock-reasons.js) : PowerPoint ne sert qu'une présentation, Excel qu'une grille, un tableau seul ne s'écrit ni en Word, ni en Markdown, ni en HTML,
@@ -249,6 +260,7 @@ const MainExport = (function () {
     }
     const onExportPdf = () => exportRecordAs(selectedPdfQuality() === 'browser-print' ? 'print' : 'pdf');
     const onExportPdfProtected = () => exportRecordAs('pdfProtected');
+    const onExportPdfArchive = () => exportRecordAs('pdfArchive');
     const onExportDocx = () => exportRecordAs('docx');
     const onExportPptx = () => exportRecordAs('pptx');
     const onExportXlsx = () => exportRecordAs('xlsx');
@@ -277,6 +289,8 @@ const MainExport = (function () {
       pdf: { zip: 'pdfZip', merged: 'pdfMerged', sheets: 'pdfSheets' },
       // Le PDF protégé n'a ni PDF unique ni planche : pdf-lib, qui assemble des PDF, ne sait pas les chiffrer (lignes grisées dans le menu Exporter).
       pdfProtected: { zip: 'pdfProtectedZip' },
+      // Le PDF/A a le PDF unique (réuni, puis passé en PDF/A d'un coup) mais pas la planche : elle est faite pour l'impression (ligne grisée dans le menu Exporter).
+      pdfArchive: { zip: 'pdfArchiveZip', merged: 'pdfArchiveMerged' },
       docx: { zip: 'docxZip' },
       pptx: { zip: 'pptxZip' },
       xlsx: { zip: 'xlsxZip', workbook: 'xlsxSingle' },
@@ -299,7 +313,7 @@ const MainExport = (function () {
       const type = selectedExportType();
       const lines = selectedExportLines(type);
       if (lines !== 'one') return onExportBatch(EXPORT_BATCH_OF[type][lines]);
-      return ({ pdf: onExportPdf, pdfProtected: onExportPdfProtected, docx: onExportDocx, pptx: onExportPptx, xlsx: onExportXlsx, md: onExportMd, mdTemplate: onExportMdTemplate, html: onExportHtml, htmlFragment: onExportHtmlFragment })[type]();
+      return ({ pdf: onExportPdf, pdfProtected: onExportPdfProtected, pdfArchive: onExportPdfArchive, docx: onExportDocx, pptx: onExportPptx, xlsx: onExportXlsx, md: onExportMd, mdTemplate: onExportMdTemplate, html: onExportHtml, htmlFragment: onExportHtmlFragment })[type]();
     };
 
     // Mode email (planning/feature-email-mode.md) : construit l'URL mailto: de la ligne courante et l'ouvre par un <a> synthétique plutôt que
@@ -384,9 +398,9 @@ const MainExport = (function () {
     // Les deux menus d'export d'accord avec le type choisi, l'option de lignes cochée et le genre du modèle ouvert (on grise ou on masque ce qui ne s'applique
     // pas, les lignes restent dans la page) :
     // - menu « Type d'export » (#v2-quality-flyout) : la ligne du type choisi est active ; Word ou Excel, que le modèle ne sait pas faire, est grisé ; la qualité du
-    //   PDF (intitulé, filet et trois lignes : `data-export-for="pdf pdfProtected"`) n'est montrée que pour les deux PDF - demande du 12/10 -, la qualité choisie est gardée
-    //   et revient avec le PDF (hors des PDF ses lignes sont aussi grisées : un clic dessus ne choisit rien). En PDF protégé, « Impression navigateur » reste montrée mais grisée
-    //   (`data-export-grey-for` : le navigateur imprime, il ne chiffre pas) et la ligne active est celle qui s'applique, « Vectoriel » si c'était l'impression ;
+    //   PDF (intitulé, filet et trois lignes : `data-export-for="pdf pdfProtected pdfArchive"`) n'est montrée que pour les trois PDF - demande du 12/10 -, la qualité choisie est gardée
+    //   et revient avec le PDF (hors des PDF ses lignes sont aussi grisées : un clic dessus ne choisit rien). En PDF protégé et en PDF/A, « Impression navigateur » reste montrée mais grisée
+    //   (`data-export-grey-for` : le navigateur imprime, il ne chiffre pas et ne fait pas de PDF/A) et la ligne active est celle qui s'applique, « Vectoriel » si c'était l'impression ;
     // - menu « Exporter » (#v2-export-pdf-flyout) : seules les options du type choisi sont montrées (`data-export-for`, une liste de types) et celle que le bouton
     //   Exporter lance, selectedExportLines, est cochée (`aria-checked`). Une option que le type montre sans pouvoir la faire est grisée, avec sa raison en info-bulle
     //   (`data-export-grey-for` : le PDF unique et l'assemblage en PDF protégé, que pdf-lib assemble sans pouvoir les chiffrer). Sous les options de lignes, pour les deux PDF seulement, la
@@ -413,13 +427,16 @@ const MainExport = (function () {
         row.classList.toggle('is-active', row.dataset.exportType === type);
         grey(row, !exportTypeAvailable(row.dataset.exportType), exportTypeReason(row.dataset.exportType));
       });
-      const greyedFor = (row, key) => ((row.dataset.exportGreyFor || '').split(' ').indexOf(type) !== -1 ? I18n.t(key) : '');
-      const pdfType = type === 'pdf' || type === 'pdfProtected';
+      // `reasons` : pour chaque type que la ligne grise (`data-export-grey-for`), la clé de la phrase qui dit pourquoi.
+      const greyedFor = (row, reasons) => ((row.dataset.exportGreyFor || '').split(' ').indexOf(type) !== -1 && reasons[type] ? I18n.t(reasons[type]) : '');
+      const pdfType = type === 'pdf' || type === 'pdfProtected' || type === 'pdfArchive';
+      // Le navigateur imprime un PDF ordinaire : ni chiffré ni PDF/A. Pour ces deux types la ligne « Impression navigateur » est grisée et la ligne active est « Vectoriel ».
+      const printOff = type === 'pdfProtected' || type === 'pdfArchive';
       typeFlyout.querySelectorAll('.v2-hover-row[data-quality]').forEach(row => {
-        const applied = type === 'pdfProtected' && qualitySelect.value === 'browser-print' ? 'native' : qualitySelect.value;
+        const applied = printOff && qualitySelect.value === 'browser-print' ? 'native' : qualitySelect.value;
         row.classList.toggle('is-active', pdfType && row.dataset.quality === applied);
-        const notForProtected = greyedFor(row, 'quality.protectedOff');
-        grey(row, !pdfType || !!notForProtected, notForProtected || I18n.t('lock.exportPdfOnly'));
+        const notForType = greyedFor(row, { pdfProtected: 'quality.protectedOff', pdfArchive: 'quality.archiveOff' });
+        grey(row, !pdfType || !!notForType, notForType || I18n.t('lock.exportPdfOnly'));
       });
       // Où va le PDF (js/pdf-delivery.js) : télécharger, ranger dans GFS ou les deux ; les deux lignes qui rangent sont grisées sans GFS.
       PdfDelivery.sync(exportFlyout);
@@ -431,8 +448,8 @@ const MainExport = (function () {
       RowAttachment.sync(exportFlyout, lines);
       exportFlyout.querySelectorAll('.v2-hover-row[data-export-lines]').forEach(row => {
         row.setAttribute('aria-checked', row.dataset.exportLines === lines ? 'true' : 'false');
-        const protectedOff = greyedFor(row, 'exportLines.protectedOff');
-        grey(row, !!protectedOff, protectedOff);
+        const linesOff = greyedFor(row, { pdfProtected: 'exportLines.protectedOff', pdfArchive: 'exportLines.archiveOff' });
+        grey(row, !!linesOff, linesOff);
       });
       typeButton.classList.toggle('active', type !== 'pdf');
     }
@@ -491,10 +508,24 @@ const MainExport = (function () {
         entryExt: '.pdf', fileSuffix: '-export-pdf-protege.zip',
         loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await ExportCommon.ensureJsZipLoaded(); },
       }),
+      // « PDF/A (archivage) » en lot : les PDF d'une archive ZIP, chacun passé en PDF/A-2b (`archive` : openBatchSink pose `{ archive: true }` sur chaque ligne, js/pdf-export.js).
+      pdfArchiveZip: Object.assign({}, PDF_BATCH, {
+        archive: true, engines: ['pdf', 'archive'], confirm: 'confirm.batchExport', done: 'status.batchExportDoneArchive', doneWithFailures: 'status.batchExportDoneWithFailuresArchive',
+        entryExt: '.pdf', fileSuffix: '-export-pdfa.zip',
+        loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await ExportCommon.ensureJsZipLoaded(); },
+      }),
       pdfMerged: Object.assign({}, PDF_BATCH, {
         confirm: 'confirm.mergedExport', done: 'status.mergedExportDone', doneWithFailures: 'status.mergedExportDoneWithFailures',
         splitDone: 'status.splitMergedDone', splitDoneWithFailures: 'status.splitMergedDoneWithFailures',
         merged: true, fileSuffix: '-export.pdf', engines: ['pdf', 'merge'],
+        loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await PdfMerge.ensureLibLoaded(); },
+      }),
+      // « PDF/A (archivage) » en un seul PDF : les mêmes PDF par ligne que le PDF unique, réunis par pdf-lib, puis le fichier entier passé en PDF/A-2b d'un coup (`archive`, openBatchSink :
+      // la réunion ne garde pas la description XMP des PDF d'origine, c'est donc le fichier réuni qui se convertit, une seule fois).
+      pdfArchiveMerged: Object.assign({}, PDF_BATCH, {
+        archive: true, confirm: 'confirm.mergedExport', done: 'status.mergedExportDoneArchive', doneWithFailures: 'status.mergedExportDoneWithFailuresArchive',
+        splitDone: 'status.splitMergedDoneArchive', splitDoneWithFailures: 'status.splitMergedDoneWithFailuresArchive',
+        merged: true, fileSuffix: '-export-pdfa.pdf', engines: ['pdf', 'merge', 'archive'],
         loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await PdfMerge.ensureLibLoaded(); },
       }),
       // Assemblage avant impression (js/sheet-assembly-dialog.js, js/sheet-layout.js) : les mêmes PDF par ligne que le PDF unique, posés sur des
@@ -717,7 +748,9 @@ const MainExport = (function () {
       // Un lot protégé : le mot de passe et les autorisations de la fenêtre pour chaque PDF - le mot de passe de sa ligne en mode « Un par ligne », et c'est cette ligne qui échoue, jamais
       // le lot, quand sa cellule ne sert pas -, chacun avec son propre mot de passe « propriétaire » tiré au hasard.
       const protection = sheetSetup && sheetSetup.protection;
-      const render = doc => cfg.renderRow(doc.html, tableId, doc.row, doc.source.filenameTemplate, doc.headerFooterData, doc.source.margins, doc.source.pageOptions, doc.source.typeModele, imageQuality, protection ? PdfProtection.docFields(PdfProtection.settingsForRow(protection, doc.row)) : undefined);
+      // Un lot PDF/A : chaque PDF d'une archive ZIP est passé en PDF/A par sa ligne (js/pdf-export.js) ; les lignes d'un PDF unique, elles, restent ordinaires - c'est le fichier réuni qui se convertit à la fin (`finish`).
+      const rowFields = protection ? doc => PdfProtection.docFields(PdfProtection.settingsForRow(protection, doc.row)) : (cfg.archive && !cfg.merged ? () => ARCHIVE_DOC_FIELDS : () => undefined);
+      const render = doc => cfg.renderRow(doc.html, tableId, doc.row, doc.source.filenameTemplate, doc.headerFooterData, doc.source.margins, doc.source.pageOptions, doc.source.typeModele, imageQuality, rowFields(doc));
       if (cfg.merged) {
         const pdf = await (cfg.sheets ? PdfMerge.createSheets(tableId, sheetSetup.layout) : PdfMerge.create(tableId));
         return {
@@ -726,8 +759,8 @@ const MainExport = (function () {
             await pdf.append(blob);
             return { blankPages };
           },
-          finish: () => pdf.toBlob(),
-          finishing: cfg.sheets ? 'status.sheetsAssembling' : 'status.pdfMerging',
+          finish: async () => (cfg.archive ? PdfArchive.convert(await pdf.toBlob()) : pdf.toBlob()),
+          finishing: cfg.sheets ? 'status.sheetsAssembling' : (cfg.archive ? 'status.pdfArchiveMerging' : 'status.pdfMerging'),
           sheetCount: () => (cfg.sheets ? pdf.sheetCount : 0),
         };
       }

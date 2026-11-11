@@ -20,11 +20,12 @@ const require = createRequire(import.meta.url);
 const JSZip = require(join(ROOT, 'dev-tests', '.offline-cache', 'umd', 'jszip.min.js'));
 const ExcelJS = require(join(ROOT, 'dev-tests', '.offline-cache', 'umd', 'exceljs.min.js'));
 
-// Les onze moteurs : leur nom dans index.html (data-engine), leur fichier, leur variable globale.
+// Les douze moteurs : leur nom dans index.html (data-engine), leur fichier, leur variable globale.
 const ENGINES = {
   pdf: { file: 'pdf-export', global: 'PdfExport' },
   sheets: { file: 'sheet-layout', global: 'SheetLayout' },
   merge: { file: 'pdf-merge', global: 'PdfMerge' },
+  archive: { file: 'pdf-archive', global: 'PdfArchive' },
   docx: { file: 'docx-export', global: 'DocxExport' },
   pptx: { file: 'pptx-export', global: 'PptxExport' },
   pptxImport: { file: 'pptx-import', global: 'PptxImport' },
@@ -71,7 +72,7 @@ async function scenario(title, fn) {
 // Les scripts de moteur demandés, exactement ceux que le scénario attend : ni plus (rien ne charge ce qu'il n'utilise pas), ni moins, chacun une fois.
 function expectEngines(label, requests, loadedNow, expected) {
   check(`${label} : le réseau ne reçoit que ${expected.map(name => ENGINES[name].file + '.js').join(' et ')}, une seule fois chacun`, same(requests, expected), requests);
-  check(`${label} : parmi les onze moteurs, seuls existent ${expected.map(name => ENGINES[name].global).join(', ')}`, same(loadedNow, expected), loadedNow);
+  check(`${label} : parmi les douze moteurs, seuls existent ${expected.map(name => ENGINES[name].global).join(', ')}`, same(loadedNow, expected), loadedNow);
 }
 
 const bytesOf = file => readFile(file);
@@ -98,11 +99,11 @@ const exportBatch = (page, kind, name) => saved(exportBatchOf(page, kind, `lazy-
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 await scenario('Ouverture : aucun moteur n\'est chargé', async ({ w, page, requests, loaded }) => {
   await sleep(1500);
-  check('ouverture : aucun des dix scripts de moteur n\'est demandé au réseau', requests.length === 0, requests);
-  check('ouverture : aucun des onze moteurs n\'existe (PdfExport, PdfMerge, SheetLayout, DocxExport, PptxExport, PptxImport, DocxImport, XlsxExport, XlsxNumberFormat, MarkdownExport, HtmlExport)', (await loaded()).length === 0, await loaded());
+  check('ouverture : aucun des douze scripts de moteur n\'est demandé au réseau', requests.length === 0, requests);
+  check('ouverture : aucun des douze moteurs n\'existe (PdfExport, PdfMerge, PdfArchive, SheetLayout, DocxExport, PptxExport, PptxImport, DocxImport, XlsxExport, XlsxNumberFormat, MarkdownExport, HtmlExport)', (await loaded()).length === 0, await loaded());
   check('ouverture : ExportEngines existe, avec ensure et loadAll', await page.evaluate(() => typeof ExportEngines === 'object' && typeof ExportEngines.ensure === 'function' && typeof ExportEngines.loadAll === 'function'));
   const tags = await page.evaluate(() => Array.from(document.querySelectorAll('script[type="text/x-lazy-engine"]'), tag => [tag.dataset.engine, tag.getAttribute('src')]));
-  check('index.html : dix balises inertes, une par moteur, chacune vers son fichier et avec une version de cache (?v=)',
+  check('index.html : douze balises inertes, une par moteur, chacune vers son fichier et avec une version de cache (?v=)',
     tags.length === NAMES.length && NAMES.every(name => tags.filter(([engine, src]) => engine === name && new RegExp('^js/' + ENGINES[name].file + '\\.js\\?v=\\d+(\\.\\d+)*$').test(src)).length === 1), tags);
   check('ouverture : les boutons d\'export existent et sont prêts (le clic ne dépend d\'aucun moteur chargé)', await page.evaluate(() => ['btn-export-pdf', 'v2-export-lines-one', 'v2-export-lines-zip', 'v2-export-lines-merged'].every(id => !!document.getElementById(id))));
   check('ouverture : aucune erreur de page', w.errors.length === 0, w.errors);
@@ -123,7 +124,7 @@ await scenario('ExportEngines : une demande, deux demandes, une liste, tout', as
   check('une liste de noms charge chacun d\'eux (fusion, feuilles)', same(await loaded(), ['pdf', 'merge', 'sheets']) && same(requests, ['pdf', 'merge', 'sheets']), { loaded: await loaded(), requests });
   check('ensure() sans nom se résout sans rien charger', (await page.evaluate(() => ExportEngines.ensure().then(() => 'ok', e => e.message))) === 'ok' && requests.length === 3, requests);
   await page.evaluate(() => ExportEngines.loadAll());
-  check('loadAll charge les sept qui manquaient (Word, PowerPoint, import PowerPoint, Excel, format des nombres, Markdown, HTML), les dix ne sont demandés qu\'une fois chacun', same(await loaded(), NAMES) && same(requests, NAMES), { loaded: await loaded(), requests });
+  check('loadAll charge les huit qui manquaient (PDF/A, Word, PowerPoint, import PowerPoint, Excel, format des nombres, Markdown, HTML), les douze ne sont demandés qu\'une fois chacun', same(await loaded(), NAMES) && same(requests, NAMES), { loaded: await loaded(), requests });
   await page.evaluate(() => ExportEngines.loadAll());
   check('un second loadAll ne fait aucune requête', requests.length === NAMES.length, requests);
   check('aucune erreur de page', w.errors.length === 0, w.errors);
@@ -147,6 +148,14 @@ await scenario('PDF d\'une ligne : le moteur PDF seul', async ({ w, page, reques
   check('PDF d\'une ligne : le fichier est un PDF (en-tête %PDF-, nom en .pdf)', startsWith(await bytesOf(out.file), '%PDF-') && /\.pdf$/.test(out.suggested) && out.size > 1000, out);
   expectEngines('PDF d\'une ligne', requests, await loaded(), ['pdf']);
   check('PDF d\'une ligne : aucune erreur de page', w.errors.length === 0, w.errors);
+});
+await scenario('PDF/A d\'une ligne : le moteur PDF, la conversion en PDF/A et la fusion (pdf-lib) dont elle se sert', async ({ w, page, requests, loaded }) => {
+  await prepare(page);
+  const out = await exportSingle(page, 'pdfArchive', 'pdfa');
+  const bytes = await bytesOf(out.file);
+  check('PDF/A d\'une ligne : le fichier est un .pdf qui porte la description XMP PDF/A-2b et l\'intention de rendu sRGB', startsWith(bytes, '%PDF-') && /\.pdf$/.test(out.suggested) && bytes.includes('<pdfaid:part>2</pdfaid:part>') && bytes.includes('GTS_PDFA1'), { suggested: out.suggested, size: out.size });
+  expectEngines('PDF/A d\'une ligne', requests, await loaded(), ['pdf', 'archive', 'merge']);
+  check('PDF/A d\'une ligne : aucune erreur de page', w.errors.length === 0, w.errors);
 });
 await scenario('Word d\'une ligne : le moteur Word seul', async ({ w, page, requests, loaded }) => {
   await prepare(page);
@@ -190,6 +199,8 @@ await scenario('HTML d\'une ligne : le moteur HTML seul, pour le fichier à dép
 const BATCHES = [
   { kind: 'pdfZip', label: 'ZIP de PDF', engines: ['pdf'], grid: false, verify: async (out, label) => { const entries = await zipEntries(out.file); check(`${label} : l'archive porte ${ROWS} PDF`, /\.zip$/.test(out.suggested) && entries.length === ROWS && entries.every(n => /\.pdf$/.test(n)), { suggested: out.suggested, entries }); } },
   { kind: 'pdfMerged', label: 'PDF unique', engines: ['pdf', 'merge'], grid: false, verify: async (out, label) => { check(`${label} : un seul PDF, nommé -export.pdf`, startsWith(await bytesOf(out.file), '%PDF-') && /-export\.pdf$/.test(out.suggested) && out.size > 1000, out); } },
+  { kind: 'pdfArchiveZip', label: 'ZIP de PDF/A', engines: ['pdf', 'archive', 'merge'], grid: false, verify: async (out, label) => { const entries = await zipEntries(out.file); check(`${label} : l'archive porte ${ROWS} PDF`, /\.zip$/.test(out.suggested) && entries.length === ROWS && entries.every(n => /\.pdf$/.test(n)), { suggested: out.suggested, entries }); } },
+  { kind: 'pdfArchiveMerged', label: 'PDF/A unique', engines: ['pdf', 'merge', 'archive'], grid: false, verify: async (out, label) => { check(`${label} : un seul PDF, nommé -export-pdfa.pdf`, startsWith(await bytesOf(out.file), '%PDF-') && /-export-pdfa\.pdf$/.test(out.suggested) && out.size > 1000, out); } },
   { kind: 'pdfSheets', label: 'Assemblage avant impression', engines: ['pdf', 'merge', 'sheets'], grid: false, verify: async (out, label) => { check(`${label} : un PDF d'assemblage, nommé -assemblage.pdf`, startsWith(await bytesOf(out.file), '%PDF-') && /-assemblage\.pdf$/.test(out.suggested) && out.size > 1000, out); } },
   { kind: 'docxZip', label: 'ZIP de Word', engines: ['docx'], grid: false, verify: async (out, label) => { const entries = await zipEntries(out.file); check(`${label} : l'archive porte ${ROWS} documents Word`, /\.zip$/.test(out.suggested) && entries.length === ROWS && entries.every(n => /\.docx$/.test(n)), { suggested: out.suggested, entries }); } },
   { kind: 'xlsxZip', label: 'ZIP d\'Excel', engines: ['xlsx'], grid: true, verify: async (out, label) => { const entries = await zipEntries(out.file); check(`${label} : l'archive porte ${ROWS} classeurs`, /\.zip$/.test(out.suggested) && entries.length === ROWS && entries.every(n => /\.xlsx$/.test(n)), { suggested: out.suggested, entries }); } },

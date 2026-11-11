@@ -21,6 +21,8 @@ const I18nTextsExport = {
   // --- PDF protégé (js/pdf-protection.js, js/pdf-protection-dialog.js) : l'explication des lignes grisées, puis la fenêtre du mot de passe ---
   'exportLines.protectedOff': { fr: 'Pas disponible en PDF protégé : un fichier qui réunit plusieurs documents ne se protège pas.', en: 'Not available for a protected PDF: a file combining several documents cannot be protected.' },
   'exportLines.mdTemplate': { fr: 'Un seul fichier : le modèle', en: 'One file: the template' },
+  'exportLines.archiveOff': { fr: 'Pas disponible en PDF/A : une planche d’assemblage est faite pour être imprimée, pas archivée.', en: 'Not available for PDF/A: an assembly sheet is made to be printed, not archived.' },
+  'quality.archiveOff': { fr: 'Pas disponible en PDF/A : l’impression par le navigateur ne produit pas de PDF/A.', en: 'Not available for PDF/A: browser printing does not produce PDF/A.' },
   'quality.protectedOff': { fr: 'Pas disponible en PDF protégé : l’impression par le navigateur ne chiffre pas le fichier.', en: 'Not available for a protected PDF: browser printing does not encrypt the file.' },
   'pdfProtect.title': { fr: 'PDF protégé', en: 'Protected PDF' },
   'pdfProtect.batch': { fr: '{count} {count|PDF protégé|PDF protégés} pour « {table} », {count|regroupé|regroupés} dans une archive ZIP avec le même mot de passe et les mêmes autorisations.', en: '{count} protected {count|PDF|PDFs} for “{table}”, bundled in a ZIP archive with the same password and the same permissions.' },
@@ -273,6 +275,8 @@ const I18nTextsExport = {
   'status.batchExportDoneWithFailures': { fr: '{ok} {ok|PDF généré|PDF générés}, {failed} {failed|échec|échecs} — archive ZIP téléchargée.', en: '{ok} {ok|PDF|PDFs} generated, {failed} {failed|failure|failures} — ZIP archive downloaded.' },
   'status.batchExportDone': { fr: '{ok} {ok|PDF généré|PDF générés} — archive ZIP téléchargée.', en: '{ok} {ok|PDF|PDFs} generated — ZIP archive downloaded.' },
   'status.batchExportDoneProtected': { fr: '{ok} {ok|PDF protégé généré|PDF protégés générés} — archive ZIP téléchargée.', en: '{ok} protected {ok|PDF|PDFs} generated — ZIP archive downloaded.' },
+  'status.batchExportDoneArchive': { fr: '{ok} {ok|PDF/A généré|PDF/A générés} — archive ZIP téléchargée.', en: '{ok} PDF/A {ok|file|files} generated — ZIP archive downloaded.' },
+  'status.batchExportDoneWithFailuresArchive': { fr: '{ok} {ok|PDF/A généré|PDF/A générés}, {failed} {failed|échec|échecs} — archive ZIP téléchargée.', en: '{ok} PDF/A {ok|file|files} generated, {failed} {failed|failure|failures} — ZIP archive downloaded.' },
   'status.batchExportDoneWithFailuresProtected': { fr: '{ok} {ok|PDF protégé généré|PDF protégés générés}, {failed} {failed|échec|échecs} — archive ZIP téléchargée.', en: '{ok} protected {ok|PDF|PDFs} generated, {failed} {failed|failure|failures} — ZIP archive downloaded.' },
   // Export DOCX de toutes les lignes (ZIP) : mêmes messages que le lot PDF, avec le bon format.
   'status.loadingExportLibs': { fr: 'Chargement des bibliothèques d’export…', en: 'Loading export libraries…' },
@@ -296,6 +300,9 @@ const I18nTextsExport = {
   'status.batchExportDoneWithFailuresHtml': { fr: '{ok} {ok|fichier HTML généré|fichiers HTML générés}, {failed} {failed|échec|échecs} — archive ZIP téléchargée.', en: '{ok} HTML {ok|file|files} generated, {failed} {failed|failure|failures} — ZIP archive downloaded.' },
   'status.batchExportDoneHtml': { fr: '{ok} {ok|fichier HTML généré|fichiers HTML générés} — archive ZIP téléchargée.', en: '{ok} HTML {ok|file|files} generated — ZIP archive downloaded.' },
   'status.pdfMerging': { fr: 'Assemblage du PDF unique…', en: 'Assembling the single PDF…' },
+  'status.pdfArchiveMerging': { fr: 'Assemblage du PDF unique et conversion en PDF/A…', en: 'Assembling the single PDF and converting it to PDF/A…' },
+  'status.mergedExportDoneArchive': { fr: '{ok} {ok|ligne réunie|lignes réunies} dans un seul PDF/A — fichier téléchargé.', en: '{ok} {ok|row|rows} combined into a single PDF/A — file downloaded.' },
+  'status.mergedExportDoneWithFailuresArchive': { fr: '{ok} {ok|ligne réunie|lignes réunies} dans un seul PDF/A, {failed} {failed|échec|échecs} — fichier téléchargé.', en: '{ok} {ok|row|rows} combined into a single PDF/A, {failed} {failed|failure|failures} — file downloaded.' },
   'status.mergedExportDoneWithFailures': { fr: '{ok} {ok|ligne réunie|lignes réunies} dans un seul PDF, {failed} {failed|échec|échecs} — fichier téléchargé.', en: '{ok} {ok|row|rows} combined into a single PDF, {failed} {failed|failure|failures} — file downloaded.' },
   'status.mergedExportDone': { fr: '{ok} {ok|ligne réunie|lignes réunies} dans un seul PDF — fichier téléchargé.', en: '{ok} {ok|row|rows} combined into a single PDF — file downloaded.' },
   'status.mergedExportDoneGrid': { fr: '{ok} {ok|valeur réunie|valeurs réunies} dans un seul PDF — fichier téléchargé.', en: '{ok} {ok|value|values} combined into a single PDF — file downloaded.' },

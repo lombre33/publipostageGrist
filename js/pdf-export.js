@@ -5256,8 +5256,8 @@ const PdfExport = (function () {
   // le lot, cf. ExternalImages.beginRun), les marges et les bibliothèques, puis le HTML, le nom du fichier et l'en-tête et le pied résolus pour la
   // ligne. `gridModel` : le modèle de la ligne est une grille ; absent, c'est le modèle ouvert (un lot « Modèle selon la ligne » peut mêler les deux
   // genres, js/main.js). `quality` : 'light' ramène les images à LIGHT_IMAGE_PPI points par pouce ; absent, le PDF reprend les images telles quelles.
-  // `docFields` : les champs de document à poser sur le document fini (mot de passe, droits et propriétés d'un « PDF protégé », js/pdf-protection.js:docFields) ;
-  // absent, le PDF est ordinaire.
+  // `docFields` : les champs de document à poser sur le document fini (mot de passe, droits et propriétés d'un « PDF protégé », js/pdf-protection.js:docFields), ou `{ archive: true }`
+  // pour un PDF/A (js/pdf-archive.js) ; absent, le PDF est ordinaire.
   async function prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields) {
     await ExternalImages.confirmExport(htmlContent, headerFooterData);
     setPageMarginsPt(marginsPt);
@@ -5268,7 +5268,7 @@ const PdfExport = (function () {
     const docDefinition = await buildNativePdfDocDefinition(resolvedHtml, filename, resolvedHeaderFooterData);
     // pdfmake chiffre chaque fichier qu'il écrit et pdf-lib ne lit pas un PDF chiffré : un document qui mêle des formats de page (plusieurs fichiers, réunis ensuite) ne peut pas être protégé. Jamais
     // un PDF livré sans la protection demandée : l'export s'arrête, et la phrase dit pourquoi (js/main.js, js/batch-failures.js).
-    if (docFields && docDefinition._followingRuns) throw mixedFormatsError();
+    if (docFields && protects(docFields) && docDefinition._followingRuns) throw mixedFormatsError();
     return { docDefinition: withDocFields(docDefinition, docFields), filename };
   }
 
@@ -5282,10 +5282,14 @@ const PdfExport = (function () {
   // Les champs de document de la protection, posés sur le document fini - jamais sur ceux des passes de mesure, qui n'écrivent aucun fichier. Seuls les champs
   // de pdfmake que la protection porte sont repris ; les propriétés complètent le titre sans le remplacer.
   const DOC_FIELDS = ['version', 'userPassword', 'ownerPassword', 'permissions'];
+  // Ces champs chiffrent-ils le document ? (`docFields.archive` - le PDF/A - n'est pas de ceux-là : il se pose après la mise en page, sans chiffrer.)
+  const protects = docFields => DOC_FIELDS.some(key => docFields[key] !== undefined);
+  // `docFields.archive` : le PDF est passé en PDF/A-2b une fois rendu (js/pdf-archive.js, `archived`). La marque `_archive` n'est lue que par renderDocument : pdfmake ignore les champs en `_`.
   function withDocFields(docDefinition, docFields) {
     if (!docFields) return docDefinition;
     DOC_FIELDS.forEach(key => { if (docFields[key] !== undefined) docDefinition[key] = docFields[key]; });
     if (docFields.info) docDefinition.info = Object.assign({}, docDefinition.info, docFields.info);
+    if (docFields.archive) docDefinition._archive = true;
     return docDefinition;
   }
 
@@ -5406,6 +5410,11 @@ const PdfExport = (function () {
 
   // Le PDF d'une définition : mis en page une fois (renderOnce), avec ses pages blanches, et de quoi l'enregistrer ou en prendre le blob. Un document qui mêle des formats passe par renderRuns.
   async function renderDocument(docDefinition, everyPageWanted) {
+    const rendered = await renderPlain(docDefinition, everyPageWanted);
+    return docDefinition._archive ? archived(rendered) : rendered;
+  }
+
+  async function renderPlain(docDefinition, everyPageWanted) {
     if (docDefinition._followingRuns) {
       const { blankPages, blob } = await renderRuns(docDefinition, everyPageWanted);
       return { blankPages, save: name => ExportCommon.downloadBlob(blob, name), blob: () => Promise.resolve(blob) };
@@ -5413,6 +5422,14 @@ const PdfExport = (function () {
     const pdf = window.pdfMake.createPdf(docDefinition);
     const { blankPages } = await renderOnce(pdf, docDefinition, everyPageWanted || docDefinition._everyPageWanted);
     return { blankPages, save: name => pdf.download(name), blob: () => blobOf(pdf) };
+  }
+
+  // Le même PDF passé en PDF/A-2b (js/pdf-archive.js) : il se télécharge par son Blob - le PDF de pdfmake, lui, est celui d'avant la conversion. Le moteur de la conversion se charge ici, au seul
+  // moment où un PDF en a besoin (les moteurs d'export ne se lisent pas entre eux au chargement).
+  async function archived(rendered) {
+    await ExportEngines.ensure('archive');
+    const blob = await PdfArchive.convert(await rendered.blob());
+    return { blankPages: rendered.blankPages, save: name => ExportCommon.downloadBlob(blob, name), blob: () => Promise.resolve(blob) };
   }
 
   // Résout à `false` quand la personne renonce à l'export à cause d'une page blanche (rien n'est enregistré) ; `undefined` quand il n'y avait pas de ligne.

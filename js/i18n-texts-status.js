@@ -146,6 +146,7 @@ const I18nTextsStatus = {
   'status.pdfGenerating': { fr: 'Génération du PDF en cours…', en: 'Generating PDF…' },
   'status.pdfGenerated': { fr: 'PDF généré.', en: 'PDF generated.' },
   'status.pdfProtectedGenerated': { fr: 'PDF protégé généré.', en: 'Protected PDF generated.' },
+  'status.pdfArchiveGenerated': { fr: 'PDF/A généré.', en: 'PDF/A generated.' },
   'status.pdfPasswordProblem.empty': { fr: 'Pas de mot de passe pour cette ligne : la colonne « {column} » est vide. Aucun PDF n’a été généré.', en: 'No password for this row: column “{column}” is empty. No PDF was generated.' },
   'status.pdfPasswordProblem.type': { fr: 'La colonne « {column} » ne donne pas un mot de passe utilisable pour cette ligne (ni texte ni nombre). Aucun PDF n’a été généré.', en: 'Column “{column}” gives no usable password for this row (neither text nor number). No PDF was generated.' },
   'status.pdfPasswordProblem.tooLong': { fr: 'Le mot de passe de cette ligne (colonne « {column} ») dépasse 127 octets. Aucun PDF n’a été généré.', en: 'The password of this row (column “{column}”) is longer than 127 bytes. No PDF was generated.' },

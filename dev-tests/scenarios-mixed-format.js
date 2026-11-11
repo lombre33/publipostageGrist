@@ -703,6 +703,29 @@ window.EditorTestSuites.mixedFormat = (function () {
       },
     },
 
+    {
+      id: 'format_pdf_a_archive_pdf_keeps_mixed_formats',
+      description: 'PDF/A : contrairement au PDF protégé, un macro-modèle qui mêle des formats se passe en PDF/A - la conversion se fait sur le PDF réuni, que pdf-lib relit : les pages gardent leur taille (portrait et diapositive), le fichier porte la description PDF/A-2b',
+      async run(h) {
+        const problems = [];
+        await plainPage(h);
+        const mixed = start('portrait') + lines(2, 'Alpha') + slotBreak(1, 'landscape', SLIDE) + deckOut(slidesOf(2, 'Slide')) + slotBreak(2, 'portrait') + lines(2, 'Echo');
+        await PdfExport.ensurePdfLibsLoaded();
+        await PdfMerge.ensureLibLoaded();
+        const archived = await PdfExport.getNativePdfBlobForRecord(mixed, null, {}, '', null, PageLayout.getMarginsPt(), undefined, undefined, { archive: true });
+        const plain = await PdfExport.getNativePdfBlobForRecord(mixed, null, {}, '', null, PageLayout.getMarginsPt(), undefined, undefined, undefined);
+        const sizesOf = async blob => (await PDFLib.PDFDocument.load(await blob.arrayBuffer())).getPages().map(page => { const { width, height } = page.getSize(); return Math.round(width) + 'x' + Math.round(height); });
+        const archivedSizes = await sizesOf(archived.blob);
+        const plainSizes = await sizesOf(plain.blob);
+        if (new Set(archivedSizes).size < 2) problems.push('le PDF/A a perdu ses deux formats de page : ' + archivedSizes.join());
+        if (archivedSizes.join() !== plainSizes.join()) problems.push('les pages du PDF/A (' + archivedSizes.join() + ') ne sont pas celles du PDF ordinaire (' + plainSizes.join() + ')');
+        const raw = new TextDecoder('latin1').decode(await archived.blob.arrayBuffer());
+        if (!/<pdfaid:part>2<\/pdfaid:part>/.test(raw) || !/GTS_PDFA1/.test(raw)) problems.push('le PDF/A d\'un macro-modèle aux formats mêlés ne porte pas la description PDF/A-2b');
+        if (/<pdfaid:part>/.test(new TextDecoder('latin1').decode(await plain.blob.arrayBuffer()))) problems.push('le PDF ordinaire du même macro-modèle porte une description PDF/A');
+        return verdict(problems, { pages: archivedSizes });
+      },
+    },
+
     // ---------- La chaîne entière ----------
     {
       id: 'format_following_each_model_comes_out_with_its_slide_page_in_all_four_outputs',

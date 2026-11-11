@@ -280,6 +280,7 @@ const I18nTextsTemplates = {
   'toolbar.exportType': { fr: 'Type d’export', en: 'Export type' },
   'exportType.pdf': { fr: 'PDF', en: 'PDF' },
   'exportType.pdfProtected': { fr: 'PDF protégé', en: 'Protected PDF' },
+  'exportType.pdfArchive': { fr: 'PDF/A (archivage)', en: 'PDF/A (archiving)' },
   'exportType.docx': { fr: 'Word (bêta)', en: 'Word (beta)' },
   'exportType.pptx': { fr: 'PowerPoint (bêta)', en: 'PowerPoint (beta)' },
   'pptx.name.title': { fr: 'Titre', en: 'Title' },

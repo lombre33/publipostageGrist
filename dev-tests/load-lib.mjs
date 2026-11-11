@@ -275,6 +275,7 @@ export async function chooseExportLines(page, lines) {
 // (le fichier à déposer : html, htmlZip ; le contenu à coller : htmlFragment, htmlFragmentZip).
 export const EXPORT_KINDS = {
   pdf: ['pdf', 'one'], pdfZip: ['pdf', 'zip'], pdfMerged: ['pdf', 'merged'], pdfSheets: ['pdf', 'sheets'],
+  pdfArchive: ['pdfArchive', 'one'], pdfArchiveZip: ['pdfArchive', 'zip'], pdfArchiveMerged: ['pdfArchive', 'merged'], // « PDF/A (archivage) » : une ligne, ZIP, PDF unique
   docx: ['docx', 'one'], docxZip: ['docx', 'zip'],
   xlsx: ['xlsx', 'one'], xlsxZip: ['xlsx', 'zip'], xlsxSingle: ['xlsx', 'workbook'],
   md: ['md', 'one'], mdZip: ['md', 'zip'],
@@ -294,7 +295,7 @@ export async function startExport(page, kind) {
   });
 }
 export const EXPORT_ROWS = {
-  pdfZip: 'pdfZip', pdfMerged: 'pdfMerged', pdfSheets: 'pdfSheets', // « Assemblage avant impression » : la fenêtre de réglage tient lieu de confirmation
+  pdfZip: 'pdfZip', pdfMerged: 'pdfMerged', pdfArchiveZip: 'pdfArchiveZip', pdfArchiveMerged: 'pdfArchiveMerged', pdfSheets: 'pdfSheets', // « Assemblage avant impression » : la fenêtre de réglage tient lieu de confirmation
   docxZip: 'docxZip', xlsxZip: 'xlsxZip', xlsxSingle: 'xlsxSingle', mdZip: 'mdZip', htmlZip: 'htmlZip', htmlFragmentZip: 'htmlFragmentZip',
 };
 export async function exportBatchOf(page, kind, name, { timeout = 900000 } = {}) {

@@ -830,8 +830,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // ce que le banc dev-tests/verify-lazy-engines.mjs ne voit pas d'un coup d'œil : un des fichiers de moteur qui redevient une balise ordinaire (chargé à l'ouverture, comme avant), un nom de moteur
 // écrit de travers dans un export, et un script qui appelle un moteur sans le faire charger (une erreur « PdfExport n'est pas défini » au premier clic, que seul cet export-là montre).
 {
-  const ENGINE_FILES = { pdf: 'pdf-export', sheets: 'sheet-layout', merge: 'pdf-merge', docx: 'docx-export', pptx: 'pptx-export', pptxImport: 'pptx-import', docxImport: 'docx-import', xlsx: 'xlsx-export', xlsxFormat: 'xlsx-number-format', md: 'markdown-export', html: 'html-export' };
-  const ENGINE_GLOBALS = { PdfExport: 'pdf-export', SheetLayout: 'sheet-layout', PdfMerge: 'pdf-merge', DocxExport: 'docx-export', PptxExport: 'pptx-export', PptxImport: 'pptx-import', DocxImport: 'docx-import', XlsxExport: 'xlsx-export', XlsxNumberFormat: 'xlsx-number-format', MarkdownExport: 'markdown-export', HtmlExport: 'html-export' };
+  const ENGINE_FILES = { pdf: 'pdf-export', sheets: 'sheet-layout', merge: 'pdf-merge', archive: 'pdf-archive', docx: 'docx-export', pptx: 'pptx-export', pptxImport: 'pptx-import', docxImport: 'docx-import', xlsx: 'xlsx-export', xlsxFormat: 'xlsx-number-format', md: 'markdown-export', html: 'html-export' };
+  const ENGINE_GLOBALS = { PdfExport: 'pdf-export', SheetLayout: 'sheet-layout', PdfMerge: 'pdf-merge', PdfArchive: 'pdf-archive', DocxExport: 'docx-export', PptxExport: 'pptx-export', PptxImport: 'pptx-import', DocxImport: 'docx-import', XlsxExport: 'xlsx-export', XlsxNumberFormat: 'xlsx-number-format', MarkdownExport: 'markdown-export', HtmlExport: 'html-export' };
   // Les fichiers qui nomment un moteur sans nommer ExportEngines : la fenêtre des planches, que js/main-export.js (onExportBatch) n'ouvre qu'après avoir chargé « sheets ».
   const CALLED_AFTER_ENSURE = ['js/sheet-assembly-dialog.js'];
   const page = read('index.html').replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
