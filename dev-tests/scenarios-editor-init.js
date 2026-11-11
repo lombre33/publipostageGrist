@@ -9,7 +9,7 @@
   // Type (m = marque, n = nœud, e = extension) et nom, dans l'ordre que TipTap leur donne (priorité, puis rang). Une liste ouverte doit voir ↑, ↓ et Tab avant
   // prosemirror-tables : varBadgeSuggestion (« # »), textExpansion (« § »), mentionSuggestion (« @ »), emailPlainText (js/email-plain-text.js) et gridEditor sont de priorité 1000 (« # » dans une case : verify-grid-hash-mouse.mjs).
   const EXTENSIONS = words(`
-    m:link n:paragraph e:calcBadgeKeys e:varBadgeSuggestion e:textExpansion e:mentionSuggestion e:emailPlainText e:gridEditor m:insertion m:deletion e:listItemBranchingDeleteKeymap m:textStyle e:editable
+    m:link n:paragraph e:calcBadgeKeys e:emojiChipKeys e:varBadgeSuggestion e:textExpansion e:mentionSuggestion e:emailPlainText e:gridEditor m:insertion m:deletion e:listItemBranchingDeleteKeymap m:textStyle e:editable
     e:clipboardTextSerializer e:commands e:focusEvents e:keymap e:tabindex e:drop e:paste e:delete e:textDirection e:starterKit m:bold n:blockquote
     n:bulletList m:code n:codeBlock e:dropCursor e:gapCursor n:hardBreak n:heading e:undoRedo n:horizontalRule m:italic n:listItem e:listKeymap
     n:orderedList m:strike n:text m:underline e:trailingNode n:doc e:textAlign e:fontFamily e:fontSize e:textColor e:highlightColor m:superscript m:subscript
@@ -32,7 +32,7 @@
     tiptap__placeholder$ trailingNode$ history$ codeBlockVSCodeHandler$ textDirection$ tiptapPaste$ tiptapDrop$ tabindex$ clearDocument$ focusEvents$
     clipboardTextSerializer$ editable$ tabIndent$ headerFooterEscape$
   `);
-  const PLUGIN_COUNT = 185; // dont deux de l'historique des gestes de la page (js/history-markers.js : le clavier que TipTap pose pour toute extension, et `historyKeepsLinks$`, qui défend à l'extension Link de refaire un lien sur le texte que Ctrl + Z ou Ctrl + Y rend), un de « Texte de droite à gauche » (js/text-direction.js : de même), un de « Paragraphe… » (js/paragraph-format.js : de même), un de « Caractère… » (js/character-format.js : de même), un de « Puce… » (js/bullet-format.js : de même), deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js),
+  const PLUGIN_COUNT = 186; // dont deux de l'historique des gestes de la page (js/history-markers.js : le clavier que TipTap pose pour toute extension, et `historyKeepsLinks$`, qui défend à l'extension Link de refaire un lien sur le texte que Ctrl + Z ou Ctrl + Y rend), un de « Texte de droite à gauche » (js/text-direction.js : de même), un de « Paragraphe… » (js/paragraph-format.js : de même), un de « Caractère… » (js/character-format.js : de même), un de « Puce… » (js/bullet-format.js : de même), deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js), un du clavier de la puce « Smiley » (js/emoji-chip.js : Entrée met le focus dans sa grille),
   // deux du tableau lié (js/linked-table.js : le clavier que TipTap pose pour toute extension, et `linkedTable$`, le garde-fou et le repère), trois des diapositives liées
   // (js/slide-links.js : le clavier de son nœud, celui de son extension et `slideLinks$`, le garde-fou et le repère), deux des copies de diapositive qui suivent leur source dans un document (js/slide-copies.js : le clavier de son extension
   // et `slideCopies$`, le verrou et le trait d'accent), deux des diapositives d'une page de document et de leur source (js/page-copies.js : le clavier de son extension, Retour arrière et Suppr contre le repère d'une page, et `pageCopies$`, le

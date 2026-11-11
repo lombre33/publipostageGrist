@@ -270,6 +270,14 @@ const I18nTextsStatus = {
   'chips.email': { fr: 'Email de l’utilisateur', en: 'User’s email' },
   'chips.name': { fr: 'Nom de l’utilisateur', en: 'User’s name' },
   'chips.rowNumber': { fr: 'N° de ligne', en: 'Row number' },
+  'chips.emoji': { fr: 'Smiley', en: 'Emoji' },
+  // --- La grille de choix d'un smiley (js/emoji-chip.js, js/floating-toolbars.js:createEmojiChipToolbar) ---
+  'emoji.picker.label': { fr: 'Choisir un smiley', en: 'Choose an emoji' },
+  'emoji.group.faces': { fr: 'Visages', en: 'Faces' },
+  'emoji.group.hands': { fr: 'Mains et gestes', en: 'Hands and gestures' },
+  'emoji.group.symbols': { fr: 'Cœurs et symboles', en: 'Hearts and symbols' },
+  'emoji.group.office': { fr: 'Bureau', en: 'Office' },
+  'emoji.group.fun': { fr: 'Fête et voyage', en: 'Party and travel' },
 
   // --- Premier contact : le widget ouvert hors de Grist, un réseau qui bloque une adresse, un démarrage interrompu (js/first-contact.js) ---
   'firstContact.reload': { fr: 'Recharger la page', en: 'Reload the page' },

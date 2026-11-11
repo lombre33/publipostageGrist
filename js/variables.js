@@ -55,6 +55,9 @@ const Variables = (function () {
       // Le rang de la ligne dans une zone répétée par une Boucle (1, 2, 3...), écrit à la Lecture et à l'export (js/loop-rules.js, itemBinding) ; une
       // puce comme la date, mais qui n'a de sens que dans un document : elle n'entre pas dans un champ texte.
       { key: 'N° de ligne', i18nKey: 'chips.rowNumber', kind: 'chip', chipKind: 'rowNumber' },
+      // Un smiley au choix (js/emoji-chip.js), posé avec sa grille de choix ouverte, qu'un clic sur lui rouvre. Un emoji, pas une valeur du moment : il s'écrit tel quel partout, et reste du
+      // document (aucun sens dans un champ texte, où un emoji se tape ou se colle déjà). `aliases` : les deux noms qu'on lui donne, trouvés quelle que soit la langue de l'interface.
+      { key: 'Smiley', i18nKey: 'chips.emoji', kind: 'chip', chipKind: 'emoji', aliases: 'smiley emoji émoji' },
       // Un bloc (js/conditional-text.js), pas une puce en ligne : il entoure le texte sélectionné quand le bouton « Insérer une variable » a ouvert la
       // liste dessus, sinon il se pose vide, curseur dedans.
       { key: 'Texte conditionnel', i18nKey: 'chips.conditionalText', kind: 'chip', chipKind: 'conditionalText' },
@@ -267,7 +270,7 @@ const Variables = (function () {
         if (fieldMode) items = items.filter(v => v.inField);
         else if (Editor.isEditingHeaderFooter()) items = items.filter(v => v.chipKind !== 'footnote');
         const found = nameTest(query);
-        return items.filter(v => found(displayKey(v), displayKey(v)));
+        return items.filter(v => found(displayKey(v) + (v.aliases ? ' ' + v.aliases : ''), displayKey(v)));
       }
       refreshSchemaOnce();
       return fieldMode ? fieldItems(query, editor) : prioritizeTables(matchingVariables(query), currentTables(editor));
@@ -407,6 +410,7 @@ const Variables = (function () {
       conditionalValue: (editor, range) => ConditionalValue.insertFromPanel(editor, range),
       conditionalCheckbox: (editor, range) => ConditionalCheckbox.insertFromPanel(editor, range),
       calc: (editor, range) => VariableCalc.insertFromPanel(editor, range),
+      emoji: (editor, range) => EmojiChip.insertFromPanel(editor, range),
     };
     function insertFootnote(editor, range) {
       const id = 'fn-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);

@@ -325,7 +325,15 @@ async function runTheme(theme, lang) {
   await realClick(page, chipsTab);
   await page.waitForTimeout(150);
   const entries = await page.evaluate(() => Array.from(document.querySelectorAll('#autocomplete-box .ac-item')).map(i => i.textContent.trim()));
-  const entry = await hitByText(page, '#autocomplete-box .ac-item', T.entry);
+  let entry = await hitByText(page, '#autocomplete-box .ac-item', T.entry);
+  // La liste a son propre défilement (hauteur limitée à la place libre autour du curseur) : depuis « Smiley » (onze lignes), la ligne peut être sous le bord visible, la molette posée sur la liste l'amène.
+  for (let wheels = 0; entry.found && !(entry.inViewport && entry.onTop) && wheels < 6; wheels++) {
+    const list = await hitTest(page, '#autocomplete-box .ac-items');
+    await page.mouse.move(list.x, list.y);
+    await page.mouse.wheel(0, 60);
+    await page.waitForTimeout(120);
+    entry = await hitByText(page, '#autocomplete-box .ac-item', T.entry);
+  }
   await shot(page, `${theme}-${lang}-1-liste-chips`);
   check(`${label} - l'entrée « ${T.entry} » est dans l'onglet Chips, juste après « ${T.textEntry} », visible et au premier plan`,
     entry.found && entry.inViewport && entry.onTop && entries.indexOf(T.entry) === entries.indexOf(T.textEntry) + 1 && entries.indexOf(T.entry) > 0, { entry, entries });

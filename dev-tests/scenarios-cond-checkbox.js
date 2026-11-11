@@ -143,8 +143,8 @@
       const view = views()[0];
       const box = view && view.querySelector('.resolved-checkbox');
       const checks = {
-        // « Valeur conditionnelle » (js/conditional-value.js) la précède et « Calcul » (js/variable-calc.js) la suit : dix lignes depuis « Nom de l'utilisateur » (juste après l'email) et « N° de ligne » (juste après lui), la case conditionnelle neuvième.
-        entryIsListed: items.indexOf(I18n.t('chips.conditionalCheckbox')) === 8 && items.length === 10 && items[7] === I18n.t('chips.conditionalValue') && items[9] === I18n.t('chips.calc'),
+        // « Valeur conditionnelle » (js/conditional-value.js) la précède et « Calcul » (js/variable-calc.js) la suit : onze lignes depuis « Nom de l'utilisateur » (juste après l'email), « N° de ligne » (juste après lui) et « Smiley » (js/emoji-chip.js, juste après « N° de ligne »), la case conditionnelle dixième.
+        entryIsListed: items.indexOf(I18n.t('chips.conditionalCheckbox')) === 9 && items.length === 11 && items[8] === I18n.t('chips.conditionalValue') && items[10] === I18n.t('chips.calc'),
         picked,
         oneChipNoHash: nodes.length === 1 && ed().state.doc.textContent === 'Contrat signé ',
         defaults: nodes.length === 1 && nodes[0].node.attrs.style === 'accentPlain' && nodes[0].node.attrs.condition === null,

@@ -1,0 +1,18 @@
+/* Le smiley (js/emoji-chip.js, puce « Smiley ») : dans l'éditeur, un emoji posé sans la pastille verte des autres puces (il n'est pas une valeur calculée : il s'écrit tel quel), qui se
+   laisse montrer au survol et s'entoure quand il est sélectionné - c'est alors que sa grille de choix s'ouvre. Les marques de texte (couleur, surlignage, taille) le suivent comme
+   n'importe quel texte. La Lecture et les exports l'ont déjà remplacé par son texte (js/reader-mode.js:smartChipValue). */
+.tiptap .smart-chip[data-chip-kind="emoji"], .pp-field-editor .smart-chip[data-chip-kind="emoji"] { background: transparent; border-color: transparent; color: inherit; padding: 0 1px; font-size: 1em; line-height: inherit; cursor: pointer; }
+.tiptap .smart-chip[data-chip-kind="emoji"]:hover { background: var(--surface-sunken); }
+.tiptap .smart-chip[data-chip-kind="emoji"].ProseMirror-selectednode { outline: 2px solid var(--accent-soft-border); outline-offset: 1px; background: var(--surface-sunken); }
+
+/* La grille de choix (js/floating-toolbars.js:createEmojiChipToolbar) : le chrome vient de `.v2-floating-toolbar` ; elle défile à partir de 240 px de haut (le panneau de Grist est bas :
+   400 px) et ne dépasse jamais la fenêtre. Huit smileys par rangée, des boutons de la taille d'un bouton de barre. */
+.v2-emoji-toolbar { display: none; flex-direction: column; width: 266px; max-width: calc(100vw - 16px); max-height: min(240px, calc(100vh - 24px)); overflow-y: auto; box-sizing: border-box; }
+.v2-emoji-toolbar.visible { display: flex; }
+.v2-emoji-toolbar .emoji-picker { display: flex; flex-direction: column; gap: 4px; }
+.v2-emoji-toolbar .emoji-group-title { margin: 2px 4px 0; font: 600 11px/1.3 var(--font-ui); color: var(--text-muted, #6b7482); }
+.v2-emoji-toolbar .emoji-cells { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+.v2-emoji-toolbar .emoji-cell { height: 28px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-xs, 4px); background: transparent; font-size: 17px; line-height: 1; cursor: pointer; }
+.v2-emoji-toolbar .emoji-cell:hover { background: var(--surface-sunken); }
+.v2-emoji-toolbar .emoji-cell:focus-visible { outline: 2px solid var(--accent-soft-border); outline-offset: -1px; }
+.v2-emoji-toolbar .emoji-cell[aria-pressed="true"] { background: var(--accent-soft, var(--surface-sunken)); border-color: var(--accent-soft-border); }

@@ -133,7 +133,7 @@ EXTRAS = (
     + [0x202F, 0x205F, 0x2012, 0x2016, 0x2023, 0x2024, 0x2031, 0x2034, 0x2035, 0x2036, 0x2037, 0x203B, 0x203D, 0x203E, 0x2043, 0x2045, 0x2046]
     + [0x2102, 0x2111, 0x2115, 0x2118, 0x211A, 0x211C, 0x211D, 0x2124, 0x2135]
 )
-# Émojis courants d'un document (contact, courrier, calendrier, colis, mains, visages, cœurs...), dessinés en noir et blanc par Noto Emoji.
+# Émojis courants d'un document (contact, courrier, calendrier, colis, mains, visages, cœurs...), dessinés en noir et blanc par Noto Emoji. S'y ajoutent les smileys de la puce « Smiley » (SMILEYS, ci-dessous).
 EMOJIS = (
     '✅❌✨❕❔⏰'
     '😀😁😂😃😄😅😆😇😉😊😋😌😍😎😐😑😒😔😕😘😛😜😞😟😠😡😢😤😥😨😩😪😫😭😮😱😳😴😷🙂🙃🙄🤔🤗🤝🙏'
@@ -143,6 +143,19 @@ EMOJIS = (
     '🚗🚕🚙🚌🚚🚛🚲🚀🚢🏠🏢🏭🏪🏥🏫🏦🏨'
     '🎉🎊🎁🎯🏆🏅🌍🌎🌏🌐🌟🌞🌙🌧🍎🍴🍽🥂'
 )
+
+
+def smileys():
+    """Les smileys offerts par la puce « Smiley » (js/emoji-chip.js : une ligne `emojis: '…'` par thème) : le PDF les dessine tous, aucun ne sort en case vide. Sans sélecteur de variante ni joint : ils ne se dessinent pas."""
+    with open(os.path.join(JS, 'emoji-chip.js'), encoding='utf-8') as f:
+        text = f.read()
+    groups = re.findall(r"i18nKey: '[^']*', emojis: '([^']*)'", text)
+    if not groups:
+        sys.exit('js/emoji-chip.js : aucune ligne `emojis: \'…\'` trouvée (la liste des smileys a changé de forme ?)')
+    return ''.join(c for c in ''.join(groups) if c not in ' \ufe0f\u200d')
+
+
+SMILEYS = smileys()
 # Les émojis ne servent que pour ce qu'aucune police de symboles n'a (la baht ฿ vient de Noto Sans Thai, ℃ et ₿ de Noto Sans...).
 PRIORITY = ['symbols2', 'symbols', 'math', 'sans', 'thai', 'emoji']
 
@@ -156,9 +169,9 @@ def symbols(cache):
     for key in PRIORITY:
         font = TTFont(fetch(key, cache))
         sources[key] = (font, font.getBestCmap(), font.getGlyphSet(), UPM / font['head'].unitsPerEm)
-    wanted = set(cp for a, b in BLOCKS for cp in range(a, b + 1)) | set(EXTRAS) | set(ord(c) for c in EMOJIS)
+    wanted = set(cp for a, b in BLOCKS for cp in range(a, b + 1)) | set(EXTRAS) | set(ord(c) for c in EMOJIS + SMILEYS)
     wanted = sorted(wanted)
-    emoji_only = set(ord(c) for c in EMOJIS)
+    emoji_only = set(ord(c) for c in EMOJIS + SMILEYS)
     order, cmap, glyphs, metrics = ['.notdef'], {}, {'.notdef': TTGlyphPen(None).glyph()}, {'.notdef': (1024, 0)}
     missing = []
     for cp in wanted:

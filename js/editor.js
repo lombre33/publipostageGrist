@@ -432,6 +432,7 @@ const Editor = (function () {
       EditorNodes.createVarBadgeNode(Node, mergeAttributes),
       EditorNodes.createCalcBadgeNode(Node, mergeAttributes),
       EditorNodes.createCalcBadgeKeysExtension(Extension),
+      EmojiChip.createKeysExtension(Extension),
       EditorNodes.createPageNumberBadgeNode(Node, mergeAttributes),
       EditorNodes.createSmartChipNode(Node, mergeAttributes),
       // Tabulation (js/tab-indent.js) : ce que Tab écrit, un nœud en ligne que le HTML relu garde jusqu'en fin de bloc (un caractère de blanc y serait effacé).
@@ -636,6 +637,7 @@ const Editor = (function () {
     FloatingToolbars.wireImageFloatingToolbar();
     FloatingToolbars.wireVariableFloatingToolbar();
     FloatingToolbars.wireTimeChipFloatingToolbar();
+    FloatingToolbars.wireEmojiChipFloatingToolbar();
     FloatingToolbars.wireMentionFloatingToolbar();
     FloatingToolbars.wireCopyFloatingToolbar();
     FloatingToolbars.wireTocFloatingToolbar();

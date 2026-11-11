@@ -14,7 +14,7 @@ const PdfExport = (function () {
     { src: 'js/pdf-fonts-boxes.js?v=0.1' },
     // PPSymbols (dev-tests/build-pdf-fonts-fallback.py) : ✓ → ★ ① ₿ ✅... que ni Roboto ni les cinq autres familles n'ont ; js/pdf-glyph-fallback.js
     // (chargé avec la page) y renvoie ces caractères. ~380 Ko.
-    { src: 'js/pdf-fonts-symbols.js?v=0.1' },
+    { src: 'js/pdf-fonts-symbols.js?v=0.2' },
   ];
   let pdfLibsPromise = null;
   // Séquentiel (pas Promise.all) : pdf-fonts*.js lisent window.pdfMake.vfs à l'exécution, donc s'exécutent après pdfmake.min.js et vfs_fonts.min.js.

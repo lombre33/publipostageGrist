@@ -82,7 +82,12 @@ const FieldEditor = (function () {
           out += EditorNodes.varBadgeHtml(attrs);
           return;
         }
-        if (node.matches('span.smart-chip')) { out += EditorNodes.smartChipHtml(EditorNodes.smartChipAttrsOf(node)); return; }
+        if (node.matches('span.smart-chip')) {
+          // Un smiley du document se colle ici comme le texte qu'il est : un champ n'a ni grille de choix ni de quoi changer une puce « Smiley », et sa valeur s'écrit en texte.
+          const chip = EditorNodes.smartChipAttrsOf(node);
+          out += chip.kind === EmojiChip.KIND ? FieldCodec.escapeText(chip.emoji) : EditorNodes.smartChipHtml(chip);
+          return;
+        }
         const block = BLOCK_TAGS.test(node.tagName);
         if (block) out += lines ? '</p><p>' : ' ';
         walk(node);

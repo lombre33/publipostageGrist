@@ -208,8 +208,8 @@ async function placeChip(page, label, { lang, paragraph, before, entry, measure 
   if (measure) {
     const items = await page.evaluate(() => Array.from(document.querySelectorAll('#autocomplete-box .ac-item')).map(i => i.textContent.trim()));
     const R = ROWS[lang];
-    check(`${label} - dix lignes, « ${R.name} » juste après « ${R.email} » (« ${R.rowNumber} » ensuite), « ${R.calc} » en dernier`,
-      items.length === 10 && items.indexOf(R.name) === items.indexOf(R.email) + 1 && items.indexOf(R.email) === 3 && items[5] === R.rowNumber && items[9] === R.calc && items[0] === R.footnote, items);
+    check(`${label} - onze lignes, « ${R.name} » juste après « ${R.email} » (« ${R.rowNumber} » ensuite), « ${R.calc} » en dernier`,
+      items.length === 11 && items.indexOf(R.name) === items.indexOf(R.email) + 1 && items.indexOf(R.email) === 3 && items[5] === R.rowNumber && items[10] === R.calc && items[0] === R.footnote, items);
     await shot(page, `${lang}-liste-chips`);
     // La liste a son propre défilement (hauteur limitée à la place libre autour du curseur) : « Calcul », la dernière ligne, doit rester atteignable à la molette posée sur elle.
     const reach = async name => {

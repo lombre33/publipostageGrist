@@ -241,8 +241,8 @@ async function runCase({ lang, title }) {
   await realClick(page, chipsTab);
   await page.waitForTimeout(150);
   const items = await page.evaluate(() => Array.from(document.querySelectorAll('#autocomplete-box .ac-item')).map(i => i.textContent.trim()));
-  check(`${label} - dix lignes, « ${R.rowNumber} » juste après « ${R.name} », « ${R.calc} » en dernier`,
-    items.length === 10 && items.indexOf(R.rowNumber) === items.indexOf(R.name) + 1 && items.indexOf(R.rowNumber) === 5 && items[9] === R.calc, items);
+  check(`${label} - onze lignes, « ${R.rowNumber} » juste après « ${R.name} », « ${R.calc} » en dernier`,
+    items.length === 11 && items.indexOf(R.rowNumber) === items.indexOf(R.name) + 1 && items.indexOf(R.rowNumber) === 5 && items[10] === R.calc, items);
   const wanted = await hitByText(page, '#autocomplete-box .ac-item', R.rowNumber);
   check(`${label} - la ligne « ${R.rowNumber} » est entière dans le panneau, au premier plan, texte non rogné`, wanted.found && wanted.inViewport && wanted.onTop && wanted.fits, wanted);
   await shot(page, `${lang}-liste`);

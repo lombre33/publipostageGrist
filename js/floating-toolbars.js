@@ -1627,7 +1627,8 @@ const FloatingToolbars = (function () {
     const DEFAULT_STYLE = 'colon';
     function selectedChip() {
       const node = editor.state.selection.node;
-      return node && node.type.name === 'smartChip' && (!inField || node.attrs.kind === 'time') ? { node, pos: editor.state.selection.from } : null;
+      // Un smiley a sa propre barre (createEmojiChipToolbar : sa grille de choix), jamais celle-ci.
+      return node && node.type.name === 'smartChip' && node.attrs.kind !== EmojiChip.KIND && (!inField || node.attrs.kind === 'time') ? { node, pos: editor.state.selection.from } : null;
     }
     function chipToolbarHtml() {
       const items = VariableFormat.timeChoices().map(t => `<option value="${t.key}">${VariableFormat.timeLabel(t)}</option>`).join('');
@@ -1678,6 +1679,85 @@ const FloatingToolbars = (function () {
     if (extra && extra.windowEl) Layers.above(panel.el, extra.windowEl);
     return panel;
   }
+
+  // La barre flottante d'un smiley (la puce « Smiley », js/emoji-chip.js) sélectionné - par un clic sur lui, ou à son insertion par le menu « # » : la grille des smileys offerts, le sien marqué
+  // (`aria-pressed`). Choisir un autre smiley remplace celui-ci d'un seul geste d'Annuler et remet le curseur derrière lui : la barre se referme. Au clavier, Entrée sur le smiley sélectionné
+  // met le focus dans la grille (EmojiChip.createKeysExtension), les flèches y vont d'un smiley à l'autre, Entrée ou Espace choisit, Échap referme sans rien changer.
+  // Pour le document seulement : un champ texte (Objet, À, Cc...) n'a pas de smiley à changer, un emoji s'y tape ou s'y colle déjà (un smiley collé y devient du texte, js/field-editor.js).
+  function createEmojiChipToolbar(editor) {
+    function selectedChip() {
+      const node = editor.state.selection.node;
+      return node && node.type.name === 'smartChip' && node.attrs.kind === EmojiChip.KIND && editor.isEditable ? { node, pos: editor.state.selection.from } : null;
+    }
+    // Remet le curseur derrière le smiley et rend le focus à l'éditeur : la barre, qui ne se montre que sur un smiley sélectionné, se referme.
+    function leave(chip) { editor.chain().focus().setTextSelection(chip.pos + chip.node.nodeSize).run(); }
+    function onAction(action) {
+      const chip = selectedChip();
+      const emoji = EmojiChip.emojiOfAction(action);
+      if (!chip || !emoji) return;
+      if (emoji !== chip.node.attrs.emoji) EditorCore.patchNodeAndReselect(editor, chip.pos, Object.assign({}, chip.node.attrs, { emoji }));
+      leave(chip);
+    }
+    // Rend visible le smiley en cours dans la grille, qui défile : par les rectangles, jamais `scrollIntoView` (il ferait défiler la page entière).
+    function keepCurrentVisible(panelEl, cell) {
+      const view = panelEl.getBoundingClientRect();
+      const box = cell.getBoundingClientRect();
+      if (box.top < view.top) panelEl.scrollTop -= view.top - box.top + 4;
+      else if (box.bottom > view.bottom) panelEl.scrollTop += box.bottom - view.bottom + 4;
+    }
+    function wire() {
+      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-emoji-toolbar', EmojiChip.pickerHtml(), onAction);
+      EditorCore.registerFloatingPanel(panel);
+      const cells = Array.from(panel.el.querySelectorAll('.emoji-cell'));
+      let marked = null;
+      // Le clavier dans la grille : flèches, Début et Fin déplacent le focus ; Échap referme (le focus revient à l'éditeur). Entrée et Espace sont ceux du bouton lui-même.
+      panel.el.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+          const chip = selectedChip();
+          if (!chip) return;
+          event.preventDefault();
+          leave(chip);
+          return;
+        }
+        const target = EmojiChip.cellAfterKey(cells, event.target.closest('.emoji-cell'), event.key);
+        if (!target) return;
+        event.preventDefault();
+        target.focus();
+        keepCurrentVisible(panel.el, target);
+      });
+      const check = ({ transaction } = {}) => {
+        // Le blur de l'éditeur ne change ni la sélection ni le document : cf. wireImageFloatingToolbar. Il se produit quand le focus passe dans la grille.
+        if (transaction && transaction.getMeta('blur')) return;
+        const chip = selectedChip();
+        if (!chip) { panel.hide(); marked = null; return; }
+        const dom = editor.view.nodeDOM(chip.pos);
+        // Éditeur masqué (Lecture, résumé d'un macro-modèle) : cf. createVariableToolbar.
+        if (!dom || !dom.getClientRects().length) { panel.hide(); marked = null; return; }
+        const opening = !panel.el.classList.contains('visible');
+        // Le plafond de hauteur : la grille se place du côté de la puce où il y a le plus de place (au-dessus par défaut, dessous sinon) et défile ; dans un panneau de Grist bas (400 px)
+        // la puce peut avoir moins de 240 px des deux côtés, et sa grille sortirait alors de la fenêtre, ses premières lignes inatteignables. Son écart à l'ancre (8 px) et sa marge au bord (8 px) en sont retirés.
+        const anchor = dom.getBoundingClientRect();
+        const room = Math.max(anchor.top, document.documentElement.clientHeight - anchor.bottom) - 8 - 8 - 2;
+        panel.el.style.maxHeight = Math.max(112, Math.min(240, Math.floor(room))) + 'px';
+        const current = chip.node.attrs.emoji;
+        if (current !== marked) {
+          cells.forEach(cell => cell.setAttribute('aria-pressed', cell.getAttribute('aria-label') === current ? 'true' : 'false'));
+          marked = current;
+        }
+        panel.show(dom, anchoredBarOptions);
+        if (opening) {
+          const cell = panel.el.querySelector('.emoji-cell[aria-pressed="true"]');
+          panel.el.scrollTop = 0;
+          if (cell) keepCurrentVisible(panel.el, cell);
+        }
+      };
+      editor.on('selectionUpdate', check);
+      editor.on('transaction', check);
+      return panel;
+    }
+    return { wire };
+  }
+  function wireEmojiChipFloatingToolbar() { return createEmojiChipToolbar(editor).wire(); }
 
   // La barre flottante d'une pastille « @ » (js/mention.js) sélectionnée, comme celle d'une bulle de variable : « Autres colonnes de la même fiche », qui ouvre la fenêtre des bulles
   // (js/variable-linked-attrs.js) sur la ligne de la fiche - et non sur celle que la page affiche - pour changer la colonne que la pastille lit ou en citer d'autres à la suite. Grisé, jamais retiré,
@@ -1963,5 +2043,5 @@ const FloatingToolbars = (function () {
     return { wireSuggestionFloatingToolbar };
   })();
 
-  return { setEditor, wireColorPickers, wireTableFloatingToolbar, wireImageFloatingToolbar, wireVariableFloatingToolbar, attachVariableToolbar, wireTimeChipFloatingToolbar, attachTimeChipToolbar, wireMentionFloatingToolbar, wireCopyFloatingToolbar, wireTocFloatingToolbar, variableWindowOpen, wireSuggestionFloatingToolbar };
+  return { setEditor, wireColorPickers, wireTableFloatingToolbar, wireImageFloatingToolbar, wireVariableFloatingToolbar, attachVariableToolbar, wireTimeChipFloatingToolbar, attachTimeChipToolbar, wireEmojiChipFloatingToolbar, wireMentionFloatingToolbar, wireCopyFloatingToolbar, wireTocFloatingToolbar, variableWindowOpen, wireSuggestionFloatingToolbar };
 })();

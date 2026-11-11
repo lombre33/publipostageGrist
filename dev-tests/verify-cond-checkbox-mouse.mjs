@@ -332,8 +332,8 @@ async function placeChip(page, label, entryName) {
   }
   check(`${label} - la ligne « ${entryName} » est dans l'onglet Chips, visible et au premier plan (la molette sur la liste l'amène au besoin)`, entry.found && entry.inViewport && entry.onTop, entry);
   const items = await page.evaluate(() => Array.from(document.querySelectorAll('#autocomplete-box .ac-item')).map(i => i.textContent.trim()));
-  // Dix lignes depuis « Nom de l'utilisateur » (juste après l'email), « N° de ligne » (juste après lui), « Valeur conditionnelle » (js/conditional-value.js) et « Calcul » (js/variable-calc.js) : la case conditionnelle est la neuvième, juste avant « Calcul ».
-  check(`${label} - elle vient après « Texte conditionnel » et « Valeur conditionnelle » : dix lignes, « Calcul » en dernier`, items.length === 10 && items[8] === entryName && /^(Valeur conditionnelle|Conditional value)$/.test(items[7]) && /^(Calcul|Calculation)$/.test(items[9]), items);
+  // Onze lignes depuis « Nom de l'utilisateur » (juste après l'email), « N° de ligne » (juste après lui), « Smiley » (js/emoji-chip.js, juste après « N° de ligne »), « Valeur conditionnelle » (js/conditional-value.js) et « Calcul » (js/variable-calc.js) : la case conditionnelle est la dixième, juste avant « Calcul ».
+  check(`${label} - elle vient après « Texte conditionnel » et « Valeur conditionnelle » : onze lignes, « Calcul » en dernier`, items.length === 11 && items[9] === entryName && /^(Valeur conditionnelle|Conditional value)$/.test(items[8]) && /^(Calcul|Calculation)$/.test(items[10]), items);
   if (entry.found) await realClick(page, entry);
   await page.waitForTimeout(350);
   return entry;

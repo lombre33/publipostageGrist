@@ -188,9 +188,9 @@
         await openChipsTab(h);
         en = panelItems();
       } finally { I18n.setLang(lang); }
-      // Dix lignes : « Nom de l'utilisateur » vient juste après l'email, « N° de ligne » (js/loop-rules.js) juste après lui, puis le bloc ; « Valeur conditionnelle » (js/conditional-value.js) juste après le bloc, « Case conditionnelle » puis « Calcul » ensuite.
-      const pass = fr.length === 10 && fr[6] === 'Texte conditionnel' && fr[7] === 'Valeur conditionnelle' && fr[8] === 'Case conditionnelle' && fr[9] === 'Calcul' && fr.slice(0, 6).join('|') === 'Note de bas de page|Date du jour|Heure actuelle|Email de l’utilisateur|Nom de l’utilisateur|N° de ligne'
-        && en.length === 10 && en[3] === 'User’s email' && en[4] === 'User’s name' && en[5] === 'Row number' && en[6] === 'Conditional text' && en[7] === 'Conditional value' && en[8] === 'Conditional checkbox' && en[9] === 'Calculation';
+      // Onze lignes : « Nom de l'utilisateur » vient juste après l'email, « N° de ligne » (js/loop-rules.js) juste après lui, « Smiley » (js/emoji-chip.js) ensuite, puis le bloc ; « Valeur conditionnelle » (js/conditional-value.js) juste après le bloc, « Case conditionnelle » puis « Calcul » ensuite.
+      const pass = fr.length === 11 && fr[6] === 'Smiley' && fr[7] === 'Texte conditionnel' && fr[8] === 'Valeur conditionnelle' && fr[9] === 'Case conditionnelle' && fr[10] === 'Calcul' && fr.slice(0, 6).join('|') === 'Note de bas de page|Date du jour|Heure actuelle|Email de l’utilisateur|Nom de l’utilisateur|N° de ligne'
+        && en.length === 11 && en[3] === 'User’s email' && en[4] === 'User’s name' && en[5] === 'Row number' && en[6] === 'Emoji' && en[7] === 'Conditional text' && en[8] === 'Conditional value' && en[9] === 'Conditional checkbox' && en[10] === 'Calculation';
       return { pass, notes: JSON.stringify({ fr, en }) };
     },
   });

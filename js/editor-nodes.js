@@ -345,11 +345,12 @@ const EditorNodes = (function () {
       });
     }
 
-    // Chip intelligent (date, heure, email, nom), même schéma que varBadge. Jamais de vraie valeur dans l'éditeur (résolu en Lecture et à l'export, cf.
-    // js/reader-mode.js:resolveSmartChips) ; vert plutôt que bleu pour signaler « valeur calculée, pas une colonne Grist ».
-    const KIND_I18N_KEYS = { date: 'chips.date', time: 'chips.time', email: 'chips.email', name: 'chips.name', rowNumber: 'chips.rowNumber' };
-    // Le libellé d'une puce, dans la langue de l'interface (« Date du jour »).
-    function smartChipLabel(kind) {
+    // Chip intelligent (date, heure, email, nom, n° de ligne, smiley), même schéma que varBadge. Jamais de vraie valeur dans l'éditeur (résolu en Lecture et à l'export, cf.
+    // js/reader-mode.js:resolveSmartChips) ; vert plutôt que bleu pour signaler « valeur calculée, pas une colonne Grist » - sauf le smiley, qui s'écrit tel quel (js/emoji-chip.js).
+    const KIND_I18N_KEYS = { date: 'chips.date', time: 'chips.time', email: 'chips.email', name: 'chips.name', rowNumber: 'chips.rowNumber', emoji: 'chips.emoji' };
+    // Le libellé d'une puce, dans la langue de l'interface (« Date du jour ») ; celui d'un smiley est le smiley lui-même (`attrs.emoji`), sans lui le mot « Smiley ».
+    function smartChipLabel(kind, attrs) {
+      if (kind === EmojiChip.KIND && attrs) return EmojiChip.normalize(attrs.emoji);
       const key = KIND_I18N_KEYS[kind];
       return key ? I18n.t(key) : '?';
     }
@@ -357,22 +358,25 @@ const EditorNodes = (function () {
     // (js/field-codec.js) écrivent la même puce que l'éditeur.
     // `time` : l'écriture de l'heure d'une puce « Heure actuelle » (une clé de VariableFormat.TIME_STYLES, `data-chip-time`) ; absente, la puce écrit l'heure sur 24 heures comme avant ce réglage.
     // Aucune autre puce n'en porte.
+    // `emoji` : le smiley d'une puce « Smiley » (`data-chip-emoji`, js/emoji-chip.js) ; aucune autre puce n'en porte.
     // `condStyle` : la mise en forme selon la ligne (js/conditional-style.js, `data-cond-style`), propre au document : un champ texte ne l'écrit pas.
-    const smartChipAttributes = (kind, time, condStyle) => Object.assign({ class: 'smart-chip', contenteditable: 'false', 'data-chip-kind': kind }, kind === 'time' && time ? { 'data-chip-time': time } : {},
-      condStyle ? { 'data-cond-style': JSON.stringify(condStyle) } : {});
-    // Sans réglage, ni `time` ni `condStyle` ne sont dans le résultat : la forme d'une puce d'avant ces réglages ({ kind }) ne change pas.
+    const smartChipAttributes = (kind, time, condStyle, emoji) => Object.assign({ class: 'smart-chip', contenteditable: 'false', 'data-chip-kind': kind }, kind === 'time' && time ? { 'data-chip-time': time } : {},
+      kind === EmojiChip.KIND ? { 'data-chip-emoji': EmojiChip.normalize(emoji) } : {}, condStyle ? { 'data-cond-style': JSON.stringify(condStyle) } : {});
+    // Sans réglage, ni `time` ni `condStyle` ne sont dans le résultat : la forme d'une puce d'avant ces réglages ({ kind }) ne change pas. Le smiley, lui, porte toujours le sien : un
+    // `data-chip-emoji` absent ou qui n'est pas un emoji (HTML collé, modèle abîmé) donne le smiley d'origine, jamais du texte.
     function smartChipAttrsOf(el) {
       const attrs = { kind: el.getAttribute('data-chip-kind') || 'date' };
       const time = attrs.kind === 'time' && el.getAttribute('data-chip-time');
       if (time) attrs.time = time;
+      if (attrs.kind === EmojiChip.KIND) attrs.emoji = EmojiChip.normalize(el.getAttribute('data-chip-emoji') || el.textContent);
       const condStyle = ConditionalStyle.parse(el.getAttribute('data-cond-style'));
       if (condStyle) attrs.condStyle = condStyle;
       return attrs;
     }
     function smartChipElement(nodeAttrs) {
       const span = document.createElement('span');
-      setAttrs(span, smartChipAttributes(nodeAttrs.kind, nodeAttrs.time, nodeAttrs.condStyle));
-      span.textContent = smartChipLabel(nodeAttrs.kind);
+      setAttrs(span, smartChipAttributes(nodeAttrs.kind, nodeAttrs.time, nodeAttrs.condStyle, nodeAttrs.emoji));
+      span.textContent = smartChipLabel(nodeAttrs.kind, nodeAttrs);
       return span;
     }
     function smartChipHtml(nodeAttrs) {
@@ -382,13 +386,18 @@ const EditorNodes = (function () {
       return inlineAtom(Node, {
         name: 'smartChip',
         addAttributes() {
-          return { kind: internalAttr('date'), time: internalAttr(null), condStyle: internalAttr(null) };
+          return { kind: internalAttr('date'), time: internalAttr(null), emoji: internalAttr(null), condStyle: internalAttr(null) };
         },
         parseHTML() {
           return [{ tag: 'span.smart-chip', getAttrs: smartChipAttrsOf }];
         },
         renderHTML({ node }) {
-          return ['span', mergeAttributes(smartChipAttributes(node.attrs.kind, node.attrs.time, node.attrs.condStyle)), smartChipLabel(node.attrs.kind)];
+          return ['span', mergeAttributes(smartChipAttributes(node.attrs.kind, node.attrs.time, node.attrs.condStyle, node.attrs.emoji)), smartChipLabel(node.attrs.kind, node.attrs)];
+        },
+        // Le texte brut d'une sélection copiée : un smiley s'écrit lui-même (le collage dans un éditeur de texte le garde) ; les autres puces n'ont aucun texte, comme avant. N'entre pas
+        // dans `textContent` du document : seul le texte copié le lit.
+        renderText({ node }) {
+          return node.attrs.kind === EmojiChip.KIND ? EmojiChip.normalize(node.attrs.emoji) : '';
         },
         // Vue de l'éditeur seulement : la même puce, avec la couleur, le surlignage, le souligné et le barré de ses marques (showTextMarks, que
         // css/variable-actions.css montre sous « Mise en forme » de Réglages). Pas de `update` : ProseMirror garde la vue tant que le nœud est
