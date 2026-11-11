@@ -625,6 +625,10 @@
    numéro qu'à l'export et à l'aperçu paginé. */
 .tiptap .page-number-badge, .reader-content .page-number-badge { display: inline-block; background: #e7f7ee; color: #146c43; border: 1px solid #b8e6cc; padding: 0 4px; border-radius: 3px; font-size: .92em; line-height: 1.4; }
 
+/* Le numéro d'une diapositive résolu (js/slides-entry.js:resolveSlideNumbers, `data-slide-number`) n'est plus un espace réservé : la Lecture, le diaporama et l'impression le montrent comme du texte de la diapositive (sa
+   police, sa taille, sa couleur), sans la pastille verte de `.page-number-badge`. */
+.reader-content .page-number-badge[data-slide-number] { display: inline; background: none; border: 0; padding: 0; border-radius: 0; color: inherit; font-size: inherit; line-height: inherit; }
+
 /* Chips intelligents (js/editor.js:createSmartChipNode, createFootnoteRefNode) : même palette verte que `.page-number-badge`, celle de « valeur
    calculée, pas une #Variable ». Le marqueur de note reste sans pastille ni fond (un chiffre vert en exposant). */
 .tiptap .smart-chip, .pp-field-editor .smart-chip, .reader-content .smart-chip { display: inline-block; background: #e7f7ee; color: #146c43; border: 1px solid #b8e6cc; padding: 0 4px; border-radius: 3px; font-size: .92em; line-height: 1.4; }

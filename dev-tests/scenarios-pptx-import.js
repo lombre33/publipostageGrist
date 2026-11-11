@@ -485,6 +485,59 @@
       return result(bad);
     });
 
+  // Le champ de numéro de diapositive : la pastille de numéro de l'éditeur, avec la taille, la couleur et le gras de son champ ; de l'import à la Lecture, chaque diapositive y lit son rang (demande du 11/11 : « un # vert à la place des
+  // numéros de slides, pas résolu en Lecture ni au diaporama »). Les cas de la sortie seule (Lecture, diaporama, PDF, Word) sont dans le groupe slideNumber.
+  const slideNumberField = (rPr = '') => `<a:fld id="{B6F15528-21DE-4FAA-801E-634DDDAF4B2B}" type="slidenum"><a:rPr lang="fr-FR"${rPr}</a:rPr><a:t>‹#›</a:t></a:fld>`;
+  add('pptx_import_slide_number_field_keeps_its_look_and_reads_as_the_slide_number',
+    'Le champ « numéro de diapositive » d\'un PowerPoint devient la pastille de numéro de l\'éditeur AVEC la taille (28 pt), la couleur (blanc) et le gras de son champ, que l\'éditeur garde ; dans la sortie de la présentation (Lecture, diaporama, exports) la pastille de la diapositive 1 lit 1, celle de la 2 lit 2, sans pastille verte, à la taille et à la couleur du champ ; l\'export PowerPoint la réécrit en champ',
+    async (h) => {
+      const sized = ' sz="2800" b="1">' + solid('FFFFFF');
+      const plainField = '>';
+      const r = await run1({
+        slides: [
+          { shapes: textBox(20, 10, 300, 60, para(run('Page ', 'sz="2800"', solid('FFFFFF')) + slideNumberField(sized))) },
+          { shapes: textBox(20, 10, 300, 60, para(run('Suite ') + slideNumberField(plainField))) },
+        ],
+      });
+      const { bad, expect } = checker();
+      const [first, second] = slidesOf(r.html).map(slide => slide.frames[0]);
+      expect('une pastille de numéro par diapositive', first.el.querySelectorAll('.page-number-badge').length === 1 && second.el.querySelectorAll('.page-number-badge').length === 1);
+      const wrapper = first.el.querySelector('.page-number-badge').parentElement;
+      expect('la pastille du champ est dans la série de son champ : 28 pt, blanc, gras', wrapper.tagName === 'SPAN' && /font-size: 28pt/.test(wrapper.getAttribute('style')) && /color: #ffffff/.test(wrapper.getAttribute('style')) && !!wrapper.closest('strong'), first.inner);
+      // L'éditeur garde ce que l'import a posé : la pastille, sous sa taille, sa couleur et son gras.
+      const written = await inEditor(h, r);
+      const inEd = body(written).querySelector('.page-number-badge');
+      const around = inEd ? inEd.parentElement.closest('span[style]') : null;
+      expect('l\'éditeur garde la pastille sous sa taille, sa couleur et son gras', !!around && /font-size: 28pt/.test(around.getAttribute('style') || '') && /color: (#ffffff|rgb\(255, 255, 255\))/.test(around.getAttribute('style') || '') && !!inEd.closest('strong'), written);
+      // La sortie de la présentation : le rang de la diapositive, le style du champ.
+      const out = SlidesEntry.outputHtml('presentation', written, { theme: null });
+      const numbers = Array.from(body(out).querySelectorAll('.page-number-badge')).map(b => b.textContent + '@' + b.getAttribute('data-slide-number'));
+      expect('dans la sortie : 1 puis 2', numbers.join(' ') === '1@1 2@2', numbers);
+      h.setA4Preview(true);
+      const reader = await h.renderReaderMode(out);
+      await sleep(300);
+      const shown = Array.from(reader.querySelectorAll('.page-number-badge'));
+      const css = shown.map(b => getComputedStyle(b));
+      expect('à la Lecture : 1 puis 2, sans pastille verte', shown.map(b => b.textContent).join(' ') === '1 2' && css.every(c => c.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(c.borderTopWidth) === 0), shown.map(b => b.textContent));
+      expect('à la Lecture : le numéro de la 1 est blanc et gras, à 28 pt (37,33 px)', !!css[0] && css[0].color === 'rgb(255, 255, 255)' && css[0].fontSize === '37.3333px' && Number(css[0].fontWeight) >= 600, css[0] && [css[0].color, css[0].fontSize, css[0].fontWeight]);
+      h.setA4Preview(false);
+      document.getElementById('reader-container').style.display = '';
+      document.getElementById('editor-container').style.display = '';
+      // L'export PowerPoint (`keepProps`) en refait un champ, et un aller-retour le redonne.
+      await h.resetEditor();
+      document.getElementById('editor-container').classList.add('a4-preview');
+      PageLayout.setMarginsMm(Object.assign({}, r.page));
+      try {
+        const blob = await PptxExport.fromHtml(SlidesEntry.outputHtml('presentation', written, { keepProps: true, theme: null }), { marginsPt: PageLayout.getMarginsPt(), title: 'Essai' });
+        const back = await PptxImport.fromBuffer(await blob.arrayBuffer());
+        const again = slidesOf(back.html).map(slide => slide.frames.map(f => f.el.querySelectorAll('.page-number-badge').length).join('+'));
+        expect('l\'aller-retour redonne un champ de numéro par diapositive', again.join(' ') === '1 1', again);
+      } finally {
+        PageLayout.setMarginsMm(null);
+      }
+      return result(bad);
+    });
+
   // --- L'interligne et les espaces avant et après (« Paragraphe… », chantier 2 de « Import PowerPoint sans perte ») --------------------------------------------------------------------------
   // Les réglages de chaque paragraphe sous `root`, comme l'éditeur les lit : « Texte[interligne|avant|après] », « - » pour un réglage absent, « ∅ » pour un paragraphe sans texte.
   const settingsOf = root => Array.from(root.querySelectorAll('p')).map((p) => {

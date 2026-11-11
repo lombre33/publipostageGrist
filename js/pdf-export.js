@@ -663,7 +663,9 @@ const PdfExport = (function () {
     ['var-badge', (node, style) => textRuns(node.textContent || '', style)],
     // Contrairement à .var-badge, aucune valeur réelle n'existe avant que pdfmake choisisse le numéro de page final - marqueur résolu plus tard par
     // resolvePageNumberPlaceholders à chaque callback header/footer natif.
-    ['page-number-badge', (node, style) => [{ text: '#', ...style, _pendingPageNumber: { format: node.getAttribute('data-format') || 'n' } }]],
+    // Le numéro d'une diapositive est déjà résolu dans le texte de sortie d'une présentation (js/slides-entry.js:resolveSlideNumbers, `data-slide-number`) : il s'écrit tel quel, ce n'est pas un numéro de page (une diapositive
+    // plus haute que sa page en prend plusieurs) et le corps de la page n'a pas de callback qui le résolve.
+    ['page-number-badge', (node, style) => (node.hasAttribute('data-slide-number') ? textRuns(node.textContent || '', style) : [{ text: '#', ...style, _pendingPageNumber: { format: node.getAttribute('data-format') || 'n' } }])],
     ['smart-chip', (node, style) => textRuns(node.textContent || '', style)],
     ['resolved-checkbox', checkboxRuns],
     ['footnote-ref-marker', footnoteRuns],

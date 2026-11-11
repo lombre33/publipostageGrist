@@ -176,6 +176,7 @@ const SlidesEntry = (function () {
         // Le thème de la présentation : sa police et sa couleur sur le texte et les titres, la même chose qu'à l'écran (css/slide-theme.css).
         if (theme) SlideTheme.forOutputIn(tree, theme);
         markSlideBreaks(tree);
+        resolveSlideNumbers(tree);
         return tree.innerHTML;
       }
     }
@@ -184,7 +185,10 @@ const SlidesEntry = (function () {
     // Le thème de la présentation : sa police et sa couleur sur le texte et les titres, la même chose qu'à l'écran (css/slide-theme.css).
     if (theme) html = SlideTheme.forOutput(html, theme);
     const host = Dom.inertTemplate(html);
-    return markSlideBreaks(host.content) ? host.innerHTML : html;
+    // L'export PowerPoint (`keepProps`) écrit le numéro en vrai champ de numéro de diapositive (js/pptx-export.js) : la pastille lui reste.
+    const marked = markSlideBreaks(host.content);
+    const numbered = !keepProps && resolveSlideNumbers(host.content);
+    return marked || numbered ? host.innerHTML : html;
   }
   // Marque les sauts de page de premier niveau de `root` (un arbre lu : un fragment ou un `body`) comme sauts de diapositive, et ouvre la dernière diapositive sur une ligne ; vrai quand il y en a.
   function markSlideBreaks(root) {
@@ -195,6 +199,30 @@ const SlidesEntry = (function () {
     // Le cadre du fond de la dernière diapositive ne compte pas, ni ceux de son décor : ils se dessinent sans texte à eux, la page doit encore s'ouvrir sur une ligne.
     const written = blocks.filter(block => !block.hasAttribute('data-ff-bg') && !block.hasAttribute(FreeFrame.DECOR_ATTR));
     if (written[written.length - 1].classList.contains('page-break-marker')) root.appendChild(document.createElement('p'));
+    return true;
+  }
+
+  // LE NUMÉRO DE DIAPOSITIVE (11/11, « un # vert à la place des numéros de slides, pas résolu en mode Lecture ni quand on lance le diapo ») : la pastille de numéro de page d'un texte de présentation (celle que le champ de numéro
+  // d'un PowerPoint importé y pose, ou celle que la personne y insère) est un espace réservé, que l'éditeur laisse à « # » comme dans un en-tête ; la Lecture, le diaporama, l'impression et les exports (PDF, Word, HTML) la
+  // lisent ici, dans le texte de sortie, et en écrivent le numéro de la diapositive où elle est posée : 1 plus les sauts de page de premier niveau qui la précèdent (comme FreeFrame.slideStartOf), dans le format de la pastille
+  // (« 3 », « Page 3 », « 3/12 » : PageLayout.pageNumberText, le total est le nombre de diapositives). La pastille reste (même classe : le HTML et le Markdown, où un numéro ne coule pas avec le texte, la retirent toujours) ;
+  // `data-slide-number` dit qu'elle est résolue : la Lecture la montre alors comme du texte de la diapositive, sans pastille verte (css/editor-v2.css), le PDF et le Word en écrivent le texte, non un champ de page (une
+  // diapositive plus haute que sa page en prend plusieurs). Vrai quand une pastille a été résolue.
+  const SLIDE_NUMBER_ATTR = 'data-slide-number';
+  function resolveSlideNumbers(root) {
+    if (!root.querySelector('.page-number-badge')) return false;
+    const blocks = Array.from(root.children);
+    const isBreak = block => block.classList.contains('page-break-marker');
+    const total = blocks.filter(isBreak).length + 1;
+    let rank = 1;
+    blocks.forEach((block) => {
+      if (isBreak(block)) { rank += 1; return; }
+      const badges = block.classList.contains('page-number-badge') ? [block] : Array.from(block.querySelectorAll('.page-number-badge'));
+      badges.forEach((badge) => {
+        badge.textContent = PageLayout.pageNumberText(badge.getAttribute('data-format') || 'n', rank, total);
+        badge.setAttribute(SLIDE_NUMBER_ATTR, String(rank));
+      });
+    });
     return true;
   }
 

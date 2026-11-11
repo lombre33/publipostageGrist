@@ -405,6 +405,8 @@ const DocxExport = (function () {
   function pageNumberRuns(node, style) {
     const format = node.getAttribute('data-format') || 'n';
     const opts = runOpts(style);
+    // Le numéro d'une diapositive est déjà résolu dans le texte de sortie d'une présentation (js/slides-entry.js:resolveSlideNumbers) : le texte même, non un champ de page (une diapositive peut tenir sur plusieurs pages).
+    if (node.hasAttribute('data-slide-number')) return [new docx.TextRun(Object.assign({ text: node.textContent || '' }, opts))];
     const current = new docx.TextRun(Object.assign({ children: [docx.PageNumber.CURRENT] }, opts));
     if (format === 'page-n') return [new docx.TextRun(Object.assign({ text: 'Page ' }, opts)), current];
     if (format === 'n-slash-total') return [current, new docx.TextRun(Object.assign({ text: '/' }, opts)), new docx.TextRun(Object.assign({ children: [docx.PageNumber.TOTAL_PAGES] }, opts))];

@@ -647,6 +647,7 @@ const PptxImport = (function () {
   // `shape` : { env, roots (les conteneurs de styles du moins au plus prioritaire : styles par défaut, masque, espaces réservés, liste de l'objet), fontRef (la couleur de police du style de l'objet), scale (la
   // réduction de taille que PowerPoint a appliquée au texte trop long) }.
   const BADGE = '<span class="page-number-badge" contenteditable="false" data-format="n">#</span>';
+  const FIELD_MARK = '%%SLIDENUM%%';   // la place de la pastille dans la série de caractères que runMarkup écrit pour un champ
   function colorHexOf(el, env) {
     if (!el) return '';
     const color = COLOR_NODES.indexOf(el.localName) >= 0 ? colorOf(el, env) : (fillOfElement(el, env) || {}).color;
@@ -851,7 +852,17 @@ const PptxImport = (function () {
       kids(p).forEach((node) => {
         if (node.localName === 'br') { html += '<br>'; text += '\n'; return; }
         if (node.localName !== 'r' && node.localName !== 'fld') return;
-        if (node.localName === 'fld' && /^slidenum/i.test(attr(node, 'type') || '')) { html += BADGE; text += '#'; return; }
+        if (node.localName === 'fld' && /^slidenum/i.test(attr(node, 'type') || '')) {
+          // Le champ de numéro de diapositive est la pastille de numéro de l'éditeur, que la Lecture, le diaporama et les exports résolvent (js/slides-entry.js:resolveSlideNumbers) ; il garde la taille, la couleur, la
+          // police et le gras de son champ (`rPr`), qui le posent comme le reste du texte (une diapositive au numéro blanc sur un bandeau sombre ne le perd pas).
+          const field = foldRun(defs.concat([kid(node, 'rPr')]));
+          html += runMarkup(FIELD_MARK, field, shape).replace(FIELD_MARK, BADGE);
+          text += '#';
+          tallest = Math.max(tallest, field.sz ? field.sz / 100 : DEFAULT_SIZE_PT);
+          if (!first) first = field;
+          noteRun('#', field, found, env, report);
+          return;
+        }
         const value = (kid(node, 't') || { textContent: '' }).textContent;
         if (!value) return;
         const run = foldRun(defs.concat([kid(node, 'rPr')]));
