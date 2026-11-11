@@ -206,7 +206,7 @@ const MainImport = (function () {
         await placeImportedPresentation(imported, progress, file);
         PerfTrace.mark('import PowerPoint : en place');
         progress.end();
-        await tellPptxImportReport(imported.report);   // la fenêtre du rapport prend le focus et le rend à l'éditeur en se fermant
+        await tellPptxImportReport(imported, file);   // la fenêtre du rapport prend le focus et le rend à l'éditeur en se fermant
         return true;
       } finally {
         progress.end();
@@ -298,12 +298,35 @@ const MainImport = (function () {
       if (Templates.getCurrentId() != null) setStatus(I18n.t('status.pptxImportedSaved', { n: imported.slideCount, name: templateNameInput ? templateNameInput.value : keepName }));
     }
 
-    // Ce que l'import n'a pas repris tel quel, une ligne par genre d'objet ; rien à dire quand tout est arrivé.
-    async function tellPptxImportReport(report) {
+    // Ce que l'import n'a pas repris tel quel, une ligne par genre d'objet ; rien à dire quand tout est arrivé. Chaque ligne se déplie (js/import-report.js) pour dire où (les diapositives, le masque) et quoi (les noms), et
+    // « Copier le détail » met tout en texte, avec les mesures du fichier et le décor de chaque masque et mise en page : de quoi décider quoi reprendre en priorité (11/11, « un moyen d'itérer »).
+    async function tellPptxImportReport(imported, file) {
+      const report = imported && imported.report;
       if (!report || !report.length) return;
-      const lines = report.map(item => '• ' + I18n.t('pptx.import.report.' + item.key, { n: item.n, max: PptxImport.MAX_SLIDES }));
-      await Dialogs.notice({ title: I18n.t('pptx.import.reportTitle'), message: I18n.t('pptx.import.reportIntro') + '\n' + lines.join('\n') });
+      const headline = item => I18n.t('pptx.import.report.' + item.key, { n: item.n, max: PptxImport.MAX_SLIDES });
+      const entries = report.map(item => ({ headline: headline(item), lines: ImportReport.detailLines(item) }));
+      const copied = report.map(item => ({ headline: headline(item), lines: ImportReport.detailLines(item, { slides: ImportReport.SLIDES_COPIED, names: ImportReport.NAMES_COPIED }) }));
+      await ImportReport.show({ title: I18n.t('pptx.import.reportTitle'), intro: I18n.t('pptx.import.reportIntro'), entries, text: pptxReportText(imported, file, copied) });
       refocusEditorIfLost();
+    }
+
+    // Le texte que « Copier le détail » met dans le presse-papiers : l'en-tête (le fichier, ses mesures, celles de la page), chaque ligne du rapport avec son détail, puis le décor du masque et de chaque mise en page.
+    function pptxReportText(imported, file, entries) {
+      const stats = imported.stats;
+      const header = [I18n.t('importReport.text.title')];
+      if (file && file.name) header.push(I18n.t('importReport.text.file', { name: file.name, size: importMegabytes(file.size || 0) }));
+      if (stats) {
+        header.push(I18n.t('importReport.text.facts', { slides: stats.slides, objects: stats.objects, images: stats.images, imageSize: importMegabytes(stats.imageBytes), seconds: Math.round(stats.ms / 100) / 10 }) + (stats.heavy ? ' ; ' + I18n.t('importReport.text.heavy') : ''));
+      }
+      if (typeof PerfTrace !== 'undefined' && PerfTrace.summary) header.push(I18n.t('importReport.text.perf', { summary: PerfTrace.summary('import PowerPoint') }));
+      const footer = [];
+      if (stats && stats.holders && stats.holders.length) {
+        footer.push(I18n.t('importReport.text.decors'));
+        stats.holders.forEach((holder) => {
+          footer.push('- ' + I18n.t('importReport.text.decor', { label: holder.label, objects: holder.objects, summary: holder.summary }) + (holder.skipped ? ' ; ' + I18n.t('importReport.text.skipped', { max: PptxImport.MAX_DECOR_OBJECTS }) : ''));
+        });
+      }
+      return ImportReport.plainText({ header, intro: I18n.t('importReport.text.lost'), entries, footer });
     }
 
     // Import d'un fichier Word (js/docx-import.js), « Importer un Word… » du menu « + », sur le modèle de l'import PowerPoint : le sélecteur s'ouvre dans le clic, le fichier est lu ensuite, et ce n'est qu'après (un fichier

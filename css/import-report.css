@@ -1,0 +1,18 @@
+/* La fenêtre du compte rendu d'un import (js/import-report.js) : une phrase, la liste de ce qui n'a pas été repris (chaque ligne se déplie : où et quoi), le bouton « Copier le détail ». Sur la base commune des fenêtres
+   (css/modal-base.css : titre et boutons fixes, seule la liste défile, le tout tient dans 700x400) ; les couleurs ne viennent que des jetons de css/style.css, donc du thème clair comme du sombre. */
+.pp-import-report-box { --pp-modal-title-gap: 8px; --pp-modal-actions-gap: 12px; }
+.pp-import-report-intro { margin: 0 0 8px; font-size: 12.5px; line-height: 1.5; color: var(--text); overflow-wrap: anywhere; }
+.pp-import-report-intro[hidden] { display: none; }
+.pp-import-report-list { list-style: none; margin: 0; padding: 0; }
+.pp-import-report-item { margin: 0; padding: 5px 0; border-top: 1px solid var(--border); font-size: 12.5px; line-height: 1.45; color: var(--text); }
+.pp-import-report-headline { overflow-wrap: anywhere; }
+.pp-import-report-more > summary { cursor: pointer; border-radius: var(--radius-sm); }
+.pp-import-report-more > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pp-import-report-lines { margin: 4px 0 2px 18px; padding: 6px 8px; border-radius: var(--radius-sm); background: var(--surface-sunken); }
+.pp-import-report-line { margin: 0 0 4px; font-size: 12px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
+.pp-import-report-line:last-child { margin-bottom: 0; }
+.pp-import-report-feedback { min-height: 18px; margin: 8px 0 0; font-size: 12px; line-height: 1.4; color: var(--text-muted); }
+.pp-import-report-text { display: block; box-sizing: border-box; width: 100%; margin: 4px 0 8px; font: 11.5px/1.4 ui-monospace, Consolas, monospace; color: var(--text); background: var(--surface-sunken); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); resize: vertical; }
+.pp-import-report-text[hidden] { display: none; }
+/* Le champ dont la commande de copie lit son texte quand le presse-papiers du navigateur est refusé : hors de l'écran, jamais vu. */
+.pp-import-report-offscreen { position: fixed; left: -9999px; top: 0; width: 1px; height: 1px; opacity: 0; }

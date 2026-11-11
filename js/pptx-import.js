@@ -385,16 +385,90 @@ const PptxImport = (function () {
       || (!!turn && (numAttr(turn, 'lat', 0) !== 0 || numAttr(turn, 'lon', 0) !== 0 || numAttr(turn, 'rev', 0) !== 0));
     return out;
   }
+  // La taille à laquelle un texte a été ramené pour tenir (par tranches de 5 points), pour le détail du rapport : « réduit à 70 % ».
+  const shrunkLabel = scale => I18n.t('importReport.shrunkTo', { pct: Math.max(MIN_FIT_SCALE * 100, Math.round(scale * 20) * 5) });
   // Compte, dans le rapport, ce qu'un objet repris n'a pas gardé : une fois par objet et par genre.
   function tally(report, losses) {
     if (losses) losses.forEach((key) => { report[key] += 1; });
   }
-  // Un rapport à zéro : celui où les essais de réduction d'un texte comptent leurs liens, leurs polices... sans rien ajouter au vrai.
-  function blankReport() {
+  // Un rapport à zéro : celui où les essais de réduction d'un texte comptent leurs liens, leurs polices... sans rien ajouter au vrai. `parent` : le rapport dont il relaie les noms (`note`) - le décor d'un masque se lit
+  // dans un rapport à part (il n'est compté qu'une fois), mais ce qu'il nomme doit arriver au détail du vrai.
+  // `where` (le décor d'un masque, lu une première fois) : chaque ajout se souvient de l'objet en cours (`trail`), pour que le vrai rapport l'inscrive à son nom quand le décor y est versé.
+  function blankReport(parent, where) {
     const out = {};
-    REPORT_KEYS.forEach((key) => { out[key] = 0; });
+    const trail = [];
+    REPORT_KEYS.forEach((key) => {
+      if (!where) { out[key] = 0; return; }
+      let value = 0;
+      Object.defineProperty(out, key, { enumerable: true, get: () => value, set: (next) => { if (next > value) trail.push([key, next - value, where.object]); value = next; } });
+    });
+    if (parent && parent.note) Object.defineProperty(out, 'note', { value: parent.note });
+    Object.defineProperty(out, 'trail', { value: trail });
     return out;
   }
+  // LE DÉTAIL DU RAPPORT (11/11, « un moyen d'itérer pour améliorer la prise en charge » : le compte rendu dit OÙ et QUOI, pas seulement combien). Le vrai rapport est un rapport à zéro dont chaque compteur se souvient de
+  // ce qu'on y ajoute : `where` dit où l'import en est (la diapositive, le masque ou la mise en page qui se lit, l'objet en cours) et chaque ajout s'inscrit à cet endroit, sans que les quarante endroits qui comptent
+  // aient à le dire ; `note(genre, nom, n, texte)` nomme en plus ce qui n'est pas repris (une police, un format d'image, un effet d'animation, une forme) sans toucher au compte. `detailOf(genre)` rend ce qui a été vu :
+  // `places` (les diapositives, puis les masques et mises en page, chacun avec son compte), `objects` (les noms d'objets de PowerPoint) et `labels` (les noms donnés), les plus nombreux d'abord, bornés.
+  const DETAIL_NAMES_MAX = 40;
+  const NV_NODES = ['nvSpPr', 'nvCxnSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr'];
+  const objectNameOf = node => String(attr(kid(kid(node, NV_NODES), 'cNvPr'), 'name') || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  function recordingReport() {
+    const counts = {};
+    const spots = new Map();
+    const where = { slide: 0, holder: '', object: '' };
+    const report = {};
+    const spotOf = (key) => {
+      let spot = spots.get(key);
+      if (!spot) { spot = { slides: new Map(), holders: new Map(), objects: new Map(), labels: new Map(), moreObjects: 0, moreLabels: 0 }; spots.set(key, spot); }
+      return spot;
+    };
+    const bump = (map, name, n, text) => {
+      const seen = map.get(name);
+      if (seen) { seen.n += n; return true; }
+      if (map.size >= DETAIL_NAMES_MAX) return false;
+      map.set(name, { n, text: text || '' });
+      return true;
+    };
+    const see = (key, delta) => {
+      const spot = spotOf(key);
+      if (where.holder) spot.holders.set(where.holder, (spot.holders.get(where.holder) || 0) + delta);
+      else if (where.slide > 0) spot.slides.set(where.slide, (spot.slides.get(where.slide) || 0) + delta);
+      if (where.object && !bump(spot.objects, where.object, delta)) spot.moreObjects += delta;
+    };
+    REPORT_KEYS.forEach((key) => {
+      counts[key] = 0;
+      Object.defineProperty(report, key, {
+        enumerable: true,
+        get: () => counts[key],
+        set: (value) => { const delta = value - counts[key]; counts[key] = value; if (delta > 0) see(key, delta); },
+      });
+    });
+    const ranked = map => Array.from(map, ([name, entry]) => Object.assign({ name, n: entry.n }, entry.text ? { text: entry.text } : {})).sort((a, b) => b.n - a.n);
+    Object.defineProperties(report, {
+      where: { value: where },
+      note: { value: (key, name, n, text) => { const spot = spotOf(key); const count = n === undefined ? 1 : n; if (!bump(spot.labels, name, count, text)) spot.moreLabels += count; } },
+      detailOf: {
+        value: (key) => {
+          const spot = spots.get(key);
+          const out = {};
+          if (!spot) return out;
+          const places = Array.from(spot.slides, ([slide, n]) => ({ slide, n })).sort((a, b) => a.slide - b.slide).concat(Array.from(spot.holders, ([holder, n]) => ({ holder, n })));
+          if (places.length) out.places = places;
+          if (spot.objects.size) out.objects = ranked(spot.objects);
+          if (spot.moreObjects) out.moreObjects = spot.moreObjects;
+          if (spot.labels.size) out.labels = ranked(spot.labels);
+          if (spot.moreLabels) out.moreLabels = spot.moreLabels;
+          return out;
+        },
+      },
+    });
+    return report;
+  }
+  // Nomme ce qui n'est pas repris dans le détail du rapport (rien dans un rapport d'essai : il ne détaille pas).
+  const noteTo = (report, key, name, n, text) => { if (report && report.note && name) report.note(key, name, n, text); };
+  // Où en est l'import : le rapport vrai de la lecture porte `where`.
+  const whereOf = ctx => ctx.realReport.where;
   // Ce que les propriétés d'un objet (`cNvPr`) portent que l'éditeur ne garde pas : un lien (sur une image comme sur une forme) que ni l'image (enveloppée d'un lien) ni le texte de la forme (lié en entier) n'ont pris
   // (`linked`). Le texte alternatif (`descr`) est repris (`alt` du cadre, de l'image).
   function noteObject(node, losses, linked) {
@@ -715,6 +789,7 @@ const PptxImport = (function () {
     if (seen.has(key)) return;
     seen.add(key);
     report.fonts += 1;
+    noteTo(report, 'fonts', faceOf(face, env.theme));
   }
   function noteRun(value, run, found, env, report) {
     if (!value.replace(/\s+/g, '')) return;
@@ -1019,16 +1094,37 @@ const PptxImport = (function () {
     for (let i = nodes.length - 1; i >= 0; i--) if (nodes[i] && nodes[i].hasAttribute(name)) return nodes[i].getAttribute(name);
     return null;
   };
+  // De quoi est fait un décor (le rapport le nomme quand il est trop lourd pour être repris) : des formes libres, des formes, des images, des traits, des textes ; `graphic` : les tableaux et les graphiques, que le
+  // décompte (`n`) ne compte pas ; `biggest` : le plus gros groupe, en objets.
+  const decorKind = (node) => {
+    if (node.localName === 'pic') return 'pic';
+    if (node.localName === 'cxnSp') return 'line';
+    if (kid(kid(node, 'spPr'), 'custGeom')) return 'free';
+    return descendants(kid(node, 'txBody'), 't').some(t => t.textContent.trim()) ? 'text' : 'shape';
+  };
   function countTree(tree, deco) {
     kids(tree).forEach((node) => {
       if (/^(sp|pic|cxnSp)$/.test(node.localName)) {
-        if (!(node.localName === 'sp' && placeholderOf(node))) deco.n += 1;
+        if (!(node.localName === 'sp' && placeholderOf(node))) {
+          deco.n += 1;
+          const kind = decorKind(node);
+          deco.kinds[kind] = (deco.kinds[kind] || 0) + 1;
+        }
       } else if (node.localName === 'grpSp') {
+        const before = deco.n;
         countTree(node, deco);
+        deco.biggest = Math.max(deco.biggest, deco.n - before);
+      } else if (node.localName === 'graphicFrame') {
+        deco.kinds.graphic = (deco.kinds.graphic || 0) + 1;
       }
     });
   }
 
+  // Une image qui n'est pas reprise, comptée et nommée : son fichier dans le paquet et pourquoi (format que le navigateur ne lit pas, partie absente, trop lourde, plafond du total des images).
+  function lostImage(report, path, why, size) {
+    report.images += 1;
+    noteTo(report, 'images', I18n.t('importReport.image.' + why, { name: (String(path || '').split('/').pop() || '?').slice(0, 60), size: size ? megabytes(size) : '' }));
+  }
   // Une image de la présentation en adresse de données, ou null : son format n'est pas lisible, elle est introuvable ou trop lourde (le rapport le dit).
   async function imageData(path, env) {
     const ctx = env.ctx;
@@ -1037,13 +1133,13 @@ const PptxImport = (function () {
     const extension = (path.split('.').pop() || '').toLowerCase();
     let data = null;
     if (UNREADABLE_IMAGES.test(extension) || !IMAGE_TYPES[extension]) {
-      ctx.report.images += 1;
+      lostImage(ctx.report, path, 'format');
     } else if (!ctx.pkg.has(path)) {
-      ctx.report.images += 1;
+      lostImage(ctx.report, path, 'missing');
     } else {
       const size = ctx.pkg.sizeOf(path);
       if (size > MAX_IMAGE_BYTES || ctx.imageBytes + size > MAX_IMAGES_BYTES) {
-        ctx.report.images += 1;
+        lostImage(ctx.report, path, size > MAX_IMAGE_BYTES ? 'heavy' : 'budget', size);
       } else {
         ctx.imageBytes += size;
         data = 'data:' + IMAGE_TYPES[extension] + ';base64,' + await ctx.pkg.base64(path);
@@ -1107,7 +1203,11 @@ const PptxImport = (function () {
     const ctx = env.ctx;
     const light = await lightened(ctx, data);
     if (!light || ctx.decorBytes + light.length > MAX_DECOR_BYTES) {
-      if (!ctx.skipped.has(data)) { ctx.skipped.add(data); ctx.realReport[key] += 1; }
+      if (!ctx.skipped.has(data)) {
+        ctx.skipped.add(data);
+        ctx.realReport[key] += 1;
+        noteTo(ctx.realReport, key, I18n.t(key === 'masterObjects' ? 'importReport.decorImageHeavy' : 'importReport.backgroundHeavy', { size: light ? megabytes(light.length) : '' }));
+      }
       return null;
     }
     ctx.decorBytes += light.length;
@@ -1384,7 +1484,7 @@ const PptxImport = (function () {
     if (kid(nvPr, ['videoFile', 'audioFile', 'wavAudioFile'])) ctx.report.media += 1;
     const box = inPoints(place(xf, groups), ctx.k);
     let data = await pictureData(pic, env, box);
-    if (!data) { if (!env.slideRels.byId.get(relAttr(blip, 'embed'))) ctx.report.images += 1; return; }
+    if (!data) { if (!env.slideRels.byId.get(relAttr(blip, 'embed'))) lostImage(ctx.report, '', 'orphan'); return; }
     if (env.decor) { data = await copiedImage(env, data, 'masterObjects'); if (!data) return; }
     const alpha = numAttr(kid(blip, 'alphaModFix'), 'amt', 100000) / 100000;
     // Les réglages, la forme, la bordure et l'ombre de l'image sont faits dans ses points (finishedPicture) ; l'image d'un décor de masque reste telle quelle.
@@ -1392,7 +1492,7 @@ const PptxImport = (function () {
     // Le poids des images écrites dans le texte a un plafond : une présentation faite de photos lourdes remplirait la mémoire de la page (et la case de Grist) bien avant la fin.
     if (ctx.heavy && !env.decor) {
       const written = (finished ? finished.data : data).length;
-      if (ctx.embedded + written > MAX_EMBEDDED_CHARS) { ctx.report.images += 1; return; }
+      if (ctx.embedded + written > MAX_EMBEDDED_CHARS) { lostImage(ctx.report, '', 'embedded'); return; }
       ctx.embedded += written;
     }
     // Une action du diaporama (suivante, précédente...) ne tient pas dans le lien d'une image du texte : seul le cadre la porte. Une adresse ou une diapositive enveloppe l'image d'un lien, comme « Lien » de l'éditeur.
@@ -1546,7 +1646,7 @@ const PptxImport = (function () {
     const holders = [spPr, context.layoutSp && kid(context.layoutSp, 'spPr'), context.masterSp && kid(context.masterSp, 'spPr')].filter(Boolean);
     const xf = holders.map(xfrmOf).find(Boolean);
     // Un objet sans place nulle part (ni lui, ni sa mise en page, ni son masque) n'a pas où se poser : il n'est pas repris, et s'il porte du texte le rapport le compte (masqué ou non).
-    if (!xf) { if (descendants(kid(sp, 'txBody'), 't').some(t => t.textContent.trim())) ctx.report.unreadable += 1; return; }
+    if (!xf) { if (descendants(kid(sp, 'txBody'), 't').some(t => t.textContent.trim())) { ctx.report.unreadable += 1; noteTo(ctx.report, 'unreadable', I18n.t('importReport.unreadable.noPlace')); } return; }
     const geom = holders.map(h => kid(h, ['prstGeom', 'custGeom'])).find(Boolean);
     const prst = attr(geom, 'prst') || (geom ? 'cust' : 'rect');
     if (LINE_PRESETS.has(prst)) { connectorObject(sp, env, groups, out); return; }
@@ -1595,6 +1695,7 @@ const PptxImport = (function () {
     if (!known && !plainRect) {
       if (prst === 'cust' && !hasFill && !hasText) { ctx.report.freeDrawings += 1; return; }
       ctx.report.shapes += 1;
+      noteTo(ctx.report, 'shapes', prst === 'cust' ? I18n.t('importReport.freeform') : prst);
     }
     if (fill.kind === 'blip') {
       let data = env.decor && ctx.prepared.has(fill.el) ? ctx.prepared.get(fill.el) : undefined;
@@ -1674,7 +1775,7 @@ const PptxImport = (function () {
       const room = fitKindOf(bodies) === 'spAutoFit' ? Math.max(frame.h, env.page.h - frame.y - 1) : frame.h;
       const fitted = fitText(ctx, frame, txBody, shape, room, frame.rot ? Infinity : Math.max(env.page.h - frame.y, 12), items);
       items = fitted.items;
-      if (fitted.scale < shape.scale - 0.001) ctx.report.shrunk += 1;
+      if (fitted.scale < shape.scale - 0.001) { ctx.report.shrunk += 1; noteTo(ctx.report, 'shrunk', shrunkLabel(fitted.scale)); }
       if (plain && !box.rot && fitted.natural < frame.h - 1 && anchor !== 't') {
         frame.y += anchor === 'b' ? frame.h - fitted.natural : (frame.h - fitted.natural) / 2;
         frame.h = fitted.natural;
@@ -1960,6 +2061,7 @@ const PptxImport = (function () {
       html = best.html;
       natural = best.natural;
       ctx.report.shrunk += 1;
+      noteTo(ctx.report, 'shrunk', shrunkLabel(best.scale));
     }
     // Le tableau est un cadre libre à sa place exacte (comme un cadre de texte : ses marges intérieures sont celles de l'éditeur, le tableau est donc reculé d'autant), de la hauteur du tableau tel que l'éditeur le dessinera.
     out.push(FreeFrame.html({ x: box.x - FRAME_PAD_X_PT, y: box.y - FRAME_PAD_Y_PT, w: box.w + 2 * FRAME_PAD_X_PT, h: Math.max(box.h, natural) + 2 * FRAME_PAD_Y_PT, rot: 0, layer: '' }, html));
@@ -1982,18 +2084,34 @@ const PptxImport = (function () {
   }
   async function graphicObject(node, env, groups, out) {
     const report = env.ctx.report;
-    if (env.decor) { report.masterObjects += 1; return; }
     const data = at(node, 'graphic/graphicData');
     const uri = attr(data, 'uri') || '';
+    if (env.decor) {
+      report.masterObjects += 1;
+      noteTo(report, 'masterObjects', I18n.t(/\/table$/.test(uri) ? 'importReport.graphic.table' : (/chart/i.test(uri) ? 'importReport.graphic.chart' : 'importReport.graphic.other')));
+      return;
+    }
+    const ole = kid(data, 'oleObj') || descendants(data, 'oleObj')[0];
     if (/\/table$/.test(uri)) await tableObject(node, env, groups, out);
-    else if (/chart/i.test(uri)) report.charts += 1;
+    else if (/chart/i.test(uri)) { report.charts += 1; noteTo(report, 'charts', await chartKindOf(data, env)); }
     else if (/diagram/i.test(uri)) report.diagrams += 1;
-    else if (/\/ole$/.test(uri) || kid(data, 'oleObj') || descendants(data, 'oleObj').length) report.embedded += 1;
-    else report.unreadable += 1;
+    else if (/\/ole$/.test(uri) || ole) { report.embedded += 1; noteTo(report, 'embedded', attr(ole, 'progId')); }
+    else { report.unreadable += 1; noteTo(report, 'unreadable', I18n.t('importReport.unreadable.graphic', { name: uri.split('/').pop() || '?' })); }
+  }
+  // Le genre d'un graphique de PowerPoint (`barChart`, `pieChart`, `lineChart`…, plusieurs liés par « + » pour un graphique combiné), lu dans sa partie : le détail du rapport le nomme, sans rien changer à ce qui est repris.
+  async function chartKindOf(data, env) {
+    try {
+      const rel = env.slideRels.byId.get(relAttr(descendants(data, 'chart')[0], 'id'));
+      const doc = rel && rel.target ? await env.ctx.pkg.xml(rel.target) : null;
+      const plot = doc ? at(doc.documentElement, 'chart/plotArea') : null;
+      return plot ? kids(plot).map(el => el.localName).filter(name => /Chart$/.test(name)).join('+') : '';
+    } catch (e) {
+      return '';
+    }
   }
   async function groupObject(node, env, groups, depth, out) {
     const xf = xfrmOf(kid(node, 'grpSpPr'));
-    if (!xf || depth >= MAX_DEPTH) { env.ctx.report.unreadable += 1; return; }
+    if (!xf || depth >= MAX_DEPTH) { env.ctx.report.unreadable += 1; noteTo(env.ctx.report, 'unreadable', I18n.t(xf ? 'importReport.unreadable.depth' : 'importReport.unreadable.noPlace', { n: MAX_DEPTH })); return; }
     // Le texte alternatif d'un groupe n'a pas de place dans l'éditeur (ses objets sont repris un à un) : compté.
     if (!env.decor && altOfObject(node)) env.ctx.report.altTexts += 1;
     await walkTree(node, env, [xf].concat(groups), depth + 1, out);
@@ -2005,7 +2123,8 @@ const PptxImport = (function () {
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i];
       await ctx.pace();
-      if (ctx.objects >= MAX_OBJECTS) { ctx.report.unreadable += 1; return; }
+      whereOf(ctx).object = objectNameOf(node);
+      if (ctx.objects >= MAX_OBJECTS) { ctx.report.unreadable += 1; noteTo(ctx.report, 'unreadable', I18n.t('importReport.unreadable.tooMany', { n: MAX_OBJECTS })); return; }
       if (!env.decor && /^(sp|cxnSp|pic|grpSp|graphicFrame)$/.test(node.localName)) ctx.objects += 1;
       const from = out.length;
       // Un objet masqué (volet Sélection) : un objet du décor n'est pas repris (le rapport le dit) ; les autres le sont, masqués (`data-ff-hidden`) - un tableau, qui ne se masque pas, est ôté et compté (hideFrames), un graphique reste compté comme un graphique.
@@ -2030,6 +2149,7 @@ const PptxImport = (function () {
         }
       } catch (e) {
         ctx.report.unreadable += 1;
+        noteTo(ctx.report, 'unreadable', I18n.t('importReport.unreadable.error', { message: String((e && e.message) || e).replace(/\s+/g, ' ').slice(0, 80) }));
       }
       if (hidden) hideFrames(out, from);
       const animated = env.animations && !env.decor && /^(sp|cxnSp|pic|grpSp|graphicFrame)$/.test(node.localName)
@@ -2058,9 +2178,20 @@ const PptxImport = (function () {
     const anim = FrameAnim.normalized({ effect: kind, side, exit, start: ANIM_STARTS[attr(effect, 'nodeType')], dur: spans.length ? Math.max(...spans) : FrameAnim.DURATION.def, delay: Number.isFinite(wait) ? wait : 0 });
     return anim ? { id: attr(targets[0], 'spid'), anim, used: false, slots: [] } : null;
   }
-  // Les animations de la diapositive `root` : { byId (l'identifiant de l'objet -> son animation), lost (celles qu'on ne reprend pas) }.
+  // Le nom d'une animation que l'éditeur ne reprend pas, pour le détail du rapport : sa sorte et son numéro d'effet de PowerPoint (« emphase 6 », « entrée 10 »), et pourquoi quand ce n'est pas l'effet qui manque.
+  const ANIM_CLASSES = ['entr', 'exit', 'emph', 'path', 'verb', 'mediacall'];
+  function animationLabel(effect, main, duplicate) {
+    const cls = attr(effect, 'presetClass') || '';
+    const id = numAttr(effect, 'presetID', -1);
+    let why = '';
+    if (!(main && main.contains(effect))) why = 'trigger';
+    else if (duplicate) why = 'second';
+    else if (descendants(effect, 'spTgt').some(target => kid(target, 'txEl'))) why = 'paragraph';
+    return I18n.t('importReport.animKind.' + (ANIM_CLASSES.indexOf(cls) >= 0 ? cls : 'other')) + ' ' + (id >= 0 ? id : '?') + (why ? ', ' + I18n.t('importReport.animWhy.' + why) : '');
+  }
+  // Les animations de la diapositive `root` : { byId (l'identifiant de l'objet -> son animation), lost (celles qu'on ne reprend pas), lostWhy (leurs noms) }.
   function timingOf(root) {
-    const found = { byId: new Map(), lost: 0 };
+    const found = { byId: new Map(), lost: 0, lostWhy: [] };
     const timing = kid(root, 'timing');
     if (!timing) return found;
     const nodes = descendants(timing, 'cTn');
@@ -2068,7 +2199,7 @@ const PptxImport = (function () {
     let rank = 0;
     nodes.filter(node => ANIM_STARTS[attr(node, 'nodeType') || '']).forEach((effect) => {
       const one = main && main.contains(effect) ? animationOf(effect) : null;
-      if (!one || found.byId.has(one.id)) { found.lost += 1; return; }
+      if (!one || found.byId.has(one.id)) { found.lost += 1; found.lostWhy.push(animationLabel(effect, main, !!one)); return; }
       rank += 1;
       one.rank = rank;
       found.byId.set(one.id, one);
@@ -2097,7 +2228,10 @@ const PptxImport = (function () {
   // Une fois les objets de la diapositive posés : ceux dont la cible n'a pas été reprise sont comptés ; quand l'ordre de la séquence n'est pas celui des cadres, chaque cadre dit sa place (`n`).
   function settleAnimations(out, timing, report) {
     const used = Array.from(timing.byId.values()).filter(one => one.used);
-    report.animations += timing.lost + timing.byId.size - used.length;
+    const unused = timing.byId.size - used.length;
+    report.animations += timing.lost + unused;
+    timing.lostWhy.forEach(label => noteTo(report, 'animations', label));
+    if (unused) noteTo(report, 'animations', I18n.t('importReport.animWhy.target'), unused);
     const placed = used.slice().sort((a, b) => a.slots[0] - b.slots[0]);
     if (placed.every((one, k) => k === 0 || placed[k - 1].rank < one.rank)) return;
     used.forEach((one) => {
@@ -2229,7 +2363,7 @@ const PptxImport = (function () {
     // Le « cut » est un changement sans effet - ce que le diaporama fait sans transition - et ne perd rien ; son passage « par le noir » est un fondu approché.
     if (name === 'cut' && !/^(1|true)$/.test(attr(effect, 'thruBlk') || '')) return advance;
     let kind = TRANSITIONS[name];
-    if (!kind) { kind = 'fade'; report.transitions += 1; }
+    if (!kind) { kind = 'fade'; report.transitions += 1; noteTo(report, 'transitions', name); }
     const written = localAttr(el, 'dur');
     const ms = written === null || written === '' ? NaN : Number(written);
     const dur = Number.isFinite(ms) ? ms : (SPEED_MS[attr(el, 'spd')] || SPEED_MS.med);
@@ -2247,12 +2381,12 @@ const PptxImport = (function () {
     const rels = await ctx.pkg.rels(path);
     const themeRel = rels.ofType('theme')[0];
     const tree = at(root, 'cSld/spTree');
-    const deco = { n: 0 };
+    const deco = { n: 0, kinds: {}, biggest: 0 };
     countTree(tree, deco);
     const master = {
       path, root, rels, theme: readTheme(themeRel && themeRel.target ? await ctx.pkg.xml(themeRel.target) : null), clrMap: clrMapOf(kid(root, 'clrMap'), CLR_MAP_DEFAULT),
       txStyles: { title: at(root, 'txStyles/titleStyle'), body: at(root, 'txStyles/bodyStyle'), other: at(root, 'txStyles/otherStyle') },
-      placeholders: kids(tree, 'sp').filter(placeholderOf), decorations: deco.n,
+      placeholders: kids(tree, 'sp').filter(placeholderOf), decorations: deco.n, kinds: deco.kinds, biggest: deco.biggest,
     };
     ctx.masters.set(path, master);
     return master;
@@ -2265,11 +2399,11 @@ const PptxImport = (function () {
     const masterRel = rels.ofType('slideMaster')[0];
     const master = await loadMaster(masterRel && masterRel.target ? masterRel.target : '', ctx);
     const tree = at(root, 'cSld/spTree');
-    const deco = { n: 0 };
+    const deco = { n: 0, kinds: {}, biggest: 0 };
     countTree(tree, deco);
     const layout = {
       path, root, rels, master, clrOverride: at(root, 'clrMapOvr/overrideClrMapping'),
-      placeholders: kids(tree, 'sp').filter(placeholderOf), decorations: deco.n, showMaster: attr(root, 'showMasterSp') !== '0',
+      placeholders: kids(tree, 'sp').filter(placeholderOf), decorations: deco.n, kinds: deco.kinds, biggest: deco.biggest, showMaster: attr(root, 'showMasterSp') !== '0',
     };
     ctx.layouts.set(path, layout);
     return layout;
@@ -2278,30 +2412,87 @@ const PptxImport = (function () {
   // Le décor d'un masque ou d'une mise en page : ses objets qui ne sont pas des espaces réservés (bandeaux, logo, cartes, textes) sont recopiés DERRIÈRE le texte de chaque diapositive qui les montre, du masque à la mise en page :
   // sans eux une diapositive perd son allure, et un texte clair sur un bandeau devient illisible. Ce que le décor a de non repris (tableaux, graphiques, trop d'objets, images trop lourdes) est compté une seule fois, pas une
   // fois par diapositive.
+  // Le détail du rapport dit de quel masque ou de quelle mise en page vient une perte du décor (`where.holder`) : « Masque », ou « Mise en page « Titre et contenu » ».
+  function holderLabel(holder) {
+    if (!holder.label) {
+      const name = holder.master ? String(attr(at(holder.root, 'cSld'), 'name') || '') : String((holder.theme && holder.theme.name) || '');
+      const shown = name.replace(/\s+/g, ' ').trim().slice(0, 60);
+      holder.label = I18n.t(holder.master ? 'importReport.layout' : 'importReport.master', { name: shown || '?' });
+    }
+    return holder.label;
+  }
   async function decorFrames(holder, env, out) {
     const ctx = env.ctx;
     const tree = at(holder.root, 'cSld/spTree');
     if (!tree) return;
     const first = !ctx.counted.has(holder.path);
     ctx.counted.add(holder.path);
-    if (holder.decorations > MAX_DECOR_OBJECTS) {
-      if (first) ctx.report.masterObjects += holder.decorations;
-      return;
-    }
-    const saved = ctx.report;
-    const scratch = blankReport();
-    ctx.report = scratch;
+    const seen = ctx.holderUse.get(holder.path);
+    if (seen) seen.uses += 1; else ctx.holderUse.set(holder.path, { holder, uses: 1 });
+    const where = whereOf(ctx);
+    where.holder = holderLabel(holder);
+    where.object = '';
     try {
-      await walkTree(tree, Object.assign({}, env, { slideRels: holder.rels, decor: 'behind' }), [], 0, out);
+      if (holder.decorations > MAX_DECOR_OBJECTS) {
+        if (first) ctx.report.masterObjects += holder.decorations;
+        return;
+      }
+      const saved = ctx.report;
+      const scratch = blankReport(first ? saved : null, first ? where : null);
+      ctx.report = scratch;
+      try {
+        await walkTree(tree, Object.assign({}, env, { slideRels: holder.rels, decor: 'behind' }), [], 0, out);
+      } finally {
+        ctx.report = saved;
+      }
+      // Le décor lu une première fois est versé au vrai rapport, objet par objet : le détail dit lequel a perdu quoi.
+      if (first) scratch.trail.forEach(([key, delta, object]) => { where.object = object; saved[key] += delta; });
+      where.object = '';
     } finally {
-      ctx.report = saved;
+      where.holder = '';
+      where.object = '';
     }
-    if (first) REPORT_KEYS.forEach((key) => { saved[key] += scratch[key]; });
+  }
+  // Le décor de chaque masque et mise en page qu'une diapositive a montré, pour le détail du rapport : ses objets par sorte, le plus gros groupe, le poids de ses images, le nombre de diapositives qui le recopient, et si
+  // l'import l'a sauté (plus de MAX_DECOR_OBJECTS objets). Les décors lourds sont aussi NOMMÉS dans la ligne « objets du masque » du rapport.
+  function decorStats(ctx) {
+    const out = [];
+    ctx.holderUse.forEach(({ holder, uses }) => {
+      const graphic = holder.kinds.graphic || 0;
+      if (!holder.decorations && !graphic) return;
+      const images = new Set();
+      descendants(at(holder.root, 'cSld/spTree'), 'blip').forEach((blip) => {
+        const rel = holder.rels.byId.get(relAttr(blip, 'embed'));
+        if (rel && rel.target && ctx.pkg.has(rel.target)) images.add(rel.target);
+      });
+      let imageBytes = 0;
+      images.forEach((path) => { imageBytes += ctx.pkg.sizeOf(path); });
+      const skipped = holder.decorations > MAX_DECOR_OBJECTS;
+      const entry = { label: holderLabel(holder), layout: !!holder.master, objects: holder.decorations, kinds: Object.assign({}, holder.kinds), biggest: holder.biggest, images: images.size, imageBytes, uses, skipped };
+      entry.summary = decorSummary(entry);
+      out.push(entry);
+      if (skipped) noteTo(ctx.realReport, 'masterObjects', entry.label, entry.objects, entry.summary);
+    });
+    return out;
+  }
+  const DECOR_KINDS = ['free', 'shape', 'pic', 'line', 'text', 'graphic'];
+  const megabytes = bytes => (Math.ceil(bytes / 104857.6) / 10).toLocaleString(I18n.getLang());
+  function decorSummary(entry) {
+    const parts = DECOR_KINDS.filter(kind => entry.kinds[kind]).map(kind => I18n.t('importReport.kind.' + kind, { n: entry.kinds[kind] }));
+    const list = [parts.join(', ')];
+    if (entry.biggest > 1) list.push(I18n.t('importReport.biggestGroup', { n: entry.biggest }));
+    if (entry.imageBytes) list.push(I18n.t('importReport.decorImages', { n: entry.images, size: megabytes(entry.imageBytes) }));
+    list.push(I18n.t('importReport.usedBy', { n: entry.uses }));
+    return list.filter(Boolean).join(' ; ');
   }
 
   // --- Une diapositive -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   async function slideHtml(path, ctx, pageBox) {
     ctx.slideNumber = ctx.slideNumbers.get(path) || 0;
+    const where = whereOf(ctx);
+    where.slide = ctx.slideNumber;
+    where.holder = '';
+    where.object = '';
     const doc = await ctx.pkg.xml(path);
     if (!doc) throw fail('unreadable', 'Une diapositive est illisible.');
     const root = doc.documentElement;
@@ -2330,6 +2521,7 @@ const PptxImport = (function () {
       await decorFrames(layout, env, frames);
     }
     await walkTree(at(root, 'cSld/spTree'), env, [], 0, frames);
+    where.object = '';
     settleAnimations(frames, env.animations, ctx.report);
     const bgHex = background.rgb ? toHex(background.rgb) : '';
     const spoken = await notesOf(env);
@@ -2377,14 +2569,21 @@ const PptxImport = (function () {
   // entier, réuni À LA DEMANDE (un petit fichier, les essais) - il n'a plus rien à rendre une fois les diapositives posées. Construit HORS de `fromBuffer` : un accesseur écrit dans la fonction qui a lu le
   // fichier garderait en vie tout son contexte - le paquet dézippé, les 450 documents XML de ses diapositives, le cache de toutes les images - aussi longtemps que le résultat existe (V8 partage un seul
   // contexte entre les fonctions d'une même portée) : 110 000 nœuds et 85 Mo retenus pendant la mise en place et pendant que la personne lit le rapport.
-  function importResult(texts, page, report) {
-    return {
+  function importResult(texts, page, report, stats) {
+    const result = {
       get html() { return texts.join(PAGE_BREAK); },
       slideTexts: texts, page, slideCount: texts.length, report,
     };
+    // Les mesures ne sont pas énumérables : la durée de la lecture change à chaque fois, et un essai qui compare le résultat d'un même fichier (JSON.stringify : dev-tests/ooxml-import-recorder.js) ne doit pas la voir.
+    Object.defineProperty(result, 'stats', { value: stats });
+    return result;
   }
-  // Le texte d'une présentation d'après le contenu d'un fichier .pptx : { html, slideTexts, page: { orientation, format, theme }, slideCount, report: [{ key, n }] } ; `theme` : celui du fichier (themeOf), absent sans thème lisible.
+  // Le texte d'une présentation d'après le contenu d'un fichier .pptx : { html, slideTexts, page: { orientation, format, theme }, slideCount, report, stats } ; `theme` : celui du fichier (themeOf), absent sans thème lisible.
+  // `report` : une ligne par genre non repris, { key, n } et, quand le fichier dit où, `places` (les diapositives, puis les masques et mises en page, chacun avec son compte), `objects` (les noms des objets de PowerPoint),
+  // `labels` (ce que l'import nomme : polices, formats d'image, effets d'animation, formes...) et ce qui dépasse leur borne (`moreObjects`, `moreLabels`) : le détail de la fenêtre du compte rendu (js/import-report.js).
+  // `stats` : les mesures du fichier (poids, diapositives, objets, images, décor de chaque masque et mise en page, durée de la lecture), pour le texte que la fenêtre copie.
   async function fromBuffer(buffer, options) {
+    const startedAt = performance.now();
     if (!buffer || buffer.byteLength > MAX_FILE_BYTES) throw fail('tooBig', 'Ce fichier est trop gros pour être importé.', { size: buffer ? buffer.byteLength : 0, max: MAX_FILE_BYTES });
     const pkg = await openPackage(buffer);
     const rootRels = await pkg.xml('_rels/.rels');
@@ -2398,7 +2597,7 @@ const PptxImport = (function () {
     if (!paths.length) throw fail('empty', 'Cette présentation n’a aucune diapositive.');
     const size = kid(presentation, 'sldSz');
     const page = pageFor(Math.max(numAttr(size, 'cx', 12192000), 1), Math.max(numAttr(size, 'cy', 6858000), 1));
-    const report = blankReport();
+    const report = recordingReport();
     // Les sections de la bande des diapositives (`p14:sectionLst`) : le nom de chacune devient celui de la section que sa première diapositive ouvre (slideHtml ; SlideProps.SECTION_MAX caractères au plus) ;
     // celle qui n'a aucune diapositive reprise est comptée.
     const idPaths = new Map(kids(kid(presentation, 'sldIdLst'), 'sldId').map(el => [attr(el, 'id'), (presentationRels.byId.get(relAttr(el, 'id')) || {}).target]));
@@ -2412,7 +2611,7 @@ const PptxImport = (function () {
       });
     });
     const ctx = {
-      pkg, k: page.k, report, realReport: report, images: new Map(), imageBytes: 0, decorBytes: 0, prepared: new Map(), skipped: new Set(), objects: 0, masters: new Map(), layouts: new Map(), counted: new Set(),
+      pkg, k: page.k, report, realReport: report, images: new Map(), imageBytes: 0, decorBytes: 0, prepared: new Map(), skipped: new Set(), objects: 0, masters: new Map(), layouts: new Map(), counted: new Set(), holderUse: new Map(),
       defaultText: kid(presentation, 'defaultTextStyle'), presentationRels, pace: pacer(), embedded: 0, heavy: buffer.byteLength >= HEAVY_FILE_BYTES,
     };
     const onProgress = options && typeof options.onProgress === 'function' ? options.onProgress : null;
@@ -2461,10 +2660,14 @@ const PptxImport = (function () {
     }
     // Le thème du fichier (couleurs, polices, fond) devient celui de la présentation : il se change d'un coup (« Thème… » du menu Page). Les couleurs d'un texte qui sont celles du thème le suivent ; une police posée
     // sur une série de caractères reste celle du fichier. Un fichier sans thème lisible n'en a pas (la présentation d'avant).
+    const stats = {
+      fileBytes: buffer.byteLength, slides: texts.length, objects: ctx.objects, heavy: ctx.heavy, images: Array.from(ctx.images.values()).filter(Boolean).length, imageBytes: ctx.imageBytes, decorBytes: ctx.decorBytes,
+      holders: decorStats(ctx), ms: Math.round(performance.now() - startedAt),
+    };
     const said = REPORT_KEYS.filter(key => report[key] > 0);
     const imported = { orientation: page.orientation, format: page.format };
     if (ctx.theme) imported.theme = ctx.theme;
-    return importResult(texts, imported, said.map(key => ({ key, n: report[key] })));
+    return importResult(texts, imported, said.map(key => Object.assign({ key, n: report[key] }, report.detailOf(key))), stats);
   }
   async function fromFile(file, options) {
     if (!file || file.size > MAX_FILE_BYTES) throw fail('tooBig', 'Ce fichier est trop gros pour être importé.', { size: file ? file.size : 0, max: MAX_FILE_BYTES });
@@ -2477,5 +2680,5 @@ const PptxImport = (function () {
     return fromBuffer(buffer, options);
   }
 
-  return { fromFile, fromBuffer, MAX_FILE_BYTES, MAX_UNPACKED_BYTES, MAX_SLIDES, HEAVY_FILE_BYTES, REPORT_KEYS };
+  return { fromFile, fromBuffer, MAX_FILE_BYTES, MAX_UNPACKED_BYTES, MAX_SLIDES, MAX_DECOR_OBJECTS, HEAVY_FILE_BYTES, REPORT_KEYS };
 })();

@@ -51,6 +51,8 @@ const TEXTS = {
       '2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '1 objet dont la liste de tirets est trop longue ou illisible (son trait est dessiné plein)'],
     manyFirst: '3 animations d’objets non reprises', manyLast: '1 objet illisible non repris', lostLast: '3 objets illisibles non repris',
     lostSamples: ['2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '1 section de diapositives non reprise (aucune de ses diapositives n’est importée)', '2 textes verticaux écrits à l’horizontale'],
+    copy: 'Copier le détail', copied: 'Détail copié', copyTitle: 'Compte rendu d’import PowerPoint (Publipostage+)',
+    animLines: ['Diapositive : 1 (×2)'], fontLines: ['Diapositive : 1 (×2)', 'Objets : Zone de texte; Dégradé', 'Détail : Comic Sans MS; Verdana'], lastLines: ['Diapositive : 1', 'Objet : Objet inconnu', 'Détail : objet graphique inconnu (inconnu)'],
     offTitle: 'Cette fonction demande Grist Factory Suite', offMessage: /Diapositives/,
   },
   en: {
@@ -66,6 +68,8 @@ const TEXTS = {
       '2 fonts missing from the editor, replaced by the nearest available', '1 object with a dash list too long or unreadable (its line drawn solid)'],
     manyFirst: '3 object animations not imported', manyLast: '1 unreadable object not imported', lostLast: '3 unreadable objects not imported',
     lostSamples: ['2 fonts missing from the editor, replaced by the nearest available', '1 slide section not imported (none of its slides is imported)', '2 vertical texts written horizontally'],
+    copy: 'Copy the detail', copied: 'Detail copied', copyTitle: 'PowerPoint import report (Publipostage+)',
+    animLines: ['Slide: 1 (×2)'], fontLines: ['Slide: 1 (×2)', 'Objects: Zone de texte; Dégradé', 'Detail: Comic Sans MS; Verdana'], lastLines: ['Slide: 1', 'Object: Objet inconnu', 'Detail: unknown graphic object (inconnu)'],
     offTitle: 'This feature needs Grist Factory Suite', offMessage: /Slides/,
   },
 };
@@ -178,6 +182,8 @@ const statusOf = page => page.evaluate(() => {
 });
 // La fenêtre ouverte (Dialogs : question « Modifications non enregistrées », fenêtre du rapport, explication d'une extension absente) : titre, message, boutons, place, défilement du message.
 const dialogState = page => page.evaluate(() => {
+  const report = document.getElementById('pp-import-report-modal');
+  if (report && getComputedStyle(report).display !== 'none') return { shown: true, title: '(fenêtre du compte rendu)', message: '', buttons: [] };   // les contrôles « aucune fenêtre » voient aussi celle-là
   const ov = document.getElementById('pp-dialog-modal');
   const shown = !!ov && getComputedStyle(ov).display !== 'none';
   if (!shown) return { shown: false, title: '', message: '', buttons: [] };
@@ -196,11 +202,57 @@ const dialogState = page => page.evaluate(() => {
     focusOn: document.activeElement ? document.activeElement.textContent.trim().slice(0, 30) : '',
   };
 });
-// Un bouton de la fenêtre ouverte par son texte, au vrai clic (atteignable, dans le panneau).
+// La fenêtre du compte rendu (js/import-report.js) : titre, phrase, une ligne par genre (chacune se déplie : son détail), boutons, place, défilement du contenu, ce qui a le focus.
+const reportState = page => page.evaluate(() => {
+  const ov = document.getElementById('pp-import-report-modal');
+  const shown = !!ov && getComputedStyle(ov).display !== 'none';
+  if (!shown) return { shown: false, headlines: [], buttons: [], lines: [], open: [] };
+  const rect = el => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; };
+  const inPanel = r => r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight;
+  const body = ov.querySelector('.pp-modal-body');
+  const title = ov.querySelector('#pp-import-report-title');
+  const buttons = Array.from(ov.querySelectorAll('.var-modal-actions button')).filter(b => !b.hidden && b.getClientRects().length);
+  const items = Array.from(ov.querySelectorAll('.pp-import-report-item'));
+  const feedback = ov.querySelector('.pp-import-report-feedback');
+  return {
+    shown, title: title.textContent, intro: ov.querySelector('.pp-import-report-intro').textContent,
+    headlines: items.map(li => li.querySelector('.pp-import-report-headline').textContent),
+    open: items.map(li => { const d = li.querySelector('details'); return !!d && d.open; }),
+    lines: items.map(li => Array.from(li.querySelectorAll('.pp-import-report-line')).map(p => p.textContent)),
+    buttons: buttons.map(b => b.textContent.trim()),
+    box: rect(ov.querySelector('.pp-modal-box')), boxInPanel: inPanel(rect(ov.querySelector('.pp-modal-box'))), titleInPanel: inPanel(rect(title)), buttonsInPanel: buttons.every(b => inPanel(rect(b))),
+    scrolls: body.scrollHeight > body.clientHeight + 1, scrollTop: body.scrollTop, scrollMax: body.scrollHeight - body.clientHeight,
+    feedback: feedback ? feedback.textContent : '', focusOn: document.activeElement ? document.activeElement.textContent.trim().slice(0, 30) : '',
+  };
+});
+// Une ligne du compte rendu, dépliée ou repliée au VRAI clic sur son titre (atteignable, dans la fenêtre) ; rend où il a cliqué.
+async function clickReportRow(page, index) {
+  const target = await page.evaluate((i) => {
+    const summary = document.querySelectorAll('#pp-import-report-modal .pp-import-report-item')[i].querySelector('summary');
+    if (!summary) return null;
+    summary.scrollIntoView({ block: 'nearest' });
+    const r = summary.getBoundingClientRect();
+    const body = document.querySelector('#pp-import-report-modal .pp-modal-body').getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + 12, r.top + r.height / 2);
+    return { x: r.left + 12, y: r.top + r.height / 2, reachable: !!top && summary.contains(top), inBody: r.top >= body.top - 1 && r.bottom <= body.bottom + 1 };
+  }, index);
+  if (!target) return null;
+  await page.mouse.move(target.x - 6, target.y, { steps: 2 });
+  await page.mouse.click(target.x, target.y);
+  await sleep(250);
+  return target;
+}
+// Les lignes de détail d'une ligne du compte rendu : toutes à l'écran, dans la fenêtre, sans que rien les recouvre.
+const linesInView = (page, index) => page.evaluate((i) => {
+  const body = document.querySelector('#pp-import-report-modal .pp-modal-body').getBoundingClientRect();
+  const lines = Array.from(document.querySelectorAll('#pp-import-report-modal .pp-import-report-item')[i].querySelectorAll('.pp-import-report-line'));
+  return { count: lines.length, inside: lines.every((line) => { const r = line.getBoundingClientRect(); const top = document.elementFromPoint(r.left + 6, r.top + r.height / 2); return r.width > 0 && r.top >= body.top - 1 && r.bottom <= body.bottom + 1 && !!top && line.contains(top); }) };
+}, index);
+// Un bouton de la fenêtre ouverte (la question, l'explication d'une extension absente ou le compte rendu) par son texte, au vrai clic (atteignable, dans le panneau).
 async function clickDialogButton(page, text) {
   const target = await page.evaluate(label => {
-    const ov = document.getElementById('pp-dialog-modal');
-    if (!ov || getComputedStyle(ov).display === 'none') return null;
+    const ov = ['pp-import-report-modal', 'pp-dialog-modal'].map(id => document.getElementById(id)).find(o => o && getComputedStyle(o).display !== 'none');
+    if (!ov) return null;
     const button = Array.from(ov.querySelectorAll('.var-modal-actions button')).filter(b => !b.hidden && b.getClientRects().length).find(b => b.textContent.trim() === label);
     if (!button) return null;
     const r = button.getBoundingClientRect();
@@ -247,8 +299,8 @@ async function pickFile(page, file) {
 const settle = async (page, pattern) => {
   await page.waitForFunction(source => {
     const text = document.getElementById('status-msg').textContent;
-    const ov = document.getElementById('pp-dialog-modal');
-    return new RegExp(source).test(text) || (!!ov && getComputedStyle(ov).display !== 'none');
+    const open = ['pp-import-report-modal', 'pp-dialog-modal'].some((id) => { const ov = document.getElementById(id); return !!ov && getComputedStyle(ov).display !== 'none'; });
+    return new RegExp(source).test(text) || open;
   }, pattern.source, { timeout: 30000 }).catch(() => {});
   await sleep(600);
 };
@@ -385,87 +437,118 @@ async function run(lang, scheme) {
     check(tag + `« ${T.discard} » est atteignable à la souris dans le panneau`, !!discarded && discarded.reachable && discarded.inPanel, discarded);
     await settle(page, T.importedPattern);
     await sleep(400);
-    const told = await dialogState(page);
+    const told = await reportState(page);
     check(tag + `« ${T.discard} » : la présentation du fichier remplace le premier document (deux miniatures) et le coin d'état le dit`, (await snapshot(page)).slides === 2 && (await statusOf(page)).text === T.imported(2), { slides: (await snapshot(page)).slides, status: (await statusOf(page)).text });
-    const lines = told.message.split('\n');
-    check(tag + `la fenêtre du rapport s'ouvre APRÈS la question, titrée « ${T.reportTitle} », avec sa phrase d'introduction`, told.shown && told.title === T.reportTitle && lines[0] === T.reportIntro, { title: told.title, intro: lines[0] });
-    check(tag + 'elle dit chaque genre non repris, un par ligne, dans l\'ordre (animations, graphique, dégradé), au singulier ou au pluriel',
-      JSON.stringify(lines.slice(1)) === JSON.stringify(T.report.map(line => '• ' + line)), lines.slice(1));
-    check(tag + 'elle n\'a qu\'un bouton, « ' + T.close + ' », entière dans le panneau, avec le focus dessus', told.buttons.length === 1 && told.buttons[0] === T.close && told.boxInPanel && told.buttonsInPanel && told.focusOn === T.close, told);
-    const titleContrast = await contrastOf(page, '#pp-dialog-modal #pp-dialog-title');
-    const messageContrast = await contrastOf(page, '#pp-dialog-modal .pp-dialog-message');
-    check(tag + 'le titre et le texte de la fenêtre du rapport tiennent les contrastes de la charte (>= 4,5:1)', titleContrast >= 4.5 && messageContrast >= 4.5, { titleContrast, messageContrast });
+    check(tag + `la fenêtre du rapport s'ouvre APRÈS la question, titrée « ${T.reportTitle} », avec sa phrase d'introduction`, told.shown && told.title === T.reportTitle && told.intro === T.reportIntro, { title: told.title, intro: told.intro });
+    check(tag + 'elle dit chaque genre non repris, un par ligne, dans l\'ordre (animations, graphique, dégradé), au singulier ou au pluriel, chaque ligne repliée', JSON.stringify(told.headlines) === JSON.stringify(T.report) && told.open.every(open => !open), { headlines: told.headlines, open: told.open });
+    check(tag + `elle a deux boutons, « ${T.copy} » et « ${T.close} », entière dans le panneau, avec le focus sur « ${T.close} »`, JSON.stringify(told.buttons) === JSON.stringify([T.copy, T.close]) && told.boxInPanel && told.titleInPanel && told.buttonsInPanel && told.focusOn === T.close, told);
+    const titleContrast = await contrastOf(page, '#pp-import-report-modal #pp-import-report-title');
+    const headlineContrast = await contrastOf(page, '#pp-import-report-modal .pp-import-report-headline');
+    const introContrast = await contrastOf(page, '#pp-import-report-modal .pp-import-report-intro');
+    check(tag + 'le titre, la phrase et les lignes de la fenêtre du rapport tiennent les contrastes de la charte (>= 4,5:1)', titleContrast >= 4.5 && headlineContrast >= 4.5 && introContrast >= 4.5, { titleContrast, headlineContrast, introContrast });
     await snap('report');
+
+    // Le détail d'une ligne : un vrai clic sur son titre la déplie (OÙ : la diapositive ; QUOI : les objets, les noms) ; un second la replie.
+    const opening = await clickReportRow(page, 0);
+    const opened = await reportState(page);
+    const openedView = await linesInView(page, 0);
+    check(tag + 'un vrai clic sur la première ligne (animations) est atteignable et la déplie : sa diapositive, entière dans la fenêtre, rien ne la recouvre', !!opening && opening.reachable && opening.inBody && opened.open[0] === true && opened.lines[0][0] === T.animLines[0] && openedView.count === opened.lines[0].length && openedView.inside, { opening, open: opened.open, lines: opened.lines[0], view: openedView });
+    await clickReportRow(page, 0);
+    const folded = await reportState(page);
+    check(tag + 'un second clic la replie', folded.open[0] === false && folded.boxInPanel && folded.buttonsInPanel, { open: folded.open });
+    const fontsRow = T.report.length - 2;
+    await clickReportRow(page, fontsRow);
+    const fonts = await reportState(page);
+    const fontsView = await linesInView(page, fontsRow);
+    check(tag + 'la ligne des polices dit où (diapositive 1), quels objets et quelles polices (Comic Sans MS, Verdana), à l\'écran', fonts.open[fontsRow] === true && JSON.stringify(fonts.lines[fontsRow]) === JSON.stringify(T.fontLines) && fontsView.inside && fonts.boxInPanel && fonts.titleInPanel && fonts.buttonsInPanel, { lines: fonts.lines[fontsRow], view: fontsView });
+    const lineContrast = await contrastOf(page, '#pp-import-report-modal .pp-import-report-line');
+    check(tag + 'les lignes du détail tiennent les contrastes de la charte (>= 4,5:1)', lineContrast >= 4.5, lineContrast);
+    await snap('report-detail');
+
+    // « Copier le détail » : un vrai clic met le texte dans le vrai presse-papiers (fichier, mesures, chaque ligne et son détail en retrait) et le dit ; la fenêtre reste ouverte.
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    const copying = await clickDialogButton(page, T.copy);
+    const pasted = await page.evaluate(() => navigator.clipboard.readText()).catch(e => 'ERREUR ' + e.message);
+    const copied = await reportState(page);
+    const pastedLines = String(pasted).split('\n');
+    check(tag + `« ${T.copy} » est atteignable à la souris dans le panneau, dit « ${T.copied} », et la fenêtre reste ouverte`, !!copying && copying.reachable && copying.inPanel && copied.shown && copied.feedback === T.copied, { copying, feedback: copied.feedback });
+    check(tag + 'le presse-papiers a le texte : le titre, le fichier (resultats.pptx), puis chaque ligne en « • » avec son détail en retrait', pastedLines[0] === T.copyTitle && /resultats\.pptx/.test(pastedLines[1]) && T.report.every(line => pastedLines.includes('• ' + line)) && T.fontLines.every(line => pastedLines.includes('    ' + line)) && T.animLines.every(line => pastedLines.includes('    ' + line)), pastedLines.slice(0, 14));
+    await snap('report-copied');
     const closed = await clickDialogButton(page, T.close);
     check(tag + `« ${T.close} » est atteignable à la souris dans le panneau`, !!closed && closed.reachable && closed.inPanel, closed);
-    const afterClose = await page.evaluate(() => ({ editorFocused: !!document.activeElement && !!document.activeElement.closest('.tiptap'), open: getComputedStyle(document.getElementById('pp-dialog-modal')).display !== 'none' }));
+    const afterClose = await page.evaluate(() => ({ editorFocused: !!document.activeElement && !!document.activeElement.closest('.tiptap'), open: ['pp-import-report-modal', 'pp-dialog-modal'].some((id) => { const ov = document.getElementById(id); return !!ov && getComputedStyle(ov).display !== 'none'; }) }));
     check(tag + 'la fenêtre se ferme et rend la main à l\'éditeur (le curseur est dans le texte)', !afterClose.open && afterClose.editorFocused, afterClose);
     const reported = await snapshot(page);
     check(tag + 'rien d\'autre n\'a bougé : le texte du fichier est là, deux miniatures, des cadres', /Résultats/.test(reported.text) && reported.slides === 2 && reported.frames >= 4, { slides: reported.slides, frames: reported.frames });
 
-    // Une longue fenêtre : à la molette, le texte défile jusqu'à sa dernière ligne, vue en entier dans la fenêtre, titre et bouton toujours là.
-    const wheelToTheEnd = async (dialog, lastLine, shot) => {
-      if (!dialog.scrolls) return;
+    // Une longue fenêtre : à la molette, la liste défile jusqu'à sa dernière ligne, vue en entière dans la fenêtre, titre et boutons toujours là.
+    const wheelToTheEnd = async (report, lastHeadline, shot) => {
+      if (!report.scrolls) return;
       await page.mouse.move(WIDTH / 2, HEIGHT / 2);
       await page.mouse.wheel(0, 8000);
       await sleep(400);
-      const end = await dialogState(page);
+      const end = await reportState(page);
       const lastVisible = await page.evaluate((line) => {
-        const message = document.querySelector('#pp-dialog-modal .pp-dialog-message');
-        const range = document.createRange();
-        const node = message.firstChild;
-        const text = node.textContent;
-        const at = text.lastIndexOf(line);
-        range.setStart(node, at);
-        range.setEnd(node, at + line.length);
-        const r = range.getBoundingClientRect();
-        const ov = document.querySelector('#pp-dialog-modal .pp-dialog-box');
-        const box = ov.getBoundingClientRect();
-        return { top: r.top, bottom: r.bottom, boxBottom: box.bottom, boxTop: box.top, inside: r.top >= box.top && r.bottom <= box.bottom + 1 };
-      }, lastLine);
-      check(tag + 'à la molette, le texte défile jusqu\'à sa dernière ligne, vue en entier dans la fenêtre, titre et bouton toujours là', end.scrollTop > 0 && lastVisible.inside && end.titleInPanel && end.buttonsInPanel, { end: { scrollTop: end.scrollTop, scrollMax: end.scrollMax }, lastVisible });
+        const body = document.querySelector('#pp-import-report-modal .pp-modal-body').getBoundingClientRect();
+        const items = Array.from(document.querySelectorAll('#pp-import-report-modal .pp-import-report-item'));
+        const last = items[items.length - 1].querySelector('.pp-import-report-headline');
+        const r = last.getBoundingClientRect();
+        return { text: last.textContent, top: r.top, bottom: r.bottom, bodyTop: body.top, bodyBottom: body.bottom, inside: last.textContent === line && r.top >= body.top - 1 && r.bottom <= body.bottom + 1 };
+      }, lastHeadline);
+      check(tag + 'à la molette, la liste défile jusqu\'à sa dernière ligne, vue en entier dans la fenêtre, titre et boutons toujours là', end.scrollTop > 0 && lastVisible.inside && end.titleInPanel && end.buttonsInPanel, { end: { scrollTop: end.scrollTop, scrollMax: end.scrollMax }, lastVisible });
       await snap(shot);
     };
 
-    // 5) Un fichier qui a de tout : la fenêtre du rapport le plus long (seize genres) tient dans le panneau, titre et bouton fixes, le texte défile.
+    // 5) Un fichier qui a de tout : la fenêtre du rapport le plus long (seize genres) tient dans le panneau, titre et boutons fixes, la liste défile.
     await pickFile(page, pptxFile('tout.pptx', await buildDeck(page, 'many')));
     await settle(page, /^$/);
     await clickDialogButton(page, T.discard);
     await sleep(900);
-    const long = await dialogState(page);
-    const longLines = long.message.split('\n');
+    const long = await reportState(page);
     check(tag + 'le rapport le plus long : seize genres, un par ligne, du premier (animations) au dernier (objet illisible), titre et introduction comme les autres',
-      long.shown && long.title === T.reportTitle && longLines[0] === T.reportIntro && longLines.length === 17 && longLines[1] === '• ' + T.manyFirst && longLines[16] === '• ' + T.manyLast, { title: long.title, count: longLines.length - 1, first: longLines[1], last: longLines[longLines.length - 1] });
-    check(tag + 'la fenêtre tient dans le panneau : titre et bouton « ' + T.close + ' » à l\'écran sans défiler la page, le texte défile dans la fenêtre', long.boxInPanel && long.titleInPanel && long.buttonsInPanel && long.scrolls && long.scrollMax > 0, long);
+      long.shown && long.title === T.reportTitle && long.intro === T.reportIntro && long.headlines.length === 16 && long.headlines[0] === T.manyFirst && long.headlines[15] === T.manyLast, { title: long.title, count: long.headlines.length, first: long.headlines[0], last: long.headlines[long.headlines.length - 1] });
+    check(tag + 'la fenêtre tient dans le panneau : titre et boutons à l\'écran sans défiler la page, la liste défile dans la fenêtre', long.boxInPanel && long.titleInPanel && long.buttonsInPanel && long.scrolls && long.scrollMax > 0, long);
     await snap('report-long');
     await wheelToTheEnd(long, T.manyLast, 'report-long-end');
-    await clickDialogButton(page, T.close);
-    check(tag + 'la fenêtre du rapport le plus long se ferme au vrai clic', !(await dialogState(page)).shown);
+    // Au bout de la liste, la dernière ligne se déplie au vrai clic et se lit en entier (la liste s'allonge : un dernier coup de molette).
+    await clickReportRow(page, 15);
+    await page.mouse.wheel(0, 8000);
+    await sleep(300);
+    const lastOpen = await reportState(page);
+    const lastView = await linesInView(page, 15);
+    check(tag + 'la dernière ligne (objet illisible) se déplie au vrai clic : sa diapositive, son objet et ce que l\'import en dit, lus en entier dans la fenêtre', lastOpen.open[15] === true && JSON.stringify(lastOpen.lines[15]) === JSON.stringify(T.lastLines) && lastView.inside && lastOpen.titleInPanel && lastOpen.buttonsInPanel, { lines: lastOpen.lines[15], view: lastView });
+    await snap('report-long-detail');
+    await page.keyboard.press('Escape');
+    await sleep(450);
+    check(tag + 'Échap ferme la fenêtre du rapport le plus long', !(await reportState(page)).shown);
 
     // 5 ter) Un fichier qui a de tout, ce qui n'arrive pas ET ce que l'éditeur ne sait pas encore faire : la fenêtre au rapport le plus long de toutes (une ligne par genre du rapport), dite dans la langue de
-    //    l'interface, tient dans le panneau comme les autres, titre et bouton fixes, et se lit jusqu'à sa dernière ligne.
+    //    l'interface, tient dans le panneau comme les autres, titre et boutons fixes, et se lit jusqu'à sa dernière ligne.
     const lostFile = await buildDeck(page, 'lost');
     // Le fichier fait dire tous les genres du rapport sauf trois (ceux que le même objet ne peut pas faire dire ensemble) : un lot qui reprend un genre en retire un de la liste, le plancher le suit.
     const { wanted, keys } = await page.evaluate(async (b64) => {
       const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
       const imported = await PptxImport.fromBuffer(bin.buffer);
-      return { keys: PptxImport.REPORT_KEYS.length, wanted: imported.report.map(item => '• ' + I18n.t('pptx.import.report.' + item.key, { n: item.n, max: PptxImport.MAX_SLIDES })) };
+      return { keys: PptxImport.REPORT_KEYS.length, wanted: imported.report.map(item => I18n.t('pptx.import.report.' + item.key, { n: item.n, max: PptxImport.MAX_SLIDES })) };
     }, lostFile.toString('base64'));
     await pickFile(page, pptxFile('perdu.pptx', lostFile));
     await settle(page, /^$/);
     await clickDialogButton(page, T.discard);
     await sleep(900);
-    const lost = await dialogState(page);
-    const lostLines = lost.message.split('\n');
+    const lost = await reportState(page);
     check(tag + `le rapport le plus long de tous : ${wanted.length} genres, un par ligne, dans l'ordre et dans la langue de l'interface, du premier (animations) au dernier (objet illisible), aucune clé laissée telle quelle`,
-      lost.shown && lost.title === T.reportTitle && lostLines[0] === T.reportIntro && wanted.length >= keys - 3 && JSON.stringify(lostLines.slice(1)) === JSON.stringify(wanted) && lostLines[1] === '• ' + T.manyFirst
-        && lostLines[lostLines.length - 1] === '• ' + T.lostLast && !lost.message.includes('pptx.import.report.'), { title: lost.title, count: lostLines.length - 1, wanted: wanted.length, first: lostLines[1], last: lostLines[lostLines.length - 1] });
-    check(tag + 'des lignes à lire telles quelles, au singulier et au pluriel : ' + T.lostSamples.map(line => '« ' + line + ' »').join(', '), T.lostSamples.every(line => lostLines.includes('• ' + line)), lostLines.filter(line => /polices|fonts|sections?|verticaux|vertical/.test(line)));
-    check(tag + 'la fenêtre tient dans le panneau : titre et bouton « ' + T.close + ' » à l\'écran sans défiler la page, le texte défile dans la fenêtre', lost.boxInPanel && lost.titleInPanel && lost.buttonsInPanel && lost.scrolls && lost.scrollMax > long.scrollMax, { box: lost.box, scrolls: lost.scrolls, scrollMax: lost.scrollMax, longScrollMax: long.scrollMax });
+      lost.shown && lost.title === T.reportTitle && lost.intro === T.reportIntro && wanted.length >= keys - 3 && JSON.stringify(lost.headlines) === JSON.stringify(wanted) && lost.headlines[0] === T.manyFirst
+        && lost.headlines[lost.headlines.length - 1] === T.lostLast && !lost.headlines.some(line => line.includes('pptx.import.report.')), { title: lost.title, count: lost.headlines.length, wanted: wanted.length, first: lost.headlines[0], last: lost.headlines[lost.headlines.length - 1] });
+    check(tag + 'des lignes à lire telles quelles, au singulier et au pluriel : ' + T.lostSamples.map(line => '« ' + line + ' »').join(', '), T.lostSamples.every(line => lost.headlines.includes(line)), lost.headlines.filter(line => /polices|fonts|sections?|verticaux|vertical/.test(line)));
+    check(tag + 'les lignes du détail ne laissent aucune clé de texte telle quelle', lost.lines.every(lines => lines.every(line => !/importReport\.|pptx\.import\./.test(line))), lost.lines.flat().filter(line => /importReport\.|pptx\.import\./.test(line)));
+    check(tag + 'la fenêtre tient dans le panneau : titre et boutons à l\'écran sans défiler la page, la liste défile dans la fenêtre', lost.boxInPanel && lost.titleInPanel && lost.buttonsInPanel && lost.scrolls && lost.scrollMax > long.scrollMax, { box: lost.box, scrolls: lost.scrolls, scrollMax: lost.scrollMax, longScrollMax: long.scrollMax });
     await snap('report-lost');
     await wheelToTheEnd(lost, T.lostLast, 'report-lost-end');
+    const lostCopy = await clickDialogButton(page, T.copy);
+    const lostPasted = String(await page.evaluate(() => navigator.clipboard.readText()).catch(e => 'ERREUR ' + e.message)).split('\n');
+    check(tag + 'le texte copié du rapport le plus long dit toutes ses lignes : une « • » par genre, le pied avec le décor du masque', !!lostCopy && lostCopy.reachable && lostPasted.filter(line => line.startsWith('• ')).length === wanted.length && wanted.every(line => lostPasted.includes('• ' + line)) && lostPasted.some(line => /Essai/.test(line)), { count: lostPasted.filter(line => line.startsWith('• ')).length, wanted: wanted.length, tail: lostPasted.slice(-4) });
     await clickDialogButton(page, T.close);
-    check(tag + 'la fenêtre du rapport de tous les genres se ferme au vrai clic', !(await dialogState(page)).shown);
+    check(tag + 'la fenêtre du rapport de tous les genres se ferme au vrai clic', !(await reportState(page)).shown);
 
     // 5 bis) La page du fichier : une présentation en 4:3 s'ouvre en 4:3 (720 x 540 pt) et non à la page d'une nouvelle présentation (960 x 540) ; rien à dire, donc aucune fenêtre de rapport.
     await pickFile(page, pptxFile('quatre-tiers.pptx', await buildDeck(page, 'fourThree')));

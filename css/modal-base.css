@@ -31,6 +31,7 @@
 #pp-news-modal { z-index: 2060; }
 #pp-export-news-modal { z-index: 2070; }
 #pp-placing-modal { z-index: 2090; } /* l'avancement d'un gros import (js/import-placing.js) : par-dessus les fenêtres d'index.html, sous les saisies et confirmations (2100) : la question « Modifications non enregistrées » et le rapport de l'import passent devant (le voile se retire pour elles) */
+#pp-import-report-modal { z-index: 2095; } /* la fenêtre du compte rendu d'un import (js/import-report.js) : par-dessus l'avancement (2090) qui vient de se retirer, sous les saisies et confirmations (2100) */
 
 /* max-height en % de l'écran (le voile est fixe sur tout le panneau) et flex en colonne : le contenu prend la place qui reste, titre et boutons
    gardent la leur. Pas d'overflow sur le cadre : il rognerait les coins et défilerait à sa guise quand un champ prend le focus. */

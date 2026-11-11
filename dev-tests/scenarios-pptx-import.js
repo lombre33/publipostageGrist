@@ -63,7 +63,7 @@
   };
   const masterXml = m => `${HEAD}<p:sldMaster ${NS}><p:cSld>${m.bg || ''}${tree(m.shapes || '')}</p:cSld><p:clrMap ${m.clrMap || CLR_MAP}/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>`
     + `<p:txStyles><p:titleStyle>${m.title || ''}</p:titleStyle><p:bodyStyle>${m.body || ''}</p:bodyStyle><p:otherStyle>${m.other || ''}</p:otherStyle></p:txStyles></p:sldMaster>`;
-  const layoutXml = l => `${HEAD}<p:sldLayout ${NS}${l.showMasterSp === false ? ' showMasterSp="0"' : ''}><p:cSld>${l.bg || ''}${tree(l.shapes || '')}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`;
+  const layoutXml = l => `${HEAD}<p:sldLayout ${NS}${l.showMasterSp === false ? ' showMasterSp="0"' : ''}><p:cSld${l.name ? ` name="${esc(l.name)}"` : ''}>${l.bg || ''}${tree(l.shapes || '')}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`;
   const slideXml = s => `${HEAD}<p:sld ${NS}${s.show === false ? ' show="0"' : ''}${s.showMasterSp === false ? ' showMasterSp="0"' : ''}><p:cSld>${s.bg || ''}${tree(s.shapes || '')}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${s.transition || ''}${s.timing || ''}</p:sld>`;
   const notesXml = lines => `${HEAD}<p:notes ${NS}><p:cSld>${tree('<p:sp><p:nvSpPr><p:cNvPr id="2" name="Image de la diapositive"/><p:cNvSpPr/><p:nvPr><p:ph type="sldImg"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp>'
     + `<p:sp><p:nvSpPr><p:cNvPr id="3" name="Notes"/><p:cNvSpPr/><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>${lines.map(l => `<a:p><a:r><a:rPr lang="fr-FR"/><a:t>${esc(l)}</a:t></a:r></a:p>`).join('')}</p:txBody></p:sp>`)}</p:cSld></p:notes>`;
@@ -2775,6 +2775,156 @@
       const pageSize = PageLayout.getPageSizePt();
       expect('la page de l\'éditeur est celle du fichier : 960 x 540 pt', near(pageSize.width, 960.09, 0.2) && near(pageSize.height, 540, 0.2), pageSize);
       expect('l\'HTML relu après chargement garde les attributs des cadres (x, y, largeur, hauteur)', /data-ff-x="40"/.test(html) && /data-ff-w="880"/.test(html), html.slice(0, 200));
+      return result(bad);
+    });
+
+
+  // --- Le détail du compte rendu (11/11, « quand on a le feedback d'un import, un moyen d'itérer pour améliorer la prise en charge ») -----------------------------------------------------------------------------
+  // Chaque ligne du rapport (`{ key, n }`, inchangée) porte en plus OÙ (`places` : les diapositives avec leur compte, puis les masques et mises en page), QUOI (`objects` : les noms des objets de PowerPoint) et ce que l'import
+  // nomme (`labels` : polices, formats d'image, effets d'animation, formes...), bornés ; `stats` (hors du JSON du résultat) dit le fichier et le décor de chaque masque. js/import-report.js met le tout en lignes de texte.
+  const detailOf = (r, key) => r.report.find(item => item.key === key) || {};
+  const countsBy = list => Object.fromEntries((list || []).map(entry => [entry.name, entry.n]));
+  const inLang = async (lang, fn) => { const before = I18n.getLang(); I18n.setLang(lang); try { return await fn(); } finally { I18n.setLang(before); } };
+  const gradientBox = (id, name, y) => sp({ id, name, x: 60, y, w: 200, h: 40, fill: GRADIENT, text: para(sm('x')) });
+
+  add('pptx_import_report_detail_says_which_slides_and_which_objects_and_the_counts_do_not_move',
+    'Chaque ligne du compte rendu dit OÙ (les diapositives, avec leur compte : 1, 3 (×2), 4) et QUOI (le nom de chaque objet de PowerPoint, le plus fréquent d\'abord) ; la somme des diapositives redonne le compte ; rien n\'est dit pour une diapositive sans perte ; les comptes de toujours ne bougent pas',
+    async () => {
+      await ready();
+      const { bad, expect } = checker();
+      const r = await run1({ slides: [
+        { shapes: gradientBox(2, 'Bandeau du titre', 40) },
+        { shapes: textBox(60, 40, 400, 40, para(sm('Rien à dire')), { id: 2 }) },
+        { shapes: gradientBox(2, 'Bandeau du titre', 40) + gradientBox(3, 'Pied de page', 400) },
+        { shapes: gradientBox(2, 'Fond de la carte', 40) },
+      ] });
+      const item = detailOf(r, 'gradients');
+      expect('le compte de toujours : 4 dégradés, et la ligne garde sa forme { key, n }', reportOf(r).gradients === 4 && item.key === 'gradients' && item.n === 4, r.report);
+      expect('OÙ : la diapositive 1 (1), la 3 (2), la 4 (1) ; la 2, sans perte, n\'y est pas', JSON.stringify(item.places) === JSON.stringify([{ slide: 1, n: 1 }, { slide: 3, n: 2 }, { slide: 4, n: 1 }]), item.places);
+      const named = countsBy(item.objects);
+      expect('QUOI : « Bandeau du titre » deux fois, « Pied de page » et « Fond de la carte » une fois, le plus fréquent d\'abord', named['Bandeau du titre'] === 2 && named['Pied de page'] === 1 && named['Fond de la carte'] === 1 && item.objects.length === 3 && item.objects[0].name === 'Bandeau du titre', item.objects);
+      expect('rien d\'autre n\'est détaillé : pas de texte réduit ni de nom en trop', !item.moreObjects && !item.labels, item);
+      expect('chaque ligne qui dit OÙ a des diapositives dont la somme est son compte', r.report.every(line => !line.places || line.places.reduce((sum, place) => sum + place.n, 0) === line.n), r.report);
+      const lines = ImportReport.detailLines(item);
+      expect('en français : « Diapositives : 1, 3 (×2), 4 » puis « Objets : Bandeau du titre ×2; Pied de page; Fond de la carte »', lines.length === 2 && lines[0] === 'Diapositives : 1, 3 (×2), 4' && lines[1] === 'Objets : Bandeau du titre ×2; Pied de page; Fond de la carte', lines);
+      const english = await inLang('en', () => ImportReport.detailLines(item));
+      expect('en anglais, les mêmes lignes', english.length === 2 && english[0] === 'Slides: 1, 3 (×2), 4' && english[1] === 'Objects: Bandeau du titre ×2; Pied de page; Fond de la carte', english);
+      const enOne = await inLang('en', () => ImportReport.detailLines({ key: 'x', n: 1, places: [{ slide: 7, n: 1 }], objects: [{ name: 'Seul', n: 1 }] }));
+      expect('une seule diapositive et un seul objet : « Slide: 7 », « Object: Seul » (le singulier)', enOne[0] === 'Slide: 7' && enOne[1] === 'Object: Seul', enOne);
+      return result(bad);
+    });
+
+  add('pptx_import_report_detail_names_what_the_import_did_not_take_fonts_image_formats_animations_shapes_and_shrunk_texts',
+    'Le détail NOMME ce qui n\'est pas repris sans changer le compte : la police absente de l\'éditeur, le format d\'image illisible, l\'effet d\'animation (emphase 6, un paragraphe à la fois, deuxième animation), la forme libre, la transition, le texte réduit (à 5 % près)',
+    async () => {
+      await ready();
+      const { bad, expect } = checker();
+      const effect = (spid, { preset = 10, cls = 'entr', node = 'clickEffect', tx = '' } = {}) => `<p:par><p:cTn id="9" presetID="${preset}" presetClass="${cls}" fill="hold" nodeType="${node}"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>`
+        + `<p:set><p:cBhvr><p:cTn id="10" dur="1" fill="hold"/><p:tgtEl><p:spTgt spid="${spid}">${tx}</p:spTgt></p:tgtEl></p:cBhvr></p:set>`
+        + `<p:animEffect transition="in" filter="fade"><p:cBhvr><p:cTn id="11" dur="500"/><p:tgtEl><p:spTgt spid="${spid}">${tx}</p:spTgt></p:tgtEl></p:cBhvr></p:animEffect></p:childTnLst></p:cTn></p:par>`;
+      const timing = effects => `<p:timing><p:tnLst><p:par><p:cTn id="1" nodeType="tmRoot"><p:childTnLst><p:seq><p:cTn id="2" nodeType="mainSeq"><p:childTnLst>${effects}</p:childTnLst></p:cTn></p:seq></p:childTnLst></p:cTn></p:par></p:tnLst></p:timing>`;
+      const box = (id, name, row) => sp({ id, name, x: 40 + (id % 4) * 200, y: 60 + row * 90, w: 160, h: 60, text: para(run(name, 'sz="1400"')) });
+      const two = para(run('Premier paragraphe', 'sz="2000"')) + para(run('Deuxième paragraphe', 'sz="2000"'), '', lnPct(121.16));
+      const r = await run1({
+        media: { 'p.png': TWO_TONE(), 'schema.emf': btoa('EMF') },
+        slides: [
+          { shapes: lone(para(sm('Texte', '', '<a:latin typeface="Comic Sans MS"/>')), { name: 'Titre en Comic Sans' }), transition: '<p:transition><p:checker dir="horz"/></p:transition>' },
+          {
+            rels: [IMAGE_REL('rId2', 'p.png'), IMAGE_REL('rId3', 'schema.emf')],
+            shapes: textBox(40, 40, 300, 40, para(sm('Autre', '', '<a:latin typeface="Comic Sans MS"/>')), { id: 2, name: 'Deuxième en Comic Sans' }) + textBox(40, 100, 300, 40, para(sm('Futura', '', '<a:latin typeface="Futura"/>')), { id: 3, name: 'Texte en Futura' })
+              + photo({ id: 6, name: 'Schéma de la page', rid: 'rId3' }) + sp({ id: 7, name: 'Étoile libre', x: 400, y: 300, w: 80, h: 60, prst: '', fill: solid('FFC000'), text: para(sm('x')), geom: DETAILED_SKETCH })
+              + textBox(40, 400, 400, 52, two, { id: 8, name: 'Texte trop long' }),
+          },
+          { shapes: box(2, 'A', 0) + box(3, 'B', 1) + box(4, 'C', 2), timing: timing(effect(2, { preset: 6, cls: 'emph' }) + effect(3, { tx: '<p:txEl><p:pRg st="0" end="0"/></p:txEl>' }) + effect(4) + effect(4, { preset: 22 })) },
+        ],
+      });
+      const fonts = detailOf(r, 'fonts');
+      expect('polices : une police est comptée une fois pour tout le fichier - « Comic Sans MS » à la première fois (diapositive 1, pas à la seconde), « Futura » (diapositive 2) ; le compte est celui d\'avant',
+        reportOf(r).fonts === 2 && fonts.n === 2 && countsBy(fonts.labels)['Comic Sans MS'] === 1 && countsBy(fonts.labels).Futura === 1 && JSON.stringify(fonts.places) === JSON.stringify([{ slide: 1, n: 1 }, { slide: 2, n: 1 }]) && countsBy(fonts.objects)['Titre en Comic Sans'] === 1 && countsBy(fonts.objects)['Texte en Futura'] === 1, fonts);
+      const images = detailOf(r, 'images');
+      expect('image illisible : le nom du fichier et le motif, sur la diapositive 2, avec le nom de l\'objet', images.n === 1 && /schema\.emf/.test((images.labels[0] || {}).name || '') && JSON.stringify(images.places) === JSON.stringify([{ slide: 2, n: 1 }]) && countsBy(images.objects)['Schéma de la page'] === 1, images);
+      const shapes = detailOf(r, 'shapes');
+      expect('forme libre : nommée « forme libre », avec le nom de l\'objet', shapes.n === 1 && countsBy(shapes.labels)['forme libre'] === 1 && countsBy(shapes.objects)['Étoile libre'] === 1, shapes);
+      const transitions = detailOf(r, 'transitions');
+      expect('transition : l\'effet de PowerPoint est nommé, sur la diapositive 1', transitions.n === 1 && countsBy(transitions.labels).checker === 1 && JSON.stringify(transitions.places) === JSON.stringify([{ slide: 1, n: 1 }]), transitions);
+      const shrunk = detailOf(r, 'shrunk');
+      const pct = shrunk.labels && shrunk.labels.length === 1 ? Number(/(\d+) %/.exec(shrunk.labels[0].name || '')[1]) : -1;
+      expect('texte réduit : « réduit à NN % », un multiple de 5 sous 100, sur la diapositive 2, avec le nom de l\'objet', shrunk.n === 1 && pct > 0 && pct < 100 && pct % 5 === 0 && JSON.stringify(shrunk.places) === JSON.stringify([{ slide: 2, n: 1 }]) && countsBy(shrunk.objects)['Texte trop long'] === 1, shrunk);
+      const animations = detailOf(r, 'animations');
+      const kind = name => I18n.t('importReport.animKind.' + name);
+      const named = countsBy(animations.labels);
+      expect('animations : « emphase 6 », « entrée 10, un paragraphe à la fois », « entrée 22, deuxième animation du même objet » - 3 non reprises, sur la diapositive 3',
+        reportOf(r).animations === 3 && animations.n === 3 && named[kind('emph') + ' 6'] === 1 && named[kind('entr') + ' 10, ' + I18n.t('importReport.animWhy.paragraph')] === 1 && named[kind('entr') + ' 22, ' + I18n.t('importReport.animWhy.second')] === 1 && JSON.stringify(animations.places) === JSON.stringify([{ slide: 3, n: 3 }]), animations);
+      const lines = ImportReport.detailLines(fonts);
+      expect('les noms sans texte vont sur une ligne « Détail : … »', lines[lines.length - 1] === 'Détail : Comic Sans MS; Futura', lines);
+      return result(bad);
+    });
+
+  add('pptx_import_report_detail_of_the_master_and_layout_decor_names_the_holder_counts_it_once_and_says_what_was_skipped',
+    'Le décor d\'un masque ou d\'une mise en page est détaillé par porteur : « Masque « Essai » » ou « Mise en page « Titre et contenu » », compté une seule fois quelle que soit le nombre de diapositives qui le montrent ; un décor de plus de 150 objets est SAUTÉ et la ligne dit ce qu\'il contient (formes, images, plus gros groupe) et combien de diapositives le montraient',
+    async () => {
+      await ready();
+      const { bad, expect } = checker();
+      const slides = [{ shapes: textBox(100, 200, 300, 40, para(run('Un', 'sz="2000"')), { id: 2 }) }, { shapes: textBox(100, 200, 300, 40, para(run('Deux', 'sz="2000"')), { id: 2 }) }, { shapes: textBox(100, 200, 300, 40, para(run('Trois', 'sz="2000"')), { id: 2 }) }];
+      const crowd = Array.from({ length: 151 }, (_, i) => sp({ id: 100 + i, name: 'Décor ' + i, x: 5 * (i % 150), y: 5, w: 30, h: 30, fill: solid('FFC000') })).join('');
+      const skippedMaster = await run1({ master: { shapes: crowd }, slides });
+      const lineOf = detailOf(skippedMaster, 'masterObjects');
+      expect('un masque de 151 objets : compté une fois (151), au nom du masque', lineOf.n === 151 && JSON.stringify(lineOf.places) === JSON.stringify([{ holder: 'Masque « Essai »', n: 151 }]), lineOf);
+      const holder = skippedMaster.stats.holders[0];
+      expect('le décor est dit : 151 formes, sauté, montré par les 3 diapositives', skippedMaster.stats.holders.length === 1 && holder.label === 'Masque « Essai »' && holder.layout === false && holder.objects === 151 && holder.kinds.shape === 151 && holder.skipped === true && holder.uses === 3, skippedMaster.stats.holders);
+      expect('la ligne nomme le masque avec son contenu : « Masque « Essai » : 151 formes ; montré par 3 diapositives »', ImportReport.detailLines(lineOf).includes('Masque « Essai » : 151 formes ; montré par 3 diapositives'), ImportReport.detailLines(lineOf));
+      const skippedLayout = await run1({ layout: { name: 'Titre et contenu', shapes: crowd }, slides });
+      expect('une mise en page de 151 objets : « Mise en page « Titre et contenu » », et elle seule', skippedLayout.stats.holders.length === 1 && skippedLayout.stats.holders[0].label === 'Mise en page « Titre et contenu »' && skippedLayout.stats.holders[0].layout === true && skippedLayout.stats.holders[0].skipped === true && detailOf(skippedLayout, 'masterObjects').places[0].holder === 'Mise en page « Titre et contenu »', { stats: skippedLayout.stats.holders, report: skippedLayout.report });
+      const english = await inLang('en', async () => ImportReport.detailLines(detailOf(await run1({ layout: { name: 'Titre et contenu', shapes: crowd }, slides }), 'masterObjects')));
+      expect('en anglais : « Layout “Titre et contenu” » et « shown by 3 slides »', english.some(line => /Layout “Titre et contenu”.*151 shapes.*shown by 3 slides/.test(line)), english);
+      // Un décor lu (moins de 150 objets) : sa perte est comptée une fois, au nom du masque, et non une fois par diapositive.
+      const readMaster = await run1({ master: { shapes: gradientBox(10, 'Bandeau du masque', 0) + sp({ id: 11, name: 'Pastille', x: 300, y: 5, w: 20, h: 20, fill: solid('FFC000') }) }, slides });
+      const gradients = detailOf(readMaster, 'gradients');
+      expect('un dégradé du masque, montré par 3 diapositives : compté une fois, au nom du masque, avec le nom de son objet', reportOf(readMaster).gradients === 1 && JSON.stringify(gradients.places) === JSON.stringify([{ holder: 'Masque « Essai »', n: 1 }]) && countsBy(gradients.objects)['Bandeau du masque'] === 1, gradients);
+      const read = readMaster.stats.holders[0];
+      expect('et le décor lu est dit : 2 objets (une forme, un texte), pas sauté, 3 diapositives', readMaster.stats.holders.length === 1 && read.objects === 2 && !read.skipped && read.uses === 3 && read.summary === '1 forme, 1 texte ; montré par 3 diapositives', readMaster.stats.holders);
+      return result(bad);
+    });
+
+  add('pptx_import_report_detail_keeps_forty_names_and_says_how_many_it_left_out_stats_stay_out_of_the_json',
+    'Le détail garde 40 noms au plus par ligne et dit combien il en laisse (60 objets : 40 noms, 20 laissés ; la ligne copiée finit par « … (+52) » dans la fenêtre) ; les chiffres du fichier (`stats`) se lisent mais n\'entrent pas dans le JSON du résultat (le test d\'or le hache)',
+    async () => {
+      await ready();
+      const { bad, expect } = checker();
+      const many = await run1({ slides: [{ shapes: Array.from({ length: 60 }, (_, i) => gradientBox(2 + i, 'Dégradé n° ' + (i + 1), 10 + (i % 20) * 20)).join('') }] });
+      const item = detailOf(many, 'gradients');
+      expect('60 objets : le compte est 60, 40 noms gardés, 20 laissés', item.n === 60 && item.objects.length === 40 && item.moreObjects === 20 && item.objects.reduce((sum, entry) => sum + entry.n, 0) + item.moreObjects === 60, { n: item.n, names: (item.objects || []).length, more: item.moreObjects });
+      const shown = ImportReport.detailLines(item).find(line => /^Objets/.test(line)) || '';
+      expect('dans la fenêtre : 8 noms puis « … (+52) » (32 noms de plus et 20 laissés)', shown.split('; ').length === 8 && /… \(\+52\)$/.test(shown) && shown.startsWith('Objets : Dégradé n° 1;'), shown);
+      const copied = ImportReport.detailLines(item, { slides: ImportReport.SLIDES_COPIED, names: ImportReport.NAMES_COPIED }).find(line => /^Objets/.test(line)) || '';
+      expect('dans le texte copié : les 40 noms puis « … (+20) »', copied.split('; ').length === 40 && /… \(\+20\)$/.test(copied), copied);
+      const r = await run1({ slides: [{}, {}] });
+      expect('stats : 2 diapositives, le poids du fichier, aucun décor ; lisibles sur le résultat', r.stats && r.stats.slides === 2 && r.stats.fileBytes > 1000 && Array.isArray(r.stats.holders) && r.stats.holders.length === 0 && r.stats.heavy === false, r.stats);
+      expect('mais hors du JSON du résultat (non énumérable) : sa durée, qui varie, ne change pas le hachage du test d\'or', !r.propertyIsEnumerable('stats') && !/"stats"/.test(JSON.stringify(r)) && !Object.keys(r).includes('stats'), Object.keys(r));
+      return result(bad);
+    });
+
+  add('pptx_import_report_detail_text_lines_ranges_caps_and_the_copied_text',
+    'Les lignes du détail : trois numéros qui se suivent font une plage (« 1–3 »), un numéro qui compte plusieurs pertes dit « (×3) », au-delà de la limite « … (+n) » ; le texte copié met l\'en-tête, la phrase, chaque ligne en « • » et son détail en retrait, le pied',
+    async () => {
+      await ready();
+      const { bad, expect } = checker();
+      const item = {
+        key: 'x', n: 14,
+        places: [1, 2, 3, 5, 7, 8, 9, 10, 12].map(slide => ({ slide, n: 1 })).concat([{ slide: 14, n: 3 }, { holder: 'Masque « M »', n: 2 }]),
+        objects: [{ name: 'A', n: 3 }, { name: 'B', n: 1 }], moreObjects: 5,
+        labels: [{ name: 'police Futura', n: 2 }, { name: 'Masque « M »', n: 151, text: '151 formes ; montré par 2 diapositives' }], moreLabels: 4,
+      };
+      const lines = ImportReport.detailLines(item);
+      expect('les numéros : plages, numéro seul, numéro répété ; les masques à part', lines[0] === 'Diapositives : 1–3, 5, 7–10, 12, 14 (×3)' && lines[1] === 'Dans : Masque « M » ×2', lines);
+      expect('les objets : le compte de noms compte « le reste » pour un, les noms au-delà sont comptés avec ceux que le rapport a laissés', lines[2] === 'Objets : A ×3; B … (+5)', lines[2]);
+      expect('les noms simples sur une ligne, ceux qui ont un texte chacun sur la sienne', lines[3] === 'Détail : police Futura ×2 … (+4)' && lines[4] === 'Masque « M » : 151 formes ; montré par 2 diapositives' && lines.length === 5, lines);
+      const short = ImportReport.detailLines(item, { slides: 2, names: 1 });
+      expect('limites serrées : « 1–3, 5 … (+6) » (6 diapositives de plus) et un seul nom', short[0] === 'Diapositives : 1–3, 5 … (+6)' && short[2] === 'Objets : A ×3 … (+6)', short);
+      expect('un détail vide ne donne aucune ligne', ImportReport.detailLines({ key: 'x', n: 1 }).length === 0, ImportReport.detailLines({ key: 'x', n: 1 }));
+      const text = ImportReport.plainText({ header: ['Titre', 'Fichier : a.pptx'], intro: 'Phrase.', entries: [{ headline: '3 images', lines: ['un', 'deux'] }, { headline: '1 forme' }], footer: ['Pied'] });
+      expect('le texte copié : en-tête, ligne vide, phrase, « • » et le détail en retrait de quatre espaces, ligne vide, pied', text === 'Titre\nFichier : a.pptx\n\nPhrase.\n• 3 images\n    un\n    deux\n• 1 forme\n\nPied', JSON.stringify(text));
+      expect('sans phrase ni pied, rien de plus', ImportReport.plainText({ header: ['T'], entries: [{ headline: 'H' }] }) === 'T\n• H', ImportReport.plainText({ header: ['T'], entries: [{ headline: 'H' }] }));
       return result(bad);
     });
 

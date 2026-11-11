@@ -9,7 +9,13 @@
   window.__collectedReady = { then: (ok, no) => Promise.all(pending).then(ok, no) };
   const hex = async (bytes) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('');
   const encoder = new TextEncoder();
-  const normalize = (value) => JSON.stringify(value, (key, v) => (v instanceof Map ? { map: Array.from(v) } : v instanceof Set ? { set: Array.from(v) } : v instanceof ArrayBuffer ? { bytes: v.byteLength } : v))
+  // Le DÉTAIL du compte rendu d'un import PowerPoint (`places`, `objects`, `labels`, `moreObjects`, `moreLabels` d'une ligne { key, n } : où et quoi, 11/11) n'entre pas dans le hachage : la référence fige ce que l'import ÉCRIT
+  // (le HTML, la page, les comptes du rapport), pas les mots que le compte rendu met sur ce qu'il n'a pas repris ; ces mots ont leurs essais (groupe pptxImport, `pptx_import_report_detail_*`).
+  const DETAIL_KEYS = /^(places|objects|labels|moreObjects|moreLabels)$/;
+  const normalize = (value) => JSON.stringify(value, function (key, v) {
+    if (DETAIL_KEYS.test(key) && this && typeof this.key === 'string' && 'n' in this) return undefined;
+    return v instanceof Map ? { map: Array.from(v) } : v instanceof Set ? { set: Array.from(v) } : v instanceof ArrayBuffer ? { bytes: v.byteLength } : v;
+  })
     .replace(/data:(image\/[a-z0-9.+-]+);base64,[A-Za-z0-9+/=]+/g, 'data:$1;base64,#')
     .replace(/\b(fn|cm|en)-[a-z0-9]{8,}\b/g, '$1-#');
   async function keyOf(kind, buffer, options) {
