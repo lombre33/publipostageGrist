@@ -211,12 +211,14 @@ const VersionsStore = (function () {
         if (heavy && Date.now() - heavy.at < KEEP_EVERY_MS && chars >= heavy.chars * LIGHTER_THAN) return null;
       }
       weight = chars;
+      // Les règles d'abord, qui ne coûtent rien : pendant qu'on écrit, elles disent « pas maintenant » à presque chaque enregistrement automatique, et l'état remplacé n'a pas à être mis en texte, comparé
+      // et haché pour l'apprendre (sur un modèle de 20 millions de signes, deux textes de ce poids construits puis jetés à chaque passage). Ce que la fonction rend ne change pas : les trois refus rendent null.
+      last = kept.get(String(rowId));
+      if (!force && !worthKeeping({ modifiePar, dateModif, author, now: Date.now(), last })) return null;
       beforeText = stable(snapshotOf(stored));
       if (beforeText === stable(snapshotOf(next))) return null;
       key = keyOf(beforeText);
-      last = kept.get(String(rowId));
       if (last && last.key === key) return null;
-      if (!force && !worthKeeping({ modifiePar, dateModif, author, now: Date.now(), last })) return null;
     } catch (e) {
       console.warn('[VersionsStore] version non comparée', e);
       return null;

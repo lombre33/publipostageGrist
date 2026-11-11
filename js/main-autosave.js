@@ -79,29 +79,59 @@ const MainAutosave = (function () {
     // table des modèles, reconstruit le texte entier, l'écrit et relit sa date : plusieurs secondes de page prise (mesuré sur 150 diapositives de photos : 4 s sur 5), pendant lesquelles la frappe n'arrive plus et que
     // la mémoire de la page gonfle de plusieurs centaines de Mo. Un tel modèle laisse donc une milliseconde par millier de signes entre deux passages (8 s pour 8 millions de signes, 30 s au plus), et attend que la
     // personne ait cessé de taper (AUTOSAVE_QUIET_MS) tant que cela ne dure pas plus de AUTOSAVE_QUIET_MAX_DEFER_MS. Un modèle plus léger ne passe jamais par ici : son rythme (2,5 s) ne change pas.
+    // LA PAUSE EST CELLE DE LA PERSONNE, pas seulement celle du texte (11/11, un PowerPoint de 29 Mo : « quand on déplace une diapo c'est full freeze pendant plusieurs secondes ») : le passage partait 1,5 s
+    // après la dernière modification, donc au moment où la personne, sa diapositive déplacée, allait chercher la suivante à la souris. Tant que la souris bouge, qu'une touche s'enfonce ou que la molette
+    // tourne, il attend (`lastInputAt`), dans la même limite. La relecture d'une table lourde au repos attend de même (heavyIdleReadMustWait) : elle tient la page autant qu'un passage qui écrit.
     const AUTOSAVE_HEAVY_CHARS = 8 * 1000 * 1000;
     const AUTOSAVE_HEAVY_CHARS_PER_MS = 1000;
     const AUTOSAVE_HEAVY_MAX_GAP_MS = 30000;
     const AUTOSAVE_QUIET_MS = 1500;
     const AUTOSAVE_QUIET_MAX_DEFER_MS = 45000;
     let typingDeferredSince = 0;
+    let idleReadDeferredSince = 0;
+    // Le dernier geste de la personne dans la page (souris, touche, molette), qu'il modifie le texte ou non.
+    let lastInputAt = -Infinity;
+    const noteInput = () => { lastInputAt = performance.now(); };
+    ['pointermove', 'pointerdown', 'keydown', 'wheel'].forEach((type) => { window.addEventListener(type, noteInput, { capture: true, passive: true }); });
+    const lastActivityAt = () => Math.max(persist.autosaveLastEditAt || -Infinity, lastInputAt);
     // Le poids du modèle ouvert : le texte que le cache de js/templates.js tient de lui (lu ou écrit par ce widget).
     function openModelChars() {
       const open = Templates.byId(Templates.getCurrentId());
       return open && typeof open.contenu === 'string' ? open.contenu.length : 0;
     }
-    // Ce passage doit-il attendre ? Seulement pour un modèle lourd à enregistrer : trop tôt après le passage précédent, ou la personne est en train de taper (un passage reporté trop longtemps part quand même).
+    // Ce passage doit-il attendre ? Seulement pour un modèle lourd à enregistrer : trop tôt après le passage précédent, ou la personne est en plein geste (un passage reporté trop longtemps part quand même).
     function heavyPassMustWait(now) {
       const chars = openModelChars();
       if (chars < AUTOSAVE_HEAVY_CHARS) { typingDeferredSince = 0; return false; }
       const gap = Math.min(AUTOSAVE_HEAVY_MAX_GAP_MS, Math.ceil(chars / AUTOSAVE_HEAVY_CHARS_PER_MS));
       if (now - persist.autosaveLastCheckAt < gap - AUTOSAVE_INTERVAL_MS / 2) return true;
-      if (now - persist.autosaveLastEditAt < AUTOSAVE_QUIET_MS) {
+      if (now - lastActivityAt() < AUTOSAVE_QUIET_MS) {
         if (!typingDeferredSince) typingDeferredSince = now;
         if (now - typingDeferredSince < AUTOSAVE_QUIET_MAX_DEFER_MS) return true;
       }
       typingDeferredSince = 0;
       return false;
+    }
+    // La relecture au repos d'une table lourde doit-elle attendre ? Tant que la personne est en plein geste, dans la même limite : rien n'est à enregistrer, seul un enregistrement fait ailleurs se voit un peu plus tard.
+    function heavyIdleReadMustWait(now) {
+      if (Templates.getLoadedChars() < AUTOSAVE_HEAVY_CHARS) { idleReadDeferredSince = 0; return false; }
+      if (now - lastActivityAt() < AUTOSAVE_QUIET_MS) {
+        if (!idleReadDeferredSince) idleReadDeferredSince = now;
+        if (now - idleReadDeferredSince < AUTOSAVE_QUIET_MAX_DEFER_MS) return true;
+      }
+      idleReadDeferredSince = 0;
+      return false;
+    }
+    // Rend la main au navigateur au milieu d'un passage lourd : le temps d'une image quand la page est visible (ce qui attendait - une touche, un clic, l'image elle-même - passe), jamais plus de 100 ms. Un
+    // onglet caché ne peint rien et ralentit ses minuteries : le passage y continue sans pause, personne n'attend la page.
+    function letPageBreathe() {
+      if (document.hidden) return Promise.resolve();
+      return new Promise((resolve) => {
+        let done = false;
+        const go = () => { if (!done) { done = true; resolve(); } };
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(go, 0));
+        setTimeout(go, 100);
+      });
     }
     // Préférence par navigateur (comme la touche de déclenchement #Variable, cf. js/settings.js), pas par document : chacun choisit s'il veut
     // l'enregistrement automatique, indépendamment des autres personnes qui ouvrent le même widget.
@@ -272,6 +302,9 @@ const MainAutosave = (function () {
     async function writeAutosave(id, { nom, isMacro }, remoteTpl, epoch, editVersion, synced) {
       try {
         const suiviModifications = isMacro ? null : await Editor.getSuiviModificationsForSave();
+        // Un modèle lourd : la table qui vient d'arriver a tenu la page (des dizaines de Mo reçus), écrire le texte et l'envoyer la tiendra encore. Entre les deux, le navigateur reprend la main : la page
+        // ne reste jamais prise d'un seul tenant. Ce qui est tapé pendant ce temps part avec ce passage (le texte se lit après) et reste « à enregistrer » pour le suivant (`editVersion` date d'avant).
+        if (!isMacro && openModelChars() >= AUTOSAVE_HEAVY_CHARS) await letPageBreathe();
         // un autre modèle a été choisi pendant l'attente de l'identification : l'éditeur n'est plus celui dont `id` est la ligne (cf. onSave)
         if (epoch !== persist.autosaveEpoch) return;
         // La question « Enregistrer / Abandonner / Annuler » s'est ouverte depuis le départ de ce passage (leavePromptOpen n'est regardé qu'au départ) : rien n'est écrit, ce qui attend reste à demander,
@@ -316,7 +349,8 @@ const MainAutosave = (function () {
       const checkStartedAt = performance.now();
       // Un modèle que Grist a refusé d'écrire (autosaveRefused) attend comme un modèle au repos : ce qui est tapé ne peut pas partir, le relire à chaque passage ne servirait qu'à charger Grist.
       if ((!persist.autosaveDirty || autosaveRefused()) && checkStartedAt - persist.autosaveLastCheckAt < autosaveIdleIntervalMs() - AUTOSAVE_INTERVAL_MS / 2) return;
-      if (persist.autosaveDirty && !autosaveRefused() && heavyPassMustWait(checkStartedAt)) return; // un modèle lourd : espacé, et pas pendant la frappe (voir AUTOSAVE_HEAVY_CHARS)
+      if (persist.autosaveDirty && !autosaveRefused() && heavyPassMustWait(checkStartedAt)) return; // un modèle lourd : espacé, et pas pendant un geste (voir AUTOSAVE_HEAVY_CHARS)
+      if ((!persist.autosaveDirty || autosaveRefused()) && heavyIdleReadMustWait(checkStartedAt)) return; // une table lourde au repos : sa relecture attend aussi la fin du geste
       const epoch = persist.autosaveEpoch;
       let remote;
       try { remote = await readRemoteTemplate(id, epoch); }

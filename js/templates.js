@@ -10,10 +10,17 @@ const Templates = (function () {
   let cacheWrites = 0;
   const cacheWrittenAt = new Map();
   // Quand le cache a été lu dans Grist (le début de la dernière lecture de loadAll) et quand ce widget a écrit chacune de ses lignes pour la dernière fois : saveRow s'en sert pour savoir si l'état qu'il
-  // va remplacer est celui que Grist garde encore (cf. storedStateFor), sans relire la table quand il vient d'être lu.
+  // va remplacer est celui que Grist garde encore (cf. storedStateFor), sans relire la table quand il vient d'être lu. `cacheArrivedAt` : le moment où cette lecture est arrivée (une table lourde
+  // met des secondes à venir).
   let cacheReadAt = 0;
+  let cacheArrivedAt = 0;
   const cacheRowWrittenAt = new Map();
   const CACHE_FRESH_MS = 3000;
+  // Une table LOURDE (11/11, un PowerPoint de 29 Mo importé : 38 millions de signes dans une ligne) : chaque lecture la rapporte en entier, des dizaines de Mo que le navigateur recopie d'un cadre à l'autre
+  // (deux fois quand Grist Factory Suite héberge l'app : son courtier la reçoit puis la renvoie), page prise pendant ce temps. À partir de ce poids, un enregistrement ne la relit plus pour rien : ni
+  // pour sa date (cf. readBackDateModifs), ni pour l'état qu'il remplace quand elle vient d'arriver (cf. storedStateFor). Même seuil que le passage espacé de l'enregistrement automatique
+  // (js/main-autosave.js, AUTOSAVE_HEAVY_CHARS).
+  const HEAVY_TABLE_CHARS = 8 * 1000 * 1000;
   let currentTemplateId = null;
   // Monte à chaque setCurrentId : saveRow ne pose la ligne qu'il crée comme modèle courant que si personne n'a chargé un autre modèle pendant que
   // Grist écrivait.
@@ -463,6 +470,7 @@ const Templates = (function () {
       // Aucune migration n'a tourné (ni écrit une colonne) depuis la lecture initiale : elle est encore la table, inutile de la relire.
       const tableData = first && migrationRuns === runsBefore ? first : await grist.docApi.fetchTable(TABLE_NAME);
       loadedChars = charsOf(tableData);
+      confirmPredictedDates(tableData, writtenAtStart);
       // La ligne des réglages du document n'est pas un modèle : mise de côté, jamais dans le cache.
       const templates = [];
       let settingsAt = -1;
@@ -472,6 +480,7 @@ const Templates = (function () {
       });
       templatesCache = keepWrittenSince(templates, writtenAtStart);
       cacheReadAt = readStartedAt;
+      cacheArrivedAt = Date.now();
       adoptDocumentSettings(tableData, settingsAt, settingsEpochAtStart);
     } catch (e) {
       console.error('Erreur chargement modèles', e);
@@ -607,7 +616,32 @@ const Templates = (function () {
     templatesCache.forEach(t => { if (isOpenableType(t.typeModele)) t.estParDefaut = (id != null && sameId(t.id, id)); });
   }
 
-  async function readBackDateModifs(rowIds, fallback) {
+  // LA DATE QUE GRIST GARDE, SANS LA RELIRE (11/11, table lourde : relire une date, c'était faire revenir les 38 Mo de la table après chaque enregistrement). Une colonne « Date et heure » qui reçoit la
+  // date ISO de saveRow garde ce même instant en secondes, millièmes compris : exactement Date.parse(iso) / 1000 (mesuré dans un vrai Grist, grist-static 0.1.6 : 47 dates sur 47, le même nombre bit pour
+  // bit). Ce n'est tenu pour vrai dans CE document qu'après l'avoir vu : `dateModifShape` vaut 'seconds' quand la dernière relecture a rendu ce nombre pour chaque ligne écrite (à un instant qui ne tombait pas pile sur une seconde), 'other' sinon (une
+  // colonne d'un autre type, un Grist qui arrondirait : le faux Grist des essais arrondit à la seconde, sauf demande). Alors, et pour une table lourde seulement (HEAVY_TABLE_CHARS : rien ne change pour
+  // les autres), la date d'un enregistrement est ce nombre, sans relecture. La lecture suivante de la table le confirme (confirmPredictedDates, dans loadAll - le passage suivant de l'enregistrement
+  // automatique la fait avant d'écrire) : une date prévue que Grist ne rend pas - une autre personne a écrit la ligne depuis, ou la colonne a changé - remet 'other', et les enregistrements relisent de
+  // nouveau leur date jusqu'à ce qu'une relecture redonne le nombre prévu.
+  let dateModifShape = '';
+  const predictedDates = new Map();   // identifiant de ligne (en texte) -> la date prévue à sa dernière écriture, tant qu'aucune lecture ne l'a confirmée
+  function predictedDateModif(iso) {
+    const ms = typeof iso === 'string' ? Date.parse(iso) : NaN;
+    return Number.isNaN(ms) ? null : ms / 1000;
+  }
+  // `tableData` : la table qui vient d'arriver ; `writtenAtStart` : `cacheWrites` au début de sa lecture. Une ligne écrite pendant cette lecture y a peut-être encore son état d'avant (cf. keepWrittenSince) :
+  // sa date prévue attend la lecture suivante.
+  function confirmPredictedDates(tableData, writtenAtStart) {
+    if (!predictedDates.size || !tableData || !Array.isArray(tableData.id)) return;
+    predictedDates.forEach((predicted, key) => {
+      if (cacheWrittenAt.get(key) > writtenAtStart) return;
+      const at = tableData.id.findIndex(rowId => String(rowId) === key);
+      if (at !== -1 && (!tableData.DateModif || tableData.DateModif[at] !== predicted)) dateModifShape = 'other';
+      predictedDates.delete(key);
+    });
+  }
+
+  async function readBackDateModifs(rowIds, fallback, writtenChars = 0) {
     // Relit le DateModif réellement stocké par Grist pour ces lignes plutôt que de se fier à la chaîne ISO qu'on vient d'envoyer : rien ne garantit
     // que Grist la redonne telle quelle (une colonne DateTime peut être représentée autrement en interne, en nombre par exemple). js/main.js
     // (autosaveTick) compare la valeur renvoyée par save() à une valeur lue plus tard par loadAll() ou fetchTable() : dans deux représentations
@@ -615,24 +649,40 @@ const Templates = (function () {
     // côtés l'évite, quelle que soit la représentation. Défensif : un échec ici (colonne absente, ligne introuvable, requête en échec) ne doit pas
     // faire échouer un enregistrement réussi par ailleurs ; on retombe sur la chaîne ISO d'origine. Une seule lecture de la table pour toutes les lignes
     // (un enregistrement qui écrit aussi des modèles Grille, cf. saveRow) ; rend une Map identifiant -> DateModif.
+    // `writtenChars` : le poids du texte que l'enregistrement vient d'écrire. Table lourde (ce poids, ou celui de sa dernière lecture) dont on sait comment Grist garde une date : la date est prévue,
+    // la table n'est pas relue (voir plus haut).
     const dates = new Map();
+    const predicted = predictedDateModif(fallback);
+    if (dateModifShape === 'seconds' && predicted !== null && Math.max(loadedChars, writtenChars) >= HEAVY_TABLE_CHARS) {
+      rowIds.forEach((rowId) => { dates.set(rowId, predicted); predictedDates.set(String(rowId), predicted); });
+      return dates;
+    }
     const keep = rowId => dates.set(rowId, fallback);
     try {
       const tableData = await grist.docApi.fetchTable(TABLE_NAME);
+      let asPredicted = predicted !== null;
       rowIds.forEach((rowId) => {
+        predictedDates.delete(String(rowId));
         const idx = tableData.id.indexOf(rowId);
         if (idx === -1 || !tableData.DateModif) {
           console.error('Relecture DateModif après enregistrement : ligne ou colonne introuvable, valeur locale conservée');
           keep(rowId);
-        } else dates.set(rowId, tableData.DateModif[idx]);
+          asPredicted = false;
+        } else {
+          dates.set(rowId, tableData.DateModif[idx]);
+          if (tableData.DateModif[idx] !== predicted) asPredicted = false;
+        }
       });
+      // Un instant tombé pile sur une seconde ne prouve rien (une colonne qui arrondirait à la seconde rendrait le même nombre) : il ne fait jamais passer à 'seconds', il peut seulement en faire sortir.
+      if (!asPredicted) dateModifShape = 'other';
+      else if (!Number.isInteger(predicted)) dateModifShape = 'seconds';
     } catch (e) {
       console.error('Erreur relecture DateModif après enregistrement', e);
       rowIds.forEach(keep);
     }
     return dates;
   }
-  async function readBackDateModif(rowId, fallback) { return (await readBackDateModifs([rowId], fallback)).get(rowId); }
+  async function readBackDateModif(rowId, fallback, writtenChars = 0) { return (await readBackDateModifs([rowId], fallback, writtenChars)).get(rowId); }
 
   // L'historique des versions (js/versions-store.js) : à chaque enregistrement d'un modèle qui existe déjà, l'état qu'il remplace peut être gardé, en une ligne de plus dans le MÊME lot (Grist l'applique
   // en entier ou pas du tout). Absent des pages d'essai qui ne chargent que ce module : l'enregistrement se fait alors sans.
@@ -652,9 +702,11 @@ const Templates = (function () {
 
   // L'état que Grist garde pour la ligne `id` au moment d'enregistrer, celui que l'enregistrement va remplacer : le cache quand il vient d'être lu ou écrit par ce widget, sinon la ligne relue (une autre
   // personne a pu l'enregistrer depuis, et c'est son état qu'il faut garder). null quand la ligne n'existe plus.
+  // Une table lourde met des secondes à venir : comptés depuis le début de sa lecture, les trois secondes de fraîcheur étaient passées quand elle arrivait, et l'enregistrement qui suit la lecture d'un
+  // passage la relisait aussitôt en entier (une traversée de plus, pour rien : relue, elle aurait eu le même âge en arrivant). Sa fraîcheur se compte donc depuis son arrivée.
   async function storedStateFor(id) {
     const cached = byId(id);
-    const freshAt = Math.max(cacheReadAt, cacheRowWrittenAt.get(String(id)) || 0);
+    const freshAt = Math.max(loadedChars >= HEAVY_TABLE_CHARS ? cacheArrivedAt : cacheReadAt, cacheRowWrittenAt.get(String(id)) || 0);
     if (cached && Date.now() - freshAt <= CACHE_FRESH_MS) return cached;
     const tableData = await readTable();
     if (!tableData || !Array.isArray(tableData.id)) return cached || null;
@@ -734,6 +786,8 @@ const Templates = (function () {
     if (writesModifiedBy) columns.ModifiePar = currentAuthorLabel();
     if (nom != null || !id) columns.Nom = nom == null ? '' : nom;
     const others = alsoWrite || [];
+    // Le poids de ce qui part : readBackDateModifs ne relit pas une table lourde pour une date qu'il sait prévoir.
+    const writtenChars = others.reduce((sum, other) => sum + (typeof other.contenu === 'string' ? other.contenu.length : 0), typeof contenuHtml === 'string' ? contenuHtml.length : 0);
     const otherActions = others.map(({ id: modelId, contenu }) => ['UpdateRecord', TABLE_NAME, modelId, { Contenu: contenu, DateModif: now }]);
     // Ce que les modèles écrits avec le document gardent après coup : leur contenu dans le cache dès l'écriture faite, puis leur DateModif relu, noté.
     const settleOthersContent = () => others.forEach(({ id: modelId, contenu }) => settleContent(modelId, contenu, now));
@@ -754,7 +808,7 @@ const Templates = (function () {
       // quitté puis rouvert aussitôt y est lu - avant la relecture de la date ci-dessous, qui dure des secondes quand Grist est lent.
       settleWritten(id, columns, now);
       settleOthersContent();
-      const dates = await readBackDateModifs([id, ...others.map(({ id: modelId }) => modelId)], now);
+      const dates = await readBackDateModifs([id, ...others.map(({ id: modelId }) => modelId)], now, writtenChars);
       const dateModif = dates.get(id);
       writes.remember(id, dateModif);
       noteDateModif(id, dateModif);
@@ -771,7 +825,7 @@ const Templates = (function () {
       // est à l'écran, et l'enregistrement automatique y écrirait ensuite, sous l'identifiant du modèle neuf, ce que l'écran montre.
       if (currentIdSeq === seqAtStart) currentTemplateId = newId;
       settleOthersContent();
-      const dates = await readBackDateModifs([newId, ...others.map(({ id: modelId }) => modelId)], now);
+      const dates = await readBackDateModifs([newId, ...others.map(({ id: modelId }) => modelId)], now, writtenChars);
       const dateModif = dates.get(newId);
       writes.remember(newId, dateModif);
       settleOthers(dates);
@@ -791,7 +845,7 @@ const Templates = (function () {
       ['UpdateRecord', TABLE_NAME, id, { Contenu: contenuHtml, DateModif: now }]
     ]);
     settleContent(id, contenuHtml, now);
-    const dateModif = await readBackDateModif(id, now);
+    const dateModif = await readBackDateModif(id, now, typeof contenuHtml === 'string' ? contenuHtml.length : 0);
     writes.remember(id, dateModif);
     noteDateModif(id, dateModif);
     return { id, dateModif };

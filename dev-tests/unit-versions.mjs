@@ -52,7 +52,11 @@ const VERSION_COLUMNS = ['Jeton', 'Date', 'Auteur', 'Nom', 'Genre', 'Donnees'];
 // Faux document : des tables en colonnes typées, un journal des lots appliqués, un registre de TOUS les appels (réussis ou refusés) et des lectures. Un lot est atomique, comme dans
 // Grist : une action qui échoue défait celles d'avant (le faux stub de la page, lui, applique action par action).
 class Doc {
-  constructor({ models = MODEL_COLUMNS, user = null } = {}) {
+  // `fractionalDates` : une colonne « Date et heure » garde les millièmes de l'instant reçu, comme le vrai Grist (mesuré le 11/11 dans grist-static : Date.parse(iso) / 1000, bit pour bit) ; par défaut
+  // ce faux document arrondit à la seconde, comme le faux Grist des pages d'essai.
+  constructor({ models = MODEL_COLUMNS, user = null, fractionalDates = false } = {}) {
+    this.fractionalDates = fractionalDates;
+    this.onRead = null;  // appelé à chaque lecture de table, avant qu'elle ne revienne : une lecture lente avance l'horloge du test ici
     this.tables = {};
     this.nextId = {};
     this.journal = [];   // les actions APPLIQUÉES, dans l'ordre
@@ -78,12 +82,16 @@ class Doc {
   readsOf(table) { return this.reads.filter((r) => r === table).length; }
   versionAdds() { return this.journal.filter((a) => a[0] === 'AddRecord' && a[1] === VERSIONS).length; }
 
-  stored(type, value) { return type === 'DateTime' && typeof value === 'string' ? Math.floor(Date.parse(value) / 1000) : value; }
+  stored(type, value) {
+    if (type !== 'DateTime' || typeof value !== 'string') return value;
+    return this.fractionalDates ? Date.parse(value) / 1000 : Math.floor(Date.parse(value) / 1000);
+  }
 
   async listTables() { return Object.keys(this.tables); }
 
   async fetchTable(tableId) {
     this.reads.push(tableId);
+    if (this.onRead) this.onRead(tableId);
     if (this.failReads.has(tableId)) throw new Error('Table illisible : ' + tableId);
     const table = this.tables[tableId];
     if (!table) throw new Error('Invalid table ' + tableId);
@@ -286,6 +294,26 @@ async function main() {
       check(`règles de garde, ${name} : ${why}`, doc.rows(VERSIONS).length === expected, `${doc.rows(VERSIONS).length} version(s), attendu ${expected}`);
     }
     check('les versions gardées sont celles qui précédaient chaque copie : v1, v5, v7', sameList(await t.contents(), ['<p>v1</p>', '<p>v5</p>', '<p>v7</p>']), json(await t.contents()));
+    // Ce que coûte un « pas maintenant » (11/11, modèles lourds) : quand les règles de temps suffisent à refuser la copie, l'état remplacé n'est pas mis en texte pour l'apprendre (deux textes du poids du
+    // modèle, comparés puis hachés, à chaque enregistrement automatique). `typeModele` n'est lu que par snapshotOf : l'état compte ses lectures.
+    const cost = await t.run(`(async () => {
+      let reads = 0;
+      const author = 'Moi Même <moi@exemple.fr>';
+      const stateOf = html => ({ get typeModele() { reads++; return 'document'; }, contenu: html, modifiePar: author, dateModif: Date.now() / 1000 });
+      const tokenFor = async () => 'jeton-de-cout';
+      const first = await VersionsStore.prepare({ rowId: 9001, stored: stateOf('<p>a</p>'), next: stateOf('<p>b</p>'), author, tokenFor });
+      if (first) first.commit(9101);
+      const readsToKeep = reads;
+      reads = 0;
+      const second = await VersionsStore.prepare({ rowId: 9001, stored: stateOf('<p>b</p>'), next: stateOf('<p>c</p>'), author, tokenFor });
+      const readsToRefuse = reads;
+      reads = 0;
+      const forced = await VersionsStore.prepare({ rowId: 9001, stored: stateOf('<p>b</p>'), next: stateOf('<p>c</p>'), author, tokenFor, force: true });
+      return { kept: !!first, readsToKeep, refused: second === null, readsToRefuse, forced: !!forced, readsForced: reads };
+    })()`);
+    check('une copie à garder met l\'état remplacé en texte (il est lu), et un refus par les seules règles de temps ne le lit pas du tout',
+      cost.kept && cost.readsToKeep > 0 && cost.refused && cost.readsToRefuse === 0, json(cost));
+    check('une restauration (copie d\'office) lit toujours l\'état, même quand les règles de temps refuseraient', cost.forced && cost.readsForced > 0, json(cost));
   }
 
   // 3. Une autre personne, le cache de 3 secondes, l'identité inconnue.
@@ -339,6 +367,98 @@ async function main() {
     await t.save(id, '<p>v8</p>');
     const staleReads = doc.readsOf(MODELS) - staleBefore;
     check('cache de moins de 3 s : une lecture de moins qu\'avec un cache plus ancien (celle de l\'état remplacé)', staleReads - freshReads === 1, `${freshReads} contre ${staleReads}`);
+  }
+
+  // 3b. Une table LOURDE (11/11, un PowerPoint de 29 Mo importé : des dizaines de millions de signes dans la table des modèles, que chaque lecture rapporte en entier, page prise pendant ce temps). Un
+  // enregistrement ne la relit plus pour rien : ni pour la date qu'il vient d'écrire quand on sait comment Grist la garde, ni pour l'état qu'il remplace quand la table vient d'arriver.
+  {
+    const HEAVY = '<p>' + 'x'.repeat(8 * 1000 * 1000) + '</p>';
+    const readsDuring = async (doc, action) => { const before = doc.readsOf(MODELS); const result = await action(); return { reads: doc.readsOf(MODELS) - before, result }; };
+    const person = { email: 'moi@exemple.fr', name: 'Moi Même' };
+
+    // Un Grist qui garde les millièmes (le vrai).
+    {
+      const doc = new Doc({ fractionalDates: true });
+      const t = fresh(doc);
+      await t.identify(person);
+      t.advance(1234); // un instant qui ne tombe pas pile sur une seconde : la relecture de la création dit comment Grist garde une date
+      const id = await t.create('Gros', HEAVY + '<p>v1</p>');
+      const stored = () => doc.row(MODELS, id).DateModif;
+      // Le premier enregistrement de la session garde une version et crée le jeton du modèle (des lectures de plus, une fois) : il passe avant les mesures.
+      t.advance(10 * SEC);
+      await t.save(id, HEAVY + '<p>v1b</p>');
+      t.advance(10 * SEC);
+      const stale = await readsDuring(doc, () => t.save(id, HEAVY + '<p>v2</p>'));
+      check('table lourde, cache de plus de 3 s : une seule lecture (l\'état remplacé : une autre personne a pu écrire), plus aucune pour la date',
+        stale.reads === 1, stale.reads);
+      check('... et la date rendue est, au bit près, celle que Grist garde', stale.result.dateModif === stored() && !Number.isInteger(stored()), json([stale.result.dateModif, stored()]));
+      check('... comme celle que le widget retient de sa dernière écriture', t.run(`Templates.lastWritten(${id})`) === stored(), json(t.run(`Templates.lastWritten(${id})`)));
+      t.advance(SEC + 7);
+      const quick = await readsDuring(doc, () => t.save(id, HEAVY + '<p>v3</p>'));
+      check('table lourde, écrite il y a moins de 3 s : aucune lecture du tout', quick.reads === 0 && quick.result.dateModif === stored(), json([quick.reads, quick.result.dateModif, stored()]));
+      // Le passage de l'enregistrement automatique : il relit la table (des secondes à venir), puis enregistre.
+      t.advance(30 * SEC);
+      doc.onRead = (table) => { if (table === MODELS) t.advance(5 * SEC); };
+      await t.run('Templates.loadAll()');
+      const afterRead = await readsDuring(doc, () => t.save(id, HEAVY + '<p>v4</p>'));
+      doc.onRead = null;
+      check('table lourde arrivée à l\'instant après 5 s de lecture : l\'enregistrement qui suit ne la relit pas (sa fraîcheur se compte depuis son arrivée)',
+        afterRead.reads === 0 && afterRead.result.dateModif === stored(), json([afterRead.reads, afterRead.result.dateModif, stored()]));
+      // Une date prévue que Grist ne rend pas : une autre personne a écrit la ligne depuis.
+      t.advance(10 * SEC);
+      const row = doc.row(MODELS, id);
+      row.Contenu = HEAVY + '<p>ailleurs</p>';
+      row.ModifiePar = 'Autre <autre@exemple.fr>';
+      row.DateModif = t.now() / 1000 + 0.25;
+      const elsewhereDate = row.DateModif;
+      const reloaded = await t.run('Templates.loadAll()');
+      check('une ligne réécrite ailleurs : la lecture suivante rend SA date, pas celle que le widget avait prévue', reloaded.find((m) => m.id === id).dateModif === elsewhereDate, json(reloaded.find((m) => m.id === id).dateModif));
+      t.advance(10 * SEC);
+      const afterRefuted = await readsDuring(doc, () => t.save(id, HEAVY + '<p>v5</p>'));
+      check('... et l\'enregistrement d\'après relit de nouveau sa date (la prévision a été démentie) : deux lectures, la date de Grist',
+        afterRefuted.reads === 2 && afterRefuted.result.dateModif === stored(), json([afterRefuted.reads, afterRefuted.result.dateModif, stored()]));
+      t.advance(10 * SEC);
+      const trustedAgain = await readsDuring(doc, () => t.save(id, HEAVY + '<p>v6</p>'));
+      check('... puis, la relecture ayant redonné le nombre prévu, la date n\'est plus relue', trustedAgain.reads === 1 && trustedAgain.result.dateModif === stored(), json([trustedAgain.reads, trustedAgain.result.dateModif, stored()]));
+    }
+
+    // Une table légère : rien ne change, chaque enregistrement relit sa date, et la fraîcheur du cache se compte depuis le début de sa lecture.
+    {
+      const doc = new Doc({ fractionalDates: true });
+      const t = fresh(doc);
+      await t.identify(person);
+      t.advance(1234);
+      const id = await t.create('Léger', '<p>v1</p>');
+      t.advance(10 * SEC);
+      await t.save(id, '<p>v1b</p>'); // le premier enregistrement de la session (version gardée, jeton créé) passe avant les mesures
+      t.advance(SEC + 7);
+      const quick = await readsDuring(doc, () => t.save(id, '<p>v2</p>'));
+      check('table légère : chaque enregistrement relit sa date, comme avant (une lecture)', quick.reads === 1 && quick.result.dateModif === doc.row(MODELS, id).DateModif, json([quick.reads, quick.result.dateModif]));
+      t.advance(30 * SEC);
+      doc.onRead = (table) => { if (table === MODELS) t.advance(5 * SEC); };
+      await t.run('Templates.loadAll()');
+      doc.onRead = null;
+      const afterRead = await readsDuring(doc, () => t.save(id, '<p>v3</p>'));
+      check('table légère lue en 5 s : l\'état remplacé est relu comme avant (deux lectures)', afterRead.reads === 2, afterRead.reads);
+    }
+
+    // Un Grist qui arrondirait une date à la seconde (ce faux document par défaut) : la date n'est jamais prévue, même après une écriture tombée pile sur une seconde.
+    {
+      const doc = new Doc();
+      const t = fresh(doc);
+      await t.identify(person);
+      const id = await t.create('Gros', HEAVY + '<p>v1</p>'); // l'horloge du test part d'une seconde ronde : la relecture rend le nombre prévu, par hasard
+      const stored = () => doc.row(MODELS, id).DateModif;
+      t.advance(10 * SEC);
+      await t.save(id, HEAVY + '<p>v1b</p>'); // encore une seconde ronde, et le premier enregistrement de la session (version gardée, jeton créé) passe avant les mesures
+      t.advance(10 * SEC + 345);
+      const first = await readsDuring(doc, () => t.save(id, HEAVY + '<p>v2</p>'));
+      check('Grist qui arrondit à la seconde : une date tombée pile sur une seconde ne prouve rien, la suivante est relue (deux lectures) et c\'est celle de Grist',
+        first.reads === 2 && first.result.dateModif === stored() && Number.isInteger(stored()), json([first.reads, first.result.dateModif, stored()]));
+      t.advance(10 * SEC);
+      const second = await readsDuring(doc, () => t.save(id, HEAVY + '<p>v3</p>'));
+      check('... et toutes les suivantes aussi', second.reads === 2 && second.result.dateModif === stored(), json([second.reads, second.result.dateModif, stored()]));
+    }
   }
 
   // 4. Ce que le modèle garde de son auteur.

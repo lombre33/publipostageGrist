@@ -689,9 +689,14 @@ const Editor = (function () {
   // et seuls les blocs neufs se sérialisent. Même sérialiseur que `editor.getHTML()` (celui du schéma, qui écrit les marques de suivi des cases) sur le même nœud ; les blocs d'un document ne
   // portent aucune marque (`serializeFragment` n'a alors rien à regrouper d'un bloc à l'autre) et l'`innerHTML` d'un conteneur est la suite des HTML de ses enfants : la sortie est la même, octet pour octet.
   // Seul le rendu peut changer sans que le nœud change : ce qui ne vient pas de ses attributs (la langue de l'interface pour la puce d'une date, la touche de déclenchement du panneau « # » pour la
-  // bulle d'une variable ou d'un calcul) fait repartir la mémoire à neuf. Une marque sur un bloc de premier niveau, ou une erreur : le calcul d'avant, en entier. Un bloc de plus de 64 Ko (une photo
-  // collée dans le texte) ne se garde pas : le texte gardé doublerait le poids de l'image en mémoire, et la refaire coûte quelques millisecondes.
+  // bulle d'une variable ou d'un calcul) fait repartir la mémoire à neuf. Une marque sur un bloc de premier niveau, ou une erreur : le calcul d'avant, en entier.
+  // UN BLOC DE PLUS DE 64 Ko (une photo posée dans le texte) ne se garde pas en entier : le texte gardé doublerait le poids de l'image en mémoire. Il se garde EN MORCEAUX (11/11, un PowerPoint de 29 Mo :
+  // ses 57 photos se réécrivaient à chaque passage de l'enregistrement automatique, 215 ms de page prise et 38 Mo de textes jetés aussitôt) : ce que son HTML écrit autour de ses valeurs lourdes - l'adresse
+  // de données de la photo, des centaines de milliers de signes -, et ces valeurs elles-mêmes, qui sont DÉJÀ en mémoire puisque ce sont les attributs du nœud. Rien de lourd n'est donc gardé en double, et
+  // le texte du document se recompose d'une seule recopie. Les morceaux viennent du HTML rendu lui-même, coupé là où une valeur lourde s'y retrouve telle quelle : leur réunion est ce HTML, octet pour octet.
+  // Une valeur que le rendu a transformée (un `&` devenu `&amp;`) ne s'y retrouve pas : le bloc reste alors réécrit à chaque fois, comme avant ; de même quand ce qui resterait à garder dépasse 64 Ko.
   const BLOCK_HTML_KEPT_MAX = 65536;
+  const HEAVY_VALUE_MIN = 8192;
   let blockHtml = new WeakMap();
   let blockHtmlSetup = '';
   // La mémoire repart à neuf quand ce qui change le rendu sans changer le nœud a changé.
@@ -699,19 +704,76 @@ const Editor = (function () {
     const setup = I18n.getLang() + '|' + Variables.triggerChar();
     if (setup !== blockHtmlSetup) { blockHtml = new WeakMap(); blockHtmlSetup = setup; }
   }
-  // Le HTML d'un bloc de premier niveau : celui de la mémoire, sinon rendu par `serializer` dans le conteneur de `hold` (créé au premier besoin, gardé d'un bloc à l'autre) et gardé.
+  // Les valeurs lourdes d'un bloc : chaque attribut en texte d'au moins HEAVY_VALUE_MIN signes de ce nœud, de ses descendants et de leurs marques, une fois chacune.
+  function heavyValuesOf(node) {
+    const values = [];
+    const take = (attrs) => {
+      for (const name in attrs) {
+        const value = attrs[name];
+        if (typeof value === 'string' && value.length >= HEAVY_VALUE_MIN && values.indexOf(value) === -1) values.push(value);
+      }
+    };
+    const visit = (current) => { take(current.attrs); current.marks.forEach((mark) => { take(mark.attrs); }); };
+    visit(node);
+    node.descendants((child) => { visit(child); });
+    return values;
+  }
+  // Un court morceau de `html` recopié à part : la tranche d'un long texte (`slice`) pointe dans ce texte et le retient en entier tant qu'elle vit - ici les centaines de milliers de signes d'une photo
+  // pour quelques dizaines de signes gardés.
+  const ownCopy = text => JSON.parse(JSON.stringify(text));
+  // `html` coupé autour de ses valeurs lourdes : la liste des morceaux, dans l'ordre (les valeurs y sont les textes de `values`, pas des copies), ou null quand aucune ne s'y retrouve telle quelle ou
+  // quand le reste dépasse BLOCK_HTML_KEPT_MAX. À chaque pas, la valeur retrouvée le plus tôt dans ce qui reste (la plus longue quand deux commencent au même endroit) ; `next` garde où chacune se retrouve
+  // ensuite, pour ne pas relire le texte à chaque pas.
+  function piecesOf(html, values) {
+    if (!values.length) return null;
+    const next = values.map(value => html.indexOf(value));
+    const pieces = [];
+    let from = 0;
+    let kept = 0;
+    for (;;) {
+      let first = -1;
+      for (let i = 0; i < values.length; i++) {
+        if (next[i] === -1) continue;
+        if (first === -1 || next[i] < next[first] || (next[i] === next[first] && values[i].length > values[first].length)) first = i;
+      }
+      if (first === -1) break;
+      const at = next[first];
+      kept += at - from;
+      if (kept > BLOCK_HTML_KEPT_MAX) return null;
+      if (at > from) pieces.push(ownCopy(html.slice(from, at)));
+      pieces.push(values[first]);
+      from = at + values[first].length;
+      for (let i = 0; i < values.length; i++) if (next[i] !== -1 && next[i] < from) next[i] = html.indexOf(values[i], from);
+    }
+    if (!pieces.length) return null;
+    kept += html.length - from;
+    if (kept > BLOCK_HTML_KEPT_MAX) return null;
+    if (from < html.length) pieces.push(ownCopy(html.slice(from)));
+    return pieces;
+  }
+  // Ce qu'un bloc de premier niveau écrit : son HTML (un texte) ou ses morceaux (une liste, voir plus haut), tels que la mémoire les tient ; sinon le HTML rendu par `serializer` dans le conteneur de `hold`
+  // (créé au premier besoin, gardé d'un bloc à l'autre), gardé en entier ou en morceaux quand il peut l'être.
   // Les éléments du rendu sont créés dans le document du conteneur, qui n'est pas celui de la page : une image créée dans la page se charge dès que son adresse est posée, même hors de la page - le navigateur
   // relisait ainsi chaque photo (une adresse de données de plusieurs Mo) à chaque passage de l'enregistrement automatique, pour un élément jeté aussitôt. Le texte écrit est le même.
-  function htmlOfBlock(node, serializer, hold) {
-    let html = blockHtml.get(node);
-    if (html === undefined) {
+  function blockHtmlOf(node, serializer, hold) {
+    let kept = blockHtml.get(node);
+    if (kept === undefined) {
       if (!hold.div) hold.div = document.implementation.createHTMLDocument().createElement('div');
       hold.div.appendChild(serializer.serializeNode(node, { document: hold.div.ownerDocument }));
-      html = hold.div.innerHTML;
+      kept = hold.div.innerHTML;
       hold.div.textContent = '';
-      if (html.length <= BLOCK_HTML_KEPT_MAX) blockHtml.set(node, html);
+      if (kept.length <= BLOCK_HTML_KEPT_MAX) blockHtml.set(node, kept);
+      else {
+        const pieces = piecesOf(kept, heavyValuesOf(node));
+        if (pieces) blockHtml.set(node, pieces);
+      }
     }
-    return html;
+    return kept;
+  }
+  // Ajoute à `parts` ce qu'un bloc écrit (`blockHtmlOf`) : son texte, ou ses morceaux un à un.
+  function pushBlockHtml(parts, kept) {
+    if (typeof kept === 'string') parts.push(kept);
+    else for (let i = 0; i < kept.length; i++) parts.push(kept[i]);
   }
   function documentHtml(content, schema) {
     let plain = !!domSerializerClass;
@@ -722,7 +784,7 @@ const Editor = (function () {
       const serializer = domSerializerClass.fromSchema(schema);
       const hold = { div: null };
       const parts = [];
-      content.forEach(node => { parts.push(htmlOfBlock(node, serializer, hold)); });
+      content.forEach(node => { pushBlockHtml(parts, blockHtmlOf(node, serializer, hold)); });
       return parts.join('');
     } catch (e) {
       return htmlOfFragment(content, schema);
@@ -762,7 +824,7 @@ const Editor = (function () {
         while (index < doc.childCount && performance.now() < until) {
           const node = doc.child(index);
           if (node.marks.length) return;
-          htmlOfBlock(node, serializer, hold);
+          blockHtmlOf(node, serializer, hold);
           index += 1;
         }
       } catch (e) { return; }
@@ -785,7 +847,7 @@ const Editor = (function () {
     return GridEditor.serialize(documentHtml(doc && doc.content ? doc.content : editor.state.doc.content, editor.schema));
   }
   // Écrit le texte du document d'avance, bloc après bloc, en rendant la main entre deux (`pause()` : js/import-placing.js) : l'enregistrement qui suit l'import d'un gros fichier le trouve prêt au lieu de
-  // tenir la page 600 ms d'un seul bloc (les blocs de plus de BLOCK_HTML_KEPT_MAX caractères - une photo - ne sont pas gardés par la mémoire des blocs, donc relus à chaque getHTML). Un document qui change
+  // tenir la page 600 ms d'un seul bloc (un bloc lourd qui ne se garde ni en entier ni en morceaux, voir BLOCK_HTML_KEPT_MAX, serait relu par ce getHTML). Un document qui change
   // pendant ce temps, ou dont un bloc porte une marque (documentHtml s'y passe de la mémoire) : rien n'est préparé, getHTML fait comme avant.
   let preparedHtml = null;   // { doc, html } : le texte du document `doc`
   async function prepareHTML(pause) {
@@ -800,7 +862,7 @@ const Editor = (function () {
       for (let i = 0; i < doc.childCount; i++) {
         const node = doc.child(i);
         if (node.marks.length) return;
-        parts.push(htmlOfBlock(node, serializer, hold));
+        pushBlockHtml(parts, blockHtmlOf(node, serializer, hold));
         await pause();
         if (!editor || editor.state.doc !== doc) return;
       }

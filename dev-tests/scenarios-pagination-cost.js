@@ -1193,6 +1193,74 @@
     },
   });
 
+  // Un bloc LOURD (une photo posée dans le texte, plus de 64 Ko) gardé EN MORCEAUX (js/editor.js : piecesOf, heavyValuesOf, blockHtmlOf ; 11/11, un PowerPoint de 29 Mo : ses 57 photos se réécrivaient à
+  // chaque passage de l'enregistrement automatique, 215 ms de page prise et 38 Mo de textes jetés aussitôt). `serializer.serializeNode` n'est appelé que pour un bloc de premier niveau que la mémoire n'a pas.
+  cases.push({
+    id: 'autosave_html_keeps_a_heavy_block_in_pieces_and_writes_the_same_bytes',
+    description: "Un bloc qui porte une photo de plus de 64 Ko n'est plus réécrit à chaque lecture du HTML : la deuxième lecture ne rend aucun bloc, une lettre tapée n'en fait rendre qu'un, et le texte reste celui de TipTap octet pour octet (trois photos, deux fois la même dans un bloc, une photo et un long texte alternatif) ; un bloc dont la photo est transformée par le rendu (un « & » dans son adresse) reste réécrit à chaque lecture, avec les mêmes octets",
+    run: async (h) => {
+      // Des « photos » de 70 000 signes et plus, toutes différentes (le contenu n'a pas à être une image : seul le texte de l'adresse compte).
+      const photo = (seed, chars) => {
+        let x = seed * 7919 + 13;
+        let out = '';
+        const wanted = Math.floor((chars || 70000) / 4) * 4;   // un multiple de 4 : une adresse base64 que le navigateur sait lire
+        while (out.length < wanted) { x = (x * 1103515245 + 12345) & 0x7fffffff; out += x.toString(36); }
+        return 'data:image/png;base64,' + out.slice(0, wanted);
+      };
+      const img = (src, alt) => '<img class="editor-image" alt="' + (alt || 'Photo') + '" src="' + src + '" style="width: 80px" data-layer="normal" data-wrap="inline">';
+      const a = photo(1);
+      const b = photo(2, 90000);
+      const c = photo(3);
+      const longAlt = 'Description ' + 'longue '.repeat(1400); // 9 800 signes : une valeur lourde de plus dans le même bloc
+      const html = '<p>Début</p>'
+        + '<p>' + img(a) + '</p>'
+        + '<p>Entre deux</p>'
+        + '<p>avant ' + img(b) + ' milieu ' + img(b) + ' après</p>'   // deux fois la même photo dans un bloc
+        + '<p>' + img(c, longAlt) + '</p>'                             // une photo et un long texte alternatif
+        + '<p>Fin</p>';
+      await setup(h, html);
+      const editor = EditorCore.getEditor();
+      const serializer = editor.schema.cached.domSerializer;
+      const real = serializer.serializeNode;
+      let calls = 0;
+      serializer.serializeNode = function () { calls++; return real.apply(this, arguments); };
+      try {
+        const counted = fn => { calls = 0; const value = fn(); return { value, calls }; };
+        const blocks = editor.state.doc.childCount;
+        const full = editor.getHTML();
+        const first = counted(() => Editor.getHTML());
+        const second = counted(() => Editor.getHTML());
+        const third = counted(() => Editor.getHTML());
+        // Une lettre dans un paragraphe léger : lui seul est rendu.
+        let pos = -1;
+        editor.state.doc.forEach((node, offset) => { if (node.type.name === 'paragraph' && node.textContent === 'Entre deux') pos = offset + 1; });
+        editor.view.dispatch(editor.state.tr.insertText('x', pos));
+        const edited = counted(() => Editor.getHTML());
+        const fullEdited = editor.getHTML();
+        const heavy = full.length > 3 * 70000 && blocks === 6;
+        const same = first.value === full && second.value === full && third.value === full && edited.value === fullEdited && edited.value !== full && edited.value.indexOf('<p>xEntre deux</p>') >= 0;
+        // Une photo dont l'adresse porte un « & » : le rendu l'écrit « &amp; », elle ne se retrouve pas telle quelle dans le HTML, et tout le bloc reste à garder (plus de 64 Ko) : il n'est pas gardé.
+        const dirty = photo(4).replace(/^(.{1000})/, '$1&');
+        await setup(h, '<p>Début</p><p>' + img(dirty) + '</p><p>Fin</p>');
+        const editor2 = EditorCore.getEditor();
+        const serializer2 = editor2.schema.cached.domSerializer;
+        const patched = serializer2 !== serializer;
+        if (patched) serializer2.serializeNode = function () { calls++; return real.apply(this, arguments); };
+        try {
+          const full2 = editor2.getHTML();
+          const firstDirty = counted(() => Editor.getHTML());
+          const secondDirty = counted(() => Editor.getHTML());
+          const sameDirty = firstDirty.value === full2 && secondDirty.value === full2 && full2.indexOf('&amp;') !== -1;
+          return {
+            pass: heavy && second.calls === 0 && third.calls === 0 && edited.calls === 1 && same && secondDirty.calls === 1 && sameDirty,
+            notes: blocks + ' blocs, ' + full.length + ' caractères ; blocs rendus : 1re lecture ' + first.calls + ', 2e ' + second.calls + ' et 3e ' + third.calls + ' (attendu 0), après une lettre ' + edited.calls
+              + ' (attendu 1) ; mêmes octets que TipTap=' + same + ' ; adresse avec « & » : 2e lecture ' + secondDirty.calls + ' bloc rendu (attendu 1 : le bloc lourd n\'est pas gardé), mêmes octets=' + sameDirty,
+          };
+        } finally { if (patched) serializer2.serializeNode = real; }
+      } finally { serializer.serializeNode = real; }
+    },
+  });
+
   cases.push({
     id: 'autosave_html_follows_the_interface_language_and_the_trigger_key_like_the_full_serialization',
     description: "Quand la langue de l'interface ou la touche de déclenchement du panneau « # » change sans que le texte change, le HTML lu reste celui de TipTap octet pour octet (puce d'une date, sommaire, bulle d'une variable, bulle d'un calcul) : la mémoire des blocs repart à neuf",
