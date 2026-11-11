@@ -727,8 +727,8 @@ async function columnsPart(T) {
   // La barre, puis la fenêtre.
   await clickOn('.tiptap .mention-chip');
   let bar = await barState();
-  check(`${T} : un clic sur la pastille ouvre sa barre - un seul bouton « Autres colonnes de la même fiche », dans le panneau, juste à côté de la pastille, rien par-dessus`,
-    bar.visible && bar.buttons === 1 && bar.title === 'Autres colonnes de la même fiche' && bar.label === bar.title && !bar.grey && bar.inPanel && bar.reachable && bar.nearChip, bar);
+  check(`${T} : un clic sur la pastille ouvre sa barre - deux boutons (« Autres colonnes de la même fiche » d'abord, puis « Style », ajouté le 07/11), dans le panneau, juste à côté de la pastille, rien par-dessus`,
+    bar.visible && bar.buttons === 2 && bar.title === 'Autres colonnes de la même fiche' && bar.label === bar.title && !bar.grey && bar.inPanel && bar.reachable && bar.nearChip, bar);
   await snap(`${T}-10-barre-pastille`);
   await clickOn('.v2-mention-toolbar.visible button');
   await page.waitForTimeout(300);
@@ -796,7 +796,7 @@ async function columnsPart(T) {
   check(`${T} : dans une case de 120 px, la pastille d'un nom long reste dans la case, sur une ligne, coupée par « … »`, before.inCell && before.oneLine && before.cut && before.text === LONG_NAME, before);
   await clickOn('.tiptap td .mention-chip');
   bar = await barState();
-  check(`${T} : un clic sur la pastille de la case ouvre sa barre, dans le panneau et sous la souris`, bar.visible && bar.buttons === 1 && bar.inPanel && bar.reachable && bar.nearChip, bar);
+  check(`${T} : un clic sur la pastille de la case ouvre sa barre, dans le panneau et sous la souris`, bar.visible && bar.buttons === 2 && bar.inPanel && bar.reachable && bar.nearChip, bar);
   await snap(`${T}-14-barre-case`);
   await clickOn('.v2-mention-toolbar.visible button');
   await page.waitForTimeout(300);
@@ -816,7 +816,7 @@ async function columnsPart(T) {
   await clickOn('.tiptap .mention-chip');
   bar = await barState();
   check(`${T} : la pastille rouge (fiche disparue) a sa barre, bouton grisé - il reste là - avec le message de la pastille en info-bulle`,
-    bar.visible && bar.buttons === 1 && bar.grey && bar.title === 'Cette fiche n’existe plus dans la table « MnPersonnes ».' && bar.label === bar.title, bar);
+    bar.visible && bar.buttons === 2 && bar.grey && bar.title === 'Cette fiche n’existe plus dans la table « MnPersonnes ».' && bar.label === bar.title, bar);
   await clickOn('.v2-mention-toolbar.visible button');
   await page.waitForTimeout(300);
   check(`${T} : un clic sur le bouton grisé n'ouvre rien : ni fenêtre, la pastille reste sélectionnée et sa barre ouverte`, !(await windowState()).open && (await chipSelected()) && (await barState()).visible);

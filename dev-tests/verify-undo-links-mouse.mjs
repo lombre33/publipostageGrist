@@ -42,6 +42,14 @@ const linkWrites = page => page.evaluate(table => window.__gristStub.getActionLo
 const clearWrites = page => page.evaluate(() => window.__gristStub.clearActionLog());
 const forget = page => page.evaluate(() => { if (typeof ActionHistory !== 'undefined') ActionHistory.reset(); });
 const status = page => page.evaluate(() => (document.getElementById('status-msg') || {}).textContent || '');
+// L'enregistrement automatique (toutes les 2,5 s) écrase le coin d'état par « Enregistré à … » dès qu'un passage tombe entre le geste et la lecture : on note chaque texte que le coin prend depuis le repère
+// et le contrôle d'un message cherche dans la liste (rouge un essai sur deux sur l'ancien code, relevé le 10/11).
+const watchStatus = page => page.evaluate(() => {
+  const el = document.getElementById('status-msg');
+  window.__statusSeen = [el.textContent];
+  if (!window.__statusWatch) { window.__statusWatch = new MutationObserver(() => window.__statusSeen.push(el.textContent)); window.__statusWatch.observe(el, { childList: true, characterData: true, subtree: true }); }
+});
+const statusSeen = page => page.evaluate(() => (window.__statusSeen || []).slice());
 const said = (page, key, link) => page.evaluate(({ key, link }) => I18n.t(key, { link }), { key, link });
 const text = page => page.evaluate(() => EditorCore.getEditor().getText());
 const inEditor = page => page.evaluate(() => !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('.ProseMirror')));
@@ -141,9 +149,10 @@ async function phase(lang, theme) {
     check(`${tag} 1 : le panneau, resté ouvert, montre le nouveau lien`, await displayed(page, '#link-rules-modal') && JSON.stringify(await panelLabels(page)) === JSON.stringify([labelB]), await panelLabels(page));
     await closePanel(page);
     await clearWrites(page);
+    await watchStatus(page);
     await key(page, 'Control+z');
     check(`${tag} 1 : Ctrl + Z rend les anciennes colonnes, par une seule écriture`, JSON.stringify(await rules(page)) === JSON.stringify([ROW_A]) && JSON.stringify(await linkWrites(page)) === '["UpdateRecord"]', { rules: await rules(page), writes: await linkWrites(page) });
-    check(`${tag} 1 : le coin d'état nomme le lien rendu`, (await status(page)) === await said(page, 'status.linkRestored', labelA), await status(page));
+    check(`${tag} 1 : le coin d'état nomme le lien rendu`, (await statusSeen(page)).includes(await said(page, 'status.linkRestored', labelA)), await status(page));
     check(`${tag} 1 : le clavier est rendu à l'éditeur`, await inEditor(page));
     await key(page, 'Control+y');
     check(`${tag} 1 : Ctrl + Y rend les nouvelles colonnes`, JSON.stringify(await rules(page)) === JSON.stringify([ROW_B]) && (await status(page)) === await said(page, 'status.linkRestored', labelB), { rules: await rules(page), status: await status(page) });
@@ -169,9 +178,10 @@ async function phase(lang, theme) {
     check(`${tag} 2 : « Supprimer » retire le lien : la table et une seule écriture`, JSON.stringify(await rules(page)) === '[]' && JSON.stringify(await linkWrites(page)) === '["RemoveRecord"]', { rules: await rules(page), writes: await linkWrites(page) });
     await closePanel(page);
     await clearWrites(page);
+    await watchStatus(page);
     await key(page, 'Control+z');
     check(`${tag} 2 : Ctrl + Z rend le lien tel qu'il était, par une seule écriture`, JSON.stringify(await rules(page)) === JSON.stringify([ROW_B]) && JSON.stringify(await linkWrites(page)) === '["AddRecord"]', { rules: await rules(page), writes: await linkWrites(page) });
-    check(`${tag} 2 : le coin d'état nomme le lien rendu`, (await status(page)) === await said(page, 'status.linkRestored', labelB), await status(page));
+    check(`${tag} 2 : le coin d'état nomme le lien rendu`, (await statusSeen(page)).includes(await said(page, 'status.linkRestored', labelB)), await status(page));
     await openPanel(page);
     check(`${tag} 2 : « Tables liées » montre le lien rendu`, JSON.stringify(await panelLabels(page)) === JSON.stringify([labelB]), await panelLabels(page));
     await closePanel(page);
@@ -203,12 +213,13 @@ async function phase(lang, theme) {
     await page.keyboard.type(' APRES');
     await sleep(700);
     await clearWrites(page);
+    await watchStatus(page);
     await key(page, 'Control+z');
     check(`${tag} 3 : 1er Ctrl + Z : le texte d'après seul`, !/APRES/.test(await text(page)) && JSON.stringify(await badges(page)) === '["Contacts.Fonction"]' && JSON.stringify(await rules(page)) === JSON.stringify([ROW_A]), { text: await text(page), badges: await badges(page), rules: await rules(page) });
     await key(page, 'Control+z');
     check(`${tag} 3 : 2e Ctrl + Z : la variable seule, le lien reste`, (await badges(page)).length === 0 && JSON.stringify(await rules(page)) === JSON.stringify([ROW_A]) && JSON.stringify(await linkWrites(page)) === '[]', { badges: await badges(page), rules: await rules(page), writes: await linkWrites(page) });
     await key(page, 'Control+z');
-    check(`${tag} 3 : 3e Ctrl + Z : le lien est retiré (une écriture), le coin d'état le nomme`, JSON.stringify(await rules(page)) === '[]' && JSON.stringify(await linkWrites(page)) === '["RemoveRecord"]' && (await status(page)) === await said(page, 'status.linkRemoved', labelA), { rules: await rules(page), writes: await linkWrites(page), status: await status(page) });
+    check(`${tag} 3 : 3e Ctrl + Z : le lien est retiré (une écriture), le coin d'état le nomme`, JSON.stringify(await rules(page)) === '[]' && JSON.stringify(await linkWrites(page)) === '["RemoveRecord"]' && (await statusSeen(page)).includes(await said(page, 'status.linkRemoved', labelA)), { rules: await rules(page), writes: await linkWrites(page), status: await status(page) });
     check(`${tag} 3 : le texte d'avant est encore là`, / AVANT/.test(await text(page)), await text(page));
     await key(page, 'Control+y');
     check(`${tag} 3 : 1er Ctrl + Y : le lien revient, la variable pas encore`, JSON.stringify(await rules(page)) === JSON.stringify([ROW_A]) && (await badges(page)).length === 0 && (await status(page)) === await said(page, 'status.linkRestored', labelA), { rules: await rules(page), badges: await badges(page), status: await status(page) });

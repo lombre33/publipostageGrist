@@ -245,7 +245,8 @@ let bump = false;
 await page.route('**/_test-harness.html', async (route) => {
   const response = await route.fetch();
   let body = await response.text();
-  if (bump) body = body.replace(/(js\/page-layout\.js\?v=)([0-9.]+)/, (all, prefix, version) => prefix + version + '9');
+  // Toutes les occurrences (le bloc de préchargement d'index.html nomme le fichier avant sa balise <script> : la première n'est plus celle que la page exécute).
+  if (bump) body = body.replace(/(js\/page-layout\.js\?v=)([0-9.]+)/g, (all, prefix, version) => prefix + version + '9');
   await route.fulfill({ response, body });
 });
 const reload = async () => {
