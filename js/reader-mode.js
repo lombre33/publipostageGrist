@@ -459,6 +459,12 @@ const ReaderMode = (function () {
     const rank = wrapper.getAttribute('data-pp-sheet');
     return '#reader-container .reader-content' + (rank === null ? '' : '[data-pp-sheet="' + rank + '"]');
   }
+  // La même feuille, pour la règle de son plancher : le même élément, le même poids dans la cascade, écrit sans combinateur d'ancêtre (EditorCore.reserveRule : de
+  // `#reader-container .reader-content { … }`, Firefox retient l'id et refait le style de toute la Lecture à chaque feuille posée).
+  function sheetItself(wrapper) {
+    const rank = wrapper.getAttribute('data-pp-sheet');
+    return '.reader-content' + (rank === null ? '' : '[data-pp-sheet="' + rank + '"]') + ':is(#reader-container *)';
+  }
   function zoneForPage(zones, kind, n) {
     // La variante d'en-tête ou de pied de la page `n` (`kind` : 'header' ou 'footer') : celle de la première page quand elle a la sienne.
     return (n === 1 && zones.differentFirstPage) ? zones[kind + 'First'] : zones[kind + 'Default'];
@@ -560,7 +566,7 @@ const ReaderMode = (function () {
       // class="page-break-marker">, jamais un <p>.
       // Posée tout de suite, puis vérifiée et corrigée sur le bloc qui ouvre la page suivante (EditorCore.fitReserve, comme l'éditeur) ; une réserve qui tient va dans
       // `pass.reserves`, que watchGeometry relit.
-      const ruleFor = px => sheetSel + ' > *:nth-child(' + (offset.afterIndex + 1) + ') { margin-bottom: ' + px + 'px; }';
+      const ruleFor = px => EditorCore.reserveRule(sheetSel, el, offset.afterIndex + 1, px);
       const sheet = steps.add(ruleFor(seamHeight + remaining));
       const next = EditorCore.nextInFlow(el);
       const bodyTopRel = afterBottomRel + remaining + seamHeight;
@@ -579,9 +585,10 @@ const ReaderMode = (function () {
   function placeSimpleSeamsAtOnce(pass, offsets, start) {
     // Les coutures d'une suite de coupures simples (ni entre deux lignes d'un tableau, ni dans une zone à deux colonnes) qui commence à la coupure `start`, posées d'un coup, chaque
     // coupure vérifiée, la première qui n'est pas au rendez-vous et toutes celles d'après laissées à placeSeam (carte du 21/10, « Accélérer ») : même calcul que l'éditeur
-    // (js/header-footer-preview.js:placeSimpleSeamsAtOnce, qui le dit en entier). Rend le nombre de coupures posées : 0 pour une suite d'une seule coupure (placeSeam la pose, la suite d'après
-    // sera tentée) ou quand aucune n'a tenu (`pass.atOnce` tombe : plus aucun lot dans ce calcul). Les coupures déjà posées avant `start` (une coupure dans un tableau ou une zone, posée une
-    // à une) sont dans le document : la lecture les voit.
+    // (js/header-footer-preview.js:placeSimpleSeamsAtOnce ; EditorCore.placeReservesAtOnce le dit en entier). Rend le nombre de coupures posées : 0 pour une suite d'une seule coupure
+    // (placeSeam la pose, la suite d'après sera tentée) ou quand aucune n'a tenu (`pass.atOnce` tombe : plus aucun lot dans ce calcul ; il tombe aussi quand le moteur n'arrondit
+    // comme aucun de ceux que le calcul connaît, deux suites de rang). Les coupures déjà posées avant `start` (une coupure dans un tableau ou une zone, posée une à une) sont dans le
+    // document : la lecture les voit.
     const { zones, geometry, totalPages, wrapperChildren, wrapperRect, wrapperLeft, wrapperWidth, zoom, toLayoutY, overlay, steps, marginRules, pages, footAreaPx, headAreaPx, sheetSel } = pass;
     let count = 0;
     while (start + count < offsets.length && offsets[start + count].rowIndex == null && !offsets[start + count].zone && wrapperChildren[offsets[start + count].afterIndex]) count++;
@@ -598,48 +605,36 @@ const ReaderMode = (function () {
       seam.style.width = wrapperWidth + 'px';
       built.push({ seam, divider });
     }
-    const read = built.map(({ seam, divider }, i) => {
+    // Le bloc qui ouvre la page d'après chaque coupure se cherche une fois (EditorCore.nextInFlow relit le style calculé de ses frères).
+    const cuts = built.map(({ seam, divider }, i) => {
       const el = wrapperChildren[offsets[start + i].afterIndex];
-      const next = EditorCore.nextInFlow(el);
-      const bottom = el.getBoundingClientRect().bottom;
-      return { el, seamHeight: seam.getBoundingClientRect().height / zoom, dividerHeight: divider.getBoundingClientRect().height / zoom, bottom, gap: next ? next.getBoundingClientRect().top - bottom : null };
+      return { el, next: EditorCore.nextInFlow(el), nth: offsets[start + i].afterIndex + 1, seamHeight: seam.getBoundingClientRect().height / zoom, dividerHeight: divider.getBoundingClientRect().height / zoom };
     });
-    const planned = [];
-    let shift = 0;
-    let bodyTopRel = pass.bodyTopRel;
-    for (let i = 0; i < count; i++) {
-      const { el, seamHeight, dividerHeight, bottom, gap } = read[i];
-      const afterBottomScreen = bottom + shift;
-      const afterBottomRel = (afterBottomScreen - wrapperRect.top) / zoom;
-      const remaining = Math.max(0, geometry.pageContentHeightPx - (afterBottomRel - bodyTopRel));
-      const margin = seamHeight + remaining;
-      const seamTop = toLayoutY(afterBottomScreen) + remaining;
-      bodyTopRel = afterBottomRel + remaining + seamHeight;
-      planned.push({
-        el, afterBottomScreen, seamTop, bodyTopRel, page: { top: seamTop + footAreaPx + dividerHeight, bodyTop: seamTop + seamHeight },
-        rule: sheetSel + ' > *:nth-child(' + (offsets[start + i].afterIndex + 1) + ') { margin-bottom: ' + margin + 'px; }',
-      });
-      const laid = Math.floor(margin * zoom * 64) / 64;
-      if (gap === null || laid < gap) break;
-      shift += laid - gap;
-    }
-    const sheet = steps.add(planned.map(p => p.rule).join('\n'));
-    // Chaque coupure posée l'est vraiment : son bloc finit où prévu, et le bloc qui ouvre la page suivante commence au haut de son corps.
-    const opens = p => { const next = EditorCore.nextInFlow(p.el); return !next || EditorCore.opensPageAt((next.getBoundingClientRect().top - wrapperRect.top) / zoom, p.bodyTopRel); };
-    let placed = 0;
-    while (placed < planned.length && planned[placed].el.getBoundingClientRect().bottom === planned[placed].afterBottomScreen && opens(planned[placed])) placed++;
-    if (placed < planned.length) sheet.textContent = planned.slice(0, placed).map(p => p.rule).join('\n');
-    built.slice(placed).forEach(({ seam }) => seam.remove());
-    planned.slice(0, placed).forEach((p, i) => {
-      const next = EditorCore.nextInFlow(p.el);
-      if (next) pass.reserves.push({ next, bodyTopRel: p.bodyTopRel });
-      marginRules.push(p.rule);
-      built[i].seam.style.top = p.seamTop + 'px';
-      pages[pages.length - 1].bottom = p.seamTop + footAreaPx;
-      pages.push(p.page);
+    const ruleOf = (i, margin) => EditorCore.reserveRule(sheetSel, cuts[i].el, cuts[i].nth, margin);
+    let sheet = null;
+    const { steps: placed, missed } = EditorCore.placeReservesAtOnce(count, {
+      zoom, rootTop: wrapperRect.top, bodyTopRel: pass.bodyTopRel, capacityOf: () => geometry.pageContentHeightPx, seamHeightOf: i => cuts[i].seamHeight,
+    }, {
+      bottom: i => cuts[i].el.getBoundingClientRect().bottom,
+      nextTop: i => (cuts[i].next ? cuts[i].next.getBoundingClientRect().top : null),
+      write(margins) {
+        const text = margins.map((margin, i) => ruleOf(i, margin)).join('\n');
+        if (sheet) sheet.textContent = text; else sheet = steps.add(text);
+      },
     });
-    if (placed > 0) pass.bodyTopRel = planned[placed - 1].bodyTopRel; else pass.atOnce = false;
-    return placed;
+    built.slice(placed.length).forEach(({ seam }) => seam.remove());
+    placed.forEach((step, i) => {
+      const seamTop = toLayoutY(step.afterBottomScreen) + step.remaining;
+      if (cuts[i].next) pass.reserves.push({ next: cuts[i].next, bodyTopRel: step.bodyTopRel });
+      marginRules.push(ruleOf(i, step.margin));
+      built[i].seam.style.top = seamTop + 'px';
+      pages[pages.length - 1].bottom = seamTop + footAreaPx;
+      pages.push({ top: seamTop + footAreaPx + cuts[i].dividerHeight, bodyTop: seamTop + cuts[i].seamHeight });
+    });
+    if (placed.length > 0) pass.bodyTopRel = placed[placed.length - 1].bodyTopRel;
+    if (missed) pass.atOnceMisses = (pass.atOnceMisses || 0) + 1;
+    if (placed.length === 0 || pass.atOnceMisses >= 2) pass.atOnce = false;
+    return placed.length;
   }
   function layoutSeams(ctx) {
     // Les coutures de toutes les frontières de page et les règles de marge qui réservent leur place. Rend les mesures dont la suite a besoin.
@@ -692,7 +687,7 @@ const ReaderMode = (function () {
     }
     // La dernière page, jusqu'à sa hauteur réelle : la feuille ne descend jamais sous le haut du corps de cette page, plus la hauteur utile d'une
     // page, plus sa marge du bas (le plancher ne gêne pas un contenu plus long).
-    marginRules.push(pass.sheetSel + ' { min-height: ' + (pass.bodyTopRel + pageContentHeightPx + mPx.bottom) + 'px; }');
+    marginRules.push(sheetItself(wrapper) + ' { min-height: ' + (pass.bodyTopRel + pageContentHeightPx + mPx.bottom) + 'px; }');
     pass.tableStrips.forEach((strips, index) => marginRules.push(TablePageCut.clipRule(pass.sheetSel + ' > *:nth-child(' + (index + 1) + ')', strips)));
     styleEl.textContent = marginRules.join('\n');
     steps.clear();

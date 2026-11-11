@@ -214,6 +214,139 @@ const EditorCore = (function () {
     return opensPageAt(topOf(), bodyTopRel);
   }
 
+  // La règle de réserve d'une coupure : `px` de marge sous le bloc `afterEl`, enfant de rang `nth` de la feuille `sheetSelector` (`#editor-container .tiptap`, ou la feuille de la
+  // Lecture). Sa FORME décide de ce que le navigateur refait à chaque feuille posée, réécrite ou retirée (trois à quatre par pagination) :
+  //   - un bloc quelconque : `feuille > *:nth-child(N)`. La règle peut viser n'importe quel bloc ; Chromium refait le style de tous les blocs (629 pour 39 diapositives : 16 ms la
+  //     feuille de 38 règles) ;
+  //   - le repère d'un saut de page (ce par quoi finit chaque diapositive d'une présentation ; la classe lui vient du texte et ne change jamais) : la règle le nomme, et Chromium
+  //     ne revoit que les repères (4 ms). Elle s'écrit de plus SANS combinateur d'ancêtre, `.page-break-marker:nth-child(N):is(feuille > *)`, pour Gecko : d'une règle
+  //     `#editor-container .tiptap > .page-break-marker…`, Firefox retient l'id le plus à gauche et refait le style de TOUT ce que `#editor-container` contient
+  //     (servo/components/style/invalidation/stylesheets.rs, collect_invalidations : « the outermost local name, class, or ID selector to the left of an ancestor combinator ») ;
+  //     d'une règle sans combinateur d'ancêtre, il ne retient que la classe du bloc visé et ne revoit que les repères. Relevé du 11/11 chez une personne, sous Firefox, sur une
+  //     présentation de 57 diapositives : 69 800 éléments restylés à chaque feuille, 0,27 s chacune, 112 fois par pagination (29 s ; l'autre moitié du relevé est dans
+  //     placeReservesAtOnce). `:is()` ne se lit pas comme un ancêtre : le sélecteur n'a qu'une suite, celle du bloc.
+  // Le même bloc est visé, avec la même cascade ou une plus forte (un id, deux ou trois classes : aucune autre règle de marge n'a d'id).
+  function reserveRule(sheetSelector, afterEl, nth, px) {
+    const marker = !!(afterEl && afterEl.classList && afterEl.classList.contains('page-break-marker'));
+    return (marker ? '.page-break-marker:nth-child(' + nth + '):is(' + sheetSelector + ' > *)' : sheetSelector + ' > *:nth-child(' + nth + ')') + ' { margin-bottom: ' + px + 'px; }';
+  }
+
+  // --- Les réserves d'une suite de coupures simples, posées d'un coup (js/header-footer-preview.js et js/reader-mode.js:placeSimpleSeamsAtOnce) ---------------------------------
+  // Le calcul une à une pose la règle d'une coupure puis mesure le document avant la suivante : une mise en page par page. Ici, une lecture d'abord (le bas du bloc de chaque coupure,
+  // l'écart jusqu'au bloc suivant) ; puis chaque coupure se calcule comme une à une, sur la position que son bloc aura une fois les règles d'avant posées ; toutes les règles se posent
+  // d'un coup, et une seconde lecture vérifie chaque coupure. Ce qui en sort est toujours ce que le calcul une à une aurait posé : la première coupure qui n'est pas au rendez-vous,
+  // et toutes celles d'après, sont rendues à l'appelant.
+  //
+  // Prévoir la position d'un bloc, c'est savoir ce que le moteur fait d'une marge : posée en px, elle devient, sous le zoom de la feuille, l'écart jusqu'au bloc suivant, rangé sur
+  // la grille de mise en page du moteur. Chromium et WebKit rangent au 1/64 de pixel, vers le bas (mesuré) ; Gecko au 1/60, au plus proche, en simple précision (ses « unités
+  // d'application » : layout/base/Units.h, NSToCoordRound), et ses rectangles sortent au 1/65536 (dom/base/DOMRect.cpp). Relevé du 11/11 chez une personne, sous Firefox : avec
+  // le seul arrondi de Chromium, la deuxième coupure n'était jamais où le calcul la prévoyait, chaque appel n'en posait donc qu'une, et une présentation de 57 diapositives payait
+  // 112 feuilles de style posées ou réécrites par pagination (29 s ; reserveRule dit ce que chacune coûtait). L'arrondi s'apprend donc sur ce que
+  // le moteur a vraiment posé (learnReserveRounding) : le premier calcul d'une session part de celui de Chromium, le suivant de celui qui explique les écarts lus.
+  //   `laid(margin, zoom)` : l'écart posé, en cases de la grille ; `at(bottom, shift)` : la position (pixels écran, telle que le moteur la rendra) d'un bord lu à `bottom` et
+  //   descendu de `shift` cases.
+  const gecko = au => Math.round(au * 65536 / 60) / 65536;
+  const RESERVE_ROUNDINGS = [
+    { name: 'floor64', units: 64, laid: (margin, zoom) => Math.floor(margin * zoom * 64), at: (bottom, shift) => bottom + shift / 64 },
+    { name: 'round60', units: 60, laid: (margin, zoom) => Math.floor(Math.fround(Math.fround(Math.fround(Math.fround(margin) * Math.fround(zoom)) * 60) + 0.5)), at: (bottom, shift) => gecko(Math.round(bottom * 60) + shift) },
+    { name: 'round64', units: 64, laid: (margin, zoom) => Math.round(margin * zoom * 64), at: (bottom, shift) => bottom + shift / 64 },
+    { name: 'floor60', units: 60, laid: (margin, zoom) => Math.floor(margin * zoom * 60), at: (bottom, shift) => gecko(Math.round(bottom * 60) + shift) },
+  ];
+  let reserveRounding = RESERVE_ROUNDINGS[0];
+  // L'arrondi retenu (son nom) ; avec un nom, le pose (les essais rejouent un moteur qui n'arrondit pas comme prévu).
+  function reserveRoundingName(name) {
+    if (name !== undefined) reserveRounding = RESERVE_ROUNDINGS.find(r => r.name === name) || RESERVE_ROUNDINGS[0];
+    return reserveRounding.name;
+  }
+  // Deux cases voisines de deux grilles différentes sont à 1/960 de pixel au plus près ; les rectangles de Gecko sont justes au 1/65536.
+  const RESERVE_GRID_SLACK_PX = 1 / 4096;
+  // Ce que le moteur a posé pour chaque marge (`samples` : { margin, gap } - l'écart lu sous le bloc, en pixels écran) désigne son arrondi : celui qui explique quatre écarts sur cinq
+  // au moins, et plus que tous les autres, est retenu pour la suite. Rend vrai si l'arrondi courant n'expliquait pas les écarts et qu'aucun autre ne le fait (un moteur inconnu, ou
+  // un contenu qui ne se dessine pas au zoom de la feuille) : l'appelant cesse alors de poser d'un coup.
+  function learnReserveRounding(samples, zoom) {
+    if (samples.length < 2) return false;
+    const fits = rounding => samples.filter(s => Math.abs(rounding.laid(s.margin, zoom) / rounding.units - s.gap) < RESERVE_GRID_SLACK_PX).length;
+    const enough = Math.max(2, Math.ceil(samples.length * 0.8));
+    const current = fits(reserveRounding);
+    let best = reserveRounding;
+    let bestFits = current;
+    RESERVE_ROUNDINGS.forEach((rounding) => { const n = fits(rounding); if (n > bestFits) { best = rounding; bestFits = n; } });
+    if (best !== reserveRounding && bestFits >= enough) { reserveRounding = best; return false; }
+    return current < enough;
+  }
+  // Le calcul d'une coupure, celui du calcul une à une (placePaginationSeam, placeSeam), depuis le bas à l'écran du bloc qui finit la page et le haut du corps de cette page.
+  function reserveStep(geo, i, afterBottomScreen, bodyTopRel) {
+    const afterBottomRel = (afterBottomScreen - geo.rootTop) / geo.zoom;
+    const remaining = Math.max(0, geo.capacityOf(i) - (afterBottomRel - bodyTopRel));
+    const seamHeight = geo.seamHeightOf(i);
+    return { afterBottomScreen, remaining, margin: seamHeight + remaining, bodyTopRel: afterBottomRel + remaining + seamHeight };
+  }
+  // Pose d'un coup les réserves de `count` coupures simples qui se suivent.
+  //   `geo` : { zoom, rootTop (le haut du texte, pixels écran), bodyTopRel (le haut du corps de la première page de la suite, pixels de mise en page depuis `rootTop`),
+  //             capacityOf(i) (la place du corps de la page que la coupure i finit), seamHeightOf(i) (la hauteur de sa couture) } ;
+  //   `io`  : { bottom(i) (lit le bas à l'écran du bloc qui finit la page), nextTop(i) (lit le haut du bloc qui ouvre la page suivante ; null s'il n'y en a pas),
+  //             write(margins) (pose la feuille des réserves, une marge par coupure dans l'ordre, à la place de celle d'avant) }.
+  // Rend { steps, missed } : `steps`, les coupures posées dans l'ordre ({ afterBottomScreen, remaining, margin, bodyTopRel }, les nombres du calcul une à une), la feuille ne
+  // portant plus que leurs règles ; `missed`, vrai quand l'arrondi du moteur n'a pas été reconnu.
+  // Une marge qui ne l'emporte pas sur l'écart d'avant (une marge du bloc suivant plus grande) arrête la prévision.
+  function placeReservesAtOnce(count, geo, io) {
+    const { zoom } = geo;
+    const rounding = reserveRounding;
+    const unitsOf = px => Math.round((px - geo.rootTop) * rounding.units);
+    const natural = [];
+    for (let i = 0; i < count; i++) {
+      const bottom = io.bottom(i);
+      const top = io.nextTop(i);
+      natural.push({ bottom, gap: top === null ? null : Math.round((top - bottom) * rounding.units) });
+    }
+    const planned = [];
+    let shift = 0;
+    let bodyTopRel = geo.bodyTopRel;
+    for (let i = 0; i < count; i++) {
+      const { bottom, gap } = natural[i];
+      const step = reserveStep(geo, i, rounding.at(bottom, shift), bodyTopRel);
+      step.units = unitsOf(bottom) + shift;
+      bodyTopRel = step.bodyTopRel;
+      planned.push(step);
+      const laid = rounding.laid(step.margin, zoom);
+      if (gap === null || laid < gap) break;
+      step.wins = true;
+      shift += laid - gap;
+    }
+    io.write(planned.map(step => step.margin));
+    // Une lecture pour toutes les coupures. Chaque coupure posée l'est vraiment : son bloc finit sur la case prévue, et le bloc qui ouvre la page suivante commence au haut de son
+    // corps (comme fitReserve le vérifie).
+    const actual = planned.map((step, i) => ({ bottom: io.bottom(i), top: io.nextTop(i) }));
+    const opens = (top, step) => top === null || opensPageAt((top - geo.rootTop) / zoom, step.bodyTopRel);
+    let held = 0;
+    while (held < planned.length && unitsOf(actual[held].bottom) === planned[held].units && opens(actual[held].top, planned[held])) held++;
+    let exact = 0;
+    while (exact < held && actual[exact].bottom === planned[exact].afterBottomScreen) exact++;
+    // L'arrondi se réapprend dès qu'une coupure n'est pas au nombre prévu, même sur sa case (comptées sur une grille qui n'est pas celle du moteur, les cases tombent parfois justes
+    // par hasard) ; il n'est dit « non reconnu » que si une coupure a manqué sa case.
+    const unknown = exact < planned.length
+      && learnReserveRounding(planned.map((step, i) => ({ margin: step.margin, gap: step.wins && actual[i].top !== null ? actual[i].top - actual[i].bottom : null })).filter(s => s.gap !== null), zoom);
+    const missed = unknown && held < planned.length;
+    // Sur la bonne case, le bloc n'est pas toujours au nombre prévu (un arrondi pas encore appris, un rectangle rendu en simple précision très bas dans un long document) : la règle
+    // du calcul une à une se calcule sur le nombre LU. À partir de la première coupure dans ce cas, les règles se recalculent donc sur ce qui vient d'être lu et se reposent ; une
+    // relecture les confirme : un bloc resté exactement où il était a la règle que le calcul une à une lui aurait donnée.
+    let placed = held;
+    let inSheet = planned.length;
+    if (exact < held) {
+      bodyTopRel = exact ? planned[exact - 1].bodyTopRel : geo.bodyTopRel;
+      for (let i = exact; i < held; i++) {
+        planned[i] = reserveStep(geo, i, actual[i].bottom, bodyTopRel);
+        bodyTopRel = planned[i].bodyTopRel;
+      }
+      io.write(planned.slice(0, held).map(step => step.margin));
+      inSheet = held;
+      placed = exact;
+      while (placed < held && io.bottom(placed) === actual[placed].bottom && opens(io.nextTop(placed), planned[placed])) placed++;
+    }
+    if (placed < inSheet) io.write(planned.slice(0, placed).map(step => step.margin));
+    return { steps: planned.slice(0, placed), missed };
+  }
+
   function nextInFlow(el) {
     // Le bloc qui ouvre la page après `el`, la réserve d'une coupure posée sous lui (js/header-footer-preview.js, js/reader-mode.js) : son premier frère dans le flux. Un
     // bloc en position absolue (un cadre posé sur sa diapositive) ne prend pas de place dans la page et n'en ouvre aucune.
@@ -846,7 +979,7 @@ const EditorCore = (function () {
 
   return {
     setEditor, getEditor, focusEditor, setFloatingUi, setNodeSelectionClass, getTextSelectionClass, setTextSelectionClass,
-    patchNodeAndReselect, editorContentWidthPx, pageScale, atPageScale, layoutZoom, contentZoom, contentZoomIsOff, settleContentZoom, createStepSheets, nextInFlow, gapAbove, opensPageAt, fitReserve, createFloatingPanel,
+    patchNodeAndReselect, editorContentWidthPx, pageScale, atPageScale, layoutZoom, contentZoom, contentZoomIsOff, settleContentZoom, createStepSheets, nextInFlow, gapAbove, opensPageAt, fitReserve, reserveRule, placeReservesAtOnce, reserveRoundingName, createFloatingPanel,
     registerFloatingPanel, hideFloatingContextToolbars, isFormFieldFocus, closeHoverMenu,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
     setColorBar, setColorIcon, createSelectionPreserver, isCellSelection, runOnSelectedCells, isInsideNode, isTextOnlyEdit,

@@ -142,8 +142,10 @@
     try { fn(); } finally { records = observer.takeRecords(); observer.disconnect(); }
     return records.reduce((sum, r) => sum + Array.from(r.addedNodes).filter(n => n.nodeName === 'STYLE').length, 0);
   }
-  // Le bloc que vise la règle de réserve d'une coupure (js/header-footer-preview.js:seamSubject) : le repère d'un saut de page par sa classe, tout autre bloc par `*`.
-  const subjectOf = el => (el.classList.contains('page-break-marker') ? '.page-break-marker' : '*');
+  // La règle de réserve d'une coupure de l'éditeur, écrite ici comme elle doit sortir (js/editor-core.js:reserveRule) : `px` de marge sous le bloc `el`, enfant de rang `nth`. Le repère
+  // d'un saut de page se nomme par sa classe, sans combinateur d'ancêtre (le rattachement à la feuille est dans `:is()`) ; tout autre bloc garde `feuille > *`.
+  const reserveRuleOf = (el, nth, px) => (el.classList.contains('page-break-marker') ? '.page-break-marker:nth-child(' + nth + '):is(#editor-container .tiptap > *)' : '#editor-container .tiptap > *:nth-child(' + nth + ')')
+    + ' { margin-bottom: ' + px + 'px; }';
   // Refait, sur le document tel que la pagination l'a laissé, le calcul d'une coupure après l'autre (js/header-footer-preview.js:placePaginationSeam, sans en-tête ni pied) : la
   // réserve et le haut de chaque couture que ce calcul pose, comparés à ce qui est posé, au chiffre près. Rend les écarts.
   function oneByOneGaps() {
@@ -166,7 +168,7 @@
       const afterBottomRel = (afterBottomScreen - tipTop) / zoom;
       const remaining = Math.max(0, pageContentHeightPx - (afterBottomRel - bodyTopRel));
       const seamHeight = seams[i].getBoundingClientRect().height / zoom;
-      const rule = '#editor-container .tiptap > ' + subjectOf(brk.afterEl) + ':nth-child(' + (children.indexOf(brk.afterEl) + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }';
+      const rule = reserveRuleOf(brk.afterEl, children.indexOf(brk.afterEl) + 1, seamHeight + remaining);
       // Le haut relu tel que le navigateur l'écrit (style.top arrondit l'écriture) : le même nombre posé de la même façon.
       probe.style.top = (toLayoutY(afterBottomScreen) + remaining) + 'px';
       if (!sheet.includes(rule) || seams[i].style.top !== probe.style.top) gaps.push({ page: i + 1, rule, top: probe.style.top, posed: seams[i].style.top });
@@ -194,7 +196,7 @@
   const deck = n => Array.from({ length: n }, (_, i) => '<p>Diapositive ' + (i + 1) + '</p><p>Un peu de texte pour la remplir.</p>' + (i < n - 1 ? '<div class="page-break-marker" contenteditable="false">Saut de page</div>' : '')).join('');
   cases.push({
     id: 'pagination_editor_seam_rules_name_the_page_break_marker_so_a_sheet_does_not_restyle_every_block',
-    description: "Demande du 04/11 (« quand on doit supprimer ou déplacer une diapo il y a un freeze de quelques secondes ») : à chaque pagination, trois feuilles de règles « marge sous le bloc qui finit la page » sont posées ou retirées, et une règle `*:nth-child(N)` peut viser n'importe lequel des blocs : le navigateur refaisait le style de tous les blocs de la présentation (629 à 39 diapositives : 16 ms la feuille de 38 règles, de plus en plus avec sa longueur) ; la règle d'une coupure qui tombe sur le repère d'un saut de page (ce par quoi finit chaque diapositive) vise maintenant `.page-break-marker:nth-child(N)` (4 ms la feuille), toute autre coupure garde `*`. Mêmes blocs visés, mêmes réserves et mêmes coutures au chiffre près que le calcul une coupure après l'autre.",
+    description: "Demande du 04/11 (« quand on doit supprimer ou déplacer une diapo il y a un freeze de quelques secondes ») : à chaque pagination, trois feuilles de règles « marge sous le bloc qui finit la page » sont posées ou retirées, et une règle `*:nth-child(N)` peut viser n'importe lequel des blocs : le navigateur refaisait le style de tous les blocs de la présentation (629 à 39 diapositives : 16 ms la feuille de 38 règles, de plus en plus avec sa longueur) ; la règle d'une coupure qui tombe sur le repère d'un saut de page (ce par quoi finit chaque diapositive) vise maintenant `.page-break-marker:nth-child(N)` (4 ms la feuille), toute autre coupure garde `*`. Mêmes blocs visés, mêmes réserves et mêmes coutures au chiffre près que le calcul une coupure après l'autre. (Depuis le 11/11 la règle du repère s'écrit `.page-break-marker:nth-child(N):is(#editor-container .tiptap > *)` : le cas `…_do_not_make_firefox_restyle_the_whole_editor` dit pourquoi.)",
     run: async (h) => {
       await setup(h, deck(12));
       HeaderFooterPreview.renderPaginationOverlay();
@@ -203,13 +205,346 @@
       const children = Array.from(tip.children);
       const onMarker = HeaderFooterPreview.pageBreaks().filter(brk => brk.afterEl.classList.contains('page-break-marker'));
       if (onMarker.length < 8) return { pass: false, notes: 'présentation trop courte : ' + onMarker.length + ' coupure(s) sur un repère seulement' };
-      const ruleFor = (brk, subject) => new RegExp('#editor-container \\.tiptap > ' + subject + ':nth-child\\(' + (children.indexOf(brk.afterEl) + 1) + '\\) \\{ margin-bottom: [0-9.]+px; \\}');
-      const named = onMarker.filter(brk => ruleFor(brk, '\\.page-break-marker').test(sheet)).length;
-      const generic = onMarker.filter(brk => ruleFor(brk, '\\*').test(sheet)).length;
+      const nthOf = brk => ':nth-child\\(' + (children.indexOf(brk.afterEl) + 1) + '\\)';
+      const margin = ' \\{ margin-bottom: [0-9.]+px; \\}';
+      const named = onMarker.filter(brk => new RegExp('(^|\\n)\\.page-break-marker' + nthOf(brk) + ':is\\(#editor-container \\.tiptap > \\*\\)' + margin).test(sheet)).length;
+      const generic = onMarker.filter(brk => new RegExp('#editor-container \\.tiptap > \\*' + nthOf(brk) + margin).test(sheet)).length;
       const { gaps, breaks } = oneByOneGaps();
       return {
         pass: named === onMarker.length && generic === 0 && gaps.length === 0 && breaks >= onMarker.length,
         notes: onMarker.length + ' coupures sur un repère, règles qui nomment `.page-break-marker`=' + named + ' (attendu ' + onMarker.length + '), règles `*:nth-child` sur un repère=' + generic + ' (attendu 0), écarts au calcul une à une=' + gaps.length + (gaps.length ? ' ' + JSON.stringify(gaps.slice(0, 2)) : ''),
+      };
+    },
+  });
+
+  // --- Relevé du 11/11 sous Firefox, sur une présentation de 57 diapositives (82 633 éléments) : « le déplacement était fluide mais juste après ça a freezé plusieurs dizaines de
+  // secondes ». Le profil : un calcul des pages de 31 s, dont 30,5 s de style refait (112 fois les 69 800 éléments de l'éditeur, 0,27 s chacune) et 0,7 s de mise en page. Deux causes :
+  //   1. la FORME des règles. D'une règle `#editor-container .tiptap > .page-break-marker:nth-child(N)`, Firefox retient l'id le plus à gauche d'un combinateur d'ancêtre et refait le
+  //      style de tout ce que cet élément contient, à chaque feuille posée, réécrite ou retirée (servo/components/style/invalidation/stylesheets.rs, collect_invalidations : « the
+  //      outermost local name, class, or ID selector to the left of an ancestor combinator »). Sans combinateur d'ancêtre au premier niveau, il ne retient que la classe du bloc visé ;
+  //   2. l'ARRONDI. La pose d'un coup prévoyait la place des blocs avec l'arrondi de Chromium (1/64 de pixel, vers le bas) ; Gecko range au 1/60, au plus proche : la deuxième coupure
+  //      n'était jamais où le calcul la prévoyait, chaque appel n'en posait donc qu'une, et chaque appel pose puis réécrit une feuille (56 appels, 112 feuilles).
+  // Aucun Firefox ne tourne ici : la forme se contrôle sur ce que la pagination écrit, l'arrondi sur un moteur simulé qui compte comme Gecko, ligne à ligne de son code source.
+
+  // Toutes les écritures de texte dans une feuille <style> le temps de l'écoute : { el, value }.
+  function watchEverySheet() {
+    const desc = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent');
+    const writes = [];
+    Object.defineProperty(Node.prototype, 'textContent', {
+      configurable: true, enumerable: desc.enumerable, get: desc.get,
+      set(value) { if (this instanceof HTMLStyleElement) writes.push({ el: this, value: String(value) }); desc.set.call(this, value); },
+    });
+    return { writes, stop() { Object.defineProperty(Node.prototype, 'textContent', desc); } };
+  }
+  // Le premier niveau d'un sélecteur : ce qui reste hors de toute parenthèse et de tout crochet, les combinateurs de frères (`+`, `~`) collés à leurs voisins.
+  const topLevelOf = (selector) => {
+    let out = ''; let depth = 0;
+    for (const c of selector.trim()) { if (c === '(' || c === '[') depth++; else if (c === ')' || c === ']') depth--; else if (depth === 0) out += c; }
+    return out.replace(/\s*([+~])\s*/g, '$1');
+  };
+  // Un combinateur d'ancêtre (un blanc ou `>`) au premier niveau : ce qui fait retenir à Firefox l'élément le plus à gauche, et refaire le style de tout ce qu'il contient.
+  const namesAnAncestor = selector => /[\s>]/.test(topLevelOf(selector));
+  // Les règles d'un texte de feuille, une par ligne : { selector, body }.
+  const rulesOf = text => String(text).split('\n').map(line => line.match(/^\s*(.+?)\s*\{\s*([^{}]*)\}\s*$/)).filter(Boolean).map(m => ({ selector: m[1], body: m[2] }));
+  const pxOf = body => parseFloat((body.match(/:\s*(-?[0-9.]+(?:e-?\d+)?)px/) || [])[1]);
+  // Une longueur du style calculé (le navigateur l'écrit avec six chiffres : au dixième près pour une hauteur de 13 000 px) est-elle celle de la règle ?
+  const sameLength = (computed, px) => Math.abs(parseFloat(computed) - px) <= Math.max(0.02, Math.abs(px) * 2e-5);
+
+  cases.push({
+    id: 'pagination_editor_rules_of_a_presentation_do_not_make_firefox_restyle_the_whole_editor',
+    description: "Relevé du 11/11 sous Firefox (29 s de calcul des pages sur une présentation de 57 diapositives, 112 fois le style de tout l'éditeur refait) : aucune règle que la pagination d'une présentation écrit - la réserve sous le repère d'un saut de page, le plancher de la feuille, dans la feuille finale comme dans celles posées en route - ne porte de combinateur d'ancêtre au premier niveau (`#editor-container .tiptap > …` faisait retenir l'id à Firefox, et refaire le style de tout ce que l'éditeur contient à chaque feuille). La réserve s'écrit `.page-break-marker:nth-child(N):is(#editor-container .tiptap > *)`, le plancher `.tiptap:is(#editor-container *)` : chacune vise le même élément qu'avant, lui seul, et le style calculé la suit.",
+    run: async (h) => {
+      await setup(h, deck(12));
+      HeaderFooterPreview.renderPaginationOverlay();
+      const tip = document.querySelector('#editor-container .tiptap');
+      const watch = watchEverySheet();
+      try { HeaderFooterPreview.renderPaginationOverlay(); } finally { watch.stop(); }
+      const breaks = HeaderFooterPreview.pageBreaks();
+      if (breaks.length < 8) return { pass: false, notes: 'présentation trop courte : ' + breaks.length + ' coupure(s) seulement' };
+      const written = watch.writes.reduce((all, w) => all.concat(rulesOf(w.value)), []);
+      const withAncestor = written.filter(rule => namesAnAncestor(rule.selector));
+      const reserves = written.filter(rule => /margin-bottom:/.test(rule.body)).length;
+      const floors = written.filter(rule => /min-height:/.test(rule.body)).length;
+      // La feuille finale : chaque réserve vise le bloc de sa coupure et lui seul, le plancher vise la feuille et elle seule, et le style calculé les suit.
+      const final = rulesOf(document.getElementById('v2-pagination-margins-style').textContent);
+      const finalReserves = final.filter(rule => /margin-bottom:/.test(rule.body));
+      const aimed = finalReserves.filter((rule, i) => {
+        const hit = document.querySelectorAll(rule.selector);
+        return hit.length === 1 && hit[0] === breaks[i].afterEl && sameLength(getComputedStyle(hit[0]).marginBottom, pxOf(rule.body));
+      }).length;
+      const floor = final.find(rule => /min-height:/.test(rule.body));
+      const floorHit = floor ? document.querySelectorAll(floor.selector) : [];
+      const floorOk = !!floor && floorHit.length === 1 && floorHit[0] === tip && sameLength(getComputedStyle(tip).minHeight, pxOf(floor.body));
+      return {
+        pass: withAncestor.length === 0 && reserves >= breaks.length && floors >= 2 && finalReserves.length === breaks.length && aimed === breaks.length && floorOk,
+        notes: breaks.length + ' coupures, ' + written.length + ' règles écrites en ' + watch.writes.length + ' feuilles (réserves=' + reserves + ', planchers=' + floors + '), règles à combinateur d\'ancêtre=' + withAncestor.length + ' (attendu 0'
+          + (withAncestor.length ? ' ; ' + withAncestor[0].selector : '') + '), réserves finales qui visent leur bloc et lui seul=' + aimed + '/' + finalReserves.length + ' (attendu ' + breaks.length + '), plancher sur la feuille seule=' + floorOk
+          + (floor ? ' (' + floor.selector + ', ' + pxOf(floor.body) + ' px demandés, ' + getComputedStyle(tip).minHeight + ' calculés, ' + floorHit.length + ' élément visé)' : ''),
+      };
+    },
+  });
+
+  cases.push({
+    id: 'pagination_reader_rules_of_a_presentation_do_not_make_firefox_restyle_the_whole_reader',
+    description: "Le même contrôle en Lecture : la réserve sous le repère d'un saut de page (`.page-break-marker:nth-child(N):is(#reader-container .reader-content > *)`) et le plancher de la feuille (`.reader-content:is(#reader-container *)`) s'écrivent sans combinateur d'ancêtre au premier niveau, dans la feuille finale comme dans celles posées en route ; chacune vise le même élément qu'avant, lui seul, et le style calculé la suit.",
+    run: async (h) => {
+      await setup(h, deck(12));
+      const watch = watchEverySheet();
+      let out = null;
+      try {
+        await h.renderReaderMode(Editor.getHTML(), Editor.getHeaderFooterData());
+        await h.sleep(250);
+        const rc = document.getElementById('reader-container');
+        const wrapper = rc.querySelector('.reader-content');
+        const markers = Array.from(wrapper.children).filter(el => el.classList.contains('page-break-marker'));
+        const seams = rc.querySelectorAll('.v2-pagination-overlay .v2-page-band').length;
+        const written = watch.writes.filter(w => w.el.classList.contains('v2-pagination-style')).reduce((all, w) => all.concat(rulesOf(w.value)), []);
+        const withAncestor = written.filter(rule => namesAnAncestor(rule.selector));
+        const final = rulesOf(Array.from(rc.querySelectorAll('.reader-content > style.v2-pagination-style')).map(el => el.textContent).join('\n'));
+        const finalReserves = final.filter(rule => /margin-bottom:/.test(rule.body));
+        const aimed = finalReserves.filter((rule, i) => {
+          const hit = rc.querySelectorAll(rule.selector);
+          return hit.length === 1 && hit[0] === markers[i] && sameLength(getComputedStyle(hit[0]).marginBottom, pxOf(rule.body));
+        }).length;
+        const floor = final.find(rule => /min-height:/.test(rule.body));
+        const floorHit = floor ? rc.querySelectorAll(floor.selector) : [];
+        const floorOk = !!floor && floorHit.length === 1 && floorHit[0] === wrapper && sameLength(getComputedStyle(wrapper).minHeight, pxOf(floor.body));
+        out = { seams, markers: markers.length, written: written.length, withAncestor, finalReserves: finalReserves.length, aimed, floorOk, floor, floorNote: floor ? pxOf(floor.body) + ' px demandés, ' + getComputedStyle(wrapper).minHeight + ' calculés, ' + floorHit.length + ' élément visé' : '' };
+      } finally {
+        watch.stop();
+        restoreReader();
+      }
+      if (out.seams < 8 || out.seams !== out.markers) return { pass: false, notes: 'présentation inattendue : ' + out.seams + ' coupure(s) pour ' + out.markers + ' repère(s)' };
+      return {
+        pass: out.withAncestor.length === 0 && out.finalReserves === out.seams && out.aimed === out.seams && out.floorOk,
+        notes: out.seams + ' coupures, ' + out.written + ' règles écrites, règles à combinateur d\'ancêtre=' + out.withAncestor.length + ' (attendu 0' + (out.withAncestor.length ? ' ; ' + out.withAncestor[0].selector : '')
+          + '), réserves finales qui visent leur repère et lui seul=' + out.aimed + '/' + out.finalReserves + ' (attendu ' + out.seams + '), plancher sur la feuille seule=' + out.floorOk + (out.floor ? ' (' + out.floor.selector + ', ' + out.floorNote + ')' : ''),
+      };
+    },
+  });
+
+  // --- Un moteur de mise en page simulé, pour EditorCore.placeReservesAtOnce ---------------------------------------------------------------------------------------------------
+  // Un document : des pages l'une sous l'autre, chacune finie par un bloc sous lequel une règle pose une marge (`own` : sa marge propre, `nextTop` : la marge du haut du bloc
+  // suivant ; les deux se fondent, la plus grande l'emporte). Le moteur range tout sur SA grille : `units` cases par pixel, `margin(px, zoom)` la marge posée en cases, `rect(cases)`
+  // le nombre que getBoundingClientRect rend.
+  //   - gecko : unités d'application, 1/60 de pixel. La longueur en simple précision, fois le zoom en simple précision (servo/components/style/values/specified/length.rs,
+  //     to_computed_value_with_base_size ; values/computed/box.rs, Zoom::zoom), fois 60, arrondie par int(x + 0.5f) (layout/style/ServoStyleConstsInlines.h,
+  //     DefaultLengthToAppUnits ; NS_lroundf) ; les rectangles au 1/65536 (dom/base/DOMRect.cpp, SetLayoutRect) ;
+  //   - chromium : 1/64 de pixel, vers le bas (mesuré) ;
+  //   - trunc60 : un moteur au 1/60 qui tronquerait ; unknown : une grille au 1/100 qu'aucun arrondi connu n'explique.
+  const geckoRect = au => Math.floor(au * (65536 / 60) + 0.5) * (1 / 65536);
+  const SIM_ENGINES = {
+    gecko: { units: 60, margin: (px, zoom) => Math.trunc(Math.fround(Math.fround(Math.fround(Math.fround(px) * Math.fround(zoom)) * 60) + 0.5)), rect: geckoRect, learned: 'round60' },
+    chromium: { units: 64, margin: (px, zoom) => Math.floor(px * zoom * 64), rect: units => units / 64, learned: 'floor64' },
+    trunc60: { units: 60, margin: (px, zoom) => Math.floor(px * zoom * 60), rect: geckoRect, learned: 'floor60' },
+    unknown: { units: 100, margin: (px, zoom) => Math.round(px * zoom * 100), rect: units => units / 100, learned: null },
+  };
+  function simDoc(engine, seed, n) {
+    let state = seed >>> 0;
+    const rand = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 4294967296; };
+    const zoom = [0.857, 0.922, 1, 0.5, 1.25, 0.731, 0.86][Math.floor(rand() * 7)];
+    const capacity = [931.6535433070866, 607.5, 1009.1338582677165][Math.floor(rand() * 3)];
+    // Le haut du texte au-dessus de l'écran (un document défilé), la couture de 40 à 100 px, des pages remplies de 15 à 95 %.
+    const doc = { zoom, capacity, padding: 94.48818897637796, n, rootTopUnits: Math.round((rand() - 0.7) * 400000), seamUnits: Math.round((40 + rand() * 60) * engine.units), pages: [] };
+    for (let i = 0; i <= n; i++) {
+      doc.pages.push({ height: Math.max(1, Math.round(capacity * zoom * (0.15 + rand() * 0.8) * engine.units)), own: rand() < 0.3 ? Math.round(rand() * 16 * engine.units) : 0, nextTop: Math.round(rand() * 24 * zoom * engine.units) });
+    }
+    return doc;
+  }
+  // Le document mis en page par le moteur sous les règles `margins` (une par coupure, dans l'ordre ; les suivantes absentes).
+  function simLayout(engine, doc) {
+    let margins = []; let laid = null; let writes = 0;
+    const lay = () => {
+      if (laid) return laid;
+      let y = doc.rootTopUnits + engine.margin(doc.padding, doc.zoom);
+      laid = { tops: [], bottoms: [] };
+      doc.pages.forEach((page, i) => {
+        laid.tops.push(y);
+        laid.bottoms.push(y + page.height);
+        y += page.height + Math.max(margins[i] !== undefined ? engine.margin(margins[i], doc.zoom) : page.own, page.nextTop);
+      });
+      return laid;
+    };
+    const rootTop = engine.rect(doc.rootTopUnits);
+    return {
+      rootTop, seamHeight: (engine.rect(doc.rootTopUnits + doc.seamUnits) - rootTop) / doc.zoom,
+      bottom: i => engine.rect(lay().bottoms[i]),
+      top: i => (i < doc.pages.length ? engine.rect(lay().tops[i]) : null),
+      set(next) { margins = next.slice(); laid = null; writes++; },
+      rules: () => margins.length, writes: () => writes,
+    };
+  }
+  // Une coupure, comme placePaginationSeam la calcule : depuis le bas LU du bloc qui finit la page.
+  function simStep(doc, lay, i, bodyTopRel) {
+    const afterBottomScreen = lay.bottom(i);
+    const afterBottomRel = (afterBottomScreen - lay.rootTop) / doc.zoom;
+    const remaining = Math.max(0, doc.capacity - (afterBottomRel - bodyTopRel));
+    return { afterBottomScreen, remaining, margin: lay.seamHeight + remaining, bodyTopRel: afterBottomRel + remaining + lay.seamHeight };
+  }
+  // Le calcul une coupure après l'autre : la règle posée, puis la suivante mesurée.
+  function simOneByOne(engine, doc) {
+    const lay = simLayout(engine, doc);
+    const steps = [];
+    for (let i = 0; i < doc.n; i++) {
+      steps.push(simStep(doc, lay, i, i ? steps[i - 1].bodyTopRel : doc.padding));
+      lay.set(steps.map(step => step.margin));
+    }
+    return steps;
+  }
+  // La pose d'un coup, menée comme placeSimpleSeamsAtOnce et la boucle de layoutPaginationSeams la mènent : chaque appel pose ce qu'il peut ; deux arrondis non reconnus, ou un appel
+  // qui ne pose rien, et le reste passe une à une. Rend les coupures posées, le nombre de coupures posées par appel, d'écritures de la feuille, d'appels à l'arrondi non reconnu.
+  function simAtOnce(engine, doc) {
+    const lay = simLayout(engine, doc);
+    const out = { steps: [], calls: [], missed: 0, sheetLeft: true };
+    let atOnce = true;
+    while (out.steps.length < doc.n) {
+      const start = out.steps.length;
+      const kept = out.steps.map(step => step.margin);
+      const bodyTopRel = start ? out.steps[start - 1].bodyTopRel : doc.padding;
+      let placed = [];
+      if (atOnce && doc.n - start >= 2) {
+        const result = EditorCore.placeReservesAtOnce(doc.n - start, { zoom: doc.zoom, rootTop: lay.rootTop, bodyTopRel, capacityOf: () => doc.capacity, seamHeightOf: () => lay.seamHeight }, {
+          bottom: i => lay.bottom(start + i), nextTop: i => lay.top(start + i + 1), write(margins) { lay.set(kept.concat(margins)); },
+        });
+        placed = result.steps;
+        out.calls.push(placed.length);
+        if (result.missed) out.missed++;
+        // La feuille ne porte plus que les règles des coupures posées.
+        if (lay.rules() !== start + placed.length) out.sheetLeft = false;
+        if (placed.length === 0 || out.missed >= 2) atOnce = false;
+      }
+      if (placed.length === 0) {
+        placed = [simStep(doc, lay, start, bodyTopRel)];
+        lay.set(kept.concat([placed[0].margin]));
+      }
+      placed.forEach(step => out.steps.push(step));
+    }
+    out.writes = lay.writes();
+    return out;
+  }
+  const sameSteps = (a, b) => a.length === b.length && a.every((step, i) => step.margin === b[i].margin && step.afterBottomScreen === b[i].afterBottomScreen && step.remaining === b[i].remaining && step.bodyTopRel === b[i].bodyTopRel);
+
+  cases.push({
+    id: 'pagination_places_page_breaks_at_once_on_an_engine_that_rounds_like_firefox',
+    description: "Relevé du 11/11 sous Firefox : la pose d'un coup prévoyait la place des blocs avec le seul arrondi de Chromium (1/64 de pixel, vers le bas), et sous Gecko (1/60, au plus proche, en simple précision) la deuxième coupure n'était jamais où le calcul la prévoyait : chaque appel n'en posait qu'une et réécrivait la feuille (56 appels et 112 feuilles pour 57 diapositives). Sur un moteur simulé qui compte comme Gecko, et sur 120 documents tirés au hasard de 2 à 71 coupures : parti de l'arrondi de Chromium, le premier calcul ne pose d'abord que quelques coupures (ce que le profil montrait), apprend l'arrondi de ce qu'il vient de lire et pose le reste à l'appel suivant (2 appels et 4 écritures au plus) ; les calculs suivants posent tout en un appel et une écriture. Sur un moteur qui tronquerait au 1/60, pareil ; sur Chromium, un appel et une écriture dès le premier ; sur une grille qu'aucun arrondi connu n'explique, deux appels disent « non reconnu » et le reste passe une à une. Dans tous les cas, chaque réserve, chaque bas de page et chaque haut de corps est, au bit près, celui du calcul une coupure après l'autre, et la feuille ne garde que les règles des coupures posées.",
+    run: async () => {
+      if (!EditorCore.placeReservesAtOnce || !EditorCore.reserveRoundingName) return { pass: false, notes: "EditorCore.placeReservesAtOnce n'existe pas : la pose d'un coup ne connaît que l'arrondi de Chromium" };
+      const before = EditorCore.reserveRoundingName();
+      const report = {};
+      try {
+        Object.entries(SIM_ENGINES).forEach(([name, engine]) => {
+          const r = { docs: 0, wrong: 0, sheetLeft: 0, firstCalls: 0, firstWrites: 0, firstShort: 0, long: 0, nextCalls: 0, nextWrites: 0, learned: {}, missedDocs: 0, single: 0 };
+          for (let seed = 1; seed <= 120; seed++) {
+            const doc = simDoc(engine, seed, 2 + (seed * 7) % 70);
+            const reference = simOneByOne(engine, doc);
+            EditorCore.reserveRoundingName('floor64');
+            const first = simAtOnce(engine, doc);
+            const learned = EditorCore.reserveRoundingName();
+            const next = simAtOnce(engine, doc);
+            r.docs++;
+            if (!sameSteps(first.steps, reference) || !sameSteps(next.steps, reference)) r.wrong++;
+            if (!first.sheetLeft || !next.sheetLeft) r.sheetLeft++;
+            r.firstCalls = Math.max(r.firstCalls, first.calls.length);
+            r.firstWrites = Math.max(r.firstWrites, first.writes);
+            // Un document d'au moins dix coupures : l'arrondi de Chromium en a-t-il posé moins que toutes au premier appel ?
+            if (doc.n >= 10) { r.long++; if (first.calls[0] < doc.n) r.firstShort++; }
+            if (doc.n >= 4) {
+              r.nextCalls = Math.max(r.nextCalls, next.calls.length);
+              r.nextWrites = Math.max(r.nextWrites, next.writes);
+              r.learned[learned] = (r.learned[learned] || 0) + 1;
+              if (next.missed >= 2) r.missedDocs++;
+              r.single = Math.max(r.single, next.steps.length - next.calls.reduce((sum, k) => sum + k, 0));
+            }
+          }
+          report[name] = r;
+        });
+      } finally {
+        EditorCore.reserveRoundingName(before);
+      }
+      const { gecko, chromium, trunc60, unknown } = report;
+      const exact = Object.values(report).every(r => r.wrong === 0 && r.sheetLeft === 0);
+      const only = (r, name) => Object.keys(r.learned).length === 1 && r.learned[name] > 0;
+      const geckoOk = gecko.firstShort >= gecko.long * 0.9 && gecko.firstCalls <= 2 && gecko.firstWrites <= 4 && gecko.nextCalls === 1 && gecko.nextWrites === 1 && only(gecko, 'round60');
+      const chromiumOk = chromium.firstCalls === 1 && chromium.firstWrites === 1 && chromium.nextCalls === 1 && chromium.nextWrites === 1 && only(chromium, 'floor64');
+      // Un moteur qui tronque : sur un petit document, « au plus proche » explique parfois aussi bien les quelques écarts lus ; les deux prévoient alors juste.
+      const truncOk = trunc60.firstCalls <= 2 && trunc60.firstWrites <= 4 && trunc60.nextCalls <= 2 && trunc60.nextWrites <= 4 && (trunc60.learned.floor60 || 0) >= trunc60.docs * 0.8;
+      const unknownOk = unknown.missedDocs > 0 && unknown.nextCalls <= 3 && unknown.single > 0;
+      const line = (name, r) => name + ' : ' + r.docs + ' documents, écarts au calcul une à une=' + r.wrong + ', premier calcul ' + r.firstCalls + ' appel(s) et ' + r.firstWrites + ' écriture(s) au plus (premier appel incomplet sur ' + r.firstShort + '/' + r.long
+        + ' documents de dix coupures et plus), calculs suivants ' + r.nextCalls + ' appel(s) et ' + r.nextWrites + ' écriture(s) au plus, arrondi appris ' + JSON.stringify(r.learned) + ', documents à deux appels non reconnus=' + r.missedDocs;
+      return {
+        pass: exact && geckoOk && chromiumOk && truncOk && unknownOk,
+        notes: [line('gecko', gecko) + ' (attendu : ≥ 90 % de premiers appels incomplets, 2 appels et 4 écritures au plus puis 1 et 1, round60 seul)', line('chromium', chromium) + ' (attendu : 1 et 1 partout, floor64 seul)',
+          line('trunc60', trunc60) + ' (attendu : 2 appels et 4 écritures au plus, floor60 appris 8 fois sur 10 au moins)', line('unknown', unknown) + ' (attendu : des documents non reconnus, 3 appels au plus, le reste une à une)'].join(' | '),
+      };
+    },
+  });
+
+  // Les écritures de feuilles de réserves à plusieurs règles pendant un calcul, hors la feuille finale des marges : une par appel de la pose d'un coup, plus une quand elle en retire.
+  const batchWrites = writes => writes.filter(w => w.el.id !== 'v2-pagination-margins-style' && rulesIn(w.value) >= 2).length;
+
+  cases.push({
+    id: 'pagination_editor_relearns_the_engine_rounding_instead_of_placing_one_page_break_per_call',
+    description: "Le même défaut, dans la page : l'éditeur part de l'arrondi d'un autre moteur (celui de Gecko, posé à la main sous Chromium : ce que Firefox vivait à l'envers) et pagine une présentation de 40 diapositives. Avant, chaque appel de la pose d'un coup ne posait qu'une coupure : 39 appels, deux feuilles chacun. Maintenant, le premier appel apprend l'arrondi du moteur sur ce qu'il vient de lire et le suivant pose le reste : quatre feuilles à plusieurs règles au plus, l'arrondi retenu est de nouveau celui du moteur, et la feuille finale est, au caractère près, celle d'un calcul parti du bon arrondi (donc celle du calcul une coupure après l'autre).",
+    run: async (h) => {
+      if (!EditorCore.reserveRoundingName) return { pass: false, notes: "EditorCore.reserveRoundingName n'existe pas : la pose d'un coup ne connaît que l'arrondi de Chromium" };
+      await setup(h, deck(40));
+      HeaderFooterPreview.renderPaginationOverlay();
+      const native = EditorCore.reserveRoundingName();
+      const reference = document.getElementById('v2-pagination-margins-style').textContent;
+      const breaks = breaksInEditor();
+      if (breaks < 30) return { pass: false, notes: 'présentation trop courte : ' + breaks + ' coupure(s) seulement' };
+      const foreign = native === 'round60' ? 'floor64' : 'round60';
+      const watch = watchEverySheet();
+      let learned = null;
+      try {
+        EditorCore.reserveRoundingName(foreign);
+        HeaderFooterPreview.renderPaginationOverlay();
+        learned = EditorCore.reserveRoundingName();
+      } finally {
+        watch.stop();
+        EditorCore.reserveRoundingName(native);
+      }
+      const sheet = document.getElementById('v2-pagination-margins-style').textContent;
+      const batches = batchWrites(watch.writes);
+      const { gaps } = oneByOneGaps();
+      return {
+        pass: learned === native && batches <= 4 && sheet === reference && gaps.length === 0 && breaksInEditor() === breaks,
+        notes: breaks + ' coupures, arrondi du moteur=' + native + ', parti de ' + foreign + ', retenu après le calcul=' + learned + ' (attendu ' + native + '), feuilles de réserves à plusieurs règles écrites en route=' + batches
+          + ' (attendu 4 au plus ; une coupure par appel en écrivait ' + (breaks - 1) + '), feuille finale identique à celle du bon arrondi=' + (sheet === reference) + ', écarts au calcul une à une=' + gaps.length,
+      };
+    },
+  });
+
+  cases.push({
+    id: 'pagination_editor_stops_placing_at_once_when_the_engine_rounding_is_not_recognised',
+    description: "Garde-fou du même défaut : un moteur dont aucun arrondi connu n'explique les écarts (ici, le texte dessiné à un zoom de 2 dix-millièmes plus grand que celui de la feuille : la place de la deuxième coupure n'est jamais celle que le calcul prévoit) ne paie plus un appel de la pose d'un coup par coupure. Après deux appels qui n'ont pas reconnu l'arrondi, le reste du calcul passe une coupure après l'autre, une règle par feuille : quatre feuilles à plusieurs règles au plus pour 39 coupures (avant : une par coupure), et chaque réserve reste celle du calcul une à une.",
+    run: async (h) => {
+      await setup(h, deck(40));
+      HeaderFooterPreview.renderPaginationOverlay();
+      const breaks = breaksInEditor();
+      if (breaks < 30) return { pass: false, notes: 'présentation trop courte : ' + breaks + ' coupure(s) seulement' };
+      const native = EditorCore.reserveRoundingName ? EditorCore.reserveRoundingName() : null;
+      const off = document.createElement('style');
+      off.textContent = '#editor-container .v2-page-sheet > .tiptap { zoom: 1.0002 !important; }';
+      document.head.appendChild(off);
+      const watch = watchEverySheet();
+      let batches = 0; let gaps = []; let after = 0; let kept = null;
+      try {
+        HeaderFooterPreview.renderPaginationOverlay();
+        batches = batchWrites(watch.writes);
+        ({ gaps } = oneByOneGaps());
+        after = breaksInEditor();
+        kept = EditorCore.reserveRoundingName ? EditorCore.reserveRoundingName() : null;
+      } finally {
+        watch.stop();
+        off.remove();
+        if (native) EditorCore.reserveRoundingName(native);
+        HeaderFooterPreview.renderPaginationOverlay();
+      }
+      return {
+        pass: batches <= 4 && gaps.length === 0 && after === breaks && kept === native,
+        notes: breaks + ' coupures, feuilles de réserves à plusieurs règles écrites en route=' + batches + ' (attendu 4 au plus ; avant, une par coupure), écarts au calcul une à une=' + gaps.length + (gaps.length ? ' ' + JSON.stringify(gaps.slice(0, 2)) : '')
+          + ', coupures après=' + after + ', arrondi retenu=' + kept + ' (attendu ' + native + ' : un moteur non reconnu ne change pas l\'arrondi appris)',
       };
     },
   });
@@ -267,7 +602,7 @@
       const afterBottomRel = (afterBottomScreen - tipTop) / zoom;
       const remaining = Math.max(0, pageContentHeightPx - (afterBottomRel - bodyTopRel));
       const seamHeight = seams[i].getBoundingClientRect().height / zoom;
-      const rule = '#editor-container .tiptap > ' + subjectOf(brk.afterEl) + ':nth-child(' + (children.indexOf(brk.afterEl) + 1) + ') { margin-bottom: ' + (seamHeight + remaining) + 'px; }';
+      const rule = reserveRuleOf(brk.afterEl, children.indexOf(brk.afterEl) + 1, seamHeight + remaining);
       probe.style.top = (toLayoutY(afterBottomScreen) + remaining) + 'px';
       if ((!brk.inner && !sheet.includes(rule)) || seams[i].style.top !== probe.style.top) gaps.push({ page: i + 1, inner: !!brk.inner, rule: brk.inner ? undefined : rule, top: probe.style.top, posed: seams[i].style.top });
       bodyTopRel = afterBottomRel + remaining + seamHeight;
