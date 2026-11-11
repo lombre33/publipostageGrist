@@ -255,6 +255,8 @@ const I18nTextsExport = {
   'importReport.animWhy.paragraph': { fr: 'un paragraphe à la fois', en: 'one paragraph at a time' },
   'importReport.animWhy.target': { fr: 'objet animé non repris', en: 'animated object not imported' },
   'importReport.freeform': { fr: 'forme libre', en: 'freeform' },
+  'importReport.debug': { fr: 'DÉBOGAGE TEMPORAIRE', en: 'TEMPORARY DEBUG' },
+  'importReport.slideN': { fr: 'diapositive {n}', en: 'slide {n}' },
   'importReport.shrunkTo': { fr: 'réduit à {pct} %', en: 'reduced to {pct}%' },
   'importReport.image.format': { fr: '{name} : format que le navigateur ne lit pas', en: '{name}: a format the browser cannot read' },
   'importReport.image.missing': { fr: '{name} : fichier absent de la présentation', en: '{name}: file missing from the presentation' },

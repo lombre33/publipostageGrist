@@ -56,7 +56,9 @@ const ImportReport = (function () {
     const labels = item.labels || [];
     const plain = labels.filter(entry => !entry.text).map(entry => ({ text: named(entry), count: entry.n }));
     if (plain.length) lines.push(I18n.t('importReport.labels', { list: listOf(plain, namesLimit, '; ', item.moreLabels) }));
-    labels.filter(entry => entry.text).slice(0, namesLimit).forEach(entry => lines.push(entry.name + ' : ' + entry.text));
+    const withText = labels.filter(entry => entry.text);
+    withText.slice(0, namesLimit).forEach(entry => lines.push(entry.name + ' : ' + entry.text));
+    if (withText.length > namesLimit) lines.push(I18n.t('importReport.more', { n: withText.length - namesLimit }));
     return lines;
   }
 

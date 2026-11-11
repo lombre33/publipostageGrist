@@ -326,11 +326,29 @@ const MainImport = (function () {
       const footer = [];
       if (stats && stats.holders && stats.holders.length) {
         footer.push(I18n.t('importReport.text.decors'));
+        const mapsSeen = new Map();
         stats.holders.forEach((holder) => {
           footer.push('- ' + I18n.t('importReport.text.decor', { label: holder.label, objects: holder.objects, summary: holder.summary }) + (holder.skipped ? ' ; ' + I18n.t('importReport.text.skipped', { max: PptxImport.MAX_DECOR_OBJECTS }) : ''));
+          pptxDebugLines(holder, mapsSeen).forEach(line => footer.push(line));
         });
       }
       return ImportReport.plainText({ header, intro: I18n.t('importReport.text.lost'), entries, footer });
+    }
+
+    // DÉBOGAGE TEMPORAIRE (11/11, à retirer avant la sortie avec `decorDebug` de js/pptx-import.js et `importReport.debug`) : le concret d'un décor, en lignes techniques sous celle du masque ou de la mise en page - le fichier,
+    // les diapositives, les groupes (boîte en % de la page), les images, les couleurs, les points de tracé, et la carte de la page ; une carte déjà donnée n'est pas redite.
+    function pptxDebugLines(holder, mapsSeen) {
+      const debug = holder.debug;
+      if (!debug) return [];
+      const box = rect => 'x=' + rect.x + '% y=' + rect.y + '% w=' + rect.w + '% h=' + rect.h + '%';
+      const out = ['    ' + I18n.t('importReport.debug') + ' : file=' + debug.file + ' slides=' + (debug.slides.join(',') || '-') + ' points=' + debug.points + ' (max ' + debug.mostPoints + ') tiny=' + debug.tiny + ' outside=' + debug.outside + ' colors=' + (debug.colors.map(([color, n]) => color + '×' + n).join(' ') || '-')];
+      debug.groups.forEach(group => out.push('      group "' + group.name + '" : ' + group.shapes + ' shapes ' + box(group)));
+      if (debug.loose) out.push('      loose shapes : ' + debug.loose.shapes + ' ' + box(debug.loose));
+      debug.pictures.forEach(pic => out.push('      picture "' + pic.name + '" : ' + box(pic)));
+      const map = debug.map.join('\n');
+      if (mapsSeen.has(map)) out.push('      map : same as ' + mapsSeen.get(map));
+      else { mapsSeen.set(map, debug.file); out.push('      map (. 1 : 2-3 * 4-9 # 10+ shapes per cell) :'); debug.map.forEach(row => out.push('      ' + row)); }
+      return out;
     }
 
     // Import d'un fichier Word (js/docx-import.js), « Importer un Word… » du menu « + », sur le modèle de l'import PowerPoint : le sélecteur s'ouvre dans le clic, le fichier est lu ensuite, et ce n'est qu'après (un fichier

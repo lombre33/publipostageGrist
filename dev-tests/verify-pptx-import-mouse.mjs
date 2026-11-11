@@ -52,7 +52,7 @@ const TEXTS = {
     manyFirst: '3 animations d’objets non reprises', manyLast: '1 objet illisible non repris', lostLast: '3 objets illisibles non repris',
     lostSamples: ['2 polices absentes de l’éditeur, remplacées par la plus proche de chacune', '1 section de diapositives non reprise (aucune de ses diapositives n’est importée)', '2 textes verticaux écrits à l’horizontale'],
     copy: 'Copier le détail', copied: 'Détail copié', copyTitle: 'Compte rendu d’import PowerPoint (Publipostage+)',
-    animLines: ['Diapositive : 1 (×2)'], fontLines: ['Diapositive : 1 (×2)', 'Objets : Zone de texte; Dégradé', 'Détail : Comic Sans MS; Verdana'], lastLines: ['Diapositive : 1', 'Objet : Objet inconnu', 'Détail : objet graphique inconnu (inconnu)'],
+    animLines: ['Diapositive : 1 (×2)'], fontLines: ['Diapositive : 1 (×2)', 'Objets : Zone de texte; Dégradé', 'Comic Sans MS : Zone de texte (diapositive 1)', 'Verdana : Dégradé (diapositive 1)'], lastLines: ['Diapositive : 1', 'Objet : Objet inconnu', 'Détail : objet graphique inconnu (inconnu)'],
     offTitle: 'Cette fonction demande Grist Factory Suite', offMessage: /Diapositives/,
   },
   en: {
@@ -69,7 +69,7 @@ const TEXTS = {
     manyFirst: '3 object animations not imported', manyLast: '1 unreadable object not imported', lostLast: '3 unreadable objects not imported',
     lostSamples: ['2 fonts missing from the editor, replaced by the nearest available', '1 slide section not imported (none of its slides is imported)', '2 vertical texts written horizontally'],
     copy: 'Copy the detail', copied: 'Detail copied', copyTitle: 'PowerPoint import report (Publipostage+)',
-    animLines: ['Slide: 1 (×2)'], fontLines: ['Slide: 1 (×2)', 'Objects: Zone de texte; Dégradé', 'Detail: Comic Sans MS; Verdana'], lastLines: ['Slide: 1', 'Object: Objet inconnu', 'Detail: unknown graphic object (inconnu)'],
+    animLines: ['Slide: 1 (×2)'], fontLines: ['Slide: 1 (×2)', 'Objects: Zone de texte; Dégradé', 'Comic Sans MS : Zone de texte (slide 1)', 'Verdana : Dégradé (slide 1)'], lastLines: ['Slide: 1', 'Object: Objet inconnu', 'Detail: unknown graphic object (inconnu)'],
     offTitle: 'This feature needs Grist Factory Suite', offMessage: /Slides/,
   },
 };
@@ -546,7 +546,7 @@ async function run(lang, scheme) {
     await wheelToTheEnd(lost, T.lostLast, 'report-lost-end');
     const lostCopy = await clickDialogButton(page, T.copy);
     const lostPasted = String(await page.evaluate(() => navigator.clipboard.readText()).catch(e => 'ERREUR ' + e.message)).split('\n');
-    check(tag + 'le texte copié du rapport le plus long dit toutes ses lignes : une « • » par genre, le pied avec le décor du masque', !!lostCopy && lostCopy.reachable && lostPasted.filter(line => line.startsWith('• ')).length === wanted.length && wanted.every(line => lostPasted.includes('• ' + line)) && lostPasted.some(line => /Essai/.test(line)), { count: lostPasted.filter(line => line.startsWith('• ')).length, wanted: wanted.length, tail: lostPasted.slice(-4) });
+    check(tag + 'le texte copié du rapport le plus long dit toutes ses lignes : une « • » par genre, le pied avec le décor du masque et, dessous, son débogage temporaire (fichier, diapositives, carte)', !!lostCopy && lostCopy.reachable && lostPasted.filter(line => line.startsWith('• ')).length === wanted.length && wanted.every(line => lostPasted.includes('• ' + line)) && lostPasted.some(line => /Essai/.test(line)) && lostPasted.some(line => /DÉBOGAGE TEMPORAIRE|TEMPORARY DEBUG/.test(line) && /file=slideMaster1\.xml/.test(line)), { count: lostPasted.filter(line => line.startsWith('• ')).length, wanted: wanted.length, tail: lostPasted.slice(-4) });
     await clickDialogButton(page, T.close);
     check(tag + 'la fenêtre du rapport de tous les genres se ferme au vrai clic', !(await reportState(page)).shown);
 

@@ -386,7 +386,8 @@ const PptxImport = (function () {
     return out;
   }
   // La taille à laquelle un texte a été ramené pour tenir (par tranches de 5 points), pour le détail du rapport : « réduit à 70 % ».
-  const shrunkLabel = scale => I18n.t('importReport.shrunkTo', { pct: Math.max(MIN_FIT_SCALE * 100, Math.round(scale * 20) * 5) });
+  // Le vrai pourcentage, au pour cent près et jamais « 100 % » (un texte réduit de 2 % est « réduit à 98 % », pas « à 100 % »).
+  const shrunkLabel = scale => I18n.t('importReport.shrunkTo', { pct: Math.max(MIN_FIT_SCALE * 100, Math.min(99, Math.round(scale * 100))) });
   // Compte, dans le rapport, ce qu'un objet repris n'a pas gardé : une fois par objet et par genre.
   function tally(report, losses) {
     if (losses) losses.forEach((key) => { report[key] += 1; });
@@ -469,6 +470,12 @@ const PptxImport = (function () {
   const noteTo = (report, key, name, n, text) => { if (report && report.note && name) report.note(key, name, n, text); };
   // Où en est l'import : le rapport vrai de la lecture porte `where`.
   const whereOf = ctx => ctx.realReport.where;
+  // L'objet en cours et son endroit, pour les lignes du détail qui les joignent à ce qu'elles nomment : « Tableau 5 (diapositive 7) », « Bandeau (Masque « Essai ») ».
+  function placeOf(ctx) {
+    const where = whereOf(ctx);
+    const place = where.holder || (where.slide > 0 ? I18n.t('importReport.slideN', { n: where.slide }) : '');
+    return (where.object || '?') + (place ? ' (' + place + ')' : '');
+  }
   // Ce que les propriétés d'un objet (`cNvPr`) portent que l'éditeur ne garde pas : un lien (sur une image comme sur une forme) que ni l'image (enveloppée d'un lien) ni le texte de la forme (lié en entier) n'ont pris
   // (`linked`). Le texte alternatif (`descr`) est repris (`alt` du cadre, de l'image).
   function noteObject(node, losses, linked) {
@@ -790,7 +797,7 @@ const PptxImport = (function () {
     if (seen.has(key)) return;
     seen.add(key);
     report.fonts += 1;
-    noteTo(report, 'fonts', faceOf(face, env.theme));
+    noteTo(report, 'fonts', faceOf(face, env.theme), 1, placeOf(env.ctx));
   }
   function noteRun(value, run, found, env, report) {
     if (!value.replace(/\s+/g, '')) return;
@@ -1786,7 +1793,7 @@ const PptxImport = (function () {
       const room = fitKindOf(bodies) === 'spAutoFit' ? Math.max(frame.h, env.page.h - frame.y - 1) : frame.h;
       const fitted = fitText(ctx, frame, txBody, shape, room, frame.rot ? Infinity : Math.max(env.page.h - frame.y, 12), items);
       items = fitted.items;
-      if (fitted.scale < shape.scale - 0.001) { ctx.report.shrunk += 1; noteTo(ctx.report, 'shrunk', shrunkLabel(fitted.scale)); }
+      if (fitted.scale < shape.scale - 0.001) { ctx.report.shrunk += 1; noteTo(ctx.report, 'shrunk', placeOf(ctx), 1, shrunkLabel(fitted.scale)); }
       if (plain && !box.rot && fitted.natural < frame.h - 1 && anchor !== 't') {
         frame.y += anchor === 'b' ? frame.h - fitted.natural : (frame.h - fitted.natural) / 2;
         frame.h = fitted.natural;
@@ -2072,7 +2079,7 @@ const PptxImport = (function () {
       html = best.html;
       natural = best.natural;
       ctx.report.shrunk += 1;
-      noteTo(ctx.report, 'shrunk', shrunkLabel(best.scale));
+      noteTo(ctx.report, 'shrunk', placeOf(ctx), 1, shrunkLabel(best.scale));
     }
     // Le tableau est un cadre libre à sa place exacte (comme un cadre de texte : ses marges intérieures sont celles de l'éditeur, le tableau est donc reculé d'autant), de la hauteur du tableau tel que l'éditeur le dessinera.
     out.push(FreeFrame.html({ x: box.x - FRAME_PAD_X_PT, y: box.y - FRAME_PAD_Y_PT, w: box.w + 2 * FRAME_PAD_X_PT, h: Math.max(box.h, natural) + 2 * FRAME_PAD_Y_PT, rot: 0, layer: '' }, html));
@@ -2191,14 +2198,16 @@ const PptxImport = (function () {
   }
   // Le nom d'une animation que l'éditeur ne reprend pas, pour le détail du rapport : sa sorte et son numéro d'effet de PowerPoint (« emphase 6 », « entrée 10 »), et pourquoi quand ce n'est pas l'effet qui manque.
   const ANIM_CLASSES = ['entr', 'exit', 'emph', 'path', 'verb', 'mediacall'];
-  function animationLabel(effect, main, duplicate) {
+  function animationLabel(effect, main, duplicate, nameOf) {
     const cls = attr(effect, 'presetClass') || '';
     const id = numAttr(effect, 'presetID', -1);
     let why = '';
     if (!(main && main.contains(effect))) why = 'trigger';
     else if (duplicate) why = 'second';
     else if (descendants(effect, 'spTgt').some(target => kid(target, 'txEl'))) why = 'paragraph';
-    return I18n.t('importReport.animKind.' + (ANIM_CLASSES.indexOf(cls) >= 0 ? cls : 'other')) + ' ' + (id >= 0 ? id : '?') + (why ? ', ' + I18n.t('importReport.animWhy.' + why) : '');
+    const target = descendants(effect, 'spTgt')[0];
+    const object = target && nameOf ? nameOf(attr(target, 'spid')) : '';
+    return I18n.t('importReport.animKind.' + (ANIM_CLASSES.indexOf(cls) >= 0 ? cls : 'other')) + ' ' + (id >= 0 ? id : '?') + (why ? ', ' + I18n.t('importReport.animWhy.' + why) : '') + (object ? ' (' + object + ')' : '');
   }
   // Les animations de la diapositive `root` : { byId (l'identifiant de l'objet -> son animation), lost (celles qu'on ne reprend pas), lostWhy (leurs noms) }.
   function timingOf(root) {
@@ -2207,10 +2216,16 @@ const PptxImport = (function () {
     if (!timing) return found;
     const nodes = descendants(timing, 'cTn');
     const main = nodes.find(node => attr(node, 'nodeType') === 'mainSeq');
+    // Le nom de l'objet qu'une animation vise (par son identifiant), cherché la première fois qu'une animation n'est pas reprise.
+    let names = null;
+    const nameOf = (id) => {
+      if (!names) names = new Map(descendants(root, 'cNvPr').map(el => [attr(el, 'id'), String(attr(el, 'name') || '').replace(/\s+/g, ' ').trim().slice(0, 60)]));
+      return names.get(id) || '';
+    };
     let rank = 0;
     nodes.filter(node => ANIM_STARTS[attr(node, 'nodeType') || '']).forEach((effect) => {
       const one = main && main.contains(effect) ? animationOf(effect) : null;
-      if (!one || found.byId.has(one.id)) { found.lost += 1; found.lostWhy.push(animationLabel(effect, main, !!one)); return; }
+      if (!one || found.byId.has(one.id)) { found.lost += 1; found.lostWhy.push(animationLabel(effect, main, !!one, nameOf)); return; }
       rank += 1;
       one.rank = rank;
       found.byId.set(one.id, one);
@@ -2439,7 +2454,7 @@ const PptxImport = (function () {
     const first = !ctx.counted.has(holder.path);
     ctx.counted.add(holder.path);
     const seen = ctx.holderUse.get(holder.path);
-    if (seen) seen.uses += 1; else ctx.holderUse.set(holder.path, { holder, uses: 1 });
+    if (seen) { seen.uses += 1; seen.slides.push(ctx.slideNumber); } else ctx.holderUse.set(holder.path, { holder, uses: 1, slides: [ctx.slideNumber] });
     const where = whereOf(ctx);
     where.holder = holderLabel(holder);
     where.object = '';
@@ -2468,7 +2483,7 @@ const PptxImport = (function () {
   // l'import l'a sauté (plus de MAX_DECOR_OBJECTS objets). Les décors lourds sont aussi NOMMÉS dans la ligne « objets du masque » du rapport.
   function decorStats(ctx) {
     const out = [];
-    ctx.holderUse.forEach(({ holder, uses }) => {
+    ctx.holderUse.forEach(({ holder, uses, slides }) => {
       const graphic = holder.kinds.graphic || 0;
       if (!holder.decorations && !graphic) return;
       const images = new Set();
@@ -2481,6 +2496,7 @@ const PptxImport = (function () {
       const skipped = holder.decorations > MAX_DECOR_OBJECTS;
       const entry = { label: holderLabel(holder), layout: !!holder.master, objects: holder.decorations, kinds: Object.assign({}, holder.kinds), biggest: holder.biggest, images: images.size, imageBytes, uses, skipped };
       entry.summary = decorSummary(entry);
+      entry.debug = decorDebug(holder, ctx, slides);   // DÉBOGAGE TEMPORAIRE
       out.push(entry);
       if (skipped) noteTo(ctx.realReport, 'masterObjects', entry.label, entry.objects, entry.summary);
     });
@@ -2495,6 +2511,77 @@ const PptxImport = (function () {
     if (entry.imageBytes) list.push(I18n.t('importReport.decorImages', { n: entry.images, size: megabytes(entry.imageBytes) }));
     list.push(I18n.t('importReport.usedBy', { n: entry.uses }));
     return list.filter(Boolean).join(' ; ');
+  }
+
+  // --- DÉBOGAGE TEMPORAIRE (11/11 : « améliore le code pour avoir plus de debug, on fera sauter au moment de le sortir ») ------------------------------------------------------------------------------
+  // À RETIRER avant la sortie : ce bloc, `decorDebug` dans `decorStats`, `holderUse[].slides`, `ctx.pageEmu`, les lignes « DÉBOGAGE » du texte copié (js/main-import.js `pptxReportText`) et `importReport.debug`.
+  // Ce que le décor d'un masque ou d'une mise en page a de concret, pour décider quoi en faire : le fichier, les diapositives qui le montrent, la boîte de chaque groupe (en % de la page), les images, les couleurs
+  // des formes, les points de tracé, les formes minuscules, et une CARTE de la page (où sont les formes). Tout vient de l'XML du décor, lu une fois par porteur.
+  const DEBUG_MAP = { cols: 48, rows: 10 };
+  function decorDebug(holder, ctx, slides) {
+    const tree = at(holder.root, 'cSld/spTree');
+    const page = ctx.pageEmu || { w: 12192000, h: 6858000 };
+    const leaves = [];
+    const walk = (node, groups, top) => {
+      kids(node).forEach((child) => {
+        const name = child.localName;
+        if (/^(sp|pic|cxnSp)$/.test(name)) {
+          if (name === 'sp' && placeholderOf(child)) return;
+          const xf = xfrmOf(kid(child, 'spPr'));
+          leaves.push({ node: child, kind: decorKind(child), top, box: xf ? place({ x: xf.x, y: xf.y, w: xf.w, h: xf.h, rot: 0, flipH: false, flipV: false }, groups) : null });
+        } else if (name === 'grpSp') {
+          const xf = xfrmOf(kid(child, 'grpSpPr'));
+          walk(child, xf ? [xf].concat(groups) : groups, top || child);
+        }
+      });
+    };
+    walk(tree, [], null);
+    const pct = (value, total) => Math.round(value / total * 100);
+    const boxOf = (list) => {
+      const boxes = list.map(leaf => leaf.box).filter(Boolean);
+      if (!boxes.length) return null;
+      const x1 = Math.min(...boxes.map(b => b.x));
+      const y1 = Math.min(...boxes.map(b => b.y));
+      const x2 = Math.max(...boxes.map(b => b.x + b.w));
+      const y2 = Math.max(...boxes.map(b => b.y + b.h));
+      return { x: pct(x1, page.w), y: pct(y1, page.h), w: pct(x2 - x1, page.w), h: pct(y2 - y1, page.h) };
+    };
+    const groups = new Map();
+    leaves.forEach((leaf) => { if (leaf.top) { if (!groups.has(leaf.top)) groups.set(leaf.top, []); groups.get(leaf.top).push(leaf); } });
+    const loose = leaves.filter(leaf => !leaf.top && leaf.kind !== 'pic');
+    const colors = new Map();
+    let points = 0;
+    let mostPoints = 0;
+    let tiny = 0;
+    leaves.forEach((leaf) => {
+      if (leaf.kind === 'pic') return;
+      const fill = kid(kid(leaf.node, 'spPr'), ['solidFill', 'gradFill', 'blipFill', 'pattFill', 'noFill']);
+      const color = !fill ? '-' : fill.localName === 'solidFill' ? (attr(kid(fill, ['srgbClr', 'schemeClr']), 'val') || '?') : fill.localName.replace('Fill', '');
+      colors.set(color, (colors.get(color) || 0) + 1);
+      const here = descendants(leaf.node, 'pt').length;
+      points += here;
+      mostPoints = Math.max(mostPoints, here);
+      if (leaf.box && leaf.box.w < page.w / 100 && leaf.box.h < page.h / 100) tiny += 1;
+    });
+    const cells = Array.from({ length: DEBUG_MAP.rows }, () => new Array(DEBUG_MAP.cols).fill(0));
+    let outside = 0;
+    leaves.forEach((leaf) => {
+      if (!leaf.box) return;
+      const col = Math.floor((leaf.box.x + leaf.box.w / 2) / page.w * DEBUG_MAP.cols);
+      const row = Math.floor((leaf.box.y + leaf.box.h / 2) / page.h * DEBUG_MAP.rows);
+      if (col < 0 || col >= DEBUG_MAP.cols || row < 0 || row >= DEBUG_MAP.rows) outside += 1; else cells[row][col] += 1;
+    });
+    const glyph = n => (n === 0 ? ' ' : n === 1 ? '.' : n < 4 ? ':' : n < 10 ? '*' : '#');
+    return {
+      file: String(holder.path || '').split('/').pop(),
+      slides: (slides || []).slice(0, 60),
+      groups: Array.from(groups, ([node, list]) => Object.assign({ name: objectNameOf(node), shapes: list.length }, boxOf(list))).sort((a, b) => b.shapes - a.shapes).slice(0, 6),
+      loose: loose.length ? Object.assign({ shapes: loose.length }, boxOf(loose)) : null,
+      pictures: leaves.filter(leaf => leaf.kind === 'pic').slice(0, 6).map(leaf => Object.assign({ name: objectNameOf(leaf.node) }, boxOf([leaf]))),
+      colors: Array.from(colors).sort((a, b) => b[1] - a[1]).slice(0, 6),
+      points, mostPoints, tiny, outside,
+      map: cells.map(row => '|' + row.map(glyph).join('') + '|'),
+    };
   }
 
   // --- Une diapositive -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2607,7 +2694,8 @@ const PptxImport = (function () {
     const paths = kids(kid(presentation, 'sldIdLst'), 'sldId').map(el => presentationRels.byId.get(relAttr(el, 'id'))).filter(rel => rel && rel.target && pkg.has(rel.target)).map(rel => rel.target);
     if (!paths.length) throw fail('empty', 'Cette présentation n’a aucune diapositive.');
     const size = kid(presentation, 'sldSz');
-    const page = pageFor(Math.max(numAttr(size, 'cx', 12192000), 1), Math.max(numAttr(size, 'cy', 6858000), 1));
+    const pageEmu = { w: Math.max(numAttr(size, 'cx', 12192000), 1), h: Math.max(numAttr(size, 'cy', 6858000), 1) };
+    const page = pageFor(pageEmu.w, pageEmu.h);
     const report = recordingReport();
     // Les sections de la bande des diapositives (`p14:sectionLst`) : le nom de chacune devient celui de la section que sa première diapositive ouvre (slideHtml ; SlideProps.SECTION_MAX caractères au plus) ;
     // celle qui n'a aucune diapositive reprise est comptée.
@@ -2622,7 +2710,7 @@ const PptxImport = (function () {
       });
     });
     const ctx = {
-      pkg, k: page.k, report, realReport: report, images: new Map(), imageBytes: 0, decorBytes: 0, prepared: new Map(), skipped: new Set(), objects: 0, masters: new Map(), layouts: new Map(), counted: new Set(), holderUse: new Map(),
+      pkg, k: page.k, pageEmu, report, realReport: report, images: new Map(), imageBytes: 0, decorBytes: 0, prepared: new Map(), skipped: new Set(), objects: 0, masters: new Map(), layouts: new Map(), counted: new Set(), holderUse: new Map(),
       defaultText: kid(presentation, 'defaultTextStyle'), presentationRels, pace: pacer(), embedded: 0, heavy: buffer.byteLength >= HEAVY_FILE_BYTES,
     };
     const onProgress = options && typeof options.onProgress === 'function' ? options.onProgress : null;

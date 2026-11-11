@@ -2893,7 +2893,7 @@
       });
       const fonts = detailOf(r, 'fonts');
       expect('polices : une police est comptée une fois pour tout le fichier - « Comic Sans MS » à la première fois (diapositive 1, pas à la seconde), « Futura » (diapositive 2) ; le compte est celui d\'avant',
-        reportOf(r).fonts === 2 && fonts.n === 2 && countsBy(fonts.labels)['Comic Sans MS'] === 1 && countsBy(fonts.labels).Futura === 1 && JSON.stringify(fonts.places) === JSON.stringify([{ slide: 1, n: 1 }, { slide: 2, n: 1 }]) && countsBy(fonts.objects)['Titre en Comic Sans'] === 1 && countsBy(fonts.objects)['Texte en Futura'] === 1, fonts);
+        reportOf(r).fonts === 2 && fonts.n === 2 && countsBy(fonts.labels)['Comic Sans MS'] === 1 && countsBy(fonts.labels).Futura === 1 && fonts.labels.find(label => label.name === 'Comic Sans MS').text === 'Titre en Comic Sans (diapositive 1)' && fonts.labels.find(label => label.name === 'Futura').text === 'Texte en Futura (diapositive 2)' && JSON.stringify(fonts.places) === JSON.stringify([{ slide: 1, n: 1 }, { slide: 2, n: 1 }]) && countsBy(fonts.objects)['Titre en Comic Sans'] === 1 && countsBy(fonts.objects)['Texte en Futura'] === 1, fonts);
       const images = detailOf(r, 'images');
       expect('image illisible : le nom du fichier et le motif, sur la diapositive 2, avec le nom de l\'objet', images.n === 1 && /schema\.emf/.test((images.labels[0] || {}).name || '') && JSON.stringify(images.places) === JSON.stringify([{ slide: 2, n: 1 }]) && countsBy(images.objects)['Schéma de la page'] === 1, images);
       const shapes = detailOf(r, 'shapes');
@@ -2901,15 +2901,16 @@
       const transitions = detailOf(r, 'transitions');
       expect('transition : l\'effet de PowerPoint est nommé, sur la diapositive 1', transitions.n === 1 && countsBy(transitions.labels).checker === 1 && JSON.stringify(transitions.places) === JSON.stringify([{ slide: 1, n: 1 }]), transitions);
       const shrunk = detailOf(r, 'shrunk');
-      const pct = shrunk.labels && shrunk.labels.length === 1 ? Number(/(\d+) %/.exec(shrunk.labels[0].name || '')[1]) : -1;
-      expect('texte réduit : « réduit à NN % », un multiple de 5 sous 100, sur la diapositive 2, avec le nom de l\'objet', shrunk.n === 1 && pct > 0 && pct < 100 && pct % 5 === 0 && JSON.stringify(shrunk.places) === JSON.stringify([{ slide: 2, n: 1 }]) && countsBy(shrunk.objects)['Texte trop long'] === 1, shrunk);
+      const pct = shrunk.labels && shrunk.labels.length === 1 ? Number(/(\d+) %/.exec(shrunk.labels[0].text || '')[1]) : -1;
+      expect('texte réduit : l\'objet et sa diapositive (« Texte trop long (diapositive 2) ») portent « réduit à NN % », NN sous 100, sur la diapositive 2', shrunk.n === 1 && pct >= 60 && pct < 100 && shrunk.labels[0].name === 'Texte trop long (diapositive 2)' && JSON.stringify(shrunk.places) === JSON.stringify([{ slide: 2, n: 1 }]) && countsBy(shrunk.objects)['Texte trop long'] === 1, shrunk);
+      expect('et se lit « Texte trop long (diapositive 2) : réduit à NN % » dans le détail', ImportReport.detailLines(shrunk).includes('Texte trop long (diapositive 2) : réduit à ' + pct + ' %'), ImportReport.detailLines(shrunk));
       const animations = detailOf(r, 'animations');
       const kind = name => I18n.t('importReport.animKind.' + name);
       const named = countsBy(animations.labels);
-      expect('animations : « emphase 6 », « entrée 10, un paragraphe à la fois », « entrée 22, deuxième animation du même objet » - 3 non reprises, sur la diapositive 3',
-        reportOf(r).animations === 3 && animations.n === 3 && named[kind('emph') + ' 6'] === 1 && named[kind('entr') + ' 10, ' + I18n.t('importReport.animWhy.paragraph')] === 1 && named[kind('entr') + ' 22, ' + I18n.t('importReport.animWhy.second')] === 1 && JSON.stringify(animations.places) === JSON.stringify([{ slide: 3, n: 3 }]), animations);
+      expect('animations : « emphase 6 (A) », « entrée 10, un paragraphe à la fois (B) », « entrée 22, deuxième animation du même objet (C) » - le nom de l\'objet visé y est - 3 non reprises, sur la diapositive 3',
+        reportOf(r).animations === 3 && animations.n === 3 && named[kind('emph') + ' 6 (A)'] === 1 && named[kind('entr') + ' 10, ' + I18n.t('importReport.animWhy.paragraph') + ' (B)'] === 1 && named[kind('entr') + ' 22, ' + I18n.t('importReport.animWhy.second') + ' (C)'] === 1 && JSON.stringify(animations.places) === JSON.stringify([{ slide: 3, n: 3 }]), animations);
       const lines = ImportReport.detailLines(fonts);
-      expect('les noms sans texte vont sur une ligne « Détail : … »', lines[lines.length - 1] === 'Détail : Comic Sans MS; Futura', lines);
+      expect('chaque police dit son objet et sa diapositive, une par ligne : « Comic Sans MS : Titre en Comic Sans (diapositive 1) »', lines.includes('Comic Sans MS : Titre en Comic Sans (diapositive 1)') && lines.includes('Futura : Texte en Futura (diapositive 2)'), lines);
       return result(bad);
     });
 
@@ -2978,6 +2979,49 @@
       const text = ImportReport.plainText({ header: ['Titre', 'Fichier : a.pptx'], intro: 'Phrase.', entries: [{ headline: '3 images', lines: ['un', 'deux'] }, { headline: '1 forme' }], footer: ['Pied'] });
       expect('le texte copié : en-tête, ligne vide, phrase, « • » et le détail en retrait de quatre espaces, ligne vide, pied', text === 'Titre\nFichier : a.pptx\n\nPhrase.\n• 3 images\n    un\n    deux\n• 1 forme\n\nPied', JSON.stringify(text));
       expect('sans phrase ni pied, rien de plus', ImportReport.plainText({ header: ['T'], entries: [{ headline: 'H' }] }) === 'T\n• H', ImportReport.plainText({ header: ['T'], entries: [{ headline: 'H' }] }));
+      return result(bad);
+    });
+
+
+
+  add('pptx_import_report_detail_shrunk_texts_say_their_real_percent_never_one_hundred',
+    'Un texte réduit de 2 % se lit « réduit à 98 % », pas « à 100 % » (l\'arrondi à 5 % l\'écrivait) : le pourcentage est celui de la réduction, au pour cent près, sous 100',
+    async () => {
+      await ready();
+      const { bad, expect } = checker();
+      const two = para(run('Premier paragraphe', 'sz="2000"')) + para(run('Deuxième paragraphe', 'sz="2000"'), '', lnPct(121.16));
+      const labels = [];
+      for (let height = 52; height <= 56; height++) {
+        const r = await run1({ slides: [{ shapes: textBox(40, 100, 400, height, two, { id: 2 }) }] });
+        const item = detailOf(r, 'shrunk');
+        labels.push({ height, n: item.n || 0, text: ((item.labels || [])[0] || {}).text || '' });
+      }
+      expect('une boîte de 55 pt : le texte est réduit de 2 % et le dit « réduit à 98 % »', (labels.find(l => l.height === 55) || {}).text === 'réduit à 98 %', labels);
+      expect('aucune réduction ne se lit « à 100 % » ni « à 95 % » pour une réduction de 2 % : 52 pt 92 %, 53 pt 94 %, 54 pt 96 %', labels.every(l => l.text !== 'réduit à 100 %') && labels.find(l => l.height === 52).text === 'réduit à 92 %' && labels.find(l => l.height === 54).text === 'réduit à 96 %', labels);
+      expect('une boîte de 56 pt : le texte tient, rien n\'est dit', labels.find(l => l.height === 56).n === 0, labels);
+      return result(bad);
+    });
+
+  add('pptx_import_report_detail_of_a_heavy_decor_gives_the_concrete_debug_file_slides_groups_colors_points_and_a_map_of_the_page',
+    'DÉBOGAGE TEMPORAIRE : le décor d\'un masque dit son fichier, les diapositives qui le montrent, la boîte de son groupe (en % de la page), les couleurs de ses formes, ses points de tracé et une carte de la page en 10 lignes de 48 cases (à retirer avec le débogage)',
+    async () => {
+      await ready();
+      const { bad, expect } = checker();
+      const children = Array.from({ length: 120 }, (_, i) => sp({ id: 100 + i, name: 'Morceau ' + i, x: 100 + (i % 20) * 20, y: 50 + Math.floor(i / 20) * 20, w: 20, h: 20, prst: '', geom: FREEFORM, fill: solid(i % 2 ? 'FFC000' : '1B2430') })).join('');
+      const decor = grp({ id: 99, x: 100, y: 50, w: 400, h: 120, cx: 100, cy: 50, cw: 400, ch: 120, children });
+      const slides = [{ shapes: textBox(100, 300, 300, 40, para(run('Un', 'sz="2000"')), { id: 2 }) }, { shapes: textBox(100, 300, 300, 40, para(run('Deux', 'sz="2000"')), { id: 2 }) }, { shapes: textBox(100, 300, 300, 40, para(run('Trois', 'sz="2000"')), { id: 2 }) }];
+      const r = await run1({ master: { shapes: decor }, slides });
+      const holder = r.stats.holders[0] || {};
+      const d = holder.debug || {};
+      expect('le décor est lu (120 formes libres dans un groupe), non sauté', r.stats.holders.length === 1 && holder.objects === 120 && holder.kinds.free === 120 && holder.skipped === false, r.stats.holders.map(h => ({ objects: h.objects, kinds: h.kinds })));
+      expect('le fichier et les diapositives qui le montrent : slideMaster1.xml, 1, 2 et 3', d.file === 'slideMaster1.xml' && JSON.stringify(d.slides) === '[1,2,3]', { file: d.file, slides: d.slides });
+      expect('le groupe : 120 formes, de 10 % (x), 9 % (y) sur 42 % de large et 22 % de haut de la page 960 x 540', d.groups && d.groups.length === 1 && d.groups[0].shapes === 120 && d.groups[0].x === 10 && d.groups[0].y === 9 && d.groups[0].w === 42 && d.groups[0].h === 22, d.groups);
+      expect('les couleurs : 60 jaunes (FFC000) et 60 sombres (1B2430)', d.colors && d.colors.length === 2 && d.colors.every(([color, n]) => (color === 'FFC000' || color === '1B2430') && n === 60), d.colors);
+      expect('les points : 3 par forme libre, 360 en tout, aucune forme minuscule (20 pt)', d.points === 360 && d.mostPoints === 3 && d.tiny === 0, { points: d.points, most: d.mostPoints, tiny: d.tiny });
+      expect('la carte : 10 lignes de 48 cases entre barres, les formes dans le quart haut gauche de la page', d.map && d.map.length === 10 && d.map.every(row => row.length === 50 && row[0] === '|' && row[49] === '|') && /[:*#]/.test(d.map.join('')) && d.map.slice(5).every(row => !/[.:*#]/.test(row)), d.map);
+      const withPicture = await run1({ master: { shapes: sp({ id: 7, name: 'Bandeau', x: 0, y: 0, w: 960, h: 60, fill: solid('2F5597') }) + sp({ id: 8, name: 'Carré', x: 10, y: 10, w: 20, h: 20, fill: solid('FFFFFF') }) }, slides });
+      const light = (withPicture.stats.holders[0] || {}).debug || {};
+      expect('un décor sans groupe : ses formes isolées sont dites (2, bandeau en haut sur toute la largeur), aucun groupe', !light.groups.length && light.loose && light.loose.shapes === 2 && light.loose.x === 0 && light.loose.y === 0 && light.loose.w === 100 && light.loose.h === 11, light);
       return result(bad);
     });
 
