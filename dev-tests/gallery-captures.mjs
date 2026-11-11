@@ -125,7 +125,8 @@ const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@.*$/, 'umd/docx.iife.js'],
   ...(existsSync(join(CACHE, 'umd/echarts.min.js')) ? [[/^https:\/\/cdn\.jsdelivr\.net\/npm\/echarts@[\d.]+\/dist\/echarts\.min\.js$/, 'umd/echarts.min.js']] : []),
 ] : [];
-const CHUNK_BASE = 'https://esm.sh/_offline-chunks/';
+// Servis depuis l'origine de la page (pas depuis esm.sh) : la politique de index.html ne nomme plus que les paquets exacts de l'éditeur, et 'self' couvre cette origine.
+const CHUNK_BASE = `http://127.0.0.1:${PORT}/_offline-chunks/`;
 const absoluteChunks = (code) => code.replace(/(from\s*|import\s*)"\.\/(chunk-[A-Z0-9]+\.js)"/g, (_, kw, file) => `${kw}"${CHUNK_BASE}${file}"`);
 
 const require = createRequire(import.meta.url);
@@ -153,10 +154,13 @@ async function openWidget(browser, images, { slides = false, extensions = [] } =
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) problems.push('console.error : ' + m.text()); });
   page.on('dialog', async (d) => { problems.push('boîte native (' + d.type() + ') : ' + d.message()); await d.dismiss(); });
   if (OFFLINE) {
+    await page.route(`${CHUNK_BASE}*`, async (route) => {
+      const chunk = route.request().url().match(/\/(chunk-[A-Z0-9]+\.js)$/);
+      if (!chunk) return route.fulfill({ status: 404, body: '// morceau inconnu' });
+      route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', headers: { 'Access-Control-Allow-Origin': '*' }, body: absoluteChunks(await readFile(join(CACHE, 'esm', chunk[1]), 'utf8')) });
+    });
     await page.route('**://esm.sh/**', async (route) => {
       const url = route.request().url();
-      const chunk = url.match(/\/(chunk-[A-Z0-9]+\.js)$/);
-      if (chunk) return route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: absoluteChunks(await readFile(join(CACHE, 'esm', chunk[1]), 'utf8')) });
       const spec = Object.keys(esmMap).find((k) => url === `https://esm.sh/${k}` || url === `https://esm.sh/*${k}` || url.startsWith(`https://esm.sh/${k}@`) || url.startsWith(`https://esm.sh/*${k}@`));
       if (!spec) return route.fulfill({ status: 404, body: `// pas de miroir local pour ${url}` });
       route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: absoluteChunks(await readFile(join(ROOT, esmMap[spec].replace(/^\//, '')), 'utf8')) });
