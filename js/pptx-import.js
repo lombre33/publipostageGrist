@@ -63,11 +63,15 @@ const PptxImport = (function () {
   const MAX_DEPTH = 12;                            // groupes imbriqués
   // --- Avancer sans figer la page ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
   // La lecture d'un gros fichier (des centaines de diapositives, des formes par milliers, des photos) est un seul long calcul : sans pause, la page ne répond plus à rien pendant des dizaines de secondes. Le
-  // travail est donc coupé en tranches de SLICE_MS : entre deux, la page respire (clics, défilement, coin d'état qui se peint). La pause passe par `scheduler.yield` (le navigateur sert d'abord les clics et la
-  // frappe, puis reprend ici) ; sans lui, par un minuteur à 0 ms. Toutes les PAINT_MS, la pause attend aussi une image (elle ne dure jamais plus de 60 ms : un onglet caché n'en peint pas).
+  // travail est donc coupé en tranches de SLICE_MS : entre deux, la page respire (clics, défilement, coin d'état qui se peint). La pause est une tâche ordinaire (scheduler.postTask, au rang des minuteurs et des
+  // messages de GFS ; sans lui, un minuteur à 0 ms), jamais `scheduler.yield` : sa reprise passe devant tous les minuteurs, qui attendaient la fin de la lecture (mesuré le 11/11 : 18 s de lecture sans un seul
+  // battement de minuteur, le voile et le suivi du lag aveugles) - comme js/import-placing.js et js/work-pacer.js. Toutes les PAINT_MS, la pause attend aussi une image (elle ne dure jamais plus de 60 ms : un onglet caché n'en peint pas).
   const SLICE_MS = 30;
   const PAINT_MS = 250;
-  const breathe = () => (typeof scheduler !== 'undefined' && scheduler && typeof scheduler.yield === 'function' ? scheduler.yield() : new Promise(resolve => setTimeout(resolve, 0)));
+  const breathe = () => new Promise((resolve) => {
+    if (typeof scheduler !== 'undefined' && scheduler && typeof scheduler.postTask === 'function') scheduler.postTask(resolve, { priority: 'user-visible' });
+    else setTimeout(resolve, 0);
+  });
   const breatheAndPaint = () => new Promise((resolve) => {
     // Un onglet caché ne peint rien et ses minuteurs sont ralentis (une seconde, puis une minute) : la pause est alors une simple tâche.
     if (typeof document !== 'undefined' && document.hidden) { breathe().then(resolve); return; }

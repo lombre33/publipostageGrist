@@ -7,6 +7,7 @@
 // le fichier « lourd » est le même, grossi de 16 Mo d'octets qu'aucune compression ne réduit.
 // Ce que les cas vérifient :
 //  - la page répond pendant la lecture : le battement d'un minuteur de 10 ms ne s'arrête jamais plus de 300 ms (avant : 450 ms, dix arrêts de plus de 200 ms) ; le compteur de progression monte jusqu'au total ;
+//    et pendant la lecture de milliers de formes à texte (du calcul pur, sans image à attendre), il ne s'arrête jamais plus de 400 ms (la pause par `scheduler.yield` laissait passer près d'une seconde) ;
 //  - un fichier léger garde la définition de ses images (comme avant) ; un fichier lourd les ramène à 220 points par pouce de leur boîte, pèse cinq à dix fois moins dans le texte, et rend la même structure et le
 //    même rapport ;
 //  - à la vraie souris : le coin d'état dit « Lecture du fichier PowerPoint… n / 6 » puis « Mise en place de 6 diapositives… » puis « PowerPoint importé », un clic sur « Réglages » en route ouvre la fenêtre
@@ -70,6 +71,18 @@ async function makeDeck(page, name, pad) {
   }, { name, pad, slidesN: SLIDES, picsPer: PICS, photoPx: PHOTO_PX, boxPt: BOX_PT });
 }
 
+// Fabrique un fichier fait de milliers de formes à texte (sans image) et le garde dans `window.__decks[name]` : la lecture n'y attend aucune image, c'est du calcul sans autre pause que celle de pptx-import.js.
+const makeShapesDeck = (page, name, slidesN, shapesN) => page.evaluate(async ({ name, slidesN, shapesN }) => {
+  const { pptx, textBox, para, run } = window.PptxFixtures;
+  const slides = Array.from({ length: slidesN }, (_, s) => ({
+    shapes: Array.from({ length: shapesN }, (_, i) => textBox(20 + (i % 12) * 74, 20 + Math.floor(i / 12) * 40, 70, 36, para(run('D' + s + ' F' + i + ' un peu de texte', 'sz="1000"')) + para(run('seconde ligne', 'sz="900"')), { id: 2 + i })).join(''),
+  }));
+  const buffer = await pptx({ slides });
+  window.__decks = window.__decks || {};
+  window.__decks[name] = buffer;
+  return buffer.byteLength;
+}, { name, slidesN, shapesN });
+
 // Lit le fichier gardé dans la page en comptant les arrêts du battement d'un minuteur de 10 ms ; rend ce que l'import a écrit (sans les octets d'image : leur empreinte à part) et la taille des trois premières images.
 const readDeck = (page, name) => page.evaluate(async (which) => {
   const digest = async text => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
@@ -86,7 +99,7 @@ const readDeck = (page, name) => page.evaluate(async (which) => {
   const sources = result.html.match(/data:image\/[a-z]+;base64,[A-Za-z0-9+/=]+/g) || [];
   const dims = await Promise.all(sources.slice(0, 3).map(src => new Promise((resolve) => { const img = new Image(); img.onload = () => resolve([img.naturalWidth, img.naturalHeight]); img.onerror = () => resolve(null); img.src = src; })));
   return {
-    ms, maxGap: Math.round(Math.max(...gaps)), over200: gaps.filter(g => g > 200).length, progress, dims, images: sources.length, slideCount: result.slideCount, report: JSON.stringify(result.report),
+    ms, maxGap: Math.round(Math.max(...gaps)), over200: gaps.filter(g => g > 200).length, beats: gaps.length, progress, dims, images: sources.length, slideCount: result.slideCount, report: JSON.stringify(result.report),
     htmlMb: Math.round(result.html.length / 104857.6) / 10, shape: await digest(result.html.replace(/data:image\/[a-z]+;base64,[A-Za-z0-9+/=]+/g, 'DATA')),
   };
 }, name);
@@ -119,6 +132,15 @@ async function run(lang) {
     light.progress.length >= SLIDES && light.progress.every(([done, total], i) => total === SLIDES && (i === 0 || done >= light.progress[i - 1][0])) && light.progress[light.progress.length - 1][0] === SLIDES, light.progress);
   check(tag + 'un fichier léger garde la définition de ses images : 4 000 points de large et plus, comme avant', light.dims.length === 3 && light.dims.every(d => d && d[0] >= 4000), light.dims);
   check(tag + `les ${SLIDES} diapositives sont là, et le rapport ne dit rien d'une image perdue`, light.slideCount === SLIDES && !/"images"/.test(light.report), { slideCount: light.slideCount, report: light.report });
+
+  // 1a) Beaucoup de formes à texte, aucune image : la lecture est du calcul pur, coupé par la seule pause de pptx-import.js. Cette pause passait par `scheduler.yield`, dont la reprise passe devant tous les
+  // minuteurs : sur ce fichier, le battement de 10 ms s'arrêtait près d'une seconde et ne battait que huit fois en deux secondes et demie (18 s de lecture sans un battement sur un fichier de 6 000 formes par diapositive).
+  const SHAPES_SLIDES = 3;
+  const SHAPES_EACH = 1500;
+  await makeShapesDeck(page, 'shapes', SHAPES_SLIDES, SHAPES_EACH);
+  const shapes = await readDeck(page, 'shapes');
+  check(tag + `pendant la lecture de ${SHAPES_SLIDES} diapositives de ${SHAPES_EACH} formes à texte, le minuteur de 10 ms ne s'arrête jamais plus de 400 ms et bat une fois toutes les 150 ms au moins (ancien : près d'une seconde d'arrêt, huit battements)`,
+    shapes.slideCount === SHAPES_SLIDES && shapes.maxGap <= 400 && shapes.beats * 150 >= shapes.ms, { maxGap: shapes.maxGap, beats: shapes.beats, ms: shapes.ms, over200: shapes.over200 });
 
   // 1b) Le résultat d'un import ne retient pas la lecture : gardé (pendant la mise en place, pendant que la personne lit le rapport), il n'ajoute presque aucun document au navigateur. Un accesseur écrit dans
   // `fromBuffer` gardait en vie le paquet dézippé, les documents XML de chaque diapositive et le cache des images (450 documents et 110 000 nœuds pour 150 diapositives).
