@@ -420,6 +420,79 @@
     },
   });
 
+  // --- La liste des fils (js/comments-list.js, Comments.listThreads / revealThread / setThreadResolved / onChange) : le volet « Commentaires » s'appuie dessus ---
+  async function commentParagraph(h, index, message) {
+    const para = document.querySelectorAll('.tiptap p')[index];
+    await h.selectAllInElement(para);
+    await h.clickButton('v2-btn-comment');
+    await h.sleep(250);
+    const marks = Array.from(document.querySelectorAll('.tiptap .comment-mark'));
+    const mark = marks.find(m => para.contains(m));
+    const id = mark ? mark.getAttribute('data-comment-id') : null;
+    if (id && message) await postFirstMessage(h, message);
+    return id;
+  }
+
+  cases.push({
+    id: 'comment_list_gives_each_thread_in_text_order_with_quote_state_and_messages',
+    description: "Comments.listThreads rend un fil par commentaire, dans l'ordre du texte : le passage commenté, l'état (en cours ou résolu), le nombre de messages, le premier et le dernier ; résoudre un fil depuis la liste change la marque du texte, une seconde fois ne fait rien ; atteindre un fil place le curseur sur son passage et ouvre sa fenêtre",
+    run: async (h) => {
+      try {
+        await savedTemplateWithText(h, 'Commentaires liste', 'Premier passage commenté');
+        Editor.setHTML('<p>Premier passage commenté</p><p>Second passage à voir</p>');
+        await h.sleep(150);
+        const first = await commentParagraph(h, 0, 'Question sur le premier');
+        const second = await commentParagraph(h, 1, 'Remarque sur le second');
+        if (!first || !second) return { pass: false, notes: 'marques absentes : ' + first + ' / ' + second };
+        replyArea().value = 'Réponse au second';
+        await pressPopupButton(h, '.v2-comment-popup-post');
+        await closePopupIfOpen(h);
+        const out = {};
+        const threads = Comments.listThreads();
+        out.order = threads.map(t => t.id).join() === first + ',' + second && threads.every((t, i) => t.from < t.to && (i === 0 || t.from >= threads[i - 1].to));
+        out.quotes = threads[0].quote === 'Premier passage commenté' && threads[1].quote === 'Second passage à voir';
+        out.counts = threads[0].count === 1 && threads[1].count === 2 && threads[1].first.texte === 'Remarque sur le second' && threads[1].last.texte === 'Réponse au second' && threads[0].resolved === false;
+        out.resolve = (await Comments.setThreadResolved(first, true)) === true && Comments.listThreads()[0].resolved === true && /data-comment-id="[^"]*"[^>]*data-resolved="true"/.test(Editor.getHTML());
+        out.again = (await Comments.setThreadResolved(first, true)) === false;
+        out.reopen = (await Comments.setThreadResolved(first, false)) === true && Comments.listThreads()[0].resolved === false;
+        EditorCore.getEditor().commands.setTextSelection(1);
+        out.reveal = Comments.revealThread(second) === true;
+        await h.sleep(250);
+        const caret = EditorCore.getEditor().state.selection.from;
+        out.caretOnSecond = caret >= Comments.listThreads()[1].from && caret <= Comments.listThreads()[1].to && popupVisible();
+        out.unknown = Comments.revealThread('inconnu') === false;
+        await closePopupIfOpen(h);
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' ' + JSON.stringify(threads.map(t => [t.id, t.quote, t.count])) };
+      } finally { await closePopupIfOpen(h); }
+    },
+  });
+
+  cases.push({
+    id: 'comment_list_tells_its_listeners_when_a_message_is_posted',
+    description: "Comments.onChange prévient quand un message est publié (réponse comprise) : le volet se redessine sans polling ; un document sans commentaire donne une liste vide",
+    run: async (h) => {
+      try {
+        await savedTemplateWithText(h, 'Commentaires écoute', 'Texte à commenter');
+        let calls = 0;
+        Comments.onChange(() => { calls++; });
+        const id = await commentFirstParagraph(h);
+        if (!id) return { pass: false, notes: 'aucune marque posée' };
+        const before = calls;
+        await postFirstMessage(h, 'Un premier mot');
+        const afterPost = calls;
+        replyArea().value = 'Un second mot';
+        await pressPopupButton(h, '.v2-comment-popup-post');
+        const afterReply = calls;
+        await closePopupIfOpen(h);
+        const out = { post: afterPost > before, reply: afterReply > afterPost, count: Comments.listThreads()[0].count === 2 };
+        Editor.setHTML('<p>Rien à commenter</p>');
+        await h.sleep(150);
+        out.empty = Comments.listThreads().length === 0;
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' calls=' + calls };
+      } finally { await closePopupIfOpen(h); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.comments = cases;
 })();

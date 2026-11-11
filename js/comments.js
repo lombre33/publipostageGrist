@@ -48,6 +48,13 @@ const Comments = (function () {
   }
 
   let currentModeleId = null;
+  // Ce qui écoute les changements des fils (le volet « Commentaires » de js/track-changes-pane.js) : un message posté, un fil supprimé, un historique défait, les fils d'un autre modèle chargés. Un fil résolu ou
+  // posé, lui, change une marque du texte : ce sont les transactions de l'éditeur qui le disent.
+  const changeListeners = [];
+  function onChange(listener) { if (typeof listener === 'function') changeListeners.push(listener); }
+  function notifyChange() {
+    changeListeners.forEach((listener) => { try { listener(); } catch (e) { console.error('[Comments] un écouteur de changement a échoué', e); } });
+  }
   // { [commentId]: [{id, uid, auteur, texte, creeLe}, ...] } trié par creeLe croissant. `id` : la ligne Grist, qui change quand Annuler supprime un message
   // puis Rétablir le recrée ; `uid` : l'identité du message pour l'historique, qui ne change jamais.
   let threadsByCommentId = {};
@@ -142,6 +149,7 @@ const Comments = (function () {
     staged.forEach((thread) => {
       threadsByCommentId[thread.id] = thread.messages.map(m => ({ id: null, uid: newMessageUid(), auteur: m.auteur || '', texte: m.texte || '', creeLe: m.creeLe || '' }));
     });
+    notifyChange();
   }
   // Vrai : les messages sont dans la table. Nul : rien n'attendait. Faux : l'écriture est refusée ou a échoué : la personne en est avertie, les fils restent ouverts au clic et attendent encore (un
   // enregistrement de plus les réessaie : `hasStaged`). Deux appels en même temps (Enregistrer deux fois de suite) partagent la même écriture.
@@ -184,6 +192,7 @@ const Comments = (function () {
     threadsByCommentId = {};
     knownUids.clear();
     closePopup();
+    notifyChange();
     if (!modeleId) return;
     if (!carriesCommentMarks(tpl)) return;
     if (!(await ensureTableExists())) return;
@@ -195,6 +204,7 @@ const Comments = (function () {
       console.error('[Comments] Erreur chargement commentaires', e);
       threadsByCommentId = {};
     }
+    notifyChange();
   }
 
   async function postMessage(commentId, texte) {
@@ -217,6 +227,7 @@ const Comments = (function () {
     const message = { id: newId, uid: newMessageUid(), auteur, texte: trimmed, creeLe };
     knownUids.set(contentKey(message), message.uid);
     (threadsByCommentId[commentId] = threadsByCommentId[commentId] || []).push(message);
+    notifyChange();
     return true;
   }
 
@@ -226,12 +237,14 @@ const Comments = (function () {
     const all = threadsByCommentId[commentId] || [];
     const rows = all.filter(r => r.id != null);
     delete threadsByCommentId[commentId];
+    notifyChange();
     if (!rows.length) return;
     try { await grist.docApi.applyUserActions(rows.map(r => ['RemoveRecord', TABLE_NAME, r.id])); }
     catch (e) {
       console.error('[Comments] Erreur suppression du fil', e);
       // Les lignes sont restées dans la table : le fil les garde, pour que l'historique n'en recrée pas un double (Ctrl + Z rend la marque, et ces lignes sont toujours là).
       threadsByCommentId[commentId] = all;
+      notifyChange();
     }
   }
 
@@ -286,6 +299,7 @@ const Comments = (function () {
       returned.forEach((m, i) => { m.id = result && result.retValues && result.retValues[i] != null ? result.retValues[i] : null; });
     });
     syncPopup();
+    notifyChange();
   }
 
   // Un geste qui écrit dans la table des fils, avec son repère d'historique posé à la fin. `publishes` : le geste publie le premier message d'un fil dont la marque vient d'être posée et dont c'est le dernier pas de
@@ -338,6 +352,33 @@ const Comments = (function () {
     const tr = editor.state.tr;
     ranges.forEach(r => tr.addMark(r.start, r.end, r.mark));
     editor.view.dispatch(TrackChanges.skipTracking(tr));
+  }
+
+  // La liste des fils du modèle ouvert, dans l'ordre du texte (js/comments-list.js) : le volet « Commentaires » la montre. Vide sans éditeur.
+  function listThreads() {
+    return editor ? CommentsList.collect(editor.state.doc, threadsByCommentId) : [];
+  }
+  // Amène au passage commenté par le fil `commentId` : le curseur à son début, le texte défilé jusque-là, puis la fenêtre du fil, ancrée sur sa marque. Vrai quand le fil a une marque dans le texte.
+  function revealThread(commentId) {
+    if (!editor) return false;
+    const thread = listThreads().find(entry => entry.id === commentId);
+    if (!thread) return false;
+    const { doc } = editor.state;
+    const selection = EditorCore.getTextSelectionClass().near(doc.resolve(Math.max(0, Math.min(thread.from, doc.content.size))), 1);
+    editor.view.dispatch(editor.state.tr.setSelection(selection).scrollIntoView());
+    // La fenêtre se place une fois le texte défilé : ancrée avant, elle partirait de l'ancienne place de la marque.
+    requestAnimationFrame(() => {
+      const anchor = markElement(commentId);
+      if (anchor) openThreadView(commentId, anchor, thread.resolved);
+    });
+    return true;
+  }
+  // Résout ou rouvre le fil (le geste du bouton de sa fenêtre : la marque change d'état, l'historique du texte le suit). `resolved` : l'état voulu.
+  async function setThreadResolved(commentId, resolved) {
+    const thread = listThreads().find(entry => entry.id === commentId);
+    if (!thread || thread.resolved === !!resolved || !canComment) return false;
+    await toggleResolved(commentId, thread.resolved);
+    return true;
   }
 
   // Popup : mêmes mécaniques d'ouverture et de positionnement que #v2-footnote-popup (js/editor.js). Il se ferme par la croix, Échap, ou un clic en dehors de lui quand le fil est publié
@@ -829,7 +870,7 @@ const Comments = (function () {
   return {
     setEditor, loadForTemplate, stageImported, adoptStaged, hasStaged, insertCommentAtSelection, wireClickToOpen,
     setPermissions, isReaderMode, setReaderHooks, buildReaderHtml, wireReader,
-    snapshot, restore, whenIdle,
+    snapshot, restore, whenIdle, listThreads, revealThread, setThreadResolved, onChange,
     TABLE_NAME, TABLE_COLUMNS, PDF_COLUMNS, kit,
   };
 })();
