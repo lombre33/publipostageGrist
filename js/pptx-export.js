@@ -1227,10 +1227,14 @@ const PptxExport = (function () {
       contentWidthPx: Math.max(40, (page.width - marginsPt.left - marginsPt.right) * PT_TO_PX),
     };
     const slides = [];
+    // La page respire entre deux diapositives (js/work-pacer.js : rien tant que la tranche dure moins de 40 ms) : une diapositive sans image n'attend rien de réel, et toutes se fabriquaient d'un bloc - 0,9 s pour 24
+    // diapositives de 140 cadres, 11 s pour six de 6 000 - sans qu'un clic passe ni que le coin d'état se peigne.
+    const pace = typeof WorkPacer !== 'undefined' ? WorkPacer.create() : async () => {};
     for (let i = 0; i < sources.length; i += 1) {
       const slide = await buildSlide(sources[i], i + 1, ctx);
       slide.props = sources[i].props || { transition: '', from: 'r', dur: 700, bg: '', notes: '', hidden: false, advance: 0 };
       slides.push(slide);
+      await pace();
     }
     // Le décor du thème, sur le masque : son logo est une image du fichier comme une autre (il est lu avant la liste des types de [Content_Types].xml).
     const decor = await decorPartsOf(themed, page, ctx);

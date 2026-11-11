@@ -562,6 +562,42 @@ async function pageNumberField(lang, page) {
   check(tag + 'le mot « Page » qui le précède s\'écrit comme lui', same(plain) && same(marked), fields.map(f => f.prefix));
 }
 
+// Une grande présentation SANS image : une diapositive n'y attend rien de réel (pas d'image à décoder), toutes se fabriquaient d'un bloc - un seul arrêt de 0,9 s pour 24 diapositives de 140 cadres, 11 s pour six de
+// 6 000. Le moteur est appelé dans la page, comme le fait l'export ; le battement d'un minuteur de 10 ms dit si la page répond pendant ce temps.
+async function bigDeckBreathes(lang, page) {
+  const tag = `[${lang}] `;
+  console.log(`\n${tag}11) Une grande présentation sans image : la page répond pendant la fabrication du fichier`);
+  const SLIDES = 24;
+  const FRAMES = 140;
+  const run = await page.evaluate(async ({ slidesN, framesN }) => {
+    const MARK = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
+    let html = '';
+    for (let n = 1; n <= slidesN; n++) {
+      if (n > 1) html += MARK;
+      for (let i = 0; i < framesN; i++) html += FreeFrame.html({ x: (i % 24) * 26, y: 10 + Math.floor(i / 24) * 12, w: 24, h: 10 }, `<p>Cadre ${n}.${i}</p>`);
+    }
+    await ExportEngines.ensure('pptx');
+    await ExportCommon.ensureJsZipLoaded();
+    const gaps = [];
+    let last = performance.now();
+    let on = true;
+    const beat = () => { const now = performance.now(); gaps.push(now - last); last = now; if (on) setTimeout(beat, 10); };
+    setTimeout(beat, 10);
+    const started = performance.now();
+    const blob = await PptxExport.fromHtml(html, { marginsPt: PageLayout.getMarginsPt(), title: 'grand' });
+    const ms = Math.round(performance.now() - started);
+    on = false;
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const slideFiles = Object.keys(zip.files).filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name));
+    const first = await zip.file('ppt/slides/slide1.xml').async('string');
+    const last24 = await zip.file('ppt/slides/slide' + slidesN + '.xml').async('string');
+    return { ms, maxGap: Math.round(Math.max(...gaps)), beats: gaps.length, slides: slideFiles.length, shapesFirst: (first.match(/<p:sp>/g) || []).length, shapesLast: (last24.match(/<p:sp>/g) || []).length, lastText: /Cadre 24\.139/.test(last24) };
+  }, { slidesN: SLIDES, framesN: FRAMES });
+  check(tag + `l'export de ${SLIDES} diapositives de ${FRAMES} cadres sans image : le minuteur de 10 ms ne s'arrête jamais plus de 300 ms et bat plus d'une fois toutes les 100 ms (ancien : un arrêt de 900 ms d'un seul bloc)`,
+    run.maxGap <= 300 && run.beats * 100 >= run.ms, run);
+  check(tag + `le fichier est le même : ${SLIDES} diapositives, ${FRAMES} formes sur la première et sur la dernière, le dernier cadre à sa place`, run.slides === SLIDES && run.shapesFirst === FRAMES && run.shapesLast === FRAMES && run.lastText, run);
+}
+
 // Sans ligne sélectionnée.
 async function withoutRow(lang) {
   const T = TEXTS[lang];
@@ -581,6 +617,7 @@ if (fr.page) {
   await batch('fr', fr.page, fr.keep);
   await otherOutputs('fr', fr.page);
   await pageNumberField('fr', fr.page);
+  await bigDeckBreathes('fr', fr.page);
 }
 await withoutRow('fr');
 console.log('\n=== verify-pptx-export : anglais, sombre ===');
