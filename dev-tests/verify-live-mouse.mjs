@@ -261,9 +261,14 @@ for (const dark of [false, true]) {
   const k1 = await C.evaluate(() => ({ active: document.activeElement.id, open: getComputedStyle(document.getElementById('v2-collab-flyout')).display }));
   await C.keyboard.press('Tab');
   const k2 = await C.evaluate(() => document.activeElement.id);
-  await C.keyboard.press('Tab');
+  // Le menu a deux lignes de plus sur le chemin depuis le 09/11 (« Suivre la mise en forme » et « Volet des modifications ») : on suit les Tab jusqu'à « Écriture en direct » au lieu de compter trois touches.
+  const visited = [k1.active, k2];
+  for (let i = 0; i < 6 && visited[visited.length - 1] !== 'v2-btn-live'; i++) {
+    await C.keyboard.press('Tab');
+    visited.push(await C.evaluate(() => document.activeElement.id));
+  }
   const k3 = await C.evaluate(() => ({ active: document.activeElement.id, open: getComputedStyle(document.getElementById('v2-collab-flyout')).display }));
-  check(`${theme} : au clavier, Tab arrive sur le bouton (le menu s'ouvre), puis « Suivi des modifications », puis « Écriture en direct » (les deux lignes grisées d'office sont sautées)`, k1.active === 'v2-btn-collab' && k1.open === 'flex' && k2 === 'v2-btn-track-changes' && k3.active === 'v2-btn-live' && k3.open === 'flex', { k1, k2, k3 });
+  check(`${theme} : au clavier, Tab arrive sur le bouton (le menu s'ouvre), puis « Suivi des modifications », « Suivre la mise en forme », le volet des modifications, puis « Écriture en direct » (les deux lignes grisées d'office sont sautées)`, k1.active === 'v2-btn-collab' && k1.open === 'flex' && k2 === 'v2-btn-track-changes' && k3.active === 'v2-btn-live' && k3.open === 'flex' && visited.join() === 'v2-btn-collab,v2-btn-track-changes,v2-btn-track-format,v2-btn-track-pane,v2-btn-live', { k1, k2, k3, visited });
   await C.keyboard.press('Enter');
   await waitLive(C);
   const k4 = await C.evaluate(() => ({ live: LiveEntry.state(), bar: !!document.getElementById('live-bar'), button: document.getElementById('v2-btn-collab').classList.contains('is-active') }));

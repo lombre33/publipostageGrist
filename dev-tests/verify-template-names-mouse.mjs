@@ -176,7 +176,14 @@ const away = (page) => page.mouse.move(350, 340, { steps: 6 });
 const label = (page) => page.evaluate(() => document.querySelector('.tts-trigger-label').textContent);
 const statusInfo = (page) => page.evaluate(() => {
   const el = document.getElementById('status-msg');
-  return { text: el.textContent, fits: el.scrollWidth <= el.clientWidth, barH: Math.round(document.getElementById('toolbar-top').getBoundingClientRect().height) };
+  return { text: el.textContent, fits: el.scrollWidth <= el.clientWidth, barH: Math.round(document.getElementById('toolbar-top').getBoundingClientRect().height), seen: (window.__statusSeen || []).slice() };
+});
+// Le coin d'état est écrasé par « Enregistré à … » dès qu'un passage de l'enregistrement automatique tombe entre le geste et la lecture (toutes les 2,5 s, plus souvent sous charge : relevé le 10/11) :
+// chaque texte qu'il prend depuis ce repère est noté, et le contrôle d'un message cherche dans cette liste plutôt que dans le texte du moment.
+const markStatus = (page) => page.evaluate(() => {
+  const el = document.getElementById('status-msg');
+  window.__statusSeen = [el.textContent];
+  if (!window.__statusWatch) { window.__statusWatch = new MutationObserver(() => window.__statusSeen.push(el.textContent)); window.__statusWatch.observe(el, { childList: true, characterData: true, subtree: true }); }
 });
 const dialogInfo = (page) => page.evaluate(() => {
   const m = document.getElementById('pp-dialog-modal'); if (!m || getComputedStyle(m).display === 'none') return { shown: false };
@@ -404,7 +411,8 @@ const rowOf = (nom) => page.evaluate((nm) => {
   return i === -1 ? null : { id: r.id[i], content: String(r.Contenu[i]) };
 }, nom);
 const typeInEditor = async (text) => {
-  await page.evaluate(() => EditorCore.getEditor().commands.focus('end'));
+  // TipTap pose le curseur au prochain affichage (requestAnimationFrame) : la frappe qui part aussitôt perd ses premières lettres (« après » manquait, relevé le 10/11, y compris sur l'ancien code).
+  await page.evaluate(() => { EditorCore.getEditor().commands.focus('end'); return new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))); });
   await page.keyboard.type(text);
 };
 const barRef = (await statusInfo(page)).barH;
@@ -428,12 +436,13 @@ check('ce qui est tapé ensuite s’enregistre (sans nom, l’enregistrement aut
 await away(page);
 
 // Un clic ailleurs valide de même.
+await markStatus(page);
 await realClick(page, '#btn-rename-template', 250);
 await page.keyboard.press('Backspace');
 await realClick(page, '.ProseMirror', 300);
 title = await titleInfo();
 st = await statusInfo(page);
-check('un clic dans le texte, le nom effacé : le champ se referme sur « Facture en cours », le coin d’état le dit', !title.fieldOpen && title.field === 'Facture en cours' && title.label === 'Facture en cours' && st.text === MSG, { title, st });
+check('un clic dans le texte, le nom effacé : le champ se referme sur « Facture en cours », le coin d’état le dit', !title.fieldOpen && title.field === 'Facture en cours' && title.label === 'Facture en cours' && st.seen.includes(MSG), { title, st });
 await away(page);
 
 // Échap : la frappe est abandonnée, même quand l'enregistrement automatique en avait écrit le début.
@@ -476,10 +485,11 @@ check('anglais : « Save as… » propose le premier nom libre, sélectionné', 
 await page.keyboard.type('Quittance'); await page.keyboard.press('Enter'); await page.waitForTimeout(900);
 st = await statusInfo(page);
 check('anglais : « This name already exists: renamed “Quittance (3)”. »', st.text === 'This name already exists: renamed “Quittance (3)”.', st);
+await markStatus(page);
 await realClick(page, '#btn-rename-template', 250);
 await page.keyboard.press('Backspace'); await page.keyboard.press('Enter'); await page.waitForTimeout(250);
 st = await statusInfo(page);
-check('anglais : le nom effacé revient et le coin d’état dit « Template name required: “Quittance (3)” is kept. »', st.text === 'Template name required: “Quittance (3)” is kept.' && (await label(page)) === 'Quittance (3)', { st, label: await label(page) });
+check('anglais : le nom effacé revient et le coin d’état dit « Template name required: “Quittance (3)” is kept. »', st.seen.includes('Template name required: “Quittance (3)” is kept.') && (await label(page)) === 'Quittance (3)', { st, label: await label(page) });
 await page.evaluate(() => I18n.setLang('fr'));
 await page.context().close();
 
