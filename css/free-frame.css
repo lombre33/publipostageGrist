@@ -18,6 +18,12 @@
    Un cadre PIVOTÉ (`data-ff-rot`, `--ff-rot` : des degrés dans le sens des aiguilles d'une montre) tourne autour du centre de sa boîte ; son rognage à la page se fait alors par son ancre. */
 
 .pp-free-frame { position: relative; display: block; height: 0; margin: 0; padding: 0; border: 0; overflow: visible; }
+/* Un cadre ENDORMI d'un très gros diaporama (js/frame-sleep.js : il est loin de l'écran et la sélection n'y est pas) n'a plus de boîte : le navigateur ne le met plus en page, ne le dessine plus, ne
+   décode plus ses images et ne le teste plus au pointeur. Une ancre sans hauteur ni marge qui disparaît ne déplace rien (les marges de ses voisins se rejoignaient déjà à travers elle). On n'y mesure
+   rien : sa hauteur lue vaudrait zéro (FreeFrame.overflowsPage garde sa réponse, `view.coordsAtPos` la réveille d'abord). `position: absolute` n'a aucun effet sur une boîte qui n'existe pas : il dit à
+   ceux qui cherchent le bloc suivant DANS LE FLUX par son style (EditorCore.nextInFlow) que celui-ci n'y est pas. Dans le texte de l'éditeur seulement : une copie (la bande, la Lecture, le diaporama,
+   une sortie) qui porterait la classe se dessine comme les autres. */
+#editor-container .v2-page-sheet > .tiptap > .pp-free-frame.pp-ff-asleep { display: none; position: absolute; }
 .pp-free-frame-box {
   position: absolute; box-sizing: border-box; display: flex; flex-direction: column;
   left: calc(var(--ff-x, 0pt) - var(--pp-margin-left, 0px) - var(--ff-bleed, 0pt)); top: calc(var(--ff-y, 0pt) - var(--pp-margin-top, 0px) - var(--pp-top-band, 0px) - var(--ff-bleed, 0pt));

@@ -367,6 +367,11 @@
     try {
       const outcome = await ImportPlacing.fillOpened(plan, { progress, covered: progress.isShown, closing, onPlaced: (markers, fraction) => note(plan.firstSlides + markers, plan.firstShare + (1 - plan.firstShare) * fraction), finish: result => settleOpenedPresentation(tpl, result) });
       PerfTrace.mark('ouverture par morceaux : ' + (outcome === 'done' ? 'fin' : outcome === 'broken' ? 'texte rechargé d’un bloc' : 'arrêtée'));
+      // Le voile ne part pas avant que la page soit calme : l'éditeur est prêt à répondre dès qu'il se découvre (js/import-placing.js:whenQuiet).
+      if (outcome !== 'stopped') {
+        const quiet = await progress.settle();
+        if (quiet) PerfTrace.mark('ouverture par morceaux : page calme', quiet);
+      }
     } finally {
       progress.end();
       refocusEditorIfLost();

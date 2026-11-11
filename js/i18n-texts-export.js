@@ -196,6 +196,7 @@ const I18nTextsExport = {
   'status.pptxOpeningProgress': { fr: 'Ouverture des diapositives… {done} / {total}', en: 'Opening the slides… {done} / {total}' },
   // La mise en page finale d'une pose, import comme ouverture (js/import-placing.js : onClosing, closingText) : le voile et le coin d'état disent l'étape en cours, `what` est l'un des mots qui suivent.
   'status.pptxClosing': { fr: 'Mise en page finale, étape {step} sur {steps} : {what}…', en: 'Final layout, step {step} of {steps}: {what}…' },
+  'importPlacing.settling': { fr: 'Dernières vérifications : l’éditeur se prépare à répondre…', en: 'Final checks: the editor is getting ready to respond…' },
   'importPlacing.closing.show': { fr: 'affichage des diapositives', en: 'showing the slides' },
   'importPlacing.closing.measure': { fr: 'mesure des cadres ({done} sur {total})', en: 'measuring the frames ({done} of {total})' },
   'importPlacing.closing.tables': { fr: 'tableaux', en: 'tables' },

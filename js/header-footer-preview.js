@@ -648,7 +648,9 @@ const HeaderFooterPreview = (function () {
       // place ni page, et son rectangle est nul à l'origine de l'ÉCRAN, non du texte : l'écart qu'EditorCore.gapAbove lui trouvait avec le bloc d'avant grandissait avec le défilement du
       // conteneur, et une pagination faite plus bas que le haut du document ouvrait un blanc de plusieurs pages (la vue sautait à chaque pause de frappe). Il ne compte pas et ne porte
       // jamais une coupure : la marge d'une coupure sur lui n'aurait aucun effet.
-      if (tiptapShown && !child.getClientRects().length) return;
+      // Un cadre libre endormi (js/frame-sleep.js) n'est pas rendu non plus : même sort, sans lui demander son rectangle (ils sont des milliers). Éveillé, son ancre de hauteur nulle ne compte pas
+      // davantage : la pagination est la même.
+      if (child.classList.contains(FreeFrame.ASLEEP) || (tiptapShown && !child.getClientRects().length)) return;
       const height = heightOf(child);
       if (child.classList.contains('page-break-marker')) {
         if (index >= blankTailStart) return;
@@ -896,7 +898,9 @@ const HeaderFooterPreview = (function () {
     if (!tiptapEl || !lastReserves.length) return true;
     const zoom = layoutZoom(tiptapEl);
     const top = tiptapEl.getBoundingClientRect().top;
-    return lastReserves.every(r => !r.next.isConnected || Math.abs((r.next.getBoundingClientRect().top - top) / zoom - r.bodyTopRel) < 1);
+    // Un cadre libre ENDORMI (js/frame-sleep.js) n'a pas de boîte : son rectangle est nul à l'origine de l'écran, il « aurait bougé » à chaque contrôle et relancerait la pagination à chaque défilement. Il se contrôle
+    // quand il se réveille ; l'ancre qui porte sa réserve, elle, ne dort jamais.
+    return lastReserves.every(r => !r.next.isConnected || r.next.classList.contains(FreeFrame.ASLEEP) || Math.abs((r.next.getBoundingClientRect().top - top) / zoom - r.bodyTopRel) < 1);
   }
   function recomputeIfMoved() {
     // La zone ouverte change de taille sans transaction quand une image finit de charger : le trait et la note la suivent.

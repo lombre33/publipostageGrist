@@ -59,6 +59,7 @@ const FreeFrame = (function () {
   const ACTIVE = 'pp-ff-active';
   const SELECTED = 'pp-ff-selected';
   const EMPTY = 'pp-ff-empty';
+  const ASLEEP = 'pp-ff-asleep';   // un cadre endormi d'un très gros diaporama (js/frame-sleep.js) : le navigateur ne met plus son contenu en page ni ne le dessine
   const UI = 'pp-ff-ui';
   // La couche derrière le texte, et la marque que l'éditeur pose sur le parent de son texte tant que les clics y passent au cadre sous le pointeur (css/free-frame.css).
   const LAYER_BEHIND = 'behind';
@@ -417,7 +418,18 @@ const FreeFrame = (function () {
   // (`data-ff-bg`, des sorties seulement) est la page même. L'écart d'un demi-point ne compte pas (l'arrondi des mesures). Une boîte sans fond ni trait ne se voit pas : seul son contenu (le texte,
   // une image) sort de la page ou n'en sort pas, ses marges ne comptent pas (une image au ras de la page, d'un fond ou d'un import PowerPoint, n'est pas un cadre qui dépasse). Un cadre DERRIÈRE le texte
   // qui n'a pas de texte à lui (un bandeau, une forme, une image : un décor) est rogné à la page par construction, rien n'y est perdu : il n'est jamais signalé.
-  function measuredOverflow(dom) {
+  // Ce que la réponse lit de la boîte dessinée : sa hauteur (pixels de mise en page) et, pour une boîte qui ne se voit pas, la plus petite marge de son texte dans chaque sens (points).
+  function boxSeen(a, box) {
+    const content = box && !isLineAttrs(a) && !a.fill && !(a.line && a.lw) ? box.querySelector(':scope > .' + CONTENT) : null;
+    const style = content ? getComputedStyle(content) : null;
+    return {
+      height: box ? box.offsetHeight : 0,
+      padX: style ? Math.min(parseFloat(style.paddingLeft) || 0, parseFloat(style.paddingRight) || 0) * PT_PER_PX : 0,
+      padY: style ? Math.min(parseFloat(style.paddingTop) || 0, parseFloat(style.paddingBottom) || 0) * PT_PER_PX : 0,
+    };
+  }
+  // La réponse, d'après les réglages du cadre et ce qui a été lu de sa boîte (`seen`, de boxSeen) : aucune lecture de mise en page ici.
+  function overflowFrom(dom, seen) {
     if (dom.hasAttribute(BACKGROUND_ATTR) || dom.hasAttribute(DECOR_ATTR)) return false;
     const a = attrsOfEl(dom);
     const box = dom.querySelector(':scope > .' + BOX);
@@ -425,13 +437,9 @@ const FreeFrame = (function () {
       const body = box && box.querySelector(':scope > .' + CONTENT);
       if (!body || !body.textContent.trim()) return false;
     }
-    const shown = isLineAttrs(a) || !box ? a.h : Math.max(a.h, box.offsetHeight * PT_PER_PX);
-    const content = box && !isLineAttrs(a) && !a.fill && !(a.line && a.lw) ? box.querySelector(':scope > .' + CONTENT) : null;
-    const style = content ? getComputedStyle(content) : null;
-    const padX = style ? Math.min(parseFloat(style.paddingLeft) || 0, parseFloat(style.paddingRight) || 0) * PT_PER_PX : 0;
-    const padY = style ? Math.min(parseFloat(style.paddingTop) || 0, parseFloat(style.paddingBottom) || 0) * PT_PER_PX : 0;
-    const wide = Math.max(a.w - 2 * padX, 0);
-    const high = Math.max(shown - 2 * padY, 0);
+    const shown = isLineAttrs(a) || !box ? a.h : Math.max(a.h, seen.height * PT_PER_PX);
+    const wide = Math.max(a.w - 2 * seen.padX, 0);
+    const high = Math.max(shown - 2 * seen.padY, 0);
     const turn = a.rot * Math.PI / 180;
     const cos = Math.abs(Math.cos(turn));
     const sin = Math.abs(Math.sin(turn));
@@ -442,18 +450,79 @@ const FreeFrame = (function () {
     const page = pageSize();
     return centerX - halfW < -OVERFLOW_SLACK_PT || centerY - halfH < -OVERFLOW_SLACK_PT || centerX + halfW > page.width + OVERFLOW_SLACK_PT || centerY + halfH > page.height + OVERFLOW_SLACK_PT;
   }
+  function measuredOverflow(dom) {
+    return overflowFrom(dom, boxSeen(attrsOfEl(dom), dom.querySelector(':scope > .' + BOX)));
+  }
   // La réponse de `overflowsPage` pour chaque cadre vivant, et de quoi elle dépend : la hauteur montrée de sa boîte et la page. La bande des diapositives la demande à chaque frappe pour tous
   // les cadres du texte (494 sur une présentation chargée) : relire leurs réglages et leur style à chaque fois coûtait ~8 ms par lettre. Ni les réglages ni le texte d'un cadre ne changent sans que
   // `paint` repasse dessus (nœud mis à jour, geste) : il oublie alors la réponse (null). Un élément que `paint` n'a jamais peint (un test, une copie) n'est pas gardé (undefined).
+  // Un cadre ENDORMI (js/frame-sleep.js) ne se mesure pas - il n'a pas de boîte, sa hauteur lue vaudrait zéro - : sa réponse est celle de son dernier éveil, refaite sans lecture quand la page a
+  // changé (ce qui a été lu de sa boîte est gardé avec elle). Ceux dont le nœud a changé pendant leur sommeil (`paint` a oublié leur réponse : `staleAsleep`) se mesurent TOUS ENSEMBLE à la première
+  // demande, éveillés le temps d'une seule mise en page (un changement fait à toutes les diapositives ne coûte pas une mise en page par cadre).
+  // Ce qui change la hauteur d'un cadre SANS toucher à son nœud (le thème, un style du modèle, une police ou une image qui arrive) change aussi celle des endormis, que personne ne relit : un cadre
+  // éveillé dont la boîte n'a plus la hauteur gardée en est le témoin, et demande leur revue (FrameSleep.recheck : la tournée, par morceaux, quand la personne ne fait rien).
   const overflowKept = new WeakMap();
-  function overflowsPage(dom) {
-    const kept = overflowKept.get(dom);
-    const page = pageSize();
-    if (kept && kept.box.offsetHeight === kept.height && kept.width === page.width && kept.pageHeight === page.height) return kept.out;
-    const out = measuredOverflow(dom);
-    const box = kept === undefined ? null : dom.querySelector(':scope > .' + BOX);
-    if (box) overflowKept.set(dom, { box, height: box.offsetHeight, width: page.width, pageHeight: page.height, out });
+  const staleAsleep = new Set();
+  function measureOverflow(dom, kept, page) {
+    const box = dom.querySelector(':scope > .' + BOX);
+    const seen = boxSeen(attrsOfEl(dom), box);
+    const out = overflowFrom(dom, seen);
+    if (kept !== undefined && box) overflowKept.set(dom, { box, height: seen.height, seen, width: page.width, pageHeight: page.height, out });
     return out;
+  }
+  function measureStaleAsleep(page) {
+    const doms = Array.from(staleAsleep).filter(dom => dom.isConnected && dom.classList.contains(ASLEEP) && !overflowKept.get(dom));
+    staleAsleep.clear();
+    doms.forEach((dom) => { dom.classList.remove(ASLEEP); });
+    try {
+      doms.forEach((dom) => { measureOverflow(dom, null, page); });
+    } finally {
+      doms.forEach((dom) => { dom.classList.add(ASLEEP); });
+    }
+  }
+  function overflowsPage(dom) {
+    let kept = overflowKept.get(dom);
+    const page = pageSize();
+    const asleep = dom.classList.contains(ASLEEP);
+    if (asleep && kept === null && staleAsleep.size) {
+      measureStaleAsleep(page);
+      kept = overflowKept.get(dom);
+    }
+    if (kept && asleep) {
+      if (kept.width !== page.width || kept.pageHeight !== page.height) Object.assign(kept, { width: page.width, pageHeight: page.height, out: overflowFrom(dom, kept.seen) });
+      return kept.out;
+    }
+    if (kept) {
+      if (kept.box.offsetHeight !== kept.height) FrameSleep.recheck();
+      else if (kept.width === page.width && kept.pageHeight === page.height) return kept.out;
+    }
+    if (!asleep) return measureOverflow(dom, kept, page);
+    // Un endormi sans réponse gardée et hors de la liste (jamais peint) : mesuré éveillé, à lui seul.
+    dom.classList.remove(ASLEEP);
+    try {
+      return measureOverflow(dom, kept, page);
+    } finally {
+      dom.classList.add(ASLEEP);
+    }
+  }
+  // La tournée de js/frame-sleep.js : ces cadres endormis se remesurent ensemble, éveillés le temps d'une seule mise en page. Rend le nombre de ceux dont la réponse a changé (un cadre sans réponse
+  // gardée n'en est pas : la bande ne tient plus son verdict, son nœud a changé).
+  function recheckAsleep(doms) {
+    const page = pageSize();
+    const list = doms.filter(dom => dom.isConnected && dom.classList.contains(ASLEEP) && overflowKept.get(dom) !== undefined);
+    let flips = 0;
+    list.forEach((dom) => { dom.classList.remove(ASLEEP); });
+    try {
+      list.forEach((dom) => {
+        const kept = overflowKept.get(dom);
+        staleAsleep.delete(dom);
+        const out = measureOverflow(dom, null, page);
+        if (kept && out !== kept.out) flips += 1;
+      });
+    } finally {
+      list.forEach((dom) => { dom.classList.add(ASLEEP); });
+    }
+    return flips;
   }
 
   // Le geste, en pure fonction : `kind` est 'move' ou les côtés tenus par la poignée (n, e, s, w, ne, nw, se, sw) ; `dx` et `dy` le déplacement de la souris en points ; `shown` la hauteur
@@ -923,6 +992,7 @@ const FreeFrame = (function () {
   }
   function paint(dom, a) {
     overflowKept.set(dom, null);
+    if (dom.classList.contains(ASLEEP)) staleAsleep.add(dom);
     const vars = varsOf(a);
     Object.keys(vars).forEach((name) => { dom.style.setProperty(name, vars[name]); });
     LOOK_VARS.forEach((name) => { if (!(name in vars)) dom.style.removeProperty(name); });
@@ -1484,7 +1554,7 @@ const FreeFrame = (function () {
           },
         });
 
-        return [views, flow, FrameMulti.createPlugin(deps), new Plugin({
+        return [views, flow, FrameMulti.createPlugin(deps), FrameSleep.createPlugin(deps), new Plugin({
           key: new PluginKey('freeFrame'),
           props: {
             // Le curseur dans un cadre : son contour se dessine (le cadre sélectionné a le sien, par selectNode).
@@ -1533,8 +1603,8 @@ const FreeFrame = (function () {
   });
 
   return {
-    NODE, LINE_NODE, CLASS, BOX, CONTENT, BACKGROUND_ATTR, DECOR_ATTR, LAYER_BEHIND, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml, html, decorHtml, artFits, lookRefused,
-    configure, createNode, createLineNode, createExtension, wireToolbar, normalized, withoutHidden, withoutHiddenIn, measuresOf: attrsOfEl, straight, horizontal, flatten, gesture, lineGesture, rotationAt, turnOf, storedHeight, keepReachable, overflowsPage, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
+    NODE, LINE_NODE, CLASS, BOX, CONTENT, ASLEEP, BACKGROUND_ATTR, DECOR_ATTR, LAYER_BEHIND, DEFAULTS, LOOK, SHAPE_LOOK, LINE_LOOK, LIMITS, STAY_ON_PAGE_PT, CASCADE_PT, lineWidthOf, backgroundHtml, html, decorHtml, artFits, lookRefused,
+    configure, createNode, createLineNode, createExtension, wireToolbar, normalized, withoutHidden, withoutHiddenIn, measuresOf: attrsOfEl, straight, horizontal, flatten, gesture, lineGesture, rotationAt, turnOf, storedHeight, keepReachable, overflowsPage, recheckAsleep, misplaced, tidyTransaction, headRange, slideStartOf, flowSelection,
     insert, insertTable, insertView, insertVideo, patch, nudge, turnBy, reorder, duplicate, remove, select, currentFrame, frameAround, syncToolbar,
   };
 })();

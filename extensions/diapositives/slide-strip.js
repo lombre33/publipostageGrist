@@ -118,6 +118,7 @@ const SlideStrip = (function () {
   let overflowDue = false;         // des verdicts ont été repris sans mesure : la vérification complète attend la pause de la frappe (drawThumbs)
   let redrawTimer = null;
   let stopPaginated = null;
+  let stopRechecked = null;
   let resizeObserver = null;
   let stopBar = null;              // se désabonne de la barre de GFS
   let stopPeers = null;            // se désabonne des personnes du direct (LiveEntry.onPeers)
@@ -784,6 +785,8 @@ const SlideStrip = (function () {
     if (names && EDIT_CLASS_HINT.test(names)) Array.from(node.classList).filter(name => /selected/i.test(name) || name === 'is-editor-empty' || name === 'has-focus').forEach(name => node.classList.remove(name));
   }
   function tidyCopy(copy) {
+    // La copie d'un cadre endormi dans l'éditeur (js/frame-sleep.js) n'en garde pas la classe : elle se dessine.
+    copy.classList.remove(FreeFrame.ASLEEP);
     copy.querySelectorAll('.editor-image-handle, .editor-image-move-handle, .column-resize-handle, .ProseMirror-gapcursor').forEach(node => node.remove());
     tidyNode(copy);
     copy.querySelectorAll('*').forEach(tidyNode);
@@ -814,30 +817,81 @@ const SlideStrip = (function () {
   function knownFramesOut(slide, pageKey) {
     if (!slide.nodes.length) return null;
     const known = framesOutKnown.get(slide.nodes[0].node);
-    if (!known || known.page !== pageKey || known.nodes.length !== slide.nodes.length) return null;
+    if (!known || known.page !== pageKey || known.epoch !== FrameSleep.answersEpoch() || known.nodes.length !== slide.nodes.length) return null;
     for (let k = 0; k < known.nodes.length; k++) if (known.nodes[k] !== slide.nodes[k].node) return null;
     return known;
   }
+  // Les cadres libres de la diapositive `slide` dans la page de l'éditeur, dans l'ordre : par le frère suivant du cadre d'avant (nextBlockDom), sinon par `nodeDOM`.
+  function frameDomsOf(slide) {
+    const view = editor.view;
+    const doms = [];
+    let cursor = null;
+    slide.nodes.forEach(({ node, pos }) => {
+      if (node.type.name !== FreeFrame.NODE && node.type.name !== FreeFrame.LINE_NODE) return;
+      const near = nextBlockDom(cursor, node);
+      const dom = near ? near.dom : view.nodeDOM(pos);
+      if (!(dom instanceof HTMLElement)) return;
+      cursor = dom;
+      if (dom.classList.contains(FreeFrame.CLASS)) doms.push(dom);
+    });
+    return doms;
+  }
+  // Le rang de la diapositive qui porte `el`, un bloc de premier niveau du texte de l'éditeur : par sa position dans le texte (-1 quand il n'y est plus).
+  function slideIndexOfBlock(el) {
+    let pos = -1;
+    try { pos = editor.view.posAtDOM(el, 0); } catch (e) { return -1; }
+    let low = 0;
+    let high = slides.length - 1;
+    while (low < high) {
+      const mid = (low + high + 1) >> 1;
+      if (slides[mid].start <= pos) low = mid; else high = mid - 1;
+    }
+    return low;
+  }
+  // Au-delà de ce nombre de diapositives à mesurer d'un coup (le premier passage, un changement de page, un changement fait à tout le texte), une seule marche sur les blocs de la page coûte moins
+  // que de chercher le premier cadre de chacune.
+  const OVERFLOW_WALK_FROM = 12;
+  // Une frappe ne mesure que SA diapositive (un `nodeDOM`, puis ses cadres) : plus de marche sur les 2 400 blocs de la page à chaque lettre, ni de table de leurs rangs (5 ms par lettre sur 57
+  // diapositives). La vérification complète (`all`) laisse aussi leur verdict aux diapositives ENDORMIES (js/frame-sleep.js : leurs cadres ne se mesurent pas) : il se revérifie quand elles se
+  // réveillent, à la pause ou à la pagination qui suit ; ce qui change leur hauteur sans changer leurs blocs (le thème, une police, une image) passe par la tournée des endormis, qui périme alors
+  // tous les verdicts gardés (FrameSleep.answersEpoch, onRechecked).
   function syncOverflow(all) {
     overflowing = new Set();
     framesOut = new Set();
     const page = PageLayout.getPageSizePt();
     const pageKey = page.width + 'x' + page.height;
-    const known = all ? [] : slides.map(slide => knownFramesOut(slide, pageKey));
-    const slideOf = new Map();
-    let index = 0;
-    Array.from(editor.view.dom.children).forEach((child) => {
-      if (child.classList.contains('page-break-marker')) { index += 1; return; }
-      slideOf.set(child, index);
-      if (known[index]) return;
-      if (child.classList.contains(FreeFrame.CLASS) && !framesOut.has(index) && FreeFrame.overflowsPage(child)) framesOut.add(index);
-    });
+    const epoch = FrameSleep.answersEpoch();
+    const due = [];
+    let reused = false;
     slides.forEach((slide, i) => {
-      if (known[i]) { if (known[i].out) framesOut.add(i); return; }
-      if (slide.nodes.length) framesOutKnown.set(slide.nodes[0].node, { nodes: slide.nodes.map(entry => entry.node), page: pageKey, out: framesOut.has(i) });
+      const known = knownFramesOut(slide, pageKey);
+      if (known && (!all || FrameSleep.sleeps(i))) {
+        if (known.out) framesOut.add(i);
+        reused = true;
+        return;
+      }
+      due.push(i);
     });
-    overflowDue = !all && known.some(Boolean);
-    HeaderFooterPreview.pageBreaks().forEach((brk) => { if (slideOf.has(brk.afterEl)) overflowing.add(slideOf.get(brk.afterEl)); });
+    if (due.length > OVERFLOW_WALK_FROM) {
+      const wanted = new Set(due);
+      let index = 0;
+      for (let child = editor.view.dom.firstElementChild; child; child = child.nextElementSibling) {
+        if (child.classList.contains('page-break-marker')) { index += 1; continue; }
+        if (wanted.has(index) && !framesOut.has(index) && child.classList.contains(FreeFrame.CLASS) && FreeFrame.overflowsPage(child)) framesOut.add(index);
+      }
+    } else {
+      due.forEach((i) => { if (frameDomsOf(slides[i]).some(dom => FreeFrame.overflowsPage(dom))) framesOut.add(i); });
+    }
+    due.forEach((i) => {
+      const slide = slides[i];
+      if (slide.nodes.length) framesOutKnown.set(slide.nodes[0].node, { nodes: slide.nodes.map(entry => entry.node), page: pageKey, epoch, out: framesOut.has(i) });
+    });
+    overflowDue = !all && reused;
+    HeaderFooterPreview.pageBreaks().forEach((brk) => {
+      if (!brk.afterEl || brk.afterEl.classList.contains('page-break-marker')) return;
+      const index = slideIndexOfBlock(brk.afterEl);
+      if (index >= 0) overflowing.add(index);
+    });
     rows.forEach((r, i) => {
       const why = overflowWhy(i);
       r.dot.hidden = !why.length;
@@ -2234,6 +2288,12 @@ const SlideStrip = (function () {
     r.nodes = null;
     scheduleThumbs();
   }
+  // La tournée des cadres endormis (js/frame-sleep.js) a changé des réponses « ce cadre dépasse » : les verdicts gardés avant elle ne valent plus (FrameSleep.answersEpoch a monté), et les points
+  // rouges se refont tout de suite quand la bande est à jour du texte (sans mesure : chaque cadre rend sa réponse gardée), sinon à sa prochaine lecture.
+  function onRechecked() {
+    if (!shown || held || editingHeaderFooter() || editor.state.doc !== readDoc) return;
+    syncOverflow(true);
+  }
   // Après chaque pagination : ce qui dépasse, et toutes les miniatures quand la page a changé (format, sens, marges) ; les images en calque suivent leur diapositive. Sortie de
   // l'en-tête : le texte des diapositives est revenu.
   function onPaginated() {
@@ -2301,6 +2361,7 @@ const SlideStrip = (function () {
       chartDom = editor.view.dom;
       chartDom.addEventListener(ChartEntry.PAINTED_EVENT, onChartPainted);
       stopPaginated = HeaderFooterPreview.onPaginated(onPaginated);
+      stopRechecked = FrameSleep.onRechecked(onRechecked);
       stopPeers = LiveEntry.onPeers(onPeers);
       document.addEventListener('copy', onCopy, true);
       document.addEventListener('copy', rememberCopy);
@@ -2345,6 +2406,7 @@ const SlideStrip = (function () {
     if (stopLight) { stopLight(); stopLight = null; }
     if (chartDom) { chartDom.removeEventListener(ChartEntry.PAINTED_EVENT, onChartPainted); chartDom = null; }
     if (stopPaginated) { stopPaginated(); stopPaginated = null; }
+    if (stopRechecked) { stopRechecked(); stopRechecked = null; }
     if (stopPeers) { stopPeers(); stopPeers = null; }
     document.removeEventListener('copy', onCopy, true);
     document.removeEventListener('copy', rememberCopy);

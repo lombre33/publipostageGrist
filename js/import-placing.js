@@ -39,6 +39,33 @@ const ImportPlacing = (function () {
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(go);
     setTimeout(go, 60);                       // une image qui ne vient pas : la pause ne dure jamais plus de 60 ms
   });
+  // « Quand la pop-up s'enlève, l'éditeur doit être prêt à 100 % » (11/11) : le texte est posé, mais ce que le navigateur et l'éditeur gardent pour « plus tard » (une pagination différée, des images qui se
+  // décodent, la relecture de la bande, les minuteurs de l'enregistrement) tombe sinon sur la première frappe de la personne. `whenQuiet` attend que la page ait été CALME d'affilée : une pulsation de 16 ms
+  // qui arrive plus de QUIET_GAP_MS après la précédente dit que la page était prise (une tâche longue, une mise en page), et la fenêtre de calme repart de là. Un onglet caché n'a ni voile à lire ni minuteurs
+  // fiables : il n'attend pas. Elle ne dure jamais plus de QUIET_MAX_MS (une page qui ne se calme pas ne retient pas la personne), et `shouldStop()` l'interrompt (un autre texte a pris l'éditeur).
+  const QUIET_MS = 700;          // la durée de calme d'affilée qui suffit
+  const QUIET_GAP_MS = 100;      // une pulsation en retard de plus que cela : la page était prise
+  const QUIET_MAX_MS = 10000;    // jamais plus longtemps que cela
+  const QUIET_BEAT_MS = 16;
+  function whenQuiet(shouldStop) {
+    return new Promise((resolve) => {
+      if (document.hidden) { resolve({ waited: 0, busy: 0, capped: false }); return; }
+      const startedAt = performance.now();
+      let lastBeat = startedAt;
+      let calmSince = startedAt;
+      let busy = 0;                                // combien de fois la page s'est trouvée prise pendant l'attente
+      const beat = () => {
+        const now = performance.now();
+        if (document.hidden || (shouldStop && shouldStop())) { resolve({ waited: Math.round(now - startedAt), busy, capped: false }); return; }
+        if (now - lastBeat > QUIET_GAP_MS) { calmSince = now; busy += 1; }
+        lastBeat = now;
+        const capped = now - startedAt >= QUIET_MAX_MS;
+        if (capped || now - calmSince >= QUIET_MS) { resolve({ waited: Math.round(now - startedAt), busy, capped }); return; }
+        setTimeout(beat, QUIET_BEAT_MS);
+      };
+      setTimeout(beat, QUIET_BEAT_MS);
+    });
+  }
   // La fonction `pace()` d'une pose : à appeler souvent, elle ne fait une pause que si la tranche dure depuis SLICE_MS.
   function pacer() {
     let sliceStart = performance.now();
@@ -132,6 +159,13 @@ const ImportPlacing = (function () {
       isShown() { return shown && !ended && !suspended && !!win && win.isOpen(); },
       allowCancel(handler) { cancelHandler = typeof handler === 'function' ? handler : null; showCancel(); },
       suspend() { suspended = true; clearTimeout(timer); if (win && win.isOpen()) win.hide(); },
+      // Garde le voile (s'il est à l'écran) jusqu'à ce que la page soit calme d'affilée, voir `whenQuiet` : à appeler quand tout est posé, juste avant `end()`. Sans voile à l'écran, rien à attendre.
+      async settle() {
+        if (ended || suspended || !shown) return null;
+        last = { text: I18n.t('importPlacing.settling'), fraction: 1 };
+        draw(true);
+        return whenQuiet(() => ended || suspended);
+      },
       end() { if (ended) return; ended = true; clearTimeout(timer); cancelHandler = null; showCancel(); if (win && win.isOpen()) win.hide(); },
     };
   }
@@ -311,7 +345,7 @@ const ImportPlacing = (function () {
           placedMarkers += occurrences(html, MARKER_OPEN);
           placedMs += step.ms;
           if (locked) { if (unmeasured < 0) unmeasured = from; } else measureFrom(from);
-          if (!locked && frames >= LOCK_AFTER_FRAMES && covered()) { lockDom(); locked = true; }
+          if (!locked && frames >= LOCK_AFTER_FRAMES && covered() && !FrameSleep.isOn()) { lockDom(); locked = true; }
           if (onStep) onStep({ markers: placedMarkers, fraction: totalMs ? Math.min(1, placedMs / totalMs) : 0 });
           first = false;
           await pace();
@@ -459,5 +493,5 @@ const ImportPlacing = (function () {
   // Une pose est-elle en cours (import ou ouverture par morceaux) ? Le texte de l'éditeur n'est alors pas complet, ni sa mise en page à jour.
   const isPlacing = () => !!activeRun;
 
-  return { begin, slidesOf, takeFirst, appendSlides, prepareSave, planOpen, fillOpened, stopFill, isFilling, isPlacing, whenFilled, closingText, closingShare, stepsOf, profileOf, FIRST_SLIDES, FIRST_MS, STEP_MS, PAGE_BREAK };
+  return { begin, whenQuiet, slidesOf, takeFirst, appendSlides, prepareSave, planOpen, fillOpened, stopFill, isFilling, isPlacing, whenFilled, closingText, closingShare, stepsOf, profileOf, FIRST_SLIDES, FIRST_MS, STEP_MS, PAGE_BREAK };
 })();

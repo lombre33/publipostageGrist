@@ -207,6 +207,8 @@ const MainImport = (function () {
         PerfTrace.mark('import PowerPoint : mise en place');
         await placeImportedPresentation(imported, progress, file);
         PerfTrace.mark('import PowerPoint : en place');
+        const quiet = await progress.settle();   // le voile ne part pas avant que la page soit calme (js/import-placing.js:whenQuiet)
+        if (quiet) PerfTrace.mark('import PowerPoint : page calme', quiet);
         progress.end();
         await tellPptxImportReport(imported, file);   // la fenêtre du rapport prend le focus et le rend à l'éditeur en se fermant
         return true;

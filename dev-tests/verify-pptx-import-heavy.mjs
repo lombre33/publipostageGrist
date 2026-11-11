@@ -244,8 +244,11 @@ async function run(lang) {
   const placed = log.findIndex(text => /^Mise en place des diapositives… 6 \/ 6$/.test(text));
   const imported = log.findIndex(text => /^PowerPoint importé : 6 diapositives\./.test(text));
   check(tag + 'le coin d\'état dit les étapes dans l\'ordre : « Lecture du fichier PowerPoint… n / 6 », « Mise en place des diapositives… 0 / 6 » jusqu\'à « 6 / 6 », puis « PowerPoint importé : 6 diapositives. »', firstRead >= 0 && placing > firstRead && placed > placing && imported > placed, { firstRead, placing, placed, imported, log: log.slice(0, 16) });
+  // Depuis le 11/11 le voile ne part pas avec le mot « PowerPoint importé » : il reste, « Dernières vérifications », jusqu'à ce que la page ait été calme (js/import-placing.js : settle, whenQuiet).
+  await page.waitForFunction(() => { const el = document.getElementById('pp-placing-modal'); return !el || getComputedStyle(el).display === 'none'; }, null, { timeout: 20000 }).catch(() => {});
   const veilTexts = await page.evaluate(() => window.__veilTexts.slice());
   check(tag + 'le voile a dit la lecture au fil des diapositives (au moins trois textes « Lecture du fichier PowerPoint… n / 6 » différents) puis, une fois fini, il est retiré', veilTexts.filter(text => /^Lecture du fichier PowerPoint… \d \/ 6$/.test(text)).length >= 3 && !(await veilState()).shown, veilTexts);
+  check(tag + 'et son dernier mot est « Dernières vérifications » (le voile attend que la page soit calme avant de se retirer)', /^(Dernières vérifications|Final checks)/.test(veilTexts[veilTexts.length - 1] || ''), veilTexts.slice(-3));
   const state = await page.evaluate(() => ({ slides: document.querySelectorAll('.pp-slide-item').length, marks: PerfTrace.events().filter(e => e.kind === 'mark' && /^import PowerPoint/.test(e.label)).map(e => e.label) }));
   check(tag + 'un seul import est arrivé : 6 miniatures, et le suivi n\'a vu que deux lectures (l\'annulée et celle-ci), une mise en place', state.slides === SLIDES && state.marks.filter(m => m === 'import PowerPoint : lecture').length === 2 && state.marks.filter(m => m === 'import PowerPoint : en place').length === 1, state);
   check(tag + 'après l\'import, un nouvel import est de nouveau possible (le garde est levé)', await page.evaluate(() => document.getElementById('v2-btn-import-pptx').getAttribute('aria-disabled') === 'false'));
@@ -273,6 +276,7 @@ async function run(lang) {
   });
   check(tag + 'un gros fichier importé est enregistré dans Grist sous son nom : un identifiant, « Ma grosse présentation », type présentation, six diapositives dans le contenu écrit', kept.id != null && kept.nom === 'Ma grosse présentation' && kept.type === 'presentation' && kept.breaks === SLIDES - 1 && kept.title === 'Ma grosse présentation' && String(kept.selected) === String(kept.id), kept);
   check(tag + 'le coin d\'état le dit : « PowerPoint importé : 6 diapositives, enregistré sous « Ma grosse présentation ». »', kept.log.some(text => text === 'PowerPoint importé : 6 diapositives, enregistré sous « Ma grosse présentation ».'), kept.log);
+  await page.waitForFunction(() => { const el = document.getElementById('pp-placing-modal'); return !el || getComputedStyle(el).display === 'none'; }, null, { timeout: 20000 }).catch(() => {});
   const noVeil = await page.evaluate(() => !document.getElementById('pp-placing-modal') || getComputedStyle(document.getElementById('pp-placing-modal')).display === 'none');
   check(tag + 'le voile est retiré quand l\'import est fini : le texte se tape de nouveau', noVeil);
 
@@ -382,6 +386,9 @@ async function placingCases(page, tag) {
 // est à l'écran ET que 2 500 cadres sont posés ; jamais pour un fichier ordinaire ; toujours remontré à la fin, même quand la pose échoue ; et les mesures prises pendant le masquage sont celles du texte montré (le
 // point rouge d'une diapositive dont un cadre sort de la page tombe sur la même diapositive).
 async function lockCases(page, tag) {
+  // Depuis les cadres endormis (js/frame-sleep.js), un texte de plus de 600 cadres n'est plus masqué par le voile : la pose n'a rien à cacher. Le masquage reste le repli d'un navigateur ou d'un réglage où les
+  // cadres ne dorment pas : l'essai le prend en disant à la pose que rien ne dort.
+  await page.evaluate(() => { window.__realSleepOn = FrameSleep.isOn; FrameSleep.isOn = () => false; });
   const r = await page.evaluate(async () => {
     const tick = ms => new Promise(resolve => setTimeout(resolve, ms));
     const PB = ImportPlacing.PAGE_BREAK;
@@ -433,6 +440,7 @@ async function lockCases(page, tag) {
     out.failWasHidden = wasHidden; out.failRejected = rejected; out.failHiddenAfter = hiddenNow(); out.closedFail = closedFail;
     return out;
   });
+  await page.evaluate(() => { FrameSleep.isOn = window.__realSleepOn; });
   check(tag + 'le voile à l\'écran et 2 500 cadres posés : le texte est masqué (content-visibility: hidden) à partir de la trente-deuxième diapositive de 80 cadres, jamais avant, et remontré à la fin', r.firstHidden >= 31 && r.firstHidden <= 33 && r.hiddenWhileVeil >= 5 && !r.hiddenAfter && r.styleAfter === '', { firstHidden: r.firstHidden, hiddenWhileVeil: r.hiddenWhileVeil, hiddenAfter: r.hiddenAfter, styleAfter: r.styleAfter });
   check(tag + 'sans voile à l\'écran, ou pour un fichier ordinaire (240 cadres), le texte n\'est jamais masqué', r.hiddenNoVeil === 0 && r.hiddenSmall === 0, { hiddenNoVeil: r.hiddenNoVeil, hiddenSmall: r.hiddenSmall });
   // La clôture, étape par étape (11/11) : `show` (texte encore masqué), `measure` (avec son compte, qui avance jusqu'au bout), `tables`, `pages`, `images`, `strip` ; sans masquage, les quatre dernières seulement.

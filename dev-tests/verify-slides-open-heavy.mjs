@@ -132,16 +132,18 @@ const watchOpening = (page) => page.evaluate(() => {
   setTimeout(tick, 10);
   window.__veilLines = [];
   window.__veilPercents = [];
+  window.__settlingAt = 0;
+  window.__veilGoneAt = 0;
   const note = () => {
     const el = document.getElementById('pp-placing-modal'); const line = el && el.querySelector('.pp-placing-line');
-    if (!el || !line || getComputedStyle(el).display === 'none') return;
-    if (window.__veilLines[window.__veilLines.length - 1] !== line.textContent) window.__veilLines.push(line.textContent);
+    if (!el || !line || getComputedStyle(el).display === 'none') { if (window.__veilLines.length && !window.__veilGoneAt) window.__veilGoneAt = performance.now(); return; }
+    if (window.__veilLines[window.__veilLines.length - 1] !== line.textContent) { window.__veilLines.push(line.textContent); if (/^Dernières vérifications/.test(line.textContent) && !window.__settlingAt) window.__settlingAt = performance.now(); }
     const percent = Number(el.querySelector('.pp-placing-bar').getAttribute('aria-valuenow'));
     if (window.__veilPercents[window.__veilPercents.length - 1] !== percent) window.__veilPercents.push(percent);
   };
   new MutationObserver(note).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['style', 'aria-valuenow'] });
 });
-const heartbeat = (page) => page.evaluate(() => { window.__hb.stop = true; return { max: Math.round(window.__hb.max), over300: window.__hb.over300, lines: window.__veilLines.slice(), percents: window.__veilPercents.slice() }; });
+const heartbeat = (page) => page.evaluate(() => { window.__hb.stop = true; return { max: Math.round(window.__hb.max), over300: window.__hb.over300, lines: window.__veilLines.slice(), percents: window.__veilPercents.slice(), settlingAt: window.__settlingAt, goneAt: window.__veilGoneAt }; });
 
 const { page } = await t.openPage({ hosted: true, stub: { extensions: ACTIVE }, seed: seedWith(), lang: 'fr', colorScheme: 'light' });
 await page.waitForFunction((n) => typeof ImportPlacing !== 'undefined' && Templates.getCached().length >= n, MODELS, { timeout: 30000 });
@@ -225,6 +227,7 @@ const early = await chooseAndLook(page, IDS.alpha);
 const OPEN_STEP_PLACE = 0.9;       // la part de la barre que prend la pose des diapositives (js/main.js) ; le reste est la mise en page finale, étape par étape
 const isOpeningLine = l => /^Ouverture des diapositives… \d+ \/ \d+$/.test(l);
 const isClosingLine = l => /^Mise en page finale, étape \d+ sur \d+ : .+…$/.test(l);
+const isSettlingLine = l => /^Dernières vérifications : l’éditeur se prépare à répondre…$/.test(l);
 // Le premier tour de pose ne rend pas la main avant le premier pas : le coin d'état dit déjà la diapositive d'après (jusqu'à trois de plus), le voile, lui, montre son premier pas.
 const statusN = Number((early.status.match(/… (\d+) \//) || [0, 0])[1]);
 const veilN = early.veil ? Number((early.veil.line.match(/… (\d+) \//) || [0, 0])[1]) : 0;
@@ -244,9 +247,13 @@ const classic = await classicOf(page, IDS.alpha);
 check('à la fin : les ' + (SLIDES - 1) + ' sauts de page sont là, la bande des diapositives a ses ' + SLIDES + ' vignettes, le remplissage est fini, le voile est retiré', done.breaks === SLIDES - 1 && done.strip === SLIDES && done.filling === false && (await veilOf(page)).shown === false, { done });
 check('le texte obtenu par pas est CELUI de l\'ouverture d\'un bloc, à l\'octet près (et celui que le modèle avait enregistré)', progressiveHtml === classic.html && classic.html === texts.alpha, { progressive: progressiveHtml.length, classic: classic.html.length, saved: texts.alpha.length });
 const openingLines = opened.lines.filter(isOpeningLine);
-const closingOfOpened = opened.lines.slice(openingLines.length);
+const afterOpening = opened.lines.slice(openingLines.length);
+const closingOfOpened = afterOpening.filter(l => !isSettlingLine(l));
+const settlingOfOpened = afterOpening.filter(isSettlingLine);
 check('le voile a dit l\'avancement au fil de l\'ouverture : au moins quatre textes « Ouverture des diapositives… n / ' + SLIDES + ' » différents, en croissant, et une barre qui avance', openingLines.length >= 4 && openingLines.every((l, i) => /^Ouverture des diapositives… \d+ \/ 50$/.test(l) && (i === 0 || Number(l.match(/(\d+) \//)[1]) > Number(openingLines[i - 1].match(/(\d+) \//)[1]))) && opened.percents.length >= 4 && opened.percents.every((p, i) => i === 0 || p >= opened.percents[i - 1]), { lines: opened.lines.slice(0, 6), percents: opened.percents.slice(0, 8) });
-check('puis la mise en page finale, étape par étape (« Mise en page finale, étape n sur N : … ») : rien d\'autre après la dernière « Ouverture des diapositives… », et la barre finit au-dessus de 90 %', closingOfOpened.length >= 1 && closingOfOpened.every(isClosingLine) && opened.lines.length === openingLines.length + closingOfOpened.length && opened.percents[opened.percents.length - 1] >= 90, { closing: closingOfOpened, percents: opened.percents.slice(-4) });
+check('puis la mise en page finale, étape par étape (« Mise en page finale, étape n sur N : … ») : rien d\'autre après la dernière « Ouverture des diapositives… », et la barre finit au-dessus de 90 %', closingOfOpened.length >= 1 && closingOfOpened.every(isClosingLine) && opened.lines.length === openingLines.length + closingOfOpened.length + settlingOfOpened.length && opened.percents[opened.percents.length - 1] >= 90, { closing: closingOfOpened, percents: opened.percents.slice(-4) });
+// 11/11 « quand la pop-up s'enlève l'éditeur doit être prêt à 100 % » : une fois tout posé, le voile reste, dit « Dernières vérifications », et ne part qu'après une fenêtre de calme (700 ms au moins sans arrêt de plus de 100 ms).
+check('puis, le texte étant posé, le voile dit « Dernières vérifications : l’éditeur se prépare à répondre… » (une fois, en dernier) et ne s’enlève qu’au moins 650 ms plus tard, la page étant restée calme', settlingOfOpened.length === 1 && afterOpening[afterOpening.length - 1] === settlingOfOpened[0] && opened.settlingAt > 0 && opened.goneAt - opened.settlingAt >= 650 && opened.goneAt - opened.settlingAt <= 10500, { lines: afterOpening.slice(-2), settlingAt: Math.round(opened.settlingAt), goneAt: Math.round(opened.goneAt), stayedMs: Math.round(opened.goneAt - opened.settlingAt) });
 // Le plus long arrêt de cette ouverture frôlait la limite de 300 ms (322, 333 et 344 ms mesurés le 11/11 les jours de charge, sans changement du code : le même arbre passait ailleurs) : 450 ms, loin des secondes d'une ouverture d'un bloc d'un gros texte.
 check('la page reste fluide : le battement (10 ms) ne s\'arrête jamais plus de 450 ms, et un seul arrêt dépasse 300 ms, pendant l\'ouverture par pas (l\'ouverture d\'un bloc de ce texte : ' + classic.ms + ' ms)', opened.max <= 450 && opened.over300 <= 1, { maxGapMs: opened.max, over300: opened.over300, classicMs: classic.ms });
 // Rien n'est « à enregistrer » : plusieurs passages de l'enregistrement automatique (3 s chacun) n'écrivent rien.
@@ -376,22 +383,29 @@ const giantDone = await stateOf(page);
 check('la présentation géante : à la fin ses ' + (BIG_SLIDES * BIG_FRAMES) + ' cadres et ' + (BIG_SLIDES - 1) + ' sauts de page sont là, le texte est IDENTIQUE à l\'ouverture d\'un bloc et au texte enregistré', giantDone.frames === BIG_SLIDES * BIG_FRAMES && giantDone.breaks === BIG_SLIDES - 1 && giantHtml === giantClassic.html && giantClassic.html === texts.giant, { frames: giantDone.frames, breaks: giantDone.breaks, same: giantHtml === giantClassic.html });
 check('la page reste fluide pendant l\'ouverture de la présentation géante (aucun arrêt de plus de 550 ms, et deux au plus de plus de 300 : la clôture met en page, pagine et relit tout le texte, chacun dans sa tâche ; l\'ouverture d\'un bloc : ' + giantClassic.ms + ' ms) et la barre avance au fil des pas (' + giantRun.percents.length + ' valeurs) alors que le texte dit toujours la diapositive en cours', giantRun.max <= 550 && giantRun.over300 <= 2 && giantRun.percents.length >= 8 && giantRun.percents.every((p, i) => i === 0 || p >= giantRun.percents[i - 1]) && giantRun.lines.filter(isOpeningLine).length <= BIG_SLIDES, { maxGapMs: giantRun.max, over300: giantRun.over300, classicMs: giantClassic.ms, percents: giantRun.percents.slice(0, 12), lines: giantRun.lines });
 // ================= 7b) Un texte assez lourd pour être MASQUÉ derrière le voile : la mise en page finale est annoncée avant =================
+// Depuis les cadres endormis (js/frame-sleep.js), un texte de plus de 600 cadres n'est plus masqué par le voile : ses cadres lointains dorment, la pose n'a rien à cacher. Le chemin de repli (le texte masqué, remontré
+// avant la clôture) reste celui d'un navigateur ou d'un réglage où les cadres ne dorment pas : l'essai le prend en disant à la pose que rien ne dort.
+await page.evaluate(() => { window.__realSleepOn = FrameSleep.isOn; FrameSleep.isOn = () => false; });
 await watchOpening(page);
 await chooseAndLook(page, IDS.lock);
 await waitFilled(page, IDS.lock);
+await page.evaluate(() => { FrameSleep.isOn = window.__realSleepOn; });
 const lockRun = await heartbeat(page);
 const lockDone = await stateOf(page);
 const lockHtml = await textOf(page);
 const closingAt = lockRun.lines.findIndex(l => /^Mise en page finale/.test(l));
-const closingLines = closingAt < 0 ? [] : lockRun.lines.slice(closingAt);
+const afterLock = closingAt < 0 ? [] : lockRun.lines.slice(closingAt);
+const closingLines = afterLock.filter(l => !isSettlingLine(l));
+const lockSettling = afterLock.filter(isSettlingLine);
 // « Mise en page finale, étape n sur N : quoi… » : les étapes se suivent sans retour en arrière, de la première (remontrer le texte masqué) à la dernière (les miniatures), et la barre finit avec elles.
 const closingSteps = closingLines.map((l) => { const m = /^Mise en page finale, étape (\d+) sur (\d+) : (.+)…$/.exec(l); return m ? { step: Number(m[1]), steps: Number(m[2]), what: m[3] } : null; });
 check('une présentation de 3 000 cadres (le texte est masqué derrière le voile) : après les « Ouverture des diapositives… », le voile dit chaque étape de la mise en page finale (« étape n sur 6 : … », de « affichage des diapositives » à « miniatures », la mesure des cadres avec son compte), sans retour en arrière',
   closingAt >= 3 && lockRun.lines.slice(0, closingAt).every(l => /^Ouverture des diapositives… \d+ \/ 5$/.test(l)) && closingSteps.length >= 6 && closingSteps.every(Boolean) && closingSteps.every(c => c.steps === 6)
   && closingSteps[0].step === 1 && closingSteps[0].what === 'affichage des diapositives' && closingSteps[closingSteps.length - 1].step === 6 && closingSteps[closingSteps.length - 1].what === 'miniatures'
   && closingSteps.every((c, i) => i === 0 || c.step === closingSteps[i - 1].step || c.step === closingSteps[i - 1].step + 1) && closingSteps.some(c => /^mesure des cadres \(\d+ sur \d+\)$/.test(c.what))
-  && ['tableaux', 'pages', 'images et variables'].every(what => closingSteps.some(c => c.what === what)),
-  { lines: lockRun.lines.slice(Math.max(0, closingAt - 1)), closingAt });
+  && ['tableaux', 'pages', 'images et variables'].every(what => closingSteps.some(c => c.what === what))
+  && lockSettling.length === 1 && lockRun.lines[lockRun.lines.length - 1] === lockSettling[0] && lockRun.goneAt - lockRun.settlingAt >= 650,
+  { lines: lockRun.lines.slice(Math.max(0, closingAt - 1)), closingAt, stayedMs: Math.round(lockRun.goneAt - lockRun.settlingAt) });
 const closingPercents = lockRun.percents.filter(p => p > 90);
 check('et la barre avance pendant la mise en page finale (plusieurs valeurs au-dessus de 90 %, jamais en arrière, 100 % à la fin)', closingPercents.length >= 3 && lockRun.percents.every((p, i) => i === 0 || p >= lockRun.percents[i - 1]) && lockRun.percents[lockRun.percents.length - 1] >= 98, { percents: lockRun.percents.slice(-8) });
 check('et le texte est entier à la fin (3 000 cadres, 4 sauts de page), identique à ce que le modèle avait enregistré, le voile retiré', lockDone.frames === 5 * BIG_FRAMES && lockDone.breaks === 4 && lockDone.filling === false && lockHtml === texts.lock && (await veilOf(page)).shown === false, { frames: lockDone.frames, breaks: lockDone.breaks, same: lockHtml === texts.lock });
@@ -461,6 +475,67 @@ const firstTake = await page.evaluate(async ({ frames }) => {
   return out;
 }, { frames: BIG_FRAMES });
 check('à l\'import, trois diapositives légères restent le début d\'avant ; trois diapositives géantes ne donnent qu\'un début de la première (le reste se pose par pas, sans saut de page en tête) et le texte final est celui d\'un seul bloc, à l\'octet près', firstTake.light.sameAsBefore === true && firstTake.giant.started === 1 && firstTake.giant.firstFrames > 0 && firstTake.giant.firstFrames < BIG_FRAMES / 2 && firstTake.giant.pieces === 3 && firstTake.giant.lead0 === '' && firstTake.giant.leads === true && firstTake.giant.lossless === true && firstTake.same === true, firstTake);
+
+// ================= 7c) Le voile garde sa place jusqu'à ce que la page soit calme =================
+// 11/11 « il faudrait que quand la pop-up s'enlève l'éditeur soit prêt à 100 % » : `progress.settle()` (js/import-placing.js:whenQuiet) retient le voile, avec « Dernières vérifications », tant que la page n'a pas
+// été calme 700 ms d'affilée (aucune pulsation de 16 ms en retard de plus de 100 ms), sans dépasser 10 s ; sans voile à l'écran il n'attend rien ; la fin du suivi l'interrompt.
+const settleRun = await page.evaluate(async () => {
+  const burn = (ms) => { const s = performance.now(); while (performance.now() - s < ms) { /* la page est prise */ } };
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  const lineNow = () => { const el = document.getElementById('pp-placing-modal'); const l = el && el.querySelector('.pp-placing-line'); return el && l && getComputedStyle(el).display !== 'none' ? l.textContent : null; };
+  const out = { hasSettle: typeof ImportPlacing.begin().settle === 'function' };
+  if (!out.hasSettle) return out;
+  // a) le voile est là, la page est prise deux fois pendant l'attente (de 200 à 420 ms, de 650 à 870 ms) : l'attente finit au moins 700 ms après la dernière fois
+  const p = ImportPlacing.begin({ opening: true });
+  p.update('Ouverture des diapositives… 1 / 2', 0.5, true);
+  await wait(40);
+  out.shownBefore = p.isShown();
+  let lastBusyEnd = 0;
+  let midLine = null;
+  setTimeout(() => burn(220), 200);
+  setTimeout(() => { burn(220); lastBusyEnd = performance.now(); }, 650);
+  setTimeout(() => { midLine = lineNow(); }, 450);
+  const t0 = performance.now();
+  const res = await p.settle();
+  const t1 = performance.now();
+  out.res = res;
+  out.sinceBusyMs = Math.round(t1 - lastBusyEnd);
+  out.totalMs = Math.round(t1 - t0);
+  out.midLine = midLine;
+  out.shownAfter = p.isShown();
+  p.end();
+  out.hiddenAfterEnd = lineNow() === null;
+  // b) un petit fichier : le voile ne s'est pas montré, rien à attendre
+  const q = ImportPlacing.begin();
+  q.update('x', 0.1);
+  const tq = performance.now();
+  out.quick = await q.settle();
+  out.quickMs = Math.round(performance.now() - tq);
+  q.end();
+  // c) la fin du suivi (un autre texte prend l'éditeur) interrompt l'attente
+  const e = ImportPlacing.begin({ opening: true });
+  e.update('y', 0.5, true);
+  setTimeout(() => e.end(), 100);
+  const te = performance.now();
+  await e.settle();
+  out.endedMs = Math.round(performance.now() - te);
+  // d) une page qui ne se calme jamais (130 ms de travail toutes les 140 ms) : l'attente s'arrête d'elle-même vers 10 s
+  const c = ImportPlacing.begin({ opening: true });
+  c.update('z', 0.5, true);
+  const timer = setInterval(() => burn(130), 140);
+  const tc = performance.now();
+  out.cap = await c.settle();
+  out.capMs = Math.round(performance.now() - tc);
+  clearInterval(timer);
+  c.end();
+  return out;
+});
+check('progress.settle() existe (le voile a une fin « quand la page est calme »)', settleRun.hasSettle === true, settleRun);
+check('le voile est à l\'écran, dit « Dernières vérifications… » pendant l\'attente et la page, prise deux fois, est comptée deux fois occupée', settleRun.shownBefore === true && /^Dernières vérifications/.test(settleRun.midLine || '') && settleRun.res && settleRun.res.busy >= 2, { mid: settleRun.midLine, res: settleRun.res });
+check('l\'attente finit au moins 650 ms après la dernière fois où la page était prise, et le voile est encore là à cet instant (c\'est l\'appelant qui l\'enlève)', settleRun.res && settleRun.res.capped === false && settleRun.sinceBusyMs >= 650 && settleRun.sinceBusyMs < 1500 && settleRun.shownAfter === true && settleRun.hiddenAfterEnd === true, { sinceBusyMs: settleRun.sinceBusyMs, totalMs: settleRun.totalMs, res: settleRun.res });
+check('sans voile à l\'écran (un petit fichier) : settle() ne retient personne (null, tout de suite)', settleRun.quick === null && settleRun.quickMs < 100, { quick: settleRun.quick, ms: settleRun.quickMs });
+check('la fin du suivi interrompt l\'attente (moins de 300 ms après)', settleRun.endedMs < 300, { ms: settleRun.endedMs });
+check('une page qui ne se calme jamais ne retient pas la personne : l\'attente s\'arrête vers 10 s, annoncée « capped »', settleRun.cap && settleRun.cap.capped === true && settleRun.capMs >= 9800 && settleRun.capMs < 12500, { cap: settleRun.cap, ms: settleRun.capMs });
 
 // ================= 8) En anglais =================
 const en = await t.openPage({ hosted: true, stub: { extensions: ACTIVE }, seed: seedWith(), lang: 'en', colorScheme: 'light' });
