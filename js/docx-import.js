@@ -16,11 +16,9 @@
 // Ce qu'il ne garde pas est COMPTÉ, un genre à la fois, et dit à la personne par la fenêtre du compte rendu (js/main.js:tellDocxImportReport) ; rien n'est perdu en silence. Le moteur ne
 // touche ni à l'éditeur ni à la page : il rend le TEXTE du document (le HTML que l'éditeur écrit), la page, les en-têtes et pieds de page, et le compte rendu.
 const DocxImport = (function () {
-  const MAX_FILE_BYTES = 150 * 1024 * 1024;
-  const MAX_UNPACKED_BYTES = 900 * 1024 * 1024;   // ce que le paquet pèse une fois défait : plus, c'est une bombe de compression
-  const MAX_PART_BYTES = 60 * 1024 * 1024;         // une partie XML plus grosse est ignorée
-  const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
-  const MAX_IMAGES_BYTES = 80 * 1024 * 1024;       // le poids des images reprises, au total : le modèle s'écrit dans une case de Grist
+  // Les plafonds communs aux deux imports (js/export-common.js:Ooxml.LIMITS) ; une partie XML plus grosse que celui-ci est ignorée.
+  const { file: MAX_FILE_BYTES, unpacked: MAX_UNPACKED_BYTES, image: MAX_IMAGE_BYTES, images: MAX_IMAGES_BYTES } = ExportCommon.Ooxml.LIMITS;
+  const MAX_PART_BYTES = 60 * 1024 * 1024;
   const MAX_DEPTH = 24;                            // tableaux, contrôles et champs emboîtés
   const PT_PER_TWIP = 1 / 20;
   const PX_PER_TWIP = 96 / 1440;
@@ -29,9 +27,7 @@ const DocxImport = (function () {
   const EDITOR_BODY_PT = ExportCommon.EDITOR_STYLE.bodyPt;
   const EDITOR_HEADING_PT = ExportCommon.EDITOR_STYLE.headingPt;
   const NATURAL_LINE = ExportCommon.EDITOR_STYLE.naturalLine;
-  const EDITOR_TEXT = '1b2430';
-  // Les polices que l'éditeur sait montrer ; toute autre est remplacée par la plus proche (familyOf) et comptée au compte rendu.
-  const EDITOR_FONTS = new Set(['roboto', 'arial', 'times new roman', 'georgia', 'courier new', 'calibri']);
+  const { EDITOR_TEXT, EDITOR_FONTS, IMAGE_TYPES } = ExportCommon.Ooxml;
   const SAME_FAMILY = /^(?:calibri|carlito|arial(?! (?:black|narrow|rounded|unicode))|arimo|helvetica|times|tinos|georgia|gelasio|courier|cousine|roboto)/;
   const REPORT_KEYS = [
     'sections', 'columns', 'fonts', 'tabs', 'rightIndent', 'paragraphBorders', 'numbering', 'images', 'floatingImages', 'imageEffects', 'shapes', 'charts', 'diagrams', 'equations',
@@ -194,13 +190,7 @@ const DocxImport = (function () {
   // La famille de remplacement la plus proche parmi celles de l'éditeur (Roboto par défaut, Arial, Times New Roman, Georgia, Courier New, Calibri) ; null : celle de l'éditeur.
   function familyOf(name) {
     const key = String(name || '').trim().toLowerCase();
-    if (!key) return null;
-    if (/^(calibri|carlito)/.test(key)) return 'Calibri';
-    if (/^(arial|helvetica|arimo)/.test(key)) return 'Arial';
-    if (key === 'georgia' || key === 'gelasio') return 'Georgia';
-    if (/^(courier|consolas|lucida console|monaco|menlo|cascadia|source code|fira (code|mono)|andale mono|cousine|monospace)/.test(key)) return 'Courier New';
-    if (/^(times|tinos|cambria|garamond|palatino|book antiqua|bookman|century (schoolbook|old)|constantia|baskerville|didot|bodoni|sitka|minion|perpetua|goudy|caslon|georgia pro|serif$)/.test(key)) return 'Times New Roman';
-    return null;
+    return key ? ExportCommon.Ooxml.nearestFamily(key) : null;
   }
   const HIGHLIGHT = {
     yellow: 'ffff00', green: '00ff00', cyan: '00ffff', magenta: 'ff00ff', blue: '0000ff', red: 'ff0000', darkBlue: '000080', darkCyan: '008080', darkGreen: '008000', darkMagenta: '800080',
@@ -413,7 +403,6 @@ const DocxImport = (function () {
   }
 
   // Les images d'une partie (le document, un en-tête, un pied de page) : lues une fois, en adresse de données, avec le plafond de poids du modèle.
-  const IMAGE_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', jpe: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp', svg: 'image/svg+xml' };
   async function loadImages(ctx, rels) {
     const images = new Map();
     for (const entry of rels.ofType('image')) {

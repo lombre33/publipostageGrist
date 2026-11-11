@@ -527,7 +527,22 @@ const ExportCommon = (function () {
       }
       return { zip, fileOf, xml, rels, has: path => !!fileOf(path) };
     }
-    return { fail, kids, kid, at, descendants, localAttr, relAttr, numAttrOf, round2, fixed, escText, escAttr, spaced, resolvePath, openPackage };
+    // Ce que les deux imports se donnent en commun. Plafonds (en octets) : le fichier, le paquet une fois défait (plus, c'est une bombe de compression), une image, le poids des images reprises au
+    // total (le modèle s'écrit dans une case de Grist). Le type d'image que le navigateur sait lire, par extension. La couleur du texte de l'éditeur (js/character-format.js) : un texte de cette
+    // couleur n'en pose pas. Les polices que l'éditeur sait montrer ; toute autre est remplacée par la plus proche (`nearestFamily`, sur le nom en minuscules) et comptée au compte rendu.
+    const LIMITS = { file: 150 * 1024 * 1024, unpacked: 900 * 1024 * 1024, image: 25 * 1024 * 1024, images: 80 * 1024 * 1024 };
+    const IMAGE_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', jpe: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml' };
+    const EDITOR_TEXT = '1b2430';
+    const EDITOR_FONTS = new Set(['roboto', 'arial', 'times new roman', 'georgia', 'courier new', 'calibri']);
+    function nearestFamily(key) {
+      if (/^(calibri|carlito)/.test(key)) return 'Calibri';
+      if (/^(arial|helvetica|arimo)/.test(key)) return 'Arial';
+      if (key === 'georgia' || key === 'gelasio') return 'Georgia';
+      if (/^(courier|consolas|lucida console|monaco|menlo|cascadia|source code|fira (code|mono)|andale mono|cousine|monospace)/.test(key)) return 'Courier New';
+      if (/^(times|tinos|cambria|garamond|palatino|book antiqua|bookman|century (schoolbook|old)|constantia|baskerville|didot|bodoni|sitka|minion|perpetua|goudy|caslon|georgia pro|serif$)/.test(key)) return 'Times New Roman';
+      return null;
+    }
+    return { fail, kids, kid, at, descendants, localAttr, relAttr, numAttrOf, round2, fixed, escText, escAttr, spaced, resolvePath, openPackage, LIMITS, IMAGE_TYPES, EDITOR_TEXT, EDITOR_FONTS, nearestFamily };
   })();
 
   return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, fillEmptyBlocks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,

@@ -41,11 +41,11 @@ const PptxImport = (function () {
   const EMU_PER_PT = 12700;
   const EMU_PER_MM = 36000;
   const PX_PER_PT = 96 / 72;
-  const MAX_FILE_BYTES = 150 * 1024 * 1024;
-  const MAX_UNPACKED_BYTES = 900 * 1024 * 1024;   // ce que le paquet pèse une fois défait : plus, c'est une bombe de compression
-  const MAX_PART_BYTES = 40 * 1024 * 1024;         // une partie XML plus grosse est ignorée
-  const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
-  const MAX_IMAGES_BYTES = 80 * 1024 * 1024;       // le poids des images reprises, au total : le modèle s'écrit dans une case de Grist
+  // Les plafonds communs aux deux imports (js/export-common.js:Ooxml.LIMITS) ; une partie XML plus grosse que celui-ci est ignorée.
+  const { file: MAX_FILE_BYTES, unpacked: MAX_UNPACKED_BYTES, image: MAX_IMAGE_BYTES, images: MAX_IMAGES_BYTES } = ExportCommon.Ooxml.LIMITS;
+  const MAX_PART_BYTES = 40 * 1024 * 1024;
+  // Le texte de l'éditeur, ses six polices (toute autre est remplacée par la plus proche, `familyOf`, et le rapport la compte une fois) et les types d'image lus (js/export-common.js:Ooxml).
+  const { EDITOR_TEXT, EDITOR_FONTS, IMAGE_TYPES } = ExportCommon.Ooxml;
   const MAX_PIXELS = 16000000;                     // une image redessinée (rognée, retournée, étirée) ne dépasse pas 16 millions de points
   const MAX_SLIDES = 500;
   const MAX_OBJECTS = 20000;
@@ -97,7 +97,6 @@ const PptxImport = (function () {
   const THIN_H_PT = 23;                            // un rectangle sans texte plus bas devient un trait de son épaisseur : un cadre n'est jamais plus bas qu'une ligne de texte avec ses marges (22 pt) ni plus étroit que 24 pt
   const THIN_W_PT = 24;
   const NO_WRAP_SLACK = 0.15;                      // un texte qui ne se replie pas (wrap="none") : sa boîte est élargie de 15 %, la police de l'éditeur est un peu plus large
-  const EDITOR_TEXT = '1b2430';
   const SYSTEM_COLORS = { window: 'ffffff', windowText: '000000', windowFrame: '646464', highlight: '3399ff', highlightText: 'ffffff', btnFace: 'f0f0f0', btnText: '000000', grayText: '808080', menu: 'f0f0f0', menuText: '000000' };
   const PRESET_COLORS = {
     black: '000000', white: 'ffffff', red: 'ff0000', green: '008000', blue: '0000ff', yellow: 'ffff00', cyan: '00ffff', magenta: 'ff00ff', gray: '808080', grey: '808080', ltGray: 'c0c0c0', ltGrey: 'c0c0c0', dkGray: '404040',
@@ -111,8 +110,6 @@ const PptxImport = (function () {
   const VERTICAL_TEXT = /^(vert|vert270|wordArtVert|eaVert|mongolianVert|wordArtVertRtl)$/;
   // Le texte d'un objet tourné d'un quart de tour (`vert`, `vert270`) est repris ; les lettres empilées et les écritures verticales d'Asie ou de Mongolie, non (le texte est écrit à l'horizontale).
   const TURNED_TEXT = /^(vert|vert270)$/;
-  // Les six polices de l'éditeur : toute autre est remplacée par la plus proche (familyOf), et le rapport la compte une fois.
-  const EDITOR_FONTS = new Set(['roboto', 'arial', 'times new roman', 'georgia', 'courier new', 'calibri']);
   // Les espaces de PowerPoint dits en pour cent (`spcPct`) sont ce pour cent de la hauteur d'une ligne simple, 1,2 fois la taille du texte.
   const POWERPOINT_LINE = 1.2;
   const LINE_PRESETS = new Set(['line', 'straightConnector1', 'bentConnector2', 'bentConnector3', 'bentConnector4', 'bentConnector5', 'curvedConnector2', 'curvedConnector3', 'curvedConnector4', 'curvedConnector5']);
@@ -127,7 +124,6 @@ const PptxImport = (function () {
   const WINGDINGS = { l: '●', n: '■', o: '□', q: '❑', v: '❖', u: '◆', '§': '▪', '¨': '◻', 'Ø': '➢', 'è': '➔', 'ü': '✓', 'û': '✗', 'Ï': '☞', '¶': '¶' };
   const SYMBOL = { '·': '•', '¨': '♦', '§': '♣', '¤': '↔', '¾': '⎯' };
   const NUMBERING = { alphaLcPeriod: 'alpha', alphaLcParenR: 'alpha', alphaLcParenBoth: 'alpha', alphaUcPeriod: 'alpha', alphaUcParenR: 'alpha', alphaUcParenBoth: 'alpha', romanLcPeriod: 'roman', romanLcParenR: 'roman', romanLcParenBoth: 'roman', romanUcPeriod: 'roman', romanUcParenR: 'roman', romanUcParenBoth: 'roman' };
-  const IMAGE_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', jpe: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml' };
   const UNREADABLE_IMAGES = /^(emf|wmf|tif|tiff|wdp|jxr|hdp|pict|ico|cur|emz|wmz)$/;
   // Le sens d'une transition : l'inverse de la table de l'export (js/pptx-export.js, DIRECTIONS), du côté d'où la diapositive arrive.
   const FROM_SIDE = { l: 'r', r: 'l', d: 't', u: 'b' };
@@ -472,15 +468,8 @@ const PptxImport = (function () {
   }
   // La famille de remplacement la plus proche parmi celles de l'éditeur (Roboto par défaut, Arial, Times New Roman, Georgia, Courier New, Calibri) ; null : celle de l'éditeur.
   function familyOf(name, theme) {
-    const face = faceOf(name, theme);
-    const key = face.toLowerCase();
-    if (!key) return null;
-    if (/^(calibri|carlito)/.test(key)) return 'Calibri';
-    if (/^(arial|helvetica|arimo)/.test(key)) return 'Arial';
-    if (key === 'georgia' || key === 'gelasio') return 'Georgia';
-    if (/^(courier|consolas|lucida console|monaco|menlo|cascadia|source code|fira (code|mono)|andale mono|cousine|monospace)/.test(key)) return 'Courier New';
-    if (/^(times|tinos|cambria|garamond|palatino|book antiqua|bookman|century (schoolbook|old)|constantia|baskerville|didot|bodoni|sitka|minion|perpetua|goudy|caslon|georgia pro|serif$)/.test(key)) return 'Times New Roman';
-    return null;
+    const key = faceOf(name, theme).toLowerCase();
+    return key ? ExportCommon.Ooxml.nearestFamily(key) : null;
   }
   // Le thème du fichier dans la forme du thème d'une présentation (js/slide-theme.js) : son nom, le fond et le texte (par la correspondance de couleurs du masque : « fond 1 » et « texte 1 »), les titres (la couleur du
   // premier niveau du style de titre du masque, le texte à défaut), les six accents et les deux polices (la plus proche parmi celles de l'éditeur, Roboto à défaut). null quand une couleur manque ou que l'éditeur n'a pas
