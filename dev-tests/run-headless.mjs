@@ -376,6 +376,7 @@ const NODE_SCRIPTS = {
   docxImportMouse: 'verify-docx-import-mouse.mjs', // l'import d'un fichier Word (js/docx-import.js, ligne « Importer un Word… » du menu « + », js/main.js `onImportDocx`) : vrai clic, vrai sélecteur de fichier réduit aux documents Word, document neuf sans nom (titre, texte, liste, tableau, image, note, page, en-tête, pied de page, filigrane), « Modifications non enregistrées » après le choix du fichier, fenêtre du rapport (six genres, puis presque tous, défilante) dans le panneau 700x400, fichiers refusés en rouge, français clair puis anglais sombre (port 9097 ; DOCX_IMPORT_SHOTS=<dossier> pour des captures)
   pptxImportHeavy: 'verify-pptx-import-heavy.mjs', // l'import d'un GROS PowerPoint (js/pptx-import.js par tranches, HEAVY_FILE_BYTES et TARGET_PPI, js/image-io.js `canvasDataUri`, js/main-import.js : compteur, garde, mise en place par morceaux avec js/import-placing.js - texte identique à celui d'un seul bloc, page jamais figée plus de 400 ms, voile d'avancement -, enregistrement d'un gros fichier dans Grist ; js/perf-trace.js, TEMPORAIRE, Ctrl + Alt + Maj + L) : la page répond pendant la lecture (plus long arrêt du battement), la progression, un fichier léger garde ses images, un fichier lourd les ramène à 220 points par pouce et rend la même structure, à la vraie souris le coin d'état, un clic en route, un second fichier refusé, le suivi du lag (arrêts, fonctions lentes, étapes, rapport, fichier et fenêtre en français et en anglais)
   slidesOpenHeavy: 'verify-slides-open-heavy.mjs', // l'OUVERTURE d'une très grosse présentation ENREGISTRÉE (js/import-placing.js `planOpen` / `fillOpened` / `stopFill` / `isFilling` / `whenFilled`, js/main.js `loadTemplateIntoEditor` (option `progressive`), `fillOpenedPresentation`, `settleOpenedPresentation`, js/main-autosave.js, js/main-save.js, js/main-live.js, js/main-export.js, `Editor.appendHTML` avec `dropTrailing`, js/track-changes.js ; nuit du 10/11, « zéro gel à l'ouverture d'un gros PowerPoint »), GFS simulé, extension active, six présentations fabriquées dans la page : le plan (texte coupé aux sauts de page ENREGISTRÉS, sans perte, saut de sens conservé, aucun plan pour un petit modèle ou un saut enfoui dans un tableau), le premier pas d'un seul coup (voile titré « Ouverture de la présentation », avancement, coin d'état, trois sauts de page au plus), la frappe bloquée pendant le remplissage, le texte final identique à l'octet près à celui d'une ouverture d'un bloc ET au texte enregistré, la page jamais arrêtée plus de 300 ms, aucune écriture dans Grist tant que ça remplit (ni après, sans geste), une frappe ensuite enregistre le texte ENTIER, « Enregistrer » pendant le remplissage attend puis écrit tout, un autre modèle choisi pendant ce temps arrête le remplissage, repli sur l'ouverture d'un bloc quand un saut de page est enfoui plus bas, titre, ligne et conseil en anglais (port 9102)
+  ooxmlImportGolden: 'verify-ooxml-import-golden.mjs', // l'AVANT / APRÈS des imports Word et PowerPoint : ce que chaque import rend d'un même fichier ne change pas (dev-tests/ooxml-import-golden.json, dev-tests/ooxml-import-recorder.js ; `--update` quand le changement est voulu) ; rejoue les 10 groupes qui importent un fichier : ~80 s
   pptxImportMouse: 'verify-pptx-import-mouse.mjs', // l'import d'un fichier PowerPoint (js/pptx-import.js, ligne « Importer un PowerPoint… » du menu « + », js/main.js `onImportPptx`, extension « diapositives » ; demande du 22/10 : la parité avec PowerPoint, « import »), GFS simulé, vraie souris et vrai sélecteur de fichier, 700x400, français clair puis anglais sombre : la ligne du menu, le sélecteur réduit aux présentations (annuler ne change rien), le moteur demandé au réseau une seule fois, une présentation reprise en entier (miniatures, page 960 x 540, texte, carte, tableau, image, trait, cadre sélectionnable, aucun point rouge), « Modifications non enregistrées » après le choix du fichier, la fenêtre du rapport (genres, ordre, pluriels, dix-huit lignes qui défilent, bouton, retour à l'éditeur), la page du fichier (4:3 = 720 x 540), les fichiers refusés (pas un zip, zip sans présentation, ancien .ppt, sans diapositive, plus de 150 Mo : message entier dans le coin d'état, aucune fenêtre), la ligne grisée sans l'extension (widget seul : fenêtre explicative ; GFS : appel `installer`)
   chartMouse: 'verify-chart-mouse.mjs', // Graphique de la page (extensions/graphique/chart-block.js, joué hébergé) : ligne du menu de la chaîne, fenêtre sans défilement, liste avec recherche au-dessus de la fenêtre (graphiques grisés avec leur raison, par page), aperçu du vrai graphique, lignes à tracer, cadre sans image, poignée, liaison à régler au-dessus de la fenêtre, Lecture ; vraie souris et vrai clavier, 700x400 clair, sombre et anglais
   chartSlidesGrid: 'verify-chart-slides-grid.mjs', // le graphique de la page PUIS le graphique créé (« Créer un graphique… », lot 1) dans une présentation (Slides+) et dans une grille (module de graphiques) : l'éditeur le dessine dans le texte et dans un cadre libre, la bande des diapositives en montre le dessin et le suit quand la ligne change (js/editor-nodes.js `applyImageAttrs`, js/chart-entry.js `PAINTED_EVENT`, extensions/diapositives/slide-strip.js `onChartPainted`), la Lecture, le diaporama et le PowerPoint ont la même image, une ligne sans vente n'en a plus ; une grille : éditeur, Lecture, PDF et Excel ; hébergé, 700x400, clair puis anglais sombre
@@ -547,6 +548,10 @@ let probe = null; // --probe "<expression JS>" : ouvre le harnais, evalue, affic
 // tout premier fetchTable de GristAPI.init(). Seul moyen de tester "le widget demarre avec tel modele deja marque par defaut" : setVariables/setRows
 // APRES "Widget prêt." (la seule ouverture qu'offrait ce fichier jusqu'ici) arrive structurellement trop tard, une fois init() deja termine.
 let preseedFile = null;
+// --collect <fichier.json> : à la fin de chaque groupe, écrit dans ce fichier ce que la page a rangé dans `window.__collected` (un enregistreur posé par --preseed), { groupe: valeur }. Sert aux essais qui comparent
+// une sortie avant et après un chantier (dev-tests/verify-ooxml-import-golden.mjs : ce que rendent les imports Word et PowerPoint).
+let collectFile = null;
+const collected = {};
 // --width/--height : viewport par défaut 1400x1000 pensé pour la fenêtre de dev, mais un panneau latéral
 // Grist réel (là où vit ce widget) descend couramment à ~700x400 - certains bugs de mise en page/scroll
 // (débordement de page masqué, barre d'outils qui remonte hors de portée) ne sont reproductibles qu'à
@@ -560,6 +565,7 @@ for (let i = 0; i < argv.length; i++) {
   if (argv[i] === '--case') { onlyCases.push(argv[++i]); continue; }
   if (argv[i] === '--probe') { probe = argv[++i]; continue; }
   if (argv[i] === '--preseed') { preseedFile = argv[++i]; continue; }
+  if (argv[i] === '--collect') { collectFile = resolve(argv[++i]); continue; }
   if (argv[i] === '--width') { viewportWidth = Number(argv[++i]); continue; }
   if (argv[i] === '--height') { viewportHeight = Number(argv[++i]); continue; }
   wanted.push(argv[i]);
@@ -761,6 +767,10 @@ async function runGroup(name, probeExpr, lang) {
     return { report: window.TestRunner.report(results), results: results.map(r => ({ name: r.id || r.name, pass: r.pass, notes: r.notes })), deferred: results.deferred };
   }, name);
 
+  if (collectFile) {
+    const got = await page.evaluate(async () => { if (window.__collectedReady) await window.__collectedReady; return window.__collected || null; });
+    if (got) collected[name] = Object.assign(collected[name] || {}, got);
+  }
   await browser.close();
   if (result.missing) return { name, pass: 0, fail: 0, missing: true, consoleErrors };
   const fail = result.results.filter(r => !r.pass);
@@ -829,6 +839,7 @@ for (const s of runnableNodeScripts) {
     console.log(`  (sortie inattendue de ${s}, code de sortie ${r.status})`);
   }
 }
+if (collectFile) await writeFile(collectFile, JSON.stringify(collected));
 console.log(`\n=== TOTAL : ${totalPass} OK, ${totalFail} ECHEC(S) ===`);
 if (failing.length) console.log('Groupes en échec : ' + failing.join(', '));
 server.close();

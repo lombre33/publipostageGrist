@@ -8,3 +8,6 @@ _test-harness.html
 
 # Images brutes des scènes de capture du README (outils/depot-propre/captures/lancer-tout.sh) : seules les images finales de public/screenshots/ se commitent.
 outils/depot-propre/captures/out/
+
+# Journal d'avant de dev-tests/verify-ooxml-import-golden.mjs (les sorties des imports d'une passe à la suivante, pour montrer l'écart ; écrit par --update).
+dev-tests/.ooxml-import-before.json
