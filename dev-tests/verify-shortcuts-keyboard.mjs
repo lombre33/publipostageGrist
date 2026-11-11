@@ -8,7 +8,7 @@
 //  - une touche changée dans Réglages > Raccourcis marche tout de suite, l'ancienne ne fait plus rien (Ctrl+B ne met plus en gras), « Par défaut » les rend ;
 //  - l'écoute d'une combinaison : un doublon, une touche seule, Ctrl+Alt (AltGr) sont refusés sous la touche concernée, Échap abandonne sans fermer la fenêtre ;
 //  - au clavier seul : Ctrl+/ ouvre la liste, Tab passe de touche en touche, Entrée écoute, la touche tapée est prise ;
-//  - la liste des touches (une ligne par action, 58) tient dans 700x400 : seul le contenu défile, le titre, les onglets et « Fermer » ne bougent pas, rien ne déborde ni ne se coupe ;
+//  - la liste des touches (une ligne par action, 61) tient dans 700x400 : seul le contenu défile, le titre, les onglets et « Fermer » ne bougent pas, rien ne déborde ni ne se coupe ;
 //  - les infobulles montrent la touche (« Gras (Alt+B) ») sans sortir de la fenêtre, les lignes de menu aussi ; mode Mac : ⌥L, ⌘ ; anglais : « Shift ».
 // Lancé par run-headless.mjs (groupe Node "shortcutsKeyboard", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-shortcuts-keyboard.mjs
 // SHORTCUTS_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
@@ -27,8 +27,8 @@ const WIDTH = 700;
 const HEIGHT = 400;
 // Le nombre d'actions de js/shortcuts.js, une ligne chacune dans la liste. Une action ajoutée ou retirée le change : le dire ici et, pour une action
 // ajoutée, la nommer dans ADDED_ACTIONS (remapPart) pour qu'elle soit lue une à une et pas seulement comptée. 54 jusqu'au 09/10, 57 depuis « Graphique
-// de la page… » (chartBlock), l'exposant et l'indice, ajoutés ce jour-là sans que ce compte suive ; 58 depuis « Créer un graphique… » (chartMake), 59 depuis « Texte alternatif » (altText, ajoutée sans que ce compte suive), 60 depuis « Vidéo… » (videoBlock).
-const ACTION_COUNT = 60;
+// de la page… » (chartBlock), l'exposant et l'indice, ajoutés ce jour-là sans que ce compte suive ; 58 depuis « Créer un graphique… » (chartMake), 59 depuis « Texte alternatif » (altText, ajoutée sans que ce compte suive), 60 depuis « Vidéo… » (videoBlock), 61 depuis « Palette de commandes » (commandPalette, Alt+/).
+const ACTION_COUNT = 61;
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
 
 // Même régénération du harnais et même miroir hors-ligne que dev-tests/verify-text-expansion-keyboard.mjs.
@@ -381,6 +381,7 @@ async function remapPart(T, fr) {
     { id: 'chartBlock', group: 'insert', name: fr ? 'Graphique de la page…' : 'Chart from the page…', key: L.none },
     { id: 'chartMake', group: 'insert', name: fr ? 'Créer un graphique…' : 'Create a chart…', key: L.none },
     { id: 'videoBlock', group: 'insert', name: fr ? 'Vidéo…' : 'Video…', key: L.none },
+    { id: 'commandPalette', group: 'view', name: fr ? 'Palette de commandes' : 'Command palette', key: 'Alt+/' },
     { id: 'superscript', group: 'format', name: fr ? 'Exposant' : 'Superscript', key: 'Ctrl+.' },
     { id: 'subscript', group: 'format', name: fr ? 'Indice' : 'Subscript', key: 'Ctrl+,' },
   ];

@@ -58,6 +58,8 @@ const Shortcuts = (function () {
       // physique.
       match = /^Key([A-Z])$/.exec(code);
       if (match) return match[1].toLowerCase();
+      // Idem pour la barre oblique (Alt+/ de la palette de commandes) : Option+/ écrit « ÷ » sur un clavier Mac.
+      if (code === 'Slash' && isMac()) return '/';
       return null;
     }
 
@@ -176,7 +178,7 @@ const Shortcuts = (function () {
     return { formProblem, RESERVED };
   })();
 
-  const { click, mouseDown, headingRow, findPanel, editMode, templatesList, toggleListInCells, insertTodayChip, openKeysList } = (function () {
+  const { click, mouseDown, headingRow, findPanel, editMode, templatesList, toggleListInCells, insertTodayChip, openKeysList, usable } = (function () {
     // Les gestes d'une action, et les deux actions qui n'ont pas de bouton
 
     const byId = id => document.getElementById(id);
@@ -190,47 +192,51 @@ const Shortcuts = (function () {
       if (getComputedStyle(el).pointerEvents === 'none') return false;
       return !!el.closest('.v2-hover-flyout') || el.getClientRects().length > 0;
     }
+    // Le contrôle dont une action dépend (`run.element`) : la palette de commandes (js/command-palette.js) s'en sert, par `Shortcuts.state`, pour griser sans le lancer une commande que le geste de la souris ne ferait
+    // pas. Une action sans bouton (Rechercher, Appliquer la mise en forme...) n'en a pas : elle reste proposée, et dit au lancement qu'elle n'a rien fait.
+    const via = (run, element) => { run.element = element; return run; };
     // Clique le bouton (ou la ligne de menu) : même chemin que la souris, donc mêmes gardes. false quand il n'y en a pas ou qu'il est inutilisable.
-    const click = id => () => { const el = byId(id); if (!usable(el)) return false; el.click(); return true; };
+    const click = id => via(() => { const el = byId(id); if (!usable(el)) return false; el.click(); return true; }, () => byId(id));
     // Un bouton câblé sur « mousedown » (couleur de police, surlignage, taille de police : js/floating-toolbars.js, js/main-toolbar.js) ne verrait
     // jamais un `click` : on lui fait le même geste que la souris. Mêmes gardes que `click`.
-    const mouseDown = id => () => {
+    const mouseDown = id => via(() => {
       const el = byId(id);
       if (!usable(el)) return false;
       el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, composed: true, button: 0, view: window }));
       return true;
-    };
+    }, () => byId(id));
     // « Titre 1 » : la ligne du menu Titre (même geste que la souris). Une seconde fois sur le même niveau, retour au paragraphe : la touche de TipTap
     // (Ctrl+Alt+1) en fait autant.
-    const headingRow = level => () => {
+    const headingRow = level => via(() => {
       const select = byId('v2-header-select');
       const target = select && select.value === String(level) ? 'p' : String(level);
       const row = document.querySelector('#v2-heading-flyout .v2-hover-row[data-level="' + target + '"]');
       if (!usable(row)) return false;
       row.click();
       return true;
-    };
+    }, () => document.querySelector('#v2-heading-flyout .v2-hover-row[data-level="' + level + '"]'));
     // « Rechercher » et « Rechercher et remplacer » : ouvrent la barre de js/find-replace.js, le clavier dans son champ - comme Ctrl+F et Ctrl+H, pas
     // comme la loupe, qui referme la barre déjà ouverte (une touche qui la fermerait ne chercherait plus). Faux sans rien ouvrir quand l'éditeur n'est
     // pas à l'écran (Lecture, macro-modèle) : la touche reste alors au navigateur.
     const findPanel = replace => () => typeof FindReplace !== 'undefined' && !!FindReplace.open({ replace });
     // « Mode édition » : le curseur revient dans le document, pour qu'on tape tout de suite - sinon la frappe suivante tomberait sur le bouton (Espace
     // le cliquerait).
-    const editMode = () => {
+    const editMode = via(() => {
       if (!click('btn-mode-edit')()) return false;
       const editor = typeof EditorCore !== 'undefined' && EditorCore.getEditor();
       if (editor && editor.isEditable) editor.commands.focus();
       return true;
-    };
-    const templatesList = () => { const el = document.querySelector('#v2-title-cluster .tts-trigger'); if (!usable(el)) return false; el.click(); return true; };
+    }, () => byId('btn-mode-edit'));
+    const templatesListButton = () => document.querySelector('#v2-title-cluster .tts-trigger');
+    const templatesList = via(() => { const el = templatesListButton(); if (!usable(el)) return false; el.click(); return true; }, templatesListButton);
     // « Liste numérotée » et « Liste de tâches » : la touche d'origine (Ctrl+Maj+7 et Ctrl+Maj+9, celles de TipTap) bascule - elle pose la liste et la
     // retire au second appui - alors que le bouton pose un style (numérotation, cases à cocher). Sur une sélection de cases, où l'éditeur ne traiterait
     // que la case de tête, elle bascule donc la liste dans chaque case (EditorCore.toggleList), sous les mêmes gardes que le bouton.
-    const toggleListInCells = (name, command, buttonId) => () => {
+    const toggleListInCells = (name, command, buttonId) => via(() => {
       if (typeof EditorCore === 'undefined' || !usable(byId(buttonId))) return false;
       EditorCore.toggleList(name, command);
       return true;
-    };
+    }, () => byId(buttonId));
 
     // « Date du jour » : la même bulle que la ligne « Date du jour » du panneau # (résolue à chaque Lecture et à chaque export), pas une date figée
     // dans le modèle. Faite par le bouton « Insérer une variable » : grisée comme lui (lecture seule, Lecture, macro-modèle).
@@ -239,6 +245,7 @@ const Shortcuts = (function () {
       if (!editor || !usable(byId('v2-btn-insert-variable'))) return false;
       return editor.chain().focus().insertContent({ type: 'smartChip', attrs: { kind: 'date' } }).run();
     }
+    insertTodayChip.element = () => byId('v2-btn-insert-variable');
 
     // Ouvre Réglages sur l'onglet Raccourcis, au tableau des touches.
     function openKeysList() {
@@ -250,7 +257,8 @@ const Shortcuts = (function () {
       if (typeof ShortcutsPanel !== 'undefined') ShortcutsPanel.showKeys();
       return true;
     }
-    return { click, mouseDown, headingRow, findPanel, editMode, templatesList, toggleListInCells, insertTodayChip, openKeysList };
+    openKeysList.element = () => byId('v2-btn-settings');
+    return { click, mouseDown, headingRow, findPanel, editMode, templatesList, toggleListInCells, insertTodayChip, openKeysList, usable };
   })();
 
   const { ACTIONS, GROUPS, BY_ID } = (function () {
@@ -279,7 +287,9 @@ const Shortcuts = (function () {
       { id: 'modeEdit', group: 'view', label: 'toolbar.modeEdit', key: 'Alt+e', scope: 'app', hint: tip('btn-mode-edit'), run: editMode },
       { id: 'modeRead', group: 'view', label: 'toolbar.modeRead', key: 'Alt+l', scope: 'app', hint: '#v2-read-flyout .v2-hover-flyout-label', aria: tip('btn-mode-read'), run: click('btn-mode-read') },
       { id: 'settings', group: 'view', label: 'settings.tooltip', key: '', scope: 'app', hint: tip('v2-btn-settings'), run: click('v2-btn-settings') },
-      { id: 'keysList', group: 'view', label: 'shortcuts.action.keysList', key: 'Mod+/', scope: 'app', run: () => openKeysList() },
+      { id: 'keysList', group: 'view', label: 'shortcuts.action.keysList', key: 'Mod+/', scope: 'app', run: openKeysList },
+      // Palette de commandes (js/command-palette.js) : chercher une commande par son nom et la lancer, comme « Rechercher dans les menus » de Google Docs - Alt+/ (⌥/ sur Mac). Ctrl+K reste « Lien… » : le lien garde sa touche, la palette prend celle de Google Docs.
+      { id: 'commandPalette', group: 'view', label: 'shortcuts.action.commandPalette', key: 'Alt+/', scope: 'app', run: () => typeof CommandPalette !== 'undefined' && CommandPalette.toggle() },
       { id: 'find', group: 'view', label: 'shortcuts.action.find', key: 'Mod+f', native: true, scope: 'app', aria: tip('v2-btn-find'), run: findPanel(false) },
       { id: 'replace', group: 'view', label: 'shortcuts.action.replace', key: 'Mod+h', macKey: 'Mod+Shift+h', aliases: ['Mod+Shift+h'], native: true, scope: 'app', run: findPanel(true) },
       // Mise en forme
@@ -333,7 +343,7 @@ const Shortcuts = (function () {
       { id: 'chartBlock', group: 'insert', label: 'insert.chart.row', key: '', scope: 'editor', hint: tip('v2-btn-chart'), run: click('v2-btn-chart') },
       { id: 'chartMake', group: 'insert', label: 'insert.chart.make.row', key: '', scope: 'editor', hint: tip('v2-btn-chart-make'), run: click('v2-btn-chart-make') },
       { id: 'variable', group: 'insert', label: 'insert.variable.tip', key: '', scope: 'editor', hint: tip('v2-btn-insert-variable'), run: click('v2-btn-insert-variable') },
-      { id: 'today', group: 'insert', label: 'chips.date', key: 'Alt+Shift+d', scope: 'editor', run: () => insertTodayChip() },
+      { id: 'today', group: 'insert', label: 'chips.date', key: 'Alt+Shift+d', scope: 'editor', run: insertTodayChip },
       // Historique et suivi
       { id: 'undo', group: 'history', label: 'history.undo', key: 'Mod+z', native: true, anywhere: true, scope: 'editor', repeat: true, hint: tip('v2-btn-undo'), run: click('v2-btn-undo') },
       { id: 'redo', group: 'history', label: 'history.redo', key: 'Mod+y', aliases: ['Mod+Shift+z'], native: true, anywhere: true, scope: 'editor', repeat: true, hint: tip('v2-btn-redo'), run: click('v2-btn-redo') },
@@ -465,6 +475,17 @@ const Shortcuts = (function () {
     return { decorate, changed, setKey, resetKey, resetAll, chosen, restore };
   })();
 
+  // Une action peut-elle partir maintenant ? { available, reason } : faux quand le contrôle dont elle dépend ne recevrait pas le clic de la souris (grisé, masqué, droits, Lecture), `reason` étant alors ce
+  // que ce contrôle dit de son grisé (js/lock-reasons.js ; '' sans raison). Vrai pour une action sans contrôle (`run.element`, plus haut) : elle dira elle-même qu'elle n'a rien fait. Ne lance rien.
+  function state(id) {
+    const action = actionOf(id);
+    if (!action) return { available: false, reason: '' };
+    const element = typeof action.run.element === 'function' ? action.run.element() : undefined;
+    if (element === undefined || usable(element)) return { available: true, reason: '' };
+    const holder = element && element.closest && typeof LockReasons !== 'undefined' ? element.closest('[' + LockReasons.REASON + ']') : null;
+    return { available: false, reason: holder ? LockReasons.reasonOf(holder) : '' };
+  }
+
   const { onKeydown, isAltGr } = (function () {
     // Le clavier
 
@@ -588,5 +609,6 @@ const Shortcuts = (function () {
     setPlatform: value => { platformOverride = value || null; changed(); },
     reload: () => { custom = readStorage(); changed(); },
     run: id => { const action = actionOf(id); return !!action && action.run(); },
+    state,
   };
 })();

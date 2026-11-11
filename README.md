@@ -42,7 +42,7 @@ Le détail, fonction par fonction, noms de fichiers compris, est dans [`planning
 - **Lecture, enregistrement, collaboration** : mode lecture simple ou épuré, enregistrement automatique avec détection de conflit, historique des versions (comparer, nommer, restaurer), commentaires, suivi des modifications (bêta), droits par personne.
 - **Exports** : PDF vectoriel (en trois qualités), PDF protégé (AES-256), export en lot (ZIP ou un seul PDF), assemblage avant impression, Word (bêta), Excel, Markdown (document ou modèle), HTML, e-mail.
 - **Modèles** : plusieurs par document Grist, une galerie de 22 modèles prêts à l'emploi (21 sans Grist Factory Suite), import Markdown.
-- **Interface** : français et anglais, thème clair, sombre ou celui du système, 58 raccourcis personnalisables, barre d'outils pensée pour un petit panneau (testée à 700 × 400).
+- **Interface** : français et anglais, thème clair, sombre ou celui du système, 61 raccourcis personnalisables, barre d'outils pensée pour un petit panneau (testée à 700 × 400).
 
 **Avec Grist Factory Suite** (GFS, la suite d'applications de Grist Factory) : les présentations (diapositives, thèmes, diaporama avec vue intervenant, import et export PowerPoint), les graphiques, l'écriture en direct à plusieurs et la lecture de PDF se branchent au widget par des extensions (`extensions/`). Sans GFS, le widget grise leurs commandes et dit pourquoi. Où en est la liaison : [`GFS-ETAT.md`](GFS-ETAT.md).
 
@@ -153,7 +153,7 @@ The complete, feature-by-feature detail, file names included, is in [`planning/r
 - **Reading, saving, collaboration**: standard or clean reading mode, autosave with conflict detection, version history (compare, name, restore), comments, track changes (beta), per-person rights.
 - **Exports**: vector PDF (three qualities), protected PDF (AES-256), batch export (ZIP or a single PDF), sheet assembly before printing, Word (beta), Excel, Markdown (document or template), HTML, e-mail.
 - **Templates**: several per Grist document, a gallery of 22 ready-to-use templates (21 without Grist Factory Suite), Markdown import.
-- **Interface**: French and English, light, dark or system theme, 58 customizable shortcuts, a toolbar designed for a small panel (tested at 700 × 400).
+- **Interface**: French and English, light, dark or system theme, 61 customizable shortcuts, a toolbar designed for a small panel (tested at 700 × 400).
 
 **With Grist Factory Suite** (GFS, Grist Factory's suite of applications): presentations (slides, themes, a slide show with presenter view, PowerPoint import and export), charts, live multi-user editing and PDF reading plug into the widget through extensions (`extensions/`). Without GFS, the widget greys out their commands and says why. State of the integration: [`GFS-ETAT.md`](GFS-ETAT.md).
 

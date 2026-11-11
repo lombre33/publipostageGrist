@@ -1045,6 +1045,7 @@
     wireA4PreviewToggle();
     OrientationToggle.wire({ isReadOnly });
     LinkedTable.wire({ setStatus, openModel: openLinkedModel });
+    CommandPalette.wire({ setStatus });
     wireLinkRulesModal();
     wireTemplateGalleryModal();
     wireTemplateRename();

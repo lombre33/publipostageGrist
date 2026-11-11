@@ -211,7 +211,12 @@
       const ran = {};
       try {
         await withText(h);
-        for (const action of Shortcuts.ACTIONS) { current = action.id; ran[action.id] = Shortcuts.run(action.id) === true; }
+        for (const action of Shortcuts.ACTIONS) {
+          current = action.id;
+          ran[action.id] = Shortcuts.run(action.id) === true;
+          // La palette de commandes s'ouvre : refermée aussitôt, pour qu'elle ne reste pas devant les actions suivantes.
+          if (typeof CommandPalette !== 'undefined' && CommandPalette.isOpen()) CommandPalette.close();
+        }
         // Les retraits ne se pressent que dans une liste (grisés ailleurs, comme leur bouton) : la deuxième puce peut descendre d'un niveau, une puce imbriquée peut remonter.
         const inList = async (markup, id) => {
           Editor.setHTML(markup);
@@ -251,7 +256,7 @@
     run: async (h) => {
       await reset(h);
       const expected = {
-        modeRead: 'Alt+l', modeEdit: 'Alt+e', templates: 'Alt+m', rename: 'F2', exportPdf: 'Alt+p', keysList: 'Mod+/',
+        modeRead: 'Alt+l', modeEdit: 'Alt+e', templates: 'Alt+m', rename: 'F2', exportPdf: 'Alt+p', keysList: 'Mod+/', commandPalette: 'Alt+/',
         heading1: 'Alt+Shift+1', heading2: 'Alt+Shift+2', heading3: 'Alt+Shift+3', highlight: 'Alt+Shift+h', pageBreak: 'Alt+Enter', comment: 'Mod+Alt+m', today: 'Alt+Shift+d',
         save: 'Mod+s', link: 'Mod+k', bold: 'Mod+b', italic: 'Mod+i', underline: 'Mod+u', undo: 'Mod+z', redo: 'Mod+y', find: 'Mod+f', replace: 'Mod+h',
         bulletList: 'Mod+Shift+8', orderedList: 'Mod+Shift+7', taskList: 'Mod+Shift+9',

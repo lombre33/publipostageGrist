@@ -1,0 +1,31 @@
+/* Palette de commandes (js/command-palette.js, Alt+/) : une fenêtre de la base commune (css/modal-base.css) avec son champ de recherche sous le titre et la liste des commandes dessous. Le champ vient de
+   `.pp-dialog-input`, les boutons de css/variable-actions.css ; ne reste ici que ce qui est propre à la palette. Chargé après eux. Rien que des jetons de couleur : clair et sombre suivent le thème. */
+
+/* La fenêtre reste calée en haut du panneau : le champ ne bouge pas quand la liste raccourcit à mesure qu'on tape. Le cadre ne dépasse pas 560 px de haut sur un grand panneau (59 commandes, un titre par groupe). */
+#pp-palette-modal { align-items: flex-start; }
+.pp-palette-box { --pp-modal-title-gap: 8px; --pp-modal-actions-gap: 10px; margin-top: var(--pp-modal-gap); max-height: min(calc(100% - 2 * var(--pp-modal-gap)), 560px); }
+.pp-palette-input { margin-top: 8px; }
+
+/* La liste déborde du contenu de 8 px de chaque côté : le texte des lignes reste aligné sur celui du titre et du champ, le surlignage a de l'air. */
+.pp-palette-list { list-style: none; margin: 0 -8px; padding: 0 0 4px; }
+.pp-palette-list[hidden] { display: none; }
+.pp-palette-group { margin: 0; padding: 10px 8px 3px; font-size: 11.5px; font-weight: 700; color: var(--text-muted); }
+.pp-palette-group:first-child { padding-top: 2px; }
+.pp-palette-row { display: flex; align-items: center; gap: 12px; padding: 6px 8px; border-radius: var(--radius-sm); font-size: 13px; line-height: 1.35; color: var(--text); cursor: pointer; }
+.pp-palette-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+/* La touche actuelle de la commande, comme dans Réglages > Raccourcis ; en --text (le gris des textes discrets ferait 4,4:1 sur la ligne surlignée). */
+.pp-palette-key { flex: none; box-sizing: border-box; padding: 1px 6px; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface); font-family: var(--font-ui); font-size: 11.5px; color: var(--text); white-space: nowrap; }
+.pp-palette-row.is-active { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+/* Une commande que le bouton de la barre ne ferait pas ici : grisée, jamais retirée ; la raison est dans l'info-bulle et, surlignée, au bas de la fenêtre. */
+.pp-palette-row.is-off { color: var(--text-muted); cursor: not-allowed; }
+.pp-palette-row.is-off .pp-palette-key { color: var(--text-muted); }
+.pp-palette-empty { margin: 8px 0 12px; font-size: 12.5px; line-height: 1.45; color: var(--text-muted); overflow-wrap: anywhere; }
+.pp-palette-empty[hidden] { display: none; }
+/* Annonce aux lecteurs d'écran (nombre de résultats, commande indisponible), jamais affichée. */
+.pp-palette-live { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Bas de la fenêtre : les touches de la liste, ou la raison du grisé de la commande surlignée, puis « Fermer ». */
+/* Deux lignes de réserve : la raison d'un grisé tient en deux lignes, et le bas de la fenêtre ne change pas de hauteur d'une commande à l'autre (la liste ne bouge pas sous le doigt). */
+.pp-palette-hint { flex: 1 1 auto; min-width: 0; min-height: 2.8em; display: flex; align-items: center; font-size: 12px; line-height: 1.4; color: var(--text-muted); overflow-wrap: anywhere; }
+.pp-palette-hint.is-reason { font-weight: 600; color: var(--text); }
+.pp-palette-actions button { flex: none; }
