@@ -865,14 +865,17 @@
 #v2-heading-flyout .v2-numbering-block { padding: 10px 12px 8px; }
 #v2-heading-flyout .v2-numbering-label { margin-bottom: 8px; }
 #v2-heading-flyout .v2-segmented-btn { padding: 0 14px; font-size: 12.5px; white-space: nowrap; }
-/* Menu « Type d'export » : neuf types (PDF, PDF protégé, Word, PowerPoint, Excel, Markdown, Markdown (modèle) et les deux HTML) puis, pour les deux PDF, l'intitulé et les trois
+/* Menu « Type d'export » : dix types (PDF, PDF protégé, PDF/A, Word, PowerPoint, Excel, Markdown, Markdown (modèle) et les deux HTML) puis, pour les trois PDF, l'intitulé et les trois
    qualités. Au rythme des autres menus (lignes de 27 px, 3 px d'écart) elles finissaient sous le pli d'un panneau de 700×400 (onze lignes déjà à 436 px), où « Impression navigateur » et « Léger »
    n'étaient plus atteignables à la souris. Resserré pour ce menu seulement (ciblé par ID, comme #v2-heading-flyout) : lignes de 24 px (la taille minimale d'une cible, WCAG 2.5.8) sans écart
-   entre elles, le menu finit vers 390 px (avec 2 px d'écart, onze lignes finissaient à 390 px et douze à 416 px). La hauteur de ligne est fixée (`line-height`), pour que la police du système ne
-   la fasse pas varier d'un ordinateur à l'autre. */
-#v2-quality-flyout { gap: 0; }
+   entre elles, la hauteur de ligne fixée (`line-height`) pour que la police du système ne la fasse pas varier d'un ordinateur à l'autre. Avec neuf types le menu finissait vers 390 px ; le
+   dixième (PDF/A) l'a poussé à 412 px, sous le bas du panneau : les lignes ne bougent plus, ce sont les marges du menu et de ses deux intitulés qui sont reprises (2 px de remplissage au lieu de 4
+   en haut et en bas, intitulés à 4 px au-dessus et 2 px au-dessous, filet de séparation sans marge), et le menu finit vers 396 px. Une ligne de plus ne tiendrait plus : elle demanderait de revoir
+   la structure du menu (deux colonnes, ou une autre place pour les qualités), pas de resserrer encore. */
+#v2-quality-flyout { gap: 0; padding-top: 2px; padding-bottom: 2px; }
 #v2-quality-flyout .v2-hover-row { padding: 4px 9px; line-height: 16px; }
-#v2-quality-flyout .v2-hover-flyout-label { line-height: 14px; }
+#v2-quality-flyout .v2-hover-flyout-label { line-height: 14px; padding-top: 4px; padding-bottom: 2px; }
+#v2-quality-flyout .v2-hover-hsep { margin-top: 0; margin-bottom: 0; }
 /* Pas de petit point sous le bouton principal d'un groupe au survol : l'indice est retiré à dessein (`.v2-hover-group > button::after`), ne pas le
    remettre. Le bouton garde `aria-haspopup` et `aria-expanded` (js/editor-core.js). */
 /* Couleur de police et surlignage : deux boutons indépendants. Le premier (l'icône) applique directement la dernière couleur choisie, le second
