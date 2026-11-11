@@ -373,6 +373,9 @@ const SlideShow = (function () {
   async function start(fromCurrent) {
     if (run || launching) return;
     if (off) { SlidesEntry.explainOff(); return; }
+    // Un gros modèle qui se remplit par morceaux (js/main.js:fillOpenedPresentation) n'a pas encore toutes ses diapositives : le diaporama n'en montrerait que le début (11/11 : « 1 / 2 » pour 120 diapositives, F5 pressé sous le voile).
+    // Le geste ne part pas ; la phrase dit d'attendre la fin de l'ouverture (le voile dit où l'on en est), un nouveau geste lance alors le diaporama en plein écran, ce qu'une attente sans geste ne permettrait plus.
+    if (typeof ImportPlacing !== 'undefined' && ImportPlacing.isFilling()) { SlidesEntry.status(I18n.t('slides.show.filling')); return; }
     closeMenu(false);
     // Une présentation qui a des vues de diapositive (js/slide-view.js) garde le repère des diapositives que le texte vise : la copie que la vue montre se prend à cette adresse.
     const source = Editor.getHTML();

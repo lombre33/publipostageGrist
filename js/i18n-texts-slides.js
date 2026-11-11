@@ -198,6 +198,7 @@ const I18nTextsSlides = {
   'slides.show.exit': { fr: 'Quitter le diaporama (Échap)', en: 'Exit the slide show (Esc)' },
   'slides.show.end': { fr: 'Fin du diaporama. Un clic ou une touche pour quitter.', en: 'End of slide show. Click or press a key to exit.' },
   'slides.show.failed': { fr: 'Le diaporama n’a pas pu s’afficher : {message}', en: 'The slide show could not be shown: {message}' },
+  'slides.show.filling': { fr: 'La présentation est encore en train de s’ouvrir : lance le diaporama dans un instant.', en: 'The presentation is still opening: start the slide show in a moment.' },
   'slides.show.window.hint': { fr: 'Un clic ou une touche pour passer en plein écran.', en: 'Click or press a key to go full screen.' },
   'slides.show.window.blocked': { fr: 'Le navigateur a bloqué la fenêtre du diaporama : il s’affiche dans le panneau.', en: 'The browser blocked the slide show window: it is shown in the panel.' },
   'slides.show.window.closed': { fr: 'Le diaporama est terminé. Cette fenêtre peut être fermée.', en: 'The slide show is over. This window can be closed.' },
