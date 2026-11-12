@@ -14,6 +14,7 @@
 //   --poser-politique  les écrit dans la liste (gfs.politique.scriptSrc de package.json), sans réseau (le relevé est déjà là : la liste refaite par une fusion, une version montée).
 // La page n'est plus écrite ici : la carte d'importation et le script-src d'index.html sont écrits par l'outil du kit (node kit/outils/bibliotheques.mjs) d'après la liste, un seul écrivain ; après --ecrire
 // ou --poser-politique, le relancer. Ordre d'une montée de version : la liste (dependencies), l'outil du kit, --ecrire (réseau), l'outil du kit de nouveau.
+// La carte que ce relevé suit est celle des CDN : une balise <script type="importmap">, ou le bloc de données `gfs-carte-cdn` quand la page porte aussi la copie de l'éditeur (gfs.copie, consigne 066 de GFS).
 // Le relevé est gardé hors ligne par dev-tests/verify-code-hygiene.mjs : la carte d'importation ne peut plus changer sans que le relevé soit refait, et le relevé ne contient aucune version flottante.
 // Une alerte se lit « le code que le widget charge n'est plus celui que j'ai relevé » : voir la fiche de crise de SECURITY.md (couper la source, retirer le module de la carte, republier).
 //
@@ -35,12 +36,29 @@ export const BROWSERS = {
   safari: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15',
 };
 
+// Les cartes d'importation d'une page. Écrite à la main, une balise <script type="importmap"> ; quand la liste déclare une copie de l'éditeur (gfs.copie, consigne 066 de GFS), l'outil du kit écrit à sa place
+// deux blocs de données, <script type="application/json"> (`gfs-carte-cdn` : celle des CDN, ce que ce relevé suit ; `gfs-carte-copie` : celle de la copie dans vendor/editeur), qu'un petit script de la page
+// choisit au démarrage (une page ne garde qu'une carte). Le texte de la carte des CDN, ou null.
+export function importMapText(html) {
+  const match = html.match(/<script type="importmap">([\s\S]*?)<\/script>|<script type="application\/json" id="gfs-carte-cdn">([\s\S]*?)<\/script>/);
+  return match ? (match[1] !== undefined ? match[1] : match[2]) : null;
+}
+// Le texte de la carte de la copie, ou null quand la page n'en a pas.
+export function copyMapText(html) {
+  const match = html.match(/<script type="application\/json" id="gfs-carte-copie">([\s\S]*?)<\/script>/);
+  return match ? match[1] : null;
+}
+// La carte des CDN, lue (les `imports`).
+export function importMapOf(html) {
+  const text = importMapText(html);
+  if (text === null) throw new Error('carte d\'importation introuvable dans index.html');
+  return JSON.parse(text).imports;
+}
+
 // La partie de la carte d'importation qui touche esm.sh : les adresses qu'elle fait charger (valeurs) et celles qu'elle remplace (clés). Le reste (les modules du kit de GFS) change avec son
 // propre sous-module et ne concerne pas ce relevé.
 export function esmImports(html, origin = ORIGIN) {
-  const match = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
-  if (!match) throw new Error('carte d\'importation introuvable dans index.html');
-  const all = JSON.parse(match[1]).imports;
+  const all = importMapOf(html);
   const mine = {};
   for (const key of Object.keys(all).sort()) if (key.startsWith(origin + '/') || all[key].startsWith(origin + '/')) mine[key] = all[key];
   return mine;

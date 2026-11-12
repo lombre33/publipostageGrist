@@ -7,7 +7,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
 
 ## L'essentiel
 
-- **Une page statique.** `index.html`, `js/`, `css/`, `extensions/` et `kit/` sont servis tels quels par GitHub Pages ; Grist les
+- **Une page statique.** `index.html`, `js/`, `css/`, `extensions/`, `kit/` et `vendor/` sont servis tels quels par GitHub Pages ; Grist les
   charge dans un cadre et le widget demande l'accès complet au document, une seule fois (`grist.ready`,
   `js/grist-api.js`), pour les raisons que dit le [README](README.md#sécurité-et-permissions). Pas d'étape
   de construction, pas de serveur à nous.
@@ -31,7 +31,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   assemblé (Yjs et les extensions de TipTap qui s'en servent) ; pour la lecture d'un PDF, un seul module aussi
   (pdf.js et son moteur). Les modules sont chargés par `<script type="module">` avec leur empreinte, que ni la
   carte d'importation ni la politique de sécurité du contenu ne nomment.
-- **L'éditeur** (TipTap sur ProseMirror) se charge par `import()` depuis l'import map de `index.html`.
+- **L'éditeur** (TipTap sur ProseMirror) se charge par `import()` depuis l'import map de `index.html` : celle des CDN (`esm.sh`), ou celle de sa copie figée (`vendor/editeur/`, avec ses licences et son manifeste d'empreintes) quand l'adresse dit `copie=editeur` ou que la case « Éditeur hors ligne » de Réglages est cochée ; un petit script en ligne pose l'une des deux avant tout le reste.
   **Chaque export** charge sa bibliothèque au premier usage, avec une empreinte (SRI) que le navigateur
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
@@ -47,8 +47,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
 Dans l'ordre, une dizaine de minutes chacun :
 
 1. `index.html` : la politique de sécurité du contenu (`<meta http-equiv="Content-Security-Policy">`),
-   l'import map, l'ordre des scripts, les deux petits scripts en ligne (leurs empreintes, et celle de
-   l'import map, sont dans la politique). Elle garde aussi les adresses exactes de Plotly et d'ECharts, que GFS donne à l'extension
+   les import maps (celle des CDN et celle de la copie de l'éditeur, que choisit un petit script), l'ordre des scripts, les trois petits scripts en ligne (leurs empreintes, et celles des import maps, sont dans la politique). Elle garde aussi les adresses exactes de Plotly et d'ECharts, que GFS donne à l'extension
    du graphique et que le widget seul ne charge jamais (le commentaire au-dessus de la balise dit pourquoi).
 2. `js/grist-api.js` : tout ce que le widget lit et écrit dans Grist (démarrage, lecture des tables, clés de
    correspondance, sonde de l'e-mail).
@@ -475,7 +474,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
 
 ## The essentials
 
-- **A static page.** `index.html`, `js/`, `css/`, `extensions/` and `kit/` are served as they are by GitHub Pages; Grist loads them
+- **A static page.** `index.html`, `js/`, `css/`, `extensions/`, `kit/` and `vendor/` are served as they are by GitHub Pages; Grist loads them
   in a frame and the widget asks for full access to the document, once (`grist.ready`, `js/grist-api.js`),
   for the reasons given in the [README](README.md#security-and-permissions). No build step, no server of
   our own.
@@ -498,7 +497,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   module (Yjs and the TipTap extensions that use it); for PDF reading, a single module too (pdf.js and its engine). The
   modules are loaded by `<script type="module">` with their integrity hash, which neither the import map nor the content
   security policy names.
-- **The editor** (TipTap on ProseMirror) is loaded with `import()` from the import map of `index.html`.
+- **The editor** (TipTap on ProseMirror) is loaded with `import()` from the import map of `index.html`: the CDN one (`esm.sh`), or the one for its frozen copy (`vendor/editeur/`, with its licenses and its hash manifest) when the address says `copie=editeur` or the “Offline editor” checkbox in Settings is ticked; a small inline script sets one of the two before anything else.
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
@@ -512,7 +511,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
 In order, about ten minutes each:
 
 1. `index.html`: the Content Security Policy (`<meta http-equiv="Content-Security-Policy">`), the import
-   map, the order of the scripts, the two small inline scripts (their hashes, and the import map's, are in
+   maps (the CDN one and the editor copy's, which a small script chooses between), the order of the scripts, the three small inline scripts (their hashes, and the import maps', are in
    the policy). It also keeps the exact addresses of Plotly and ECharts, which GFS gives to the chart extension and which
    the widget alone never loads (the comment above the tag says why).
 2. `js/grist-api.js`: everything the widget reads and writes in Grist (startup, reading tables, matching

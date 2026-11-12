@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { check, summarizeAndExit } from './unit-harness.mjs';
-import { floatingVersion, resolveSpecifier, specifiersOf, esmImports, importMapDigest, crawl, consolidate, buildManifest, compare, scriptSources, withListSources } from '../outils/empreintes-editeur.mjs';
+import { floatingVersion, resolveSpecifier, specifiersOf, esmImports, importMapText, copyMapText, importMapOf, importMapDigest, crawl, consolidate, buildManifest, compare, scriptSources, withListSources } from '../outils/empreintes-editeur.mjs';
 
 // ---- 1. Versions flottantes et versions exactes
 const exact = [
@@ -106,6 +106,17 @@ const html = `<script type="importmap">{"imports":{"kit/x":"./kit/js/x.js?v=1","
 const mine = esmImports(html);
 check('carte : seules les entrées qui touchent esm.sh sont retenues (le kit de GFS change avec son propre sous-module), triées', JSON.stringify(Object.keys(mine)) === JSON.stringify(['@a/b', 'https://esm.sh/c@^1.0.0?target=es2022']), JSON.stringify(Object.keys(mine)));
 check('carte : son empreinte change dès qu\'une entrée change (le relevé est alors à refaire), pas quand le kit change', importMapDigest(mine) === importMapDigest(esmImports(html.replace('x.js?v=1', 'x.js?v=2'))) && importMapDigest(mine) !== importMapDigest(esmImports(html.replace('c@1.2.3', 'c@1.2.4'))));
+
+// La page à DEUX cartes (la copie figée de l'éditeur, consigne 066 de GFS) : l'outil du kit écrit la carte des CDN (`gfs-carte-cdn`) et celle de la copie (`gfs-carte-copie`) en données, un script de la page en pose une.
+// Le relevé suit la carte des CDN, jamais celle de la copie (ses adresses sont celles du dossier vendor/editeur).
+const twoMaps = '<script type="application/json" id="gfs-carte-cdn">\n{"imports":{"kit/x":"./kit/js/x.js?v=1","@a/b":"https://esm.sh/@a/b@1.0.0","https://esm.sh/c@^1.0.0?target=es2022":"https://esm.sh/c@1.2.3?target=es2022"}}\n</script>\n'
+  + '<script type="application/json" id="gfs-carte-copie">\n{"imports":{"kit/x":"./kit/js/x.js?v=1","@a/b":"./vendor/editeur/a__b.js?v=abcd1234"}}\n</script>\n'
+  + '<script>(function () { var carte = document.createElement(\'script\'); carte.type = \'importmap\'; document.head.appendChild(carte); })();</script>';
+check('carte : une page à deux cartes (copie de l\'éditeur) donne à esmImports celle des CDN, jamais celle de la copie ; le texte de la copie se lit à part, et une page à une seule carte n\'en a pas',
+  JSON.stringify(esmImports(twoMaps)) === JSON.stringify(mine) && importMapDigest(esmImports(twoMaps)) === importMapDigest(mine) && /vendor\/editeur/.test(copyMapText(twoMaps)) && !/vendor\/editeur/.test(importMapText(twoMaps)) && copyMapText(html) === null,
+  JSON.stringify({ cdn: Object.keys(esmImports(twoMaps)), copie: copyMapText(twoMaps) }));
+check('carte : le script qui pose la carte (`carte.type = \'importmap\'`) n\'est pas pris pour une carte, et une page sans carte est une erreur nommée',
+  importMapText('<script>carte.type = \'importmap\'</script>') === null && (() => { try { importMapOf('<html></html>'); return ''; } catch (error) { return error.message; } })().includes('carte d\'importation introuvable'));
 
 // ---- 6. Les sources d'esm.sh de la politique de sécurité du contenu
 const addresses = [

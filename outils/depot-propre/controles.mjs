@@ -43,8 +43,10 @@ const read = rel => readFileSync(join(root, rel), 'utf8');
 
 // Les polices embarquées (base64) : des suites de lettres au hasard qui ressemblent à n'importe quel motif. Elles ne sont lues pour aucun contrôle de texte.
 const FONT_DATA = /(^|\/)(pdf-fonts[^/]*\.js|roboto-fonts\.css)$/;
+// vendor/ : du code de tiers, minifié, construit par l'outil du kit (la copie figée de l'éditeur, consigne 066 de GFS) ; il n'est pas écrit à la main, aucun contrôle de texte ne le lit (ses licences et son manifeste sont gardés ailleurs : ci-dessous).
+const THIRD_PARTY = /^vendor\//;
 const TEXT_EXT = new Set(['.html', '.js', '.mjs', '.css', '.json', '.md', '.py', '.svg', '.txt', '']);
-const textFiles = files.filter(file => TEXT_EXT.has(extname(file.rel).toLowerCase()) && !FONT_DATA.test(file.rel) && file.size < 3_000_000);
+const textFiles = files.filter(file => TEXT_EXT.has(extname(file.rel).toLowerCase()) && !FONT_DATA.test(file.rel) && !THIRD_PARTY.test(file.rel) && file.size < 3_000_000);
 
 // Retourne « fichier:ligne » pour chaque ligne qui correspond, au plus `limit` par motif.
 function grep(pattern, selection = textFiles) {
@@ -73,7 +75,7 @@ for (const required of ['index.html', 'LICENSE', 'README.md', 'SECURITY.md', 'CO
 const NEVER = ['dev-tests', 'planning', 'prototypes', 'templates-gallery-dev', 'outils', '.claude', 'AUDIT_CODE.md', 'CAHIER_DES_CHARGES.md', 'GFS-ETAT.md', 'package.json', 'bibliotheques'];
 const topLevel = new Set(files.map(file => file.rel.split('/')[0]));
 for (const name of NEVER) if (topLevel.has(name)) fail(`entrée du dépôt de développement présente à la racine : ${name}`);
-const KNOWN = new Set(['index.html', 'css', 'js', 'extensions', 'img', 'templates-gallery', 'screenshots', 'kit', 'beta', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'PATCH_NOTES.md', 'NOTICE', 'CARTE_DU_CODE.md', '.github', '.gitignore', '.gitattributes', '.nojekyll']);
+const KNOWN = new Set(['index.html', 'css', 'js', 'extensions', 'img', 'templates-gallery', 'screenshots', 'kit', 'vendor', 'beta', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'PATCH_NOTES.md', 'NOTICE', 'CARTE_DU_CODE.md', '.github', '.gitignore', '.gitattributes', '.nojekyll']);
 for (const name of topLevel) if (!KNOWN.has(name) && !NEVER.includes(name)) warn(`entrée inconnue à la racine : ${name} (à classer dans publier.sh et dans controles.mjs)`);
 // Le kit de Grist Factory (kit/, sous-module du dépôt de développement, ici en fichiers : publier.sh) : un sous-module vide (.gitmodules sans fichiers) ne servirait rien, et le dépôt public n'a pas de sous-module.
 if (has('.gitmodules')) fail('.gitmodules présent : le dépôt public n\'a pas de sous-module, le kit y est en fichiers (publier.sh)');
@@ -82,6 +84,18 @@ if (has('.gitmodules')) fail('.gitmodules présent : le dépôt public n\'a pas 
   const KIT_FILES = ['kit/js/ambiance-message.js', 'kit/js/ambiance-pose.js', 'kit/js/once.js'];
   const cited = [...new Set(grep(/\bkit\/js\//, textFiles.filter(file => file.rel === 'index.html' || file.rel.startsWith('js/'))).map(hit => hit.file))];
   if (cited.length) for (const file of KIT_FILES) if (!has(file)) fail(`${cited.join(', ')} cite le kit, mais ${file} est absent de l'arbre (publier.sh doit y poser le kit : css, js et LICENSE)`);
+}
+
+// La copie figée de l'éditeur (vendor/editeur, consigne 066 de GFS) : si la page en cite des modules (sa carte « gfs-carte-copie »), le dossier part avec elle, avec ses licences et son manifeste - sinon la case
+// « Éditeur hors ligne » de Réglages rendrait une page sans éditeur.
+if (has('index.html')) {
+  const copyMap = (read('index.html').match(/<script type="application\/json" id="gfs-carte-copie">([\s\S]*?)<\/script>/) || [])[1];
+  if (copyMap !== undefined) {
+    let cited = [];
+    try { cited = [...new Set(Object.values(JSON.parse(copyMap).imports).filter(address => address.startsWith('./vendor/')).map(address => address.slice(2).replace(/\?.*$/, '')))]; } catch (e) { fail('index.html : la carte de la copie (gfs-carte-copie) n\'est pas du JSON'); }
+    for (const rel of cited) if (!has(rel)) fail(`index.html cite ${rel} (la copie de l'éditeur), mais il est absent de l'arbre (publier.sh doit y poser vendor)`);
+    if (cited.length) for (const rel of ['vendor/editeur/LICENCES.txt', 'vendor/editeur/COPIE.json']) if (!has(rel)) fail(`${rel} est absent de l'arbre : la copie de l'éditeur part avec ses licences et son manifeste (consigne 066 de GFS)`);
+  }
 }
 
 if (has('LICENSE')) {
@@ -321,6 +335,7 @@ if (has('README.md')) {
     pp_alt_reminder: ['rappel des images sans texte alternatif', 'reminder about images without alternative text'],
     pp_variable_tip: ['info-bulle de valeur d\'une variable', 'variable value tooltip'],
     pp_last_mode: ['dernier mode choisi (édition ou lecture)', 'last mode chosen (edit or read)'],
+    pp_editeur_copie: ['éditeur hors ligne', 'offline editor'],
     pp_trigger_char: ['touches', 'keys'],
     pp_expansion_char: ['touches', 'keys'],
     pp_shortcuts: ['raccourcis', 'shortcuts'],

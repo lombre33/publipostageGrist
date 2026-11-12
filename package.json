@@ -336,6 +336,11 @@
         }
       ]
     },
+    "copie": {
+      "fonction": "editeur",
+      "dossier": "vendor/editeur",
+      "cle": "pp_editeur_copie"
+    },
     "code": {
       "dossiers": [
         "js",

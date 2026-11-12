@@ -30,7 +30,9 @@ ICI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Ce qui part sur le dépôt public, tel que le dépôt de développement le suit.
 # .nojekyll (un fichier vide) part avec le reste : le dépôt public a son propre site (GitHub Pages) et, sans lui, Pages passe les .md dans Jekyll
 # avant de publier ; une accolade double ouverte dans un .md fait alors échouer la publication, et le site reste sur la version d'avant (consigne 037 de GFS).
-PUBLIES=(index.html css js extensions img templates-gallery LICENSE .nojekyll kit)
+# vendor/ : la copie figée de l'éditeur (vendor/editeur, consigne 066 de GFS, construite par l'outil du kit) ; la page publique en cite les modules dans sa carte « copie » (case « Éditeur hors ligne » de Réglages),
+# donc elle part avec la page, avec ses licences (LICENCES.txt) et son manifeste (COPIE.json) ; c'est du code de tiers, minifié : les contrôles de texte ne le lisent pas.
+PUBLIES=(index.html css js extensions img templates-gallery LICENSE .nojekyll kit vendor)
 # Ce qui ne part jamais (les documents publics viennent de public/, pas du README du dépôt de développement). .gitmodules : le dépôt public n'a pas de sous-module,
 # et son adresse nomme le compte du dépôt de développement ; le kit part en fichiers (KIT_PARTIES ci-dessous).
 # package.json (la liste unique des bibliothèques, consignes 063 et 067 de GFS) et bibliotheques/ (son catalogue) restent dans le dépôt de développement : les poser dans le dépôt public, pour Dependabot, est une décision à part.

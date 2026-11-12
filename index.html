@@ -59,6 +59,7 @@
     https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js
     https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
     'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-P9ZLRRWMLqXkb/9FwZGB27z3ElRFaLmJ8FzqfJVeliw='
+    'sha256-BiuAFunOAIaPe2+70OACSJYmh2KaqEoJ/3/lAKyFUgI=' 'sha256-NOQDvFtAZJzyogwgFo789ZWtP6KbE82bIykO7VsHKO0='
     'sha256-dr2nJ9qlSEpVpFpN01rgQ3bZHAcSZWrebqvX0xSlX7I=';
   object-src 'none'; base-uri 'none'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; form-action 'none'">
 <!-- Enregistrement automatique coupé (pp_autosave_enabled = 'false', cf. js/main.js:isAutosaveEnabled) : le bouton Enregistrer est noir et blanc dès le PREMIER affichage, pas bleu le temps que
@@ -93,8 +94,12 @@
      outils/empreintes-editeur.mjs --verifier refuse toute adresse flottante du parcours ; dev-tests/verify-code-hygiene.mjs garde le releve hors ligne.
      Les deux premieres entrees sont celles du kit de Grist Factory (sous-module kit/, consigne 041 de GFS : l'ambiance choisie dans GFS) : un module du kit n'a qu'UNE adresse par page
      (kit/js/once.js le dit dans la console sinon), donc js/gfs-link.js et js/gfs-ambiance.js l'importent par ce nom, jamais par un chemin. Le ?v= est le debut du commit que le depot
-     epingle (git ls-files -s kit) : il change avec lui, dans la liste (gfs.carte.fixes) comme ici, et l'empreinte de la carte dans la politique ci-dessus avec. -->
-<script type="importmap">
+     epingle (git ls-files -s kit) : il change avec lui, dans la liste (gfs.carte.fixes) comme ici, et l'empreinte de la carte dans la politique ci-dessus avec.
+     Depuis la consigne 066 de GFS, la page porte DEUX cartes en donnees : celle-ci (gfs-carte-cdn) et gfs-carte-copie, les memes noms vers les modules de vendor/editeur/ (la copie figee de l'editeur, construite
+     par `node kit/outils/bibliotheques.mjs --copies` d'apres les memes versions). Le script qui les suit en pose UNE seule dans la page, avant tout le reste (Firefox n'en prend qu'une) : la copie quand l'adresse
+     dit copie=editeur (GFS la met quand la personne l'a choisie) ou quand la cle pp_editeur_copie du navigateur vaut « copie » (Reglages > Theme > Editeur hors ligne, js/settings.js), le CDN sinon.
+     Rien de ces deux cartes ni du script ne s'ecrit a la main : l'outil les refait avec leurs empreintes dans la politique ci-dessus. -->
+<script type="application/json" id="gfs-carte-cdn">
 {
   "imports": {
     "kit/ambiance-message": "./kit/js/ambiance-message.js?v=2feec25",
@@ -159,6 +164,66 @@
   }
 }
 </script>
+<script type="application/json" id="gfs-carte-copie">
+{
+  "imports": {
+    "kit/ambiance-message": "./kit/js/ambiance-message.js?v=2feec25",
+    "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=2feec25",
+    "https://esm.sh/@floating-ui/dom@^1.0.0?target=es2022": "https://esm.sh/@floating-ui/dom@1.8.0?target=es2022",
+    "https://esm.sh/@floating-ui/core@^1.6.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
+    "https://esm.sh/@floating-ui/core@^1.8.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
+    "https://esm.sh/@floating-ui/utils@^0.2.8?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12?target=es2022",
+    "https://esm.sh/@floating-ui/utils@^0.2.12?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12?target=es2022",
+    "https://esm.sh/@floating-ui/utils@^0.2.8/dom?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12/dom?target=es2022",
+    "https://esm.sh/@floating-ui/utils@^0.2.12/dom?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12/dom?target=es2022",
+    "https://esm.sh/linkifyjs@^4.3.3?target=es2022": "https://esm.sh/linkifyjs@4.4.0?target=es2022",
+    "prosemirror-model": "./vendor/editeur/prosemirror-model.js?v=ff62a9a2",
+    "orderedmap": "./vendor/editeur/orderedmap.js?v=6cd0b6e1",
+    "prosemirror-state": "./vendor/editeur/prosemirror-state.js?v=f90b686c",
+    "prosemirror-transform": "./vendor/editeur/prosemirror-transform.js?v=7aab8ea7",
+    "prosemirror-view": "./vendor/editeur/prosemirror-view.js?v=446e17b6",
+    "rope-sequence": "./vendor/editeur/rope-sequence.js?v=83945a01",
+    "prosemirror-history": "./vendor/editeur/prosemirror-history.js?v=347ec3b6",
+    "prosemirror-keymap": "./vendor/editeur/prosemirror-keymap.js?v=25b46455",
+    "w3c-keyname": "./vendor/editeur/w3c-keyname.js?v=2270224f",
+    "prosemirror-commands": "./vendor/editeur/prosemirror-commands.js?v=f951b30f",
+    "prosemirror-schema-list": "./vendor/editeur/prosemirror-schema-list.js?v=416887b3",
+    "prosemirror-tables": "./vendor/editeur/prosemirror-tables.js?v=2f2dc66d",
+    "prosemirror-gapcursor": "./vendor/editeur/prosemirror-gapcursor.js?v=ad4f3c8e",
+    "prosemirror-dropcursor": "./vendor/editeur/prosemirror-dropcursor.js?v=3ec62eb4",
+    "prosemirror-inputrules": "./vendor/editeur/prosemirror-inputrules.js?v=cfaa69dc",
+    "prosemirror-changeset": "./vendor/editeur/prosemirror-changeset.js?v=8bfede48",
+    "@tiptap/core": "./vendor/editeur/tiptap__core.js?v=7a287e83",
+    "@tiptap/starter-kit": "./vendor/editeur/tiptap__starter-kit.js?v=338d19af",
+    "@tiptap/extension-document": "./vendor/editeur/tiptap__extension-document.js?v=d3deccc2",
+    "@tiptap/extension-underline": "./vendor/editeur/tiptap__extension-underline.js?v=fa75e8a3",
+    "@tiptap/extension-text-align": "./vendor/editeur/tiptap__extension-text-align.js?v=e6ca142b",
+    "@tiptap/extension-text-style": "./vendor/editeur/tiptap__extension-text-style.js?v=07a7feb0",
+    "@tiptap/extension-font-family": "./vendor/editeur/tiptap__extension-font-family.js?v=17feae41",
+    "@tiptap/extension-table": "./vendor/editeur/tiptap__extension-table.js?v=afd79b67",
+    "@tiptap/extension-table-row": "./vendor/editeur/tiptap__extension-table-row.js?v=4fadf657",
+    "@tiptap/extension-table-cell": "./vendor/editeur/tiptap__extension-table-cell.js?v=8292572c",
+    "@tiptap/extension-table-header": "./vendor/editeur/tiptap__extension-table-header.js?v=b1f12d77",
+    "@tiptap/extension-task-list": "./vendor/editeur/tiptap__extension-task-list.js?v=37134a8f",
+    "@tiptap/extension-task-item": "./vendor/editeur/tiptap__extension-task-item.js?v=ca7c3329",
+    "@tiptap/extension-placeholder": "./vendor/editeur/tiptap__extension-placeholder.js?v=33d6a8b3",
+    "@tiptap/suggestion": "./vendor/editeur/tiptap__suggestion.js?v=2dbafcba",
+    "@floating-ui/dom": "./vendor/editeur/floating-ui__dom.js?v=eb36d1fb",
+    "@handlewithcare/prosemirror-suggest-changes": "./vendor/editeur/handlewithcare__prosemirror-suggest-changes.js?v=4fd9ad50"
+  }
+}
+</script>
+<script>
+(function () {
+  var fonction = "editeur", cle = "pp_editeur_copie", copie = false;
+  try { copie = (new URLSearchParams(location.search).get('copie') || '').split(',').indexOf(fonction) >= 0; } catch (e) { /* adresse illisible : le CDN */ }
+  try { if (!copie && cle !== null) copie = localStorage.getItem(cle) === 'copie'; } catch (e) { /* stockage indisponible : le CDN */ }
+  var carte = document.createElement('script');
+  carte.type = 'importmap';
+  carte.textContent = document.getElementById(copie ? 'gfs-carte-copie' : 'gfs-carte-cdn').textContent;
+  document.head.appendChild(carte);
+})();
+</script>
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.69">
 <link rel="stylesheet" href="css/style.css?v=0.107">
 <link rel="stylesheet" href="css/reader-guide.css?v=0.5">
@@ -191,7 +256,7 @@
 <link rel="stylesheet" href="css/script-marks.css?v=0.2">
 <link rel="stylesheet" href="css/tab-indent.css?v=0.1">
 <link rel="stylesheet" href="css/qr-code.css?v=0.4">
-<link rel="stylesheet" href="css/alt-text.css?v=0.2">
+<link rel="stylesheet" href="css/alt-text.css?v=0.3">
 <link rel="stylesheet" href="css/chart-frame.css?v=0.1">
 <link rel="stylesheet" href="css/linked-table.css?v=0.2">
 <link rel="stylesheet" href="css/image-reshape.css?v=0.1">
@@ -260,7 +325,7 @@
 <link rel="preload" as="script" href="js/i18n-texts-review.js?v=0.2">
 <link rel="preload" as="script" href="js/i18n-texts-slides.js?v=0.2">
 <link rel="preload" as="script" href="js/i18n-texts-motion.js?v=0.1">
-<link rel="preload" as="script" href="js/i18n-texts-settings.js?v=0.6">
+<link rel="preload" as="script" href="js/i18n-texts-settings.js?v=0.7">
 <link rel="preload" as="script" href="js/i18n-texts-status.js?v=0.5">
 <link rel="preload" as="script" href="js/i18n-texts-variables.js?v=0.5">
 <link rel="preload" as="script" href="js/i18n-texts-eml.js?v=0.1">
@@ -352,7 +417,7 @@
 <link rel="preload" as="script" href="js/template-gallery.js?v=0.16">
 <link rel="preload" as="script" href="js/template-pack.js?v=0.5">
 <link rel="preload" as="script" href="js/template-gallery-modal.js?v=0.12">
-<link rel="preload" as="script" href="js/settings.js?v=0.27">
+<link rel="preload" as="script" href="js/settings.js?v=0.28">
 <link rel="preload" as="script" href="js/condition-rules.js?v=0.18">
 <link rel="preload" as="script" href="js/condition-fields.js?v=0.25">
 <link rel="preload" as="script" href="js/modal-base.js?v=0.7">
@@ -1056,6 +1121,20 @@
           <p class="settings-access-hint" id="settings-alt-reminder-hint" data-i18n="settings.accessibility.altReminderHint">Éteint, rien ne change. Allumé, un export Word, PowerPoint, HTML ou Markdown s’arrête une fois pour dire combien d’images n’ont pas de texte alternatif (une image décorative n’en a pas besoin), même pour un lot entier. Le PDF n’écrit pas de texte alternatif : il n’est pas concerné.</p>
           <p class="settings-access-hint" data-i18n="settings.accessibility.perBrowser">Ce choix est propre à ce navigateur, comme la langue et le thème.</p>
         </section>
+        <!-- Éditeur hors ligne (js/settings.js:syncOfflineEditor, consigne 066 de GFS) : l'éditeur démarre depuis la copie rangée dans vendor/editeur au lieu d'esm.sh. Le script de index.html choisit la carte d'importation avant tout le reste : la case écrit la clé du navigateur (pp_editeur_copie) et le changement attend un rechargement. Hébergée par GFS, ou quand l'adresse du widget demande déjà la copie (copie=editeur), la case est grisée, montre ce qui est en vigueur, et une phrase dit où se fait le choix ; cachées autrement. -->
+        <section class="settings-section settings-theme-section" aria-labelledby="settings-offline-editor-title">
+          <h4 class="settings-section-title" id="settings-offline-editor-title" data-i18n="settings.offlineEditor.title">Éditeur hors ligne</h4>
+          <p class="settings-panel-intro" data-i18n="settings.offlineEditor.intro">L’éditeur de texte se télécharge depuis esm.sh à chaque démarrage. Sa copie hors ligne, rangée avec l’app, le fait démarrer sans rien demander à esm.sh : utile derrière un pare-feu qui bloque ce site.</p>
+          <label class="settings-alt-reminder" id="settings-offline-editor-label" for="settings-offline-editor"><input type="checkbox" id="settings-offline-editor" aria-describedby="settings-offline-editor-hint"><span data-i18n="settings.offlineEditor.label">Utiliser la copie hors ligne de l’éditeur</span></label>
+          <p class="settings-access-hint" id="settings-offline-editor-hint" data-i18n="settings.offlineEditor.hint">Les exports PDF, Word et Excel gardent leurs propres bibliothèques, téléchargées au premier export.</p>
+          <p class="settings-access-hint" id="settings-offline-editor-per-browser" data-i18n="settings.offlineEditor.perBrowser">Ce choix est propre à ce navigateur, comme la langue et le thème, et prend effet au prochain démarrage.</p>
+          <p class="settings-access-hint" id="settings-offline-editor-gfs-note" data-i18n="settings.offlineEditor.gfsNote" hidden>Dans Grist Factory Suite, ce choix se fait dans la fenêtre « Apps et extensions » (ligne Éditeur) et prend effet au prochain démarrage de l’app.</p>
+          <p class="settings-access-hint" id="settings-offline-editor-address-note" data-i18n="settings.offlineEditor.addressNote" hidden>L’adresse du widget demande déjà la copie (copie=editeur) : pour choisir ici, retirez ce paramètre de l’adresse.</p>
+          <p class="settings-trigger-reload-notice" id="settings-offline-editor-reload-notice" hidden>
+            <span data-i18n="settings.triggerKey.reloadNotice">Rechargez la page pour appliquer ce changement.</span>
+            <button type="button" id="settings-offline-editor-reload-btn" data-i18n="settings.triggerKey.reloadButton">Recharger maintenant</button>
+          </p>
+        </section>
       </div>
       <div class="settings-panel" data-settings-panel="triggerKey" hidden>
         <p class="settings-panel-intro" id="settings-trigger-intro" data-i18n="settings.triggerKey.intro">Caractère à taper dans le texte pour ouvrir la liste des variables et des Puces.</p>
@@ -1273,7 +1352,7 @@
 <script src="js/i18n-texts-review.js?v=0.2"></script>
 <script src="js/i18n-texts-slides.js?v=0.2"></script>
 <script src="js/i18n-texts-motion.js?v=0.1"></script>
-<script src="js/i18n-texts-settings.js?v=0.6"></script>
+<script src="js/i18n-texts-settings.js?v=0.7"></script>
 <script src="js/i18n-texts-status.js?v=0.5"></script>
 <script src="js/i18n-texts-variables.js?v=0.5"></script>
 <script src="js/i18n-texts-eml.js?v=0.1"></script>
@@ -1384,7 +1463,7 @@
 <script src="js/template-gallery.js?v=0.16"></script>
 <script src="js/template-pack.js?v=0.5"></script>
 <script src="js/template-gallery-modal.js?v=0.12"></script>
-<script src="js/settings.js?v=0.27"></script>
+<script src="js/settings.js?v=0.28"></script>
 <script src="js/condition-rules.js?v=0.18"></script>
 <script src="js/condition-fields.js?v=0.25"></script>
 <script src="js/modal-base.js?v=0.7"></script>

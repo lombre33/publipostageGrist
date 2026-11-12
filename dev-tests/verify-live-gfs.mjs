@@ -15,6 +15,7 @@
 // Lancé par run-headless.mjs (groupe Node "liveGfs", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-live-gfs.mjs (le fichier assemblé : bash dev-tests/offline-deps.sh)
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { importMapText, copyMapText } from '../outils/empreintes-editeur.mjs';
 import { startKit, ROOT, LIVE_PATH, liveIntegrity, liveFileExists, editorText, until, dialogShown, dialogGone, dialogInfo, pressDialogButton, startLive, converge, typeAt } from './live-test-kit.mjs';
 
 let total = 0, failures = 0;
@@ -38,11 +39,13 @@ const KEYS = ['yjs', 'y-protocols/awareness', '@tiptap/y-tiptap', '@tiptap/exten
 
 console.log('\n== 1) Ce que l\'app nomme ==');
 const indexHtml = readFileSync(join(ROOT, 'index.html'), 'utf8');
-const importMap = JSON.parse(/<script type="importmap">\s*([\s\S]*?)<\/script>/.exec(indexHtml)[1]);
+// Les cartes de la page : celle des CDN et, depuis la copie figée de l'éditeur (consigne 066 de GFS), celle de la copie (`gfs-carte-copie`) : aucune des deux ne nomme un des six paquets.
+const importMaps = [importMapText(indexHtml), copyMapText(indexHtml)].filter(text => text !== null).map(text => JSON.parse(text).imports);
+const mapEntries = importMaps.flatMap(imports => Object.keys(imports).concat(Object.values(imports)));
 const policy = /<meta http-equiv="Content-Security-Policy" content="([^"]*)"/.exec(indexHtml)[1];
-const named = SIX.filter(name => Object.keys(importMap.imports).concat(Object.values(importMap.imports)).some(entry => entry === name || entry.includes('/' + name + '@') || entry.includes('/' + name + '/') || entry.startsWith(name + '/')));
-check('la carte d\'importation d\'index.html ne nomme aucun des six paquets (ni leurs sous-chemins)', named.length === 0, named);
-// « yjs » seul (voir le contrôle d'après) : `linkifyjs`, une source de script-src de l'éditeur, se termine par ces lettres.
+const named = SIX.filter(name => mapEntries.some(entry => entry === name || entry.includes('/' + name + '@') || entry.includes('/' + name + '/') || entry.startsWith(name + '/')));
+check('les cartes d\'importation d\'index.html (celle des CDN, celle de la copie de l\'éditeur) ne nomment aucun des six paquets (ni leurs sous-chemins)', importMaps.length >= 1 && named.length === 0, named);
+// La politique ne nomme aucun dossier de l'app, pas même `vendor/editeur` (la copie de l'éditeur, consigne 066) : ses sources sont des CDN et 'self'. « yjs » seul (voir le contrôle d'après) : `linkifyjs` en est une source.
 check('la politique de sécurité du contenu ne nomme ni GFS, ni un fichier d\'extension : le fichier de GFS passe par \'self\'', !/gfs|edition|vendor|(?<![a-z0-9])yjs/i.test(policy) && /script-src[^;]*'self'/.test(policy), policy);
 // « yjs » seul : `linkifyjs` (carte d'importation de l'éditeur, figée le 10/11) se termine par ces lettres.
 check('index.html ne charge rien de plus pour l\'écriture en direct (seul js/live-entry.js, le point d\'entrée du socle)', !/(?<![a-z0-9])yjs|y-protocols|lib0|y-tiptap|extension-collaboration|edition-live/i.test(indexHtml) && /js\/live-entry\.js/.test(indexHtml));

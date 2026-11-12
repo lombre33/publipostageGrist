@@ -81,6 +81,9 @@
 //      de Grist (`_grist_…`) ou une suppression de table hors des endroits connus, une écriture « widget » (tables Publipostage_*) qui vise autre chose que ses tables (point sécurité du 06/11, risque « accès complet ») ;
 //  38. la liste unique des bibliothèques (package.json à la racine, consignes 063 et 067 de GFS) : elle perd sa forme, une version n'y est plus exacte, le miroir des essais ou la carte d'importation d'index.html dit
 //      une autre version qu'elle, le catalogue (bibliotheques/catalogue.json) n'a plus une entrée à la version de chaque bibliothèque de la liste.
+//  39. la copie figée de l'éditeur (vendor/editeur, consigne 066 de GFS, construite par l'outil du kit) : un fichier du dossier n'est plus celui de son manifeste, une version de la carte monte dans la liste sans que la copie
+//      soit refaite, la carte « copie » de la page ne nomme plus chaque module à l'empreinte de son fichier, une licence qui n'est plus compatible avec la GPL-3.0 de l'app arrive avec un paquet, la clé du stockage de la
+//      liste n'est plus celle que la case « Éditeur hors ligne » de Réglages écrit.
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -95,7 +98,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { check, summarizeAndExit } from './unit-harness.mjs';
-import { esmImports, importMapDigest, floatingVersion, scriptSources } from '../outils/empreintes-editeur.mjs';
+import { esmImports, importMapDigest, importMapText, copyMapText, floatingVersion, scriptSources } from '../outils/empreintes-editeur.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = rel => readFileSync(join(ROOT, rel), 'utf8');
@@ -693,13 +696,14 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // mot entier, nulle part (code, tests, documents, modèles de la galerie). L'audit signalait aussi une valeur en dur dans `token` (le faux jeton d'un test de la Lecture) : un faux jeton s'appelle `stub-token`, comme
 // celui du faux Grist (dev-tests/grist-stub.js). Les mots sont écrits en morceaux dans le code pour que ce fichier ne se compte pas lui-même ; les dossiers cachés (le miroir hors ligne) et node_modules sont ignorés.
 // Le kit (un sous-module) n'est lu que dans ce qui part de lui sur le dépôt public (KIT_PARTIES de publier.sh) : ses essais, ses outils et son README sont à lui, avec ses propres contrôles (la 0.20.2 porte
-// des valeurs d'exemple dans ses essais de synchro, que ce contrôle-ci prendrait pour des jetons en dur).
+// des valeurs d'exemple dans ses essais de synchro, que ce contrôle-ci prendrait pour des jetons en dur). vendor/ (la copie figée de l'éditeur) est du code de tiers, minifié : il n'est pas lu non plus.
 {
   const kitParties = ((read('outils/depot-propre/publier.sh').match(/^KIT_PARTIES=\(([^)]*)\)/m) || [])[1] || '').split(/\s+/).filter(Boolean);
   const walkText = (dir, exts, out = []) => {
     for (const name of readdirSync(join(ROOT, dir))) {
       if (name.startsWith('.') || name === 'node_modules') continue;
       if (dir === 'kit' && !kitParties.includes(name)) continue;
+      if (!dir && name === 'vendor') continue; // la copie figée de l'éditeur (consigne 066 de GFS) : du code de tiers, minifié, construit par l'outil du kit
       const rel = dir ? `${dir}/${name}` : name;
       if (statSync(join(ROOT, rel)).isDirectory()) walkText(rel, exts, out);
       else if (exts.test(name)) out.push(rel);
@@ -1390,7 +1394,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const policy = (page.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/) || [])[1] || '';
   // La page sans sa politique : l'adresse de Plotly n'a de place que dans la politique (consigne 007) ; partout ailleurs dans la page - une balise <script src>, un <link> -, elle n'a rien à faire.
   const pageWithoutPolicy = page.replace(/<meta http-equiv="Content-Security-Policy" content="[^"]*"/, '<meta csp>');
-  const importMap = (page.match(/<script\b[^>]*type\s*=\s*["']?importmap[^>]*>([\s\S]*?)<\/script>/i) || [])[1] || '';
+  const importMap = importMapText(page) || ''; // la carte des CDN : une balise importmap, ou le bloc `gfs-carte-cdn` de la page à deux cartes (copie de l'éditeur, 066)
   const list = read('dev-tests/.offline-cache/package.json') + '\n' + read('dev-tests/.offline-cache/build.mjs');
   const PLOTLY_ADDRESS = EXTENSION_LIBRARY_ADDRESSES.plotly;   // l'adresse du catalogue de GFS (bibliotheques/catalogue.json), mode CDN
   check('extension : ni la liste des bibliothèques de l\'app (dev-tests/.offline-cache) ni la carte d\'importation d\'index.html ne nomment Plotly (GFS le porte)',
@@ -1794,12 +1798,14 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const listed = spawnSync('git', ['ls-files', '-s', 'kit'], { cwd: ROOT, encoding: 'utf8' });
   const pin = ((/^160000 ([0-9a-f]{40}) 0\tkit$/m.exec(listed.stdout || '')) || [])[1] || '';
   const modules = existsSync(join(ROOT, '.gitmodules')) ? read('.gitmodules') : '';
-  const importMap = (() => { try { return JSON.parse((index.match(/<script type="importmap">([\s\S]*?)<\/script>/) || [])[1]).imports; } catch (e) { return {}; } })();
+  const importMap = (() => { try { return JSON.parse(importMapText(index)).imports; } catch (e) { return {}; } })();
   const kitEntries = Object.entries(importMap).filter(([name]) => name.startsWith('kit/'));
+  const copyKitEntries = (() => { try { return Object.entries(JSON.parse(copyMapText(index)).imports).filter(([name]) => name.startsWith('kit/')); } catch (e) { return []; } })(); // la carte de la copie de l'éditeur (066) porte les mêmes
   check('ambiance de GFS : le kit est un sous-module épinglé (.gitmodules et gitlink) et la carte d\'importation de index.html n\'en nomme que `kit/ambiance-message` et `kit/ambiance-pose`, à l\'empreinte du gitlink (sept premiers caractères)',
     pin !== '' && /\[submodule "kit"\]\s+path = kit\s+url = https:\/\/github\.com\/lombre33\/grist-factory-kit\.git/.test(modules)
-      && JSON.stringify(kitEntries) === JSON.stringify([['kit/ambiance-message', `./kit/js/ambiance-message.js?v=${pin.slice(0, 7)}`], ['kit/ambiance-pose', `./kit/js/ambiance-pose.js?v=${pin.slice(0, 7)}`]]),
-    JSON.stringify({ pin: pin.slice(0, 7), kitEntries }));
+      && JSON.stringify(kitEntries) === JSON.stringify([['kit/ambiance-message', `./kit/js/ambiance-message.js?v=${pin.slice(0, 7)}`], ['kit/ambiance-pose', `./kit/js/ambiance-pose.js?v=${pin.slice(0, 7)}`]])
+      && JSON.stringify(copyKitEntries) === JSON.stringify(kitEntries),
+    JSON.stringify({ pin: pin.slice(0, 7), kitEntries, copyKitEntries }));
 
   // (2) rien n'importe un autre module du kit
   const importers = [['index.html', index], ...[...jsFiles].map(rel => [rel, read(rel)])];
@@ -2112,13 +2118,58 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const mirror = JSON.parse(read('dev-tests/.offline-cache/package.json')).dependencies || {};
   const apart = [...new Set([...Object.keys(deps), ...Object.keys(mirror)])].filter(name => deps[name] !== mirror[name]).sort().map(name => `${name} : liste ${deps[name] || '-'}, miroir ${mirror[name] || '-'}`);
   check('liste des bibliothèques : le miroir des essais (dev-tests/.offline-cache/package.json) dit les mêmes paquets aux mêmes versions que la liste - une version se monte dans la liste ET dans le miroir (puis `bash dev-tests/offline-deps.sh`), jusqu\'à ce que l\'outil du kit refasse le miroir', apart.length === 0, apart.join(' ; '));
-  const imports = (() => { try { return JSON.parse((read('index.html').match(/<script type="importmap">([\s\S]*?)<\/script>/) || [])[1]).imports; } catch (e) { return {}; } })();
+  const imports = (() => { try { return JSON.parse(importMapText(read('index.html'))).imports; } catch (e) { return {}; } })();
   const named = [...(gfs.carte && gfs.carte.paquets || []), ...Object.keys(gfs.carte && gfs.carte.sousChemins || {})];
   const mapOff = named.filter(name => !Object.entries(imports).some(([key, value]) => new RegExp(`/\\*?${escapeRe(name)}@${escapeRe(deps[name] || '?')}(?:[/?]|$)`).test(key === name ? value : key)));
   check('liste des bibliothèques : la carte d\'importation d\'index.html nomme, pour chacun des paquets de la liste qu\'elle écrit (gfs.carte.paquets et sousChemins), la version de la liste - une version montée dans la liste sans relancer l\'outil du kit (ou montée à la main dans la page) se voit ici', named.length >= 30 && mapOff.length === 0, mapOff.join(' ') || `${named.length} paquets`);
   const catalogue = existsSync(join(ROOT, 'bibliotheques', 'catalogue.json')) ? JSON.parse(read('bibliotheques/catalogue.json')).bibliotheques || [] : [];
   const missing = Object.entries(gfs.bibliotheques || {}).filter(([id, spec]) => !catalogue.some(entry => entry.id === id && entry.version === deps[spec.paquet] && entry.cdn && /^sha384-[A-Za-z0-9+/]{64}$/.test(entry.cdn.integrite || ''))).map(([id]) => id);
   check('liste des bibliothèques : le catalogue (bibliotheques/catalogue.json, écrit par l\'outil du kit) a une entrée par bibliothèque de la liste, à la version de la liste, avec son empreinte sha384', Object.keys(gfs.bibliotheques || {}).length >= 9 && missing.length === 0, missing.join(' ') || `${catalogue.length} entrées`);
+}
+
+// ============================================================================
+// 39. La copie figée de l'éditeur : le dossier, sa liste, la page et la case de Réglages disent la même chose (consigne 066 de GFS)
+// ============================================================================
+// Un client qui ferme le réseau coche « Éditeur hors ligne » : la page pose alors la carte « copie » (modules de vendor/editeur/) au lieu de celle des CDN. Ce code s'exécute dans la page avec l'accès complet au
+// document, comme celui d'esm.sh : il est construit par l'outil du kit (node kit/outils/bibliotheques.mjs --copies, réseau : npm) d'après les versions de la liste, jamais écrit à la main, et son manifeste
+// (COPIE.json) donne l'empreinte de chaque fichier. Ce contrôle ne lance pas l'outil (le kit est un sous-module qui n'est pas toujours là : son --verifier le redit dans le groupe bibliothequesListe) ; il garde, sans lui,
+// qu'aucun fichier du dossier n'a été touché depuis la construction, que la copie est celle des versions de la liste, que la page nomme chaque module à l'empreinte de son fichier, et que les licences venues avec les
+// paquets sont de celles que la GPL-3.0 de l'app accepte.
+{
+  const list = JSON.parse(read('package.json'));
+  const spec = (list.gfs && list.gfs.copie) || null;
+  const deps = { ...(list.devDependencies || {}), ...(list.dependencies || {}) };
+  const folder = spec ? spec.dossier : 'vendor/editeur';
+  const manifest = existsSync(join(ROOT, folder, 'COPIE.json')) ? JSON.parse(read(`${folder}/COPIE.json`)) : null;
+  const sha384 = bytes => `sha384-${createHash('sha384').update(bytes).digest('base64')}`;
+  const onDisk = existsSync(join(ROOT, folder)) ? readdirSync(join(ROOT, folder)).filter(name => name.endsWith('.js')).sort() : [];
+  check('copie de l\'éditeur : la liste la déclare (gfs.copie : fonction « editeur », dossier vendor/editeur, clé pp_editeur_copie) et le dossier a son manifeste (COPIE.json), ses licences (LICENCES.txt) et plus de trente modules',
+    !!spec && spec.fonction === 'editeur' && spec.dossier === 'vendor/editeur' && spec.cle === 'pp_editeur_copie' && !!manifest && manifest.fonction === 'editeur' && existsSync(join(ROOT, folder, 'LICENCES.txt')) && onDisk.length >= 40,
+    JSON.stringify({ spec, manifest: !!manifest, fichiers: onDisk.length }));
+  const touched = manifest ? Object.entries(manifest.fichiers).filter(([name, hash]) => !existsSync(join(ROOT, folder, name)) || sha384(readFileSync(join(ROOT, folder, name))) !== hash).map(([name]) => name) : ['COPIE.json absent'];
+  const extra = manifest ? onDisk.filter(name => !(name in manifest.fichiers)) : [];
+  check('copie de l\'éditeur : chaque fichier du dossier est à l\'empreinte SHA-384 de son manifeste (aucun absent, modifié ou en trop) - la copie se refait par `node kit/outils/bibliotheques.mjs --copies`, jamais à la main', !!manifest && touched.length === 0 && extra.length === 0, [...touched.map(name => `${name} (absent ou modifié)`), ...extra.map(name => `${name} (en trop)`)].join(' ; '));
+  const named = (list.gfs && list.gfs.carte && list.gfs.carte.paquets) || [];
+  const behind = manifest ? named.filter(name => manifest.paquets[name] !== deps[name]).map(name => `${name} : copie ${manifest.paquets[name] || '-'}, liste ${deps[name] || '-'}`) : ['manifeste absent'];
+  check('copie de l\'éditeur : chaque paquet de la carte (gfs.carte.paquets) est dans la copie à la version de la liste - une version montée dans la liste demande de refaire la copie (`--copies`, réseau)', named.length >= 30 && behind.length === 0, behind.join(' ; ') || `${named.length} paquets`);
+  const copyImports = (() => { try { return JSON.parse(copyMapText(read('index.html'))).imports; } catch (e) { return {}; } })();
+  const fixes = (list.gfs && list.gfs.carte && list.gfs.carte.fixes) || {};
+  const moduleOf = name => name.replace('@', '').replace('/', '__');
+  const wrong = manifest ? named.filter(name => {
+    const file = `${moduleOf(name)}.js`, hash = manifest.fichiers[file];
+    const want = hash ? `./${folder}/${file}?v=${Buffer.from(hash.slice('sha384-'.length), 'base64').toString('hex').slice(0, 8)}` : null;
+    return copyImports[name] !== want;
+  }) : named;
+  const stray = Object.keys(copyImports).filter(key => !named.includes(key) && !(key in fixes));
+  check('copie de l\'éditeur : la carte « copie » de la page (gfs-carte-copie) donne à chaque module de la carte son fichier de vendor/editeur, avec les huit premiers chiffres de son empreinte en `?v=`, et rien d\'autre que les entrées fixes de la liste (gfs.carte.fixes)',
+    named.length >= 30 && wrong.length === 0 && stray.length === 0, [...wrong.map(name => `${name} : adresse inattendue`), ...stray.map(key => `${key} : entrée en trop`)].join(' ; '));
+  const licences = existsSync(join(ROOT, folder, 'LICENCES.txt')) ? read(`${folder}/LICENCES.txt`) : '';
+  const heads = [...licences.matchAll(/^== (\S+)@(\S+) : (.+?) ==$/gm)].map(match => ({ name: match[1], version: match[2], licence: match[3] }));
+  const FREE = new Set(['MIT', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', 'Apache-2.0', '0BSD']);
+  const unlisted = manifest ? Object.entries(manifest.paquets).filter(([name, version]) => !heads.some(head => head.name === name && head.version === version)).map(([name, version]) => `${name}@${version}`) : [];
+  const incompatible = heads.filter(head => !FREE.has(head.licence)).map(head => `${head.name}@${head.version} : ${head.licence}`);
+  check('copie de l\'éditeur : LICENCES.txt nomme chaque paquet de la copie à sa version, et chaque licence est de celles que la GPL-3.0 de l\'app accepte (MIT, ISC, BSD, Apache-2.0, 0BSD)',
+    !!manifest && heads.length >= 40 && unlisted.length === 0 && incompatible.length === 0, [...unlisted.map(item => `${item} sans licence`), ...incompatible].join(' ; ') || `${heads.length} paquets`);
 }
 
 summarizeAndExit();

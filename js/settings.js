@@ -1,5 +1,5 @@
 // Panneau Réglages : Langue (rechargement de la page, I18n.storeLang), Thème (js/person-store.js + data-theme sur <html>, et le choix « Par défaut » / « Mise en forme » des bulles et des puces de l'éditeur,
-// data-bubble-marks sur <html>), Touche de déclenchement (js/person-store.js, relue par
+// data-bubble-marks sur <html>, et la case « Éditeur hors ligne » : la clé du navigateur que lit le script de index.html pour démarrer l'éditeur depuis vendor/editeur), Touche de déclenchement (js/person-store.js, relue par
 // Variables.triggerChar), Email (la messagerie qui ouvre le lien du mode Email, gardée par MailtoExport.setMailClient), Marges de page (par modèle, avec quatre préréglages, la chaîne qui lie les quatre marges et la
 // mention d'un macro-modèle) et Crédits (statique). Le thème, les bulles et les puces, la touche de déclenchement et la messagerie se défont par Ctrl + Z (js/settings-history.js). Même convention d'ouverture et de fermeture que les autres fenêtres (style.display, pas de fermeture au
 // clic sur le fond). Langue et Touche de déclenchement rechargent la page, qui rouvre le modèle où la personne était (reloadKeepingTemplate, takeReopenId). Hébergée par GFS, la langue est celle de GFS
@@ -93,6 +93,51 @@ const Settings = (function () {
 
   const byId = id => document.getElementById(id);
   const all = selector => Array.from(document.querySelectorAll(selector));
+
+  // L'éditeur hors ligne (consigne 066 de GFS) : TipTap et ProseMirror démarrent depuis la copie rangée dans vendor/editeur au lieu d'esm.sh. Le choix est fait AVANT tout le reste, par le script de index.html (écrit par
+  // l'outil du kit, `node kit/outils/bibliotheques.mjs --copies`) qui pose l'une ou l'autre carte d'importation : celle de la copie quand l'adresse du cadre dit `copie=editeur` (GFS l'y met quand la personne a choisi la copie
+  // dans sa fenêtre « Apps et extensions » ; une adresse de widget écrite ainsi le fait aussi) ou quand la clé `pp_editeur_copie` du navigateur vaut `copie`. Ces trois mots sont ceux de `gfs.copie` dans package.json
+  // (codeHygiene § 39 garde qu'ils sont les mêmes ici). Seule, la case écrit cette clé par PersonStore (le même localStorage que lit le script) ; hébergée par GFS, ou quand l'adresse décide déjà, elle est grisée et ne montre que
+  // ce qui est en vigueur. « En vigueur » se lit sur la carte que le script a posée (celle de la copie nomme vendor/editeur/), jamais déduit de l'adresse ou du stockage : c'est ce qui est vraiment chargé. Le choix gardé et ce
+  // qui est en vigueur ne s'accordent qu'au rechargement : la phrase « Rechargez la page » paraît tant qu'ils diffèrent.
+  const OFFLINE_EDITOR_FUNCTION = 'editeur';
+  const OFFLINE_EDITOR_STORAGE = 'pp_editeur_copie';
+  const OFFLINE_EDITOR_FOLDER = 'vendor/editeur';
+
+  const offlineEditorKept = () => PersonStore.get(OFFLINE_EDITOR_STORAGE) === 'copie';
+  function offlineEditorAddressAsks() {
+    try { return (new URLSearchParams(location.search).get('copie') || '').split(',').indexOf(OFFLINE_EDITOR_FUNCTION) !== -1; } catch (e) { return false; }
+  }
+  const offlineEditorInUse = () => all('script[type="importmap"]').some(map => (map.textContent || '').indexOf('/' + OFFLINE_EDITOR_FOLDER + '/') !== -1);
+  // Qui décide : 'gfs' (hébergée : le choix est celui de la fenêtre de GFS), 'address' (l'adresse du widget demande la copie), null (la personne, par la case).
+  const offlineEditorLock = () => (GfsLink.hosted ? 'gfs' : (offlineEditorAddressAsks() ? 'address' : null));
+  // La case de l'onglet Thème, défaite par Ctrl + Z comme les autres choix ; grisée, rien ne s'écrit (`locked`).
+  const OFFLINE_EDITOR_SETTING = {
+    read: () => (offlineEditorKept() ? 'on' : 'off'),
+    write: value => (value === 'on' ? PersonStore.set(OFFLINE_EDITOR_STORAGE, 'copie') : PersonStore.remove(OFFLINE_EDITOR_STORAGE)),
+    say: said('settings.offlineEditor.title', value => I18n.t('settings.offlineEditor.' + value)),
+    locked: () => offlineEditorLock() !== null,
+  };
+
+  // La case et ses phrases d'après ce qui est en vigueur, à l'ouverture de Réglages et après chaque geste. Grisée, la case montre ce qui est chargé et une phrase dit qui décide ; libre, elle montre le choix gardé et la phrase
+  // « Rechargez la page » paraît tant que ce choix n'est pas ce qui est chargé.
+  function syncOfflineEditor() {
+    const box = byId('settings-offline-editor');
+    if (!box) return;
+    const lock = offlineEditorLock();
+    const inUse = offlineEditorInUse();
+    box.checked = lock ? inUse : offlineEditorKept();
+    box.disabled = lock !== null;
+    const label = byId('settings-offline-editor-label');
+    if (label) label.classList.toggle('is-disabled', lock !== null);
+    const notes = { gfs: byId('settings-offline-editor-gfs-note'), address: byId('settings-offline-editor-address-note') };
+    Object.keys(notes).forEach(name => { if (notes[name]) notes[name].hidden = lock !== name; });
+    const perBrowser = byId('settings-offline-editor-per-browser');
+    if (perBrowser) perBrowser.hidden = lock !== null;
+    box.setAttribute('aria-describedby', 'settings-offline-editor-hint ' + (lock ? 'settings-offline-editor-' + lock + '-note' : 'settings-offline-editor-per-browser'));
+    const notice = byId('settings-offline-editor-reload-notice');
+    if (notice) notice.hidden = lock !== null || offlineEditorKept() === inUse;
+  }
 
   // Réglage par modèle (pas global comme langue/touche ci-dessus) : brouillon dans PageLayout, persisté seulement au prochain "Enregistrer" - même
   // philosophie que l'en-tête/pied de page (js/header-footer-preview.js).
@@ -265,6 +310,7 @@ const Settings = (function () {
       bubbleMarksRadios.forEach(r => { r.checked = (r.value === getBubbleMarks()); });
       if (altReminderBox) altReminderBox.checked = AltReminder.isOn();
       if (varTipBox) varTipBox.checked = VariableTip.isOn();
+      syncOfflineEditor();
       mailClientRadios.forEach(r => { r.checked = (r.value === MailtoExport.getMailClient()); });
       if (triggerSelect) triggerSelect.value = Variables.triggerChar();
       if (reloadNotice) reloadNotice.hidden = true;
@@ -357,6 +403,22 @@ const Settings = (function () {
     reloadKeepingTemplate();
   }
 
+  // La case « Éditeur hors ligne » : le choix s'écrit à l'instant (le stockage refusé laisse la case sur ce qui est gardé), mais l'éditeur déjà démarré ne change pas : « Recharger maintenant » rouvre le modèle où la personne
+  // était, après la question « Enregistrer / Abandonner / Annuler » quand une modification attend, comme un changement de langue ; « Annuler » laisse tout en l'état.
+  function wireOfflineEditor(leave) {
+    const box = byId('settings-offline-editor');
+    const reloadBtn = byId('settings-offline-editor-reload-btn');
+    if (!box || !reloadBtn) return;
+    box.addEventListener('change', () => {
+      SettingsHistory.track(OFFLINE_EDITOR_SETTING, () => OFFLINE_EDITOR_SETTING.write(box.checked ? 'on' : 'off'));
+      syncOfflineEditor();
+    });
+    reloadBtn.addEventListener('click', async () => {
+      if (leave && leave.hasEditsToConfirmBeforeLeaving() && !(await leave.askBeforeLeaving())) return;
+      reloadKeepingTemplate();
+    });
+  }
+
   function wireTriggerChar() {
     const triggerSelect = byId('settings-trigger-char');
     const reloadNotice = byId('settings-trigger-reload-notice');
@@ -407,6 +469,7 @@ const Settings = (function () {
     });
     wireRadios('settings-mail-client', value => SettingsHistory.track(MAIL_CLIENT_SETTING, () => MailtoExport.setMailClient(value)));
     wireTriggerChar();
+    wireOfflineEditor(leave);
     // Hébergée, un changement de langue fait dans GFS est suivi ici (followGfsLanguage) ; js/main.js le rappelle une fois le modèle de départ ouvert.
     leaveHooks = leave;
     GfsLink.onLanguage(() => { applyLanguageLock(); followGfsLanguage(); });

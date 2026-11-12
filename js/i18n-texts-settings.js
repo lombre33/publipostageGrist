@@ -50,6 +50,31 @@ const I18nTextsSettings = {
   'settings.accessibility.perBrowser': { fr: 'Ce choix est propre à ce navigateur, comme la langue et le thème.', en: 'This choice is specific to this browser, like the language and the theme.' },
   'settings.accessibility.on': { fr: 'allumé', en: 'on' },
   'settings.accessibility.off': { fr: 'éteint', en: 'off' },
+  // Éditeur hors ligne (js/settings.js, consigne 066 de GFS) : une section de l'onglet Thème, la barre des onglets étant pleine. Le rechargement reprend les textes de l'onglet Insertion (settings.triggerKey.reload*).
+  'settings.offlineEditor.title': { fr: 'Éditeur hors ligne', en: 'Offline editor' },
+  'settings.offlineEditor.intro': {
+    fr: 'L’éditeur de texte se télécharge depuis esm.sh à chaque démarrage. Sa copie hors ligne, rangée avec l’app, le fait démarrer sans rien demander à esm.sh : utile derrière un pare-feu qui bloque ce site.',
+    en: 'The text editor is downloaded from esm.sh at every start. Its offline copy, stored with the app, lets it start without asking esm.sh for anything: useful behind a firewall that blocks that site.',
+  },
+  'settings.offlineEditor.label': { fr: 'Utiliser la copie hors ligne de l’éditeur', en: 'Use the offline copy of the editor' },
+  'settings.offlineEditor.hint': {
+    fr: 'Les exports PDF, Word et Excel gardent leurs propres bibliothèques, téléchargées au premier export.',
+    en: 'PDF, Word and Excel exports keep their own libraries, downloaded at the first export.',
+  },
+  'settings.offlineEditor.perBrowser': {
+    fr: 'Ce choix est propre à ce navigateur, comme la langue et le thème, et prend effet au prochain démarrage.',
+    en: 'This choice is specific to this browser, like the language and the theme, and takes effect at the next start.',
+  },
+  'settings.offlineEditor.gfsNote': {
+    fr: 'Dans Grist Factory Suite, ce choix se fait dans la fenêtre « Apps et extensions » (ligne Éditeur) et prend effet au prochain démarrage de l’app.',
+    en: 'In Grist Factory Suite, this choice is made in the “Apps and extensions” window (Editor row) and takes effect the next time the app starts.',
+  },
+  'settings.offlineEditor.addressNote': {
+    fr: 'L’adresse du widget demande déjà la copie (copie=editeur) : pour choisir ici, retirez ce paramètre de l’adresse.',
+    en: 'The widget’s address already asks for the copy (copie=editeur): to choose here, remove that parameter from the address.',
+  },
+  'settings.offlineEditor.on': { fr: 'allumé', en: 'on' },
+  'settings.offlineEditor.off': { fr: 'éteint', en: 'off' },
   // Le rappel à l'export (js/alt-reminder.js), réglage « Accessibilité » allumé.
   'altReminder.title': { fr: 'Images sans texte alternatif', en: 'Images without alternative text' },
   'altReminder.message': {

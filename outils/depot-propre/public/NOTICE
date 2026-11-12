@@ -29,6 +29,17 @@ indiquée, à la version indiquée (sauf l'API de Grist). Elles gardent leur pro
 These libraries are not copied into this repository: the browser downloads them from the address
 shown, at the version shown (except the Grist API). They keep their own license.
 
+Exception : une copie hors ligne de l'éditeur (TipTap, ProseMirror, @floating-ui/dom,
+prosemirror-suggest-changes et leurs dépendances) est rangée dans le dossier vendor/editeur/, construite
+et minifiée d'après les versions ci-dessous ; la licence et les droits de chaque paquet de la copie sont
+dans vendor/editeur/LICENCES.txt (tous sous licence MIT). Le navigateur la charge à la place d'esm.sh
+quand la personne choisit « Éditeur hors ligne » dans Réglages.
+Exception: an offline copy of the editor (TipTap, ProseMirror, @floating-ui/dom,
+prosemirror-suggest-changes and their dependencies) is stored in the vendor/editeur/ folder, built and
+minified from the versions below; the license and copyright of every package in the copy are in
+vendor/editeur/LICENCES.txt (all MIT-licensed). The browser loads it instead of esm.sh when the person
+chooses "Offline editor" in Settings.
+
 Grist plugin API (grist-plugin-api.js)
   Licence / License : Apache License 2.0 (https://github.com/gristlabs/grist-core)
   Droits / Copyright : Grist Labs et contributeurs / Grist Labs and contributors

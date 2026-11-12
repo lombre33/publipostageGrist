@@ -188,7 +188,8 @@ const measure = page => page.evaluate(() => {
 
 // La dernière note (`.settings-access-hint`) de l'onglet affiché, vue depuis le cadre qui défile : entière dans ce que la fenêtre en montre ?
 const lastHintOf = page => page.evaluate(() => {
-  const hints = document.querySelectorAll('.settings-panel:not([hidden]) .settings-access-hint');
+  // Une note cachée (`hidden`, comme les deux de la case « Éditeur hors ligne » qui ne se montrent que verrouillée) n'a pas de place et ne se lit pas : la dernière note à lire est la dernière qui en a une.
+  const hints = Array.from(document.querySelectorAll('.settings-panel:not([hidden]) .settings-access-hint')).filter(hint => hint.getClientRects().length > 0);
   const h = hints[hints.length - 1];
   let scroller = document.querySelector('.settings-panel:not([hidden])');
   while (scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;

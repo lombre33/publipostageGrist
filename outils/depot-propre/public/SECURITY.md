@@ -65,7 +65,7 @@ Le widget charge son code depuis son propre site (GitHub Pages), depuis `esm.sh`
 4. **Mesurer.** Relire les commits publiés depuis la dernière version saine et noter la période pendant laquelle un code piégé a pu être servi.
 5. **Corriger et informer.** Publier la correction, puis un avis qui donne cette période : les personnes concernées relisent, sur ces dates, l'historique d'activité de leurs documents Grist.
 
-Un fichier modifié sur `cdnjs.cloudflare.com` ou `cdn.jsdelivr.net` est déjà refusé par le navigateur (SRI). Le cas qui demande cette fiche est surtout celui d'`esm.sh`, dont l'éditeur est chargé sans empreinte (voir « Choix connus, documentés »).
+Un fichier modifié sur `cdnjs.cloudflare.com` ou `cdn.jsdelivr.net` est déjà refusé par le navigateur (SRI). Le cas qui demande cette fiche est surtout celui d'`esm.sh`, dont l'éditeur est chargé sans empreinte (voir « Choix connus, documentés »). Pour l'éditeur, une copie figée rangée dans le dépôt (`vendor/editeur/`, Réglages > Thème > « Éditeur hors ligne ») coupe cette source : rien n'est alors demandé à `esm.sh`, et chaque fichier de la copie a son empreinte SHA-384 dans `COPIE.json`.
 
 ---
 
@@ -134,4 +134,4 @@ The widget loads its code from its own site (GitHub Pages), from `esm.sh` (the e
 4. **Measure.** Review the commits published since the last sound version and note the period during which booby-trapped code may have been served.
 5. **Fix and inform.** Publish the fix, then a notice giving that period: affected people review their Grist documents' activity history over those dates.
 
-A file altered on `cdnjs.cloudflare.com` or `cdn.jsdelivr.net` is already refused by the browser (SRI). The case this sheet is mainly for is `esm.sh`, whose editor is loaded without a hash (see "Known, documented choices").
+A file altered on `cdnjs.cloudflare.com` or `cdn.jsdelivr.net` is already refused by the browser (SRI). The case this sheet is mainly for is `esm.sh`, whose editor is loaded without a hash (see "Known, documented choices"). For the editor, a frozen copy stored in the repository (`vendor/editeur/`, Settings > Theme > “Offline editor”) cuts that source: nothing is then requested from `esm.sh`, and each file of the copy has its SHA-384 hash in `COPIE.json`.

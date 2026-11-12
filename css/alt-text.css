@@ -10,6 +10,8 @@
 .pp-alt-decorative input { flex: none; margin: 0; }
 .pp-alt-decorative-hint { margin-top: 2px; padding-left: 20px; }
 
-/* Réglages > Thème > Accessibilité (js/alt-reminder.js) : la case du rappel « images sans texte alternatif » à l'export. */
+/* Réglages > Thème > Accessibilité (js/alt-reminder.js) : la case du rappel « images sans texte alternatif » à l'export. Les autres cases de l'onglet Thème la reprennent ; grisée (Éditeur hors ligne
+   hébergé par GFS, js/settings.js:syncOfflineEditor), elle s'atténue comme les cases de langue (.settings-radio-row label.is-disabled). */
 .settings-alt-reminder { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); margin: 10px 0 0; cursor: pointer; }
 .settings-alt-reminder input { margin: 0; flex: none; cursor: inherit; }
+.settings-alt-reminder.is-disabled { opacity: .45; cursor: default; }
