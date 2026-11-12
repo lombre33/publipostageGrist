@@ -42,7 +42,8 @@ const importMap = JSON.parse(/<script type="importmap">\s*([\s\S]*?)<\/script>/.
 const policy = /<meta http-equiv="Content-Security-Policy" content="([^"]*)"/.exec(indexHtml)[1];
 const named = SIX.filter(name => Object.keys(importMap.imports).concat(Object.values(importMap.imports)).some(entry => entry === name || entry.includes('/' + name + '@') || entry.includes('/' + name + '/') || entry.startsWith(name + '/')));
 check('la carte d\'importation d\'index.html ne nomme aucun des six paquets (ni leurs sous-chemins)', named.length === 0, named);
-check('la politique de sécurité du contenu ne nomme ni GFS, ni un fichier d\'extension : le fichier de GFS passe par \'self\'', !/gfs|edition|vendor|yjs/i.test(policy) && /script-src[^;]*'self'/.test(policy), policy);
+// « yjs » seul (voir le contrôle d'après) : `linkifyjs`, une source de script-src de l'éditeur, se termine par ces lettres.
+check('la politique de sécurité du contenu ne nomme ni GFS, ni un fichier d\'extension : le fichier de GFS passe par \'self\'', !/gfs|edition|vendor|(?<![a-z0-9])yjs/i.test(policy) && /script-src[^;]*'self'/.test(policy), policy);
 // « yjs » seul : `linkifyjs` (carte d'importation de l'éditeur, figée le 10/11) se termine par ces lettres.
 check('index.html ne charge rien de plus pour l\'écriture en direct (seul js/live-entry.js, le point d\'entrée du socle)', !/(?<![a-z0-9])yjs|y-protocols|lib0|y-tiptap|extension-collaboration|edition-live/i.test(indexHtml) && /js\/live-entry\.js/.test(indexHtml));
 function sourcesIn(dir, found = []) {
