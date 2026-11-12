@@ -43,3 +43,10 @@
 .pp-word-count { position: fixed; z-index: var(--z-page-zoom); box-sizing: border-box; height: 20px; padding: 0 8px; display: inline-flex; align-items: center; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 8px); background: var(--surface); color: var(--text-muted); box-shadow: var(--shadow-card); font-family: var(--font-ui); font-size: 11px; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; user-select: none; }
 .pp-word-count[hidden] { display: none; }
 @media print { .pp-word-count { display: none; } }
+
+/* Le voile de dépôt (js/drop-import.js) : pendant qu'un fichier Word, PowerPoint, Excel ou Markdown survole la page, un cadre en pointillé à 6 px du bord et une étiquette centrée disent « Déposez le fichier pour
+   l'importer ». Il ne reçoit aucun clic (le dépôt est écouté sur le document), n'a aucun fond plein (le document reste lisible dessous) et passe sous les fenêtres. Jetons de css/style.css, aucune couleur en dur. */
+.pp-drop-hint { position: fixed; inset: 6px; z-index: var(--z-page-zoom); display: none; align-items: center; justify-content: center; box-sizing: border-box; border: 2px dashed var(--accent); border-radius: var(--radius-md, 8px); background: color-mix(in srgb, var(--accent-soft) 55%, transparent); pointer-events: none; }
+.pp-drop-hint.is-on { display: flex; }
+.pp-drop-hint-text { max-width: 80%; padding: 8px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 8px); background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); font-family: var(--font-ui); font-size: 13px; font-weight: 600; text-align: center; }
+@media print { .pp-drop-hint { display: none; } }

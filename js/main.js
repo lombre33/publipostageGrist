@@ -775,7 +775,12 @@
   });
 
   // L'import d'un fichier (Excel, Markdown, PowerPoint, Word : le menu « + » et le « Nouveau > Importer » de GFS) est dans js/main-import.js ; ce qu'il tire d'ici lui est donné.
-  const { importFileFromGfs, onImportDocx, onImportMd, onImportPptx, onImportXlsx } = MainImport.create({ askBeforeLeaving, hasEditsToConfirmBeforeLeaving, isReadOnly, loadTemplateIntoEditor, markAutosaveDirty, onSave, refocusEditorIfLost, setStatus, templateNameInput, templateSelect, updateSaveStatus });
+  // Un document est ouvert à l'écran, en Édition, avec du texte : un fichier Word ou Markdown déposé peut alors s'y fondre au lieu d'ouvrir un nouveau modèle (js/main-import.js:importDroppedFile).
+  function canMergeDocument() {
+    const editor = EditorCore.getEditor();
+    return currentMode === 'edit' && currentTypeModele === 'document' && !isReadOnly() && !!editor && editor.state.doc.textContent.trim().length > 0;
+  }
+  const { importFileFromGfs, importDroppedFile, onImportDocx, onImportMd, onImportPptx, onImportXlsx } = MainImport.create({ askBeforeLeaving, canMergeDocument, hasEditsToConfirmBeforeLeaving, isReadOnly, loadTemplateIntoEditor, markAutosaveDirty, onSave, refocusEditorIfLost, setStatus, templateNameInput, templateSelect, updateSaveStatus });
 
   // Le mode que la personne a choisi en dernier (Édition ou Lecture) : une préférence de la personne (PersonStore `pp_last_mode`), relue au démarrage (startMode). Écrite par les deux boutons, jamais par
   // switchMode : la Lecture imposée (document en lecture seule, PDF à l'écran) et la Lecture épurée ne sont pas un choix, et un « Nouveau » de GFS qui s'ouvre en Édition ne l'efface pas.
@@ -1116,6 +1121,7 @@
       // Le curseur revient dans l'éditeur à l'endroit où il était, sans faire défiler le document.
       focusEditor: () => { const editor = EditorCore.getEditor(); if (editor && editor.isEditable) editor.commands.focus(null, { scrollIntoView: false }); },
     });
+    DropImport.wire({ importFile: importDroppedFile, setStatus }); // déposer un fichier Word, PowerPoint, Excel ou Markdown pour l'importer (js/drop-import.js)
     VariableReview.wire(); // le coin d'état « N variables à revoir » (js/variable-review.js)
     MarkFields.wire(); // la case « Repérer les champs » du menu Mode lecture (js/mark-fields.js)
     BarFold.wire(); // la languette qui replie le panneau du haut (js/bar-fold.js)

@@ -165,6 +165,18 @@ const I18nTextsExport = {
   'status.mdImportLibrary': { fr: 'Le lecteur Markdown n’a pas pu se charger : vérifiez la connexion, puis réessayez.', en: 'The Markdown reader could not be loaded: check the connection, then try again.' },
   // Import d'un fichier Word (js/docx-import.js, js/main.js:onImportDocx) : lecture, fin, fichier refusé, puis la fenêtre de ce que l'éditeur n'a pas repris tel quel (une ligne par genre, `docx.import.report.<genre>`, dans l'ordre de DocxImport.REPORT_KEYS).
   'status.docxImporting': { fr: 'Lecture du fichier Word…', en: 'Reading the Word file…' },
+  // Déposer un fichier sur la page (js/drop-import.js, js/main-import.js:importDroppedFile).
+  'drop.hint': { fr: 'Déposez le fichier pour l’importer', en: 'Drop the file to import it' },
+  'drop.title': { fr: 'Importer le fichier', en: 'Import the file' },
+  'drop.message': { fr: '« {name} » : un document est déjà ouvert. Que faire du contenu du fichier ?', en: '“{name}”: a document is already open. What should be done with the file’s content?' },
+  'drop.new': { fr: 'Nouveau document', en: 'New document' },
+  'drop.replace': { fr: 'Remplacer celui-ci', en: 'Replace this one' },
+  'drop.after': { fr: 'Ajouter après', en: 'Add after' },
+  'drop.insert': { fr: 'Insérer ici', en: 'Insert here' },
+  'status.dropReadOnly': { fr: 'Ce document est en lecture seule : rien n’a été importé.', en: 'This document is read-only: nothing was imported.' },
+  'status.dropUnsupported': { fr: 'Le fichier « {name} » n’est pas pris en charge : déposez un Word, un PowerPoint, un Excel ou un Markdown.', en: 'The file “{name}” is not supported: drop a Word, PowerPoint, Excel or Markdown file.' },
+  'status.dropOnlyFirst': { fr: 'Un seul fichier à la fois : « {name} » est importé, les autres sont ignorés.', en: 'One file at a time: “{name}” is imported, the others are ignored.' },
+  'status.dropMerged': { fr: '« {name} » est dans le document. Ctrl+Z le retire ; rien n’est enregistré avant « Enregistrer ».', en: '“{name}” is in the document. Ctrl+Z removes it; nothing is saved until “Save”.' },
   'status.docxImported': { fr: 'Word importé. Nommez le modèle puis enregistrez-le.', en: 'Word imported. Name the template, then save it.' },
   'status.docxImportUnreadable': { fr: 'Ce fichier n’est pas un document Word (.docx) lisible.', en: 'This file is not a readable Word (.docx) document.' },
   'status.docxImportLegacy': { fr: 'Format .doc d’avant 2007 ou fichier protégé : enregistrez-le en .docx sans mot de passe.', en: 'Pre-2007 .doc format or password-protected file: save it as .docx without a password.' },

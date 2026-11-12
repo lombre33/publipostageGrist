@@ -3,7 +3,7 @@
 // lui, ce qu'il en tire (la question « Enregistrer / Abandonner / Annuler », le coin d'état, le chargement d'un modèle dans l'éditeur...) lui est donné par `api`. Les corps sont ceux de main.js.
 const MainImport = (function () {
   function create(api) {
-    const { askBeforeLeaving, hasEditsToConfirmBeforeLeaving, isReadOnly, loadTemplateIntoEditor, markAutosaveDirty, onSave, refocusEditorIfLost, setStatus, templateNameInput, templateSelect, updateSaveStatus } = api;
+    const { askBeforeLeaving, canMergeDocument, hasEditsToConfirmBeforeLeaving, isReadOnly, loadTemplateIntoEditor, markAutosaveDirty, onSave, refocusEditorIfLost, setStatus, templateNameInput, templateSelect, updateSaveStatus } = api;
 
     // « Nouveau > Importer » demandé par GFS (js/gfs-open.js, consigne GFS 035) : GFS a ouvert le sélecteur de fichier lui-même (le cadre isolé de l'app n'a pas le geste de la personne) et donne le fichier choisi, que
     // `valeur` nomme : `excel` (une grille), `markdown` (un document), `powerpoint` (une présentation, l'extension « diapositives » étant active), `word` (un document). Il est lu par le chemin de la ligne du même nom du menu « + » - mêmes
@@ -19,6 +19,51 @@ const MainImport = (function () {
         case 'word': return importDocxFile(file);
         default: return false;
       }
+    }
+
+    // Un fichier DÉPOSÉ sur la page (js/drop-import.js ; audit « confort d'usage » du 12/11, idée 9) : le genre se lit à son extension. Excel et PowerPoint font toujours un nouveau modèle (une grille, une présentation).
+    // Word et Markdown aussi quand aucun document n'est ouvert à l'écran (ou qu'il est vide) ; quand un document est ouvert, une fenêtre demande : « Nouveau document » (la voie du menu « + »), « Remplacer celui-ci » (le
+    // contenu du fichier prend la place du texte, le modèle garde son nom, sa page, son en-tête et son pied), « Ajouter après » (à la fin du texte) ou « Insérer ici » (au curseur) - chacun défait par Ctrl + Z, rien
+    // n'est enregistré avant « Enregistrer ». true : le fichier est à l'écran ; false : refusé, en lecture seule, ou la personne a annulé.
+    const DROP_KINDS = [
+      ['word', /\.(docx|docm|dotx|dotm)$/i],
+      ['powerpoint', /\.(pptx|pptm|potx|potm)$/i],
+      ['excel', /\.(xlsx|xlsm|xltx|xltm)$/i],
+      ['markdown', /\.(md|markdown|mdown|mkd|txt)$/i],
+    ];
+    const kindOfFile = file => { const found = DROP_KINDS.find(([, pattern]) => pattern.test(file && file.name || '')); return found ? found[0] : null; };
+    async function importDroppedFile(file) {
+      if (isReadOnly()) { setStatus(I18n.t('status.dropReadOnly'), true); return false; }
+      const kind = kindOfFile(file);
+      if (!kind) { setStatus(I18n.t('status.dropUnsupported', { name: file && file.name || '' }), true); return false; }
+      if (!((kind === 'word' || kind === 'markdown') && canMergeDocument())) return importFileFromGfs(kind, file);
+      const choice = await Dialogs.choose({
+        title: I18n.t('drop.title'),
+        message: I18n.t('drop.message', { name: file.name }),
+        choices: [
+          { value: 'new', label: I18n.t('drop.new'), primary: true },
+          { value: 'replace', label: I18n.t('drop.replace') },
+          { value: 'after', label: I18n.t('drop.after') },
+          { value: 'insert', label: I18n.t('drop.insert') },
+        ],
+      });
+      if (!choice) { refocusEditorIfLost(); return false; }
+      if (choice === 'new') return importFileFromGfs(kind, file);
+      setStatus(I18n.t(kind === 'word' ? 'status.docxImporting' : 'status.mdImporting'));
+      const imported = kind === 'word' ? await readDocxForImport(file) : await readMdForImport(file);
+      if (!imported) return false;
+      const editor = EditorCore.getEditor();
+      if (!editor || !canMergeDocument()) { updateSaveStatus(); return false; }
+      // Le contenu du fichier entre dans le document par l'éditeur (une seule étape d'historique) ; la page, l'en-tête et le pied du fichier ne sont pas repris - ce sont ceux du modèle ouvert.
+      const chain = editor.chain().focus();
+      if (choice === 'replace') chain.setContent(imported.html, true);
+      else if (choice === 'after') chain.focus('end').insertContent(imported.html);
+      else chain.insertContent(imported.html);
+      chain.run();
+      markAutosaveDirty();
+      setStatus(I18n.t('status.dropMerged', { name: file.name }));
+      if (kind === 'word') await tellDocxImportReport(imported.report);
+      return true;
     }
 
     // Import d'un classeur Excel (js/grid-xlsx-import.js). Le sélecteur de fichier doit s'ouvrir dans le clic ; le classeur est lu ensuite et, s'il a
@@ -412,7 +457,7 @@ const MainImport = (function () {
       refocusEditorIfLost();
     }
 
-    return { importFileFromGfs, onImportDocx, onImportMd, onImportPptx, onImportXlsx };
+    return { importFileFromGfs, importDroppedFile, onImportDocx, onImportMd, onImportPptx, onImportXlsx };
   }
 
   return { create };
