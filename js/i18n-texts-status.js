@@ -264,6 +264,7 @@ const I18nTextsStatus = {
   // --- Panneau `#` : onglets ---
   'panel.tabVariables': { fr: 'Variables', en: 'Variables' },
   'panel.tabChips': { fr: 'Puces', en: 'Chips' },
+  'panel.close': { fr: 'Fermer la liste (Échap)', en: 'Close the list (Esc)' },
   'chips.footnote': { fr: 'Note de bas de page', en: 'Footnote' },
   'chips.date': { fr: 'Date du jour', en: 'Today’s date' },
   'chips.time': { fr: 'Heure actuelle', en: 'Current time' },

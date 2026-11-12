@@ -702,6 +702,11 @@
 .ac-tab.active { color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
 /* L'onglet choisi sous la souris, comme la ligne choisie d'un menu (`.v2-hover-row.is-active:hover`, plus bas) : `--accent-ink` sur le gris du survol, 5,67 et 5,41:1 au lieu de 4,02 et 4,43. */
 .ac-tab.active:hover { color: var(--accent-ink); }
+/* La croix de la liste (js/variables.js:ensureBox) : à droite des onglets, 28 px de large, l'icône en `--text-muted` (5,4:1 sur le fond de la liste), `--text` et le gris
+   du survol dessous. Un bouton hors de l'ordre de tabulation (tabindex -1) : le focus ne quitte jamais l'éditeur. */
+.ac-close { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; padding: 0; border: none; border-left: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; }
+.ac-close svg { width: 14px; height: 14px; pointer-events: none; }
+.ac-close:hover { background: var(--surface-sunken); color: var(--text); }
 
 #v2-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--border, #d7dde3); background: var(--surface, #fff); }
 /* #v2-toolbar est imbriqué dans #toolbar-top : la règle générique `#toolbar-top button::before` de css/style.css s'y applique donc aussi, et sans

@@ -739,6 +739,158 @@
     },
   });
 
+  // --- Un « # » qui n'est pas une variable (12/11) : la liste « # » se ferme à la croix ou à Échap, et Entrée redevient un saut de ligne ---
+  // Avant : la liste, ouverte dès que le curseur est derrière un « # » (« Lot # »), gardait Entrée : impossible de passer à la ligne sans poser la première variable de la liste.
+  const listShown = () => { const box = document.getElementById('autocomplete-box'); return !!box && box.style.display !== 'none'; };
+  // Une touche envoyée à l'éditeur, comme le navigateur ; vrai si elle a été prise (par la liste ou par l'éditeur).
+  function pressInEditor(key, options) {
+    const event = new KeyboardEvent('keydown', Object.assign({ key, bubbles: true, cancelable: true }, options));
+    document.querySelector('.tiptap').dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+  // Ce que le document porte : un texte par paragraphe, avec ses nœuds en ligne (`hardBreak`, `varBadge`, `smartChip`) à leur place.
+  const shapeOfDocument = () => EditorCore.getEditor().getJSON().content.map(node => node.type + ':' + (node.content || []).map(inline => (inline.type === 'text' ? inline.text : inline.type)).join('|'));
+  // Un « # » en fin de texte, derrière un mot : « Lot # ». Un « # » seul sur sa ligne n'est pas ce cas : Entrée y est une règle de saisie de TipTap (un titre vide), sans rapport avec la liste.
+  // La liste « # » n'a de lignes dans l'onglet des variables que si le document a une table : le faux Grist en reçoit une, rendue à la fin du cas.
+  const HASH_TABLE = 'ChHashDossiers';
+  async function withHashTable(body) {
+    window.__gristStub.setVariables(HASH_TABLE, { Titre: 'Text', Statut: 'Text' });
+    window.__gristStub.setRows(HASH_TABLE, [{ id: 1, Titre: 'Dossier A', Statut: 'Urgent' }]);
+    await GristAPI.refreshSchema();
+    try {
+      return await body();
+    } finally {
+      window.__gristStub.dropTable(HASH_TABLE);
+      await GristAPI.refreshSchema();
+    }
+  }
+  const hashCase = entry => Object.assign({}, entry, { run: h => withHashTable(() => entry.run(h)) });
+  async function openLotHash(h) {
+    await h.focusAtEnd();
+    await h.typeText('Lot #');
+    await h.sleep(120);
+  }
+  const closeCross = () => document.querySelector('#autocomplete-box .ac-close');
+  const pressCross = () => {
+    const event = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    const cross = closeCross();
+    if (cross) cross.dispatchEvent(event);
+    return !!cross && event.defaultPrevented;
+  };
+
+  const crossCase = {
+    id: 'hash_list_cross_closes_it_and_enter_breaks_the_line',
+    description: 'Derrière un « # » qui n\'est pas une variable, la croix de la liste « # » la ferme (nom et info-bulle dans la langue de la page, hors de l\'ordre de tabulation, sans voler le focus de l\'éditeur) et Entrée passe alors à la ligne : rien n\'est posé',
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        await openLotHash(h);
+        await h.sleep(120);
+        const cross = closeCross();
+        const label = I18n.getLang() === 'en' ? 'Close the list (Esc)' : 'Fermer la liste (Échap)';
+        const opened = { shown: listShown(), cross: !!cross, label: cross && cross.getAttribute('aria-label'), title: cross && cross.title, tabIndex: cross && cross.tabIndex, tag: cross && cross.tagName };
+        const keptFocus = pressCross();
+        await h.sleep(80);
+        const closed = { shown: listShown(), shape: shapeOfDocument() };
+        const taken = pressInEditor('Enter');
+        await h.sleep(80);
+        const afterEnter = { shown: listShown(), shape: shapeOfDocument(), taken };
+        const checks = {
+          opened: opened.shown && opened.cross && opened.tag === 'BUTTON' && opened.label === label && opened.title === label && opened.tabIndex === -1,
+          keptFocus,
+          closed: !closed.shown && JSON.stringify(closed.shape) === JSON.stringify(['paragraph:Lot #']),
+          enterBreaksTheLine: afterEnter.taken && !afterEnter.shown && JSON.stringify(afterEnter.shape) === JSON.stringify(['paragraph:Lot #', 'paragraph:']),
+        };
+        const failed = Object.keys(checks).filter(k => !checks[k]);
+        return { pass: failed.length === 0, notes: failed.join(', ') || JSON.stringify({ lang: I18n.getLang(), opened, closed, afterEnter }) };
+      } finally {
+        await h.resetEditor();
+      }
+    },
+  };
+  cases.push(hashCase(crossCase), hashCase(Object.assign({}, crossCase, {
+    id: 'hash_list_cross_is_called_close_the_list_in_an_english_page',
+    lang: 'en',
+    description: 'Dans une page qui démarre en anglais, la croix de la liste « # » s\'appelle « Close the list (Esc) » et fait la même chose : elle ferme la liste, Entrée passe à la ligne',
+  })));
+
+  cases.push(hashCase({
+    id: 'hash_list_escape_closes_it_and_enter_breaks_the_line',
+    description: 'Échap ferme la liste « # » ouverte derrière un « # » de texte, et Entrée passe alors à la ligne sans poser de variable (la liste fermée ne garde plus ses lignes ni la touche Entrée)',
+    run: async (h) => {
+      await h.resetEditor();
+      await openLotHash(h);
+      await h.sleep(120);
+      const opened = listShown();
+      pressInEditor('Escape');
+      await h.sleep(80);
+      const closed = listShown();
+      const taken = pressInEditor('Enter');
+      await h.sleep(80);
+      const shape = shapeOfDocument();
+      return { pass: opened && !closed && taken && JSON.stringify(shape) === JSON.stringify(['paragraph:Lot #', 'paragraph:']) && !listShown(), notes: JSON.stringify({ opened, closed, taken, shape }) };
+    },
+  }));
+
+  cases.push(hashCase({
+    id: 'hash_list_stays_closed_while_typing_and_reopens_on_a_new_hash',
+    description: 'Une fois fermée (croix), la liste « # » reste fermée tant qu\'on écrit à la suite du même « # », même ce qui nomme une colonne (« #Tit ») - Entrée passe à la ligne -, un nouveau « # » la rouvre, et l\'onglet des puces choisi avant la fermeture ne reste pas : elle repart des variables',
+    run: async (h) => {
+      const activeTab = () => (listShown() ? document.querySelector('#autocomplete-box .ac-tab.active').dataset.tab : null);
+      await h.resetEditor();
+      await openLotHash(h);
+      await h.sleep(120);
+      pressCross();
+      await h.sleep(80);
+      // « Tit » nomme la colonne « Titre » : sans la croix la liste se rouvrirait sur elle.
+      await h.typeText('Tit');
+      await h.sleep(80);
+      const stillClosed = !listShown();
+      const taken = pressInEditor('Enter');
+      await h.sleep(80);
+      const afterEnter = shapeOfDocument();
+      await h.typeText('#');
+      await h.sleep(120);
+      const reopened = { shown: listShown(), tab: activeTab() };
+      // Les puces choisies, la liste fermée à la croix : le « # » suivant rouvre les variables.
+      document.querySelector('#autocomplete-box .ac-tab[data-tab="chips"]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      await h.sleep(40);
+      const onChips = activeTab();
+      pressCross();
+      await h.sleep(80);
+      pressInEditor('Enter');
+      await h.sleep(80);
+      await h.typeText('#');
+      await h.sleep(120);
+      const again = { shown: listShown(), tab: activeTab() };
+      const pass = stillClosed && taken && JSON.stringify(afterEnter) === JSON.stringify(['paragraph:Lot #Tit', 'paragraph:']) && reopened.shown && reopened.tab === 'variables' && onChips === 'chips' && again.shown && again.tab === 'variables';
+      return { pass, notes: JSON.stringify({ stillClosed, taken, afterEnter, reopened, onChips, again }) };
+    },
+  }));
+
+  cases.push(hashCase({
+    id: 'hash_list_modified_enter_keeps_its_meaning_and_plain_enter_still_picks',
+    description: 'La liste « # » ouverte laisse passer Maj + Entrée et Ctrl + Entrée (le saut de ligne de l\'éditeur : un retour à la ligne, rien de posé, comme dans les listes « § » et « @ »), et Entrée seule pose toujours la ligne choisie, sur la même ligne du document',
+    run: async (h) => {
+      const round = async (options) => {
+        await h.resetEditor();
+        await openLotHash(h);
+        await h.sleep(120);
+        const opened = listShown();
+        pressInEditor('Enter', options);
+        await h.sleep(80);
+        return { opened, shape: shapeOfDocument() };
+      };
+      const shift = await round({ shiftKey: true });
+      const ctrl = await round({ ctrlKey: true });
+      const plain = await round({});
+      await h.resetEditor();
+      const breaks = r => r.opened && r.shape.length === 1 && r.shape[0] === 'paragraph:Lot #|hardBreak';
+      const picked = plain.opened && plain.shape.length === 1 && /varBadge|smartChip/.test(plain.shape[0]) && !plain.shape[0].includes('hardBreak');
+      return { pass: breaks(shift) && breaks(ctrl) && picked, notes: JSON.stringify({ shift, ctrl, plain }) };
+    },
+  }));
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.chips = cases;
 })();

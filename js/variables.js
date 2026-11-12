@@ -24,6 +24,8 @@ const Variables = (function () {
   let latestFieldMode = false;
   // La commande de l'entrée choisie : @tiptap/suggestion ne la donne qu'à onStart et onUpdate, jamais à onKeyDown ni au clic de souris.
   let latestCommand = null;
+  // La clé du plugin @tiptap/suggestion de la liste (prise sur le plugin que createExtension rend) : la croix de la liste ferme celle-ci par un message à cette clé.
+  let suggestionKey = null;
   // Onglet actif du panneau « # » (le champ texte d'une fenêtre - QR code, calcul - n'a pas celui des puces) ; 'variables' à chaque ouverture.
   let activeTab = 'variables';
   // La fenêtre d'où la liste s'ouvre quand c'est depuis un de ses champs (le calcul d'une bulle) : la liste passe devant elle
@@ -91,6 +93,16 @@ const Variables = (function () {
         });
         tabs.appendChild(tab);
       });
+      // La croix ferme la liste pour CE « # » (un « # » qui n'est pas une variable : « Lot # », « n° # »), comme Échap : Entrée redevient un saut de ligne. mousedown +
+      // preventDefault (pas click), comme les onglets : le focus reste dans l'éditeur. Hors de l'ordre de tabulation : le clavier a Échap. Absente des champs texte
+      // d'une ligne (Objet, À, Cc, Cci, nom du PDF : setTabsVisible(false) masque les onglets avec elle), où Entrée ne passe pas à la ligne.
+      const close = Dom.button('ac-close');
+      close.tabIndex = -1;
+      close.setAttribute('aria-label', I18n.t('panel.close'));
+      close.title = I18n.t('panel.close');
+      Dom.setMarkup(close, Icons.svg('closeFind'));
+      close.addEventListener('mousedown', e => { e.preventDefault(); dismiss(); });
+      tabs.appendChild(close);
       acItemsBox = Dom.el('div', 'ac-items');
       // Les écouteurs sont posés une fois sur la liste, pas sur chaque ligne : elle n'a pas de limite, des milliers de lignes ne portent pas deux
       // écouteurs chacune. Un survol choisit la ligne comme les flèches, pour qu'Entrée suive la ligne survolée ; un clic l'insère, au mousedown +
@@ -352,7 +364,7 @@ const Variables = (function () {
     return { setTabsVisible, render, select, moveSelection, position, preferChipsTab };
   })();
 
-  const { updateItems, hide, suggestionRender } = (function () {
+  const { updateItems, hide, dismiss, suggestionRender } = (function () {
     // La mise à jour de la liste et l'objet de rendu de @tiptap/suggestion
 
     // `fieldMode` : la liste d'un champ texte, dont l'onglet des puces n'a que celles qui s'écrivent en texte.
@@ -376,6 +388,15 @@ const Variables = (function () {
 
     function hide() { if (acBox) acBox.style.display = 'none'; }
 
+    // La croix de la liste : ferme la liste de l'éditeur (ou du champ à bulles) pour le « # » où se trouve le curseur, comme Échap. Cacher la boîte ne suffit pas, la liste
+    // gardant ses lignes et la touche Entrée : le plugin est prévenu (message `exit`, comme à Échap), la saisie reste fermée tant que ce « # » ne change pas et Entrée
+    // retombe sur l'éditeur - un saut de ligne.
+    function dismiss() {
+      const view = latestProps && latestProps.editor && latestProps.editor.view;
+      hide();
+      if (view && !view.isDestroyed && suggestionKey) view.dispatch(view.state.tr.setMeta(suggestionKey, { exit: true }));
+    }
+
     // L'objet de rendu de @tiptap/suggestion : onStart et onUpdate à chaque frappe après le déclencheur, onKeyDown pour intercepter flèches, Entrée et
     // Échap (true : géré, l'éditeur ne les reçoit pas), onExit quand le déclencheur n'est plus actif (curseur sorti, espace tapé...).
     function suggestionRender(fieldMode) {
@@ -386,6 +407,8 @@ const Variables = (function () {
           if (!currentItems.length) return false;
           if (props.event.key === 'ArrowDown') { moveSelection(1); return true; }
           if (props.event.key === 'ArrowUp') { moveSelection(-1); return true; }
+          // Maj/Ctrl/Alt/Cmd + Entrée gardent leur sens (le saut de ligne de l'éditeur), comme dans les listes « § » et « @ » (js/suggestion-list.js).
+          if (props.event.key === 'Enter' && (props.event.shiftKey || props.event.ctrlKey || props.event.altKey || props.event.metaKey)) return false;
           if (props.event.key === 'Enter' || props.event.key === 'Tab') { latestCommand(currentItems[selectedIndex]); return true; }
           if (props.event.key === 'Escape') { hide(); return true; }
           return false;
@@ -398,7 +421,7 @@ const Variables = (function () {
         },
       };
     }
-    return { updateItems, hide, suggestionRender };
+    return { updateItems, hide, dismiss, suggestionRender };
   })();
 
   const { createExtension, createFieldExtension, isAttachmentColumn, becomesImage, attachmentImageNode, insertAttachmentImage } = (function () {
@@ -487,16 +510,16 @@ const Variables = (function () {
         // ligne), elle rend la main sans rien consommer.
         priority: 1000,
         addProseMirrorPlugins() {
-          return [
-            Suggestion(Object.assign(suggestionBase(this.editor), {
-              // Jamais dans un bloc de code : un « # » de commentaire ou de couleur (#fff) y ouvrirait la liste, et une bulle ne peut pas vivre dans du
-              // texte brut.
-              allow: ({ state, range }) => !state.doc.resolve(range.from).parent.type.spec.code,
-              items: ({ query, editor }) => computeItems(query, editor),
-              command: ({ editor, range, props }) => insertItem(editor, range, props),
-              render: suggestionRender,
-            })),
-          ];
+          const plugin = Suggestion(Object.assign(suggestionBase(this.editor), {
+            // Jamais dans un bloc de code : un « # » de commentaire ou de couleur (#fff) y ouvrirait la liste, et une bulle ne peut pas vivre dans du
+            // texte brut.
+            allow: ({ state, range }) => !state.doc.resolve(range.from).parent.type.spec.code,
+            items: ({ query, editor }) => computeItems(query, editor),
+            command: ({ editor, range, props }) => insertItem(editor, range, props),
+            render: suggestionRender,
+          }));
+          suggestionKey = plugin.spec.key;
+          return [plugin];
         },
       });
     }
@@ -517,16 +540,16 @@ const Variables = (function () {
         // de la liste garde le focus du champ (mousedown sans effet par défaut, cf. ensureBox) : il n'arrive pas ici.
         onBlur() { hide(); },
         addProseMirrorPlugins() {
-          return [
-            Suggestion(Object.assign(suggestionBase(this.editor), {
-              allowedPrefixes: null,
-              items: ({ query, editor }) => (attachmentsOnly(editor) ? computeItems(query, editor, true).filter(isAttachmentColumn) : computeItems(query, editor, true)),
-              // La liste se ferme au choix : la fenêtre de la clé de correspondance, si elle s'ouvre, ne la retrouve pas ouverte derrière elle, et un refus laisse le
-              // texte tapé sans liste, comme le champ d'avant.
-              command: ({ editor, range, props }) => { hide(); insertItem(editor, range, props); },
-              render: () => suggestionRender(true),
-            })),
-          ];
+          const plugin = Suggestion(Object.assign(suggestionBase(this.editor), {
+            allowedPrefixes: null,
+            items: ({ query, editor }) => (attachmentsOnly(editor) ? computeItems(query, editor, true).filter(isAttachmentColumn) : computeItems(query, editor, true)),
+            // La liste se ferme au choix : la fenêtre de la clé de correspondance, si elle s'ouvre, ne la retrouve pas ouverte derrière elle, et un refus laisse le
+            // texte tapé sans liste, comme le champ d'avant.
+            command: ({ editor, range, props }) => { hide(); insertItem(editor, range, props); },
+            render: () => suggestionRender(true),
+          }));
+          suggestionKey = plugin.spec.key;
+          return [plugin];
         },
       });
     }

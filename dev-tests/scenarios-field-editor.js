@@ -503,6 +503,36 @@
     try { return await body(); } finally { GristAPI.getCurrentUserEmail = kept.email; GristAPI.getCurrentUserName = kept.name; }
   }
 
+  // La croix de la liste « # » (12/11, « # » qui n'est pas une variable) : la liste d'un champ à bulles se ferme au clic sur la croix, comme à Échap, et reste fermée tant que ce « # »
+  // est celui de la saisie ; un « # » neuf (dans un autre champ) l'ouvre de nouveau. Le texte du champ n'a pas bougé : rien n'a été posé.
+  scenario(
+    'fieldeditor_hash_list_cross_closes_the_list_and_nothing_is_picked',
+    'Dans un champ à bulles, la croix de la liste « # » la ferme sans rien poser (ni bulle ni puce), la liste reste fermée tant qu\u2019on écrit à la suite de ce « # », et un « # » dans un autre champ l\u2019ouvre de nouveau',
+    async (h) => {
+      I18n.setLang('fr');
+      await h.fieldType(SUBJECT, 'Le #');
+      const cross = acBox() && acBox().querySelector('.ac-close');
+      const opened = { rows: listed(), cross: !!cross, tabsShown: !!tabBar() && tabBar().shown };
+      const mousedown = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      if (cross) cross.dispatchEvent(mousedown);
+      await h.sleep(60);
+      const closed = { list: listed(), text: textOf(SUBJECT), badges: badgesOf(SUBJECT).length, chips: chipsOf(SUBJECT).length, keptFocus: mousedown.defaultPrevented };
+      await h.fieldType(SUBJECT, 'x', true);
+      await h.sleep(40);
+      const typedAfter = { list: listed(), text: textOf(SUBJECT) };
+      await h.fieldType(CC, 'a@x.fr, #');
+      const elsewhere = listed();
+      const checks = {
+        opened: !!opened.rows && opened.rows.length > 0 && opened.cross && opened.tabsShown,
+        closed: closed.list === null && closed.text === 'Le #' && closed.badges === 0 && closed.chips === 0 && closed.keptFocus === true,
+        staysClosed: typedAfter.list === null && typedAfter.text === 'Le #x',
+        otherField: !!elsewhere && elsewhere.length > 0,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.join(', ') || JSON.stringify({ opened, closed, typedAfter, elsewhere }) };
+    },
+  );
+
   scenario(
     'fieldeditor_hash_list_chips_tab_offers_the_four_text_chips_and_a_pick_becomes_a_chip',
     'L’onglet Puces de la liste « # » d’un champ n’a que les quatre puces qui s’écrivent en texte - Date du jour, Heure actuelle, Email et Nom de l’utilisateur -, ni la note de bas de page, ni les blocs conditionnels, ni le calcul ; il se filtre à la frappe ; Entrée, un clic et les flèches posent la puce à la place de la saisie (texte avant gardé, liste fermée, valeur enregistrée en HTML) ; la liste rouverte recommence par l’onglet Variables',
