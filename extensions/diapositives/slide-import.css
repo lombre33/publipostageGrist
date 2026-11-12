@@ -49,6 +49,9 @@ body.pp-slide-import-on .pp-page-zoom { right: calc(var(--pp-zoom-right, 0px) + 
 .pp-slide-import-list { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 4px; padding: 4px 8px 6px; overflow-x: hidden; overflow-y: auto; }
 .pp-slide-import-list > .pp-slide-item { flex: none; }
 .pp-slide-import .pp-slide-thumb { width: 96px; }
+/* La pastille de numéro de page d'une diapositive dont le numéro est écrit (la photo d'un bloc de document, SlidesEntry.resolveSlideNumbers) : du texte de la diapositive, sans la pastille verte de l'éditeur
+   (comme `.reader-content .page-number-badge[data-slide-number]` de css/editor-v2.css). */
+.pp-slide-page .page-number-badge[data-slide-number] { display: inline; background: none; border: 0; padding: 0; border-radius: 0; color: inherit; font-size: inherit; line-height: inherit; }
 .pp-slide-import .pp-slide-item[aria-selected="true"] .pp-slide-thumb { box-shadow: 0 0 0 1px var(--border-strong); }
 .pp-slide-import .pp-slide-item[aria-selected="true"] .pp-slide-num { color: var(--text-muted); font-weight: 400; }
 .pp-slide-import-list[aria-disabled="true"] .pp-slide-item { cursor: not-allowed; }

@@ -240,8 +240,17 @@ const SlideCopies = (function () {
     const at = parsed.byId.get(link.slide);
     if (at === undefined) return { action: 'missing', model };
     const remote = parsed.slides[at];
-    const srcHash = slideHash(remote);
-    return { action: link.base === srcHash ? 'none' : 'pull', model, remote, srcHash, at };
+    const total = parsed.slides.length;
+    const srcHash = slideHash(remote) + numberStamp(hasNumber(remote), at + 1, total);
+    return { action: link.base === srcHash ? 'none' : 'pull', model, remote, srcHash, at, total };
+  }
+  // Une diapositive qui porte son numéro (la pastille de numéro de page) est dessinée avec ce numéro : elle n'est plus à jour quand son rang ou le nombre de diapositives change, même si son contenu
+  // n'a pas bougé. L'empreinte d'un tel bloc garde donc le rang et le total derrière celle du contenu (vide pour une diapositive sans numéro : les blocs d'avant restent à jour).
+  const numberStamp = (has, rank, total) => (has ? '@' + rank + '/' + total : '');
+  function hasNumber(remote) {
+    let found = false;
+    remote.nodes.forEach((entry) => { entry.node.descendants((node) => { if (node.type.name === 'pageNumberBadge') found = true; return !found; }); });
+    return found;
   }
   // Le HTML d'une diapositive lue de sa présentation (sans repère ni image répétée), tel que l'extension le dessine.
   function slideHtml(editor, remote) {
@@ -264,7 +273,7 @@ const SlideCopies = (function () {
       for (const { block, plan } of stale) {
         const key = keyOf({ linkModel: block.link.model, linkSlide: block.link.slide });
         if (shots.has(key)) continue;
-        shots.set(key, { plan, shot: await SlidesEntry.blockSnapshot(slideHtml(editor, plan.remote), plan.model) });
+        shots.set(key, { plan, shot: await SlidesEntry.blockSnapshot(slideHtml(editor, plan.remote), plan.model, { rank: plan.at + 1, total: plan.total }) });
       }
       if (editor.isDestroyed || paused(editor)) return null;
       const tr = editor.state.tr;
@@ -443,5 +452,5 @@ const SlideCopies = (function () {
     return SlideLinks.strip(Editor.getHTML(tr.doc));
   }
 
-  return { SOURCE_TYPE, createExtension, follow, followBlocks, forOutput, insert, insertBlock, detach, statusAt, linkedFrom, copiesOf, blocksOf };
+  return { SOURCE_TYPE, createExtension, follow, followBlocks, forOutput, insert, insertBlock, numberStamp, detach, statusAt, linkedFrom, copiesOf, blocksOf };
 })();

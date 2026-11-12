@@ -210,9 +210,18 @@ const SlidesEntry = (function () {
   // (« 3 », « Page 3 », « 3/12 » : PageLayout.pageNumberText, le total est le nombre de diapositives). La pastille reste (même classe : le HTML et le Markdown, où un numéro ne coule pas avec le texte, la retirent toujours) ;
   // `data-slide-number` dit qu'elle est résolue : la Lecture la montre alors comme du texte de la diapositive, sans pastille verte (css/editor-v2.css), le PDF et le Word en écrivent le texte, non un champ de page (une
   // diapositive plus haute que sa page en prend plusieurs). Vrai quand une pastille a été résolue.
+  // `at` ({ rank, total }) : le rang et le nombre de diapositives de la présentation quand `root` ne porte qu'UNE diapositive (la photo d'un bloc de document, extensions/diapositives/slide-import.js : sans
+  // saut de page devant elle, son numéro serait toujours 1).
   const SLIDE_NUMBER_ATTR = 'data-slide-number';
-  function resolveSlideNumbers(root) {
+  function resolveSlideNumbers(root, at) {
     if (!root.querySelector('.page-number-badge')) return false;
+    if (at) {
+      root.querySelectorAll('.page-number-badge').forEach((badge) => {
+        badge.textContent = PageLayout.pageNumberText(badge.getAttribute('data-format') || 'n', at.rank, at.total);
+        badge.setAttribute(SLIDE_NUMBER_ATTR, String(at.rank));
+      });
+      return true;
+    }
     const blocks = Array.from(root.children);
     const isBreak = block => block.classList.contains('page-break-marker');
     const total = blocks.filter(isBreak).length + 1;
@@ -350,14 +359,15 @@ const SlidesEntry = (function () {
   function registerTextImport(next) { textImport = next; }
   // La photo d'une diapositive (extensions/diapositives/slide-raster.js, posée par le volet une fois chargé : registerBlockRaster) : `blockSnapshot(html, tpl)` dessine le HTML d'une diapositive de la
   // présentation `tpl` à la page de celle-ci, et rend { src, width, height, text, words } (null quand l'extension est éteinte, ne se charge pas, ou que le dessin échoue). Le socle (js/slide-copies.js) s'en
-  // sert pour mettre à jour une diapositive posée en bloc et liée à sa source.
+  // sert pour mettre à jour une diapositive posée en bloc et liée à sa source. `at` : { rank, total }, la place de la diapositive dans sa présentation (13/11, « mon numéro de page apparaît en # vert ») :
+  // son numéro est écrit dans la photo (resolveSlideNumbers), comme la Lecture et les exports.
   let blockRaster = null;
   function registerBlockRaster(next) { blockRaster = next; }
-  async function blockSnapshot(html, tpl) {
+  async function blockSnapshot(html, tpl, at) {
     if (!isAvailable()) return null;
     try { await Extensions.ensure(ID); } catch (e) { return null; }
     if (!blockRaster) return null;
-    try { return await blockRaster(html, tpl); } catch (e) { console.warn('[SlidesEntry] photo de diapositive impossible', e); return null; }
+    try { return await blockRaster(html, tpl, at); } catch (e) { console.warn('[SlidesEntry] photo de diapositive impossible', e); return null; }
   }
   // La ligne « Diapositive d'une présentation… » du menu : sans l'extension, elle explique ; avec elle, le code se charge d'abord (un échec le dit, le clic suivant réessaie), puis le volet
   // s'ouvre. `byKeyboard` : le clavier va dans le volet. Vrai quand le volet est ouvert. Rien ne se passe hors de l'Édition d'un document (la Lecture, un modèle en lecture seule, une
@@ -409,7 +419,7 @@ const SlidesEntry = (function () {
 
   return {
     ID, TYPE, FEATURE_KEY, SLIDE_BREAK_ATTR, setHooks, setContext, isAvailable, isPresentation, reason, startNew, ensureFor, unavailableReason, pageFor, pageSizeOf, onChange: Extensions.onChange,
-    changed: sync, register, explainOff, relayout, status, showsEveryPage, presentationShown, seamLabel, outputHtml, TEXT_SIZE, HEADING_SIZES, createTextExtension, textMarks,
+    changed: sync, register, explainOff, relayout, status, showsEveryPage, presentationShown, seamLabel, outputHtml, resolveSlideNumbers, TEXT_SIZE, HEADING_SIZES, createTextExtension, textMarks,
     registerTextImport, registerBlockRaster, blockSnapshot, openTextImport, pastedInDocument, registerTheme, openTheme, shownSlide, showSlide,
   };
 })();

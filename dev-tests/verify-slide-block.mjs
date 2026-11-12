@@ -155,7 +155,7 @@ async function buildSlides() {
       + '</tbody></table>';
     const slide3 = FreeFrame.html({ x: 0, y: 0, w: 60, h: 540, shape: 'rect', fill: '#009de0', layer: 'behind', decorative: '1' }, '')
       + FreeFrame.html({ x: 8, y: 10, w: 50, h: 22, layer: 'behind' }, `<p><img class="editor-image" src="${logo}" alt="" style="width: 44px"></p>`)
-      + FreeFrame.html({ x: 880, y: 500, w: 60, h: 24, layer: 'behind' }, '<p><span style="font-size: 12pt">3</span></p>')
+      + FreeFrame.html({ x: 880, y: 500, w: 60, h: 24, layer: 'behind' }, '<p><span style="font-size: 12pt"><span class="page-number-badge" contenteditable="false" data-format="n">#</span></span></p>')
       + FreeFrame.html({ x: 90, y: 30, w: 760, h: 50 }, '<h2><span style="font-size: 20pt">Arbitrages du 13 octobre 2026</span></h2>')
       + FreeFrame.html({ x: 90, y: 100, w: 800, h: 300 }, table);
     return FreeFrame.html({ x: 80, y: 200, w: 800, h: 100 }, '<h1><span style="font-size: 44pt">Comité innovation</span></h1>') + MARK
@@ -226,7 +226,7 @@ const countIn = (box, test) => app.evaluate(async ([b, kind]) => {
   const x = Math.round(b[0] * img.naturalWidth); const y = Math.round(b[1] * img.naturalHeight);
   const data = ctx.getImageData(x, y, Math.round((b[2] - b[0]) * img.naturalWidth), Math.round((b[3] - b[1]) * img.naturalHeight)).data;
   let n = 0;
-  for (let i = 0; i < data.length; i += 4) { const light = data[i] > 225 && data[i + 1] > 225 && data[i + 2] > 225; const dark = data[i] < 90 && data[i + 1] < 90 && data[i + 2] < 90; if (kind === 'light' ? light : dark) n++; }
+  for (let i = 0; i < data.length; i += 4) { const light = data[i] > 225 && data[i + 1] > 225 && data[i + 2] > 225; const dark = data[i] < 90 && data[i + 1] < 90 && data[i + 2] < 90; const green = data[i + 1] > 235 && data[i + 1] - data[i] > 10 && data[i + 1] - data[i + 2] > 5; if (kind === 'light' ? light : kind === 'green' ? green : dark) n++; }
   return n;
 }, [box, test]);
 const selectedNode = () => app.evaluate(() => { const n = EditorCore.getEditor().state.selection.node; return n ? { type: n.type.name, hasText: !!n.attrs.slideText } : null; });
@@ -286,6 +286,9 @@ check('le bas de la page est blanc, l’en-tête du tableau est bleu, la cellule
 const logoLight = await countIn([0.01, 0.025, 0.07, 0.1], 'light');
 const numberDark = await countIn([0.9, 0.9, 0.97, 0.97], 'dark');
 check('le logo est dans le bandeau (des pixels blancs sur le bleu, là où il est posé) et le numéro est en bas à droite (des pixels sombres)', logoLight > 30 && numberDark > 20, { logoLight, numberDark });
+// 13/11, « mon numéro de page apparaît en # vert » : la pastille de numéro de la diapositive (celle que l'import PowerPoint écrit) est écrite en chiffre, comme à la Lecture, sans la pastille verte de l'éditeur.
+const numberGreen = await countIn([0.88, 0.88, 0.99, 0.99], 'green');
+check('le numéro de la diapositive est écrit (« 3 », le dernier texte de l’image), non laissé en « # » ; ni pastille verte à sa place', /(^|\s)3\s*$/.test(img0.slideText) && !/(^|\s)#(\s|$)/.test(img0.slideText) && numberGreen === 0, { text: img0.slideText.slice(-40), numberGreen });
 const caret = await app.evaluate(() => EditorCore.getEditor().state.selection.$from.parent.textContent);
 check('le curseur est dans le bloc qui suit l’image (« Merci à toutes et à tous. »), les insertions se suivent', caret === 'Merci à toutes et à tous.', caret);
 await a.press('Control+z');
@@ -389,6 +392,12 @@ list = await blocks();
 const now = list.filter(b => b.image && b.image.link)[0];
 check('il garde sa taille, son lien (même diapositive, nouvelle empreinte) et un texte alternatif à jour', !!now && now.image.width === sizeBefore && now.image.link.slide === linked[0].image.link.slide && now.image.link.base !== linked[0].image.link.base && /20 novembre 2026/.test(now.image.alt), { now, sizeBefore });
 check('le coin d’état le dit : « Le bloc lié à « Support » a pris la dernière version de sa diapositive. »', (await said()).includes('Le bloc lié à « Support » a pris la dernière version de sa diapositive.'), await said());
+// Une diapositive est ajoutée AVANT elle dans « Support » : son numéro passe de 3 à 4, le bloc lié se redessine avec (son contenu n'a pas bougé : c'est son rang qui change).
+await watchStatus();
+const inserted = await app.evaluate(() => { const stub = window.__gristStub; const html = stub.getRow('Publipostage_Modeles', 8).Contenu; const marks = Array.from(html.matchAll(/<div[^>]*page-break-marker[^>]*>[^<]*<\/div>/g)); if (marks.length < 2) return false; const at = marks[1].index; stub.remoteWrite('Publipostage_Modeles', 8, { Contenu: html.slice(0, at) + marks[1][0] + '<p>Diapositive ajoutée</p>' + html.slice(at), DateModif: new Date().toISOString() }); return true; });
+check('(préparation) une diapositive est ajoutée avant la 3e dans « Support »', inserted, null);
+const renumbered = await waitFor(() => { let ok = false; EditorCore.getEditor().state.doc.descendants((n) => { if (n.type.name === 'editorImage' && n.attrs.slideLink && /(^|\s)4\s*$/.test(n.attrs.slideText || '')) ok = true; }); return ok; }, null, 45000);
+check('le bloc lié se redessine avec le nouveau rang : son numéro dit 4, son contenu n’a pas changé', renumbered, await said());
 // « Détacher » : l'image reste, le lien part.
 await clickBlock(1);
 await a.click('.v2-copy-toolbar .v2-copy-detach', 0, 500);

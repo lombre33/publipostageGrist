@@ -650,8 +650,9 @@ const SlideImport = (function () {
   // tableaux), large comme le texte, qu'on sélectionne, redimensionne et supprime d'un geste ; l'image garde le texte de la diapositive (Ctrl+F, texte alternatif). Le dessin est asynchrone (le
   // navigateur peint la page dans un SVG, puis un canevas : extensions/diapositives/slide-raster.js) ; pendant ce temps, les clics suivants attendent (`linking`), et rien ne s'insère si le document
   // ou la source a changé entre-temps. La largeur est celle du texte du document, 16:9 par la source : la personne la règle ensuite aux poignées. Un seul pas d'annulation.
-  // La photo de `html` (une diapositive, sans repère) à la page de la présentation `tpl`, dessinée hors de l'écran à l'échelle 1.
-  async function snapshotHtml(html, tpl) {
+  // La photo de `html` (une diapositive, sans repère) à la page de la présentation `tpl`, dessinée hors de l'écran à l'échelle 1. `at` : { rank, total }, la place de la diapositive dans sa présentation
+  // (13/11, « mon numéro de page apparaît en # vert ») : sa pastille de numéro y est écrite en texte de la diapositive, comme la Lecture et les exports, non laissée en espace réservé « # ».
+  async function snapshotHtml(html, tpl, at) {
     const stored = SlidesEntry.pageFor(SlidesEntry.TYPE, tpl ? tpl.marginsMm : null);
     const page = pageFromStored(stored, stored.orientation);
     const g = Object.assign({ scale: 1, own: true }, page);
@@ -663,6 +664,7 @@ const SlideImport = (function () {
     try {
       paint(host, html, g.width, g);
       const thumb = host.querySelector('.pp-slide-thumb');
+      if (at) SlidesEntry.resolveSlideNumbers(thumb.querySelector('.pp-slide-page'), at);
       thumb.style.contentVisibility = 'visible';
       thumb.style.boxShadow = 'none';
       // La mise en page d'abord (les polices ne se chargent qu'à la première ligne qui s'en sert), puis les polices.
@@ -683,7 +685,7 @@ const SlideImport = (function () {
     const byKeyboard = list.contains(document.activeElement);
     SlidesEntry.status(I18n.t('slides.block.drawing', { n: index + 1 }));
     let shot = null;
-    try { shot = await snapshotHtml(html, Templates.byId(id)); } catch (error) { console.warn('[SlideImport] diapositive en bloc : dessin impossible', error); }
+    try { shot = await snapshotHtml(html, Templates.byId(id), { rank: index + 1, total: source.slides.length }); } catch (error) { console.warn('[SlideImport] diapositive en bloc : dessin impossible', error); }
     if (!shot) { SlidesEntry.status(I18n.t('slides.block.failed'), true); return false; }
     // Le document, la source ou le volet ont changé pendant le dessin : rien n'est posé.
     if (!open || editor.isDestroyed || EditorCore.getEditor() !== editor || String(Templates.getCurrentId()) !== String(here) || !source || String(source.id) !== String(id)) return false;
@@ -725,7 +727,9 @@ const SlideImport = (function () {
         if (await placeBlock(editor, index, html, null, here)) SlidesEntry.status(I18n.t('slides.link.already', { n: index + 1, name }));
         return;
       }
-      await placeBlock(editor, index, html, link, here);
+      // L'empreinte d'une diapositive qui porte son numéro garde son rang et le nombre de diapositives (SlideCopies.numberStamp) : le bloc se redessine quand ils changent.
+      const stamp = SlideCopies.numberStamp(html.indexOf('page-number-badge') !== -1, index + 1, source.slides.length);
+      await placeBlock(editor, index, html, Object.assign({}, link, { srcHash: link.srcHash + stamp }), here);
     } catch (error) {
       if (!error || !error.reason) console.warn('[SlideImport] bloc lié en échec', error);
       SlidesEntry.status(I18n.t((error && error.reason) || 'slides.link.failed', { name }), true);
