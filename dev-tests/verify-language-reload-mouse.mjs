@@ -7,6 +7,8 @@
 //   2. une modification attend d'être enregistrée (l'enregistrement automatique est coupé) : la question « Modifications non enregistrées » (Annuler / Abandonner / Enregistrer) passe
 //      devant Réglages avant tout rechargement ; « Annuler » laisse la page, sa langue, la case cochée d'avant et le texte tapé ; « Enregistrer » écrit le modèle avant que la page
 //      parte ; « Abandonner » la laisse partir sans l'écrire ;
+//   2 bis. « Recharger maintenant » de la touche de déclenchement pose la même question quand une modification attend (elle rechargeait la page sans rien demander) : « Annuler » laisse la
+//      page, le texte tapé et l'avis ; « Enregistrer » écrit le modèle avant que la page parte ; « Ne pas enregistrer » la laisse partir sans l'écrire ; la touche choisie est gardée.
 //   3. stockage refusé (la langue ne survivrait pas au rechargement) : rien ne change, ni la langue ni un rechargement, et la case revient sur la langue de la page.
 //   4. la page rechargée rouvre le modèle où la personne était (demande du 20/10) : « Facture », pas le ★ « Contrat », après « English » puis après « Recharger maintenant » de la touche de déclenchement ;
 //      le fragment de l'adresse qui porte son identifiant (`#pp-open=…`) est effacé aussitôt, donc un rechargement qui ne vient pas de Réglages (F5) ouvre le ★ ; un modèle supprimé entre-temps ou un autre
@@ -196,6 +198,27 @@ async function clickDialogButton(page, text) {
   await page.mouse.click(at.x, at.y);
   return at;
 }
+// La question « Modifications non enregistrées » est à l'écran : on l'attend, puis le temps qu'elle finisse de s'ouvrir.
+async function waitForQuestion(page) {
+  await page.waitForFunction(() => { const m = document.getElementById('pp-dialog-modal'); return !!m && getComputedStyle(m).display !== 'none'; }, null, { timeout: 5000 }).catch(() => {});
+  await sleep(250);
+}
+// Ce que la question montre : son titre, son message, ses boutons visibles, si elle est devant tout le reste et tient dans la fenêtre.
+const questionOf = page => page.evaluate(() => {
+  const modal = document.getElementById('pp-dialog-modal');
+  const box = modal && modal.querySelector('.pp-dialog-box');
+  const buttons = Array.from(document.querySelectorAll('#pp-dialog-modal .var-modal-actions button')).filter(b => b.getClientRects().length > 0).map(b => b.textContent.trim());
+  if (!box) return null;
+  const r = box.getBoundingClientRect();
+  const top = document.elementFromPoint(r.left + r.width / 2, r.top + 12);
+  return {
+    title: (document.getElementById('pp-dialog-title') || {}).textContent || '',
+    message: (document.getElementById('pp-dialog-message') || {}).textContent || '',
+    buttons,
+    inFront: !!top && box.contains(top),
+    inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight,
+  };
+});
 async function openSettings(page) {
   await realClick(page, '#v2-btn-settings');
   await page.waitForFunction(() => getComputedStyle(document.getElementById('settings-modal')).display !== 'none', null, { timeout: 5000 }).catch(() => {});
@@ -287,23 +310,8 @@ console.log(`\n=== 2. Une modification attend d'être enregistrée : la question
   check('le texte tapé est « à enregistrer » (enregistrement automatique coupé)', dirty);
   await openSettings(page);
   await realClick(page, 'input[name="settings-lang"][value="en"]');
-  await page.waitForFunction(() => { const m = document.getElementById('pp-dialog-modal'); return !!m && getComputedStyle(m).display !== 'none'; }, null, { timeout: 5000 }).catch(() => {});
-  await sleep(250);
-  const asked = await page.evaluate(() => {
-    const modal = document.getElementById('pp-dialog-modal');
-    const box = modal && modal.querySelector('.pp-dialog-box');
-    const buttons = Array.from(document.querySelectorAll('#pp-dialog-modal .var-modal-actions button')).filter(b => b.getClientRects().length > 0).map(b => b.textContent.trim());
-    if (!box) return null;
-    const r = box.getBoundingClientRect();
-    const top = document.elementFromPoint(r.left + r.width / 2, r.top + 12);
-    return {
-      title: (document.getElementById('pp-dialog-title') || {}).textContent || '',
-      message: (document.getElementById('pp-dialog-message') || {}).textContent || '',
-      buttons,
-      inFront: !!top && box.contains(top),
-      inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight,
-    };
-  });
+  await waitForQuestion(page);
+  const asked = await questionOf(page);
   check('la question « Modifications non enregistrées » s\'ouvre devant Réglages, avec « Annuler », « Ne pas enregistrer » et « Enregistrer »',
     !!asked && /Modifications non enregistrées/.test(asked.title) && /Contrat/.test(asked.message) && asked.buttons.join('|') === 'Annuler|Ne pas enregistrer|Enregistrer' && asked.inFront && asked.inside, asked);
   const held = await snapshot(page);
@@ -320,8 +328,7 @@ console.log(`\n=== 2. Une modification attend d'être enregistrée : la question
 
   // « Enregistrer » : le modèle est écrit avant que la page parte.
   await realClick(page, 'input[name="settings-lang"][value="en"]');
-  await page.waitForFunction(() => { const m = document.getElementById('pp-dialog-modal'); return !!m && getComputedStyle(m).display !== 'none'; }, null, { timeout: 5000 }).catch(() => {});
-  await sleep(250);
+  await waitForQuestion(page);
   const reloadedSave = await clickAndReload(page, () => clickDialogButton(page, 'Enregistrer'));
   const atSave = await takeAtReload(page);
   check('« Enregistrer » : le modèle est écrit dans le document avant que la page parte, qui a encore sa langue d\'avant', !!atSave && atSave.written === true && atSave.lang === 'fr', atSave);
@@ -337,14 +344,74 @@ console.log(`\n=== 2. Une modification attend d'être enregistrée : la question
   await page.waitForFunction(() => document.getElementById('status-msg').classList.contains('is-unsaved'), null, { timeout: 5000 }).catch(() => {});
   await openSettings(page);
   await realClick(page, 'input[name="settings-lang"][value="en"]');
-  await page.waitForFunction(() => { const m = document.getElementById('pp-dialog-modal'); return !!m && getComputedStyle(m).display !== 'none'; }, null, { timeout: 5000 }).catch(() => {});
-  await sleep(250);
+  await waitForQuestion(page);
   // « Abandonner » : la page part sans écrire le modèle.
   const reloadedDiscard = await clickAndReload(page, () => clickDialogButton(page, 'Ne pas enregistrer'));
   const atDiscard = await takeAtReload(page);
   check('« Ne pas enregistrer » : la page part sans avoir écrit le modèle', !!atDiscard && atDiscard.written === false && atDiscard.lang === 'fr', atDiscard);
   const discarded = await snapshot(page);
   check('« Ne pas enregistrer » : la page rechargée repart en anglais', reloadedDiscard && discarded.lang === 'en' && discarded.htmlLang === 'en' && discarded.stored === 'en', discarded);
+  await context.close();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------
+console.log(`\n=== 2 bis. « Recharger maintenant » de la touche de déclenchement pose la même question, ${WIDTH}x${HEIGHT} ===`);
+// Une modification attend (l'enregistrement automatique est coupé), la touche de déclenchement vient de changer : la page propose « Recharger maintenant ».
+async function typeThenChangeTrigger(page) {
+  await realClick(page, '.tiptap p');
+  await page.keyboard.press('End');
+  await page.keyboard.type(' ' + TYPED);
+  await page.waitForFunction(() => document.getElementById('status-msg').classList.contains('is-unsaved'), null, { timeout: 5000 }).catch(() => {});
+  await openTriggerTab(page);
+  await page.selectOption('#settings-trigger-char', '@');
+}
+const triggerKept = page => page.evaluate(() => { try { return localStorage.getItem('pp_trigger_char'); } catch (e) { return 'illisible'; } });
+{
+  const { context, page } = await openWidget({ autosave: false });
+  await page.evaluate(() => { window.__marker = 'avant'; });
+  await typeThenChangeTrigger(page);
+  const noticeShown = await page.evaluate(() => !document.getElementById('settings-trigger-reload-notice').hidden);
+  check('la touche de déclenchement change : la page propose « Recharger maintenant »', noticeShown);
+  await realClick(page, '#settings-trigger-reload-btn');
+  await waitForQuestion(page);
+  const asked = await questionOf(page);
+  check('la question « Modifications non enregistrées » s\'ouvre devant Réglages, avec « Annuler », « Ne pas enregistrer » et « Enregistrer »',
+    !!asked && /Modifications non enregistrées/.test(asked.title) && /Contrat/.test(asked.message) && asked.buttons.join('|') === 'Annuler|Ne pas enregistrer|Enregistrer' && asked.inFront && asked.inside, asked);
+  const held = await snapshot(page);
+  check('la page n\'a pas rechargé : rien ne part avant la réponse', held.marker === 'avant', held);
+
+  // « Annuler » : la page, le texte tapé et l'avis restent où ils étaient.
+  await clickDialogButton(page, 'Annuler');
+  const stayed = await staysPut(page, 1200);
+  const afterCancel = await snapshot(page);
+  const kept = await page.evaluate(() => ({
+    text: (document.querySelector('.tiptap') || {}).textContent || '',
+    unsaved: document.getElementById('status-msg').classList.contains('is-unsaved'),
+    noticeShown: !document.getElementById('settings-trigger-reload-notice').hidden,
+  }));
+  check('« Annuler » : la page ne recharge pas, Réglages reste ouvert avec l\'avis « Recharger maintenant »', stayed && afterCancel.marker === 'avant' && afterCancel.modalShown && kept.noticeShown, { afterCancel, kept });
+  check('« Annuler » : le texte tapé est toujours là, toujours à enregistrer', kept.text.includes(TYPED) && kept.unsaved, kept);
+
+  // « Enregistrer » : le modèle est écrit avant que la page parte, qui garde la nouvelle touche.
+  await realClick(page, '#settings-trigger-reload-btn');
+  await waitForQuestion(page);
+  const reloadedSave = await clickAndReload(page, () => clickDialogButton(page, 'Enregistrer'));
+  const atSave = await takeAtReload(page);
+  check('« Enregistrer » : le modèle est écrit dans le document avant que la page parte', !!atSave && atSave.written === true, atSave);
+  const saved = await snapshot(page);
+  check('« Enregistrer » : la page rechargée est neuve et garde la nouvelle touche « @ »', reloadedSave && saved.marker === null && (await triggerKept(page)) === '@', saved);
+  await context.close();
+}
+{
+  const { context, page } = await openWidget({ autosave: false });
+  await typeThenChangeTrigger(page);
+  await realClick(page, '#settings-trigger-reload-btn');
+  await waitForQuestion(page);
+  // « Ne pas enregistrer » : la page part sans écrire le modèle, avec la nouvelle touche.
+  const reloadedDiscard = await clickAndReload(page, () => clickDialogButton(page, 'Ne pas enregistrer'));
+  const atDiscard = await takeAtReload(page);
+  check('« Ne pas enregistrer » : la page part sans avoir écrit le modèle', !!atDiscard && atDiscard.written === false, atDiscard);
+  check('« Ne pas enregistrer » : la page rechargée garde la nouvelle touche « @ »', reloadedDiscard && (await triggerKept(page)) === '@');
   await context.close();
 }
 

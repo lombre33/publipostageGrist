@@ -403,8 +403,14 @@ const Settings = (function () {
     reloadKeepingTemplate();
   }
 
-  // La case « Éditeur hors ligne » : le choix s'écrit à l'instant (le stockage refusé laisse la case sur ce qui est gardé), mais l'éditeur déjà démarré ne change pas : « Recharger maintenant » rouvre le modèle où la personne
-  // était, après la question « Enregistrer / Abandonner / Annuler » quand une modification attend, comme un changement de langue ; « Annuler » laisse tout en l'état.
+  // « Recharger maintenant » (la touche de déclenchement, l'éditeur hors ligne) rouvre le modèle où la personne était, après la question « Enregistrer / Abandonner / Annuler » quand une modification attend,
+  // comme un changement de langue ; « Annuler » laisse tout en l'état (la page, le texte tapé, l'avis qui propose de recharger).
+  async function reloadAfterQuestion(leave) {
+    if (leave && leave.hasEditsToConfirmBeforeLeaving() && !(await leave.askBeforeLeaving())) return;
+    reloadKeepingTemplate();
+  }
+
+  // La case « Éditeur hors ligne » : le choix s'écrit à l'instant (le stockage refusé laisse la case sur ce qui est gardé), mais l'éditeur déjà démarré ne change pas : « Recharger maintenant » (reloadAfterQuestion) le recharge.
   function wireOfflineEditor(leave) {
     const box = byId('settings-offline-editor');
     const reloadBtn = byId('settings-offline-editor-reload-btn');
@@ -413,13 +419,10 @@ const Settings = (function () {
       SettingsHistory.track(OFFLINE_EDITOR_SETTING, () => OFFLINE_EDITOR_SETTING.write(box.checked ? 'on' : 'off'));
       syncOfflineEditor();
     });
-    reloadBtn.addEventListener('click', async () => {
-      if (leave && leave.hasEditsToConfirmBeforeLeaving() && !(await leave.askBeforeLeaving())) return;
-      reloadKeepingTemplate();
-    });
+    reloadBtn.addEventListener('click', () => reloadAfterQuestion(leave));
   }
 
-  function wireTriggerChar() {
+  function wireTriggerChar(leave) {
     const triggerSelect = byId('settings-trigger-char');
     const reloadNotice = byId('settings-trigger-reload-notice');
     const reloadBtn = byId('settings-trigger-reload-btn');
@@ -431,7 +434,7 @@ const Settings = (function () {
       // rechargement est plus simple pour un réglage qui change rarement.
       reloadNotice.hidden = false;
     });
-    reloadBtn.addEventListener('click', reloadKeepingTemplate);
+    reloadBtn.addEventListener('click', () => reloadAfterQuestion(leave));
   }
 
   function wireSettingsModal(leave) {
@@ -468,7 +471,7 @@ const Settings = (function () {
       varTipBox.checked = VariableTip.isOn();
     });
     wireRadios('settings-mail-client', value => SettingsHistory.track(MAIL_CLIENT_SETTING, () => MailtoExport.setMailClient(value)));
-    wireTriggerChar();
+    wireTriggerChar(leave);
     wireOfflineEditor(leave);
     // Hébergée, un changement de langue fait dans GFS est suivi ici (followGfsLanguage) ; js/main.js le rappelle une fois le modèle de départ ouvert.
     leaveHooks = leave;

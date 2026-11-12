@@ -1023,9 +1023,11 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   // nulle) le refuse, et ce cadre est le seul endroit où la demande portait aussi.
   const reload = (settings.match(/function reloadKeepingTemplate\(language, openId\) \{[\s\S]*?\n  \}/) || [''])[0];
   const take = (settings.match(/function takeReopenId\(\) \{[\s\S]*?\n  \}/) || [''])[0];
-  check('réouverture : reloadKeepingTemplate laisse l\u2019identifiant du modèle ouvert dans le fragment de l\u2019adresse (history.replaceState) AVANT de recharger, et la langue et la touche de déclenchement passent par lui',
+  check('réouverture : reloadKeepingTemplate laisse l\u2019identifiant du modèle ouvert dans le fragment de l\u2019adresse (history.replaceState) AVANT de recharger, et la langue, la touche de déclenchement et l\u2019éditeur hors ligne passent par lui',
     reload !== '' && reload.indexOf('Templates.getCurrentId()') !== -1 && reload.indexOf("'pp-open='") !== -1 && reload.indexOf("'#' + parts.join('&')") !== -1 && reload.indexOf('history.replaceState(') !== -1 && reload.indexOf('location.reload()') > reload.indexOf('history.replaceState(')
-      && /reloadBtn\.addEventListener\('click', reloadKeepingTemplate\)/.test(settings), reload);
+      && /async function reloadAfterQuestion\(leave\) \{[^}]*askBeforeLeaving\(\)[^}]*\n\s*reloadKeepingTemplate\(\);/.test(settings), reload);
+  check('réouverture : les deux boutons « Recharger maintenant » de Réglages (la touche de déclenchement, l\u2019éditeur hors ligne) posent d\u2019abord la question « Enregistrer / Abandonner / Annuler » quand du texte attend (reloadAfterQuestion), jamais un rechargement sans elle',
+    (settings.match(/reloadBtn\.addEventListener\('click', \(\) => reloadAfterQuestion\(leave\)\)/g) || []).length === 2 && !/reloadBtn\.addEventListener\('click', reloadKeepingTemplate\)/.test(settings) && /wireTriggerChar\(leave\);/.test(settings), 'js/settings.js');
   check('réouverture : takeReopenId lit le fragment, l\u2019efface aussitôt (history.replaceState) et ne touche à aucun autre fragment ; il n\u2019écrit ni ne lit aucun stockage du navigateur',
     take !== '' && settings.includes(String.raw`const REOPEN_HASH = /^#(?:pp-open=(\d+)(?:&pp-lang=(?:fr|en))?|pp-lang=(?:fr|en))$/;`) && take.indexOf('history.replaceState(') !== -1 && !/(?:local|session)Storage|indexedDB|document\.cookie/.test(reload + take), take);
   check('réouverture : js/main.js lit ce fragment (Settings.takeReopenId) avant le modèle que GFS désigne, la ligne, la vue et le ★, qui passent après lui',
