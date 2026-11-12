@@ -44,6 +44,8 @@ HTML
   echo '# dev' > README.md; echo x > dev-tests/a.mjs; echo x > planning/a.md
   # La liste unique des bibliothèques et son catalogue (consignes 063 et 067 de GFS) : à la racine du dépôt de développement, ils ne partent pas.
   mkdir -p bibliotheques; echo '{}' > package.json; echo '{}' > bibliotheques/catalogue.json
+  # La copie figée de l'éditeur (consigne 066 de GFS) : du code de tiers construit par l'outil du kit, que publier.sh fait partir avec la page (PUBLIES) ; le faux en porte un module, ses licences et son manifeste.
+  mkdir -p vendor/editeur; echo 'export default 1;' > vendor/editeur/prosemirror.js; echo 'licences' > vendor/editeur/LICENCES.txt; echo '{}' > vendor/editeur/COPIE.json
   cp "$ICI/publier.sh" "$ICI/controles.mjs" outils/depot-propre/
   cp -r "$ICI"/public/* outils/depot-propre/public/
   # La carte du code cite chaque fichier du widget : le faux dépôt les porte (vides, pages .html comprises), pour que ses références tiennent.
@@ -144,6 +146,7 @@ kit_en_fichiers() { # css, js et licence du kit, en fichiers ordinaires, sans .g
 }
 vrai "le kit part en fichiers (css, js, licence), au commit épinglé, sans .gitmodules ni sous-module" kit_en_fichiers
 vrai "... sans son README, son journal ni ses essais" test ! -e "$P/kit/README.md" -a ! -e "$P/kit/CHANGELOG.md" -a ! -e "$P/kit/test" -a ! -e "$P/kit/.git"
+vrai "la copie figée de l'éditeur part avec la page : un module, ses licences et son manifeste (vendor/editeur)" test -s "$P/vendor/editeur/prosemirror.js" -a -s "$P/vendor/editeur/LICENCES.txt" -a -s "$P/vendor/editeur/COPIE.json"
 vrai "la date est écrite en toutes lettres" grep -q "4 octobre 2026" "$P/README.md"
 vrai "la sauvegarde .bundle existe" test -s "$T/sortie1/publication-1.0.0-beta.1.bundle"
 vrai "le clone public est propre" test -z "$(git -C "$P" status --porcelain)"
@@ -218,8 +221,9 @@ muter "un nombre de fichiers par famille périmé dans la carte du code" "annonc
 # Les lignes d'une famille se comparent à celles de ses fichiers (ici, des fichiers d'une ligne : tout nombre annoncé au-delà de la marge est signalé).
 LFAM="$(grep -oEm1 '^### .*\([0-9]+ fichiers, [0-9][0-9 ]* lignes\)' "$P/CARTE_DU_CODE.md" | grep -oE '[0-9][0-9 ]* lignes\)$' | grep -oE '^[0-9][0-9 ]*[0-9]')"
 muter "un nombre de lignes par famille périmé dans la carte du code" "annonce 900 lignes, ses fichiers en comptent" "sed -i 's/, $LFAM lignes)/, 900 lignes)/' CARTE_DU_CODE.md"
-# Une famille compte les fichiers de la première colonne de son tableau : un fichier que le rôle d'une ligne cite en passant n'est pas à elle.
-vrai "... et un fichier que le rôle d'une ligne cite sans qu'il soit à elle ne s'ajoute pas à sa famille" bash -c "rm -rf '$T/mut'; cp -a '$P' '$T/mut'; rm -rf '$T/mut/.git'; sed -i '/^| \`js\/grist-api.js\` | /s/ |\$/ Voir \`js\/dom.js\`. |/' '$T/mut/CARTE_DU_CODE.md'; grep -q 'Voir .js/dom.js' '$T/mut/CARTE_DU_CODE.md' && ! node '$C' '$T/mut' --version 1.0.0-beta.2 | grep -q 'son tableau en cite'"
+# Une famille compte les fichiers de la première colonne de son tableau : un fichier que le rôle d'une ligne cite en passant n'est pas à elle. Les nombres de la carte ne sont recomptés qu'à l'envoi
+# (numeros-carte.mjs) : entre deux envois, certaines familles annoncent déjà un compte périmé, et c'est leur avertissement qui compte avant comme après - la mutation ne doit pas en ajouter un.
+vrai "... et un fichier que le rôle d'une ligne cite sans qu'il soit à elle ne s'ajoute pas à sa famille" bash -c "rm -rf '$T/mut'; cp -a '$P' '$T/mut'; rm -rf '$T/mut/.git'; AVANT=\$(node '$C' '$T/mut' --version 1.0.0-beta.2 | grep -c 'son tableau en cite'); sed -i '/^| \`js\/grist-api.js\` | /s/ |\$/ Voir \`js\/dom.js\`. |/' '$T/mut/CARTE_DU_CODE.md'; grep -q 'Voir .js/dom.js' '$T/mut/CARTE_DU_CODE.md' && test \"\$(node '$C' '$T/mut' --version 1.0.0-beta.2 | grep -c 'son tableau en cite')\" = \"\$AVANT\""
 attend "les lignes que la carte du code annonce se comparent à l'arbre (ici $LTREE lignes de js/)" "annonce $LJS lignes dans js/, l'arbre en compte $LTREE" "$(node "$C" "$P" --version 1.0.0-beta.2 2>&1)"
 vrai "... et passent quand l'arbre en compte à peu près autant" bash -c "rm -rf '$T/mut'; cp -a '$P' '$T/mut'; rm -rf '$T/mut/.git'; seq 1 $((${LJS// /} - LTREE)) > '$T/mut/js/gros.js'; ! node '$C' '$T/mut' --version 1.0.0-beta.2 | grep -q 'annonce $LJS lignes'"
 # numeros-carte.mjs recompte les nombres de la carte d'après le dépôt de développement ; ici, un arbre dont les fichiers n'ont qu'une ligne.
@@ -244,6 +248,22 @@ vrai "une clé du navigateur nommée dans le README passe" bash -c "rm -rf '$T/m
 muter "un .gitmodules resté dans l'arbre public (il n'a pas de sous-module)" "n'a pas de sous-module" "printf '[submodule \"kit\"]\n' > .gitmodules"
 muter "un code qui cite le kit alors qu'un de ses fichiers manque" "cite le kit, mais kit/js/ambiance-pose.js est absent" "echo \"import('../kit/js/ambiance-pose.js');\" >> js/main.js; rm kit/js/ambiance-pose.js"
 vrai "un code qui cite le kit, ses fichiers présents, passe" bash -c "rm -rf '$T/mut'; cp -a '$P' '$T/mut'; rm -rf '$T/mut/.git'; echo \"import('../kit/js/ambiance-pose.js');\" >> '$T/mut/js/main.js'; node '$C' '$T/mut' --version 1.0.0-beta.2 | grep -q ' 0 erreur'"
+# La page qui cite la copie de l'éditeur (sa carte « gfs-carte-copie », consigne 066 de GFS) : le module cité, les licences et le manifeste doivent être dans l'arbre, sinon la case « Éditeur hors ligne » rendrait une page sans éditeur.
+# (La carte est un script en ligne : la politique de sécurité de la page en porte l'empreinte, que le petit script pose avec elle.)
+cat > "$T/poser-carte-copie.mjs" <<'JS'
+import fs from 'node:fs';
+import crypto from 'node:crypto';
+const json = JSON.stringify({ imports: { editeur: './vendor/editeur/prosemirror.js?v=1' } });
+let html = fs.readFileSync('index.html', 'utf8');
+const hash = crypto.createHash('sha256').update(json).digest('base64');
+html = html.replace('</head>', `<script type="application/json" id="gfs-carte-copie">${json}</script></head>`).replace('; object-src', ` 'sha256-${hash}'; object-src`);
+fs.writeFileSync('index.html', html);
+JS
+CARTE_COPIE="node '$T/poser-carte-copie.mjs'"
+muter "une page qui cite la copie de l'éditeur alors qu'un de ses modules manque" "cite vendor/editeur/prosemirror.js (la copie de l'éditeur), mais il est absent de l'arbre" "$CARTE_COPIE; rm vendor/editeur/prosemirror.js"
+muter "une page qui cite la copie de l'éditeur alors que ses licences manquent" "vendor/editeur/LICENCES.txt est absent de l'arbre" "$CARTE_COPIE; rm vendor/editeur/LICENCES.txt"
+muter "une page qui cite la copie de l'éditeur alors que son manifeste manque" "vendor/editeur/COPIE.json est absent de l'arbre" "$CARTE_COPIE; rm vendor/editeur/COPIE.json"
+vrai "une page qui cite la copie de l'éditeur, ses fichiers présents, passe" bash -c "rm -rf '$T/mut'; cp -a '$P' '$T/mut'; rm -rf '$T/mut/.git'; (cd '$T/mut' && $CARTE_COPIE); node '$C' '$T/mut' --version 1.0.0-beta.2 | grep -q ' 0 erreur'"
 muter "une licence qui n'est pas la GPL" "GNU GPL version 3" "echo 'MIT' > LICENSE"
 muter "un CHANGELOG sans la version" "aucune section" "sed -i 's/^## \[1.0.0-beta.2\]/## [9.9.9]/' CHANGELOG.md"
 muter "js/version.js absent (et la page qui le chargeait retirée)" "js/version.js absent" "rm js/version.js; sed -i 's#<script src=\"js/version.js\"></script>##' index.html"
