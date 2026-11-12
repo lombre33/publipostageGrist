@@ -474,6 +474,8 @@ const Editor = (function () {
       EditorNodes.createBehindImageClickThroughExtension(Extension, Plugin, PluginKey),
       Variables.createExtension(Extension, Suggestion),
       TextExpansion.createExtension(Extension, Suggestion, InputRule, PluginKey),
+      // La typographie française à la frappe (js/french-typography.js) : espace insécable avant « : ; ! ? », guillemets « », apostrophe courbe, points de suspension.
+      FrenchTypography.createExtension(Extension, InputRule),
       // La liste « @ » (js/mention.js), rangée après celle de « § » : elle voit les touches avant celle de « # » et de « § » quand elle est ouverte.
       Mention.createExtension(Extension, Suggestion, PluginKey),
       LinkDialog.createExtension(Extension),

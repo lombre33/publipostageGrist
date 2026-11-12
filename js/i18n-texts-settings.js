@@ -36,6 +36,15 @@ const I18nTextsSettings = {
   },
   'settings.varTip.on': { fr: 'allumée', en: 'on' },
   'settings.varTip.off': { fr: 'éteinte', en: 'off' },
+  // Saisie (js/french-typography.js) : la typographie française à la frappe.
+  'settings.typing.title': { fr: 'Saisie', en: 'Typing' },
+  'settings.typing.french': { fr: 'Typographie française à la frappe', en: 'French typography while typing' },
+  'settings.typing.frenchHint': {
+    fr: 'Une espace insécable avant « : ; ! ? », les guillemets « » à la place de ", l’apostrophe courbe ’ et le caractère … à la place de trois points. Un retour arrière juste après les défait. Rien n’est touché dans le texte collé ni dans un bloc de code. Sans choix de votre part, la case suit la langue de l’interface (cochée en français). Ce choix est propre à ce navigateur.',
+    en: 'A non-breaking space before “: ; ! ?”, « » guillemets in place of ", the curly apostrophe ’ and the … character in place of three dots. A backspace right after undoes them. Pasted text and code blocks are left alone. Unless you choose, the box follows the interface language (checked in French). This choice is specific to this browser.',
+  },
+  'settings.typing.on': { fr: 'allumée', en: 'on' },
+  'settings.typing.off': { fr: 'éteinte', en: 'off' },
   // Accessibilité (js/alt-reminder.js) : une section de l'onglet Thème, la barre des onglets étant pleine.
   'settings.accessibility.title': { fr: 'Accessibilité', en: 'Accessibility' },
   'settings.accessibility.intro': {

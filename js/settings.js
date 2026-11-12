@@ -80,6 +80,12 @@ const Settings = (function () {
     write: value => VariableTip.setOn(value === 'on'),
     say: said('settings.bubbleMarks.title', value => I18n.t('settings.varTip.' + value)),
   };
+  // La typographie française à la frappe (js/french-typography.js, qui garde la préférence) : une case de la section « Saisie », défaite par Ctrl + Z comme les autres choix.
+  const FRENCH_TYPOGRAPHY_SETTING = {
+    read: () => (FrenchTypography.isOn() ? 'on' : 'off'),
+    write: value => FrenchTypography.setOn(value === 'on'),
+    say: said('settings.typing.title', value => I18n.t('settings.typing.' + value)),
+  };
   const TRIGGER_SETTING = {
     read: () => Variables.triggerChar(),
     write: value => PersonStore.set(TRIGGER_KEY_STORAGE, value),
@@ -300,6 +306,7 @@ const Settings = (function () {
     const bubbleMarksRadios = all('input[name="settings-bubble-marks"]');
     const altReminderBox = byId('settings-alt-reminder');
     const varTipBox = byId('settings-var-tip');
+    const frenchTypographyBox = byId('settings-french-typography');
     const mailClientRadios = all('input[name="settings-mail-client"]');
     const triggerSelect = byId('settings-trigger-char');
     const reloadNotice = byId('settings-trigger-reload-notice');
@@ -310,6 +317,7 @@ const Settings = (function () {
       bubbleMarksRadios.forEach(r => { r.checked = (r.value === getBubbleMarks()); });
       if (altReminderBox) altReminderBox.checked = AltReminder.isOn();
       if (varTipBox) varTipBox.checked = VariableTip.isOn();
+      if (frenchTypographyBox) frenchTypographyBox.checked = FrenchTypography.isOn();
       syncOfflineEditor();
       mailClientRadios.forEach(r => { r.checked = (r.value === MailtoExport.getMailClient()); });
       if (triggerSelect) triggerSelect.value = Variables.triggerChar();
@@ -469,6 +477,11 @@ const Settings = (function () {
     if (varTipBox) varTipBox.addEventListener('change', () => {
       SettingsHistory.track(VARIABLE_TIP_SETTING, () => VariableTip.setOn(varTipBox.checked));
       varTipBox.checked = VariableTip.isOn();
+    });
+    const frenchTypographyBox = byId('settings-french-typography');
+    if (frenchTypographyBox) frenchTypographyBox.addEventListener('change', () => {
+      SettingsHistory.track(FRENCH_TYPOGRAPHY_SETTING, () => FrenchTypography.setOn(frenchTypographyBox.checked));
+      frenchTypographyBox.checked = FrenchTypography.isOn();
     });
     wireRadios('settings-mail-client', value => SettingsHistory.track(MAIL_CLIENT_SETTING, () => MailtoExport.setMailClient(value)));
     wireTriggerChar(leave);

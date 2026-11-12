@@ -106,6 +106,8 @@ if (OFFLINE) {
       body: await readFile(join(CACHE, rel), 'utf8'),
     }));
   }
+  // Ce test ne parle pas de typographie : la frappe y reste telle quelle (js/french-typography.js, préférence éteinte).
+  await page.addInitScript(() => { try { localStorage.setItem('pp_french_typography', 'off'); } catch (e) { /* stockage refusé */ } });
   await page.addInitScript(() => {
     Object.defineProperty(HTMLScriptElement.prototype, 'integrity', { configurable: true, get: () => '', set: () => {} });
   });
