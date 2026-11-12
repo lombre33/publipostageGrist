@@ -690,10 +690,14 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // d'un numéro de SIRET de modèle. Aucun n'était du travail oublié ; ils sont reformulés (« défaut », « numéro à 14 chiffres ») et ce contrôle garde le compte à zéro : aucun des cinq mots de MARKERS, en capitales et
 // mot entier, nulle part (code, tests, documents, modèles de la galerie). L'audit signalait aussi une valeur en dur dans `token` (le faux jeton d'un test de la Lecture) : un faux jeton s'appelle `stub-token`, comme
 // celui du faux Grist (dev-tests/grist-stub.js). Les mots sont écrits en morceaux dans le code pour que ce fichier ne se compte pas lui-même ; les dossiers cachés (le miroir hors ligne) et node_modules sont ignorés.
+// Le kit (un sous-module) n'est lu que dans ce qui part de lui sur le dépôt public (KIT_PARTIES de publier.sh) : ses essais, ses outils et son README sont à lui, avec ses propres contrôles (la 0.20.2 porte
+// des valeurs d'exemple dans ses essais de synchro, que ce contrôle-ci prendrait pour des jetons en dur).
 {
+  const kitParties = ((read('outils/depot-propre/publier.sh').match(/^KIT_PARTIES=\(([^)]*)\)/m) || [])[1] || '').split(/\s+/).filter(Boolean);
   const walkText = (dir, exts, out = []) => {
     for (const name of readdirSync(join(ROOT, dir))) {
       if (name.startsWith('.') || name === 'node_modules') continue;
+      if (dir === 'kit' && !kitParties.includes(name)) continue;
       const rel = dir ? `${dir}/${name}` : name;
       if (statSync(join(ROOT, rel)).isDirectory()) walkText(rel, exts, out);
       else if (exts.test(name)) out.push(rel);
@@ -720,7 +724,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
       else if (!/[{}]/.test(value) && !/^(?:YOUR_|CHANGE_?ME|PLACEHOLDER)/i.test(value)) hardCoded.push(`${rel} (« ${value} »)`);
     }
   }
-  check('travail inachevé : l\'analyse lit bien le dépôt (garde-fou de l\'analyse elle-même : au moins 150 fichiers texte, le faux jeton `stub-token` du faux Grist est vu)', textFiles.length >= 150 && stubSeen >= 1, `${textFiles.length} fichiers, ${stubSeen} faux jeton(s)`);
+  check('travail inachevé : l\'analyse lit bien le dépôt (garde-fou de l\'analyse elle-même : au moins 150 fichiers texte, le faux jeton `stub-token` du faux Grist est vu, KIT_PARTIES se lit dans publier.sh)', textFiles.length >= 150 && stubSeen >= 1 && kitParties.length >= 2, `${textFiles.length} fichiers, ${stubSeen} faux jeton(s), kit : ${kitParties.join(' ')}`);
   check('jetons : l\'analyse lit aussi les noms en capitales (garde-fou de l\'analyse elle-même : une constante `SECRET` ou `PASSWORD` est lue comme `secret` ou `password`)',
     ['SEC' + 'RET', 'PASS' + 'WORD'].every(name => `const ${name} = 'valeur-d-essai'`.match(secretRe)), 'la regex ne lit plus les capitales');
   check('jetons : l\'analyse lit aussi les noms composés (garde-fou de l\'analyse elle-même : `ownerPassword` et `ACCESS_KEY` sont lus comme un mot de passe et une clé d\'accès - c\'est le dernier mot du nom qui décide, comme dans l\'audit externe)',
