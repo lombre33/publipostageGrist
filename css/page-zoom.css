@@ -50,3 +50,19 @@
 .pp-drop-hint.is-on { display: flex; }
 .pp-drop-hint-text { max-width: 80%; padding: 8px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 8px); background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); font-family: var(--font-ui); font-size: 13px; font-weight: 600; text-align: center; }
 @media print { .pp-drop-hint { display: none; } }
+
+/* « Quelle ligne je lis ? » (js/reading-line.js) : une petite pastille en bas à gauche de la Lecture, « ‹ Martin · ligne 2 sur 3 ›. Elle ne gêne pas la lecture : pendant que le document défile (et un instant après) elle devient presque transparente
+   et ne reçoit plus aucun clic (`is-quiet`) ; hors de l'écran à l'impression ; la Lecture épurée ne la montre pas. */
+.pp-reading-line { position: fixed; z-index: var(--z-page-zoom); box-sizing: border-box; height: 22px; padding: 0 2px; display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 8px); background: var(--surface); color: var(--text-muted); box-shadow: var(--shadow-card); font-family: var(--font-ui); font-size: 11px; line-height: 1; white-space: nowrap; user-select: none; opacity: 1; transition: opacity .18s ease; }
+.pp-reading-line[hidden] { display: none; }
+.pp-reading-line:hover, .pp-reading-line:focus-within { opacity: 1; }
+.pp-reading-line.is-quiet { opacity: .2; pointer-events: none; }
+.pp-reading-line-label { padding: 0 4px; font-variant-numeric: tabular-nums; }
+.pp-reading-line-btn { box-sizing: border-box; width: 18px; height: 18px; margin: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: var(--radius-xs, 5px); background: transparent; color: inherit; cursor: pointer; }
+.pp-reading-line-btn svg { width: 12px; height: 12px; }
+.pp-reading-line-btn:hover:not(:disabled) { background: var(--surface-sunken); border-color: var(--border); color: var(--text); }
+.pp-reading-line-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-reading-line-btn:disabled { opacity: .35; cursor: default; }
+body.pp-clean-reading .pp-reading-line { display: none; }
+@media (prefers-reduced-motion: reduce) { .pp-reading-line { transition: none; } }
+@media print { .pp-reading-line { display: none; } }

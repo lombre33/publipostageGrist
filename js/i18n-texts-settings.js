@@ -54,6 +54,10 @@ const I18nTextsSettings = {
   'wordCount.words': { fr: '{n} {n|mot|mots}', en: '{n} {n|word|words}' },
   'wordCount.signs': { fr: '{n} {n|signe|signes}', en: '{n} {n|character|characters}' },
   'wordCount.pages': { fr: '{n} {n|page|pages}', en: '{n} {n|page|pages}' },
+  'readingLine.position': { fr: 'ligne {n} sur {total}', en: 'row {n} of {total}' },
+  'readingLine.prev': { fr: 'Ligne précédente', en: 'Previous row' },
+  'readingLine.next': { fr: 'Ligne suivante', en: 'Next row' },
+  'readingLine.failed': { fr: 'Impossible de passer à cette ligne : Grist n\u2019a pas déplacé son curseur.', en: 'Could not move to that row: Grist did not move its cursor.' },
   'settings.typing.on': { fr: 'allumée', en: 'on' },
   'settings.typing.off': { fr: 'éteinte', en: 'off' },
   // Accessibilité (js/alt-reminder.js) : une section de l'onglet Thème, la barre des onglets étant pleine.

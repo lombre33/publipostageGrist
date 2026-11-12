@@ -838,6 +838,7 @@
     if (mode === 'read') { await renderReader(latestRecord || GristAPI.getCurrentRecord(), latestRecordTableId || GristAPI.getCurrentTableId()); keepSlide(mode, slideKept); }
     await updateEmailFieldsDisplay();
     await updateEmailLengthGauge();
+    ReadingLine.refresh(); // la pastille « ligne 2 sur 3 » ne se montre qu'en Lecture
   }
 
   // Classe posée sur les deux conteneurs (édition et lecture) : la largeur réelle d'une page PDF doit aussi s'appliquer en mode Lecture. `.checked`
@@ -1048,17 +1049,22 @@
     if (currentMode === 'read' && record && !switched) await renderReader(record, latestRecordTableId);
     if (currentMode === 'read') await updateEmailFieldsDisplay();
     await updateEmailLengthGauge();
+    ReadingLine.refresh();
   }
 
   // Les lignes de la vue de Grist ont changé (un filtre posé ou retiré, une ligne ajoutée ou modifiée ailleurs que sous le curseur) : la ligne choisie est la
   // même, onRecordChange n'a rien dit. Seule une Lecture qui boucle sur toutes les lignes (ReaderMode.readsAllRows) les montre : elle se redessine, une fois pour
-  // une rafale de messages (un filtre en envoie plusieurs).
+  // une rafale de messages (un filtre en envoie plusieurs). La pastille « ligne 2 sur 3 » (js/reading-line.js) relit alors le nombre de lignes de la vue, Lecture d'une ligne comprise.
   const VIEW_REFRESH_MS = 250;
   let viewRefreshTimer = null;
   function onViewRowsChanged() {
-    if (currentMode !== 'read' || !ReaderMode.readsAllRows()) return;
+    if (currentMode !== 'read') return;
     clearTimeout(viewRefreshTimer);
-    viewRefreshTimer = setTimeout(() => { if (currentMode === 'read' && ReaderMode.readsAllRows()) renderReader(); }, VIEW_REFRESH_MS);
+    viewRefreshTimer = setTimeout(() => {
+      if (currentMode !== 'read') return;
+      if (ReaderMode.readsAllRows()) renderReader();
+      ReadingLine.refresh(); // le « ligne 2 sur 3 » suit un filtre posé ou une ligne ajoutée
+    }, VIEW_REFRESH_MS);
   }
 
   // Les boutons de la barre : nouveau modèle, import, suppression, exports, création de l'email, modes Édition et Lecture.
@@ -1122,6 +1128,7 @@
       focusEditor: () => { const editor = EditorCore.getEditor(); if (editor && editor.isEditable) editor.commands.focus(null, { scrollIntoView: false }); },
     });
     DropImport.wire({ importFile: importDroppedFile, setStatus }); // déposer un fichier Word, PowerPoint, Excel ou Markdown pour l'importer (js/drop-import.js)
+    ReadingLine.wire({ currentRecord: () => ({ record: latestRecord, tableId: latestRecordTableId }), readsAllRows: () => ReaderMode.readsAllRows(), setStatus }); // « ‹ Martin · ligne 2 sur 3 › » en Lecture (js/reading-line.js)
     VariableReview.wire(); // le coin d'état « N variables à revoir » (js/variable-review.js)
     MarkFields.wire(); // la case « Repérer les champs » du menu Mode lecture (js/mark-fields.js)
     BarFold.wire(); // la languette qui replie le panneau du haut (js/bar-fold.js)

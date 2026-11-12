@@ -64,6 +64,8 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     // l'ordre de ses lignes, pour ne rien changer aux tests qui ne s'en soucient pas. viewFailure : le message d'une panne simulée de l'appel (null : aucune).
     viewRowIds: null,
     viewFailure: null,
+    cursorCalls: [],
+    cursorFailure: null,
     viewCalls: [],
     // Les écouteurs `grist.on('message', ...)` : le bus de messages de Grist, que grist.onRecords lit aussi (message `dataChange`, cf. fireViewChange). Ajouter ne remplace jamais.
     messageCallbacks: [],
@@ -936,6 +938,21 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     },
     setOptions: async function (options) { state.options = JSON.parse(JSON.stringify(options || {})); notifyOptions(); },
     clearOptions: async function () { state.options = null; notifyOptions(); },
+    // grist.setCursorPos({ rowId }) : Grist déplace son curseur sur cette ligne de la vue, puis envoie au widget la ligne qui est sous le curseur (onRecord). Gardé dans state.cursorCalls ;
+    // state.cursorFailure (message) simule un refus. Une ligne que la vue ne montre pas n'est pas atteinte (le curseur ne bouge pas, rien n'est envoyé).
+    setCursorPos: async function (pos) {
+      state.cursorCalls.push(pos && pos.rowId);
+      if (state.cursorFailure != null) throw new Error(state.cursorFailure);
+      const shown = state.viewRowIds ? state.viewRowIds : readTable(state.lastTableId).id;
+      if (!pos || shown.indexOf(pos.rowId) === -1) return;
+      const row = getRow(state.lastTableId, pos.rowId);
+      const record = { id: pos.rowId };
+      Object.keys(state.columns[state.lastTableId] || {}).forEach(function (col) {
+        const value = row[col];
+        record[col] = Array.isArray(value) && value[0] === 'L' ? value.slice(1) : value;
+      });
+      fireRecord(record, state.lastTableId);
+    },
     // Exposée aussi en haut de grist (grist-plugin-api.ts exporte fetchSelectedTable à la fois seule et dans docApi).
     fetchSelectedTable: fetchSelectedTable,
     docApi: {
