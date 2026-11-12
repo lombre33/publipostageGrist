@@ -152,6 +152,7 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(120px, calc(var(--gf
    Re-déclarés avec `[hidden]` pour qu'ils reprennent la main (même piège que `.settings-trigger-reload-notice[hidden]` plus bas). */
 #v2-email-fields-row[hidden] { display: none; }
 #btn-create-email[hidden] { display: none; }
+#btn-create-emails[hidden] { display: none; }
 .v2-email-field-label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
 .v2-email-field-input { flex: 0 1 200px; min-width: 120px; }
 .v2-email-field-input.v2-email-field-subject { flex-basis: 300px; }
@@ -188,6 +189,11 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(120px, calc(var(--gf
    texte ci-dessus. Taille : celle du ::before générique de `#toolbar-top button` (14 × 14, css/style.css) ; une valeur ici n'y gagnerait pas,
    cette règle étant moins spécifique sur `width` et `height` (seul `mask-image`, qu'aucune autre règle ne fixe, s'applique). */
 #btn-create-email::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='22' y1='2' x2='11' y2='13'/%3E%3Cpolygon points='22 2 15 22 11 13 2 9 22 2'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='22' y1='2' x2='11' y2='13'/%3E%3Cpolygon points='22 2 15 22 11 13 2 9 22 2'/%3E%3C/svg%3E"); }
+
+/* « Tous les emails… » (js/email-drafts.js) : à côté de « Créer l'email », visible en mode email seulement. Bouton texte neutre - l'accent reste à l'action principale - : il garde le style générique de
+   `#toolbar-top button` (css/style.css : bordure, hauteur, police), sans icône (son ::before générique s'afficherait en carré plein faute de `mask-image`). */
+#toolbar-top #btn-create-emails { padding: 0 10px; white-space: nowrap; }
+#toolbar-top #btn-create-emails::before { content: none; }
 
 /* Type d'export (ex-« Qualité PDF ») : bouton et panneau au survol (même mécanisme que les styles de puce et de numérotation de la ligne de mise en forme)
    plutôt qu'un `<select>` toujours affiché ; js/main.js lit encore `v2-export-type.value` et `v2-pdf-quality.value` directement (et `v2-export-lines.value`, les lignes du menu Exporter). Allumé (`.active`, comme

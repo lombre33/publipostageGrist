@@ -4,7 +4,7 @@
 const MainEmail = (function () {
   function create(api) {
     const {
-      EMAIL_FIELDS, emailCciInput, emailCciToggle, emailCharCounter, emailFieldsRow, getCurrentMode, getCurrentTableId, getCurrentTypeModele,
+      EMAIL_FIELDS, currentDocumentHtml, emailCciInput, emailCciToggle, emailCharCounter, emailFieldsRow, getCurrentMode, getCurrentTableId, getCurrentTypeModele,
       getEmailFieldsRawCache, getLatestRecord, getLatestRecordTableId, readerContainer, renderReader, setEmailFieldsRawCache,
     } = api;
 
@@ -90,6 +90,17 @@ const MainEmail = (function () {
       return MailtoExport.buildMailtoUrl({ to: fields.destinataires, cc: fields.cc, bcc: fields.cci, subject: fields.objet, bodyText, client: MailtoExport.getMailClient() });
     }
 
+    // L'email d'UNE ligne parmi beaucoup (js/email-drafts.js : « Tous les emails… ») : les champs résolus, le texte du corps et le lien, comme buildMailtoForRecord - mêmes résolutions, même texte -, mais le corps est lu dans le
+    // document résolu de la ligne (ReaderMode.resolvedHtml), pas dans #reader-container : la Lecture, la ligne affichée et la jauge ne sont pas touchées, et le rendu d'une ligne n'écarte pas celui d'une autre. L'appelant tient
+    // une passe de lecture pour la série (GristAPI.withReadPass). Rend { fields: { objet, destinataires, cc, cci }, bodyText, url }.
+    async function describeMailForRecord(record, tableId) {
+      const fields = await resolveEmailFieldsForRecord(getEmailFieldsFromInputs(), tableId, record);
+      const { html } = await ReaderMode.resolvedHtml(() => currentDocumentHtml(tableId, record, { anchors: true }), tableId, record);
+      const bodyText = MailtoExport.plainTextFromHtml(html);
+      const url = MailtoExport.buildMailtoUrl({ to: fields.destinataires, cc: fields.cc, bcc: fields.cci, subject: fields.objet, bodyText, client: MailtoExport.getMailClient() });
+      return { fields, bodyText, url };
+    }
+
     // Jauge de longueur mailto:, permanente, sur l'URL résolue (to+cc+cci+objet+corps) et non sur le gabarit tapé : un accent ou un retour à la ligne
     // coûte plus cher une fois encodé (cf. MailtoExport). Dépend de la ligne sélectionnée : appelée à chaque changement de ligne, de modèle ou de
     // contenu (avec un debounce, cf. scheduleEmailLengthGauge) ; jamais bloquante, seulement informative.
@@ -116,7 +127,7 @@ const MainEmail = (function () {
     }
 
     return {
-      buildMailtoForRecord, eachEmailInput, getEmailFieldsFromInputs, loadEmailFields, scheduleEmailLengthGauge, updateEmailFieldsDisplay,
+      buildMailtoForRecord, describeMailForRecord, eachEmailInput, getEmailFieldsFromInputs, loadEmailFields, scheduleEmailLengthGauge, updateEmailFieldsDisplay,
       updateEmailLengthGauge, wireCciToggle,
     };
   }

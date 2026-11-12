@@ -4,7 +4,7 @@
 // main.js lui est donné par `api`. Les corps sont ceux de main.js.
 const MainExport = (function () {
   function create(api) {
-    const { buildMailtoForRecord, currentDocumentHtml, getCurrentMacroSlots, getCurrentTableId, getCurrentTypeModele, getPdfFilenameTemplate, perModelOption, setStatus, templateNameInput } = api;
+    const { buildMailtoForRecord, describeMailForRecord, currentDocumentHtml, getCurrentMacroSlots, getCurrentTableId, getCurrentTypeModele, getPdfFilenameTemplate, perModelOption, setStatus, templateNameInput } = api;
 
     // Verrou anti-double-export : pdf-export.js numérote les notes de bas de page dans un état de module partagé, que deux exports en parallèle
     // corrompraient en silence. Tous les contrôles d'export (EXPORT_CONTROL_IDS) sont désactivés pendant toute opération, pas seulement celui cliqué.
@@ -34,7 +34,7 @@ const MainExport = (function () {
     // Les contrôles qu'un export en cours grise : tous les exports et « Créer l'email », pour qu'on ne lance pas un second export par-dessus le
     // premier.
     const EXPORT_CONTROL_IDS = ['btn-export-pdf', 'v2-btn-export-pdf', 'v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged', 'v2-btn-export-pdf-sheets', 'v2-btn-export-docx', 'v2-btn-export-docx-batch', 'v2-btn-export-xlsx',
-      'v2-btn-export-xlsx-batch', 'v2-btn-export-xlsx-single', 'btn-create-email'];
+      'v2-btn-export-xlsx-batch', 'v2-btn-export-xlsx-single', 'btn-create-email', 'btn-create-emails'];
     function withExportLock(fn) {
       return async (...args) => {
         // Un gros modèle qui se remplit par morceaux (js/main.js:fillOpenedPresentation) n'a pas encore tout son texte : l'export attend la fin.
@@ -335,18 +335,39 @@ const MainExport = (function () {
           setStatus('');
           return;
         }
-        const link = document.createElement('a');
-        link.href = url;
-        // Dans le cadre isolé de GFS, un lien mailto: suivi dans le cadre le ferait mourir : nouvel onglet (consigne GFS 011). Seule, rien ne change.
-        if (GfsLink.opensInNewTab(url)) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
+        // Dans le cadre isolé de GFS, le lien s'ouvre dans un nouvel onglet (consigne GFS 011) : MailtoExport.openLink.
+        MailtoExport.openLink(url);
         setStatus(I18n.t('status.emailCreated'));
       } catch (e) {
         console.error('[main] échec de la création de l’email', e);
         setStatus(I18n.t('status.emailCreationError'), true);
       }
+    }
+
+    // « Tous les emails… » (js/email-drafts.js) : les lignes à écrire (celles de la vue, ou toute la table, au choix quand la vue n'en montre qu'une partie : le même choix que les exports en lot), le lien mailto: de chacune
+    // préparé d'avance (destinataires, objet et texte déjà remplis, ni la Lecture ni la ligne affichée ne bougent), puis la fenêtre « Brouillons d'email » les ouvre dans le logiciel de messagerie par paquets. Le widget n'envoie
+    // rien : chaque brouillon s'ouvre, la personne le relit et l'envoie. « Arrêter » (la pastille du lot) abandonne la préparation, rien n'est ouvert.
+    async function onCreateEmails() {
+      Editor.exitHeaderFooterModeIfActive();
+      const tableId = getCurrentTableId() || GristAPI.getCurrentTableId();
+      if (!tableId) { setStatus(I18n.t('status.currentTableNotFound'), true); return; }
+      const picked = await readBatchRows({ label: 'e-mail' }, tableId, null);
+      if (!picked) return;
+      let prepared;
+      try {
+        prepared = await EmailDrafts.prepare(picked.rows, {
+          describe: row => describeMailForRecord(row, tableId),
+          onProgress: (current, total) => setStatus(I18n.t('emailDrafts.progress', { current, total })),
+        });
+      } catch (e) {
+        console.error('[main] brouillons d’emails : préparation impossible', e);
+        setStatus(I18n.t('status.emailDraftsError'), true);
+        return;
+      }
+      if (prepared.stopped) { setStatus(I18n.t('status.emailDraftsStopped')); return; }
+      setStatus('');
+      const result = await EmailDrafts.open({ tableId, items: prepared.items });
+      setStatus(result.opened ? I18n.t('status.emailDraftsOpened', { opened: result.opened, total: prepared.items.length }) : '');
     }
 
     // Dans une grille, « lignes » devient « valeurs de la table » : une ligne y est déjà une ligne de la grille. Les autres types de modèle gardent
@@ -1028,7 +1049,7 @@ const MainExport = (function () {
 
     const isExportRunning = () => exportOperationInProgress;
 
-    return { isExportRunning, onCreateEmail, onExport, onExportBatch, onExportDocx, onExportPdf, onExportXlsx, syncExportMenus, syncExportRowsForModelType, withExportLock };
+    return { isExportRunning, onCreateEmail, onCreateEmails, onExport, onExportBatch, onExportDocx, onExportPdf, onExportXlsx, syncExportMenus, syncExportRowsForModelType, withExportLock };
   }
 
   return { create };
