@@ -1,10 +1,10 @@
-/* « Présenter » (extensions/diapositives/slide-show.js) : le bouton ▶ à gauche de la pastille du zoom, son menu ▾, et le diaporama.
-   - Le bouton a l'allure de la pastille (css/page-zoom.css : même hauteur, même cadre, mêmes jetons) ; le script pose le groupe ▾ ▶ sur sa ligne, à sa gauche (`right` et `bottom` en
-     ligne), au même niveau --z-page-zoom, le ▶ contre la pastille. Grisés, jamais retirés, quand l'extension est éteinte.
+/* « Présenter » (extensions/diapositives/slide-show.js) : le bouton ▶ dans l'en-tête de la bande des diapositives, son menu ▾, et le diaporama.
+   - Le bouton a l'allure de la pastille du zoom (css/page-zoom.css : même hauteur, même cadre, mêmes jetons) ; le groupe ▾ ▶ est dans l'en-tête de la bande (.pp-slide-head, extensions/diapositives/slide-strip.css),
+     qui le centre, et n'a plus de place à lui : l'avis de Grist (bas droite du cadre) le recouvrait au coin du zoom. Grisés, jamais retirés, quand l'extension est éteinte.
    - Le diaporama couvre tout (plein écran, sinon tout le panneau, au niveau des info-bulles, --z-tip), fond noir ; la page est dessinée dans l'arbre ombre du rendu
      (js/print-export.js:stage), que `.pp-slide-show-host` sort de sa place hors de l'écran. La barre du bas et les messages reprennent les jetons de css/style.css (texte ≥ 4,5:1,
      clair et sombre). Ce fichier ne se charge qu'avec l'extension. */
-.pp-slide-show-split { position: fixed; z-index: var(--z-page-zoom); display: inline-flex; align-items: center; gap: 2px; }
+.pp-slide-show-split { display: inline-flex; align-items: center; gap: 2px; }
 .pp-slide-show-split[hidden] { display: none; }
 .pp-slide-show-open, .pp-slide-show-more { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 24px; margin: 0; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 8px); background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); cursor: pointer; }
 .pp-slide-show-open { width: 30px; }

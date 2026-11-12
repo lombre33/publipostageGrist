@@ -3,9 +3,10 @@
 // français clair puis anglais sombre, hébergé par GFS comme pour de vrai : l'app dans le cadre isolé de GFS (sans `allow-same-origin`, qui refuse aussi le plein écran : le diaporama
 // s'ouvre alors dans une fenêtre à part, que le navigateur de l'essai refuse - `popups` faux, comme un bloqueur de fenêtres - : il se joue donc dans le panneau, avec la ligne qui le dit ;
 // la fenêtre pour de bon est dans verify-slides-window.mjs), l'extension « diapositives » active, « Cible » à l'écran (trois diapositives, une variable, une forme « Devant le texte » sur la troisième).
-//  LE BOUTON : ▶ à gauche de la pastille du zoom, sur sa ligne, sans la recouvrir ni recouvrir la page de la diapositive ; il la suit quand elle s'ouvre au survol ; son info-bulle dit la
-//   diapositive du curseur. Rien ne bouge dans la barre d'outils. La pastille arrivée après lui (présentation ouverte au démarrage, demande du 21/10 : « le bouton play peut revenir
-//   avec le zoom ») : il attend, invisible, puis se pose à sa gauche.
+//  LE BOUTON : ▶ dans l'en-tête de la bande des diapositives, en haut à gauche, au-dessus de la 1re miniature, sans rien recouvrir ; son info-bulle dit la diapositive du curseur. Rien ne bouge dans la barre
+//   d'outils. Il ne dépend plus du zoom (demande du 21/10 : « le bouton play peut revenir avec le zoom » ; changée le 12/11) : pastille absente ou ouverte au survol, il ne bouge pas. L'AVIS DE GRIST (demande du
+//   12/11 : « le bouton play est recouvert par la popup de Grist quand un travail est en cours ») : une pile de trois avis posée comme Grist le fait (en bas à droite de la fenêtre, 320 px de large, des
+//   clics pris) ne touche ni ▶ ni ▾, ni le menu ouvert ; un vrai clic sur ▶ lance le diaporama quand même.
 //  DÉPART : F5 part de la première diapositive, le bouton et Maj+F5 de celle du curseur. Le diaporama couvre tout le panneau, fond noir, la diapositive au centre, entière, aussi grande
 //   que le panneau le permet (16:9) ; la variable y est remplie avec la ligne choisie, la forme est sur sa diapositive ; ni « Saut de page », ni bande, ni barre d'outils.
 //  PASSER : → Espace Entrée Page suivante, un clic, la molette avancent ; ← Page précédente reculent ; Début et Fin ; après la dernière, l'écran de fin, et une touche quitte. La souris
@@ -184,36 +185,83 @@ async function run(lang, colorScheme) {
   const A = await t.openPage({ hosted: true, framed: true, stub: { extensions: ACTIVE, langue: lang }, seed: SEED, lang, colorScheme });
   const { page, app } = A;
   const a = toolsOf(A);
-  // La pastille du zoom arrive après le bouton (une présentation ouverte au démarrage s'affiche avant que la pastille soit construite) : le bouton attend, invisible, puis se pose à
-  // sa gauche, jamais au coin haut gauche du panneau.
+  // La pastille du zoom arrive après le bouton (une présentation ouverte au démarrage s'affiche avant que la pastille soit construite) : le bouton, lui, ne l'attend plus.
   await app.evaluate(() => { window.__ppPill = document.getElementById('pp-page-zoom'); window.__ppPill.remove(); });
   await open(A, 8, 3);
-  const early = await app.evaluate(() => { const b = document.querySelector('.pp-slide-show-open'); return { built: !!b, shown: !!b && !b.hidden && getComputedStyle(b).visibility !== 'hidden' }; });
+  const early = await app.evaluate(() => { const b = document.querySelector('.pp-slide-show-open'); const r = b ? b.getBoundingClientRect() : null; return { built: !!b, shown: !!b && !b.hidden && getComputedStyle(b).visibility !== 'hidden', rect: r && { left: r.left, top: r.top } }; });
   await app.evaluate(() => document.body.appendChild(window.__ppPill));
   await sleep(400);
   const late = await state(app);
-  check(tag + 'la pastille du zoom arrivée après le bouton : le bouton attend, invisible, puis se pose à sa gauche, sur sa ligne (jamais au coin haut gauche)',
-    early.built && !early.shown && !!late.button && !late.button.hidden && late.button.rect.right <= late.pill.left && late.pill.left - late.button.rect.right <= 6 && near(late.button.rect.bottom, late.pill.bottom),
-    { early, button: late.button && late.button.rect, pill: late.pill });
+  check(tag + 'la pastille du zoom arrivée après le bouton : le bouton était déjà là (il ne l’attend pas) et n’a pas bougé à son arrivée',
+    early.built && early.shown && !!late.button && !late.button.hidden && near(late.button.rect.left, early.rect.left) && near(late.button.rect.top, early.rect.top), { early, button: late.button && late.button.rect, pill: late.pill });
   // Le curseur dans la diapositive 2 : un clic sur sa miniature.
   await a.click('.pp-slide-strip .pp-slide-item', 1, 600);
   await a.click('.pp-slide-strip .pp-slide-item', 1, 600);
   const savesBefore = await saves(app);
   let s = await state(app);
   const htmlBefore = s.html;
-  check(tag + 'le bouton ▶ est à gauche de la pastille du zoom, sur sa ligne, sans la recouvrir, et son info-bulle dit la diapositive du curseur (2)',
-    !!s.button && !s.button.hidden && s.button.rect.right <= s.pill.left && s.pill.left - s.button.rect.right <= 6 && near(s.button.rect.bottom, s.pill.bottom) && s.button.title === T.tip(2)
-      && (await contrastOf(app, '.pp-slide-show-open')) >= 3, { button: s.button, pill: s.pill });
+  const head = await app.evaluate(() => {
+    const h = document.querySelector('.pp-slide-strip > .pp-slide-head');
+    const strip = document.querySelector('.pp-slide-strip');
+    const first = document.querySelector('.pp-slide-strip .pp-slide-item');
+    const box = el => { if (!el) return null; const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; };
+    return { head: box(h), strip: box(strip), first: box(first), holds: !!h && !!h.querySelector('.pp-slide-show-open') && !!h.querySelector('.pp-slide-show-more'), fixed: getComputedStyle(document.querySelector('.pp-slide-show-split')).position };
+  });
+  check(tag + 'le bouton ▶ est dans l’en-tête de la bande, en haut à gauche, au-dessus de la 1re miniature (sans la recouvrir), tout entier dans le cadre, et son info-bulle dit la diapositive du curseur (2)',
+    !!s.button && !s.button.hidden && head.holds && head.fixed !== 'fixed' && s.button.rect.left >= head.strip.left && s.button.rect.right <= head.strip.right && s.button.rect.top >= head.strip.top && s.button.rect.top - head.strip.top < 40
+      && s.button.rect.bottom <= head.first.top && s.button.title === T.tip(2) && (await contrastOf(app, '.pp-slide-show-open')) >= 3, { button: s.button, head });
   check(tag + 'le petit bouton ▾ est à gauche du ▶, sur sa ligne, sans le recouvrir, avec son info-bulle, et annonce un menu',
     !!s.more && !s.more.hidden && s.more.rect.right <= s.button.rect.left && s.button.rect.left - s.more.rect.right <= 4 && near(s.more.rect.bottom, s.button.rect.bottom) && s.more.title === T.more
       && s.more.popup === 'menu' && s.more.expanded === 'false' && s.more.rect.width >= 16 && (await contrastOf(app, '.pp-slide-show-more')) >= 3, { more: s.more, button: s.button && s.button.rect });
-  // La pastille s'ouvre au survol, vers la gauche : le bouton la suit.
+  // La pastille s'ouvre au survol, vers la gauche : le bouton n'en dépend plus, il ne bouge pas.
+  const buttonBefore = s.button.rect;
   const pillCenter = { x: (s.pill.left + s.pill.right) / 2, y: (s.pill.top + s.pill.bottom) / 2 };
   await a.moveAt(pillCenter.x, pillCenter.y);
   await sleep(300);
   s = await state(app);
-  check(tag + 'la pastille ouverte au survol : le bouton reste à sa gauche, sans la recouvrir', s.pill.width > 60 && s.button.rect.right <= s.pill.left && s.pill.left - s.button.rect.right <= 6, { button: s.button.rect, pill: s.pill });
+  check(tag + 'la pastille ouverte au survol : le bouton ne bouge pas, ni ne la recouvre', s.pill.width > 60 && near(s.button.rect.left, buttonBefore.left) && near(s.button.rect.top, buttonBefore.top)
+    && (s.button.rect.right <= s.pill.left || s.button.rect.left >= s.pill.right || s.button.rect.bottom <= s.pill.top || s.button.rect.top >= s.pill.bottom), { button: s.button.rect, before: buttonBefore, pill: s.pill });
   await a.moveAt(300, 250);
+
+  // --- L'avis de Grist (demande du 12/11) : Grist pose ses avis et la progression d'un travail en bas à droite de la fenêtre (`position: fixed; bottom: 8px; right: 8px`, 240 à 320 px de large, empilés vers
+  // le haut, chacun prend les clics ; grist-core, app/client/ui/NotifyUI.ts). Ici une pile de trois, posée dans la page PARENTE comme Grist : elle recouvre le coin bas droit du cadre, là où le ▶ était collé au zoom.
+  await page.evaluate(() => {
+    const stack = document.createElement('div');
+    stack.id = 'fake-grist-notices';
+    stack.style.cssText = 'position:fixed;bottom:8px;right:8px;z-index:100000;display:flex;flex-direction:column;align-items:flex-end;pointer-events:none';
+    for (let i = 0; i < 3; i++) {
+      const toast = document.createElement('div');
+      toast.className = 'fake-grist-notice';
+      toast.textContent = 'Travail en cours';
+      toast.style.cssText = 'box-sizing:border-box;width:320px;height:84px;margin:4px;padding:12px;background:#262633;color:#fff;border-radius:3px;pointer-events:auto';
+      stack.appendChild(toast);
+    }
+    document.body.appendChild(stack);
+  });
+  const notices = await page.evaluate(() => { const r = document.getElementById('fake-grist-notices').getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; });
+  const covered = await Promise.all(['.pp-slide-show-more', '.pp-slide-show-open'].map(async selector => {
+    const c = await a.inPage(await app.evaluate(sel => { const r = document.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, selector));
+    return page.evaluate(([x, y]) => { const hit = document.elementFromPoint(x, y); return hit ? (hit.closest('.fake-grist-notice') ? 'avis' : hit.tagName.toLowerCase()) : 'rien'; }, [c.x, c.y]);
+  }));
+  check(tag + 'une pile d’avis de Grist (3 x 320 px, en bas à droite) ne recouvre ni le ▶ ni le petit ▾ : la page parente rend la main à l’app à leur place',
+    covered.every(hit => hit === 'iframe') && notices.left > 300 && notices.top > 100, { covered, notices });
+  await a.click('.pp-slide-show-more', 0, 300);
+  const menuNow = await menuState(app);
+  // Le début de chaque ligne du menu (là où se lit le texte et où l'on vise) : la page parente rend la main à l'app, jamais l'avis.
+  const itemHits = menuNow.open ? await app.evaluate(() => Array.from(document.querySelectorAll('.pp-show-menu [data-action]')).map(b => { const r = b.getBoundingClientRect(); return { x: r.left + 40, y: r.top + r.height / 2 }; })) : [];
+  const itemsAt = await Promise.all(itemHits.map(p => a.inPage(p)));
+  const menuHits = await page.evaluate(points => points.map(([x, y]) => { const hit = document.elementFromPoint(x, y); return hit ? (hit.closest('.fake-grist-notice') ? 'avis' : hit.tagName.toLowerCase()) : 'rien'; }), itemsAt.map(p => [p.x, p.y]));
+  check(tag + 'le menu ▾ s’ouvre à droite de la bande, tout entier dans le cadre, et le début de chacune de ses lignes reste hors des avis de Grist',
+    menuNow.open && menuNow.rect.left >= 112 && menuNow.rect.top >= 0 && menuNow.rect.right <= 700 && menuNow.rect.bottom <= 400 && menuHits.length === 4 && menuHits.every(hit => hit === 'iframe'), { menu: menuNow.rect, menuHits });
+  await a.click('.pp-slide-show-more', 0, 250);
+  await a.click('.pp-slide-show-open', 0, 300);
+  await shown(app);
+  s = await state(app);
+  check(tag + 'sous la pile d’avis, un vrai clic sur le ▶ lance le diaporama depuis la diapositive du curseur', !!s.show && s.show.counter === '2 / 3', { counter: s.show && s.show.counter });
+  await a.press('Escape');
+  await page.evaluate(() => document.getElementById('fake-grist-notices').remove());
+  await sleep(200);
+  s = await state(app);
 
   // --- Le bouton : depuis la diapositive du curseur.
   await a.click('.pp-slide-show-open', 0, 300);
@@ -319,8 +367,8 @@ async function run(lang, colorScheme) {
   let m = await menuState(app);
   s = await state(app);
   const labels = m.items.map(i => i.text);
-  check(tag + 'un clic sur ▾ : le menu s’ouvre au-dessus, dans le panneau, avec « À partir de la diapositive 2 », « Depuis le début » et les interrupteurs « Plein écran » et « Vue intervenant »',
-    m.open && s.more.expanded === 'true' && m.rect.left >= 0 && m.rect.right <= 700 && m.rect.top >= 0 && m.rect.bottom <= s.more.rect.top + 1
+  check(tag + 'un clic sur ▾ : le menu s’ouvre à droite de la bande, à la hauteur de l’en-tête, dans le panneau, avec « À partir de la diapositive 2 », « Depuis le début » et les interrupteurs « Plein écran » et « Vue intervenant »',
+    m.open && s.more.expanded === 'true' && m.rect.left >= 112 && m.rect.right <= 700 && m.rect.top >= 0 && m.rect.top <= s.more.rect.top + 1 && m.rect.bottom <= 400
       && labels.join('|') === [T.current(2), T.begin, T.fullscreen, T.speaker].join('|') && m.items[2].role === 'menuitemcheckbox' && m.items[3].role === 'menuitemcheckbox' && m.items[3].checked === 'false', { open: m.open, rect: m.rect, labels, more: s.more });
   check(tag + 'dans un cadre qui ne permet pas le plein écran : l’interrupteur est coché et jamais grisé, avec sa ligne dessous : le diaporama s’ouvre dans une fenêtre à part',
     m.items[2].disabled === null && m.items[2].checked === 'true' && m.items[2].note === T.fullscreenWindow, m.items[2]);
@@ -417,7 +465,7 @@ async function run(lang, colorScheme) {
   m = await menuState(app);
   check(tag + 'Entrée sur « Depuis le début » le lance ; en quittant, le clavier revient à ▾', viaKeys === '1 / 3' && !s.show && !m.open && s.focus.includes('pp-slide-show-more'), { viaKeys, focus: s.focus, open: m.open });
   await a.click('.pp-slide-show-more', 0, 250);
-  await a.clickAt(300, 250);
+  await a.clickAt(600, 180);
   m = await menuState(app);
   check(tag + 'un appui à côté referme le menu, sans rien lancer', !m.open && !(await state(app)).show, { open: m.open });
   await allow(frameAllows);

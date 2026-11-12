@@ -1,7 +1,8 @@
 // « Présenter » : le diaporama d'une présentation, en plein écran, une diapositive à la fois (extension « diapositives » de Grist Factory Suite ; demande du 21/10, carte « Près du
-// zoom »). Le bouton ▶ est à gauche de la pastille du zoom, au coin bas droit du document, tant que la bande des diapositives est montrée (extensions/diapositives/slide-strip.js) ;
-// la barre d'outils ne change pas (elle est gelée). Ce fichier est le bouton, son menu et le départ ; la lecture elle-même (passer, transitions, animations, barre du bas) est celle du lecteur
-// commun (slide-player.js), qui joue de la même façon dans le panneau et dans la fenêtre à part (slide-window.js, slide-present.js).
+// zoom », puis demande du 12/11). Le bouton ▶ est dans l'en-tête de la bande des diapositives (extensions/diapositives/slide-strip.js : `SlideStrip.showSlot`), en haut à gauche, tant que la bande est montrée.
+// Il était collé au zoom, au coin bas droit du document, où l'avis de Grist (en bas à droite de la fenêtre, 240 à 320 px de large, la barre de progression d'un travail en cours comprise) le recouvrait et prenait
+// ses clics ; la progression d'un lot de l'app (css/batch-progress.css) tient le coin bas gauche : l'en-tête de la bande n'est sous aucun des deux. La barre d'outils ne change pas (elle est gelée).
+// Ce fichier est le bouton, son menu et le départ ; la lecture elle-même (passer, transitions, animations, barre du bas) est celle du lecteur commun (slide-player.js), qui joue de la même façon dans le panneau et dans la fenêtre à part (slide-window.js, slide-present.js).
 //  - DÉPART : le bouton et Maj+F5 partent de la diapositive du curseur, F5 de la première (comme PowerPoint). Le diaporama prend tout l'écran, fond noir, la diapositive au centre, aussi
 //    grande que l'écran le permet. OÙ IL SE JOUE (demande du 24/10 : « un moyen alternatif pour avoir un plein écran, c'est vraiment important ») :
 //      1. le cadre permet le plein écran du navigateur (`document.fullscreenEnabled`) : dans le panneau du widget, en plein écran ;
@@ -21,24 +22,22 @@
 //    « Aller à… », et pour le public l'écran noir (B), l'écran blanc (W) et le stylo (D). Le navigateur n'accorde qu'UNE fenêtre par geste (mesuré, Chromium) : la fenêtre du diaporama est la seule qui s'ouvre, la console est le widget lui-même. Elle suit la fenêtre (slide-window.js : `follow`) et lui
 //    passe ses ordres ; elle prend fin avec elle (la fenêtre qui se ferme, Échap, « Quitter »). Sans la fenêtre (le navigateur la refuse), le diaporama se joue dans le panneau, avec une ligne qui le dit.
 //  - L'extension éteinte par GFS : le bouton reste, grisé avec sa raison, et son clic l'explique (SlidesEntry.explainOff), comme les gestes de la bande.
-//  - LA BARRE DE GFS (consigne GFS 025) : elle recouvre le cadre au bord choisi par la personne. Le ▶ suit la pastille du zoom, qui s'écarte de la barre quand elle la recouvrirait
-//    (js/page-zoom.js:stepAside, qui compte aussi la place du ▶ : `data-pp-zoom-companion`). Le diaporama du panneau prend tout le cadre : à son ouverture l'app demande à GFS de masquer sa barre
+//  - LA BARRE DE GFS (consigne GFS 025) : elle recouvre le cadre au bord choisi par la personne. Le ▶ suit la bande, qui lui cède ce que la barre en mord (slide-strip.js:place : une gouttière à gauche, la hauteur mordue
+//    en haut ou en bas) : il n'a plus de calcul à lui. Le diaporama du panneau prend tout le cadre : à son ouverture l'app demande à GFS de masquer sa barre
 //    (`GfsBar.hide(true)`), et chaque sortie la lui fait rendre (`GfsBar.hide(false)`, dans `stop`, le seul chemin de sortie), Échap et « Quitter » comprise. La fenêtre à part ne couvre rien : la
 //    barre reste.
 // Styles : extensions/diapositives/slide-show.css.
 const SlideShow = (function () {
   const el = Dom.el;
-  const PILL_GAP = 4;              // l'écart, en px, entre le ▶ et la pastille du zoom à sa droite
 
-  let split = null;                // le groupe ▾ ▶, posé à gauche de la pastille du zoom : c'est lui que `place` déplace et que la pastille compte (`data-pp-zoom-companion`)
-  let button = null;               // ▶ « Présenter », le bord droit du groupe, contre la pastille
+  let split = null;                // le groupe ▾ ▶, posé dans l'en-tête de la bande des diapositives (`SlideStrip.showSlot`) : il se cache et se déplace avec elle
+  let button = null;               // ▶ « Présenter », le bord droit du groupe
   let more = null;                 // ▾, à gauche du ▶ : le menu des autres départs et du plein écran
   let menu = null;                 // le menu de ▾ : { panel, open, pointer }
   let wantFullscreen = true;       // l'interrupteur « Plein écran » du menu (le ▶, F5 et Maj+F5 le suivent) ; gardé pour la page ouverte
   let wantSpeaker = false;         // l'interrupteur « Vue intervenant » du menu : le diaporama dans sa fenêtre, le panneau en console ; gardé pour la page ouverte
   let shown = false;               // la bande est montrée : le bouton aussi, et F5 lance le diaporama
   let off = false;                 // l'extension est éteinte : le bouton est grisé
-  let placeObservers = [];
   let run = null;                  // le diaporama du panneau en cours : { player (SlidePlayer), root, focusBack } - ou, pour la vue intervenant, la console : { speaker (SlideSpeaker), link (SlideWindow), root, focusBack }
   let launching = false;           // un départ est en route (la question des images d'un autre site, le rendu de la fenêtre à part) : un autre geste ne lance pas un deuxième diaporama
 
@@ -48,7 +47,6 @@ const SlideShow = (function () {
     if (button) return;
     split = el('div', 'pp-slide-show-split');
     split.hidden = true;
-    split.setAttribute('data-pp-zoom-companion', String(PILL_GAP));
     more = Dom.button('pp-slide-show-more');
     Dom.setMarkup(more, Icons.svg('caretDown'));
     more.setAttribute('aria-haspopup', 'menu');
@@ -68,50 +66,7 @@ const SlideShow = (function () {
       if (menu && menu.open) closeMenu(false); else openMenu(event.detail === 0);
     });
     split.append(more, button);
-    document.body.appendChild(split);
     document.addEventListener('keydown', onStartKey, true);
-  }
-  // À gauche de la pastille du zoom, sur sa ligne : elle se déplace (barre de défilement, volet d'import) et s'élargit à gauche au survol, le bouton la suit. Sans pastille posée
-  // (une présentation ouverte au démarrage s'affiche avant que la pastille soit construite), le bouton attend, invisible, au lieu de tomber au coin haut gauche du panneau : la
-  // pastille qui arrive dans la page le place (observePlace).
-  function place() {
-    if (!split || split.hidden) return;
-    const pill = document.getElementById('pp-page-zoom');
-    watchPill(pill);
-    const r = pill ? pill.getBoundingClientRect() : null;
-    const ready = !!r && r.width > 0 && r.height > 0;
-    split.style.visibility = ready ? '' : 'hidden';
-    if (!ready) return;
-    const root = document.documentElement;
-    split.style.right = Math.round(root.clientWidth - r.left + PILL_GAP) + 'px';
-    split.style.bottom = Math.round(root.clientHeight - r.bottom) + 'px';
-  }
-  // La pastille est suivie dès qu'elle existe : sa taille (ouverte au survol, montrée) et son style (sa place).
-  let observing = false;
-  let watchedPill = null;
-  function watchPill(pill) {
-    if (!observing || !pill || pill === watchedPill) return;
-    watchedPill = pill;
-    if (typeof ResizeObserver === 'function') { const sizes = new ResizeObserver(place); sizes.observe(pill); placeObservers.push(sizes); }
-    if (typeof MutationObserver === 'function') { const moves = new MutationObserver(place); moves.observe(pill, { attributes: true, attributeFilter: ['style'] }); placeObservers.push(moves); }
-  }
-  function observePlace() {
-    if (observing) return;
-    observing = true;
-    // La classe de la page (la bande, le volet « Importer ») et ses enfants directs : la pastille qui arrive.
-    if (typeof MutationObserver === 'function') {
-      const page = new MutationObserver(place);
-      page.observe(document.body, { attributes: true, attributeFilter: ['class'], childList: true });
-      placeObservers.push(page);
-    }
-    window.addEventListener('resize', place);
-  }
-  function unobservePlace() {
-    placeObservers.forEach(o => o.disconnect());
-    placeObservers = [];
-    observing = false;
-    watchedPill = null;
-    window.removeEventListener('resize', place);
   }
   // L'info-bulle dit de quelle diapositive le bouton part ; écrite seulement quand elle change (la bande la redemande à chaque transaction).
   let said = '';
@@ -128,18 +83,18 @@ const SlideShow = (function () {
     more.setAttribute('aria-disabled', off ? 'true' : 'false');
     if (off) closeMenu(false);
   }
-  // La bande le montre et le cache avec elle (`on`) ; `isOff` : l'extension est éteinte. Appelée aussi à chaque changement de diapositive, pour l'info-bulle.
+  // La bande le montre et le cache avec elle (`on`) ; `isOff` : l'extension est éteinte. Appelée aussi à chaque changement de diapositive, pour l'info-bulle. Le groupe va dans l'en-tête de la bande
+  // la première fois qu'elle le montre (et s'y remet si la bande a été refaite) : il n'a pas d'autre place.
   function sync(on, isOff) {
     build();
     const was = shown;
     off = !!isOff;
     shown = !!on;
+    const slot = typeof SlideStrip !== 'undefined' ? SlideStrip.showSlot() : null;
+    if (slot && split.parentNode !== slot) slot.appendChild(split);
     button.hidden = !shown;
     split.hidden = !shown;
-    if (shown && !was) { observePlace(); place(); }
-    if (!shown && was) { unobservePlace(); closeMenu(false); }
-    // La pastille compte la place du ▶ pour s'écarter de la barre de GFS : elle la refait quand il paraît ou disparaît.
-    if (shown !== was) PageZoom.place();
+    if (!shown && was) closeMenu(false);
     if (shown) syncTexts();
   }
 
@@ -204,7 +159,8 @@ const SlideShow = (function () {
     paintMenu();
     Object.assign(menu, { open: true, pointer: !byKeyboard });
     more.setAttribute('aria-expanded', 'true');
-    menu.panel.show(split, { placement: 'top-end', offset: 6 });
+    // À droite de la bande, à la hauteur de l'en-tête (comme le menu de disposition, slide-strip.js) : dessous, il tombait sur les miniatures et, dans un cadre de 400 px de haut, passait sous le bord bas.
+    menu.panel.show(split.parentNode || split, { placement: 'right-start', offset: 6 });
     if (byKeyboard) menuButtons()[0].focus();
     document.addEventListener('mousedown', onPressOutsideMenu, true);
   }

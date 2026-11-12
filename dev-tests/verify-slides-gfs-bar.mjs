@@ -10,9 +10,9 @@
 //  2) LA BARRE CHANGE bande ouverte : en haut, à droite, en bas, plus de barre (l'explorateur de GFS), à gauche : la bande est à la place d'avant sans barre au pixel près, la page se réajuste, et rien ne sort du cadre.
 //  3) LE VOLET « IMPORTER », barre à droite : rien du volet (en-tête, « Fermer », choix de la source, liste) sous la zone, la barre dans sa gouttière à droite, la pastille du zoom à gauche du volet, la page entre la
 //     bande et le volet ; le volet se ferme et rend sa place (sans barre au pixel près).
-//  4) LA PASTILLE DU ZOOM ET LE ▶, barre en bas : à 700 × 400 la barre est loin d'eux, rien ne bouge ; dans un cadre plus étroit (460 × 300, la zone bouge avec lui) leur place ouverte (survol) toucherait la zone, ils
-//     montent ensemble de sa hauteur, sur la même ligne, sans la recouvrir, ouverts ou non ; à la vraie souris on les atteint (survol de la pastille, clic sur le pourcentage) ; le cadre revient à 700 × 400 : ils
-//     redescendent. Barre à droite dans un cadre bas : ils reculent d'autant.
+//  4) LA PASTILLE DU ZOOM ET LE ▶, barre en bas : à 700 × 400 la barre est loin d'eux, rien ne bouge ; dans un cadre plus étroit (410 × 300, la zone bouge avec lui) la place ouverte de la pastille (survol) toucherait
+//     la zone, elle monte de sa hauteur, sans la recouvrir, ouverte ou non ; à la vraie souris on l'atteint (survol de la pastille, clic sur le pourcentage) ; le cadre revient à 700 × 400 : elle redescend. Barre à droite
+//     dans un cadre bas : elle recule d'autant. Le ▶, lui, est dans l'en-tête de la bande (demande du 12/11) : il suit la bande et ne bouge pas de la pastille, et la barre ne le recouvre à aucun bord.
 //  5) « PRÉSENTER » : le ▶ à la vraie souris, F5 et Maj+F5 masquent la barre (un appel `barre.masquer { masquee: true }`, la barre disparaît), Échap, « Quitter » (vraie souris) et l'écran de fin la rendent (`masquee: false`) ;
 //     pendant le diaporama la bande ne bouge pas, à la sortie non plus (la page ne se réajuste pas pour rien). Un GFS d'avant la consigne et la page seule : le diaporama part et se ferme comme avant, sans barre.
 // Lancé par run-headless.mjs (groupe Node « slidesGfsBar », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slides-gfs-bar.mjs
@@ -107,7 +107,7 @@ const measure = app => app.evaluate(() => {
   const body = document.body.style;
   return {
     strip: visible(strip) ? rect(strip) : null,
-    stripControls: all(strip, '.pp-slide-item, .pp-slide-num, .pp-slide-add'),
+    stripControls: all(strip, '.pp-slide-item, .pp-slide-num, .pp-slide-add, .pp-slide-show-open, .pp-slide-show-more'),
     panel: visible(panel) ? rect(panel) : null,
     panelControls: all(panel, '.pp-slide-import-head, .pp-slide-import-close, .pp-slide-import-field, .ss-trigger, .pp-slide-import-keep, .pp-slide-item'),
     sheet: rect(document.querySelector('#editor-container .v2-page-sheet')),
@@ -174,7 +174,7 @@ async function run(lang, colorScheme) {
     return found ? String(found.className).split(/\s+/)[0] : null;
   }, [x, y]);
   const sweep = [];
-  for (const y of [175, 232]) {
+  for (const y of [165, 200, 262]) {
     for (let x = 0; x <= 170; x += 6) {
       const before = await barHits(page);
       await page.mouse.move(x, y);
@@ -182,7 +182,7 @@ async function run(lang, colorScheme) {
     }
   }
   const under = sweep.filter(p => p.bar && p.under);
-  check(tag + 'à la vraie souris : deux balayages de la bande à hauteur de la barre (de 0 à 170 px, sur deux miniatures) ne passent jamais sur la barre là où se trouve une miniature ou un bouton', under.length === 0, under.slice(0, 5));
+  check(tag + 'à la vraie souris : trois balayages de la bande à hauteur de la barre (de 0 à 170 px : l’en-tête avec ▾ ▶, puis deux miniatures) ne passent jamais sur la barre là où se trouve une miniature ou un bouton', under.length === 0, under.slice(0, 5));
   check(tag + 'et les balayages sont sérieux : la barre a pris la souris sur sa largeur (' + sweep.filter(p => p.bar).length + ' points) et ils ont rencontré des miniatures (' + sweep.filter(p => !p.bar && p.under).length + ' points)', sweep.filter(p => p.bar).length >= 8 && sweep.filter(p => !p.bar && p.under).length >= 8, sweep.slice(0, 6));
   await tools.click('.pp-slide-strip .pp-slide-item', 1, 500);
   const at = await app.evaluate(() => { const s = SlideStrip.slidesOf(EditorCore.getEditor().state.doc); const from = EditorCore.getEditor().state.selection.from; return s.findIndex(x => from <= x.end); });
@@ -258,16 +258,16 @@ async function run(lang, colorScheme) {
   check(tag + 'barre en bas à 700 × 400 : la pastille et le ▶, au repos et ouverts, sont loin de la zone ; rien ne bouge (ni décalage, ni écart avec la référence sans barre)',
     !hits(b.pill, bottom700) && !hits(b.play, bottom700) && !hits(bOpen.pill, bottom700) && !hits(bOpen.play, bottom700) && b.pillShift.y === '' && sameRect(b.pill, ref.pill) && sameRect(b.play, ref.play), { pill: showRect(b.pill), open: showRect(bOpen.pill), zone: showRect(zoneRect(bottom700)) });
   await standIn(A, null);
-  await resizeFrame(A, 460, 300);
-  const bottom500 = await barAt(page, 'bas', 460, 300);
+  await resizeFrame(A, 410, 300);
+  const bottom500 = await barAt(page, 'bas', 410, 300);
   await setBar(A, bottom500);
   await standIn(A, bottom500);
   const n = await measure(app);
   const nOpen = await open0();
-  check(tag + '460 × 300, barre en bas : la pastille ouverte (survol) et le ▶ toucheraient la zone, ils montent ensemble : ni au repos ni ouverts ils ne la touchent',
+  check(tag + '410 × 300, barre en bas : la pastille ouverte (survol) toucherait la zone, elle monte : ni au repos ni ouverte elle ne la touche, et le ▶ de la bande non plus',
     n.pillShift.y !== '' && !hits(n.pill, bottom500) && !hits(n.play, bottom500) && !hits(nOpen.pill, bottom500) && !hits(nOpen.play, bottom500), { pill: showRect(n.pill), open: showRect(nOpen.pill), play: showRect(nOpen.play), shift: n.pillShift, zone: showRect(zoneRect(bottom500)) });
-  check(tag + 'ils restent ensemble, le ▶ à gauche de la pastille et sur sa ligne, dans le cadre, et la pastille n\'a pas bougé de côté (seulement montée)',
-    n.play.right <= n.pill.left + 0.5 && n.pill.left - n.play.right <= 6 && Math.abs(n.play.bottom - n.pill.bottom) <= 1.5 && n.pill.bottom <= 300.5 && n.pill.top >= 0 && Math.abs(n.pill.right - nOpen.pill.right) < 0.6, { pill: showRect(n.pill), play: showRect(n.play) });
+  check(tag + 'le ▶ reste dans l\'en-tête de la bande (en haut à gauche de la bande, dans le cadre) : il n\'a pas suivi la pastille, qui n\'a pas bougé de côté (seulement montée)',
+    !!n.play && !!n.strip && n.play.left >= n.strip.left && n.play.right <= n.strip.right && n.play.top >= n.strip.top && n.play.top - n.strip.top < 40 && n.pill.bottom <= 300.5 && n.pill.top >= 0 && Math.abs(n.pill.right - nOpen.pill.right) < 0.6, { pill: showRect(n.pill), play: showRect(n.play), strip: showRect(n.strip) });
   check(tag + 'la pastille ne saute pas sous la souris : la même place au repos et ouverte (son bord droit et son bas ne bougent pas)', Math.abs(n.pill.bottom - nOpen.pill.bottom) < 0.6 && Math.abs(n.pill.right - nOpen.pill.right) < 0.6, { repos: showRect(n.pill), ouverte: showRect(nOpen.pill) });
   // Elle s'atteint à la vraie souris : le survol l'ouvre, un clic sur le pourcentage rend l'affichage d'origine.
   const hitsBefore = await barHits(page);
