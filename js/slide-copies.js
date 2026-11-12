@@ -208,20 +208,29 @@ const SlideCopies = (function () {
   }
   // Le texte alternatif d'une diapositive en bloc : ce qu'elle dit, sur une ligne (500 signes au plus : AltText.MAX).
   const blockAltOf = text => AltText.clean(text ? I18n.t('slides.block.alt', { text: String(text).replace(/\s*\n+\s*/g, ' ; ') }) : I18n.t('slides.block.altEmpty'));
-  // Les attributs de l'image d'une photo de diapositive `shot` ({ src, text, words }), large de `width` (en px) ; `link` : { linkModel, linkKey, linkSlide, srcHash } de SlideLinks.anchorSource.
-  function blockAttrs(shot, width, link) {
+  // Une diapositive qui parle d'une ligne (une variable, un calcul, une puce de date ou de nom, une condition, une image de colonne) ne se dessine pas une fois pour toutes : la Lecture et les exports la
+  // redessinent pour chaque ligne (`fillBlocks`). Le bloc garde donc la diapositive elle-même, `slideSource` : { h, m, r, t } - son HTML, les marges de sa présentation (qui donnent la page), son rang
+  // dans la présentation et le nombre de diapositives (0 : sans numéro). Null pour une diapositive qui n'en parle pas : sa photo suffit, et le document ne grossit pas.
+  const needsRow = html => /var-badge|calc-badge|smart-chip|mention-chip|data-var-table|data-condition|data-loop/.test(html || '');
+  function blockSourceOf(html, tpl, at) {
+    return needsRow(html) ? { h: html, m: (tpl && tpl.marginsMm) || null, r: at ? at.rank : 0, t: at ? at.total : 0 } : null;
+  }
+  // Les attributs de l'image d'une photo de diapositive `shot` ({ src, text, words }), large de `width` (en px) ; `link` : { linkModel, linkKey, linkSlide, srcHash } de SlideLinks.anchorSource ;
+  // `source` : celle de `blockSourceOf`.
+  function blockAttrs(shot, width, link, source) {
     return {
       src: shot.src, alt: blockAltOf(shot.text), width: width + 'px', slideText: shot.text || null, slideWords: shot.words && shot.words.length ? shot.words : null,
       slideLink: link ? { model: link.linkModel, key: link.linkKey, slide: link.linkSlide, base: link.srcHash } : null,
+      slideSource: source || null,
     };
   }
   // Pose la photo `shot` au curseur du document, large de `width` px (la largeur du texte) : un paragraphe qui ne porte que l'image, un seul pas d'annulation à part de la frappe d'avant ; le curseur se
   // pose dans le bloc qui suit (il y en a toujours un : une ligne vide est ajoutée au besoin). Rend { blocks: 1 }.
-  function insertBlock(editor, { shot, width, link }) {
+  function insertBlock(editor, { shot, width, link, slideSource }) {
     const { state } = editor;
     const { from, to } = placeFor(state, copiesOf(state.doc));
     const { editorImage, paragraph } = editor.schema.nodes;
-    const block = paragraph.create(null, [editorImage.create(blockAttrs(shot, width, link))]);
+    const block = paragraph.create(null, [editorImage.create(blockAttrs(shot, width, link, slideSource))]);
     const content = [block];
     const next = state.doc.nodeAt(to);
     if (!next || !next.isTextblock) content.push(paragraph.create());
@@ -273,7 +282,9 @@ const SlideCopies = (function () {
       for (const { block, plan } of stale) {
         const key = keyOf({ linkModel: block.link.model, linkSlide: block.link.slide });
         if (shots.has(key)) continue;
-        shots.set(key, { plan, shot: await SlidesEntry.blockSnapshot(slideHtml(editor, plan.remote), plan.model, { rank: plan.at + 1, total: plan.total }) });
+        const html = slideHtml(editor, plan.remote);
+        const at = { rank: plan.at + 1, total: plan.total };
+        shots.set(key, { plan, shot: await SlidesEntry.blockSnapshot(html, plan.model, at), slideSource: blockSourceOf(html, plan.model, at) });
       }
       if (editor.isDestroyed || paused(editor)) return null;
       const tr = editor.state.tr;
@@ -288,7 +299,7 @@ const SlideCopies = (function () {
         // La source a bougé encore pendant le dessin : le prochain passage reprend (la photo n'est plus la bonne).
         if (live.action !== 'pull' || live.srcHash !== got.plan.srcHash) continue;
         const own = node.attrs.alt !== blockAltOf(node.attrs.slideText);
-        const attrs = Object.assign({}, node.attrs, blockAttrs(got.shot, 0, { linkModel: link.model, linkKey: link.key, linkSlide: link.slide, srcHash: live.srcHash }));
+        const attrs = Object.assign({}, node.attrs, blockAttrs(got.shot, 0, { linkModel: link.model, linkKey: link.key, linkSlide: link.slide, srcHash: live.srcHash }, got.slideSource));
         attrs.width = node.attrs.width;
         if (own) attrs.alt = node.attrs.alt;
         tr.setNodeMarkup(pos, undefined, attrs);
@@ -304,6 +315,58 @@ const SlideCopies = (function () {
       following = false;
     }
   }
+  // ---- Les blocs redessinés pour une ligne (la Lecture et les exports) -----------------------------------------------------------------------------------
+
+  // La Lecture et les exports (js/reader-mode.js : `resolveSlideBlocks`) redessinent, pour la ligne qu'ils écrivent, chaque diapositive en bloc qui garde sa diapositive (`slideSource`) : `resolveHtml(html)`
+  // rend le HTML de la diapositive avec les valeurs de la ligne (les mêmes bulles, puces et conditions que le document), le dessin est celui du volet (SlidesEntry.blockSnapshot, numéro écrit) et il remplace
+  // l'image de ce bloc, son texte et son texte alternatif (celui qu'elle avait tiré de la diapositive : un texte alternatif écrit par la personne reste). Les photos déjà dessinées se gardent (même HTML résolu,
+  // mêmes marges, même rang : une autre ligne qui donne les mêmes valeurs, ou la même ligne relue) ; hors de l'extension, ou si le dessin échoue, le bloc garde la photo de l'éditeur.
+  const REDRAWN_KEEP = 16;
+  const redrawn = new Map();
+  // Une empreinte courte d'un long texte (le HTML d'une diapositive peut porter ses images) : FNV-1a sur 32 bits, derrière la longueur.
+  function stampOf(text) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+    return text.length + ':' + (h >>> 0).toString(36);
+  }
+  const readSource = (img) => {
+    try {
+      const value = JSON.parse(img.getAttribute('data-slide-source'));
+      return value && typeof value.h === 'string' ? value : null;
+    } catch (e) { return null; }
+  };
+  async function redrawOne(img, resolveHtml) {
+    const source = readSource(img);
+    if (!source) return false;
+    const html = await resolveHtml(source.h);
+    const at = source.r ? { rank: source.r, total: source.t } : null;
+    const key = stampOf(html) + '|' + stampOf(JSON.stringify([source.m, at]));
+    let shot = redrawn.get(key);
+    if (shot) { redrawn.delete(key); } else { shot = await SlidesEntry.blockSnapshot(html, { marginsMm: source.m }, at); }
+    if (!shot) return false;
+    redrawn.set(key, shot);
+    if (redrawn.size > REDRAWN_KEEP) redrawn.delete(redrawn.keys().next().value);
+    const was = img.getAttribute('data-slide-text') || '';
+    const auto = (img.getAttribute('alt') || '') === blockAltOf(was);
+    img.setAttribute('src', shot.src);
+    if (shot.text) img.setAttribute('data-slide-text', shot.text); else img.removeAttribute('data-slide-text');
+    if (shot.words && shot.words.length) img.setAttribute('data-slide-words', JSON.stringify(shot.words)); else img.removeAttribute('data-slide-words');
+    if (auto) img.setAttribute('alt', blockAltOf(shot.text));
+    return true;
+  }
+  // Redessine les diapositives en bloc de `root` (le HTML d'un document) qui gardent leur diapositive. `stale()` : vrai quand un rendu plus récent a pris la suite (le reste est laissé). Une à une : chaque
+  // dessin tient un canevas de 1920 x 1080. Rend le nombre de blocs redessinés.
+  async function fillBlocks(root, resolveHtml, stale) {
+    let n = 0;
+    for (const img of Array.from(root.querySelectorAll('img.editor-image[data-slide-source]'))) {
+      if (stale && stale()) break;
+      try { if (await redrawOne(img, resolveHtml)) n++; } catch (e) { console.warn('[SlideCopies] diapositive en bloc : redessin impossible', e); }
+      // La diapositive n'a plus rien à faire dans ce HTML de sortie (HTML, Word...), où elle n'est qu'un poids de plus.
+      img.removeAttribute('data-slide-source');
+    }
+    return n;
+  }
+
   // Le bloc lié que la sélection désigne (l'image sélectionnée), ou null : { block: { node, pos }, from, name, n, gone } (comme `statusAt` d'une copie en texte).
   function blockStatusAt(state) {
     const { selection } = state;
@@ -452,5 +515,5 @@ const SlideCopies = (function () {
     return SlideLinks.strip(Editor.getHTML(tr.doc));
   }
 
-  return { SOURCE_TYPE, createExtension, follow, followBlocks, forOutput, insert, insertBlock, numberStamp, detach, statusAt, linkedFrom, copiesOf, blocksOf };
+  return { SOURCE_TYPE, createExtension, follow, followBlocks, fillBlocks, forOutput, insert, insertBlock, blockSourceOf, numberStamp, detach, statusAt, linkedFrom, copiesOf, blocksOf };
 })();

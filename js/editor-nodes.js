@@ -1800,6 +1800,9 @@ const EditorNodes = (function () {
         slideText: { default: null, parseHTML: el => el.getAttribute('data-slide-text') || null, renderHTML: noBareRender },
         slideWords: { default: null, parseHTML: el => jsonAttr(el, 'data-slide-words'), renderHTML: noBareRender },
         slideLink: { default: null, parseHTML: el => jsonAttr(el, 'data-slide-link'), renderHTML: noBareRender },
+        // `slideSource` : la diapositive elle-même, pour celles qui parlent d'une ligne (une variable, une puce, une condition) : `{ h, m, r, t }` - son HTML, les marges de sa présentation, son rang et le nombre de
+        // diapositives (js/slide-copies.js : `sourceOf`). La Lecture et les exports la redessinent pour chaque ligne (js/reader-mode.js : `resolveSlideBlocks`) ; l'éditeur, lui, montre la photo.
+        slideSource: { default: null, parseHTML: el => jsonAttr(el, 'data-slide-source'), renderHTML: noBareRender },
       };
     }
     return { moveImageNode, imageAttributes };
@@ -2183,6 +2186,7 @@ const EditorNodes = (function () {
           if (nodeAttrs.slideText) attrs['data-slide-text'] = nodeAttrs.slideText;
           if (nodeAttrs.slideWords) attrs['data-slide-words'] = JSON.stringify(nodeAttrs.slideWords);
           if (nodeAttrs.slideLink) attrs['data-slide-link'] = JSON.stringify(nodeAttrs.slideLink);
+          if (nodeAttrs.slideSource) attrs['data-slide-source'] = JSON.stringify(nodeAttrs.slideSource);
           if (ChartEntry.isChartAttrs(nodeAttrs)) {
             if (nodeAttrs.chartSection) attrs['data-chart-section'] = String(nodeAttrs.chartSection);
             if (nodeAttrs.chartSpec) attrs['data-chart-spec'] = nodeAttrs.chartSpec;

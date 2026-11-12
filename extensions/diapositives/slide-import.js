@@ -701,7 +701,9 @@ const SlideImport = (function () {
     // Le document, la source ou le volet ont changé pendant le dessin : rien n'est posé.
     if (!open || editor.isDestroyed || EditorCore.getEditor() !== editor || String(Templates.getCurrentId()) !== String(here) || !source || String(source.id) !== String(id)) return false;
     if (isOff()) { SlidesEntry.explainOff(); return false; }
-    SlideCopies.insertBlock(editor, { shot, width: blockWidthPx(), link });
+    // Une diapositive qui parle d'une ligne (une variable, une puce...) garde sa diapositive : la Lecture et les exports la redessinent pour chaque ligne (js/slide-copies.js : `fillBlocks`).
+    const slideSource = SlideCopies.blockSourceOf(html, Templates.byId(id), { rank: index + 1, total: source.slides.length });
+    SlideCopies.insertBlock(editor, { shot, width: blockWidthPx(), link, slideSource });
     setActive(index, byKeyboard);
     // À la souris, le clavier revient dans le texte, là où le curseur s'est posé (après le bloc) ; au clavier, il reste sur la miniature, pour la suivante.
     if (!byKeyboard) editor.commands.focus();

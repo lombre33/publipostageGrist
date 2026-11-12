@@ -172,9 +172,11 @@ await app.evaluate((size) => {
   window.__reads = 0; window.__parses = 0; window.__big = size;
   const docApi = grist.docApi;
   const fetchTable = docApi.fetchTable.bind(docApi);
-  docApi.fetchTable = (table) => { if (table === 'Publipostage_Modeles') window.__reads++; return fetchTable(table); };
+  // Ne comptent que les lectures de la liaison : le passage de l'enregistrement automatique (toutes les 2,5 s) et l'enregistrement du document ouvert (saveRow) lisent la table eux aussi, et selon l'instant
+  // où ils tombent par rapport au clic (le moindre retard de la page les déplace) ils se retrouvaient dans la fenêtre : l'essai ne mesurait plus la liaison.
+  docApi.fetchTable = (table) => { if (table === 'Publipostage_Modeles' && !/runAutosaveTick|saveRow/.test(new Error().stack)) window.__reads++; return fetchTable(table); };
   const parse = HtmlSanitize.parseInert;
-  HtmlSanitize.parseInert = function (html) { if (String(html).length >= window.__big / 2) window.__parses++; return parse.apply(this, arguments); };
+  HtmlSanitize.parseInert = function (html) { if (String(html).length >= window.__big / 2 && !/runAutosaveTick|saveRow/.test(new Error().stack)) window.__parses++; return parse.apply(this, arguments); };
 }, heavy.length);
 const counts = () => app.evaluate(() => ({ reads: window.__reads, parses: window.__parses }));
 const resetCounts = () => app.evaluate(() => { window.__reads = 0; window.__parses = 0; });

@@ -13,11 +13,17 @@
 //  - « Garder liée » : le bloc porte sa diapositive source, la ligne de « Support » reçoit son repère ; quand « Support » change ailleurs, le bloc prend la nouvelle diapositive à la lecture suivante de l'enregistrement
 //    automatique, SANS perdre sa taille ; la barre de l'image dit « Suit la diapositive 3 de « Support » » et « Détacher » ne garde que l'image.
 // Lancé par run-headless.mjs (groupe Node « slideBlock », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slide-block.mjs
+// `SLIDE_BLOCK_SHOTS=<dossier>` enregistre des captures (le zoom au survol, le bloc posé avec son numéro écrit).
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { start, seedModels } from './gfs-page.mjs';
 
 const t = await start({ name: 'verify-slide-block', port: Number(process.env.SLIDE_BLOCK_PORT || 9141) });
 const { check } = t;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const SHOTS = process.env.SLIDE_BLOCK_SHOTS || '';
+if (SHOTS) mkdirSync(SHOTS, { recursive: true });
+const shot = async (tab, name) => { if (SHOTS) await tab.page.screenshot({ path: join(SHOTS, name + '.png') }); };
 const ACTIVE = ['graphique', 'diapositives'];
 
 // Les gestes à la vraie souris et au vrai clavier : les éléments se lisent dans le cadre de l'app (`app`), la souris et le clavier sont ceux de l'onglet (`page`), décalés de la place du
@@ -499,13 +505,19 @@ await c.reach(await c.inPage(await c.centerOf('.pp-slide-import .pp-slide-thumb'
 await sleep(550);
 const tallZoom0 = await C.app.evaluate(zoomProbe);
 check('au survol de la miniature 1, le zoom montre la diapositive en grand (520 px au plus), à gauche du volet', !!tallZoom0 && tallZoom0.w === 520 && tallZoom0.right <= tallZoom0.panelLeft && /Comité innovation/.test(tallZoom0.text), tallZoom0);
+await C.app.evaluate(() => { const l = document.querySelector('.pp-slide-import-list'); l.scrollTop = 0; });
 const tallAt1 = await c.inPage(await c.centerOf('.pp-slide-import .pp-slide-thumb', 1));
 await C.page.mouse.move(tallAt1.x, tallAt1.y, { steps: 3 });
 await sleep(150);
 const tallZoom1 = await C.app.evaluate(zoomProbe);
 check('d’une miniature à l’autre, le zoom suit tout de suite : la diapositive 2', !!tallZoom1 && /Ordre du jour/.test(tallZoom1.text) && !/Comité innovation/.test(tallZoom1.text), tallZoom1);
-await c.click('.pp-slide-import-kind-btn', 1, 300);
-await c.clickThumb(0, 300);
+await c.reach(await c.inPage(await c.centerOf('.pp-slide-import .pp-slide-thumb', 2)));
+await sleep(550);
+await shot(C, 'volet-zoom-diapositive-3');
+await c.clickThumb(2, 1200);
 check('un clic sur la miniature ferme le zoom (la diapositive se pose)', (await C.app.evaluate(zoomProbe)) === null, await C.app.evaluate(zoomProbe));
+await C.app.evaluate(() => { const img = document.querySelector('#editor-container .tiptap img.editor-image-slide, #editor-container .tiptap .editor-image-slide img'); if (img) img.scrollIntoView({ block: 'center' }); });
+await sleep(400);
+await shot(C, 'bloc-pose-numero-ecrit');
 
 await t.finish();

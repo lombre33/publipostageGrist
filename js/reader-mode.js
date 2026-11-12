@@ -1322,6 +1322,7 @@ const ReaderMode = (function () {
       resolveAltTexts(wrapper, tableId, record),
       resolveCharts(wrapper, tableId, record),
       resolveSmartChips(wrapper),
+      resolveSlideBlocks(wrapper, tableId, record, stale),
     ]);
     carryNoteColors(wrapper);
     if (stale()) return null;
@@ -1505,6 +1506,12 @@ const ReaderMode = (function () {
     // tracer, le graphique disparaît comme une image sans pièce jointe, supprimé dans Grist - ou sans l'extension qui les dessine - il laisse une note. Ils n'ont jamais d'image dans le modèle.
     const nodes = Array.from(wrapper.querySelectorAll('img.editor-image[data-chart-section], img.editor-image[data-chart-spec]')).filter(ChartEntry.needsImage);
     await Promise.all(nodes.map(img => ChartEntry.resolveImage(img, tableId, record)));
+  }
+  async function resolveSlideBlocks(wrapper, tableId, record, stale) {
+    // Les diapositives posées en bloc qui parlent d'une ligne (une variable, une puce, une condition : js/slide-copies.js, `slideSource`) : redessinées pour la ligne affichée, leurs valeurs comprises - dans une
+    // zone répétée, la même à chaque tour, comme un graphique. Le HTML de la diapositive est résolu comme celui d'un export (preview), puis dessiné par l'extension « diapositives » ; sans elle, le bloc garde la photo de l'éditeur.
+    if (!wrapper.querySelector('img.editor-image[data-slide-source]')) return;
+    await SlideCopies.fillBlocks(wrapper, html => preview(html, tableId, record), stale);
   }
   function formatTodayDate() {
     // Chips intelligents : date du jour, heure actuelle, email et nom de la personne connectée. Des valeurs calculées, jamais liées à une colonne
@@ -1858,6 +1865,7 @@ const ReaderMode = (function () {
     await resolveAltTexts(wrapper, tableId || lastCurrentTableId, record);
     await resolveCharts(wrapper, tableId || lastCurrentTableId, record);
     await resolveSmartChips(wrapper);
+    await resolveSlideBlocks(wrapper, tableId || lastCurrentTableId, record);
     await GristAPI.hydrateAttachmentImages(wrapper);
     // Une vidéo de document (js/video-frame.js) devient un rectangle gris 16/9 qui porte son titre, cliquable : un tableau d'une case, que tous les formats savent écrire.
     VideoFrame.forExport(wrapper);
