@@ -775,6 +775,17 @@
   // L'import d'un fichier (Excel, Markdown, PowerPoint, Word : le menu « + » et le « Nouveau > Importer » de GFS) est dans js/main-import.js ; ce qu'il tire d'ici lui est donné.
   const { importFileFromGfs, onImportDocx, onImportMd, onImportPptx, onImportXlsx } = MainImport.create({ askBeforeLeaving, hasEditsToConfirmBeforeLeaving, isReadOnly, loadTemplateIntoEditor, markAutosaveDirty, onSave, refocusEditorIfLost, setStatus, templateNameInput, templateSelect, updateSaveStatus });
 
+  // Le mode que la personne a choisi en dernier (Édition ou Lecture) : une préférence de la personne (PersonStore `pp_last_mode`), relue au démarrage (startMode). Écrite par les deux boutons, jamais par
+  // switchMode : la Lecture imposée (document en lecture seule, PDF à l'écran) et la Lecture épurée ne sont pas un choix, et un « Nouveau » de GFS qui s'ouvre en Édition ne l'efface pas.
+  const LAST_MODE_KEY = 'pp_last_mode';
+  function rememberMode(mode) { PersonStore.set(LAST_MODE_KEY, mode === 'read' ? 'read' : 'edit'); }
+  // Le mode d'ouverture : la Lecture seulement quand c'était le dernier choix ET qu'un modèle ordinaire s'ouvre de lui-même (le modèle de la ligne, de la vue, le ★, celui que GFS désigne ou que le rechargement
+  // d'un changement de langue rouvre). Tout ce qui demande l'éditeur - un modèle vierge, un import, un macro-modèle, l'absence de modèle - ouvre l'Édition comme avant.
+  function startMode({ blank, importing, hasTemplate }) {
+    if (blank || importing || !hasTemplate || currentTypeModele === 'macro') return 'edit';
+    return PersonStore.get(LAST_MODE_KEY) === 'read' ? 'read' : 'edit';
+  }
+
   async function switchMode(mode) {
     // Lecture seule : le mode Lecture est le seul accessible, y compris depuis la dernière ligne d'init().
     if (isReadOnly()) mode = 'read';
@@ -1065,10 +1076,14 @@
     onExportRow('v2-btn-export-xlsx-single', withExportLock(() => onExportBatch('xlsxSingle')));
     if (btnCreateEmail) btnCreateEmail.addEventListener('click', withExportLock(onCreateEmail));
     if (btnCreateEmails) btnCreateEmails.addEventListener('click', withExportLock(onCreateEmails));
-    btnEdit.addEventListener('click', () => switchMode('edit'));
+    btnEdit.addEventListener('click', () => { rememberMode('edit'); switchMode('edit'); });
     // Le bouton Mode lecture fait ce que dit la ligne cochée de son menu (js/clean-reading.js), comme Exporter : la Lecture (cochée au départ) ou la Lecture épurée.
-    // `detail` à 0 : Entrée, Espace ou Alt+L (qui clique le bouton) - le focus revient au bouton à la sortie de la Lecture épurée.
-    btnRead.addEventListener('click', event => CleanReading.readButton(event.detail === 0));
+    // `detail` à 0 : Entrée, Espace ou Alt+L (qui clique le bouton) - le focus revient au bouton à la sortie de la Lecture épurée. La Lecture épurée est un passage : elle ne change pas le mode que la page
+    // rouvrira (on en sort là où l'on était).
+    btnRead.addEventListener('click', event => {
+      if (CleanReading.getChoice() !== 'clean') rememberMode('read');
+      CleanReading.readButton(event.detail === 0);
+    });
   }
 
   // Le reste des branchements de l'interface : Lecture épurée, fenêtres, nom du fichier PDF, type d'export, raccourcis, bandeau de conflit, menu
@@ -1244,7 +1259,8 @@
     applyAccessRights();
     AccessRights.onChange(onAccessRightsChange);
     GristAPI.onAccessLevelChange(onWidgetAccessChange);
-    await switchMode('edit');
+    const opening = GfsLink.opening();
+    await switchMode(startMode({ blank: gfsBlankOpened || gfsBlankType !== null, importing: !!opening && opening.raison === 'importer', hasTemplate: startupTemplateId !== undefined }));
     FirstContact.ready();
     setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'));
     // Juste après « Widget prêt. » : la phrase qui dit pourquoi ce modèle s'est ouvert (GFS) la remplace ; les avertissements de checkAfterOpen passent après elle, et l'import que GFS demande (« Nouveau > Importer ») puis les appels `ouvrir` reçus pendant le démarrage sont traités à la fin de ce tour.

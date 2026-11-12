@@ -126,7 +126,7 @@
     const now = Math.floor(Date.now() / 1000) - 3600;
     const pushRow = (id, values) => { T.id.push(id); cols.forEach(c => T[c].push(values[c])); };
     for (let i = 0; i < m.count; i++) {
-      pushRow(i + 1, { Nom: (m.namePrefix || 'Modèle ') + String(i + 1).padStart(4, '0'), Contenu: modelHtml(m, i), NomFichierPDF: '', HeaderFooter: m.hf ? hfJson(m) : NO_HF, DateModif: now, Margins: '', EstParDefaut: false, TypeModele: m.type || 'document', Destinataires: '', Cc: '', Cci: '', Objet: '', SuiviModifications: '' });
+      pushRow(i + 1, { Nom: (m.namePrefix || 'Modèle ') + String(i + 1).padStart(4, '0'), Contenu: modelHtml(m, i), NomFichierPDF: '', HeaderFooter: m.hf ? hfJson(m) : NO_HF, DateModif: now, Margins: '', EstParDefaut: !!m.firstIsDefault && i === 0, TypeModele: m.type || 'document', Destinataires: '', Cc: '', Cci: '', Objet: '', SuiviModifications: '' });
     }
     let total = m.count;
     if (m.macro) {
