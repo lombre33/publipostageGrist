@@ -778,7 +778,26 @@
   // Le mode que la personne a choisi en dernier (Édition ou Lecture) : une préférence de la personne (PersonStore `pp_last_mode`), relue au démarrage (startMode). Écrite par les deux boutons, jamais par
   // switchMode : la Lecture imposée (document en lecture seule, PDF à l'écran) et la Lecture épurée ne sont pas un choix, et un « Nouveau » de GFS qui s'ouvre en Édition ne l'efface pas.
   const LAST_MODE_KEY = 'pp_last_mode';
-  function rememberMode(mode) { PersonStore.set(LAST_MODE_KEY, mode === 'read' ? 'read' : 'edit'); }
+  // Seul, le navigateur la garde aussitôt. Chez GFS, chaque écriture est un appel `stockage.ecrire` : on n'en fait qu'une, quand la valeur a changé et qu'on cesse de basculer (10 s sans clic), ou quand la page
+  // se cache ou se ferme - lire ne déclenche donc pas une écriture à chaque bascule Édition / Lecture (consigne GFS 024 : « lire n'écrit jamais »).
+  const MODE_WRITE_DELAY_MS = 10000;
+  let pendingMode = null;
+  let pendingModeTimer = 0;
+  function flushMode() {
+    clearTimeout(pendingModeTimer);
+    pendingModeTimer = 0;
+    const mode = pendingMode;
+    pendingMode = null;
+    if (mode && PersonStore.get(LAST_MODE_KEY) !== mode) PersonStore.set(LAST_MODE_KEY, mode);
+  }
+  function rememberMode(mode) {
+    pendingMode = mode === 'read' ? 'read' : 'edit';
+    if (!PersonStore.shared()) { flushMode(); return; }
+    clearTimeout(pendingModeTimer);
+    pendingModeTimer = setTimeout(flushMode, MODE_WRITE_DELAY_MS);
+  }
+  window.addEventListener('pagehide', flushMode);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushMode(); });
   // Le mode d'ouverture : la Lecture seulement quand c'était le dernier choix ET qu'un modèle ordinaire s'ouvre de lui-même (le modèle de la ligne, de la vue, le ★, celui que GFS désigne ou que le rechargement
   // d'un changement de langue rouvre). Tout ce qui demande l'éditeur - un modèle vierge, un import, un macro-modèle, l'absence de modèle - ouvre l'Édition comme avant.
   function startMode({ blank, importing, hasTemplate }) {
