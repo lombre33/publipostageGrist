@@ -263,6 +263,10 @@ const I18nTextsFormat = {
   'pageBreak.marker': { fr: 'Saut de page', en: 'Page break' },
   'pageBreak.markerLandscape': { fr: 'Saut de page · la suite en paysage', en: 'Page break · the pages that follow in landscape' },
   'pageBreak.markerPortrait': { fr: 'Saut de page · la suite en portrait', en: 'Page break · the pages that follow in portrait' },
+  // « Fin de la section » (js/editor-nodes.js : createLoopEndNode) : la marque qui arrête la section répétée par un titre en boucle. Le repère de l'éditeur seul se traduit ; le HTML enregistré
+  // garde « Fin de la section ». La commande se lance depuis la palette (Alt+/) et Réglages > Raccourcis.
+  'loopEnd.marker': { fr: 'Fin de la section', en: 'End of section' },
+  'insert.loopEnd.tip': { fr: 'Fin de la section répétée', en: 'End of the repeated section' },
   'insert.toc.tip': { fr: 'Insérer un sommaire', en: 'Insert a table of contents' },
   'insert.toc.aria': { fr: 'Insérer un sommaire (généré à partir des titres)', en: 'Insert a table of contents (generated from headings)' },
   'insert.comment.tip': { fr: 'Commenter la sélection', en: 'Comment on selection' },

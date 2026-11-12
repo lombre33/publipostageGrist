@@ -282,6 +282,10 @@ input, select, textarea, button { font-family: var(--font-ui); }
 /* Dans la Lecture le repère garde sa place mais ne se voit pas : `visibility: hidden` (et non un texte transparent : Chromium 153 range le texte transparent dans la couche de texte du PDF de l'impression,
    où « Saut de page » se lisait, se cherchait et se copiait à chaque coupure ; la recherche de la page et les lecteurs d'écran ne le trouvent plus non plus dans la Lecture). */
 #reader-container .page-break-marker { visibility: hidden; }
+/* « Fin de la section » (js/editor-nodes.js:createLoopEndNode) : le repère de l'éditeur est un trait bleu pointillé, du bleu des repères de boucle (css/loop-marks.css). La Lecture et l'export ne
+   l'écrivent jamais (js/loop-rules.js:stripEndMarkers) ; ce `display: none` est la ceinture, pour un document qui ne passe pas par la boucle (un modèle lu sans ligne, un export du modèle). */
+.loop-end-marker { display: block; margin: 10px 0; padding: 2px 10px; border: 1px dashed #b7cdf2; border-radius: 4px; background: #f5f9ff; color: #12406b; font-size: .8em; text-align: center; user-select: none; }
+#reader-container .loop-end-marker { display: none; }
 /* Le repère de départ des sens de page d'un macro-modèle (js/page-sections.js) dit le sens de la première page et n'a rien à montrer : ni dans la Lecture sans
    aperçu de la page, ni dans la source. */
 .page-section-start { display: none; }

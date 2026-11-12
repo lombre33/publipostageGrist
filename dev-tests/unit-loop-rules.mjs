@@ -25,6 +25,11 @@ const TYPES = {
   'Notes.Factures': 'RefList:Factures',
   'Notes.Texte': 'Text',
   'Clients.Nom': 'Text',
+  // Des sous-points dans la table des points : une colonne Référence vers sa propre table (le point parent), et le rattachement à l'instance.
+  'Points.Titre': 'Text',
+  'Points.Instance': 'Ref:Instances',
+  'Points.Parent': 'Ref:Points',
+  'Points.Annexes': 'RefList:Points',
 };
 const COLUMNS = {};
 Object.keys(TYPES).forEach(key => { const [table, column] = key.split('.'); (COLUMNS[table] = COLUMNS[table] || []).push(column); });
@@ -278,5 +283,45 @@ const before = aside.readsAll;
 await run({ all: 'linked' }, aside);
 check('une boucle sur la vue d\'à côté est signalée au contexte comme les autres boucles sur toutes les lignes (la Lecture se redessine quand les lignes de la vue changent)',
   before === false && aside.readsAll === true);
+
+// Sections répétées : où s'arrête le titre qui porte la boucle (sectionRanges, sur une suite de blocs frères).
+const ranges = blocks => plain(rules.sectionRanges(blocks));
+const H = (level, owns) => ({ level, owns: !!owns });
+const P = {};
+const MARK = { marker: true };
+check('une section sans titre ni marque derrière elle va jusqu\'à la fin des blocs',
+  same(ranges([H(2, true), P, P]), [{ start: 0, end: 3, marker: -1 }]));
+check('un titre de même niveau ferme la section',
+  same(ranges([H(2, true), P, H(2), P]), [{ start: 0, end: 2, marker: -1 }]));
+check('un titre de niveau plus haut ferme la section ; un titre de niveau plus bas n\'y change rien',
+  same(ranges([H(2, true), P, H(3), P, H(1), P]), [{ start: 0, end: 4, marker: -1 }]));
+check('la marque « Fin de la section » ferme la section et dit où elle est ; ce qui la suit n\'en fait plus partie',
+  same(ranges([H(2, true), P, MARK, P]), [{ start: 0, end: 2, marker: 2 }]));
+check('un titre qui ne porte aucune boucle ferme quand même la section précédente',
+  same(ranges([H(2, true), P, H(1), P]), [{ start: 0, end: 2, marker: -1 }]));
+check('les sections s\'emboîtent : celle d\'un titre 2 est dans celle d\'un titre 1, chaque titre 2 s\'arrête au suivant, le titre 1 s\'arrête au titre 1 suivant',
+  same(ranges([H(1, true), P, H(2, true), P, P, H(2, true), P, H(1, true), P]), [
+    { start: 0, end: 7, marker: -1 }, { start: 2, end: 5, marker: -1 }, { start: 5, end: 7, marker: -1 }, { start: 7, end: 9, marker: -1 },
+  ]));
+check('une marque ferme la section la plus proche encore ouverte, pas celle du dessus',
+  same(ranges([H(1, true), H(2, true), P, MARK, P]), [{ start: 0, end: 5, marker: -1 }, { start: 1, end: 3, marker: 3 }]));
+check('deux marques ferment deux sections emboîtées, la plus proche d\'abord',
+  same(ranges([H(1, true), H(2, true), P, MARK, P, MARK, P]), [{ start: 0, end: 5, marker: 5 }, { start: 1, end: 3, marker: 3 }]));
+check('une marque qui ne ferme aucune section est sans effet', same(ranges([P, MARK, H(2, true), P]), [{ start: 2, end: 4, marker: -1 }]));
+check('deux sections de même niveau l\'une derrière l\'autre ne se mêlent pas',
+  same(ranges([H(2, true), P, H(2, true), P]), [{ start: 0, end: 2, marker: -1 }, { start: 2, end: 4, marker: -1 }]));
+check('le repère de marque est exposé par le moteur (les exports le retirent avec lui)', rules.END_MARKER_SELECTOR === '[data-loop-end]');
+
+// Les sous-lignes de la même table : une zone répétée pour la table des points, et dans cette zone une bulle de la même table qui a une colonne Référence vers elle-même.
+check('dans la zone d\'une table, ses sous-lignes : celles dont la colonne Référence vers la même table désigne la ligne de la zone',
+  same(sourceFor({ table: 'Points', column: 'Titre' }, 'Instances', 'Points'), { table: 'Points', via: null, within: 'Points', by: 'Parent', columns: ['Parent'] }));
+check('une table sans colonne Référence vers elle-même n\'a pas de sous-lignes : la bulle de la zone lit la ligne du tour, comme avant',
+  sourceFor({ table: 'Factures', column: 'Nom' }, 'Clients', 'Factures') === null);
+check('une colonne Liste de références vers la même table se lit comme toute autre colonne de la table : ses sous-lignes sont celles de la colonne Référence « Parent »',
+  same(sourceFor({ table: 'Points', column: 'Annexes' }, 'Instances', 'Points'), { table: 'Points', via: null, within: 'Points', by: 'Parent', columns: ['Parent'] }));
+check('la colonne qui rattache les sous-lignes à leur point est celle que la boucle a enregistrée',
+  rules.nestedColumn({ table: 'Points', within: 'Points', by: 'Parent' }) === 'Parent' && rules.nestedColumn({ table: 'Points', within: 'Points' }) === 'Parent');
+check('une boucle de sous-lignes de la même table lit la ligne de la zone qui l\'entoure (scopeFor) et trouve sa source quand le point est la table de sa portée',
+  same(plain(rules.scopeFor({ within: 'Points' }, { Points: { id: 4 } }, 'Instances', { id: 1 })), { tableId: 'Points', record: { id: 4 } }) && rules.sourceError({ within: 'Points', table: 'Points', by: 'Parent' }, 'Points') === null);
 
 summarizeAndExit();

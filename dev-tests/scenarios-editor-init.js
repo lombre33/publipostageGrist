@@ -16,23 +16,23 @@
     e:bulletStyle e:orderedListStyle n:taskList n:taskItem e:taskListStyle e:placeholder n:varBadge n:calcBadge n:pageNumberBadge n:smartChip n:tabStop n:mention n:footnoteRef e:inlineMarksCarrier
     m:commentMark m:modification e:suggestChangesBridge e:gridEnter e:conditionalValueKeys e:floatingImageKeys e:behindImageClickThrough
     e:linkShortcut e:findReplace n:table n:tableRow n:tableHeader n:tableCell n:twoColumnsColumn n:twoColumnsZone n:callout
-    n:conditionalText n:conditionalCheckbox n:conditionalValue e:caption e:keepNext e:ppTextDirection e:paragraphFormat e:characterFormat e:bulletFormat e:typingStyle e:listMarkers e:headingStyles e:anchors n:editorImage n:pageBreak e:pageSections n:headingNumberingConfig n:toc
+    n:conditionalText n:conditionalCheckbox n:conditionalValue e:caption e:keepNext e:ppTextDirection e:paragraphFormat e:characterFormat e:bulletFormat e:typingStyle e:listMarkers e:headingStyles e:anchors n:editorImage n:pageBreak n:loopEnd e:loopSections e:pageSections n:headingNumberingConfig n:toc
     n:slideLink e:slideLinks e:slideCopies e:pageCopies e:slideText n:freeFrame n:freeLine e:freeFrameBehaviour n:slideProps e:slidePropsGuard e:slideThemeDecor e:tabNavigation e:clearHistory e:historyMarkers e:linkedTable e:headerFooterEscape e:tabIndent
   `);
   const NODES = words(`
     paragraph blockquote bulletList codeBlock hardBreak heading horizontalRule listItem orderedList text doc taskList taskItem varBadge
     calcBadge pageNumberBadge smartChip tabStop mention footnoteRef table tableRow tableHeader tableCell twoColumnsColumn twoColumnsZone callout
-    conditionalText conditionalCheckbox conditionalValue editorImage pageBreak headingNumberingConfig toc slideLink freeFrame freeLine slideProps
+    conditionalText conditionalCheckbox conditionalValue editorImage pageBreak loopEnd headingNumberingConfig toc slideLink freeFrame freeLine slideProps
   `);
   const MARKS = words('link insertion deletion textStyle bold code italic strike underline superscript subscript commentMark modification');
   // Les plugins qui portent un nom, dans l'ordre de l'état de l'éditeur (les autres s'appellent `plugin$`, `plugin$1`...).
   const NAMED_PLUGINS = words(`
-    gridEditor$ emailPlainText$ mentionSuggestion$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ linkedTable$ historyKeepsLinks$ slideThemeDecor$ slideProps$ freeFrameViews$ freeFrameFlow$ ppFrameMulti$ freeFrame$ slideText$ pageCopies$ slideCopies$ slideLinks$ pageSections$ anchors$ headingStyles$ listMarkers$ typingStyle$ captionPlaceholder$ conditionalTextAfter$ tableColumnResizing$ selectingCells$
+    gridEditor$ emailPlainText$ mentionSuggestion$ textExpansionSuggestion$ suggestion$ autolink$ handleClickLink$ handlePasteLink$ linkedTable$ historyKeepsLinks$ slideThemeDecor$ slideProps$ freeFrameViews$ freeFrameFlow$ ppFrameMulti$ frameSleep$ freeFrame$ slideText$ pageCopies$ slideCopies$ slideLinks$ pageSections$ loopSections$ anchors$ headingStyles$ listMarkers$ typingStyle$ captionPlaceholder$ conditionalTextAfter$ tableColumnResizing$ selectingCells$
     ppFindReplace$ behindImageClickThrough$ floatingImageKeep$ conditionalValueInput$ @handlewithcare/prosemirror-suggest-changes$
     tiptap__placeholder$ trailingNode$ history$ codeBlockVSCodeHandler$ textDirection$ tiptapPaste$ tiptapDrop$ tabindex$ clearDocument$ focusEvents$
     clipboardTextSerializer$ editable$ tabIndent$ headerFooterEscape$
   `);
-  const PLUGIN_COUNT = 186; // dont deux de l'historique des gestes de la page (js/history-markers.js : le clavier que TipTap pose pour toute extension, et `historyKeepsLinks$`, qui défend à l'extension Link de refaire un lien sur le texte que Ctrl + Z ou Ctrl + Y rend), un de « Texte de droite à gauche » (js/text-direction.js : de même), un de « Paragraphe… » (js/paragraph-format.js : de même), un de « Caractère… » (js/character-format.js : de même), un de « Puce… » (js/bullet-format.js : de même), deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js), un du clavier de la puce « Smiley » (js/emoji-chip.js : Entrée met le focus dans sa grille),
+  const PLUGIN_COUNT = 190; // dont deux de l'historique des gestes de la page (js/history-markers.js : le clavier que TipTap pose pour toute extension, et `historyKeepsLinks$`, qui défend à l'extension Link de refaire un lien sur le texte que Ctrl + Z ou Ctrl + Y rend), un de « Texte de droite à gauche » (js/text-direction.js : de même), un de « Paragraphe… » (js/paragraph-format.js : de même), un de « Caractère… » (js/character-format.js : de même), un de « Puce… » (js/bullet-format.js : de même), deux d'emailPlainText (js/email-plain-text.js), un plugin de clavier par marque d'exposant et d'indice (js/script-marks.js), un du clavier de la puce « Smiley » (js/emoji-chip.js : Entrée met le focus dans sa grille),
   // deux du tableau lié (js/linked-table.js : le clavier que TipTap pose pour toute extension, et `linkedTable$`, le garde-fou et le repère), trois des diapositives liées
   // (js/slide-links.js : le clavier de son nœud, celui de son extension et `slideLinks$`, le garde-fou et le repère), deux des copies de diapositive qui suivent leur source dans un document (js/slide-copies.js : le clavier de son extension
   // et `slideCopies$`, le verrou et le trait d'accent), deux des diapositives d'une page de document et de leur source (js/page-copies.js : le clavier de son extension, Retour arrière et Suppr contre le repère d'une page, et `pageCopies$`, le
@@ -44,6 +44,7 @@
   // un du porteur des marques des nœuds en ligne
   // (js/editor-nodes.js : `inlineMarksCarrier`, qui n'a que ce clavier), un du bloc de texte conditionnel (js/editor-nodes.js : `conditionalTextAfter$`, le clic dans la place libre derrière un bloc
   // qui finit sa case), deux des signets (js/anchors.js : ce clavier et `anchors$`, les drapeaux et la correction des doublons),
+  // un des cadres endormis (`frameSleep$`, js/frame-sleep.js : le réveil avant que la sélection soit écrite, rangé avec le comportement des cadres) ; trois de la section répétée d'une boucle (js/editor-nodes.js : le clavier du nœud `loopEnd`, la marque « Fin de la section » ; js/loop-sections.js : le clavier de son extension et `loopSections$`, qui pose en décoration le repère de chaque section),
   // deux de la vue des pages de sens différents (js/page-section-view.js : le clavier de son extension et `pageSections$`, qui pose les décorations des pages étroites et la classe de la feuille),
   // deux du style de frappe des cases vides (js/typing-style.js : le clavier de son extension et `typingStyle$`, qui rend les marques en attente au curseur et la frappe sur des cases sélectionnées),
   // deux des ronds et des numéros de liste qui suivent leur texte (js/list-markers.js : le clavier de son extension et `listMarkers$`, qui pose la couleur et la taille de la puce de chaque point en décoration),

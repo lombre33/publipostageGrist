@@ -52,7 +52,7 @@
     {"fichier": "css/toolbar-v2.css", "selecteur": "tpl-gallery-card:hover|v2-hf-pill|v2-image-var-picker|data-tip", "categorie": "neutre"},
     {"fichier": "extensions/diapositives/slide-strip.css", "selecteur": "pp-slide-thumb", "categorie": "apercu"},
     {"fichier": "extensions/diapositives/slide-strip.css", "selecteur": "pp-slide-person|pp-slide-ghost|pp-slide-menu", "categorie": "neutre"},
-    {"fichier": "css/style.css", "selecteur": "var-badge", "categorie": "type"},
+    {"fichier": "css/style.css", "selecteur": "var-badge|loop-end-marker", "categorie": "type"},
     {"fichier": "css/style.css", "selecteur": "autosave-conflict-banner", "categorie": "etat"},
     {"fichier": "css/style.css", "selecteur": "btn-save\\.is-autosave-off|pp-autosave-off|^\\.modal-content$|editor-image-handle", "categorie": "neutre"},
     {"fichier": "css/style.css", "selecteur": "^#reader-container|^#reader-container h1", "categorie": "papier"},

@@ -172,7 +172,11 @@ const EditorNodes = (function () {
       // Le sinon (js/variable-otherwise.js) : cinq attributs simples, écrits seulement quand il existe - ou, en texte et variables, le seul `data-otherwise`.
       Object.assign(attrs, VariableOtherwise.toAttributes(nodeAttrs.otherwise), VariableOtherwise.typedToAttributes(nodeAttrs.otherwiseText));
       // `data-loop-repeat` à part : les repères de la zone répétée (css/variable-actions.css) la trouvent par sélecteur, sans lire le JSON.
-      if (nodeAttrs.loop) { LoopMarks.need(); attrs['data-loop'] = JSON.stringify(nodeAttrs.loop); attrs['data-loop-repeat'] = nodeAttrs.loop.repeat || 'inline'; }
+      if (nodeAttrs.loop) {
+        LoopMarks.need();
+        if (nodeAttrs.loop.repeat === 'section') LoopMarks.needSections();
+        attrs['data-loop'] = JSON.stringify(nodeAttrs.loop); attrs['data-loop-repeat'] = nodeAttrs.loop.repeat || 'inline';
+      }
       return attrs;
     }
     // Les attributs d'un nœud bulle d'après son <span> : l'inverse de varBadgeAttributes.
@@ -2122,7 +2126,7 @@ const EditorNodes = (function () {
     return { imageNodeView };
   })();
 
-  const { createEditorImageNode, createPageBreakNode } = (function () {
+  const { createEditorImageNode, createPageBreakNode, createLoopEndNode } = (function () {
     // Image : le nœud ; le saut de page
 
     // Image : nœud atome en ligne (`layer` normal/devant/derrière, `opacity`, `align`, `wrap`). Chaque attribut garde un renderHTML vide : le nœud
@@ -2242,7 +2246,58 @@ const EditorNodes = (function () {
         },
       });
     }
-    return { createEditorImageNode, createPageBreakNode };
+    // « Fin de la section » (demande du 12/11) - nœud atome de bloc qui arrête la section répétée par un titre en boucle (« Le titre et ce qui le suit », js/variable-loop.js) : la section va
+    // sinon jusqu'au prochain titre de même niveau ou plus haut, et le texte du dessous qui n'en fait pas partie (la conclusion d'un compte rendu, après tous ses points) est ainsi hors d'elle.
+    // La marque ferme la section ouverte la plus proche. Elle ne s'écrit jamais dans un document lu ou exporté (js/loop-rules.js:stripEndMarkers) ; l'éditeur la montre comme un trait bleu
+    // pointillé qui dit son nom dans la langue de l'interface, le HTML enregistré garde le texte français (comme le saut de page).
+    function createLoopEndNode(Node) {
+      return Node.create({
+        name: 'loopEnd',
+        group: 'block',
+        atom: true,
+        selectable: true,
+        parseHTML() { return [{ tag: 'div.loop-end-marker' }]; },
+        renderHTML() { return ['div', { class: 'loop-end-marker', 'data-loop-end': 'true', contenteditable: 'false' }, 'Fin de la section']; },
+        addNodeView() {
+          return () => {
+            const dom = document.createElement('div');
+            dom.className = 'loop-end-marker';
+            dom.setAttribute('data-loop-end', 'true');
+            dom.contentEditable = 'false';
+            dom.textContent = I18n.t('loopEnd.marker');
+            return { dom };
+          };
+        },
+        // La marque, puis le curseur SOUS elle (comme le saut de page) : un atome posé reste sélectionné, et la frappe qui suit le REMPLACERAIT.
+        addCommands() {
+          return {
+            insertLoopEnd: () => ({ chain }) => chain()
+              // Une sélection (la bulle qu'on vient de régler, un mot) n'est jamais remplacée par la marque : le curseur passe au bout de sa ligne, la marque se pose sous elle. Sans cela, la
+              // marque posée alors que la bulle d'un titre est encore sélectionnée emportait le titre.
+              .command(({ tr, dispatch }) => {
+                const { selection } = tr;
+                if (selection.empty || !selection.$to.parent.isTextblock) return true;
+                if (dispatch) tr.setSelection(EditorCore.getTextSelectionClass().create(tr.doc, selection.$to.end()));
+                return true;
+              })
+              .insertContent({ type: this.name })
+              .command(({ tr, state, dispatch }) => {
+                const { selection } = tr;
+                if (!selection.node || selection.node.type.name !== this.name) return true;
+                if (dispatch) {
+                  const below = selection.to;
+                  const next = tr.doc.nodeAt(below);
+                  if (!next || !next.isTextblock) tr.insert(below, state.schema.nodes.paragraph.create());
+                  tr.setSelection(EditorCore.getTextSelectionClass().create(tr.doc, below + 1)).scrollIntoView();
+                }
+                return true;
+              })
+              .run(),
+          };
+        },
+      });
+    }
+    return { createEditorImageNode, createPageBreakNode, createLoopEndNode };
   })();
 
   const { createHeadingNumberingConfigNode, createTocNode } = (function () {
@@ -2462,7 +2517,7 @@ const EditorNodes = (function () {
     createFontSizeExtension, createTextColorExtension, createHighlightExtension,
     createBulletStyleExtension, createOrderedListStyleExtension, createTaskListStyleExtension,
     withCellBackground, withCondStyle, withFastColwidth, parseColwidthOnce, createTableView, createTabNavigationExtension, createClearHistoryExtension,
-    createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createConditionalValueNode, createConditionalValueKeysExtension, createFloatingImageKeysExtension, createBehindImageClickThroughExtension, createEditorImageNode, moveImageNode, createPageBreakNode,
+    createTwoColumnsNodes, createConditionalTextNode, createConditionalCheckboxNode, createConditionalValueNode, createConditionalValueKeysExtension, createFloatingImageKeysExtension, createBehindImageClickThroughExtension, createEditorImageNode, moveImageNode, createPageBreakNode, createLoopEndNode,
     createHeadingNumberingConfigNode, createTocNode, createSlideLinkNode, splitBadgeLabel,
     createInlineMarksCarrier, INLINE_MARKS_ATTR, INLINE_LEAF_NODES,
     inlineAtom, internalAttr,

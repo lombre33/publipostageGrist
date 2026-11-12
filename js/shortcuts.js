@@ -178,7 +178,7 @@ const Shortcuts = (function () {
     return { formProblem, RESERVED };
   })();
 
-  const { click, mouseDown, headingRow, findPanel, editMode, templatesList, toggleListInCells, insertTodayChip, openKeysList, usable } = (function () {
+  const { click, mouseDown, headingRow, findPanel, editMode, templatesList, toggleListInCells, insertTodayChip, insertLoopEnd, openKeysList, usable } = (function () {
     // Les gestes d'une action, et les deux actions qui n'ont pas de bouton
 
     const byId = id => document.getElementById(id);
@@ -247,6 +247,15 @@ const Shortcuts = (function () {
     }
     insertTodayChip.element = () => byId('v2-btn-insert-variable');
 
+    // « Fin de la section » : la marque est posée sous le curseur, comme le saut de page. Elle suit la garde du bouton des variables (insertTodayChip) : là où une variable ne se pose pas,
+    // une boucle n'a pas lieu d'être, ni sa marque.
+    function insertLoopEnd() {
+      const editor = typeof EditorCore !== 'undefined' && EditorCore.getEditor();
+      if (!editor || !usable(byId('v2-btn-insert-variable'))) return false;
+      return editor.chain().focus().insertLoopEnd().run();
+    }
+    insertLoopEnd.element = () => byId('v2-btn-insert-variable');
+
     // Ouvre Réglages sur l'onglet Raccourcis, au tableau des touches.
     function openKeysList() {
       const button = byId('v2-btn-settings');
@@ -258,7 +267,7 @@ const Shortcuts = (function () {
       return true;
     }
     openKeysList.element = () => byId('v2-btn-settings');
-    return { click, mouseDown, headingRow, findPanel, editMode, templatesList, toggleListInCells, insertTodayChip, openKeysList, usable };
+    return { click, mouseDown, headingRow, findPanel, editMode, templatesList, toggleListInCells, insertTodayChip, insertLoopEnd, openKeysList, usable };
   })();
 
   const { ACTIONS, GROUPS, BY_ID } = (function () {
@@ -330,6 +339,8 @@ const Shortcuts = (function () {
       { id: 'image', group: 'insert', label: 'shortcuts.action.image', key: '', scope: 'editor', hint: '#v2-image-flyout .v2-hover-flyout-label', aria: tip('v2-btn-image'), run: click('v2-btn-image') },
       { id: 'pageBreak', group: 'insert', label: 'insert.pageBreak.tip', key: 'Alt+Enter', scope: 'editor', hint: tip('v2-btn-page-break'), run: click('v2-btn-page-break') },
       { id: 'toc', group: 'insert', label: 'insert.toc.tip', key: '', scope: 'editor', hint: tip('v2-btn-toc'), run: click('v2-btn-toc') },
+      // La marque qui arrête la section répétée par un titre en boucle (js/loop-sections.js) : pas de bouton, la palette de commandes (Alt+/) et la fenêtre de la Boucle la proposent.
+      { id: 'loopEnd', group: 'insert', label: 'insert.loopEnd.tip', key: '', scope: 'editor', run: insertLoopEnd },
       // Commenter : Ctrl+Alt+M (⌥⌘M sur Mac), la touche de Google Docs, depuis le 03/11, à la place d'Alt+Maj+M. Ce module la prend lui-même (`ctrlAlt`), et non l'éditeur comme Ctrl+Alt+C : Commenter agit aussi dans la
       // Lecture et dans un document en lecture seule, où l'éditeur est caché.
       { id: 'comment', group: 'insert', label: 'insert.comment.tip', key: 'Mod+Alt+m', ctrlAlt: true, scope: 'editor', hint: tip('v2-btn-comment'), run: click('v2-btn-comment') },

@@ -517,6 +517,9 @@ const Editor = (function () {
       Anchors.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       EditorNodes.createEditorImageNode(Node),
       EditorNodes.createPageBreakNode(Node),
+      // « Fin de la section » (js/loop-sections.js) : la marque qui arrête la section répétée par un titre en boucle, et le repère de chaque section (une décoration par bloc), rien d'écrit dans le texte.
+      EditorNodes.createLoopEndNode(Node),
+      LoopSections.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       // Pages tournées d'un document (js/page-section-view.js) : les blocs d'une page plus étroite que la feuille sont rentrés (une décoration), la feuille prend la largeur de la plus large.
       PageSectionView.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       EditorNodes.createHeadingNumberingConfigNode(Node),

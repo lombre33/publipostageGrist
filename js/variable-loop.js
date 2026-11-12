@@ -10,7 +10,9 @@ const VariableLoop = (function () {
   const { el, option } = Dom;
   const { setLine, shorten } = VariableModal;
   // Nœuds ProseMirror qui forment une zone répétée, pour chaque `repeat` : les mêmes que js/loop-rules.js:zoneOf côté HTML (tr, li, p et h1-h6).
-  const ZONE_NODES = { row: ['tableRow'], item: ['listItem', 'taskItem'], paragraph: ['paragraph', 'heading'] };
+  // `section` : le titre qui porte la bulle d'une section répétée (« Le titre et ce qui le suit ») ; ce qu'il répète s'étend aux blocs frères qui le suivent (js/loop-sections.js), qui ne
+  // sont pas ses descendants : zonesAt les cherche à part. Dans cette table, un titre est d'abord la zone « paragraph » (le premier nom qui le porte), `section` ne sert qu'à placeOf.
+  const ZONE_NODES = { row: ['tableRow'], item: ['listItem', 'taskItem'], paragraph: ['paragraph', 'heading'], section: ['heading'] };
   // Les bulles qui lisent une ligne de table : « La ligne du tableau » les fait toutes suivre, une boucle « dans sa cellule » ne répète que celle qui la porte.
   const BUBBLE_NODES = ['varBadge', 'calcBadge'];
   // Les nœuds qui portent la boucle d'une zone : la bulle d'une variable et l'image d'une colonne Pièces jointes (attribut `loop` de l'un comme de l'autre).
@@ -71,7 +73,10 @@ const VariableLoop = (function () {
   function zonesAt(editorState, pos) {
     const $pos = editorState.doc.resolve(pos);
     const zones = [];
-    for (let depth = $pos.depth; depth > 0; depth--) {
+    for (let depth = $pos.depth; depth >= 0; depth--) {
+      // Les sections répétées du parent qui contiennent le bloc où tombe `pos` : plus larges que la zone du bloc lui-même (traitée à son tour, juste dessous), plus proches que celles du parent.
+      if (depth < $pos.depth) LoopSections.zonesAt($pos.node(depth), $pos.start(depth), $pos.index(depth)).forEach(zone => zones.push(zone));
+      if (depth === 0) break;
       const node = $pos.node(depth);
       const repeat = Object.keys(ZONE_NODES).find(r => ZONE_NODES[r].indexOf(node.type.name) !== -1);
       if (!repeat) continue;
@@ -189,8 +194,12 @@ const VariableLoop = (function () {
     const place = placeIn(editorState, pos);
     const $pos = editorState.doc.resolve(pos);
     const others = zonesAt(editorState, pos).filter(z => z.owner.pos !== pos);
-    const taken = repeat => others.some(z => z.repeat === repeat && z.start === $pos.before(nearestDepth($pos, ZONE_NODES[repeat])));
-    place.repeats = place.repeats.filter(repeat => repeat === 'inline' || !taken(repeat));
+    // Un titre n'a qu'une boucle : « Le titre » (paragraph) et « Le titre et ce qui le suit » (section) sont la même zone de départ, l'une prise par une autre bulle ferme l'autre.
+    const headingTaken = () => others.some(z => (z.repeat === 'paragraph' || z.repeat === 'section') && z.start === $pos.before(nearestDepth($pos, ZONE_NODES.section)));
+    const taken = repeat => (repeat === 'paragraph' || repeat === 'section') && place.kind === 'heading' ? headingTaken() : others.some(z => z.repeat === repeat && z.start === $pos.before(nearestDepth($pos, ZONE_NODES[repeat])));
+    // Une image de colonne Pièces jointes ne répète pas de section : le choix est celui d'une bulle de variable.
+    const node = editorState.doc.nodeAt(pos);
+    place.repeats = place.repeats.filter(repeat => repeat === 'inline' || (repeat === 'section' ? !isImageNode(node) : true) && !taken(repeat));
     return place;
   }
   // Combien de bulles (variables, calculs) porte la ligne de tableau `row` (`start` : sa position) en plus de celle qui est à `pos`.
@@ -213,7 +222,8 @@ const VariableLoop = (function () {
       };
     }
     if (itemDepth !== -1) return { kind: 'list', repeats: ['item', 'inline'], inCell: rowDepth !== -1 };
-    return { kind: $pos.parent.type.name === 'heading' ? 'heading' : 'paragraph', repeats: ['inline', 'paragraph'], inCell: false };
+    const heading = $pos.parent.type.name === 'heading';
+    return { kind: heading ? 'heading' : 'paragraph', repeats: heading ? ['inline', 'paragraph', 'section'] : ['inline', 'paragraph'], inCell: false };
   }
 
   // === « Répéter la ligne » : le bouton de la barre d'un tableau (js/floating-toolbars.js) ===
@@ -286,6 +296,7 @@ const VariableLoop = (function () {
     return I18n.t('varLoop.repeat.' + repeat);
   }
   function emptyLabel(mode, repeat, place) {
+    if (repeat === 'section') return I18n.t(mode === 'text' ? 'varLoop.empty.sectionText' : 'varLoop.empty.hideSection');
     if (repeat === 'row') return I18n.t(mode === 'text' ? 'varLoop.empty.rowText' : 'varLoop.empty.header');
     if (repeat === 'item') return I18n.t(mode === 'text' ? 'varLoop.empty.itemText' : 'varLoop.empty.none');
     if (mode === 'hide') return I18n.t(place.kind === 'heading' ? 'varLoop.empty.hideHeading' : 'varLoop.empty.hide');
@@ -294,6 +305,7 @@ const VariableLoop = (function () {
   // Ce que montre la lecture quand aucune ligne n'est retenue (même règle que js/loop-rules.js:applyEmptyZone et emptyInlineNode).
   function emptyEffect(loop, place) {
     const text = loop.emptyText;
+    if (loop.repeat === 'section') return loop.empty === 'text' ? I18n.t('varLoop.effect.sectionText', { text }) : I18n.t('varLoop.effect.hideSection');
     if (loop.repeat === 'row') return loop.empty === 'text' ? I18n.t('varLoop.effect.rowText', { text }) : I18n.t('varLoop.effect.header');
     if (loop.repeat === 'item') return loop.empty === 'text' ? I18n.t('varLoop.effect.itemText', { text }) : I18n.t('varLoop.effect.none');
     if (loop.empty === 'hide') return I18n.t(place.kind === 'heading' ? 'varLoop.effect.hideHeading' : 'varLoop.effect.hide');
@@ -574,8 +586,10 @@ const VariableLoop = (function () {
     const { table, within } = state.source;
     const columns = LoopRules.referenceColumnsTo(table, within);
     if (!columns.length) { sourceText.textContent = I18n.t('varLoop.source.withinLost', { table, within }); return; }
-    if (columns.length === 1) { sourceText.textContent = I18n.t('varLoop.source.within', { table, within, via: table + '.' + columns[0] }); return; }
-    sourceText.textContent = I18n.t('varLoop.source.withinPick', { table, within });
+    // La même table (des sous-points rangés avec leurs points) : les lignes qui ont la ligne de la zone pour parent.
+    const same = table === within;
+    if (columns.length === 1) { sourceText.textContent = I18n.t(same ? 'varLoop.source.parent' : 'varLoop.source.within', { table, within, via: table + '.' + columns[0] }); return; }
+    sourceText.textContent = I18n.t(same ? 'varLoop.source.parentPick' : 'varLoop.source.withinPick', { table, within });
     sourceBy.replaceChildren();
     columns.forEach(c => ConditionFields.appendColumnOption(sourceBy, c, table, c));
     sourceBy.value = state.working.by;
@@ -609,6 +623,12 @@ const VariableLoop = (function () {
   // et montre le choix qui les fait suivre, sauf quand une case fusionnée interdit « La ligne du tableau ».
   function renderRepeatNote() {
     const { repeatNote } = refs;
+    // « Le titre et ce qui le suit » : la note dit où la section s'arrête, et comment la fermer ailleurs (la marque « Fin de la section »).
+    if (state.working.repeat === 'section') {
+      repeatNote.hidden = false;
+      repeatNote.textContent = I18n.t('varLoop.repeat.sectionNote');
+      return;
+    }
     const others = state.working.repeat === 'inline' && state.place.kind === 'table' ? state.place.rowOthers : 0;
     repeatNote.hidden = !others;
     if (!others) { repeatNote.textContent = ''; return; }
@@ -636,10 +656,12 @@ const VariableLoop = (function () {
     const rules = state.working.rules;
     const redraw = () => { renderFilter(); previewRun.schedule(); };
     filterBox.replaceChildren();
+    const noParent = noParentColumn();
     if (!rules.length) {
       const row = el('div', 'var-loop-filter-empty');
       row.append(ConditionFields.buildAddRuleButton(filterBox, rules, redraw), el('span', 'var-loop-hint', I18n.t(state.source.all ? 'varLoop.filter.noneAll' : 'varLoop.filter.none')));
       filterBox.appendChild(row);
+      if (noParent) filterBox.appendChild(noParentButton(noParent, rules, redraw));
       return;
     }
     const modeRow = el('div', 'var-condition-mode');
@@ -667,8 +689,28 @@ const VariableLoop = (function () {
     // « + Groupe » : les parenthèses d'un filtre, « A et (B ou C) » (js/condition-fields.js:renderItems).
     const foot = el('div', 'var-condition-foot');
     foot.append(ConditionFields.buildAddRuleButton(filterBox, rules, redraw), ConditionFields.buildAddGroupButton(filterBox, rules, () => state.working.filterMode, redraw));
+    if (noParent && !hasNoParentRule(rules, noParent) && state.working.filterMode === 'all') foot.appendChild(noParentButton(noParent, rules, redraw));
     rulesBox.appendChild(foot);
     filterBox.append(modeRow, rulesBox);
+  }
+  // Le filtre « seulement les lignes sans parent » : proposé quand la table de la boucle a une colonne Référence vers elle-même (des sous-points rangés avec leurs points) et que la boucle
+  // n'est pas elle-même celle des sous-points d'une zone de cette table (`within`) : rattachées à la ligne de la page, les lignes sans parent sont les points du premier niveau, et les
+  // sous-points - rattachés à la même ligne - n'y seraient sinon pas à part. La colonne : la première qui désigne la table ; vide si aucune, ou si la boucle est une boucle imbriquée.
+  function noParentColumn() {
+    const source = state.source;
+    if (source.within || source.via) return '';
+    return LoopRules.referenceColumnsTo(source.table, source.table)[0] || '';
+  }
+  const hasNoParentRule = (rules, column) => rules.some(rule => !ConditionRules.isGroup(rule) && rule.column === column && rule.operator === 'vide');
+  function noParentButton(column, rules, redraw) {
+    const button = el('button', 'var-loop-link var-loop-no-parent', I18n.t('varLoop.filter.noParent', { column }));
+    button.type = 'button';
+    button.title = I18n.t('varLoop.filter.noParentTitle', { column });
+    button.addEventListener('click', () => {
+      if (!hasNoParentRule(rules, column)) rules.push({ column, operator: 'vide', value: '' });
+      redraw();
+    });
+    return button;
   }
   // « Lignes affichées » : seulement pour l'image (la fenêtre d'une bulle écrit toujours toutes les lignes) ; le choix s'applique après le filtre et le tri.
   function renderPick() {

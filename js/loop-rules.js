@@ -3,7 +3,7 @@
 // en lot). Aucune dépendance à l'éditeur.
 //
 // La boucle vit dans l'attribut `loop` du nœud varBadge - ou editorImage, l'image d'une colonne Pièces jointes, pour sa propre boucle - (js/editor-nodes.js, sérialisé en data-loop), comme la condition d'affichage :
-//   { repeat: 'inline'|'row'|'item'|'paragraph', table, via: null|{ table, column }, within: null|'Table', by: null|'Colonne', all: null|'view'|'table'|'linked',
+//   { repeat: 'inline'|'row'|'item'|'paragraph'|'section', table, via: null|{ table, column }, within: null|'Table', by: null|'Colonne', all: null|'view'|'table'|'linked',
 //     filter: null|{ mode, rules }, sort: { column, direction }, pick?: 'first'|'last', empty, emptyText, separator, lastSeparator }
 // - `table` : la table dont les lignes sont parcourues. `via` : une colonne Liste de références de la table de la page (les fiches qu'elle référence,
 //   dans l'ordre de la cellule) ; sans `via`, les lignes de `table` trouvées par la règle de liaison du document (Variables.resolveLinkedRows, la
@@ -18,7 +18,8 @@
 //   références), ou `within` est cette table et `by` la colonne Référence de `table` qui désigne sa ligne (Lignes.Facture). Aucun lien de plus que pour
 //   une boucle de la page : la colonne Référence suffit, sans règle de liaison pour `table`.
 // - `repeat` : ce qui se répète autour de la bulle - la ligne du tableau (<tr>), l'élément de liste (<li>), le paragraphe ou le titre qui la
-//   contient, ou la bulle seule, dans la phrase ('inline' : ses valeurs jointes par `separator`, et `lastSeparator` avant la dernière). Une zone n'a
+//   contient, la SECTION d'un titre ('section' : le titre qui porte la bulle et tout ce qui le suit jusqu'au prochain titre de même niveau ou plus haut, ou jusqu'à la
+//   marque « Fin de la section » ; voir sectionRanges), ou la bulle seule, dans la phrase ('inline' : ses valeurs jointes par `separator`, et `lastSeparator` avant la dernière). Une zone n'a
 //   qu'une boucle, celle de sa première bulle qui en porte une ; les autres bulles de `table` placées dans la zone suivent la même ligne à chaque
 //   tour.
 // - Portée sur la bulle plutôt que sur la zone : supprimer ou déplacer la bulle emporte sa boucle, jamais une zone répétée qu'aucune bulle ne
@@ -32,14 +33,44 @@
 // et images compris. Elle porte aussi le rang du tour (`turn`, 1 pour la première ligne retenue : après le filtre et le tri) que la puce « N° de
 // ligne » écrit (js/reader-mode.js:resolveSmartChips) ; dans une zone répétée dans une autre, celui de la zone la plus proche.
 const LoopRules = (function () {
-  const REPEATS = ['inline', 'row', 'item', 'paragraph'];
+  const REPEATS = ['inline', 'row', 'item', 'paragraph', 'section'];
   // Les lignes retenues APRÈS le filtre et le tri : toutes (par défaut, rien n'est écrit), ou la première / la dernière seule (le choix « Une seule ligne » de la fenêtre d'une image).
   const PICKS = ['first', 'last'];
   const ALL_SCOPES = ['view', 'table', 'linked'];
   // Choix « Si aucune ligne » proposés pour chaque zone, le premier étant celui par défaut (sauf 'inline' dans une cellule de tableau, cf.
   // defaultEmpty).
-  const EMPTY_MODES = { row: ['header', 'text'], item: ['none', 'text'], paragraph: ['hide', 'text', 'blank'], inline: ['hide', 'text', 'blank'] };
+  const EMPTY_MODES = { row: ['header', 'text'], item: ['none', 'text'], paragraph: ['hide', 'text', 'blank'], section: ['hide', 'text'], inline: ['hide', 'text', 'blank'] };
   const TEXT_BLOCK_SELECTOR = 'p, h1, h2, h3, h4, h5, h6';
+  const HEADING_SELECTOR = 'h1, h2, h3, h4, h5, h6';
+  // La marque « Fin de la section » (nœud `loopEnd` de js/editor-nodes.js) : un bloc vide qui arrête la section répétée la plus proche encore ouverte. Elle ne s'écrit jamais
+  // dans un document lu ou exporté (stripEndMarkers).
+  const END_MARKER_SELECTOR = '[data-loop-end]';
+
+  // Où s'arrête chaque section répétée, pour une suite de blocs frères (les enfants d'un même parent, dans l'ordre). `blocks` : [{ level, marker, owns }] - `level` : le niveau
+  // du titre (1 à 6, 0 pour tout autre bloc), `marker` : vrai pour la marque « Fin de la section », `owns` : vrai pour un titre qui porte la boucle d'une section. Rend
+  // [{ start, end, marker }] dans l'ordre des départs : la section couvre les blocs de `start` à `end` EXCLU ; `marker` : le rang de la marque qui l'a fermée, -1 sinon. Une section
+  // finit au prochain titre de même niveau ou plus haut (un titre 2 ferme la section d'un titre 2, un titre 1 ferme celle d'un titre 2 et celle d'un titre 1), ou à la première marque
+  // qui la trouve ouverte - la plus proche si plusieurs sont ouvertes -, ou à la fin des blocs. Les sections s'emboîtent : celle d'un titre 2 est dans celle d'un titre 1.
+  function sectionRanges(blocks) {
+    const ranges = [];
+    const open = [];
+    const close = (entry, end, marker) => { entry.end = end; entry.marker = marker; ranges.push(entry); };
+    blocks.forEach((block, index) => {
+      if (block.marker) {
+        if (open.length) close(open.pop(), index, index);
+        return;
+      }
+      if (!block.level) return;
+      while (open.length && open[open.length - 1].level >= block.level) close(open.pop(), index, -1);
+      if (block.owns) open.push({ start: index, level: block.level });
+    });
+    while (open.length) close(open.pop(), blocks.length, -1);
+    return ranges.sort((a, b) => a.start - b.start).map(({ start, end, marker }) => ({ start, end, marker }));
+  }
+  function headingLevel(el) {
+    const match = /^H([1-6])$/.exec(el.tagName);
+    return match ? Number(match[1]) : 0;
+  }
 
   function defaultEmpty(repeat, inTableCell) {
     if (repeat === 'inline' && inTableCell) return 'blank';
@@ -91,7 +122,11 @@ const LoopRules = (function () {
     if (attrs.table === enclosing) {
       if (String(attrs.column).indexOf('.') !== -1) return null;
       const ref = GristAPI.referenceOf(GristAPI.getColumnType(attrs.table, attrs.column));
-      return ref && ref.list && ref.table !== enclosing ? { table: ref.table, via: { table: enclosing, column: attrs.column } } : null;
+      if (ref && ref.list && ref.table !== enclosing) return { table: ref.table, via: { table: enclosing, column: attrs.column } };
+      // Les sous-lignes de la même table : celles dont une colonne Référence (une seule fiche) désigne la ligne de la zone pour parent - des sous-points dans la table des
+      // points, avec une colonne « Point parent ». La table de la zone est alors aussi celle de la boucle : dans cette zone-ci, ses variables lisent la sous-ligne du tour.
+      const parents = referenceColumnsTo(enclosing, enclosing);
+      return parents.length ? { table: enclosing, via: null, within: enclosing, by: parents[0], columns: parents } : null;
     }
     const columns = referenceColumnsTo(attrs.table, enclosing);
     return columns.length ? { table: attrs.table, via: null, within: enclosing, by: columns[0], columns } : null;
@@ -365,6 +400,7 @@ const LoopRules = (function () {
     if (repeat === 'row') zone = badge.closest('tr');
     else if (repeat === 'item') zone = badge.closest('li');
     else if (repeat === 'paragraph') zone = badge.closest(TEXT_BLOCK_SELECTOR);
+    else if (repeat === 'section') zone = badge.closest(HEADING_SELECTOR);
     return zone && zone !== root && root.contains(zone) ? zone : null;
   }
   // Les bulles qui portent encore la boucle d'une zone, avec leur zone, dans l'ordre du document ; une boucle illisible ou sans zone est retirée (la
@@ -379,16 +415,41 @@ const LoopRules = (function () {
       if (!zone) { badge.removeAttribute('data-loop'); continue; }
       owners.push({ badge, loop, zone });
     }
+    attachSections(owners);
     return owners;
+  }
+  // Les blocs d'une section répétée (`nodes` : le titre et ce qui le suit, jusqu'au prochain titre de même niveau ou plus haut ou à la marque ; `marker` : la marque qui la
+  // ferme, ou null), posés sur chaque propriétaire de section. Les blocs sont ceux des enfants du parent du titre : une section ne traverse jamais un parent (cellule, encadré,
+  // liste). Recalculé à chaque niveau de déroulé : les copies d'une section extérieure mettent les titres 2 de chaque tour à côté de ceux des tours suivants, et c'est le titre
+  // 1 du tour suivant qui ferme la section du dernier titre 2 du tour (sectionRanges).
+  function attachSections(owners) {
+    const parents = new Map();
+    owners.filter(o => o.loop.repeat === 'section').forEach(o => {
+      if (!parents.has(o.zone.parentElement)) parents.set(o.zone.parentElement, []);
+      parents.get(o.zone.parentElement).push(o);
+    });
+    parents.forEach((list, parent) => {
+      const children = Array.from(parent.children);
+      const ranges = sectionRanges(children.map(child => ({ level: headingLevel(child), marker: child.matches(END_MARKER_SELECTOR), owns: list.some(o => o.zone === child) })));
+      list.forEach(o => {
+        const range = ranges.find(r => children[r.start] === o.zone);
+        o.nodes = range ? children.slice(range.start, range.end) : [o.zone];
+        o.marker = range && range.marker >= 0 ? children[range.marker] : null;
+      });
+    });
+  }
+  // Vrai quand la zone de `inner` est dans celle de `outer` : un descendant de sa zone, ou - pour une section - un des blocs de la section ou un de leurs descendants (un titre 2
+  // dans la section d'un titre 1). Deux boucles de la même zone (deux bulles du même titre) ne sont pas l'une dans l'autre.
+  function zoneInside(inner, outer) {
+    if (inner.zone === outer.zone) return false;
+    if (outer.nodes) return outer.nodes.some(node => node.contains(inner.zone));
+    for (let el = inner.zone.parentElement; el; el = el.parentElement) if (el === outer.zone) return true;
+    return false;
   }
   // Celles dont la zone n'est dans la zone d'aucune autre : la boucle d'une zone répétée dans une autre attend les copies de la zone qui l'entoure, qui lui
   // donnent sa ligne (scopeFor).
   function outermost(owners) {
-    const zones = new Set(owners.map(o => o.zone));
-    return owners.filter(o => {
-      for (let el = o.zone.parentElement; el; el = el.parentElement) if (zones.has(el)) return false;
-      return true;
-    });
+    return owners.filter(o => !owners.some(other => zoneInside(o, other)));
   }
   // Ce que chaque conteneur doit encore avoir pour rester : un <ul> ou un <table> sans ligne ne s'affiche pas et n'a rien à exporter ; un encadré
   // (js/callout.js) sans contenu se verrait encore : sa barre et son fond.
@@ -424,7 +485,14 @@ const LoopRules = (function () {
     p.append(...emptyNodes(loop, source));
     return p;
   }
-  function applyEmptyZone(zone, loop, badge) {
+  function applyEmptyZone(zone, loop, badge, nodes) {
+    if (loop.repeat === 'section') {
+      // Toute la section disparaît, ou ne laisse que le texte « Si aucune ligne » à la place de son titre.
+      const rest = nodes ? nodes.slice(1) : [];
+      if (loop.empty === 'text' && loop.emptyText) zone.replaceWith(textParagraph(loop, badge)); else removeAndPrune(zone);
+      rest.forEach(removeAndPrune);
+      return;
+    }
     if (loop.repeat === 'row') {
       if (loop.empty !== 'text') { removeAndPrune(zone); return; }
       // « Une ligne de texte » : une seule cellule sur toute la largeur de la ligne (colspan lu par les exports PDF et DOCX).
@@ -447,7 +515,7 @@ const LoopRules = (function () {
 
   // Une zone : sa copie pour chaque ligne retenue, associée à cette ligne ; « si aucune ligne » sinon. Une boucle qui ne trouve plus sa source laisse la
   // zone telle quelle.
-  async function expandZone({ badge, loop, zone }, tableId, record, root, context) {
+  async function expandZone({ badge, loop, zone, nodes, marker }, tableId, record, root, context) {
     // Une seule boucle par zone : celle-ci. Une autre bulle de la même zone qui en porte une (copiée-collée) redevient une bulle ordinaire.
     zone.querySelectorAll(LOOP_OWNER_SELECTOR).forEach(b => {
       const other = parseLoop(b.getAttribute('data-loop'));
@@ -458,14 +526,25 @@ const LoopRules = (function () {
     try { result = await iterate(loop, scope.tableId, scope.record, context); }
     catch (e) { console.error('[LoopRules] échec du calcul des lignes de la boucle', loop, e); return; }
     if (result.error) { console.warn('[LoopRules] boucle sur « ' + loop.table + ' » sans source (' + result.error + ') : zone affichée une fois.'); return; }
-    if (!result.items.length) { applyEmptyZone(zone, loop, badge); return; }
+    if (marker) marker.remove();
+    if (!result.items.length) { applyEmptyZone(zone, loop, badge, nodes); return; }
     const copies = document.createDocumentFragment();
+    // Une section : tous ses blocs, copiés ensemble à chaque tour ; une autre zone : son seul élément.
+    const parts = nodes || [zone];
     result.items.forEach((item, index) => {
-      const clone = zone.cloneNode(true);
-      bindClone(zone, clone, loop, item, index + 1);
-      copies.appendChild(clone);
+      parts.forEach(part => {
+        const clone = part.cloneNode(true);
+        bindClone(part, clone, loop, item, index + 1);
+        copies.appendChild(clone);
+      });
     });
     zone.replaceWith(copies);
+    parts.slice(1).forEach(part => part.remove());
+  }
+  // Retire de `root` les marques « Fin de la section » : elles ne servent qu'à fermer une section, jamais à lire ou à exporter. Appelé même quand rien ne se déroule (aucune ligne
+  // affichée, source perdue).
+  function stripEndMarkers(root) {
+    if (root) root.querySelectorAll(END_MARKER_SELECTOR).forEach(marker => marker.remove());
   }
   // Niveaux de zones dans des zones que l'on déroule au plus (le HTML d'un modèle peut venir de n'importe où : la boucle doit finir).
   const MAX_NESTING = 12;
@@ -474,7 +553,7 @@ const LoopRules = (function () {
   // laisse la zone telle quelle : ses bulles affichent alors toutes les valeurs, jointes par des virgules, comme avant la boucle. Les boucles « dans la
   // phrase » restent sur leur bulle (resolveInline, appelée par js/reader-mode.js).
   async function expandZones(root, tableId, record, ctx) {
-    if (!root || !record || !tableId) return;
+    if (!root || !record || !tableId) { stripEndMarkers(root); return; }
     const context = ctx || createContext();
     for (let level = 0; level < MAX_NESTING; level++) {
       const owners = outermost(zoneOwners(root));
@@ -486,6 +565,7 @@ const LoopRules = (function () {
     }
     // Les images en boucle « dans la phrase » en dernier : chacune lit la ligne du tour de la zone qui l'entoure, une fois cette zone déroulée.
     await expandInlineImages(root, tableId, record, context);
+    stripEndMarkers(root);
   }
   // Une image de colonne Pièces jointes en boucle « dans la phrase » : copiée pour chaque ligne retenue, les copies côte à côte (une espace entre elles), chacune associée à sa
   // ligne (bindingOf) - js/reader-mode.js:resolveVariableImages lit alors sa pièce jointe dans cette ligne. Sans ligne retenue : ce que dit « Si aucune ligne » (emptyInlineNode).
@@ -567,7 +647,7 @@ const LoopRules = (function () {
   }
 
   return {
-    EMPTY_MODES, defaultEmpty, normalizeLoop, sourceFor, allSourceFor, referenceColumnsTo, nestedColumn, parentTable, enclosingOf, sourceError, scopeFor, createContext, iterate, itemBinding,
+    EMPTY_MODES, END_MARKER_SELECTOR, sectionRanges, stripEndMarkers, defaultEmpty, normalizeLoop, sourceFor, allSourceFor, referenceColumnsTo, nestedColumn, parentTable, enclosingOf, sourceError, scopeFor, createContext, iterate, itemBinding,
     bindingOf, inheritBinding, expandZones, inlineLoopOf, resolveInline, removeHiddenBlocks, removeAndPrune, joinValues,
   };
 })();

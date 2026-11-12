@@ -514,6 +514,7 @@ const I18nTextsSettings = {
   'palette.kw.twoColumns': { fr: 'colonnes mise en page', en: 'columns layout' },
   'palette.kw.image': { fr: 'photo logo illustration', en: 'photo logo picture' },
   'palette.kw.pageBreak': { fr: 'nouvelle page coupure', en: 'new page' },
+  'palette.kw.loopEnd': { fr: 'marque boucle titre répéter ordre du jour', en: 'marker loop heading repeat agenda' },
   'palette.kw.toc': { fr: 'table des matières titres', en: 'table of contents headings' },
   'palette.kw.comment': { fr: 'note annoter remarque', en: 'note annotate remark' },
   'palette.kw.altText': { fr: 'description accessibilité', en: 'description accessibility' },
