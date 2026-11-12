@@ -187,7 +187,9 @@ const FieldEditor = (function () {
     function normalize(field) {
       const { editor } = field;
       if (field.shown != null || !editor.isEditable) return;
-      const wanted = docOf(field, contentOf(field, storedOf(field)));
+      // Un champ qui n'accepte que des variables (le champ PJ, `data-variables-kind`) ne garde pas le texte tapé à côté : seules ses bulles restent, le texte part au départ du curseur.
+      const content = contentOf(field, storedOf(field));
+      const wanted = docOf(field, field.variablesKind && !field.multiline ? content.filter(item => !FieldCodec.isText(item)) : content);
       if (!wanted.eq(editor.state.doc)) show(field, field.multiline ? linesOfDoc(wanted) : itemsOfDoc(wanted));
     }
     // Au départ du curseur : une bulle sélectionnée ne reste pas la sélection (la première touche tapée au retour la remplacerait), et les clés tapées
@@ -334,6 +336,7 @@ const FieldEditor = (function () {
     const field = {
       host, libs, editor: null, panels: [], shown: null, readOnly: false, session: null,
       multiline: !!opts.multiline, keepSpaces: !!opts.keepSpaces, hostWindow: opts.hostWindow || null, limit: opts.limit || null,
+      variablesKind: (host.dataset && host.dataset.variablesKind) || '',
     };
     field.editor = new libs.TiptapEditor({
       element: host,

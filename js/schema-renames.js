@@ -599,7 +599,7 @@ const SchemaRenames = (function () {
     // Un modèle d'un type que le widget ne connaît pas (js/templates.js, isKnownType) n'est jamais réécrit : son contenu n'est pas du HTML de ce widget. Une présentation est réécrite, même quand
     // GFS a éteint son extension : son contenu est celui d'un document, et ses variables doivent suivre la colonne renommée.
     if (!Templates.isKnownType(row.TypeModele)) return null;
-    const TEXT_COLUMNS = ['NomFichierPDF', 'Destinataires', 'Cc', 'Cci', 'Objet'];
+    const TEXT_COLUMNS = ['NomFichierPDF', 'Destinataires', 'Cc', 'Cci', 'Objet', 'PJ'];
     const fields = {};
     let count = 0;
     const keep = (column, text, n) => { if (n) { fields[column] = text; count += n; } };
@@ -656,7 +656,7 @@ const SchemaRenames = (function () {
   }
 
   async function fetchTemplateRows() {
-    const TEMPLATE_COLUMNS = ['Nom', 'TypeModele', 'Contenu', 'HeaderFooter', 'NomFichierPDF', 'Destinataires', 'Cc', 'Cci', 'Objet'];
+    const TEMPLATE_COLUMNS = ['Nom', 'TypeModele', 'Contenu', 'HeaderFooter', 'NomFichierPDF', 'Destinataires', 'Cc', 'Cci', 'Objet', 'PJ'];
     const tableData = await grist.docApi.fetchTable(Templates.TABLE_NAME);
     return (tableData.id || []).map((id, i) => {
       const row = { id };

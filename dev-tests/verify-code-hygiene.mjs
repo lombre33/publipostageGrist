@@ -759,8 +759,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('champs : index.html se lit bien (garde-fou de l\'analyse elle-même : une trentaine de champs au moins)', fields >= 30, `${fields} champs`);
   check('champs : chaque champ de saisie de index.html a un nom accessible (aria-label, aria-labelledby, <label for> ou <label> englobante, title) - un texte d\'exemple n\'en est pas un', unnamed.length === 0, unnamed.join(', '));
   const bubbleIds = bubbleFields.map(m => (m[2].match(/\bid="([^"]+)"/) || [])[1]).sort();
-  check('champs à bulles : index.html a les cinq champs texte à bulles (Objet, À, Cc, Cci, nom du PDF) en éléments `pp-field-editor`, jamais un <input> : un <input> ne porte pas de bulle', JSON.stringify(bubbleIds) === JSON.stringify(['pdf-filename-template', 'v2-email-cc', 'v2-email-cci', 'v2-email-subject', 'v2-email-to'])
-    && !/<input\b[^>]*\bid="(pdf-filename-template|v2-email-subject|v2-email-to|v2-email-cc|v2-email-cci)"/.test(page), bubbleIds.join(', '));
+  check('champs à bulles : index.html a les six champs texte à bulles (Objet, À, Cc, Cci, PJ, nom du PDF) en éléments `pp-field-editor`, jamais un <input> : un <input> ne porte pas de bulle', JSON.stringify(bubbleIds) === JSON.stringify(['pdf-filename-template', 'v2-email-cc', 'v2-email-cci', 'v2-email-pj', 'v2-email-subject', 'v2-email-to'])
+    && !/<input\b[^>]*\bid="(pdf-filename-template|v2-email-subject|v2-email-to|v2-email-cc|v2-email-cci|v2-email-pj)"/.test(page), bubbleIds.join(', '));
   const at = needle => page.indexOf(needle);
   const once = pattern => (page.match(pattern) || []).length === 1;
   check('champs à bulles : index.html charge css/field-editor.css, js/field-codec.js et js/field-editor.js une fois chacun, le codec avant le champ et les deux avant js/main.js (qui monte les champs au démarrage)',

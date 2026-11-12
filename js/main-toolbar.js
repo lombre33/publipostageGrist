@@ -9,6 +9,10 @@ const MainToolbar = (function () {
   let inEmailMode = false;
   function setEmailMode(active) { inEmailMode = !!active; }
   const isEmailMode = () => inEmailMode;
+  // Un modèle email dont le type d'export est « Email (.eml) » (js/eml-export.js) : le fichier porte la mise en forme du modèle, la barre n'est donc plus celle du texte brut du lien mailto:
+  // (inEmailMode est alors faux) ; elle garde seulement grisé ce qu'un email n'a pas : pages, sommaire, vidéo et diapositive.
+  let inEmlMode = false;
+  function setEmlMode(active) { inEmlMode = !!active; }
   // Un macro-modèle n'a aucun corps de document (l'éditeur partagé reste vide) : il grise plus de boutons qu'un e-mail.
   let inMacroMode = false;
   function setMacroMode(active) { inMacroMode = !!active; }
@@ -390,6 +394,7 @@ const MainToolbar = (function () {
     // Un modèle email, un macro-modèle, puis l'en-tête ou le pied de page : ce qui rend le grisé, dans l'ordre où le texte le dit.
     const plain = () => I18n.t(inMacroMode ? 'lock.macro' : 'lock.email');
     const zone = () => I18n.t('lock.hf');
+    const eml = () => I18n.t('lock.emlNoSense');
     const groups = [
       // E-mail ou macro-modèle : on grise la mise en forme qui n'a aucun sens dans un mailto: (texte brut, js/mailto-export.js) ou sans corps de
       // document. Les groupes à survol (titres, alignement, image) le sont en entier : leurs enfants ne reçoivent plus la souris (.v2-hf-locked, css/toolbar-v2.css),
@@ -400,12 +405,12 @@ const MainToolbar = (function () {
       [mailOrMacro, ['v2-btn-char-smallcaps', 'v2-btn-char-shadow', 'v2-btn-char-stroke', 'v2-char-spacing'], plain],
       // Le sommaire a la condition de ce groupe, plus l'en-tête et le pied de page : une zone n'a que 60 px de hauteur, aucune liste de titres n'y a sa
       // place (une condition par bouton : un second groupe lèverait le grisé du premier).
-      [mailOrMacro || inHfMode, ['v2-btn-toc'], () => (mailOrMacro ? plain() : zone())],
+      [mailOrMacro || inEmlMode || inHfMode, ['v2-btn-toc'], () => (mailOrMacro ? plain() : inEmlMode ? eml() : zone())],
       // Dans une grille ou dans un tableau de document, le bouton pose ou retire le saut avant la ligne sélectionnée : grisé sur la première ligne, au
       // milieu d'une case fusionnée sur plusieurs lignes, dans un tableau qui n'est pas du premier niveau du document et sous le suivi des modifications.
       // Dans un en-tête ou un pied de page, il est grisé aussi : aucune page ne s'ouvre dans une bande de 60 px, pas même avant une ligne de tableau.
       // La raison d'une ligne de tableau est dite par son info-bulle (syncPageBreakButton, `pp-row-break`) : ici seuls l'email, le macro-modèle et la zone parlent.
-      [mailOrMacro || inHfMode || (GridEditor.pageBreakInTable(editor) && !GridEditor.canTogglePageBreak(editor)), ['v2-btn-page-break'], () => (mailOrMacro ? plain() : inHfMode ? zone() : '')],
+      [mailOrMacro || inEmlMode || inHfMode || (GridEditor.pageBreakInTable(editor) && !GridEditor.canTogglePageBreak(editor)), ['v2-btn-page-break'], () => (mailOrMacro ? plain() : inEmlMode ? eml() : inHfMode ? zone() : '')],
       // Un macro-modèle grise aussi ce que l'e-mail laisse actif - le menu « Aa » en entier, donc l'exposant et l'indice que le lien écrit en caractères Unicode
       // (js/script-marks.js:toUnicode) -, et le menu « Lien et blocs de contenu » en entier. Annuler et Rétablir restent actifs : l'historique d'un macro-modèle
       // garde sa page et sa composition (js/history-markers.js, domaines « page » et « macro »).
@@ -425,10 +430,10 @@ const MainToolbar = (function () {
       [inEmailMode || inHfMode, ['v2-btn-callout', 'v2-btn-signature', 'v2-btn-chart', 'v2-btn-chart-make'], () => (inEmailMode ? plain() : zone())],
       [inEmailMode, ['v2-btn-qr'], plain],
       // Une vidéo (js/video-frame.js) : un cadre dans une diapositive, un bloc dans un document - une vignette et un lien, sans objet dans un e-mail (texte brut) ni dans un en-tête ou un pied de page.
-      [inEmailMode || inHfMode, ['v2-btn-video'], () => (inEmailMode ? plain() : zone())],
+      [inEmailMode || inEmlMode || inHfMode, ['v2-btn-video'], () => (inEmailMode ? plain() : inEmlMode ? eml() : zone())],
       // Une diapositive en texte (js/slide-text.js) : des blocs de texte du document, sans objet dans un e-mail (texte brut), dans un en-tête ou un pied de page, ni dans une présentation (son volet
       // « Importer » copie une diapositive entière).
-      [inEmailMode || inHfMode || SlidesEntry.presentationShown(), ['v2-btn-slide-text'], () => (inEmailMode ? plain() : inHfMode ? zone() : I18n.t('lock.slides'))],
+      [inEmailMode || inEmlMode || inHfMode || SlidesEntry.presentationShown(), ['v2-btn-slide-text'], () => (inEmailMode ? plain() : inEmlMode ? eml() : inHfMode ? zone() : I18n.t('lock.slides'))],
     ];
     const lockedNow = new Set();
     groups.forEach(([locked, ids, reason]) => ids.forEach(id => {
@@ -980,6 +985,6 @@ const MainToolbar = (function () {
   }
 
   return {
-    setEditor, setEmailMode, isEmailMode, setMacroMode, setGridMode, syncToolbarState, wireToolbar,
+    setEditor, setEmailMode, setEmlMode, isEmailMode, setMacroMode, setGridMode, syncToolbarState, wireToolbar,
   };
 })();

@@ -32,19 +32,43 @@
   const emailCcInput = document.getElementById('v2-email-cc');
   const emailCciInput = document.getElementById('v2-email-cci');
   const emailCciToggle = document.getElementById('v2-btn-toggle-cci');
+  const emailPjInput = document.getElementById('v2-email-pj');
+  const emailPjToggle = document.getElementById('v2-btn-toggle-pj');
   const btnCreateEmail = document.getElementById('btn-create-email');
   const emailCharCounter = document.getElementById('v2-email-char-counter');
 
-  // Les quatre champs de l'email : leur clé, la même dans les réglages du modèle et dans les valeurs résolues, et leur champ (un champ texte à bulles,
-  // js/field-editor.js : l'élément se lit et s'écrit comme un <input>).
-  const EMAIL_FIELDS = [['objet', emailSubjectInput], ['destinataires', emailToInput], ['cc', emailCcInput], ['cci', emailCciInput]];
+  // Les cinq champs de l'email : leur clé, la même dans les réglages du modèle et dans les valeurs résolues, et leur champ (un champ texte à bulles,
+  // js/field-editor.js : l'élément se lit et s'écrit comme un <input>). `pj` (les pièces jointes du .eml, js/eml-export.js) n'a que des variables de colonnes Pièces jointes.
+  const EMAIL_FIELDS = [['objet', emailSubjectInput], ['destinataires', emailToInput], ['cc', emailCcInput], ['cci', emailCciInput], ['pj', emailPjInput]];
 
-  // Les cinq champs texte à bulles (nom du fichier PDF, Objet, À, Cc, Cci) : des éditeurs d'une ligne montés dans leurs éléments (js/field-editor.js),
+  // Les six champs texte à bulles (nom du fichier PDF, Objet, À, Cc, Cci, PJ) : des éditeurs d'une ligne montés dans leurs éléments (js/field-editor.js),
   // après celui du document - la barre d'une bulle réutilise ses réglages.
   function attachFieldEditors(libs) {
     FieldEditor.attach(pdfFilenameInput, libs);
     eachEmailInput(input => FieldEditor.attach(input, libs));
   }
+
+  // Ce qu'écrit l'éditeur d'un modèle email : le texte brut du lien mailto: (la barre grise la mise en forme, EmailPlainText ferme les autres chemins) tant que le type d'export n'est pas « Email (.eml) »,
+  // dont le fichier porte la mise en forme (js/eml-export.js) ; la barre ne grise alors que ce qu'un email n'a pas (MainToolbar.setEmlMode). Le type vient du menu « Type d'export » : relu à chaque
+  // synchro des menus (évènement `pp:exportTypeSynced`, js/main-export.js:syncExportMenus), et rien ne se refait quand rien n'a changé.
+  let emailEditorModeKey = null;
+  function syncEmailEditorMode() {
+    const email = currentTypeModele === 'email';
+    const eml = email && selectedExportType() === 'eml';
+    const plain = email && !eml;
+    emailEditorModeKey = (plain ? 'plain' : '') + '|' + (eml ? 'eml' : '');
+    MainToolbar.setEmailMode(plain);
+    MainToolbar.setEmlMode(eml);
+    EmailPlainText.setActive(plain);
+  }
+  document.addEventListener('pp:exportTypeSynced', () => {
+    if (emailEditorModeKey === null) return;   // aucun modèle n'a encore été chargé : le chargement pose le mode
+    const email = currentTypeModele === 'email';
+    const eml = email && selectedExportType() === 'eml';
+    if (emailEditorModeKey === (email && !eml ? 'plain' : '') + '|' + (eml ? 'eml' : '')) return;
+    syncEmailEditorMode();
+    MainToolbar.syncToolbarState();
+  });
 
   function setStatus(msg, isError) {
     statusMsg.textContent = msg;
@@ -196,6 +220,7 @@
     emailFieldsRawCache = null;
     eachEmailInput(input => { input.value = ''; input.readOnly = false; });
     MainToolbar.setEmailMode(false);
+    MainToolbar.setEmlMode(false);
     EmailPlainText.setActive(false);
     MainToolbar.setMacroMode(true);
     Settings.setMacroMode(true);
@@ -304,8 +329,7 @@
     showTemplateNames(tpl);
     currentTypeModele = typeModele;
     loadEmailFields(tpl);
-    MainToolbar.setEmailMode(currentTypeModele === 'email');
-    EmailPlainText.setActive(currentTypeModele === 'email');
+    syncEmailEditorMode();
     MainToolbar.setMacroMode(false);
     Settings.setMacroMode(false);
     MainToolbar.setGridMode(GridEditor.isGridType(currentTypeModele));
@@ -686,7 +710,7 @@
     buildMailtoForRecord, eachEmailInput, getEmailFieldsFromInputs, loadEmailFields, scheduleEmailLengthGauge, updateEmailFieldsDisplay, updateEmailLengthGauge,
     wireCciToggle,
   } = MainEmail.create({
-    EMAIL_FIELDS, emailCciInput, emailCciToggle, emailCharCounter, emailFieldsRow, getCurrentMode: () => currentMode, getCurrentTableId: () => currentTableId,
+    EMAIL_FIELDS, emailCciInput, emailCciToggle, emailPjInput, emailPjToggle, emailCharCounter, emailFieldsRow, getCurrentMode: () => currentMode, getCurrentTableId: () => currentTableId,
     getCurrentTypeModele: () => currentTypeModele, getEmailFieldsRawCache: () => emailFieldsRawCache, getLatestRecord: () => latestRecord,
     getLatestRecordTableId: () => latestRecordTableId, readerContainer, renderReader, setEmailFieldsRawCache: value => { emailFieldsRawCache = value; },
   });
@@ -705,9 +729,9 @@
   });
 
   // Les exports (le verrou, l'export d'une ligne, les menus d'export, les exports en lot) sont dans js/main-export.js ; ce qu'il tire d'ici lui est donné, le type du modèle et la table à l'écran en lecture.
-  const { isExportRunning, onCreateEmail, onExport, onExportBatch, onExportDocx, onExportPdf, onExportXlsx, syncExportMenus, syncExportRowsForModelType, withExportLock } = MainExport.create({
+  const { isExportRunning, onCreateEmail, onExport, onExportBatch, onExportDocx, onExportPdf, onExportXlsx, selectedExportType, syncExportMenus, syncExportRowsForModelType, withExportLock } = MainExport.create({
     buildMailtoForRecord, currentDocumentHtml, getCurrentMacroSlots, getPdfFilenameTemplate, perModelOption, setStatus, templateNameInput,
-    getCurrentTableId: () => currentTableId, getCurrentTypeModele: () => currentTypeModele,
+    getCurrentTableId: () => currentTableId, getCurrentTypeModele: () => currentTypeModele, getEmailFields: () => getEmailFieldsFromInputs(),
   });
 
   // L'enregistrement automatique (js/main-autosave.js), l'enregistrement manuel avec les versions, la suppression et la copie d'un modèle (js/main-save.js) et la sortie d'un modèle
@@ -734,7 +758,7 @@
 
   // L'écriture en direct et le suivi des modifications (js/main-live.js), les diapositives (js/main-slides.js) : créés après l'autosave, l'enregistrement et la sortie d'un modèle, dont ils prennent des noms.
   const { wireEditTracking, wireLiveEditing } = MainLive.create({
-    eachEmailInput, emailCciInput, emailCciToggle, getCurrentMode: () => currentMode, getCurrentTypeModele: () => currentTypeModele, hideConflictBanner,
+    eachEmailInput, emailCciInput, emailCciToggle, emailPjInput, emailPjToggle, getCurrentMode: () => currentMode, getCurrentTypeModele: () => currentTypeModele, hideConflictBanner,
     isAccessGuideShown, isExportRunning, isReadOnly, markAutosaveDirty, markTextDirty, onPageLayoutChanged, onWatermarkChanged, pdfFilenameInput, persist,
     scheduleEmailLengthGauge, templateNameInput, updateSaveStatus, wireCciToggle,
   });

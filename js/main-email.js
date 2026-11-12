@@ -4,7 +4,7 @@
 const MainEmail = (function () {
   function create(api) {
     const {
-      EMAIL_FIELDS, emailCciInput, emailCciToggle, emailCharCounter, emailFieldsRow, getCurrentMode, getCurrentTableId, getCurrentTypeModele,
+      EMAIL_FIELDS, emailCciInput, emailCciToggle, emailPjInput, emailPjToggle, emailCharCounter, emailFieldsRow, getCurrentMode, getCurrentTableId, getCurrentTypeModele,
       getEmailFieldsRawCache, getLatestRecord, getLatestRecordTableId, readerContainer, renderReader, setEmailFieldsRawCache,
     } = api;
 
@@ -20,6 +20,12 @@ const MainEmail = (function () {
       return { objet, destinataires, cc, cci };
     }
 
+    // Les noms des pièces jointes du champ PJ pour une ligne (la Lecture les montre à la place des bulles) : séparés par des virgules, vides quand le champ n'en cite aucune ou que la lecture échoue.
+    async function attachmentNamesText(rawPj, tableId, record) {
+      if (!rawPj) return '';
+      try { return (await EmlExport.attachmentNamesOf(rawPj, tableId, record)).join(', '); } catch (e) { console.error('[main-email] noms des pièces jointes illisibles', e); return ''; }
+    }
+
     const eachEmailInput = fn => EMAIL_FIELDS.forEach(([key, input]) => { if (input) fn(input, key); });
 
     function getEmailFieldsFromInputs() {
@@ -29,12 +35,15 @@ const MainEmail = (function () {
       return Object.fromEntries(EMAIL_FIELDS.map(([key, input]) => [key, input ? input.value.trim() : '']));
     }
 
+    // Les boutons « + Cci » et « + PJ » : chacun montre ou replie son champ.
     function wireCciToggle() {
-      if (!emailCciToggle || !emailCciInput) return;
-      emailCciToggle.addEventListener('click', () => {
-        emailCciInput.hidden = !emailCciInput.hidden;
-        emailCciToggle.classList.toggle('is-active', !emailCciInput.hidden);
-        if (!emailCciInput.hidden) emailCciInput.focus();
+      [[emailCciToggle, emailCciInput], [emailPjToggle, emailPjInput]].forEach(([toggle, input]) => {
+        if (!toggle || !input) return;
+        toggle.addEventListener('click', () => {
+          input.hidden = !input.hidden;
+          toggle.classList.toggle('is-active', !input.hidden);
+          if (!input.hidden) input.focus();
+        });
       });
     }
 
@@ -45,11 +54,12 @@ const MainEmail = (function () {
       // résolution est redemandée plus bas si l'on est en Lecture.
       setEmailFieldsRawCache(null);
       eachEmailInput((input, key) => { input.readOnly = false; input.value = tpl ? (tpl[key] || '') : ''; });
-      if (emailCciInput) {
-        // Contrairement au nom du fichier PDF, la Cci reste visible quand elle est déjà réglée.
-        emailCciInput.hidden = !emailCciInput.value.trim();
-        if (emailCciToggle) emailCciToggle.classList.toggle('is-active', !emailCciInput.hidden);
-      }
+      // Contrairement au nom du fichier PDF, la Cci et les pièces jointes restent visibles quand elles sont déjà réglées.
+      [[emailCciToggle, emailCciInput], [emailPjToggle, emailPjInput]].forEach(([toggle, input]) => {
+        if (!input) return;
+        input.hidden = !input.value.trim();
+        if (toggle) toggle.classList.toggle('is-active', !input.hidden);
+      });
     }
 
     // Bascule l'affichage d'Objet/À/Cc/Cci entre gabarit brut (édition) et valeurs résolues (lecture) sur les mêmes champs, jamais dupliqués (cf.
@@ -73,6 +83,7 @@ const MainEmail = (function () {
       const tableId = getLatestRecordTableId() || GristAPI.getCurrentTableId() || getCurrentTableId();
       const raw = getEmailFieldsRawCache();
       const resolved = await resolveEmailFieldsForRecord(raw, tableId, record);
+      resolved.pj = await attachmentNamesText(raw.pj, tableId, record);
       // Repassé en édition (ou modèle changé) pendant la résolution : emailFieldsRawCache a déjà été traité par la branche ci-dessus, ne pas écraser
       // son travail avec ce résultat maintenant obsolète.
       if (getCurrentMode() !== 'read' || getEmailFieldsRawCache() !== raw) return;

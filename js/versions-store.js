@@ -91,7 +91,7 @@ const VersionsStore = (function () {
       headerFooter: template.headerFooter || null,
       margins: template.marginsMm || null,
     };
-    ['destinataires', 'cc', 'cci', 'objet'].forEach(key => { if (template[key]) out[key] = template[key]; });
+    ['destinataires', 'cc', 'cci', 'objet', 'pj'].forEach(key => { if (template[key]) out[key] = template[key]; });
     if (template.suiviModifications && Object.keys(template.suiviModifications).length) out.suiviModifications = template.suiviModifications;
     return out;
   }

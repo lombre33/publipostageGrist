@@ -4,7 +4,7 @@
 // main.js lui est donné par `api`. Les corps sont ceux de main.js.
 const MainExport = (function () {
   function create(api) {
-    const { buildMailtoForRecord, currentDocumentHtml, getCurrentMacroSlots, getCurrentTableId, getCurrentTypeModele, getPdfFilenameTemplate, perModelOption, setStatus, templateNameInput } = api;
+    const { buildMailtoForRecord, currentDocumentHtml, getCurrentMacroSlots, getCurrentTableId, getCurrentTypeModele, getEmailFields, getPdfFilenameTemplate, perModelOption, setStatus, templateNameInput } = api;
 
     // Verrou anti-double-export : pdf-export.js numérote les notes de bas de page dans un état de module partagé, que deux exports en parallèle
     // corrompraient en silence. Tous les contrôles d'export (EXPORT_CONTROL_IDS) sont désactivés pendant toute opération, pas seulement celui cliqué.
@@ -171,6 +171,14 @@ const MainExport = (function () {
         batch: 'htmlFragmentZip', noRecord: 'alert.noRecordForExportHtml', generating: 'status.htmlGenerating', generated: 'status.htmlGenerated', failed: 'status.htmlGenerationError',
         run: (doc, tableId, record) => HtmlExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, { fragment: true }),
       },
+      // Email (.eml) (js/eml-export.js) : un modèle email écrit en fichier de message à ouvrir dans la messagerie - la mise en forme du modèle, ses images et les pièces jointes du champ PJ -, en brouillon à relire
+      // et à envoyer. `describe` : la phrase de fin quand des adresses n'en sont pas (laissées de côté).
+      eml: {
+        engines: ['html'],
+        batch: 'emlZip', noRecord: 'alert.noRecordForExportEml', generating: 'status.emlGenerating', generated: 'status.emlGenerated', failed: 'status.emlGenerationError',
+        run: (doc, tableId, record) => EmlExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, getEmailFields()),
+        describe: result => (result && result.skipped && result.skipped.length ? I18n.t('status.emlGeneratedSkipped', { count: result.skipped.length, list: result.skipped.join(', ') }) : ''),
+      },
     };
 
     // Les réglages de « PDF protégé » pour la ligne affichée : ceux de la fenêtre tels quels, sauf pour « Un par ligne », où le mot de passe est celui de la cellule de CETTE ligne. La ligne
@@ -209,7 +217,7 @@ const MainExport = (function () {
         const said = PdfDelivery.describe(delivery);
         const gone = !delivery || !delivery.shelved || delivery.delivered.size > 0;
         const problem = spec.stampsExportDate && gone ? await stampExportDate(tableId, [record.id]) : '';
-        const generated = I18n.t(spec.generated);
+        const generated = (spec.describe && spec.describe(saved)) || I18n.t(spec.generated);
         setExportDoneStatus(said.text ? (delivery.downloaded ? said.text + ' ' + generated : said.text) : generated, [said.note, problem].filter(Boolean).join(' '));
       } catch (e) {
         // « Annuler » sur la fenêtre des images d'un site externe (js/external-images.js) : un choix, pas une erreur.
@@ -218,6 +226,8 @@ const MainExport = (function () {
         if (e && e.passwordProblem) { setStatus(I18n.t('status.pdfPasswordProblem.' + e.passwordProblem, { column: e.column }), true); return; }
         // Une image du document illisible ou incomplète (un PNG tronqué) : pdfmake ne peut pas la mettre dans le PDF ; la phrase dit quoi faire, plutôt que l'échec sans cause.
         if (e && e.imageProblem) { console.error(e); setStatus(I18n.t('status.pdfImageProblem'), true); return; }
+        // Une pièce jointe du champ PJ illisible (.eml) : la phrase donne le nom du fichier, aucun email n'est généré sans la pièce attendue.
+        if (e && e.attachmentProblem) { console.error(e); setStatus(e.message, true); return; }
         // Un document de plus de PrintExport.MAX_PAGES pages : l'impression navigateur le refuse (son coût croît avec le carré du nombre de pages) ; ce n'est
         // pas une panne, la phrase dit quoi choisir à la place.
         if (PrintExport.isTooLong(e)) { setStatus(I18n.t('status.printTooLong', { n: e.pages, max: PrintExport.MAX_PAGES }), true); return; }
@@ -232,13 +242,14 @@ const MainExport = (function () {
     function exportTypeAvailable(type) {
       const grid = GridEditor.isGridType(getCurrentTypeModele());
       return type === 'pdf' || type === 'pdfProtected' || type === 'pdfArchive' || ((type === 'docx' || type === 'md' || type === 'html' || type === 'htmlFragment') && !grid) || (type === 'xlsx' && grid)
-        || (type === 'mdTemplate' && !grid && getCurrentTypeModele() !== 'macro') || (type === 'pptx' && getCurrentTypeModele() === 'presentation');
+        || (type === 'mdTemplate' && !grid && getCurrentTypeModele() !== 'macro') || (type === 'pptx' && getCurrentTypeModele() === 'presentation') || (type === 'eml' && getCurrentTypeModele() === 'email');
     }
     // Pourquoi une ligne du menu « Type d'export » est grisée pour le modèle ouvert (js/lock-reasons.js) : PowerPoint ne sert qu'une présentation, Excel qu'une grille, un tableau seul ne s'écrit ni en Word, ni en Markdown, ni en HTML,
     // un macro-modèle n'a pas de texte à écrire en Markdown.
     function exportTypeReason(type) {
       if (type === 'pptx') return I18n.t('lock.exportPptx');
       if (type === 'xlsx') return I18n.t('lock.exportXlsx');
+      if (type === 'eml') return I18n.t('lock.exportEml');
       if (type === 'mdTemplate' && getCurrentTypeModele() === 'macro') return I18n.t('lock.exportMacroMd');
       return GridEditor.isGridType(getCurrentTypeModele()) ? I18n.t('lock.exportNotGrid') : '';
     }
@@ -267,6 +278,7 @@ const MainExport = (function () {
     const onExportMd = () => exportRecordAs('md');
     const onExportHtml = () => exportRecordAs('html');
     const onExportHtmlFragment = () => exportRecordAs('htmlFragment');
+    const onExportEml = () => exportRecordAs('eml');
     // « Markdown (modèle) » : le modèle ouvert tel que l'éditeur le montre, ses variables écrites {{Table.Colonne}} et le reste de ses éléments de fusion en HTML en ligne
     // (js/markdown-export.js:exportTemplate), pour que l'import le relise intact. Ni ligne, ni valeur : rien à lire dans Grist, un seul fichier nommé d'après le modèle.
     async function onExportMdTemplate() {
@@ -297,6 +309,7 @@ const MainExport = (function () {
       md: { zip: 'mdZip' },
       html: { zip: 'htmlZip' },
       htmlFragment: { zip: 'htmlFragmentZip' },
+      eml: { zip: 'emlZip' },
       // Le modèle n'est pas une ligne : un seul fichier, jamais de lot (le menu Exporter ne propose rien d'autre que le dire).
       mdTemplate: {},
     };
@@ -313,7 +326,7 @@ const MainExport = (function () {
       const type = selectedExportType();
       const lines = selectedExportLines(type);
       if (lines !== 'one') return onExportBatch(EXPORT_BATCH_OF[type][lines]);
-      return ({ pdf: onExportPdf, pdfProtected: onExportPdfProtected, pdfArchive: onExportPdfArchive, docx: onExportDocx, pptx: onExportPptx, xlsx: onExportXlsx, md: onExportMd, mdTemplate: onExportMdTemplate, html: onExportHtml, htmlFragment: onExportHtmlFragment })[type]();
+      return ({ pdf: onExportPdf, pdfProtected: onExportPdfProtected, pdfArchive: onExportPdfArchive, docx: onExportDocx, pptx: onExportPptx, xlsx: onExportXlsx, md: onExportMd, mdTemplate: onExportMdTemplate, html: onExportHtml, htmlFragment: onExportHtmlFragment, eml: onExportEml })[type]();
     };
 
     // Mode email (planning/feature-email-mode.md) : construit l'URL mailto: de la ligne courante et l'ouvre par un <a> synthétique plutôt que
@@ -452,6 +465,8 @@ const MainExport = (function () {
         grey(row, !!linesOff, linesOff);
       });
       typeButton.classList.toggle('active', type !== 'pdf');
+      // Le type d'export décide si l'éditeur d'un modèle email écrit le texte brut du lien mailto: ou la mise en forme d'un .eml (js/main.js:syncEmailEditorMode).
+      document.dispatchEvent(new CustomEvent('pp:exportTypeSynced', { detail: { type } }));
     }
 
     // Caractères invalides dans un nom de fichier ZIP ou Windows : une valeur de cellule comme « Dupont/Fils » casserait l'arborescence du ZIP si elle
@@ -583,6 +598,14 @@ const MainExport = (function () {
         loadLibs: () => ExportCommon.ensureJsZipLoaded(),
         renderRow: (html, tableId, row, filenameTemplate, headerFooterData) => HtmlExport.getHtmlBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, { fragment: true }),
       },
+      // Un fichier .eml par ligne, dans une archive ZIP (js/eml-export.js) : le champ PJ de chaque ligne en pièces jointes. Les champs du modèle de la ligne (`doc.source.email`, le dernier argument) sont ceux du modèle qui fait son document.
+      emlZip: {
+        label: 'Email', confirm: 'confirm.batchExportEml', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressEml',
+        noFile: 'status.exportErrorEml', done: 'status.batchExportDoneEml', doneWithFailures: 'status.batchExportDoneWithFailuresEml',
+        entryExt: '.eml', fileSuffix: '-export-eml.zip', grid: false, engines: ['html'],
+        loadLibs: () => ExportCommon.ensureJsZipLoaded(),
+        renderRow: (html, tableId, row, filenameTemplate, headerFooterData, _margins, _pageOptions, _typeModele, _imageQuality, _docFields, emailFields) => EmlExport.getEmlBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, emailFields),
+      },
       xlsxSingle: {
         label: 'Excel', confirm: 'confirm.singleWorkbookExport', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressXlsx',
         noFile: 'status.exportErrorXlsx', done: 'status.singleWorkbookDone', doneWithFailures: 'status.singleWorkbookDoneWithFailures',
@@ -625,6 +648,7 @@ const MainExport = (function () {
       return {
         typeModele: getCurrentTypeModele(), isMacro, html: isMacro ? null : SlidesEntry.outputHtml(getCurrentTypeModele(), Editor.getHTML(), { keepProps: !!cfg.keepProps, anchors: writesSlideAnchors(cfg), theme: PageLayout.getTheme() }), macroSlots: isMacro ? getCurrentMacroSlots() : null, perModelSense: isMacro && PageLayout.isOrientationAuto(), anchors: writesSlideAnchors(cfg),
         headerFooterData: Editor.getHeaderFooterData(), filenameTemplate: getPdfFilenameTemplate(), margins: cfg.margins ? cfg.margins() : null, pageOptions: null,
+        email: getCurrentTypeModele() === 'email' ? getEmailFields() : null,
       };
     }
 
@@ -647,6 +671,7 @@ const MainExport = (function () {
       return {
         typeModele: tpl.typeModele || 'document', isMacro, html: isMacro ? null : SlidesEntry.outputHtml(tpl.typeModele, LinkedTable.resolveHtml(EditorCore.getEditor(), tpl.contenu || ''), { keepProps: !!cfg.keepProps, anchors: writesSlideAnchors(cfg), theme: tpl.marginsMm && tpl.marginsMm.theme, stored: tpl.marginsMm || null }), macroSlots: isMacro ? (tpl.macroSlots || { slots: [] }) : null, perModelSense, anchors: writesSlideAnchors(cfg),
         headerFooterData: tpl.headerFooter, filenameTemplate: String(tpl.nomFichierPDF || '').trim(), margins, pageOptions,
+        email: tpl.typeModele === 'email' ? { objet: tpl.objet, destinataires: tpl.destinataires, cc: tpl.cc, cci: tpl.cci, pj: tpl.pj } : null,
       };
     }
 
@@ -752,7 +777,7 @@ const MainExport = (function () {
       const protection = sheetSetup && sheetSetup.protection;
       // Un lot PDF/A : chaque PDF d'une archive ZIP est passé en PDF/A par sa ligne (js/pdf-export.js) ; les lignes d'un PDF unique, elles, restent ordinaires - c'est le fichier réuni qui se convertit à la fin (`finish`).
       const rowFields = protection ? doc => PdfProtection.docFields(PdfProtection.settingsForRow(protection, doc.row)) : (cfg.archive && !cfg.merged ? () => ARCHIVE_DOC_FIELDS : () => undefined);
-      const render = doc => cfg.renderRow(doc.html, tableId, doc.row, doc.source.filenameTemplate, doc.headerFooterData, doc.source.margins, doc.source.pageOptions, doc.source.typeModele, imageQuality, rowFields(doc));
+      const render = doc => cfg.renderRow(doc.html, tableId, doc.row, doc.source.filenameTemplate, doc.headerFooterData, doc.source.margins, doc.source.pageOptions, doc.source.typeModele, imageQuality, rowFields(doc), doc.source.email);
       if (cfg.merged) {
         const pdf = await (cfg.sheets ? PdfMerge.createSheets(tableId, sheetSetup.layout) : PdfMerge.create(tableId));
         return {
@@ -1028,7 +1053,7 @@ const MainExport = (function () {
 
     const isExportRunning = () => exportOperationInProgress;
 
-    return { isExportRunning, onCreateEmail, onExport, onExportBatch, onExportDocx, onExportPdf, onExportXlsx, syncExportMenus, syncExportRowsForModelType, withExportLock };
+    return { isExportRunning, onCreateEmail, onExport, onExportBatch, onExportDocx, onExportPdf, onExportXlsx, selectedExportType, syncExportMenus, syncExportRowsForModelType, withExportLock };
   }
 
   return { create };

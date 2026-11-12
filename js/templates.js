@@ -115,6 +115,8 @@ const Templates = (function () {
       ['Cc', 'Text', 'Copie (Cc)'],
       ['Cci', 'Text', 'Copie cachée (Cci)'],
       ['Objet', 'Text', 'Objet de l\'email'],
+      // Les pièces jointes du .eml (js/eml-export.js) : des variables de colonnes Pièces jointes de Grist, dans l'écriture des autres champs (js/field-codec.js).
+      ['PJ', 'Text', 'Pièces jointes (PJ)'],
     ]);
 
     // Suivi des modifications (planning/feature-track-changes.md) : auteur et horodatage de chaque suggestion en attente, écrits dans le même
@@ -268,6 +270,7 @@ const Templates = (function () {
       cc: cell('Cc', ''),
       cci: cell('Cci', ''),
       objet: cell('Objet', ''),
+      pj: cell('PJ', ''),
       // Utilisé par js/main.js (auto-save) pour détecter qu'une autre personne a enregistré ce même modèle entre deux vérifications - jamais
       // affiché tel quel à l'utilisateur.
       dateModif: cell('DateModif', null),
@@ -755,7 +758,7 @@ const Templates = (function () {
     // Rend { id, dateModif } (pas seulement l'id) : js/main.js (auto-save) doit connaître le DateModif qu'il vient d'écrire pour le distinguer d'un
     // DateModif constaté plus tard, preuve qu'une autre personne a enregistré ce modèle entre-temps. dateModif vient d'une relecture de Grist
     // (readBackDateModif), pas de la chaîne ISO envoyée. `typeModele` et `emailFields` (mode email, cf. ensureEmailColumns) sont facultatifs : les
-    // appels du mode document ne changent pas. emailFields = { destinataires, cc, cci, objet }, ignoré (colonnes laissées vides) pour un modèle
+    // appels du mode document ne changent pas. emailFields = { destinataires, cc, cci, objet, pj }, ignoré (colonnes laissées vides) pour un modèle
     // document. `suiviModifications` : { [id]: { author, createdAt } } (TrackChanges.computeMetadata, js/track-changes.js), écrite dans le même
     // UpdateRecord/AddRecord que Contenu, jamais dans un appel séparé (planning/feature-track-changes.md : la fenêtre de risque en cas de conflit
     // d'auto-save). null pour un macro-modèle (Editor.getSuiviModificationsForSave n'est jamais appelée sur ce chemin, cf. onSave dans js/main.js).
@@ -779,7 +782,7 @@ const Templates = (function () {
       HeaderFooter: JSON.stringify(headerFooterData || safeParseHeaderFooter(null)),
       Margins: JSON.stringify(marginsData || safeParseMargins(null)),
       TypeModele: typeModele,
-      Destinataires: email.destinataires || '', Cc: email.cc || '', Cci: email.cci || '', Objet: email.objet || '',
+      Destinataires: email.destinataires || '', Cc: email.cc || '', Cci: email.cci || '', Objet: email.objet || '', PJ: email.pj || '',
       SuiviModifications: JSON.stringify(suiviModifications || {}),
     };
     // Jamais une colonne que la table n'a pas : Grist refuserait tout le lot (cf. modifiedByColumnReady).
@@ -953,7 +956,7 @@ const Templates = (function () {
 
   // Les colonnes qu'une ligne de la table porte pour le widget (celles que templateFromRow lit et que saveRow écrit) : de quoi rendre une ligne supprimée telle qu'elle était. Pas les autres colonnes du document : Grist
   // refuse toute valeur dans une colonne à formule, et tout le lot sur une colonne qu'il ne connaît pas.
-  const ROW_COLUMNS = ['Nom', 'Contenu', 'NomFichierPDF', 'DateModif', 'HeaderFooter', 'Margins', 'EstParDefaut', 'TypeModele', 'Destinataires', 'Cc', 'Cci', 'Objet', 'SuiviModifications', 'Jeton', 'ModifiePar'];
+  const ROW_COLUMNS = ['Nom', 'Contenu', 'NomFichierPDF', 'DateModif', 'HeaderFooter', 'Margins', 'EstParDefaut', 'TypeModele', 'Destinataires', 'Cc', 'Cci', 'Objet', 'PJ', 'SuiviModifications', 'Jeton', 'ModifiePar'];
 
   // La ligne `id` telle que Grist la garde en ce moment - relue, pas celle du cache : une autre personne a pu l'enregistrer depuis -, à lire AVANT de la supprimer (Annuler la rend, cf. restoreRow). { id, values } ; null si la
   // ligne n'existe plus ou si la table ne se lit pas.
@@ -1008,7 +1011,7 @@ const Templates = (function () {
     const cached = byId(id);
     if (!cached) return Promise.reject(new Error('Modèle introuvable : rien n’a été restauré.'));
     if ((snapshot.typeModele || 'document') !== cached.typeModele) return Promise.reject(new Error('Cette version est d’un autre type de modèle : rien n’a été restauré.'));
-    const email = { destinataires: snapshot.destinataires, cc: snapshot.cc, cci: snapshot.cci, objet: snapshot.objet };
+    const email = { destinataires: snapshot.destinataires, cc: snapshot.cc, cci: snapshot.cci, objet: snapshot.objet, pj: snapshot.pj };
     return writes.track(() => saveRow(id, null, snapshot.contenu, snapshot.nomFichierPDF, snapshot.headerFooter, snapshot.margins, cached.typeModele, email, snapshot.suiviModifications || {}, null, { force: true, genre: 'restauration' }));
   }
 

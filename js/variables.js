@@ -500,6 +500,11 @@ const Variables = (function () {
         },
       });
     }
+    // Le champ PJ du mode email (js/eml-export.js) ne cite que des colonnes Pièces jointes : sa liste « # » n'en propose pas d'autres, ni puce. Son élément le dit (`data-variables-kind="attachments"`).
+    const attachmentsOnly = editor => {
+      const host = editor && editor.options && editor.options.element;
+      return !!host && !!host.dataset && host.dataset.variablesKind === 'attachments';
+    };
     // L'extension TipTap d'un champ texte à bulles (js/field-editor.js) : le « # » ouvre la même liste que dans l'éditeur, dont l'onglet des puces n'a que
     // celles qui s'écrivent en texte, et le choix pose une bulle ou une puce. Même demande de clé de correspondance qu'à l'insertion d'une bulle du corps
     // (insertVariable). Le déclencheur s'ouvre
@@ -515,7 +520,7 @@ const Variables = (function () {
           return [
             Suggestion(Object.assign(suggestionBase(this.editor), {
               allowedPrefixes: null,
-              items: ({ query, editor }) => computeItems(query, editor, true),
+              items: ({ query, editor }) => (attachmentsOnly(editor) ? computeItems(query, editor, true).filter(isAttachmentColumn) : computeItems(query, editor, true)),
               // La liste se ferme au choix : la fenêtre de la clé de correspondance, si elle s'ouvre, ne la retrouve pas ouverte derrière elle, et un refus laisse le
               // texte tapé sans liste, comme le champ d'avant.
               command: ({ editor, range, props }) => { hide(); insertItem(editor, range, props); },
@@ -1679,7 +1684,7 @@ const Variables = (function () {
     }
     function findTemplatesUsingTable(tableCible) {
       const needles = ['data-table="' + tableCible + '"', 'data-otherwise-table="' + tableCible + '"'];
-      const fields = tpl => [tpl.nomFichierPDF, tpl.objet, tpl.destinataires, tpl.cc, tpl.cci];
+      const fields = tpl => [tpl.nomFichierPDF, tpl.objet, tpl.destinataires, tpl.cc, tpl.cci, tpl.pj];
       return Templates.getCached().filter(tpl => (tpl.contenu && (needles.some(needle => tpl.contenu.indexOf(needle) !== -1) || otherwiseCites(tpl.contenu, tableCible) || loopCites(tpl.contenu, tableCible)))
         || fields(tpl).some(value => value && FieldCodec.variablesIn(value).some(v => v.table === tableCible)));
     }
