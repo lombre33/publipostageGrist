@@ -24,8 +24,8 @@ const CANCEL = MODAL + ' .pp-modal-actions button:not(.var-modal-primary)';
 const DOC_HTML = '<p><span style="font-family: Marianne;">Texte en Marianne : été, œuvre</span></p><p><span style="font-family: Cambria;">Cambria devient Tinos</span></p>';
 const PLAIN_HTML = '<p><span style="font-family: Arial;">Arial est dans le PDF</span></p>';
 const WORDS = {
-  fr: { cancelled: 'Export annulé.', needsGfs: 'Inclure Marianne demande Grist Factory Suite', roboto: 'Remplacer Marianne par Roboto', include: 'Inclure Marianne dans le PDF' },
-  en: { cancelled: 'Export canceled.', needsGfs: 'Including Marianne requires Grist Factory Suite', roboto: 'Replace Marianne with Roboto', include: 'Include Marianne in the PDF' },
+  fr: { cancelled: 'Export annulé.', needsExt: 'Inclure Marianne demande l’extension « Polices » de Grist Factory Suite', activate: 'Activer l’extension « Polices »…', roboto: 'Remplacer Marianne par Roboto', include: 'Inclure Marianne dans le PDF' },
+  en: { cancelled: 'Export canceled.', needsExt: 'Including Marianne requires the “Fonts” extension of Grist Factory Suite', activate: 'Turn on the “Fonts” extension…', roboto: 'Replace Marianne with Roboto', include: 'Include Marianne in the PDF' },
 };
 
 let total = 0;
@@ -67,7 +67,7 @@ const seen = page => page.evaluate(() => {
     return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
   };
   const ratio = (a, c) => { const la = lum(a), lb = lum(c); return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); };
-  const texts = Array.from(ov.querySelectorAll('.pp-fonts-intro, .pp-fonts-text, .pp-fonts-row, .pp-fonts-legend, .pp-fonts-choice label, .pp-fonts-note, .pp-fonts-link, .pp-modal-title, h3')).filter(shownNode);
+  const texts = Array.from(ov.querySelectorAll('.pp-fonts-intro, .pp-fonts-text, .pp-fonts-row, .pp-fonts-legend, .pp-fonts-choice label, .pp-fonts-note, .pp-fonts-activate, .pp-fonts-link, .pp-modal-title, h3')).filter(shownNode);
   const rows = Array.from(ov.querySelectorAll('.pp-fonts-row')).filter(shownNode);
   const ok = ov.querySelector('.var-modal-primary');
   const cancel = ov.querySelector('.pp-modal-actions button:not(.var-modal-primary)');
@@ -81,6 +81,7 @@ const seen = page => page.evaluate(() => {
     links: Array.from(ov.querySelectorAll('.pp-fonts-link')).filter(shownNode).map(a => a.getAttribute('href')),
     allText: ov.textContent.replace(/\s+/g, ' '),
     noGfsShown: shownNode(ov.querySelector('.pp-fonts-note')),
+    activateShown: shownNode(ov.querySelector('.pp-fonts-activate')), activateText: (ov.querySelector('.pp-fonts-activate') || {}).textContent || '', focusId: (document.activeElement && document.activeElement.id) || '',
     lowest: texts.map(el => ({ t: el.textContent.trim().slice(0, 30), c: Math.round(ratio(getComputedStyle(el).color, opaque(el)) * 100) / 100 })).filter(x => x.c < 4.5),
     texts: texts.length,
   };
@@ -113,18 +114,39 @@ try {
   await setDocument(page, DOC_HTML);
   await sleep(300);
   await click(page, '#btn-export-pdf');
-  check('sans GFS : la fenêtre « Polices du document » s\'ouvre', await waitDialog(page));
+  check('sans l\'extension : la fenêtre « Polices du document » s\'ouvre', await waitDialog(page));
   await sleep(300);
   let s = await seen(page);
   check('sans GFS : entière dans le panneau 700x400, ses deux boutons au premier plan', s.inPanel && s.okSeen && s.cancelSeen, { inPanel: s.inPanel, ok: s.okSeen, cancel: s.cancelSeen, h: s.boxH });
   check('sans GFS : ouverte en haut, la première police remplacée se lit sans défiler (« Cambria → Tinos »)', s.scrollTop === 0 && s.firstRowSeen && /Cambria → Tinos/.test(s.rows.join(' ')), { top: s.scrollTop, rows: s.rows });
-  check('sans GFS : la phrase dit qu\'inclure Marianne demande Grist Factory Suite, sans choix ni case', s.noGfsShown && s.allText.includes(WORDS.fr.needsGfs) && !s.choice && !s.roboto && !s.include, { shown: s.noGfsShown, choice: s.choice });
+  check('sans l\'extension : la phrase dit qu\'inclure Marianne demande l\'extension « Polices » de Grist Factory Suite, le bouton pour l\'activer est là, sans choix ni case', s.noGfsShown && s.allText.includes(WORDS.fr.needsExt) && s.activateShown && s.activateText === WORDS.fr.activate && !s.choice && !s.roboto && !s.include, { shown: s.noGfsShown, activate: s.activateText, choice: s.choice });
   check('sans GFS : tous les textes sont lisibles (>= 4,5:1)', s.texts > 0 && s.lowest.length === 0, s.lowest);
   const noGfs = await downloadOf(page, 'polices-sans-gfs', async () => { await click(page, OK); });
   check('sans GFS : « Exporter le PDF » (vrai clic) télécharge le PDF', noGfs.size > 1000 && /\.pdf$/.test(noGfs.file), noGfs);
   const noGfsFonts = await pdfFontsOf(noGfs.file);
   check('sans GFS : Cambria est écrit en Tinos, Marianne en Roboto, aucune Marianne dans le PDF', /Tinos/.test(noGfsFonts) && /Roboto/.test(noGfsFonts) && !/Marianne/.test(noGfsFonts), noGfsFonts);
   check('sans GFS : rien n\'a été demandé à jsDelivr', jsdelivr.length === 0, jsdelivr);
+
+  // ---- 1 bis) Le bouton « Activer l'extension » : un vrai clic ouvre la fenêtre d'installation de GFS ; cochée là-bas, la fenêtre ouverte montre le choix ----
+  await setDocument(page, DOC_HTML);
+  await sleep(300);
+  await click(page, '#btn-export-pdf');
+  check('le bouton d\'activation : la fenêtre s\'ouvre', await waitDialog(page));
+  await sleep(300);
+  await reveal(page, '.pp-fonts-activate');
+  s = await seen(page);
+  const asksBefore = await page.evaluate(() => window.__gfsStub.calls.filter(c => c.nom === 'installer').length);
+  await click(page, '.pp-fonts-activate');
+  let asksAfter = asksBefore;
+  for (let i = 0; i < 60 && asksAfter === asksBefore; i++) { await sleep(60); asksAfter = await page.evaluate(() => window.__gfsStub.calls.filter(c => c.nom === 'installer').length); }
+  check('un vrai clic sur « Activer l\'extension « Polices »… » demande à GFS sa fenêtre d\'installation (appel installer pour « polices »)', asksAfter === asksBefore + 1 && await page.evaluate(() => { const calls = window.__gfsStub.calls.filter(c => c.nom === 'installer'); return calls[calls.length - 1].args.extension === 'polices'; }), { asksBefore, asksAfter });
+  await setExtensions(page, ['graphique', 'polices']);
+  await sleep(300);
+  s = await seen(page);
+  check('l\'extension cochée dans GFS : la fenêtre ouverte montre le choix Roboto / Inclure, sans la phrase ni le bouton, et ne s\'est pas fermée', (await dialogOpen(page)) && s.choice && s.roboto && s.include && !s.noGfsShown && !s.activateShown, { open: await dialogOpen(page), choice: s.choice, note: s.noGfsShown, button: s.activateShown });
+  check('le focus est passé du bouton au choix « Remplacer Marianne par Roboto »', s.focusId === 'pp-fonts-roboto', s.focusId);
+  await page.keyboard.press('Escape');
+  check('Échap ferme la fenêtre (rien n\'est exporté)', await waitDialog(page, false));
 
   // ---- 2) Avec GFS ----
   await setExtensions(page, ['graphique', 'polices']);
@@ -175,6 +197,16 @@ try {
   await page.evaluate(() => GfsLink.ready.then(() => Extensions.loadAll()));
   await pickTemplate(page, 'Modèle 0001');
   await fire(page, 'PbClients', 1);
+  await setExtensions(page, ['graphique']);
+  await setDocument(page, DOC_HTML);
+  await sleep(300);
+  await click(page, '#btn-export-pdf');
+  check('anglais, sombre, sans l\'extension : la fenêtre s\'ouvre', await waitDialog(page));
+  await sleep(300);
+  s = await seen(page);
+  check('anglais, sombre, sans l\'extension : la phrase et le bouton « Turn on the “Fonts” extension… » se lisent (>= 4,5:1), sans choix', s.allText.includes(WORDS.en.needsExt) && s.activateShown && s.activateText === WORDS.en.activate && !s.choice && s.lowest.length === 0, { activate: s.activateText, lowest: s.lowest });
+  await page.keyboard.press('Escape');
+  await waitDialog(page, false);
   await setExtensions(page, ['graphique', 'polices']);
   await setDocument(page, DOC_HTML);
   await sleep(300);

@@ -112,6 +112,10 @@ const PdfFontPlan = (function () {
     const marianneTitle = el('h4', 'pp-fonts-heading');
     const marianneText = el('p', 'pp-fonts-text');
     const noGfs = el('p', 'pp-fonts-text pp-fonts-note');
+    // Dans GFS, l'extension se coche dans sa fenêtre d'installation (Extensions.explain) : le bouton l'ouvre depuis ici, la fenêtre se met à jour quand GFS dit qu'elle est active.
+    const activate = el('button', 'pp-fonts-activate');
+    activate.type = 'button';
+    activate.addEventListener('click', onActivate);
     const choice = el('fieldset', 'pp-fonts-choice');
     const legend = el('legend', 'pp-fonts-legend');
     const useRoboto = check('pp-fonts-roboto', 'pp-fonts-marianne');
@@ -128,11 +132,11 @@ const PdfFontPlan = (function () {
     const linkTerms = link(RULES.terms);
     [linkTypography, linkTerms].forEach((a) => { const item = el('li'); item.appendChild(a); rulesList.appendChild(item); });
     rules.append(rulesLabel, rulesList);
-    marianne.append(marianneTitle, marianneText, noGfs, choice, rules);
+    marianne.append(marianneTitle, marianneText, noGfs, activate, choice, rules);
 
     win.body.append(intro, replaced, marianne);
     const { cancel, ok } = win.addButtons();
-    refs = { intro, replaced, replacedTitle, replacedText, list, marianne, marianneTitle, marianneText, noGfs, choice, legend, useRoboto, include, consent, status, rules, rulesLabel, linkTypography, linkTerms, cancel, ok };
+    refs = { intro, replaced, replacedTitle, replacedText, list, marianne, marianneTitle, marianneText, noGfs, activate, choice, legend, useRoboto, include, consent, status, rules, rulesLabel, linkTypography, linkTerms, cancel, ok };
 
     cancel.addEventListener('click', () => { if (current) current.finish(null); });
     win.body.addEventListener('change', () => { setStatus(''); render(); });
@@ -144,6 +148,27 @@ const PdfFontPlan = (function () {
     refs.status.classList.toggle('is-problem', !!problem);
   }
   // La case de la déclaration ne sert qu'avec « Inclure » ; « Exporter » reste grisé tant que la déclaration manque.
+  // Ce que la fenêtre dit de l'extension « polices » : active, le choix (Roboto / Inclure) ; sinon la phrase qui dit pourquoi il n'y est pas, et - dans GFS, qui répond - le bouton qui ouvre
+  // la fenêtre d'installation de GFS pour la cocher. Rejouée à chaque événement `extensions` de GFS : cochée là-bas, la fenêtre ouverte montre le choix sans se refermer.
+  function showAvailability() {
+    if (!current || !refs || !current.found.marianne) return;
+    const can = Extensions.isActive(EXTENSION);
+    const askable = !can && GfsLink.hosted && GfsLink.isAnswering();
+    const focusWasOnButton = document.activeElement === refs.activate;
+    refs.noGfs.textContent = I18n.t(askable ? 'pdfFonts.marianne.needsExtension' : 'pdfFonts.marianne.needsGfs', { extension: Extensions.nameOf(EXTENSION) });
+    refs.noGfs.hidden = can;
+    refs.activate.textContent = I18n.t('pdfFonts.marianne.activate', { extension: Extensions.nameOf(EXTENSION) });
+    refs.activate.hidden = !askable;
+    refs.choice.hidden = !can;
+    if (focusWasOnButton && can) refs.useRoboto.input.focus();
+  }
+
+  // Le bouton n'est pas grisé pendant la demande (un bouton grisé perd le focus, et deux clics ne posent qu'une demande chez GFS : GfsLink.install).
+  async function onActivate() {
+    await Extensions.explain(EXTENSION, 'pdfFonts.marianne.feature');
+    showAvailability();
+  }
+
   function render() {
     const { include, consent, ok } = refs;
     consent.input.disabled = !include.input.checked;
@@ -181,12 +206,15 @@ const PdfFontPlan = (function () {
       const finish = (value) => {
         if (done) return;
         done = true;
+        if (current && current.stop) current.stop();
         current = null;
         token++;
         win.hide();
         resolve(value);
       };
-      current = { finish };
+      current = { finish, found };
+      const stop = Extensions.onChange(showAvailability);
+      current.stop = stop;
       const r = refs;
       win.title.textContent = I18n.t('pdfFonts.title');
       r.intro.textContent = I18n.t('pdfFonts.intro');
@@ -204,9 +232,7 @@ const PdfFontPlan = (function () {
       r.marianne.hidden = !found.marianne;
       r.marianneTitle.textContent = I18n.t('pdfFonts.marianne.title');
       r.marianneText.textContent = I18n.t('pdfFonts.marianne.text');
-      r.noGfs.textContent = I18n.t('pdfFonts.marianne.needsGfs');
-      r.noGfs.hidden = canInclude;
-      r.choice.hidden = !canInclude;
+      showAvailability();
       r.legend.textContent = I18n.t('pdfFonts.marianne.legend');
       r.useRoboto.text.textContent = I18n.t('pdfFonts.marianne.replace');
       r.include.text.textContent = I18n.t('pdfFonts.marianne.include');

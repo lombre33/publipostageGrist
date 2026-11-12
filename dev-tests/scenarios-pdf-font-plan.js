@@ -258,7 +258,10 @@
         const pending = PdfFontPlan.review([para('Marianne', 'Bonjour')]);
         if (!(await waitOpen())) return result(['la fenêtre ne s’ouvre pas']);
         if (shown(pick('.pp-fonts-choice'))) bad.push('le choix est montré sans GFS');
-        if (!shown(pick('.pp-fonts-note')) || pick('.pp-fonts-note').textContent !== I18n.t('pdfFonts.marianne.needsGfs')) bad.push('phrase sans GFS=' + pick('.pp-fonts-note').textContent);
+        const needs = I18n.t('pdfFonts.marianne.needsExtension', { extension: Extensions.nameOf('polices') });
+        if (!shown(pick('.pp-fonts-note')) || pick('.pp-fonts-note').textContent !== needs) bad.push('phrase sans GFS=' + pick('.pp-fonts-note').textContent);
+        const activateButton = pick('.pp-fonts-activate');
+        if (!shown(activateButton) || activateButton.textContent !== I18n.t('pdfFonts.marianne.activate', { extension: Extensions.nameOf('polices') })) bad.push('bouton d’activation=' + (activateButton ? activateButton.textContent : 'absent'));
         okButton().click();
         const plan = await pending;
         if (!plan || plan.marianne !== false) bad.push('plan=' + JSON.stringify(plan));
@@ -266,6 +269,58 @@
         if (arimoCount(base64) !== 0 || !baseFontsOf(base64).includes('Roboto-Regular')) bad.push('PDF=' + baseFontsOf(base64).join());
         if (asked.length) bad.push('requêtes=' + asked.join());
       } finally { window.fetch = originalFetch; }
+      return result(bad);
+    }),
+  });
+
+  cases.push({
+    id: 'pdffontplan_the_window_opens_the_gfs_install_window_and_shows_the_choice_once_the_extension_is_on',
+    description: 'Dans GFS, extension « polices » non cochée : la fenêtre dit laquelle cocher et porte le bouton « Activer l’extension « Polices »… » ; le clic demande à GFS sa fenêtre d’installation (appel `installer`) ; une fois l’extension cochée là-bas, la fenêtre ouverte montre le choix Roboto / Inclure (le bouton et la phrase partent, le focus passe au choix) sans se refermer ; « Exporter » garde Marianne en Roboto tant que rien n’est inclus',
+    run: async () => withExtensions(['graphique'], async () => {
+      const bad = [];
+      const stub = window.__gfsStub;
+      const pending = PdfFontPlan.review([para('Marianne', 'Bonjour')]);
+      if (!(await waitOpen())) return result(['la fenêtre ne s’ouvre pas']);
+      const button = pick('.pp-fonts-activate');
+      if (!shown(button)) { okButton().click(); await pending; return result(['le bouton d’activation n’est pas montré']); }
+      const before = stub.calls.filter(call => call.nom === 'installer').length;
+      button.focus();
+      button.click();
+      for (let i = 0; i < 60 && stub.calls.filter(call => call.nom === 'installer').length === before; i++) await sleep(30);
+      const asked = stub.calls.filter(call => call.nom === 'installer');
+      if (asked.length !== before + 1 || !asked[asked.length - 1].args || asked[asked.length - 1].args.extension !== 'polices') bad.push('appel installer=' + JSON.stringify(asked.slice(before)));
+      if (shown(pick('.pp-fonts-choice'))) bad.push('le choix est montré avant que l’extension soit cochée');
+      await sleep(150);
+      stub.setExtensions(['graphique', 'polices']);
+      for (let i = 0; i < 60 && !shown(pick('.pp-fonts-choice')); i++) await sleep(30);
+      if (!isOpen()) bad.push('la fenêtre s’est fermée');
+      if (!shown(pick('.pp-fonts-choice')) || !shown(pick('#pp-fonts-roboto')) || !shown(pick('#pp-fonts-include'))) bad.push('le choix n’est pas montré une fois l’extension cochée');
+      if (shown(pick('.pp-fonts-note')) || shown(pick('.pp-fonts-activate'))) bad.push('la phrase ou le bouton restent');
+      if (document.activeElement !== pick('#pp-fonts-roboto')) bad.push('le focus n’est pas passé au choix : ' + (document.activeElement && (document.activeElement.id || document.activeElement.className)));
+      if (!pick('#pp-fonts-roboto').checked || okButton().disabled) bad.push('Roboto n’est pas choisi au départ ou Exporter est grisé');
+      okButton().click();
+      const plan = await pending;
+      if (!plan || plan.marianne !== false) bad.push('plan=' + JSON.stringify(plan));
+      return result(bad);
+    }),
+  });
+
+  cases.push({
+    id: 'pdffontplan_no_activate_button_when_gfs_does_not_answer',
+    description: 'Si GFS ne répond pas (rien à y cocher), la fenêtre garde la phrase « demande Grist Factory Suite » seule : pas de bouton pour activer l’extension',
+    run: async () => withExtensions(['graphique'], async () => {
+      const bad = [];
+      const original = GfsLink.isAnswering;
+      GfsLink.isAnswering = () => false;
+      try {
+        if (GfsLink.isAnswering() !== false) return result(['essai mal posé : GfsLink.isAnswering ne se remplace pas']);
+        const pending = PdfFontPlan.review([para('Marianne', 'Bonjour')]);
+        if (!(await waitOpen())) return result(['la fenêtre ne s’ouvre pas']);
+        if (shown(pick('.pp-fonts-activate'))) bad.push('le bouton est montré');
+        if (pick('.pp-fonts-note').textContent !== I18n.t('pdfFonts.marianne.needsGfs')) bad.push('phrase=' + pick('.pp-fonts-note').textContent);
+        okButton().click();
+        await pending;
+      } finally { GfsLink.isAnswering = original; }
       return result(bad);
     }),
   });
