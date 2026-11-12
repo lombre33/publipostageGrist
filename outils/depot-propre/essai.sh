@@ -42,6 +42,8 @@ HTML
   echo '[]' > templates-gallery/catalogue.json
   printf 'GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\n' > LICENSE
   echo '# dev' > README.md; echo x > dev-tests/a.mjs; echo x > planning/a.md
+  # La liste unique des bibliothèques et son catalogue (consignes 063 et 067 de GFS) : à la racine du dépôt de développement, ils ne partent pas.
+  mkdir -p bibliotheques; echo '{}' > package.json; echo '{}' > bibliotheques/catalogue.json
   cp "$ICI/publier.sh" "$ICI/controles.mjs" outils/depot-propre/
   cp -r "$ICI"/public/* outils/depot-propre/public/
   # La carte du code cite chaque fichier du widget : le faux dépôt les porte (vides, pages .html comprises), pour que ses références tiennent.
@@ -128,6 +130,7 @@ vrai "étiquette annotée v1.0.0-beta.1" test "$(git -C "$P" cat-file -t v1.0.0-
 vrai "un commit de plus sur l'historique existant" test "$(git -C "$P" rev-parse HEAD~1)" = "$AVANT"
 vrai "le message ne porte aucune trace de session" test -z "$(git -C "$P" log -1 --format=%B | grep -i -E 'claude|session|co-authored')"
 vrai "dev-tests, planning et outils ne partent pas" test -z "$(git -C "$P" ls-tree --name-only HEAD | grep -E '^(dev-tests|planning|outils)$')"
+vrai "package.json et bibliotheques/ (la liste unique des bibliothèques et son catalogue) sont connus du dépôt de développement et ne partent pas" test -f "$T/dev/package.json" -a -z "$(git -C "$P" ls-tree --name-only HEAD | grep -E '^(package.json|bibliotheques)$')"
 vrai ".nojekyll part avec le reste, vide, à la racine du dépôt public" test -f "$P/.nojekyll" -a ! -s "$P/.nojekyll" -a -n "$(git -C "$P" ls-tree --name-only HEAD | grep -x '.nojekyll')"
 vrai "les documents publics sont là, README du dépôt de développement absent" test -f "$P/SECURITY.md" -a -f "$P/NOTICE" -a "$(head -1 "$P/README.md")" = "# Publipostage+ pour Grist"
 # Un gabarit resté en place s'écrit {{MAJUSCULES}} (comme le cherche controles.mjs) : la carte décrit aussi des {{variables}} de modèle, qui sont du texte.
@@ -191,6 +194,8 @@ muter "un lien cassé" "lien(s) cassé(s)" "sed -i 's/(CONTRIBUTING.md)/(CONTRIB
 muter "une ancre cassée" "ancre absente" "sed -i 's/(#limites-connues)/(#limites)/' README.md"
 muter "un secret" "secret" "echo 'ghp_abcdefghijklmnopqrstuvwxyz0123' >> js/main.js"
 muter "un dossier de développement" "présente à la racine" "mkdir dev-tests; echo x > dev-tests/a"
+muter "la liste des bibliothèques (package.json) à la racine du dépôt public" "présente à la racine : package.json" "echo '{}' > package.json"
+muter "le catalogue des bibliothèques (bibliotheques/) à la racine du dépôt public" "présente à la racine : bibliotheques" "mkdir bibliotheques; echo x > bibliotheques/a"
 muter "un fichier cité par la page, absent" "cite des fichiers absents" "rm img/logo.jpg"
 muter "un dossier de la galerie dont le nom commence par « _ » (GitHub Pages ne le sert pas)" "commence par « _ » ou « . »" "mkdir -p templates-gallery/_tables; echo x > templates-gallery/_tables/gestion.json"
 muter "un fichier caché dans js/ (GitHub Pages ne le sert pas)" "commence par « _ » ou « . »" "echo x > js/.cache"

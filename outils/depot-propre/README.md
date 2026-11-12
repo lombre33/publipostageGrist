@@ -68,7 +68,9 @@ chemin est affiché.
   `main` ou pas à jour.
 - Une entrée à la racine du dépôt de développement qu'il ne connaît pas (`PUBLIES` ou `EXCLUS` dans
   `publier.sh`) : un nouveau dossier ne part jamais par oubli. Un dossier publié s'ajoute aussi à `KNOWN`
-  dans `controles.mjs`, un dossier qui ne doit pas partir à `NEVER`.
+  dans `controles.mjs`, un dossier qui ne doit pas partir à `NEVER`. `package.json` (la liste unique des
+  bibliothèques) et `bibliotheques/` (son catalogue) sont classés ainsi : ils restent dans le dépôt de
+  développement, et les poser dans le dépôt public est une décision à part.
 - Un fichier ou un dossier de `PUBLIES` que le dépôt de développement ne suit pas. `.nojekyll`, un fichier vide
   à la racine, en fait partie : il part avec le reste, car le dépôt public a son propre site (GitHub Pages) et,
   sans lui, Pages passe les `.md` dans Jekyll avant de publier ; un `.md` qui porte une accolade double ouverte
