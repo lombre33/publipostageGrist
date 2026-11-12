@@ -1114,6 +1114,7 @@
     wirePageModals();
     wireSaveShortcut();
     wirePageFitZoom();
+    PageChip.wire();
     decorateSaveButtonShortcut();
     Shortcuts.onChange(decorateSaveButtonShortcut);
     wireAutosaveConflictBanner();

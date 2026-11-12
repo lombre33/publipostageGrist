@@ -30,3 +30,10 @@
   .pp-page-zoom:not(:hover):not(:focus-within):not(.pp-page-zoom-measuring) > :not(.pp-page-zoom-value) { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 }
 @media print { .pp-page-zoom { display: none; } }
+
+/* Le repère de page du défilement (js/page-chip.js) : « 3/4 », rien d'autre, plus petit que la pastille de zoom dont il longe le bord haut (au coin) ou plus près du pointeur quand on tire la barre de défilement
+   (la position est posée par le script). Invisible au repos, il s'allume au défilement et s'efface un instant après ; il ne reçoit aucun clic. Même niveau que la pastille de zoom (--z-page-zoom), mêmes jetons. */
+.pp-page-chip { position: fixed; z-index: var(--z-page-zoom); box-sizing: border-box; height: 20px; padding: 0 7px; display: inline-flex; align-items: center; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 8px); background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); font-family: var(--font-ui); font-size: 11px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; user-select: none; opacity: 0; visibility: hidden; transition: opacity .18s ease, visibility 0s .18s; }
+.pp-page-chip.pp-page-chip-on { opacity: 1; visibility: visible; transition: opacity .08s ease; }
+@media (prefers-reduced-motion: reduce) { .pp-page-chip, .pp-page-chip.pp-page-chip-on { transition: none; } }
+@media print { .pp-page-chip { display: none; } }
