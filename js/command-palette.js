@@ -7,7 +7,7 @@
 //
 // La recherche est celle des autres listes (SearchSelect.searchWords / foundIn : accents et casse ignorés, mots dans n'importe quel ordre) sur le nom de la commande, le nom de son groupe (« Mise en forme »)
 // et des mots en plus (`palette.kw.<action>` : « pdf » pour « Exporter »). L'ordre : le nom qui commence par le premier mot, puis le nom qui le contient, puis le reste ; à rang égal, l'ordre de Réglages.
-// Sans saisie, toutes les commandes, rangées par groupe.
+// Sans saisie, toutes les commandes, rangées par groupe. Avec une saisie, les titres du document qui la portent suivent les commandes (« Aller à… » un titre, readHeadings).
 //
 // La fenêtre est une ModalBase (js/modal-base.js) : Tab tourne dedans, Échap la ferme, le focus revient à l'élément qui l'avait. Elle s'ouvre par-dessus le document sans rien lui faire : la
 // sélection de l'éditeur reste celle d'avant, et la commande lancée la trouve. Aucun stockage : rien n'est retenu d'une ouverture à l'autre.
@@ -29,6 +29,36 @@ const CommandPalette = (function () {
   let opener = null;         // l'élément qui avait le focus à l'ouverture
   let openerInEditor = false; // ... et c'était le document : le focus lui revient par l'éditeur, qui remet sa sélection
 
+  let headings = []; // les titres du document qu'on voit (Édition : ceux de l'éditeur ; Lecture : ceux de la page lue), pris à l'ouverture : { id, kind: 'heading', name, level, pos | el, ... }
+  const MAX_HEADINGS = 300;
+
+  // « Aller à… » un titre (audit « confort d'usage » du 12/11, idée 8) : en tapant, les titres du document qui portent les mots saisis s'ajoutent aux commandes, après elles, dans l'ordre du document ; Entrée y mène (le curseur
+  // s'y pose en Édition, la page y défile en Lecture). Rien n'est listé sans saisie : la liste des commandes reste ce qu'elle était. Un titre vide n'est pas listé ; une bulle y est écrite [Table.Colonne].
+  function readHeadings() {
+    headings = [];
+    const visible = id => { const node = document.getElementById(id); return !!node && node.getClientRects().length > 0; };
+    const make = (text, level, target) => {
+      const name = text.replace(/\s+/g, ' ').trim();
+      if (!name || headings.length >= MAX_HEADINGS) return;
+      const groupLabel = t('palette.headings');
+      headings.push(Object.assign({
+        id: 'heading-' + headings.length, kind: 'heading', name, group: 'headings', groupLabel, key: 'H' + level, available: true, reason: '',
+        nameKey: SearchSelect.searchKey(name), haystack: SearchSelect.searchKey(name, groupLabel),
+      }, target));
+    };
+    if (visible('editor-container') && typeof EditorCore !== 'undefined' && EditorCore.getEditor()) {
+      const leaf = node => { const attrs = node.attrs || {}; const column = attrs.column || attrs['data-column']; return column ? '[' + column + ']' : ''; };
+      EditorCore.getEditor().state.doc.descendants((node, pos) => {
+        if (node.type.name !== 'heading') return true;
+        make(node.textBetween(0, node.content.size, ' ', leaf), node.attrs.level || 1, { pos: pos + 1 });
+        return false;
+      });
+    } else if (visible('reader-container')) {
+      document.querySelectorAll('#reader-container .reader-content h1, #reader-container .reader-content h2, #reader-container .reader-content h3, #reader-container .reader-content h4, #reader-container .reader-content h5, #reader-container .reader-content h6')
+        .forEach(node => make(node.textContent, Number(node.tagName.slice(1)), { el: node }));
+    }
+  }
+
   // Les mots à taper en plus du nom : ceux de `palette.kw.<action>` quand le texte existe.
   const keywordsOf = id => (I18n.has('palette.kw.' + id) ? t('palette.kw.' + id) : '');
 
@@ -49,12 +79,13 @@ const CommandPalette = (function () {
     const words = SearchSelect.searchWords(query);
     if (!words.length) return commands.slice();
     const ranked = [];
+    const found = headings.filter(heading => SearchSelect.foundIn(words, heading.haystack));
     commands.forEach((command, order) => {
       if (!SearchSelect.foundIn(words, command.haystack)) return;
       const rank = command.nameKey.indexOf(words[0]) === 0 && SearchSelect.foundIn(words, command.nameKey) ? 0 : SearchSelect.foundIn(words, command.nameKey) ? 1 : 2;
       ranked.push({ command, rank, order });
     });
-    return ranked.sort((a, b) => a.rank - b.rank || a.order - b.order).map(entry => entry.command);
+    return ranked.sort((a, b) => a.rank - b.rank || a.order - b.order).map(entry => entry.command).concat(found);
   }
 
   const optionId = command => 'pp-palette-option-' + command.id;
@@ -149,6 +180,7 @@ const CommandPalette = (function () {
     const wasInEditor = openerInEditor;
     const back = opener;
     closeWindow(false);
+    if (command.kind === 'heading') { goToHeading(command); return; }
     let done = false;
     try { done = !!Shortcuts.run(command.id); } catch (e) { console.warn('[palette] la commande « ' + command.id + ' » a échoué', e); }
     if (!done) host.setStatus(t('palette.didNothing', { name: command.name }), false);
@@ -157,6 +189,15 @@ const CommandPalette = (function () {
       const active = document.activeElement;
       if (!active || active === document.body) giveFocusBack(wasInEditor, back);
     });
+  }
+
+  // Va au titre : en Édition le curseur s'y pose et le document défile jusqu'à lui ; en Lecture la page y défile.
+  function goToHeading(heading) {
+    if (heading.el) { if (heading.el.isConnected) heading.el.scrollIntoView({ block: 'start' }); return; }
+    const editor = typeof EditorCore !== 'undefined' ? EditorCore.getEditor() : null;
+    if (!editor) return;
+    const at = Math.min(heading.pos, editor.state.doc.content.size);
+    editor.chain().focus().setTextSelection(at).scrollIntoView().run();
   }
 
   // Le focus revient là où il était : au document par l'éditeur (`focusEditor` remet sa sélection), sinon à l'élément qui l'avait.
@@ -230,6 +271,7 @@ const CommandPalette = (function () {
     opener = document.activeElement;
     openerInEditor = !!(opener && opener.closest && opener.closest('.ProseMirror') && !opener.closest('.pp-field-editor'));
     readCommands();
+    readHeadings();
     shown = filter('');
     renderList('');
     win.show(refs.input);

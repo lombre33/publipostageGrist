@@ -334,7 +334,7 @@
       out.keywords = keywordIds.length > 30 && frOk && enOk;
       await reset(h, 'en');
       const expected = {
-        title: 'Command palette', label: 'Search for a command', placeholder: 'A command: pdf, table, bold…', hint: '↑ ↓ to choose · Enter to run · Esc to close', close: 'Close', listLabel: 'Commands',
+        title: 'Command palette', label: 'Search for a command', placeholder: 'A command or a heading: pdf, table, introduction…', hint: '↑ ↓ to choose · Enter to run · Esc to close', close: 'Close', listLabel: 'Commands and headings',
         groups: 'Templates|View|Formatting|Insert|History and tracking', pdf: 'Export', bold: 'Bold', none: 'No command matches “zzzz”.', heading: 'Heading 1, Heading 2, Heading 3', keywords: true,
       };
       return { pass: JSON.stringify(out) === JSON.stringify(expected), notes: JSON.stringify(out) };
