@@ -305,7 +305,7 @@ const SlideImport = (function () {
       if (node.nodeType === Node.TEXT_NODE && !node.nodeValue.trim()) return;
       slides[slides.length - 1].push(node);
     });
-    source = { id: tpl.id, contenu, doc: body.ownerDocument, slides, marks, kind: tpl.typeModele === SlidesEntry.TYPE ? 'slides' : 'pages' };
+    source = { id: tpl.id, contenu, body, doc: body.ownerDocument, slides, marks, kind: tpl.typeModele === SlidesEntry.TYPE ? 'slides' : 'pages' };
     clearRows();
   }
   // Une copie des blocs de la diapositive `index`, dans le document inerte de la source, sans ce qui appartient à la source : ses images répétées sur toutes les pages (le fond de ses
@@ -576,7 +576,7 @@ const SlideImport = (function () {
     linking = true;
     SlidesEntry.status(I18n.t('slides.link.linking', { name }));
     try {
-      const { html, link } = await SlideLinks.anchorSource(editor, id, index, source.contenu);
+      const { html, link } = await SlideLinks.anchorSource(editor, id, index, source.contenu, source.body);
       if (!open || EditorCore.getEditor() !== editor || String(Templates.getCurrentId()) !== String(here) || !source || String(source.id) !== String(id)) return;
       if (isOff()) { SlidesEntry.explainOff(); return; }
       if (SlideCopies.linkedFrom(editor, id).has(link.linkSlide)) {
@@ -654,7 +654,7 @@ const SlideImport = (function () {
     linking = true;
     SlidesEntry.status(I18n.t('slides.link.linking', { name }));
     try {
-      const { html, link } = await SlideLinks.anchorSource(editor, id, index, source.contenu);
+      const { html, link } = await SlideLinks.anchorSource(editor, id, index, source.contenu, source.body);
       if (!open || EditorCore.getEditor() !== editor || String(Templates.getCurrentId()) !== String(here) || !source || String(source.id) !== String(id)) return;
       if (isOff()) { SlidesEntry.explainOff(); return; }
       // Un lien par diapositive source et par présentation : déjà liée ici, elle arrive en copie.

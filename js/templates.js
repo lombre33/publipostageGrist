@@ -861,7 +861,9 @@ const Templates = (function () {
   function newToken() {
     return Array.from(crypto.getRandomValues(new Uint32Array(4)), word => word.toString(36).padStart(7, '0')).join('').slice(0, 24);
   }
-  async function ensureToken(id) {
+  // `fresh` : l'appelant vient de relire la table (loadAll) ; si le cache n'y voit pas de jeton pour ce modèle, il n'y en a pas, et la première relecture de la table entière (des dizaines de Mo pour un gros
+  // PowerPoint) n'apprendrait rien : seul le jeton écrit est relu, pour la course ci-dessous.
+  async function ensureToken(id, { fresh = false } = {}) {
     await ensureTableExists();
     await ensureTokenColumn();
     async function read() {
@@ -869,7 +871,8 @@ const Templates = (function () {
       const at = tableData.id.findIndex(rowId => sameId(rowId, id));
       return { rowId: at === -1 ? null : tableData.id[at], token: at === -1 || !tableData.Jeton ? '' : String(tableData.Jeton[at] || '') };
     }
-    let { rowId, token } = await read();
+    const known = fresh ? byId(id) : null;
+    let { rowId, token } = known && !known.jeton ? { rowId: known.id, token: '' } : await read();
     if (rowId == null) return '';
     if (!token) {
       await grist.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, rowId, { Jeton: newToken() }]]);

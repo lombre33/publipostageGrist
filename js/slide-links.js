@@ -265,7 +265,11 @@ const SlideLinks = (function () {
   // son contenu ne change pas : la synchro le relit à chaque passage. { doc, slides, byId } (`byId` : le numéro d'une diapositive source -> son rang).
   const parsedModels = new Map();
   function parseHtml(editor, html) {
-    const doc = libs.PMDOMParser.fromSchema(editor.schema).parse(HtmlSanitize.parseInert(String(html || '')));
+    return parseBody(editor, HtmlSanitize.parseInert(String(html || '')));
+  }
+  // La même lecture d'un texte déjà assaini (HtmlSanitize.parseInert) : le volet « Importer » a lu celui de sa source pour ses miniatures, et le rend à anchorSource plutôt que de le faire relire.
+  function parseBody(editor, body) {
+    const doc = libs.PMDOMParser.fromSchema(editor.schema).parse(body);
     const slides = slidesOf(doc);
     const byId = new Map();
     slides.forEach((slide, index) => {
@@ -929,21 +933,23 @@ const SlideLinks = (function () {
   // qu'avait le cache), reçoit son numéro de diapositive source quand elle n'en a pas encore, écrit tout de suite dans la source (son texte seul, Templates.saveContent ; relu juste avant :
   // un repère posé sur un cache en retard écraserait ce que la source a changé depuis). Rend { html, link } : la diapositive à importer et le lien de son repère (sans base : tagImported la
   // prend sur ce que le collage a posé) ; lève une Error dont `reason` est la clé de la raison (la source supprimée, ou changée depuis que la personne l'a vue).
-  async function anchorSource(editor, id, index, seen) {
+  async function anchorSource(editor, id, index, seen, seenBody) {
     const fail = (reason) => { const error = new Error(reason); error.reason = reason; throw error; };
     if (!libs || !editor) fail('slides.link.failed');
     const blocked = blockedReason();
     if (blocked) fail(blocked);
-    const before = parseHtml(editor, seen);
+    // `seenBody` : ce texte déjà assaini par le volet (rien ne le relit) ; un gros PowerPoint (30 Mo) se lit en une demi-seconde et plus, jamais deux fois ici.
+    const before = seenBody ? parseBody(editor, seenBody) : parseHtml(editor, seen);
     const wanted = before.slides[index];
     if (!wanted) fail('slides.link.changed');
     const wantedHash = slideHash(wanted);
     await Templates.loadAll();
     const model = Templates.byId(id);
     if (!model || model.typeModele !== TYPE) fail('slides.link.gone');
-    const key = model.jeton || await Templates.ensureToken(model.id);
+    const key = model.jeton || await Templates.ensureToken(model.id, { fresh: true });
     if (!key) fail('slides.link.failed');
-    const parsed = parseHtml(editor, model.contenu);
+    // La source relue est celle que la personne a vue (le cas courant) : la lecture d'avant sert, rien n'est relu.
+    const parsed = String(model.contenu || '') === String(seen || '') ? before : parseHtml(editor, model.contenu);
     let at = parsed.slides[index] && slideHash(parsed.slides[index]) === wantedHash ? index : parsed.slides.findIndex(slide => slideHash(slide) === wantedHash);
     if (at < 0) fail('slides.link.changed');
     let slide = parsed.slides[at];
