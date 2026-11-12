@@ -48,6 +48,8 @@
 //  - Les PERSONNES du direct (écriture en direct, extension « édition » : LiveEntry.places, demande du 03/11) : sous la miniature de la diapositive où quelqu'un d'autre est (la place de sa sélection,
 //    même quand son clavier n'est pas dans l'éditeur), une pastille de sa couleur - son nom au survol et dans le nom de la miniature - ; au-delà de quatre sur la même, un « +N ». La pastille se
 //    pose sur le bord bas de la miniature, hors de la mise en page : la bande ne bouge pas quand quelqu'un arrive, part ou change de diapositive.
+//  - « PRÉSENTER » (demande du 12/11 : l'avis de Grist, qui se pose en bas à droite du cadre, recouvrait le ▶ collé au zoom) : le groupe ▾ ▶ de slide-show.js est dans l'EN-TÊTE de la bande, au-dessus de la 1re miniature
+//    et hors de la liste qui défile - ni l'avis de Grist (bas droite) ni la progression d'un lot (bas gauche) ne passent dessus, et la barre de GFS, que la bande cède déjà à chaque bord, ne le recouvre pas.
 //  - GFS éteint l'extension pendant que la présentation est ouverte : la bande reste et ses miniatures mènent toujours à leur diapositive ; ses gestes sont grisés avec leur raison, et
 //    leur clic explique (SlidesEntry.explainOff).
 //  - Pendant l'écriture d'un en-tête ou d'un pied de page, l'éditeur porte leur texte, pas celui des diapositives : la bande ne bouge pas, et un geste referme d'abord l'en-tête.
@@ -85,6 +87,7 @@ const SlideStrip = (function () {
 
   let strip = null;                // la bande (<aside>), créée au premier affichage
   let list = null;                 // la liste des miniatures
+  let headRow = null;              // l'en-tête de la bande, au-dessus de la 1re miniature : la place de « Présenter » (slide-show.js)
   let actionsRow = null;           // la rangée des deux boutons du bas : « Ajouter » et « Importer » (l'ancre de leurs menus)
   let addButton = null;
   let importButton = null;         // « Importer », qui ouvre et ferme le volet d'import (SlideImport)
@@ -321,6 +324,8 @@ const SlideStrip = (function () {
     list.setAttribute('aria-multiselectable', 'true');
     // Les boutons du bas sur UNE ligne (carte du 22/10, « Trois icônes sur une ligne » : « Objets », le troisième, est depuis dans la barre d'outils du haut, js/objects-menu.js), un carré d'une
     // icône chacun : leur nom est l'info-bulle (syncOff) et le nom accessible, et la liste des miniatures garde la place que des boutons empilés lui prenaient.
+    // « Présenter » (slide-show.js) se pose dans l'en-tête, hors de la liste qui défile : en haut à gauche de la bande, il n'est sous aucun des avis que Grist ou l'app posent en bas du cadre.
+    headRow = el('div', 'pp-slide-head');
     actionsRow = el('div', 'pp-slide-actions');
     addButton = Dom.button('pp-slide-add');
     addButton.setAttribute('aria-haspopup', 'menu');
@@ -337,7 +342,7 @@ const SlideStrip = (function () {
     overviewButton.setAttribute('aria-expanded', 'false');
     hideIcon(overviewButton);
     actionsRow.append(addButton, importButton, overviewButton);
-    strip.append(list, actionsRow);
+    strip.append(headRow, list, actionsRow);
     document.body.appendChild(strip);
     wireList();
     wireAddButton();
@@ -1091,7 +1096,7 @@ const SlideStrip = (function () {
     // « Vue d'ensemble » n'est jamais grisée : la regarder ne change rien (ses gestes, eux, suivent ceux de la bande).
     overviewButton.setAttribute('aria-label', I18n.t('slides.overview.buttonTip'));
     overviewButton.title = I18n.t('slides.overview.buttonTip');
-    // « Présenter » (slide-show.js), à côté de la pastille du zoom : montré avec la bande, grisé avec elle, et son info-bulle dit la diapositive du curseur.
+    // « Présenter » (slide-show.js), dans l'en-tête de la bande : montré avec elle, grisé avec elle, et son info-bulle dit la diapositive du curseur.
     if (typeof SlideShow !== 'undefined') SlideShow.sync(true, off);
   }
 
@@ -2578,5 +2583,5 @@ const SlideStrip = (function () {
 
   SlidesEntry.register({ show, hide, shownSlide, showSlide });
 
-  return { show, hide, hold, overview, slidesOf, pageCopy, redrawViews, importAfterCurrent, settleLinked, syncLinks: () => syncLinks(false), current: () => current, shownSlide, showSlide, isOff: () => off, isShown: () => shown };
+  return { show, hide, hold, overview, slidesOf, pageCopy, redrawViews, importAfterCurrent, settleLinked, syncLinks: () => syncLinks(false), current: () => current, shownSlide, showSlide, isOff: () => off, isShown: () => shown, showSlot: () => headRow };
 })();

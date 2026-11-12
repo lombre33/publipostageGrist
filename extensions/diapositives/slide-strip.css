@@ -11,6 +11,10 @@ body.pp-slide-strip-on #editor-container { padding-left: calc(var(--pp-slide-str
 body.pp-slide-strip-on #editor-container .tiptap > .page-break-marker:not(.ProseMirror-selectednode) { color: transparent; border-color: transparent; }
 .pp-slide-strip { position: fixed; left: 0; top: 0; z-index: 20; display: flex; flex-direction: column; box-sizing: border-box; width: calc(var(--pp-slide-strip-width, 112px) + var(--pp-slide-strip-bar, 0px)); padding-left: var(--pp-slide-strip-bar, 0px); border-right: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12px; line-height: 1.3; }
 .pp-slide-strip[hidden] { display: none; }
+/* L'en-tête de la bande (slide-strip.js : `headRow`, où slide-show.js pose ▾ ▶) : une rangée de 26 px (le bouton fait 24 px) et la liste dessous reprend 4 px de rembourrage au lieu de 8, pour que les trois
+   miniatures de la bande à 700 x 400 tiennent toujours entières sans défiler (essai slidesStrip : 181 px de liste pour 3 miniatures, la bande en fait 249 moins les trois boutons du bas et cet en-tête). */
+.pp-slide-head { flex: none; display: flex; align-items: center; justify-content: center; padding: 2px 6px 0; }
+.pp-slide-head + .pp-slide-list { padding-top: 4px; }
 .pp-slide-list { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 8px 6px; overflow-x: hidden; overflow-y: auto; }
 .pp-slide-row { position: relative; flex: none; }
 
