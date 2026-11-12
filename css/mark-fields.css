@@ -1,0 +1,6 @@
+/* « Repérer les champs » (js/mark-fields.js) : en Lecture, avec la ligne cochée du menu du bouton Mode lecture, les valeurs écrites par les bulles (`.resolved-var`) prennent un fond léger et une valeur vide
+   devient un petit « vide » entouré. Un fond et un pseudo-élément en ligne, jamais de marge ni de bordure qui prenne de la place : la mise en page de la Lecture ne bouge pas. Une erreur (`.error-msg`) garde son
+   rouge. Jetons de css/style.css (texte ≥ 4,5:1, clair et sombre), aucune couleur en dur. Jamais à l'impression. */
+body.pp-mark-fields #reader-container .resolved-var:not(.error-msg) { background: var(--accent-soft); border-radius: 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+body.pp-mark-fields #reader-container .resolved-var:not(.error-msg):empty::before { content: var(--pp-fields-empty, "vide"); display: inline; padding: 0 4px; border: 1px dashed var(--border-strong); border-radius: 3px; font-family: var(--font-ui); font-size: .75em; font-style: italic; line-height: 1; color: var(--text-muted, var(--text)); }
+@media print { body.pp-mark-fields #reader-container .resolved-var { background: none; } body.pp-mark-fields #reader-container .resolved-var:empty::before { content: none; } }

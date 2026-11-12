@@ -279,6 +279,7 @@
 <link rel="stylesheet" href="css/character-format.css?v=0.3">
 <link rel="stylesheet" href="css/bullet-format.css?v=0.3">
 <link rel="stylesheet" href="css/clean-reading.css?v=0.3">
+<link rel="stylesheet" href="css/mark-fields.css?v=0.1">
 <link rel="stylesheet" href="css/bar-fold.css?v=0.2">
 <link rel="stylesheet" href="css/format-painter.css?v=0.4">
 <link rel="stylesheet" href="css/heading-styles.css?v=0.1">
@@ -317,7 +318,7 @@
 <link rel="preload" as="script" href="js/space-gap.js?v=0.3">
 <link rel="preload" as="script" href="js/reader-mode.js?v=0.200">
 <link rel="preload" as="script" href="js/reader-guide.js?v=0.7">
-<link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.4">
+<link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.5">
 <link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.14">
 <link rel="preload" as="script" href="js/i18n-texts-format.js?v=0.3">
 <link rel="preload" as="script" href="js/i18n-texts-blocks.js?v=0.3">
@@ -517,6 +518,7 @@
 <link rel="preload" as="script" href="js/page-sense-edit.js?v=0.2">
 <link rel="preload" as="script" href="js/orientation-toggle.js?v=0.20">
 <link rel="preload" as="script" href="js/clean-reading.js?v=0.8">
+<link rel="preload" as="script" href="js/mark-fields.js?v=0.1">
 <link rel="preload" as="script" href="js/bar-fold.js?v=0.1">
 <link rel="preload" as="script" href="js/page-zoom.js?v=0.16">
 <link rel="preload" as="script" href="js/page-chip.js?v=0.1">
@@ -541,7 +543,7 @@
 <link rel="preload" as="script" href="js/main-reader.js?v=0.1">
 <link rel="preload" as="script" href="js/main-live.js?v=0.3">
 <link rel="preload" as="script" href="js/main-slides.js?v=0.2">
-<link rel="preload" as="script" href="js/main.js?v=0.249">
+<link rel="preload" as="script" href="js/main.js?v=0.250">
 <!-- précharge des scripts : fin -->
 </head>
 <body>
@@ -595,6 +597,8 @@
             <span class="v2-hover-flyout-label" data-i18n="toolbar.modeRead">Mode lecture</span>
             <span class="v2-hover-row v2-hover-row-check-start" id="v2-btn-read-simple" role="menuitemradio" aria-checked="true" tabindex="0" data-read-choice="simple" data-i18n="toolbar.readSimple">Lecture simple</span>
             <span class="v2-hover-row v2-hover-row-check-start" id="v2-btn-clean-reading" role="menuitemradio" aria-checked="false" tabindex="0" data-read-choice="clean" data-i18n="toolbar.cleanReading">Lecture épurée</span>
+            <!-- Une case à part (js/mark-fields.js) : elle teinte les valeurs de Grist en Lecture ; elle ne change pas ce que fait le bouton. -->
+            <span class="v2-hover-row v2-hover-row-check-start" id="v2-btn-mark-fields" role="menuitemcheckbox" aria-checked="false" tabindex="0" data-i18n="toolbar.markFields">Repérer les champs</span>
           </span>
         </span>
       </div>
@@ -1354,7 +1358,7 @@
 <script src="js/space-gap.js?v=0.3"></script>
 <script src="js/reader-mode.js?v=0.200"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
-<script src="js/i18n-texts-templates.js?v=0.4"></script>
+<script src="js/i18n-texts-templates.js?v=0.5"></script>
 <script src="js/i18n-texts-export.js?v=0.14"></script>
 <script src="js/i18n-texts-format.js?v=0.3"></script>
 <script src="js/i18n-texts-blocks.js?v=0.3"></script>
@@ -1573,6 +1577,7 @@
 <script src="js/page-sense-edit.js?v=0.2"></script>
 <script src="js/orientation-toggle.js?v=0.20"></script>
 <script src="js/clean-reading.js?v=0.8"></script>
+<script src="js/mark-fields.js?v=0.1"></script>
 <script src="js/bar-fold.js?v=0.1"></script>
 <script src="js/page-zoom.js?v=0.16"></script>
 <script src="js/page-chip.js?v=0.1"></script>
@@ -1597,6 +1602,6 @@
 <script src="js/main-reader.js?v=0.1"></script>
 <script src="js/main-live.js?v=0.3"></script>
 <script src="js/main-slides.js?v=0.2"></script>
-<script src="js/main.js?v=0.249"></script>
+<script src="js/main.js?v=0.250"></script>
 </body>
 </html>

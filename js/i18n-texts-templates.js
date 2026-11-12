@@ -85,6 +85,8 @@ const I18nTextsTemplates = {
   // Lecture simple et Lecture épurée (js/clean-reading.js) : les deux lignes à cocher du menu du bouton Mode lecture, et l'info-bulle du bouton de sortie.
   'toolbar.readSimple': { fr: 'Lecture simple', en: 'Standard reading' },
   'toolbar.cleanReading': { fr: 'Lecture épurée', en: 'Clean reading' },
+  'toolbar.markFields': { fr: 'Repérer les champs', en: 'Highlight fields' },
+  'markFields.empty': { fr: 'vide', en: 'empty' },
   'cleanReading.exit': { fr: 'Quitter la lecture épurée (Échap)', en: 'Exit clean reading (Esc)' },
   // Languette du panneau du haut (js/bar-fold.js) : son nom accessible et son info-bulle (title natif, la languette est hors de la barre), qui disent l'action à faire.
   'barFold.fold': { fr: 'Replier le panneau du haut', en: 'Collapse the top panel' },

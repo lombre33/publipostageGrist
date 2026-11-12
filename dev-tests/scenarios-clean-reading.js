@@ -91,9 +91,11 @@
       const simple = el(ROW_SIMPLE);
       const row = el(ROW_CLEAN);
       const label = flyout && flyout.querySelector('.v2-hover-flyout-label');
-      const rows = flyout ? Array.from(flyout.querySelectorAll(':scope > .v2-hover-row')) : [];
+      const rows = flyout ? Array.from(flyout.querySelectorAll(':scope > .v2-hover-row[data-read-choice]')) : [];
+      // La troisième ligne (js/mark-fields.js, « Repérer les champs ») est une case à part : elle n'est pas un choix du bouton.
+      const markRow = flyout && flyout.querySelector(':scope > #v2-btn-mark-fields');
       const structure = { group: !!group, buttonInGroup: !!group && group.querySelector(':scope > #btn-mode-read') === button, flyoutInGroup: !!group && group.querySelector(':scope > #v2-read-flyout') === flyout,
-        rowInFlyout: !!flyout && row && row.parentElement === flyout, simpleInFlyout: !!flyout && simple && simple.parentElement === flyout, order: rows.map(r => r.id).join(','),
+        rowInFlyout: !!flyout && row && row.parentElement === flyout, simpleInFlyout: !!flyout && simple && simple.parentElement === flyout, order: rows.map(r => r.id).join(','), markRow: !!markRow && markRow.getAttribute('role') === 'menuitemcheckbox' && markRow.getAttribute('aria-checked') === 'false' && markRow.previousElementSibling === row,
         rowTexts: rows.map(r => r.textContent).join('|'), labelText: label && label.textContent, rowRoles: rows.map(r => r.getAttribute('role')).join(','), rowTabs: rows.map(r => r.tabIndex).join(','),
         checkClass: rows.map(r => r.classList.contains('v2-hover-row-check-start')).join(','), checked: rowsState(), choice: CleanReading.getChoice(), labelBeforeRows: !!label && label.nextElementSibling === simple,
         noTip: button && !button.hasAttribute('data-tip'), aria: button && button.getAttribute('aria-label') };
@@ -121,7 +123,7 @@
       await sleep(300);
       await finish();
       const pass = structure.group && structure.buttonInGroup && structure.flyoutInGroup && structure.rowInFlyout && structure.simpleInFlyout && structure.order === ROW_SIMPLE + ',' + ROW_CLEAN
-        && structure.rowTexts === 'Lecture simple|Lecture épurée' && structure.labelText === 'Mode lecture' && structure.labelBeforeRows && structure.rowRoles === 'menuitemradio,menuitemradio' && structure.rowTabs === '0,0'
+        && structure.rowTexts === 'Lecture simple|Lecture épurée' && structure.labelText === 'Mode lecture' && structure.labelBeforeRows && structure.markRow && structure.rowRoles === 'menuitemradio,menuitemradio' && structure.rowTabs === '0,0'
         && structure.checkClass === 'true,true' && structure.checked === 'true,false' && structure.choice === 'simple' && structure.noTip && structure.aria === 'Mode lecture' && keytip === expectedKeytip && !!shortcutKeys
         && toolbarIconsAdded === 0 && lookOk && !rest.bodyClass && !rest.exitShown && rest.barShown && !rest.active && ran && toRead;
       return { pass, notes: JSON.stringify({ structure, keytip, expectedKeytip, shortcutKeys, toolbarIconsAdded, look, lookOk, rest, ran, toRead }) };
