@@ -137,10 +137,11 @@
     shownBar() {
       return stub.barre && !stub.masquee ? JSON.parse(JSON.stringify(stub.barre)) : null;
     },
-    // La forme que GFS calcule pour un cadre de `width` × `height` : la barre fait 34 × 124 px (124 × 34 en haut et en bas), à 4 px du bord et centrée sur lui ; la zone y ajoute 4 px tout autour.
-    zoneDe(bord, width, height) {
+    // La forme que GFS calcule pour un cadre de `width` × `height` : la barre fait 34 × 124 px (124 × 34 en haut et en bas), à 4 px du bord et centrée sur lui ; la zone y ajoute 4 px tout autour. C'est la barre à quatre
+    // boutons de la consigne 026, celle des exemples des essais ; la vraie barre de GFS en a cinq (dock.js de GFS : 34 × 154 px, zone de 42 × 162) : `boutons` = 5 la donne (30 px par bouton et 4 px de plus).
+    zoneDe(bord, width, height, boutons = 4) {
       const side = 34 + 2 * 4;
-      const length = 124 + 2 * 4;
+      const length = 30 * boutons + 4 + 2 * 4;
       const vertical = bord === 'gauche' || bord === 'droite';
       const w = vertical ? side : length;
       const h = vertical ? length : side;

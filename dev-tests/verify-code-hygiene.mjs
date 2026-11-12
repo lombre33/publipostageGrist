@@ -1244,7 +1244,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('vide sous la barre de GFS : aucun chiffre de la barre n’est écrit dans js/toolbar-gap.js (la zone vient de GFS, qui l’a mesurée : seuls 0, 0.5 et 1 y apparaissent, une tolérance d’un pixel)', numbers.length === 0, numbers.join(', '));
   check('vide sous la barre de GFS : css/toolbar-v2.css porte les deux marges (`#toolbar-top .pp-gfs-gap { margin-left: var(--pp-gfs-gap, 0px); }` et `#toolbar-top .pp-gfs-room { margin-right: var(--pp-gfs-room, 0px); }`, qui passent devant celles d’un séparateur) et le raccourcissement du sélecteur du modèle d’un cadre étroit, qui ne lit que --gfs-bar-x',
     /#toolbar-top \.pp-gfs-gap \{ margin-left: var\(--pp-gfs-gap, 0px\); \}/.test(css) && /#toolbar-top \.pp-gfs-room \{ margin-right: var\(--pp-gfs-room, 0px\); \}/.test(css)
-      && /html\[data-gfs-bar="top"\] #v2-title-cluster \{ max-width: max\(120px, calc\(var\(--gfs-bar-x\) - 17px\)\); \}/.test(css), 'css/toolbar-v2.css');
+      && /html\[data-gfs-bar="top"\] #v2-title-cluster \{ max-width: max\(88px, calc\(var\(--gfs-bar-x\) - 17px\)\); \}/.test(css), 'css/toolbar-v2.css');
   for (const name of ['pp-gfs-gap', 'pp-gfs-room']) {
     const named = [...jsFiles, ...cssFiles].filter(rel => rel !== 'js/toolbar-gap.js' && rel !== 'css/toolbar-v2.css' && new RegExp(name).test(rel.endsWith('.css') ? stripComments(read(rel)) : noCommentsJs(read(rel))));
     check(`vide sous la barre de GFS : seuls js/toolbar-gap.js et css/toolbar-v2.css nomment ${name} (un autre composant qui poserait ce décalage défairait celui de la ligne)`, named.length === 0, named.join(', '));

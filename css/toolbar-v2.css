@@ -60,8 +60,9 @@
 #toolbar-top .pp-gfs-room { margin-right: var(--pp-gfs-room, 0px); }
 /* Dans un cadre étroit (moins de 600 px environ) la zone de la barre commence avant la fin du sélecteur de modèle, que rien ne peut décaler : il n'est pas déplacé, il se raccourcit (son nom est tronqué par « … », comme
    à toute autre largeur trop juste) pour finir à une marge de la zone (moins les 10 px de la marge de la ligne, les 5 px entre deux éléments et les 2 px de la bordure du sélecteur). `--gfs-bar-x` vient de GFS, aucun chiffre de la barre n'est écrit ici ;
-   120 px au moins, pour qu'un cadre minuscule ne le réduise pas à rien. */
-html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(120px, calc(var(--gfs-bar-x) - 17px)); }
+   88 px au moins, pour qu'un cadre minuscule ne le réduise pas à rien : ses deux boutons (Renommer, Modèle par défaut, 27 px chacun) et de quoi montrer l'icône du modèle. La barre de GFS a cinq boutons (zone de 162 px) : à 400 px de large
+   la zone commence à 119 px, il reste 102 px au sélecteur (avec 120 px au moins, il finissait 13 px dans la zone et son dernier bouton passait sous la barre). */
+html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs-bar-x) - 17px)); }
 /* Un séparateur que la ligne laisse seul au début ou au bout d'une ligne (js/toolbar-gap.js), dans la rangée du modèle et de l'export comme dans celle de mise en forme, ne sépare plus rien : son trait est caché, sa place
    reste (visibility, pas display), rien ne bouge. */
 #toolbar-top .bar-row > .bar-sep.pp-sep-alone,
