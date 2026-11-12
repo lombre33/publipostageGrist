@@ -1210,6 +1210,7 @@
     ExportChoices.wire({ canSave: () => !isReadOnly(), onApplied: syncExportMenus });
     ActionHistory.wire({ status: setStatus });
     FormatSlots.wire({ status: setStatus });
+    FormatPainter.setHost({ status: setStatus });
     HeadingStyles.wire({ status: setStatus });
     TemplatePreferences.loadForCurrentUser()
       .then(() => { TemplateTreeSelect.refresh(); ExportChoices.refresh(); })

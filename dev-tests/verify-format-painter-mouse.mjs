@@ -10,6 +10,9 @@
 //  - un glissé sur plusieurs mots, un triple-clic sur un paragraphe (le titre 2 centré d'un curseur, dont le paragraphe passe titre), les cases d'un tableau glissées ;
 //  - un simple clic sans sélection ne peint rien et laisse le pinceau armé, Échap l'arrête ; un double-clic sur le bouton le garde armé (liseré, curseur) pour plusieurs mots, un clic
 //    sur le bouton l'arrête ;
+//  - « Effacer la mise en forme » (audit confort du 12/11, idée 3) : le menu du pinceau commence par deux lignes à cocher, « Copier la mise en forme » (cochée) et « Effacer la mise en forme », entières et lisibles ;
+//    un vrai clic sur la seconde la coche sans perdre la sélection, le bouton change d'icône et de nom, un clic dessus remet la sélection au naturel (un seul Ctrl+Z la rend), un titre centré pris en entier
+//    redevient un paragraphe, recocher « Copier » rend le rouleau ;
 //  - au clavier : Alt+Maj+C puis Alt+Maj+V sur une sélection faite aux flèches ;
 //  - en Lecture le bouton est grisé et ne fait rien ; en anglais, « Format painter (Alt+Shift+C) ».
 // Lancé par run-headless.mjs (groupe Node "formatPainterMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-format-painter-mouse.mjs
@@ -445,6 +448,98 @@ async function readingPart(T) {
   check(`${T} : de retour en Édition le bouton est libre et le pinceau au repos`, sameState(await painter(), READY), await painter());
 }
 
+// === « Effacer la mise en forme » : les deux lignes du menu, le bouton qui change de geste, une étape d'Annuler (audit confort du 12/11, idée 3) ===========================================
+// Le rectangle, le texte et la lisibilité (≥ 4,5:1) d'une ligne du menu, et la coche DEVANT le libellé (visible quand la ligne est cochée).
+const choiceRow = id => page.evaluate(id => {
+  const parse = value => { const m = /rgba?\(([^)]+)\)/.exec(value); if (!m) return null; const p = m[1].split(',').map(x => parseFloat(x)); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };
+  const over = (top, under) => ({ r: top.r * top.a + under.r * (1 - top.a), g: top.g * top.a + under.g * (1 - top.a), b: top.b * top.a + under.b * (1 - top.a), a: 1 });
+  const lum = c => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+  const el = document.getElementById(id);
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  const layers = [];
+  for (let e = el; e; e = e.parentElement) { const c = parse(getComputedStyle(e).backgroundColor); if (c && c.a > 0) layers.push(c); if (c && c.a === 1) break; }
+  let bg = { r: 255, g: 255, b: 255, a: 1 };
+  layers.reverse().forEach(layer => { bg = over(layer, bg); });
+  const fg = over(parse(getComputedStyle(el).color), bg);
+  const l1 = lum(fg), l2 = lum(bg);
+  return { text: el.textContent.trim(), checked: el.getAttribute('aria-checked'), tick: getComputedStyle(el, '::before').visibility, x: r.left + r.width / 2, y: r.top + r.height / 2,
+    inside: r.width > 0 && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight, contrast: Math.round((Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05) * 100) / 100,
+    cut: el.scrollWidth > el.clientWidth + 1 };
+}, id);
+// Comme la personne : du bouton droit dans son menu (juste sous lui), puis vers la ligne. Un chemin en diagonale sort du groupe, et le menu qui se referme n'est plus là au bout du geste.
+async function moveIntoMenu(row) {
+  const b = await page.evaluate(() => { const r = document.getElementById('v2-btn-format-painter').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.bottom + 6 }; });
+  await page.mouse.move(b.x, b.y, { steps: 2 });
+  await page.mouse.move(row.x, row.y, { steps: 5 });
+}
+const buttonIcon = () => page.evaluate(() => { const b = document.getElementById('v2-btn-format-painter'); return { icon: b.innerHTML, label: b.getAttribute('aria-label'), clear: b.classList.contains('pp-painter-clear') }; });
+async function clearPart(T) {
+  await setDoc(DOC);
+  const source = await boxOf('Source');
+  await page.mouse.dblclick(source.cx, source.cy);
+  await page.waitForTimeout(150);
+  await openMenu();
+  const copy = await choiceRow('v2-btn-painter-copy');
+  const clear = await choiceRow('v2-btn-painter-clear');
+  check(`${T} : le menu du pinceau commence par « Copier la mise en forme » (cochée) puis « Effacer la mise en forme », entières dans la fenêtre, lisibles (≥ 4,5:1)`,
+    !!copy && !!clear && copy.text === 'Copier la mise en forme' && clear.text === 'Effacer la mise en forme' && copy.checked === 'true' && clear.checked === 'false' && copy.tick === 'visible' && clear.tick === 'hidden'
+    && copy.inside && clear.inside && !copy.cut && !clear.cut && copy.contrast >= 4.5 && clear.contrast >= 4.5, { copy, clear });
+  const before = await buttonIcon();
+  // La vraie souris sur la ligne « Effacer » : elle se coche, le texte sélectionné le reste (la ligne ne prend pas le focus), le bouton change d'icône et de nom, rien n'est effacé.
+  await moveIntoMenu(clear);
+  await page.mouse.click(clear.x, clear.y);
+  await page.waitForTimeout(200);
+  const clearChecked = await choiceRow('v2-btn-painter-clear');
+  const after = await buttonIcon();
+  check(`${T} : un clic sur « Effacer la mise en forme » la coche, garde la sélection du texte, change l'icône et le nom du bouton, sans rien effacer`,
+    clearChecked.checked === 'true' && (await choiceRow('v2-btn-painter-copy')).checked === 'false' && (await selected()) === 'Source' && after.clear && after.icon !== before.icon && /^Effacer la mise en forme/.test(after.label) && isPainted(await formatOf('Source')),
+    { clearChecked, selected: await selected(), before: before.label, after: after.label });
+  await page.mouse.move(400, 300);
+  await page.waitForTimeout(200);
+  const clearContrast = await iconContrast();
+  check(`${T} : l'icône du bouton en mode « Effacer » fait 4,5:1 au moins (${clearContrast})`, clearContrast >= 4.5, clearContrast);
+  await snap(`${T}-effacer-coche`);
+  // Le vrai clic sur le bouton : la sélection est remise au naturel ; un vrai Ctrl+Z rend tout d'un coup.
+  await page.click('#v2-btn-format-painter', { timeout: 5000 });
+  await page.waitForTimeout(200);
+  const plain = await formatOf('Source');
+  check(`${T} : le bouton efface la sélection (gras, italique, souligné, barré, police, taille, couleur et surlignage partis), sans armer le pinceau`, isPlain(plain) && !(await painter()).armed, { plain, painter: await painter() });
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(250);
+  check(`${T} : un seul Ctrl+Z rend la mise en forme`, isPainted(await formatOf('Source')), await formatOf('Source'));
+  // Le titre centré pris en entier (triple-clic) : titre et alignement partent aussi.
+  const heading = await boxOf('Titre modèle');
+  await tripleClick(heading);
+  await page.click('#v2-btn-format-painter', { timeout: 5000 });
+  await page.waitForTimeout(200);
+  const block = await blockOf('Titre modèle');
+  check(`${T} : un titre centré pris en entier redevient un paragraphe sans alignement`, !!block && block.tag === 'p' && block.align !== 'center', block);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(250);
+  // Retour à « Copier » au vrai clic : le bouton retrouve son rouleau et arme le pinceau. La souris quitte d'abord le groupe : un clic dans le bouton referme le menu jusqu'à ce qu'elle en sorte.
+  await page.evaluate(() => { const a = document.activeElement; if (a && a !== document.body) a.blur(); }); // le focus ne reste pas sur le bouton : le menu s'ouvrirait par le clavier et se fermerait au premier mouvement
+  await page.mouse.move(400, 300);
+  await page.waitForTimeout(500);
+  await openMenu();
+  const copyAgain = await choiceRow('v2-btn-painter-copy');
+  await moveIntoMenu(copyAgain);
+  await page.mouse.click(copyAgain.x, copyAgain.y);
+  await page.waitForTimeout(200);
+  const back = await buttonIcon();
+  check(`${T} : recocher « Copier la mise en forme » rend au bouton son rouleau et son nom`, !back.clear && back.icon === before.icon && back.label === before.label, { back: back.label, copyAgain });
+  await page.mouse.move(400, 300);
+  await page.waitForTimeout(150);
+  const box2 = await boxOf('Source');
+  await page.mouse.dblclick(box2.cx, box2.cy);
+  await page.waitForTimeout(150);
+  await clickButton();
+  check(`${T} : de nouveau, un clic sur le bouton copie et arme le pinceau`, sameState(await painter(), ARMED), await painter());
+  await page.keyboard.press('Escape');
+  await page.mouse.move(400, 300);
+  await page.evaluate(() => { FormatPainter.choose('copy'); FormatPainter.disarm(); }); // la suite du parcours repart sur « Copier », même si un contrôle d'ici a échoué
+}
+
 // La page ne change plus de langue en route : Réglages garde le choix et la recharge. Le script fait pareil - il garde la langue, recharge, attend le widget.
 async function restartIn(lang) {
   await page.evaluate(next => I18n.storeLang(next), lang);
@@ -466,12 +561,16 @@ async function englishPart() {
   check(`${T} : le menu du bouton se nomme « Format painter (Alt+Shift+C) », entier dans la fenêtre`, title.content === 'Format painter (Alt+Shift+C)' && title.shown && title.left >= 0 && title.right <= WIDTH && title.bottom <= HEIGHT, title);
   const aria = await page.evaluate(() => document.getElementById('v2-btn-format-painter').getAttribute('aria-label'));
   check(`${T} : le nom accessible est en anglais`, /^Format painter: copies the formatting/.test(aria), aria);
+  const rowsEn = [await choiceRow('v2-btn-painter-copy'), await choiceRow('v2-btn-painter-clear')];
+  check(`${T} : les deux lignes à cocher du menu sont en anglais, « Copy the formatting » (cochée) puis « Clear the formatting », entières dans la fenêtre`,
+    rowsEn[0].text === 'Copy the formatting' && rowsEn[1].text === 'Clear the formatting' && rowsEn[0].checked === 'true' && rowsEn[0].inside && rowsEn[1].inside && !rowsEn[0].cut && !rowsEn[1].cut, rowsEn);
   await page.mouse.move(400, 300);
 }
 
 async function run(T) {
   await buttonPart(T);
   await paintingPart(T);
+  await clearPart(T);
   await keyboardPart(T);
   await readingPart(T);
 }

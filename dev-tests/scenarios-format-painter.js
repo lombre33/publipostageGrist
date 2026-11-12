@@ -454,6 +454,136 @@
     },
   });
 
+  // « Effacer la mise en forme » (audit « confort d'usage » du 12/11, idée 3, GO d'Antoine : une liste sous le pinceau, « Copier la mise en forme » par défaut et « Effacer la mise en forme ») : deux lignes à cocher en
+  // tête du menu du pinceau ; le bouton fait ce que dit la ligne cochée (le rouleau pour copier, un « T » croisé pour effacer) ; effacer remet la sélection au naturel en UNE étape d'historique.
+  const rowOf = value => document.querySelector('#v2-painter-flyout [data-painter-choice="' + value + '"]');
+  const statusText = () => (document.getElementById('status-msg') || {}).textContent;
+  const resetChoice = () => { FormatPainter.choose('copy'); FormatPainter.disarm(); };
+  const marksNamed = needle => marksOf(needle);
+
+  cases.push({
+    id: 'fp_clear_two_rows_open_the_menu_copy_is_checked_and_the_checked_row_gives_the_button_its_icon_and_name',
+    description: 'Le menu du pinceau commence par deux lignes à cocher, « Copier la mise en forme » (cochée au départ) puis « Effacer la mise en forme » ; cocher la seconde (clic, Entrée, Espace) change l\'icône et le nom du bouton sans rien effacer, arrête un pinceau armé, et recocher la première rend le rouleau',
+    run: async (h) => {
+      await h.resetEditor();
+      resetChoice();
+      const bad = [];
+      const english = I18n.getLang() === 'en';
+      const copy = rowOf('copy');
+      const clear = rowOf('clear');
+      if (!copy || !clear) return { pass: false, notes: 'lignes absentes : ' + JSON.stringify({ copy: !!copy, clear: !!clear }) };
+      const first = Array.from(document.getElementById('v2-painter-flyout').children).slice(0, 3).map(e => e.id || e.className.split(' ')[0]);
+      if (first.join(',') !== 'v2-hover-flyout-label,v2-btn-painter-copy,v2-btn-painter-clear') bad.push('ordre ' + first.join(','));
+      const wantCopy = english ? 'Copy the formatting' : 'Copier la mise en forme';
+      const wantClear = english ? 'Clear the formatting' : 'Effacer la mise en forme';
+      if (copy.textContent.trim() !== wantCopy || clear.textContent.trim() !== wantClear) bad.push('textes ' + copy.textContent + ' / ' + clear.textContent);
+      if (copy.getAttribute('aria-checked') !== 'true' || clear.getAttribute('aria-checked') !== 'false' || FormatPainter.getChoice() !== 'copy') bad.push('départ ' + copy.getAttribute('aria-checked') + clear.getAttribute('aria-checked'));
+      const iconCopy = button().innerHTML;
+      const ariaCopy = button().getAttribute('aria-label');
+      // Une ligne coche sans prendre le focus (la sélection du texte reste) : le mousedown est annulé.
+      const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      clear.dispatchEvent(down);
+      if (!down.defaultPrevented) bad.push('la ligne prend le focus à la souris');
+      FormatPainter.arm(false);
+      clear.click();
+      await sleep(30);
+      if (FormatPainter.getChoice() !== 'clear' || clear.getAttribute('aria-checked') !== 'true' || copy.getAttribute('aria-checked') !== 'false') bad.push('clic : ' + FormatPainter.getChoice());
+      if (FormatPainter.isArmed()) bad.push('le pinceau est resté armé');
+      if (button().innerHTML === iconCopy || !button().querySelector('svg')) bad.push('l\'icône n\'a pas changé');
+      if (button().getAttribute('aria-label') === ariaCopy || !/^(Effacer|Clear)/.test(button().getAttribute('aria-label'))) bad.push('nom accessible : ' + button().getAttribute('aria-label'));
+      copy.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      if (FormatPainter.getChoice() !== 'copy' || button().innerHTML !== iconCopy || button().getAttribute('aria-label') !== ariaCopy) bad.push('Entrée sur « Copier » ne rend pas le rouleau');
+      clear.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+      if (FormatPainter.getChoice() !== 'clear') bad.push('Espace sur « Effacer »');
+      if (FormatPainter.choose('autre') !== false || FormatPainter.getChoice() !== 'clear') bad.push('un choix inconnu change quelque chose');
+      resetChoice();
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'fp_clear_button_with_the_clear_row_checked_removes_character_and_paragraph_formatting_in_one_undo_step',
+    description: 'Ligne « Effacer » cochée, un clic sur le bouton remet la sélection au naturel (gras, italique, souligné, barré, police, taille, couleur, surlignage partis ; un lien reste ; un titre centré pris en entier redevient un paragraphe sans alignement), en une seule étape d\'historique que Ctrl+Z rend ; sans « Effacer » cochée, le bouton copie toujours',
+    run: async (h) => {
+      await h.resetEditor();
+      resetChoice();
+      const bad = [];
+      await load('<h2 style="text-align: center">' + STYLED.replace('Modèle', 'Titre stylé') + '</h2><p>Un <a href="https://exemple.org"><strong>lien gras</strong></a> et ' + STYLED + ' dans le texte.</p>');
+      FormatPainter.choose('clear');
+      // Un mot, pas le paragraphe en entier : ses marques partent, le paragraphe garde son titre.
+      await selectText('Titre stylé');
+      const beforeTitle = marksNamed('Titre stylé');
+      button().click();
+      await sleep(60);
+      const afterTitle = marksNamed('Titre stylé');
+      const block = blockOf('Titre stylé');
+      if (!/bold/.test(beforeTitle) || afterTitle !== '') bad.push('marques ' + beforeTitle + ' -> ' + afterTitle);
+      if (block.type.name !== 'heading' && block.type.name !== 'paragraph') bad.push('bloc ' + block.type.name);
+      // Le paragraphe pris en entier (un triple-clic) : titre et alignement partent aussi.
+      await selectBlockOf('Titre stylé');
+      button().click();
+      await sleep(60);
+      const plain = blockOf('Titre stylé');
+      if (plain.type.name !== 'paragraph' || plain.attrs.textAlign) bad.push('paragraphe entier : ' + plain.type.name + ' ' + plain.attrs.textAlign);
+      // Le second paragraphe : le lien reste, sa mise en gras part ; le texte stylé est nu.
+      await selectBlockOf('et ');
+      const stepsBefore = editor().state.doc.toJSON();
+      button().click();
+      await sleep(60);
+      const link = marksNamed('lien gras');
+      if (!/link\{/.test(link) || /bold/.test(link)) bad.push('lien : ' + link);
+      if (marksNamed('Modèle') !== '') bad.push('texte stylé : ' + marksNamed('Modèle'));
+      // Une seule étape d'historique : un Ctrl+Z rend ce que le dernier clic a effacé.
+      editor().commands.undo();
+      await sleep(60);
+      if (JSON.stringify(editor().state.doc.toJSON()) !== JSON.stringify(stepsBefore)) bad.push('un Ctrl+Z ne rend pas tout');
+      // Sans « Effacer » cochée, le bouton copie : la mise en forme est gardée et le pinceau s'arme.
+      FormatPainter.choose('copy');
+      await selectText('Modèle');
+      button().click();
+      await sleep(30);
+      if (!FormatPainter.isArmed() || !FormatPainter.hasCopy()) bad.push('« Copier » n\'arme plus le pinceau');
+      finish();
+      resetChoice();
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'fp_clear_with_nothing_selected_changes_nothing_says_what_to_do_and_the_palette_command_clears_on_its_own',
+    description: 'Sans texte sélectionné (curseur seul), « Effacer » ne change rien et le coin d\'état dit « Sélectionnez le texte dont la mise en forme est à effacer. » ; la commande « Effacer la mise en forme » de la palette (Alt+/) existe, sans touche, et efface la sélection même quand « Copier » est la ligne cochée',
+    run: async (h) => {
+      await h.resetEditor();
+      resetChoice();
+      const bad = [];
+      const english = I18n.getLang() === 'en';
+      await load('<p>' + STYLED + ' puis du texte.</p>');
+      FormatPainter.choose('clear');
+      await caretIn('Modèle');
+      const docBefore = JSON.stringify(editor().state.doc.toJSON());
+      document.getElementById('status-msg').textContent = '';
+      button().click();
+      await sleep(60);
+      const want = english ? 'Select the text whose formatting is to be cleared.' : 'Sélectionnez le texte dont la mise en forme est à effacer.';
+      if (JSON.stringify(editor().state.doc.toJSON()) !== docBefore) bad.push('le document a changé sur un curseur seul');
+      if (statusText() !== want) bad.push('coin d\'état : ' + JSON.stringify(statusText()));
+      FormatPainter.choose('copy');
+      const action = Shortcuts.action('formatClear');
+      if (!action) bad.push('commande absente du registre');
+      else {
+        if (I18n.t(action.label) !== (english ? 'Clear the formatting' : 'Effacer la mise en forme')) bad.push('libellé ' + I18n.t(action.label));
+        if (Shortcuts.keyFor('formatClear')) bad.push('une touche par défaut : ' + Shortcuts.keyFor('formatClear'));
+        await selectText('Modèle');
+        action.run();
+        await sleep(60);
+        if (marksNamed('Modèle') !== '') bad.push('la palette n\'efface pas : ' + marksNamed('Modèle'));
+        if (FormatPainter.getChoice() !== 'copy') bad.push('la palette a changé la ligne cochée');
+      }
+      resetChoice();
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.formatPainter = cases;
 })();

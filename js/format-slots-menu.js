@@ -17,6 +17,7 @@ const FormatSlotsMenu = (function () {
   let group = null;
   let wired = false;
   let drawn = ''; // ce que le menu montre, pour ne le redessiner que s'il change
+  let fixedCount = 1; // l'intitulé et les deux lignes à cocher du pinceau (index.html) : ce que le dessin garde, tout ce qui suit est redessiné
 
   // Ce que le menu montre : la langue, les places des deux portées et le droit de peindre la sélection.
   function signature() {
@@ -56,7 +57,7 @@ const FormatSlotsMenu = (function () {
     return row;
   }
 
-  // Redessine le menu sous son intitulé (le nom du pinceau, dans le HTML, qui porte aussi sa touche). Le clavier garde sa place : le focus, s'il était sur une ligne (ou sur celle que `focusAt` désigne, quand le geste vient
+  // Redessine le menu sous son intitulé et les deux lignes à cocher qui le suivent (le nom du pinceau et « Copier / Effacer la mise en forme », dans le HTML ; l'intitulé porte aussi sa touche). Le clavier garde sa place : le focus, s'il était sur une ligne (ou sur celle que `focusAt` désigne, quand le geste vient
   // du clavier), passe à la ligne de la même place - une place qu'on vient de remplir ou de vider ne le laisse pas dans le vide. Le bouton qui portait le focus part avec l'ancien dessin, et un focus qui s'en va sans
   // destination referme le menu (js/editor-core.js : la sortie du groupe) : il passe donc d'abord au bouton du pinceau, qui reste, le temps du dessin - ce qui rouvre aussi le menu au clavier s'il s'était refermé.
   function render(focusAt) {
@@ -74,7 +75,7 @@ const FormatSlotsMenu = (function () {
       parts.push(heading);
       scope.slots.forEach((slot, index) => parts.push(rowOf(scope, index, slot, canApply)));
     });
-    while (flyout.children.length > 1) flyout.lastElementChild.remove();
+    while (flyout.children.length > fixedCount) flyout.lastElementChild.remove();
     flyout.append(...parts);
     drawn = signature();
     if (at && at.scope) {
@@ -146,6 +147,7 @@ const FormatSlotsMenu = (function () {
     group = flyout ? flyout.closest('.v2-hover-group') : null;
     if (!flyout || wired) return;
     wired = true;
+    fixedCount = flyout.children.length;
     // Un bouton du menu ne prend pas le focus à la souris : la sélection du texte, qu'il met en forme, reste celle de l'éditeur.
     flyout.addEventListener('mousedown', (event) => { if (event.target.closest && event.target.closest('button')) event.preventDefault(); });
     flyout.addEventListener('click', onClick);

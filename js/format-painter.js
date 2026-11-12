@@ -14,6 +14,10 @@
 //    peindre un mot ne recentre pas son paragraphe. Les puces, les tableaux et les images ne sont pas de la mise en forme de texte ; un paragraphe de
 //    légende garde son type.
 // Une application est une seule transaction : un seul Ctrl+Z la défait.
+// Le menu du pinceau a deux lignes à cocher en tête, comme le menu Mode lecture (js/clean-reading.js) : « Copier la mise en forme » (cochée au départ : le geste de toujours) et « Effacer la mise en forme ». Le
+// bouton fait ce que dit la ligne cochée ; cocher ne fait rien d'autre. « Effacer » remet la sélection au naturel, comme peindre un texte ordinaire : ni gras, italique, souligné, barré, exposant, indice, ni police, taille,
+// couleur ou surlignage, et pour les paragraphes pris en entier ni titre, alignement, interligne, espaces ou retraits (un lien, un commentaire, une marque de suivi, une puce, un tableau, une image : jamais touchés).
+// Le choix n'est pas gardé d'une ouverture à l'autre : la page repart sur « Copier ». La palette de commandes (Alt+/) a sa propre ligne « Effacer la mise en forme », qui efface sans passer par le choix.
 const FormatPainter = (function () {
   const BUTTON_ID = 'v2-btn-format-painter';
   const ARMED_CLASS = 'pp-format-painting'; // posée sur <html> tant que le pinceau attend : css/format-painter.css y met le curseur
@@ -22,6 +26,10 @@ const FormatPainter = (function () {
   const PARAGRAPH_TYPES = ['paragraph', 'heading'];
   const MULTI_CLICK_MS = 700; // un clic qui suit de moins que cela le double-clic qui vient de peindre un mot en est le troisième : le triple-clic
 
+  const CHOICES = ['copy', 'clear'];
+  const CHOICE_ROWS = '#v2-painter-flyout [data-painter-choice]';
+  let choice = 'copy'; // la ligne cochée du menu : ce que fait le bouton
+  let host = { status: () => {} }; // `status(texte, erreur)` : le coin d'état de la page (js/main.js)
   let editor = null;
   let button = null;
   let wired = false;
@@ -139,6 +147,39 @@ const FormatPainter = (function () {
     indentLeft: indentable ? settingOf(block, 'indentLeft') : null, indentFirst: indentable ? settingOf(block, 'indentFirst') : null,
   });
 
+  // Les lignes à cocher du menu, l'icône et le nom du bouton disent ce que fait le bouton : le rouleau pour copier, le « T » croisé pour effacer.
+  function syncChoice() {
+    document.querySelectorAll(CHOICE_ROWS).forEach(row => row.setAttribute('aria-checked', row.dataset.painterChoice === choice ? 'true' : 'false'));
+    if (!button) return;
+    const clearing = choice === 'clear';
+    button.classList.toggle('pp-painter-clear', clearing);
+    Dom.setMarkup(button, Icons.svg(clearing ? 'clearFormat' : 'formatPainter'));
+    button.setAttribute('aria-label', I18n.t(clearing ? 'fmt.clear.aria' : 'fmt.painter.aria'));
+  }
+  // Coche une ligne, sans rien faire d'autre ; un pinceau armé s'arrête (le bouton ne peint plus). Faux pour un choix inconnu.
+  function choose(value) {
+    if (CHOICES.indexOf(value) === -1) return false;
+    choice = value;
+    if (armed) disarm();
+    syncChoice();
+    return true;
+  }
+
+  // La forme d'un texte ordinaire : aucune marque, un paragraphe sans titre, sans alignement ni réglage « Paragraphe… ».
+  const plainSnapshot = () => ({
+    marks: [],
+    block: { type: 'paragraph', level: null, align: null, spacing: { lineHeight: null, spaceBefore: null, spaceAfter: null, indentLeft: null, indentFirst: null } },
+  });
+  // « Effacer la mise en forme » : pose la forme d'un texte ordinaire sur la sélection, en une transaction (un Ctrl+Z la rend). Faux quand le pinceau est grisé ; sans texte sélectionné, rien ne change et le
+  // coin d'état dit quoi faire.
+  function clearSelection() {
+    if (!isUsable()) return false;
+    if (armed) disarm();
+    if (paint(editor, plainSnapshot())) return true;
+    host.status(I18n.t('fmt.clear.needSelection'), false);
+    return false;
+  }
+
   function refresh() {
     document.documentElement.classList.toggle(ARMED_CLASS, armed);
     if (!button) return;
@@ -197,10 +238,12 @@ const FormatPainter = (function () {
   // Espace, la touche du pinceau) a un `detail` de 0 : il bascule comme un clic.
   function onButtonClick(event) {
     if (event.detail >= 2) return; // le second clic d'un double-clic : le `dblclick` qui suit s'en charge
+    if (choice === 'clear') { clearSelection(); return; }
     if (armed) disarm();
     else if (copy()) arm(false);
   }
   function onButtonDoubleClick() {
+    if (choice === 'clear') return; // le premier clic a déjà effacé : il n'y a rien à garder armé
     if (copy()) arm(true);
   }
 
@@ -252,6 +295,17 @@ const FormatPainter = (function () {
     wired = true;
     button.addEventListener('click', onButtonClick);
     button.addEventListener('dblclick', onButtonDoubleClick);
+    document.querySelectorAll(CHOICE_ROWS).forEach(row => {
+      // Une ligne de menu est un <span tabindex="0"> : la souris la focaliserait, ce qui ferait perdre sa sélection au texte à mettre en forme et laisserait le menu ouvert (:focus-within). Entrée et Espace font ce
+      // que fait le clic : cocher la ligne ; c'est le bouton du pinceau qui agit (même règle que le menu Mode lecture).
+      row.addEventListener('mousedown', event => event.preventDefault());
+      row.addEventListener('click', () => choose(row.dataset.painterChoice));
+      row.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        choose(row.dataset.painterChoice);
+      });
+    });
     document.addEventListener('mousedown', onMouseDown, true);
     document.addEventListener('mouseup', onMouseUp, true);
     document.addEventListener('keydown', onKeyDown);
@@ -261,10 +315,13 @@ const FormatPainter = (function () {
     const group = button.closest('.v2-hover-group');
     if (group) greyed.observe(group, { attributes: true, attributeFilter: ['class', 'hidden'] });
     refresh();
+    syncChoice();
   }
 
   return {
-    wire, copy, apply, arm, disarm, capture, paint, isUsable,
+    wire, copy, apply, arm, disarm, capture, paint, isUsable, clearSelection, choose,
+    getChoice: () => choice,
+    setHost: given => { host = Object.assign({ status: () => {} }, given); },
     isArmed: () => armed,
     isSticky: () => armed && sticky,
     hasCopy: () => !!snapshot,

@@ -56,6 +56,11 @@ const I18nTextsFormat = {
   // Pinceau de mise en forme (js/format-painter.js) : l'infobulle nomme le bouton, le nom accessible dit comment s'en servir.
   'fmt.painter.tip': { fr: 'Reproduire la mise en forme', en: 'Format painter' },
   'fmt.painter.aria': { fr: 'Reproduire la mise en forme : copie celle du texte sélectionné, puis la pose sur le texte qu\'on sélectionne ensuite (double-clic : plusieurs fois, Échap pour arrêter)', en: 'Format painter: copies the formatting of the selected text, then applies it to the text you select next (double-click to keep painting, Esc to stop)' },
+  // Le menu du pinceau a deux lignes à cocher en tête (js/format-painter.js) : le bouton copie la mise en forme (cochée au départ) ou l'efface ; la palette de commandes a la même ligne « Effacer ».
+  'fmt.painter.copy': { fr: 'Copier la mise en forme', en: 'Copy the formatting' },
+  'fmt.clear.row': { fr: 'Effacer la mise en forme', en: 'Clear the formatting' },
+  'fmt.clear.aria': { fr: 'Effacer la mise en forme : remet le texte sélectionné au naturel (gras, couleurs, taille, police, alignement…)', en: 'Clear the formatting: puts the selected text back to plain (bold, colors, size, font, alignment…)' },
+  'fmt.clear.needSelection': { fr: 'Sélectionnez le texte dont la mise en forme est à effacer.', en: 'Select the text whose formatting is to be cleared.' },
   // Mises en forme gardées (js/format-slots.js, menu au survol du pinceau, js/format-slots-menu.js) : trois dans le modèle et trois partagées par le document, comme les couleurs des menus de couleur.
   'fmtSlot.scope.model': { fr: 'Mises en forme du modèle', en: 'Template formats' },
   'fmtSlot.scope.document': { fr: 'Mises en forme partagées', en: 'Shared formats' },

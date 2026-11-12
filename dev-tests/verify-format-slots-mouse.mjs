@@ -290,6 +290,14 @@ async function pass(lang, theme, tag) {
     await sleep(300);
     const onButton = await where();
     check(`${tag} : le focus sur le bouton du pinceau ouvre le menu`, onButton.at === 'v2-btn-format-painter' && onButton.shown && onButton.expanded === 'true', onButton);
+    // Les deux lignes à cocher du menu (« Copier » puis « Effacer la mise en forme », index.html) viennent d'abord au clavier, comme celles du menu Mode lecture : deux Tab, puis la première place.
+    await page.keyboard.press('Tab');
+    await sleep(200);
+    const copyRow = await where();
+    await page.keyboard.press('Tab');
+    await sleep(200);
+    const clearRow = await where();
+    check(`${tag} : Tab entre dans le menu par ses deux lignes à cocher, « Copier » puis « Effacer la mise en forme »`, copyRow.at === 'v2-btn-painter-copy' && clearRow.at === 'v2-btn-painter-clear' && clearRow.shown, { copyRow, clearRow });
     await page.keyboard.press('Tab');
     await sleep(200);
     const firstRow = await where();
@@ -329,7 +337,9 @@ async function pass(lang, theme, tag) {
     await selectParagraph(page, 'Cible une');
     await page.focus('#v2-btn-format-painter');
     await sleep(300);
-    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab'); // « Copier la mise en forme »
+    await page.keyboard.press('Tab'); // « Effacer la mise en forme »
+    await page.keyboard.press('Tab'); // la première place
     await sleep(200);
     const applyRow = await where();
     await page.keyboard.press('Enter');

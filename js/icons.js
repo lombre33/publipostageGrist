@@ -140,6 +140,8 @@ const Icons = (function () {
       // Pinceau de mise en forme (js/format-painter.js) : un rouleau de peintre (le rouleau, son bras, son manche). Ni le feutre du surlignage ni le
       // seau de la couleur de fond : une icône = une fonction.
       formatPainter: '<rect x="3" y="3" width="14" height="6" rx="1.5"/><path d="M17 6h2.5A1.5 1.5 0 0 1 21 7.5V11a1.5 1.5 0 0 1-1.5 1.5H12V15"/><rect x="10" y="15" width="4" height="6" rx="1"/>',
+      // Effacer la mise en forme (js/format-painter.js, la ligne « Effacer » du menu du pinceau : le bouton la porte quand elle est cochée) : un T barré d'une petite croix. Une icône = une fonction : ni le rouleau du pinceau, ni la gomme d'une suppression.
+      clearFormat: '<path d="M4 7V4h12v3M10 4v11M7 15h6"/><path d="M15.5 14.5l5 5M20.5 14.5l-5 5"/>',
       fill: '<path d="M13 2 4 11a4 4 0 0 0 0 5.5A4 4 0 0 0 9.5 21a4 4 0 0 0 5.5-5.5z"/><path d="M4 15h11"/>',
       caretDown: '<path d="M6 9l6 6 6-6"/>',
       noColor: '<circle cx="12" cy="12" r="8.5"/><path d="M5.5 5.5l13 13"/>',

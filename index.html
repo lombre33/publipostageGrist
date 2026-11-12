@@ -319,7 +319,7 @@
 <link rel="preload" as="script" href="js/reader-guide.js?v=0.7">
 <link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.4">
 <link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.14">
-<link rel="preload" as="script" href="js/i18n-texts-format.js?v=0.2">
+<link rel="preload" as="script" href="js/i18n-texts-format.js?v=0.3">
 <link rel="preload" as="script" href="js/i18n-texts-blocks.js?v=0.3">
 <link rel="preload" as="script" href="js/i18n-texts-editor.js?v=0.1">
 <link rel="preload" as="script" href="js/i18n-texts-review.js?v=0.2">
@@ -330,7 +330,7 @@
 <link rel="preload" as="script" href="js/i18n-texts-variables.js?v=0.5">
 <link rel="preload" as="script" href="js/i18n-texts-eml.js?v=0.1">
 <link rel="preload" as="script" href="js/i18n.js?v=0.378">
-<link rel="preload" as="script" href="js/shortcuts.js?v=0.39">
+<link rel="preload" as="script" href="js/shortcuts.js?v=0.40">
 <link rel="preload" as="script" href="js/page-layout.js?v=0.30">
 <link rel="preload" as="script" href="js/page-sections.js?v=0.3">
 <link rel="preload" as="script" href="js/color-math.js?v=0.1">
@@ -351,7 +351,7 @@
 <link rel="preload" as="script" href="js/toolbar-gap.js?v=0.5">
 <link rel="preload" as="script" href="js/search-select.js?v=0.23">
 <link rel="preload" as="script" href="js/variables.js?v=0.97">
-<link rel="preload" as="script" href="js/icons.js?v=0.90">
+<link rel="preload" as="script" href="js/icons.js?v=0.91">
 <link rel="preload" as="script" href="js/editor-core.js?v=0.44">
 <link rel="preload" as="script" href="js/color-palette.js?v=0.5">
 <link rel="preload" as="script" href="js/header-footer-preview.js?v=1.67">
@@ -359,7 +359,7 @@
 <link rel="preload" as="script" href="js/editor-nodes.js?v=1.82">
 <link rel="preload" as="script" href="js/floating-toolbars.js?v=0.94">
 <link rel="preload" as="script" href="js/main-toolbar.js?v=1.62">
-<link rel="preload" as="script" href="js/format-painter.js?v=0.7">
+<link rel="preload" as="script" href="js/format-painter.js?v=0.8">
 <link rel="preload" as="script" href="js/script-marks.js?v=0.1">
 <link rel="preload" as="script" href="js/emoji-paste.js?v=0.1">
 <link rel="preload" as="script" href="js/emoji-chip.js?v=0.1">
@@ -500,7 +500,7 @@
 <link rel="preload" as="script" href="js/pdf-delivery.js?v=0.5">
 <link rel="preload" as="script" href="js/expansion-history.js?v=0.1">
 <link rel="preload" as="script" href="js/format-slots.js?v=0.1">
-<link rel="preload" as="script" href="js/format-slots-menu.js?v=0.1">
+<link rel="preload" as="script" href="js/format-slots-menu.js?v=0.2">
 <link rel="preload" as="script" href="js/access-rights.js?v=0.13">
 <link rel="preload" as="script" href="js/save-reminder.js?v=0.4">
 <link rel="preload" as="script" href="js/schema-renames.js?v=0.23">
@@ -539,7 +539,7 @@
 <link rel="preload" as="script" href="js/main-reader.js?v=0.1">
 <link rel="preload" as="script" href="js/main-live.js?v=0.3">
 <link rel="preload" as="script" href="js/main-slides.js?v=0.2">
-<link rel="preload" as="script" href="js/main.js?v=0.248">
+<link rel="preload" as="script" href="js/main.js?v=0.249">
 <!-- précharge des scripts : fin -->
 </head>
 <body>
@@ -880,11 +880,13 @@
           <span class="v2-color-split-caret" id="v2-color-highlight-caret"></span>
         </button>
       </span>
-      <!-- Pinceau de mise en forme : un clic copie la mise en forme du texte, son menu au survol garde trois mises en forme du modèle et trois partagées par le document (js/format-slots-menu.js remplit le menu sous son intitulé). Comme Tableau, Image et Enregistrer, le bouton n'a pas de data-tip : l'info-bulle se retirerait dès l'ouverture du menu, l'intitulé du menu dit le bouton et sa touche (js/shortcuts.js). Le groupe est marqué data-close-on-click, comme Enregistrer : le clic sur le bouton est le geste (il copie et arme le pinceau), le menu resté ouvert sous la souris recouvrirait le texte qu'on vise ensuite. -->
+      <!-- Pinceau de mise en forme : un clic copie la mise en forme du texte (ou l'efface, quand la ligne « Effacer la mise en forme » de son menu est cochée), son menu au survol garde trois mises en forme du modèle et trois partagées par le document (js/format-slots-menu.js remplit le menu sous son intitulé). Comme Tableau, Image et Enregistrer, le bouton n'a pas de data-tip : l'info-bulle se retirerait dès l'ouverture du menu, l'intitulé du menu dit le bouton et sa touche (js/shortcuts.js). Le groupe est marqué data-close-on-click, comme Enregistrer : le clic sur le bouton est le geste (il copie et arme le pinceau), le menu resté ouvert sous la souris recouvrirait le texte qu'on vise ensuite. -->
       <span class="v2-hover-group" id="v2-painter-group" data-close-on-click>
         <button type="button" id="v2-btn-format-painter" aria-label="Reproduire la mise en forme : copie celle du texte sélectionné, puis la pose sur le texte qu'on sélectionne ensuite (double-clic : plusieurs fois, Échap pour arrêter)" aria-pressed="false" data-i18n-aria="fmt.painter.aria"></button>
         <span class="v2-hover-flyout v2-hover-flyout-v v2-hover-flyout-scrollable" id="v2-painter-flyout">
           <span class="v2-hover-flyout-label" data-i18n="fmt.painter.tip">Reproduire la mise en forme</span>
+          <span class="v2-hover-row v2-hover-row-check-start" id="v2-btn-painter-copy" role="menuitemradio" aria-checked="true" tabindex="0" data-painter-choice="copy" data-i18n="fmt.painter.copy">Copier la mise en forme</span>
+          <span class="v2-hover-row v2-hover-row-check-start" id="v2-btn-painter-clear" role="menuitemradio" aria-checked="false" tabindex="0" data-painter-choice="clear" data-i18n="fmt.clear.row">Effacer la mise en forme</span>
         </span>
       </span>
       <span class="v2-sep"></span>
@@ -1346,7 +1348,7 @@
 <script src="js/reader-guide.js?v=0.7"></script>
 <script src="js/i18n-texts-templates.js?v=0.4"></script>
 <script src="js/i18n-texts-export.js?v=0.14"></script>
-<script src="js/i18n-texts-format.js?v=0.2"></script>
+<script src="js/i18n-texts-format.js?v=0.3"></script>
 <script src="js/i18n-texts-blocks.js?v=0.3"></script>
 <script src="js/i18n-texts-editor.js?v=0.1"></script>
 <script src="js/i18n-texts-review.js?v=0.2"></script>
@@ -1357,7 +1359,7 @@
 <script src="js/i18n-texts-variables.js?v=0.5"></script>
 <script src="js/i18n-texts-eml.js?v=0.1"></script>
 <script src="js/i18n.js?v=0.378"></script>
-<script src="js/shortcuts.js?v=0.39"></script>
+<script src="js/shortcuts.js?v=0.40"></script>
 <script src="js/page-layout.js?v=0.30"></script>
 <script src="js/page-sections.js?v=0.3"></script>
 <script src="js/color-math.js?v=0.1"></script>
@@ -1378,7 +1380,7 @@
 <script src="js/toolbar-gap.js?v=0.5"></script>
 <script src="js/search-select.js?v=0.23"></script>
 <script src="js/variables.js?v=0.97"></script>
-<script src="js/icons.js?v=0.90"></script>
+<script src="js/icons.js?v=0.91"></script>
 <script src="js/editor-core.js?v=0.44"></script>
 <script src="js/color-palette.js?v=0.5"></script>
 <script src="js/header-footer-preview.js?v=1.67"></script>
@@ -1386,7 +1388,7 @@
 <script src="js/editor-nodes.js?v=1.82"></script>
 <script src="js/floating-toolbars.js?v=0.94"></script>
 <script src="js/main-toolbar.js?v=1.62"></script>
-<script src="js/format-painter.js?v=0.7"></script>
+<script src="js/format-painter.js?v=0.8"></script>
 <script src="js/script-marks.js?v=0.1"></script>
 <script src="js/emoji-paste.js?v=0.1"></script>
 <script src="js/emoji-chip.js?v=0.1"></script>
@@ -1546,7 +1548,7 @@
 <script src="js/pdf-delivery.js?v=0.5"></script>
 <script src="js/expansion-history.js?v=0.1"></script>
 <script src="js/format-slots.js?v=0.1"></script>
-<script src="js/format-slots-menu.js?v=0.1"></script>
+<script src="js/format-slots-menu.js?v=0.2"></script>
 <script src="js/access-rights.js?v=0.13"></script>
 <script src="js/save-reminder.js?v=0.4"></script>
 <script src="js/schema-renames.js?v=0.23"></script>
@@ -1585,6 +1587,6 @@
 <script src="js/main-reader.js?v=0.1"></script>
 <script src="js/main-live.js?v=0.3"></script>
 <script src="js/main-slides.js?v=0.2"></script>
-<script src="js/main.js?v=0.248"></script>
+<script src="js/main.js?v=0.249"></script>
 </body>
 </html>

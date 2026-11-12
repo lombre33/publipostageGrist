@@ -331,6 +331,8 @@ const Shortcuts = (function () {
       // armé. « Appliquer » pose ce qui a été copié sur la sélection du moment, faite au clavier ou à la souris ; sans rien de copié, ni sélection de
       // texte, elle ne fait rien. Le bouton ouvre un menu au survol (les mises en forme gardées) : comme Tableau et Image, c'est l'intitulé du menu qui dit le bouton et sa touche.
       { id: 'formatPainter', group: 'format', label: 'fmt.painter.tip', key: 'Alt+Shift+c', scope: 'editor', hint: '#v2-painter-flyout .v2-hover-flyout-label', aria: tip('v2-btn-format-painter'), run: click('v2-btn-format-painter') },
+      // « Effacer la mise en forme » : sans touche (Ctrl+Espace de Word se tape mal sur un clavier AZERTY), sans bouton à elle (c'est une ligne du menu du pinceau) : la palette de commandes (Alt+/) la propose et elle efface la sélection sans passer par la ligne cochée.
+      { id: 'formatClear', group: 'format', label: 'fmt.clear.row', key: '', scope: 'editor', run: () => typeof FormatPainter !== 'undefined' && FormatPainter.clearSelection() },
       { id: 'formatPaste', group: 'format', label: 'shortcuts.action.formatPaste', key: 'Alt+Shift+v', scope: 'editor', run: () => typeof FormatPainter !== 'undefined' && FormatPainter.apply() },
       { id: 'heading1', group: 'format', label: 'heading.level1', key: 'Alt+Shift+1', aliases: ['Mod+Alt+1'], scope: 'editor', hint: '#v2-heading-flyout .v2-hover-row[data-level="1"]', run: headingRow(1) },
       { id: 'heading2', group: 'format', label: 'heading.level2', key: 'Alt+Shift+2', aliases: ['Mod+Alt+2'], scope: 'editor', hint: '#v2-heading-flyout .v2-hover-row[data-level="2"]', run: headingRow(2) },

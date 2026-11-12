@@ -242,7 +242,7 @@
       // Rien à presser dans l'état de départ : pas de modèle à marquer par défaut, ni de modifications suivies à accepter ou refuser, ni de mise en forme copiée à appliquer, ni d'image sélectionnée pour son texte alternatif (sa touche a son propre test, groupe altText) (le clic du pinceau est
       // avalé ici ; sa touche d'application a son propre test, groupe formatPainter).
       // Ni de bulle sélectionnée pour « Voir la valeur de la variable » (js/variable-tip.js : sa ligne a son propre test, groupe varValueTip, qui la lance bulle sélectionnée).
-      const expectedNotRun = ['acceptAll', 'rejectAll', 'setDefault', 'formatPaste', 'altText', 'variableValue'].sort();
+      const expectedNotRun = ['acceptAll', 'rejectAll', 'setDefault', 'formatPaste', 'formatClear', 'altText', 'variableValue'].sort();
       const unexpected = notRun.filter(id => expectedNotRun.indexOf(id) === -1);
       const groupsWithoutAction = Shortcuts.GROUPS.filter(g => !Shortcuts.ACTIONS.some(a => a.group === g));
       const count = Shortcuts.ACTIONS.length;
