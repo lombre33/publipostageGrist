@@ -48,3 +48,7 @@
    qu'un seul `.pp-find-match`. */
 .tiptap :is(.var-badge, .calc-badge).pp-find-match.pp-find-match { background: #ffe58f; color: inherit; border-color: #8a4b00; }
 .tiptap :is(.var-badge, .calc-badge).pp-find-match.pp-find-match.pp-find-current { background: #ffb347; box-shadow: 0 0 0 1.5px #8a4b00; }
+/* Une diapositive posée en un bloc, trouvée par son texte (une image : extensions/diapositives/slide-raster.js) : un cadre jaune pâle autour de toute l'image, orange cerclé de brun pour la courante
+   (le cerclage la distingue sans la couleur seule). Un fond n'y verrait rien : l'image le couvre. */
+.tiptap .editor-image-view.pp-find-match { background: transparent; outline: 4px solid #ffe58f; outline-offset: 0; border-radius: 2px; }
+.tiptap .editor-image-view.pp-find-match.pp-find-current { background: transparent; outline: 3px solid #ffb347; outline-offset: 1.5px; box-shadow: 0 0 0 1.5px #8a4b00; }

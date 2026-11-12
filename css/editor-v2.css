@@ -291,6 +291,8 @@
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4'%3E%3Cpath d='M12 3 2 20h20Z'/%3E%3Cpath d='M12 10v4M12 17h.01'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4'%3E%3Cpath d='M12 3 2 20h20Z'/%3E%3Cpath d='M12 10v4M12 17h.01'/%3E%3C/svg%3E");
 }
+/* Une diapositive posée en bloc : sa page blanche, sur la page blanche du document, garde un liseré de la couleur des bordures (l'éditeur seulement : l'image enregistrée est celle de la diapositive). */
+.tiptap .editor-image-view.editor-image-slide > img.editor-image { box-shadow: 0 0 0 1px var(--border-strong); }
 .tiptap .editor-image-handle, .tiptap .editor-image-move-handle { display: none; position: absolute; }
 .tiptap .editor-image-view.editor-image-selected .editor-image-handle { display: block; width: 10px; height: 10px; background: #fff; border: 1.5px solid var(--accent, #2f6fed); border-radius: 50%; z-index: 10; }
 .tiptap .editor-image-handle-nw { top: -5px; left: -5px; cursor: nwse-resize; }

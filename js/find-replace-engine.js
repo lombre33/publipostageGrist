@@ -143,15 +143,22 @@ const FindReplaceEngine = (function () {
     return hit;
   }
 
-  // Les bulles du bloc `block` (à la position `blockPos`) qui contiennent la requête, dans l'ordre.
+  // Les diapositives posées en un bloc (une image qui porte son texte, `slideText` : extensions/diapositives/slide-raster.js). Comme une bulle : UN résultat par diapositive, de la taille de l'image,
+  // quand son texte contient la requête ; « Remplacer » la laisse telle quelle (le texte d'une image ne se réécrit pas ici).
+  const SLIDE_IMAGES = new WeakSet();
+  const isSlideImageNode = node => node.type.name === 'editorImage' && !!node.attrs.slideText;
+  const isSlideImage = match => SLIDE_IMAGES.has(match);
+
+  // Les bulles et les diapositives en bloc du bloc `block` (à la position `blockPos`) qui contiennent la requête, dans l'ordre.
   function bubbleMatches(block, blockPos, compiled, opts) {
     const found = [];
     block.forEach((child, offset) => {
-      if (child.isText || !isBubbleNode(child) || child.marks.some(isDeletion)) return;
-      if (!bubbleParts(child).some(part => hasMatch(compiled, part.text, opts))) return;
+      if (child.isText || child.marks.some(isDeletion)) return;
+      const slide = isSlideImageNode(child);
+      if (slide ? !hasMatch(compiled, child.attrs.slideText, opts) : (!isBubbleNode(child) || !bubbleParts(child).some(part => hasMatch(compiled, part.text, opts)))) return;
       const at = blockPos + 1 + offset;
       const match = { from: at, to: at + child.nodeSize };
-      BUBBLES.add(match);
+      (slide ? SLIDE_IMAGES : BUBBLES).add(match);
       found.push(match);
     });
     return found;
@@ -252,5 +259,5 @@ const FindReplaceEngine = (function () {
     return changed ? { attrs } : { reason: tooLong ? 'tooLong' : (tooLongOtherwise ? 'tooLongOtherwise' : 'name') };
   }
 
-  return { findMatches, compile, expandReplacement, isBubble, replaceInBubble, escapeRegex, OBJECT };
+  return { findMatches, compile, expandReplacement, isBubble, isSlideImage, replaceInBubble, escapeRegex, OBJECT };
 })();

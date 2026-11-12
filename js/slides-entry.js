@@ -348,6 +348,17 @@ const SlidesEntry = (function () {
   // Posé par l'extension à son chargement (extensions/diapositives/slide-import.js) : { open(byKeyboard), close(), isOpen(), syncScreen(shown), keepsFormat() } ; le volet des diapositives
   // d'une présentation, ouvert depuis un document.
   function registerTextImport(next) { textImport = next; }
+  // La photo d'une diapositive (extensions/diapositives/slide-raster.js, posée par le volet une fois chargé : registerBlockRaster) : `blockSnapshot(html, tpl)` dessine le HTML d'une diapositive de la
+  // présentation `tpl` à la page de celle-ci, et rend { src, width, height, text, words } (null quand l'extension est éteinte, ne se charge pas, ou que le dessin échoue). Le socle (js/slide-copies.js) s'en
+  // sert pour mettre à jour une diapositive posée en bloc et liée à sa source.
+  let blockRaster = null;
+  function registerBlockRaster(next) { blockRaster = next; }
+  async function blockSnapshot(html, tpl) {
+    if (!isAvailable()) return null;
+    try { await Extensions.ensure(ID); } catch (e) { return null; }
+    if (!blockRaster) return null;
+    try { return await blockRaster(html, tpl); } catch (e) { console.warn('[SlidesEntry] photo de diapositive impossible', e); return null; }
+  }
   // La ligne « Diapositive d'une présentation… » du menu : sans l'extension, elle explique ; avec elle, le code se charge d'abord (un échec le dit, le clic suivant réessaie), puis le volet
   // s'ouvre. `byKeyboard` : le clavier va dans le volet. Vrai quand le volet est ouvert. Rien ne se passe hors de l'Édition d'un document (la Lecture, un modèle en lecture seule, une
   // présentation, un e-mail) : la ligne y est grisée, et un clic qui l'atteindrait quand même n'ouvre rien.
@@ -399,6 +410,6 @@ const SlidesEntry = (function () {
   return {
     ID, TYPE, FEATURE_KEY, SLIDE_BREAK_ATTR, setHooks, setContext, isAvailable, isPresentation, reason, startNew, ensureFor, unavailableReason, pageFor, pageSizeOf, onChange: Extensions.onChange,
     changed: sync, register, explainOff, relayout, status, showsEveryPage, presentationShown, seamLabel, outputHtml, TEXT_SIZE, HEADING_SIZES, createTextExtension, textMarks,
-    registerTextImport, openTextImport, pastedInDocument, registerTheme, openTheme, shownSlide, showSlide,
+    registerTextImport, registerBlockRaster, blockSnapshot, openTextImport, pastedInDocument, registerTheme, openTheme, shownSlide, showSlide,
   };
 })();

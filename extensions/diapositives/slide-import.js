@@ -56,6 +56,8 @@ const SlideImport = (function () {
   let keepLinked = false;          // ce que la personne a coché pour une diapositive, le temps de la page
   let linkText = false;            // en texte : ce qu'elle a coché (« Garder liée »), le temps du volet : un texte lié ne s'écrit plus, la case ne reste pas cochée d'une ouverture à l'autre
   let keepFormat = false;          // en texte : ce qu'elle a coché (« Garder la mise en forme d'origine »), le temps du volet
+  let asBlock = true;              // en texte : « En bloc » (la diapositive arrive en une image, avec son décor) ou « En texte » ; gardé le temps de la page, « En bloc » d'abord
+  let kind = null;                 // le choix « En bloc » / « En texte » : { row, block, text }
   let titleLabel = null;           // le titre du volet, libellé du choix de la source
   let mode = 'slides';             // 'slides' : le volet « Importer » de la bande, dans une présentation ; 'text' : le volet d'un document, qui insère une diapositive en texte
   const remembered = { slides: null, text: null };   // la source de chacun des deux usages du volet, que `sourceId` porte quand il est ouvert
@@ -105,7 +107,10 @@ const SlideImport = (function () {
     if (!inText() && !inPages()) return null;
     const tpl = sourceId == null ? null : Templates.byId(sourceId);
     const stored = inPages() ? Object.assign({}, tpl && tpl.marginsMm) : SlidesEntry.pageFor(SlidesEntry.TYPE, tpl ? tpl.marginsMm : null);
-    const orientation = inPages() ? senseAt(stored.orientation, index) : stored.orientation;
+    return pageFromStored(stored, inPages() ? senseAt(stored.orientation, index) : stored.orientation);
+  }
+  // La page (taille et marges, en pixels CSS) que dit la colonne Margins d'un modèle (`stored`), dans le sens `orientation`.
+  function pageFromStored(stored, orientation) {
     const size = PageLayout.pageSizeMmFor(orientation, stored.format || PageLayout.DEFAULT_FORMAT);
     const px = (mm, fallback) => (Number.isFinite(mm) ? mm : fallback) * PageLayout.MM_TO_PX;
     const side = name => px(stored[name], PageLayout.DEFAULT_MARGIN_MM);
@@ -144,6 +149,26 @@ const SlideImport = (function () {
     field.appendChild(select);
     empty = el('p', 'pp-slide-import-empty', I18n.t('slides.import.noOther'));
     empty.hidden = true;
+    // « En bloc » / « En texte » (un document seulement) : deux boutons radio, une flèche passe de l'un à l'autre.
+    const kindRow = el('div', 'pp-slide-import-kind');
+    kindRow.setAttribute('role', 'radiogroup');
+    kindRow.setAttribute('aria-label', I18n.t('slides.block.kindLabel'));
+    kindRow.hidden = true;
+    const kindButton = (value, labelKey, tipKey) => {
+      const button = Dom.button('pp-slide-import-kind-btn');
+      button.setAttribute('role', 'radio');
+      button.textContent = I18n.t(labelKey);
+      button.title = I18n.t(tipKey);
+      button.addEventListener('click', () => chooseKind(value, false));
+      button.addEventListener('keydown', (event) => {
+        if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+        event.preventDefault();
+        chooseKind(!value, true);
+      });
+      return button;
+    };
+    kind = { row: kindRow, block: kindButton(true, 'slides.block.kindBlock', 'slides.block.kindBlockTip'), text: kindButton(false, 'slides.block.kindText', 'slides.block.kindTextTip') };
+    kindRow.append(kind.block, kind.text);
     const row = el('label', 'pp-slide-import-keep');
     row.hidden = true;
     const box = el('input');
@@ -168,7 +193,7 @@ const SlideImport = (function () {
     list = el('div', 'pp-slide-import-list');
     list.setAttribute('role', 'listbox');
     list.setAttribute('aria-describedby', HINT_ID);
-    panel.append(head, field, empty, keep.row, format.row, hint, list);
+    panel.append(head, field, empty, kind.row, keep.row, format.row, hint, list);
     document.body.appendChild(panel);
     // La liste avec recherche ; sans elle (une erreur), le <select> natif reste et sert de même.
     try { SearchSelect.attachTemplates(select); } catch (e) { console.warn('[SlideImport] liste avec recherche indisponible, liste native gardée', e); }
@@ -374,8 +399,8 @@ const SlideImport = (function () {
   }
   // La miniature de `html` (une diapositive, déjà sans ce qui n'appartient qu'à sa présentation) dans `host`, large de `width` pixels, dessinée comme celles du volet : la fenêtre
   // « Demander » des diapositives liées (slide-links-ui.js) y montre ses deux versions. `host` doit être affiché : la place des images en calque se lit sur la page.
-  function paint(host, html, width) {
-    const g = geometry(width);
+  function paint(host, html, width, geom) {
+    const g = geom || geometry(width);
     const thumb = el('div', 'pp-slide-thumb');
     thumb.setAttribute('aria-hidden', 'true');
     thumb.style.width = width + 'px';
@@ -460,6 +485,7 @@ const SlideImport = (function () {
     keep.row.classList.toggle('pp-slide-import-keep-off', !!blocked);
     keep.row.title = blocked || I18n.t('slides.import.keepLinkedTip');
     format.row.hidden = true;
+    kind.row.hidden = true;
   }
   // En texte : l'indication dit où la diapositive arrive, ou pourquoi le volet est grisé ; les cases « Garder liée » (grisée avec sa raison quand un lien ne peut pas se poser : la case s'y montre
   // décochée) et « Garder la mise en forme d'origine » se montrent avec la source.
@@ -468,9 +494,10 @@ const SlideImport = (function () {
     const reason = SlideLinks.blockedReason();
     const blocked = off ? SlidesEntry.reason() : (reason ? I18n.t(reason) : '');
     const linked = linkText && !blocked;
-    const hintKey = linked ? (keepFormat ? 'slides.copy.hintLinkedKeep' : 'slides.copy.hintLinked') : (keepFormat ? 'slides.text.hintKeep' : 'slides.text.hint');
+    const hintKey = asBlock ? (linked ? 'slides.block.hintLinked' : 'slides.block.hint')
+      : linked ? (keepFormat ? 'slides.copy.hintLinkedKeep' : 'slides.copy.hintLinked') : (keepFormat ? 'slides.text.hintKeep' : 'slides.text.hint');
     const text = !source ? '' : off ? SlidesEntry.reason() : I18n.t(hintKey);
-    const state = 'text|' + text + '|' + off + '|' + blocked + '|' + linkText + '|' + keepFormat;
+    const state = 'text|' + text + '|' + off + '|' + blocked + '|' + linkText + '|' + keepFormat + '|' + asBlock;
     if (state === said) return;
     said = state;
     hint.textContent = text;
@@ -480,12 +507,26 @@ const SlideImport = (function () {
     keep.box.checked = linked;
     keep.box.disabled = !!blocked;
     keep.row.classList.toggle('pp-slide-import-keep-off', !!blocked);
-    keep.row.title = blocked || I18n.t('slides.copy.keepLinkedTip');
-    format.row.hidden = !source;
+    keep.row.title = blocked || I18n.t(asBlock ? 'slides.block.keepLinkedTip' : 'slides.copy.keepLinkedTip');
+    kind.row.hidden = !source;
+    kind.block.setAttribute('aria-checked', asBlock ? 'true' : 'false');
+    kind.text.setAttribute('aria-checked', asBlock ? 'false' : 'true');
+    kind.block.tabIndex = asBlock ? 0 : -1;
+    kind.text.tabIndex = asBlock ? -1 : 0;
+    kind.row.classList.toggle('pp-slide-import-kind-off', off);
+    // La mise en forme d'origine ne vaut que pour le texte : une diapositive en bloc a toujours la sienne.
+    format.row.hidden = !source || asBlock;
     format.box.checked = keepFormat;
     format.box.disabled = off;
     format.row.classList.toggle('pp-slide-import-keep-off', off);
     format.row.title = off ? SlidesEntry.reason() : I18n.t('slides.text.keepFormatTip');
+  }
+  // « En bloc » ou « En texte » : le choix se garde le temps de la page ; `focus` : le clavier suit le bouton choisi.
+  function chooseKind(block, focus) {
+    asBlock = !!block;
+    said = null;
+    syncHint();
+    if (focus) (asBlock ? kind.block : kind.text).focus();
   }
   // Une page de document : l'indication dit où les diapositives arrivent, ou pourquoi le volet est grisé ; les cases « Garder liée » (grisée avec sa raison quand un lien ne peut pas se poser : la case s'y montre
   // décochée) et « Garder la mise en forme d'origine » se montrent avec la source.
@@ -507,6 +548,7 @@ const SlideImport = (function () {
     keep.box.disabled = !!blocked;
     keep.row.classList.toggle('pp-slide-import-keep-off', !!blocked);
     keep.row.title = blocked || I18n.t('slides.page.keepLinkedTip');
+    kind.row.hidden = true;
     format.row.hidden = !source;
     format.box.checked = keepFormat;
     format.box.disabled = off;
@@ -530,7 +572,11 @@ const SlideImport = (function () {
   function importSlide(index) {
     if (!source || !source.slides[index] || linking) return;
     if (isOff()) { SlidesEntry.explainOff(); return; }
-    if (inText()) { if (linkText && !SlideLinks.blockedReason()) insertLinkedText(index); else insertText(index); return; }
+    if (inText()) {
+      const linked = linkText && !SlideLinks.blockedReason();
+      if (asBlock) { if (linked) insertLinkedBlock(index); else insertBlock(index); } else if (linked) insertLinkedText(index); else insertText(index);
+      return;
+    }
     if (inPages()) { if (keepLinked && !SlideLinks.blockedReason()) importLinkedPage(index); else importPage(index); return; }
     if (keepLinked && !SlideLinks.blockedReason()) { importLinked(index); return; }
     const markup = cleanCopy(index).innerHTML;
@@ -594,6 +640,94 @@ const SlideImport = (function () {
       SlidesEntry.status(dropped ? said + ' ' + dropped : said);
     } catch (error) {
       if (!error || !error.reason) console.warn('[SlideImport] copie liée en échec', error);
+      SlidesEntry.status(I18n.t((error && error.reason) || 'slides.link.failed', { name }), true);
+      if (error && (error.reason === 'slides.link.changed' || error.reason === 'slides.link.gone') && open) reload();
+    } finally {
+      linking = false;
+    }
+  }
+  // « En bloc » (demande du 12/11, carte « Un bloc comme une image ») : la diapositive `index` arrive dans le document en UNE image, dessinée comme la miniature (son décor, son logo, son numéro, ses
+  // tableaux), large comme le texte, qu'on sélectionne, redimensionne et supprime d'un geste ; l'image garde le texte de la diapositive (Ctrl+F, texte alternatif). Le dessin est asynchrone (le
+  // navigateur peint la page dans un SVG, puis un canevas : extensions/diapositives/slide-raster.js) ; pendant ce temps, les clics suivants attendent (`linking`), et rien ne s'insère si le document
+  // ou la source a changé entre-temps. La largeur est celle du texte du document, 16:9 par la source : la personne la règle ensuite aux poignées. Un seul pas d'annulation.
+  // La photo de `html` (une diapositive, sans repère) à la page de la présentation `tpl`, dessinée hors de l'écran à l'échelle 1.
+  async function snapshotHtml(html, tpl) {
+    const stored = SlidesEntry.pageFor(SlidesEntry.TYPE, tpl ? tpl.marginsMm : null);
+    const page = pageFromStored(stored, stored.orientation);
+    const g = Object.assign({ scale: 1, own: true }, page);
+    const host = el('div');
+    host.setAttribute('aria-hidden', 'true');
+    host.inert = true;
+    host.style.cssText = 'position: fixed; left: -30000px; top: 0; width: ' + g.width + 'px; pointer-events: none;';
+    document.body.appendChild(host);
+    try {
+      paint(host, html, g.width, g);
+      const thumb = host.querySelector('.pp-slide-thumb');
+      thumb.style.contentVisibility = 'visible';
+      thumb.style.boxShadow = 'none';
+      // La mise en page d'abord (les polices ne se chargent qu'à la première ligne qui s'en sert), puis les polices.
+      thumb.getBoundingClientRect();
+      if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      return await SlideRaster.snapshot(thumb, Math.round(g.width), Math.round(g.height));
+    } finally {
+      host.remove();
+    }
+  }
+  const blockWidthPx = () => Math.floor(PageLayout.getContentWidthMm() * PageLayout.MM_TO_PX);
+  // Une diapositive sans texte, sans image, sans objet ni tableau n'a rien à montrer.
+  const isBlank = (holder) => !holder.textContent.trim() && !holder.querySelector('img, table, .pp-free-frame');
+  // Dessine la diapositive `html` et la pose au curseur (`link` : celui de SlideLinks.anchorSource, ou rien) ; rend vrai quand elle est posée. Le dessin qui échoue le dit et ne pose rien.
+  async function placeBlock(editor, index, html, link, here) {
+    const name = nameOf(Templates.byId(source.id));
+    const id = source.id;
+    const byKeyboard = list.contains(document.activeElement);
+    SlidesEntry.status(I18n.t('slides.block.drawing', { n: index + 1 }));
+    let shot = null;
+    try { shot = await snapshotHtml(html, Templates.byId(id)); } catch (error) { console.warn('[SlideImport] diapositive en bloc : dessin impossible', error); }
+    if (!shot) { SlidesEntry.status(I18n.t('slides.block.failed'), true); return false; }
+    // Le document, la source ou le volet ont changé pendant le dessin : rien n'est posé.
+    if (!open || editor.isDestroyed || EditorCore.getEditor() !== editor || String(Templates.getCurrentId()) !== String(here) || !source || String(source.id) !== String(id)) return false;
+    if (isOff()) { SlidesEntry.explainOff(); return false; }
+    SlideCopies.insertBlock(editor, { shot, width: blockWidthPx(), link });
+    setActive(index, byKeyboard);
+    // À la souris, le clavier revient dans le texte, là où le curseur s'est posé (après le bloc) ; au clavier, il reste sur la miniature, pour la suivante.
+    if (!byKeyboard) editor.commands.focus();
+    SlidesEntry.status(I18n.t(link ? 'slides.block.doneLinked' : 'slides.block.done', { n: index + 1, name }));
+    return true;
+  }
+  async function insertBlock(index) {
+    const editor = EditorCore.getEditor();
+    if (!editor || editor.isDestroyed || !editor.isEditable) return;
+    const name = nameOf(Templates.byId(source.id));
+    if (HeaderFooterPreview.getHfMode()) { SlidesEntry.status(I18n.t('slides.text.notHere'), true); return; }
+    const copy = cleanCopy(index);
+    if (isBlank(copy)) { setActive(index, list.contains(document.activeElement)); SlidesEntry.status(I18n.t('slides.text.empty', { n: index + 1, name })); return; }
+    linking = true;
+    try { await placeBlock(editor, index, copy.innerHTML, null, Templates.getCurrentId()); } finally { linking = false; }
+  }
+  // « En bloc », « Garder liée » : comme en texte, la source relue reçoit le repère de la diapositive (SlideLinks.anchorSource), puis le bloc arrive avec son lien (js/slide-copies.js : `slideLink`,
+  // `followBlocks`). Une diapositive déjà liée à ce document arrive sans lien, et le coin d'état le dit ; ce qui empêche le lien se dit sur la ligne d'état, et rien n'est inséré.
+  async function insertLinkedBlock(index) {
+    const editor = EditorCore.getEditor();
+    if (!editor || editor.isDestroyed || !editor.isEditable) return;
+    const id = source.id;
+    const name = nameOf(Templates.byId(id));
+    if (HeaderFooterPreview.getHfMode()) { SlidesEntry.status(I18n.t('slides.text.notHere'), true); return; }
+    if (isBlank(cleanCopy(index))) { insertBlock(index); return; }
+    const here = Templates.getCurrentId();
+    linking = true;
+    SlidesEntry.status(I18n.t('slides.link.linking', { name }));
+    try {
+      const { html, link } = await SlideLinks.anchorSource(editor, id, index, source.contenu, source.body);
+      if (!open || EditorCore.getEditor() !== editor || String(Templates.getCurrentId()) !== String(here) || !source || String(source.id) !== String(id)) return;
+      if (isOff()) { SlidesEntry.explainOff(); return; }
+      if (SlideCopies.linkedFrom(editor, id).has(link.linkSlide)) {
+        if (await placeBlock(editor, index, html, null, here)) SlidesEntry.status(I18n.t('slides.link.already', { n: index + 1, name }));
+        return;
+      }
+      await placeBlock(editor, index, html, link, here);
+    } catch (error) {
+      if (!error || !error.reason) console.warn('[SlideImport] bloc lié en échec', error);
       SlidesEntry.status(I18n.t((error && error.reason) || 'slides.link.failed', { name }), true);
       if (error && (error.reason === 'slides.link.changed' || error.reason === 'slides.link.gone') && open) reload();
     } finally {
@@ -754,6 +888,7 @@ const SlideImport = (function () {
     if (stopPaginated) { stopPaginated(); stopPaginated = null; }
   }
 
+  SlidesEntry.registerBlockRaster(snapshotHtml);
   SlidesEntry.registerTextImport({ open: openText, close: closePanel, isOpen: () => open && inText(), syncScreen, keepsFormat: () => open && inText() && keepFormat });
 
   // `keepsFormat` : le volet ouvert sur un document garde les tailles du document (le Ctrl+V d'une sélection de document sur la bande, slide-strip.js, suit la case).

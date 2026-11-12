@@ -180,11 +180,129 @@ const SlideCopies = (function () {
     return { dropped: result.dropped, blocks: result.nodes.length };
   }
 
-  // Les diapositives de la présentation `id` dont ce document porte déjà une copie liée (un lien par diapositive source et par document).
+  // Les diapositives de la présentation `id` dont ce document porte déjà une copie liée (un lien par diapositive source et par document), en texte ou en bloc.
   function linkedFrom(editor, id) {
     const found = new Set();
-    if (editor && !editor.isDestroyed) copiesOf(editor.state.doc).forEach((copy) => { if (String(copy.attrs.linkModel) === String(id)) found.add(copy.attrs.linkSlide); });
+    if (!editor || editor.isDestroyed) return found;
+    copiesOf(editor.state.doc).forEach((copy) => { if (String(copy.attrs.linkModel) === String(id)) found.add(copy.attrs.linkSlide); });
+    blocksOf(editor.state.doc).forEach(({ link }) => { if (String(link.model) === String(id)) found.add(link.slide); });
     return found;
+  }
+
+  // ---- Les diapositives posées en bloc --------------------------------------------------------------------------------------------------------------
+
+  // Une diapositive posée « En bloc » est UNE image du document (le nœud `editorImage` : poignées, alignement, Suppr comme toute image) qui porte, en plus, ce que la diapositive dit : son texte
+  // (`slideText`, que la recherche Ctrl+F trouve), ses mots et leur place (`slideWords`, la couche de texte invisible) et, quand « Garder liée » est cochée, sa diapositive source (`slideLink` :
+  // `{ model, key, slide, base }`, la présentation, son jeton, le numéro de la diapositive dans la présentation, l'empreinte de la source à la dernière synchro). Pas de repère à part ni de verrou :
+  // l'image est un seul bloc, qu'on supprime ou qu'on déplace en entier, et la personne peut la redimensionner ou la recadrer ; la source, elle, la remplace quand elle change (`followBlocks`), en gardant
+  // la taille et l'alignement. La photo est dessinée par l'extension « diapositives » (extensions/diapositives/slide-raster.js, `SlidesEntry.blockSnapshot`) : éteinte, le bloc reste tel qu'il est.
+  const isBlockLink = link => !!link && typeof link === 'object' && !!link.model && !!link.key && !!link.slide && typeof link.base === 'string';
+  // Les diapositives en bloc liées du texte `doc`, dans l'ordre : [{ node, pos, link }].
+  function blocksOf(doc) {
+    const found = [];
+    doc.descendants((node, pos) => {
+      if (node.type.name === 'editorImage' && isBlockLink(node.attrs.slideLink)) found.push({ node, pos, link: node.attrs.slideLink });
+      return !node.isAtom;
+    });
+    return found;
+  }
+  // Le texte alternatif d'une diapositive en bloc : ce qu'elle dit, sur une ligne (500 signes au plus : AltText.MAX).
+  const blockAltOf = text => AltText.clean(text ? I18n.t('slides.block.alt', { text: String(text).replace(/\s*\n+\s*/g, ' ; ') }) : I18n.t('slides.block.altEmpty'));
+  // Les attributs de l'image d'une photo de diapositive `shot` ({ src, text, words }), large de `width` (en px) ; `link` : { linkModel, linkKey, linkSlide, srcHash } de SlideLinks.anchorSource.
+  function blockAttrs(shot, width, link) {
+    return {
+      src: shot.src, alt: blockAltOf(shot.text), width: width + 'px', slideText: shot.text || null, slideWords: shot.words && shot.words.length ? shot.words : null,
+      slideLink: link ? { model: link.linkModel, key: link.linkKey, slide: link.linkSlide, base: link.srcHash } : null,
+    };
+  }
+  // Pose la photo `shot` au curseur du document, large de `width` px (la largeur du texte) : un paragraphe qui ne porte que l'image, un seul pas d'annulation à part de la frappe d'avant ; le curseur se
+  // pose dans le bloc qui suit (il y en a toujours un : une ligne vide est ajoutée au besoin). Rend { blocks: 1 }.
+  function insertBlock(editor, { shot, width, link }) {
+    const { state } = editor;
+    const { from, to } = placeFor(state, copiesOf(state.doc));
+    const { editorImage, paragraph } = editor.schema.nodes;
+    const block = paragraph.create(null, [editorImage.create(blockAttrs(shot, width, link))]);
+    const content = [block];
+    const next = state.doc.nodeAt(to);
+    if (!next || !next.isTextblock) content.push(paragraph.create());
+    const tr = state.tr.setMeta('closeHistory$', true).replaceWith(from, to, content);
+    tr.setSelection(EditorCore.getTextSelectionClass().near(tr.doc.resolve(from + block.nodeSize), 1)).scrollIntoView();
+    editor.view.dispatch(tr);
+    return { blocks: 1 };
+  }
+
+  // Ce qu'il y a à faire d'un bloc lié : { action, model, remote, srcHash, at } comme `planOf` ('missing' : la présentation ou la diapositive n'existe plus, le bloc reste tel quel ; 'none' ; 'pull').
+  function blockPlanOf(editor, link) {
+    const { parseModel, slideHash } = kit();
+    const model = Templates.byId(link.model);
+    if (!model || model.typeModele !== SOURCE_TYPE || model.jeton !== link.key) return { action: 'missing', model: null };
+    const parsed = parseModel(editor, model);
+    const at = parsed.byId.get(link.slide);
+    if (at === undefined) return { action: 'missing', model };
+    const remote = parsed.slides[at];
+    const srcHash = slideHash(remote);
+    return { action: link.base === srcHash ? 'none' : 'pull', model, remote, srcHash, at };
+  }
+  // Le HTML d'une diapositive lue de sa présentation (sans repère ni image répétée), tel que l'extension le dessine.
+  function slideHtml(editor, remote) {
+    const { portable } = kit();
+    return Editor.getHTML(editor.schema.topNodeType.create(null, portable(editor, remote.nodes.map(entry => entry.node))));
+  }
+
+  // Les blocs du document ouvert reprennent leur diapositive quand elle a changé depuis la dernière synchro, d'après les modèles du cache (comme `follow`) ; la photo se dessine (c'est asynchrone) puis
+  // une seule transaction, hors de l'historique et sans rendre le document « à enregistrer », remplace l'image de chaque bloc en gardant sa taille, son alignement et le texte alternatif de la
+  // personne. Un bloc qui n'est plus là, ou déjà à jour, n'est pas touché. Rend une promesse : { pulled: [rangs] }, ou null quand rien n'a lieu (rien de lié, rien de changé, l'extension éteinte).
+  let following = false;
+  async function followBlocks(editor) {
+    if (following || paused(editor)) return null;
+    const stale = blocksOf(editor.state.doc).map(block => ({ block, plan: blockPlanOf(editor, block.link) })).filter(({ plan }) => plan.action === 'pull');
+    if (!stale.length) return null;
+    following = true;
+    try {
+      // Une photo par diapositive source (deux blocs de la même diapositive la partagent).
+      const shots = new Map();
+      for (const { block, plan } of stale) {
+        const key = keyOf({ linkModel: block.link.model, linkSlide: block.link.slide });
+        if (shots.has(key)) continue;
+        shots.set(key, { plan, shot: await SlidesEntry.blockSnapshot(slideHtml(editor, plan.remote), plan.model) });
+      }
+      if (editor.isDestroyed || paused(editor)) return null;
+      const tr = editor.state.tr;
+      const done = { pulled: [], name: '' };
+      // De la dernière à la première : un bloc remplacé ne déplace pas ceux d'avant (le nœud garde sa taille : les positions ne bougent de toute façon pas).
+      const now = blocksOf(editor.state.doc);
+      for (let i = now.length - 1; i >= 0; i--) {
+        const { node, pos, link } = now[i];
+        const got = shots.get(keyOf({ linkModel: link.model, linkSlide: link.slide }));
+        if (!got || !got.shot) continue;
+        const live = blockPlanOf(editor, link);
+        // La source a bougé encore pendant le dessin : le prochain passage reprend (la photo n'est plus la bonne).
+        if (live.action !== 'pull' || live.srcHash !== got.plan.srcHash) continue;
+        const own = node.attrs.alt !== blockAltOf(node.attrs.slideText);
+        const attrs = Object.assign({}, node.attrs, blockAttrs(got.shot, 0, { linkModel: link.model, linkKey: link.key, linkSlide: link.slide, srcHash: live.srcHash }));
+        attrs.width = node.attrs.width;
+        if (own) attrs.alt = node.attrs.alt;
+        tr.setNodeMarkup(pos, undefined, attrs);
+        done.pulled.unshift(i);
+        done.name = live.model.nom;
+      }
+      if (!tr.steps.length) return null;
+      editor.view.dispatch(SlideLinks.markSync(tr));
+      if (done.pulled.length === 1) say('slides.block.pulled', { name: done.name });
+      else say('slides.block.pulledMany', { n: done.pulled.length });
+      return done;
+    } finally {
+      following = false;
+    }
+  }
+  // Le bloc lié que la sélection désigne (l'image sélectionnée), ou null : { block: { node, pos }, from, name, n, gone } (comme `statusAt` d'une copie en texte).
+  function blockStatusAt(state) {
+    const { selection } = state;
+    const node = selection.node;
+    if (!node || node.type.name !== 'editorImage' || !isBlockLink(node.attrs.slideLink)) return null;
+    const editor = EditorCore.getEditor();
+    const plan = editor && !editor.isDestroyed && kit().libs ? blockPlanOf(editor, node.attrs.slideLink) : { action: 'missing', model: null };
+    return { block: { node, pos: selection.from }, from: selection.from, name: plan.model ? plan.model.nom : '', n: plan.action === 'missing' ? 0 : plan.at + 1, gone: plan.action === 'missing' };
   }
 
   // ---- Le verrou et le trait d'accent ------------------------------------------------------------------------------------------------------------------
@@ -268,6 +386,8 @@ const SlideCopies = (function () {
   function statusAt(state) {
     if (GridEditor.isActive() || HeaderFooterPreview.getHfMode()) return null;
     const { selection } = state;
+    const asBlock = blockStatusAt(state);
+    if (asBlock) return asBlock;
     const copy = copiesOf(state.doc).find(c => c.whole && selection.from >= c.from && selection.to <= c.pos);
     if (!copy) return null;
     const editor = EditorCore.getEditor();
@@ -283,6 +403,13 @@ const SlideCopies = (function () {
     if (blocked) { say(blocked, null, true); return false; }
     const status = statusAt(editor.state);
     if (!status) return false;
+    // Un bloc garde son image : seul le lien part (un seul Annuler le rend).
+    if (status.block) {
+      const { node, pos } = status.block;
+      editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, { slideLink: null })).setMeta(SlideLinks.kit().OWN_META, 'detach'));
+      say('slides.block.detached', { name: status.name });
+      return true;
+    }
     const { copy } = status;
     editor.view.dispatch(editor.state.tr.delete(copy.pos, copy.pos + copy.node.nodeSize).setMeta(SlideLinks.kit().OWN_META, 'detach'));
     say('slides.copy.detached', { name: status.name });
@@ -316,5 +443,5 @@ const SlideCopies = (function () {
     return SlideLinks.strip(Editor.getHTML(tr.doc));
   }
 
-  return { SOURCE_TYPE, createExtension, follow, forOutput, insert, detach, statusAt, linkedFrom, copiesOf };
+  return { SOURCE_TYPE, createExtension, follow, followBlocks, forOutput, insert, insertBlock, detach, statusAt, linkedFrom, copiesOf, blocksOf };
 })();

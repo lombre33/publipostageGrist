@@ -33,6 +33,15 @@ body.pp-slide-import-on .pp-page-zoom { right: calc(var(--pp-zoom-right, 0px) + 
 .pp-slide-import-keep input { margin: 0; accent-color: var(--accent-solid); cursor: inherit; }
 .pp-slide-import-keep.pp-slide-import-keep-off { color: var(--text-muted); cursor: not-allowed; }
 .pp-slide-import-hint[hidden], .pp-slide-import-empty[hidden] { display: none; }
+/* « En bloc » / « En texte » (un document seulement) : deux boutons radio côte à côte, sous le choix de la source ; le choisi prend le fond de sélection, un cadre le dit aussi sans la couleur. */
+.pp-slide-import-kind { flex: none; display: flex; gap: 4px; padding: 4px 10px 0; }
+.pp-slide-import-kind[hidden] { display: none; }
+.pp-slide-import-kind-btn { flex: 1 1 0; min-width: 0; height: 24px; margin: 0; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-xs, 4px); background: transparent; color: var(--text); font: inherit; font-size: 12px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-slide-import-kind-btn:hover { background: var(--surface-sunken); }
+.pp-slide-import-kind-btn[aria-checked="true"] { background: var(--surface-sunken); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 600; }
+.pp-slide-import-kind-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-slide-import-kind-off .pp-slide-import-kind-btn { color: var(--text-muted); cursor: not-allowed; }
+
 
 /* Les miniatures de la source : celles de la bande, plus larges (THUMB_WIDTH_PX du script). Aucune n'est « la diapositive du curseur » : ni liseré ni numéro d'accent ; celle qui a le
    clavier porte le cadre de focus. Grisées (l'extension éteinte), elles restent lisibles, et leur clic explique. 96 px de large (54 de haut en 16:9, plus larges que les 80 px de la bande) : sous une indication de deux lignes, le volet d'un

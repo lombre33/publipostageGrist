@@ -2,7 +2,7 @@
 // rouvrir le texte du remplacement pour Annuler. Façade : js/find-replace.js.
 const FindReplaceActions = (function () {
   const { META, state, editor, currentMatches, allStories, indexOfSelection, refresh } = FindReplaceView;
-  const { expandReplacement, isBubble, replaceInBubble } = FindReplaceEngine;
+  const { expandReplacement, isBubble, isSlideImage, replaceInBubble } = FindReplaceEngine;
   // Le message qui dit ce qu'un remplacement a fait vient du panneau, chargé après : appelé à l'usage, jamais au chargement.
   const setFlash = text => FindReplacePanel.setFlash(text);
 
@@ -130,12 +130,14 @@ const FindReplaceActions = (function () {
     else tr.delete(match.from, match.to);
   }
 
-  const KEPT_TEXT = { name: 'find.bubble.name', formula: 'find.bubble.formula', tooLong: 'find.bubble.tooLong', tooLongOtherwise: 'find.bubble.tooLongOtherwise', suggest: 'find.bubble.suggest' };
+  const KEPT_TEXT = { name: 'find.bubble.name', formula: 'find.bubble.formula', tooLong: 'find.bubble.tooLong', tooLongOtherwise: 'find.bubble.tooLongOtherwise', suggest: 'find.bubble.suggest', slide: 'find.slide.kept' };
   // Remplace `match` dans `tr` : rend null quand il l'est, sinon pourquoi il reste tel quel - 'name' (le résultat n'est que dans le nom d'une bulle, qui
   // suit une colonne), 'formula' (la formule d'un calcul), 'tooLong' (un « Avant » ou un « Après » trop long), 'tooLongOtherwise' (le texte d'un sinon trop long), 'suggest' (une bulle ne se propose pas en
   // suppression et insertion : en mode suivi elle reste). Une bulle ne change que par le texte qu'elle porte (« Avant », « Après »), par ses attributs :
   // sa position et sa taille ne bougent pas, les résultats suivants non plus.
   function replaceMatch(tr, doc, match, suggest) {
+    // Une diapositive posée en un bloc (une image qui porte son texte) ne se réécrit pas ici : 'slide'.
+    if (isSlideImage(match)) return 'slide';
     if (!isBubble(match)) { replaceInTransaction(tr, doc, match, expandReplacement(match, state.replacement), suggest); return null; }
     const { attrs, reason } = replaceInBubble(doc.nodeAt(match.from), state.query, state, state.replacement);
     if (!attrs) return reason;
@@ -194,8 +196,8 @@ const FindReplaceActions = (function () {
 
   // Ce que dit le compteur après « Tout remplacer » : « 3 remplacements, 1 bulle laissée, 2 autres ailleurs » - ce qui a changé, ce qui est resté tel quel, ce qui attend dans
   // un autre texte du modèle (l'en-tête, le corps, le pied).
-  function replacedFlash(count, kept, elsewhere) {
-    return [count ? I18n.t('find.replaced', { count }) : '', kept ? I18n.t('find.kept', { kept }) : '', elsewhere ? I18n.t('find.elsewhere', { rest: elsewhere }) : ''].filter(Boolean).join(', ');
+  function replacedFlash(count, kept, elsewhere, slides = 0) {
+    return [count ? I18n.t('find.replaced', { count }) : '', kept ? I18n.t('find.kept', { kept }) : '', slides ? I18n.t('find.keptSlides', { slides }) : '', elsewhere ? I18n.t('find.elsewhere', { rest: elsewhere }) : ''].filter(Boolean).join(', ');
   }
 
   // Tous les résultats DU TEXTE QUE L'ÉDITEUR CONTIENT (le corps, ou l'en-tête ou le pied ouvert) en une transaction (donc une seule annulation), du dernier au premier : les
@@ -212,13 +214,17 @@ const FindReplaceActions = (function () {
     const doc = ed.state.doc;
     const tr = ed.state.tr;
     let kept = 0;
-    for (let i = matches.length - 1; i >= 0; i--) if (replaceMatch(tr, doc, matches[i], suggest)) kept++;
-    const count = matches.length - kept;
-    // Que des bulles qui ne changent pas : rien à envoyer, le document reste tel quel.
-    if (!count) { setFlash(replacedFlash(0, kept, elsewhere)); return 0; }
+    let slides = 0;
+    for (let i = matches.length - 1; i >= 0; i--) {
+      const left = replaceMatch(tr, doc, matches[i], suggest);
+      if (left === 'slide') slides++; else if (left) kept++;
+    }
+    const count = matches.length - kept - slides;
+    // Que des bulles ou des diapositives qui ne changent pas : rien à envoyer, le document reste tel quel.
+    if (!count) { setFlash(replacedFlash(0, kept, elsewhere, slides)); return 0; }
     const applied = dispatchAndCapture(tr);
     if (!applied) { setFlash(I18n.t('find.replaceFailed')); return 0; }
-    setFlash(replacedFlash(count, kept, elsewhere));
+    setFlash(replacedFlash(count, kept, elsewhere, slides));
     return count;
   }
 

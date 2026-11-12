@@ -1826,8 +1826,9 @@ const FloatingToolbars = (function () {
         name.textContent = label;
         name.title = label;
         detach.querySelector('span').textContent = I18n.t('slides.copy.detach');
-        detach.title = I18n.t('slides.copy.detachTip');
-        panel.show(dom, anchoredBarOptions);
+        detach.title = I18n.t(status.block ? 'slides.block.detachTip' : 'slides.copy.detachTip');
+        // Une diapositive en bloc est une image : sa propre barre (js/floating-toolbars.js : image) est déjà au-dessus d'elle, celle du lien se pose dessous.
+        panel.show(dom, status.block ? () => Object.assign({}, anchoredBarOptions(), { placement: 'bottom' }) : anchoredBarOptions);
       };
       editor.on('selectionUpdate', check);
       editor.on('transaction', check);

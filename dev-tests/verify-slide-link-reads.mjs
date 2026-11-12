@@ -127,6 +127,8 @@ function toolsOf(tab) {
     await sleep(250);
     await press('Enter');
     await sleep(500);
+    // Ces essais jouent la copie EN TEXTE (le volet choisit « En bloc » d'abord, le bloc a son propre essai : `slideBlock`) : on choisit « En texte ».
+    await click('.pp-slide-import-kind-btn', 1, 300);
   };
   return { click, clickRow, openMenu, leaveMenu, clickThumb, showThumb, clickText, press, pickSource, reach, inPage, centerOf };
 }

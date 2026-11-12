@@ -1793,6 +1793,13 @@ const EditorNodes = (function () {
         // Une vidéo YouTube ou Vimeo (js/video-frame.js, ligne « Vidéo… » du menu « Lien et blocs de contenu ») : son identifiant (`youtube:dQw4w9WgXcQ[@90]`), jamais une adresse ni un lecteur. Jamais de `src` :
         // l'éditeur et la Lecture dessinent la vignette (VideoFrame.poster), les exports un rectangle gris qui porte le titre. La vidéo se déplace, s'habille et se redimensionne comme toute image.
         video: { default: null, parseHTML: el => el.getAttribute('data-video') || null, renderHTML: noBareRender },
+        // Une DIAPOSITIVE posée dans le document en un bloc (extensions/diapositives/slide-raster.js, volet « Insérer depuis », « En bloc ») : l'image est sa photo, et elle garde ce que la diapositive
+        // dit. `slideText` : son texte, ligne par ligne (la recherche Ctrl+F le trouve, le texte alternatif en est tiré) ; `slideWords` : ses mots avec leur place sur l'image, un petit texte JSON
+        // `[[x, y, largeur, hauteur, mot], ...]` en millièmes de l'image (la couche de texte invisible, js/slide-block.js) ; `slideLink` : la diapositive source, quand « Garder liée » est cochée,
+        // `{ model, key, slide, base }` (js/slide-block.js : la présentation, son jeton, le numéro de la diapositive, l'empreinte de la dernière synchro). Jamais écrits pour une autre image.
+        slideText: { default: null, parseHTML: el => el.getAttribute('data-slide-text') || null, renderHTML: noBareRender },
+        slideWords: { default: null, parseHTML: el => jsonAttr(el, 'data-slide-words'), renderHTML: noBareRender },
+        slideLink: { default: null, parseHTML: el => jsonAttr(el, 'data-slide-link'), renderHTML: noBareRender },
       };
     }
     return { moveImageNode, imageAttributes };
@@ -1918,6 +1925,8 @@ const EditorNodes = (function () {
       img.alt = attrs.alt || '';
       img.setAttribute('style', imageInnerStyle(attrs, isVarBox, isQrBox, isChartBox, isVideoBox));
       wrap.classList.toggle('editor-image-video', isVideoBox);
+      // Une diapositive posée en bloc (`slideText`, extensions/diapositives/slide-raster.js) : un liseré la montre comme un bloc, sa page blanche sur la page blanche du document (css/editor-v2.css).
+      wrap.classList.toggle('editor-image-slide', !!attrs.slideText || !!attrs.slideWords || !!attrs.slideLink);
       // La vue n'écrit pas les attributs du nœud sur son <img> (renderHTML ne sert qu'à l'enregistrement) : la vidéo, que VideoFrame lit sur l'<img>, y est posée à la main.
       if (isVideoBox) img.setAttribute('data-video', attrs.video); else img.removeAttribute('data-video');
       if (isVideoBox) {
@@ -2171,6 +2180,9 @@ const EditorNodes = (function () {
           }
           if (nodeAttrs.qrText) attrs['data-qr-text'] = nodeAttrs.qrText;
           if (nodeAttrs.video) attrs['data-video'] = nodeAttrs.video;
+          if (nodeAttrs.slideText) attrs['data-slide-text'] = nodeAttrs.slideText;
+          if (nodeAttrs.slideWords) attrs['data-slide-words'] = JSON.stringify(nodeAttrs.slideWords);
+          if (nodeAttrs.slideLink) attrs['data-slide-link'] = JSON.stringify(nodeAttrs.slideLink);
           if (ChartEntry.isChartAttrs(nodeAttrs)) {
             if (nodeAttrs.chartSection) attrs['data-chart-section'] = String(nodeAttrs.chartSection);
             if (nodeAttrs.chartSpec) attrs['data-chart-spec'] = nodeAttrs.chartSpec;

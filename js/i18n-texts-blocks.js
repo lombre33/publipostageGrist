@@ -300,6 +300,8 @@ const I18nTextsBlocks = {
   'find.bubble.tooLong': { fr: 'Trop long pour une bulle ({max} signes au plus).', en: 'Too long for a bubble ({max} characters at most).' },
   'find.bubble.tooLongOtherwise': { fr: 'Trop long pour le sinon d’une bulle ({max} signes au plus).', en: 'Too long for the “otherwise” of a bubble ({max} characters at most).' },
   'find.bubble.suggest': { fr: 'Avec le suivi, une bulle ne se remplace pas.', en: 'With track changes on, bubbles aren’t replaced.' },
+  'find.slide.kept': { fr: 'Le texte d’une diapositive en bloc ne se remplace pas.', en: 'The text of a slide block can’t be replaced.' },
+  'find.keptSlides': { fr: '{slides} {slides|diapositive laissée|diapositives laissées}', en: '{slides} {slides|slide left as is|slides left as is}' },
   'find.kept': { fr: '{kept} {kept|bulle laissée|bulles laissées}', en: '{kept} {kept|bubble left as is|bubbles left as is}' },
   // Après « Tout remplacer » : ce qui attend dans un autre texte du modèle (l'en-tête, le corps, le pied), à la suite de « 3 remplacements » et de « 1 bulle laissée ».
   'find.elsewhere': { fr: '{rest} {rest|autre|autres} ailleurs', en: '{rest} {rest|other|others} elsewhere' },

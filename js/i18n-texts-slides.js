@@ -253,4 +253,23 @@ const I18nTextsSlides = {
   'frame.behindText': { fr: 'Derrière le texte', en: 'Behind text' },
   // La pastille « Ordre » de la barre de l'objet : le menu des trois lignes ci-dessus.
   'frame.order': { fr: 'Ordre', en: 'Order' },
+  // Une diapositive posée dans un document « En bloc », comme une image (extensions/diapositives/slide-import.js, extensions/diapositives/slide-raster.js ; js/slide-copies.js pour le lien).
+  'slides.block.kindLabel': { fr: 'Comment insérer la diapositive', en: 'How to insert the slide' },
+  'slides.block.kindBlock': { fr: 'En bloc', en: 'As a block' },
+  'slides.block.kindText': { fr: 'En texte', en: 'As text' },
+  'slides.block.kindBlockTip': { fr: 'La diapositive arrive telle qu’elle est, en un seul bloc qu’on sélectionne, redimensionne et supprime d’un geste.', en: 'The slide arrives as it is, in one block you select, resize and delete in one gesture.' },
+  'slides.block.kindTextTip': { fr: 'Le texte de la diapositive arrive dans le document, modifiable, à la taille du document.', en: 'The slide’s text arrives in the document, editable, at the document’s size.' },
+  'slides.block.hint': { fr: 'Un clic sur une diapositive la pose en un bloc, comme une image, à l’endroit du curseur.', en: 'Click a slide to place it as a block, like an image, at the cursor.' },
+  'slides.block.hintLinked': { fr: 'Un clic sur une diapositive la pose en un bloc, comme une image, à l’endroit du curseur, liée à la diapositive.', en: 'Click a slide to place it as a block, like an image, at the cursor, linked to the slide.' },
+  'slides.block.keepLinkedTip': { fr: 'Le bloc reste lié à la diapositive : il la suit quand elle change.', en: 'The block stays linked to the slide: it follows it when it changes.' },
+  'slides.block.drawing': { fr: 'Dessin de la diapositive {n}…', en: 'Drawing slide {n}…' },
+  'slides.block.done': { fr: 'Diapositive {n} de « {name} » posée en bloc.', en: 'Slide {n} from “{name}” placed as a block.' },
+  'slides.block.doneLinked': { fr: 'Diapositive {n} de « {name} » posée en bloc, liée à sa source.', en: 'Slide {n} from “{name}” placed as a block, linked to its source.' },
+  'slides.block.failed': { fr: 'La diapositive n’a pas pu être dessinée : insérez-la « En texte ».', en: 'The slide could not be drawn: insert it “As text” instead.' },
+  'slides.block.alt': { fr: 'Diapositive : {text}', en: 'Slide: {text}' },
+  'slides.block.altEmpty': { fr: 'Diapositive sans texte', en: 'Slide without text' },
+  'slides.block.pulled': { fr: 'Le bloc lié à « {name} » a pris la dernière version de sa diapositive.', en: 'The block linked to “{name}” took the latest version of its slide.' },
+  'slides.block.pulledMany': { fr: '{n} blocs liés ont pris la dernière version de leur diapositive.', en: '{n} linked blocks took the latest version of their slide.' },
+  'slides.block.detachTip': { fr: 'Le bloc reste tel qu’il est et ne suit plus la diapositive.', en: 'The block stays as it is and no longer follows the slide.' },
+  'slides.block.detached': { fr: 'Bloc détaché : il ne suit plus sa diapositive.', en: 'Block detached: it no longer follows its slide.' },
 };

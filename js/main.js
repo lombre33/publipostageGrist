@@ -430,6 +430,8 @@
     const slides = SlideLinks.follow(editor, loading);
     const copies = SlideCopies.follow(editor);
     const pages = PageCopies.follow(editor);
+    // Les diapositives posées en bloc se redessinent à part (la photo se fait en route) : la Lecture se redessine quand elles ont fini.
+    SlideCopies.followBlocks(editor).then((blocks) => { if (blocks && blocks.pulled.length && currentMode === 'read') renderReader(); }, (error) => console.warn('[SlideCopies] bloc lié non mis à jour', error));
     if (((synced && synced.pulled.length) || (slides && slides.pulled.length) || (copies && copies.pulled.length) || (pages && pages.pulled.length)) && currentMode === 'read') renderReader();
     return synced;
   }

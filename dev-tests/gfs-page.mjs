@@ -77,7 +77,8 @@ export async function start({ name, port, popupBlocker = false, scrollbars = fal
       const target = info.isDirectory() ? join(filePath, 'index.html') : filePath;
       // Le kit de Grist Factory (kit/, consigne 041 de GFS) et la copie figée de l'éditeur (vendor/editeur/, consigne 066) : des modules ES que l'app importe par import() ; un cadre à origine opaque (ISOLATED_SANDBOX) n'en lit un que si l'hôte répond avec cet en-tête, que GitHub Pages met sur tous ses fichiers.
       const headers = { 'Content-Type': MIME[extname(target)] || 'application/octet-stream', 'Cache-Control': 'no-store' };
-      if (urlPath.startsWith('/kit/') || urlPath.startsWith('/vendor/')) headers['Access-Control-Allow-Origin'] = '*';
+      // GitHub Pages envoie `Access-Control-Allow-Origin: *` pour tout fichier : les feuilles de css/ se relisent (fetch) depuis un cadre isolé (la police Roboto de extensions/diapositives/slide-raster.js).
+      if (urlPath.startsWith('/kit/') || urlPath.startsWith('/vendor/') || urlPath.startsWith('/css/')) headers['Access-Control-Allow-Origin'] = '*';
       res.writeHead(200, headers);
       res.end(await readFile(target));
     } catch { res.writeHead(404).end('not found'); }
