@@ -28,7 +28,7 @@ const sameList = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 const MODELES = {
   Nom: 'Text', Contenu: 'Text', NomFichierPDF: 'Text', DateModif: 'DateTime', HeaderFooter: 'Text', EstParDefaut: 'Bool', Margins: 'Text',
-  TypeModele: 'Text', Destinataires: 'Text', Cc: 'Text', Cci: 'Text', Objet: 'Text', SuiviModifications: 'Text', ModifiePar: 'Text',
+  TypeModele: 'Text', Destinataires: 'Text', Cc: 'Text', Cci: 'Text', Objet: 'Text', PJ: 'Text', SuiviModifications: 'Text', ModifiePar: 'Text',
 };
 
 // Faux document : la table des modèles seule (les autres ne servent à rien ici), un journal des actions, des pannes et des lenteurs à la demande.

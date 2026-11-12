@@ -279,6 +279,28 @@ window.EditorTestSuites.undoFields = (function () {
     },
   });
 
+  cases.push({
+    id: 'undo_fields_pj_folds_and_unfolds_with_its_value',
+    description: 'Le champ PJ (les pièces jointes du .eml) se replie quand Annuler lui rend une valeur vide, et se déplie avec sa valeur quand Rétablir la lui rend ; le bouton « + PJ » suit, comme « + Cci »',
+    async run(h) {
+      const problems = [];
+      const PJ = 'v2-email-pj';
+      const toggleOn = () => byId('v2-btn-toggle-pj').classList.contains('is-active');
+      try {
+        await freshEmail(h, 'Annuler les champs - PJ');
+        check(problems, 'au départ : le champ est replié, le bouton éteint', [byId(PJ).hidden, byId(PJ).value, toggleOn()], [true, '', false]);
+        // Le retour de l'historique des champs (js/history-markers.js, domaine « fields ») : ce que le geste rend, valeur par valeur.
+        FieldEditor.restore({ [PJ]: '#Colonne.Pj' }, { [PJ]: '' });
+        await h.sleep(60);
+        check(problems, 'Ctrl + Y : le champ déplié avec sa valeur, le bouton allumé', [byId(PJ).hidden, byId(PJ).value, toggleOn()], [false, '#Colonne.Pj', true]);
+        FieldEditor.restore({ [PJ]: '' }, { [PJ]: '#Colonne.Pj' });
+        await h.sleep(60);
+        check(problems, 'Ctrl + Z : le champ replié, le bouton éteint', [byId(PJ).hidden, byId(PJ).value, toggleOn()], [true, '', false]);
+        return verdict(problems, {});
+      } finally { await leave(h); }
+    },
+  });
+
   // --- 4) Le modèle enregistré ---
 
   cases.push({

@@ -10,7 +10,7 @@
 //  4) ce que garde une version : l'état remplacé (pas le nouveau), avec son jeton, sa date et son auteur, lisible après coup ;
 //  5) restaurer : le nom d'aujourd'hui est gardé, l'état remplacé est gardé d'office (genre « restauration »), un autre type de modèle est refusé ;
 //  6) une copie qui échoue n'empêche jamais d'enregistrer : lot rejoué sans elle, copies suspendues dix minutes ; l'erreur d'origine remonte quand le lot échoue aussi sans ;
-//     un compte sans droit de structure enregistre sans la colonne « Modifié par », sans la redemander à chaque fois ;
+//     un compte sans droit de structure enregistre sans la colonne « Modifié par » ni la colonne « PJ » (pièces jointes du .eml), sans les redemander à chaque fois ;
 //  7) l'ouverture de l'historique : LA lecture de la table, plafonds (30 par modèle, 3 millions de caractères, jamais une version nommée ni la plus récente d'un modèle),
 //     versions des modèles supprimés retirées après un délai de grâce, table absente ou modèle sans jeton = historique vide sans rien créer, ménage de fond tous les 400 ajouts ;
 //  8) supprimer un modèle ne lit rien, et un numéro de ligne redonné par Grist ne reprend pas les règles de l'ancien modèle ;
@@ -662,6 +662,29 @@ async function main() {
     check('6g. ... dix minutes plus tard, la colonne est demandée de nouveau (et créée quand le droit existe)', attempts() === 2 && 'ModifiePar' in doc.row(MODELS, id), attempts());
     await t.save(id, '<p>v4</p>');
     check('6g. ... et l\'auteur est écrit', doc.row(MODELS, id).ModifiePar === 'Moi Même <moi@exemple.fr>', doc.row(MODELS, id).ModifiePar);
+  }
+  {
+    // 6h. Même règle pour la colonne « PJ » (les pièces jointes du .eml, js/eml-export.js) : tous les documents d'avant elle ne l'ont pas, et un compte sans droit de structure enregistre quand même, sans elle.
+    const columns = Object.assign({}, MODEL_COLUMNS);
+    delete columns.PJ;
+    const doc = new Doc({ models: columns });
+    const t = fresh(doc);
+    doc.denyStructure = true;
+    const loaded = await t.run('Templates.loadAll()').then(() => true, () => false);
+    const attempts = () => doc.calls.filter((c) => c.actions.some((a) => a[0] === 'AddVisibleColumn' && a[2] === 'PJ')).length;
+    check('6h. sans droit de structure : la liste des modèles se charge quand même', loaded);
+    const id = doc.addRow(MODELS, { Nom: 'Courrier', Contenu: '<p>v1</p>', TypeModele: 'email', DateModif: START / 1000 });
+    await t.run('Templates.loadAll()');
+    const saved = await t.save(id, '<p>v2</p>', { type: 'email', email: { objet: 'Bonjour', destinataires: 'a@b.fr', cc: '', cci: '', pj: '#T.Pj' } }).then(() => true, (e) => e.message);
+    await t.save(id, '<p>v3</p>', { type: 'email', email: { objet: 'Bonjour', destinataires: 'a@b.fr', cc: '', cci: '', pj: '#T.Pj' } });
+    check('6h. ... l\'enregistrement marche, sans la colonne « PJ » (une écriture dessus annulerait le lot), et l\'objet est écrit', saved === true && doc.row(MODELS, id).Contenu === '<p>v3</p>' && doc.row(MODELS, id).Objet === 'Bonjour' && !('PJ' in doc.row(MODELS, id)), String(saved));
+    check('6h. ... la colonne n\'a été demandée qu\'une fois en tout (pas à chaque chargement ni à chaque enregistrement)', attempts() === 1, attempts());
+    t.advance(11 * MIN);
+    doc.denyStructure = false;
+    await t.run('Templates.loadAll()');
+    check('6h. ... dix minutes plus tard, la colonne est demandée de nouveau (et créée quand le droit existe)', attempts() === 2 && 'PJ' in doc.row(MODELS, id), attempts());
+    await t.save(id, '<p>v4</p>', { type: 'email', email: { objet: 'Bonjour', destinataires: 'a@b.fr', cc: '', cci: '', pj: '#T.Pj' } });
+    check('6h. ... et les pièces jointes sont écrites', doc.row(MODELS, id).PJ === '#T.Pj', doc.row(MODELS, id).PJ);
   }
 
   // === 7. L'ouverture de l'historique et les plafonds ===

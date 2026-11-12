@@ -115,9 +115,11 @@ const Templates = (function () {
       ['Cc', 'Text', 'Copie (Cc)'],
       ['Cci', 'Text', 'Copie cachée (Cci)'],
       ['Objet', 'Text', 'Objet de l\'email'],
-      // Les pièces jointes du .eml (js/eml-export.js) : des variables de colonnes Pièces jointes de Grist, dans l'écriture des autres champs (js/field-codec.js).
-      ['PJ', 'Text', 'Pièces jointes (PJ)'],
     ]);
+
+    // Les pièces jointes du .eml (js/eml-export.js) : des variables de colonnes Pièces jointes de Grist, dans l'écriture des autres champs (js/field-codec.js). Une colonne à part, comme « Modifié par » :
+    // tous les documents d'avant elle ne l'ont pas, et une personne qui n'a pas le droit d'ajouter une colonne enregistre quand même, sans elle (cf. pjColumnReady).
+    const ensurePjColumn = ensureColumns([['PJ', 'Text', 'Pièces jointes (PJ)']]);
 
     // Suivi des modifications (planning/feature-track-changes.md) : auteur et horodatage de chaque suggestion en attente, écrits dans le même
     // UpdateRecord/AddRecord que Contenu et DateModif, jamais dans un appel séparé.
@@ -137,11 +139,11 @@ const Templates = (function () {
     // d'ajouter une colonne enregistre quand même, sans elle (cf. modifiedByColumnReady).
     const ensureModifiedByColumn = ensureColumns([['ModifiePar', 'Text', 'Modifié par']]);
     return {
-      ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn, ensureModifiedByColumn,
+      ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensurePjColumn, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn, ensureModifiedByColumn,
     };
   }
   const {
-    ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn, ensureModifiedByColumn,
+    ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensurePjColumn, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn, ensureModifiedByColumn,
   } = defineColumnMigrations();
 
   // La colonne « Modifié par » existe-t-elle (ou vient-elle d'être créée) ? Faux quand la personne n'a pas le droit d'ajouter une colonne : l'enregistrement la laisse alors de côté (un UpdateRecord sur une
@@ -151,6 +153,16 @@ const Templates = (function () {
     if (Date.now() < modifiedByRetryAt) return false;
     try { if (await ensureModifiedByColumn()) return true; } catch (e) { /* refus de créer la table : l'enregistrement le dira lui-même */ }
     modifiedByRetryAt = Date.now() + 10 * 60 * 1000;
+    return false;
+  }
+
+  // La colonne « PJ » existe-t-elle (ou vient-elle d'être créée) ? Même règle que « Modifié par » : faux quand la personne n'a pas le droit d'ajouter une colonne, l'enregistrement la laisse alors de côté
+  // (un UpdateRecord sur une colonne inconnue annulerait tout le lot, et aucun modèle ne s'enregistrerait plus) et ne retente pas avant dix minutes.
+  let pjRetryAt = 0;
+  async function pjColumnReady() {
+    if (Date.now() < pjRetryAt) return false;
+    try { if (await ensurePjColumn()) return true; } catch (e) { /* refus de créer la table : l'enregistrement le dira lui-même */ }
+    pjRetryAt = Date.now() + 10 * 60 * 1000;
     return false;
   }
 
@@ -460,6 +472,7 @@ const Templates = (function () {
       await ensureMarginsColumn();
       await ensureDateModifColumn();
       await ensureEmailColumns();
+      await pjColumnReady();
       await ensureTrackChangesColumn();
       await modifiedByColumnReady();
     } catch (e) {
@@ -773,6 +786,7 @@ const Templates = (function () {
     await ensureMarginsColumn();
     await ensureDateModifColumn();
     await ensureEmailColumns();
+    const writesPj = await pjColumnReady();
     await ensureTrackChangesColumn();
     const writesModifiedBy = await modifiedByColumnReady();
     const now = new Date().toISOString();
@@ -782,10 +796,11 @@ const Templates = (function () {
       HeaderFooter: JSON.stringify(headerFooterData || safeParseHeaderFooter(null)),
       Margins: JSON.stringify(marginsData || safeParseMargins(null)),
       TypeModele: typeModele,
-      Destinataires: email.destinataires || '', Cc: email.cc || '', Cci: email.cci || '', Objet: email.objet || '', PJ: email.pj || '',
+      Destinataires: email.destinataires || '', Cc: email.cc || '', Cci: email.cci || '', Objet: email.objet || '',
       SuiviModifications: JSON.stringify(suiviModifications || {}),
     };
-    // Jamais une colonne que la table n'a pas : Grist refuserait tout le lot (cf. modifiedByColumnReady).
+    // Jamais une colonne que la table n'a pas : Grist refuserait tout le lot (cf. modifiedByColumnReady, pjColumnReady).
+    if (writesPj) columns.PJ = email.pj || '';
     if (writesModifiedBy) columns.ModifiePar = currentAuthorLabel();
     if (nom != null || !id) columns.Nom = nom == null ? '' : nom;
     const others = alsoWrite || [];
