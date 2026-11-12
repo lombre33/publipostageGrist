@@ -18,6 +18,7 @@ const MainLive = (function () {
       // Le texte reçu d'une autre personne de l'écriture en direct compte, il reste à enregistrer jusqu'à ce que l'une d'elles l'ait fait ; l'accroche du texte au salon (au démarrage) non.
       EditorCore.getEditor().on('update', ({ transaction }) => { if (!LinkedTable.isSyncTransaction(transaction) && !SlideLinks.isSyncTransaction(transaction) && !LiveEntry.isSettingUp()) markTextDirty(); });
       EditorCore.getEditor().on('update', scheduleEmailLengthGauge);
+      WordCount.wire(EditorCore.getEditor()); // le compteur de mots, de signes et de pages (js/word-count.js), caché au départ
       if (templateNameInput) templateNameInput.addEventListener('input', markAutosaveDirty);
       if (pdfFilenameInput) pdfFilenameInput.addEventListener('input', markAutosaveDirty);
       // Annuler ou Rétablir rend une valeur à un champ (js/field-editor.js, domaine « fields ») : le crayon du nom du PDF et les boutons « + Cci » et « + PJ » en montrent l'état, comme au chargement d'un modèle.

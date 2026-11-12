@@ -86,6 +86,12 @@ const Settings = (function () {
     write: value => FrenchTypography.setOn(value === 'on'),
     say: said('settings.typing.title', value => I18n.t('settings.typing.' + value)),
   };
+  // Le compteur de mots, de signes et de pages (js/word-count.js, qui garde la préférence) : une case de la section « Saisie », défaite par Ctrl + Z comme les autres choix.
+  const WORD_COUNT_SETTING = {
+    read: () => (WordCount.isOn() ? 'on' : 'off'),
+    write: value => WordCount.setOn(value === 'on'),
+    say: said('settings.wordCount.label', value => I18n.t('settings.wordCount.' + value)),
+  };
   const TRIGGER_SETTING = {
     read: () => Variables.triggerChar(),
     write: value => PersonStore.set(TRIGGER_KEY_STORAGE, value),
@@ -307,6 +313,7 @@ const Settings = (function () {
     const altReminderBox = byId('settings-alt-reminder');
     const varTipBox = byId('settings-var-tip');
     const frenchTypographyBox = byId('settings-french-typography');
+    const wordCountBox = byId('settings-word-count');
     const mailClientRadios = all('input[name="settings-mail-client"]');
     const triggerSelect = byId('settings-trigger-char');
     const reloadNotice = byId('settings-trigger-reload-notice');
@@ -318,6 +325,7 @@ const Settings = (function () {
       if (altReminderBox) altReminderBox.checked = AltReminder.isOn();
       if (varTipBox) varTipBox.checked = VariableTip.isOn();
       if (frenchTypographyBox) frenchTypographyBox.checked = FrenchTypography.isOn();
+      if (wordCountBox) wordCountBox.checked = WordCount.isOn();
       syncOfflineEditor();
       mailClientRadios.forEach(r => { r.checked = (r.value === MailtoExport.getMailClient()); });
       if (triggerSelect) triggerSelect.value = Variables.triggerChar();
@@ -482,6 +490,11 @@ const Settings = (function () {
     if (frenchTypographyBox) frenchTypographyBox.addEventListener('change', () => {
       SettingsHistory.track(FRENCH_TYPOGRAPHY_SETTING, () => FrenchTypography.setOn(frenchTypographyBox.checked));
       frenchTypographyBox.checked = FrenchTypography.isOn();
+    });
+    const wordCountBox = byId('settings-word-count');
+    if (wordCountBox) wordCountBox.addEventListener('change', () => {
+      SettingsHistory.track(WORD_COUNT_SETTING, () => WordCount.setOn(wordCountBox.checked));
+      wordCountBox.checked = WordCount.isOn();
     });
     wireRadios('settings-mail-client', value => SettingsHistory.track(MAIL_CLIENT_SETTING, () => MailtoExport.setMailClient(value)));
     wireTriggerChar(leave);

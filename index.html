@@ -294,7 +294,7 @@
 <link rel="stylesheet" href="css/external-images.css?v=0.3">
 <link rel="stylesheet" href="css/first-contact.css?v=0.2">
 <link rel="stylesheet" href="css/whats-new.css?v=0.5">
-<link rel="stylesheet" href="css/page-zoom.css?v=0.5">
+<link rel="stylesheet" href="css/page-zoom.css?v=0.6">
 <link rel="stylesheet" href="css/batch-progress.css?v=0.1">
 <link rel="stylesheet" href="css/field-editor.css?v=0.1">
 <link rel="stylesheet" href="css/email-plain-text.css?v=0.2">
@@ -423,7 +423,7 @@
 <link rel="preload" as="script" href="js/template-gallery.js?v=0.16">
 <link rel="preload" as="script" href="js/template-pack.js?v=0.5">
 <link rel="preload" as="script" href="js/template-gallery-modal.js?v=0.12">
-<link rel="preload" as="script" href="js/settings.js?v=0.30">
+<link rel="preload" as="script" href="js/settings.js?v=0.31">
 <link rel="preload" as="script" href="js/condition-rules.js?v=0.18">
 <link rel="preload" as="script" href="js/condition-fields.js?v=0.25">
 <link rel="preload" as="script" href="js/modal-base.js?v=0.7">
@@ -528,6 +528,7 @@
 <link rel="preload" as="script" href="js/bar-fold.js?v=0.1">
 <link rel="preload" as="script" href="js/page-zoom.js?v=0.16">
 <link rel="preload" as="script" href="js/page-chip.js?v=0.1">
+<link rel="preload" as="script" href="js/word-count.js?v=0.1">
 <link rel="preload" as="script" href="js/field-codec.js?v=0.8">
 <link rel="preload" as="script" href="js/field-editor.js?v=0.13">
 <link rel="preload" as="script" href="js/import-placing.js?v=0.6">
@@ -547,7 +548,7 @@
 <link rel="preload" as="script" href="js/main-macro-return.js?v=0.2">
 <link rel="preload" as="script" href="js/main-access.js?v=0.2">
 <link rel="preload" as="script" href="js/main-reader.js?v=0.1">
-<link rel="preload" as="script" href="js/main-live.js?v=0.3">
+<link rel="preload" as="script" href="js/main-live.js?v=0.4">
 <link rel="preload" as="script" href="js/main-slides.js?v=0.2">
 <link rel="preload" as="script" href="js/main.js?v=0.252">
 <!-- précharge des scripts : fin -->
@@ -1132,6 +1133,8 @@
           <h4 class="settings-section-title" id="settings-typing-title" data-i18n="settings.typing.title">Saisie</h4>
           <label class="settings-alt-reminder" for="settings-french-typography"><input type="checkbox" id="settings-french-typography" aria-describedby="settings-french-typography-hint"><span data-i18n="settings.typing.french">Typographie française à la frappe</span></label>
           <p class="settings-access-hint" id="settings-french-typography-hint" data-i18n="settings.typing.frenchHint">Une espace insécable avant « : ; ! ? », les guillemets « » à la place de ", l’apostrophe courbe ’ et le caractère … à la place de trois points. Un retour arrière juste après les défait. Rien n’est touché dans le texte collé ni dans un bloc de code. Sans choix de votre part, la case suit la langue de l’interface (cochée en français). Ce choix est propre à ce navigateur.</p>
+          <label class="settings-alt-reminder" for="settings-word-count"><input type="checkbox" id="settings-word-count" aria-describedby="settings-word-count-hint"><span data-i18n="settings.wordCount.label">Compter les mots, les signes et les pages</span></label>
+          <p class="settings-access-hint" id="settings-word-count-hint" data-i18n="settings.wordCount.hint">Une petite pastille en bas à gauche du document dit « 35 mots · 206 signes · 1 page » : le texte du modèle tel qu’il est écrit (une variable compte pour un mot), et les pages de l’aperçu A4. Cachée tant que la case n’est pas cochée. Ce choix est propre à ce navigateur.</p>
         </section>
         <!-- Accessibilité (js/alt-reminder.js) : le rappel « images sans texte alternatif » à l'export, éteint au départ. Une section de cet onglet : la barre des onglets est pleine à 700 px. -->
         <section class="settings-section settings-theme-section" aria-labelledby="settings-accessibility-title">
@@ -1485,7 +1488,7 @@
 <script src="js/template-gallery.js?v=0.16"></script>
 <script src="js/template-pack.js?v=0.5"></script>
 <script src="js/template-gallery-modal.js?v=0.12"></script>
-<script src="js/settings.js?v=0.30"></script>
+<script src="js/settings.js?v=0.31"></script>
 <script src="js/condition-rules.js?v=0.18"></script>
 <script src="js/condition-fields.js?v=0.25"></script>
 <script src="js/modal-base.js?v=0.7"></script>
@@ -1590,6 +1593,7 @@
 <script src="js/bar-fold.js?v=0.1"></script>
 <script src="js/page-zoom.js?v=0.16"></script>
 <script src="js/page-chip.js?v=0.1"></script>
+<script src="js/word-count.js?v=0.1"></script>
 <script src="js/field-codec.js?v=0.8"></script>
 <script src="js/field-editor.js?v=0.13"></script>
 <script src="js/import-placing.js?v=0.6"></script>
@@ -1609,7 +1613,7 @@
 <script src="js/main-macro-return.js?v=0.2"></script>
 <script src="js/main-access.js?v=0.2"></script>
 <script src="js/main-reader.js?v=0.1"></script>
-<script src="js/main-live.js?v=0.3"></script>
+<script src="js/main-live.js?v=0.4"></script>
 <script src="js/main-slides.js?v=0.2"></script>
 <script src="js/main.js?v=0.252"></script>
 </body>

@@ -37,3 +37,9 @@
 .pp-page-chip.pp-page-chip-on { opacity: 1; visibility: visible; transition: opacity .08s ease; }
 @media (prefers-reduced-motion: reduce) { .pp-page-chip, .pp-page-chip.pp-page-chip-on { transition: none; } }
 @media print { .pp-page-chip { display: none; } }
+
+/* Le compteur « 35 mots · 206 signes · 1 page » (js/word-count.js) : en bas à gauche du document, discret, de la famille de la pastille de zoom (mêmes jetons, même niveau). Hors de la barre d'outils (gelée) ;
+   caché au départ (la case de Réglages > Thème > Saisie l'allume), posé par le script au coin du document qu'on voit, sans jamais recevoir de clic. */
+.pp-word-count { position: fixed; z-index: var(--z-page-zoom); box-sizing: border-box; height: 20px; padding: 0 8px; display: inline-flex; align-items: center; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 8px); background: var(--surface); color: var(--text-muted); box-shadow: var(--shadow-card); font-family: var(--font-ui); font-size: 11px; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; user-select: none; }
+.pp-word-count[hidden] { display: none; }
+@media print { .pp-word-count { display: none; } }

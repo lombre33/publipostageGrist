@@ -43,6 +43,17 @@ const I18nTextsSettings = {
     fr: 'Une espace insécable avant « : ; ! ? », les guillemets « » à la place de ", l’apostrophe courbe ’ et le caractère … à la place de trois points. Un retour arrière juste après les défait. Rien n’est touché dans le texte collé ni dans un bloc de code. Sans choix de votre part, la case suit la langue de l’interface (cochée en français). Ce choix est propre à ce navigateur.',
     en: 'A non-breaking space before “: ; ! ?”, « » guillemets in place of ", the curly apostrophe ’ and the … character in place of three dots. A backspace right after undoes them. Pasted text and code blocks are left alone. Unless you choose, the box follows the interface language (checked in French). This choice is specific to this browser.',
   },
+  // Compteur de mots, de signes et de pages (js/word-count.js) : une case de la section « Saisie ».
+  'settings.wordCount.label': { fr: 'Compter les mots, les signes et les pages', en: 'Count words, characters and pages' },
+  'settings.wordCount.hint': {
+    fr: 'Une petite pastille en bas à gauche du document dit « 35 mots · 206 signes · 1 page » : le texte du modèle tel qu’il est écrit (une variable compte pour un mot), et les pages de l’aperçu A4. Cachée tant que la case n’est pas cochée. Ce choix est propre à ce navigateur.',
+    en: 'A small chip at the bottom left of the document says “35 words · 206 characters · 1 page”: the template text as written (a variable counts as one word), and the pages of the A4 preview. Hidden until the box is checked. This choice is specific to this browser.',
+  },
+  'settings.wordCount.on': { fr: 'allumé', en: 'on' },
+  'settings.wordCount.off': { fr: 'éteint', en: 'off' },
+  'wordCount.words': { fr: '{n} {n|mot|mots}', en: '{n} {n|word|words}' },
+  'wordCount.signs': { fr: '{n} {n|signe|signes}', en: '{n} {n|character|characters}' },
+  'wordCount.pages': { fr: '{n} {n|page|pages}', en: '{n} {n|page|pages}' },
   'settings.typing.on': { fr: 'allumée', en: 'on' },
   'settings.typing.off': { fr: 'éteinte', en: 'off' },
   // Accessibilité (js/alt-reminder.js) : une section de l'onglet Thème, la barre des onglets étant pleine.
