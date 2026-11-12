@@ -225,6 +225,8 @@
       "fixes": {
         "kit/ambiance-message": "./kit/js/ambiance-message.js?v=1fd425d",
         "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=1fd425d",
+        "kit/correcteurs-message": "./kit/js/correcteurs-message.js?v=1fd425d",
+        "kit/correcteurs-pose": "./kit/js/correcteurs-pose.js?v=1fd425d",
         "https://esm.sh/@floating-ui/dom@^1.0.0?target=es2022": "https://esm.sh/@floating-ui/dom@1.8.0?target=es2022",
         "https://esm.sh/@floating-ui/core@^1.6.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
         "https://esm.sh/@floating-ui/core@^1.8.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",

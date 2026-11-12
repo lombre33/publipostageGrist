@@ -25,7 +25,7 @@
 //     garde autour d’elle), rien de caché ni de coupé, l’ordre de lecture gardé dans chaque rangée, au plus une ligne de plus par rangée, un séparateur seul au bord de sa ligne caché (dans les trois rangées), ce qui précède le premier élément décalé n’a pas bougé, rien ne bouge là où la
 //     barre ne recouvre rien, un second calcul ne change rien, la barre partie tout revient (aucune marge ni variable ne reste) ; l’histoire ne compte pas (d’un bord à l’autre sans passer par « plus de barre », ou le
 //     cadre qui change de taille sous la barre : même résultat que depuis une page sans barre) ; un balayage à la vraie souris le long de la barre, pour les cas qui poussent un bouton à droite, à la ligne ou en bas.
-//  5 bis) LA VRAIE BARRE DE GFS A CINQ BOUTONS (34 × 154 px, zone de 42 × 162 px ; `zoneDe(…, 5)` du GFS simulé), pas les quatre de l’exemple de la consigne : aux six petits cadres (de 700 × 400 à 400 × 230) et aux quatre bords,
+//  5 bis) LA VRAIE BARRE DE GFS A CINQ BOUTONS (34 × 154 px, zone de 42 × 162 px ; `zoneDe(…, 5)` du GFS simulé), puis SIX depuis le bouton « LanguageTool » (consigne 068 : 34 × 184 px, zone de 42 × 192 px), pas les quatre de l’exemple de la consigne : aux six petits cadres (de 700 × 400 à 400 × 230) et aux quatre bords,
 //     rien sous la barre ; en haut, le sélecteur du modèle (qui ne peut que se raccourcir) finit avant la zone en gardant ses deux boutons entiers et cliquables et de quoi montrer son nom (à 400 px de large il finissait 13 px dans la zone).
 //  6) UN GFS D’AVANT LA CONSIGNE 025 et la page seule : même ligne qu’une page sans barre, rien de décalé ; la page seule cache aussi le trait d’un séparateur resté seul, dans la rangée du modèle (580 px) comme dans celle de mise en forme (800 px) : la règle ne tient pas à la barre.
 //  7) Anglais, thème sombre : même vide, en haut et à gauche.
@@ -213,7 +213,7 @@ const ALL = {
   separators: 'un séparateur seul au bord de sa ligne a son trait caché dans les trois rangées (celle de mise en forme comprise), ceux qui séparent deux éléments d’une même ligne se voient',
 };
 // Ce qui cloche entre les rangées d’une page sans barre (`ref`) et les mêmes avec la barre `bar` (`now`).
-function problemsAll(ref, now, bar) {
+function problemsAll(ref, now, bar, { logoMayMove = false } = {}) {
   const refByKey = Object.fromEntries(ref.units.map(u => [u.key, u]));
   const nowByKey = Object.fromEntries(now.units.map(u => [u.key, u]));
   const problems = { under: [], hidden: [], order: [], lines: [], before: [], idle: [], separators: separatorProblems(now) };
@@ -237,9 +237,12 @@ function problemsAll(ref, now, bar) {
     if (rowLines(now, row) > rowLines(ref, row) + 1) problems.lines.push(row + ' : ' + rowLines(ref, row) + ' → ' + rowLines(now, row) + ' lignes');
     const units = now.units.filter(u => u.row === row);
     const first = units.findIndex(u => u.gap || u.room);
+    // Quand la barre arrive jusqu'au logo (six boutons, cadre de moins de 240 px de haut, bord droit), le logo s'écarte de la zone et le retrait de droite de la rangée grandit de la même largeur : un regroupement qui ne
+    // tient plus dans ce qui reste passe à la ligne. Ce n'est pas le décalage de la barre d'outils (aucun élément ne porte de marge) mais l'écart du logo : l'essai des six boutons le permet, et le compte (`logoMoves`).
+    const logoMoved = logoMayMove && ref.logo && now.logo && Math.abs(now.logo.left - ref.logo.left) > 0.5;
     (first < 0 ? units : units.slice(0, first)).forEach((u) => {
       const was = refByKey[u.key];
-      if (was && (Math.abs(u.left - was.left) > 0.5 || Math.abs((u.top - u.origin) - (was.top - was.origin)) > 3)) problems.before.push(u.key + ' a bougé de ' + [round(was.left), round(was.top - was.origin)] + ' à ' + [round(u.left), round(u.top - u.origin)] + ' (dans sa rangée) sans rien de décalé avant lui');
+      if (!logoMoved && was && (Math.abs(u.left - was.left) > 0.5 || Math.abs((u.top - u.origin) - (was.top - was.origin)) > 3)) problems.before.push(u.key + ' a bougé de ' + [round(was.left), round(was.top - was.origin)] + ' à ' + [round(u.left), round(u.top - u.origin)] + ' (dans sa rangée) sans rien de décalé avant lui');
     });
   });
   // La barre ne recouvre rien (aucun élément n’entre dans sa zone de plus de 1 px) : la mise en page est celle d’une page sans barre, au pixel près, sans marge posée.
@@ -581,18 +584,20 @@ console.log('\n1) 700 × 400, la barre en haut dès le contexte : un vide sous l
   // La vraie barre de GFS a cinq boutons (34 × 154 px, zone de 42 × 162 px), pas les quatre de l'exemple de la consigne : la zone du haut commence plus tôt (à 400 px de large, à x 119), et le sélecteur du modèle, qui ne peut
   // que se raccourcir, finissait 13 px dans la zone (9 px sous la barre elle-même). Les mêmes petits cadres, aux quatre bords : rien sous la barre, le sélecteur du modèle se raccourcit en gardant ses deux boutons (Renommer,
   // Modèle par défaut) entiers et cliquables, et il retrouve sa largeur la barre partie.
-  const five = { issues: [], cases: 0, titles: [] };
-  for (const [width, height] of [[400, 300], [400, 230], [420, 240], [480, 300], [560, 300], [700, 400]]) {
+  // Depuis la consigne 068, le réglage « Bouton LanguageTool » de GFS ajoute un sixième bouton à la barre (34 × 184 px, zone de 42 × 192 px) : les mêmes cadres et les mêmes bords, avec six boutons.
+  const five = { issues: [], cases: 0, titles: [], logoMoves: [] };
+  for (const buttons of [5, 6]) for (const [width, height] of [[400, 300], [400, 230], [420, 240], [480, 300], [560, 300], [700, 400]]) {
     await resizeFrame(page, app, width, height);
     await setBar(page, app, null);
     const plain = await measureRows(app);
     const wide = plain.units.find(u => u.key === 'modele/v2-title-cluster#0');
     for (const [edge, label] of EDGES) {
-      const barNow = await barAt(page, edge, width, height, 5);
+      const barNow = await barAt(page, edge, width, height, buttons);
       await setBar(page, app, barNow);
       const barred = await measureRows(app);
       five.cases += 1;
-      Object.entries(problemsAll(plain, barred, barNow)).forEach(([key, list]) => list.forEach(text => five.issues.push(`${width} × ${height} ${label} : ${text}`)));
+      Object.entries(problemsAll(plain, barred, barNow, { logoMayMove: buttons === 6 })).forEach(([key, list]) => list.forEach(text => five.issues.push(`${buttons} boutons, ${width} × ${height} ${label} : ${text}`)));
+      if (plain.logo && barred.logo && Math.abs(barred.logo.left - plain.logo.left) > 0.5) five.logoMoves.push(`${buttons} boutons, ${width} × ${height} ${label}`);
       if (edge === 'haut') {
         const seen = await app.evaluate(() => {
           const box = id => { const r = document.getElementById(id).getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; };
@@ -601,20 +606,22 @@ console.log('\n1) 700 × 400, la barre en haut dès le contexte : un vide sous l
           return { cluster: box('v2-title-cluster'), rename: box('btn-rename-template'), byDefault: box('btn-set-default-template'), renameHit: hit('btn-rename-template'), defaultHit: hit('btn-set-default-template'), trigger: trigger ? trigger.getBoundingClientRect().width : 0 };
         });
         const limit = barNow.zone.x + 0.5;
-        five.titles.push(`${width} × ${height} : sélecteur ${round(seen.cluster.left)} à ${round(seen.cluster.right)} (zone dès ${barNow.zone.x}, sans barre ${round(wide.right)})`);
-        if (seen.cluster.right > limit || seen.rename.right > limit || seen.byDefault.right > limit) five.issues.push(`${width} × ${height} en haut : le sélecteur du modèle ou l'un de ses boutons finit à ${round(Math.max(seen.cluster.right, seen.rename.right, seen.byDefault.right))}, dans la zone (dès ${barNow.zone.x})`);
-        if (seen.cluster.right > wide.right + 0.5) five.issues.push(`${width} × ${height} en haut : le sélecteur est plus long avec la barre que sans (${round(seen.cluster.right)} contre ${round(wide.right)})`);
-        if (!seen.renameHit || !seen.defaultHit) five.issues.push(`${width} × ${height} en haut : Renommer ou Modèle par défaut ne reçoit plus le clic (renommer ${seen.renameHit}, par défaut ${seen.defaultHit})`);
-        if (seen.trigger < 28) five.issues.push(`${width} × ${height} en haut : le nom du modèle n'a plus de place (${round(seen.trigger)} px)`);
+        five.titles.push(`${buttons} boutons, ${width} × ${height} : sélecteur ${round(seen.cluster.left)} à ${round(seen.cluster.right)} (zone dès ${barNow.zone.x}, sans barre ${round(wide.right)})`);
+        if (seen.cluster.right > limit || seen.rename.right > limit || seen.byDefault.right > limit) five.issues.push(`${buttons} boutons, ${width} × ${height} en haut : le sélecteur du modèle ou l'un de ses boutons finit à ${round(Math.max(seen.cluster.right, seen.rename.right, seen.byDefault.right))}, dans la zone (dès ${barNow.zone.x})`);
+        if (seen.cluster.right > wide.right + 0.5) five.issues.push(`${buttons} boutons, ${width} × ${height} en haut : le sélecteur est plus long avec la barre que sans (${round(seen.cluster.right)} contre ${round(wide.right)})`);
+        if (!seen.renameHit || !seen.defaultHit) five.issues.push(`${buttons} boutons, ${width} × ${height} en haut : Renommer ou Modèle par défaut ne reçoit plus le clic (renommer ${seen.renameHit}, par défaut ${seen.defaultHit})`);
+        if (seen.trigger < 28) five.issues.push(`${buttons} boutons, ${width} × ${height} en haut : le nom du modèle n'a plus de place (${round(seen.trigger)} px)`);
       }
       await setBar(page, app, null);
       const gone = await measureRows(app);
-      if (!same(unitsAtRows(gone), unitsAtRows(plain))) five.issues.push(`${width} × ${height} ${label} : la barre partie, les rangées ne reviennent pas à ce qu'elles étaient`);
+      if (!same(unitsAtRows(gone), unitsAtRows(plain))) five.issues.push(`${buttons} boutons, ${width} × ${height} ${label} : la barre partie, les rangées ne reviennent pas à ce qu'elles étaient`);
     }
   }
-  if (VERBOSE) console.log(five.titles.join('\n'));
-  check('la barre à cinq boutons, aux six petits cadres et aux quatre bords : rien sous la barre, rien de caché, le sélecteur du modèle finit avant la zone en gardant ses deux boutons cliquables et un nom lisible, tout revient la barre partie',
-    five.cases === 24 && five.issues.length === 0, five.issues.slice(0, 8));
+  if (VERBOSE) console.log(five.titles.join('\n') + '\nlogo écarté : ' + five.logoMoves.join(' ; '));
+  check('la barre à cinq boutons, puis à six (le bouton « LanguageTool » de la consigne 068), aux six petits cadres et aux quatre bords : rien sous la barre, rien de caché, le sélecteur du modèle finit avant la zone en gardant ses deux boutons cliquables et un nom lisible, tout revient la barre partie',
+    five.cases === 48 && five.issues.length === 0, five.issues.slice(0, 8));
+  check('à six boutons seulement, et seulement au bord droit des cadres les moins hauts, la barre arrive jusqu\'au logo : il s\'écarte de la zone (la rangée du modèle perd sa place à droite et un regroupement passe à la ligne, sans rien cacher) ; jamais à cinq boutons',
+    five.logoMoves.length >= 1 && five.logoMoves.every(text => /^6 boutons, .* à droite$/.test(text)), five.logoMoves);
 
   // L’histoire ne compte pas : d’un bord à l’autre sans passer par « plus de barre », puis le cadre qui change de taille sous la barre, donnent ce que donne une page sans barre à qui on pose la barre.
   const history = [];

@@ -79,9 +79,9 @@ const KNOWN = new Set(['index.html', 'css', 'js', 'extensions', 'img', 'template
 for (const name of topLevel) if (!KNOWN.has(name) && !NEVER.includes(name)) warn(`entrée inconnue à la racine : ${name} (à classer dans publier.sh et dans controles.mjs)`);
 // Le kit de Grist Factory (kit/, sous-module du dépôt de développement, ici en fichiers : publier.sh) : un sous-module vide (.gitmodules sans fichiers) ne servirait rien, et le dépôt public n'a pas de sous-module.
 if (has('.gitmodules')) fail('.gitmodules présent : le dépôt public n\'a pas de sous-module, le kit y est en fichiers (publier.sh)');
-// Ce que l'app importe du kit (consigne 041 de GFS : la page et js/) : si le code cite le kit, ces fichiers-là sont dans l'arbre.
+// Ce que l'app importe du kit (consignes 041 et 068 de GFS : la page et js/) : si le code cite le kit, ces fichiers-là sont dans l'arbre.
 {
-  const KIT_FILES = ['kit/js/ambiance-message.js', 'kit/js/ambiance-pose.js', 'kit/js/once.js'];
+  const KIT_FILES = ['kit/js/ambiance-message.js', 'kit/js/ambiance-pose.js', 'kit/js/correcteurs-message.js', 'kit/js/correcteurs-pose.js', 'kit/js/once.js'];
   const cited = [...new Set(grep(/\bkit\/js\//, textFiles.filter(file => file.rel === 'index.html' || file.rel.startsWith('js/'))).map(hit => hit.file))];
   if (cited.length) for (const file of KIT_FILES) if (!has(file)) fail(`${cited.join(', ')} cite le kit, mais ${file} est absent de l'arbre (publier.sh doit y poser le kit : css, js et LICENSE)`);
 }

@@ -58,8 +58,8 @@
     https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js
     https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js
     https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
-    'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-IHD+uKQsKpyjQtP0XowGrWc08zPhxYNhEzGVGFmQq7I='
-    'sha256-YTcp8WGFJ+nAmi5wimdsA7eXkHalE79W1TpakAm7Ogc=' 'sha256-NOQDvFtAZJzyogwgFo789ZWtP6KbE82bIykO7VsHKO0='
+    'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-kt7Ckq2EhQRroEps+r7UdhQxk8dazDJkevBw/DlPsks='
+    'sha256-lmFNeMqoAkHe4DsO9iMIqUl0O983bV9b7rh75o+9c5M=' 'sha256-NOQDvFtAZJzyogwgFo789ZWtP6KbE82bIykO7VsHKO0='
     'sha256-dr2nJ9qlSEpVpFpN01rgQ3bZHAcSZWrebqvX0xSlX7I=';
   object-src 'none'; base-uri 'none'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; form-action 'none'">
 <!-- Enregistrement automatique coupé (pp_autosave_enabled = 'false', cf. js/main.js:isAutosaveEnabled) : le bouton Enregistrer est noir et blanc dès le PREMIER affichage, pas bleu le temps que
@@ -92,8 +92,8 @@
      a chaque demande (cache de dix minutes) vers la derniere version publiee : sans ces entrees, une version nouvelle de linkifyjs ou de floating-ui, publiee OU VOLEE sur npm, se serait chargee
      dans l'editeur le jour meme, avec l'acces complet au document. Chacune renvoie vers la version exacte que l'adresse flottante donnait le 10/11 (meme fichier final, meme texte, cache immuable).
      outils/empreintes-editeur.mjs --verifier refuse toute adresse flottante du parcours ; dev-tests/verify-code-hygiene.mjs garde le releve hors ligne.
-     Les deux premieres entrees sont celles du kit de Grist Factory (sous-module kit/, consigne 041 de GFS : l'ambiance choisie dans GFS) : un module du kit n'a qu'UNE adresse par page
-     (kit/js/once.js le dit dans la console sinon), donc js/gfs-link.js et js/gfs-ambiance.js l'importent par ce nom, jamais par un chemin. Le ?v= est le debut du commit que le depot
+     Les quatre premieres entrees sont celles du kit de Grist Factory (sous-module kit/ ; consigne 041 de GFS : l'ambiance choisie dans GFS, consigne 068 : les correcteurs du navigateur coupes) : un module du kit n'a qu'UNE adresse par page
+     (kit/js/once.js le dit dans la console sinon), donc js/gfs-link.js (les lecteurs des messages), js/gfs-ambiance.js et js/gfs-correcteurs.js (les poses) les importent par ce nom, jamais par un chemin. Le ?v= est le debut du commit que le depot
      epingle (git ls-files -s kit) : il change avec lui, dans la liste (gfs.carte.fixes) comme ici, et l'empreinte de la carte dans la politique ci-dessus avec.
      Depuis la consigne 066 de GFS, la page porte DEUX cartes en donnees : celle-ci (gfs-carte-cdn) et gfs-carte-copie, les memes noms vers les modules de vendor/editeur/ (la copie figee de l'editeur, construite
      par `node kit/outils/bibliotheques.mjs --copies` d'apres les memes versions). Le script qui les suit en pose UNE seule dans la page, avant tout le reste (Firefox n'en prend qu'une) : la copie quand l'adresse
@@ -104,6 +104,8 @@
   "imports": {
     "kit/ambiance-message": "./kit/js/ambiance-message.js?v=1fd425d",
     "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=1fd425d",
+    "kit/correcteurs-message": "./kit/js/correcteurs-message.js?v=1fd425d",
+    "kit/correcteurs-pose": "./kit/js/correcteurs-pose.js?v=1fd425d",
     "https://esm.sh/@floating-ui/dom@^1.0.0?target=es2022": "https://esm.sh/@floating-ui/dom@1.8.0?target=es2022",
     "https://esm.sh/@floating-ui/core@^1.6.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
     "https://esm.sh/@floating-ui/core@^1.8.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
@@ -169,6 +171,8 @@
   "imports": {
     "kit/ambiance-message": "./kit/js/ambiance-message.js?v=1fd425d",
     "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=1fd425d",
+    "kit/correcteurs-message": "./kit/js/correcteurs-message.js?v=1fd425d",
+    "kit/correcteurs-pose": "./kit/js/correcteurs-pose.js?v=1fd425d",
     "https://esm.sh/@floating-ui/dom@^1.0.0?target=es2022": "https://esm.sh/@floating-ui/dom@1.8.0?target=es2022",
     "https://esm.sh/@floating-ui/core@^1.6.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
     "https://esm.sh/@floating-ui/core@^1.8.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
@@ -299,10 +303,11 @@
 <link rel="stylesheet" href="css/gfs-ambiance.css?v=0.1">
 <!-- précharge des scripts : début (écrit par outils/precharger-scripts.mjs d'après les balises <script> ci-dessous : ne pas le modifier à la main) -->
 <!-- Sans ce bloc, les scripts se chargent un par un (la politique de sécurité de cette page est une balise <meta> : le navigateur ne lit plus la page à l'avance) : 8 s de plus à 30 ms d'aller-retour. -->
-<link rel="preload" as="script" href="js/gfs-link.js?v=0.17">
+<link rel="preload" as="script" href="js/gfs-link.js?v=0.18">
 <link rel="preload" as="script" href="js/person-store.js?v=0.3">
 <link rel="preload" as="script" href="js/gfs-bar.js?v=0.5">
 <link rel="preload" as="script" href="js/gfs-ambiance.js?v=0.1">
+<link rel="preload" as="script" href="js/gfs-correcteurs.js?v=0.1">
 <link rel="preload" as="script" href="js/perf-trace.js?v=0.3">
 <link rel="preload" as="script" href="js/dom.js?v=0.4">
 <link rel="preload" as="script" href="js/image-io.js?v=0.4">
@@ -1326,13 +1331,15 @@
     <div class="pp-modal-actions modal-actions"><p class="settings-save-reminder" id="settings-save-reminder" role="status" hidden></p><button id="settings-close" data-i18n="common.close">Fermer</button></div>
   </div></div>
 </div>
-<!-- GFS (js/gfs-link.js), les préférences de la personne (js/person-store.js), la barre de GFS (js/gfs-bar.js) puis la pose de son ambiance (js/gfs-ambiance.js, consigne 041) AVANT tout autre script : le contexte que GFS donne
-     (dont l'espace de l'app, consigne 024, sa barre, consigne 025, et l'ambiance qu'il a choisie) est demandé dès le premier script et arrive pendant que les autres se chargent, si bien que le thème, les raccourcis ou le caractère de
-     déclenchement que ces scripts lisent en se chargeant sont déjà ceux de la personne, que la zone de la barre est connue de qui voudra s'en écarter et que l'ambiance est posée avant que les autres n'aient fini de se charger. -->
-<script src="js/gfs-link.js?v=0.17"></script>
+<!-- GFS (js/gfs-link.js), les préférences de la personne (js/person-store.js), la barre de GFS (js/gfs-bar.js), la pose de son ambiance (js/gfs-ambiance.js, consigne 041) puis la coupure des correcteurs du navigateur quand son bouton
+     le dit (js/gfs-correcteurs.js, consigne 068) AVANT tout autre script : le contexte que GFS donne (dont l'espace de l'app, consigne 024, sa barre, consigne 025, l'ambiance qu'il a choisie et ses correcteurs) est demandé dès le premier script
+     et arrive pendant que les autres se chargent, si bien que le thème, les raccourcis ou le caractère de déclenchement que ces scripts lisent en se chargeant sont déjà ceux de la personne, que la zone de la barre est connue de qui voudra
+     s'en écarter, que l'ambiance est posée avant que les autres n'aient fini de se charger et que la marque des correcteurs est sur chaque zone de texte dès qu'elle naît. -->
+<script src="js/gfs-link.js?v=0.18"></script>
 <script src="js/person-store.js?v=0.3"></script>
 <script src="js/gfs-bar.js?v=0.5"></script>
 <script src="js/gfs-ambiance.js?v=0.1"></script>
+<script src="js/gfs-correcteurs.js?v=0.1"></script>
 <script src="js/perf-trace.js?v=0.3"></script>
 <script src="js/dom.js?v=0.4"></script>
 <script src="js/image-io.js?v=0.4"></script>

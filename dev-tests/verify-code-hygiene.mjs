@@ -68,8 +68,8 @@
 //  30. le site de GitHub Pages qui perd un des deux fichiers de sa racine : `.nojekyll` (sans lui, Pages passe d'abord les .md dans Jekyll, et une accolade double ouverte dans un seul d'entre eux fait
 //      échouer la publication en silence : le site reste sur la version d'avant ; consigne 037 de GFS) ou `index.html` ; et l'envoi sur le dépôt public qui le laisserait derrière : `.nojekyll` retiré de PUBLIES
 //      ou rangé dans EXCLUS (publier.sh), absent de la liste des fichiers requis de controles.mjs, ou un arbre à publier sans lui que controles.mjs laisserait passer (« Les deux » d'Antoine du 03/11).
-//  31. l'ambiance de GFS (consigne GFS 041, guide des apps règle 15) : le kit de GFS est un sous-module épinglé que la carte d'importation de index.html ne nomme que par ses deux modules de lecture et de pose, à son empreinte, et que
-//      rien d'autre n'importe (jamais son lien, jamais son `ambiance.js` : deux liens dans un cadre se prennent les réponses) ; css/gfs-ambiance.css n'agit que sous `data-gfs-ambiance` ou `data-gfs-forme` ; un jeton de forme se lit
+//  31. l'ambiance de GFS (consigne GFS 041, guide des apps règle 15) : le kit de GFS est un sous-module épinglé que la carte d'importation de index.html ne nomme que par ses quatre modules de lecture et de pose (l'ambiance, puis,
+//      depuis la consigne 068, les correcteurs du navigateur), à son empreinte, et que rien d'autre n'importe (jamais son lien, jamais son `ambiance.js` ni son `correcteurs.js` : deux liens dans un cadre se prennent les réponses) ; css/gfs-ambiance.css n'agit que sous `data-gfs-ambiance` ou `data-gfs-forme` ; un jeton de forme se lit
 //      avec sa valeur d'origine en repli, jamais ceux de la mise en page de GFS (`--main-bg`, `--gap`...) ; l'impression les remet à leur repli ; et aucune couleur n'est écrite en dur dans les feuilles hors de la liste justifiée
 //      dev-tests/ambiance-exceptions.json (le papier, l'état, le type, les repères de capture : ce que l'ambiance ne doit pas changer).
 //  32. un nom que le guide Grist.Gouv juge pauvre : une variable déclarée `a`, `b`, `c`, `d`, `f`, `z`, `data`, `tmp`, `val`, `obj`, `arr`, `ret`... (`e`, `x`, `y`, `i`, `j`, `k`, `n` restent permis) ou une fonction
@@ -1765,8 +1765,9 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // ============================================================================
 // Dans GFS, la personne choisit une ambiance (Grist Factory, Pop, Papier, Brut, Néon, ou sa couleur) : js/gfs-ambiance.js pose ses jetons sur <html> et les feuilles les lisent. Rien de tout cela ne casse un test
 // fonctionnel quand il se défait : une couleur écrite en dur ne suit simplement pas l'ambiance, un jeton lu sans repli casse la page hors de GFS, un second lien de GFS dans le cadre prend les réponses du premier. Ce
-// contrôle garde les cinq règles : (1) le kit est un sous-module (.gitmodules + gitlink) dont la carte d'importation de index.html ne nomme que `kit/ambiance-message` et `kit/ambiance-pose`, à l'empreinte du gitlink ;
-// (2) rien n'importe un autre module du kit ; (3) css/gfs-ambiance.css n'a aucune règle hors `:root[data-gfs-ambiance]` ou `:root[data-gfs-forme]` (sans ambiance, elle ne change rien) ; (4) un jeton de forme se lit avec
+// contrôle garde les cinq règles : (1) le kit est un sous-module (.gitmodules + gitlink) dont la carte d'importation de index.html ne nomme que `kit/ambiance-message`, `kit/ambiance-pose` et, depuis la consigne 068 (les
+// correcteurs du navigateur coupés par le bouton « LanguageTool » de GFS), `kit/correcteurs-message` et `kit/correcteurs-pose`, à l'empreinte du gitlink ;
+// (2) rien n'importe un autre module du kit (js/gfs-correcteurs.js ne prend que la pose, jamais `kit/js/correcteurs.js`, qui démarrerait un second lien) ; (3) css/gfs-ambiance.css n'a aucune règle hors `:root[data-gfs-ambiance]` ou `:root[data-gfs-forme]` (sans ambiance, elle ne change rien) ; (4) un jeton de forme se lit avec
 // sa valeur d'origine en repli, ceux de la mise en page de GFS ne se lisent jamais, et `.pp-print-host` (l'impression : ce que l'app produit) remet à leur repli tous ceux que les feuilles lisent ; (5) aucune couleur
 // (#rrggbb, rgb(), hsl(), nom) n'est écrite en dur dans css/ ni extensions/ - hors définition de jeton et hors repli de `var(--x, #fff)` - sans règle de dev-tests/ambiance-exceptions.json qui dit pourquoi, et
 // aucune règle de cette liste ne reste sans effet.
@@ -1803,9 +1804,9 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const importMap = (() => { try { return JSON.parse(importMapText(index)).imports; } catch (e) { return {}; } })();
   const kitEntries = Object.entries(importMap).filter(([name]) => name.startsWith('kit/'));
   const copyKitEntries = (() => { try { return Object.entries(JSON.parse(copyMapText(index)).imports).filter(([name]) => name.startsWith('kit/')); } catch (e) { return []; } })(); // la carte de la copie de l'éditeur (066) porte les mêmes
-  check('ambiance de GFS : le kit est un sous-module épinglé (.gitmodules et gitlink) et la carte d\'importation de index.html n\'en nomme que `kit/ambiance-message` et `kit/ambiance-pose`, à l\'empreinte du gitlink (sept premiers caractères)',
+  check('ambiance de GFS : le kit est un sous-module épinglé (.gitmodules et gitlink) et la carte d\'importation de index.html n\'en nomme que `kit/ambiance-message`, `kit/ambiance-pose`, `kit/correcteurs-message` et `kit/correcteurs-pose`, à l\'empreinte du gitlink (sept premiers caractères)',
     pin !== '' && /\[submodule "kit"\]\s+path = kit\s+url = https:\/\/github\.com\/lombre33\/grist-factory-kit\.git/.test(modules)
-      && JSON.stringify(kitEntries) === JSON.stringify([['kit/ambiance-message', `./kit/js/ambiance-message.js?v=${pin.slice(0, 7)}`], ['kit/ambiance-pose', `./kit/js/ambiance-pose.js?v=${pin.slice(0, 7)}`]])
+      && JSON.stringify(kitEntries) === JSON.stringify(['ambiance-message', 'ambiance-pose', 'correcteurs-message', 'correcteurs-pose'].map(name => [`kit/${name}`, `./kit/js/${name}.js?v=${pin.slice(0, 7)}`]))
       && JSON.stringify(copyKitEntries) === JSON.stringify(kitEntries),
     JSON.stringify({ pin: pin.slice(0, 7), kitEntries, copyKitEntries }));
 
@@ -1815,8 +1816,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   for (const [rel, text] of importers) {
     for (const match of text.matchAll(/(?:import\s*\(\s*|\bfrom\s+|\bsrc=)['"]([^'"]*\bkit\/[^'"]*)['"]/g)) kitImports.push(`${rel} : ${match[1]}`);
   }
-  check('ambiance de GFS : seuls js/gfs-link.js (`kit/ambiance-message`) et js/gfs-ambiance.js (`kit/ambiance-pose`) importent le kit - jamais son lien (`kit/js/gfs-link.js`), son `ambiance.js` ni son `host.js` : deux liens de GFS dans un cadre numérotent chacun leurs appels depuis 1 et se prennent les réponses',
-    JSON.stringify(kitImports.sort()) === JSON.stringify(['js/gfs-ambiance.js : kit/ambiance-pose', 'js/gfs-link.js : kit/ambiance-message']), kitImports.join(' ; '));
+  check('ambiance de GFS : seuls js/gfs-link.js (`kit/ambiance-message`, `kit/correcteurs-message`), js/gfs-ambiance.js (`kit/ambiance-pose`) et js/gfs-correcteurs.js (`kit/correcteurs-pose`) importent le kit - jamais son lien (`kit/js/gfs-link.js`), son `ambiance.js`, son `correcteurs.js` ni son `host.js` : deux liens de GFS dans un cadre numérotent chacun leurs appels depuis 1 et se prennent les réponses',
+    JSON.stringify(kitImports.sort()) === JSON.stringify(['js/gfs-ambiance.js : kit/ambiance-pose', 'js/gfs-correcteurs.js : kit/correcteurs-pose', 'js/gfs-link.js : kit/ambiance-message', 'js/gfs-link.js : kit/correcteurs-message']), kitImports.join(' ; '));
 
   // (3) la feuille de l'ambiance n'agit que sous ses deux marques de <html>
   const unscoped = [];

@@ -54,7 +54,7 @@ HTML
     cd "$T/kit-src"
     mkdir -p css js test
     echo '.kit { color: #000; }' > css/tokens.css
-    for f in ambiance-message ambiance-pose once; do echo "export default '$f';" > "js/$f.js"; done
+    for f in ambiance-message ambiance-pose correcteurs-message correcteurs-pose once; do echo "export default '$f';" > "js/$f.js"; done
     printf 'GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\n' > LICENSE
     echo '# kit' > README.md; echo x > CHANGELOG.md; echo x > test/a.mjs
     G add -A; G commit -qm kit

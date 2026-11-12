@@ -1,6 +1,6 @@
 // Le lien avec Grist Factory Suite (GFS) : ce que le widget en sait quand GFS l'héberge, et rien quand il tourne seul (une fenêtre de Grist qui charge l'adresse de ce dépôt).
 // Les messages de GFS ont leur enveloppe (contrats de GFS, section 5) : { gfs: <contrat>, type: 'appel' | 'reponse' | 'erreur' | 'evenement', id, nom, args | data }, sans le `mtype` du
-// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Douze choses seulement :
+// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Quatorze choses seulement :
 //  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }),
 //    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre),
 //    `ouverture`, ce que GFS demande d'ouvrir au démarrage (consigne 010 ; pour « Nouveau > Importer », le fichier à importer que GFS donne, consigne 035), `langue`, la langue qui vaut maintenant (`fr` ou `en`, consigne 019), `stockage`, l'espace de cette app chez GFS
@@ -20,6 +20,10 @@
 //    de la personne, un seul pour GFS et toutes ses apps, `{ id, couleur, ajustee, clair, sombre, forme }` ou `null` (rien n'est choisi : l'app garde ses couleurs). Il est lu par `normalizeAmbiance` du kit
 //    (kit/js/ambiance-message.js, une carte d'importation de index.html le nomme) : les jetons que l'app connaît et des valeurs vérifiées, rien d'autre. Le dernier est gardé (`ambiance()`, une copie),
 //    les abonnés de `onAmbiance` sont rappelés quand il change vraiment (js/gfs-ambiance.js, le seul à s'en servir : il pose les jetons sur la page) ;
+//  - `correcteurs` (contrats 5.2, point 13, consigne 068), au contexte puis par l'événement `correcteurs` `{ correcteurs }` (une fois par changement, quand la personne coupe ou rallume les correcteurs du navigateur, LanguageTool,
+//    par le bouton de la barre de GFS) : `{ coupes: true | false }`, vrai quand elle les a coupés. Il est lu par `normalizeCorrecteurs` du kit (kit/js/correcteurs-message.js, une carte d'importation de index.html le nomme) :
+//    tout ce qui n'est pas exactement `{ coupes: true }` vaut « pas coupé ». Le dernier est gardé (`correcteurs()`, une copie), les abonnés de `onCorrecteurs` sont rappelés quand `coupes` change vraiment (js/gfs-correcteurs.js,
+//    le seul à s'en servir : il pose la marque que LanguageTool respecte sur chaque zone de texte de la page) ;
 //  - `lecteurs` (demande du 06/11, objet vidéo de Slides+, js/video-frame.js), au contexte puis par l'événement `lecteurs` `{ lecteurs }` : les sites dont GFS sait jouer le lecteur (`youtube`, `vimeo`), qu'il pose lui-même par-dessus
 //    le cadre de l'app (le cadre isolé n'a pas d'identité et un lecteur posé dedans échoue) ; l'app lui dit quoi et où par les appels `lecteur.afficher { id, fournisseur, video, debut?, rect, zone }`, `lecteur.deplacer { id, rect, zone }`,
 //    `lecteur.masquer { id, masque }` et `lecteur.fermer { id }`, sans `id` d'appel (GFS ne répond rien), et GFS dit où en est son lecteur par l'événement `lecteur { id, etat }` (`lecture`, `pause`, `fin`, `erreur`). Sans la clé, la liste est vide
@@ -35,7 +39,7 @@
 //    `importer`, `lire` ou `lien`) et dont il attend `{ ferme: true | false }` avant de détruire son cadre : l'abonné de `onClose` répond (js/gfs-open.js : ce qui attend est enregistré avant le `oui`). Une réponse qui
 //    échoue est une erreur (`GFS_ECHEC`, GFS demande alors à la personne), jamais un `oui`. Tout autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3).
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
-// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `players()` rend [], `player()` rend faux, `settingsSaved()` rend null, `ambiance()` rend null, `hideBar()` rend faux, `opensInNewTab()` rend faux et `deposit()` et `attach()` rejettent sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
+// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `players()` rend [], `player()` rend faux, `settingsSaved()` rend null, `ambiance()` rend null, `correcteurs()` rend { coupes: false }, `hideBar()` rend faux, `opensInNewTab()` rend faux et `deposit()` et `attach()` rejettent sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
 // qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js, js/gfs-open.js, js/person-store.js et js/gfs-bar.js, jamais par ce fichier (sauf `opensInNewTab`, que trois liens consultent, consigne 011).
 const GfsLink = (function () {
   const CONTRACT = 0;                // le contrat que parle l'app, celui de son manifeste
@@ -75,6 +79,10 @@ const GfsLink = (function () {
   let ambianceRaw = null;      // ce que GFS a dit, tel quel : relu dès que le lecteur du kit est là
   let readAmbiance = null;     // `normalizeAmbiance` du kit, une fois son module chargé (hébergée seulement)
   const ambianceListeners = new Set();
+  let correcteurs = { coupes: false };   // `correcteurs` du contexte, puis de l'événement `correcteurs` (consigne 068), lu par `normalizeCorrecteurs` du kit : { coupes } ; { coupes: false } seul, si GFS ne le donne pas, ou si le lecteur du kit n'est pas là
+  let correcteursRaw = null;   // ce que GFS a dit, tel quel : relu dès que le lecteur du kit est là
+  let readCorrecteurs = null;  // `normalizeCorrecteurs` du kit, une fois son module chargé (hébergée seulement)
+  const correcteursListeners = new Set();
   let openHandler = null;      // celui qui s'est inscrit pour l'appel `ouvrir` (onOpen)
   const earlyOpens = [];       // les appels `ouvrir` arrivés avant lui : ils attendent son inscription
   let closeHandler = null;     // celui qui s'est inscrit pour l'appel `fermer` (onClose)
@@ -154,8 +162,8 @@ const GfsLink = (function () {
     return list.filter((name, at) => list.indexOf(name) === at);
   }
 
-  // Ce que GFS donne (contexte ou événement `extensions`) : une liste d'identifiants, des sources, l'adresse du widget, l'ouverture demandée, la langue, l'espace de l'app, la barre et l'ambiance, rien d'autre n'est gardé. L'événement
-  // `extensions` n'a ni adresse, ni ouverture, ni langue, ni espace, ni barre, ni ambiance : il ne les efface pas. La langue du contexte (`fr` ou `en`) fait foi à chaque appel `contexte` ; elle est gardée sans rappeler personne
+  // Ce que GFS donne (contexte ou événement `extensions`) : une liste d'identifiants, des sources, l'adresse du widget, l'ouverture demandée, la langue, l'espace de l'app, la barre, l'ambiance et les correcteurs, rien d'autre n'est gardé. L'événement
+  // `extensions` n'a ni adresse, ni ouverture, ni langue, ni espace, ni barre, ni ambiance, ni correcteurs : il ne les efface pas. La langue du contexte (`fr` ou `en`) fait foi à chaque appel `contexte` ; elle est gardée sans rappeler personne
   // (applyLanguage rappelle ceux qui suivent l'événement `langue`). Il en va de même de la barre : celle du contexte est gardée sans rappeler personne (le départ lit `bar()`), applyBar rappelle ceux qui suivent
   // l'événement `barre`.
   function apply(data) {
@@ -166,6 +174,7 @@ const GfsLink = (function () {
     if ('stockage' in data) storage = normalizeStorage(data.stockage);
     if ('barre' in data) bar = normalizeBar(data.barre);
     if ('ambiance' in data) setAmbiance(data.ambiance);
+    if ('correcteurs' in data) setCorrecteurs(data.correcteurs);
     if ('lecteurs' in data) players = normalizePlayers(data.lecteurs);
     const nextExtensions = (Array.isArray(data.extensions) ? data.extensions : []).filter(id => typeof id === 'string' && ID_PATTERN.test(id));
     const nextLibraries = new Map();
@@ -259,6 +268,32 @@ const GfsLink = (function () {
     setAmbiance(ambianceRaw);
   }).catch(e => console.warn('[GfsLink] le lecteur d\'ambiance du kit ne se charge pas : l\'app garde ses couleurs', e));
 
+  // Les correcteurs du contexte ou de l'événement `correcteurs` (contrats 5.2, point 13, consigne 068) : le message est gardé tel que GFS l'a dit puis lu par `normalizeCorrecteurs` du kit, pour qui tout ce qui n'est pas exactement
+  // `{ coupes: true }` vaut « pas coupé ». Les abonnés de `onCorrecteurs` sont rappelés (`fn(correcteurs())`) quand `coupes` change vraiment, au contexte comme à l'événement ; un message qui, lu, donne le même résultat que
+  // le précédent ne rappelle personne. Tant que le lecteur du kit n'est pas là, rien n'est lu (pas coupé) : il relit alors le dernier message dès son arrivée.
+  function setCorrecteurs(raw) {
+    correcteursRaw = raw === undefined ? null : raw;
+    const next = readCorrecteurs === null ? { coupes: false } : readCorrecteurs(correcteursRaw);
+    if (next.coupes === correcteurs.coupes) return;
+    correcteurs = { coupes: next.coupes };
+    correcteursListeners.forEach((fn) => { try { fn(getCorrecteurs()); } catch (e) { console.warn('[GfsLink] abonné des correcteurs en échec', e); } });
+  }
+
+  // L'événement `correcteurs` : `{ correcteurs }`, le message. Un événement sans `correcteurs` ne dit rien et ne change rien.
+  function applyCorrecteurs(data) {
+    known = true;
+    if (!data || typeof data !== 'object' || !('correcteurs' in data)) return;
+    setCorrecteurs(data.correcteurs);
+  }
+
+  // Le lecteur du kit : kit/js/correcteurs-message.js par la carte d'importation de index.html, une seule adresse (le kit la demande). Seule l'app hébergée le charge, dès le départ et en même temps que le contexte se demande ;
+  // seule, rien n'est téléchargé. Un module qui ne se charge pas (le dépôt de l'app sans son kit, un réseau qui le coupe) ne casse rien : l'app ne coupe rien et le dit une fois dans la console.
+  const correcteursReader = !hosted ? Promise.resolve() : import('kit/correcteurs-message').then((module) => {
+    if (typeof module.normalizeCorrecteurs !== 'function') throw new TypeError('normalizeCorrecteurs manque au module');
+    readCorrecteurs = module.normalizeCorrecteurs;
+    setCorrecteurs(correcteursRaw);
+  }).catch(e => console.warn('[GfsLink] le lecteur des correcteurs du kit ne se charge pas : l\'app ne coupe rien', e));
+
   function onMessage(event) {
     if (event.source !== window.parent) return;
     const message = event.data;
@@ -274,6 +309,7 @@ const GfsLink = (function () {
     else if (message.type === 'evenement' && message.nom === 'barre') applyBar(message.data);
     else if (message.type === 'evenement' && message.nom === 'reglages') applySettings(message.data);
     else if (message.type === 'evenement' && message.nom === 'ambiance') applyAmbiance(message.data);
+    else if (message.type === 'evenement' && message.nom === 'correcteurs') applyCorrecteurs(message.data);
     else if (message.type === 'evenement' && message.nom === 'lecteurs') applyPlayers(message.data);
     else if (message.type === 'evenement' && message.nom === 'lecteur') applyPlayerEvent(message.data);
     else if (message.type === 'appel') receiveCall(message);
@@ -373,6 +409,9 @@ const GfsLink = (function () {
   // L'ambiance que la personne a choisie pour GFS et ses apps (consigne 041) : celle du contexte, puis celle du dernier événement `ambiance`, lue par le kit : { id, couleur, ajustee, clair, sombre, forme } (voir
   // setAmbiance), une copie que l'appelant peut garder. null seul, si GFS ne répond pas ou ne la donne pas (un GFS d'avant la consigne 041), quand rien n'est choisi, ou quand le lecteur du kit ne s'est pas chargé.
   function getAmbiance() { return ambiance === null ? null : JSON.parse(JSON.stringify(ambiance)); }
+  // Les correcteurs du navigateur (LanguageTool), coupés ou non par la personne (consigne 068) : ceux du contexte, puis ceux du dernier événement `correcteurs`, lus par le kit : { coupes }, une copie que l'appelant peut garder.
+  // { coupes: false } seul, si GFS ne répond pas ou ne les donne pas (un GFS d'avant la consigne 068), tant que le bouton n'est pas dans sa barre, et quand le lecteur du kit ne s'est pas chargé.
+  function getCorrecteurs() { return { coupes: correcteurs.coupes }; }
   // Les sites que GFS sait jouer (`['youtube', 'vimeo']`), une copie ; vide seul ou quand GFS ne les donne pas.
   function getPlayers() { return players.slice(); }
   // Un appel `lecteur.<action>` vers GFS (`afficher`, `deplacer`, `masquer`, `fermer`), sans `id` d'appel : GFS ne répond rien. `args` est un objet simple (js/video-frame.js en fait la forme : identifiants et nombres, jamais
@@ -391,6 +430,9 @@ const GfsLink = (function () {
   // Un abonné de l'ambiance est rappelé (`fn(ambiance())`) à chaque changement du message lu : au contexte quand il en porte un, à chaque événement `ambiance` qui change l'état, et quand le lecteur du kit arrive après
   // eux. Rend de quoi se désabonner.
   function onAmbiance(fn) { ambianceListeners.add(fn); return () => ambianceListeners.delete(fn); }
+  // Un abonné des correcteurs est rappelé (`fn(correcteurs())`) à chaque changement de `coupes` : au contexte quand il dit « coupés », à chaque événement `correcteurs` qui change l'état, et quand le lecteur du kit arrive après
+  // eux. Rend de quoi se désabonner.
+  function onCorrecteurs(fn) { correcteursListeners.add(fn); return () => correcteursListeners.delete(fn); }
   // Un abonné de la langue est rappelé (`fn('fr' | 'en')`) à chaque événement `langue` qui change celle de GFS, jamais à l'arrivée du contexte : le départ lit `language()`. Rend de quoi se désabonner.
   function onLanguage(fn) { languageListeners.add(fn); return () => languageListeners.delete(fn); }
   // Un abonné des réglages est rappelé (`fn(true | false)`, ce que rend `settingsSaved()`) à chaque événement `reglages` qui change l'état, jamais à l'arrivée du contexte (il n'en porte pas) : le départ lit
@@ -485,5 +527,5 @@ const GfsLink = (function () {
     call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(readerIfNeeded).then(settleReady);
   } else settleReady();
 
-  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, players: getPlayers, player, onChange, onLanguage, onSettings, onBar, onAmbiance, onPlayerEvent, onOpen, onClose, install, deposit, attach };
+  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, correcteurs: getCorrecteurs, players: getPlayers, player, onChange, onLanguage, onSettings, onBar, onAmbiance, onCorrecteurs, onPlayerEvent, onOpen, onClose, install, deposit, attach };
 })();

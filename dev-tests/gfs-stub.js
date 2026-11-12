@@ -33,6 +33,10 @@
 //   window.__gfsStub.ambiance : le message d'ambiance que rend le contexte (contrats 5.2 point 10, consigne 041) : `{ id, couleur, ajustee, clair, sombre, forme }` (dix-neuf jetons de couleur par mode, la forme en textes de CSS), null : rien n'est choisi
 //   (Grist Factory sans couleur), ou undefined : un GFS d'avant la consigne 041 (par défaut), dont le contexte n'a pas d'`ambiance` et qui n'envoie aucun événement. Réglée avant le chargement de la page, comme `barre` ; setAmbiance(message)
 //   la change et envoie l'événement `ambiance` `{ ambiance }`, UNE seule fois par geste, et rien quand le message ne change pas, comme GFS. dev-tests/fixtures/ambiances-gfs.json porte de vrais messages, produits par le moteur d'ambiances de GFS.
+//   window.__gfsStub.correcteurs : le message des correcteurs du navigateur que rend le contexte (contrats 5.2 point 13, consigne 068) : `{ coupes: true | false }`, vrai quand la personne a coupé LanguageTool par le bouton de la barre de GFS ; undefined : un GFS
+//   d'avant la consigne 068 (par défaut), dont le contexte n'a pas de `correcteurs` et qui n'envoie aucun événement (un vrai GFS qui n'a pas le bouton dans sa barre rend `{ coupes: false }`). Réglée avant le chargement de la page, comme `ambiance` ;
+//   setCorrecteurs(message) la change et envoie l'événement `correcteurs` `{ correcteurs: { coupes } }`, UNE seule fois par changement de `coupes`, et rien quand il ne change pas, comme GFS (cocher la ligne « Bouton LanguageTool » alors que le choix
+//   de couper est éteint n'envoie rien) ; un message d'une autre forme se poste tel quel par `post({ type: 'evenement', nom: 'correcteurs', data })`.
 //   window.__gfsStub.ranger : l'appel `ranger { fichier, nom, type?, lot?, suivants?, dossier? }` (contrats 5.4 point 9, consigne 043) - null : un GFS d'avant la consigne 043, dont l'appel reçoit `GFS_INCONNU` (par défaut) ; sinon un objet de réglage que le
 //   test pose (`{}` : un GFS qui sait ranger) : `quandPris` ('copie' par défaut, 'remplace' ou 'ignore', ou une fonction `(nom, args, rang) => …` : ce que la personne répond à la fenêtre « Ce nom est déjà pris »), `erreur` ({ code, message } : toutes les
 //   demandes échouent ainsi), `erreurs` ({ rang: { code, message } } : celle-là seule, `rang` compté de 1 dans l'ordre des appels), `delai` (millisecondes avant la réponse : le temps que la personne prend). Il tient le contrat : le nom reçoit « .pdf » s'il lui
@@ -88,6 +92,7 @@
     refus: [],
     barre: undefined,
     ambiance: undefined,
+    correcteurs: undefined,
     masquee: false,
     refusBarre: [],
     ignoreContext: false,
@@ -130,6 +135,7 @@
       if (stub.stockage) data.stockage = Object.assign({}, stub.stockage);
       if (stub.barre !== undefined) data.barre = stub.shownBar();
       if (stub.ambiance !== undefined) data.ambiance = JSON.parse(JSON.stringify(stub.ambiance));
+      if (stub.correcteurs !== undefined) data.correcteurs = JSON.parse(JSON.stringify(stub.correcteurs));
       if (stub.lecteurs !== undefined) data.lecteurs = stub.lecteurs.slice();
       return data;
     },
@@ -438,6 +444,14 @@
       if (JSON.stringify(next) === JSON.stringify(stub.ambiance)) return;
       stub.ambiance = next === undefined ? undefined : JSON.parse(JSON.stringify(next));
       stub.post({ type: 'evenement', nom: 'ambiance', data: { ambiance: next === undefined ? null : JSON.parse(JSON.stringify(next)) } });
+    },
+    // L'événement `correcteurs` : la personne coupe ou rallume les correcteurs du navigateur par le bouton de la barre de GFS. Un seul événement par changement de `coupes`, et aucun quand il ne change pas, comme GFS.
+    setCorrecteurs(next) {
+      const was = Boolean(stub.correcteurs) && stub.correcteurs.coupes === true;
+      stub.correcteurs = next === undefined ? undefined : JSON.parse(JSON.stringify(next));
+      const now = Boolean(stub.correcteurs) && stub.correcteurs.coupes === true;
+      if (was === now) return;
+      stub.post({ type: 'evenement', nom: 'correcteurs', data: { correcteurs: { coupes: now } } });
     },
   };
   // Ce que l'app écrit à son parent : ses appels (contrats 5.1) et ses réponses aux appels de GFS.

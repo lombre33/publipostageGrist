@@ -79,7 +79,7 @@ chemin est affiché.
   sous-module. Le dépôt public n'a pas de sous-module : `.gitmodules` ne part pas (`EXCLUS`), le kit y arrive en
   fichiers ordinaires, ceux de son commit épinglé (`KIT_PARTIES` : `css`, `js`, `LICENSE`), sans son README, son
   journal ni ses essais. Ce que la page ou `js/` en importe (`kit/js/ambiance-message.js`, `ambiance-pose.js`,
-  `once.js`) doit y être, sinon `controles.mjs` s'arrête.
+  `correcteurs-message.js`, `correcteurs-pose.js`, `once.js`) doit y être, sinon `controles.mjs` s'arrête.
 - Un sous-dossier de `public/` autre que `screenshots/`, ou autre chose qu'un `.png` dans `public/screenshots/`.
 - Une version qui n'est pas du semver, ou une étiquette déjà prise.
 - D'écraser ce que le dépôt public a reçu depuis la dernière étiquette (une contribution acceptée là-bas et

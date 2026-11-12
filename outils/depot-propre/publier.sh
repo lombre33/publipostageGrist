@@ -37,7 +37,7 @@ PUBLIES=(index.html css js extensions img templates-gallery LICENSE .nojekyll ki
 # et son adresse nomme le compte du dépôt de développement ; le kit part en fichiers (KIT_PARTIES ci-dessous).
 # package.json (la liste unique des bibliothèques, consignes 063 et 067 de GFS) et bibliotheques/ (son catalogue) restent dans le dépôt de développement : les poser dans le dépôt public, pour Dependabot, est une décision à part.
 EXCLUS=(.claude .gitignore .gitmodules AUDIT_CODE.md CAHIER_DES_CHARGES.md GFS-ETAT.md README.md bibliotheques dev-tests outils package.json planning prototypes templates-gallery-dev)
-# Ce que le dépôt public reçoit du kit (consigne 041 de GFS : l'app en importe ambiance-message.js et ambiance-pose.js, qui importe once.js) : ce que le kit sert, sa licence ;
+# Ce que le dépôt public reçoit du kit (consignes 041 et 068 de GFS : l'app en importe ambiance-message.js, ambiance-pose.js, correcteurs-message.js et correcteurs-pose.js, qui importent once.js) : ce que le kit sert, sa licence ;
 # ni son README, ni son journal, ni ses essais.
 KIT_PARTIES=(css js LICENSE)
 
