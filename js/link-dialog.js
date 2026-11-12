@@ -513,12 +513,7 @@ const LinkDialog = (function () {
   }
   function showTip(anchor) {
     if (!anchor.isConnected) return;
-    if (!tip) {
-      tip = el('div', 'pp-link-tip');
-      tip.setAttribute('role', 'tooltip');
-      tip.hidden = true;
-      document.body.appendChild(tip);
-    }
+    if (!tip) tip = EditorTip.create('pp-link-tip');
     tip.textContent = '';
     const href = anchor.getAttribute('href') || '';
     const anchorId = Anchors.idOfHref(href);
@@ -530,15 +525,7 @@ const LinkDialog = (function () {
     } else {
       tip.append(el('span', 'pp-link-tip-url', href), el('span', 'pp-link-tip-hint', I18n.t('hyperlink.openHint', { key: modKey() })));
     }
-    tip.hidden = false;
-    const rect = anchor.getClientRects()[0] || anchor.getBoundingClientRect();
-    const tipRect = tip.getBoundingClientRect();
-    // La barre de GFS (js/gfs-bar.js) : sous le lien, l'info-bulle s'arrête avant la zone (une barre en bas la fait passer au-dessus) ; sans barre, le bas du cadre.
-    const under = GfsBar.limits({ left: rect.left, right: rect.left + tipRect.width, top: rect.bottom + 6, bottom: rect.bottom + 6 + tipRect.height });
-    const below = rect.bottom + 6 + tipRect.height <= Math.min(window.innerHeight, under.bottom) - 4;
-    tip.style.top = Math.max(4, below ? rect.bottom + 6 : rect.top - 6 - tipRect.height) + 'px';
-    tip.style.left = Math.max(4, Math.min(rect.left, window.innerWidth - tipRect.width - 4)) + 'px';
-    ViewportFit.avoidBar(tip, rect); // ce que la barre recouvre encore (à sa gauche ou à sa droite, ou le lien tout en haut) : l'info-bulle glisse hors de la zone
+    EditorTip.place(tip, anchor);
   }
 
   function wireEditor(ed) {

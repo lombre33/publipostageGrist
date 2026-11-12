@@ -1178,6 +1178,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
       const tree = noCommentsJs(read('js/template-tree-select.js'));
       const select = noCommentsJs(read('js/search-select.js'));
       const link = noCommentsJs(read('js/link-dialog.js'));
+      const tipJs = noCommentsJs(read('js/editor-tip.js'));
       const grid = noCommentsJs(read('js/grid-editor.js'));
       const others = jsFiles.filter(rel => rel !== 'js/gfs-bar.js' && rel !== 'js/viewport-fit.js' && /GfsBar\.settle\b/.test(noCommentsJs(read(rel))));
       return others.length === 0
@@ -1186,10 +1187,10 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
         && /ViewportFit\.releaseBar\(el\);/.test(core) && /ViewportFit\.avoidBar\(el, referenceEl\.getBoundingClientRect\(\)\)/.test(core) && /GfsBar\.onChange\(\(\) => \{ if \(relayout && !docked && el\.classList\.contains\('visible'\)\) relayout\(\); \}\);/.test(core)
         && /ViewportFit\.releaseBar\(popup\);/.test(tree) && /ViewportFit\.avoidBar\(popup, rect\)/.test(tree) && /GfsBar\.onChange\(\(\) => \{ if \(popup\.classList\.contains\('is-open'\)\) positionPopup\(\); \}\);/.test(tree)
         && /ViewportFit\.releaseBar\(panel\);/.test(select) && /ViewportFit\.avoidBar\(panel, rect\)/.test(select) && /s\.offBar = GfsBar\.onChange\(s\.onResize\);/.test(select)
-        && /GfsBar\.limits\(/.test(link) && /ViewportFit\.avoidBar\(tip, rect\)/.test(link) && /ViewportFit\.avoidBar\(tip, \{ left: event\.clientX/.test(grid)
+        && /EditorTip\.place\(tip, anchor\)/.test(link) && /GfsBar\.limits\(/.test(tipJs) && /ViewportFit\.avoidBar\(tip, rect\)/.test(tipJs) && /ViewportFit\.avoidBar\(tip, \{ left: event\.clientX/.test(grid)
         && /\.pp-bar-capped \{ max-height: var\(--pp-bar-cap\) !important; overflow-y: auto;/.test(read('css/editor-v2.css'))
         && /\.v2-floating-toolbar\.v2-table-toolbar:not\(\.docked\) \{[^}]*max-width: calc\(100vw - var\(--gfs-bar-inset-left, 0px\) - var\(--gfs-bar-inset-right, 0px\)/.test(read('css/grid.css'));
-    })(), 'js/viewport-fit.js, js/editor-core.js, js/template-tree-select.js, js/search-select.js, js/link-dialog.js, js/grid-editor.js, css/editor-v2.css, css/grid.css');
+    })(), 'js/viewport-fit.js, js/editor-core.js, js/template-tree-select.js, js/search-select.js, js/link-dialog.js, js/editor-tip.js, js/grid-editor.js, css/editor-v2.css, css/grid.css');
   // Le logo et la sortie de la Lecture épurée (consigne GFS 025, deuxième lot, dernier sujet) : posés à demeure dans un coin, ils s'écartent par GfsBar.keepClear (une propriété `translate`, jamais leur top ou leur right :
   // leur place d'origine reste celle de la feuille de style) ; le logo laisse son recul à la ligne de la barre d'outils (`--pp-logo-shift`, qui s'ajoute à la réserve de 34 px) ; aucun autre fichier n'appelle keepClear.
   check('barre de GFS : le logo (js/toolbar-gap.js) et la sortie de la Lecture épurée (js/clean-reading.js) s’écartent de la zone par GfsBar.keepClear (une propriété `translate`, jamais leur top ou leur right), la ligne de la barre d’outils réserve le recul du logo (`--pp-logo-shift`, css/toolbar-v2.css) et aucun autre fichier que la languette du panneau replié (js/bar-fold.js) n’appelle keepClear',
