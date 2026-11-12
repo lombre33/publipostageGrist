@@ -28,7 +28,7 @@ const HEIGHT = 400;
 // Le nombre d'actions de js/shortcuts.js, une ligne chacune dans la liste. Une action ajoutée ou retirée le change : le dire ici et, pour une action
 // ajoutée, la nommer dans ADDED_ACTIONS (remapPart) pour qu'elle soit lue une à une et pas seulement comptée. 54 jusqu'au 09/10, 57 depuis « Graphique
 // de la page… » (chartBlock), l'exposant et l'indice, ajoutés ce jour-là sans que ce compte suive ; 58 depuis « Créer un graphique… » (chartMake), 59 depuis « Texte alternatif » (altText, ajoutée sans que ce compte suive), 60 depuis « Vidéo… » (videoBlock), 61 depuis « Palette de commandes » (commandPalette, Alt+/), 62 depuis « Replier le panneau du haut » (barFold).
-const ACTION_COUNT = 62;
+const ACTION_COUNT = 66;
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
 
 // Même régénération du harnais et même miroir hors-ligne que dev-tests/verify-text-expansion-keyboard.mjs.

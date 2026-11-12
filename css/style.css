@@ -391,3 +391,6 @@ input, select, textarea, button { font-family: var(--font-ui); }
 /* « Modifications non enregistrées » (enregistrement automatique coupé, js/main.js:updateSaveStatus) : couleur du texte courant au lieu du gris
    des autres messages, pour se repérer d'un coup d'œil, sans le rouge d'une erreur : rien n'a échoué, l'enregistrement est à faire à la main. */
 #status-msg.is-unsaved { color: var(--text); }
+/* « 2 variables à revoir » (js/variable-review.js) : le message mène à la bulle rouge ou orange suivante au clic ; souligné comme un lien, sans couleur d'erreur (la bulle seule est signalée). */
+#status-msg.pp-status-review { color: var(--text); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+#status-msg.pp-status-review:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }

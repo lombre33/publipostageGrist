@@ -980,6 +980,8 @@ const Editor = (function () {
     });
     // Les pastilles « @ » : rouges quand leur fiche n'existe plus, nom à jour (js/mention.js).
     Mention.markChips(root);
+    // Le coin d'état compte les bulles à revoir (js/variable-review.js) : seulement pour le document, pas pour les champs texte à bulles.
+    if (editor && root === editor.view.dom) VariableReview.refresh();
   }
   // La table de la page au dernier signalement : ce qu'une bulle doit à la page (Variables.isUnlinked) change avec elle, sans que le document bouge.
   let markedPage = null;

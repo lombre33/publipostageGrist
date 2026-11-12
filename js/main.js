@@ -1114,6 +1114,7 @@
       // Le curseur revient dans l'éditeur à l'endroit où il était, sans faire défiler le document.
       focusEditor: () => { const editor = EditorCore.getEditor(); if (editor && editor.isEditable) editor.commands.focus(null, { scrollIntoView: false }); },
     });
+    VariableReview.wire(); // le coin d'état « N variables à revoir » (js/variable-review.js)
     MarkFields.wire(); // la case « Repérer les champs » du menu Mode lecture (js/mark-fields.js)
     BarFold.wire(); // la languette qui replie le panneau du haut (js/bar-fold.js)
     wireA4PreviewToggle();

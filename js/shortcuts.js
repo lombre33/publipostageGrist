@@ -303,6 +303,7 @@ const Shortcuts = (function () {
       { id: 'commandPalette', group: 'view', label: 'shortcuts.action.commandPalette', key: 'Alt+/', scope: 'app', run: () => typeof CommandPalette !== 'undefined' && CommandPalette.toggle() },
       // La valeur de la bulle sélectionnée (js/variable-tip.js) : aux flèches la bulle se sélectionne, l'info-bulle vient seule après 0,6 s ; cette ligne de la palette la montre tout de suite. Sans touche d'origine.
       { id: 'variableValue', group: 'view', label: 'shortcuts.action.variableValue', key: '', scope: 'editor', run: () => typeof VariableTip !== 'undefined' && VariableTip.showSelected() },
+      { id: 'nextReviewVariable', group: 'view', label: 'review.action', key: '', scope: 'editor', run: () => typeof VariableReview !== 'undefined' && VariableReview.next() },
       { id: 'find', group: 'view', label: 'shortcuts.action.find', key: 'Mod+f', native: true, scope: 'app', aria: tip('v2-btn-find'), run: findPanel(false) },
       { id: 'replace', group: 'view', label: 'shortcuts.action.replace', key: 'Mod+h', macKey: 'Mod+Shift+h', aliases: ['Mod+Shift+h'], native: true, scope: 'app', run: findPanel(true) },
       // Mise en forme

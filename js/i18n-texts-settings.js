@@ -512,7 +512,7 @@ const I18nTextsSettings = {
   // --- Palette de commandes (js/command-palette.js, Alt+/) : chercher une commande par son nom et la lancer. Le nom de chaque commande est celui de sa ligne dans Réglages > Raccourcis ; `palette.kw.<action>` ajoute les mots
   // qu'on tape pour la trouver quand son nom ne les porte pas (« pdf » pour « Exporter »). ---
   'shortcuts.action.commandPalette': { fr: 'Palette de commandes', en: 'Command palette' },
-  'shortcuts.action.variableValue': { fr: 'Voir la valeur de la variable sélectionnée', en: 'Show the value of the selected variable' },
+  'shortcuts.action.variableValue': { fr: 'Valeur de la variable choisie', en: 'Value of the selected variable' },
   'palette.title': { fr: 'Palette de commandes', en: 'Command palette' },
   'palette.search.label': { fr: 'Rechercher une commande', en: 'Search for a command' },
   'palette.search.placeholder': { fr: 'Une commande : pdf, tableau, gras…', en: 'A command: pdf, table, bold…' },

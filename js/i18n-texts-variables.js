@@ -2,6 +2,13 @@
 // Chargé AVANT js/i18n.js, qui assemble tous les js/i18n-texts-*.js. Un texte neuf va dans le fichier de son domaine, en français et en anglais dans le même lot, et le `?v=` de ce fichier monte dans index.html ;
 // une clé n'existe que dans un seul fichier (l'essai « aucune clé déclarée deux fois » lit les fichiers ensemble).
 const I18nTextsVariables = {
+  // --- Variables à revoir (js/variable-review.js) : le coin d'état et la commande de la palette ---
+  'review.status.one': { fr: '1 variable à revoir', en: '1 variable to review' },
+  'review.status.many': { fr: '{n} variables à revoir', en: '{n} variables to review' },
+  'review.status.tip': { fr: 'Aller à la variable à revoir (une bulle rouge ou orange) ; un nouveau clic mène à la suivante', en: 'Go to the variable to review (a red or amber bubble); another click goes to the next one' },
+  'review.at': { fr: 'Variable à revoir {i}/{n} : {problem}', en: 'Variable to review {i}/{n}: {problem}' },
+  'review.none': { fr: 'Aucune variable à revoir.', en: 'No variable to review.' },
+  'review.action': { fr: 'Aller à la variable à revoir suivante', en: 'Go to the next variable to review' },
   // --- Info-bulle de valeur d'une bulle de l'éditeur (js/variable-tip.js) ---
   'varTip.empty': { fr: '(vide)', en: '(empty)' },
   'varTip.hidden': { fr: 'Masquée pour cette ligne : sa condition n’est pas remplie', en: 'Hidden for this row: its condition is not met' },
