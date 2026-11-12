@@ -215,6 +215,7 @@
 <link rel="stylesheet" href="css/heading-styles.css?v=0.1">
 <link rel="stylesheet" href="css/sheet-assembly.css?v=0.3">
 <link rel="stylesheet" href="css/pdf-protection.css?v=0.3">
+<link rel="stylesheet" href="css/pdf-fonts.css?v=0.1">
 <link rel="stylesheet" href="css/versions-history.css?v=0.2">
 <link rel="stylesheet" href="css/external-images.css?v=0.3">
 <link rel="stylesheet" href="css/first-contact.css?v=0.2">
@@ -247,8 +248,8 @@
 <link rel="preload" as="script" href="js/space-gap.js?v=0.3">
 <link rel="preload" as="script" href="js/reader-mode.js?v=0.198">
 <link rel="preload" as="script" href="js/reader-guide.js?v=0.7">
-<link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.3">
-<link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.12">
+<link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.4">
+<link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.13">
 <link rel="preload" as="script" href="js/i18n-texts-format.js?v=0.1">
 <link rel="preload" as="script" href="js/i18n-texts-blocks.js?v=0.3">
 <link rel="preload" as="script" href="js/i18n-texts-editor.js?v=0.1">
@@ -377,7 +378,7 @@
 <link rel="preload" as="script" href="js/anchors.js?v=0.5">
 <link rel="preload" as="script" href="js/qr-code.js?v=0.10">
 <link rel="preload" as="script" href="js/gfs-open.js?v=0.6">
-<link rel="preload" as="script" href="js/extensions.js?v=0.87">
+<link rel="preload" as="script" href="js/extensions.js?v=0.88">
 <link rel="preload" as="script" href="js/pdf-reading.js?v=0.3">
 <link rel="preload" as="script" href="js/chart-entry.js?v=0.5">
 <link rel="preload" as="script" href="js/live-entry.js?v=0.4">
@@ -439,6 +440,7 @@
 <link rel="preload" as="script" href="js/sheet-assembly-dialog.js?v=0.7">
 <link rel="preload" as="script" href="js/pdf-protection.js?v=0.2">
 <link rel="preload" as="script" href="js/pdf-protection-dialog.js?v=0.4">
+<link rel="preload" as="script" href="js/pdf-font-plan.js?v=0.1">
 <link rel="preload" as="script" href="js/page-sense-edit.js?v=0.2">
 <link rel="preload" as="script" href="js/orientation-toggle.js?v=0.20">
 <link rel="preload" as="script" href="js/clean-reading.js?v=0.8">
@@ -453,7 +455,7 @@
 <link rel="preload" as="script" href="js/batch-progress.js?v=0.1">
 <link rel="preload" as="script" href="js/batch-precheck.js?v=0.1">
 <link rel="preload" as="script" href="js/email-drafts.js?v=0.1">
-<link rel="preload" as="script" href="js/main-export.js?v=0.8">
+<link rel="preload" as="script" href="js/main-export.js?v=0.9">
 <link rel="preload" as="script" href="js/main-autosave.js?v=0.4">
 <link rel="preload" as="script" href="js/main-save.js?v=0.2">
 <link rel="preload" as="script" href="js/main-leave.js?v=0.1">
@@ -1253,8 +1255,8 @@
 <script src="js/space-gap.js?v=0.3"></script>
 <script src="js/reader-mode.js?v=0.198"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
-<script src="js/i18n-texts-templates.js?v=0.3"></script>
-<script src="js/i18n-texts-export.js?v=0.12"></script>
+<script src="js/i18n-texts-templates.js?v=0.4"></script>
+<script src="js/i18n-texts-export.js?v=0.13"></script>
 <script src="js/i18n-texts-format.js?v=0.1"></script>
 <script src="js/i18n-texts-blocks.js?v=0.3"></script>
 <script src="js/i18n-texts-editor.js?v=0.1"></script>
@@ -1347,7 +1349,7 @@
 <!-- Moteurs d'export : js/export-engines.js les charge au premier export (ExportEngines.ensure), pas à l'ouverture. Ces balises ne s'exécutent pas (le
      navigateur ne connaît pas leur type) ; leur version de cache se monte comme celle de tout script. -->
 <script src="js/export-engines.js?v=0.2"></script>
-<script type="text/x-lazy-engine" data-engine="pdf" src="js/pdf-export.js?v=1.111"></script>
+<script type="text/x-lazy-engine" data-engine="pdf" src="js/pdf-export.js?v=1.112"></script>
 <script type="text/x-lazy-engine" data-engine="sheets" src="js/sheet-layout.js?v=0.3"></script>
 <script type="text/x-lazy-engine" data-engine="merge" src="js/pdf-merge.js?v=0.9"></script>
 <script type="text/x-lazy-engine" data-engine="archive" src="js/pdf-archive.js?v=0.2"></script>
@@ -1402,7 +1404,7 @@
 <script src="js/anchors.js?v=0.5"></script>
 <script src="js/qr-code.js?v=0.10"></script>
 <script src="js/gfs-open.js?v=0.6"></script>
-<script src="js/extensions.js?v=0.87"></script>
+<script src="js/extensions.js?v=0.88"></script>
 <script src="js/pdf-reading.js?v=0.3"></script>
 <script src="js/chart-entry.js?v=0.5"></script>
 <script src="js/live-entry.js?v=0.4"></script>
@@ -1464,6 +1466,7 @@
 <script src="js/sheet-assembly-dialog.js?v=0.7"></script>
 <script src="js/pdf-protection.js?v=0.2"></script>
 <script src="js/pdf-protection-dialog.js?v=0.4"></script>
+<script src="js/pdf-font-plan.js?v=0.1"></script>
 <script src="js/page-sense-edit.js?v=0.2"></script>
 <script src="js/orientation-toggle.js?v=0.20"></script>
 <script src="js/clean-reading.js?v=0.8"></script>
@@ -1478,7 +1481,7 @@
 <script src="js/batch-progress.js?v=0.1"></script>
 <script src="js/batch-precheck.js?v=0.1"></script>
 <script src="js/email-drafts.js?v=0.1"></script>
-<script src="js/main-export.js?v=0.8"></script>
+<script src="js/main-export.js?v=0.9"></script>
 <script src="js/main-autosave.js?v=0.4"></script>
 <script src="js/main-save.js?v=0.2"></script>
 <script src="js/main-leave.js?v=0.1"></script>

@@ -1,0 +1,28 @@
+/* La fenêtre « Polices du document » (js/pdf-font-plan.js) : ce que le PDF fera des polices que le document nomme et que le PDF n'a pas, puis, seulement quand le document est écrit en Marianne, le bloc de cette police
+   (le choix Roboto ou Marianne, la déclaration à cocher, les règles de l'État). Titre et boutons restent en place, le contenu défile : dans les 376 px du panneau de 700x400, les deux blocs se lisent en faisant
+   défiler. Chargé après css/modal-base.css et css/variable-actions.css (le cadre et les boutons de la fenêtre en viennent). Jetons seulement. */
+.pp-fonts-intro { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; color: var(--text); overflow-wrap: anywhere; }
+.pp-fonts-section { margin: 0 0 12px; }
+.pp-fonts-section[hidden], .pp-fonts-note[hidden], .pp-fonts-choice[hidden] { display: none; }
+.pp-fonts-heading { margin: 0 0 4px; font-size: 12px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--text); }
+.pp-fonts-text { margin: 0 0 6px; font-size: 12.5px; line-height: 1.5; color: var(--text-muted); overflow-wrap: anywhere; }
+.pp-fonts-note { font-weight: 600; color: var(--text); }
+.pp-fonts-list { margin: 0 0 4px; padding: 0 0 0 10px; list-style: none; }
+.pp-fonts-row { margin: 0 0 2px; font-size: 12.5px; line-height: 1.5; color: var(--text); overflow-wrap: anywhere; }
+.pp-fonts-name { font-weight: 700; }
+.pp-fonts-arrow { color: var(--text-muted); }
+.pp-fonts-choice { min-width: 0; margin: 4px 0 8px; padding: 0 0 0 10px; border: 0; }
+.pp-fonts-legend { padding: 0; margin: 0 0 4px; font-size: 12px; font-weight: 700; color: var(--text); }
+.pp-fonts-check { display: flex; align-items: flex-start; gap: 6px; margin: 0 0 3px; font-size: 12.5px; line-height: 1.45; font-weight: 600; color: var(--text); cursor: pointer; }
+.pp-fonts-check input { flex: none; margin: 2px 0 0; accent-color: var(--accent-solid); cursor: inherit; }
+.pp-fonts-check input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pp-fonts-check input:disabled + span { color: var(--text-muted); }
+.pp-fonts-consent { margin-left: 22px; font-weight: 400; }
+.pp-fonts-status { min-height: 0; margin: 4px 0 0 22px; font-size: 12px; line-height: 1.45; color: var(--text-muted); overflow-wrap: anywhere; }
+.pp-fonts-status:empty { display: none; }
+.pp-fonts-status.is-problem { font-weight: 600; color: var(--danger-ink); }
+.pp-fonts-rules { margin: 0; font-size: 12.5px; line-height: 1.5; }
+.pp-fonts-rules-label { display: block; margin: 0 0 2px; font-weight: 700; color: var(--text); }
+.pp-fonts-rules-list { margin: 0; padding: 0 0 0 10px; list-style: none; }
+.pp-fonts-link { color: var(--accent-ink); text-decoration: underline; overflow-wrap: anywhere; }
+.pp-fonts-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

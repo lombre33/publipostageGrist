@@ -1412,8 +1412,17 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     if (/(?:https?:)?\/\/[^\s'"`]*plotly|plotly[^\n]*(?:https?:)?\/\/[^\s'"`]+\.js\b/i.test(code)) named.push(rel);
     if (/\b2\.13\.2\b/.test(code)) versions.push(rel);
   }
-  check('extension : ni l\'adresse de Plotly ni une empreinte (sha384-…) ne sont écrites dans le code du widget ou de ses extensions, ni ailleurs dans la page que dans sa politique (la source vient de GFS)',
-    named.length === 0 && !jsFiles.filter(rel => rel.startsWith('extensions/')).some(rel => /sha(256|384|512)-[A-Za-z0-9+/=]{20,}/.test(read(rel))), named.join(', '));
+  // La seule exception : les quatre empreintes de la police Marianne (ce sont des polices, pas du code ; le fichier se lit chez jsDelivr et se vérifie avant d'entrer dans le PDF, cf. la ligne suivante).
+  const FONT_EXTENSION = 'extensions/polices/marianne.js';
+  check('extension : ni l\'adresse de Plotly ni une empreinte (sha384-…) ne sont écrites dans le code du widget ou de ses extensions, ni ailleurs dans la page que dans sa politique (la source vient de GFS) - sauf les quatre empreintes des fichiers de la police Marianne',
+    named.length === 0 && !jsFiles.filter(rel => rel.startsWith('extensions/') && rel !== FONT_EXTENSION).some(rel => /sha(256|384|512)-[A-Za-z0-9+/=]{20,}/.test(read(rel))), named.join(', '));
+  const fontFilesInTree = ['js', 'extensions', 'css', 'img'].flatMap(dir => listFiles(dir, /\.(woff2?|ttf|otf)$/i));
+  const marianneCode = noCommentsJs(read(FONT_EXTENSION));
+  const marianneAddresses = marianneCode.match(/https?:\/\/[^\s'"`]+/g) || [];
+  const marianneOrder = marianneCode.indexOf('await digestOf(bytes)') > 0 && marianneCode.indexOf('await digestOf(bytes)') < marianneCode.indexOf('await woffToSfnt(bytes)') && /digest !== \(hashes/.test(marianneCode);
+  check('extension polices : la police Marianne ne se lit que chez jsDelivr, dans la version exacte du DSFR (jamais flottante), chaque fichier avec son empreinte SHA-384, comparée avant que le fichier entre dans pdfMake ; aucune balise script, aucun fichier de la police dans le dépôt',
+    marianneAddresses.length === 1 && /^https:\/\/cdn\.jsdelivr\.net\/npm\/@gouvfr\/dsfr@/.test(marianneAddresses[0]) && /const VERSION = '\d+\.\d+\.\d+';/.test(marianneCode) && (marianneCode.match(/hash: 'sha384-[A-Za-z0-9+/=]{64}'/g) || []).length === 4 && marianneOrder && !/createElement\(\s*['"]script['"]\s*\)/.test(marianneCode) && fontFilesInTree.length === 0,
+    JSON.stringify({ addresses: marianneAddresses, order: marianneOrder }));
   check('extension : la version exacte de Plotly (2.13.2) s\'écrit une fois dans le code, avec son identifiant, dans extensions/graphique/chart-plot.js (la politique d\'index.html la porte aussi, dans l\'adresse)',
     versions.length === 1 && versions[0] === 'extensions/graphique/chart-plot.js' && /const LIBRARY = \{ id: 'plotly', version: '2\.13\.2' \};/.test(read('extensions/graphique/chart-plot.js')), versions.join(', '));
   const plot = noCommentsJs(read('extensions/graphique/chart-plot.js'));

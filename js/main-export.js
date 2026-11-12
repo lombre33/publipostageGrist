@@ -189,7 +189,11 @@ const MainExport = (function () {
       return PdfProtection.settingsForRow(protection, await GristAPI.fetchRowById(tableId, record.id, true));
     }
 
+    // Le plan des polices du PDF (js/pdf-font-plan.js) ne vaut que pour l'export qui l'a demandé : remis à zéro à sa fin, quelle que soit la sortie.
     async function exportRecordAs(kind) {
+      try { return await runRecordExport(kind); } finally { if (typeof PdfFontPlan !== 'undefined') PdfFontPlan.reset(); }
+    }
+    async function runRecordExport(kind) {
       const spec = SINGLE_EXPORTS[kind];
       Editor.exitHeaderFooterModeIfActive();
       const record = GristAPI.getCurrentRecord();
@@ -208,6 +212,8 @@ const MainExport = (function () {
         const doc = await currentRecordDocument(tableId, record, { keepProps: !!spec.keepProps, anchors: writesSlideAnchors(spec) });
         if (doc.split) { await onExportBatch(spec.batch, doc.split, { protection }); return; }
         await ExportEngines.ensure(spec.engines);
+        // Les polices du PDF : la fenêtre « Polices du document » quand une police du modèle ne peut pas y entrer (ou qu'il est écrit en Marianne) ; y renoncer ne lance rien.
+        if (spec.engines.includes('pdf') && typeof PdfFontPlan !== 'undefined' && !(await PdfFontPlan.review([doc.html, doc.headerFooterData]))) { setStatus(I18n.t('status.exportCancelled')); return; }
         PdfDelivery.takeReport();   // un rapport resté d'un export d'avant ne dit rien de celui-ci
         const saved = await spec.run(doc, tableId, record, protection);
         // « Annuler » sur la fenêtre des pages blanches (le PDF seul, js/pdf-export.js) : rien n'est enregistré, et la ligne n'est pas datée.
@@ -842,6 +848,17 @@ const MainExport = (function () {
     // comme la ligne.
     // `preset` (facultatif) : ce que l'export seul a déjà demandé avant de partir en lot - { protection }, les réglages de la fenêtre « PDF protégé ».
     async function onExportBatch(kind, only, preset) {
+      try { return await runBatchExport(kind, only, preset); } finally { if (typeof PdfFontPlan !== 'undefined') PdfFontPlan.reset(); }
+    }
+    // Tout ce qui porte une police dans un lot : le HTML et les en-têtes de chaque modèle employé, et les modèles d'un macro-modèle (ils n'ont pas de HTML à eux).
+    function batchFontTexts(jobs, templatesCache) {
+      const texts = [];
+      new Set(jobs.map(job => job.source)).forEach((source) => { texts.push(source.html, source.headerFooterData); });
+      jobs.forEach((job) => { if (job.rowHtml !== undefined) texts.push(job.rowHtml); });
+      if (jobs.some(job => job.source.isMacro)) (templatesCache || []).forEach((tpl) => { texts.push(tpl.contenu, tpl.headerFooter); });
+      return texts;
+    }
+    async function runBatchExport(kind, only, preset) {
       const cfg = BATCH_EXPORTS[kind];
       Editor.exitHeaderFooterModeIfActive();
       const tableId = getCurrentTableId() || GristAPI.getCurrentTableId();
@@ -872,6 +889,8 @@ const MainExport = (function () {
       }
       const sheetSetup = await confirmBatch(cfg, { only, tableId, rowCount: rows.length, jobCount: jobs.length, splitting, protection: preset && preset.protection, linkedView: linked, confirmed: checked.confirmed });
       if (!sheetSetup) return;
+      // Les polices des PDF du lot : une seule fenêtre « Polices du document » pour tous les documents du lot ; y renoncer ne lance rien.
+      if (cfg.engines.includes('pdf') && typeof PdfFontPlan !== 'undefined' && !(await PdfFontPlan.review(batchFontTexts(jobs, templatesCache)))) { setStatus(I18n.t('status.exportCancelled')); return; }
 
       // Ni JSZip ni le lot PDF ne sont chargés d'office au démarrage du widget : `JSZip` n'existe pas tant que ceci n'a pas été attendu au moins une
       // fois.

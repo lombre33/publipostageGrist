@@ -178,11 +178,14 @@ const PdfExport = (function () {
     'courier new': 'Cousine', 'courier': 'Cousine',
     'calibri': 'Carlito',
   };
+  // Une police que le PDF n'a pas prend la plus proche de celles qu'il a (js/pdf-font-plan.js : Cambria -> Tinos, Consolas -> Cousine), Marianne la sienne si la personne l'a incluse ; sinon null : Roboto.
   function pdfFontFor(value) {
     if (!value) return null;
     const first = value.split(',')[0].trim().replace(/^["']|["']$/g, '').toLowerCase();
-    return FONT_FAMILY_MAP[first] || null;
+    return FONT_FAMILY_MAP[first] || (typeof PdfFontPlan !== 'undefined' ? PdfFontPlan.substituteFor(first) : null);
   }
+  // Cette famille (en minuscules) s'écrit-elle dans le PDF telle quelle, sans remplacement : Roboto, ou une des cinq que le PDF a sous un équivalent de même chasse ?
+  const hasEmbeddedFamily = lower => lower === 'roboto' || Object.prototype.hasOwnProperty.call(FONT_FAMILY_MAP, lower);
 
   function addDecoration(out, name) {
     const list = Array.isArray(out.decoration) ? out.decoration.slice() : (out.decoration ? [out.decoration] : []);
@@ -5459,5 +5462,5 @@ const PdfExport = (function () {
     return { blob: await rendered.blob(), filename, blankPages: rendered.blankPages };
   }
 
-  return { exportCurrentRecord, getNativePdfBlobForRecord, ensurePdfLibsLoaded };
+  return { exportCurrentRecord, getNativePdfBlobForRecord, ensurePdfLibsLoaded, hasEmbeddedFamily, pdfFontFor };
 })();
