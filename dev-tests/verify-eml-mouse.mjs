@@ -5,7 +5,7 @@
 // bouton Exporter : le fichier .eml téléchargé est lu (en-têtes, objet et destinataire résolus pour la ligne, HTML mis en forme, pièce jointe octet pour octet - servie par la route du faux
 // Grist, comme le ferait le vrai serveur -), et le type « PDF » rend la barre de texte brut. ATTENTION - ce que ce parcours ne prouve pas : aucun VRAI client de messagerie n'a ouvert le fichier.
 // Lancé par run-headless.mjs (groupe Node "emlMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-eml-mouse.mjs
-// EML_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
+// EML_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) et le .eml téléchargé (essai-vrai-export.eml, à ouvrir dans un vrai client) ; sans elle, rien n'est écrit.
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
@@ -230,6 +230,7 @@ async function run() {
   await realClick('#btn-export-pdf', 200);
   const download = await downloading;
   const filePath = await download.path();
+  if (SHOTS) await writeFile(join(SHOTS, 'essai-vrai-export.eml'), readFileSync(filePath));
   const raw = readFileSync(filePath).toString('latin1');
   check('le fichier téléchargé porte l’extension .eml', /\.eml$/.test(download.suggestedFilename()), download.suggestedFilename());
   check('le fichier est de l’ASCII pur, CRLF partout', /^[\x00-\x7F]*$/.test(raw) && !/(^|[^\r])\n/.test(raw), null);
