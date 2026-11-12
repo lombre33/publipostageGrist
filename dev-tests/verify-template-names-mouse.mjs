@@ -473,6 +473,65 @@ check('... et l’enregistrement automatique l’écrit (une ligne, l’ancien n
 await away(page);
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
+// 5 bis) Le premier Ctrl+S d'un modèle sans nom (audit confort du 12/11, idée 11) : la fenêtre du nom arrive avec le premier titre déjà écrit
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+console.log('\n== Premier Ctrl+S sans nom ==');
+const dialogText = (page) => page.evaluate(() => {
+  const m = document.getElementById('pp-dialog-modal'); if (!m || getComputedStyle(m).display === 'none') return null;
+  const q = (sel) => { const e = m.querySelector(sel); return e ? e.textContent : null; };
+  return { title: q('#pp-dialog-title'), message: q('#pp-dialog-message'), label: q('.pp-dialog-label, label') };
+});
+// Un modèle neuf, un titre (« ## » + espace) puis une ligne de texte, tapés au vrai clavier ; la question « Ne pas enregistrer » du modèle d'avant, si elle vient, est répondue.
+async function newDocumentWithHeading(heading, discard = 'Ne pas enregistrer') {
+  await newMenuRow('#v2-btn-new-document', 600);
+  if ((await dialogInfo(page)).shown) await clickQuestion(discard);
+  await typeInEditor('## ' + heading);
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('Une ligne de texte');
+  await page.waitForTimeout(150);
+}
+let firstSave;
+await newDocumentWithHeading('Bail de location');
+let before = (await names(page)).length;
+await page.keyboard.press('Control+s'); await page.waitForTimeout(600);
+dlg = await dialogInfo(page);
+firstSave = await dialogText(page);
+check('Ctrl+S sur un modèle neuf sans nom : la fenêtre « Enregistrer » arrive avec « Bail de location » (le premier titre) saisi et sélectionné, le focus dans le champ, entière dans le panneau',
+  dlg.shown && dlg.value === 'Bail de location' && dlg.selected && dlg.focused && dlg.inPanel && firstSave.title === 'Enregistrer', { dlg, firstSave });
+check('elle dit d’où vient la proposition et garde ses deux boutons « Annuler » et « Enregistrer »', firstSave.message === 'Proposé : le premier titre du document.' && dlg.buttons.join('|') === 'Annuler|Enregistrer', { firstSave, buttons: dlg.buttons });
+await page.screenshot({ path: SHOTS + '/5-premier-ctrl-s.png', clip: { x: 0, y: 0, width: 700, height: 400 } });
+await markStatus(page);
+await page.keyboard.press('Enter'); await page.waitForTimeout(900);
+n = await names(page);
+st = await statusInfo(page);
+check('Entrée enregistre le modèle sous « Bail de location » (une ligne de plus), le titre le montre, sans phrase rouge « Nom du modèle requis. »',
+  n.length === before + 1 && n.filter(x => x === 'Bail de location').length === 1 && (await label(page)) === 'Bail de location' && !st.seen.some(t => /requis/.test(t)), { n, label: await label(page), seen: st.seen });
+await away(page);
+
+// Annuler (Échap) : rien n'est écrit, rien n'est dit en rouge, le modèle reste sans nom, le focus revient dans le texte.
+await newDocumentWithHeading('Quittance de loyer');
+before = (await names(page)).length;
+await markStatus(page);
+await page.keyboard.press('Control+s'); await page.waitForTimeout(500);
+await page.keyboard.press('Escape'); await page.waitForTimeout(500);
+dlg = await dialogInfo(page);
+n = await names(page);
+st = await statusInfo(page);
+title = await titleInfo();
+check('Échap dans cette fenêtre : elle se ferme, rien n’est enregistré, aucune phrase rouge, le modèle reste sans nom (« — Nouveau modèle — »)',
+  !dlg.shown && n.length === before && !n.includes('Quittance de loyer') && !st.seen.some(t => /requis/.test(t)) && title.label === '— Nouveau modèle —' && title.id == null, { dlg, n, seen: st.seen, title });
+await page.keyboard.press('Control+s'); await page.waitForTimeout(500);
+dlg = await dialogInfo(page);
+check('Ctrl+S une seconde fois : la fenêtre revient avec la même proposition', dlg.shown && dlg.value === 'Quittance de loyer', dlg);
+await page.keyboard.type('Quittance mars'); await page.keyboard.press('Enter'); await page.waitForTimeout(900);
+n = await names(page);
+check('une frappe remplace la proposition : « Quittance mars » est enregistré, « Quittance de loyer » ne l’est pas', n.includes('Quittance mars') && !n.includes('Quittance de loyer') && (await label(page)) === 'Quittance mars', { n, label: await label(page) });
+await away(page);
+// Un modèle qui a déjà un nom n'ouvre jamais la fenêtre.
+await page.keyboard.press('Control+s'); await page.waitForTimeout(600);
+check('Ctrl+S sur un modèle nommé : aucune fenêtre (il s’enregistre directement)', !(await dialogInfo(page)).shown, await dialogInfo(page));
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
 // 6) Anglais
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
 console.log('\n== Anglais ==');
@@ -490,6 +549,12 @@ await realClick(page, '#btn-rename-template', 250);
 await page.keyboard.press('Backspace'); await page.keyboard.press('Enter'); await page.waitForTimeout(250);
 st = await statusInfo(page);
 check('anglais : le nom effacé revient et le coin d’état dit « Template name required: “Quittance (3)” is kept. »', st.seen.includes('Template name required: “Quittance (3)” is kept.') && (await label(page)) === 'Quittance (3)', { st, label: await label(page) });
+await newDocumentWithHeading('Lease', 'Don’t save');
+await page.keyboard.press('Control+s'); await page.waitForTimeout(600);
+dlg = await dialogInfo(page);
+firstSave = await dialogText(page);
+check('anglais : Ctrl+S sans nom : « Save », « Name of the new template », « Suggested: the first heading of the document. », « Lease » sélectionné', dlg.shown && dlg.value === 'Lease' && dlg.selected && firstSave.title === 'Save' && firstSave.message === 'Suggested: the first heading of the document.' && dlg.buttons.join('|') === 'Cancel|Save', { dlg, firstSave });
+await page.keyboard.press('Escape'); await page.waitForTimeout(300);
 await page.evaluate(() => I18n.setLang('fr'));
 await page.context().close();
 

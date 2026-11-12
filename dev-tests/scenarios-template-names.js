@@ -573,6 +573,103 @@
     },
   });
 
+  // Le premier « Enregistrer » d'un modèle sans nom, Ctrl+S compris (audit « confort d'usage » du 12/11, idée 11, GO d'Antoine) : au lieu de la seule phrase rouge « Nom du modèle requis. », la
+  // fenêtre du nom s'ouvre avec le premier titre du document déjà écrit (à défaut, son début ; sans rien, vide). Annuler ne dit rien et n'écrit rien ; un nom pris reçoit son « (2) » ; un modèle
+  // qui a déjà un nom ne voit jamais la fenêtre. Code : js/main-save.js (`suggestedName`, `askFirstName`, `runSave`).
+  async function newUnnamed(h, html) {
+    await h.resetEditor();
+    h.openFlyout('#v2-new-template-group');
+    await h.clickButton('v2-btn-new-document');
+    await h.sleep(50);
+    Editor.setHTML(html);
+    nameInput().value = '';
+    await h.sleep(50);
+  }
+  const lastRow = () => { const r = rows(); return r.Nom.length ? { id: r.id[r.id.length - 1], nom: r.Nom[r.Nom.length - 1] } : null; };
+  const badgeOf = (column) => '<span class="var-badge" data-table="T" data-column="' + column + '" data-key="T.' + column + '"></span>';
+
+  cases.push({
+    id: 'names_first_save_without_a_name_proposes_the_first_heading_then_the_start_of_the_text',
+    description: 'Enregistrer un modèle neuf sans nom ouvre la fenêtre « Enregistrer » avec le premier titre écrit (« Proposé : le premier titre du document. ») ; Entrée l\'enregistre sous ce nom, sans phrase rouge. Sans titre : le début du premier texte, coupé à 80 signes (« Proposé : le début du document. »). Un titre qui ne contient qu\'une pastille de variable est passé : le titre suivant, à défaut le texte',
+    run: async (h) => {
+      const bad = [];
+      const results = [];
+      const cases = [
+        { html: '<p>Introduction</p><h2>Facture de mars</h2><p>Corps</p>', want: 'Facture de mars', message: 'Proposé : le premier titre du document.' },
+        { html: '<p>' + 'Mot '.repeat(40) + '</p>', want: ('Mot '.repeat(40)).slice(0, 80).trim(), message: 'Proposé : le début du document.' },
+        { html: '<h1>' + badgeOf('Nom') + '</h1><h3>Lettre au client</h3>', want: 'Lettre au client', message: 'Proposé : le premier titre du document.' },
+        { html: '<h1>' + badgeOf('Nom') + '</h1><p>Texte de repli</p>', want: 'Texte de repli', message: 'Proposé : le début du document.' },
+      ];
+      for (const one of cases) {
+        await newUnnamed(h, one.html);
+        const before = rows().Nom.length;
+        const dialogs = h.stubDialogs({ prompt: (o) => o.value });
+        try { await h.clickButton('btn-save'); await h.sleep(500); } finally { dialogs.restore(); }
+        const asked = dialogs.asked[0] || {};
+        const saved = lastRow();
+        results.push({ value: asked.value, message: asked.message, title: asked.title, label: asked.label, confirm: asked.confirmLabel, stored: saved && saved.nom, status: status() });
+        if (dialogs.asked.length !== 1) bad.push('fenêtres posées : ' + dialogs.asked.length + ' pour ' + one.html.slice(0, 30));
+        if (asked.value !== one.want) bad.push('proposé ' + JSON.stringify(asked.value) + ' au lieu de ' + JSON.stringify(one.want));
+        if (asked.message !== one.message) bad.push('message ' + JSON.stringify(asked.message));
+        if (asked.title !== 'Enregistrer' || asked.label !== 'Nom du nouveau modèle' || asked.confirmLabel !== 'Enregistrer') bad.push('libellés ' + JSON.stringify([asked.title, asked.label, asked.confirmLabel]));
+        if (rows().Nom.length !== before + 1 || !saved || saved.nom !== one.want || nameInput().value !== one.want) bad.push('enregistré sous ' + JSON.stringify(saved && saved.nom) + ', champ ' + JSON.stringify(nameInput().value));
+        if (/requis/.test(status())) bad.push('phrase rouge : ' + status());
+      }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') + ' ' + JSON.stringify(results) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'names_first_save_without_a_name_and_without_text_asks_with_an_empty_field_and_cancel_writes_nothing',
+    description: 'Un modèle neuf vide : la fenêtre s\'ouvre champ vide et dit pourquoi (« Ce modèle n\'a pas encore de nom. ») ; la valider vide rend la phrase rouge « Nom du modèle requis. » sans rien écrire ; Annuler ne dit rien (pas de phrase rouge) et n\'écrit rien ; un nom tapé dans la fenêtre s\'enregistre',
+    run: async (h) => {
+      const bad = [];
+      await newUnnamed(h, '<p></p>');
+      const before = rows().Nom.length;
+      let answer = '';
+      const dialogs = h.stubDialogs({ prompt: () => answer });
+      try {
+        await h.clickButton('btn-save'); await h.sleep(300);
+        const first = dialogs.asked[0] || {};
+        if (first.value !== '' || first.message !== 'Ce modèle n’a pas encore de nom.') bad.push('fenêtre vide : ' + JSON.stringify([first.value, first.message]));
+        if (rows().Nom.length !== before || status() !== 'Nom du modèle requis.') bad.push('validée vide : ' + rows().Nom.length + ' lignes, « ' + status() + ' »');
+        document.getElementById('status-msg').textContent = '';
+        answer = null;
+        await h.clickButton('btn-save'); await h.sleep(300);
+        if (rows().Nom.length !== before || /requis/.test(status())) bad.push('annulée : ' + rows().Nom.length + ' lignes, « ' + status() + ' »');
+        if (nameInput().value !== '') bad.push('le champ du nom a changé : ' + JSON.stringify(nameInput().value));
+        answer = '  Mon modèle à moi  ';
+        await h.clickButton('btn-save'); await h.sleep(500);
+        const saved = lastRow();
+        if (!saved || saved.nom !== 'Mon modèle à moi' || nameInput().value !== 'Mon modèle à moi' || rows().Nom.length !== before + 1) bad.push('nom tapé : ' + JSON.stringify(saved) + ' champ ' + JSON.stringify(nameInput().value));
+      } finally { dialogs.restore(); }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'names_first_save_proposal_taken_by_another_template_is_numbered_and_a_named_template_never_asks',
+    description: 'Le premier titre proposé existe déjà : l\'enregistrement prend « (2) » et le dit, comme pour un nom tapé. Un modèle qui a déjà un nom n\'ouvre jamais la fenêtre : Enregistrer l\'enregistre directement',
+    run: async (h) => {
+      const bad = [];
+      const taken = await createTemplate(h, 'document', 'Rapport du jour');
+      await newUnnamed(h, '<h1>Rapport du jour</h1><p>Autre contenu</p>');
+      const dialogs = h.stubDialogs({ prompt: (o) => o.value });
+      try {
+        await h.clickButton('btn-save'); await h.sleep(500);
+        const saved = lastRow();
+        if (dialogs.asked.length !== 1 || dialogs.asked[0].value !== 'Rapport du jour') bad.push('proposé : ' + JSON.stringify(dialogs.asked.map(a => a.value)));
+        if (!saved || saved.nom !== 'Rapport du jour (2)' || saved.id === taken || nameInput().value !== 'Rapport du jour (2)') bad.push('enregistré sous ' + JSON.stringify(saved) + ', champ ' + JSON.stringify(nameInput().value));
+        if (status() !== 'Ce nom existe déjà : renommé « Rapport du jour (2) ».') bad.push('coin d\'état : ' + status());
+        Editor.setHTML('<h1>Rapport du jour</h1><p>Modifié</p>');
+        await h.sleep(60);
+        await h.clickButton('btn-save'); await h.sleep(500);
+        if (dialogs.asked.length !== 1) bad.push('un modèle nommé a rouvert la fenêtre : ' + dialogs.asked.length + ' demandes');
+      } finally { dialogs.restore(); }
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') + ' ' + JSON.stringify(names()) : 'ok' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.templateNames = cases;
 })();

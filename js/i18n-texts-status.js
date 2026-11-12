@@ -259,6 +259,10 @@ const I18nTextsStatus = {
   'attach.gfs.failed': { fr: 'PDF non joint à la ligne : Grist Factory Suite n’a pas pu le faire{detail}.', en: 'PDF not attached to the row: Grist Factory Suite could not do it{detail}.' },
   'attach.reason.row': { fr: 'la ligne n’existe plus', en: 'the row no longer exists' },
   'prompt.newTemplateName': { fr: 'Nom du nouveau modèle', en: 'Name of the new template' },
+  // Le premier « Enregistrer » d'un modèle sans nom (Ctrl+S compris) : la fenêtre propose le premier titre du document (à défaut, son début) ; sans rien à proposer, elle dit pourquoi elle s'ouvre.
+  'prompt.firstSaveFromTitle': { fr: 'Proposé : le premier titre du document.', en: 'Suggested: the first heading of the document.' },
+  'prompt.firstSaveFromText': { fr: 'Proposé : le début du document.', en: 'Suggested: the start of the document.' },
+  'prompt.firstSaveNoSuggestion': { fr: 'Ce modèle n’a pas encore de nom.', en: 'This template has no name yet.' },
   'prompt.newTableName': { fr: 'Nom de la nouvelle table Grist', en: 'Name of the new Grist table' },
 
   // --- Panneau `#` : onglets ---

@@ -35,6 +35,38 @@ const MainSave = (function () {
       return persist.saveWaiting;
     }
 
+    // Le premier titre du document (à défaut, son premier texte) : ce que la fenêtre du premier « Enregistrer » propose comme nom. Cherché dans le document de l'éditeur sans le sérialiser (un gros modèle ne
+    // coûte rien : la recherche s'arrête au premier titre), les pastilles de variables ne comptent pas comme du texte.
+    const SUGGESTED_NAME_MAX = 80;
+    function suggestedName() {
+      const editor = EditorCore.getEditor();
+      if (!editor) return null;
+      let title = '';
+      let text = '';
+      editor.state.doc.descendants(node => {
+        if (title) return false;
+        if (!node.isTextblock) return true;
+        const line = node.textBetween(0, node.content.size, ' ').replace(/\s+/g, ' ').trim();
+        if (line) { if (node.type.name === 'heading') title = line; else if (!text) text = line; }
+        return false;
+      });
+      const cut = line => line.slice(0, SUGGESTED_NAME_MAX).trim();
+      if (title) return { name: cut(title), key: 'prompt.firstSaveFromTitle' };
+      if (text) return { name: cut(text), key: 'prompt.firstSaveFromText' };
+      return null;
+    }
+    // Rend le nom que la personne a validé (vide si elle a validé un champ vide), ou null si elle a annulé.
+    async function askFirstName() {
+      const suggestion = suggestedName();
+      return Dialogs.prompt({
+        title: I18n.t('common.save'),
+        label: I18n.t('prompt.newTemplateName'),
+        message: I18n.t(suggestion ? suggestion.key : 'prompt.firstSaveNoSuggestion'),
+        value: suggestion ? suggestion.name : '',
+        confirmLabel: I18n.t('common.save'),
+      });
+    }
+
     // Un macro-modèle s'édite uniquement dans sa fenêtre (MacroEditor) : Editor.getHTML() est toujours vide pour ce type et, par le chemin normal,
     // écraserait sa composition par un contenu vide. « Enregistrer » rouvre donc la fenêtre au lieu d'enregistrer.
     async function runSave() {
@@ -47,8 +79,17 @@ const MainSave = (function () {
       }
       Editor.exitHeaderFooterModeIfActive();
       const id = Templates.getCurrentId();
-      const typedName = templateNameInput ? templateNameInput.value.trim() : '';
-      const nom = settleTemplateName(); // nom déjà pris : « nom (2) »... (la saisie du crayon, une copie, un modèle de la galerie passent tous par ici)
+      let typedName = templateNameInput ? templateNameInput.value.trim() : '';
+      let nom = settleTemplateName(); // nom déjà pris : « nom (2) »... (la saisie du crayon, une copie, un modèle de la galerie passent tous par ici)
+      // Un modèle neuf sans nom : la fenêtre du nom, avec le premier titre du document déjà écrit (Entrée suffit). Annuler laisse tout comme c'était, sans phrase rouge : la personne a répondu elle-même.
+      if (!nom && id == null) {
+        const asked = await askFirstName();
+        if (asked === null) return;
+        persist.saveStartedAt = Date.now(); // la fenêtre a pu rester ouverte longtemps : le garde-fou de 60 s compte depuis la réponse
+        typedName = asked.trim();
+        if (templateNameInput) templateNameInput.value = typedName;
+        nom = settleTemplateName();
+      }
       if (!nom) { setStatus(I18n.t('status.templateNameRequired'), true); return; }
       let savedId, dateModif, send = null, synced = null;
       const epoch = persist.autosaveEpoch;
