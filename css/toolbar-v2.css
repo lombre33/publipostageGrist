@@ -173,6 +173,8 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(120px, calc(var(--gf
    l'emporte à spécificité égale (chargé avant ; `#v2-toolbar button::before` dans css/editor-v2.css règle le même problème pour l'autre barre) et
    affiche un carré plein 14 × 14, faute de `mask-image` défini pour ce bouton. */
 #toolbar-top #v2-btn-toggle-cci::before, #toolbar-top #v2-btn-toggle-pj::before { content: none; }
+/* Les pièces jointes n'existent que dans un email (.eml) : hors de ce type d'export, ni le bouton « + PJ » ni son champ ne sont montrés (js/main.js:syncEmailEditorMode pose `is-eml`) ; ce que le champ contient reste dans le modèle. */
+#v2-email-fields-row:not(.is-eml) #v2-btn-toggle-pj, #v2-email-fields-row:not(.is-eml) #v2-email-pj { display: none; }
 
 /* Compteur de longueur et bouton d'action de la `.bar-row` 1, visibles en mode email seulement (js/main.js), insérés après le bouton Exporter PDF
    existant : il n'y a qu'un seul bouton d'action ici (planning/feature-email-mode.md §4.1), le bouton d'export PDF étant déjà sur la première

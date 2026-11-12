@@ -61,6 +61,8 @@
     MainToolbar.setEmailMode(plain);
     MainToolbar.setEmlMode(eml);
     EmailPlainText.setActive(plain);
+    // Le bouton « + PJ » et son champ ne se montrent que pour ce type (css/toolbar-v2.css) : un lien mailto: ou un PDF n'a aucune pièce jointe, et un champ qui n'y sert à rien induirait en erreur ; sa valeur reste dans le modèle.
+    if (emailFieldsRow) emailFieldsRow.classList.toggle('is-eml', eml);
   }
   document.addEventListener('pp:exportTypeSynced', () => {
     if (emailEditorModeKey === null) return;   // aucun modèle n'a encore été chargé : le chargement pose le mode

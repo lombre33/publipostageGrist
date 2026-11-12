@@ -340,6 +340,9 @@
   const newDocument = async h => { h.openFlyout('#v2-new-template-group'); await h.clickButton('v2-btn-new-document'); await sleep(300); };
   const acBox = () => document.getElementById('autocomplete-box');
   const listed = () => (acBox() && acBox().style.display !== 'none' ? Array.from(acBox().querySelectorAll('.ac-item')).map(e => e.textContent) : null);
+  // Le type du menu Type d'export (le champ PJ ne se montre que pour « eml », demande d'Antoine du 12/11) et ce que la feuille de style en montre.
+  const chooseType = async type => { document.querySelector('#v2-quality-flyout .v2-hover-row[data-export-type="' + type + '"]').click(); await sleep(120); };
+  const shownNow = id => getComputedStyle(el(id)).display !== 'none';
 
   cases.push({
     id: 'eml_pj_field_list_offers_only_attachments_columns',
@@ -351,6 +354,9 @@
         await newEmail(h);
         const pj = el('v2-email-pj');
         const cci = el('v2-email-cci');
+        check(problems, 'au PDF : ni « + PJ » ni le champ PJ ne sont montrés, « + Cci » l\'est', [shownNow('v2-btn-toggle-pj'), shownNow('v2-email-pj'), shownNow('v2-btn-toggle-cci')], [false, false, true]);
+        await chooseType('eml');
+        check(problems, 'en .eml : « + PJ » est montré, le champ reste replié', [shownNow('v2-btn-toggle-pj'), shownNow('v2-email-pj')], [true, false]);
         check(problems, 'le champ suit la Cci', !!(cci.compareDocumentPosition(pj) & Node.DOCUMENT_POSITION_FOLLOWING), true);
         check(problems, 'le bouton « + PJ » suit la Cci', !!(cci.compareDocumentPosition(el('v2-btn-toggle-pj')) & Node.DOCUMENT_POSITION_FOLLOWING), true);
         check(problems, 'replié au départ', pj.hidden, true);
@@ -364,8 +370,18 @@
         check(problems, 'colonnes proposées à l\'Objet', all, [TABLE + '.Lien', TABLE + '.Mail', TABLE + '.Nom', TABLE + '.Pj']);
         el('v2-btn-toggle-pj').click();
         check(problems, 'le bouton le replie', pj.hidden, true);
+        // Déplié puis de retour au PDF : le champ disparaît mais garde sa valeur, qui revient avec le type .eml.
+        el('v2-btn-toggle-pj').click();
+        pj.value = '#' + TABLE + '.Pj';
+        await chooseType('pdf');
+        check(problems, 'retour au PDF : ni « + PJ » ni le champ ne sont montrés', [shownNow('v2-btn-toggle-pj'), shownNow('v2-email-pj')], [false, false]);
+        check(problems, 'retour au PDF : la valeur du champ est gardée', pj.value, '#' + TABLE + '.Pj');
+        await chooseType('eml');
+        check(problems, '.eml de nouveau : le champ revient, avec sa valeur', [shownNow('v2-email-pj'), pj.value], [true, '#' + TABLE + '.Pj']);
       } finally {
         ['v2-email-pj', 'v2-email-subject'].forEach(id => { el(id).value = ''; });
+        const pdfRow = document.querySelector('#v2-quality-flyout .v2-hover-row[data-export-type="pdf"]');
+        if (pdfRow) pdfRow.click();
         await newDocument(h);
         await cleanup();
       }
@@ -381,6 +397,7 @@
       await seed(h, { a: 141, b: 142, c: 143 });
       try {
         await newEmail(h);
+        await chooseType('eml');
         const pj = el('v2-email-pj');
         pj.hidden = false;
         pj.value = 'du texte #' + TABLE + '.Pj et encore';
@@ -397,6 +414,8 @@
         check(problems, 'l\'Objet garde son texte', FieldCodec.itemsOf(el('v2-email-subject').value).map(item => (item.badge ? item.badge.key : item.text)), ['Objet ', TABLE + '.Nom', ' fin']);
       } finally {
         ['v2-email-pj', 'v2-email-subject'].forEach(id => { el(id).value = ''; });
+        const pdfRow = document.querySelector('#v2-quality-flyout .v2-hover-row[data-export-type="pdf"]');
+        if (pdfRow) pdfRow.click();
         await newDocument(h);
         await cleanup();
       }

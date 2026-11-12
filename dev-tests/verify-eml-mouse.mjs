@@ -179,12 +179,31 @@ async function run() {
   await realClick('#v2-btn-new-email', 900);
   check('un nouvel email est ouvert, l’éditeur écrit le texte brut du lien (gras grisé)', (await stateOf()).plain && (await stateOf()).bold, await stateOf());
 
-  // 1) Le bandeau : « + PJ » après « + Cci », un clic le montre, rien ne déborde à 700 px.
+  // 0) Demande d'Antoine du 12/11 : tant que le type d'export n'est pas « Email (.eml) », ni « + PJ » ni son champ ne sont montrés (ils n'y serviraient à rien et induiraient en erreur).
+  const pdfShown = await page.evaluate(() => {
+    const visible = id => { const el = document.getElementById(id); const rect = el.getBoundingClientRect(); return getComputedStyle(el).display !== 'none' && rect.width > 0 && rect.height > 0; };
+    return { cci: visible('v2-btn-toggle-cci'), pjButton: visible('v2-btn-toggle-pj'), pjField: visible('v2-email-pj') };
+  });
+  check('type PDF : « + Cci » est montré, « + PJ » et le champ PJ ne le sont pas', pdfShown.cci && !pdfShown.pjButton && !pdfShown.pjField, pdfShown);
+
+  // 1) Le type « Email (.eml) » à la souris : le survol ouvre le menu, un clic sur la ligne la choisit.
+  const eml = await realHover('#v2-btn-quality').then(() => centerOf('#v2-quality-flyout .v2-hover-row[data-export-type="eml"]'));
+  check('la ligne « Email (.eml) » est offerte (non grisée) dans un email et accessible à la souris', !!eml && eml.onTop && !(await page.evaluate(() => document.querySelector('#v2-quality-flyout .v2-hover-row[data-export-type="eml"]').classList.contains('v2-hover-row-disabled'))), eml);
+  await realClick('#v2-quality-flyout .v2-hover-row[data-export-type="eml"]', 400);
+  const afterEml = await stateOf();
+  check('« Email (.eml) » choisi : l’éditeur n’écrit plus le texte brut du lien (gras dégrisé), le sommaire reste grisé', afterEml.type === 'eml' && !afterEml.plain && !afterEml.bold && afterEml.toc, afterEml);
+  const typeShown = await page.evaluate(() => document.getElementById('v2-btn-quality').classList.contains('active'));
+  check('le bouton du type est allumé : on sait avant de cliquer sur Exporter que le fichier ne sera pas un PDF', typeShown, typeShown);
+
+  // 2) Le bandeau : « + PJ » après « + Cci », un clic le montre, rien ne déborde à 700 px.
   const order = await page.evaluate(() => {
     const row = document.getElementById('v2-email-fields-row');
     return { ids: Array.from(row.children).map(child => child.id).filter(Boolean), overflow: row.scrollWidth - row.clientWidth, pjHidden: document.getElementById('v2-email-pj').hidden };
   });
-  check('le bouton « + PJ » vient juste après le champ Cci, le champ PJ après lui, replié au départ', order.ids.indexOf('v2-btn-toggle-pj') === order.ids.indexOf('v2-email-cci') + 1 && order.ids.indexOf('v2-email-pj') === order.ids.indexOf('v2-btn-toggle-pj') + 1 && order.pjHidden, order);
+  check('« Email (.eml) » choisi : le bouton « + PJ » vient juste après le champ Cci, le champ PJ après lui, replié au départ', order.ids.indexOf('v2-btn-toggle-pj') === order.ids.indexOf('v2-email-cci') + 1 && order.ids.indexOf('v2-email-pj') === order.ids.indexOf('v2-btn-toggle-pj') + 1 && order.pjHidden, order);
+  // Le menu du type reste ouvert tant que la souris est dessus et recouvre le bandeau à 700 px : on la retire avant de viser « + PJ ».
+  await page.mouse.move(350, 330);
+  await page.waitForTimeout(500);
   await realClick('#v2-btn-toggle-pj', 250);
   const shown = await page.evaluate(() => {
     const field = document.getElementById('v2-email-pj');
@@ -195,7 +214,7 @@ async function run() {
   check('un clic sur « + PJ » montre le champ, dans la fenêtre de 700 px, sans défilement horizontal du bandeau', !shown.hidden && shown.inside && shown.width >= 64 && shown.overflow <= 1, shown);
   if (SHOTS) await page.screenshot({ path: join(SHOTS, 'eml-bandeau-700x400.png') });
 
-  // 2) Objet, destinataire et PJ au vrai clavier : la liste « # » du champ PJ ne propose que la colonne Pièces jointes.
+  // 3) Objet, destinataire et PJ au vrai clavier : la liste « # » du champ PJ ne propose que la colonne Pièces jointes.
   await realClick('#v2-email-subject', 150);
   await page.keyboard.type('Facture ');
   await page.keyboard.type('#EmlClients.Nom');
@@ -215,14 +234,7 @@ async function run() {
   await page.evaluate(html => Editor.setHTML(html), BODY_HTML);
   await page.waitForTimeout(500);
 
-  // 3) Le type « Email (.eml) » à la souris : le survol ouvre le menu, un clic sur la ligne la choisit.
-  const eml = await realHover('#v2-btn-quality').then(() => centerOf('#v2-quality-flyout .v2-hover-row[data-export-type="eml"]'));
-  check('la ligne « Email (.eml) » est offerte (non grisée) dans un email et accessible à la souris', !!eml && eml.onTop && !(await page.evaluate(() => document.querySelector('#v2-quality-flyout .v2-hover-row[data-export-type="eml"]').classList.contains('v2-hover-row-disabled'))), eml);
-  await realClick('#v2-quality-flyout .v2-hover-row[data-export-type="eml"]', 400);
-  const afterEml = await stateOf();
-  check('« Email (.eml) » choisi : l’éditeur n’écrit plus le texte brut du lien (gras dégrisé), le sommaire reste grisé', afterEml.type === 'eml' && !afterEml.plain && !afterEml.bold && afterEml.toc, afterEml);
-  const typeShown = await page.evaluate(() => document.getElementById('v2-btn-quality').classList.contains('active'));
-  check('le bouton du type est allumé : on sait avant de cliquer sur Exporter que le fichier ne sera pas un PDF', typeShown, typeShown);
+  await realHover('#v2-btn-quality');
   if (SHOTS) await page.screenshot({ path: join(SHOTS, 'eml-type-choisi-700x400.png') });
 
   // 4) Le vrai clic sur Exporter : le .eml est téléchargé et relu.
@@ -255,6 +267,15 @@ async function run() {
   check('en revenant au PDF, l’éditeur redevient celui du texte brut (gras grisé)', back.type === 'pdf' && back.plain && back.bold, back);
   const kept = await page.evaluate(() => ({ pj: document.getElementById('v2-email-pj').value, subject: document.getElementById('v2-email-subject').value }));
   check('le champ PJ et l’objet gardent leur valeur', /EmlClients\.Pj/.test(kept.pj) && /EmlClients\.Nom/.test(kept.subject), kept);
+  const hiddenAgain = await page.evaluate(() => {
+    const visible = id => { const el = document.getElementById(id); const rect = el.getBoundingClientRect(); return getComputedStyle(el).display !== 'none' && rect.width > 0 && rect.height > 0; };
+    return { pjButton: visible('v2-btn-toggle-pj'), pjField: visible('v2-email-pj'), cci: visible('v2-btn-toggle-cci') };
+  });
+  check('en revenant au PDF, « + PJ » et le champ PJ disparaissent (« + Cci » reste)', !hiddenAgain.pjButton && !hiddenAgain.pjField && hiddenAgain.cci, hiddenAgain);
+  await realHover('#v2-btn-quality');
+  await realClick('#v2-quality-flyout .v2-hover-row[data-export-type="eml"]', 400);
+  const returned = await page.evaluate(() => { const el = document.getElementById('v2-email-pj'); return { shown: getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0, value: el.value }; });
+  check('« Email (.eml) » rechoisi : le champ PJ revient avec sa valeur', returned.shown && /EmlClients\.Pj/.test(returned.value), returned);
 }
 
 await run();
