@@ -35,6 +35,7 @@
   const emailPjInput = document.getElementById('v2-email-pj');
   const emailPjToggle = document.getElementById('v2-btn-toggle-pj');
   const btnCreateEmail = document.getElementById('btn-create-email');
+  const btnCreateEmails = document.getElementById('btn-create-emails');
   const emailCharCounter = document.getElementById('v2-email-char-counter');
 
   // Les cinq champs de l'email : leur clé, la même dans les réglages du modèle et dans les valeurs résolues, et leur champ (un champ texte à bulles,
@@ -231,6 +232,7 @@
     Editor.refreshPaginationPreview();
     MainToolbar.syncToolbarState();
     if (btnCreateEmail) btnCreateEmail.hidden = true;
+    if (btnCreateEmails) btnCreateEmails.hidden = true;
     Templates.setCurrentId(tpl ? tpl.id : null);
     LiveEntry.changed(); // la ligne « Écriture en direct » du menu suit le modèle ouvert (js/live-entry.js)
     Comments.loadForTemplate(tpl ? tpl.id : null, tpl).catch(e => console.error('[main] chargement des commentaires impossible', e));
@@ -349,6 +351,7 @@
     Editor.refreshPaginationPreview();
     MainToolbar.syncToolbarState();
     if (btnCreateEmail) btnCreateEmail.hidden = currentTypeModele !== 'email';
+    if (btnCreateEmails) btnCreateEmails.hidden = currentTypeModele !== 'email';
     setCurrentTemplate(tpl);
     const headingNumberingSelect = document.getElementById('v2-heading-numbering-select');
     if (headingNumberingSelect) headingNumberingSelect.value = Editor.getHeadingNumberingStyle();
@@ -707,10 +710,10 @@
   // getEmailFieldsFromInputs, adoptTableName, settleTemplateName, forgetMacroOriginUnless...) ; ce qu'ils prennent aux morceaux créés plus bas (isAutosaveEnabled, markAutosaveDirty,
   // askBeforeLeaving, hasEditsToConfirmBeforeLeaving) leur est donné par des appels différés.
   const {
-    buildMailtoForRecord, eachEmailInput, getEmailFieldsFromInputs, loadEmailFields, scheduleEmailLengthGauge, updateEmailFieldsDisplay, updateEmailLengthGauge,
+    buildMailtoForRecord, describeMailForRecord, eachEmailInput, getEmailFieldsFromInputs, loadEmailFields, scheduleEmailLengthGauge, updateEmailFieldsDisplay, updateEmailLengthGauge,
     wireCciToggle,
   } = MainEmail.create({
-    EMAIL_FIELDS, emailCciInput, emailCciToggle, emailPjInput, emailPjToggle, emailCharCounter, emailFieldsRow, getCurrentMode: () => currentMode, getCurrentTableId: () => currentTableId,
+    EMAIL_FIELDS, currentDocumentHtml, emailCciInput, emailCciToggle, emailPjInput, emailPjToggle, emailCharCounter, emailFieldsRow, getCurrentMode: () => currentMode, getCurrentTableId: () => currentTableId,
     getCurrentTypeModele: () => currentTypeModele, getEmailFieldsRawCache: () => emailFieldsRawCache, getLatestRecord: () => latestRecord,
     getLatestRecordTableId: () => latestRecordTableId, readerContainer, renderReader, setEmailFieldsRawCache: value => { emailFieldsRawCache = value; },
   });
@@ -729,8 +732,8 @@
   });
 
   // Les exports (le verrou, l'export d'une ligne, les menus d'export, les exports en lot) sont dans js/main-export.js ; ce qu'il tire d'ici lui est donné, le type du modèle et la table à l'écran en lecture.
-  const { isExportRunning, onCreateEmail, onExport, onExportBatch, onExportDocx, onExportPdf, onExportXlsx, selectedExportType, syncExportMenus, syncExportRowsForModelType, withExportLock } = MainExport.create({
-    buildMailtoForRecord, currentDocumentHtml, getCurrentMacroSlots, getPdfFilenameTemplate, perModelOption, setStatus, templateNameInput,
+  const { isExportRunning, onCreateEmail, onCreateEmails, onExport, onExportBatch, onExportDocx, onExportPdf, onExportXlsx, selectedExportType, syncExportMenus, syncExportRowsForModelType, withExportLock } = MainExport.create({
+    buildMailtoForRecord, describeMailForRecord, currentDocumentHtml, getCurrentMacroSlots, getPdfFilenameTemplate, perModelOption, setStatus, templateNameInput,
     getCurrentTableId: () => currentTableId, getCurrentTypeModele: () => currentTypeModele, getEmailFields: () => getEmailFieldsFromInputs(),
   });
 
@@ -1059,6 +1062,7 @@
     onExportRow('v2-btn-export-xlsx-batch', withExportLock(() => onExportBatch('xlsxZip')));
     onExportRow('v2-btn-export-xlsx-single', withExportLock(() => onExportBatch('xlsxSingle')));
     if (btnCreateEmail) btnCreateEmail.addEventListener('click', withExportLock(onCreateEmail));
+    if (btnCreateEmails) btnCreateEmails.addEventListener('click', withExportLock(onCreateEmails));
     btnEdit.addEventListener('click', () => switchMode('edit'));
     // Le bouton Mode lecture fait ce que dit la ligne cochée de son menu (js/clean-reading.js), comme Exporter : la Lecture (cochée au départ) ou la Lecture épurée.
     // `detail` à 0 : Entrée, Espace ou Alt+L (qui clique le bouton) - le focus revient au bouton à la sortie de la Lecture épurée.

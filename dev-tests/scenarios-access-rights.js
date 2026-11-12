@@ -158,7 +158,7 @@
       DocxExport.exportCurrentRecord = async () => { calls.push('docx'); };
       const dialogs = h.stubDialogs({ confirm: () => { calls.push('confirm'); return false; } });
       try {
-        ['btn-export-pdf', 'v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged', 'v2-btn-export-docx', 'v2-btn-export-docx-batch', 'btn-create-email']
+        ['btn-export-pdf', 'v2-btn-export-pdf-batch', 'v2-btn-export-pdf-merged', 'v2-btn-export-docx', 'v2-btn-export-docx-batch', 'btn-create-email', 'btn-create-emails']
           .forEach(id => document.getElementById(id).click());
         await sleep(400);
       } finally {
@@ -166,11 +166,11 @@
         DocxExport.exportCurrentRecord = origDocx;
         dialogs.restore();
       }
-      const greyed = ['v2-export-pdf-group', 'v2-quality-group', 'btn-create-email'].filter(locked);
+      const greyed = ['v2-export-pdf-group', 'v2-quality-group', 'btn-create-email', 'btn-create-emails'].filter(locked);
       const editFree = !locked('v2-save-group') && !locked('btn-mode-edit') && !inReadMode();
       await cleanup();
       const unlocked = !locked('v2-export-pdf-group') && !locked('v2-quality-group');
-      const pass = applied && calls.length === 0 && greyed.length === 3 && editFree && unlocked;
+      const pass = applied && calls.length === 0 && greyed.length === 4 && editFree && unlocked && !document.getElementById('pp-email-drafts-modal');
       return { pass, notes: JSON.stringify({ applied, calls, greyed, editFree, unlocked }) };
     },
   });

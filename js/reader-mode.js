@@ -1422,6 +1422,16 @@ const ReaderMode = (function () {
       return { paged, hasError: resolved.hasError };
     });
   }
+  // === Le document d'une ligne RÉSOLU, sans page ni mise en page : le texte d'un brouillon d'email par ligne (js/main-email.js:describeMailForRecord) ===
+  // Les mêmes boucles, blocs conditionnels, bulles et puces que la Lecture (resolveReaderBody), rendus en HTML dans un nœud qui n'entre jamais dans la page : rien n'est écrit dans #reader-container et le compteur de rendus
+  // (`renderGeneration`) ne bouge pas - un rendu de la Lecture ou la jauge de l'email, qui tournent pendant ce temps, ne l'écartent pas, et il ne les écarte pas. Pas de withReadPass ici : chacun en rouvrirait un neuf (le cache est remis
+  // à zéro à chaque appel) ; c'est l'appelant qui en tient un pour toute une série de lignes (EmailDrafts.prepare). Rend { html, hasError }.
+  async function resolvedHtml(htmlContent, tableId, record) {
+    if (typeof htmlContent === 'function') htmlContent = await htmlContent();
+    const wrapper = readerWrapperFrom(htmlContent, PRINT_VIEW);
+    const resolved = await resolveReaderBody(wrapper, tableId, record, () => false);
+    return { html: wrapper.innerHTML, hasError: !!(resolved && resolved.hasError) };
+  }
   function resolveTocMarkers(wrapper) {
     // Remplace .toc-marker par la vraie liste de titres, sans numéro de page (non paginé ici). Numérotation de HeadingNumbering, jamais lue par
     // getComputedStyle('::before').content (qui ne rend que « counter(h1c) », counter() n'étant résolu qu'à la peinture).
@@ -1901,5 +1911,5 @@ const ReaderMode = (function () {
       catch (e) { return ''; }
     });
   }
-  return { render, lend, renderInto, preview, inspect, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll, slideShown, showSlide };
+  return { render, lend, renderInto, resolvedHtml, preview, inspect, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll, slideShown, showSlide };
 })();

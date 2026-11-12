@@ -242,8 +242,20 @@ const MailtoExport = (function () {
   // en « %0D%0A » - le client de messagerie le décoderait, et un saut de ligne suivi d'un faux en-tête (« Bcc: … ») dans un champ du lien est la forme
   // classique d'une injection d'en-tête (consigne GFS 046 : une valeur de cellule n'ajoute jamais un champ au lien).
   function encodeAddressList(value) {
-    if (!value) return '';
-    return value.split(/[,;\r\n\u2028\u2029]/).map(address => address.trim()).filter(Boolean).map(address => encodeURIComponent(address)).join(',');
+    return addressesOf(value).map(address => encodeURIComponent(address)).join(',');
+  }
+
+  // Les adresses d'un champ À, Cc ou Cci, une à une, comme le lien les sépare (voir ci-dessus) : par virgule, point-virgule ou saut de ligne, sans espaces autour, sans adresse vide.
+  function addressesOf(value) {
+    if (!value) return [];
+    return String(value).split(/[,;\r\n\u2028\u2029]/).map(address => address.trim()).filter(Boolean);
+  }
+
+  // Une adresse qui a la forme d'une adresse email (« nom@domaine.xx », ou « Nom <nom@domaine.xx> »). Un contrôle de forme, pas de l'existence de la boîte : il ne sert qu'à dire « à vérifier »
+  // (js/email-drafts.js), jamais à refuser un lien.
+  function looksLikeAddress(address) {
+    const bare = String(address).replace(/^.*<([^<>]+)>\s*$/, '$1').trim();
+    return /^[^\s@<>,;()"]+@[^\s@<>,;()"]+\.[^\s@<>,;()"]+$/.test(bare);
   }
 
   // L'objet tient sur une ligne : un saut de ligne (une cellule à plusieurs lignes, ou un CR LF suivi d'un faux en-tête « Bcc: … ») devient une espace, pour le
@@ -282,5 +294,17 @@ const MailtoExport = (function () {
     return { length: url.length, safe: url.length <= SAFE_URL_LENGTH, limit: SAFE_URL_LENGTH };
   }
 
-  return { plainTextFromHtml, buildMailtoUrl, checkUrlLength, getMailClient, setMailClient };
+  // Ouvre un lien mailto: dans le logiciel de messagerie, par un <a> synthétique plutôt que window.location.href, dont le comportement dans l'iframe sandboxée d'un widget Grist est moins prévisible.
+  // Dans le cadre isolé de GFS, un lien mailto: suivi dans le cadre le ferait mourir : nouvel onglet (consigne GFS 011). Seule, rien ne change. `newTab` (facultatif) : toujours dans un nouvel onglet - plusieurs liens ouverts d'un coup (js/email-drafts.js) ne se
+  // remplaceraient pas l'un l'autre dans le cadre du widget.
+  function openLink(url, { newTab = false } = {}) {
+    const link = document.createElement('a');
+    link.href = url;
+    if (newTab || GfsLink.opensInNewTab(url)) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  return { plainTextFromHtml, buildMailtoUrl, checkUrlLength, getMailClient, setMailClient, addressesOf, looksLikeAddress, openLink };
 })();
