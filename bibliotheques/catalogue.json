@@ -1,0 +1,77 @@
+{
+  "outil": "node kit/outils/bibliotheques.mjs",
+  "bibliotheques": [
+    {
+      "id": "docx",
+      "version": "9.15.1",
+      "cdn": {
+        "src": "https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/index.iife.js",
+        "integrite": "sha384-ud8085E8t6iW4uUom5nN5cpzTZ4OdsNKB/AKWfOsI62tzsoV2X7r7/o4KWESO8rq"
+      }
+    },
+    {
+      "id": "docx-charts",
+      "version": "9.15.1",
+      "cdn": {
+        "src": "https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/charts.iife.js",
+        "integrite": "sha384-PFbg0J+cwbPG1He8zpFvlw/uXmHMA3ea3Gyyw9aS2IIjX0zKpD7YeprlCNVCMs1Y"
+      }
+    },
+    {
+      "id": "exceljs",
+      "version": "4.4.0",
+      "cdn": {
+        "src": "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js",
+        "integrite": "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz"
+      }
+    },
+    {
+      "id": "jszip",
+      "version": "3.10.1",
+      "cdn": {
+        "src": "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
+        "integrite": "sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG"
+      }
+    },
+    {
+      "id": "marked",
+      "version": "15.0.12",
+      "cdn": {
+        "src": "https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js",
+        "integrite": "sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+"
+      }
+    },
+    {
+      "id": "pdf-lib",
+      "version": "1.17.1",
+      "cdn": {
+        "src": "https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js",
+        "integrite": "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI"
+      }
+    },
+    {
+      "id": "pdfmake",
+      "version": "0.2.7",
+      "cdn": {
+        "src": "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js",
+        "integrite": "sha384-VFQrHzqBh5qiJIU0uGU5CIW3+OWpdGGJM9LBnGbuIH2mkICcFZ7lPd/AAtI7SNf7"
+      }
+    },
+    {
+      "id": "pdfmake-polices",
+      "version": "0.2.7",
+      "cdn": {
+        "src": "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js",
+        "integrite": "sha384-dWs4+zGqy/KS6giKxiK+6iowhidQwjVFaiE1lMar36QwIulE44VyBSQp0brMCx4D"
+      }
+    },
+    {
+      "id": "qrcode-generator",
+      "version": "1.4.4",
+      "cdn": {
+        "src": "https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js",
+        "integrite": "sha384-mZT2gIty7ZDdOGkxfP6joZcYdMW1Jvj9dRlfpTmaJAKKXTqzygtB22k7FLe+KZC1"
+      }
+    }
+  ]
+}

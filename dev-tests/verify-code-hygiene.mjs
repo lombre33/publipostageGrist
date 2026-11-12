@@ -76,9 +76,11 @@
 //      déclarée d'une ou deux lettres, dans le code du widget (gw audit du 04/11, point B-NOM-01 ; les fichiers de Slides+, de la fenêtre « Nouveautés » et du pont GFS en sont exclus pour l'instant).
 //  35. le code de l'éditeur que le widget charge depuis esm.sh (TipTap, ProseMirror, leurs dépendances : une centaine de fichiers) sans que le navigateur le contrôle : le relevé outils/empreintes-editeur.json ne correspond
 //      plus à la carte d'importation d'index.html (une entrée changée sans refaire le relevé), contient une adresse à VERSION FLOTTANTE (`@^1.0.0` : esm.sh la résout à chaque demande, une version npm publiée ou volée
-//      se chargerait le jour même), un fichier non figé autre qu'une cale `node/*.mjs` d'esm.sh, ou une entrée de la carte que rien n'importe et qui ne répond pas (point sécurité du 06/11, risque « chaîne d'approvisionnement ») ;
+//      se chargerait le jour même), un fichier non figé autre qu'une cale `node/*.mjs` d'esm.sh, ou une entrée de la carte que rien n'importe et qui ne répond pas, ou des sources d'esm.sh de `script-src` ou de la liste des bibliothèques (package.json) qui ne sont pas celles du relevé (point sécurité du 06/11, risque « chaîne d'approvisionnement ») ;
 //  36. l'inventaire des écritures dans le document Grist (`applyUserActions`, le widget a l'accès complet) : un fichier de plus qui écrit, une action de plus dans un fichier qui écrit déjà, une écriture dans une table
-//      de Grist (`_grist_…`) ou une suppression de table hors des endroits connus, une écriture « widget » (tables Publipostage_*) qui vise autre chose que ses tables (point sécurité du 06/11, risque « accès complet »).
+//      de Grist (`_grist_…`) ou une suppression de table hors des endroits connus, une écriture « widget » (tables Publipostage_*) qui vise autre chose que ses tables (point sécurité du 06/11, risque « accès complet ») ;
+//  38. la liste unique des bibliothèques (package.json à la racine, consignes 063 et 067 de GFS) : elle perd sa forme, une version n'y est plus exacte, le miroir des essais ou la carte d'importation d'index.html dit
+//      une autre version qu'elle, le catalogue (bibliotheques/catalogue.json) n'a plus une entrée à la version de chaque bibliothèque de la liste.
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -1993,13 +1995,18 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     check('éditeur d\'esm.sh : une entrée de la carte dont l\'adresse ne répond pas (le relevé la note « statut ») n\'est importée par aucun fichier de js/ ni d\'extensions/', importedDead.length === 0, importedDead.join(' '));
     // La politique de sécurité du contenu ne nomme PAS esm.sh en entier (choix d'Antoine du 11/11, « Resserrer la liste ») : sans cela, n'importe quel paquet d'npm ou dépôt de GitHub que sert esm.sh pourrait
     // s'exécuter si un filtre cédait. Ses sources sont, une à une, celles que le relevé donne : un dossier par paquet de l'éditeur à sa version exacte, quatre cales d'esm.sh. Le relevé change (une version, un module) :
-    // `node outils/empreintes-editeur.mjs --ecrire` (réseau) ou `--poser-politique` (sans réseau) les remet à jour dans index.html.
+    // `node outils/empreintes-editeur.mjs --ecrire` (réseau) ou `--poser-politique` (sans réseau) les remettent à jour dans la liste des bibliothèques (package.json, gfs.politique.scriptSrc), puis l'outil du kit
+    // (`node kit/outils/bibliotheques.mjs`) réécrit le script-src d'index.html d'après elle : un seul écrivain pour la page (consigne 063 de GFS).
+    const list = existsSync(join(ROOT, 'package.json')) ? JSON.parse(read('package.json')) : null;
+    const listed = ((list && list.gfs && list.gfs.politique && list.gfs.politique.scriptSrc) || []).filter(token => token === 'https://esm.sh' || token.startsWith('https://esm.sh/')).sort();
     const policy = (index.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/) || [])[1] || '';
     const scriptTokens = ((policy.split(';').map(d => d.trim().split(/\s+/)).find(d => d[0] === 'script-src')) || []).slice(1);
     const inPolicy = scriptTokens.filter(token => token === 'https://esm.sh' || token.startsWith('https://esm.sh/')).sort();
     const wanted = scriptSources(Object.keys(manifest.fichiers).filter(address => !manifest.fichiers[address].statut));
     check('éditeur d\'esm.sh : script-src ne nomme pas l\'hôte « https://esm.sh » en entier', !scriptTokens.includes('https://esm.sh'), 'https://esm.sh seul ouvre tout npm et tout GitHub');
-    check('éditeur d\'esm.sh : les sources d\'esm.sh de script-src sont exactement celles du relevé (`node outils/empreintes-editeur.mjs --poser-politique` les réécrit sans réseau)',
+    check('éditeur d\'esm.sh : les sources d\'esm.sh de la liste des bibliothèques (package.json, gfs.politique.scriptSrc) sont exactement celles du relevé (`node outils/empreintes-editeur.mjs --poser-politique` les réécrit dans la liste, sans réseau)',
+      JSON.stringify(listed) === JSON.stringify(wanted), `à ajouter : ${wanted.filter(source => !listed.includes(source)).join(' ') || '-'} ; à retirer : ${listed.filter(source => !wanted.includes(source)).join(' ') || '-'}`);
+    check('éditeur d\'esm.sh : les sources d\'esm.sh de script-src sont exactement celles du relevé, donc celles de la liste (la page est écrite par l\'outil du kit : `node kit/outils/bibliotheques.mjs` la réécrit d\'après la liste, après `--poser-politique`)',
       JSON.stringify(inPolicy) === JSON.stringify(wanted), `à ajouter : ${wanted.filter(source => !inPolicy.includes(source)).join(' ') || '-'} ; à retirer : ${inPolicy.filter(source => !wanted.includes(source)).join(' ') || '-'}`);
   }
 }
@@ -2082,6 +2089,36 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const back = Object.keys(DEAD).filter(name => code.some(([, text]) => new RegExp('(?<![\\w$])' + name + '(?![\\w$])').test(text)));
   check('code mort : dix noms retirés de js/ n\'y reviennent pas (BUILT_IN_PAGE_MM_MAX, MODIFIER_ORDER, TRANSITION_KEYS, htmlAttrs, elementFor, strokeOutline, customParts, slideIdsOf, gestureCount, refreshNow)', back.length === 0,
     back.map(name => `${name} (retiré de ${DEAD[name]})`).join(' ; '));
+}
+
+// ============================================================================
+// 38. La liste unique des bibliothèques : une version s'écrit une fois, dans package.json (consignes 063 et 067 de GFS)
+// ============================================================================
+// Une version de bibliothèque s'écrit UNE fois, dans package.json à la racine (« dependencies » : des versions exactes ; « gfs » : ce que l'outil du kit en tire). L'outil du kit (node kit/outils/bibliotheques.mjs)
+// en refait le catalogue (bibliotheques/catalogue.json), la carte d'importation et le script-src d'index.html : rien de tout cela ne s'écrit à la main. Ce contrôle ne lance pas l'outil (le kit est un sous-module qui
+// n'est pas toujours là : dev-tests/verify-bibliotheques-liste.mjs, groupe bibliothequesListe, joue son --verifier quand il y est) ; il garde ce qui se voit sans lui : la forme de la liste, des versions exactes, le miroir des essais
+// (dev-tests/.offline-cache/package.json, qu'installe offline-deps.sh : il dit encore les mêmes versions à part, jusqu'à ce que l'outil le refasse) et la carte d'importation à la version de la liste pour chaque paquet qu'elle nomme.
+{
+  const list = existsSync(join(ROOT, 'package.json')) ? JSON.parse(read('package.json')) : null;
+  const gfs = (list && list.gfs) || {};
+  const deps = list ? { ...(list.devDependencies || {}), ...(list.dependencies || {}) } : {};
+  const EXACT = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+  const escapeRe = text => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+  check('liste des bibliothèques : package.json existe à la racine, privé, avec la section gfs que lit l\'outil du kit (page index.html, carte d\'esm.sh, politique, bibliothèques)',
+    !!list && list.private === true && gfs.page === 'index.html' && !!gfs.carte && gfs.carte.origine === 'https://esm.sh' && Array.isArray(gfs.politique && gfs.politique.scriptSrc) && Object.keys(gfs.bibliotheques || {}).length >= 9,
+    list ? JSON.stringify({ private: list.private, page: gfs.page, origine: gfs.carte && gfs.carte.origine, scriptSrc: Array.isArray(gfs.politique && gfs.politique.scriptSrc), bibliotheques: Object.keys(gfs.bibliotheques || {}).length }) : 'package.json absent');
+  const notExact = Object.entries(deps).filter(([, version]) => !EXACT.test(version)).map(([name, version]) => `${name}@${version}`);
+  check('liste des bibliothèques : chaque version de dependencies et de devDependencies est exacte (ni ^, ni ~, ni latest : le navigateur ne résout aucune plage, et l\'outil du kit les refuse)', Object.keys(deps).length >= 40 && notExact.length === 0, notExact.join(' ') || `${Object.keys(deps).length} paquets`);
+  const mirror = JSON.parse(read('dev-tests/.offline-cache/package.json')).dependencies || {};
+  const apart = [...new Set([...Object.keys(deps), ...Object.keys(mirror)])].filter(name => deps[name] !== mirror[name]).sort().map(name => `${name} : liste ${deps[name] || '-'}, miroir ${mirror[name] || '-'}`);
+  check('liste des bibliothèques : le miroir des essais (dev-tests/.offline-cache/package.json) dit les mêmes paquets aux mêmes versions que la liste - une version se monte dans la liste ET dans le miroir (puis `bash dev-tests/offline-deps.sh`), jusqu\'à ce que l\'outil du kit refasse le miroir', apart.length === 0, apart.join(' ; '));
+  const imports = (() => { try { return JSON.parse((read('index.html').match(/<script type="importmap">([\s\S]*?)<\/script>/) || [])[1]).imports; } catch (e) { return {}; } })();
+  const named = [...(gfs.carte && gfs.carte.paquets || []), ...Object.keys(gfs.carte && gfs.carte.sousChemins || {})];
+  const mapOff = named.filter(name => !Object.entries(imports).some(([key, value]) => new RegExp(`/\\*?${escapeRe(name)}@${escapeRe(deps[name] || '?')}(?:[/?]|$)`).test(key === name ? value : key)));
+  check('liste des bibliothèques : la carte d\'importation d\'index.html nomme, pour chacun des paquets de la liste qu\'elle écrit (gfs.carte.paquets et sousChemins), la version de la liste - une version montée dans la liste sans relancer l\'outil du kit (ou montée à la main dans la page) se voit ici', named.length >= 30 && mapOff.length === 0, mapOff.join(' ') || `${named.length} paquets`);
+  const catalogue = existsSync(join(ROOT, 'bibliotheques', 'catalogue.json')) ? JSON.parse(read('bibliotheques/catalogue.json')).bibliotheques || [] : [];
+  const missing = Object.entries(gfs.bibliotheques || {}).filter(([id, spec]) => !catalogue.some(entry => entry.id === id && entry.version === deps[spec.paquet] && entry.cdn && /^sha384-[A-Za-z0-9+/]{64}$/.test(entry.cdn.integrite || ''))).map(([id]) => id);
+  check('liste des bibliothèques : le catalogue (bibliotheques/catalogue.json, écrit par l\'outil du kit) a une entrée par bibliothèque de la liste, à la version de la liste, avec son empreinte sha384', Object.keys(gfs.bibliotheques || {}).length >= 9 && missing.length === 0, missing.join(' ') || `${catalogue.length} entrées`);
 }
 
 summarizeAndExit();

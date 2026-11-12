@@ -3,7 +3,7 @@
 //
 // Pourquoi : ce code s'exécute dans la page avec l'accès complet au document, et le navigateur ne le contrôle par aucune empreinte (la politique de sécurité du contenu ne cite que l'hôte `esm.sh`, la
 // carte d'importation de index.html ne porte pas de `integrity`). Hébergé chez nous : refusé (choix d'Antoine du 05/10). Ce qu'on peut faire sans rien changer au chargement, c'est SAVOIR :
-//   --ecrire    (écrit aussi, dans index.html, les sources d'esm.sh de script-src : voir --politique) parcourt tout ce que la carte d'importation fait charger (les modules et, de proche en proche, tous ceux qu'ils importent), à la manière du navigateur, avec trois navigateurs
+//   --ecrire    (écrit aussi, dans la liste des bibliothèques package.json, les sources d'esm.sh de script-src : voir --politique) parcourt tout ce que la carte d'importation fait charger (les modules et, de proche en proche, tous ceux qu'ils importent), à la manière du navigateur, avec trois navigateurs
 //               (Chrome, Firefox, Safari), et écrit outils/empreintes-editeur.json : l'adresse de chaque fichier, son empreinte SHA-384 (celle d'un attribut `integrity`) et sa taille ;
 //   --verifier  refait le même parcours et le compare au relevé : code 1 si un fichier figé chez esm.sh a changé d'octets, s'il en manque ou s'il en vient un nouveau, si les trois navigateurs ne
 //               reçoivent pas les mêmes octets (un serveur qui change de réponse selon le navigateur est le signe d'une compromission), ou si une adresse du parcours porte une version FLOTTANTE
@@ -11,7 +11,9 @@
 //               fichiers d'esm.sh qui ne sont pas figés chez eux (leurs cales `node/*.mjs`, un jour de cache) ont changé ;
 //   --dire      parcourt et affiche, sans lire ni écrire le relevé ;
 //   --politique affiche les sources d'esm.sh de la politique de sécurité du contenu (script-src d'index.html), prises du relevé : un chemin de paquet à version exacte par ligne, jamais l'hôte entier ;
-//   --poser-politique  les écrit dans index.html, sans réseau (le relevé est déjà là : index.html refait par un autre outil, une fusion).
+//   --poser-politique  les écrit dans la liste (gfs.politique.scriptSrc de package.json), sans réseau (le relevé est déjà là : la liste refaite par une fusion, une version montée).
+// La page n'est plus écrite ici : la carte d'importation et le script-src d'index.html sont écrits par l'outil du kit (node kit/outils/bibliotheques.mjs) d'après la liste, un seul écrivain ; après --ecrire
+// ou --poser-politique, le relancer. Ordre d'une montée de version : la liste (dependencies), l'outil du kit, --ecrire (réseau), l'outil du kit de nouveau.
 // Le relevé est gardé hors ligne par dev-tests/verify-code-hygiene.mjs : la carte d'importation ne peut plus changer sans que le relevé soit refait, et le relevé ne contient aucune version flottante.
 // Une alerte se lit « le code que le widget charge n'est plus celui que j'ai relevé » : voir la fiche de crise de SECURITY.md (couper la source, retirer le module de la carte, republier).
 //
@@ -23,6 +25,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const MANIFEST_PATH = join(ROOT, 'outils', 'empreintes-editeur.json');
+export const LIST_PATH = join(ROOT, 'package.json'); // la liste unique des bibliothèques de l'app (consignes 063 et 067 de GFS)
 export const ORIGIN = 'https://esm.sh';
 
 // Trois navigateurs : le serveur varie sa réponse selon l'en-tête User-Agent (vary: User-Agent) ; les octets doivent pourtant être les mêmes.
@@ -184,27 +187,51 @@ export function scriptSources(addresses, origin = ORIGIN) {
   return [...sources].sort();
 }
 
-// index.html avec les sources d'esm.sh de `script-src` remplacées par celles du relevé (la suite d'adresses d'esm.sh qui s'y trouve, d'une ligne ou de cent, est remplacée d'un bloc, à la marge de la
-// politique, 150 caractères par ligne) : on peut la relancer, elle donne le même texte.
-export function withEsmSources(html, sources, origin = ORIGIN) {
-  const policy = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/);
-  if (!policy) throw new Error('politique de sécurité du contenu introuvable dans index.html');
-  const run = new RegExp('\\s*(?:' + origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\S*\\s*)+');
-  if (!run.test(policy[1])) throw new Error('aucune adresse d\'esm.sh dans la politique : où poser les sources ?');
-  const lines = [];
-  let line = '';
-  for (const source of sources) {
-    if (line && line.length + 1 + source.length > 150) { lines.push(line); line = ''; }
-    line += (line ? ' ' : '') + source;
+// La liste de l'app (package.json) avec les sources d'esm.sh de `gfs.politique.scriptSrc` remplacées par celles du relevé : l'outil du kit écrit le `script-src` d'index.html d'après cette liste, et c'est ici
+// que le relevé la tient à jour (choix du 11/11, « Resserrer la liste », puis consigne 063 de GFS : un seul écrivain pour la page). Seul le tableau change, le reste du texte est repris octet pour octet ; la
+// suite d'adresses d'esm.sh qui s'y trouve est remplacée d'un bloc, à la place de la première (les autres sources gardent leur ordre), une source par ligne : on peut la relancer, elle donne le même texte.
+export function withListSources(listText, sources, origin = ORIGIN) {
+  const list = JSON.parse(listText);
+  const fixed = list.gfs && list.gfs.politique && list.gfs.politique.scriptSrc;
+  if (!Array.isArray(fixed)) throw new Error('gfs.politique.scriptSrc introuvable dans la liste (package.json) : où poser les sources ?');
+  const isEsm = token => token === origin || token.startsWith(origin + '/');
+  const at = fixed.findIndex(isEsm);
+  if (at < 0) throw new Error('aucune adresse d\'esm.sh dans gfs.politique.scriptSrc : où poser les sources ?');
+  const wanted = [...fixed.slice(0, at), ...sources, ...fixed.slice(at).filter(token => !isEsm(token))];
+  // Le tableau dans le texte : après la seule clé « scriptSrc », de son « [ » à son « ] » (une chaîne est sautée d'un bloc, elle peut contenir des crochets).
+  const key = listText.indexOf('"scriptSrc"');
+  if (key < 0 || key !== listText.lastIndexOf('"scriptSrc"')) throw new Error('la clé « scriptSrc » doit être écrite une seule fois dans la liste');
+  const open = listText.indexOf('[', key);
+  const string = /"(?:[^"\\]|\\.)*"/y;
+  let close = open + 1;
+  while (open >= 0 && close < listText.length && listText[close] !== ']') {
+    string.lastIndex = close;
+    const quoted = listText[close] === '"' ? string.exec(listText) : null;
+    close += quoted ? quoted[0].length : 1;
   }
-  if (line) lines.push(line);
-  const content = policy[1].replace(run, '\n    ' + lines.join('\n    ') + '\n    ');
-  return html.replace(policy[0], policy[0].replace(policy[1], content));
+  if (open < 0 || close >= listText.length) throw new Error('le tableau gfs.politique.scriptSrc est mal fermé dans la liste');
+  const lineStart = listText.lastIndexOf('\n', key) + 1;
+  const indent = listText.slice(lineStart, key).match(/^\s*/)[0];
+  const written = `${listText.slice(0, open)}[\n${wanted.map(token => `${indent}  ${JSON.stringify(token)}`).join(',\n')}\n${indent}]${listText.slice(close + 1)}`;
+  const back = JSON.parse(written);
+  list.gfs.politique.scriptSrc = wanted;
+  if (JSON.stringify(back) !== JSON.stringify(list)) throw new Error('la liste réécrite n\'est plus celle d\'avant : arrêt, rien n\'est écrit');
+  return written;
 }
 
 async function liveFetch(address, userAgent) {
   const response = await fetch(address, { headers: { 'user-agent': userAgent } });
   return { status: response.status, bytes: Buffer.from(await response.arrayBuffer()), cacheControl: response.headers.get('cache-control') || '' };
+}
+
+// Écrit les sources dans la liste (package.json) et dit quoi faire ensuite : la page, elle, est écrite par l'outil du kit.
+function putSources(sources) {
+  const text = readFileSync(LIST_PATH, 'utf8');
+  const written = withListSources(text, sources);
+  if (written !== text) writeFileSync(LIST_PATH, written);
+  return written !== text
+    ? 'Sources d\'esm.sh de gfs.politique.scriptSrc remises à jour dans package.json : relancer node kit/outils/bibliotheques.mjs pour réécrire le script-src d\'index.html'
+    : 'Les sources d\'esm.sh de gfs.politique.scriptSrc (package.json) sont déjà celles du relevé';
 }
 
 async function main() {
@@ -217,10 +244,7 @@ async function main() {
     const known = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')).fichiers;
     const sources = scriptSources(Object.keys(known).filter(address => !known[address].statut));
     if (mode === '--politique') { for (const source of sources) console.log(source); return; }
-    const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
-    const written = withEsmSources(html, sources);
-    if (written !== html) writeFileSync(join(ROOT, 'index.html'), written);
-    console.log(written !== html ? 'Sources d\'esm.sh de script-src remises à jour dans index.html' : 'Les sources d\'esm.sh de script-src sont déjà celles du relevé');
+    console.log(putSources(sources));
     return;
   }
   const imports = esmImports(readFileSync(join(ROOT, 'index.html'), 'utf8'));
@@ -242,10 +266,7 @@ async function main() {
     }
     writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n');
     console.log('Relevé écrit : outils/empreintes-editeur.json');
-    const indexPath = join(ROOT, 'index.html');
-    const html = readFileSync(indexPath, 'utf8');
-    const written = withEsmSources(html, scriptSources(flat.filter(address => consolidated.files[address].status === 200)));
-    if (written !== html) { writeFileSync(indexPath, written); console.log('Sources d\'esm.sh de script-src remises à jour dans index.html'); }
+    console.log(putSources(scriptSources(flat.filter(address => consolidated.files[address].status === 200))));
     return;
   }
   const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));

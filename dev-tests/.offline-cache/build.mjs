@@ -1,4 +1,4 @@
-// Bundle les memes versions exactes que l'importmap de index.html en modules ESM locaux.
+// Bundle les memes versions exactes que la liste des bibliotheques (package.json a la racine, d'ou l'outil du kit ecrit l'importmap de index.html) en modules ESM locaux.
 // `splitting: true` est INDISPENSABLE : sans lui, chaque entree embarquerait sa propre copie de
 // ProseMirror, et deux copies de prosemirror-state/view dans la meme page cassent TipTap
 // (instanceof croises, plugin keys dupliquees).

@@ -7,12 +7,18 @@
 //  2) le parcours lit les imports comme le navigateur : minifiés (`import"/x.mjs"`, `export*from"/y.mjs"`, `import("/z.mjs")`), chemins absolus, relatifs et spécificateurs nus, et la carte d'importation
 //     qui REMPLACE une adresse (c'est ainsi qu'une adresse flottante est figée : une entrée de la carte qui la renvoie vers la version exacte) ;
 //  3) les sources d'esm.sh de la politique de sécurité du contenu (choix du 11/11, « Resserrer la liste ») : un dossier par paquet à version exacte (et son adresse nue quand elle est chargée aussi), les cales
-//     node/ une à une, JAMAIS l'hôte entier ; réécrites dans index.html d'un bloc, sans toucher aux autres sources ni aux empreintes, et le même texte à chaque relance ;
+//     node/ une à une, JAMAIS l'hôte entier ; écrites d'un bloc dans la liste de l'app (package.json, gfs.politique.scriptSrc : consignes 063 et 067 de GFS), sans toucher aux autres sources ni au reste du fichier,
+//     le même texte à chaque relance ; la page, elle, est écrite par l'outil du kit seul (un seul écrivain : la ligne de commande ne touche pas index.html) ;
 //  4) la vérification : rien n'a bougé = rien à dire ; un fichier figé chez esm.sh qui change d'un octet, un fichier nouveau, un fichier disparu, une adresse flottante qui revient, ou des navigateurs qui
 //     reçoivent des octets différents (un serveur qui change de réponse selon le navigateur) = écart ; un fichier non figé (une cale `node/*.mjs`, un jour de cache) qui change = « à regarder » seulement.
 // Lancer : node dev-tests/unit-editor-fingerprints.mjs
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { check, summarizeAndExit } from './unit-harness.mjs';
-import { floatingVersion, resolveSpecifier, specifiersOf, esmImports, importMapDigest, crawl, consolidate, buildManifest, compare, scriptSources, withEsmSources } from '../outils/empreintes-editeur.mjs';
+import { floatingVersion, resolveSpecifier, specifiersOf, esmImports, importMapDigest, crawl, consolidate, buildManifest, compare, scriptSources, withListSources } from '../outils/empreintes-editeur.mjs';
 
 // ---- 1. Versions flottantes et versions exactes
 const exact = [
@@ -114,17 +120,54 @@ const expectedSources = [
 ];
 check('politique : un dossier par paquet à version exacte (portée, build externe « * » compris), son adresse nue quand elle est chargée aussi, la cale node/ telle quelle, rien d\'un autre site, la requête ?target ignorée', JSON.stringify(sources) === JSON.stringify(expectedSources), JSON.stringify(sources));
 check('politique : jamais l\'hôte entier ni la racine, et un paquet sans version exacte ne donne pas de dossier ouvert à toutes ses versions', !sources.includes('https://esm.sh') && !sources.includes('https://esm.sh/') && sources.every(source => /@\d+\.\d+\.\d+\/?$|\/node\/[a-z_]+\.mjs$/.test(source)), JSON.stringify(sources));
-const page = `<head>\n<meta http-equiv="Content-Security-Policy" content="\n  script-src 'self' 'unsafe-eval' https://esm.sh https://docs.getgrist.com/grist-plugin-api.js\n    https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js\n    'sha256-AAAA=' 'sha256-BBBB=';\n  object-src 'none'">\n</head>`;
-const written = withEsmSources(page, sources);
-const writtenPolicy = written.match(/content="([^"]*)"/)[1];
-const tokens = writtenPolicy.split(';')[0].trim().split(/\s+/).slice(1);
-check('réécriture : l\'hôte entier disparaît, les sources du relevé entrent, tout le reste (autres sites, empreintes, directives suivantes) est gardé dans le même ordre',
-  !tokens.includes('https://esm.sh') && expectedSources.every(source => tokens.includes(source)) && JSON.stringify(tokens.filter(t => !t.startsWith('https://esm.sh'))) === JSON.stringify(["'self'", "'unsafe-eval'", 'https://docs.getgrist.com/grist-plugin-api.js', 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', "'sha256-AAAA='", "'sha256-BBBB='"]) && /object-src 'none'$/.test(writtenPolicy), JSON.stringify(tokens));
-check('réécriture : relancée, elle donne le même texte ; une liste plus courte retire les sources qui ne sont plus au relevé', withEsmSources(written, sources) === written && !withEsmSources(written, expectedSources.slice(0, 2)).includes('linkifyjs'));
-const longList = scriptSources(Array.from({ length: 60 }, (_, i) => `https://esm.sh/paquet-numero-${i}@1.0.${i}/es2022/x.mjs`));
-check('réécriture : les sources sont rangées à la marge, 150 caractères par ligne au plus', withEsmSources(page, longList).split('\n').every(line => line.length <= 160), String(Math.max(...withEsmSources(page, longList).split('\n').map(line => line.length))));
-let threw = '';
-try { withEsmSources(page.replace('https://esm.sh ', ''), sources); } catch (error) { threw = error.message; }
-check('réécriture : une politique sans aucune adresse d\'esm.sh est une erreur, pas une écriture muette', /aucune adresse d'esm\.sh/.test(threw), threw);
+// La liste de l'app (package.json, consignes 063 et 067 de GFS) : l'outil du kit écrit le `script-src` d'index.html d'après `gfs.politique.scriptSrc` ; le relevé y tient les sources d'esm.sh à jour.
+const list = JSON.stringify({
+  name: 'essai', private: true, dependencies: { a: '1.0.0' },
+  gfs: { page: 'index.html', politique: { scriptSrc: ["'self'", "'unsafe-eval'", 'https://esm.sh/ancien@1.0.0', 'https://esm.sh/ancien@1.0.0/', 'https://docs.getgrist.com/grist-plugin-api.js', 'https://autre.exemple/a[1].js'] }, carte: { origine: 'https://esm.sh', paquets: ['a'] } },
+  devDependencies: { esbuild: '0.25.10' },
+}, null, 2) + '\n';
+const written = withListSources(list, sources);
+const tokens = JSON.parse(written).gfs.politique.scriptSrc;
+check('réécriture : les sources du relevé entrent à la place des adresses d\'esm.sh de la liste, tout le reste (autres sites, hôte entier exclu) est gardé dans le même ordre',
+  !tokens.includes('https://esm.sh/ancien@1.0.0') && expectedSources.every(source => tokens.includes(source)) && JSON.stringify(tokens.filter(token => !token.startsWith('https://esm.sh'))) === JSON.stringify(["'self'", "'unsafe-eval'", 'https://docs.getgrist.com/grist-plugin-api.js', 'https://autre.exemple/a[1].js'])
+    && tokens.indexOf(expectedSources[0]) === 2 && tokens[tokens.length - 1] === 'https://autre.exemple/a[1].js', JSON.stringify(tokens));
+const before = list.slice(0, list.indexOf('"scriptSrc"'));
+const arrayEnd = list.indexOf('\n      ]') + '\n      ]'.length, writtenArrayEnd = written.indexOf('\n      ]') + '\n      ]'.length;
+check('réécriture : seul le tableau change : le texte avant et après lui est repris octet pour octet (les autres sections, dependencies, devDependencies, gfs.carte)', written.startsWith(before) && written.slice(writtenArrayEnd) === list.slice(arrayEnd), written.slice(writtenArrayEnd, writtenArrayEnd + 40));
+check('réécriture : une source par ligne, à l\'indentation du tableau de la liste (le fichier est le même qu\'un JSON.stringify de deux espaces)', written.split('\n').filter(line => line.includes('https://esm.sh/')).every(line => /^ {8}"https:\/\/esm\.sh\/[^"]+",?$/.test(line)) && JSON.stringify(JSON.parse(written), null, 2) + '\n' === written);
+check('réécriture : relancée, elle donne le même texte ; une liste plus courte retire les sources qui ne sont plus au relevé', withListSources(written, sources) === written && !withListSources(written, expectedSources.slice(0, 2)).includes('linkifyjs'));
+const compact = '{"gfs":{"politique":{"scriptSrc":["\'self\'","https://esm.sh/ancien@1.0.0","https://docs.getgrist.com/grist-plugin-api.js","https://esm.sh/autre@2.0.0"]}},"dependencies":{}}';
+const compactWritten = withListSources(compact, expectedSources.slice(0, 3));
+check('réécriture : une liste écrite autrement (tout sur une ligne, adresses d\'esm.sh séparées) est réécrite de même : les sources entrent à la place de la première, la seconde adresse d\'esm.sh part, le reste ne bouge pas',
+  JSON.stringify(JSON.parse(compactWritten).gfs.politique.scriptSrc) === JSON.stringify(["'self'", ...expectedSources.slice(0, 3), 'https://docs.getgrist.com/grist-plugin-api.js']) && compactWritten.endsWith(']}},"dependencies":{}}'), compactWritten);
+const refuses = (text) => { try { withListSources(text, sources); return ''; } catch (error) { return error.message; } };
+const withoutEsm = list.replace(/^ +"https:\/\/esm\.sh[^\n]*\n/gm, '');
+check('réécriture : une liste sans aucune adresse d\'esm.sh dans scriptSrc est une erreur, pas une écriture muette', JSON.parse(withoutEsm).gfs.politique.scriptSrc.length === 4 && /aucune adresse d'esm\.sh/.test(refuses(withoutEsm)), refuses(withoutEsm));
+check('réécriture : une liste sans gfs.politique.scriptSrc est une erreur nommée (le relevé n\'invente pas où poser les sources)', /introuvable/.test(refuses('{"dependencies":{}}')) && /introuvable/.test(refuses('{"gfs":{"politique":{}}}')), refuses('{"dependencies":{}}'));
+
+// ---- 7. La ligne de commande n'écrit que la liste : la page est à l'outil du kit (un seul écrivain)
+{
+  const dir = mkdtempSync(join(tmpdir(), 'releve-liste-'));
+  try {
+    mkdirSync(join(dir, 'outils'));
+    for (const file of ['empreintes-editeur.mjs', 'empreintes-editeur.json']) copyFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'outils', file), join(dir, 'outils', file));
+    const known = JSON.parse(readFileSync(join(dir, 'outils', 'empreintes-editeur.json'), 'utf8')).fichiers;
+    const realSources = scriptSources(Object.keys(known).filter(address => !known[address].statut));
+    const page = '<!DOCTYPE html>\n<meta http-equiv="Content-Security-Policy" content="script-src \'self\' https://esm.sh/ancien@1.0.0 \'sha256-AAAA=\'; object-src \'none\'">\n<script type="importmap">{"imports":{}}</script>\n';
+    const start = JSON.stringify({ gfs: { page: 'index.html', politique: { scriptSrc: ["'self'", 'https://esm.sh/ancien@1.0.0', 'https://docs.getgrist.com/grist-plugin-api.js'] } } }, null, 2) + '\n';
+    writeFileSync(join(dir, 'index.html'), page);
+    writeFileSync(join(dir, 'package.json'), start);
+    const run = () => spawnSync(process.execPath, [join(dir, 'outils', 'empreintes-editeur.mjs'), '--poser-politique'], { encoding: 'utf8' });
+    const first = run();
+    const afterFirst = readFileSync(join(dir, 'package.json'), 'utf8');
+    const second = run();
+    const rewritten = JSON.parse(afterFirst).gfs.politique.scriptSrc;
+    check('ligne de commande : --poser-politique écrit les sources du relevé dans la liste (package.json), sans réseau, et dit de relancer l\'outil du kit', first.status === 0 && JSON.stringify(rewritten) === JSON.stringify(["'self'", ...realSources, 'https://docs.getgrist.com/grist-plugin-api.js']) && /kit\/outils\/bibliotheques\.mjs/.test(first.stdout), `${first.status} ${first.stdout} ${first.stderr}`.slice(0, 300));
+    check('ligne de commande : index.html n\'est PAS touché (octet pour octet) : la carte d\'importation et le script-src sont écrits par l\'outil du kit seul', readFileSync(join(dir, 'index.html'), 'utf8') === page);
+    check('ligne de commande : relancée, elle dit que la liste est déjà celle du relevé et ne change pas un octet', second.status === 0 && /déjà celles du relevé/.test(second.stdout) && readFileSync(join(dir, 'package.json'), 'utf8') === afterFirst, second.stdout);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 summarizeAndExit();

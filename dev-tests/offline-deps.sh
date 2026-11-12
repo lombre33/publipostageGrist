@@ -8,14 +8,16 @@
 # Sans ce miroir, TipTap ne démarre pas du tout et AUCUN test ne peut tourner. Dans un navigateur
 # normal avec accès aux CDN, ce script est inutile : le harnais marche tel quel.
 #
-# Les versions installées sont EXACTEMENT celles de l'importmap de index.html - les garder
-# synchronisées à la main quand index.html change de version (le script n'est pas une source de
-# vérité, juste un miroir).
+# Les versions installées sont EXACTEMENT celles de la liste des bibliothèques (package.json à la
+# racine : « dependencies », d'où l'outil du kit écrit l'importmap de index.html) - les garder
+# synchronisées à la main dans .offline-cache/package.json quand une version change dans la liste
+# (codeHygiene § 38 compare les deux ; le script n'est pas une source de vérité, juste un miroir).
 #
 # Le fichier « edition-live » de l'écriture en direct (que Grist Factory Suite assemble) se refait
-# aussi, mais ses six paquets ne sont PAS dans package.json (la liste de l'app ne nomme pas les
-# bibliothèques d'une extension) : edition-live.json les porte, build.mjs les installe dans
-# edition-live-deps/ et construit edition-live/edition-live.js.
+# aussi, mais ses six paquets ne sont PAS dans .offline-cache/package.json ni dans la liste de la
+# racine (la liste de l'app ne nomme pas les bibliothèques d'une extension) : edition-live.json
+# les porte, build.mjs les installe dans edition-live-deps/ et construit
+# edition-live/edition-live.js.
 set -euo pipefail
 cd "$(dirname "$0")/.offline-cache"
 npm install --no-audit --no-fund --silent

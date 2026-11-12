@@ -6,8 +6,8 @@
 <link rel="icon" type="image/jpeg" href="img/grist-factory-logo.jpg">
 <!-- Politique de sécurité du contenu (contrôle du 04/10, AUDIT_CODE.md §3.2) : même si du HTML piégé échappait au filtre (js/html-sanitize.js), le navigateur refuse tout script en ligne, tout
      gestionnaire d'événement, toute adresse javascript:, tout script d'une autre adresse que celles-ci (l'adresse entière quand la bibliothèque est figée), tout cadre sauf ceux de YouTube (youtube-nocookie.com) et de Vimeo (player.vimeo.com), tout objet, formulaire et toute
-     balise de base. Ces deux cadres sont la SEULE ouverture de `frame-src` : le lecteur d'une vidéo que l'app seule (sans GFS) pose au clic sur ▶ (js/video-frame.js, choix du 09/11 : une baisse de sécurité voulue, deux sites nommés) ; hébergée par GFS, l'app ne pose aucun cadre. Les trois scripts en ligne de cette page y sont cités par leur empreinte : en modifier un (la carte d'importation comprise) change son empreinte, et dev-tests/verify-code-hygiene.mjs
-     (groupe codeHygiene) dit laquelle écrire. esm.sh n'est PAS ouvert en entier (choix du 11/11, « Resserrer la liste ») : seuls les paquets de l'éditeur, à leur version exacte, et quatre cales node/*.mjs d'esm.sh y sont nommés, un chemin par paquet, pris du relevé outils/empreintes-editeur.json (node outils/empreintes-editeur.mjs --ecrire les remet à jour, --politique les affiche) ; un autre paquet, un dépôt GitHub servi par esm.sh ou une autre version de TipTap ne se charge pas. 'unsafe-eval' reste, faute de mieux : le fichier
+     balise de base. Ces deux cadres sont la SEULE ouverture de `frame-src` : le lecteur d'une vidéo que l'app seule (sans GFS) pose au clic sur ▶ (js/video-frame.js, choix du 09/11 : une baisse de sécurité voulue, deux sites nommés) ; hébergée par GFS, l'app ne pose aucun cadre. Les trois scripts en ligne de cette page y sont cités par leur empreinte : en modifier un (la carte d'importation comprise) change son empreinte. Cette politique est ÉCRITE par l'outil du kit, d'après la liste
+     des bibliothèques de l'app (package.json à la racine, section gfs) : node kit/outils/bibliotheques.mjs la réécrit, empreintes comprises, et dev-tests/verify-code-hygiene.mjs (groupe codeHygiene) refuse l'écart ; rien ne s'y change à la main. esm.sh n'est PAS ouvert en entier (choix du 11/11, « Resserrer la liste ») : seuls les paquets de l'éditeur, à leur version exacte, et quatre cales node/*.mjs d'esm.sh y sont nommés, un chemin par paquet, pris du relevé outils/empreintes-editeur.json (node outils/empreintes-editeur.mjs --ecrire, réseau, ou --poser-politique, sans réseau, les écrivent dans la liste, gfs.politique.scriptSrc de package.json, puis l'outil du kit les reporte ici ; --politique les affiche) ; un autre paquet, un dépôt GitHub servi par esm.sh ou une autre version de TipTap ne se charge pas. 'unsafe-eval' reste, faute de mieux : le fichier
      que Grist sert (docs.getgrist.com/grist-plugin-api.js) est un bundle de développement dont chaque module s'évalue par eval(), et sans lui l'objet grist n'existe pas (dev-tests/verify-csp.mjs charge
      le vrai fichier). Styles, polices, images et connexions ne sont pas limités : le widget lit des images et des pièces jointes de n'importe quel site. Aucune feuille de style ni police ne vient
      pourtant d'un autre site : l'interface prend la police du système (--font-ui de css/style.css), et codeHygiene comme cspLoad refusent qu'une autre apparaisse.
@@ -17,8 +17,7 @@
      que GFS héberge (même origine) passe par 'self' sans rien nommer. ECharts (le graphique créé, même extension) est dans le même cas : echarts@6.1.0/dist/echarts.min.js, l'adresse exacte du catalogue de GFS pour
      son mode CDN. Une bibliothèque d'extension à venir : l'adresse exacte que GFS donne, une par bibliothèque, jamais écrite de la main de l'app. -->
 <meta http-equiv="Content-Security-Policy" content="
-  script-src 'self' 'unsafe-eval'
-    https://esm.sh/*orderedmap@2.1.1 https://esm.sh/*orderedmap@2.1.1/ https://esm.sh/*prosemirror-changeset@2.4.1
+  script-src 'self' 'unsafe-eval' https://esm.sh/*orderedmap@2.1.1 https://esm.sh/*orderedmap@2.1.1/ https://esm.sh/*prosemirror-changeset@2.4.1
     https://esm.sh/*prosemirror-changeset@2.4.1/ https://esm.sh/*prosemirror-commands@1.7.1 https://esm.sh/*prosemirror-commands@1.7.1/
     https://esm.sh/*prosemirror-dropcursor@1.8.2 https://esm.sh/*prosemirror-dropcursor@1.8.2/ https://esm.sh/*prosemirror-gapcursor@1.4.1
     https://esm.sh/*prosemirror-gapcursor@1.4.1/ https://esm.sh/*prosemirror-history@1.5.0 https://esm.sh/*prosemirror-history@1.5.0/
@@ -27,14 +26,15 @@
     https://esm.sh/*prosemirror-schema-list@1.5.1 https://esm.sh/*prosemirror-schema-list@1.5.1/ https://esm.sh/*prosemirror-state@1.4.4
     https://esm.sh/*prosemirror-state@1.4.4/ https://esm.sh/*prosemirror-tables@1.8.5 https://esm.sh/*prosemirror-tables@1.8.5/
     https://esm.sh/*prosemirror-transform@1.12.0 https://esm.sh/*prosemirror-transform@1.12.0/ https://esm.sh/*prosemirror-view@1.42.3
-    https://esm.sh/*prosemirror-view@1.42.3/ https://esm.sh/*rope-sequence@1.3.4 https://esm.sh/*rope-sequence@1.3.4/ https://esm.sh/*w3c-keyname@2.2.8
-    https://esm.sh/*w3c-keyname@2.2.8/ https://esm.sh/@floating-ui/core@1.8.0 https://esm.sh/@floating-ui/core@1.8.0/
-    https://esm.sh/@floating-ui/dom@1.6.12 https://esm.sh/@floating-ui/dom@1.6.12/ https://esm.sh/@floating-ui/dom@1.8.0
-    https://esm.sh/@floating-ui/dom@1.8.0/ https://esm.sh/@floating-ui/utils@0.2.12 https://esm.sh/@floating-ui/utils@0.2.12/
-    https://esm.sh/@handlewithcare/prosemirror-suggest-changes@0.1.8 https://esm.sh/@handlewithcare/prosemirror-suggest-changes@0.1.8/
-    https://esm.sh/@tiptap/core@3.31.3 https://esm.sh/@tiptap/core@3.31.3/ https://esm.sh/@tiptap/extension-blockquote@3.31.3/
-    https://esm.sh/@tiptap/extension-bold@3.31.3/ https://esm.sh/@tiptap/extension-code-block@3.31.3/ https://esm.sh/@tiptap/extension-code@3.31.3/
-    https://esm.sh/@tiptap/extension-document@3.31.3 https://esm.sh/@tiptap/extension-document@3.31.3/ https://esm.sh/@tiptap/extension-font-family@3.31.3
+    https://esm.sh/*prosemirror-view@1.42.3/ https://esm.sh/*rope-sequence@1.3.4 https://esm.sh/*rope-sequence@1.3.4/
+    https://esm.sh/*w3c-keyname@2.2.8 https://esm.sh/*w3c-keyname@2.2.8/ https://esm.sh/@floating-ui/core@1.8.0
+    https://esm.sh/@floating-ui/core@1.8.0/ https://esm.sh/@floating-ui/dom@1.6.12 https://esm.sh/@floating-ui/dom@1.6.12/
+    https://esm.sh/@floating-ui/dom@1.8.0 https://esm.sh/@floating-ui/dom@1.8.0/ https://esm.sh/@floating-ui/utils@0.2.12
+    https://esm.sh/@floating-ui/utils@0.2.12/ https://esm.sh/@handlewithcare/prosemirror-suggest-changes@0.1.8
+    https://esm.sh/@handlewithcare/prosemirror-suggest-changes@0.1.8/ https://esm.sh/@tiptap/core@3.31.3 https://esm.sh/@tiptap/core@3.31.3/
+    https://esm.sh/@tiptap/extension-blockquote@3.31.3/ https://esm.sh/@tiptap/extension-bold@3.31.3/
+    https://esm.sh/@tiptap/extension-code-block@3.31.3/ https://esm.sh/@tiptap/extension-code@3.31.3/ https://esm.sh/@tiptap/extension-document@3.31.3
+    https://esm.sh/@tiptap/extension-document@3.31.3/ https://esm.sh/@tiptap/extension-font-family@3.31.3
     https://esm.sh/@tiptap/extension-font-family@3.31.3/ https://esm.sh/@tiptap/extension-hard-break@3.31.3/
     https://esm.sh/@tiptap/extension-heading@3.31.3/ https://esm.sh/@tiptap/extension-horizontal-rule@3.31.3/
     https://esm.sh/@tiptap/extension-italic@3.31.3/ https://esm.sh/@tiptap/extension-link@3.31.3/ https://esm.sh/@tiptap/extension-list@3.31.3/
@@ -43,22 +43,23 @@
     https://esm.sh/@tiptap/extension-table-cell@3.31.3 https://esm.sh/@tiptap/extension-table-cell@3.31.3/
     https://esm.sh/@tiptap/extension-table-header@3.31.3 https://esm.sh/@tiptap/extension-table-header@3.31.3/
     https://esm.sh/@tiptap/extension-table-row@3.31.3 https://esm.sh/@tiptap/extension-table-row@3.31.3/ https://esm.sh/@tiptap/extension-table@3.31.3
-    https://esm.sh/@tiptap/extension-table@3.31.3/ https://esm.sh/@tiptap/extension-task-item@3.31.3 https://esm.sh/@tiptap/extension-task-item@3.31.3/
-    https://esm.sh/@tiptap/extension-task-list@3.31.3 https://esm.sh/@tiptap/extension-task-list@3.31.3/
-    https://esm.sh/@tiptap/extension-text-align@3.31.3 https://esm.sh/@tiptap/extension-text-align@3.31.3/
-    https://esm.sh/@tiptap/extension-text-style@3.31.3 https://esm.sh/@tiptap/extension-text-style@3.31.3/ https://esm.sh/@tiptap/extension-text@3.31.3/
+    https://esm.sh/@tiptap/extension-table@3.31.3/ https://esm.sh/@tiptap/extension-task-item@3.31.3
+    https://esm.sh/@tiptap/extension-task-item@3.31.3/ https://esm.sh/@tiptap/extension-task-list@3.31.3
+    https://esm.sh/@tiptap/extension-task-list@3.31.3/ https://esm.sh/@tiptap/extension-text-align@3.31.3
+    https://esm.sh/@tiptap/extension-text-align@3.31.3/ https://esm.sh/@tiptap/extension-text-style@3.31.3
+    https://esm.sh/@tiptap/extension-text-style@3.31.3/ https://esm.sh/@tiptap/extension-text@3.31.3/
     https://esm.sh/@tiptap/extension-underline@3.31.3 https://esm.sh/@tiptap/extension-underline@3.31.3/ https://esm.sh/@tiptap/extensions@3.31.3/
     https://esm.sh/@tiptap/starter-kit@3.31.3 https://esm.sh/@tiptap/starter-kit@3.31.3/ https://esm.sh/@tiptap/suggestion@3.31.3
     https://esm.sh/@tiptap/suggestion@3.31.3/ https://esm.sh/linkifyjs@4.4.0 https://esm.sh/linkifyjs@4.4.0/ https://esm.sh/node/async_hooks.mjs
-    https://esm.sh/node/events.mjs https://esm.sh/node/process.mjs https://esm.sh/node/tty.mjs
-    https://docs.getgrist.com/grist-plugin-api.js
+    https://esm.sh/node/events.mjs https://esm.sh/node/process.mjs https://esm.sh/node/tty.mjs https://docs.getgrist.com/grist-plugin-api.js
+    https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js
+    https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/index.iife.js https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/charts.iife.js
+    https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js
+    https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js
     https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js
-    https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js
-    https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
-    https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js
-    https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/index.iife.js https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/charts.iife.js https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js
-    https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js
-    'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-jST4sYifC15ZGQ2im8Ncf6PltPIfmRv6CvSUxGFJLSw=' 'sha256-dr2nJ9qlSEpVpFpN01rgQ3bZHAcSZWrebqvX0xSlX7I=';
+    https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
+    'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-P9ZLRRWMLqXkb/9FwZGB27z3ElRFaLmJ8FzqfJVeliw='
+    'sha256-dr2nJ9qlSEpVpFpN01rgQ3bZHAcSZWrebqvX0xSlX7I=';
   object-src 'none'; base-uri 'none'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; form-action 'none'">
 <!-- Enregistrement automatique coupé (pp_autosave_enabled = 'false', cf. js/main.js:isAutosaveEnabled) : le bouton Enregistrer est noir et blanc dès le PREMIER affichage, pas bleu le temps que
      les scripts finissent de se charger puis en fondu vers le noir. La classe est posée ICI, sur <html>, avant les feuilles de style et le corps : un script placé après le bouton attend que les
@@ -84,18 +85,28 @@
      prosemirror-model", cf. commit qui a corrige cette regression).
      Un script classique (pas type="module") peut resoudre ces specifiers nus
      via import() dynamique - cf. commentaire en tete de js/editor.js.
-     Les huit dernieres entrees (@floating-ui, linkifyjs) figent des VERSIONS FLOTTANTES : les paquets de TipTap et de floating-ui les demandent sous la forme `@^1.0.0` ou `@^4.3.3`, qu'esm.sh resout
+     Cette carte est ECRITE par l'outil du kit (node kit/outils/bibliotheques.mjs) d'apres la liste des bibliotheques (package.json a la racine : dependencies pour les versions, gfs.carte pour la carte) :
+     une version change dans la liste, jamais ici, et l'outil refait la carte, la politique de securite ci-dessus et le catalogue bibliotheques/catalogue.json.
+     Les huit entrees qui suivent celles du kit (@floating-ui, linkifyjs ; « fixes » de la liste) figent des VERSIONS FLOTTANTES : les paquets de TipTap et de floating-ui les demandent sous la forme `@^1.0.0` ou `@^4.3.3`, qu'esm.sh resout
      a chaque demande (cache de dix minutes) vers la derniere version publiee : sans ces entrees, une version nouvelle de linkifyjs ou de floating-ui, publiee OU VOLEE sur npm, se serait chargee
      dans l'editeur le jour meme, avec l'acces complet au document. Chacune renvoie vers la version exacte que l'adresse flottante donnait le 10/11 (meme fichier final, meme texte, cache immuable).
      outils/empreintes-editeur.mjs --verifier refuse toute adresse flottante du parcours ; dev-tests/verify-code-hygiene.mjs garde le releve hors ligne.
      Les deux premieres entrees sont celles du kit de Grist Factory (sous-module kit/, consigne 041 de GFS : l'ambiance choisie dans GFS) : un module du kit n'a qu'UNE adresse par page
      (kit/js/once.js le dit dans la console sinon), donc js/gfs-link.js et js/gfs-ambiance.js l'importent par ce nom, jamais par un chemin. Le ?v= est le debut du commit que le depot
-     epingle (git ls-files -s kit) : il change avec lui, et l'empreinte de la carte dans la politique ci-dessus avec. -->
+     epingle (git ls-files -s kit) : il change avec lui, dans la liste (gfs.carte.fixes) comme ici, et l'empreinte de la carte dans la politique ci-dessus avec. -->
 <script type="importmap">
 {
   "imports": {
     "kit/ambiance-message": "./kit/js/ambiance-message.js?v=2feec25",
     "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=2feec25",
+    "https://esm.sh/@floating-ui/dom@^1.0.0?target=es2022": "https://esm.sh/@floating-ui/dom@1.8.0?target=es2022",
+    "https://esm.sh/@floating-ui/core@^1.6.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
+    "https://esm.sh/@floating-ui/core@^1.8.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
+    "https://esm.sh/@floating-ui/utils@^0.2.8?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12?target=es2022",
+    "https://esm.sh/@floating-ui/utils@^0.2.12?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12?target=es2022",
+    "https://esm.sh/@floating-ui/utils@^0.2.8/dom?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12/dom?target=es2022",
+    "https://esm.sh/@floating-ui/utils@^0.2.12/dom?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12/dom?target=es2022",
+    "https://esm.sh/linkifyjs@^4.3.3?target=es2022": "https://esm.sh/linkifyjs@4.4.0?target=es2022",
     "prosemirror-model": "https://esm.sh/*prosemirror-model@1.25.11",
     "orderedmap": "https://esm.sh/*orderedmap@2.1.1",
     "prosemirror-state": "https://esm.sh/*prosemirror-state@1.4.4",
@@ -113,19 +124,6 @@
     "prosemirror-inputrules": "https://esm.sh/*prosemirror-inputrules@1.5.1",
     "prosemirror-changeset": "https://esm.sh/*prosemirror-changeset@2.4.1",
     "@tiptap/core": "https://esm.sh/@tiptap/core@3.31.3",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/model.mjs": "https://esm.sh/*prosemirror-model@1.25.11",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/state.mjs": "https://esm.sh/*prosemirror-state@1.4.4",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/view.mjs": "https://esm.sh/*prosemirror-view@1.42.3",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/transform.mjs": "https://esm.sh/*prosemirror-transform@1.12.0",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/keymap.mjs": "https://esm.sh/*prosemirror-keymap@1.2.3",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/commands.mjs": "https://esm.sh/*prosemirror-commands@1.7.1",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/schema-list.mjs": "https://esm.sh/*prosemirror-schema-list@1.5.1",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/tables.mjs": "https://esm.sh/*prosemirror-tables@1.8.5",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/gapcursor.mjs": "https://esm.sh/*prosemirror-gapcursor@1.4.1",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/dropcursor.mjs": "https://esm.sh/*prosemirror-dropcursor@1.8.2",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/inputrules.mjs": "https://esm.sh/*prosemirror-inputrules@1.5.1",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/history.mjs": "https://esm.sh/*prosemirror-history@1.5.0",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/changeset.mjs": "https://esm.sh/*prosemirror-changeset@2.4.1",
     "@tiptap/starter-kit": "https://esm.sh/@tiptap/starter-kit@3.31.3",
     "@tiptap/extension-document": "https://esm.sh/@tiptap/extension-document@3.31.3",
     "@tiptap/extension-underline": "https://esm.sh/@tiptap/extension-underline@3.31.3",
@@ -142,17 +140,22 @@
     "@tiptap/suggestion": "https://esm.sh/@tiptap/suggestion@3.31.3",
     "@floating-ui/dom": "https://esm.sh/@floating-ui/dom@1.6.12",
     "@handlewithcare/prosemirror-suggest-changes": "https://esm.sh/@handlewithcare/prosemirror-suggest-changes@0.1.8",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/model.mjs": "https://esm.sh/*prosemirror-model@1.25.11",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/state.mjs": "https://esm.sh/*prosemirror-state@1.4.4",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/view.mjs": "https://esm.sh/*prosemirror-view@1.42.3",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/transform.mjs": "https://esm.sh/*prosemirror-transform@1.12.0",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/keymap.mjs": "https://esm.sh/*prosemirror-keymap@1.2.3",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/commands.mjs": "https://esm.sh/*prosemirror-commands@1.7.1",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/schema-list.mjs": "https://esm.sh/*prosemirror-schema-list@1.5.1",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/tables.mjs": "https://esm.sh/*prosemirror-tables@1.8.5",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/gapcursor.mjs": "https://esm.sh/*prosemirror-gapcursor@1.4.1",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/dropcursor.mjs": "https://esm.sh/*prosemirror-dropcursor@1.8.2",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/inputrules.mjs": "https://esm.sh/*prosemirror-inputrules@1.5.1",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/history.mjs": "https://esm.sh/*prosemirror-history@1.5.0",
+    "https://esm.sh/@tiptap/pm@3.31.3/es2022/changeset.mjs": "https://esm.sh/*prosemirror-changeset@2.4.1",
     "https://esm.sh/prosemirror-state@^1.0.0?target=es2022": "https://esm.sh/*prosemirror-state@1.4.4",
     "https://esm.sh/prosemirror-transform@^1.0.0?target=es2022": "https://esm.sh/*prosemirror-transform@1.12.0",
-    "https://esm.sh/prosemirror-view@^1.0.0?target=es2022": "https://esm.sh/*prosemirror-view@1.42.3",
-    "https://esm.sh/@floating-ui/dom@^1.0.0?target=es2022": "https://esm.sh/@floating-ui/dom@1.8.0?target=es2022",
-    "https://esm.sh/@floating-ui/core@^1.6.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
-    "https://esm.sh/@floating-ui/core@^1.8.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
-    "https://esm.sh/@floating-ui/utils@^0.2.8?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12?target=es2022",
-    "https://esm.sh/@floating-ui/utils@^0.2.12?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12?target=es2022",
-    "https://esm.sh/@floating-ui/utils@^0.2.8/dom?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12/dom?target=es2022",
-    "https://esm.sh/@floating-ui/utils@^0.2.12/dom?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12/dom?target=es2022",
-    "https://esm.sh/linkifyjs@^4.3.3?target=es2022": "https://esm.sh/linkifyjs@4.4.0?target=es2022"
+    "https://esm.sh/prosemirror-view@^1.0.0?target=es2022": "https://esm.sh/*prosemirror-view@1.42.3"
   }
 }
 </script>
