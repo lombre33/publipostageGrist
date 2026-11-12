@@ -2,6 +2,17 @@
 // Chargé AVANT js/i18n.js, qui assemble tous les js/i18n-texts-*.js. Un texte neuf va dans le fichier de son domaine, en français et en anglais dans le même lot, et le `?v=` de ce fichier monte dans index.html ;
 // une clé n'existe que dans un seul fichier (l'essai « aucune clé déclarée deux fois » lit les fichiers ensemble).
 const I18nTextsVariables = {
+  // --- Info-bulle de valeur d'une bulle de l'éditeur (js/variable-tip.js) ---
+  'varTip.empty': { fr: '(vide)', en: '(empty)' },
+  'varTip.hidden': { fr: 'Masquée pour cette ligne : sa condition n’est pas remplie', en: 'Hidden for this row: its condition is not met' },
+  'varTip.noRow': { fr: 'Aucune ligne n’est sélectionnée dans Grist', en: 'No row is selected in Grist' },
+  'varTip.files': { fr: '{count} {count|pièce jointe|pièces jointes}', en: '{count} {count|attachment|attachments}' },
+  'varTip.otherwise': { fr: 'Valeur du « sinon » : la condition n’est pas remplie', en: 'Value of the “otherwise”: the condition is not met' },
+  'varTip.zone': { fr: 'Répétée pour {count} {count|ligne|lignes}', en: 'Repeated for {count} {count|row|rows}' },
+  'varTip.zoneNested': { fr: 'Répétée pour {count} {count|ligne|lignes}, dans la première ligne de la zone qui l’entoure', en: 'Repeated for {count} {count|row|rows}, within the first row of the zone around it' },
+  'varTip.more': { fr: '+ {count} {count|autre|autres}', en: '+ {count} more' },
+  'varTip.zoneEmpty': { fr: 'Aucune ligne à répéter ici : cette zone ne montre pas la valeur', en: 'No row to repeat here: this zone does not show the value' },
+  'varTip.foot': { fr: '{name} · ligne n° {id}', en: '{name} · row #{id}' },
   // --- Modale de configuration de correspondance (js/variables.js:showLinkConfigModal) ---
   'linkConfig.columnPlaceholder': { fr: '— Choisir une colonne —', en: '— Choose a column —' },
   // Le choix « le numéro de la ligne » des deux listes de la fenêtre et de la ligne du panneau « Tables liées » ; `rowIdSearch` garde ses anciens noms

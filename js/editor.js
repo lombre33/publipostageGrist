@@ -635,6 +635,7 @@ const Editor = (function () {
     MainToolbar.setEditor(editor);
     MainToolbar.wireToolbar();
     LinkDialog.wireEditor(editor);
+    VariableTip.wire(editor);
     FindReplace.wireEditor(editor);
     FloatingToolbars.wireColorPickers();
     FloatingToolbars.wireTableFloatingToolbar();

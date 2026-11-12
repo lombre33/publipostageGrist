@@ -74,6 +74,12 @@ const Settings = (function () {
     write: value => AltReminder.setOn(value === 'on'),
     say: said('settings.accessibility.title', value => I18n.t('settings.accessibility.' + value)),
   };
+  // L'info-bulle de valeur d'une bulle (js/variable-tip.js, qui garde la préférence) : une case de la section « Bulles et puces dans l'éditeur », défaite par Ctrl + Z comme les autres choix.
+  const VARIABLE_TIP_SETTING = {
+    read: () => (VariableTip.isOn() ? 'on' : 'off'),
+    write: value => VariableTip.setOn(value === 'on'),
+    say: said('settings.bubbleMarks.title', value => I18n.t('settings.varTip.' + value)),
+  };
   const TRIGGER_SETTING = {
     read: () => Variables.triggerChar(),
     write: value => PersonStore.set(TRIGGER_KEY_STORAGE, value),
@@ -248,6 +254,7 @@ const Settings = (function () {
     const themeRadios = all('input[name="settings-theme"]');
     const bubbleMarksRadios = all('input[name="settings-bubble-marks"]');
     const altReminderBox = byId('settings-alt-reminder');
+    const varTipBox = byId('settings-var-tip');
     const mailClientRadios = all('input[name="settings-mail-client"]');
     const triggerSelect = byId('settings-trigger-char');
     const reloadNotice = byId('settings-trigger-reload-notice');
@@ -257,6 +264,7 @@ const Settings = (function () {
       themeRadios.forEach(r => { r.checked = (r.value === getTheme()); });
       bubbleMarksRadios.forEach(r => { r.checked = (r.value === getBubbleMarks()); });
       if (altReminderBox) altReminderBox.checked = AltReminder.isOn();
+      if (varTipBox) varTipBox.checked = VariableTip.isOn();
       mailClientRadios.forEach(r => { r.checked = (r.value === MailtoExport.getMailClient()); });
       if (triggerSelect) triggerSelect.value = Variables.triggerChar();
       if (reloadNotice) reloadNotice.hidden = true;
@@ -391,6 +399,11 @@ const Settings = (function () {
     if (altReminderBox) altReminderBox.addEventListener('change', () => {
       SettingsHistory.track(ALT_REMINDER_SETTING, () => AltReminder.setOn(altReminderBox.checked));
       altReminderBox.checked = AltReminder.isOn();
+    });
+    const varTipBox = byId('settings-var-tip');
+    if (varTipBox) varTipBox.addEventListener('change', () => {
+      SettingsHistory.track(VARIABLE_TIP_SETTING, () => VariableTip.setOn(varTipBox.checked));
+      varTipBox.checked = VariableTip.isOn();
     });
     wireRadios('settings-mail-client', value => SettingsHistory.track(MAIL_CLIENT_SETTING, () => MailtoExport.setMailClient(value)));
     wireTriggerChar();

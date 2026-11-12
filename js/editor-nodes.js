@@ -142,6 +142,8 @@ const EditorNodes = (function () {
       // coupe par la gauche, ce que scrollWidth ne compte pas : on compare les rectangles.
       dom.addEventListener('mouseenter', () => {
         if (dom.classList.contains(prefix + '-broken') || dom.classList.contains(prefix + '-unlinked')) return;
+        // L'info-bulle de valeur (js/variable-tip.js) écrit le nom entier dans son pied : pas deux info-bulles l'une sur l'autre.
+        if (VariableTip.isOn()) { if (dom.title === label) dom.removeAttribute('title'); return; }
         const cut = head.scrollWidth > head.clientWidth || (tail && tailText.getBoundingClientRect().width > tail.getBoundingClientRect().width + 0.5);
         if (cut) dom.title = label;
         else if (dom.title === label) dom.removeAttribute('title');

@@ -1,0 +1,15 @@
+/* Info-bulle de valeur d'une bulle de l'éditeur (js/variable-tip.js) : même teinte que celle des liens (css/link-dialog.css) et des infobulles de la barre - fond `--text`, texte `--surface`, lisible dans
+   les deux thèmes -, mais elle se survole et se sélectionne (pointer-events) : on peut y copier la valeur. Sous les fenêtres (jeton --z-tip de css/style.css, une info-bulle de l'éditeur ne s'ouvre jamais devant elles). */
+.pp-var-tip { position: fixed; z-index: var(--z-tip); display: flex; flex-direction: column; gap: 3px; max-width: 320px; box-sizing: border-box; padding: 6px 10px; border-radius: var(--radius-md, 6px); background: var(--text); color: var(--surface); font-family: var(--font-ui); font-size: 12px; line-height: 1.4; box-shadow: 0 4px 10px rgba(15, 23, 42, .25); user-select: text; }
+.pp-var-tip[hidden] { display: none; }
+/* La valeur : 5 lignes au plus, la fin se coupe par « … » ; les retours à la ligne d'une cellule de texte restent. */
+.pp-var-tip-value { font-weight: 600; overflow-wrap: anywhere; white-space: pre-line; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; line-clamp: 5; overflow: hidden; }
+.pp-var-tip-dim, .pp-var-tip-note, .pp-var-tip-foot { opacity: .85; overflow-wrap: anywhere; }
+.pp-var-tip-note, .pp-var-tip-foot { font-size: 11px; }
+.pp-var-tip-foot { margin-top: 2px; }
+.pp-var-tip-turn { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.pp-var-tip-turn .pp-var-tip-value { flex: 1 1 auto; min-width: 0; }
+.pp-var-tip-n { flex: none; min-width: 1.2em; text-align: right; font-variant-numeric: tabular-nums; opacity: .85; }
+/* Dite aux lecteurs d'écran seulement (la bulle sélectionnée au clavier). */
+.pp-var-tip-live { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+@media print { .pp-var-tip, .pp-var-tip-live { display: none; } }

@@ -364,6 +364,8 @@ const LoopRules = (function () {
   // conditionnels (leur condition), et les puces (le rang du tour pour « N° de ligne », la ligne que lit la mise en forme conditionnelle d'une puce), les cases et les lignes de tableau à mise en forme conditionnelle (la ligne du tour d'une ligne répétée).
   const BOUND_SELECTOR = '.var-badge, .calc-badge, img.editor-image[data-var-table], img.editor-image[data-qr-text], img.editor-image[alt], .pp-free-frame[data-ff-alt], .conditional-text, .conditional-value, .conditional-checkbox, .smart-chip, .mention-chip[data-cond-style], td[data-cond-style], th[data-cond-style], tr[data-cond-style]';
   function bindingOf(el) { return (el && bindings.get(el)) || null; }
+  // Associe à un élément (la copie d'une bulle que l'info-bulle de valeur lit, js/reader-mode.js:peek) la ligne d'un tour, comme bindClone le fait pour les copies d'une zone déroulée.
+  function bindElement(el, binding) { if (el && binding) bindings.set(el, binding); }
   // Les éléments qui prennent la place d'un autre APRÈS le déroulé des zones (le sinon d'un bloc ou d'une valeur conditionnels, qui porte des variables) lisent la
   // même ligne du tour que lui : ils reprennent sa liaison. Rien à faire hors d'une zone répétée.
   function inheritBinding(source, nodes) {
@@ -445,6 +447,43 @@ const LoopRules = (function () {
     if (outer.nodes) return outer.nodes.some(node => node.contains(inner.zone));
     for (let el = inner.zone.parentElement; el; el = el.parentElement) if (el === outer.zone) return true;
     return false;
+  }
+  // Les zones répétées qui entourent l'élément `el` de `root` (un document que rien n'a déroulé : celui de l'éditeur), de la plus extérieure à la plus intérieure : [{ badge, loop, zone }]
+  // - `badge` : la bulle qui porte la boucle de la zone. Rien qu'en remontant d'`el` (la ligne du tableau, l'élément de liste, le paragraphe ou le titre qui le contient, puis la section d'un
+  // titre en regardant les frères de chaque bloc qui l'entoure) : jamais un parcours du document, c'est ce qui permet de la lire au survol d'une bulle dans un gros document. Une zone dont
+  // la bulle n'est plus à sa place, ou dont la boucle est illisible, n'en est pas une (zoneOwners les compte de même). Les boucles « dans la phrase » ne répètent aucune zone.
+  const ZONE_KINDS = [['tr', 'row'], ['li', 'item'], [TEXT_BLOCK_SELECTOR, 'paragraph']];
+  function ownerOf(zone, repeat, root) {
+    for (const badge of zone.querySelectorAll(LOOP_OWNER_SELECTOR)) {
+      const loop = parseLoop(badge.getAttribute('data-loop'));
+      if (loop && loop.repeat === repeat && zoneOf(badge, repeat, root) === zone) return { badge, loop, zone };
+    }
+    return null;
+  }
+  function zoneChainOf(el, root) {
+    const found = [];
+    for (let node = el; node && node !== root; node = node.parentElement) {
+      for (const [selector, repeat] of ZONE_KINDS) {
+        if (!node.matches(selector)) continue;
+        const owner = ownerOf(node, repeat, root);
+        if (owner) found.push(owner);
+      }
+      // Les blocs frères d'un titre qui porte la boucle d'une section : le bloc `node` est dans la section d'un titre de son parent quand sectionRanges le range entre le titre et sa fin.
+      const parent = node.parentElement;
+      if (!parent || !root.contains(parent)) continue;
+      const owners = [];
+      for (const child of parent.children) {
+        if (!headingLevel(child)) continue;
+        const owner = ownerOf(child, 'section', root);
+        if (owner) owners.push(owner);
+      }
+      if (!owners.length) continue;
+      attachSections(owners);
+      owners.forEach(owner => { if (owner.nodes && owner.nodes.includes(node) && !found.some(f => f.zone === owner.zone && f.loop.repeat === 'section')) found.push(owner); });
+    }
+    // Du dehors au dedans : une zone vient après toutes celles qui l'entourent (zoneInside).
+    const depth = level => found.filter(other => other !== level && zoneInside(level, other)).length;
+    return found.map(level => ({ level, depth: depth(level) })).sort((a, b) => a.depth - b.depth).map(({ level }) => ({ badge: level.badge, loop: level.loop, zone: level.zone }));
   }
   // Celles dont la zone n'est dans la zone d'aucune autre : la boucle d'une zone répétée dans une autre attend les copies de la zone qui l'entoure, qui lui
   // donnent sa ligne (scopeFor).
@@ -648,6 +687,6 @@ const LoopRules = (function () {
 
   return {
     EMPTY_MODES, END_MARKER_SELECTOR, sectionRanges, stripEndMarkers, defaultEmpty, normalizeLoop, sourceFor, allSourceFor, referenceColumnsTo, nestedColumn, parentTable, enclosingOf, sourceError, scopeFor, createContext, iterate, itemBinding,
-    bindingOf, inheritBinding, expandZones, inlineLoopOf, resolveInline, removeHiddenBlocks, removeAndPrune, joinValues,
+    bindingOf, bindElement, zoneChainOf, inheritBinding, expandZones, inlineLoopOf, resolveInline, removeHiddenBlocks, removeAndPrune, joinValues,
   };
 })();

@@ -208,6 +208,24 @@ const GristAPI = (function () {
     try { return await work(); }
     finally { if (--_readPassesOpen === 0) _readPass = null; }
   }
+  // Une lecture partagée entre des gestes qui se suivent hors de tout rendu : l'info-bulle de valeur d'une bulle (js/variable-tip.js) survolée l'une après l'autre relit les mêmes tables,
+  // et chaque fetchTable renvoie la table entière. Sans rendu en cours, les appels de `maxAgeMs` au plus d'écart et pour la même ligne affichée de la page partagent une lecture ; une autre
+  // ligne (ou une même ligne que Grist vient de renvoyer, une cellule modifiée) en repart d'une neuve, et elle est jetée au bout de ce délai (rien ne reste en mémoire). Un rendu en cours
+  // (withReadPass) passe devant : on lit alors avec lui, jamais avec un cache plus ancien que le sien.
+  let _sharedPass = null;
+  async function withSharedReadPass(work, maxAgeMs) {
+    if (_readPassesOpen === 0) {
+      if (!_sharedPass || _sharedPass.record !== _currentRecord || Date.now() - _sharedPass.at > maxAgeMs) {
+        const made = { at: Date.now(), record: _currentRecord, pass: { tables: new Map(), rows: new Map() } };
+        _sharedPass = made;
+        setTimeout(() => { if (_sharedPass === made) _sharedPass = null; }, maxAgeMs + 50);
+      }
+      _readPass = _sharedPass.pass;
+    }
+    _readPassesOpen++;
+    try { return await work(); }
+    finally { if (--_readPassesOpen === 0) _readPass = null; }
+  }
   // Données colonnaires d'une table (le résultat de fetchTable, jamais modifié par les appelants). `fresh` : lecture directe, hors rendu - quand le
   // résultat dépend d'une écriture qui vient d'avoir lieu (getCurrentUserEmail).
   function readTable(tableId, fresh) {
@@ -1344,5 +1362,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

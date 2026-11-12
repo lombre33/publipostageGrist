@@ -28,6 +28,14 @@ const I18nTextsSettings = {
     en: 'Default: they keep their pale look, easy to spot on any background. Formatting: they take the chosen color, highlight, underline and strikethrough. This choice only changes the editor: Read mode, the PDF and Word stay as they are.',
   },
   'settings.bubbleMarks.perBrowser': { fr: 'Ce choix est propre à ce navigateur, comme la langue et le thème.', en: 'This choice is specific to this browser, like the language and the theme.' },
+  // Info-bulle de valeur d'une bulle (js/variable-tip.js) : une case de la section « Bulles et puces dans l'éditeur ».
+  'settings.varTip.label': { fr: 'Montrer la valeur d’une variable quand la souris s’arrête dessus', en: 'Show a variable’s value when the mouse rests on it' },
+  'settings.varTip.hint': {
+    fr: 'Une info-bulle donne la valeur de la bulle pour la ligne sélectionnée dans Grist, comme la Lecture l’écrit ; dans une zone répétée, les premières lignes. Au clavier, une bulle sélectionnée aux flèches la montre aussi. Ce choix est propre à ce navigateur.',
+    en: 'A tooltip gives the bubble’s value for the row selected in Grist, as Read mode writes it; in a repeated zone, the first rows. With the keyboard, a bubble selected with the arrow keys shows it too. This choice is specific to this browser.',
+  },
+  'settings.varTip.on': { fr: 'allumée', en: 'on' },
+  'settings.varTip.off': { fr: 'éteinte', en: 'off' },
   // Accessibilité (js/alt-reminder.js) : une section de l'onglet Thème, la barre des onglets étant pleine.
   'settings.accessibility.title': { fr: 'Accessibilité', en: 'Accessibility' },
   'settings.accessibility.intro': {
@@ -470,6 +478,7 @@ const I18nTextsSettings = {
   // --- Palette de commandes (js/command-palette.js, Alt+/) : chercher une commande par son nom et la lancer. Le nom de chaque commande est celui de sa ligne dans Réglages > Raccourcis ; `palette.kw.<action>` ajoute les mots
   // qu'on tape pour la trouver quand son nom ne les porte pas (« pdf » pour « Exporter »). ---
   'shortcuts.action.commandPalette': { fr: 'Palette de commandes', en: 'Command palette' },
+  'shortcuts.action.variableValue': { fr: 'Voir la valeur de la variable sélectionnée', en: 'Show the value of the selected variable' },
   'palette.title': { fr: 'Palette de commandes', en: 'Command palette' },
   'palette.search.label': { fr: 'Rechercher une commande', en: 'Search for a command' },
   'palette.search.placeholder': { fr: 'Une commande : pdf, tableau, gras…', en: 'A command: pdf, table, bold…' },
@@ -485,6 +494,7 @@ const I18nTextsSettings = {
   'palette.close': { fr: 'Fermer', en: 'Close' },
   'palette.kw.exportPdf': { fr: 'pdf word docx html markdown email imprimer télécharger', en: 'pdf word docx html markdown email print download' },
   'palette.kw.save': { fr: 'sauvegarder sauver', en: 'store keep' },
+  'palette.kw.variableValue': { fr: 'info-bulle survol bulle valeur contenu variable', en: 'tooltip hover bubble value content variable' },
   'palette.kw.new': { fr: 'créer nouveau document', en: 'create new document' },
   'palette.kw.templates': { fr: 'ouvrir modèle document changer', en: 'open document switch' },
   'palette.kw.settings': { fr: 'paramètres préférences options langue thème', en: 'preferences options language theme' },

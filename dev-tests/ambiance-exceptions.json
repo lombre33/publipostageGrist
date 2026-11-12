@@ -36,6 +36,7 @@
     {"fichier": "extensions/diapositives/slide-import.css", "selecteur": ".*", "categorie": "apercu"},
     {"fichier": "css/free-frame.css", "selecteur": ".*", "categorie": "canevas"},
     {"fichier": "css/link-dialog.css", "selecteur": ".*", "categorie": "neutre"},
+    {"fichier": "css/variable-tip.css", "selecteur": ".*", "categorie": "neutre"},
     {"fichier": "css/text-expansion.css", "selecteur": ".*", "categorie": "neutre"},
     {"fichier": "extensions/diapositives/slide-show.css", "selecteur": ".*", "categorie": "neutre"},
     {"fichier": "extensions/diapositives/slide-transitions.css", "selecteur": ".*", "categorie": "neutre"},

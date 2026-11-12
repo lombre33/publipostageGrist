@@ -1737,6 +1737,69 @@ const ReaderMode = (function () {
       return { node: span, isError: true };
     }
   }
+  // Ce que dit une bulle de l'ÉDITEUR pour la ligne `record` de la table `tableId`, sans rien dérouler ni rien écrire dans le document (l'info-bulle de valeur au survol, js/variable-tip.js) :
+  // une copie de la bulle, posée dans un nœud à part, suit la même porte que la Lecture (le sinon, la condition, la boucle dans la phrase, le format, les « Avant » / « Après » : resolveBadgeNode).
+  // Dans une zone répétée (`opts.root` : le document de l'éditeur, d'où on remonte aux zones qui entourent la bulle - LoopRules.zoneChainOf), elle est lue pour les `opts.max` premiers tours de la zone
+  // la plus proche, et pour le premier tour de chaque zone qui l'entoure. Rend { turns, total, zone } - `turns` : une entrée par tour (une seule hors zone), { text } | { empty } | { hidden } (sa
+  // condition n'est pas remplie, sans sinon) | { error: texte } | { files: n } (pièces jointes), avec `otherwise` quand le sinon a pris la place ; `total` : les tours de la zone ; `zone` :
+  // { repeat, nested } ou null hors zone (ou quand la boucle ne trouve plus sa source : la Lecture écrit alors la bulle comme une bulle ordinaire) ; `turns` vide (zone sans aucune ligne, `empty` : le choix
+  // « Si aucune ligne » de la boucle) quand la Lecture n'écrirait pas la bulle du tout. Les tables se lisent dans une passe partagée de 10 s (GristAPI.withSharedReadPass).
+  const PEEK_FRESH_MS = 10000;
+  async function peek(badge, tableId, record, opts) {
+    const root = opts && opts.root;
+    const max = (opts && opts.max) || 5;
+    const chain = root ? LoopRules.zoneChainOf(badge, root) : [];
+    return GristAPI.withSharedReadPass(async () => {
+      const loopCtx = LoopRules.createContext();
+      let binding = null;
+      let bindings = [null];
+      let total = 1;
+      let zone = null;
+      for (let i = 0; i < chain.length; i++) {
+        const { loop } = chain[i];
+        const scope = LoopRules.scopeFor(loop, binding && binding.rows, tableId, record);
+        let found;
+        try { found = await LoopRules.iterate(loop, scope.tableId, scope.record, loopCtx); } catch (e) { found = { error: 'read' }; }
+        if (found.error) { zone = null; break; }
+        const last = i === chain.length - 1;
+        zone = last ? { repeat: loop.repeat, nested: chain.length > 1 } : null;
+        if (!found.items.length) return { turns: [], total: 0, zone: { repeat: loop.repeat, nested: i > 0, outer: !last }, empty: loop.empty };
+        if (!last) { binding = LoopRules.itemBinding(loop, found.items[0], binding, 1); bindings = [binding]; continue; }
+        bindings = found.items.slice(0, max).map((item, k) => LoopRules.itemBinding(loop, item, binding, k + 1));
+        total = found.items.length;
+      }
+      const turns = await Promise.all(bindings.map(turn => peekTurn(badge, tableId, record, turn, loopCtx)));
+      return { turns, total, zone };
+    }, PEEK_FRESH_MS);
+  }
+  async function peekTurn(badge, tableId, record, binding, loopCtx) {
+    const holder = document.createElement('span');
+    const copy = badge.cloneNode(false);
+    holder.appendChild(copy);
+    LoopRules.bindElement(copy, binding);
+    const calc = isCalcBadge(copy);
+    const hasOtherwise = !calc && (copy.hasAttribute('data-otherwise-key') || copy.hasAttribute('data-otherwise'));
+    const before = copy.getAttribute('data-table') + '.' + copy.getAttribute('data-column');
+    if (!calc && !hasOtherwise && copy.hasAttribute('data-condition') && !(await badgeConditionHolds(copy, tableId, record, binding))) return { hidden: true };
+    try {
+      if (hasOtherwise) await VariableOtherwise.resolve(holder, tableId, record);
+      let failed = null;
+      await Promise.all(Array.from(holder.querySelectorAll(BADGE_SELECTOR)).map(async inner => {
+        const { node, isError } = await resolveBadgeNode(inner, tableId, record, parseBadgeFormat(inner), loopCtx);
+        if (isError && !failed) failed = node.textContent;
+        inner.replaceWith(node);
+      }));
+      if (failed) return { error: failed };
+      const via = hasOtherwise && (!holder.contains(copy) || copy.getAttribute('data-table') + '.' + copy.getAttribute('data-column') !== before);
+      const text = holder.textContent.trim();
+      const files = holder.querySelectorAll('img').length;
+      const turn = !text && files ? { files } : text ? { text } : { empty: true };
+      if (via) turn.otherwise = true;
+      return turn;
+    } catch (e) {
+      return { error: I18n.t('variables.error.generic', { message: e.message }) };
+    }
+  }
   async function expandedWrapper(htmlContent, tableId, record) {
     // Le document tel que preview() le déroule avant de remplacer les bulles : les zones répétées (leurs copies comprises) et les conditions de bloc,
     // de valeur et de case résolues, le sinon des bulles basculé. Partagé avec splitBadges.
@@ -1911,5 +1974,5 @@ const ReaderMode = (function () {
       catch (e) { return ''; }
     });
   }
-  return { render, lend, renderInto, resolvedHtml, preview, inspect, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll, slideShown, showSlide };
+  return { render, lend, renderInto, resolvedHtml, preview, peek, inspect, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll, slideShown, showSlide };
 })();
