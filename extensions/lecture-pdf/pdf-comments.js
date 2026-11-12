@@ -391,6 +391,8 @@ const PdfComments = (function () {
     onHidden();
   }
   kit.onHide(onHidden);
+  // Un clic en dehors de la fenêtre la referme quand le fil est publié (js/comments.js : outsideMouseDown, qui garde aussi toute saisie commencée) ; un fil tout neuf, lui, attend son premier message.
+  kit.onOutside({ canClose: () => !!win && !win.isNew && !(draft && draft.id === win.id) && !!threads.get(win.id) && threads.get(win.id).messages.length > 0, close: closeWindow });
 
   // Les fils viennent d'être relus (ou un geste vient de les changer) : la fenêtre ouverte dit la même chose, sans perdre la réponse qu'on y tape.
   function syncWindow() {

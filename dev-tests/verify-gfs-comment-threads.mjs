@@ -205,6 +205,48 @@ console.log('\n== Répondre, résoudre, rouvrir, supprimer : chaque geste est UN
 }
 
 // ==================================================================================================================================================================================================
+console.log('\n== Un clic en dehors de la fenêtre d’un fil publié la referme ; un fil neuf ou une saisie commencée la gardent ==');
+{
+  const o = await open('facture', { init: RECORD_CALLS });
+  const page = o.page;
+  // Un point du panneau que ni la fenêtre ni une marque ne recouvrent : le clic vise vraiment « dehors ».
+  const clickOutside = async () => {
+    const p = await popupOf(page);
+    const spot = [[30, 330], [670, 330], [30, 200], [670, 200], [350, 385]].find(([x, y]) => !(x >= p.left && x <= p.right && y >= p.top && y <= p.bottom));
+    await page.mouse.move(spot[0] + 12, spot[1], { steps: 2 });
+    await page.mouse.click(spot[0], spot[1]);
+    await sleep(350);
+  };
+  await commentSelection(page, 1, 'Garantie', 0.0, 0.46);
+  await clickOutside();
+  check('un fil tout neuf, sans message, ne se ferme pas au clic dehors : sa marque d’essai reste, rien n’est écrit', (await popupOf(page)).open && (await marksOf(page)).length === 1 && (await callsOf(page)).length === 0);
+  await typeIn(page, 'Brouillon');
+  await clickOutside();
+  check('… un premier message tapé mais pas publié reste là, avec son texte', (await popupOf(page)).open && (await popupOf(page)).replyValue === 'Brouillon' && (await callsOf(page)).length === 0);
+  await press(page, 'post');
+  const id = (await threadsNow(page))[0].id;
+  check('« Publier » écrit le fil et la fenêtre le montre', same((await popupOf(page)).messages, ['Brouillon']) && (await rowsOf(page)).length === 1);
+  await clickOutside();
+  check('un fil publié : un clic en dehors de la fenêtre la referme, la marque et la ligne restent', !(await popupOf(page)).open && (await seenMarks(page)).join() === id && (await rowsOf(page)).length === 1);
+  await openMark(page, id);
+  const inside = await popupOf(page);
+  await page.mouse.click((inside.left + inside.right) / 2, inside.top + 14);
+  await sleep(300);
+  check('un clic dans la fenêtre (son en-tête) ne la referme pas', (await popupOf(page)).open);
+  await typeIn(page, 'Réponse en cours');
+  await clickOutside();
+  check('une réponse commencée n’est pas perdue au clic dehors : la fenêtre reste et garde le texte', (await popupOf(page)).open && (await popupOf(page)).replyValue === 'Réponse en cours');
+  const reply = await popupOf(page);
+  await page.mouse.click(reply.reply.x, reply.reply.y);
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Delete');
+  await sleep(150);
+  await clickOutside();
+  check('… la réponse vidée, le clic dehors referme la fenêtre ; rien de plus n’est écrit', !(await popupOf(page)).open && (await rowsOf(page)).length === 1);
+  await o.context.close();
+}
+
+// ==================================================================================================================================================================================================
 console.log('\n== Annuler et Rétablir (Ctrl + Z, Ctrl + Y, les boutons) couvrent publier, répondre, résoudre, supprimer ==');
 {
   const o = await open('facture', { init: RECORD_CALLS });

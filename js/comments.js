@@ -340,8 +340,8 @@ const Comments = (function () {
     editor.view.dispatch(TrackChanges.skipTracking(tr));
   }
 
-  // Popup : mêmes mécaniques d'ouverture et de positionnement que #v2-footnote-popup (js/editor.js) ; il ne se ferme que par une action explicite,
-  // jamais au clic extérieur, comme celui des notes de bas de page.
+  // Popup : mêmes mécaniques d'ouverture et de positionnement que #v2-footnote-popup (js/editor.js). Il se ferme par la croix, Échap, ou un clic en dehors de lui quand le fil est publié
+  // et qu'aucune réponse n'y est en train d'être tapée (outsideMouseDown) ; un fil neuf qui attend son premier message, ou une saisie commencée, ne se ferme jamais au clic extérieur.
   let popupBox = null;
   let popupCommentId = null;
   // Vrai tant qu'un tout nouveau fil n'a pas reçu son premier message : Annuler retire alors la marque posée à sa création.
@@ -385,12 +385,32 @@ const Comments = (function () {
     renderPopup(popupCommentId, resolved).replyArea.value = draft;
   }
 
+  // Un clic en dehors de la fenêtre d'un fil déjà publié la referme, comme dans un éditeur de documents : plus besoin de viser la croix. Ce qui garde la fenêtre ouverte, parce qu'il y aurait quelque chose à
+  // perdre : le fil tout neuf qui attend son premier message (le fermer retire sa marque), et toute saisie commencée - un premier message ou une réponse pas encore publiés. Ce qui ne compte pas pour
+  // « en dehors » : le clic dans une fenêtre du widget (la confirmation de « Supprimer »), sur une marque de commentaire (elle ouvre son fil), sur « Annuler » ou « Rétablir » de la barre (la fenêtre ouverte
+  // montre alors le fil défait ou rétabli, syncPopup), un clic droit ou du milieu. Posé en phase de capture, avant le geste qui suit.
+  const OUTSIDE_KEEPS = '.pp-modal, [data-comment-id], #v2-btn-undo, #v2-btn-redo';
+  // Le module des fils d'un PDF, qui tient le même cadre : `canClose()` dit si son fil est publié, `close()` le referme.
+  let externalOutside = null;
+  function outsideMouseDown(event) {
+    if (event.button !== 0 || !popupBox || popupBox.style.display === 'none') return;
+    const target = event.target;
+    if (!target || (popupBox.contains(target)) || (target.closest && target.closest(OUTSIDE_KEEPS))) return;
+    const typing = popupBox.querySelector('.v2-comment-popup-reply');
+    if (typing && typing.value.trim()) return;
+    if (popupCommentId) {
+      if (popupIsNewThread || !(threadsByCommentId[popupCommentId] || []).length) return;
+      closePopup();
+    } else if (externalOutside && externalOutside.canClose()) externalOutside.close();
+  }
+
   function ensurePopupBox() {
     if (popupBox) return popupBox;
     popupBox = document.createElement('div');
     popupBox.id = 'v2-comment-popup';
     popupBox.style.display = 'none';
     document.body.appendChild(popupBox);
+    document.addEventListener('mousedown', outsideMouseDown, true);
     return popupBox;
   }
 
@@ -791,7 +811,7 @@ const Comments = (function () {
   }
 
   // La fenêtre d'un fil, pour les fils d'un PDF (extensions/lecture-pdf/pdf-comments.js) : le même cadre (un seul à la fois à l'écran), les mêmes morceaux, la même pose. `closeModelPopup` ferme celle d'un modèle avant qu'un fil de PDF
-  // s'ouvre ; `onHide(fn)` prévient le module quand ce fichier referme le cadre.
+  // s'ouvre ; `onHide(fn)` prévient le module quand ce fichier referme le cadre ; `onOutside({ canClose, close })` lui laisse refermer son fil au clic en dehors (outsideMouseDown).
   const kit = {
     box: ensurePopupBox,
     header: popupHeader,
@@ -801,6 +821,7 @@ const Comments = (function () {
     place: positionPopup,
     closeModelPopup: closePopup,
     onHide(fn) { externalHide = typeof fn === 'function' ? fn : null; },
+    onOutside(handlers) { externalOutside = handlers && typeof handlers.canClose === 'function' && typeof handlers.close === 'function' ? handlers : null; },
     canComment: () => canComment,
     newId: newCommentId,
   };
