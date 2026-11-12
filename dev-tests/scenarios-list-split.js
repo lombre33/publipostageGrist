@@ -612,11 +612,12 @@
         const { zip, names } = dl && dl.blob ? await zipEntries(dl.blob) : { zip: null, names: [] };
         const texts = {};
         for (const n of names) texts[n] = squash((await pdfPageTexts(h, await zip.file(n).async('blob'))).join(' | '));
+        // Sans nom réglé, chaque PDF porte le nom du macro-modèle puis celui de sa ligne, puis la valeur du « Un document par valeur » (audit confort du 12/11, idée 1).
         const expected = {
-          'publipostage - Santé.pdf': squash('COUVERTURE Alpha : Santé') + '|' + 'ANNEXEALPHA',
-          'publipostage - Social.pdf': squash('COUVERTURE Alpha : Social') + '|' + 'ANNEXEALPHA',
-          'publipostage - Sport.pdf': squash('COUVERTURE Beta : Sport'),
-          'publipostage.pdf': squash('COUVERTURE Gamma :'),
+          'LsMacro dossier - Alpha - Santé.pdf': squash('COUVERTURE Alpha : Santé') + '|' + 'ANNEXEALPHA',
+          'LsMacro dossier - Alpha - Social.pdf': squash('COUVERTURE Alpha : Social') + '|' + 'ANNEXEALPHA',
+          'LsMacro dossier - Beta - Sport.pdf': squash('COUVERTURE Beta : Sport'),
+          'LsMacro dossier - Gamma.pdf': squash('COUVERTURE Gamma :'),
         };
         const matches = names.every(n => texts[n] === expected[n]);
         window.__gristStub.fireRecord(Object.assign({}, RECORD_1), TABLE);
@@ -625,7 +626,7 @@
         const singleZip = single.blobs.find(b => b && /zip/i.test(b.type || ''));
         const single2 = singleZip ? await zipEntries(singleZip) : { names: [] };
         const pass = loaded && JSON.stringify(names) === JSON.stringify(Object.keys(expected).sort()) && matches && res.status === I18n.t('status.batchExportDone', { ok: 4 })
-          && JSON.stringify(single2.names) === JSON.stringify(['publipostage - Santé.pdf', 'publipostage - Social.pdf']);
+          && JSON.stringify(single2.names) === JSON.stringify(['LsMacro dossier - Alpha - Santé.pdf', 'LsMacro dossier - Alpha - Social.pdf']);
         return { pass, notes: JSON.stringify({ loaded, names, texts, status: res.status, single: single2.names }) };
       } finally { await restoreDocumentMode(h); }
     },

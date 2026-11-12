@@ -943,9 +943,11 @@
         const files = zip ? Object.keys(zip.files).sort() : [];
         const textsByFile = {};
         for (const f of files) textsByFile[f] = squash((await pdfPageTexts(h, await zip.file(f).async('blob'))).join(' | '));
-        const expectedFiles = ['publipostage (2).pdf', 'publipostage (3).pdf', 'publipostage.pdf'];
+        // Sans nom réglé, chaque PDF porte le nom du macro-modèle puis celui de sa ligne (audit confort du 12/11, idée 1) : avant, « publipostage », « publipostage (2) »…
+        const fileOf = row => 'PbMacro dossier - ' + row.Nom + '.pdf';
+        const expectedFiles = MACRO_ROWS.map(fileOf).sort();
         const rowOk = files.length === MACRO_ROWS.length && MACRO_ROWS.every((row, i) => {
-          const text = textsByFile[['publipostage.pdf', 'publipostage (2).pdf', 'publipostage (3).pdf'][i]] || '';
+          const text = textsByFile[fileOf(row)] || '';
           const other = row.TypeDossier === 'Particulier' ? ANNEX_BY_TYPE.Entreprise : ANNEX_BY_TYPE.Particulier;
           return text.includes(squash('COUVERTURE' + row.Nom)) && text.includes(ANNEX_BY_TYPE[row.TypeDossier]) && !text.includes(other);
         });

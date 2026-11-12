@@ -47,6 +47,10 @@ const ROW_PASSWORD_1 = ROW_PASSWORDS[0];
 const ROW_PASSWORD_2 = ROW_PASSWORDS[1].trim();
 // Le texte que la bulle « Nom » de la première ligne donne dans le PDF (dev-tests/load-doc.js : table + colonne + mot + numéro de ligne).
 const ROW_TEXTS = ['PbClients Nom alpha 1', 'PbClients Nom beta 2', 'PbClients Nom gamma 3'];
+// Sans « Nom du fichier PDF », un fichier s'appelle comme le modèle puis comme sa ligne (audit confort du 12/11, idée 1). Le modèle ouvert porte un nom sans accent : un téléchargement au nom accentué sort « download » du Chromium sans écran, et `unzip` écrit « #U00e8 ».
+const MODEL_NAME = 'Contrat';
+const FILE_OF = i => MODEL_NAME + ' - ' + ROW_TEXTS[i] + '.pdf';
+const nameModel = page => page.evaluate(name => { document.getElementById('template-name').value = name; }, MODEL_NAME);
 
 const WORDS = {
   fr: { types: ['PDF', 'PDF protégé', 'Word (bêta)', 'Excel'], qualities: ['Vectoriel (par défaut)', 'Impression navigateur', 'Léger (images réduites)'], title: 'PDF protégé', ok: 'Exporter', cancel: 'Annuler', cancelled: 'Export annulé.', done: 'PDF protégé généré.', lines: ['Une seule ligne', 'Toutes les lignes de la vue (ZIP)', 'Toutes les lignes de la vue en un seul PDF', 'Assemblage avant impression'] },
@@ -311,6 +315,7 @@ try {
   w = await open({ spec: SPEC, port: PORT, settleMs: 1500, theme: 'light', lang: 'fr' });
   let { page } = w;
   await pickTemplate(page, 'Modèle 0001');
+  await nameModel(page);
   await fire(page, 'PbClients', 1);
   await menus(page, 'fr', 'français, clair');
 
@@ -364,7 +369,7 @@ try {
     const right = run('pdfinfo', ['-upw', PASSWORD, single.file]);
     check('poppler : sans mot de passe ou avec un mauvais, le fichier est refusé', !without.ok && /password/i.test(without.out) && !wrong.ok && /password/i.test(wrong.out), { without: without.out.trim(), wrong: wrong.out.trim() });
     check('poppler : avec le bon mot de passe, il s\'ouvre, chiffré en AES-256 (imprimer permis, copier refusé, modifier refusé)', right.ok && /Encrypted:\s+yes \(print:yes copy:no change:no addNotes:no algorithm:AES-256\)/.test(right.out), right.out.split('\n').filter(l => /Encrypted|Error/.test(l)));
-    check('poppler : auteur, sujet, mots-clés et titre relus', right.ok && /Author:\s+Anne Durand/.test(right.out) && /Subject:\s+Courrier/.test(right.out) && /Keywords:\s+test, pdf/.test(right.out) && /Title:\s+publipostage/.test(right.out), right.out.split('\n').filter(l => /Author|Subject|Keywords|Title/.test(l)));
+    check('poppler : auteur, sujet, mots-clés et titre relus', right.ok && /Author:\s+Anne Durand/.test(right.out) && /Subject:\s+Courrier/.test(right.out) && /Keywords:\s+test, pdf/.test(right.out) && /Title:\s+Contrat - PbClients Nom alpha 1/.test(right.out), right.out.split('\n').filter(l => /Author|Subject|Keywords|Title/.test(l)));
     const text = run('pdftotext', ['-upw', PASSWORD, single.file, '-']);
     check('poppler : le texte de la ligne se lit avec le mot de passe', text.ok && squash(text.out).includes(ROW_TEXTS[0]), squash(text.out).slice(0, 120));
     check('poppler : sans mot de passe, le texte ne se lit pas', !run('pdftotext', [single.file, '-']).ok);
@@ -424,7 +429,7 @@ try {
   const pdfs = unzipped.ok ? readdirSync(dir).filter(f => /\.pdf$/.test(f)).sort() : [];
   check('l\'archive contient trois PDF', pdfs.length === 3, { pdfs, out: unzipped.out.slice(0, 120) });
   if (POPPLER) {
-    const rows = ROW_TEXTS.map((text, i) => ({ file: join(dir, ['publipostage.pdf', 'publipostage (2).pdf', 'publipostage (3).pdf'][i]), text }));
+    const rows = ROW_TEXTS.map((text, i) => ({ file: join(dir, FILE_OF(i)), text }));
     const results = rows.map(r => ({ without: run('pdfinfo', [r.file]), info: run('pdfinfo', ['-upw', PASSWORD, r.file]), text: run('pdftotext', ['-upw', PASSWORD, r.file, '-']), want: r.text }));
     check('poppler : chacun des trois PDF est refusé sans mot de passe et chiffré en AES-256', results.every(r => !r.without.ok && r.info.ok && /algorithm:AES-256/.test(r.info.out)), results.map(r => ({ without: r.without.ok, info: r.info.out.split('\n').filter(l => /Encrypted/.test(l)) })));
     check('poppler : avec le mot de passe, chaque PDF donne le texte de sa ligne', results.every(r => r.text.ok && squash(r.text.out).includes(r.want)), results.map(r => squash(r.text.out).slice(0, 80)));
@@ -629,15 +634,15 @@ try {
   });
   const failTexts = await measure(page, ['#pp-dialog-title', '#pp-dialog-message', '#pp-dialog-modal .pp-modal-actions button:first-of-type']);
   check('à la fin du lot, la fenêtre liste la ligne sans mot de passe avec sa raison (colonne « Mdp » vide), entière dans le panneau et lisible (>= 4,5:1)',
-    failWindow.title === MW.failTitle && /contient 2 autres documents/.test(failWindow.message) && /ligne n° 3 : la colonne « Mdp » est vide : pas de mot de passe pour ce PDF/i.test(failWindow.message) && failWindow.inside && readable(failTexts) && failTexts[2].text === MW.failClose, { failWindow, contrast: failTexts.map(t => t.contrast) });
+    failWindow.title === MW.failTitle && /contient 2 autres documents/.test(failWindow.message) && /Contrat - PbClients Nom gamma 3 \(ligne n° 3\) : la colonne « Mdp » est vide : pas de mot de passe pour ce PDF/i.test(failWindow.message) && failWindow.inside && readable(failTexts) && failTexts[2].text === MW.failClose, { failWindow, contrast: failTexts.map(t => t.contrast) });
   await click(page, '#pp-dialog-modal .pp-modal-actions button:first-of-type');
   await sleep(500);
   check('l\'état de fin dit « ' + MW.failures + ' »', (await status(page)) === MW.failures, await status(page));
   const columnPdfs = unzipPdfs(columnZip.file, 'pp-protect-column-');
-  check('l\'archive PbClients-export-pdf-protege.zip contient les deux PDF qui ont un mot de passe, pas la ligne 3', columnZip.suggested === 'PbClients-export-pdf-protege.zip' && same(columnPdfs.names, ['publipostage (2).pdf', 'publipostage.pdf']), { file: columnZip.suggested, names: columnPdfs.names });
+  check('l\'archive PbClients-export-pdf-protege.zip contient les deux PDF qui ont un mot de passe, pas la ligne 3', columnZip.suggested === 'PbClients-export-pdf-protege.zip' && same(columnPdfs.names, [FILE_OF(0), FILE_OF(1)].sort()), { file: columnZip.suggested, names: columnPdfs.names });
   if (POPPLER && columnPdfs.names.length === 2) {
-    const one = join(columnPdfs.dir, 'publipostage.pdf');
-    const two = join(columnPdfs.dir, 'publipostage (2).pdf');
+    const one = join(columnPdfs.dir, FILE_OF(0));
+    const two = join(columnPdfs.dir, FILE_OF(1));
     check('poppler : le PDF de la ligne 1 s\'ouvre avec son mot de passe et pas avec celui de la ligne 2 ; celui de la ligne 2 avec le sien et pas avec celui de la ligne 1',
       opensWith(one, ROW_PASSWORD_1) && !opensWith(one, ROW_PASSWORD_2) && opensWith(two, ROW_PASSWORD_2) && !opensWith(two, ROW_PASSWORD_1), columnPdfs.names);
     check('poppler : chaque PDF porte le texte de sa ligne', textWith(one, ROW_PASSWORD_1).includes(ROW_TEXTS[0]) && textWith(two, ROW_PASSWORD_2).includes(ROW_TEXTS[1]), [textWith(one, ROW_PASSWORD_1).slice(0, 60), textWith(two, ROW_PASSWORD_2).slice(0, 60)]);
@@ -686,6 +691,7 @@ try {
   w = await open({ spec: SPEC, port: PORT, settleMs: 1500, theme: 'dark', lang: 'en' });
   ({ page } = w);
   await pickTemplate(page, 'Modèle 0001');
+  await nameModel(page);
   await fire(page, 'PbClients', 1);
   await menus(page, 'en', 'anglais, sombre');
   console.log('\n[anglais, sombre] La fenêtre du mot de passe');

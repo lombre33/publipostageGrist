@@ -5,6 +5,9 @@
 const MainExport = (function () {
   function create(api) {
     const { buildMailtoForRecord, describeMailForRecord, currentDocumentHtml, getCurrentMacroSlots, getCurrentTableId, getCurrentTypeModele, getEmailFields, getPdfFilenameTemplate, perModelOption, setStatus, templateNameInput } = api;
+    // Le nom de fichier d'une ligne exportée : celui que le modèle règle (« Nom du fichier PDF »), à défaut le nom du modèle puis celui de la ligne
+    // (ReaderMode.autoName : « Facture - Dupont »). Un modèle email garde l'objet de l'email, qui le nomme déjà (js/eml-export.js).
+    const exportFilenameTemplate = () => getPdfFilenameTemplate() || (getCurrentTypeModele() === 'email' ? '' : ReaderMode.autoName(templateNameInput ? templateNameInput.value : ''));
 
     // Verrou anti-double-export : pdf-export.js numérote les notes de bas de page dans un état de module partagé, que deux exports en parallèle
     // corrompraient en silence. Tous les contrôles d'export (EXPORT_CONTROL_IDS) sont désactivés pendant toute opération, pas seulement celui cliqué.
@@ -111,7 +114,7 @@ const MainExport = (function () {
         engines: ['pdf'],
         batch: 'pdfZip', noRecord: 'alert.noRecordForExport', generating: 'status.pdfGenerating', generated: 'status.pdfGenerated', failed: 'status.pdfGenerationError',
         stampsExportDate: true,
-        run: (doc, tableId, record) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt(), undefined, pdfImageQuality(), undefined, SlidesEntry.showsEveryPage(getCurrentTypeModele())),
+        run: (doc, tableId, record) => PdfExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt(), undefined, pdfImageQuality(), undefined, SlidesEntry.showsEveryPage(getCurrentTypeModele())),
       },
       // « PDF protégé » (type du menu Type d'export) : le même PDF vectoriel, chiffré avec le mot de passe, les autorisations et les propriétés que la fenêtre
       // (js/pdf-protection-dialog.js) vient de fixer, avant tout le reste (`protect`). « Impression navigateur » n'a pas de sens ici (le navigateur imprime, il ne chiffre pas) :
@@ -120,7 +123,7 @@ const MainExport = (function () {
         engines: ['pdf'], protect: true,
         batch: 'pdfProtectedZip', noRecord: 'alert.noRecordForExport', generating: 'status.pdfGenerating', generated: 'status.pdfProtectedGenerated', failed: 'status.pdfGenerationError',
         stampsExportDate: true,
-        run: (doc, tableId, record, protection) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt(), undefined, pdfImageQuality(), PdfProtection.docFields(protection), SlidesEntry.showsEveryPage(getCurrentTypeModele())),
+        run: (doc, tableId, record, protection) => PdfExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt(), undefined, pdfImageQuality(), PdfProtection.docFields(protection), SlidesEntry.showsEveryPage(getCurrentTypeModele())),
       },
       // « PDF/A (archivage) » (type du menu Type d'export) : le même PDF vectoriel, passé en PDF/A-2b une fois rendu (js/pdf-archive.js), le format que les archives et les cabinets comptables demandent pour une facture. « Impression
       // navigateur » n'a pas de sens ici (le navigateur imprime un PDF ordinaire) ; « Léger » s'applique. Un PDF/A ne se chiffre pas : « PDF protégé » reste un type à part. Un document découpé « Un document par valeur » reste un lot (une archive ZIP).
@@ -128,55 +131,55 @@ const MainExport = (function () {
         engines: ['pdf', 'archive'],
         batch: 'pdfArchiveZip', noRecord: 'alert.noRecordForExport', generating: 'status.pdfGenerating', generated: 'status.pdfArchiveGenerated', failed: 'status.pdfGenerationError',
         stampsExportDate: true,
-        run: (doc, tableId, record) => PdfExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt(), undefined, pdfImageQuality(), ARCHIVE_DOC_FIELDS, SlidesEntry.showsEveryPage(getCurrentTypeModele())),
+        run: (doc, tableId, record) => PdfExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt(), undefined, pdfImageQuality(), ARCHIVE_DOC_FIELDS, SlidesEntry.showsEveryPage(getCurrentTypeModele())),
       },
       // « Impression navigateur » (qualité du bouton PDF) : la Lecture, imprimée par le navigateur (js/print-export.js), sans moteur à charger. Un document
       // découpé « Un document par valeur » reste un lot : le lot PDF (archive ZIP), une impression ne faisant qu'un document.
       print: {
         engines: [], slideAnchors: true,
         batch: 'pdfZip', noRecord: 'alert.noRecordForExport', generating: 'status.printPreparing', generated: 'status.printStarted', failed: 'status.printFailed',
-        run: (doc, tableId, record) => PrintExport.printRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData),
+        run: (doc, tableId, record) => PrintExport.printRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData),
       },
       docx: {
         engines: ['docx'],
         batch: 'docxZip', noRecord: 'alert.noRecordForExportDocx', generating: 'status.docxGenerating', generated: 'status.docxGenerated', failed: 'status.docxGenerationError',
-        run: (doc, tableId, record) => DocxExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsTwip()),
+        run: (doc, tableId, record) => DocxExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsTwip()),
       },
       xlsx: {
         engines: ['xlsx'],
         batch: 'xlsxZip', noRecord: 'alert.noRecordForExportXlsx', generating: 'status.xlsxGenerating', generated: 'status.xlsxGenerated', failed: 'status.xlsxGenerationError',
-        run: (doc, tableId, record) => XlsxExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate()),
+        run: (doc, tableId, record) => XlsxExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate()),
       },
       // PowerPoint (js/pptx-export.js) : la présentation, une diapositive du fichier par diapositive, objets modifiables ; `keepProps` : le HTML garde le repère de chaque diapositive, d'où viennent sa transition, son fond et ses notes.
       pptx: {
         engines: ['pptx'], keepProps: true,
         batch: 'pptxZip', noRecord: 'alert.noRecordForExportPptx', generating: 'status.pptxGenerating', generated: 'status.pptxGenerated', failed: 'status.pptxGenerationError',
-        run: (doc, tableId, record) => PptxExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt()),
+        run: (doc, tableId, record) => PptxExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt()),
       },
       // Markdown (js/markdown-export.js) : le texte du document, sans marges ni pages ; comme le Word, il est fait pour un document, pas pour une grille.
       md: {
         engines: ['md'],
         batch: 'mdZip', noRecord: 'alert.noRecordForExportMd', generating: 'status.mdGenerating', generated: 'status.mdGenerated', failed: 'status.mdGenerationError',
-        run: (doc, tableId, record) => MarkdownExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData),
+        run: (doc, tableId, record) => MarkdownExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData),
       },
       // HTML (js/html-export.js) : le texte du document qui coule comme une page web, ni pages ni marges. `html` : le fichier complet à déposer sur un site ; `htmlFragment` : le contenu
       // seul à coller dans un bloc de page (`fragment`). Comme le Word et le Markdown, ils ne font que des documents.
       html: {
         engines: ['html'],
         batch: 'htmlZip', noRecord: 'alert.noRecordForExportHtml', generating: 'status.htmlGenerating', generated: 'status.htmlGenerated', failed: 'status.htmlGenerationError',
-        run: (doc, tableId, record) => HtmlExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData),
+        run: (doc, tableId, record) => HtmlExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData),
       },
       htmlFragment: {
         engines: ['html'],
         batch: 'htmlFragmentZip', noRecord: 'alert.noRecordForExportHtml', generating: 'status.htmlGenerating', generated: 'status.htmlGenerated', failed: 'status.htmlGenerationError',
-        run: (doc, tableId, record) => HtmlExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, { fragment: true }),
+        run: (doc, tableId, record) => HtmlExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData, { fragment: true }),
       },
       // Email (.eml) (js/eml-export.js) : un modèle email écrit en fichier de message à ouvrir dans la messagerie - la mise en forme du modèle, ses images et les pièces jointes du champ PJ -, en brouillon à relire
       // et à envoyer. `describe` : la phrase de fin quand des adresses n'en sont pas (laissées de côté).
       eml: {
         engines: ['html'],
         batch: 'emlZip', noRecord: 'alert.noRecordForExportEml', generating: 'status.emlGenerating', generated: 'status.emlGenerated', failed: 'status.emlGenerationError',
-        run: (doc, tableId, record) => EmlExport.exportCurrentRecord(doc.html, tableId, record, getPdfFilenameTemplate(), doc.headerFooterData, getEmailFields()),
+        run: (doc, tableId, record) => EmlExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData, getEmailFields()),
         describe: result => (result && result.skipped && result.skipped.length ? I18n.t('status.emlGeneratedSkipped', { count: result.skipped.length, list: result.skipped.join(', ') }) : ''),
       },
     };
@@ -674,7 +677,7 @@ const MainExport = (function () {
       const isMacro = getCurrentTypeModele() === 'macro';
       return {
         typeModele: getCurrentTypeModele(), isMacro, html: isMacro ? null : SlidesEntry.outputHtml(getCurrentTypeModele(), Editor.getHTML(), { keepProps: !!cfg.keepProps, anchors: writesSlideAnchors(cfg), theme: PageLayout.getTheme() }), macroSlots: isMacro ? getCurrentMacroSlots() : null, perModelSense: isMacro && PageLayout.isOrientationAuto(), anchors: writesSlideAnchors(cfg),
-        headerFooterData: Editor.getHeaderFooterData(), filenameTemplate: getPdfFilenameTemplate(), margins: cfg.margins ? cfg.margins() : null, pageOptions: null,
+        headerFooterData: Editor.getHeaderFooterData(), filenameTemplate: exportFilenameTemplate(), margins: cfg.margins ? cfg.margins() : null, pageOptions: null,
         email: getCurrentTypeModele() === 'email' ? getEmailFields() : null,
       };
     }
@@ -697,7 +700,7 @@ const MainExport = (function () {
       } finally { PageLayout.setMarginsMm(onScreen); }
       return {
         typeModele: tpl.typeModele || 'document', isMacro, html: isMacro ? null : SlidesEntry.outputHtml(tpl.typeModele, LinkedTable.resolveHtml(EditorCore.getEditor(), tpl.contenu || ''), { keepProps: !!cfg.keepProps, anchors: writesSlideAnchors(cfg), theme: tpl.marginsMm && tpl.marginsMm.theme, stored: tpl.marginsMm || null }), macroSlots: isMacro ? (tpl.macroSlots || { slots: [] }) : null, perModelSense, anchors: writesSlideAnchors(cfg),
-        headerFooterData: tpl.headerFooter, filenameTemplate: String(tpl.nomFichierPDF || '').trim(), margins, pageOptions,
+        headerFooterData: tpl.headerFooter, filenameTemplate: String(tpl.nomFichierPDF || '').trim() || (tpl.typeModele === 'email' ? '' : ReaderMode.autoName(tpl.nom)), margins, pageOptions,
         email: tpl.typeModele === 'email' ? { objet: tpl.objet, destinataires: tpl.destinataires, cc: tpl.cc, cci: tpl.cci, pj: tpl.pj } : null,
       };
     }
@@ -940,7 +943,8 @@ const MainExport = (function () {
     async function precheckBatch(cfg, tableId, only, jobs, { openSource, templatesCache }) {
       if (only || jobs.length < 2) return { jobs, confirmed: false };
       const nameOf = cfg.merged || cfg.single ? null : async job => {
-        if (!job.source.filenameTemplate) return null;
+        // Le nom donné d'office (nom du modèle, puis de la ligne) ne se compare pas : deux clients du même nom ne sont pas un problème de plus qu'avant.
+        if (!job.source.filenameTemplate || ReaderMode.isAutoName(job.source.filenameTemplate)) return null;
         const filename = sanitizeFilenamePart(await ReaderMode.resolveFilename(job.source.filenameTemplate, tableId, job.row));
         const valueName = job.variant && job.variant.label ? sanitizeFilenamePart(job.variant.label) : '';
         return { base: (filename || ('document-' + job.row.id)) + (valueName ? ' - ' + valueName : ''), empty: !filename };

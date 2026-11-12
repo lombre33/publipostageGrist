@@ -2518,7 +2518,8 @@
         const zip = await JSZip.loadAsync(await file.blob.arrayBuffer());
         const texts = {};
         for (const name of Object.keys(zip.files)) texts[name] = (await pdfPages(h, await zip.file(name).async('blob'))).map(p => squashed(p.text));
-        const names = ['publipostage.pdf', 'publipostage (2).pdf', 'publipostage (3).pdf'];
+        // Sans nom réglé : le nom du macro-modèle puis celui de la ligne (audit confort du 12/11, idée 1).
+        const names = ['Macro œil lot - a.pdf', 'Macro œil lot - b.pdf', 'Macro œil lot - z.pdf'];
         if (Object.keys(texts).length !== 3 || !names.every(n => texts[n])) return { pass: false, notes: 'fichiers : ' + JSON.stringify(Object.keys(texts)) };
         const pages = n => texts[n].map(t => ['Pagedegarde', 'Autrepage', 'Pagepardéfaut'].filter(w => t.includes(w)).join('+'));
         // Ligne « a » : annexe 1 = « Autre page », masquée : rien à sa place. Ligne « b » : son annexe est le modèle de la page de garde (autre position). Ligne « z » : modèle par défaut.

@@ -1963,16 +1963,35 @@ const ReaderMode = (function () {
   }
   // Les caractères qu'un nom de fichier ne peut pas porter, dans la valeur d'une variable.
   const fileSafe = text => String(text || '').replace(/[\\/:*?"<>|]/g, '_');
+  // Le nom d'un fichier quand le modèle n'en règle aucun (le champ « Nom du fichier PDF » est vide) : le nom du modèle, puis celui de la ligne - la colonne qui
+  // nomme les fiches du « @ » (Mention.labelColumnOf), à défaut le n° de la ligne : « Facture - Dupont ». Il voyage dans `filenameTemplate`, partout où ce
+  // gabarit passe (PDF, Word, Excel, ZIP d'un lot...) : le marqueur AUTO_NAME en tête, puis le nom du modèle. Un gabarit réglé par la personne ne commence
+  // jamais par lui (caractère invisible, jamais saisi, jamais enregistré).
+  const AUTO_NAME = '⁣';
+  const autoName = templateName => {
+    const name = String(templateName == null ? '' : templateName).replace(/\s+/g, ' ').trim();
+    return name ? AUTO_NAME + name : '';
+  };
+  const isAutoName = filenameTemplate => typeof filenameTemplate === 'string' && filenameTemplate.charAt(0) === AUTO_NAME;
+  async function autoFilename(templateName, tableId, record) {
+    let label = '';
+    try {
+      const column = typeof Mention !== 'undefined' ? Mention.labelColumnOf(tableId) : null;
+      if (column) label = fileSafe(String(await Variables.resolveVariable(tableId, column, tableId, record, null, { rawNumbers: true })).replace(/\s+/g, ' ').trim()).slice(0, 80).trim();
+    } catch (e) { label = ''; }
+    return [fileSafe(templateName), label || (record && record.id != null ? String(record.id) : '')].filter(Boolean).join(' - ');
+  }
   async function resolveFilename(filenameTemplate, tableId, record) {
     // Le nom d'un fichier : les variables de son modèle remplacées par leur valeur (Variables.replaceTextVariables, comme les champs de l'email), les
     // caractères interdits d'un nom de fichier remplacés par « _ » dans chaque valeur. Une valeur illisible donne un texte vide, jamais un export en
     // échec.
     if (!filenameTemplate) return 'publipostage';
+    if (isAutoName(filenameTemplate)) return autoFilename(filenameTemplate.slice(1), tableId, record);
     if (FieldCodec.isRich(filenameTemplate)) return fieldText(filenameTemplate, tableId, record, fileSafe);
     return Variables.replaceTextVariables(filenameTemplate, async m => {
       try { return fileSafe(await Variables.resolveVariable(m.table, m.column, tableId, record, null, { rawNumbers: true })); }
       catch (e) { return ''; }
     });
   }
-  return { render, lend, renderInto, resolvedHtml, preview, peek, inspect, resolveFilename, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll, slideShown, showSlide };
+  return { render, lend, renderInto, resolvedHtml, preview, peek, inspect, resolveFilename, autoName, isAutoName, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll, slideShown, showSlide };
 })();
