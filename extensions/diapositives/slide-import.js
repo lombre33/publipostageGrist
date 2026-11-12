@@ -37,7 +37,12 @@
 // Styles : extensions/diapositives/slide-import.css (dont la place que le volet prend à droite du document, `body.pp-slide-import-on`).
 const SlideImport = (function () {
   const el = Dom.el;
-  const THUMB_WIDTH_PX = 96;       // la largeur d'une miniature (celle de slide-import.css) ; sa hauteur suit la page
+  const THUMB_WIDTH_PX = 148;      // la largeur d'une miniature (celle de slide-import.css) ; sa hauteur suit la page (13/11 : 96 px avant, « les diapos sont toutes petites »)
+  const THUMB_COMPACT_PX = 96;     // celle d'une fenêtre basse (moins de COMPACT_BELOW_PX de haut, un panneau de 700 x 400 : la liste y montre une miniature entière sous les cases, 148 px de large n'y tiendrait pas)
+  const COMPACT_BELOW_PX = 480;
+  const ZOOM_MAX_PX = 520;         // le zoom au survol : la diapositive en grand, à gauche du volet, sur le document ; sa largeur au plus,
+  const ZOOM_MIN_PX = 200;         // et au moins (la place à gauche du volet en dessous : pas de zoom)
+  const ZOOM_DELAY_MS = 300;       // le temps que la souris reste sur une miniature avant que le zoom s'ouvre (d'une miniature à l'autre, il suit tout de suite)
   const DRAW_AHEAD_PX = 300;       // au-delà de ce que la liste montre, la hauteur de miniatures dessinées, au-dessus et au-dessous
   const PT_TO_PX = PageLayout.MM_TO_PX / PageLayout.MM_TO_PT;
   const SOURCE_ID = 'pp-slide-import-source';
@@ -46,6 +51,10 @@ const SlideImport = (function () {
   const FORMAT_ID = 'pp-slide-import-format';
   const LAYERED = 'img.editor-image[data-layer="front"], img.editor-image[data-layer="behind"]';
 
+  let zoomEl = null;               // le zoom au survol, créé au premier survol, posé dans <body> (la liste coupe ce qui la dépasse)
+  let zoomTimer = 0;
+  let zoomIndex = -1;              // la miniature qu'il montre (-1 : fermé)
+  let zoomPending = -1;            // celle dont il attend l'instant d'ouverture (-1 : aucune)
   let panel = null;                // le volet (<aside>), créé à la première ouverture
   let field = null;                // le choix de la source : son libellé et son <select>, que la liste avec recherche remplace à l'écran
   let select = null;
@@ -97,10 +106,11 @@ const SlideImport = (function () {
     const width = own ? own.width : PageLayout.getSheetWidthPx();
     const height = own ? own.height : PageLayout.getPageSizePx().height;
     const margins = own ? own.margins : PageLayout.getMarginsPx();
-    return { width, height, margins, scale: (thumbWidth || THUMB_WIDTH_PX) / width, key: [width, height, margins.top, margins.right, margins.bottom, margins.left].join(' '), own: !!own };
+    return { width, height, margins, scale: (thumbWidth || currentThumbWidth()) / width, key: [width, height, margins.top, margins.right, margins.bottom, margins.left].join(' '), own: !!own };
   }
-  // Ce qui change la taille des miniatures : la page de chacune.
-  const geometryKey = () => rows.map((row, index) => geometry(undefined, index).key).join('|') || geometry().key;
+  const currentThumbWidth = () => (window.innerHeight < COMPACT_BELOW_PX ? THUMB_COMPACT_PX : THUMB_WIDTH_PX);
+  // Ce qui change la taille des miniatures : leur largeur (la fenêtre basse les réduit) et la page de chacune.
+  const geometryKey = () => currentThumbWidth() + ':' + (rows.map((row, index) => geometry(undefined, index).key).join('|') || geometry().key);
   // La page de la source quand ce n'est pas celle de la présentation à l'écran, en pixels CSS : en texte, celle de la présentation source (le document qui reçoit la diapositive n'a pas la même) ; pour une
   // page de document, celle du document, dans le sens de cette page (un saut de page qui porte un sens tourne la page qu'il ouvre et celles qui suivent, js/page-sections.js).
   function ownPage(index) {
@@ -382,6 +392,7 @@ const SlideImport = (function () {
     return { item, thumb, page, drawn: false, near: !nearObserver };
   }
   function clearRows() {
+    hideZoom();
     rows.forEach((r) => { if (nearObserver) nearObserver.unobserve(r.item); r.item.remove(); });
     rows = [];
     active = 0;
@@ -815,13 +826,68 @@ const SlideImport = (function () {
     if (typeof command === 'function') command();
   }
 
+  // Le zoom au survol (13/11, « possible au survol de les avoir zoomées ? ») : la diapositive de la miniature survolée (ou qui a le clavier), en grand à gauche du volet, sur le document, avec son numéro
+  // de page écrit comme dans le bloc qu'elle donnera. Il ne prend ni la souris ni le clavier (aucun clic n'y tombe), se ferme dès que la souris quitte la liste, qu'elle défile, qu'on clique ou valide,
+  // et ne s'ouvre pas quand la place à gauche du volet manque.
+  function hideZoom() {
+    clearTimeout(zoomTimer);
+    zoomPending = -1;
+    zoomIndex = -1;
+    if (zoomEl && !zoomEl.hidden) { zoomEl.hidden = true; zoomEl.replaceChildren(); }
+  }
+  function showZoom(index) {
+    clearTimeout(zoomTimer);
+    zoomPending = -1;
+    const row = rows[index];
+    const left = panel ? panel.getBoundingClientRect().left : 0;
+    if (!open || !source || !row || left - 24 < ZOOM_MIN_PX) { hideZoom(); return; }
+    if (!zoomEl) {
+      zoomEl = el('div', 'pp-slide-import-zoom');
+      zoomEl.setAttribute('aria-hidden', 'true');
+      zoomEl.hidden = true;
+      document.body.appendChild(zoomEl);
+    }
+    const width = Math.round(Math.min(ZOOM_MAX_PX, left - 24));
+    const g = geometry(width, index);
+    paint(zoomEl, cleanCopy(index).innerHTML, width, g);
+    SlidesEntry.resolveSlideNumbers(zoomEl.querySelector('.pp-slide-page'), { rank: index + 1, total: rows.length });
+    const height = Math.round(g.height * g.scale);
+    const at = row.item.getBoundingClientRect();
+    const top = Math.max(8, Math.min(at.top + at.height / 2 - height / 2, window.innerHeight - height - 8));
+    zoomEl.style.left = Math.round(left - 10 - width) + 'px';
+    zoomEl.style.top = Math.round(top) + 'px';
+    zoomEl.style.width = width + 'px';
+    zoomEl.hidden = false;
+    zoomIndex = index;
+  }
+  // La souris bouge sur une miniature : le zoom s'ouvre après un court instant, ou tout de suite s'il est déjà ouvert sur une autre. Le mouvement (et non l'arrivée) le rouvre quand la liste a défilé
+  // sous une souris immobile : le défilement le ferme.
+  function onListMove(event) {
+    const index = indexOf(event.target);
+    if (index < 0) { clearTimeout(zoomTimer); zoomPending = -1; return; }
+    if (index === zoomIndex || index === zoomPending) return;
+    clearTimeout(zoomTimer);
+    zoomPending = -1;
+    if (zoomIndex >= 0) { showZoom(index); return; }
+    zoomPending = index;
+    zoomTimer = setTimeout(() => showZoom(index), ZOOM_DELAY_MS);
+  }
   // La souris et le clavier
   function wireList() {
+    list.addEventListener('mousemove', onListMove);
+    list.addEventListener('mouseleave', hideZoom);
+    // Au clavier, la miniature qui a le focus montre son zoom ; il se ferme quand le focus sort de la liste. La liste qui défile sous la molette le ferme ; celle que le focus fait défiler
+    // (la miniature qui le prend est amenée à l'écran) le garde, sous la miniature qui l'a.
+    const focusedIndex = () => { const index = indexOf(document.activeElement); return index >= 0 && document.activeElement === rows[index].item && document.activeElement.matches(':focus-visible') ? index : -1; };
+    list.addEventListener('scroll', () => { const index = focusedIndex(); if (index >= 0) showZoom(index); else hideZoom(); }, { passive: true });
+    list.addEventListener('focusin', (event) => { const index = indexOf(event.target); if (index >= 0 && event.target === rows[index].item && event.target.matches(':focus-visible')) showZoom(index); });
+    list.addEventListener('focusout', (event) => { if (!list.contains(event.relatedTarget)) hideZoom(); });
     // Ni focus ni sélection de texte à l'appui : le clavier reste où il est. Le second clic d'un double-clic (detail 2) n'importe pas une seconde fois.
     list.addEventListener('mousedown', (event) => { if (itemOf(event.target)) event.preventDefault(); });
     list.addEventListener('click', (event) => {
       const index = indexOf(event.target);
       if (index < 0 || event.detail > 1) return;
+      hideZoom();
       importSlide(index);
     });
     list.addEventListener('keydown', onListKey);
@@ -839,7 +905,7 @@ const SlideImport = (function () {
     } else if (key === 'Enter' || key === ' ') {
       // Une touche tenue enfoncée n'importe qu'une fois.
       event.preventDefault();
-      if (!event.repeat) importSlide(index);
+      if (!event.repeat) { hideZoom(); importSlide(index); }
     }
   }
   // Échap ferme le volet ; la liste avec recherche ouverte se ferme d'abord seule (elle arrête son Échap).
@@ -865,6 +931,9 @@ const SlideImport = (function () {
     panel.style.top = (top + bite.top) + 'px';
     panel.style.height = Math.max(0, box.clientHeight - bite.top - bite.bottom) + 'px';
     panel.style.left = (right - width - gutter) + 'px';
+    // Une fenêtre basse (ou qui le devient) a des miniatures réduites : la classe en règle la largeur (css), les miniatures se retaillent.
+    panel.classList.toggle('pp-slide-import-compact', currentThumbWidth() === THUMB_COMPACT_PX);
+    if (rows.length && geometryKey() !== sizedFor) syncRows();
   }
   // La barre de GFS arrive, part ou change de bord : le volet se replace et, si la gouttière a changé, la page se réajuste à la largeur qui reste. Pendant le diaporama GFS masque sa
   // barre pour lui : le volet ne bouge pas.

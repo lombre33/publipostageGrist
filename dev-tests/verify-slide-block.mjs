@@ -249,6 +249,58 @@ await a.pickSource('support');
 const kinds = await app.evaluate(() => ({ block: document.querySelector('.pp-slide-import-kind-btn:nth-child(1)').getAttribute('aria-checked'), text: document.querySelector('.pp-slide-import-kind-btn:nth-child(2)').getAttribute('aria-checked'), labels: Array.from(document.querySelectorAll('.pp-slide-import-kind-btn')).map(b => b.textContent), hint: document.getElementById('pp-slide-import-hint').textContent, format: !document.getElementById('pp-slide-import-format').closest('label').hidden }));
 check('le volet propose « En bloc » (choisi d’abord) et « En texte » ; l’indication parle d’un bloc, la mise en forme d’origine (du texte) n’est pas proposée', kinds.block === 'true' && kinds.text === 'false' && kinds.labels.join('|') === 'En bloc|En texte' && /en un bloc/.test(kinds.hint) && !kinds.format, kinds);
 
+// --- Les miniatures du volet sont plus grandes (13/11, « les diapos sont toutes petites »), et un zoom les montre en grand au survol, à la souris comme au clavier.
+const thumbBox = await app.evaluate(() => { const t = document.querySelector('.pp-slide-import .pp-slide-thumb'); const p = document.querySelector('.pp-slide-import').getBoundingClientRect(); const l = document.querySelector('.pp-slide-import-list'); const r = t.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), right: Math.round(r.right), panelRight: Math.round(p.right), bottom: Math.round(r.bottom), listBottom: Math.round(l.getBoundingClientRect().bottom), overflowX: l.scrollWidth > l.clientWidth }; });
+check('à 700 x 400 (fenêtre basse), les miniatures restent à 96 px et la première tient entière dans le volet, sans défilement de côté', thumbBox.w === 96 && thumbBox.h >= 53 && thumbBox.h <= 55 && thumbBox.right <= thumbBox.panelRight && thumbBox.bottom <= thumbBox.listBottom && !thumbBox.overflowX, thumbBox);
+const zoomProbe = () => {
+  const z = document.querySelector('.pp-slide-import-zoom');
+  if (!z || z.hidden) return null;
+  const r = z.getBoundingClientRect();
+  const p = document.querySelector('.pp-slide-import').getBoundingClientRect();
+  const badge = z.querySelector('.page-number-badge');
+  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return { w: Math.round(r.width), right: Math.round(r.right), panelLeft: Math.round(p.left), top: Math.round(r.top), bottom: Math.round(r.bottom), vh: innerHeight, text: z.textContent.replace(/\s+/g, ' ').trim().slice(0, 80), badge: badge ? { text: badge.textContent, resolved: badge.getAttribute('data-slide-number'), bg: getComputedStyle(badge).backgroundColor } : null, pointer: getComputedStyle(z).pointerEvents, hit: !!hit && z.contains(hit) };
+};
+const zoomState = () => app.evaluate(zoomProbe);
+await a.showThumb(0);
+await a.reach(await a.inPage(await a.centerOf('.pp-slide-import .pp-slide-thumb', 0)));
+const zoomEarly = await zoomState();
+await sleep(500);
+const zoom1 = await zoomState();
+check('au survol de la miniature 1, le zoom ne s’ouvre pas tout de suite, puis montre la diapositive en grand, à gauche du volet, dans la fenêtre', !zoomEarly && !!zoom1 && zoom1.w >= 300 && zoom1.w <= 520 && zoom1.right <= zoom1.panelLeft && zoom1.top >= 0 && zoom1.bottom <= zoom1.vh && /Comité innovation/.test(zoom1.text), { zoomEarly, zoom1 });
+check('le zoom ne prend ni la souris ni un clic (pas d’événement de pointeur, rien ne tombe dessus)', !!zoom1 && zoom1.pointer === 'none' && !zoom1.hit, zoom1);
+// À 700 x 400, la liste du volet montre une miniature : la molette amène la suivante sous la souris immobile, le zoom se ferme avec le défilement et se rouvre au premier mouvement, sur celle qui est dessous.
+const pitch = await app.evaluate(() => { const t = document.querySelectorAll('.pp-slide-import .pp-slide-item'); return Math.round(t[1].getBoundingClientRect().top - t[0].getBoundingClientRect().top); });
+await page.mouse.wheel(0, pitch);
+await sleep(400);
+const zoomScrolled = await zoomState();
+check('la liste défile sous la souris : le zoom se ferme', zoomScrolled === null, zoomScrolled);
+const hoverAt = await a.inPage(await a.centerOf('.pp-slide-import .pp-slide-thumb', 1));
+await page.mouse.move(hoverAt.x + 3, hoverAt.y - 3, { steps: 2 });
+await sleep(500);
+const zoom0 = await zoomState();
+check('au premier mouvement de la souris, il se rouvre sur la miniature qui est dessous : la diapositive 2', !!zoom0 && /Ordre du jour/.test(zoom0.text) && !/Comité innovation/.test(zoom0.text), zoom0);
+await a.showThumb(2);
+await a.reach(await a.inPage(await a.centerOf('.pp-slide-import .pp-slide-thumb', 2)));
+await sleep(500);
+const zoom2 = await zoomState();
+check('le zoom de la diapositive 3 montre son numéro écrit (« 3 »), sans la pastille verte', !!zoom2 && !!zoom2.badge && zoom2.badge.text === '3' && zoom2.badge.resolved === '3' && /rgba\(0, 0, 0, 0\)|transparent/.test(zoom2.badge.bg) && /Arbitrages/.test(zoom2.text), zoom2);
+await page.mouse.move(...Object.values(await a.inPage({ x: 150, y: 200 })), { steps: 4 });
+await sleep(150);
+check('la souris quitte le volet : le zoom se ferme', (await zoomState()) === null, await zoomState());
+await app.evaluate(() => document.querySelector('.pp-slide-import-kind-btn[aria-checked="true"]').focus());
+await a.press('Tab');
+await a.press('Tab');
+const onRow = await app.evaluate(() => (document.activeElement.classList.contains('pp-slide-item') ? Array.from(document.querySelectorAll('.pp-slide-import .pp-slide-item')).indexOf(document.activeElement) : -1));
+const zoomKey = await zoomState();
+check('au clavier, la miniature qui a le focus montre son zoom (la diapositive 1)', onRow === 0 && !!zoomKey && /Comité innovation/.test(zoomKey.text), { onRow, zoomKey });
+await a.press('ArrowDown');
+const zoomKey2 = await zoomState();
+check('Flèche bas : le zoom passe à la diapositive suivante', !!zoomKey2 && /Ordre du jour/.test(zoomKey2.text), zoomKey2);
+await a.press('Shift+Tab');
+check('le focus sort de la liste : le zoom se ferme', (await zoomState()) === null, await zoomState());
+await app.evaluate(() => { const first = document.querySelector('.pp-slide-import .pp-slide-item'); if (first) first.scrollIntoView({ block: 'nearest' }); });
+
 // --- « En texte » reste ce qu'il était : du texte (un tableau), pas d'image.
 await a.click('.pp-slide-import-kind-btn', 1, 300);
 const textKinds = await app.evaluate(() => ({ text: document.querySelectorAll('.pp-slide-import-kind-btn')[1].getAttribute('aria-checked'), hint: document.getElementById('pp-slide-import-hint').textContent, format: !document.getElementById('pp-slide-import-format').closest('label').hidden }));
@@ -432,5 +484,28 @@ const barColors = await appB.evaluate(() => { const on = document.querySelector(
 const lum = (css) => { const m = css.match(/\d+(\.\d+)?/g).map(Number).slice(0, 3).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
 const ratio = (a1, a2) => { const [hi, lo] = [lum(a1), lum(a2)].sort((p, q) => q - p); return (hi + 0.05) / (lo + 0.05); };
 check('[en dark] le bouton choisi se lit : texte sur son fond au moins 4,5:1', ratio(barColors.onText, barColors.onBg) >= 4.5, { barColors, ratio: ratio(barColors.onText, barColors.onBg) });
+
+// --- Dans une fenêtre haute (900 x 760), les miniatures du volet font 148 px (« les diapos sont toutes petites »), plusieurs tiennent dans la liste, et le zoom suit tout de suite d'une miniature à l'autre.
+const C = await t.openPage({ hosted: true, framed: true, stub: { extensions: ACTIVE }, seed: SEED, init: `window.__SLIDES = ${JSON.stringify(slides)};`, lang: 'fr', colorScheme: 'light', width: 900, height: 760 });
+const c = toolsOf(C);
+await sleep(1500);
+await c.clickText('Helene SCHWALM revient sur les décisions du dernier Comité.');
+await c.clickRow('v2-btn-slide-text', 900);
+await c.leaveMenu();
+await c.pickSource('support');
+const tall = await C.app.evaluate(() => { const l = document.querySelector('.pp-slide-import-list').getBoundingClientRect(); const thumbs = Array.from(document.querySelectorAll('.pp-slide-import .pp-slide-thumb')).map(el => el.getBoundingClientRect()); return { widths: thumbs.map(r => Math.round(r.width)), heights: thumbs.map(r => Math.round(r.height)), inside: thumbs.filter(r => r.top >= l.top - 1 && r.bottom <= l.bottom + 1).length, overflowX: document.querySelector('.pp-slide-import-list').scrollWidth > document.querySelector('.pp-slide-import-list').clientWidth, panelRight: Math.round(document.querySelector('.pp-slide-import').getBoundingClientRect().right), right: Math.round(thumbs[0].right) }; });
+check('dans une fenêtre haute (900 x 760), les trois miniatures font 148 px de large (83 de haut), tiennent toutes dans le volet, sans défilement de côté', tall.widths.join() === '148,148,148' && tall.heights.every(h => h >= 82 && h <= 84) && tall.inside === 3 && !tall.overflowX && tall.right <= tall.panelRight, tall);
+await c.reach(await c.inPage(await c.centerOf('.pp-slide-import .pp-slide-thumb', 0)));
+await sleep(550);
+const tallZoom0 = await C.app.evaluate(zoomProbe);
+check('au survol de la miniature 1, le zoom montre la diapositive en grand (520 px au plus), à gauche du volet', !!tallZoom0 && tallZoom0.w === 520 && tallZoom0.right <= tallZoom0.panelLeft && /Comité innovation/.test(tallZoom0.text), tallZoom0);
+const tallAt1 = await c.inPage(await c.centerOf('.pp-slide-import .pp-slide-thumb', 1));
+await C.page.mouse.move(tallAt1.x, tallAt1.y, { steps: 3 });
+await sleep(150);
+const tallZoom1 = await C.app.evaluate(zoomProbe);
+check('d’une miniature à l’autre, le zoom suit tout de suite : la diapositive 2', !!tallZoom1 && /Ordre du jour/.test(tallZoom1.text) && !/Comité innovation/.test(tallZoom1.text), tallZoom1);
+await c.click('.pp-slide-import-kind-btn', 1, 300);
+await c.clickThumb(0, 300);
+check('un clic sur la miniature ferme le zoom (la diapositive se pose)', (await C.app.evaluate(zoomProbe)) === null, await C.app.evaluate(zoomProbe));
 
 await t.finish();

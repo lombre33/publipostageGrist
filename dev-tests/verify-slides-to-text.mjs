@@ -184,6 +184,8 @@ function toolsOf(tab) {
     await sleep(250);
     await press('Enter');
     await sleep(500);
+    // Ces essais jouent la copie EN TEXTE (le volet choisit « En bloc » d'abord, le bloc a son propre essai : `slideBlock`) : on choisit « En texte ».
+    await click('.pp-slide-import-kind-btn', 1, 300);
   };
   return { click, clickRow, openMenu, leaveMenu, clickThumb, showThumb, clickText, press, pickSource, reach, inPage, centerOf };
 }
@@ -358,6 +360,8 @@ async function run(lang, colorScheme) {
   await sleep(250);
   await a.press('Enter');
   await sleep(600);
+  // Ces essais jouent la copie EN TEXTE (le volet choisit « En bloc » d'abord, le bloc a son propre essai : `slideBlock`) : on choisit « En texte ».
+  await a.click('.pp-slide-import-kind-btn', 1, 300);
   s = await state(app);
   check(tag + '« commerc » puis Entrée choisit « ' + NAME + ' » : une miniature par diapositive, nommée ; l’indication dit où elle arrive ; la case « ' + T.keep + ' » se montre, décochée',
     s.field === NAME && sameList(s.rows.map(r => r.label), [T.item(1, 3), T.item(2, 3), T.item(3, 3)]) && s.hint === T.hint && !!s.keep && s.keep.text === T.keep && !s.keep.checked && !s.keep.disabled,

@@ -44,17 +44,24 @@ body.pp-slide-import-on .pp-page-zoom { right: calc(var(--pp-zoom-right, 0px) + 
 
 
 /* Les miniatures de la source : celles de la bande, plus larges (THUMB_WIDTH_PX du script). Aucune n'est « la diapositive du curseur » : ni liseré ni numéro d'accent ; celle qui a le
-   clavier porte le cadre de focus. Grisées (l'extension éteinte), elles restent lisibles, et leur clic explique. 96 px de large (54 de haut en 16:9, plus larges que les 80 px de la bande) : sous une indication de deux lignes, le volet d'un
-   panneau de 700 x 400 px en montre deux en entier. */
+   clavier porte le cadre de focus. Grisées (l'extension éteinte), elles restent lisibles, et leur clic explique. 148 px de large (83 de haut en 16:9 ; 96 px jusqu'au 13/11, « les diapos sont toutes petites » ; la bande en a 80) ; 96 px dans une fenêtre basse (`.pp-slide-import-compact`, moins de 480 px
+   de haut, THUMB_COMPACT_PX du script) : sous les cases et l'indication, le volet d'un panneau de 700 x 400 px y montre une miniature entière. */
 .pp-slide-import-list { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 4px; padding: 4px 8px 6px; overflow-x: hidden; overflow-y: auto; }
 .pp-slide-import-list > .pp-slide-item { flex: none; }
-.pp-slide-import .pp-slide-thumb { width: 96px; }
+.pp-slide-import .pp-slide-thumb { width: 148px; }
+.pp-slide-import.pp-slide-import-compact .pp-slide-thumb { width: 96px; }
 /* La pastille de numéro de page d'une diapositive dont le numéro est écrit (la photo d'un bloc de document, SlidesEntry.resolveSlideNumbers) : du texte de la diapositive, sans la pastille verte de l'éditeur
    (comme `.reader-content .page-number-badge[data-slide-number]` de css/editor-v2.css). */
 .pp-slide-page .page-number-badge[data-slide-number] { display: inline; background: none; border: 0; padding: 0; border-radius: 0; color: inherit; font-size: inherit; line-height: inherit; }
 .pp-slide-import .pp-slide-item[aria-selected="true"] .pp-slide-thumb { box-shadow: 0 0 0 1px var(--border-strong); }
 .pp-slide-import .pp-slide-item[aria-selected="true"] .pp-slide-num { color: var(--text-muted); font-weight: 400; }
 .pp-slide-import-list[aria-disabled="true"] .pp-slide-item { cursor: not-allowed; }
+
+/* Le zoom au survol (slide-import.js : showZoom) : la diapositive de la miniature survolée en grand, à gauche du volet, sur le document ; au niveau des bulles d'aide, sans prendre la souris. Sa page est blanche,
+   comme celle de l'éditeur : un liseré et l'ombre des fenêtres flottantes la détachent du document. */
+.pp-slide-import-zoom { position: fixed; z-index: var(--z-tip, 1800); pointer-events: none; background: #fff; border-radius: 3px; box-shadow: 0 0 0 1px var(--border-strong), var(--shadow-float); }
+.pp-slide-import-zoom[hidden] { display: none; }
+.pp-slide-import-zoom .pp-slide-thumb { box-shadow: none; }
 
 /* La fenêtre « Demander » des diapositives liées (slide-links-ui.js, sur la base commune des fenêtres) : le message, puis les deux versions côte à côte, chacune sous son nom, dans les
    miniatures du volet (sa page réduite, blanche comme celle de l'éditeur, large de THUMB_WIDTH_PX du script) ; l'une sous l'autre quand la place manque. */
@@ -65,6 +72,6 @@ body.pp-slide-import-on .pp-page-zoom { right: calc(var(--pp-zoom-right, 0px) + 
 .pp-slide-link-ask-thumb .pp-slide-thumb { position: relative; overflow: hidden; border-radius: 2px; background: #fff; box-shadow: 0 0 0 1px var(--border-strong); }
 
 @media print {
-  .pp-slide-import { display: none; }
+  .pp-slide-import, .pp-slide-import-zoom { display: none; }
   body.pp-slide-import-on #editor-container { padding-right: 14px; }
 }
