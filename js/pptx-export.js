@@ -16,7 +16,7 @@
 //
 // Ce qu'il ne reprend pas, volontairement (le dire est le rôle de la fiche du moteur, README) : les en-têtes, pieds de page et filigrane (PowerPoint les pose sur le masque), les notes de bas de page, les
 // sommaires, les encadrés (leur texte part, pas leur cadre), le texte qui déborde de la diapositive (il reste hors d'elle, comme à l'écran), le habillage d'une image par le texte, les polices elles-mêmes
-// (jamais embarquées : une police absente chez le lecteur est remplacée par PowerPoint), les animations d'objets autres que celles d'un objet de l'éditeur (js/frame-anim.js : apparition, fondu, volée, balayage, zoom, entrée ou sortie, écrites en `p:timing`). Les images d'un autre site passent d'abord par la fenêtre js/external-images.js.
+// (jamais embarquées : une police absente chez le lecteur est remplacée par PowerPoint), les animations autres que celles d'un objet ou d'un élément du texte de l'éditeur (js/frame-anim.js, js/block-anim.js : apparition, fondu, volée, balayage, zoom, entrée ou sortie, écrites en `p:timing` ; un paragraphe ou un point de liste, une plage de paragraphes de sa forme). Les images d'un autre site passent d'abord par la fenêtre js/external-images.js.
 const PptxExport = (function () {
   const EMU_PER_PT = 12700;
   const PX_TO_PT = 72 / 96;
@@ -871,7 +871,9 @@ const PptxExport = (function () {
         + `<p:txBody><a:bodyPr ${insetsXml(insets[0], insets[1], insets[2], insets[3])} ${attrs.vert ? ` vert="${attrs.vert}"` : ''} anchor="${attrs.shape ? 'ctr' : 't'}"${attrs.cols ? ` numCol="${attrs.cols}" spcCol="${emu(attrs.colGap)}"` : ''}>${attrs.shape || attrs.vert ? '<a:noAutofit/>' : '<a:spAutoFit/>'}</a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`);
       // Ce que le cadre porte et qui n'est pas du texte (une image, un tableau) devient un objet de la diapositive, à sa place dans le cadre, tourné avec lui.
       const centre = { x: attrs.x + attrs.w / 2, y: attrs.y + heightPt / 2 };
+      const parts = paragraphAnimations(units, content).map(run => Object.assign(run, { first: id, last: id, shape: id }));
       for (const item of found.flow) {
+        const before = slide.nextShapeId;
         if (item.type === 'picture') {
           const at = rotatedAbout(scope.onSlide(scope.box(item.el)), centre, attrs.rot);
           const chart = attrs.rot ? null : await chartPartOf(item.el, ctx, at);
@@ -884,9 +886,11 @@ const PptxExport = (function () {
           const b = rotatedAbout(scope.onSlide(scope.box(item.el)), centre, attrs.rot);
           out.push(tableXml(item.el, slide, ctx, scope, b));
         }
+        if (item.type === 'picture' || item.type === 'table') parts.push(elementAnimation(item.el, before, slide.nextShapeId - 1));
       }
-      await flushInlineImages(slide, ctx, scope, box => rotatedAbout(box, centre, attrs.rot), out);
+      parts.push(...await flushInlineImages(slide, ctx, scope, box => rotatedAbout(box, centre, attrs.rot), out));
       slide.animate(attrs.anim, firstId, slide.nextShapeId - 1, id);
+      animateElements(slide, parts);
     } finally { unflatten(); boxEl.style.transform = savedTurn; }
   }
   // Ramène à la 1re colonne la place de chaque paragraphe (et de sa liste) d'un cadre à `attrs.cols` colonnes, pour que son retrait se compte depuis le bord de SA colonne : `originPx` (le bord gauche du texte) et
@@ -905,13 +909,18 @@ const PptxExport = (function () {
     return { left: r.left - boxRect.left, top: r.top - boxRect.top };
   }
   // Les images trouvées dans les paragraphes, posées après le texte qui les porte.
+  // Rend les animations des images posées (js/block-anim.js : une image du texte s'anime, sauf derrière le texte, qui est un décor), pour animateElements.
   async function flushInlineImages(slide, ctx, scope, place, into) {
     const images = slide.pendingImages.splice(0);
+    const parts = [];
     for (const img of images) {
+      const first = slide.nextShapeId;
       const picture = await pictureOf(img, slide, ctx, scope, place);
       if (!picture) continue;
       if (into && picture.layer !== 'behind' && picture.layer !== 'front') into.push(picture.xml); else putPicture(slide, picture);
+      if (picture.layer !== 'behind') parts.push(elementAnimation(img, first, slide.nextShapeId - 1));
     }
+    return parts;
   }
 
   // --- La diapositive : fond, transition, notes -----------------------------------------------------------------------------------------------------------------------------------------------
@@ -950,13 +959,49 @@ const PptxExport = (function () {
   }
   // Les animations d'objets (js/frame-anim.js) : `p:timing`, la suite de la diapositive rangée en pas (FrameAnim.stepsOf) comme PowerPoint la range - un `p:par` par clic, dedans un par groupe qui part
   // ensemble (au clic, ou après la précédente), dedans un par effet. Les préréglages de PowerPoint : apparition (1), fondu (10), volée (2), balayage (22), zoom (53).
+  // Les animations des ÉLÉMENTS du texte (js/block-anim.js : un paragraphe, un titre, un point de liste, une image, un tableau). Un paragraphe ou un point de liste devient une plage de paragraphes de sa forme à texte
+  // (`txEl/pRg`, « un paragraphe à la fois » de PowerPoint) ; l'élément animé le plus proche d'une unité de texte (son paragraphe, son point, ou le point qui le contient) est le sien, et un point qui en
+  // contient d'autres les emmène avec lui (sa plage couvre ses sous-points, sauf ceux qui ont leur propre animation).
+  function animatedOwner(unit, stop) {
+    for (let el = unit.el; el && el !== stop; el = el.parentElement) {
+      if (/^(P|H[1-6]|LI)$/.test(el.tagName) && FrameAnim.normalized(el.getAttribute(FrameAnim.ATTR))) return el;
+    }
+    return null;
+  }
+  // Les plages de paragraphes animées de `units` (les unités d'une forme à texte, une par `a:p`) : [{ el, anim, range: { st, end } }] ; `stop` : le bord du texte (le contenu du cadre ou l'hôte de mesure).
+  function paragraphAnimations(units, stop) {
+    const runs = [];
+    units.forEach((unit, i) => {
+      const owner = animatedOwner(unit, stop);
+      if (!owner) return;
+      const last = runs[runs.length - 1];
+      if (last && last.el === owner && last.range.end === i - 1) last.range.end = i;
+      else runs.push({ el: owner, anim: FrameAnim.normalized(owner.getAttribute(FrameAnim.ATTR)), range: { st: i, end: i } });
+    });
+    return runs;
+  }
+  // L'animation d'un objet de PowerPoint qui n'est pas un cadre : `first` à `last`, ses identifiants (une image, un tableau).
+  function elementAnimation(el, first, last) {
+    const anim = FrameAnim.normalized(el.getAttribute(FrameAnim.ATTR));
+    return anim && last >= first ? { el, anim, first, last, range: null } : null;
+  }
+  // Pose ces animations sur la diapositive dans l'ordre du texte (un élément qui a plusieurs plages, un point coupé par un sous-point animé, fait partir les suivantes avec la première).
+  function animateElements(slide, parts) {
+    const found = parts.filter(Boolean).sort((a, b) => (a.el === b.el ? 0 : (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1)));
+    const seen = new Set();
+    found.forEach((part) => {
+      slide.animate(seen.has(part.el) ? Object.assign({}, part.anim, { start: 'with' }) : part.anim, part.first, part.last, part.shape || 0, part.range);
+      seen.add(part.el);
+    });
+  }
   const ANIM_PRESET = { appear: 1, fade: 10, fly: 2, wipe: 22, zoom: 53 };
   const ANIM_SUBTYPE = { fly: { t: 1, r: 2, b: 4, l: 8 }, wipe: { t: 1, r: 2, b: 4, l: 8 }, zoom: { '': 16 } };
   const ANIM_WIPE = { t: 'up', b: 'down', l: 'left', r: 'right' };
   const ANIM_NODE = { click: 'clickEffect', with: 'withEffect', after: 'afterEffect' };
   const ANIM_EDGE = { l: ['ppt_x', '0-#ppt_w/2'], r: ['ppt_x', '1+#ppt_w/2'], t: ['ppt_y', '0-#ppt_h/2'], b: ['ppt_y', '1+#ppt_h/2'] };
-  function behaviorsXml(a, id, nextId) {
-    const target = `<p:tgtEl><p:spTgt spid="${id}"/></p:tgtEl>`;
+  function behaviorsXml(a, id, nextId, range) {
+    // Un paragraphe (ou un point de liste et ses sous-points) : la plage de paragraphes de la forme, comme « Un paragraphe à la fois » de PowerPoint.
+    const target = `<p:tgtEl><p:spTgt spid="${id}">${range ? `<p:txEl><p:pRg st="${range.st}" end="${range.end}"/></p:txEl>` : ''}</p:spTgt></p:tgtEl>`;
     const visible = `<p:set><p:cBhvr><p:cTn id="${nextId()}" dur="1" fill="hold"><p:stCondLst><p:cond delay="${a.exit && a.effect !== 'appear' ? a.dur : 0}"/></p:stCondLst></p:cTn>${target}<p:attrNameLst><p:attrName>style.visibility</p:attrName></p:attrNameLst></p:cBhvr><p:to><p:strVal val="${a.exit ? 'hidden' : 'visible'}"/></p:to></p:set>`;
     const filter = name => `<p:animEffect transition="${a.exit ? 'out' : 'in'}" filter="${name}"><p:cBhvr><p:cTn id="${nextId()}" dur="${a.dur}"/>${target}</p:cBhvr></p:animEffect>`;
     const move = (attr, from, to) => `<p:anim calcmode="lin" valueType="num"><p:cBhvr additive="base"><p:cTn id="${nextId()}" dur="${a.dur}" fill="hold"/>${target}<p:attrNameLst><p:attrName>${attr}</p:attrName></p:attrNameLst></p:cBhvr>`
@@ -974,7 +1019,7 @@ const PptxExport = (function () {
   function timingXml(slide) {
     const items = [];
     slide.animations.forEach((one) => {
-      for (let id = one.first; id <= one.last; id += 1) items.push({ anim: id === one.first ? one.anim : Object.assign({}, one.anim, { start: 'with' }), id, shape: id === one.shape });
+      for (let id = one.first; id <= one.last; id += 1) items.push({ anim: id === one.first ? one.anim : Object.assign({}, one.anim, { start: 'with' }), id, shape: id === one.shape, range: one.range || null });
     });
     if (!items.length) return '';
     const { steps } = FrameAnim.stepsOf(items);
@@ -996,8 +1041,8 @@ const PptxExport = (function () {
         const effects = group.effects.map(({ a, item }) => {
           const effectId = nextId();
           const subtype = (ANIM_SUBTYPE[a.effect] || {})[a.side] || 0;
-          const inner = behaviorsXml(a, item.id, nextId);
-          return `<p:par><p:cTn id="${effectId}" presetID="${ANIM_PRESET[a.effect]}" presetClass="${a.exit ? 'exit' : 'entr'}" presetSubtype="${subtype}" fill="hold"${item.shape ? ' grpId="0"' : ''} nodeType="${ANIM_NODE[a.start]}">`
+          const inner = behaviorsXml(a, item.id, nextId, item.range);
+          return `<p:par><p:cTn id="${effectId}" presetID="${ANIM_PRESET[a.effect]}" presetClass="${a.exit ? 'exit' : 'entr'}" presetSubtype="${subtype}" fill="hold"${item.shape || item.range ? ' grpId="0"' : ''} nodeType="${ANIM_NODE[a.start]}">`
             + `<p:stCondLst><p:cond delay="${a.delay}"/></p:stCondLst><p:childTnLst>${inner}</p:childTnLst></p:cTn></p:par>`;
         }).join('');
         return `<p:par><p:cTn id="${groupId}" fill="hold"><p:stCondLst><p:cond delay="${group.delay}"/></p:stCondLst><p:childTnLst>${effects}</p:childTnLst></p:cTn></p:par>`;
@@ -1006,7 +1051,14 @@ const PptxExport = (function () {
       const start = k === 0 ? '<p:cond delay="indefinite"/><p:cond evt="onBegin" delay="0"><p:tn val="2"/></p:cond>' : '<p:cond delay="indefinite"/>';
       built.push(`<p:par><p:cTn id="${stepId}" fill="hold"><p:stCondLst>${start}</p:stCondLst><p:childTnLst>${groupXml}</p:childTnLst></p:cTn></p:par>`);
     });
-    const builds = items.filter(item => item.shape).map(item => `<p:bldP spid="${item.id}" grpId="0" animBg="1"/>`).join('');
+    // Le bloc de construction de chaque forme à texte animée : l'objet entier (`animBg`), un paragraphe à la fois (`build="p"`), ou les deux.
+    const shapeBuilds = new Map();
+    items.filter(item => item.shape || item.range).forEach((item) => {
+      const build = shapeBuilds.get(item.id) || { whole: false, paragraphs: false };
+      if (item.range) build.paragraphs = true; else build.whole = true;
+      shapeBuilds.set(item.id, build);
+    });
+    const builds = Array.from(shapeBuilds, ([id, build]) => `<p:bldP spid="${id}" grpId="0"${build.paragraphs ? ' build="p"' : ''}${build.whole ? ' animBg="1"' : ''}/>`).join('');
     return '<p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"><p:childTnLst>'
       + `<p:seq concurrent="1" nextAc="seek"><p:cTn id="2" dur="indefinite" nodeType="mainSeq"><p:childTnLst>${built.join('')}</p:childTnLst></p:cTn>`
       + '<p:prevCondLst><p:cond evt="onPrev" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:prevCondLst><p:nextCondLst><p:cond evt="onNext" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:nextCondLst></p:seq>'
@@ -1036,9 +1088,9 @@ const PptxExport = (function () {
       takeId() { return this.nextShapeId++; },
       // L'animation d'un objet de l'éditeur (js/frame-anim.js) : elle se pose sur les objets de PowerPoint qu'il est devenu (`first` à `last`, ses identifiants ; `shape` : celui de sa forme à texte, s'il y en a un).
       animations: [],
-      animate(anim, first, last, shape) {
+      animate(anim, first, last, shape, range) {
         const a = FrameAnim.normalized(anim);
-        if (a && last >= first) this.animations.push({ anim: a, first, last, shape });
+        if (a && last >= first) this.animations.push({ anim: a, first, last, shape, range: range || null });
       },
       relFor(type, target, external) {
         const found = this.rels.find(rel => rel.type === type && rel.target === target);
@@ -1088,31 +1140,39 @@ const PptxExport = (function () {
       const first = found.flow.find(item => item.type === 'text' && item.units.some(hasText));
       let title = null;
       if (first && isHeadingUnit(first.units[0]) && first.units.length === 1) { title = first.units[0]; first.units = []; }
+      // Les animations des éléments du texte de la diapositive (hors cadres), posées après celles des cadres : l'éditeur lit les cadres d'abord, puis le texte.
+      const bodyParts = [];
       for (const item of groupTexts(found.flow)) {
+        const before = slide.nextShapeId;
         if (item.type === 'text') {
           const left = Math.min(...item.units.map(unit => (unit.list ? Math.min(unit.outer.left, unit.list.left) : unit.outer.left)));
           const right = Math.max(...item.units.map(unit => unit.outer.right));
           const top = item.units[0].rect.top;
           const bottom = item.units[item.units.length - 1].rect.bottom;
           slide.shapes.flow.push(textBoxXml(slide, scope.onSlide({ left, top, width: right - left, height: bottom - top }), paragraphsXml(item.units, left, slide, ctx)));
-          await flushInlineImages(slide, ctx, scope, null, null);
+          const shape = slide.nextShapeId - 1;
+          paragraphAnimations(item.units, host).forEach(run => bodyParts.push(Object.assign(run, { first: shape, last: shape, shape })));
+          bodyParts.push(...await flushInlineImages(slide, ctx, scope, null, null));
         } else if (item.type === 'picture') {
           putPicture(slide, await pictureOf(item.el, slide, ctx, scope, null));
+          bodyParts.push(elementAnimation(item.el, before, slide.nextShapeId - 1));
         } else if (item.type === 'table') {
           slide.shapes.flow.push(tableXml(item.el, slide, ctx, scope, scope.onSlide(scope.box(item.el))));
+          bodyParts.push(elementAnimation(item.el, before, slide.nextShapeId - 1));
         } else if (item.type === 'rule') {
           const b = scope.onSlide(scope.box(item.el));
           slide.shapes.flow.push(connectorXml(slide, { x: b.x, y: b.y + b.h / 2, w: b.w, h: 0 }, cssHex(computedOf(item.el).backgroundColor) || 'D0D7DE', 0.75, '', null, 'line'));
         } else if (item.type === 'code') {
           slide.shapes.flow.push(codeXml(item.el, slide, ctx, scope));
-          await flushInlineImages(slide, ctx, scope, null, null);
+          bodyParts.push(...await flushInlineImages(slide, ctx, scope, null, null));
         }
       }
       // Les images des cases d'un tableau, posées après lui (par-dessus).
-      await flushInlineImages(slide, ctx, scope, null, null);
+      bodyParts.push(...await flushInlineImages(slide, ctx, scope, null, null));
       if (title) {
         const b = scope.onSlide(title.rect);
         slide.shapes.flow.unshift(textBoxXml(slide, b, paragraphsXml([title], title.rect.left, slide, ctx), true));
+        paragraphAnimations([title], host).forEach(run => bodyParts.push(Object.assign(run, { first: slide.nextShapeId - 1, last: slide.nextShapeId - 1, shape: slide.nextShapeId - 1 })));
       }
       for (const frame of found.frames) {
         const first = slide.nextShapeId;
@@ -1120,6 +1180,7 @@ const PptxExport = (function () {
         // Un objet masqué (volet Sélection de PowerPoint) : tous les objets que son cadre est devenu le sont.
         if (FreeFrame.measuresOf(frame).hidden) for (let id = first; id < slide.nextShapeId; id++) slide.hiddenIds.add(id);
       }
+      animateElements(slide, bodyParts);
     } finally { detach(); }
     return slide;
   }

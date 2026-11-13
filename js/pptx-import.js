@@ -22,7 +22,7 @@
 //    même à la hauteur qu'il a dans le fichier.
 //  - LES TABLEAUX sont ceux de l'éditeur, posés librement : chacun est dans un cadre libre, à sa place exacte sur la diapositive (comme un cadre de texte), à la hauteur qu'il a dans le fichier ; il se déplace, se redimensionne,
 //    se masque et s'anime comme les autres objets.
-// Ce qu'il ne reprend pas (le rapport le compte, REPORT_KEYS) : les animations d'objets autres qu'une entrée ou une sortie d'apparition, de fondu, de volée, de balayage ou de zoom sur un objet entier (js/frame-anim.js, animationOf), les graphiques, les objets incorporés (Excel, Word...), les vidéos et les sons, les commentaires, les équations, les images d'un
+// Ce qu'il ne reprend pas (le rapport le compte, REPORT_KEYS) : les animations autres qu'une entrée ou une sortie d'apparition, de fondu, de volée, de balayage ou de zoom sur un objet entier ou sur un paragraphe (js/frame-anim.js, js/block-anim.js, animationOf), les graphiques, les objets incorporés (Excel, Word...), les vidéos et les sons, les commentaires, les équations, les images d'un
 // format que le navigateur ne lit pas (EMF, WMF, TIFF), les formes libres (remplacées par leur rectangle), les connecteurs coudés ou courbes (remplacés par un trait droit), les dégradés (leur couleur moyenne) et le
 // décor d'un masque que l'éditeur ne sait pas poser (tableaux, graphiques, trop d'objets, images trop lourdes).
 //  - LES LIENS D'OBJET (demande du 02/11, « Lien, puis aperçu animé d'affilée », second niveau) : le lien posé sur une forme, une zone cliquable ou une image devient le lien du CADRE (`data-ff-link`, js/frame-link.js) - une adresse,
@@ -910,10 +910,12 @@ const PptxImport = (function () {
     // L'alignement, l'interligne et les espaces avant et après : les attributs et le style que l'éditeur écrit lui-même.
     // Un paragraphe de droite à gauche (`rtl`) garde son alignement dit en toutes lettres (PowerPoint dit « gauche » ou « droite » sans le retourner) et ses retraits depuis la marge de droite.
     const attrs = TextDirection.markup(item.rtl) + ParagraphFormat.markup(item.format, ALIGNS[item.align] || (item.rtl ? 'left' : undefined), item.rtl);
-    if (!item.empty) return '<p' + attrs + '>' + item.html + '</p>';
+    // L'animation d'un paragraphe (« un paragraphe à la fois ») est sur le paragraphe lui-même, ou sur son point de liste (assemble) : un point s'anime avec ses sous-points.
+    const animated = inList ? '' : (item.anim || '');
+    if (!item.empty) return '<p' + attrs + animated + '>' + item.html + '</p>';
     // Un paragraphe vide garde la hauteur de sa ligne : une espace insécable à la taille du paragraphe (au delà de la taille de l'éditeur).
-    if (inList || item.size < 12) return '<p' + attrs + '></p>';
-    return '<p' + attrs + '><span style="font-size: ' + fixed(item.size) + 'pt"> </span></p>';
+    if (inList || item.size < 12) return '<p' + attrs + animated + '></p>';
+    return '<p' + attrs + animated + '><span style="font-size: ' + fixed(item.size) + 'pt"> </span></p>';
   }
   // Les paragraphes en balisage : les listes sont emboîtées selon leur niveau (jamais de saut de niveau : un élément de niveau 3 sous un de niveau 1 est de niveau 2), une liste change quand sa sorte ou son style change.
   function assemble(items) {
@@ -940,7 +942,7 @@ const PptxImport = (function () {
         stack[level] = { tag: l.tag, key };
         stack.length = level + 1;
       }
-      out += item.list.tag === 'task' ? '<li data-type="taskItem" data-checked="' + (item.list.checked ? 'true' : 'false') + '">' : '<li' + (item.list.look ? ListMarkers.markup(item.list.look.color, item.list.look.size) : '') + '>';
+      out += item.list.tag === 'task' ? '<li data-type="taskItem" data-checked="' + (item.list.checked ? 'true' : 'false') + '"' + (item.anim || '') + '>' : '<li' + (item.list.look ? ListMarkers.markup(item.list.look.color, item.list.look.size) : '') + (item.anim || '') + '>';
       out += paragraphTag(item, true);
     });
     closeTo(0);
@@ -1800,7 +1802,7 @@ const PptxImport = (function () {
         frame.h = fitted.natural;
       }
     }
-    out.push(FreeFrame.html(frame, hasText ? assemble(items) : '<p></p>'));
+    out.push(FreeFrame.html(frame, hasText ? assemble(animateParagraphs(items, attr(kid(nv, 'cNvPr'), 'id'), env)) : '<p></p>'));
   }
   // Les réglages d'une forme prédéfinie (`a:avLst`) : { adj: 25000, ... }, ceux écrits en « val N » (les seuls que PowerPoint écrit).
   function adjustsOf(geom) {
@@ -2179,8 +2181,9 @@ const PptxImport = (function () {
 
   // --- Les animations d'objets ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   // Ce que l'éditeur reprend d'une animation de PowerPoint (js/frame-anim.js) : une ENTRÉE ou une SORTIE de la séquence principale - apparition (1), fondu (10), volée (2), balayage (22), zoom (23, 53) -
-  // sur un objet entier, une seule par objet (la première). Le côté vient du sous-type (1 haut, 2 droite, 4 bas, 8 gauche), le départ du type du nœud (au clic, avec ou après la précédente), la durée de la plus
-  // longue des durées de l'effet (sans le « 1 ms » qui montre l'objet), le délai de celui de l'effet. Tout le reste (emphase, trajectoire, effets autres, un paragraphe à la fois, un objet qui en a plusieurs,
+  // sur un objet entier (une seule par objet, la première), ou sur un PARAGRAPHE de son texte (« un paragraphe à la fois » : une plage `txEl/pRg`, une par premier paragraphe ; js/block-anim.js, animateParagraphs).
+  // Le côté vient du sous-type (1 haut, 2 droite, 4 bas, 8 gauche), le départ du type du nœud (au clic, avec ou après la précédente), la durée de la plus
+  // longue des durées de l'effet (sans le « 1 ms » qui montre l'objet), le délai de celui de l'effet. Tout le reste (emphase, trajectoire, effets autres, par mot ou par lettre, un objet ou un paragraphe qui en a plusieurs,
   // une séquence déclenchée par un clic sur un objet, une cible qui n'est pas reprise) est compté au rapport.
   const ANIM_PRESETS = { 1: 'appear', 10: 'fade', 2: 'fly', 22: 'wipe', 23: 'zoom', 53: 'zoom' };
   const ANIM_STARTS = { clickEffect: 'click', withEffect: 'with', afterEffect: 'after' };
@@ -2189,13 +2192,19 @@ const PptxImport = (function () {
     const exit = attr(effect, 'presetClass') === 'exit';
     if (!kind || (!exit && attr(effect, 'presetClass') !== 'entr')) return null;
     const targets = descendants(effect, 'spTgt');
-    if (!targets.length || targets.some(target => attr(target, 'spid') !== attr(targets[0], 'spid') || kid(target, 'txEl'))) return null;
+    if (!targets.length || targets.some(target => attr(target, 'spid') !== attr(targets[0], 'spid'))) return null;
+    // Un objet entier, ou UNE plage de paragraphes (`txEl/pRg` : « un paragraphe à la fois ») ; une série de caractères (`charRg` : par mot, par lettre), ou plusieurs plages, ne se disent pas.
+    const texts = targets.filter(target => kid(target, 'txEl'));
+    if (texts.length && texts.length !== targets.length) return null;
+    const ranges = texts.map(target => kid(kid(target, 'txEl'), 'pRg'));
+    if (ranges.some(range => !range) || new Set(ranges.map(range => attr(range, 'st') + '-' + attr(range, 'end'))).size > 1) return null;
+    const range = ranges.length ? { st: numAttr(ranges[0], 'st', 0), end: numAttr(ranges[0], 'end', numAttr(ranges[0], 'st', 0)) } : null;
     const sub = numAttr(effect, 'presetSubtype', 0);
     const side = sub & 8 ? 'l' : (sub & 2 ? 'r' : (sub & 1 ? 't' : 'b'));
-    const spans = descendants(effect, 'cTn').map(node => numAttr(node, 'dur', 0)).filter(ms => ms > 1);
+    const lengths = descendants(effect, 'cTn').map(node => numAttr(node, 'dur', 0)).filter(ms => ms > 1);
     const wait = Number(attr(at(effect, 'stCondLst/cond'), 'delay'));
-    const anim = FrameAnim.normalized({ effect: kind, side, exit, start: ANIM_STARTS[attr(effect, 'nodeType')], dur: spans.length ? Math.max(...spans) : FrameAnim.DURATION.def, delay: Number.isFinite(wait) ? wait : 0 });
-    return anim ? { id: attr(targets[0], 'spid'), anim, used: false, slots: [] } : null;
+    const anim = FrameAnim.normalized({ effect: kind, side, exit, start: ANIM_STARTS[attr(effect, 'nodeType')], dur: lengths.length ? Math.max(...lengths) : FrameAnim.DURATION.def, delay: Number.isFinite(wait) ? wait : 0 });
+    return anim ? { id: attr(targets[0], 'spid'), anim, range, used: false, slots: [] } : null;
   }
   // Le nom d'une animation que l'éditeur ne reprend pas, pour le détail du rapport : sa sorte et son numéro d'effet de PowerPoint (« emphase 6 », « entrée 10 »), et pourquoi quand ce n'est pas l'effet qui manque.
   const ANIM_CLASSES = ['entr', 'exit', 'emph', 'path', 'verb', 'mediacall'];
@@ -2205,14 +2214,15 @@ const PptxImport = (function () {
     let why = '';
     if (!(main && main.contains(effect))) why = 'trigger';
     else if (duplicate) why = 'second';
-    else if (descendants(effect, 'spTgt').some(target => kid(target, 'txEl'))) why = 'paragraph';
+    else if (descendants(effect, 'spTgt').some(target => kid(target, 'txEl') && !kid(kid(target, 'txEl'), 'pRg'))) why = 'letters';
     const target = descendants(effect, 'spTgt')[0];
     const object = target && nameOf ? nameOf(attr(target, 'spid')) : '';
     return I18n.t('importReport.animKind.' + (ANIM_CLASSES.indexOf(cls) >= 0 ? cls : 'other')) + ' ' + (id >= 0 ? id : '?') + (why ? ', ' + I18n.t('importReport.animWhy.' + why) : '') + (object ? ' (' + object + ')' : '');
   }
-  // Les animations de la diapositive `root` : { byId (l'identifiant de l'objet -> son animation), lost (celles qu'on ne reprend pas), lostWhy (leurs noms) }.
+  // Les animations de la diapositive `root` : { byId (l'identifiant de l'objet -> son animation d'objet entier), paragraphs (l'identifiant de l'objet -> Map(son premier paragraphe -> l'animation de ce paragraphe
+  // et de ses sous-points)), all (toutes celles qu'on reprend), lost (celles qu'on ne reprend pas), lostWhy (leurs noms) }.
   function timingOf(root) {
-    const found = { byId: new Map(), lost: 0, lostWhy: [] };
+    const found = { byId: new Map(), paragraphs: new Map(), all: [], lost: 0, lostWhy: [] };
     const timing = kid(root, 'timing');
     if (!timing) return found;
     const nodes = descendants(timing, 'cTn');
@@ -2226,10 +2236,12 @@ const PptxImport = (function () {
     let rank = 0;
     nodes.filter(node => ANIM_STARTS[attr(node, 'nodeType') || '']).forEach((effect) => {
       const one = main && main.contains(effect) ? animationOf(effect) : null;
-      if (!one || found.byId.has(one.id)) { found.lost += 1; found.lostWhy.push(animationLabel(effect, main, !!one, nameOf)); return; }
+      const starts = one && one.range ? (found.paragraphs.get(one.id) || new Map()) : null;
+      if (!one || (one.range ? starts.has(one.range.st) : found.byId.has(one.id))) { found.lost += 1; found.lostWhy.push(animationLabel(effect, main, !!one, nameOf)); return; }
       rank += 1;
       one.rank = rank;
-      found.byId.set(one.id, one);
+      if (one.range) { starts.set(one.range.st, one); found.paragraphs.set(one.id, starts); } else found.byId.set(one.id, one);
+      found.all.push(one);
     });
     return found;
   }
@@ -2242,29 +2254,52 @@ const PptxImport = (function () {
       if (typeof html === 'string' && html.startsWith('<div class="pp-free-frame"')) out[i] = html.replace('<div class="pp-free-frame"', '<div class="pp-free-frame" data-ff-hidden="1"');
     }
   }
+  // Le réglage d'une animation tel qu'il s'écrit sur un élément, suivi de son rang dans la séquence de PowerPoint (`data-pp-rank`, retiré par settleAnimations une fois toute la diapositive posée).
+  const RANK_ATTR = 'data-pp-rank';
+  const animMarkup = (anim, rank) => ' data-ff-anim="' + FrameAnim.text(anim) + '" ' + RANK_ATTR + '="' + rank + '"';
   function animateFrames(out, from, one) {
     for (let i = from; i < out.length; i++) {
       const html = out[i];
       if (typeof html !== 'string' || !html.startsWith('<div class="pp-free-frame"') || html.slice(0, html.indexOf('>')).includes(' data-ff-anim=')) continue;
-      const text = FrameAnim.text(one.slots.length ? Object.assign({}, one.anim, { start: 'with' }) : one.anim);
-      out[i] = html.replace('<div class="pp-free-frame"', '<div class="pp-free-frame" data-ff-anim="' + text + '"');
+      out[i] = html.replace('<div class="pp-free-frame"', '<div class="pp-free-frame"' + animMarkup(one.slots.length ? Object.assign({}, one.anim, { start: 'with' }) : one.anim, one.rank));
       one.slots.push(i);
       one.used = true;
     }
   }
-  // Une fois les objets de la diapositive posés : ceux dont la cible n'a pas été reprise sont comptés ; quand l'ordre de la séquence n'est pas celui des cadres, chaque cadre dit sa place (`n`).
+  // « Un paragraphe à la fois » : les animations des paragraphes de l'objet `spid` posées sur ses `items` (paragraphsOf : un par paragraphe du fichier, dans l'ordre). Une plage `st`-`end` est UN élément de
+  // l'éditeur quand `st` est un point de liste : son li, qui porte ses sous-points (« par premier niveau ») ; un paragraphe qui n'est pas dans une liste, ou une plage de plusieurs points du même niveau,
+  // donne un élément par paragraphe, les suivants partant avec le premier. Un objet de décor, ou sans animation de paragraphe, rend les `items` tels quels.
+  function animateParagraphs(items, spid, env) {
+    const starts = env.animations && !env.decor ? env.animations.paragraphs.get(spid) : null;
+    if (!starts) return items;
+    const out = items.slice();
+    starts.forEach((one, st) => {
+      if (st >= items.length) return;
+      one.used = true;
+      const level = items[st].list ? items[st].list.level : -1;
+      for (let i = st; i <= Math.min(one.range.end, items.length - 1); i++) {
+        if (i > st && items[st].list && items[i].list && items[i].list.level > level) continue;   // un sous-point arrive avec son point
+        out[i] = Object.assign({}, items[i], { anim: animMarkup(i === st ? one.anim : Object.assign({}, one.anim, { start: 'with' }), one.rank) });
+      }
+    });
+    return out;
+  }
+  // Une fois les objets de la diapositive posés : ceux dont la cible n'a pas été reprise sont comptés ; quand l'ordre de la séquence n'est pas celui du texte (les cadres, puis leurs paragraphes, dans l'ordre
+  // où l'éditeur les lit), chaque élément animé dit sa place (`n`) ; sinon aucune n'est écrite.
   function settleAnimations(out, timing, report) {
-    const used = Array.from(timing.byId.values()).filter(one => one.used);
-    const unused = timing.byId.size - used.length;
+    const used = timing.all.filter(one => one.used);
+    const unused = timing.all.length - used.length;
     report.animations += timing.lost + unused;
     timing.lostWhy.forEach(label => noteTo(report, 'animations', label));
     if (unused) noteTo(report, 'animations', I18n.t('importReport.animWhy.target'), unused);
-    const placed = used.slice().sort((a, b) => a.slots[0] - b.slots[0]);
-    if (placed.every((one, k) => k === 0 || placed[k - 1].rank < one.rank)) return;
-    used.forEach((one) => {
-      one.slots.forEach((slot) => {
-        out[slot] = out[slot].replace(/ data-ff-anim="([^"]*)"/, (all, text) => ' data-ff-anim="' + FrameAnim.text(Object.assign(FrameAnim.parse(text), { order: Math.min(one.rank, FrameAnim.ORDER_MAX) })) + '"');
-      });
+    const marked = out.map(html => (typeof html === 'string' && html.includes(' ' + RANK_ATTR + '=') ? html : null));
+    const ranks = [];
+    marked.forEach((html) => { if (html) for (const found of html.matchAll(new RegExp(' ' + RANK_ATTR + '="(\\d+)"', 'g'))) ranks.push(Number(found[1])); });
+    const inOrder = ranks.every((rank, k) => k === 0 || ranks[k - 1] <= rank);
+    marked.forEach((html, i) => {
+      if (!html) return;
+      out[i] = html.replace(new RegExp(' data-ff-anim="([^"]*)" ' + RANK_ATTR + '="(\\d+)"', 'g'), (all, text, rank) => ' data-ff-anim="'
+        + (inOrder ? text : FrameAnim.text(Object.assign(FrameAnim.parse(text), { order: Math.min(Number(rank), FrameAnim.ORDER_MAX) }))) + '"');
     });
   }
 

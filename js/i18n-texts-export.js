@@ -286,7 +286,7 @@ const I18nTextsExport = {
   'importReport.animKind.other': { fr: 'effet', en: 'effect' },
   'importReport.animWhy.trigger': { fr: 'déclenchée par un clic sur un objet', en: 'triggered by a click on an object' },
   'importReport.animWhy.second': { fr: 'deuxième animation du même objet', en: 'second animation of the same object' },
-  'importReport.animWhy.paragraph': { fr: 'un paragraphe à la fois', en: 'one paragraph at a time' },
+  'importReport.animWhy.letters': { fr: 'par mot ou par lettre', en: 'by word or by letter' },
   'importReport.animWhy.target': { fr: 'objet animé non repris', en: 'animated object not imported' },
   'importReport.freeform': { fr: 'forme libre', en: 'freeform' },
   'importReport.debug': { fr: 'DÉBOGAGE TEMPORAIRE', en: 'TEMPORARY DEBUG' },
