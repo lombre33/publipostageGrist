@@ -915,6 +915,32 @@
       return result(bad);
     });
 
+  add('pptx_import_replaces_a_picture_bullet_by_the_round_bullet',
+    'Une puce en image (`buBlip`) devient le rond de l\'éditeur : ses points forment UNE liste ronde avec ceux qui la suivent, même quand une police de symboles (Wingdings) est dite avant ou après elle ; un point sans puce reste hors liste ; la puce suit la couleur du texte sauf si le fichier en dit une ; une ligne au rapport',
+    async () => {
+      const blip = '<a:buBlip><a:blip r:embed="rId2"/></a:buBlip>';
+      const item = (text, inner) => para(run(text, 'sz="2000"', solid('C00000')), 'marL="342900" indent="-342900"', inner);
+      const r = await run1({
+        slides: [{
+          rels: [IMAGE_REL('rId2', 'image1.jpeg')],
+          shapes: textBox(20, 10, 900, 400,
+            item('Image un', blip) + item('Image deux', '<a:buFont typeface="Wingdings"/>' + blip) + item('Image trois', blip + '<a:buFont typeface="Wingdings"/>')
+            + item('Verte', '<a:buClr><a:srgbClr val="00AA00"/></a:buClr>' + blip) + item('Rond', '<a:buChar char="•"/>') + item('Sans', '<a:buNone/>')),
+        }],
+      });
+      const { bad, expect } = checker();
+      const frame = slidesOf(r.html)[0].frames[0];
+      const items = frame ? Array.from(frame.el.querySelectorAll('li')) : [];
+      const itemOf = word => items.find(li => li.textContent.trim() === word);
+      const look = word => { const li = itemOf(word); return li && li.getAttribute('data-bullet-color'); };
+      expect('une seule liste ronde de cinq points : les trois puces en image, la verte et le rond', !!frame && listKinds(frame.el) === 'ul' && items.length === 5, frame && frame.inner);
+      expect('le point sans puce reste un paragraphe hors liste', !!frame && !itemOf('Sans') && /Sans/.test(frame.text), frame && frame.inner);
+      expect('la puce suit la couleur du texte (aucun réglage de couleur)', look('Image un') === null && look('Image deux') === null && look('Image trois') === null, [look('Image un'), look('Image deux')]);
+      expect('la puce verte du fichier garde sa couleur', look('Verte') === '#00aa00', look('Verte'));
+      expect('le rapport compte les puces en image une fois, rien d\'autre (pas de « signe remplacé »)', JSON.stringify(reportOf(r)) === '{"bulletImages":1}', r.report);
+      return result(bad);
+    });
+
   // --- L'ombre et le contour des lettres (« Caractère… », lot 9c de « Import PowerPoint sans perte ») -------------------------------------------------------------------------------------
   add('pptx_import_keeps_the_shadow_and_the_outline_of_the_letters',
     'L\'ombre portée d\'un texte (décalage 3 pt à 45°, flou 4 pt, noir à 40 %) et son contour plein (1 pt rouge) sont repris en `text-shadow` et `-webkit-text-stroke` ; un texte sans effet n\'en a pas ; une ombre sans couleur, une lueur et un contour en dégradé ne sont pas repris',
@@ -1880,7 +1906,7 @@
     lossCase('puce d\'un caractère inconnu d\'une police de symboles', { bulletChars: 1 }, lone(listed('<a:buFont typeface="Wingdings"/><a:buChar char="\u00b1"/>'))),
     lossCase('puce d\'un signe de plusieurs caractères', { bulletChars: 1 }, lone(listed('<a:buFont typeface="Arial"/><a:buChar char="ab"/>'))),
     lossCase('numérotation en lettres majuscules', { bulletChars: 1 }, lone(listed('<a:buAutoNum type="alphaUcPeriod"/>'))),
-    lossCase('puce en image : le retrait de la puce n\'est pas compté en plus', { bulletImages: 1 }, lone(listed('<a:buBlip><a:blip r:embed="rId2"/></a:buBlip>'))),
+    lossCase('puce en image : remplacée par le rond, comptée une fois et pas comme un signe de puce remplacé', { bulletImages: 1 }, lone(listed('<a:buBlip><a:blip r:embed="rId2"/></a:buBlip>') + listed('<a:buFont typeface="Wingdings"/><a:buBlip><a:blip r:embed="rId2"/></a:buBlip>'))),
   ];
   // Les formes et les traits.
   const objectLosses = () => [

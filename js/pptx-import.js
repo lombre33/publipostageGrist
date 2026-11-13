@@ -33,7 +33,7 @@
 //    un trait, une image, un tableau) - jamais pour un objet qui n'arrive pas (il est compté pour ce qu'il est), jamais pour un réglage que le fichier laisse à sa valeur d'origine ni pour ce que l'éditeur fait lui-même.
 //    Le texte : des tabulations aux crans propres ou alignées à droite, au centre ou sur la virgule (`tabs` ; les autres sont reprises, au cran de `defTabSz` ou du premier cran régulier), des lettres empilées ou une écriture verticale d'Asie (`vertical` ; les textes tournés d'un quart de tour sont repris), la lueur, le reflet, l'ombre intérieure ou le contour en
 //    dégradé des lettres (`textEffects`), le dégradé du texte, un souligné épais, à tirets longs ou mêlés, double ondulé ou aux mots seuls (le simple, le double, le pointillé, le tireté et l'ondulé sont repris), une
-//    police que l'éditeur n'a pas (une fois par police), une puce dont le signe ou la numérotation est remplacé par le plus proche de l'éditeur, une puce en image. Les formes et les traits : une liste de tirets illisible, ombre, lueur, reflet, bords adoucis, relief, motif, image
+//    police que l'éditeur n'a pas (une fois par police), une puce dont le signe ou la numérotation est remplacé par le plus proche de l'éditeur, une puce en image (remplacée par le rond). Les formes et les traits : une liste de tirets illisible, ombre, lueur, reflet, bords adoucis, relief, motif, image
 //    en fond, bulle ovale, objet du masque masqué, lien d'objet vers une diapositive absente du fichier, vers un fichier, un programme, une macro ou un diaporama personnalisé, ou posé sur un trait (`objectLinks` ; les autres sont repris par le cadre), texte alternatif d'un groupe ou d'un tableau. Les images : rognage en forme, niveaux de gris et autres réglages, bordure ou ombre. Un tableau : un fond en dégradé ou en motif. Une diapositive : un fond
 //    en motif, un minutage. Le fichier : ses sections et son thème (couleurs et polices figées ; dit seulement avec d'autres lignes, il ne justifie pas une fenêtre à lui seul). Chaque chantier suivant retire du rapport
 //    les lignes de ce qu'il sait reprendre.
@@ -601,12 +601,14 @@ const PptxImport = (function () {
       const bullet = kid(el, ['buNone', 'buChar', 'buAutoNum', 'buBlip']);
       if (bullet) {
         out.blip = bullet.localName === 'buBlip';
-        if (bullet.localName === 'buNone' || bullet.localName === 'buBlip') out.bullet = null;
+        // Une puce en image (`buBlip`) devient le rond de l'éditeur, de la couleur du texte (le rapport le dit) : la police d'une puce de caractère ne la touche pas.
+        if (bullet.localName === 'buNone') out.bullet = null;
+        else if (bullet.localName === 'buBlip') out.bullet = { kind: 'char', char: '•', font: '', picture: true };
         else if (bullet.localName === 'buChar') out.bullet = { kind: 'char', char: attr(bullet, 'char') || '•', font: out.bullet && out.bullet.font };
         else out.bullet = { kind: 'auto', type: attr(bullet, 'type') || 'arabicPeriod', start: numAttr(bullet, 'startAt', 1) };
       }
       const font = attr(kid(el, 'buFont'), 'typeface');
-      if (font && out.bullet) out.bullet.font = font;
+      if (font && out.bullet && !out.bullet.picture) out.bullet.font = font;
     });
     return out;
   }
@@ -821,8 +823,7 @@ const PptxImport = (function () {
     const page = shape.env.ctx.k / EMU_PER_PT;
     return {
       lineHeight: line, spaceBefore: first ? null : spaceOf(para.spcBef), spaceAfter: last ? null : spaceOf(para.spcAft),
-      // Une puce en image est retirée (le rapport le dit) : le texte reste à la marge où elle le laissait, sans retrait suspendu.
-      indentLeft: indents ? para.marL * page : null, indentFirst: indents && !para.blip ? para.indent * page : null,
+      indentLeft: indents ? para.marL * page : null, indentFirst: indents ? para.indent * page : null,
     };
   }
   // Le cran des tabulations d'un paragraphe, en EMU : celui de `defTabSz` (1 pouce, 914400, à défaut), ou, quand le paragraphe pose ses propres crans (`tabLst`), l'écart du premier si tous sont alignés à gauche et
