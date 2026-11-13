@@ -6,9 +6,10 @@
 //   accesseur) ; le relevé gelé est dev-tests/api-snapshot.json. ÉCHEC si un module disparaît, si une clé disparaît ou si une clé change de genre (une fonction devenue donnée) ; une
 //   clé AJOUTÉE n'échoue pas (une fonction neuve n'est pas une régression), elle est comptée à part. Le relevé se regèle volontairement : `node dev-tests/verify-api-snapshot.mjs --update`
 //   (à faire juste avant de commencer une série de découpes, et après chaque ajout qu'on veut protéger).
-//  LE CHARGEMENT : le widget s'ouvre sans erreur de page ; chaque `<script src>` local d'index.html existe et n'y est inscrit qu'une fois ; aucun fichier de js/ n'est orphelin (un
-//   fichier découpé dont on a oublié la balise) ; aucun module n'est appelé (`Nom.méthode`) sans exister (hors le relevé des cas connus, dans le même fichier de relevé).
-//  LES DÉTECTEURS EUX-MÊMES : quelques cas fabriqués (un module retiré, une clé retirée, un genre changé, un orphelin, un module inconnu) prouvent que chaque contrôle échoue quand il le doit.
+//  LE CHARGEMENT : le widget s'ouvre sans erreur de page ; chaque `<script src>` local d'index.html existe et n'y est inscrit qu'une fois, et de même pour chaque autre page du site (les `.html` de la
+//   racine : nouveautes.html, la fenêtre des nouveautés seule sur sa page) ; aucun fichier de js/ n'est orphelin (un fichier découpé dont on a oublié la balise : les balises des autres pages du site comptent,
+//   `js/news-page.js` n'est branché que dans nouveautes.html) ; aucun module n'est appelé (`Nom.méthode`) sans exister (hors le relevé des cas connus, dans le même fichier de relevé).
+//  LES DÉTECTEURS EUX-MÊMES : quelques cas fabriqués (un module retiré, une clé retirée, un genre changé, un orphelin, un fichier que seule une autre page charge, un module inconnu) prouvent que chaque contrôle échoue quand il le doit.
 // Lancé par run-headless.mjs (groupe Node « apiSnapshot », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-api-snapshot.mjs [--update]
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
@@ -44,8 +45,29 @@ export function extensionScripts(extensionsJs) {
   return out;
 }
 
+// Les autres pages du site, à côté d'index.html : les `.html` de la racine (`nouveautes.html`, la fenêtre des nouveautés de la V1 seule sur sa page, consigne 070), sauf index.html et les copies que les
+// essais génèrent (`_test-harness.html`, ignorée par git, son nom commence par `_`). Elles ont leurs propres balises `<script>` : `js/news-page.js` n'est branché que dans nouveautes.html.
+export const otherPageFiles = names => names.filter(f => /\.html$/.test(f) && f !== 'index.html' && !f.startsWith('_')).sort();
+
+// Les scripts locaux de ces pages, page après page, balise après balise : { 'nouveautes.html': texte } -> ['js/dom.js', …, 'js/news-page.js'].
+export const otherPagesScripts = pages => Object.values(pages).flatMap(html => localScripts(html));
+
+// Ce qui cloche dans les balises d'une autre page : un script local qui n'existe pas (`exists(chemin)` le dit) ou qu'elle inscrit deux fois ; une phrase par défaut, dans l'ordre de la page.
+export function pageScriptProblems(pages, exists) {
+  const out = [];
+  for (const [page, html] of Object.entries(pages)) {
+    const seen = new Set();
+    for (const s of localScripts(html)) {
+      if (!exists(s)) out.push(`${page} : ${s} n'existe pas`);
+      if (seen.has(s)) out.push(`${page} : ${s} est inscrit deux fois`);
+      seen.add(s);
+    }
+  }
+  return out;
+}
+
 // Les fichiers de js/ qu'aucun autre fichier ne nomme DANS SON CODE (un nom cité en commentaire ne charge rien) ni ne déclare index.html : un fichier découpé dont personne n'a branché la balise.
-// `files` : { 'js/x.js': texte }, `indexScripts` : localScripts(index.html) et les fichiers d'extensions, `extraText` : le texte d'autres fichiers qui chargent des scripts (extensions/).
+// `files` : { 'js/x.js': texte }, `indexScripts` : localScripts(index.html), les scripts des autres pages du site (otherPagesScripts) et les fichiers d'extensions, `extraText` : le texte d'autres fichiers qui chargent des scripts (extensions/).
 export function orphans(files, indexScripts, extraText = '') {
   const named = Object.entries(files).map(([f, text]) => [f, stripCode(text, true)]);
   return Object.keys(files).filter(f => {
@@ -179,6 +201,8 @@ if (!isMain) { /* importé par un autre essai : seules les fonctions ci-dessus s
   const update = process.argv.includes('--update');
   const indexHtml = readFileSync(join(ROOT, 'index.html'), 'utf8');
   const scripts = localScripts(indexHtml);
+  const otherPages = Object.fromEntries(otherPageFiles(readdirSync(ROOT)).map(f => [f, readFileSync(join(ROOT, f), 'utf8')]));
+  const otherScripts = otherPagesScripts(otherPages);
   const extScripts = extensionScripts(readFileSync(join(ROOT, 'js', 'extensions.js'), 'utf8'));
   const files = {};
   for (const f of readdirSync(join(ROOT, 'js'))) if (f.endsWith('.js')) files['js/' + f] = readFileSync(join(ROOT, 'js', f), 'utf8');
@@ -193,10 +217,13 @@ if (!isMain) { /* importé par un autre essai : seules les fonctions ci-dessus s
   const seen = new Set();
   const twice = scripts.filter(s => (seen.has(s) ? true : (seen.add(s), false)));
   check('index.html : aucun script local inscrit deux fois', twice.length === 0, twice.join('\n'));
+  // Les autres pages du site (nouveautes.html) : chacune de leurs balises pointe un fichier qui existe, une seule fois par page.
+  const pageProblems = pageScriptProblems(otherPages, s => existsSync(join(ROOT, s)));
+  check('autres pages du site (nouveautes.html) : chaque script local existe et n\'est inscrit qu\'une fois', pageProblems.length === 0, pageProblems.join('\n'));
 
-  // 2. Aucun fichier de js/ orphelin.
-  const orphanList = orphans(Object.fromEntries(Object.entries(files).filter(([f]) => f.startsWith('js/'))), [...scripts, ...extScripts], Object.entries(files).filter(([f]) => f.startsWith('extensions/')).map(([, t]) => t).join('\n'));
-  check('js/ : aucun fichier que personne ne charge ni ne nomme (balise oubliée après une découpe)', orphanList.length === 0, orphanList.join('\n'));
+  // 2. Aucun fichier de js/ orphelin : index.html, les autres pages du site, js/extensions.js et le code des autres fichiers sont ceux qui chargent ou nomment.
+  const orphanList = orphans(Object.fromEntries(Object.entries(files).filter(([f]) => f.startsWith('js/'))), [...scripts, ...otherScripts, ...extScripts], Object.entries(files).filter(([f]) => f.startsWith('extensions/')).map(([, t]) => t).join('\n'));
+  check('js/ : aucun fichier que personne ne charge ni ne nomme (index.html, autres pages du site, extensions, code ; balise oubliée après une découpe)', orphanList.length === 0, orphanList.join('\n'));
 
   // 3. Le widget s'ouvre ; le relevé de l'API.
   // Un script oublié ou un ordre de chargement cassé empêche souvent le widget d'être prêt : on le dit au bout d'une minute, avec les erreurs de la page, au lieu d'attendre les trois minutes de load-lib.
@@ -295,6 +322,14 @@ if (!isMain) { /* importé par un autre essai : seules les fonctions ci-dessus s
   check('détecteur : une fonction devenue donnée est vue', compareSnapshots(base, { A: 'run:d size:d', B: base.B }).changedKinds.length === 1);
   check('détecteur : une clé ajoutée n\'échoue pas', (() => { const d = compareSnapshots(base, { A: 'extra:f run:f size:d', B: base.B, C: 'x:f' }); return d.removedKeys.length + d.changedKinds.length + d.removedModules.length === 0 && d.addedKeys.join() === 'A.extra' && d.addedModules.join() === 'C'; })());
   check('détecteur : un fichier que personne ne nomme est un orphelin', orphans({ 'js/a.js': 'A.run(); load(\'js/d.js\')', 'js/b-part.js': 'x', 'js/c.js': '// voir b-part.js', 'js/d.js': 'y' }, ['js/a.js']).join() === 'js/b-part.js,js/c.js');
+  check('détecteur : un fichier que seule une autre page du site charge n\'est pas un orphelin, la même page sans sa balise le rend orphelin', (() => {
+    const files = { 'js/a.js': 'A.run()', 'js/news.js': 'x' };
+    const page = tag => ({ 'nouveautes.html': `<script src="js/a.js"></script>${tag}` });
+    return orphans(files, ['js/a.js', ...otherPagesScripts(page('<script src="js/news.js?v=2"></script>'))]).length === 0
+      && orphans(files, ['js/a.js', ...otherPagesScripts(page(''))]).join() === 'js/news.js';
+  })());
+  check('détecteur : les autres pages du site sont les .html de la racine, sans index.html ni les copies générées (_test-harness.html)', otherPageFiles(['nouveautes.html', 'index.html', '_test-harness.html', 'README.md', 'autre.html']).join() === 'autre.html,nouveautes.html');
+  check('détecteur : un script d\'une autre page qui n\'existe pas, ou qui y est inscrit deux fois, est vu', pageScriptProblems({ 'p.html': '<script src="js/a.js"></script><script src="js/a.js?v=2"></script><script src="js/gone.js"></script><script src="https://cdn.x/y.js"></script>' }, s => s !== 'js/gone.js').join('|') === 'p.html : js/a.js est inscrit deux fois|p.html : js/gone.js n\'existe pas');
   check('détecteur : un appel sur un module inconnu est relevé, pas une variable locale', (() => { const c = calledModules('const Local = {}; Local.a(); Ghost.run(); // Fake.x\nconst s = "Str.y";'); return c.has('Ghost') && !c.has('Local') && !c.has('Fake') && !c.has('Str'); })());
   check('détecteur : les fichiers d\'une extension sont lus dans js/extensions.js', extensionScripts("a: { scripts: ['x.js', 'y.js'], styles: [] }, 'lecture-pdf': { nameKey: 'k', scripts: ['z.js'] }").join() === 'extensions/a/x.js,extensions/a/y.js,extensions/lecture-pdf/z.js');
   check('détecteur : une table de textes (js/i18n-texts-*.js) n\'est pas un module du relevé, un autre fichier de js/ l\'est', isTextTable('js/i18n-texts-export.js') && !isTextTable('js/i18n.js') && !isTextTable('js/export-menu.js'), null);
