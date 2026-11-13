@@ -239,10 +239,10 @@
       }
       Object.keys(requested).forEach(id => requested[id].forEach(target => { if (!realGet.call(document, target)) problems.push(id + ' : #' + target + ' n\'existe pas dans index.html'); }));
       const notRun = Object.keys(ran).filter(id => !ran[id]).sort();
-      // Rien à presser dans l'état de départ : pas de modèle à marquer par défaut, ni de modifications suivies à accepter ou refuser, ni de mise en forme copiée à appliquer, ni d'image sélectionnée pour son texte alternatif (sa touche a son propre test, groupe altText) (le clic du pinceau est
+      // Rien à presser dans l'état de départ : pas de modèle à marquer par défaut, ni de modifications suivies à accepter ou refuser, ni de mise en forme copiée à appliquer, ni d'image sélectionnée pour son texte alternatif (sa touche a son propre test, groupe altText) ni de présentation pour « Animation… » (sa ligne du menu « Objets » est grisée hors d'une présentation ; son essai à la souris : groupe frameAnim) (le clic du pinceau est
       // avalé ici ; sa touche d'application a son propre test, groupe formatPainter).
       // Ni de bulle sélectionnée pour « Voir la valeur de la variable » (js/variable-tip.js : sa ligne a son propre test, groupe varValueTip, qui la lance bulle sélectionnée).
-      const expectedNotRun = ['acceptAll', 'rejectAll', 'setDefault', 'formatPaste', 'formatClear', 'nextReviewVariable', 'altText', 'variableValue'].sort();
+      const expectedNotRun = ['acceptAll', 'rejectAll', 'setDefault', 'formatPaste', 'formatClear', 'nextReviewVariable', 'altText', 'variableValue', 'blockAnimation'].sort();
       const unexpected = notRun.filter(id => expectedNotRun.indexOf(id) === -1);
       const groupsWithoutAction = Shortcuts.GROUPS.filter(g => !Shortcuts.ACTIONS.some(a => a.group === g));
       const count = Shortcuts.ACTIONS.length;

@@ -2173,6 +2173,7 @@ const EditorNodes = (function () {
           if (nodeAttrs.pageLeftPt != null) attrs['data-page-left-pt'] = String(nodeAttrs.pageLeftPt);
           if (nodeAttrs.pageTopPt != null) attrs['data-page-top-pt'] = String(nodeAttrs.pageTopPt);
           if (nodeAttrs.repeat) attrs['data-repeat'] = 'true';
+          if (nodeAttrs.anim) attrs['data-ff-anim'] = nodeAttrs.anim;   // l'animation de l'image (js/block-anim.js)
           if (AltText.isDecorative(nodeAttrs.decorative)) attrs['data-decorative'] = 'true';
           if (nodeAttrs.varTable) {
             attrs['data-var-table'] = nodeAttrs.varTable;

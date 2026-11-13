@@ -363,7 +363,7 @@ async function run(lang, colorScheme) {
   await leave();
   await hoverObjectsButton(page);
   const objects = await page.evaluate((sel) => Array.from(document.querySelector(sel).querySelectorAll('[data-action]')).map(b => b.dataset.action), OBJECTS_MENU);
-  check(tag + 'le menu « Objets » ne propose plus la vidéo : ses quatre premières lignes sont le cadre de texte, le tableau, la vue d\'une diapositive et le tableau d\'un modèle Grille', objects.slice(0, 4).join() === 'textFrame,table,slideView,linkedTable' && objects.indexOf('video') === -1, objects);
+  check(tag + 'le menu « Objets » ne propose plus la vidéo : ses cinq premières lignes sont le cadre de texte, le tableau, la vue d\'une diapositive, l\'animation et le tableau d\'un modèle Grille', objects.slice(0, 5).join() === 'textFrame,table,slideView,animation,linkedTable' && objects.indexOf('video') === -1, objects);
   await leave();
   await openBlocks();
   const blocks = await page.evaluate(() => {

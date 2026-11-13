@@ -1,5 +1,6 @@
 // La fenêtre « Animation… » d'un objet de diapositive (extension « diapositives » de Grist Factory Suite ; chantier 8c de l'import PowerPoint : « animations d'objets »). Le bouton « Animation… »
-// de la barre de l'objet sélectionné (js/free-frame.js) l'ouvre pour lui. Le socle (js/frame-anim.js) garde le réglage dans le HTML de l'objet et joue les mouvements ; ce fichier ne fait que
+// de la barre de l'objet sélectionné (js/free-frame.js) l'ouvre pour lui, et la ligne « Animation… » du menu « Objets » (js/objects-menu.js) ou la commande de la palette l'ouvre pour l'élément du curseur (un
+// paragraphe, un titre, un point de liste, une image, un tableau : js/block-anim.js). Le socle (js/frame-anim.js) garde le réglage dans le HTML de l'objet et joue les mouvements ; ce fichier ne fait que
 // les proposer et les poser.
 //  - Un BROUILLON, comme la fenêtre « Transition… » (slide-transitions-ui.js, dont il reprend les boutons radio et les styles) : l'effet, son type (entrée ou sortie), son côté, son départ
 //    (au clic, avec ou après la précédente), sa durée et son délai se choisissent sans rien écrire ; « Appliquer » pose l'animation sur l'objet (UN pas d'historique), « Annuler » (ou Échap)
@@ -118,7 +119,7 @@ const FrameAnimUi = (function () {
     durations.addEventListener('click', event => choose('dur', event));
     delays.addEventListener('click', event => choose('delay', event));
     [effects, kinds, sides, starts, durations, delays].forEach(one => one.addEventListener('keydown', event => onRadioKey(one, event)));
-    refs = { win: win.box, effects, kinds, sides, starts, durations, delays, preview, box };
+    refs = { win: win.box, intro, effects, kinds, sides, starts, durations, delays, preview, box };
   }
 
   // Le brouillon et ce que la fenêtre en montre : { effect ('' : aucune), exit, side, start, dur, delay } ; l'ordre dans la diapositive (`order`) est celui de l'objet, que la fenêtre ne change pas.
@@ -204,12 +205,23 @@ const FrameAnimUi = (function () {
     timers.push(setTimeout(replay, PREVIEW_DELAY_MS));
   }
 
-  // Ouvre la fenêtre pour l'objet qui est à la position `pos` du texte de l'éditeur. `onClose` : rend le clavier à qui l'avait.
+  // Ce que la fenêtre dit de l'objet qu'elle règle : la phrase d'un cadre, forme ou ligne ; pour un élément du texte, sa sorte et ses premiers mots (« paragraphe « Bonjour à… » »).
+  const EXCERPT = 40;
+  function introOf(node) {
+    if (BlockAnim.TYPES.indexOf(node.type.name) < 0) return I18n.t('frame.anim.intro');
+    const text = node.type.name === 'editorImage' ? '' : node.textContent.replace(/\s+/g, ' ').trim();
+    const kind = I18n.t('frame.anim.unit.' + node.type.name);
+    const unit = text ? I18n.t('frame.anim.unitText', { kind, text: text.length > EXCERPT ? text.slice(0, EXCERPT).trim() + '…' : text }) : kind;
+    return I18n.t('frame.anim.introUnit', { unit });
+  }
+  // Ouvre la fenêtre pour l'objet ou l'élément du texte qui est à la position `pos` du texte de l'éditeur (un cadre, une forme, une ligne, un paragraphe, un titre, un point de liste, une image, un tableau :
+  // js/block-anim.js). `onClose` : rend le clavier à qui l'avait.
   function open(ed, pos, onClose) {
     const node = ed && ed.state.doc.nodeAt(pos);
     if (!node) return;
     ensure();
-    const a = FrameAnim.normalized(FreeFrame.normalized(node.attrs).anim);
+    refs.intro.textContent = introOf(node);
+    const a = FrameAnim.normalized(BlockAnim.textOf(node));
     state = { ed, pos, onClose, order: a ? a.order : 0, draft: { effect: a ? a.effect : '', exit: a ? a.exit : false, side: a && a.side ? a.side : 'b', start: a ? a.start : 'click', dur: a && a.dur ? a.dur : FrameAnim.DURATION.def, delay: a ? a.delay : 0 } };
     dropExtras();
     addChoice(refs.durations, state.draft.dur);
@@ -239,7 +251,7 @@ const FrameAnimUi = (function () {
     const node = ed.state.doc.nodeAt(pos);
     close();
     if (!node) { SlidesEntry.status(I18n.t('frame.anim.gone')); return; }
-    if (!FreeFrame.patch(ed, pos, { anim: text }, true)) { SlidesEntry.status(I18n.t('frame.anim.unchanged')); return; }
+    if (!BlockAnim.patch(ed, pos, text, true)) { SlidesEntry.status(I18n.t('frame.anim.unchanged')); return; }
     SlidesEntry.status(I18n.t(text ? 'frame.anim.applied' : 'frame.anim.removed'));
   }
 

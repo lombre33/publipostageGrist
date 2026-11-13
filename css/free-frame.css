@@ -230,6 +230,8 @@
    plus long des noms (« Cadre de texte », « Vue… ») tienne dans la largeur de la grille des formes, sans élargir le menu. */
 #v2-objects-flyout .v2-objects-pair { display: flex; gap: 2px; }
 #v2-toolbar #v2-objects-flyout .v2-objects-pair > .v2-menu-row { flex: 1 1 auto; width: auto; min-width: 0; gap: 4px; padding-left: 4px; padding-right: 4px; white-space: nowrap; }
+/* « Animation… » : une icône seule au bout de la ligne (son nom est l'info-bulle et le nom accessible), de 26 px (le menu ne dépasse pas 300 px de large : verify-slide-view.mjs). */
+#v2-toolbar #v2-objects-flyout .v2-objects-pair > .v2-menu-row.v2-objects-icon-only { flex: none; width: 26px; justify-content: center; padding-left: 0; padding-right: 0; }
 #v2-objects-flyout .v2-objects-lines-row { display: flex; align-items: center; }
 #v2-objects-flyout .v2-objects-lines-row > .v2-hover-flyout-label { flex: none; padding-top: 0; padding-bottom: 0; }
 #v2-objects-flyout .v2-objects-lines-row > .v2-objects-grid { grid-template-columns: repeat(3, 30px); padding-bottom: 0; }

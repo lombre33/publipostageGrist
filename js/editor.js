@@ -543,6 +543,8 @@ const Editor = (function () {
       TextDirection.createExtension(Extension),
       // « Paragraphe… » (js/paragraph-format.js) : l'interligne, l'espace avant et après et les retraits d'un paragraphe, cinq attributs du paragraphe, sans plugin.
       ParagraphFormat.createExtension(Extension),
+      // L'animation d'un élément du texte d'une diapositive (js/block-anim.js) : un attribut du paragraphe, du titre, du point de liste, de l'image et du tableau, sans plugin.
+      BlockAnim.createExtension(Extension),
       // « Caractère… » (js/character-format.js) : l'espacement des caractères et les petites capitales, deux réglages de la marque textStyle, sans plugin.
       CharacterFormat.createExtension(Extension),
       BulletFormat.createExtension(Extension),

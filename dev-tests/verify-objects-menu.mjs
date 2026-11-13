@@ -3,7 +3,7 @@
 // 22/10 : « le bouton d'ajout des formes n'a rien à faire en bas à gauche, ça doit être dans la tool bar en haut comme tout le reste du contenu »), à la vraie souris et au vrai clavier, 700x400,
 // français clair puis anglais sombre, hébergé par GFS (simulé par dev-tests/gfs-stub.js) ou seul. Le geste lui-même (poser un cadre, une forme, une ligne) a ses essais : dev-tests/verify-free-frame.mjs
 // (l'entrée, le menu, le clavier, le cadre), verify-shapes.mjs et verify-lines.mjs (chaque forme, chaque ligne).
-//  HÉBERGÉ, EXTENSION ACTIVE : devant une présentation le bouton n'est pas grisé (ses vingt-trois choix se voient) ; devant un document, un email ou un macro-modèle il se grise sur place (aria-disabled,
+//  HÉBERGÉ, EXTENSION ACTIVE : devant une présentation le bouton n'est pas grisé (ses vingt-quatre choix se voient) ; devant un document, un email ou un macro-modèle il se grise sur place (aria-disabled,
 //   son nom reste « Objets ») et son menu s'ouvre quand même pour dire « Les objets se posent sur une diapositive » (lisible, >= 4,5:1, aucun choix) ; rien ne se pose, ni au clic ni au clavier ;
 //   ouvrir une présentation le dégrise, rouvrir un document le grise.
 //  EXTENSION ÉTEINTE EN DIRECT (événement `extensions`) : le bouton se grise avec la raison de l'extension, son clic appelle `installer` de GFS (pas de fenêtre) ; rallumée, il redevient utilisable.
@@ -102,7 +102,20 @@ async function runHosted(lang, colorScheme) {
   check(tag + 'devant une présentation le bouton n\'est pas grisé (aria-disabled « false », opaque), nommé d\'après la diapositive du curseur (« ' + T.buttonTip(1) + ' »), menu fermé', s.disabled === 'false' && s.opacity === 1 && !s.explains && s.label === T.buttonTip(1) && s.expanded !== 'true' && !s.menu, s);
   await hoverObject(page, 'textFrame');
   s = await stateOf(page);
-  check(tag + 'son menu montre ses vingt-trois choix (quatre lignes : cadre de texte, tableau, vue, tableau d\'un modèle Grille ; seize formes ; trois lignes) et aucune raison', !s.off && s.choices === 23 && s.reason === '' && s.title === T.menu && inPanel(s.menu, 700, 400), s);
+  check(tag + 'son menu montre ses vingt-quatre choix (cinq lignes : cadre de texte, tableau, vue et animation côte à côte, tableau d\'un modèle Grille ; seize formes ; trois lignes) et aucune raison', !s.off && s.choices === 24 && s.reason === '' && s.title === T.menu && inPanel(s.menu, 700, 400), s);
+  // « Animation… » est le quatrième bouton de la ligne du haut : une icône seule, nommée par aria-label ; au clavier, ← → parcourent les quatre d'un trait et bouclent.
+  const pairLine = await page.evaluate(() => Array.from(document.querySelectorAll('#v2-objects-flyout .v2-objects-pair > [data-action]')).map(b => b.dataset.action + (b.textContent.trim() ? '' : '(icône)')).join(','));
+  check(tag + 'la ligne du haut a quatre boutons : cadre de texte, tableau, vue, animation (icône seule)', pairLine === 'textFrame,table,slideView,animation(icône)', pairLine);
+  await leave(page);
+  await page.focus(OBJECTS_BUTTON);
+  await page.keyboard.press('Enter');
+  const walked = [];
+  for (let step = 0; step < 5; step++) {
+    walked.push(await page.evaluate(() => (document.activeElement && document.activeElement.dataset.action) || ''));
+    await page.keyboard.press('ArrowRight');
+  }
+  check(tag + 'au clavier, → parcourt la ligne du haut d\'un trait et revient au premier après l\'animation', walked.join(',') === 'textFrame,table,slideView,animation,textFrame', walked.join(','));
+  await page.keyboard.press('Escape');
   await snap(page, `presentation-${lang}-${colorScheme}`);
   await leave(page);
 
@@ -227,7 +240,7 @@ async function runSmall() {
   check(tag + 'le bouton « Objets » est dans la barre, derrière « Image », entier dans le panneau, au premier plan', !!button && !!image && button.left >= image.right - 1 && inPanel(button, 600, 400) && await onTop(page, OBJECTS_BUTTON), { button, image });
   await hoverObject(page, 'line:double');
   const s = await stateOf(page);
-  check(tag + 'son menu est entier dans le panneau, la dernière ligne et la dernière forme reçoivent le clic', s.choices === 23 && inPanel(s.menu, 600, 400) && await onTop(page, objectRow('line:double')) && await onTop(page, objectRow('shape:wedgeRoundRectCallout')) && await onTop(page, objectRow('textFrame')), s);
+  check(tag + 'son menu est entier dans le panneau, la dernière ligne et la dernière forme reçoivent le clic', s.choices === 24 && inPanel(s.menu, 600, 400) && await onTop(page, objectRow('line:double')) && await onTop(page, objectRow('shape:wedgeRoundRectCallout')) && await onTop(page, objectRow('textFrame')), s);
   await snap(page, 'petit-panneau');
   await page.close?.();
 }

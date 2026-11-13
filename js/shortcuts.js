@@ -342,6 +342,8 @@ const Shortcuts = (function () {
       { id: 'table', group: 'insert', label: 'insert.table', key: '', scope: 'editor', hint: '#v2-table-flyout .v2-hover-flyout-label', aria: tip('v2-btn-table'), run: click('v2-btn-table') },
       { id: 'twoColumns', group: 'insert', label: 'insert.twoColumns', key: '', scope: 'editor', hint: tip('v2-btn-two-columns'), run: click('v2-btn-two-columns') },
       { id: 'image', group: 'insert', label: 'shortcuts.action.image', key: '', scope: 'editor', hint: '#v2-image-flyout .v2-hover-flyout-label', aria: tip('v2-btn-image'), run: click('v2-btn-image') },
+      // « Animation… » de l'élément du curseur (js/block-anim.js) : la ligne du menu « Objets » (grisée hors d'une présentation, donc la palette de commandes la grise aussi) ; sans touche d'origine.
+      { id: 'blockAnimation', group: 'insert', label: 'shortcuts.action.blockAnimation', key: '', scope: 'editor', hint: tip('v2-btn-block-animation'), run: click('v2-btn-block-animation') },
       { id: 'pageBreak', group: 'insert', label: 'insert.pageBreak.tip', key: 'Alt+Enter', scope: 'editor', hint: tip('v2-btn-page-break'), run: click('v2-btn-page-break') },
       { id: 'toc', group: 'insert', label: 'insert.toc.tip', key: '', scope: 'editor', hint: tip('v2-btn-toc'), run: click('v2-btn-toc') },
       // La marque qui arrête la section répétée par un titre en boucle (js/loop-sections.js) : pas de bouton, la palette de commandes (Alt+/) et la fenêtre de la Boucle la proposent.

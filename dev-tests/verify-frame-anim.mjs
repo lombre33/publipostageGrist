@@ -6,8 +6,11 @@
 //   à l'effet sont grisés avec leur raison ; « Appliquer » pose l'animation en UN pas d'historique, « Aucune » la retire, « Annuler » ne change rien.
 //  LE DIAPORAMA : un objet qui entre n'est pas là à l'arrivée, l'animation « avec » du début se joue seule, chaque suivant joue un pas avant de passer à la diapositive d'après, précédent défait un
 //   pas, une sortie cache l'objet, revenir en arrière rend tout joué ; la Lecture et les exports gardent chaque objet à sa place.
+//  LES ÉLÉMENTS DU TEXTE (demande du 13/11, js/block-anim.js) : un paragraphe, un titre, un point de liste (avec ses sous-points), un tableau et les paragraphes d'un cadre portent leur `data-ff-anim` ; Entrée ne
+//   le propage pas ; l'élément du curseur est visé (le point plutôt que son paragraphe, le tableau plutôt que sa case) ; la ligne « Animation… » du menu « Objets » ouvre la fenêtre pour lui et pose le
+//   réglage en UN pas d'historique ; le diaporama les joue un par un, les sous-points avec leur point ; l'éditeur ne bouge pas.
 // Lancé par run-headless.mjs (groupe Node "frameAnim", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-frame-anim.mjs
-import { start, seedModels, contrastOf, WIDTH, HEIGHT } from './gfs-page.mjs';
+import { start, seedModels, contrastOf, WIDTH, HEIGHT, OBJECTS_MENU, objectRow, hoverObject, chooseObject } from './gfs-page.mjs';
 
 const t = await start({ name: 'verify-frame-anim', port: Number(process.env.FRAME_ANIM_PORT || 9160) });
 const { check } = t;
@@ -25,10 +28,17 @@ const SLIDES = [
 ].join(BR);
 const HAND = `<h2>Main</h2>${FRAME(40, 100, 200, 60, 'fly:q out d5 w-3', 'M1')}${FRAME(260, 100, 200, 60, 'bogus', 'M2')}${FRAME(480, 100, 160, 60, 'zoom:l d99999 w99999 n500', 'M3')}`;
 const ORDER = `<h2>Ordre</h2>${FRAME(40, 100, 200, 60, 'fade', 'O1')}${FRAME(260, 100, 200, 60, 'fade', 'O2')}${FRAME(480, 100, 160, 60, 'fade n1', 'O3')}`;
+// 10 « Blocs » : une diapositive dont les ÉLÉMENTS DU TEXTE portent une animation - un cadre à deux paragraphes animés (« un paragraphe à la fois »), un titre, un paragraphe (l'autre est libre), un point de liste
+// avec son sous-point (non animé : il arrive avec son point), un autre point, un tableau.
+const BLOCKS = `<div class="pp-free-frame" role="group" data-ff-x="40" data-ff-y="260" data-ff-w="300" data-ff-h="60"><div class="pp-free-frame-box"><div class="pp-free-frame-content"><p data-ff-anim="fade">Alpha</p><p data-ff-anim="fade">Beta</p></div></div></div>`
+  + `<h2 data-ff-anim="appear">Titre anime</h2><p data-ff-anim="fade">Premier paragraphe</p><p>Paragraphe libre</p>`
+  + `<ul><li data-ff-anim="fade"><p>Point un</p><ul><li><p>Sous-point</p></li></ul></li><li data-ff-anim="appear"><p>Point deux</p></li></ul>`
+  + `<table data-ff-anim="fade"><tbody><tr><td><p>Case</p></td></tr></tbody></table>`;
 const SEED = seedModels({ record: RECORD }) + `
   add(7, 'Anim', '${SLIDES}', false, 'presentation');
   add(8, 'Valeurs', '${HAND}', false, 'presentation');
   add(9, 'Ordre', '${ORDER}', false, 'presentation');
+  add(10, 'Blocs', '${BLOCKS}', false, 'presentation');
   stub.state.nextRowId.Publipostage_Modeles = 30;
 `;
 
@@ -364,6 +374,121 @@ async function run(lang, colorScheme, full) {
   s = await stageState(page);
   check(tag + 'les clics suivants jouent O1 puis O2', !s.by.O1.hidden && !s.by.O2.hidden && /^1\D+1/.test(s.counter), s);
   await press('Escape', 400);
+
+  // --- 6. Les éléments du texte.
+  console.log('\n' + tag + '6) Tout élément du texte s\'anime : paragraphe, titre, point de liste, tableau, paragraphes d\'un cadre');
+  await open(10);
+  let w = null;
+  const animated = () => page.evaluate(() => {
+    const out = [];
+    EditorCore.getEditor().state.doc.descendants((node) => { if (node.type.name !== 'freeFrame' && node.attrs && node.attrs.anim) out.push(node.type.name + ':' + node.textContent + '=' + node.attrs.anim); });
+    return out;
+  });
+  const got = await animated();
+  check(tag + 'les réglages sont lus dans le HTML : deux paragraphes du cadre, le titre, un paragraphe, deux points de liste (le premier avec son sous-point) et le tableau',
+    got.join(' | ') === 'paragraph:Alpha=fade | paragraph:Beta=fade | heading:Titre anime=appear | paragraph:Premier paragraphe=fade | listItem:Point unSous-point=fade | listItem:Point deux=appear | table:Case=fade', got);
+  const savedHtml = await page.evaluate(() => Editor.getHTML());
+  check(tag + 'le HTML enregistré redit chaque réglage, sur l\'élément lui-même, et seulement ceux-là (sept)', (savedHtml.match(/data-ff-anim="/g) || []).length === 7 && /<h2[^>]*data-ff-anim="appear"/.test(savedHtml) && /<li[^>]*data-ff-anim="fade"/.test(savedHtml) && /<table[^>]*data-ff-anim="fade"/.test(savedHtml), (savedHtml.match(/<[a-z0-9]+[^>]*data-ff-anim="[^"]*"/g) || []));
+  const unitFor = needle => page.evaluate((word) => {
+    const ed = EditorCore.getEditor();
+    let at = -1;
+    ed.state.doc.descendants((node, pos) => { if (at < 0 && node.isText && node.text.includes(word)) at = pos + 1; });
+    ed.commands.focus();
+    ed.commands.setTextSelection(at);
+    const unit = BlockAnim.unitAt(ed.state);
+    return unit ? unit.node.type.name + ':' + unit.node.textContent : null;
+  }, needle);
+  const units = [await unitFor('Titre anime'), await unitFor('libre'), await unitFor('Point un'), await unitFor('Sous-point'), await unitFor('Case'), await unitFor('Beta')];
+  check(tag + 'l\'élément du curseur est visé : le titre, le paragraphe, le POINT (non son paragraphe), le sous-point (non son parent), le TABLEAU (non sa case), le paragraphe du cadre',
+    units.join(' | ') === 'heading:Titre anime | paragraph:Paragraphe libre | listItem:Point unSous-point | listItem:Sous-point | table:Case | paragraph:Beta', units);
+  const frameUnit = await page.evaluate(() => { const ed = EditorCore.getEditor(); let at = -1; ed.state.doc.forEach((node, pos) => { if (at < 0 && node.type.name === 'freeFrame') at = pos; }); FreeFrame.select(ed, at); const unit = BlockAnim.unitAt(ed.state); return unit && unit.node.type.name; });
+  check(tag + 'un cadre sélectionné est lui-même visé', frameUnit === 'freeFrame', frameUnit);
+  // Entrée à la fin d'un paragraphe animé : le suivant ne l'est pas.
+  await page.evaluate(() => {
+    const ed = EditorCore.getEditor();
+    let at = -1;
+    ed.state.doc.descendants((node, pos) => { if (at < 0 && node.type.name === 'paragraph' && node.textContent === 'Premier paragraphe') at = pos + node.nodeSize - 1; });
+    ed.commands.focus();
+    ed.commands.setTextSelection(at);
+  });
+  await press('Enter', 200);
+  const afterEnter = await page.evaluate(() => { const out = []; EditorCore.getEditor().state.doc.descendants((node) => { if (node.type.name === 'paragraph' && /^(Premier paragraphe|)$/.test(node.textContent) && node.attrs.anim !== undefined) out.push(node.textContent + '=' + node.attrs.anim); }); return out.join('|'); });
+  check(tag + 'Entrée à la fin d\'un paragraphe animé ouvre un paragraphe qui ne l\'est pas (le réglage ne se propage pas)', afterEnter.startsWith('Premier paragraphe=fade|=') && !/=fade\|=fade/.test(afterEnter), afterEnter);
+  await press('Control+z');
+  await press('Control+z');
+  // La ligne « Animation… » du menu « Objets » : la fenêtre pour l'élément du curseur.
+  await unitFor('Premier paragraphe');
+  // Un menu de la barre encore ouvert sous la souris recouvrirait le bouton « Objets » : la souris quitte la barre d'abord.
+  await page.mouse.move(350, 330, { steps: 3 });
+  await sleep(500);
+  await hoverObject(page, 'animation');
+  const row = await page.evaluate(({ selector, menuSelector }) => {
+    const b = document.querySelector(selector);
+    const menu = document.querySelector(menuSelector);
+    if (!b || !menu) return null;
+    const r = b.getBoundingClientRect();
+    const m = menu.getBoundingClientRect();
+    return { label: b.getAttribute('aria-label') || '', tip: b.dataset.tip || b.title || '', text: b.textContent.trim(), shown: r.width > 0 && r.height > 0, inView: r.top >= 0 && r.bottom <= window.innerHeight && r.left >= m.left - 1 && r.right <= m.right + 1, menuInView: m.bottom <= window.innerHeight, disabled: b.disabled };
+  }, { selector: objectRow('animation'), menuSelector: OBJECTS_MENU });
+  check(tag + `le menu « Objets » a le bouton « ${T.button} » (une icône au bout de la ligne), visible en entier dans 700x400, actif dans une présentation`, !!row && row.label === T.button && row.text === '' && row.shown && row.inView && row.menuInView && !row.disabled, row);
+  await chooseObject(page, 'animation');
+  await sleep(300);
+  w = await windowState();
+  const introText = await page.evaluate(() => (document.getElementById('pp-frame-anim-intro') || {}).textContent || '');
+  check(tag + 'la ligne ouvre la fenêtre pour le paragraphe du curseur : elle le nomme et montre son fondu', !!w && w.groups.effects.checked.join() === 'fade' && introText.includes(lang === 'fr' ? 'paragraphe « Premier paragraphe »' : 'paragraph “Premier paragraphe”'), { introText, groups: w && w.groups.effects });
+  check(tag + 'la fenêtre tient dans 700x400', !!w && w.inView && w.okInBox && Object.values(w.groups).every(g => g.inBox), w);
+  await click(inWindow('fly'));
+  await click('#pp-frame-anim .pp-slide-transition-sides [data-value="l"]');
+  await forget();
+  await click('#pp-frame-anim .var-modal-primary');
+  const second = (await animated()).find(line => line.startsWith('paragraph:Premier paragraphe')) || '';
+  check(tag + 'Appliquer pose « fly:l » sur ce paragraphe, la ligne d\'état le dit', second === 'paragraph:Premier paragraphe=fly:l' && (await said()).includes(T.applied), { second, said: await said() });
+  await press('Control+z');
+  const undone = (await animated()).find(line => line.startsWith('paragraph:Premier paragraphe')) || '';
+  check(tag + 'UN Ctrl+Z le rend', undone === 'paragraph:Premier paragraphe=fade', undone);
+  // Un élément du texte sans animation : « Aucune » reste le choix, Appliquer ne change rien.
+  await unitFor('libre');
+  const viaAction = await page.evaluate(() => { const action = Shortcuts.ACTIONS.find(a => a.id === 'blockAnimation'); return !!action && typeof action.run === 'function' && action.key === ''; });
+  check(tag + 'la commande « Animation de l\'élément… » existe pour la palette et Réglages > Raccourcis, sans touche d\'origine', viaAction, '');
+  await page.evaluate(() => Shortcuts.ACTIONS.find(a => a.id === 'blockAnimation').run());
+  await sleep(300);
+  w = await windowState();
+  check(tag + 'la commande ouvre la fenêtre pour le paragraphe libre : aucun effet n\'est coché', !!w && w.groups.effects.checked.join() === '', w && w.groups.effects);
+  await press('Escape', 300);
+  check(tag + 'Échap referme la fenêtre sans rien changer', (await animated()).length === 7 && !(await windowState()), await animated());
+
+  // Le diaporama joue les éléments un par un : le cadre paragraphe par paragraphe, puis le texte dans l'ordre.
+  const elementsState = () => page.evaluate(() => {
+    const host = document.querySelector('.pp-slide-show-host');
+    const root = host && host.shadowRoot ? host.shadowRoot : document.querySelector('.pp-slide-show');
+    const seen = (n) => getComputedStyle(n).visibility !== 'hidden';
+    const out = {};
+    root.querySelectorAll('[data-ff-anim]').forEach((n) => { out[n.textContent.trim().replace(/\s+/g, ' ').slice(0, 18)] = seen(n); });
+    const sub = Array.from(root.querySelectorAll('li')).find(li => li.textContent.trim() === 'Sous-point');
+    out.sub = !!sub && seen(sub);
+    out.counter = (document.querySelector('.pp-slide-show-counter') || {}).textContent || '';
+    return out;
+  });
+  await open(10);
+  await page.evaluate(() => { EditorCore.getEditor().commands.focus('start'); });
+  await startShow();
+  let e = await elementsState();
+  check(tag + 'à l\'arrivée, aucun élément animé n\'est là (cadre, titre, paragraphe, points, tableau), ni le sous-point d\'un point animé ; le paragraphe libre y est', !e.Alpha && !e.Beta && !e['Titre anime'] && !e['Premier paragraphe'] && !e['Point unSous-point'] && !e['Point deux'] && !e.Case && !e.sub, e);
+  const wanted = ['Alpha', 'Beta', 'Titre anime', 'Premier paragraphe', 'Point unSous-point', 'Point deux', 'Case'];
+  for (let k = 0; k < wanted.length; k++) {
+    await press('ArrowRight', 120);
+    e = await elementsState();
+    const shown = wanted.filter(name => e[name]);
+    check(tag + `clic ${k + 1} : seuls ${wanted.slice(0, k + 1).join(', ')} sont là${k === 4 ? ' (le sous-point arrive avec son point)' : ''}`, shown.join('|') === wanted.slice(0, k + 1).join('|') && e.sub === (k >= 4), { shown, sub: e.sub });
+  }
+  await press('ArrowLeft', 300);
+  e = await elementsState();
+  check(tag + 'un précédent défait le dernier pas : le tableau n\'est plus là, tout le reste y est', !e.Case && e['Point deux'] && e.sub, e);
+  await press('Escape', 400);
+  const notMoved = await page.evaluate(() => Array.from(document.querySelectorAll('#editor-container [data-ff-anim]')).filter(n => (n.matches('.pp-free-frame') ? n.firstElementChild : n)).map(n => getComputedStyle(n).visibility + '|' + n.getAnimations().length).join(' '));
+  check(tag + 'l\'éditeur n\'a pas bougé : aucun élément caché, aucune animation', !notMoved.includes('hidden') && /^(visible\|0 ?)+$/.test(notMoved), notMoved);
+  const readerHtml = await page.evaluate(() => SlidesEntry.outputHtml('presentation', Editor.getHTML()));
+  check(tag + 'le HTML de la Lecture et des exports garde les réglages, sans style qui cache un élément', readerHtml.includes('<h2 data-ff-anim="appear"') && !/visibility\s*:\s*hidden/.test(readerHtml), '');
   await page.close();
 }
 

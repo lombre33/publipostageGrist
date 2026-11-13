@@ -22,6 +22,9 @@ const ObjectsMenu = (function () {
     { id: 'table', pair: true, icon: 'table', label: 'slides.objects.table', tip: 'slides.objects.tableTip', place: (ed, slideStart) => FreeFrame.insertTable(ed, slideStart) },
     // « Vue… » (demande du 02/11, « Lien, puis aperçu animé d'affilée », troisième niveau) : la liste avec recherche des diapositives, puis un cadre qui montre la choisie en direct et y mène au clic (js/slide-view.js).
     { id: 'slideView', pair: true, icon: 'slideView', label: 'slides.objects.slideView', tip: 'slides.objects.slideViewTip', picker: true },
+    // « Animation… » (demande du 13/11, « chaque élément de la page doit pouvoir avoir une animation ») : la fenêtre de l'élément du curseur - un paragraphe, un titre, un point de liste, un tableau, ou l'image
+    // ou le cadre sélectionné (js/block-anim.js) ; elle ne pose rien, elle règle ce qui est déjà là. Une icône seule au bout de la ligne : le menu finit à 381 px sur 400, une ligne de plus le ferait sortir du panneau.
+    { id: 'animation', domId: 'v2-btn-block-animation', pair: true, iconOnly: true, icon: 'frameAnimation', label: 'slides.objects.animation', tip: 'slides.objects.animationTip', animate: true },
     { id: 'linkedTable', icon: 'linkedTable', label: 'slides.objects.linkedTable', tip: 'slides.objects.linkedTableTip', picker: true },
   ];
   // Les formes, en grille sous les onglets : le nom est `shape.<sorte>` ; l'icône des seize d'avant est dessinée à la main (`shape<Sorte>`, js/icons.js), celle des autres vient de leur dessin
@@ -125,10 +128,12 @@ const ObjectsMenu = (function () {
       const button = Dom.button('v2-menu-row');
       button.setAttribute('role', 'menuitem');
       button.dataset.action = row.id;
+      if (row.domId) button.id = row.domId;   // la touche et la palette de commandes (js/shortcuts.js) cliquent la ligne par son id
       const icon = Dom.el('span', 'v2-menu-row-icon');
       Dom.setMarkup(icon, Icons.svg(row.icon));
       hideIcon(icon);
-      button.append(icon, Dom.el('span', null, I18n.t(row.label)));
+      if (row.iconOnly) { button.setAttribute('aria-label', I18n.t(row.label)); button.classList.add('v2-objects-icon-only'); button.append(icon); }
+      else button.append(icon, Dom.el('span', null, I18n.t(row.label)));
       if (row.pair && !pair.parentNode) frag.append(pair);
       (row.pair ? pair : frag).append(button);
     });
@@ -302,6 +307,7 @@ const ObjectsMenu = (function () {
     Editor.exitHeaderFooterModeIfActive();
     const ed = EditorCore.getEditor();
     if (!ed) return;
+    if (spec.animate) { BlockAnim.openForSelection(ed, () => ed.view.focus()); return; }
     if (spec.picker) { (spec.id === 'slideView' ? SlideView : LinkedTable).openPicker(ed, flyout.querySelector('[data-action="' + spec.id + '"]'), true); return; }
     spec.place(ed, FreeFrame.slideStartOf(ed.state.doc, ed.state.selection.from));
     // La barre du cadre posé se montre une fois la transaction passée (js/editor-core.js ferme les barres flottantes au geste qui vient d'avoir lieu).

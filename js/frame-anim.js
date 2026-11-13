@@ -6,6 +6,9 @@
 //    qui en ont un), s'il s'agit d'une ENTRÉE (par défaut) ou d'une SORTIE (`out`), son DÉPART (`click` : au clic, par défaut ; `with` : avec la précédente ; `after` : après la précédente),
 //    sa durée et son délai en millisecondes, et sa place dans l'ordre (`n`, 0 : la place de l'objet dans le texte). Le texte : « fly:l out with d500 w200 n3 » ; vide : pas d'animation.
 //    Un objet n'a qu'UNE animation (un fichier PowerPoint qui en met plusieurs sur le même objet garde la première ; les autres sont comptées au compte rendu de l'import).
+//  - Tout ÉLÉMENT de la page, hors décors, peut porter la sienne (demande du 13/11, « chaque élément de la page doit pouvoir avoir une animation », et « un paragraphe à la fois » de PowerPoint) : un
+//    paragraphe, un titre, un point de liste (avec ses sous-points), une case à cocher, une image, un tableau (js/block-anim.js : le même `data-ff-anim`, sur l'élément lui-même). Un cadre peut donc
+//    n'être animé que par ses paragraphes. Le diaporama joue l'élément (sa `box`) comme un cadre, dans l'ordre du texte ; les sous-points d'un point animé arrivent avec lui.
 //  - Les PAS (stepsOf) : la suite des animations d'une diapositive, rangée par place (ceux qui ont un `n`, dans l'ordre de `n`, puis les autres dans l'ordre du texte), est coupée à chaque
 //    animation « au clic » : le pas 0 est celui qui part tout seul à l'arrivée sur la diapositive (les animations « avec » ou « après » placées avant le premier clic), puis un pas par clic.
 //    Dans un pas, « avec la précédente » part en même temps que la précédente, « après la précédente » quand celle-ci a fini (son délai et sa durée comptés) ; le délai de l'animation
@@ -138,26 +141,28 @@ const FrameAnim = (function () {
     return { animation, finished, cancel() { animation.cancel(); } };
   }
 
-  // Le HTML d'une présentation avec, sur chaque objet animé, le rang de sa diapositive (`data-ff-slide` : les sauts de page qui le précèdent) : le diaporama, qui ne voit que le HTML mis en
+  // Le HTML d'une présentation avec, sur chaque élément animé, le rang de sa diapositive (`data-ff-slide` : les sauts de page qui le précèdent) : le diaporama, qui ne voit que le HTML mis en
   // page, y retrouve la diapositive de chaque objet. Sans animation dans le HTML, il est rendu tel quel, sans être relu.
   function stampSlides(html) {
     const raw = String(html == null ? '' : html);
     if (raw.indexOf(ATTR) === -1) return raw;
     const body = HtmlSanitize.parseInert(raw);
     let slide = 0;
-    body.querySelectorAll(BREAK + ', ' + FRAME + '[' + ATTR + ']').forEach((node) => {
+    body.querySelectorAll(BREAK + ', [' + ATTR + ']').forEach((node) => {
       if (node.matches(BREAK)) slide += 1; else node.setAttribute(SLIDE_ATTR, String(slide));
     });
     return body.innerHTML;
   }
-  // Les objets animés de la mise en page `root`, par diapositive : Map(rang de la diapositive -> [{ box, anim }]) dans l'ordre du texte.
+  // Ce qui bouge quand l'élément `node` s'anime : la boîte d'un cadre, l'élément lui-même pour tout autre (paragraphe, titre, point de liste, image, tableau).
+  const boxOf = node => (node.matches(FRAME) ? node.querySelector(':scope > .pp-free-frame-box') : node);
+  // Les éléments animés de la mise en page `root`, par diapositive : Map(rang de la diapositive -> [{ box, anim }]) dans l'ordre du texte (les cadres, rangés au début de leur diapositive, puis le texte).
   function framesOf(root) {
     const found = new Map();
-    root.querySelectorAll(FRAME + '[' + ATTR + '][' + SLIDE_ATTR + ']').forEach((frame) => {
-      const anim = normalized(frame.getAttribute(ATTR));
-      const box = frame.querySelector(':scope > .pp-free-frame-box');
+    root.querySelectorAll('[' + ATTR + '][' + SLIDE_ATTR + ']').forEach((node) => {
+      const anim = normalized(node.getAttribute(ATTR));
+      const box = boxOf(node);
       if (!anim || !box) return;
-      const slide = Number(frame.getAttribute(SLIDE_ATTR));
+      const slide = Number(node.getAttribute(SLIDE_ATTR));
       if (!found.has(slide)) found.set(slide, []);
       found.get(slide).push({ box, anim });
     });
