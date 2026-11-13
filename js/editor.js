@@ -364,6 +364,42 @@ const Editor = (function () {
     return html.slice(0, start).replace(/\s+$/, '') + html.slice(start, stop) + html.slice(stop).replace(/>\s+</g, '><').trim();
   }
 
+  // Les images d'une page web collée. Copier une partie d'une page (texte et photos) ne met dans le presse-papiers que du HTML : chaque photo y est une `<img src="https://…">` (Chromium rend
+  // l'adresse absolue et recopie sur la balise le style qui fixe sa largeur), aucune image « fichier » n'accompagne - seul « Copier l'image » du clic droit en joint une, que `handlePaste` prend
+  // déjà. L'éditeur ne lit que ses propres images (`img.editor-image`, js/editor-nodes.js) : ProseMirror écartait chaque `<img>` collée en silence et le texte arrivait sans aucune photo. Ici
+  // chacune redevient une image de l'éditeur, à la façon de l'import Markdown (js/markdown-import.js, `images`) : une adresse web (« //hôte » est prise pour https) ou une data URI d'image, jamais
+  // `javascript:`, `file:`, `blob:` ni un chemin relatif (une image lue depuis un fichier de l'ordinateur ne s'ouvrirait pas : elle reste écartée, comme avant). Rien d'autre de la balise n'est
+  // repris que l'adresse, le texte alternatif et la largeur - ni gestionnaire (`onerror`), ni `srcset`, ni style, ni classe : l'image est écrite à neuf, et la balise est construite par le navigateur,
+  // une adresse ou un texte qui porte des guillemets et des chevrons reste du texte. La largeur est celle que le PDF et le Word lisent, en px (l'attribut `width`, ou le style qui prime sur lui) ; en
+  // pourcentage, en em, absente, ou donnée par la seule hauteur, l'image prend la largeur de l'éditeur (320 px), comme une image insérée. Une image dont les deux mesures déclarées ne dépassent
+  // pas 2 px est le pixel espion d'une infolettre : elle n'est pas collée (son cadre « Afficher » aurait la taille d'une vraie image). Une image d'un autre site garde la règle de js/external-images.js :
+  // masquée jusqu'au clic « Afficher », le collage ne fait contacter aucun site, et l'export demande avant de la télécharger. Ce qui n'est pas gardé garde ses octets (la balise reste telle quelle,
+  // ProseMirror l'écarte) ; une image de l'éditeur (`editor-image`) n'est pas touchée.
+  const PASTED_IMG_TAG = /<img\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
+  const PASTED_PX = /^(\d+(?:\.\d+)?)(?:px)?$/i;
+  const TRACKING_PIXEL_PX = 2;
+  const declaredPx = value => { const found = PASTED_PX.exec(String(value || '').trim()); return found ? parseFloat(found[1]) : null; };
+  function pastedImageAsEditorImage(img) {
+    if (!img || img.classList.contains('editor-image')) return null;
+    let src = (img.getAttribute('src') || '').trim();
+    if (/^\/\//.test(src)) src = 'https:' + src;
+    if (!/^https?:\/\//i.test(src) && !/^data:image\//i.test(src)) return null;
+    // Le style prime sur l'attribut, comme à l'écran.
+    const width = declaredPx(img.style.width) ?? declaredPx(img.getAttribute('width'));
+    const height = declaredPx(img.style.height) ?? declaredPx(img.getAttribute('height'));
+    if (width !== null && height !== null && width <= TRACKING_PIXEL_PX && height <= TRACKING_PIXEL_PX) return null;
+    const made = Dom.inertTemplate('<img>').content.firstElementChild;
+    made.setAttribute('class', 'editor-image');
+    made.setAttribute('src', src);
+    made.setAttribute('alt', (img.getAttribute('alt') || '').replace(/\s+/g, ' ').trim());
+    if (width > 0) made.setAttribute('style', 'width: ' + Math.round(width * 100) / 100 + 'px');
+    return made.outerHTML;
+  }
+  function webImagesAsEditorImages(html) {
+    if (typeof html !== 'string' || !/<img\b/i.test(html)) return html;
+    return html.replace(PASTED_IMG_TAG, tag => pastedImageAsEditorImage(Dom.inertTemplate(tag).content.firstElementChild) || tag);
+  }
+
   function clipboardProps() {
     return {
       // Copier une sélection de cases : le texte brut est un tableau tabulé (js/table-select.js), le HTML reste le tableau des cases ; tout le
@@ -374,12 +410,14 @@ const Editor = (function () {
       // Un tableau de tableur (Excel, Sheets, LibreOffice) collé dans un document devient un tableau du document, case par case
       // (js/grid-table.js) ; dans une grille, c'est le plugin de la grille (GridEditor.createExtension) qui le réécrit pour elle. Un exposant collé de
       // Google Docs perd d'abord la taille réduite de son <span> (js/script-marks.js : la marque réduit déjà le texte). Une diapositive copiée de la bande des diapositives devient du texte du
-      // document, à sa taille (js/slide-text.js) ; ni une grille ni un e-mail n'en veulent.
+      // document, à sa taille (js/slide-text.js) ; ni une grille ni un e-mail n'en veulent. En dernier, les photos d'une page web collée redeviennent des images de l'éditeur
+      // (webImagesAsEditorImages : après le tableur et la diapositive, qui réécrivent leur HTML tout entier) ; un e-mail est du texte brut, il n'en reçoit aucune.
       transformPastedHTML: pastedHtml => {
         const html = EmojiPaste.textFromImages(withoutFragmentPadding(pastedHtml));
         const slide = GridEditor.isActive() || EmailPlainText.isActive() ? html : SlidesEntry.pastedInDocument(html);
         const pasted = ScriptMarks.cleanPastedHtml(slide);
-        return GridEditor.isActive() ? pasted : GridTable.cleanPastedDocumentHtml(pasted);
+        const cleaned = GridEditor.isActive() ? pasted : GridTable.cleanPastedDocumentHtml(pasted);
+        return EmailPlainText.isActive() ? cleaned : webImagesAsEditorImages(cleaned);
       },
       // Ne consomme que si le presse-papiers contient réellement une image ; un collage de texte normal suit le traitement natif de ProseMirror.
       handlePaste(view, event) {
