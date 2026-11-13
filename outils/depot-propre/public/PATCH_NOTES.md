@@ -248,7 +248,7 @@ Ces changements touchent des habitudes de la bêta.
 - **Menus qui se referment au clic** : ceux d'Enregistrer, de « + », de « Mode lecture » et de « Type d'export » ne recouvrent plus ce qu'on vise juste après.
 - **L'icône du menu « Lien et blocs de contenu »** montre des blocs, plus le maillon d'un lien.
 - **Galerie** : les quatre modèles d'avant sont refaits avec les fonctions récentes ; les modèles déjà créés à partir d'eux ne changent pas.
-- **La bêta reste disponible** : si un ancien modèle ne se rouvre pas bien dans la V1, la bêta 1.0.0-beta.1 reste servie, telle quelle et sans correctif, à `https://grist-factory.github.io/Publipostage-Plus/beta/` (dans Grist, changer l'adresse du widget personnalisé). Le retour est sûr tant que le modèle n'a pas été enregistré avec la V1 : la bêta efface ce qu'elle ne connaît pas (signets, exposants et indices, « Sinon afficher »).
+- **La bêta reste disponible** : si un ancien modèle ne se rouvre pas bien dans la V1, la bêta 1.0.0-beta.1 reste servie, telle quelle et sans correctif, à `https://grist-factory.github.io/Publipostage-Plus/beta/` (dans Grist, changer l'adresse du widget personnalisé). Seul ajout : un bandeau, que sa croix ferme, conseille de migrer vers la version 1.1, et son bouton « Découvrir les nouveautés » ouvre les nouveautés dans un nouvel onglet. Le retour est sûr tant que le modèle n'a pas été enregistré avec la V1 : la bêta efface ce qu'elle ne connaît pas (signets, exposants et indices, « Sinon afficher »).
 
 #### Retiré
 
@@ -589,7 +589,7 @@ These changes affect habits from the beta.
 - **Menus that close on click**: those of Save, "+", "Read mode" and "Export type" no longer cover what you aim at right after.
 - **The icon of the "Link and content blocks" menu** shows blocks, no longer the link of a chain.
 - **Gallery**: the four previous templates are redone with the recent features; the templates already created from them do not change.
-- **The beta stays available**: if an old template does not reopen well in the V1, the 1.0.0-beta.1 beta is still served, as it was and without fixes, at `https://grist-factory.github.io/Publipostage-Plus/beta/` (in Grist, change the address of the custom widget). Going back is safe as long as the template has not been saved with the V1: the beta erases what it does not know (bookmarks, superscripts and subscripts, "Otherwise show").
+- **The beta stays available**: if an old template does not reopen well in the V1, the 1.0.0-beta.1 beta is still served, as it was and without fixes, at `https://grist-factory.github.io/Publipostage-Plus/beta/` (in Grist, change the address of the custom widget). The only addition is a banner, which its cross closes, recommending migrating to version 1.1; its "Discover what's new" button opens the news in a new tab. Going back is safe as long as the template has not been saved with the V1: the beta erases what it does not know (bookmarks, superscripts and subscripts, "Otherwise show").
 
 #### Removed
 

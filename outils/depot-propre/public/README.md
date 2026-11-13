@@ -38,7 +38,7 @@ Ouvert seul dans un onglet du navigateur, le widget ne fonctionne pas : il le di
 
 **Premiers pas** : ouvrez le menu « Nouveau modèle » puis « Nouveau document » (ou « Créer à partir d'un modèle… » pour partir de la galerie), écrivez votre texte et tapez `#` pour insérer une variable. Passez en mode lecture pour voir le document rempli avec la ligne sélectionnée, puis exportez-le.
 
-**Garder la bêta** : si un ancien modèle ne se rouvre pas bien dans la version actuelle, la bêta 1.0.0-beta.1 reste servie, telle quelle et sans correctif, à `https://grist-factory.github.io/Publipostage-Plus/beta/` (dans Grist, changez l'adresse du widget personnalisé). Le retour est sûr tant que le modèle n'a pas été enregistré avec la version actuelle : la bêta efface ce qu'elle ne connaît pas (signets, exposants et indices, « Sinon afficher »). Elle ne reçoit plus de mise à jour.
+**Garder la bêta** : si un ancien modèle ne se rouvre pas bien dans la version actuelle, la bêta 1.0.0-beta.1 reste servie, telle quelle et sans correctif, à `https://grist-factory.github.io/Publipostage-Plus/beta/` (dans Grist, changez l'adresse du widget personnalisé). Seul ajout : un bandeau, que sa croix ferme, conseille de migrer vers la version 1.1, et son bouton « Découvrir les nouveautés » ouvre les nouveautés dans un nouvel onglet. Le retour est sûr tant que le modèle n'a pas été enregistré avec la version actuelle : la bêta efface ce qu'elle ne connaît pas (signets, exposants et indices, « Sinon afficher »). Elle ne reçoit plus de mise à jour.
 
 ## Visite en images
 
@@ -380,7 +380,7 @@ Opened alone in a browser tab, the widget does not work: it says so and recalls 
 
 **First steps**: open the "New template" menu then "New document" (or "Create from a template…" to start from the gallery), write your text and type `#` to insert a variable. Switch to reading mode to see the document filled with the selected row, then export it.
 
-**Keeping the beta**: if an old template does not reopen well in the current version, the 1.0.0-beta.1 beta is still served, as it was and with no fixes, at `https://grist-factory.github.io/Publipostage-Plus/beta/` (in Grist, change the custom widget's address). Going back is safe as long as the template has not been saved with the current version: the beta erases what it does not know (bookmarks, superscripts and subscripts, "Otherwise show"). It no longer receives updates.
+**Keeping the beta**: if an old template does not reopen well in the current version, the 1.0.0-beta.1 beta is still served, as it was and with no fixes, at `https://grist-factory.github.io/Publipostage-Plus/beta/` (in Grist, change the custom widget's address). The only addition is a banner, which its cross closes, recommending migrating to version 1.1; its "Discover what's new" button opens the news in a new tab. Going back is safe as long as the template has not been saved with the current version: the beta erases what it does not know (bookmarks, superscripts and subscripts, "Otherwise show"). It no longer receives updates.
 
 ## Tour in pictures
 

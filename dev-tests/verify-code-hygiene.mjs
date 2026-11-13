@@ -17,7 +17,9 @@
 //      un jeton --z-* déclaré dans une autre feuille, un z-index en `!important` (un popup de fenêtre passe par Layers.raise(popup, fenêtre)), un z-index posé en ligne hors js/layers.js.
 //  10. un texte rouge posé avec --danger (4,37:1 sur blanc) au lieu de --danger-ink (4,5:1 au moins sur tous les fonds) : seuls quatre boutons à icône seule gardent --danger (contrôle du 03/10).
 //  11. la politique de sécurité du contenu d'index.html qui ne dit plus ce que la page charge : un script en ligne (la carte d'importation comprise) dont l'empreinte n'est plus la sienne, une bibliothèque
-//      d'un CDN qu'elle ne permet pas, une empreinte ou une adresse que plus rien n'utilise (contrôle de sécurité du 04/10).
+//      d'un CDN qu'elle ne permet pas, une empreinte ou une adresse que plus rien n'utilise (contrôle de sécurité du 04/10). Et la page des nouveautés, nouveautes.html (la fenêtre des nouveautés seule sur sa page, ouverte dans un
+//      nouvel onglet par le bandeau de la bêta figée, consigne 070 de GFS) : une politique moins étroite que « ses propres fichiers et rien d'autre », un script, un gestionnaire ou un style en ligne, un fichier qui n'est pas
+//      celui d'index.html à la même version, une liste de chargement qui n'est plus ce que la fenêtre demande, un bloc de préchargement périmé, ou un js/news-page.js qui écrit dans le navigateur (il lit seulement le thème).
 //  12. une police ou une feuille de style chargée depuis un autre site (Google Fonts ou autre : @import, url(), <link>, adresse d'un service de polices), ou une police d'interface qui n'est plus celle du
 //      système (choix d'Antoine du 04/10 : « une police système similaire, pas de Google Fonts ou autre »).
 //  13. un console.log, console.info, console.debug ou console.trace dans js/ ou index.html (la console ne reçoit que les avertissements et les erreurs : un widget public ne raconte pas son démarrage), et la
@@ -169,7 +171,7 @@ const EXTENSION_LIBRARY_ADDRESSES = {
 const cssFiles = [...listFiles('css', /\.css$/), ...listFiles('extensions', /\.css$/)];
 const galleryFiles = [...listFiles('templates-gallery', /\.(html|json)$/), ...listFiles('templates-gallery-dev', /\.(html|json)$/)];
 // Tout ce qui PRODUIT du DOM ou consomme des noms : la page, les scripts, les modèles livrés.
-const producerText = ['index.html', ...jsFiles, ...galleryFiles].map(read).join('\n');
+const producerText = ['index.html', 'nouveautes.html', ...jsFiles, ...galleryFiles].map(read).join('\n');
 
 const stripComments = css => css.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '));
 const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' ')).replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
@@ -588,6 +590,50 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
       `lancer node outils/precharger-scripts.mjs ; manquent : ${missing.join(', ') || 'aucun'} ; en trop : ${extra.join(', ') || 'aucun'}`);
     check('chargement : le bloc de préchargement vient APRÈS la balise <meta> de la politique (un `<link>` qui la précède serait chargé hors d\'elle), et aucun script de la page ne porte `async` ni `defer` (l\'ordre d\'exécution est celui de la page)',
       raw.indexOf(START) > page.indexOf('<meta http-equiv="Content-Security-Policy"') && !/<script\b[^>]*\b(?:async|defer)\b/i.test(page));
+  }
+
+  // (a ter) nouveautes.html : la fenêtre des nouveautés de la version 1 seule sur sa page (consigne 070 de GFS : le bouton « Découvrir les nouveautés » du bandeau de la bêta figée l'ouvre dans un nouvel
+  // onglet). Ce n'est pas le widget : ni Grist, ni GFS, ni éditeur. Elle charge une PARTIE des fichiers d'index.html - les mêmes, aux mêmes versions, dans le même ordre (le navigateur les a déjà s'il a
+  // ouvert le widget ; un même fichier à deux versions serait téléchargé deux fois) - plus ses deux fichiers (js/news-page.js, css/news-page.css), sous une politique plus étroite que celle d'index.html :
+  // rien que ses propres fichiers, aucun script en ligne. Les essais de dev-tests/verify-news-page.mjs la chargent SANS contourner cette politique.
+  {
+    const { filesOf, scriptsOf, isCurrentNews, START, END } = await import('../outils/precharger-scripts.mjs');
+    const indexHtml = read('index.html');
+    const news = read('nouveautes.html');
+    const newsPage = news.replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
+    const policy = (/<meta http-equiv="Content-Security-Policy" content="([^"]*)">/.exec(newsPage) || [, ''])[1];
+    const directives = policy.split(';').map(d => d.trim()).filter(Boolean).map(d => d.replace(/\s+/g, ' ')).sort();
+    const STRICT = ["base-uri 'none'", "connect-src 'none'", "default-src 'none'", "form-action 'none'", "frame-src 'none'", "img-src 'self'", "object-src 'none'", "script-src 'self'", "style-src 'self'"];
+    check('nouveautes.html : sa politique de sécurité du contenu (<meta>) est la plus étroite possible - ses propres fichiers (`self`) et rien d\'autre : aucune connexion, aucun cadre, aucun objet, aucune balise de base, aucun formulaire - et la page n\'a ni script en ligne, ni gestionnaire d\'événement, ni attribut style (le navigateur les refuserait)',
+      JSON.stringify(directives) === JSON.stringify(STRICT) && !/<script(?![^>]*\bsrc=)[^>]*>/i.test(newsPage) && !/\son[a-z]+\s*=/i.test(newsPage.replace(/<meta[^>]*>/g, '')) && !/\sstyle\s*=/i.test(newsPage),
+      policy);
+    const OWN = ['js/news-page.js', 'css/news-page.css'];
+    const indexFiles = filesOf(indexHtml);
+    const newsFiles = filesOf(news);
+    const shared = newsFiles.filter(([file]) => !OWN.includes(file));
+    const indexOrder = indexFiles.map(([file]) => file);
+    const notAsIndex = shared.filter(([file, version]) => !indexFiles.some(([f, v]) => f === file && v === version)).map(([file, version]) => file + '?v=' + version);
+    const outOfOrder = shared.map(([file]) => file).filter((file, i, all) => i > 0 && indexOrder.indexOf(file) < indexOrder.indexOf(all[i - 1]));
+    check('nouveautes.html : chaque fichier qu\'elle partage avec index.html est à la version d\'index.html (`?v=`) et dans son ordre - `node outils/precharger-scripts.mjs` aligne les versions',
+      shared.length >= 20 && notAsIndex.length === 0 && outOfOrder.length === 0, `autre version : ${notAsIndex.join(', ') || 'aucun'} ; dans le désordre : ${outOfOrder.join(', ') || 'aucun'}`);
+    // Ce que la fenêtre demande, et rien d'autre : dom, tous les textes avant js/i18n.js, layers, modal-base, whats-new, les quatre feuilles de la fenêtre, puis les deux fichiers de la page à la fin.
+    const WANTED = ['js/dom.js', ...I18N_FILES, 'js/layers.js', 'js/modal-base.js', 'js/whats-new.js', 'css/style.css', 'css/modal-base.css', 'css/variable-actions.css', 'css/whats-new.css'];
+    const sharedFiles = shared.map(([file]) => file);
+    const scriptsOfNews = newsFiles.filter(([file]) => file.endsWith('.js')).map(([file]) => file);
+    const texts = scriptsOfNews.filter(file => /^js\/i18n-texts-/.test(file));
+    check('nouveautes.html : elle charge exactement ce que la fenêtre des nouveautés demande (js/dom.js, chaque js/i18n-texts-*.js avant js/i18n.js, js/layers.js, js/modal-base.js, js/whats-new.js, les feuilles style, modal-base, variable-actions et whats-new), chacun une fois, puis js/news-page.js et css/news-page.css - ni Grist, ni GFS, ni éditeur',
+      JSON.stringify([...sharedFiles].sort()) === JSON.stringify([...WANTED].sort()) && new Set(newsFiles.map(([file]) => file)).size === newsFiles.length
+        && scriptsOfNews[scriptsOfNews.length - 1] === 'js/news-page.js' && newsFiles.filter(([file]) => OWN.includes(file)).length === 2 && newsFiles.filter(([file]) => file.endsWith('.css')).slice(-1)[0][0] === 'css/news-page.css'
+        && scriptsOfNews.indexOf('js/i18n.js') === texts.length + 1 && texts.every(file => scriptsOfNews.indexOf(file) < scriptsOfNews.indexOf('js/i18n.js')),
+      newsFiles.map(([file]) => file).join(', '));
+    const missing = newsFiles.map(([file]) => file).filter(file => !existsSync(join(ROOT, file)));
+    check('nouveautes.html : chaque fichier qu\'elle charge existe', newsFiles.length > 20 && missing.length === 0, missing.join(', '));
+    const block = news.includes(START) && news.includes(END) ? news.slice(news.indexOf(START), news.indexOf(END)) : '';
+    const preloadedNews = [...block.matchAll(/<link rel="preload" as="script" href="([^"]+)">/g)].map(m => m[1]);
+    check('nouveautes.html : elle précharge chacun de ses scripts, avec sa version, une fois, dans l\'ordre de la page (bloc écrit par outils/precharger-scripts.mjs), APRÈS la balise <meta> de sa politique et avant la fin de <head> ; aucun de ses scripts ne porte `async` ni `defer`',
+      preloadedNews.length > 15 && preloadedNews.join('|') === scriptsOf(news).join('|') && isCurrentNews(news, indexHtml) && news.indexOf(START) > news.indexOf('<meta http-equiv="Content-Security-Policy"') && news.indexOf(END) < news.indexOf('</head>')
+        && !/<script\b[^>]*\b(?:async|defer)\b/i.test(newsPage),
+      'lancer node outils/precharger-scripts.mjs');
   }
 
   // (b) Chaque adresse de bibliothèque que le widget charge est permise ; (c) chaque adresse permise sert encore. Une source avec un chemin est exacte, une source sans chemin ouvre tout son hôte (esm.sh).
@@ -1099,10 +1145,21 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const panel = noCommentsJs(read('js/shortcuts-panel.js'));
   const page = read('index.html').replace(/<!--[\s\S]*?-->/g, '');
   const KEYS = ['pp_theme', 'pp_trigger_char', 'pp_expansion_char', 'pp_shortcuts', 'pp_shortcuts_view', 'pp_mail_client', 'pp_autosave_enabled', 'pp_sheet_assembly', 'pp_page_zoom', 'pp_pdf_protection', 'pp_news_seen', 'pp_bubble_marks', 'pp_export_destination', 'pp_layer_checks'];
-  const ALLOWED = ['js/person-store.js', 'js/i18n.js', 'js/schema-renames.js'];
+  const ALLOWED = ['js/person-store.js', 'js/i18n.js', 'js/schema-renames.js', 'js/news-page.js'];
   const rawStorage = jsFiles.filter(rel => !ALLOWED.includes(rel) && /\b(?:localStorage|sessionStorage)\b/.test(noCommentsJs(read(rel))));
-  check('stockage de chaque personne : aucun module ne touche localStorage ni sessionStorage, sauf js/person-store.js (les préférences), js/i18n.js (la langue) et js/schema-renames.js (les noms de colonnes) ; les autres lisent et écrivent par PersonStore',
+  check('stockage de chaque personne : aucun module ne touche localStorage ni sessionStorage, sauf js/person-store.js (les préférences), js/i18n.js (la langue), js/schema-renames.js (les noms de colonnes) et js/news-page.js (le thème, lu seulement : le contrôle qui suit) ; les autres lisent et écrivent par PersonStore',
     rawStorage.length === 0, rawStorage.join(', '));
+  // La page des nouveautés (nouveautes.html, consigne 070 de GFS) n'est pas le widget : pas de PersonStore réel (il demande Grist ou GFS). Elle ne fait que LIRE le thème que la personne a choisi dans Réglages
+  // (la même clé, dans le même stockage du navigateur : js/person-store.js y retombe hors de GFS), et son PersonStore ne garde rien : js/whats-new.js y écrit « 1.0 vue » (pp_news_seen) à la fermeture de
+  // la fenêtre, ce qui ne doit rien changer à ce que le widget fera à sa prochaine ouverture.
+  {
+    const newsJs = noCommentsJs(read('js/news-page.js'));
+    const touches = [...newsJs.matchAll(/\b(localStorage|sessionStorage)\s*\.\s*(\w+)/g)].map(m => m[1] + '.' + m[2]);
+    check('page des nouveautés : js/news-page.js ne fait que LIRE le thème (localStorage.getItem(\'pp_theme\'), une fois) - ni écriture, ni suppression, ni sessionStorage - et son PersonStore ne lit ni n\'écrit rien (get renvoie null, set et remove renvoient false)',
+      touches.length === 1 && touches[0] === 'localStorage.getItem' && /localStorage\.getItem\('pp_theme'\)/.test(newsJs)
+        && /^const PersonStore = Object\.freeze\(\{\s*ready: Promise\.resolve\(\),\s*get: \(\) => null,\s*set: \(\) => false,\s*remove: \(\) => false,\s*\}\);/m.test(newsJs),
+      touches.join(', '));
+  }
   const unused = KEYS.filter(key => !jsFiles.some(rel => rel !== 'js/person-store.js' && new RegExp("'" + key + "'").test(noCommentsJs(read(rel))) && /\bPersonStore\.(?:get|set|remove)\(/.test(noCommentsJs(read(rel)))));
   check('stockage de chaque personne : chacune des quatorze clés (les dix de la consigne 024, `pp_news_seen` la fenêtre des nouveautés, `pp_bubble_marks` le choix des bulles et des puces, `pp_export_destination` la destination des PDF exportés et `pp_layer_checks` les relectures des images en calque déjà faites) est lue ou écrite par PersonStore dans le module qui la nomme', unused.length === 0, unused.join(', '));
   // Les options du widget de « PDF joint à la ligne » : Grist Factory Suite ne retient que des clés déclarées dans son manifeste, toutes `pp_*` (consigne 001, règle 2) ; `setOption` refuse une clé

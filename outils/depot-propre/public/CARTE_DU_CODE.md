@@ -294,6 +294,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/command-palette.js` | La palette de commandes (`CommandPalette`) : Alt+/ (⌥/ sur Mac), la touche de « Rechercher dans les menus » de Google Docs, ouvre une fenêtre avec un champ ; on tape quelques lettres (« pdf », « tableau ») et la liste ne garde que les commandes de Réglages > Raccourcis qui les portent, Entrée lance celle qui est surlignée (`Shortcuts.run` : mêmes gardes que le bouton de la barre). Une commande que le bouton ne ferait pas ici reste dans la liste, grisée, et dit pourquoi (`Shortcuts.state`). |
 | `js/first-contact.js` | La fenêtre de premier contact quand le widget ne démarre pas comme prévu. |
 | `js/whats-new.js` | La fenêtre des nouveautés d'une version (images dans `img/news/`) : un carrousel de onze écrans et sa fenêtre « Exporter, en détail » de cinq écrans, ouverte par la ligne « Nouveautés » de Réglages > Crédits, et toute seule une fois par navigateur à la première ouverture après une version qui en a (`WhatsNew.openOnFirstConnection`, appelée par `js/main.js` ; la dernière version fermée est la clé `pp_news_seen` de `PersonStore`). |
+| `js/news-page.js` | La page des nouveautés (`nouveautes.html`) : la fenêtre de `js/whats-new.js` ouverte seule sur sa page, dans la langue que l'adresse donne (`?lang=fr` ou `?lang=en`), pour le bouton « Découvrir les nouveautés » du bandeau de la bêta figée, qui l'ouvre dans un nouvel onglet. Ce n'est pas le widget : ni Grist, ni GFS ; elle lit seulement le thème choisi dans Réglages et ne retient rien (son `PersonStore` ne garde rien : fermer la fenêtre ne change pas ce que le widget fera à l'ouverture suivante). Sa feuille : `css/news-page.css`, en plus de celles de la fenêtre. |
 | `js/clean-reading.js` | La Lecture épurée (sans la barre du haut) et les deux lignes à cocher du menu du bouton Mode lecture, « Lecture simple » (au départ) ou « Lecture épurée » : le bouton, et Alt+L, font ce que la ligne cochée dit, comme le bouton Exporter ; ouverte d'emblée pour les personnes en lecture seule, comptes Lecteur de Grist compris, quand la case des Réglages est cochée. |
 | `js/version.js` | Le numéro de version. |
 
@@ -404,7 +405,7 @@ fenêtre de `js/` (`css/callout.css` pour `js/callout.js`, `css/gfs-ambiance.css
 ne charge rien d'eux. `kit/` est le kit de Grist Factory, repris tel quel avec sa licence (des feuilles de style et des
 modules que ses applications se partagent) : le widget n'en importe que `ambiance-message.js`, `ambiance-pose.js`, `correcteurs-message.js` et `correcteurs-pose.js`
 (qui importent `once.js`), et seulement quand GFS l'héberge. `beta/` est la bêta 1.0.0-beta.1 telle qu'elle a été
-publiée, gardée à son adresse (voir le [README](README.md)) : cette carte décrit la version courante, pas elle. Le
+publiée, gardée à son adresse (voir le [README](README.md)), avec un bandeau en plus (`beta/js/beta-bandeau.js` et `beta/css/beta-bandeau.css`, que sa page `beta/index.html` charge) : cette carte décrit la version courante, pas elle. Le
 dépôt de développement du projet garde en plus ses tests, ses outils de publication et ses notes de conception, qui
 ne sont pas publiés ici.
 
@@ -766,6 +767,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/command-palette.js` | The command palette (`CommandPalette`): Alt+/ (⌥/ on a Mac), the key of Google Docs' “Search the menus”, opens a window with a field; type a few letters (“pdf”, “table”) and the list keeps only the commands of Settings > Shortcuts that carry them, Enter runs the highlighted one (`Shortcuts.run`: same guards as the toolbar button). A command the button would not run here stays in the list, greyed out, and says why (`Shortcuts.state`). |
 | `js/first-contact.js` | The first-contact window, when the widget doesn't start as expected. |
 | `js/whats-new.js` | The what's-new window of a version (images in `img/news/`): a carousel of eleven screens and its five-screen “Exporting, in detail” window, opened by the “What’s new” line of Settings > Credits, and by itself once per browser the first time the widget is opened after a version that has news (`WhatsNew.openOnFirstConnection`, called by `js/main.js`; the last version closed is the `pp_news_seen` key of `PersonStore`). |
+| `js/news-page.js` | The what's-new page (`nouveautes.html`): the `js/whats-new.js` window opened alone on its page, in the language the address gives (`?lang=fr` or `?lang=en`), for the “Discover what's new” button of the frozen beta's banner, which opens it in a new tab. It is not the widget: no Grist, no GFS; it only reads the theme chosen in Settings and remembers nothing (its `PersonStore` keeps nothing: closing the window changes nothing about what the widget will do at its next opening). Its stylesheet: `css/news-page.css`, besides the window's own. |
 | `js/clean-reading.js` | Clean reading (without the top bar) and the two tickable rows of the Reading mode button's menu, "Standard reading" (at the start) or "Clean reading": the button, and Alt+L, do what the ticked row says, like the Export button; opened straight away for read-only people, Grist Viewer accounts included, when the Settings box is ticked. |
 | `js/version.js` | The version number. |
 
@@ -874,7 +876,7 @@ the documents' font.
 `SECURITY.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `PATCH_NOTES.md`, `NOTICE`, `LICENSE` and this file. The page
 loads none of them. `kit/` is Grist Factory's kit, taken as it is with its licence (style sheets and modules that its
 apps share): the widget imports only `ambiance-message.js`, `ambiance-pose.js`, `correcteurs-message.js` and `correcteurs-pose.js`
-(which import `once.js`), and only when GFS hosts it. `beta/` is the 1.0.0-beta.1 beta as it was published, kept at its address (see the [README](README.md)):
+(which import `once.js`), and only when GFS hosts it. `beta/` is the 1.0.0-beta.1 beta as it was published, kept at its address (see the [README](README.md)), with a banner added (`beta/js/beta-bandeau.js` and `beta/css/beta-bandeau.css`, which its page `beta/index.html` loads):
 this map describes the current version, not that one. The project's development repository also keeps its tests, its
 publication tools and its design notes, which are not published here.
 

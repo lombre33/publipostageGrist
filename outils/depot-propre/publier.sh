@@ -9,11 +9,12 @@
 #   --ecraser     : publie même si le dépôt public a reçu, depuis la dernière étiquette de version, des changements aux fichiers que ce script remplace.
 #
 # Ce que fait le script, dans l'ordre :
-#   1. vérifie que le dépôt de développement est propre et sur origin/main, et que le clone public est propre et à jour, avec sa copie figée de la bêta (beta/, posée à la main, jamais
-#      touchée par ce script) identique aux fichiers du site de l'étiquette de la bêta (v1.0.0-beta.1, ou celle que PP_BETA_ETIQUETTE nomme) ;
+#   1. vérifie que le dépôt de développement est propre et sur origin/main, et que le clone public est propre et à jour, avec sa copie figée de la bêta (beta/, posée à la main une fois) identique
+#      aux fichiers du site de l'étiquette de la bêta (v1.0.0-beta.1, ou celle que PP_BETA_ETIQUETTE nomme), avec ou sans le bandeau de la consigne 070 de GFS, et rien d'autre ;
 #   2. refuse toute entrée de la racine du dépôt de développement qu'il ne connaît pas (PUBLIES ou EXCLUS ci-dessous) : un nouveau dossier ne part jamais par oubli ;
 #   3. refuse d'écraser des changements faits dans le dépôt public depuis la dernière étiquette vX.Y.Z (contribution acceptée là-bas et pas reportée ici) ;
-#   4. remplace dans le clone public les entrées PUBLIEES par celles du dépôt de développement (fichiers suivis seulement, les fichiers retirés disparaissent) ;
+#   4. remplace dans le clone public les entrées PUBLIEES par celles du dépôt de développement (fichiers suivis seulement, les fichiers retirés disparaissent), puis recompose beta/ :
+#      les fichiers de l'étiquette de la bêta, sans correctif, et le bandeau « version bêta » (outils/depot-propre/beta/, posé par beta-bandeau.mjs) : un seul envoi porte la version 1 et le bandeau ;
 #      le kit de Grist Factory (kit/, un sous-module du dépôt de développement) part en fichiers, ceux du commit que le dépôt de développement épingle (css, js et la licence),
 #      sans .gitmodules : le dépôt public n'a pas de sous-module ; les entrées que seul le dépôt public porte (.github/…) ne sont pas touchées ;
 #   5. pose par-dessus les documents publics de outils/depot-propre/public/ (README, SECURITY, CONTRIBUTING, CODE_OF_CONDUCT, CHANGELOG, PATCH_NOTES, NOTICE, CARTE_DU_CODE),
@@ -32,7 +33,9 @@ ICI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # avant de publier ; une accolade double ouverte dans un .md fait alors échouer la publication, et le site reste sur la version d'avant (consigne 037 de GFS).
 # vendor/ : la copie figée de l'éditeur (vendor/editeur, consigne 066 de GFS, construite par l'outil du kit) ; la page publique en cite les modules dans sa carte « copie » (case « Éditeur hors ligne » de Réglages),
 # donc elle part avec la page, avec ses licences (LICENCES.txt) et son manifeste (COPIE.json) ; c'est du code de tiers, minifié : les contrôles de texte ne le lisent pas.
-PUBLIES=(index.html css js extensions img templates-gallery LICENSE .nojekyll kit vendor)
+# nouveautes.html : la fenêtre des nouveautés de la version 1 seule sur sa page (consigne 070 de GFS) ; le bouton « Découvrir les nouveautés » du bandeau de la bêta figée l'ouvre dans un nouvel onglet
+# (../nouveautes.html depuis beta/), donc elle part avec la version 1, avant que le bandeau soit posé dans beta/ (outils/depot-propre/beta-bandeau.mjs).
+PUBLIES=(index.html nouveautes.html css js extensions img templates-gallery LICENSE .nojekyll kit vendor)
 # Ce qui ne part jamais (les documents publics viennent de public/, pas du README du dépôt de développement). .gitmodules : le dépôt public n'a pas de sous-module,
 # et son adresse nomme le compte du dépôt de développement ; le kit part en fichiers (KIT_PARTIES ci-dessous).
 # package.json (la liste unique des bibliothèques, consignes 063 et 067 de GFS) et bibliotheques/ (son catalogue) restent dans le dépôt de développement : les poser dans le dépôt public, pour Dependabot, est une décision à part.
@@ -100,25 +103,16 @@ git -C "$PROPRE" fetch --quiet --tags origin main || die "git fetch origin main 
   || die "le clone public n'est pas à jour avec origin/main : git -C $PROPRE pull --ff-only"
 
 # La bêta figée : beta/ du dépôt public garde, à une adresse à part (…/Publipostage-Plus/beta/), les fichiers du site de la bêta pour les personnes dont un ancien modèle ne se rouvre pas bien dans
-# la version courante. Elle est posée à la main (outils/depot-propre/README.md, « La bêta figée ») et ce script n'y touche pas (beta n'est ni dans PUBLIES ni dans les documents de public/).
-# Elle doit être là, et identique à ce que l'étiquette de la bêta porte : une copie prise ailleurs (de main, par exemple) ou retouchée à la main ferait croire à qui la garde qu'il a la bêta telle quelle.
-# L'arbre d'un dossier (ou d'un fichier) se compare par son empreinte git : mêmes octets et mêmes droits, ou rien.
+# la version courante, SANS correctif ; la consigne 070 de GFS y ajoute un bandeau « version bêta » (js/beta-bandeau.js, css/beta-bandeau.css et deux lignes de index.html : outils/depot-propre/beta/,
+# posé par beta-bandeau.mjs). beta/ est posée à la main une fois (outils/depot-propre/README.md, « La bêta figée ») ; ce script la vérifie ici, puis la recompose à l'étape 4 : l'étiquette de la bêta + le
+# bandeau d'aujourd'hui. Elle doit être là, et identique à ce que l'étiquette de la bêta porte (le bandeau, de la version qu'il avait, mis à part) : une copie prise ailleurs (de main, par exemple) ou
+# retouchée à la main ferait croire à qui la garde qu'il a la bêta telle quelle. Un dossier (ou un fichier) se compare par son empreinte git : mêmes octets et mêmes droits, ou rien.
 BETA_ETIQUETTE="${PP_BETA_ETIQUETTE:-v1.0.0-beta.1}"
-BETA_PARTIES=(index.html css js img templates-gallery LICENSE)   # les fichiers du site de la bêta, tels que son étiquette les porte à la racine
 git -C "$PROPRE" rev-parse -q --verify "refs/tags/$BETA_ETIQUETTE" >/dev/null \
   || die "l'étiquette $BETA_ETIQUETTE de la bêta est absente du clone public (git -C $PROPRE fetch --tags origin) : sans elle, beta/ ne peut pas être vérifiée"
 git -C "$PROPRE" rev-parse -q --verify HEAD:beta >/dev/null 2>&1 \
   || die "beta/ est absente du clone public : la copie figée de la bêta est à y poser avant l'envoi (outils/depot-propre/README.md, « La bêta figée »)"
-beta_differentes=""
-for x in "${BETA_PARTIES[@]}"; do
-  [ "$(git -C "$PROPRE" rev-parse -q --verify "$BETA_ETIQUETTE:$x" 2>/dev/null || true)" = "$(git -C "$PROPRE" rev-parse -q --verify "HEAD:beta/$x" 2>/dev/null || true)" ] \
-    || beta_differentes+="  beta/$x"$'\n'
-done
-[ -z "$beta_differentes" ] \
-  || die "beta/ n'est pas identique aux fichiers du site de $BETA_ETIQUETTE (la bêta figée ne se corrige pas, on la repose telle que l'étiquette la porte) :"$'\n'"$beta_differentes"
-beta_en_trop="$(git -C "$PROPRE" ls-tree --name-only HEAD:beta | grep -vxF -f <(printf '%s\n' "${BETA_PARTIES[@]}") || true)"
-[ -z "$beta_en_trop" ] \
-  || die "beta/ porte des entrées que la bêta n'avait pas :"$'\n'"$(echo "$beta_en_trop" | sed 's/^/  beta\//')"
+beta_ecarts="$(node "$ICI/beta-bandeau.mjs" --ecarts "$PROPRE" --etiquette "$BETA_ETIQUETTE" 2>&1)" || die "$beta_ecarts"
 
 # --- version et dates ----------------------------------------------------------------------------------------------------------------------
 if [ -z "$VERSION" ]; then
@@ -197,6 +191,9 @@ fi
 MODIFIE=1
 for x in "${PUBLIES[@]}"; do rm -rf "${PROPRE:?}/$x"; done
 git -C "$DEV" archive --format=tar HEAD "${PUBLIES[@]}" | tar -x -C "$PROPRE"
+# La bêta figée est recomposée à chaque publication : les fichiers de l'étiquette de la bêta et le bandeau de outils/depot-propre/beta/ (un bandeau modifié dans le dépôt de développement se pose à la
+# publication suivante ; rien d'autre de beta/ ne change jamais). nouveautes.html, que le bouton du bandeau ouvre, part dans la même publication : un seul envoi, aucune adresse qui répond 404.
+node "$ICI/beta-bandeau.mjs" --poser "$PROPRE" --etiquette "$BETA_ETIQUETTE" >/dev/null || die "le bandeau n'a pas pu être posé dans beta/ (beta-bandeau.mjs --poser, voir le message au-dessus)"
 # `git archive` ne descend pas dans un sous-module (il laisse un dossier vide) : le kit vient de son propre commit épinglé.
 mkdir -p "$PROPRE/kit"
 git -C "$DEV/kit" archive --format=tar "$KIT_COMMIT" "${KIT_PARTIES[@]}" | tar -x -C "$PROPRE/kit"

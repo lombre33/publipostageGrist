@@ -27,11 +27,18 @@ git init -q --bare "$T/dev-origin.git"
 git init -q -b main "$T/dev"
 (
   cd "$T/dev"
-  mkdir -p css js extensions img templates-gallery dev-tests planning outils/depot-propre/public
+  mkdir -p css js extensions img templates-gallery dev-tests planning outils/depot-propre/public outils/depot-propre/beta
   cat > index.html <<HTML
 <!doctype html><html><head><meta charset="utf-8"><title>essai</title>
 <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'sha256-$HASH'; object-src 'none'">
 <link rel="stylesheet" href="css/style.css"><script>window.x=1;</script><script src="js/version.js"></script><script src="js/main.js"></script>
+</head><body><img src="img/logo.jpg"></body></html>
+HTML
+  # La page des nouveautés de la version 1 (consigne 070 de GFS) : la fenêtre des nouveautés seule sur sa page, sous une politique de sécurité qui ne laisse passer que ses propres fichiers ; le bouton du bandeau de la bêta figée l'ouvre.
+  cat > nouveautes.html <<'HTML'
+<!doctype html><html><head><meta charset="utf-8"><title>nouveautés</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<link rel="stylesheet" href="css/style.css"><script src="js/version.js"></script><script src="js/main.js"></script>
 </head><body><img src="img/logo.jpg"></body></html>
 HTML
   echo 'body { margin: 0; }' > css/style.css
@@ -46,7 +53,9 @@ HTML
   mkdir -p bibliotheques; echo '{}' > package.json; echo '{}' > bibliotheques/catalogue.json
   # La copie figée de l'éditeur (consigne 066 de GFS) : du code de tiers construit par l'outil du kit, que publier.sh fait partir avec la page (PUBLIES) ; le faux en porte un module, ses licences et son manifeste.
   mkdir -p vendor/editeur; echo 'export default 1;' > vendor/editeur/prosemirror.js; echo 'licences' > vendor/editeur/LICENCES.txt; echo '{}' > vendor/editeur/COPIE.json
-  cp "$ICI/publier.sh" "$ICI/controles.mjs" outils/depot-propre/
+  # Les outils, avec le bandeau de la bêta figée (beta-bandeau.mjs et les deux fichiers de beta/) : controles.mjs et publier.sh les lisent à côté d'eux.
+  cp "$ICI/publier.sh" "$ICI/controles.mjs" "$ICI/beta-bandeau.mjs" outils/depot-propre/
+  cp "$ICI"/beta/beta-bandeau.js "$ICI"/beta/beta-bandeau.css outils/depot-propre/beta/
   cp -r "$ICI"/public/* outils/depot-propre/public/
   # La carte du code cite chaque fichier du widget : le faux dépôt les porte (vides, pages .html comprises), pour que ses références tiennent.
   grep -oE '`(js|css|extensions)/[A-Za-z0-9_./-]+\.(js|css|html)`' "$ICI/public/CARTE_DU_CODE.md" | tr -d '`' | sort -u | while read -r f; do [ -e "$f" ] || { mkdir -p "$(dirname "$f")"; echo "/* $f */" > "$f"; }; done
@@ -73,9 +82,10 @@ git init -q -b main "$T/propre-src"
   mkdir -p screenshots; echo png > screenshots/01-edition-modele-avec-variables.png; echo png > screenshots/02-lecture-document-rempli.png; echo png > screenshots/ancienne.png
   echo '# alpha' > README.md; echo old > index.html
   # La bêta figée : beta/ porte les fichiers du site de la bêta (une page, sa feuille de style, sa version, une image, un catalogue, la licence). L'étiquette de la bêta les porte à la racine :
-  # son arbre est celui de beta/ (un commit orphelin, comme l'étiquette v1.0.0-beta.1 du vrai dépôt public, dont l'arbre est celui du site).
+  # son arbre est celui de beta/ (un commit orphelin, comme l'étiquette v1.0.0-beta.1 du vrai dépôt public, dont l'arbre est celui du site). Sa page a, comme celle de la vraie bêta, </head> et </body>
+  # chacun en début de ligne : c'est là que beta-bandeau.mjs pose les deux lignes du bandeau (consigne 070 de GFS), la feuille avant </head>, le script avant </body>.
   mkdir -p beta/css beta/js beta/img beta/templates-gallery
-  printf '<!doctype html><title>bêta</title><link rel="stylesheet" href="css/style.css"><script src="js/version.js"></script><img src="img/logo.jpg">\n' > beta/index.html
+  printf '<!doctype html>\n<html>\n<head>\n<title>bêta</title>\n<link rel="stylesheet" href="css/style.css">\n</head>\n<body>\n<img src="img/logo.jpg">\n<script src="js/version.js"></script>\n</body>\n</html>\n' > beta/index.html
   echo 'body { margin: 1px; }' > beta/css/style.css
   echo "const PP_VERSION = '1.0.0-beta.1';" > beta/js/version.js
   echo jpg > beta/img/logo.jpg
@@ -150,7 +160,13 @@ vrai "la copie figée de l'éditeur part avec la page : un module, ses licences 
 vrai "la date est écrite en toutes lettres" grep -q "4 octobre 2026" "$P/README.md"
 vrai "la sauvegarde .bundle existe" test -s "$T/sortie1/publication-1.0.0-beta.1.bundle"
 vrai "le clone public est propre" test -z "$(git -C "$P" status --porcelain)"
-vrai "la bêta figée n'a pas bougé : beta/ est toujours, octet pour octet, ce que l'étiquette de la bêta porte" test "$(git -C "$P" rev-parse HEAD:beta)" = "$(git -C "$P" rev-parse "$PP_BETA_ETIQUETTE^{tree}")"
+vrai "nouveautes.html (la page des nouveautés de la version 1) part à la racine du dépôt public, avec la version 1" test -s "$P/nouveautes.html" -a -n "$(git -C "$P" ls-tree --name-only HEAD | grep -x 'nouveautes.html')"
+# La bêta figée (consigne 070 de GFS) : l'étiquette de la bêta, sans correctif, avec un bandeau en plus - deux fichiers (js/beta-bandeau.js, css/beta-bandeau.css) et deux lignes de index.html. Rien d'autre n'a bougé.
+vrai "la bêta figée n'a pas bougé, sauf son bandeau : beta/ est l'étiquette de la bêta, octet pour octet, plus le bandeau de outils/depot-propre/beta/ (beta-bandeau.mjs --verifier), et rien d'autre" node "$ICI/beta-bandeau.mjs" --verifier "$P"
+vrai "... ses fichiers sont ceux de l'étiquette (version, feuille de style, image, catalogue, licence)" bash -c "for f in js/version.js css/style.css img/logo.jpg templates-gallery/catalogue.json LICENSE; do test \"\$(git -C '$P' rev-parse HEAD:beta/\$f)\" = \"\$(git -C '$P' rev-parse '$PP_BETA_ETIQUETTE:'\$f)\" || exit 1; done"
+vrai "... et la page n'a que deux lignes de plus, celles du bandeau : la feuille avant </head>, le script avant </body>" bash -c "test \"\$(diff <(git -C '$P' show '$PP_BETA_ETIQUETTE:index.html') <(git -C '$P' show HEAD:beta/index.html) | grep -c '^<')\" = 0 && test \"\$(diff <(git -C '$P' show '$PP_BETA_ETIQUETTE:index.html') <(git -C '$P' show HEAD:beta/index.html) | grep -c '^>')\" = 2 && git -C '$P' show HEAD:beta/index.html | grep -B1 -x '</head>' | head -1 | grep -q 'css/beta-bandeau.css?v=' && git -C '$P' show HEAD:beta/index.html | grep -B1 -x '</body>' | head -1 | grep -q 'js/beta-bandeau.js?v='"
+vrai "le bandeau pose ses deux fichiers dans beta/, ceux de outils/depot-propre/beta/" bash -c "cmp -s '$T/dev/outils/depot-propre/beta/beta-bandeau.js' '$P/beta/js/beta-bandeau.js' && cmp -s '$T/dev/outils/depot-propre/beta/beta-bandeau.css' '$P/beta/css/beta-bandeau.css'"
+vrai "... et le bouton du bandeau ouvre une page qui existe dans le dépôt public (../nouveautes.html depuis beta/)" bash -c "grep -q \"const NEWS_PAGE = '../nouveautes.html'\" '$P/beta/js/beta-bandeau.js' && test -s '$P/nouveautes.html'"
 
 echo "publier.sh : garde contre l'écrasement"
 (cd "$T/dev" && sed -i 's/beta\.1/beta.2/' js/version.js && G commit -qam "version" && git push -q origin main)
@@ -200,6 +216,15 @@ muter "un dossier de développement" "présente à la racine" "mkdir dev-tests; 
 muter "la liste des bibliothèques (package.json) à la racine du dépôt public" "présente à la racine : package.json" "echo '{}' > package.json"
 muter "le catalogue des bibliothèques (bibliotheques/) à la racine du dépôt public" "présente à la racine : bibliotheques" "mkdir bibliotheques; echo x > bibliotheques/a"
 muter "un fichier cité par la page, absent" "cite des fichiers absents" "rm img/logo.jpg"
+# nouveautes.html (consigne 070 de GFS) : la page que le bouton du bandeau de la bêta ouvre. Elle n'est pas le widget : sa politique de sécurité ne laisse passer que ses propres fichiers, sans script en ligne ni connexion.
+muter "la page des nouveautés absente" "fichier absent : nouveautes.html" "rm nouveautes.html"
+muter "la page des nouveautés sans politique de sécurité" "nouveautes.html : aucune politique de sécurité du contenu" "sed -i '/Content-Security-Policy/d' nouveautes.html"
+muter "la page des nouveautés qui autorise d'autres scripts que les siens" "nouveautes.html : script-src doit être 'self' seul" "sed -i \"s/script-src 'self'/script-src 'self' https:/\" nouveautes.html"
+muter "la page des nouveautés qui autorise une connexion" "nouveautes.html : connect-src doit être 'none'" "sed -i \"s/connect-src 'none'/connect-src https:/\" nouveautes.html"
+muter "la page des nouveautés dont la politique n'est plus fermée par défaut" "nouveautes.html : default-src doit être 'none'" "sed -i \"s/default-src 'none'; //\" nouveautes.html"
+muter "la page des nouveautés avec un script en ligne" "nouveautes.html : un script en ligne" "sed -i 's#</body>#<script>window.y=1;</script></body>#' nouveautes.html"
+muter "la page des nouveautés qui cite un fichier absent" "nouveautes.html cite des fichiers absents de l'arbre : js/absent.js" "sed -i 's#</body>#<script src=\"js/absent.js\"></script></body>#' nouveautes.html"
+vrai "... et la page des nouveautés du faux dépôt, telle qu'elle est, ne fait rien dire à controles.mjs" bash -c "node '$C' '$P' --version 1.0.0-beta.2 | grep -c 'nouveautes.html' | grep -qx 0"
 muter "un dossier de la galerie dont le nom commence par « _ » (GitHub Pages ne le sert pas)" "commence par « _ » ou « . »" "mkdir -p templates-gallery/_tables; echo x > templates-gallery/_tables/gestion.json"
 muter "un fichier caché dans js/ (GitHub Pages ne le sert pas)" "commence par « _ » ou « . »" "echo x > js/.cache"
 muter "la carte du code absente" "fichier absent : CARTE_DU_CODE.md" "rm CARTE_DU_CODE.md"
@@ -279,6 +304,18 @@ muter "beta/ absente" "la copie figée de la bêta est absente" "rm -rf beta"
 muter "beta/ copiée de la version qui part (js/version.js d'une autre version)" "beta/js/version.js annonce 1.0.0-beta.2" "echo \"const PP_VERSION = '1.0.0-beta.2';\" > beta/js/version.js"
 muter "beta/ sans js/version.js" "beta/js/version.js annonce aucune version" "rm beta/js/version.js"
 muter "une page de beta/ qui cite un fichier absent de beta/" "beta/index.html cite des fichiers absents de beta/ : css/style.css" "rm beta/css/style.css"
+# Le bandeau « version bêta » (consigne 070 de GFS) : beta/ le porte tel que outils/depot-propre/beta/ l'écrit ; un bandeau absent, retouché ou mal posé se voit.
+muter "un bandeau dont le script manque dans beta/" "beta/js/beta-bandeau.js : le bandeau de la bêta est absent" "rm beta/js/beta-bandeau.js"
+muter "un bandeau dont la feuille de style manque dans beta/" "beta/css/beta-bandeau.css : le bandeau de la bêta est absent" "rm beta/css/beta-bandeau.css"
+muter "un script du bandeau retouché à la main dans beta/" "beta/js/beta-bandeau.js n'est pas celui de outils/depot-propre/beta/" "echo '/* retouche */' >> beta/js/beta-bandeau.js"
+muter "une feuille du bandeau retouchée à la main dans beta/" "beta/css/beta-bandeau.css n'est pas celui de outils/depot-propre/beta/" "echo '/* retouche */' >> beta/css/beta-bandeau.css"
+muter "un bandeau dont la ligne du script a disparu de beta/index.html" "le script du bandeau .* devrait y être une fois" "sed -i '/js\/beta-bandeau.js/d' beta/index.html"
+muter "un bandeau dont la ligne de la feuille a disparu de beta/index.html" "la feuille du bandeau .* devrait y être une fois" "sed -i '/css\/beta-bandeau.css/d' beta/index.html"
+muter "un bandeau dont le script est cité à la version d'un autre fichier (?v= périmé)" "le script du bandeau .* devrait y être une fois, à la version de son fichier" "sed -i 's/beta-bandeau.js?v=[0-9a-f]\{8\}/beta-bandeau.js?v=00000000/' beta/index.html"
+muter "un bandeau dont la feuille est citée à la version d'un autre fichier (?v= périmé)" "la feuille du bandeau .* devrait y être une fois, à la version de son fichier" "sed -i 's/beta-bandeau.css?v=[0-9a-f]\{8\}/beta-bandeau.css?v=00000000/' beta/index.html"
+muter "un bandeau dont la feuille est après </head>" "la feuille du bandeau doit être dans <head>" "perl -0pi -e 's#(<link rel=\"stylesheet\" href=\"css/beta-bandeau\.css\?v=[0-9a-f]{8}\">\n)(</head>\n)#\$2\$1#' beta/index.html"
+muter "un bandeau dont le script n'est plus le dernier de la page (il doit se poser après main.js)" "le script du bandeau doit être le dernier script de la page" "perl -0pi -e 's#(<script src=\"js/version\.js\"></script>\n)(<script src=\"js/beta-bandeau\.js\?v=[0-9a-f]{8}\"></script>\n)#\$2\$1#' beta/index.html"
+muter "un bandeau dont le bouton ouvre une page absente de l'arbre" "cette page n'est pas dans l'arbre" "rm nouveautes.html"
 MUTER_OPTS=""
 renvois() { node "$C" "$1" --version 1.0.0-beta.2 | grep 'un renvoi à un dossier' | grep -oE ' : [0-9]+ ligne' | grep -oE '[0-9]+' || echo 0; }
 rm -rf "$T/mut"; cp -a "$P" "$T/mut"; rm -rf "$T/mut/.git"; echo '/* voir planning et dev-tests */' >> "$T/mut/beta/css/style.css"
@@ -301,6 +338,65 @@ beta_refus "refuse une beta/ à laquelle il manque un dossier de la bêta" "  be
 beta_refus "refuse une beta/ qui porte une entrée que la bêta n'avait pas" "beta/ porte des entrées que la bêta n'avait pas" "echo x > beta/NOTES.md"
 beta_refus "refuse quand l'étiquette de la bêta est introuvable" "l'étiquette etiquette-inconnue de la bêta est absente" "echo x >> README.md" "PP_BETA_ETIQUETTE=etiquette-inconnue"
 beta_refus "passe la copie de la version qui part à controles.mjs, qui refuse une beta/ qui n'est pas la 1.0.0-beta.1" "beta/js/version.js annonce 1.0.0, la bêta figée est la 1.0.0-beta.1" "copie_de_la_version" "PP_BETA_ETIQUETTE=copie-de-la-version"
+
+echo "beta-bandeau.mjs : le bandeau de la bêta figée (consigne 070 de GFS)"
+BB="$ICI/beta-bandeau.mjs"
+# Un clone public neuf (celui du début : sa bêta figée est l'étiquette, sans bandeau, comme celle du vrai dépôt public avant la consigne 070), sur lequel chaque essai pose, vérifie ou abîme beta/.
+bandeau_clone() { rm -rf "$T/clone3"; git clone -q "$T/propre-src" "$T/clone3"; }
+bandeau_clone
+vrai "--ecarts accepte beta/ telle que l'étiquette la porte, sans bandeau" node "$BB" --ecarts "$T/clone3"
+SORTIE="$(node "$BB" --verifier "$T/clone3" 2>&1)"; STATUT=$?
+attend "--verifier refuse une beta/ sans bandeau, et nomme ses deux fichiers" "beta/js/beta-bandeau.js" "$SORTIE"
+attend "... et la ligne de sa page" "beta/index.html" "$SORTIE"
+vrai "... avec un code de sortie 1" test "$STATUT" = 1
+node "$BB" --poser "$T/clone3" >/dev/null
+vrai "--poser écrit beta/ dans le dossier de travail seulement : rien n'est ajouté à l'index, rien n'est committé" bash -c "test -z \"\$(git -C '$T/clone3' diff --cached --name-only)\" && test \"\$(git -C '$T/clone3' rev-parse HEAD)\" = \"\$(git -C '$T/propre-src' rev-parse HEAD)\" && git -C '$T/clone3' status --porcelain | grep -q 'beta/'"
+vrai "... et ce qu'il écrit passe --verifier --arbre" node "$BB" --verifier "$T/clone3" --arbre
+APRES_1="$(cd "$T/clone3" && find beta -type f | sort | xargs cat | openssl dgst -sha256)"
+node "$BB" --poser "$T/clone3" >/dev/null
+vrai "--poser une seconde fois n'ajoute et ne retire rien (même résultat)" test "$APRES_1" = "$(cd "$T/clone3" && find beta -type f | sort | xargs cat | openssl dgst -sha256)"
+(cd "$T/clone3" && G add -A && G commit -qm "bandeau")
+vrai "une fois committée, beta/ passe --verifier" node "$BB" --verifier "$T/clone3"
+vrai "... et --ecarts (avec ou sans bandeau)" node "$BB" --ecarts "$T/clone3"
+# Un bandeau d'une autre version (un correctif du bandeau posé depuis) : publier.sh l'accepte, il le recompose ; --verifier, lui, dit qu'il n'est plus le bon.
+(cd "$T/clone3" && echo '/* bandeau d une autre version */' >> beta/js/beta-bandeau.js && sed -i 's/beta-bandeau.js?v=[0-9a-f]\{8\}/beta-bandeau.js?v=00000000/' beta/index.html && G commit -qam "bandeau d'une autre version")
+vrai "--ecarts accepte un bandeau d'une autre version : publier.sh le recompose" node "$BB" --ecarts "$T/clone3"
+attend "--verifier dit que ce bandeau n'est plus le bon" "beta/js/beta-bandeau.js" "$(node "$BB" --verifier "$T/clone3" 2>&1)"
+node "$BB" --poser "$T/clone3" >/dev/null
+vrai "--poser le remplace par le bandeau d'aujourd'hui" node "$BB" --verifier "$T/clone3" --arbre
+# La bêta figée ne se corrige pas : un fichier de l'étiquette retouché, un fichier de plus, un fichier de moins, la page retouchée ailleurs que par les deux lignes du bandeau.
+retouche_refusee() { # description, motif attendu, retouche de beta/ dans le clone
+  bandeau_clone; node "$BB" --poser "$T/clone3" >/dev/null
+  (cd "$T/clone3" && eval "$3" && G add -A && G commit -qm "retouche")
+  local ecarts verifier
+  ecarts="$(node "$BB" --ecarts "$T/clone3" 2>&1)"; local s1=$?
+  verifier="$(node "$BB" --verifier "$T/clone3" 2>&1)"; local s2=$?
+  attend "$1 : --ecarts le refuse" "$2" "$ecarts"
+  vrai "... avec un code de sortie 1, pour --ecarts comme pour --verifier" test "$s1" = 1 -a "$s2" = 1
+}
+retouche_refusee "une feuille de style de la bêta retouchée" "beta/css" "echo '/* correctif */' >> beta/css/style.css"
+retouche_refusee "un fichier de la bêta retiré" "beta/img" "git rm -rq beta/img"
+retouche_refusee "un fichier que la bêta n'avait pas" "beta/ porte des entrées que la bêta n'avait pas" "echo x > beta/NOTES.md"
+retouche_refusee "la page de la bêta retouchée ailleurs que par les lignes du bandeau" "beta/index.html" "sed -i 's#<title>bêta</title>#<title>bêta corrigée</title>#' beta/index.html"
+# Où poser les deux lignes : une page de bêta sans ligne </body> (ou en double) n'est pas modifiée au hasard, l'outil s'arrête et dit pourquoi.
+bandeau_clone
+(cd "$T/clone3" && sed -i '/^<\/body>$/d' beta/index.html && G commit -qam "sans </body>" && G tag sans-body "$(echo x | G commit-tree HEAD:beta)")
+SORTIE="$(node "$BB" --poser "$T/clone3" --etiquette sans-body 2>&1)"; STATUT=$?
+attend "--poser s'arrête devant une page sans ligne </body>, et le dit" "exactement une ligne </body>" "$SORTIE"
+vrai "... avec un code de sortie 1" test "$STATUT" = 1
+vrai "... et beta/ du clone n'a pas été touchée (rien d'écrit à moitié)" test -z "$(git -C "$T/clone3" status --porcelain)"
+vrai "... et --poser sans clone ni option affiche l'usage (code 2)" bash -c "node '$BB' --poser 2>/dev/null; test \$? = 2"
+
+echo "publier.sh : le bandeau suit le dépôt de développement"
+# Un correctif du bandeau (outils/depot-propre/beta/ du dépôt de développement) part à la publication suivante, sans rien toucher d'autre dans beta/.
+git -C "$P" push -q origin main v1.0.0-beta.2
+(cd "$T/dev" && sed -i 's/beta\.2/beta.3/' js/version.js && echo '/* correctif du bandeau */' >> outils/depot-propre/beta/beta-bandeau.css && G commit -qam "version, bandeau corrigé" && git push -q origin main)
+SORTIE="$(publier --version 1.0.0-beta.3 --sortie "$T/sortie6")"
+attend "publie avec le bandeau corrigé" "étiquette v1.0.0-beta.3 prêts" "$SORTIE"
+vrai "beta/ porte le bandeau corrigé (la feuille de style du dépôt de développement, octet pour octet)" cmp -s "$T/dev/outils/depot-propre/beta/beta-bandeau.css" "$P/beta/css/beta-bandeau.css"
+vrai "... avec la version de sa feuille mise à jour dans la page (les huit premiers chiffres de l'empreinte du fichier)" grep -qF "css/beta-bandeau.css?v=$(openssl dgst -sha256 -r "$T/dev/outils/depot-propre/beta/beta-bandeau.css" | cut -c1-8)\"" "$P/beta/index.html"
+vrai "... et beta/ est le bandeau du dépôt de développement + l'étiquette de la bêta, rien d'autre" node "$T/dev/outils/depot-propre/beta-bandeau.mjs" --verifier "$P"
+vrai "... le reste de beta/ n'a pas bougé (js/version.js est celui de l'étiquette)" test "$(git -C "$P" rev-parse HEAD:beta/js/version.js)" = "$(git -C "$P" rev-parse "$PP_BETA_ETIQUETTE:js/version.js")"
 
 echo
 echo "$OK réussi(s), $KO échec(s)."

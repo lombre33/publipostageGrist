@@ -38,12 +38,23 @@ const I18n = (function () {
     } catch (e) { return null; }
   }
 
-  // Langue au premier lancement : celle de GFS quand il héberge l'app (gfsLang), sinon celle que la personne a choisie dans Réglages (enregistrée), sinon la première langue du navigateur parmi le français
-  // et l'anglais, l'anglais quand il n'en propose aucune des deux, le français quand il ne dit rien. Le choix n'est enregistré qu'à un changement dans
+  // La langue que l'adresse impose à ce chargement, sans rien retenir : `?lang=fr` ou `?lang=en` (le bouton « Découvrir les nouveautés » du bandeau de la bêta ouvre nouveautes.html dans la langue de son
+  // widget, consigne 070 de GFS). null quand l'adresse n'en dit pas une des deux. Le widget que Grist charge n'a pas ce paramètre : Grist n'en donne pas, GFS donne `language` (gfsLang).
+  function addressLang() {
+    try {
+      const given = String(new URLSearchParams(window.location.search).get('lang') || '').toLowerCase();
+      return given === 'fr' || given === 'en' ? given : null;
+    } catch (e) { return null; }
+  }
+
+  // Langue au premier lancement : celle de GFS quand il héberge l'app (gfsLang), sinon celle que l'adresse impose (addressLang), sinon celle que la personne a choisie dans Réglages (enregistrée), sinon la
+  // première langue du navigateur parmi le français et l'anglais, l'anglais quand il n'en propose aucune des deux, le français quand il ne dit rien. Le choix n'est enregistré qu'à un changement dans
   // Réglages : un navigateur remis en anglais, ou en français, est suivi tant que la personne n'a rien choisi.
   function initialLang() {
     const hosted = gfsLang();
     if (hosted) return hosted;
+    const addressed = addressLang();
+    if (addressed) return addressed;
     let stored = null;
     try { stored = localStorage.getItem('pp_lang'); } catch (e) { /* stockage indisponible : on suit le navigateur */ }
     if (stored === 'fr' || stored === 'en') return stored;

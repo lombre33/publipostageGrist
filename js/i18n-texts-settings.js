@@ -321,6 +321,10 @@ const I18nTextsSettings = {
   'news.prev': { fr: 'Précédent', en: 'Previous' },
   'news.next': { fr: 'Suivant', en: 'Next' },
   'news.dotLabel': { fr: '{n} / {total} : {name}', en: '{n} / {total}: {name}' },
+  // La page des nouveautés (nouveautes.html, js/news-page.js) : la même fenêtre, seule sur sa page, ouverte dans un nouvel onglet par le bouton « Découvrir les nouveautés » du bandeau de la bêta (consigne 070 de GFS).
+  'news.page.title': { fr: 'Nouveautés · Publipostage+', en: 'What’s new · Publipostage+' },
+  'news.page.lead': { fr: 'Ce que la version 1 de Publipostage+ change, en images.', en: 'What version 1 of Publipostage+ changes, in pictures.' },
+  'news.page.done': { fr: 'Vous pouvez fermer cet onglet.', en: 'You can close this tab.' },
   'news.loop.name': { fr: 'Une ligne dans le modèle, toutes les lignes dans le document', en: 'One row in the template, every row in the document' },
   'news.loop.text': { fr: 'Avec la Boucle, une seule ligne de tableau suffit : elle se répète pour chaque ligne d’une table (une facture, un bulletin, une liste).', en: 'With Loop, a single table row is enough: it repeats for each row of a table (an invoice, a report card, a list).' },
   'news.loop.alt': { fr: 'Un tableau de modèle avec une ligne répétée, puis le document avec toutes les lignes', en: 'A template table with one repeated row, then the document with all the rows' },

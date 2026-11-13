@@ -6,14 +6,19 @@
 // avec le bloc). Une balise `<link rel="preload" as="script">` par script les fait demander tous ensemble, dès l'en-tête ; les scripts gardent leur place et leur ordre d'exécution, rien d'autre ne change.
 // Le bloc est ÉCRIT par cet outil à partir des balises `<script src="js/…">` de la page : une version (`?v=`) qui diffère entre la balise et son préchargement ferait télécharger le fichier deux fois.
 //
-//   node outils/precharger-scripts.mjs              réécrit le bloc d'index.html d'après ses balises (à lancer après avoir ajouté, retiré ou monté la version d'un script)
-//   node outils/precharger-scripts.mjs --verifier   code 1 si le bloc n'est pas à jour (c'est ce que vérifie dev-tests/verify-code-hygiene.mjs)
-import { readFileSync, writeFileSync } from 'node:fs';
+// nouveautes.html (la fenêtre des nouveautés de la version 1 seule sur sa page, consigne 070 de GFS) charge une partie des fichiers d'index.html : l'outil lui donne LEURS versions (`?v=`), puisqu'un même fichier à
+// deux versions serait téléchargé deux fois par la personne qui a ouvert le widget puis cette page, et il écrit son bloc de préchargement de la même façon. Les fichiers propres à la page (js/news-page.js,
+// css/news-page.css) gardent la version qu'elle écrit.
+//
+//   node outils/precharger-scripts.mjs              réécrit le bloc d'index.html d'après ses balises, puis aligne nouveautes.html sur index.html et réécrit son bloc (à lancer après avoir ajouté, retiré ou monté la version d'un fichier)
+//   node outils/precharger-scripts.mjs --verifier   code 1 si l'un des deux blocs, ou les versions de nouveautes.html, ne sont pas à jour (c'est ce que vérifie dev-tests/verify-code-hygiene.mjs)
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const INDEX_PATH = join(ROOT, 'index.html');
+export const NEWS_PATH = join(ROOT, 'nouveautes.html');
 export const START = '<!-- précharge des scripts : début (écrit par outils/precharger-scripts.mjs d\'après les balises <script> ci-dessous : ne pas le modifier à la main) -->';
 export const END = '<!-- précharge des scripts : fin -->';
 const EXPLAIN = '<!-- Sans ce bloc, les scripts se chargent un par un (la politique de sécurité de cette page est une balise <meta> : le navigateur ne lit plus la page à l\'avance) : 8 s de plus à 30 ms d\'aller-retour. -->';
@@ -39,14 +44,42 @@ export function rewrite(html) {
 }
 export function isCurrent(html) { return rewrite(html) === html; }
 
+// Les fichiers qu'une page charge par une balise `<script src="js/…?v=…">` ou `<link rel="stylesheet" href="css/…?v=…">`, dans l'ordre de la page, hors commentaires et hors du bloc de préchargement : [fichier, version].
+const FILE_TAG = /<script src="((?:js|extensions)\/[^"?]+)\?v=([^"]+)"><\/script>|<link rel="stylesheet" href="(css\/[^"?]+)\?v=([^"]+)">/g;
+export function filesOf(html) {
+  const outside = html.replace(blockPattern(), '').replace(/<!--[\s\S]*?-->/g, '');
+  return [...outside.matchAll(FILE_TAG)].map(m => m[1] ? [m[1], m[2]] : [m[3], m[4]]);
+}
+// nouveautes.html avec, pour chaque fichier qu'index.html charge aussi, la version d'index.html (les commentaires de la page ne sont pas touchés : seules les balises le sont).
+export function alignNews(newsHtml, indexHtml) {
+  const versions = new Map(filesOf(indexHtml));
+  return newsHtml.replace(FILE_TAG, (tag, script, scriptVersion, sheet, sheetVersion) => {
+    const file = script || sheet;
+    const version = versions.get(file);
+    return version === undefined ? tag : tag.replace('?v=' + (script ? scriptVersion : sheetVersion), '?v=' + version);
+  });
+}
+// nouveautes.html à jour : versions d'index.html, puis son propre bloc de préchargement.
+export function rewriteNews(newsHtml, indexHtml) { return rewrite(alignNews(newsHtml, indexHtml)); }
+export function isCurrentNews(newsHtml, indexHtml) { return rewriteNews(newsHtml, indexHtml) === newsHtml; }
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const html = readFileSync(INDEX_PATH, 'utf8');
+  const news = existsSync(NEWS_PATH) ? readFileSync(NEWS_PATH, 'utf8') : null;
   if (process.argv.includes('--verifier')) {
-    if (isCurrent(html)) console.log('Le bloc de préchargement d\'index.html est à jour (' + scriptsOf(html).length + ' scripts).');
-    else { console.error('Le bloc de préchargement d\'index.html n\'est pas à jour : lancer node outils/precharger-scripts.mjs'); process.exit(1); }
+    const stale = [];
+    if (!isCurrent(html)) stale.push('index.html (le bloc de préchargement)');
+    if (news !== null && !isCurrentNews(news, html)) stale.push('nouveautes.html (les versions d\'index.html, ou son bloc de préchargement)');
+    if (stale.length === 0) console.log('Les blocs de préchargement sont à jour : index.html (' + scriptsOf(html).length + ' scripts)' + (news !== null ? ', nouveautes.html (' + scriptsOf(news).length + ' scripts).' : '.'));
+    else { console.error('À réécrire : ' + stale.join(' ; ') + ' : lancer node outils/precharger-scripts.mjs'); process.exit(1); }
   } else {
     const next = rewrite(html);
-    if (next === html) console.log('Rien à changer (' + scriptsOf(html).length + ' scripts préchargés).');
-    else { writeFileSync(INDEX_PATH, next); console.log('Bloc de préchargement réécrit : ' + scriptsOf(next).length + ' scripts.'); }
+    if (next === html) console.log('index.html : rien à changer (' + scriptsOf(html).length + ' scripts préchargés).');
+    else { writeFileSync(INDEX_PATH, next); console.log('index.html : bloc de préchargement réécrit (' + scriptsOf(next).length + ' scripts).'); }
+    if (news !== null) {
+      const nextNews = rewriteNews(news, next);
+      if (nextNews === news) console.log('nouveautes.html : rien à changer (' + scriptsOf(news).length + ' scripts préchargés).');
+      else { writeFileSync(NEWS_PATH, nextNews); console.log('nouveautes.html : versions alignées sur index.html, bloc de préchargement réécrit (' + scriptsOf(nextNews).length + ' scripts).'); }
+    }
   }
 }

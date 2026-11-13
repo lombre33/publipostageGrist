@@ -3,12 +3,13 @@
 // Lecture seule : rien n'est modifié. Il lit l'arbre tel qu'il sera publié, pas le dépôt de développement.
 //
 // Usage : node controles.mjs <dossier de l'arbre à publier> [--version 1.0.0-beta.1] [--beta-figee]
-//   --beta-figee : l'arbre est celui du dépôt public, qui garde dans beta/ la copie figée de la bêta (publier.sh le demande) : elle doit y être, et être la bêta.
+//   --beta-figee : l'arbre est celui du dépôt public, qui garde dans beta/ la copie figée de la bêta (publier.sh le demande) : elle doit y être, être la bêta, et porter son bandeau (consigne 070 de GFS).
 // Sortie : une ligne par constat, « ERREUR » (publier.sh refuse de committer) ou « AVERTISSEMENT » (à relire), puis le total.
 // Code de sortie : 1 s'il y a au moins une erreur, 0 sinon.
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
-import { join, relative, extname, sep } from 'node:path';
+import { join, relative, extname, sep, posix } from 'node:path';
 import { createHash } from 'node:crypto';
+import { balises, sources, BANDEAU_JS, BANDEAU_CSS } from './beta-bandeau.mjs';
 
 const args = process.argv.slice(2);
 const root = args[0];
@@ -69,13 +70,13 @@ function report(level, label, hits, show = 4) {
 // 1. Ce qui doit être là, et ce qui ne doit jamais l'être
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // .nojekyll (un fichier vide) : le dépôt public a son propre site GitHub Pages ; sans lui, Pages passe les .md dans Jekyll avant de publier, et une accolade double ouverte dans un seul d'entre eux fait échouer la publication en silence (le site reste sur la version d'avant).
-for (const required of ['index.html', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'PATCH_NOTES.md', 'NOTICE', 'CARTE_DU_CODE.md', '.nojekyll']) {
+for (const required of ['index.html', 'nouveautes.html', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'PATCH_NOTES.md', 'NOTICE', 'CARTE_DU_CODE.md', '.nojekyll']) {
   if (!has(required)) fail(`fichier absent : ${required}`);
 }
 const NEVER = ['dev-tests', 'planning', 'prototypes', 'templates-gallery-dev', 'outils', '.claude', 'AUDIT_CODE.md', 'CAHIER_DES_CHARGES.md', 'GFS-ETAT.md', 'package.json', 'bibliotheques'];
 const topLevel = new Set(files.map(file => file.rel.split('/')[0]));
 for (const name of NEVER) if (topLevel.has(name)) fail(`entrée du dépôt de développement présente à la racine : ${name}`);
-const KNOWN = new Set(['index.html', 'css', 'js', 'extensions', 'img', 'templates-gallery', 'screenshots', 'kit', 'vendor', 'beta', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'PATCH_NOTES.md', 'NOTICE', 'CARTE_DU_CODE.md', '.github', '.gitignore', '.gitattributes', '.nojekyll']);
+const KNOWN = new Set(['index.html', 'nouveautes.html', 'css', 'js', 'extensions', 'img', 'templates-gallery', 'screenshots', 'kit', 'vendor', 'beta', 'LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'CHANGELOG.md', 'PATCH_NOTES.md', 'NOTICE', 'CARTE_DU_CODE.md', '.github', '.gitignore', '.gitattributes', '.nojekyll']);
 for (const name of topLevel) if (!KNOWN.has(name) && !NEVER.includes(name)) warn(`entrée inconnue à la racine : ${name} (à classer dans publier.sh et dans controles.mjs)`);
 // Le kit de Grist Factory (kit/, sous-module du dépôt de développement, ici en fichiers : publier.sh) : un sous-module vide (.gitmodules sans fichiers) ne servirait rien, et le dépôt public n'a pas de sous-module.
 if (has('.gitmodules')) fail('.gitmodules présent : le dépôt public n\'a pas de sous-module, le kit y est en fichiers (publier.sh)');
@@ -121,6 +122,25 @@ if (betaFigee) {
       if (!has(`beta/${target.replace(/^\.\//, '')}`)) absent.push(target);
     }
     if (absent.length) fail(`beta/index.html cite des fichiers absents de beta/ : ${[...new Set(absent)].join(', ')}`);
+
+    // Le bandeau « version bêta » (consigne 070 de GFS) : beta/ le porte tel que outils/depot-propre/beta/ l'écrit (beta-bandeau.mjs, que publier.sh lance) - ses deux fichiers à l'octet près, ses deux
+    // lignes dans index.html (la feuille avant </head>, le script après tous les autres, chacun avec l'empreinte de son fichier) - et la page que son bouton ouvre est dans l'arbre. Le reste de beta/ est
+    // celui de l'étiquette : publier.sh le vérifie avec git (beta-bandeau.mjs --ecarts), ici il n'y a pas d'historique.
+    const src = sources();
+    const lignes = balises(src);
+    const page = read('beta/index.html');
+    for (const [rel, attendu] of [[BANDEAU_JS, src.js], [BANDEAU_CSS, src.css]]) {
+      if (!has(`beta/${rel}`)) fail(`beta/${rel} : le bandeau de la bêta est absent (publier.sh le pose : beta-bandeau.mjs --poser, consigne 070 de GFS)`);
+      else if (!readFileSync(join(root, 'beta', rel)).equals(attendu)) fail(`beta/${rel} n'est pas celui de outils/depot-propre/beta/ : le bandeau se repose avec beta-bandeau.mjs --poser, il ne se retouche pas dans beta/`);
+    }
+    for (const [nom, ligne] of [['la feuille', lignes.css], ['le script', lignes.js]]) {
+      const n = page.split(ligne + '\n').length - 1;
+      if (n !== 1) fail(`beta/index.html : ${nom} du bandeau (${ligne}) devrait y être une fois, à la version de son fichier (${n} trouvée(s))`);
+    }
+    if (page.includes(lignes.css) && page.indexOf(lignes.css) > page.indexOf('</head>')) fail('beta/index.html : la feuille du bandeau doit être dans <head>');
+    if (page.includes(lignes.js) && page.indexOf(lignes.js) !== page.lastIndexOf('<script')) fail('beta/index.html : le script du bandeau doit être le dernier script de la page (il se pose après main.js)');
+    const cible = (/const NEWS_PAGE = '([^']+)'/.exec(src.js.toString('utf8')) || [])[1];
+    if (!cible || !has(posix.normalize(`beta/${cible}`))) fail(`beta/${BANDEAU_JS} ouvre ${cible || 'aucune page'} depuis beta/ : cette page n'est pas dans l'arbre (la page des nouveautés de la version 1, nouveautes.html, part à la racine du site)`);
   }
 }
 
@@ -191,6 +211,31 @@ if (has('index.html')) {
 
   // Rien dans la page ne doit encore pointer vers le dépôt de développement.
   report('error', 'l\'adresse du dépôt de développement (publipostageGrist)', grep(/publipostageGrist/i));
+}
+
+// nouveautes.html : la fenêtre des nouveautés de la version 1 seule sur sa page (consigne 070 de GFS), ouverte dans un nouvel onglet par le bouton du bandeau de la bêta figée. Ce n'est pas le widget : aucune
+// connexion, aucun script en ligne, rien que ses propres fichiers (politique de sécurité du contenu), et chaque fichier qu'elle cite est dans l'arbre.
+if (has('nouveautes.html')) {
+  const raw = read('nouveautes.html');
+  const page = raw.replace(/<!--[\s\S]*?-->/g, comment => comment.replace(/[^\n]/g, ' '));
+  const meta = page.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/);
+  if (!meta) {
+    fail('nouveautes.html : aucune politique de sécurité du contenu (<meta http-equiv="Content-Security-Policy">)');
+  } else {
+    if (meta.index > page.indexOf('<script') && page.indexOf('<script') >= 0) fail('nouveautes.html : la politique de sécurité du contenu vient après le premier <script>');
+    const directives = Object.fromEntries(meta[1].split(';').map(directive => directive.trim().split(/\s+/)).filter(directive => directive[0]).map(directive => [directive[0], directive.slice(1).join(' ')]));
+    if (directives['default-src'] !== "'none'") fail("nouveautes.html : default-src doit être 'none' (rien que ce que la politique nomme)");
+    if (directives['script-src'] !== "'self'") fail(`nouveautes.html : script-src doit être 'self' seul (ses propres scripts) : ${directives['script-src'] || 'absent'}`);
+    if (directives['connect-src'] !== "'none'") fail("nouveautes.html : connect-src doit être 'none' (la page ne se connecte à rien)");
+  }
+  for (const match of page.matchAll(/<script\b([^>]*)>/gi)) if (!/\bsrc\s*=/i.test(match[1])) fail('nouveautes.html : un script en ligne (la politique de la page le refuse : tous ses scripts sont des fichiers)');
+  const missing = [];
+  for (const match of page.matchAll(/\b(?:src|href)="([^"#]+)"/g)) {
+    const target = match[1].split('?')[0];
+    if (/^(https?:|\/\/|data:|mailto:|javascript:)/i.test(target)) continue;
+    if (!has(target.replace(/^\.\//, ''))) missing.push(target);
+  }
+  if (missing.length) fail(`nouveautes.html cite des fichiers absents de l'arbre : ${[...new Set(missing)].join(', ')}`);
 }
 
 // GitHub Pages (Jekyll) ne sert aucun fichier ni dossier dont le nom commence par « _ » ou « . » : ce que le widget charge n'en porte pas (templates-gallery/_tables/ répondait 404 en ligne le 09/10 ; il s'appelle families/).
