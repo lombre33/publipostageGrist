@@ -75,6 +75,7 @@ const Comments = (function () {
     canComment = nextCanComment;
     readerMode = nextReaderMode;
     readerRange = null;
+    notifyChange();   // le volet des commentaires grise ou rend ses boutons « Résoudre »
   }
   function isReaderMode() { return readerMode; }
   function setReaderHooks(hooks) {
@@ -366,10 +367,17 @@ const Comments = (function () {
     const { doc } = editor.state;
     const selection = EditorCore.getTextSelectionClass().near(doc.resolve(Math.max(0, Math.min(thread.from, doc.content.size))), 1);
     editor.view.dispatch(editor.state.tr.setSelection(selection).scrollIntoView());
-    // La fenêtre se place une fois le texte défilé : ancrée avant, elle partirait de l'ancienne place de la marque.
+    EditorCore.scrollToPosition(editor.view, selection.from);
+    // La fenêtre se place une fois le texte défilé : ancrée avant, elle partirait de l'ancienne place de la marque. Un fil tout neuf qui attend son premier message, ou une saisie commencée, ne se laissent
+    // pas fermer par un autre fil (comme au clic en dehors, outsideMouseDown) : la fenêtre reste, le texte seul se déplace. Celle du même fil, déjà ouverte, suit le passage.
     requestAnimationFrame(() => {
       const anchor = markElement(commentId);
-      if (anchor) openThreadView(commentId, anchor, thread.resolved);
+      if (!anchor) return;
+      const shown = !!popupBox && popupBox.style.display !== 'none';
+      const typing = shown ? popupBox.querySelector('.v2-comment-popup-reply') : null;
+      const busy = shown && !!popupCommentId && (popupIsNewThread || !!(typing && typing.value.trim()));
+      if (shown && popupCommentId === commentId) positionPopup(popupBox, anchor);
+      else if (!busy) openThreadView(commentId, anchor, thread.resolved);
     });
     return true;
   }

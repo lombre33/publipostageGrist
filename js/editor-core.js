@@ -977,8 +977,30 @@ const EditorCore = (function () {
     return true;
   }
 
+  // Amène la position `pos` du texte à la vue, dans le conteneur qui défile (le plus proche ancêtre de l'éditeur qui défile), à un tiers de sa hauteur. ProseMirror (`scrollIntoView` d'une transaction) ne
+  // défile que par la sélection DOM : quand le focus est resté ailleurs (le volet « Modifications » et « Commentaires » garde la main, Suivant, Précédent), cette sélection n'est pas dans le texte et rien ne
+  // bouge. Une position cachée par l'affichage « Sans marque », « Marques simples » ou « Original » (js/track-changes-pane.js) n'a aucune coordonnée : on amène alors le premier bloc visible qui l'entoure.
+  // Rien à faire quand elle est déjà à la vue.
+  function scrollToPosition(view, pos) {
+    if (!view || !view.dom) return;
+    let rect = view.coordsAtPos(pos);
+    if (rect.top === 0 && rect.bottom === 0) {
+      const { node } = view.domAtPos(pos);
+      let block = node.nodeType === 1 ? node : node.parentElement;
+      while (block && block !== view.dom && block.getClientRects().length === 0) block = block.parentElement;
+      if (!block || block === view.dom) return;
+      rect = block.getBoundingClientRect();
+    }
+    let box = view.dom.parentElement;
+    while (box && box !== document.documentElement && !(box.scrollHeight > box.clientHeight && /(auto|scroll)/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+    if (!box || box === document.documentElement) return;
+    const frame = box.getBoundingClientRect();
+    if (rect.top >= frame.top && rect.bottom <= frame.bottom) return;
+    box.scrollTop += rect.top - frame.top - Math.min(frame.height / 3, 120);
+  }
+
   return {
-    setEditor, getEditor, focusEditor, setFloatingUi, setNodeSelectionClass, getTextSelectionClass, setTextSelectionClass,
+    setEditor, getEditor, focusEditor, scrollToPosition, setFloatingUi, setNodeSelectionClass, getTextSelectionClass, setTextSelectionClass,
     patchNodeAndReselect, editorContentWidthPx, pageScale, atPageScale, layoutZoom, contentZoom, contentZoomIsOff, settleContentZoom, createStepSheets, nextInFlow, gapAbove, opensPageAt, fitReserve, reserveRule, placeReservesAtOnce, reserveRoundingName, createFloatingPanel,
     registerFloatingPanel, hideFloatingContextToolbars, isFormFieldFocus, closeHoverMenu,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,

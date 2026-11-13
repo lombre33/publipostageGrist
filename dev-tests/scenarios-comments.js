@@ -493,6 +493,185 @@
     },
   });
 
+  // --- L'onglet « Commentaires » du volet (js/track-changes-pane.js), dans la page : sa ligne du menu, ses lignes, ses boutons. La vraie souris, à 700x400, est dans dev-tests/verify-comment-pane-mouse.mjs. ---
+  const paneEl = () => document.getElementById('pp-track-pane');
+  const commentPanel = () => document.getElementById('pp-track-panel-comments');
+  const threadRows = () => Array.from(commentPanel().querySelectorAll('.pp-trackpane-thread'));
+  const closePaneIfOpen = () => { if (typeof TrackChangesPane !== 'undefined' && TrackChangesPane.isOpen()) TrackChangesPane.closePane({ focus: false }); };
+  const pick = (row, sel) => { const e = row.querySelector(sel); return e ? e.textContent : null; };
+  function setThreadFilter(value) {
+    const select = commentPanel().querySelector('.pp-trackpane-threadfilter');
+    select.value = value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  cases.push({
+    id: 'comment_pane_lists_the_threads_filters_resolves_and_goes_to_the_passage',
+    description: "La ligne « Liste des commentaires » ouvre le volet sur l'onglet « Commentaires » : un fil par ligne dans l'ordre du texte (le passage cité, le dernier mot, les réponses) ; « Ouverts / Résolus / Tous » ; « Résoudre » et « Rouvrir » sur la ligne changent la marque du texte ; un clic va au passage et ouvre le fil ; « Suivant » le fait de proche en proche ; les deux onglets s'alternent par la ligne de chacun",
+    run: async (h) => {
+      try {
+        await savedTemplateWithText(h, 'Commentaires volet', 'Premier passage commenté');
+        Editor.setHTML('<p>Premier passage commenté</p><p>Second passage à voir</p><p>Troisième passage</p><p>Fin sans commentaire</p>');
+        await h.sleep(150);
+        const first = await commentParagraph(h, 0, 'Question sur le premier');
+        const second = await commentParagraph(h, 1, 'Remarque sur le second');
+        replyArea().value = 'Réponse au second';
+        await pressPopupButton(h, '.v2-comment-popup-post');
+        await closePopupIfOpen(h);
+        const third = await commentParagraph(h, 2, 'Un mot sur le troisième');
+        await closePopupIfOpen(h);
+        if (!first || !second || !third) return { pass: false, notes: 'marques absentes : ' + [first, second, third] };
+        // Le curseur dans le dernier paragraphe, sans commentaire : le volet dit « 3 commentaires », pas « n sur 3 ».
+        EditorCore.getEditor().commands.setTextSelection(EditorCore.getEditor().state.doc.content.size - 2);
+        const out = {};
+        const menuRow = () => document.getElementById('v2-btn-comment-pane');
+        out.rowFirst = !!menuRow() && menuRow().getAttribute('aria-pressed') === 'false';
+        await h.clickButton('v2-btn-comment-pane');
+        await h.sleep(300);
+        out.opened = TrackChangesPane.isOpen() && TrackChangesPane.tab() === 'comments' && !commentPanel().hidden && document.getElementById('pp-track-panel-changes').hidden
+          && menuRow().getAttribute('aria-pressed') === 'true' && menuRow().classList.contains('is-active') && !document.getElementById('v2-btn-track-pane').classList.contains('is-active');
+        out.rows = threadRows().map(r => r.dataset.id).join() === [first, second, third].join();
+        const rows = threadRows();
+        out.quote = pick(rows[1], '.pp-trackpane-quote') === 'Second passage à voir';
+        out.excerpt = /: Réponse au second$/.test(pick(rows[1], '.pp-trackpane-excerpt') || '') && pick(rows[0], '.pp-trackpane-excerpt') === 'Question sur le premier';
+        out.replies = pick(rows[1], '.pp-trackpane-meta') === '1 réponse' && pick(rows[0], '.pp-trackpane-meta') === null;
+        out.count = paneEl().querySelector('.pp-trackpane-count').textContent === '3 commentaires';
+        out.options = Array.from(commentPanel().querySelectorAll('.pp-trackpane-threadfilter option')).map(o => o.textContent).join() === 'Ouverts (3),Résolus (0),Tous (3)';
+        // Résoudre : la marque du texte change, la ligne quitte « Ouverts »
+        rows[0].querySelector('.pp-trackpane-resolve').click();
+        await h.sleep(450);
+        out.resolved = Comments.listThreads()[0].resolved === true && /data-comment-id="[^"]*"[^>]*data-resolved="true"/.test(Editor.getHTML());
+        out.leaves = threadRows().map(r => r.dataset.id).join() === [second, third].join() && paneEl().querySelector('.pp-trackpane-count').textContent === '2 commentaires';
+        setThreadFilter('resolved');
+        await h.sleep(150);
+        const resolvedRows = threadRows();
+        out.resolvedList = resolvedRows.length === 1 && resolvedRows[0].dataset.id === first && resolvedRows[0].classList.contains('is-resolved') && pick(resolvedRows[0], '.pp-trackpane-meta') === 'Résolu'
+          && /^Rouvrir le commentaire de/.test(resolvedRows[0].querySelector('.pp-trackpane-resolve').title);
+        resolvedRows[0].querySelector('.pp-trackpane-resolve').click();
+        await h.sleep(450);
+        out.reopened = Comments.listThreads()[0].resolved === false && threadRows().length === 0 && commentPanel().querySelector('.pp-trackpane-empty').textContent === 'Aucun commentaire résolu.';
+        setThreadFilter('all');
+        await h.sleep(150);
+        out.all = threadRows().length === 3;
+        // Un clic sur une ligne : le curseur au passage, la fenêtre du fil
+        threadRows()[1].querySelector('.pp-trackpane-go').click();
+        await h.sleep(350);
+        const thread = Comments.listThreads()[1];
+        const caret = EditorCore.getEditor().state.selection.from;
+        out.go = caret >= thread.from && caret <= thread.to && popupVisible() && /Réponse au second/.test(popup().textContent) && threadRows()[1].classList.contains('is-current')
+          && paneEl().querySelector('.pp-trackpane-count').textContent === '2 sur 3';
+        paneEl().querySelector('.pp-trackpane-next').click();
+        await h.sleep(350);
+        out.next = threadRows()[2].classList.contains('is-current') && /Un mot sur le troisième/.test(popup().textContent) && paneEl().querySelector('.pp-trackpane-next').getAttribute('aria-label') === 'Commentaire suivant';
+        paneEl().querySelector('.pp-trackpane-prev').click();
+        await h.sleep(350);
+        out.prev = threadRows()[1].classList.contains('is-current');
+        await closePopupIfOpen(h);
+        // Les deux onglets
+        paneEl().querySelector('#pp-track-tab-changes').click();
+        await h.sleep(200);
+        out.tabChanges = TrackChangesPane.tab() === 'changes' && commentPanel().hidden && !document.getElementById('pp-track-panel-changes').hidden && document.getElementById('v2-btn-track-pane').classList.contains('is-active')
+          && !menuRow().classList.contains('is-active') && paneEl().querySelector('.pp-trackpane-next').getAttribute('aria-label') === 'Modification suivante';
+        await h.clickButton('v2-btn-comment-pane');
+        await h.sleep(250);
+        out.rowSwitches = TrackChangesPane.isOpen() && TrackChangesPane.tab() === 'comments' && menuRow().classList.contains('is-active') && threadRows().length === 3;
+        await h.clickButton('v2-btn-comment-pane');
+        await h.sleep(200);
+        out.rowCloses = !TrackChangesPane.isOpen() && menuRow().getAttribute('aria-pressed') === 'false';
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { closePaneIfOpen(); await closePopupIfOpen(h); }
+    },
+  });
+
+  cases.push({
+    id: 'comment_pane_follows_posted_replies_and_a_document_without_comments',
+    description: "Le volet ouvert sur les commentaires se redessine tout seul quand une réponse est publiée (le nombre de réponses, le dernier mot) et quand le texte perd ses commentaires (« Aucun commentaire dans ce modèle. ») ; sans éditeur à l'écran il n'ouvre rien",
+    run: async (h) => {
+      try {
+        await savedTemplateWithText(h, 'Commentaires volet suivi', 'Un texte à commenter');
+        const id = await commentFirstParagraph(h);
+        if (!id) return { pass: false, notes: 'aucune marque posée' };
+        await postFirstMessage(h, 'Un premier mot');
+        const out = {};
+        TrackChangesPane.open('comments');
+        await h.sleep(300);
+        out.one = threadRows().length === 1 && pick(threadRows()[0], '.pp-trackpane-meta') === null;
+        replyArea().value = 'Une réponse tapée pendant que le volet est ouvert';
+        await pressPopupButton(h, '.v2-comment-popup-post');
+        await closePopupIfOpen(h);
+        await h.sleep(450);
+        out.replied = pick(threadRows()[0], '.pp-trackpane-meta') === '1 réponse' && /: Une réponse tapée/.test(pick(threadRows()[0], '.pp-trackpane-excerpt') || '');
+        Editor.setHTML('<p>Rien à commenter</p>');
+        await h.sleep(450);
+        out.empty = threadRows().length === 0 && commentPanel().querySelector('.pp-trackpane-empty').textContent === 'Aucun commentaire dans ce modèle.'
+          && commentPanel().querySelector('.pp-trackpane-threadfilter').closest('.pp-trackpane-filterrow').hidden && paneEl().querySelector('.pp-trackpane-count').textContent === '';
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { closePaneIfOpen(); await closePopupIfOpen(h); }
+    },
+  });
+
+  cases.push({
+    id: 'comment_pane_buttons_are_greyed_without_comment_rights_and_resolve_nothing',
+    description: "Sans le droit de commenter, « Résoudre » du volet est grisé (jamais retiré, atteignable, avec la raison en infobulle) et un clic ne résout rien ; le droit rendu, il résout",
+    run: async (h) => {
+      try {
+        await savedTemplateWithText(h, 'Commentaires volet droits', 'Un texte à commenter');
+        const id = await commentFirstParagraph(h);
+        if (!id) return { pass: false, notes: 'aucune marque posée' };
+        await postFirstMessage(h, 'Un mot');
+        await closePopupIfOpen(h);
+        const out = {};
+        TrackChangesPane.open('comments');
+        await h.sleep(300);
+        const button = () => threadRows()[0].querySelector('.pp-trackpane-resolve');
+        out.enabled = button().getAttribute('aria-disabled') !== 'true';
+        Comments.setPermissions({ canComment: false, readerMode: false });
+        await h.sleep(450);
+        out.greyed = button().getAttribute('aria-disabled') === 'true' && button().title === I18n.t('lock.noComment') && !button().disabled;
+        button().click();
+        await h.sleep(350);
+        out.untouched = Comments.listThreads()[0].resolved === false && threadRows().length === 1;
+        Comments.setPermissions({ canComment: true, readerMode: false });
+        await h.sleep(450);
+        out.back = button().getAttribute('aria-disabled') !== 'true';
+        button().click();
+        await h.sleep(450);
+        out.resolved = Comments.listThreads()[0].resolved === true;
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { Comments.setPermissions({ canComment: true, readerMode: false }); closePaneIfOpen(); await closePopupIfOpen(h); }
+    },
+  });
+
+  cases.push({
+    id: 'comment_pane_row_click_keeps_the_window_of_a_thread_being_written',
+    description: "Un clic sur la ligne d'un autre fil ne ferme pas la fenêtre d'un fil tout neuf dont le premier message est en train d'être tapé : le texte se déplace, la fenêtre et la saisie restent, et le message se publie ensuite",
+    run: async (h) => {
+      try {
+        await savedTemplateWithText(h, 'Commentaires volet saisie', 'Premier passage commenté');
+        Editor.setHTML('<p>Premier passage commenté</p><p>Second passage à voir</p>');
+        await h.sleep(150);
+        const first = await commentParagraph(h, 0, 'Un mot sur le premier');
+        await closePopupIfOpen(h);
+        const second = await commentParagraph(h, 1, null);
+        if (!first || !second) return { pass: false, notes: 'marques absentes : ' + first + ' / ' + second };
+        replyArea().value = 'Un premier mot encore à publier';
+        TrackChangesPane.open('comments');
+        await h.sleep(300);
+        const out = {};
+        out.listed = threadRows().map(r => r.dataset.id).join() === first + ',' + second;
+        threadRows()[0].querySelector('.pp-trackpane-go').click();
+        await h.sleep(400);
+        out.stays = popupVisible() && replyArea() && replyArea().value === 'Un premier mot encore à publier' && !/Un mot sur le premier/.test(popup().textContent);
+        out.markKept = !!document.querySelector('.tiptap .comment-mark[data-comment-id="' + second + '"]');
+        await pressPopupButton(h, '.v2-comment-popup-post');
+        await closePopupIfOpen(h);
+        await h.sleep(400);
+        out.published = Comments.listThreads()[1].count === 1 && rowsFor(second).length === 1 && rowsFor(second)[0].texte === 'Un premier mot encore à publier';
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+      } finally { closePaneIfOpen(); await closePopupIfOpen(h); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.comments = cases;
 })();

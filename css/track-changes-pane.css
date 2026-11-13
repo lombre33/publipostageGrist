@@ -1,4 +1,4 @@
-/* Le volet « Modifications » (js/track-changes-pane.js) : la liste des modifications en attente, collée à droite du texte. Il se pose en `position: fixed` sur la hauteur de #editor-container,
+/* Le volet de relecture (js/track-changes-pane.js), en deux onglets, « Modifications » et « Commentaires » : la liste des modifications en attente ou des commentaires du modèle, collée à droite du texte. Il se pose en `position: fixed` sur la hauteur de #editor-container,
    que le script réduit d'autant (marge à droite) : la page garde sa largeur, seule la fenêtre sur elle rétrécit. Les couleurs viennent des jetons de css/style.css (clair et sombre, 4,5:1 au
    moins) ; le volet est monochrome, l'ajout et la suppression se lisent à leur signe (+ / −) et à leur soulignement ou barré, pas à la couleur seule. */
 .pp-trackpane {
@@ -16,10 +16,19 @@
 }
 .pp-trackpane[hidden] { display: none; }
 
-.pp-trackpane-header { flex: none; display: flex; align-items: center; gap: 2px; padding: 4px 6px 4px 10px; border-bottom: 1px solid var(--border); }
-.pp-trackpane-heading { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
-.pp-trackpane-title { margin: 0; font-size: 13px; font-weight: 600; }
-.pp-trackpane-count { min-height: 15px; color: var(--text-muted); font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-trackpane-header { flex: none; display: flex; flex-direction: column; border-bottom: 1px solid var(--border); }
+.pp-trackpane-tabrow { display: flex; align-items: center; gap: 2px; padding: 2px 6px 0 6px; border-bottom: 1px solid var(--border); }
+.pp-trackpane-navrow { display: flex; align-items: center; gap: 2px; padding: 1px 6px 1px 10px; }
+.pp-trackpane-count { flex: 1 1 auto; min-width: 0; min-height: 15px; color: var(--text-muted); font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Les onglets : le texte seul, celui qui est montré en gras net, souligné de la couleur d'accent ; l'autre, atténué (jamais la couleur seule : aria-selected le dit aussi). */
+.pp-trackpane-tabs { flex: 1 1 auto; min-width: 0; display: flex; gap: 2px; }
+.pp-trackpane-tab { flex: 0 1 auto; min-width: 0; height: 28px; padding: 0 7px; border: 0; border-bottom: 2px solid transparent; border-radius: var(--radius-xs, 5px) var(--radius-xs, 5px) 0 0; background: transparent; color: var(--text-muted); font: inherit; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.pp-trackpane-tab:hover { background: var(--surface-sunken); color: var(--text); }
+.pp-trackpane-tab.is-active { border-bottom-color: var(--accent); color: var(--text); }
+.pp-trackpane-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* Le contenu d'un onglet prend toute la hauteur que l'en-tête laisse : sa liste défile, rien d'autre. */
+.pp-trackpane-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.pp-trackpane-panel[hidden] { display: none; }
 
 /* Boutons icône : nus au repos, fond et bordure discrets au survol (comme ceux du panneau Rechercher, css/find-replace.css). */
 .pp-trackpane-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-xs, 5px); background: transparent; color: var(--text); cursor: pointer; }
@@ -69,3 +78,11 @@
 .pp-trackpane-bulk { flex: none; display: flex; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--border); }
 .pp-trackpane-bulkbtn { flex: 1 1 0; min-width: 0; height: 28px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-btn, var(--radius-sm)); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .pp-trackpane-bulkbtn:hover { background: var(--surface-sunken); }
+
+/* L'onglet « Commentaires » : les lignes ont celles des modifications (le bouton qui mène au passage, le bouton qui résout) ; en plus, le passage cité (un filet à gauche, comme une citation), le dernier mot
+   sur deux lignes au plus, le passage cité sur une, et une ligne de repères (réponses, « Résolu »). Un commentaire résolu garde sa place, son nom passe en teinte discrète (jamais une opacité : le texte tient 4,5:1). */
+.pp-trackpane-quote { min-width: 0; padding-left: 6px; border-left: 2px solid var(--border-strong); color: var(--text-muted); font-style: italic; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; overflow: hidden; }
+.pp-trackpane-excerpt { min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.pp-trackpane-meta { color: var(--text-muted); font-size: 11px; font-weight: 600; }
+.pp-trackpane-thread.is-resolved .pp-trackpane-who, .pp-trackpane-thread.is-resolved .pp-trackpane-excerpt { color: var(--text-muted); }
+.pp-trackpane-threadnote { padding: 3px 10px; border-bottom: 1px solid var(--border); }

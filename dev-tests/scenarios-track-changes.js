@@ -3173,7 +3173,7 @@
 
   // --- Le volet « Modifications » (js/track-changes-pane.js), dans la page : sa ligne du menu, ses lignes, ses boutons. La vraie souris, à 700x400, est dans dev-tests/verify-track-pane-mouse.mjs. ---
   const paneEl = () => document.getElementById('pp-track-pane');
-  const paneRows = () => Array.from(paneEl().querySelectorAll('.pp-trackpane-item'));
+  const paneRows = () => Array.from(paneEl().querySelectorAll('#pp-track-panel-changes .pp-trackpane-item'));
   const LIST_DOC = '<p>Alpha <ins data-id="3">ajouté</ins> bêta <del data-id="1">retiré</del> gamma <del data-id="2">ancien</del><ins data-id="2">nouveau</ins> fin.</p>';
   const closePaneIfOpen = () => { if (TrackChangesPane.isOpen()) TrackChangesPane.closePane({ focus: false }); };
 
@@ -3196,7 +3196,7 @@
         out.opened = TrackChangesPane.isOpen() && !paneEl().hidden && row().getAttribute('aria-pressed') === 'true' && row().classList.contains('is-active');
         out.rows = paneRows().length === 3 && paneRows().map(item => item.querySelector('.pp-trackpane-what').textContent).join() === 'Ajout,Suppression,Remplacement';
         out.room = box.style.marginRight === paneEl().offsetWidth + 'px' && paneEl().offsetWidth > 100;
-        out.title = paneEl().querySelector('.pp-trackpane-title').textContent === 'Modifications' && paneEl().querySelector('.pp-trackpane-count').textContent === '3 modifications';
+        out.title = paneEl().querySelector('.pp-trackpane-tab.is-active').textContent === 'Modifications' && paneEl().querySelector('.pp-trackpane-count').textContent === '3 modifications';
         await h.clickButton('v2-btn-track-pane');
         await h.sleep(150);
         out.closedByRow = !TrackChangesPane.isOpen() && paneEl().hidden && box.style.marginRight === '' && row().getAttribute('aria-pressed') === 'false';
@@ -3467,6 +3467,51 @@
         out.allAgain = added().every(cell => fill(cell) === 'rgb(229, 246, 238)') && shown(cellOf('A3')) && fill(cellOf('A3')) === 'rgb(251, 233, 233)';
         return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
       } finally { closePaneIfOpen(); await disableTrackChangesIfOn(h); }
+    },
+  });
+
+  // Le volet garde le focus quand on s'en sert : ProseMirror ne défile que par la sélection DOM, qui n'est alors pas dans le texte. Sans EditorCore.scrollToPosition, « Suivant » posait le curseur sur une
+  // modification tout en bas d'un long texte sans jamais l'amener à l'écran (scrollTop restait à 0).
+  cases.push({
+    id: 'trackchanges_pane_reveal_scrolls_a_change_far_down_even_when_the_pane_keeps_the_focus',
+    description: "« Suivant » du volet amène à l'écran une modification tout en bas d'un long texte alors que le focus est resté dans le volet (le conteneur défile), et une modification déjà à la vue ne fait pas défiler ; « Précédent » remonte",
+    run: async (h) => {
+      try {
+        await h.resetEditor();
+        useMarie();
+        await disableTrackChangesIfOn(h);
+        const filler = Array.from({ length: 80 }, (_, i) => '<p>Un paragraphe de remplissage, le numéro ' + (i + 1) + ', pour que le texte dépasse la fenêtre.</p>').join('');
+        Editor.setHTML('<p>Début <ins data-id="2">ajout du haut</ins></p>' + filler + '<p>Fin <ins data-id="1">ajout du bas</ins>.</p>', { 1: JEAN, 2: JEAN });
+        await h.sleep(250);
+        const box = document.getElementById('editor-container');
+        // Le panneau de Grist n'a que quelques centaines de pixels : le conteneur est ramené à cette hauteur pour que le texte défile, comme dans le widget.
+        box.style.height = '260px';
+        box.style.overflowY = 'auto';
+        await h.sleep(150);
+        const visible = (selector) => { const r = document.querySelector(selector).getBoundingClientRect(); const c = box.getBoundingClientRect(); return r.bottom > c.top && r.top < c.bottom; };
+        const out = {};
+        out.longEnough = box.scrollHeight > box.clientHeight + 200;
+        await h.clickButton('v2-btn-track-pane');
+        await h.sleep(300);
+        document.activeElement.blur();
+        out.focusOutside = !document.activeElement.closest('.ProseMirror');
+        out.startVisible = visible('.tiptap ins[data-id="2"]') && box.scrollTop === 0;
+        EditorCore.getEditor().commands.setTextSelection(Editor.getSuggestionEntries().find(e => e.id === '2').to);
+        const next = paneEl().querySelector('.pp-trackpane-next');
+        next.click();
+        await h.sleep(300);
+        const selected = Editor.getSuggestionEntries().find(e => e.id === '1');
+        out.cursorThere = EditorCore.getEditor().state.selection.from === selected.from;
+        out.scrolled = box.scrollTop > 0 && visible('.tiptap ins[data-id="1"]');
+        paneEl().querySelector('.pp-trackpane-prev').click();
+        await h.sleep(300);
+        out.backUp = visible('.tiptap ins[data-id="2"]') && box.scrollTop < 40;
+        return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) + ' scrollTop=' + box.scrollTop };
+      } finally {
+        const box = document.getElementById('editor-container');
+        box.style.height = ''; box.style.overflowY = '';
+        closePaneIfOpen(); await disableTrackChangesIfOn(h);
+      }
     },
   });
 

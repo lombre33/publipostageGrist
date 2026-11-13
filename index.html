@@ -237,7 +237,7 @@
 <link rel="stylesheet" href="css/template-tree-select.css?v=0.24">
 <link rel="stylesheet" href="css/template-organize-modal.css?v=0.10">
 <link rel="stylesheet" href="css/track-changes.css?v=0.12">
-<link rel="stylesheet" href="css/track-changes-pane.css?v=0.3">
+<link rel="stylesheet" href="css/track-changes-pane.css?v=0.4">
 <link rel="stylesheet" href="css/modal-base.css?v=0.14">
 <link rel="stylesheet" href="css/import-placing.css?v=0.1">
 <link rel="stylesheet" href="css/import-report.css?v=0.1">
@@ -328,7 +328,7 @@
 <link rel="preload" as="script" href="js/i18n-texts-format.js?v=0.3">
 <link rel="preload" as="script" href="js/i18n-texts-blocks.js?v=0.4">
 <link rel="preload" as="script" href="js/i18n-texts-editor.js?v=0.1">
-<link rel="preload" as="script" href="js/i18n-texts-review.js?v=0.2">
+<link rel="preload" as="script" href="js/i18n-texts-review.js?v=0.3">
 <link rel="preload" as="script" href="js/i18n-texts-slides.js?v=0.3">
 <link rel="preload" as="script" href="js/i18n-texts-motion.js?v=0.1">
 <link rel="preload" as="script" href="js/i18n-texts-settings.js?v=0.12">
@@ -357,14 +357,14 @@
 <link rel="preload" as="script" href="js/toolbar-gap.js?v=0.5">
 <link rel="preload" as="script" href="js/search-select.js?v=0.23">
 <link rel="preload" as="script" href="js/variables.js?v=0.97">
-<link rel="preload" as="script" href="js/icons.js?v=0.91">
-<link rel="preload" as="script" href="js/editor-core.js?v=0.44">
+<link rel="preload" as="script" href="js/icons.js?v=0.92">
+<link rel="preload" as="script" href="js/editor-core.js?v=0.45">
 <link rel="preload" as="script" href="js/color-palette.js?v=0.5">
 <link rel="preload" as="script" href="js/header-footer-preview.js?v=1.67">
 <link rel="preload" as="script" href="js/loop-marks.js?v=0.2">
 <link rel="preload" as="script" href="js/editor-nodes.js?v=1.84">
 <link rel="preload" as="script" href="js/floating-toolbars.js?v=0.95">
-<link rel="preload" as="script" href="js/main-toolbar.js?v=1.62">
+<link rel="preload" as="script" href="js/main-toolbar.js?v=1.63">
 <link rel="preload" as="script" href="js/format-painter.js?v=0.8">
 <link rel="preload" as="script" href="js/script-marks.js?v=0.1">
 <link rel="preload" as="script" href="js/emoji-paste.js?v=0.1">
@@ -379,7 +379,7 @@
 <link rel="preload" as="script" href="js/track-changes-commands.js?v=0.3">
 <link rel="preload" as="script" href="js/track-changes-list.js?v=0.2">
 <link rel="preload" as="script" href="js/track-changes.js?v=0.25">
-<link rel="preload" as="script" href="js/track-changes-pane.js?v=0.5">
+<link rel="preload" as="script" href="js/track-changes-pane.js?v=0.6">
 <link rel="preload" as="script" href="js/history-markers.js?v=0.10">
 <link rel="preload" as="script" href="js/action-history.js?v=0.4">
 <link rel="preload" as="script" href="js/table-borders.js?v=0.4">
@@ -412,7 +412,7 @@
 <link rel="preload" as="script" href="js/heading-styles.js?v=0.3">
 <link rel="preload" as="script" href="js/page-copies.js?v=0.3">
 <link rel="preload" as="script" href="js/email-plain-text.js?v=0.3">
-<link rel="preload" as="script" href="js/editor.js?v=2.113">
+<link rel="preload" as="script" href="js/editor.js?v=2.114">
 <link rel="preload" as="script" href="js/export-common.js?v=0.30">
 <link rel="preload" as="script" href="js/pdf-glyph-fallback.js?v=0.3">
 <link rel="preload" as="script" href="js/export-engines.js?v=0.2">
@@ -966,6 +966,7 @@
           <button type="button" class="v2-menu-row" id="v2-btn-accept-all" aria-label="Accepter toutes les suggestions du document" data-i18n-aria="trackChanges.acceptAll.aria"><span class="v2-menu-row-icon"></span><span data-i18n="trackChanges.acceptAll.tip">Tout accepter</span></button>
           <button type="button" class="v2-menu-row" id="v2-btn-reject-all" aria-label="Refuser toutes les suggestions du document" data-i18n-aria="trackChanges.rejectAll.aria"><span class="v2-menu-row-icon"></span><span data-i18n="trackChanges.rejectAll.tip">Tout refuser</span></button>
           <button type="button" class="v2-menu-row" id="v2-btn-track-pane" aria-pressed="false" aria-label="Afficher ou masquer la liste des modifications en attente" data-i18n-aria="trackList.row.aria"><span class="v2-menu-row-icon"></span><span data-i18n="trackList.row.tip">Liste des modifications</span></button>
+          <button type="button" class="v2-menu-row" id="v2-btn-comment-pane" aria-pressed="false" aria-label="Afficher ou masquer la liste des commentaires du modèle" data-i18n-aria="commentList.row.aria"><span class="v2-menu-row-icon"></span><span data-i18n="commentList.row.tip">Liste des commentaires</span></button>
           <button type="button" class="v2-menu-row" id="v2-btn-live" aria-label="Écriture en direct" data-i18n-aria="live.row.aria"><span class="v2-menu-row-icon"></span><span id="v2-btn-live-label" data-i18n="live.row.label">Écriture en direct</span></button>
         </span>
       </span>
@@ -1377,7 +1378,7 @@
 <script src="js/i18n-texts-format.js?v=0.3"></script>
 <script src="js/i18n-texts-blocks.js?v=0.4"></script>
 <script src="js/i18n-texts-editor.js?v=0.1"></script>
-<script src="js/i18n-texts-review.js?v=0.2"></script>
+<script src="js/i18n-texts-review.js?v=0.3"></script>
 <script src="js/i18n-texts-slides.js?v=0.3"></script>
 <script src="js/i18n-texts-motion.js?v=0.1"></script>
 <script src="js/i18n-texts-settings.js?v=0.12"></script>
@@ -1406,14 +1407,14 @@
 <script src="js/toolbar-gap.js?v=0.5"></script>
 <script src="js/search-select.js?v=0.23"></script>
 <script src="js/variables.js?v=0.97"></script>
-<script src="js/icons.js?v=0.91"></script>
-<script src="js/editor-core.js?v=0.44"></script>
+<script src="js/icons.js?v=0.92"></script>
+<script src="js/editor-core.js?v=0.45"></script>
 <script src="js/color-palette.js?v=0.5"></script>
 <script src="js/header-footer-preview.js?v=1.67"></script>
 <script src="js/loop-marks.js?v=0.2"></script>
 <script src="js/editor-nodes.js?v=1.84"></script>
 <script src="js/floating-toolbars.js?v=0.95"></script>
-<script src="js/main-toolbar.js?v=1.62"></script>
+<script src="js/main-toolbar.js?v=1.63"></script>
 <script src="js/format-painter.js?v=0.8"></script>
 <script src="js/script-marks.js?v=0.1"></script>
 <script src="js/emoji-paste.js?v=0.1"></script>
@@ -1428,7 +1429,7 @@
 <script src="js/track-changes-commands.js?v=0.3"></script>
 <script src="js/track-changes-list.js?v=0.2"></script>
 <script src="js/track-changes.js?v=0.25"></script>
-<script src="js/track-changes-pane.js?v=0.5"></script>
+<script src="js/track-changes-pane.js?v=0.6"></script>
 <script src="js/history-markers.js?v=0.10"></script>
 <script src="js/action-history.js?v=0.4"></script>
 <script src="js/table-borders.js?v=0.4"></script>
@@ -1461,7 +1462,7 @@
 <script src="js/heading-styles.js?v=0.3"></script>
 <script src="js/page-copies.js?v=0.3"></script>
 <script src="js/email-plain-text.js?v=0.3"></script>
-<script src="js/editor.js?v=2.113"></script>
+<script src="js/editor.js?v=2.114"></script>
 <script src="js/export-common.js?v=0.30"></script>
 <script src="js/pdf-glyph-fallback.js?v=0.3"></script>
 <!-- Moteurs d'export : js/export-engines.js les charge au premier export (ExportEngines.ensure), pas à l'ouverture. Ces balises ne s'exécutent pas (le

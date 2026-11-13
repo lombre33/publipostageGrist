@@ -3,7 +3,7 @@
 // modifications, « Tout accepter » et « Tout refuser » ne sont plus trois icônes de la barre mais les trois lignes du menu d'un seul bouton, ouvert au survol comme « Lien et blocs de
 // contenu ». Les scénarios de dev-tests/scenarios-toolbar-chrome.js (toolbar_collab_menu_...) tournent DANS la page ; ce script-ci le prouve à la vraie souris et au vrai clavier, à la taille
 // du panneau Grist (~700x400), en clair puis en sombre :
-//   1) le survol du bouton ouvre le menu (« Édition collaborative » en titre, cinq lignes dont « Liste des modifications »), tout entier dans le panneau, et chaque ligne reçoit le clic (elementFromPoint à son centre) ;
+//   1) le survol du bouton ouvre le menu (« Édition collaborative » en titre, six lignes dont « Liste des modifications » et « Liste des commentaires »), tout entier dans le panneau, et chaque ligne reçoit le clic (elementFromPoint à son centre) ;
 //   2) un vrai clic sur « Suivi des modifications » allume le suivi - la ligne ET le bouton, menu refermé -, le curseur reste dans le texte, un second clic l'éteint ;
 //   3) sans modification en attente « Tout accepter » et « Tout refuser » sont grisés ; une frappe en suivi les dégrise ; « Tout refuser » rend le texte d'origine, « Tout accepter » garde la frappe ;
 //   4) le clavier : Tab arrive sur le bouton (le menu s'ouvre), puis sur « Suivi des modifications » ; Entrée l'allume ;
@@ -178,16 +178,16 @@ for (const dark of [false, true]) {
   const fly = await rectOf(page, '#v2-collab-flyout');
   const title = await page.evaluate(() => document.querySelector('#v2-collab-flyout .v2-hover-flyout-label').textContent.trim());
   const rows = {};
-  for (const id of ['v2-btn-track-changes', 'v2-btn-track-format', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-btn-track-pane']) rows[id] = await rectOf(page, '#' + id);
+  for (const id of ['v2-btn-track-changes', 'v2-btn-track-format', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-btn-track-pane', 'v2-btn-comment-pane']) rows[id] = await rectOf(page, '#' + id);
   await page.screenshot({ path: `${SHOTS}/menu-ouvert-${theme}.png`, clip: { x: 0, y: 0, width: WIDTH, height: 260 } });
   check(`${theme} : le bouton « Édition collaborative » est dans la barre, visible, au premier plan`, !!btn && btn.onTop && btn.w > 10 && btn.h > 10 && btn.b < 200, btn);
   check(`${theme} : le survol du bouton ouvre le menu, titré « Édition collaborative »`, open1 && title === 'Édition collaborative', { open1, title });
   check(`${theme} : le menu tient tout entier dans le panneau (rien de coupé à droite ni en bas)`, !!fly && fly.l >= 0 && fly.r <= WIDTH && fly.b <= HEIGHT, fly && { l: fly.l, r: fly.r, b: fly.b });
-  check(`${theme} : les cinq lignes sont dans le menu, dans l'ordre suivi, mise en forme, tout accepter, tout refuser, liste des modifications, et reçoivent le clic au centre`,
-    Object.values(rows).every(r => r && r.onTop) && rows['v2-btn-track-changes'].y < rows['v2-btn-track-format'].y && rows['v2-btn-track-format'].y < rows['v2-btn-accept-all'].y && rows['v2-btn-accept-all'].y < rows['v2-btn-reject-all'].y && rows['v2-btn-reject-all'].y < rows['v2-btn-track-pane'].y, rows);
+  check(`${theme} : les six lignes sont dans le menu, dans l'ordre suivi, mise en forme, tout accepter, tout refuser, liste des modifications, liste des commentaires, et reçoivent le clic au centre`,
+    Object.values(rows).every(r => r && r.onTop) && rows['v2-btn-track-changes'].y < rows['v2-btn-track-format'].y && rows['v2-btn-track-format'].y < rows['v2-btn-accept-all'].y && rows['v2-btn-accept-all'].y < rows['v2-btn-reject-all'].y && rows['v2-btn-reject-all'].y < rows['v2-btn-track-pane'].y && rows['v2-btn-track-pane'].y < rows['v2-btn-comment-pane'].y, rows);
   const colors = await page.evaluate(() => {
     const bg = getComputedStyle(document.getElementById('v2-collab-flyout')).backgroundColor;
-    return ['v2-btn-track-changes', 'v2-btn-track-format', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-btn-track-pane'].map(id => ({ id, color: getComputedStyle(document.getElementById(id)).color, disabled: document.getElementById(id).disabled, bg }));
+    return ['v2-btn-track-changes', 'v2-btn-track-format', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-btn-track-pane', 'v2-btn-comment-pane'].map(id => ({ id, color: getComputedStyle(document.getElementById(id)).color, disabled: document.getElementById(id).disabled, bg }));
   });
   const ratios = colors.map(c => ({ id: c.id, ratio: Math.round(contrast(c.color, c.bg) * 100) / 100 }));
   check(`${theme} : le texte des lignes se lit sur le fond du menu (4,5:1 au moins)`, ratios.every(r => r.ratio >= 4.5), ratios);

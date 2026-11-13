@@ -193,7 +193,7 @@ const paneState = (page) => page.evaluate(() => {
       who: item.querySelector('.pp-trackpane-who').textContent, what: item.querySelector('.pp-trackpane-what').textContent, when: item.querySelector('.pp-trackpane-when').textContent,
       extracts: Array.from(item.querySelectorAll('.pp-trackpane-extract')).map(e => e.textContent), current: item.classList.contains('is-current'),
     })),
-    count: pane ? pane.querySelector('.pp-trackpane-count').textContent : '', title: pane ? pane.querySelector('.pp-trackpane-title').textContent : '',
+    count: pane ? pane.querySelector('.pp-trackpane-count').textContent : '', title: pane ? pane.querySelector('.pp-trackpane-tab.is-active').textContent : '',
     rowPressed: document.getElementById('v2-btn-track-pane').getAttribute('aria-pressed'), rowLit: document.getElementById('v2-btn-track-pane').classList.contains('is-active'),
     selFrom: ed.state.selection.from, html: Editor.getHTML(), focus: document.activeElement && (document.activeElement.className || document.activeElement.id),
     inEditor: !!document.activeElement && !!document.activeElement.closest && !!document.activeElement.closest('.ProseMirror'),
@@ -288,7 +288,7 @@ for (const mode of ['clair', 'sombre', 'anglais']) {
     const pane = document.getElementById('pp-track-pane');
     const bg = getComputedStyle(pane).backgroundColor;
     const pick = (sel) => { const e = pane.querySelector(sel); return e ? { sel, color: getComputedStyle(e).color, bg } : null; };
-    return ['.pp-trackpane-title', '.pp-trackpane-count', '.pp-trackpane-who', '.pp-trackpane-when', '.pp-trackpane-what', '.pp-trackpane-text'].map(pick);
+    return ['.pp-trackpane-tab.is-active', '.pp-trackpane-tab:not(.is-active)', '.pp-trackpane-count', '.pp-trackpane-who', '.pp-trackpane-when', '.pp-trackpane-what', '.pp-trackpane-text'].map(pick);
   });
   const ratios = colors.map(c => c && ({ sel: c.sel, ratio: Math.round(contrast(c.color, c.bg) * 100) / 100 }));
   check(`${mode} : le texte du volet se lit sur son fond (4,5:1 au moins)`, ratios.every(x => x && x.ratio >= 4.5), ratios);
@@ -336,13 +336,17 @@ for (const mode of ['clair', 'sombre', 'anglais']) {
   check(`${mode} : à quatre modifications de trois personnes, le choix de la personne paraît sous l'en-tête, dans le panneau, et propose « ${F.all} » puis chaque personne avec son nombre`, p1.filterShown && p1.filterBox[2] <= WIDTH && p1.filterBox[0] >= p1.pane[0] && p1.options[0] === F.all && p1.options.includes(F.jean) && p1.options.length === 4 && !p1.bulkShown, { options: p1.options, filterBox: p1.filterBox, bulk: p1.bulkShown });
   check(`${mode} : chaque ligne porte un point de couleur, le même pour la même personne, deux personnes n'ont pas le même, et il se voit sur le fond du volet (3:1 au moins)`,
     p1.rows.length === 4 && p1.rows[0].dot === p1.rows[1].dot && new Set(p1.rows.map(r => r.dot)).size === 3 && p1.rows.every(r => contrast(r.dot, p1.bg) >= 3), { rows: p1.rows, bg: p1.bg });
-  // Le choix se fait au clavier sur la liste déroulante (le menu natif d'un <select> n'est pas atteignable à la souris en test) : le focus y arrive par Tab depuis le bouton de fermeture.
+  // Le choix se fait au clavier sur la liste déroulante (le menu natif d'un <select> n'est pas atteignable à la souris en test) : le focus y arrive par Tab depuis le bouton de fermeture, après « Précédent » et « Suivant » (la ligne du haut est celle de la phrase et de ces deux boutons).
   await page.focus('.pp-trackpane-close');
+  await page.keyboard.press('Tab');
+  const onPrev = await page.evaluate(() => document.activeElement.className);
+  await page.keyboard.press('Tab');
+  const onNext = await page.evaluate(() => document.activeElement.className);
   await page.keyboard.press('Tab');
   const onView = await page.evaluate(() => document.activeElement.className);
   await page.keyboard.press('Tab');
   const onSelect = await page.evaluate(() => document.activeElement.className);
-  check(`${mode} : au clavier, Tab depuis « Fermer » arrive sur l'affichage, puis sur le choix de la personne`, /pp-trackpane-view/.test(onView) && /pp-trackpane-filter/.test(onSelect), { onView, onSelect });
+  check(`${mode} : au clavier, Tab depuis « Fermer » arrive sur « Précédent », « Suivant », l'affichage, puis sur le choix de la personne`, /pp-trackpane-prev/.test(onPrev) && /pp-trackpane-next/.test(onNext) && /pp-trackpane-view/.test(onView) && /pp-trackpane-filter/.test(onSelect), { onPrev, onNext, onView, onSelect });
   await page.selectOption('.pp-trackpane-filter', 'jean.dupont@example.org');
   await page.waitForTimeout(300);
   const p2 = await people();

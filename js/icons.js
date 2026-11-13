@@ -153,6 +153,10 @@ const Icons = (function () {
       // Suivre la mise en forme (js/main-toolbar.js, menu « Édition collaborative ») : un « A » et un crayon, le suivi appliqué à l'aspect du texte. Ni le crayon seul du suivi, ni le « A » de la couleur du texte.
       trackFormat: '<path d="M3 19 8 6l5 13M5.2 15h5.6"/><path d="M15 20l.8-2.6 3.9-3.9a1.3 1.3 0 0 1 1.8 1.8l-3.9 3.9z"/>',
       trackList: '<path d="M4 6h16M4 12h8M4 18h6"/><path d="m14 17 2.5 2.5L21 15"/>',
+      // Volet « Commentaires » (js/track-changes-pane.js, menu « Édition collaborative ») : deux bulles l'une derrière l'autre, la liste des fils ; sur une ligne du volet, résoudre (une coche dans un rond, distincte de la coche d'« Accepter ») et rouvrir (une flèche qui revient).
+      commentList: '<path d="M4 4.5h11a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H8.5L5.5 15.5V13H4a1 1 0 0 1-1-1V5.5a1 1 0 0 1 1-1z"/><path d="M19 9.5h1a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1h-1v2.5L16.5 17H10a1 1 0 0 1-1-1v-1.5"/>',
+      commentResolve: '<circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.3l2.4 2.4 4.6-4.9"/>',
+      commentReopen: '<path d="M4 12a8 8 0 1 0 2.6-5.9"/><path d="M4 4.5v4.2h4.2"/>',
       acceptAll: '<path d="M5 13l4 4L19 7"/>',
       rejectAll: '<path d="M6 6l12 12M18 6L6 18"/>',
       // Édition collaborative (js/main-toolbar.js, le bouton qui range le suivi, « Tout accepter » et « Tout refuser ») : deux personnes, de profil.
