@@ -71,6 +71,7 @@ const I18nTextsTemplates = {
   'toolbar.newPresentation': { fr: 'Nouvelle présentation', en: 'New presentation' },
   'toolbar.importXlsx': { fr: 'Importer un Excel…', en: 'Import from Excel…' },
   'toolbar.importMd': { fr: 'Importer un Markdown…', en: 'Import from Markdown…' },
+  'toolbar.importHtml': { fr: 'Importer un HTML…', en: 'Import from HTML…' },
   'toolbar.importDocx': { fr: 'Importer un Word…', en: 'Import from Word…' },
   'toolbar.importPptx': { fr: 'Importer un PowerPoint…', en: 'Import from PowerPoint…' },
   'toolbar.newFromTemplate': { fr: 'Créer à partir d’un modèle…', en: 'Create from a template…' },

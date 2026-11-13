@@ -1,4 +1,4 @@
-// L'import d'un fichier dans le widget : Excel, Markdown, PowerPoint et Word, par le menu « + » (le sélecteur de fichier s'ouvre dans le clic) et par le « Nouveau > Importer » de GFS
+// L'import d'un fichier dans le widget : Excel, Markdown, HTML, PowerPoint et Word, par le menu « + » (le sélecteur de fichier s'ouvre dans le clic) et par le « Nouveau > Importer » de GFS
 // (js/gfs-open.js, consigne GFS 035 : GFS ouvre le sélecteur lui-même et donne le fichier). Sorti de js/main.js (refactorisation du 09/11, découpe 5) : rien de modifiable n'est partagé avec
 // lui, ce qu'il en tire (la question « Enregistrer / Abandonner / Annuler », le coin d'état, le chargement d'un modèle dans l'éditeur...) lui est donné par `api`. Les corps sont ceux de main.js.
 const MainImport = (function () {
@@ -6,15 +6,16 @@ const MainImport = (function () {
     const { askBeforeLeaving, canMergeDocument, hasEditsToConfirmBeforeLeaving, isReadOnly, loadTemplateIntoEditor, markAutosaveDirty, onSave, refocusEditorIfLost, setStatus, templateNameInput, templateSelect, updateSaveStatus } = api;
 
     // « Nouveau > Importer » demandé par GFS (js/gfs-open.js, consigne GFS 035) : GFS a ouvert le sélecteur de fichier lui-même (le cadre isolé de l'app n'a pas le geste de la personne) et donne le fichier choisi, que
-    // `valeur` nomme : `excel` (une grille), `markdown` (un document), `powerpoint` (une présentation, l'extension « diapositives » étant active), `word` (un document). Il est lu par le chemin de la ligne du même nom du menu « + » - mêmes
+    // `valeur` nomme : `excel` (une grille), `markdown` (un document), `html` (un document), `powerpoint` (une présentation, l'extension « diapositives » étant active), `word` (un document). Il est lu par le chemin de la ligne du même nom du menu « + » - mêmes
     // lectures, mêmes refus et mêmes phrases du coin d'état, même question d'enregistrement après une lecture réussie, même résultat : un modèle sans nom et pas encore enregistré, rien d'écrit avant son premier
     // « Enregistrer » - sans le sélecteur. true : le modèle importé est à l'écran ; false : le document est en lecture seule, la valeur est inconnue, le fichier est refusé, ou la personne a annulé.
-    // `word` (choix du porteur du 07/11) n'est proposé par GFS qu'une fois qu'il le déclare dans `actions.importer` de son manifeste : tant qu'il ne le fait pas, aucune valeur `word` n'arrive, et rien ne change.
+    // `word` (choix du porteur du 07/11) et `html` (13/11) ne sont proposés par GFS qu'une fois qu'il les déclare dans `actions.importer` de son manifeste : tant qu'il ne le fait pas, aucune valeur `word` ni `html` n'arrive, et rien ne change.
     async function importFileFromGfs(kind, file) {
       if (isReadOnly()) return false;
       switch (kind) {
         case 'excel': return importXlsxFile(file);
         case 'markdown': return importMdFile(file);
+        case 'html': return importHtmlFile(file);
         case 'powerpoint': return importPptxFile(file);
         case 'word': return importDocxFile(file);
         default: return false;
@@ -22,7 +23,7 @@ const MainImport = (function () {
     }
 
     // Un fichier DÉPOSÉ sur la page (js/drop-import.js ; audit « confort d'usage » du 12/11, idée 9) : le genre se lit à son extension. Excel et PowerPoint font toujours un nouveau modèle (une grille, une présentation).
-    // Word et Markdown aussi quand aucun document n'est ouvert à l'écran (ou qu'il est vide) ; quand un document est ouvert, une fenêtre demande : « Nouveau document » (la voie du menu « + »), « Remplacer celui-ci » (le
+    // Word, HTML et Markdown aussi quand aucun document n'est ouvert à l'écran (ou qu'il est vide) ; quand un document est ouvert, une fenêtre demande : « Nouveau document » (la voie du menu « + »), « Remplacer celui-ci » (le
     // contenu du fichier prend la place du texte, le modèle garde son nom, sa page, son en-tête et son pied), « Ajouter après » (à la fin du texte) ou « Insérer ici » (au curseur) - chacun défait par Ctrl + Z, rien
     // n'est enregistré avant « Enregistrer ». true : le fichier est à l'écran ; false : refusé, en lecture seule, ou la personne a annulé.
     const DROP_KINDS = [
@@ -30,13 +31,14 @@ const MainImport = (function () {
       ['powerpoint', /\.(pptx|pptm|potx|potm)$/i],
       ['excel', /\.(xlsx|xlsm|xltx|xltm)$/i],
       ['markdown', /\.(md|markdown|mdown|mkd|txt)$/i],
+      ['html', /\.(html|htm|xhtml)$/i],
     ];
     const kindOfFile = file => { const found = DROP_KINDS.find(([, pattern]) => pattern.test(file && file.name || '')); return found ? found[0] : null; };
     async function importDroppedFile(file) {
       if (isReadOnly()) { setStatus(I18n.t('status.dropReadOnly'), true); return false; }
       const kind = kindOfFile(file);
       if (!kind) { setStatus(I18n.t('status.dropUnsupported', { name: file && file.name || '' }), true); return false; }
-      if (!((kind === 'word' || kind === 'markdown') && canMergeDocument())) return importFileFromGfs(kind, file);
+      if (!((kind === 'word' || kind === 'markdown' || kind === 'html') && canMergeDocument())) return importFileFromGfs(kind, file);
       const choice = await Dialogs.choose({
         title: I18n.t('drop.title'),
         message: I18n.t('drop.message', { name: file.name }),
@@ -49,8 +51,8 @@ const MainImport = (function () {
       });
       if (!choice) { refocusEditorIfLost(); return false; }
       if (choice === 'new') return importFileFromGfs(kind, file);
-      setStatus(I18n.t(kind === 'word' ? 'status.docxImporting' : 'status.mdImporting'));
-      const imported = kind === 'word' ? await readDocxForImport(file) : await readMdForImport(file);
+      setStatus(I18n.t(kind === 'word' ? 'status.docxImporting' : kind === 'html' ? 'status.htmlImporting' : 'status.mdImporting'));
+      const imported = kind === 'word' ? await readDocxForImport(file) : kind === 'html' ? await readHtmlForImport(file) : await readMdForImport(file);
       if (!imported) return false;
       const editor = EditorCore.getEditor();
       if (!editor || !canMergeDocument()) { updateSaveStatus(); return false; }
@@ -63,6 +65,7 @@ const MainImport = (function () {
       markAutosaveDirty();
       setStatus(I18n.t('status.dropMerged', { name: file.name }));
       if (kind === 'word') await tellDocxImportReport(imported.report);
+      else if (kind === 'html') await tellHtmlImportReport(imported.report);
       return true;
     }
 
@@ -195,6 +198,64 @@ const MainImport = (function () {
       if (images && variables) return I18n.t('status.mdImportedImagesVariables', { images, variables });
       if (variables) return I18n.t('status.mdImportedVariables', { n: variables });
       return images ? I18n.t('status.mdImportedImages', { n: images }) : I18n.t('status.mdImported');
+    }
+
+    // Import d'un fichier HTML (js/html-import.js), « Importer un HTML… » du menu « + » (une page web enregistrée, un export de Word « Page web », un export HTML du widget), sur le modèle de l'import Markdown : le
+    // sélecteur s'ouvre dans le clic, le fichier est lu ensuite, et ce n'est qu'après (un fichier refusé ne coûte rien) qu'on demande de quitter le modèle courant s'il a des modifications non enregistrées. Le résultat est
+    // un nouveau document, sans nom et pas encore enregistré ; l'en-tête et le pied de page d'un export du widget deviennent ceux du document. Ce que l'éditeur n'a pas repris tel quel est dit dans une fenêtre, une ligne par genre.
+    const HTML_IMPORT_ACCEPT = '.html,.htm,.xhtml,text/html,application/xhtml+xml';
+    const HTML_IMPORT_ERRORS = { unreadable: 'status.htmlImportUnreadable', empty: 'status.htmlImportEmpty', tooBig: 'status.htmlImportTooBig', tooMuchText: 'status.htmlImportTooMuchText' };
+    function onImportHtml() {
+      if (isReadOnly()) return;
+      GridXlsxImport.chooseFile(importHtmlFile, HTML_IMPORT_ACCEPT);
+    }
+
+    // Le fichier HTML choisi, par le sélecteur du menu « + », par le dépôt ou donné par GFS (importFileFromGfs). true : le document importé est à l'écran (et le compte rendu de ce qui n'a pas été repris, s'il y en a un, a été lu) ;
+    // false : le fichier est refusé (l'erreur est dite dans le coin d'état) ou la personne a répondu « Annuler » à la question d'enregistrement : rien n'a changé.
+    async function importHtmlFile(file) {
+      setStatus(I18n.t('status.htmlImporting'));
+      const imported = await readHtmlForImport(file);
+      if (!imported) return false;
+      if (hasEditsToConfirmBeforeLeaving()) {
+        updateSaveStatus(); // la lecture est finie : « Lecture… » serait faux pendant la question
+        if (!(await askBeforeLeaving())) return false;
+      }
+      openImportedHtml(imported);
+      await tellHtmlImportReport(imported.report);
+      return true;
+    }
+
+    // Lit le fichier et construit le document. null : le fichier est refusé (l'erreur est dite dans le coin d'état) ; rien d'autre ne se passe.
+    async function readHtmlForImport(file) {
+      try {
+        return await HtmlImport.fromFile(file);
+      } catch (e) {
+        reportHtmlImportError(e);
+        return null;
+      }
+    }
+
+    function reportHtmlImportError(e) {
+      console.warn('[main] import HTML impossible', e); // une erreur de la personne (mauvais fichier), pas du widget
+      const key = HTML_IMPORT_ERRORS[e && e.code] || HTML_IMPORT_ERRORS.unreadable;
+      const thousands = n => Number(n).toLocaleString(I18n.getLang());
+      setStatus(I18n.t(key, { size: e && e.size ? importMegabytes(e.size) : '', max: e && e.code === 'tooMuchText' ? thousands(e.max) : e && e.max ? importMegabytes(e.max) : '', chars: e && e.chars ? thousands(e.chars) : '' }), true);
+    }
+
+    function openImportedHtml(imported) {
+      // Un nouveau document, sans nom et pas encore enregistré, comme « Nouveau document » ; l'en-tête et le pied de page sont ceux d'un export du widget (sinon aucun).
+      templateSelect.value = '';
+      loadTemplateIntoEditor({ id: null, nom: '', contenu: imported.html, typeModele: 'document', marginsMm: null, suiviModifications: null, headerFooter: imported.headerFooter }, 'document');
+      markAutosaveDirty();
+      setStatus(I18n.t('status.htmlImported'));
+    }
+
+    // Ce que l'import n'a pas repris tel quel, une ligne par genre ; rien à dire quand tout est arrivé.
+    async function tellHtmlImportReport(report) {
+      if (!report || !report.length) return;
+      const lines = report.map(item => '• ' + I18n.t('html.import.report.' + item.key, { n: item.n }));
+      await Dialogs.notice({ title: I18n.t('html.import.reportTitle'), message: I18n.t('html.import.reportIntro') + '\n' + lines.join('\n') });
+      refocusEditorIfLost();
     }
 
     // Import d'un fichier PowerPoint (js/pptx-import.js), « Importer un PowerPoint… » du menu « + », sur le modèle des deux imports d'au-dessus : le sélecteur s'ouvre dans le clic, le fichier est lu ensuite, et ce n'est
@@ -457,7 +518,7 @@ const MainImport = (function () {
       refocusEditorIfLost();
     }
 
-    return { importFileFromGfs, importDroppedFile, onImportDocx, onImportMd, onImportPptx, onImportXlsx };
+    return { importFileFromGfs, importDroppedFile, onImportDocx, onImportHtml, onImportMd, onImportPptx, onImportXlsx };
   }
 
   return { create };

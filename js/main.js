@@ -780,7 +780,7 @@
     const editor = EditorCore.getEditor();
     return currentMode === 'edit' && currentTypeModele === 'document' && !isReadOnly() && !!editor && editor.state.doc.textContent.trim().length > 0;
   }
-  const { importFileFromGfs, importDroppedFile, onImportDocx, onImportMd, onImportPptx, onImportXlsx } = MainImport.create({ askBeforeLeaving, canMergeDocument, hasEditsToConfirmBeforeLeaving, isReadOnly, loadTemplateIntoEditor, markAutosaveDirty, onSave, refocusEditorIfLost, setStatus, templateNameInput, templateSelect, updateSaveStatus });
+  const { importFileFromGfs, importDroppedFile, onImportDocx, onImportHtml, onImportMd, onImportPptx, onImportXlsx } = MainImport.create({ askBeforeLeaving, canMergeDocument, hasEditsToConfirmBeforeLeaving, isReadOnly, loadTemplateIntoEditor, markAutosaveDirty, onSave, refocusEditorIfLost, setStatus, templateNameInput, templateSelect, updateSaveStatus });
 
   // Le mode que la personne a choisi en dernier (Édition ou Lecture) : une préférence de la personne (PersonStore `pp_last_mode`), relue au démarrage (startMode). Écrite par les deux boutons, jamais par
   // switchMode : la Lecture imposée (document en lecture seule, PDF à l'écran) et la Lecture épurée ne sont pas un choix, et un « Nouveau » de GFS qui s'ouvre en Édition ne l'efface pas.
@@ -1084,6 +1084,8 @@
     if (btnImportXlsx) btnImportXlsx.addEventListener('click', onImportXlsx);
     const btnImportMd = document.getElementById('v2-btn-import-md');
     if (btnImportMd) btnImportMd.addEventListener('click', onImportMd);
+    const btnImportHtml = document.getElementById('v2-btn-import-html');
+    if (btnImportHtml) btnImportHtml.addEventListener('click', onImportHtml);
     const btnImportDocx = document.getElementById('v2-btn-import-docx');
     if (btnImportDocx) btnImportDocx.addEventListener('click', onImportDocx);
     const btnImportPptx = document.getElementById('v2-btn-import-pptx');

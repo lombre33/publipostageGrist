@@ -273,7 +273,7 @@ async function run(lang, scheme) {
     await hoverRow(page, PLUS, ROW);
     const [row] = await rowsState(page, [ROW]);
     check(tag + `le menu « + » montre « ${T.row} » entre « Importer un Markdown… » et « Importer un PowerPoint… », entière dans le panneau, atteignable, active sans aucune extension, sans texte coupé`,
-      !row.missing && row.text === T.row && row.previous === 'v2-btn-import-md' && row.next === 'v2-btn-import-pptx' && row.inside && row.reachable && !row.cut && row.live, row);
+      !row.missing && row.text === T.row && row.previous === 'v2-btn-import-html' && row.next === 'v2-btn-import-pptx' && row.inside && row.reachable && !row.cut && row.live, row);
     check(tag + 'le texte de la ligne tient les contrastes de la charte (>= 4,5:1), au repos et sous la souris', row.contrast >= 4.5, row.contrast);
     const hovered = await hoveredState(page, ROW);
     check(tag + 'sous la souris, la ligne se peint de son fond de survol et reste lisible (>= 4,5:1)', hovered.hovered && hovered.painted && hovered.contrast >= 4.5, hovered);
