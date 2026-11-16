@@ -4,6 +4,9 @@
 //    de la fenêtre (bleu + information, orange + triangle, rouge + point d'exclamation) : la couleur et l'icône se choisissent ensuite à part, c'est
 //    pourquoi le type n'est pas gardé dans le document. La palette et les icônes ne sont écrites qu'ici : le CSS de l'éditeur et de la Lecture en est
 //    généré (installStyles), les exports PDF et Word en tirent les mêmes couleurs (colors) et la même icône en PNG (iconPng), l'export HTML les mêmes règles (styleText).
+//  - Les couleurs de l'État (mode « Identité de l'État », js/state-mode.js) sont cinq couleurs de plus dans la même palette (STATE_COLOR_ORDER : mise en avant, information, succès, attention, erreur, valeurs de
+//    @gouvfr/dsfr 1.15.4) : elles se règlent par une ligne « État » de la fenêtre, montrée seulement mode allumé (ou quand l'encadré modifié en porte une). Dans la palette, donc dans le CSS de l'éditeur, de la
+//    Lecture et de l'impression, dans le PDF, le Word et le HTML, et un modèle qui en porte s'ouvre et s'enregistre à l'identique mode éteint : seule la fenêtre dépend du mode, jamais le rendu.
 //  - Le bloc de signature est un morceau de document fait de nœuds qui existent déjà (une zone 2 colonnes, des paragraphes) : de l'espace pour
 //    signer, une ligne, puis « Nom et signature » sous la première colonne et « Date » sous la seconde. Rien à rendre de nouveau dans la Lecture, le
 //    PDF, le Word ou l'e-mail, et tout reste modifiable (une variable à la place du nom, une autre légende...).
@@ -22,7 +25,16 @@ const Callout = (function () {
     red: { accent: '#dc2626', tint: '#fef2f2' },
     purple: { accent: '#7e22ce', tint: '#faf5ff' },
     gray: { accent: '#4b5563', tint: '#f3f4f6' },
+    // Les couleurs de l'État : la barre et l'icône sont le bleu France (mise en avant) ou la couleur de l'alerte (425-625 du DSFR), le fond la teinte 950-100 ; le texte du document (#1b2430) y reste à plus de 14:1,
+    // la barre et l'icône à 3:1 au moins sur la teinte.
+    state: { accent: '#000091', tint: '#eeeeee' },
+    'state-info': { accent: '#0063cb', tint: '#e8edff' },
+    'state-success': { accent: '#18753c', tint: '#b8fec9' },
+    'state-warning': { accent: '#b34000', tint: '#ffe9e6' },
+    'state-error': { accent: '#ce0500', tint: '#ffe9e9' },
   };
+  // Les cinq couleurs de l'État, dans l'ordre de la fenêtre ; COLOR_ORDER reste les six couleurs d'avant (les couleurs de la fenêtre, de ses essais et du PDF d'avant).
+  const STATE_COLOR_ORDER = ['state', 'state-info', 'state-success', 'state-warning', 'state-error'];
   // Icônes « trait » sur une grille de 24 (même famille que js/icons.js) : une liste de tracés, un rond de 9 de rayon pour les cercles. Les points
   // (`h.01`) sont des tracés de longueur nulle : avec des bouts ronds ils se peignent comme un point.
   const CIRCLE = 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z';
@@ -50,10 +62,21 @@ const Callout = (function () {
     attention: { color: 'amber', icon: 'warning' },
     important: { color: 'red', icon: 'alert' },
   };
+  // Les départs de la ligne « État » de la fenêtre : la couleur de l'État et l'icône qui va avec (le DSFR n'impose pas d'icône à la mise en avant : l'information).
+  const STATE_PRESETS = {
+    state: { color: 'state', icon: 'info' },
+    'state-info': { color: 'state-info', icon: 'info' },
+    'state-success': { color: 'state-success', icon: 'check' },
+    'state-warning': { color: 'state-warning', icon: 'warning' },
+    'state-error': { color: 'state-error', icon: 'alert' },
+  };
   const DEFAULT = PRESETS.note;
 
   const has = (table, key) => Object.prototype.hasOwnProperty.call(table, key);
   const colorOf = key => COLORS[has(COLORS, key) ? key : DEFAULT.color];
+  const isStateColor = key => STATE_COLOR_ORDER.indexOf(key) !== -1;
+  // Une couleur que la palette connaît (les six d'avant et celles de l'État) : les seules que le document garde.
+  const hasColor = key => has(COLORS, key);
   const iconOf = key => ICONS[has(ICONS, key) ? key : DEFAULT.icon];
 
   function svgMarkup(iconKey, stroke) {
@@ -82,7 +105,7 @@ const Callout = (function () {
   function styleText() {
     const first = COLORS[DEFAULT.color];
     const rules = ['.callout { --callout-accent: ' + first.accent + '; --callout-tint: ' + first.tint + '; --callout-icon: ' + maskUrl(DEFAULT.icon) + '; }'];
-    COLOR_ORDER.forEach(key => rules.push('.callout[data-color="' + key + '"] { --callout-accent: ' + COLORS[key].accent + '; --callout-tint: ' + COLORS[key].tint + '; }'));
+    COLOR_ORDER.concat(STATE_COLOR_ORDER).forEach(key => rules.push('.callout[data-color="' + key + '"] { --callout-accent: ' + COLORS[key].accent + '; --callout-tint: ' + COLORS[key].tint + '; }'));
     ICON_ORDER.forEach(key => rules.push('.callout[data-icon="' + key + '"] { --callout-icon: ' + maskUrl(key) + '; }'));
     return rules.join('\n');
   }
@@ -179,6 +202,7 @@ const Callout = (function () {
     win = ModalBase.create({ id: 'pp-callout-modal', titleId: 'pp-callout-title', size: 'md', boxClass: 'pp-callout-box', actionsClass: 'var-modal-actions', onEscape: () => closeWindow(), restoreFocus: false });
     const grid = el('div', 'pp-callout-grid');
     const typeLabel = el('span', 'pp-callout-label'); typeLabel.id = 'pp-callout-type-label';
+    const stateLabel = el('span', 'pp-callout-label'); stateLabel.id = 'pp-callout-state-label';
     const colorLabel = el('span', 'pp-callout-label'); colorLabel.id = 'pp-callout-color-label';
     const iconLabel = el('span', 'pp-callout-label'); iconLabel.id = 'pp-callout-icon-label';
     const previewLabel = el('span', 'pp-callout-label');
@@ -193,6 +217,18 @@ const Callout = (function () {
         button.append(swatch, el('span', 'pp-callout-type-name'));
       },
     })), key => pick({ color: PRESETS[key].color, icon: PRESETS[key].icon }));
+    // La ligne « État » : les cinq départs aux couleurs de l'État (une couleur et son icône, comme les types), montrée seulement mode allumé ou quand l'encadré modifié en porte une (open).
+    const states = radioGroup('pp-callout-state-label', STATE_COLOR_ORDER.map(key => ({
+      value: key,
+      className: 'pp-callout-type',
+      fill(button) {
+        // Sur une pastille blanche, comme le papier : le bleu France (#000091) et le rouge sombre ne se lisent pas sur le fond du thème sombre.
+        const swatch = el('span', 'pp-callout-type-icon is-paper');
+        Dom.setMarkup(swatch, svgMarkup(STATE_PRESETS[key].icon, 'currentColor'));
+        swatch.style.color = COLORS[key].accent;
+        button.append(swatch, el('span', 'pp-callout-type-name'));
+      },
+    })), key => pick({ color: STATE_PRESETS[key].color, icon: STATE_PRESETS[key].icon }));
     const colors = radioGroup('pp-callout-color-label', COLOR_ORDER.map(key => ({
       value: key,
       className: 'pp-callout-swatch',
@@ -213,7 +249,7 @@ const Callout = (function () {
     win.body.appendChild(grid);
 
     const { first: remove, cancel, ok } = win.addButtons('var-modal-danger');
-    refs = { typeLabel, colorLabel, iconLabel, previewLabel, types, colors, icons, preview, sample, remove, cancel, ok };
+    refs = { typeLabel, stateLabel, colorLabel, iconLabel, previewLabel, types, states, colors, icons, preview, sample, remove, cancel, ok };
     cancel.addEventListener('click', () => closeWindow());
     ok.addEventListener('click', apply);
     remove.addEventListener('click', removeCallout);
@@ -225,9 +261,10 @@ const Callout = (function () {
   }
 
   function render() {
-    const { types, colors, icons, preview } = refs;
+    const { types, states, colors, icons, preview } = refs;
     const preset = PRESET_ORDER.find(key => PRESETS[key].color === state.color && PRESETS[key].icon === state.icon);
     types.check(preset);
+    states.check(STATE_COLOR_ORDER.find(key => STATE_PRESETS[key].color === state.color && STATE_PRESETS[key].icon === state.icon));
     colors.check(state.color);
     icons.check(state.icon);
     preview.dataset.color = state.color;
@@ -248,13 +285,19 @@ const Callout = (function () {
     const found = findAround(ed.state.selection.$from);
     state = found ? { color: has(COLORS, found.node.attrs.color) ? found.node.attrs.color : DEFAULT.color, icon: has(ICONS, found.node.attrs.icon) ? found.node.attrs.icon : DEFAULT.icon, editing: true }
       : { color: DEFAULT.color, icon: DEFAULT.icon, editing: false };
-    const { typeLabel, colorLabel, iconLabel, previewLabel, types, colors, icons, sample, remove, cancel, ok } = refs;
+    const { typeLabel, stateLabel, colorLabel, iconLabel, previewLabel, types, states, colors, icons, sample, remove, cancel, ok } = refs;
     win.title.textContent = I18n.t(state.editing ? 'callout.title.edit' : 'callout.title.new');
     typeLabel.textContent = I18n.t('callout.type');
+    stateLabel.textContent = I18n.t('callout.state');
     colorLabel.textContent = I18n.t('callout.color');
     iconLabel.textContent = I18n.t('callout.icon');
     previewLabel.textContent = I18n.t('callout.preview');
     types.buttons.forEach(b => { b.querySelector('.pp-callout-type-name').textContent = I18n.t('callout.type.' + b.dataset.value); });
+    states.buttons.forEach(b => { b.querySelector('.pp-callout-type-name').textContent = I18n.t('callout.state.' + b.dataset.value); });
+    // La ligne « État » : mode allumé, ou un encadré qui porte déjà une couleur de l'État (la personne voit alors où elle est, mode éteint ou non).
+    const showState = (typeof StateMode !== 'undefined' && StateMode.isOn()) || isStateColor(state.color);
+    // La ligne n'est dans la fenêtre que quand elle est montrée (rien de caché que le clavier ou un lecteur d'écran trouverait) : sous la ligne « Type ».
+    if (!showState) { stateLabel.remove(); states.group.remove(); } else if (!stateLabel.isConnected) types.group.after(stateLabel, states.group);
     colors.buttons.forEach(b => { const name = I18n.t('callout.color.' + b.dataset.value); b.setAttribute('aria-label', name); b.title = name; });
     icons.buttons.forEach(b => { const name = I18n.t('callout.icon.' + b.dataset.value); b.setAttribute('aria-label', name); b.title = name; });
     sample.textContent = I18n.t('callout.preview.sample');
@@ -321,5 +364,5 @@ const Callout = (function () {
   }
 
   installStyles();
-  return { COLORS, COLOR_ORDER, ICON_ORDER, PRESETS, PRESET_ORDER, createNode, isInside, open, wrapSelection, insertSignature, iconPng, colorOf, styleText };
+  return { COLORS, COLOR_ORDER, STATE_COLOR_ORDER, STATE_PRESETS, isStateColor, hasColor, ICON_ORDER, PRESETS, PRESET_ORDER, createNode, isInside, open, wrapSelection, insertSignature, iconPng, colorOf, styleText };
 })();

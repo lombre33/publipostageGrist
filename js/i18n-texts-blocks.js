@@ -11,6 +11,13 @@ const I18nTextsBlocks = {
   'callout.type.attention': { fr: 'Attention', en: 'Warning' },
   'callout.type.important': { fr: 'Important', en: 'Important' },
   'callout.color': { fr: 'Couleur', en: 'Color' },
+  // La ligne « État » de la fenêtre (mode « Identité de l'État », js/state-mode.js) : cinq départs aux couleurs du DSFR.
+  'callout.state': { fr: 'État', en: 'State' },
+  'callout.state.state': { fr: 'Mise en avant', en: 'Highlight' },
+  'callout.state.state-info': { fr: 'Information', en: 'Information' },
+  'callout.state.state-success': { fr: 'Succès', en: 'Success' },
+  'callout.state.state-warning': { fr: 'Attention', en: 'Warning' },
+  'callout.state.state-error': { fr: 'Erreur', en: 'Error' },
   'callout.color.blue': { fr: 'Bleu', en: 'Blue' },
   'callout.color.green': { fr: 'Vert', en: 'Green' },
   'callout.color.amber': { fr: 'Orange', en: 'Orange' },

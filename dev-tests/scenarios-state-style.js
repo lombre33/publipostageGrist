@@ -5,6 +5,8 @@
 //  - « Appliquer le style de l'État » (menu Titre) : les six niveaux de titres du modèle prennent Marianne, #161616 et les tailles papier ; rien d'autre ne change (le texte, les réglages du document) ; UN Ctrl + Z
 //    défait, Ctrl + Y remet ; une seconde fois ne fait rien (pas de pas d'annulation) ; la ligne est grisée, avec sa raison, mode éteint ou extension absente (son clic ouvre alors l'installation) ;
 //  - un modèle qui porte ce style s'ouvre et se réenregistre à l'identique mode éteint, et s'affiche pareil ;
+//  - les encadrés aux couleurs de l'État (js/callout.js : mise en avant, information, succès, attention, erreur, valeurs du DSFR 1.15.4) : dans la palette (les six couleurs d'avant n'ont pas bougé), peints pareil dans
+//    l'éditeur, la Lecture, le PDF, le Word et le HTML, une ligne « État » de la fenêtre montrée mode allumé seulement (ou quand l'encadré modifié en porte une), un modèle qui en porte à l'identique mode éteint ;
 //  - les textes, en français et en anglais, ne promettent rien d'« officiel ».
 // Joué « hébergé » (dev-tests/gfs-stub.js) : l'extension `etat` est active ou non selon `setExtensions`. Le même parcours à la vraie souris dans le panneau de 700x400 : dev-tests/verify-state-style-mouse.mjs (stateStyleMouse).
 (function () {
@@ -296,12 +298,208 @@
     },
   });
 
+
+  // --- Les encadrés aux couleurs de l'État ---
+  const rgbOf = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+  const near = (a, b, tolerance) => a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) <= tolerance);
+  const cssRgb = text => (String(text).match(/\d+/g) || []).slice(0, 3).map(Number);
+  const STATE = { 'state': ['#000091', '#eeeeee'], 'state-info': ['#0063cb', '#e8edff'], 'state-success': ['#18753c', '#b8fec9'], 'state-warning': ['#b34000', '#ffe9e6'], 'state-error': ['#ce0500', '#ffe9e9'] };
+  const calloutHtml = (color, icon, label) => '<div class="callout" data-color="' + color + '" data-icon="' + icon + '"><p>' + label + '</p></div>';
+  const modal = () => byId('pp-callout-modal');
+  const modalShown = () => !!modal() && modal().style.display !== 'none';
+  const stateGroup = () => modal().querySelector('[aria-labelledby="pp-callout-state-label"]');
+  const stateLabel = () => byId('pp-callout-state-label');
+  const visible = node => !!node && !node.hidden && getComputedStyle(node).display !== 'none';
+  const okButton = () => modal().querySelector('.pp-modal-actions .var-modal-primary');
+  const cancelButton = () => modal().querySelector('.pp-modal-actions button:not(.var-modal-primary)');
+  const calloutNode = () => { let found = null; ed().state.doc.descendants((node) => { if (!found && node.type.name === 'callout') found = node; }); return found; };
+  async function renderPdfPage(base64) {
+    await TestHelpers.ensurePdfJsLoaded();
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    return { width: viewport.width / 2, pixel: (xPt, yPt) => Array.from(ctx.getImageData(Math.round(xPt * 2), Math.round(yPt * 2), 1, 1).data.slice(0, 3)) };
+  }
+
+  cases.push({
+    id: 'statestyle_callout_palette_has_the_five_state_colors_and_the_six_old_ones_stay',
+    description: 'La palette de l’encadré garde ses six couleurs (COLOR_ORDER) et reçoit les cinq de l’État aux valeurs du DSFR ; chacune a sa règle CSS générée ; le texte du document y reste à 12:1 au moins, la barre et l’icône à 3:1',
+    run: async () => {
+      const bad = [];
+      if (!same(Callout.COLOR_ORDER, ['blue', 'green', 'amber', 'red', 'purple', 'gray'])) bad.push('COLOR_ORDER a bougé : ' + Callout.COLOR_ORDER.join());
+      if (!same(Callout.STATE_COLOR_ORDER, Object.keys(STATE))) bad.push('STATE_COLOR_ORDER=' + Callout.STATE_COLOR_ORDER.join());
+      const sheet = Callout.styleText();
+      Object.keys(STATE).forEach((key) => {
+        const color = Callout.COLORS[key];
+        if (!color || color.accent !== STATE[key][0] || color.tint !== STATE[key][1]) bad.push(key + ' : ' + JSON.stringify(color));
+        if (!sheet.includes('.callout[data-color="' + key + '"]') || !sheet.includes(STATE[key][0]) || !sheet.includes(STATE[key][1])) bad.push(key + ' : règle CSS absente');
+        if (!Callout.isStateColor(key) || !Callout.hasColor(key)) bad.push(key + ' : isStateColor/hasColor');
+        if (ColorMath.contrast('#1b2430', STATE[key][1]) < 12) bad.push(key + ' : texte sur teinte ' + ColorMath.contrast('#1b2430', STATE[key][1]).toFixed(1));
+        if (ColorMath.contrast(STATE[key][0], STATE[key][1]) < 3) bad.push(key + ' : barre sur teinte ' + ColorMath.contrast(STATE[key][0], STATE[key][1]).toFixed(1));
+        if (Callout.colorOf(key) !== color) bad.push(key + ' : colorOf');
+      });
+      if (Callout.isStateColor('blue') || Callout.hasColor('evil"]{x')) bad.push('isStateColor/hasColor acceptent à tort');
+      return result(bad);
+    },
+  });
+
+  cases.push({
+    id: 'statestyle_state_callout_is_painted_the_same_in_editor_reader_html_pdf_and_word',
+    description: 'Un encadré « succès » et un « erreur » de l’État sortent aux mêmes couleurs partout : éditeur et Lecture (fond, barre), HTML (balisage et règles, sans les autres couleurs de l’État), PDF (pixels du fond et de la barre), Word (fond et barre de la cellule) ; mode éteint comme allumé',
+    run: async (h) => {
+      const bad = [];
+      const source = '<p>Avant</p>' + calloutHtml('state-success', 'check', 'EncadreSucces avec du texte') + calloutHtml('state-error', 'alert', 'EncadreErreur avec du texte') + '<p>Après</p>';
+      for (const state of ['on', 'off']) {
+        await withMode(state, async () => {
+          await h.resetEditor();
+          await load(source);
+          const boxes = Array.from(document.querySelectorAll('#editor-container .ProseMirror .callout'));
+          if (boxes.length !== 2) { bad.push(state + ' : encadrés peints=' + boxes.length); return; }
+          [['state-success', boxes[0]], ['state-error', boxes[1]]].forEach(([key, box]) => {
+            const cs = getComputedStyle(box);
+            if (!near(cssRgb(cs.backgroundColor), rgbOf(STATE[key][1]), 1) || !near(cssRgb(cs.borderLeftColor), rgbOf(STATE[key][0]), 1)) bad.push(state + ' éditeur ' + key + ' : ' + cs.backgroundColor + ' / ' + cs.borderLeftColor);
+          });
+          const reader = await h.renderReaderMode(Editor.getHTML());
+          const rboxes = Array.from(reader.querySelectorAll('.callout'));
+          [['state-success', rboxes[0]], ['state-error', rboxes[1]]].forEach(([key, box]) => {
+            const cs = box && getComputedStyle(box);
+            if (!cs || !near(cssRgb(cs.backgroundColor), rgbOf(STATE[key][1]), 1) || !near(cssRgb(cs.borderLeftColor), rgbOf(STATE[key][0]), 1)) bad.push(state + ' Lecture ' + key + ' : ' + (cs && cs.backgroundColor));
+          });
+          document.getElementById('reader-container').style.display = 'none';
+        });
+      }
+      await h.resetEditor();
+      // HTML : le balisage garde la clé, la feuille de style n'a que les règles des couleurs employées.
+      const out = await h.exportHtml(source);
+      const css = (out.text.match(/<style>\n([\s\S]*?)\n<\/style>/) || [])[1] || '';
+      if (!/<div class="pp-callout" data-color="state-success" data-icon="check" role="note">/.test(out.text) || !/data-color="state-error"/.test(out.text)) bad.push('HTML : balisage');
+      ['state-success', 'state-error'].forEach((key) => {
+        if (!css.includes('.pp-doc .pp-callout[data-color="' + key + '"]') || !css.includes(STATE[key][0]) || !css.includes(STATE[key][1])) bad.push('HTML : règle de ' + key + ' absente');
+      });
+      ['state', 'state-info', 'state-warning'].forEach((key) => { if (css.includes('[data-color="' + key + '"]')) bad.push('HTML : règle inutilisée ' + key); });
+      // PDF : le fond jusqu'à la marge et la barre de gauche, aux couleurs de l'État.
+      const pdf = await h.exportPdfContent(source);
+      const truth = await h.extractPdfGroundTruth(pdf.base64);
+      const view = await renderPdfPage(pdf.base64);
+      const items = truth.pages[0].textItems;
+      [['state-success', 'EncadreSucces'], ['state-error', 'EncadreErreur']].forEach(([key, text]) => {
+        const item = items.find(i => i.str.startsWith(text));
+        if (!item) { bad.push('PDF : texte ' + text + ' absent'); return; }
+        const y = item.y - 3;
+        const bar = view.pixel(29.5, y);
+        const tint = view.pixel(view.width - 28 - 30, y);
+        if (!near(bar, rgbOf(STATE[key][0]), 6) || !near(tint, rgbOf(STATE[key][1]), 3)) bad.push('PDF ' + key + ' : barre ' + bar + ' fond ' + tint);
+      });
+      // Word : une cellule teintée avec la barre de la couleur d'accent.
+      const docx = await h.exportDocxParts(calloutHtml('state-warning', 'warning', 'Note de l’État'));
+      const tbl = docx.doc.getElementsByTagName('w:tbl')[0];
+      const cells = tbl ? Array.from(tbl.getElementsByTagName('w:tc')) : [];
+      if (cells.length !== 2) bad.push('Word : cellules=' + cells.length);
+      else {
+        const left = cells[0].getElementsByTagName('w:tcBorders')[0].getElementsByTagName('w:left')[0];
+        const fill = tc => tc.getElementsByTagName('w:shd')[0].getAttribute('w:fill');
+        if (left.getAttribute('w:color') !== 'B34000' || fill(cells[0]) !== 'FFE9E6' || fill(cells[1]) !== 'FFE9E6') bad.push('Word : ' + left.getAttribute('w:color') + ' ' + fill(cells[0]) + ' ' + fill(cells[1]));
+      }
+      return result(bad);
+    },
+  });
+
+  cases.push({
+    id: 'statestyle_callout_window_shows_the_state_row_only_with_the_mode_on_or_on_a_state_callout',
+    description: 'La fenêtre de l’encadré : mode éteint, la ligne « État » est cachée ; allumé, elle montre cinq départs (mise en avant, information, succès, attention, erreur), le choix pose la couleur ET l’icône dans l’aperçu et dans le document, UN Ctrl + Z le défait ; un encadré de l’État modifié mode éteint montre la ligne avec son choix coché',
+    run: async (h) => {
+      const bad = [];
+      await h.resetEditor();
+      const closeWindow = async () => { if (modalShown()) { cancelButton().click(); await sleep(120); } };
+      await withMode('off', async () => {
+        await load('<p>Du texte</p>');
+        await h.selectAllInEditor();
+        Callout.open();
+        await sleep(200);
+        if (!modalShown()) { bad.push('off : fenêtre fermée'); return; }
+        if (visible(stateGroup()) || visible(stateLabel())) bad.push('off : la ligne « État » est montrée');
+        await closeWindow();
+      });
+      await withMode('on', async () => {
+        await load('<p>Du texte</p>');
+        const start = Editor.getHTML();
+        await h.selectAllInEditor();
+        Callout.open();
+        await sleep(200);
+        if (!modalShown()) { bad.push('on : fenêtre fermée'); return; }
+        if (!visible(stateGroup()) || !visible(stateLabel())) { bad.push('on : la ligne « État » est cachée'); await closeWindow(); return; }
+        const buttons = Array.from(stateGroup().querySelectorAll('button'));
+        if (!same(buttons.map(b => b.dataset.value), Object.keys(STATE))) bad.push('on : choix=' + buttons.map(b => b.dataset.value).join());
+        if (!same(buttons.map(b => b.textContent.trim()), ['Mise en avant', 'Information', 'Succès', 'Attention', 'Erreur'])) bad.push('on : noms=' + buttons.map(b => b.textContent.trim()).join());
+        if (stateLabel().textContent !== I18n.t('callout.state')) bad.push('on : intitulé=' + stateLabel().textContent);
+        buttons[2].click();
+        await sleep(100);
+        const preview = modal().querySelector('.pp-callout-paper .callout');
+        if (preview.dataset.color !== 'state-success' || preview.dataset.icon !== 'check') bad.push('on : aperçu=' + preview.dataset.color + '/' + preview.dataset.icon);
+        if (buttons[2].getAttribute('aria-checked') !== 'true' || buttons.filter(b => b.getAttribute('aria-checked') === 'true').length !== 1) bad.push('on : choix coché');
+        okButton().click();
+        await sleep(200);
+        const node = calloutNode();
+        if (!node || node.attrs.color !== 'state-success' || node.attrs.icon !== 'check') bad.push('on : nœud=' + JSON.stringify(node && node.attrs));
+        const inserted = Editor.getHTML();
+        await undo();
+        if (Editor.getHTML() !== start) bad.push('on : Ctrl+Z ne rend pas le départ d’un coup');
+        await redo();
+        if (Editor.getHTML() !== inserted) bad.push('on : Ctrl+Y ne remet pas l’encadré');
+      });
+      await withMode('off', async () => {
+        await load(calloutHtml('state-warning', 'warning', 'Déjà de l’État'));
+        ed().chain().focus('start').run();
+        await sleep(120);
+        Callout.open();
+        await sleep(200);
+        if (!modalShown()) { bad.push('off+état : fenêtre fermée'); return; }
+        if (!visible(stateGroup())) bad.push('off+état : la ligne « État » est cachée devant un encadré de l’État');
+        else {
+          const checked = Array.from(stateGroup().querySelectorAll('button')).filter(b => b.getAttribute('aria-checked') === 'true').map(b => b.dataset.value);
+          if (!same(checked, ['state-warning'])) bad.push('off+état : coché=' + checked.join());
+        }
+        await closeWindow();
+      });
+      await closeWindow();
+      return result(bad);
+    },
+  });
+
+  cases.push({
+    id: 'statestyle_a_template_with_state_callouts_opens_and_saves_the_same_with_the_mode_off',
+    description: 'Un modèle qui porte des encadrés de l’État se relit et se réécrit octet pour octet mode éteint comme allumé ou sans l’extension',
+    run: async (h) => {
+      const bad = [];
+      const markup = calloutHtml('state', 'info', 'Mise en avant') + calloutHtml('state-info', 'info', 'Info') + calloutHtml('state-success', 'check', 'Succès') + calloutHtml('state-warning', 'warning', 'Attention') + calloutHtml('state-error', 'alert', 'Erreur');
+      const seen = {};
+      for (const state of ['on', 'off', 'absent']) {
+        await withMode(state, async () => {
+          await h.resetEditor();
+          await load(markup);
+          seen[state] = Editor.getHTML();
+        });
+      }
+      if (seen.on !== seen.off || seen.on !== seen.absent) bad.push('le HTML enregistré change avec le mode');
+      Object.keys(STATE).forEach((key) => { if (!seen.off.includes('data-color="' + key + '"')) bad.push('couleur perdue : ' + key); });
+      return result(bad);
+    },
+  });
+
   cases.push({
     id: 'statestyle_texts_are_in_both_languages_and_promise_nothing_official',
     description: 'Les textes du lot 2 existent en français et en anglais, sans variable oubliée ; aucun ne parle d’« officiel » ou de « conforme au DSFR »',
     run: async () => {
       const bad = [];
-      const keys = ['state.color.row', 'state.color.row.hint', 'state.color.alerts', 'state.color.alerts.hint', 'state.color.lightBlueText', 'state.style.apply', 'state.style.apply.hint', 'state.style.locked.off', 'state.style.status.applied', 'state.style.status.same']
+      const keys = ['state.color.row', 'state.color.row.hint', 'state.color.alerts', 'state.color.alerts.hint', 'state.color.lightBlueText', 'state.style.apply', 'state.style.apply.hint', 'state.style.locked.off', 'state.style.status.applied', 'state.style.status.same', 'callout.state', 'callout.state.state', 'callout.state.state-info', 'callout.state.state-success', 'callout.state.state-warning', 'callout.state.state-error']
         .concat(StateStyle.BRAND.concat(StateStyle.ALERTS).map(item => 'state.color.name.' + item[0]));
       const kept = I18n.getLang();
       const words = { fr: [], en: [] };
@@ -311,7 +509,7 @@
       }
       I18n.setLang(kept);
       keys.forEach((key, i) => {
-        if (words.fr[i] === words.en[i] && !/state\.color\.name\.(info)$/.test(key)) bad.push('identique dans les deux langues : ' + key);
+        if (words.fr[i] === words.en[i] && !/^(state\.color\.name\.info|callout\.state\.state-info)$/.test(key)) bad.push('identique dans les deux langues : ' + key);
         if (/\{[a-z]+\}/.test(words.fr[i] + words.en[i])) bad.push('variable non remplacée : ' + key);
       });
       if (/officiel|official|conforme au dsfr|dsfr[- ]compliant/i.test(words.fr.concat(words.en).join(' '))) bad.push('promesse « officiel » ou « conforme »');

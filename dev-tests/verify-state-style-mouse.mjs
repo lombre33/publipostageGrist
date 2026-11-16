@@ -5,6 +5,8 @@
 //      un vrai clic peint les titres en Marianne, #161616, aux tailles papier, le coin d'état le dit ; Ctrl+Z défait d'un coup, Ctrl+Y remet ;
 //   2) le menu de la couleur de police : les deux rangées de l'État sont là, tiennent dans le panneau, leurs pastilles sont atteignables, leurs intitulés lisibles (>= 4,5:1) ; un vrai clic sur le bleu
 //      France clair pose la couleur ET le coin d'état dit pourquoi on la garde pour les filets (lisible >= 4,5:1) ; un clic sur le bleu France ne dit rien ;
+//   2 bis) la fenêtre de l'encadré (mode allumé) : la ligne « État » montre ses cinq départs, tient dans le panneau avec ses deux boutons au premier plan, un vrai clic sur « Succès » peint l'aperçu en
+//      teinte et barre de l'État (lisible), « Insérer » pose l'encadré, Ctrl+Z le retire d'un coup ; mode éteint la ligne est cachée ;
 //   3) mode éteint : la ligne est grisée (atteignable, jamais retirée), un vrai clic dit pourquoi dans le coin d'état sans rien changer, et le menu de couleur n'a plus les rangées de l'État ;
 //   4) aucune erreur de page.
 // Lancé par run-headless.mjs (groupe Node « stateStyleMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-state-style-mouse.mjs
@@ -12,7 +14,7 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { open, stopServer, sleep, center } from './load-lib.mjs';
+import { open, stopServer, sleep, center, click } from './load-lib.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const PORT = Number(process.env.STATE_STYLE_PORT || 9059);
@@ -33,8 +35,8 @@ const realErrors = w => w.errors.filter(e => !/Failed to load resource|ERR_TUNNE
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png` }); };
 
 const WORDS = {
-  fr: { apply: 'Appliquer le style de l’État', applied: 'Style de l’État appliqué aux titres de ce modèle.', off: 'Allume d’abord le mode « Identité de l’État » (Réglages, onglet Thème).', row: 'Couleurs de l’État', alerts: 'Alertes de l’État', lightBlue: /4,22:1.*filets/ },
-  en: { apply: 'Apply the State style', applied: 'State style applied to this template’s headings.', off: 'Turn on the “State identity” mode first (Settings, Theme tab).', row: 'State colors', alerts: 'State alerts', lightBlue: /4\.22:1.*rules/ },
+  fr: { apply: 'Appliquer le style de l’État', applied: 'Style de l’État appliqué aux titres de ce modèle.', off: 'Allume d’abord le mode « Identité de l’État » (Réglages, onglet Thème).', row: 'Couleurs de l’État', alerts: 'Alertes de l’État', lightBlue: /4,22:1.*filets/, stateRow: 'État', names: ['Mise en avant', 'Information', 'Succès', 'Attention', 'Erreur'] },
+  en: { apply: 'Apply the State style', applied: 'State style applied to this template’s headings.', off: 'Turn on the “State identity” mode first (Settings, Theme tab).', row: 'State colors', alerts: 'State alerts', lightBlue: /4\.22:1.*rules/, stateRow: 'State', names: ['Highlight', 'Information', 'Success', 'Warning', 'Error'] },
 };
 
 const PAGE_HELPERS = `
@@ -123,6 +125,15 @@ async function selectAllText(page) {
   });
   await sleep(300);
 }
+async function selectText(page, needle) {
+  await page.evaluate((text) => {
+    const ed = EditorCore.getEditor();
+    let from = null, to = null;
+    ed.state.doc.descendants((n, pos) => { if (from === null && n.isText && n.text.indexOf(text) !== -1) { from = pos; to = pos + n.nodeSize; } });
+    ed.chain().focus().setTextSelection({ from, to }).run();
+  }, needle);
+  await sleep(300);
+}
 async function openColorMenu(page) {
   const c = await center(page, '#v2-btn-text-color-caret');
   await page.mouse.move(c.x - 15, c.y);
@@ -150,6 +161,40 @@ const menuState = page => page.evaluate(`(() => {
     footerSeen: (() => { const f = menu.querySelector('.cp-custom'); if (!f) return false; const r = f.getBoundingClientRect(); return r.bottom <= innerHeight && r.top >= 0; })(),
   };
 })()`);
+
+const windowState = page => page.evaluate(`(() => {
+  ${PAGE_HELPERS}
+  const ov = document.getElementById('pp-callout-modal');
+  if (!ov || getComputedStyle(ov).display === 'none') return null;
+  const box = ov.querySelector('.pp-modal-box');
+  const b = box.getBoundingClientRect();
+  const label = document.getElementById('pp-callout-state-label');
+  const group = ov.querySelector('[aria-labelledby="pp-callout-state-label"]');
+  const shown = el => !!el && !el.hidden && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
+  const onTop = (el) => { const r = el.getBoundingClientRect(); const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!t && (el === t || el.contains(t)); };
+  const ok = ov.querySelector('.pp-modal-actions .var-modal-primary');
+  const cancel = Array.from(ov.querySelectorAll('.pp-modal-actions button')).find(x => !x.classList.contains('var-modal-primary') && x.getBoundingClientRect().width > 0);
+  const buttons = group ? Array.from(group.querySelectorAll('button')) : [];
+  const preview = ov.querySelector('.pp-callout-paper .callout');
+  const pc = getComputedStyle(preview);
+  return {
+    inPanel: b.left >= 0 && b.top >= 0 && b.right <= innerWidth && b.bottom <= innerHeight, okSeen: onTop(ok), cancelSeen: onTop(cancel),
+    labelShown: shown(label), groupShown: shown(group), label: label ? label.textContent : null, names: buttons.map(x => x.textContent.trim()),
+    labelRatio: shown(label) ? ratio(getComputedStyle(label).color, opaque(label)) : null,
+    nameRatios: buttons.filter(shown).map(x => ratio(getComputedStyle(x.querySelector('.pp-callout-type-name')).color, opaque(x))),
+    iconRatios: buttons.filter(shown).map((x) => { const i = x.querySelector('.pp-callout-type-icon'); return ratio(getComputedStyle(i).color, getComputedStyle(i).backgroundColor); }),
+    checked: buttons.filter(x => x.getAttribute('aria-checked') === 'true').map(x => x.dataset.value),
+    previewColor: preview.dataset.color, previewIcon: preview.dataset.icon, previewBg: pc.backgroundColor, previewBar: pc.borderLeftColor,
+  };
+})()`);
+async function revealIn(page, selector) {
+  await page.evaluate((sel) => { const el = document.querySelector(sel); if (el) el.scrollIntoView({ block: 'nearest' }); }, selector);
+  await sleep(150);
+}
+const calloutAttrs = page => page.evaluate(() => { let found = null; EditorCore.getEditor().state.doc.descendants((n) => { if (!found && n.type.name === 'callout') found = n.attrs; }); return found; });
+const closeCallout = async (page) => {
+  if (await page.evaluate(() => { const ov = document.getElementById('pp-callout-modal'); return !!ov && getComputedStyle(ov).display !== 'none'; })) { await page.keyboard.press('Escape'); await sleep(250); }
+};
 const textColorOf = page => page.evaluate(() => ColorMath.parseCss(EditorCore.getEditor().getAttributes('textStyle').color));
 const statusLook = page => page.evaluate(`(() => {
   ${PAGE_HELPERS}
@@ -224,6 +269,44 @@ async function run(lang, theme) {
     check(tag + ' : un vrai clic sur le bleu France clair pose #6a6af4 ET le coin d\'état dit pourquoi le garder pour les filets', (await textColorOf(page)) === '#6a6af4' && words.lightBlue.test(look.text), { color: await textColorOf(page), status: look.text });
     check(tag + ' : l\'avis est lisible (>= 4,5:1)', look.ratio >= 4.5, look);
     await shot(page, tag.replace(' ', '-') + '-4-avis-bleu-clair');
+
+
+    // ---- 2 bis) La fenêtre de l'encadré, mode allumé ----
+    await page.evaluate(() => { EditorCore.closeDropdownPanel(); Editor.setHTML('<p>Du texte à encadrer.</p>'); });
+    await sleep(300);
+    await selectText(page, 'Du texte');
+    const beforeCallout = await HTML(page);
+    await page.evaluate(() => Callout.open());
+    await sleep(350);
+    let cw = await windowState(page);
+    check(tag + ' : la fenêtre de l\'encadré, mode allumé, montre la ligne « ' + words.stateRow + ' » et ses cinq départs : ' + words.names.join(', '), !!cw && cw.labelShown && cw.groupShown && cw.label === words.stateRow && JSON.stringify(cw.names) === JSON.stringify(words.names), cw);
+    check(tag + ' : la fenêtre tient dans le panneau 700x400, ses deux boutons au premier plan', !!cw && cw.inPanel && cw.okSeen && cw.cancelSeen, cw);
+    check(tag + ' : l\'intitulé et les noms de la ligne sont lisibles (>= 4,5:1)', !!cw && cw.labelRatio >= 4.5 && cw.nameRatios.length === 5 && cw.nameRatios.every(r => r >= 4.5), cw && { label: cw.labelRatio, names: cw.nameRatios });
+    check(tag + ' : les icônes des cinq départs se lisent (>= 3:1 sur leur pastille blanche), aussi en thème sombre', !!cw && cw.iconRatios.length === 5 && cw.iconRatios.every(r => r >= 3), cw && cw.iconRatios);
+    await revealIn(page, '#pp-callout-modal [aria-labelledby="pp-callout-state-label"] button[data-value="state-success"]');
+    await click(page, '#pp-callout-modal [aria-labelledby="pp-callout-state-label"] button[data-value="state-success"]');
+    await sleep(250);
+    cw = await windowState(page);
+    check(tag + ' : un vrai clic sur « ' + words.names[2] + ' » peint l\'aperçu en teinte #b8fec9 et barre #18753c, avec l\'icône coche, et le coche', !!cw && cw.previewColor === 'state-success' && cw.previewIcon === 'check' && cw.previewBg === 'rgb(184, 254, 201)' && cw.previewBar === 'rgb(24, 117, 60)' && cw.checked.join() === 'state-success', cw);
+    await shot(page, tag.replace(' ', '-') + '-6-fenetre-encadre');
+    await revealIn(page, '#pp-callout-modal .pp-modal-actions .var-modal-primary');
+    await click(page, '#pp-callout-modal .pp-modal-actions .var-modal-primary');
+    await sleep(400);
+    const attrs = await calloutAttrs(page);
+    check(tag + ' : « Insérer » pose l\'encadré de l\'État (couleur et icône dans le document)', !!attrs && attrs.color === 'state-success' && attrs.icon === 'check', attrs);
+    await page.evaluate(() => { EditorCore.getEditor().commands.focus('end'); });
+    await sleep(150);
+    await page.keyboard.press('Control+z');
+    await sleep(500);
+    check(tag + ' : au vrai clavier, UN Ctrl+Z retire l\'encadré (le HTML revient octet pour octet)', (await HTML(page)) === beforeCallout, (await HTML(page)).slice(0, 200));
+    await setMode(page, false);
+    await selectText(page, 'Du texte');
+    await page.evaluate(() => Callout.open());
+    await sleep(350);
+    cw = await windowState(page);
+    check(tag + ' : mode éteint, la ligne « ' + words.stateRow + ' » est cachée et la fenêtre reste entière', !!cw && !cw.labelShown && !cw.groupShown && cw.inPanel && cw.okSeen, cw);
+    await closeCallout(page);
+    await setMode(page, true);
 
     // ---- 3) Mode éteint ----
     await setMode(page, false);

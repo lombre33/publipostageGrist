@@ -13,7 +13,7 @@
 "BlockAnim":"TYPES:d createExtension:f isDecor:f openForSelection:f patch:f textOf:f unitAt:f",
 "BookmarkDialog":"open:f",
 "BulletFormat":"ATTR:d DEFAULT_CHAR:d PRESETS:d VAR:d apply:f colorNormalized:f createExtension:f currentChar:f currentLook:f markerOf:f markup:f normalized:f open:f sizeNormalized:f syncRow:f",
-"Callout":"COLORS:d COLOR_ORDER:d ICON_ORDER:d PRESETS:d PRESET_ORDER:d colorOf:f createNode:f iconPng:f insertSignature:f isInside:f open:f styleText:f wrapSelection:f",
+"Callout":"COLORS:d COLOR_ORDER:d ICON_ORDER:d PRESETS:d PRESET_ORDER:d STATE_COLOR_ORDER:d STATE_PRESETS:d colorOf:f createNode:f hasColor:f iconPng:f insertSignature:f isInside:f isStateColor:f open:f styleText:f wrapSelection:f",
 "Caption":"COLOR:d SIZE_PT:d captionsAfter:f carriesCaption:f createExtension:f fitsWithCaption:f isCaptionElement:f run:f syncButton:f",
 "CharacterFormat":"DEFAULT_SHADOW:d DEFAULT_STROKE:d POWERPOINT_UNDERLINE:d SMALL_CAPS:d SMALL_CAPS_RATIO:d SPACING:d SPACING_STEP:d UNDERLINE_STYLES:d WORD_UNDERLINE:d apply:f createExtension:f declarations:f normalizedLine:f normalizedShadow:f normalizedSpacing:f normalizedStroke:f parseShadow:f parseStroke:f readState:f smallCapsOf:f smallCapsPieces:f spacingPt:f stepSpacing:f syncMenus:f underlineOfPowerPoint:f wireMenus:f",
 "ChartBlock":"demand:f drawMade:f forgetDrawings:f open:f paintFrame:f refreshEditor:f refreshFrame:f releaseFrame:f resolveImage:f setIdleDrawing:f",

@@ -664,7 +664,7 @@ const HtmlExport = (function () {
     const color = el.getAttribute('data-color');
     const icon = el.getAttribute('data-icon');
     // Les attributs de couleur et d'icône portent la palette (Callout.styleText) : seules les clés que la palette connaît sont écrites.
-    if (Callout.COLOR_ORDER.indexOf(color) !== -1) { out.setAttribute('data-color', color); ctx.callouts.colors.add(color); }
+    if (Callout.hasColor(color)) { out.setAttribute('data-color', color); ctx.callouts.colors.add(color); }
     if (Callout.ICON_ORDER.indexOf(icon) !== -1) { out.setAttribute('data-icon', icon); ctx.callouts.icons.add(icon); }
     out.setAttribute('role', 'note');
     childrenInto(el, out, ctx);
