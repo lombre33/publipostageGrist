@@ -175,6 +175,46 @@ const dropFile = (page, name, content) => page.evaluate(({ name, content }) => {
   return { dropPrevented: fire('drop').defaultPrevented };
 }, { name, content });
 
+// Une archive ZIP de page, fabriquée dans la page par JSZip (la même bibliothèque que l'import lira) : la page, sa feuille de style liée et son image, rangées dans `<titre>_files/` comme un navigateur le fait.
+const pageArchive = (page, title) => page.evaluate(async ({ title, png }) => {
+  await ExportCommon.ensureJsZipLoaded();
+  const zip = new JSZip();
+  zip.file('index.html', `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="${title}_files/style.css"></head><body><h1>${title}</h1><p>Texte de la page</p><p><img src="${title}_files/logo.png" alt="Logo"></p></body></html>`);
+  zip.file(`${title}_files/style.css`, 'h1 { color: #000091 }');
+  zip.file(`${title}_files/logo.png`, Uint8Array.from(atob(png.split(',')[1]), c => c.charCodeAt(0)));
+  return zip.generateAsync({ type: 'base64' });
+}, { title, png: PNG });
+// Ce que la page montre d'une page importée avec ses voisins : le texte, le titre et sa couleur, les images en données.
+const neighbourState = (page, title) => page.evaluate((title) => {
+  const root = document.querySelector('#editor-container .ProseMirror');
+  const heading = Array.from(root.querySelectorAll('h1 span')).concat(Array.from(root.querySelectorAll('h1'))).find(el => el.textContent === title);
+  return { text: root.textContent, color: heading ? getComputedStyle(heading).color : '', images: Array.from(root.querySelectorAll('img.editor-image')).map(img => (img.getAttribute('src') || '').slice(0, 22)),
+    placeholders: (root.textContent.match(/image non reprise|image not imported/g) || []).length };
+}, title);
+// Un glisser-déposer de fichiers qui portent un dossier : le dépôt du navigateur donne des entrées (webkitGetAsEntry) qu'on ne sait pas fabriquer au bureau ; l'événement est le vrai, son `dataTransfer` est un
+// objet qui répond comme celui d'un dossier déposé (un dossier, un sous-dossier, ses fichiers).
+const dropFolder = (page, folder) => page.evaluate(({ folder, png }) => {
+  const bytes = Uint8Array.from(atob(png.split(',')[1]), c => c.charCodeAt(0));
+  const fileEntry = (name, content) => ({ isFile: true, isDirectory: false, name, file: ok => ok(new File([content], name)) });
+  const dirEntry = (name, children) => ({ isFile: false, isDirectory: true, name, createReader() { let done = false; return { readEntries: (ok) => { if (done) return ok([]); done = true; ok(children); } }; } });
+  const root = dirEntry(folder, [
+    fileEntry('index.html', `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="${folder}_files/style.css"></head><body><h1>${folder}</h1><p>Texte du dossier</p><p><img src="${folder}_files/logo.png" alt="Logo"></p></body></html>`),
+    dirEntry(`${folder}_files`, [fileEntry('style.css', 'h1 { color: #000091 }'), fileEntry('logo.png', bytes)]),
+  ]);
+  const transfer = { types: ['Files'], files: [new File([], folder)], items: [{ kind: 'file', type: '', webkitGetAsEntry: () => root }] };
+  const event = new DragEvent('drop', { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', { value: transfer });
+  document.body.dispatchEvent(event);
+  return { dropPrevented: event.defaultPrevented };
+}, { folder, png: PNG });
+const dropArchive = (page, base64) => page.evaluate((base64) => {
+  const transfer = new DataTransfer();
+  transfer.items.add(new File([Uint8Array.from(atob(base64), c => c.charCodeAt(0))], 'page.zip', { type: 'application/zip' }));
+  const fireDrop = kind => { const e = new DragEvent(kind, { bubbles: true, cancelable: true, dataTransfer: transfer }); document.body.dispatchEvent(e); return e; };
+  fireDrop('dragenter'); fireDrop('dragover');
+  return { dropPrevented: fireDrop('drop').defaultPrevented };
+}, base64);
+
 async function run(theme, lang) {
   const label = lang === 'en' ? 'anglais' : theme === 'dark' ? 'sombre' : 'clair';
   const T = TEXTS[lang];
@@ -200,7 +240,7 @@ async function run(theme, lang) {
     check(`${label} - un vrai clic sur la ligne ouvre le vrai sélecteur de fichier`, !!chooser1);
     if (!chooser1) return;
     const accept = await chooser1.element().getAttribute('accept');
-    check(`${label} - le sélecteur est réduit aux fichiers HTML (pas aux classeurs ni au Markdown), pour un seul fichier`, !chooser1.isMultiple() && /\.html\b/.test(accept) && /\.htm\b/.test(accept) && !/xlsx|\.md\b/.test(accept), { accept, multiple: chooser1.isMultiple() });
+    check(`${label} - le sélecteur est réduit aux fichiers HTML et aux archives ZIP (pas aux classeurs ni au Markdown), pour un seul fichier`, !chooser1.isMultiple() && /\.html\b/.test(accept) && /\.htm\b/.test(accept) && /\.zip\b/.test(accept) && !/xlsx|\.md\b/.test(accept), { accept, multiple: chooser1.isMultiple() });
     await chooser1.element().evaluate(el => el.dispatchEvent(new Event('cancel')));
     await sleep(500);
     const afterCancel = await statusOf(page);
@@ -344,6 +384,39 @@ async function run(theme, lang) {
     const after = await snapshot(page);
     check(`${label} - « ${T.drop.after} » : le texte d'avant reste, la page déposée est à la fin, le modèle garde son nom`,
       after.text.startsWith('Début du texteFin du texte') && /Page déposée/.test(after.text) && after.name === 'Mon modèle', { text: after.text.slice(0, 80), name: after.name });
+    // 8) Les voisins de la page : une archive ZIP au vrai sélecteur, un dossier déposé, une archive déposée. Les images arrivent en données, la feuille liée colore le titre, aucun compte rendu à lire.
+    const archive = await pageArchive(page, 'Archive');
+    await pickFile(page, { name: 'page.zip', mimeType: 'application/zip', buffer: Buffer.from(archive, 'base64') });
+    await settle(page, /^$/);
+    const leave = await clickDialogButton(page, T.discard);
+    check(`${label} - une archive ZIP au vrai sélecteur : la question d'enregistrement vient après la lecture, « ${T.discard} » est atteignable`, !!leave && leave.reachable, leave);
+    await settle(page, /HTML import|importé|imported/);
+    const fromArchive = await neighbourState(page, 'Archive');
+    const archiveDialog = await dialogState(page);
+    check(`${label} - l'archive : le titre est bleu (feuille liée lue), l'image voisine est en données, aucun mot « image non reprise », aucun compte rendu`,
+      fromArchive.color === 'rgb(0, 0, 145)' && fromArchive.images.length === 1 && /^data:image\/png;base64/.test(fromArchive.images[0]) && fromArchive.placeholders === 0 && !archiveDialog.shown && /Texte de la page/.test(fromArchive.text), { fromArchive, archiveDialog });
+    await snap('archive');
+
+    const folderDrop = await dropFolder(page, 'Dossier');
+    await sleep(1200);
+    const folderChoose = await dialogState(page);
+    check(`${label} - un dossier déposé sur un document ouvert : la fenêtre à quatre choix s'ouvre, le navigateur n'ouvre pas le dossier`,
+      folderDrop.dropPrevented && folderChoose.shown && folderChoose.buttons.includes(T.drop.nw) && folderChoose.buttons.includes(T.drop.after), { folderDrop, folderChoose });
+    await clickDialogButton(page, T.drop.after);
+    await settle(page, /^$/);
+    const fromFolder = await neighbourState(page, 'Dossier');
+    check(`${label} - le dossier : sa page est ajoutée à la fin, titre bleu, image du sous-dossier en données`,
+      fromFolder.color === 'rgb(0, 0, 145)' && fromFolder.images.length === 2 && fromFolder.placeholders === 0 && /Texte de la page.*Texte du dossier/.test(fromFolder.text), fromFolder);
+
+    const zipDrop = await dropArchive(page, await pageArchive(page, 'Deposee'));
+    await sleep(900);
+    const zipChoose = await dialogState(page);
+    check(`${label} - une archive ZIP déposée est reconnue : la fenêtre à quatre choix s'ouvre`, zipDrop.dropPrevented && zipChoose.shown && zipChoose.buttons.includes(T.drop.after), { zipDrop, zipChoose });
+    await clickDialogButton(page, T.drop.after);
+    await settle(page, /^$/);
+    const fromZipDrop = await neighbourState(page, 'Deposee');
+    check(`${label} - l'archive déposée : sa page est ajoutée, titre bleu, image en données`, fromZipDrop.color === 'rgb(0, 0, 145)' && fromZipDrop.images.length === 3 && /Texte de la page/.test(fromZipDrop.text), fromZipDrop);
+
     check(`${label} - aucune erreur de page, aucune boîte du navigateur`, realErrors(w).length === 0 && w.dialogs.length === 0, { errors: realErrors(w), dialogs: w.dialogs });
   } finally {
     await w.close();

@@ -1,0 +1,403 @@
+{
+ "_note": "48 produits d'exemple d'Atlas Logistique (cas d'usage du 04/10, modèles/stock, données fictives) : de quoi essayer le moteur du tableau croisé (js/pivot.js) sur des lignes qui ressemblent à celles de la valorisation du stock.",
+ "categories": [
+  "Visserie & fixation",
+  "Électricité",
+  "Plomberie",
+  "Peinture & finition",
+  "Emballage",
+  "Sécurité (EPI)"
+ ],
+ "zones": [
+  "Réserve",
+  "Picking",
+  "Quai",
+  "Froid"
+ ],
+ "produits": [
+  {
+   "sku": "ATL-VIS-0001",
+   "categorie": "Visserie & fixation",
+   "zone": "Froid",
+   "fournisseur": "Établissements Dupont & Fils (SARL)",
+   "stock": 64.0,
+   "prixAchat": 3.9
+  },
+  {
+   "sku": "ATL-VIS-0002",
+   "categorie": "Visserie & fixation",
+   "zone": "Picking",
+   "fournisseur": "Établissements Dupont & Fils (SARL)",
+   "stock": 0.0,
+   "prixAchat": 6.45
+  },
+  {
+   "sku": "ATL-VIS-0003",
+   "categorie": "Visserie & fixation",
+   "zone": "Réserve",
+   "fournisseur": "Quincaillerie de l'Est",
+   "stock": 110.0,
+   "prixAchat": 8.2
+  },
+  {
+   "sku": "ATL-ELE-0004",
+   "categorie": "Électricité",
+   "zone": "Froid",
+   "fournisseur": "Électro-Pro Distribution",
+   "stock": 239.0,
+   "prixAchat": 61.3
+  },
+  {
+   "sku": "ATL-ELE-0005",
+   "categorie": "Électricité",
+   "zone": "Quai",
+   "fournisseur": "Électro-Pro Distribution",
+   "stock": 156.0,
+   "prixAchat": 7.85
+  },
+  {
+   "sku": "ATL-ELE-0006",
+   "categorie": "Électricité",
+   "zone": "Réserve",
+   "fournisseur": "Électro-Pro Distribution",
+   "stock": 229.0,
+   "prixAchat": 24.9
+  },
+  {
+   "sku": "ATL-PLO-0007",
+   "categorie": "Plomberie",
+   "zone": "Quai",
+   "fournisseur": "Quincaillerie de l'Est",
+   "stock": 3.0,
+   "prixAchat": 58.0
+  },
+  {
+   "sku": "ATL-PLO-0008",
+   "categorie": "Plomberie",
+   "zone": "Quai",
+   "fournisseur": "Quincaillerie de l'Est",
+   "stock": 66.0,
+   "prixAchat": 2.35
+  },
+  {
+   "sku": "ATL-PEI-0009",
+   "categorie": "Peinture & finition",
+   "zone": "Réserve",
+   "fournisseur": "Établissements Dupont & Fils (SARL)",
+   "stock": 0.0,
+   "prixAchat": 74.5
+  },
+  {
+   "sku": "ATL-PEI-0010",
+   "categorie": "Peinture & finition",
+   "zone": "Froid",
+   "fournisseur": "Établissements Dupont & Fils (SARL)",
+   "stock": 115.0,
+   "prixAchat": 3.2
+  },
+  {
+   "sku": "ATL-EMB-0011",
+   "categorie": "Emballage",
+   "zone": "Picking",
+   "fournisseur": "Emballages du Sud-Ouest « EMBASO » — Société anonyme au capital de 1 250 000 €",
+   "stock": 204.0,
+   "prixAchat": 1.18
+  },
+  {
+   "sku": "ATL-EMB-0012",
+   "categorie": "Emballage",
+   "zone": "Picking",
+   "fournisseur": "Emballages du Sud-Ouest « EMBASO » — Société anonyme au capital de 1 250 000 €",
+   "stock": 143.0,
+   "prixAchat": 9.9
+  },
+  {
+   "sku": "ATL-EMB-0013",
+   "categorie": "Emballage",
+   "zone": "Froid",
+   "fournisseur": "Emballages du Sud-Ouest « EMBASO » — Société anonyme au capital de 1 250 000 €",
+   "stock": 174.0,
+   "prixAchat": 7.4
+  },
+  {
+   "sku": "ATL-EPI-0014",
+   "categorie": "Sécurité (EPI)",
+   "zone": "Picking",
+   "fournisseur": "Sécurité & Protection Plus",
+   "stock": 1.0,
+   "prixAchat": 2.15
+  },
+  {
+   "sku": "ATL-EPI-0015",
+   "categorie": "Sécurité (EPI)",
+   "zone": "Réserve",
+   "fournisseur": "Sécurité & Protection Plus",
+   "stock": 34.0,
+   "prixAchat": 6.9
+  },
+  {
+   "sku": "ATL-EPI-0016",
+   "categorie": "Sécurité (EPI)",
+   "zone": "Froid",
+   "fournisseur": "Sécurité & Protection Plus",
+   "stock": 55.0,
+   "prixAchat": 3.75
+  },
+  {
+   "sku": "ATL-VIS-0017",
+   "categorie": "Visserie & fixation",
+   "zone": "Quai",
+   "fournisseur": "Établissements Dupont & Fils (SARL)",
+   "stock": 70.0,
+   "prixAchat": 5.27
+  },
+  {
+   "sku": "ATL-VIS-0018",
+   "categorie": "Visserie & fixation",
+   "zone": "Réserve",
+   "fournisseur": "Établissements Dupont & Fils (SARL)",
+   "stock": 0.0,
+   "prixAchat": 8.71
+  },
+  {
+   "sku": "ATL-VIS-0019",
+   "categorie": "Visserie & fixation",
+   "zone": "Quai",
+   "fournisseur": "Quincaillerie de l'Est",
+   "stock": 210.0,
+   "prixAchat": 11.07
+  },
+  {
+   "sku": "ATL-ELE-0020",
+   "categorie": "Électricité",
+   "zone": "Quai",
+   "fournisseur": "Électro-Pro Distribution",
+   "stock": 79.0,
+   "prixAchat": 82.76
+  },
+  {
+   "sku": "ATL-ELE-0021",
+   "categorie": "Électricité",
+   "zone": "Réserve",
+   "fournisseur": "Électro-Pro Distribution",
+   "stock": 4.0,
+   "prixAchat": 10.6
+  },
+  {
+   "sku": "ATL-ELE-0022",
+   "categorie": "Électricité",
+   "zone": "Froid",
+   "fournisseur": "Électro-Pro Distribution",
+   "stock": 77.0,
+   "prixAchat": 33.62
+  },
+  {
+   "sku": "ATL-PLO-0023",
+   "categorie": "Plomberie",
+   "zone": "Picking",
+   "fournisseur": "Quincaillerie de l'Est",
+   "stock": 32.0,
+   "prixAchat": 78.3
+  },
+  {
+   "sku": "ATL-PLO-0024",
+   "categorie": "Plomberie",
+   "zone": "Picking",
+   "fournisseur": "Quincaillerie de l'Est",
+   "stock": 169.0,
+   "prixAchat": 3.17
+  },
+  {
+   "sku": "ATL-PEI-0025",
+   "categorie": "Peinture & finition",
+   "zone": "Froid",
+   "fournisseur": "Établissements Dupont & Fils (SARL)",
+   "stock": 58.0,
+   "prixAchat": 100.58
+  },
+  {
+   "sku": "ATL-PEI-0026",
+   "categorie": "Peinture & finition",
+   "zone": "Picking",
+   "fournisseur": "Établissements Dupont & Fils (SARL)",
+   "stock": 203.0,
+   "prixAchat": 4.32
+  },
+  {
+   "sku": "ATL-EMB-0027",
+   "categorie": "Emballage",
+   "zone": "Réserve",
+   "fournisseur": "Emballages du Sud-Ouest « EMBASO » — Société anonyme au capital de 1 250 000 €",
+   "stock": 0.0,
+   "prixAchat": 1.59
+  },
+  {
+   "sku": "ATL-EMB-0028",
+   "categorie": "Emballage",
+   "zone": "Froid",
+   "fournisseur": "Emballages du Sud-Ouest « EMBASO » — Société anonyme au capital de 1 250 000 €",
+   "stock": 3.0,
+   "prixAchat": 13.37
+  },
+  {
+   "sku": "ATL-EMB-0029",
+   "categorie": "Emballage",
+   "zone": "Quai",
+   "fournisseur": "Emballages du Sud-Ouest « EMBASO » — Société anonyme au capital de 1 250 000 €",
+   "stock": 181.0,
+   "prixAchat": 9.99
+  },
+  {
+   "sku": "ATL-EPI-0030",
+   "categorie": "Sécurité (EPI)",
+   "zone": "Réserve",
+   "fournisseur": "Sécurité & Protection Plus",
+   "stock": 23.0,
+   "prixAchat": 2.9
+  },
+  {
+   "sku": "ATL-EPI-0031",
+   "categorie": "Sécurité (EPI)",
+   "zone": "Quai",
+   "fournisseur": "Sécurité & Protection Plus",
+   "stock": 96.0,
+   "prixAchat": 9.32
+  },
+  {
+   "sku": "ATL-EPI-0032",
+   "categorie": "Sécurité (EPI)",
+   "zone": "Quai",
+   "fournisseur": "Sécurité & Protection Plus",
+   "stock": 203.0,
+   "prixAchat": 5.06
+  },
+  {
+   "sku": "ATL-VIS-0033",
+   "categorie": "Visserie & fixation",
+   "zone": "Réserve",
+   "fournisseur": "Établissements Dupont & Fils (SARL)",
+   "stock": 79.0,
+   "prixAchat": 17.16
+  },
+  {
+   "sku": "ATL-VIS-0034",
+   "categorie": "Visserie & fixation",
+   "zone": "Froid",
+   "fournisseur": "Établissements Dupont & Fils (SARL)",
+   "stock": 100.0,
+   "prixAchat": 28.38
+  },
+  {
+   "sku": "ATL-VIS-0035",
+   "categorie": "Visserie & fixation",
+   "zone": "Picking",
+   "fournisseur": "Quincaillerie de l'Est",
+   "stock": 2.0,
+   "prixAchat": 36.08
+  },
+  {
+   "sku": "ATL-ELE-0036",
+   "categorie": "Électricité",
+   "zone": "Picking",
+   "fournisseur": "Électro-Pro Distribution",
+   "stock": 0.0,
+   "prixAchat": 269.72
+  },
+  {
+   "sku": "ATL-ELE-0037",
+   "categorie": "Électricité",
+   "zone": "Froid",
+   "fournisseur": "Électro-Pro Distribution",
+   "stock": 59.0,
+   "prixAchat": 34.54
+  },
+  {
+   "sku": "ATL-ELE-0038",
+   "categorie": "Électricité",
+   "zone": "Picking",
+   "fournisseur": "Électro-Pro Distribution",
+   "stock": 225.0,
+   "prixAchat": 109.56
+  },
+  {
+   "sku": "ATL-PLO-0039",
+   "categorie": "Plomberie",
+   "zone": "Réserve",
+   "fournisseur": "Quincaillerie de l'Est",
+   "stock": 229.0,
+   "prixAchat": 255.2
+  },
+  {
+   "sku": "ATL-PLO-0040",
+   "categorie": "Plomberie",
+   "zone": "Froid",
+   "fournisseur": "Quincaillerie de l'Est",
+   "stock": 10.0,
+   "prixAchat": 10.34
+  },
+  {
+   "sku": "ATL-PEI-0041",
+   "categorie": "Peinture & finition",
+   "zone": "Quai",
+   "fournisseur": "Établissements Dupont & Fils (SARL)",
+   "stock": 236.0,
+   "prixAchat": 327.8
+  },
+  {
+   "sku": "ATL-PEI-0042",
+   "categorie": "Peinture & finition",
+   "zone": "Réserve",
+   "fournisseur": "Établissements Dupont & Fils (SARL)",
+   "stock": 2.0,
+   "prixAchat": 14.08
+  },
+  {
+   "sku": "ATL-EMB-0043",
+   "categorie": "Emballage",
+   "zone": "Quai",
+   "fournisseur": "Emballages du Sud-Ouest « EMBASO » — Société anonyme au capital de 1 250 000 €",
+   "stock": 16.0,
+   "prixAchat": 5.19
+  },
+  {
+   "sku": "ATL-EMB-0044",
+   "categorie": "Emballage",
+   "zone": "Quai",
+   "fournisseur": "Emballages du Sud-Ouest « EMBASO » — Société anonyme au capital de 1 250 000 €",
+   "stock": 185.0,
+   "prixAchat": 43.56
+  },
+  {
+   "sku": "ATL-EMB-0045",
+   "categorie": "Emballage",
+   "zone": "Réserve",
+   "fournisseur": "Emballages du Sud-Ouest « EMBASO » — Société anonyme au capital de 1 250 000 €",
+   "stock": 0.0,
+   "prixAchat": 32.56
+  },
+  {
+   "sku": "ATL-EPI-0046",
+   "categorie": "Sécurité (EPI)",
+   "zone": "Froid",
+   "fournisseur": "Sécurité & Protection Plus",
+   "stock": 115.0,
+   "prixAchat": 9.46
+  },
+  {
+   "sku": "ATL-EPI-0047",
+   "categorie": "Sécurité (EPI)",
+   "zone": "Picking",
+   "fournisseur": "Sécurité & Protection Plus",
+   "stock": 124.0,
+   "prixAchat": 30.36
+  },
+  {
+   "sku": "ATL-EPI-0048",
+   "categorie": "Sécurité (EPI)",
+   "zone": "Picking",
+   "fournisseur": "Sécurité & Protection Plus",
+   "stock": 177.0,
+   "prixAchat": 16.5
+  }
+ ]
+}

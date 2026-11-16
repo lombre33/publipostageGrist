@@ -782,7 +782,7 @@
     const editor = EditorCore.getEditor();
     return currentMode === 'edit' && currentTypeModele === 'document' && !isReadOnly() && !!editor && editor.state.doc.textContent.trim().length > 0;
   }
-  const { importFileFromGfs, importDroppedFile, onImportDocx, onImportHtml, onImportMd, onImportPptx, onImportXlsx } = MainImport.create({ askBeforeLeaving, canMergeDocument, hasEditsToConfirmBeforeLeaving, isReadOnly, loadTemplateIntoEditor, markAutosaveDirty, onSave, refocusEditorIfLost, setStatus, templateNameInput, templateSelect, updateSaveStatus });
+  const { importFileFromGfs, importDroppedFile, importDroppedSet, onImportDocx, onImportHtml, onImportMd, onImportPptx, onImportXlsx } = MainImport.create({ askBeforeLeaving, canMergeDocument, hasEditsToConfirmBeforeLeaving, isReadOnly, loadTemplateIntoEditor, markAutosaveDirty, onSave, refocusEditorIfLost, setStatus, templateNameInput, templateSelect, updateSaveStatus });
 
   // Le mode que la personne a choisi en dernier (Édition ou Lecture) : une préférence de la personne (PersonStore `pp_last_mode`), relue au démarrage (startMode). Écrite par les deux boutons, jamais par
   // switchMode : la Lecture imposée (document en lecture seule, PDF à l'écran) et la Lecture épurée ne sont pas un choix, et un « Nouveau » de GFS qui s'ouvre en Édition ne l'efface pas.
@@ -1131,7 +1131,7 @@
       // Le curseur revient dans l'éditeur à l'endroit où il était, sans faire défiler le document.
       focusEditor: () => { const editor = EditorCore.getEditor(); if (editor && editor.isEditable) editor.commands.focus(null, { scrollIntoView: false }); },
     });
-    DropImport.wire({ importFile: importDroppedFile, setStatus }); // déposer un fichier Word, PowerPoint, Excel ou Markdown pour l'importer (js/drop-import.js)
+    DropImport.wire({ importFile: importDroppedFile, importSet: importDroppedSet, setStatus }); // déposer un fichier Word, PowerPoint, Excel, HTML ou Markdown (ou un dossier, ou une page HTML avec ses images) pour l'importer (js/drop-import.js)
     ReadingLine.wire({ currentRecord: () => ({ record: latestRecord, tableId: latestRecordTableId }), readsAllRows: () => ReaderMode.readsAllRows(), setStatus }); // « ‹ Martin · ligne 2 sur 3 › » en Lecture (js/reading-line.js)
     VariableReview.wire(); // le coin d'état « N variables à revoir » (js/variable-review.js)
     MarkFields.wire(); // la case « Repérer les champs » du menu Mode lecture (js/mark-fields.js)
