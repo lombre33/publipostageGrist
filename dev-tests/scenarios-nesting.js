@@ -108,7 +108,7 @@
 
   cases.push({
     id: 'nest_checklist_item_no_nested_block',
-    description: 'CAS NÉGATIF ATTENDU : une case à cocher ne peut contenir qu\'un paragraphe (nested:false) - insérer un tableau à l\'intérieur ne doit PAS produire de tableau imbriqué dans le <li>',
+    description: 'CAS NÉGATIF ATTENDU : une case à cocher ne contient que des paragraphes puis des sous-cases (schéma `paragraph+ taskList*`) - insérer un tableau à l\'intérieur ne doit PAS produire de tableau imbriqué dans le <li>',
     run: async (h) => {
       await h.resetEditor();
       await h.focusAtEnd();
@@ -124,8 +124,8 @@
       await h.clickButton('v2-btn-table');
       await h.sleep(80);
       const html = Editor.getHTML();
-      // Comportement attendu (schéma : taskItem content = 'paragraph+' avec
-      // nested:false) : soit la commande insertTable est un no-op (aucun
+      // Comportement attendu (schéma : taskItem content = 'paragraph+ taskList*',
+      // sous-cases seulement, js/editor.js) : soit la commande insertTable est un no-op (aucun
       // <table> nulle part), soit ProseMirror insère le tableau EN DEHORS du
       // <li> (après la liste) plutôt que de casser le schéma - dans les deux
       // cas, PAS de <table> À L'INTÉRIEUR du <li data-type="taskItem">.

@@ -659,6 +659,20 @@
     },
   });
 
+  cases.push({
+    id: 'xlsx_subtasks_take_a_level_of_indent_in_the_cell',
+    description: 'Dans une case, une sous-case à cocher (rangée dans le <div> de sa case, comme l\'éditeur l\'écrit) prend un retrait de plus que la case qui la porte, comme une sous-liste de puces',
+    run: async (h) => {
+      await seed(h);
+      const task = (checked, inner) => '<li data-checked="' + checked + '" data-type="taskItem"><label><input type="checkbox"><span></span></label><div>' + inner + '</div></li>';
+      const x = await exportGrid([200], [90], [[
+        '<td><ul data-type="taskList">' + task(true, '<p>fait</p><ul data-type="taskList">' + task(false, '<p>sous-case</p>') + '</ul>') + task(false, '<p>à faire</p>') + '</ul></td>',
+      ]]);
+      const value = x.sheet.cell('A1').value;
+      return { pass: value === '☑ fait\n  ☐ sous-case\n☐ à faire', notes: JSON.stringify(value) };
+    },
+  });
+
   // --- 6) Liens, formules, images --------------------------------------------------------------------------------------------------------------------------------------
   cases.push({
     id: 'xlsx_links_are_clickable_only_when_they_cover_the_cell_and_text_never_becomes_a_formula',

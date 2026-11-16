@@ -595,7 +595,7 @@
 
   // --- Le trait d'une citation posée dans un élément de liste, dans une case ou dans une autre citation (12/10, carte « Corriger les trois petits défauts » : « Les trois ») ---
   // Le PDF lisait ces citations d'un seul tenant avec ce qui les entoure : le trait ne se dessinait pas, et la première ligne de la citation se collait à celle de l'élément de liste (« AlphaBeta » sur une ligne).
-  // Une liste de tâches ne figure pas ici : un élément de tâche n'accepte que des paragraphes (TaskItem `nested: false`), l'éditeur sort le trait de la liste en la coupant en deux (cas `task_list_cannot_hold_a_rule`).
+  // Une liste de tâches ne figure pas ici : un élément de tâche n'accepte que des paragraphes et des sous-cases (TaskItem `paragraph+ taskList*`, js/editor.js), l'éditeur sort le trait de la liste en la coupant en deux (cas `task_list_cannot_hold_a_rule`).
   const round2 = n => Math.round(n * 100) / 100;
   // Les traits noirs RÉELLEMENT peints sur la première page du PDF : le trait du document (`#000000`), ni les bordures grises des tableaux ni les cases à cocher.
   async function paintedRules(h, view) {

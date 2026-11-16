@@ -75,8 +75,8 @@
 /* Lecture : aperçu figé du contenu résolu, pas un formulaire. Une case cliquable n'enregistrerait rien ; elle est désactivée plutôt que retirée du
    HTML. */
 .reader-content ul[data-type="taskList"] input[type="checkbox"] { pointer-events: none; }
-.tiptap ul[data-type="taskList"]:not([data-tasklist-style="classic"]):not([data-tasklist-style="accentPlain"]) li[data-checked="true"] > div,
-.reader-content ul[data-type="taskList"]:not([data-tasklist-style="classic"]):not([data-tasklist-style="accentPlain"]) li[data-checked="true"] > div { text-decoration: line-through; color: var(--paper-text-faint, #667085); }
+.tiptap ul[data-type="taskList"]:not([data-tasklist-style="classic"]):not([data-tasklist-style="accentPlain"]) li[data-checked="true"] > div > p,
+.reader-content ul[data-type="taskList"]:not([data-tasklist-style="classic"]):not([data-tasklist-style="accentPlain"]) li[data-checked="true"] > div > p { text-decoration: line-through; color: var(--paper-text-faint, #667085); }
 /* Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode ; barre « Oui / Non » d'une bulle, js/floating-toolbars.js) : mêmes trois
    styles que la liste à cases, dessinés à la main (une case native ne se pose pas dans une ligne de texte et n'a pas de couleur propre). La taille
    suit celle du texte. La couleur vient de la bulle, en style en ligne (VariableFormat.checkboxColor) : `currentColor` fait le contour, le fond

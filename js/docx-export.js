@@ -906,14 +906,22 @@ const DocxExport = (function () {
     let sawLineBlock = false;
     for (const child of Array.from(node.childNodes)) {
       if (only && !only.has(child)) continue;
-      if (child.nodeType === Node.ELEMENT_NODE && /^(UL|OL)$/.test(child.tagName)) continue;
+      if (isListElement(child)) continue;
       const isLineBlock = child.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6]|PRE)$/.test(child.tagName);
       if (isLineBlock && sawLineBlock) out.push(new docx.TextRun({ break: 1 }));
       if (isLineBlock) sawLineBlock = true;
-      for (const run of await inlineNodesFrom(child, style, ctx)) out.push(run);
+      // Le contenu d'une case à cocher est enveloppé dans un <div> : ses sous-cases y sont, elles n'entrent pas dans le texte de la case.
+      const childRuns = isTaskBody(child) ? await inlineNodesExcludingNestedLists(child, style, ctx) : await inlineNodesFrom(child, style, ctx);
+      for (const run of childRuns) out.push(run);
     }
     return out;
   }
+  const isListElement = node => node.nodeType === Node.ELEMENT_NODE && /^(UL|OL)$/.test(node.tagName);
+  // Le <div> qui enveloppe le contenu d'une case à cocher (TipTap : <li><label>…</label><div>texte et sous-cases</div></li>).
+  const isTaskBody = node => node.nodeType === Node.ELEMENT_NODE && node.tagName === 'DIV' && !!node.parentElement && node.parentElement.tagName === 'LI'
+    && !!node.parentElement.parentElement && node.parentElement.parentElement.getAttribute('data-type') === 'taskList';
+  // Les sous-listes d'un morceau d'item (ses enfants) : celles qu'il porte directement et, pour une case à cocher, celles de son <div>.
+  const nestedListsIn = nodes => nodes.flatMap(child => (isListElement(child) ? [child] : (isTaskBody(child) ? Array.from(child.children).filter(isListElement) : [])));
 
   // Numérotation Word native (numbering.xml) : chaque <ul> ou <ol> du document reçoit sa propre référence (jamais partagée, même entre deux listes du
   // même style), un seul niveau (0) suffit alors, l'indentation des niveaux imbriqués étant posée par `depth` (une sous-liste = une autre référence).
@@ -985,7 +993,7 @@ const DocxExport = (function () {
         if (cut && ExportCommon.isBlankSegment(segment)) continue;
         const only = cut ? new Set(segment.nodes) : null;
         const runs = await inlineNodesExcludingNestedLists(li, baseStyle, ctx, only);
-        const nested = segment.nodes.filter(c => c.nodeType === Node.ELEMENT_NODE && /^(UL|OL)$/.test(c.tagName));
+        const nested = nestedListsIn(segment.nodes);
         // Après un tableau, un morceau qui ne porte que des sous-listes : pas de ligne vide avant elles (le PDF ne l'écrit pas non plus).
         if (!(markerDone && !runs.length && nested.length)) {
           const opts = {

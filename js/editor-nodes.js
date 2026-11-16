@@ -653,8 +653,8 @@ const EditorNodes = (function () {
   const { createTabNavigationExtension, createClearHistoryExtension } = (function () {
     // Les touches d'un tableau et l'effacement de l'historique
 
-    // Tab / Shift-Tab : dans une liste, indente ou désindente l'élément (la touche est toujours consommée, jamais de passage à la cellule ou à la
-    // colonne suivante) ; dans une zone 2 colonnes, passe d'une colonne à l'autre ou sort de la zone.
+    // Tab / Shift-Tab : dans une liste (puces, numéros, cases à cocher), indente ou désindente l'élément (la touche est toujours consommée, jamais de passage à la
+    // cellule ou à la colonne suivante) ; dans une zone 2 colonnes, passe d'une colonne à l'autre ou sort de la zone.
     function createTabNavigationExtension(Extension) {
       // Le curseur au plus près de `pos`, dans le sens `dir`.
       const moveNear = (ed, pos, dir) => ed.chain().focus().setTextSelection(EditorCore.getTextSelectionClass().near(ed.state.doc.resolve(pos), dir)).run();
@@ -663,11 +663,8 @@ const EditorNodes = (function () {
         addKeyboardShortcuts() {
           return {
             Tab: ({ editor: ed }) => {
-              if (ed.isActive('listItem')) {
-                // Toujours consommé, même en cas d'échec du sink : jamais de repli sur un changement de cellule/colonne.
-                ed.commands.sinkListItem('listItem');
-                return true;
-              }
+              // Toujours consommé, même en cas d'échec du sink : jamais de repli sur un changement de cellule/colonne ni sur une tabulation écrite dans le texte.
+              if (EditorCore.shiftListItem(ed, 'in')) return true;
               const { $from } = ed.state.selection;
               const ctx = findTwoColumnsContext($from);
               if (!ctx) return false;
@@ -682,10 +679,7 @@ const EditorNodes = (function () {
               return true;
             },
             'Shift-Tab': ({ editor: ed }) => {
-              if (ed.isActive('listItem')) {
-                ed.commands.liftListItem('listItem');
-                return true;
-              }
+              if (EditorCore.shiftListItem(ed, 'out')) return true;
               const { $from } = ed.state.selection;
               const ctx = findTwoColumnsContext($from);
               if (!ctx) return false;

@@ -703,7 +703,9 @@ const PdfExport = (function () {
       const isLineBlock = child.nodeType === Node.ELEMENT_NODE && /^(P|DIV|H[1-6]|PRE)$/.test(child.tagName);
       if (isLineBlock && sawLineBlock) runs.push({ text: '\n', ...style });
       if (isLineBlock) sawLineBlock = true;
-      for (const run of inlineRuns(child, style, images)) runs.push(run);
+      // Le contenu d'une case à cocher est enveloppé dans un <div> (css/editor-v2.css) : ses sous-cases y sont, `skip` doit donc les y trouver aussi.
+      const childRunsOf = skip && isTaskBody(child) ? runsOfNodes(child.childNodes, inheritedStyle(child, style), images, skip) : inlineRuns(child, style, images);
+      for (const run of childRunsOf) runs.push(run);
     });
     return runs;
   }
@@ -725,7 +727,19 @@ const PdfExport = (function () {
   // texte du <li> parent. Un bloc de code posé après le texte de l'item (ou un paragraphe après lui) commence sa propre ligne, comme dans inlineRuns.
   function inlineRunsExcludingNestedLists(node, parentStyle, images) {
     const style = inheritedStyle(node, parentStyle);
-    return childRuns(node, style, images, child => child.nodeType === Node.ELEMENT_NODE && /^(UL|OL)$/.test(child.tagName));
+    return childRuns(node, style, images, isListElement);
+  }
+  const isListElement = node => node.nodeType === Node.ELEMENT_NODE && /^(UL|OL)$/.test(node.tagName);
+  // Le <div> qui enveloppe le contenu d'une case à cocher (TipTap : <li><label>…</label><div>texte et sous-cases</div></li>).
+  const isTaskBody = node => node.nodeType === Node.ELEMENT_NODE && node.tagName === 'DIV' && !!node.parentElement && node.parentElement.tagName === 'LI' && isTaskListItem(node.parentElement);
+  // Les sous-listes d'un point de liste : celles qu'il porte directement, et, pour une case à cocher, celles de son <div> (une sous-case s'y range, pas sous le <li>).
+  function nestedListsOf(li) {
+    const lists = [];
+    Array.from(li.children).forEach(child => {
+      if (isListElement(child)) lists.push(child);
+      else if (isTaskBody(child)) Array.from(child.children).filter(isListElement).forEach(list => lists.push(list));
+    });
+    return lists;
   }
 
   // inlineRuns glisse un marqueur `{_imageMarker:true}` pour que blockFrom() reconstitue l'ordre réel texte/image ; tout autre appelant doit le
@@ -894,7 +908,7 @@ const PdfExport = (function () {
   function listLinesOf(list, lines) {
     Array.from(list.children).filter(c => c.tagName === 'LI').forEach(li => {
       lines.push(li);
-      Array.from(li.children).filter(c => /^(UL|OL)$/.test(c.tagName)).forEach(nested => listLinesOf(nested, lines));
+      nestedListsOf(li).forEach(nested => listLinesOf(nested, lines));
     });
   }
   // Découpe les enfants directs d'une cellule en "lignes" pdfmake : <p>/<div>/<h1-6> direct = sa propre ligne, comme un trait (<hr>) ; <ul>/<ol>
@@ -2057,7 +2071,8 @@ const PdfExport = (function () {
       const markerX = rtlItem ? toX(item.getBoundingClientRect().right) + markerWidthPt(marker, sizePt) - markerWidthPt(marker.trim(), sizePt) : toX(item.getBoundingClientRect().left) - markerWidthPt(marker, sizePt);
       PdfGlyphFallback.runsFor(marker.trim(), { font: 'Roboto' }).forEach(run => over.push(textSvg(markerX, y, run.text, markerLook, run.font)));
     });
-    const taskItems = Array.from(content.querySelectorAll('ul[data-type="taskList"] > li'));
+    // Les cases des sous-cases d'un point sont celles de leurs propres blocs du PDF (`ownLists`), pas de celui-ci.
+    const taskItems = Array.from(content.querySelectorAll('ul[data-type="taskList"] > li')).filter(item => !inNestedList(item));
     if (content.matches('ul[data-type="taskList"] > li')) taskItems.unshift(content);
     taskItems.forEach(item => {
       const input = item.querySelector('input[type="checkbox"]');
@@ -2104,7 +2119,7 @@ const PdfExport = (function () {
     const box = { left: rect.left + px('borderLeftWidth') + px('paddingLeft'), top: rect.top + px('borderTopWidth') + px('paddingTop') };
     const widthPt = Math.max(1, (rect.width - px('borderLeftWidth') - px('paddingLeft') - px('borderRightWidth') - px('paddingRight')) * PX_TO_PT);
     // La hauteur du contenu : celle de la boîte, moins ce qui est à elle (remplissage, bord) ; pour un point de liste, jusqu'à sa première sous-liste, qui est d'autres blocs.
-    const nestedList = tag === 'LI' ? node.querySelector(':scope > ul, :scope > ol') : null;
+    const nestedList = tag === 'LI' ? nestedListsOf(node)[0] || null : null;
     const bottomPx = nestedList ? nestedList.getBoundingClientRect().top : rect.bottom - px('borderBottomWidth') - px('paddingBottom');
     const heightPt = Math.max(1, (bottomPx - box.top) * PX_TO_PT);
     // De la place autour pour ce que l'effet déborde (ombre, flou, contour), et à gauche pour la puce d'un point de liste, qui pend hors de sa boîte.
@@ -3483,7 +3498,7 @@ const PdfExport = (function () {
   // js/editor.js) est exclue du texte de son <li> et traitée comme ses propres blocs (`nestedLists`).
   function blockRunsOf(node, tag) {
     const images = [];
-    const nestedLists = tag === 'LI' ? Array.from(node.children).filter(c => /^(UL|OL)$/.test(c.tagName)) : [];
+    const nestedLists = tag === 'LI' ? nestedListsOf(node) : [];
     const base = { fontSize: HEADING_SIZES[tag] || DEFAULT_FONT_SIZE };
     const rawRuns = nestedLists.length ? inlineRunsExcludingNestedLists(node, base, images) : inlineRuns(node, base, images);
     return { rawRuns, images, nestedLists };

@@ -130,12 +130,18 @@
     });
 
   add('markdown_import_task_lists_checked_mixed_numbered_and_nested',
-    'Une liste à cases devient une liste à cases de l\'éditeur (cochée ou non) ; une liste mêlée de puces et de cases en fait deux, dans l\'ordre ; dans une liste numérotée la case reste un caractère (☐ ☑) ; une case dans une liste large (lignes vides entre éléments) est reprise ; une liste à cases dans une liste à cases (que l\'éditeur n\'a pas) est mise à plat, sans rien perdre ni changer d\'ordre',
+    'Une liste à cases devient une liste à cases de l\'éditeur (cochée ou non) ; une liste mêlée de puces et de cases en fait deux, dans l\'ordre ; dans une liste numérotée la case reste un caractère (☐ ☑) ; une case dans une liste large (lignes vides entre éléments) est reprise ; une liste à cases dans une liste à cases devient une sous-case de la case qui la précède (l\'éditeur les imbrique depuis le 16/11), sans rien perdre ni changer d\'ordre',
     async (h) => {
       const { edited } = await inEditor(h, doc('- [ ] à faire', '- [x] fait', '- simple puce', '', '1. [ ] numérotée', '2. [x] cochée', '', '- [x] large', '', '- [ ] large aussi', '', '- [ ] parent', '  - [x] enfant', '  - puce dedans', '- [x] suivant'));
       const { bad, expect } = checker();
-      const states = all(edited, 'ul[data-type="taskList"] > li').map(li => (li.getAttribute('data-checked') === 'true' ? '[x] ' : '[ ] ') + li.textContent.trim());
-      expect('cases dans l\'ordre du fichier, enfant à plat', states.join('|') === '[ ] à faire|[x] fait|[x] large|[ ] large aussi|[ ] parent|[x] enfant|[x] suivant', states);
+      // Le texte PROPRE d'une case (son premier paragraphe) : celui d'un parent ne doit pas reprendre le texte de ses sous-cases.
+      const ownText = li => (li.querySelector(':scope > div > p, :scope > p') || li).textContent.trim();
+      const items = all(edited, 'ul[data-type="taskList"] li');
+      const states = items.map(li => (li.getAttribute('data-checked') === 'true' ? '[x] ' : '[ ] ') + ownText(li));
+      expect('cases dans l\'ordre du fichier, enfant gardé', states.join('|') === '[ ] à faire|[x] fait|[x] large|[ ] large aussi|[ ] parent|[x] enfant|[x] suivant', states);
+      const parent = items.find(li => ownText(li) === 'parent');
+      const child = items.find(li => ownText(li) === 'enfant');
+      expect('« enfant » est une sous-case de « parent » (un niveau plus bas, case cochée gardée)', !!parent && !!child && parent.contains(child) && child.getAttribute('data-checked') === 'true' && !!child.closest('ul[data-type="taskList"]').parentElement.closest('ul[data-type="taskList"]'), parent && parent.outerHTML.slice(0, 200));
       expect('la puce simple reste une puce, après les deux cases', textsOf(edited, 'ul:not([data-type]) > li').join('|') === 'simple puce|puce dedans', textsOf(edited, 'ul:not([data-type]) > li'));
       expect('liste numérotée : caractères ☐ et ☑', textsOf(edited, 'ol > li').map(t => t.replace(/\s+/g, ' ')).join('|') === '☐ numérotée|☑ cochée', textsOf(edited, 'ol > li'));
       expect('plus aucune case à cocher de Markdown dans le texte', !/\[ \]|\[x\]/.test(dom(edited).textContent));

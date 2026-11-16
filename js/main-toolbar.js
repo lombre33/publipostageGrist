@@ -323,8 +323,8 @@ const MainToolbar = (function () {
     // Sur une sélection de cases, `can()` est toujours faux (son début est avant la liste, pas dedans) : on grise d'après les listes que les cases
     // contiennent.
     const cellsSelected = EditorCore.isCellSelection(editor.state.selection);
-    setDisabled('v2-btn-indent', cellsSelected ? !EditorCore.canShiftListsInSelectedCells('in') : !editor.can().sinkListItem('listItem'), 'lock.indent');
-    setDisabled('v2-btn-outdent', cellsSelected ? !EditorCore.canShiftListsInSelectedCells('out') : !editor.can().liftListItem('listItem'), 'lock.outdent');
+    setDisabled('v2-btn-indent', cellsSelected ? !EditorCore.canShiftListsInSelectedCells('in') : !EditorCore.canShiftListItem(editor, 'in'), 'lock.indent');
+    setDisabled('v2-btn-outdent', cellsSelected ? !EditorCore.canShiftListsInSelectedCells('out') : !EditorCore.canShiftListItem(editor, 'out'), 'lock.outdent');
     setActive('v2-btn-citation', EditorCore.isQuoteActive());
     setActive('v2-btn-code-block', editor.isActive('codeBlock'));
     const inLink = editor.isActive('link');
@@ -769,8 +769,8 @@ const MainToolbar = (function () {
     // Hors d'une liste, la commande ne fait rien sans erreur : le bouton se grise (syncBlockButtons) au lieu de disparaître. Sur une sélection de
     // cases, chaque liste des cases se décale (EditorCore.shiftListsInSelectedCells : les commandes ne regardent que la case de tête et se grisent) ;
     // le premier élément d'une liste ne se décale pas, comme dans une case seule.
-    bind('v2-btn-outdent', () => { if (!EditorCore.shiftListsInSelectedCells('out')) editor.chain().focus().liftListItem('listItem').run(); });
-    bind('v2-btn-indent', () => { if (!EditorCore.shiftListsInSelectedCells('in')) editor.chain().focus().sinkListItem('listItem').run(); });
+    bind('v2-btn-outdent', () => { if (!EditorCore.shiftListsInSelectedCells('out')) EditorCore.shiftListItem(editor, 'out'); });
+    bind('v2-btn-indent', () => { if (!EditorCore.shiftListsInSelectedCells('in')) EditorCore.shiftListItem(editor, 'in'); });
     // Dans un en-tête ou un pied de page, une seule ligne : la zone a 60 px de contenu, une ligne de tableau en prend 29 et deux dépasseraient (le trait rouge de la zone).
     bind('v2-btn-table', () => editor.chain().focus().insertTable({ rows: HeaderFooterPreview.getHfMode() ? 1 : 2, cols: 2, withHeaderRow: false }).run());
     bind('v2-btn-two-columns', () => editor.chain().focus().insertTwoColumns().run());

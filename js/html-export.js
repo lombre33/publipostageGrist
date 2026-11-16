@@ -102,7 +102,7 @@ const HtmlExport = (function () {
     '.pp-doc .pp-tasks .pp-checkbox { flex: none; margin-top: .2em; color: #2f6fed; }',
     '.pp-doc .pp-tasks.pp-tasks-classic .pp-checkbox { color: #222; }',
     '.pp-doc .pp-task-body { flex: 1; min-width: 0; }',
-    '.pp-doc ul.pp-tasks:not(.pp-tasks-classic):not(.pp-tasks-plain) > li.pp-done > .pp-task-body { text-decoration: line-through; color: #667085; }',
+    '.pp-doc ul.pp-tasks:not(.pp-tasks-classic):not(.pp-tasks-plain) > li.pp-done > .pp-task-body > p { text-decoration: line-through; color: #667085; }',
   ].join('\n');
   const TOC_CSS = [
     '.pp-doc .pp-toc { margin: 6px 0; }',

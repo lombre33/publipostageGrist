@@ -328,7 +328,7 @@ const XlsxExport = (function () {
         Array.from(li.childNodes).forEach(child => {
           if (child.nodeType === 1 && child.tagName === 'LABEL') return; // la case à cocher d'une liste de tâches : son repère est déjà écrit
           if (child.nodeType === 1 && (child.tagName === 'UL' || child.tagName === 'OL')) visit(child, own, listCtx + 1);
-          else if (child.nodeType === 1 && child.tagName === 'DIV') Array.from(child.childNodes).forEach(inner => visit(inner, own, listCtx));
+          else if (child.nodeType === 1 && child.tagName === 'DIV') Array.from(child.childNodes).forEach(inner => visit(inner, own, inner.nodeType === 1 && (inner.tagName === 'UL' || inner.tagName === 'OL') ? listCtx + 1 : listCtx));
           else visit(child, own, listCtx);
         });
         out.closeItem();

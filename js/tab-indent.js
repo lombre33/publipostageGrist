@@ -2,7 +2,8 @@
 // 12,7 mm (un demi-pouce, 720 twips : celui des tabulations par défaut de Word), partout où l'on écrit sur plusieurs lignes - le corps du document, l'en-tête et
 // le pied de page (le même éditeur), les blocs de contenu, les encadrés, les citations.
 //
-// Ce que Tab faisait déjà garde la main (la touche n'arrive ici que si personne ne la prend) : dans une liste à puces ou numérotée elle change le niveau, dans
+// Ce que Tab faisait déjà garde la main (la touche n'arrive ici que si personne ne la prend) : dans une liste à puces, numérotée ou à cases elle change le niveau
+// (la case glisse avec son texte sous la précédente : js/editor-core.js:shiftListItem), dans
 // une liste ouverte (« # », « § », « @ ») elle choisit, dans une zone à deux colonnes elle passe d'une colonne à l'autre (js/editor-nodes.js:
 // createTabNavigationExtension), dans une case de tableau elle va à la case suivante (comme dans Word). Les champs d'une ligne (la barre, les noms de fichier) et les
 // petites fenêtres de saisie (note de bas de page, commentaire, réglages) gardent Tab pour passer au champ ou au bouton suivant : le clavier n'en sortirait plus.

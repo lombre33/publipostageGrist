@@ -890,6 +890,43 @@ const EditorCore = (function () {
       chain => chain.command(({ state, commands }) => { if (isInsideNode(state.selection.$from, name) !== wanted) commands[command](); return true; }));
   }
 
+  // Le niveau d'un point de liste : Tab, Maj+Tab et les boutons de retrait le changent pour le point qui porte le curseur, une case à cocher (`taskItem`) comme une puce ou un numéro
+  // (`listItem`) ; le plus proche quand une liste de cases est dans un point de puce. Null hors d'une liste.
+  function listItemNameAt($pos) {
+    for (let depth = $pos.depth; depth > 0; depth -= 1) {
+      const name = $pos.node(depth).type.name;
+      if (name === 'taskItem' || name === 'listItem') return name;
+    }
+    return null;
+  }
+  // Une case glissée sous la précédente ouvre une sous-liste de cases : elle prend le style des cases et le sens d'écriture de la liste qui la porte (sans cela, des cases « classiques » repartaient au style
+  // par défaut au premier Tab). Une sous-liste qui existait déjà, et qui a donc d'autres cases, garde les siens.
+  function inheritTaskListSettings(tr) {
+    const { $from } = tr.selection;
+    const lists = [];
+    for (let depth = $from.depth; depth > 0 && lists.length < 2; depth -= 1) if ($from.node(depth).type.name === 'taskList') lists.push(depth);
+    if (lists.length < 2 || $from.node(lists[0]).childCount !== 1) return;
+    tr.setNodeMarkup($from.before(lists[0]), null, Object.assign({}, $from.node(lists[0]).attrs, $from.node(lists[1]).attrs));
+  }
+  function canShiftListItem(ed, direction) {
+    // Le retrait ('in') ou le retrait inverse ('out') du point du curseur a-t-il quelque chose à faire ? (sinon le bouton reste grisé)
+    const name = listItemNameAt(ed.state.selection.$from);
+    return !!name && (direction === 'in' ? ed.can().sinkListItem(name) : ed.can().liftListItem(name));
+  }
+  function shiftListItem(ed, direction) {
+    // Descend ('in') le point de liste du curseur d'un niveau, sous le point qui le précède, ou le remonte ('out'). Vrai quand le curseur est dans une liste, même quand rien ne bouge (le premier point n'a
+    // aucun frère avant lui où s'emboîter) : la touche Tab est alors prise quand même, jamais de repli sur une tabulation écrite dans le texte ou sur la case suivante d'un tableau.
+    const name = listItemNameAt(ed.state.selection.$from);
+    if (!name) return false;
+    if (direction === 'out') ed.chain().focus().liftListItem(name).run();
+    else ed.chain().focus().command(({ commands, tr }) => {
+      if (!commands.sinkListItem(name)) return false;
+      if (name === 'taskItem') inheritTaskListSettings(tr);
+      return true;
+    }).run();
+    return true;
+  }
+
   // Citation et retrait sur une sélection de cases : `toggleBlockquote`, `sinkListItem` et `liftListItem` partent de `$from.blockRange($to)`, donc de
   // la seule case de tête, et les boutons du retrait se grisent (`can()` faux : le début d'une sélection de cases est avant la liste, pas dedans).
   // Ici chaque case est traitée pour elle-même.
@@ -1005,6 +1042,6 @@ const EditorCore = (function () {
     registerFloatingPanel, hideFloatingContextToolbars, isFormFieldFocus, closeHoverMenu,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
     setColorBar, setColorIcon, createSelectionPreserver, isCellSelection, runOnSelectedCells, isInsideNode, isTextOnlyEdit,
-    toggleList, isQuoteActive, quoteSelectedCells, canShiftListsInSelectedCells, shiftListsInSelectedCells,
+    toggleList, isQuoteActive, quoteSelectedCells, canShiftListsInSelectedCells, shiftListsInSelectedCells, canShiftListItem, shiftListItem,
   };
 })();
