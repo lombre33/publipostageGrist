@@ -201,6 +201,8 @@ const HtmlExport = (function () {
   const FONT_FALLBACKS = {
     roboto: "system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif", arial: 'Helvetica, sans-serif', 'times new roman': 'Times, serif', georgia: 'serif',
     'courier new': 'Courier, monospace', calibri: "Carlito, 'Segoe UI', Helvetica, Arial, sans-serif",
+    // La police de l'État : jamais dans le fichier (js/pdf-font-plan.js) ; sans repli, un navigateur qui ne l'a pas écrirait en police à empattements. Le DSFR écrit « Marianne, arial, sans-serif ».
+    marianne: 'arial, sans-serif',
   };
   // Les noms entre apostrophes : l'attribut style est écrit entre guillemets, une apostrophe y reste telle quelle (un guillemet y serait écrit &quot;).
   function fontStack(value) {

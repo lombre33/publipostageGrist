@@ -1,0 +1,40 @@
+/* Le mode « Identité de l'État » (js/state-mode.js) : la fenêtre où la personne déclare son droit de l'allumer, puis la section de Réglages > Thème qui l'ouvre. Titre et boutons restent en place, le contenu
+   défile : dans les 376 px du panneau de 700x400, les constats, le choix et la déclaration se lisent en faisant défiler. Chargé après css/modal-base.css et css/variable-actions.css (le cadre et les boutons
+   de la fenêtre en viennent). Jetons seulement : l'interface reste monochrome, le style de l'État vit dans le document, jamais dans les fenêtres. */
+.pp-etat-lead { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; color: var(--text); overflow-wrap: anywhere; }
+.pp-etat-signals { margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-sunken); }
+.pp-etat-heading { margin: 0 0 4px; font-size: 12px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--text); }
+.pp-etat-signal { display: flex; align-items: flex-start; gap: 8px; margin: 4px 0; }
+.pp-etat-dot { flex: none; box-sizing: border-box; width: 18px; height: 18px; margin-top: 1px; border: 1.5px solid var(--text-muted); border-radius: 50%; font-size: 11px; font-weight: 700; line-height: 15px; text-align: center; color: var(--text-muted); }
+.pp-etat-dot.is-ok { border-color: var(--good); color: var(--good); }
+.pp-etat-dot.is-no { border-color: var(--warn-ink); color: var(--warn-ink); }
+.pp-etat-signal-body { min-width: 0; font-size: 12.5px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
+.pp-etat-signal-label { display: block; font-weight: 700; }
+.pp-etat-signal-detail { color: var(--text-muted); }
+.pp-etat-small { margin: 6px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-muted); overflow-wrap: anywhere; }
+.pp-etat-warn, .pp-etat-info { margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--warn-soft-border); border-radius: var(--radius-sm); background: var(--warn-soft); font-size: 12.5px; line-height: 1.5; color: var(--warn-ink); overflow-wrap: anywhere; }
+.pp-etat-info { border-color: var(--accent-soft-border); background: var(--accent-soft); color: var(--accent-ink); }
+.pp-etat-warn[hidden], .pp-etat-info[hidden], .pp-etat-consent[hidden], .pp-etat-rules[hidden] { display: none; }
+.pp-etat-choice { min-width: 0; margin: 0 0 8px; padding: 0; border: 0; }
+.pp-etat-legend { padding: 0; margin: 0 0 4px; font-size: 12px; font-weight: 700; color: var(--text); }
+.pp-etat-check { display: flex; align-items: flex-start; gap: 6px; margin: 0 0 4px; font-size: 12.5px; line-height: 1.45; color: var(--text); cursor: pointer; }
+.pp-etat-check input { flex: none; margin: 2px 0 0; accent-color: var(--accent-solid); cursor: inherit; }
+.pp-etat-check input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pp-etat-consent { margin: 8px 0 8px; font-weight: 600; }
+.pp-etat-rules { margin: 0 0 6px; font-size: 12.5px; line-height: 1.5; }
+.pp-etat-rules-label { display: block; margin: 0 0 2px; font-weight: 700; color: var(--text); }
+.pp-etat-rules-list { margin: 0; padding: 0 0 0 10px; list-style: none; }
+.pp-etat-link { color: var(--accent-ink); text-decoration: underline; overflow-wrap: anywhere; }
+.pp-etat-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pp-etat-status { min-height: 0; margin: 6px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-muted); overflow-wrap: anywhere; }
+.pp-etat-status:empty { display: none; }
+.pp-etat-status.is-problem { font-weight: 600; color: var(--danger-ink); }
+
+/* La section de Réglages > Thème : l'état en clair, puis le bouton. Grisé (sans GFS, ou l'extension éteinte) le bouton garde sa place et reste atteignable au clavier (aria-disabled) ; son clic explique. */
+.settings-etat-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 10px 0 0; font-size: 13px; color: var(--text); }
+.settings-etat-state { font-weight: 600; }
+.settings-etat-button { font-family: var(--font-ui); font-size: 12.5px; padding: 4px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-btn, var(--radius-sm)); background: var(--surface); color: var(--text); cursor: pointer; }
+.settings-etat-button:hover { background: var(--surface-sunken); }
+.settings-etat-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.settings-etat-button.is-disabled { opacity: .45; cursor: default; }
+.settings-etat-button.is-disabled:hover { background: var(--surface); }

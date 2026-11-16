@@ -19,6 +19,7 @@ const I18nTextsTemplates = {
   'extension.diapositives.name': { fr: 'Diapositives', en: 'Slides' },
   'extension.lecturePdf.name': { fr: 'Lecture de PDF', en: 'PDF reading' },
   'extension.polices.name': { fr: 'Polices', en: 'Fonts' },
+  'extension.etat.name': { fr: 'Identité de l’État', en: 'State identity' },
   'extension.off.title': { fr: 'Cette fonction demande Grist Factory Suite', en: 'This feature needs Grist Factory Suite' },
   'extension.off.message': {
     fr: '« {feature} » fait partie de l’extension « {extension} », qui n’est disponible que dans Grist Factory Suite. Ouvrez Publipostage+ depuis Grist Factory Suite pour l’utiliser.',

@@ -327,6 +327,7 @@ const Settings = (function () {
       if (frenchTypographyBox) frenchTypographyBox.checked = FrenchTypography.isOn();
       if (wordCountBox) wordCountBox.checked = WordCount.isOn();
       syncOfflineEditor();
+      StateMode.syncSettings();
       mailClientRadios.forEach(r => { r.checked = (r.value === MailtoExport.getMailClient()); });
       if (triggerSelect) triggerSelect.value = Variables.triggerChar();
       if (reloadNotice) reloadNotice.hidden = true;
@@ -499,6 +500,7 @@ const Settings = (function () {
     wireRadios('settings-mail-client', value => SettingsHistory.track(MAIL_CLIENT_SETTING, () => MailtoExport.setMailClient(value)));
     wireTriggerChar(leave);
     wireOfflineEditor(leave);
+    StateMode.mountSettings();
     // Hébergée, un changement de langue fait dans GFS est suivi ici (followGfsLanguage) ; js/main.js le rappelle une fois le modèle de départ ouvert.
     leaveHooks = leave;
     GfsLink.onLanguage(() => { applyLanguageLock(); followGfsLanguage(); });

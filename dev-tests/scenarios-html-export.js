@@ -183,6 +183,8 @@
         '<p><span style="color: rgb(255, 0, 0)">C</span> <span style="background-color: rgb(255, 255, 0)">F</span> <span style="font-size: 24px">T</span> <span style="font-size: 18pt; color: #112233">P</span></p>'],
       ['polices de repli', '<p><span style="font-family: Georgia">G</span> <span style="font-family: &quot;Times New Roman&quot;">T</span> <span style="font-family: Roboto">R</span> <span style="font-family: Arial, sans-serif">A</span> <span style="font-family: Inconnue">I</span></p>',
         '<p><span style="font-family: Georgia, serif">G</span> <span style="font-family: \'Times New Roman\', Times, serif">T</span> <span style="font-family: Roboto, system-ui, -apple-system, \'Segoe UI\', Helvetica, Arial, sans-serif">R</span> <span style="font-family: Arial, sans-serif">A</span> <span style="font-family: Inconnue">I</span></p>'],
+      ['Marianne a son repli (le DSFR écrit « Marianne, arial, sans-serif »)', '<p><span style="font-family: Marianne">M</span> <span style="font-family: Marianne, arial, sans-serif">D</span> <span style="font-family: marianne">m</span></p>',
+        '<p><span style="font-family: Marianne, arial, sans-serif">M</span> <span style="font-family: Marianne, arial, sans-serif">D</span> <span style="font-family: marianne, arial, sans-serif">m</span></p>'],
       ['alignement et retour à la ligne', '<p style="text-align: center">Centré</p><p style="text-align: right">Droite<br>Ligne 2<br class="ProseMirror-trailingBreak"></p>',
         '<p style="text-align: center">Centré</p>\n<p style="text-align: right">Droite<br>Ligne 2</p>'],
       ['marques imbriquées', '<p><strong><em>gras italique</em></strong> <strong>gras <u>souligné</u> fin</strong> <code>code <b>x</b></code></p>',

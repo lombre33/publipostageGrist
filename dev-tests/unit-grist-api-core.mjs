@@ -114,6 +114,7 @@ function fresh(doc, { gristExtra = {}, withPageTree = true } = {}) {
     grist,
     console: { log() {}, warn: (...a) => log.warnings.push(a.join(' ')), error: (...a) => log.errors.push(a.join(' ')) },
     setTimeout,
+    URL,   // getInstanceHost et fixBaseUrl lisent l'adresse de l'API que donne le jeton
   };
   if (withPageTree) globals.PageTree = { afterTableCreated: (name) => log.pages.push(name) };
   const ctx = createContext(globals);
@@ -791,6 +792,18 @@ async function main() {
     await run('GristAPI.refreshColumnTypes()');
     check('colonnes absentes des métadonnées (ancien Grist) : types lus, aucune aide ni colonne montrée, aucun choix', (await run('GristAPI.getColumnType("Missions", "Personne")')) === 'Ref:Personnes'
       && (await run('GristAPI.getDisplayColumn("Missions", "Personne")')) === null && (await run('GristAPI.getReferenceColumn("Missions", "Personne")')) === null && (await run('GristAPI.getColumnChoices("Missions", "Titre")')) === null);
+  });
+
+  // === getInstanceHost : l'hôte de l'instance de Grist, un constat pour le mode « Identité de l'État » (js/state-mode.js) ===
+  await section('getInstanceHost', async () => {
+    const hostOf = async (baseUrl, extra = {}) => {
+      const doc = Object.assign(new Doc(), { async getAccessToken() { if (extra.refuse) throw new Error('jeton refusé'); return { token: 't', baseUrl, ttlMsecs: 120000 }; } });
+      return fresh(doc).run('GristAPI.getInstanceHost()');
+    };
+    check('hôte : celui de l\'adresse de l\'API que donne le jeton, en minuscules (sans port ni chemin)', (await hostOf('https://Grist.Numerique.Gouv.fr:8484/o/docs/api/docs/abc')) === 'grist.numerique.gouv.fr');
+    check('hôte : une instance hors .gouv.fr garde le sien', (await hostOf('https://docs.getgrist.com/api/docs/abc')) === 'docs.getgrist.com');
+    check('hôte : une adresse illisible rend \'\' sans lever', (await hostOf('pas une adresse')) === '');
+    check('hôte : un jeton refusé rend \'\' sans lever', (await hostOf('https://docs.getgrist.com/api/docs/abc', { refuse: true })) === '');
   });
 
   summarizeAndExit();

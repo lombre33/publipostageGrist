@@ -229,7 +229,7 @@
 })();
 </script>
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.69">
-<link rel="stylesheet" href="css/style.css?v=0.108">
+<link rel="stylesheet" href="css/style.css?v=0.109">
 <link rel="stylesheet" href="css/reader-guide.css?v=0.5">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.145">
 <link rel="stylesheet" href="css/toolbar-v2.css?v=0.86">
@@ -291,6 +291,7 @@
 <link rel="stylesheet" href="css/sheet-assembly.css?v=0.3">
 <link rel="stylesheet" href="css/pdf-protection.css?v=0.3">
 <link rel="stylesheet" href="css/pdf-fonts.css?v=0.2">
+<link rel="stylesheet" href="css/state-mode.css?v=0.1">
 <link rel="stylesheet" href="css/versions-history.css?v=0.2">
 <link rel="stylesheet" href="css/external-images.css?v=0.3">
 <link rel="stylesheet" href="css/first-contact.css?v=0.2">
@@ -318,13 +319,13 @@
 <link rel="preload" as="script" href="js/version.js?v=0.4">
 <link rel="preload" as="script" href="js/html-sanitize.js?v=0.9">
 <link rel="preload" as="script" href="js/page-tree.js?v=0.5">
-<link rel="preload" as="script" href="js/grist-api.js?v=0.122">
+<link rel="preload" as="script" href="js/grist-api.js?v=0.123">
 <link rel="preload" as="script" href="js/templates.js?v=0.111">
 <link rel="preload" as="script" href="js/table-consent.js?v=0.2">
 <link rel="preload" as="script" href="js/space-gap.js?v=0.3">
 <link rel="preload" as="script" href="js/reader-mode.js?v=0.202">
 <link rel="preload" as="script" href="js/reader-guide.js?v=0.7">
-<link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.6">
+<link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.7">
 <link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.19">
 <link rel="preload" as="script" href="js/i18n-texts-format.js?v=0.3">
 <link rel="preload" as="script" href="js/i18n-texts-blocks.js?v=0.4">
@@ -332,7 +333,7 @@
 <link rel="preload" as="script" href="js/i18n-texts-review.js?v=0.3">
 <link rel="preload" as="script" href="js/i18n-texts-slides.js?v=0.3">
 <link rel="preload" as="script" href="js/i18n-texts-motion.js?v=0.2">
-<link rel="preload" as="script" href="js/i18n-texts-settings.js?v=0.13">
+<link rel="preload" as="script" href="js/i18n-texts-settings.js?v=0.14">
 <link rel="preload" as="script" href="js/i18n-texts-status.js?v=0.6">
 <link rel="preload" as="script" href="js/i18n-texts-variables.js?v=0.6">
 <link rel="preload" as="script" href="js/i18n-texts-eml.js?v=0.1">
@@ -401,6 +402,7 @@
 <link rel="preload" as="script" href="js/frame-link.js?v=0.2">
 <link rel="preload" as="script" href="js/alt-text.js?v=0.2">
 <link rel="preload" as="script" href="js/alt-reminder.js?v=0.1">
+<link rel="preload" as="script" href="js/state-mode.js?v=0.1">
 <link rel="preload" as="script" href="js/free-frame-line-menus.js?v=0.1">
 <link rel="preload" as="script" href="js/free-frame-box-menus.js?v=0.1">
 <link rel="preload" as="script" href="js/free-frame-toolbar.js?v=0.1">
@@ -429,7 +431,7 @@
 <link rel="preload" as="script" href="js/template-gallery.js?v=0.16">
 <link rel="preload" as="script" href="js/template-pack.js?v=0.5">
 <link rel="preload" as="script" href="js/template-gallery-modal.js?v=0.12">
-<link rel="preload" as="script" href="js/settings.js?v=0.31">
+<link rel="preload" as="script" href="js/settings.js?v=0.32">
 <link rel="preload" as="script" href="js/condition-rules.js?v=0.18">
 <link rel="preload" as="script" href="js/condition-fields.js?v=0.25">
 <link rel="preload" as="script" href="js/modal-base.js?v=0.7">
@@ -463,7 +465,7 @@
 <link rel="preload" as="script" href="js/anchors.js?v=0.5">
 <link rel="preload" as="script" href="js/qr-code.js?v=0.10">
 <link rel="preload" as="script" href="js/gfs-open.js?v=0.6">
-<link rel="preload" as="script" href="js/extensions.js?v=0.95">
+<link rel="preload" as="script" href="js/extensions.js?v=0.96">
 <link rel="preload" as="script" href="js/pdf-reading.js?v=0.3">
 <link rel="preload" as="script" href="js/chart-entry.js?v=0.5">
 <link rel="preload" as="script" href="js/live-entry.js?v=0.4">
@@ -1158,6 +1160,16 @@
           <p class="settings-access-hint" id="settings-alt-reminder-hint" data-i18n="settings.accessibility.altReminderHint">Éteint, rien ne change. Allumé, un export Word, PowerPoint, HTML ou Markdown s’arrête une fois pour dire combien d’images n’ont pas de texte alternatif (une image décorative n’en a pas besoin), même pour un lot entier. Le PDF n’écrit pas de texte alternatif : il n’est pas concerné.</p>
           <p class="settings-access-hint" data-i18n="settings.accessibility.perBrowser">Ce choix est propre à ce navigateur, comme la langue et le thème.</p>
         </section>
+        <!-- Identité de l'État (js/state-mode.js) : le mode DSFR, éteint au départ, réservé à l'administration. Sans Grist Factory Suite, ou sans son extension « etat », le bouton est grisé (aria-disabled), la phrase du dessous dit pourquoi et le clic explique. -->
+        <section class="settings-section settings-theme-section" aria-labelledby="settings-etat-title">
+          <h4 class="settings-section-title" id="settings-etat-title" data-i18n="settings.etat.title">Identité de l’État (DSFR)</h4>
+          <p class="settings-panel-intro" data-i18n="settings.etat.intro">Des couleurs, des styles de texte, des modèles et un contrôle qui reprennent l’identité visuelle de l’État, pour les documents de l’administration. Ce mode ne donne aucun droit : la marque de l’État est réservée à l’administration, et ce widget n’est pas un service de l’État.</p>
+          <div class="settings-etat-line">
+            <span class="settings-etat-state" id="settings-etat-state" role="status"></span>
+            <button type="button" class="settings-etat-button" id="settings-etat-button" aria-describedby="settings-etat-hint" data-i18n="settings.etat.button.activate">Activer…</button>
+          </div>
+          <p class="settings-access-hint" id="settings-etat-hint"></p>
+        </section>
         <!-- Éditeur hors ligne (js/settings.js:syncOfflineEditor, consigne 066 de GFS) : l'éditeur démarre depuis la copie rangée dans vendor/editeur au lieu d'esm.sh. Le script de index.html choisit la carte d'importation avant tout le reste : la case écrit la clé du navigateur (pp_editeur_copie) et le changement attend un rechargement. Hébergée par GFS, ou quand l'adresse du widget demande déjà la copie (copie=editeur), la case est grisée, montre ce qui est en vigueur, et une phrase dit où se fait le choix ; cachées autrement. -->
         <section class="settings-section settings-theme-section" aria-labelledby="settings-offline-editor-title">
           <h4 class="settings-section-title" id="settings-offline-editor-title" data-i18n="settings.offlineEditor.title">Éditeur hors ligne</h4>
@@ -1366,7 +1378,7 @@
 <script src="js/version.js?v=0.4"></script>
 <script src="js/html-sanitize.js?v=0.9"></script>
 <script src="js/page-tree.js?v=0.5"></script>
-<script src="js/grist-api.js?v=0.122"></script>
+<script src="js/grist-api.js?v=0.123"></script>
 <script src="js/templates.js?v=0.111"></script>
 <script src="js/table-consent.js?v=0.2"></script>
 <script>
@@ -1383,7 +1395,7 @@
 <script src="js/space-gap.js?v=0.3"></script>
 <script src="js/reader-mode.js?v=0.202"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
-<script src="js/i18n-texts-templates.js?v=0.6"></script>
+<script src="js/i18n-texts-templates.js?v=0.7"></script>
 <script src="js/i18n-texts-export.js?v=0.19"></script>
 <script src="js/i18n-texts-format.js?v=0.3"></script>
 <script src="js/i18n-texts-blocks.js?v=0.4"></script>
@@ -1391,7 +1403,7 @@
 <script src="js/i18n-texts-review.js?v=0.3"></script>
 <script src="js/i18n-texts-slides.js?v=0.3"></script>
 <script src="js/i18n-texts-motion.js?v=0.2"></script>
-<script src="js/i18n-texts-settings.js?v=0.13"></script>
+<script src="js/i18n-texts-settings.js?v=0.14"></script>
 <script src="js/i18n-texts-status.js?v=0.6"></script>
 <script src="js/i18n-texts-variables.js?v=0.6"></script>
 <script src="js/i18n-texts-eml.js?v=0.1"></script>
@@ -1460,6 +1472,7 @@
 <script src="js/frame-link.js?v=0.2"></script>
 <script src="js/alt-text.js?v=0.2"></script>
 <script src="js/alt-reminder.js?v=0.1"></script>
+<script src="js/state-mode.js?v=0.1"></script>
 <script src="js/free-frame-line-menus.js?v=0.1"></script>
 <script src="js/free-frame-box-menus.js?v=0.1"></script>
 <script src="js/free-frame-toolbar.js?v=0.1"></script>
@@ -1489,7 +1502,7 @@
 <script type="text/x-lazy-engine" data-engine="xlsx" src="js/xlsx-export.js?v=0.29"></script>
 <script type="text/x-lazy-engine" data-engine="xlsxFormat" src="js/xlsx-number-format.js?v=0.4"></script>
 <script type="text/x-lazy-engine" data-engine="md" src="js/markdown-export.js?v=0.13"></script>
-<script type="text/x-lazy-engine" data-engine="html" src="js/html-export.js?v=0.20"></script>
+<script type="text/x-lazy-engine" data-engine="html" src="js/html-export.js?v=0.21"></script>
 <script type="text/x-lazy-engine" data-engine="pptx" src="js/pptx-export.js?v=0.36"></script>
 <script type="text/x-lazy-engine" data-engine="pptxImport" src="js/pptx-import.js?v=0.59"></script>
 <script type="text/x-lazy-engine" data-engine="docxImport" src="js/docx-import.js?v=0.6"></script>
@@ -1507,7 +1520,7 @@
 <script src="js/template-gallery.js?v=0.16"></script>
 <script src="js/template-pack.js?v=0.5"></script>
 <script src="js/template-gallery-modal.js?v=0.12"></script>
-<script src="js/settings.js?v=0.31"></script>
+<script src="js/settings.js?v=0.32"></script>
 <script src="js/condition-rules.js?v=0.18"></script>
 <script src="js/condition-fields.js?v=0.25"></script>
 <script src="js/modal-base.js?v=0.7"></script>
@@ -1541,7 +1554,7 @@
 <script src="js/anchors.js?v=0.5"></script>
 <script src="js/qr-code.js?v=0.10"></script>
 <script src="js/gfs-open.js?v=0.6"></script>
-<script src="js/extensions.js?v=0.95"></script>
+<script src="js/extensions.js?v=0.96"></script>
 <script src="js/pdf-reading.js?v=0.3"></script>
 <script src="js/chart-entry.js?v=0.5"></script>
 <script src="js/live-entry.js?v=0.4"></script>

@@ -968,11 +968,11 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
       },
       // Le document, par l'adresse de son interface de programmation (…/api/docs/<identifiant>) : js/schema-renames.js y lit l'identifiant du document pour ranger son instantané.
       // Un identifiant tiré à chaque chargement de la page : deux pages de test ne partagent jamais un instantané (setDocId pour jouer « le même document, rouvert »).
-      // Chaque demande est gardée (state.tokenCalls : { readOnly }) ; state.tokenFailure refuse d'en donner ; state.tokenTtlMs fixe la durée de vie annoncée (js/row-attachment.js redemande un jeton qui expire).
+      // Chaque demande est gardée (state.tokenCalls : { readOnly }) ; state.tokenFailure refuse d'en donner ; state.tokenTtlMs fixe la durée de vie annoncée (js/row-attachment.js redemande un jeton qui expire) ; state.tokenBaseUrl fixe l'adresse de l'interface de programmation que le jeton donne (js/grist-api.js:getInstanceHost lit son hôte).
       getAccessToken: async function (options) {
         state.tokenCalls.push({ readOnly: !!(options && options.readOnly) });
         if (state.tokenFailure) throw new Error(state.tokenFailure);
-        return { token: options && options.readOnly === false ? 'stub-write-token' + state.tokenCalls.length : 'stub-token', baseUrl: 'http://localhost/api/docs/' + state.docId, ttlMsecs: state.tokenTtlMs };
+        return { token: options && options.readOnly === false ? 'stub-write-token' + state.tokenCalls.length : 'stub-token', baseUrl: state.tokenBaseUrl || 'http://localhost/api/docs/' + state.docId, ttlMsecs: state.tokenTtlMs };
       },
       // La vraie fetchSelectedRecord (GristView, jamais GristDocAPI - exposée ici via docApi comme grist-plugin-api.ts le fait, cf. son export
       // `docApi = {...coreDocApi, ...viewApi, fetchSelectedTable, fetchSelectedRecord}`) ne prend PAS de tableId : elle opère sur la section liée à
@@ -994,6 +994,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
 
   state.tokenCalls = [];
   state.tokenFailure = '';
+  state.tokenBaseUrl = '';
   state.tokenTtlMs = 120000;
 
   // Le faux envoi d'une pièce jointe (js/row-attachment.js) : le POST multipart `…/attachments?auth=…` que la communauté de Grist décrit (« Upload attachment from custom widget » : champ `upload`, réponse = la liste

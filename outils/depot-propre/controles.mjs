@@ -378,6 +378,7 @@ if (has('README.md')) {
     pp_theme: ['thème', 'theme'],
     pp_bubble_marks: ['mise en forme des bulles', 'formatting of bubbles'],
     pp_alt_reminder: ['rappel des images sans texte alternatif', 'reminder about images without alternative text'],
+    pp_etat_declaration: ['déclaration du mode identité de l\'état', 'declaration for the state identity mode'],
     pp_variable_tip: ['info-bulle de valeur d\'une variable', 'variable value tooltip'],
     pp_french_typography: ['typographie française à la frappe', 'french typography while typing'],
     pp_word_count: ['compteur de mots', 'word counter'],

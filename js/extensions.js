@@ -54,6 +54,14 @@ const Extensions = (function () {
       scripts: ['marianne.js'],
       styles: [],
     },
+    // Le mode « Identité de l'État » (DSFR, étude du 13/11) : couleurs, styles, modèles et contrôle qui reprennent l'identité visuelle de l'État, réservés à l'administration. Au premier lot l'extension n'est que
+    // le premier verrou du mode (js/state-mode.js : sans GFS, ou sans qu'elle soit active, tout est grisé) : elle n'a pas de code à charger. Le bloc-marque et les modèles (extensions/etat/) viendront avec elle.
+    etat: {
+      nameKey: 'extension.etat.name',
+      version: '0.1',
+      scripts: [],
+      styles: [],
+    },
   };
 
   const loaded = new Set();
