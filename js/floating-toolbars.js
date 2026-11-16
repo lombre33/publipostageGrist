@@ -196,6 +196,8 @@ const FloatingToolbars = (function () {
         cellStyle: ['cell-style', 'varStyle', I18n.t('table.cellStyle')],
         // « Répéter la ligne » : la Boucle de la ligne du curseur (js/variable-loop.js:rowStatus), après les alignements.
         repeat: ['row-repeat', 'varLoop', I18n.t('table.rowRepeat')],
+        // « Tableau croisé… » : la ligne du curseur devient un tableau croisé (js/pivot-editor.js:status, fenêtre js/pivot-window.js), juste après « Répéter la ligne ».
+        pivot: ['row-pivot', 'pivot', I18n.t('table.pivot')],
         // Menu « Bordures » d'une grille et d'un tableau de document : les huit réglages (icône, info-bulle).
         borders: [['all', 'bordersAll', I18n.t('table.bordersAll')], ['outer', 'bordersOuter', I18n.t('table.bordersOuter')], ['inner', 'bordersInner', I18n.t('table.bordersInner')],
           ['top', 'bordersTop', I18n.t('table.bordersTop')], ['bottom', 'bordersBottom', I18n.t('table.bordersBottom')], ['left', 'bordersLeft', I18n.t('table.bordersLeft')],
@@ -221,6 +223,7 @@ const FloatingToolbars = (function () {
         + spec.valign.map(([action, icon, , title]) => barButton(action, icon, title)).join('')
         + '<span class="v2-floating-sep"></span>'
         + barButton(...spec.repeat)
+        + barButton(...spec.pivot)
         // Tableau lié à un modèle Grille (js/linked-table.js) : un seul bouton à menu (icône du lien et chevron, comme « Bordures »), caché (jamais grisé : il n'a de sens que pour
         // un tableau lié) tant que le tableau du curseur n'est pas lié. Le nom du modèle et les actions sur le lien sont dans son menu : dans 700 px la barre n'a pas la place
         // d'un nom, et les lots suivants y ajoutent des actions.
@@ -377,6 +380,8 @@ const FloatingToolbars = (function () {
         // Grisé (cf. tableButtonSync), « Répéter la ligne » ne fait rien : openRow vérifie la ligne, et un tableau lié verrouillé refuserait d'écrire la boucle (le
         // garde-fou de js/linked-table.js) : la fenêtre ne s'ouvrirait que pour ne rien enregistrer.
         'row-repeat': () => { const link = LinkedTable.status(editor.state); if (!(link && link.locked)) VariableLoop.openRow(editor); },
+        // Grisé (cf. tableButtonSync) hors grille, sur plusieurs lignes et sur une ligne traversée par une fusion : la fenêtre ne s'ouvrirait que pour ne rien écrire.
+        'row-pivot': () => { const pivot = PivotEditor.status(editor); if (pivot.enabled) PivotWindow.open(editor, pivot.pos); },
         caption: () => Caption.run(editor, 'table'),
         'fill-open': () => openFillMenu(menus),
         // Grisé (cf. tableButtonSync) sous le suivi des modifications et dans un tableau lié verrouillé : la fenêtre ne s'ouvrirait que pour ne rien enregistrer.
@@ -460,6 +465,12 @@ const FloatingToolbars = (function () {
         setDisabled('row-repeat', !row.enabled, row.title);
         setActive('row-repeat', row.active);
       };
+      // « Tableau croisé… » (js/pivot-editor.js:status) : allumé quand la ligne du curseur en porte un ; grisé, sa raison en info-bulle, hors grille, sur plusieurs lignes ou sur une ligne traversée par une fusion.
+      const syncPivotButton = () => {
+        const pivot = PivotEditor.status(editor);
+        setDisabled('row-pivot', !pivot.enabled, pivot.title);
+        setActive('row-pivot', pivot.active);
+      };
       // Tableau lié à un modèle Grille : son bouton se montre pour lui seul, jamais dans une grille. Verrouillé (suivi des modifications allumé), tout ce qui changerait ses
       // cases se grise avec la raison - le garde-fou (js/linked-table.js) refuserait de toute façon ; les boutons que les autres synchronisations ne regrisent pas (ligne,
       // colonne, supprimer, fond) retrouvent leur titre au dégrisage. Le bouton du lien reste ouvert : son menu dit pourquoi le tableau est verrouillé. Le menu, s'il est
@@ -502,6 +513,7 @@ const FloatingToolbars = (function () {
         syncSettingButtons();
         syncStyleButton();
         syncRepeatButton();
+        syncPivotButton();
       };
       const syncDocumentButtons = () => {
         setLocked('table-del', false);
@@ -514,6 +526,7 @@ const FloatingToolbars = (function () {
         syncSettingButtons();
         syncStyleButton();
         syncRepeatButton();
+        syncPivotButton();
         Caption.syncButton(button('caption'), editor, 'table');
         syncFillBar();
         syncLinkedGroup();

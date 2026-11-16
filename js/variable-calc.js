@@ -220,5 +220,5 @@ const VariableCalc = (function () {
   }
   const isOpen = () => !!win && win.isOpen();
 
-  return { insertFromPanel, openAt, isOpen };
+  return { insertFromPanel, openAt, isOpen, compile, typedFormula };
 })();

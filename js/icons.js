@@ -170,6 +170,8 @@ const Icons = (function () {
       // barre d'outils, ni le seau du fond : une icône = une fonction.
       varStyle: '<path d="M3 20 8 7l5 13"/><path d="M4.9 15.5h6.2"/><path d="M18 3l1.2 3.3L22.5 7.5l-3.3 1.2L18 12l-1.2-3.3L13.5 7.5l3.3-1.2z"/>',
       varLinked: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+      // « Tableau croisé… » de la barre du tableau (js/pivot-editor.js) : une grille à en-têtes (première ligne, première colonne) et la flèche qui pivote les valeurs.
+      pivot: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 9v12"/><path d="M13 15.5h5M16 12.5l3 3-3 3"/>',
       varLoop: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
       // Bouton « Colonne… » de la même barre (js/variable-column.js : changer ou réparer la colonne d'une bulle) : une colonne de tableau avec sa case
       // d'en-tête et les deux chevrons, haut et bas, d'un choix dans une liste.

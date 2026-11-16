@@ -57,6 +57,8 @@ const PivotZones = (function () {
   const wrapError = message => I18n.t('variables.error.generic', { message });
   // Le message d'une erreur sans son « [ERREUR : … ] » : celui d'une variable illisible arrive déjà entre crochets (variables.error.*).
   const bare = text => { const wrapped = /^\[[^:\]]+:\s*([\s\S]*)\]$/.exec(String(text)); return wrapped ? wrapped[1] : String(text); };
+  // Un message écrit à la place du tableau, entre « [ERREUR : … ] » une seule fois (celui d'une variable illisible arrive déjà entre crochets).
+  const errorLine = text => wrapError(bare(text));
   // Le texte d'une erreur du moteur ou du Calcul (même règle que Variables.resolveCalcResult : une variable illisible dit son propre message).
   function errorText(error) {
     if (!error) return wrapError(I18n.t('pivot.error.cell'));
@@ -316,7 +318,7 @@ const PivotZones = (function () {
       try {
         const built = await compute(tr.getAttribute(ATTR), tableId, record, ctx);
         if (ctx && built.readsAll) ctx.readsAll = true;
-        if (built.error) rows = [messageRow(wrapError(bare(built.error)), oldWidth)];
+        if (built.error) rows = [messageRow(errorLine(built.error), oldWidth)];
         else if (!built.result.rows.length) rows = [messageRow(wrapError(I18n.t('pivot.error.noRows')), oldWidth)];
         else {
           const laid = layout(built.result, built.def);
@@ -332,5 +334,5 @@ const PivotZones = (function () {
     }
   }
 
-  return { ATTR, ZONE_SELECTOR, defOf, pathLabel, formulaLabel, valueTitle, describe, load, compute, layout, cellText, toRows, expand, errorText };
+  return { ATTR, ZONE_SELECTOR, defOf, pathLabel, formulaLabel, valueTitle, describe, load, compute, layout, cellText, toRows, expand, errorText, errorLine };
 })();

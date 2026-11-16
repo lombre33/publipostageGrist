@@ -127,6 +127,13 @@ const GridEditor = (function () {
               parseHTML: el => el.getAttribute('data-page-break-before') === 'true',
               renderHTML: attrs => (attrs.pageBreakBefore ? { 'data-page-break-before': 'true' } : {}),
             },
+            // Le tableau croisé que cette ligne porte (js/pivot-editor.js) : sa définition en JSON (js/pivot.js:normalize), `data-pivot` dans le HTML du modèle. À la Lecture et à l'export, la ligne devient son
+            // tableau (js/pivot-zones.js). Null pour toute autre ligne : aucun changement de rendu ni de HTML.
+            pivot: {
+              default: null,
+              parseHTML: el => el.getAttribute('data-pivot') || null,
+              renderHTML: attrs => (attrs.pivot ? { 'data-pivot': attrs.pivot } : {}),
+            },
           });
         },
       });

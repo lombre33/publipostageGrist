@@ -1,0 +1,84 @@
+/* Le tableau croisé de la grille (js/pivot-editor.js, js/pivot-window.js) : la ligne qui le porte dans l'éditeur - son cadre, l'étiquette, l'aperçu - et la fenêtre de réglage. Rien que des jetons de couleur : clair et
+   sombre suivent le thème. Les listes et les champs de la fenêtre viennent de css/modal-base.css (.pp-dialog-label, .pp-dialog-input) et de css/search-select.css ; ses boutons de css/variable-actions.css. */
+
+/* === La ligne dans l'éditeur === */
+
+/* La ligne prend la hauteur du cadre (décoration de l'éditeur : rien n'en reste dans le document, ni dans la Lecture) ; ses cases restent derrière, la première porte le cadre. Aucune ligne de plus dans le DOM :
+   les bandeaux de la grille se calent sur les vraies lignes. */
+#editor-container.v2-grid-mode .tiptap table tr.pp-pivot-row > td,
+#editor-container.v2-grid-mode .tiptap table tr.pp-pivot-row > th { height: 8.75rem; vertical-align: top; }
+#editor-container.v2-grid-mode .tiptap table tr.pp-pivot-row > td:first-child,
+#editor-container.v2-grid-mode .tiptap table tr.pp-pivot-row > th:first-child { position: relative; }
+
+/* Le cadre couvre toute la largeur du tableau (js/pivot-editor.js:followTable pose sa largeur) ; la souris le traverse, sauf le bouton « Modifier » : un clic dans la ligne choisit toujours sa case. */
+.pp-pivot-preview {
+  position: absolute; z-index: 1; top: 0; left: 0; bottom: 0; box-sizing: border-box; overflow: hidden; pointer-events: none;
+  display: flex; flex-direction: column; gap: 4px; padding: 6px 10px 6px 12px;
+  background: var(--accent-soft); border-left: 4px solid var(--accent); color: var(--text); font-family: var(--font-ui); font-size: 12px; line-height: 1.35; text-align: left; white-space: normal;
+}
+.pp-pivot-bar { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pp-pivot-icon { flex: none; display: inline-flex; color: var(--accent-ink); }
+.pp-pivot-icon svg { width: 16px; height: 16px; }
+.pp-pivot-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; color: var(--accent-ink); }
+.pp-pivot-edit {
+  flex: none; height: 24px; padding: 0 10px; border: 1px solid var(--accent-soft-border); border-radius: var(--radius-sm); background: var(--surface); color: var(--accent-ink);
+  font: 700 12px/1 var(--font-ui); cursor: pointer; pointer-events: auto;
+}
+.pp-pivot-edit:hover { background: var(--surface-sunken); }
+.pp-pivot-edit:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-pivot-body { min-height: 0; overflow: hidden; }
+
+/* L'aperçu du tableau (le cadre de la ligne comme la fenêtre de réglage). Dans l'éditeur, les règles du tableau de la grille (fond blanc, largeur automatique, bordures de case) s'appliquent aussi à ce tableau
+   imbriqué : la seconde liste de sélecteurs les reprend pour que l'aperçu garde ses jetons (clair et sombre) et toute la largeur du cadre. */
+.pp-pivot-mini, #editor-container .tiptap .pp-pivot-preview table.pp-pivot-mini { border-collapse: collapse; width: 100%; margin: 0; table-layout: auto; background: var(--surface); color: var(--text); font-size: 12px; }
+.pp-pivot-mini th, .pp-pivot-mini td, #editor-container .tiptap .pp-pivot-preview .pp-pivot-mini th, #editor-container .tiptap .pp-pivot-preview .pp-pivot-mini td {
+  height: auto; padding: 2px 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); text-align: left; vertical-align: middle; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pp-pivot-mini th, #editor-container .tiptap .pp-pivot-preview .pp-pivot-mini th { background: var(--surface-sunken); font-weight: 700; }
+.pp-pivot-mini .is-num, #editor-container .tiptap .pp-pivot-preview .pp-pivot-mini .is-num { text-align: right; font-variant-numeric: tabular-nums; }
+.pp-pivot-mini .is-bold, .pp-pivot-mini tr.is-total td, #editor-container .tiptap .pp-pivot-preview .pp-pivot-mini tr.is-total td { font-weight: 700; }
+.pp-pivot-mini tr.is-total td, #editor-container .tiptap .pp-pivot-preview .pp-pivot-mini tr.is-total td { background: var(--surface-sunken); }
+.pp-pivot-mini .is-error, #editor-container .tiptap .pp-pivot-preview .pp-pivot-mini .is-error { color: var(--danger-ink); }
+.pp-pivot-note { padding: 2px 0; color: var(--text-muted); }
+.pp-pivot-note.is-error { color: var(--danger-ink); }
+
+/* === La fenêtre === */
+
+.pp-pivot-box .pp-modal-body { padding-bottom: 8px; }
+.pp-pivot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px 14px; margin: 0 0 12px; }
+.pp-pivot-grid > [hidden], .pp-pivot-field[hidden] { display: none; }
+.pp-pivot-field { min-width: 0; }
+.pp-pivot-label { display: block; margin: 0 0 6px; font-size: 12px; font-weight: 700; color: var(--text); }
+.pp-pivot-second { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.pp-pivot-second[hidden], .pp-pivot-link[hidden] { display: none; }
+.pp-pivot-second > select, .pp-pivot-second > .ss-wrap { flex: 1 1 auto; min-width: 0; }
+.pp-pivot-link { display: inline-block; margin-top: 6px; padding: 0; border: none; background: none; color: var(--accent-ink); font: 600 12px/1.4 var(--font-ui); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.pp-pivot-second .pp-pivot-link { margin: 0; flex: none; }
+.pp-pivot-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Les choix à une seule réponse (la source, ce qu'on met dans les cases) : une rangée de boutons accolés, le choix posé en accent ; un choix grisé garde sa place, sa raison est dans son info-bulle. */
+.pp-pivot-seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; margin: 0 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.pp-pivot-seg-button, .pp-pivot-source-option { border: none; background: var(--surface); color: var(--text); font: 700 12px/1.3 var(--font-ui); cursor: pointer; }
+.pp-pivot-seg-button { height: 28px; padding: 0 11px; }
+.pp-pivot-seg-button + .pp-pivot-seg-button { border-left: 1px solid var(--border); }
+.pp-pivot-source { display: flex; flex-direction: column; gap: 4px; margin: 0 0 12px; }
+.pp-pivot-source-option { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); text-align: left; font-weight: 600; }
+.pp-pivot-source-option::before { content: ''; flex: none; width: 12px; height: 12px; box-sizing: border-box; border: 2px solid var(--border-strong); border-radius: 50%; }
+.pp-pivot-source-option[aria-checked="true"], .pp-pivot-seg-button[aria-checked="true"] { background: var(--accent-soft); color: var(--accent-ink); }
+.pp-pivot-source-option[aria-checked="true"] { border-color: var(--accent-soft-border); }
+.pp-pivot-source-option[aria-checked="true"]::before { border-color: var(--accent); background: radial-gradient(circle, var(--accent) 0 35%, transparent 40%); }
+.pp-pivot-seg-button:hover, .pp-pivot-source-option:hover { background: var(--surface-sunken); }
+.pp-pivot-seg-button[aria-disabled="true"], .pp-pivot-source-option[aria-disabled="true"] { opacity: .5; cursor: default; }
+.pp-pivot-seg-button[aria-disabled="true"]:hover, .pp-pivot-source-option[aria-disabled="true"]:hover { background: var(--surface); }
+.pp-pivot-seg-button:focus-visible, .pp-pivot-source-option:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.pp-pivot-totals { display: flex; flex-wrap: wrap; gap: 6px 16px; padding-top: 5px; }
+.pp-pivot-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+.pp-pivot-check input:disabled + span { color: var(--text-muted); }
+.pp-pivot-box .pp-dialog-input[aria-invalid="true"] { border-color: var(--danger); }
+.pp-pivot-box .pp-dialog-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.pp-pivot-status { margin: 0 0 6px; font-size: 12px; line-height: 1.45; color: var(--text-muted); }
+.pp-pivot-status[data-state="error"] { color: var(--danger-ink); }
+.pp-pivot-status:empty { display: none; }
+.pp-pivot-window-preview { overflow-x: auto; margin: 0 0 6px; }

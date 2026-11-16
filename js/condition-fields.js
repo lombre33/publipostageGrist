@@ -746,5 +746,5 @@ const ConditionFields = (function () {
     return { row, modeleSelect };
   }
 
-  return { appendColumnOption, ensureTableLinked, emptyRule, buildRuleRow, buildAddRuleButton, buildAddGroupButton, renderItems, buildTemplateRule };
+  return { appendColumnOption, friendlyTypeLabel, ensureTableLinked, emptyRule, buildRuleRow, buildAddRuleButton, buildAddGroupButton, renderItems, buildTemplateRule };
 })();

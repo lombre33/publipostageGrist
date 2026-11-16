@@ -600,6 +600,8 @@ const Editor = (function () {
       EmailPlainText.createExtension(Extension, { Plugin, PluginKey }),
       // Tableau lié à un modèle Grille : ses cases suivent les règles d'une grille, un modèle n'y est lié qu'une fois par document, un repère le montre.
       LinkedTable.createExtension(Extension),
+      // La ligne de grille qui porte un tableau croisé (js/pivot-editor.js) : son cadre et son aperçu dans l'éditeur, la saisie refusée dans ses cases.
+      PivotEditor.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       GridEditor.createExtension(Extension),
     ];
   }
