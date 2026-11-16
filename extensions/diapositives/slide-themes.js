@@ -12,6 +12,9 @@
 // SAVED_MAX au plus, dans l'ordre où on les a rangés.
 const SlideThemes = (function () {
   const make = (id, colors, fonts) => ({ id, theme: { colors: Object.assign({ bg: '#ffffff' }, colors), fonts } });
+  // Un thème prêt qui a besoin du mode « Identité de l'État » (js/state-mode.js) : sa ligne reste dans la fenêtre, grisée avec sa raison tant que le mode n'est pas allumé (slide-theme-ui.js, StateStyle.lock) ; un thème déjà posé
+  // dans une présentation, lui, reste posé, mode allumé ou non.
+  const makeState = (id, colors, fonts) => Object.assign(make(id, colors, fonts), { state: true });
 
   const LIST = [
     make('ocean', { text: '#1e2a35', title: '#0b3c5d', accent1: '#1d70b8', accent2: '#00a3a3', accent3: '#5aa9e6', accent4: '#f2a541', accent5: '#6c8ead', accent6: '#3bb273' }, { title: 'Roboto', body: 'Roboto' }),
@@ -21,6 +24,9 @@ const SlideThemes = (function () {
     make('sun', { text: '#2b2118', title: '#b45309', accent1: '#d97706', accent2: '#f59e0b', accent3: '#dc2626', accent4: '#0891b2', accent5: '#65a30d', accent6: '#7c3aed' }, { title: 'Calibri', body: 'Calibri' }),
     make('slate', { text: '#333b45', title: '#2b3440', accent1: '#4a6fa5', accent2: '#8a9ba8', accent3: '#b0bec5', accent4: '#607d8b', accent5: '#455a64', accent6: '#cfd8dc' }, { title: 'Arial', body: 'Arial' }),
     make('editorial', { text: '#1f2937', title: '#111827', accent1: '#b91c1c', accent2: '#6b7280', accent3: '#9ca3af', accent4: '#374151', accent5: '#d1d5db', accent6: '#4b5563' }, { title: 'Times New Roman', body: 'Arial' }),
+    // « Identité de l'État » : le gris des textes (#161616) et le Bleu France des titres du système de design de l'État, le Rouge Marianne en deuxième couleur, puis le bleu clair, le vert, l'orange et le gris des alertes et des mentions ;
+    // Arial, la police de repli du système de design (Marianne n'est pas une des six polices du menu : elle ne s'écrit que dans le PDF, extension « polices »). Texte et titres ont plus de 4,5:1 sur le fond blanc.
+    makeState('etat', { text: '#161616', title: '#000091', accent1: '#000091', accent2: '#e1000f', accent3: '#6a6af4', accent4: '#18753c', accent5: '#b34000', accent6: '#666666' }, { title: 'Arial', body: 'Arial' }),
   ];
 
   // Le thème prêt qui a ces couleurs et ces polices (le nom gardé dans le modèle ne compte pas : une fois le thème choisi, le modèle porte ses propres réglages), ou null.

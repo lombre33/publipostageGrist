@@ -589,6 +589,42 @@ async function run(lang, colorScheme) {
     }
   }
 
+  // --- Le thème « Identité de l'État » (lot 5 du mode « Identité de l'État ») posé sur la présentation : la fenêtre à part le joue comme le panneau (titre en Bleu France et en Arial, texte en gris #161616), les variables `--pp-theme-*`
+  // de la page lui étant passées.
+  await open(A, 8, 3);
+  // Le geste de « Appliquer » de la fenêtre « Thème… » (slide-theme-ui.js, commit) : le thème de la page, les couleurs recolorées dans le texte, la mise en page refaite.
+  await app.evaluate(() => {
+    const ed = EditorCore.getEditor();
+    const before = SlideTheme.normalize(PageLayout.getTheme());
+    const next = SlideTheme.normalize(SlideThemes.byId('etat').theme);
+    PageLayout.setTheme(next);
+    const tr = ed.state.tr;
+    SlideTheme.remap(tr, before, next);
+    if (tr.docChanged) ed.view.dispatch(TrackChanges.skipTracking(tr));
+    Editor.refreshLayout();
+    document.dispatchEvent(new CustomEvent('pp:marginsChanged'));
+  });
+  await sleep(600);
+  await cursorIn(a, 0);
+  const lookIn = target => target.evaluate(() => {
+    const host = document.getElementById('pp-slide-show-stage');
+    const scope = host && host.shadowRoot ? host.shadowRoot.querySelector('.pp-print-scope') : null;
+    const layer = scope ? scope.querySelector(':scope > .pp-slide-show-layer:not(.pp-slide-show-ghost)') : null;
+    const look = (el) => { if (!el) return null; const cs = getComputedStyle(el); return { color: cs.color, family: cs.fontFamily.split(',')[0].replace(/["']/g, '') }; };
+    return layer ? { title: look(layer.querySelector('h1')), text: look(layer.querySelector('p')) } : null;
+  });
+  const themed = await playAndCatch(A, a);
+  check(tag + 'avec le thème « Identité de l’État » posé, le ▶ ouvre la fenêtre à part', !!themed && context.pages().length === 2, { pages: context.pages().length });
+  if (themed) {
+    await waitCounter(themed);
+    await sleep(700);
+    const inWindow = await lookIn(themed);
+    check(tag + 'la fenêtre à part joue le thème : titre en Bleu France et en Arial, texte en gris #161616', !!inWindow && !!inWindow.title && inWindow.title.color === 'rgb(0, 0, 145)' && inWindow.title.family === 'Arial' && !!inWindow.text && inWindow.text.color === 'rgb(22, 22, 22)', inWindow);
+    await closing(themed.keyboard.press('Escape'));
+    await closedWithin(themed, 3000);
+  }
+  await app.evaluate(() => { PageLayout.setTheme(null); });
+
   check(tag + 'aucune boîte native du navigateur', A.natives.length === 0, A.natives);
   check(tag + 'aucune erreur de page dans la fenêtre', errors.length === 0, errors);
   await A.context.close();

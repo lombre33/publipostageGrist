@@ -3,7 +3,7 @@
 // présentation » : couleurs, polices, avant le décor), à la VRAIE souris et au vrai clavier, 700x400, français clair puis anglais sombre, hébergé par GFS (simulé par dev-tests/gfs-stub.js), l'extension
 // « diapositives » active. Un thème se pose dans une fenêtre du menu Page ; il vit dans la page du modèle (colonne Margins), se voit à l'écran par défaut et recolore ce qui avait une couleur du thème.
 //  LA LIGNE : « Thème… » n'est dans le menu Page que d'une présentation, entière dans le panneau, lisible, avec le nom du thème posé à droite ; l'extension éteinte la grise avec sa raison et rien ne s'ouvre.
-//  LA FENÊTRE : tient dans le panneau sans défiler, titre et description reliés, « Aspect d'origine » et sept thèmes (au moins 24 px de haut, atteignables), neuf pastilles et deux polices ; un BROUILLON :
+//  LA FENÊTRE : tient dans le panneau sans défiler, titre et description reliés, « Aspect d'origine » et huit thèmes (dont « Identité de l'État », grisé sans le mode) (au moins 24 px de haut, atteignables), neuf pastilles et deux polices ; un BROUILLON :
 //   rien n'est écrit avant « Appliquer », « Annuler » et Échap ne changent rien et rendent le clavier à l'éditeur ; au clavier les flèches choisissent un thème, Tab va aux polices puis aux couleurs, Entrée valide.
 //  LA POSE : le titre et le texte prennent la police et la couleur du thème, une couleur de l'ancien thème suit le nouveau (le bleu d'origine devient le premier accent) et une couleur composée à la main reste ;
 //   UN Ctrl+Z (vrai clavier) rend le thème ET les couleurs, Ctrl+Y les remet ; le thème est enregistré avec le modèle et revient à la réouverture.
@@ -132,7 +132,12 @@ const windowState = page => page.evaluate(() => {
   const buttons = Array.from(overlay.querySelectorAll('.pp-modal-actions button:not(.pp-slide-theme-tool)'));
   const tools = Array.from(overlay.querySelectorAll('.pp-modal-actions .pp-slide-theme-tool'));
   const controls = rows.concat(chips, selects, buttons, tools);
-  const covered = controls.filter((el) => { const q = el.getBoundingClientRect(); const hit = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return !(hit === el || el.contains(hit)); }).map(el => el.dataset.value || el.dataset.slot || el.textContent.trim());
+  // Une ligne sous le pli de la liste (qui défile : huit lignes se voient, la neuvième s'atteint à la molette) est d'abord amenée dans la liste, comme le fait la personne, avant qu'on cherche ce qui la recouvre ; la liste reprend ensuite
+  // son défilement d'avant (les autres contrôles lisent où elle en est).
+  const listBox = overlay.querySelector('.pp-slide-theme-list');
+  const listTop = listBox.scrollTop;
+  const covered = controls.filter((el) => { if (rows.includes(el)) el.scrollIntoView({ block: 'nearest' }); const q = el.getBoundingClientRect(); const hit = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return !(hit === el || el.contains(hit)); }).map(el => el.dataset.value || el.dataset.slot || el.textContent.trim());
+  listBox.scrollTop = listTop;
   const active = document.activeElement;
   let focus = '';
   if (active) {
@@ -313,8 +318,8 @@ async function run(lang, colorScheme, full) {
   if (!win) { await snap(page, tag.replace(/\W+/g, '') + 'echec'); await page.context().close(); return; }
   await snap(page, `${lang}-${colorScheme}-1-fenetre`);
   check(tag + 'la fenêtre tient dans le panneau de 700x400 sans défiler, boutons compris', inPanel(win.box) && !win.scrolls && win.buttons.every(b => inPanel(b.rect)), { box: win.box, scrolls: win.scrolls, buttons: win.buttons.map(b => b.rect) });
-  check(tag + 'huit lignes (Aspect d\'origine et sept thèmes) de 24 px au moins, toutes atteignables, « Aspect d\'origine » cochée et seule atteinte par Tab',
-    win.rows.length === 8 && win.rows[0].text === T.original && win.rows[0].checked === 'true' && win.rows.filter(r => r.checked === 'true').length === 1 && win.rows.filter(r => r.tab === 0).length === 1 && win.rows[0].tab === 0 && win.rows.every(r => r.height >= 23.5) && !win.covered.length,
+  check(tag + 'neuf lignes (Aspect d\'origine et huit thèmes) de 24 px au moins, toutes atteignables, « Aspect d\'origine » cochée et seule atteinte par Tab',
+    win.rows.length === 9 && win.rows[0].text === T.original && win.rows[0].checked === 'true' && win.rows.filter(r => r.checked === 'true').length === 1 && win.rows.filter(r => r.tab === 0).length === 1 && win.rows[0].tab === 0 && win.rows.every(r => r.height >= 23.5) && !win.covered.length,
     { rows: win.rows.map(r => [r.value, r.text, r.checked, r.tab, Math.round(r.height)]), covered: win.covered });
   check(tag + 'neuf pastilles de couleur (22 px) et deux polices, boutons « ' + T.cancel + ' » et « ' + T.apply + ' » (le second principal)', win.chips.length === 9 && win.chips.every(c => c.width >= 21.5 && c.height >= 21.5) && win.selects.length === 2
     && win.buttons.map(b => b.text).join('|') === `${T.cancel}|${T.apply}` && win.buttons[1].primary, { chips: win.chips.length, selects: win.selects, buttons: win.buttons.map(b => b.text) });
@@ -668,13 +673,13 @@ async function run(lang, colorScheme, full) {
     const redoStep = async () => { await selectWord(page, 'Titre'); await page.keyboard.press('Control+y'); await sleep(700); };
     win = await reopen();
     check(tag + `au pied de la fenêtre, à gauche d'« ${T.cancel} », deux boutons : « ${T.saveTool} » (actif : le thème choisi est celui de la présentation) et « ${T.forgetTool} » (grisé : aucun thème du document n'est choisi), dans le panneau, de 24 px au moins, sans rien devant, sur la ligne des boutons de la fenêtre`,
-      !!win && win.rows.length === 8 && win.rows.every(r => !r.mine) && win.tools.length === 2 && win.tools[0].text === T.saveTool && win.tools[1].text === T.forgetTool && win.tools[0].disabled === 'false' && win.tools[1].disabled === 'true'
+      !!win && win.rows.length === 9 && win.rows.every(r => !r.mine) && win.tools.length === 2 && win.tools[0].text === T.saveTool && win.tools[1].text === T.forgetTool && win.tools[0].disabled === 'false' && win.tools[1].disabled === 'true'
       && win.tools.every(b => inPanel(b.rect) && b.rect.height >= 24 && Math.abs((b.rect.top + b.rect.bottom) / 2 - (win.buttons[0].rect.top + win.buttons[0].rect.bottom) / 2) < 3 && b.rect.right <= win.buttons[0].rect.left) && win.tools[0].rect.right <= win.tools[1].rect.left && !win.covered.length && inPanel(win.box) && !win.scrolls, win && { rows: win.rows.length, tools: win.tools.map(b => [b.text, b.disabled, Math.round(b.rect.height)]), covered: win.covered, scrolls: win.scrolls });
     check(tag + 'le bouton grisé dit sa raison dans son infobulle, les deux textes se lisent (4,5:1)', !!win && T.needsMine.test(win.tools[1].title) && (await contrastOf(page, SAVE)) >= 4.5 && (await contrastOf(page, FORGET)) >= 4.5,
       [win && win.tools[1].title, await contrastOf(page, SAVE), await contrastOf(page, FORGET)]);
     await tool(2);
     win = await windowState(page);
-    check(tag + 'un clic sur le bouton grisé ne retire rien, la ligne sous les couleurs dit pourquoi', !!win && win.rows.length === 8 && T.needsMine.test(win.caption) && (await promptState(page)) === null && noThemes(await documentThemes(page)), win && { rows: win.rows.length, caption: win.caption });
+    check(tag + 'un clic sur le bouton grisé ne retire rien, la ligne sous les couleurs dit pourquoi', !!win && win.rows.length === 9 && T.needsMine.test(win.caption) && (await promptState(page)) === null && noThemes(await documentThemes(page)), win && { rows: win.rows.length, caption: win.caption });
     // Un nom se demande : Échap ne range rien, la fenêtre du thème reste ouverte.
     await tool(1);
     let ask = await promptState(page);
@@ -683,7 +688,7 @@ async function run(lang, colorScheme, full) {
     await page.keyboard.press('Escape');
     await sleep(350);
     win = await windowState(page);
-    check(tag + 'Échap ferme la saisie seule : la fenêtre du thème reste ouverte, rien n\'est rangé, rien n\'est écrit dans Grist', (await promptState(page)) === null && !!win && win.rows.length === 8 && noThemes(await documentThemes(page)), [win && win.rows.length, await documentThemes(page)]);
+    check(tag + 'Échap ferme la saisie seule : la fenêtre du thème reste ouverte, rien n\'est rangé, rien n\'est écrit dans Grist', (await promptState(page)) === null && !!win && win.rows.length === 9 && noThemes(await documentThemes(page)), [win && win.rows.length, await documentThemes(page)]);
     // Ranger « Maison » : le nom tapé remplace le nom proposé ; la saisie se valide au vrai clic.
     await tool(1);
     await page.keyboard.type(T.mine);
@@ -692,7 +697,7 @@ async function run(lang, colorScheme, full) {
     win = await windowState(page);
     const mineRow = win && win.rows.find(r => r.value === 'my:' + T.mine);
     check(tag + `« ${T.mine} » est rangé : une neuvième ligne, juste après « ${T.original} » et avant les thèmes prêts (le premier est séparé d'eux par un filet), entière dans la liste, cochée (seule), le clavier dessus, la fenêtre du thème ne défile pas`,
-      !!win && win.rows.length === 9 && win.rows[1].value === 'my:' + T.mine && !!mineRow && mineRow.mine && mineRow.visible && win.rows[2].firstReady && mineRow.checked === 'true' && win.rows.filter(r => r.checked === 'true').length === 1 && win.focus === 'row:my:' + T.mine && !win.scrolls && inPanel(win.box) && win.rows.every(r => r.height >= 23.5),
+      !!win && win.rows.length === 10 && win.rows[1].value === 'my:' + T.mine && !!mineRow && mineRow.mine && mineRow.visible && win.rows[2].firstReady && mineRow.checked === 'true' && win.rows.filter(r => r.checked === 'true').length === 1 && win.focus === 'row:my:' + T.mine && !win.scrolls && inPanel(win.box) && win.rows.every(r => r.height >= 23.5),
       win && { rows: win.rows.map(r => [r.value, r.checked, r.mine, r.firstReady, r.visible]), focus: win.focus, scrolls: win.scrolls });
     check(tag + 'la ligne sous les couleurs le dit, « ' + T.forgetTool + ' » devient actif, la ligne du document a son infobulle', !!win && win.caption === T.savedMsg && win.tools[1].disabled === 'false' && !!mineRow && mineRow.title.length > 10, win && { caption: win.caption, tools: win.tools.map(b => b.disabled), title: mineRow && mineRow.title });
     await snap(page, `${lang}-${colorScheme}-10-liste`);
@@ -704,7 +709,7 @@ async function run(lang, colorScheme, full) {
     await undoStep();
     check(tag + 'un Ctrl+Z défait le rangement : la liste est vide, Grist l\'a reçu, le coin d\'état le dit', (await documentThemes(page)).length === 0 && (await statusLog()).includes(T.undoneMsg), [await documentThemes(page), (await statusLog()).slice(-3)]);
     win = await reopen();
-    check(tag + 'rouverte, la fenêtre n\'a plus de thème du document', !!win && win.rows.length === 8 && win.rows.every(r => !r.mine), win && win.rows.length);
+    check(tag + 'rouverte, la fenêtre n\'a plus de thème du document', !!win && win.rows.length === 9 && win.rows.every(r => !r.mine), win && win.rows.length);
     await closeWindow();
     await redoStep();
     check(tag + 'un Ctrl+Y remet « ' + T.mine + ' » (Grist le reçoit, le coin d\'état le dit)', (await documentThemes(page)).length === 1 && (await statusLog()).includes(T.redoneMsg), [await documentThemes(page), (await statusLog()).slice(-3)]);
@@ -713,8 +718,8 @@ async function run(lang, colorScheme, full) {
     await chooseRow('my:' + T.mine);
     await tool(2);
     win = await windowState(page);
-    check(tag + `« ${T.forgetTool} » retire « ${T.mine} » de la liste : huit lignes, la ligne sous les couleurs le dit, les réglages restent dans le brouillon (le thème prêt qu'ils sont est coché), le clavier sur la ligne cochée`,
-      !!win && win.rows.length === 8 && win.caption === T.removedMsg && win.rows.filter(r => r.checked === 'true').length === 1 && win.rows.find(r => r.value === 'forest').checked === 'true' && /^row:/.test(win.focus) && win.tools[1].disabled === 'true' && (await documentThemes(page)).length === 0,
+    check(tag + `« ${T.forgetTool} » retire « ${T.mine} » de la liste : neuf lignes, la ligne sous les couleurs le dit, les réglages restent dans le brouillon (le thème prêt qu'ils sont est coché), le clavier sur la ligne cochée`,
+      !!win && win.rows.length === 9 && win.caption === T.removedMsg && win.rows.filter(r => r.checked === 'true').length === 1 && win.rows.find(r => r.value === 'forest').checked === 'true' && /^row:/.test(win.focus) && win.tools[1].disabled === 'true' && (await documentThemes(page)).length === 0,
       win && { rows: win.rows.length, caption: win.caption, focus: win.focus, tools: win.tools.map(b => b.disabled) });
     await closeWindow();
     await undoStep();
@@ -722,7 +727,7 @@ async function run(lang, colorScheme, full) {
     // Un thème composé dans une présentation est rangé, une AUTRE présentation du document le retrouve et le pose.
     if (await open(7, 2)) {
       win = await reopen();
-      check(tag + 'dans l\'autre présentation, la liste du document est là (« ' + T.mine + ' » juste après « ' + T.original + ' », visible sans défiler la liste) et son thème personnalisé n\'est dans aucune ligne cochée', !!win && win.rows.length === 9 && win.rows[1].value === 'my:' + T.mine && win.rows[1].visible && win.rows.every(r => r.checked === 'false'), win && win.rows.map(r => [r.value, r.checked, r.visible]));
+      check(tag + 'dans l\'autre présentation, la liste du document est là (« ' + T.mine + ' » juste après « ' + T.original + ' », visible sans défiler la liste) et son thème personnalisé n\'est dans aucune ligne cochée', !!win && win.rows.length === 10 && win.rows[1].value === 'my:' + T.mine && win.rows[1].visible && win.rows.every(r => r.checked === 'false'), win && win.rows.map(r => [r.value, r.checked, r.visible]));
       await tool(1);
       ask = await promptState(page);
       check(tag + `« ${T.saveTool} » propose « ${T.defaultName} » (le nom n'est pas pris)`, !!ask && ask.value === T.defaultName, ask);
@@ -731,12 +736,12 @@ async function run(lang, colorScheme, full) {
       await sleep(500);
       win = await windowState(page);
       check(tag + `« ${T.rose} » est rangé : dixième ligne, la deuxième du document (après « ${T.mine} »), cochée, avec le premier accent et la police des titres composés ; Grist a deux thèmes`,
-        !!win && win.rows.length === 10 && win.rows[2].value === 'my:' + T.rose && win.rows[2].checked === 'true' && win.rows[2].visible && win.caption === T.savedMsg.replace(T.mine, T.rose) && (await documentThemes(page)).length === 2 && (await documentThemes(page))[1].colors.accent1 === '#aa3366' && (await documentThemes(page))[1].fonts.title === 'Courier New',
+        !!win && win.rows.length === 11 && win.rows[2].value === 'my:' + T.rose && win.rows[2].checked === 'true' && win.rows[2].visible && win.caption === T.savedMsg.replace(T.mine, T.rose) && (await documentThemes(page)).length === 2 && (await documentThemes(page))[1].colors.accent1 === '#aa3366' && (await documentThemes(page))[1].fonts.title === 'Courier New',
         win && { rows: win.rows.map(r => [r.value, r.checked]), caption: win.caption, stored: await documentThemes(page) });
       await closeWindow();
       if (await open(8, 2)) {
         win = await reopen();
-        check(tag + 'dans la première présentation, « ' + T.rose + ' » est dans la liste', !!win && win.rows.length === 10 && !!win.rows.find(r => r.value === 'my:' + T.rose), win && win.rows.map(r => r.value));
+        check(tag + 'dans la première présentation, « ' + T.rose + ' » est dans la liste', !!win && win.rows.length === 11 && !!win.rows.find(r => r.value === 'my:' + T.rose), win && win.rows.map(r => r.value));
         await chooseRow('my:' + T.rose);
         await realClick(page, '#pp-slide-theme .pp-modal-actions .var-modal-primary');
         await sleep(900);
@@ -756,7 +761,7 @@ async function run(lang, colorScheme, full) {
         await sleep(500);
         win = await windowState(page);
         const roseNow = (await documentThemes(page)).find(item => item.name === T.rose);
-        check(tag + 'la ligne « ' + T.rose + ' » est remplacée à sa place (toujours dix lignes, la ligne sous les couleurs le dit, Grist a la police des titres Georgia)', !!win && win.rows.length === 10 && win.rows[2].value === 'my:' + T.rose && win.caption === T.replacedMsg && !!roseNow && roseNow.fonts.title === 'Georgia', win && { rows: win.rows.length, caption: win.caption, stored: roseNow });
+        check(tag + 'la ligne « ' + T.rose + ' » est remplacée à sa place (toujours onze lignes, la ligne sous les couleurs le dit, Grist a la police des titres Georgia)', !!win && win.rows.length === 11 && win.rows[2].value === 'my:' + T.rose && win.caption === T.replacedMsg && !!roseNow && roseNow.fonts.title === 'Georgia', win && { rows: win.rows.length, caption: win.caption, stored: roseNow });
         // « Aspect d'origine » n'est pas un thème à ranger.
         await chooseRow('');
         win = await windowState(page);
@@ -772,7 +777,7 @@ async function run(lang, colorScheme, full) {
     await page.evaluate(() => { for (let n = 3; n <= 12; n += 1) SlideThemes.save(SlideThemes.byId('ocean').theme, 'Thème ' + n); });
     await sleep(500);
     win = await reopen();
-    check(tag + 'douze thèmes du document : vingt lignes, la liste défile dans sa colonne, la fenêtre et ses boutons restent dans le panneau sans défiler', !!win && win.rows.length === 20 && win.list.scrolls && !win.scrolls && inPanel(win.box) && win.buttons.every(b => inPanel(b.rect)) && win.tools.every(b => inPanel(b.rect)),
+    check(tag + 'douze thèmes du document : vingt et une lignes, la liste défile dans sa colonne, la fenêtre et ses boutons restent dans le panneau sans défiler', !!win && win.rows.length === 21 && win.list.scrolls && !win.scrolls && inPanel(win.box) && win.buttons.every(b => inPanel(b.rect)) && win.tools.every(b => inPanel(b.rect)),
       win && { rows: win.rows.length, listScrolls: win.list.scrolls, scrolls: win.scrolls, box: win.box });
     await snap(page, `${lang}-${colorScheme}-11-liste-longue`);
     await chooseRow('my:' + T.mine);
@@ -782,7 +787,7 @@ async function run(lang, colorScheme, full) {
     await page.keyboard.press('Enter');
     await sleep(500);
     win = await windowState(page);
-    check(tag + 'une treizième entrée est refusée : aucune ligne de plus, la ligne sous les couleurs le dit, la saisie est fermée', !!ask && (await promptState(page)) === null && !!win && win.rows.length === 20 && T.fullMsg.test(win.caption) && (await documentThemes(page)).length === 12, win && { rows: win.rows.length, caption: win.caption, stored: (await documentThemes(page)).length });
+    check(tag + 'une treizième entrée est refusée : aucune ligne de plus, la ligne sous les couleurs le dit, la saisie est fermée', !!ask && (await promptState(page)) === null && !!win && win.rows.length === 21 && T.fullMsg.test(win.caption) && (await documentThemes(page)).length === 12, win && { rows: win.rows.length, caption: win.caption, stored: (await documentThemes(page)).length });
     // La dernière ligne s'atteint à la souris (la molette fait défiler la liste) et se coche.
     const listBox = await boxOf(page, '#pp-slide-theme .pp-slide-theme-list');
     await page.mouse.move(listBox.x, listBox.y, { steps: 3 });

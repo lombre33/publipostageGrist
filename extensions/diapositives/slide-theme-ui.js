@@ -132,12 +132,31 @@ const SlideThemeUi = (function () {
   }
 
   // La liste : « Aspect d'origine » (aucun thème), les thèmes du document (une ligne par thème, son nom en valeur après `my:`), puis les thèmes prêts ; une pastille de quatre couleurs et le nom de chacun. Les thèmes du document sont
-  // AVANT les thèmes prêts : la liste tient huit lignes dans le panneau de 700x400 et défile au-delà, un thème qu'on vient de ranger ne doit pas se cacher sous le pli.
+  // AVANT les thèmes prêts : la liste tient huit lignes dans le panneau de 700x400 et défile au-delà (le thème « Identité de l'État », le dernier des thèmes prêts, est la neuvième : il s'atteint en faisant défiler la liste), un thème qu'on vient de ranger ne doit pas se cacher sous le pli.
   function listRows() {
     const original = { id: '', name: I18n.t('slides.theme.original'), theme: SlideTheme.original() };
     const mine = SlideThemes.saved().map(theme => ({ id: MINE + theme.name, name: theme.name, theme, mine: true }));
-    const ready = SlideThemes.LIST.map(preset => ({ id: preset.id, name: I18n.t('slides.theme.preset.' + preset.id), theme: SlideTheme.normalize(preset.theme) }));
+    const ready = SlideThemes.LIST.map(preset => ({ id: preset.id, name: I18n.t('slides.theme.preset.' + preset.id), theme: SlideTheme.normalize(preset.theme), state: !!preset.state }));
     return [original].concat(mine, ready);
+  }
+  // Un thème prêt qui a besoin du mode « Identité de l'État » (`state` dans slide-themes.js) : sans lui la ligne reste là, grisée (aria-disabled), sa raison en info-bulle ; le choisir la dit dans la ligne sous les couleurs et, quand
+  // l'extension manque, ouvre la fenêtre d'installation de GFS. La liste se refait à chaque ouverture de la fenêtre : le mode allumé entre deux ouvertures dégrise la ligne.
+  const stateLock = () => (typeof StateStyle === 'undefined' ? { reason: '', missing: false } : StateStyle.lock());
+  function lockRow(button, id) {
+    const { reason } = stateLock();
+    button.classList.toggle('is-locked', !!reason);
+    if (reason) button.setAttribute('aria-disabled', 'true');
+    button.title = reason || I18n.t('slides.theme.preset.' + id + '.hint');
+  }
+  // Vrai (et rien n'est choisi) quand le thème prêt `preset` est grisé : la raison est dite, la coche revient là où elle était.
+  function refuseLocked(preset) {
+    if (!preset || !preset.state) return false;
+    const lock = stateLock();
+    if (!lock.reason) return false;
+    say(lock.reason);
+    refs.radios.check(checkedId());
+    if (lock.missing) StateMode.explain();
+    return true;
   }
   function makeList() {
     const rows = listRows();
@@ -152,6 +171,7 @@ const SlideThemeUi = (function () {
           dotsOf(row.theme).forEach((color) => { const dot = el('i'); dot.style.background = color; dots.append(dot); });
           button.append(dots, el('span', 'pp-slide-theme-name', row.name));
           if (row.mine) button.title = I18n.t('slides.theme.saved.hint');
+          if (row.state) lockRow(button, row.id);
         },
       })),
     });
@@ -186,6 +206,7 @@ const SlideThemeUi = (function () {
       return;
     }
     const preset = id ? SlideThemes.byId(id) : null;
+    if (refuseLocked(preset)) return;
     state.draft = preset ? SlideTheme.normalize(Object.assign({ name: I18n.t('slides.theme.preset.' + preset.id) }, kept, preset.theme)) : null;
     state.base = '';
     render();

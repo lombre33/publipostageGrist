@@ -449,6 +449,8 @@ const I18nTextsMotion = {
   'slides.theme.preset.sun': { fr: 'Soleil', en: 'Sunshine' },
   'slides.theme.preset.slate': { fr: 'Ardoise', en: 'Slate' },
   'slides.theme.preset.editorial': { fr: 'Éditorial', en: 'Editorial' },
+  'slides.theme.preset.etat': { fr: 'Identité de l’État', en: 'State identity' },
+  'slides.theme.preset.etat.hint': { fr: 'Le Bleu France des titres, le gris #161616 des textes et les couleurs des alertes, en Arial (Marianne ne s’écrit que dans le PDF).', en: 'France blue titles, #161616 gray text and the alert colors, in Arial (Marianne is written in the PDF only).' },
   'slides.theme.colors': { fr: 'Couleurs du thème', en: 'Theme colors' },
   'slides.theme.font.title': { fr: 'Police des titres', en: 'Title font' },
   'slides.theme.font.body': { fr: 'Police du texte', en: 'Text font' },

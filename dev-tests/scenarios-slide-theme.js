@@ -541,6 +541,41 @@
       return result(bad);
     });
 
+  add('th_the_state_theme_is_the_state_palette_and_waits_for_the_mode',
+    'Le thème prêt « Identité de l\'État » (`etat`, lot 5 du mode « Identité de l\'État ») : titres en Bleu France (#000091), texte en gris #161616, fond blanc, accents tous pris dans la palette de l\'État (js/state-style.js : couleurs et alertes), Arial pour les titres et le texte, texte et titres à 4,5:1 au moins ; il est le seul thème prêt à attendre le mode (`state: true`), le dernier de la liste, jamais identique à un autre, retrouvé par find et nommé par nameOf ; les autres thèmes prêts n\'attendent rien.',
+    async (h) => {
+      await reset(h);
+      const bad = [];
+      if (typeof SlideThemes === 'undefined') {
+        await new Promise((resolve, reject) => { const s = document.createElement('script'); s.src = 'extensions/diapositives/slide-themes.js?v=test'; s.onload = resolve; s.onerror = () => reject(new Error('slide-themes.js introuvable')); document.head.appendChild(s); });
+      }
+      const api = (new Function('return SlideThemes'))();
+      const preset = api.byId('etat');
+      if (!preset) { bad.push('le thème etat est absent'); return result(bad); }
+      const t = SlideTheme.normalize(preset.theme);
+      const hex = rows => rows.map(row => row[1].toLowerCase());
+      const state = hex(StateStyle.BRAND).concat(hex(StateStyle.ALERTS));
+      if (t.colors.title !== '#000091' || t.colors.text !== '#161616' || t.colors.bg !== '#ffffff') bad.push('titre, texte ou fond : ' + JSON.stringify([t.colors.title, t.colors.text, t.colors.bg]));
+      SlideTheme.ACCENT_SLOTS.forEach((slot) => { if (state.indexOf(t.colors[slot]) === -1) bad.push(slot + ' (' + t.colors[slot] + ') n\'est pas dans la palette de l\'État'); });
+      if (t.fonts.title !== 'Arial' || t.fonts.body !== 'Arial') bad.push('polices : ' + JSON.stringify(t.fonts));
+      if (ColorMath.contrast(t.colors.text, t.colors.bg) < 4.5 || ColorMath.contrast(t.colors.title, t.colors.bg) < 4.5) bad.push('contraste');
+      if (preset.state !== true) bad.push('le thème de l\'État n\'attend pas le mode');
+      const others = api.LIST.filter(item => item.id !== 'etat');
+      if (others.some(item => item.state)) bad.push('un autre thème prêt attend le mode : ' + others.filter(item => item.state).map(item => item.id).join(','));
+      if (api.LIST[api.LIST.length - 1].id !== 'etat') bad.push('le thème de l\'État n\'est pas le dernier de la liste');
+      if (others.some(item => JSON.stringify([SlideTheme.normalize(item.theme).colors, SlideTheme.normalize(item.theme).fonts]) === JSON.stringify([t.colors, t.fonts]))) bad.push('identique à un autre thème');
+      const found = api.find(Object.assign({ name: 'peu importe' }, preset.theme));
+      if (!found || found.id !== 'etat' || api.nameOf(t) !== I18n.t('slides.theme.preset.etat')) bad.push('find ou nameOf');
+      const was = I18n.getLang();
+      try {
+        I18n.setLang('fr');
+        if (I18n.t('slides.theme.preset.etat') !== 'Identité de l’État') bad.push('nom FR : ' + I18n.t('slides.theme.preset.etat'));
+        I18n.setLang('en');
+        if (I18n.t('slides.theme.preset.etat') !== 'State identity') bad.push('nom EN : ' + I18n.t('slides.theme.preset.etat'));
+      } finally { I18n.setLang(was); }
+      return result(bad);
+    });
+
   add('th_the_texts_exist_in_french_and_english',
     'Chaque texte du thème existe en français et en anglais (clés slides.theme.*, slides.decor.*, pptx.name.decor*, color.scope.theme*, toolbar.page.theme), les thèmes du document et le décor compris',
     async () => {
@@ -550,7 +585,7 @@
         'slides.theme.save', 'slides.theme.save.hint', 'slides.theme.save.needsTheme', 'slides.theme.save.title', 'slides.theme.save.label', 'slides.theme.save.default', 'slides.theme.save.empty', 'slides.theme.forget', 'slides.theme.forget.hint', 'slides.theme.forget.needsMine',
         'slides.theme.saved.hint', 'slides.theme.saved.added', 'slides.theme.saved.replaced', 'slides.theme.saved.removed', 'slides.theme.saved.full', 'slides.theme.saved.failed', 'slides.theme.saved.locked', 'slides.theme.saved.now', 'slides.theme.saved.none', 'slides.theme.quoted']
         .concat(['pptx.name.decorBand', 'pptx.name.decorLogo', 'pptx.name.decorText', 'slides.theme.saved.heavy', 'slides.decor.open', 'slides.decor.open.hint', 'slides.decor.summary', 'slides.decor.summary.none', 'slides.decor.summary.band', 'slides.decor.summary.logo', 'slides.decor.summary.number', 'slides.decor.summary.footer', 'slides.decor.title', 'slides.decor.intro', 'slides.decor.band', 'slides.decor.logo', 'slides.decor.number', 'slides.decor.footer', 'slides.decor.none', 'slides.decor.edge.left', 'slides.decor.edge.top', 'slides.decor.edge.bottom', 'slides.decor.band.edge', 'slides.decor.band.thickness', 'slides.decor.band.color', 'slides.decor.thickness.thin', 'slides.decor.thickness.medium', 'slides.decor.thickness.thick', 'slides.decor.logo.choose', 'slides.decor.logo.change', 'slides.decor.logo.remove', 'slides.decor.logo.pos', 'slides.decor.logo.size', 'slides.decor.logo.small', 'slides.decor.logo.medium', 'slides.decor.logo.large', 'slides.decor.logo.fileTooBig', 'slides.decor.logo.unreadable', 'slides.decor.logo.tooBig', 'slides.decor.corner.tl', 'slides.decor.corner.tr', 'slides.decor.corner.bl', 'slides.decor.corner.br', 'slides.decor.spot.bl', 'slides.decor.spot.bc', 'slides.decor.spot.br', 'slides.decor.footer.pos', 'slides.decor.footer.placeholder', 'slides.decor.skipFirst', 'slides.decor.skipFirst.needs', 'slides.decor.clear'])
-        .concat(['ocean', 'helianthe', 'forest', 'burgundy', 'sun', 'slate', 'editorial'].map(id => 'slides.theme.preset.' + id))
+        .concat(['ocean', 'helianthe', 'forest', 'burgundy', 'sun', 'slate', 'editorial', 'etat'].map(id => 'slides.theme.preset.' + id)).concat(['slides.theme.preset.etat.hint'])
         .concat(SlideTheme.COLOR_SLOTS.map(slot => 'slides.theme.slot.' + slot));
       const was = I18n.getLang();
       try {
