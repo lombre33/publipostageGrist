@@ -256,7 +256,82 @@ async function loadImage(page, src, extra = '') {
   await page.context().close();
 }
 
-// ---- 5) L'anglais -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ---- 5) Les lignes de menu que la place du curseur grise (lot 3) : le groupe à survol ouvre sa ligne, le vrai appui sur la ligne grisée ouvre la bulle ----------------------------------
+// Le groupe à survol ouvre sa ligne sans que la souris la quitte : elle descend dans le menu et s'arrête sur la ligne (comme verify-lock-reasons-mouse.mjs).
+async function toRow(page, groupSelector, rowSelector) {
+  const g = await goTo(page, groupSelector);
+  await pause(450);
+  await page.evaluate((sel) => { const el = document.querySelector(sel); if (el && el.closest('.v2-hover-flyout-scrollable')) el.scrollIntoView({ block: 'nearest' }); }, rowSelector);
+  await pause(150);
+  const r = await boxOf(page, rowSelector);
+  if (!r || !r.w || !r.h) throw new Error('ligne introuvable ou masquée : ' + rowSelector);
+  const x = Math.min(Math.max(g.x, r.left + 6), r.right - 6);
+  await page.mouse.move(x, g.y + 12, { steps: 2 });
+  await page.mouse.move(x, r.y, { steps: 6 });
+  await page.mouse.move(r.x, r.y, { steps: 3 });
+  await pause(250);
+  return r;
+}
+async function clickRow(page, groupSelector, rowSelector) {
+  await closeBubble(page);
+  await toRow(page, groupSelector, rowSelector);
+  await page.mouse.down();
+  await page.mouse.up();
+  await pause(300);
+}
+async function readRow(page, groupSelector, rowSelector) {
+  await clickRow(page, groupSelector, rowSelector);
+  const opened = await bubbleOpen(page);
+  const name = await textOf(page, '.pp-lockbubble-name');
+  const why = await textOf(page, '.pp-lockbubble-why');
+  if (opened) await press(page, '.pp-lockbubble-more');
+  const ctx = await page.evaluate(() => Array.from(document.querySelectorAll('.pp-lockbubble-ctx dt, .pp-lockbubble-ctx dd')).map(node => node.textContent.trim()).join(' '));
+  return { opened, name, why, checks: await checksOf(page), fix: await textOf(page, '.pp-lockbubble-fix'), ctx };
+}
+{
+  const page = await barPage();
+  await page.evaluate(() => Editor.setHTML('<h2>Titre du contrat</h2><p>Texte</p><ol><li><p>Un</p></li></ol>'));
+  await pause(400);
+  const heading = await boxOf(page, '.tiptap h2');
+  await page.mouse.click(heading.x, heading.y);
+  await pause(400);
+  const before = await html(page);
+  const keep = await buttonState(page, '#v2-btn-keep-next');
+  t.check('menu : « Garder avec le suivant » est grisée dans un titre, avec la clé de sa raison sur la ligne', !!keep && keep.grey && keep.reason === 'keepNext.notHere', keep);
+  const found = await readRow(page, '#v2-btn-align-main', '#v2-btn-keep-next');
+  t.check('menu : un vrai appui sur la ligne grisée ouvre la bulle, qui s\'appelle comme la ligne et dit sa raison', found.opened && /^Garder avec le suivant/.test(found.name) && found.why === keep.title, found);
+  t.check('menu : « Garder avec le suivant » : ni en-tête ni pied de page ✓, aucun paragraphe de texte dans la sélection ✕, le curseur est dans un titre de niveau 2', has(found.checks, /Aucun en-tête ni pied de page n’est en cours d’édition/, false) && has(found.checks, /Aucun paragraphe de texte dans la sélection.*le curseur est dans un titre de niveau 2/, true), found.checks);
+  t.check('menu : le geste dit de placer le curseur dans un paragraphe du texte, et le constat lit le curseur', /placez le curseur dans un paragraphe du texte/.test(found.fix) && /Curseur un titre de niveau 2/.test(found.ctx), found);
+  t.check('menu : la ligne reste grisée, le document n\'a pas bougé', (await buttonState(page, '#v2-btn-keep-next')).grey && (await html(page)) === before);
+  // Dans une liste numérotée : « Puce… » dit ce que le curseur touche.
+  await closeBubble(page);
+  const item = await boxOf(page, '.tiptap ol li p');
+  await page.mouse.click(item.x, item.y);
+  await pause(400);
+  const bullet = await readRow(page, '#v2-btn-bullet', '#v2-btn-bullet-char');
+  t.check('menu : « Puce… » dans une liste numérotée : le curseur n\'est pas dans une liste à puces, il est dans un paragraphe d\'une liste numérotée', bullet.opened && has(bullet.checks, /Le curseur n’est pas dans une liste à puces.*le curseur est dans un paragraphe, dans une liste numérotée/, true) && /placez le curseur dans une liste à puces/.test(bullet.fix), bullet);
+  // Signet… dans une liste à puces (la barre flottante d'un tableau recouvrirait le menu : le test prend une liste).
+  await closeBubble(page);
+  await page.evaluate(() => Editor.setHTML('<ul><li><p>Puce</p></li></ul><p>Fin</p>'));
+  await pause(400);
+  const dot = await boxOf(page, '.tiptap ul li p');
+  await page.mouse.click(dot.x, dot.y);
+  await pause(400);
+  const mark = await readRow(page, '#v2-btn-link', '#v2-row-bookmark');
+  t.check('menu : « Signet… » dans une liste à puces : le curseur est dans un paragraphe, dans une liste à puces, et le geste le dit', mark.opened && has(mark.checks, /Le curseur n’est pas dans un paragraphe ou un titre du texte, au premier niveau.*le curseur est dans un paragraphe, dans une liste à puces/, true) && /hors tableau, liste, colonne et encadré/.test(mark.fix), mark);
+  // Le curseur revient dans un paragraphe du texte : la ligne se dégrise et perd sa clé.
+  await closeBubble(page);
+  await page.evaluate(() => Editor.setHTML('<p>Bonjour</p>'));
+  await pause(300);
+  const paragraph = await boxOf(page, '.tiptap p');
+  await page.mouse.click(paragraph.x, paragraph.y);
+  await pause(400);
+  const freed = await buttonState(page, '#v2-btn-keep-next');
+  t.check('menu : le curseur dans un paragraphe du texte, « Garder avec le suivant » se dégrise et perd sa clé de raison', !!freed && !freed.grey && !freed.reason, freed);
+  await page.context().close();
+}
+
+// ---- 6) L'anglais -----------------------------------------------------------------------------------------------------------------------------------------------------------
 {
   const page = await barPage({ lang: 'en' });
   await page.evaluate(doc => Editor.setHTML(doc), PLAIN_TABLE);

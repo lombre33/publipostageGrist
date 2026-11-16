@@ -179,6 +179,7 @@ const MainAccess = (function () {
         if (reason) say(reason, locked, event);
       }, true);
       LockReasons.wire(say);
+      LockBubble.wireGreyed();
     }
 
     return {

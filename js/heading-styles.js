@@ -402,7 +402,7 @@ const HeadingStyles = (function () {
       row.setAttribute('aria-disabled', locked ? 'true' : 'false');
       row.classList.toggle('v2-hover-row-disabled', !!locked);
       row.tabIndex = locked ? -1 : 0;
-      if (locked) row.title = I18n.t(locked); else row.removeAttribute('title');
+      if (locked) { row.title = I18n.t(locked); row.setAttribute('data-pp-bar-reason', locked); } else { row.removeAttribute('title'); row.removeAttribute('data-pp-bar-reason'); }
     };
     setRow(rows.update, s.locked, 'headingStyle.update');
     setRow(rows.reset, s.resetLocked, 'headingStyle.reset');

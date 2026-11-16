@@ -214,7 +214,7 @@ const Anchors = (function () {
     row.classList.toggle('v2-hover-row-disabled', !!locked);
     row.classList.toggle('is-active', !locked && !!s.named);
     row.tabIndex = locked ? -1 : 0;
-    if (locked) row.title = I18n.t(locked); else row.removeAttribute('title');
+    if (locked) { row.title = I18n.t(locked); row.setAttribute('data-pp-bar-reason', locked); } else { row.removeAttribute('title'); row.removeAttribute('data-pp-bar-reason'); }
     const label = row.querySelector('[data-bookmark-label]');
     if (label) label.textContent = I18n.t(s.named ? 'insert.bookmark.rowEdit' : 'insert.bookmark.row');
     row.setAttribute('aria-label', I18n.t(s.named ? 'insert.bookmark.ariaEdit' : 'insert.bookmark.aria'));

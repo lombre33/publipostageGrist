@@ -255,9 +255,9 @@
     description: 'LockBarCauses : chaque raison de grisé des barres du tableau et de l\'image (clés lues sur le bouton) a un constat - au moins une cause ✕, un geste, ce que le widget voit - dont aucun texte n\'est inachevé (accolade, clé non traduite, undefined), en français',
     run: async (h) => {
       const out = await everyBarKey(h);
-      const required = ['table.rowsEqualizeNeed', 'table.cellMergeNeedsCells', 'table.cellTracked', 'table.settingTracked', 'table.rowRepeatNoSource', 'table.pivotDocument', 'linkedTable.lockedTracked', 'imgToolbar.conditionNeedsColumn', 'imgToolbar.reshapeVector', 'imgToolbar.repeatNeedsPage', 'caption.gridLocked'];
+      const required = ['table.rowsEqualizeNeed', 'table.cellMergeNeedsCells', 'table.cellTracked', 'table.settingTracked', 'table.rowRepeatNoSource', 'table.pivotDocument', 'linkedTable.lockedTracked', 'imgToolbar.conditionNeedsColumn', 'imgToolbar.reshapeVector', 'imgToolbar.repeatNeedsPage', 'caption.gridLocked', 'keepNext.notHere', 'paragraphFormat.notHere', 'textDirection.notHere', 'bulletFormat.notHere', 'bookmark.notHere', 'headingStyle.notHere', 'headingStyle.none', 'headingStyle.document.none'];
       const missing = required.filter(key => out.keys.indexOf(key) === -1);
-      return { pass: out.failures.length === 0 && missing.length === 0 && out.keys.length >= 25, notes: JSON.stringify({ count: out.keys.length, missing, failures: out.failures }) };
+      return { pass: out.failures.length === 0 && missing.length === 0 && out.keys.length >= 39, notes: JSON.stringify({ count: out.keys.length, missing, failures: out.failures }) };
     },
   });
   cases.push({

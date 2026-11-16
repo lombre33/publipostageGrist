@@ -1,11 +1,13 @@
-// Le constat d'une icône grisée des barres flottantes du tableau et de l'image : pourquoi CE bouton est grisé, lu sur le tableau ou l'image qui porte la sélection (sa taille, ses cases fusionnées, les cases choisies, le suivi des modifications,
-// la source et le calque de l'image), avec le geste pour le dégriser. Demande du 12/11 (lot 2) : la bulle de js/lock-bubble.js disait déjà la phrase de l'info-bulle ; « En savoir plus » écarte maintenant une à une les causes voisines.
+// Le constat d'une icône grisée des barres flottantes du tableau et de l'image, et d'une ligne de menu que la place du curseur grise : pourquoi CE bouton est grisé, lu sur le tableau ou l'image qui porte la sélection (sa taille, ses cases
+// fusionnées, les cases choisies, le suivi des modifications, la source et le calque de l'image) ou sur ce que le curseur touche (un titre, une case de tableau, une liste, un en-tête), avec le geste pour le dégriser. Demande du 12/11 (lots 2 et 3) :
+// la bulle de js/lock-bubble.js disait déjà la phrase de l'info-bulle ; « En savoir plus » écarte maintenant une à une les causes voisines.
 //
-// Le bouton garde la clé de sa raison en attribut (`data-pp-bar-reason`, posé par `setDisabled` de js/floating-toolbars.js, `Caption.syncButton`) : rien à deviner à partir du texte de l'info-bulle, qui change de langue. Une clé inconnue
+// Le bouton ou la ligne garde la clé de sa raison en attribut (`data-pp-bar-reason`, posé par `setDisabled` de js/floating-toolbars.js, `Caption.syncButton`, et par les lignes de js/keep-with-next.js, js/paragraph-format.js, js/text-direction.js,
+// js/bullet-format.js, js/anchors.js, js/heading-styles.js) : rien à deviner à partir du texte de l'info-bulle, qui change de langue. Une clé inconnue
 // ne donne rien (`forKey` rend null) : la bulle garde alors la phrase seule. Les noms (modèle lié, table et colonne d'une variable) passent par les jetons de js/lock-diagnostic.js.
 //
 //   LockBarCauses.forKey(key)   le constat { why?, checks, fix, context } de la raison `key`, ou null quand elle n'a pas de constat
-//   LockBarCauses.keys()        les clés de raison qui ont un constat
+//   LockBarCauses.keys()        les clés de raison qui ont un constat (barres du tableau et de l'image, lignes de menu que la place du curseur grise)
 const LockBarCauses = (function () {
   const t = (key, vars) => I18n.t(key, vars);
   const { ok, no } = LockDiagnostic.checks;
@@ -128,6 +130,50 @@ const LockBarCauses = (function () {
     'caption.gridLocked': state => ({ checks: [inTable(state), no(t('lockBubble.bar.chk.gridTable'), t('lockBubble.bar.chk.gridCaption'))], fix: t('lockBubble.bar.fix.gridCaption') }),
   }, MERGE, REPEAT, LINKED);
 
+  // === Le curseur : les lignes de menu que la place de la sélection grise ===
+  const CONTAINERS = { tableCell: 'cell', tableHeader: 'cell', bulletList: 'bullet', orderedList: 'ordered', taskList: 'task', callout: 'callout', blockquote: 'quote', twoColumnsColumn: 'column' };
+  function placeNow() {
+    const editor = editorNow();
+    if (!editor) return { kind: 'none', containers: [] };
+    if (HeaderFooterPreview.getHfMode()) return { kind: 'headerFooter', containers: [] };
+    const selection = editor.state.selection;
+    if (selection.node) return { kind: selection.node.type.name === 'editorImage' ? 'image' : selection.node.type.name === 'table' ? 'table' : 'object', containers: [] };
+    const $from = selection.$from;
+    const containers = [];
+    for (let depth = 1; depth < $from.depth; depth++) {
+      const kind = CONTAINERS[$from.node(depth).type.name];
+      if (kind && containers.indexOf(kind) === -1) containers.push(kind);
+    }
+    const block = $from.parent;
+    const kind = block.type.name === 'heading' ? 'heading' : block.type.name === 'paragraph' ? (block.attrs.caption ? 'caption' : 'paragraph') : 'none';
+    return { kind, level: block.attrs && block.attrs.level, containers, bullet: editor.isActive('bulletList') };
+  }
+  function placeText(place) {
+    const block = t('lockBubble.bar.place.' + place.kind, { level: place.level });
+    return place.containers.length ? t('lockBubble.bar.place.inside', { block, containers: place.containers.map(kind => t('lockBubble.bar.place.' + kind)).join(', ') }) : block;
+  }
+  const outOfHeaderFooter = place => (place.kind === 'headerFooter' ? no(t('lockBubble.bar.chk.hfEditing'), t('lockBubble.bar.chk.hfEditingNote')) : ok(t('lockBubble.bar.chk.noHeaderFooter')));
+  function placeFinding(titleKey, fixKey) {
+    return place => ({
+      checks: [outOfHeaderFooter(place), no(t(titleKey), t('lockBubble.bar.chk.cursorIn', { place: placeText(place) }))],
+      fix: t(place.kind === 'headerFooter' ? 'lockBubble.bar.fix.leaveHeaderFooter' : fixKey),
+    });
+  }
+  const headingLevelFinding = (noStyleKey, fixKey) => place => ({
+    checks: [place.kind === 'heading' ? ok(t('lockBubble.bar.chk.inHeading', { level: place.level })) : no(t('lockBubble.bar.chk.notOneHeading'), t('lockBubble.bar.chk.cursorIn', { place: placeText(place) })), no(t(noStyleKey, { level: place.level || '' }))],
+    fix: t(fixKey),
+  });
+  const PLACE = {
+    'keepNext.notHere': placeFinding('lockBubble.bar.chk.noParagraph', 'lockBubble.bar.fix.place.paragraph'),
+    'paragraphFormat.notHere': placeFinding('lockBubble.bar.chk.noParagraph', 'lockBubble.bar.fix.place.paragraph'),
+    'textDirection.notHere': placeFinding('lockBubble.bar.chk.noText', 'lockBubble.bar.fix.place.text'),
+    'bulletFormat.notHere': place => ({ checks: [no(t('lockBubble.bar.chk.notBullet'), t('lockBubble.bar.chk.cursorIn', { place: placeText(place) }))], fix: t('lockBubble.bar.fix.place.bullet') }),
+    'bookmark.notHere': placeFinding('lockBubble.bar.chk.notFirstLevel', 'lockBubble.bar.fix.place.bookmark'),
+    'headingStyle.notHere': placeFinding('lockBubble.bar.chk.notOneHeading', 'lockBubble.bar.fix.place.heading'),
+    'headingStyle.none': headingLevelFinding('lockBubble.bar.chk.noOwnStyle', 'lockBubble.bar.fix.headingOwn'),
+    'headingStyle.document.none': headingLevelFinding('lockBubble.bar.chk.noSharedStyle', 'lockBubble.bar.fix.headingShared'),
+  };
+
   // === L'image ===
   function imageState() {
     const editor = editorNow();
@@ -200,11 +246,13 @@ const LockBarCauses = (function () {
   function forKey(key) {
     const imageBuilder = IMAGE[key];
     const tableBuilder = TABLE[key];
-    if (!imageBuilder && !tableBuilder) return null;
-    const state = imageBuilder ? imageState() : tableState();
-    const found = (imageBuilder || tableBuilder)(state);
-    return Object.assign({ why: found.why }, { checks: found.checks, fix: found.fix, context: LockDiagnostic.context({ rows: imageBuilder ? imageRows(state) : tableRows(state) }, '') });
+    const placeBuilder = PLACE[key];
+    if (!imageBuilder && !tableBuilder && !placeBuilder) return null;
+    const state = imageBuilder ? imageState() : placeBuilder ? placeNow() : tableState();
+    const found = (imageBuilder || tableBuilder || placeBuilder)(state);
+    const rows = imageBuilder ? imageRows(state) : placeBuilder ? [[t('lockBubble.bar.ctx.place'), placeText(state)]] : tableRows(state);
+    return Object.assign({ why: found.why }, { checks: found.checks, fix: found.fix, context: LockDiagnostic.context({ rows }, '') });
   }
 
-  return { forKey, keys: () => Object.keys(TABLE).concat(Object.keys(IMAGE)) };
+  return { forKey, keys: () => Object.keys(TABLE).concat(Object.keys(IMAGE), Object.keys(PLACE)) };
 })();

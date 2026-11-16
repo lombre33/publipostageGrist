@@ -89,6 +89,8 @@ async function clickRow(page, id) {
   const during = await page.evaluate(([x, y, rowId]) => ({ scrollTop: document.getElementById('v2-heading-flyout').scrollTop, underIsRow: !!document.elementFromPoint(x, y) && !!document.elementFromPoint(x, y).closest('#' + rowId) }), [before.x, before.y, id]);
   await page.mouse.up();
   await sleep(350);
+  // Un appui sur une ligne grisée ouvre la bulle de sa raison (js/lock-bubble.js, demande du 12/11) : elle reste jusqu'au prochain appui et recouvrirait les lignes suivantes.
+  await page.evaluate(() => { if (typeof LockBubble !== 'undefined') LockBubble.close(); });
   return { before, during };
 }
 const leaveMenu = async page => { await page.mouse.move(350, 390, { steps: 6 }); await sleep(500); };

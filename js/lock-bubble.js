@@ -4,6 +4,7 @@
 //
 // Qui l'ouvre :
 //   - un contrôle grisé par une cause qui ARRÊTE le clic (js/lock-reasons.js : droits, PDF, type du modèle, grille, tableau lié) : js/main-access.js (wireAccessLockGuard) ;
+//   - une ligne de menu grisée par son module (aria-disabled et `v2-hover-row-disabled`, sa raison en info-bulle : Garder avec le suivant, Signet, styles de titres, Paragraphe, Puce…) : `LockBubble.wireGreyed()`, appelé par js/main-access.js ;
 //   - une icône grisée d'une barre flottante (variable, tableau, image : aria-disabled + `title`) : EditorCore.createFloatingPanel. Le constat d'une icône que le code sait expliquer mieux que sa phrase (la Boucle) vient du
 //     fournisseur que la barre a posé avec `LockBubble.provide(barre, (bouton) => constat | null)`.
 //   LockBubble.openFor(el, { reason, keyboard })   ouvre la bulle de `el` (la referme si elle est déjà ouverte pour lui) ; vrai quand elle a répondu (ouverte ou refermée), faux sans phrase à dire ou sans boîte à l'écran où la poser
@@ -263,5 +264,16 @@ const LockBubble = (function () {
     return true;
   }
 
-  return { openFor, close, provide, isOpen: () => !!now, current: () => (now ? now.anchor : null) };
+  // Une ligne de menu grisée par son module (aria-disabled et `v2-hover-row-disabled`, sa raison en info-bulle : js/keep-with-next.js, js/anchors.js, js/heading-styles.js, js/paragraph-format.js…), qui ne passe pas par js/lock-reasons.js :
+  // son clic ouvre aussi la bulle. Le clic n'est pas arrêté, ces lignes l'ignorent déjà quand elles sont grisées ; une ligne que js/lock-reasons.js gère (elle a sa raison en `data-pp-lock-reason`) garde son chemin.
+  const GREYED_ROWS = '.v2-hover-row-disabled[aria-disabled="true"][title]';
+  function wireGreyed() {
+    document.addEventListener('click', event => {
+      const row = event.target && event.target.closest ? event.target.closest(GREYED_ROWS) : null;
+      if (!row || row.hasAttribute('data-pp-lock-reason') || row.closest('.pp-lockbubble')) return;
+      openFor(row, { keyboard: event.detail === 0 });
+    }, true);
+  }
+
+  return { openFor, close, provide, wireGreyed, isOpen: () => !!now, current: () => (now ? now.anchor : null) };
 })();

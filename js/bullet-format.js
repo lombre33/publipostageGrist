@@ -102,7 +102,7 @@ const BulletFormat = (function () {
     row.setAttribute('aria-disabled', reason ? 'true' : 'false');
     row.classList.toggle('v2-hover-row-disabled', !!reason);
     row.tabIndex = reason ? -1 : 0;
-    if (reason) row.title = I18n.t(reason); else row.removeAttribute('title');
+    if (reason) { row.title = I18n.t(reason); row.setAttribute('data-pp-bar-reason', reason); } else { row.removeAttribute('title'); row.removeAttribute('data-pp-bar-reason'); }
   }
   // Le signe de la liste du curseur : celui de la liste la plus proche, null pour le style de la liste.
   const currentChar = editor => normalized(editor.getAttributes('bulletList').bulletChar);

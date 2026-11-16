@@ -71,7 +71,7 @@ const TextDirection = (function () {
     row.setAttribute('aria-disabled', s.locked ? 'true' : 'false');
     row.classList.toggle('v2-hover-row-disabled', !!s.locked);
     row.tabIndex = s.locked ? -1 : 0;
-    if (s.locked) row.title = I18n.t(s.locked); else row.removeAttribute('title');
+    if (s.locked) { row.title = I18n.t(s.locked); row.setAttribute('data-pp-bar-reason', s.locked); } else { row.removeAttribute('title'); row.removeAttribute('data-pp-bar-reason'); }
   }
 
   // Le clic sur la ligne : pose le sens sur tous les blocs visés, ou le retire à tous quand tous l'ont. Une seule transaction. Faux, sans rien changer, quand la ligne est grisée.
