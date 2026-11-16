@@ -52,6 +52,9 @@ const attr = (page, selector, name) => page.evaluate(([sel, n]) => { const el = 
 async function toRow(page, groupSelector, rowSelector) {
   const g = await goTo(page, groupSelector);
   await pause(450);
+  // Un menu qui défile (`.v2-hover-flyout-scrollable`, js/editor-core.js `positionFlyout` : il tient dans l'espace sous son bouton) : la personne fait défiler la ligne jusqu'à l'écran avant de la viser.
+  await page.evaluate((sel) => { const el = document.querySelector(sel); if (el && el.closest('.v2-hover-flyout-scrollable')) el.scrollIntoView({ block: 'nearest' }); }, rowSelector);
+  await pause(150);
   const r = await boxOf(page, rowSelector);
   if (!r || !r.w || !r.h) throw new Error('ligne introuvable ou masquée : ' + rowSelector);
   const x = Math.min(Math.max(g.x, r.left + 6), r.right - 6);
