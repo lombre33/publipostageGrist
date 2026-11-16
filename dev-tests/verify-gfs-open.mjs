@@ -12,7 +12,7 @@
 //   rouvre pas son modèle ; le macro-modèle garde l'ordre habituel et ouvre par-dessus son écran de composition, vide, dans le panneau ; `dossier` n'y change rien ; un type absent, refusé par la garde, une présentation
 //   sans l'extension, un document en lecture seule : l'ordre habituel, sans message.
 //  « NOUVEAU > IMPORTER » (consigne 035 : `raison` `importer` et `importation: { valeur, fichier: File }`, js/gfs-link.js `normalizeOpening`, js/gfs-open.js, js/main.js `importFileFromGfs`) : l'importation est gardée pour cette
-//   raison seule (un `File` et une valeur en texte), jamais pour une autre ; GFS a déjà ouvert le sélecteur, donc aucun sélecteur ne s'ouvre ; chacune des quatre valeurs (Excel, Markdown, PowerPoint, Word) lit SON fichier par le chemin
+//   raison seule (un `File` et une valeur en texte), jamais pour une autre ; GFS a déjà ouvert le sélecteur, donc aucun sélecteur ne s'ouvre ; chacune des cinq valeurs (Excel, Markdown, HTML, PowerPoint, Word) lit SON fichier par le chemin
 //   du menu « + » (mêmes phrases du coin d'état, mêmes refus, même question d'enregistrement après une lecture réussie) et le modèle importé est sans nom, sans rien d'écrit, JAMAIS remplacé par un modèle vierge ; un fichier
 //   refusé, une valeur inconnue, une importation illisible, une personne qui annule ou un document en lecture seule : `{ ouvert: false }` ; au démarrage, le modèle habituel s'ouvre, « Widget prêt. » se dit, puis l'import suit
 //   (avant les appels `ouvrir` reçus pendant le démarrage) ; seule, rien ne change.
@@ -92,9 +92,11 @@ const answers = page => page.evaluate(() => window.__gfsStub.answers.slice());
 // « Nouveau > Importer » (consigne 035) : GFS a fait choisir le fichier et le donne à l'app, `importation: { valeur, fichier: File }`. Un `File` ne passe ni par `page.evaluate` ni par le JSON du stub : il est fabriqué dans
 // la page (`window.__makeFile`), les octets d'un classeur ou d'une présentation y voyagent en base64. Les aides comptent aussi les ouvertures du sélecteur de fichier (un clic sur un champ de fichier : aucune
 // ne doit avoir lieu, GFS a déjà ouvert le sien) et les lectures du lecteur Markdown (celles de ce fichier).
-const IMPORT_TYPE = { excel: 'grille', markdown: 'document', powerpoint: 'presentation', word: 'document' };
+const IMPORT_TYPE = { excel: 'grille', markdown: 'document', html: 'document', powerpoint: 'presentation', word: 'document' };
 const MIME = {
   markdown: 'text/markdown',
+  html: 'text/html',
+  zip: 'application/zip',
   excel: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   powerpoint: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   word: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -106,6 +108,13 @@ const NOT_A_BOOK = { name: 'faux.xlsx', mime: MIME.excel, text: 'ceci n’est pa
 const NOT_A_DECK = { name: 'faux.pptx', mime: MIME.powerpoint, text: 'ceci n’est pas une présentation' };
 const NOT_A_DOC = { name: 'faux.docx', mime: MIME.word, text: 'ceci n’est pas un document Word' };
 const WORD_TEXT = 'Texte du fichier Word de GFS.';
+// HTML (13/11, lots 1 et 2 de l'import ; GFS déclare la valeur `html` dans `actions.importer`) : une page seule, une archive ZIP de la page (fabriquée dans la page de l'essai : sa page et son image), une page vide, une
+// archive qui n'en est pas une (les quatre premiers octets d'un ZIP, puis du bruit).
+const HTML_PAGE = { name: 'page.html', mime: MIME.html, text: '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Page de GFS</title></head><body><h1>Page HTML de GFS</h1><p>Texte du fichier HTML de GFS.</p></body></html>' };
+const HTML_TEXT = 'Texte du fichier HTML de GFS.';
+const ZIP_TEXT = 'Texte de l’archive HTML de GFS.';
+const EMPTY_HTML = { name: 'vide.html', mime: MIME.html, text: '<!doctype html><html><head><title>Vide</title></head><body></body></html>' };
+const NOT_A_ZIP = { name: 'faux.zip', mime: MIME.zip, base64: 'UEsDBAECAwQFBgcICQo=' };
 const IMPORT_HELPERS = `
   window.__makeFile = (src) => new File([src.base64 ? Uint8Array.from(atob(src.base64), c => c.charCodeAt(0)) : src.text], src.name, { type: src.mime });
   window.__picker = 0; window.__mdReads = []; window.__docxReads = [];
@@ -129,7 +138,7 @@ const importState = page => page.evaluate(() => ({
   current: Templates.getCurrentId(), list: document.getElementById('template-select').value, name: document.getElementById('template-name').value,
   text: document.querySelector('.ProseMirror').textContent, status: document.getElementById('status-msg').textContent, statusClass: document.getElementById('status-msg').className,
   grid: GridEditor.isActive(), cells: Array.from(document.querySelectorAll('.ProseMirror td, .ProseMirror th')).map(c => c.textContent.trim()),
-  slides: document.querySelectorAll('.pp-slide-item').length, strip: !!document.querySelector('.pp-slide-strip') && !document.querySelector('.pp-slide-strip').hidden,
+  images: document.querySelectorAll('.ProseMirror img[src^="data:image/png"]').length, slides: document.querySelectorAll('.pp-slide-item').length, strip: !!document.querySelector('.pp-slide-strip') && !document.querySelector('.pp-slide-strip').hidden,
   picker: window.__picker, mdReads: window.__mdReads.slice(), fileInputs: document.querySelectorAll('input[type="file"]').length, opened: (window.__opened || []).slice(),
 }));
 const dialogOf = page => page.evaluate(() => {
@@ -156,12 +165,15 @@ const IMPORTED = {
   excel: { fr: 'Excel importé : 3 lignes, 2 colonnes. Nommez le modèle puis enregistrez-le.', en: 'Excel imported: 3 rows, 2 columns. Name the template, then save it.' },
   powerpoint: { fr: 'PowerPoint importé : 2 diapositives. Nommez le modèle puis enregistrez-le.', en: 'PowerPoint imported: 2 slides. Name the template, then save it.' },
   word: { fr: 'Word importé. Nommez le modèle puis enregistrez-le.', en: 'Word imported. Name the template, then save it.' },
+  html: { fr: 'HTML importé. Nommez le modèle puis enregistrez-le.', en: 'HTML imported. Name the template, then save it.' },
 };
 const REFUSED = {
   markdown: 'Ce fichier Markdown est vide : il n’y a rien à importer.',
   excel: 'Ce fichier n’est pas un classeur Excel (.xlsx) lisible.',
   powerpoint: 'Ce fichier n’est pas une présentation PowerPoint (.pptx) lisible.',
   word: 'Ce fichier n’est pas un document Word (.docx) lisible.',
+  html: 'Ce fichier n’est pas une page HTML lisible.',
+  htmlEmpty: 'Cette page HTML est vide : il n’y a rien à importer.',
 };
 
 async function startWith(label, { stub, options, record, lang = 'fr', colorScheme = 'light', hosted = true, search = '' } = {}, expectName, expectId, expectStatus) {
@@ -700,10 +712,14 @@ async function buildFixtures(page) {
     const slide = text => ({ shapes: textBox(60, 40, 840, 80, para(run(text, 'sz="4000"')), { id: 2 }) });
     const { docx, p, pStyle } = window.DocxFixtures;
     const word = await docx({ body: p('Bilan Word GFS', pStyle('Title')) + p('Texte du fichier Word de GFS.') });
-    return { xlsx: base64(await book.xlsx.writeBuffer()), deck: base64(await pptx({ slides: [slide('Bilan GFS'), slide('Suite')] })), word: base64(word) };
+    await ExportCommon.ensureJsZipLoaded();
+    const archive = new JSZip();
+    archive.file('index.html', '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Archive de GFS</title></head><body><h1>Archive HTML de GFS</h1><p>Texte de l’archive HTML de GFS.</p><p><img src="images/logo.png" alt="Logo"></p></body></html>');
+    archive.file('images/logo.png', 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', { base64: true });
+    return { xlsx: base64(await book.xlsx.writeBuffer()), deck: base64(await pptx({ slides: [slide('Bilan GFS'), slide('Suite')] })), word: base64(word), zip: base64(await archive.generateAsync({ type: 'uint8array', compression: 'DEFLATE' })) };
   });
 }
-let SOURCES = null;   // les quatre fichiers de l'essai, une fois fabriqués : { markdown, excel, powerpoint, word }
+let SOURCES = null;   // les fichiers de l'essai, une fois fabriqués : { markdown, excel, powerpoint, word, html, zip }
 
 console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier de GFS (l’app est déjà ouverte) ==');
 {
@@ -711,7 +727,7 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   const page = o.page;
   await started(page);
   const fixtures = await buildFixtures(page);
-  SOURCES = { markdown: MARKDOWN, excel: { name: 'ventes.xlsx', mime: MIME.excel, base64: fixtures.xlsx }, powerpoint: { name: 'bilan.pptx', mime: MIME.powerpoint, base64: fixtures.deck }, word: { name: 'bilan.docx', mime: MIME.word, base64: fixtures.word } };
+  SOURCES = { markdown: MARKDOWN, excel: { name: 'ventes.xlsx', mime: MIME.excel, base64: fixtures.xlsx }, powerpoint: { name: 'bilan.pptx', mime: MIME.powerpoint, base64: fixtures.deck }, word: { name: 'bilan.docx', mime: MIME.word, base64: fixtures.word }, html: HTML_PAGE, zip: { name: 'page.zip', mime: MIME.zip, base64: fixtures.zip } };
   const installs = () => page.evaluate(() => window.__gfsStub.calls.filter(c => c.nom === 'installer').map(c => c.args));
   const nothingWritten = async () => { const w = await writes(page); return w.models === 0 && w.options === 'null'; };
   const blanksOpened = state => state.opened.filter(id => id === 'null').length;
@@ -840,6 +856,48 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   got = await importState(page);
   check(`un fichier qui n’est pas un document Word : \`{ ouvert: false }\`, le coin d’état dit « ${REFUSED.word} » en erreur, le document Word reste, aucune question`, reply.type === 'reponse' && reply.data.ouvert === false && got.status === REFUSED.word && got.statusClass === 'error-msg' && got.text.includes(WORD_TEXT) && !(await dialogOf(page)).open, { reply, got });
   check('aucun sélecteur de fichier, rien d’écrit, aucune boîte native', got.picker === 0 && await nothingWritten() && o.natives.length === 0, o.natives);
+
+  // HTML (13/11, la valeur `html` que GFS déclare dans `actions.importer`) : lu par le chemin de la ligne « Importer un HTML… » du menu « + », sans extension à installer. Le document Word importé attend d'être
+  // enregistré : la question se pose APRÈS la lecture du fichier, et un fichier refusé ne coûte rien.
+  const htmlAnsweredBefore = (await answers(page)).length;
+  const htmlBlanksBefore = blanksOpened(await importState(page));
+  pending = askImport(page, 'html', SOURCES.html);
+  await waitDialog(page);
+  d = await dialogOf(page);
+  got = await importState(page);
+  await sleep(600);
+  check('html, avec le document importé qui attend d’être enregistré : la question se pose APRÈS la lecture de la page, dans le panneau, sans « Enregistrer » (le modèle n’a pas de nom), le document reste', d.open && d.inPanel && d.buttons.map(b => b.label).join('|') === 'Annuler|Ne pas enregistrer' && got.text.includes(WORD_TEXT) && !got.text.includes(HTML_TEXT), { d, got });
+  check('GFS n’a pas de réponse tant que la personne n’a pas choisi (pas de délai), aucun sélecteur', (await answers(page)).length === htmlAnsweredBefore && got.picker === 0 && got.fileInputs === 0, await answers(page));
+  await pressDialog(page, 'Annuler');
+  reply = await pending;
+  got = await importState(page);
+  check('« Annuler » : `{ ouvert: false }`, le document est resté (rien n’a changé), aucun modèle vierge', reply.type === 'reponse' && reply.data.ouvert === false && got.text.includes(WORD_TEXT) && blanksOpened(got) === htmlBlanksBefore && !(await dialogOf(page)).open, { reply, got });
+
+  pending = askImport(page, 'html', SOURCES.html);
+  await waitDialog(page);
+  await pressDialog(page, 'Ne pas enregistrer');
+  reply = await pending;
+  got = await importState(page);
+  check('« Ne pas enregistrer » : `{ ouvert: true }`, la page est à l’écran (son titre et son texte), sans nom ni modèle courant', reply.type === 'reponse' && reply.data.ouvert === true && got.current == null && got.list === '' && got.name === '' && !got.grid && got.slides === 0 && got.text.includes('Page HTML de GFS') && got.text.includes(HTML_TEXT), { reply, got });
+  check('le coin d’état dit la phrase du menu « + » : « HTML importé. Nommez le modèle puis enregistrez-le. »', got.status === IMPORTED.html.fr, got);
+  check('aucun sélecteur de fichier, aucune fenêtre de rapport (la page est reprise en entier), rien d’écrit, un seul modèle sans identifiant de plus', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(page)).open && await nothingWritten() && blanksOpened(got) === htmlBlanksBefore + 1, got);
+
+  // L'archive ZIP de la page (la page et son dossier d'images) arrive par la MÊME valeur `html` : l'app la reconnaît à ses premiers octets, pas à son extension.
+  pending = askImport(page, 'html', SOURCES.zip, {}, 30000);
+  await waitDialog(page);
+  await pressDialog(page, 'Ne pas enregistrer');
+  reply = await pending;
+  got = await importState(page);
+  check('html, une archive ZIP : `{ ouvert: true }`, la page de l’archive est à l’écran avec son image reprise (une image en base 64, celle du dossier `images`), sans nom ni modèle courant', reply.type === 'reponse' && reply.data.ouvert === true && got.current == null && got.name === '' && got.text.includes('Archive HTML de GFS') && got.text.includes(ZIP_TEXT) && got.images === 1, { reply, got });
+  check('le coin d’état dit la même phrase, aucune fenêtre de rapport, aucun sélecteur, rien d’écrit', got.status === IMPORTED.html.fr && !(await dialogOf(page)).open && got.picker === 0 && await nothingWritten(), got);
+
+  // Un fichier refusé : `{ ouvert: false }`, la phrase du menu « + » en erreur, aucune question même quand le document attend d'être enregistré, le document de l'archive reste.
+  for (const [label, src, sentence] of [['une archive qui n’en est pas une', NOT_A_ZIP, REFUSED.html], ['une page vide', EMPTY_HTML, REFUSED.htmlEmpty]]) {
+    reply = await askImport(page, 'html', src);
+    got = await importState(page);
+    check(`${label} : \`{ ouvert: false }\`, le coin d’état dit « ${sentence} » en erreur, le document reste, aucune question`, reply.type === 'reponse' && reply.data.ouvert === false && got.status === sentence && got.statusClass === 'error-msg' && got.text.includes(ZIP_TEXT) && !(await dialogOf(page)).open, { reply, got });
+  }
+  check('aucun sélecteur de fichier, rien d’écrit, aucune boîte native', (await importState(page)).picker === 0 && await nothingWritten() && o.natives.length === 0, o.natives);
   await o.context.close();
 
   // Un document en lecture seule refuse, sans même lire le fichier.
@@ -851,6 +909,9 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   reply = await askImport(readonly.page, 'word', SOURCES.word);
   got = await importState(readonly.page);
   check('… et pour un fichier Word : `{ ouvert: false }`, rien ne change, le fichier n’est même pas lu, aucun sélecteur', reply.type === 'reponse' && reply.data.ouvert === false && got.status === before.status && got.name === 'Départ A défaut' && JSON.stringify(await readonly.page.evaluate(() => window.__docxReads)) === '[]' && got.picker === 0, { reply, before, got });
+  reply = await askImport(readonly.page, 'html', SOURCES.html);
+  got = await importState(readonly.page);
+  check('… et pour une page HTML : `{ ouvert: false }`, rien ne change, aucun sélecteur', reply.type === 'reponse' && reply.data.ouvert === false && got.status === before.status && got.name === 'Départ A défaut' && got.picker === 0, { reply, before, got });
   await readonly.context.close();
 }
 
@@ -901,6 +962,29 @@ console.log('\n== « Nouveau > Importer » au démarrage : le fichier est dans l
   check('`GfsLink.opening()` garde l’importation (la valeur `word`, un `File`)', await o.page.evaluate(() => { const i = GfsLink.opening().importation; return !!i && i.valeur === 'word' && i.fichier instanceof File && i.fichier.name === 'bilan.docx'; }));
   await o.context.close();
 
+  // HTML (13/11) : aucune extension à installer, la page (ou l'archive ZIP de la page) suit le ★ comme les autres.
+  o = await startImporting('html', SOURCES.html);
+  await waitStatus(o.page, /^HTML importé/);
+  got = await importState(o.page);
+  check('html : la page du fichier est à l’écran (son titre et son texte), sans nom ni modèle courant (le ★ s’était ouvert avant, l’import a suivi)', got.current == null && got.name === '' && got.list === '' && got.text.includes('Page HTML de GFS') && got.text.includes(HTML_TEXT) && got.opened.join() === '1,null', got);
+  check('le coin d’état dit « HTML importé. Nommez le modèle puis enregistrez-le. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', got.status === IMPORTED.html.fr, got);
+  check('aucun sélecteur de fichier, aucune fenêtre de rapport, rien d’écrit', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(o.page)).open && await nothingWritten(o.page), got);
+  check('`GfsLink.opening()` garde l’importation (la valeur `html`, un `File`)', await o.page.evaluate(() => { const i = GfsLink.opening().importation; return !!i && i.valeur === 'html' && i.fichier instanceof File && i.fichier.name === 'page.html'; }));
+  await o.context.close();
+
+  o = await startImporting('html', SOURCES.zip);
+  await waitStatus(o.page, /^HTML importé/);
+  got = await importState(o.page);
+  check('html, une archive ZIP : la page de l’archive est à l’écran avec son image reprise, sans nom ni modèle courant, avec la phrase du menu « + »', got.current == null && got.name === '' && got.text.includes('Archive HTML de GFS') && got.text.includes(ZIP_TEXT) && got.images === 1 && got.status === IMPORTED.html.fr, got);
+  check('`GfsLink.opening()` garde l’importation (la valeur `html`, une archive : un `File`)', await o.page.evaluate(() => { const i = GfsLink.opening().importation; return !!i && i.valeur === 'html' && i.fichier instanceof File && i.fichier.name === 'page.zip'; }));
+  await o.context.close();
+
+  o = await startImporting('html', SOURCES.html, { lang: 'en' });
+  await waitStatus(o.page, /^HTML imported/);
+  got = await importState(o.page);
+  check('en anglais : « HTML imported. Name the template, then save it. », la page du fichier est à l’écran', got.status === IMPORTED.html.en && got.text.includes(HTML_TEXT) && got.current == null, got);
+  await o.context.close();
+
   o = await startImporting('markdown', SOURCES.markdown, { lang: 'en' });
   await waitStatus(o.page, /^Markdown imported/);
   got = await importState(o.page);
@@ -933,6 +1017,13 @@ console.log('\n== « Nouveau > Importer » au démarrage : le fichier est dans l
   got = await importState(o.page);
   usualOrder(got, 'un fichier qui n’est pas un document Word');
   check('… et le coin d’état dit « Ce fichier n’est pas un document Word (.docx) lisible. » en erreur', got.status === REFUSED.word && got.statusClass === 'error-msg', got);
+  await o.context.close();
+
+  o = await startImporting('html', NOT_A_ZIP);
+  await waitStatus(o.page, /n’est pas une page HTML/);
+  got = await importState(o.page);
+  usualOrder(got, 'une archive qui n’en est pas une');
+  check('… et le coin d’état dit « Ce fichier n’est pas une page HTML lisible. » en erreur', got.status === REFUSED.html && got.statusClass === 'error-msg', got);
   await o.context.close();
 
   // Ce que l'app ne peut pas importer : le modèle habituel, sans vierge à la place.
