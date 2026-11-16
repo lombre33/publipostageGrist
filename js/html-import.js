@@ -29,7 +29,7 @@ const HtmlImport = (function () {
   const MIN_CONTRAST = 1.6;
 
   // Les genres du compte rendu, dans l'ordre de la fenêtre (`html.import.report.<genre>`).
-  const REPORT_KEYS = ['imagesRelative', 'imagesExternal', 'pixels', 'relativeLinks', 'embedded', 'svg', 'formFields', 'scripts', 'navigation', 'hidden', 'relativeSizes', 'stylesUnread', 'variables'];
+  const REPORT_KEYS = ['imagesRelative', 'imagesHeavy', 'imagesExternal', 'pixels', 'relativeLinks', 'pagesOther', 'embedded', 'svg', 'formFields', 'scripts', 'navigation', 'hidden', 'relativeSizes', 'stylesLinked', 'stylesUnread', 'variables'];
 
   // Les erreurs que la personne peut corriger (mauvais fichier) : `code` dit laquelle (js/main-import.js:reportHtmlImportError).
   const fail = (code, extra) => Object.assign(new Error('Import HTML : ' + code), { code }, extra);
@@ -57,6 +57,137 @@ const HtmlImport = (function () {
     return decode(new Uint8Array(await file.arrayBuffer()));
   }
 
+  // --- Les voisins du fichier : images et feuilles de style ----------------------------------------------------------------------------------------
+  // Une page enregistrée par un navigateur ou par Word range ses images et ses feuilles de style à côté d'elle (`Page_files/image001.png`) : un fichier choisi seul n'a pas ses voisins (un mot à la place des
+  // images), mais une archive ZIP de la page, ou un dossier ou plusieurs fichiers déposés ensemble les ont. Une source de voisins est une liste d'entrées { path, size, bytes() } ; `sourceOf` l'indexe
+  // et rend `find(chemin)`. Un chemin s'écrit comme la page l'écrit (relatif au dossier de la page, `../` permis, `%20`, barres obliques inverses) ; il se retrouve exactement, puis sans tenir compte des
+  // majuscules, puis par son seul nom de fichier quand aucun autre fichier ne porte ce nom.
+  const LIMITS = ExportCommon.Ooxml.LIMITS;
+  const MAX_SHEET_BYTES = 1024 * 1024;
+  const PAGE_FILE = /\.(?:html?|xhtml)$/i;
+  const dirOf = path => (path.lastIndexOf('/') === -1 ? '' : path.slice(0, path.lastIndexOf('/')));
+  const baseNameOf = path => path.slice(path.lastIndexOf('/') + 1);
+  function normalizePath(path) {
+    const parts = [];
+    String(path).replace(/\\/g, '/').split('/').forEach((segment) => {
+      if (segment === '..') parts.pop();
+      else if (segment && segment !== '.') parts.push(segment);
+    });
+    return parts.join('/');
+  }
+  function sourceOf(entries) {
+    const exact = new Map();
+    const lower = new Map();
+    const names = new Map();
+    entries.forEach((entry) => {
+      const path = normalizePath(entry.path);
+      exact.set(path, entry);
+      lower.set(path.toLowerCase(), lower.has(path.toLowerCase()) ? null : entry);
+      const name = baseNameOf(path).toLowerCase();
+      names.set(name, names.has(name) ? null : entry);
+    });
+    return {
+      count: entries.length,
+      find(path) { const key = normalizePath(path); return exact.get(key) || lower.get(key.toLowerCase()) || names.get(baseNameOf(key).toLowerCase()) || null; },
+    };
+  }
+  // Où un `src` ou un `href` écrit dans la page se trouve dans la source : null pour une adresse qui n'est pas un chemin (web, data:, ancre, vide) ; `file:` ne garde que son chemin.
+  function localPathOf(written, pageDir) {
+    let value = String(written || '').trim().replace(/[?#].*$/, '');
+    if (!value || /^\/\//.test(value)) return null;
+    if (/^file:/i.test(value)) value = value.replace(/^file:\/*/i, '/');
+    else if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return null;
+    try { value = decodeURIComponent(value); } catch (e) { /* un « % » seul : le chemin tel quel */ }
+    value = value.replace(/\\/g, '/');
+    return value.charAt(0) === '/' ? value.slice(1) : (pageDir ? pageDir + '/' : '') + value;
+  }
+  // Le type d'une image d'après ses premiers octets (jamais d'après son extension : un fichier renommé n'est pas une image) ; '' pour tout autre fichier, SVG compris.
+  function sniffImage(bytes) {
+    const at = (i, text) => text.split('').every((c, k) => bytes[i + k] === c.charCodeAt(0));
+    if (bytes.length > 3 && bytes[0] === 0x89 && at(1, 'PNG')) return 'image/png';
+    if (bytes.length > 2 && bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return 'image/jpeg';
+    if (at(0, 'GIF8')) return 'image/gif';
+    if (at(0, 'RIFF') && at(8, 'WEBP')) return 'image/webp';
+    if (at(0, 'BM') && bytes.length > 14) return 'image/bmp';
+    if (at(4, 'ftypavif') || at(4, 'ftypavis')) return 'image/avif';
+    return '';
+  }
+  function dataUriOf(bytes, mime) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(new Blob([bytes], { type: mime }));
+    });
+  }
+  // Ce que la page demande à ses voisins : { images: Map(src écrit → { uri } ou { heavy: true }), sheets: Map(href écrit → texte) }. Une page qui déclare un <base> web lit ses adresses relatives sur le web,
+  // pas dans ce dossier : rien n'est pris. Une image trop lourde (une seule : 25 Mo ; toutes ensemble : 80 Mo, comme Word) reste un mot ; un fichier qui n'est pas une image aussi (il n'est pas trouvé).
+  async function neighboursOf(text, source, pageDir) {
+    const found = { images: new Map(), sheets: new Map() };
+    if (!source || !source.count) return found;
+    const doc = new DOMParser().parseFromString(text, 'text/html');
+    if (baseOf(doc)) return found;
+    const uris = new Map();
+    let total = 0;
+    for (const img of Array.from(doc.querySelectorAll('img[src]'))) {
+      const written = (img.getAttribute('src') || '').trim();
+      if (found.images.has(written)) continue;
+      const path = localPathOf(written, pageDir);
+      const entry = path === null ? null : source.find(path);
+      if (!entry) continue;
+      if (uris.has(entry)) { found.images.set(written, uris.get(entry)); continue; }
+      let result = null;
+      if (entry.size > LIMITS.image || total + entry.size > LIMITS.images) result = { heavy: true };
+      else {
+        let bytes = null;
+        try { bytes = await entry.bytes(); } catch (e) { bytes = null; }
+        const mime = bytes ? sniffImage(bytes) : '';
+        if (mime) { total += bytes.length; result = { uri: await dataUriOf(bytes, mime) }; }
+      }
+      if (result) { uris.set(entry, result); found.images.set(written, result); }
+    }
+    for (const link of Array.from(doc.querySelectorAll('link[href]'))) {
+      if (!isScreenSheet(link)) continue;
+      const written = (link.getAttribute('href') || '').trim();
+      const path = localPathOf(written, pageDir);
+      const entry = path === null ? null : source.find(path);
+      if (!entry || entry.size > MAX_SHEET_BYTES || found.sheets.has(written)) continue;
+      try { found.sheets.set(written, decode(await entry.bytes())); } catch (e) { /* illisible : comptée au compte rendu */ }
+    }
+    return found;
+  }
+  // La page à importer parmi des chemins : la moins profonde, `index` avant les autres, puis l'ordre des noms.
+  function pickPage(paths) {
+    const pages = paths.filter(path => PAGE_FILE.test(path) && !/(?:^|\/)__MACOSX\//.test(path));
+    const depth = path => path.split('/').length;
+    const isIndex = path => /^index\.(?:html?|xhtml)$/i.test(baseNameOf(path));
+    pages.sort((a, b) => depth(a) - depth(b) || Number(isIndex(b)) - Number(isIndex(a)) || (a < b ? -1 : a > b ? 1 : 0));
+    return pages[0] || null;
+  }
+  async function isZip(file) {
+    if (!file || file.size < 4) return false;
+    const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+    return head[0] === 0x50 && head[1] === 0x4B && head[2] === 0x03 && head[3] === 0x04;
+  }
+  // Une archive ZIP de la page : la page choisie par `pickPage` et le reste en voisins.
+  async function readArchive(file) {
+    if (file.size > LIMITS.file) throw fail('tooBig', { size: file.size, max: LIMITS.file });
+    try { await ExportCommon.ensureJsZipLoaded(); } catch (e) { throw fail('library'); }
+    let zip;
+    try { zip = await JSZip.loadAsync(await file.arrayBuffer()); } catch (e) { throw fail('unreadable'); }
+    const unpacked = ExportCommon.zipUnpackedBytes(zip);
+    if (unpacked > LIMITS.unpacked) throw fail('tooBig', { size: unpacked, max: LIMITS.unpacked });
+    const entries = Object.keys(zip.files).filter(name => !zip.files[name].dir && !/(?:^|\/)__MACOSX\//.test(name)).map(name => ({
+      path: name, size: zip.files[name]._data && Number.isFinite(zip.files[name]._data.uncompressedSize) ? zip.files[name]._data.uncompressedSize : 0,
+      bytes: async () => zip.file(name).async('uint8array'),
+    }));
+    const pagePath = pickPage(entries.map(entry => entry.path));
+    if (!pagePath) throw fail('noPage');
+    const page = entries.find(entry => entry.path === pagePath);
+    if (page.size > MAX_BYTES) throw fail('tooBig', { size: page.size, max: MAX_BYTES });
+    return { text: decode(await page.bytes()), source: sourceOf(entries), pageDir: dirOf(normalizePath(pagePath)), pages: entries.filter(entry => PAGE_FILE.test(entry.path)).length };
+  }
+
   // --- Petits outils ---------------------------------------------------------------------------------------------------------------------------
   const TEXT_NODE = 3;
   const ELEMENT_NODE = 1;
@@ -67,6 +198,8 @@ const HtmlImport = (function () {
   const isParagraphLike = el => /^(?:P|H[1-6])$/.test(el.tagName);
   // Les éléments que ce module écrit lui-même (formes de l'éditeur) : leurs attributs ne sont pas ceux de la page, le rangement final les laisse.
   let made = new WeakSet();
+  // Les voisins de la page en cours de conversion (neighboursOf) ; null pour un fichier seul.
+  let neighbours = null;
   function make(doc, tag, attrs) {
     const node = doc.createElement(tag);
     Object.keys(attrs || {}).forEach(name => node.setAttribute(name, attrs[name]));
@@ -553,6 +686,16 @@ const HtmlImport = (function () {
     const doc = root.ownerDocument;
     root.querySelectorAll('img').forEach((img) => {
       let src = (img.getAttribute('src') || '').trim();
+      const near = neighbours && neighbours.images.get(src);
+      if (near && near.uri) src = near.uri;
+      else if (near) {
+        report.imagesHeavy = (report.imagesHeavy || 0) + 1;
+        const heavyAlt = (img.getAttribute('alt') || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+        const heavy = doc.createElement('em');
+        heavy.textContent = '[' + (heavyAlt ? I18n.t('markdown.imageNotImportedNamed', { alt: heavyAlt }) : I18n.t('markdown.imageNotImported')) + ']';
+        img.replaceWith(heavy);
+        return;
+      }
       if (/^\/\//.test(src)) src = 'https:' + src;
       else if (base && src && !/^(?:[a-z][a-z0-9+.-]*:|#)/i.test(src)) { try { src = new URL(src, base).href; } catch (e) { /* adresse illisible : elle sera relative */ } }
       const alt = (img.getAttribute('alt') || '').replace(/\s+/g, ' ').trim().slice(0, 120);
@@ -633,12 +776,23 @@ const HtmlImport = (function () {
     const base = original.querySelector('base[href]');
     try { return base && /^https?:\/\//i.test(base.getAttribute('href')) ? new URL(base.getAttribute('href')).href : ''; } catch (e) { return ''; }
   }
-  // Le texte des feuilles de style de l'écran : <style> sans `media` ou pour l'écran. Les feuilles liées (<link rel="stylesheet">) ne sont pas dans le fichier : elles ne sont pas lues.
-  function styleTextOf(original) {
-    return Array.from(original.querySelectorAll('style')).filter((style) => {
-      const media = (style.getAttribute('media') || '').trim().toLowerCase();
-      return !media || media === 'all' || media === 'screen';
-    }).map(style => style.textContent).join('\n');
+  // Une feuille pour l'écran : sans `media` ou `all` / `screen` ; et, pour un <link>, `rel` qui dit « stylesheet » sans « alternate ».
+  function isScreenSheet(el) {
+    const media = (el.getAttribute('media') || '').trim().toLowerCase();
+    if (media && media !== 'all' && media !== 'screen') return false;
+    if (el.localName !== 'link') return true;
+    const rel = (el.getAttribute('rel') || '').toLowerCase().split(/\s+/);
+    return rel.indexOf('stylesheet') !== -1 && rel.indexOf('alternate') === -1;
+  }
+  // Le texte des feuilles de style de l'écran, dans l'ordre de la page : <style>, et les feuilles liées (<link rel="stylesheet">) quand leurs voisins les donnent. Une feuille liée qu'on ne lit pas (rangée à
+  // côté du fichier sans que ses voisins soient là, ou sur un autre site : rien n'est téléchargé) est comptée.
+  function styleTextOf(original, report) {
+    return Array.from(original.querySelectorAll('style, link[href]')).filter(isScreenSheet).map((el) => {
+      if (el.localName === 'style') return el.textContent;
+      const text = neighbours && neighbours.sheets.get((el.getAttribute('href') || '').trim());
+      if (text === undefined || text === null) { report.stylesLinked = (report.stylesLinked || 0) + 1; return ''; }
+      return text;
+    }).join('\n');
   }
 
   // --- Le document ------------------------------------------------------------------------------------------------------------------------------------
@@ -659,14 +813,20 @@ const HtmlImport = (function () {
   }
 
   // Le document d'un texte HTML : { html, headerFooter (ou null), report: [{ key, n }] }, ou une erreur à code (empty, tooMuchText, unreadable).
-  function toDocument(raw) {
+  // `options.neighbours` : ce que neighboursOf a trouvé à côté du fichier (images en data URI, texte des feuilles liées).
+  function toDocument(raw, options) {
+    neighbours = options && options.neighbours ? options.neighbours : null;
+    try { return convert(raw); } finally { neighbours = null; }
+  }
+  function convert(raw) {
     const text = String(raw == null ? '' : raw).replace(/^﻿/, '');
     made = new WeakSet();
     const report = {};
     const original = new DOMParser().parseFromString(text, 'text/html');
     countOriginals(original, report);
+    if (neighbours && neighbours.otherPages) report.pagesOther = neighbours.otherPages;
     const base = baseOf(original);
-    const cssText = styleTextOf(original);
+    const cssText = styleTextOf(original, report);
     // Les boutons et ce que la page cache par l'attribut `hidden` sont retirés AVANT l'assainissement : il ouvrirait un bouton (son texte resterait), il n'a pas de quoi reconnaître un élément caché.
     original.body.querySelectorAll('[hidden], button').forEach(el => el.remove());
     const tree = HtmlSanitize.parseInert(original.body.innerHTML);
@@ -702,13 +862,25 @@ const HtmlImport = (function () {
     return { html, headerFooter: filled ? headerFooter : null, report: REPORT_KEYS.filter(key => report[key]).map(key => ({ key, n: report[key] })), widget: !!report.widget };
   }
 
-  // Le fichier choisi, lu et converti : { html, headerFooter, report }, ou une erreur à code (tooBig, unreadable, empty, tooMuchText).
-  async function fromFile(file) {
-    const text = await readText(file);
+  // Le fichier choisi, lu et converti : { html, headerFooter, report }, ou une erreur à code (tooBig, unreadable, empty, tooMuchText, noPage, library). `file` est une page HTML ou une archive ZIP ;
+  // `options.neighbours` : les fichiers déposés avec la page ([{ path, file }], chemins relatifs au dépôt) et `options.pagePath` le chemin de la page parmi eux.
+  async function fromFile(file, options) {
+    let page;
+    // Un nom en .zip qui n'en est pas un (un faux, un fichier tronqué) n'est pas une page.
+    if (/\.zip$/i.test(file.name || '') && !(await isZip(file))) throw fail('unreadable');
+    if (await isZip(file)) page = await readArchive(file);
+    else {
+      const given = options && Array.isArray(options.neighbours) ? options.neighbours : [];
+      const text = await readText(file);
+      const source = given.length ? sourceOf(given.map(item => ({ path: item.path, size: item.file.size, bytes: async () => new Uint8Array(await item.file.arrayBuffer()) }))) : null;
+      page = { text, source, pageDir: dirOf(normalizePath((options && options.pagePath) || file.name)), pages: given.filter(item => PAGE_FILE.test(item.path) && !/(?:^|\/)__MACOSX\//.test(item.path)).length };
+    }
+    const found = await neighboursOf(page.text, page.source, page.pageDir);
+    found.otherPages = page.pages > 1 ? page.pages - 1 : 0;
     // Le coin d'état se peint avant que la conversion ne tienne la page.
     await new Promise(resolve => setTimeout(resolve, 0));
-    return toDocument(text);
+    return toDocument(page.text, { neighbours: found });
   }
 
-  return { fromFile, toDocument, decode, REPORT_KEYS, MAX_BYTES, MAX_TEXT };
+  return { fromFile, toDocument, decode, pickPage, REPORT_KEYS, MAX_BYTES, MAX_TEXT };
 })();

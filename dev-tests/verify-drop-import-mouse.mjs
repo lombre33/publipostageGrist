@@ -139,10 +139,10 @@ async function run(lang, scheme, w) {
   check(`${L} : Ctrl+Z rend le texte d'avant`, d.text === 'Début du texte|Fin du texte', d);
 
   await seed(page);
-  const unknown = await dragFile(page, { name: 'archive.zip', type: 'application/zip', content: 'zip', phase: 'drop' });
+  const unknown = await dragFile(page, { name: 'archive.rar', type: 'application/vnd.rar', content: 'rar', phase: 'drop' });
   await sleep(500);
   d = await doc(page);
-  check(`${L} : un fichier d'un genre inconnu est refusé dans le coin d'état, rien ne change, le navigateur ne l'ouvre pas`, unknown.dropPrevented && /archive\.zip/.test(d.status) && d.text === 'Début du texte|Fin du texte', { unknown, d });
+  check(`${L} : un fichier d'un genre inconnu est refusé dans le coin d'état, rien ne change, le navigateur ne l'ouvre pas`, unknown.dropPrevented && /archive\.rar/.test(d.status) && d.text === 'Début du texte|Fin du texte', { unknown, d });
 }
 
 let w = null;

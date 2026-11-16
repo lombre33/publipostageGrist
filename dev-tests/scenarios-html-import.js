@@ -398,6 +398,121 @@
       return result(bad);
     });
 
+  // --- Les voisins de la page : archive ZIP, dossier, fichiers déposés ensemble ---------------------------------------------------------------------------
+  const PNG_BYTES = Uint8Array.from(atob(PNG.split(',')[1]), c => c.charCodeAt(0));
+  async function zipOf(entries) {
+    await ExportCommon.ensureJsZipLoaded();
+    const zip = new JSZip();
+    Object.keys(entries).forEach(name => zip.file(name, entries[name]));
+    return new File([await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' })], 'page.zip', { type: 'application/zip' });
+  }
+  const textFile = (text, name) => new File([text], name, { type: 'text/plain' });
+  const dataImages = html => all(html, 'img.editor-image').filter(img => /^data:image\/png;base64,/.test(img.getAttribute('src') || ''));
+  const withNeighbours = (items) => ({ neighbours: items.map(([path, file]) => ({ path, file })), pagePath: items[0][0] });
+  const gone = '<em>[image non reprise';
+
+  add('html_import_a_zip_archive_brings_its_images_and_its_style_sheet',
+    'Une archive ZIP de la page (la page, son dossier d\'images, sa feuille de style liée, un résidu __MACOSX) : les images voisines arrivent en données (adresse encodée, majuscules différentes, deux fois la même), la feuille de style liée donne sa couleur au titre, et le compte rendu n\'a ni image relative ni feuille non lue.',
+    async (h) => {
+      const zip = await zipOf({
+        'index.html': page('<h1>Titre lié</h1><p><img src="Page_files/logo.png" alt="Logo"></p><p><img src="Page_files/Plan%20A.PNG" alt="Plan"> et <img src="Page_files/logo.png" alt="Logo bis"></p>',
+          '<link rel="stylesheet" href="Page_files/style.css"><link rel="icon" href="Page_files/favicon.ico">'),
+        'Page_files/logo.png': PNG_BYTES, 'Page_files/Plan A.png': PNG_BYTES, 'Page_files/style.css': 'h1 { color: #000091 }',
+        '__MACOSX/._index.html': 'residu',
+      });
+      await h.resetEditor();
+      const converted = await HtmlImport.fromFile(zip);
+      Editor.setHTML(converted.html);
+      await sleep(250);
+      const edited = Editor.getHTML();
+      const { bad, expect } = checker();
+      expect('trois images en données (logo deux fois, plan)', dataImages(edited).length === 3, all(edited, 'img').map(img => (img.getAttribute('src') || '').slice(0, 30)));
+      expect('aucun mot « image non reprise »', edited.indexOf(gone) === -1, edited);
+      const title = spanOf(edited, 'Titre lié');
+      expect('le titre a la couleur de la feuille liée', !!title && title.style.color === col('#000091'), title && title.outerHTML);
+      expect('aucun genre au compte rendu', converted.report.length === 0, converted.report);
+      return result(bad);
+    });
+
+  add('html_import_the_archive_page_is_the_shallowest_index_and_the_others_are_counted',
+    'Dans une archive ou un dossier de plusieurs pages, la page importée est la moins profonde, `index` avant les autres, puis l\'ordre des noms ; les autres pages sont comptées ; les chemins se lisent depuis le dossier de la page (../, ./) ; pickPage ne choisit rien sans page.',
+    async () => {
+      const { bad, expect } = checker();
+      expect('index à la racine avant une page plus profonde et avant une page de même niveau', HtmlImport.pickPage(['docs/a.html', 'b.html', 'index.html', 'a.htm']) === 'index.html');
+      expect('sans index : la moins profonde, puis les noms', HtmlImport.pickPage(['x/y/z.html', 'x/b.html', 'x/a.html']) === 'x/a.html');
+      expect('ni __MACOSX ni autre fichier', HtmlImport.pickPage(['__MACOSX/._a.html', 'a.css', 'b.png']) === null);
+      const zip = await zipOf({
+        'site/pages/index.html': page('<p>Page profonde</p><p><img src="../shared/logo.png" alt="Logo"></p><p><img src="./local.png" alt="Local"></p>'),
+        'site/shared/logo.png': PNG_BYTES, 'site/pages/local.png': PNG_BYTES, 'site/autre.html': page('<p>Autre</p>'), 'site/pages/aide.html': page('<p>Aide</p>'),
+      });
+      const converted = await HtmlImport.fromFile(zip);
+      expect('la page la moins profonde est lue : « Autre », avec ses deux voisins pour tout bagage', dom(converted.html).textContent.indexOf('Autre') !== -1 && dom(converted.html).textContent.indexOf('Page profonde') === -1, converted.html);
+      const deep = await HtmlImport.fromFile(await zipOf({
+        'site/pages/index.html': page('<p>Page profonde</p><p><img src="../shared/logo.png" alt="Logo"></p><p><img src="./local.png" alt="Local"></p>'),
+        'site/shared/logo.png': PNG_BYTES, 'site/pages/local.png': PNG_BYTES,
+      }));
+      expect('les chemins ../ et ./ se lisent depuis le dossier de la page', dataImages(deep.html).length === 2 && deep.report.length === 0, deep.report);
+      expect('deux autres pages comptées', reportOf(converted).pagesOther === 2, converted.report);
+      return result(bad);
+    });
+
+  add('html_import_an_archive_without_a_page_or_a_broken_archive_is_refused',
+    'Une archive sans page HTML dit `noPage`, un fichier qui commence comme un zip mais n\'en est pas un dit `unreadable`, une page de plus de 10 Mo dans l\'archive dit `tooBig`.',
+    async () => {
+      const { bad, expect } = checker();
+      const none = await failure(async () => HtmlImport.fromFile(await zipOf({ 'logo.png': PNG_BYTES, 'style.css': 'h1 {}' })));
+      expect('sans page : noPage', none && none.code === 'noPage', none && none.code);
+      const broken = await failure(() => HtmlImport.fromFile(new File([Uint8Array.from([0x50, 0x4B, 0x03, 0x04, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])], 'cassee.zip')));
+      expect('archive cassée : unreadable', broken && broken.code === 'unreadable', broken && broken.code);
+      const big = await failure(async () => HtmlImport.fromFile(await zipOf({ 'index.html': new Uint8Array(10 * 1024 * 1024 + 1).fill(97) })));
+      expect('page de plus de 10 Mo : tooBig', big && big.code === 'tooBig' && big.size > big.max, big && [big.code, big.size, big.max]);
+      return result(bad);
+    });
+
+  add('html_import_files_dropped_together_give_their_images_and_style_sheet_to_the_page',
+    'Une page déposée avec ses voisins (un dossier ou plusieurs fichiers) : l\'image est trouvée au chemin exact, sans tenir compte des majuscules, ou par son seul nom quand aucun autre fichier ne le porte ; deux fichiers du même nom ne se devinent pas ; un fichier qui n\'est pas une image (octets) reste un mot ; la feuille liée est lue.',
+    async () => {
+      const { bad, expect } = checker();
+      const src = page('<h1>Titre</h1><p><img src="Convocation_fichiers/image001.png" alt="A"></p><p><img src="images/photo.png" alt="B"></p><p><img src="doublon/x.png" alt="C"></p><p><img src="faux.png" alt="D"></p>',
+        '<link rel="stylesheet" href="Convocation_fichiers/style.css">');
+      const main = fileOf([src], 'Convocation.htm');
+      const converted = await HtmlImport.fromFile(main, withNeighbours([
+        ['Convocation.htm', main], ['Convocation_fichiers/IMAGE001.PNG', new File([PNG_BYTES], 'IMAGE001.PNG')], ['elsewhere/photo.png', new File([PNG_BYTES], 'photo.png')],
+        ['a/x.png', new File([PNG_BYTES], 'x.png')], ['b/x.png', new File([PNG_BYTES], 'x.png')], ['faux.png', textFile('ceci n\'est pas une image', 'faux.png')],
+        ['Convocation_fichiers/style.css', textFile('h1 { color: #b34000 }', 'style.css')],
+      ]));
+      const found = dataImages(converted.html);
+      expect('deux images trouvées : sans tenir compte des majuscules, puis par le nom seul', found.length === 2, found.length);
+      expect('l\'image du doublon et le faux fichier restent des mots', (converted.html.match(/image non reprise/g) || []).length === 2 && /image non reprise : C/.test(converted.html) && /image non reprise : D/.test(converted.html), converted.html);
+      expect('un compte : deux images relatives', reportOf(converted).imagesRelative === 2 && !reportOf(converted).stylesLinked, converted.report);
+      expect('la feuille liée est appliquée', /color:\s*#b34000|color:\s*rgb\(179, 64, 0\)/i.test(converted.html), converted.html.slice(0, 200));
+      const lone = await HtmlImport.fromFile(main);
+      expect('sans voisins : tout reste des mots et la feuille liée est comptée', reportOf(lone).imagesRelative === 4 && reportOf(lone).stylesLinked === 1, lone.report);
+      return result(bad);
+    });
+
+  add('html_import_a_heavy_image_stays_a_word_and_is_counted',
+    'Une image de plus de 25 Mo (annoncée par l\'archive, jamais lue) reste un mot et se compte ; un fichier qui n\'est pas une image n\'est pas pris pour une image ; une page qui déclare un <base> web lit ses adresses relatives sur le web et ne prend rien dans l\'archive.',
+    async () => {
+      const { bad, expect } = checker();
+      const heavy = await HtmlImport.fromFile(await zipOf({ 'index.html': page('<p>Texte</p><p><img src="grosse.png" alt="Grosse"></p><p><img src="petite.png" alt="Petite"></p>'),
+        'grosse.png': new Uint8Array(26 * 1024 * 1024), 'petite.png': PNG_BYTES }));
+      expect('une image en données, une image lourde dite', dataImages(heavy.html).length === 1 && /image non reprise : Grosse/.test(heavy.html) && reportOf(heavy).imagesHeavy === 1 && !reportOf(heavy).imagesRelative, heavy.report);
+      const based = await HtmlImport.fromFile(await zipOf({ 'index.html': page('<p><img src="logo.png" alt="Logo"></p>', '<base href="https://www.exemple.fr/site/">'), 'logo.png': PNG_BYTES }));
+      expect('avec <base> web : l\'image est web (comptée « autre site »), rien n\'est pris dans l\'archive', dataImages(based.html).length === 0 && reportOf(based).imagesExternal === 1 && /https:\/\/www\.exemple\.fr\/site\/logo\.png/.test(based.html), based.html);
+      return result(bad);
+    });
+
+  add('html_import_a_linked_style_sheet_that_is_not_read_is_counted',
+    'Sans voisins, une feuille liée (<link rel="stylesheet">) rangée à côté ou sur un autre site n\'est pas lue et se compte, une par feuille ; une icône, une feuille pour l\'impression ou une feuille « alternate » ne se comptent pas.',
+    async () => {
+      const { bad, expect } = checker();
+      const converted = imp(page('<h1>Titre</h1>', '<link rel="stylesheet" href="style.css"><link rel="stylesheet" href="https://cdn.exemple.invalid/x.css"><link rel="icon" href="a.ico">'
+        + '<link rel="stylesheet" media="print" href="print.css"><link rel="alternate stylesheet" href="dark.css"><link rel="stylesheet" media="screen" href="ecran.css">'));
+      expect('trois feuilles non lues : style.css, x.css et ecran.css', reportOf(converted).stylesLinked === 3, converted.report);
+      return result(bad);
+    });
+
   // --- Le compte rendu --------------------------------------------------------------------------------------------------------------------------------
   add('html_import_the_report_has_one_line_per_kind_in_order_in_both_languages',
     'Chaque genre du compte rendu (HtmlImport.REPORT_KEYS) a sa phrase en français et en anglais ; un compte rendu ne dit que les genres présents, dans l\'ordre de REPORT_KEYS, avec leur nombre ; une page sans rien à dire n\'a aucune ligne.',
