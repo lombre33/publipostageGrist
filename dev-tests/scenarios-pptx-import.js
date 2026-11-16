@@ -198,8 +198,9 @@
       const slides = slidesOf(r.html);
       expect('trois diapositives dans le texte, séparées par deux sauts de page', slides.length === 3 && (r.html.match(/page-break-marker/g) || []).length === 2, slides.length);
       const text = slides[0].frames[0];
-      expect('le texte posé : x 100, y 80, largeur 300, hauteur 60 (les marges intérieures de PowerPoint sont celles d\'un cadre : rien à compenser)',
-        !!text && near(text.x, 100) && near(text.y, 80) && near(text.w, 300) && near(text.h, 60) && /Bonjour/.test(text.text), text && { x: text.x, y: text.y, w: text.w, h: text.h });
+      // Les marges intérieures de PowerPoint sont celles d'un cadre (rien à compenser) ; le cadre est descendu de l'écart de première ligne de base (firstLineShift : 20 pt à 100 % = 1,11 pt).
+      expect('le texte posé : x 100, y 80 + 1,11 (la ligne de base de PowerPoint), largeur 300, hauteur 60',
+        !!text && near(text.x, 100) && near(text.y, 81.11, 0.1) && near(text.w, 300) && near(text.h, 60) && /Bonjour/.test(text.text), text && { x: text.x, y: text.y, w: text.w, h: text.h });
       expect('le texte est à la taille du fichier (20 pt)', /font-size: 20pt/.test(text ? text.inner : ''), text && text.inner);
       expect('la deuxième diapositive, sans objet, n\'a aucun cadre', slides[1].frames.length === 0);
       expect('la troisième garde son texte', slides[2].frames.length === 1 && /Trois/.test(slides[2].frames[0].text));
@@ -214,7 +215,7 @@
       const four = await run1({ size: [720, 540], slides: [{ shapes: textBox(72, 54, 200, 40, para(run('Quatre tiers', 'sz="2000"'))) }] });
       expect('4:3 : paysage, 190.5x254', four.page.orientation === 'landscape' && four.page.format === '190.5x254', four.page);
       const f = slidesOf(four.html)[0].frames[0];
-      expect('4:3 : le texte reste à ses 72 x 54 points', f && near(f.x, 72) && near(f.y, 54) && near(f.w, 200), f && { x: f.x, y: f.y, w: f.w });
+      expect('4:3 : le texte reste à ses 72 x 54 points (54 + 1,11 : la ligne de base de PowerPoint)', f && near(f.x, 72) && near(f.y, 55.11, 0.1) && near(f.w, 200), f && { x: f.x, y: f.y, w: f.w });
       const portrait = await run1({ size: [540, 960], slides: [{ shapes: '' }] });
       expect('portrait : le sens est portrait, la page 190.5x338.7', portrait.page.orientation === 'portrait' && portrait.page.format === '190.5x338.7', portrait.page);
       // 40 pouces x 22,5 pouces : 2 880 x 1 620 points, bien au delà des 558,8 mm (1 584 points) que l'éditeur accepte au plus.
@@ -300,9 +301,9 @@
       const { bad, expect } = checker();
       const [title, content] = slidesOf(r.html)[0].frames;
       expect('deux cadres (titre, texte), pas un de plus : l\'espace réservé du masque et celui de la mise en page ne sont pas recopiés', slidesOf(r.html)[0].frames.length === 2, slidesOf(r.html)[0].frames.map(f => f.text));
-      expect('le titre prend la place du masque (la mise en page n\'en a pas) : 50, 30, 860 x 70', !!title && near(title.x, 50) && near(title.y, 30) && near(title.w, 860) && near(title.h, 70), title && { x: title.x, y: title.y, w: title.w, h: title.h });
+      expect('le titre prend la place du masque (la mise en page n\'en a pas) : 50, 30 + 2,44 (la ligne de base de PowerPoint), 860 x 70', !!title && near(title.x, 50) && near(title.y, 32.44, 0.1) && near(title.w, 860) && near(title.h, 70), title && { x: title.x, y: title.y, w: title.w, h: title.h });
       expect('le titre : 44 pt, gras, centré, de la couleur accent1 du thème (4472c4)', !!title && /font-size: 44pt; color: #4472c4/.test(title.inner) && /<strong>/.test(title.inner) && /text-align: center/.test(title.inner), title && title.inner);
-      expect('le texte prend la place de la MISE EN PAGE (60, 140, 840 x 340), pas celle du masque', !!content && near(content.x, 60) && near(content.y, 140) && near(content.w, 840) && near(content.h, 340), content && { x: content.x, y: content.y, w: content.w, h: content.h });
+      expect('le texte prend la place de la MISE EN PAGE (60, 140 + 1,55 pour la ligne de base de PowerPoint, 840 x 340), pas celle du masque', !!content && near(content.x, 60) && near(content.y, 141.55, 0.1) && near(content.w, 840) && near(content.h, 340), content && { x: content.x, y: content.y, w: content.w, h: content.h });
       const list = content && content.el.querySelector('ul');
       expect('trois éléments de liste, dont le sous-point emboîté sous « Premier » : <ul><li>Premier<ul><li>Sous-point</li></ul></li><li>Deuxième</li></ul>',
         !!list && list.querySelectorAll(':scope > li').length === 2 && /^Premier/.test(list.children[0].textContent) && !!list.children[0].querySelector(':scope > ul > li') && /Deuxième/.test(list.children[1].textContent), content && content.inner);
@@ -548,6 +549,92 @@
   const lnPts = pt => `<a:lnSpc><a:spcPts val="${Math.round(pt * 100)}"/></a:lnSpc>`;
   const spcPts = (name, pt) => `<a:${name}><a:spcPts val="${Math.round(pt * 100)}"/></a:${name}>`;
   const spcPct = (name, pct) => `<a:${name}><a:spcPct val="${Math.round(pct * 1000)}"/></a:${name}>`;
+
+  // Les espaces qui se suivent : l'éditeur lit « a   b » en « a b » (il replie les blancs à la lecture du texte) ; l'import écrit donc la première ordinaire et les suivantes insécables.
+  add('pptx_import_runs_of_spaces_keep_their_width',
+    'Les espaces qui se suivent dans un texte du fichier gardent leur largeur : « Un   deux » (trois espaces) est écrit avec une espace ordinaire puis des insécables et l\'éditeur garde les trois (il lisait « Un deux » : les colonnes alignées à l\'espace se décalaient de 14 à 28 pt) ; une espace seule, y compris entre deux séries de caractères, reste ordinaire',
+    async (h) => {
+      const r = await run1({ slides: [{ shapes: lone(para(sm('Un   deux  trois') + sm(' quatre')) + para(sm('Cinq six'))) }] });
+      const { bad, expect } = checker();
+      expect('l\'import écrit « Un   deux  trois » avec une espace ordinaire puis des insécables, et laisse les espaces seules', r.html.indexOf('Un   deux  trois') >= 0 && /Cinq six</.test(r.html) && />\s*quatre</.test(r.html), r.html.slice(r.html.indexOf('Un') - 20, r.html.indexOf('Un') + 120));
+      const html = await inEditor(h, r);
+      const paragraphs = Array.from(slidesOf(html)[0].frames[0].el.querySelectorAll('p')).map(p => p.textContent);
+      expect('dans l\'éditeur, les trois espaces et les deux espaces sont là (8 + 8 signes), l\'espace seule aussi', paragraphs[0] === 'Un   deux  trois quatre' && paragraphs[1] === 'Cinq six', paragraphs.map(t => t.replace(/ /g, '·')));
+      return result(bad);
+    });
+
+  // Le texte alternatif : un nom de fichier n'est pas une description (python-pptx et d'autres écrivent `descr="logo.png"`).
+  add('pptx_import_a_file_name_is_not_an_alt_text',
+    'Un texte alternatif qui n\'est que le nom du fichier de l\'image (« logo.png », « IMG_2043.JPG », « Capture d\'écran 2026-11-13.png ») n\'est pas repris : l\'image reste « non décrite » (le rappel de l\'export la réclame, un lecteur d\'écran ne lit pas « logo point png ») ; une vraie description, même qui parle d\'un fichier, est gardée',
+    async () => {
+      const r = await run1({
+        media: { 'logo.png': TWO_TONE() },
+        slides: [{
+          rels: [IMAGE_REL('rId2', 'logo.png')],
+          shapes: pic({ id: 2, name: 'Image 1', x: 20, y: 20, w: 80, h: 40, descr: 'logo.png' })
+            + pic({ id: 3, name: 'Image 2', x: 120, y: 20, w: 80, h: 40, descr: 'Le logo de Rosedale' })
+            + pic({ id: 4, name: 'Image 3', x: 220, y: 20, w: 80, h: 40, descr: 'IMG_2043.JPG' })
+            + pic({ id: 5, name: 'Image 4', x: 320, y: 20, w: 80, h: 40, descr: 'Capture d\'écran 2026-11-13.png' })
+            + pic({ id: 6, name: 'Image 5', x: 420, y: 20, w: 80, h: 40, descr: 'Le schéma du fichier plan.png, vue de dessus' }),
+        }],
+      });
+      const { bad, expect } = checker();
+      const alts = slidesOf(r.html)[0].frames.map((frame) => { const img = frame.el.querySelector('img'); return img ? img.getAttribute('alt') : null; });
+      expect('les trois noms de fichier ne sont pas repris (alt vide), les deux descriptions le sont', alts.join('|') === '|Le logo de Rosedale|||Le schéma du fichier plan.png, vue de dessus', alts);
+      return result(bad);
+    });
+
+  // La première ligne de base : PowerPoint pose l'interligne en plus AU-DESSUS de la ligne (la ligne de base est à une ligne moins le bas de la police), le navigateur le partage dessus et dessous. Le texte posé à la boîte du fichier
+  // était donc trop haut (60 pt : 3,3 pt ; un titre à 150 % : 7 pt). Mesuré dans le vrai éditeur, en Arial (boîte des glyphes 1,117 : la mesure est refusée avec une autre police).
+  add('pptx_import_text_lands_on_the_powerpoint_baseline',
+    'Le texte importé tombe sur la ligne de base de PowerPoint : à 1 pt près, la première ligne de base du texte dans l\'éditeur est celle que PowerPoint dessine (la boîte du fichier + son marge haute + une ligne simple, 1,2 fois la taille fois l\'interligne, moins le bas de la police) pour 60 pt à 100 %, 20 pt à 150 %, 12 pt à 80 %, 36 pt à 50 pt exacts et un texte centré ; un fichier que l\'export de l\'éditeur a écrit (« Grist Factory ») garde ses cadres où ils sont',
+    async (h) => {
+      const arial = '<a:latin typeface="Arial"/>';
+      const cases = [
+        { label: '60 pt à 100 %', size: 60, line: lnPct(100), ppt: 1.2 },
+        { label: '20 pt à 150 %', size: 20, line: lnPct(150), ppt: 1.8 },
+        { label: '12 pt à 80 %', size: 12, line: lnPct(80), ppt: 0.96 },
+        { label: '36 pt à 50 pt exacts', size: 36, line: lnPts(50), ppt: 50 / 36 },
+        { label: '28 pt centré à 100 %', size: 28, line: lnPct(100), ppt: 1.2, anchor: 'ctr' },
+      ];
+      const boxY = i => 20 + i * 100;
+      const shapes = cases.map((c, i) => textBox(40, boxY(i), 880, 80, para(run('Hxg', `sz="${c.size * 100}"`, arial), '', c.line), Object.assign({ id: 2 + i }, c.anchor ? { body: `anchor="${c.anchor}"` } : {}))).join('');
+      const r = await run1({ slides: [{ shapes }] });
+      const { bad, expect } = checker();
+      const html = await inEditor(h, r);
+      const frames = Array.from(document.querySelectorAll('.tiptap .pp-free-frame'));
+      expect('un cadre par texte', frames.length === cases.length, frames.length);
+      const zoom = EditorCore.layoutZoom(EditorCore.getEditor().view.dom);
+      cases.forEach((c, i) => {
+        const el = frames[i];
+        if (!el) return;
+        const p = el.querySelector('.pp-free-frame-content p');
+        const node = p.querySelector('span').firstChild;
+        const range = document.createRange();
+        range.setStart(node, 0);
+        range.setEnd(node, 1);
+        const glyph = range.getBoundingClientRect();
+        const box = glyph.height / zoom / (c.size * 96 / 72);
+        const frameY = FreeFrame.measuresOf(el).y;
+        const baseline = frameY + 3.6 + ((glyph.top - p.getBoundingClientRect().top) / zoom) * 0.75 + 0.905 * c.size;
+        // La boîte du fichier : texte en haut, sa marge haute (3,6 pt) puis la ligne ; centré, le milieu de la boîte (80 pt de haut) puis la moitié de la ligne.
+        const want = c.anchor === 'ctr'
+          ? boxY(i) + 40 + c.ppt * c.size / 2 - 0.212 * c.size
+          : boxY(i) + 3.6 + (c.ppt - 0.212) * c.size;
+        expect(c.label + ' : la mesure se fait avec une police de 1,117 (la boîte des glyphes d\'Arial), pas ' + box.toFixed(3), near(box, 1.117, 0.07), box);
+        expect(c.label + ' : la ligne de base est à ' + want.toFixed(2) + ' pt (PowerPoint), à 1 pt près', near(baseline, want, 1), { baseline: Math.round(baseline * 100) / 100, want: Math.round(want * 100) / 100, frameY });
+      });
+      // Un fichier de l'export de l'éditeur : ses cadres restent où l'export les a mis (sans cela, chaque aller-retour descendrait le texte).
+      const appXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Grist Factory</Application></Properties>';
+      const shape = textBox(40, 100, 800, 80, para(run('Titre', 'sz="6000"', arial), '', lnPct(100)), { id: 2 });
+      const own = await run1({ slides: [{ shapes: shape }], parts: { 'docProps/app.xml': appXml } });
+      const other = await run1({ slides: [{ shapes: shape }], parts: { 'docProps/app.xml': appXml.replace('Grist Factory', 'Microsoft Office PowerPoint') } });
+      const ownY = slidesOf(own.html)[0].frames[0].y;
+      const otherY = slidesOf(other.html)[0].frames[0].y;
+      expect('un fichier écrit par « Grist Factory » garde son cadre à y = 100', near(ownY, 100, 0.05), ownY);
+      expect('le même fichier réenregistré par PowerPoint est descendu de l\'écart de ligne de base (60 pt à 100 % : 3,33 pt)', near(otherY, 103.33, 0.1), otherY);
+      return result(bad);
+    });
 
   add('pptx_import_line_spacing_and_paragraph_spaces_become_the_paragraph_settings',
     'Les trois réglages d\'interligne et d\'espaces de « Paragraphe… » viennent du fichier : interligne en pour cent (150 % = 1,758 fois la taille ; 100 %, la ligne simple de l\'éditeur = 1,172 ; 121 %, son interligne d\'origine = aucun réglage), interligne exact en points (28 pt sur du 14 pt = 2), espaces avant et après en points et en pour cent d\'une ligne (50 % de 14 pt = 8,4 pt) ; l\'espace avant le premier paragraphe et après le dernier n\'est pas posé (on pense que PowerPoint ne le pose pas : à vérifier sur un vrai fichier) ; le rapport n\'a rien à dire ; l\'éditeur garde les réglages',
@@ -2903,7 +2990,7 @@
       expect('aucun cadre n\'est signalé comme sortant de sa diapositive (le point rouge de la bande ne s\'allume pas)', out.length === 0, out.map(el => FreeFrame.measuresOf(el)));
       const boxTop = el => (el.querySelector('.pp-free-frame-box').getBoundingClientRect().top - s.rect.top) / s.zoom * 0.75;
       const title = frames[1];
-      expect('le titre de la diapositive 1 (après le bandeau du masque) est à 60 pt du haut de la page, le bandeau à 0', !!title && near(boxTop(title), 60, 1.5) && near(boxTop(frames[0]), 0, 1.5), title && [boxTop(frames[0]), boxTop(title)]);
+      expect('le titre de la diapositive 1 (après le bandeau du masque) est à 60 pt du haut de la page (+ 1,77 pour la ligne de base de PowerPoint), le bandeau à 0', !!title && near(boxTop(title), 61.8, 1) && near(boxTop(frames[0]), 0, 1.5), title && [boxTop(frames[0]), boxTop(title)]);
       const pageSize = PageLayout.getPageSizePt();
       expect('la page de l\'éditeur est celle du fichier : 960 x 540 pt', near(pageSize.width, 960.09, 0.2) && near(pageSize.height, 540, 0.2), pageSize);
       expect('l\'HTML relu après chargement garde les attributs des cadres (x, y, largeur, hauteur)', /data-ff-x="40"/.test(html) && /data-ff-w="880"/.test(html), html.slice(0, 200));

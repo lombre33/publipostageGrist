@@ -446,10 +446,10 @@ const ExportCommon = (function () {
     const escAttr = text => escText(text).replace(/"/g, '&quot;');
     // Lu à l'appel : le nœud-tabulation est celui de js/tab-indent.js, chargé avant ce fichier mais qu'aucun autre ne garantit à la lecture de celui-ci.
     const tabMarkup = () => '<span class="' + TabIndent.CLASS + '" style="white-space: pre-wrap">' + TabIndent.TAB + '</span>';
-    // Un texte en balisage : les espaces qui se suivent restent (insécables), une tabulation devient le nœud-tabulation de l'éditeur, un retour à la ligne devient <br>.
+    // Un texte en balisage : les espaces qui se suivent restent (la première ordinaire, les suivantes \u00a0 : l'éditeur lit « a   b » en « a b »), une tabulation devient le nœud-tabulation de l'éditeur, un retour à la ligne devient <br>.
     function spaced(text) {
       const tab = tabMarkup();
-      return escText(String(text).replace(ILLEGAL, '')).replace(/\t/g, tab).replace(/ {2,}/g, run => ' ' + ' '.repeat(run.length - 1)).replace(/\r\n?|\n|\u000b/g, '<br>');
+      return escText(String(text).replace(ILLEGAL, '')).replace(/\t/g, tab).replace(/ {2,}/g, run => ' ' + '\u00a0'.repeat(run.length - 1)).replace(/\r\n?|\n|\u000b/g, '<br>');
     }
     // Le chemin d'une partie visée par une relation (`target`) depuis la partie qui la porte ; null pour une adresse extérieure.
     function resolvePath(partPath, target) {

@@ -112,6 +112,24 @@ const PptxImport = (function () {
   const TURNED_TEXT = /^(vert|vert270)$/;
   // Les espaces de PowerPoint dits en pour cent (`spcPct`) sont ce pour cent de la hauteur d'une ligne simple, 1,2 fois la taille du texte.
   const POWERPOINT_LINE = 1.2;
+  // Où tombe la première ligne de base. PowerPoint (et LibreOffice) posent l'interligne en plus AU-DESSUS de la ligne : la ligne de base est à une ligne simple (1,2 fois la taille, fois le pour cent) moins le bas de la police.
+  // Le navigateur partage l'interligne en deux, moitié dessus et moitié dessous, et la ligne ne peut pas être plus basse que celle de la cale du paragraphe (10,5 pt). Sans correction, un texte posé à la boîte du
+  // fichier est trop HAUT, et d'autant plus que la taille est grande (un titre de 60 pt : 6 pt). Mesures de la police de l'éditeur dans le cas courant (Arial, Arimo) : boîte des glyphes 1,117, haut 0,905, bas 0,212.
+  const GLYPH_BOX = 1.117;
+  const GLYPH_ASCENT = 0.905;
+  const GLYPH_DESCENT = 0.212;
+  const STRUT_PT = 10.5;
+  // `lead` : { size (points de la page, la plus grande taille de la première ligne), css (l'interligne que l'éditeur pose, en fois la taille), ppt (celui de PowerPoint, en fois la taille) }.
+  // Rend de combien de points descendre le texte pour que sa première ligne de base soit celle de PowerPoint ; `anchor` et `natural` (la hauteur du texte, mesurée) corrigent aussi le texte centré ou en bas, dont la
+  // boîte est centrée ou collée en bas sur sa hauteur et non sur celle de PowerPoint.
+  function firstLineShift(lead, anchor, natural) {
+    if (!lead || !(lead.size > 0)) return 0;
+    const above = size => (lead.css * size - GLYPH_BOX * size) / 2 + GLYPH_ASCENT * size;
+    const browser = Math.max(above(lead.size), above(STRUT_PT));
+    const powerpoint = (lead.ppt - GLYPH_DESCENT) * lead.size;
+    const blockGap = natural > 0 && lead.css > 0 ? natural * (1 - lead.ppt / lead.css) : 0;
+    return powerpoint - browser + (anchor === 'b' ? blockGap : (anchor === 'ctr' ? blockGap / 2 : 0));
+  }
   const LINE_PRESETS = new Set(['line', 'straightConnector1', 'bentConnector2', 'bentConnector3', 'bentConnector4', 'bentConnector5', 'curvedConnector2', 'curvedConnector3', 'curvedConnector4', 'curvedConnector5']);
   const BENT_PRESETS = /^(bent|curved)Connector/;
   // Les puces que l'éditeur dessine de lui-même (css/editor-v2.css) : le rond, le rond creux et le carré plein ; toute autre est un signe choisi (js/bullet-format.js, « Puce… »).
@@ -482,7 +500,11 @@ const PptxImport = (function () {
     const props = kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr']), 'cNvPr');
     if (kid(props, 'hlinkClick') && !linked) losses.add('objectLinks');
   }
-  const altOfObject = node => (attr(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr']), 'cNvPr'), 'descr') || '').trim();
+  // Le texte alternatif d'un objet tel que le fichier l'écrit. Un générateur de présentation (python-pptx, une exportation) y met le NOM du fichier de l'image (« logo.png ») : ce n'est pas une description, et le
+  // garder ferait lire « logo point png » par un lecteur d'écran et passer l'image pour décrite (js/alt-reminder.js). Un texte qui n'est qu'un nom de fichier (il finit par l'extension d'une image) vaut donc « sans texte alternatif ».
+  const FILE_NAME_ALT = /^.{1,200}\.(?:png|jpe?g|jpe|gif|bmp|dib|tiff?|svg|webp|emf|wmf|heic|heif|avif|ico)$/i;
+  const descriptionOf = raw => { const text = String(raw || '').trim(); return FILE_NAME_ALT.test(text) ? '' : text; };
+  const altOfObject = node => descriptionOf(attr(kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr']), 'cNvPr'), 'descr'));
   // « Marquer comme décorative » (l'extension `decorative` de Microsoft dans les propriétés de l'objet, `cNvPr/extLst/ext`) : l'objet que PowerPoint dit sans texte à lire.
   const decorativeOfObject = node => {
     const props = kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr', 'nvGrpSpPr', 'nvGraphicFramePr']), 'cNvPr');
@@ -817,11 +839,12 @@ const PptxImport = (function () {
   function spacingOf(para, size, shape, first, last, indents) {
     const grow = shape.scale * shape.env.ctx.k;
     const spaceOf = spacing => (!spacing ? null : (spacing.pct ? (spacing.val / 100000) * size * POWERPOINT_LINE * grow : (spacing.val / 100) * grow));
-    const line = para.lnSpc && !para.lnSpc.pct
-      ? (para.lnSpc.val / 100) / size
-      : (((para.lnSpc ? para.lnSpc.val : 100000) / 1000) - (shape.lineCut || 0)) / 100 * ParagraphFormat.NATURAL_LINE;
+    const exact = !!(para.lnSpc && !para.lnSpc.pct);
+    const percent = (((para.lnSpc ? para.lnSpc.val : 100000) / 1000) - (shape.lineCut || 0)) / 100;
+    const line = exact ? (para.lnSpc.val / 100) / size : percent * ParagraphFormat.NATURAL_LINE;
     const page = shape.env.ctx.k / EMU_PER_PT;
     return {
+      pptLine: exact ? line : percent * POWERPOINT_LINE,
       lineHeight: line, spaceBefore: first ? null : spaceOf(para.spcBef), spaceAfter: last ? null : spaceOf(para.spcAft),
       indentLeft: indents ? para.marL * page : null, indentFirst: indents ? para.indent * page : null,
     };
@@ -895,6 +918,7 @@ const PptxImport = (function () {
       items.push({
         html, align: para.algn, rtl: para.rtl, list, empty, text, size: endSize * shape.scale * env.ctx.k,
         format,
+        lead: { size: (tallest || endSize) * shape.scale * env.ctx.k, css: format.lineHeight, ppt: format.pptLine },
       });
       if (!empty) {
         texted = true;
@@ -1520,7 +1544,7 @@ const PptxImport = (function () {
     const frameLink = env.decor ? '' : frameLinkOf(pic, env);
     const showAction = !!FrameLink.actionOf(frameLink);
     const link = env.decor || showAction ? null : objectLinkOf(pic, env);
-    out.push(pictureFrame(finished ? finished.box : box, finished ? finished.data : data, attr(at(pic, 'nvPicPr/cNvPr'), 'descr'), alpha, env.decor, link && link.href, showAction ? frameLink : '', decorativeOfObject(pic)));
+    out.push(pictureFrame(finished ? finished.box : box, finished ? finished.data : data, descriptionOf(attr(at(pic, 'nvPicPr/cNvPr'), 'descr')), alpha, env.decor, link && link.href, showAction ? frameLink : '', decorativeOfObject(pic)));
     // Ce que l'éditeur ne garde pas de l'image : ce que finishedPicture n'a pas fait (une forme inconnue, un réglage ou un effet qu'il ne dessine pas), son lien.
     const losses = new Set();
     const geometry = kid(spPr, ['prstGeom', 'custGeom']);
@@ -1778,6 +1802,8 @@ const PptxImport = (function () {
       frame.w += 2 * FRAME_PAD_X_PT - left - right;
       frame.y += top - FRAME_PAD_Y_PT;
       frame.h += 2 * FRAME_PAD_Y_PT - top - bottom;
+      // La première ligne de base de PowerPoint : le texte en haut est descendu (ou monté) de l'écart d'interligne ; centré ou en bas, c'est plus bas, quand la hauteur du texte est mesurée.
+      if (!box.rot && !ctx.ownExport && anchor === 't' && items.length) frame.y += firstLineShift(items[0].lead, 't', 0);
       const first = items.find(item => !item.empty);
       if (bodyAttr(bodies, 'wrap') === 'none' && first && !box.rot) {
         // Un peu plus large, du côté où le texte déborde, sans sortir de la page.
@@ -1800,6 +1826,7 @@ const PptxImport = (function () {
       if (plain && !box.rot && fitted.natural < frame.h - 1 && anchor !== 't') {
         frame.y += anchor === 'b' ? frame.h - fitted.natural : (frame.h - fitted.natural) / 2;
         frame.h = fitted.natural;
+        if (!ctx.ownExport && items.length) frame.y += firstLineShift(items[0].lead, anchor, fitted.natural);
       }
     }
     out.push(FreeFrame.html(frame, hasText ? assemble(animateParagraphs(items, attr(kid(nv, 'cNvPr'), 'id'), env)) : '<p></p>'));
@@ -2745,7 +2772,12 @@ const PptxImport = (function () {
         else report.sections += 1;
       });
     });
+    // Un fichier que l'export de l'éditeur a écrit (`docProps/app.xml`, « Grist Factory ») garde ses cadres où il les a mis : la hauteur du texte n'y est pas corrigée (firstLineShift), sans quoi chaque aller-retour
+    // l'abaisserait d'un cran de plus. Un fichier repris et réenregistré par PowerPoint n'a plus cette marque : son texte est celui que PowerPoint dessine.
+    const appProps = await pkg.xml('docProps/app.xml');
+    const writtenBy = appProps ? ((descendants(appProps.documentElement, 'Application')[0] || {}).textContent || '') : '';
     const ctx = {
+      ownExport: /^\s*Grist Factory\s*$/i.test(writtenBy),
       pkg, k: page.k, pageEmu, report, realReport: report, images: new Map(), imageBytes: 0, decorBytes: 0, prepared: new Map(), skipped: new Set(), objects: 0, masters: new Map(), layouts: new Map(), counted: new Set(), holderUse: new Map(),
       defaultText: kid(presentation, 'defaultTextStyle'), presentationRels, pace: pacer(), embedded: 0, heavy: buffer.byteLength >= HEAVY_FILE_BYTES,
     };
