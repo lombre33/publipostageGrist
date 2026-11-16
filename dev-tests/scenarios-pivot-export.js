@@ -202,7 +202,7 @@
 
   cases.push({
     id: 'pivotExport_excel_writes_the_table',
-    description: 'L’Excel d’une ligne écrit les rangées du tableau croisé dans la feuille (les cases en texte tant que le vrai tableau croisé d’Excel n’est pas là), la ligne qui le porte ne laisse rien de son texte',
+    description: 'L’Excel d’une ligne écrit les rangées du tableau croisé dans la feuille de la ligne (le tableau écrit, en texte), la ligne qui le porte ne laisse rien de son texte',
     run: async (h) => {
       await seed(h);
       await ExportCommon.ensureJsZipLoaded();
@@ -223,6 +223,178 @@
       const pass = !!header && same(header.filter(Boolean), ['Categorie', 'Réserve', 'Picking', 'Quai', 'Total']) && rowsMatch(rowsOnly.map(r => r.slice(0, 5)), wanted)
         && !strings.some(s => /jamais lu/.test(s)) && strings.includes('Titre') && strings.includes('Note du bas');
       return { pass, notes: JSON.stringify({ rows }) };
+    },
+  });
+
+  // Les parties XML d'un classeur lues telles qu'elles sont écrites (DOM de l'archive) : `files` = { chemin -> document }.
+  async function xmlParts(zip, pattern) {
+    const out = {};
+    for (const name of Object.keys(zip.files).filter(n => pattern.test(n))) out[name] = new DOMParser().parseFromString(await zip.file(name).async('string'), 'application/xml');
+    return out;
+  }
+  const attrOf = (el, name) => (el ? el.getAttribute(name) : null);
+  const kids = (el, tag) => Array.from(el.children).filter(c => c.localName === tag);
+
+  cases.push({
+    id: 'pivotExport_excel_native_pivot_table',
+    description: 'L’Excel d’une ligne porte aussi le VRAI tableau croisé d’Excel (cache, enregistrements, définition du tableau, relations, types de contenu), sur sa feuille, avec les données à plat dans la dernière : les mêmes sommes que le tableau écrit, les rangées et les colonnes dans l’ordre du tableau, les totaux, le format de nombre',
+    run: async (h) => {
+      await seed(h);
+      await ExportCommon.ensureJsZipLoaded();
+      const { blob } = await XlsxExport.getXlsxBlobForRecord(gridHtml(DEF), 'PvAtlas', RECORD_NORD(), '');
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      window.__collected = { xlsx: await new Promise(resolve => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.readAsDataURL(blob); }) };
+      const names = Object.keys(zip.files);
+      const parts = { cache: 'xl/pivotCache/pivotCacheDefinition1.xml', records: 'xl/pivotCache/pivotCacheRecords1.xml', table: 'xl/pivotTables/pivotTable1.xml' };
+      const present = Object.values(parts).every(n => names.includes(n)) && names.includes('xl/pivotCache/_rels/pivotCacheDefinition1.xml.rels') && names.includes('xl/pivotTables/_rels/pivotTable1.xml.rels');
+      const workbook = new DOMParser().parseFromString(await zip.file('xl/workbook.xml').async('string'), 'application/xml');
+      const sheetNames = Array.from(workbook.getElementsByTagName('sheet')).map(el => el.getAttribute('name'));
+      const caches = Array.from(workbook.getElementsByTagName('pivotCache')).map(el => [el.getAttribute('cacheId'), el.getAttribute('r:id')]);
+      const types = await zip.file('[Content_Types].xml').async('string');
+      const typesOk = ['pivotCacheDefinition+xml', 'pivotCacheRecords+xml', 'pivotTable+xml'].every(t => types.includes(t));
+      const workbookRels = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+      const relOk = !!caches[0] && new RegExp('Id="' + caches[0][1] + '"[^>]*pivotCacheDefinition1\\.xml|pivotCacheDefinition1\\.xml[^>]*Id="' + caches[0][1] + '"').test(workbookRels);
+      if (!present) return { pass: false, notes: JSON.stringify({ names }) };
+      const cache = new DOMParser().parseFromString(await zip.file(parts.cache).async('string'), 'application/xml');
+      const records = new DOMParser().parseFromString(await zip.file(parts.records).async('string'), 'application/xml');
+      const table = new DOMParser().parseFromString(await zip.file(parts.table).async('string'), 'application/xml');
+      const root = table.documentElement;
+      const fields = Array.from(cache.getElementsByTagName('cacheField')).map(el => ({ name: el.getAttribute('name'), items: Array.from(el.getElementsByTagName('s')).map(s => s.getAttribute('v')) }));
+      // Les sommes que le cache donne (ses enregistrements), à comparer à celles du tableau écrit.
+      const sums = {}; let grand = 0;
+      Array.from(records.getElementsByTagName('r')).forEach(r => {
+        const cells = Array.from(r.children);
+        const category = fields[0].items[Number(attrOf(cells[0], 'v'))]; const zone = fields[1].items[Number(attrOf(cells[1], 'v'))];
+        const n = cells[2].localName === 'n' ? Number(attrOf(cells[2], 'v')) : null;
+        if (n === null) return;
+        sums[category + '|' + zone] = (sums[category + '|' + zone] || 0) + n; grand += n;
+      });
+      const want = expected(PRODUCTS);
+      const sumsOk = Object.keys(want.cells).every(c => Object.keys(want.cells[c]).every(z => near(sums[c + '|' + z], want.cells[c][z]))) && near(grand, want.grand)
+        && Object.keys(sums).length === Object.values(want.cells).reduce((n, row) => n + Object.keys(row).length, 0);
+      // L'ordre des rangées et des colonnes : celui du tableau (les choix de la colonne, « (vide) » en dernier), pas celui des lignes.
+      const pivotFields = kids(root.getElementsByTagName('pivotFields')[0], 'pivotField');
+      const order = i => kids(pivotFields[i].getElementsByTagName('items')[0], 'item').map(it => fields[i].items[Number(it.getAttribute('x'))]);
+      const orderOk = same(order(0), ORDER) && same(order(1), ZONES);
+      const rowFields = kids(root.getElementsByTagName('rowFields')[0], 'field').map(f => f.getAttribute('x'));
+      const colFields = kids(root.getElementsByTagName('colFields')[0], 'field').map(f => f.getAttribute('x'));
+      const dataField = root.getElementsByTagName('dataField')[0];
+      const shapeOk = same(rowFields, ['0']) && same(colFields, ['1']) && attrOf(dataField, 'fld') === '2' && !dataField.hasAttribute('subtotal') && /Somme de/.test(attrOf(dataField, 'name'))
+        && attrOf(root, 'rowGrandTotals') === '1' && attrOf(root, 'colGrandTotals') === '1' && attrOf(root, 'cacheId') === caches[0][0] && attrOf(cache.documentElement, 'refreshOnLoad') === '1'
+        && attrOf(root.getElementsByTagName('location')[0], 'ref') === 'A3:E9';
+      // La feuille du tableau : les mêmes rangées que le tableau écrit, en vrais nombres (et la feuille des données est la dernière).
+      const sst = new DOMParser().parseFromString(await zip.file('xl/sharedStrings.xml').async('string'), 'application/xml');
+      const strings = Array.from(sst.getElementsByTagName('si')).map(si => Array.from(si.getElementsByTagName('t')).map(t => t.textContent).join(''));
+      const pivotSheetIndex = sheetNames.indexOf('Tableau croisé') + 1;
+      const sheetXml = new DOMParser().parseFromString(await zip.file('xl/worksheets/sheet' + pivotSheetIndex + '.xml').async('string'), 'application/xml');
+      const grid = Array.from(sheetXml.getElementsByTagName('row')).filter(r => Number(r.getAttribute('r')) >= 3).map(r => Array.from(r.getElementsByTagName('c')).map(c => {
+        const v = c.getElementsByTagName('v')[0];
+        if (!v) return null;
+        return c.getAttribute('t') === 's' ? strings[Number(v.textContent)] : Number(v.textContent);
+      }));
+      const bodyRows = grid.slice(2).filter(row => row[0] !== null);
+      const wanted = wantedRows(PRODUCTS);
+      const gridOk = bodyRows.length === wanted.length && bodyRows.every((row, i) => row[0] === wanted[i][0] && wanted[i].slice(1).every((v, j) => (v === null ? row[j + 1] === null || row[j + 1] === undefined : near(row[j + 1], v))));
+      const pass = present && typesOk && relOk && same(sheetNames.slice(-2), ['Tableau croisé', 'Données du tableau croisé']) && sumsOk && orderOk && shapeOk && gridOk;
+      return { pass, notes: JSON.stringify({ sheetNames, caches, typesOk, relOk, sumsOk, orderOk, shapeOk, gridOk, order0: order(0), order1: order(1), grid }) };
+    },
+  });
+
+  // L'archive d'un export lue : les noms des feuilles, les caches, et les parties XML des tableaux croisés (numérotées de 1).
+  async function pivotParts(zip) {
+    const workbook = new DOMParser().parseFromString(await zip.file('xl/workbook.xml').async('string'), 'application/xml');
+    const sheetNames = Array.from(workbook.getElementsByTagName('sheet')).map(el => el.getAttribute('name'));
+    const caches = Array.from(workbook.getElementsByTagName('pivotCache')).map(el => el.getAttribute('cacheId'));
+    const tables = await xmlParts(zip, /^xl\/pivotTables\/pivotTable\d+\.xml$/);
+    const defs = await xmlParts(zip, /^xl\/pivotCache\/pivotCacheDefinition\d+\.xml$/);
+    const recs = await xmlParts(zip, /^xl\/pivotCache\/pivotCacheRecords\d+\.xml$/);
+    return { sheetNames, caches, tables, defs, recs };
+  }
+  // Les enregistrements d'un cache lus : [{ items: [texte de chaque champ de regroupement], n }] pour un cache dont le dernier champ est la valeur.
+  function cacheRows(def, recs) {
+    const fields = Array.from(def.getElementsByTagName('cacheField')).map(el => Array.from(el.getElementsByTagName('s')).map(x => x.getAttribute('v')));
+    return Array.from(recs.getElementsByTagName('r')).map(r => {
+      const cells = Array.from(r.children);
+      const last = cells[cells.length - 1];
+      return { items: cells.slice(0, -1).map((c, i) => fields[i][Number(c.getAttribute('v'))]), n: last.localName === 'n' ? Number(last.getAttribute('v')) : null };
+    });
+  }
+
+  cases.push({
+    id: 'pivotExport_excel_native_pivot_two_levels_and_count',
+    description: 'Un tableau à deux niveaux de rangées, sans colonne, qui compte les lignes : le tableau croisé d’Excel a ses deux champs en rangées (la rangée qui garde son groupe reprend le niveau d’avant), « Nombre » comme fonction, un champ « Ligne » dans les données, le total général en bas seulement',
+    run: async (h) => {
+      await seed(h);
+      await ExportCommon.ensureJsZipLoaded();
+      const def = { v: 1, source: { table: 'PvProduits', scope: 'table' }, rows: ['Categorie', 'Emplacement.Zone'], cols: [], value: null, agg: 'count' };
+      const { blob } = await XlsxExport.getXlsxBlobForRecord(gridHtml(def), 'PvAtlas', RECORD_NORD(), '');
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const { sheetNames, caches, tables, defs, recs } = await pivotParts(zip);
+      if (caches.length !== 1) return { pass: false, notes: JSON.stringify({ sheetNames, caches }) };
+      const root = tables['xl/pivotTables/pivotTable1.xml'].documentElement;
+      const rows = cacheRows(defs['xl/pivotCache/pivotCacheDefinition1.xml'], recs['xl/pivotCache/pivotCacheRecords1.xml']);
+      const counts = {};
+      rows.forEach(r => { const key = r.items.join('|'); counts[key] = (counts[key] || 0) + (r.n === null ? 0 : r.n); });
+      const wantCounts = {};
+      PRODUCTS.forEach(([, category, location]) => { const key = (category || '(vide)') + '|' + ZONE_BY_LOCATION[location]; wantCounts[key] = (wantCounts[key] || 0) + 1; });
+      const names = Array.from(defs['xl/pivotCache/pivotCacheDefinition1.xml'].getElementsByTagName('cacheField')).map(el => el.getAttribute('name'));
+      const rowItems = Array.from(root.getElementsByTagName('rowItems')[0].children).map(i => ({ r: i.getAttribute('r'), t: i.getAttribute('t'), n: i.children.length }));
+      const location = root.getElementsByTagName('location')[0];
+      const leafRows = Object.keys(wantCounts).length;
+      const dataField = root.getElementsByTagName('dataField')[0];
+      const pass = same(counts, wantCounts) && rows.length === PRODUCTS.length && same(names, ['Categorie', 'Emplacement ▸ Zone', 'Ligne'])
+        && attrOf(dataField, 'subtotal') === 'count' && attrOf(dataField, 'fld') === '2' && root.getElementsByTagName('colFields').length === 0
+        && attrOf(root, 'colGrandTotals') === '1' && rowItems.length === leafRows + 1 && rowItems[rowItems.length - 1].t === 'grand'
+        && rowItems.filter(i => i.r === '1').length > 0 && rowItems.filter(i => i.t !== 'grand' && i.r !== '1').every(i => i.n === 2) && rowItems.filter(i => i.r === '1').every(i => i.n === 1)
+        && attrOf(location, 'firstDataCol') === '2' && attrOf(location, 'firstDataRow') === '1' && attrOf(location, 'ref') === 'A3:C' + (3 + leafRows + 1)
+        && root.getElementsByTagName('colItems')[0].children.length === 1;
+      return { pass, notes: JSON.stringify({ sheetNames, counts, names, rowItems, ref: attrOf(location, 'ref') }) };
+    },
+  });
+
+  cases.push({
+    id: 'pivotExport_excel_native_pivot_skipped_when_excel_could_not_redo_it',
+    description: 'Un tableau dont Excel ne saurait pas refaire les sommes (une liste de choix en rangées : une ligne y serait comptée deux fois dans les totaux) n’a que son tableau écrit : une seule feuille, aucune partie de tableau croisé, les rangées écrites comme avant',
+    run: async (h) => {
+      await seed(h);
+      await ExportCommon.ensureJsZipLoaded();
+      const stub = window.__gristStub;
+      stub.setVariables('PvProduits', { Categorie: 'Choice', Etiquettes: 'ChoiceList', Emplacement: 'Ref:PvEmplacements', Stock: 'Numeric', PrixAchat: 'Numeric', Atlas: 'Ref:PvAtlas', manualSort: 'ManualSortPos' }, { Categorie: CATEGORIES });
+      stub.setRows('PvProduits', PRODUCT_ROWS.map(r => Object.assign({}, r, { Atlas: 1, Etiquettes: r.id % 2 ? ['L', 'neuf', 'promo'] : ['L', 'neuf'] })));
+      await GristAPI.refreshSchema();
+      const def = { v: 1, source: { table: 'PvProduits', scope: 'table' }, rows: ['Etiquettes'], cols: [], value: { kind: 'column', path: 'Stock' }, agg: 'sum' };
+      const { blob } = await XlsxExport.getXlsxBlobForRecord(gridHtml(def), 'PvAtlas', RECORD_NORD(), '');
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const { sheetNames, caches } = await pivotParts(zip);
+      const names = Object.keys(zip.files);
+      const sst = new DOMParser().parseFromString(await zip.file('xl/sharedStrings.xml').async('string'), 'application/xml');
+      const strings = Array.from(sst.getElementsByTagName('si')).map(si => Array.from(si.getElementsByTagName('t')).map(t => t.textContent).join(''));
+      const pass = sheetNames.length === 1 && caches.length === 0 && !names.some(n => /pivot/i.test(n)) && strings.includes('neuf') && strings.includes('promo') && strings.includes('Total');
+      return { pass, notes: JSON.stringify({ sheetNames, caches, parts: names.filter(n => /pivot/i.test(n)) }) };
+    },
+  });
+
+  cases.push({
+    id: 'pivotExport_excel_native_pivot_in_a_single_workbook',
+    description: 'Un classeur unique de deux lignes de la page : chaque ligne a son tableau croisé (ses lignes liées), sur sa feuille numérotée, dans un cache à lui, et toutes les données à plat sont dans la même feuille, la dernière',
+    run: async (h) => {
+      await seed(h);
+      await ExportCommon.ensureJsZipLoaded();
+      const book = await XlsxExport.createSingleWorkbook({});
+      await book.appendRecord(gridHtml(LINKED), 'PvAtlas', RECORD_NORD(), 'Nord', null, null);
+      await book.appendRecord(gridHtml(LINKED), 'PvAtlas', RECORD_SUD(), 'Sud', null, null);
+      const zip = await JSZip.loadAsync(await (await book.toBlob()).arrayBuffer());
+      const { sheetNames, caches, tables, defs, recs } = await pivotParts(zip);
+      const tableCount = Object.keys(tables).length;
+      if (tableCount !== 2 || caches.length !== 2) return { pass: false, notes: JSON.stringify({ sheetNames, caches, tableCount }) };
+      const sumOf = n => cacheRows(defs['xl/pivotCache/pivotCacheDefinition' + n + '.xml'], recs['xl/pivotCache/pivotCacheRecords' + n + '.xml']).reduce((sum, r) => sum + (r.n || 0), 0);
+      const nord = expected(PRODUCTS.filter(p => p[0] % 2)).grand;
+      const sud = expected(PRODUCTS.filter(p => !(p[0] % 2))).grand;
+      const sources = Array.from(zip.file('xl/pivotCache/pivotCacheDefinition1.xml') ? [1, 2] : []).map(n => attrOf(defs['xl/pivotCache/pivotCacheDefinition' + n + '.xml'].getElementsByTagName('worksheetSource')[0], 'sheet'));
+      const pass = same(sheetNames, ['Nord', 'Sud', 'Tableau croisé', 'Tableau croisé (2)', 'Données du tableau croisé']) && near(sumOf(1), nord) && near(sumOf(2), sud)
+        && new Set(sources).size === 1 && sources[0] === 'Données du tableau croisé'
+        && same(Array.from(new Set(Object.values(tables).map(t => attrOf(t.documentElement, 'name')))).sort(), ['Tableau croisé 1', 'Tableau croisé 2']);
+      return { pass, notes: JSON.stringify({ sheetNames, caches, sums: [sumOf(1), sumOf(2)], want: [nord, sud], sources }) };
     },
   });
 

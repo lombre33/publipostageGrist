@@ -332,6 +332,13 @@ const I18nTextsTemplates = {
   // Un graphique créé exporté en Excel est un graphique natif (js/xlsx-export.js) : ses cellules s'écrivent dans une feuille à part, en dernier, et chaque graphique y a son titre (« Graphique 1 », « Graphique 1 - Ventes »).
   'xlsx.chart.sheet': { fr: 'Données des graphiques', en: 'Chart data' },
   'xlsx.chart.name': { fr: 'Graphique', en: 'Chart' },
+  // Le tableau croisé d'une grille exporté en Excel est un vrai tableau croisé d'Excel (js/xlsx-export.js, js/xlsx-pivot.js) : sa feuille, la feuille de ses données à plat, le champ qu'on compte quand rien n'est additionné, le champ « Valeurs » d'Excel et
+  // le champ « renseigné » d'une colonne dont on compte les valeurs.
+  'xlsx.pivot.sheet': { fr: 'Tableau croisé', en: 'Pivot table' },
+  'xlsx.pivot.data': { fr: 'Données du tableau croisé', en: 'Pivot table data' },
+  'xlsx.pivot.line': { fr: 'Ligne', en: 'Row' },
+  'xlsx.pivot.values': { fr: 'Valeurs', en: 'Values' },
+  'xlsx.pivot.filled': { fr: '{name} (renseigné)', en: '{name} (filled in)' },
   'toolbar.exportXlsx': { fr: 'Exporter en Excel…', en: 'Export to Excel…' },
   'toolbar.exportXlsxBatch': { fr: 'Exporter les valeurs de la table en Excel (ZIP)…', en: 'Export table values to Excel (ZIP)…' },
   'toolbar.exportXlsxSingle': { fr: 'Exporter les valeurs de la table dans un seul classeur…', en: 'Export table values to a single workbook…' },

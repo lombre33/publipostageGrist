@@ -196,7 +196,7 @@ const PivotZones = (function () {
     if (loaded.error) return loaded;
     const result = Pivot.compute(loaded.def, loaded.records, { labels: { empty: I18n.t('pivot.empty'), yes: I18n.t('pivot.yes'), no: I18n.t('pivot.no') } });
     if (result.error) return { def: loaded.def, error: errorText(result.error) };
-    return { def: loaded.def, result, records: loaded.records.length, readsAll: loaded.readsAll };
+    return { def: loaded.def, result, records: loaded.records.length, loaded: loaded.records, readsAll: loaded.readsAll };
   }
 
   // === Le tableau écrit ===
@@ -312,9 +312,22 @@ const PivotZones = (function () {
     (ctx.pivotProblems = ctx.pivotProblems || []).push({ name: (def && describe(def)) || I18n.t('pivot.window.title'), text: bare(text) });
   }
 
+  // Ce que l'export Excel écrit en plus du tableau, le vrai tableau croisé d'Excel (js/xlsx-pivot.js) : { def, result, flat, title, names, valueTitle } - `flat` : les lignes lues à plat (js/pivot.js:flat),
+  // `title` : le nom du tableau (describe), `names` : le nom de chaque colonne de la source (les colonnes de regroupement, lignes puis colonnes, puis la valeur) tel que Grist l'écrit en tête de colonne.
+  // Null quand Excel ne saurait pas le calculer (une liste de choix en regroupement, une valeur en erreur) : le tableau écrit en texte reste seul.
+  function nativeInfo(built) {
+    const def = built.def;
+    const flat = Pivot.flat(def, built.loaded, { labels: { empty: I18n.t('pivot.empty'), yes: I18n.t('pivot.yes'), no: I18n.t('pivot.no') } });
+    if (flat.unsupported) return null;
+    const table = def.source.table;
+    const names = flat.dims.map(path => trim(pathLabel(table, path)));
+    names.push(def.value ? trim(def.value.kind === 'formula' ? formulaLabel(def.value.formula) : pathLabel(table, def.value.path)) : '');
+    return { def, result: built.result, flat, title: describe(def), names, valueTitle: valueTitle(def) };
+  }
+
   // Remplace chaque ligne de tableau croisé de `root` par son tableau. `ctx` : celui de LoopRules.createContext, partagé avec le déroulé des boucles (lecture mémorisée des tables ; `readsAll` y dit à la Lecture de se redessiner
-  // quand la vue de Grist change). Sans ligne de la page (rien à afficher) la ligne est simplement retirée.
-  async function expand(root, tableId, record, ctx) {
+  // quand la vue de Grist change). Sans ligne de la page (rien à afficher) la ligne est simplement retirée. `onPivot(info)` (facultatif, l'export Excel) reçoit nativeInfo de chaque tableau écrit, dans l'ordre du document.
+  async function expand(root, tableId, record, ctx, onPivot) {
     if (!root) return;
     for (const tr of Array.from(root.querySelectorAll(ZONE_SELECTOR))) {
       const table = tr.closest('table');
@@ -335,6 +348,7 @@ const PivotZones = (function () {
           rows = toRows(laid.rows, columns, widths);
           const failed = laid.rows.reduce((found, row) => found || row.cells.find(c => c.error), null);
           if (failed) noteProblem(ctx, built.def, failed.text);
+          else if (onPivot) { const info = nativeInfo(built); if (info) onPivot(info); }
         }
       } catch (e) {
         console.error('[PivotZones] échec du tableau croisé', e);
@@ -346,5 +360,5 @@ const PivotZones = (function () {
     }
   }
 
-  return { ATTR, ZONE_SELECTOR, defOf, pathLabel, formulaLabel, valueTitle, describe, load, compute, layout, cellText, toRows, expand, errorText, errorLine };
+  return { ATTR, ZONE_SELECTOR, defOf, pathLabel, formulaLabel, valueTitle, describe, load, compute, layout, cellText, toRows, nativeInfo, expand, errorText, errorLine };
 })();

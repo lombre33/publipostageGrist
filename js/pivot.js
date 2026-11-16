@@ -31,6 +31,7 @@
 // qui la contiennent, au lieu de fausser une somme sans que personne le voie. `from` : le premier niveau de la rangée qui change par rapport à la rangée
 // d'avant (0 pour la première) : avec deux colonnes en lignes, on n'écrit le texte du niveau 1 qu'à partir de là. Sans colonne en colonnes, `cols` n'a
 // qu'une colonne sans texte, `rowTotals` vaut `null` et `colTotals` n'a que le total général (la ligne du bas).
+// `flat` met les mêmes lignes à plat (une ligne par ligne source, le texte de chaque colonne de regroupement, la valeur) pour le vrai tableau croisé d'Excel que l'export Excel écrit (js/xlsx-pivot.js).
 const Pivot = (function () {
   const VERSION = 1;
   const AGGREGATES = ['sum', 'count', 'average', 'min', 'max'];
@@ -327,5 +328,31 @@ const Pivot = (function () {
     };
   }
 
-  return { VERSION, AGGREGATES, SORTS, SCOPES, MAX_ROW_LEVELS, COLUMN_WARNING, normalize, normalizeFormat, needs, compute };
+  // Les lignes lues À PLAT, pour un tableau croisé que le tableur calcule lui-même (le vrai tableau croisé d'Excel, js/xlsx-pivot.js) : une ligne par ligne source, avec le texte de chaque colonne de regroupement
+  // (lignes puis colonnes, ceux de `compute`) et la valeur qu'elle apporte. Rend { dims: [chemin], rows: [{ labels: [texte], n: nombre|null, filled }] }, ou { unsupported: 'list' | 'error' } : une liste de choix
+  // met une ligne dans plusieurs rangées (le total d'un tableur compterait deux fois), et une valeur en erreur n'a pas de nombre à additionner - le tableau écrit en texte, lui, sait le dire.
+  function flat(raw, records, opts) {
+    const def = normalize(raw);
+    if (!def) return { unsupported: 'error' };
+    const labels = Object.assign({ empty: '(vide)', yes: 'Oui', no: 'Non' }, opts && opts.labels);
+    const measure = measureReader(def);
+    if (measure.error) return { unsupported: 'error' };
+    const paths = def.rows.concat(def.cols);
+    const rows = [];
+    for (const record of Array.isArray(records) ? records : []) {
+      const dims = (record && record.dims) || {};
+      const found = measure.read(record || {});
+      if (found.error) return { unsupported: 'error' };
+      const texts = [];
+      for (const path of paths) {
+        const buckets = bucketsOf(dims[path], labels);
+        if (buckets.length > 1) return { unsupported: 'list' };
+        texts.push(buckets[0].label);
+      }
+      rows.push({ labels: texts, n: found.n === undefined ? null : found.n, filled: !!found.filled });
+    }
+    return { dims: paths, rows };
+  }
+
+  return { VERSION, AGGREGATES, SORTS, SCOPES, MAX_ROW_LEVELS, COLUMN_WARNING, normalize, normalizeFormat, needs, compute, flat };
 })();

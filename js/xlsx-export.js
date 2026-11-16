@@ -3,7 +3,7 @@
 // architecture que js/docx-export.js : le HTML du modèle passe par ReaderMode.preview (les bulles prennent leur valeur), puis un parcours du DOM
 // résolu fabrique le fichier.
 //
-// L'Excel n'est qu'un affichage : ni formule ni calcul. Une case n'est écrite en vrai nombre ou en vraie date que si elle ne contient que cela (une
+// L'Excel n'est qu'un affichage : ni formule ni calcul (hors le tableau croisé, voir plus bas). Une case n'est écrite en vrai nombre ou en vraie date que si elle ne contient que cela (une
 // seule bulle nombre ou date, ou un seul « Calcul » écrit en nombre, sans autre texte), avec le format d'affichage de la bulle ; toute autre case est
 // du texte.
 //
@@ -486,6 +486,9 @@ const XlsxExport = (function () {
   const NS_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
   const CHART_CT = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
   const DRAWING_CT = 'application/vnd.openxmlformats-officedocument.drawing+xml';
+  const PIVOT_CACHE_CT = 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml';
+  const PIVOT_RECORDS_CT = 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml';
+  const PIVOT_TABLE_CT = 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml';
   const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
   const EMPTY_DRAWING = XML_HEAD + '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"></xdr:wsDr>';
   // L'élément `drawing` d'une feuille se place avant ceux qui le suivent dans le schéma (legacyDrawing, picture, tableParts, extLst...), sinon à la fin.
@@ -522,17 +525,19 @@ const XlsxExport = (function () {
     const place = at === undefined ? sheetXml.lastIndexOf('</worksheet>') : at;
     return sheetXml.slice(0, place) + `<drawing r:id="${relId}"/>` + sheetXml.slice(place);
   }
-  async function injectCharts(zip, items) {
-    // Ajoute au zip du classeur les graphiques `items` ([{ chart (la ligne de chartListOf), xml (sa partie, formules retournées), name }]) : leur partie xl/charts/chartN.xml, leur ancre dans le dessin de leur
-    // feuille (celui d'ExcelJS quand la feuille porte des images, un neuf sinon), les relations et les types de contenu.
-    const read = async name => (zip.file(name) ? zip.file(name).async('string') : null);
-    const workbookXml = await read('xl/workbook.xml');
-    const workbookRels = relationsOf(await read('xl/_rels/workbook.xml.rels'));
-    const sheetPathOf = (name) => {
+  function sheetPathFinder(workbookXml, workbookRels) {
+    // Le chemin, dans l'archive, de la feuille qui porte ce nom (« xl/worksheets/sheet3.xml ») ; null si le classeur ne l'a pas.
+    return (name) => {
       const tag = Array.from(workbookXml.matchAll(/<sheet\b[^>]*>/g), m => m[0]).find(t => xmlRead((/\sname="([^"]*)"/.exec(t) || [])[1] || '') === name);
       const rel = tag && workbookRels.find(r => r.id === (/\sr:id="([^"]*)"/.exec(tag) || [])[1]);
       return rel ? 'xl/' + rel.target.replace(/^\//, '').replace(/^xl\//, '') : null;
     };
+  }
+  async function injectCharts(zip, items) {
+    // Ajoute au zip du classeur les graphiques `items` ([{ chart (la ligne de chartListOf), xml (sa partie, formules retournées), name }]) : leur partie xl/charts/chartN.xml, leur ancre dans le dessin de leur
+    // feuille (celui d'ExcelJS quand la feuille porte des images, un neuf sinon), les relations et les types de contenu.
+    const read = async name => (zip.file(name) ? zip.file(name).async('string') : null);
+    const sheetPathOf = sheetPathFinder(await read('xl/workbook.xml'), relationsOf(await read('xl/_rels/workbook.xml.rels')));
     let types = await read('[Content_Types].xml');
     const addOverride = (part, type) => { if (types.indexOf('PartName="' + part + '"') < 0) types = types.replace('</Types>', `<Override PartName="${part}" ContentType="${type}"/></Types>`); };
     const names = Object.keys(zip.files);
@@ -604,6 +609,145 @@ const XlsxExport = (function () {
     return { sheet, parts };
   }
   const chartName = index => I18n.t('xlsx.chart.name') + ' ' + (index + 1);
+
+  // Les tableaux croisés de la grille (« Tableau croisé » de la grille, js/pivot-zones.js) : le tableau écrit en texte reste dans la feuille de l'enregistrement, et le fichier porte en plus le VRAI tableau croisé d'Excel,
+  // que la personne retourne, filtre et actualise (js/xlsx-pivot.js en fait le plan et les parties). Il a sa propre feuille (Excel rafraîchit un tableau croisé sur place : posé dans la grille, il écraserait ses voisines) et ses
+  // données, à plat, sont écrites dans une feuille « Données du tableau croisé », la dernière ; `workbookToBlob` ajoute à l'archive les parties que ExcelJS ne sait pas écrire. Un tableau qu'Excel ne saurait pas refaire (une
+  // liste de choix en regroupement, une valeur en erreur) n'a que son tableau écrit.
+  const pivotsOf = new WeakMap(); // classeur -> ses tableaux croisés : { sheetName (la feuille de l'enregistrement), info (PivotZones.nativeInfo) }
+  const pivotListOf = (workbook) => { if (!pivotsOf.has(workbook)) pivotsOf.set(workbook, []); return pivotsOf.get(workbook); };
+  function notePivots(workbook, sheet, pivots) {
+    if (!sheet || !pivots || !pivots.length) return;
+    pivots.forEach(info => pivotListOf(workbook).push({ sheetName: sheet.name, info }));
+  }
+  const PIVOT_HEAD_FILL = 'FFE8EDF3';
+  const BUILT_IN_FORMATS = { General: 0, 0: 1, '0.00': 2, '#,##0': 3, '#,##0.00': 4, '0%': 9, '0.00%': 10 };
+  function pivotNumberCode(info, built) {
+    // Le format des nombres du tableau, en code d'Excel : celui de la définition (séparateurs, décimales, devise, pourcentage) ; un nombre de lignes s'écrit en entier, et le zéro se masque comme dans le tableau écrit
+    // (« Écriture des nombres » : le zéro ne s'écrit que si la définition le demande). Sans décimales réglées, le même nombre de décimales pour tous (celui du plus précis, trois au plus) : le code « #,##0.### »
+    // écrirait « 17. » pour un entier.
+    const { def } = info;
+    const format = def.format || null;
+    const counting = def.agg === 'count';
+    const numbers = [].concat(...built.sheet.grid.map(row => row.map(cell => cell.value))).filter(value => typeof value === 'number');
+    const placesOf = (value) => {
+      const shown = format && format.percent ? Math.round(value * 1e11) / 1e9 : value;
+      const text = String(Math.abs(shown));
+      return /e-/.test(text) ? 3 : (/\.(\d+)/.exec(text) || [, ''])[1].length;
+    };
+    const places = Math.min(3, numbers.reduce((top, value) => Math.max(top, placesOf(value)), 0));
+    let wanted = format;
+    if (counting) wanted = { type: 'number', style: format && format.style ? format.style : 'none', decimals: 0 };
+    else if (places && !(format && format.decimals != null)) wanted = Object.assign({}, format, { type: 'number', decimals: places });
+    const code = numberFormatCode(wanted, places && !counting ? 0.5 : 1);
+    return counting || (format && format.zero === 'show') ? code : code + ';-' + code + ';';
+  }
+  function writePivotSheets(workbook, jobs) {
+    // Les feuilles des tableaux croisés : une par tableau (ses cases, comme Excel les montre) puis la feuille des données, la dernière - par tableau, un titre, une ligne d'en-têtes et ses lignes, une ligne vide avant le
+    // suivant. Rend { sheets, items } : les feuilles ajoutées et, par tableau, de quoi écrire ses parties (injectPivots) ; items est vide quand aucun tableau n'est refaisable.
+    const labels = { total: I18n.t('pivot.total'), line: I18n.t('xlsx.pivot.line'), filled: name => I18n.t('xlsx.pivot.filled', { name }) };
+    const built = [];
+    jobs.forEach(job => { const plan = XlsxPivot.plan(job.info, labels); if (plan) built.push({ job, plan }); });
+    if (!built.length) return { sheets: [], items: [] };
+    const taken = new Set(workbook.worksheets.map(sheet => sheet.name.toLowerCase()));
+    const several = new Set(jobs.map(job => job.sheetName)).size > 1;
+    // Les cases de chaque tableau, sur sa feuille : le titre en A1, le tableau à partir de la ligne 3.
+    const PIVOT_TOP = 3;
+    const sheets = [];
+    const items = built.map(({ job, plan }, at) => {
+      const sheet = workbook.addWorksheet(sheetNameFrom(I18n.t('xlsx.pivot.sheet'), taken), { views: [{ showGridLines: false }] });
+      sheets.push(sheet);
+      const code = pivotNumberCode(job.info, plan);
+      const title = sheet.getCell(1, 1);
+      title.value = (several ? job.sheetName + ' - ' : '') + plan.title;
+      title.font = fontOf({ bold: true });
+      plan.sheet.grid.forEach((cells, r) => cells.forEach((cell, c) => {
+        const target = sheet.getCell(PIVOT_TOP + r, 1 + c);
+        if (cell.value !== undefined) { target.value = cell.value; target.numFmt = code; target.alignment = { horizontal: 'right' }; }
+        else if (cell.text !== '') target.value = cell.text;
+        target.font = fontOf({ bold: !!(cell.bold || cell.head) });
+        if (cell.head) target.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PIVOT_HEAD_FILL } };
+        target.border = CELL_BORDER;
+      }));
+      for (let c = 0; c < plan.sheet.width; c++) sheet.getColumn(1 + c).width = c < plan.depth ? 26 : 16;
+      return { sheetName: sheet.name, plan, code, name: I18n.t('xlsx.pivot.sheet') + ' ' + (at + 1), cacheId: at + 1 };
+    });
+    // Leurs données à plat, dans une même feuille.
+    const data = workbook.addWorksheet(sheetNameFrom(I18n.t('xlsx.pivot.data'), taken));
+    sheets.push(data);
+    let top = 1;
+    items.forEach((item) => {
+      const head = data.getCell(top, 1);
+      head.value = item.name + ' - ' + item.plan.title;
+      head.font = fontOf({ bold: true });
+      item.sourceSheet = data.name;
+      item.sourceTop = top + 1;
+      item.plan.source.headers.forEach((name, c) => {
+        const cell = data.getCell(top + 1, 1 + c);
+        cell.value = name;
+        cell.font = fontOf({ bold: true });
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PIVOT_HEAD_FILL } };
+      });
+      item.plan.source.rows.forEach((row, r) => row.forEach((value, c) => {
+        if (value === null) return;
+        const cell = data.getCell(top + 2 + r, 1 + c);
+        cell.value = value;
+        cell.font = fontOf({});
+      }));
+      top += item.plan.source.rows.length + 3;
+    });
+    for (let c = 1; c <= 8; c++) data.getColumn(c).width = 24;
+    return { sheets, items };
+  }
+  function numberFormatIdIn(stylesXml, code) {
+    // Le numéro, dans le classeur écrit, du format de nombre `code` : un format du classeur (xl/styles.xml) ou un de ceux qu'Excel connaît d'avance ; 0 (le standard) s'il n'y est pas.
+    if (Object.prototype.hasOwnProperty.call(BUILT_IN_FORMATS, code)) return BUILT_IN_FORMATS[code];
+    const wanted = xmlAttr(code);
+    const found = Array.from(String(stylesXml || '').matchAll(/<numFmt\b[^>]*>/g), m => m[0]).find(tag => (/\sformatCode="([^"]*)"/.exec(tag) || [])[1] === wanted);
+    return found ? Number((/\snumFmtId="(\d+)"/.exec(found) || [])[1]) || 0 : 0;
+  }
+  async function injectPivots(zip, items) {
+    // Ajoute au zip du classeur les tableaux croisés `items` (ceux de writePivotSheets) : par tableau, la définition du cache, ses enregistrements et la définition du tableau (xl/pivotCache, xl/pivotTables), leurs relations, les
+    // types de contenu, et la liste des caches du classeur (`pivotCaches` de xl/workbook.xml, après tout ce que ExcelJS y écrit).
+    const read = async name => (zip.file(name) ? zip.file(name).async('string') : null);
+    const put = (name, text) => zip.file(name, text, { createFolders: false });
+    let workbookXml = await read('xl/workbook.xml');
+    const workbookRels = relationsOf(await read('xl/_rels/workbook.xml.rels'));
+    const sheetPathOf = sheetPathFinder(workbookXml, workbookRels);
+    const styles = await read('xl/styles.xml');
+    let types = await read('[Content_Types].xml');
+    const addOverride = (part, type) => { if (types.indexOf('PartName="' + part + '"') < 0) types = types.replace('</Types>', `<Override PartName="${part}" ContentType="${type}"/></Types>`); };
+    const refreshed = Math.round((Date.now() / 86400000 + 25569) * 1e5) / 1e5;
+    const caches = [];
+    for (const item of items) {
+      const sheetPath = sheetPathOf(item.sheetName);
+      if (!sheetPath) throw new Error('feuille du tableau croisé introuvable : ' + item.sheetName);
+      const n = item.cacheId;
+      const parts = XlsxPivot.xml(item.plan, {
+        sourceSheet: item.sourceSheet, sourceTop: item.sourceTop, pivotTop: 3, cacheId: n, name: item.name, numFmtId: numberFormatIdIn(styles, item.code),
+        totalLabel: I18n.t('pivot.total'), valuesCaption: I18n.t('xlsx.pivot.values'), refreshed, relationId: 'rId1',
+      });
+      put(`xl/pivotCache/pivotCacheDefinition${n}.xml`, parts.cacheDefinition);
+      put(`xl/pivotCache/pivotCacheRecords${n}.xml`, parts.cacheRecords);
+      put(`xl/pivotCache/_rels/pivotCacheDefinition${n}.xml.rels`, relationsXml([{ id: 'rId1', type: NS_REL + '/pivotCacheRecords', target: `pivotCacheRecords${n}.xml` }]));
+      put(`xl/pivotTables/pivotTable${n}.xml`, parts.table);
+      put(`xl/pivotTables/_rels/pivotTable${n}.xml.rels`, relationsXml([{ id: 'rId1', type: NS_REL + '/pivotCacheDefinition', target: `../pivotCache/pivotCacheDefinition${n}.xml` }]));
+      const sheetRelsPath = sheetPath.replace(/([^/]+)$/, '_rels/$1.rels');
+      const sheetRels = relationsOf(await read(sheetRelsPath));
+      sheetRels.push({ id: nextRelId(sheetRels), type: NS_REL + '/pivotTable', target: `../pivotTables/pivotTable${n}.xml` });
+      put(sheetRelsPath, relationsXml(sheetRels));
+      const cacheRel = nextRelId(workbookRels);
+      workbookRels.push({ id: cacheRel, type: NS_REL + '/pivotCacheDefinition', target: `pivotCache/pivotCacheDefinition${n}.xml` });
+      caches.push(`<pivotCache cacheId="${n}" r:id="${cacheRel}"/>`);
+      addOverride(`/xl/pivotCache/pivotCacheDefinition${n}.xml`, PIVOT_CACHE_CT);
+      addOverride(`/xl/pivotCache/pivotCacheRecords${n}.xml`, PIVOT_RECORDS_CT);
+      addOverride(`/xl/pivotTables/pivotTable${n}.xml`, PIVOT_TABLE_CT);
+    }
+    workbookXml = workbookXml.replace('</workbook>', `<pivotCaches>${caches.join('')}</pivotCaches></workbook>`);
+    put('xl/workbook.xml', workbookXml);
+    put('xl/_rels/workbook.xml.rels', relationsXml(workbookRels));
+    put('[Content_Types].xml', types);
+  }
 
   function sheetNameFrom(name, used) {
     // Feuille
@@ -772,7 +916,9 @@ const XlsxExport = (function () {
     const detach = ExportCommon.attachMeasureHost(root, widthPx + 24);
     try {
       await Promise.all(Array.from(root.querySelectorAll('img')).map(img => (img.decode ? img.decode().catch(() => {}) : Promise.resolve())));
-      return await addTableSheet(workbook, name, root, options || {});
+      const sheet = await addTableSheet(workbook, name, root, options || {});
+      notePivots(workbook, sheet, options && options.pivots);
+      return sheet;
     } finally { detach(); }
   }
 
@@ -793,30 +939,52 @@ const XlsxExport = (function () {
     return { landscape: PageLayout.isLandscape(), paperSize: PAPER_SIZES[PageLayout.getFormat()] || PAPER_SIZES.A4, marginsInch: { left: inch(m.left), right: inch(m.right), top: inch(m.top), bottom: inch(m.bottom) } };
   }
 
-  // Le HTML d'un enregistrement dont les bulles ont pris leur valeur (typedCellHook marque les cases à nombre ou date) et le nom de son fichier.
-  const resolveRecord = (htmlContent, tableId, record, filenameTemplate) =>
-    ExportCommon.resolveRecord(htmlContent, tableId, record, filenameTemplate, null, typedCellHook(tableId, record));
+  // Le HTML d'un enregistrement dont les bulles ont pris leur valeur (typedCellHook marque les cases à nombre ou date), le nom de son fichier et ses tableaux croisés (`pivots` : ceux que le document écrit,
+  // PivotZones.nativeInfo, dans l'ordre du document ; la feuille de l'enregistrement les note, voir notePivots).
+  async function resolveRecord(htmlContent, tableId, record, filenameTemplate) {
+    const hook = typedCellHook(tableId, record);
+    const pivots = [];
+    hook.onPivot = info => pivots.push(info);
+    const resolved = await ExportCommon.resolveRecord(htmlContent, tableId, record, filenameTemplate, null, hook);
+    return Object.assign({}, resolved, { pivots });
+  }
+  async function packageWorkbook(workbook, charts, pivots) {
+    // Le classeur en fichier avec ses parties que ExcelJS n'écrit pas : les tableaux croisés et les graphiques natifs. Leurs feuilles s'ajoutent, l'archive s'écrit, puis chaque partie y prend sa place ; les feuilles ajoutées
+    // s'en vont à la fin, qu'il y ait eu échec ou non (l'appelant relit alors le classeur sans elles).
+    let pivotData = null;
+    let chartData = null;
+    try {
+      await ExportCommon.ensureJsZipLoaded();
+      if (pivots.length) { await ExportEngines.ensure('xlsxPivot'); pivotData = writePivotSheets(workbook, pivots); }
+      if (charts.length) chartData = writeChartData(workbook, charts);
+      const zip = await JSZip.loadAsync(await workbook.xlsx.writeBuffer());
+      if (pivotData && pivotData.items.length) await injectPivots(zip, pivotData.items);
+      if (chartData) await injectCharts(zip, charts.map((chart, index) => ({ chart, xml: chartData.parts[index], name: chartName(index) })));
+      return await zip.generateAsync({ type: 'blob', mimeType: XLSX_MIME, compression: 'DEFLATE' });
+    } finally {
+      if (chartData) workbook.removeWorksheet(chartData.sheet.id);
+      if (pivotData) pivotData.sheets.forEach(sheet => workbook.removeWorksheet(sheet.id));
+    }
+  }
   async function workbookToBlob(workbook) {
-    // Le classeur en fichier. Les graphiques natifs (addNativeChart) dont la feuille est encore là (un enregistrement qui échoue retire la sienne) entrent après l'écriture d'ExcelJS : la feuille des données
-    // s'ajoute, l'archive s'écrit, puis chaque graphique y prend sa place. Si cela échoue, la feuille des données s'en va et les images prennent la place des graphiques.
+    // Le classeur en fichier. Les graphiques natifs (addNativeChart) dont la feuille est encore là (un enregistrement qui échoue retire la sienne) entrent après l'écriture d'ExcelJS : la feuille des données s'ajoute, l'archive
+    // s'écrit, puis chaque graphique y prend sa place ; de même pour les tableaux croisés (writePivotSheets). Si cela échoue, les tableaux croisés d'Excel s'en vont (il reste les tableaux écrits), puis les graphiques natifs
+    // (les images prennent leur place).
     const charts = chartListOf(workbook).filter(chart => workbook.getWorksheet(chart.sheetName));
+    const pivots = pivotListOf(workbook).filter(job => workbook.getWorksheet(job.sheetName));
+    if (pivots.length) {
+      try { return await packageWorkbook(workbook, charts, pivots); }
+      catch (e) { console.warn('[XlsxExport] tableaux croisés d\'Excel impossibles, les tableaux écrits sont gardés :', e); pivotListOf(workbook).length = 0; }
+    }
     if (charts.length) {
-      let data = null;
-      try {
-        await ExportCommon.ensureJsZipLoaded();
-        data = writeChartData(workbook, charts);
-        const zip = await JSZip.loadAsync(await workbook.xlsx.writeBuffer());
-        await injectCharts(zip, charts.map((chart, index) => ({ chart, xml: data.parts[index], name: chartName(index) })));
-        return await zip.generateAsync({ type: 'blob', mimeType: XLSX_MIME, compression: 'DEFLATE' });
-      } catch (e) {
+      try { return await packageWorkbook(workbook, charts, []); }
+      catch (e) {
         console.warn('[XlsxExport] graphiques natifs impossibles, les images sont gardées :', e);
         chartListOf(workbook).length = 0;
         for (const chart of charts) {
           const picture = await imageForWorkbook(chart.img);
           if (picture) placePicture(workbook, workbook.getWorksheet(chart.sheetName), chart, picture, chart);
         }
-      } finally {
-        if (data) workbook.removeWorksheet(data.sheet.id);
       }
     }
     return new Blob([await workbook.xlsx.writeBuffer()], { type: XLSX_MIME });
@@ -828,9 +996,9 @@ const XlsxExport = (function () {
     // (js/external-images.js).
     await ExternalImages.confirmExport(htmlContent, null);
     await ensureExcelLibLoaded();
-    const { resolvedHtml, filename } = await resolveRecord(htmlContent, tableId, record, filenameTemplate);
+    const { resolvedHtml, filename, pivots } = await resolveRecord(htmlContent, tableId, record, filenameTemplate);
     const workbook = newWorkbook();
-    await addRecordSheet(workbook, filename, resolvedHtml, Object.assign(pageOptionsFromLayout(), options || {}));
+    await addRecordSheet(workbook, filename, resolvedHtml, Object.assign(pageOptionsFromLayout(), options || {}, { pivots }));
     return { blob: await workbookToBlob(workbook), filename };
   }
   async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, options) {
@@ -860,14 +1028,16 @@ const XlsxExport = (function () {
     return {
       async appendRecord(htmlContent, tableId, record, filenameTemplate, valueName, pageOptions) {
         await ExternalImages.confirmExport(htmlContent, null);
-        const { resolvedHtml, filename } = await resolveRecord(htmlContent, tableId, record, filenameTemplate);
+        const { resolvedHtml, filename, pivots } = await resolveRecord(htmlContent, tableId, record, filenameTemplate);
         const before = workbook.worksheets.length;
         const chartsBefore = chartListOf(workbook).length;
+        const pivotsBefore = pivotListOf(workbook).length;
         try {
-          await addRecordSheet(workbook, nameWithValue(filename, valueName), resolvedHtml, Object.assign(pageOptionsFromLayout(), options || {}, pageOptions || {}, { usedNames }));
+          await addRecordSheet(workbook, nameWithValue(filename, valueName), resolvedHtml, Object.assign(pageOptionsFromLayout(), options || {}, pageOptions || {}, { usedNames, pivots }));
         } catch (e) {
           workbook.worksheets.slice(before).forEach(sheet => { usedNames.delete(sheet.name.toLowerCase()); workbook.removeWorksheet(sheet.id); });
           chartListOf(workbook).length = chartsBefore;
+          pivotListOf(workbook).length = pivotsBefore;
           throw e;
         }
         return { filename };

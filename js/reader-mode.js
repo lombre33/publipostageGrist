@@ -1809,7 +1809,7 @@ const ReaderMode = (function () {
       return { error: I18n.t('variables.error.generic', { message: e.message }) };
     }
   }
-  async function expandedWrapper(htmlContent, tableId, record) {
+  async function expandedWrapper(htmlContent, tableId, record, onPivot) {
     // Le document tel que preview() le déroule avant de remplacer les bulles : les zones répétées (leurs copies comprises) et les conditions de bloc,
     // de valeur et de case résolues, le sinon des bulles basculé. Partagé avec splitBadges.
     const cleanHtml = HtmlSanitize.clean(htmlContent);
@@ -1825,7 +1825,7 @@ const ReaderMode = (function () {
     // Mêmes zones répétées que le mode Lecture (cf. render()), avant de lister les bulles : les copies en font partie.
     const loopCtx = LoopRules.createContext();
     await LoopRules.expandZones(wrapper, tableId || lastCurrentTableId, record, loopCtx);
-    await PivotZones.expand(wrapper, tableId || lastCurrentTableId, record, loopCtx);
+    await PivotZones.expand(wrapper, tableId || lastCurrentTableId, record, loopCtx, onPivot);
     await resolveConditionalNodes(wrapper, tableId || lastCurrentTableId, record);
     return { wrapper, loopCtx };
   }
@@ -1853,8 +1853,8 @@ const ReaderMode = (function () {
     // `onBadge(badge, binding)` (facultatif, js/xlsx-export.js) : appelé pour chaque bulle après le déroulé des zones répétées et avant qu'elle soit
     // remplacée par sa valeur, avec la ligne du tour qu'elle suit (null hors zone) ; le fichier Excel y repère les cases qui ne contiennent qu'un
     // nombre ou qu'une date. Il s'exécute d'un trait jusqu'à son premier `await` pendant que le parcours démarre : toutes les bulles sont alors
-    // encore en place.
-    const { wrapper, loopCtx } = await expandedWrapper(htmlContent, tableId, record);
+    // encore en place. `onBadge.onPivot(info)` (facultatif, la même fonction porte les deux) : appelé pour chaque tableau croisé que le document écrit (PivotZones.nativeInfo), pour le vrai tableau croisé du fichier Excel.
+    const { wrapper, loopCtx } = await expandedWrapper(htmlContent, tableId, record, onBadge && onBadge.onPivot);
     const badges = wrapper.querySelectorAll(BADGE_SELECTOR);
     await Promise.all(Array.from(badges).map(async badge => {
       const format = parseBadgeFormat(badge);
