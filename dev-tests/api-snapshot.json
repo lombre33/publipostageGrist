@@ -121,7 +121,7 @@
 "LivePage":"MAP:d ORIGIN:d create:f fill:f",
 "LiveSync":"ABANDONED_MS:d COLUMNS:d REMOTE:d cleanColor:f cleanName:f createSession:f fromB64:f median:f toB64:f",
 "LockBarCauses":"forKey:f keys:f",
-"LockBubble":"close:f current:f isOpen:f openFor:f provide:f",
+"LockBubble":"close:f current:f isOpen:f openFor:f provide:f wireGreyed:f",
 "LockDiagnostic":"aliases:f checks:d context:f forLock:f forLoop:f identify:f quote:f report:f resolve:f tokens:d",
 "LockReasons":"BLOCKS:d CAUSE:d KIND:d REASON:d detailOf:f reasonOf:f set:f wire:f",
 "LoopMarks":"SECTIONS_EVENT:d hasSections:f isActive:f need:f needSections:f reset:f",
