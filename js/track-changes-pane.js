@@ -551,6 +551,8 @@ const TrackChangesPane = (function () {
   function open(tab) {
     const box = container();
     if (!editor || !box || box.offsetParent === null) return false;
+    // Les deux volets se posent au même bord : le contrôle du style de l'État (js/state-check-pane.js) cède la place.
+    if (typeof StateCheckPane !== 'undefined') StateCheckPane.closePane({ focus: false });
     ensure();
     state.open = true;
     state.tab = TABS.includes(tab) ? tab : 'changes';

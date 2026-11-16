@@ -181,7 +181,7 @@ const I18nTextsSettings = {
   'state.color.name.error': { fr: 'Erreur', en: 'Error' },
   'state.color.name.redText': { fr: 'Rouge Marianne, version pour le texte', en: 'Marianne red, text version' },
   'state.color.lightBlueText': {
-    fr: 'Bleu France clair : 4,22:1 sur blanc, sous le seuil de 4,5:1. Garde-le pour les filets.',
+    fr: 'Bleu France clair : 4,22:1 sur blanc, sous le seuil de 4,5:1. Gardez-le pour les filets.',
     en: 'Light France blue: 4.22:1 on white, below the 4.5:1 threshold. Keep it for rules and bars.',
   },
   'state.style.apply': { fr: 'Appliquer le style de l’État', en: 'Apply the State style' },
@@ -190,7 +190,7 @@ const I18nTextsSettings = {
     en: 'Writes the styles of this template’s six heading levels: Marianne, gray #161616, 26 to 14 pt. Nothing else changes; Ctrl + Z undoes it.',
   },
   'state.style.locked.off': {
-    fr: 'Allume d’abord le mode « Identité de l’État » (Réglages, onglet Thème).',
+    fr: 'Allumez d’abord le mode « Identité de l’État » (Réglages, onglet Thème).',
     en: 'Turn on the “State identity” mode first (Settings, Theme tab).',
   },
   'state.style.status.applied': { fr: 'Style de l’État appliqué aux titres de ce modèle.', en: 'State style applied to this template’s headings.' },

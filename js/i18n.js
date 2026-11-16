@@ -23,7 +23,8 @@ const I18n = (function () {
     I18nTextsVariables,
     I18nTextsEml,
     I18nTextsPivot,
-    I18nTextsLockbubble
+    I18nTextsLockbubble,
+    I18nTextsState
   );
 
   // Hébergé par GFS (`gfs=<n>` dans l'adresse), la langue est celle de GFS : un seul choix par personne pour toutes ses apps (consigne 019, contrats de GFS 5.2 point 6). Celle que la page s'est donnée

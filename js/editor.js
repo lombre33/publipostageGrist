@@ -694,6 +694,7 @@ const Editor = (function () {
     FloatingToolbars.wireTocFloatingToolbar();
     FloatingToolbars.wireSuggestionFloatingToolbar({ of: getSuggestionAuthors, onChange: onSuggestionAuthorsChange });
     TrackChangesPane.wireEditor(editor, { onAuthorsChange: onSuggestionAuthorsChange });
+    StateCheckPane.wireEditor(editor);
     FreeFrame.wireToolbar(editor);
     Comments.setEditor(editor);
     Comments.wireClickToOpen();

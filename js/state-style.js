@@ -21,6 +21,14 @@ const StateStyle = (function () {
   ];
   const ALERTS = [['info', '#0063cb'], ['success', '#18753c'], ['warning', '#b34000'], ['error', '#ce0500'], ['redText', '#c9191e']];
 
+  // Les couleurs que le contrôle (js/state-check.js) tient pour « de l'État » : les couleurs et les alertes ci-dessus, le blanc, et les deux couleurs (trait et fond) de chaque encadré de l'État (js/callout.js). Des codes
+  // #rrggbb en minuscules.
+  function paletteHexes() {
+    const all = BRAND.concat(ALERTS).map(item => item[1]).concat('#ffffff');
+    if (typeof Callout !== 'undefined') Callout.STATE_COLOR_ORDER.forEach((key) => { const color = Callout.colorOf(key); all.push(color.accent, color.tint); });
+    return all.filter((hex, at) => all.indexOf(hex) === at);
+  }
+
   // Où dire ce qui se passe (le coin d'état de la page, js/main.js) : `status(texte, erreur)`.
   let host = { status: () => {} };
   function wire(options) { host = Object.assign({}, host, options); }
@@ -90,5 +98,5 @@ const StateStyle = (function () {
     return applyToModel(editor);
   }
 
-  return { FONT, INK, HEADING_PT, LIGHT_BLUE, BRAND, ALERTS, wire, rows, noteTextColor, headingStyles, syncRow, applyToModel, onRow };
+  return { FONT, INK, HEADING_PT, LIGHT_BLUE, BRAND, ALERTS, wire, rows, noteTextColor, headingStyles, lock, paletteHexes, syncRow, applyToModel, onRow };
 })();

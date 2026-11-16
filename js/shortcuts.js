@@ -301,6 +301,8 @@ const Shortcuts = (function () {
       { id: 'barFold', group: 'view', label: 'shortcuts.action.barFold', key: 'Mod+Shift+f', scope: 'app', hint: tip('v2-bar-fold-tab'), run: click('v2-bar-fold-tab') },
       // Le plan du document (js/document-outline.js) : le volet à gauche du texte qui liste les titres. Sans touche d'origine : celle de Google Docs est un enchaînement de deux touches (Ctrl+Alt+A puis Ctrl+Alt+H), que ce module
       // ne prend pas ; la palette (Alt+/ : « plan ») et la languette au bord du texte l'ouvrent, et Réglages > Raccourcis permet d'en choisir une. Elle ouvre ou ferme : sa languette quand il est fermé, le bouton « Fermer » du volet quand il est ouvert.
+      // Le contrôle du style de l'État (js/state-check-pane.js) : le volet des constats, à droite du texte. Même chemin que la souris : la ligne du menu « Édition collaborative » ; grisée (mode éteint, extension absente), elle explique.
+      { id: 'stateCheck', group: 'view', label: 'state.check.title', key: '', scope: 'app', hint: tip('v2-btn-state-check'), run: click('v2-btn-state-check') },
       { id: 'documentOutline', group: 'view', label: 'shortcuts.action.documentOutline', key: '', scope: 'app', hint: tip('v2-outline-tab'), run: outlineToggle },
       { id: 'settings', group: 'view', label: 'settings.tooltip', key: '', scope: 'app', hint: tip('v2-btn-settings'), run: click('v2-btn-settings') },
       { id: 'keysList', group: 'view', label: 'shortcuts.action.keysList', key: 'Mod+/', scope: 'app', run: openKeysList },

@@ -35,7 +35,7 @@ const realErrors = w => w.errors.filter(e => !/Failed to load resource|ERR_TUNNE
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png` }); };
 
 const WORDS = {
-  fr: { apply: 'Appliquer le style de l’État', applied: 'Style de l’État appliqué aux titres de ce modèle.', off: 'Allume d’abord le mode « Identité de l’État » (Réglages, onglet Thème).', row: 'Couleurs de l’État', alerts: 'Alertes de l’État', lightBlue: /4,22:1.*filets/, stateRow: 'État', names: ['Mise en avant', 'Information', 'Succès', 'Attention', 'Erreur'] },
+  fr: { apply: 'Appliquer le style de l’État', applied: 'Style de l’État appliqué aux titres de ce modèle.', off: 'Allumez d’abord le mode « Identité de l’État » (Réglages, onglet Thème).', row: 'Couleurs de l’État', alerts: 'Alertes de l’État', lightBlue: /4,22:1.*filets/, stateRow: 'État', names: ['Mise en avant', 'Information', 'Succès', 'Attention', 'Erreur'] },
   en: { apply: 'Apply the State style', applied: 'State style applied to this template’s headings.', off: 'Turn on the “State identity” mode first (Settings, Theme tab).', row: 'State colors', alerts: 'State alerts', lightBlue: /4\.22:1.*rules/, stateRow: 'State', names: ['Highlight', 'Information', 'Success', 'Warning', 'Error'] },
 };
 

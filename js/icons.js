@@ -155,6 +155,10 @@ const Icons = (function () {
       trackList: '<path d="M4 6h16M4 12h8M4 18h6"/><path d="m14 17 2.5 2.5L21 15"/>',
       // Volet « Commentaires » (js/track-changes-pane.js, menu « Édition collaborative ») : deux bulles l'une derrière l'autre, la liste des fils ; sur une ligne du volet, résoudre (une coche dans un rond, distincte de la coche d'« Accepter ») et rouvrir (une flèche qui revient).
       commentList: '<path d="M4 4.5h11a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H8.5L5.5 15.5V13H4a1 1 0 0 1-1-1V5.5a1 1 0 0 1 1-1z"/><path d="M19 9.5h1a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1h-1v2.5L16.5 17H10a1 1 0 0 1-1-1v-1.5"/>',
+      // Contrôle du style de l'État (js/state-check-pane.js, menu « Édition collaborative ») : un écu à coche ; les deux pastilles d'une ligne du volet : à revoir (point d'exclamation) et sans remarque (coche).
+      stateCheck: '<path d="M12 3 4.5 6v5.5c0 4.4 3 7.6 7.5 9.5 4.5-1.9 7.5-5.1 7.5-9.5V6z"/><path d="m8.8 12.2 2.4 2.4 4-4.4"/>',
+      warnMark: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.4v.1"/>',
+      checkMark: '<circle cx="12" cy="12" r="9"/><path d="m8.2 12.4 2.6 2.6 5-5.3"/>',
       commentResolve: '<circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.3l2.4 2.4 4.6-4.9"/>',
       commentReopen: '<path d="M4 12a8 8 0 1 0 2.6-5.9"/><path d="M4 4.5v4.2h4.2"/>',
       acceptAll: '<path d="M5 13l4 4L19 7"/>',
