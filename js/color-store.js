@@ -52,10 +52,12 @@ const ColorStore = (function () {
     if (!palette.length) return null;
     return { id: 'theme', readonly: true, label: I18n.t('color.scope.theme'), hint: I18n.t('color.scope.theme.hint'), colors: palette.map(item => item.color), names: palette.map(item => I18n.t('slides.theme.slot.' + item.slot)) };
   }
-  // Les rangées que montre un menu de couleur : celle du thème d'abord quand la présentation en a un, puis celles qu'on a gardées.
+  // Les rangées que montre un menu de couleur : celle du thème d'abord quand la présentation en a un, puis les couleurs de l'État quand le mode « Identité de l'État » est allumé (js/state-style.js : même forme, `readonly`),
+  // puis celles qu'on a gardées.
   function rows() {
     const theme = themeRow();
-    return (theme ? [theme] : []).concat(scopes());
+    const state = typeof StateStyle !== 'undefined' ? StateStyle.rows() : [];
+    return (theme ? [theme] : []).concat(state, scopes());
   }
 
   // Garde `color` (un #rrggbb) en tête de la portée ; faux pour une portée inconnue ou une couleur qui n'en est pas une.

@@ -439,6 +439,22 @@ const HeadingStyles = (function () {
     return true;
   }
 
+  // Pose d'un coup les styles de niveau `styles` ({ "1": style … "6": style }) dans le MODÈLE (le style de l'État, js/state-style.js) : les niveaux nommés prennent ce style en entier, les autres restent comme ils sont.
+  // La mise en forme à la main des titres n'est pas touchée (on ne retire rien). Une seule transaction, donc un seul Ctrl + Z ; le suivi des modifications n'en fait pas une suggestion. Faux, sans rien changer, quand
+  // l'éditeur n'est pas modifiable ou que le modèle a déjà ces styles.
+  function setModelStyles(editor, styles) {
+    if (!editor || !editor.isEditable) return false;
+    const given = normalize(styles);
+    if (!given) return false;
+    const { state, view } = editor;
+    const tr = state.tr;
+    writeStyles(tr, state, Object.assign({}, stylesOf(state.doc) || {}, given));
+    if (!tr.docChanged) return false;
+    view.dispatch(TrackChanges.skipTracking(tr));
+    view.focus();
+    return true;
+  }
+
   // « Mettre à jour « Titre N » (partagé) d'après la sélection » : le style du niveau, écrit dans les réglages du document - tous ses modèles et toute l'équipe le prennent. Les titres de ce modèle perdent la mise en forme à
   // la main des réglages que la sélection pose, sauf quand le modèle a son propre style de ce niveau : il l'emporte ici, rien n'y change. Un seul Ctrl + Z défait le geste. Faux, sans rien changer, quand la ligne est grisée,
   // que l'éditeur n'est pas modifiable ou que le style partagé et les titres sont déjà tels que la sélection les donne.
@@ -530,6 +546,6 @@ const HeadingStyles = (function () {
 
   return {
     ATTR, SETTING, LEVELS, normalize, serialize, declarations, apply, createExtension, captureStyle, styleOfMarks, configOf, stylesOf, documentStyles, effective, effectiveOf, wire, status, syncRows, update, reset, styleAt,
-    withStyleAt,
+    withStyleAt, setModelStyles,
   };
 })();

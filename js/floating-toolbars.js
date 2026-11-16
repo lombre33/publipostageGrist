@@ -124,10 +124,10 @@ const FloatingToolbars = (function () {
       noneKey: 'colorDropdown.noneDefault',
       withSavedSelection,
       current: () => editor.getAttributes('textStyle').color || null,
-      onPick: (chain, color) => { lastTextColor = color; chain.setTextColor(color); EditorCore.setColorIcon('v2-text-color-icon', color); },
+      onPick: (chain, color) => { lastTextColor = color; chain.setTextColor(color); EditorCore.setColorIcon('v2-text-color-icon', color); StateStyle.noteTextColor(color); },
       onNone: (chain) => { chain.unsetTextColor(); EditorCore.setColorIcon('v2-text-color-icon', null); },
     });
-    wireQuickApply('v2-btn-text-color', chain => chain.setTextColor(lastTextColor));
+    wireQuickApply('v2-btn-text-color', (chain) => { chain.setTextColor(lastTextColor); StateStyle.noteTextColor(lastTextColor); });
     EditorCore.wireDropdownButton(document.getElementById('v2-btn-text-color-caret'), textColorPanel, captureSelection);
 
     const highlightPanel = createColorDropdown({

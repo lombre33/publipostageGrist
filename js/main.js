@@ -1253,6 +1253,7 @@
     FormatSlots.wire({ status: setStatus });
     FormatPainter.setHost({ status: setStatus });
     HeadingStyles.wire({ status: setStatus });
+    StateStyle.wire({ status: setStatus });
     TemplatePreferences.loadForCurrentUser()
       .then(() => { TemplateTreeSelect.refresh(); ExportChoices.refresh(); })
       .catch(e => console.error('[main] chargement des préférences de rangement impossible', e));

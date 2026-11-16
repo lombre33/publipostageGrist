@@ -370,6 +370,7 @@ const MainToolbar = (function () {
       modelLevels: byId('v2-heading-levels-model'),
       documentLevels: byId('v2-heading-levels-document'),
     });
+    StateStyle.syncRow(byId('v2-btn-state-style-apply'), editor);
     // Les mises en forme gardées (menu du pinceau) : le menu se redessine quand ses places, la langue ou le droit de peindre la sélection changent.
     FormatSlotsMenu.sync(editor);
     // « Garder avec le suivant » (menu Alignement) : cochée quand les paragraphes visés le portent, grisée avec sa raison hors du texte courant.
@@ -906,6 +907,19 @@ const MainToolbar = (function () {
         run();
       });
     });
+    // « Appliquer le style de l'État » (js/state-style.js) : les styles des six niveaux de titres du modèle. Grisée tant que le mode n'est pas allumé : son clic dit alors pourquoi (ou ouvre l'installation de l'extension), au clavier aussi.
+    const stateRow = byId('v2-btn-state-style-apply');
+    if (stateRow) {
+      const runState = () => { if (!stateRow.closest('.v2-hf-locked, .pp-access-locked')) StateStyle.onRow(editor); };
+      StateMode.onChange(() => StateStyle.syncRow(stateRow, editor));
+      stateRow.addEventListener('mousedown', event => event.preventDefault());
+      stateRow.addEventListener('click', runState);
+      stateRow.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        runState();
+      });
+    }
     // Réglage de document, pas de sélection : le data-attribute est posé avant la commande pour que le rafraîchissement synchrone du sommaire,
     // qu'elle déclenche, lise déjà la bonne valeur.
     const select = byId('v2-heading-numbering-select');
