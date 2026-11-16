@@ -296,6 +296,8 @@
     }
     // La bande des diapositives suit l'éditeur : montrée à gauche d'une présentation en Édition, cachée sinon (js/slides-entry.js).
     SlidesEntry.changed();
+    // Le plan du document (js/document-outline.js) relit ce que l'écran montre : l'éditeur, la Lecture, une grille ou une présentation qui n'ont pas de plan.
+    DocumentOutline.sync();
   }
 
   // forcedTypeModele : seulement pour tpl = null (nouveau modèle vide, cf. startNewTemplate) ; un modèle existant porte son propre type, jamais

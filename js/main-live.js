@@ -19,6 +19,7 @@ const MainLive = (function () {
       EditorCore.getEditor().on('update', ({ transaction }) => { if (!LinkedTable.isSyncTransaction(transaction) && !SlideLinks.isSyncTransaction(transaction) && !LiveEntry.isSettingUp()) markTextDirty(); });
       EditorCore.getEditor().on('update', scheduleEmailLengthGauge);
       WordCount.wire(EditorCore.getEditor()); // le compteur de mots, de signes et de pages (js/word-count.js), caché au départ
+      DocumentOutline.wire(EditorCore.getEditor()); // le plan du document, à gauche du texte (js/document-outline.js), fermé au départ
       if (templateNameInput) templateNameInput.addEventListener('input', markAutosaveDirty);
       if (pdfFilenameInput) pdfFilenameInput.addEventListener('input', markAutosaveDirty);
       // Annuler ou Rétablir rend une valeur à un champ (js/field-editor.js, domaine « fields ») : le crayon du nom du PDF et les boutons « + Cci » et « + PJ » en montrent l'état, comme au chargement d'un modèle.

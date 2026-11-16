@@ -178,7 +178,7 @@ const Shortcuts = (function () {
     return { formProblem, RESERVED };
   })();
 
-  const { click, mouseDown, headingRow, findPanel, editMode, templatesList, toggleListInCells, insertTodayChip, insertLoopEnd, openKeysList, usable } = (function () {
+  const { click, mouseDown, headingRow, findPanel, editMode, templatesList, toggleListInCells, insertTodayChip, insertLoopEnd, openKeysList, outlineToggle, usable } = (function () {
     // Les gestes d'une action, et les deux actions qui n'ont pas de bouton
 
     const byId = id => document.getElementById(id);
@@ -267,7 +267,9 @@ const Shortcuts = (function () {
       return true;
     }
     openKeysList.element = () => byId('v2-btn-settings');
-    return { click, mouseDown, headingRow, findPanel, editMode, templatesList, toggleListInCells, insertTodayChip, insertLoopEnd, openKeysList, usable };
+    // Le plan du document : ouvre ou ferme, comme le clic de la souris sur la languette (ou sur « Fermer » du volet). Faux quand il n'a rien à lister ici (grille, présentation...).
+    const outlineToggle = via(() => (typeof DocumentOutline !== 'undefined' && DocumentOutline.isAvailable() ? DocumentOutline.toggle() : false), () => (typeof DocumentOutline !== 'undefined' ? DocumentOutline.controlElement() : null));
+    return { click, mouseDown, headingRow, findPanel, editMode, templatesList, toggleListInCells, insertTodayChip, insertLoopEnd, openKeysList, outlineToggle, usable };
   })();
 
   const { ACTIONS, GROUPS, BY_ID } = (function () {
@@ -297,6 +299,9 @@ const Shortcuts = (function () {
       { id: 'modeRead', group: 'view', label: 'toolbar.modeRead', key: 'Alt+l', scope: 'app', hint: '#v2-read-flyout .v2-hover-flyout-label', aria: tip('btn-mode-read'), run: click('btn-mode-read') },
       // Replier ou déplier le panneau du haut (js/bar-fold.js) : Ctrl+Maj+F (⌘⇧F sur Mac), la touche de Google Docs pour masquer les menus. Elle clique la languette, qui n'existe pas dans la Lecture épurée : rien n'y part alors.
       { id: 'barFold', group: 'view', label: 'shortcuts.action.barFold', key: 'Mod+Shift+f', scope: 'app', hint: tip('v2-bar-fold-tab'), run: click('v2-bar-fold-tab') },
+      // Le plan du document (js/document-outline.js) : le volet à gauche du texte qui liste les titres. Sans touche d'origine : celle de Google Docs est un enchaînement de deux touches (Ctrl+Alt+A puis Ctrl+Alt+H), que ce module
+      // ne prend pas ; la palette (Alt+/ : « plan ») et la languette au bord du texte l'ouvrent, et Réglages > Raccourcis permet d'en choisir une. Elle ouvre ou ferme : sa languette quand il est fermé, le bouton « Fermer » du volet quand il est ouvert.
+      { id: 'documentOutline', group: 'view', label: 'shortcuts.action.documentOutline', key: '', scope: 'app', hint: tip('v2-outline-tab'), run: outlineToggle },
       { id: 'settings', group: 'view', label: 'settings.tooltip', key: '', scope: 'app', hint: tip('v2-btn-settings'), run: click('v2-btn-settings') },
       { id: 'keysList', group: 'view', label: 'shortcuts.action.keysList', key: 'Mod+/', scope: 'app', run: openKeysList },
       // Palette de commandes (js/command-palette.js) : chercher une commande par son nom et la lancer, comme « Rechercher dans les menus » de Google Docs - Alt+/ (⌥/ sur Mac). Ctrl+K reste « Lien… » : le lien garde sa touche, la palette prend celle de Google Docs.

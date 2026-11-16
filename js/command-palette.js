@@ -36,27 +36,14 @@ const CommandPalette = (function () {
   // s'y pose en Édition, la page y défile en Lecture). Rien n'est listé sans saisie : la liste des commandes reste ce qu'elle était. Un titre vide n'est pas listé ; une bulle y est écrite [Table.Colonne].
   function readHeadings() {
     headings = [];
-    const visible = id => { const node = document.getElementById(id); return !!node && node.getClientRects().length > 0; };
-    const make = (text, level, target) => {
-      const name = text.replace(/\s+/g, ' ').trim();
-      if (!name || headings.length >= MAX_HEADINGS) return;
-      const groupLabel = t('palette.headings');
+    const groupLabel = t('palette.headings');
+    // La lecture des titres est celle du plan du document (js/document-outline.js) : une seule copie.
+    DocumentOutline.read(MAX_HEADINGS).items.forEach(item => {
       headings.push(Object.assign({
-        id: 'heading-' + headings.length, kind: 'heading', name, group: 'headings', groupLabel, key: 'H' + level, available: true, reason: '',
-        nameKey: SearchSelect.searchKey(name), haystack: SearchSelect.searchKey(name, groupLabel),
-      }, target));
-    };
-    if (visible('editor-container') && typeof EditorCore !== 'undefined' && EditorCore.getEditor()) {
-      const leaf = node => { const attrs = node.attrs || {}; const column = attrs.column || attrs['data-column']; return column ? '[' + column + ']' : ''; };
-      EditorCore.getEditor().state.doc.descendants((node, pos) => {
-        if (node.type.name !== 'heading') return true;
-        make(node.textBetween(0, node.content.size, ' ', leaf), node.attrs.level || 1, { pos: pos + 1 });
-        return false;
-      });
-    } else if (visible('reader-container')) {
-      document.querySelectorAll('#reader-container .reader-content h1, #reader-container .reader-content h2, #reader-container .reader-content h3, #reader-container .reader-content h4, #reader-container .reader-content h5, #reader-container .reader-content h6')
-        .forEach(node => make(node.textContent, Number(node.tagName.slice(1)), { el: node }));
-    }
+        id: 'heading-' + headings.length, kind: 'heading', name: item.name, group: 'headings', groupLabel, key: 'H' + item.level, available: true, reason: '',
+        nameKey: SearchSelect.searchKey(item.name), haystack: SearchSelect.searchKey(item.name, groupLabel),
+      }, item.el ? { el: item.el } : { pos: item.pos }));
+    });
   }
 
   // Les mots à taper en plus du nom : ceux de `palette.kw.<action>` quand le texte existe.

@@ -232,6 +232,8 @@ const Icons = (function () {
       wholeWord: '<circle cx="7.5" cy="10" r="2.8"/><path d="M10.3 7.2V13"/><path d="M13.7 4v9"/><circle cx="16.7" cy="10" r="2.8"/><path d="M3.5 17v3.5h17V17"/>',
       regex: '<circle cx="6" cy="17.5" r=".6"/><path d="M15 5v10M10.7 7.5l8.6 5M19.3 7.5l-8.6 5"/>',
       closeFind: '<path d="M7 7l10 10M17 7 7 17"/>',
+      // Plan du document (js/document-outline.js, languette au bord gauche du texte) : trois lignes de plus en plus décalées, la liste des titres par niveau. Ce n'est pas `toc` (le bloc Sommaire, avec ses points et son numéro de page).
+      outline: '<path d="M4 6h16"/><path d="M8 12h12"/><path d="M12 18h8"/>',
       // QR code (js/qr-code.js) : ligne du même menu - trois repères d'angle et quelques modules, la même figure que le cadre d'un QR code dont le
       // texte contient une colonne (css/qr-code.css).
       qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20v.01M17 20h4v-3"/>',
