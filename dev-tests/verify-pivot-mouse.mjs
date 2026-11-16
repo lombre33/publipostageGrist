@@ -364,6 +364,73 @@ async function runTheme(theme) {
   const undone = await pivotRowAttrs(page);
   check(`${label} - Ctrl+Z reprend cette modification d'un seul pas (la ligne revient comme avant)`, !!undone[1] && undone[1].cols.length === 0 && undone[1].rows.join() === 'Categorie', undone[1]);
 
+  // 4 bis) Les lignes retenues et l'écriture des nombres, à la souris et au clavier : une condition (Stock ≥ 10), deux décimales en moins et une devise ; l'aperçu les suit, « Enregistrer » les écrit,
+  // Ctrl+Z reprend le tout d'un seul pas, et la fenêtre rouverte les relit.
+  await clickInPanel(page, '.pp-pivot-edit', `${label} - Modifier (filtre)`);
+  await page.waitForTimeout(500);
+  const addRule = '#pp-pivot-modal .pp-pivot-filter .var-condition-add';
+  await page.evaluate(() => document.getElementById('pp-pivot-filter-label').scrollIntoView({ block: 'center' }));
+  await page.waitForTimeout(150);
+  const noneSaid = await page.evaluate(() => (document.querySelector('#pp-pivot-modal .pp-pivot-filter .var-loop-hint') || {}).textContent);
+  check(`${label} - sans condition, « Lignes retenues » le dit (« toutes les lignes lues sont croisées ») et propose d'en ajouter une`, noneSaid === 'Toutes les lignes lues sont croisées.' && !!(await boxOf(page, addRule)), noneSaid);
+  await clickInPanel(page, addRule, `${label} - + Ajouter une condition`);
+  await page.waitForTimeout(250);
+  const columnTrigger = '#pp-pivot-modal .pp-pivot-filter .macro-rule-row .macro-rule-column + .ss-wrap .ss-trigger';
+  await clickInPanel(page, columnTrigger, `${label} - colonne de la condition`);
+  await page.waitForTimeout(200);
+  await page.keyboard.type('Stock', { delay: 20 });
+  await page.waitForTimeout(150);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    const operator = document.querySelector('#pp-pivot-modal .pp-pivot-filter .macro-rule-row select:not(.macro-rule-column)');
+    operator.value = '≥';
+    operator.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.waitForTimeout(250);
+  await clickInPanel(page, '#pp-pivot-modal .pp-pivot-filter .macro-rule-value', `${label} - valeur de la condition`);
+  await page.keyboard.type('10', { delay: 20 });
+  await page.waitForTimeout(700);
+  const filtered = await page.evaluate(() => Array.from(document.querySelectorAll('#pp-pivot-modal .pp-pivot-window-preview table tr')).map(tr => Array.from(tr.children).map(c => c.textContent.trim())));
+  const stats = await page.evaluate(() => document.querySelector('#pp-pivot-modal .pp-pivot-window-preview + .pp-link-note').textContent);
+  check(`${label} - la condition « Stock ≥ 10 » restreint l'aperçu aux produits qui la remplissent (3 lignes lues, total 99)`,
+    filtered.length === 5 && filtered[filtered.length - 1][0] === 'Total' && filtered[filtered.length - 1][1].replace(/\s/g, '') === '99' && /3 /.test(stats), { filtered, stats });
+  await shot(page, `pivot-${theme}-window-filter`);
+  // L'écriture des nombres : zéro décimale, devise « € ».
+  await page.evaluate(() => document.getElementById('pp-pivot-fmt-label').scrollIntoView({ block: 'center' }));
+  await page.waitForTimeout(150);
+  await page.evaluate(() => { const d = document.getElementById('pp-pivot-fmt-decimals'); d.value = '0'; d.dispatchEvent(new Event('change', { bubbles: true })); });
+  await clickInPanel(page, '#pp-pivot-fmt-currency', `${label} - devise`);
+  await page.keyboard.type('€', { delay: 20 });
+  await page.waitForTimeout(700);
+  await shot(page, `pivot-${theme}-window-filter-format`);
+  const written = await page.evaluate(() => Array.from(document.querySelectorAll('#pp-pivot-modal .pp-pivot-window-preview table tr')).map(tr => Array.from(tr.children).map(c => c.textContent.trim())));
+  check(`${label} - zéro décimale et la devise « € » s'écrivent dans l'aperçu, cases et total compris`, written.length === 5 && written.slice(1).every(row => /€$/.test(row[1])) && written[written.length - 1][1].replace(/[\s  ]/g, '') === '99€', written);
+  const fits = await boxOf(page, '#pp-pivot-modal .var-modal-primary');
+  check(`${label} - avec le filtre et l'écriture des nombres, la fenêtre tient toujours dans le panneau (« Enregistrer » atteignable)`, !!fits && fits.inViewport, fits);
+  await realClick(page, '#pp-pivot-modal .var-modal-primary');
+  await page.waitForTimeout(450);
+  const saved = (await pivotRowAttrs(page))[1];
+  check(`${label} - « Enregistrer » écrit le filtre (Stock ≥ 10) et le format (0 décimale, €) dans la ligne`,
+    !!saved && !!saved.filter && saved.filter.mode === 'all' && saved.filter.rules.length === 1 && saved.filter.rules[0].column === 'Stock' && saved.filter.rules[0].operator === '≥' && saved.filter.rules[0].value === '10'
+    && !!saved.format && saved.format.decimals === 0 && saved.format.currency === '€' && saved.format.type === 'number', saved);
+  const framed = await page.evaluate(() => Array.from(document.querySelectorAll('.pp-pivot-preview table.pp-pivot-mini tr')).map(tr => Array.from(tr.children).map(c => c.textContent.trim())));
+  check(`${label} - le cadre de la ligne montre le tableau filtré et écrit avec la devise (deux rangées, puis le total 99 €)`, framed.length === 4 && framed[3][0] === 'Total' && framed[3][1].replace(/[\s  ]/g, '') === '99€' && framed[1][1].replace(/[\s  ]/g, '') === '12€', framed);
+  await clickInPanel(page, '.pp-pivot-edit', `${label} - Modifier (relecture)`);
+  await page.waitForTimeout(500);
+  const reread = await page.evaluate(() => ({
+    rules: document.querySelectorAll('#pp-pivot-modal .pp-pivot-filter .macro-rule-row').length,
+    column: (document.querySelector('#pp-pivot-modal .pp-pivot-filter .macro-rule-column') || {}).value, value: (document.querySelector('#pp-pivot-modal .pp-pivot-filter .macro-rule-value') || {}).value,
+    decimals: document.getElementById('pp-pivot-fmt-decimals').value, currency: document.getElementById('pp-pivot-fmt-currency').value,
+  }));
+  check(`${label} - la fenêtre rouverte relit le filtre et l'écriture des nombres`, reread.rules === 1 && reread.column === 'Stock' && reread.value === '10' && reread.decimals === '0' && reread.currency === '€', reread);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(400);
+  const unfiltered = (await pivotRowAttrs(page))[1];
+  check(`${label} - Ctrl+Z reprend le filtre et le format d'un seul pas (la ligne revient sans eux)`, !!unfiltered && unfiltered.filter === undefined && unfiltered.format === undefined && unfiltered.rows.join() === 'Categorie', unfiltered);
+
   // 5) Une ligne ordinaire : le bouton de la barre du tableau ouvre la fenêtre, Échap la ferme et le clavier revient.
   const plain = await boxOf(page, '.tiptap table > tbody > tr:nth-child(4) > td:nth-child(2)');
   await page.mouse.move(plain.x - 4, plain.y, { steps: 3 });
@@ -386,9 +453,10 @@ async function runTheme(theme) {
   await clickInPanel(page, '.pp-pivot-edit', `${label} - Modifier (anglais)`);
   await page.waitForTimeout(500);
   await shot(page, `pivot-${theme}-window-en`);
-  const english = await page.evaluate(() => ({ title: document.querySelector('#pp-pivot-modal h3').textContent, ok: document.querySelector('#pp-pivot-modal .var-modal-primary').textContent, hint: document.getElementById('pp-pivot-calc').placeholder }));
+  const english = await page.evaluate(() => ({ title: document.querySelector('#pp-pivot-modal h3').textContent, ok: document.querySelector('#pp-pivot-modal .var-modal-primary').textContent, hint: document.getElementById('pp-pivot-calc').placeholder, filter: document.getElementById('pp-pivot-filter-label').textContent, format: document.getElementById('pp-pivot-fmt-label').textContent, none: (document.querySelector('#pp-pivot-modal .pp-pivot-filter .var-loop-hint') || {}).textContent, styles: Array.from(document.getElementById('pp-pivot-fmt-style').options).map(o => o.textContent) }));
   const enBox = await boxOf(page, '#pp-pivot-modal .pp-modal-box');
   check(`${label} - en anglais, la fenêtre est écrite en anglais et tient dans le panneau`, english.title === 'Pivot table' && english.ok === 'Save' && english.hint.indexOf('Products') !== -1 && !!enBox && enBox.inViewport, { english, enBox });
+  check(`${label} - en anglais, « Rows kept » et « How numbers are written » (séparateurs, décimales) sont écrits en anglais`, english.filter === 'Rows kept' && english.format === 'How numbers are written' && english.none === 'Every row read is used.' && english.styles[0] === 'The language’s own' && /French|Anglo/.test(english.styles.join()), english);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(250);
   await page.evaluate(() => I18n.setLang('fr'));

@@ -2,7 +2,7 @@
 // comme l'export la lira (ReaderMode.inspect : les mêmes bulles, sans images, codes QR ni mise en page) et la fenêtre ne s'ouvre que s'il y a de quoi la remplir. Rien à signaler : l'export continue comme avant, sans un clic de plus.
 // Ce qui est signalé (ce que la personne voit mal en ouvrant le fichier fini) :
 //  - `wrongKind` : « Modèle selon la ligne » envoie la ligne vers un modèle que cet export ne fait pas (une grille en Word, un document en Excel) : elle n'est pas générée ;
-//  - `error` : une bulle dont le document écrirait un message d'erreur (colonne ou table disparue, ligne introuvable, calcul faux) ;
+//  - `error` : une bulle dont le document écrirait un message d'erreur (colonne ou table disparue, ligne introuvable, calcul faux), ou un tableau croisé de la grille qui ne se lit pas ou dont une case dirait son erreur (`pivot`) ;
 //  - `image` : une pièce jointe que le document ne dessinerait pas (ce n'est pas une image : une note à sa place ; ou sans fiche dans Grist : supprimée) ;
 //  - `broken` : une variable cassée du modèle (colonne, table ou chemin disparus : le rouge de l'éditeur) que le document écrit vide, sans un mot - une ligne de la liste pour tout le lot, sans ligne de table (`rowId` nul) ;
 //  - `nameEmpty` : le nom du fichier que le modèle donne est vide (le fichier prend le nom « document-n° »), `nameDuplicate` : le même nom qu'une ligne plus haut (un « (2) » est ajouté). Seulement pour une archive ZIP dont
@@ -60,7 +60,7 @@ const BatchPrecheck = (function () {
                 brokenSeen.add(b.key);
                 problems.push({ rowId: null, jobIndex: i, kind: 'broken', blocking: false, key: b.key, reason: b.reason });
               });
-              found.errors.forEach(e => problems.push({ rowId, jobIndex: i, kind: 'error', blocking: true, key: e.key, text: e.text, calc: !!e.calc }));
+              found.errors.forEach(e => problems.push({ rowId, jobIndex: i, kind: 'error', blocking: true, key: e.key, text: e.text, calc: !!e.calc, pivot: !!e.pivot }));
               found.images.forEach(image => {
                 const problem = { rowId, jobIndex: i, kind: 'image', blocking: true, key: image.key, name: image.name, reason: image.reason };
                 // Sans fiche : ne vaut un problème qu'une fois le total connu (la table des pièces jointes est-elle lisible ?).
@@ -92,7 +92,7 @@ const BatchPrecheck = (function () {
     switch (problem.kind) {
       case 'wrongKind': return I18n.t('batchFailures.wrongKind.' + problem.wrongKind, { format });
       case 'broken': return I18n.t('batchPrecheck.reason.broken.' + problem.reason, { key: problem.key });
-      case 'error': return I18n.t(problem.calc ? 'batchPrecheck.reason.errorCalc' : 'batchPrecheck.reason.error', { key: clip(problem.key), text: clip(problem.text) });
+      case 'error': return I18n.t(problem.pivot ? 'batchPrecheck.reason.errorPivot' : problem.calc ? 'batchPrecheck.reason.errorCalc' : 'batchPrecheck.reason.error', { key: clip(problem.key), text: clip(problem.text) });
       case 'image': return I18n.t('batchPrecheck.reason.image.' + problem.reason, { key: problem.key, name: clip(problem.name) });
       case 'nameEmpty': return I18n.t('batchPrecheck.reason.nameEmpty', { name: problem.name });
       default: return I18n.t('batchPrecheck.reason.nameDuplicate', { other: problem.other });

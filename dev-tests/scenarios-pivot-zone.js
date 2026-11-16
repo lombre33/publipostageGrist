@@ -79,6 +79,7 @@
     return out;
   }
   const value = (stock, price) => stock * price;
+  const ORDER_NAMES = CATEGORIES.concat('(vide)');
 
   cases.push({
     id: 'pivot_formula_cells_and_totals',
@@ -234,6 +235,99 @@
       const pass = electricity[0] === 'Électricité' && wrapped(electricity[3]) && wrapped(electricity[4]) && wrapped(total[3]) && wrapped(total[4])
         && !wrapped(electricity[1]) && !wrapped(rows[2][1]) && !wrapped(total[1]);
       return { pass, notes: JSON.stringify(rows) };
+    },
+  });
+
+  // Le tableau lu dans le HTML résolu : [rangées de textes], l'en-tête compris.
+  const tableRows = async def => rowTexts(await preview(gridHtml(def)));
+
+  cases.push({
+    id: 'pivot_filter_keeps_matching_rows',
+    description: 'Le filtre « Lignes retenues » (celui d’une Boucle) ne laisse croiser que les lignes qui le remplissent : Stock ≥ 10 donne les cases, les totaux et le total général de ces seuls produits ; « au moins une » des deux conditions élargit ; un groupe mêle « et » et « ou »',
+    run: async (h) => {
+      await seed(h);
+      const total = (rows, products) => {
+        const e = expectedTable(products, value);
+        const grand = products.reduce((sum, [, , , stock, price]) => sum + stock * price, 0);
+        const head = rows.find(r => r[0] === 'Total');
+        return !!head && near(toNumber(head[head.length - 1]), grand) && Object.keys(e).every(c => rows.some(r => r[0] === c));
+      };
+      const kept = PRODUCTS.filter(p => p[3] >= 10);
+      const all = await tableRows(Object.assign({}, DEF, { filter: { mode: 'all', rules: [{ column: 'Stock', operator: '≥', value: '10' }] } }));
+      const ok1 = total(all, kept) && !all.some(r => r[0] === '(vide)');
+      // Deux conditions reliées par « et » : Stock ≥ 10 et Catégorie = Visserie.
+      const both = await tableRows(Object.assign({}, DEF, { filter: { mode: 'all', rules: [{ column: 'Stock', operator: '≥', value: '10' }, { column: 'Categorie', operator: '=', value: 'Visserie' }] } }));
+      const visserie = PRODUCTS.filter(p => p[3] >= 10 && p[1] === 'Visserie');
+      const ok2 = total(both, visserie) && both.filter(r => ORDER_NAMES.includes(r[0])).length === 1;
+      // « Au moins une » : Catégorie = Plomberie ou Catégorie = Électricité.
+      const any = await tableRows(Object.assign({}, DEF, { filter: { mode: 'any', rules: [{ column: 'Categorie', operator: '=', value: 'Plomberie' }, { column: 'Categorie', operator: '=', value: 'Électricité' }] } }));
+      const either = PRODUCTS.filter(p => p[1] === 'Plomberie' || p[1] === 'Électricité');
+      const ok3 = total(any, either) && !any.some(r => r[0] === 'Visserie');
+      // Un groupe : Stock ≥ 10 ET (Catégorie = Visserie OU Catégorie = Électricité).
+      const group = await tableRows(Object.assign({}, DEF, { filter: { mode: 'all', rules: [{ column: 'Stock', operator: '≥', value: '10' }, { mode: 'any', rules: [{ column: 'Categorie', operator: '=', value: 'Visserie' }, { column: 'Categorie', operator: '=', value: 'Électricité' }] }] } }));
+      const grouped = PRODUCTS.filter(p => p[3] >= 10 && (p[1] === 'Visserie' || p[1] === 'Électricité'));
+      const ok4 = total(group, grouped) && !group.some(r => r[0] === 'Plomberie');
+      return { pass: ok1 && ok2 && ok3 && ok4, notes: JSON.stringify({ ok1, ok2, ok3, ok4, all }) };
+    },
+  });
+
+  cases.push({
+    id: 'pivot_filter_unreadable_or_empty',
+    description: 'Un filtre sans règle complète garde toutes les lignes (comme une Boucle), et un filtre qui ne retient aucune ligne le dit (« aucune ligne à croiser »), jamais un tableau vide',
+    run: async (h) => {
+      await seed(h);
+      const base = await tableRows(DEF);
+      const blank = await tableRows(Object.assign({}, DEF, { filter: { mode: 'all', rules: [{ column: '', operator: '=', value: 'x' }] } }));
+      const none = await tableRows(Object.assign({}, DEF, { filter: { mode: 'all', rules: [{ column: 'Stock', operator: '>', value: '100000' }] } }));
+      const said = none.find(r => /^\[(ERREUR|ERROR)\s*:/.test(r[0]));
+      const pass = same(base, blank) && !!said && /aucune ligne|no rows/.test(said[0]) && !none.some(r => r[0] === 'Total');
+      return { pass, notes: JSON.stringify({ none }) };
+    },
+  });
+
+  cases.push({
+    id: 'pivot_format_writes_numbers',
+    description: 'Le format du tableau s’applique aux cases et aux totaux comme à une bulle : 0 décimale et devise « € » (« 17 € »), 2 décimales à l’anglo-saxonne (« 1,234.50 »), pourcentage, et le zéro n’est écrit qu’avec « zero: show » ; un nombre de lignes garde ses entiers',
+    run: async (h) => {
+      await seed(h);
+      const money = await tableRows(Object.assign({}, DEF, { format: { type: 'number', decimals: 0, currency: '€' } }));
+      const visserie = money.find(r => r[0] === 'Visserie');
+      const grand = money.find(r => r[0] === 'Total');
+      const ok1 = !!visserie && /^17\s€$/.test(visserie[1].replace(/[  ]/g, ' ')) && /€$/.test(grand[4]) && !/[,.]/.test(grand[4].replace(/[  ]/g, ' ').replace('€', '').trim().slice(-3));
+      const us = await tableRows(Object.assign({}, DEF, { format: { type: 'number', style: 'us', decimals: 2 } }));
+      const usTotal = us.find(r => r[0] === 'Total');
+      const ok2 = /^560\.32$/.test(usTotal[4]) && /^364\.92$/.test(usTotal[3]);
+      const big = await tableRows(Object.assign({}, DEF, { value: { kind: 'formula', formula: '{PvProduits.Stock} * {PvProduits.PrixAchat} * 100' }, format: { type: 'number', style: 'us', decimals: 1 } }));
+      const bigTotal = big.find(r => r[0] === 'Total');
+      const ok3 = /^56,032\.0$/.test(bigTotal[4]);
+      const percent = await tableRows(Object.assign({}, DEF, { value: { kind: 'formula', formula: '{PvProduits.Stock} / 1000' }, format: { type: 'number', percent: true, decimals: 1 } }));
+      const pTotal = percent.find(r => r[0] === 'Total');
+      const ok4 = /%$/.test(pTotal[4]) && near(toNumber(pTotal[4]), PRODUCTS.reduce((sum, p) => sum + p[3], 0) / 10);
+      // Le nombre de lignes reste entier, avec les séparateurs du format.
+      const count = await tableRows({ v: 1, source: { table: 'PvProduits', scope: 'table' }, rows: ['Categorie'], cols: ['Emplacement.Zone'], value: null, agg: 'count', format: { type: 'number', style: 'us', decimals: 2, currency: '€' } });
+      const countTotal = count.find(r => r[0] === 'Total');
+      const ok5 = countTotal[4] === String(PRODUCTS.length);
+      return { pass: ok1 && ok2 && ok3 && ok4 && ok5, notes: JSON.stringify({ ok1, ok2, ok3, ok4, ok5, visserie, grand, usTotal, bigTotal, pTotal, countTotal }) };
+    },
+  });
+
+  cases.push({
+    id: 'pivot_format_zero_shown_on_request',
+    description: 'Une case dont les lignes valent zéro (un produit sans stock, seul dans sa case) reste vide par défaut, comme une bulle, et s’écrit « 0 » avec zero: show ; une case sans aucune ligne reste vide dans les deux cas',
+    run: async (h) => {
+      await seed(h);
+      // Le produit 9 (Plomberie, Picking) n'a plus de stock : sa case vaut zéro. Électricité × Picking n'a aucun produit.
+      const rowsWith = PRODUCT_ROWS.map(r => (r.id === 9 ? Object.assign({}, r, { Stock: 0 }) : r));
+      window.__gristStub.setRows('PvProduits', rowsWith.map(r => Object.assign({}, r, { Atlas: r.id % 2 ? 1 : 2 })));
+      const def = Object.assign({}, DEF, { value: { kind: 'column', path: 'Stock' } });
+      const find = (rows, name) => rows.find(r => r[0] === name);
+      const hidden = find(await tableRows(def), 'Plomberie');
+      const shownRows = await tableRows(Object.assign({}, def, { format: { type: 'number', zero: 'show' } }));
+      const shown = find(shownRows, 'Plomberie');
+      const empty = find(shownRows, 'Électricité');
+      // Plomberie : Réserve 10, Picking 0, Quai 3, total 13.
+      const pass = same(hidden, ['Plomberie', '10', '', '3', '13']) && same(shown, ['Plomberie', '10', '0', '3', '13']) && empty[2] === '';
+      return { pass, notes: JSON.stringify({ hidden, shown, empty }) };
     },
   });
 

@@ -3,7 +3,8 @@
 //
 // Les colonnes se choisissent dans la liste avec recherche des autres fenêtres (js/search-select.js) et, comme elles, on y descend de Référence en Référence (« Emplacement ▸ Zone ») : le chemin choisi s'enregistre
 // « Emplacement.Zone » (js/pivot.js). La valeur des cases est « Nombre de lignes », une colonne de Grist qu'on additionne (ou compte, moyenne, minimum, maximum), ou un Calcul écrit comme celui d'une bulle
-// (js/variable-calc.js : « #Produits.Stock * #Produits.PrixAchat », évalué pour chaque ligne puis additionné). Rien n'est écrit dans Grist : la définition ne vit que dans la ligne de la grille.
+// (js/variable-calc.js : « #Produits.Stock * #Produits.PrixAchat », évalué pour chaque ligne puis additionné). Les lignes lues se filtrent comme celles d'une Boucle (« Lignes retenues » : les mêmes règles et groupes,
+// js/condition-fields.js) et les nombres s'écrivent comme ceux d'une bulle (séparateurs, décimales, devise, pourcentage, zéro). Rien n'est écrit dans Grist : la définition ne vit que dans la ligne de la grille.
 //
 // Rien n'est écrit avant « Valider » : « Annuler » laisse la ligne telle qu'elle était, et le tableau croisé posé ou modifié n'est qu'un seul pas d'Annuler (PivotEditor.apply). Styles : css/pivot.css.
 const PivotWindow = (function () {
@@ -55,6 +56,8 @@ const PivotWindow = (function () {
     const table = base && base.source ? base.source.table : defaultTable();
     const scope = base && base.source && scopesFor(table).some(item => item.value === base.source.scope && item.ok) ? base.source.scope : firstScope(table);
     const value = base ? base.value : null;
+    const filter = base && base.filter ? ConditionRules.plainCondition(base.filter) : null;
+    const format = base ? base.format : null;
     return {
       table,
       scope,
@@ -67,10 +70,23 @@ const PivotWindow = (function () {
       totalRows: base ? base.totals.rows : true,
       totalCols: base ? base.totals.cols : true,
       sort: base ? base.sort : 'choices',
-      filter: base ? base.filter : null,
-      format: base ? base.format : null,
+      // Le filtre : une copie des règles (la fenêtre les modifie en place, rien n'est écrit avant « Valider »).
+      filterMode: filter ? filter.mode : 'all',
+      rules: filter ? filter.rules : [],
+      // L'écriture des nombres : les champs de la fenêtre. Le zéro se cache sauf `zero: 'show'`, comme dans une bulle.
+      fmtStyle: format && format.style ? format.style : '',
+      fmtDecimals: format && format.decimals !== undefined ? String(format.decimals) : '',
+      fmtCurrency: format && format.currency ? format.currency : '',
+      fmtPercent: !!(format && format.percent),
+      fmtHideZero: !(format && format.zero === 'show'),
     };
   }
+
+  // Le format que disent les champs d'écriture des nombres (Pivot.normalize le ramène à ses seules clés, et à rien quand tout est laissé par défaut).
+  const formatOf = w => ({
+    type: 'number', style: w.fmtStyle || undefined, decimals: w.fmtDecimals === '' ? undefined : Number(w.fmtDecimals),
+    currency: w.fmtCurrency, percent: w.fmtPercent || undefined, zero: w.fmtHideZero ? undefined : 'show',
+  });
 
   // La définition que disent les champs : { def } ou { missing } (la clé du texte qui dit ce qui manque).
   function definition() {
@@ -90,7 +106,7 @@ const PivotWindow = (function () {
     }
     const def = Pivot.normalize({
       v: 1, source: { table: w.table, scope: w.scope }, rows, cols: w.cols ? [w.cols] : [], value, agg: value ? w.agg : 'count',
-      totals: { rows: w.totalRows, cols: w.totalCols }, sort: w.sort, filter: w.filter, format: w.format,
+      totals: { rows: w.totalRows, cols: w.totalCols }, sort: w.sort, filter: ConditionRules.plainCondition({ mode: w.filterMode, rules: w.rules }), format: formatOf(w),
     });
     return def ? { def } : { missing: 'pivot.window.needDifferent' };
   }
@@ -138,6 +154,11 @@ const PivotWindow = (function () {
     w.totalRows = refs.totalRows.checked;
     w.totalCols = refs.totalCols.checked;
     w.sort = refs.sort.value;
+    w.fmtStyle = refs.fmtStyle.value;
+    w.fmtDecimals = refs.fmtDecimals.value;
+    w.fmtCurrency = refs.fmtCurrency.value.trim();
+    w.fmtPercent = refs.fmtPercent.checked;
+    w.fmtHideZero = refs.fmtHideZero.checked;
   }
 
   // === Dessin ===
@@ -239,6 +260,48 @@ const PivotWindow = (function () {
     Pivot.SORTS.forEach(name => sort.appendChild(option(name, '')));
     const sortField = field('', sort, 'pp-pivot-sort');
 
+    // Les lignes retenues : le filtre d'une Boucle (« Garder les lignes où toutes les conditions sont remplies »), dessiné par renderFilter.
+    const filterLabel = el('span', 'pp-pivot-label');
+    filterLabel.id = 'pp-pivot-filter-label';
+    const filterBox = el('div', 'pp-pivot-filter');
+    filterBox.setAttribute('role', 'group');
+    filterBox.setAttribute('aria-labelledby', 'pp-pivot-filter-label');
+
+    // L'écriture des nombres : celle d'une bulle, réduite à ce que le tableau règle.
+    const fmtStyle = select('pp-pivot-fmt-style');
+    ['', 'fr', 'us', 'none'].forEach(value => fmtStyle.appendChild(option(value, '')));
+    const fmtStyleField = field('', fmtStyle, 'pp-pivot-fmt-style');
+    const fmtDecimals = select('pp-pivot-fmt-decimals');
+    ['', '0', '1', '2', '3'].forEach(value => fmtDecimals.appendChild(option(value, '')));
+    const fmtDecimalsField = field('', fmtDecimals, 'pp-pivot-fmt-decimals');
+    const fmtCurrency = el('input', 'pp-dialog-input');
+    fmtCurrency.id = 'pp-pivot-fmt-currency';
+    fmtCurrency.type = 'text';
+    fmtCurrency.maxLength = 6;
+    fmtCurrency.autocomplete = 'off';
+    const fmtCurrencyField = field('', fmtCurrency, 'pp-pivot-fmt-currency');
+    // « Écriture des nombres » titre les quatre champs ; les deux cases à cocher ont leur propre intitulé.
+    const fmtLabel = el('span', 'pp-pivot-label');
+    fmtLabel.id = 'pp-pivot-fmt-label';
+    const fmtMoreLabel = el('span', 'pp-pivot-label');
+    fmtMoreLabel.id = 'pp-pivot-fmt-more-label';
+    const fmtPercentLabel = el('label', 'pp-pivot-check');
+    const fmtPercent = el('input');
+    fmtPercent.type = 'checkbox';
+    const fmtPercentText = el('span');
+    fmtPercentLabel.append(fmtPercent, fmtPercentText);
+    const fmtZeroLabel = el('label', 'pp-pivot-check');
+    const fmtHideZero = el('input');
+    fmtHideZero.type = 'checkbox';
+    const fmtZeroText = el('span');
+    fmtZeroLabel.append(fmtHideZero, fmtZeroText);
+    const fmtChecks = el('div', 'pp-pivot-totals');
+    fmtChecks.setAttribute('role', 'group');
+    fmtChecks.setAttribute('aria-labelledby', 'pp-pivot-fmt-more-label');
+    fmtChecks.append(fmtPercentLabel, fmtZeroLabel);
+    const fmtField = el('div', 'pp-pivot-field');
+    fmtField.append(fmtMoreLabel, fmtChecks);
+
     const previewLabel = el('span', 'pp-pivot-label');
     const previewNote = el('p', 'pp-pivot-status');
     previewNote.setAttribute('role', 'status');
@@ -253,12 +316,16 @@ const PivotWindow = (function () {
     const totalsField = el('div', 'pp-pivot-field');
     totalsField.append(totalsLabel, totalsBox);
     optionsRow.append(totalsField, sortField.box);
-    win.body.append(intro, fieldsTop, sourceLabel, source.group, kindLabel, kind.group, valueBlock, optionsRow, previewLabel, previewNote, previewBody, previewStats);
+    const formatRow = el('div', 'pp-pivot-grid');
+    formatRow.append(fmtStyleField.box, fmtDecimalsField.box, fmtCurrencyField.box, fmtField);
+    win.body.append(intro, fieldsTop, sourceLabel, source.group, filterLabel, filterBox, kindLabel, kind.group, valueBlock, optionsRow, fmtLabel, formatRow, previewLabel, previewNote, previewBody, previewStats);
     const { first: remove, cancel, ok } = win.addButtons('var-modal-danger');
 
     refs = {
       intro, table, tableLabel: tableField.label, sourceLabel, source, row1, row2, rowBox, rowAdd, rowRemove, rowsLabel: rowsField.label, cols, colsLabel: colsField.label,
       kindLabel, kind, valueColumn, valueColumnField, valueColumnLabel: valueColumnField.label, calc, calcField, calcLabel: calcField.label, calcHelp, agg, aggField, aggLabel: aggField.label,
+      filterLabel, filterBox, fmtStyle, fmtStyleLabel: fmtStyleField.label, fmtDecimals, fmtDecimalsLabel: fmtDecimalsField.label, fmtCurrency, fmtCurrencyLabel: fmtCurrencyField.label,
+      fmtLabel, fmtMoreLabel, fmtPercent, fmtPercentText, fmtHideZero, fmtZeroText,
       totalsLabel, totalRows, totalCols, totalRowsText, totalColsText, sort, sortLabel: sortField.label, previewLabel, previewNote, previewBody, previewStats, remove, cancel, ok,
     };
 
@@ -282,10 +349,23 @@ const PivotWindow = (function () {
       state.working.rows = [''];
       state.working.cols = '';
       state.working.valuePath = '';
+      // Les règles du filtre portent sur les colonnes de l'ancienne table : elles ne valent plus rien.
+      state.working.rules = [];
+      state.working.filterMode = 'all';
       renderTable();
       previewRun.schedule();
     });
     [refs.row1, refs.row2, refs.cols, refs.valueColumn, refs.agg, refs.sort, refs.totalRows, refs.totalCols].forEach(node => node.addEventListener('change', () => { changed(); syncTotals(); }));
+    // Une valeur ou un opérateur d'une condition change la règle en place (js/condition-fields.js) : seul le regard sur la boîte des règles voit le tableau à refaire.
+    refs.filterBox.addEventListener('input', previewRun.schedule);
+    refs.filterBox.addEventListener('change', previewRun.schedule);
+    [refs.fmtStyle, refs.fmtDecimals, refs.fmtPercent, refs.fmtHideZero].forEach(node => node.addEventListener('change', changed));
+    refs.fmtCurrency.addEventListener('input', changed);
+    refs.fmtCurrency.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' || event.isComposing) return;
+      event.preventDefault();
+      apply();
+    });
     refs.calc.addEventListener('input', () => { refs.calc.removeAttribute('aria-invalid'); changed(); });
     refs.calc.addEventListener('keydown', (event) => {
       // La liste des colonnes qui s'ouvre sous le champ prend Entrée avant la fenêtre (son écouteur a déjà pris l'évènement).
@@ -331,6 +411,18 @@ const PivotWindow = (function () {
     refs.totalColsText.textContent = I18n.t('pivot.window.totalCols');
     refs.sortLabel.textContent = I18n.t('pivot.window.order');
     Array.from(refs.sort.options).forEach(item => { item.textContent = I18n.t('pivot.window.sort.' + item.value); });
+    refs.filterLabel.textContent = I18n.t('pivot.window.filter');
+    refs.fmtLabel.textContent = I18n.t('pivot.window.format');
+    refs.fmtMoreLabel.textContent = I18n.t('pivot.window.format.more');
+    refs.fmtStyleLabel.textContent = I18n.t('pivot.window.format.style');
+    ['', 'fr', 'us', 'none'].forEach((value, index) => { refs.fmtStyle.options[index].textContent = I18n.t(value ? 'varFmt.style' + value.charAt(0).toUpperCase() + value.slice(1) : 'pivot.window.format.auto'); });
+    refs.fmtDecimalsLabel.textContent = I18n.t('varFmt.decimals');
+    ['', '0', '1', '2', '3'].forEach((value, index) => { refs.fmtDecimals.options[index].textContent = value ? value : I18n.t('varFmt.decimalsAuto'); });
+    refs.fmtCurrencyLabel.textContent = I18n.t('varFmt.currencyPlaceholder');
+    refs.fmtCurrency.title = I18n.t('varFmt.currencyTitle');
+    refs.fmtCurrency.placeholder = '€';
+    refs.fmtPercentText.textContent = I18n.t('varFmt.percentTitle');
+    refs.fmtZeroText.textContent = I18n.t('varFmt.zero');
     refs.previewLabel.textContent = I18n.t('pivot.window.preview');
     refs.kind.buttons.forEach((item) => { item.textContent = I18n.t('pivot.window.kind.' + item.dataset.value); });
     refs.remove.textContent = I18n.t('pivot.window.remove');
@@ -361,6 +453,54 @@ const PivotWindow = (function () {
     refs.rowAdd.hidden = second;
     syncKind();
     syncTotals();
+    renderFilter();
+    syncFormat();
+  }
+
+  // Les lignes retenues, comme le filtre d'une Boucle (js/variable-loop.js:renderFilter) : sans règle, le bouton d'ajout et « toutes les lignes lues » ; avec, « Garder les lignes où toutes / au moins une des conditions
+  // sont remplies », les lignes Colonne / Opérateur / Valeur sur les colonnes de la table lue, et des groupes (« + Groupe ») pour mêler « et » et « ou ».
+  function renderFilter() {
+    const w = state.working;
+    const { filterBox } = refs;
+    const rules = w.rules;
+    const redraw = () => { renderFilter(); previewRun.schedule(); };
+    filterBox.replaceChildren();
+    if (!rules.length) {
+      const row = el('div', 'var-loop-filter-empty');
+      row.append(ConditionFields.buildAddRuleButton(filterBox, rules, redraw), el('span', 'var-loop-hint', I18n.t('pivot.window.filterNone')));
+      filterBox.appendChild(row);
+      return;
+    }
+    const modeRow = el('div', 'var-condition-mode');
+    const modeSelect = el('select');
+    modeSelect.setAttribute('aria-label', I18n.t('varCond.modeAria'));
+    modeSelect.append(option('all', I18n.t('varCond.modeAll')), option('any', I18n.t('varCond.modeAny')));
+    modeSelect.value = w.filterMode;
+    modeSelect.addEventListener('change', () => { w.filterMode = modeSelect.value === 'any' ? 'any' : 'all'; redraw(); });
+    modeRow.append(el('span', null, I18n.t('varLoop.filter.before')), modeSelect, el('span', null, I18n.t('varCond.modeAfter')));
+    const rulesBox = el('div', 'var-condition-rules');
+    ConditionFields.renderItems(rulesBox, {
+      items: rules,
+      mode: w.filterMode,
+      setMode: (next) => { w.filterMode = next; },
+      buildRow: (rule, row) => ConditionFields.buildRuleRow(rule, row.index, Object.assign({}, row, { options: { table: w.table } })),
+      removeItem: (index) => { rules.splice(index, 1); redraw(); },
+      redraw,
+      root: filterBox,
+    });
+    const foot = el('div', 'var-condition-foot');
+    foot.append(ConditionFields.buildAddRuleButton(filterBox, rules, redraw), ConditionFields.buildAddGroupButton(filterBox, rules, () => w.filterMode, redraw));
+    rulesBox.appendChild(foot);
+    filterBox.append(modeRow, rulesBox);
+  }
+  // Les champs d'écriture des nombres relus dans les réglages.
+  function syncFormat() {
+    const w = state.working;
+    refs.fmtStyle.value = w.fmtStyle;
+    refs.fmtDecimals.value = w.fmtDecimals;
+    refs.fmtCurrency.value = w.fmtCurrency;
+    refs.fmtPercent.checked = w.fmtPercent;
+    refs.fmtHideZero.checked = w.fmtHideZero;
   }
 
   function syncSource() {

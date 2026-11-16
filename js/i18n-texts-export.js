@@ -482,6 +482,7 @@ const I18nTextsExport = {
   'batchPrecheck.reason.broken.path': { fr: 'la variable #{key} est cassée : son chemin ne mène plus à une colonne', en: 'variable #{key} is broken: its path no longer leads to a column' },
   'batchPrecheck.reason.error': { fr: 'la variable #{key} s’écrirait « {text} »', en: 'variable #{key} would be written as “{text}”' },
   'batchPrecheck.reason.errorCalc': { fr: 'le calcul « {key} » s’écrirait « {text} »', en: 'the calculation “{key}” would be written as “{text}”' },
+  'batchPrecheck.reason.errorPivot': { fr: 'le tableau croisé « {key} » s’écrirait « {text} »', en: 'the pivot table “{key}” would be written as “{text}”' },
   'batchPrecheck.reason.image.notImage': { fr: 'la pièce jointe de #{key} (« {name} ») n’est pas une image', en: 'the attachment of #{key} (“{name}”) is not an image' },
   'batchPrecheck.reason.image.unknown': { fr: 'la pièce jointe de #{key} est introuvable dans Grist', en: 'the attachment of #{key} cannot be found in Grist' },
   'batchPrecheck.reason.nameEmpty': { fr: 'le nom du fichier est vide : il s’appellera « {name} »', en: 'the file name is empty: it will be called “{name}”' },

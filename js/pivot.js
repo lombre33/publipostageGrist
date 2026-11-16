@@ -7,11 +7,12 @@
 // La définition d'un tableau croisé (`normalize`) - ce que la zone portera, en JSON, dans la page :
 //   { v: 1, source: null | { table, scope: 'linked'|'view'|'table' }, rows: [chemin] | [chemin, chemin], cols: [] | [chemin],
 //     value: null | { kind: 'column', path } | { kind: 'formula', formula }, agg: 'sum'|'count'|'average'|'min'|'max',
-//     totals: { rows, cols }, sort: 'choices'|'az'|'za'|'total', filter: null | objet, format: null | objet }
+//     totals: { rows, cols }, sort: 'choices'|'az'|'za'|'total', filter: null | { mode, rules }, format: null | { type: 'number', style?, decimals?, currency?, percent?, zero? } }
 // - Un `chemin` est le nom d'une colonne de la table source, ou un chemin par références (« Emplacement.Zone ») : le moteur ne le suit pas, c'est celui qui
 //   lit les lignes qui le fait (`needs` dit quoi lire).
-// - `source`, `filter` et `format` ne sont lus que par les lots suivants (quelles lignes, lesquelles retenir, comment écrire un nombre) : le moteur les garde
-//   tels quels. Sans `value`, le tableau compte les lignes (agg vaut 'count').
+// - `source` (quelles lignes lire), `filter` (lesquelles retenir : la condition d'une bulle, `{ mode: 'all'|'any', rules }`, dont les règles se lisent dans js/condition-rules.js) et
+//   `format` (comment écrire un nombre : celui d'une bulle, réduit à ce que le tableau règle - séparateurs, décimales, devise, pourcentage, zéro) ne sont pas lus par le moteur : il
+//   garde le filtre tel quel (celui qui lit les lignes le retient) et ramène le format à ses seules clés connues (`normalizeFormat`). Sans `value`, le tableau compte les lignes (agg vaut 'count').
 // - `totals.rows` : la colonne des totaux de chaque ligne ; `totals.cols` : la ligne des totaux de chaque colonne. Un total est calculé sur les LIGNES de la
 //   rangée (une moyenne de la rangée, pas la somme de ses moyennes) et une ligne n'y compte qu'une fois, même quand une liste de choix la met dans plusieurs
 //   cases.
@@ -51,6 +52,21 @@ const Pivot = (function () {
   }
   const detached = value => (isPlain(value) ? JSON.parse(JSON.stringify(value)) : null);
 
+  // Le format d'écriture d'un nombre (celui des bulles : js/variable-format.js:formatNumber), réduit à ce que le tableau règle : `style` ('fr', 'us' ou 'none' : les séparateurs ; absent = ceux de la langue
+  // de l'interface), `decimals` (0 à 3 ; absent = automatique), `currency` (un symbole ou un mot de six signes au plus), `percent` (vrai : 0,256 s'écrit 25,6 %) et `zero: 'show'` (le zéro s'écrit ; sans
+  // lui, une valeur nulle ne s'écrit pas, comme dans une bulle). Une clé inconnue ou hors limites est retirée ; sans aucun réglage, null (l'écriture par défaut).
+  function normalizeFormat(raw) {
+    if (!isPlain(raw)) return null;
+    const format = { type: 'number' };
+    if (raw.style === 'fr' || raw.style === 'us' || raw.style === 'none') format.style = raw.style;
+    if (Number.isInteger(raw.decimals) && raw.decimals >= 0 && raw.decimals <= 3) format.decimals = raw.decimals;
+    const currency = typeof raw.currency === 'string' ? raw.currency.trim() : '';
+    if (currency && currency.length <= 6) format.currency = currency;
+    if (raw.percent === true) format.percent = true;
+    if (raw.zero === 'show') format.zero = 'show';
+    return Object.keys(format).length > 1 ? format : null;
+  }
+
   // La forme sûre d'une définition lue dans la page (objet ou JSON) ; null si elle ne tient pas : rien en lignes, plus de deux colonnes en lignes ou
   // plus d'une en colonnes, une colonne posée deux fois, une valeur ou une fonction inconnue.
   function normalize(raw) {
@@ -83,7 +99,7 @@ const Pivot = (function () {
       source = { table: pathOf(def.source.table), scope };
     }
     const totals = isPlain(def.totals) ? { rows: def.totals.rows !== false, cols: def.totals.cols !== false } : { rows: true, cols: true };
-    return { v: VERSION, source, rows, cols, value, agg, totals, sort, filter: detached(def.filter), format: detached(def.format) };
+    return { v: VERSION, source, rows, cols, value, agg, totals, sort, filter: detached(def.filter), format: normalizeFormat(def.format) };
   }
 
   // Ce que celui qui lit les lignes doit lire pour chacune : `dims` (les chemins de regroupement, lignes puis colonnes) et `measure` - null, `{ kind:
@@ -311,5 +327,5 @@ const Pivot = (function () {
     };
   }
 
-  return { VERSION, AGGREGATES, SORTS, SCOPES, MAX_ROW_LEVELS, COLUMN_WARNING, normalize, needs, compute };
+  return { VERSION, AGGREGATES, SORTS, SCOPES, MAX_ROW_LEVELS, COLUMN_WARNING, normalize, normalizeFormat, needs, compute };
 })();

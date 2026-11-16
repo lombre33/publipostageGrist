@@ -176,7 +176,7 @@
 "PdfView":"barElement:f clearSelection:f hasText:f isMounted:f markElement:f mount:f onMarkClick:f onMounted:f onTextKnown:f pageText:f pagesShown:f selection:f setBar:f setMarks:f unmount:f",
 "PerfTrace":"download:f events:f mark:f report:f summary:f totals:f watch:f",
 "PersonStore":"get:f onLoaded:f ready:d remove:f set:f shared:f",
-"Pivot":"AGGREGATES:d COLUMN_WARNING:d MAX_ROW_LEVELS:d SCOPES:d SORTS:d VERSION:d compute:f needs:f normalize:f",
+"Pivot":"AGGREGATES:d COLUMN_WARNING:d MAX_ROW_LEVELS:d SCOPES:d SORTS:d VERSION:d compute:f needs:f normalize:f normalizeFormat:f",
 "PivotEditor":"ATTR:d apply:f createExtension:f defAt:f drawTable:f fillPreview:f isBlank:f pivotRows:f serialize:f status:f",
 "PivotWindow":"isOpen:f open:f",
 "PivotZones":"ATTR:d ZONE_SELECTOR:d cellText:f compute:f defOf:f describe:f errorLine:f errorText:f expand:f formulaLabel:f layout:f load:f pathLabel:f toRows:f valueTitle:f",

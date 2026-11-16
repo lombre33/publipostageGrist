@@ -1888,7 +1888,8 @@ const ReaderMode = (function () {
     // (aucune table connue), rien n'est dit « cassé ».
     const { wrapper, loopCtx } = await expandedWrapper(htmlContent, tableId, record);
     const table = tableId || lastCurrentTableId;
-    const errors = [];
+    // Un tableau croisé qui ne se lit pas (table disparue, plus de ligne liée à la page) ou dont une case dit son erreur : le document l'écrit comme à la Lecture, le contrôle le dit une fois par tableau (js/pivot-zones.js:noteProblem).
+    const errors = (loopCtx.pivotProblems || []).map(problem => ({ key: problem.name, text: problem.text, pivot: true }));
     const broken = [];
     const images = [];
     let seen = 0;

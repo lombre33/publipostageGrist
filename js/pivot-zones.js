@@ -160,7 +160,8 @@ const PivotZones = (function () {
     const context = ctx || LoopRules.createContext();
     // La table de la page n'a pas de « lignes liées à la ligne de la page » : sa propre vue (js/loop-rules.js:allSourceFor).
     const scope = def.source.scope === 'linked' && table === tableId ? 'view' : def.source.scope;
-    const loop = { repeat: 'row', table, via: null, within: null, by: null, all: scope === 'linked' ? null : scope, filter: null, sort: { column: null, direction: 'asc' } };
+    // Le filtre du tableau est celui d'une boucle (js/loop-rules.js:iterate le passe aux lignes lues) : les règles incomplètes sont ignorées, sans règle complète toutes les lignes sont gardées.
+    const loop = { repeat: 'row', table, via: null, within: null, by: null, all: scope === 'linked' ? null : scope, filter: ConditionRules.normalizeCondition(def.filter), sort: { column: null, direction: 'asc' } };
     const found = await LoopRules.iterate(loop, tableId, record, context);
     if (found.error) return { def, error: found.error === 'noLink' ? I18n.t('pivot.error.noLink', { table }) : I18n.t('pivot.error.source', { table, reason: found.error }) };
     const fetchRows = context.fetchRows;
@@ -206,7 +207,8 @@ const PivotZones = (function () {
     if (typeof value === 'object') return errorText(value.error);
     const format = def.format && typeof def.format === 'object' ? def.format : null;
     const opts = { keepZero: !!(format && format.zero === 'show') };
-    if (def.agg === 'count') return Variables.formatValue(value, { type: 'number', style: 'none', decimals: 0, zero: 'show' }, null, null, Object.assign({ colType: 'Int' }, opts));
+    // Un nombre de lignes ou de valeurs compte des unités : entier, zéro écrit, seuls les séparateurs du format choisi y servent.
+    if (def.agg === 'count') return Variables.formatValue(value, { type: 'number', style: format && format.style ? format.style : 'none', decimals: 0, zero: 'show' }, null, null, Object.assign({ colType: 'Int' }, opts));
     if (def.value && def.value.kind === 'column') return Variables.formatValue(value, format, def.source.table, def.value.path, opts);
     return Variables.formatValue(value, format, null, null, Object.assign({ colType: 'Numeric' }, opts));
   }
@@ -303,6 +305,13 @@ const PivotZones = (function () {
     });
   }
 
+  // Ce qui ne s'écrit pas dans un tableau, dit au contrôle d'avant lot (js/reader-mode.js:inspect) : `ctx.pivotProblems` reçoit { name, text } - le nom du tableau (« Catégorie × Zone · Somme de Stock ») et le message sans son
+  // « [ERREUR : … ] » - pour un tableau qui ne se lit pas ou pour la première case en erreur d'un tableau lu ; le document, lui, l'écrit comme à la Lecture.
+  function noteProblem(ctx, def, text) {
+    if (!ctx) return;
+    (ctx.pivotProblems = ctx.pivotProblems || []).push({ name: (def && describe(def)) || I18n.t('pivot.window.title'), text: bare(text) });
+  }
+
   // Remplace chaque ligne de tableau croisé de `root` par son tableau. `ctx` : celui de LoopRules.createContext, partagé avec le déroulé des boucles (lecture mémorisée des tables ; `readsAll` y dit à la Lecture de se redessiner
   // quand la vue de Grist change). Sans ligne de la page (rien à afficher) la ligne est simplement retirée.
   async function expand(root, tableId, record, ctx) {
@@ -318,16 +327,19 @@ const PivotZones = (function () {
       try {
         const built = await compute(tr.getAttribute(ATTR), tableId, record, ctx);
         if (ctx && built.readsAll) ctx.readsAll = true;
-        if (built.error) rows = [messageRow(errorLine(built.error), oldWidth)];
-        else if (!built.result.rows.length) rows = [messageRow(wrapError(I18n.t('pivot.error.noRows')), oldWidth)];
+        if (built.error) { rows = [messageRow(errorLine(built.error), oldWidth)]; noteProblem(ctx, built.def, built.error); }
+        else if (!built.result.rows.length) { rows = [messageRow(wrapError(I18n.t('pivot.error.noRows')), oldWidth)]; noteProblem(ctx, built.def, I18n.t('pivot.error.noRows')); }
         else {
           const laid = layout(built.result, built.def);
           columns = Math.max(oldWidth, laid.width);
           rows = toRows(laid.rows, columns, widths);
+          const failed = laid.rows.reduce((found, row) => found || row.cells.find(c => c.error), null);
+          if (failed) noteProblem(ctx, built.def, failed.text);
         }
       } catch (e) {
         console.error('[PivotZones] échec du tableau croisé', e);
         rows = [messageRow(wrapError(I18n.t('pivot.error.cell')), oldWidth)];
+        noteProblem(ctx, null, I18n.t('pivot.error.cell'));
       }
       tr.replaceWith(...rows);
       padRows(table, oldWidth, columns);

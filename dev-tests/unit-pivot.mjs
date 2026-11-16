@@ -254,9 +254,22 @@ check('compute est déterministe : deux appels, même résultat, lignes données
   const second = compute(atlasDef, atlasRecords.slice().reverse());
   return same(first.rows, second.rows) && same(first.cols, second.cols) && nearAll(first.colTotals, second.colTotals) && near(first.grand, second.grand);
 })());
-check('source, filtre et format sont gardés tels quels par normalize (pour les lots suivants)', (() => {
-  const def = call('normalize', { rows: ['A'], source: { table: 'Produits', scope: 'table' }, filter: { all: [{ path: 'A', op: 'eq', value: 'x' }] }, format: { decimals: 2, currency: 'EUR' } });
-  return same(def.filter, { all: [{ path: 'A', op: 'eq', value: 'x' }] }) && same(def.format, { decimals: 2, currency: 'EUR' }) && def.source.scope === 'table';
+check('source et filtre sont gardés tels quels par normalize (le filtre se lit à la lecture des lignes)', (() => {
+  const filter = { mode: 'all', rules: [{ column: 'A', operator: '=', value: 'x' }] };
+  const def = call('normalize', { rows: ['A'], source: { table: 'Produits', scope: 'table' }, filter });
+  return same(def.filter, filter) && def.filter !== filter && def.source.scope === 'table' && call('normalize', { rows: ['A'] }).filter === null;
+})());
+check('normalize : le format garde les seules clés connues, dans un ordre fixe (type, style, décimales, devise, pourcentage, zéro)', (() => {
+  const def = call('normalize', { rows: ['A'], format: { zero: 'show', percent: true, currency: ' € ', decimals: 2, style: 'us', words: true, junk: 1 } });
+  return same(def.format, { type: 'number', style: 'us', decimals: 2, currency: '€', percent: true, zero: 'show' })
+    && JSON.stringify(def.format) === '{"type":"number","style":"us","decimals":2,"currency":"€","percent":true,"zero":"show"}';
+})());
+check('normalize : un format sans aucun réglage connu, ou hors limites, vaut « pas de format »', ['x', 4, [], {}, { decimals: 4 }, { decimals: -1 }, { decimals: 1.5 }, { style: 'de' }, { currency: '  ' }, { currency: 'trop long' }, { percent: 'oui' }, { zero: 'hide' }, { type: 'date', preset: 'iso' }]
+  .every(format => call('normalize', { rows: ['A'], format }).format === null) && call('normalize', { rows: ['A'] }).format === null);
+check('normalize : décimales de 0 à 3 gardées, le zéro est une décimale valable', [0, 1, 2, 3].every(n => call('normalize', { rows: ['A'], format: { decimals: n } }).format.decimals === n));
+check('normalize : une définition relue deux fois est la même (le format normalisé se normalise en lui-même)', (() => {
+  const once = call('normalize', { rows: ['A'], format: { style: 'fr', decimals: 0, percent: true, zero: 'show' }, filter: { mode: 'any', rules: [] } });
+  return same(call('normalize', JSON.stringify(once)), once);
 })());
 
 summarizeAndExit();
