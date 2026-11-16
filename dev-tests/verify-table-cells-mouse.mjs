@@ -329,7 +329,7 @@ async function runTheme(colorScheme) {
     const item = await realClick(page, targetSel);
     check(`${label} - ${what} est visible dans le panneau`, !!item && item.inViewport, item);
   };
-  const disabledOf = id => page.evaluate(i => document.getElementById(i).disabled, id);
+  const disabledOf = id => page.evaluate(i => { const b = document.getElementById(i); return b.disabled || b.hasAttribute('data-pp-lock-soft'); }, id); // grisé : `disabled` ou grisé « doux » (js/lock-reasons.js)
 
   await loadDoc(page, TABLE);
   const quoteRect = await dragCells(page, FROM, TO);

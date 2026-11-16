@@ -124,7 +124,7 @@ window.EditorTestSuites.orientation = (function () {
           const btn = document.getElementById('btn-page-orientation');
           const sheet = document.querySelector('#editor-container .v2-page-sheet');
           const breaks = () => document.querySelectorAll('#editor-container .v2-page-break-line').length;
-          if (btn.disabled) problems.push('grisé sur un modèle classique');
+          if (btn.disabled || btn.hasAttribute('data-pp-lock-soft')) problems.push('grisé sur un modèle classique');
           const portraitBreaks = breaks();
           const portraitWidth = layoutWidth(sheet);
           layoutEvents = 0; marginsEvents = 0;
@@ -144,7 +144,7 @@ window.EditorTestSuites.orientation = (function () {
           h.openFlyout('#v2-new-template-group');
           await h.clickButton('v2-btn-new-email');
           await h.sleep(300);
-          if (!btn.disabled) problems.push('dégrisé sur un email');
+          if (!btn.disabled && !btn.hasAttribute('data-pp-lock-soft')) problems.push('dégrisé sur un email'); // grisé : `disabled`, ou grisé « doux » (js/lock-reasons.js)
           btn.click(); OrientationToggle.toggle();
           await h.sleep(100);
           if (PageLayout.isLandscape()) problems.push('un email a tourné');
@@ -311,7 +311,7 @@ window.EditorTestSuites.orientation = (function () {
         const saved = JSON.parse(row.Margins || '{}');
         const portraitId = await savedTemplate(h, 'Orient portrait', '<p>Portrait</p>', 'portrait');
         const sheetNow = () => { const el = document.querySelector('#editor-container .v2-page-sheet'); return el ? layoutWidth(el) : null; };
-        const buttonNow = () => { const b = document.getElementById('btn-page-orientation'); return { disabled: b.disabled, pressed: b.getAttribute('aria-pressed') }; };
+        const buttonNow = () => { const b = document.getElementById('btn-page-orientation'); return { disabled: b.disabled || b.hasAttribute('data-pp-lock-soft'), pressed: b.getAttribute('aria-pressed') }; };
         await selectTemplate(h, landscapeId);
         const loadedLandscape = { landscape: PageLayout.isLandscape(), cssVar: document.documentElement.style.getPropertyValue('--pp-page-width') };
         const landscapeButton = buttonNow();

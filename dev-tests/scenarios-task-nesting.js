@@ -163,10 +163,10 @@
       const outdent = document.getElementById('v2-btn-outdent');
       await caretIn('Premier');
       await sleep(80);
-      const first = { indent: !indent.disabled, outdent: !outdent.disabled };
+      const first = { indent: !((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(indent), outdent: !((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(outdent) };
       await caretIn('Deuxième');
       await sleep(80);
-      const second = { indent: !indent.disabled, outdent: !outdent.disabled };
+      const second = { indent: !((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(indent), outdent: !((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(outdent) };
       await h.clickButton('v2-btn-indent');
       await sleep(80);
       const nested = shape();

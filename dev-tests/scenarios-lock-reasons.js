@@ -8,6 +8,8 @@
   const cases = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const byId = id => document.getElementById(id);
+  // Un bouton grisé : `disabled` du navigateur, ou « grisé doux » (js/lock-reasons.js : `data-pp-lock-soft`, qui arrête le clic et ouvre la bulle).
+  const GREY = el => !!el && (el.disabled || el.hasAttribute('data-pp-lock-soft'));
   // Ce que dit un clic sur un grisé : la bulle sous le contrôle (js/lock-bubble.js, qui a remplacé la phrase du coin d'état), sinon le coin d'état.
   const say = () => { const why = document.querySelector('.pp-lockbubble-why'); return (why ? why.textContent : byId('status-msg').textContent).trim(); };
   const clearSaid = () => { LockBubble.close(); byId('status-msg').textContent = ''; };
@@ -207,7 +209,8 @@
       // Ce que la grille laisse actif ne dit rien.
       const activeQuiet = ['v2-btn-bold', 'v2-btn-link', 'v2-btn-undo'].filter(id => blocks(id) || byId(id).hasAttribute('data-pp-lock-reason'));
       await goToNewDocument(h);
-      const stuck = ids.concat(['v2-a4-toggle']).filter(id => blocks(id));
+      // Encore grisé par la grille : accepter et refuser tout peuvent rester grisés pour une autre raison (aucune modification en attente, cause « state »).
+      const stuck = ids.concat(['v2-a4-toggle']).filter(id => blocks(id) && (titleOf(id) === reason || id === 'v2-a4-toggle'));
       const pass = silent.length === 0 && a4Title === I18n.t('lock.gridSheet') && saidByTable === reason && saidByA4 === I18n.t('lock.gridSheet') && a4Checked && activeQuiet.length === 0 && stuck.length === 0 && !a4.hasAttribute('title');
       return { pass, notes: JSON.stringify({ silent, a4Title, saidByTable, saidByA4, a4Checked, activeQuiet, stuck }) };
     },
@@ -268,7 +271,7 @@
       await goToNewEmail(h);
       const reason = I18n.t('lock.email');
       const button = byId('btn-page-orientation');
-      const buttonOk = button.disabled && button.getAttribute('title') === reason;
+      const buttonOk = GREY(button) && button.getAttribute('title') === reason;
       const rows = Array.from(document.querySelectorAll('#v2-page-flyout .v2-hover-row-check'));
       const silent = rows.filter(r => r.getAttribute('title') !== reason || !r.hasAttribute('data-pp-lock-blocks')).map(r => r.id || r.textContent.trim().slice(0, 20));
       clearSaid();
@@ -278,7 +281,7 @@
       const quiet = rows.concat([button]).filter(r => r.hasAttribute('data-pp-lock-blocks') || r.getAttribute('title') === reason).length;
       OrientationToggle.setBusy(true);
       const busyReason = I18n.t('lock.pageBusy');
-      const busyButton = button.disabled && button.getAttribute('title') === busyReason;
+      const busyButton = GREY(button) && button.getAttribute('title') === busyReason;
       const busyRows = Array.from(document.querySelectorAll('#v2-page-flyout .v2-hover-row-check')).filter(r => r.getAttribute('title') !== busyReason).length;
       OrientationToggle.setBusy(false);
       const free = !button.hasAttribute('data-pp-lock-reason') && rows.every(r => !r.hasAttribute('data-pp-lock-reason'));
@@ -336,32 +339,32 @@
       ed().commands.setTextSelection(posOf('Un'));
       MainToolbar.syncToolbarState();
       const out = {};
-      out.plain = { indent: byId('v2-btn-indent').disabled && titleOf('v2-btn-indent') === I18n.t('lock.indent'), outdent: byId('v2-btn-outdent').disabled && titleOf('v2-btn-outdent') === I18n.t('lock.outdent') };
-      out.nothingPending = ['v2-btn-accept-all', 'v2-btn-reject-all'].every(id => byId(id).disabled && titleOf(id) === I18n.t('lock.noPending'));
+      out.plain = { indent: GREY(byId('v2-btn-indent')) && titleOf('v2-btn-indent') === I18n.t('lock.indent'), outdent: GREY(byId('v2-btn-outdent')) && titleOf('v2-btn-outdent') === I18n.t('lock.outdent') };
+      out.nothingPending = ['v2-btn-accept-all', 'v2-btn-reject-all'].every(id => GREY(byId(id)) && titleOf(id) === I18n.t('lock.noPending'));
       Editor.setHTML('<ul><li><p>Premier</p></li><li><p>Second</p></li></ul>');
       await sleep(80);
       ed().commands.setTextSelection(posOf('Second'));
       MainToolbar.syncToolbarState();
-      out.secondItem = { indentFree: !byId('v2-btn-indent').disabled && titleOf('v2-btn-indent') === null && !byId('v2-btn-indent').hasAttribute('data-pp-lock-reason'), outdentFree: !byId('v2-btn-outdent').disabled && titleOf('v2-btn-outdent') === null };
+      out.secondItem = { indentFree: !GREY(byId('v2-btn-indent')) && titleOf('v2-btn-indent') === null && !byId('v2-btn-indent').hasAttribute('data-pp-lock-reason'), outdentFree: !GREY(byId('v2-btn-outdent')) && titleOf('v2-btn-outdent') === null };
       ed().commands.setTextSelection(posOf('Premier'));
       MainToolbar.syncToolbarState();
-      out.firstItem = { indent: byId('v2-btn-indent').disabled && titleOf('v2-btn-indent') === I18n.t('lock.indent'), outdentFree: !byId('v2-btn-outdent').disabled };
+      out.firstItem = { indent: GREY(byId('v2-btn-indent')) && titleOf('v2-btn-indent') === I18n.t('lock.indent'), outdentFree: !GREY(byId('v2-btn-outdent')) };
       // ★ : sans modèle enregistré, puis sur un email enregistré, puis sur un document enregistré.
       const star = byId('btn-set-default-template');
       await goToNewDocument(h);
-      out.starNone = star.disabled && star.getAttribute('title') === I18n.t('lock.defaultNone');
+      out.starNone = GREY(star) && star.getAttribute('title') === I18n.t('lock.defaultNone');
       await goToNewEmail(h);
       byId('template-name').hidden = false;
       byId('template-name').value = 'EmailDesRaisons';
       await h.clickButton('btn-save');
       await sleep(250);
-      out.starEmail = star.disabled && star.getAttribute('title') === I18n.t('lock.defaultType');
+      out.starEmail = GREY(star) && star.getAttribute('title') === I18n.t('lock.defaultType');
       await goToNewDocument(h);
       byId('template-name').hidden = false;
       byId('template-name').value = 'DocDesRaisons';
       await h.clickButton('btn-save');
       await sleep(250);
-      out.starFree = !star.disabled && !star.hasAttribute('title') && !star.hasAttribute('data-pp-lock-reason');
+      out.starFree = !GREY(star) && !star.hasAttribute('title') && !star.hasAttribute('data-pp-lock-reason');
       const pass = out.plain.indent && out.plain.outdent && out.nothingPending && out.secondItem.indentFree && out.secondItem.outdentFree && out.firstItem.indent && out.firstItem.outdentFree && out.starNone && out.starEmail && out.starFree;
       return { pass, notes: JSON.stringify(out) };
     },
@@ -380,16 +383,16 @@
       const resetAll = byId('settings-keys-reset-all');
       const out = {};
       out.rows = resets().length;
-      out.allQuiet = resets().filter(b => !b.disabled || b.getAttribute('title') !== I18n.t('lock.keyDefault')).length;
-      out.resetAll = resetAll.disabled && resetAll.getAttribute('title') === I18n.t('lock.keysAllDefault');
+      out.allQuiet = resets().filter(b => !GREY(b) || b.getAttribute('title') !== I18n.t('lock.keyDefault')).length;
+      out.resetAll = GREY(resetAll) && resetAll.getAttribute('title') === I18n.t('lock.keysAllDefault');
       Shortcuts.setKey('modeRead', 'Alt+r');
       await sleep(80);
       const row = document.querySelector('.settings-key-row[data-action="modeRead"] .settings-key-reset');
-      out.changedFree = !row.disabled && !row.hasAttribute('title') && !resetAll.disabled && !resetAll.hasAttribute('title');
+      out.changedFree = !GREY(row) && !row.hasAttribute('title') && !GREY(resetAll) && !resetAll.hasAttribute('title');
       out.othersStillSay = resets().filter(b => b !== row && b.getAttribute('title') !== I18n.t('lock.keyDefault')).length;
       Shortcuts.resetAll();
       await sleep(80);
-      out.backToQuiet = row.disabled && row.getAttribute('title') === I18n.t('lock.keyDefault') && resetAll.disabled && resetAll.getAttribute('title') === I18n.t('lock.keysAllDefault');
+      out.backToQuiet = GREY(row) && row.getAttribute('title') === I18n.t('lock.keyDefault') && GREY(resetAll) && resetAll.getAttribute('title') === I18n.t('lock.keysAllDefault');
       byId('settings-close').click();
       const pass = out.rows > 30 && out.allQuiet === 0 && out.resetAll && out.changedFree && out.othersStillSay === 0 && out.backToQuiet;
       return { pass, notes: JSON.stringify(out) };

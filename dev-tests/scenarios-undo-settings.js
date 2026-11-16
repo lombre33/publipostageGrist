@@ -409,7 +409,7 @@ window.EditorTestSuites.undoSettings = (function () {
         check(problems, 'Ctrl + Z : l\'infobulle du gras dit Ctrl+B', keytip('bold'), tipOf('Mod+b'));
         check(problems, 'Ctrl + Z : le coin d\'état nomme l\'action et sa touche', [status(), statusClass() === 'error-msg'], [keySaid('bold', 'Mod+b'), false]);
         await openKeys(h);
-        check(problems, 'la liste rouverte montre Ctrl+B et grise « Par défaut »', [keyShown('bold'), keyReset('bold').disabled], [Shortcuts.format('Mod+b'), true]);
+        check(problems, 'la liste rouverte montre Ctrl+B et grise « Par défaut »', [keyShown('bold'), ((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(keyReset('bold'))], [Shortcuts.format('Mod+b'), true]);
         await closeSettings(h);
         await redo(h);
         check(problems, 'Ctrl + Y : Alt+B revient (choix gardé, infobulle, coin d\'état)', [Shortcuts.keyFor('bold'), storedKeys(), keytip('bold'), status()], ['Alt+b', { bold: 'Alt+b' }, tipOf('Alt+b'), keySaid('bold', 'Alt+b')]);

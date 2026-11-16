@@ -1137,7 +1137,7 @@ window.EditorTestSuites.pageSections = (function () {
           OrientationToggle.sync();
           const button = document.getElementById('btn-page-orientation');
           const why = I18n.t('toolbar.page.docHf');
-          if (!button.disabled || button.getAttribute('aria-label') !== I18n.t('toolbar.orientation.docHf')) problems.push('le bouton n\'est pas grisé avec sa raison : ' + button.getAttribute('aria-label'));
+          if (!(button.disabled || button.hasAttribute('data-pp-lock-soft')) || button.getAttribute('aria-label') !== I18n.t('toolbar.orientation.docHf')) problems.push('le bouton n\'est pas grisé avec sa raison : ' + button.getAttribute('aria-label'));
           ['portrait', 'landscape'].forEach(sense => { const state = stateOf(senseRow(sense)); if (state.disabled !== 'true' || state.title !== why) problems.push('« ' + sense + ' » : ' + JSON.stringify(state)); });
           const mainBefore = HeaderFooterPreview.mainDocumentHtml();
           await OrientationToggle.selectOrientation('landscape');
@@ -1148,7 +1148,7 @@ window.EditorTestSuites.pageSections = (function () {
           if (done) done.click();
           await h.sleep(300);
           OrientationToggle.sync();
-          if (document.getElementById('btn-page-orientation').disabled) problems.push('le bouton reste grisé après l\'en-tête');
+          if (((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(document.getElementById('btn-page-orientation'))) problems.push('le bouton reste grisé après l\'en-tête');
         }
         // Les autres types de modèle n'ont pas ce choix ; il revient avec le document.
         const block = document.getElementById('v2-page-scope');

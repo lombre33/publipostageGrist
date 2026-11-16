@@ -67,7 +67,7 @@ async function toRow(page, groupSelector, rowSelector) {
 const clickRow = async (page, groupSelector, rowSelector) => { const r = await toRow(page, groupSelector, rowSelector); await pressAt(page, r); return r; };
 
 // Un contrôle grisé : le survol dit pourquoi (info-bulle du contrôle lui-même, curseur « interdit », pas de seconde bulle de l'application), le vrai appui ouvre la bulle, qui dit la même raison.
-// `natively` : un bouton que le navigateur désactive ne reçoit aucun clic, l'info-bulle seule (le coin d'état reste muet).
+// `natively` : un bouton `disabled` du navigateur ne reçoit aucun clic, l'info-bulle seule (le coin d'état reste muet). Plus aucun contrôle de ce parcours : js/lock-reasons.js grise « doux » les boutons dont la cause est « state » (le clic ouvre la bulle).
 async function lockedControl(page, label, selector, reason, { natively = false, quietDocument = true, viaGroup = null } = {}) {
   // La bulle du contrôle d'avant se ferme (Échap, ou un appui ailleurs) : ouverte, elle recouvrirait celui-ci.
   await page.evaluate(() => LockBubble.close());
@@ -137,7 +137,7 @@ async function newTemplate(page, kind) {
     t.check('email : l\'appui sur la police grisée n\'ouvre pas son volet', font.inside && pressed !== 'true', pressed);
   }
   // Page : le bouton que le navigateur désactive (info-bulle seule).
-  await lockedControl(page, 'email : bouton Page', '#btn-page-orientation', /email/i, { natively: true, quietDocument: true });
+  await lockedControl(page, 'email : bouton Page', '#btn-page-orientation', /email/i, { quietDocument: true });
 
   // Une grille : la barre (tableau) et l'aperçu A4 (la case de l'étiquette).
   await newTemplate(page, 'grid');
@@ -205,8 +205,8 @@ async function newTemplate(page, kind) {
     await pressAt(page, tab);
     await page.waitForSelector('#settings-keys-list .settings-key-row', { state: 'visible', timeout: 5000 });
     await pause(300);
-    await lockedControl(page, 'Raccourcis : « Tout remettre par défaut »', '#settings-keys-reset-all', /rien à remettre/i, { natively: true });
-    await lockedControl(page, 'Raccourcis : « Par défaut » d\'une ligne', '#settings-keys-list .settings-key-row .settings-key-reset', /rien à remettre/i, { natively: true });
+    await lockedControl(page, 'Raccourcis : « Tout remettre par défaut »', '#settings-keys-reset-all', /rien à remettre/i);
+    await lockedControl(page, 'Raccourcis : « Par défaut » d\'une ligne', '#settings-keys-list .settings-key-row .settings-key-reset', /rien à remettre/i);
   }
   t.check('aucune boîte native ouverte pendant le parcours en français', true);
   await page.context().close();

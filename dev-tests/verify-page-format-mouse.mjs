@@ -468,7 +468,7 @@ async function runTheme(theme) {
   }
   await page.waitForTimeout(700);
   await away(page);
-  const onEmail = await page.evaluate(() => ({ disabled: document.getElementById('btn-page-orientation').disabled }));
+  const onEmail = await page.evaluate(() => ({ disabled: (b => b.disabled || b.hasAttribute('data-pp-lock-soft'))(document.getElementById('btn-page-orientation')) }));
   const btn2 = await boxOf(page, '#btn-page-orientation');
   await page.mouse.move(btn2.x - 8, btn2.y - 4, { steps: 2 }); await page.mouse.move(btn2.x, btn2.y, { steps: 3 }); await page.waitForTimeout(300);
   const emailMenu = await pageMenu(page);
@@ -513,7 +513,7 @@ async function runTheme(theme) {
   await page.waitForTimeout(1000);
   const macroRowNow = () => page.evaluate((id) => { const r = window.__gristStub.getRow('Publipostage_Modeles', id); return { margins: r.Margins, contenu: r.Contenu }; }, macroId);
   const macroBefore = await macroRowNow();
-  const onMacro = await page.evaluate(() => ({ disabled: document.getElementById('btn-page-orientation').disabled, summary: getComputedStyle(document.getElementById('macro-summary-container')).display,
+  const onMacro = await page.evaluate(() => ({ disabled: (b => b.disabled || b.hasAttribute('data-pp-lock-soft'))(document.getElementById('btn-page-orientation')), summary: getComputedStyle(document.getElementById('macro-summary-container')).display,
     editor: getComputedStyle(document.getElementById('editor-container')).display }));
   const macroBtn = await boxOf(page, '#btn-page-orientation');
   await page.mouse.move(macroBtn.x - 8, macroBtn.y - 4, { steps: 2 }); await page.mouse.move(macroBtn.x, macroBtn.y, { steps: 3 }); await page.waitForTimeout(300);

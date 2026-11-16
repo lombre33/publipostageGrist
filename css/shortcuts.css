@@ -27,8 +27,8 @@
 .settings-keys-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 6px; }
 .settings-keys-head .settings-section-title { margin: 0; }
 .settings-keys-head button, .settings-key-reset { font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); cursor: pointer; }
-.settings-keys-head button:hover:not(:disabled), .settings-key-reset:hover:not(:disabled) { background: var(--surface-sunken); }
-.settings-keys-head button:disabled, .settings-key-reset:disabled { opacity: .55; cursor: default; }
+.settings-keys-head button:hover:not(:disabled):not([data-pp-lock-soft]), .settings-key-reset:hover:not(:disabled):not([data-pp-lock-soft]) { background: var(--surface-sunken); }
+.settings-keys-head button:disabled, .settings-key-reset:disabled, .settings-keys-head button[data-pp-lock-soft], .settings-key-reset[data-pp-lock-soft] { opacity: .55; cursor: default; }
 .settings-keys-group { margin: 14px 0 4px; font-family: var(--font-ui); font-size: 12px; font-weight: 700; color: var(--text-muted); }
 .settings-keys-rows { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
 .settings-key-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0 8px; padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }

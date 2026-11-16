@@ -252,12 +252,12 @@
   }
   cases.push({
     id: 'lock_bubble_every_bar_reason_has_a_complete_finding',
-    description: 'LockBarCauses : chaque raison de grisé des barres du tableau et de l\'image (clés lues sur le bouton) a un constat - au moins une cause ✕, un geste, ce que le widget voit - dont aucun texte n\'est inachevé (accolade, clé non traduite, undefined), en français',
+    description: 'LockBarCauses : chaque raison de grisé des barres du tableau et de l\'image, des lignes de menu et des boutons grisés « doux » (clés lues sur le bouton) a un constat - au moins une cause ✕, un geste, ce que le widget voit - dont aucun texte n\'est inachevé (accolade, clé non traduite, undefined), en français',
     run: async (h) => {
       const out = await everyBarKey(h);
-      const required = ['table.rowsEqualizeNeed', 'table.cellMergeNeedsCells', 'table.cellTracked', 'table.settingTracked', 'table.rowRepeatNoSource', 'table.pivotDocument', 'linkedTable.lockedTracked', 'imgToolbar.conditionNeedsColumn', 'imgToolbar.reshapeVector', 'imgToolbar.repeatNeedsPage', 'caption.gridLocked', 'keepNext.notHere', 'paragraphFormat.notHere', 'textDirection.notHere', 'bulletFormat.notHere', 'bookmark.notHere', 'headingStyle.notHere', 'headingStyle.none', 'headingStyle.document.none'];
+      const required = ['table.rowsEqualizeNeed', 'table.cellMergeNeedsCells', 'table.cellTracked', 'table.settingTracked', 'table.rowRepeatNoSource', 'table.pivotDocument', 'linkedTable.lockedTracked', 'imgToolbar.conditionNeedsColumn', 'imgToolbar.reshapeVector', 'imgToolbar.repeatNeedsPage', 'caption.gridLocked', 'keepNext.notHere', 'paragraphFormat.notHere', 'textDirection.notHere', 'bulletFormat.notHere', 'bookmark.notHere', 'headingStyle.notHere', 'headingStyle.none', 'headingStyle.document.none', 'lock.indent', 'lock.outdent', 'lock.noPending', 'lock.defaultNone', 'lock.defaultType', 'lock.keyDefault', 'lock.keysAllDefault', 'lock.pageBusy', 'lock.pageDocHf'];
       const missing = required.filter(key => out.keys.indexOf(key) === -1);
-      return { pass: out.failures.length === 0 && missing.length === 0 && out.keys.length >= 39, notes: JSON.stringify({ count: out.keys.length, missing, failures: out.failures }) };
+      return { pass: out.failures.length === 0 && missing.length === 0 && out.keys.length >= 48, notes: JSON.stringify({ count: out.keys.length, missing, failures: out.failures }) };
     },
   });
   cases.push({

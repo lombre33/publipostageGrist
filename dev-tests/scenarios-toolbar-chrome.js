@@ -116,14 +116,14 @@
       document.getElementById('template-name').value = 'EmailPourDefaut';
       await h.clickButton('btn-save');
       await h.sleep(200);
-      const disabledOnEmail = document.getElementById('btn-set-default-template').disabled;
+      const disabledOnEmail = ((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(document.getElementById('btn-set-default-template'));
       await goToNewDocument(h);
       await h.sleep(30);
       document.getElementById('template-name').hidden = false;
       document.getElementById('template-name').value = 'DocPourDefaut';
       await h.clickButton('btn-save');
       await h.sleep(200);
-      const enabledOnDocument = !document.getElementById('btn-set-default-template').disabled;
+      const enabledOnDocument = !((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(document.getElementById('btn-set-default-template'));
       return { pass: disabledOnEmail && enabledOnDocument, notes: JSON.stringify({ disabledOnEmail, enabledOnDocument }) };
     },
   });
@@ -502,7 +502,7 @@
           if (!(rect.width > 0 && rect.height > 0) || getComputedStyle(btn).display === 'none') problems.push(name + ' : bouton masqué');
           const pageGroup = btn.closest('#v2-page-group');
           if (!pageGroup || !pageGroup.previousElementSibling || pageGroup.previousElementSibling.id !== 'v2-a4-toggle') problems.push(name + ' : pas juste après Aperçu A4');
-          if (!btn.disabled) problems.push(name + ' : pas grisé (disabled)');
+          if (!btn.disabled && !btn.hasAttribute('data-pp-lock-soft')) problems.push(name + ' : pas grisé (disabled ou grisé « doux »)');
           if (parseFloat(getComputedStyle(btn).opacity) > 0.5) problems.push(name + ' : opacité ' + getComputedStyle(btn).opacity);
           const want = I18n.t('toolbar.orientation.unavailable');
           if (btn.getAttribute('aria-label') !== want) problems.push(name + ' : libellé (aria-label) « ' + btn.getAttribute('aria-label') + ' » au lieu de « ' + want + ' »');
@@ -541,7 +541,7 @@
         await goToNewDocument(h);
         await h.sleep(60);
         const btn = orientationButton();
-        const state = () => ({ page: PageLayout.getOrientation(), data: btn.dataset.orientation, pressed: btn.getAttribute('aria-pressed'), active: btn.classList.contains('active'), label: btn.getAttribute('aria-label'), tip: btn.hasAttribute('data-tip'), disabled: btn.disabled, mask: maskImageOf(btn) });
+        const state = () => ({ page: PageLayout.getOrientation(), data: btn.dataset.orientation, pressed: btn.getAttribute('aria-pressed'), active: btn.classList.contains('active'), label: btn.getAttribute('aria-label'), tip: btn.hasAttribute('data-tip'), disabled: btn.disabled || btn.hasAttribute('data-pp-lock-soft'), mask: maskImageOf(btn) });
         const before = state();
         if (before.disabled) problems.push('grisé alors que le type est accepté');
         if (before.page !== 'portrait' || before.data !== 'portrait' || before.pressed !== 'false' || before.active) problems.push('état de départ : ' + JSON.stringify(before));
@@ -564,7 +564,7 @@
         if (signals !== 2) problems.push(signals + ' signal(aux) après deux clics (2 attendus)');
         await goToNewEmail(h);
         await h.sleep(60);
-        if (!btn.disabled) problems.push('un email reste dégrisé alors que son type n\'est pas accepté');
+        if (!btn.disabled && !btn.hasAttribute('data-pp-lock-soft')) problems.push('un email reste dégrisé alors que son type n\'est pas accepté');
       } finally {
         document.removeEventListener('pp:marginsChanged', onSignal);
         await restoreOrientationState(typesBefore);

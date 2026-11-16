@@ -121,7 +121,7 @@ const ShortcutsPanel = (function () {
     row.resetButton.disabled = !changed;
     row.resetButton.setAttribute('aria-label', t('settings.keys.resetAria', { action: name }));
     // Grisé, « Par défaut » dit pourquoi en info-bulle (js/lock-reasons.js, cause « state » : un bouton `disabled` ne reçoit pas le clic).
-    LockReasons.set(row.resetButton, 'state', changed ? '' : t('lock.keyDefault'));
+    LockReasons.set(row.resetButton, 'state', changed ? '' : t('lock.keyDefault'), 'lock.keyDefault');
   }
 
   function build() {
@@ -171,7 +171,7 @@ const ShortcutsPanel = (function () {
     if (resetAllButton) {
       const anyChanged = Shortcuts.ACTIONS.some(a => Shortcuts.isChanged(a.id));
       resetAllButton.disabled = !anyChanged;
-      LockReasons.set(resetAllButton, 'state', anyChanged ? '' : t('lock.keysAllDefault'));
+      LockReasons.set(resetAllButton, 'state', anyChanged ? '' : t('lock.keysAllDefault'), 'lock.keysAllDefault');
     }
   }
 

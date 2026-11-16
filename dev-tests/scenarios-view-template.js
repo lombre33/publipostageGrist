@@ -153,7 +153,7 @@
       const seen = {};
       for (const [label, id, nom] of [['email', f.M, 'Vue - M email'], ['macro', f.N, 'Vue - N macro']]) {
         await openByHand(id);
-        const starGreyed = el('btn-set-default-template').disabled;
+        const starGreyed = ((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(el('btn-set-default-template'));
         await openSettings();
         const before = Object.assign({ option: optionNow() || null }, panel());
         el('settings-viewtemplate-set').click();

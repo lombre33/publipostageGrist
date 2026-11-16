@@ -115,7 +115,7 @@ const MainAccess = (function () {
         const input = document.getElementById(id);
         if (!input) return;
         input.disabled = rights.readOnly;
-        LockReasons.set(input, 'state', rights.readOnly ? I18n.t('lock.readOnly') : '');
+        LockReasons.set(input, 'state', rights.readOnly ? I18n.t('lock.readOnly') : '', 'lock.readOnly');
       });
       applyCommentsPermissions();
       applyPdfLocks();

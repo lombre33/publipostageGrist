@@ -32,8 +32,8 @@ const snap = page => page.evaluate(() => ({
   painted: document.querySelectorAll('.tiptap ins').length,
   paragraphs: document.querySelectorAll('.tiptap p').length,
   firstText: (document.querySelector('.tiptap p') || {}).textContent,
-  acceptOff: document.getElementById('v2-btn-accept-all').disabled,
-  rejectOff: document.getElementById('v2-btn-reject-all').disabled,
+  acceptOff: (el => el.disabled || el.hasAttribute('data-pp-lock-soft'))(document.getElementById('v2-btn-accept-all')),
+  rejectOff: (el => el.disabled || el.hasAttribute('data-pp-lock-soft'))(document.getElementById('v2-btn-reject-all')),
   focusInEditor: !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('.ProseMirror')),
 }));
 // Un vrai clic sur une ligne du menu « Édition collaborative » : le survol du bouton l'ouvre, la souris descend à la ligne (qui doit être atteinte, rien ne la recouvre).

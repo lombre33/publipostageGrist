@@ -147,13 +147,17 @@ const LockDiagnostic = (function () {
     const cause = (detail && detail.cause) || '';
     const kind = (detail && detail.kind) || '';
     // Une icône grisée d'une barre flottante du tableau ou de l'image garde la clé de sa raison : js/lock-bar-causes.js en lit le constat.
-    const barKey = !cause && el.getAttribute ? el.getAttribute('data-pp-bar-reason') : '';
+    // Un bouton grisé « doux » (cause `state`, js/lock-reasons.js) porte la clé de sa raison dans le genre de la cause.
+    const barKey = !cause && el.getAttribute ? el.getAttribute('data-pp-bar-reason') : cause === 'state' ? kind : '';
     const barFinding = barKey ? LockBarCauses.forKey(barKey) : null;
     if (barFinding) return barFinding;
+    // Le bouton Page d'un modèle email, grisé « doux » : le même constat que le grisé par le type du modèle.
+    if (cause === 'state' && kind === 'lock.email') { const found = modelChecks('email'); return { checks: found.checks, fix: found.fix, action: null, context: context(null, 'email') }; }
     let checks = [];
     let fix = '';
     let action = null;
-    if (cause === 'access') {
+    // Les marges de Réglages grisées en lecture seule (cause `state`, genre « lock.readOnly ») disent la même chose que les droits.
+    if (cause === 'access' || (cause === 'state' && kind === 'lock.readOnly')) {
       checks = accessChecks(kind);
       fix = FIX_OF_ACCESS[kind] ? t(FIX_OF_ACCESS[kind]) : '';
       if (kind === 'lock.readMode' && !rightsNow().readOnly) action = { label: t('lockBubble.fix.editMode'), run: switchToEditing };

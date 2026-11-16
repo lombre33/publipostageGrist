@@ -159,7 +159,7 @@ const state = (page) => page.evaluate(() => ({
   on: Editor.isTrackChangesOn(), pending: Editor.hasPendingTrackedChanges(),
   buttonLit: document.getElementById('v2-btn-collab').classList.contains('is-active'),
   rowLit: document.getElementById('v2-btn-track-changes').classList.contains('is-active'),
-  acceptOff: document.getElementById('v2-btn-accept-all').disabled, rejectOff: document.getElementById('v2-btn-reject-all').disabled,
+  acceptOff: (el => el.disabled || el.hasAttribute('data-pp-lock-soft'))(document.getElementById('v2-btn-accept-all')), rejectOff: (el => el.disabled || el.hasAttribute('data-pp-lock-soft'))(document.getElementById('v2-btn-reject-all')), // grisé : `disabled` ou grisé « doux » (js/lock-reasons.js)
   html: Editor.getHTML(), inEditor: !!document.activeElement && !!document.activeElement.closest && !!document.activeElement.closest('.ProseMirror'),
 }));
 const lin = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };

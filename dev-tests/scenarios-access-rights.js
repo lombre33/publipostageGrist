@@ -440,7 +440,7 @@
       const templateId = await savedTemplate(h, 'Lecture barre grisée');
       const children = () => Array.from(document.getElementById('v2-toolbar').children);
       const barLocked = () => children().filter(el => el.id !== 'v2-btn-comment').every(el => el.classList.contains('pp-access-locked') && el.getAttribute('aria-disabled') === 'true');
-      const barFree = () => children().every(el => !el.classList.contains('pp-access-locked') && !el.hasAttribute('aria-disabled'));
+      const barFree = () => children().every(el => !el.classList.contains('pp-access-locked') && (!el.hasAttribute('aria-disabled') || el.hasAttribute('data-pp-lock-soft'))); // un bouton grisé « doux » (Retrait hors d'une liste...) garde son aria-disabled
       const stored = () => stub().getRow('Publipostage_Modeles', templateId).Contenu;
       const modelWrites = () => stub().countActions('UpdateRecord', 'Publipostage_Modeles') + stub().countActions('AddRecord', 'Publipostage_Modeles');
       // Le menu « Lien et blocs de contenu » : son bouton et ses neuf lignes, « Signet… », « QR code… », « Graphique de la page… » et « Diapositive d'une présentation… » comprises (les lignes se cliquent par .click(), la souris ne les atteint pas sans survol).
@@ -912,7 +912,7 @@
       await savedTemplate(h, 'Droits marges');
       const ids = ['settings-margin-top', 'settings-margin-right', 'settings-margin-bottom', 'settings-margin-left',
         'settings-margin-preset-none', 'settings-margin-preset-narrow', 'settings-margin-preset-classic', 'settings-margin-preset-wide', 'settings-margins-link'];
-      const disabled = () => ids.filter(id => { const el = document.getElementById(id); return !!el && el.disabled; });
+      const disabled = () => ids.filter(id => { const el = document.getElementById(id); return !!el && (el.disabled || el.hasAttribute('data-pp-lock-soft')); }); // grisé : `disabled`, ou grisé « doux » (js/lock-reasons.js : le clic ouvre la bulle)
       const startFree = disabled().length === 0;
       const applied = await applyRights({ readOnly: true });
       const greyed = disabled();

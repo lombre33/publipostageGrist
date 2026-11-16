@@ -152,7 +152,7 @@ const centerOf = selector => page.evaluate(sel => {
   const r = el.getBoundingClientRect();
   const x = r.left + r.width / 2, y = r.top + r.height / 2;
   const top = document.elementFromPoint(x, y);
-  return { x, y, onTop: !!top && (top === el || el.contains(top)), disabled: !!el.disabled };
+  return { x, y, onTop: !!top && (top === el || el.contains(top)), disabled: !!el.disabled || el.hasAttribute('data-pp-lock-soft') };
 }, selector);
 const real = async (selector, wait = 200) => {
   const c = await centerOf(selector);

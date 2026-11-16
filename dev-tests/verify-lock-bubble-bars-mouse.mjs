@@ -331,6 +331,71 @@ async function readRow(page, groupSelector, rowSelector) {
   await page.context().close();
 }
 
+// ---- 5b) Les boutons que le navigateur grisait (lot 4) : Retrait, Tout accepter, ★ ---------------------------------------------------------------------------------------
+// Un bouton `disabled` ne reçoit aucun clic : js/lock-reasons.js le grise « doux » (aria-disabled, plus de `disabled`, hors de l'ordre des tabulations) ; son clic ouvre la bulle, son info-bulle reste.
+const softState = (page, selector) => page.evaluate(sel => { const b = document.querySelector(sel); return b ? { soft: b.hasAttribute('data-pp-lock-soft'), aria: b.getAttribute('aria-disabled'), disabled: b.disabled, tabindex: b.getAttribute('tabindex'), title: b.getAttribute('title'), blocks: b.hasAttribute('data-pp-lock-blocks') } : null; }, selector);
+{
+  const page = await barPage();
+  await page.evaluate(() => Editor.setHTML('<p>Texte</p><ul><li><p>Un</p></li><li><p>Deux</p></li></ul>'));
+  await pause(400);
+  const texte = await boxOf(page, '.tiptap > p');
+  await page.mouse.click(texte.x, texte.y);
+  await pause(400);
+  const before = await html(page);
+  const indent = await softState(page, '#v2-btn-indent');
+  t.check('boutons : « Retrait » hors d\'une liste est grisé « doux » : aria-disabled, plus de `disabled`, hors de l\'ordre des tabulations, il garde sa raison en info-bulle', !!indent && indent.soft && indent.aria === 'true' && indent.disabled === false && indent.tabindex === '-1' && /point de liste/.test(indent.title || '') && indent.blocks, indent);
+  await closeBubble(page);
+  await press(page, '#v2-btn-indent');
+  const outsideOpened = await bubbleOpen(page);
+  const outsideName = await textOf(page, '.pp-lockbubble-name');
+  const outsideWhy = await textOf(page, '.pp-lockbubble-why');
+  if (outsideOpened) await press(page, '.pp-lockbubble-more');
+  const outsideChecks = await checksOf(page);
+  const outsideFix = await textOf(page, '.pp-lockbubble-fix');
+  t.check('boutons : un vrai appui sur « Retrait » grisé ouvre la bulle, qui s\'appelle comme le bouton et dit sa raison', outsideOpened && /retrait/i.test(outsideName) && outsideWhy === indent.title, { outsideOpened, outsideName, outsideWhy });
+  t.check('boutons : « Retrait » : le curseur n\'est pas dans une liste, il est dans un paragraphe, et le geste dit de le placer dans un point de liste', has(outsideChecks, /Le curseur n’est pas dans une liste.*un paragraphe/, true) && /point de liste/.test(outsideFix), { outsideChecks, outsideFix });
+  t.check('boutons : le bouton reste grisé et le document n\'a pas bougé', (await softState(page, '#v2-btn-indent')).soft && (await html(page)) === before);
+  // Premier point d'une liste.
+  await closeBubble(page);
+  const first = await boxOf(page, '.tiptap ul li:first-child p');
+  await page.mouse.click(first.x, first.y);
+  await pause(400);
+  await press(page, '#v2-btn-indent');
+  const firstOpened = await bubbleOpen(page);
+  if (firstOpened) await press(page, '.pp-lockbubble-more');
+  const firstChecks = await checksOf(page);
+  t.check('boutons : « Retrait » sur le premier point d\'une liste : le curseur est dans un point de liste ✓, ce point est le premier de sa liste ✕', firstOpened && has(firstChecks, /Le curseur est dans un point de liste/, false) && has(firstChecks, /premier de sa liste/, true), firstChecks);
+  // Le deuxième point : le bouton se dégrise, rend son état au navigateur, et un vrai clic descend le point.
+  await closeBubble(page);
+  const second = await boxOf(page, '.tiptap ul li:nth-child(2) p');
+  await page.mouse.click(second.x, second.y);
+  await pause(400);
+  const freedIndent = await softState(page, '#v2-btn-indent');
+  t.check('boutons : sur le deuxième point, « Retrait » se dégrise : plus de grisé doux, plus d\'info-bulle de raison, retour dans l\'ordre des tabulations', !!freedIndent && !freedIndent.soft && freedIndent.aria === null && freedIndent.tabindex === null && !(freedIndent.title || '').includes('Indisponible') && !freedIndent.blocks, freedIndent);
+  await press(page, '#v2-btn-indent');
+  t.check('boutons : le bouton dégrisé agit pour de vrai : le deuxième point descend d\'un niveau et aucune bulle ne s\'ouvre', /<ul>.*<li><p>Un<\/p><ul>/.test(await html(page)) && !(await bubbleOpen(page)), await html(page));
+  // Tout accepter, sans modification suivie.
+  await closeBubble(page);
+  const accept = await softState(page, '#v2-btn-accept-all');
+  t.check('boutons : « Tout accepter » sans modification suivie est grisé « doux » avec la raison en info-bulle', !!accept && accept.soft && accept.aria === 'true' && accept.disabled === false && /aucune modification suivie/.test(accept.title || ''), accept);
+  const pending = await readRow(page, '#v2-collab-group', '#v2-btn-accept-all');
+  t.check('boutons : un vrai appui sur « Tout accepter » grisé ouvre la bulle : le suivi est éteint ✕, aucune modification suivie n\'attend ✕, le geste dit d\'allumer le suivi', pending.opened && /accepter/i.test(pending.name) && has(pending.checks, /Le suivi des modifications est éteint/, true) && has(pending.checks, /Aucune modification suivie n’attend/, true) && /suivi des modifications/.test(pending.fix), pending);
+  // ★ : le bouton du modèle par défaut.
+  await closeBubble(page);
+  const star = await softState(page, '#btn-set-default-template');
+  if (star && star.soft) {
+    await press(page, '#btn-set-default-template');
+    const starOpened = await bubbleOpen(page);
+    const starName = await textOf(page, '.pp-lockbubble-name');
+    if (starOpened) await press(page, '.pp-lockbubble-more');
+    const starChecks = await checksOf(page);
+    t.check('boutons : ★ sans modèle ouvert : un vrai appui ouvre la bulle, qui dit qu\'aucun modèle n\'est ouvert et le geste', starOpened && /défaut/i.test(starName) && has(starChecks, /Aucun modèle n’est ouvert/, true), { starOpened, starName, starChecks });
+  } else {
+    t.check('boutons : ★ est actif dans cette page d\'essai (aucun grisé à lire)', !!star && !star.soft, star);
+  }
+  await page.context().close();
+}
+
 // ---- 6) L'anglais -----------------------------------------------------------------------------------------------------------------------------------------------------------
 {
   const page = await barPage({ lang: 'en' });

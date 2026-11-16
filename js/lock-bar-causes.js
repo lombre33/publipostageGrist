@@ -174,6 +174,71 @@ const LockBarCauses = (function () {
     'headingStyle.document.none': headingLevelFinding('lockBubble.bar.chk.noSharedStyle', 'lockBubble.bar.fix.headingShared'),
   };
 
+  // === Les boutons grisés « doux » (js/lock-reasons.js, cause `state`) : Retrait, Tout accepter, ★, Par défaut des raccourcis, Page ===
+  // Le genre de leur cause porte la clé de la raison ; ces constats n'ont pas de place à lire dans le texte seul, leurs lignes disent ce que le bouton attend.
+  function listFacts() {
+    const place = placeNow();
+    const editor = editorNow();
+    let first = false;
+    let inList = false;
+    if (editor && place.kind !== 'none' && place.kind !== 'headerFooter') {
+      const $from = editor.state.selection.$from;
+      for (let depth = $from.depth; depth > 0 && !inList; depth--) {
+        const name = $from.node(depth).type.name;
+        if (name === 'listItem' || name === 'taskItem') { inList = true; first = $from.index(depth - 1) === 0; }
+      }
+    }
+    return { place, inList, first };
+  }
+  const listRows = facts => [[t('lockBubble.bar.ctx.place'), placeText(facts.place)]];
+  function pendingFacts() {
+    return { tracking: Editor.isTrackChangesOn() };
+  }
+  function templateFacts() {
+    const id = Templates.getCurrentId();
+    const record = Templates.byId ? Templates.byId(id) : null;
+    const type = record && record.typeModele ? record.typeModele : 'document';
+    return { id, type };
+  }
+  const STATE = {
+    'lock.indent': () => {
+      const facts = listFacts();
+      return {
+        checks: facts.inList
+          ? [ok(t('lockBubble.bar.chk.inListItem')), no(t(facts.first ? 'lockBubble.bar.chk.firstItem' : 'lockBubble.bar.chk.cannotSink'), t(facts.first ? 'lockBubble.bar.chk.firstItemNote' : 'lockBubble.bar.chk.cannotSinkNote'))]
+          : [no(t('lockBubble.bar.chk.notInList'), t('lockBubble.bar.chk.cursorIn', { place: placeText(facts.place) }))],
+        fix: t('lockBubble.bar.fix.indent'),
+        rows: listRows(facts),
+      };
+    },
+    'lock.outdent': () => {
+      const facts = listFacts();
+      return {
+        checks: facts.inList ? [ok(t('lockBubble.bar.chk.inListItem')), no(t('lockBubble.bar.chk.cannotLift'), t('lockBubble.bar.chk.cannotLiftNote'))] : [no(t('lockBubble.bar.chk.notInList'), t('lockBubble.bar.chk.cursorIn', { place: placeText(facts.place) }))],
+        fix: t('lockBubble.bar.fix.outdent'),
+        rows: listRows(facts),
+      };
+    },
+    'lock.noPending': () => {
+      const facts = pendingFacts();
+      return {
+        checks: [facts.tracking ? ok(t('lockBubble.bar.chk.trackOn')) : no(t('lockBubble.bar.chk.trackOff'), t('lockBubble.bar.chk.trackOffNote')), no(t('lockBubble.bar.chk.nothingPending'), t('lockBubble.bar.chk.nothingPendingNote'))],
+        fix: t('lockBubble.bar.fix.pending'),
+        rows: [[t('lockBubble.bar.ctx.tracking'), t(facts.tracking ? 'lockBubble.bar.ctx.on' : 'lockBubble.bar.ctx.off')]],
+      };
+    },
+    'lock.defaultNone': () => ({ checks: [no(t('lockBubble.bar.chk.noTemplate'), t('lockBubble.bar.chk.noTemplateNote'))], fix: t('lockBubble.bar.fix.defaultNone'), rows: [[t('lockBubble.bar.ctx.template'), t('lockBubble.bar.ctx.none')]] }),
+    'lock.defaultType': () => {
+      const facts = templateFacts();
+      const type = I18n.has('lockBubble.type.' + facts.type) ? t('lockBubble.type.' + facts.type) : t('lockBubble.bar.type.other');
+      return { checks: [no(t('lockBubble.bar.chk.templateType', { type }), t('lockBubble.bar.chk.templateTypeNote'))], fix: t('lockBubble.bar.fix.defaultType'), rows: [[t('lockBubble.bar.ctx.template'), t('lockBubble.bar.ctx.typeOf', { type })]] };
+    },
+    'lock.keyDefault': () => ({ checks: [no(t('lockBubble.bar.chk.keyIsOriginal'), t('lockBubble.bar.chk.keyIsOriginalNote'))], fix: t('lockBubble.bar.fix.keyDefault'), rows: [] }),
+    'lock.keysAllDefault': () => ({ checks: [no(t('lockBubble.bar.chk.noKeyChanged'), t('lockBubble.bar.chk.noKeyChangedNote'))], fix: t('lockBubble.bar.fix.keysAllDefault'), rows: [] }),
+    'lock.pageBusy': () => ({ checks: [no(t('lockBubble.bar.chk.exportRunning'), t('lockBubble.bar.chk.exportRunningNote'))], fix: t('lockBubble.bar.fix.pageBusy'), rows: [] }),
+    'lock.pageDocHf': () => ({ checks: [no(t('lockBubble.bar.chk.hfEditing'), t('lockBubble.bar.chk.pagesTurnedNote'))], fix: t('lockBubble.bar.fix.pageDocHf'), rows: [] }),
+  };
+
   // === L'image ===
   function imageState() {
     const editor = editorNow();
@@ -247,12 +312,13 @@ const LockBarCauses = (function () {
     const imageBuilder = IMAGE[key];
     const tableBuilder = TABLE[key];
     const placeBuilder = PLACE[key];
-    if (!imageBuilder && !tableBuilder && !placeBuilder) return null;
-    const state = imageBuilder ? imageState() : placeBuilder ? placeNow() : tableState();
-    const found = (imageBuilder || tableBuilder || placeBuilder)(state);
-    const rows = imageBuilder ? imageRows(state) : placeBuilder ? [[t('lockBubble.bar.ctx.place'), placeText(state)]] : tableRows(state);
+    const stateBuilder = STATE[key];
+    if (!imageBuilder && !tableBuilder && !placeBuilder && !stateBuilder) return null;
+    const state = imageBuilder ? imageState() : placeBuilder ? placeNow() : stateBuilder ? null : tableState();
+    const found = (imageBuilder || tableBuilder || placeBuilder || stateBuilder)(state);
+    const rows = stateBuilder ? found.rows : imageBuilder ? imageRows(state) : placeBuilder ? [[t('lockBubble.bar.ctx.place'), placeText(state)]] : tableRows(state);
     return Object.assign({ why: found.why }, { checks: found.checks, fix: found.fix, context: LockDiagnostic.context({ rows }, '') });
   }
 
-  return { forKey, keys: () => Object.keys(TABLE).concat(Object.keys(IMAGE), Object.keys(PLACE)) };
+  return { forKey, keys: () => Object.keys(TABLE).concat(Object.keys(IMAGE), Object.keys(PLACE), Object.keys(STATE)) };
 })();

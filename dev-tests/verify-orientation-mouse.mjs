@@ -213,7 +213,7 @@ async function runTheme(theme) {
   const btnState = () => page.evaluate(() => {
     const b = document.getElementById('btn-page-orientation');
     const cs = getComputedStyle(b, '::before');
-    return { disabled: b.disabled, pressed: b.getAttribute('aria-pressed'), data: b.dataset.orientation, label: b.getAttribute('aria-label'), mask: cs.webkitMaskImage || cs.maskImage || '' };
+    return { disabled: b.disabled || b.hasAttribute('data-pp-lock-soft'), pressed: b.getAttribute('aria-pressed'), data: b.dataset.orientation, label: b.getAttribute('aria-label'), mask: cs.webkitMaskImage || cs.maskImage || '' };
   });
   const before = await btnState();
   check(`${label} - le bouton d'orientation est entièrement dans le panneau, actif, non enfoncé, avec une page haute`,

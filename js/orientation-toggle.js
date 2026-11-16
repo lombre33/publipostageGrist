@@ -520,7 +520,8 @@ const OrientationToggle = (function () {
     btn.classList.toggle('active', supported && landscape);
     btn.disabled = !supported || busy || waiting;
     // Grisé, il dit pourquoi en info-bulle (cause « state » de js/lock-reasons.js : un bouton `disabled` ne reçoit pas le clic) : un email n'a pas de page, un export lit le sens et le format au départ, des pages tournées une à une attendent l'en-tête.
-    LockReasons.set(btn, 'state', !supported ? I18n.t('lock.email') : busy ? I18n.t('lock.pageBusy') : waiting ? I18n.t('lock.pageDocHf') : '');
+    const lockKey = !supported ? 'lock.email' : busy ? 'lock.pageBusy' : waiting ? 'lock.pageDocHf' : '';
+    LockReasons.set(btn, 'state', lockKey ? I18n.t(lockKey) : '', lockKey);
     syncPreviewToggle(formatName, slide);
     syncMenu(supported, landscape, format, auto, formatName);
   }

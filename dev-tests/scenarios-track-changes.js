@@ -150,11 +150,11 @@
       Editor.setHTML('<p>Rien à traiter.</p>');
       await h.sleep(60);
       const bothPresent = !!acceptBtn() && !!rejectBtn();
-      const disabledClean = acceptBtn().disabled && rejectBtn().disabled;
+      const disabledClean = ((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(acceptBtn()) && ((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(rejectBtn());
       const opacityClean = getComputedStyle(acceptBtn()).opacity;
       await h.focusAtEnd();
       await h.typeText(' ajout.');
-      const enabledAfter = !acceptBtn().disabled && !rejectBtn().disabled;
+      const enabledAfter = !((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(acceptBtn()) && !((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(rejectBtn());
       const opacityAfter = getComputedStyle(acceptBtn()).opacity;
       await disableTrackChangesIfOn(h);
       return {
@@ -1327,11 +1327,11 @@
         const ORIGINAL = '<p>Garder</p><p>Aligné</p><p>Fin</p>';
         const out = {};
         await documentWithSettings(h, ORIGINAL, ['Aligné'], alignRight);
-        out.pending = modificationCount() === 1 && /text-align: right/.test(Editor.getHTML()) && Editor.hasPendingTrackedChanges() && !rejectBtn().disabled;
+        out.pending = modificationCount() === 1 && /text-align: right/.test(Editor.getHTML()) && Editor.hasPendingTrackedChanges() && !((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(rejectBtn());
         const run = await runAllChunked(h, 'reject');
         out.noLoop = !run.looped;
         out.original = Editor.getHTML() === ORIGINAL;
-        out.clean = !Editor.hasPendingTrackedChanges() && acceptBtn().disabled && rejectBtn().disabled;
+        out.clean = !Editor.hasPendingTrackedChanges() && ((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(acceptBtn()) && ((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(rejectBtn());
         await h.sleep(700);
         EditorCore.getEditor().commands.undo();
         await h.sleep(250);
@@ -1493,11 +1493,11 @@
         await loadTable(h, TABLE_3X2, 'b1', true);
         const original = plainHtml(Editor.getHTML());
         await pickCellFill(h, FILL);
-        out.pending = cellModifications() === 1 && FILL_CSS.test(Editor.getHTML()) && Editor.hasPendingTrackedChanges() && !rejectBtn().disabled;
+        out.pending = cellModifications() === 1 && FILL_CSS.test(Editor.getHTML()) && Editor.hasPendingTrackedChanges() && !((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(rejectBtn());
         const rejected = await runAllChunked(h, 'reject');
         out.rejectNoLoop = !rejected.looped;
         const afterReject = Editor.getHTML();
-        out.rejectOriginal = plainHtml(afterReject) === original && !/background-color/.test(afterReject) && cellModifications() === 0 && !Editor.hasPendingTrackedChanges() && acceptBtn().disabled && rejectBtn().disabled;
+        out.rejectOriginal = plainHtml(afterReject) === original && !/background-color/.test(afterReject) && cellModifications() === 0 && !Editor.hasPendingTrackedChanges() && ((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(acceptBtn()) && ((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(rejectBtn());
         await h.sleep(700);
         EditorCore.getEditor().commands.undo();
         await h.sleep(250);

@@ -344,7 +344,7 @@ window.EditorTestSuites.pageFormat = (function () {
           OrientationToggle.setBusy(true);
           const busyRows = menuRows();
           if (busyRows.some(r => r.disabled !== 'true' || !r.greyed || r.tab !== -1)) problems.push('export en cours : lignes non grisées');
-          if (!document.getElementById('btn-page-orientation').disabled) problems.push('export en cours : bouton non grisé');
+          if (!(b => b.disabled || b.hasAttribute('data-pp-lock-soft'))(document.getElementById('btn-page-orientation'))) problems.push('export en cours : bouton non grisé'); // grisé : `disabled` ou grisé « doux » (js/lock-reasons.js)
           menuRow('A5').click();
           OrientationToggle.selectFormat('A6');
           await h.sleep(100);
@@ -565,7 +565,7 @@ window.EditorTestSuites.pageFormat = (function () {
         }
         await selectTemplate(h, macro.id);
         const macroState = state();
-        if (macroState.format !== 'A4' || macroState.landscape || macroState.css !== '793.71px' || macroState.checked !== 'portrait,A4' || document.getElementById('btn-page-orientation').disabled) problems.push('macro-modèle : ' + JSON.stringify(macroState));
+        if (macroState.format !== 'A4' || macroState.landscape || macroState.css !== '793.71px' || macroState.checked !== 'portrait,A4' || (b => b.disabled || b.hasAttribute('data-pp-lock-soft'))(document.getElementById('btn-page-orientation'))) problems.push('macro-modèle : ' + JSON.stringify(macroState));
         await selectTemplate(h, a4Id);
         return { pass: problems.length === 0, notes: JSON.stringify({ problems, a5Saved, a3Saved }) };
       },

@@ -131,7 +131,8 @@
     // js/view-template.js). Le bouton est grisé (même traitement que « aucun modèle chargé »), jamais masqué.
     btn.disabled = currentId == null || !Templates.canBeDocumentDefault(currentTypeModele);
     // Grisé, il dit pourquoi en info-bulle (cause « state » de js/lock-reasons.js : un bouton `disabled` ne reçoit pas le clic).
-    LockReasons.set(btn, 'state', btn.disabled ? I18n.t(currentId == null ? 'lock.defaultNone' : 'lock.defaultType') : '');
+    const defaultKey = currentId == null ? 'lock.defaultNone' : 'lock.defaultType';
+    LockReasons.set(btn, 'state', btn.disabled ? I18n.t(defaultKey) : '', defaultKey);
   }
 
   // Le ★ du document, posé sur le modèle `id` ou retiré s'il le porte déjà. Trois endroits y mènent : le bouton de la barre (le modèle ouvert), une ligne de

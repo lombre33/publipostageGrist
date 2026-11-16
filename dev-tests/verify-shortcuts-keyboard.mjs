@@ -391,7 +391,7 @@ async function remapPart(T, fr) {
     return { id, group: row ? row.parentElement.getAttribute('aria-labelledby').replace('settings-keys-group-', '') : null, name: row ? row.querySelector('.settings-key-name').textContent : null, key: row ? row.querySelector('.settings-key-btn').textContent : null };
   }), ADDED_ACTIONS.map(a => a.id));
   check(`${T} : « ${ADDED_ACTIONS.map(a => a.name).join(' », « ')} » ont chacune leur ligne, leur groupe et leur touche d'origine`, JSON.stringify(added) === JSON.stringify(ADDED_ACTIONS), { added, expected: ADDED_ACTIONS });
-  check(`${T} : au départ rien n'est changé : « ${L.reset} » et « Tout remettre » grisés`, await page.evaluate(() => Array.from(document.querySelectorAll('.settings-key-reset')).every(b => b.disabled) && document.getElementById('settings-keys-reset-all').disabled));
+  check(`${T} : au départ rien n'est changé : « ${L.reset} » et « Tout remettre » grisés`, await page.evaluate(() => Array.from(document.querySelectorAll('.settings-key-reset')).every(b => b.disabled || b.hasAttribute('data-pp-lock-soft')) && (el => el.disabled || el.hasAttribute('data-pp-lock-soft'))(document.getElementById('settings-keys-reset-all'))));
 
   // Gras : Alt+B à la place de Ctrl+B.
   await click(keyBtn('bold'), 150);
@@ -399,7 +399,7 @@ async function remapPart(T, fr) {
   await snap(`${T}-1-ecoute`);
   await page.keyboard.press('Alt+b');
   await page.waitForTimeout(150);
-  check(`${T} : Alt+B est prise : la ligne la montre, l'écoute s'arrête, « ${L.reset} » s'allume`, (await text(keyBtn('bold'))) === 'Alt+B' && !(await page.evaluate(() => Shortcuts.isRecording())) && !(await page.evaluate(sel => document.querySelector(sel).disabled, resetBtn('bold'))), await text(keyBtn('bold')));
+  check(`${T} : Alt+B est prise : la ligne la montre, l'écoute s'arrête, « ${L.reset} » s'allume`, (await text(keyBtn('bold'))) === 'Alt+B' && !(await page.evaluate(() => Shortcuts.isRecording())) && !(await page.evaluate(sel => (el => el.disabled || el.hasAttribute('data-pp-lock-soft'))(document.querySelector(sel)), resetBtn('bold'))), await text(keyBtn('bold')));
   check(`${T} : le choix est gardé dans le navigateur (seul le gras est changé)`, (await stored()) === '{"bold":"Alt+b"}', await stored());
   check(`${T} : la touche reste sur son bouton (focus conservé)`, (await focused()).includes('settings-key-btn'), await focused());
 
@@ -475,7 +475,7 @@ async function remapPart(T, fr) {
   check(`${T} : l'infobulle ne montre plus de touche`, (await tipOf('v2-btn-bold')).content === L.bold, await tipOf('v2-btn-bold'));
   await openKeys();
   await click(resetBtn('bold'), 150);
-  check(`${T} : « ${L.reset} » rend Ctrl+B : la ligne, le navigateur et le grisé du bouton`, (await text(keyBtn('bold'))) === 'Ctrl+B' && (await stored()) === null && (await page.evaluate(sel => document.querySelector(sel).disabled, resetBtn('bold'))), { shown: await text(keyBtn('bold')), stored: await stored() });
+  check(`${T} : « ${L.reset} » rend Ctrl+B : la ligne, le navigateur et le grisé du bouton`, (await text(keyBtn('bold'))) === 'Ctrl+B' && (await stored()) === null && (await page.evaluate(sel => (el => el.disabled || el.hasAttribute('data-pp-lock-soft'))(document.querySelector(sel)), resetBtn('bold'))), { shown: await text(keyBtn('bold')), stored: await stored() });
   await closeSettings();
   await focusEnd();
   await page.keyboard.press('Control+a');
@@ -491,7 +491,7 @@ async function remapPart(T, fr) {
   await click(keyBtn('underline'), 100);
   await page.keyboard.press('Alt+u');
   await page.waitForTimeout(100);
-  check(`${T} : deux touches changées : « Tout remettre par défaut » s'allume`, !(await page.evaluate(() => document.getElementById('settings-keys-reset-all').disabled)) && (await stored()) === '{"italic":"Alt+i","underline":"Alt+u"}', await stored());
+  check(`${T} : deux touches changées : « Tout remettre par défaut » s'allume`, !(await page.evaluate(() => (el => el.disabled || el.hasAttribute('data-pp-lock-soft'))(document.getElementById('settings-keys-reset-all')))) && (await stored()) === '{"italic":"Alt+i","underline":"Alt+u"}', await stored());
   await click('#settings-keys-reset-all', 300);
   const dialog = await page.evaluate(() => { const m = document.getElementById('pp-dialog-modal'); return { open: !!m && m.style.display !== 'none', title: (document.getElementById('pp-dialog-title') || {}).textContent }; });
   check(`${T} : une confirmation s'ouvre, dans la langue de l'interface`, dialog.open && dialog.title === (fr ? 'Remettre toutes les touches par défaut ?' : 'Reset all keys to their defaults?'), dialog);
@@ -500,7 +500,7 @@ async function remapPart(T, fr) {
   check(`${T} : Échap abandonne : rien n'est rendu, Réglages reste ouvert`, (await stored()) === '{"italic":"Alt+i","underline":"Alt+u"}' && (await settingsOpen()), await stored());
   await click('#settings-keys-reset-all', 300);
   await click('#pp-dialog-modal .var-modal-primary', 350);
-  check(`${T} : confirmée, toutes les touches reviennent à celles d'origine`, (await stored()) === null && (await text(keyBtn('italic'))) === 'Ctrl+I' && (await page.evaluate(() => document.getElementById('settings-keys-reset-all').disabled)), { stored: await stored(), italic: await text(keyBtn('italic')) });
+  check(`${T} : confirmée, toutes les touches reviennent à celles d'origine`, (await stored()) === null && (await text(keyBtn('italic'))) === 'Ctrl+I' && (await page.evaluate(() => (el => el.disabled || el.hasAttribute('data-pp-lock-soft'))(document.getElementById('settings-keys-reset-all')))), { stored: await stored(), italic: await text(keyBtn('italic')) });
   await closeSettings();
 }
 
@@ -524,7 +524,7 @@ async function keyboardOnlyPart(T) {
   await page.waitForTimeout(150);
   check(`${T} : Alt+N est prise, le focus reste sur la touche`, (await text(keyBtn('new'))) === 'Alt+N' && (await focused()).includes('settings-key-btn') && !(await page.evaluate(() => Shortcuts.isRecording())), { shown: await text(keyBtn('new')), focus: await focused() });
   await page.keyboard.press('Tab');
-  check(`${T} : Tab mène à « Par défaut », devenu actif`, await page.evaluate(() => document.activeElement.classList.contains('settings-key-reset') && !document.activeElement.disabled), await focused());
+  check(`${T} : Tab mène à « Par défaut », devenu actif`, await page.evaluate(() => document.activeElement.classList.contains('settings-key-reset') && !document.activeElement.disabled && !document.activeElement.hasAttribute('data-pp-lock-soft')), await focused());
   await page.keyboard.press('Escape');
   await page.waitForTimeout(250);
   await focusEnd();

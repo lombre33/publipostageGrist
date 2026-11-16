@@ -253,7 +253,7 @@ const MainToolbar = (function () {
     const el = byId(id);
     if (!el) return;
     el.disabled = !!off;
-    if (reason) LockReasons.set(el, 'state', off ? I18n.t(reason) : '');
+    if (reason) LockReasons.set(el, 'state', off ? I18n.t(reason) : '', reason);
   };
   const MARK_BUTTONS = { 'v2-btn-bold': 'bold', 'v2-btn-italic': 'italic', 'v2-btn-underline': 'underline', 'v2-btn-strike': 'strike' };
   // « Exposant » et « Indice » (js/script-marks.js) : les deux icônes en tête du menu « Aa », enfoncées comme Gras quand le texte du curseur porte la

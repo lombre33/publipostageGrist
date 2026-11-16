@@ -469,7 +469,7 @@
     const overlays = Array.from(document.querySelectorAll('.pp-modal, [class*="popup"], [class*="dropdown"], [class*="floating"], [class*="picker"]'))
       .filter(el => el.isConnected && getComputedStyle(el).display !== 'none' && getComputedStyle(el).visibility !== 'hidden' && el.getClientRects().length > 0)
       .map(el => el.id || el.className).sort();
-    const toolbar = Array.from(document.querySelectorAll('#v2-toolbar button, .bar-row button')).map(b => b.id + ':' + (b.classList.contains('active') || b.classList.contains('is-active') ? 'on' : '') + (b.disabled ? ':off' : '') + (b.getAttribute('aria-pressed') || '')).join(',');
+    const toolbar = Array.from(document.querySelectorAll('#v2-toolbar button, .bar-row button')).map(b => b.id + ':' + (b.classList.contains('active') || b.classList.contains('is-active') ? 'on' : '') + (b.disabled || b.hasAttribute('data-pp-lock-soft') ? ':off' : '') + (b.getAttribute('aria-pressed') || '')).join(',');
     return JSON.stringify({ html, overlays, toolbar, tracking: Editor.isTrackChangesOn(), alerts: (window.__shortcutAlerts || []).join('|') });
   }
   // Referme ce qu'une action a ouvert (menu de nuances, fenêtre, fil de commentaire) pour que la seconde manche parte du même état que la première.
@@ -972,7 +972,7 @@
         rows: rows.length, groups: groups.join('|'),
         modeRead: text('modeRead', '.settings-key-name') + '=' + text('modeRead', '.settings-key-btn'),
         none: text('table', '.settings-key-btn') + (byAction('table').querySelector('.settings-key-btn').classList.contains('is-none') ? ' (italique)' : ''),
-        resetDisabled: rows.every(r => r.querySelector('.settings-key-reset').disabled), resetAllDisabled: document.getElementById('settings-keys-reset-all').disabled,
+        resetDisabled: rows.every(r => ((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(r.querySelector('.settings-key-reset'))), resetAllDisabled: ((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(document.getElementById('settings-keys-reset-all')),
         keysShown: !document.getElementById('settings-keys-section').hidden, expansionShown: !document.getElementById('settings-expansion-section').hidden,
         labelled: Array.from(document.querySelectorAll('#settings-keys-list .settings-keys-rows')).filter(ul => { const h = document.getElementById(ul.getAttribute('aria-labelledby')); return !!h && h.classList.contains('settings-keys-group'); }).length,
       };
@@ -981,7 +981,7 @@
       document.getElementById('settings-switch-keys').click();
       out.backToKeys = { keys: !document.getElementById('settings-keys-section').hidden, expansion: !document.getElementById('settings-expansion-section').hidden, selected: document.getElementById('settings-switch-keys').getAttribute('aria-selected') };
       Shortcuts.setKey('modeRead', 'Alt+r');
-      out.afterChange = { key: text('modeRead', '.settings-key-btn'), resetEnabled: !byAction('modeRead').querySelector('.settings-key-reset').disabled, resetAllEnabled: !document.getElementById('settings-keys-reset-all').disabled };
+      out.afterChange = { key: text('modeRead', '.settings-key-btn'), resetEnabled: !((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(byAction('modeRead').querySelector('.settings-key-reset')), resetAllEnabled: !((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(document.getElementById('settings-keys-reset-all')) };
       const pass = out.rows === Shortcuts.ACTIONS.length && out.labelled === 5 && out.groups === 'Modèles|Affichage|Mise en forme|Insertion|Historique et suivi'
         && out.modeRead === 'Mode lecture=Alt+L' && out.none === 'Aucune (italique)' && out.resetDisabled && out.resetAllDisabled && out.keysShown && !out.expansionShown
         && !out.afterSwitch.keys && out.afterSwitch.expansion && out.afterSwitch.selected === 'true' && out.afterSwitch.stored === 'expansion'
@@ -1019,7 +1019,7 @@
       press('Shift', keyButton('modeEdit'));
       out.loneModifierKeepsError = errorOf('modeEdit') === out.altGr;
       press('Alt+q', keyButton('modeEdit'));
-      out.taken = { key: Shortcuts.keyFor('modeEdit'), error: errorOf('modeEdit'), recording: Shortcuts.isRecording(), shown: keyButton('modeEdit').textContent, resetEnabled: !row('modeEdit').querySelector('.settings-key-reset').disabled };
+      out.taken = { key: Shortcuts.keyFor('modeEdit'), error: errorOf('modeEdit'), recording: Shortcuts.isRecording(), shown: keyButton('modeEdit').textContent, resetEnabled: !((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(row('modeEdit').querySelector('.settings-key-reset')) };
       // Échap : abandonne, la fenêtre reste ouverte.
       keyButton('modeRead').click();
       const esc = press('Escape', keyButton('modeRead'));
@@ -1030,7 +1030,7 @@
       out.removed = { key: Shortcuts.keyFor('modeRead'), shown: keyButton('modeRead').textContent, none: keyButton('modeRead').classList.contains('is-none') };
       // « Par défaut » d'une ligne.
       row('modeEdit').querySelector('.settings-key-reset').click();
-      out.rowReset = { key: Shortcuts.keyFor('modeEdit'), disabled: row('modeEdit').querySelector('.settings-key-reset').disabled };
+      out.rowReset = { key: Shortcuts.keyFor('modeEdit'), disabled: ((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(row('modeEdit').querySelector('.settings-key-reset')) };
       // « Tout remettre par défaut » : une confirmation, puis tout est rendu.
       Shortcuts.setKey('italic', 'Alt+i');
       const answers = [false, true];
@@ -1044,7 +1044,7 @@
         document.getElementById('settings-keys-reset-all').click();
         await sleep(100);
       } finally { Dialogs.confirm = realConfirm; }
-      out.resetAll = { changed: Shortcuts.ACTIONS.filter(a => Shortcuts.isChanged(a.id)).length, asked: asked.join('|'), allDisabled: document.getElementById('settings-keys-reset-all').disabled };
+      out.resetAll = { changed: Shortcuts.ACTIONS.filter(a => Shortcuts.isChanged(a.id)).length, asked: asked.join('|'), allDisabled: ((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(document.getElementById('settings-keys-reset-all')) };
       clicks.stop();
       // Fermer la fenêtre pendant une écoute l'arrête.
       keyButton('bold').click();

@@ -731,7 +731,7 @@
    couleur ; actif dans les deux modes (document et email), jamais grisé. */
 #v2-toolbar button.v2-btn-variable { border-color: var(--accent-soft-border, #c7dbfd); color: var(--accent, #2f6fed); }
 #v2-toolbar button.v2-btn-variable:hover { background: var(--accent-soft, #e8f0fe); }
-#v2-toolbar button:disabled, #v2-toolbar button:disabled:hover { opacity: .35; cursor: default; background: transparent; border-color: transparent; }
+#v2-toolbar button:disabled, #v2-toolbar button:disabled:hover, #v2-toolbar button[data-pp-lock-soft], #v2-toolbar button[data-pp-lock-soft]:hover { opacity: .35; cursor: default; background: transparent; border-color: transparent; }
 #v2-toolbar select { border: 1px solid transparent; border-radius: var(--radius-xs, 4px); padding: 3px 6px; font-size: 12.5px; background: transparent; }
 #v2-toolbar select:hover, #v2-toolbar select:focus-visible { border-color: var(--border, #d7dde3); background: var(--surface, #fff); }
 #v2-toolbar .v2-sep { width: 1px; align-self: stretch; background: var(--border, #d7dde3); margin: 0 4px; }
