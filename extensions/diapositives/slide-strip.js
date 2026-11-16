@@ -2050,8 +2050,8 @@ const SlideStrip = (function () {
     goTo(index === current ? set[set.length - 1] : current, false);
   }
   function wireList() {
-    // Ni focus sur la miniature ni sélection de texte : un clic sur une miniature va au document. Le geste se fait au clic, après l'appui qui referme les barres de l'éditeur
-    // (js/editor-core.js) : celle du tableau où le curseur arrive s'ouvre alors normalement.
+    // Ni focus de l'appui ni sélection de texte : le geste se fait au clic, après l'appui qui referme les barres de l'éditeur (js/editor-core.js) : celle du tableau où le curseur
+    // arrive s'ouvre alors normalement.
     list.addEventListener('mousedown', (event) => { if (rowOf(event.target)) event.preventDefault(); });
     list.addEventListener('click', (event) => {
       const r = rowOf(event.target);
@@ -2064,9 +2064,12 @@ const SlideStrip = (function () {
       // Maj+clic et Ctrl+clic : le clavier reste dans la bande (Suppr, Ctrl+C s'appliquent au choix).
       if (event.shiftKey) { refresh(false); pick(range(Math.min(anchor, slides.length - 1), index)); goTo(index, false); focusItem(index); return; }
       if (event.ctrlKey || event.metaKey) { togglePick(index); focusItem(current); return; }
+      // Un clic simple mène à la diapositive et laisse le clavier sur la miniature, comme PowerPoint et Google Slides : ↑ et ↓ passent alors à la diapositive d'avant et d'après
+      // (onListKey) au lieu de descendre ligne à ligne dans le texte ; Entrée ou Échap rend le clavier au document.
       picked = [];
       anchor = index;
-      goTo(index, true);
+      goTo(index, false);
+      focusItem(index);
     });
     list.addEventListener('contextmenu', (event) => {
       const r = rowOf(event.target);

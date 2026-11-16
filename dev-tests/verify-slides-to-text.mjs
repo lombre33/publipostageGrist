@@ -498,7 +498,6 @@ async function run(lang, colorScheme) {
   check(tag + '« ' + NAME + ' » à l’écran : sa bande a trois miniatures, la ligne du menu est grisée (le volet « Importer » de la bande y copie une diapositive entière), et le volet est fermé',
     strip === 3 && (await rowOf(app)).locked && !s.open && !s.bodyOn, { strip, row: await rowOf(app), open: s.open });
   await a.click('.pp-slide-strip .pp-slide-thumb', 0, 400);
-  await a.press('Escape');
   for (let i = 0; i < 10 && !/^strip$/.test((await state(app)).focus || ''); i++) await a.press('Tab');
   await a.press('Control+c');
   s = await state(app);

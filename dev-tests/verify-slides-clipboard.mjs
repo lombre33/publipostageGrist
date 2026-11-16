@@ -102,8 +102,9 @@ function toolsOf(tab) {
     await sleep(250);
   };
   const press = async (key) => { await page.keyboard.press(key); await sleep(220); };
-  // Le clic sur une miniature rend le clavier au document ; Échap puis Tab le ramènent dans la bande, sur la miniature cochée.
+  // Le clic sur une miniature laisse le clavier sur elle ; venu du texte, Échap puis Tab le ramènent dans la bande, sur la miniature cochée.
   const intoStrip = async () => {
+    if (/^item/.test((await state(app)).focus || '')) return;
     await press('Escape');
     for (let i = 0; i < 10 && !/^item/.test((await state(app)).focus || ''); i++) await press('Tab');
   };

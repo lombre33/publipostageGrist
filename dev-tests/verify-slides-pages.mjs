@@ -298,6 +298,9 @@ async function run(lang, colorScheme) {
   await sleep(2500);
   const reader = await measure(app, 'reader');
   await a.click('#btn-mode-edit', 0, 1200);
+  // La bande revient en haut avant le clic : un clic laisse le clavier sur la miniature, qui garde la liste où elle l'a défilée, et la première miniature serait alors sous le ▶.
+  await app.evaluate(() => { document.querySelector('.pp-slide-list').scrollTop = 0; });
+  await sleep(150);
   await a.click('.pp-slide-thumb', 0, 500);
   await a.press('F5', 300);
   await app.waitForFunction(() => { const s = document.querySelector('.pp-slide-show'); const c = s && s.querySelector('.pp-slide-show-counter'); return !!c && c.textContent !== ''; }, null, { timeout: 15000 }).catch(() => {});
