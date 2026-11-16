@@ -1071,7 +1071,7 @@ const Variables = (function () {
     return { resolveRawValue, resolveVariableResult, resolveVariable, resolveListTexts };
   })();
 
-  const { formulaErrorText, resolveCalcResult } = (function () {
+  const { formulaErrorText, calcOperand, resolveCalcResult } = (function () {
     // Le calcul d'une bulle : message d'erreur, opérande, résultat
 
     // === Bulle « Calcul » (js/formula.js) ===
@@ -1134,7 +1134,7 @@ const Variables = (function () {
         return failure({ code: 'failed' });
       }
     }
-    return { formulaErrorText, resolveCalcResult };
+    return { formulaErrorText, calcOperand, resolveCalcResult };
   })();
   const { resolveCalc, badgeProblem, pageReferencesTo, isUnlinked, calcProblem, findTextVariables } = (function () {
     // Les problèmes d'un calcul et la lecture des variables d'un champ texte
@@ -1777,7 +1777,7 @@ const Variables = (function () {
   return {
     createExtension, createFieldExtension, isAttachmentColumn, becomesImage, attachmentImageNode, insertAttachmentImage, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
     preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, linkRuleLabel, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, listItems, decodeShown, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow, attachmentReference, attachmentColumnsBelow,
-    resolveCalcResult, resolveCalc, badgeProblem, pageReferencesTo, isUnlinked, calcProblem, formulaErrorText,
+    calcOperand, resolveCalcResult, resolveCalc, badgeProblem, pageReferencesTo, isUnlinked, calcProblem, formulaErrorText,
     linkMissText, linkMissesStale, forgetLinkMisses, scanLinkMisses,
   };
 })();

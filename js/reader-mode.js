@@ -1300,6 +1300,8 @@ const ReaderMode = (function () {
     // resolveBadgeNode.
     const loopCtx = LoopRules.createContext();
     await LoopRules.expandZones(wrapper, tableId, record, loopCtx);
+    // Les lignes de tableau croisé de la grille (js/pivot-zones.js) : chacune devient son tableau, déjà écrit en texte.
+    await PivotZones.expand(wrapper, tableId, record, loopCtx);
     if (stale()) return null;
     // Blocs de texte, valeurs et cases conditionnels, sinon des bulles : défaits ou retirés ici, avant les bulles - celles d'un bloc retiré n'ont rien à
     // résoudre.
@@ -1823,6 +1825,7 @@ const ReaderMode = (function () {
     // Mêmes zones répétées que le mode Lecture (cf. render()), avant de lister les bulles : les copies en font partie.
     const loopCtx = LoopRules.createContext();
     await LoopRules.expandZones(wrapper, tableId || lastCurrentTableId, record, loopCtx);
+    await PivotZones.expand(wrapper, tableId || lastCurrentTableId, record, loopCtx);
     await resolveConditionalNodes(wrapper, tableId || lastCurrentTableId, record);
     return { wrapper, loopCtx };
   }

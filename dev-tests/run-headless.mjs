@@ -119,6 +119,7 @@ const GROUPS = {
   trackChanges: 'scenarios-track-changes',
   varCondition: 'scenarios-var-condition',
   varLoop: 'scenarios-var-loop',
+  pivotZone: 'scenarios-pivot-zone', // le tableau croisé de la grille à la Lecture (js/pivot-zones.js, js/pivot.js) : une ligne `data-pivot` remplacée par son tableau - Calcul Stock × PrixAchat, chemin par référence, deux niveaux, les trois sources, titre fusionné étendu, largeurs reprises, erreurs dites
   loopSection: 'scenarios-loop-section', // la Boucle répète une section (le titre et ce qui le suit : js/loop-rules.js sectionRanges, attachSections, la marque « Fin de la section »), des sous-points dans la même table ou dans une autre, la fenêtre et les repères de la section dans l'éditeur
   varValueTip: 'scenarios-var-value-tip', // l'info-bulle de valeur d'une bulle au survol (js/variable-tip.js, js/editor-tip.js, ReaderMode.peek, LoopRules.zoneChainOf, GristAPI.withSharedReadPass) : la valeur de la Lecture pour la ligne choisie, les 5 premiers tours d'une zone, les états en clair, la souris parquée, Échap, le clavier, la case de Réglages, une seule lecture par table
   condText: 'scenarios-cond-text', // bloc de texte conditionnel (menu des variables, onglet Chips) : pose et entourage, barre flottante, fenêtre de condition, sinon du bloc, Lecture et exports
