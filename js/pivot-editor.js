@@ -80,7 +80,7 @@ const PivotEditor = (function () {
   // Ce que fait « Tableau croisé… » pour la sélection : { enabled, active, title, pos } - `pos` : la ligne visée. Allumé quand la ligne porte déjà un tableau croisé (le bouton la modifie). Grisé, avec sa raison en
   // info-bulle : dans un tableau de document (la grille seule le porte pour l'instant), plusieurs lignes sélectionnées, une case fusionnée qui traverse la ligne. Jamais retiré.
   function status(editor) {
-    const grey = key => ({ enabled: false, active: false, title: I18n.t(key), pos: null });
+    const grey = key => ({ enabled: false, active: false, title: I18n.t(key), pos: null, reason: key });
     if (!GridEditor.isActive()) return grey('table.pivotDocument');
     const state = editor.state;
     const start = selectedRowStart(state);

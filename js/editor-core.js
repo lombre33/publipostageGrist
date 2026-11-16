@@ -382,6 +382,12 @@ const EditorCore = (function () {
     const el = document.createElement('div');
     el.className = className;
     Dom.setMarkup(el, innerHTML);
+    // Le nom de chaque bouton tel qu'il est à sa création (son nom accessible, ou son info-bulle d'alors, celle du bouton non grisé) : un bouton grisé prend sa raison pour info-bulle et pour nom,
+    // et la bulle de l'icône (js/lock-diagnostic.js:identify) retrouve ici le nom que l'icône avait.
+    el.querySelectorAll('button[data-action]').forEach((btn) => {
+      const label = btn.getAttribute('aria-label') || btn.getAttribute('title');
+      if (label) btn.setAttribute('data-pp-bar-label', label);
+    });
     // mousedown+preventDefault : évite de perdre le focus/la sélection ProseMirror avant que l'action ne s'exécute.
     let pressedBtn = null;
     el.addEventListener('mousedown', (event) => {

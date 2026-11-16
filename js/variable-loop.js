@@ -269,7 +269,7 @@ const VariableLoop = (function () {
   // traverse la ligne, aucune variable dans la ligne, ou aucune qui puisse la répéter.
   function rowStatus(editor) {
     const state = editor.state;
-    const grey = key => ({ active: false, enabled: false, title: I18n.t(key) });
+    const grey = key => ({ active: false, enabled: false, title: I18n.t(key), reason: key });
     const start = selectedRowStart(state);
     if (start == null) return grey('table.rowRepeatOne');
     const row = state.doc.nodeAt(start);
@@ -288,6 +288,21 @@ const VariableLoop = (function () {
     });
     if (!best) return grey(variables.length ? 'table.rowRepeatNoSource' : 'table.rowRepeatNone');
     return { active: false, enabled: true, title: I18n.t('table.rowRepeat'), pos: best.pos };
+  }
+  // Ce que la ligne du curseur porte, pour le constat de « Répéter la ligne » quand il est grisé (js/lock-bar-causes.js) : `start` (la position de la ligne, null quand la sélection en touche plusieurs ou aucune) et ses
+  // variables, chacune avec ce qui lui manque pour répéter la ligne : `problem` (colonne ou table disparue de Grist), `repeats` (faux : dans une liste, ou dans une zone déjà répétée), `source` (faux : aucune source de lignes) et `within`
+  // (la table de la zone répétée qui entoure la variable : sa table doit lui être rattachée, sinon pas de source).
+  function diagnoseRow(editor) {
+    const state = editor.state;
+    const start = selectedRowStart(state);
+    if (start == null) return { start: null, variables: [] };
+    const variables = rowVariables(state.doc, start, state.doc.nodeAt(start)).map(({ pos, node }) => {
+      const attrs = loopAttrs(node);
+      const repeats = placeOf(state, pos, false).repeats.indexOf('row') !== -1;
+      const zone = enclosingAt(state, pos, pos);
+      return { table: attrs.table, column: attrs.column, problem: Variables.badgeProblem(attrs.table, attrs.column) || '', repeats, source: repeats && !!sourcesAt(state, pos, node).source, within: zone ? zone.owner.loop.table : '' };
+    });
+    return { start, variables };
   }
   // « Répéter la ligne » : ouvre la fenêtre de la bulle que rowStatus retient, sur « La ligne du tableau ». Faux, sans rien ouvrir, quand le bouton est grisé.
   function openRow(editor) {
@@ -1040,5 +1055,5 @@ const VariableLoop = (function () {
     if (probing) probeLinkedView(state);
   }
 
-  return { openAt, isOpen, status, diagnose, rowStatus, openRow, loopTablesAt, setContext, zonesAt, nestableAt, nestableInFedZoneAt, feedsAt };
+  return { openAt, isOpen, status, diagnose, diagnoseRow, rowStatus, openRow, loopTablesAt, setContext, zonesAt, nestableAt, nestableInFedZoneAt, feedsAt };
 })();

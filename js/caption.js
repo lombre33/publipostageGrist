@@ -116,6 +116,8 @@ const Caption = (function () {
     button.setAttribute('aria-disabled', s.locked ? 'true' : 'false');
     button.title = title;
     button.setAttribute('aria-label', title);
+    if (s.locked) button.setAttribute('data-pp-bar-reason', s.locked);
+    else button.removeAttribute('data-pp-bar-reason');
   }
 
   // Le clic sur le bouton : pose la légende vide sous le bloc et y met le curseur, ou ramène le curseur à la fin de celle qui y est déjà. Une seule

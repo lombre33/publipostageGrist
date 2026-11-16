@@ -334,7 +334,7 @@ async function newTemplate(page, kind) {
     await press(page, sel);
     t.check('barre du tableau : un vrai clic sur l\'icône grisée ouvre la bulle, qui dit la raison de l\'info-bulle', (await bubbleOpen(page)) && (await textOf(page, '.pp-lockbubble-why')) === grey.title, grey);
     await press(page, '.pp-lockbubble-more');
-    t.check('barre du tableau : « En savoir plus » donne ce que le widget voit et le bouton de copie (aucune vérification inventée)', /Publipostage\+/.test(await textOf(page, '.pp-lockbubble-ctx')) && !!(await boxOf(page, '.pp-lockbubble-copy')) && (await checksOf(page)).length === 0);
+    t.check('barre du tableau : « En savoir plus » donne ce que le widget voit, le bouton de copie et une cause ✕ lue sur le tableau (le détail est dans lockBubbleBarsMouse)', /Publipostage\+/.test(await textOf(page, '.pp-lockbubble-ctx')) && !!(await boxOf(page, '.pp-lockbubble-copy')) && (await checksOf(page)).some(check => check.no));
     t.check('barre du tableau : la barre reste ouverte, le document n\'a pas bougé', (await page.evaluate(() => !!document.querySelector('.v2-table-toolbar.visible'))) && (await html(page)) === before);
   }
   await page.context().close();

@@ -9,6 +9,7 @@
 //   LockDiagnostic.identify(el)                    { name, icon } : le nom court du contrôle et son icône
 //   LockDiagnostic.forLock(el, detail)             le constat d'un grisé de js/lock-reasons.js (`detail` : { cause, kind, reason })
 //   LockDiagnostic.forLoop({ editor, pos, node, taken })   le constat de la Boucle d'une variable ou d'une image de colonne Pièces jointes
+//   (les icônes grisées des barres du tableau et de l'image : js/lock-bar-causes.js, appelé par forLock ; `quote`, `checks` et `tokens` lui sont rendus)
 //   LockDiagnostic.resolve(text, mask)             un texte à jetons, écrit tel quel (mask faux) ou avec les noms remplacés (mask vrai) ; les alias se suivent d'un appel à l'autre avec `LockDiagnostic.aliases()`
 //   LockDiagnostic.report(spec, { name, why, mask })   le texte du forum
 // Un constat : { why?, sub?, checks: [{ s: 'ok' | 'no', t, d? }], fix?, action?: { label, run }, context: [[libellé, valeur]] } ; `why` et `sub` écrasent la phrase du grisé quand elle porte des noms (jetons).
@@ -145,6 +146,10 @@ const LockDiagnostic = (function () {
   function forLock(el, detail) {
     const cause = (detail && detail.cause) || '';
     const kind = (detail && detail.kind) || '';
+    // Une icône grisée d'une barre flottante du tableau ou de l'image garde la clé de sa raison : js/lock-bar-causes.js en lit le constat.
+    const barKey = !cause && el.getAttribute ? el.getAttribute('data-pp-bar-reason') : '';
+    const barFinding = barKey ? LockBarCauses.forKey(barKey) : null;
+    if (barFinding) return barFinding;
     let checks = [];
     let fix = '';
     let action = null;
@@ -229,7 +234,7 @@ const LockDiagnostic = (function () {
   function identify(el) {
     const holder = el.querySelector ? el.querySelector('[aria-label], [title]') : null;
     const candidates = [
-      el.getAttribute('aria-label'), el.getAttribute('data-pp-lock-kept-title'), el.getAttribute('data-tip'),
+      el.getAttribute('data-pp-bar-label'), el.getAttribute('aria-label'), el.getAttribute('data-pp-lock-kept-title'), el.getAttribute('data-tip'),
       holder && (holder.getAttribute('aria-label') || holder.getAttribute('title')), (el.textContent || '').trim(),
     ];
     const found = candidates.map(shortName).find(text => text && text.length <= 40);
@@ -237,5 +242,5 @@ const LockDiagnostic = (function () {
     return { name: found || t('lockBubble.generic'), icon: svg ? svg.outerHTML : '' };
   }
 
-  return { identify, forLock, forLoop, resolve, aliases, report, context, tokens: { tableName, columnName, templateName } };
+  return { identify, forLock, forLoop, resolve, aliases, report, context, quote, checks: { ok, no }, tokens: { tableName, columnName, templateName } };
 })();

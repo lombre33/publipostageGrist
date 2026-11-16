@@ -221,6 +221,101 @@
       return { pass, notes: JSON.stringify(out) };
     },
   });
+  // === Les barres du tableau et de l'image (js/lock-bar-causes.js, lot 2) : chaque raison de grisé a un constat, dans les deux langues, et ses textes sont complets ===
+  const TABLE_DOC = '<table><tbody><tr><th><p>Produit</p></th><th><p>Quantité</p></th></tr><tr><td colspan="2"><p>Fusion</p></td></tr><tr><td><p>Gamma</p></td><td><p>Delta</p></td></tr></tbody></table><p>Fin</p>';
+  const textPos = (editor, word) => { let found = -1; editor.state.doc.descendants((node, pos) => { if (found === -1 && node.isText && node.text === word) found = pos + 1; }); return found; };
+  const imagePos = editor => { let found = -1; editor.state.doc.descendants((node, pos) => { if (found === -1 && node.type.name === 'editorImage') found = pos; }); return found; };
+  const unfinished = value => typeof value === 'string' && /\{[a-zA-Z]+\}|lockBubble\.|undefined|\[object|NaN/.test(value);
+  const everyText = spec => [spec.fix, spec.why].concat((spec.checks || []).reduce((all, check) => all.concat([check.t, check.d]), []), (spec.context || []).reduce((all, row) => all.concat(row), []));
+  async function everyBarKey(h) {
+    await h.resetEditor();
+    const editor = EditorCore.getEditor();
+    const out = { keys: LockBarCauses.keys(), failures: [] };
+    const IMAGE_KEY = /^(imgToolbar\.|caption\.image)/;
+    Editor.setHTML(TABLE_DOC);
+    await sleep(60);
+    editor.commands.setTextSelection(textPos(editor, 'Gamma'));
+    const imageDoc = '<p>Avant</p><p><img class="editor-image" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" alt="" style="width: 160px"></p><p>Après</p>';
+    for (const key of out.keys) {
+      if (IMAGE_KEY.test(key)) { Editor.setHTML(imageDoc); await sleep(60); editor.commands.setNodeSelection(imagePos(editor)); } else { Editor.setHTML(TABLE_DOC); await sleep(60); editor.commands.setTextSelection(textPos(editor, 'Gamma')); }
+      const spec = LockBarCauses.forKey(key);
+      if (!spec) { out.failures.push(key + ' : aucun constat'); continue; }
+      const texts = everyText(spec).filter(value => value !== undefined);
+      const resolved = texts.map(value => LockDiagnostic.resolve(value, false));
+      const masked = LockDiagnostic.report(spec, { name: 'Icône', why: spec.why || 'Raison', mask: true });
+      if (!spec.checks.length || !spec.checks.some(check => check.s === 'no')) out.failures.push(key + ' : pas de cause ✕');
+      if (!spec.fix || !spec.fix.trim()) out.failures.push(key + ' : pas de geste');
+      if (!spec.context.length) out.failures.push(key + ' : pas de contexte');
+      if (resolved.some(unfinished) || unfinished(masked)) out.failures.push(key + ' : texte inachevé ' + JSON.stringify(resolved.filter(unfinished)));
+    }
+    return out;
+  }
+  cases.push({
+    id: 'lock_bubble_every_bar_reason_has_a_complete_finding',
+    description: 'LockBarCauses : chaque raison de grisé des barres du tableau et de l\'image (clés lues sur le bouton) a un constat - au moins une cause ✕, un geste, ce que le widget voit - dont aucun texte n\'est inachevé (accolade, clé non traduite, undefined), en français',
+    run: async (h) => {
+      const out = await everyBarKey(h);
+      const required = ['table.rowsEqualizeNeed', 'table.cellMergeNeedsCells', 'table.cellTracked', 'table.settingTracked', 'table.rowRepeatNoSource', 'table.pivotDocument', 'linkedTable.lockedTracked', 'imgToolbar.conditionNeedsColumn', 'imgToolbar.reshapeVector', 'imgToolbar.repeatNeedsPage', 'caption.gridLocked'];
+      const missing = required.filter(key => out.keys.indexOf(key) === -1);
+      return { pass: out.failures.length === 0 && missing.length === 0 && out.keys.length >= 25, notes: JSON.stringify({ count: out.keys.length, missing, failures: out.failures }) };
+    },
+  });
+  cases.push({
+    id: 'lock_bubble_every_bar_reason_has_a_complete_finding_in_english',
+    lang: 'en',
+    description: 'La page qui démarre en anglais : les mêmes constats sont complets et sans texte inachevé, et le premier dit « Fewer than two rows chosen »',
+    run: async (h) => {
+      const out = await everyBarKey(h);
+      await h.resetEditor();
+      const editor = EditorCore.getEditor();
+      Editor.setHTML(TABLE_DOC);
+      await sleep(60);
+      editor.commands.setTextSelection(textPos(editor, 'Gamma'));
+      const rows = LockBarCauses.forKey('table.rowsEqualizeNeed');
+      const english = !!rows && rows.checks.some(check => check.s === 'no' && /Fewer than two rows chosen/.test(check.t)) && /drag across the table to choose at least two rows/.test(rows.fix) && rows.context.some(row => row[0] === 'Table type');
+      return { pass: I18n.getLang() === 'en' && out.failures.length === 0 && english, notes: JSON.stringify({ lang: I18n.getLang(), failures: out.failures, english }) };
+    },
+  });
+  cases.push({
+    id: 'lock_bubble_bar_external_image_and_row_inside_a_zone_without_source',
+    description: 'LockBarCauses : l\'image d\'une adresse web dit qu\'elle n\'est pas dans le document ; la ligne d\'un tableau dans une zone répétée dont la variable n\'est pas rattachée à la table de la zone nomme la variable et la zone (noms lus dans le document, jetons)',
+    run: async (h) => {
+      await h.resetEditor();
+      const stub = window.__gristStub;
+      stub.setViewRows(null);
+      stub.setVariables('Factures', { Numero: 'Text' });
+      stub.setVariables('Lignes', { Parent: 'Ref:Factures', Designation: 'Text' });
+      stub.setVariables('Autre', { Nom: 'Text' });
+      stub.setRows('Factures', [{ id: 1, Numero: 'F-1' }]);
+      stub.setRows('Lignes', [{ id: 1, Parent: 1, Designation: 'A' }]);
+      stub.setRows('Autre', [{ id: 1, Nom: 'N' }]);
+      await GristAPI.refreshSchema();
+      await GristAPI.deleteLinkRule('Lignes');
+      await GristAPI.saveLinkRule('Lignes', { mode: 'match', colonneCible: 'Parent', colonneSource: 'id' });
+      await GristAPI.refreshSchema();
+      stub.fireRecord({ id: 1, Numero: 'F-1' }, 'Factures');
+      const editor = EditorCore.getEditor();
+      Editor.setHTML('<p><img class="editor-image" src="https://exemple.invalid/logo.png" alt=""></p>');
+      await sleep(60);
+      editor.commands.setNodeSelection(imagePos(editor));
+      const external = LockBarCauses.forKey('imgToolbar.reshapeExternal');
+      const badge = (table, column, extra) => '<span class="var-badge" data-table="' + table + '" data-column="' + column + '" data-key="' + table + '.' + column + '"' + (extra || '') + '></span>';
+      const loop = JSON.stringify({ repeat: 'row', table: 'Lignes' }).replace(/"/g, '&quot;');
+      Editor.setHTML('<table><tbody><tr><td><p>' + badge('Lignes', 'Designation', ' data-loop="' + loop + '" data-loop-repeat="row"') + '</p></td><td><table><tbody><tr><td><p>' + badge('Autre', 'Nom') + '</p></td><td><p>Fixe</p></td></tr></tbody></table></td></tr></tbody></table><p>Fin</p>');
+      await sleep(80);
+      editor.commands.setTextSelection(textPos(editor, 'Fixe'));
+      const status = VariableLoop.rowStatus(editor);
+      const found = LockBarCauses.forKey('table.rowRepeatNoSource');
+      const none = found.checks.find(check => check.s === 'no');
+      const shown = none ? LockDiagnostic.resolve(none.d, false) : '';
+      const masked = LockDiagnostic.report(found, { name: 'Répéter la ligne', why: 'Raison', mask: true });
+      const pass = !!external && external.checks.some(check => check.s === 'no' && /L’image vient d’une adresse web/.test(check.t))
+        && status.reason === 'table.rowRepeatNoSource' && !status.enabled
+        && shown === 'Autre.Nom (dans la zone répétée de « Lignes », mais sa table n’y est pas rattachée)'
+        && /Table 1\.Colonne 1 \(dans la zone répétée de « Table 2 »/.test(masked) && !/Autre|Lignes/.test(masked);
+      return { pass, notes: JSON.stringify({ external: !!external, reason: status.reason, shown, masked: masked.split('\n').filter(line => /Table/.test(line)).slice(0, 4) }) };
+    },
+  });
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.lockBubble = cases;
 })();

@@ -86,5 +86,16 @@ const TableMerge = (function () {
     return GridEditor.splitSelected(ed);
   }
 
-  return { configure, mergeBlock, splitBlock, mergeCells, splitCell, rowCrossedByMerge };
+  // Ce que le tableau du curseur et la sélection ont de mesurable, pour le constat d'une icône grisée de sa barre (js/lock-bar-causes.js) : null hors d'un tableau ; sinon sa taille (`rows`, `cols`), ses cases fusionnées
+  // (`merged`), les cases choisies (`chosen` : 0 pour un simple curseur), les lignes et colonnes que la sélection couvre (`chosenRows`, `chosenCols`, de `top` à `bottom` exclu) et les rangs des lignes qu'une boucle répète (`looped`).
+  function facts(ed) {
+    if (!libs || !ed || !libs.isInTable(ed.state)) return null;
+    const { table, map, top, bottom, left, right } = libs.selectedRect(ed.state);
+    let merged = 0;
+    table.forEach(row => row.forEach((cell) => { if ((cell.attrs.colspan || 1) > 1 || (cell.attrs.rowspan || 1) > 1) merged++; }));
+    const sel = cellSelectionOf(ed.state);
+    return { rows: map.height, cols: map.width, merged, chosen: sel ? sel.ranges.length : 0, chosenRows: bottom - top, chosenCols: right - left, top, bottom, left, right, looped: loopRows(table) };
+  }
+
+  return { configure, mergeBlock, splitBlock, mergeCells, splitCell, rowCrossedByMerge, facts };
 })();

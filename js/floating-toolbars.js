@@ -23,12 +23,15 @@ const FloatingToolbars = (function () {
       },
       // aria-disabled plutôt que disabled : un <button disabled> ne reçoit plus le survol, son info-bulle (qui dit pourquoi il est grisé) ne
       // s'afficherait pas.
-      setDisabled(action, disabled, title) {
+      // `reasonKey` : la clé du texte de la raison (js/i18n.js) ; elle reste en attribut tant que le bouton est grisé, et la bulle de l'icône (js/lock-bar-causes.js) y lit son constat.
+      setDisabled(action, disabled, title, reasonKey) {
         const btn = button(action);
         if (!btn) return;
         btn.classList.toggle('is-disabled', !!disabled);
         btn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
         btn.title = title;
+        if (disabled && reasonKey) btn.setAttribute('data-pp-bar-reason', reasonKey);
+        else btn.removeAttribute('data-pp-bar-reason');
       },
       // Un champ qu'on est en train de saisir garde sa valeur.
       setField(selector, value) {
@@ -423,7 +426,7 @@ const FloatingToolbars = (function () {
           const btn = button(action);
           if (btn) btn.classList.remove('v2-hf-locked');
           const reason = blockOf(editor);
-          setDisabled(action, !!reason, I18n.t(reason || labelKey));
+          setDisabled(action, !!reason, I18n.t(reason || labelKey), reason);
         });
       };
       // L'alignement vertical des cases visées, enfoncé (aucun quand la sélection en mêle plusieurs), et ses boutons, avec celui des bordures, grisés
@@ -437,9 +440,9 @@ const FloatingToolbars = (function () {
           if (!btn) return;
           btn.classList.toggle('is-active', align === value);
           btn.setAttribute('aria-pressed', align === value ? 'true' : 'false');
-          setDisabled(action, blocked, blocked ? I18n.t('table.settingTracked') : title);
+          setDisabled(action, blocked, blocked ? I18n.t('table.settingTracked') : title, 'table.settingTracked');
         });
-        setDisabled('borders-open', blocked, I18n.t(blocked ? 'table.settingTracked' : 'table.bordersOpen'));
+        setDisabled('borders-open', blocked, I18n.t(blocked ? 'table.settingTracked' : 'table.bordersOpen'), 'table.settingTracked');
       };
       // « Égaliser » : grisé, avec sa raison pour info-bulle, tant que la sélection ne couvre pas au moins deux lignes (colonnes) - dans une grille comme
       // dans un document, de la même façon (jamais retiré).
@@ -447,7 +450,7 @@ const FloatingToolbars = (function () {
       const syncEqualizeButtons = () => {
         EQUALIZE_BUTTONS.forEach(([action, kind, labelKey, needKey]) => {
           const can = GridEditor.canEqualize(editor, kind);
-          setDisabled(action, !can, I18n.t(can ? labelKey : needKey));
+          setDisabled(action, !can, I18n.t(can ? labelKey : needKey), needKey);
         });
       };
       // « Répéter la ligne » (js/variable-loop.js:rowStatus) : allumé quand la ligne du curseur est déjà répétée par une Boucle ; grisé, sa raison en info-bulle comme
@@ -457,18 +460,18 @@ const FloatingToolbars = (function () {
       // le suivi ne verrait pas, comme les bordures).
       const syncStyleButton = () => {
         const blocked = GridEditor.tableSettingsBlocked();
-        setDisabled('cell-style', blocked, I18n.t(blocked ? 'table.settingTracked' : 'table.cellStyle'));
+        setDisabled('cell-style', blocked, I18n.t(blocked ? 'table.settingTracked' : 'table.cellStyle'), 'table.settingTracked');
         setActive('cell-style', !blocked && ConditionalStyleWindow.tableIsSet(editor));
       };
       const syncRepeatButton = () => {
         const row = VariableLoop.rowStatus(editor);
-        setDisabled('row-repeat', !row.enabled, row.title);
+        setDisabled('row-repeat', !row.enabled, row.title, row.reason);
         setActive('row-repeat', row.active);
       };
       // « Tableau croisé… » (js/pivot-editor.js:status) : allumé quand la ligne du curseur en porte un ; grisé, sa raison en info-bulle, hors grille, sur plusieurs lignes ou sur une ligne traversée par une fusion.
       const syncPivotButton = () => {
         const pivot = PivotEditor.status(editor);
-        setDisabled('row-pivot', !pivot.enabled, pivot.title);
+        setDisabled('row-pivot', !pivot.enabled, pivot.title, pivot.reason);
         setActive('row-pivot', pivot.active);
       };
       // Tableau lié à un modèle Grille : son bouton se montre pour lui seul, jamais dans une grille. Verrouillé (suivi des modifications allumé), tout ce qui changerait ses
@@ -491,7 +494,7 @@ const FloatingToolbars = (function () {
           open.classList.toggle('is-locked', !!link.locked);
           if (menuOpen) menus.linked.refresh(link);
           if (link.locked) {
-            LINK_LOCKED.forEach(action => setDisabled(action, true, I18n.t(link.locked, { name: link.name })));
+            LINK_LOCKED.forEach(action => setDisabled(action, true, I18n.t(link.locked, { name: link.name }), link.locked));
             greyedByLink = true;
             return;
           }
@@ -518,9 +521,9 @@ const FloatingToolbars = (function () {
       const syncDocumentButtons = () => {
         setLocked('table-del', false);
         const colBlocked = columnDeleteBlocked();
-        setDisabled('col-del', colBlocked, I18n.t(colBlocked ? 'table.colDelMerged' : 'table.colDel'));
+        setDisabled('col-del', colBlocked, I18n.t(colBlocked ? 'table.colDelMerged' : 'table.colDel'), 'table.colDelMerged');
         const rowBlocked = rowDeleteBlocked();
-        setDisabled('row-del', rowBlocked, I18n.t(rowBlocked ? 'table.rowDelMerged' : 'table.rowDel'));
+        setDisabled('row-del', rowBlocked, I18n.t(rowBlocked ? 'table.rowDelMerged' : 'table.rowDel'), 'table.rowDelMerged');
         syncEqualizeButtons();
         syncDocumentMergeButtons();
         syncSettingButtons();
@@ -994,7 +997,7 @@ const FloatingToolbars = (function () {
       const btn = controls.button('var-condition');
       if (!btn) return;
       const title = I18n.t(attrs.varTable ? 'varToolbar.condition' : 'imgToolbar.conditionNeedsColumn');
-      controls.setDisabled('var-condition', !attrs.varTable, title);
+      controls.setDisabled('var-condition', !attrs.varTable, title, 'imgToolbar.conditionNeedsColumn');
       controls.setActive('var-condition', !!attrs.varTable && !!ConditionRules.normalizeCondition(attrs.condition));
       btn.setAttribute('aria-label', title);
     }
@@ -1005,7 +1008,7 @@ const FloatingToolbars = (function () {
       if (!btn) return;
       const column = !!node.attrs.varTable;
       const status = column ? VariableLoop.status(editor, editor.state.selection.from, node) : { active: false, enabled: false, title: I18n.t('imgToolbar.loopNeedsColumn') };
-      controls.setDisabled('var-loop', !status.enabled, status.title);
+      controls.setDisabled('var-loop', !status.enabled, status.title, column ? '' : 'imgToolbar.loopNeedsColumn');
       controls.setActive('var-loop', status.enabled && status.active);
       btn.setAttribute('aria-label', status.title);
     }
@@ -1015,20 +1018,20 @@ const FloatingToolbars = (function () {
       const btn = controls.button('reshape');
       if (!btn) return;
       const title = I18n.t(reason || 'imgToolbar.reshape');
-      controls.setDisabled('reshape', reason, title);
+      controls.setDisabled('reshape', reason, title, reason);
       btn.setAttribute('aria-label', title);
       // « Rogner… » : la même raison, le même grisé.
       const crop = controls.button('crop');
       if (!crop) return;
       const cropTitle = I18n.t(reason || 'imgToolbar.crop');
-      controls.setDisabled('crop', reason, cropTitle);
+      controls.setDisabled('crop', reason, cropTitle, reason);
       crop.setAttribute('aria-label', cropTitle);
     }
     function syncImageWrapButton(controls, node) {
       // Grisé (jamais retiré) quand la bascule ne change rien ; .v2-hf-locked : css/toolbar-v2.css.
       const wrapReason = wrapUnavailableReason(node);
       controls.setActive('wrap', !wrapReason && node.attrs.wrap === 'block');
-      controls.setDisabled('wrap', wrapReason, I18n.t(wrapReason || 'imgToolbar.inlineToggle'));
+      controls.setDisabled('wrap', wrapReason, I18n.t(wrapReason || 'imgToolbar.inlineToggle'), wrapReason);
     }
     function syncImageLayerLocks(controls) {
       // Grisés (jamais retirés) quand pdf-export.js ne résout pas les calques (en-tête/pied, grille) ; .v2-hf-locked : css/toolbar-v2.css.
@@ -1042,7 +1045,7 @@ const FloatingToolbars = (function () {
       // « Sur toutes les pages » : grisée tant que l'image n'est pas derrière le texte.
       const repeatReason = repeatUnavailableReason(attrs);
       controls.setActive('repeat', !repeatReason && attrs.repeat);
-      controls.setDisabled('repeat', repeatReason, I18n.t(repeatReason || 'imgToolbar.repeat'));
+      controls.setDisabled('repeat', repeatReason, I18n.t(repeatReason || 'imgToolbar.repeat'), repeatReason);
       const repeatBtn = controls.button('repeat');
       if (repeatBtn) repeatBtn.setAttribute('aria-pressed', !repeatReason && attrs.repeat ? 'true' : 'false');
     }
