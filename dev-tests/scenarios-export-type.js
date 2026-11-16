@@ -4,7 +4,7 @@
 // pourrait apparaître que quand on sélectionne PDF », « il ne doit y avoir dans le menu du bouton Exporter que les options de lignes/classeur » (pas d'« Exporter en docx »), « le bouton
 // Exporter, c'est le toggle du choix : quand on met toutes les lignes, le bouton par défaut devient toutes les lignes, avec une petite coche devant ».
 // Ce que la suite garde :
-//  1) le menu Type : onze lignes (PDF, PDF protégé, PDF/A, Word, PowerPoint, Excel, Markdown, Markdown (modèle), HTML (fichier à déposer), HTML (contenu à coller), Email (.eml), ce dernier grisé hors d'un modèle email), leurs noms français et anglais, la ligne du type choisi active, Word, les deux Markdown et les deux HTML grisés dans une grille et Excel grisé dans un document (jamais retiré) ;
+//  1) le menu Type : douze lignes (PDF, PDF protégé, PDF/A, Word, PowerPoint, Excel, Markdown, Markdown (modèle), HTML (fichier à déposer), HTML (contenu à coller), HTML (modèle), Email (.eml), ce dernier grisé hors d'un modèle email), leurs noms français et anglais, la ligne du type choisi active, Word, les deux Markdown et les deux HTML grisés dans une grille et Excel grisé dans un document (jamais retiré) ;
 //     la qualité du PDF (intitulé, filet, trois lignes) n'est montrée que pour les trois PDF ; la qualité choisie est gardée et revient avec le PDF ; le PDF protégé a sa suite : groupe pdfProtection ;
 //  2) le menu Exporter : titre « Exporter » (« Export »), rien que les options de lignes et de classeur du type choisi (PDF : une seule ligne, toutes les lignes en ZIP, en un seul PDF,
 //     l'assemblage ; Word, Markdown et les deux HTML : une seule ligne, ZIP ; Excel : une seule ligne, ZIP, un seul classeur), aucune ligne qui nomme un format, la coche DEVANT l'option cochée ;
@@ -129,7 +129,7 @@
 
   cases.push({
     id: 'exporttype_menu_lists_pdf_word_excel_and_shows_the_pdf_quality_only_for_pdf',
-    description: 'Le menu du bouton à gauche d\'Exporter s\'appelle « Type d\'export » et a onze lignes de type (PDF, PDF protégé, PDF/A, Word, PowerPoint, Excel, Markdown, Markdown (modèle), HTML (fichier à déposer), HTML (contenu à coller), Email (.eml)) nommées dans la langue de la page (français ici) ; la qualité du PDF (intitulé, filet, Vectoriel, Impression navigateur, Léger) n\'est montrée que pour les deux PDF ; au départ PDF et Vectoriel sont les lignes actives, PowerPoint (une présentation seulement) et Excel sont grisés dans un document',
+    description: 'Le menu du bouton à gauche d\'Exporter s\'appelle « Type d\'export » et a douze lignes de type (PDF, PDF protégé, PDF/A, Word, PowerPoint, Excel, Markdown, Markdown (modèle), HTML (fichier à déposer), HTML (contenu à coller), HTML (modèle), Email (.eml)) nommées dans la langue de la page (français ici) ; la qualité du PDF (intitulé, filet, Vectoriel, Impression navigateur, Léger) n\'est montrée que pour les deux PDF ; au départ PDF et Vectoriel sont les lignes actives, PowerPoint (une présentation seulement) et Excel sont grisés dans un document',
     run: async (h) => {
       await seed(h);
       await reset(h);
@@ -138,33 +138,33 @@
         const flyout = document.querySelector(TYPE_FLYOUT);
         const labels = () => Array.from(flyout.querySelectorAll('.v2-hover-flyout-label')).filter(shown).map(el => el.textContent.trim());
         const fr = readTypeMenu();
-        const wantFr = { label: 'Type d’export', aria: 'Type d’export', types: ['PDF', 'PDF protégé', 'PDF/A (archivage)', 'Word (bêta)', 'PowerPoint (bêta)', 'Excel', 'Markdown', 'Markdown (modèle)', 'HTML (fichier à déposer)', 'HTML (contenu à coller)', 'Email (.eml)'], qualityLabel: 'Qualité PDF', qualities: ['Vectoriel (par défaut)', 'Impression navigateur', 'Léger (images réduites)'], options: ['PDF', 'PDF protégé', 'PDF/A (archivage)', 'Word (bêta)', 'PowerPoint (bêta)', 'Excel', 'Markdown', 'Markdown (modèle)', 'HTML (fichier à déposer)', 'HTML (contenu à coller)', 'Email (.eml)'] };
+        const wantFr = { label: 'Type d’export', aria: 'Type d’export', types: ['PDF', 'PDF protégé', 'PDF/A (archivage)', 'Word (bêta)', 'PowerPoint (bêta)', 'Excel', 'Markdown', 'Markdown (modèle)', 'HTML (fichier à déposer)', 'HTML (contenu à coller)', 'HTML (modèle)', 'Email (.eml)'], qualityLabel: 'Qualité PDF', qualities: ['Vectoriel (par défaut)', 'Impression navigateur', 'Léger (images réduites)'], options: ['PDF', 'PDF protégé', 'PDF/A (archivage)', 'Word (bêta)', 'PowerPoint (bêta)', 'Excel', 'Markdown', 'Markdown (modèle)', 'HTML (fichier à déposer)', 'HTML (contenu à coller)', 'HTML (modèle)', 'Email (.eml)'] };
         if (JSON.stringify(fr) !== JSON.stringify(wantFr)) bad.push('français=' + JSON.stringify(fr));
         const order = Array.from(flyout.querySelectorAll('.v2-hover-row')).map(row => row.dataset.exportType || row.dataset.quality).join();
-        if (order !== 'pdf,pdfProtected,pdfArchive,docx,pptx,xlsx,md,mdTemplate,html,htmlFragment,eml,native,browser-print,light') bad.push('ordre=' + order);
+        if (order !== 'pdf,pdfProtected,pdfArchive,docx,pptx,xlsx,md,mdTemplate,html,htmlFragment,htmlTemplate,eml,native,browser-print,light') bad.push('ordre=' + order);
         const active = Array.from(flyout.querySelectorAll('.v2-hover-row.is-active')).map(row => row.dataset.exportType || row.dataset.quality).join();
         if (active !== 'pdf,native') bad.push('lignes actives=' + active);
-        if (!live(typeRow('pdf')) || !live(typeRow('pdfProtected')) || !live(typeRow('docx')) || !live(typeRow('md')) || !live(typeRow('mdTemplate')) || !live(typeRow('html')) || !live(typeRow('htmlFragment')) || !greyed(typeRow('pptx')) || !greyed(typeRow('xlsx')) || !greyed(typeRow('eml'))) bad.push('grisés dans un document : ' + JSON.stringify(['pdf', 'pdfProtected', 'docx', 'pptx', 'xlsx', 'md', 'mdTemplate', 'html', 'htmlFragment'].map(t => typeRow(t).className)));
+        if (!live(typeRow('pdf')) || !live(typeRow('pdfProtected')) || !live(typeRow('docx')) || !live(typeRow('md')) || !live(typeRow('mdTemplate')) || !live(typeRow('html')) || !live(typeRow('htmlFragment')) || !live(typeRow('htmlTemplate')) || !greyed(typeRow('pptx')) || !greyed(typeRow('xlsx')) || !greyed(typeRow('eml'))) bad.push('grisés dans un document : ' + JSON.stringify(['pdf', 'pdfProtected', 'docx', 'pptx', 'xlsx', 'md', 'mdTemplate', 'html', 'htmlFragment'].map(t => typeRow(t).className)));
         if (!['native', 'browser-print', 'light'].every(q => live(qualityRow(q)))) bad.push('qualités grisées pour le PDF');
         if (document.getElementById('v2-btn-quality').classList.contains('active')) bad.push('bouton allumé pour le PDF');
         // Pour le PDF : les deux intitulés, le filet et les trois lignes de qualité sont montrés.
         if (JSON.stringify(labels()) !== JSON.stringify(['Type d’export', 'Qualité PDF'])) bad.push('intitulés montrés pour le PDF=' + JSON.stringify(labels()));
         if (!Array.from(flyout.querySelectorAll('.v2-hover-hsep')).every(shown)) bad.push('filet masqué pour le PDF');
-        if (shownRows(TYPE_FLYOUT).length !== 14) bad.push('lignes montrées pour le PDF=' + shownRows(TYPE_FLYOUT).length);
-        // Pour Word : seulement les onze types ; la qualité (intitulé, filet, lignes) n'est pas montrée, mais reste dans la page.
+        if (shownRows(TYPE_FLYOUT).length !== 15) bad.push('lignes montrées pour le PDF=' + shownRows(TYPE_FLYOUT).length);
+        // Pour Word : seulement les douze types ; la qualité (intitulé, filet, lignes) n'est pas montrée, mais reste dans la page.
         await pickType('docx');
         if (JSON.stringify(labels()) !== JSON.stringify(['Type d’export'])) bad.push('intitulés montrés avec Word=' + JSON.stringify(labels()));
         if (Array.from(flyout.querySelectorAll('.v2-hover-hsep')).some(shown)) bad.push('filet montré avec Word');
         const wordRows = shownRows(TYPE_FLYOUT).map(row => row.dataset.exportType || row.dataset.quality).join();
-        if (wordRows !== 'pdf,pdfProtected,pdfArchive,docx,pptx,xlsx,md,mdTemplate,html,htmlFragment,eml') bad.push('lignes montrées avec Word=' + wordRows);
+        if (wordRows !== 'pdf,pdfProtected,pdfArchive,docx,pptx,xlsx,md,mdTemplate,html,htmlFragment,htmlTemplate,eml') bad.push('lignes montrées avec Word=' + wordRows);
         if (flyout.querySelectorAll('.v2-hover-row[data-quality]').length !== 3) bad.push('une ligne de qualité a été retirée de la page');
         // Pour Excel (dans une grille) : de même.
         await pickType('pdf');
         await enterGrid(h);
         await pickType('xlsx');
-        if (JSON.stringify(labels()) !== JSON.stringify(['Type d’export']) || shownRows(TYPE_FLYOUT).length !== 11) bad.push('menu avec Excel : ' + JSON.stringify(labels()) + ' / ' + shownRows(TYPE_FLYOUT).length + ' lignes');
+        if (JSON.stringify(labels()) !== JSON.stringify(['Type d’export']) || shownRows(TYPE_FLYOUT).length !== 12) bad.push('menu avec Excel : ' + JSON.stringify(labels()) + ' / ' + shownRows(TYPE_FLYOUT).length + ' lignes');
         // Dans une grille, Word, PowerPoint, les deux Markdown et les deux HTML sont grisés (jamais retirés) ; Excel, les deux PDF ne le sont pas.
-        if (!greyed(typeRow('docx')) || !greyed(typeRow('pptx')) || !greyed(typeRow('md')) || !greyed(typeRow('mdTemplate')) || !greyed(typeRow('html')) || !greyed(typeRow('htmlFragment')) || !greyed(typeRow('eml')) || !live(typeRow('xlsx')) || !live(typeRow('pdf')) || !live(typeRow('pdfProtected'))) bad.push('grisés dans une grille : ' + JSON.stringify(['pdf', 'pdfProtected', 'docx', 'pptx', 'xlsx', 'md', 'mdTemplate', 'html', 'htmlFragment'].map(t => typeRow(t).className)));
+        if (!greyed(typeRow('docx')) || !greyed(typeRow('pptx')) || !greyed(typeRow('md')) || !greyed(typeRow('mdTemplate')) || !greyed(typeRow('html')) || !greyed(typeRow('htmlFragment')) || !greyed(typeRow('htmlTemplate')) || !greyed(typeRow('eml')) || !live(typeRow('xlsx')) || !live(typeRow('pdf')) || !live(typeRow('pdfProtected'))) bad.push('grisés dans une grille : ' + JSON.stringify(['pdf', 'pdfProtected', 'docx', 'pptx', 'xlsx', 'md', 'mdTemplate', 'html', 'htmlFragment'].map(t => typeRow(t).className)));
         await pickType('md');
         if (typeSelect().value !== 'xlsx') bad.push('Markdown grisé a été choisi dans une grille : ' + typeSelect().value);
         await pickType('mdTemplate');
@@ -173,10 +173,12 @@
         if (typeSelect().value !== 'xlsx') bad.push('HTML (fichier à déposer) grisé a été choisi dans une grille : ' + typeSelect().value);
         await pickType('htmlFragment');
         if (typeSelect().value !== 'xlsx') bad.push('HTML (contenu à coller) grisé a été choisi dans une grille : ' + typeSelect().value);
+        await pickType('htmlTemplate');
+        if (typeSelect().value !== 'xlsx') bad.push('HTML (modèle) grisé a été choisi dans une grille : ' + typeSelect().value);
         await pickType('eml');
         if (typeSelect().value !== 'xlsx') bad.push('Email (.eml) grisé a été choisi dans une grille : ' + typeSelect().value);
         await pickType('pdf');
-        if (shownRows(TYPE_FLYOUT).length !== 14 || labels().length !== 2) bad.push('retour au PDF : ' + shownRows(TYPE_FLYOUT).length + ' lignes, ' + labels().length + ' intitulés');
+        if (shownRows(TYPE_FLYOUT).length !== 15 || labels().length !== 2) bad.push('retour au PDF : ' + shownRows(TYPE_FLYOUT).length + ' lignes, ' + labels().length + ' intitulés');
       } finally { await reset(h); }
       return result(bad);
     },
@@ -185,13 +187,13 @@
   cases.push({
     id: 'exporttype_menu_wording_is_english_on_a_page_that_starts_in_english',
     lang: 'en',
-    description: 'Page qui démarre en anglais : le menu « Export type » nomme ses onze types (PDF, Protected PDF, PDF/A (archiving), Word (beta), PowerPoint (beta), Excel, Markdown, Markdown (template), HTML (file to upload), HTML (content to paste), Email (.eml)) et la qualité du PDF (Vector, Browser print, Light) en anglais',
+    description: 'Page qui démarre en anglais : le menu « Export type » nomme ses douze types (PDF, Protected PDF, PDF/A (archiving), Word (beta), PowerPoint (beta), Excel, Markdown, Markdown (template), HTML (file to upload), HTML (content to paste), HTML (template), Email (.eml)) et la qualité du PDF (Vector, Browser print, Light) en anglais',
     run: async (h) => {
       await seed(h);
       await reset(h);
       const bad = [];
       try {
-        const wantEn = { label: 'Export type', aria: 'Export type', types: ['PDF', 'Protected PDF', 'PDF/A (archiving)', 'Word (beta)', 'PowerPoint (beta)', 'Excel', 'Markdown', 'Markdown (template)', 'HTML (file to upload)', 'HTML (content to paste)', 'Email (.eml)'], qualityLabel: 'PDF quality', qualities: ['Vector (default)', 'Browser print', 'Light (smaller images)'], options: ['PDF', 'Protected PDF', 'PDF/A (archiving)', 'Word (beta)', 'PowerPoint (beta)', 'Excel', 'Markdown', 'Markdown (template)', 'HTML (file to upload)', 'HTML (content to paste)', 'Email (.eml)'] };
+        const wantEn = { label: 'Export type', aria: 'Export type', types: ['PDF', 'Protected PDF', 'PDF/A (archiving)', 'Word (beta)', 'PowerPoint (beta)', 'Excel', 'Markdown', 'Markdown (template)', 'HTML (file to upload)', 'HTML (content to paste)', 'HTML (template)', 'Email (.eml)'], qualityLabel: 'PDF quality', qualities: ['Vector (default)', 'Browser print', 'Light (smaller images)'], options: ['PDF', 'Protected PDF', 'PDF/A (archiving)', 'Word (beta)', 'PowerPoint (beta)', 'Excel', 'Markdown', 'Markdown (template)', 'HTML (file to upload)', 'HTML (content to paste)', 'HTML (template)', 'Email (.eml)'] };
         const en = readTypeMenu();
         if (JSON.stringify(en) !== JSON.stringify(wantEn)) bad.push('anglais=' + JSON.stringify(en));
       } finally { await reset(h); }
@@ -580,7 +582,7 @@
       const downloads = [];
       const realDownload = ExportCommon.downloadBlob;
       ExportCommon.downloadBlob = (blob, name) => downloads.push({ blob, name });
-      const note = () => document.querySelector(EXPORT_FLYOUT + ' .v2-hover-flyout-label[data-export-for="mdTemplate"]');
+      const note = () => document.querySelector(EXPORT_FLYOUT + ' .v2-hover-flyout-label[data-export-for~="mdTemplate"]');
       const exportWithButton = async () => {
         const before = downloads.length;
         document.getElementById('btn-export-pdf').click();
@@ -665,7 +667,101 @@
       const bad = [];
       try {
         await pickType('mdTemplate');
-        const note = document.querySelector(EXPORT_FLYOUT + ' .v2-hover-flyout-label[data-export-for="mdTemplate"]');
+        const note = document.querySelector(EXPORT_FLYOUT + ' .v2-hover-flyout-label[data-export-for~="mdTemplate"]');
+        if (!note || !shown(note) || note.textContent.trim() !== 'One file: the template') bad.push('mot du menu Export en anglais=' + (note && shown(note) ? note.textContent.trim() : 'absent'));
+        if (shownLines() !== '') bad.push('options de lignes montrées=' + shownLines());
+      } finally { await reset(h); }
+      return result(bad);
+    },
+  });
+
+  cases.push({
+    id: 'exporttype_html_template_exports_the_model_itself_with_no_row_and_no_lot',
+    description: 'Le type « HTML (modèle) » (lot 3 de l\'import HTML, 16/11) exporte le modèle ouvert, ses éléments de fusion écrits avec leurs réglages : un seul fichier .html nommé d\'après le modèle (« publipostage » sans nom), sans ligne ni lot, aucune question, aucun autre export, le mot « Un seul fichier : le modèle » au lieu des options de lignes, le choix de lignes gardé pour un autre type ; grisé dans une grille et dans un macro-modèle (qui garde le HTML d\'une ligne), où le bouton exporte un PDF.',
+    run: async (h) => {
+      await seed(h);
+      await reset(h);
+      Editor.setHTML(`<p>Bonjour ${badge('Nom')}, voici votre courrier.</p>`);
+      await sleep(80);
+      const spies = spyOnEngines();
+      const batches = spyOnBatches(h);
+      const bad = [];
+      const downloads = [];
+      const realDownload = ExportCommon.downloadBlob;
+      ExportCommon.downloadBlob = (blob, name) => downloads.push({ blob, name });
+      const note = () => document.querySelector(EXPORT_FLYOUT + ' .v2-hover-flyout-label[data-export-for~="htmlTemplate"]');
+      const exportWithButton = async () => {
+        const before = downloads.length;
+        document.getElementById('btn-export-pdf').click();
+        for (let i = 0; i < 80 && downloads.length === before; i++) await sleep(50);
+        for (let i = 0; i < 40 && document.getElementById('btn-export-pdf').style.pointerEvents === 'none'; i++) await sleep(50);
+        await sleep(30);
+        return downloads.slice(before);
+      };
+      const nameInput = document.getElementById('template-name');
+      try {
+        await pickType('html');
+        await pickLines('zip');
+        await pickType('htmlTemplate');
+        if (typeSelect().value !== 'htmlTemplate' || !typeRow('htmlTemplate').classList.contains('is-active') || typeRow('html').classList.contains('is-active')) bad.push('type non choisi : ' + typeSelect().value);
+        if (!document.getElementById('v2-btn-quality').classList.contains('active')) bad.push('bouton du type non allumé');
+        if (!['native', 'browser-print', 'light'].every(q => !shown(qualityRow(q)) && greyed(qualityRow(q)))) bad.push('qualités du PDF encore montrées ou non grisées');
+        if (shownLines() !== '') bad.push('options de lignes montrées=' + shownLines());
+        if (!note() || !shown(note()) || note().textContent.trim() !== 'Un seul fichier : le modèle') bad.push('mot du menu Exporter en français=' + (note() && shown(note()) ? note().textContent.trim() : 'absent'));
+        if (linesSelect().value !== 'zip') bad.push('le choix de lignes gardé a été touché : ' + linesSelect().value);
+        nameInput.value = 'Contrat / Client';
+        const first = await exportWithButton();
+        if (first.length !== 1 || first[0].name !== 'Contrat _ Client.html') bad.push('fichier=' + JSON.stringify(first.map(d => d.name)));
+        const text = first.length ? await first[0].blob.text() : '';
+        if (!/<div class="pp-doc" data-pp-template="1">/.test(text) || !new RegExp('<span class="var-badge" data-table="' + TABLE + '" data-column="Nom" data-key="' + TABLE + '.Nom">').test(text) || !/<title>Contrat _ Client<\/title>/.test(text)) bad.push('texte=' + JSON.stringify(text.slice(text.indexOf('<body>'), text.indexOf('<body>') + 400)));
+        if (first.length && first[0].blob.type !== 'text/html;charset=utf-8') bad.push('type=' + first[0].blob.type);
+        if (spies.total() !== 0 || batches.asked() !== 0 || batches.sheets.length !== 0) bad.push('un autre export ou une question est partie : ' + JSON.stringify({ engines: spies.calls, asked: batches.asked() }));
+        const status = document.getElementById('status-msg').textContent.trim();
+        if (status !== 'Modèle exporté en HTML, éléments de fusion compris.') bad.push('état=' + status);
+        nameInput.value = '';
+        const second = await exportWithButton();
+        if (second.length !== 1 || second[0].name !== 'publipostage.html') bad.push('fichier sans nom=' + JSON.stringify(second.map(d => d.name)));
+        await pickType('html');
+        if (shown(note()) || shownLines() !== 'one,zip' || tickedLines() !== 'zip') bad.push('retour à HTML : mot ' + shown(note()) + ', options ' + shownLines() + ', coché ' + tickedLines());
+        await pickType('htmlTemplate');
+        await enterGrid(h);
+        if (typeSelect().value !== 'pdf' || !greyed(typeRow('htmlTemplate')) || typeRow('htmlTemplate').classList.contains('is-active')) bad.push('grille après HTML (modèle) : ' + typeSelect().value + ' / ' + typeRow('htmlTemplate').className);
+        typeSelect().value = 'htmlTemplate';
+        spies.calls.pdf.length = 0;
+        await clickAndWait('btn-export-pdf', spies);
+        if (spies.calls.pdf.length !== 1 || downloads.length !== 2) bad.push('export d\'une grille avec le type posé de l\'extérieur : ' + JSON.stringify(spies.calls) + ' / fichiers ' + downloads.length);
+        await leaveGrid(h);
+        h.openFlyout('#v2-new-template-group');
+        await h.clickButton('v2-btn-new-macro');
+        await sleep(150);
+        const macroName = document.getElementById('macro-editor-name');
+        if (!macroName) bad.push('fenêtre du macro-modèle introuvable');
+        else {
+          macroName.value = 'Macro HTML (modèle)';
+          document.getElementById('macro-editor-save').click();
+          await sleep(300);
+          if (!greyed(typeRow('htmlTemplate')) || !live(typeRow('html')) || !live(typeRow('htmlFragment'))) bad.push('dans un macro-modèle : ' + typeRow('htmlTemplate').className + ' / ' + typeRow('html').className);
+          typeSelect().value = 'htmlTemplate';
+          spies.calls.pdf.length = 0;
+          await clickAndWait('btn-export-pdf', spies);
+          if (spies.calls.pdf.length !== 1 || downloads.length !== 2) bad.push('export d\'un macro-modèle avec le type posé de l\'extérieur : ' + JSON.stringify(spies.calls) + ' / fichiers ' + downloads.length);
+        }
+      } finally { ExportCommon.downloadBlob = realDownload; nameInput.value = ''; batches.restore(); spies.restore(); await reset(h); }
+      return result(bad);
+    },
+  });
+
+  cases.push({
+    id: 'exporttype_html_template_word_is_english_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : avec le type « HTML (template) », le menu Export dit « One file: the template » au lieu des options de lignes',
+    run: async (h) => {
+      await seed(h);
+      await reset(h);
+      const bad = [];
+      try {
+        await pickType('htmlTemplate');
+        const note = document.querySelector(EXPORT_FLYOUT + ' .v2-hover-flyout-label[data-export-for~="htmlTemplate"]');
         if (!note || !shown(note) || note.textContent.trim() !== 'One file: the template') bad.push('mot du menu Export en anglais=' + (note && shown(note) ? note.textContent.trim() : 'absent'));
         if (shownLines() !== '') bad.push('options de lignes montrées=' + shownLines());
       } finally { await reset(h); }

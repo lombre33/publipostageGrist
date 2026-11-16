@@ -200,6 +200,15 @@ const HtmlImport = (function () {
   let made = new WeakSet();
   // Les voisins de la page en cours de conversion (neighboursOf) ; null pour un fichier seul.
   let neighbours = null;
+  // Un modèle que le widget a exporté (js/html-export.js, « HTML (modèle) ») porte `data-pp-template` sur sa racine `.pp-doc` : lui seul garde ses éléments de fusion (bulles de variable, calculs, puces,
+  // blocs et valeurs conditionnels, images liées à une colonne...), avec leur classe et leurs attributs, et le texte `{{...}}` n'y est pas lu comme une variable (ses bulles sont écrites en entier).
+  // Une page web qui porterait ces classes n'en fait pas des objets de l'éditeur : sans la marque, le rangement final les retire.
+  const TEMPLATE_ATTR = 'data-pp-template';
+  const TEMPLATE_VERSION = '1';
+  let template = false;
+  const MERGE_SELECTOR = ['span.var-badge', 'span.calc-badge', 'span.smart-chip', 'span.mention-chip', 'span.page-number-badge', 'span.conditional-checkbox', 'span.conditional-value',
+    'div.conditional-text', 'div.page-break-marker', 'div.heading-numbering-config', 'div.' + PageSections.START_CLASS,
+    'img[data-var-table]', 'img[data-chart-section]', 'img[data-chart-spec]', 'img[data-video]', 'img[data-qr-text]'].join(', ');
   function make(doc, tag, attrs) {
     const node = doc.createElement(tag);
     Object.keys(attrs || {}).forEach(name => node.setAttribute(name, attrs[name]));
@@ -548,7 +557,7 @@ const HtmlImport = (function () {
   // jamais modifiés : ce qui reste de la page est assaini comme le reste.
   function mapWidgetExport(root, report, imageAlign) {
     const doc = root.ownerDocument;
-    const zones = { header: '', footer: '' };
+    const zones = { header: '', footer: '', headerFirst: '', footerFirst: '' };
     const kids = (el, tag, attrs) => { const out = make(doc, tag, attrs); while (el.firstChild) out.appendChild(el.firstChild); return out; };
     root.querySelectorAll('nav.pp-toc').forEach(nav => nav.replaceWith(make(doc, 'div', { class: 'toc-marker' })));
     root.querySelectorAll('.pp-callout').forEach((callout) => {
@@ -597,9 +606,10 @@ const HtmlImport = (function () {
     root.querySelectorAll('img').forEach((img) => {
       ['left', 'right', 'center'].forEach((side) => { if (img.classList.contains('pp-' + side)) imageAlign.set(img, side); });
     });
-    // L'en-tête et le pied de page (le tout premier et le tout dernier bloc du document) sortent du texte, une fois le reste mis en forme.
+    // L'en-tête et le pied de page (le tout premier et le tout dernier bloc du document) sortent du texte, une fois le reste mis en forme ; ceux de la première page (`pp-first`, que seul un modèle écrit) à part.
     ['header', 'footer'].forEach((name) => {
-      root.querySelectorAll(':scope > .pp-zone.pp-' + name).forEach((zone) => { zones[name] = zone; zone.remove(); });
+      root.querySelectorAll(':scope > .pp-zone.pp-' + name + ':not(.pp-first)').forEach((zone) => { zones[name] = zone; zone.remove(); });
+      root.querySelectorAll(':scope > .pp-zone.pp-' + name + '.pp-first').forEach((zone) => { zones[name + 'First'] = zone; zone.remove(); });
     });
     report.widget = 1;
     return zones;
@@ -661,7 +671,7 @@ const HtmlImport = (function () {
   // l'éditeur sans l'avoir demandé) sont retirés, sauf aux éléments que ce module a écrits.
   function stripForeign(root) {
     root.querySelectorAll('*').forEach((el) => {
-      if (made.has(el)) { el.removeAttribute('id'); return; }
+      if (made.has(el) || (template && el.matches(MERGE_SELECTOR))) { el.removeAttribute('id'); return; }
       Array.from(el.attributes).forEach((attr) => {
         const name = attr.name.toLowerCase();
         if (name === 'class' || name === 'id' || name.indexOf('data-') === 0) el.removeAttribute(attr.name);
@@ -685,6 +695,8 @@ const HtmlImport = (function () {
   function images(root, report, base, imageAlign) {
     const doc = root.ownerDocument;
     root.querySelectorAll('img').forEach((img) => {
+      // Une image que le modèle lie à une colonne, à un graphique ou à un code QR n'a pas d'adresse : elle est dessinée à la lecture, elle reste telle quelle.
+      if (template && ExportCommon.isMergeImage(img)) { img.classList.add('editor-image'); return; }
       let src = (img.getAttribute('src') || '').trim();
       const near = neighbours && neighbours.images.get(src);
       if (near && near.uri) src = near.uri;
@@ -808,7 +820,7 @@ const HtmlImport = (function () {
     decorate.forEach((attrs, el) => Object.keys(attrs).forEach(name => el.setAttribute(name, attrs[name])));
     decorate.clear();
     images(root, report, base, imageAlign);
-    variables(root, report);
+    if (!template) variables(root, report);
     return HtmlSanitize.clean(root.innerHTML).trim();
   }
 
@@ -816,7 +828,7 @@ const HtmlImport = (function () {
   // `options.neighbours` : ce que neighboursOf a trouvé à côté du fichier (images en data URI, texte des feuilles liées).
   function toDocument(raw, options) {
     neighbours = options && options.neighbours ? options.neighbours : null;
-    try { return convert(raw); } finally { neighbours = null; }
+    try { return convert(raw); } finally { neighbours = null; template = false; }
   }
   function convert(raw) {
     const text = String(raw == null ? '' : raw).replace(/^﻿/, '');
@@ -836,7 +848,8 @@ const HtmlImport = (function () {
     const root = widget || tree;
     const imageAlign = new Map();
     const decorate = new Map();
-    let zones = { header: '', footer: '' };
+    template = !!widget && widget.getAttribute(TEMPLATE_ATTR) === TEMPLATE_VERSION;
+    let zones = { header: '', footer: '', headerFirst: '', footerFirst: '' };
     if (widget) zones = mapWidgetExport(root, report, imageAlign);
     else {
       const table = declarationsOf(root, cssText, report);
@@ -849,17 +862,19 @@ const HtmlImport = (function () {
     anchors(root, decorate);
     const html = finish(root, report, base, imageAlign, decorate);
     const headerFooter = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
-    ['header', 'footer'].forEach((name) => {
-      if (zones[name]) {
-        structure(zones[name]);
-        headerFooter[name].default = finish(zones[name], report, base, imageAlign, new Map());
+    [['header', 'default', 'header'], ['header', 'first', 'headerFirst'], ['footer', 'default', 'footer'], ['footer', 'first', 'footerFirst']].forEach(([name, which, key]) => {
+      if (zones[key]) {
+        structure(zones[key]);
+        headerFooter[name][which] = finish(zones[key], report, base, imageAlign, new Map());
       }
     });
-    const filled = PageLayout.hasZoneContent(headerFooter.header.default) || PageLayout.hasZoneContent(headerFooter.footer.default);
+    const hasZone = value => PageLayout.hasZoneContent(value);
+    const filled = hasZone(headerFooter.header.default) || hasZone(headerFooter.footer.default) || hasZone(headerFooter.header.first) || hasZone(headerFooter.footer.first);
     if (!html && !filled) throw fail('empty');
     headerFooter.enabled = filled;
+    headerFooter.differentFirstPage = hasZone(headerFooter.header.first) || hasZone(headerFooter.footer.first);
     made = new WeakSet();
-    return { html, headerFooter: filled ? headerFooter : null, report: REPORT_KEYS.filter(key => report[key]).map(key => ({ key, n: report[key] })), widget: !!report.widget };
+    return { html, headerFooter: filled ? headerFooter : null, report: REPORT_KEYS.filter(key => report[key]).map(key => ({ key, n: report[key] })), widget: !!report.widget, template };
   }
 
   // Le fichier choisi, lu et converti : { html, headerFooter, report }, ou une erreur à code (tooBig, unreadable, empty, tooMuchText, noPage, library). `file` est une page HTML ou une archive ZIP ;

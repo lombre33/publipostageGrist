@@ -231,7 +231,7 @@
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.69">
 <link rel="stylesheet" href="css/style.css?v=0.109">
 <link rel="stylesheet" href="css/reader-guide.css?v=0.5">
-<link rel="stylesheet" href="css/editor-v2.css?v=0.145">
+<link rel="stylesheet" href="css/editor-v2.css?v=0.146">
 <link rel="stylesheet" href="css/toolbar-v2.css?v=0.86">
 <link rel="stylesheet" href="css/grid.css?v=0.17">
 <link rel="stylesheet" href="css/template-tree-select.css?v=0.24">
@@ -326,12 +326,12 @@
 <link rel="preload" as="script" href="js/space-gap.js?v=0.3">
 <link rel="preload" as="script" href="js/reader-mode.js?v=0.202">
 <link rel="preload" as="script" href="js/reader-guide.js?v=0.7">
-<link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.7">
-<link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.19">
+<link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.8">
+<link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.20">
 <link rel="preload" as="script" href="js/i18n-texts-format.js?v=0.3">
-<link rel="preload" as="script" href="js/i18n-texts-blocks.js?v=0.5">
+<link rel="preload" as="script" href="js/i18n-texts-blocks.js?v=0.6">
 <link rel="preload" as="script" href="js/i18n-texts-editor.js?v=0.1">
-<link rel="preload" as="script" href="js/i18n-texts-review.js?v=0.3">
+<link rel="preload" as="script" href="js/i18n-texts-review.js?v=0.4">
 <link rel="preload" as="script" href="js/i18n-texts-slides.js?v=0.3">
 <link rel="preload" as="script" href="js/i18n-texts-motion.js?v=0.2">
 <link rel="preload" as="script" href="js/i18n-texts-settings.js?v=0.15">
@@ -427,7 +427,7 @@
 <link rel="preload" as="script" href="js/versions-store.js?v=0.7">
 <link rel="preload" as="script" href="js/grid-xlsx-import.js?v=0.12">
 <link rel="preload" as="script" href="js/markdown-import.js?v=0.4">
-<link rel="preload" as="script" href="js/html-import.js?v=0.3">
+<link rel="preload" as="script" href="js/html-import.js?v=0.4">
 <link rel="preload" as="script" href="js/mailto-export.js?v=0.20">
 <link rel="preload" as="script" href="js/eml-export.js?v=0.1">
 <link rel="preload" as="script" href="js/template-gallery.js?v=0.16">
@@ -554,7 +554,7 @@
 <link rel="preload" as="script" href="js/batch-progress.js?v=0.1">
 <link rel="preload" as="script" href="js/batch-precheck.js?v=0.1">
 <link rel="preload" as="script" href="js/email-drafts.js?v=0.1">
-<link rel="preload" as="script" href="js/main-export.js?v=0.10">
+<link rel="preload" as="script" href="js/main-export.js?v=0.11">
 <link rel="preload" as="script" href="js/main-autosave.js?v=0.4">
 <link rel="preload" as="script" href="js/main-save.js?v=0.3">
 <link rel="preload" as="script" href="js/main-leave.js?v=0.1">
@@ -582,7 +582,7 @@
       <div class="action-cluster">
         <span class="v2-hover-group" id="v2-new-template-group" data-close-on-click>
           <button id="btn-new" aria-label="Nouveau modèle" data-i18n-aria="toolbar.new"></button>
-          <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-new-template-flyout">
+          <span class="v2-hover-flyout v2-hover-flyout-v v2-hover-flyout-scrollable" id="v2-new-template-flyout">
             <span class="v2-hover-flyout-label" data-i18n="toolbar.new">Nouveau modèle</span>
             <span class="v2-hover-row" id="v2-btn-new-document" data-i18n="toolbar.newDocument">Nouveau document</span>
             <span class="v2-hover-row" id="v2-btn-new-email" data-i18n="toolbar.newEmail">Nouvel email</span>
@@ -636,7 +636,7 @@
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-page-flyout" role="menu" aria-label="Page" data-i18n-aria="toolbar.page.label"></span>
       </span>
       <span class="bar-sep"></span>
-      <!-- Type d'export (ex-« Qualité PDF ») : PDF, PDF protégé, PDF/A (archivage), Word, PowerPoint (une présentation seulement), Excel, Markdown, Markdown (modèle : les variables y sont écrites {{Table.Colonne}}), HTML (le fichier complet à déposer sur un site) ou HTML (le contenu seul à coller dans un bloc de page), et la qualité du PDF, montrée pour les deux PDF seulement (`data-export-for`, js/main.js:syncExportMenus ; la qualité choisie est gardée et revient avec le PDF ; « Impression navigateur » reste grisée en PDF protégé). Le bouton Exporter juste après exporte dans ce type, selon l'option de lignes cochée dans son menu. Les listes cachées portent les choix (#v2-export-type, #v2-pdf-quality). -->
+      <!-- Type d'export (ex-« Qualité PDF ») : PDF, PDF protégé, PDF/A (archivage), Word, PowerPoint (une présentation seulement), Excel, Markdown, Markdown (modèle : les variables y sont écrites {{Table.Colonne}}), HTML (le fichier complet à déposer sur un site) HTML (le contenu seul à coller dans un bloc de page) ou HTML (modèle : ses éléments de fusion y gardent leurs réglages), et la qualité du PDF, montrée pour les deux PDF seulement (`data-export-for`, js/main.js:syncExportMenus ; la qualité choisie est gardée et revient avec le PDF ; « Impression navigateur » reste grisée en PDF protégé). Le bouton Exporter juste après exporte dans ce type, selon l'option de lignes cochée dans son menu. Les listes cachées portent les choix (#v2-export-type, #v2-pdf-quality). -->
       <span class="v2-hover-group" id="v2-quality-group" data-close-on-click>
         <button type="button" id="v2-btn-quality" aria-label="Type d'export" data-i18n-aria="toolbar.exportType"></button>
         <select id="v2-export-type" aria-label="Type d'export" data-i18n-aria="toolbar.exportType" hidden>
@@ -650,6 +650,7 @@
           <option value="mdTemplate" data-i18n="exportType.mdTemplate">Markdown (modèle)</option>
           <option value="html" data-i18n="exportType.html">HTML (fichier à déposer)</option>
           <option value="htmlFragment" data-i18n="exportType.htmlFragment">HTML (contenu à coller)</option>
+          <option value="htmlTemplate" data-i18n="exportType.htmlTemplate">HTML (modèle)</option>
           <option value="eml" data-i18n="exportType.eml">Email (.eml)</option>
         </select>
         <select id="v2-pdf-quality" aria-label="Qualité d'export PDF" data-i18n-aria="toolbar.quality.aria" hidden>
@@ -657,7 +658,7 @@
           <option value="browser-print" data-i18n="quality.browserPrint">Impression navigateur</option>
           <option value="light" data-i18n="quality.light">Léger (images réduites)</option>
         </select>
-        <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-quality-flyout">
+        <span class="v2-hover-flyout v2-hover-flyout-v v2-hover-flyout-scrollable" id="v2-quality-flyout">
           <span class="v2-hover-flyout-label" data-i18n="toolbar.exportType">Type d'export</span>
           <span class="v2-hover-row is-active" data-export-type="pdf" data-i18n="exportType.pdf">PDF</span>
           <span class="v2-hover-row" data-export-type="pdfProtected" data-i18n="exportType.pdfProtected">PDF protégé</span>
@@ -669,6 +670,7 @@
           <span class="v2-hover-row" data-export-type="mdTemplate" data-i18n="exportType.mdTemplate">Markdown (modèle)</span>
           <span class="v2-hover-row" data-export-type="html" data-i18n="exportType.html">HTML (fichier à déposer)</span>
           <span class="v2-hover-row" data-export-type="htmlFragment" data-i18n="exportType.htmlFragment">HTML (contenu à coller)</span>
+          <span class="v2-hover-row" data-export-type="htmlTemplate" data-i18n="exportType.htmlTemplate">HTML (modèle)</span>
           <span class="v2-hover-row v2-hover-row-disabled" data-export-type="eml" aria-disabled="true" data-i18n="exportType.eml">Email (.eml)</span>
           <span class="v2-hover-hsep" data-export-for="pdf pdfProtected pdfArchive"></span>
           <span class="v2-hover-flyout-label" data-export-for="pdf pdfProtected pdfArchive" data-i18n="toolbar.quality.tip">Qualité PDF</span>
@@ -689,7 +691,7 @@
         <!-- Menu Exporter : les options de lignes et de classeur du type choisi (`data-export-for` : les types qui les montrent ; `data-export-grey-for` : ceux pour qui la ligne est montrée mais grisée, js/main.js:syncExportMenus). Une option se coche (liste cachée #v2-export-lines) et le bouton Exporter lance l'option cochée ; aucune ligne ne porte le nom d'un format, le format est celui du menu Type d'export. -->
         <span class="v2-hover-flyout v2-hover-flyout-v" id="v2-export-pdf-flyout" role="menu" aria-label="Exporter" data-i18n-aria="toolbar.export">
           <span class="v2-hover-flyout-label" data-i18n="toolbar.export">Exporter</span>
-          <span class="v2-hover-flyout-label" data-export-for="mdTemplate" hidden data-i18n="exportLines.mdTemplate">Un seul fichier : le modèle</span>
+          <span class="v2-hover-flyout-label" data-export-for="mdTemplate htmlTemplate" hidden data-i18n="exportLines.mdTemplate">Un seul fichier : le modèle</span>
           <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-one" role="menuitemradio" aria-checked="true" tabindex="0" data-export-lines="one" data-export-for="pdf pdfProtected pdfArchive docx pptx xlsx md html htmlFragment eml" data-i18n="exportLines.one">Une seule ligne</span>
           <span class="v2-hover-hsep"></span>
           <span class="v2-hover-row v2-hover-row-check-start" id="v2-export-lines-zip" role="menuitemradio" aria-checked="false" tabindex="0" data-export-lines="zip" data-export-for="pdf pdfProtected pdfArchive docx pptx xlsx md html htmlFragment eml" data-i18n="exportLines.zip">Toutes les lignes de la vue (ZIP)</span>
@@ -1402,12 +1404,12 @@
 <script src="js/space-gap.js?v=0.3"></script>
 <script src="js/reader-mode.js?v=0.202"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
-<script src="js/i18n-texts-templates.js?v=0.7"></script>
-<script src="js/i18n-texts-export.js?v=0.19"></script>
+<script src="js/i18n-texts-templates.js?v=0.8"></script>
+<script src="js/i18n-texts-export.js?v=0.20"></script>
 <script src="js/i18n-texts-format.js?v=0.3"></script>
-<script src="js/i18n-texts-blocks.js?v=0.5"></script>
+<script src="js/i18n-texts-blocks.js?v=0.6"></script>
 <script src="js/i18n-texts-editor.js?v=0.1"></script>
-<script src="js/i18n-texts-review.js?v=0.3"></script>
+<script src="js/i18n-texts-review.js?v=0.4"></script>
 <script src="js/i18n-texts-slides.js?v=0.3"></script>
 <script src="js/i18n-texts-motion.js?v=0.2"></script>
 <script src="js/i18n-texts-settings.js?v=0.15"></script>
@@ -1510,7 +1512,7 @@
 <script type="text/x-lazy-engine" data-engine="xlsx" src="js/xlsx-export.js?v=0.29"></script>
 <script type="text/x-lazy-engine" data-engine="xlsxFormat" src="js/xlsx-number-format.js?v=0.4"></script>
 <script type="text/x-lazy-engine" data-engine="md" src="js/markdown-export.js?v=0.13"></script>
-<script type="text/x-lazy-engine" data-engine="html" src="js/html-export.js?v=0.22"></script>
+<script type="text/x-lazy-engine" data-engine="html" src="js/html-export.js?v=0.23"></script>
 <script type="text/x-lazy-engine" data-engine="pptx" src="js/pptx-export.js?v=0.36"></script>
 <script type="text/x-lazy-engine" data-engine="pptxImport" src="js/pptx-import.js?v=0.59"></script>
 <script type="text/x-lazy-engine" data-engine="docxImport" src="js/docx-import.js?v=0.6"></script>
@@ -1522,7 +1524,7 @@
 <script type="text/x-lazy-module" data-module="versions-compare" src="js/versions-compare.js?v=0.2"></script>
 <script src="js/grid-xlsx-import.js?v=0.12"></script>
 <script src="js/markdown-import.js?v=0.4"></script>
-<script src="js/html-import.js?v=0.3"></script>
+<script src="js/html-import.js?v=0.4"></script>
 <script src="js/mailto-export.js?v=0.20"></script>
 <script src="js/eml-export.js?v=0.1"></script>
 <script src="js/template-gallery.js?v=0.16"></script>
@@ -1649,7 +1651,7 @@
 <script src="js/batch-progress.js?v=0.1"></script>
 <script src="js/batch-precheck.js?v=0.1"></script>
 <script src="js/email-drafts.js?v=0.1"></script>
-<script src="js/main-export.js?v=0.10"></script>
+<script src="js/main-export.js?v=0.11"></script>
 <script src="js/main-autosave.js?v=0.4"></script>
 <script src="js/main-save.js?v=0.3"></script>
 <script src="js/main-leave.js?v=0.1"></script>

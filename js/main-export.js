@@ -244,22 +244,23 @@ const MainExport = (function () {
         setStatus(I18n.t(spec.failed), true);
       }
     }
-    // Le type d'export (menu du bouton à gauche d'Exporter, ex-« Qualité PDF ») : PDF, PDF protégé, PDF/A, Word, Excel, Markdown, Markdown (modèle), HTML ou HTML (contenu à coller), gardé dans la liste cachée
+    // Le type d'export (menu du bouton à gauche d'Exporter, ex-« Qualité PDF ») : PDF, PDF protégé, PDF/A, Word, Excel, Markdown, Markdown (modèle), HTML, HTML (contenu à coller) ou HTML (modèle), gardé dans la liste cachée
     // #v2-export-type comme la qualité du PDF l'est dans #v2-pdf-quality. Word, Markdown et HTML n'ont de sens que pour un document (un macro-modèle compris) et Excel que pour une
-    // grille ; « Markdown (modèle) » écrit le contenu du modèle ouvert (ses variables comprises), donc ni une grille ni un macro-modèle, qui n'a pas de contenu à lui : un type
+    // grille ; « Markdown (modèle) » et « HTML (modèle) » écrivent le contenu du modèle ouvert (ses variables comprises), donc ni une grille ni un macro-modèle, qui n'a pas de contenu à lui : un type
     // que le modèle ouvert ne sait pas faire n'est pas proposé (ligne grisée) et le bouton Exporter retombe sur le PDF, jamais sur une erreur.
     function exportTypeAvailable(type) {
       const grid = GridEditor.isGridType(getCurrentTypeModele());
       return type === 'pdf' || type === 'pdfProtected' || type === 'pdfArchive' || ((type === 'docx' || type === 'md' || type === 'html' || type === 'htmlFragment') && !grid) || (type === 'xlsx' && grid)
-        || (type === 'mdTemplate' && !grid && getCurrentTypeModele() !== 'macro') || (type === 'pptx' && getCurrentTypeModele() === 'presentation') || (type === 'eml' && getCurrentTypeModele() === 'email');
+        || ((type === 'mdTemplate' || type === 'htmlTemplate') && !grid && getCurrentTypeModele() !== 'macro') || (type === 'pptx' && getCurrentTypeModele() === 'presentation') || (type === 'eml' && getCurrentTypeModele() === 'email');
     }
     // Pourquoi une ligne du menu « Type d'export » est grisée pour le modèle ouvert (js/lock-reasons.js) : PowerPoint ne sert qu'une présentation, Excel qu'une grille, un tableau seul ne s'écrit ni en Word, ni en Markdown, ni en HTML,
-    // un macro-modèle n'a pas de texte à écrire en Markdown.
+    // un macro-modèle n'a pas de texte à écrire en Markdown ni en HTML (modèle).
     function exportTypeReason(type) {
       if (type === 'pptx') return I18n.t('lock.exportPptx');
       if (type === 'xlsx') return I18n.t('lock.exportXlsx');
       if (type === 'eml') return I18n.t('lock.exportEml');
       if (type === 'mdTemplate' && getCurrentTypeModele() === 'macro') return I18n.t('lock.exportMacroMd');
+      if (type === 'htmlTemplate' && getCurrentTypeModele() === 'macro') return I18n.t('lock.exportMacroHtml');
       return GridEditor.isGridType(getCurrentTypeModele()) ? I18n.t('lock.exportNotGrid') : '';
     }
     function selectedExportType() {
@@ -302,6 +303,20 @@ const MainExport = (function () {
         setStatus(I18n.t('status.mdGenerationError'), true);
       }
     }
+    // « HTML (modèle) » : le modèle ouvert tel que l'éditeur le garde, ses éléments de fusion écrits avec leurs réglages (js/html-export.js:exportTemplate), pour que l'import HTML le relise intact. Ni ligne,
+    // ni valeur : un seul fichier nommé d'après le modèle, qu'aucune fenêtre d'images d'un autre site ne précède (le document n'est pas posé dans la page).
+    async function onExportHtmlTemplate() {
+      Editor.exitHeaderFooterModeIfActive();
+      setStatus(I18n.t('status.htmlGenerating'));
+      try {
+        await ExportEngines.ensure(['html']);
+        await HtmlExport.exportTemplate(SlideLinks.strip(Editor.getHTML()), Editor.getHeaderFooterData(), sanitizeFilenamePart(templateNameInput ? templateNameInput.value : ''));
+        setExportDoneStatus(I18n.t('status.htmlTemplateGenerated'));
+      } catch (e) {
+        console.error(e);
+        setStatus(I18n.t('status.htmlGenerationError'), true);
+      }
+    }
     // Les lignes que le bouton Exporter exporte (options du menu du bouton Exporter, demande du 12/10) : « une seule ligne » (la ligne affichée) ou
     // toutes les lignes de la table - un ZIP (un fichier par ligne), un seul PDF, l'assemblage avant impression, ou pour Excel un seul classeur. L'option cochée est
     // gardée dans la liste cachée #v2-export-lines. Chaque type n'a que ses lots (EXPORT_BATCH_OF) : une option que le type ne connaît pas (le PDF unique après un
@@ -321,6 +336,7 @@ const MainExport = (function () {
       eml: { zip: 'emlZip' },
       // Le modèle n'est pas une ligne : un seul fichier, jamais de lot (le menu Exporter ne propose rien d'autre que le dire).
       mdTemplate: {},
+      htmlTemplate: {},
     };
     const EXPORT_LINES = ['one', 'zip', 'merged', 'sheets', 'workbook'];
     function selectedExportLines(type) {
@@ -335,7 +351,7 @@ const MainExport = (function () {
       const type = selectedExportType();
       const lines = selectedExportLines(type);
       if (lines !== 'one') return onExportBatch(EXPORT_BATCH_OF[type][lines]);
-      return ({ pdf: onExportPdf, pdfProtected: onExportPdfProtected, pdfArchive: onExportPdfArchive, docx: onExportDocx, pptx: onExportPptx, xlsx: onExportXlsx, md: onExportMd, mdTemplate: onExportMdTemplate, html: onExportHtml, htmlFragment: onExportHtmlFragment, eml: onExportEml })[type]();
+      return ({ pdf: onExportPdf, pdfProtected: onExportPdfProtected, pdfArchive: onExportPdfArchive, docx: onExportDocx, pptx: onExportPptx, xlsx: onExportXlsx, md: onExportMd, mdTemplate: onExportMdTemplate, html: onExportHtml, htmlFragment: onExportHtmlFragment, htmlTemplate: onExportHtmlTemplate, eml: onExportEml })[type]();
     };
 
     // Mode email (planning/feature-email-mode.md) : construit l'URL mailto: de la ligne courante et l'ouvre par un <a> synthétique plutôt que

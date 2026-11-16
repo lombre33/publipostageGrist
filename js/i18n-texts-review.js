@@ -106,6 +106,7 @@ const I18nTextsReview = {
   'lock.exportXlsx': { fr: 'Disponible pour une grille seulement', en: 'Available for a grid only' },
   'lock.exportNotGrid': { fr: 'Indisponible dans une grille : un tableau seul s’exporte en Excel ou en PDF', en: 'Unavailable in a grid: a single table is exported as Excel or PDF' },
   'lock.exportMacroMd': { fr: 'Indisponible dans un macro-modèle : il n’a pas de texte à écrire en Markdown', en: 'Unavailable in a macro-template: it has no text to write as Markdown' },
+  'lock.exportMacroHtml': { fr: 'Indisponible dans un macro-modèle : il n’a pas de texte à écrire en HTML (modèle)', en: 'Unavailable in a macro-template: it has no text to write as HTML (template)' },
   'lock.exportPdfOnly': { fr: 'Disponible pour un export en PDF seulement', en: 'Available for a PDF export only' },
   'lock.keyDefault': { fr: 'Déjà la touche d’origine : il n’y a rien à remettre', en: 'Already the original key: there is nothing to restore' },
   'lock.keysAllDefault': { fr: 'Aucune touche n’a été changée : il n’y a rien à remettre', en: 'No key has been changed: there is nothing to reset' },

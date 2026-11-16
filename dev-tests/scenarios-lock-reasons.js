@@ -298,7 +298,7 @@
       await goToNewDocument(h);
       out.docPptx = row('pptx').getAttribute('title') === I18n.t('lock.exportPptx') && row('pptx').hasAttribute('data-pp-lock-blocks');
       out.docXlsx = row('xlsx').getAttribute('title') === I18n.t('lock.exportXlsx');
-      out.docQuiet = ['pdf', 'pdfProtected', 'docx', 'md', 'mdTemplate', 'html', 'htmlFragment'].filter(t => grey(row(t)) || row(t).hasAttribute('data-pp-lock-reason'));
+      out.docQuiet = ['pdf', 'pdfProtected', 'docx', 'md', 'mdTemplate', 'html', 'htmlFragment', 'htmlTemplate'].filter(t => grey(row(t)) || row(t).hasAttribute('data-pp-lock-reason'));
       clearSaid();
       row('xlsx').click();
       out.xlsxSaid = say() === I18n.t('lock.exportXlsx');
@@ -311,12 +311,12 @@
       await sleep(100);
       out.qualityInPdf = ['native', 'light'].filter(q => quality(q).hasAttribute('data-pp-lock-reason'));
       await goToNewMacro(h);
-      out.macroMd = row('mdTemplate').getAttribute('title') === I18n.t('lock.exportMacroMd');
+      out.macroMd = row('mdTemplate').getAttribute('title') === I18n.t('lock.exportMacroMd') && row('htmlTemplate').getAttribute('title') === I18n.t('lock.exportMacroHtml') && !row('html').hasAttribute('data-pp-lock-reason');
       await goToNewGrid(h);
-      out.gridDocx = row('docx').getAttribute('title') === I18n.t('lock.exportNotGrid') && row('md').getAttribute('title') === I18n.t('lock.exportNotGrid');
+      out.gridDocx = row('docx').getAttribute('title') === I18n.t('lock.exportNotGrid') && row('md').getAttribute('title') === I18n.t('lock.exportNotGrid') && row('htmlTemplate').getAttribute('title') === I18n.t('lock.exportNotGrid');
       out.gridXlsxFree = !grey(row('xlsx')) && !row('xlsx').hasAttribute('data-pp-lock-reason');
       await goToNewDocument(h);
-      out.backDocx = !row('docx').hasAttribute('data-pp-lock-reason') && !row('mdTemplate').hasAttribute('data-pp-lock-reason');
+      out.backDocx = !row('docx').hasAttribute('data-pp-lock-reason') && !row('mdTemplate').hasAttribute('data-pp-lock-reason') && !row('htmlTemplate').hasAttribute('data-pp-lock-reason');
       const pass = out.docPptx && out.docXlsx && out.docQuiet.length === 0 && out.xlsxSaid && out.typeKept && out.qualityInDocx.length === 0 && out.qualityInPdf.length === 0 && out.macroMd && out.gridDocx && out.gridXlsxFree && out.backDocx;
       return { pass, notes: JSON.stringify(out) };
     },

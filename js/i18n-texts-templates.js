@@ -309,6 +309,7 @@ const I18nTextsTemplates = {
   'exportType.mdTemplate': { fr: 'Markdown (modèle)', en: 'Markdown (template)' },
   'exportType.html': { fr: 'HTML (fichier à déposer)', en: 'HTML (file to upload)' },
   'exportType.htmlFragment': { fr: 'HTML (contenu à coller)', en: 'HTML (content to paste)' },
+  'exportType.htmlTemplate': { fr: 'HTML (modèle)', en: 'HTML (template)' },
   'toolbar.export': { fr: 'Exporter', en: 'Export' },
   'toolbar.exportLines': { fr: 'Lignes exportées', en: 'Exported rows' },
   'exportLines.one': { fr: 'Une seule ligne', en: 'A single row' },

@@ -22,6 +22,12 @@
 // le sens de la page, les sauts de page, le filigrane, les images derrière le texte ou sur toutes les pages, les numéros de page, la position des images « devant le texte » (elles
 // suivent le texte) et les polices elles-mêmes (le fichier n'en emporte aucune : une police nommée dans le document reste nommée, avec des polices de repli).
 //
+// Un troisième fichier, « HTML (modèle) » (`options.template`) : le modèle lui-même, tel que l'éditeur le garde, pour que l'import HTML (js/html-import.js) le relise intact. Mêmes règles d'écriture,
+// avec en plus ses éléments de fusion, écrits avec leur classe, leurs attributs `data-*` et leur libellé comme texte : bulle de variable (réglée ou non), calcul, puce, pastille « @ », numéro de
+// page, case, valeur et bloc conditionnels, image liée à une colonne, code QR ou graphique de la page ; le saut de page et la numérotation des titres (réglage, pas texte). Rien n'est résolu (pas de
+// ligne, pas de lecture de Grist), l'en-tête et le pied de page s'écrivent tous les deux fois (par défaut et première page, celle-ci cachée par la feuille de style), et la racine porte
+// `data-pp-template` : sans cette marque, l'import n'accorde à aucun élément d'une page web le droit d'être un élément de fusion.
+//
 // Rien de ce qui peut s'exécuter n'est écrit : le HTML d'entrée passe d'abord par HtmlSanitize.parseInert (liste blanche de balises et d'attributs, aucune adresse active), puis chaque
 // balise, attribut et déclaration de style écrits le sont à leur tour par liste blanche. `htmlToDocument` ne résout rien (ni ligne, ni Grist) : il écrit le HTML qu'on lui donne. La
 // fenêtre des images d'un autre site (js/external-images.js) s'ouvre avant, dans `getHtmlBlobForRecord`, comme pour tous les exports : le navigateur les télécharge pendant la
@@ -65,6 +71,13 @@ const HtmlExport = (function () {
   const CAPTION_CSS = '.pp-doc .pp-caption { font-size: 12px; font-style: italic; color: #595959; }';
   // L'en-tête et le pied, écrits une fois : un peu d'air entre eux et le texte.
   const ZONE_CSS = '.pp-doc .pp-zone { display: flow-root; }\n.pp-doc .pp-header { margin-bottom: 12px; }\n.pp-doc .pp-footer { margin-top: 12px; }';
+  // Le modèle : ses éléments de fusion n'ont pas de valeur à lire, ce sont des repères que la feuille de style montre ; l'en-tête et le pied de la première page ne sont écrits que pour l'import.
+  const TEMPLATE_CSS = [
+    '.pp-doc :is(.var-badge, .calc-badge, .smart-chip, .mention-chip, .page-number-badge, .conditional-checkbox) { padding: 0 .25em; border-radius: 3px; background: #e8eefc; color: #1b2430; }',
+    '.pp-doc .conditional-text { margin: 4px 0; padding-left: 12px; border-left: 3px solid #8a94a6; }',
+    '.pp-doc .conditional-value { border-bottom: 1px dashed #667085; }',
+    '.pp-doc .pp-first { display: none; }',
+  ].join('\n');
   const IMAGE_CSS = [
     '.pp-doc img { max-width: 100%; height: auto; vertical-align: bottom; }',
     '.pp-doc img.pp-left { float: left; margin: 0 12px 8px 0; max-width: calc(100% - 12px); }',
@@ -146,6 +159,7 @@ const HtmlExport = (function () {
     if (ctx.uses.has('toc')) parts.push(TOC_CSS);
     if (ctx.uses.has('footnotes')) parts.push(FOOTNOTES_CSS);
     if (ctx.uses.has('callout')) parts.push(CALLOUT_CSS, calloutPalette(ctx.callouts));
+    if (ctx.template) parts.push(TEMPLATE_CSS);
     return parts.join('\n');
   }
 
@@ -258,6 +272,8 @@ const HtmlExport = (function () {
     const images = [];
     roots.forEach(root => root.querySelectorAll('img').forEach(img => images.push(img)));
     for (const img of images) {
+      // Le modèle garde ses images de fusion, quel que soit leur calque : elles n'ont pas d'adresse, la ligne les dessine à la lecture.
+      if (ctx.template && !img.hasAttribute('data-pdf-skip') && ExportCommon.isMergeImage(img)) { ctx.images.set(img, { merge: true }); continue; }
       if (img.hasAttribute('data-pdf-skip') || isOffText(img)) { ctx.images.set(img, { skip: true }); continue; }
       const src = (img.getAttribute('src') || '').trim();
       if (!src) { ExportCommon.noteImageWithoutSource(img); ctx.images.set(img, { skip: true }); continue; }
@@ -286,7 +302,8 @@ const HtmlExport = (function () {
     const config = root.querySelector(':scope > .heading-numbering-config');
     const style = (config && config.dataset.style) || 'none';
     const elements = Array.from(root.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'));
-    const markers = HeadingNumbering.markersFor(elements, style);
+    // Le modèle garde le réglage de numérotation (un élément `heading-numbering-config`, voir templateInto) et non les numéros écrits dans le texte.
+    const markers = ctx.template ? elements.map(() => '') : HeadingNumbering.markersFor(elements, style);
     const info = new Map();
     const entries = [];
     elements.forEach((el, i) => {
@@ -474,7 +491,7 @@ const HtmlExport = (function () {
   }
 
   function textBlockInto(el, parent, ctx, tag) {
-    const source = withoutPageNumbers(el);
+    const source = ctx.template ? el : withoutPageNumbers(el);
     if (!source) return;
     const out = make(ctx, tag);
     setStyle(out, keptStyle(el));
@@ -487,7 +504,7 @@ const HtmlExport = (function () {
   }
 
   function headingInto(el, parent, ctx) {
-    const source = withoutPageNumbers(el);
+    const source = ctx.template ? el : withoutPageNumbers(el);
     if (!source || !(source.textContent || '').trim()) return;
     const out = make(ctx, el.localName);
     setStyle(out, keptStyle(el));
@@ -600,7 +617,8 @@ const HtmlExport = (function () {
     const own = keptStyle(el, new Set(['vertical-align']));
     // `<th>` n'a pas de style propre dans l'éditeur (ni gras ni centrage) : écrit dans la case, un site qui style ses `<th>` ne le change pas.
     const parts = [borderStyle(t.borders && t.borders.get(el)), 'padding: 4px 6px', 'vertical-align: ' + (ExportCommon.cellVerticalAlign(el) || 'top')];
-    if (el.localName === 'th') parts.push('font-weight: normal', 'text-align: left');
+    // Le « left » de départ n'est écrit que si la case ne dit pas déjà son alignement : une case relue par l'import (js/html-import.js) le porte, et réécrite elle ne le répète pas.
+    if (el.localName === 'th') parts.push('font-weight: normal', ...(own && /(?:^|;)\s*text-align\s*:/.test(own) ? [] : ['text-align: left']));
     if (own) parts.push(own);
     out.setAttribute('style', parts.join('; '));
     childrenInto(el, out, ctx);
@@ -641,8 +659,23 @@ const HtmlExport = (function () {
     parent.appendChild(wrap);
   }
 
+  // Les attributs que l'éditeur écrit pour un élément de fusion (sa classe et ses `data-*`, sauf ce que seul le widget lit), recopiés tels quels : l'import les redonne à l'éditeur.
+  function copyMergeAttrs(el, out, extra) {
+    Array.from(el.attributes).forEach((attr) => {
+      if (attr.name === 'data-pdf-skip') return;
+      if (attr.name === 'class' || attr.name.indexOf('data-') === 0 || (extra && extra.indexOf(attr.name) !== -1)) out.setAttribute(attr.name, attr.value);
+    });
+  }
+  // Une image liée à une colonne, un graphique de la page, une vidéo ou un code QR dont le texte cite une colonne : sans adresse, dessinée à la lecture.
+  function mergeImageInto(el, parent, ctx) {
+    const out = make(ctx, 'img');
+    copyMergeAttrs(el, out, ['alt', 'title', 'style']);
+    parent.appendChild(out);
+  }
+
   function imageInto(el, parent, ctx) {
     const info = ctx.images.get(el);
+    if (info && info.merge) { mergeImageInto(el, parent, ctx); return; }
     if (!info || info.skip) return;
     ctx.uses.add('image');
     const out = make(ctx, 'img');
@@ -741,10 +774,41 @@ const HtmlExport = (function () {
     parent.appendChild(out);
   }
 
+  // Ce que seul un modèle écrit (`ctx.template`) : ses éléments de fusion, avec leur classe, leurs attributs et leur libellé comme texte, et les repères du document que le fichier d'une ligne
+  // n'écrit pas (saut de page, réglage de la numérotation des titres). Retourne vrai quand l'élément est écrit ici.
+  const TEMPLATE_MARKS = ['page-break-marker', 'heading-numbering-config'];
+  function templateInto(el, parent, ctx) {
+    const cl = el.classList;
+    if (isAtom(el) || cl.contains('page-number-badge')) {
+      const atom = make(ctx, el.localName);
+      copyMergeAttrs(el, atom);
+      atom.textContent = el.textContent || '';
+      parent.appendChild(atom);
+      return true;
+    }
+    // La valeur et le bloc conditionnels : leur balise autour de leur contenu, un bloc vide garde la sienne (la condition est un réglage du modèle).
+    if (cl.contains('conditional-value') || cl.contains('conditional-text')) {
+      const out = make(ctx, el.localName);
+      copyMergeAttrs(el, out);
+      childrenInto(el, out, ctx);
+      parent.appendChild(out);
+      return true;
+    }
+    if (PageSections.isStart(el) || TEMPLATE_MARKS.some(name => cl.contains(name))) {
+      const mark = make(ctx, 'div');
+      copyMergeAttrs(el, mark);
+      if (cl.contains('page-break-marker')) mark.setAttribute('style', 'page-break-after: always');
+      parent.appendChild(mark);
+      return true;
+    }
+    return false;
+  }
+
   function nodeInto(el, parent, ctx) {
     const tag = el.localName;
     const cl = el.classList;
     if (el.hasAttribute('data-pdf-skip') || SKIPPED_TAGS.has(tag)) return;
+    if (ctx.template && templateInto(el, parent, ctx)) return;
     if (cl.contains('heading-numbering-config') || cl.contains('page-break-marker') || cl.contains('page-number-badge')) return;
     // Le repère de départ d'un macro-modèle (js/page-sections.js) ne dit que la page du premier modèle : un fichier HTML n'a pas de pages, il n'y laisse pas un bloc vide.
     if (PageSections.isStart(el)) return;
@@ -804,6 +868,21 @@ const HtmlExport = (function () {
     const main = PageLayout.hasZoneContent(part.default) ? part.default : '';
     return (kind === 'header' ? first || main : main || first) || '';
   }
+  // Le modèle écrit ses quatre zones (en-tête et pied, par défaut et de la première page : celles de la première page seulement quand « première page différente » est réglé), dans l'ordre
+  // où le fichier les pose : `kind` dit si elle va avant le texte ou après, `className` sa classe (la première page porte `pp-first`).
+  function templateZones(headerFooterData) {
+    if (!headerFooterData || !headerFooterData.enabled) return [];
+    const list = [];
+    ['header', 'footer'].forEach((kind) => {
+      const part = headerFooterData[kind];
+      if (!part) return;
+      [['default', kind], ['first', kind + ' ' + PREFIX + 'first']].forEach(([which, className]) => {
+        if (which === 'first' && !headerFooterData.differentFirstPage) return;
+        if (PageLayout.hasZoneContent(part[which])) list.push({ kind, className, first: which === 'first', root: rootOf(part[which]) });
+      });
+    });
+    return list;
+  }
   const hasContent = el => !!(el.textContent || '').trim() || !!el.querySelector('img, table, hr');
   // Une ligne vide : un paragraphe sans texte ni rien d'autre qu'un retour à la ligne. Celles de la fin du document (l'éditeur en laisse une derrière son dernier bloc) ne sont pas écrites : la
   // page ne finirait pas sur du blanc ; ReaderMode.trimTrailingBlankBlocks garde toujours la première, pour la page qu'elle ne vide pas.
@@ -830,7 +909,9 @@ const HtmlExport = (function () {
     flush();
     return pieces.join('\n');
   }
-  const wrapTag = (tag, className, inner) => '<' + tag + ' class="' + className + '">' + (inner ? '\n' + inner + '\n' : '') + '</' + tag + '>';
+  const wrapTag = (tag, className, inner, attrs) => '<' + tag + ' class="' + className + '"' + (attrs || '') + '>' + (inner ? '\n' + inner + '\n' : '') + '</' + tag + '>';
+  // La marque que l'import cherche pour reconnaître un modèle (js/html-import.js : TEMPLATE_ATTR) ; sa valeur est la version de l'écriture.
+  const TEMPLATE_MARK = ' data-pp-template="1"';
   const escapeHtml = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const escapeComment = value => String(value).replace(/--+/g, '-');
 
@@ -841,25 +922,31 @@ const HtmlExport = (function () {
     const body = rootOf(resolvedHtml);
     // Ni ligne vide ni saut de page orphelin en fin de document.
     ReaderMode.trimTrailingBlankBlocks(body);
-    const zoneRoots = { header: rootOf(zoneHtml(headerFooterData, 'header')), footer: rootOf(zoneHtml(headerFooterData, 'footer')) };
+    const template = !!opts.template;
+    // Un fichier : l'en-tête et le pied écrits une fois ; un modèle : les quatre zones que l'éditeur garde.
+    const zones = template ? templateZones(headerFooterData) : [
+      { kind: 'header', className: 'header', root: rootOf(zoneHtml(headerFooterData, 'header')) },
+      { kind: 'footer', className: 'footer', root: rootOf(zoneHtml(headerFooterData, 'footer')) },
+    ];
     const ctx = {
       doc: body.ownerDocument, images: new Map(), footnotes: [], uses: new Set(), callouts: { colors: new Set(), icons: new Set() },
-      headings: null, toc: null, token: tokenOf(String(resolvedHtml || '')),
+      headings: null, toc: null, token: tokenOf(String(resolvedHtml || '')), template,
       // Les signets du corps (adresse -> bloc) et les liens qui y mènent (dropDeadAnchorLinks).
       fragment: !!opts.fragment, anchors: Anchors.elementsOf(body), anchorLinks: [],
     };
-    await readImages([body, zoneRoots.header, zoneRoots.footer], ctx);
+    await readImages([body].concat(zones.map(zone => zone.root)), ctx);
     const headings = headingsOf(body, ctx, !!body.querySelector('.toc-marker'));
     const written = ctx.doc.createElement('div');
-    const part = (root, className) => {
-      const zone = make(ctx, 'div', PREFIX + 'zone ' + PREFIX + className);
+    const part = (zone) => {
+      const box = make(ctx, 'div', PREFIX + 'zone ' + PREFIX + zone.className);
       ctx.headings = null;
       ctx.toc = null;
-      childrenInto(root, zone, ctx);
-      return hasContent(zone) ? zone : null;
+      childrenInto(zone.root, box, ctx);
+      if (!hasContent(box)) return null;
+      ctx.uses.add('zone');
+      return box;
     };
-    const header = part(zoneRoots.header, 'header');
-    if (header) { ctx.uses.add('zone'); written.appendChild(header); }
+    zones.filter(zone => zone.kind === 'header').forEach((zone) => { const box = part(zone); if (box) written.appendChild(box); });
     ctx.headings = headings.info;
     ctx.toc = headings.entries;
     const content = make(ctx, 'div');
@@ -867,10 +954,10 @@ const HtmlExport = (function () {
     dropTrailingBlankLines(content);
     while (content.firstChild) written.appendChild(content.firstChild);
     // Le pied est écrit avant la liste des notes : une note qu'il cite se range avec les autres. La liste ferme le texte, le pied vient après.
-    const footer = part(zoneRoots.footer, 'footer');
+    const footers = zones.filter(zone => zone.kind === 'footer').map(part);
     const notes = footnotesList(ctx);
     if (notes) written.appendChild(notes);
-    if (footer) { ctx.uses.add('zone'); written.appendChild(footer); }
+    footers.forEach((box) => { if (box) written.appendChild(box); });
     dropDeadAnchorLinks(ctx, written);
     const inner = topLevelHtml(written);
     const css = stylesheetFor(ctx, !!opts.fragment);
@@ -878,7 +965,13 @@ const HtmlExport = (function () {
     if (opts.fragment) {
       return '<!-- ' + escapeComment(I18n.t('html.fragmentNote')) + ' -->\n<style>\n' + css + '\n</style>\n' + wrapTag('div', 'pp-doc', inner) + '\n';
     }
-    const title = (firstHeading && firstHeading.label) || opts.title || I18n.t('html.defaultTitle');
+    // Le titre d'un modèle est son nom : le premier titre du texte peut être une variable, qui n'a pas de libellé à lire.
+    const title = template ? opts.title || (firstHeading && firstHeading.label) || I18n.t('html.defaultTitle') : (firstHeading && firstHeading.label) || opts.title || I18n.t('html.defaultTitle');
+    if (template) {
+      return '<!doctype html>\n<html lang="' + escapeHtml(I18n.getLang() === 'en' ? 'en' : 'fr') + '">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        + '<title>' + escapeHtml(title) + '</title>\n<style>\n' + css + '\n</style>\n</head>\n<body>\n<!-- ' + escapeComment(I18n.t('html.templateNote')) + ' -->\n'
+        + wrapTag('div', 'pp-doc', inner, TEMPLATE_MARK) + '\n</body>\n</html>\n';
+    }
     return '<!doctype html>\n<html lang="' + escapeHtml(I18n.getLang() === 'en' ? 'en' : 'fr') + '">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
       + '<title>' + escapeHtml(title) + '</title>\n<style>\n' + css + '\n</style>\n</head>\n<body>\n' + wrapTag('div', 'pp-doc', inner) + '\n</body>\n</html>\n';
   }
@@ -894,6 +987,15 @@ const HtmlExport = (function () {
     const source = await htmlToDocument(resolvedHtml, resolvedHeaderFooterData, Object.assign({ title: filename }, options));
     return { blob: new Blob([source], { type: 'text/html;charset=utf-8' }), filename };
   }
+  // Le modèle lui-même (« HTML (modèle) ») : le HTML et les en-têtes et pieds que l'éditeur garde, aucune ligne, rien de résolu. Le fichier porte le nom du modèle.
+  async function getHtmlBlobForTemplate(htmlContent, headerFooterData, name) {
+    const source = await htmlToDocument(htmlContent, headerFooterData, { template: true, title: name });
+    return { blob: new Blob([source], { type: 'text/html;charset=utf-8' }), filename: name };
+  }
+  async function exportTemplate(htmlContent, headerFooterData, name) {
+    const { blob, filename } = await getHtmlBlobForTemplate(htmlContent, headerFooterData, name);
+    ExportCommon.downloadBlob(blob, (filename || 'publipostage') + '.html');
+  }
   // Le fichier du contenu à coller porte « -fragment » : les deux fichiers d'une même ligne ne s'écrasent pas.
   const fileExtension = options => (options && options.fragment ? '-fragment.html' : '.html');
   async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, options) {
@@ -902,5 +1004,5 @@ const HtmlExport = (function () {
     ExportCommon.downloadBlob(blob, (filename || 'publipostage') + fileExtension(options));
   }
 
-  return { exportCurrentRecord, getHtmlBlobForRecord, htmlToDocument, fileExtension };
+  return { exportCurrentRecord, getHtmlBlobForRecord, exportTemplate, getHtmlBlobForTemplate, htmlToDocument, fileExtension };
 })();

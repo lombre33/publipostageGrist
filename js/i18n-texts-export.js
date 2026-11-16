@@ -127,6 +127,7 @@ const I18nTextsExport = {
   'status.htmlGenerating': { fr: 'Génération du HTML en cours…', en: 'Generating HTML…' },
   'status.htmlGenerated': { fr: 'HTML généré.', en: 'HTML generated.' },
   'status.htmlGenerationError': { fr: 'Erreur génération HTML.', en: 'HTML generation error.' },
+  'status.htmlTemplateGenerated': { fr: 'Modèle exporté en HTML, éléments de fusion compris.', en: 'Template exported to HTML, merge elements included.' },
   'status.xlsxGenerating': { fr: 'Génération du fichier Excel en cours…', en: 'Generating the Excel file…' },
   'status.xlsxGenerated': { fr: 'Fichier Excel généré.', en: 'Excel file generated.' },
   'status.xlsxGenerationError': { fr: 'Erreur de génération du fichier Excel.', en: 'Excel file generation error.' },

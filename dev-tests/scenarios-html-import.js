@@ -15,7 +15,9 @@
 //  - les signets, <dt> <dd> <figcaption>, <center> et align ;
 //  - les variables {{Table.Colonne}} ; les fichiers : encodages, binaire, vide, trop gros, trop de texte ;
 //  - ce que la page porte de dangereux ou de forgé (gestionnaires, javascript:, classes et attributs de l'éditeur) n'arrive pas dans le document ;
-//  - le compte rendu : un genre par ligne, dans l'ordre, FR et EN.
+//  - le compte rendu : un genre par ligne, dans l'ordre, FR et EN ;
+//  - le type d'export « HTML (modèle) » (lot 3, demande du 16/11 : « tu peux lancer les autres chantiers en attente ») et sa relecture : un modèle exporté puis importé puis exporté de nouveau donne le même fichier, avec ses
+//    19 éléments de fusion, ses quatre zones, son saut de page et sa numérotation de titres ; sans la marque `data-pp-template`, une page web qui porte ces classes n'en fait toujours rien.
 (function () {
   const cases = [];
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -529,6 +531,165 @@
       const converted = imp(page('<script>1</script><p>Texte {{Autre.Colonne}}</p><p><img src="images/a.png" alt="A"></p><nav><p>Menu</p></nav>'));
       expect('les genres présents, dans l\'ordre, une fois chacun', converted.report.map(item => item.key).join(',') === 'imagesRelative,scripts,navigation,variables', converted.report);
       expect('une page nette n\'a aucune ligne', imp(page('<h1>Titre</h1><p>Texte</p>')).report.length === 0);
+      return result(bad);
+    });
+
+  // --- Le modèle (« HTML (modèle) ») -------------------------------------------------------------------------------------------------------------------
+  // Le type d'export écrit le modèle tel que l'éditeur le garde (js/html-export.js, `template: true`), sa racine marquée `data-pp-template="1"` ; l'import le relit (js/html-import.js) : seul un fichier marqué garde
+  // ses éléments de fusion, et le texte `{{...}}` n'y est pas lu comme une variable. Il lui faut les variables du document : la clé d'une bulle est celle d'une table que le test pose.
+  const TPL = 'ExpHtClients';
+  const COND_ATTR = '{&quot;mode&quot;:&quot;all&quot;,&quot;rules&quot;:[{&quot;column&quot;:&quot;Nom&quot;,&quot;operator&quot;:&quot;equals&quot;,&quot;value&quot;:&quot;a&quot;}]}';
+  async function seedModel() {
+    const stub = window.__gristStub;
+    stub.setVariables('ExpHtAnnuaire', { Nom: 'Text', Email: 'Text' });
+    stub.setVariables(TPL, { Nom: 'Text', Ville: 'Text', Total: 'Numeric', Chef: 'Ref:ExpHtAnnuaire' });
+    await GristAPI.refreshSchema();
+  }
+  const MERGE = 'span.var-badge, span.calc-badge, span.smart-chip, span.mention-chip, span.page-number-badge, span.conditional-checkbox, span.conditional-value, div.conditional-text, img[data-var-key], img[data-qr-text], img[data-chart-section]';
+  const mergeOf = html => all(html, MERGE).map(node => node.localName + '|' + Array.from(node.attributes).filter(a => a.name !== 'style').map(a => a.name + '=' + a.value).sort().join(';'));
+  const bubble = (column, key, extra) => `<span class="var-badge" contenteditable="false" data-table="${TPL}" data-column="${column}" data-key="${key}"${extra || ''}>#${key}</span>`;
+  // Le modèle de l'essai : titres numérotés, un saut de page, les 19 éléments de fusion de l'éditeur, deux zones d'en-tête, un pied avec son numéro de page.
+  function templateHtml() {
+    const nom = bubble('Nom', TPL + '.Nom');
+    return '<div class="heading-numbering-config" contenteditable="false" data-style="numeric"></div>'
+      + `<h1>Contrat ${nom}</h1><p style="text-align: right">Paris, le 12 octobre</p>`
+      + `<p>Bonjour <strong>${nom}</strong>, de ${bubble('Ville', TPL + '.Ville', ' data-format="{&quot;type&quot;:&quot;date&quot;,&quot;preset&quot;:&quot;long&quot;}" data-before="Dr|X"')}. Chef : ${bubble('Chef.Email', TPL + '.Chef.Email')}. Texte {{ libre }} et {{${TPL}.Nom}} littéral. `
+      + `Total : <span class="calc-badge" contenteditable="false" data-formula="{${TPL}.Total} * 2">= 2 × Total</span> le <span class="smart-chip" contenteditable="false" data-chip-kind="date">Date du jour</span> page <span class="page-number-badge" contenteditable="false" data-format="page-n">Page #</span>. Rédigé par <span class="mention-chip" contenteditable="false" data-mention-table="${TPL}" data-mention-row="2" data-mention-column="Nom">Marie Martin</span></p>`
+      + `<div class="conditional-text" data-condition="${COND_ATTR}"><p>Bloc <em>conditionnel</em> pour ${nom}</p><ul><li><p>point ${bubble('Ville', TPL + '.Ville')}</p></li></ul>`
+      + `<div class="conditional-text" data-condition="${COND_ATTR}"><p style="text-align: center">Bloc imbriqué</p></div></div>`
+      + '<div class="page-break-marker"></div><h2>Conditions</h2>'
+      + `<p>Valeur : <span class="conditional-value" data-condition="${COND_ATTR}" data-otherwise="non"> urgent </span>ok <span class="conditional-checkbox" contenteditable="false" data-checkbox-style="boxes" data-condition="${COND_ATTR}">☐</span></p>`
+      + `<table><tbody><tr><th><p>Client</p></th><th><p>Ville</p></th></tr><tr><td><p>${nom}</p></td><td><p>${bubble('Ville', TPL + '.Ville', ' data-after="a|b"')}</p></td></tr></tbody></table>`
+      + `<p><img class="editor-image" draggable="false" src="" alt="Image" style="width: 200px; height: 100px" data-layer="normal" data-wrap="inline" data-var-table="${TPL}" data-var-column="Nom" data-var-key="${TPL}.Nom"></p>`
+      + `<p><img class="editor-image" draggable="false" alt="QR" style="width: 120px" data-layer="normal" data-wrap="inline" data-qr-text="${TPL}.Nom"></p>`
+      + '<p><img class="editor-image" draggable="false" alt="Graphique" data-layer="normal" data-wrap="inline" data-chart-section="s1" data-chart-scope="all" data-chart-name="c"></p>';
+  }
+  const templateZones = () => ({ enabled: true, differentFirstPage: true, header: { default: `<p>Entête ${bubble('Nom', TPL + '.Nom')}</p>`, first: '<p>Première page</p>' },
+    footer: { default: '<p style="text-align: center"><span class="page-number-badge" contenteditable="false" data-format="n-slash-total">#/#</span></p>', first: '' } });
+  const exportTemplate = async (html, zones, name) => (await HtmlExport.getHtmlBlobForTemplate(html, zones, name || 'Contrat')).blob.text();
+
+  add('html_template_export_then_import_then_export_gives_the_same_file',
+    'Aller-retour du type « HTML (modèle) » : un modèle (bulles dans le titre, le gras, une liste, un tableau et un en-tête ; bulle à format, chemin de références, calcul, puce, pastille « @ », numéro de page ; valeur, case et bloc conditionnel, imbriqué ; trois images liées à une colonne, à un code QR et à un graphique ; saut de page ; numérotation des titres ; en-tête de la première page ; pied centré avec son numéro de page) exporté en fichier HTML, importé, puis exporté de nouveau donne le même fichier, octet pour octet, et les 19 éléments de fusion gardent chacun leur classe et tous leurs attributs.',
+    async (h) => {
+      await seedModel();
+      await h.resetEditor();
+      Editor.setHTML(templateHtml());
+      Editor.setHeaderFooterData(templateZones());
+      await sleep(300);
+      const edited1 = Editor.getHTML();
+      const first = await exportTemplate(edited1, Editor.getHeaderFooterData());
+      const back = imp(first);
+      Editor.setHTML(back.html);
+      Editor.setHeaderFooterData(back.headerFooter);
+      await sleep(300);
+      const edited2 = Editor.getHTML();
+      const zones2 = Editor.getHeaderFooterData();
+      const second = await exportTemplate(edited2, zones2);
+      const { bad, expect } = checker();
+      const at = Array.from(first).findIndex((c, i) => c !== second[i]);
+      expect('le fichier ré-exporté est identique', second === first, second === first ? '' : { at, first: first.slice(Math.max(0, at - 200), at + 300), second: second.slice(Math.max(0, at - 200), at + 300) });
+      const before = mergeOf(edited1);
+      const after = mergeOf(edited2);
+      expect('les 19 éléments de fusion (huit bulles, un calcul, une puce, une pastille « @ », un numéro de page, deux blocs, une valeur, une case, trois images) sont tous là, chacun avec ses attributs', before.length === 19 && JSON.stringify(before) === JSON.stringify(after), { before: before.length, after: after.length, diff: before.filter((x, i) => x !== after[i]).slice(0, 3) });
+      expect('la marque du modèle, le compte rendu : un modèle, aucune variable inconnue', /<div class="pp-doc" data-pp-template="1">/.test(first) && back.template === true && !back.report.some(item => item.key === 'variables'), back.report);
+      expect('un « {{ » littéral reste du texte dans le modèle, même quand il a la forme d\'une clé de variable', new RegExp('Texte \\{\\{ libre \\}\\} et \\{\\{' + TPL + '\\.Nom\\}\\} littéral').test(dom(edited2).textContent) && bubblesCount(edited2) === bubblesCount(edited1), [bubblesCount(edited1), bubblesCount(edited2)]);
+      expect('zones : en-tête (avec sa bulle), première page, pied (numéro de page, centré)', zones2.enabled && zones2.differentFirstPage && all(zones2.header.default, 'span.var-badge').length === 1 && /Première page/.test(zones2.header.first)
+        && /text-align: center/.test(zones2.footer.default) && all(zones2.footer.default, 'span.page-number-badge')[0].getAttribute('data-format') === 'n-slash-total' && !PageLayout.hasZoneContent(zones2.footer.first), zones2);
+      expect('trois images de fusion, chacune dans son paragraphe, sans adresse', all(edited2, 'p').filter(p => p.querySelector('img[data-var-key], img[data-qr-text], img[data-chart-section]')).length === 3
+        && all(edited2, 'img').every(img => !(img.getAttribute('src') || '').trim()));
+      expect('le saut de page et le réglage de numérotation reviennent, aucun numéro n\'est écrit dans le texte des titres', all(edited2, 'div.page-break-marker').length === 1
+        && all(edited2, 'div.heading-numbering-config').length === 1 && all(edited2, 'div.heading-numbering-config')[0].getAttribute('data-style') === 'numeric'
+        && !/^\s*(?:1|a)[).]/.test(textsOf(edited2, 'h2')[0]), textsOf(edited2, 'h1, h2'));
+      return result(bad);
+    });
+  const bubblesCount = html => all(html, 'span.var-badge').length;
+
+  add('html_template_file_is_one_complete_page_with_its_marks_and_nothing_resolved',
+    'Le fichier « HTML (modèle) » : un document complet (doctype, UTF-8, titre = nom du modèle, feuille de style), sa racine marquée, une note dite en tête, les quatre zones avec leurs classes (celles de la première page cachées par la feuille de style), les images de fusion sans adresse, aucune valeur lue dans Grist ; un modèle sans zone n\'écrit aucune zone ; la numérotation des titres n\'est pas écrite dans le texte.',
+    async (h) => {
+      await seedModel();
+      await h.resetEditor();
+      Editor.setHTML(templateHtml());
+      await sleep(250);
+      const withZones = await exportTemplate(Editor.getHTML(), templateZones(), 'Mon modèle');
+      const withoutZones = await exportTemplate(Editor.getHTML(), { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } }, 'Mon modèle');
+      const { bad, expect } = checker();
+      expect('un document complet', /^<!doctype html>\n<html lang="(?:fr|en)">/.test(withZones) && /<meta charset="utf-8">/.test(withZones) && /<title>Mon modèle<\/title>/.test(withZones) && /<style>[\s\S]+<\/style>/.test(withZones));
+      expect('la racine porte la marque, la note est dite en tête', /<body>\n<!-- [^>]+-->\n<div class="pp-doc" data-pp-template="1">/.test(withZones));
+      const doc = new DOMParser().parseFromString(withZones, 'text/html');
+      const zoneClasses = Array.from(doc.querySelectorAll('.pp-doc > .pp-zone')).map(zone => zone.className);
+      expect('trois zones : l\'en-tête, celui de la première page, le pied', JSON.stringify(zoneClasses) === JSON.stringify(['pp-zone pp-header', 'pp-zone pp-header pp-first', 'pp-zone pp-footer']), zoneClasses);
+      expect('les zones de la première page sont cachées par la feuille de style', /\.pp-doc \.pp-first \{ display: none; \}/.test(withZones));
+      expect('aucune zone dans un modèle sans en-tête ni pied', new DOMParser().parseFromString(withoutZones, 'text/html').querySelector('.pp-zone') === null);
+      expect('les images de fusion n\'ont pas d\'adresse, gardent leurs données', Array.from(doc.querySelectorAll('img')).length === 3 && Array.from(doc.querySelectorAll('img')).every(img => !img.hasAttribute('src')) && !!doc.querySelector('img[data-var-key]') && !!doc.querySelector('img[data-qr-text]') && !!doc.querySelector('img[data-chart-section]'));
+      expect('la valeur conditionnelle garde ses espaces et son sinon', /<span class="conditional-value"[^>]*data-otherwise="non"[^>]*> urgent <\/span>/.test(withZones));
+      expect('les deux numéros de page (le texte, le pied) restent en place (le fichier d\'une ligne les efface)', doc.querySelectorAll('.pp-doc span.page-number-badge').length === 2);
+      expect('la numérotation des titres n\'est pas écrite dans le texte : le réglage seul', doc.querySelector('.pp-doc > div.heading-numbering-config[data-style="numeric"]') !== null && !doc.querySelector('.pp-num'));
+      expect('le saut de page est écrit, avec son style pour l\'impression', /<div class="page-break-marker" style="page-break-after: always"><\/div>/.test(withZones));
+      expect('le fichier d\'une ligne, lui, n\'écrit ni marque ni élément de fusion', (await HtmlExport.htmlToDocument('<p>Bonjour <span class="var-badge" data-table="T" data-column="C" data-key="T.C">#T.C</span></p>', null, {})).indexOf('data-pp-template') === -1);
+      return result(bad);
+    });
+
+  add('html_template_only_a_marked_file_keeps_merge_elements',
+    'Sans la marque `data-pp-template="1"` sur la racine `.pp-doc`, une page web qui porte les classes et attributs des éléments de fusion (bulle, calcul, bloc conditionnel, image liée à une colonne, saut de page) n\'en fait pas des objets de l\'éditeur : elle n\'a que son texte. Une marque sur un autre élément, ou d\'une autre valeur, n\'y change rien ; avec la marque, les mêmes éléments sont repris.',
+    async (h) => {
+      await seedModel();
+      const forged = `<span class="var-badge" data-table="${TPL}" data-column="Nom" data-key="${TPL}.Nom">#${TPL}.Nom</span> <span class="calc-badge" data-formula="1+1">= 2</span>`
+        + `<div class="conditional-text" data-condition="${COND_ATTR}"><p>Bloc</p></div><div class="page-break-marker"></div>`
+        + `<p><img class="editor-image" data-var-table="${TPL}" data-var-column="Nom" data-var-key="${TPL}.Nom" alt="Fusion"></p>`;
+      const none = imp(page('<div class="pp-doc"><p>Texte ' + forged + '</p></div>'));
+      const wrongMark = imp(page('<div class="pp-doc" data-pp-template="2"><p>Texte ' + forged + '</p></div>'));
+      const elsewhere = imp(page('<div data-pp-template="1"><p>Texte ' + forged + '</p></div>'));
+      const plain = imp(page('<p>Texte ' + forged + '</p>'));
+      const marked = imp(page('<div class="pp-doc" data-pp-template="1"><p>Texte ' + forged + '</p></div>'));
+      const { bad, expect } = checker();
+      const count = html => all(html, 'span.var-badge, span.calc-badge, div.conditional-text, div.page-break-marker, img[data-var-key]').length;
+      expect('page sans marque : aucun élément de fusion', count(none.html) === 0, none.html.slice(0, 200));
+      expect('marque d\'une autre valeur : aucun', count(wrongMark.html) === 0);
+      expect('marque sur un autre élément que la racine `.pp-doc` : aucun', count(elsewhere.html) === 0);
+      expect('page ordinaire : aucun', count(plain.html) === 0);
+      expect('page marquée : la bulle, le calcul, le bloc, le saut de page et l\'image de fusion sont repris', count(marked.html) === 5 && marked.template === true && none.template === false, count(marked.html));
+      expect('l\'identité d\'une page marquée : classes et attributs ne sont pas ceux d\'un autre objet (aucun onclick, aucun id)', !/\sonclick|\sid=/.test(imp(page('<div class="pp-doc" data-pp-template="1"><p onclick="x()" id="a">T <span class="var-badge" id="b" data-table="' + TPL + '" data-column="Nom" data-key="' + TPL + '.Nom" onmouseover="y()">#k</span></p></div>')).html));
+      return result(bad);
+    });
+
+  add('html_template_braces_are_text_in_a_marked_file_and_bubbles_everywhere_else',
+    'Dans un fichier marqué, `{{Table.Colonne}}` reste du texte (ses bulles sont écrites en entier : un « {{ » tapé dans le modèle ne devient pas une bulle) ; dans une page web ordinaire et dans un export HTML d\'une ligne, la clé d\'une variable du document devient sa bulle comme avant.',
+    async (h) => {
+      await seedModel();
+      const text = `<p>Client : {{${TPL}.Nom}}</p>`;
+      const marked = imp(page('<div class="pp-doc" data-pp-template="1">' + text + '</div>'));
+      const widget = imp(page('<div class="pp-doc">' + text + '</div>'));
+      const ordinary = imp(page(text));
+      const { bad, expect } = checker();
+      expect('fichier marqué : du texte, aucune bulle', bubblesCount(marked.html) === 0 && textsOf(marked.html, 'p')[0] === 'Client : {{' + TPL + '.Nom}}', marked.html);
+      expect('export d\'une ligne : la bulle', bubblesCount(widget.html) === 1, widget.html);
+      expect('page ordinaire : la bulle', bubblesCount(ordinary.html) === 1, ordinary.html);
+      return result(bad);
+    });
+
+  add('html_template_zones_come_back_in_their_place_and_a_file_without_a_first_page_has_none',
+    'Les quatre zones d\'un modèle : l\'en-tête et le pied par défaut, celui de la première page de chacun ; « première page différente » n\'est réglé que si une zone de la première page est écrite ; un en-tête vide n\'est pas écrit ; un modèle à pied seul ou à première page seule revient avec ses zones et rien d\'autre.',
+    async (h) => {
+      await seedModel();
+      await h.resetEditor();
+      Editor.setHTML('<p>Corps</p>');
+      await sleep(200);
+      const roundTrip = async (zones) => {
+        const written = await exportTemplate(Editor.getHTML(), zones, 'Z');
+        return { written, back: imp(written) };
+      };
+      const { bad, expect } = checker();
+      const footerOnly = await roundTrip({ enabled: true, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '<p>Pied</p>', first: '<p>Pied première page ignoré</p>' } });
+      expect('pied seul : une zone écrite, la première page ignorée (réglage éteint), rien d\'autre', all(footerOnly.written, '.pp-zone').length === 1 && footerOnly.back.headerFooter && !footerOnly.back.headerFooter.differentFirstPage
+        && /Pied/.test(footerOnly.back.headerFooter.footer.default) && !PageLayout.hasZoneContent(footerOnly.back.headerFooter.header.default) && !PageLayout.hasZoneContent(footerOnly.back.headerFooter.footer.first), footerOnly.back.headerFooter);
+      const firstOnly = await roundTrip({ enabled: true, differentFirstPage: true, header: { default: '', first: '<p>Seule la première</p>' }, footer: { default: '', first: '' } });
+      expect('première page seule : réglée, avec son texte, sans en-tête par défaut', !!firstOnly.back.headerFooter && firstOnly.back.headerFooter.enabled && firstOnly.back.headerFooter.differentFirstPage
+        && /Seule la première/.test(firstOnly.back.headerFooter.header.first) && !PageLayout.hasZoneContent(firstOnly.back.headerFooter.header.default), firstOnly.back.headerFooter);
+      const all4 = await roundTrip({ enabled: true, differentFirstPage: true, header: { default: '<p>H</p>', first: '<p>H1</p>' }, footer: { default: '<p>F</p>', first: '<p>F1</p>' } });
+      const hf = all4.back.headerFooter;
+      expect('les quatre zones reviennent', !!hf && hf.differentFirstPage && /H/.test(hf.header.default) && /H1/.test(hf.header.first) && /F/.test(hf.footer.default) && /F1/.test(hf.footer.first), hf);
+      expect('zones désactivées : aucune', all((await roundTrip({ enabled: false, differentFirstPage: true, header: { default: '<p>H</p>', first: '<p>H1</p>' }, footer: { default: '', first: '' } })).written, '.pp-zone').length === 0);
       return result(bad);
     });
 

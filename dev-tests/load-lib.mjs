@@ -190,6 +190,8 @@ export async function click(page, sel) {
 export async function hoverRow(page, parentSel, rowSel) {
   const p = await center(page, parentSel);
   await page.mouse.move(p.x - 25, p.y); await page.mouse.move(p.x, p.y, { steps: 4 }); await sleep(600);
+  // Un menu qui défile (`.v2-hover-flyout-scrollable` : « Titre », « Type d'export ») ne montre pas toutes ses lignes à la fois : celle qu'on vise est amenée dans sa boîte, comme le fait la molette.
+  await page.evaluate((sel) => { const el = document.querySelector(sel); if (el && el.closest('.v2-hover-flyout-scrollable')) el.scrollIntoView({ block: 'nearest' }); }, rowSel);
   const r = await center(page, rowSel);
   if (!r || !r.w) throw new Error('ligne introuvable ou masquée : ' + rowSel); // une ligne masquée (type d'export autre) a un cadre vide : jamais cliquer en (0, 0)
   const inRow = Math.min(Math.max(p.x, r.x - r.w / 2 + 6), r.x + r.w / 2 - 6);

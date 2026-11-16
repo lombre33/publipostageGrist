@@ -881,8 +881,13 @@
    n'étaient plus atteignables à la souris. Resserré pour ce menu seulement (ciblé par ID, comme #v2-heading-flyout) : lignes de 24 px (la taille minimale d'une cible, WCAG 2.5.8) sans écart
    entre elles, la hauteur de ligne fixée (`line-height`) pour que la police du système ne la fasse pas varier d'un ordinateur à l'autre. Avec neuf types le menu finissait vers 390 px ; le
    dixième (PDF/A) l'a poussé à 412 px, sous le bas du panneau : les lignes ne bougent plus, ce sont les marges du menu et de ses deux intitulés qui sont reprises (2 px de remplissage au lieu de 4
-   en haut et en bas, intitulés à 4 px au-dessus et 2 px au-dessous, filet de séparation sans marge), et le menu finit vers 396 px. Une ligne de plus ne tiendrait plus : elle demanderait de revoir
-   la structure du menu (deux colonnes, ou une autre place pour les qualités), pas de resserrer encore. */
+   en haut et en bas, intitulés à 4 px au-dessus et 2 px au-dessous, filet de séparation sans marge), et le menu finit vers 396 px. Une ligne de plus ne tenait plus : la ligne « Email (.eml) »
+   (11 types) puis « HTML (modèle) » (12) l'ont poussé à 417 puis 441 px, où « Impression navigateur » et « Léger » n'étaient plus atteignables à la souris (le menu finit sous le bas du panneau).
+   Plutôt que de resserrer encore, le menu prend la classe `v2-hover-flyout-scrollable` (comme « Titre », js/editor-core.js:positionFlyout) : sa hauteur est celle de la place qui reste sous
+   son bouton et le reste défile à la molette. Aucune ligne de ce menu ne porte d'info-bulle `[data-tip]` (un grisé dit sa raison par le `title`), donc rien n'est rogné. */
+/* Menu « + » (Nouveau modèle, les cinq imports, « Créer à partir d'un modèle… ») : avec la ligne « Importer un HTML… » il finissait à 410 px dans un cadre de 400 (essai gfsBarFit, « le menu reste dans le cadre »). Il défile
+   comme « Titre » (`v2-hover-flyout-scrollable`, aucune ligne à info-bulle) et son écart entre lignes passe de 3 à 1 px : à 700×400 il tient sans barre de défilement, plus petit il défile. */
+#v2-new-template-flyout { gap: 1px; }
 #v2-quality-flyout { gap: 0; padding-top: 2px; padding-bottom: 2px; }
 #v2-quality-flyout .v2-hover-row { padding: 4px 9px; line-height: 16px; }
 #v2-quality-flyout .v2-hover-flyout-label { line-height: 14px; padding-top: 4px; padding-bottom: 2px; }

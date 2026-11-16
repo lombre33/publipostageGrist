@@ -353,6 +353,7 @@ const I18nTextsBlocks = {
   'html.defaultTitle': { fr: 'Document', en: 'Document' },
   'html.footnoteBack': { fr: 'Revenir au texte', en: 'Back to the text' },
   'html.fragmentNote': { fr: 'Contenu à coller dans un bloc HTML de votre site : sa feuille de style ne touche que ce bloc.', en: 'Content to paste into an HTML block of your site: its stylesheet only touches this block.' },
+  'html.templateNote': { fr: 'Modèle : ses variables, calculs et blocs conditionnels sont écrits avec leurs réglages pour que « Importer un HTML… » les retrouve intacts. Ne pas modifier ces éléments à la main.', en: 'Template: its variables, calculations and conditional blocks are written with their settings so that “Import from HTML…” brings them back intact. Do not edit these elements by hand.' },
 
   // --- Mode Email (planning/feature-email-mode.md) : bandeau Objet/À/Cc/Cci + action de création du mailto: ---
   'email.to.label': { fr: 'À', en: 'To' },
