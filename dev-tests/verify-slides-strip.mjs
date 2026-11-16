@@ -7,7 +7,7 @@
 //   lisibles (>= 4,5:1).
 //  LES SAUTS DE PAGE (demande du 21/10) : ceux d'une présentation ne se voient pas dans l'éditeur (ni texte ni cadre) et gardent leur place (trois pages) ; celui qu'une flèche sélectionne
 //   se voit ; ceux d'un document se voient toujours.
-//  ALLER : un clic sur une miniature pose le curseur dans sa diapositive, que le document montre, et rend le clavier au document.
+//  ALLER : un clic sur une miniature pose le curseur dans sa diapositive, que le document montre, et laisse le clavier sur la miniature (demande du 16/11, `slidesArrows` : ↑ et ↓ y passent d'une diapositive à l'autre).
 //  LES GESTES, chacun défait par UN Ctrl+Z : « Ajouter » (au bas de la bande) ajoute une diapositive vide après celle du curseur, où l'on écrit aussitôt ; le menu « ⋯ » (au survol) et le clic
 //   droit ouvrent le menu de la diapositive, au premier plan et dans le panneau : « Dupliquer », « Descendre », « Supprimer » ; « Monter » est grisé sur la première, « Descendre » sur la
 //   dernière, avec leur raison.
@@ -447,13 +447,13 @@ async function run(lang, colorScheme) {
   await click('.pp-slide-thumb', 0);
   s = await stripState(page);
   const first = await page.evaluate(() => { const c = document.getElementById('editor-container').getBoundingClientRect(); const r = document.querySelector('.ProseMirror h1').getBoundingClientRect(); return { top: r.top - c.top, bottom: c.bottom - r.bottom }; });
-  check(tag + 'un clic sur la miniature 1 pose le curseur dans la diapositive 1, qu’il coche ; le clavier va au document, qui montre son titre',
-    s.cursor === 0 && s.selected[0] && !s.selected[1] && s.focus === 'editor' && first.top > 0 && first.bottom > 0, { cursor: s.cursor, selected: s.selected, focus: s.focus, first });
+  check(tag + 'un clic sur la miniature 1 pose le curseur dans la diapositive 1, qu’il coche ; le clavier reste sur la miniature, le document montre son titre',
+    s.cursor === 0 && s.selected[0] && !s.selected[1] && s.focus === 'item1' && first.top > 0 && first.bottom > 0, { cursor: s.cursor, selected: s.selected, focus: s.focus, first });
   await click('.pp-slide-thumb', 2);
   s = await stripState(page);
   const third = await page.evaluate(() => { const c = document.getElementById('editor-container').getBoundingClientRect(); const p = Array.from(document.querySelectorAll('.ProseMirror > p')).find(el => el.textContent === 'Trois').getBoundingClientRect(); return { top: p.top - c.top, height: c.height }; });
   check(tag + 'un clic sur la miniature 3 y pose le curseur et fait défiler le document jusqu’à sa page : son texte est en haut de la partie visible',
-    s.cursor === 2 && s.selected[2] && s.focus === 'editor' && third.top > 0 && third.top < third.height / 3, { cursor: s.cursor, focus: s.focus, third });
+    s.cursor === 2 && s.selected[2] && s.focus === 'item3' && third.top > 0 && third.top < third.height / 3, { cursor: s.cursor, focus: s.focus, third });
 
   // --- « Ajouter », mise en page « Vide » : une diapositive vide après celle du curseur, où l'on écrit aussitôt.
   await click('.pp-slide-add');
@@ -595,7 +595,6 @@ async function run(lang, colorScheme) {
   // Suppr efface la 4e : les rangées d'après qui n'ont pas encore de miniature ne montrent aucun bloc, rien ne les fait reconnaître ; elles prennent les rangées libres. Celle de la diapositive
   // supprimée, la première de la liste, ne doit pas servir à la première d'entre elles : les cinq rangées copiées d'entre les deux passaient devant elle, une à une (un déplacement fait revoir le style de la miniature).
   await click('.pp-slide-thumb', 3);
-  await press('Escape');
   for (let i = 0; i < 10 && !/^item/.test((await stripState(page)).focus || ''); i++) await press('Tab');
   await watchRows(page);
   await press('Delete');
@@ -622,7 +621,6 @@ async function run(lang, colorScheme) {
     drawnThumbs.length === 40 && drawnThumbs[0].filled && !drawnThumbs[0].drawn && drawnThumbs[39].filled && drawnThumbs[39].drawn && drawnThumbs.every(d => d.mode === 'auto' && d.width === drawnThumbs[0].width),
     { premiere: drawnThumbs[0], derniere: drawnThumbs[39], modes: Array.from(new Set(drawnThumbs.map(d => d.mode))) });
   await click('.pp-slide-thumb', 37);
-  await press('Escape');
   for (let i = 0; i < 10 && !/^item/.test((await stripState(page)).focus || ''); i++) await press('Tab');
   await page.evaluate(() => {
     window.__paginations = 0;
@@ -653,7 +651,6 @@ async function run(lang, colorScheme) {
   check(tag + 'l’image de la diapositive 2 passe « Devant le texte » (vrai clic) : posée sur sa page, la 2', layer.layer === 'front' && layer.pageIndex === 1 && layer.drawnOn === 1, layer);
   const layerHtml = (await stripState(page)).html;
   await click('.pp-slide-thumb', 1);
-  await press('Escape');
   for (let i = 0; i < 10 && !/^item/.test((await stripState(page)).focus || ''); i++) await press('Tab');
   await countPaginations(page);
   await page.keyboard.press('Control+ArrowUp');
@@ -673,7 +670,6 @@ async function run(lang, colorScheme) {
   await page.waitForFunction(() => document.querySelectorAll('.pp-slide-item').length === 3 && !document.querySelector('.pp-slide-strip').hidden, null, { timeout: 8000 }).catch(() => {});
   await sleep(600);
   await click('.pp-slide-thumb', 0);
-  await press('Escape');
   for (let i = 0; i < 10 && !/^item/.test((await stripState(page)).focus || ''); i++) await press('Tab');
   await press('Control+z');
   await sleep(700);
@@ -704,7 +700,6 @@ async function run(lang, colorScheme) {
   layer = await layerState(page);
   check(tag + 'un Ctrl+Z défait la frappe : l’image revient en page 2, et le texte est celui d’avant', s.html === layerHtml && layer.pages === 3 && layer.pageIndex === 1 && layer.drawnOn === 1, { layer, same: s.html === layerHtml });
   await click('.pp-slide-thumb', 1);
-  await press('Escape');
   for (let i = 0; i < 10 && !/^item/.test((await stripState(page)).focus || ''); i++) await press('Tab');
   await press('Control+ArrowUp');
   await sleep(700);
@@ -719,7 +714,6 @@ async function run(lang, colorScheme) {
   layer = await layerState(page);
   check(tag + 'une présentation de douze diapositives dont la dernière porte une image « Devant le texte » : l’image est sur la page 12 (data-page-index 11)', layer.layer === 'front' && layer.pageIndex === 11 && layer.texts.length === 12, layer);
   await click('.pp-slide-thumb', 3);
-  await press('Escape');
   for (let i = 0; i < 10 && !/^item/.test((await stripState(page)).focus || ''); i++) await press('Tab');
   const denseHtml = (await stripState(page)).html;
   await noteBlocks(page);
@@ -813,7 +807,7 @@ async function run(lang, colorScheme) {
   check(tag + 'une ligne grisée appelle aussi `installer` et referme le menu ; rien ne change', installs.length === 2 && !s.menuOpen && s.html === html0 && !(await appDialogOpen(page)), { installs, menuOpen: s.menuOpen });
   await click('.pp-slide-thumb', 0);
   s = await stripState(page);
-  check(tag + 'une miniature mène toujours à sa diapositive', s.cursor === 0 && s.selected[0] && s.focus === 'editor', { cursor: s.cursor, focus: s.focus });
+  check(tag + 'une miniature mène toujours à sa diapositive', s.cursor === 0 && s.selected[0] && s.focus === 'item1', { cursor: s.cursor, focus: s.focus });
 
   // --- Rallumée : tout redevient utilisable ; le modèle enregistré ne porte pas la marque des sauts.
   await page.evaluate(list => window.__gfsStub.setExtensions(list), ACTIVE);

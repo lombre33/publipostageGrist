@@ -344,7 +344,7 @@ async function run(lang, colorScheme) {
   s = await state(app);
   check(tag + 'Maj+F5 lance depuis la diapositive du curseur, « Quitter » ferme', viaShiftF5 === '2 / 3' && !s.show && !s.host, { viaShiftF5, show: !!s.show });
   const savesAfter = await saves(app);
-  check(tag + 'après le diaporama : le texte n’a pas changé, rien n’est enregistré, le clavier est revenu au document', s.html === htmlBefore && savesAfter === savesBefore && s.focus === 'editor',
+  check(tag + 'après le diaporama : le texte n’a pas changé, rien n’est enregistré, le clavier est revenu où il était (sur la miniature cliquée)', s.html === htmlBefore && savesAfter === savesBefore && s.focus === 'pp-slide-item',
     { same: s.html === htmlBefore, saves: [savesBefore, savesAfter], focus: s.focus });
 
   // --- Le menu ▾ : deux départs et l'interrupteur « Plein écran ». Un `requestFullscreen` espion compte ce qu'on demande au navigateur ; `fullscreenEnabled` dit ce que le cadre permet

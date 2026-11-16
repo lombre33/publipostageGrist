@@ -298,7 +298,7 @@ async function run(lang, colorScheme) {
   await a.click(1, 'Shift');
   await a.click(2);
   s = await state(app);
-  check(tag + 'un clic simple : le choix revient à la miniature cliquée, le clavier au document', same(s.selected, [2]) && s.focus === 'editor', { selected: s.selected, focus: s.focus });
+  check(tag + 'un clic simple : le choix revient à la miniature cliquée, le clavier reste sur elle', same(s.selected, [2]) && s.focus === 'item2', { selected: s.selected, focus: s.focus });
   await a.click(0);
   await a.click(1, 'Shift');
   // Un clic au bout de « Deux » dans le document (le curseur reste dans le choix), puis une lettre.

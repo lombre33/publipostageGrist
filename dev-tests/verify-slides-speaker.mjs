@@ -257,6 +257,9 @@ async function cursorIn(a, n) {
   await sleep(150);
   await a.click('.pp-slide-strip .pp-slide-item', n, 500);
   await a.click('.pp-slide-strip .pp-slide-item', n, 500);
+  // Le clic laisse le clavier sur la miniature : Entrée le rend au texte de la diapositive.
+  await (typeof a.app.page === 'function' ? a.app.page() : a.app).keyboard.press('Enter');
+  await sleep(300);
 }
 // La couleur d'un pixel d'une capture.
 async function colorAt(page, buffer, x, y) {
