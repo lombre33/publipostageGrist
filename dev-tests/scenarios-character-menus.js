@@ -11,8 +11,9 @@
   const byId = id => document.getElementById(id);
   const ed = () => EditorCore.getEditor();
   const written = () => Editor.getHTML().replace(/<p><\/p>$/, '');
-  const say = () => byId('status-msg').textContent.trim();
-  const clearSaid = () => { byId('status-msg').textContent = ''; };
+  // La raison d'un grisé s'écrit dans la bulle de l'icône (js/lock-bubble.js), ou dans le coin d'état quand l'icône n'a pas de bulle.
+  const say = () => { const why = document.querySelector('.pp-lockbubble-why'); return (why ? why.textContent : byId('status-msg').textContent).trim(); };
+  const clearSaid = () => { LockBubble.close(); byId('status-msg').textContent = ''; };
   const checked = id => (byId(id) ? byId(id).getAttribute('aria-checked') : null);
   const blocks = id => !!byId(id) && byId(id).hasAttribute('data-pp-lock-blocks');
 

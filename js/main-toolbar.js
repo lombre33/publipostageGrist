@@ -438,11 +438,14 @@ const MainToolbar = (function () {
       [inEmailMode || inEmlMode || inHfMode || SlidesEntry.presentationShown(), ['v2-btn-slide-text'], () => (inEmailMode ? plain() : inEmlMode ? eml() : inHfMode ? zone() : I18n.t('lock.slides'))],
     ];
     const lockedNow = new Set();
+    // Le genre du grisé (la bulle d'une icône grisée en choisit ses vérifications, js/lock-diagnostic.js) : celui de la phrase que le groupe dit.
+    const kindOfReason = text => (text === I18n.t('lock.macro') ? 'macro' : text === I18n.t('lock.email') ? 'email' : text === I18n.t('lock.emlNoSense') ? 'eml' : text === I18n.t('lock.hf') ? 'zone' : 'selection');
     groups.forEach(([locked, ids, reason]) => ids.forEach(id => {
       const el = byId(id);
       if (!el) return;
       el.classList.toggle('v2-hf-locked', !!locked);
-      LockReasons.set(el, 'mode', locked ? reason() : '');
+      const text = locked ? reason() : '';
+      LockReasons.set(el, 'mode', text, kindOfReason(text));
       if (locked) lockedNow.add(id);
     }));
     return lockedNow;

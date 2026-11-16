@@ -151,7 +151,7 @@ const seen = page => page.evaluate(({ ALL, STAY }) => {
     frames: frames.length, firstText: layerOf(frames[0]) ? layerOf(frames[0]).textContent : null, firstDark: dark(frames[0]),
     labels: frames.slice(0, 3).map(f => f.getAttribute('aria-label')), widest: reader.getAttribute('data-pp-widest-sheet'),
     readerShown: visible(reader), editorShown: visible(q('#editor-container')), modeRead: q('#btn-mode-read').classList.contains('active'), modeEdit: q('#btn-mode-edit').classList.contains('active'),
-    status: q('#status-msg').textContent, statusClass: q('#status-msg').className, current: Templates.getCurrentId(), list: q('#template-select').value, name: q('#template-name').value,
+    status: q('#status-msg').textContent, statusClass: q('#status-msg').className, lockSaid: (q('.pp-lockbubble-why') || { textContent: '' }).textContent, current: Templates.getCurrentId(), list: q('#template-select').value, name: q('#template-name').value,
     editorText: q('.ProseMirror').textContent, readerText: reader.textContent.slice(0, 80),
     locked: Array.from(document.querySelectorAll('.pp-pdf-locked')).map(e => e.id).sort(),
     titles: Object.fromEntries(['btn-mode-edit', 'v2-save-group', 'btn-delete', 'v2-page-group', 'v2-quality-group', 'v2-export-pdf-group', 'v2-btn-comment'].map(id => [id, q('#' + id) ? q('#' + id).getAttribute('title') : null])),
@@ -340,19 +340,22 @@ let beforePdf;
   await page.mouse.click(edit.x, edit.y);
   await sleep(300);
   v = await seen(page);
-  check('un clic sur « Édition » ne change rien (la Lecture reste) et le coin d’état dit la raison', v.modeRead && !v.modeEdit && !v.editorShown && v.status === PHRASE.fr.edit, v);
+  check('un clic sur « Édition » ne change rien (la Lecture reste) et la bulle de l’icône dit la raison', v.modeRead && !v.modeEdit && !v.editorShown && v.lockSaid === PHRASE.fr.edit, v);
+  await page.evaluate(() => LockBubble.close()); // la bulle recouvrirait la commande suivante
   await hover(page, '#btn-save');
   check('au survol du bouton « Enregistrer » grisé, son menu ne s’ouvre pas', !(await flyoutShown(page)));
   const exportBox = await boxOf(page, '#v2-export-pdf-group');
   await page.mouse.click(exportBox.x, exportBox.y);
   await sleep(300);
   v = await seen(page);
-  check('un clic sur « Exporter » grisé ne lance rien (aucune fenêtre) et dit la raison de l’export', v.status === PHRASE.fr.export && !(await dialogOf(page)).open && v.active, { status: v.status });
+  check('un clic sur « Exporter » grisé ne lance rien (aucune fenêtre) et dit la raison de l’export', v.lockSaid === PHRASE.fr.export && !(await dialogOf(page)).open && v.active, { said: v.lockSaid });
+  await page.evaluate(() => LockBubble.close());
   await page.focus('#btn-save');
   await page.keyboard.press('Enter');
   await sleep(300);
   v = await seen(page);
-  check('au clavier (Entrée sur « Enregistrer » grisé) : rien ne s’enregistre, aucune question, la raison des modèles dans le coin d’état', v.status === PHRASE.fr.template && !(await dialogOf(page)).open && v.active, { status: v.status });
+  check('au clavier (Entrée sur « Enregistrer » grisé) : rien ne s’enregistre, aucune question, la raison des modèles dans la bulle de l’icône', v.lockSaid === PHRASE.fr.template && !(await dialogOf(page)).open && v.active, { said: v.lockSaid });
+  await page.evaluate(() => LockBubble.close());
   // Les raccourcis des commandes grisées ne font rien non plus : Ctrl+S n'enregistre pas, Alt+P n'exporte pas.
   const written = await writes(page);
   await page.focus('.pp-pdf-pages');

@@ -1053,6 +1053,11 @@ const FloatingToolbars = (function () {
       wireImageArrowKeys();
       const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-image-toolbar', html, imageToolbarAction, imageToolbarInput);
       const controls = controlsOf(panel);
+      // Une icône grisée de cette barre ouvre sa bulle (js/lock-bubble.js) ; la Boucle d'une image de colonne Pièces jointes lit le document pour dire pourquoi (LockDiagnostic.forLoop).
+      LockBubble.provide(panel.el, button => {
+        const node = button.dataset.action === 'var-loop' ? selectedImageNode() : null;
+        return node && node.attrs.varTable ? LockDiagnostic.forLoop({ editor, pos: editor.state.selection.from, node, taken: false }) : null;
+      });
       // Sélection visuelle recalculée ici (pas via selectNode/deselectNode, peu fiable après un setNodeMarkup) : source de vérité unique.
       EditorCore.registerFloatingPanel(panel);
       const check = ({ transaction } = {}) => {
@@ -1126,7 +1131,7 @@ const FloatingToolbars = (function () {
 
     const { syncVariableState } = createVariableState({ editor, rawText, loopWindowTaken, variableColumnType, gristFormatOf, setLabeled, greyOut, syncColumnButton, syncListButton, syncConditionButton, showCalcEdit, syncBoolButtons });
 
-    const { wireToolbar } = createVariableToolbarWiring({ editor, options, inField, rawText, setRefreshToolbar: value => { refreshToolbar = value; }, variableToolbarHtml, isFormatKind, variableTarget, variableColumnType, onVariableAction, onVariableInput, syncConditionalState, syncBoolButtons, syncVariableState, syncStyleButton });
+    const { wireToolbar } = createVariableToolbarWiring({ editor, options, inField, rawText, loopWindowTaken, setRefreshToolbar: value => { refreshToolbar = value; }, variableToolbarHtml, isFormatKind, variableTarget, variableColumnType, onVariableAction, onVariableInput, syncConditionalState, syncBoolButtons, syncVariableState, syncStyleButton });
 
     return { wire: wireToolbar };
   }
@@ -1548,7 +1553,7 @@ const FloatingToolbars = (function () {
     return { syncVariableState };
   }
 
-  function createVariableToolbarWiring({ editor, options, inField, rawText, setRefreshToolbar, variableToolbarHtml, isFormatKind, variableTarget, variableColumnType, onVariableAction, onVariableInput, syncConditionalState, syncBoolButtons, syncVariableState, syncStyleButton }) {
+  function createVariableToolbarWiring({ editor, options, inField, rawText, loopWindowTaken, setRefreshToolbar, variableToolbarHtml, isFormatKind, variableTarget, variableColumnType, onVariableAction, onVariableInput, syncConditionalState, syncBoolButtons, syncVariableState, syncStyleButton }) {
     // Barre flottante d'une bulle #Variable : ce qu'elle montre selon la sélection, où elle se pose, et son câblage
 
     function showVariableFormatPanels(ui, panel, kind, node) {
@@ -1608,6 +1613,11 @@ const FloatingToolbars = (function () {
     function wireToolbar() {
       const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-varfmt-toolbar', variableToolbarHtml(), onVariableAction, onVariableInput);
       EditorCore.registerFloatingPanel(panel, inField ? options.ownerEl : null);
+      // Une icône grisée de cette barre ouvre sa bulle (js/lock-bubble.js) ; celle de la Boucle sait lire le document pour dire pourquoi (LockDiagnostic.forLoop), les autres disent la phrase de leur info-bulle.
+      LockBubble.provide(panel.el, button => {
+        const target = button.dataset.action === 'var-loop' ? variableTarget() : null;
+        return target && isFormatKind(target.kind) ? LockDiagnostic.forLoop({ editor, pos: target.pos, node: target.node, taken: loopWindowTaken() }) : null;
+      });
       const ui = Object.assign(controlsOf(panel), { section: name => panel.el.querySelector(`[data-var-panel="${name}"]`) });
       const check = variableToolbarCheck(panel, ui);
       setRefreshToolbar(() => check());

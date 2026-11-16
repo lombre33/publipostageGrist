@@ -1,0 +1,46 @@
+/* La bulle d'une icône grisée (js/lock-bubble.js) et son constat (js/lock-diagnostic.js). Monochrome : la charte n'a qu'un éditeur, le ✕ est plein (jamais rouge : le rouge reste pour « cassé »), clair et sombre par les jetons de
+   css/style.css. Au niveau des info-bulles (jeton --z-tip) : sous les fenêtres, au-dessus des menus et des barres flottantes. À 700×400 la bulle défile en elle-même : l'en-tête et la raison restent en haut, le pied
+   (« Masquer les noms », « Copier le constat », le bouton du geste) reste en bas. */
+.pp-lockbubble { position: fixed; z-index: var(--z-tip); display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; max-width: calc(100vw - 8px); background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: 10px; box-shadow: var(--shadow-float); font-family: var(--font-ui); font-size: 12.5px; line-height: 1.45; }
+.pp-lockbubble-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 9px 8px 0 12px; }
+.pp-lockbubble-ico { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; background: var(--surface-sunken); color: var(--text-muted); }
+.pp-lockbubble-ico svg { width: 16px; height: 16px; }
+.pp-lockbubble-name { flex: 1 1 auto; min-width: 0; font-weight: 600; }
+.pp-lockbubble-name small { display: block; font-weight: 400; font-size: 11px; color: var(--text-muted); overflow-wrap: anywhere; }
+.pp-lockbubble-x { flex: none; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.pp-lockbubble-x:hover { background: var(--surface-sunken); color: var(--text); }
+.pp-lockbubble-x svg { width: 14px; height: 14px; }
+.pp-lockbubble-why { flex: none; margin: 6px 12px 0; overflow-wrap: anywhere; }
+.pp-lockbubble-more { flex: none; align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin: 6px 12px 8px; padding: 2px 0; border: 0; background: none; color: var(--text); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.pp-lockbubble-caret { display: inline-grid; place-items: center; width: 12px; height: 12px; }
+.pp-lockbubble-caret svg { width: 12px; height: 12px; }
+.pp-lockbubble-more[aria-expanded="true"] .pp-lockbubble-caret { transform: rotate(180deg); }
+.pp-lockbubble-diag { flex: 1 1 auto; min-height: 0; margin: 0 8px; padding: 6px 4px; border-top: 1px solid var(--border); overflow-y: auto; }
+.pp-lockbubble-diag[hidden], .pp-lockbubble-foot[hidden] { display: none; }
+.pp-lockbubble-checks { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.pp-lockbubble-check { display: grid; grid-template-columns: 16px 1fr; gap: 7px; padding: 3px 6px; border-radius: 6px; }
+.pp-lockbubble-check.is-no { background: var(--surface-sunken); font-weight: 600; }
+.pp-lockbubble-check small { display: block; font-weight: 400; font-size: 11.5px; color: var(--text-muted); overflow-wrap: anywhere; }
+.pp-lockbubble-mark { display: grid; place-items: center; box-sizing: border-box; width: 16px; height: 16px; margin-top: 1px; border: 1.5px solid var(--border-strong); border-radius: 50%; color: var(--text-muted); font-size: 10px; font-weight: 700; line-height: 1; }
+.is-no > .pp-lockbubble-mark { background: var(--text); border-color: var(--text); color: var(--surface); }
+.pp-lockbubble-fix { margin: 4px 6px; padding: 6px 6px 2px; border-top: 1px dashed var(--border-strong); overflow-wrap: anywhere; }
+.pp-lockbubble-fix b { font-weight: 600; }
+.pp-lockbubble-ctx { margin: 6px 6px 2px; padding: 6px 8px; border-radius: 8px; background: var(--surface-sunken); }
+.pp-lockbubble-ctx h4 { margin: 0 0 3px; font-size: 11px; font-weight: 600; color: var(--text-muted); }
+.pp-lockbubble-ctx dl { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; margin: 0; font-size: 11.5px; }
+.pp-lockbubble-ctx dt { color: var(--text-muted); }
+.pp-lockbubble-ctx dd { margin: 0; overflow-wrap: anywhere; }
+.pp-lockbubble-foot { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 8px 12px 10px; border-top: 1px solid var(--border); background: var(--surface); }
+.pp-lockbubble-mask { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; color: var(--text-muted); cursor: pointer; }
+.pp-lockbubble-mask input { margin: 0; }
+.pp-lockbubble-actions { display: flex; justify-content: space-between; gap: 6px; }
+.pp-lockbubble-foot button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+.pp-lockbubble-foot button.is-done { background: var(--surface-sunken); }
+.pp-lockbubble-btn-ico { display: inline-grid; place-items: center; width: 13px; height: 13px; }
+.pp-lockbubble-btn-ico svg { width: 13px; height: 13px; }
+.pp-lockbubble button:focus-visible, .pp-lockbubble input:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+/* Dites aux lecteurs d'écran seulement : « écartée » ou « cause » avant chaque vérification ; le champ caché de la copie de secours. */
+.pp-lockbubble-sr, .pp-lockbubble-offscreen { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* Le contrôle dont la bulle est ouverte : cerné, pour qu'on voie de quelle icône elle parle (elle reste grisée). */
+[data-pp-lock-open] { box-shadow: 0 0 0 2px var(--text); border-radius: 6px; }
+@media print { .pp-lockbubble { display: none; } }

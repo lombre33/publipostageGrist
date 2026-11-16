@@ -1,15 +1,16 @@
 // Suite "lockReasons" - la raison d'un grisé (js/lock-reasons.js). Audit UI/UX du 04/11, carte « Faire dire pourquoi un bouton ou une ligne est grisé ? », réponse : « Oui, au survol et au clic ».
 //
-// Un bouton, un groupe ou une ligne de menu grisé dit POURQUOI : son `title` (le survol) est la raison, et son clic - arrêté en capture, avant tout gestionnaire - l'écrit dans le coin d'état, comme la lecture d'un PDF
-// (js/main.js:applyPdfLocks). Ces cas jouent la raison de chaque mode (email, macro-modèle, grille, en-tête, Lecture), les menus (Page, Type d'export), les boutons `disabled` du navigateur (qui ne reçoivent aucun clic :
+// Un bouton, un groupe ou une ligne de menu grisé dit POURQUOI : son `title` (le survol) est la raison, et son clic - arrêté en capture, avant tout gestionnaire - ouvre la bulle de l'icône grisée (js/lock-bubble.js ; avant elle,
+// la raison s'écrivait dans le coin d'état). Les essais de la bulle elle-même : dev-tests/scenarios-lock-bubble.js. Ces cas jouent la raison de chaque mode (email, macro-modèle, grille, en-tête, Lecture), les menus (Page, Type d'export), les boutons `disabled` du navigateur (qui ne reçoivent aucun clic :
 // leur info-bulle seule), Réglages > Raccourcis, et les deux pièges du mécanisme : l'appui sur la police grisée n'ouvre pas son volet, le groupe grisé n'ouvre pas son menu au survol (aria-expanded reste « false »).
 // Les droits par personne (lecture seule) et la souris réelle à 700 x 400 : le script Node verify-lock-reasons-mouse.mjs (groupe lockReasonsMouse).
 (function () {
   const cases = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const byId = id => document.getElementById(id);
-  const say = () => byId('status-msg').textContent.trim();
-  const clearSaid = () => { byId('status-msg').textContent = ''; };
+  // Ce que dit un clic sur un grisé : la bulle sous le contrôle (js/lock-bubble.js, qui a remplacé la phrase du coin d'état), sinon le coin d'état.
+  const say = () => { const why = document.querySelector('.pp-lockbubble-why'); return (why ? why.textContent : byId('status-msg').textContent).trim(); };
+  const clearSaid = () => { LockBubble.close(); byId('status-msg').textContent = ''; };
   const titleOf = id => { const el = byId(id); return el ? el.getAttribute('title') : null; };
   const blocks = id => { const el = byId(id); return !!el && el.hasAttribute('data-pp-lock-blocks'); };
 

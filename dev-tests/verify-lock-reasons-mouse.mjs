@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // La raison d'un grisé (js/lock-reasons.js) à la VRAIE souris (page.mouse, Node/Playwright) et à la taille du panneau Grist (~700x400) : dev-tests/scenarios-lock-reasons.js joue les cas
 // DANS la page (click(), dispatchEvent) ; ici une personne survole un contrôle grisé, y appuie pour de bon et lit ce qu'elle voit : l'info-bulle (le `title` de ce qui est SOUS le pointeur,
-// jamais d'un parent), le curseur « interdit », le coin d'état, et rien de plus (le document ne bouge pas, le menu du groupe grisé ne s'ouvre pas, l'appui sur la police n'ouvre pas son volet).
+// jamais d'un parent), le curseur « interdit », la bulle (js/lock-bubble.js), et rien de plus (le document ne bouge pas, le menu du groupe grisé ne s'ouvre pas, l'appui sur la police n'ouvre pas son volet).
 // Les contextes : un modèle email, un macro-modèle, une grille (barre et aperçu A4), le mode Lecture, la lecture seule par droits (réglage semé avant le démarrage, comme
 // dev-tests/verify-access-rights-mouse.mjs), un bouton que le navigateur désactive (Page en email : l'info-bulle seule), le menu « Type d'export », Réglages > Raccourcis ; en français, puis en anglais.
 // Lancé par run-headless.mjs (groupe Node "lockReasonsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-lock-reasons-mouse.mjs
@@ -43,8 +43,9 @@ const seen = (page, b) => page.evaluate(({ x, y }) => {
   return { under: name(el), tipHolder: name(tip), lockHolder: name(holder), sameHolder: !!tip && tip === holder, title: tip ? tip.getAttribute('title') : '', blocks: !!(holder && holder.hasAttribute('data-pp-lock-blocks')),
     cursor: getComputedStyle(el).cursor, appTipShown: tipped ? getComputedStyle(tipped, '::after').display !== 'none' : false };
 }, { x: b.x, y: b.y });
-const status = page => page.evaluate(() => document.getElementById('status-msg').textContent.trim());
-const clearStatus = page => page.evaluate(() => { document.getElementById('status-msg').textContent = ''; });
+// Ce que dit un vrai appui sur un grisé : la bulle sous le contrôle (js/lock-bubble.js, qui a remplacé la phrase du coin d'état), sinon le coin d'état.
+const status = page => page.evaluate(() => { const why = document.querySelector('.pp-lockbubble-why'); return (why ? why.textContent : document.getElementById('status-msg').textContent).trim(); });
+const clearStatus = page => page.evaluate(() => { LockBubble.close(); document.getElementById('status-msg').textContent = ''; });
 const html = page => page.evaluate(() => Editor.getHTML());
 const attr = (page, selector, name) => page.evaluate(([sel, n]) => { const el = document.querySelector(sel); return el ? el.getAttribute(n) : null; }, [selector, name]);
 // Le groupe à survol ouvre sa ligne sans que la souris la quitte : elle descend dans le menu (comme hoverRow de dev-tests/load-lib.mjs) et s'arrête sur la ligne.
@@ -62,9 +63,11 @@ async function toRow(page, groupSelector, rowSelector) {
 }
 const clickRow = async (page, groupSelector, rowSelector) => { const r = await toRow(page, groupSelector, rowSelector); await pressAt(page, r); return r; };
 
-// Un contrôle grisé : le survol dit pourquoi (info-bulle du contrôle lui-même, curseur « interdit », pas de seconde bulle de l'application), le vrai appui l'écrit dans le coin d'état.
+// Un contrôle grisé : le survol dit pourquoi (info-bulle du contrôle lui-même, curseur « interdit », pas de seconde bulle de l'application), le vrai appui ouvre la bulle, qui dit la même raison.
 // `natively` : un bouton que le navigateur désactive ne reçoit aucun clic, l'info-bulle seule (le coin d'état reste muet).
 async function lockedControl(page, label, selector, reason, { natively = false, quietDocument = true, viaGroup = null } = {}) {
+  // La bulle du contrôle d'avant se ferme (Échap, ou un appui ailleurs) : ouverte, elle recouvrirait celui-ci.
+  await page.evaluate(() => LockBubble.close());
   const before = await html(page);
   const b = viaGroup ? await toRow(page, viaGroup, selector) : await goTo(page, selector);
   const s = await seen(page, b);
@@ -74,7 +77,7 @@ async function lockedControl(page, label, selector, reason, { natively = false, 
   await pressAt(page, b);
   const said = await status(page);
   if (natively) t.check(`${label} : le navigateur ne laisse pas cliquer, le coin d'état reste muet`, said === '', said);
-  else t.check(`${label} : le vrai appui écrit la raison dans le coin d'état, la même que l'info-bulle`, !!s && said === s.title && reason.test(said), { said, title: s && s.title });
+  else t.check(`${label} : le vrai appui ouvre la bulle, qui dit la même raison que l'info-bulle`, !!s && said === s.title && reason.test(said), { said, title: s && s.title });
   if (quietDocument) t.check(`${label} : le document n'a pas bougé`, (await html(page)) === before);
   return { b, s, said };
 }
@@ -85,6 +88,7 @@ async function quietControl(page, label, selector) {
 }
 // Nouveau modèle, à la vraie souris : « Nouvel email », « Nouvelle grille », « Nouveau document », « Nouveau macro-modèle » (sa fenêtre : un nom tapé, Enregistrer).
 async function newTemplate(page, kind) {
+  await page.evaluate(() => LockBubble.close()); // la bulle du contrôle d'avant recouvrirait le menu « + »
   await clickRow(page, '#btn-new', '#v2-btn-new-' + kind);
   if (kind === 'macro') {
     await page.waitForSelector('#macro-editor-name', { state: 'visible', timeout: 5000 });

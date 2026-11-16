@@ -244,6 +244,7 @@ const widgetState = page => page.evaluate(() => {
     writes: s.getActionLog().filter(a => a[0] === 'BulkUpdateRecord' && a[1] === 'Clients').map(a => a[2]),
     stored: PersonStore.get('pp_export_attach'),
     status: document.getElementById('status-msg').textContent, statusClass: document.getElementById('status-msg').className,
+    lockSaid: (document.querySelector('.pp-lockbubble-why') || { textContent: '' }).textContent,
     uploads: (window.__ra_server ? window.__ra_server.requests.length : 0), writeTokens: s.state.tokenCalls.filter(c => c.readOnly === false).length,
   };
 });
@@ -475,7 +476,9 @@ async function pass(colorScheme, lang) {
   await page.mouse.click(m6.row.x, m6.row.y);
   await page.waitForTimeout(300);
   const w7 = await widgetState(page);
-  check(`${tag} : dans GFS : un vrai clic sur la case grisée dit la raison au coin d'état et ne change pas la clé de la personne`, w7.status === T.offGfs && w7.stored === '1', w7);
+  // Grisée par une cause de js/lock-reasons.js, la case ouvre la bulle de sa ligne (js/lock-bubble.js), qui dit la raison.
+  check(`${tag} : dans GFS : un vrai clic sur la case grisée dit la raison dans sa bulle et ne change pas la clé de la personne`, (w7.lockSaid || w7.status) === T.offGfs && w7.stored === '1', w7);
+  await page.evaluate(() => LockBubble.close());
   await shot(page, `${colorScheme}-${lang}-8-gfs-menu`);
   await leaveMenu(page);
   await clearLog(page);

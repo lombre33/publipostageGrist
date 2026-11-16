@@ -38,7 +38,7 @@ const MainAccess = (function () {
       el.classList.toggle(ACCESS_LOCK_CLASS, locked);
       if (locked) el.setAttribute('aria-disabled', 'true');
       else el.removeAttribute('aria-disabled');
-      LockReasons.set(el, 'access', locked && reason ? I18n.t(reason) : '');
+      LockReasons.set(el, 'access', locked && reason ? I18n.t(reason) : '', reason);
     }
 
     // Pendant la lecture d'un PDF (js/pdf-reading.js, consigne GFS 040), ce qui ne s'applique pas à lui reste là, GRISÉ avec sa raison - dans l'info-bulle du survol (`title`, comme setExplained de js/main-toolbar.js :
@@ -63,7 +63,7 @@ const MainAccess = (function () {
         const locked = on && !!reasons[reason];
         el.classList.toggle(PDF_LOCK_CLASS, locked);
         // La raison est l'info-bulle du contrôle et ce que son clic écrit dans le coin d'état : js/lock-reasons.js (cause « pdf »), qui rend aussi au dégrisé le `title` d'avant.
-        LockReasons.set(el, 'pdf', locked ? reasons[reason] : '');
+        LockReasons.set(el, 'pdf', locked ? reasons[reason] : '', 'pdf');
         if (locked) {
           el.setAttribute('aria-disabled', 'true');
           el.setAttribute('data-pp-pdf-reason', reasons[reason]);
@@ -161,18 +161,24 @@ const MainAccess = (function () {
 
     // Un clic (souris, clavier, ou .click() d'un autre module) sur une commande grisée par applyAccessRights ou applyFormattingBarLock est arrêté en
     // capture, avant tout gestionnaire. Et sur tout contrôle grisé qui dit pourquoi (js/lock-reasons.js : les droits, la lecture d'un PDF, le type du modèle,
-    // une grille...) : le clic ne fait rien et le coin d'état en dit la raison, comme l'info-bulle du survol. Les deux gardes se complètent : le premier
-    // arrête aussi ce qui n'a pas de raison.
+    // une grille...) : le clic ne fait rien et une bulle s'ouvre sous le contrôle (js/lock-bubble.js : la raison, « En savoir plus » qui vérifie le document, « Copier le
+    // constat »), comme l'info-bulle du survol dit déjà la raison. Les deux gardes se complètent : le premier arrête aussi ce qui n'a pas de raison.
+    // Sans bulle (le contrôle n'existe plus), la raison s'écrit dans le coin d'état, comme avant la bulle.
+    function say(reason, locked, event) {
+      if (locked && LockBubble.openFor(locked, { reason, keyboard: !!event && event.detail === 0 })) return;
+      setStatus(reason);
+    }
     function wireAccessLockGuard() {
       document.addEventListener('click', event => {
         const target = event.target;
-        if (!target || !target.closest || !target.closest('.' + ACCESS_LOCK_CLASS)) return;
+        const locked = target && target.closest ? target.closest('.' + ACCESS_LOCK_CLASS) : null;
+        if (!locked) return;
         event.preventDefault();
         event.stopImmediatePropagation();
-        const reason = LockReasons.reasonOf(target.closest('.' + ACCESS_LOCK_CLASS));
-        if (reason) setStatus(reason);
+        const reason = LockReasons.reasonOf(locked);
+        if (reason) say(reason, locked, event);
       }, true);
-      LockReasons.wire(setStatus);
+      LockReasons.wire(say);
     }
 
     return {

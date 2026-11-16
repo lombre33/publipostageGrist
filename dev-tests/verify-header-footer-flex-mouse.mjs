@@ -464,7 +464,7 @@ async function run(T) {
   await caretInZone();
   const greyed = id => page.evaluate(sel => { const el = document.getElementById(sel); const cs = getComputedStyle(el); const r = el.getBoundingClientRect(); return { locked: el.classList.contains('v2-hf-locked'), opacity: cs.opacity, pointer: cs.pointerEvents, reason: el.getAttribute('title') || '', shown: r.width > 0 && r.height > 0 && r.right <= innerWidth && r.bottom <= innerHeight }; }, id);
   const tocBox = await greyed('v2-btn-toc'), breakBox = await greyed('v2-btn-page-break'), tableBox = await greyed('v2-btn-table');
-  // Grisés, ils reçoivent la souris pour dire pourquoi (js/lock-reasons.js : info-bulle, et le clic écrit la raison dans le coin d'état sans rien poser) : « en-tête ou pied de page ».
+  // Grisés, ils reçoivent la souris pour dire pourquoi (js/lock-reasons.js : info-bulle, et le clic ouvre la bulle de l'icône qui dit la raison sans rien poser) : « en-tête ou pied de page ».
   check(`${T}, en-tête : « Sommaire » et « Saut de page » sont grisés dans la zone (classe de grisé, opacité .35, la raison en info-bulle), toujours dans la barre ; « Tableau » reste actif`,
     tocBox.locked && tocBox.opacity === '0.35' && /en-tête|header/i.test(tocBox.reason) && tocBox.shown && breakBox.locked && breakBox.opacity === '0.35' && /en-tête|header/i.test(breakBox.reason) && breakBox.shown
     && !tableBox.locked && tableBox.opacity === '1' && tableBox.reason === '', { tocBox, breakBox, tableBox });
@@ -474,6 +474,9 @@ async function run(T) {
   await sleep(250);
   const grey = await html();
   check(`${T}, en-tête : un clic réel sur « Sommaire », un sur « Saut de page » et Alt+Entrée ne posent ni sommaire ni saut de page dans la zone`, !/toc-marker|page-break-marker/.test(grey), grey);
+  // Le dernier clic sur une icône grisée a ouvert sa bulle (js/lock-bubble.js), qui dit la même raison que l'info-bulle ; on la ferme : ouverte, elle recouvrirait le texte du corps.
+  const bubbleWhy = await page.evaluate(() => { const why = document.querySelector('.pp-lockbubble-why'); const said = why ? why.textContent : ''; LockBubble.close(); return said; });
+  check(`${T}, en-tête : le clic sur « Saut de page » grisé a ouvert sa bulle, qui dit pourquoi (en-tête ou pied de page)`, /en-tête|header/i.test(bubbleWhy) && bubbleWhy === breakBox.reason, { bubbleWhy, reason: breakBox.reason });
   // Un clic sur un bouton grisé tombe sur la barre derrière lui et retire le focus de l'éditeur : un clic dans la zone le rend avant de taper.
   await caretInZone();
   await page.keyboard.type('--- ');

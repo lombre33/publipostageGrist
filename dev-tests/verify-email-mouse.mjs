@@ -455,6 +455,7 @@ async function formattingKeysAndPaste() {
   await realClick('#v2-heading-chip', 250);
   await page.mouse.move(WIDTH - 20, HEIGHT - 20, { steps: 4 });
   check('et un vrai clic sur son bouton n’ouvre rien et ne pose aucun titre', (await headingMenuState()).flyout === 'none' && !/<h[1-6][ >]/.test(await editorHtml()), await editorHtml());
+  await page.evaluate(() => LockBubble.close()); // le clic sur le bouton grisé a ouvert sa bulle (js/lock-bubble.js) : fermée, elle ne recouvre pas le texte
   await page.mouse.move(WIDTH - 20, HEIGHT - 20, { steps: 4 });
 
   await emptyEditorWithCursor();

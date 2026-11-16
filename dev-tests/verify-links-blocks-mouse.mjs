@@ -365,6 +365,9 @@ async function run(theme) {
   await snap(`${T}-7-menu-bloc-de-code`);
   const lockedAt = await pressRow('#v2-row-link');
   check(`${T}, bloc de code : un clic sur la ligne « Lien… » grisée n'ouvre rien`, !(await winOpen()), lockedAt);
+  // Elle ouvre la bulle de la ligne (js/lock-bubble.js), qui dit la même raison ; on la ferme pour que la ligne suivante soit libre.
+  const rowBubble = await page.evaluate(() => { const why = document.querySelector('.pp-lockbubble-why'); const out = { open: !!why, why: why ? why.textContent : '' }; LockBubble.close(); return out; });
+  check(`${T}, bloc de code : la ligne « Lien… » grisée ouvre sa bulle, qui dit la même raison que son info-bulle`, rowBubble.open && rowBubble.why === linkWhy.reason, { rowBubble, linkWhy });
   await pressRow('#v2-btn-code-block');
   check(`${T}, bloc de code : un second clic sur sa ligne redonne le paragraphe`, !/<pre>/.test(await html()), await html());
   await closeMenu();

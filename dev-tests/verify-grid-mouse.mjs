@@ -695,6 +695,7 @@ async function runTheme(theme) {
   page.once('download', d => { wordDownload = d.suggestedFilename(); });
   await realClick(page, ROW.typeWord);
   await page.waitForTimeout(1500);
+  await page.evaluate(() => LockBubble.close()); // la ligne grisée a ouvert sa bulle (js/lock-bubble.js) : fermée, elle ne recouvre pas la ligne suivante du menu
   check(`${label} - vrai clic sur le type Word grisé d'une grille : le type reste PDF, aucun téléchargement`, wordDownload === null && await typeValue() === 'pdf', { wordDownload, type: await typeValue() });
   await page.mouse.move(WIDTH - 10, HEIGHT - 10);
   check(`${label} - vrai clic sur le type Excel : Excel est choisi (menu « Type d'export » : ligne active, bouton du type allumé)`,
@@ -804,6 +805,7 @@ async function runTheme(theme) {
   page.on('download', dl => { excelDownload = dl.suggestedFilename(); });
   await realClick(page, ROW.typeExcel);
   await page.waitForTimeout(900);
+  await page.evaluate(() => LockBubble.close());
   const dialogAfterGreyed = await page.evaluate(() => { const ov = document.getElementById('pp-dialog-modal'); return !!ov && ov.style.display !== 'none'; });
   check(`${label} - vrai clic sur le type Excel grisé d'un document : le type reste PDF, aucun téléchargement, aucune confirmation`, excelDownload === null && !dialogAfterGreyed && await typeValue() === 'pdf', { excelDownload, dialogAfterGreyed, type: await typeValue() });
   await page.mouse.move(WIDTH - 10, HEIGHT - 10);

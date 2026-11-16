@@ -510,6 +510,14 @@ const nestedState = await page.evaluate(() => ({
   modalOpen: document.getElementById('var-loop-modal').style.display !== 'none',
 }));
 check('dans la ligne répétée, la Boucle d’une autre variable est grisée et un vrai clic n’ouvre rien', nestedBtn.found && nestedState.disabled === 'true' && !nestedState.modalOpen, { nestedBtn, nestedState });
+// Le clic sur l'icône grisée ouvre sa bulle (js/lock-bubble.js), qui dit la même raison que l'info-bulle et dresse le constat de la Boucle.
+const nestedBubble = await page.evaluate(() => {
+  const why = document.querySelector('.pp-lockbubble-why');
+  const out = { open: !!why, why: why ? why.textContent : '', title: document.querySelector('.v2-varfmt-toolbar button[data-action="var-loop"]').title };
+  LockBubble.close();
+  return out;
+});
+check('… le même clic ouvre la bulle de la Boucle, qui dit la même raison que son info-bulle', nestedBubble.open && nestedBubble.why === nestedBubble.title && nestedBubble.why !== '', nestedBubble);
 
 // 4 bis) Boucle dans une boucle (demande d'Antoine du 2026-10-09, point 5.2) : dans la ligne répétée des tâches, les notes de chaque tâche - rattachées à la
 // tâche par une colonne Référence (aucune règle de liaison) - se répètent en liste dans la seconde case. Deux colonnes de VcNotes mènent à VcTaches (Tache,
@@ -613,6 +621,7 @@ const noWayState = await page.evaluate(() => {
   return { disabled: b.getAttribute('aria-disabled'), title: b.title, expected: I18n.t('varToolbar.loopNestedNone', { table: 'VcDossiers', within: 'VcTaches' }), modalOpen: document.getElementById('var-loop-modal').style.display !== 'none' };
 });
 check('une variable sans colonne qui mène à la tâche : Boucle grisée avec sa raison, un vrai clic n’ouvre rien', noWayIcon.found && noWayState.disabled === 'true' && noWayState.title === noWayState.expected && !noWayState.modalOpen, noWayState);
+await page.evaluate(() => LockBubble.close()); // le clic sur une icône grisée a ouvert sa bulle (js/lock-bubble.js) : fermée, elle ne recouvre pas la suite
 // En anglais : mêmes phrases, dans la langue de l'interface.
 await page.evaluate(() => I18n.setLang('en'));
 await page.waitForTimeout(200);
@@ -738,6 +747,7 @@ const statutState = await page.evaluate(() => ({
 }));
 check('dans la ligne répétée pour toutes les lignes, la Boucle de l’autre variable de la ligne est grisée (déjà dans la zone) et un vrai clic n’ouvre rien',
   statutIcon.found && statutState.disabled === 'true' && statutState.title === statutState.expected && !statutState.modalOpen, statutState);
+await page.evaluate(() => LockBubble.close()); // le clic sur une icône grisée a ouvert sa bulle (js/lock-bubble.js) : fermée, elle ne recouvre pas la suite
 
 // 4 ter bis) Le troisième choix de « Lignes de la table à utiliser » : la vue d'à côté (demande d'Antoine du 2026-10-23, « laisser le choix à l'user dans la modale des boucles »). Le widget est
 // relié par « Sélectionner par » à un tableau « Dossiers urgents » (filtre et tri enregistrés, posés dans le faux Grist comme Grist les écrit). À la vraie souris et à 700x400 : un
@@ -1036,6 +1046,7 @@ await page.waitForTimeout(400);
 const rpGreyOpen = (await loopWindow()).open;
 check('une ligne sans variable : le bouton est grisé (pas retiré), sa raison en info-bulle, et un vrai clic n’ouvre rien',
   !!rpGrey && rpGrey.grey && rpGrey.opacity < 0.5 && rpGrey.title === 'Répéter la ligne : cette ligne n’a aucune variable (insérez-en une avec #)' && rpGreyButton.found && !rpGreyOpen, { rpGrey, rpGreyOpen });
+await page.evaluate(() => LockBubble.close()); // le clic sur une icône grisée a ouvert sa bulle (js/lock-bubble.js) : fermée, elle ne recouvre pas la suite
 await page.evaluate(() => I18n.setLang('en'));
 await page.waitForTimeout(200);
 await clickInCell(1, 2);
@@ -2866,6 +2877,7 @@ if (conditionButtonPlain.onTop) await page.mouse.click(conditionButtonPlain.x, c
 await page.waitForTimeout(300);
 const openedOnPlain = await page.evaluate(() => { const m = document.getElementById('var-condition-modal'); return !!m && m.style.display !== 'none' && m.getClientRects().length > 0; });
 check('... et un vrai clic sur le bouton grisé n\'ouvre aucune fenêtre', !openedOnPlain, { openedOnPlain });
+await page.evaluate(() => LockBubble.close()); // le clic sur une icône grisée a ouvert sa bulle (js/lock-bubble.js) : fermée, elle ne recouvre pas la suite
 
 // 8) Une pièce jointe cochée dans « Autres attributs » se pose en IMAGE liée (retour d'Antoine du 05/11 : « ça reste une ligne, ça ne bascule pas en mode image »).
 // VcFiches est liée à la page par sa ligne fixe ; sa colonne Référence Entite mène à VcEntites, dont Logo est une colonne Pièces jointes. Tout à la vraie souris à 700x400 :
@@ -3037,6 +3049,7 @@ if (loopButtonPlain.onTop) await page.mouse.click(loopButtonPlain.x, loopButtonP
 await page.waitForTimeout(300);
 const loopOpenedOnPlain = await page.evaluate(() => { const m = document.getElementById('var-loop-modal'); return !!m && m.style.display !== 'none' && m.getClientRects().length > 0; });
 check('... et un vrai clic sur le bouton grisé n\'ouvre aucune fenêtre', !loopOpenedOnPlain, { loopOpenedOnPlain });
+await page.evaluate(() => LockBubble.close()); // le clic sur une icône grisée a ouvert sa bulle (js/lock-bubble.js) : fermée, elle ne recouvre pas la suite
 
 // 10) La clé d'un lien peut être un chemin de références (retour d'Antoine du 05/11 : page Badge, Nom prénom → Annuaire, Structure → Structure, sans colonne formule). La page est VcBadges
 // (Personne → VcPersons), VcPersons a sa Structure (→ VcStructs, dont Nom est du texte) : aucune colonne ne relie VcBadges à VcStructs. Tout à la vraie souris à 700x400 : une bulle

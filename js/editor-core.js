@@ -402,6 +402,9 @@ const EditorCore = (function () {
     el.addEventListener('click', (event) => {
       const btn = event.target.closest('button[data-action]');
       if (!btn) return;
+      // Une icône grisée AVEC sa raison (`is-disabled`, posée par setDisabled de js/floating-toolbars.js : aria-disabled et `title` = la raison) ne fait rien, au clic comme au clavier : une bulle
+      // s'ouvre dessous et dit pourquoi (js/lock-bubble.js). Une icône grisée sans raison (`v2-hf-locked`) suit son chemin d'avant.
+      if (btn.classList.contains('is-disabled') && btn.getAttribute('aria-disabled') === 'true' && LockBubble.openFor(btn, { keyboard: event.detail === 0 })) { pressedBtn = null; return; }
       if (pressedBtn === btn) { pressedBtn = null; return; }
       onAction(btn.dataset.action);
     });
@@ -496,7 +499,8 @@ const EditorCore = (function () {
   }, true);
   document.addEventListener('mousedown', (event) => {
     const target = event.target;
-    if (target.closest('.v2-floating-toolbar') || target.closest('.pp-page-zoom') || target.closest('.pp-doc-strips')) return;
+    // La bulle d'une icône grisée (js/lock-bubble.js) s'ouvre sous une icône de la barre : la presser ne ferme pas la barre, dont l'icône resterait sans ancre.
+    if (target.closest('.v2-floating-toolbar') || target.closest('.pp-page-zoom') || target.closest('.pp-doc-strips') || target.closest('.pp-lockbubble')) return;
     if (pressInBarMenu) return;
     const inDocument = !!target.closest('.tiptap');
     floatingContextPanels.forEach(({ panel, ownerEl }) => {

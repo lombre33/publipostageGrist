@@ -8,7 +8,7 @@
 //    second le retire, un autre le remplace ; le bouton garde son clic ;
 //  - une sélection aux réglages mêlés : la ligne montre un tiret, un clic la pose partout ;
 //  - au clavier : le focus entre dans le menu (Tab), Entrée coche la ligne ;
-//  - un modèle email : les lignes qu'il grise disent pourquoi (info-bulle, coin d'état au clic) sans rien changer, Exposant et Indice restent ; la ligne « Caractère… » n'est plus dans le menu Alignement.
+//  - un modèle email : les lignes qu'il grise disent pourquoi (info-bulle, bulle de l'icône au clic) sans rien changer, Exposant et Indice restent ; la ligne « Caractère… » n'est plus dans le menu Alignement.
 // Lancé par run-headless.mjs (groupe Node "characterFormatMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-character-format-mouse.mjs
 // CHARACTER_FORMAT_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { mkdir } from 'node:fs/promises';
@@ -80,8 +80,9 @@ async function clickRow(page, buttonSelector, rowSelector) {
   return r;
 }
 const html = page => page.evaluate(() => Editor.getHTML());
-const status = page => page.evaluate(() => document.getElementById('status-msg').textContent.trim());
-const clearStatus = page => page.evaluate(() => { document.getElementById('status-msg').textContent = ''; });
+// La raison d'un grisé se dit dans la bulle de l'icône (js/lock-bubble.js), ou dans le coin d'état quand l'icône n'a pas de bulle.
+const status = page => page.evaluate(() => { const why = document.querySelector('.pp-lockbubble-why'); return (why ? why.textContent : document.getElementById('status-msg').textContent).trim(); });
+const clearStatus = page => page.evaluate(() => { LockBubble.close(); document.getElementById('status-msg').textContent = ''; });
 const attr = (page, selector, name) => page.evaluate(([sel, n]) => { const el = document.querySelector(sel); return el ? el.getAttribute(n) : null; }, [selector, name]);
 const display = (page, selector) => page.evaluate(sel => { const el = document.querySelector(sel); return el ? getComputedStyle(el).display : null; }, selector);
 const selectedText = page => page.evaluate(() => { const s = EditorCore.getEditor().state; return s.doc.textBetween(s.selection.from, s.selection.to, ' '); });
@@ -381,7 +382,8 @@ async function run(theme, lang) {
     const seenUnder = await page.evaluate(({ x, y }) => { const el = document.elementFromPoint(x, y); const holder = el && el.closest('[data-pp-lock-reason]'); return { holder: holder ? holder.id : null, title: el && el.closest('[title]') ? el.closest('[title]').title : '', cursor: el ? getComputedStyle(el).cursor : '' }; }, { x: r.x, y: r.y });
     t.check(`${T}, email : la ligne « ${names.stroke} » est grisée, son info-bulle dit pourquoi, le curseur est « interdit »`, shut.blocks && /email/i.test(shut.title) && shut.title === shut.reason && seenUnder.holder === ROW.stroke.slice(1) && seenUnder.cursor === 'not-allowed', { shut, seenUnder });
     await press(page);
-    t.check(`${T}, email : le clic écrit la raison dans le coin d'état et ne change rien`, (await status(page)) === shut.reason && (await html(page)) === before, { status: await status(page), same: (await html(page)) === before });
+    t.check(`${T}, email : le clic ouvre la bulle qui dit la raison et ne change rien`, (await status(page)) === shut.reason && (await html(page)) === before, { status: await status(page), same: (await html(page)) === before });
+    await clearStatus(page); // la bulle de la ligne grisée se ferme : ouverte, elle recouvrirait la ligne suivante
     const kept = await rowState(page, '#v2-btn-superscript');
     t.check(`${T}, email : Exposant et Indice restent actifs (sans raison)`, !kept.blocks && kept.reason === '', kept);
     await clickRow(page, MAIN, '#v2-btn-superscript');

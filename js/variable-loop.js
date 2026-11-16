@@ -182,6 +182,17 @@ const VariableLoop = (function () {
     const within = zone.owner.loop.table;
     return { active: false, enabled: false, title: I18n.t(attrs.table === within ? 'varToolbar.loopNested' : 'varToolbar.loopNestedNone', { table: attrs.table, within }) };
   }
+  // Ce que la bulle de « En savoir plus » (js/lock-diagnostic.js:forLoop) lit pour dire pourquoi la Boucle de `node` est grisée : la table et la colonne de la variable, ce qui la coupe de sa donnée (Variables.badgeProblem : '' quand rien),
+  // la zone répétée qui l'entoure ({ repeat, table } : ce qu'elle répète et la table qu'elle parcourt, null hors d'une zone) et si c'est un calcul. Aucune cellule n'est lue.
+  function diagnose(editor, pos, node) {
+    const attrs = loopAttrs(node);
+    const zone = enclosingAt(editor.state, pos, pos);
+    return {
+      table: attrs.table, column: attrs.column, isCalc: node.type.name === 'calcBadge',
+      problem: Variables.badgeProblem(attrs.table, attrs.column) || '',
+      zone: zone ? { repeat: zone.repeat, table: zone.owner.loop.table } : null,
+    };
+  }
   // Où est la bulle : décide des choix « Ce qui se répète » (le plus proche l'emporte : une liste dans une cellule propose l'élément de liste).
   // `rowMerged` : une case fusionnée sur plusieurs lignes traverse la ligne de la bulle (js/table-merge.js) ; la copier pour chaque ligne liée
   // casserait le tableau, « La ligne du tableau » est alors grisée. `rowOthers` : combien d'autres variables la ligne porte - « La variable, dans sa cellule »
@@ -1029,5 +1040,5 @@ const VariableLoop = (function () {
     if (probing) probeLinkedView(state);
   }
 
-  return { openAt, isOpen, status, rowStatus, openRow, loopTablesAt, setContext, zonesAt, nestableAt, nestableInFedZoneAt, feedsAt };
+  return { openAt, isOpen, status, diagnose, rowStatus, openRow, loopTablesAt, setContext, zonesAt, nestableAt, nestableInFedZoneAt, feedsAt };
 })();

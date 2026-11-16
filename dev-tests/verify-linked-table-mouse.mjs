@@ -574,7 +574,7 @@ async function run(theme) {
   await clickInText('B2');
   const greyed = {};
   for (const id of ['v2-btn-table', 'v2-btn-two-columns', 'v2-btn-toc']) {
-    // Grisé, le bouton reçoit la souris pour dire pourquoi (js/lock-reasons.js) : son info-bulle est la raison et son clic l'écrit dans le coin d'état.
+    // Grisé, le bouton reçoit la souris pour dire pourquoi (js/lock-reasons.js) : son info-bulle est la raison et son clic ouvre la bulle qui la dit.
     greyed[id] = await page.evaluate(i => { const e = document.getElementById(i); const cs = getComputedStyle(e); return { locked: e.classList.contains('v2-hf-locked'), opacity: cs.opacity, reason: e.getAttribute('title') || '' }; }, id);
   }
   check(`${T}, boutons : Tableau, Deux colonnes et Sommaire sont grisés (jamais retirés) et disent pourquoi quand le curseur est dans le tableau lié`, Object.values(greyed).every(g => g.locked && g.reason !== '' && Number(g.opacity) < 0.5), greyed);
@@ -584,11 +584,14 @@ async function run(theme) {
     await page.mouse.click(c.x, c.y);
     await page.waitForTimeout(120);
   }
-  const saidAfterClicks = await page.evaluate(() => document.getElementById('status-msg').textContent.trim());
-  check(`${T}, boutons : le clic sur le dernier bouton grisé (Sommaire) écrit sa raison dans le coin d'état`, saidAfterClicks !== '' && saidAfterClicks === greyed['v2-btn-toc'].reason, { saidAfterClicks, reason: greyed['v2-btn-toc'].reason });
+  // Chaque clic ouvre la bulle du bouton (js/lock-bubble.js) et ferme celle d'avant : il n'en reste qu'une, celle du dernier, qui dit sa raison. On la ferme pour libérer le menu qui suit.
+  const saidAfterClicks = await page.evaluate(() => { const why = document.querySelector('.pp-lockbubble-why'); const said = (why ? why.textContent : document.getElementById('status-msg').textContent).trim(); LockBubble.close(); return said; });
+  check(`${T}, boutons : le clic sur le dernier bouton grisé (Sommaire) ouvre sa bulle, qui dit sa raison`, saidAfterClicks !== '' && saidAfterClicks === greyed['v2-btn-toc'].reason, { saidAfterClicks, reason: greyed['v2-btn-toc'].reason });
   const lockedLine = await pressRow('#v2-btn-citation', { from: '#v2-btn-link' });
+  await page.evaluate(() => LockBubble.close()); // la bulle de la ligne grisée recouvrirait la ligne suivante
   await closeMenu();
   const lockedCode = await pressRow('#v2-btn-code-block', { from: '#v2-btn-link' });
+  await page.evaluate(() => LockBubble.close());
   await closeMenu();
   check(`${T}, boutons : un clic sur ces boutons et sur « Citation » et « Bloc de code » (grisés) ne change rien au document`, (await html()) === docBefore, { lockedLine, lockedCode });
   // La ligne du menu Tableau, elle, est grisée avec sa raison : un tableau lié ne se pose pas dans un tableau.
