@@ -3289,7 +3289,80 @@ const PdfExport = (function () {
     const blocks = isFlowText(node, tag, headingMarkers) ? flowTextBlocks(ctx) : ordinaryBlocks(ctx, blockRunsOf(node, tag));
     // Le réglage « Paragraphe… » d'un paragraphe vaut pour tous ses blocs (le texte, les images qu'il porte, le texte à côté d'une image). Un élément de liste et une citation, dont
     // les blocs suivants sont ceux de leurs sous-listes, le posent sur leur seul bloc de texte (textBlockFrom).
-    return tag === 'P' ? applyParagraphFormat(blocks, node) : blocks;
+    const placed = tag === 'P' ? applyParagraphFormat(blocks, node) : blocks;
+    if (tag === 'P' || /^H[1-6]$/.test(tag)) fitLineBoxes(placed, node);
+    return placed;
+  }
+
+  // La ligne du PDF contre celle de l'éditeur. pdfmake pose le texte tout en HAUT de sa ligne (l'interligne en plus est en dessous) et compte une ligne de la hauteur de la police (ascender moins descender, table
+  // `hhea` : Roboto 1,172, Arimo 1,117) ; le navigateur partage l'interligne moitié dessus, moitié dessous, et ne compte que `line-height` fois la taille. Pour du Roboto à 10,5 pt la différence est de 0,8 pt ; pour
+  // un titre de 48 pt elle monte à 5 pt (Roboto) ou 7 pt (Arial, Arimo), et le pas des lignes d'un texte en Arimo était 4,7 % trop serré (LINE_HEIGHT_RATIO suppose Roboto). `fitLineBoxes` règle donc, pour
+  // chaque paragraphe et chaque titre : l'interligne du bloc (facteur CSS divisé par la hauteur de ligne naturelle de la police du plus grand texte : le pas devient celui de l'écran) et sa place (le bloc descend de
+  // l'écart entre la ligne de base du navigateur et celle de pdfmake, et remonte d'autant par sa marge basse : la hauteur du bloc ne change pas, ce qui suit n'est pas déplacé).
+  const hheaCache = new Map();
+  const STRUT_PT = 14 * PX_TO_PT; // la cale d'un paragraphe : 14 px, 10,5 pt
+  const FIT_MIN_PT = 1.5; // l'écart de ligne de base en dessous duquel `fitLineBox` ne déplace pas le bloc
+  // { asc, desc } de la police du PDF `family` en fois la taille, lus dans le fichier embarqué ; null quand on ne sait pas les lire (la ligne reste alors celle d'avant).
+  function fontLineMetrics(family) {
+    if (hheaCache.has(family)) return hheaCache.get(family);
+    let found = null;
+    try {
+      const files = window.pdfMake && window.pdfMake.fonts && window.pdfMake.fonts[family];
+      const base64 = files && window.pdfMake.vfs && window.pdfMake.vfs[files.normal];
+      if (base64) {
+        const binary = atob(base64);
+        const byte = i => binary.charCodeAt(i);
+        const u16 = i => (byte(i) << 8) | byte(i + 1);
+        const i16 = i => { const v = u16(i); return v > 32767 ? v - 65536 : v; };
+        const tables = {};
+        for (let t = 0, count = u16(4); t < count; t++) {
+          const at = 12 + t * 16;
+          tables[binary.substr(at, 4)] = (byte(at + 8) * 16777216) + (byte(at + 9) << 16) + (byte(at + 10) << 8) + byte(at + 11);
+        }
+        if (tables.head !== undefined && tables.hhea !== undefined) {
+          const upm = u16(tables.head + 18);
+          const asc = i16(tables.hhea + 4) / upm;
+          const desc = -i16(tables.hhea + 6) / upm;
+          if (upm > 0 && asc > 0 && desc > 0 && asc + desc < 3) found = { asc, desc };
+        }
+      }
+    } catch (e) { found = null; }
+    hheaCache.set(family, found);
+    return found;
+  }
+
+  function fitLineBoxes(blocks, node) {
+    (Array.isArray(blocks) ? blocks : [blocks]).forEach(block => fitLineBox(block, node));
+  }
+
+  function fitLineBox(block, node) {
+    if (!block || typeof block !== 'object' || block.text === undefined || block.columns || block.stack || block.image || block.svg || block.canvas || block.absolutePosition || block._pendingImgNode || block._tabGap) return;
+    const runs = (Array.isArray(block.text) ? block.text : [block]).filter(run => run && typeof run === 'object' && !run.image && !run.svg && String(run.text === undefined ? '' : (Array.isArray(run.text) ? run.text.map(r => (r && r.text) || r).join('') : run.text)) !== '');
+    if (!runs.length || runs.some(run => run._imageMarker || run.sup || run.sub)) return;
+    const cs = getComputedStyle(node);
+    // L'interligne réglé par « Paragraphe… » (`data-line-height`) vaut sur l'éditeur comme sur le PDF ; sans réglage, celui de la feuille de style.
+    const format = node.tagName === 'P' ? ParagraphFormat.readOf(node) : null;
+    const factor = format && format.lineHeight != null ? format.lineHeight : parseFloat(cs.lineHeight) / parseFloat(cs.fontSize);
+    if (!(factor > 0)) return;
+    const inks = runs.map((run) => {
+      const family = run.font || block.font || 'Roboto';
+      const size = run.fontSize || block.fontSize || DEFAULT_FONT_SIZE;
+      return { size, metrics: fontLineMetrics(family) };
+    });
+    const strutMetrics = fontLineMetrics(pdfFontFor(cs.fontFamily) || 'Roboto');
+    const bodyMetrics = fontLineMetrics('Roboto');
+    if (!strutMetrics || !bodyMetrics || inks.some(ink => !ink.metrics || !(ink.size > 0))) return;
+    // Le haut de la ligne au navigateur : le plus haut des textes et de la cale du paragraphe (sa police et sa taille) ; celui de pdfmake : l'ascender du plus haut texte.
+    const above = (size, metrics) => (factor * size - (metrics.asc + metrics.desc) * size) / 2 + metrics.asc * size;
+    const screenBaseline = Math.max(above(parseFloat(cs.fontSize) * PX_TO_PT, strutMetrics), ...inks.map(ink => above(ink.size, ink.metrics)));
+    const pdfBaseline = Math.max(...inks.map(ink => ink.metrics.asc * ink.size));
+    const tallest = inks.reduce((best, ink) => (ink.size * (ink.metrics.asc + ink.metrics.desc) > best.size * (best.metrics.asc + best.metrics.desc) ? ink : best));
+    block.lineHeight = factor / (tallest.metrics.asc + tallest.metrics.desc);
+    // Le texte courant du PDF (10,5 pt, Roboto) est depuis toujours posé 0,8 à 1,3 pt au-dessus de l'éditeur : les citations, les listes, les cases de tableau, les traits et les essais qui les
+    // mesurent partent de cette ligne. Seul l'écart EN PLUS de celui du texte courant est donc rattrapé : le texte courant ne bouge pas, un gros titre se range par rapport à lui comme à l'écran.
+    // Sous FIT_MIN_PT (2 px) le navigateur arrondit lui-même ses lignes au pixel et les essais qui comparent un titre à l'éditeur (`imageText`) tolèrent 0,6 pt : un titre de 18 pt n'est pas touché.
+    const shift = (screenBaseline - pdfBaseline) - (above(STRUT_PT, bodyMetrics) - bodyMetrics.asc * STRUT_PT);
+    if (Math.abs(shift) >= FIT_MIN_PT) { addTopMargin(block, shift); addBottomMargin(block, -shift); }
   }
 
   // L'interligne, les espaces et les retraits réglés par « Paragraphe… » (js/paragraph-format.js) sur le paragraphe, l'élément de liste ou la citation `node`, posés sur ses blocs pdfmake
