@@ -188,9 +188,10 @@ const DocxImport = (function () {
 
   // --- Les polices et les couleurs -----------------------------------------------------------------------------------------------------------------------------------------------
   // La famille de remplacement la plus proche parmi celles de l'éditeur (Roboto par défaut, Arial, Times New Roman, Georgia, Courier New, Calibri) ; null : celle de l'éditeur.
+  // Marianne et les polices libres du catalogue (js/free-fonts.js) gardent leur nom (`keptFamily`) : le PDF sait les écrire (fenêtre « Polices du document »).
   function familyOf(name) {
     const key = String(name || '').trim().toLowerCase();
-    return key ? ExportCommon.Ooxml.nearestFamily(key) : null;
+    return key ? ExportCommon.Ooxml.keptFamily(name) || ExportCommon.Ooxml.nearestFamily(key) : null;
   }
   const HIGHLIGHT = {
     yellow: 'ffff00', green: '00ff00', cyan: '00ffff', magenta: 'ff00ff', blue: '0000ff', red: 'ff0000', darkBlue: '000080', darkCyan: '008080', darkGreen: '008000', darkMagenta: '800080',
@@ -257,7 +258,7 @@ const DocxImport = (function () {
     if (!name) return null;
     const lower = name.toLowerCase();
     // Une variante d'une police que l'éditeur a (« Calibri Light », « Times », « Courier ») prend la sienne sans rien dire ; une autre famille (« Cambria », « Consolas », « Aptos ») est comptée.
-    if (!EDITOR_FONTS.has(lower) && !SAME_FAMILY.test(lower) && !ctx.fontsSeen.has(lower)) { ctx.fontsSeen.add(lower); count(ctx, 'fonts'); }
+    if (!EDITOR_FONTS.has(lower) && !SAME_FAMILY.test(lower) && !ExportCommon.Ooxml.keptFamily(name) && !ctx.fontsSeen.has(lower)) { ctx.fontsSeen.add(lower); count(ctx, 'fonts'); }
     return familyOf(name);
   }
   function count(ctx, key, n) { ctx.report.set(key, (ctx.report.get(key) || 0) + (n === undefined ? 1 : n)); }

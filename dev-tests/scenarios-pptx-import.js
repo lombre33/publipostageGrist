@@ -2756,6 +2756,23 @@
       return result(bad);
     });
 
+  add('pptx_import_keeps_the_name_of_marianne_and_the_free_fonts',
+    'Marianne et les polices libres du catalogue (Open Sans, Lato...) gardent leur nom à l\'import (le PDF sait les écrire : fenêtre « Polices du document »), sans être comptées comme perdues, quelle que soit la casse du fichier ; une autre police (Comic Sans MS) est remplacée et comptée comme avant ; une police de la liste, de chasse fixe (Fira Code), garde aussi son nom',
+    async () => {
+      const { bad, expect } = checker();
+      const face = (name, text) => para(sm(text, '', `<a:latin typeface="${name}"/>`));
+      const r = await run1({ slides: [{ shapes: lone(face('Marianne', 'Texte Marianne') + face('open sans', 'Texte Open Sans') + face('Lato', 'Texte Lato') + face('Fira Code', 'Code') + face('Comic Sans MS', 'Texte Comic')) }] });
+      const html = r.html;
+      expect('Marianne garde son nom', /font-family: Marianne[^>]*>Texte Marianne/.test(html), html);
+      expect('Open Sans garde son nom, écrit comme dans la liste (« open sans » du fichier devient « Open Sans »)', /font-family: Open Sans[^>]*>Texte Open Sans/.test(html), html);
+      expect('Lato garde son nom', /font-family: Lato[^>]*>Texte Lato/.test(html), html);
+      expect('Fira Code garde son nom (avant : Courier New)', /font-family: Fira Code[^>]*>Code/.test(html) && !/Courier New[^>]*>Code/.test(html), html);
+      expect('Comic Sans MS est remplacée (aucune des polices de la liste) et comptée une fois', !/font-family: Comic Sans MS/.test(html) && reportOf(r).fonts === 1, r.report);
+      const kept = await run1({ slides: [{ shapes: lone(face('Marianne', 'Un') + face('Open Sans', 'Deux') + face('Lato', 'Trois')) }] });
+      expect('trois polices gardées : rien au rapport', sameReport(reportOf(kept), {}), kept.report);
+      return result(bad);
+    });
+
   add('pptx_import_report_every_kind_of_loss_at_once',
     'Un fichier qui demande de tout à la fois (une diapositive par cas) : chaque genre est compté exactement, le rapport suit l\'ordre de PptxImport.REPORT_KEYS, le thème est dit avec les autres lignes ; chaque genre du rapport a son cas ici',
     async () => {

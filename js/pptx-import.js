@@ -570,9 +570,11 @@ const PptxImport = (function () {
     return String(face || '').trim();
   }
   // La famille de remplacement la plus proche parmi celles de l'éditeur (Roboto par défaut, Arial, Times New Roman, Georgia, Courier New, Calibri) ; null : celle de l'éditeur.
+  // Marianne et les polices libres du catalogue (js/free-fonts.js) gardent leur nom (`keptFamily`) : le PDF sait les écrire (fenêtre « Polices du document »).
   function familyOf(name, theme) {
-    const key = faceOf(name, theme).toLowerCase();
-    return key ? ExportCommon.Ooxml.nearestFamily(key) : null;
+    const face = faceOf(name, theme);
+    const key = face.toLowerCase();
+    return key ? ExportCommon.Ooxml.keptFamily(face) || ExportCommon.Ooxml.nearestFamily(key) : null;
   }
   // Le thème du fichier dans la forme du thème d'une présentation (js/slide-theme.js) : son nom, le fond et le texte (par la correspondance de couleurs du masque : « fond 1 » et « texte 1 »), les titres (la couleur du
   // premier niveau du style de titre du masque, le texte à défaut), les six accents et les deux polices (la plus proche parmi celles de l'éditeur, Roboto à défaut). null quand une couleur manque ou que l'éditeur n'a pas
@@ -816,7 +818,7 @@ const PptxImport = (function () {
   // Une police que l'éditeur n'a pas exactement : comptée la première fois qu'un texte s'en sert.
   function noteFont(face, env, report) {
     const key = faceOf(face, env.theme).toLowerCase();
-    if (!key || EDITOR_FONTS.has(key)) return;
+    if (!key || EDITOR_FONTS.has(key) || ExportCommon.Ooxml.keptFamily(faceOf(face, env.theme))) return;
     const seen = env.ctx.fontsSeen || (env.ctx.fontsSeen = new Set());
     if (seen.has(key)) return;
     seen.add(key);

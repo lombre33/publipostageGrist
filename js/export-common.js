@@ -533,7 +533,7 @@ const ExportCommon = (function () {
     }
     // Ce que les deux imports se donnent en commun. Plafonds (en octets) : le fichier, le paquet une fois défait (plus, c'est une bombe de compression), une image, le poids des images reprises au
     // total (le modèle s'écrit dans une case de Grist). Le type d'image que le navigateur sait lire, par extension. La couleur du texte de l'éditeur (js/character-format.js) : un texte de cette
-    // couleur n'en pose pas. Les polices que l'éditeur sait montrer ; toute autre est remplacée par la plus proche (`nearestFamily`, sur le nom en minuscules) et comptée au compte rendu.
+    // couleur n'en pose pas. Les polices que l'éditeur sait montrer ; toute autre est remplacée par la plus proche (`nearestFamily`, sur le nom en minuscules) et comptée au compte rendu, sauf Marianne et les polices libres du catalogue (`keptFamily`), dont le nom est gardé.
     const LIMITS = { file: 150 * 1024 * 1024, unpacked: 900 * 1024 * 1024, image: 25 * 1024 * 1024, images: 80 * 1024 * 1024 };
     const IMAGE_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', jpe: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml' };
     const EDITOR_TEXT = '1b2430';
@@ -546,7 +546,16 @@ const ExportCommon = (function () {
       if (/^(times|tinos|cambria|garamond|palatino|book antiqua|bookman|century (schoolbook|old)|constantia|baskerville|didot|bodoni|sitka|minion|perpetua|goudy|caslon|georgia pro|serif$)/.test(key)) return 'Times New Roman';
       return null;
     }
-    return { fail, kids, kid, at, descendants, localAttr, relAttr, numAttrOf, round2, fixed, escText, escAttr, spaced, resolvePath, openPackage, LIMITS, IMAGE_TYPES, EDITOR_TEXT, EDITOR_FONTS, nearestFamily };
+    // Le nom qu'un import GARDE tel quel au lieu de le remplacer par la plus proche : Marianne (police de l'État : le document est écrit en Marianne, le PDF la propose à l'export avec GFS) et les polices libres
+    // de js/free-fonts.js (Open Sans, Lato, Inter...), que le PDF sait inclure à la demande (extensions/polices/libres.js). Le nom est celui de la liste, quelle que soit la casse du fichier ; null pour toute autre.
+    function keptFamily(name) {
+      const key = String(name || '').trim().toLowerCase();
+      if (!key) return null;
+      if (key === 'marianne') return 'Marianne';
+      const font = typeof FreeFonts !== 'undefined' ? FreeFonts.find(key) : null;
+      return font ? font.name : null;
+    }
+    return { fail, kids, kid, at, descendants, localAttr, relAttr, numAttrOf, round2, fixed, escText, escAttr, spaced, resolvePath, openPackage, LIMITS, IMAGE_TYPES, EDITOR_TEXT, EDITOR_FONTS, nearestFamily, keptFamily };
   })();
 
   return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, fillEmptyBlocks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,

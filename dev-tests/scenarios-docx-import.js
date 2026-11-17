@@ -202,6 +202,19 @@
     return result(bad);
   });
 
+  add('docxImport_marianne_and_the_free_fonts_keep_their_name', 'Marianne et les polices libres du catalogue (Open Sans, Lato...) gardent leur nom à l\'import Word (le PDF sait les écrire : fenêtre « Polices du document »), sans être comptées comme perdues, quelle que soit la casse du fichier ; Cambria et Aptos restent remplacées et comptées', async () => {
+    const { bad, expect } = checker();
+    const font = name => `<w:rFonts w:ascii="${name}" w:hAnsi="${name}"/>`;
+    const kept = await imported({ body: p(r('Marianne', font('Marianne')) + r('Sans', font('open sans')) + r('Lato', font('Lato')) + r('Code', font('Fira Code'))) });
+    expect('quatre polices gardées : aucune ligne au rapport', countOf(kept.report, 'fonts') === 0, kept.report);
+    expect('Marianne garde son nom', /font-family: Marianne[^>]*>Marianne/.test(kept.html), kept.html);
+    expect('« open sans » du fichier devient « Open Sans », comme dans la liste', /font-family: Open Sans[^>]*>Sans/.test(kept.html), kept.html);
+    expect('Lato et Fira Code gardent leur nom (Fira Code : avant Courier New)', /font-family: Lato[^>]*>Lato/.test(kept.html) && /font-family: Fira Code[^>]*>Code/.test(kept.html) && !/Courier New/.test(kept.html), kept.html);
+    const mixed = await imported({ body: p(r('a', font('Open Sans')) + r('b', font('Cambria')) + r('c', font('Aptos'))) });
+    expect('une police de la liste gardée, Cambria et Aptos comptées : deux polices au rapport', countOf(mixed.report, 'fonts') === 2 && /font-family: Open Sans/.test(mixed.html) && /font-family: Times New Roman[^>]*>b/.test(mixed.html), { report: mixed.report, html: mixed.html });
+    return result(bad);
+  });
+
   add('docxImport_adjacent_runs_with_the_same_look_are_one', 'des séries de caractères voisines de même aspect ne font qu\'une (Word en coupe à chaque correction) ; un aspect différent les sépare', async () => {
     const { bad, expect } = checker();
     const out = await imported({ body: p(r('Bon') + r('jour ') + r('à ', '<w:b/>') + r('tous', '<w:b/>') + r('.')) });
