@@ -465,6 +465,8 @@ const XlsxExport = (function () {
     // graphiques) ne se charge pas, ou Office refuserait ses données ; l'appelant pose alors l'image.
     const img = entry.img;
     if (!img.hasAttribute('data-chart-office')) return false;
+    // Le classeur d'enregistrement de l'export OpenDocument (js/ods-export.js) n'a pas de graphique natif : l'image se pose, et le classeur compte celles qui étaient des graphiques.
+    if (workbook.recording) { workbook.noteChart(); return false; }
     try { await ExportEngines.ensure('docx'); }
     catch (e) { console.warn('[XlsxExport] graphique natif impossible (moteur Word injoignable), l\'image est gardée :', e); return false; }
     const part = await DocxExport.chartPartsOf(img, size.width, size.height);
@@ -824,6 +826,7 @@ const XlsxExport = (function () {
     if (typedInfo && text !== '') {
       master.value = typedInfo.value;
       master.numFmt = typedInfo.numFmt;
+      master.shown = text;   // le texte que la bulle écrit : l'export OpenDocument (js/ods-export.js) le garde avec la valeur, comme LibreOffice
       master.font = fontOf(firstStyle);
     } else if (content.wholeLink && runs.length) {
       master.value = { text, hyperlink: content.wholeLink };
@@ -1015,36 +1018,36 @@ const XlsxExport = (function () {
     return String(name || '').slice(0, Math.max(0, 31 - tail.length)).trim() + tail;
   }
 
-  async function createSingleWorkbook(options) {
-    // Un classeur unique pour toute la table : une feuille par enregistrement (et une de plus à chaque saut de page de la grille), nommée comme le
-    // fichier qu'il aurait eu dans l'archive ZIP (31 caractères au plus, « nom (2) » quand deux feuilles s'appelleraient pareil). Un enregistrement
-    // qui échoue ne laisse pas de feuille à moitié écrite : l'appelant le compte en échec et passe au suivant. `valueName` (facultatif) : la valeur
-    // de la liste que ce document écrit quand le modèle est réglé « Un document par valeur » ; elle suit le nom de la feuille. `pageOptions`
-    // (facultatif, de la forme de pageOptionsFromLayout) : la page de cette feuille quand son modèle n'est pas celui de l'écran (« Modèle selon la
-    // ligne », js/main.js:onExportBatch).
-    await ensureExcelLibLoaded();
-    const workbook = newWorkbook();
+  function recordAppender(workbook, options) {
+    // Ajoute au classeur `workbook` (un classeur d'ExcelJS, ou le classeur d'enregistrement de l'export OpenDocument, js/ods-export.js) la feuille d'un enregistrement, dont le nom est celui du fichier qu'il aurait eu dans l'archive ZIP
+    // (31 caractères au plus, « nom (2) » quand deux feuilles s'appelleraient pareil). Un enregistrement qui échoue ne laisse pas de feuille à moitié écrite : l'appelant le compte en échec et passe au suivant. `valueName`
+    // (facultatif) : la valeur de la liste que ce document écrit quand le modèle est réglé « Un document par valeur » ; elle suit le nom de la feuille. `pageOptions` (facultatif, de la forme de pageOptionsFromLayout) : la page de
+    // cette feuille quand son modèle n'est pas celui de l'écran (« Modèle selon la ligne », js/main.js:onExportBatch). Rend le nom du fichier et le nombre de tableaux croisés du document.
     const usedNames = new Set();
-    return {
-      async appendRecord(htmlContent, tableId, record, filenameTemplate, valueName, pageOptions) {
-        await ExternalImages.confirmExport(htmlContent, null);
-        const { resolvedHtml, filename, pivots } = await resolveRecord(htmlContent, tableId, record, filenameTemplate);
-        const before = workbook.worksheets.length;
-        const chartsBefore = chartListOf(workbook).length;
-        const pivotsBefore = pivotListOf(workbook).length;
-        try {
-          await addRecordSheet(workbook, nameWithValue(filename, valueName), resolvedHtml, Object.assign(pageOptionsFromLayout(), options || {}, pageOptions || {}, { usedNames, pivots }));
-        } catch (e) {
-          workbook.worksheets.slice(before).forEach(sheet => { usedNames.delete(sheet.name.toLowerCase()); workbook.removeWorksheet(sheet.id); });
-          chartListOf(workbook).length = chartsBefore;
-          pivotListOf(workbook).length = pivotsBefore;
-          throw e;
-        }
-        return { filename };
-      },
-      toBlob: () => workbookToBlob(workbook),
+    return async function appendRecord(htmlContent, tableId, record, filenameTemplate, valueName, pageOptions) {
+      await ExternalImages.confirmExport(htmlContent, null);
+      const { resolvedHtml, filename, pivots } = await resolveRecord(htmlContent, tableId, record, filenameTemplate);
+      const before = workbook.worksheets.length;
+      const chartsBefore = chartListOf(workbook).length;
+      const pivotsBefore = pivotListOf(workbook).length;
+      try {
+        await addRecordSheet(workbook, nameWithValue(filename, valueName), resolvedHtml, Object.assign(pageOptionsFromLayout(), options || {}, pageOptions || {}, { usedNames, pivots }));
+      } catch (e) {
+        workbook.worksheets.slice(before).forEach(sheet => { usedNames.delete(sheet.name.toLowerCase()); workbook.removeWorksheet(sheet.id); });
+        chartListOf(workbook).length = chartsBefore;
+        pivotListOf(workbook).length = pivotsBefore;
+        throw e;
+      }
+      return { filename, pivots: pivots.length };
     };
   }
 
-  return { exportCurrentRecord, getXlsxBlobForRecord, createSingleWorkbook, ensureExcelLibLoaded, sheetNameFrom, pageOptionsFromLayout, XLSX_MIME };
+  async function createSingleWorkbook(options) {
+    // Un classeur unique pour toute la table : une feuille par enregistrement (et une de plus à chaque saut de page de la grille), voir recordAppender.
+    await ensureExcelLibLoaded();
+    const workbook = newWorkbook();
+    return { appendRecord: recordAppender(workbook, options), toBlob: () => workbookToBlob(workbook) };
+  }
+
+  return { exportCurrentRecord, getXlsxBlobForRecord, createSingleWorkbook, recordAppender, ensureExcelLibLoaded, sheetNameFrom, pageOptionsFromLayout, XLSX_MIME };
 })();

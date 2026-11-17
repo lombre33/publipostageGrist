@@ -145,11 +145,15 @@ const MainExport = (function () {
         batch: 'docxZip', noRecord: 'alert.noRecordForExportDocx', generating: 'status.docxGenerating', generated: 'status.docxGenerated', failed: 'status.docxGenerationError',
         run: (doc, tableId, record) => DocxExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsTwip()),
       },
-      // OpenDocument texte (js/odt-export.js) : le document en .odt (LibreOffice, OnlyOffice, Collabora...), écrit sans bibliothèque de plus ; ce que le fichier n'a pas pu reprendre (`describe`) est dit dans le coin d'état.
+      // OpenDocument (LibreOffice, OnlyOffice, Collabora...), écrit sans bibliothèque de plus : le document en .odt (js/odt-export.js) ou la grille en .ods (js/ods-export.js, qui lit la grille comme l'export Excel, d'où le moteur `xlsx`) ;
+      // ce que le fichier n'a pas pu reprendre (`describe`) est dit dans le coin d'état.
       odf: {
-        engines: ['odtExport'],
-        batch: 'odfZip', noRecord: 'alert.noRecordForExportOdf', generating: 'status.odfGenerating', generated: 'status.odfGenerated', failed: 'status.odfGenerationError',
-        run: (doc, tableId, record) => OdtExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsMm()),
+        get engines() { return GridEditor.isGridType(getCurrentTypeModele()) ? ['xlsx', 'odsExport'] : ['odtExport']; },
+        get batch() { return GridEditor.isGridType(getCurrentTypeModele()) ? 'odsZip' : 'odfZip'; },
+        noRecord: 'alert.noRecordForExportOdf', generating: 'status.odfGenerating', generated: 'status.odfGenerated', failed: 'status.odfGenerationError',
+        run: (doc, tableId, record) => (GridEditor.isGridType(getCurrentTypeModele())
+          ? OdsExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate())
+          : OdtExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsMm())),
         describe: result => (result && result.report && result.report.length ? I18n.t('status.odfGeneratedNotCarried', { list: result.report.map(item => I18n.t('odf.export.lost.' + item.key, { n: item.n })).join(', ') }) : ''),
       },
       xlsx: {
@@ -257,7 +261,7 @@ const MainExport = (function () {
     // que le modèle ouvert ne sait pas faire n'est pas proposé (ligne grisée) et le bouton Exporter retombe sur le PDF, jamais sur une erreur.
     function exportTypeAvailable(type) {
       const grid = GridEditor.isGridType(getCurrentTypeModele());
-      return type === 'pdf' || type === 'pdfProtected' || type === 'pdfArchive' || ((type === 'docx' || type === 'odf' || type === 'md' || type === 'html' || type === 'htmlFragment') && !grid) || (type === 'xlsx' && grid)
+      return type === 'pdf' || type === 'pdfProtected' || type === 'pdfArchive' || ((type === 'docx' || type === 'md' || type === 'html' || type === 'htmlFragment') && !grid) || type === 'odf' || (type === 'xlsx' && grid)
         || ((type === 'mdTemplate' || type === 'htmlTemplate') && !grid && getCurrentTypeModele() !== 'macro') || (type === 'pptx' && getCurrentTypeModele() === 'presentation') || (type === 'eml' && getCurrentTypeModele() === 'email');
     }
     // Pourquoi une ligne du menu « Type d'export » est grisée pour le modèle ouvert (js/lock-reasons.js) : PowerPoint ne sert qu'une présentation, Excel qu'une grille, un tableau seul ne s'écrit ni en Word, ni en Markdown, ni en HTML,
@@ -336,7 +340,8 @@ const MainExport = (function () {
       // Le PDF/A a le PDF unique (réuni, puis passé en PDF/A d'un coup) mais pas la planche : elle est faite pour l'impression (ligne grisée dans le menu Exporter).
       pdfArchive: { zip: 'pdfArchiveZip', merged: 'pdfArchiveMerged' },
       docx: { zip: 'docxZip' },
-      odf: { zip: 'odfZip' },
+      // OpenDocument : le document en .odt, la grille en .ods (un lot par genre de modèle ; pas de classeur unique pour le .ods).
+      get odf() { return { zip: GridEditor.isGridType(getCurrentTypeModele()) ? 'odsZip' : 'odfZip' }; },
       pptx: { zip: 'pptxZip' },
       xlsx: { zip: 'xlsxZip', workbook: 'xlsxSingle' },
       md: { zip: 'mdZip' },
@@ -621,6 +626,14 @@ const MainExport = (function () {
         entryExt: '.odt', fileSuffix: '-export-odt.zip', margins: () => PageLayout.getMarginsMm(), grid: false, engines: ['odtExport'],
         loadLibs: () => ExportCommon.ensureJsZipLoaded(),
         renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => OdtExport.getOdtBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
+      },
+      // Un fichier .ods par ligne, dans une archive ZIP (js/ods-export.js) : la page de la grille (format, sens, marges), lue comme celle du lot Excel ; comme lui, il ne fait que des grilles.
+      odsZip: {
+        label: 'OpenDocument', confirm: 'confirm.batchExportOdf', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressOdf',
+        noFile: 'status.exportErrorOdf', done: 'status.batchExportDoneOdf', doneWithFailures: 'status.batchExportDoneWithFailuresOdf',
+        entryExt: '.ods', fileSuffix: '-export-ods.zip', grid: true, engines: ['xlsx', 'odsExport'], pageOptions: () => XlsxExport.pageOptionsFromLayout(),
+        loadLibs: () => ExportCommon.ensureJsZipLoaded(),
+        renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins, pageOptions) => OdsExport.getOdsBlobForRecord(html, tableId, row, filenameTemplate, pageOptions || undefined),
       },
       // Un fichier .pptx par ligne, dans une archive ZIP (js/pptx-export.js) : la page du modèle est celle des diapositives, `keepProps` garde le repère de chacune (transition, fond, notes).
       pptxZip: {

@@ -348,12 +348,12 @@ async function menus(page, lang, tag) {
     htmlNoLines.every(r => !r.missing && !r.shown) && htmlTemplateNote.text === W.htmlTemplateNote && htmlTemplateNote.shown && htmlTemplateNote.inside && htmlTemplateNote.reachable && !htmlTemplateNote.cut && htmlTemplateNote.contrast >= 4.5, { htmlTemplateNote, shownLines: htmlNoLines.filter(r => r.shown || r.missing).map(r => r.sel) });
   await parkMouse(page);
 
-  console.log(`\n[${tag}] Dans une grille : Word, OpenDocument, PowerPoint et Markdown grisés, Excel choisi`);
+  console.log(`\n[${tag}] Dans une grille : Word, PowerPoint et Markdown grisés, Excel et OpenDocument (.ods) actifs`);
   await newModel(page, 'grid');
   await hoverRow(page, TYPE_MENU, TYPE_ROW('xlsx'));
   const gridTypes = await stateOf(page, ['pdf', 'docx', 'odf', 'pptx', 'xlsx', 'md', 'mdTemplate', 'html', 'htmlFragment', 'htmlTemplate'].map(TYPE_ROW));
-  check(`${tag} : PDF et Excel sont actifs, Word, OpenDocument, PowerPoint, Markdown, « ${W.mdTemplate} » et les trois HTML sont grisés (ils restent dans le menu), les dix sont entiers dans le panneau et lisibles`,
-    gridTypes[0].live && gridTypes[1].greyed && gridTypes[2].greyed && gridTypes[3].greyed && gridTypes[4].live && gridTypes.slice(5).every(r => r.greyed) && entire(gridTypes) && readable(gridTypes), gridTypes);
+  check(`${tag} : PDF, Excel et OpenDocument sont actifs, Word, PowerPoint, Markdown, « ${W.mdTemplate} » et les trois HTML sont grisés (ils restent dans le menu), les dix sont entiers dans le panneau et lisibles`,
+    gridTypes[0].live && gridTypes[1].greyed && gridTypes[2].live && gridTypes[3].greyed && gridTypes[4].live && gridTypes.slice(5).every(r => r.greyed) && entire(gridTypes) && readable(gridTypes), gridTypes);
   await clickHoverRow(page, TYPE_MENU, TYPE_ROW('docx'));
   await sleep(300);
   check(`${tag} : un vrai clic sur Word grisé ne le choisit pas`, (await typeValue(page)) === 'pdf', { type: await typeValue(page) });
@@ -361,9 +361,14 @@ async function menus(page, lang, tag) {
   await sleep(300);
   check(`${tag} : ni « ${W.allTypes[5]} » grisé`, (await typeValue(page)) === 'pdf', { type: await typeValue(page) });
   await page.keyboard.press('Escape');
+  // OpenDocument sert aussi la grille (le tableur .ods) : un vrai clic le choisit, puis le PDF revient pour la suite.
   await clickHoverRow(page, TYPE_MENU, TYPE_ROW('odf'));
   await sleep(300);
-  check(`${tag} : ni « ${W.allTypes[4]} » grisé`, (await typeValue(page)) === 'pdf', { type: await typeValue(page) });
+  check(`${tag} : un vrai clic sur « ${W.allTypes[4]} » dans une grille le choisit (le tableur .ods)`, (await typeValue(page)) === 'odf', { type: await typeValue(page) });
+  await hoverRow(page, TYPE_MENU, TYPE_ROW('pdf'));
+  await clickHoverRow(page, TYPE_MENU, TYPE_ROW('pdf'));
+  await sleep(300);
+  check(`${tag} : le PDF se rechoisit`, (await typeValue(page)) === 'pdf', { type: await typeValue(page) });
   await page.keyboard.press('Escape');
   await clickHoverRow(page, TYPE_MENU, TYPE_ROW('md'));
   await sleep(300);
@@ -576,6 +581,36 @@ try {
   await sleep(600);
   await parkMouse(page);
   await chooseExportLines(page, 'one');
+  await parkMouse(page);
+
+  console.log('\nLes exports de la grille (type OpenDocument : un .ods)');
+  await clickHoverRow(page, TYPE_MENU, TYPE_ROW('odf'));
+  await sleep(300);
+  await parkMouse(page);
+  check('un vrai clic sur OpenDocument, dans une grille, le choisit : le type vaut « odf » et le bouton du type est allumé', (await typeValue(page)) === 'odf' && (await typeButtonLit(page)), { type: await typeValue(page), lit: await typeButtonLit(page) });
+  const odsFile = await download(page, () => click(page, EXPORT_MENU));
+  const odsBytes = odsFile ? await readFile(await odsFile.path()) : Buffer.alloc(0);
+  check('le bouton Exporter, type OpenDocument, « une seule ligne » : un fichier .ods (tableur) est téléchargé, un paquet dont « mimetype » ouvre l\'archive',
+    /\.ods$/i.test(nameOf(odsFile) || '') && odsBytes.subarray(0, 2).toString('latin1') === 'PK' && odsBytes.toString('latin1', 30, 84) === 'mimetypeapplication/vnd.oasis.opendocument.spreadsheet', { name: nameOf(odsFile), head: odsBytes.toString('latin1', 30, 84) });
+  check('l\'état dit « OpenDocument généré. »', (await status(page)) === 'OpenDocument généré.', await status(page));
+  await sleep(600);
+  await parkMouse(page);
+  await chooseExportLines(page, 'zip');
+  await parkMouse(page);
+  const odsZip = await download(page, async () => {
+    await click(page, EXPORT_MENU);
+    await page.waitForSelector('#pp-dialog-modal .var-modal-primary', { state: 'visible', timeout: 30000 });
+    await sleep(250);
+    await click(page, '#pp-dialog-modal .var-modal-primary');
+  }, 120000);
+  check('« Toutes les valeurs de la vue (ZIP) » cochée, type OpenDocument : le bouton Exporter demande sa confirmation, « Générer » rend l\'archive des tableurs (-export-ods.zip)', /-export-ods\.zip$/i.test(nameOf(odsZip) || ''), nameOf(odsZip));
+  await sleep(600);
+  await parkMouse(page);
+  await chooseExportLines(page, 'one');
+  await parkMouse(page);
+  // De retour à Excel, pour le passage dans un document qui suit : Excel ne s'y fait pas, OpenDocument si.
+  await clickHoverRow(page, TYPE_MENU, TYPE_ROW('xlsx'));
+  await sleep(300);
   await parkMouse(page);
 
   console.log('\nRetour dans un document : le type revient au PDF');

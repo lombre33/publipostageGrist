@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 const JSZip = require(join(ROOT, 'dev-tests', '.offline-cache', 'umd', 'jszip.min.js'));
 const ExcelJS = require(join(ROOT, 'dev-tests', '.offline-cache', 'umd', 'exceljs.min.js'));
 
-// Les seize moteurs : leur nom dans index.html (data-engine), leur fichier, leur variable globale.
+// Les dix-sept moteurs : leur nom dans index.html (data-engine), leur fichier, leur variable globale.
 const ENGINES = {
   pdf: { file: 'pdf-export', global: 'PdfExport' },
   sheets: { file: 'sheet-layout', global: 'SheetLayout' },
@@ -33,6 +33,7 @@ const ENGINES = {
   odtImport: { file: 'odt-import', global: 'OdtImport' },
   odsImport: { file: 'ods-import', global: 'OdsImport' },
   odtExport: { file: 'odt-export', global: 'OdtExport' },
+  odsExport: { file: 'ods-export', global: 'OdsExport' },
   xlsx: { file: 'xlsx-export', global: 'XlsxExport' },
   xlsxFormat: { file: 'xlsx-number-format', global: 'XlsxNumberFormat' },
   xlsxPivot: { file: 'xlsx-pivot', global: 'XlsxPivot' },
@@ -76,7 +77,7 @@ async function scenario(title, fn) {
 // Les scripts de moteur demandés, exactement ceux que le scénario attend : ni plus (rien ne charge ce qu'il n'utilise pas), ni moins, chacun une fois.
 function expectEngines(label, requests, loadedNow, expected) {
   check(`${label} : le réseau ne reçoit que ${expected.map(name => ENGINES[name].file + '.js').join(' et ')}, une seule fois chacun`, same(requests, expected), requests);
-  check(`${label} : parmi les seize moteurs, seuls existent ${expected.map(name => ENGINES[name].global).join(', ')}`, same(loadedNow, expected), loadedNow);
+  check(`${label} : parmi les dix-sept moteurs, seuls existent ${expected.map(name => ENGINES[name].global).join(', ')}`, same(loadedNow, expected), loadedNow);
 }
 
 const bytesOf = file => readFile(file);
@@ -103,11 +104,11 @@ const exportBatch = (page, kind, name) => saved(exportBatchOf(page, kind, `lazy-
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 await scenario('Ouverture : aucun moteur n\'est chargé', async ({ w, page, requests, loaded }) => {
   await sleep(1500);
-  check('ouverture : aucun des seize scripts de moteur n\'est demandé au réseau', requests.length === 0, requests);
-  check('ouverture : aucun des seize moteurs n\'existe (PdfExport, PdfMerge, PdfArchive, SheetLayout, DocxExport, PptxExport, PptxImport, DocxImport, OdtImport, OdsImport, OdtExport, XlsxExport, XlsxNumberFormat, XlsxPivot, MarkdownExport, HtmlExport)', (await loaded()).length === 0, await loaded());
+  check('ouverture : aucun des dix-sept scripts de moteur n\'est demandé au réseau', requests.length === 0, requests);
+  check('ouverture : aucun des seize moteurs n\'existe (PdfExport, PdfMerge, PdfArchive, SheetLayout, DocxExport, PptxExport, PptxImport, DocxImport, OdtImport, OdsImport, OdtExport, OdsExport, XlsxExport, XlsxNumberFormat, XlsxPivot, MarkdownExport, HtmlExport)', (await loaded()).length === 0, await loaded());
   check('ouverture : ExportEngines existe, avec ensure et loadAll', await page.evaluate(() => typeof ExportEngines === 'object' && typeof ExportEngines.ensure === 'function' && typeof ExportEngines.loadAll === 'function'));
   const tags = await page.evaluate(() => Array.from(document.querySelectorAll('script[type="text/x-lazy-engine"]'), tag => [tag.dataset.engine, tag.getAttribute('src')]));
-  check('index.html : seize balises inertes, une par moteur, chacune vers son fichier et avec une version de cache (?v=)',
+  check('index.html : dix-sept balises inertes, une par moteur, chacune vers son fichier et avec une version de cache (?v=)',
     tags.length === NAMES.length && NAMES.every(name => tags.filter(([engine, src]) => engine === name && new RegExp('^js/' + ENGINES[name].file + '\\.js\\?v=\\d+(\\.\\d+)*$').test(src)).length === 1), tags);
   check('ouverture : les boutons d\'export existent et sont prêts (le clic ne dépend d\'aucun moteur chargé)', await page.evaluate(() => ['btn-export-pdf', 'v2-export-lines-one', 'v2-export-lines-zip', 'v2-export-lines-merged'].every(id => !!document.getElementById(id))));
   check('ouverture : aucune erreur de page', w.errors.length === 0, w.errors);
@@ -177,6 +178,16 @@ await scenario('OpenDocument d\'une ligne : le moteur OpenDocument seul', async 
   expectEngines('OpenDocument d\'une ligne', requests, await loaded(), ['odtExport']);
   check('OpenDocument d\'une ligne : aucune erreur de page', w.errors.length === 0, w.errors);
 });
+await scenario('OpenDocument d\'une grille : le lecteur de grille d\'Excel et le moteur .ods, sans ExcelJS', async ({ w, page, requests, loaded }) => {
+  await prepare(page, { grid: true });
+  const out = await exportSingle(page, 'odf', 'odf');
+  const entries = await zipEntries(out.file);
+  check('OpenDocument d\'une grille : le fichier est un .ods (zip avec mimetype, content.xml et META-INF/manifest.xml)', /\.ods$/.test(out.suggested) && entries[0] === 'mimetype' && entries.includes('content.xml') && entries.includes('META-INF/manifest.xml'), { suggested: out.suggested, entries: entries.slice(0, 6) });
+  check('OpenDocument d\'une grille : le type du fichier est celui d\'un tableur', (await bytesOf(out.file)).toString('latin1').includes('application/vnd.oasis.opendocument.spreadsheet'), out.suggested);
+  expectEngines('OpenDocument d\'une grille', requests, await loaded(), ['xlsx', 'odsExport']);
+  check('OpenDocument d\'une grille : la bibliothèque ExcelJS n\'est jamais demandée (le classeur est écrit sans elle)', !requests.some(url => /exceljs/i.test(url)), requests);
+  check('OpenDocument d\'une grille : aucune erreur de page', w.errors.length === 0, w.errors);
+});
 await scenario('Excel d\'une ligne : le moteur Excel seul', async ({ w, page, requests, loaded }) => {
   await prepare(page, { grid: true });
   const out = await exportSingle(page, 'xlsx', 'xlsx');
@@ -216,6 +227,7 @@ const BATCHES = [
   { kind: 'pdfSheets', label: 'Assemblage avant impression', engines: ['pdf', 'merge', 'sheets'], grid: false, verify: async (out, label) => { check(`${label} : un PDF d'assemblage, nommé -assemblage.pdf`, startsWith(await bytesOf(out.file), '%PDF-') && /-assemblage\.pdf$/.test(out.suggested) && out.size > 1000, out); } },
   { kind: 'docxZip', label: 'ZIP de Word', engines: ['docx'], grid: false, verify: async (out, label) => { const entries = await zipEntries(out.file); check(`${label} : l'archive porte ${ROWS} documents Word`, /\.zip$/.test(out.suggested) && entries.length === ROWS && entries.every(n => /\.docx$/.test(n)), { suggested: out.suggested, entries }); } },
   { kind: 'odfZip', label: 'ZIP d\'OpenDocument', engines: ['odtExport'], grid: false, verify: async (out, label) => { const entries = await zipEntries(out.file); check(`${label} : l'archive porte ${ROWS} documents OpenDocument`, /\.zip$/.test(out.suggested) && entries.length === ROWS && entries.every(n => /\.odt$/.test(n)), { suggested: out.suggested, entries }); } },
+  { kind: 'odsZip', label: 'ZIP d\'OpenDocument (grilles)', engines: ['xlsx', 'odsExport'], grid: true, verify: async (out, label) => { const entries = await zipEntries(out.file); check(`${label} : l'archive porte ${ROWS} tableurs OpenDocument`, /\.zip$/.test(out.suggested) && entries.length === ROWS && entries.every(n => /\.ods$/.test(n)), { suggested: out.suggested, entries }); } },
   { kind: 'xlsxZip', label: 'ZIP d\'Excel', engines: ['xlsx'], grid: true, verify: async (out, label) => { const entries = await zipEntries(out.file); check(`${label} : l'archive porte ${ROWS} classeurs`, /\.zip$/.test(out.suggested) && entries.length === ROWS && entries.every(n => /\.xlsx$/.test(n)), { suggested: out.suggested, entries }); } },
   { kind: 'mdZip', label: 'ZIP de Markdown', engines: ['md'], grid: false, verify: async (out, label) => { const entries = await zipEntries(out.file); check(`${label} : l'archive porte ${ROWS} fichiers Markdown`, /\.zip$/.test(out.suggested) && entries.length === ROWS && entries.every(n => /\.md$/.test(n)), { suggested: out.suggested, entries }); } },
   { kind: 'htmlZip', label: 'ZIP de HTML (fichiers à déposer)', engines: ['html'], grid: false, verify: async (out, label) => { const entries = await zipEntries(out.file); check(`${label} : l'archive porte ${ROWS} fichiers HTML`, /\.zip$/.test(out.suggested) && entries.length === ROWS && entries.every(n => /\.html$/.test(n) && !/-fragment\.html$/.test(n)), { suggested: out.suggested, entries }); } },

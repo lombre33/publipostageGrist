@@ -133,6 +133,8 @@ const I18nTextsExport = {
   'status.odfGeneratedNotCarried': { fr: 'OpenDocument généré. Non repris : {list}.', en: 'OpenDocument generated. Not carried over: {list}.' },
   'odf.export.lost.images': { fr: '{n} {n|image|images}', en: '{n} {n|image|images}' },
   'odf.export.lost.imagesFloating': { fr: '{n} {n|position d’image|positions d’image}', en: '{n} image {n|position|positions}' },
+  'odf.export.lost.charts': { fr: '{n} {n|graphique repris en image, plus modifiable|graphiques repris en images, plus modifiables}', en: '{n} {n|chart|charts} kept as {n|a picture|pictures}, no longer editable' },
+  'odf.export.lost.pivots': { fr: '{n} {n|tableau croisé écrit en tableau simple|tableaux croisés écrits en tableaux simples}', en: '{n} pivot {n|table|tables} written as {n|a plain table|plain tables}' },
   'status.mdGenerating': { fr: 'Génération du Markdown en cours…', en: 'Generating Markdown…' },
   'status.mdGenerated': { fr: 'Markdown généré.', en: 'Markdown generated.' },
   'status.mdGenerationError': { fr: 'Erreur génération Markdown.', en: 'Markdown generation error.' },

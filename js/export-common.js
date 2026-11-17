@@ -783,6 +783,61 @@ const ExportCommon = (function () {
     return { NS, name, attr, attrs, children, child, descendants, toPoints, open, kindOf };
   })();
 
+  // L'écriture des fichiers OpenDocument (js/odt-export.js, js/ods-export.js) : ce que les moteurs d'export ont en commun, écrit une seule fois - les espaces de noms, l'en-tête XML, le texte et les attributs sans
+  // caractère interdit, et le texte d'un paragraphe comme OpenDocument le lit.
+  const OdfXml = (function () {
+    const NAMESPACES = [
+      ['office', 'urn:oasis:names:tc:opendocument:xmlns:office:1.0'], ['style', 'urn:oasis:names:tc:opendocument:xmlns:style:1.0'], ['text', 'urn:oasis:names:tc:opendocument:xmlns:text:1.0'],
+      ['table', 'urn:oasis:names:tc:opendocument:xmlns:table:1.0'], ['draw', 'urn:oasis:names:tc:opendocument:xmlns:drawing:1.0'], ['fo', 'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0'],
+      ['svg', 'urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0'], ['xlink', 'http://www.w3.org/1999/xlink'], ['dc', 'http://purl.org/dc/elements/1.1/'], ['meta', 'urn:oasis:names:tc:opendocument:xmlns:meta:1.0'],
+      ['number', 'urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0'], ['manifest', 'urn:oasis:names:tc:opendocument:xmlns:manifest:1.0'], ['config', 'urn:oasis:names:tc:opendocument:xmlns:config:1.0'],
+    ];
+    const XML_HEAD = '<?xml version="1.0" encoding="UTF-8"?>';
+    const namespaceAttrs = NAMESPACES.map(entry => 'xmlns:' + entry[0] + '="' + entry[1] + '"').join(' ');
+
+    // --- Le XML ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    // Un texte pour un élément ou un attribut : les caractères que XML 1.0 interdit sont retirés (un seul suffit à rendre tout le fichier illisible), puis les quatre signes réservés sont écrits.
+    const INVALID_XML = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g;
+    const escText = text => String(text === null || text === undefined ? '' : text).replace(INVALID_XML, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const escAttr = text => escText(text).replace(/"/g, '&quot;').replace(/\t/g, '&#9;').replace(/\n/g, '&#10;').replace(/\r/g, '&#13;');
+    const fixed = (value, digits) => String(Math.round(value * Math.pow(10, digits === undefined ? 3 : digits)) / Math.pow(10, digits === undefined ? 3 : digits));
+    const attrsOf = (list) => list.filter(pair => pair[1] !== null && pair[1] !== undefined && pair[1] !== '').map(pair => ' ' + pair[0] + '="' + escAttr(pair[1]) + '"').join('');
+    // Le texte d'un paragraphe comme OpenDocument le lit : les blancs qui se suivent n'en font qu'un, et le premier blanc d'un paragraphe ne compte pas ; une suite d'espaces s'écrit donc `text:s`, une tabulation
+    // `text:tab`, un retour à la ligne `text:line-break`. `state.blank` : le caractère d'avant est un blanc (ou le paragraphe commence).
+    function textXml(raw, state) {
+      const text = String(raw === null || raw === undefined ? '' : raw).replace(INVALID_XML, '').replace(/\r\n?/g, '\n');
+      let out = '';
+      let index = 0;
+      while (index < text.length) {
+        const char = text[index];
+        if (char === ' ') {
+          let run = 1;
+          while (text[index + run] === ' ') run += 1;
+          if (state.blank) out += '<text:s' + (run > 1 ? ' text:c="' + run + '"' : '') + '/>';
+          else out += ' ' + (run > 1 ? '<text:s' + (run > 2 ? ' text:c="' + (run - 1) + '"' : '') + '/>' : '');
+          state.blank = true;
+          index += run;
+        } else if (char === '\t') {
+          out += '<text:tab/>';
+          state.blank = true;
+          index += 1;
+        } else if (char === '\n') {
+          out += '<text:line-break/>';
+          state.blank = true;
+          index += 1;
+        } else {
+          let end = index + 1;
+          while (end < text.length && !/[ \t\n]/.test(text[end])) end += 1;
+          out += escText(text.slice(index, end));
+          state.blank = false;
+          index = end;
+        }
+      }
+      return out;
+    }
+    return { NAMESPACES, XML_HEAD, namespaceAttrs, escText, escAttr, fixed, attrsOf, textXml };
+  })();
+
   return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, fillEmptyBlocks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
-    resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages, isMergeImage, Ooxml, Markup, Odf };
+    resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages, isMergeImage, Ooxml, Markup, Odf, OdfXml };
 })();

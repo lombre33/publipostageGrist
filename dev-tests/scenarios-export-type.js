@@ -163,8 +163,8 @@
         await enterGrid(h);
         await pickType('xlsx');
         if (JSON.stringify(labels()) !== JSON.stringify(['Type d’export']) || shownRows(TYPE_FLYOUT).length !== 13) bad.push('menu avec Excel : ' + JSON.stringify(labels()) + ' / ' + shownRows(TYPE_FLYOUT).length + ' lignes');
-        // Dans une grille, Word, PowerPoint, les deux Markdown et les deux HTML sont grisés (jamais retirés) ; Excel, les deux PDF ne le sont pas.
-        if (!greyed(typeRow('docx')) || !greyed(typeRow('odf')) || !greyed(typeRow('pptx')) || !greyed(typeRow('md')) || !greyed(typeRow('mdTemplate')) || !greyed(typeRow('html')) || !greyed(typeRow('htmlFragment')) || !greyed(typeRow('htmlTemplate')) || !greyed(typeRow('eml')) || !live(typeRow('xlsx')) || !live(typeRow('pdf')) || !live(typeRow('pdfProtected'))) bad.push('grisés dans une grille : ' + JSON.stringify(['pdf', 'pdfProtected', 'docx', 'pptx', 'xlsx', 'md', 'mdTemplate', 'html', 'htmlFragment'].map(t => typeRow(t).className)));
+        // Dans une grille, Word, PowerPoint, les deux Markdown et les deux HTML sont grisés (jamais retirés) ; Excel, OpenDocument (le tableur .ods) et les deux PDF ne le sont pas.
+        if (!greyed(typeRow('docx')) || !live(typeRow('odf')) || !greyed(typeRow('pptx')) || !greyed(typeRow('md')) || !greyed(typeRow('mdTemplate')) || !greyed(typeRow('html')) || !greyed(typeRow('htmlFragment')) || !greyed(typeRow('htmlTemplate')) || !greyed(typeRow('eml')) || !live(typeRow('xlsx')) || !live(typeRow('pdf')) || !live(typeRow('pdfProtected'))) bad.push('grisés dans une grille : ' + JSON.stringify(['pdf', 'pdfProtected', 'docx', 'pptx', 'xlsx', 'md', 'mdTemplate', 'html', 'htmlFragment'].map(t => typeRow(t).className)));
         await pickType('md');
         if (typeSelect().value !== 'xlsx') bad.push('Markdown grisé a été choisi dans une grille : ' + typeSelect().value);
         await pickType('mdTemplate');
