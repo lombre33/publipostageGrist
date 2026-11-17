@@ -124,7 +124,7 @@ const Variables = (function () {
     return { SMART_CHIP_ITEMS, displayKey, ensureBox };
   })();
 
-  const { currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow, attachmentReference, attachmentColumnsBelow, refreshSchemaOnce, computeItems, fieldItems } = (function () {
+  const { currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, rowListOf, columnsBelow, attachmentReference, attachmentColumnsBelow, refreshSchemaOnce, computeItems, fieldItems } = (function () {
     // Les entrées de la liste : tables en cours, variables qui correspondent, onglet actif
 
     // Tables « en cours », la plus proche d'abord : celles que parcourent les zones répétées où est le curseur, de la plus proche à la plus large
@@ -190,6 +190,30 @@ const Variables = (function () {
       const hops = String(column).split('.');
       hops.pop();
       return VariableFormat.isListType(GristAPI.getColumnType(table, column)) || !!crossedListTable(table, hops);
+    }
+
+    // La liste de références dont une bulle lit les LIGNES une à une, ou '' : la colonne Liste de références elle-même (`Partenaires`) ou un chemin qui en traverse une seule
+    // (`Partenaires.Nom_complet`, `Partenaires.Adresse.Ville`) et finit sur une valeur simple. Le nom rendu est celui de cette colonne (`Partenaires`) : toutes les bulles qui lisent la même liste de
+    // références la lisent par le même chemin de départ, donc avec les mêmes lignes dans le même ordre - la k-ième ligne est le même partenaire pour chacune. « Un document par valeur »
+    // (js/list-split.js) les fait avancer ENSEMBLE, un document par ligne de la liste, au lieu d'un document par combinaison. Une colonne Liste de choix, un chemin sans liste de références,
+    // ou qui en traverse deux (les valeurs ne se rangent plus par ligne), ou qui finit lui-même sur une liste (une Liste de choix lue sur chaque ligne) : '', une liste de VALEURS.
+    function rowListOf(table, column) {
+      const hops = String(column).split('.');
+      const last = hops.pop();
+      if (!hops.length) {
+        const ref = GristAPI.referenceOf(GristAPI.getColumnType(table, last));
+        return ref && ref.list ? last : '';
+      }
+      if (VariableFormat.isListType(GristAPI.getColumnType(table, column))) return '';
+      let at = table;
+      let listHop = -1;
+      for (let i = 0; i < hops.length; i++) {
+        const ref = GristAPI.referenceOf(GristAPI.getColumnType(at, hops[i]));
+        if (!ref) return '';
+        if (ref.list) { if (listHop !== -1) return ''; listHop = i; }
+        at = ref.table;
+      }
+      return listHop === -1 ? '' : hops.slice(0, listHop + 1).join('.');
     }
 
     // Les lignes où mène la flèche de la colonne `key` (« Table.Colonne » ou le chemin « Table.Référence.Colonne » qui y mène) dans une liste de colonnes
@@ -297,7 +321,7 @@ const Variables = (function () {
       if (!items.length || (items.length === 1 && SearchSelect.normalize(items[0].key) === typed)) return [];
       return items;
     }
-    return { currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow, attachmentReference, attachmentColumnsBelow, refreshSchemaOnce, computeItems, fieldItems };
+    return { currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, rowListOf, columnsBelow, attachmentReference, attachmentColumnsBelow, refreshSchemaOnce, computeItems, fieldItems };
   })();
 
   const { setTabsVisible, render, select, moveSelection, position, preferChipsTab } = (function () {
@@ -655,7 +679,7 @@ const Variables = (function () {
     return { insertFilenameVariable, initFilenameInput };
   })();
 
-  const { zeroHidden, formatValue, listTexts } = (function () {
+  const { zeroHidden, formatValue, listTexts, rowTexts } = (function () {
     // Le texte d'une valeur : zéro caché, mise en forme, liste
 
     // Zéro : sans réglage, un nombre nul ne s'écrit pas du tout (ni le nombre, ni sa devise, ni « zéro » en lettres) dans une colonne Numérique ou
@@ -709,6 +733,9 @@ const Variables = (function () {
     // « , 12/09/2026 ») ; avec un réglage de la fenêtre « Liste » (js/variable-list.js) elle s'écrit à plat, sinon les valeurs sont jointes par « , ».
     function formatList(val, format, varTable, varColumn, opts, drop) {
       const style = VariableFormat.listStyle(format);
+      // « Un document par valeur » d'une liste lue ligne par ligne (`row`, posé par js/list-split.js : rowListOf) : la valeur de la ligne de rang `index` de la liste de références, vide comprise - le même
+      // partenaire pour chaque variable de la liste, même quand une autre écrit vide pour le sien (« la deuxième adresse » d'un partenaire qui n'en a pas ne décale pas les suivants).
+      if (style && style.pick === 'nth' && format.list.row === true) return rowText(val[style.index - 1], format, varTable, varColumn, opts, drop);
       const texts = withoutZeros(style ? VariableFormat.flattenList(val) : val, drop).map(v => formatValue(v, format, varTable, varColumn, opts)).filter(text => text !== '');
       return style ? VariableFormat.listText(texts, style) : texts.join(', ');
     }
@@ -727,6 +754,21 @@ const Variables = (function () {
       if (!opts.rawNumbers && typeof val === 'number' && GristAPI.referenceOf(colType)) return Object.assign({}, format, { type: 'number', style: 'none', decimals: 0, maxDecimals: REFERENCE_MAX_DECIMALS });
       return format;
     }
+    // L'écriture de la valeur d'UNE ligne d'une liste lue ligne par ligne : vide pour une ligne sans valeur ou au zéro caché ; une cellule qui est elle-même une liste s'écrit à plat, jointe par « , ».
+    function rowText(item, format, varTable, varColumn, opts, drop) {
+      if (item === null || item === undefined || (drop && VariableFormat.isZero(item))) return '';
+      const plain = Object.assign({}, format);
+      delete plain.list;
+      return formatValue(item, plain, varTable, varColumn, opts);
+    }
+    // Les valeurs d'une liste lue ligne par ligne, une écriture PAR LIGNE de la liste de références et vides comprises (rowListOf) : la suite qu'un export « un document par valeur » parcourt pour les
+    // bulles d'une même liste de références (js/list-split.js), alors que `listTexts` saute les vides. Une valeur seule est une liste d'une ligne.
+    function rowTexts(val, format, varTable, varColumn, opts) {
+      opts = opts || {};
+      if (val === null || val === undefined) return [];
+      const drop = dropsZero(format, typeOfValue(varTable, varColumn, opts), opts);
+      return (Array.isArray(val) ? val : [val]).map(item => rowText(item, format, varTable, varColumn, opts, drop));
+    }
     // Les valeurs d'une liste, une écriture chacune, dans l'ordre et au compte où « La n-ième » (fenêtre « Liste ») les prend : à plat, le zéro caché
     // comme la bulle l'écrit, celles qui s'écrivent vides en moins. C'est la suite qu'un export « un document par valeur » parcourt
     // (js/list-split.js) : le document n° k écrit la k-ième. Une valeur qui n'est pas une liste est une suite d'un seul élément.
@@ -737,7 +779,7 @@ const Variables = (function () {
       const items = withoutZeros(Array.isArray(val) ? VariableFormat.flattenList(val) : [val], drop);
       return items.map(v => formatValue(v, format, varTable, varColumn, opts)).filter(text => text !== '');
     }
-    return { zeroHidden, formatValue, listTexts };
+    return { zeroHidden, formatValue, listTexts, rowTexts };
   })();
   const { unwrapRefValue, listItems, decodeShown, cellValue, shownValue, rawRowOf, referencedRowId } = (function () {
     // La valeur d'une cellule et la ligne brute de la ligne courante
@@ -991,7 +1033,7 @@ const Variables = (function () {
     }
     return { resolveRows };
   })();
-  const { resolveRawValue, resolveVariableResult, resolveVariable, resolveListTexts } = (function () {
+  const { resolveRawValue, resolveVariableResult, resolveVariable, resolveListTexts, resolveRowTexts } = (function () {
     // La valeur brute d'une variable, son texte et ses valeurs de liste
 
     // La valeur de `column` lue au bout du chemin `hops` : { value }, { value: [...], multi: true } quand la règle de la table trouve plusieurs lignes ou
@@ -1068,7 +1110,18 @@ const Variables = (function () {
         return { texts: [], error: I18n.t('variables.error.failed', { table: varTable, column: varColumn }) };
       }
     }
-    return { resolveRawValue, resolveVariableResult, resolveVariable, resolveListTexts };
+    // Les valeurs d'une liste lue ligne par ligne pour cette ligne, une par ligne de la liste de références et vides comprises (rowTexts) : { texts }, ou { texts: [], error }. `opts` : cf. resolveVariableResult.
+    async function resolveRowTexts(varTable, varColumn, currentTableId, record, format, opts) {
+      try {
+        const { value, error } = await resolveRawValue(varTable, varColumn, currentTableId, record, opts);
+        if (error) return { texts: [], error };
+        return { texts: rowTexts(value, format, varTable, varColumn, opts) };
+      } catch (e) {
+        console.error('[variables] échec de la lecture d\'une liste par ligne', e);
+        return { texts: [], error: I18n.t('variables.error.failed', { table: varTable, column: varColumn }) };
+      }
+    }
+    return { resolveRawValue, resolveVariableResult, resolveVariable, resolveListTexts, resolveRowTexts };
   })();
 
   const { formulaErrorText, calcOperand, resolveCalcResult } = (function () {
@@ -1776,7 +1829,7 @@ const Variables = (function () {
   // lien qui ne trouve aucune ligne, js/editor.js et js/variable-column.js).
   return {
     createExtension, createFieldExtension, isAttachmentColumn, becomesImage, attachmentImageNode, insertAttachmentImage, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
-    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, linkRuleLabel, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, zeroHidden, listItems, decodeShown, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, columnsBelow, attachmentReference, attachmentColumnsBelow,
+    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, linkRuleLabel, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, rowTexts, resolveRowTexts, zeroHidden, listItems, decodeShown, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, rowListOf, columnsBelow, attachmentReference, attachmentColumnsBelow,
     calcOperand, resolveCalcResult, resolveCalc, badgeProblem, pageReferencesTo, isUnlinked, calcProblem, formulaErrorText,
     linkMissText, linkMissesStale, forgetLinkMisses, scanLinkMisses,
   };

@@ -2,8 +2,8 @@
 // en traverse une (#Dossiers.Equipe.Email : l'email de chaque ligne de l'équipe, Variables.writesList). Toutes les valeurs avec le
 // séparateur voulu, ou la première, la dernière, la n-ième. Sans réglage la bulle les écrit toutes, séparées par « , ». Le réglage vit dans le
 // `format.list` de la bulle (js/variable-format.js), que Variables.formatValue lit pour tous les rendus : Lecture, PDF, Word, Excel, e-mail, export
-// en lot. La case « Un document par valeur » (js/list-split.js) fait sortir un document par valeur aux exports PDF, Word et Excel ; la Lecture et
-// l'e-mail gardent l'affichage réglé ici. Même gabarit que la fenêtre de boucle (js/variable-loop.js) ; l'aperçu passe par le vrai
+// en lot. La case « Un document par valeur » (js/list-split.js) fait sortir un document par valeur aux exports PDF, Word, Excel, Markdown et HTML ; la
+// Lecture montre le document d'une valeur à la fois, une pastille passe de l'une à l'autre (js/reading-value.js) ; l'e-mail garde l'affichage réglé ici. Même gabarit que la fenêtre de boucle (js/variable-loop.js) ; l'aperçu passe par le vrai
 // Variables.formatValue sur la ligne sélectionnée, il ne peut donc pas écrire autre chose que le document. Ouverte depuis la barre flottante de la
 // bulle (js/floating-toolbars.js:wireVariableFloatingToolbar).
 const VariableList = (function () {

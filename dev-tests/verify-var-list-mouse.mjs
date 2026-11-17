@@ -323,7 +323,7 @@ async function run(theme) {
   const splitLabelBox = await hitTest(SPLIT_LABEL);
   const splitCheckBox = await hitTest(SPLIT_BOX);
   check(`${T} - la case « Un document par valeur » est décochée à l'ouverture, avec son indication dessous, et il n'y a qu'une ligne d'aperçu`,
-    splitOpen.shown && !splitOpen.splitChecked && splitOpen.splitLabel === 'Un document par valeur' && splitOpen.splitHint === 'Exports PDF, Word, Excel, Markdown et HTML seulement.' && splitOpen.lines.length === 1, splitOpen);
+    splitOpen.shown && !splitOpen.splitChecked && splitOpen.splitLabel === 'Un document par valeur' && splitOpen.splitHint === 'Exports PDF, Word, Excel, Markdown et HTML ; la Lecture montre une valeur à la fois.' && splitOpen.lines.length === 1, splitOpen);
   check(`${T} - le libellé et la case sont dans le panneau, au premier plan, le libellé assez haut pour un vrai clic (au moins 20 px)`,
     [splitLabelBox, splitCheckBox].every(b => b.found && b.inViewport && b.onTop) && splitLabelBox.h >= 20, { splitLabelBox, splitCheckBox });
   await shot(`${theme}-6-case-decochee`);
@@ -374,7 +374,8 @@ async function run(theme) {
   await clickSel('#btn-mode-read');
   await page.waitForTimeout(400);
   const splitRead = await page.evaluate(() => Array.from(document.querySelectorAll('#reader-container .reader-content .resolved-var')).map(e => e.textContent));
-  check(`${T} - Mode lecture : la liste s'écrit en entier (« Santé, Social, Culture »), un document par valeur ne concerne que les exports`, JSON.stringify(splitRead) === JSON.stringify(['Santé, Social, Culture', 'Alpha']), splitRead);
+  const splitChip = await page.evaluate(() => { const el = document.getElementById('pp-reading-value'); return el && !el.hidden && el.getClientRects().length > 0 ? el.textContent : null; });
+  check(`${T} - Mode lecture : un document par valeur montre le document de la première valeur (« Santé »), avec la pastille « valeur 1 sur 3 » pour passer aux autres (js/reading-value.js)`, JSON.stringify(splitRead) === JSON.stringify(['Santé', 'Alpha']) && /^Santé · (valeur 1 sur 3|value 1 of 3)$/.test(splitChip || ''), { splitRead, splitChip });
   await clickSel('#btn-mode-edit');
   await page.waitForTimeout(300);
   // Rouverte : cochée ; un vrai clic sur la case elle-même la décoche, Enregistrer retire tout réglage.
@@ -418,7 +419,7 @@ async function runEnglish() {
   check('anglais - « By number » avec le numéro 3 : aperçu « Culture »', nth.preview === 'Selected row (#1): 3 values (Santé, Social, Culture). The document writes “Culture”.', nth);
   await shot('en-fenetre');
   check('anglais - la case « One document per value » est décochée avec son indication', opened.splitLabel === 'One document per value' && !opened.splitChecked
-    && opened.splitHint === 'PDF, Word, Excel, Markdown and HTML exports only.', opened);
+    && opened.splitHint === 'PDF, Word, Excel, Markdown and HTML exports; Read mode shows one value at a time.', opened);
   await clickSel(SPLIT_LABEL);
   const enSplit = await modalState();
   check('anglais - vrai clic sur le libellé : la case est cochée, seconde ligne « 3 documents for this row », la fenêtre reste entière dans le panneau, sans défilement horizontal',

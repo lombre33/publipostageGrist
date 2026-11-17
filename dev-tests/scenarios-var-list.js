@@ -590,7 +590,7 @@
           && same(en.picks.map(p => p[1]), ['All values', 'The first', 'The last', 'By number']) && en.picks[2][2] === 'true'
           && en.sepLabel === 'Separator' && en.lastLabel === 'Before the last value' && en.numberLabel === 'Number' && en.placeholder === 'same as separator'
           && same(en.hints, ['spaces included', '1 = the first value. With no value at that position, nothing is written.',
-            'PDF, Word, Excel, Markdown and HTML exports only.'])
+            'PDF, Word, Excel, Markdown and HTML exports; Read mode shows one value at a time.'])
           && en.splitLabel === 'One document per value' && !en.splitChecked
           && en.resetText === 'Reset to default' && en.cancelText === 'Cancel' && en.saveText === 'Save'
           && en.preview === 'Selected row (#1): 3 values (Santé, Social, Culture). The document writes “Culture”.',
@@ -670,7 +670,7 @@
       const checks = {
         opened: got.opened,
         initial: !got.initial.checked && got.initial.label === 'Un document par valeur' && got.initial.line.hidden && got.initial.line.text === '' && got.initial.first === prev + 'Santé, Social, Culture ».'
-          && got.initial.hint === 'Exports PDF, Word, Excel, Markdown et HTML seulement.',
+          && got.initial.hint === 'Exports PDF, Word, Excel, Markdown et HTML ; la Lecture montre une valeur à la fois.',
         ticked: !got.ticked.line.hidden && got.ticked.line.text === export3 && got.ticked.first === prev + 'Santé, Social, Culture ».',
         withFirst: got.withFirst.checked && !got.withFirst.line.hidden && got.withFirst.line.text === export3 && got.withFirst.first === prev + 'Santé ».',
         saved: same(got.saved.format, { list: { pick: 'first', perValue: true } }) && got.saved.bar.active && got.saved.bar.enabled && same(got.serialized, { list: { pick: 'first', perValue: true } }),

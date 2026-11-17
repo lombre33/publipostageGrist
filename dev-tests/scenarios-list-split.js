@@ -648,6 +648,138 @@
     },
   });
 
+  // --- Plusieurs variables d'une même liste de références (cas d'usage d'Antoine du 17/11 : « une colonne référence multiple pour tous les partenaires d'un projet, un document pour chacun » ;
+  // #Projets.Partenaires.Nom_complet, .ligne_1, .ligne_2, .CP et .Ville cochées « Un document par valeur » faisaient le produit des listes, 32 documents pour 2 partenaires) ---
+  const PROJ = 'LsProjets';
+  const ETAB = 'LsEtablissements';
+  const refBadge = (path, format) => `<span class="var-badge" data-table="${PROJ}" data-column="${path}" data-key="${PROJ}.${path}"${format ? attr('data-format', format) : ''}></span>`;
+  const FIELDS = ['Nom_complet', 'ligne_1', 'ligne_2', 'CP', 'Ville'];
+  const addressOf = (list, perValue) => `<p>${FIELDS.map(f => refBadge(list + '.' + f, perValue === false ? null : PER)).join(' | ')}</p>`;
+  async function seedRefs(h) {
+    await h.resetEditor();
+    const stub = window.__gristStub;
+    stub.setVariables(ETAB, { Nom_complet: 'Text', ligne_1: 'Text', ligne_2: 'Text', CP: 'Text', Ville: 'Text' });
+    stub.setRows(ETAB, [
+      { id: 1, Nom_complet: 'Bordeaux Sciences Agro', ligne_1: '1 cours du Général de Gaulle', ligne_2: '', CP: '33170', Ville: 'Gradignan' },
+      { id: 2, Nom_complet: 'Institut d’Études Politiques de Bordeaux', ligne_1: '11 allée Ausone', ligne_2: 'Bâtiment B', CP: '33607', Ville: 'Pessac' },
+      { id: 3, Nom_complet: '', ligne_1: '5 rue Sans-Nom', ligne_2: '', CP: '33000', Ville: 'Bordeaux' },
+      { id: 4, Nom_complet: 'Université de Bordeaux', ligne_1: '35 place Pey-Berland', ligne_2: '', CP: '33000', Ville: 'Bordeaux' },
+    ]);
+    stub.setVariables(PROJ, { Titre: 'Text', Partenaires: 'RefList:' + ETAB, Autres: 'RefList:' + ETAB, gristHelper_Display: 'Any' }, null, { Partenaires: 'gristHelper_Display' });
+    stub.setRows(PROJ, [
+      { id: 1, Titre: 'Alpha', Partenaires: ['L', 1, 2], Autres: ['L', 3, 4, 1], gristHelper_Display: ['L', 'Bordeaux Sciences Agro', 'Institut d’Études Politiques de Bordeaux'] },
+      { id: 2, Titre: 'Beta', Partenaires: ['L', 3, 2], Autres: null, gristHelper_Display: ['L', '', 'Institut d’Études Politiques de Bordeaux'] },
+      { id: 3, Titre: 'Gamma', Partenaires: null, Autres: null, gristHelper_Display: null },
+    ]);
+    await GristAPI.refreshSchema();
+  }
+  // Le texte de chaque document d'une ligne, résolu comme le fait l'export : le plan, la réécriture, puis la Lecture commune.
+  async function documentsOf(html, record) {
+    const plan = await ListSplit.plan([html], PROJ, record);
+    const texts = [];
+    for (const variant of plan.variants) {
+      const resolved = await ReaderMode.resolvedHtml(() => ListSplit.pin(html, variant), PROJ, record);
+      const holder = document.createElement('div');
+      holder.innerHTML = resolved.html;
+      texts.push(Array.from(holder.querySelectorAll('.resolved-var')).map(e => e.textContent).join(' | '));
+    }
+    return { plan, texts };
+  }
+
+  cases.push({
+    id: 'listsplit_variables_of_one_list_of_references_advance_together_one_document_per_row',
+    description: 'Cinq variables d’une même liste de références (#Projets.Partenaires.Nom_complet, .ligne_1, .ligne_2, .CP, .Ville) cochées « Un document par valeur » ne font plus un document par combinaison (32 pour deux partenaires) : un seul groupe, un document par partenaire, la k-ième ligne de la liste pour chaque variable, les fichiers nommés d’après le premier texte écrit.',
+    run: async (h) => {
+      await seedRefs(h);
+      const rows = await GristAPI.fetchTableRows(PROJ);
+      const { plan, texts } = await documentsOf(addressOf('Partenaires'), rows[0]);
+      const r = { groups: plan.groups.length, labels: labelsOf(plan), pins: plan.variants.map(v => Object.values(v.pins)), texts };
+      const pass = r.groups === 1 && JSON.stringify(r.labels) === JSON.stringify(['Bordeaux Sciences Agro', 'Institut d’Études Politiques de Bordeaux']) && JSON.stringify(r.pins) === '[[1],[2]]'
+        && JSON.stringify(texts) === JSON.stringify([
+          'Bordeaux Sciences Agro | 1 cours du Général de Gaulle |  | 33170 | Gradignan',
+          'Institut d’Études Politiques de Bordeaux | 11 allée Ausone | Bâtiment B | 33607 | Pessac',
+        ]);
+      return { pass, notes: JSON.stringify(r) };
+    },
+  });
+
+  cases.push({
+    id: 'listsplit_an_empty_cell_of_one_partner_does_not_shift_the_following_partners',
+    description: 'Le rang suit la LIGNE de la liste de références, pas la k-ième valeur non vide : le premier partenaire n’a pas de deuxième ligne d’adresse, son document l’écrit vide et celui du second garde « Bâtiment B » ; un partenaire sans nom mais avec une adresse a son document, nommé d’après le premier texte écrit.',
+    run: async (h) => {
+      await seedRefs(h);
+      const rows = await GristAPI.fetchTableRows(PROJ);
+      const beta = await documentsOf(addressOf('Partenaires'), rows[1]);
+      const line2 = await documentsOf(`<p>${refBadge('Partenaires.ligne_2', PER)} ${refBadge('Partenaires.Ville', PER)}</p>`, rows[0]);
+      const r = { beta: beta.texts, betaLabels: labelsOf(beta.plan), line2: line2.texts, line2Labels: labelsOf(line2.plan) };
+      const pass = JSON.stringify(r.beta) === JSON.stringify([' | 5 rue Sans-Nom |  | 33000 | Bordeaux', 'Institut d’Études Politiques de Bordeaux | 11 allée Ausone | Bâtiment B | 33607 | Pessac'])
+        && JSON.stringify(r.betaLabels) === JSON.stringify(['5 rue Sans-Nom', 'Institut d’Études Politiques de Bordeaux'])
+        && JSON.stringify(r.line2) === JSON.stringify([' | Gradignan', 'Bâtiment B | Pessac']) && JSON.stringify(r.line2Labels) === JSON.stringify(['Gradignan', 'Bâtiment B']);
+      return { pass, notes: JSON.stringify(r) };
+    },
+  });
+
+  cases.push({
+    id: 'listsplit_the_list_column_itself_and_its_paths_are_one_list_and_two_lists_are_a_product',
+    description: 'La colonne Liste de références elle-même (#Projets.Partenaires) et les chemins qui la traversent forment une seule liste ; deux listes de références différentes (Partenaires et Autres) font toujours un document par combinaison (2 × 2 : la ligne de « Autres » sans nom n’écrit rien dans sa seule variable, comme avant) ; une seule variable cochée sur une liste de références garde ses documents d’avant (un par valeur écrite) ; une ligne sans partenaire garde son document.',
+    run: async (h) => {
+      await seedRefs(h);
+      const rows = await GristAPI.fetchTableRows(PROJ);
+      const mixed = await documentsOf(`<p>${refBadge('Partenaires', PER)} ${refBadge('Partenaires.Ville', PER)}</p>`, rows[0]);
+      const product = await documentsOf(`<p>${refBadge('Partenaires.Nom_complet', PER)} ${refBadge('Autres.Nom_complet', PER)}</p>`, rows[0]);
+      const alone = await documentsOf(`<p>${refBadge('Partenaires.Nom_complet', PER)}</p>`, rows[1]);
+      const none = await documentsOf(addressOf('Partenaires'), rows[2]);
+      const r = { mixed: mixed.texts, mixedGroups: mixed.plan.groups.length, product: [product.plan.groups.length, product.plan.variants.length, labelsOf(product.plan)], alone: labelsOf(alone.plan), none: [none.plan.variants.length, none.plan.groups.length] };
+      const pass = r.mixedGroups === 1 && JSON.stringify(r.mixed) === JSON.stringify(['Bordeaux Sciences Agro | Gradignan', 'Institut d’Études Politiques de Bordeaux | Pessac'])
+        && r.product[0] === 2 && r.product[1] === 4 && r.product[2][0] === 'Bordeaux Sciences Agro - Université de Bordeaux'
+        && JSON.stringify(r.alone) === JSON.stringify(['Institut d’Études Politiques de Bordeaux']) && JSON.stringify(r.none) === '[1,1]';
+      return { pass, notes: JSON.stringify(r) };
+    },
+  });
+
+  cases.push({
+    id: 'listsplit_single_pdf_export_of_a_project_is_one_pdf_per_partner_not_one_per_combination',
+    description: '« Exporter en PDF » d’un projet dont les cinq variables d’adresse lisent la même liste de références : une archive de deux PDF, un par partenaire, nommés d’après son nom, chacun avec l’adresse de SON partenaire (« Bâtiment B » dans le seul second) - pas les 32 PDF du produit des cinq listes.',
+    run: async (h) => {
+      await seedRefs(h);
+      window.__gristStub.fireRecord({ id: 1, Titre: 'Alpha', Partenaires: ['Bordeaux Sciences Agro', 'Institut d’Études Politiques de Bordeaux'] }, PROJ);
+      await h.sleep(60);
+      Editor.setHTML(`<p>Projet ${refBadge('Titre')} : ${FIELDS.map(f => refBadge('Partenaires.' + f, PER)).join(' / ')}</p>`);
+      Editor.setHeaderFooterData(NO_HF);
+      await h.sleep(80);
+      const exported = await withFilenameTemplate('#' + PROJ + '.Titre', () => clickAndCapturePdf(h, 'btn-export-pdf'));
+      const zipBlob = exported.blobs.find(b => b && /zip/i.test(b.type || ''));
+      const { zip, names } = zipBlob ? await zipEntries(zipBlob) : { zip: null, names: [] };
+      const texts = {};
+      for (const n of names) texts[n] = squash((await pdfPageTexts(h, await zip.file(n).async('blob'))).join(' '));
+      const first = names.find(n => /Bordeaux Sciences Agro/.test(n));
+      const second = names.find(n => /Institut/.test(n));
+      const pass = names.length === 2 && !!first && !!second
+        && texts[first] === squash('ProjetAlpha:BordeauxSciencesAgro/1coursduGénéraldeGaulle//33170/Gradignan')
+        && texts[second] === squash('ProjetAlpha:Institut d’ÉtudesPolitiquesdeBordeaux/11alléeAusone/BâtimentB/33607/Pessac');
+      return { pass, notes: JSON.stringify({ names, texts }) };
+    },
+  });
+
+  cases.push({
+    id: 'listsplit_a_row_pick_writes_the_row_of_the_list_with_its_empty_ones_and_the_other_settings_are_unchanged',
+    description: 'Le réglage « une ligne de la liste » (list.row, posé seulement par l’export) écrit la valeur de la k-ième ligne de la liste de références, vide comprise ; sans lui « La n-ième » saute toujours les vides, et les valeurs d’une Liste de choix restent découpées une par une (les cas d’avant n’ont pas changé).',
+    run: async (h) => {
+      await seedRefs(h);
+      const rows = await GristAPI.fetchTableRows(PROJ);
+      const one = async (path, list) => Variables.resolveVariable(PROJ, path, PROJ, rows[0], { list });
+      const r = {
+        rowEmpty: await one('Partenaires.ligne_2', { pick: 'nth', index: 1, row: true }),
+        rowFilled: await one('Partenaires.ligne_2', { pick: 'nth', index: 2, row: true }),
+        rowBeyond: await one('Partenaires.ligne_2', { pick: 'nth', index: 3, row: true }),
+        plainNth: await one('Partenaires.ligne_2', { pick: 'nth', index: 1 }),
+        listOf: [Variables.rowListOf(PROJ, 'Partenaires'), Variables.rowListOf(PROJ, 'Partenaires.Ville'), Variables.rowListOf(PROJ, 'Titre'), Variables.rowListOf(PROJ, 'Titre.Foo')],
+      };
+      const pass = r.rowEmpty === '' && r.rowFilled === 'Bâtiment B' && r.rowBeyond === '' && r.plainNth === 'Bâtiment B' && JSON.stringify(r.listOf) === JSON.stringify(['Partenaires', 'Partenaires', '', '']);
+      return { pass, notes: JSON.stringify(r) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.listSplit = cases;
 })();

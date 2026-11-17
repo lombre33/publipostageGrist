@@ -550,7 +550,7 @@ const I18nTextsVariables = {
   'varList.reset': { fr: 'Remettre par défaut', en: 'Reset to default' },
   'varList.saveLost': { fr: 'La variable a été déplacée ou supprimée pendant l’édition : le réglage de la liste n’a pas été enregistré.', en: 'The variable was moved or deleted while editing: the list setting was not saved.' },
   'varList.split.label': { fr: 'Un document par valeur', en: 'One document per value' },
-  'varList.split.hint': { fr: 'Exports PDF, Word, Excel, Markdown et HTML seulement.', en: 'PDF, Word, Excel, Markdown and HTML exports only.' },
+  'varList.split.hint': { fr: 'Exports PDF, Word, Excel, Markdown et HTML ; la Lecture montre une valeur à la fois.', en: 'PDF, Word, Excel, Markdown and HTML exports; Read mode shows one value at a time.' },
   'varList.split.hintField': { fr: 'Indisponible ici : se règle sur une variable du corps du modèle.', en: 'Unavailable here: set it on a variable in the body of the template.' },
   'varList.split.preview': { fr: 'Export : {count} documents, un par valeur ({values}).', en: 'Export: {count} documents, one per value ({values}).' },
   'varList.split.previewSingle': { fr: 'Export : un seul document, cette ligne n’a qu’une valeur.', en: 'Export: a single document, this row has only one value.' },
