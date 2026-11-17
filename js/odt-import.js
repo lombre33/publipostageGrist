@@ -8,6 +8,8 @@
 // Ce que le texte devient : les paragraphes (alignement, interligne, espaces avant et après, retraits, sens d'écriture), les titres (`text:h`, niveaux 1 à 6), les séries de caractères (gras, italique, souligné et
 // sa sorte, barré, exposant, indice, couleur, fond, police, taille, espacement, petites capitales, majuscules), les listes à puces et numérotées emboîtées, les tableaux (colonnes, fusions, fonds, traits, hauteurs,
 // alignement vertical, tableau dans un tableau mis à plat), les liens, les sauts de ligne et de page, les tabulations, la page (format, sens, marges).
+// Puis ce que l'éditeur sait porter à côté du texte : les images et les notes, les en-têtes et pieds de page de la page de départ (et sa première page), les commentaires et leurs réponses (des fils), les modifications
+// suivies (insertions et suppressions restées en attente, avec auteur et date), les champs de fusion (la variable de la colonne du même nom) et le numéro de page.
 //
 // Ce qu'il ne garde pas est COMPTÉ, un genre à la fois, et dit à la personne par la fenêtre du compte rendu (js/main-import.js:tellOdtImportReport) ; rien n'est perdu en silence. Le moteur ne touche ni à
 // l'éditeur ni à la page : il rend le TEXTE du document (le HTML que l'éditeur écrit), la page et le compte rendu.
@@ -27,7 +29,7 @@ const OdtImport = (function () {
   const { EDITOR_TEXT, EDITOR_FONTS: editorFonts } = ExportCommon.Ooxml;
   const SAME_FAMILY = /^(?:calibri|carlito|arial(?! (?:black|narrow|rounded|unicode))|arimo|helvetica|liberation sans|times|tinos|liberation serif|georgia|gelasio|courier|cousine|liberation mono|roboto)/;
   const REPORT_KEYS = [
-    'sections', 'columns', 'fonts', 'tabs', 'rightIndent', 'paragraphBorders', 'numbering', 'images', 'floatingImages', 'imageEffects', 'shapes', 'headerFooter', 'comments', 'trackedChanges', 'hidden', 'fields', 'toc',
+    'sections', 'columns', 'fonts', 'tabs', 'rightIndent', 'paragraphBorders', 'numbering', 'images', 'floatingImages', 'imageEffects', 'shapes', 'headerFooter', 'comments', 'trackedChanges', 'hidden', 'fields', 'mergeFields', 'toc',
     'endnotes', 'nestedTables', 'borderStyles', 'links', 'tableCells',
   ];
   const PAGE_BREAK = '<div class="page-break-marker"></div>';
@@ -35,7 +37,7 @@ const OdtImport = (function () {
   // --- Petits outils sur le XML (js/export-common.js:Odf et Ooxml) -------------------------------------------------------------------------------------------------------------------------------
   const { fail, kids, round2, fixed, escAttr } = ExportCommon.Ooxml;
   const { name, attr, attrs, children, child, toPoints } = ExportCommon.Odf;
-  const { itemsHtml, safeHref } = ExportCommon.Markup;
+  const { itemsHtml, safeHref, trackWrap, mergeFieldHtml: defaultMergeField, pageNumberHtml } = ExportCommon.Markup;
   const count = (ctx, key, n) => { ctx.report.set(key, (ctx.report.get(key) || 0) + (n === undefined ? 1 : n)); };
   const lose = (st, key) => { if (st.losses) st.losses.add(key); };
   const whole = (value, fallback, max) => {
@@ -192,11 +194,11 @@ const OdtImport = (function () {
     }
     return look;
   }
-  const lookKey = (look, link) => [look.style.join(';'), look.b, look.i, look.u, look.uLine, look.s, look.sup, look.sub, link || ''].join('|');
+  const lookKey = (look, link, track, comments) => [look.style.join(';'), look.b, look.i, look.u, look.uLine, look.s, look.sup, look.sub, look.caps, link || '', track ? track.kind + track.id : '', comments ? comments.map(c => c.id).join(',') : ''].join('|');
 
   // --- Le texte d'un paragraphe ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
   // L'état d'un paragraphe en cours de lecture : `props` (propriétés de caractère du paragraphe), `baseSize` (la taille que l'éditeur donne à ce paragraphe sans réglage), `items`, `link`.
-  const newState = (ctx, props, baseSize, depth) => ({ ctx, props, baseSize, items: [], link: '', losses: new Set(), depth, collapsible: true, last: null });
+  const newState = (ctx, props, baseSize, depth) => ({ ctx, props, baseSize, items: [], link: '', losses: new Set(), depth, collapsible: true, last: null, deleted: null });
   // Le texte d'un nœud, comme OpenDocument le lit : les blancs qui se suivent (espaces, tabulations, retours à la ligne du fichier) n'en font qu'un, et le premier blanc d'un paragraphe ne compte pas.
   function pushText(st, raw, props, collapse) {
     let text = collapse ? raw.replace(/[ \t\r\n]+/g, ' ') : raw;
@@ -204,16 +206,28 @@ const OdtImport = (function () {
     if (!text) return;
     const look = runLook(st.ctx, props, st.baseSize, !!st.link);
     if (look.hidden) { lose(st, 'hidden'); return; }
-    const entry = { text, look, key: lookKey(look, st.link), link: st.link, caps: look.caps };
-    st.items.push(entry);
-    st.last = collapse ? entry : null;
+    const track = currentTrack(st);
+    const comments = openComments(st.ctx, null);
+    let rest = text;
+    // Un commentaire posé en un point (sans passage choisi) se range sur le mot qui suit.
+    if (st.ctx.pointThreads.length) {
+      const head = (/^\s*\S+/.exec(text) || [text])[0];
+      st.items.push(entryOf(head, look, st.link, track, openComments(st.ctx, st.ctx.pointThreads.splice(0))));
+      rest = text.slice(head.length);
+    }
+    if (rest) st.items.push(entryOf(rest, look, st.link, track, comments));
+    st.last = collapse ? st.items[st.items.length - 1] : null;
     st.collapsible = collapse ? / $/.test(text) : false;
   }
+  // Une série de caractères : le texte, son aspect, son lien, sa modification suivie et ses fils de commentaire (ce qui fait que deux séries voisines se fondent ou non en une).
+  const entryOf = (text, look, link, track, comments) => ({ text, look, key: lookKey(look, link, track, comments), link, caps: look.caps, track, comments });
+  // Un élément qui reste seul (image, note, numéro de page) ; dans une insertion suivie, une image est suivie comme elle.
+  const pushRaw = (st, html) => { const track = currentTrack(st); st.items.push({ raw: track && /^<img\b/.test(html) ? trackWrap(html, track) : html }); };
   // Les marques sans texte (signets, repères d'index, sauts de page « doux » que l'application calcule), le numéro qu'un titre numéroté recopie (`text:number`) et le texte d'un rubi.
   const SKIPPED = new Set([
     'text:bookmark', 'text:bookmark-start', 'text:bookmark-end', 'text:soft-page-break', 'text:reference-mark', 'text:reference-mark-start', 'text:reference-mark-end', 'text:index-mark', 'text:index-mark-start',
     'text:index-mark-end', 'text:alphabetical-index-mark', 'text:alphabetical-index-mark-start', 'text:alphabetical-index-mark-end', 'text:toc-mark', 'text:toc-mark-start', 'text:toc-mark-end', 'text:number',
-    'text:ruby-text', 'text:change', 'text:change-start', 'text:change-end', 'office:annotation-end', 'text:title', 'text:subject-placeholder-never',
+    'text:ruby-text', 'text:title', 'text:subject-placeholder-never',
   ]);
   function readInline(st, parent, props) {
     for (let node = parent.firstChild; node; node = node.nextSibling) {
@@ -240,8 +254,26 @@ const OdtImport = (function () {
           break;
         }
         case 'text:note': { const marker = noteMarker(st.ctx, node); if (marker) st.items.push({ raw: marker }); break; }
-        case 'office:annotation': count(st.ctx, 'comments'); break;
-        case 'draw:frame': { const html = frameHtml(st.ctx, node); if (html) st.items.push({ raw: html }); break; }
+        case 'office:annotation': annotationStart(st, node); break;
+        case 'office:annotation-end': annotationEnd(st, node); break;
+        case 'text:change-start': changeStart(st, node, props); break;
+        case 'text:change-end': changeEnd(st, node); break;
+        case 'text:change': pointChange(st, node, props); break;
+        case 'draw:frame': { const html = frameHtml(st.ctx, node); if (html) pushRaw(st, html); break; }
+        case 'text:page-number':
+          // Le numéro de la page où l'on est : celui de l'éditeur ; « la page d'avant » ou « d'après » garde sa dernière valeur.
+          if (!attr(node, 'text:select-page') || attr(node, 'text:select-page') === 'current') { pushRaw(st, pageNumberHtml()); break; }
+          count(st.ctx, 'fields');
+          readInline(st, node, props);
+          break;
+        case 'text:database-display': {
+          // Un champ de fusion devient la variable de la colonne du même nom (quand la table en a une) ; sinon il garde son texte et le compte rendu le dit.
+          const html = attr(node, 'text:column-name') ? st.ctx.mergeField(String(attr(node, 'text:column-name')).trim()) : '';
+          if (html) { pushRaw(st, html); break; }
+          count(st.ctx, 'mergeFields');
+          readInline(st, node, props);
+          break;
+        }
         case 'draw:image': count(st.ctx, 'images'); break;
         case 'text:ruby': readInline(st, child(node, 'text:ruby-base') || node, props); break;
         default:
@@ -253,6 +285,173 @@ const OdtImport = (function () {
       }
     }
   }
+  // --- Modifications suivies et commentaires -------------------------------------------------------------------------------------------------------------------------------------------------
+  const MAX_REVISIONS = 5000;
+  const MAX_THREADS = 1000;
+  const textOf = el => (el ? el.textContent.trim() : '');
+  const isoOf = (text) => { const time = Date.parse(String(text || '').trim()); return Number.isFinite(time) ? new Date(time).toISOString() : null; };
+  // Le texte brut d'un élément, comme la personne le lit : les blancs qui se suivent n'en font qu'un, `text:s`, les tabulations et les retours à la ligne sont ceux du fichier.
+  function plainText(el) {
+    let out = '';
+    const walk = (node) => {
+      for (let part = node.firstChild; part; part = part.nextSibling) {
+        if (part.nodeType === 3 || part.nodeType === 4) { out += part.nodeValue.replace(/[ \t\r\n]+/g, ' '); continue; }
+        if (part.nodeType !== 1) continue;
+        const tag = name(part);
+        if (tag === 'text:s') out += ' '.repeat(whole(attr(part, 'text:c'), 1, 1000));
+        else if (tag === 'text:tab') out += '\t';
+        else if (tag === 'text:line-break') out += '\n';
+        else if (tag !== 'text:note-citation' && tag !== 'text:number') walk(part);
+      }
+    };
+    walk(el);
+    return out;
+  }
+  // Les modifications suivies du fichier (`text:changed-region`) : une insertion (`text:insertion`, le texte inséré est dans le corps, entre `text:change-start` et `text:change-end`), une suppression (le texte supprimé est
+  // rangé DANS la région, un `text:change` en marque la place) ou un changement de mise en forme (que l'éditeur ne suit pas : accepté et compté). Une insertion ou une suppression reste une modification EN ATTENTE de
+  // l'éditeur (js/track-changes.js : `<ins data-id>` / `<del data-id>`), avec son auteur et sa date dans les métadonnées du suivi.
+  function readChanges(ctx, odf) {
+    descendants(odf.body, 'changed-region').forEach((region) => {
+      if (name(region) !== 'text:changed-region') return;
+      const id = attr(region, 'text:id') || attr(region, 'xml:id');
+      const body = child(region, ['text:insertion', 'text:deletion', 'text:format-change']);
+      if (!id || !body) return;
+      const info = child(body, 'office:change-info');
+      const kind = name(body) === 'text:insertion' ? 'ins' : (name(body) === 'text:deletion' ? 'del' : 'format');
+      ctx.changes.set(id, { id, kind, el: body, author: textOf(child(info, 'dc:creator')), date: isoOf(textOf(child(info, 'dc:date'))) });
+    });
+  }
+  // Le numéro que l'éditeur donne à la modification de ce fichier ({ kind, id }) ; une même région n'est qu'une modification. Au-delà du plafond, la modification est acceptée et comptée.
+  function trackOf(ctx, regionId, kind) {
+    const key = kind + ':' + regionId;
+    let id = ctx.revisions.get(key);
+    if (!id) {
+      if (ctx.revisions.size >= MAX_REVISIONS) { lostChange(ctx, regionId); return null; }
+      id = ctx.revisions.size + 1;
+      ctx.revisions.set(key, id);
+      const region = ctx.changes.get(regionId) || {};
+      const meta = { author: null };
+      if (region.author) meta.authorName = region.author.slice(0, 120);
+      meta.createdAt = region.date || null;
+      ctx.suivi[id] = meta;
+    }
+    return { kind, id };
+  }
+  function lostChange(ctx, regionId) {
+    if (ctx.countedChanges.has(regionId)) return;
+    ctx.countedChanges.add(regionId);
+    count(ctx, 'trackedChanges');
+  }
+  // La modification qui s'applique au texte d'ici : le texte supprimé que l'on relit, ou la dernière insertion ouverte.
+  function currentTrack(st) {
+    if (st.deleted) return st.deleted;
+    const open = st.ctx.openInserts;
+    return open.length ? trackOf(st.ctx, open[open.length - 1], 'ins') : null;
+  }
+  function changeStart(st, node, props) {
+    const id = attr(node, 'text:change-id');
+    const region = st.ctx.changes.get(id);
+    if (!region) return;
+    if (region.kind === 'ins') st.ctx.openInserts.push(id);
+    else if (region.kind === 'del') deletedText(st, region, props);
+    else lostChange(st.ctx, id);
+  }
+  function changeEnd(st, node) {
+    const open = st.ctx.openInserts;
+    const index = open.lastIndexOf(attr(node, 'text:change-id'));
+    if (index >= 0) open.splice(index, 1);
+  }
+  function pointChange(st, node, props) {
+    const id = attr(node, 'text:change-id');
+    const region = st.ctx.changes.get(id);
+    if (!region) return;
+    if (region.kind === 'del') deletedText(st, region, props);
+    else if (region.kind === 'format') lostChange(st.ctx, id);
+  }
+  // Le texte qu'une suppression suivie a rangé dans sa région, remis ici, barré en attente : ses paragraphes se suivent d'un retour à la ligne. Une suppression sans texte (un simple saut de paragraphe) est comptée.
+  function deletedText(st, region, props) {
+    const ctx = st.ctx;
+    const paragraphs = descendants(region.el, 'p').concat(descendants(region.el, 'h')).filter(part => name(part) === 'text:p' || name(part) === 'text:h');
+    paragraphs.sort((a, b) => (a.compareDocumentPosition(b) & 4 ? -1 : 1));
+    if (!paragraphs.some(part => part.textContent.trim())) { lostChange(ctx, region.id); return; }
+    const track = trackOf(ctx, region.id, 'del');
+    if (!track) return;
+    const outer = st.deleted;
+    st.deleted = track;
+    paragraphs.forEach((part, index) => {
+      if (index) pushText(st, '\n', props, false);
+      st.collapsible = false;
+      readInline(st, part, props);
+    });
+    st.deleted = outer;
+  }
+  // Les commentaires du fichier (`office:annotation`) et leurs réponses (`loext:parent-name`) : un FIL de l'éditeur (js/comments.js) - la marque `comment-mark` sur le passage, les messages (auteur, texte, date) rangés pour
+  // la table des fils quand le document aura un numéro. Le passage s'étend jusqu'à `office:annotation-end` du même nom ; un commentaire posé en un point se range sur le mot qui suit (ou le dernier du paragraphe).
+  function readComments(ctx, odf) {
+    const annotations = descendants(odf.body, 'annotation').filter(el => name(el) === 'office:annotation');
+    descendants(odf.body, 'annotation-end').forEach((el) => { if (name(el) === 'office:annotation-end' && attr(el, 'office:name')) ctx.endNames.add(attr(el, 'office:name')); });
+    const stamp = Date.now().toString(36);
+    const threadOf = new Map();
+    const replies = [];
+    annotations.forEach((el) => {
+      const texte = descendants(el, 'p').filter(part => name(part) === 'text:p').map(plainText).join('\n').replace(/^\s+|\s+$/g, '');
+      if (!texte) return;
+      const entry = { el, own: attr(el, 'office:name'), parent: attr(el, 'loext:parent-name'), message: { auteur: textOf(child(el, 'dc:creator')), texte, creeLe: isoOf(textOf(child(el, 'dc:date'))) || new Date().toISOString() } };
+      if (entry.parent) { replies.push(entry); return; }
+      if (ctx.threads.length >= MAX_THREADS) { count(ctx, 'comments'); return; }
+      const thread = { id: 'cm-' + stamp + 'o' + (ctx.threads.length + 1), resolved: attr(el, 'loext:resolved') === 'true', messages: [entry.message], anchored: false };
+      ctx.threads.push(thread);
+      ctx.threadOf.set(el, thread);
+      if (entry.own) threadOf.set(entry.own, thread);
+    });
+    replies.forEach((entry) => {
+      const thread = threadOf.get(entry.parent);
+      if (!thread) { count(ctx, 'comments'); return; }
+      thread.messages.push(entry.message);
+      if (entry.own) threadOf.set(entry.own, thread);
+    });
+    ctx.threads.forEach(thread => thread.messages.sort((a, b) => String(a.creeLe).localeCompare(String(b.creeLe))));
+    ctx.annotations = new Set(annotations);
+  }
+  function annotationStart(st, node) {
+    const ctx = st.ctx;
+    // Un commentaire d'un endroit que la lecture n'a pas fait (en-tête, pied de page) n'a pas de fil : compté.
+    if (!ctx.annotations.has(node)) { count(ctx, 'comments'); return; }
+    const thread = ctx.threadOf.get(node);
+    if (!thread) return;
+    const own = attr(node, 'office:name');
+    if (own && ctx.endNames.has(own)) ctx.openThreads.set(own, thread);
+    else ctx.pointThreads.push(thread);
+  }
+  function annotationEnd(st, node) {
+    st.ctx.openThreads.delete(attr(node, 'office:name'));
+  }
+  // Les fils dont le passage est ouvert à cet endroit (et ceux de `extra`) : [{ id, resolved }] dans l'ordre des numéros, ou null ; le fil dont un passage est marqué est « accroché ».
+  function openComments(ctx, extra) {
+    const seen = new Map();
+    ctx.openThreads.forEach((thread) => { seen.set(thread.id, thread); });
+    (extra || []).forEach((thread) => { seen.set(thread.id, thread); });
+    if (!seen.size) return null;
+    seen.forEach((thread) => { thread.anchored = true; });
+    return Array.from(seen.values()).sort((a, b) => (a.id < b.id ? -1 : 1)).map(thread => ({ id: thread.id, resolved: thread.resolved }));
+  }
+  // Un commentaire posé en un point, quand plus aucun texte ne suit dans le paragraphe : il se range sur le dernier mot de ce paragraphe.
+  function anchorStrays(st) {
+    const ctx = st.ctx;
+    if (!ctx.pointThreads.length) return;
+    let index = st.items.length - 1;
+    while (index >= 0 && st.items[index].raw !== undefined) index -= 1;
+    if (index < 0) { ctx.pointThreads.length = 0; return; }
+    const entry = st.items[index];
+    const marks = openComments(ctx, ctx.pointThreads.splice(0));
+    const found = /\S+\s*$/.exec(entry.text);
+    const cut = found && found.index > 0 ? found.index : 0;
+    const tail = entryOf(entry.text.slice(cut), entry.look, entry.link, entry.track, (entry.comments || []).concat(marks).sort((a, b) => (a.id < b.id ? -1 : 1)));
+    if (cut) st.items.splice(index, 1, entryOf(entry.text.slice(0, cut), entry.look, entry.link, entry.track, entry.comments), tail);
+    else st.items[index] = tail;
+    if (st.last === entry) st.last = tail;
+  }
+
   // --- Les images et les notes ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
   const IMAGE_SNIFF = [['iVBOR', 'image/png'], ['/9j/', 'image/jpeg'], ['R0lGOD', 'image/gif'], ['UklGR', 'image/webp'], ['Qk', 'image/bmp'], ['PHN2Zy', 'image/svg+xml'], ['PD94bW', 'image/svg+xml']];
   // Les images du document, lues une fois pour toutes en adresses de données, avec les plafonds de poids de l'import Word : `draw:image` -> { src } ou { unsupported: true } (format illisible,
@@ -260,7 +459,8 @@ const OdtImport = (function () {
   async function loadImages(ctx, odf) {
     const images = new Map();
     const imageTypes = ExportCommon.Ooxml.IMAGE_TYPES;
-    const nodes = ExportCommon.Odf.descendants(odf.body, 'image').filter(node => name(node) === 'draw:image');
+    // Les images du corps, et celles des en-têtes et pieds de page (rangés dans les pages maîtresses).
+    const nodes = [odf.body].concat(odf.sections('office:master-styles')).reduce((all, holder) => all.concat(ExportCommon.Odf.descendants(holder, 'image').filter(node => name(node) === 'draw:image')), []);
     for (const node of nodes) {
       const href = String(attr(node, 'xlink:href') || '').replace(/^\.\//, '');
       const binary = child(node, 'office:binary-data');
@@ -316,7 +516,7 @@ const OdtImport = (function () {
     const body = child(note, 'text:note-body');
     const parts = [];
     kids(body).forEach((part) => {
-      const text = part.textContent.replace(/\s+/g, ' ').trim();
+      const text = plainText(part).replace(/\s+/g, ' ').trim();
       if (text) parts.push(text);
     });
     return parts.join(' ');
@@ -391,6 +591,7 @@ const OdtImport = (function () {
     const baseSize = level ? EDITOR_HEADING_PT['H' + level] : EDITOR_BODY_PT;
     const st = newState(ctx, textBase, baseSize, 0);
     readInline(st, el, textBase);
+    anchorStrays(st);
     // Le dernier blanc d'un paragraphe ne compte pas.
     if (st.last && / $/.test(st.last.text)) { st.last.text = st.last.text.slice(0, -1); if (!st.last.text) st.items.splice(st.items.lastIndexOf(st.last), 1); }
     const sizePt = Number.isFinite(textBase._size) ? textBase._size : EDITOR_BODY_PT;
@@ -548,7 +749,7 @@ const OdtImport = (function () {
           break;
         }
         case 'text:numbered-paragraph': out += blocksOf(ctx, part, depth + 1); break;
-        case 'text:tracked-changes': count(ctx, 'trackedChanges', children(part, 'text:changed-region').length); break;
+        case 'text:tracked-changes': break;
         case 'draw:frame': { const html = frameHtml(ctx, part); if (html) { out += '<p>' + html + '</p>'; ctx.started = true; } break; }
         default:
           if (INDEXES.indexOf(tag) >= 0) { count(ctx, 'toc'); if (tag === 'text:table-of-content') out += '<div class="toc-marker"></div>'; ctx.started = true; break; }
@@ -734,17 +935,57 @@ const OdtImport = (function () {
     return named.get(wanted) || ctx.styles.masters[0] || null;
   }
 
+  // --- Les en-têtes et pieds de page ---------------------------------------------------------------------------------------------------------------------------------------------------------
+  // Le contenu d'une zone (`style:header`, `style:footer-first`...), en balisage ; rien quand elle manque ou qu'elle est masquée (`style:display="false"`). Une zone ne commence pas de page : le texte déjà lu n'y change rien.
+  function zoneHtml(ctx, page, tag) {
+    const holder = child(page, tag);
+    if (!holder || attr(holder, 'style:display') === 'false') return '';
+    const started = ctx.started;
+    ctx.started = false;
+    const html = blocksOf(ctx, holder, 0);
+    ctx.started = started;
+    return PageLayout.hasZoneContent(html) ? html : '';
+  }
+  // La zone existe, n'est pas masquée et porte du texte ou une image (sans la lire : elle n'est pas reprise).
+  function hasContent(page, tag) {
+    const holder = child(page, tag);
+    return !!holder && attr(holder, 'style:display') !== 'false' && !!(holder.textContent.trim() || descendants(holder, 'frame').length);
+  }
+  // Les zones de la page de départ : { header: { default, first }, footer: { default, first }, different (la première page a les siennes), leftPages (zones des pages paires, non reprises) }. La première page a ses zones
+  // soit dans la page maîtresse même (`style:header-first`), soit parce que la page maîtresse de départ est « Première page », suivie (`style:next-style-name`) par celle des autres pages.
+  function zonesOf(ctx, master) {
+    const zones = { header: { default: '', first: '' }, footer: { default: '', first: '' }, different: false, leftPages: 0 };
+    if (!master) return zones;
+    const nextName = attr(master, 'style:next-style-name');
+    const next = nextName && nextName !== attr(master, 'style:name') ? ctx.styles.masters.find(other => attr(other, 'style:name') === nextName) : null;
+    ['header', 'footer'].forEach((kind) => {
+      const own = zoneHtml(ctx, master, 'style:' + kind);
+      const explicit = zoneHtml(ctx, master, 'style:' + kind + '-first');
+      if (explicit) { zones[kind].default = own; zones[kind].first = explicit; zones.different = true; }
+      else if (next) { zones[kind].first = own; zones[kind].default = zoneHtml(ctx, next, 'style:' + kind); }
+      else zones[kind].default = own;
+      if (hasContent(master, 'style:' + kind + '-left')) zones.leftPages += 1;
+    });
+    if (next && ['header', 'footer'].some(kind => zones[kind].first || zones[kind].default)) zones.different = true;
+    // La première page qui n'a pas de zone à elle (un pied de page, quand seul l'en-tête a une première page) montre celle des autres pages.
+    if (zones.different) ['header', 'footer'].forEach((kind) => { if (!zones[kind].first && !next) zones[kind].first = zones[kind].default; });
+    return zones;
+  }
+
   // --- Le fichier ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   const MESSAGES = {
     notPackage: 'Ce fichier n’est pas un document OpenDocument.', unreadable: 'Ce fichier n’a pas pu être lu.', tooBig: 'Ce fichier est trop gros pour être importé.',
     encrypted: 'Ce fichier OpenDocument est protégé par un mot de passe.',
   };
-  async function fromBuffer(buffer) {
+  async function fromBuffer(buffer, options) {
     const odf = await ExportCommon.Odf.open(buffer, { limits: { maxUnpacked: MAX_UNPACKED_BYTES, maxPart: MAX_PART_BYTES }, messages: MESSAGES });
     if (odf.kind !== 'text') throw fail('wrongType', 'Ce fichier OpenDocument n’est pas un document texte.', { kind: odf.kind });
     const styles = readStyles(odf);
     const ctx = {
       styles, report: new Map(), fontsSeen: new Set(), counters: new Map(), started: false, contentWidthPt: 450, firstStyles: new Set(), usedMasters: new Set(), images: new Map(), imageBytes: 0, noteCounter: 0,
+      mergeField: (options && options.mergeField) || defaultMergeField,
+      changes: new Map(), revisions: new Map(), suivi: {}, countedChanges: new Set(), openInserts: [],
+      threads: [], threadOf: new Map(), annotations: new Set(), endNames: new Set(), openThreads: new Map(), pointThreads: [],
     };
     // Les styles du premier bloc disent la page de départ (ils changent de page maîtresse), avant que le corps soit lu.
     kids(odf.body).some((part) => {
@@ -763,12 +1004,16 @@ const OdtImport = (function () {
       ctx.contentWidthPt = Math.max(100, widthPt - (page.left + page.right) / MM_PER_PT);
     }
     ctx.images = await loadImages(ctx, odf);
+    readChanges(ctx, odf);
+    readComments(ctx, odf);
     const html = blocksOf(ctx, odf.body, 0).replace(/(?:<div class="page-break-marker"><\/div>)+$/, '');
-    // Les en-têtes et pieds de page, et les pages maîtresses d'une autre mise en page, ne sont pas repris : comptés.
-    if (master) {
-      const holders = children(master).filter(part => /^style:(?:header|footer)/.test(name(part)));
-      if (holders.some(holder => holder.textContent.trim() || descendants(holder, 'frame').length)) count(ctx, 'headerFooter');
-    }
+    ctx.openThreads.clear();
+    ctx.openInserts.length = 0;
+    // Les en-têtes et pieds de page de la page de départ ; ceux des pages paires (une autre zone pour les pages de gauche) ne sont pas repris : comptés.
+    const zones = zonesOf(ctx, master);
+    const filled = ['header', 'footer'].some(kind => zones[kind].default || zones[kind].first);
+    const headerFooter = filled ? { enabled: true, differentFirstPage: zones.different, header: zones.header, footer: zones.footer } : null;
+    if (zones.leftPages) count(ctx, 'headerFooter', zones.leftPages);
     // Les pages maîtresses que le texte demande (un style qui change de page) et dont la mise en page n'est pas celle de départ : seule celle de départ est reprise.
     const startName = attr(master, 'style:name');
     let differing = 0;
@@ -777,12 +1022,16 @@ const OdtImport = (function () {
       if (used !== startName && other && !samePage(pageOf(styles.layouts.get(attr(other, 'style:page-layout-name'))), page)) differing += 1;
     });
     if (differing) count(ctx, 'sections', differing);
-    if (!/\S/.test(html.replace(/<[^>]*>/g, '')) && !/<(?:table|img|hr)\b|toc-marker/.test(html)) throw fail('empty', 'Ce document OpenDocument est vide.');
+    if (!/\S/.test(html.replace(/<[^>]*>/g, '')) && !/<(?:table|img|hr)\b|toc-marker/.test(html) && !filled) throw fail('empty', 'Ce document OpenDocument est vide.');
+    // Les fils dont aucun passage de texte n'a été marqué n'ont rien à quoi s'accrocher : comptés, non repris.
+    const unanchored = ctx.threads.filter(thread => !thread.anchored).length;
+    if (unanchored) count(ctx, 'comments', unanchored);
+    const comments = ctx.threads.filter(thread => thread.anchored).map(thread => ({ id: thread.id, resolved: thread.resolved, messages: thread.messages }));
     const report = REPORT_KEYS.filter(key => ctx.report.get(key)).map(key => ({ key, n: ctx.report.get(key) }));
-    return { html, page, headerFooter: null, report, suiviModifications: null, comments: [] };
+    return { html, headerFooter, page, report, suiviModifications: ctx.revisions.size ? ctx.suivi : null, comments };
   }
   const descendants = (el, local) => (el ? Array.from(el.getElementsByTagNameNS('*', local)) : []);
-  async function fromFile(file) {
+  async function fromFile(file, options) {
     if (!file || file.size > MAX_FILE_BYTES) throw fail('tooBig', 'Ce fichier est trop gros pour être importé.', { size: file ? file.size : 0, max: MAX_FILE_BYTES });
     let buffer;
     try {
@@ -790,7 +1039,7 @@ const OdtImport = (function () {
     } catch (e) {
       throw fail('unreadable', 'Ce fichier n’a pas pu être lu.', { cause: e });
     }
-    return fromBuffer(buffer);
+    return fromBuffer(buffer, options);
   }
 
   return { fromFile, fromBuffer, MAX_FILE_BYTES, MAX_UNPACKED_BYTES, REPORT_KEYS };

@@ -66,12 +66,15 @@ const TEXTS = {
 // `locked` : un fichier protégé ; `empty` : un document sans texte ; `notOdf` : un zip qui n'est pas un OpenDocument.
 const buildFile = async (page, kind) => Buffer.from(await page.evaluate(async (which) => {
   const F = window.OdtFixtures;
-  const { odt, p, h, span, tStyle, cellStyle, cell, covered, row, table, bulletList, item, listStyle, BULLET_LEVELS, DEFAULT_STYLES } = F;
+  const { odt, p, h, span, tStyle, cellStyle, cell, covered, row, table, bulletList, item, listStyle, BULLET_LEVELS, DEFAULT_STYLES, MASTER } = F;
   const kinds = {
     plain: () => ({
+      masters: MASTER('<style:header><text:p>Rapport de gestion</text:p></style:header><style:footer><text:p>Page <text:page-number text:select-page="current">1</text:page-number></text:p></style:footer>'),
       styles: DEFAULT_STYLES + listStyle('L1', BULLET_LEVELS(['•'])),
       auto: tStyle('T1', 'fo:font-weight="bold" fo:color="#c80000"') + cellStyle('Table1.A1', 'fo:border="0.5pt solid #000000"') + cellStyle('Table1.B1', 'fo:background-color="#d9e2f3" fo:border="0.5pt solid #000000"'),
-      body: h('Bilan de l’année') + p('Le chiffre d’affaires ' + span('progresse', 'T1') + ' de 12 %.') + bulletList([item(p('Premier point')), item(p('Deuxième point'))])
+      body: '<text:tracked-changes><text:changed-region text:id="ct1"><text:insertion><office:change-info><dc:creator>Camille</dc:creator><dc:date>2026-11-10T09:00:00</dc:date></office:change-info></text:insertion></text:changed-region></text:tracked-changes>'
+        + h('Bilan de l’année') + p('Le chiffre d’affaires ' + span('progresse', 'T1') + ' de 12 %.')
+        + p('Une <text:change-start text:change-id="ct1"/>ligne ajoutée<text:change-end text:change-id="ct1"/> et un <office:annotation office:name="N1"><dc:creator>Camille</dc:creator><dc:date>2026-11-10T09:00:00</dc:date><text:p>À vérifier</text:p></office:annotation>chiffre à revoir<office:annotation-end office:name="N1"/>.') + bulletList([item(p('Premier point')), item(p('Deuxième point'))])
         + table('<table:table-column/><table:table-column/>', [row([cell(p('Mois'), 'Table1.B1', 'table:number-columns-spanned="2"'), covered()]), row([cell(p('Janvier'), 'Table1.A1'), cell(p('120'), 'Table1.A1')])]),
     }),
     report: () => ({
@@ -80,7 +83,7 @@ const buildFile = async (page, kind) => Buffer.from(await page.evaluate(async (w
         + p('Image <draw:frame draw:name="i1" text:anchor-type="as-char"><draw:image xlink:href="Pictures/a.png"/></draw:frame>')
         + p('Zone <draw:frame draw:name="z1" text:anchor-type="as-char"><draw:text-box><text:p>dedans</text:p></draw:text-box></draw:frame>')
         + p('Note<text:note text:id="n1" text:note-class="endnote"><text:note-citation>i</text:note-citation><text:note-body><text:p>Voici la note de fin.</text:p></text:note-body></text:note>')
-        + p('Avec commentaire<office:annotation><dc:creator>A</dc:creator><text:p>À revoir</text:p></office:annotation><office:annotation-end/>')
+        + p('Avec commentaire') + p('<office:annotation><dc:creator>A</dc:creator><text:p>À revoir</text:p></office:annotation>')
         + p('Date : <text:date text:date-value="2026-11-17">17/11/2026</text:date>')
         + p('<text:a xlink:href="javascript:alert(1)" xlink:type="simple">piège</text:a>'),
     }),
@@ -263,6 +266,15 @@ async function run(lang, scheme) {
       plain.headings === 1 && /Bilan de l’année/.test(plain.text) && /Le chiffre d’affaires progresse de 12 %\./.test(plain.text) && plain.items === 2 && /Deuxième point/.test(plain.text)
       && plain.tables === 1 && plain.merged === 1 && /Janvier/.test(plain.text), { headings: plain.headings, items: plain.items, tables: plain.tables, merged: plain.merged, text: plain.text.slice(0, 160) });
     check(tag + 'la mise en forme du texte est reprise : « progresse » en gras', plain.strong.includes('progresse'), plain.strong);
+    const rich = await page.evaluate(() => {
+      const data = HeaderFooterPreview.getHeaderFooterData();
+      const tiptap = document.querySelector('#editor-container .tiptap');
+      return { enabled: data.enabled, header: data.header.default, footer: data.footer.default, inserted: Array.from(tiptap.querySelectorAll('ins')).map(e => e.textContent), marked: Array.from(tiptap.querySelectorAll('span.comment-mark')).map(e => e.textContent) };
+    });
+    check(tag + 'l\'en-tête et le pied de page du fichier sont repris (le numéro de page est celui de l\'éditeur), sans rien dire de plus',
+      rich.enabled && /Rapport de gestion/.test(rich.header) && /Page/.test(rich.footer) && /page-number-badge/.test(rich.footer), rich);
+    check(tag + 'l\'insertion suivie du fichier reste en attente dans le texte et le passage commenté est marqué',
+      rich.inserted.join('') === 'ligne ajoutée' && rich.marked.join('') === 'chiffre à revoir', rich);
     const visible = await page.evaluate(() => {
       const c = document.getElementById('editor-container').getBoundingClientRect();
       const h1 = document.querySelector('#editor-container .tiptap h1');

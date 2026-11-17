@@ -486,31 +486,153 @@
     return result(bad);
   });
 
-  add('odtImport_what_is_not_carried_over_is_counted', 'notes, images, formes, commentaires, modifications suivies, champs, index, section à colonnes, en-tête : comptés au compte rendu, jamais perdus en silence', async () => {
+  add('odtImport_what_is_not_carried_over_is_counted', 'notes, images, formes, mise en forme suivie, champs, index, section à colonnes, en-tête des pages paires : comptés au compte rendu, jamais perdus en silence', async () => {
     const auto = `<style:style style:name="Sect1" style:family="section"><style:section-properties><style:columns fo:column-count="2" fo:column-gap="0.5cm"/></style:section-properties></style:style>`;
-    const body = '<text:tracked-changes text:track-changes="true"><text:changed-region text:id="ct1"><text:insertion><office:change-info><dc:creator>A</dc:creator></office:change-info></text:insertion></text:changed-region></text:tracked-changes>'
-      + p('Texte avec note<text:note text:id="ftn1" text:note-class="footnote"><text:note-citation>1</text:note-citation><text:note-body><text:p>Contenu de la note</text:p></text:note-body></text:note> et commentaire<office:annotation><dc:creator>B</dc:creator><text:p>À revoir</text:p></office:annotation><office:annotation-end/>.')
+    const body = '<text:tracked-changes text:track-changes="true"><text:changed-region text:id="ct1"><text:format-change><office:change-info><dc:creator>A</dc:creator></office:change-info></text:format-change></text:changed-region></text:tracked-changes>'
+      + p('Texte avec note<text:note text:id="ftn1" text:note-class="footnote"><text:note-citation>1</text:note-citation><text:note-body><text:p>Contenu de la note</text:p></text:note-body></text:note> et <text:change-start text:change-id="ct1"/>mise en forme<text:change-end text:change-id="ct1"/>.')
       + p('Image <draw:frame draw:name="i1" text:anchor-type="as-char" svg:width="2cm" svg:height="1cm"><draw:image xlink:href="Pictures/a.png" xlink:type="simple"/></draw:frame>')
       + p('Zone <draw:frame draw:name="z1" text:anchor-type="as-char" svg:width="2cm" svg:height="1cm"><draw:text-box><text:p>dedans</text:p></draw:text-box></draw:frame>')
       + p('Date : <text:date text:date-value="2026-11-17">17/11/2026</text:date>, page <text:page-number>3</text:page-number>')
       + '<text:table-of-content text:name="Index1"><text:index-body><text:p>Sommaire</text:p></text:index-body></text:table-of-content>'
       + '<text:section text:style-name="Sect1" text:name="S1"><text:p>En colonnes</text:p></text:section>';
-    const out = await imported({ auto, body, masters: MASTER('<style:header><text:p>En-tête</text:p></style:header>') });
+    const out = await imported({ auto, body, masters: MASTER('<style:header><text:p>En-tête</text:p></style:header><style:header-left><text:p>Pages paires</text:p></style:header-left>') });
     const { bad, expect } = checker();
     const noteMark = dom(out.html).querySelector('sup.footnote-ref-marker');
     expect('la note de bas de page est reprise (repère et texte), donc absente du rapport', !!noteMark && noteMark.getAttribute('data-note-text') === 'Contenu de la note' && !countOf(out.report, 'notes') && !countOf(out.report, 'endnotes'), out.html.slice(0, 300));
-    expect('le commentaire est compté', countOf(out.report, 'comments') === 1, out.report);
     expect('l\'image que le fichier ne contient pas (Pictures/a.png absent) est comptée', countOf(out.report, 'images') === 1, out.report);
     expect('la zone de texte est comptée comme forme', countOf(out.report, 'shapes') === 1, out.report);
-    expect('deux champs comptés (date, numéro de page)', countOf(out.report, 'fields') === 2, out.report);
+    expect('un champ compté (la date) : le numéro de page devient celui de l\'éditeur', countOf(out.report, 'fields') === 1 && /page-number-badge/.test(out.html), out.report);
     expect('l\'index est compté', countOf(out.report, 'toc') === 1, out.report);
     expect('la section en deux colonnes est comptée', countOf(out.report, 'columns') === 1, out.report);
-    expect('la modification suivie est comptée', countOf(out.report, 'trackedChanges') === 1, out.report);
-    expect('l\'en-tête est compté', countOf(out.report, 'headerFooter') === 1, out.report);
+    expect('le changement de mise en forme suivi est compté (une fois)', countOf(out.report, 'trackedChanges') === 1 && !out.suiviModifications, [out.report, out.suiviModifications]);
+    expect('l\'en-tête des pages paires est compté, celui des autres pages est repris', countOf(out.report, 'headerFooter') === 1 && !!out.headerFooter && /En-tête/.test(out.headerFooter.header.default) && !/Pages paires/.test(JSON.stringify(out.headerFooter)), [out.report, out.headerFooter]);
     expect('le texte « En colonnes » est repris, sur une colonne', /En colonnes/.test(out.html));
     expect('les champs gardent leur dernière valeur', /17\/11\/2026/.test(out.html), out.html.slice(0, 600));
     expect('le texte de la zone n\'est pas repris', !/dedans/.test(out.html), out.html);
     expect('l\'ordre du rapport suit OdtImport.REPORT_KEYS', JSON.stringify(keysOf(out.report)) === JSON.stringify(OdtImport.REPORT_KEYS.filter(key => keysOf(out.report).indexOf(key) >= 0)), keysOf(out.report));
+    return result(bad);
+  });
+
+  // ============================================================================================================================================================================================
+  // En-têtes et pieds de page, commentaires, modifications suivies, champs
+  // ============================================================================================================================================================================================
+  add('odtImport_header_and_footer_of_the_start_page_are_kept', 'l\'en-tête et le pied de page de la page de départ sont repris (le numéro de page en bulle, une zone qui ne porte que lui comprise) ; une zone masquée ou vide ne compte pas ; « première page » par zone dédiée ou par page maîtresse suivie', async () => {
+    const { bad, expect } = checker();
+    const pageNumber = '<text:page-number text:select-page="current">3</text:page-number>';
+    const same = await imported({ masters: MASTER('<style:header><text:p>Rapport annuel</text:p></style:header><style:footer><text:p>Page ' + pageNumber + '</text:p></style:footer>') });
+    expect('un en-tête et un pied : zones reprises, une seule apparence pour toutes les pages', !!same.headerFooter && same.headerFooter.enabled && !same.headerFooter.differentFirstPage, same.headerFooter);
+    expect('l\'en-tête garde son texte', !!same.headerFooter && /Rapport annuel/.test(same.headerFooter.header.default), same.headerFooter);
+    expect('le pied de page garde « Page » et reçoit le numéro de page de l\'éditeur', !!same.headerFooter && /Page[^]*page-number-badge/.test(same.headerFooter.footer.default), same.headerFooter);
+    expect('rien à dire au compte rendu', !same.report.length, same.report);
+    const only = await imported({ masters: MASTER('<style:footer><text:p>' + pageNumber + '</text:p></style:footer>') });
+    expect('un pied qui ne porte que le numéro de page est gardé', !!only.headerFooter && /page-number-badge/.test(only.headerFooter.footer.default), only.headerFooter);
+    const hidden = await imported({ masters: MASTER('<style:header style:display="false"><text:p>Masqué</text:p></style:header><style:footer><text:p/></style:footer>') });
+    expect('une zone masquée ou vide n\'ouvre aucun en-tête ni pied', hidden.headerFooter === null, hidden.headerFooter);
+    const dedicated = await imported({ masters: MASTER('<style:header><text:p>Courant</text:p></style:header><style:header-first><text:p>Titre</text:p></style:header-first><style:footer><text:p>Pied</text:p></style:footer>') });
+    const hf = dedicated.headerFooter;
+    expect('première page à part : en-tête de première page repris', !!hf && hf.differentFirstPage && /Titre/.test(hf.header.first) && /Courant/.test(hf.header.default), hf);
+    expect('le pied sans première page à lui montre le même sur la première page', !!hf && /Pied/.test(hf.footer.first) && /Pied/.test(hf.footer.default), hf);
+    const masters = '<style:master-page style:name="First_20_Page" style:page-layout-name="pm1" style:next-style-name="Standard"><style:footer><text:p>Pied de couverture</text:p></style:footer></style:master-page>'
+      + '<style:master-page style:name="Standard" style:page-layout-name="pm1"><style:header><text:p>Haut des pages</text:p></style:header><style:footer><text:p>Pied courant</text:p></style:footer></style:master-page>';
+    const auto = '<style:style style:name="Cover" style:family="paragraph" style:parent-style-name="Standard" style:master-page-name="First_20_Page"/>';
+    const cover = await imported({ auto, masters, body: p('Couverture', 'Cover') + p('Suite') });
+    const covered = cover.headerFooter;
+    expect('page maîtresse « première page » suivie d\'une autre : la première page a sa zone, les suivantes celle de la suivante', !!covered && covered.differentFirstPage && /Pied de couverture/.test(covered.footer.first) && /Pied courant/.test(covered.footer.default) && /Haut des pages/.test(covered.header.default) && !covered.header.first, covered);
+    expect('aucune « autre mise en page » comptée (même page)', !countOf(cover.report, 'sections'), cover.report);
+    return result(bad);
+  });
+
+  add('odtImport_header_images_are_read_and_a_header_only_document_is_not_empty', 'une image d\'un en-tête est reprise ; un document sans texte mais avec un en-tête n\'est pas « vide »', async () => {
+    await ready();
+    const { bad, expect } = checker();
+    const header = '<style:header><text:p>' + frame({ href: 'Pictures/logo.png', width: '3cm', height: '1cm' }) + '</text:p></style:header>';
+    const out = await imported({ masters: MASTER(header), media: { 'logo.png': RED_BLUE() }, body: p('Texte') });
+    expect('l\'image de l\'en-tête est reprise', !!out.headerFooter && /<img[^>]+src="data:image\/png;base64,/.test(out.headerFooter.header.default), out.headerFooter);
+    expect('pas comptée comme image perdue', !countOf(out.report, 'images'), out.report);
+    const onlyHeader = await failure(async () => OdtImport.fromBuffer(await odt({ masters: MASTER('<style:header><text:p>Seul</text:p></style:header>'), body: '<text:p/>' })));
+    expect('un document vide avec un en-tête est accepté', !onlyHeader, onlyHeader && onlyHeader.code);
+    return result(bad);
+  });
+
+  add('odtImport_comments_become_threads', 'un commentaire (passage entre office:annotation et son office:annotation-end), ses réponses, son état « résolu », celui posé en un point : des fils de l\'éditeur avec leur auteur, leur texte et leur date ; un commentaire sans texte ne fait rien', async () => {
+    const { bad, expect } = checker();
+    const note = (name, who, when, text, extra = '') => `<office:annotation office:name="${name}"${extra}><dc:creator>${who}</dc:creator><dc:date>${when}</dc:date><text:p>${text}</text:p></office:annotation>`;
+    const body = p('Avant ' + note('A1', 'Camille', '2026-11-10T09:00:00', 'À reformuler') + 'le passage commenté' + '<office:annotation-end office:name="A1"/> après.')
+      + p(note('A2', 'Noé', '2026-11-10T10:30:00', 'Oui, c\'est fait', ' loext:parent-name="A1"') + 'Suite')
+      + p('Un ' + note('B1', 'Camille', '2026-11-11T08:00:00', 'Réglé', ' loext:resolved="true"') + 'mot' + '<office:annotation-end office:name="B1"/> repéré')
+      + p('Point' + note('', 'Alex', '2026-11-12T08:00:00', 'En un point') + ' fixe de texte')
+      + p('Fin de ligne' + note('', 'Alex', '2026-11-12T09:00:00', 'Au bout') + '')
+      + p(note('C1', 'Zoé', '2026-11-12T10:00:00', '') + 'Sans texte de commentaire');
+    const out = await imported({ body });
+    const root = dom(out.html);
+    const marks = Array.from(root.querySelectorAll('span.comment-mark'));
+    expect('quatre passages marqués (un par fil)', new Set(marks.map(mark => mark.getAttribute('data-comment-id'))).size === 4, marks.map(mark => mark.outerHTML).join(' '));
+    expect('le passage commenté est exactement celui du fichier', marks.some(mark => /le passage commenté/.test(mark.textContent)) && !marks.some(mark => /Avant|après/.test(mark.textContent)), marks.map(mark => mark.textContent));
+    expect('quatre fils rendus', out.comments.length === 4, out.comments.map(thread => thread.id));
+    const first = out.comments.find(thread => thread.messages.some(message => /À reformuler/.test(message.texte)));
+    expect('la réponse rejoint le fil du commentaire (deux messages, du plus ancien au plus récent)', !!first && first.messages.length === 2 && first.messages[0].auteur === 'Camille' && first.messages[1].auteur === 'Noé' && /c'est fait/.test(first.messages[1].texte), first);
+    expect('chaque message a une date lisible', out.comments.every(thread => thread.messages.every(message => !Number.isNaN(Date.parse(message.creeLe)))), out.comments);
+    const closed = out.comments.find(thread => thread.messages.some(message => /Réglé/.test(message.texte)));
+    expect('un fil marqué résolu l\'est', !!closed && closed.resolved === true && out.comments.filter(thread => thread.resolved).length === 1, out.comments);
+    const point = marks.filter(mark => /^\s*fixe$/.test(mark.textContent));
+    expect('un commentaire posé en un point se range sur le mot qui suit', point.length === 1, marks.map(mark => mark.textContent));
+    const tail = marks.filter(mark => /^\s*ligne$/.test(mark.textContent));
+    expect('un commentaire en fin de paragraphe se range sur le dernier mot', tail.length === 1, marks.map(mark => mark.textContent));
+    expect('un commentaire sans texte ne fait ni fil ni ligne au rapport', !countOf(out.report, 'comments') && !out.comments.some(thread => thread.messages.some(message => message.auteur === 'Zoé')), [out.report, out.comments]);
+    expect('le texte du commentaire n\'est pas dans le document', !/À reformuler|En un point/.test(textOf(out.html)), textOf(out.html));
+    return result(bad);
+  });
+
+  add('odtImport_tracked_changes_stay_pending', 'une insertion et une suppression suivies restent EN ATTENTE (ins / del avec leur numéro, auteur et date) ; la suppression remet son texte rangé dans la région ; mise en forme suivie et suppression sans texte sont comptées', async () => {
+    const { bad, expect } = checker();
+    const region = (id, kind, who, when, inner = '') => `<text:changed-region text:id="${id}" xml:id="${id}"><text:${kind}><office:change-info><dc:creator>${who}</dc:creator><dc:date>${when}</dc:date></office:change-info>${inner}</text:${kind}></text:changed-region>`;
+    const body = '<text:tracked-changes text:track-changes="true">'
+      + region('ct1', 'insertion', 'Camille', '2026-11-10T09:00:00')
+      + region('ct2', 'deletion', 'Noé', '2026-11-11T09:30:00', '<text:p>ancien mot</text:p>')
+      + region('ct3', 'format-change', 'Alex', '2026-11-12T08:00:00')
+      + region('ct4', 'deletion', 'Alex', '2026-11-12T08:05:00', '')
+      + '</text:tracked-changes>'
+      + p('Un <text:change-start text:change-id="ct1"/>ajout neuf<text:change-end text:change-id="ct1"/> puis <text:change text:change-id="ct2"/>fin et <text:change-start text:change-id="ct3"/>gras<text:change-end text:change-id="ct3"/><text:change text:change-id="ct4"/>.');
+    const out = await imported({ body });
+    const root = dom(out.html);
+    const inserted = root.querySelector('ins');
+    const deleted = root.querySelector('del');
+    expect('l\'insertion est suivie : ins avec son numéro et son texte', !!inserted && inserted.textContent === 'ajout neuf' && !!inserted.getAttribute('data-id'), out.html);
+    expect('la suppression remet le texte rangé dans la région, suivi', !!deleted && deleted.textContent === 'ancien mot' && !!deleted.getAttribute('data-id'), out.html);
+    expect('l\'insertion et la suppression ont deux numéros différents', !!inserted && !!deleted && inserted.getAttribute('data-id') !== deleted.getAttribute('data-id'));
+    expect('le texte ordinaire n\'est pas suivi', /Un /.test(textOf(out.html)) && !/gras/.test(inserted ? inserted.textContent : ''), out.html);
+    const meta = out.suiviModifications || {};
+    const insMeta = meta[inserted && inserted.getAttribute('data-id')];
+    const delMeta = meta[deleted && deleted.getAttribute('data-id')];
+    expect('auteur et date de l\'insertion', !!insMeta && insMeta.authorName === 'Camille' && insMeta.author === null && !Number.isNaN(Date.parse(insMeta.createdAt)), meta);
+    expect('auteur et date de la suppression', !!delMeta && delMeta.authorName === 'Noé' && !Number.isNaN(Date.parse(delMeta.createdAt)), meta);
+    expect('mise en forme suivie et suppression sans texte : deux modifications comptées', countOf(out.report, 'trackedChanges') === 2, out.report);
+    return result(bad);
+  });
+
+  add('odtImport_tracked_changes_survive_the_editor', 'les modifications suivies et les commentaires importés passent dans le vrai éditeur (ins, del, comment-mark gardés)', async () => {
+    await ready();
+    const { bad, expect } = checker();
+    const body = '<text:tracked-changes><text:changed-region text:id="ct1"><text:insertion><office:change-info><dc:creator>A</dc:creator><dc:date>2026-11-10T09:00:00</dc:date></office:change-info></text:insertion></text:changed-region></text:tracked-changes>'
+      + p('Un <text:change-start text:change-id="ct1"/>ajout<text:change-end text:change-id="ct1"/> et <office:annotation office:name="N1"><dc:creator>B</dc:creator><text:p>Vu</text:p></office:annotation>un passage<office:annotation-end office:name="N1"/>.');
+    const out = await OdtImport.fromBuffer(await odt({ body }));
+    const kept = await inEditor(out.html);
+    const root = dom(kept);
+    expect('l\'insertion suivie reste dans l\'éditeur', !!root.querySelector('ins') && /ajout/.test(root.querySelector('ins').textContent), kept);
+    expect('le passage commenté reste marqué', !!root.querySelector('span.comment-mark') && /un passage/.test(root.querySelector('span.comment-mark').textContent), kept);
+    return result(bad);
+  });
+
+  add('odtImport_merge_fields_and_page_numbers', 'un champ de fusion (text:database-display) devient la variable de la colonne du même nom, sinon garde son texte et est compté ; le numéro de page de la page courante devient celui de l\'éditeur, « page précédente » garde sa valeur', async () => {
+    const { bad, expect } = checker();
+    const field = (column, shown) => `<text:database-display text:table-name="Clients" text:table-type="table" text:column-name="${column}" text:database-name="base">${shown}</text:database-display>`;
+    const body = p('Bonjour ' + field('Prénom', '&lt;Prénom&gt;') + ' et ' + field('Inconnue', '&lt;Inconnue&gt;') + ', page <text:page-number text:select-page="current">2</text:page-number> et <text:page-number text:select-page="previous">1</text:page-number>.');
+    const out = await imported({ body }, { mergeField: name => (name === 'Prénom' ? '<span class="var-badge" data-key="Clients.Prenom">{{Prénom}}</span>' : '') });
+    const root = dom(out.html);
+    expect('le champ dont la colonne existe devient la variable', !!root.querySelector('span.var-badge[data-key="Clients.Prenom"]'), out.html);
+    expect('le champ sans colonne garde son texte et est compté', /&lt;Inconnue&gt;|<Inconnue>/.test(root.textContent) && countOf(out.report, 'mergeFields') === 1, [out.report, root.textContent]);
+    expect('le numéro de page courant est la bulle de l\'éditeur (une seule)', root.querySelectorAll('span.page-number-badge').length === 1, out.html);
+    expect('« page précédente » est un champ gardé avec sa valeur', countOf(out.report, 'fields') === 1 && /et 1\./.test(root.textContent), [out.report, root.textContent]);
     return result(bad);
   });
 

@@ -597,7 +597,23 @@ const ExportCommon = (function () {
       const text = String(href || '').trim();
       return SAFE_LINK.test(text) && !/[\u0000-\u001f\s]/.test(text) ? text : '';
     }
-    return { wrapRun, trackWrap, itemsHtml, safeHref };
+    // Un champ de fusion (Word, OpenDocument) devient la variable de la colonne du même nom dans la table courante, quand elle existe et qu'une seule colonne porte ce nom ('' : il reste son texte). Le nom se
+    // compare sans tenir compte des majuscules ni des accents, un blanc valant un trait bas (Word écrit « Prénom_du_client » pour « Prénom du client »).
+    const plainName = text => String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[\s_]+/g, '_').trim();
+    function mergeFieldHtml(name) {
+      try {
+        const wanted = plainName(name);
+        const table = GristAPI.getCurrentTableId();
+        if (!wanted || !table) return '';
+        const matches = GristAPI.getAllVariables().filter(v => v.table === table && (plainName(v.column) === wanted || plainName(GristAPI.getColumnLabel(v.table, v.column)) === wanted));
+        return matches.length === 1 ? EditorNodes.varBadgeHtml({ table: matches[0].table, column: matches[0].column, key: matches[0].key }) : '';
+      } catch (e) {
+        return '';
+      }
+    }
+    // Le numéro de page de l'éditeur (js/editor-nodes.js : la bulle du format « # », que l'export et l'aperçu remplacent par le vrai numéro) ; son libellé compte comme du contenu : un pied de page qui ne porte que lui n'est pas vide.
+    const pageNumberHtml = () => '<span class="page-number-badge" contenteditable="false" data-format="n">#</span>';
+    return { wrapRun, trackWrap, itemsHtml, safeHref, mergeFieldHtml, pageNumberHtml };
   })();
 
   // La lecture des fichiers OpenDocument (ODT, ODS, ODP : js/odt-import.js et ses frères) : ce qu'ils ont en commun, écrit une seule fois. Un fichier OpenDocument est un zip (JSZip) de parties XML - `content.xml`,
@@ -620,6 +636,7 @@ const ExportCommon = (function () {
       dc: 'http://purl.org/dc/elements/1.1/',
       meta: 'urn:oasis:names:tc:opendocument:xmlns:meta:1.0',
       loext: 'urn:org:documentfoundation:names:experimental:office:xmlns:loext:1.0',
+      xml: 'http://www.w3.org/XML/1998/namespace',
       calcext: 'urn:org:documentfoundation:names:experimental:calc:xmlns:calcext:1.0',
     };
     const PREFIX_OF = {};

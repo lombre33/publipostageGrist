@@ -295,7 +295,7 @@ const DocxImport = (function () {
   }
   function lookKey(look, link, track, comments) { return [look.style.join(';'), look.b, look.i, look.u, look.uLine, look.s, look.sup, look.sub, link || '', track ? track.kind + track.id : '', comments ? comments.map(c => c.id).join(',') : ''].join('|'); }
   // Les marques d'une série de caractères en balisage, communes avec l'import OpenDocument (js/export-common.js:Markup).
-  const { wrapRun, trackWrap, itemsHtml, safeHref } = ExportCommon.Markup;
+  const { wrapRun, trackWrap, itemsHtml, safeHref, mergeFieldHtml: defaultMergeField, pageNumberHtml } = ExportCommon.Markup;
 
   // --- Le texte d'un paragraphe ---------------------------------------------------------------------------------------------------------------------------------------------------
   // L'état d'un paragraphe en cours de lecture : `r` (propriétés de caractère du paragraphe), `baseSize` (la taille que l'éditeur donne à ce paragraphe sans réglage), `items`, `link`.
@@ -342,7 +342,7 @@ const DocxImport = (function () {
       count(ctx, 'mergeFields');
     } else if (kind === 'PAGE') {
       st.items = field.parentItems;
-      pushRaw(st, '<span class="page-number-badge" contenteditable="false" data-format="n"></span>');
+      pushRaw(st, pageNumberHtml());
       return;
     } else if (kind === 'TOC' || FROZEN_FIELDS.has(kind)) {
       count(ctx, 'fields');
@@ -1283,20 +1283,6 @@ const DocxImport = (function () {
     const comments = ctx.threads.filter(thread => thread.anchored).map(thread => ({ id: thread.id, resolved: thread.resolved, messages: thread.messages }));
     const report = REPORT_KEYS.filter(key => ctx.report.get(key)).map(key => ({ key, n: ctx.report.get(key) }));
     return { html, page, headerFooter, report, suiviModifications: ctx.revisions.size ? ctx.suivi : null, comments };
-  }
-  // Un champ de fusion de Word devient la variable de la colonne du même nom dans la table courante, quand elle existe et qu'une seule colonne porte ce nom ('' : il reste son texte). Le nom se compare
-  // sans tenir compte des majuscules ni des accents, un blanc valant un trait bas (Word écrit « Prénom_du_client » pour « Prénom du client »).
-  const plainName = text => String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[\s_]+/g, '_').trim();
-  function defaultMergeField(name) {
-    try {
-      const wanted = plainName(name);
-      const table = GristAPI.getCurrentTableId();
-      if (!wanted || !table) return '';
-      const matches = GristAPI.getAllVariables().filter(v => v.table === table && (plainName(v.column) === wanted || plainName(GristAPI.getColumnLabel(v.table, v.column)) === wanted));
-      return matches.length === 1 ? EditorNodes.varBadgeHtml({ table: matches[0].table, column: matches[0].column, key: matches[0].key }) : '';
-    } catch (e) {
-      return '';
-    }
   }
   async function fromFile(file, options) {
     if (!file || file.size > MAX_FILE_BYTES) throw fail('tooBig', 'Ce fichier est trop gros pour être importé.', { size: file ? file.size : 0, max: MAX_FILE_BYTES });
