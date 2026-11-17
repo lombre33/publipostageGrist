@@ -743,7 +743,7 @@ const ExportCommon = (function () {
       const sections = sectionName => documents.map(doc => child(doc.documentElement, sectionName)).filter(Boolean);
       return { kind: bodyKind || mimeKind, mime, flat, body, contentDoc, stylesDoc, sections, fileOf, has: path => !!fileOf(path), zip, descendants };
     }
-    return { NS, name, attr, attrs, children, child, toPoints, open };
+    return { NS, name, attr, attrs, children, child, descendants, toPoints, open };
   })();
 
   return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, fillEmptyBlocks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,

@@ -43,7 +43,7 @@ const TEXTS = {
     tooBig: 'Ce fichier est trop gros pour être importé : 150,1 Mo (au plus 150 Mo).', tooBigPattern: /trop gros/,
     reportTitle: 'Ce que l’import n’a pas repris tel quel', reportIntro: 'Le document est importé. Le fichier avait ceci, que l’éditeur n’a pas pu reprendre tel quel :',
     report: ['2 polices que l’éditeur n’a pas, remplacées par la plus proche', '1 paragraphe avec un retrait à droite, non repris', '1 image non reprise', '1 forme, zone de texte ou objet incorporé non repris',
-      '1 note de bas de page ou de fin non reprise', '1 commentaire non repris', '1 champ qui se met à jour (date, nombre de pages…) repris avec sa dernière valeur', '1 lien vers une adresse non sûre, repris comme texte'],
+      '1 commentaire non repris', '1 champ qui se met à jour (date, nombre de pages…) repris avec sa dernière valeur', '1 note de fin reprise comme note de bas de page', '1 lien vers une adresse non sûre, repris comme texte'],
   },
   en: {
     row: 'Import from OpenDocument…', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
@@ -57,7 +57,7 @@ const TEXTS = {
     tooBig: 'This file is too big to import: 150.1 MB (at most 150 MB).', tooBigPattern: /too big/,
     reportTitle: 'What the import did not carry over as is', reportIntro: 'The document is imported. The file had the following, which the editor could not carry over as is:',
     report: ['2 fonts the editor does not have, replaced by the closest one', '1 paragraph with a right indent, not kept', '1 image not kept', '1 shape, text box or embedded object not kept',
-      '1 footnote or endnote not kept', '1 comment not kept', '1 field that updates itself (date, page count…) kept with its last value', '1 link to an unsafe address kept as text'],
+      '1 comment not kept', '1 field that updates itself (date, page count…) kept with its last value', '1 endnote kept as a footnote', '1 link to an unsafe address kept as text'],
   },
 };
 
@@ -79,7 +79,7 @@ const buildFile = async (page, kind) => Buffer.from(await page.evaluate(async (w
       body: p('Résultats ' + span('serif', 'T1') + ' ' + span('mono', 'T2')) + p('Retrait à droite', 'P9')
         + p('Image <draw:frame draw:name="i1" text:anchor-type="as-char"><draw:image xlink:href="Pictures/a.png"/></draw:frame>')
         + p('Zone <draw:frame draw:name="z1" text:anchor-type="as-char"><draw:text-box><text:p>dedans</text:p></draw:text-box></draw:frame>')
-        + p('Note<text:note text:id="n1" text:note-class="footnote"><text:note-citation>1</text:note-citation><text:note-body><text:p>Voici la note.</text:p></text:note-body></text:note>')
+        + p('Note<text:note text:id="n1" text:note-class="endnote"><text:note-citation>i</text:note-citation><text:note-body><text:p>Voici la note de fin.</text:p></text:note-body></text:note>')
         + p('Avec commentaire<office:annotation><dc:creator>A</dc:creator><text:p>À revoir</text:p></office:annotation><office:annotation-end/>')
         + p('Date : <text:date text:date-value="2026-11-17">17/11/2026</text:date>')
         + p('<text:a xlink:href="javascript:alert(1)" xlink:type="simple">piège</text:a>'),
@@ -298,7 +298,7 @@ async function run(lang, scheme) {
     check(tag + `« ${T.discard} » : le document du fichier remplace le premier (« Résultats », plus de tableau) et le coin d'état le dit`, /Résultats/.test(replaced.text) && replaced.tables === 0 && (await statusOf(page)).text === T.imported, { tables: replaced.tables, text: replaced.text.slice(0, 80) });
     const lines = told.message.split('\n');
     check(tag + `la fenêtre du rapport s'ouvre APRÈS la question, titrée « ${T.reportTitle} », avec sa phrase d'introduction`, told.shown && told.title === T.reportTitle && lines[0] === T.reportIntro, { title: told.title, intro: lines[0] });
-    check(tag + 'elle dit chaque genre non repris, un par ligne, dans l\'ordre (polices, retrait, image, forme, note, commentaire, champ, lien), au singulier ou au pluriel',
+    check(tag + 'elle dit chaque genre non repris, un par ligne, dans l\'ordre (polices, retrait, image, forme, commentaire, champ, note de fin, lien), au singulier ou au pluriel',
       JSON.stringify(lines.slice(1)) === JSON.stringify(T.report.map(line => '• ' + line)), lines.slice(1));
     check(tag + `elle n'a qu'un bouton, « ${T.close} », entière dans le panneau, avec le focus dessus`, told.buttons.length === 1 && told.buttons[0] === T.close && told.boxInPanel && told.buttonsInPanel && told.focusOn === T.close, told);
     const titleContrast = await contrastOf(page, '#pp-dialog-modal #pp-dialog-title');

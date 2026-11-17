@@ -54,7 +54,7 @@
     + `<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml">${encrypted ? '<manifest:encryption-data manifest:checksum-type="SHA1/1K" manifest:checksum="AAAA"/>' : ''}</manifest:file-entry>`
     + '<manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/></manifest:manifest>';
   // Le fichier : `body` (le XML du corps), `auto` (styles automatiques de content.xml), `styles`, `layout`, `masters`, `fonts`, `autoStyles` (ceux de styles.xml), `mime`, `bodyTag`, `encrypted`, `parts`.
-  async function odt({ body = '<text:p>Bonjour</text:p>', auto = '', styles, layout, masters, fonts, autoStyles, mime = MIME_TEXT, bodyTag = 'office:text', encrypted = false, parts = {}, noContent = false } = {}) {
+  async function odt({ body = '<text:p>Bonjour</text:p>', auto = '', styles, layout, masters, fonts, autoStyles, mime = MIME_TEXT, bodyTag = 'office:text', encrypted = false, parts = {}, media = {}, noContent = false } = {}) {
     await ExportCommon.ensureJsZipLoaded();
     const zip = new JSZip();
     zip.file('mimetype', mime, { compression: 'STORE' });
@@ -62,6 +62,7 @@
     if (!noContent) zip.file('content.xml', contentXml({ body, auto, bodyTag }));
     zip.file('styles.xml', stylesXml({ styles, layout, masters, fonts, auto: autoStyles }));
     Object.keys(parts).forEach(name => zip.file(name, parts[name]));
+    Object.keys(media).forEach(name => zip.file('Pictures/' + name, media[name], { base64: true }));
     return zip.generateAsync({ type: 'arraybuffer', mimeType: mime });
   }
   const flat = ({ body, auto = '', mime = MIME_TEXT } = {}) => new TextEncoder().encode(`${HEAD}<office:document ${NS} office:version="1.3" office:mimetype="${mime}"><office:font-face-decls>${FONTS}</office:font-face-decls><office:styles>${DEFAULT_STYLES}</office:styles>`
@@ -83,6 +84,20 @@
   const BULLET_LEVELS = (levels) => levels.map((ch, i) => `<text:list-level-style-bullet text:level="${i + 1}" text:bullet-char="${esc(ch)}"><style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="${(i + 1) * 1.27}cm" fo:text-indent="-0.635cm" fo:margin-left="${(i + 1) * 1.27}cm"/></style:list-level-properties></text:list-level-style-bullet>`).join('');
   const NUMBER_LEVEL = (level, format, { prefix = '', suffix = '.', start = 1, display = 1 } = {}) => `<text:list-level-style-number text:level="${level}" style:num-prefix="${esc(prefix)}" style:num-suffix="${esc(suffix)}" style:num-format="${format}"${start !== 1 ? ` text:start-value="${start}"` : ''}${display !== 1 ? ` text:display-levels="${display}"` : ''}/>`;
   const listStyle = (name, levels) => `<text:list-style style:name="${name}">${levels}</text:list-style>`;
+
+  // Une image de l'essai : `w` x `h` pixels, peinte par `paint(g)` (canvas), en base64.
+  const png = (w, h, paint) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    paint(canvas.getContext('2d'));
+    return canvas.toDataURL('image/png').split(',')[1];
+  };
+  const RED_BLUE = () => png(20, 10, (g) => { g.fillStyle = '#ff0000'; g.fillRect(0, 0, 10, 10); g.fillStyle = '#0000ff'; g.fillRect(10, 0, 10, 10); });
+  // Un cadre d'image : `anchor` (as-char, paragraph, page), largeur et hauteur, texte alternatif, style graphique.
+  const frame = ({ href = 'Pictures/a.png', anchor = 'as-char', width = '4cm', height = '2cm', alt = '', style = '', inner = '' } = {}) => `<draw:frame draw:name="Image1" ${style ? `draw:style-name="${style}" ` : ''}text:anchor-type="${anchor}" svg:width="${width}" svg:height="${height}">`
+    + `<draw:image xlink:href="${href}" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad">${inner}</draw:image>${alt ? `<svg:title>${esc(alt)}</svg:title>` : ''}</draw:frame>`;
+  const graphicStyle = (name, props) => `<style:style style:name="${name}" style:family="graphic"><style:graphic-properties ${props}/></style:style>`;
 
   // Le fichier importé : `{ html, page, headerFooter, report }`.
   async function imported(options, importOptions) {
@@ -404,6 +419,56 @@
   });
 
   // ============================================================================================================================================================================================
+  // 5 bis. Les images et les notes
+  // ============================================================================================================================================================================================
+  add('odtImport_images_come_over_with_their_width_and_alt_text', 'une image en ligne est reprise en adresse de données, à sa largeur (4 cm = 151 px) et avec son texte alternatif ; la même image dans un fichier « flat » (base64 dans office:binary-data) aussi', async () => {
+    await ready();
+    const { bad, expect } = checker();
+    const out = await imported({ media: { 'a.png': RED_BLUE() }, body: p('Avant ' + frame({ alt: 'Un logo', width: '4cm' }) + ' après') });
+    const image = dom(out.html).querySelector('img.editor-image');
+    expect('une image de l\'éditeur', !!image && /^data:image\/png;base64,/.test(image.getAttribute('src')), out.html.slice(0, 200));
+    expect('largeur 4 cm = 151 px à 1 px près', !!image && near(parseFloat((image.getAttribute('style') || '').replace(/[^0-9.]/g, '')), 151.2, 1), image && image.getAttribute('style'));
+    expect('texte alternatif', !!image && image.getAttribute('alt') === 'Un logo', image && image.getAttribute('alt'));
+    expect('rien à dire : l\'image est reprise', !countOf(out.report, 'images') && !countOf(out.report, 'floatingImages'), out.report);
+    const b64 = RED_BLUE();
+    const flatOut = await OdtImport.fromBuffer(flat({ body: p(frame({ href: '', inner: `<office:binary-data>${b64}</office:binary-data>`, width: '2cm' })) }));
+    const flatImage = dom(flatOut.html).querySelector('img.editor-image');
+    expect('l\'image du fichier « flat » est reprise (base64 reconnu comme du PNG)', !!flatImage && flatImage.getAttribute('src') === 'data:image/png;base64,' + b64, flatOut.html.slice(0, 200));
+    return result(bad);
+  });
+
+  add('odtImport_floating_cropped_and_unreadable_images_are_counted', 'une image ancrée au paragraphe ou à la page est posée dans le texte et comptée ; rognée, retournée ou tournée : reprise entière et droite, comptée ; adresse hors du fichier, format illisible ou plus lourd que permis : non reprise, comptée', async () => {
+    await ready();
+    const { bad, expect } = checker();
+    const auto = graphicStyle('fr1', 'style:mirror="horizontal"') + graphicStyle('fr2', 'fo:clip="rect(0.5cm, 0cm, 0cm, 0cm)"') + graphicStyle('fr3', 'fo:clip="rect(0cm, 0cm, 0cm, 0cm)"');
+    const body = p('Flottante ' + frame({ anchor: 'paragraph' })) + p('Page ' + frame({ anchor: 'page' }))
+      + p('Retournée ' + frame({ style: 'fr1' })) + p('Rognée ' + frame({ style: 'fr2' })) + p('Rognage nul ' + frame({ style: 'fr3' }))
+      + p('Dehors ' + frame({ href: 'https://exemple.fr/x.png' })) + p('Chemin ' + frame({ href: '../secret.png' })) + p('Format ' + frame({ href: 'Pictures/b.wmf' }));
+    const out = await imported({ auto, body, media: { 'a.png': RED_BLUE(), 'b.wmf': RED_BLUE() } });
+    expect('deux images flottantes (paragraphe, page), posées dans le texte', countOf(out.report, 'floatingImages') === 2, out.report);
+    expect('deux images à effets (retournée, rognée), le rognage nul ne compte pas', countOf(out.report, 'imageEffects') === 2, out.report);
+    expect('trois images non reprises : adresse web, chemin hors du fichier, format wmf', countOf(out.report, 'images') === 3, out.report);
+    expect('cinq images dans le texte (les trois autres sont refusées)', dom(out.html).querySelectorAll('img.editor-image').length === 5, dom(out.html).querySelectorAll('img').length);
+    expect('aucune adresse web ni chemin dans le HTML (rien n\'est jamais allé chercher)', !/https:\/\/exemple|secret\.png/.test(out.html), out.html.slice(0, 300));
+    return result(bad);
+  });
+
+  add('odtImport_footnotes_become_editor_notes_and_endnotes_are_counted', 'une note de bas de page devient le repère de l\'éditeur avec son texte (paragraphes réunis, sans son numéro) ; une note de fin aussi, comptée ; une note vide n\'en fait pas', async () => {
+    const note = (cls, text) => `<text:note text:id="n${cls}" text:note-class="${cls}"><text:note-citation>1</text:note-citation><text:note-body>${text}</text:note-body></text:note>`;
+    const out = await imported({ body: p('Pied' + note('footnote', p('Première ligne.') + p('Seconde ligne.')) + ' fin' + note('endnote', p('Note de fin.')) + note('footnote', p(''))) });
+    const { bad, expect } = checker();
+    const marks = Array.from(dom(out.html).querySelectorAll('sup.footnote-ref-marker'));
+    expect('deux repères (la note vide n\'en fait pas)', marks.length === 2, out.html);
+    expect('texte de la note : paragraphes réunis, sans le numéro « 1 »', marks[0].getAttribute('data-note-text') === 'Première ligne. Seconde ligne.', marks[0].getAttribute('data-note-text'));
+    expect('la note de fin a son repère', marks[1].getAttribute('data-note-text') === 'Note de fin.', marks[1].getAttribute('data-note-text'));
+    expect('une note de fin comptée', countOf(out.report, 'endnotes') === 1, out.report);
+    expect('les repères ont des identifiants distincts', marks[0].getAttribute('data-note-id') !== marks[1].getAttribute('data-note-id'));
+    const kept = await inEditor(out.html);
+    expect('l\'éditeur réel garde les deux notes', dom(kept).querySelectorAll('sup.footnote-ref-marker').length === 2, kept.slice(0, 300));
+    return result(bad);
+  });
+
+  // ============================================================================================================================================================================================
   // 6. Les liens, ce qui n'est pas repris, le compte rendu
   // ============================================================================================================================================================================================
   add('odtImport_links_keep_only_safe_addresses', 'un lien https, mailto ou tel est gardé ; un lien « javascript: » ou « file: » reste du texte et est compté', async () => {
@@ -432,9 +497,10 @@
       + '<text:section text:style-name="Sect1" text:name="S1"><text:p>En colonnes</text:p></text:section>';
     const out = await imported({ auto, body, masters: MASTER('<style:header><text:p>En-tête</text:p></style:header>') });
     const { bad, expect } = checker();
-    expect('la note est comptée', countOf(out.report, 'notes') === 1, out.report);
+    const noteMark = dom(out.html).querySelector('sup.footnote-ref-marker');
+    expect('la note de bas de page est reprise (repère et texte), donc absente du rapport', !!noteMark && noteMark.getAttribute('data-note-text') === 'Contenu de la note' && !countOf(out.report, 'notes') && !countOf(out.report, 'endnotes'), out.html.slice(0, 300));
     expect('le commentaire est compté', countOf(out.report, 'comments') === 1, out.report);
-    expect('l\'image est comptée', countOf(out.report, 'images') === 1, out.report);
+    expect('l\'image que le fichier ne contient pas (Pictures/a.png absent) est comptée', countOf(out.report, 'images') === 1, out.report);
     expect('la zone de texte est comptée comme forme', countOf(out.report, 'shapes') === 1, out.report);
     expect('deux champs comptés (date, numéro de page)', countOf(out.report, 'fields') === 2, out.report);
     expect('l\'index est compté', countOf(out.report, 'toc') === 1, out.report);
@@ -507,7 +573,7 @@
     return result(bad);
   });
 
-  window.OdtFixtures = { odt, flat, p, h, span, pStyle, tStyle, cellStyle, colStyle, cell, covered, row, table, bulletList, item, listStyle, BULLET_LEVELS, NUMBER_LEVEL, DEFAULT_STYLES, FONTS, MASTER, A4, esc, HEAD, NS };
+  window.OdtFixtures = { odt, flat, frame, graphicStyle, png, RED_BLUE, p, h, span, pStyle, tStyle, cellStyle, colStyle, cell, covered, row, table, bulletList, item, listStyle, BULLET_LEVELS, NUMBER_LEVEL, DEFAULT_STYLES, FONTS, MASTER, A4, esc, HEAD, NS };
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.odtImport = cases;
 })();

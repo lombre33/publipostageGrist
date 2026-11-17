@@ -13,7 +13,7 @@
 // l'éditeur ni à la page : il rend le TEXTE du document (le HTML que l'éditeur écrit), la page et le compte rendu.
 const OdtImport = (function () {
   // Les plafonds communs aux imports (js/export-common.js:Ooxml.LIMITS) ; une partie XML plus grosse que celui-ci est refusée.
-  const { file: MAX_FILE_BYTES, unpacked: MAX_UNPACKED_BYTES } = ExportCommon.Ooxml.LIMITS;
+  const { file: MAX_FILE_BYTES, unpacked: MAX_UNPACKED_BYTES, image: MAX_IMAGE_BYTES, images: MAX_IMAGES_BYTES } = ExportCommon.Ooxml.LIMITS;
   const MAX_PART_BYTES = 60 * 1024 * 1024;
   const MAX_DEPTH = 24;             // listes, tableaux et sections emboîtés
   const MAX_REPEAT = 500;           // une colonne, une ligne ou une case « répétée » plus que cela est ramenée à cela
@@ -27,13 +27,13 @@ const OdtImport = (function () {
   const { EDITOR_TEXT, EDITOR_FONTS: editorFonts } = ExportCommon.Ooxml;
   const SAME_FAMILY = /^(?:calibri|carlito|arial(?! (?:black|narrow|rounded|unicode))|arimo|helvetica|liberation sans|times|tinos|liberation serif|georgia|gelasio|courier|cousine|liberation mono|roboto)/;
   const REPORT_KEYS = [
-    'sections', 'columns', 'fonts', 'tabs', 'rightIndent', 'paragraphBorders', 'numbering', 'images', 'shapes', 'notes', 'headerFooter', 'comments', 'trackedChanges', 'hidden', 'fields', 'toc',
-    'nestedTables', 'borderStyles', 'links', 'tableCells',
+    'sections', 'columns', 'fonts', 'tabs', 'rightIndent', 'paragraphBorders', 'numbering', 'images', 'floatingImages', 'imageEffects', 'shapes', 'headerFooter', 'comments', 'trackedChanges', 'hidden', 'fields', 'toc',
+    'endnotes', 'nestedTables', 'borderStyles', 'links', 'tableCells',
   ];
   const PAGE_BREAK = '<div class="page-break-marker"></div>';
 
   // --- Petits outils sur le XML (js/export-common.js:Odf et Ooxml) -------------------------------------------------------------------------------------------------------------------------------
-  const { fail, kids, round2, fixed } = ExportCommon.Ooxml;
+  const { fail, kids, round2, fixed, escAttr } = ExportCommon.Ooxml;
   const { name, attr, attrs, children, child, toPoints } = ExportCommon.Odf;
   const { itemsHtml, safeHref } = ExportCommon.Markup;
   const count = (ctx, key, n) => { ctx.report.set(key, (ctx.report.get(key) || 0) + (n === undefined ? 1 : n)); };
@@ -49,7 +49,7 @@ const OdtImport = (function () {
     const sectionProps = child(el, 'style:section-properties');
     const columns = child(sectionProps, 'style:columns');
     return {
-      para: attrs(child(el, 'style:paragraph-properties')), text: attrs(child(el, 'style:text-properties')), cell: attrs(child(el, 'style:table-cell-properties')),
+      graphic: attrs(child(el, 'style:graphic-properties')), para: attrs(child(el, 'style:paragraph-properties')), text: attrs(child(el, 'style:text-properties')), cell: attrs(child(el, 'style:table-cell-properties')),
       column: attrs(child(el, 'style:table-column-properties')), row: attrs(child(el, 'style:table-row-properties')), table: attrs(child(el, 'style:table-properties')),
       section: attrs(sectionProps), columnCount: columns ? whole(attr(columns, 'fo:column-count'), 1, 99) : 1,
       tabs: children(child(child(el, 'style:paragraph-properties'), 'style:tab-stops'), 'style:tab-stop').length,
@@ -239,9 +239,9 @@ const OdtImport = (function () {
           st.link = outer;
           break;
         }
-        case 'text:note': count(st.ctx, 'notes'); break;
+        case 'text:note': { const marker = noteMarker(st.ctx, node); if (marker) st.items.push({ raw: marker }); break; }
         case 'office:annotation': count(st.ctx, 'comments'); break;
-        case 'draw:frame': count(st.ctx, frameKind(node)); break;
+        case 'draw:frame': { const html = frameHtml(st.ctx, node); if (html) st.items.push({ raw: html }); break; }
         case 'draw:image': count(st.ctx, 'images'); break;
         case 'text:ruby': readInline(st, child(node, 'text:ruby-base') || node, props); break;
         default:
@@ -253,8 +253,82 @@ const OdtImport = (function () {
       }
     }
   }
-  // Un cadre : une image, ou autre chose (zone de texte, objet incorporé, graphique).
-  const frameKind = frame => (child(frame, 'draw:image') ? 'images' : 'shapes');
+  // --- Les images et les notes ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  const IMAGE_SNIFF = [['iVBOR', 'image/png'], ['/9j/', 'image/jpeg'], ['R0lGOD', 'image/gif'], ['UklGR', 'image/webp'], ['Qk', 'image/bmp'], ['PHN2Zy', 'image/svg+xml'], ['PD94bW', 'image/svg+xml']];
+  // Les images du document, lues une fois pour toutes en adresses de données, avec les plafonds de poids de l'import Word : `draw:image` -> { src } ou { unsupported: true } (format illisible,
+  // trop lourde, adresse hors du fichier : jamais allée chercher sur le réseau). Un fichier « flat » les porte en base 64 dans `office:binary-data`.
+  async function loadImages(ctx, odf) {
+    const images = new Map();
+    const imageTypes = ExportCommon.Ooxml.IMAGE_TYPES;
+    const nodes = ExportCommon.Odf.descendants(odf.body, 'image').filter(node => name(node) === 'draw:image');
+    for (const node of nodes) {
+      const href = String(attr(node, 'xlink:href') || '').replace(/^\.\//, '');
+      const binary = child(node, 'office:binary-data');
+      let mime = '';
+      let b64 = '';
+      try {
+        if (binary) {
+          b64 = binary.textContent.replace(/\s+/g, '');
+          const sniffed = IMAGE_SNIFF.find(([prefix]) => b64.indexOf(prefix) === 0);
+          mime = sniffed ? sniffed[1] : '';
+        } else if (href && !/^[a-z][a-z0-9+.-]*:/i.test(href) && !/^\.\.|^\//.test(href)) {
+          mime = imageTypes[href.split('.').pop().toLowerCase()] || '';
+          const file = mime ? odf.fileOf(href) : null;
+          b64 = file ? await file.async('base64') : '';
+        }
+      } catch (e) {
+        b64 = '';
+      }
+      const bytes = b64.length * 0.75;
+      if (!mime || !b64 || bytes > MAX_IMAGE_BYTES || ctx.imageBytes + bytes > MAX_IMAGES_BYTES) { images.set(node, { unsupported: true }); continue; }
+      ctx.imageBytes += bytes;
+      images.set(node, { src: 'data:' + mime + ';base64,' + b64 });
+    }
+    return images;
+  }
+  const FRAME_OBJECTS = ['draw:text-box', 'draw:object', 'draw:object-ole', 'draw:plugin', 'draw:floating-frame', 'draw:applet', 'draw:g', 'draw:custom-shape'];
+  // Ce que le style d'une image demande et que l'éditeur n'a pas : rognée (`fo:clip`), retournée (`style:mirror`), tournée (`draw:transform`).
+  function imageEffects(ctx, frame) {
+    const graphic = Object.assign({}, ((ctx.styles.styles.get('graphic:' + attr(frame, 'draw:style-name')) || {}).graphic));
+    const clip = /rect\(\s*(-?[\d.]+)\w*\s*,?\s*(-?[\d.]+)\w*\s*,?\s*(-?[\d.]+)\w*\s*,?\s*(-?[\d.]+)/.exec(graphic['fo:clip'] || '');
+    const clipped = !!clip && clip.slice(1, 5).some(value => Math.abs(parseFloat(value)) > 0.001);
+    const mirrored = !!graphic['style:mirror'] && graphic['style:mirror'] !== 'none';
+    const turned = /rotate/.test(attr(frame, 'draw:transform') || '');
+    return clipped || mirrored || turned;
+  }
+  // Un cadre (`draw:frame`) en balisage : l'image (en ligne, ou « flottante » posée dans le texte et comptée) ; une zone de texte, un objet incorporé ou un graphique n'est pas repris (compté), une image
+  // illisible ou trop lourde non plus. Une image rognée, retournée ou tournée est reprise entière et droite (comptée).
+  function frameHtml(ctx, frame) {
+    if (FRAME_OBJECTS.some(tag => child(frame, tag))) { count(ctx, 'shapes'); return ''; }
+    const node = child(frame, 'draw:image');
+    if (!node) { count(ctx, 'shapes'); return ''; }
+    const image = ctx.images.get(node);
+    if (!image || image.unsupported) { count(ctx, 'images'); return ''; }
+    if (attr(frame, 'text:anchor-type') && attr(frame, 'text:anchor-type') !== 'as-char') count(ctx, 'floatingImages');
+    if (imageEffects(ctx, frame)) count(ctx, 'imageEffects');
+    const width = toPoints(attr(frame, 'svg:width'));
+    const px = width > 0 ? Math.min(width, ctx.contentWidthPt) * PX_PER_PT : 0;
+    const alt = String(((child(frame, 'svg:desc') || child(frame, 'svg:title') || {}).textContent) || '').trim();
+    return '<img class="editor-image" src="' + image.src + '" alt="' + escAttr(alt) + '"' + (px > 0 ? ' style="width: ' + fixed(px) + 'px"' : '') + '>';
+  }
+  // Le texte brut d'une note (l'éditeur la garde en texte, sur une ligne) : ses paragraphes, sans le numéro de la note.
+  function plainNote(note) {
+    const body = child(note, 'text:note-body');
+    const parts = [];
+    kids(body).forEach((part) => {
+      const text = part.textContent.replace(/\s+/g, ' ').trim();
+      if (text) parts.push(text);
+    });
+    return parts.join(' ');
+  }
+  // Une note de bas de page devient le repère de note de l'éditeur (`sup.footnote-ref-marker`, son texte dans `data-note-text`) ; une note de fin aussi, et le compte rendu le dit.
+  function noteMarker(ctx, note) {
+    const text = plainNote(note);
+    if (!text) return '';
+    if (attr(note, 'text:note-class') === 'endnote') count(ctx, 'endnotes');
+    ctx.noteCounter += 1;
+    return '<sup class="footnote-ref-marker" data-note-id="fn-' + Date.now().toString(36) + 'o' + ctx.noteCounter + '" data-note-text="' + escAttr(text) + '"></sup>';
+  }
 
   // --- Les paragraphes -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   const rtlOf = para => /^rl/.test(para['style:writing-mode'] || '');
@@ -475,7 +549,7 @@ const OdtImport = (function () {
         }
         case 'text:numbered-paragraph': out += blocksOf(ctx, part, depth + 1); break;
         case 'text:tracked-changes': count(ctx, 'trackedChanges', children(part, 'text:changed-region').length); break;
-        case 'draw:frame': count(ctx, frameKind(part)); break;
+        case 'draw:frame': { const html = frameHtml(ctx, part); if (html) { out += '<p>' + html + '</p>'; ctx.started = true; } break; }
         default:
           if (INDEXES.indexOf(tag) >= 0) { count(ctx, 'toc'); if (tag === 'text:table-of-content') out += '<div class="toc-marker"></div>'; ctx.started = true; break; }
           if (/^draw:/.test(tag)) count(ctx, 'shapes');
@@ -670,7 +744,7 @@ const OdtImport = (function () {
     if (odf.kind !== 'text') throw fail('wrongType', 'Ce fichier OpenDocument n’est pas un document texte.', { kind: odf.kind });
     const styles = readStyles(odf);
     const ctx = {
-      styles, report: new Map(), fontsSeen: new Set(), counters: new Map(), started: false, contentWidthPt: 450, firstStyles: new Set(), usedMasters: new Set(),
+      styles, report: new Map(), fontsSeen: new Set(), counters: new Map(), started: false, contentWidthPt: 450, firstStyles: new Set(), usedMasters: new Set(), images: new Map(), imageBytes: 0, noteCounter: 0,
     };
     // Les styles du premier bloc disent la page de départ (ils changent de page maîtresse), avant que le corps soit lu.
     kids(odf.body).some((part) => {
@@ -688,6 +762,7 @@ const OdtImport = (function () {
       const widthPt = (page.orientation === PageLayout.LANDSCAPE ? Math.max(toPoints(layout['fo:page-width']), toPoints(layout['fo:page-height'])) : Math.min(toPoints(layout['fo:page-width']), toPoints(layout['fo:page-height'])));
       ctx.contentWidthPt = Math.max(100, widthPt - (page.left + page.right) / MM_PER_PT);
     }
+    ctx.images = await loadImages(ctx, odf);
     const html = blocksOf(ctx, odf.body, 0).replace(/(?:<div class="page-break-marker"><\/div>)+$/, '');
     // Les en-têtes et pieds de page, et les pages maîtresses d'une autre mise en page, ne sont pas repris : comptés.
     if (master) {
