@@ -15,7 +15,7 @@ const ReaderMode = (function () {
   const BADGE_SELECTOR = '.var-badge, .calc-badge';
   const isCalcBadge = badge => badge.classList.contains('calc-badge');
   async function badgeConditionHolds(badge, tableId, record, binding) {
-    // Condition d'affichage d'une bulle #Variable (data-condition, js/variable-condition.js) : faux = la bulle disparaît de la lecture et de
+    // Condition d'affichage d'une bulle #Variable ou d'un calcul (data-condition, js/variable-condition.js) : faux = la bulle disparaît de la lecture et de
     // l'export, le texte autour reste. Une condition illisible masque la bulle, comme une règle illisible de macro-modèle
     // (js/condition-rules.js:matches). `binding` : ligne du tour d'une zone répétée (js/loop-rules.js:bindingOf) - une règle sur une colonne de la
     // table de la boucle lit alors cette ligne.
@@ -377,8 +377,8 @@ const ReaderMode = (function () {
       const table = badge.getAttribute('data-table'); const column = badge.getAttribute('data-column');
       const format = parseBadgeFormat(badge);
       const binding = LoopRules.bindingOf(badge);
-      if (isCalcBadge(badge)) { const span = document.createElement('span'); span.textContent = await Variables.resolveCalc(badge.getAttribute('data-formula') || '', tableId, record, format, loopOpts(binding)); putValue(badge, span); return; }
       if (!(await badgeConditionHolds(badge, tableId, record, binding))) { putValue(badge, document.createTextNode('')); return; }
+      if (isCalcBadge(badge)) { const span = document.createElement('span'); span.textContent = await Variables.resolveCalc(badge.getAttribute('data-formula') || '', tableId, record, format, loopOpts(binding)); putValue(badge, span); return; }
       const inline = await resolveInlineLoop(badge, table, column, tableId, record, format, loopCtx);
       if (inline) { putValue(badge, withAffixes(badge, inline.node, inline.isError)); return; }
       try { const value = await Variables.resolveVariable(table, column, tableId, record, format, loopOpts(binding)); putValue(badge, withAffixes(badge, valueNode(value, format, ''))); }
@@ -1722,6 +1722,8 @@ const ReaderMode = (function () {
   }
   async function resolveBadgeValue(badge, tableId, record, format, loopCtx, textOpts) {
     const binding = LoopRules.bindingOf(badge);
+    // La condition d'abord, pour une variable comme pour un calcul : un calcul caché n'est pas évalué, son erreur éventuelle ne remonte nulle part (le contrôle d'avant lot).
+    if (!(await badgeConditionHolds(badge, tableId, record, binding))) return { node: document.createTextNode(''), isError: false };
     // Bulle « Calcul » (js/variable-calc.js) : le résultat de sa formule, avec la ligne du tour quand elle est dans une zone répétée - comme une
     // bulle de variable de cette table.
     if (isCalcBadge(badge)) {
@@ -1729,7 +1731,6 @@ const ReaderMode = (function () {
       const span = document.createElement('span'); span.textContent = text; span.className = 'resolved-var' + (isError ? ' error-msg' : '');
       return { node: span, isError };
     }
-    if (!(await badgeConditionHolds(badge, tableId, record, binding))) return { node: document.createTextNode(''), isError: false };
     const table = badge.getAttribute('data-table');
     const column = badge.getAttribute('data-column');
     const inline = await resolveInlineLoop(badge, table, column, tableId, record, format, loopCtx, textOpts);
@@ -1794,7 +1795,7 @@ const ReaderMode = (function () {
     const calc = isCalcBadge(copy);
     const hasOtherwise = !calc && (copy.hasAttribute('data-otherwise-key') || copy.hasAttribute('data-otherwise'));
     const before = copy.getAttribute('data-table') + '.' + copy.getAttribute('data-column');
-    if (!calc && !hasOtherwise && copy.hasAttribute('data-condition') && !(await badgeConditionHolds(copy, tableId, record, binding))) return { hidden: true };
+    if (!hasOtherwise && copy.hasAttribute('data-condition') && !(await badgeConditionHolds(copy, tableId, record, binding))) return { hidden: true };
     try {
       if (hasOtherwise) await VariableOtherwise.resolve(holder, tableId, record);
       let failed = null;

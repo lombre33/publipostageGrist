@@ -686,7 +686,7 @@
   }
   cases.push({
     id: 'varcalc_toolbar_edit_double_click_and_enter_reopen_the_same_bubble',
-    description: 'Bulle sélectionnée : la barre flottante montre « Modifier le calcul » (condition, autres attributs et boucle grisés avec leur raison, réglage nombre présent) ; ce bouton, un double-clic et Entrée ouvrent la fenêtre sur la formule en saisie ; « Valider » change la formule en place (même position, format gardé), Entrée ne coupe pas le paragraphe',
+    description: 'Bulle sélectionnée : la barre flottante montre « Modifier le calcul » (condition d’affichage disponible ; autres attributs et boucle grisés avec leur raison ; réglage nombre présent) ; ce bouton, un double-clic et Entrée ouvrent la fenêtre sur la formule en saisie ; « Valider » change la formule en place (même position, format gardé), Entrée ne coupe pas le paragraphe',
     run: async (h) => {
       const format = { type: 'number', style: 'us' };
       const placed = await placeOne(h, '{VcFactures.HT} * 0.2', format);
@@ -695,7 +695,8 @@
       const reason = I18n.t('varToolbar.notForCalc');
       const barState = {
         visible: bar.classList.contains('visible'), edit: visible(toolbarButton('calc-edit')),
-        condition: toolbarButton('var-condition').classList.contains('is-disabled') && toolbarButton('var-condition').title === reason,
+        // Depuis le 17/11 (demande d'Antoine : « y a-t-il une raison pour laquelle un calcul ne pourrait pas avoir une condition ? ») la condition d'affichage n'est plus grisée sur un calcul.
+        condition: !toolbarButton('var-condition').classList.contains('is-disabled') && toolbarButton('var-condition').title === I18n.t('varToolbar.condition'),
         linked: toolbarButton('var-linked').classList.contains('is-disabled') && toolbarButton('var-linked').title === reason,
         loop: toolbarButton('var-loop').classList.contains('is-disabled') && toolbarButton('var-loop').title === reason,
         number: visible(bar.querySelector('[data-var-panel="number"]')), date: visible(bar.querySelector('[data-var-panel="date"]')), us: toolbarButton('num-style:us').classList.contains('is-active'),

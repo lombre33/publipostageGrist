@@ -29,6 +29,11 @@ const VariableConditionData = (function () {
       title: 'varCond.title', intro: 'varCond.introImage', modeBefore: 'varCond.modeBefore', saveLost: 'varCond.saveLostImage', pasted: 'varCond.clip.pastedStatusImage',
       met: 'varCond.debug.currentMetImage', notMet: 'varCond.debug.currentNotMetImage', first: 'varCond.debug.firstBlock',
     },
+    // Un calcul : comme une variable sans son « Avant » / « Après » ni son sinon ; la ligne d'aperçu dit que le calcul s'affiche ou est masqué, sans sa valeur.
+    calcBadge: {
+      title: 'varCond.title', intro: 'varCond.introCalc', modeBefore: 'varCond.modeBefore', saveLost: 'varCond.saveLostCalc', pasted: 'varCond.clip.pastedStatusCalc',
+      met: 'varCond.debug.currentMetCalc', notMet: 'varCond.debug.currentNotMetCalc', first: 'varCond.debug.firstBlock',
+    },
     conditionalCheckbox: {
       title: 'varCond.titleCheckbox', intro: 'varCond.introCheckbox', modeBefore: 'varCond.modeBeforeCheckbox', saveLost: 'varCond.saveLostCheckbox',
       pasted: 'varCond.clip.pastedStatusCheckbox', met: 'varCond.debug.currentMetCheckbox', notMet: 'varCond.debug.currentNotMetCheckbox', first: 'varCond.debug.firstBlock',

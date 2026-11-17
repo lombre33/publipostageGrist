@@ -256,22 +256,25 @@ const EditorNodes = (function () {
     // Bulle « Calcul » (js/variable-calc.js) : une formule à la place d'une colonne, posée depuis la ligne « Calcul » du menu des variables (onglet
     // Chips). Atome en ligne comme varBadge ; `formula` est l'écriture enregistrée de js/formula.js (variables {Table.Colonne}, décimales au point,
     // noms de fonction anglais), jamais le texte saisi : la même formule se relit dans la langue de l'interface et avec la touche de déclenchement du
-    // moment. `format` : le réglage nombre de la barre flottante, comme une bulle de colonne numérique. Verte comme les chips (« valeur calculée, pas
+    // moment. `format` : le réglage nombre de la barre flottante, comme une bulle de colonne numérique. `condition` : la condition d'affichage de la
+    // même fenêtre qu'une bulle de variable (js/variable-condition.js), { mode, rules } ; le calcul qui ne la remplit pas n'écrit rien (pas de « Avant »,
+    // « Après » ni de sinon pour un calcul). Verte comme les chips (« valeur calculée, pas
     // une colonne Grist »). Résolue en lecture et à l'export par js/reader-mode.js, avec la ligne du tour dans une zone répétée.
     function createCalcBadgeNode(Node, mergeAttributes) {
       function badgeSpec(HTMLAttributes, node) {
         const attrs = mergeAttributes(HTMLAttributes, { class: 'calc-badge', contenteditable: 'false', 'data-formula': node.attrs.formula || '' });
         if (node.attrs.format) attrs['data-format'] = JSON.stringify(node.attrs.format);
+        if (node.attrs.condition) attrs['data-condition'] = JSON.stringify(node.attrs.condition);
         if (node.attrs.condStyle) attrs['data-cond-style'] = JSON.stringify(node.attrs.condStyle);
         return ['span', attrs, calcBadgeLabel(node.attrs.formula)];
       }
       return inlineAtom(Node, {
         name: 'calcBadge',
         addAttributes() {
-          return { formula: internalAttr(''), format: internalAttr(null), condStyle: internalAttr(null) };
+          return { formula: internalAttr(''), format: internalAttr(null), condition: internalAttr(null), condStyle: internalAttr(null) };
         },
         parseHTML() {
-          return [{ tag: 'span.calc-badge', getAttrs: el => ({ formula: el.getAttribute('data-formula') || '', format: jsonAttr(el, 'data-format'), condStyle: ConditionalStyle.parse(el.getAttribute('data-cond-style')) }) }];
+          return [{ tag: 'span.calc-badge', getAttrs: el => ({ formula: el.getAttribute('data-formula') || '', format: jsonAttr(el, 'data-format'), condition: jsonAttr(el, 'data-condition'), condStyle: ConditionalStyle.parse(el.getAttribute('data-cond-style')) }) }];
         },
         renderHTML({ HTMLAttributes, node }) {
           return badgeSpec(HTMLAttributes, node);

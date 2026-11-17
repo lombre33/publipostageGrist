@@ -1329,10 +1329,10 @@ const FloatingToolbars = (function () {
       if (action === 'calc-edit') { if (kind === 'calc') VariableCalc.openAt(editor, pos); return; }
       const open = WINDOWS[action];
       if (open) {
-        // Un bloc, une valeur et une case n'ont que la condition ; un calcul aucun de ces boutons (grisés par syncVariableState). La mise en forme selon la ligne : tous sauf la
-        // case, et ni dans un champ texte (grisé par syncStyleButton).
+        // Un bloc, une valeur et une case n'ont que la condition ; un calcul la condition et la mise en forme, pas les deux boutons que syncVariableState grise (autres attributs,
+        // boucle). La mise en forme selon la ligne : tous sauf la case, et ni dans un champ texte (grisé par syncStyleButton).
         const styled = action === 'var-style' && kind !== 'checkbox' && !inField;
-        if (kind === 'badge' || (kind !== 'calc' && action === 'var-condition') || styled) open(node, pos);
+        if (kind === 'badge' || action === 'var-condition' || styled) open(node, pos);
       } else if (kind === 'checkbox') {
         if (action.indexOf('bool-style:') === 0 && VariableFormat.isCheckboxStyle(action.slice(11))) {
           EditorCore.patchNodeAndReselect(editor, pos, Object.assign({}, node.attrs, { style: action.slice(11) }));
@@ -1396,16 +1396,16 @@ const FloatingToolbars = (function () {
       setLabeled(ui, 'var-list', !status.enabled, status.title);
       ui.setActive('var-list', status.active);
     }
-    // La condition garde son nom d'origine pour une bulle et un bloc ; une case conditionnelle dit « cochée si… » (une condition d'affichage n'aurait
-    // pas de sens pour elle). `reasonKey` : grisée avec cette raison (un calcul). Allumée aussi pour une bulle qui n'a que du texte « Avant » /
-    // « Après » : la même fenêtre le règle.
-    function syncConditionButton(ui, node, labelKey, reasonKey) {
+    // La condition garde son nom d'origine pour une bulle, un calcul et un bloc ; une case conditionnelle dit « cochée si… » (une condition d'affichage n'aurait
+    // pas de sens pour elle). Jamais grisée : une bulle, un calcul, un bloc, une valeur et une case en ont une. Allumée aussi pour une bulle qui n'a que du texte
+    // « Avant » / « Après » : la même fenêtre le règle.
+    function syncConditionButton(ui, node, labelKey) {
       const btn = ui.button('var-condition');
       if (!btn) return;
       btn.setAttribute('aria-label', I18n.t(labelKey));
-      ui.setDisabled('var-condition', !!reasonKey, I18n.t(reasonKey || labelKey));
+      ui.setDisabled('var-condition', false, I18n.t(labelKey));
       const set = !!ConditionRules.normalizeCondition(node.attrs.condition) || !!VariableFormat.affixes(node.attrs.before, node.attrs.after);
-      ui.setActive('var-condition', !reasonKey && set);
+      ui.setActive('var-condition', set);
     }
     // « Mise en forme conditionnelle » (js/conditional-style.js) : allumée quand l'élément a au moins une règle. Grisée - jamais retirée - avec sa raison pour une case
     // conditionnelle (une case n'a ni texte ni couleur à régler ici) et dans un champ texte (objet d'un e-mail, « Sinon afficher » : il écrit une ligne de texte).
@@ -1475,7 +1475,8 @@ const FloatingToolbars = (function () {
     function syncVariableActions(ui, node, pos) {
       const isCalc = node.type.name === 'calcBadge';
       showCalcEdit(ui, isCalc);
-      syncConditionButton(ui, node, 'varToolbar.condition', isCalc ? 'varToolbar.notForCalc' : null);
+      // La condition d'affichage est la même pour un calcul que pour une variable (la même fenêtre, la même évaluation sur la ligne affichée).
+      syncConditionButton(ui, node, 'varToolbar.condition');
       syncColumnButton(ui, node, pos);
       if (isCalc) {
         // Un calcul n'a ni autre attribut de sa ligne ni boucle : les deux boutons restent à leur place, grisés, avec leur raison en info-bulle.

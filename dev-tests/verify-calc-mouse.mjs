@@ -5,7 +5,8 @@
 //  - la ligne « Calcul » de l'onglet Chips de la liste « # » se clique et ouvre la fenêtre ;
 //  - la fenêtre tient dans 700x400 : titre, champ, boutons de fonction, résultat et boutons « Insérer » / « Annuler » visibles et au premier plan ;
 //  - taper « # » dans le champ ouvre la liste des colonnes DEVANT la fenêtre, Entrée y choisit sans valider la fenêtre, un bouton de fonction écrit « SOMME() » au curseur ;
-//  - la bulle posée se clique, sa barre flottante montre « Modifier le calcul » et ses trois boutons sans objet sont GRISÉS AUX PIXELS (un clic dessus n'ouvre rien) ;
+//  - la bulle posée se clique, sa barre flottante montre « Modifier le calcul » ; ses deux boutons sans objet (autres attributs, boucle) sont GRISÉS AUX PIXELS (un clic dessus n'ouvre rien) et la
+//    condition d'affichage ne l'est plus depuis le 17/11 (même encre que sur une variable, un vrai clic ouvre sa fenêtre, Échap la ferme) ;
 //  - « Modifier le calcul » (bouton), le double-clic et Entrée rouvrent la fenêtre sur la formule ; Échap ferme et rend le clavier à l'éditeur ;
 //  - dans une case étroite la formule est coupée par « … » sans déborder sur la case voisine ; en Lecture, la bulle devient son résultat ;
 //  - le retour visuel d'une bulle CHOISIE (variable, calcul, variable cassée ; demande d'Antoine du 01/10) : un vrai clic change le fond PEINT sur une vraie capture, un clic dans le texte le
@@ -421,7 +422,7 @@ async function runTheme(theme) {
   check(`${label} - la bulle est visible dans le panneau, au premier plan, et se lit « = SOMME(#CxLignes.Prix × #CxLignes.Qte) »`, seen(bubble) && bubbleText === '= SOMME(#CxLignes.Prix × #CxLignes.Qte)', { bubble, bubbleText });
   await shot(page, `${theme}-4-bulle`);
 
-  // 4) Un vrai clic sur la bulle : barre flottante avec « Modifier le calcul » ; condition, autres attributs et boucle grisés aux pixels ; un clic dessus n'ouvre rien.
+  // 4) Un vrai clic sur la bulle : barre flottante avec « Modifier le calcul » ; autres attributs et boucle grisés aux pixels, un clic dessus n'ouvre rien ; la condition d'affichage dégrisée, un clic ouvre sa fenêtre.
   await realClick(page, bubble);
   await page.waitForTimeout(350);
   const bar = await hitTest(page, BAR);
@@ -433,7 +434,7 @@ async function runTheme(theme) {
   };
   await shot(page, `${theme}-5-bulle-selectionnee-barre`);
   check(`${label} - un vrai clic sur la bulle la sélectionne et ouvre la barre, avec « Modifier le calcul » atteignable dans le panneau`, bar.found && bar.inViewport && seen(edit), { bar, edit });
-  check(`${label} - les trois boutons sans objet pour un calcul sont dans la barre (grisés, pas retirés)`, ['condition', 'linked', 'loop'].every(k => barButtons[k].found && barButtons[k].inViewport), barButtons);
+  check(`${label} - les trois boutons de condition, d'autres attributs et de boucle sont dans la barre (les deux derniers grisés, pas retirés)`, ['condition', 'linked', 'loop'].every(k => barButtons[k].found && barButtons[k].inViewport), barButtons);
   const greyed = { condition: await ink(page, `${BAR} button[data-action="var-condition"]`), linked: await ink(page, `${BAR} button[data-action="var-linked"]`), loop: await ink(page, `${BAR} button[data-action="var-loop"]`) };
   // La même mesure sur une bulle de variable : la barre de la première ne couvre pas la seconde que si on la quitte d'abord par un clic dans le texte.
   await clickAway(page);
@@ -442,16 +443,37 @@ async function runTheme(theme) {
   await page.waitForTimeout(350);
   const active = { condition: await ink(page, `${BAR} button[data-action="var-condition"]`), linked: await ink(page, `${BAR} button[data-action="var-linked"]`), loop: await ink(page, `${BAR} button[data-action="var-loop"]`) };
   const editHiddenOnVariable = await page.evaluate(sel => { const b = document.querySelector(sel + ' button[data-action="calc-edit"]'); return !b || b.getClientRects().length === 0; }, BAR);
-  check(`${label} - condition, autres attributs et boucle sont GRISÉS sur un calcul : moins de 60 % de l'encre des mêmes boutons sur une bulle de variable`,
-    ['condition', 'linked', 'loop'].every(k => greyed[k] != null && active[k] != null && greyed[k] < active[k] * 0.6), { greyed, active });
+  check(`${label} - autres attributs et boucle sont GRISÉS sur un calcul : moins de 60 % de l'encre des mêmes boutons sur une bulle de variable`,
+    ['linked', 'loop'].every(k => greyed[k] != null && active[k] != null && greyed[k] < active[k] * 0.6), { greyed, active });
+  check(`${label} - la condition d'affichage n'est PAS grisée sur un calcul : la même encre que sur une bulle de variable`,
+    greyed.condition != null && active.condition != null && greyed.condition >= active.condition * 0.9, { greyed, active });
   check(`${label} - sur une bulle de variable, « Modifier le calcul » n'est pas là et les trois boutons sont actifs`, editHiddenOnVariable && ['condition', 'linked', 'loop'].every(k => active[k] > 8), { editHiddenOnVariable, active });
   await clickAway(page);
   await realClick(page, await hitTest(page, '.tiptap .calc-badge'));
   await page.waitForTimeout(350);
-  for (const action of ['var-condition', 'var-linked', 'var-loop']) await clickSel(page, `${BAR} button[data-action="${action}"]`);
+  for (const action of ['var-linked', 'var-loop']) await clickSel(page, `${BAR} button[data-action="${action}"]`);
   await page.waitForTimeout(250);
   const nothingOpened = await page.evaluate(() => Array.from(document.querySelectorAll('.pp-modal')).filter(m => m.style.display !== 'none' && m.getClientRects().length > 0).length);
-  check(`${label} - un vrai clic sur chacun des trois boutons grisés n'ouvre aucune fenêtre`, nothingOpened === 0 && !!(await hitTest(page, BAR)).found, { nothingOpened });
+  check(`${label} - un vrai clic sur chacun des deux boutons grisés n'ouvre aucune fenêtre`, nothingOpened === 0 && !!(await hitTest(page, BAR)).found, { nothingOpened });
+  // La condition d'affichage : un vrai clic ouvre sa fenêtre, au premier plan et dans le panneau, avec la phrase du calcul ; Échap la ferme et la bulle se sélectionne de nouveau.
+  await clickSel(page, `${BAR} button[data-action="var-condition"]`);
+  await page.waitForTimeout(350);
+  const conditionState = await page.evaluate(() => {
+    const m = document.getElementById('var-condition-modal');
+    const shown = !!m && m.style.display !== 'none' && m.getClientRects().length > 0;
+    const box = shown ? m.querySelector('.var-modal-content').getBoundingClientRect() : null;
+    return { shown, title: shown ? m.querySelector('#var-condition-title').textContent : null, intro: shown ? m.querySelector('.var-modal-intro').textContent : null,
+      inside: !!box && box.top >= 0 && box.left >= 0 && box.right <= innerWidth + 1, barHidden: !document.querySelector('.v2-varfmt-toolbar.visible') };
+  });
+  check(`${label} - un vrai clic sur « Condition d'affichage » ouvre sa fenêtre (la phrase du calcul), dans le panneau, la barre s'efface`,
+    conditionState.shown && conditionState.title === 'Condition d’affichage' && /Ce calcul n’apparaît/.test(conditionState.intro) && conditionState.inside && conditionState.barHidden, conditionState);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  const conditionClosed = await page.evaluate(() => { const m = document.getElementById('var-condition-modal'); return !m || m.style.display === 'none' || m.getClientRects().length === 0; });
+  check(`${label} - Échap ferme la fenêtre de condition, rien n'est posé sur le calcul`, conditionClosed && (await page.evaluate(() => !Editor.getHTML().includes('data-condition'))), { conditionClosed });
+  await clickAway(page);
+  await realClick(page, await hitTest(page, '.tiptap .calc-badge'));
+  await page.waitForTimeout(350);
 
   // 5) « Modifier le calcul » : la fenêtre s'ouvre sur la formule, titre et bouton de modification, la barre s'efface ; la nouvelle formule se valide à Entrée.
   await clickSel(page, `${BAR} button[data-action="calc-edit"]`);

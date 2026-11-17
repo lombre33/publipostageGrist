@@ -365,6 +365,35 @@
     },
   });
 
+  // Antoine, 17/11 : la condition d'affichage d'un calcul (js/reader-mode.js:badgeConditionHolds). Un calcul que sa condition cache n'écrit rien en Lecture et dans le PDF : sa case Excel est vide,
+  // pas le nombre que la Lecture n'écrit pas (la bulle est remplacée par rien avant que la case soit écrite : js/xlsx-export.js:writeCellValue ne garde le nombre que d'une case qui écrit du texte).
+  cases.push({
+    id: 'xlsx_a_calculation_hidden_by_its_condition_is_an_empty_cell_and_one_that_holds_stays_a_number',
+    description: 'Une case qui ne contient qu\'une bulle « Calcul » dont la condition d\'affichage n\'est pas remplie est vide (jamais le nombre du calcul) ; remplie, c\'est le vrai nombre au format de la bulle ; sans condition, comme avant',
+    run: async (h) => {
+      await seed(h);
+      const calcWhen = (formula, condition, format) => `<span class="calc-badge" data-formula="${formula}"${withCondition(condition)}${format ? withFormat(format) : ''}></span>`;
+      const never = { mode: 'all', rules: [{ column: 'Nom', operator: '=', value: 'personne' }] };
+      const holds = { mode: 'all', rules: [{ column: 'Nom', operator: '=', value: 'Alpha Durand' }] };
+      const x = await exportGrid([100, 100, 100, 100], [30], [
+        [calcWhen('{GrilleExcel.Montant} * 2', never), calcWhen('{GrilleExcel.Montant} * 2', holds), calcWhen('{GrilleExcel.Montant} * 2', holds, { type: 'number', decimals: 2, currency: '€' }), calc('{GrilleExcel.Montant} * 2')],
+      ]);
+      const c = ref => x.sheet.cell(ref);
+      const bad = [];
+      const expect = (ref, kind, value, fmt) => {
+        const cell = c(ref);
+        if (cell.kind !== kind) bad.push(ref + ' type=' + cell.kind + ' (attendu ' + kind + ', valeur ' + JSON.stringify(cell.value) + ')');
+        else if (value !== undefined && cell.value !== value) bad.push(ref + ' valeur=' + JSON.stringify(cell.value) + ' (attendu ' + JSON.stringify(value) + ')');
+        if (fmt !== undefined && cell.style.numFmt !== fmt) bad.push(ref + ' format=' + cell.style.numFmt + ' (attendu ' + fmt + ')');
+      };
+      expect('A1', 'empty'); // condition non remplie : la Lecture n'écrit rien, la case non plus
+      expect('B1', 'number', 2469, '#,##0'); // condition remplie : le vrai nombre
+      expect('C1', 'number', 2469, '#,##0.00 "€"');
+      expect('D1', 'number', 2469, '#,##0'); // sans condition : comme avant
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
   cases.push({
     id: 'xlsx_number_and_date_formats_follow_the_interface_language',
     description: 'En interface anglaise, le format d\'une date par défaut est mm/dd/yyyy, celui d\'une date « 12 sept. 2026 » est « mmm d, yyyy », et la devise d\'un nombre à l\'américaine passe devant ; en français, jour avant mois et devise après',

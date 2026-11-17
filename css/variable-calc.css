@@ -9,6 +9,9 @@
 /* Même repère que la bulle d'une variable (css/editor-v2.css) : un point en haut à droite quand un format nombre a été choisi à la barre
    flottante. */
 .tiptap .calc-badge[data-format]::after { content: ''; position: absolute; top: -3px; right: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent, #2f6fed); border: 1px solid #fff; }
+/* Une condition d'affichage (js/variable-condition.js) : la même bordure en pointillés bleus que la bulle d'une variable (css/variable-actions.css) ; en lecture et à
+   l'export, le calcul est remplacé par son résultat ou retiré. Avant les couleurs rouge et ambre ci-dessous : une bulle à problème garde sa couleur, en pointillés. */
+.tiptap .calc-badge[data-condition] { border-style: dashed; border-color: #5b7fc0; }
 /* Bulle dont la formule ne se lit plus ou cite une colonne disparue (rouge), ou qui lit une table sans lien avec la page (ambre : la Lecture y écrit
    « aucune correspondance configurée »), classes posées par Editor.markBadgeValidity : mêmes couleurs et même triangle que .var-badge-broken et
    .var-badge-unlinked (css/style.css) ; le message est dans l'info-bulle. Texte ambre #873600 sur #ffe6c7 : 6,8:1 (5,2:1 une fois choisie). */

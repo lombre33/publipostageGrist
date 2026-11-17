@@ -90,13 +90,14 @@ const VariableModal = (function () {
   }
 
   // Le nœud dont la fenêtre est ouverte, retrouvé à la position capturée au clic, ou null s'il a bougé ou disparu depuis - alerte `lostKey`, rien
-  // n'est écrit. Une bulle doit encore porter la même variable, une pastille « @ » la même fiche (table et ligne) et la même colonne. `tag` : le module, pour le journal.
+  // n'est écrit. Une bulle doit encore porter la même variable (un calcul, la même formule), une pastille « @ » la même fiche (table et ligne) et la même colonne. `tag` : le module, pour le journal.
   function nodeAtOrigin({ editor, pos, node: original }, lostKey, tag) {
     const node = editor.state.doc.nodeAt(pos);
     const name = original.type.name;
     const sameAttrs = keys => keys.every(key => node.attrs[key] === original.attrs[key]);
     const same = node && node.type.name === name
       && (name !== 'varBadge' || sameAttrs(['table', 'column']))
+      && (name !== 'calcBadge' || sameAttrs(['formula']))
       && (name !== 'editorImage' || sameAttrs(['varTable', 'varColumn']))
       && (name !== 'mention' || sameAttrs(['table', 'row', 'column']));
     if (same) return node;

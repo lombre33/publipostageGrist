@@ -248,6 +248,12 @@ const I18nTextsVariables = {
   'varCond.saveLostImage': { fr: 'L’image a été déplacée ou supprimée pendant l’édition : la condition n’a pas été enregistrée.', en: 'The image was moved or deleted while editing: the condition was not saved.' },
   'varCond.clip.pastedStatusImage': { fr: 'Condition collée. Enregistrez pour l’appliquer à l’image.', en: 'Condition pasted. Save to apply it to the image.' },
   'varCond.clip.pastedStatusCheckbox': { fr: 'Condition collée. Enregistrez pour l’appliquer à la case.', en: 'Condition pasted. Save to apply it to the checkbox.' },
+  // Le calcul : sa condition d'affichage est la même fenêtre qu'une variable, sans « Avant » / « Après » ni sinon (js/variable-condition-data.js).
+  'varCond.introCalc': { fr: 'Ce calcul n’apparaît en lecture et à l’export que si la condition est remplie. En édition, la bulle reste visible, en pointillés.', en: 'This calculation only appears in Read mode and in exports when the condition is met. While editing, the bubble stays visible with a dashed border.' },
+  'varCond.debug.currentMetCalc': { fr: 'Ligne sélectionnée (n° {id}) : condition remplie, le calcul s’affiche.', en: 'Selected row (#{id}): condition met, the calculation is shown.' },
+  'varCond.debug.currentNotMetCalc': { fr: 'Ligne sélectionnée (n° {id}) : condition non remplie, le calcul est masqué.', en: 'Selected row (#{id}): condition not met, the calculation is hidden.' },
+  'varCond.saveLostCalc': { fr: 'Le calcul a été déplacé ou supprimé pendant l’édition : la condition n’a pas été enregistrée.', en: 'The calculation was moved or deleted while editing: the condition was not saved.' },
+  'varCond.clip.pastedStatusCalc': { fr: 'Condition collée. Enregistrez pour l’appliquer au calcul.', en: 'Condition pasted. Save to apply it to the calculation.' },
 
   // --- Fenêtre « Autres attributs » d'une variable (js/variable-linked-attrs.js) ---
   'varLinked.title': { fr: 'Autres colonnes de « {table} »', en: 'Other columns of “{table}”' },

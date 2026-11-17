@@ -543,12 +543,12 @@
 
   scenario(
     'schemarenames_column_of_the_page_table_follows_in_bubbles_conditions_formulas_and_text_fields',
-    'Montant renommée « Total » dans Grist : la bulle (colonne, clé, texte) suit en gardant son format et sa condition, ainsi que la condition d’un bloc et d’une case, la formule d’un calcul et le nom du PDF ; MontantTTC, Titre, Statut, le nom et la date du modèle ne bougent pas, un autre modèle n’est pas écrit ; un seul envoi',
+    'Montant renommée « Total » dans Grist : la bulle (colonne, clé, texte) suit en gardant son format et sa condition, ainsi que la condition d’un bloc et d’une case, la formule d’un calcul et sa condition d’affichage, et le nom du PDF ; MontantTTC, Titre, Statut, le nom et la date du modèle ne bougent pas, un autre modèle n’est pas écrit ; un seul envoi',
     async (h) => {
       const bubble = badge(PAGE, 'Montant', attr('data-format', { type: 'number', decimals: 2 }) + attr('data-condition', cond([['Statut', '=', 'Ouvert']])));
       const html = `<p>Total ${bubble} / ${badge(PAGE, 'Titre')} / ${badge(PAGE, 'MontantTTC')}</p>`
         + `<div class="conditional-text"${attr('data-condition', cond([['Montant', '>', '100']]))}><p>Gros dossier</p></div>`
-        + `<p><span class="calc-badge"${attr('data-formula', '{SrDossiers.Montant}*2+{SrDossiers.MontantTTC}')}>= ancien libellé</span></p>`
+        + `<p><span class="calc-badge"${attr('data-formula', '{SrDossiers.Montant}*2+{SrDossiers.MontantTTC}')}${attr('data-condition', cond([['Montant', '>', '0']]))}>= ancien libellé</span></p>`
         + `<p><span class="conditional-checkbox"${attr('data-condition', cond([['SrDossiers.Montant', '>', '0']]))}>☐</span></p>`;
       const id = await addTemplate({ nom: 'Sr bulles', html, pdf: text('§SrDossiers.Titre - §SrDossiers.Montant - §SrDossiers.MontantTTC') });
       const otherHtml = `<p>${badge('SrProjets', 'Nom')} ${badge(PAGE, 'Titre')}</p>`;
@@ -566,12 +566,14 @@
       const box = all(row.Contenu, '.conditional-checkbox')[0];
       const updates = stub().getActionLog().filter(a => a[0] === 'UpdateRecord' && a[1] === TABLE);
       const checks = {
-        summary: res.renames === 1 && res.templates === 1 && res.variables === 5 && res.links === 0,
+        summary: res.renames === 1 && res.templates === 1 && res.variables === 6 && res.links === 0,
         bubbleColumn: bubbleOut.getAttribute('data-column') === 'Total' && bubbleOut.getAttribute('data-key') === PAGE + '.Total' && bubbleOut.textContent === trigger() + PAGE + '.Total' && bubbleOut.getAttribute('data-table') === PAGE,
         bubbleKeepsFormatAndCondition: same(json(bubbleOut, 'data-format'), { type: 'number', decimals: 2 }) && same(json(bubbleOut, 'data-condition'), cond([['Statut', '=', 'Ouvert']])),
         otherBubblesUntouched: all(row.Contenu, '.var-badge').slice(1).map(b => b.getAttribute('data-key')).join() === PAGE + '.Titre,' + PAGE + '.MontantTTC',
         block: same(json(block, 'data-condition'), cond([['Total', '>', '100']])) && block.textContent === 'Gros dossier',
         calc: calc.getAttribute('data-formula') === '{SrDossiers.Total}*2+{SrDossiers.MontantTTC}' && calc.textContent.indexOf('SrDossiers.Total') !== -1 && calc.textContent.indexOf('ancien libellé') === -1,
+        // La condition d'affichage d'un calcul (17/11) suit le renommage comme celle d'une bulle.
+        calcCondition: same(json(calc, 'data-condition'), cond([['Total', '>', '0']])),
         checkbox: same(json(box, 'data-condition'), cond([['SrDossiers.Total', '>', '0']])),
         pdfName: row.NomFichierPDF === text('§SrDossiers.Titre - §SrDossiers.Total - §SrDossiers.MontantTTC'),
         nameAndDateKept: row.Nom === 'Sr bulles' && row.DateModif === dateBefore,
