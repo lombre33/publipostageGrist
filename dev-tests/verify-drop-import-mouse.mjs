@@ -145,6 +145,28 @@ async function run(lang, scheme, w) {
   d = await doc(page);
   check(`${L} : un fichier d'un genre inconnu est refusé dans le coin d'état, rien ne change, le navigateur ne l'ouvre pas`, unknown.dropPrevented && /archive\.rar/.test(d.status) && d.text === 'Début du texte|Fin du texte', { unknown, d });
 
+  // Une présentation OpenDocument (.odp) déposée : jamais la question « Nouveau / Remplacer / Ajouter / Insérer » non plus. Ce widget seul n'a pas l'extension « diapositives » : la fenêtre qui explique ce qu'il
+  // faut s'ouvre, le document ne bouge pas (l'import réussi d'une présentation est vérifié par dev-tests/verify-odp-import-mouse.mjs).
+  await seed(page);
+  await page.addScriptTag({ url: '/dev-tests/scenarios-odp-import.js' });
+  const deckDrop = await page.evaluate(async () => {
+    const F = window.OdpFixtures;
+    const buffer = await F.odp({ pages: [F.page('Un', F.frameText(F.paragraph('Bonjour'), { box: { x: 2, y: 2, w: 10, h: 2 } }))] });
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([buffer], 'bilan.odp', { type: 'application/vnd.oasis.opendocument.presentation' }));
+    const fire = kind => { const e = new DragEvent(kind, { bubbles: true, cancelable: true, dataTransfer: transfer }); document.body.dispatchEvent(e); return e; };
+    fire('dragenter');
+    fire('dragover');
+    return { dropPrevented: fire('drop').defaultPrevented };
+  });
+  await sleep(1500);
+  const askedDeck = await dialog(page);
+  const askedDeckTitle = await page.evaluate(() => (document.getElementById('pp-dialog-title') || {}).textContent || '');
+  check(`${L} : un .odp déposé sur un document ouvert ne pose pas la question « ${T.rep} » : la fenêtre qui explique l'extension « diapositives » s'ouvre`, deckDrop.dropPrevented && !!askedDeck && !askedDeck.buttons.includes(T.rep) && !askedDeck.buttons.includes(T.nw) && /Grist Factory Suite/.test(askedDeckTitle), askedDeck);
+  if (askedDeck) await clickDialogButton(page, fr ? 'Fermer' : 'Close');
+  d = await doc(page);
+  check(`${L} : le document est le même après le dépôt d'une présentation sans l'extension`, d.text === 'Début du texte|Fin du texte' && !d.modal, d);
+
   // Un tableur OpenDocument déposé sur un document ouvert : toujours une nouvelle grille, sans la question « Nouveau / Remplacer / Ajouter / Insérer » (qui ne vaut que pour du texte). Le fichier est fabriqué dans
   // la page avec les briques de dev-tests/scenarios-ods-import.js ; la grille neuve passe par la question habituelle du menu « + » (quitter le modèle ?) puisque le texte a des modifications non enregistrées.
   await seed(page);
@@ -166,6 +188,7 @@ async function run(lang, scheme, w) {
   await sleep(1500);
   const grid = await page.evaluate(() => ({ active: GridEditor.isActive(), text: EditorCore.getEditor().state.doc.textContent }));
   check(`${L} : le tableur déposé devient une grille (nom, âge, Ana, 31)`, grid.active && /Nom/.test(grid.text) && /Ana/.test(grid.text) && /31/.test(grid.text), grid);
+
 }
 
 let w = null;

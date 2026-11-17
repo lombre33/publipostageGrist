@@ -31,7 +31,7 @@ const TEXTS = {
     row: 'Importer un OpenDocument…', placeholder: 'Rechercher une feuille…', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler', close: 'Fermer',
     importedSheet: /^Feuille « Détail » \(2 sur 2\) importée : 3 lignes, 2 colonnes\./, imported: 'OpenDocument importé : 2 lignes, 2 colonnes. Nommez le modèle puis enregistrez-le.', importedPattern: /importé/,
     reportTitle: 'Ce que l’import n’a pas repris tel quel', reportIntro: 'Le classeur est importé. Il avait ceci, que la grille n’a pas pu reprendre tel quel :', report: ['1 formule remplacée par son résultat', '1 ligne masquée non reprise'],
-    slides: 'Ce fichier OpenDocument est une présentation : seuls les .odt et .ods sont lus.', slidesPattern: /est une présentation/,
+    drawing: 'Ce fichier OpenDocument est un dessin : seuls les textes, tableurs et présentations sont lus.', drawingPattern: /est un dessin/,
     empty: 'Ce tableur ne contient aucune case à importer.', emptyPattern: /ne contient aucune case/,
     encrypted: 'Fichier OpenDocument protégé par un mot de passe : enregistrez-le sans mot de passe.', encryptedPattern: /protégé par un mot de passe/,
     unreadable: 'Ce fichier n’est pas un document OpenDocument lisible.', unreadablePattern: /n’est pas un document OpenDocument/,
@@ -40,7 +40,7 @@ const TEXTS = {
     row: 'Import from OpenDocument…', placeholder: 'Search for a sheet…', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
     importedSheet: /^Sheet “Détail” \(2 of 2\) imported: 3 rows, 2 columns\./, imported: 'OpenDocument imported: 2 rows, 2 columns. Name the template, then save it.', importedPattern: /imported/,
     reportTitle: 'What the import did not carry over as is', reportIntro: 'The workbook is imported. It had the following, which the grid could not carry over as is:', report: ['1 formula replaced by its result', '1 hidden row not imported'],
-    slides: 'This OpenDocument file is a presentation: only .odt and .ods files are read.', slidesPattern: /is a presentation/,
+    drawing: 'This OpenDocument file is a drawing: only texts, spreadsheets and presentations are read.', drawingPattern: /is a drawing/,
     empty: 'This spreadsheet has no cells to import.', emptyPattern: /has no cells/,
     encrypted: 'Password-protected OpenDocument file: save it without a password.', encryptedPattern: /Password-protected/,
     unreadable: 'This file is not a readable OpenDocument file.', unreadablePattern: /not a readable OpenDocument/,
@@ -48,7 +48,7 @@ const TEXTS = {
 };
 
 // ---- Les fichiers de l'essai : fabriqués dans la page avec les briques de dev-tests/scenarios-ods-import.js (aucun fichier binaire dans le dépôt) ------------------------------------------------------------
-// `sales` : trois feuilles (Résumé, Détail, Brouillon masquée) ; `small` : une seule feuille de 2 x 2 ; `slides`, `emptySheet`, `locked`, `notZip`.
+// `sales` : trois feuilles (Résumé, Détail, Brouillon masquée) ; `small` : une seule feuille de 2 x 2 ; `drawing`, `emptySheet`, `locked`, `notZip`.
 const buildFile = async (page, kind) => Buffer.from(await page.evaluate(async (which) => {
   const F = window.OdsFixtures;
   const { ods, text, num, row, sheet, cellStyle } = F;
@@ -67,7 +67,7 @@ const buildFile = async (page, kind) => Buffer.from(await page.evaluate(async (w
       ],
     }),
     small: () => ({ sheets: [sheet('Seule', [row([text('Nom'), text('Âge')]), row([text('Ana'), num('31', 31)])])] }),
-    slides: () => ({ mime: 'application/vnd.oasis.opendocument.presentation', bodyTag: 'office:presentation', sheets: '<draw:page draw:name="p1"/>' }),
+    drawing: () => ({ mime: 'application/vnd.oasis.opendocument.graphics', bodyTag: 'office:drawing', sheets: '<draw:page draw:name="p1"/>' }),
     emptySheet: () => ({ sheets: [sheet('Vide', [row([F.blank(3)], 'table:number-rows-repeated="1048576"')])] }),
     locked: () => ({ encrypted: true }),
   };
@@ -255,7 +255,7 @@ async function run(lang, scheme) {
     return { after, dialog, unchanged: now.html === baseline.html };
   };
   const refusal = (what, got, expected) => check(tag + `${what} : « ${expected} » en rouge, sans fenêtre, la grille ne bouge pas`, got.after.text === expected && got.after.error && !got.dialog.shown && got.unchanged && !got.after.clipped && got.after.inPanel, got);
-  refusal('une présentation OpenDocument', await refused({ name: 'diapos.odp', mimeType: 'application/vnd.oasis.opendocument.presentation', buffer: await buildFile(page, 'slides') }, T.slidesPattern), T.slides);
+  refusal('un dessin OpenDocument', await refused({ name: 'dessin.odg', mimeType: 'application/vnd.oasis.opendocument.graphics', buffer: await buildFile(page, 'drawing') }, T.drawingPattern), T.drawing);
   refusal('un tableur sans aucune case', await refused(odsFile('vide.ods', await buildFile(page, 'emptySheet')), T.emptyPattern), T.empty);
   refusal('un tableur protégé par un mot de passe', await refused(odsFile('secret.ods', await buildFile(page, 'locked')), T.encryptedPattern), T.encrypted);
   refusal('un fichier qui n\'est pas un zip', await refused(odsFile('courrier.ods', Buffer.from('Ceci est un courrier, pas un tableur.', 'utf8')), T.unreadablePattern), T.unreadable);

@@ -617,6 +617,26 @@ const ShapeGeometry = (function () {
     const cy = f.y + shownH / 2 + dx * Math.sin(turn) + dy * Math.cos(turn);
     return { x: cx - box.w / 2, y: cy - box.h * k / 2, w: box.w, h: box.h * k };
   }
+  // Le cadre de l'éditeur pour une forme dont la géométrie de PowerPoint est `box` (pivotée de box.rot autour de son centre), au trait `lw` : { x, y, w, h, adj, geo }. Le trait de PowerPoint est
+  // centré sur le bord de la géométrie, celui de l'éditeur est DANS la boîte : la boîte couvre ce que la forme couvre. Une forme de la norme dessinée par js/shape-presets.js (le cœur, ou l'une des
+  // seize à réglages) : tout ce qui dépasse sa géométrie, le trait, les pointes de ses coins et ce qui en sort, une queue de bulle (ShapeGeometry.presetFrame, la géométrie retenue `geo` quand le
+  // cadre seul ne la redonne pas) ; une autre : la demi-épaisseur du trait de chaque côté, et, pour la bulle, la queue sous le corps (BUBBLE_BODY). L'éditeur fait tourner le cadre autour de SON
+  // centre : il est posé pour que la géométrie revienne à sa place (l'export fait l'inverse).
+  function frameOfShape(kind, box, lw, adj, cap) {
+    let inside = { x: lw / 2, y: lw / 2, w: box.w + lw, h: box.h + lw, adj: '', geo: '' };
+    if (kind && drawnByPresets(kind, adj)) {
+      const f = presetFrame(kind, box.w, box.h, { lw, adj, cap });
+      inside = { x: -f.x, y: -f.y, w: f.w, h: f.h, adj, geo: f.geo };
+    } else if (kind === 'wedgeRoundRectCallout') {
+      inside.h /= BUBBLE_BODY;
+    }
+    const turn = box.rot * Math.PI / 180;
+    const dx = inside.x + box.w / 2 - inside.w / 2;
+    const dy = inside.y + box.h / 2 - inside.h / 2;
+    const cx = box.x + box.w / 2 - (dx * Math.cos(turn) - dy * Math.sin(turn));
+    const cy = box.y + box.h / 2 - (dx * Math.sin(turn) + dy * Math.cos(turn));
+    return { x: cx - inside.w / 2, y: cy - inside.h / 2, w: inside.w, h: inside.h, adj: inside.adj, geo: inside.geo };
+  }
   // Le dessin d'une forme de la norme dans un cadre de `w` sur `h` points (`o` : { fill, line (#rrggbb ou ''), lw, dash, cap, cmpd, adj, geo }), en éléments <path> SVG dans le repère du cadre :
   // { fill, line } ('' sans fond, sans trait). Le FOND remplit chaque chemin qui en a un, de la couleur du fond éclaircie ou assombrie pour les faces qui le demandent (le dessus d'un cylindre,
   // les côtés d'un cube) ; le TRAIT suit chaque chemin qui en porte un, à cheval sur le contour, en onglet aux coins (la limite de PowerPoint, huit fois l'épaisseur), avec son tiret, son bout et
@@ -743,6 +763,6 @@ const ShapeGeometry = (function () {
 
   return {
     KINDS, TABS, TEXT, LINE, MAX_LINE_PT, BUBBLE_BODY, GRAB_PT, DASHES, COMPOUNDS, END_TYPES, END_SIZES, isKind, isPreset, drawnByPresets, kindOf, defaults, outline, inset, look, outlineInset, lineWidthFor, textInsets, ROUND_RATIO, flipOf, endOf, endSizeOf, lineEnds,
-    endPolygon, lineOutline, lineLook, lineIsPlain, dashOf, dashPairs, capOf, cmpdOf, compoundBands, dashArray, dashPhase, dashDrawingMl, strokeArt, lineParts, lineArt, geoText, presetBox, presetLayout, presetFrame, presetPlace, presetSvg, presetArt, presetIcon,
+    endPolygon, lineOutline, lineLook, lineIsPlain, dashOf, dashPairs, capOf, cmpdOf, compoundBands, dashArray, dashPhase, dashDrawingMl, strokeArt, lineParts, lineArt, geoText, presetBox, presetLayout, presetFrame, frameOfShape, presetPlace, presetSvg, presetArt, presetIcon,
   };
 })();

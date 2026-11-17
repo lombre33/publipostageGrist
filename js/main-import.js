@@ -33,14 +33,14 @@ const MainImport = (function () {
       ['excel', /\.(xlsx|xlsm|xltx|xltm)$/i],
       ['markdown', /\.(md|markdown|mdown|mkd|txt)$/i],
       ['html', /\.(html|htm|xhtml|zip)$/i],
-      ['opendocument', /\.(odt|ott|fodt|ods|ots|fods)$/i],
+      ['opendocument', /\.(odt|ott|fodt|ods|ots|fods|odp|otp|fodp)$/i],
     ];
     const kindOfFile = file => { const found = DROP_KINDS.find(([, pattern]) => pattern.test(file && file.name || '')); return found ? found[0] : null; };
     async function importDroppedFile(file, extras) {
       if (isReadOnly()) { setStatus(I18n.t('status.dropReadOnly'), true); return false; }
       const kind = kindOfFile(file);
       if (!kind) { setStatus(I18n.t('status.dropUnsupported', { name: file && file.name || '' }), true); return false; }
-      if (kind === 'opendocument' && await odfKindOf(file) === 'spreadsheet') return importOdfFile(file); // un tableur OpenDocument fait toujours une nouvelle grille, comme un classeur Excel
+      if (kind === 'opendocument' && ['spreadsheet', 'presentation'].indexOf(await odfKindOf(file)) >= 0) return importOdfFile(file); // un tableur OpenDocument fait toujours une nouvelle grille, comme un classeur Excel, une présentation une nouvelle présentation
       if (!((kind === 'word' || kind === 'opendocument' || kind === 'markdown' || kind === 'html') && canMergeDocument())) return importFileFromGfs(kind, file, extras);
       const choice = await Dialogs.choose({
         title: I18n.t('drop.title'),
@@ -277,6 +277,18 @@ const MainImport = (function () {
     // grisée et son clic explique, comme celui de « Nouvelle présentation ».
     const PPTX_IMPORT_ACCEPT = '.pptx,.ppsx,.potx,application/vnd.openxmlformats-officedocument.presentationml.presentation';
     const PPTX_IMPORT_ERRORS = { unreadable: 'status.pptxImportUnreadable', legacy: 'status.pptxImportLegacy', empty: 'status.pptxImportEmpty', tooBig: 'status.pptxImportTooBig', library: 'status.pptxImportLibrary' };
+    const ODP_IMPORT_ERRORS = { unreadable: 'status.odpImportUnreadable', wrongType: 'status.odpImportUnreadable', encrypted: 'status.odtImportEncrypted', empty: 'status.odpImportEmpty', tooBig: 'status.odpImportTooBig', fileTooBig: 'status.odpImportTooBig', library: 'status.odpImportLibrary' };
+    // Les deux genres de présentation : le moteur (js/pptx-import.js, js/odp-import.js), leurs phrases du coin d'état, leurs erreurs, le nom qu'ils portent dans les mesures, la fenêtre de ce qui n'a pas été repris.
+    const PRESENTATION_FLAVORS = {
+      pptx: {
+        engines: ['pptxImport'], module: () => PptxImport, perf: 'PowerPoint', errors: PPTX_IMPORT_ERRORS, tell: (imported, file) => tellPptxImportReport(imported, file),
+        keys: { reading: 'status.pptxImporting', progress: 'status.pptxImportingProgress', busy: 'status.pptxImportBusy', imported: 'status.pptxImported', saved: 'status.pptxImportedSaved' },
+      },
+      odp: {
+        engines: ['odpImport'], module: () => OdpImport, perf: 'OpenDocument', errors: ODP_IMPORT_ERRORS, tell: imported => tellOdpImportReport(imported),
+        keys: { reading: 'status.odpImporting', progress: 'status.odpImportingProgress', busy: 'status.odpImportBusy', imported: 'status.odpImported', saved: 'status.odpImportedSaved' },
+      },
+    };
     function onImportPptx() {
       if (isReadOnly()) return;
       if (!SlidesEntry.isAvailable()) { SlidesEntry.ensureFor(SlidesEntry.TYPE); return; }
@@ -296,40 +308,45 @@ const MainImport = (function () {
     const PPTX_STEP_READ = 0.6;
     const PPTX_STEP_PLACE = 0.25;
     const PPTX_STEP_CLOSE = 0.1;
-    async function importPptxFile(file) {
-      if (pptxImporting) { setStatus(I18n.t('status.pptxImportBusy'), true); return false; }
+    // Une présentation vient de PowerPoint (.pptx : js/pptx-import.js) ou d'un logiciel libre (.odp, OpenDocument : js/odp-import.js) : la même voie, le même voile, la même pose, le même compte rendu ; chaque genre apporte
+    // son moteur, ses phrases et la fenêtre de ce qu'il n'a pas repris.
+    const importPptxFile = file => importPresentationFile(file, PRESENTATION_FLAVORS.pptx);
+    const importOdpFile = file => importPresentationFile(file, PRESENTATION_FLAVORS.odp);
+    async function importPresentationFile(file, flavor) {
+      if (pptxImporting) { setStatus(I18n.t(flavor.keys.busy), true); return false; }
       pptxImporting = true;
       const progress = ImportPlacing.begin();
       try {
         // Le code de l'extension (la bande des diapositives) arrive avant que la présentation s'ouvre : un échec le dit, et rien n'a changé.
-        if (!(await SlidesEntry.ensureFor(SlidesEntry.TYPE))) return false;
-        const reading = I18n.t('status.pptxImporting');
+        if (!SlidesEntry.isAvailable()) updateSaveStatus();   // la fenêtre qui explique va s'ouvrir : « Lecture… » serait faux derrière elle
+        if (!(await SlidesEntry.ensureFor(SlidesEntry.TYPE))) { updateSaveStatus(); return false; }   // l'explication a été lue (ou le code ne s'est pas chargé) : « Lecture… » serait faux
+        const reading = I18n.t(flavor.keys.reading);
         setStatus(reading);
         progress.update(reading, 0);
-        PerfTrace.mark('import PowerPoint : lecture', { octets: file.size });
+        PerfTrace.mark('import ' + flavor.perf + ' : lecture', { octets: file.size });
         const run = { cancelled: false, fraction: 0 };
         progress.allowCancel(() => {
           run.cancelled = true;
           progress.allowCancel(null);
           progress.update(I18n.t('importPlacing.cancelling'), run.fraction);
         });
-        const imported = await readPptxForImport(file, progress, run);
+        const imported = await readPresentationForImport(flavor, file, progress, run);
         progress.allowCancel(null);
         if (run.cancelled && imported) { setStatus(I18n.t('status.pptxImportCancelled')); return false; } // « Annuler » arrivé avec la dernière diapositive : rien n'est posé
         if (!imported) return false;
-        PerfTrace.mark('import PowerPoint : lu', { diapositives: imported.slideCount, texteMo: Math.round(ImportPlacing.slidesOf(imported).reduce((sum, text) => sum + text.length, 0) / 104857.6) / 10 });
+        PerfTrace.mark('import ' + flavor.perf + ' : lu', { diapositives: imported.slideCount, texteMo: Math.round(ImportPlacing.slidesOf(imported).reduce((sum, text) => sum + text.length, 0) / 104857.6) / 10 });
         if (hasEditsToConfirmBeforeLeaving()) {
           progress.suspend();
           updateSaveStatus(); // la lecture est finie : « Lecture… » serait faux pendant la question
           if (!(await askBeforeLeaving())) return false;
         }
-        PerfTrace.mark('import PowerPoint : mise en place');
-        await placeImportedPresentation(imported, progress, file);
-        PerfTrace.mark('import PowerPoint : en place');
+        PerfTrace.mark('import ' + flavor.perf + ' : mise en place');
+        await placeImportedPresentation(imported, progress, file, flavor);
+        PerfTrace.mark('import ' + flavor.perf + ' : en place');
         const quiet = await progress.settle();   // le voile ne part pas avant que la page soit calme (js/import-placing.js:whenQuiet)
-        if (quiet) PerfTrace.mark('import PowerPoint : page calme', quiet);
+        if (quiet) PerfTrace.mark('import ' + flavor.perf + ' : page calme', quiet);
         progress.end();
-        await tellPptxImportReport(imported, file);   // la fenêtre du rapport prend le focus et le rend à l'éditeur en se fermant
+        await flavor.tell(imported, file);   // la fenêtre du rapport prend le focus et le rend à l'éditeur en se fermant
         return true;
       } finally {
         progress.end();
@@ -351,13 +368,13 @@ const MainImport = (function () {
     }
 
     // Lit le fichier et construit la présentation. null : le fichier est refusé (l'erreur est dite dans le coin d'état) ou l'import est annulé ; rien d'autre ne se passe.
-    async function readPptxForImport(file, progress, run) {
+    async function readPresentationForImport(flavor, file, progress, run) {
       try {
-        await ExportEngines.ensure('pptxImport').catch((e) => { throw Object.assign(new Error('moteur d’import indisponible'), { code: 'library', cause: e }); });
-        return await PptxImport.fromFile(file, {
+        await ExportEngines.ensure(flavor.engines).catch((e) => { throw Object.assign(new Error('moteur d’import indisponible'), { code: 'library', cause: e }); });
+        return await flavor.module().fromFile(file, {
           shouldStop: () => run.cancelled,
           onProgress: ({ done, total }) => {
-            const text = I18n.t('status.pptxImportingProgress', { done, total });
+            const text = I18n.t(flavor.keys.progress, { done, total });
             setStatus(text);
             run.fraction = PPTX_STEP_READ * done / Math.max(total, 1);
             if (!run.cancelled) progress.update(text, run.fraction);
@@ -365,14 +382,14 @@ const MainImport = (function () {
         });
       } catch (e) {
         if (e && e.code === 'cancelled') { setStatus(I18n.t('status.pptxImportCancelled')); return null; }
-        reportPptxImportError(e);
+        reportPresentationImportError(flavor, e);
         return null;
       }
     }
 
-    function reportPptxImportError(e) {
-      console.warn('[main] import PowerPoint impossible', e); // une erreur de la personne (mauvais fichier) ou du réseau, pas du widget
-      const key = PPTX_IMPORT_ERRORS[e && e.code] || PPTX_IMPORT_ERRORS.unreadable;
+    function reportPresentationImportError(flavor, e) {
+      console.warn('[main] import de présentation impossible', e); // une erreur de la personne (mauvais fichier) ou du réseau, pas du widget
+      const key = flavor.errors[e && e.code] || flavor.errors.unreadable;
       setStatus(I18n.t(key, { size: e && e.size ? importMegabytes(e.size) : '', max: e && e.max ? importMegabytes(e.max) : '' }), true);
     }
 
@@ -381,8 +398,8 @@ const MainImport = (function () {
     // Un gros fichier (HEAVY_FILE_BYTES, 15 Mo) est enregistré dans Grist DÈS QUE sa mise en place est finie, sous le nom du fichier (10/11, « enregistrer le modèle au fil de l'import ») : le modèle est
     // dans la liste avant que quoi que ce soit d'autre se passe, et l'enregistrement automatique prend le relais. Un fichier ordinaire garde son parcours : la personne nomme puis enregistre.
     const baseNameOf = fileName => String(fileName || '').replace(/\.[^.]*$/, '').trim();
-    async function placeImportedPresentation(imported, progress, file) {
-      const keepName = file && file.size >= PptxImport.HEAVY_FILE_BYTES ? baseNameOf(file.name) : '';
+    async function placeImportedPresentation(imported, progress, file, flavor) {
+      const keepName = file && file.size >= flavor.module().HEAVY_FILE_BYTES ? baseNameOf(file.name) : '';
       const texts = ImportPlacing.slidesOf(imported);
       const total = texts.length;
       const note = (placed) => {
@@ -409,16 +426,16 @@ const MainImport = (function () {
         if (item) item.n += failed; else imported.report.push({ key: 'unreadable', n: failed });
       }
       markAutosaveDirty();
-      setStatus(I18n.t('status.pptxImported', { n: imported.slideCount }));
+      setStatus(I18n.t(flavor.keys.imported, { n: imported.slideCount }));
       if (!keepName) return;
       const saving = I18n.t('importPlacing.saving');
       setStatus(saving);
       progress.update(saving, PPTX_STEP_READ + PPTX_STEP_PLACE + PPTX_STEP_CLOSE);
       // le texte du document s'écrit d'avance, par tranches : l'enregistrement le trouve prêt ; s'il échoue, l'enregistrement le refait lui-même, d'un bloc
-      await ImportPlacing.prepareSave().catch(error => console.warn('[main] import PowerPoint : texte non préparé d’avance', error));
+      await ImportPlacing.prepareSave().catch(error => console.warn('[main] import de présentation : texte non préparé d’avance', error));
       await onSave();     // dit lui-même son échec dans le coin d'état (tables refusées, Grist qui refuse, erreur) : le modèle reste alors « à enregistrer »
-      PerfTrace.mark('import PowerPoint : enregistré', { id: Templates.getCurrentId() });
-      if (Templates.getCurrentId() != null) setStatus(I18n.t('status.pptxImportedSaved', { n: imported.slideCount, name: templateNameInput ? templateNameInput.value : keepName }));
+      PerfTrace.mark('import ' + flavor.perf + ' : enregistré', { id: Templates.getCurrentId() });
+      if (Templates.getCurrentId() != null) setStatus(I18n.t(flavor.keys.saved, { n: imported.slideCount, name: templateNameInput ? templateNameInput.value : keepName }));
     }
 
     // Ce que l'import n'a pas repris tel quel, une ligne par genre d'objet ; rien à dire quand tout est arrivé. Chaque ligne se déplie (js/import-report.js) pour dire où (les diapositives, le masque) et quoi (les noms), et
@@ -532,11 +549,11 @@ const MainImport = (function () {
     }
 
     // Import d'un fichier OpenDocument (js/odt-import.js), « Importer un OpenDocument… » du menu « + » : même voie que Word - le sélecteur s'ouvre dans le clic, le fichier est lu ensuite, la question d'enregistrement ne vient
-    // qu'après une lecture réussie, le résultat est un nouveau document sans nom et pas encore enregistré, et ce que l'éditeur n'a pas repris tel quel est dit dans une fenêtre. Pour l'instant le texte seul (.odt, son
-    // modèle .ott, le .fodt) ; un tableur ou une présentation est dit comme tel (lots suivants).
-    const ODF_IMPORT_ACCEPT = '.odt,.ott,.fodt,.ods,.ots,.fods,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.text-template,application/vnd.oasis.opendocument.spreadsheet,application/vnd.oasis.opendocument.spreadsheet-template';
+    // qu'après une lecture réussie, le résultat est un nouveau document sans nom et pas encore enregistré, et ce que l'éditeur n'a pas repris tel quel est dit dans une fenêtre. Le fichier dit son genre : un texte (.odt, son
+    // modèle .ott, le .fodt) suit cette voie, un tableur (.ods) celle de la grille (importOdsFile), une présentation (.odp) celle des diapositives (importOdpFile) ; un dessin est refusé en le disant.
+    const ODF_IMPORT_ACCEPT = '.odt,.ott,.fodt,.ods,.ots,.fods,.odp,.otp,.fodp,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.text-template,application/vnd.oasis.opendocument.spreadsheet,application/vnd.oasis.opendocument.spreadsheet-template,application/vnd.oasis.opendocument.presentation,application/vnd.oasis.opendocument.presentation-template';
     const ODF_IMPORT_ERRORS = { unreadable: 'status.odtImportUnreadable', encrypted: 'status.odtImportEncrypted', empty: 'status.odtImportEmpty', tooBig: 'status.odtImportTooBig', library: 'status.odtImportLibrary' };
-    const ODF_KIND_NAMES = { spreadsheet: 'status.odtImportKindSpreadsheet', presentation: 'status.odtImportKindPresentation' };
+    const ODF_KIND_NAMES = { graphics: 'status.odtImportKindDrawing' };
     function onImportOdf() {
       if (isReadOnly()) return;
       GridXlsxImport.chooseFile(importOdfFile, ODF_IMPORT_ACCEPT);
@@ -544,7 +561,9 @@ const MainImport = (function () {
 
     async function importOdfFile(file) {
       setStatus(I18n.t('status.odtImporting'));
-      if (await odfKindOf(file) === 'spreadsheet') return importOdsFile(file);
+      const kind = await odfKindOf(file);
+      if (kind === 'spreadsheet') return importOdsFile(file);
+      if (kind === 'presentation') return importOdpFile(file);
       const imported = await readOdfForImport(file);
       if (!imported) return false;
       if (hasEditsToConfirmBeforeLeaving()) {
@@ -617,6 +636,15 @@ const MainImport = (function () {
       if (!report || !report.length) return;
       const lines = report.map(item => '• ' + I18n.t('odt.import.report.' + item.key, { n: item.n }));
       await Dialogs.notice({ title: I18n.t('odt.import.reportTitle'), message: I18n.t('odt.import.reportIntro') + '\n' + lines.join('\n') });
+      refocusEditorIfLost();
+    }
+
+    // Ce que l'import d'une présentation OpenDocument n'a pas repris tel quel, une ligne par genre (les genres que le texte d'un objet compte ont les mots de l'import des documents) ; rien à dire quand tout est arrivé.
+    async function tellOdpImportReport(imported) {
+      const report = imported && imported.report;
+      if (!report || !report.length) return;
+      const lines = report.map(item => '• ' + (item.scope === 'odt' ? I18n.t('odt.import.report.' + item.key, { n: item.n }) : I18n.t('odp.import.report.' + item.key, { n: item.n, max: OdpImport.MAX_SLIDES })));
+      await Dialogs.notice({ title: I18n.t('odp.import.reportTitle'), message: I18n.t('odp.import.reportIntro') + '\n' + lines.join('\n') });
       refocusEditorIfLost();
     }
 

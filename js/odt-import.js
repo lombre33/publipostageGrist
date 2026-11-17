@@ -47,11 +47,22 @@ const OdtImport = (function () {
 
   // --- Les styles : un par famille et par nom, avec les propriétés de chaque groupe -----------------------------------------------------------------------------------------------------
   // Les attributs d'un élément de propriétés (`style:text-properties`...) en objet { 'fo:color': '#c80000', ... } : une valeur par nom qualifié.
+  // Les propriétés d'une case de tableau. Un tableau de PRÉSENTATION (js/odp-import.js) écrit autrement : le fond de la case est dans `loext:graphic-properties`, ses traits dans les propriétés de paragraphe de son style.
+  const BORDER_KEYS = ['fo:border', 'fo:border-top', 'fo:border-right', 'fo:border-bottom', 'fo:border-left'];
+  function cellPropsOf(el) {
+    const own = attrs(child(el, 'style:table-cell-properties'));
+    if (attr(el, 'style:family') !== 'table-cell') return own;
+    const graphic = attrs(child(el, 'loext:graphic-properties'));
+    if (graphic['draw:fill'] === 'solid' && graphic['draw:fill-color'] && own['fo:background-color'] === undefined) own['fo:background-color'] = graphic['draw:fill-color'];
+    const para = attrs(child(el, 'style:paragraph-properties'));
+    BORDER_KEYS.forEach((key) => { if (para[key] !== undefined && own[key] === undefined) own[key] = para[key]; });
+    return own;
+  }
   const groupsOf = (el) => {
     const sectionProps = child(el, 'style:section-properties');
     const columns = child(sectionProps, 'style:columns');
     return {
-      graphic: attrs(child(el, 'style:graphic-properties')), para: attrs(child(el, 'style:paragraph-properties')), text: attrs(child(el, 'style:text-properties')), cell: attrs(child(el, 'style:table-cell-properties')),
+      graphic: attrs(child(el, 'style:graphic-properties')), para: attrs(child(el, 'style:paragraph-properties')), text: attrs(child(el, 'style:text-properties')), cell: cellPropsOf(el), drawingPage: attrs(child(el, 'style:drawing-page-properties')),
       column: attrs(child(el, 'style:table-column-properties')), row: attrs(child(el, 'style:table-row-properties')), table: attrs(child(el, 'style:table-properties')),
       section: attrs(sectionProps), columnCount: columns ? whole(attr(columns, 'fo:column-count'), 1, 99) : 1,
       tabs: children(child(child(el, 'style:paragraph-properties'), 'style:tab-stops'), 'style:tab-stop').length,
@@ -120,15 +131,15 @@ const OdtImport = (function () {
     return out;
   }
   // Les propriétés d'un groupe (`para`, `cell`...) d'un style, héritage compris : les valeurs par défaut de la famille, puis chaque style de la chaîne, attribut par attribut.
-  function merged(ctx, family, styleName, group) {
-    const out = Object.assign({}, (ctx.styles.defaults.get(family) || {})[group]);
+  function merged(ctx, family, styleName, group, base) {
+    const out = Object.assign({}, (ctx.styles.defaults.get(family) || {})[group], base);
     styleChain(ctx, family, styleName).forEach(style => Object.assign(out, style[group]));
     return out;
   }
   // Les propriétés de caractère d'un texte : celles de `parent` (le paragraphe, la série de caractères qui contient celle-ci), puis le style de caractère `styleName` et ceux dont il hérite. La taille de police est
   // rendue en points dans `_size` (un pourcentage se compte sur celle de la couche au-dessous).
   function textProps(ctx, family, styleName, parent) {
-    const out = Object.assign({}, parent || (ctx.styles.defaults.get('paragraph') || {}).text);
+    const out = Object.assign({}, parent || ctx.baseText || (ctx.styles.defaults.get('paragraph') || {}).text);
     if (out._size === undefined) out._size = toPoints(out['fo:font-size'], EDITOR_BODY_PT) || 11;
     styleChain(ctx, family, styleName).forEach((style) => {
       Object.assign(out, style.text);
@@ -585,7 +596,7 @@ const OdtImport = (function () {
     const isHeading = name(el) === 'text:h';
     const styleName = attr(el, 'text:style-name');
     const chain = styleChain(ctx, 'paragraph', styleName);
-    const para = merged(ctx, 'paragraph', styleName, 'para');
+    const para = merged(ctx, 'paragraph', styleName, 'para', ctx.basePara);
     const textBase = textProps(ctx, 'paragraph', styleName, null);
     const level = isHeading ? headingLevel(el) : 0;
     const baseSize = level ? EDITOR_HEADING_PT['H' + level] : EDITOR_BODY_PT;
@@ -845,7 +856,7 @@ const OdtImport = (function () {
         }
         for (let n = 0; n < repeat && col < 200; n++) {
           const span = whole(attr(cellEl, 'table:number-columns-spanned'), 1, 200);
-          cells.push({ el: cellEl, col, span, down: whole(attr(cellEl, 'table:number-rows-spanned'), 1, 5000), sides: null });
+          cells.push({ el: cellEl, col, span, down: whole(attr(cellEl, 'table:number-rows-spanned'), 1, 5000), sides: null, style: attr(cellEl, 'table:style-name') || attr(rowEl, 'table:default-cell-style-name') });
           col += span;
           owed = span - 1;
         }
@@ -874,7 +885,7 @@ const OdtImport = (function () {
     // Les traits : la case décide de chacun des siens ; un côté qu'elle n'a pas tracé prend celui que sa voisine trace sur la même arête.
     const grid = rows.map(() => []);
     rows.forEach((row, r) => row.cells.forEach((cell) => {
-      cell.props = merged(ctx, 'table-cell', attr(cell.el, 'table:style-name'), 'cell');
+      cell.props = merged(ctx, 'table-cell', cell.style, 'cell');
       cell.sides = sidesOf(cell.props, losses);
       for (let dr = 0; dr < cell.down && r + dr < rows.length; dr++) for (let dc = 0; dc < cell.span; dc++) grid[r + dr][cell.col + dc] = cell;
     }));
@@ -1046,5 +1057,44 @@ const OdtImport = (function () {
     return fromBuffer(buffer, options);
   }
 
-  return { fromFile, fromBuffer, MAX_FILE_BYTES, MAX_UNPACKED_BYTES, REPORT_KEYS };
+  // --- Le texte d'une présentation (js/odp-import.js) -----------------------------------------------------------------------------------------------------------------------------------------
+  // Un objet d'une diapositive (une zone de texte, une forme, une case) porte son texte comme un document : les mêmes paragraphes, listes et tableaux, lus par les mêmes fonctions. Ce qui change, c'est d'où vient
+  // l'aspect de base : le style de l'objet (famille `graphic` ou `presentation`, avec ses parents) et son « style de texte » (`draw:text-style-name`, un style de paragraphe) donnent la taille, la police, la couleur
+  // et l'alignement que les paragraphes et les séries de caractères du texte n'écrivent pas eux-mêmes. `layers` : ces styles, du plus lointain au plus proche, en [famille, nom].
+  const PRESENTATION_BLOCKS = /^(?:text:|table:)/;
+  function layeredProps(ctx, layers, group) {
+    const out = Object.assign({}, (ctx.styles.defaults.get('graphic') || {})[group]);
+    layers.forEach(([family, styleName]) => { if (styleName) styleChain(ctx, family, styleName).forEach(style => Object.assign(out, style[group])); });
+    return out;
+  }
+  // Le lecteur d'une présentation : ses styles, ses images (lues une fois, avec les plafonds de l'import Word), et `blocks(conteneur, layers, widthPt)` qui rend le balisage du texte d'un objet.
+  async function presentationReader(odf, options) {
+    const styles = readStyles(odf);
+    const ctx = {
+      styles, report: new Map(), fontsSeen: new Set(), counters: new Map(), started: false, contentWidthPt: 450, firstStyles: new Set(), usedMasters: new Set(), images: new Map(), imageBytes: 0, noteCounter: 0,
+      mergeField: (options && options.mergeField) || defaultMergeField,
+      changes: new Map(), revisions: new Map(), suivi: {}, countedChanges: new Set(), openInserts: [],
+      threads: [], threadOf: new Map(), annotations: new Set(), endNames: new Set(), openThreads: new Map(), pointThreads: [], baseText: null, basePara: null,
+    };
+    ctx.images = await loadImages(ctx, odf);
+    return {
+      ctx, styles,
+      props: (layers, group) => layeredProps(ctx, layers, group),
+      blocks(container, layers, widthPt) {
+        ctx.contentWidthPt = Math.max(20, widthPt || 450);
+        ctx.baseText = layeredProps(ctx, layers, 'text');
+        ctx.basePara = layeredProps(ctx, layers, 'para');
+        ctx.started = false;
+        let out = '';
+        kids(container).forEach((part) => { if (PRESENTATION_BLOCKS.test(name(part))) out += blockHtml(ctx, part, 0); });
+        ctx.baseText = null;
+        ctx.basePara = null;
+        return out.replace(/(?:<div class="page-break-marker"><\/div>)+/g, '');
+      },
+      // Ce que le texte a compté (une clé, un nombre) et que le compte rendu de l'import dit.
+      report: () => Array.from(ctx.report, ([key, n]) => ({ key, n })).filter(item => item.n > 0),
+    };
+  }
+
+  return { fromFile, fromBuffer, presentationReader, MAX_FILE_BYTES, MAX_UNPACKED_BYTES, REPORT_KEYS };
 })();

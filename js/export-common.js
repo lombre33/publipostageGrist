@@ -631,6 +631,8 @@ const ExportCommon = (function () {
       svg: 'urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0',
       number: 'urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0',
       presentation: 'urn:oasis:names:tc:opendocument:xmlns:presentation:1.0',
+      smil: 'urn:oasis:names:tc:opendocument:xmlns:smil-compatible:1.0',
+      anim: 'urn:oasis:names:tc:opendocument:xmlns:animation:1.0',
       manifest: 'urn:oasis:names:tc:opendocument:xmlns:manifest:1.0',
       xlink: 'http://www.w3.org/1999/xlink',
       dc: 'http://purl.org/dc/elements/1.1/',

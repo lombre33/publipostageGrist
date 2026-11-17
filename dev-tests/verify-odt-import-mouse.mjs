@@ -38,7 +38,7 @@ const TEXTS = {
     unreadable: 'Ce fichier n’est pas un document OpenDocument lisible.', unreadablePattern: /n’est pas un document OpenDocument/,
     encrypted: 'Fichier OpenDocument protégé par un mot de passe : enregistrez-le sans mot de passe.', encryptedPattern: /protégé par un mot de passe/,
     sheet: 'Ce tableur ne contient aucune case à importer.', sheetPattern: /ne contient aucune case/,
-    slides: 'Ce fichier OpenDocument est une présentation : seuls les .odt et .ods sont lus.', slidesPattern: /est une présentation/,
+    drawing: 'Ce fichier OpenDocument est un dessin : seuls les textes, tableurs et présentations sont lus.', drawingPattern: /est un dessin/,
     empty: 'Ce document OpenDocument est vide.', emptyPattern: /est vide/,
     tooBig: 'Ce fichier est trop gros pour être importé : 150,1 Mo (au plus 150 Mo).', tooBigPattern: /trop gros/,
     reportTitle: 'Ce que l’import n’a pas repris tel quel', reportIntro: 'Le document est importé. Le fichier avait ceci, que l’éditeur n’a pas pu reprendre tel quel :',
@@ -52,7 +52,7 @@ const TEXTS = {
     unreadable: 'This file is not a readable OpenDocument file.', unreadablePattern: /not a readable OpenDocument/,
     encrypted: 'Password-protected OpenDocument file: save it without a password.', encryptedPattern: /Password-protected/,
     sheet: 'This spreadsheet has no cells to import.', sheetPattern: /has no cells/,
-    slides: 'This OpenDocument file is a presentation: only .odt and .ods files are read.', slidesPattern: /is a presentation/,
+    drawing: 'This OpenDocument file is a drawing: only texts, spreadsheets and presentations are read.', drawingPattern: /is a drawing/,
     empty: 'This OpenDocument document is empty.', emptyPattern: /is empty/,
     tooBig: 'This file is too big to import: 150.1 MB (at most 150 MB).', tooBigPattern: /too big/,
     reportTitle: 'What the import did not carry over as is', reportIntro: 'The document is imported. The file had the following, which the editor could not carry over as is:',
@@ -62,7 +62,7 @@ const TEXTS = {
 };
 
 // ---- Les fichiers de l'essai : fabriqués dans la page avec les briques de dev-tests/scenarios-odt-import.js (aucun fichier binaire dans le dépôt) ------------------------------------------------------------
-// `plain` : un document que l'éditeur reprend en entier (titre, texte mis en forme, liste, tableau avec fusion) ; `report` : huit genres non repris ; `sheet`, `slides` : un tableur et une présentation ;
+// `plain` : un document que l'éditeur reprend en entier (titre, texte mis en forme, liste, tableau avec fusion) ; `report` : huit genres non repris ; `sheet`, `drawing` : un tableur et un dessin ;
 // `locked` : un fichier protégé ; `empty` : un document sans texte ; `notOdf` : un zip qui n'est pas un OpenDocument.
 const buildFile = async (page, kind) => Buffer.from(await page.evaluate(async (which) => {
   const F = window.OdtFixtures;
@@ -88,7 +88,7 @@ const buildFile = async (page, kind) => Buffer.from(await page.evaluate(async (w
         + p('<text:a xlink:href="javascript:alert(1)" xlink:type="simple">piège</text:a>'),
     }),
     sheet: () => ({ mime: 'application/vnd.oasis.opendocument.spreadsheet', bodyTag: 'office:spreadsheet', body: '<table:table table:name="A"/>' }),
-    slides: () => ({ mime: 'application/vnd.oasis.opendocument.presentation', bodyTag: 'office:presentation', body: '<draw:page draw:name="p1"/>' }),
+    drawing: () => ({ mime: 'application/vnd.oasis.opendocument.graphics', bodyTag: 'office:drawing', body: '<draw:page draw:name="p1"/>' }),
     locked: () => ({ encrypted: true }),
     empty: () => ({ body: p('') }),
   };
@@ -340,7 +340,7 @@ async function run(lang, scheme) {
     refusal('un zip qui n\'est pas un OpenDocument (une présentation PowerPoint)', await refused(odfFile('presentation.odt', await buildFile(page, 'notOdf')), T.unreadablePattern), T.unreadable);
     refusal('un fichier protégé par un mot de passe', await refused(odfFile('secret.odt', await buildFile(page, 'locked')), T.encryptedPattern), T.encrypted);
     refusal('un tableur OpenDocument sans aucune case (un tableur plein est importé : dev-tests/verify-ods-import-mouse.mjs)', await refused({ name: 'chiffres.ods', mimeType: 'application/vnd.oasis.opendocument.spreadsheet', buffer: await buildFile(page, 'sheet') }, T.sheetPattern), T.sheet);
-    refusal('une présentation OpenDocument', await refused({ name: 'diapos.odp', mimeType: 'application/vnd.oasis.opendocument.presentation', buffer: await buildFile(page, 'slides') }, T.slidesPattern), T.slides);
+    refusal('un dessin OpenDocument', await refused({ name: 'dessin.odg', mimeType: 'application/vnd.oasis.opendocument.graphics', buffer: await buildFile(page, 'drawing') }, T.drawingPattern), T.drawing);
     refusal('un document sans rien dedans', await refused(odfFile('vide.odt', await buildFile(page, 'empty')), T.emptyPattern), T.empty);
     const huge = await mibFile(tmp, 'gros.odt', MAX_MIB * 1024 * 1024 + 1);
     refusal(`un fichier de plus de ${MAX_MIB} Mo (jamais lu : sa taille suffit)`, await refused(huge, T.tooBigPattern), T.tooBig);

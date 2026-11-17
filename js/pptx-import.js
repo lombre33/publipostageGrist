@@ -1842,26 +1842,8 @@ const PptxImport = (function () {
     });
     return out;
   }
-  // Le cadre de l'éditeur pour une forme dont la géométrie de PowerPoint est `box` (pivotée de box.rot autour de son centre), au trait `lw` : { x, y, w, h, adj, geo }. Le trait de PowerPoint est
-  // centré sur le bord de la géométrie, celui de l'éditeur est DANS la boîte : la boîte couvre ce que la forme couvre. Une forme de la norme dessinée par js/shape-presets.js (le cœur, ou l'une des
-  // seize à réglages) : tout ce qui dépasse sa géométrie, le trait, les pointes de ses coins et ce qui en sort, une queue de bulle (ShapeGeometry.presetFrame, la géométrie retenue `geo` quand le
-  // cadre seul ne la redonne pas) ; une autre : la demi-épaisseur du trait de chaque côté, et, pour la bulle, la queue sous le corps (BUBBLE_BODY). L'éditeur fait tourner le cadre autour de SON
-  // centre : il est posé pour que la géométrie revienne à sa place (l'export fait l'inverse).
-  function frameOfShape(kind, box, lw, adj, cap) {
-    let inside = { x: lw / 2, y: lw / 2, w: box.w + lw, h: box.h + lw, adj: '', geo: '' };
-    if (kind && ShapeGeometry.drawnByPresets(kind, adj)) {
-      const f = ShapeGeometry.presetFrame(kind, box.w, box.h, { lw, adj, cap });
-      inside = { x: -f.x, y: -f.y, w: f.w, h: f.h, adj, geo: f.geo };
-    } else if (kind === 'wedgeRoundRectCallout') {
-      inside.h /= ShapeGeometry.BUBBLE_BODY;
-    }
-    const turn = box.rot * Math.PI / 180;
-    const dx = inside.x + box.w / 2 - inside.w / 2;
-    const dy = inside.y + box.h / 2 - inside.h / 2;
-    const cx = box.x + box.w / 2 - (dx * Math.cos(turn) - dy * Math.sin(turn));
-    const cy = box.y + box.h / 2 - (dx * Math.sin(turn) + dy * Math.cos(turn));
-    return { x: cx - inside.w / 2, y: cy - inside.h / 2, w: inside.w, h: inside.h, adj: inside.adj, geo: inside.geo };
-  }
+  // Le cadre de l'éditeur pour une forme dont la géométrie est `box` : js/shape-geometry.js:frameOfShape (l'import OpenDocument, js/odp-import.js, le calcule de même).
+  const frameOfShape = ShapeGeometry.frameOfShape;
   // Une forme libre (`a:custGeom`) de la boîte `xf` (en EMU) reprise comme forme de l'éditeur : son nom de forme libre (js/shape-presets.js : `freeze`), ou '' quand elle ne tient pas dans un nom
   // (trop de points) ou n'a rien à dessiner. Ses guides sont calculés pour la boîte du fichier, ses chemins (droites, courbes, arcs, remplissages et traits de chacun) deviennent des nombres ; le
   // rectangle du texte (`a:rect`) est gardé. `flipH` et `flipV` : la forme retournée dans sa boîte, que l'éditeur ne sait pas faire d'une autre manière.
