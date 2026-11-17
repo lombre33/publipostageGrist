@@ -294,41 +294,8 @@ const DocxImport = (function () {
     return look;
   }
   function lookKey(look, link, track, comments) { return [look.style.join(';'), look.b, look.i, look.u, look.uLine, look.s, look.sup, look.sub, link || '', track ? track.kind + track.id : '', comments ? comments.map(c => c.id).join(',') : ''].join('|'); }
-  // Le texte `inner` (déjà en balisage) avec les marques de la série de caractères, dans l'ordre de l'éditeur (js/pptx-import.js:runMarkup).
-  function wrapRun(inner, look, link, track, comments) {
-    let html = look.style.length ? '<span style="' + look.style.join('; ') + '">' + inner + '</span>' : inner;
-    if (look.b) html = '<strong>' + html + '</strong>';
-    if (look.i) html = '<em>' + html + '</em>';
-    if (look.u) html = look.uLine ? '<u style="text-decoration-style: ' + look.uLine + '">' + html + '</u>' : '<u>' + html + '</u>';
-    if (look.s) html = '<s>' + html + '</s>';
-    if (look.sup) html = '<sup>' + html + '</sup>';
-    else if (look.sub) html = '<sub>' + html + '</sub>';
-    if (link) html = '<a href="' + escAttr(link) + '">' + html + '</a>';
-    // Les marques de l'éditeur qui ne changent pas l'aspect : le fil de commentaire (js/comments.js), puis la modification suivie (js/track-changes.js : `<ins>` ou `<del>` et son numéro).
-    if (comments) comments.forEach((c) => { html = '<span class="comment-mark" data-comment-id="' + escAttr(c.id) + '" data-resolved="' + (c.resolved ? 'true' : 'false') + '">' + html + '</span>'; });
-    if (track) html = trackWrap(html, track);
-    return html;
-  }
-  const trackWrap = (html, track) => '<' + (track.kind === 'del' ? 'del' : 'ins') + ' data-id="' + track.id + '">' + html + '</' + (track.kind === 'del' ? 'del' : 'ins') + '>';
-  // Les séries de caractères qui se suivent avec le même aspect ne font qu'un (Word en coupe à chaque correction ou révision) ; un élément `raw` (image, note, numéro de page) reste seul.
-  function itemsHtml(items) {
-    let out = '';
-    for (let i = 0; i < items.length;) {
-      const item = items[i];
-      if (item.raw !== undefined) { out += item.raw; i += 1; continue; }
-      let text = item.text;
-      let j = i + 1;
-      while (j < items.length && items[j].raw === undefined && items[j].key === item.key) { text += items[j].text; j += 1; }
-      out += wrapRun(spaced(item.caps ? text.toLocaleUpperCase() : text), item.look, item.link, item.track, item.comments);
-      i = j;
-    }
-    return out;
-  }
-  const SAFE_LINK = /^(https?:|mailto:|tel:)/i;
-  function safeHref(href) {
-    const text = String(href || '').trim();
-    return SAFE_LINK.test(text) && !/[\u0000-\u001f\s]/.test(text) ? text : '';
-  }
+  // Les marques d'une série de caractères en balisage, communes avec l'import OpenDocument (js/export-common.js:Markup).
+  const { wrapRun, trackWrap, itemsHtml, safeHref } = ExportCommon.Markup;
 
   // --- Le texte d'un paragraphe ---------------------------------------------------------------------------------------------------------------------------------------------------
   // L'état d'un paragraphe en cours de lecture : `r` (propriétés de caractère du paragraphe), `baseSize` (la taille que l'éditeur donne à ce paragraphe sans réglage), `items`, `link`.

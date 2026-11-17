@@ -558,6 +558,194 @@ const ExportCommon = (function () {
     return { fail, kids, kid, at, descendants, localAttr, relAttr, numAttrOf, round2, fixed, escText, escAttr, spaced, resolvePath, openPackage, LIMITS, IMAGE_TYPES, EDITOR_TEXT, EDITOR_FONTS, nearestFamily, keptFamily };
   })();
 
+  // Les marques d'une série de caractères en balisage de l'éditeur : ce que l'import Word (js/docx-import.js) et l'import OpenDocument (js/odt-import.js) écrivent de la même façon. Une série de caractères est
+  // { text, look: { style (déclarations CSS), b, i, u, uLine, s, sup, sub }, key, link, caps, track, comments } ; un élément `raw` (image, note, numéro de page) reste seul.
+  const Markup = (function () {
+    const { escAttr, spaced } = Ooxml;
+    // Le texte `inner` (déjà en balisage) avec les marques de la série de caractères, dans l'ordre de l'éditeur (js/pptx-import.js:runMarkup).
+    function wrapRun(inner, look, link, track, comments) {
+      let html = look.style.length ? '<span style="' + look.style.join('; ') + '">' + inner + '</span>' : inner;
+      if (look.b) html = '<strong>' + html + '</strong>';
+      if (look.i) html = '<em>' + html + '</em>';
+      if (look.u) html = look.uLine ? '<u style="text-decoration-style: ' + look.uLine + '">' + html + '</u>' : '<u>' + html + '</u>';
+      if (look.s) html = '<s>' + html + '</s>';
+      if (look.sup) html = '<sup>' + html + '</sup>';
+      else if (look.sub) html = '<sub>' + html + '</sub>';
+      if (link) html = '<a href="' + escAttr(link) + '">' + html + '</a>';
+      // Les marques de l'éditeur qui ne changent pas l'aspect : le fil de commentaire (js/comments.js), puis la modification suivie (js/track-changes.js : `<ins>` ou `<del>` et son numéro).
+      if (comments) comments.forEach((c) => { html = '<span class="comment-mark" data-comment-id="' + escAttr(c.id) + '" data-resolved="' + (c.resolved ? 'true' : 'false') + '">' + html + '</span>'; });
+      if (track) html = trackWrap(html, track);
+      return html;
+    }
+    const trackWrap = (html, track) => '<' + (track.kind === 'del' ? 'del' : 'ins') + ' data-id="' + track.id + '">' + html + '</' + (track.kind === 'del' ? 'del' : 'ins') + '>';
+    // Les séries de caractères qui se suivent avec le même aspect ne font qu'un (Word en coupe à chaque correction ou révision) ; un élément `raw` (image, note, numéro de page) reste seul.
+    function itemsHtml(items) {
+      let out = '';
+      for (let i = 0; i < items.length;) {
+        const item = items[i];
+        if (item.raw !== undefined) { out += item.raw; i += 1; continue; }
+        let text = item.text;
+        let j = i + 1;
+        while (j < items.length && items[j].raw === undefined && items[j].key === item.key) { text += items[j].text; j += 1; }
+        out += wrapRun(spaced(item.caps ? text.toLocaleUpperCase() : text), item.look, item.link, item.track, item.comments);
+        i = j;
+      }
+      return out;
+    }
+    const SAFE_LINK = /^(https?:|mailto:|tel:)/i;
+    function safeHref(href) {
+      const text = String(href || '').trim();
+      return SAFE_LINK.test(text) && !/[\u0000-\u001f\s]/.test(text) ? text : '';
+    }
+    return { wrapRun, trackWrap, itemsHtml, safeHref };
+  })();
+
+  // La lecture des fichiers OpenDocument (ODT, ODS, ODP : js/odt-import.js et ses frères) : ce qu'ils ont en commun, écrit une seule fois. Un fichier OpenDocument est un zip (JSZip) de parties XML - `content.xml`,
+  // `styles.xml`, `meta.xml`, `META-INF/manifest.xml`, les images dans `Pictures/` - ou, en « flat », un seul fichier XML (.fodt, .fods, .fodp). Les noms se lisent par leur ESPACE de noms, jamais par leur préfixe
+  // (`text:p` s'écrit parfois autrement) : `name(el)` rend « text:p », `attr(el, 'fo:color')` lit un attribut. Rien n'est exécuté : les macros du fichier ne sont jamais lues.
+  const Odf = (function () {
+    const { fail, kids, kid, descendants } = Ooxml;
+    const NS = {
+      office: 'urn:oasis:names:tc:opendocument:xmlns:office:1.0',
+      style: 'urn:oasis:names:tc:opendocument:xmlns:style:1.0',
+      text: 'urn:oasis:names:tc:opendocument:xmlns:text:1.0',
+      table: 'urn:oasis:names:tc:opendocument:xmlns:table:1.0',
+      draw: 'urn:oasis:names:tc:opendocument:xmlns:drawing:1.0',
+      fo: 'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0',
+      svg: 'urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0',
+      number: 'urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0',
+      presentation: 'urn:oasis:names:tc:opendocument:xmlns:presentation:1.0',
+      manifest: 'urn:oasis:names:tc:opendocument:xmlns:manifest:1.0',
+      xlink: 'http://www.w3.org/1999/xlink',
+      dc: 'http://purl.org/dc/elements/1.1/',
+      meta: 'urn:oasis:names:tc:opendocument:xmlns:meta:1.0',
+      loext: 'urn:org:documentfoundation:names:experimental:office:xmlns:loext:1.0',
+      calcext: 'urn:org:documentfoundation:names:experimental:calc:xmlns:calcext:1.0',
+    };
+    const PREFIX_OF = {};
+    Object.keys(NS).forEach((prefix) => { PREFIX_OF[NS[prefix]] = prefix; });
+    const name = el => (el ? (PREFIX_OF[el.namespaceURI] || '?') + ':' + el.localName : '');
+    // Un attribut par son nom qualifié (`fo:color`, `style:name`) ; null quand il manque.
+    function attr(el, qname) {
+      if (!el) return null;
+      const cut = qname.indexOf(':');
+      const value = el.getAttributeNS(NS[qname.slice(0, cut)] || '', qname.slice(cut + 1));
+      return value === '' && !el.hasAttributeNS(NS[qname.slice(0, cut)] || '', qname.slice(cut + 1)) ? null : value;
+    }
+    // Tous les attributs d'un élément en objet { 'fo:color': '#c80000', ... } (noms qualifiés) ; vide quand l'élément manque.
+    function attrs(el) {
+      const out = {};
+      if (!el) return out;
+      for (let i = 0; i < el.attributes.length; i++) {
+        const entry = el.attributes[i];
+        const prefix = PREFIX_OF[entry.namespaceURI];
+        out[(prefix ? prefix + ':' : '') + entry.localName] = entry.value;
+      }
+      return out;
+    }
+    // Les enfants dont le nom qualifié est dans `names` (un nom ou une liste) ; tous sans `names`.
+    function children(el, names) {
+      const list = Array.isArray(names) ? names : (names ? [names] : null);
+      return kids(el).filter(child => !list || list.indexOf(name(child)) >= 0);
+    }
+    const child = (el, names) => children(el, names)[0] || null;
+    // Une longueur (« 0.25in », « 1.27cm », « 10mm », « 12pt », « 1pc », « 16px ») en points ; `percentOf` donne la base d'un pourcentage ; null quand ce n'en est pas une.
+    function toPoints(value, percentOf) {
+      const m = /^\s*(-?\d*\.?\d+)\s*(in|cm|mm|pt|pc|px|%)?\s*$/.exec(String(value === null || value === undefined ? '' : value));
+      if (!m) return null;
+      const n = Number(m[1]);
+      switch (m[2]) {
+        case 'in': return n * 72;
+        case 'cm': return n * 72 / 2.54;
+        case 'mm': return n * 72 / 25.4;
+        case 'pc': return n * 12;
+        case 'px': return n * 0.75;
+        case '%': return percentOf === undefined || percentOf === null ? null : n * percentOf / 100;
+        default: return m[2] === 'pt' || m[2] === undefined ? n : null;
+      }
+    }
+    const MIMES = { text: 'text', 'text-template': 'text', 'text-master': 'text', 'text-web': 'text', spreadsheet: 'spreadsheet', 'spreadsheet-template': 'spreadsheet', presentation: 'presentation', 'presentation-template': 'presentation', graphics: 'graphics', 'graphics-template': 'graphics' };
+    const BODIES = { 'office:text': 'text', 'office:spreadsheet': 'spreadsheet', 'office:presentation': 'presentation', 'office:drawing': 'graphics' };
+    // Le fichier OpenDocument : refuse ce qui n'en est pas un (ni zip ni XML, zip illisible, partie principale absente, protégé par un mot de passe, trop gros une fois défait) puis rend ses lectures :
+    // `kind` (`text`, `spreadsheet`, `presentation`, `graphics` ou ''), `body` (l'élément `office:text`...), `contentDoc` et `stylesDoc` (les documents ; le même en « flat »), `sections(nom)` (les
+    // éléments `office:styles`, `office:automatic-styles`, `office:font-face-decls`, `office:master-styles` de tous les documents), `fileOf(chemin)` et `has(chemin)` (une partie du zip).
+    // `limits` : { maxUnpacked, maxPart } ; `messages` : { notPackage, unreadable, tooBig, encrypted }.
+    async function open(buffer, { limits, messages }) {
+      const head = new Uint8Array(buffer, 0, Math.min(8, buffer.byteLength));
+      const parser = new DOMParser();
+      const parse = (text) => {
+        const parsed = parser.parseFromString(text, 'application/xml');
+        return parsed.getElementsByTagName('parsererror').length ? null : parsed;
+      };
+      let contentDoc = null;
+      let stylesDoc = null;
+      let mime = '';
+      let zip = null;
+      let fileOf = () => null;
+      let flat = false;
+      if (head[0] === 0x50 && head[1] === 0x4B) {
+        try {
+          await ensureJsZipLoaded();
+        } catch (e) {
+          throw fail('library', 'La bibliothèque de lecture des fichiers n’a pas pu être chargée.', { cause: e });
+        }
+        try {
+          zip = await JSZip.loadAsync(buffer);
+        } catch (e) {
+          throw fail('unreadable', messages.unreadable, { cause: e });
+        }
+        const names = new Map();
+        Object.keys(zip.files).forEach((entry) => { if (!zip.files[entry].dir) names.set(entry.toLowerCase(), entry); });
+        const unpacked = zipUnpackedBytes(zip);
+        if (unpacked > limits.maxUnpacked) throw fail('tooBig', messages.tooBig, { size: unpacked, max: limits.maxUnpacked });
+        fileOf = path => (path ? zip.file(names.get(String(path).toLowerCase()) || path) : null);
+        const read = async (path) => {
+          const file = fileOf(path);
+          if (!file) return null;
+          try {
+            const text = await file.async('string');
+            return text.length <= limits.maxPart ? parse(text) : null;
+          } catch (e) {
+            return null;
+          }
+        };
+        const manifest = fileOf('META-INF/manifest.xml');
+        if (manifest) {
+          const text = await manifest.async('string').catch(() => '');
+          if (/encryption-data/.test(text)) throw fail('encrypted', messages.encrypted);
+        }
+        const type = fileOf('mimetype');
+        if (type) mime = String(await type.async('string').catch(() => '')).trim();
+        contentDoc = await read('content.xml');
+        stylesDoc = await read('styles.xml');
+        if (!contentDoc || name(contentDoc.documentElement) !== 'office:document-content') throw fail('unreadable', messages.notPackage);
+      } else {
+        // Un fichier « flat » : tout le document tient dans un seul XML.
+        let text = '';
+        try {
+          text = new TextDecoder('utf-8').decode(new Uint8Array(buffer));
+        } catch (e) {
+          throw fail('unreadable', messages.unreadable, { cause: e });
+        }
+        if (!/^﻿?\s*<(\?xml|office:document)/.test(text.slice(0, 200))) throw fail('unreadable', messages.notPackage);
+        if (text.length > limits.maxPart) throw fail('tooBig', messages.tooBig, { size: text.length, max: limits.maxPart });
+        contentDoc = parse(text);
+        if (!contentDoc || name(contentDoc.documentElement) !== 'office:document') throw fail('unreadable', messages.notPackage);
+        stylesDoc = contentDoc;
+        flat = true;
+        mime = attr(contentDoc.documentElement, 'office:mimetype') || '';
+      }
+      const bodyHolder = child(contentDoc.documentElement, 'office:body');
+      const body = bodyHolder ? kids(bodyHolder)[0] || null : null;
+      const bodyKind = body ? BODIES[name(body)] || '' : '';
+      const mimeKind = MIMES[mime.replace(/^application\/vnd\.oasis\.opendocument\./, '').replace(/-flat-xml$/, '')] || '';
+      const documents = flat ? [contentDoc] : [contentDoc, stylesDoc].filter(Boolean);
+      const sections = sectionName => documents.map(doc => child(doc.documentElement, sectionName)).filter(Boolean);
+      return { kind: bodyKind || mimeKind, mime, flat, body, contentDoc, stylesDoc, sections, fileOf, has: path => !!fileOf(path), zip, descendants };
+    }
+    return { NS, name, attr, attrs, children, child, toPoints, open };
+  })();
+
   return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, fillEmptyBlocks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
-    resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages, isMergeImage, Ooxml };
+    resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages, isMergeImage, Ooxml, Markup, Odf };
 })();

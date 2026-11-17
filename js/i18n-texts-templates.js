@@ -75,6 +75,7 @@ const I18nTextsTemplates = {
   'toolbar.importHtml': { fr: 'Importer un HTML…', en: 'Import from HTML…' },
   'toolbar.importDocx': { fr: 'Importer un Word…', en: 'Import from Word…' },
   'toolbar.importPptx': { fr: 'Importer un PowerPoint…', en: 'Import from PowerPoint…' },
+  'toolbar.importOdf': { fr: 'Importer un OpenDocument…', en: 'Import from OpenDocument…' },
   'toolbar.newFromTemplate': { fr: 'Créer à partir d’un modèle…', en: 'Create from a template…' },
   'toolbar.save': { fr: 'Enregistrer', en: 'Save' },
   'toolbar.saveAs': { fr: 'Enregistrer sous (copie)', en: 'Save as (copy)' },

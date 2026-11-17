@@ -6,10 +6,10 @@ const MainImport = (function () {
     const { askBeforeLeaving, canMergeDocument, hasEditsToConfirmBeforeLeaving, isReadOnly, loadTemplateIntoEditor, markAutosaveDirty, onSave, refocusEditorIfLost, setStatus, templateNameInput, templateSelect, updateSaveStatus } = api;
 
     // « Nouveau > Importer » demandé par GFS (js/gfs-open.js, consigne GFS 035) : GFS a ouvert le sélecteur de fichier lui-même (le cadre isolé de l'app n'a pas le geste de la personne) et donne le fichier choisi, que
-    // `valeur` nomme : `excel` (une grille), `markdown` (un document), `html` (un document), `powerpoint` (une présentation, l'extension « diapositives » étant active), `word` (un document). Il est lu par le chemin de la ligne du même nom du menu « + » - mêmes
+    // `valeur` nomme : `excel` (une grille), `markdown` (un document), `html` (un document), `powerpoint` (une présentation, l'extension « diapositives » étant active), `word` (un document), `opendocument` (un document texte .odt ; le tableur et la présentation suivront). Il est lu par le chemin de la ligne du même nom du menu « + » - mêmes
     // lectures, mêmes refus et mêmes phrases du coin d'état, même question d'enregistrement après une lecture réussie, même résultat : un modèle sans nom et pas encore enregistré, rien d'écrit avant son premier
     // « Enregistrer » - sans le sélecteur. true : le modèle importé est à l'écran ; false : le document est en lecture seule, la valeur est inconnue, le fichier est refusé, ou la personne a annulé.
-    // `word` (choix du porteur du 07/11) et `html` (13/11) ne sont proposés par GFS qu'une fois qu'il les déclare dans `actions.importer` de son manifeste : tant qu'il ne le fait pas, aucune valeur `word` ni `html` n'arrive, et rien ne change.
+    // `word` (choix du porteur du 07/11), `html` (13/11) et `opendocument` (17/11) ne sont proposés par GFS qu'une fois qu'il les déclare dans `actions.importer` de son manifeste : tant qu'il ne le fait pas, aucune de ces valeurs n'arrive, et rien ne change.
     async function importFileFromGfs(kind, file, extras) {
       if (isReadOnly()) return false;
       switch (kind) {
@@ -18,6 +18,7 @@ const MainImport = (function () {
         case 'html': return importHtmlFile(file, extras);
         case 'powerpoint': return importPptxFile(file);
         case 'word': return importDocxFile(file);
+        case 'opendocument': return importOdfFile(file);
         default: return false;
       }
     }
@@ -32,13 +33,14 @@ const MainImport = (function () {
       ['excel', /\.(xlsx|xlsm|xltx|xltm)$/i],
       ['markdown', /\.(md|markdown|mdown|mkd|txt)$/i],
       ['html', /\.(html|htm|xhtml|zip)$/i],
+      ['opendocument', /\.(odt|ott|fodt)$/i],
     ];
     const kindOfFile = file => { const found = DROP_KINDS.find(([, pattern]) => pattern.test(file && file.name || '')); return found ? found[0] : null; };
     async function importDroppedFile(file, extras) {
       if (isReadOnly()) { setStatus(I18n.t('status.dropReadOnly'), true); return false; }
       const kind = kindOfFile(file);
       if (!kind) { setStatus(I18n.t('status.dropUnsupported', { name: file && file.name || '' }), true); return false; }
-      if (!((kind === 'word' || kind === 'markdown' || kind === 'html') && canMergeDocument())) return importFileFromGfs(kind, file, extras);
+      if (!((kind === 'word' || kind === 'opendocument' || kind === 'markdown' || kind === 'html') && canMergeDocument())) return importFileFromGfs(kind, file, extras);
       const choice = await Dialogs.choose({
         title: I18n.t('drop.title'),
         message: I18n.t('drop.message', { name: file.name }),
@@ -51,8 +53,8 @@ const MainImport = (function () {
       });
       if (!choice) { refocusEditorIfLost(); return false; }
       if (choice === 'new') return importFileFromGfs(kind, file, extras);
-      setStatus(I18n.t(kind === 'word' ? 'status.docxImporting' : kind === 'html' ? 'status.htmlImporting' : 'status.mdImporting'));
-      const imported = kind === 'word' ? await readDocxForImport(file) : kind === 'html' ? await readHtmlForImport(file, extras) : await readMdForImport(file);
+      setStatus(I18n.t(kind === 'word' ? 'status.docxImporting' : kind === 'opendocument' ? 'status.odtImporting' : kind === 'html' ? 'status.htmlImporting' : 'status.mdImporting'));
+      const imported = kind === 'word' ? await readDocxForImport(file) : kind === 'opendocument' ? await readOdfForImport(file) : kind === 'html' ? await readHtmlForImport(file, extras) : await readMdForImport(file);
       if (!imported) return false;
       const editor = EditorCore.getEditor();
       if (!editor || !canMergeDocument()) { updateSaveStatus(); return false; }
@@ -65,6 +67,7 @@ const MainImport = (function () {
       markAutosaveDirty();
       setStatus(I18n.t('status.dropMerged', { name: file.name }));
       if (kind === 'word') await tellDocxImportReport(imported.report);
+      else if (kind === 'opendocument') await tellOdfImportReport(imported.report);
       else if (kind === 'html') await tellHtmlImportReport(imported.report);
       return true;
     }
@@ -508,7 +511,7 @@ const MainImport = (function () {
       setStatus(I18n.t(key, { size: e && e.size ? importMegabytes(e.size) : '', max: e && e.max ? importMegabytes(e.max) : '' }), true);
     }
 
-    function openImportedDocx(imported) {
+    function openImportedDocx(imported, statusKey) {
       // Un nouveau document, sans nom et pas encore enregistré, comme « Nouveau document » ; sa page (format, sens, marges) et ses en-têtes et pieds de page sont ceux du fichier.
       templateSelect.value = '';
       // Les modifications suivies du fichier (auteur et date) restent en attente de validation ; ses commentaires sont marqués dans le texte, leurs messages attendent le premier enregistrement (ils vont dans la table
@@ -516,7 +519,7 @@ const MainImport = (function () {
       loadTemplateIntoEditor({ id: null, nom: '', contenu: imported.html, typeModele: 'document', marginsMm: imported.page, suiviModifications: imported.suiviModifications || null, headerFooter: imported.headerFooter }, 'document');
       Comments.stageImported(imported.comments);
       markAutosaveDirty();
-      setStatus(I18n.t('status.docxImported'));
+      setStatus(I18n.t(statusKey || 'status.docxImported'));
     }
 
     // Ce que l'import n'a pas repris tel quel, une ligne par genre ; rien à dire quand tout est arrivé.
@@ -527,7 +530,52 @@ const MainImport = (function () {
       refocusEditorIfLost();
     }
 
-    return { importFileFromGfs, importDroppedFile, importDroppedSet, onImportDocx, onImportHtml, onImportMd, onImportPptx, onImportXlsx };
+    // Import d'un fichier OpenDocument (js/odt-import.js), « Importer un OpenDocument… » du menu « + » : même voie que Word - le sélecteur s'ouvre dans le clic, le fichier est lu ensuite, la question d'enregistrement ne vient
+    // qu'après une lecture réussie, le résultat est un nouveau document sans nom et pas encore enregistré, et ce que l'éditeur n'a pas repris tel quel est dit dans une fenêtre. Pour l'instant le texte seul (.odt, son
+    // modèle .ott, le .fodt) ; un tableur ou une présentation est dit comme tel (lots suivants).
+    const ODF_IMPORT_ACCEPT = '.odt,.ott,.fodt,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.text-template';
+    const ODF_IMPORT_ERRORS = { unreadable: 'status.odtImportUnreadable', encrypted: 'status.odtImportEncrypted', empty: 'status.odtImportEmpty', tooBig: 'status.odtImportTooBig', library: 'status.odtImportLibrary' };
+    const ODF_KIND_NAMES = { spreadsheet: 'status.odtImportKindSpreadsheet', presentation: 'status.odtImportKindPresentation' };
+    function onImportOdf() {
+      if (isReadOnly()) return;
+      GridXlsxImport.chooseFile(importOdfFile, ODF_IMPORT_ACCEPT);
+    }
+
+    async function importOdfFile(file) {
+      setStatus(I18n.t('status.odtImporting'));
+      const imported = await readOdfForImport(file);
+      if (!imported) return false;
+      if (hasEditsToConfirmBeforeLeaving()) {
+        updateSaveStatus(); // la lecture est finie : « Lecture… » serait faux pendant la question
+        if (!(await askBeforeLeaving())) return false;
+      }
+      openImportedDocx(imported, 'status.odtImported');
+      await tellOdfImportReport(imported.report);
+      return true;
+    }
+
+    // Lit le fichier et construit le document. null : le fichier est refusé (l'erreur est dite dans le coin d'état) ; rien d'autre ne se passe.
+    async function readOdfForImport(file) {
+      try {
+        await ExportEngines.ensure('odtImport').catch((e) => { throw Object.assign(new Error('moteur d’import indisponible'), { code: 'library', cause: e }); });
+        return await OdtImport.fromFile(file);
+      } catch (e) {
+        console.warn('[main] import OpenDocument impossible', e); // une erreur de la personne (mauvais fichier) ou du réseau, pas du widget
+        if (e && e.code === 'wrongType') setStatus(I18n.t('status.odtImportOtherKind', { kind: I18n.t(ODF_KIND_NAMES[e.kind] || 'status.odtImportKindOther') }), true);
+        else setStatus(I18n.t(ODF_IMPORT_ERRORS[e && e.code] || ODF_IMPORT_ERRORS.unreadable, { size: e && e.size ? importMegabytes(e.size) : '', max: e && e.max ? importMegabytes(e.max) : '' }), true);
+        return null;
+      }
+    }
+
+    // Ce que l'import n'a pas repris tel quel, une ligne par genre ; rien à dire quand tout est arrivé.
+    async function tellOdfImportReport(report) {
+      if (!report || !report.length) return;
+      const lines = report.map(item => '• ' + I18n.t('odt.import.report.' + item.key, { n: item.n }));
+      await Dialogs.notice({ title: I18n.t('odt.import.reportTitle'), message: I18n.t('odt.import.reportIntro') + '\n' + lines.join('\n') });
+      refocusEditorIfLost();
+    }
+
+    return { importFileFromGfs, importDroppedFile, importDroppedSet, onImportDocx, onImportHtml, onImportMd, onImportOdf, onImportPptx, onImportXlsx };
   }
 
   return { create };

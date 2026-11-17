@@ -1,0 +1,722 @@
+// Import OpenDocument texte : un fichier .odt (ou son modèle .ott, ou le fichier « flat » .fodt) devient le HTML d'un NOUVEAU document, sans nom et pas encore enregistré, sur le modèle de l'import Word
+// (js/docx-import.js) : reprendre tous les éléments qui correspondent à une fonction déjà développée, dire à la personne, à la fin, ce qui n'a pas pu être pris, et rester au plus près du fichier. Les formats
+// libres (LibreOffice, OnlyOffice, Collabora, Calligra...) sont lus sans aucune bibliothèque de plus : un zip (JSZip, déjà chargé) de parties XML, lu à la main comme le .docx.
+//
+// Le fichier : `content.xml` (le texte et les styles « automatiques » : P1, T1, Table1.A1...), `styles.xml` (les styles nommés, les valeurs par défaut, les pages et leurs marges), les polices déclarées. Rien n'est
+// lu au hasard : une valeur qui manque prend celle que le fichier hérite (les valeurs par défaut, puis le style et ceux dont il hérite `style:parent-style-name`, puis le réglage de la série de caractères).
+//
+// Ce que le texte devient : les paragraphes (alignement, interligne, espaces avant et après, retraits, sens d'écriture), les titres (`text:h`, niveaux 1 à 6), les séries de caractères (gras, italique, souligné et
+// sa sorte, barré, exposant, indice, couleur, fond, police, taille, espacement, petites capitales, majuscules), les listes à puces et numérotées emboîtées, les tableaux (colonnes, fusions, fonds, traits, hauteurs,
+// alignement vertical, tableau dans un tableau mis à plat), les liens, les sauts de ligne et de page, les tabulations, la page (format, sens, marges).
+//
+// Ce qu'il ne garde pas est COMPTÉ, un genre à la fois, et dit à la personne par la fenêtre du compte rendu (js/main-import.js:tellOdtImportReport) ; rien n'est perdu en silence. Le moteur ne touche ni à
+// l'éditeur ni à la page : il rend le TEXTE du document (le HTML que l'éditeur écrit), la page et le compte rendu.
+const OdtImport = (function () {
+  // Les plafonds communs aux imports (js/export-common.js:Ooxml.LIMITS) ; une partie XML plus grosse que celui-ci est refusée.
+  const { file: MAX_FILE_BYTES, unpacked: MAX_UNPACKED_BYTES } = ExportCommon.Ooxml.LIMITS;
+  const MAX_PART_BYTES = 60 * 1024 * 1024;
+  const MAX_DEPTH = 24;             // listes, tableaux et sections emboîtés
+  const MAX_REPEAT = 500;           // une colonne, une ligne ou une case « répétée » plus que cela est ramenée à cela
+  const MAX_ROWS = 5000;
+  const MAX_CELLS = 20000;          // un tableau plus grand n'est plus un tableau de texte : il est coupé là et le compte rendu le dit
+  const PX_PER_PT = 96 / 72;
+  const MM_PER_PT = 25.4 / 72;
+  const EDITOR_BODY_PT = ExportCommon.EDITOR_STYLE.bodyPt;
+  const EDITOR_HEADING_PT = ExportCommon.EDITOR_STYLE.headingPt;
+  const NATURAL_LINE = ExportCommon.EDITOR_STYLE.naturalLine;
+  const { EDITOR_TEXT, EDITOR_FONTS: editorFonts } = ExportCommon.Ooxml;
+  const SAME_FAMILY = /^(?:calibri|carlito|arial(?! (?:black|narrow|rounded|unicode))|arimo|helvetica|liberation sans|times|tinos|liberation serif|georgia|gelasio|courier|cousine|liberation mono|roboto)/;
+  const REPORT_KEYS = [
+    'sections', 'columns', 'fonts', 'tabs', 'rightIndent', 'paragraphBorders', 'numbering', 'images', 'shapes', 'notes', 'headerFooter', 'comments', 'trackedChanges', 'hidden', 'fields', 'toc',
+    'nestedTables', 'borderStyles', 'links', 'tableCells',
+  ];
+  const PAGE_BREAK = '<div class="page-break-marker"></div>';
+
+  // --- Petits outils sur le XML (js/export-common.js:Odf et Ooxml) -------------------------------------------------------------------------------------------------------------------------------
+  const { fail, kids, round2, fixed } = ExportCommon.Ooxml;
+  const { name, attr, attrs, children, child, toPoints } = ExportCommon.Odf;
+  const { itemsHtml, safeHref } = ExportCommon.Markup;
+  const count = (ctx, key, n) => { ctx.report.set(key, (ctx.report.get(key) || 0) + (n === undefined ? 1 : n)); };
+  const lose = (st, key) => { if (st.losses) st.losses.add(key); };
+  const whole = (value, fallback, max) => {
+    const n = Math.floor(Number(value));
+    return Number.isFinite(n) && n >= 1 ? Math.min(n, max || MAX_REPEAT) : fallback;
+  };
+
+  // --- Les styles : un par famille et par nom, avec les propriétés de chaque groupe -----------------------------------------------------------------------------------------------------
+  // Les attributs d'un élément de propriétés (`style:text-properties`...) en objet { 'fo:color': '#c80000', ... } : une valeur par nom qualifié.
+  const groupsOf = (el) => {
+    const sectionProps = child(el, 'style:section-properties');
+    const columns = child(sectionProps, 'style:columns');
+    return {
+      para: attrs(child(el, 'style:paragraph-properties')), text: attrs(child(el, 'style:text-properties')), cell: attrs(child(el, 'style:table-cell-properties')),
+      column: attrs(child(el, 'style:table-column-properties')), row: attrs(child(el, 'style:table-row-properties')), table: attrs(child(el, 'style:table-properties')),
+      section: attrs(sectionProps), columnCount: columns ? whole(attr(columns, 'fo:column-count'), 1, 99) : 1,
+      tabs: children(child(child(el, 'style:paragraph-properties'), 'style:tab-stops'), 'style:tab-stop').length,
+    };
+  };
+  const LIST_LEVELS = ['text:list-level-style-bullet', 'text:list-level-style-number', 'text:list-level-style-image'];
+  function readListStyle(el) {
+    const levels = new Map();
+    children(el, LIST_LEVELS).forEach((level) => {
+      const kind = name(level) === 'text:list-level-style-bullet' ? 'bullet' : (name(level) === 'text:list-level-style-number' ? 'number' : 'image');
+      levels.set(whole(attr(level, 'text:level'), 1, 10), {
+        kind, char: attr(level, 'text:bullet-char') || '', format: attr(level, 'style:num-format') || '', prefix: attr(level, 'style:num-prefix') || '', suffix: attr(level, 'style:num-suffix') || '',
+        start: whole(attr(level, 'text:start-value'), 1, 100000), display: whole(attr(level, 'text:display-levels'), 1, 10),
+      });
+    });
+    return levels;
+  }
+  function readStyles(odf) {
+    const fonts = new Map();
+    odf.sections('office:font-face-decls').forEach((holder) => {
+      children(holder, 'style:font-face').forEach((face) => {
+        const family = String(attr(face, 'svg:font-family') || attr(face, 'style:name') || '').replace(/^['"]|['"]$/g, '').split(',')[0].replace(/^['"]|['"]$/g, '').trim();
+        fonts.set(attr(face, 'style:name'), family);
+      });
+    });
+    const styles = new Map();
+    const defaults = new Map();
+    const lists = new Map();
+    const layouts = new Map();
+    const masters = [];
+    const take = (el) => {
+      switch (name(el)) {
+        case 'style:style': {
+          const family = attr(el, 'style:family');
+          const styleName = attr(el, 'style:name');
+          if (family && styleName) {
+            styles.set(family + ':' + styleName, Object.assign({
+              name: styleName, family, parent: attr(el, 'style:parent-style-name'), display: attr(el, 'style:display-name') || styleName, master: attr(el, 'style:master-page-name') || '',
+              listStyle: attr(el, 'style:list-style-name'), outline: attr(el, 'style:default-outline-level'),
+            }, groupsOf(el)));
+          }
+          break;
+        }
+        case 'style:default-style': defaults.set(attr(el, 'style:family'), groupsOf(el)); break;
+        case 'text:list-style': lists.set(attr(el, 'style:name'), readListStyle(el)); break;
+        case 'style:page-layout': layouts.set(attr(el, 'style:name'), attrs(child(el, 'style:page-layout-properties'))); break;
+        default: break;
+      }
+    };
+    ['office:styles', 'office:automatic-styles'].forEach(section => odf.sections(section).forEach(holder => children(holder).forEach(take)));
+    odf.sections('office:master-styles').forEach(holder => children(holder, 'style:master-page').forEach(master => masters.push(master)));
+    return { fonts, styles, defaults, lists, layouts, masters };
+  }
+  // Un style et ceux dont il hérite, du plus lointain au plus proche ; un cycle ou un nom inconnu coupe la chaîne.
+  function styleChain(ctx, family, styleName) {
+    const out = [];
+    const seen = new Set();
+    let current = styleName;
+    while (current && !seen.has(current) && out.length < 32) {
+      seen.add(current);
+      const style = ctx.styles.styles.get(family + ':' + current);
+      if (!style) break;
+      out.unshift(style);
+      current = style.parent;
+    }
+    return out;
+  }
+  // Les propriétés d'un groupe (`para`, `cell`...) d'un style, héritage compris : les valeurs par défaut de la famille, puis chaque style de la chaîne, attribut par attribut.
+  function merged(ctx, family, styleName, group) {
+    const out = Object.assign({}, (ctx.styles.defaults.get(family) || {})[group]);
+    styleChain(ctx, family, styleName).forEach(style => Object.assign(out, style[group]));
+    return out;
+  }
+  // Les propriétés de caractère d'un texte : celles de `parent` (le paragraphe, la série de caractères qui contient celle-ci), puis le style de caractère `styleName` et ceux dont il hérite. La taille de police est
+  // rendue en points dans `_size` (un pourcentage se compte sur celle de la couche au-dessous).
+  function textProps(ctx, family, styleName, parent) {
+    const out = Object.assign({}, parent || (ctx.styles.defaults.get('paragraph') || {}).text);
+    if (out._size === undefined) out._size = toPoints(out['fo:font-size'], EDITOR_BODY_PT) || 11;
+    styleChain(ctx, family, styleName).forEach((style) => {
+      Object.assign(out, style.text);
+      if (style.text['fo:font-size']) { const size = toPoints(style.text['fo:font-size'], out._size); if (size) out._size = size; }
+    });
+    return out;
+  }
+
+  // --- Les polices, les couleurs et les séries de caractères --------------------------------------------------------------------------------------------------------------------------------------
+  const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+  const colorOf = value => (HEX_COLOR.test(String(value || '')) ? String(value).slice(1).toLowerCase() : null);
+  // La famille de remplacement la plus proche parmi celles de l'éditeur (Roboto par défaut, Arial, Times New Roman, Georgia, Courier New, Calibri) ; null : celle de l'éditeur.
+  // Les polices que LibreOffice met à la place d'Arial, de Times New Roman et de Courier New (mêmes chasses) sont ramenées à elles avant la recherche.
+  const METRIC_TWINS = { 'liberation sans': 'arial', 'liberation sans narrow': 'arial', 'liberation serif': 'times new roman', 'liberation mono': 'courier new', caladea: 'cambria', 'dejavu serif': 'georgia', 'dejavu sans mono': 'courier new' };
+  const familyOf = (key) => {
+    const lower = String(key || '').trim().toLowerCase();
+    return lower ? ExportCommon.Ooxml.nearestFamily(METRIC_TWINS[lower] || lower) : null;
+  };
+  const UNDERLINE_STYLES = { dotted: 'dotted', dash: 'dashed', 'long-dash': 'dashed', 'dot-dash': 'dashed', 'dot-dot-dash': 'dashed', wave: 'wavy' };
+  // La police d'une série de caractères (sa famille dans l'éditeur, ou null pour celle de l'éditeur) ; une police que l'éditeur n'a pas exactement est comptée une fois.
+  function fontOf(ctx, props) {
+    const declared = props['style:font-name'] ? ctx.styles.fonts.get(props['style:font-name']) || props['style:font-name'] : props['fo:font-family'];
+    const label = String(declared || '').replace(/^['"]|['"]$/g, '').trim();
+    if (!label) return null;
+    const lower = label.toLowerCase();
+    // Une variante d'une police que l'éditeur a (« Liberation Sans », « Calibri Light », « Times ») prend la sienne sans rien dire ; une autre famille (« Cambria », « Consolas ») est comptée.
+    if (!editorFonts.has(lower) && !SAME_FAMILY.test(lower) && !ctx.fontsSeen.has(lower)) { ctx.fontsSeen.add(lower); count(ctx, 'fonts'); }
+    return familyOf(label);
+  }
+  // Ce qu'une série de caractères demande, en marques de l'éditeur : { style (déclarations CSS), b, i, u, uLine, s, sup, sub, caps, hidden }.
+  function runLook(ctx, props, baseSize, linked) {
+    const weight = props['fo:font-weight'];
+    const italic = props['fo:font-style'];
+    const underline = props['style:text-underline-style'];
+    const strike = props['style:text-line-through-style'] || props['style:text-line-through-type'];
+    const look = {
+      style: [], b: weight === 'bold' || Number(weight) >= 600, i: italic === 'italic' || italic === 'oblique', u: false, uLine: '',
+      s: !!strike && strike !== 'none', sup: false, sub: false, caps: props['fo:text-transform'] === 'uppercase', hidden: props['text:display'] === 'none',
+    };
+    const size = props._size;
+    if (Number.isFinite(size) && size > 0 && Math.abs(size - baseSize) > 0.04) look.style.push('font-size: ' + fixed(Math.max(1, size)) + 'pt');
+    const family = fontOf(ctx, props);
+    if (family) look.style.push('font-family: ' + family);
+    const color = colorOf(props['fo:color']);
+    if (!linked && color && color !== '000000' && color !== EDITOR_TEXT) look.style.push('color: #' + color);
+    const back = colorOf(props['fo:background-color']);
+    if (back && back !== 'ffffff') look.style.push('background-color: #' + back);
+    const spacing = toPoints(props['fo:letter-spacing']);
+    const character = CharacterFormat.declarations({ letterSpacing: spacing || 0, smallCaps: props['fo:font-variant'] === 'small-caps' });
+    if (character) look.style.push(character);
+    if (underline && underline !== 'none' && !linked) {
+      look.u = true;
+      look.uLine = props['style:text-underline-type'] === 'double' ? 'double' : (UNDERLINE_STYLES[underline] || '');
+    }
+    // « Position » : « super 58% », « sub 58% » ou « 33% 58% » (monté ou descendu de 33 %, la taille réduite qui l'accompagne est celle de l'éditeur).
+    const position = /^\s*(super|sub|-?\d+(?:\.\d+)?%)/.exec(props['style:text-position'] || '');
+    if (position) {
+      const raised = position[1] === 'super' || (/%$/.test(position[1]) && parseFloat(position[1]) > 0);
+      const lowered = position[1] === 'sub' || (/%$/.test(position[1]) && parseFloat(position[1]) < 0);
+      look.sup = raised;
+      look.sub = lowered && !raised;
+      if (look.sup || look.sub) look.style = look.style.filter(rule => !/^font-size:/.test(rule));
+    }
+    return look;
+  }
+  const lookKey = (look, link) => [look.style.join(';'), look.b, look.i, look.u, look.uLine, look.s, look.sup, look.sub, link || ''].join('|');
+
+  // --- Le texte d'un paragraphe ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // L'état d'un paragraphe en cours de lecture : `props` (propriétés de caractère du paragraphe), `baseSize` (la taille que l'éditeur donne à ce paragraphe sans réglage), `items`, `link`.
+  const newState = (ctx, props, baseSize, depth) => ({ ctx, props, baseSize, items: [], link: '', losses: new Set(), depth, collapsible: true, last: null });
+  // Le texte d'un nœud, comme OpenDocument le lit : les blancs qui se suivent (espaces, tabulations, retours à la ligne du fichier) n'en font qu'un, et le premier blanc d'un paragraphe ne compte pas.
+  function pushText(st, raw, props, collapse) {
+    let text = collapse ? raw.replace(/[ \t\r\n]+/g, ' ') : raw;
+    if (collapse && st.collapsible) text = text.replace(/^ /, '');
+    if (!text) return;
+    const look = runLook(st.ctx, props, st.baseSize, !!st.link);
+    if (look.hidden) { lose(st, 'hidden'); return; }
+    const entry = { text, look, key: lookKey(look, st.link), link: st.link, caps: look.caps };
+    st.items.push(entry);
+    st.last = collapse ? entry : null;
+    st.collapsible = collapse ? / $/.test(text) : false;
+  }
+  // Les marques sans texte (signets, repères d'index, sauts de page « doux » que l'application calcule), le numéro qu'un titre numéroté recopie (`text:number`) et le texte d'un rubi.
+  const SKIPPED = new Set([
+    'text:bookmark', 'text:bookmark-start', 'text:bookmark-end', 'text:soft-page-break', 'text:reference-mark', 'text:reference-mark-start', 'text:reference-mark-end', 'text:index-mark', 'text:index-mark-start',
+    'text:index-mark-end', 'text:alphabetical-index-mark', 'text:alphabetical-index-mark-start', 'text:alphabetical-index-mark-end', 'text:toc-mark', 'text:toc-mark-start', 'text:toc-mark-end', 'text:number',
+    'text:ruby-text', 'text:change', 'text:change-start', 'text:change-end', 'office:annotation-end', 'text:title', 'text:subject-placeholder-never',
+  ]);
+  function readInline(st, parent, props) {
+    for (let node = parent.firstChild; node; node = node.nextSibling) {
+      if (node.nodeType === 3 || node.nodeType === 4) { pushText(st, node.nodeValue, props, true); continue; }
+      if (node.nodeType !== 1) continue;
+      const tag = name(node);
+      if (SKIPPED.has(tag)) continue;
+      switch (tag) {
+        case 'text:s': {
+          pushText(st, ' '.repeat(whole(attr(node, 'text:c'), 1, 1000)), props, false);
+          break;
+        }
+        case 'text:tab': pushText(st, '\t', props, false); break;
+        case 'text:line-break': pushText(st, '\n', props, false); st.collapsible = true; break;
+        case 'text:span': readInline(st, node, textProps(st.ctx, 'text', attr(node, 'text:style-name'), props)); break;
+        case 'text:a': {
+          const target = attr(node, 'xlink:href');
+          const href = safeHref(target);
+          if (target && !href) count(st.ctx, 'links');
+          const outer = st.link;
+          st.link = href;
+          readInline(st, node, props);
+          st.link = outer;
+          break;
+        }
+        case 'text:note': count(st.ctx, 'notes'); break;
+        case 'office:annotation': count(st.ctx, 'comments'); break;
+        case 'draw:frame': count(st.ctx, frameKind(node)); break;
+        case 'draw:image': count(st.ctx, 'images'); break;
+        case 'text:ruby': readInline(st, child(node, 'text:ruby-base') || node, props); break;
+        default:
+          if (/^draw:/.test(tag)) { count(st.ctx, 'shapes'); break; }
+          // Les champs (date, numéro de page, nombre de pages, auteur, champ de fusion...) : leur dernière valeur reste dans le texte.
+          if (/^text:(?:date|time|page-number|page-count|author|sender|initial-creator|creator|file-name|database|user-field|variable|sequence|modification|print|editing|chapter|word-count|paragraph-count|character-count|expression|conditional|hidden|placeholder|bibliography-mark|page-variable|reference)/.test(tag) || /^text:.*-get$/.test(tag)) count(st.ctx, 'fields');
+          readInline(st, node, props);
+          break;
+      }
+    }
+  }
+  // Un cadre : une image, ou autre chose (zone de texte, objet incorporé, graphique).
+  const frameKind = frame => (child(frame, 'draw:image') ? 'images' : 'shapes');
+
+  // --- Les paragraphes -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  const rtlOf = para => /^rl/.test(para['style:writing-mode'] || '');
+  // Le niveau de titre (1 à 6) : `text:outline-level` (de 1 à 10 dans le fichier).
+  const headingLevel = el => Math.min(6, whole(attr(el, 'text:outline-level'), 1, 10));
+  const isQuote = chain => chain.some(style => /^(?:quotations?|quote|citation)$/i.test(style.display));
+  // Un paragraphe de la table des matières (styles « Contents 1 »...) : l'éditeur refait son sommaire lui-même à partir des titres.
+  function alignOf(para, rtl) {
+    const value = para['fo:text-align'];
+    if (!value) return undefined;
+    if (value === 'center') return 'center';
+    if (value === 'justify' || value === 'justified') return 'justify';
+    if (value === 'end') return rtl ? 'left' : 'right';
+    if (value === 'right') return rtl ? undefined : 'right';
+    if (value === 'left') return rtl ? 'left' : undefined;
+    return undefined;
+  }
+  // Une marge ou un retrait en points, `fo:margin` (les quatre côtés) donnant ce que le côté n'a pas.
+  const sideOf = (para, side) => {
+    const value = para['fo:margin-' + side] !== undefined ? para['fo:margin-' + side] : para['fo:margin'];
+    return toPoints(String(value === undefined ? '' : value).trim().split(/\s+/)[0], 0);
+  };
+  // Les réglages de « Paragraphe… » (js/paragraph-format.js) : interligne (multiple de la ligne simple, ou hauteur fixée en points ramenée à la taille du texte), espaces avant et après, retraits.
+  function formatOf(para, sizePt, inList, st) {
+    const out = {};
+    const before = sideOf(para, 'top');
+    const after = sideOf(para, 'bottom');
+    if (before !== null) out.spaceBefore = before;
+    if (after !== null) out.spaceAfter = after;
+    const line = para['fo:line-height'];
+    if (line && line !== 'normal') {
+      if (/%$/.test(line)) { const ratio = parseFloat(line) / 100; if (Number.isFinite(ratio) && ratio > 0) out.lineHeight = ratio * NATURAL_LINE; }
+      else { const fixedHeight = toPoints(line); if (fixedHeight && fixedHeight > 0) out.lineHeight = fixedHeight / Math.max(1, sizePt); }
+    }
+    if (!inList) {
+      const left = sideOf(para, 'left');
+      const first = toPoints(para['fo:text-indent'], 0);
+      if (left !== null && left > 0) out.indentLeft = left;
+      if (first !== null && first !== 0) out.indentFirst = first;
+    }
+    const right = sideOf(para, 'right');
+    if (right !== null && right > 0) lose(st, 'rightIndent');
+    return out;
+  }
+  const BORDER = /^(?!\s*(?:none|hidden)\b)\s*\S+\s+\S+/;
+  function hasBorders(para) {
+    const sides = ['fo:border', 'fo:border-top', 'fo:border-bottom', 'fo:border-left', 'fo:border-right'];
+    const lines = sides.some(side => para[side] && BORDER.test(para[side]) && parseFloat(para[side]) !== 0);
+    const fill = para['fo:background-color'] && para['fo:background-color'] !== 'transparent';
+    return !!(lines || fill);
+  }
+  // Les blocs d'un paragraphe (un ou plusieurs : un saut de page avant ou après le coupe), chacun en balisage.
+  function paragraphHtml(ctx, el, inList) {
+    const isHeading = name(el) === 'text:h';
+    const styleName = attr(el, 'text:style-name');
+    const chain = styleChain(ctx, 'paragraph', styleName);
+    const para = merged(ctx, 'paragraph', styleName, 'para');
+    const textBase = textProps(ctx, 'paragraph', styleName, null);
+    const level = isHeading ? headingLevel(el) : 0;
+    const baseSize = level ? EDITOR_HEADING_PT['H' + level] : EDITOR_BODY_PT;
+    const st = newState(ctx, textBase, baseSize, 0);
+    readInline(st, el, textBase);
+    // Le dernier blanc d'un paragraphe ne compte pas.
+    if (st.last && / $/.test(st.last.text)) { st.last.text = st.last.text.slice(0, -1); if (!st.last.text) st.items.splice(st.items.lastIndexOf(st.last), 1); }
+    const sizePt = Number.isFinite(textBase._size) ? textBase._size : EDITOR_BODY_PT;
+    const format = formatOf(para, sizePt, inList, st);
+    // Les tabulations ne comptent que dans un paragraphe qui en contient une : un style qui en déclare sans qu'on s'en serve ne change rien à ce qu'on voit.
+    const hasTab = st.items.some(item => item.text && item.text.indexOf('\t') >= 0);
+    const tabStop = toPoints((ctx.styles.defaults.get('paragraph') || {}).para && ctx.styles.defaults.get('paragraph').para['style:tab-stop-distance']);
+    if (hasTab && tabStop && tabStop > 0) format.tabSize = round2(tabStop);
+    if (hasTab) { const own = chain.some(style => style.tabs > 0); if (own) lose(st, 'tabs'); }
+    if (hasBorders(para)) lose(st, 'paragraphBorders');
+    const rtl = rtlOf(para);
+    const align = alignOf(para, rtl);
+    const direction = TextDirection.markup(rtl);
+    const keep = para['fo:keep-with-next'] === 'always' && !level ? ' data-keep-next="true"' : '';
+    const html = itemsHtml(st.items);
+    const empty = !html;
+    let block;
+    if (level) {
+      block = '<h' + level + direction + (align ? ' style="text-align: ' + align + '"' : '') + '>' + html + '</h' + level + '>';
+    } else {
+      const filler = empty && sizePt >= 12 && !inList ? '<span style="font-size: ' + fixed(sizePt) + 'pt"> </span>' : '';
+      block = '<p' + direction + ParagraphFormat.markup(format, align, rtl) + keep + '>' + html + filler + '</p>';
+    }
+    if (!level && isQuote(chain) && !inList) block = '<blockquote>' + block + '</blockquote>';
+    st.losses.forEach(key => count(ctx, key));
+    const out = [];
+    if (pageBreakBefore(ctx, para, chain)) out.push(PAGE_BREAK);
+    out.push(block);
+    if (para['fo:break-after'] === 'page') out.push(PAGE_BREAK);
+    return { html: out.join(''), rtl };
+  }
+  // La page maîtresse que demande un style (le plus proche de la chaîne qui en nomme une) : le paragraphe ou le tableau qui la porte commence une page.
+  function masterOf(chain) {
+    for (let i = chain.length - 1; i >= 0; i--) if (chain[i].master) return chain[i].master;
+    return '';
+  }
+  // Un saut de page avant le paragraphe (ou le tableau) : demandé, ou son style change de page (`style:master-page-name`, la page maîtresse est notée pour le compte rendu) ; jamais au tout début du document, qui n'ouvre
+  // pas de page vide.
+  function pageBreakBefore(ctx, props, chain) {
+    const master = masterOf(chain);
+    if (master) ctx.usedMasters.add(master);
+    return !!ctx.started && (props['fo:break-before'] === 'page' || !!master);
+  }
+
+  // --- Les listes ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  const BULLET_PUA = { B7: '•', '6C': '•', '9F': '•', '6F': 'o', A7: '▪', '6E': '■', A8: '◆', FC: '✓', FB: '✗' };
+  // Le signe d'une puce : un caractère de la zone privée (Symbol, Wingdings) devient son équivalent, le reste se range dans « rond », « rond creux », « carré » ou un signe choisi.
+  function bulletOf(level) {
+    const raw = Array.from(level.char || '')[0] || '';
+    const code = raw ? raw.codePointAt(0) : 0;
+    const sign = code >= 0xF000 && code <= 0xF0FF ? (BULLET_PUA[(code & 0xFF).toString(16).toUpperCase()] || '•') : raw;
+    if (!sign || /^[•●·∙]$/.test(sign)) return { style: 'disc', char: '' };
+    if (/^[o○◦]$/.test(sign)) return { style: 'circle', char: '' };
+    if (/^[▪■◾◼§▫□◻]$/.test(sign)) return { style: 'square', char: '' };
+    return { style: 'disc', char: BulletFormat.normalized(sign) || '' };
+  }
+  const NUMBER_STYLES = { 1: 'decimal', a: 'alpha', i: 'roman' };
+  // La numérotation d'un niveau : { tag: 'ol', style, start } ; ce que l'éditeur ne sait pas écrire (majuscules, « 1.1 », texte autour du numéro) est compté une fois par liste et par niveau.
+  function numberingOf(ctx, level, key) {
+    const format = level.format;
+    const style = NUMBER_STYLES[String(format).toLowerCase()] || 'decimal';
+    const simple = (!level.prefix && (!level.suffix || /^[.)]$/.test(level.suffix))) || (level.prefix === '(' && level.suffix === ')');
+    const exact = (format === '1' || format === 'a' || format === 'i') && simple && level.display <= 1;
+    if (!exact && !ctx.fontsSeen.has('num:' + key)) { ctx.fontsSeen.add('num:' + key); count(ctx, 'numbering'); }
+    return style;
+  }
+  // La liste dont le style de liste est donné par la liste elle-même, ou à défaut par le style de son premier paragraphe.
+  function listStyleOf(ctx, listEl, inherited) {
+    const own = attr(listEl, 'text:style-name');
+    if (own) return own;
+    if (inherited) return inherited;
+    const first = child(child(listEl, ['text:list-item', 'text:list-header']), ['text:p', 'text:h']);
+    const chain = first ? styleChain(ctx, 'paragraph', attr(first, 'text:style-name')) : [];
+    for (let i = chain.length - 1; i >= 0; i--) if (chain[i].listStyle) return chain[i].listStyle;
+    return '';
+  }
+  function counterOf(ctx, listStyle) {
+    if (!ctx.counters.has(listStyle)) ctx.counters.set(listStyle, []);
+    return ctx.counters.get(listStyle);
+  }
+  function listHtml(ctx, listEl, level, inherited, depth) {
+    const styleName = listStyleOf(ctx, listEl, inherited);
+    const levels = ctx.styles.lists.get(styleName) || new Map();
+    const info = levels.get(level) || levels.get(1) || { kind: 'bullet', char: '', format: '', prefix: '', suffix: '', start: 1, display: 1 };
+    const counters = counterOf(ctx, styleName || '#default');
+    const items = children(listEl, ['text:list-item', 'text:list-header']);
+    const continues = attr(listEl, 'text:continue-numbering') === 'true' || !!attr(listEl, 'text:continue-list');
+    const numbered = info.kind === 'number';
+    if (!continues || counters[level] === undefined) counters[level] = info.start - 1;
+    const firstItem = items.find(item => name(item) === 'text:list-item');
+    const startValue = firstItem ? whole(attr(firstItem, 'text:start-value'), 0, 1000000) : 0;
+    const start = startValue || counters[level] + 1;
+    let open;
+    let rtl = false;
+    let body = '';
+    items.forEach((item) => {
+      const header = name(item) === 'text:list-header';
+      const value = whole(attr(item, 'text:start-value'), 0, 1000000);
+      if (!header) {
+        if (value) counters[level] = value - 1;
+        counters[level] += 1;
+        counters.length = level + 1;
+      }
+      let content = '';
+      kids(item).forEach((part) => {
+        const tag = name(part);
+        if (tag === 'text:p' || tag === 'text:h') {
+          const made = paragraphHtml(ctx, part, true);
+          if (!content) rtl = rtl || made.rtl;
+          content += made.html;
+        } else if (tag === 'text:list') {
+          content += listHtml(ctx, part, level + 1, styleName, depth + 1);
+        } else {
+          content += blocksOf(ctx, part, depth + 1);
+        }
+      });
+      body += '<li>' + (content || '<p></p>') + '</li>';
+    });
+    const way = TextDirection.markup(rtl);
+    if (numbered) {
+      const style = numberingOf(ctx, info, styleName + ':' + level);
+      open = '<ol' + way + (style !== 'decimal' ? ' data-number-style="' + style + '"' : '') + (start > 1 ? ' start="' + start + '"' : '') + '>';
+      return open + body + '</ol>';
+    }
+    if (info.kind === 'image' && !ctx.fontsSeen.has('num:' + styleName + ':' + level)) { ctx.fontsSeen.add('num:' + styleName + ':' + level); count(ctx, 'numbering'); }
+    const bullet = bulletOf(info);
+    open = '<ul' + way + (bullet.style !== 'disc' ? ' data-bullet-style="' + bullet.style + '"' : '') + BulletFormat.markup(bullet.char) + '>';
+    return open + body + '</ul>';
+  }
+
+  // --- Les blocs : paragraphes, listes, tableaux, sections ---------------------------------------------------------------------------------------------------------------------------------------------
+  const INDEXES = ['text:table-of-content', 'text:illustration-index', 'text:alphabetical-index', 'text:user-index', 'text:table-index', 'text:object-index', 'text:bibliography'];
+  // Les blocs d'un conteneur (le corps, une case de tableau, une section), en balisage.
+  function blocksOf(ctx, container, depth) {
+    let out = '';
+    if (!container || depth > MAX_DEPTH) return out;
+    kids(container).forEach((part) => {
+      const tag = name(part);
+      switch (tag) {
+        case 'text:p': case 'text:h': {
+          out += paragraphHtml(ctx, part, false).html;
+          ctx.started = true;
+          break;
+        }
+        case 'text:list': out += listHtml(ctx, part, 1, '', depth); ctx.started = true; break;
+        case 'table:table':
+          if (depth > 0) { count(ctx, 'nestedTables'); out += flattenTable(ctx, part, depth); } else out += tableHtml(ctx, part, depth);
+          ctx.started = true;
+          break;
+        case 'text:section': {
+          const sectionStyle = ctx.styles.styles.get('section:' + attr(part, 'text:style-name'));
+          if (attr(part, 'text:display') === 'none') { count(ctx, 'hidden'); break; }
+          if (sectionStyle && sectionStyle.columnCount > 1) count(ctx, 'columns');
+          out += blocksOf(ctx, part, depth + 1);
+          break;
+        }
+        case 'text:numbered-paragraph': out += blocksOf(ctx, part, depth + 1); break;
+        case 'text:tracked-changes': count(ctx, 'trackedChanges', children(part, 'text:changed-region').length); break;
+        case 'draw:frame': count(ctx, frameKind(part)); break;
+        default:
+          if (INDEXES.indexOf(tag) >= 0) { count(ctx, 'toc'); if (tag === 'text:table-of-content') out += '<div class="toc-marker"></div>'; ctx.started = true; break; }
+          if (/^draw:/.test(tag)) count(ctx, 'shapes');
+          break;
+      }
+    });
+    return out;
+  }
+  // Un tableau dans une case : l'éditeur n'a pas de tableau dans un tableau, ses cases sont reprises l'une après l'autre.
+  function flattenTable(ctx, table, depth) {
+    let out = '';
+    rowsOf(table).forEach(row => children(row, 'table:table-cell').forEach((cell) => { out += blocksOf(ctx, cell, depth + 1); }));
+    return out;
+  }
+
+  // --- Les tableaux ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  const ROW_HOLDERS = ['table:table-header-rows', 'table:table-rows', 'table:table-row-group'];
+  const COLUMN_HOLDERS = ['table:table-header-columns', 'table:table-columns', 'table:table-column-group'];
+  // Les lignes d'un tableau, dans l'ordre, y compris celles que rangent les groupes et l'en-tête répété.
+  function rowsOf(table) {
+    const out = [];
+    const walk = (holder) => {
+      kids(holder).forEach((part) => {
+        const tag = name(part);
+        if (tag === 'table:table-row') out.push(part);
+        else if (ROW_HOLDERS.indexOf(tag) >= 0) walk(part);
+      });
+    };
+    walk(table);
+    return out;
+  }
+  function columnsOf(ctx, table) {
+    const out = [];
+    const walk = (holder) => {
+      kids(holder).forEach((part) => {
+        const tag = name(part);
+        if (tag === 'table:table-column') {
+          const props = merged(ctx, 'table-column', attr(part, 'table:style-name'), 'column');
+          const relative = /^(\d+(?:\.\d+)?)\*$/.exec(props['style:rel-column-width'] || '');
+          const width = toPoints(props['style:column-width']);
+          for (let n = whole(attr(part, 'table:number-columns-repeated'), 1); n > 0 && out.length < 200; n--) out.push({ width, rel: relative ? Number(relative[1]) : null });
+        } else if (COLUMN_HOLDERS.indexOf(tag) >= 0) walk(part);
+      });
+    };
+    walk(table);
+    return out;
+  }
+  // Un trait d'OpenDocument (« 0.5pt solid #000000 ») en valeur de l'éditeur : 'none', ou '#rrggbb' (le trait fin de cette couleur). Épaisseur et sorte (pointillé, double...) ne se gardent pas : la sorte qui n'est pas unie est comptée.
+  function borderValue(text, losses) {
+    const parts = String(text || '').trim().split(/\s+/);
+    if (!text || parts[0] === 'none' || parts[0] === 'hidden' || parts.length < 2) return text ? 'none' : null;
+    if (parseFloat(parts[0]) === 0) return 'none';
+    if (parts[1] !== 'solid' && losses) losses.add('borderStyles');
+    return '#' + (colorOf(parts[2]) || '000000');
+  }
+  function sidesOf(cellProps, losses) {
+    const sides = {};
+    ['top', 'right', 'bottom', 'left'].forEach((side) => {
+      const own = cellProps['fo:border-' + side] !== undefined ? cellProps['fo:border-' + side] : cellProps['fo:border'];
+      sides[side] = borderValue(own, losses);
+    });
+    return sides;
+  }
+  function tableHtml(ctx, table, depth) {
+    const tableProps = merged(ctx, 'table', attr(table, 'table:style-name'), 'table');
+    const losses = new Set();
+    const columns = columnsOf(ctx, table);
+    const rowEls = rowsOf(table).slice(0, MAX_ROWS);
+    // Les lignes et leurs cases, chacune avec sa colonne de départ : les cases couvertes (fusions) sont écrites par le fichier, la grille compte donc les colonnes comme lui.
+    const rows = [];
+    let cellTotal = 0;
+    let cut = 0;
+    rowEls.forEach((rowEl) => {
+      const rowProps = merged(ctx, 'table-row', attr(rowEl, 'table:style-name'), 'row');
+      const height = toPoints(rowProps['style:row-height']) || toPoints(rowProps['style:min-row-height']) || 0;
+      const cells = [];
+      let col = 0;
+      let owed = 0;   // les cases couvertes qui suivent une case étalée sur plusieurs colonnes (le fichier les écrit) : déjà comptées dans son étalement
+      kids(rowEl).forEach((cellEl) => {
+        const tag = name(cellEl);
+        if (tag !== 'table:table-cell' && tag !== 'table:covered-table-cell') return;
+        const repeat = whole(attr(cellEl, 'table:number-columns-repeated'), 1);
+        if (tag === 'table:covered-table-cell') {
+          const inside = Math.min(owed, repeat);
+          owed -= inside;
+          col += repeat - inside;
+          return;
+        }
+        for (let n = 0; n < repeat && col < 200; n++) {
+          const span = whole(attr(cellEl, 'table:number-columns-spanned'), 1, 200);
+          cells.push({ el: cellEl, col, span, down: whole(attr(cellEl, 'table:number-rows-spanned'), 1, 5000), sides: null });
+          col += span;
+          owed = span - 1;
+        }
+      });
+      const times = whole(attr(rowEl, 'table:number-rows-repeated'), 1);
+      for (let n = 0; n < times && rows.length < MAX_ROWS; n++) {
+        if (cellTotal + cells.length > MAX_CELLS) { cut += cells.length; continue; }
+        cellTotal += cells.length;
+        rows.push({ height, cells: n === 0 ? cells : cells.map(cell => Object.assign({}, cell)), width: col });
+      }
+    });
+    if (cut) count(ctx, 'tableCells', 1);
+    const gridWidth = Math.max(columns.length, ...rows.map(row => row.width), 1);
+    // La largeur des colonnes : absolue (`style:column-width`), ou relative (« 1953* ») à la largeur du tableau ; une colonne sans largeur prend sa part de ce qui reste.
+    const totalWidth = toPoints(tableProps['style:width'], ctx.contentWidthPt) || (tableProps['style:rel-width'] ? toPoints(tableProps['style:rel-width'], ctx.contentWidthPt) : null);
+    const relTotal = columns.reduce((sum, column) => sum + (column.rel || 0), 0);
+    const absTotal = columns.reduce((sum, column) => sum + (column.width || 0), 0);
+    const widths = [];
+    for (let c = 0; c < gridWidth; c++) {
+      const column = columns[c] || {};
+      let width = column.width;
+      if (!width && column.rel && relTotal) width = (totalWidth || ctx.contentWidthPt || 450) * column.rel / relTotal;
+      if (!width) width = Math.max(30, ((totalWidth || ctx.contentWidthPt || 450) - absTotal) / Math.max(1, gridWidth - columns.filter(entry => entry.width).length));
+      widths.push(Math.max(1, Math.round(width * PX_PER_PT)));
+    }
+    // Les traits : la case décide de chacun des siens ; un côté qu'elle n'a pas tracé prend celui que sa voisine trace sur la même arête.
+    const grid = rows.map(() => []);
+    rows.forEach((row, r) => row.cells.forEach((cell) => {
+      cell.props = merged(ctx, 'table-cell', attr(cell.el, 'table:style-name'), 'cell');
+      cell.sides = sidesOf(cell.props, losses);
+      for (let dr = 0; dr < cell.down && r + dr < rows.length; dr++) for (let dc = 0; dc < cell.span; dc++) grid[r + dr][cell.col + dc] = cell;
+    }));
+    const neighbor = { top: [-1, 0, 'bottom'], bottom: [1, 0, 'top'], left: [0, -1, 'right'], right: [0, 1, 'left'] };
+    rows.forEach((row, r) => row.cells.forEach((cell) => {
+      Object.keys(neighbor).forEach((side) => {
+        if (cell.sides[side] && cell.sides[side] !== 'none') return;
+        const [dr, dc, facing] = neighbor[side];
+        const rr = dr < 0 ? r - 1 : (dr > 0 ? r + cell.down : r);
+        const cc = dc < 0 ? cell.col - 1 : (dc > 0 ? cell.col + cell.span : cell.col);
+        const other = grid[rr] && grid[rr][cc];
+        if (other && other !== cell && other.sides[facing] && other.sides[facing] !== 'none') cell.sides[side] = other.sides[facing];
+      });
+    }));
+    let html = '<table style="width: ' + widths.reduce((sum, width) => sum + width, 0) + 'px"><colgroup>' + widths.map(width => '<col style="width: ' + width + 'px">').join('') + '</colgroup><tbody>';
+    rows.forEach((row) => {
+      const height = row.height > 0 ? Math.round(row.height * PX_PER_PT) : 0;
+      html += '<tr' + (height ? ' data-row-height="' + height + '" style="height: ' + height + 'px"' : '') + '>';
+      row.cells.forEach((cell) => {
+        const fill = colorOf(cell.props['fo:background-color']);
+        const valign = cell.props['style:vertical-align'];
+        const span = widths.slice(cell.col, cell.col + cell.span);
+        const content = blocksOf(ctx, cell.el, depth + 1);
+        html += '<td' + (cell.span > 1 ? ' colspan="' + cell.span + '"' : '') + (cell.down > 1 ? ' rowspan="' + cell.down + '"' : '') + ' colwidth="' + span.join(',') + '"'
+          + (fill && fill !== 'ffffff' ? ' style="background-color: #' + fill + '"' : '') + (valign === 'middle' ? ' data-valign="middle"' : (valign === 'bottom' ? ' data-valign="bottom"' : ''))
+          + ['top', 'right', 'bottom', 'left'].map(side => ' data-border-' + side + '="' + (cell.sides[side] || 'none') + '"').join('') + '>' + (content || '<p></p>') + '</td>';
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    losses.forEach(key => count(ctx, key));
+    // Un saut de page avant le tableau (réglage du style du tableau).
+    return (pageBreakBefore(ctx, tableProps, styleChain(ctx, 'table', attr(table, 'table:style-name'))) ? PAGE_BREAK : '') + html;
+  }
+
+  // --- La page ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // Les formats que l'éditeur nomme (côté court, côté long, en millimètres) ; tout autre est un format libre « LARGEURxHAUTEUR ».
+  const NAMED_FORMATS = [['A3', 297, 420], ['A4', 210, 297], ['A5', 148, 210], ['A6', 105, 148]];
+  function pageOf(layout) {
+    if (!layout) return null;
+    const width = toPoints(layout['fo:page-width']);
+    const height = toPoints(layout['fo:page-height']);
+    if (!width || !height) return null;
+    const short = Math.min(width, height) * MM_PER_PT;
+    const long = Math.max(width, height) * MM_PER_PT;
+    const named = NAMED_FORMATS.find(format => Math.abs(format[1] - short) < 1.5 && Math.abs(format[2] - long) < 1.5);
+    const tenth = value => Math.round(value * 10) / 10;
+    const format = PageLayout.normalizeFormat(named ? named[0] : tenth(short) + 'x' + tenth(long));
+    const margin = (side) => {
+      const value = layout['fo:margin-' + side] !== undefined ? layout['fo:margin-' + side] : layout['fo:margin'];
+      const points = toPoints(String(value === undefined ? '' : value).trim().split(/\s+/)[0]);
+      return tenth(Math.max(0, points === null ? 56.7 : points) * MM_PER_PT);
+    };
+    return { top: margin('top'), right: margin('right'), bottom: margin('bottom'), left: margin('left'), orientation: width > height ? PageLayout.LANDSCAPE : PageLayout.PORTRAIT, format };
+  }
+  const samePage = (first, second) => !!first && !!second && ['top', 'right', 'bottom', 'left'].every(side => Math.abs(first[side] - second[side]) < 0.6) && first.orientation === second.orientation && first.format === second.format;
+  // La page de départ : celle que nomme le premier style qui en change, sinon la première page maîtresse du fichier.
+  function firstMaster(ctx) {
+    const named = new Map(ctx.styles.masters.map(master => [attr(master, 'style:name'), master]));
+    let wanted = null;
+    ctx.styles.styles.forEach((style) => { if (!wanted && style.master && ctx.firstStyles.has(style.family + ':' + style.name)) wanted = style.master; });
+    return named.get(wanted) || ctx.styles.masters[0] || null;
+  }
+
+  // --- Le fichier ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  const MESSAGES = {
+    notPackage: 'Ce fichier n’est pas un document OpenDocument.', unreadable: 'Ce fichier n’a pas pu être lu.', tooBig: 'Ce fichier est trop gros pour être importé.',
+    encrypted: 'Ce fichier OpenDocument est protégé par un mot de passe.',
+  };
+  async function fromBuffer(buffer) {
+    const odf = await ExportCommon.Odf.open(buffer, { limits: { maxUnpacked: MAX_UNPACKED_BYTES, maxPart: MAX_PART_BYTES }, messages: MESSAGES });
+    if (odf.kind !== 'text') throw fail('wrongType', 'Ce fichier OpenDocument n’est pas un document texte.', { kind: odf.kind });
+    const styles = readStyles(odf);
+    const ctx = {
+      styles, report: new Map(), fontsSeen: new Set(), counters: new Map(), started: false, contentWidthPt: 450, firstStyles: new Set(), usedMasters: new Set(),
+    };
+    // Les styles du premier bloc disent la page de départ (ils changent de page maîtresse), avant que le corps soit lu.
+    kids(odf.body).some((part) => {
+      const tag = name(part);
+      if (tag === 'text:p' || tag === 'text:h') ctx.firstStyles.add('paragraph:' + attr(part, 'text:style-name'));
+      else if (tag === 'table:table') ctx.firstStyles.add('table:' + attr(part, 'table:style-name'));
+      else if (tag === 'text:list') return false;
+      else return false;
+      return true;
+    });
+    const master = firstMaster(ctx);
+    const layout = master ? styles.layouts.get(attr(master, 'style:page-layout-name')) : null;
+    const page = pageOf(layout);
+    if (page) {
+      const widthPt = (page.orientation === PageLayout.LANDSCAPE ? Math.max(toPoints(layout['fo:page-width']), toPoints(layout['fo:page-height'])) : Math.min(toPoints(layout['fo:page-width']), toPoints(layout['fo:page-height'])));
+      ctx.contentWidthPt = Math.max(100, widthPt - (page.left + page.right) / MM_PER_PT);
+    }
+    const html = blocksOf(ctx, odf.body, 0).replace(/(?:<div class="page-break-marker"><\/div>)+$/, '');
+    // Les en-têtes et pieds de page, et les pages maîtresses d'une autre mise en page, ne sont pas repris : comptés.
+    if (master) {
+      const holders = children(master).filter(part => /^style:(?:header|footer)/.test(name(part)));
+      if (holders.some(holder => holder.textContent.trim() || descendants(holder, 'frame').length)) count(ctx, 'headerFooter');
+    }
+    // Les pages maîtresses que le texte demande (un style qui change de page) et dont la mise en page n'est pas celle de départ : seule celle de départ est reprise.
+    const startName = attr(master, 'style:name');
+    let differing = 0;
+    ctx.usedMasters.forEach((used) => {
+      const other = styles.masters.find(candidate => attr(candidate, 'style:name') === used);
+      if (used !== startName && other && !samePage(pageOf(styles.layouts.get(attr(other, 'style:page-layout-name'))), page)) differing += 1;
+    });
+    if (differing) count(ctx, 'sections', differing);
+    if (!/\S/.test(html.replace(/<[^>]*>/g, '')) && !/<(?:table|img|hr)\b|toc-marker/.test(html)) throw fail('empty', 'Ce document OpenDocument est vide.');
+    const report = REPORT_KEYS.filter(key => ctx.report.get(key)).map(key => ({ key, n: ctx.report.get(key) }));
+    return { html, page, headerFooter: null, report, suiviModifications: null, comments: [] };
+  }
+  const descendants = (el, local) => (el ? Array.from(el.getElementsByTagNameNS('*', local)) : []);
+  async function fromFile(file) {
+    if (!file || file.size > MAX_FILE_BYTES) throw fail('tooBig', 'Ce fichier est trop gros pour être importé.', { size: file ? file.size : 0, max: MAX_FILE_BYTES });
+    let buffer;
+    try {
+      buffer = await file.arrayBuffer();
+    } catch (e) {
+      throw fail('unreadable', 'Ce fichier n’a pas pu être lu.', { cause: e });
+    }
+    return fromBuffer(buffer);
+  }
+
+  return { fromFile, fromBuffer, MAX_FILE_BYTES, MAX_UNPACKED_BYTES, REPORT_KEYS };
+})();
