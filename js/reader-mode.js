@@ -1353,6 +1353,9 @@ const ReaderMode = (function () {
     // attentes se recouvrent au lieu de s'ajouter.
     const columnTypes = GristAPI.refreshColumnTypes().catch(() => {});
     if (typeof htmlContent === 'function') htmlContent = await htmlContent();
+    // Les en-têtes et pieds de page peuvent eux aussi être donnés par une fonction, lue APRÈS le HTML : « Un document par valeur » à la Lecture (js/reading-value.js) choisit la valeur lue en regardant le
+    // HTML, et ses en-têtes et pieds prennent la même valeur.
+    if (typeof headerFooterData === 'function') headerFooterData = headerFooterData();
     if (stale()) return;
     const wrapper = readerWrapperFrom(htmlContent);
     const resolved = await resolveReaderBody(wrapper, tableId, record, stale, columnTypes);

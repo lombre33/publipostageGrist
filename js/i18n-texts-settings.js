@@ -58,6 +58,13 @@ const I18nTextsSettings = {
   'readingLine.prev': { fr: 'Ligne précédente', en: 'Previous row' },
   'readingLine.next': { fr: 'Ligne suivante', en: 'Next row' },
   'readingLine.failed': { fr: 'Impossible de passer à cette ligne : Grist n\u2019a pas déplacé son curseur.', en: 'Could not move to that row: Grist did not move its cursor.' },
+  // La pastille « ‹ Santé · valeur 1 sur 2 › » de la Lecture (js/reading-value.js) : la valeur d'une liste réglée « Un document par valeur ».
+  'readingValue.position': { fr: 'valeur {n} sur {total}', en: 'value {n} of {total}' },
+  'readingValue.positionMany': { fr: 'document {n} sur {total}', en: 'document {n} of {total}' },
+  'readingValue.prev': { fr: 'Valeur précédente', en: 'Previous value' },
+  'readingValue.next': { fr: 'Valeur suivante', en: 'Next value' },
+  'readingValue.hint': { fr: 'Un document par valeur : la Lecture montre le document que l\u2019export sortira pour cette valeur.', en: 'One document per value: Read mode shows the document the export will produce for this value.' },
+  'readingValue.failed': { fr: 'Impossible de changer de valeur : la Lecture ne s\u2019est pas redessinée.', en: 'Could not switch value: Read mode did not redraw.' },
   'settings.typing.on': { fr: 'allumée', en: 'on' },
   'settings.typing.off': { fr: 'éteinte', en: 'off' },
   // Accessibilité (js/alt-reminder.js) : une section de l'onglet Thème, la barre des onglets étant pleine.

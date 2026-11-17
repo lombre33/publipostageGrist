@@ -8,15 +8,16 @@ const MainReader = (function () {
       readerContainer, saveScreenAs, setCurrentTableId, showConflictBanner, templateNameInput, updateSaveStatus,
     } = api;
 
-    async function renderReader(record, recordTableId) {
+    // `options.whole` : le document entier, sans choisir une valeur des listes réglées « Un document par valeur » (js/reading-value.js) - l'e-mail lit le corps de la ligne ici, et lui écrit chaque liste comme elle est réglée.
+    async function renderReader(record, recordTableId, options) {
       // Un PDF à l'écran (js/pdf-reading.js) : la Lecture montre le PDF, que la ligne de la table change ou non ; il se pose une fois, et seul un modèle qui s'ouvre le remplace.
-      if (PdfReading.isActive()) { await PdfReading.render(readerContainer); return; }
+      if (PdfReading.isActive()) { ReadingValue.clear(); await PdfReading.render(readerContainer); return; }
       if (typeof record === 'undefined') record = getLatestRecord() || GristAPI.getCurrentRecord();
       let tableId = recordTableId || GristAPI.getCurrentTableId() || getCurrentTableId();
       // Sans ligne sélectionnée, ReaderMode.render() affiche tout de même son état vide : un simple `return` laisserait #reader-container vide, un
       // écran blanc sans explication. onCreateEmail (mode email) appelle aussi renderReader() alors que currentMode reste 'edit', pour lire le corps
       // résolu sans changer de mode : #reader-container reste display:none tant que currentMode !== 'read' (cf. switchMode).
-      if (!record) { await ReaderMode.render(await currentDocumentHtml(tableId, null, { anchors: true }), tableId, null, Editor.getHeaderFooterData()); return; }
+      if (!record) { ReadingValue.clear(); await ReaderMode.render(await currentDocumentHtml(tableId, null, { anchors: true }), tableId, null, Editor.getHeaderFooterData()); return; }
       if (!tableId) {
         const ctx = await GristAPI.detectCurrentContext();
         if (ctx && ctx.tableId) { setCurrentTableId(ctx.tableId); tableId = ctx.tableId; }
@@ -25,7 +26,16 @@ const MainReader = (function () {
       // Le HTML est donné par une fonction : l'assemblage d'un macro-modèle (ses règles de slot) relit des tables, ce qui doit se faire dans les
       // lectures partagées de ce rendu.
       const html = async () => (readerCommentsActive() ? SlidesEntry.outputHtml(getCurrentTypeModele(), await Comments.buildReaderHtml(), { anchors: true, theme: PageLayout.getTheme() }) : currentDocumentHtml(tableId, record, { anchors: true }));
-      await ReaderMode.render(html, tableId, record, Editor.getHeaderFooterData());
+      // Une ligne qui fait plusieurs documents (« Un document par valeur ») : la Lecture montre celui de la valeur lue, et la pastille de js/reading-value.js passe à la valeur d'avant ou d'après. Le modèle d'un
+      // e-mail n'est jamais découpé (l'e-mail écrit la liste comme elle est réglée) : sa Lecture reste le document entier.
+      if ((options && options.whole) || getCurrentTypeModele() === 'email') {
+        ReadingValue.clear();
+        await ReaderMode.render(html, tableId, record, Editor.getHeaderFooterData());
+        return;
+      }
+      const turn = ReadingValue.turn(tableId, record, Editor.getHeaderFooterData(), [tableId, record.id, Templates.getCurrentId()].join('#'));
+      await ReaderMode.render(async () => turn.pin(await html()), tableId, record, turn.headerFooterData);
+      ReadingValue.refresh();
     }
 
     // Mode Lecture affiché (imposé par la lecture seule ou choisi) avec droit de commenter (js/comments.js:readerMode, applyCommentsPermissions) : il

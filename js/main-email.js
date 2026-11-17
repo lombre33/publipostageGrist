@@ -94,7 +94,7 @@ const MainEmail = (function () {
     // PDF). `stale` (facultatif) rend vrai quand un résultat plus récent a pris le relais : l'URL n'est alors pas construite (null).
     async function buildMailtoForRecord(record, tableId, stale) {
       const fields = await resolveEmailFieldsForRecord(getEmailFieldsFromInputs(), tableId, record);
-      await renderReader(record, tableId);
+      await renderReader(record, tableId, { whole: true }); // l'e-mail écrit chaque liste comme elle est réglée : jamais le document d'une seule valeur (js/reading-value.js)
       if (stale && stale()) return null;
       const content = readerContainer.querySelector('.reader-content');
       const bodyText = MailtoExport.plainTextFromHtml(content ? content.innerHTML : readerContainer.innerHTML);

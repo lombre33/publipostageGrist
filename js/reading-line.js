@@ -5,6 +5,7 @@
 // Elle ne se montre que s'il y a une ligne d'avant ou d'après à rejoindre : Lecture d'une ligne (pas la Lecture qui boucle sur toutes les lignes), la vue du widget a plus d'une ligne et nomme celle qu'on lit.
 // Le nom est la première valeur non vide des colonnes de la ligne ; au survol, la pastille donne le nom entier. Affichage et déplacement du curseur seulement : rien n'est écrit dans le document ni dans la table.
 //  ReadingLine.wire({ currentRecord, readsAllRows, setStatus }) ; ReadingLine.refresh() après un changement de ligne, de vue ou de mode (main.js : onRecordChange, onViewRowsChanged, switchMode).
+// Quand la ligne lue fait plusieurs documents (« Un document par valeur »), une seconde pastille se pose à côté de celle-ci : js/reading-value.js.
 const ReadingLine = (function () {
   const QUIET = 'is-quiet';
   const QUIET_MS = 900;   // le temps qu'elle reste transparente après le dernier défilement
@@ -34,11 +35,20 @@ const ReadingLine = (function () {
   }
   const shorten = text => (text.length > NAME_MAX ? text.slice(0, NAME_MAX - 1).trimEnd() + '…' : text);
 
-  function place(container) {
+  // Le coin bas gauche de la zone de lecture, en pixels de l'écran : { left, bottom } de la pastille. js/reading-value.js, la pastille « valeur 2 sur 3 », s'y place à côté de celle-ci.
+  function slot(container) {
     const box = container.getBoundingClientRect();
     const root = document.documentElement;
-    chip.style.left = Math.round(box.left + container.clientLeft + GAP + 5) + 'px';
-    chip.style.bottom = Math.round(root.clientHeight - (box.top + container.clientTop + container.clientHeight) + GAP + (container.offsetHeight - container.clientHeight - container.clientTop * 2)) + 'px';
+    return {
+      left: Math.round(box.left + container.clientLeft + GAP + 5),
+      bottom: Math.round(root.clientHeight - (box.top + container.clientTop + container.clientHeight) + GAP + (container.offsetHeight - container.clientHeight - container.clientTop * 2)),
+    };
+  }
+
+  function place(container) {
+    const at = slot(container);
+    chip.style.left = at.left + 'px';
+    chip.style.bottom = at.bottom + 'px';
   }
 
   function hide() { if (chip) chip.hidden = true; }
@@ -119,5 +129,5 @@ const ReadingLine = (function () {
     }
   }
 
-  return { wire, refresh };
+  return { wire, refresh, slot };
 })();

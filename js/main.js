@@ -842,6 +842,7 @@
     await updateEmailFieldsDisplay();
     await updateEmailLengthGauge();
     ReadingLine.refresh(); // la pastille « ligne 2 sur 3 » ne se montre qu'en Lecture
+    ReadingValue.refresh(); // de même la pastille « valeur 1 sur 2 »
   }
 
   // Classe posée sur les deux conteneurs (édition et lecture) : la largeur réelle d'une page PDF doit aussi s'appliquer en mode Lecture. `.checked`
@@ -1136,6 +1137,7 @@
     });
     DropImport.wire({ importFile: importDroppedFile, importSet: importDroppedSet, setStatus }); // déposer un fichier Word, PowerPoint, Excel, HTML ou Markdown (ou un dossier, ou une page HTML avec ses images) pour l'importer (js/drop-import.js)
     ReadingLine.wire({ currentRecord: () => ({ record: latestRecord, tableId: latestRecordTableId }), readsAllRows: () => ReaderMode.readsAllRows(), setStatus }); // « ‹ Martin · ligne 2 sur 3 › » en Lecture (js/reading-line.js)
+    ReadingValue.wire({ rerender: () => renderReader(), setStatus }); // « ‹ Santé · valeur 1 sur 2 › » : la valeur lue d'une liste réglée « Un document par valeur » (js/reading-value.js)
     VariableReview.wire(); // le coin d'état « N variables à revoir » (js/variable-review.js)
     MarkFields.wire(); // la case « Repérer les champs » du menu Mode lecture (js/mark-fields.js)
     BarFold.wire(); // la languette qui replie le panneau du haut (js/bar-fold.js)
