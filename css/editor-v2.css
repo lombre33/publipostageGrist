@@ -293,6 +293,13 @@
 }
 /* Une diapositive posée en bloc : sa page blanche, sur la page blanche du document, garde un liseré de la couleur des bordures (l'éditeur seulement : l'image enregistrée est celle de la diapositive). */
 .tiptap .editor-image-view.editor-image-slide > img.editor-image { box-shadow: 0 0 0 1px var(--border-strong); }
+/* La couche de texte invisible d'une diapositive en bloc (js/slide-words.js) : un mot par <span>, sans couleur, à la place du mot de l'image ; on le sélectionne et on le copie, l'image ne change pas. La couche ne prend
+   pas la souris (la photo reste cliquable, glissable) : seuls les mots la prennent, avec le curseur du texte ; sous les poignées. */
+.tiptap .editor-image-view .pp-slide-words { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; outline: none; font-size: 0; }
+.tiptap .editor-image-view .pp-slide-word { position: absolute; display: block; box-sizing: border-box; overflow: visible; white-space: pre; color: transparent; pointer-events: auto; cursor: text; user-select: text; -webkit-user-select: text; }
+.tiptap .editor-image-view .pp-slide-word::selection { background: rgba(47, 111, 237, 0.35); color: transparent; }
+/* Le bloc choisi (sa sélection est celle du bloc, non celle de ses mots) : ProseMirror cache la couleur de la sélection du navigateur, la couche aussi. */
+.tiptap.ProseMirror-hideselection .editor-image-view .pp-slide-word::selection { background: transparent; }
 .tiptap .editor-image-handle, .tiptap .editor-image-move-handle { display: none; position: absolute; }
 .tiptap .editor-image-view.editor-image-selected .editor-image-handle { display: block; width: 10px; height: 10px; background: #fff; border: 1.5px solid var(--accent, #2f6fed); border-radius: 50%; z-index: 10; }
 .tiptap .editor-image-handle-nw { top: -5px; left: -5px; cursor: nwse-resize; }

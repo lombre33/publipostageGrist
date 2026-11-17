@@ -84,7 +84,9 @@ const ImageReshape = (function () {
     if (!out) return false;
     const now = editor.state.doc.nodeAt(pos);
     if (!now || now.type.name !== 'editorImage' || now.attrs.src !== attrs.src) return false;
-    const patch = { src: out.src };
+    // Une diapositive posée en bloc (js/slide-copies.js) : la photo change de forme, ses mots ne sont plus à leur place (la couche de texte invisible, js/slide-words.js) et la redessiner pour une ligne rendrait
+    // la diapositive entière : la personne a choisi ce qu'elle voit, les deux sont vidés (le texte de la diapositive, lui, reste pour la recherche Ctrl+F).
+    const patch = { src: out.src, slideWords: null, slideSource: null };
     // Un quart de tour : l'image garde sa taille à l'écran, tournée - sa nouvelle largeur est son ancienne hauteur.
     if (move.turn === 90 || move.turn === 270) patch.width = Math.round(width * out.width / out.height * 100) / 100 + 'px';
     // Un rognage : la partie gardée garde sa taille à l'écran - l'image rognée est aussi large que cette partie l'était.

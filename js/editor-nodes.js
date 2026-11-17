@@ -1924,6 +1924,8 @@ const EditorNodes = (function () {
       wrap.classList.toggle('editor-image-video', isVideoBox);
       // Une diapositive posée en bloc (`slideText`, extensions/diapositives/slide-raster.js) : un liseré la montre comme un bloc, sa page blanche sur la page blanche du document (css/editor-v2.css).
       wrap.classList.toggle('editor-image-slide', !!attrs.slideText || !!attrs.slideWords || !!attrs.slideLink);
+      // Les mots de la diapositive, en texte invisible sur l'image : on les sélectionne et on les copie (js/slide-words.js). Pas pour une image derrière le texte (le texte est dessus).
+      SlideWords.sync(wrap, attrs.layer === 'normal' && !blockedSite ? attrs.slideWords : null, view.wordsOptions);
       // La vue n'écrit pas les attributs du nœud sur son <img> (renderHTML ne sert qu'à l'enregistrement) : la vidéo, que VideoFrame lit sur l'<img>, y est posée à la main.
       if (isVideoBox) img.setAttribute('data-video', attrs.video); else img.removeAttribute('data-video');
       if (isVideoBox) {
@@ -2092,6 +2094,11 @@ const EditorNodes = (function () {
     function imageNodeView({ node, editor: nodeEditor, getPos }) {
       const view = imageViewDom();
       const { wrap, img, moveHandle } = view;
+      // La couche de texte d'une diapositive en bloc (js/slide-words.js) : un clic simple sur un mot choisit le bloc, comme un clic sur l'image ; Échap rend le clavier au texte.
+      view.wordsOptions = {
+        onClick: () => { const at = getPos(); if (typeof at === 'number') { nodeEditor.commands.setNodeSelection(at); nodeEditor.view.focus(); } },
+        onEscape: () => nodeEditor.view.focus(),
+      };
       let shown = node.attrs;
       const applyAttrs = attrs => { shown = attrs; applyImageAttrs(view, attrs); };
       const redraw = () => applyImageAttrs(view, shown);
@@ -2120,8 +2127,10 @@ const EditorNodes = (function () {
         selectNode: () => { wrap.classList.add('editor-image-selected'); ChartEntry.refreshFrame(view); },
         deselectNode: () => wrap.classList.remove('editor-image-selected'),
         // Le bouton « Afficher » d'une image bloquée est à lui : ni sélection de l'image, ni glissé, ni autre geste de l'éditeur sur son clic.
-        stopEvent: event => !!event.target.closest && !!event.target.closest('.editor-image-blocked-box, .editor-image-video-play'),
+        // Les mots invisibles d'une diapositive en bloc (js/slide-words.js) ont leur propre sélection de texte : l'éditeur n'en traite ni la souris, ni le clavier, ni la copie.
+        stopEvent: event => (!!event.target.closest && !!event.target.closest('.editor-image-blocked-box, .editor-image-video-play')) || SlideWords.owns(event),
         destroy: () => {
+          SlideWords.drop(wrap);
           revealHooks.delete(redraw);
           behindImageViews.delete(wrap);
           VideoFrame.stop(wrap);

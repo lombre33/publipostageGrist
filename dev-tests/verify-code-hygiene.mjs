@@ -149,6 +149,7 @@ const LIBRARY_CLASSES = new Set([
   'column-resize-handle', // prosemirror-tables : poignée de largeur de colonne
   'resize-cursor',       // prosemirror-tables : curseur pendant le survol d'une bordure
   'ProseMirror-selectednode', // prosemirror-view : nœud « atome » sélectionné (la bulle choisie d'une variable ou d'un calcul)
+  'ProseMirror-hideselection', // prosemirror-view : posée sur l'éditeur quand la sélection est celle d'un nœud (css/editor-v2.css : la couche de texte invisible d'une diapositive en bloc n'y colore pas ses mots)
   'ProseMirror-separator', // prosemirror-view : l'<img> posée après une image en fin de paragraphe (css/editor-v2.css retire sa ligne quand l'image est seule sur la sienne)
   'endOfContent',        // pdf.js (TextLayer) : le bloc de fin de la couche de texte d'une page, qui garde la sélection continue (extensions/lecture-pdf/pdf-view.css)
   'selecting',           // pdf.js (TextLayer) : posée sur la couche de texte pendant une sélection à la souris, elle remonte le bloc de fin (même feuille)
