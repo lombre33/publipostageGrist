@@ -1,0 +1,29 @@
+{
+  "description": {
+    "fr": "Écrivez un modèle (contrat, courrier, e-mail, grille) et insérez-y les champs de votre table Grist. Publipostage+ en tire un document par ligne, à lire à l'écran ou à exporter en PDF ou en Excel.",
+    "en": "Write a template (contract, letter, email, grid) and insert the fields of your Grist table. Publipostage+ builds one document per row, to read on screen or export as PDF or Excel."
+  },
+  "captures": [
+    {
+      "fichier": "1.webp",
+      "legende": {
+        "fr": "Le modèle d'un contrat, avec les champs de la table Grist",
+        "en": "A contract template, with the fields of the Grist table"
+      }
+    },
+    {
+      "fichier": "2.webp",
+      "legende": {
+        "fr": "Le même contrat, lu avec les données d'une ligne",
+        "en": "The same contract, read with the data of one row"
+      }
+    },
+    {
+      "fichier": "3.webp",
+      "legende": {
+        "fr": "Une grille Excel remplie par la table Grist",
+        "en": "An Excel grid filled in from the Grist table"
+      }
+    }
+  ]
+}
