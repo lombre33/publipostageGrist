@@ -293,6 +293,7 @@ const I18nTextsTemplates = {
   'exportType.pdfProtected': { fr: 'PDF protégé', en: 'Protected PDF' },
   'exportType.pdfArchive': { fr: 'PDF/A (archivage)', en: 'PDF/A (archiving)' },
   'exportType.docx': { fr: 'Word (bêta)', en: 'Word (beta)' },
+  'exportType.odf': { fr: 'OpenDocument (bêta)', en: 'OpenDocument (beta)' },
   'exportType.pptx': { fr: 'PowerPoint (bêta)', en: 'PowerPoint (beta)' },
   'pptx.name.title': { fr: 'Titre', en: 'Title' },
   'pptx.name.text': { fr: 'Zone de texte', en: 'Text box' },

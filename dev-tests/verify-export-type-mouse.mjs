@@ -45,7 +45,7 @@ const WORDS = {
   fr: {
     typeLabel: 'Type d’export', qualityLabel: 'Qualité PDF', exportLabel: 'Exporter', destinationLabel: 'Destination du PDF', types: ['PDF', 'Word (bêta)', 'Excel', 'Markdown'], qualities: ['Vectoriel (par défaut)', 'Impression navigateur', 'Léger (images réduites)'],
     mdTemplate: 'Markdown (modèle)', mdTemplateNote: 'Un seul fichier : le modèle', templateExported: 'Modèle exporté en Markdown, variables comprises.',
-    allTypes: ['PDF', 'PDF protégé', 'PDF/A (archivage)', 'Word (bêta)', 'PowerPoint (bêta)', 'Excel', 'Markdown', 'Markdown (modèle)', 'HTML (fichier à déposer)', 'HTML (contenu à coller)', 'HTML (modèle)'],
+    allTypes: ['PDF', 'PDF protégé', 'PDF/A (archivage)', 'Word (bêta)', 'OpenDocument (bêta)', 'PowerPoint (bêta)', 'Excel', 'Markdown', 'Markdown (modèle)', 'HTML (fichier à déposer)', 'HTML (contenu à coller)', 'HTML (modèle)'],
     html: 'HTML (fichier à déposer)', htmlFragment: 'HTML (contenu à coller)', htmlTemplate: 'HTML (modèle)', htmlTemplateNote: 'Un seul fichier : le modèle', htmlTemplateExported: 'Modèle exporté en HTML, éléments de fusion compris.', htmlGenerated: 'HTML généré.',
     pdf: ['Une seule ligne', 'Toutes les lignes de la vue (ZIP)', 'Toutes les lignes de la vue en un seul PDF', 'Assemblage avant impression'],
     pdfGrid: ['Une seule ligne', 'Toutes les valeurs de la vue (ZIP)', 'Toutes les valeurs de la vue en un seul PDF', 'Assemblage avant impression'],
@@ -55,7 +55,7 @@ const WORDS = {
   en: {
     typeLabel: 'Export type', qualityLabel: 'PDF quality', exportLabel: 'Export', destinationLabel: 'PDF destination', types: ['PDF', 'Word (beta)', 'Excel', 'Markdown'], qualities: ['Vector (default)', 'Browser print', 'Light (smaller images)'],
     mdTemplate: 'Markdown (template)', mdTemplateNote: 'One file: the template', templateExported: 'Template exported to Markdown, variables included.',
-    allTypes: ['PDF', 'Protected PDF', 'PDF/A (archiving)', 'Word (beta)', 'PowerPoint (beta)', 'Excel', 'Markdown', 'Markdown (template)', 'HTML (file to upload)', 'HTML (content to paste)', 'HTML (template)'],
+    allTypes: ['PDF', 'Protected PDF', 'PDF/A (archiving)', 'Word (beta)', 'OpenDocument (beta)', 'PowerPoint (beta)', 'Excel', 'Markdown', 'Markdown (template)', 'HTML (file to upload)', 'HTML (content to paste)', 'HTML (template)'],
     html: 'HTML (file to upload)', htmlFragment: 'HTML (content to paste)', htmlTemplate: 'HTML (template)', htmlTemplateNote: 'One file: the template', htmlTemplateExported: 'Template exported to HTML, merge elements included.', htmlGenerated: 'HTML generated.',
     pdf: ['A single row', 'All rows of the view (ZIP)', 'All rows of the view as a single PDF', 'Assemble before printing'],
     pdfGrid: ['A single row', 'All values of the view (ZIP)', 'All values of the view as a single PDF', 'Assemble before printing'],
@@ -173,7 +173,7 @@ async function menus(page, lang, tag) {
   const entire = rows => rows.every(r => r.shown && r.inside && r.reachable && !r.cut);
   const readable = rows => rows.every(r => r.contrast >= 4.5);
   const contrasts = rows => rows.map(r => r.contrast);
-  const typeSels = ['pdf', 'pdfProtected', 'pdfArchive', 'docx', 'pptx', 'xlsx', 'md', 'mdTemplate', 'html', 'htmlFragment', 'htmlTemplate'].map(TYPE_ROW);
+  const typeSels = ['pdf', 'pdfProtected', 'pdfArchive', 'docx', 'odf', 'pptx', 'xlsx', 'md', 'mdTemplate', 'html', 'htmlFragment', 'htmlTemplate'].map(TYPE_ROW);
 
   console.log(`\n[${tag}] Le menu « ${W.typeLabel} » dans un document, type PDF`);
   await hoverRow(page, TYPE_MENU, TYPE_ROW('docx'));
@@ -187,14 +187,14 @@ async function menus(page, lang, tag) {
   // Les onze types puis les trois qualités : quatorze lignes, toutes dans le panneau. Sans le resserrement du menu (css/editor-v2.css, #v2-quality-flyout), les deux dernières qualités
   // passaient sous le pli (bas du menu à 436 px avec onze lignes) : « Impression navigateur » et « Léger » n'étaient plus atteignables, un clic dessus ne choisissait rien. Le dixième type (PDF/A)
   // l'a poussé à 412 px, sous le bas du panneau : ses marges ont été reprises, il finit vers 396 px.
-  const fourteen = await stateOf(page, [...typeSels, ...['native', 'browser-print', 'light'].map(QUALITY_ROW)]);
+  const fifteen = await stateOf(page, [...typeSels, ...['native', 'browser-print', 'light'].map(QUALITY_ROW)]);
   const innerHeight = await page.evaluate(() => window.innerHeight);
-  check(`${tag} : onze types (${W.allTypes.join(', ')}) puis trois qualités, dans cet ordre, de haut en bas`,
-    wanted(fourteen.slice(0, 11), W.allTypes) && wanted(fourteen.slice(11), W.qualities) && fourteen.every((r, i) => i === 0 || r.flowTop >= fourteen[i - 1].flowBottom - 1), fourteen.map(r => r.text));
-  check(`${tag} : les quatorze lignes sont entières dans le panneau 700x400 (la dernière finit avant le bas, avec 4 px de marge au moins), sans texte coupé, atteignables à la souris, lisibles (>= 4,5:1)`,
-    entire(fourteen) && readable(fourteen) && fourteen[13].bottom <= innerHeight - 4, { bottom: fourteen[13].bottom, panel: innerHeight, failing: fourteen.filter(r => !(r.shown && r.inside && r.reachable && !r.cut) || r.contrast < 4.5).map(r => ({ text: r.text, top: r.top, bottom: r.bottom, reachable: r.reachable })) });
-  check(`${tag} : dans un document, « ${W.allTypes[4]} » (qu'un modèle de diapositives seul sait faire) est grisé comme Excel : il reste dans le menu, entier et lisible (>= 4,5:1)`,
-    fourteen[4].greyed && !fourteen[4].live && !fourteen[4].active && fourteen[4].shown && fourteen[4].contrast >= 4.5, fourteen[4]);
+  check(`${tag} : douze types (${W.allTypes.join(', ')}) puis trois qualités, dans cet ordre, de haut en bas`,
+    wanted(fifteen.slice(0, 12), W.allTypes) && wanted(fifteen.slice(12), W.qualities) && fifteen.every((r, i) => i === 0 || r.flowTop >= fifteen[i - 1].flowBottom - 1), fifteen.map(r => r.text));
+  check(`${tag} : les quinze lignes sont entières dans le panneau 700x400 (menu amené par la molette ; la dernière finit avant le bas, avec 4 px de marge au moins), sans texte coupé, atteignables à la souris, lisibles (>= 4,5:1)`,
+    entire(fifteen) && readable(fifteen) && fifteen[14].bottom <= innerHeight - 4, { bottom: fifteen[14].bottom, panel: innerHeight, failing: fifteen.filter(r => !(r.shown && r.inside && r.reachable && !r.cut) || r.contrast < 4.5).map(r => ({ text: r.text, top: r.top, bottom: r.bottom, reachable: r.reachable })) });
+  check(`${tag} : dans un document, « ${W.allTypes[5]} » (qu'un modèle de diapositives seul sait faire) est grisé comme Excel : il reste dans le menu, entier et lisible (>= 4,5:1)`,
+    fifteen[5].greyed && !fifteen[5].live && !fifteen[5].active && fifteen[5].shown && fifteen[5].contrast >= 4.5 && fifteen[4].live && !fifteen[4].greyed, { powerpoint: fifteen[5], openDocument: fifteen[4] });
   check(`${tag} : au départ « PDF » et la qualité par défaut sont les lignes actives, Excel est grisé (il reste dans le menu), PDF, Word et Markdown sont actifs`,
     types[0].active && !types[1].active && !types[2].active && !types[3].active && types[0].live && types[1].live && types[2].greyed && types[3].live && qualities.filter(r => r.active).map(r => r.sel).join() === QUALITY_ROW('native') && qualities.every(r => r.live), { types, qualities });
   check(`${tag} : le bouton du type n'est pas allumé pour le PDF`, !(await typeButtonLit(page)));
@@ -235,7 +235,10 @@ async function menus(page, lang, tag) {
   check(`${tag} : le type reste PDF après un clic sur Excel grisé, sans fenêtre`, (await typeValue(page)) === 'pdf' && !(await dialogState(page)), { type: await typeValue(page) });
   await clickHoverRow(page, TYPE_MENU, TYPE_ROW('pptx'));
   await sleep(300);
-  check(`${tag} : ni après un clic sur « ${W.allTypes[4]} » grisé`, (await typeValue(page)) === 'pdf' && !(await dialogState(page)), { type: await typeValue(page) });
+  check(`${tag} : ni après un clic sur « ${W.allTypes[5]} » grisé`, (await typeValue(page)) === 'pdf' && !(await dialogState(page)), { type: await typeValue(page) });
+  // La bulle de la ligne grisée (js/lock-bubble.js) reste ouverte, posée sous sa ligne, jusqu'à Échap ou un appui ailleurs : elle recouvrirait le chemin vers la ligne suivante (« Léger »), dans un menu qui défile.
+  await page.keyboard.press('Escape');
+  await sleep(150);
   await clickHoverRow(page, TYPE_MENU, QUALITY_ROW('light'));
   await sleep(250);
   check(`${tag} : un vrai clic sur « ${W.qualities[2]} » la choisit`, (await qualityValue(page)) === 'light', { quality: await qualityValue(page) });
@@ -304,7 +307,7 @@ async function menus(page, lang, tag) {
     check(`${tag} : après un clic sur « ${label} » : le type vaut « ${type} » et le bouton du type est allumé`, (await typeValue(page)) === type && (await typeButtonLit(page)), { type: await typeValue(page), lit: await typeButtonLit(page) });
     await hoverRow(page, TYPE_MENU, TYPE_ROW('pdf'));
     const withHtml = await stateOf(page, typeSels);
-    check(`${tag} : avec « ${label} », seule sa ligne est active, les onze types sont entiers et lisibles, la qualité du PDF n'est pas montrée`,
+    check(`${tag} : avec « ${label} », seule sa ligne est active, les douze types sont entiers et lisibles, la qualité du PDF n'est pas montrée`,
       withHtml.filter(r => r.active).map(r => r.sel).join() === TYPE_ROW(type) && entire(withHtml) && readable(withHtml) && JSON.stringify(await labelsOf(page, '#v2-quality-flyout')) === JSON.stringify([W.typeLabel]), withHtml);
     await hoverRow(page, EXPORT_MENU, LINES_ROW('one'));
     const htmlRows = await stateOf(page, HTML_LINES);
@@ -335,8 +338,8 @@ async function menus(page, lang, tag) {
   check(`${tag} : après un clic sur « ${W.htmlTemplate} » : le type vaut « htmlTemplate » et le bouton du type est allumé`, (await typeValue(page)) === 'htmlTemplate' && (await typeButtonLit(page)), { type: await typeValue(page), lit: await typeButtonLit(page) });
   await hoverRow(page, TYPE_MENU, TYPE_ROW('pdf'));
   const withHtmlTemplate = await stateOf(page, typeSels);
-  check(`${tag} : avec « ${W.htmlTemplate} », seule sa ligne est active, juste après « ${W.htmlFragment} » ; les onze types sont entiers et lisibles, la qualité du PDF n'est pas montrée`,
-    withHtmlTemplate.filter(r => r.active).map(r => r.sel).join() === TYPE_ROW('htmlTemplate') && withHtmlTemplate[10].text === W.htmlTemplate && withHtmlTemplate[10].flowTop >= withHtmlTemplate[9].flowBottom - 1 && entire(withHtmlTemplate) && readable(withHtmlTemplate)
+  check(`${tag} : avec « ${W.htmlTemplate} », seule sa ligne est active, juste après « ${W.htmlFragment} » ; les douze types sont entiers et lisibles, la qualité du PDF n'est pas montrée`,
+    withHtmlTemplate.filter(r => r.active).map(r => r.sel).join() === TYPE_ROW('htmlTemplate') && withHtmlTemplate[11].text === W.htmlTemplate && withHtmlTemplate[11].flowTop >= withHtmlTemplate[10].flowBottom - 1 && entire(withHtmlTemplate) && readable(withHtmlTemplate)
       && JSON.stringify(await labelsOf(page, '#v2-quality-flyout')) === JSON.stringify([W.typeLabel]), withHtmlTemplate.map(r => ({ text: r.text, active: r.active, top: r.top, bottom: r.bottom })));
   await hoverRow(page, EXPORT_MENU, TEMPLATE_NOTE);
   const htmlTemplateNote = (await stateOf(page, [TEMPLATE_NOTE]))[0];
@@ -345,18 +348,23 @@ async function menus(page, lang, tag) {
     htmlNoLines.every(r => !r.missing && !r.shown) && htmlTemplateNote.text === W.htmlTemplateNote && htmlTemplateNote.shown && htmlTemplateNote.inside && htmlTemplateNote.reachable && !htmlTemplateNote.cut && htmlTemplateNote.contrast >= 4.5, { htmlTemplateNote, shownLines: htmlNoLines.filter(r => r.shown || r.missing).map(r => r.sel) });
   await parkMouse(page);
 
-  console.log(`\n[${tag}] Dans une grille : Word, PowerPoint et Markdown grisés, Excel choisi`);
+  console.log(`\n[${tag}] Dans une grille : Word, OpenDocument, PowerPoint et Markdown grisés, Excel choisi`);
   await newModel(page, 'grid');
   await hoverRow(page, TYPE_MENU, TYPE_ROW('xlsx'));
-  const gridTypes = await stateOf(page, ['pdf', 'docx', 'pptx', 'xlsx', 'md', 'mdTemplate', 'html', 'htmlFragment', 'htmlTemplate'].map(TYPE_ROW));
-  check(`${tag} : PDF et Excel sont actifs, Word, PowerPoint, Markdown, « ${W.mdTemplate} » et les trois HTML sont grisés (ils restent dans le menu), les neuf sont entiers dans le panneau et lisibles`,
-    gridTypes[0].live && gridTypes[1].greyed && gridTypes[2].greyed && gridTypes[3].live && gridTypes.slice(4).every(r => r.greyed) && entire(gridTypes) && readable(gridTypes), gridTypes);
+  const gridTypes = await stateOf(page, ['pdf', 'docx', 'odf', 'pptx', 'xlsx', 'md', 'mdTemplate', 'html', 'htmlFragment', 'htmlTemplate'].map(TYPE_ROW));
+  check(`${tag} : PDF et Excel sont actifs, Word, OpenDocument, PowerPoint, Markdown, « ${W.mdTemplate} » et les trois HTML sont grisés (ils restent dans le menu), les dix sont entiers dans le panneau et lisibles`,
+    gridTypes[0].live && gridTypes[1].greyed && gridTypes[2].greyed && gridTypes[3].greyed && gridTypes[4].live && gridTypes.slice(5).every(r => r.greyed) && entire(gridTypes) && readable(gridTypes), gridTypes);
   await clickHoverRow(page, TYPE_MENU, TYPE_ROW('docx'));
   await sleep(300);
   check(`${tag} : un vrai clic sur Word grisé ne le choisit pas`, (await typeValue(page)) === 'pdf', { type: await typeValue(page) });
   await clickHoverRow(page, TYPE_MENU, TYPE_ROW('pptx'));
   await sleep(300);
+  check(`${tag} : ni « ${W.allTypes[5]} » grisé`, (await typeValue(page)) === 'pdf', { type: await typeValue(page) });
+  await page.keyboard.press('Escape');
+  await clickHoverRow(page, TYPE_MENU, TYPE_ROW('odf'));
+  await sleep(300);
   check(`${tag} : ni « ${W.allTypes[4]} » grisé`, (await typeValue(page)) === 'pdf', { type: await typeValue(page) });
+  await page.keyboard.press('Escape');
   await clickHoverRow(page, TYPE_MENU, TYPE_ROW('md'));
   await sleep(300);
   check(`${tag} : un vrai clic sur Markdown grisé ne le choisit pas non plus`, (await typeValue(page)) === 'pdf', { type: await typeValue(page) });
@@ -610,6 +618,32 @@ try {
   const wordAsked = await dialogState(page);
   check('« Toutes les lignes de la vue (ZIP) » cochée, Alt+P pose la confirmation du ZIP de Word, dans le panneau, sans rien télécharger', !!wordAsked && wordAsked.inside && /DOCX/.test(wordAsked.message) && shortcutZip === null, { wordAsked, file: nameOf(shortcutZip) });
   if (wordAsked) await cancelDialog(page);
+  await parkMouse(page);
+  await chooseExportLines(page, 'one');
+  await parkMouse(page);
+  // OpenDocument (js/odt-export.js) : le même geste que Word, un .odt dont le premier fichier de l'archive est « mimetype » (stocké, lisible sans l'ouvrir : c'est ainsi qu'on reconnaît un OpenDocument).
+  await clickHoverRow(page, TYPE_MENU, TYPE_ROW('odf'));
+  await sleep(300);
+  await parkMouse(page);
+  check('après un clic sur OpenDocument : le type vaut « odf » et le bouton du type est allumé', (await typeValue(page)) === 'odf' && (await typeButtonLit(page)), { type: await typeValue(page), lit: await typeButtonLit(page) });
+  const odfFile = await download(page, () => click(page, EXPORT_MENU));
+  const odfBytes = odfFile ? await readFile(await odfFile.path()) : Buffer.alloc(0);
+  check('le bouton Exporter, type OpenDocument, « une seule ligne » : un fichier .odt est téléchargé, un paquet dont « mimetype » ouvre l\'archive',
+    /\.odt$/i.test(nameOf(odfFile) || '') && odfBytes.subarray(0, 2).toString('latin1') === 'PK' && odfBytes.toString('latin1', 30, 77) === 'mimetypeapplication/vnd.oasis.opendocument.text', { name: nameOf(odfFile), head: odfBytes.toString('latin1', 30, 77) });
+  check('l\'état dit « OpenDocument généré. » (rien n\'est resté de côté dans ce document)', (await status(page)) === 'OpenDocument généré.', await status(page));
+  await sleep(600);
+  await parkMouse(page);
+  await chooseExportLines(page, 'zip');
+  await parkMouse(page);
+  await click(page, '.tiptap p');
+  await sleep(200);
+  const odfZip = await download(page, async () => {
+    await page.keyboard.press('Alt+p');
+    await sleep(700);
+  }, 2500);
+  const odfAsked = await dialogState(page);
+  check('« Toutes les lignes de la vue (ZIP) » cochée, Alt+P pose la confirmation du ZIP d\'OpenDocument, dans le panneau, sans rien télécharger', !!odfAsked && odfAsked.inside && /OpenDocument/.test(odfAsked.message) && odfZip === null, { odfAsked, file: nameOf(odfZip) });
+  if (odfAsked) await cancelDialog(page);
   await parkMouse(page);
   await chooseExportLines(page, 'one');
   await parkMouse(page);

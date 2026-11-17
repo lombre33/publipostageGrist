@@ -12,7 +12,7 @@
 //   rouvre pas son modèle ; le macro-modèle garde l'ordre habituel et ouvre par-dessus son écran de composition, vide, dans le panneau ; `dossier` n'y change rien ; un type absent, refusé par la garde, une présentation
 //   sans l'extension, un document en lecture seule : l'ordre habituel, sans message.
 //  « NOUVEAU > IMPORTER » (consigne 035 : `raison` `importer` et `importation: { valeur, fichier: File }`, js/gfs-link.js `normalizeOpening`, js/gfs-open.js, js/main.js `importFileFromGfs`) : l'importation est gardée pour cette
-//   raison seule (un `File` et une valeur en texte), jamais pour une autre ; GFS a déjà ouvert le sélecteur, donc aucun sélecteur ne s'ouvre ; chacune des cinq valeurs (Excel, Markdown, HTML, PowerPoint, Word) lit SON fichier par le chemin
+//   raison seule (un `File` et une valeur en texte), jamais pour une autre ; GFS a déjà ouvert le sélecteur, donc aucun sélecteur ne s'ouvre ; chacune des six valeurs (Excel, Markdown, HTML, PowerPoint, Word, OpenDocument) lit SON fichier par le chemin
 //   du menu « + » (mêmes phrases du coin d'état, mêmes refus, même question d'enregistrement après une lecture réussie) et le modèle importé est sans nom, sans rien d'écrit, JAMAIS remplacé par un modèle vierge ; un fichier
 //   refusé, une valeur inconnue, une importation illisible, une personne qui annule ou un document en lecture seule : `{ ouvert: false }` ; au démarrage, le modèle habituel s'ouvre, « Widget prêt. » se dit, puis l'import suit
 //   (avant les appels `ouvrir` reçus pendant le démarrage) ; seule, rien ne change.
@@ -92,7 +92,7 @@ const answers = page => page.evaluate(() => window.__gfsStub.answers.slice());
 // « Nouveau > Importer » (consigne 035) : GFS a fait choisir le fichier et le donne à l'app, `importation: { valeur, fichier: File }`. Un `File` ne passe ni par `page.evaluate` ni par le JSON du stub : il est fabriqué dans
 // la page (`window.__makeFile`), les octets d'un classeur ou d'une présentation y voyagent en base64. Les aides comptent aussi les ouvertures du sélecteur de fichier (un clic sur un champ de fichier : aucune
 // ne doit avoir lieu, GFS a déjà ouvert le sien) et les lectures du lecteur Markdown (celles de ce fichier).
-const IMPORT_TYPE = { excel: 'grille', markdown: 'document', html: 'document', powerpoint: 'presentation', word: 'document' };
+const IMPORT_TYPE = { excel: 'grille', markdown: 'document', html: 'document', powerpoint: 'presentation', word: 'document', opendocument: 'document' };
 const MIME = {
   markdown: 'text/markdown',
   html: 'text/html',
@@ -100,6 +100,7 @@ const MIME = {
   excel: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   powerpoint: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   word: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  opendocument: 'application/vnd.oasis.opendocument.text',
 };
 const MARKDOWN = { name: 'note.md', mime: MIME.markdown, text: '# Titre importé\n\nTexte du fichier de GFS.' };
 const MARKDOWN_TEXT = 'Titre importéTexte du fichier de GFS.';
@@ -108,6 +109,9 @@ const NOT_A_BOOK = { name: 'faux.xlsx', mime: MIME.excel, text: 'ceci n’est pa
 const NOT_A_DECK = { name: 'faux.pptx', mime: MIME.powerpoint, text: 'ceci n’est pas une présentation' };
 const NOT_A_DOC = { name: 'faux.docx', mime: MIME.word, text: 'ceci n’est pas un document Word' };
 const WORD_TEXT = 'Texte du fichier Word de GFS.';
+// OpenDocument (17/11, lots 1 à 2b de l'import ; GFS déclare la valeur `opendocument` dans `actions.importer`) : un .odt écrit dans la page de l'essai par le moteur d'export (js/odt-export.js), puis un faux .odt.
+const NOT_AN_ODT = { name: 'faux.odt', mime: MIME.opendocument, text: 'ceci n’est pas un document OpenDocument' };
+const ODT_TEXT = 'Texte du fichier OpenDocument de GFS.';
 // HTML (13/11, lots 1 et 2 de l'import ; GFS déclare la valeur `html` dans `actions.importer`) : une page seule, une archive ZIP de la page (fabriquée dans la page de l'essai : sa page et son image), une page vide, une
 // archive qui n'en est pas une (les quatre premiers octets d'un ZIP, puis du bruit).
 const HTML_PAGE = { name: 'page.html', mime: MIME.html, text: '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Page de GFS</title></head><body><h1>Page HTML de GFS</h1><p>Texte du fichier HTML de GFS.</p></body></html>' };
@@ -166,6 +170,7 @@ const IMPORTED = {
   powerpoint: { fr: 'PowerPoint importé : 2 diapositives. Nommez le modèle puis enregistrez-le.', en: 'PowerPoint imported: 2 slides. Name the template, then save it.' },
   word: { fr: 'Word importé. Nommez le modèle puis enregistrez-le.', en: 'Word imported. Name the template, then save it.' },
   html: { fr: 'HTML importé. Nommez le modèle puis enregistrez-le.', en: 'HTML imported. Name the template, then save it.' },
+  opendocument: { fr: 'OpenDocument importé. Nommez le modèle puis enregistrez-le.', en: 'OpenDocument imported. Name the template, then save it.' },
 };
 const REFUSED = {
   markdown: 'Ce fichier Markdown est vide : il n’y a rien à importer.',
@@ -173,6 +178,7 @@ const REFUSED = {
   powerpoint: 'Ce fichier n’est pas une présentation PowerPoint (.pptx) lisible.',
   word: 'Ce fichier n’est pas un document Word (.docx) lisible.',
   html: 'Ce fichier n’est pas une page HTML lisible.',
+  opendocument: 'Ce fichier n’est pas un document OpenDocument lisible.',
   htmlEmpty: 'Cette page HTML est vide : il n’y a rien à importer.',
 };
 
@@ -713,13 +719,15 @@ async function buildFixtures(page) {
     const { docx, p, pStyle } = window.DocxFixtures;
     const word = await docx({ body: p('Bilan Word GFS', pStyle('Title')) + p('Texte du fichier Word de GFS.') });
     await ExportCommon.ensureJsZipLoaded();
+    await ExportEngines.ensure('odtExport');
+    const odt = await OdtExport.build('<h1>Bilan OpenDocument GFS</h1><p>Texte du fichier OpenDocument de GFS.</p>', {});
     const archive = new JSZip();
     archive.file('index.html', '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Archive de GFS</title></head><body><h1>Archive HTML de GFS</h1><p>Texte de l’archive HTML de GFS.</p><p><img src="images/logo.png" alt="Logo"></p></body></html>');
     archive.file('images/logo.png', 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', { base64: true });
-    return { xlsx: base64(await book.xlsx.writeBuffer()), deck: base64(await pptx({ slides: [slide('Bilan GFS'), slide('Suite')] })), word: base64(word), zip: base64(await archive.generateAsync({ type: 'uint8array', compression: 'DEFLATE' })) };
+    return { xlsx: base64(await book.xlsx.writeBuffer()), deck: base64(await pptx({ slides: [slide('Bilan GFS'), slide('Suite')] })), word: base64(word), odt: base64(await odt.blob.arrayBuffer()), zip: base64(await archive.generateAsync({ type: 'uint8array', compression: 'DEFLATE' })) };
   });
 }
-let SOURCES = null;   // les fichiers de l'essai, une fois fabriqués : { markdown, excel, powerpoint, word, html, zip }
+let SOURCES = null;   // les fichiers de l'essai, une fois fabriqués : { markdown, excel, powerpoint, word, opendocument, html, zip }
 
 console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier de GFS (l’app est déjà ouverte) ==');
 {
@@ -727,7 +735,7 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   const page = o.page;
   await started(page);
   const fixtures = await buildFixtures(page);
-  SOURCES = { markdown: MARKDOWN, excel: { name: 'ventes.xlsx', mime: MIME.excel, base64: fixtures.xlsx }, powerpoint: { name: 'bilan.pptx', mime: MIME.powerpoint, base64: fixtures.deck }, word: { name: 'bilan.docx', mime: MIME.word, base64: fixtures.word }, html: HTML_PAGE, zip: { name: 'page.zip', mime: MIME.zip, base64: fixtures.zip } };
+  SOURCES = { markdown: MARKDOWN, excel: { name: 'ventes.xlsx', mime: MIME.excel, base64: fixtures.xlsx }, powerpoint: { name: 'bilan.pptx', mime: MIME.powerpoint, base64: fixtures.deck }, word: { name: 'bilan.docx', mime: MIME.word, base64: fixtures.word }, opendocument: { name: 'bilan.odt', mime: MIME.opendocument, base64: fixtures.odt }, html: HTML_PAGE, zip: { name: 'page.zip', mime: MIME.zip, base64: fixtures.zip } };
   const installs = () => page.evaluate(() => window.__gfsStub.calls.filter(c => c.nom === 'installer').map(c => c.args));
   const nothingWritten = async () => { const w = await writes(page); return w.models === 0 && w.options === 'null'; };
   const blanksOpened = state => state.opened.filter(id => id === 'null').length;
@@ -897,6 +905,21 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
     got = await importState(page);
     check(`${label} : \`{ ouvert: false }\`, le coin d’état dit « ${sentence} » en erreur, le document reste, aucune question`, reply.type === 'reponse' && reply.data.ouvert === false && got.status === sentence && got.statusClass === 'error-msg' && got.text.includes(ZIP_TEXT) && !(await dialogOf(page)).open, { reply, got });
   }
+  // OpenDocument (17/11, la valeur `opendocument` que GFS déclare dans `actions.importer`) : lu par le chemin de la ligne « Importer un OpenDocument… » du menu « + », sans extension à installer. Le document de l'archive HTML
+  // attend d'être enregistré : la question se pose APRÈS la lecture du fichier, et un fichier refusé ne coûte rien.
+  pending = askImport(page, 'opendocument', SOURCES.opendocument);
+  await waitDialog(page);
+  d = await dialogOf(page);
+  got = await importState(page);
+  check('opendocument, avec le document importé qui attend d’être enregistré : la question se pose APRÈS la lecture du fichier, dans le panneau, sans « Enregistrer » (le modèle n’a pas de nom), le document reste', d.open && d.inPanel && d.buttons.map(b => b.label).join('|') === 'Annuler|Ne pas enregistrer' && got.text.includes(ZIP_TEXT) && !got.text.includes(ODT_TEXT), { d, got });
+  await pressDialog(page, 'Ne pas enregistrer');
+  reply = await pending;
+  got = await importState(page);
+  check('« Ne pas enregistrer » : `{ ouvert: true }`, le document du fichier est à l’écran (son titre et son texte), sans nom ni modèle courant', reply.type === 'reponse' && reply.data.ouvert === true && got.current == null && got.list === '' && got.name === '' && !got.grid && got.slides === 0 && got.text.includes('Bilan OpenDocument GFS') && got.text.includes(ODT_TEXT), { reply, got });
+  check('le coin d’état dit la phrase du menu « + » : « OpenDocument importé. Nommez le modèle puis enregistrez-le. », aucune fenêtre de rapport (rien n’est resté de côté), aucun sélecteur, rien d’écrit', got.status === IMPORTED.opendocument.fr && !(await dialogOf(page)).open && got.picker === 0 && got.fileInputs === 0 && await nothingWritten(), got);
+  reply = await askImport(page, 'opendocument', NOT_AN_ODT);
+  got = await importState(page);
+  check(`un fichier qui n’est pas un OpenDocument : \`{ ouvert: false }\`, le coin d’état dit « ${REFUSED.opendocument} » en erreur, le document reste, aucune question`, reply.type === 'reponse' && reply.data.ouvert === false && got.status === REFUSED.opendocument && got.statusClass === 'error-msg' && got.text.includes(ODT_TEXT) && !(await dialogOf(page)).open, { reply, got });
   check('aucun sélecteur de fichier, rien d’écrit, aucune boîte native', (await importState(page)).picker === 0 && await nothingWritten() && o.natives.length === 0, o.natives);
   await o.context.close();
 
@@ -912,6 +935,9 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   reply = await askImport(readonly.page, 'html', SOURCES.html);
   got = await importState(readonly.page);
   check('… et pour une page HTML : `{ ouvert: false }`, rien ne change, aucun sélecteur', reply.type === 'reponse' && reply.data.ouvert === false && got.status === before.status && got.name === 'Départ A défaut' && got.picker === 0, { reply, before, got });
+  reply = await askImport(readonly.page, 'opendocument', SOURCES.opendocument);
+  got = await importState(readonly.page);
+  check('… et pour un fichier OpenDocument : `{ ouvert: false }`, rien ne change, aucun sélecteur', reply.type === 'reponse' && reply.data.ouvert === false && got.status === before.status && got.name === 'Départ A défaut' && got.picker === 0, { reply, before, got });
   await readonly.context.close();
 }
 
@@ -979,6 +1005,22 @@ console.log('\n== « Nouveau > Importer » au démarrage : le fichier est dans l
   check('`GfsLink.opening()` garde l’importation (la valeur `html`, une archive : un `File`)', await o.page.evaluate(() => { const i = GfsLink.opening().importation; return !!i && i.valeur === 'html' && i.fichier instanceof File && i.fichier.name === 'page.zip'; }));
   await o.context.close();
 
+  // OpenDocument (17/11) : aucune extension à installer, le document du fichier suit le ★ comme les autres.
+  o = await startImporting('opendocument', SOURCES.opendocument);
+  await waitStatus(o.page, /^OpenDocument importé/);
+  got = await importState(o.page);
+  check('opendocument : le document du fichier est à l’écran (son titre et son texte), sans nom ni modèle courant (le ★ s’était ouvert avant, l’import a suivi)', got.current == null && got.name === '' && got.list === '' && got.text.includes('Bilan OpenDocument GFS') && got.text.includes(ODT_TEXT) && got.opened.join() === '1,null', got);
+  check('le coin d’état dit « OpenDocument importé. Nommez le modèle puis enregistrez-le. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', got.status === IMPORTED.opendocument.fr, got);
+  check('aucun sélecteur de fichier, aucune fenêtre de rapport, rien d’écrit', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(o.page)).open && await nothingWritten(o.page), got);
+  check('`GfsLink.opening()` garde l’importation (la valeur `opendocument`, un `File`)', await o.page.evaluate(() => { const i = GfsLink.opening().importation; return !!i && i.valeur === 'opendocument' && i.fichier instanceof File && i.fichier.name === 'bilan.odt'; }));
+  await o.context.close();
+
+  o = await startImporting('opendocument', SOURCES.opendocument, { lang: 'en' });
+  await waitStatus(o.page, /^OpenDocument imported/);
+  got = await importState(o.page);
+  check('en anglais : « OpenDocument imported. Name the template, then save it. », le document du fichier est à l’écran', got.status === IMPORTED.opendocument.en && got.text.includes(ODT_TEXT) && got.current == null, got);
+  await o.context.close();
+
   o = await startImporting('html', SOURCES.html, { lang: 'en' });
   await waitStatus(o.page, /^HTML imported/);
   got = await importState(o.page);
@@ -1024,6 +1066,13 @@ console.log('\n== « Nouveau > Importer » au démarrage : le fichier est dans l
   got = await importState(o.page);
   usualOrder(got, 'une archive qui n’en est pas une');
   check('… et le coin d’état dit « Ce fichier n’est pas une page HTML lisible. » en erreur', got.status === REFUSED.html && got.statusClass === 'error-msg', got);
+  await o.context.close();
+
+  o = await startImporting('opendocument', NOT_AN_ODT);
+  await waitStatus(o.page, /n’est pas un document OpenDocument/);
+  got = await importState(o.page);
+  usualOrder(got, 'un fichier qui n’est pas un OpenDocument');
+  check('… et le coin d’état dit « Ce fichier n’est pas un document OpenDocument lisible. » en erreur', got.status === REFUSED.opendocument && got.statusClass === 'error-msg', got);
   await o.context.close();
 
   // Ce que l'app ne peut pas importer : le modèle habituel, sans vierge à la place.

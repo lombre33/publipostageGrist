@@ -705,7 +705,7 @@ const OdtImport = (function () {
         } else if (tag === 'text:list') {
           content += listHtml(ctx, part, level + 1, styleName, depth + 1);
         } else {
-          content += blocksOf(ctx, part, depth + 1);
+          content += blockHtml(ctx, part, depth);
         }
       });
       body += '<li>' + (content || '<p></p>') + '</li>';
@@ -728,35 +728,39 @@ const OdtImport = (function () {
   function blocksOf(ctx, container, depth) {
     let out = '';
     if (!container || depth > MAX_DEPTH) return out;
-    kids(container).forEach((part) => {
-      const tag = name(part);
-      switch (tag) {
-        case 'text:p': case 'text:h': {
-          out += paragraphHtml(ctx, part, false).html;
-          ctx.started = true;
-          break;
-        }
-        case 'text:list': out += listHtml(ctx, part, 1, '', depth); ctx.started = true; break;
-        case 'table:table':
-          if (depth > 0) { count(ctx, 'nestedTables'); out += flattenTable(ctx, part, depth); } else out += tableHtml(ctx, part, depth);
-          ctx.started = true;
-          break;
-        case 'text:section': {
-          const sectionStyle = ctx.styles.styles.get('section:' + attr(part, 'text:style-name'));
-          if (attr(part, 'text:display') === 'none') { count(ctx, 'hidden'); break; }
-          if (sectionStyle && sectionStyle.columnCount > 1) count(ctx, 'columns');
-          out += blocksOf(ctx, part, depth + 1);
-          break;
-        }
-        case 'text:numbered-paragraph': out += blocksOf(ctx, part, depth + 1); break;
-        case 'text:tracked-changes': break;
-        case 'draw:frame': { const html = frameHtml(ctx, part); if (html) { out += '<p>' + html + '</p>'; ctx.started = true; } break; }
-        default:
-          if (INDEXES.indexOf(tag) >= 0) { count(ctx, 'toc'); if (tag === 'text:table-of-content') out += '<div class="toc-marker"></div>'; ctx.started = true; break; }
-          if (/^draw:/.test(tag)) count(ctx, 'shapes');
-          break;
+    kids(container).forEach((part) => { out += blockHtml(ctx, part, depth); });
+    return out;
+  }
+  // Un bloc du conteneur (un paragraphe, une liste, un tableau, une section, un index...), en balisage ; rien pour ce que l'éditeur n'a pas (compté).
+  function blockHtml(ctx, part, depth) {
+    const tag = name(part);
+    let out = '';
+    switch (tag) {
+      case 'text:p': case 'text:h': {
+        out += paragraphHtml(ctx, part, false).html;
+        ctx.started = true;
+        break;
       }
-    });
+      case 'text:list': out += listHtml(ctx, part, 1, '', depth); ctx.started = true; break;
+      case 'table:table':
+        if (depth > 0) { count(ctx, 'nestedTables'); out += flattenTable(ctx, part, depth); } else out += tableHtml(ctx, part, depth);
+        ctx.started = true;
+        break;
+      case 'text:section': {
+        const sectionStyle = ctx.styles.styles.get('section:' + attr(part, 'text:style-name'));
+        if (attr(part, 'text:display') === 'none') { count(ctx, 'hidden'); break; }
+        if (sectionStyle && sectionStyle.columnCount > 1) count(ctx, 'columns');
+        out += blocksOf(ctx, part, depth + 1);
+        break;
+      }
+      case 'text:numbered-paragraph': out += blocksOf(ctx, part, depth + 1); break;
+      case 'text:tracked-changes': break;
+      case 'draw:frame': { const html = frameHtml(ctx, part); if (html) { out += '<p>' + html + '</p>'; ctx.started = true; } break; }
+      default:
+        if (INDEXES.indexOf(tag) >= 0) { count(ctx, 'toc'); if (tag === 'text:table-of-content') out += '<div class="toc-marker"></div>'; ctx.started = true; break; }
+        if (/^draw:/.test(tag)) count(ctx, 'shapes');
+        break;
+    }
     return out;
   }
   // Un tableau dans une case : l'éditeur n'a pas de tableau dans un tableau, ses cases sont reprises l'une après l'autre.

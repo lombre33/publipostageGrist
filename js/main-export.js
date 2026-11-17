@@ -145,6 +145,13 @@ const MainExport = (function () {
         batch: 'docxZip', noRecord: 'alert.noRecordForExportDocx', generating: 'status.docxGenerating', generated: 'status.docxGenerated', failed: 'status.docxGenerationError',
         run: (doc, tableId, record) => DocxExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsTwip()),
       },
+      // OpenDocument texte (js/odt-export.js) : le document en .odt (LibreOffice, OnlyOffice, Collabora...), écrit sans bibliothèque de plus ; ce que le fichier n'a pas pu reprendre (`describe`) est dit dans le coin d'état.
+      odf: {
+        engines: ['odtExport'],
+        batch: 'odfZip', noRecord: 'alert.noRecordForExportOdf', generating: 'status.odfGenerating', generated: 'status.odfGenerated', failed: 'status.odfGenerationError',
+        run: (doc, tableId, record) => OdtExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsMm()),
+        describe: result => (result && result.report && result.report.length ? I18n.t('status.odfGeneratedNotCarried', { list: result.report.map(item => I18n.t('odf.export.lost.' + item.key, { n: item.n })).join(', ') }) : ''),
+      },
       xlsx: {
         engines: ['xlsx'],
         batch: 'xlsxZip', noRecord: 'alert.noRecordForExportXlsx', generating: 'status.xlsxGenerating', generated: 'status.xlsxGenerated', failed: 'status.xlsxGenerationError',
@@ -250,7 +257,7 @@ const MainExport = (function () {
     // que le modèle ouvert ne sait pas faire n'est pas proposé (ligne grisée) et le bouton Exporter retombe sur le PDF, jamais sur une erreur.
     function exportTypeAvailable(type) {
       const grid = GridEditor.isGridType(getCurrentTypeModele());
-      return type === 'pdf' || type === 'pdfProtected' || type === 'pdfArchive' || ((type === 'docx' || type === 'md' || type === 'html' || type === 'htmlFragment') && !grid) || (type === 'xlsx' && grid)
+      return type === 'pdf' || type === 'pdfProtected' || type === 'pdfArchive' || ((type === 'docx' || type === 'odf' || type === 'md' || type === 'html' || type === 'htmlFragment') && !grid) || (type === 'xlsx' && grid)
         || ((type === 'mdTemplate' || type === 'htmlTemplate') && !grid && getCurrentTypeModele() !== 'macro') || (type === 'pptx' && getCurrentTypeModele() === 'presentation') || (type === 'eml' && getCurrentTypeModele() === 'email');
     }
     // Pourquoi une ligne du menu « Type d'export » est grisée pour le modèle ouvert (js/lock-reasons.js) : PowerPoint ne sert qu'une présentation, Excel qu'une grille, un tableau seul ne s'écrit ni en Word, ni en Markdown, ni en HTML,
@@ -283,6 +290,7 @@ const MainExport = (function () {
     const onExportPdfProtected = () => exportRecordAs('pdfProtected');
     const onExportPdfArchive = () => exportRecordAs('pdfArchive');
     const onExportDocx = () => exportRecordAs('docx');
+    const onExportOdf = () => exportRecordAs('odf');
     const onExportPptx = () => exportRecordAs('pptx');
     const onExportXlsx = () => exportRecordAs('xlsx');
     const onExportMd = () => exportRecordAs('md');
@@ -328,6 +336,7 @@ const MainExport = (function () {
       // Le PDF/A a le PDF unique (réuni, puis passé en PDF/A d'un coup) mais pas la planche : elle est faite pour l'impression (ligne grisée dans le menu Exporter).
       pdfArchive: { zip: 'pdfArchiveZip', merged: 'pdfArchiveMerged' },
       docx: { zip: 'docxZip' },
+      odf: { zip: 'odfZip' },
       pptx: { zip: 'pptxZip' },
       xlsx: { zip: 'xlsxZip', workbook: 'xlsxSingle' },
       md: { zip: 'mdZip' },
@@ -351,7 +360,7 @@ const MainExport = (function () {
       const type = selectedExportType();
       const lines = selectedExportLines(type);
       if (lines !== 'one') return onExportBatch(EXPORT_BATCH_OF[type][lines]);
-      return ({ pdf: onExportPdf, pdfProtected: onExportPdfProtected, pdfArchive: onExportPdfArchive, docx: onExportDocx, pptx: onExportPptx, xlsx: onExportXlsx, md: onExportMd, mdTemplate: onExportMdTemplate, html: onExportHtml, htmlFragment: onExportHtmlFragment, htmlTemplate: onExportHtmlTemplate, eml: onExportEml })[type]();
+      return ({ pdf: onExportPdf, pdfProtected: onExportPdfProtected, pdfArchive: onExportPdfArchive, docx: onExportDocx, odf: onExportOdf, pptx: onExportPptx, xlsx: onExportXlsx, md: onExportMd, mdTemplate: onExportMdTemplate, html: onExportHtml, htmlFragment: onExportHtmlFragment, htmlTemplate: onExportHtmlTemplate, eml: onExportEml })[type]();
     };
 
     // Mode email (planning/feature-email-mode.md) : construit l'URL mailto: de la ligne courante et l'ouvre par un <a> synthétique plutôt que
@@ -604,6 +613,14 @@ const MainExport = (function () {
         entryExt: '.docx', fileSuffix: '-export-docx.zip', margins: () => PageLayout.getMarginsTwip(), grid: false, engines: ['docx'],
         loadLibs: () => ExportCommon.ensureJsZipLoaded(),
         renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => DocxExport.getDocxBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
+      },
+      // Un fichier .odt par ligne, dans une archive ZIP (js/odt-export.js) : la page du modèle (format, sens, marges en millimètres) ; comme le Word, il ne fait que des documents.
+      odfZip: {
+        label: 'OpenDocument', confirm: 'confirm.batchExportOdf', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressOdf',
+        noFile: 'status.exportErrorOdf', done: 'status.batchExportDoneOdf', doneWithFailures: 'status.batchExportDoneWithFailuresOdf',
+        entryExt: '.odt', fileSuffix: '-export-odt.zip', margins: () => PageLayout.getMarginsMm(), grid: false, engines: ['odtExport'],
+        loadLibs: () => ExportCommon.ensureJsZipLoaded(),
+        renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => OdtExport.getOdtBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
       },
       // Un fichier .pptx par ligne, dans une archive ZIP (js/pptx-export.js) : la page du modèle est celle des diapositives, `keepProps` garde le repère de chacune (transition, fond, notes).
       pptxZip: {
