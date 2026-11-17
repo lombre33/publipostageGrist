@@ -6,7 +6,8 @@
 //   3) un document déjà ouvert : la fenêtre « Nouveau document / Remplacer celui-ci / Ajouter après / Insérer ici » s'ouvre (focus sur « Nouveau document ») ;
 //      « Ajouter après » met le texte du fichier à la fin, « Insérer ici » au curseur, « Remplacer celui-ci » à la place du texte (le nom du modèle reste) ; Ctrl+Z défait chacun ; « Annuler » ne change rien ;
 //   4) un fichier d'un genre inconnu dit son refus dans le coin d'état, sans rien changer ; le navigateur n'ouvre pas le fichier ;
-//   5) aucune erreur de page.
+//   5) un tableur OpenDocument (.ods) déposé sur un document ouvert devient une grille, sans la question « Remplacer… » ;
+//   6) aucune erreur de page.
 // Lancé par run-headless.mjs (groupe Node « dropImportMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-drop-import-mouse.mjs
 import { open, stopServer, sleep, click } from './load-lib.mjs';
 
@@ -143,6 +144,28 @@ async function run(lang, scheme, w) {
   await sleep(500);
   d = await doc(page);
   check(`${L} : un fichier d'un genre inconnu est refusé dans le coin d'état, rien ne change, le navigateur ne l'ouvre pas`, unknown.dropPrevented && /archive\.rar/.test(d.status) && d.text === 'Début du texte|Fin du texte', { unknown, d });
+
+  // Un tableur OpenDocument déposé sur un document ouvert : toujours une nouvelle grille, sans la question « Nouveau / Remplacer / Ajouter / Insérer » (qui ne vaut que pour du texte). Le fichier est fabriqué dans
+  // la page avec les briques de dev-tests/scenarios-ods-import.js ; la grille neuve passe par la question habituelle du menu « + » (quitter le modèle ?) puisque le texte a des modifications non enregistrées.
+  await seed(page);
+  await page.addScriptTag({ url: '/dev-tests/scenarios-ods-import.js' });
+  const sheetDrop = await page.evaluate(async () => {
+    const F = window.OdsFixtures;
+    const buffer = await F.ods({ sheets: [F.sheet('S', [F.row([F.text('Nom'), F.text('Âge')]), F.row([F.text('Ana'), F.num('31', 31)])])] });
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([buffer], 'chiffres.ods', { type: 'application/vnd.oasis.opendocument.spreadsheet' }));
+    const fire = kind => { const e = new DragEvent(kind, { bubbles: true, cancelable: true, dataTransfer: transfer }); document.body.dispatchEvent(e); return e; };
+    fire('dragenter');
+    fire('dragover');
+    return { dropPrevented: fire('drop').defaultPrevented };
+  });
+  await sleep(1500);
+  const askedSheet = await dialog(page);
+  check(`${L} : un .ods déposé sur un document ouvert ne pose pas la question « ${T.rep} » : seule celle du menu « + » (quitter le modèle ?) vient`, sheetDrop.dropPrevented && !!askedSheet && askedSheet.buttons.includes(T.leave) && !askedSheet.buttons.includes(T.rep), askedSheet);
+  if (askedSheet) await clickDialogButton(page, T.leave);
+  await sleep(1500);
+  const grid = await page.evaluate(() => ({ active: GridEditor.isActive(), text: EditorCore.getEditor().state.doc.textContent }));
+  check(`${L} : le tableur déposé devient une grille (nom, âge, Ana, 31)`, grid.active && /Nom/.test(grid.text) && /Ana/.test(grid.text) && /31/.test(grid.text), grid);
 }
 
 let w = null;

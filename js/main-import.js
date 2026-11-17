@@ -6,7 +6,7 @@ const MainImport = (function () {
     const { askBeforeLeaving, canMergeDocument, hasEditsToConfirmBeforeLeaving, isReadOnly, loadTemplateIntoEditor, markAutosaveDirty, onSave, refocusEditorIfLost, setStatus, templateNameInput, templateSelect, updateSaveStatus } = api;
 
     // « Nouveau > Importer » demandé par GFS (js/gfs-open.js, consigne GFS 035) : GFS a ouvert le sélecteur de fichier lui-même (le cadre isolé de l'app n'a pas le geste de la personne) et donne le fichier choisi, que
-    // `valeur` nomme : `excel` (une grille), `markdown` (un document), `html` (un document), `powerpoint` (une présentation, l'extension « diapositives » étant active), `word` (un document), `opendocument` (un document texte .odt ; le tableur et la présentation suivront). Il est lu par le chemin de la ligne du même nom du menu « + » - mêmes
+    // `valeur` nomme : `excel` (une grille), `markdown` (un document), `html` (un document), `powerpoint` (une présentation, l'extension « diapositives » étant active), `word` (un document), `opendocument` (un document texte .odt, une grille pour un tableur .ods ; la présentation suivra). Il est lu par le chemin de la ligne du même nom du menu « + » - mêmes
     // lectures, mêmes refus et mêmes phrases du coin d'état, même question d'enregistrement après une lecture réussie, même résultat : un modèle sans nom et pas encore enregistré, rien d'écrit avant son premier
     // « Enregistrer » - sans le sélecteur. true : le modèle importé est à l'écran ; false : le document est en lecture seule, la valeur est inconnue, le fichier est refusé, ou la personne a annulé.
     // `word` (choix du porteur du 07/11), `html` (13/11) et `opendocument` (17/11) ne sont proposés par GFS qu'une fois qu'il les déclare dans `actions.importer` de son manifeste : tant qu'il ne le fait pas, aucune de ces valeurs n'arrive, et rien ne change.
@@ -33,13 +33,14 @@ const MainImport = (function () {
       ['excel', /\.(xlsx|xlsm|xltx|xltm)$/i],
       ['markdown', /\.(md|markdown|mdown|mkd|txt)$/i],
       ['html', /\.(html|htm|xhtml|zip)$/i],
-      ['opendocument', /\.(odt|ott|fodt)$/i],
+      ['opendocument', /\.(odt|ott|fodt|ods|ots|fods)$/i],
     ];
     const kindOfFile = file => { const found = DROP_KINDS.find(([, pattern]) => pattern.test(file && file.name || '')); return found ? found[0] : null; };
     async function importDroppedFile(file, extras) {
       if (isReadOnly()) { setStatus(I18n.t('status.dropReadOnly'), true); return false; }
       const kind = kindOfFile(file);
       if (!kind) { setStatus(I18n.t('status.dropUnsupported', { name: file && file.name || '' }), true); return false; }
+      if (kind === 'opendocument' && await odfKindOf(file) === 'spreadsheet') return importOdfFile(file); // un tableur OpenDocument fait toujours une nouvelle grille, comme un classeur Excel
       if (!((kind === 'word' || kind === 'opendocument' || kind === 'markdown' || kind === 'html') && canMergeDocument())) return importFileFromGfs(kind, file, extras);
       const choice = await Dialogs.choose({
         title: I18n.t('drop.title'),
@@ -141,7 +142,7 @@ const MainImport = (function () {
       setStatus(I18n.t(key, { sheet: chosen, rows: e && e.rows, cols: e && e.cols, maxRows: e && e.maxRows, maxCols: e && e.maxCols, maxCells: e && e.maxCells, size: e && e.size ? importMegabytes(e.size) : '', max: e && e.max ? importMegabytes(e.max) : '' }), true);
     }
 
-    function openImportedGrid(imported) {
+    function openImportedGrid(imported, singleKey) {
       // Une nouvelle grille, sans nom et pas encore enregistrée, comme « Nouvelle grille ».
       templateSelect.value = '';
       loadTemplateIntoEditor({ id: null, nom: '', contenu: imported.html, typeModele: GridEditor.TYPE, marginsMm: null, suiviModifications: null, headerFooter: null }, GridEditor.TYPE);
@@ -149,7 +150,7 @@ const MainImport = (function () {
       const counts = { rows: imported.rows, cols: imported.cols };
       setStatus(imported.sheetCount > 1
         ? I18n.t('status.xlsxImportedSheet', Object.assign({ sheet: imported.sheetName, index: imported.sheetIndex + 1, total: imported.sheetCount }, counts))
-        : I18n.t('status.xlsxImported', counts));
+        : I18n.t(singleKey || 'status.xlsxImported', counts));
     }
 
     // Import d'un fichier Markdown (js/markdown-import.js), « Importer un Markdown… » du menu « + », sur le modèle de l'import d'un classeur : le sélecteur s'ouvre dans
@@ -533,7 +534,7 @@ const MainImport = (function () {
     // Import d'un fichier OpenDocument (js/odt-import.js), « Importer un OpenDocument… » du menu « + » : même voie que Word - le sélecteur s'ouvre dans le clic, le fichier est lu ensuite, la question d'enregistrement ne vient
     // qu'après une lecture réussie, le résultat est un nouveau document sans nom et pas encore enregistré, et ce que l'éditeur n'a pas repris tel quel est dit dans une fenêtre. Pour l'instant le texte seul (.odt, son
     // modèle .ott, le .fodt) ; un tableur ou une présentation est dit comme tel (lots suivants).
-    const ODF_IMPORT_ACCEPT = '.odt,.ott,.fodt,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.text-template';
+    const ODF_IMPORT_ACCEPT = '.odt,.ott,.fodt,.ods,.ots,.fods,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.text-template,application/vnd.oasis.opendocument.spreadsheet,application/vnd.oasis.opendocument.spreadsheet-template';
     const ODF_IMPORT_ERRORS = { unreadable: 'status.odtImportUnreadable', encrypted: 'status.odtImportEncrypted', empty: 'status.odtImportEmpty', tooBig: 'status.odtImportTooBig', library: 'status.odtImportLibrary' };
     const ODF_KIND_NAMES = { spreadsheet: 'status.odtImportKindSpreadsheet', presentation: 'status.odtImportKindPresentation' };
     function onImportOdf() {
@@ -543,6 +544,7 @@ const MainImport = (function () {
 
     async function importOdfFile(file) {
       setStatus(I18n.t('status.odtImporting'));
+      if (await odfKindOf(file) === 'spreadsheet') return importOdsFile(file);
       const imported = await readOdfForImport(file);
       if (!imported) return false;
       if (hasEditsToConfirmBeforeLeaving()) {
@@ -552,6 +554,49 @@ const MainImport = (function () {
       openImportedDocx(imported, 'status.odtImported');
       await tellOdfImportReport(imported.report);
       return true;
+    }
+
+    // Le genre d'un fichier OpenDocument (`text`, `spreadsheet`, `presentation`...), lu sans le défaire : le texte et le tableur n'ont pas le même moteur ni le même résultat (un document, une grille). '' : le fichier ne le dit pas, le moteur du texte le juge.
+    async function odfKindOf(file) {
+      try {
+        return await ExportCommon.Odf.kindOf(await file.arrayBuffer());
+      } catch (e) {
+        return '';
+      }
+    }
+
+    // Un tableur OpenDocument (.ods, son modèle .ots, le .fods), par la même ligne « Importer un OpenDocument… » : le moteur de js/ods-import.js, la même suite que l'import d'un classeur Excel - une liste des feuilles quand il en a plusieurs, la
+    // question d'enregistrement après une lecture réussie, une nouvelle grille sans nom et pas encore enregistrée, et ce que la grille n'a pas repris dit dans une fenêtre.
+    const ODS_IMPORT_ERRORS = { unreadable: 'status.odtImportUnreadable', wrongType: 'status.odtImportUnreadable', encrypted: 'status.odtImportEncrypted', empty: 'status.odsImportEmpty', tooBig: 'status.xlsxImportTooBig', fileTooBig: 'status.odtImportTooBig', library: 'status.odtImportLibrary' };
+    async function importOdsFile(file) {
+      const imported = await readOdsForImport(file);
+      if (!imported) return false;
+      if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) { updateSaveStatus(); return false; }
+      openImportedGrid(imported, 'status.odsImported');
+      await tellXlsxImportReport(imported.report);
+      return true;
+    }
+
+    async function readOdsForImport(file) {
+      let chosen = null; // la feuille choisie, quand le tableur en a plusieurs : une erreur la nomme
+      try {
+        await ExportEngines.ensure('odsImport').catch((e) => { throw Object.assign(new Error('moteur d’import indisponible'), { code: 'library', cause: e }); });
+        const book = await OdsImport.openFile(file);
+        let index = 0;
+        if (book.sheets.length > 1) {
+          setStatus('');
+          const picked = await GridXlsxImport.chooseSheet(book.sheets, { anchor: () => document.getElementById('btn-new').getBoundingClientRect() });
+          if (picked === null) { updateSaveStatus(); refocusEditorIfLost(); return null; }
+          index = picked;
+          chosen = book.sheets[index].name;
+        }
+        return book.build(index, { lang: I18n.getLang() });
+      } catch (e) {
+        console.warn('[main] import tableur OpenDocument impossible', e); // une erreur de la personne (mauvais fichier) ou du réseau, pas du widget
+        const key = e && e.code === 'empty' && chosen !== null ? 'status.xlsxImportEmptySheet' : (ODS_IMPORT_ERRORS[e && e.code] || ODS_IMPORT_ERRORS.unreadable);
+        setStatus(I18n.t(key, { sheet: chosen, rows: e && e.rows, cols: e && e.cols, maxRows: e && e.maxRows, maxCols: e && e.maxCols, maxCells: e && e.maxCells, size: e && e.size ? importMegabytes(e.size) : '', max: e && e.max ? importMegabytes(e.max) : '' }), true);
+        return null;
+      }
     }
 
     // Lit le fichier et construit le document. null : le fichier est refusé (l'erreur est dite dans le coin d'état) ; rien d'autre ne se passe.

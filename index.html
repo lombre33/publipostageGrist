@@ -329,7 +329,7 @@
 <link rel="preload" as="script" href="js/reader-mode.js?v=0.204">
 <link rel="preload" as="script" href="js/reader-guide.js?v=0.7">
 <link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.11">
-<link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.28">
+<link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.29">
 <link rel="preload" as="script" href="js/i18n-texts-format.js?v=0.3">
 <link rel="preload" as="script" href="js/i18n-texts-blocks.js?v=0.6">
 <link rel="preload" as="script" href="js/i18n-texts-editor.js?v=0.1">
@@ -428,11 +428,11 @@
 <link rel="preload" as="script" href="js/page-copies.js?v=0.3">
 <link rel="preload" as="script" href="js/email-plain-text.js?v=0.3">
 <link rel="preload" as="script" href="js/editor.js?v=2.119">
-<link rel="preload" as="script" href="js/export-common.js?v=0.35">
+<link rel="preload" as="script" href="js/export-common.js?v=0.36">
 <link rel="preload" as="script" href="js/pdf-glyph-fallback.js?v=0.3">
 <link rel="preload" as="script" href="js/export-engines.js?v=0.2">
 <link rel="preload" as="script" href="js/versions-store.js?v=0.7">
-<link rel="preload" as="script" href="js/grid-xlsx-import.js?v=0.12">
+<link rel="preload" as="script" href="js/grid-xlsx-import.js?v=0.13">
 <link rel="preload" as="script" href="js/markdown-import.js?v=0.4">
 <link rel="preload" as="script" href="js/html-import.js?v=0.4">
 <link rel="preload" as="script" href="js/mailto-export.js?v=0.20">
@@ -560,7 +560,7 @@
 <link rel="preload" as="script" href="js/field-editor.js?v=0.13">
 <link rel="preload" as="script" href="js/import-placing.js?v=0.6">
 <link rel="preload" as="script" href="js/import-report.js?v=0.2">
-<link rel="preload" as="script" href="js/main-import.js?v=0.14">
+<link rel="preload" as="script" href="js/main-import.js?v=0.15">
 <link rel="preload" as="script" href="js/work-pacer.js?v=0.1">
 <link rel="preload" as="script" href="js/batch-progress.js?v=0.1">
 <link rel="preload" as="script" href="js/batch-precheck.js?v=0.2">
@@ -1420,7 +1420,7 @@
 <script src="js/reader-mode.js?v=0.204"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
 <script src="js/i18n-texts-templates.js?v=0.11"></script>
-<script src="js/i18n-texts-export.js?v=0.28"></script>
+<script src="js/i18n-texts-export.js?v=0.29"></script>
 <script src="js/i18n-texts-format.js?v=0.3"></script>
 <script src="js/i18n-texts-blocks.js?v=0.6"></script>
 <script src="js/i18n-texts-editor.js?v=0.1"></script>
@@ -1519,7 +1519,7 @@
 <script src="js/page-copies.js?v=0.3"></script>
 <script src="js/email-plain-text.js?v=0.3"></script>
 <script src="js/editor.js?v=2.119"></script>
-<script src="js/export-common.js?v=0.35"></script>
+<script src="js/export-common.js?v=0.36"></script>
 <script src="js/pdf-glyph-fallback.js?v=0.3"></script>
 <!-- Moteurs d'export : js/export-engines.js les charge au premier export (ExportEngines.ensure), pas à l'ouverture. Ces balises ne s'exécutent pas (le
      navigateur ne connaît pas leur type) ; leur version de cache se monte comme celle de tout script. -->
@@ -1538,6 +1538,7 @@
 <script type="text/x-lazy-engine" data-engine="pptxImport" src="js/pptx-import.js?v=0.60"></script>
 <script type="text/x-lazy-engine" data-engine="docxImport" src="js/docx-import.js?v=0.9"></script>
 <script type="text/x-lazy-engine" data-engine="odtImport" src="js/odt-import.js?v=0.4"></script>
+<script type="text/x-lazy-engine" data-engine="odsImport" src="js/ods-import.js?v=0.1"></script>
 <script type="text/x-lazy-engine" data-engine="odtExport" src="js/odt-export.js?v=0.4"></script>
 <!-- Historique des versions : le magasin (js/versions-store.js) se charge avec la page ; la fenêtre (js/versions-history.js) attend le premier clic de « Historique des versions… »
      (VersionsStore.loadWindow) et la comparaison (js/versions-compare.js) celui de « Comparer » (VersionsStore.loadCompare) : balises inertes comme celles des moteurs ci-dessus, dont
@@ -1545,7 +1546,7 @@
 <script src="js/versions-store.js?v=0.7"></script>
 <script type="text/x-lazy-module" data-module="versions" src="js/versions-history.js?v=0.4"></script>
 <script type="text/x-lazy-module" data-module="versions-compare" src="js/versions-compare.js?v=0.2"></script>
-<script src="js/grid-xlsx-import.js?v=0.12"></script>
+<script src="js/grid-xlsx-import.js?v=0.13"></script>
 <script src="js/markdown-import.js?v=0.4"></script>
 <script src="js/html-import.js?v=0.4"></script>
 <script src="js/mailto-export.js?v=0.20"></script>
@@ -1673,7 +1674,7 @@
 <script src="js/field-editor.js?v=0.13"></script>
 <script src="js/import-placing.js?v=0.6"></script>
 <script src="js/import-report.js?v=0.2"></script>
-<script src="js/main-import.js?v=0.14"></script>
+<script src="js/main-import.js?v=0.15"></script>
 <script src="js/work-pacer.js?v=0.1"></script>
 <script src="js/batch-progress.js?v=0.1"></script>
 <script src="js/batch-precheck.js?v=0.2"></script>

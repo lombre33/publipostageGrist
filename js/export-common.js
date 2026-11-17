@@ -760,7 +760,27 @@ const ExportCommon = (function () {
       const sections = sectionName => documents.map(doc => child(doc.documentElement, sectionName)).filter(Boolean);
       return { kind: bodyKind || mimeKind, mime, flat, body, contentDoc, stylesDoc, sections, fileOf, has: path => !!fileOf(path), zip, descendants };
     }
-    return { NS, name, attr, attrs, children, child, descendants, toPoints, open };
+    // Le genre d'un fichier OpenDocument (`text`, `spreadsheet`, `presentation`, `graphics`), lu sans le défaire : l'entrée `mimetype` d'un zip, ou l'attribut `office:mimetype` en tête d'un fichier « flat » ;
+    // '' quand le fichier ne le dit pas (c'est alors `open` qui juge). Sert à choisir le moteur d'import (texte ou tableur) avant d'en charger un.
+    async function kindOf(buffer) {
+      try {
+        const head = new Uint8Array(buffer, 0, Math.min(4, buffer.byteLength));
+        let mime = '';
+        if (head[0] === 0x50 && head[1] === 0x4B) {
+          await ensureJsZipLoaded();
+          const zip = await JSZip.loadAsync(buffer);
+          const entry = zip.file('mimetype');
+          mime = entry ? String(await entry.async('string')).trim() : '';
+        } else {
+          const text = new TextDecoder('utf-8').decode(new Uint8Array(buffer, 0, Math.min(4096, buffer.byteLength)));
+          mime = (/office:mimetype="([^"]+)"/.exec(text) || [])[1] || '';
+        }
+        return MIMES[mime.replace(/^application\/vnd\.oasis\.opendocument\./, '').replace(/-flat-xml$/, '')] || '';
+      } catch (e) {
+        return '';
+      }
+    }
+    return { NS, name, attr, attrs, children, child, descendants, toPoints, open, kindOf };
   })();
 
   return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, fillEmptyBlocks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,

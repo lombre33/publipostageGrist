@@ -618,5 +618,9 @@ const GridXlsxImport = (function () {
     input.click();
   }
 
-  return { openFile, chooseSheet, importFile, fromArrayBuffer, chooseFile, MAX_FILE_BYTES, MAX_UNPACKED_BYTES };
+  // Ce que l'import d'un tableur OpenDocument (js/ods-import.js) partage avec celui-ci pour que les deux grilles sortent de la même main : le contenu d'une case en HTML d'éditeur, les traits mis d'accord, les fusions
+  // ramenées aux lignes et colonnes qui restent, la taille et la police « de départ », et les limites d'une grille.
+  const shared = { runsToHtml, resolveBorders, mergeLayout, commonSize, commonFont, limits: { rows: MAX_ROWS, cols: MAX_COLS, cells: MAX_CELLS, minColPx: MIN_COL_PX, defaultRowPt: DEFAULT_ROW_PT, defaultSizePt: DEFAULT_SIZE_PT } };
+
+  return { openFile, chooseSheet, importFile, fromArrayBuffer, chooseFile, MAX_FILE_BYTES, MAX_UNPACKED_BYTES, shared };
 })();

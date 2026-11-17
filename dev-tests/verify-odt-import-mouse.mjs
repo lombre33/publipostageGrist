@@ -37,8 +37,8 @@ const TEXTS = {
     reading: /^Lecture du fichier OpenDocument/,
     unreadable: 'Ce fichier n’est pas un document OpenDocument lisible.', unreadablePattern: /n’est pas un document OpenDocument/,
     encrypted: 'Fichier OpenDocument protégé par un mot de passe : enregistrez-le sans mot de passe.', encryptedPattern: /protégé par un mot de passe/,
-    sheet: 'Ce fichier OpenDocument est un tableur : seuls les .odt sont lus pour l’instant.', sheetPattern: /est un tableur/,
-    slides: 'Ce fichier OpenDocument est une présentation : seuls les .odt sont lus pour l’instant.', slidesPattern: /est une présentation/,
+    sheet: 'Ce tableur ne contient aucune case à importer.', sheetPattern: /ne contient aucune case/,
+    slides: 'Ce fichier OpenDocument est une présentation : seuls les .odt et .ods sont lus.', slidesPattern: /est une présentation/,
     empty: 'Ce document OpenDocument est vide.', emptyPattern: /est vide/,
     tooBig: 'Ce fichier est trop gros pour être importé : 150,1 Mo (au plus 150 Mo).', tooBigPattern: /trop gros/,
     reportTitle: 'Ce que l’import n’a pas repris tel quel', reportIntro: 'Le document est importé. Le fichier avait ceci, que l’éditeur n’a pas pu reprendre tel quel :',
@@ -51,8 +51,8 @@ const TEXTS = {
     reading: /^Reading the OpenDocument file/,
     unreadable: 'This file is not a readable OpenDocument file.', unreadablePattern: /not a readable OpenDocument/,
     encrypted: 'Password-protected OpenDocument file: save it without a password.', encryptedPattern: /Password-protected/,
-    sheet: 'This OpenDocument file is a spreadsheet: only .odt files are read for now.', sheetPattern: /is a spreadsheet/,
-    slides: 'This OpenDocument file is a presentation: only .odt files are read for now.', slidesPattern: /is a presentation/,
+    sheet: 'This spreadsheet has no cells to import.', sheetPattern: /has no cells/,
+    slides: 'This OpenDocument file is a presentation: only .odt and .ods files are read.', slidesPattern: /is a presentation/,
     empty: 'This OpenDocument document is empty.', emptyPattern: /is empty/,
     tooBig: 'This file is too big to import: 150.1 MB (at most 150 MB).', tooBigPattern: /too big/,
     reportTitle: 'What the import did not carry over as is', reportIntro: 'The document is imported. The file had the following, which the editor could not carry over as is:',
@@ -242,7 +242,7 @@ async function run(lang, scheme) {
     check(tag + 'un vrai clic sur la ligne ouvre le vrai sélecteur de fichier', !!chooser);
     if (!chooser) return;
     const accept = await chooser.element().getAttribute('accept');
-    check(tag + 'le sélecteur est réduit aux documents OpenDocument texte (.odt, .ott, .fodt), pour un seul fichier, ni Word, ni classeur, ni présentation',
+    check(tag + 'le sélecteur est réduit aux fichiers OpenDocument texte (.odt, .ott, .fodt) et tableur (.ods, .ots, .fods), pour un seul fichier, ni Word, ni Excel, ni présentation',
       !chooser.isMultiple() && /\.odt\b/.test(accept) && /\.ott\b/.test(accept) && /\.fodt\b/.test(accept) && !/docx|xlsx|pptx|\.md\b/.test(accept), { accept, multiple: chooser.isMultiple() });
     await chooser.element().evaluate(el => el.dispatchEvent(new Event('cancel')));
     await sleep(500);
@@ -339,7 +339,7 @@ async function run(lang, scheme) {
     refusal('un fichier qui n\'est pas un zip', await refused(odfFile('courrier.odt', Buffer.from('Ceci est un courrier, pas un document OpenDocument.', 'utf8')), T.unreadablePattern), T.unreadable);
     refusal('un zip qui n\'est pas un OpenDocument (une présentation PowerPoint)', await refused(odfFile('presentation.odt', await buildFile(page, 'notOdf')), T.unreadablePattern), T.unreadable);
     refusal('un fichier protégé par un mot de passe', await refused(odfFile('secret.odt', await buildFile(page, 'locked')), T.encryptedPattern), T.encrypted);
-    refusal('un tableur OpenDocument', await refused({ name: 'chiffres.ods', mimeType: 'application/vnd.oasis.opendocument.spreadsheet', buffer: await buildFile(page, 'sheet') }, T.sheetPattern), T.sheet);
+    refusal('un tableur OpenDocument sans aucune case (un tableur plein est importé : dev-tests/verify-ods-import-mouse.mjs)', await refused({ name: 'chiffres.ods', mimeType: 'application/vnd.oasis.opendocument.spreadsheet', buffer: await buildFile(page, 'sheet') }, T.sheetPattern), T.sheet);
     refusal('une présentation OpenDocument', await refused({ name: 'diapos.odp', mimeType: 'application/vnd.oasis.opendocument.presentation', buffer: await buildFile(page, 'slides') }, T.slidesPattern), T.slides);
     refusal('un document sans rien dedans', await refused(odfFile('vide.odt', await buildFile(page, 'empty')), T.emptyPattern), T.empty);
     const huge = await mibFile(tmp, 'gros.odt', MAX_MIB * 1024 * 1024 + 1);
