@@ -7,10 +7,16 @@
 //    traite rien de ce qui s'y passe (`owns`, le stopEvent de la vue d'image) ; Échap la quitte et rend le clavier au texte ;
 //  - Ctrl+C écrit les mots choisis, séparés par une espace, une ligne de plus quand la ligne de l'image change : `textOf` ;
 //  - les mots sont sans importance pour un lecteur d'écran (le texte alternatif de l'image dit la diapositive) : la couche est `aria-hidden`.
+//  - à la LECTURE (`readIn`, 17/11, « pour la sélection en mode lecture si c'est possible je suis chaud ») : le même texte invisible, sur l'image de la Lecture. Elle n'a pas de vue d'éditeur : l'<img> est posée dans
+//    un cadre en ligne (`.pp-slide-read`, de sa taille, qui prend sa place dans la ligne : css/style.css) où la couche se pose ; une image habillée (alignée à gauche ou à droite) ou liée à une adresse reste telle quelle.
+//  - la taille du texte se compte en `cqh` (la hauteur de la couche) quand le navigateur le sait : elle ne dépend plus du zoom de la page (A4, volet étroit), que les mesures en pixels ne suivent pas.
 const SlideWords = (function () {
   const LAYER = 'pp-slide-words';
   const WORD = 'pp-slide-word';
   const DRAG_PX = 4;
+  const READ = 'pp-slide-read';
+  // La hauteur de la couche donne le corps des mots (`cqh`, 1 % de sa hauteur) : zoom de la page ou non, il est juste ; sans cette unité, le corps se mesure en pixels (`fit`).
+  const CQ = typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('width', '1cqh');
   // Hauteur d'un mot : la boîte que le navigateur lui a donnée est celle d'une ligne (corps et interligne) ; le corps du texte invisible en prend la plus grande part.
   const BODY = 0.85;
 
@@ -25,13 +31,14 @@ const SlideWords = (function () {
     layer.className = LAYER;
     layer.setAttribute('aria-hidden', 'true');
     layer.tabIndex = -1;
+    if (CQ) layer.style.containerType = 'size';
     const fragment = document.createDocumentFragment();
     words.forEach(([x, y, w, h, text]) => {
       const span = document.createElement('span');
       span.className = WORD;
       span.textContent = text;
       // Sans largeur : le mot garde celle de son texte, que `fit` étire ensuite jusqu'à la largeur du mot de l'image (`data-width`, en millièmes).
-      span.style.cssText = 'left: ' + (x / 10) + '%; top: ' + (y / 10) + '%; height: ' + (h / 10) + '%; font-size: ' + (h / 1000 * BODY).toFixed(4) + 'em; line-height: ' + (1 / BODY).toFixed(3);
+      span.style.cssText = 'left: ' + (x / 10) + '%; top: ' + (y / 10) + '%; height: ' + (h / 10) + '%; font-size: ' + (CQ ? (h / 10 * BODY).toFixed(3) + 'cqh' : (h / 1000 * BODY).toFixed(4) + 'em') + '; line-height: ' + (1 / BODY).toFixed(3);
       span.dataset.top = String(y);
       span.dataset.height = String(h);
       span.dataset.width = String(w);
@@ -46,7 +53,7 @@ const SlideWords = (function () {
   // couvrirait qu'une part du mot. Le rapport tient pour toute taille de l'image (le corps du texte et la largeur du mot suivent la même taille) : une seule mesure, lues toutes avant d'être écrites.
   function fit(layer, host) {
     const box = host.getBoundingClientRect();
-    layer.style.fontSize = (box.height > 0 ? box.height : 0) + 'px';
+    if (!CQ) layer.style.fontSize = (box.height > 0 ? box.height : 0) + 'px';
     if (layer.dataset.stretched === '1' || !(box.height > 0) || !(box.width > 0)) return;
     layer.dataset.stretched = '1';
     const spans = Array.from(layer.children);
@@ -105,6 +112,9 @@ const SlideWords = (function () {
       if (options && options.onClick) options.onClick(event);
     });
     layer.addEventListener('copy', (event) => {
+      // Une sélection qui sort de la couche (du texte voisin jusque sur l'image, à la Lecture) se copie comme le navigateur le fait : seule celle qui reste dans les mots prend leur mise en forme.
+      const selection = layer.ownerDocument.getSelection();
+      if (!selection || !layer.contains(selection.anchorNode) || !layer.contains(selection.focusNode)) return;
       const text = textOf(layer);
       if (!text || !event.clipboardData) return;
       event.clipboardData.setData('text/plain', text);
@@ -149,8 +159,34 @@ const SlideWords = (function () {
     if (layer) release(layer);
   }
 
+  // La Lecture (js/reader-mode.js, renderRecord) : chaque photo de diapositive posée en bloc de `root` reçoit sa couche de mots. L'<img> passe dans un cadre en ligne (`.pp-slide-read`) qui en prend la place (même
+  // taille, même alignement : css/style.css) ; ni une image derrière ou devant le texte, ni une image habillée à gauche ou à droite (le texte coule à côté, la mise en page de la Lecture la suit à part), ni une image
+  // dans un lien (le clic mène au lien) ne reçoivent de couche. Rend le nombre de couches posées.
+  function readIn(root) {
+    let count = 0;
+    root.querySelectorAll('img.editor-image[data-slide-words]').forEach((img) => {
+      let raw = null;
+      try { raw = JSON.parse(img.getAttribute('data-slide-words') || 'null'); } catch (e) { raw = null; }
+      const layer = img.getAttribute('data-layer');
+      const align = img.getAttribute('data-align');
+      if ((layer && layer !== 'normal') || align === 'left' || align === 'right' || img.closest('a[href]') || !clean(raw).length) return;
+      let host = img.parentElement;
+      if (!host) return;
+      if (!host.classList.contains(READ)) {
+        host = img.ownerDocument.createElement('span');
+        host.className = READ;
+        if (align) host.setAttribute('data-align', align);
+        if (img.getAttribute('data-wrap')) host.setAttribute('data-wrap', img.getAttribute('data-wrap'));
+        img.replaceWith(host);
+        host.appendChild(img);
+      }
+      if (sync(host, raw, null)) count++;
+    });
+    return count;
+  }
+
   // Un événement de la couche : l'éditeur (ProseMirror) ne le traite pas (stopEvent de la vue d'image).
   const owns = event => !!event.target && !!event.target.closest && !!event.target.closest('.' + LAYER);
 
-  return { sync, drop, owns, textOf, clean, LAYER, WORD };
+  return { sync, readIn, drop, owns, textOf, clean, LAYER, WORD, READ };
 })();

@@ -1361,6 +1361,8 @@ const ReaderMode = (function () {
     container.innerHTML = '';
     if (resolved.hasError) { const warn = document.createElement('p'); warn.className = 'error-msg'; warn.textContent = I18n.t('reader.unresolvedVariables'); container.appendChild(warn); }
     container.appendChild(wrapper);
+    // Les diapositives posées en bloc : leurs mots, en texte invisible sur la photo (js/slide-words.js), se sélectionnent et se copient. Avant la mise en page : le cadre de la photo en fait partie.
+    SlideWords.readIn(wrapper);
     const zones = container.classList.contains('a4-preview') ? await resolvePaginationZones(headerFooterData, tableId, record) : null;
     // Les résolutions ci-dessus sont asynchrones : un rendu plus récent peut avoir déjà repeint `container`, `wrapper` ne serait alors plus attaché.
     if (!wrapper.isConnected) return;

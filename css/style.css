@@ -388,6 +388,15 @@ input, select, textarea, button { font-family: var(--font-ui); }
    l'éditeur (largeur « au plus ce qui reste »). */
 .reader-content img.editor-image[data-align="left"]:not([data-layer="front"]):not([data-layer="behind"]) { float: left; margin: 0 12px 8px 0; max-width: calc(100% - 12px); }
 .reader-content img.editor-image[data-align="right"]:not([data-layer="front"]):not([data-layer="behind"]) { float: right; margin: 0 0 8px 12px; max-width: calc(100% - 12px); }
+/* Une diapositive posée en bloc, à la Lecture (js/slide-words.js : readIn) : sa photo est dans un cadre en ligne de sa taille, qui porte la couche de mots invisible. Le cadre prend la place de l'image dans la
+   ligne (sur la ligne de base, comme elle) et son alignement ; l'image y est un bloc, sans marge. Les mots ne prennent que la souris : on les sélectionne et on les copie, la photo ne change pas. */
+.pp-slide-read { position: relative; display: inline-block; max-width: 100%; vertical-align: baseline; }
+.pp-slide-read > img.editor-image { display: block; margin: 0; }
+.pp-slide-read[data-align="center"] { display: block; width: fit-content; margin: 0 auto; }
+.pp-slide-read[data-wrap="block"] { display: block; width: fit-content; }
+.pp-slide-read .pp-slide-words { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; outline: none; font-size: 0; }
+.pp-slide-read .pp-slide-word { position: absolute; display: block; box-sizing: border-box; overflow: visible; white-space: pre; color: transparent; pointer-events: auto; cursor: text; user-select: text; -webkit-user-select: text; }
+.pp-slide-read .pp-slide-word::selection { background: rgba(47, 111, 237, 0.35); color: transparent; }
 
 /* Lecture sans ligne sélectionnée (rendu par js/reader-mode.js:render() quand `record` est null) : neutre, sans rouge ni erreur, car ne rien avoir
    sélectionné n'est pas une erreur mais une étape qui manque ; un écran blanc n'indiquerait pas ce qu'il faut faire. */

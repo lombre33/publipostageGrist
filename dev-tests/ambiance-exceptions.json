@@ -57,7 +57,7 @@
     {"fichier": "css/style.css", "selecteur": "autosave-conflict-banner", "categorie": "etat"},
     {"fichier": "css/style.css", "selecteur": "btn-save\\.is-autosave-off|pp-autosave-off|^\\.modal-content$|editor-image-handle", "categorie": "neutre"},
     {"fichier": "css/style.css", "selecteur": "^#reader-container|^#reader-container h1", "categorie": "papier"},
-    {"fichier": "css/style.css", "selecteur": "two-columns|page-break-marker|toc-marker|toc-empty|editor-image:hover", "categorie": "canevas"},
+    {"fichier": "css/style.css", "selecteur": "two-columns|page-break-marker|toc-marker|toc-empty|editor-image:hover|pp-slide-read", "categorie": "canevas"},
     {"fichier": "css/variable-actions.css", "selecteur": ".*", "categorie": "type"},
     {"fichier": "css/loop-marks.css", "selecteur": ".*", "categorie": "type"},
     {"fichier": "css/editor-v2.css", "selecteur": "^(?!.*(?:selectedCell|column-resize-handle|two-columns|editor-image-view|v2-hf-zone-pencil|page-number-badge|smart-chip|footnote-ref-marker|var-badge|comment-mark|comment-popup))(?:\\.tiptap|#reader-container|#editor-container|\\.v2-page|\\.resolved-checkbox|\\.v2-hf-zone|\\.v2-hf-zone-body)", "categorie": "papier"},

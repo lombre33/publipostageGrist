@@ -6,6 +6,7 @@
 // puis lu comme le lirait un lecteur de PDF (poppler : pdftotext, pdftoppm) :
 //  - le texte du PDF contient « Comité innovation » et « Ordre du jour validé », UNE fois chacun, et le texte du document autour ; les mots du bloc sont dans l'ordre de la diapositive ;
 //  - chaque mot est à sa place : l'écart entre deux mots, d'un mot à l'autre et d'une ligne à l'autre, est celui de l'image (à 3 pt près), et sa largeur celle du mot de l'image (à 4 pt près) ;
+//  - la sélection à la souris d'un lecteur de PDF est un rectangle : celui d'une ligne de l'image prend cette ligne seule (pdftotext -x -y -W -H), celui qui n'a aucun mot dedans ne prend rien ;
 //  - la page montre la photo (le bandeau bleu à gauche, le blanc de la page) : les mots blancs dessous ne se voient pas ;
 //  - une diapositive dont les mots ont été vidés (image tournée) s'exporte comme une image : pas de texte de la diapositive dans le PDF, la photo est là ;
 //  - en qualité « Léger », la photo est ramenée à 150 ppi et le texte reste.
@@ -99,6 +100,15 @@ check('d’une ligne à l’autre, l’écart est celui de l’image (« Ordre �
 check('sur la deuxième ligne, « validé » est à ' + (val && ord ? (val.x - ord.x).toFixed(1) : '?') + ' pt d’« Ordre » (attendu ' + expectedDx2.toFixed(1) + ')', !!ord && !!val && near(val.x - ord.x, expectedDx2, 3), { ord, val, expectedDx2 });
 const expectedWidth = wordOf('innovation')[2] / 1000 * widthPt;
 check('chaque mot a la largeur du mot de l’image (« innovation » : ' + (inn ? (inn.r - inn.x).toFixed(1) : '?') + ' pt, attendu ' + expectedWidth.toFixed(1) + ')', !!inn && near(inn.r - inn.x, expectedWidth, 4), { inn, expectedWidth });
+
+// Une sélection à la souris dans un lecteur de PDF est un rectangle sur la page : le texte qu'il prend est celui des mots dont la place est dedans. Les rectangles de chaque ligne de l'image (poppler : pdftotext -x -y
+// -W -H, à 72 ppi, comme la page en points) donnent chacun la ligne, et elle seule ; un rectangle qui ne touche que le bandeau ne prend rien de la diapositive.
+const regionText = (x, y, w, h) => tool('pdftotext', ['-f', '1', '-l', '1', '-r', '72', '-x', String(Math.round(x)), '-y', String(Math.round(y)), '-W', String(Math.round(w)), '-H', String(Math.round(h)), file, '-']).replace(/\s+/g, ' ').trim();
+const line1 = regionText(com.x - 3, com.y - 3, inn.r - com.x + 6, com.b - com.y + 6);
+const line2 = regionText(ord.x - 3, ord.y - 3, val.r - ord.x + 6, ord.b - ord.y + 6);
+check('un rectangle de sélection autour de la première ligne de l’image prend « ' + line1 + ' » et celui de la deuxième « ' + line2 + ' »', line1 === 'Comité innovation' && line2 === 'Ordre du jour validé', { line1, line2 });
+const blank = regionText(com.x - 3, com.y + (com.b - com.y) * 1.6, 120, (ord.y - com.b) * 0.5);
+check('un rectangle entre les deux lignes, sans mot dedans, ne prend rien (« ' + blank + ' »)', blank === '', blank);
 
 // La page montre la photo ; les mots blancs, dessous, ne se voient pas.
 const raster = rasterOf(file);
