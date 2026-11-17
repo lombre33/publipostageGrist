@@ -2,7 +2,7 @@
 // avec son décor - le bandeau, le logo, le numéro - là où la présentation le met). Le navigateur ne sait pas dessiner une page HTML dans une image : on la lui donne dans un SVG (un
 // `foreignObject` qui porte la page), qu'il sait peindre, puis on le recopie dans un canevas pour en faire un PNG.
 //  - `snapshot(thumb, w, h)` : `thumb` est la miniature d'une diapositive déjà dessinée, à l'échelle 1 (SlideImport.paint, à la taille de la page), AFFICHÉE (on lit sa mise en page). Rend
-//    { src, width, height, text, words } : `src` le PNG (data:), `text` le texte de la diapositive (la recherche Ctrl+F le lit), `words` ses mots avec leur place en millièmes de la page
+//    { src, width, height, text, words } : `src` le PNG (data:) - le JPEG d'une diapositive lourde (une photo en fond), `text` le texte de la diapositive (la recherche Ctrl+F le lit), `words` ses mots avec leur place en millièmes de la page
 //    (`[x, y, largeur, hauteur, mot]`), que la couche de texte invisible posera sur l'image (sélection, copie, PDF cherchable).
 //  - Le SVG ne reprend AUCUNE feuille de style : l'app est dans le cadre isolé de GFS (sans `allow-same-origin`), où les règles des feuilles ne se lisent pas. Chaque élément porte donc son style
 //    CALCULÉ, en ligne (`inline`), précédé de `all: unset` (aucun style du navigateur ne s'y ajoute) : seul ce qui diffère de la valeur initiale (ou de celle du parent, pour une propriété héritée) est
@@ -14,6 +14,9 @@ const SlideRaster = (function () {
   const XHTML = 'http://www.w3.org/1999/xhtml';
   const SCALE = 1.5;                  // la définition de l'image : une page de 1280 px est rendue à 1920 px, nette à l'écran, au PDF et au Word
   const PER_MILLE = 1000;
+  const HEAVY_BYTES = 1.5 * 1024 * 1024;   // au-delà, le PNG d'une diapositive est essayé en JPEG
+  const JPEG_QUALITY = 0.92;
+  const JPEG_GAIN = 0.6;                  // le JPEG ne remplace le PNG que s'il pèse moins de 60 % de son poids
   const FONT_SHEET = /roboto-fonts\.css/;
 
   // Les propriétés qui se transmettent au contenu : elles ne s'écrivent que si elles diffèrent de celles du parent (sinon `all: unset` les hérite). Une propriété héritée absente de cette liste est
@@ -212,8 +215,14 @@ const SlideRaster = (function () {
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, outW, outH);
     ctx.drawImage(img, 0, 0, outW, outH);
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    let blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
     if (!blob) throw new Error('canevas illisible');
+    // Une diapositive lourde (une photo en fond : un PNG de plusieurs Mo, tenu dans le document, le PDF et le Word) passe en JPEG quand elle y gagne vraiment : la page est peinte sur du blanc, sans pixel
+    // transparent, rien ne se perd que le fin grain d'une photo. Une diapositive de texte et de formes reste en PNG, nette au pixel.
+    if (blob.size > HEAVY_BYTES) {
+      const jpeg = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY));
+      if (jpeg && jpeg.size < blob.size * JPEG_GAIN) blob = jpeg;
+    }
     const src = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob); });
     return { src, width: outW, height: outH, text: textOf(thumb), words: wordsOf(thumb, width, height) };
   }

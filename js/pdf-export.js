@@ -511,6 +511,39 @@ const PdfExport = (function () {
     return { widthPx: parseFloat(node.style.width) || 320, heightPx: node.hasAttribute('data-var-table') ? (parseFloat(node.style.height) || 240) : null };
   }
 
+  // Une diapositive posée en bloc (js/slide-copies.js : `data-slide-words`, la place des mots de la diapositive en millièmes de l'image) : la photo est une image, et le PDF n'en dirait rien à la recherche ni au copier-coller.
+  // Le bloc s'écrit donc en SVG (le bloc d'une image, mêmes marges et même alignement) : les mots d'abord, en texte du PDF, blancs, chacun à la place du mot de l'image et étiré à sa largeur ; la photo
+  // PAR-DESSUS, pleine, qui les couvre (rien de visible, rien de transparent : PDF/A le permet). Le lecteur de PDF trouve et surligne les mots à leur place, comme sur un PDF cherchable.
+  const SLIDE_WORD_BODY = 0.85;
+  const SLIDE_WORD_BASELINE = 0.8;
+  let slideWordMeter = null;
+  function slideWordWidthPt(text, sizePt) {
+    if (!slideWordMeter) { slideWordMeter = document.createElement('canvas').getContext('2d'); slideWordMeter.font = '100px Roboto, sans-serif'; }
+    return slideWordMeter.measureText(text).width * sizePt / 100;
+  }
+  function slideBlockSvg(node, widthPt) {
+    let raw = null;
+    try { raw = JSON.parse(node.getAttribute('data-slide-words') || 'null'); } catch (e) { return null; }
+    const words = SlideWords.clean(raw);
+    const href = node.getAttribute('src') || '';
+    if (!words.length || !/^data:image\/(png|jpe?g);base64,[A-Za-z0-9+/=]+$/.test(href)) return null;
+    const box = node.getBoundingClientRect();
+    const ratio = box.width > 0 && box.height > 0 ? box.height / box.width : (node.naturalWidth > 0 ? node.naturalHeight / node.naturalWidth : 9 / 16);
+    const heightPt = widthPt * ratio;
+    const texts = words.map(([x, y, w, h, text]) => {
+      const sizePt = h / 1000 * heightPt * SLIDE_WORD_BODY;
+      const natural = slideWordWidthPt(text, sizePt);
+      const stretch = natural > 0 ? Math.min(6, Math.max(0.2, (w / 1000 * widthPt) / natural)) : 1;
+      return '<g transform="translate(' + svgNum(x / 1000 * widthPt) + ' ' + svgNum(y / 1000 * heightPt + h / 1000 * heightPt * SLIDE_WORD_BASELINE) + ') scale(' + Math.round(stretch * 1000) / 1000 + ' 1)">'
+        + '<text x="0" y="0" font-family="Roboto" font-size="' + svgNum(sizePt) + '" fill="#ffffff">' + svgEscaped(text) + '</text></g>';
+    }).join('');
+    return {
+      height: heightPt,
+      svg: '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="' + svgNum(widthPt) + '" height="' + svgNum(heightPt) + '" viewBox="0 0 ' + svgNum(widthPt) + ' ' + svgNum(heightPt) + '">'
+        + texts + svgImage(0, 0, widthPt, heightPt, href) + '</svg>',
+    };
+  }
+
   function pdfImageFromNode(node) {
     const layer = node.getAttribute('data-layer') || 'normal';
     const layered = layer !== 'normal' && node.style.position === 'absolute';
@@ -528,6 +561,11 @@ const PdfExport = (function () {
     if (Number.isFinite(opacity) && opacity < 1) image.opacity = opacity;
     if (layered) markLayeredImage(image, node, layer);
     else { markFlowImage(image, node); clipZoneImage(image, node); }
+    // Une diapositive en bloc (dans le texte, entière, sans transparence) : l'image et ses mots en un bloc SVG, que le PDF peut chercher.
+    if (!layered && !image.fit && !image.cover && image.opacity === undefined) {
+      const withWords = slideBlockSvg(node, image.width);
+      if (withWords) { delete image.image; image.svg = withWords.svg; image.height = withWords.height; }
+    }
     return image;
   }
 
