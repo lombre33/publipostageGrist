@@ -164,6 +164,7 @@ async function pickNumbering(page, key) {
     await page.mouse.move(seen.x, seen.y, { steps: 4 });
     await sleep(150);
     // Un clic en deux temps : le focus que l'appui donne au bouton est ce qui remontait le menu, il faut donc mesurer entre l'appui et le relâchement.
+    // (Le menu Titre fermé tient sans défilement à 700x400 depuis son allègement : le défilement vaut alors 0 avant comme pendant l'appui ; le cas du menu déplié et défilé est dans verify-heading-menu-fold-mouse.mjs.)
     await page.mouse.down();
     await sleep(80);
     const pressed = await page.evaluate(([x, y, wantedKey]) => {
@@ -196,7 +197,7 @@ async function articleButton(page, tag) {
   check(`${tag} : le bouton « Article 1 » existe, avec ce libellé dans les deux langues`, !g.missing && g.label === 'Article 1', g);
   check(`${tag} : il est entier dans le menu, sur la même ligne que les quatre autres, sans défilement de côté`, !g.missing && g.insideFlyout === true && g.oneRow === true && g.sideScroll <= 0
     && JSON.stringify(g.keys) === JSON.stringify(['none', 'numeric', 'alpha', 'roman', 'article']), g);
-  check(`${tag} : le premier appui sur « Article 1 » ne remonte pas le menu (défilement inchangé, le bouton reste sous le pointeur)`, article.press !== null && article.press.scrollTopBefore > 0
+  check(`${tag} : le premier appui sur « Article 1 » ne remonte pas le menu (défilement inchangé, le bouton reste sous le pointeur)`, article.press !== null
     && article.press.scrollTopDuringPress === article.press.scrollTopBefore && article.press.underPointerIsButton === true, article.press);
   check(`${tag} : le premier clic suffit : il pose la numérotation « Article » (réglage du document, bouton actif)`, article.applied && !article.firstClickLost
     && await page.evaluate(() => document.querySelector('#v2-numbering-seg [data-num="article"]').classList.contains('active') && document.getElementById('v2-heading-numbering-select').value === 'article'), article);

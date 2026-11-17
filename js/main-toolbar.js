@@ -370,6 +370,7 @@ const MainToolbar = (function () {
       documentScope: byId('v2-heading-scope-document'),
       modelLevels: byId('v2-heading-levels-model'),
       documentLevels: byId('v2-heading-levels-document'),
+      summary: byId('v2-heading-styles-summary'),
     });
     StateStyle.syncRow(byId('v2-btn-state-style-apply'), editor);
     // Les mises en forme gardées (menu du pinceau) : le menu se redessine quand ses places, la langue ou le droit de peindre la sélection changent.
@@ -508,7 +509,7 @@ const MainToolbar = (function () {
     const value = level ? String(level) : 'p';
     if (headerSelect.value !== value) headerSelect.value = value;
     const chipVal = byId('v2-heading-chip-val');
-    if (chipVal) chipVal.textContent = value === 'p' ? 'Normal' : 'Titre ' + value;
+    if (chipVal) chipVal.textContent = I18n.t(value === 'p' ? 'heading.normal' : 'heading.level' + value);
     const headingFlyout = byId('v2-heading-flyout');
     if (headingFlyout) headingFlyout.querySelectorAll('.v2-hover-row[data-level]').forEach(row => row.classList.toggle('is-active', row.dataset.level === value));
   }
@@ -879,6 +880,46 @@ const MainToolbar = (function () {
     wireCompactFontSizeControls();
   }
 
+  // La ligne repliée « Styles de titres » du menu Titre et le choix de la portée (« Ce modèle », « Partagés ») une fois dépliée : ce que la personne règle rarement n'encombre pas le menu (17/11, un menu trop long à 700×400).
+  // La ligne et le choix ne sont qu'un affichage : rien n'est écrit, rien ne s'annule, l'état se garde le temps de la session (le menu rouvert est comme on l'a laissé) ; la portée choisie décide des deux lignes
+  // « Mettre à jour » et « Rétablir » montrées (le CSS masque celles de l'autre : css/heading-styles.css). Au clic comme au clavier (Entrée, Espace), sans prendre le focus à la souris : la sélection reste celle du texte
+  // et le premier clic suffit (comme les autres lignes du menu).
+  let headingStylesOpen = false;
+  let headingStylesScope = 'model';
+  function wireHeadingStylesFold(flyout) {
+    const fold = byId('v2-btn-heading-styles-fold');
+    const body = byId('v2-heading-styles-body');
+    if (!fold || !body || !flyout) return;
+    const scopeRows = Array.from(body.querySelectorAll('[data-hs-scope]'));
+    const paint = () => {
+      fold.setAttribute('aria-expanded', headingStylesOpen ? 'true' : 'false');
+      body.hidden = !headingStylesOpen;
+      body.dataset.scope = headingStylesScope;
+      scopeRows.forEach(row => row.setAttribute('aria-checked', row.dataset.hsScope === headingStylesScope ? 'true' : 'false'));
+    };
+    // Le menu défile dans un petit panneau : le corps déplié se lit en entier, sans pousser hors de vue la ligne qui l'a ouvert.
+    const reveal = () => {
+      const hidden = body.offsetTop + body.offsetHeight - (flyout.scrollTop + flyout.clientHeight);
+      if (hidden > 0) flyout.scrollTop = Math.min(flyout.scrollTop + hidden, Math.max(0, fold.offsetTop - 4));
+    };
+    const press = (row, act) => {
+      row.addEventListener('mousedown', event => event.preventDefault());
+      row.addEventListener('click', act);
+      row.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        act();
+      });
+    };
+    press(fold, () => { headingStylesOpen = !headingStylesOpen; paint(); if (headingStylesOpen) reveal(); });
+    scopeRows.forEach(row => press(row, () => {
+      if (headingStylesScope === row.dataset.hsScope) return;
+      headingStylesScope = row.dataset.hsScope;
+      paint();
+    }));
+    paint();
+  }
+
   // Menu « Titre » (niveau et numérotation) : chaque réglage reste porté par un <select> caché, source de vérité ; le panneau pose sa valeur puis
   // redéclenche 'change'. Aucune restauration de sélection nécessaire : un <span> ou un <button> ne vole pas le focus comme un <select>.
   function wireHeadingMenu() {
@@ -926,6 +967,7 @@ const MainToolbar = (function () {
         runState();
       });
     }
+    wireHeadingStylesFold(flyout);
     // Réglage de document, pas de sélection : le data-attribute est posé avant la commande pour que le rafraîchissement synchrone du sommaire,
     // qu'elle déclenche, lise déjà la bonne valeur.
     const select = byId('v2-heading-numbering-select');

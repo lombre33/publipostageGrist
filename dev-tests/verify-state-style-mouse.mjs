@@ -94,12 +94,36 @@ const rowInfo = page => page.evaluate(`(() => {
     text: row.textContent, disabled: row.getAttribute('aria-disabled'), title: row.title, x: b.left + b.width / 2, y: b.top + b.height / 2, height: Math.round(b.height),
     insideFlyout: b.left >= f.left && b.right <= f.right && b.top >= f.top && b.bottom <= f.bottom, sideScroll: flyout.scrollWidth - flyout.clientWidth,
     underPointerIsRow: !!under && under.closest('#v2-btn-state-style-apply') === row, ratio: ratio(getComputedStyle(row).color, opaque(row)), tab: row.tabIndex,
+    above: b.top < f.top, shown: b.height > 0,
   };
 })()`);
+// La ligne vit dans le pli « Styles de titres » du menu Titre : un vrai clic sur le pli la montre (le pli reste ouvert tant que la page vit), puis la molette l'amène sous le pointeur, vers le bas ou vers le haut.
+async function openFold(page) {
+  const fold = async () => page.evaluate(() => {
+    const row = document.getElementById('v2-btn-heading-styles-fold');
+    const f = document.getElementById('v2-heading-flyout').getBoundingClientRect();
+    const b = row.getBoundingClientRect();
+    return { open: row.getAttribute('aria-expanded') === 'true', x: b.left + b.width / 2, y: b.top + b.height / 2, inside: b.top >= f.top && b.bottom <= f.bottom, above: b.top < f.top };
+  });
+  let info = await fold();
+  if (info.open) return;
+  for (let i = 0; i < 10 && !info.inside; i++) {
+    await page.mouse.wheel(0, info.above ? -120 : 120);
+    await sleep(250);
+    info = await fold();
+  }
+  await page.mouse.move(info.x, info.y, { steps: 4 });
+  await sleep(150);
+  await page.mouse.down();
+  await sleep(80);
+  await page.mouse.up();
+  await sleep(350);
+}
 async function reachRow(page) {
+  await openFold(page);
   let info = await rowInfo(page);
-  for (let i = 0; i < 8 && !(info.insideFlyout && info.underPointerIsRow); i++) {
-    await page.mouse.wheel(0, 120);
+  for (let i = 0; i < 10 && info.shown && !(info.insideFlyout && info.underPointerIsRow); i++) {
+    await page.mouse.wheel(0, info.above ? -120 : 120);
     await sleep(250);
     info = await rowInfo(page);
   }

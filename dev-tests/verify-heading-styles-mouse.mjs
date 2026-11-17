@@ -67,20 +67,34 @@ const rowInfo = (page, id) => page.evaluate((rowId) => {
     text: row.textContent, disabled: row.getAttribute('aria-disabled'), x: b.left + b.width / 2, y: b.top + b.height / 2, width: Math.round(b.width), height: Math.round(b.height),
     insideFlyout: b.left >= f.left && b.right <= f.right && b.top >= f.top && b.bottom <= f.bottom, sideScroll: flyout.scrollWidth - flyout.clientWidth,
     underPointerIsRow: !!under && under.closest('#' + rowId) === row, cursor: getComputedStyle(row).cursor, scrollTop: flyout.scrollTop, inViewport: b.bottom <= innerHeight && b.top >= 0,
+    above: b.top < f.top, shown: b.height > 0,
   };
 }, id);
-// Défile le menu jusqu'à la ligne (molette), puis la mesure.
+// Défile le menu jusqu'à la ligne (molette, vers le bas ou vers le haut), puis la mesure.
 async function reachRow(page, id) {
   let info = await rowInfo(page, id);
-  for (let i = 0; i < 6 && !(info.insideFlyout && info.underPointerIsRow); i++) {
-    await page.mouse.wheel(0, 120);
+  for (let i = 0; i < 10 && info.shown && !(info.insideFlyout && info.underPointerIsRow); i++) {
+    await page.mouse.wheel(0, info.above ? -120 : 120);
     await sleep(250);
     info = await rowInfo(page, id);
   }
   return info;
 }
+// Les quatre lignes de style vivent dans le pli « Styles de titres » (menu Titre, piste « compacts + styles repliés ») : un vrai clic sur le pli, puis sur la portée voulue, comme la personne.
+const scopeOfRow = id => (id.indexOf('-doc-') !== -1 ? 'document' : 'model');
+async function openStyles(page, scope) {
+  const open = await page.evaluate(() => document.getElementById('v2-btn-heading-styles-fold').getAttribute('aria-expanded'));
+  if (open !== 'true') await clickPlain(page, 'v2-btn-heading-styles-fold');
+  const checked = await page.evaluate(which => document.getElementById('v2-heading-scope-' + which).getAttribute('aria-checked'), scope);
+  if (checked !== 'true') await clickPlain(page, 'v2-heading-scope-' + scope);
+}
+const isStyleRow = id => /^v2-btn-heading-style-/.test(id);
+async function reachStyleRow(page, id) {
+  await openStyles(page, scopeOfRow(id));
+  return reachRow(page, id);
+}
 // Un vrai clic en deux temps sur la ligne : mesure ce qui est sous le pointeur et le défilement du menu pendant l'appui.
-async function clickRow(page, id) {
+async function pressRow(page, id) {
   const before = await reachRow(page, id);
   await page.mouse.move(before.x, before.y, { steps: 4 });
   await sleep(150);
@@ -93,6 +107,12 @@ async function clickRow(page, id) {
   await page.evaluate(() => { if (typeof LockBubble !== 'undefined') LockBubble.close(); });
   return { before, during };
 }
+const clickPlain = pressRow;
+// Une ligne de style : on déplie le pli et on choisit sa portée avant de la viser.
+async function clickRow(page, id) {
+  if (isStyleRow(id)) await openStyles(page, scopeOfRow(id));
+  return pressRow(page, id);
+}
 const leaveMenu = async page => { await page.mouse.move(350, 390, { steps: 6 }); await sleep(500); };
 
 async function pass(lang, theme, tag) {
@@ -104,8 +124,8 @@ async function pass(lang, theme, tag) {
     await setDocument(page);
     const original = await HTML(page);
     await openMenu(page);
-    const update = await reachRow(page, 'v2-btn-heading-style-update');
-    const reset = await reachRow(page, 'v2-btn-heading-style-reset');
+    const update = await reachStyleRow(page, 'v2-btn-heading-style-update');
+    const reset = await reachStyleRow(page, 'v2-btn-heading-style-reset');
     check(`${tag} : « Mettre à jour » nomme le niveau du titre où est le curseur`, update.text === (english ? 'Update “Heading 1” to match the selection' : 'Mettre à jour « Titre 1 » d’après la sélection'), update.text);
     check(`${tag} : « Rétablir » nomme le niveau et est grisée tant que le niveau n'a pas de style`, reset.text === (english ? 'Restore the original style of “Heading 1”' : 'Rétablir le style d’origine de « Titre 1 »') && reset.disabled === 'true', reset);
     check(`${tag} : les deux lignes tiennent dans la largeur du menu, sans défilement de côté, et sont atteignables (la souris trouve la ligne au centre)`, update.insideFlyout && reset.insideFlyout && update.sideScroll <= 0 && update.underPointerIsRow && reset.underPointerIsRow && update.inViewport && reset.inViewport, { update, reset });
@@ -132,7 +152,7 @@ async function pass(lang, theme, tag) {
     const updatedHtml = await HTML(page);
 
     await openMenu(page);
-    const resetNow = await reachRow(page, 'v2-btn-heading-style-reset');
+    const resetNow = await reachStyleRow(page, 'v2-btn-heading-style-reset');
     check(`${tag} : « Rétablir » s'allume (le niveau a un style)`, resetNow.disabled === 'false', resetNow);
     const resetClick = await clickRow(page, 'v2-btn-heading-style-reset');
     await leaveMenu(page);
@@ -163,18 +183,18 @@ async function pass(lang, theme, tag) {
     const modelOf = () => page.evaluate(() => JSON.stringify(HeadingStyles.stylesOf(EditorCore.getEditor().state.doc)));
     const expectedShared = JSON.stringify({ 1: { italic: true, color: '#1f4e79', fontSize: '18pt', fontFamily: 'Georgia' } });
     await openMenu(page);
-    const docUpdate = await reachRow(page, 'v2-btn-heading-style-doc-update');
-    const docReset = await reachRow(page, 'v2-btn-heading-style-doc-reset');
+    const docUpdate = await reachStyleRow(page, 'v2-btn-heading-style-doc-update');
+    const docReset = await reachStyleRow(page, 'v2-btn-heading-style-doc-reset');
     check(`${tag} : « Mettre à jour » du bloc partagé nomme le niveau et dit « partagé »`, docUpdate.text === (english ? 'Update shared “Heading 1” to match the selection' : 'Mettre à jour « Titre 1 » (partagé) d’après la sélection') && docUpdate.disabled === 'false', docUpdate);
     check(`${tag} : « Rétablir » du bloc partagé est grisée tant que le document n'a pas de style à ce niveau`, docReset.text === (english ? 'Restore the original style of shared “Heading 1”' : 'Rétablir le style d’origine de « Titre 1 » (partagé)') && docReset.disabled === 'true' && docReset.cursor === 'not-allowed', docReset);
     check(`${tag} : les deux lignes partagées tiennent dans le menu, sans défilement de côté, atteignables à la souris, d'au moins 24 px`, docUpdate.insideFlyout && docReset.insideFlyout && docUpdate.sideScroll <= 0 && docUpdate.underPointerIsRow && docReset.underPointerIsRow && docUpdate.height >= 24 && docReset.height >= 24, { docUpdate, docReset });
     const blocks = await page.evaluate(() => {
-      const pick = (head, levels) => ({ head: document.getElementById(head).textContent, hint: document.getElementById(head).title, levels: document.getElementById(levels).textContent, chips: document.querySelectorAll('#' + levels + ' .pp-hs-chip').length });
+      const pick = (head, levels) => ({ head: document.querySelector('#' + head + ' .pp-hs-name').textContent, hint: document.getElementById(head).title, levels: document.getElementById(levels).textContent, chips: document.querySelectorAll('#' + levels + ' .pp-hs-chip').length });
       return { model: pick('v2-heading-scope-model', 'v2-heading-levels-model'), shared: pick('v2-heading-scope-document', 'v2-heading-levels-document') };
     });
     check(`${tag} : les deux blocs ont leur intitulé et leur infobulle, et disent « ${english ? 'None' : 'Aucun'} » sans style`,
-      blocks.model.head === (english ? 'Template heading styles' : 'Styles de titres du modèle') && blocks.model.hint === (english ? 'With this template only' : 'Avec ce modèle seulement')
-      && blocks.shared.head === (english ? 'Shared heading styles' : 'Styles de titres partagés') && blocks.shared.hint === (english ? 'For every template in this Grist document, shared with the team' : 'Pour tous les modèles de ce document Grist, partagés avec l’équipe')
+      blocks.model.head === (english ? 'This template' : 'Ce modèle') && blocks.model.hint === (english ? 'With this template only' : 'Avec ce modèle seulement')
+      && blocks.shared.head === (english ? 'Shared' : 'Partagés') && blocks.shared.hint === (english ? 'For every template in this Grist document, shared with the team' : 'Pour tous les modèles de ce document Grist, partagés avec l’équipe')
       && blocks.model.levels === (english ? 'None' : 'Aucun') && blocks.shared.levels === (english ? 'None' : 'Aucun') && !blocks.model.chips && !blocks.shared.chips, blocks);
     const clickedShared = await clickRow(page, 'v2-btn-heading-style-doc-update');
     const afterShared = await page.evaluate(() => ({
@@ -198,7 +218,7 @@ async function pass(lang, theme, tag) {
     check(`${tag} : les trois titres 1 prennent le style du document (même celui qui était rouge à la main), le titre 2 non`, sharedOnes.length === 3 && sharedOnes.every(p => p.size === '24px' && p.color === 'rgb(31, 78, 121)' && p.italic === 'italic' && p.family === 'Georgia') && sharedTwo[0].italic === 'normal', { sharedOnes, sharedTwo });
     const sharedUpdatedHtml = await HTML(page);
     await openMenu(page);
-    const docResetNow = await reachRow(page, 'v2-btn-heading-style-doc-reset');
+    const docResetNow = await reachStyleRow(page, 'v2-btn-heading-style-doc-reset');
     check(`${tag} : « Rétablir » du bloc partagé s'allume (le document a un style à ce niveau)`, docResetNow.disabled === 'false', docResetNow);
     const clickedReset = await clickRow(page, 'v2-btn-heading-style-doc-reset');
     await leaveMenu(page);
@@ -221,7 +241,7 @@ async function pass(lang, theme, tag) {
     await sleep(300);
     const grey = await HTML(page);
     await openMenu(page);
-    const greyed = await reachRow(page, 'v2-btn-heading-style-update');
+    const greyed = await reachStyleRow(page, 'v2-btn-heading-style-update');
     await clickRow(page, 'v2-btn-heading-style-update');
     await leaveMenu(page);
     check(`${tag} : dans un paragraphe, « Mettre à jour » est grisée, son pointeur dit « interdit », un vrai clic ne change rien`, greyed.disabled === 'true' && greyed.cursor === 'not-allowed' && (await HTML(page)) === grey, greyed);

@@ -22,8 +22,12 @@ const I18nTextsFormat = {
   'headingStyle.notHere': { fr: 'Seulement dans un seul titre du texte (ni en-tête ou pied de page, ni modèle Grille)', en: 'Only inside a single heading of the text (not headers, footers or Grid templates)' },
   'headingStyle.none': { fr: 'Ce niveau de titre n’a pas de style personnalisé', en: 'This heading level has no custom style' },
   // Les styles de titres du modèle et du document (js/heading-styles.js, menu Titre) : mêmes mots que les couleurs (« Couleurs du modèle », « Couleurs partagées »).
-  'headingStyle.scope.model': { fr: 'Styles de titres du modèle', en: 'Template heading styles' },
-  'headingStyle.scope.document': { fr: 'Styles de titres partagés', en: 'Shared heading styles' },
+  // La ligne repliée « Styles de titres » du menu Titre, ce qu'elle dit des niveaux stylés (le style du modèle ou, à défaut, celui du document) et les deux portées, dont les lignes d'aperçu se choisissent une fois la ligne dépliée.
+  'headingStyle.fold': { fr: 'Styles de titres', en: 'Heading styles' },
+  'headingStyle.fold.count': { fr: '{n} {n|niveau stylé|niveaux stylés}', en: '{n} styled {n|level|levels}' },
+  'headingStyle.fold.none': { fr: 'aucun style', en: 'no style' },
+  'headingStyle.scope.model.short': { fr: 'Ce modèle', en: 'This template' },
+  'headingStyle.scope.document.short': { fr: 'Partagés', en: 'Shared' },
   'headingStyle.scope.model.hint': { fr: 'Avec ce modèle seulement', en: 'With this template only' },
   'headingStyle.scope.document.hint': { fr: 'Pour tous les modèles de ce document Grist, partagés avec l’équipe', en: 'For every template in this Grist document, shared with the team' },
   'headingStyle.scope.none': { fr: 'Aucun', en: 'None' },

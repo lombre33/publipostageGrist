@@ -1,9 +1,30 @@
-/* Les styles de titres dans le menu « Titre » (js/heading-styles.js, index.html:#v2-heading-flyout) : deux blocs comme les rangées « Couleurs du modèle » et « Couleurs partagées » des menus de couleur - « Styles de titres du
-   modèle » et « Styles de titres partagés » -, chacun avec l'aperçu des niveaux qui ont un style puis ses deux lignes (mettre à jour, rétablir). Un aperçu est une pastille au nom du niveau, dessinée avec la police, la couleur,
-   l'italique, le souligné et le surlignage du style, sur le blanc de la page (le papier ne change pas avec le thème de l'écran, comme les pastilles de couleur) ; sa taille, elle, est dite dans l'infobulle. Une pastille du
-   document que le style du modèle remplace (`is-masked`) est en pointillés sur un fond gris clair (fixe, comme le blanc : le papier ne suit pas le thème de l'écran) : le texte garde son contraste. Le menu défile (`v2-hover-flyout-scrollable`) et ne porte aucune info-bulle `data-tip` : les
-   infobulles sont des `title`. */
-.pp-hs-scope { display: block; padding: 5px 9px 2px; font-size: 11px; font-weight: 600; color: var(--text-faint, #5f6b7e); white-space: nowrap; }
+/* Les styles de titres dans le menu « Titre » (js/heading-styles.js, index.html:#v2-heading-flyout). Le menu tient en trois zones, pour que l'essentiel (les niveaux, la numérotation) tienne dans un panneau de 700×400 sans défiler :
+   les niveaux (« Normal », puis 1 à 3 à gauche et 4 à 6 à droite : `.pp-hs-grid`), la numérotation, et UNE ligne repliée « Styles de titres » (`.pp-hs-fold`) qui montre combien de niveaux ont un style et s'ouvre d'un clic
+   (`aria-expanded`, js/main-toolbar.js:wireHeadingMenu). Dépliée, elle montre deux lignes d'aperçu qui se choisissent comme les deux portées des couleurs - « Ce modèle » et « Partagés » (`.pp-hs-scope-row`, la coche devant celle
+   qui est choisie) -, puis les deux lignes « Mettre à jour » et « Rétablir » de la portée choisie (celles de l'autre portée sont masquées : `data-scope` du corps) et le style de l'État. Un aperçu est une pastille au nom du niveau,
+   dessinée avec la police, la couleur, l'italique, le souligné et le surlignage du style, sur le blanc de la page (le papier ne change pas avec le thème de l'écran, comme les pastilles de couleur) ; sa taille, elle, est dite dans
+   l'infobulle. Une pastille du document que le style du modèle remplace (`is-masked`) est en pointillés sur un fond gris clair (fixe, comme le blanc : le papier ne suit pas le thème de l'écran) : le texte garde son contraste.
+   Le menu défile (`v2-hover-flyout-scrollable`) et ne porte aucune info-bulle `data-tip` : les infobulles sont des `title`. Les lignes sont resserrées (hauteur de ligne fixée, comme « Type d'export » : la police du système ne fait
+   pas varier la hauteur du menu d'un ordinateur à l'autre) : 26 px, au-dessus des 24 px d'une cible. */
+#v2-heading-flyout .v2-hover-row { padding-top: 5px; padding-bottom: 5px; line-height: 16px; }
+.pp-hs-grid { display: grid; grid-template-columns: 1fr 1fr; grid-auto-flow: column; grid-template-rows: repeat(3, auto); gap: 3px 6px; }
+.pp-hs-fold { display: flex; align-items: center; gap: 8px; }
+.pp-hs-fold-name { font-weight: 600; }
+.pp-hs-fold-sum { margin-left: auto; font-size: 11px; color: var(--text-muted, #5f6b7e); }
+.pp-hs-fold-caret {
+  flex: none; width: 14px; height: 14px; background-color: var(--text-muted, #5f6b7e); transition: transform .12s;
+  -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+.pp-hs-fold[aria-expanded="true"] .pp-hs-fold-caret { transform: rotate(180deg); }
+.pp-hs-body { display: flex; flex-direction: column; gap: 3px; }
+.pp-hs-body[hidden] { display: none; }
+.pp-hs-body[data-scope="model"] #v2-btn-heading-style-doc-update, .pp-hs-body[data-scope="model"] #v2-btn-heading-style-doc-reset,
+.pp-hs-body[data-scope="document"] #v2-btn-heading-style-update, .pp-hs-body[data-scope="document"] #v2-btn-heading-style-reset { display: none; }
+.pp-hs-scope-row { display: flex; align-items: center; gap: 8px; }
+.pp-hs-name { flex: none; font-weight: 600; }
+.pp-hs-scope-row .pp-hs-levels { flex: 1 1 0; min-width: 0; justify-content: flex-end; padding: 0; min-height: 0; }
 .pp-hs-levels { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; padding: 2px 9px 4px; min-height: 22px; }
 .pp-hs-chip {
   display: inline-block; padding: 1px 6px; border: 1px solid var(--border-strong, #c3cad6); border-radius: 4px; background: #fff; color: #1b2430;

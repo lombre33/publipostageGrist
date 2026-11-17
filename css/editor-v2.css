@@ -880,8 +880,9 @@
    à cinq boutons en dessous (« Aucune », « 1. », « a. », « I. » et « Article 1 », dont le libellé ne se coupe pas : `white-space: nowrap`). Les autres
    flyouts qui partagent `.v2-hover-flyout-v` gardent leur largeur : ciblé par ID, pas par classe. */
 #v2-heading-flyout { min-width: 224px; }
-#v2-heading-flyout .v2-numbering-block { padding: 10px 12px 8px; }
-#v2-heading-flyout .v2-numbering-label { margin-bottom: 8px; }
+/* Resserré avec le reste du menu pour que ses niveaux, la numérotation et la ligne repliée des styles tiennent dans un panneau de 700×400 (css/heading-styles.css). */
+#v2-heading-flyout .v2-numbering-block { padding: 8px 12px 6px; }
+#v2-heading-flyout .v2-numbering-label { margin-bottom: 6px; }
 #v2-heading-flyout .v2-segmented-btn { padding: 0 14px; font-size: 12.5px; white-space: nowrap; }
 /* Menu « Type d'export » : dix types (PDF, PDF protégé, PDF/A, Word, PowerPoint, Excel, Markdown, Markdown (modèle) et les deux HTML) puis, pour les trois PDF, l'intitulé et les trois
    qualités. Au rythme des autres menus (lignes de 27 px, 3 px d'écart) elles finissaient sous le pli d'un panneau de 700×400 (onze lignes déjà à 436 px), où « Impression navigateur » et « Léger »

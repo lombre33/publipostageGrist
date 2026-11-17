@@ -25,8 +25,8 @@
 //  - le MODÈLE, comme ci-dessus : le style voyage avec lui ;
 //  - le DOCUMENT Grist, pour tous ses modèles et toute l'équipe : la ligne réservée aux réglages du document de la table des modèles (Templates.getDocumentSetting, clé `headingStyles`, la même forme
 //    { "1": style … "6": style }), sans table de plus. Le changement vaut tout de suite pour les lecteurs et s'écrit dans Grist ensuite ; un refus (droits, connexion) se dit dans le coin d'état et rend l'ancien style.
-// Le style d'un niveau est celui du modèle quand il en a un, à défaut celui du document - niveau par niveau : un modèle qui ne règle que « Titre 1 » prend le « Titre 2 » du document. Le menu Titre montre les deux blocs,
-// « Styles de titres du modèle » et « Styles de titres partagés », chacun avec l'aperçu de ses niveaux et ses deux lignes (mettre à jour, rétablir). Le style du document se lit partout comme celui du modèle : l'éditeur
+// Le style d'un niveau est celui du modèle quand il en a un, à défaut celui du document - niveau par niveau : un modèle qui ne règle que « Titre 1 » prend le « Titre 2 » du document. Le menu Titre les montre derrière une ligne repliée « Styles de titres » (17/11,
+// un menu trop long à 700×400) : deux lignes d'aperçu, « Ce modèle » et « Partagés », dont celle qui est choisie décide des deux lignes (mettre à jour, rétablir) qui s'affichent. Le style du document se lit partout comme celui du modèle : l'éditeur
 // (la décoration suit les réglages du document, `pp:documentSettingsChanged`), la Lecture, l'impression, le diaporama et les exports (`effective`).
 // Mettre à jour le style partagé retire, des titres du niveau de CE modèle, la mise en forme à la main que le style porte - sauf quand le modèle a son propre style de ce niveau, qui l'emporte ici et que le geste ne
 // touche pas. Un seul Ctrl+Z défait le geste (repère HistoryMarkers, domaine « headingDocStyles », joint à la transaction qui retire la mise en forme à la main) ; il ne touche qu'aux niveaux que le geste a changés, et
@@ -391,7 +391,8 @@ const HeadingStyles = (function () {
 
   // Les lignes du menu à l'état de la sélection : libellé avec le niveau du titre, grisées par aria-disabled et `v2-hover-row-disabled` (comme les autres lignes du menu) avec leur raison pour info-bulle, sorties de
   // l'ordre des tabulations quand elles sont grisées. `rows` : { update, reset } pour le modèle, { documentUpdate, documentReset } pour le style partagé, et les éléments des deux blocs - { modelScope, documentScope }
-  // (intitulés : leur infobulle dit où vit chaque style) et { modelLevels, documentLevels } (l'aperçu des niveaux qui ont un style). Chaque élément est facultatif.
+  // (les deux lignes d'aperçu qui se choisissent : leur infobulle dit où vit chaque style), { modelLevels, documentLevels } (l'aperçu des niveaux qui ont un style) et { summary } (le texte de la ligne repliée : combien de niveaux
+  // ont un style). Chaque élément est facultatif.
   function syncRows(editor, rows) {
     if (!editor || !rows) return;
     const s = status(editor);
@@ -411,10 +412,16 @@ const HeadingStyles = (function () {
     [[rows.modelScope, 'headingStyle.scope.model.hint'], [rows.documentScope, 'headingStyle.scope.document.hint']].forEach(([head, hint]) => {
       if (head && head.title !== I18n.t(hint)) head.title = I18n.t(hint);
     });
-    if (rows.modelLevels || rows.documentLevels) {
+    if (rows.modelLevels || rows.documentLevels || rows.summary) {
       const levels = levelsOf(editor.state.doc);
       drawLevels(rows.modelLevels, levels.model);
       drawLevels(rows.documentLevels, levels.document);
+      // La ligne repliée « Styles de titres » dit combien de niveaux ont un style (celui du modèle ou, à défaut, celui du document : un niveau n'est compté qu'une fois).
+      if (rows.summary) {
+        const styled = new Set(levels.model.concat(levels.document).map(entry => entry.level)).size;
+        const text = styled ? I18n.t('headingStyle.fold.count', { n: styled }) : I18n.t('headingStyle.fold.none');
+        if (rows.summary.textContent !== text) rows.summary.textContent = text;
+      }
     }
   }
 

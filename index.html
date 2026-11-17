@@ -231,7 +231,7 @@
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.69">
 <link rel="stylesheet" href="css/style.css?v=0.110">
 <link rel="stylesheet" href="css/reader-guide.css?v=0.5">
-<link rel="stylesheet" href="css/editor-v2.css?v=0.149">
+<link rel="stylesheet" href="css/editor-v2.css?v=0.150">
 <link rel="stylesheet" href="css/toolbar-v2.css?v=0.87">
 <link rel="stylesheet" href="css/grid.css?v=0.17">
 <link rel="stylesheet" href="css/template-tree-select.css?v=0.24">
@@ -289,7 +289,7 @@
 <link rel="stylesheet" href="css/bar-fold.css?v=0.2">
 <link rel="stylesheet" href="css/document-outline.css?v=0.1">
 <link rel="stylesheet" href="css/format-painter.css?v=0.4">
-<link rel="stylesheet" href="css/heading-styles.css?v=0.1">
+<link rel="stylesheet" href="css/heading-styles.css?v=0.2">
 <link rel="stylesheet" href="css/sheet-assembly.css?v=0.3">
 <link rel="stylesheet" href="css/pdf-protection.css?v=0.3">
 <link rel="stylesheet" href="css/pdf-fonts.css?v=0.3">
@@ -330,7 +330,7 @@
 <link rel="preload" as="script" href="js/reader-guide.js?v=0.7">
 <link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.11">
 <link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.32">
-<link rel="preload" as="script" href="js/i18n-texts-format.js?v=0.3">
+<link rel="preload" as="script" href="js/i18n-texts-format.js?v=0.4">
 <link rel="preload" as="script" href="js/i18n-texts-blocks.js?v=0.6">
 <link rel="preload" as="script" href="js/i18n-texts-editor.js?v=0.1">
 <link rel="preload" as="script" href="js/i18n-texts-review.js?v=0.4">
@@ -373,7 +373,7 @@
 <link rel="preload" as="script" href="js/loop-marks.js?v=0.2">
 <link rel="preload" as="script" href="js/editor-nodes.js?v=1.87">
 <link rel="preload" as="script" href="js/floating-toolbars.js?v=0.101">
-<link rel="preload" as="script" href="js/main-toolbar.js?v=1.68">
+<link rel="preload" as="script" href="js/main-toolbar.js?v=1.69">
 <link rel="preload" as="script" href="js/format-painter.js?v=0.8">
 <link rel="preload" as="script" href="js/script-marks.js?v=0.1">
 <link rel="preload" as="script" href="js/emoji-paste.js?v=0.1">
@@ -424,7 +424,7 @@
 <link rel="preload" as="script" href="js/slide-words.js?v=0.2">
 <link rel="preload" as="script" href="js/objects-menu.js?v=0.9">
 <link rel="preload" as="script" href="js/list-markers.js?v=0.3">
-<link rel="preload" as="script" href="js/heading-styles.js?v=0.5">
+<link rel="preload" as="script" href="js/heading-styles.js?v=0.6">
 <link rel="preload" as="script" href="js/page-copies.js?v=0.3">
 <link rel="preload" as="script" href="js/email-plain-text.js?v=0.3">
 <link rel="preload" as="script" href="js/editor.js?v=2.119">
@@ -782,27 +782,15 @@
         <span class="v2-hover-flyout v2-hover-flyout-v v2-hover-flyout-scrollable" id="v2-heading-flyout" role="group" aria-label="Titre" data-i18n-aria="heading.tip">
           <span class="v2-hover-flyout-label" data-i18n="heading.tip">Titre</span>
           <span class="v2-hover-row" data-level="p" data-i18n="heading.normal">Normal</span>
-          <span class="v2-hover-row" data-level="1" data-i18n="heading.level1">Titre 1</span>
-          <span class="v2-hover-row" data-level="2" data-i18n="heading.level2">Titre 2</span>
-          <span class="v2-hover-row" data-level="3" data-i18n="heading.level3">Titre 3</span>
-          <span class="v2-hover-row" data-level="4" data-i18n="heading.level4">Titre 4</span>
-          <span class="v2-hover-row" data-level="5" data-i18n="heading.level5">Titre 5</span>
-          <span class="v2-hover-row" data-level="6" data-i18n="heading.level6">Titre 6</span>
-          <span class="v2-hover-hsep"></span>
-          <!-- Les styles de titres, en deux blocs comme les couleurs (« Couleurs du modèle » et « Couleurs partagées ») : ceux du modèle, ceux de tout le document Grist (js/heading-styles.js). Chaque bloc montre les niveaux
-               qui ont un style (l'aperçu est dessiné par js/heading-styles.js:syncRows) puis ses deux lignes ; l'infobulle de l'intitulé dit où vit le style. Les lignes du modèle gardent leurs identifiants d'avant. -->
-          <span class="pp-hs-scope" id="v2-heading-scope-model" data-i18n="headingStyle.scope.model">Styles de titres du modèle</span>
-          <span class="pp-hs-levels" id="v2-heading-levels-model"></span>
-          <span class="v2-hover-row" id="v2-btn-heading-style-update" role="menuitem" tabindex="0" aria-disabled="true" data-i18n="headingStyle.update.generic">Mettre à jour le style du titre d’après la sélection</span>
-          <span class="v2-hover-row" id="v2-btn-heading-style-reset" role="menuitem" tabindex="0" aria-disabled="true" data-i18n="headingStyle.reset.generic">Rétablir le style d’origine du titre</span>
-          <span class="v2-hover-hsep"></span>
-          <span class="pp-hs-scope" id="v2-heading-scope-document" data-i18n="headingStyle.scope.document">Styles de titres partagés</span>
-          <span class="pp-hs-levels" id="v2-heading-levels-document"></span>
-          <span class="v2-hover-row" id="v2-btn-heading-style-doc-update" role="menuitem" tabindex="0" aria-disabled="true" data-i18n="headingStyle.document.update.generic">Mettre à jour le style de titre partagé d’après la sélection</span>
-          <span class="v2-hover-row" id="v2-btn-heading-style-doc-reset" role="menuitem" tabindex="0" aria-disabled="true" data-i18n="headingStyle.document.reset.generic">Rétablir le style d’origine du titre partagé</span>
-          <span class="v2-hover-hsep"></span>
-          <!-- Le style de l'État (js/state-style.js) : écrit les styles des six niveaux de titres dans le modèle (un seul Ctrl + Z) ; grisé, avec sa raison au survol, tant que le mode « Identité de l'État » n'est pas allumé (Réglages > Thème). -->
-          <span class="v2-hover-row" id="v2-btn-state-style-apply" role="menuitem" tabindex="0" aria-disabled="true" data-i18n="state.style.apply">Appliquer le style de l’État</span>
+          <!-- Les niveaux 1 à 6 sur deux colonnes (1 à 3 à gauche avec leur touche, 4 à 6 à droite) : le menu tient dans un panneau de 700×400 sans défiler (css/heading-styles.css). Les lignes gardent `data-level`, leur raccourci et leur état « choisi ». -->
+          <span class="pp-hs-grid">
+            <span class="v2-hover-row" data-level="1" data-i18n="heading.level1">Titre 1</span>
+            <span class="v2-hover-row" data-level="2" data-i18n="heading.level2">Titre 2</span>
+            <span class="v2-hover-row" data-level="3" data-i18n="heading.level3">Titre 3</span>
+            <span class="v2-hover-row" data-level="4" data-i18n="heading.level4">Titre 4</span>
+            <span class="v2-hover-row" data-level="5" data-i18n="heading.level5">Titre 5</span>
+            <span class="v2-hover-row" data-level="6" data-i18n="heading.level6">Titre 6</span>
+          </span>
           <span class="v2-hover-hsep"></span>
           <span class="v2-numbering-block">
             <span class="v2-numbering-label" data-i18n="numbering.label">Numérotation des titres</span>
@@ -813,6 +801,31 @@
               <button type="button" class="v2-segmented-btn" data-num="roman">I.</button>
               <button type="button" class="v2-segmented-btn" data-num="article">Article 1</button>
             </span>
+          </span>
+          <span class="v2-hover-hsep"></span>
+          <!-- Les styles de titres, repliés derrière une ligne (js/main-toolbar.js:wireHeadingMenu) : ce qu'on règle rarement. Une fois la ligne dépliée, deux lignes d'aperçu qui se choisissent (« Ce modèle », « Partagés » : les mêmes deux portées qu'avant,
+               les couleurs du modèle et celles du document) et, dessous, les deux lignes « Mettre à jour » et « Rétablir » de la portée choisie, puis le style de l'État (js/state-style.js : grisé, avec sa raison au survol, tant que le mode « Identité de l'État »
+               n'est pas allumé, Réglages > Thème). Les quatre lignes de style gardent leurs identifiants ; celles de la portée non choisie sont masquées par le CSS. L'aperçu des niveaux est dessiné par js/heading-styles.js:syncRows, qui dit aussi, dans la
+               ligne repliée, combien de niveaux ont un style. -->
+          <span class="v2-hover-row pp-hs-fold" id="v2-btn-heading-styles-fold" role="menuitem" tabindex="0" aria-expanded="false" aria-controls="v2-heading-styles-body">
+            <span class="pp-hs-fold-name" data-i18n="headingStyle.fold">Styles de titres</span>
+            <span class="pp-hs-fold-sum" id="v2-heading-styles-summary"></span>
+            <span class="pp-hs-fold-caret" aria-hidden="true"></span>
+          </span>
+          <span class="pp-hs-body" id="v2-heading-styles-body" data-scope="model" hidden>
+            <span class="v2-hover-row v2-hover-row-check-start pp-hs-scope-row" id="v2-heading-scope-model" role="menuitemradio" aria-checked="true" tabindex="0" data-hs-scope="model">
+              <span class="pp-hs-name" data-i18n="headingStyle.scope.model.short">Ce modèle</span>
+              <span class="pp-hs-levels" id="v2-heading-levels-model"></span>
+            </span>
+            <span class="v2-hover-row v2-hover-row-check-start pp-hs-scope-row" id="v2-heading-scope-document" role="menuitemradio" aria-checked="false" tabindex="0" data-hs-scope="document">
+              <span class="pp-hs-name" data-i18n="headingStyle.scope.document.short">Partagés</span>
+              <span class="pp-hs-levels" id="v2-heading-levels-document"></span>
+            </span>
+            <span class="v2-hover-row" id="v2-btn-heading-style-update" role="menuitem" tabindex="0" aria-disabled="true" data-i18n="headingStyle.update.generic">Mettre à jour le style du titre d’après la sélection</span>
+            <span class="v2-hover-row" id="v2-btn-heading-style-reset" role="menuitem" tabindex="0" aria-disabled="true" data-i18n="headingStyle.reset.generic">Rétablir le style d’origine du titre</span>
+            <span class="v2-hover-row" id="v2-btn-heading-style-doc-update" role="menuitem" tabindex="0" aria-disabled="true" data-i18n="headingStyle.document.update.generic">Mettre à jour le style de titre partagé d’après la sélection</span>
+            <span class="v2-hover-row" id="v2-btn-heading-style-doc-reset" role="menuitem" tabindex="0" aria-disabled="true" data-i18n="headingStyle.document.reset.generic">Rétablir le style d’origine du titre partagé</span>
+            <span class="v2-hover-row" id="v2-btn-state-style-apply" role="menuitem" tabindex="0" aria-disabled="true" data-i18n="state.style.apply">Appliquer le style de l’État</span>
           </span>
         </span>
       </span>
@@ -1422,7 +1435,7 @@
 <script src="js/reader-guide.js?v=0.7"></script>
 <script src="js/i18n-texts-templates.js?v=0.11"></script>
 <script src="js/i18n-texts-export.js?v=0.32"></script>
-<script src="js/i18n-texts-format.js?v=0.3"></script>
+<script src="js/i18n-texts-format.js?v=0.4"></script>
 <script src="js/i18n-texts-blocks.js?v=0.6"></script>
 <script src="js/i18n-texts-editor.js?v=0.1"></script>
 <script src="js/i18n-texts-review.js?v=0.4"></script>
@@ -1465,7 +1478,7 @@
 <script src="js/loop-marks.js?v=0.2"></script>
 <script src="js/editor-nodes.js?v=1.87"></script>
 <script src="js/floating-toolbars.js?v=0.101"></script>
-<script src="js/main-toolbar.js?v=1.68"></script>
+<script src="js/main-toolbar.js?v=1.69"></script>
 <script src="js/format-painter.js?v=0.8"></script>
 <script src="js/script-marks.js?v=0.1"></script>
 <script src="js/emoji-paste.js?v=0.1"></script>
@@ -1516,7 +1529,7 @@
 <script src="js/slide-words.js?v=0.2"></script>
 <script src="js/objects-menu.js?v=0.9"></script>
 <script src="js/list-markers.js?v=0.3"></script>
-<script src="js/heading-styles.js?v=0.5"></script>
+<script src="js/heading-styles.js?v=0.6"></script>
 <script src="js/page-copies.js?v=0.3"></script>
 <script src="js/email-plain-text.js?v=0.3"></script>
 <script src="js/editor.js?v=2.119"></script>

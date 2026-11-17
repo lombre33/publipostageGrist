@@ -483,6 +483,7 @@
   const allRows = () => ({
     update: updateRow(), reset: resetRow(), documentUpdate: byId('v2-btn-heading-style-doc-update'), documentReset: byId('v2-btn-heading-style-doc-reset'),
     modelScope: byId('v2-heading-scope-model'), documentScope: byId('v2-heading-scope-document'), modelLevels: byId('v2-heading-levels-model'), documentLevels: byId('v2-heading-levels-document'),
+    summary: byId('v2-heading-styles-summary'),
   });
   const chips = box => Array.from(box.querySelectorAll('.pp-hs-chip'));
   const undoOnce = async () => { press('z'); await sleep(150); };
@@ -751,9 +752,13 @@
         await caretIn('texte');
         sync();
         let rows = allRows();
-        if (rows.modelScope.textContent !== t('Styles de titres du modèle', 'Template heading styles') || rows.modelScope.title !== t('Avec ce modèle seulement', 'With this template only')) bad.push('bloc du modèle : ' + rows.modelScope.textContent + ' / ' + rows.modelScope.title);
-        if (rows.documentScope.textContent !== t('Styles de titres partagés', 'Shared heading styles') || rows.documentScope.title !== t('Pour tous les modèles de ce document Grist, partagés avec l’équipe', 'For every template in this Grist document, shared with the team')) bad.push('bloc partagé : ' + rows.documentScope.textContent + ' / ' + rows.documentScope.title);
+        // Les deux portées sont deux lignes qui se choisissent dans le pli « Styles de titres » : un nom court, son aperçu des niveaux, l'infobulle qui dit la portée en toutes lettres.
+        const scopeName = row => row.querySelector('.pp-hs-name').textContent;
+        if (scopeName(rows.modelScope) !== t('Ce modèle', 'This template') || rows.modelScope.title !== t('Avec ce modèle seulement', 'With this template only')) bad.push('bloc du modèle : ' + scopeName(rows.modelScope) + ' / ' + rows.modelScope.title);
+        if (scopeName(rows.documentScope) !== t('Partagés', 'Shared') || rows.documentScope.title !== t('Pour tous les modèles de ce document Grist, partagés avec l’équipe', 'For every template in this Grist document, shared with the team')) bad.push('bloc partagé : ' + scopeName(rows.documentScope) + ' / ' + rows.documentScope.title);
         [rows.modelLevels, rows.documentLevels].forEach((box, i) => { if (chips(box).length || box.textContent !== t('Aucun', 'None')) bad.push('bloc ' + i + ' sans style : ' + box.textContent); });
+        // La ligne repliée « Styles de titres » dit, sans qu'on la déplie, combien de niveaux ont un style (ceux du modèle et ceux du document, comptés une fois).
+        if (rows.summary.textContent !== t('aucun style', 'no style')) bad.push('ligne repliée sans style : ' + rows.summary.textContent);
         if (rows.documentUpdate.getAttribute('aria-disabled') !== 'true' || rows.documentReset.getAttribute('aria-disabled') !== 'true' || !rows.documentUpdate.title) bad.push('lignes partagées non grisées hors d\'un titre');
         if (rows.documentUpdate.textContent !== t('Mettre à jour le style de titre partagé d’après la sélection', 'Update the shared heading style to match the selection')) bad.push('libellé hors titre : ' + rows.documentUpdate.textContent);
         // Un style du modèle (niveau 1) et du document (niveaux 1 et 2).
@@ -764,6 +769,7 @@
         rows = allRows();
         const model = chips(rows.modelLevels);
         const doc = chips(rows.documentLevels);
+        if (rows.summary.textContent !== t('2 niveaux stylés', '2 styled levels')) bad.push('ligne repliée avec le niveau 1 du modèle et les niveaux 1 et 2 du document : ' + rows.summary.textContent);
         if (model.length !== 1 || model[0].textContent !== t('Titre 1', 'Heading 1') || model[0].style.color !== 'rgb(192, 57, 43)' || model[0].style.fontStyle !== 'italic' || model[0].style.backgroundColor !== 'rgb(255, 243, 163)') bad.push('pastilles du modèle : ' + model.map(c => c.textContent + '|' + c.getAttribute('style')).join(' ; '));
         if (!/ — /.test(model[0].title) || model[0].title.indexOf(t('remplace le style partagé de ce niveau', 'replaces the shared style of this level')) === -1) bad.push('infobulle du modèle : ' + model[0].title);
         if (doc.length !== 2 || doc[0].textContent !== t('Titre 1', 'Heading 1') || doc[1].textContent !== t('Titre 2', 'Heading 2')) bad.push('pastilles partagées : ' + doc.map(c => c.textContent).join());
@@ -785,6 +791,10 @@
         await Templates.updateDocumentSettings({ headingStyles: { 2: { italic: true } } });
         sync();
         if (chips(allRows().documentLevels).length !== 1 || chips(allRows().documentLevels)[0].textContent !== t('Titre 2', 'Heading 2')) bad.push('l\'aperçu ne suit pas le document');
+        if (allRows().summary.textContent !== t('2 niveaux stylés', '2 styled levels')) bad.push('la ligne repliée ne suit pas le document : ' + allRows().summary.textContent);
+        await Templates.updateDocumentSettings({ headingStyles: { 1: { italic: true } } });
+        sync();
+        if (allRows().summary.textContent !== t('1 niveau stylé', '1 styled level')) bad.push('un niveau stylé des deux côtés est compté une fois : ' + allRows().summary.textContent);
         return result(bad);
       } finally { await docCleanup(h); }
     });
