@@ -1,0 +1,43 @@
+# Dependabot lit la liste unique des bibliothèques de l'app, package.json à la racine (consignes 063 et 067 de GFS).
+#
+# Une proposition de Dependabot ne change qu'une version dans la liste. Elle ne se fusionne pas telle quelle : la carte d'importation, le
+# script-src et le catalogue d'index.html, le relevé de l'éditeur et la copie figée se refont ensuite par l'outil du kit, dans l'ordre que dit
+# dev-tests/README.md (« La liste unique des bibliothèques » : la liste, node kit/outils/bibliotheques.mjs, node outils/empreintes-editeur.mjs --ecrire,
+# node kit/outils/bibliotheques.mjs --copies, puis les essais). `node kit/outils/bibliotheques.mjs --verifier` dit, sans réseau, ce qui n'a pas suivi.
+#
+# Il ne voit que ce que la liste appelle `dependencies` et `devDependencies` : les versions figées de `gfs.carte.fixes` lui échappent (@floating-ui/core
+# 1.8.0, @floating-ui/utils 0.2.12, linkifyjs 4.4.0, et @floating-ui/dom 1.8.0 à côté de la 1.6.12 de la liste), et le sous-module kit/ n'est pas suivi
+# (monter son épingle change des fichiers servis : un lot à part).
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(bibliothèques)"
+    groups:
+      # L'éditeur monte d'un bloc : deux copies de ProseMirror dans une page cassent TipTap, et TipTap exige des versions accordées entre elles.
+      editeur:
+        patterns:
+          - "@tiptap/*"
+          - "@handlewithcare/*"
+          - "@floating-ui/*"
+          - "prosemirror-*"
+          - "orderedmap"
+          - "rope-sequence"
+          - "w3c-keyname"
+      export-pdf:
+        patterns:
+          - "pdfmake"
+          - "pdf-lib"
+          - "pdfjs-dist"
+      export-bureautique:
+        patterns:
+          - "docx"
+          - "exceljs"
+          - "jszip"

@@ -17,7 +17,7 @@ import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, wri
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { check, summarizeAndExit } from './unit-harness.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -95,6 +95,21 @@ try {
 
   const missing = verify(copy(() => {}, 'absente'));
   check('une copie absente (vendor/ non récupéré) est dite non construite, avec la commande qui la construit', missing.status === 1 && /vendor\/editeur\/COPIE\.json absent/.test(missing.err) && /--copies/.test(missing.err), `${missing.status} ${missing.err}`.slice(-300));
+
+  // Le miroir des essais (consigne 063 de GFS, lot C) : `--miroir` le refait d'après la liste, sans seconde liste de versions ; le plan qu'il en tire (mirrorPlan, sans réseau) dit ce que les essais y trouveront.
+  const { mirrorPlan } = await import(pathToFileURL(join(ROOT, 'kit', 'outils', 'bibliotheques', 'miroir.mjs')).href);
+  const list = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  const plan = mirrorPlan(list);
+  const UMD = ['umd/docx-charts.iife.js', 'umd/docx.iife.js', 'umd/echarts.min.js', 'umd/exceljs.min.js', 'umd/jsqr.js', 'umd/jszip.min.js', 'umd/marked.min.js', 'umd/pdf-lib.min.js', 'umd/pdf.min.js', 'umd/pdf.worker.min.js', 'umd/pdfmake.min.js', 'umd/qrcode.min.js', 'umd/vfs_fonts.min.js'];
+  check('miroir des essais : la liste le déclare (dev-tests/.offline-cache) et son plan pose les 13 fichiers UMD que les essais lisent (docx, ExcelJS, JSZip, pdf-lib, pdfmake et ses polices, marked, QR code, pdf.js, jsQR, ECharts), ni plus ni moins',
+    !!plan && plan.dossier === 'dev-tests/.offline-cache' && JSON.stringify(plan.copies.map(copy => copy.vers).sort()) === JSON.stringify(UMD), plan ? plan.copies.map(copy => copy.vers).sort().join(' ') : 'pas de miroir déclaré');
+  const bareNames = list.gfs.carte.paquets.filter(name => name !== '@tiptap/pm');
+  check('miroir des essais : son plan construit un module ES par paquet de la carte, sauf @tiptap/pm (que les essais n\'importent que par ses sous-chemins), à l\'adresse /dev-tests/.offline-cache/esm/ que les essais attendent',
+    !!plan && plan.esm.length === 33 && JSON.stringify(plan.esm) === JSON.stringify(bareNames) && plan.prefixe === '/dev-tests/.offline-cache/esm/', plan ? `${plan.esm.length} modules` : 'pas de miroir déclaré');
+  const wanted = { ...list.devDependencies, ...list.dependencies };
+  const planned = plan ? plan.dependencies : {};
+  const differ = [...new Set([...Object.keys(wanted), ...Object.keys(planned)])].filter(name => wanted[name] !== planned[name]);
+  check('miroir des essais : la liste de paquets que le plan écrit dans le dossier est celle de la liste de la racine (dependencies et devDependencies, mêmes versions) : une version ne s\'écrit qu\'une fois', !!plan && Object.keys(planned).length >= 45 && differ.length === 0, differ.join(' ') || `${Object.keys(planned).length} paquets`);
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }

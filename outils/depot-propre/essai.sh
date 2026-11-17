@@ -51,6 +51,8 @@ HTML
   echo '# dev' > README.md; echo x > dev-tests/a.mjs; echo x > planning/a.md
   # La liste unique des bibliothèques et son catalogue (consignes 063 et 067 de GFS) : à la racine du dépôt de développement, ils ne partent pas.
   mkdir -p bibliotheques; echo '{}' > package.json; echo '{}' > bibliotheques/catalogue.json
+  # Dependabot du dépôt de développement (consigne 063 de GFS, lot D) : à la racine du dépôt de développement, .github ne part pas (le dépôt public porte le sien, que publier.sh ne touche pas).
+  mkdir -p .github; printf 'version: 2\nupdates: []\n' > .github/dependabot.yml
   # La copie figée de l'éditeur (consigne 066 de GFS) : du code de tiers construit par l'outil du kit, que publier.sh fait partir avec la page (PUBLIES) ; le faux en porte un module, ses licences et son manifeste.
   mkdir -p vendor/editeur; echo 'export default 1;' > vendor/editeur/prosemirror.js; echo 'licences' > vendor/editeur/LICENCES.txt; echo '{}' > vendor/editeur/COPIE.json
   # Les outils, avec le bandeau de la bêta figée (beta-bandeau.mjs et les deux fichiers de beta/) : controles.mjs et publier.sh les lisent à côté d'eux.
@@ -143,6 +145,7 @@ vrai "un commit de plus sur l'historique existant" test "$(git -C "$P" rev-parse
 vrai "le message ne porte aucune trace de session" test -z "$(git -C "$P" log -1 --format=%B | grep -i -E 'claude|session|co-authored')"
 vrai "dev-tests, planning et outils ne partent pas" test -z "$(git -C "$P" ls-tree --name-only HEAD | grep -E '^(dev-tests|planning|outils)$')"
 vrai "package.json et bibliotheques/ (la liste unique des bibliothèques et son catalogue) sont connus du dépôt de développement et ne partent pas" test -f "$T/dev/package.json" -a -z "$(git -C "$P" ls-tree --name-only HEAD | grep -E '^(package.json|bibliotheques)$')"
+vrai "le .github du dépôt de développement (Dependabot, lot D de la consigne 063) est connu de lui et ne part pas : le dépôt public garde le sien" test -f "$T/dev/.github/dependabot.yml" -a -z "$(git -C "$P" ls-tree --name-only HEAD | grep -x '.github')"
 vrai ".nojekyll part avec le reste, vide, à la racine du dépôt public" test -f "$P/.nojekyll" -a ! -s "$P/.nojekyll" -a -n "$(git -C "$P" ls-tree --name-only HEAD | grep -x '.nojekyll')"
 vrai "les documents publics sont là, README du dépôt de développement absent" test -f "$P/SECURITY.md" -a -f "$P/NOTICE" -a "$(head -1 "$P/README.md")" = "# Publipostage+ pour Grist"
 # Un gabarit resté en place s'écrit {{MAJUSCULES}} (comme le cherche controles.mjs) : la carte décrit aussi des {{variables}} de modèle, qui sont du texte.

@@ -76,6 +76,8 @@ chemin est affiché.
   dans `controles.mjs`, un dossier qui ne doit pas partir à `NEVER`. `package.json` (la liste unique des
   bibliothèques) et `bibliotheques/` (son catalogue) sont classés ainsi : ils restent dans le dépôt de
   développement, et les poser dans le dépôt public est une décision à part.
+  `.github` (le Dependabot du dépôt de développement, lot D de la consigne 063 de GFS) aussi : il reste dans
+  le dépôt de développement, le dépôt public a son propre `.github`, que `publier.sh` ne touche pas.
 - Un fichier ou un dossier de `PUBLIES` que le dépôt de développement ne suit pas. `.nojekyll`, un fichier vide
   à la racine, en fait partie : il part avec le reste, car le dépôt public a son propre site (GitHub Pages) et,
   sans lui, Pages passe les `.md` dans Jekyll avant de publier ; un `.md` qui porte une accolade double ouverte

@@ -1,4 +1,5 @@
-# Miroir local des dépendances CDN : régénéré par offline-deps.sh, jamais commité (cf. ce script).
+# Miroir local des dépendances CDN : régénéré par offline-deps.sh, jamais commité (cf. ce script). Sa liste de paquets (package.json) est écrite par `node kit/outils/bibliotheques.mjs --miroir`
+# d'après la liste de la racine : une version ne s'écrit qu'une fois.
 .offline-cache/node_modules/
 .offline-cache/esm/
 .offline-cache/umd/
@@ -8,6 +9,7 @@
 .offline-cache/pdfjs/
 .offline-cache/pdfjs-deps/
 .offline-cache/esm-map.json
+.offline-cache/package.json
 .offline-cache/package-lock.json
 
 # Empreintes des exports (dev-tests/verify-export-fingerprints.mjs) : relevé local d une refactorisation, jamais commité (le rendu dépend un peu du Chromium).

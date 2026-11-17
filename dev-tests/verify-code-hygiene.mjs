@@ -81,8 +81,8 @@
 //      se chargerait le jour même), un fichier non figé autre qu'une cale `node/*.mjs` d'esm.sh, ou une entrée de la carte que rien n'importe et qui ne répond pas, ou des sources d'esm.sh de `script-src` ou de la liste des bibliothèques (package.json) qui ne sont pas celles du relevé (point sécurité du 06/11, risque « chaîne d'approvisionnement ») ;
 //  36. l'inventaire des écritures dans le document Grist (`applyUserActions`, le widget a l'accès complet) : un fichier de plus qui écrit, une action de plus dans un fichier qui écrit déjà, une écriture dans une table
 //      de Grist (`_grist_…`) ou une suppression de table hors des endroits connus, une écriture « widget » (tables Publipostage_*) qui vise autre chose que ses tables (point sécurité du 06/11, risque « accès complet ») ;
-//  38. la liste unique des bibliothèques (package.json à la racine, consignes 063 et 067 de GFS) : elle perd sa forme, une version n'y est plus exacte, le miroir des essais ou la carte d'importation d'index.html dit
-//      une autre version qu'elle, le catalogue (bibliotheques/catalogue.json) n'a plus une entrée à la version de chaque bibliothèque de la liste.
+//  38. la liste unique des bibliothèques (package.json à la racine, consignes 063 et 067 de GFS) : elle perd sa forme, une version n'y est plus exacte, le miroir des essais n'est plus décrit par elle (gfs.miroir : refait par l'outil du kit, sans seconde liste commitée) ou dit
+//      une autre version qu'elle, la carte d'importation d'index.html dit une autre version qu'elle, le catalogue (bibliotheques/catalogue.json) n'a plus une entrée à la version de chaque bibliothèque de la liste.
 //  39. la copie figée de l'éditeur (vendor/editeur, consigne 066 de GFS, construite par l'outil du kit) : un fichier du dossier n'est plus celui de son manifeste, une version de la carte monte dans la liste sans que la copie
 //      soit refaite, la carte « copie » de la page ne nomme plus chaque module à l'empreinte de son fichier, une licence qui n'est plus compatible avec la GPL-3.0 de l'app arrive avec un paquet, la clé du stockage de la
 //      liste n'est plus celle que la case « Éditeur hors ligne » de Réglages écrit.
@@ -1456,23 +1456,25 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   // La page sans sa politique : l'adresse de Plotly n'a de place que dans la politique (consigne 007) ; partout ailleurs dans la page - une balise <script src>, un <link> -, elle n'a rien à faire.
   const pageWithoutPolicy = page.replace(/<meta http-equiv="Content-Security-Policy" content="[^"]*"/, '<meta csp>');
   const importMap = importMapText(page) || ''; // la carte des CDN : une balise importmap, ou le bloc `gfs-carte-cdn` de la page à deux cartes (copie de l'éditeur, 066)
-  const list = read('dev-tests/.offline-cache/package.json') + '\n' + read('dev-tests/.offline-cache/build.mjs');
+  // Les bibliothèques de l'app : ce que la liste de la racine nomme comme paquets et bibliothèques de CDN (pas `gfs.politique.scriptSrc`, où l'adresse de Plotly est écrite à la main, par la consigne 007), et le petit script qui assemble
+  // les deux fichiers de GFS ; le miroir des essais, lui, est refait d'après la liste.
+  const rootList = JSON.parse(read('package.json'));
+  const list = JSON.stringify({ dependencies: rootList.dependencies, devDependencies: rootList.devDependencies, bibliotheques: rootList.gfs && rootList.gfs.bibliotheques, carte: rootList.gfs && rootList.gfs.carte }) + '\n' + read('dev-tests/.offline-cache/assemblage-gfs.mjs');
   const PLOTLY_ADDRESS = EXTENSION_LIBRARY_ADDRESSES.plotly;   // l'adresse du catalogue de GFS (bibliotheques/catalogue.json), mode CDN
   check('extension : ni la liste des bibliothèques de l\'app (dev-tests/.offline-cache) ni la carte d\'importation d\'index.html ne nomment Plotly (GFS le porte)',
     importMap.length > 100 && list.length > 100 && !/plotly/i.test(importMap) && !/plotly/i.test(list), JSON.stringify({ importMap: /plotly/i.test(importMap), list: /plotly/i.test(list) }));
-  // Pareil pour l'écriture en direct (consigne GFS 012, 16/10) : les six paquets de son fichier « edition-live » (que GFS assemble) ne sont pas dans la liste de l'app non plus, ni nommés par build.mjs ; leurs versions
-  // exactes et la recette de l'assemblage sont dans dev-tests/.offline-cache/edition-live.json, à part, que build.mjs lit pour refaire le fichier des essais. Le labo de GFS ne copie que build.mjs et package.json :
-  // sans ce fichier, build.mjs saute cette étape.
+  // Pareil pour l'écriture en direct (consigne GFS 012, 16/10) : les six paquets de son fichier « edition-live » (que GFS assemble) ne sont pas dans la liste de l'app non plus, ni nommés par assemblage-gfs.mjs ; leurs versions
+  // exactes et la recette de l'assemblage sont dans dev-tests/.offline-cache/edition-live.json, à part, que assemblage-gfs.mjs lit pour refaire le fichier des essais (sans ce fichier, il saute cette étape).
   const LIVE_SIX = ['yjs', 'y-protocols', 'lib0', '@tiptap/y-tiptap', '@tiptap/extension-collaboration', '@tiptap/extension-collaboration-caret'];
   const liveNamedInList = LIVE_SIX.filter(name => list.includes('"' + name + '"') || list.includes("'" + name + "'") || list.includes("'" + name + '/'));
-  check('extension : ni la liste des bibliothèques de l\'app (dev-tests/.offline-cache/package.json) ni build.mjs ne nomment les six paquets de l\'écriture en direct (GFS les porte : edition-live.json, à part)',
+  check('extension : ni la liste des bibliothèques de l\'app (package.json à la racine) ni assemblage-gfs.mjs ne nomment les six paquets de l\'écriture en direct (GFS les porte : edition-live.json, à part)',
     list.length > 100 && liveNamedInList.length === 0, liveNamedInList.join(', '));
   let liveSpec = null;
   try { liveSpec = JSON.parse(read('dev-tests/.offline-cache/edition-live.json')); } catch (e) { liveSpec = null; }
   const liveDeps = (liveSpec && liveSpec.dependencies) || {};
-  check('extension : edition-live.json (lu par build.mjs) porte les six paquets de l\'écriture en direct, chacun à une version exacte, et la recette de l\'assemblage ; build.mjs le lit',
+  check('extension : edition-live.json (lu par assemblage-gfs.mjs) porte les six paquets de l\'écriture en direct, chacun à une version exacte, et la recette de l\'assemblage ; assemblage-gfs.mjs le lit',
     !!liveSpec && JSON.stringify(Object.keys(liveDeps).sort()) === JSON.stringify(LIVE_SIX.slice().sort()) && Object.values(liveDeps).every(version => /^\d+\.\d+\.\d+$/.test(String(version)))
-      && !!liveSpec.assemble && Array.isArray(liveSpec.assemble.modules) && liveSpec.assemble.modules.length === 5 && /edition-live\.json/.test(read('dev-tests/.offline-cache/build.mjs')),
+      && !!liveSpec.assemble && Array.isArray(liveSpec.assemble.modules) && liveSpec.assemble.modules.length === 5 && /edition-live\.json/.test(read('dev-tests/.offline-cache/assemblage-gfs.mjs')),
     liveSpec ? Object.keys(liveDeps).join(', ') : 'edition-live.json introuvable ou illisible');
   const policyTokens = policy.split(/\s+/).filter(Boolean);
   const plotlyTokens = policyTokens.filter(token => /plotly/i.test(token));
@@ -2165,7 +2167,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // Une version de bibliothèque s'écrit UNE fois, dans package.json à la racine (« dependencies » : des versions exactes ; « gfs » : ce que l'outil du kit en tire). L'outil du kit (node kit/outils/bibliotheques.mjs)
 // en refait le catalogue (bibliotheques/catalogue.json), la carte d'importation et le script-src d'index.html : rien de tout cela ne s'écrit à la main. Ce contrôle ne lance pas l'outil (le kit est un sous-module qui
 // n'est pas toujours là : dev-tests/verify-bibliotheques-liste.mjs, groupe bibliothequesListe, joue son --verifier quand il y est) ; il garde ce qui se voit sans lui : la forme de la liste, des versions exactes, le miroir des essais
-// (dev-tests/.offline-cache/package.json, qu'installe offline-deps.sh : il dit encore les mêmes versions à part, jusqu'à ce que l'outil le refasse) et la carte d'importation à la version de la liste pour chaque paquet qu'elle nomme.
+// (c'est l'outil du kit qui le refait, node kit/outils/bibliotheques.mjs --miroir, que lance dev-tests/offline-deps.sh : la liste dit où il se range et quels fichiers les essais y lisent, et sa propre liste de paquets,
+// dev-tests/.offline-cache/package.json, n'est plus commitée - une seule écriture de chaque version ; s'il y en a un sur ce poste, il dit les mêmes versions que la liste) et la carte d'importation à la version de la liste pour chaque paquet qu'elle nomme.
 {
   const list = existsSync(join(ROOT, 'package.json')) ? JSON.parse(read('package.json')) : null;
   const gfs = (list && list.gfs) || {};
@@ -2177,9 +2180,25 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     list ? JSON.stringify({ private: list.private, page: gfs.page, origine: gfs.carte && gfs.carte.origine, scriptSrc: Array.isArray(gfs.politique && gfs.politique.scriptSrc), bibliotheques: Object.keys(gfs.bibliotheques || {}).length }) : 'package.json absent');
   const notExact = Object.entries(deps).filter(([, version]) => !EXACT.test(version)).map(([name, version]) => `${name}@${version}`);
   check('liste des bibliothèques : chaque version de dependencies et de devDependencies est exacte (ni ^, ni ~, ni latest : le navigateur ne résout aucune plage, et l\'outil du kit les refuse)', Object.keys(deps).length >= 40 && notExact.length === 0, notExact.join(' ') || `${Object.keys(deps).length} paquets`);
-  const mirror = JSON.parse(read('dev-tests/.offline-cache/package.json')).dependencies || {};
-  const apart = [...new Set([...Object.keys(deps), ...Object.keys(mirror)])].filter(name => deps[name] !== mirror[name]).sort().map(name => `${name} : liste ${deps[name] || '-'}, miroir ${mirror[name] || '-'}`);
-  check('liste des bibliothèques : le miroir des essais (dev-tests/.offline-cache/package.json) dit les mêmes paquets aux mêmes versions que la liste - une version se monte dans la liste ET dans le miroir (puis `bash dev-tests/offline-deps.sh`), jusqu\'à ce que l\'outil du kit refasse le miroir', apart.length === 0, apart.join(' ; '));
+  // Le miroir des essais : la liste le déclare (gfs.miroir), l'outil du kit le refait (--miroir) ; il n'a plus de seconde liste de versions commitée ni de script à lui (build.mjs).
+  const mirrorSpec = gfs.miroir || {};
+  const gitignore = existsSync(join(ROOT, 'dev-tests', '.gitignore')) ? read('dev-tests/.gitignore') : '';
+  const needMirror = Object.entries(gfs.bibliotheques || {}).filter(([, spec]) => !spec.miroir).map(([id]) => id);
+  check('liste des bibliothèques : le miroir des essais est déclaré dans la liste (gfs.miroir : dossier dev-tests/.offline-cache, modules ES sous /dev-tests/.offline-cache/esm/, les fichiers de plus que les essais lisent) et chaque bibliothèque de CDN de la liste dit son fichier de miroir ; sa propre liste de paquets n\'est pas commitée (dev-tests/.gitignore) et l\'ancien build.mjs a disparu - `node kit/outils/bibliotheques.mjs --miroir` le refait, jamais à la main',
+    mirrorSpec.dossier === 'dev-tests/.offline-cache' && mirrorSpec.prefixe === '/dev-tests/.offline-cache/esm/' && Array.isArray(mirrorSpec.supplementaires) && mirrorSpec.supplementaires.length >= 4
+      && needMirror.length === 0 && /^\.offline-cache\/package\.json$/m.test(gitignore) && !existsSync(join(ROOT, 'dev-tests', '.offline-cache', 'build.mjs')),
+    JSON.stringify({ dossier: mirrorSpec.dossier, prefixe: mirrorSpec.prefixe, supplementaires: (mirrorSpec.supplementaires || []).length, sansMiroir: needMirror, ignoree: /^\.offline-cache\/package\.json$/m.test(gitignore), buildMjs: existsSync(join(ROOT, 'dev-tests', '.offline-cache', 'build.mjs')) }));
+  // Le point d'entrée des essais (159 fichiers le citent dans leurs messages) : il lance l'outil du kit puis l'assemblage des deux fichiers de GFS, ne lit pas de seconde liste de versions et dit quoi faire quand le kit manque.
+  const deps38 = read('dev-tests/offline-deps.sh');
+  check('liste des bibliothèques : dev-tests/offline-deps.sh refait le miroir par `node kit/outils/bibliotheques.mjs --miroir` puis `assemblage-gfs.mjs`, sans `npm install` ni liste de versions à lui, et dit « git submodule update --init kit » quand le kit manque',
+    /node kit\/outils\/bibliotheques\.mjs --miroir/.test(deps38) && /node assemblage-gfs\.mjs/.test(deps38) && !/^\s*npm install/m.test(deps38) && /git submodule update --init kit/.test(deps38),
+    JSON.stringify({ miroir: /--miroir/.test(deps38), assemblage: /assemblage-gfs/.test(deps38), npmInstall: /^\s*npm install/m.test(deps38), kitManquant: /submodule update --init kit/.test(deps38) }));
+  // Le miroir de CE poste (jamais commité : il se refait par `bash dev-tests/offline-deps.sh`) : un miroir resté à d'anciennes versions donne un faux vert aux essais d'export (le docx 9.15.1 du 03/11) - le voir ici.
+  const mirrorFile = join(ROOT, 'dev-tests', '.offline-cache', 'package.json');
+  const mirror = existsSync(mirrorFile) ? (JSON.parse(readFileSync(mirrorFile, 'utf8')).dependencies || {}) : null;
+  const apart = mirror === null ? [] : [...new Set([...Object.keys(deps), ...Object.keys(mirror)])].filter(name => deps[name] !== mirror[name]).sort().map(name => `${name} : liste ${deps[name] || '-'}, miroir ${mirror[name] || '-'}`);
+  check('liste des bibliothèques : le miroir des essais de ce poste (dev-tests/.offline-cache/package.json, écrit par --miroir), s\'il y en a un, dit les mêmes paquets aux mêmes versions que la liste - sinon il est resté à d\'anciennes versions : `bash dev-tests/offline-deps.sh` (un miroir périmé donne un faux vert aux essais d\'export)',
+    apart.length === 0, apart.join(' ; ') || (mirror === null ? 'pas de miroir sur ce poste' : `${Object.keys(mirror).length} paquets`));
   const imports = (() => { try { return JSON.parse(importMapText(read('index.html'))).imports; } catch (e) { return {}; } })();
   const named = [...(gfs.carte && gfs.carte.paquets || []), ...Object.keys(gfs.carte && gfs.carte.sousChemins || {})];
   const mapOff = named.filter(name => !Object.entries(imports).some(([key, value]) => new RegExp(`/\\*?${escapeRe(name)}@${escapeRe(deps[name] || '?')}(?:[/?]|$)`).test(key === name ? value : key)));
