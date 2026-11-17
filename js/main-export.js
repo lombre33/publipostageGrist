@@ -103,6 +103,17 @@ const MainExport = (function () {
     // Les champs de document d'un PDF/A (PdfExport.prepareRecord) : aucun mot de passe ni droit, seulement la marque qui fait passer le PDF fini en PDF/A-2b (js/pdf-archive.js).
     const ARCHIVE_DOC_FIELDS = Object.freeze({ archive: true });
 
+    // Le fichier OpenDocument du modèle ouvert : un .ods pour une grille, un .odp pour une présentation, un .odt sinon (les moteurs à charger, et le lot qui les écrit un à un).
+    const odfEngines = () => {
+      const type = getCurrentTypeModele();
+      if (GridEditor.isGridType(type)) return ['xlsx', 'odsExport'];
+      return type === 'presentation' ? ['pptx', 'odpExport'] : ['odtExport'];
+    };
+    const odfBatch = () => {
+      const type = getCurrentTypeModele();
+      if (GridEditor.isGridType(type)) return 'odsZip';
+      return type === 'presentation' ? 'odpZip' : 'odfZip';
+    };
     // Les exports d'une seule ligne : le lot que prend son document quand « Un document par valeur » le découpe, l'alerte sans ligne, les textes du
     // coin d'état et l'export lui-même (`doc` : { html, headerFooterData }, cf. currentRecordDocument), et `stampsExportDate` pour le PDF seul : la date de son dernier
     // export s'écrit dans la colonne choisie (js/export-date.js). Word n'a ni sélecteur de qualité ni autre mode
@@ -148,12 +159,16 @@ const MainExport = (function () {
       // OpenDocument (LibreOffice, OnlyOffice, Collabora...), écrit sans bibliothèque de plus : le document en .odt (js/odt-export.js) ou la grille en .ods (js/ods-export.js, qui lit la grille comme l'export Excel, d'où le moteur `xlsx`) ;
       // ce que le fichier n'a pas pu reprendre (`describe`) est dit dans le coin d'état.
       odf: {
-        get engines() { return GridEditor.isGridType(getCurrentTypeModele()) ? ['xlsx', 'odsExport'] : ['odtExport']; },
-        get batch() { return GridEditor.isGridType(getCurrentTypeModele()) ? 'odsZip' : 'odfZip'; },
+        get engines() { return odfEngines(); },
+        get batch() { return odfBatch(); },
+        // Une présentation garde le repère de chaque diapositive (transition, fond, notes), comme pour PowerPoint : le .odp les écrit.
+        get keepProps() { return getCurrentTypeModele() === 'presentation'; },
         noRecord: 'alert.noRecordForExportOdf', generating: 'status.odfGenerating', generated: 'status.odfGenerated', failed: 'status.odfGenerationError',
-        run: (doc, tableId, record) => (GridEditor.isGridType(getCurrentTypeModele())
-          ? OdsExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate())
-          : OdtExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsMm())),
+        run: (doc, tableId, record) => {
+          if (GridEditor.isGridType(getCurrentTypeModele())) return OdsExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate());
+          if (getCurrentTypeModele() === 'presentation') return OdpExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsPt());
+          return OdtExport.exportCurrentRecord(doc.html, tableId, record, exportFilenameTemplate(), doc.headerFooterData, PageLayout.getMarginsMm());
+        },
         describe: result => (result && result.report && result.report.length ? I18n.t('status.odfGeneratedNotCarried', { list: result.report.map(item => I18n.t('odf.export.lost.' + item.key, { n: item.n })).join(', ') }) : ''),
       },
       xlsx: {
@@ -340,8 +355,8 @@ const MainExport = (function () {
       // Le PDF/A a le PDF unique (réuni, puis passé en PDF/A d'un coup) mais pas la planche : elle est faite pour l'impression (ligne grisée dans le menu Exporter).
       pdfArchive: { zip: 'pdfArchiveZip', merged: 'pdfArchiveMerged' },
       docx: { zip: 'docxZip' },
-      // OpenDocument : le document en .odt, la grille en .ods (un lot par genre de modèle ; pas de classeur unique pour le .ods).
-      get odf() { return { zip: GridEditor.isGridType(getCurrentTypeModele()) ? 'odsZip' : 'odfZip' }; },
+      // OpenDocument : le document en .odt, la grille en .ods, la présentation en .odp (un lot par genre de modèle ; pas de classeur unique pour le .ods).
+      get odf() { return { zip: odfBatch() }; },
       pptx: { zip: 'pptxZip' },
       xlsx: { zip: 'xlsxZip', workbook: 'xlsxSingle' },
       md: { zip: 'mdZip' },
@@ -634,6 +649,14 @@ const MainExport = (function () {
         entryExt: '.ods', fileSuffix: '-export-ods.zip', grid: true, engines: ['xlsx', 'odsExport'], pageOptions: () => XlsxExport.pageOptionsFromLayout(),
         loadLibs: () => ExportCommon.ensureJsZipLoaded(),
         renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins, pageOptions) => OdsExport.getOdsBlobForRecord(html, tableId, row, filenameTemplate, pageOptions || undefined),
+      },
+      // Un fichier .odp par ligne, dans une archive ZIP (js/odp-export.js) : la page du modèle est celle des diapositives, `keepProps` garde le repère de chacune (transition, fond, notes) ; il lit les diapositives comme le lot PowerPoint.
+      odpZip: {
+        label: 'OpenDocument', confirm: 'confirm.batchExportOdf', loading: 'status.loadingExportLibs', loadError: 'status.exportLibsLoadError', progress: 'status.batchExportProgressOdf',
+        noFile: 'status.exportErrorOdf', done: 'status.batchExportDoneOdf', doneWithFailures: 'status.batchExportDoneWithFailuresOdf',
+        entryExt: '.odp', fileSuffix: '-export-odp.zip', margins: () => PageLayout.getMarginsPt(), grid: false, engines: ['pptx', 'odpExport'], keepProps: true,
+        loadLibs: () => ExportCommon.ensureJsZipLoaded(),
+        renderRow: (html, tableId, row, filenameTemplate, headerFooterData, margins) => OdpExport.getOdpBlobForRecord(html, tableId, row, filenameTemplate, headerFooterData, margins),
       },
       // Un fichier .pptx par ligne, dans une archive ZIP (js/pptx-export.js) : la page du modèle est celle des diapositives, `keepProps` garde le repère de chacune (transition, fond, notes).
       pptxZip: {

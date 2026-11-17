@@ -610,7 +610,7 @@ const PptxExport = (function () {
   // (DocxExport.chartPartsOf : le même graphique d'Office dans les trois applications), le moteur Word n'étant chargé que pour un graphique créé. Tout ce que PowerPoint ne saurait pas faire laisse l'image, comme avant :
   // un lien (PowerPoint n'en accepte pas sur un graphique), une rotation (il ne tourne pas un graphique), un moteur ou une bibliothèque qui ne se charge pas, une donnée refusée.
   async function chartPartOf(img, ctx, box) {
-    if (!img.hasAttribute('data-chart-office') || img.closest('a[href]') || img.closest('.pp-free-frame[data-ff-link]')) return null;
+    if (ctx.imageCharts || !img.hasAttribute('data-chart-office') || img.closest('a[href]') || img.closest('.pp-free-frame[data-ff-link]')) return null;
     try { await ExportEngines.ensure('docx'); }
     catch (e) { console.warn('[PptxExport] graphique natif impossible (moteur Word injoignable), l\'image est gardée :', e); return null; }
     return DocxExport.chartPartsOf(img, box.w * PT_TO_PX, box.h * PT_TO_PX);
@@ -761,7 +761,7 @@ const PptxExport = (function () {
   // depuis le coin du texte), à défaut à celle que le rendu lui donne. Taille : celle que l'image montre.
   async function pictureOf(img, slide, ctx, scope, place) {
     // Un graphique créé n'a pas besoin de son image tant que PowerPoint peut le garder en graphique (chartPartOf) : l'image PNG n'entre pas dans le fichier pour rien.
-    const isChart = img.hasAttribute('data-chart-office');
+    const isChart = !ctx.imageCharts && img.hasAttribute('data-chart-office');
     const media = isChart ? null : await mediaFor(img, ctx);
     if (!isChart && !media) return null;
     const layer = img.getAttribute('data-layer');
@@ -1266,7 +1266,8 @@ const PptxExport = (function () {
     return { cx: emu(page.width), cy: emu(page.height) };
   }
 
-  // Le fichier .pptx d'un HTML résolu. `marginsPt` : la page (PageLayout.getMarginsPt : marges, sens, format), `title` : le titre du document.
+  // Le fichier .pptx d'un HTML résolu. `marginsPt` : la page (PageLayout.getMarginsPt : marges, sens, format), `title` : le titre du document. `imageCharts` : les graphiques créés restent des images (l'export OpenDocument
+  // relit ce fichier : il n'a pas le graphique de PowerPoint).
   async function fromHtml(html, options = {}) {
     await ExportCommon.ensureJsZipLoaded();
     const marginsPt = options.marginsPt || PageLayout.getMarginsPt();
@@ -1283,7 +1284,7 @@ const PptxExport = (function () {
       Anchors.indexElements(source.nodes.filter(node => node.nodeType === 1)).forEach((el, id) => { if (!anchors.has(id)) anchors.set(id, i + 1); });
     });
     const ctx = {
-      size, anchors, media: new Map(), mediaList: [], charts: [], slideCount: sources.length,
+      size, anchors, media: new Map(), mediaList: [], charts: [], slideCount: sources.length, imageCharts: !!options.imageCharts,
       margins: { top: marginsPt.top, right: marginsPt.right, bottom: marginsPt.bottom, left: marginsPt.left },
       contentWidthPx: Math.max(40, (page.width - marginsPt.left - marginsPt.right) * PT_TO_PX),
     };
@@ -1386,5 +1387,5 @@ const PptxExport = (function () {
     ExportCommon.downloadBlob(blob, (filename || 'publipostage') + '.pptx');
   }
 
-  return { exportCurrentRecord, getPptxBlobForRecord, fromHtml };
+  return { exportCurrentRecord, getPptxBlobForRecord, fromHtml, slidesOf };
 })();

@@ -213,11 +213,16 @@ const OdpImport = (function () {
     octagon: 'octagon', hexagon: 'hexagon', pentagon: 'pentagon', cross: 'plus', star5: 'star5', 'right-arrow': 'rightArrow', 'left-arrow': 'leftArrow', 'up-arrow': 'upArrow', 'down-arrow': 'downArrow', heart: 'heart',
     'ring': 'donut', 'mso-spt1': 'rect', 'mso-spt2': 'rect',
   };
+  // Un tracé qui n'est qu'un rectangle plein cadre (« M 0 0 L w 0 w h 0 h Z N », celui que l'export OpenDocument écrit pour un rectangle) : une forme de genre `non-primitive` qui est un rectangle n'a rien de perdu.
+  function isRectanglePath(geometry) {
+    const corners = /^M\s*0\s+0\s+L\s*(\d+)\s+0\s+(?:L\s*)?(\d+)\s+(\d+)\s+(?:L\s*)?0\s+(\d+)\s*Z\s*N?$/.exec(String(geometry && attr(geometry, 'draw:enhanced-path') || '').trim().replace(/,/g, ' '));
+    return !!corners && corners[1] === corners[2] && corners[3] === corners[4];
+  }
   // La sorte de l'éditeur et ses réglages d'après la géométrie du fichier : { kind, adj } ; kind null quand l'éditeur ne la dessine pas.
   function kindOfGeometry(geometry) {
     const type = geometry ? attr(geometry, 'draw:type') || '' : 'rectangle';
     const ooxml = /^ooxml-(.+)$/.exec(type);
-    const kind = ooxml ? ooxml[1] : NATIVE_KINDS[type] || (type === '' ? 'rect' : null);
+    const kind = ooxml ? ooxml[1] : NATIVE_KINDS[type] || (type === '' || (type === 'non-primitive' && isRectanglePath(geometry)) ? 'rect' : null);
     if (!kind || !ShapeGeometry.isKind(kind) || kind === ShapeGeometry.LINE) return { kind: null, adj: '' };
     // Les réglages d'une forme de la norme (les poignées jaunes) : `draw:modifiers`, dans l'ordre de ses réglages.
     let adj = '';

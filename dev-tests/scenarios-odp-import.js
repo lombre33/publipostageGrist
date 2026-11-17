@@ -314,6 +314,19 @@
     return result(bad);
   });
 
+  add('odpImport_a_plain_rectangle_path_is_a_rectangle_and_costs_nothing', 'une forme dessinée par son chemin (`non-primitive`, comme l\'export OpenDocument l\'écrit) qui n\'est qu\'un rectangle plein cadre est un rectangle sans rien de perdu ; un autre chemin reste une forme inconnue, comptée', async () => {
+    const { bad, expect } = checker();
+    const rectangle = ' svg:viewBox="0 0 600 300" draw:enhanced-path="M 0 0 L 600 0 L 600 300 L 0 300 Z N"';
+    const triangle = ' svg:viewBox="0 0 600 300" draw:enhanced-path="M 0 0 L 600 0 L 0 300 Z N"';
+    const { out, frames } = await slideOne(
+      shape('non-primitive', { style: 'gr1', box: { x: 2, y: 2, w: 6, h: 3 }, geometryExtra: rectangle }) + shape('non-primitive', { style: 'gr1', box: { x: 10, y: 2, w: 6, h: 3 }, geometryExtra: triangle }),
+      { auto: graphic('gr1', 'draw:fill="solid" draw:fill-color="#ff8800" draw:stroke="none"') },
+    );
+    expect('deux cadres, deux rectangles orange', frames.length === 2 && frames.every(frame => frame.shape === 'rect' && frame.fill === '#ff8800'), frames.map(f => [f.shape, f.fill]));
+    expect('le tracé de rectangle n\'est pas compté, l\'autre l\'est : shapes une fois', countOf(out.report, 'shapes') === 1, out.report);
+    return result(bad);
+  });
+
   add('odpImport_lines_and_connectors_keep_their_ends_and_arrows', 'un trait et un connecteur : les deux bouts, le sens (de droite à gauche : retourné), la couleur, l\'épaisseur, le tiret, les pointes (« Arrow » : triangle, « Circle » : ovale) ; un trait sans couleur n\'est pas repris', async () => {
     const { bad, expect } = checker();
     const { frames } = await slideOne(
