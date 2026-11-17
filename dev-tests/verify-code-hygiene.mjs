@@ -1255,7 +1255,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
         && /function releaseBar\(el\) \{/.test(fit) && /function avoidBar\(el, anchor\) \{/.test(fit) && /GfsBar\.settle\(el\.getBoundingClientRect\(\), anchor, held\)/.test(fit) && /return \{ placePopup, releaseBar, avoidBar, contentCap \};/.test(fit)
         && /placed\.set\(box, \{ rect, options \}\);/.test(fit) && /GfsBar\.onChange\(\(\) => \{\s*placed\.forEach/.test(fit)
         && /ViewportFit\.releaseBar\(el\);/.test(core) && /ViewportFit\.avoidBar\(el, referenceEl\.getBoundingClientRect\(\)\)/.test(core) && /GfsBar\.onChange\(\(\) => \{ if \(relayout && !docked && el\.classList\.contains\('visible'\)\) relayout\(\); \}\);/.test(core)
-        && /ViewportFit\.releaseBar\(popup\);/.test(tree) && /ViewportFit\.avoidBar\(popup, rect\)/.test(tree) && /GfsBar\.onChange\(\(\) => \{ if \(popup\.classList\.contains\('is-open'\)\) positionPopup\(\); \}\);/.test(tree)
+        && /ViewportFit\.releaseBar\(popup\);/.test(tree) && /ViewportFit\.avoidBar\(popup, rect\)/.test(tree) && /GfsBar\.onChange\(\(\) => \{ if \(popup && popup\.classList\.contains\('is-open'\)\) positionPopup\(\); \}\);/.test(tree)
         && /ViewportFit\.releaseBar\(panel\);/.test(select) && /ViewportFit\.avoidBar\(panel, rect\)/.test(select) && /s\.offBar = GfsBar\.onChange\(s\.onResize\);/.test(select)
         && /EditorTip\.place\(tip, anchor\)/.test(link) && /GfsBar\.limits\(/.test(tipJs) && /ViewportFit\.avoidBar\(tip, rect\)/.test(tipJs) && /ViewportFit\.avoidBar\(tip, \{ left: event\.clientX/.test(grid)
         && /\.pp-bar-capped \{ max-height: var\(--pp-bar-cap\) !important; overflow-y: auto;/.test(read('css/editor-v2.css'))
@@ -2131,7 +2131,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     'js/slide-links-live.js': { cible: 'widget', actions: ['AddColumn', 'BulkAddOrUpdateRecord', 'BulkRemoveRecord'] },
     'js/template-gallery-modal.js': { cible: 'document', actions: ['AddTable'], pourquoi: 'la table de données que la personne crée depuis un modèle de la galerie' },
     'js/template-pack.js': { cible: 'document', actions: ['AddColumn', 'AddTable', 'RemoveTable', 'SetDisplayFormula', 'UpdateRecord'], tables: ['_grist_Tables_column'], pourquoi: 'l\'installation d\'un modèle de la galerie : ses tables, les colonnes à afficher de CES tables, le retour arrière (RemoveTable) des tables qu\'elle vient de créer' },
-    'js/template-preferences.js': { cible: 'widget', actions: ['AddRecord', 'AddVisibleColumn', 'UpdateRecord'] },
+    'js/template-preferences.js': { cible: 'widget', actions: ['AddRecord', 'AddVisibleColumn', 'BulkRemoveRecord', 'UpdateRecord'], pourquoi: 'BulkRemoveRecord : supprimer un dossier vide, ou défaire un geste qui avait posé la ligne d\'état d\'un dossier (ModeleId = 0, la table du rangement de la personne), la retire, pour qu\'un dossier sans modèle ne reste pas à l\'écran ; AddRecord y pose celle d\'un dossier créé vide, comme GFS la pose' },
     'js/templates.js': { cible: 'widget', actions: ['AddRecord', 'AddVisibleColumn', 'RemoveRecord', 'UpdateRecord'] },
     'js/text-expansion.js': { cible: 'widget', actions: ['AddRecord', 'RemoveRecord', 'UpdateRecord'] },
     'js/versions-store.js': { cible: 'widget', actions: ['AddRecord', 'BulkRemoveRecord', 'UpdateRecord'] },

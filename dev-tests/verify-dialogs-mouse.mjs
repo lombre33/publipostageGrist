@@ -1041,7 +1041,9 @@ async function runSites(theme) {
   await page.evaluate(async ({ id, folder }) => { await TemplatePreferences.setFolder(id, folder); }, { id: tplId, folder: `Litiges ${T}` });
   await openOrganize();
   const organizeOpen = () => page.evaluate(() => document.getElementById('template-organize-modal').style.display !== 'none');
-  const pending = () => page.evaluate(() => Array.from(document.querySelectorAll('#template-organize-list .tom-pending-folder')).map(e => e.textContent.replace(/\s+/g, ' ').trim()));
+  // Les dossiers de la liste (une ligne par dossier, chemin complet) : « Nouveau dossier » écrit un vrai dossier vide (sa ligne d'état), qui reste là avec son bouton « Supprimer ».
+  const folderRows = () => page.evaluate(() => Array.from(document.querySelectorAll('#template-organize-list .tts-row-folder')).map(e => ({ path: e.dataset.folderPath, del: !!e.querySelector('.tom-folder-delete-btn') })));
+  const stateFolders = () => page.evaluate(() => TemplatePreferences.listStateFolders());
   await realClick('#template-organize-new-folder', 300);
   s = await state();
   expectDialog(`${T}, nouveau dossier : « Nouveau dossier » au-dessus d’Organiser, champ vide, bouton Créer`, s,
@@ -1050,14 +1052,15 @@ async function runSites(theme) {
   await snap(`${T}-s8-nouveau-dossier`);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(250);
-  check(`${T}, nouveau dossier : Échap ferme la saisie SEULE, aucun dossier en attente, Organiser reste ouverte`, !(await isOpen()) && await organizeOpen() && (await pending()).length === 0, await pending());
+  check(`${T}, nouveau dossier : Échap ferme la saisie SEULE, aucun dossier créé, Organiser reste ouverte`, !(await isOpen()) && await organizeOpen() && !(await folderRows()).some(r => r.path === `Archives ${T}`) && !(await stateFolders()).length, await stateFolders());
   await realClick('#template-organize-new-folder', 300);
   await page.keyboard.type(`Archives ${T}`);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(350);
-  check(`${T}, nouveau dossier : Entrée crée le dossier en attente sous le nom tapé`, (await pending()).some(t => t.includes(`Archives ${T}`)), await pending());
-  // Sous-dossier : le « + » de la ligne du dossier réel.
-  const plusSel = `#template-organize-list .tts-row-folder .tom-add-subfolder-btn`;
+  check(`${T}, nouveau dossier : Entrée crée un vrai dossier vide sous le nom tapé (sa ligne d'état est écrite, la liste le garde avec son bouton « Supprimer »)`,
+    (await folderRows()).some(r => r.path === `Archives ${T}` && r.del) && (await stateFolders()).includes(`Archives ${T}`), { rows: await folderRows(), state: await stateFolders() });
+  // Sous-dossier : le « + » de la ligne du dossier qui existe.
+  const plusSel = `#template-organize-list [data-folder-path="Archives ${T}"] .tom-add-subfolder-btn`;
   check(`${T}, sous-dossier : le bouton « + » d’un dossier est atteignable dans la fenêtre`, !!(await centerOf(plusSel)) && (await centerOf(plusSel)).onTop);
   await realClick(plusSel, 300);
   s = await state();
@@ -1065,7 +1068,14 @@ async function runSites(theme) {
   await page.keyboard.type('Sous');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(350);
-  check(`${T}, sous-dossier : Entrée crée le sous-dossier sous son parent`, (await pending()).some(t => t.includes('/Sous') || t.includes('Sous')), await pending());
+  check(`${T}, sous-dossier : Entrée crée le sous-dossier sous son parent, qui n'est plus vide (plus de bouton « Supprimer »)`,
+    (await folderRows()).some(r => r.path === `Archives ${T}/Sous` && r.del) && (await folderRows()).some(r => r.path === `Archives ${T}` && !r.del), await folderRows());
+  // « Supprimer » (clic réel) : le sous-dossier d'abord, puis le dossier devenu vide ; plus aucune ligne d'état, la liste de « Déplacer vers… » est vide comme avant.
+  await realClick(`#template-organize-list [data-folder-path="Archives ${T}/Sous"] .tom-folder-delete-btn`, 300);
+  check(`${T}, supprimer un dossier vide : le sous-dossier part sans question, son parent redevient vide et porte « Supprimer »`,
+    !(await folderRows()).some(r => r.path === `Archives ${T}/Sous`) && (await folderRows()).some(r => r.path === `Archives ${T}` && r.del), await folderRows());
+  await realClick(`#template-organize-list [data-folder-path="Archives ${T}"] .tom-folder-delete-btn`, 300);
+  check(`${T}, supprimer un dossier vide : le dossier part, plus aucune ligne d'état`, !(await folderRows()).some(r => r.path.startsWith(`Archives ${T}`)) && !(await stateFolders()).length && await organizeOpen(), { rows: await folderRows(), state: await stateFolders() });
   // Déplacer vers…
   const moveSel = `#template-organize-list .tts-row-leaf .tom-move-btn`;
   await realClick(moveSel, 300);

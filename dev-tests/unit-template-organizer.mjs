@@ -7,10 +7,11 @@ import { createContext, loadScript, evalIn, check, summarizeAndExit } from './un
 const ctx = createContext({});
 loadScript(ctx, 'js/template-organizer.js');
 
-function view(templates, prefs) {
+function view(templates, prefs, folders) {
   ctx.__TEMPLATES = templates;
   ctx.__PREFS = prefs;
-  return evalIn(ctx, 'TemplateOrganizer.buildView(__TEMPLATES, __PREFS)');
+  ctx.__FOLDERS = folders;
+  return evalIn(ctx, 'TemplateOrganizer.buildView(__TEMPLATES, __PREFS, __FOLDERS)');
 }
 
 // 1. Sans aucune préférence : liste plate, alphabétique (corrige au passage l'absence de tri actuelle
@@ -169,6 +170,54 @@ function view(templates, prefs) {
   check('les 4 dossiers-pièges sont bien créés comme de vrais dossiers', JSON.stringify(dossierNoms) === JSON.stringify(['__proto__', 'constructor', 'hasOwnProperty', 'toString']), dossierNoms.join(','));
   const protoFolder = v && v.tree.find((n) => n.nom === '__proto__');
   check('chaque dossier-piège garde bien son modèle dedans', protoFolder && protoFolder.enfants.length === 1 && protoFolder.enfants[0].id === 3, protoFolder && JSON.stringify(protoFolder));
+}
+
+// 10. Consigne 072, point b (17/11) : un dossier qui n'a que sa ligne d'état (créé vide dans GFS) figure dans l'arbre comme un dossier vide ; un dossier imbriqué sans modèle
+// fait aussi exister ses parents ; un dossier déjà porté par un modèle n'est pas doublé ; sans la liste des dossiers (appel d'avant), rien ne change.
+{
+  const templates = [{ id: 1, nom: 'Facture' }, { id: 2, nom: 'Contrat' }];
+  const prefs = { 1: { epingle: false, dossier: 'Factures' } };
+  const v = view(templates, prefs, ['Factures', 'Vide', 'Archives/2024', 'Archives/2024/Clients']);
+  const names = (nodes) => nodes.filter((n) => n.type === 'dossier').map((n) => n.nom);
+  check('dossier sans modèle : il figure dans l\u2019arbre, avec ceux qui ont des modèles, par ordre alphabétique', JSON.stringify(names(v.tree)) === JSON.stringify(['Archives', 'Factures', 'Vide']), JSON.stringify(names(v.tree)));
+  const vide = v.tree.find((n) => n.nom === 'Vide');
+  check('dossier sans modèle : un dossier d\u2019arbre de type dossier, chemin et enfants vides', !!vide && vide.type === 'dossier' && vide.chemin === 'Vide' && Array.isArray(vide.enfants) && vide.enfants.length === 0, JSON.stringify(vide));
+  const archives = v.tree.find((n) => n.nom === 'Archives');
+  const a2024 = archives && archives.enfants.find((n) => n.nom === '2024');
+  check('dossier imbriqué sans modèle : ses parents existent, chacun avec son chemin', !!a2024 && archives.chemin === 'Archives' && a2024.chemin === 'Archives/2024' && a2024.enfants.length === 1 && a2024.enfants[0].chemin === 'Archives/2024/Clients', JSON.stringify(archives));
+  const factures = v.tree.find((n) => n.nom === 'Factures');
+  check('un dossier déjà porté par un modèle n\u2019est pas doublé', v.tree.filter((n) => n.nom === 'Factures').length === 1 && factures.enfants.length === 1 && factures.enfants[0].id === 1, JSON.stringify(factures));
+  check('les modèles sans dossier restent à la racine, après les dossiers', v.tree[v.tree.length - 1].type === 'modele' && v.tree[v.tree.length - 1].id === 2);
+  check('un dossier sans modèle n\u2019entre pas dans les épinglés', v.pinned.length === 0);
+  const without = view(templates, prefs);
+  check('sans la liste des dossiers (appel d\u2019avant) : seuls les dossiers des modèles', JSON.stringify(names(without.tree)) === JSON.stringify(['Factures']), JSON.stringify(names(without.tree)));
+  const odd = view(templates, prefs, ['', null, '  /  ', 'constructor', '__proto__']);
+  check('chemins vides ignorés, noms-pièges acceptés (Object.prototype)', JSON.stringify(names(odd.tree)) === JSON.stringify(['__proto__', 'constructor', 'Factures']), JSON.stringify(names(odd.tree)));
+}
+
+// 11. « Supprimer » sur un dossier vide (« Organiser mes modèles ») : findFolder retrouve un dossier de l'arbre par son chemin, à toute profondeur ; un dossier sans modèle ni sous-dossier a une liste
+// `enfants` vide, un dossier qui porte un modèle ou un sous-dossier non ; un modèle n'est jamais pris pour un dossier.
+{
+  const templates = [{ id: 1, nom: 'Facture' }, { id: 2, nom: 'Contrat' }];
+  const prefs = { 1: { epingle: false, dossier: 'Factures/Clients' } };
+  const v = view(templates, prefs, ['Vide', 'Archives/2024', 'Factures/Clients', 'Factures/Brouillons']);
+  const findIn = (tree, path) => { ctx.__TREE = tree; ctx.__PATH = path; try { return evalIn(ctx, 'TemplateOrganizer.findFolder(__TREE, __PATH)'); } catch (e) { return 'ERREUR : ' + e.message; } };
+  const find = (path) => findIn(v.tree, path);
+  // Les enfants d'un résultat, ou une liste vide : rien ne plante quand la fonction manque (essai joué sur l'ancien code : chaque vérification rend son verdict).
+  const kids = (node) => (node && Array.isArray(node.enfants) ? node.enfants : []);
+  const vide = find('Vide');
+  check('dossier vide : trouvé à la racine, sans enfant', !!vide && vide.type === 'dossier' && vide.chemin === 'Vide' && kids(vide).length === 0 && Array.isArray(vide.enfants), JSON.stringify(vide));
+  const brouillons = find('Factures/Brouillons');
+  check('dossier vide imbriqué : trouvé par son chemin complet, sans enfant', !!brouillons && brouillons.chemin === 'Factures/Brouillons' && kids(brouillons).length === 0 && Array.isArray(brouillons.enfants), JSON.stringify(brouillons));
+  const factures = find('Factures');
+  check('dossier qui en contient d’autres : trouvé, il n’est pas vide', !!factures && kids(factures).length === 2, JSON.stringify(factures));
+  const clients = find('Factures/Clients');
+  check('dossier qui porte un modèle : trouvé, il n’est pas vide', !!clients && kids(clients).length === 1 && kids(clients)[0].type === 'modele', JSON.stringify(clients));
+  const archives = find('Archives');
+  check('dossier parent implicite (seul son fils existe) : trouvé, il n’est pas vide', !!archives && kids(archives).length === 1 && kids(archives)[0].chemin === 'Archives/2024', JSON.stringify(archives));
+  check('chemin inconnu : null', find('Inconnu') === null && find('Factures/Inconnu') === null && find('') === null);
+  check('un modèle n’est pas un dossier : « Facture » et « Contrat » ne se trouvent pas', find('Facture') === null && find('Contrat') === null);
+  check('arbre absent ou vide : null, sans lever', findIn(undefined, 'Vide') === null && findIn([], 'Vide') === null);
 }
 
 summarizeAndExit();

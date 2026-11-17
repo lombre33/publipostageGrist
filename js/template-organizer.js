@@ -16,7 +16,9 @@ const TemplateOrganizer = (function () {
 
   // { pinned: [{id, nom, dossier}], tree: [noeud, ...] } ; noeud = { type: 'dossier', nom, chemin, enfants } ou { type: 'modele', id, nom }.
   // À chaque niveau : dossiers d'abord, puis modèles, par ordre alphabétique dans chaque groupe.
-  function buildView(templates, preferences) {
+  // `folders` (facultatif) : les chemins des dossiers qui existent (TemplatePreferences.listFolders) ; un dossier qui n'a que sa ligne d'état, sans modèle dedans,
+  // figure dans l'arbre comme un dossier vide - un dossier existe tant qu'une ligne le nomme, celle d'un modèle ou celle d'un état.
+  function buildView(templates, preferences, folders) {
     preferences = preferences || {};
     templates = templates || [];
 
@@ -42,6 +44,7 @@ const TemplateOrganizer = (function () {
       const dossier = (preferences[t.id] && preferences[t.id].dossier) || null;
       folderNode(splitPath(dossier)).modeles.push({ id: t.id, nom: t.nom, typeModele: t.typeModele || 'document' });
     });
+    (folders || []).forEach((path) => { const segments = splitPath(path); if (segments.length) folderNode(segments); });
 
     function toSortedList(node) {
       const dossiers = Object.keys(node.enfants)
@@ -57,5 +60,17 @@ const TemplateOrganizer = (function () {
     return { pinned, tree: toSortedList(root) };
   }
 
-  return { buildView, splitPath };
+  // Le dossier `path` (chemin normalisé) dans l'arbre de buildView, ou null. Un dossier sans modèle ni sous-dossier a une liste `enfants` vide : c'est un dossier vide, celui
+  // que « Organiser mes modèles » peut supprimer.
+  function findFolder(tree, path) {
+    for (const node of tree || []) {
+      if (node.type !== 'dossier') continue;
+      if (node.chemin === path) return node;
+      const found = findFolder(node.enfants, path);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  return { buildView, splitPath, findFolder };
 })();

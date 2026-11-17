@@ -1291,7 +1291,7 @@ window.EditorTestSuites.undoLibrary = (function () {
 
   cases.push({
     id: 'undo_library_drag_and_drop_and_place_here_are_one_step_each',
-    description: 'Un modèle glissé sur un dossier, un autre rangé par « Ranger ici » dans un dossier tout juste nommé : chacun est UN pas, Ctrl + Z le remet hors du dossier (le dossier en attente, devenu réel, disparaît avec lui), Ctrl + Y le range de nouveau',
+    description: 'Un modèle glissé sur un dossier, un autre rangé par « Ranger ici » dans un dossier tout juste créé : chacun est UN pas, et la création du dossier en est un aussi ; Ctrl + Z remet le modèle hors du dossier (le dossier vide reste), un second retire le dossier, deux Ctrl + Y rendent le tout dans l\'ordre',
     async run(h) {
       const problems = [];
       try {
@@ -1318,17 +1318,23 @@ window.EditorTestSuites.undoLibrary = (function () {
           await press(h, windowRow(third).querySelector('.tom-place-here-btn'));
           await h.sleep(300);
         });
-        check(problems, 'rangé ici : le dossier est réel', [folderOf(third), reserve().count()], ['Ici UL', 1]);
+        check(problems, 'rangé ici : le dossier est créé puis rempli, deux pas', [folderOf(third), hasStateRow('Ici UL'), reserve().count()], ['Ici UL', true, 2]);
         ed().commands.focus('end');
         await h.sleep(100);
         inEditor('z');
         await settle(h);
-        check(problems, 'Ctrl + Z : « Ranger ici » est défait, le dossier a disparu', [folderOf(third), foldersShown(/^Ici UL$/).length], ['', 0]);
+        check(problems, '1er Ctrl + Z : « Ranger ici » est défait, le dossier vide reste', [folderOf(third), hasStateRow('Ici UL'), foldersShown(/^Ici UL$/).length], ['', true, 1]);
+        inEditor('z');
+        await settle(h);
+        check(problems, '2e Ctrl + Z : la création est défaite, le dossier a disparu', [hasStateRow('Ici UL'), foldersShown(/^Ici UL$/).length], [false, 0]);
         inEditor('y');
         await settle(h);
-        check(problems, 'Ctrl + Y : rangé de nouveau', [folderOf(third), foldersShown(/^Ici UL$/).length], ['Ici UL', 1]);
+        check(problems, '1er Ctrl + Y : le dossier est de retour, vide', [folderOf(third), hasStateRow('Ici UL'), foldersShown(/^Ici UL$/).length], ['', true, 1]);
+        inEditor('y');
+        await settle(h);
+        check(problems, '2e Ctrl + Y : rangé de nouveau', [folderOf(third), foldersShown(/^Ici UL$/).length], ['Ici UL', 1]);
         return verdict(problems, { third: folderOf(third) });
-      } finally { await leave(h); }
+      } finally { await dropStateRows(['Ici UL']); await leave(h); }
     },
   });
 
@@ -1365,6 +1371,237 @@ window.EditorTestSuites.undoLibrary = (function () {
         check(problems, 'Ctrl + Z du premier clic : déplié', collapsedOf(folder), false);
         return verdict(problems, { collapsed: collapsedOf(folder) });
       } finally { await leave(h); }
+    },
+  });
+
+  // Consigne 072 de GFS : une ligne d'état (ModeleId 0) fait exister son dossier, même sans modèle dedans. Défaire un geste doit donc retirer la ligne qu'il a posée, sinon Ctrl + Z
+  // laisserait un dossier vide là où il n'y en avait pas ; la ligne que GFS avait écrite avant le geste, elle, reste.
+  const hasStateRow = path => prefRow((t, i) => Number(t.ModeleId[i]) === 0 && t.Dossier[i] === path) !== null;
+  const stateRowCount = path => { const t = stub().state.rows[PREFS]; return t.id.filter((id, i) => Number(t.ModeleId[i]) === 0 && t.Dossier[i] === path).length; };
+  async function dropStateRows(paths) {
+    const t = stub().state.rows[PREFS];
+    const rowIds = t.id.filter((id, i) => Number(t.ModeleId[i]) === 0 && paths.includes(t.Dossier[i]));
+    if (rowIds.length) await stub().applyUserActions([['BulkRemoveRecord', PREFS, rowIds]]);
+    await TemplatePreferences.loadForCurrentUser();
+    TemplateTreeSelect.refresh();
+  }
+
+  cases.push({
+    id: 'undo_library_folder_state_row_goes_with_the_gesture_that_wrote_it_and_leaves_no_empty_folder',
+    description: 'Un modèle rangé dans un dossier neuf, le dossier réglé « replié par défaut » : le premier Ctrl + Z retire la ligne d\'état que le réglage avait posée (le dossier, qui porte encore le modèle, reste), le second retire le modèle du dossier et le dossier disparaît sans laisser de dossier vide ; deux Ctrl + Y rendent le tout',
+    async run(h) {
+      const problems = [];
+      const folder = 'Fantôme UL';
+      try {
+        const ids = await fresh(h, 'Fantôme UL');
+        await inWindow(h, () => windowMove(h, ids.a, folder));
+        await inWindow(h, async () => { await press(h, windowFolder(folder).querySelector('.tom-folder-default-btn')); await h.sleep(300); });
+        check(problems, 'replié : la ligne d\'état est écrite, deux actions en réserve (le rangement, le réglage)', [hasStateRow(folder), collapsedOf(folder), reserve().count()], [true, true, 2]);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z : la ligne d\'état posée par le réglage est retirée, le modèle reste rangé', [hasStateRow(folder), folderOf(ids.a), foldersShown(/^Fantôme UL$/)], [false, folder, [[folder, 'true']]]);
+        inEditor('z');
+        await settle(h);
+        check(problems, '2e Ctrl + Z : hors du dossier, plus de dossier ni de ligne d\'état', [folderOf(ids.a), hasStateRow(folder), foldersShown(/^Fantôme UL$/), TemplatePreferences.listFolders().includes(folder)], ['', false, [], false]);
+        inEditor('y');
+        inEditor('y');
+        await settle(h);
+        check(problems, 'deux Ctrl + Y : rangé et replié de nouveau', [folderOf(ids.a), collapsedOf(folder), foldersShown(/^Fantôme UL$/)], [folder, true, [[folder, 'false']]]);
+        return verdict(problems, { folder: folderOf(ids.a) });
+      } finally { await dropStateRows([folder]); await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_new_empty_folder_its_fold_switch_and_first_model_are_three_steps',
+    description: 'Un dossier créé par « + Nouveau dossier » (sa ligne d\'état est écrite), son interrupteur « replié par défaut » mis, puis « Ranger ici » : trois pas ; Ctrl + Z remet le modèle hors du dossier (le dossier vide reste, replié), le déplie, puis supprime le dossier ; trois Ctrl + Y rendent le tout',
+    async run(h) {
+      const problems = [];
+      const folder = 'Neuf replié UL';
+      try {
+        const ids = await fresh(h, 'Neuf replié UL');
+        await inWindow(h, async () => {
+          const dialogs = h.stubDialogs({ prompt: folder });
+          try { await press(h, byId('template-organize-new-folder')); await h.sleep(300); } finally { dialogs.restore(); }
+          await press(h, windowFolder(folder).querySelector('.tom-folder-default-btn'));
+          await h.sleep(150);
+          await press(h, windowRow(ids.a).querySelector('.tom-place-here-btn'));
+          await h.sleep(400);
+        });
+        check(problems, 'trois pas : le dossier créé, replié, rempli', [folderOf(ids.a), collapsedOf(folder), hasStateRow(folder), reserve().count()], [folder, true, true, 3]);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        inEditor('z');
+        await settle(h);
+        check(problems, '1er Ctrl + Z : hors du dossier, le dossier vide reste, replié', [folderOf(ids.a), hasStateRow(folder), collapsedOf(folder), foldersShown(/^Neuf replié UL$/)], ['', true, true, [[folder, 'false']]]);
+        check(problems, '1er Ctrl + Z : le coin d\'état dit le modèle remis hors du dossier', status(), unfiled(ids.nameA));
+        inEditor('z');
+        await settle(h);
+        check(problems, '2e Ctrl + Z : déplié, la ligne d\'état reste (le dossier existe par sa création)', [hasStateRow(folder), collapsedOf(folder), foldersShown(/^Neuf replié UL$/)], [true, false, [[folder, 'true']]]);
+        inEditor('z');
+        await settle(h);
+        check(problems, '3e Ctrl + Z : plus de ligne d\'état, plus de dossier dans la liste', [hasStateRow(folder), foldersShown(/^Neuf replié UL$/), TemplatePreferences.listFolders().includes(folder)], [false, [], false]);
+        check(problems, '3e Ctrl + Z : le coin d\'état dit le dossier supprimé', status(), I18n.t('status.folderDeleted', { folder }));
+        inEditor('y');
+        inEditor('y');
+        inEditor('y');
+        await settle(h);
+        check(problems, 'trois Ctrl + Y : le dossier, replié, avec son modèle', [folderOf(ids.a), collapsedOf(folder), hasStateRow(folder), foldersShown(/^Neuf replié UL$/)], [folder, true, true, [[folder, 'false']]]);
+        return verdict(problems, { folder: folderOf(ids.a), count: reserve().count() });
+      } finally { await dropStateRows([folder]); await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_folder_gfs_wrote_keeps_its_row_when_the_fold_is_undone',
+    description: 'Un dossier créé vide dans GFS (sa ligne d\'état existe avant le geste) : le replier par défaut puis défaire rend « déplié » SANS retirer la ligne - le dossier vide reste là où GFS l\'avait mis',
+    async run(h) {
+      const problems = [];
+      const folder = 'Venu de GFS UL';
+      try {
+        await fresh(h, 'Venu de GFS UL');
+        await stub().applyUserActions([['AddRecord', PREFS, null, { Utilisateur: '', ModeleId: 0, Epingle: false, Dossier: folder, Replie: false }]]);
+        await TemplatePreferences.loadForCurrentUser();
+        TemplateTreeSelect.refresh();
+        reserve().reset();
+        check(problems, 'le dossier vide venu de GFS est dans la liste', foldersShown(/^Venu de GFS UL$/), [[folder, 'true']]);
+        await inWindow(h, async () => { await press(h, windowFolder(folder).querySelector('.tom-folder-default-btn')); await h.sleep(300); });
+        check(problems, 'replié : la même ligne passe à replié', [collapsedOf(folder), foldersShown(/^Venu de GFS UL$/)], [true, [[folder, 'false']]]);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z : la ligne reste (dépliée), le dossier vide aussi', [hasStateRow(folder), collapsedOf(folder), foldersShown(/^Venu de GFS UL$/), TemplatePreferences.listFolders().includes(folder)], [true, false, [[folder, 'true']], true]);
+        inEditor('y');
+        await settle(h);
+        check(problems, 'Ctrl + Y : replié de nouveau', [hasStateRow(folder), collapsedOf(folder)], [true, true]);
+        return verdict(problems, { collapsed: collapsedOf(folder) });
+      } finally { await dropStateRows([folder]); await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_creating_an_empty_folder_is_one_step_and_both_directions_say_it',
+    description: '« + Nouveau dossier » : UN pas ; Ctrl + Z retire la ligne d\'état (le dossier disparaît de la liste et de la fenêtre), Ctrl + Y la repose ; le coin d\'état nomme le dossier dans les deux sens',
+    async run(h) {
+      const problems = [];
+      const folder = 'Créé UL';
+      try {
+        await fresh(h, 'Créé UL');
+        await inWindow(h, async () => {
+          const dialogs = h.stubDialogs({ prompt: folder });
+          try { await press(h, byId('template-organize-new-folder')); await h.sleep(300); } finally { dialogs.restore(); }
+        });
+        check(problems, 'créé : la ligne, le dossier dans la liste, déplié, un pas', [hasStateRow(folder), collapsedOf(folder), foldersShown(/^Créé UL$/), reserve().count()], [true, false, [[folder, 'true']], 1]);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z : plus de ligne, plus de dossier, ni dans la liste ni dans la fenêtre', [hasStateRow(folder), foldersShown(/^Créé UL$/), TemplatePreferences.listFolders().includes(folder)], [false, [], false]);
+        check(problems, 'Ctrl + Z : le coin d\'état dit le dossier supprimé', status(), I18n.t('status.folderDeleted', { folder }));
+        await inWindow(h, async () => { check(problems, 'fenêtre rouverte : le dossier n\'y est plus', !!windowFolder(folder), false); });
+        inEditor('y');
+        await settle(h);
+        check(problems, 'Ctrl + Y : la ligne et le dossier sont de retour, une seule ligne', [hasStateRow(folder), foldersShown(/^Créé UL$/), stateRowCount(folder)], [true, [[folder, 'true']], 1]);
+        check(problems, 'Ctrl + Y : le coin d\'état dit le dossier créé', status(), I18n.t('status.folderCreated', { folder }));
+        await inWindow(h, async () => { check(problems, 'fenêtre rouverte : le dossier est là, supprimable', !!(windowFolder(folder) && windowFolder(folder).querySelector('.tom-folder-delete-btn')), true); });
+        return verdict(problems, { rows: stateRowCount(folder) });
+      } finally { await dropStateRows([folder]); await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_deleting_an_empty_folder_is_one_step_that_gives_it_back_as_it_was',
+    description: '« Supprimer » sur un dossier vide (que GFS a créé, replié par défaut) : UN pas ; Ctrl + Z le rend tel qu\'il était (la ligne d\'état avec son état « replié », le dossier dans la liste et la fenêtre), Ctrl + Y le supprime de nouveau ; le coin d\'état nomme le dossier dans les deux sens',
+    async run(h) {
+      const problems = [];
+      const folder = 'Supprimé UL';
+      try {
+        await fresh(h, 'Supprimé UL');
+        await stub().applyUserActions([['AddRecord', PREFS, null, { Utilisateur: '', ModeleId: 0, Epingle: false, Dossier: folder, Replie: true }]]);
+        await TemplatePreferences.loadForCurrentUser();
+        TemplateTreeSelect.refresh();
+        reserve().reset();
+        check(problems, 'le dossier vide venu de GFS est dans la liste, replié', foldersShown(/^Supprimé UL$/), [[folder, 'false']]);
+        await inWindow(h, async () => { await press(h, windowFolder(folder).querySelector('.tom-folder-delete-btn')); await h.sleep(300); });
+        check(problems, 'supprimé : plus de ligne, plus de dossier, un pas', [hasStateRow(folder), foldersShown(/^Supprimé UL$/), reserve().count()], [false, [], 1]);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z : la ligne est de retour avec « replié », le dossier dans la liste', [hasStateRow(folder), collapsedOf(folder), stateRowCount(folder), foldersShown(/^Supprimé UL$/)], [true, true, 1, [[folder, 'false']]]);
+        check(problems, 'Ctrl + Z : le coin d\'état dit le dossier créé', status(), I18n.t('status.folderCreated', { folder }));
+        await inWindow(h, async () => { check(problems, 'fenêtre rouverte : le dossier est là, replié par défaut', windowFolder(folder) && windowFolder(folder).querySelector('.tom-folder-default-btn').getAttribute('aria-pressed'), 'true'); });
+        inEditor('y');
+        await settle(h);
+        check(problems, 'Ctrl + Y : supprimé de nouveau', [hasStateRow(folder), foldersShown(/^Supprimé UL$/)], [false, []]);
+        check(problems, 'Ctrl + Y : le coin d\'état dit le dossier supprimé', status(), I18n.t('status.folderDeleted', { folder }));
+        return verdict(problems, { rows: stateRowCount(folder) });
+      } finally { await dropStateRows([folder]); await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_undoing_a_folder_creation_after_a_model_was_put_in_says_the_folder_stays',
+    description: 'Un dossier créé par « + Nouveau dossier », puis un modèle qui y est rangé par ailleurs (GFS, sans passer par l\'historique) : Ctrl + Z de la création ne retire rien (le modèle occupe le dossier), le coin d\'état le dit en erreur',
+    async run(h) {
+      const problems = [];
+      const folder = 'Occupé UL';
+      let ids = null;
+      try {
+        ids = await fresh(h, 'Occupé UL');
+        await inWindow(h, async () => {
+          const dialogs = h.stubDialogs({ prompt: folder });
+          try { await press(h, byId('template-organize-new-folder')); await h.sleep(300); } finally { dialogs.restore(); }
+        });
+        await TemplatePreferences.setFolder(ids.a, folder); // un autre écran range le modèle : aucune action
+        TemplateTreeSelect.refresh();
+        check(problems, 'un pas (la création) ; le modèle est rangé dans le dossier', [reserve().count(), folderOf(ids.a)], [1, folder]);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        inEditor('z');
+        await settle(h);
+        check(problems, 'Ctrl + Z : la ligne d\'état reste, le modèle aussi', [hasStateRow(folder), folderOf(ids.a), foldersShown(/^Occupé UL$/).length], [true, folder, 1]);
+        check(problems, 'Ctrl + Z : le coin d\'état dit que le dossier n\'est plus vide', status(), I18n.t('history.folderNotEmpty', { folder }));
+        return verdict(problems, { rows: stateRowCount(folder) });
+      } finally { if (ids) await TemplatePreferences.setFolder(ids.a, ''); await dropStateRows([folder]); await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_library_two_quick_clicks_on_a_folder_switch_come_back_one_step_at_a_time',
+    description: 'Deux clics de suite sur l\'interrupteur « replié par défaut » d\'un dossier neuf, le second avant la fin de l\'écriture du premier (Grist lent) : le premier Ctrl + Z rend « replié » (la ligne d\'état est posée), le second ne laisse ni ligne ni dossier vide, le troisième remet le modèle hors du dossier',
+    async run(h) {
+      const problems = [];
+      const folder = 'Deux clics UL';
+      const real = grist.docApi.applyUserActions;
+      try {
+        const ids = await fresh(h, 'Deux clics UL');
+        await inWindow(h, () => windowMove(h, ids.a, folder));
+        // Grist met 250 ms à répondre : le second clic arrive pendant que le premier est encore dans la file des écritures.
+        grist.docApi.applyUserActions = actions => new Promise(resolve => setTimeout(resolve, 250)).then(() => real.call(grist.docApi, actions));
+        await inWindow(h, async () => {
+          await press(h, windowFolder(folder).querySelector('.tom-folder-default-btn'));
+          await press(h, windowFolder(folder).querySelector('.tom-folder-default-btn'));
+          await h.sleep(900);
+        });
+        grist.docApi.applyUserActions = real;
+        check(problems, 'deux clics : déplié de nouveau, trois actions en réserve (le rangement, replier, déplier)', [collapsedOf(folder), reserve().count()], [false, 3]);
+        ed().commands.focus('end');
+        await h.sleep(100);
+        inEditor('z');
+        await settle(h);
+        check(problems, '1er Ctrl + Z : replié, la ligne d\'état est posée', [collapsedOf(folder), hasStateRow(folder), TemplatePreferences.isFolderCollapsed(folder), status()], [true, true, true, I18n.t('status.folderCollapsed', { folder })]);
+        inEditor('z');
+        await settle(h);
+        check(problems, '2e Ctrl + Z : déplié, plus de ligne d\'état, le dossier reste (il porte le modèle)', [collapsedOf(folder), hasStateRow(folder), folderOf(ids.a), foldersShown(/^Deux clics UL$/)], [false, false, folder, [[folder, 'true']]]);
+        inEditor('z');
+        await settle(h);
+        check(problems, '3e Ctrl + Z : hors du dossier, rien de laissé', [folderOf(ids.a), hasStateRow(folder), foldersShown(/^Deux clics UL$/)], ['', false, []]);
+        return verdict(problems, { collapsed: collapsedOf(folder) });
+      } finally { grist.docApi.applyUserActions = real; await dropStateRows([folder]); await leave(h); }
     },
   });
 

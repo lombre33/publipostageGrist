@@ -48,6 +48,7 @@ const I18nTextsReview = {
   'history.redoFailed': { fr: 'Rétablir : l’action n’a pas pu être rétablie.', en: 'Redo: the action could not be redone.' },
   'history.defaultChanged': { fr: 'Le modèle par défaut a changé depuis : rien n’a été modifié.', en: 'The default template has changed since: nothing was changed.' },
   'history.templateGone': { fr: 'Ce modèle n’existe plus : rien n’a été modifié.', en: 'This template no longer exists: nothing was changed.' },
+  'history.folderNotEmpty': { fr: 'Le dossier « {folder} » n’est plus vide : il reste en place.', en: 'The folder “{folder}” is no longer empty: it stays in place.' },
   'history.nameChanged': { fr: 'Le nom du modèle a changé depuis : rien n’a été modifié.', en: 'The template name has changed since: nothing was changed.' },
   'history.templateBack': { fr: 'Ce modèle est déjà revenu : rien n’a été modifié.', en: 'This template is already back: nothing was changed.' },
   'history.linkChanged': { fr: 'Ce lien a changé depuis : rien n’a été modifié.', en: 'This link has changed since: nothing was changed.' },

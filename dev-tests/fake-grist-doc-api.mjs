@@ -1,6 +1,6 @@
 // Faux grist.docApi minimal pour tester en Node (sans navigateur) un module qui passe par
 // listTables/applyUserActions/fetchTable - cf. dev-tests/unit-harness.mjs pour le contexte général.
-// Ne couvre QUE les actions utilisées par js/template-preferences.js (AddTable/AddRecord/UpdateRecord/AddVisibleColumn) -
+// Ne couvre QUE les actions utilisées par js/template-preferences.js (AddTable/AddRecord/UpdateRecord/BulkRemoveRecord/AddVisibleColumn) -
 // un module qui a besoin d'autre chose doit étendre cette classe, pas la détourner.
 // Options : withReplie=false simule un document créé avant la colonne Replie (dossier replié par défaut) ; withExportColumns=false, un document créé avant les
 // trois colonnes des réglages d'export (TypeExport, QualitePdf, LignesExport) ; latencyMs simule l'aller-retour Grist (sans lui, deux appels concurrents ne se
@@ -74,6 +74,14 @@ export class FakeDocApi {
         this._checkColumns(table, patch);
         const row = (this.rows[table] || []).find((r) => r.id === rowId);
         Object.assign(row, patch);
+        retValues.push(null);
+      } else if (type === 'BulkRemoveRecord' || type === 'RemoveRecord') {
+        // Comme le stub de dev-tests/grist-stub.js pour une mise à jour : une ligne qui n'existe plus fait refuser TOUTE l'action, rien n'est retiré.
+        const ids = Array.isArray(action[2]) ? action[2] : [action[2]];
+        const rows = this.rows[table] || [];
+        const missing = ids.find((id) => !rows.some((r) => r.id === id));
+        if (missing !== undefined) throw new Error('Error : la ligne ' + missing + ' de ' + table + ' n\u2019existe pas');
+        this.rows[table] = rows.filter((r) => !ids.includes(r.id));
         retValues.push(null);
       } else {
         throw new Error('FakeDocApi : action non supportée ' + type);

@@ -1,7 +1,7 @@
 // Suite "templateOrganize" - js/template-organize-modal.js ("Organiser mes modèles", créer des dossiers
 // et y ranger des modèles). Complète dev-tests/scenarios-template-tree.js plutôt que de la dupliquer :
 // ici seulement ce que ce nouveau module ajoute (bouton toolbar dédié, recherche, "Déplacer vers…",
-// glisser-déposer, boutons "+", synchronisation bidirectionnelle avec l'arbre de la barre).
+// glisser-déposer, boutons "+", créer et supprimer un dossier vide, synchronisation bidirectionnelle avec l'arbre de la barre).
 // js/template-organizer.js et js/template-preferences.js, réutilisés tels quels par cette modale, gardent
 // leurs propres suites (dev-tests/unit-template-organizer.mjs, dev-tests/unit-template-preferences.mjs).
 (function () {
@@ -19,9 +19,7 @@
   function rowByName(nom) {
     return Array.from(list().querySelectorAll('.tts-row-leaf')).find((r) => r.querySelector('.tts-row-label').textContent === nom) || null;
   }
-  // Trouve un dossier RÉEL ou "en attente" (tom-pending-folder porte aussi .tts-row-folder) par son
-  // libellé - le texte affiché est le nom du dossier pour un vrai noeud, le chemin complet pour un
-  // pending (cf. js/template-organize-modal.js:makePendingFolderRow).
+  // Trouve une ligne dossier de la fenêtre par son libellé (le dernier segment du chemin : « Nouveau » pour « Repli/Nouveau »).
   function folderRowByLabel(texte) {
     return Array.from(list().querySelectorAll('.tts-row-folder')).find((r) => r.querySelector('.tts-row-label').textContent === texte) || null;
   }
@@ -316,44 +314,56 @@
     },
   });
 
+  // Réponse d'Antoine du 17/11 à la consigne 072 de GFS : « Nouveau dossier » GARDE le dossier vide (sa ligne d'état, celle que GFS écrit pour le sien), et un dossier vide se supprime.
+  // L'ancien dossier « en attente » (une ligne à part, jamais écrite) n'existe plus : le dossier créé est une ligne ordinaire de la liste.
   cases.push({
-    id: 'organize_new_root_folder_button_shows_pending_row_without_writing',
-    description: 'Le "+ Nouveau dossier" en haut de la liste nomme un dossier candidat à la racine, affiché à part, sans écrire en base tant qu’aucun modèle n’y est rangé',
+    id: 'organize_new_root_folder_button_keeps_an_empty_folder_written_like_gfs_writes_it',
+    description: 'Le "+ Nouveau dossier" en haut de la liste garde le dossier vide : sa ligne d’état est écrite comme GFS écrit la sienne (une seule, ModeleId 0, Epingle faux, le chemin, sans Replie), le dossier est une ligne ordinaire de la liste, et la liste déroulante de la barre le montre aussi',
     run: async (h) => {
       await createTemplate(h, 'Racine - Pas encore rangé');
       TemplateOrganizeModal.open();
       await h.sleep(30);
-      const before = stub().countActions('AddRecord', TABLE) + stub().countActions('UpdateRecord', TABLE);
       await withPrompt('Nouveau dossier racine', async () => {
         await clickEl(h, document.getElementById('template-organize-new-folder'));
       });
-      const after = stub().countActions('AddRecord', TABLE) + stub().countActions('UpdateRecord', TABLE);
-      const pending = folderRowByLabel('Nouveau dossier racine');
-      const isPending = !!(pending && pending.classList.contains('tom-pending-folder'));
+      await h.sleep(80);
+      const row = folderRowByLabel('Nouveau dossier racine');
+      const states = stateRows('Nouveau dossier racine');
+      const table = stub().state.rows[TABLE];
+      const at = table.Dossier.indexOf('Nouveau dossier racine');
+      const written = states.length === 1 && states[0].u === '' && states[0].m === 0 && at !== -1 && table.Epingle[at] === false && !(table.Replie && table.Replie[at]);
+      const ordinary = !!row && row.dataset.folderPath === 'Nouveau dossier racine' && row.getAttribute('aria-expanded') === 'true' && !row.classList.contains('tom-pending-folder');
       TemplateOrganizeModal.close();
-      const pass = isPending && after === before;
-      return { pass, notes: JSON.stringify({ isPending, before, after }) };
+      await openTreePopup(h);
+      const inTree = !!treeFolder('Nouveau dossier racine');
+      await closeTree(h);
+      await dropStateRows();
+      const pass = written && ordinary && inTree;
+      return { pass, notes: JSON.stringify({ written, ordinary, inTree, states }) };
     },
   });
 
   cases.push({
-    id: 'organize_new_root_folder_cancelled_shows_no_pending_row',
-    description: 'Annuler le prompt du "+" (Annuler, pas nom vide) ne crée aucun dossier candidat ni écriture',
+    id: 'organize_new_root_folder_cancelled_creates_no_folder_and_writes_nothing',
+    description: 'Annuler le prompt du "+" (Annuler, pas nom vide) ne crée aucun dossier ni écriture',
     run: async (h) => {
       TemplateOrganizeModal.open();
       await h.sleep(30);
+      const foldersBefore = list().querySelectorAll('.tts-row-folder').length;
+      const before = writes();
       await withPrompt(null, async () => {
         await clickEl(h, document.getElementById('template-organize-new-folder'));
       });
-      const pass = !document.querySelector('.tom-pending-folder');
+      await h.sleep(40);
+      const same = list().querySelectorAll('.tts-row-folder').length === foldersBefore && writes() === before && !list().querySelector('.tom-place-hint') && !list().querySelector('.tom-place-here-btn');
       TemplateOrganizeModal.close();
-      return { pass, notes: JSON.stringify({ pass }) };
+      return { pass: same, notes: JSON.stringify({ same, foldersBefore, before, after: writes() }) };
     },
   });
 
   cases.push({
-    id: 'organize_place_here_button_writes_pending_folder_from_leaf_row',
-    description: 'Le bouton de repli "Ranger ici", visible pendant qu’un dossier est en attente, écrit Dossier pour le modèle cliqué - sans glisser-déposer (repli clavier/tactile)',
+    id: 'organize_place_here_button_files_a_model_into_the_new_empty_folder',
+    description: 'Le bouton de repli "Ranger ici", visible tant que le dossier tout juste créé est vide, écrit Dossier pour le modèle cliqué - sans glisser-déposer (repli clavier/tactile) ; le dossier porte alors un modèle : plus de « Ranger ici », plus de « Supprimer », sa ligne d’état reste',
     run: async (h) => {
       const id = await createTemplate(h, 'Repli - Ranger ici');
       TemplateOrganizeModal.open();
@@ -361,58 +371,245 @@
       await withPrompt('Repli/Nouveau', async () => {
         await clickEl(h, document.getElementById('template-organize-new-folder'));
       });
+      await h.sleep(60);
+      const hintShown = !!(folderRowByLabel('Nouveau') && folderRowByLabel('Nouveau').querySelector('.tom-place-hint'));
       const placeBtn = rowByName('Repli - Ranger ici').querySelector('.tom-place-here-btn');
       await clickEl(h, placeBtn);
       const rows = stub().state.rows[TABLE];
       const idx = rows.ModeleId.map(String).lastIndexOf(String(id));
       const wroteFolder = idx !== -1 && rows.Dossier[idx] === 'Repli/Nouveau';
-      const stillPending = !!document.querySelector('.tom-pending-folder');
-      const nowReal = !!folderRowByLabel('Nouveau');
-      TemplateOrganizeModal.close();
-      const pass = wroteFolder && !stillPending && nowReal;
-      return { pass, notes: JSON.stringify({ wroteFolder, stillPending, nowReal }) };
+      const after = folderRowByLabel('Nouveau');
+      const settled = !!after && !after.querySelector('.tom-place-hint') && !after.querySelector('.tom-folder-delete-btn') && !list().querySelector('.tom-place-here-btn');
+      const stateKept = stateRows('Repli/Nouveau').length === 1;
+      await tidy([], [id]);
+      const pass = hintShown && !!placeBtn && wroteFolder && settled && stateKept;
+      return { pass, notes: JSON.stringify({ hintShown, hasPlaceBtn: !!placeBtn, wroteFolder, settled, stateKept }) };
     },
   });
 
   cases.push({
-    id: 'organize_subfolder_plus_button_prefixes_parent_path',
-    description: 'Le "+" à droite d’un dossier réel préfixe automatiquement le chemin du parent - l’utilisateur ne tape que le nom du sous-dossier',
+    id: 'organize_subfolder_plus_button_prefixes_parent_path_and_keeps_the_empty_subfolder',
+    description: 'Le "+" à droite d’un dossier réel préfixe automatiquement le chemin du parent - l’utilisateur ne tape que le nom du sous-dossier ; le sous-dossier vide est gardé (sa ligne d’état), sous son parent, un cran plus loin',
     run: async (h) => {
-      await createTemplate(h, 'Sous-dossier - Parent créateur');
+      const id = await createTemplate(h, 'Sous-dossier - Parent créateur');
       TemplateOrganizeModal.open();
       await h.sleep(30);
       await withPrompt('Parent', async () => {
         await clickEl(h, rowByName('Sous-dossier - Parent créateur').querySelector('.tom-move-btn'));
       });
-      const parentRow = folderRowByLabel('Parent');
       await withPrompt('Enfant', async () => {
-        await clickEl(h, parentRow.querySelector('.tom-add-subfolder-btn'));
+        await clickEl(h, folderRowByLabel('Parent').querySelector('.tom-add-subfolder-btn'));
       });
-      const pending = folderRowByLabel('Parent/Enfant');
-      const isPending = !!(pending && pending.classList.contains('tom-pending-folder'));
-      TemplateOrganizeModal.close();
-      const pass = isPending;
-      return { pass, notes: JSON.stringify({ isPending }) };
+      await h.sleep(60);
+      const child = folderRowByLabel('Enfant');
+      const nested = !!child && child.dataset.folderPath === 'Parent/Enfant' && child.style.getPropertyValue('--tts-depth') === '1';
+      const written = stateRows('Parent/Enfant').length === 1 && stateRows('Parent').length === 0;
+      const deletable = { parent: !!folderRowByLabel('Parent').querySelector('.tom-folder-delete-btn'), child: !!(child && child.querySelector('.tom-folder-delete-btn')) };
+      await tidy([], [id]);
+      const pass = nested && written && !deletable.parent && deletable.child;
+      return { pass, notes: JSON.stringify({ nested, written, deletable }) };
     },
   });
 
   cases.push({
-    id: 'organize_closing_modal_discards_pending_folder_without_writing',
-    description: 'Fermer la modale abandonne silencieusement un dossier "en attente" jamais rangé - rien ne réapparaît à la réouverture, aucune écriture Grist',
+    id: 'organize_closing_and_reopening_keeps_the_new_empty_folder_but_drops_the_place_here_buttons',
+    description: 'Fermer puis rouvrir la fenêtre garde le dossier vide créé (sa ligne d’état est écrite) ; seuls les boutons « Ranger ici » qui le visaient et son indication disparaissent',
     run: async (h) => {
+      const id = await createTemplate(h, 'Fermer - Un modèle');
       TemplateOrganizeModal.open();
       await h.sleep(30);
-      const before = stub().countActions('AddRecord', TABLE) + stub().countActions('UpdateRecord', TABLE);
-      await withPrompt('Abandonné', async () => {
+      await withPrompt('Gardé vide', async () => {
         await clickEl(h, document.getElementById('template-organize-new-folder'));
       });
+      await h.sleep(60);
+      const during = { button: !!rowByName('Fermer - Un modèle').querySelector('.tom-place-here-btn'), hint: !!folderRowByLabel('Gardé vide').querySelector('.tom-place-hint') };
       TemplateOrganizeModal.close();
       TemplateOrganizeModal.open();
-      await h.sleep(30);
-      const after = stub().countActions('AddRecord', TABLE) + stub().countActions('UpdateRecord', TABLE);
-      const pass = !document.querySelector('.tom-pending-folder') && after === before;
+      await h.sleep(60);
+      const row = folderRowByLabel('Gardé vide');
+      const kept = !!row && stateRows('Gardé vide').length === 1;
+      const noTarget = !list().querySelector('.tom-place-here-btn') && !list().querySelector('.tom-place-hint');
+      const deletable = !!(row && row.querySelector('.tom-folder-delete-btn'));
+      await tidy([], [id]);
+      const pass = during.button && during.hint && kept && noTarget && deletable;
+      return { pass, notes: JSON.stringify({ during, kept, noTarget, deletable }) };
+    },
+  });
+
+  // --- « Supprimer » un dossier vide (réponse d'Antoine du 17/11) : un dossier sans modèle ni sous-dossier - sa ligne d'état est alors la seule chose qui le fait exister - porte un bouton qui la retire. ---
+  const gfsFolder = (dossier, extra, who) => ['AddRecord', TABLE, null, Object.assign({ Utilisateur: who === undefined ? '' : who, ModeleId: 0, Epingle: false, Dossier: dossier }, extra || {})];
+  const deleteBtnOf = (label) => { const r = folderRowByLabel(label); return r && r.querySelector('.tom-folder-delete-btn'); };
+  async function silenced(fn) { const quiet = console.error; console.error = () => {}; try { return await fn(); } finally { console.error = quiet; } }
+
+  cases.push({
+    id: 'organize_delete_button_is_on_empty_folders_only_and_removes_the_state_row_of_the_person',
+    description: 'Un dossier vide (sa ligne d’état seule, celle que GFS écrit) porte un bouton « Supprimer », un dossier qui porte un modèle n’en a pas ; le clic retire la ligne d’état de la personne (celle d’une autre personne reste), le dossier disparaît de la fenêtre et de la liste déroulante, le modèle reste',
+    run: async (h) => {
+      const id = await fileInto(h, 'Supprimer - Modèle', 'Supprimer-Plein');
+      await stub().applyUserActions([gfsFolder('Supprimer-Vide', { Replie: true }), gfsFolder('Supprimer-Vide', {}, 'autre@exemple.fr')]);
+      await TemplatePreferences.loadForCurrentUser();
+      TemplateOrganizeModal.open();
+      await h.sleep(40);
+      const buttons = { full: !!deleteBtnOf('Supprimer-Plein'), empty: !!deleteBtnOf('Supprimer-Vide') };
+      const btn = deleteBtnOf('Supprimer-Vide');
+      const label = btn && { text: btn.textContent, aria: btn.getAttribute('aria-label'), tag: btn.tagName };
+      await clickEl(h, btn);
+      await h.sleep(150);
+      const gone = !folderRowByLabel('Supprimer-Vide');
+      const left = stateRows('Supprimer-Vide');
+      const modelKept = !!rowByName('Supprimer - Modèle') && !!folderRowByLabel('Supprimer-Plein');
       TemplateOrganizeModal.close();
-      return { pass, notes: JSON.stringify({ pass, before, after }) };
+      await openTreePopup(h);
+      const goneInTree = !treeFolder('Supprimer-Vide') && !!treeFolder('Supprimer-Plein');
+      await closeTree(h);
+      await tidy([], [id]);
+      const pass = !buttons.full && buttons.empty && !!label && label.text === 'Supprimer' && label.tag === 'BUTTON' && /^Supprimer .*Supprimer-Vide/.test(label.aria)
+        && gone && left.length === 1 && left[0].u === 'autre@exemple.fr' && modelKept && goneInTree;
+      return { pass, notes: JSON.stringify({ buttons, label, gone, left, modelKept, goneInTree }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_delete_refused_by_grist_keeps_the_folder_and_leaves_no_step',
+    description: 'Si Grist refuse de retirer la ligne d’état, le dossier reste dans la liste, sa ligne aussi, sans pas à défaire ; la suppression suivante, acceptée, la retire',
+    run: async (h) => {
+      await stub().applyUserActions([gfsFolder('Refus-Supprimer')]);
+      await TemplatePreferences.loadForCurrentUser();
+      TemplateOrganizeModal.open();
+      await h.sleep(40);
+      const steps = ActionHistory.count();
+      const api = grist.docApi, original = api.applyUserActions;
+      api.applyUserActions = async (actions) => {
+        if (actions.some((a) => a[0] === 'BulkRemoveRecord' && a[1] === TABLE)) throw new Error('refus simulé');
+        return original.call(api, actions);
+      };
+      let refused;
+      try {
+        await silenced(async () => { await clickEl(h, deleteBtnOf('Refus-Supprimer')); await h.sleep(150); });
+        refused = { row: !!folderRowByLabel('Refus-Supprimer'), states: stateRows('Refus-Supprimer').length, steps: ActionHistory.count() - steps };
+      } finally { api.applyUserActions = original; }
+      await clickEl(h, deleteBtnOf('Refus-Supprimer'));
+      await h.sleep(150);
+      const after = { row: !!folderRowByLabel('Refus-Supprimer'), states: stateRows('Refus-Supprimer').length, steps: ActionHistory.count() - steps };
+      await tidy([], []);
+      const pass = refused.row && refused.states === 1 && refused.steps === 0 && !after.row && after.states === 0 && after.steps === 1;
+      return { pass, notes: JSON.stringify({ refused, after }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_new_folder_refused_by_grist_shows_no_folder_and_leaves_no_step',
+    description: 'Si Grist refuse d’écrire la ligne d’état d’un nouveau dossier, aucun dossier n’apparaît, ni indication ni bouton « Ranger ici », et il n’y a aucun pas à défaire',
+    run: async (h) => {
+      const id = await createTemplate(h, 'Refus - Créer');
+      TemplateOrganizeModal.open();
+      await h.sleep(40);
+      const steps = ActionHistory.count(), folders = list().querySelectorAll('.tts-row-folder').length;
+      const api = grist.docApi, original = api.applyUserActions;
+      api.applyUserActions = async (actions) => {
+        if (actions.some((a) => a[0] === 'AddRecord' && a[1] === TABLE && a[3] && a[3].ModeleId === 0)) throw new Error('refus simulé');
+        return original.call(api, actions);
+      };
+      let result;
+      try {
+        await silenced(async () => { await withPrompt('Refus-Créer', async () => { await clickEl(h, document.getElementById('template-organize-new-folder')); }); await h.sleep(150); });
+        result = { folders: list().querySelectorAll('.tts-row-folder').length - folders, hint: !!list().querySelector('.tom-place-hint'), place: !!list().querySelector('.tom-place-here-btn'), states: stateRows('Refus-Créer').length, steps: ActionHistory.count() - steps };
+      } finally { api.applyUserActions = original; }
+      await tidy([], [id]);
+      const pass = result.folders === 0 && !result.hint && !result.place && result.states === 0 && result.steps === 0;
+      return { pass, notes: JSON.stringify(result) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_new_folder_with_the_name_of_a_listed_folder_writes_nothing',
+    description: '« Nouveau dossier » avec le nom d’un dossier que la liste montre déjà (espaces autour compris) n’écrit rien et ne laisse aucun pas à défaire ; un dossier vide déjà là devient la cible de « Ranger ici », un dossier qui porte un modèle n’en devient pas une',
+    run: async (h) => {
+      const id = await fileInto(h, 'Déjà - Modèle', 'Déjà-Plein');
+      await stub().applyUserActions([gfsFolder('Déjà-Vide')]);
+      await TemplatePreferences.loadForCurrentUser();
+      TemplateOrganizeModal.open();
+      await h.sleep(40);
+      const before = writes(), steps = ActionHistory.count();
+      await withPrompt('Déjà-Plein', async () => { await clickEl(h, document.getElementById('template-organize-new-folder')); });
+      await h.sleep(60);
+      const full = { writes: writes() - before, hint: !!folderRowByLabel('Déjà-Plein').querySelector('.tom-place-hint'), place: !!list().querySelector('.tom-place-here-btn') };
+      await withPrompt('  Déjà-Vide ', async () => { await clickEl(h, document.getElementById('template-organize-new-folder')); });
+      await h.sleep(60);
+      const empty = { writes: writes() - before, hint: !!folderRowByLabel('Déjà-Vide').querySelector('.tom-place-hint'), place: !!list().querySelector('.tom-place-here-btn'), states: stateRows('Déjà-Vide').length, steps: ActionHistory.count() - steps };
+      await tidy([], [id]);
+      const pass = full.writes === 0 && !full.hint && !full.place && empty.writes === 0 && empty.hint && empty.place && empty.states === 1 && empty.steps === 0;
+      return { pass, notes: JSON.stringify({ full, empty }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_folder_holding_an_empty_subfolder_gets_its_delete_button_only_after_the_subfolder_goes',
+    description: 'Un dossier dont le seul contenu est un sous-dossier vide n’est pas vide : pas de « Supprimer » sur lui, un sur le sous-dossier ; une fois le sous-dossier supprimé, le parent (qui a sa propre ligne d’état) devient supprimable',
+    run: async (h) => {
+      await stub().applyUserActions([gfsFolder('Imbriqué-Parent'), gfsFolder('Imbriqué-Parent/Enfant')]);
+      await TemplatePreferences.loadForCurrentUser();
+      TemplateOrganizeModal.open();
+      await h.sleep(40);
+      const start = { parent: !!deleteBtnOf('Imbriqué-Parent'), child: !!deleteBtnOf('Enfant') };
+      await clickEl(h, deleteBtnOf('Enfant'));
+      await h.sleep(150);
+      const mid = { parent: !!deleteBtnOf('Imbriqué-Parent'), childRow: !!folderRowByLabel('Enfant'), childRows: stateRows('Imbriqué-Parent/Enfant').length, parentRows: stateRows('Imbriqué-Parent').length };
+      await clickEl(h, deleteBtnOf('Imbriqué-Parent'));
+      await h.sleep(150);
+      const end = { parentRow: !!folderRowByLabel('Imbriqué-Parent'), parentRows: stateRows('Imbriqué-Parent').length };
+      await tidy([], []);
+      const pass = !start.parent && start.child && mid.parent && !mid.childRow && mid.childRows === 0 && mid.parentRows === 1 && !end.parentRow && end.parentRows === 0;
+      return { pass, notes: JSON.stringify({ start, mid, end }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_delete_button_is_a_real_button_that_names_its_folder_and_focus_stays_in_the_list',
+    description: 'Accessibilité : « Supprimer » est un vrai bouton atteignable au clavier, son nom accessible dit quel dossier (il commence par le texte visible) ; après la suppression le focus reste dans la liste de la fenêtre (pas sur <body>) et Échap la ferme encore',
+    run: async (h) => {
+      await stub().applyUserActions([gfsFolder('Clavier-Vide')]);
+      await TemplatePreferences.loadForCurrentUser();
+      TemplateOrganizeModal.open();
+      await h.sleep(40);
+      const btn = deleteBtnOf('Clavier-Vide');
+      btn.focus();
+      const reachable = document.activeElement === btn && btn.tabIndex >= 0 && !btn.disabled && btn.tagName === 'BUTTON';
+      const name = btn.getAttribute('aria-label');
+      btn.click();
+      await h.sleep(150);
+      const active = document.activeElement;
+      const focusKept = modal().contains(active) && !!active && active !== document.body;
+      active.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await h.sleep(30);
+      const closed = !modalOpen();
+      await tidy([], []);
+      const pass = reachable && /^Supprimer/.test(name) && name.includes('Clavier-Vide') && name.includes(btn.textContent) && focusKept && closed;
+      return { pass, notes: JSON.stringify({ reachable, name, focusKept, closed }) };
+    },
+  });
+
+  cases.push({
+    id: 'organize_place_here_target_survives_a_search_and_goes_with_its_folder',
+    description: 'La cible de « Ranger ici » est le dossier tout juste créé : elle reste quand une recherche en cache la ligne (les boutons restent sur les modèles trouvés), revient avec sa ligne et son indication à la fin de la recherche, et s’efface avec le dossier supprimé',
+    run: async (h) => {
+      const id = await createTemplate(h, 'Cible - Un modèle');
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      await withPrompt('Cible-Recherche', async () => { await clickEl(h, document.getElementById('template-organize-new-folder')); });
+      await h.sleep(60);
+      const search = document.getElementById('template-organize-search');
+      const type = async (text) => { search.value = text; search.dispatchEvent(new Event('input', { bubbles: true })); await h.sleep(60); };
+      await type('Cible - Un');
+      const during = { place: !!(rowByName('Cible - Un modèle') && rowByName('Cible - Un modèle').querySelector('.tom-place-here-btn')), folderRow: !!folderRowByLabel('Cible-Recherche') };
+      await type('');
+      const back = { hint: !!(folderRowByLabel('Cible-Recherche') && folderRowByLabel('Cible-Recherche').querySelector('.tom-place-hint')), place: !!list().querySelector('.tom-place-here-btn') };
+      await clickEl(h, deleteBtnOf('Cible-Recherche'));
+      await h.sleep(150);
+      const after = { place: !!list().querySelector('.tom-place-here-btn'), hint: !!list().querySelector('.tom-place-hint'), row: !!folderRowByLabel('Cible-Recherche') };
+      await tidy([], [id]);
+      const pass = during.place && !during.folderRow && back.hint && back.place && !after.place && !after.hint && !after.row;
+      return { pass, notes: JSON.stringify({ during, back, after }) };
     },
   });
 
@@ -431,10 +628,19 @@
     await TemplatePreferences.setFolder(id, dossier);
     return id;
   }
+  // Depuis la consigne 072 une ligne d'état (ModeleId 0) fait exister son dossier, même sans modèle dedans : un scénario qui en a écrit une la retire à la fin (GFS le fait en
+  // supprimant un dossier vide), sinon le dossier resterait dans la liste de tous les scénarios suivants (même page, même table). Le rangement est relu ensuite.
+  async function dropStateRows() {
+    const t = stub().state.rows[TABLE];
+    const rowIds = t.id.filter((id, i) => t.ModeleId[i] === 0);
+    if (rowIds.length) await stub().applyUserActions([['BulkRemoveRecord', TABLE, rowIds]]);
+    await TemplatePreferences.loadForCurrentUser();
+  }
   async function tidy(paths, ids) {
     TemplateOrganizeModal.close();
     for (const path of paths) await TemplatePreferences.setFolderCollapsed(path, false);
     for (const id of ids) { await TemplatePreferences.setFolder(id, ''); await TemplatePreferences.setPinned(id, false); }
+    await dropStateRows();
   }
   function treeFolder(path) { return popup() && popup().querySelector('.tts-row-folder[data-folder-path="' + path + '"]'); }
   async function closeTree(h) { if (popupOpen()) { popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await h.sleep(30); } }
@@ -507,38 +713,37 @@
   });
 
   cases.push({
-    id: 'organize_pending_folder_default_is_written_only_when_the_folder_becomes_real',
-    description: 'L’interrupteur d’un dossier « en attente » ne fait aucune écriture Grist ; l’état « replié » est écrit quand un modèle y est rangé (« Ranger ici »), et un dossier laissé déplié n’écrit aucune ligne d’état',
+    id: 'organize_new_folder_default_switch_updates_its_own_state_row_and_the_tree_follows',
+    description: 'L’interrupteur d’un dossier tout juste créé règle « replié par défaut » sur SA ligne d’état (la même, mise à jour sur place, jamais une seconde) ; la liste déroulante l’ouvre replié, puis déplié',
     run: async (h) => {
-      const idA = await createTemplate(h, 'Interrupteur - Attente A');
-      const idB = await createTemplate(h, 'Interrupteur - Attente B');
       TemplateOrganizeModal.open();
       await h.sleep(30);
-      await withPrompt('Attente-Repliee', async () => { await clickEl(h, document.getElementById('template-organize-new-folder')); });
-      const pendingBtn = list().querySelector('.tom-pending-folder .tom-folder-default-btn');
-      const w0 = writes();
-      await clickEl(h, pendingBtn);
-      await h.sleep(40);
-      const pendingPressed = list().querySelector('.tom-pending-folder .tom-folder-default-btn').getAttribute('aria-pressed');
-      const noWriteWhilePending = writes() === w0;
-      await clickEl(h, rowByName('Interrupteur - Attente A').querySelector('.tom-place-here-btn'));
+      await withPrompt('Neuf-Replie', async () => { await clickEl(h, document.getElementById('template-organize-new-folder')); });
+      await h.sleep(80);
+      const first = stateRows('Neuf-Replie');
+      const pressedAtStart = defaultBtn('Neuf-Replie').getAttribute('aria-pressed');
+      await clickEl(h, defaultBtn('Neuf-Replie'));
       await h.sleep(120);
-      const real = defaultBtn('Attente-Repliee');
-      const collapsedRows = stateRows('Attente-Repliee');
-      // second dossier : interrupteur non touché -> aucune ligne d'état
-      await withPrompt('Attente-Depliee', async () => { await clickEl(h, document.getElementById('template-organize-new-folder')); });
-      await clickEl(h, rowByName('Interrupteur - Attente B').querySelector('.tom-place-here-btn'));
-      await h.sleep(120);
-      const expandedRows = stateRows('Attente-Depliee');
+      const collapsed = stateRows('Neuf-Replie');
+      const pressedAfter = defaultBtn('Neuf-Replie').getAttribute('aria-pressed');
       TemplateOrganizeModal.close();
       await openTreePopup(h);
-      const tree = { collapsed: treeFolder('Attente-Repliee').getAttribute('aria-expanded'), expanded: treeFolder('Attente-Depliee').getAttribute('aria-expanded') };
+      const treeCollapsed = treeFolder('Neuf-Replie').getAttribute('aria-expanded');
       await closeTree(h);
-      await tidy(['Attente-Repliee'], [idA, idB]);
-      const pass = pendingPressed === 'true' && noWriteWhilePending
-        && !!real && real.getAttribute('aria-pressed') === 'true' && collapsedRows.length === 1 && collapsedRows[0].r === true
-        && expandedRows.length === 0 && tree.collapsed === 'false' && tree.expanded === 'true';
-      return { pass, notes: JSON.stringify({ pendingPressed, noWriteWhilePending, collapsedRows, expandedRows, tree }) };
+      TemplateOrganizeModal.open();
+      await h.sleep(30);
+      await clickEl(h, defaultBtn('Neuf-Replie'));
+      await h.sleep(120);
+      const expanded = stateRows('Neuf-Replie');
+      TemplateOrganizeModal.close();
+      await openTreePopup(h);
+      const treeExpanded = treeFolder('Neuf-Replie').getAttribute('aria-expanded');
+      await closeTree(h);
+      await dropStateRows();
+      const pass = first.length === 1 && !first[0].r && pressedAtStart === 'false'
+        && collapsed.length === 1 && collapsed[0].id === first[0].id && collapsed[0].r === true && pressedAfter === 'true' && treeCollapsed === 'false'
+        && expanded.length === 1 && expanded[0].id === first[0].id && expanded[0].r === false && treeExpanded === 'true';
+      return { pass, notes: JSON.stringify({ first, pressedAtStart, collapsed, pressedAfter, treeCollapsed, expanded, treeExpanded }) };
     },
   });
 
@@ -664,15 +869,15 @@
         const listEl = list();
         const listState = { client: listEl.clientHeight, scroll: listEl.scrollHeight };
         await withPrompt('Fenetre-Basse-Nouveau', async () => { await clickEl(h, document.getElementById('template-organize-new-folder')); });
-        const pending = list().querySelector('.tom-pending-folder');
-        const pr = pending && pending.getBoundingClientRect(), lr = list().getBoundingClientRect();
-        const pendingInView = !!pr && pr.top >= lr.top - 1 && pr.bottom <= lr.bottom + 1;
+        const created = folderRowByLabel('Fenetre-Basse-Nouveau');
+        const pr = created && created.getBoundingClientRect(), lr = list().getBoundingClientRect();
+        const createdInView = !!pr && pr.top >= lr.top - 1 && pr.bottom <= lr.bottom + 1;
         await clickEl(h, closeBtn);
         const closed = !modalOpen();
-        const result = { content, title, closeHit, listState, pendingInView, closed };
+        const result = { content, title, closeHit, listState, createdInView, closed };
         await tidy([], ids);
         const pass = content.top >= 0 && content.bottom <= 300 && title.top >= 0 && closeHit
-          && listState.client >= 72 && listState.scroll > listState.client && pendingInView && closed;
+          && listState.client >= 72 && listState.scroll > listState.client && createdInView && closed;
         return { pass, notes: JSON.stringify(result) };
       } finally {
         restore();
@@ -898,6 +1103,57 @@
       TemplateOrganizeModal.close();
       const pass = kept && inList === documentBlue && inList !== inWindow;
       return { pass, notes: JSON.stringify({ inList, documentBlue, inWindow, rowColour: row && colourOf(row), kept }) };
+    },
+  });
+
+  // --- Consigne 072 (17/11) : GFS range aussi dans la table des préférences. « Organiser mes modèles » montre un dossier qui n'a que sa ligne d'état (ModeleId 0, ce que GFS
+  // écrit pour « Nouveau dossier ») comme un dossier vide, relit la table à chaque ouverture (une ligne écrite par une autre connexion pendant que le widget est ouvert), et un
+  // modèle s'y range comme dans les autres. « Une autre connexion » = des lignes écrites directement dans la table du stub, sans passer par le widget. ---
+  cases.push({
+    id: 'organize_shows_a_folder_with_only_its_state_row_rereads_at_opening_and_models_move_into_it',
+    description: 'La fenêtre montre à l’ouverture un dossier créé vide par une autre connexion (sa seule ligne d’état), sans modèle dedans, avec son interrupteur « replié par défaut » qui met la MÊME ligne à jour ; il figure dans les dossiers proposés par « Déplacer vers… » ; un modèle s’y range (la ligne d’état reste seule) ; une recherche en cours ne montre que les modèles qui correspondent ; le widget n’écrit rien pour la relecture',
+    run: async (h) => {
+      const id = await createTemplate(h, 'Organiser vide - Modèle');
+      await TemplatePreferences.loadForCurrentUser();
+      if (!('Replie' in stub().state.rows[TABLE])) await stub().applyUserActions([['AddVisibleColumn', TABLE, 'Replie', { type: 'Bool', isFormula: false }]]);
+      await stub().applyUserActions([['AddRecord', TABLE, null, { Utilisateur: '', ModeleId: 0, Epingle: false, Dossier: 'Organiser-Vide', Replie: false }]]);
+      const writesBefore = stub().countActions('AddRecord', TABLE) + stub().countActions('UpdateRecord', TABLE);
+      TemplateOrganizeModal.open();
+      await h.sleep(150);
+      const empty = folderRowByLabel('Organiser-Vide');
+      const seen = {
+        row: !!empty && empty.getAttribute('aria-expanded') === 'true',
+        noModelInside: !!empty && empty.nextElementSibling.querySelectorAll('.tts-row').length === 0,
+        hasSwitch: !!defaultBtn('Organiser-Vide') && !!empty.querySelector('.tom-add-subfolder-btn'),
+        proposed: TemplatePreferences.listFolders().includes('Organiser-Vide'),
+        widgetWrote: stub().countActions('AddRecord', TABLE) + stub().countActions('UpdateRecord', TABLE) - writesBefore,
+      };
+      // Une recherche ne garde que les modèles qui correspondent : le dossier vide s'efface, puis revient.
+      const search = document.getElementById('template-organize-search');
+      search.value = 'Organiser vide';
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+      await h.sleep(30);
+      const duringSearch = !!folderRowByLabel('Organiser-Vide') ? 'montré' : 'caché';
+      search.value = '';
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+      await h.sleep(30);
+      const afterSearch = !!folderRowByLabel('Organiser-Vide');
+      // L'interrupteur met la ligne d'état de GFS à jour sur place, il n'en ajoute pas une seconde.
+      await clickEl(h, defaultBtn('Organiser-Vide'));
+      await h.sleep(60);
+      const rowsAfterSwitch = stateRows('Organiser-Vide');
+      // Un modèle se range dans le dossier vide ; la ligne d'état reste la seule pour ce dossier.
+      await TemplateArrangement.moveTo(id, 'Organiser-Vide');
+      TemplateOrganizeModal.refresh();
+      await h.sleep(30);
+      const filled = folderRowByLabel('Organiser-Vide');
+      const moved = { inside: !!filled && !!filled.nextElementSibling.querySelector('.tts-row-leaf[data-template-id="' + id + '"]'), folder: TemplatePreferences.getFolder(id), stateRows: stateRows('Organiser-Vide').length };
+      await tidy(['Organiser-Vide'], [id]);
+      const pass = seen.row && seen.noModelInside && seen.hasSwitch && seen.proposed && seen.widgetWrote === 0
+        && duringSearch === 'caché' && afterSearch
+        && rowsAfterSwitch.length === 1 && rowsAfterSwitch[0].r === true
+        && moved.inside && moved.folder === 'Organiser-Vide' && moved.stateRows === 1;
+      return { pass, notes: JSON.stringify({ seen, duringSearch, afterSearch, rowsAfterSwitch, moved }) };
     },
   });
 

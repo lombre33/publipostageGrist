@@ -5,7 +5,7 @@
 // ou déplie au clic, ni que l'état survit à un rechargement de la page, ni que la colonne Replie manquante d'un document ancien est ajoutée.
 // Trois pages : (A) document neuf, (B) rechargement avec un état déjà enregistré (dont celui d'UNE AUTRE personne), (C) document créé avant la fonction.
 // À 700x400 la modale doit tenir dans la fenêtre (elle faisait 568 px de haut : titre coupé, « Fermer » hors de l'écran, demande d'Antoine du 29/09) : on la ferme
-// au vrai clic sur « Fermer », le dossier « en attente » (dernière ligne de la liste, qui défile) est atteint sans agrandir la fenêtre, et Échap ferme encore la
+// au vrai clic sur « Fermer », le dossier tout juste créé (vide, sa ligne d'état est écrite : il se range à sa place alphabétique dans la liste, qui défile) est ramené en vue sans agrandir la fenêtre, et Échap ferme encore la
 // modale après un clic dans la liste (le focus doit rester dans la modale malgré le redessin).
 // Lancé par run-headless.mjs (groupe Node "folderDefaultMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-folder-default-mouse.mjs
 import { createServer } from 'node:http';
@@ -223,20 +223,25 @@ ts = await treeState(page);
 check('fermé puis rouvert : « Litiges » redevient replié (état par défaut)', ts.find(x => x.f === 'Litiges').exp === 'false', ts);
 await page.keyboard.press('Escape'); await page.waitForTimeout(100);
 
-// dossier en attente : interrupteur local, écrit seulement quand un modèle y est rangé.
+// dossier vide : sa ligne d'état est écrite dès sa création (GFS le voit aussi) ; l'interrupteur règle cette ligne ; « Ranger ici » y range un modèle.
 await page.evaluate(() => TemplateOrganizeModal.open());
 await page.waitForTimeout(250);
 const nb = await center(page, '#template-organize-new-folder');
 await page.mouse.click(nb.x, nb.y); await page.waitForTimeout(250);
 // Le nom se tape dans la fenêtre de saisie du widget (js/dialogs.js), puis Entrée.
 await page.keyboard.type('Archives'); await page.keyboard.press('Enter'); await page.waitForTimeout(250);
-const pendBtn = await page.evaluate(() => { const b = document.querySelector('#template-organize-list .tom-pending-folder .tom-folder-default-btn'); if (!b) return null; const r = b.getBoundingClientRect(); const l = document.getElementById('template-organize-list').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, inList: r.top >= l.top - 1 && r.bottom <= l.bottom + 1 && r.bottom <= innerHeight }; });
+const ARCH_BTN = '#template-organize-list .tts-row-folder[data-folder-path="Archives"] .tom-folder-default-btn';
+const pendBtn = await page.evaluate((sel) => { const b = document.querySelector(sel); if (!b) return null; const r = b.getBoundingClientRect(); const l = document.getElementById('template-organize-list').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, inList: r.top >= l.top - 1 && r.bottom <= l.bottom + 1 && r.bottom <= innerHeight, top: document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === b }; }, ARCH_BTN);
 check('700x400 : le dossier tout juste créé est ramené en vue dans la liste, sans agrandir la fenêtre', !!pendBtn && pendBtn.inList, pendBtn);
-check('dossier en attente : il porte lui aussi l’interrupteur', !!pendBtn);
-const nBefore = (await prefRows(page)).length;
-await page.mouse.click(pendBtn.x, pendBtn.y); await page.waitForTimeout(200);
-const pendState = await page.evaluate(() => { const b = document.querySelector('#template-organize-list .tom-pending-folder .tom-folder-default-btn'); return { pressed: b.getAttribute('aria-pressed'), cls: b.className }; });
-check('dossier en attente : le clic bascule l’interrupteur sans aucune écriture Grist', pendState.pressed === 'true' && (await prefRows(page)).length === nBefore, pendState);
+check('dossier vide : il porte lui aussi l’interrupteur, au premier plan', !!pendBtn && pendBtn.top, pendBtn);
+const created = await prefRows(page);
+const archCreated = created.filter(r => r.m === 0 && r.d === 'Archives');
+check('dossier vide créé : sa ligne d’état est écrite tout de suite (ModeleId 0, Dossier « Archives », pas replié)', archCreated.length === 1 && !archCreated[0].r, created.filter(r => r.m === 0));
+const nBefore = created.length;
+await page.mouse.click(pendBtn.x, pendBtn.y); await page.waitForTimeout(300);
+const pendState = await page.evaluate((sel) => { const b = document.querySelector(sel); return { pressed: b.getAttribute('aria-pressed'), cls: b.className }; }, ARCH_BTN);
+rows = await prefRows(page);
+check('dossier vide : le clic bascule l’interrupteur en réglant la ligne d’état qui existe déjà (Replie vrai, aucune ligne ajoutée)', pendState.pressed === 'true' && rows.length === nBefore && rows.filter(r => r.m === 0 && r.d === 'Archives' && r.r === true).length === 1, { pendState, rows: rows.filter(r => r.m === 0) });
 // « Ranger ici » sur « Sans dossier » (vrai clic)
 const place = await page.evaluate(() => {
   const r = Array.from(document.querySelectorAll('#template-organize-list .tts-row-leaf')).find(e => e.querySelector('.tts-row-label').textContent === 'Sans dossier');
@@ -245,7 +250,7 @@ const place = await page.evaluate(() => {
 await page.mouse.move(place.rx, place.y); await page.mouse.click(place.x, place.y); await page.waitForTimeout(400);
 rows = await prefRows(page);
 const arch = rows.filter(r => r.m === 0 && r.d === 'Archives');
-check('« Ranger ici » : le dossier devient réel et son état « replié » est écrit (une ligne, Replie vrai)', arch.length === 1 && arch[0].r === true, rows.filter(r => r.m === 0));
+check('« Ranger ici » : le modèle entre dans le dossier, qui garde sa ligne d’état « replié » (une seule ligne, Replie vrai)', arch.length === 1 && arch[0].r === true && rows.some(r => r.m !== 0 && r.d === 'Archives'), rows.filter(r => r.m === 0 || r.d === 'Archives'));
 const stArch = await stateOf(page, 'Archives');
 check('le dossier réel « Archives » affiche l’interrupteur « replié »', !!stArch && stArch.pressed === 'true', stArch);
 await page.keyboard.press('Escape'); await page.waitForTimeout(200);

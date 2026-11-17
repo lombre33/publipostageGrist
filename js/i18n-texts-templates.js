@@ -56,8 +56,9 @@ const I18nTextsTemplates = {
   'organize.modal.newFolderRoot': { fr: '+ Nouveau dossier', en: '+ New folder' },
   'organize.modal.newSubfolderAria': { fr: 'Ajouter un sous-dossier', en: 'Add a subfolder' },
   'organize.modal.newFolderPrompt': { fr: 'Nom du nouveau dossier', en: 'New folder name' },
-  'organize.modal.newFolderPendingHint': { fr: 'Pas encore créé : glissez un modèle ici, ou cliquez « Ranger ici » sur un modèle ci-dessous.', en: 'Not created yet: drop a template here, or click “Place here” on a template below.' },
-  'organize.modal.newFolderCancelAria': { fr: 'Annuler la création de ce dossier', en: 'Cancel creating this folder' },
+  'organize.modal.newFolderHint': { fr: 'Vide : glissez un modèle ici ou cliquez « Ranger ici ».', en: 'Empty: drop a template here or click “Place here”.' },
+  'organize.modal.deleteFolder': { fr: 'Supprimer', en: 'Delete' },
+  'organize.modal.deleteFolderAria': { fr: 'Supprimer le dossier vide « {folder} »', en: 'Delete the empty folder “{folder}”' },
   'organize.modal.placeHereButton': { fr: 'Ranger ici', en: 'Place here' },
   // Interrupteur "ce dossier s'ouvre déplié / replié dans la liste" (une ligne par dossier, choix personnel enregistré par utilisateur).
   'organize.modal.folderDefault.aria': { fr: 'Dossier replié par défaut dans la liste des modèles', en: 'Folder collapsed by default in the template list' },

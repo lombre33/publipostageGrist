@@ -876,9 +876,21 @@
   function groupOf(folderRow) { return folderRow && folderRow.nextElementSibling; }
   function isLaidOut(el) { const r = el && el.getBoundingClientRect(); return !!r && r.width > 0 && r.height > 0; }
   async function closeTree(h) { if (popupOpen()) { popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await h.sleep(30); } }
+  // Retire de la table les lignes que `keep` ne garde pas, puis relit le rangement. Aucune écriture de ce widget ne retire une ligne : c'est ce que fait GFS en supprimant un
+  // dossier vide, ou quelqu'un qui nettoie la table.
+  async function dropRows(drop) {
+    const t = stub().state.rows[TABLE];
+    const rowIds = t.id.filter((id, i) => drop({ id, u: t.Utilisateur[i], m: t.ModeleId[i], d: t.Dossier[i] }));
+    if (rowIds.length) await stub().applyUserActions([['BulkRemoveRecord', TABLE, rowIds]]);
+    await TemplatePreferences.loadForCurrentUser();
+  }
+  // Depuis la consigne 072 une ligne d'état (ModeleId 0) fait exister son dossier, même sans modèle dedans : un scénario qui en a écrit une la retire à la fin, sinon le dossier
+  // resterait dans la liste de tous les scénarios suivants (même page, même table).
+  const dropStateRows = () => dropRows((r) => r.m === 0);
   async function tidyFolders(paths, ids) {
     for (const path of paths) await TemplatePreferences.setFolderCollapsed(path, false);
     for (const id of ids) { await TemplatePreferences.setFolder(id, ''); await TemplatePreferences.setPinned(id, false); }
+    await dropStateRows();
   }
 
   cases.push({
@@ -936,7 +948,7 @@
 
   cases.push({
     id: 'tree_folder_default_is_per_user_and_state_rows_do_not_leak_into_pins_and_folders',
-    description: 'L’état d’un dossier posé par UNE AUTRE personne est ignoré ; celui de la personne courante survit à un rechargement des préférences ; les lignes d’état (ModeleId 0) ne se retrouvent ni dans getCached(), ni dans les dossiers proposés',
+    description: 'L’état d’un dossier posé par UNE AUTRE personne est ignoré ; celui de la personne courante survit à un rechargement des préférences ; les lignes d’état (ModeleId 0) ne se retrouvent pas dans getCached() (ce ne sont pas des modèles) mais, depuis la consigne 072 (17/11), font exister leur dossier : il figure dans les dossiers proposés, même sans modèle',
     run: async (h) => {
       const id = await createTemplate(h, 'document', 'Arbre - Repli perso');
       await TemplatePreferences.setFolder(id, 'Arbre-Perso-1');
@@ -952,7 +964,7 @@
       await TemplatePreferences.setFolderCollapsed('Arbre-Perso-2', false);
       await tidyFolders([], [id]);
       const pass = result.otherUserIgnored && result.ownStateSurvivesReload && result.noZeroKeyInCache
-        && result.foldersListed.includes('Arbre-Perso-1') && !result.foldersListed.includes('Arbre-Perso-2');
+        && result.foldersListed.includes('Arbre-Perso-1') && result.foldersListed.includes('Arbre-Perso-2');
       return { pass, notes: JSON.stringify(result) };
     },
   });
@@ -1239,6 +1251,134 @@
       }
       const failed = Object.keys(checks).filter(k => !checks[k]);
       return { pass: Object.keys(checks).length === 25 && failed.length === 0, notes: JSON.stringify({ failed, count: Object.keys(checks).length }) };
+    },
+  });
+
+  // --- Consigne 072 (17/11, décision du porteur : « le rangement de Publipostage+ fait foi ») : GFS range aussi dans la table des préférences, pour la même personne. Ce que le
+  // widget a chargé au démarrage peut donc être dépassé pendant qu'il est ouvert : la table est relue à chaque ouverture de la liste (a) ; un dossier qui n'a que sa ligne d'état
+  // (ModeleId 0, celle de « Nouveau dossier » dans GFS) se montre comme un dossier vide (b). « Une autre connexion » = des lignes écrites directement dans la table du stub, sans
+  // passer par le widget (Utilisateur vide : sans identification, c'est la personne courante). ---
+  const modelRowCount = (id) => { const t = stub().state.rows[TABLE]; return t.id.filter((r, i) => t.ModeleId[i] === id).length; };
+  const widgetWrites = () => stub().countActions('AddRecord', TABLE) + stub().countActions('UpdateRecord', TABLE);
+  async function otherConnectionWrites(rows) {
+    // La colonne Replie manque tant que personne n'a réglé un dossier : une autre connexion (GFS) ne l'écrit pas, elle se lit vide.
+    if (rows.some((r) => r.Replie !== undefined) && !('Replie' in stub().state.rows[TABLE])) {
+      await stub().applyUserActions([['AddVisibleColumn', TABLE, 'Replie', { type: 'Bool', isFormula: false }]]);
+    }
+    await stub().applyUserActions(rows.map((r) => ['AddRecord', TABLE, null, Object.assign({ Utilisateur: '', Epingle: false, Dossier: '' }, r)]));
+  }
+
+  cases.push({
+    id: 'tree_reread_at_each_opening_picks_up_a_row_written_by_another_connection_without_duplicate',
+    description: 'GFS range aussi dans la table du rangement : une ligne qu’une autre connexion écrit pendant que le widget est ouvert est lue à l’ouverture suivante de la liste (le modèle apparaît dans son dossier et dans « Épinglés », une fois chacun ; deux lignes pour un même modèle : la dernière fait foi, un seul dossier), le widget n’écrit rien pour cela, et épingler ensuite ce modèle met la ligne de GFS à jour au lieu d’en ajouter une seconde',
+    run: async (h) => {
+      const idA = await createTemplate(h, 'document', 'Relecture - A');
+      const idB = await createTemplate(h, 'document', 'Relecture - B');
+      await TemplatePreferences.loadForCurrentUser();
+      TemplateTreeSelect.refresh();
+      const known = { folder: TemplatePreferences.getFolder(idA), pinned: TemplatePreferences.isPinned(idA) };
+      await otherConnectionWrites([
+        { ModeleId: idA, Epingle: true, Dossier: 'Relecture-GFS' },
+        { ModeleId: idB, Dossier: 'Relecture-Premier' },
+        { ModeleId: idB, Dossier: 'Relecture-Dernier' },
+      ]);
+      const writesBefore = widgetWrites();
+      await openPopup(h);
+      await h.sleep(150);
+      const leaves = (id) => popup().querySelectorAll('.tts-row-leaf[data-template-id="' + id + '"]').length;
+      const folderA = folderRowByPath('Relecture-GFS');
+      const folderB = folderRowByPath('Relecture-Dernier');
+      const seen = {
+        aFolder: !!folderA,
+        aInFolder: !!folderA && !!groupOf(folderA).querySelector('.tts-row-leaf[data-template-id="' + idA + '"]'),
+        aRows: leaves(idA),
+        bInLastFolder: !!folderB && !!groupOf(folderB).querySelector('.tts-row-leaf[data-template-id="' + idB + '"]'),
+        bNotInFirstFolder: !folderRowByPath('Relecture-Premier'),
+        bRows: leaves(idB),
+      };
+      const widgetWrote = widgetWrites() - writesBefore;
+      await closeTree(h);
+      await TemplateArrangement.pin(idA, false);
+      const t = stub().state.rows[TABLE];
+      const rowOfA = t.id.map((id, i) => ({ m: t.ModeleId[i], e: t.Epingle[i], d: t.Dossier[i] })).filter((r) => r.m === idA);
+      const afterPin = { rows: rowOfA.length, epingle: rowOfA[0] && rowOfA[0].e, dossier: rowOfA[0] && rowOfA[0].d };
+      await tidyFolders([], [idA, idB]);
+      await dropRows((r) => r.m === idA || r.m === idB);
+      TemplateTreeSelect.refresh();
+      const pass = known.folder === null && known.pinned === false
+        && seen.aFolder && seen.aInFolder && seen.aRows === 2 && seen.bInLastFolder && seen.bNotInFirstFolder && seen.bRows === 1
+        && widgetWrote === 0 && afterPin.rows === 1 && afterPin.epingle === false && afterPin.dossier === 'Relecture-GFS' && modelRowCount(idA) === 0;
+      return { pass, notes: JSON.stringify({ known, seen, widgetWrote, afterPin }) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_folder_with_only_its_state_row_shows_as_an_empty_folder_collapsed_or_not_by_Replie',
+    description: 'Un dossier qui n’a que sa ligne d’état (ModeleId 0, ce que GFS écrit pour « Nouveau dossier ») figure dans la liste comme un dossier vide, déplié ou replié d’après Replie, au même rang que les autres dossiers ; un dossier imbriqué fait exister ses parents ; la ligne d’état d’une autre personne n’en fait pas un dossier ; la liste garde ses lignes et sa navigation au clavier',
+    run: async (h) => {
+      const id = await createTemplate(h, 'document', 'Vide - Modèle voisin');
+      await TemplatePreferences.setFolder(id, 'Vide-Plein');
+      await otherConnectionWrites([
+        { ModeleId: 0, Dossier: 'Vide-Deplie', Replie: false },
+        { ModeleId: 0, Dossier: 'Vide-Parent/Vide-Enfant', Replie: true },
+        { Utilisateur: 'autre@exemple.fr', ModeleId: 0, Dossier: 'Vide-Chez-Un-Autre', Replie: false },
+      ]);
+      await openPopup(h);
+      await h.sleep(150);
+      const rowsIn = (folder) => groupOf(folder) ? groupOf(folder).querySelectorAll('.tts-row').length : -1;
+      const plein = folderRowByPath('Vide-Plein');
+      const deplie = folderRowByPath('Vide-Deplie');
+      const parent = folderRowByPath('Vide-Parent');
+      const enfant = folderRowByPath('Vide-Parent/Vide-Enfant');
+      const seen = {
+        deplie: !!deplie && deplie.getAttribute('aria-expanded') === 'true' && rowsIn(deplie) === 0 && isLaidOut(deplie),
+        parent: !!parent && parent.getAttribute('aria-expanded') === 'true' && !!enfant && groupOf(parent).contains(enfant),
+        enfantReplie: !!enfant && enfant.getAttribute('aria-expanded') === 'false' && rowsIn(enfant) === 0,
+        pleinKeepsItsModel: !!plein && rowsIn(plein) === 1 && !!rowFor(id),
+        autreAbsent: !folderRowByPath('Vide-Chez-Un-Autre'),
+        sameRowAsOthers: !!deplie && !!plein && deplie.className === plein.className && deplie.querySelector('.tts-folder-caret') !== null && deplie.querySelector('.tts-icon-folder') !== null,
+      };
+      const order = Array.from(popup().querySelectorAll('.tts-row-folder')).map((r) => r.dataset.folderPath).filter((p) => p.startsWith('Vide-') && !p.includes('/'));
+      // Au clavier : une ligne de dossier vide se parcourt comme les autres, Droite sur un dossier vide déplié ne casse rien, Entrée le replie.
+      deplie.focus();
+      const key = (k) => { const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }); document.activeElement.dispatchEvent(e); return e.defaultPrevented; };
+      const keyboard = { right: key('ArrowRight') === true && document.activeElement === deplie, enter: key('Enter') === true && deplie.getAttribute('aria-expanded') === 'false', enterAgain: key('Enter') === true && deplie.getAttribute('aria-expanded') === 'true' };
+      await closeTree(h);
+      await tidyFolders([], [id]);
+      const pass = seen.deplie && seen.parent && seen.enfantReplie && seen.pleinKeepsItsModel && seen.autreAbsent && seen.sameRowAsOthers
+        && JSON.stringify(order) === JSON.stringify(['Vide-Deplie', 'Vide-Parent', 'Vide-Plein']) && keyboard.right && keyboard.enter && keyboard.enterAgain;
+      return { pass, notes: JSON.stringify({ seen, order, keyboard }) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_reread_redraw_keeps_the_keyboard_focus_on_a_folder_row',
+    description: 'La relecture du rangement redessine la liste seulement quand il a changé, et le focus clavier qui était sur une ligne de DOSSIER y reste (avant, seule une ligne de modèle gardait le focus : il retombait sur <body>) ; un dossier venu d’une autre connexion apparaît sans que la liste se referme ; une relecture qui ne trouve rien de neuf ne redessine pas',
+    run: async (h) => {
+      const id = await createTemplate(h, 'document', 'Focus - Modèle');
+      await TemplatePreferences.setFolder(id, 'Focus-Z');
+      await openPopup(h);
+      await h.sleep(100);
+      const folder = folderRowByPath('Focus-Z');
+      folder.focus();
+      const before = { focusPath: document.activeElement.dataset.folderPath, aRowBefore: !!folderRowByPath('Focus-A') };
+      // Rien de neuf : la relecture ne redessine pas (la même ligne de DOM reste en place).
+      await TemplateArrangement.reread();
+      const sameNode = folderRowByPath('Focus-Z') === folder && document.activeElement === folder;
+      await otherConnectionWrites([{ ModeleId: 0, Dossier: 'Focus-A', Replie: false }]);
+      await TemplateArrangement.reread();
+      await h.sleep(30);
+      const after = {
+        open: popupOpen(),
+        newFolder: !!folderRowByPath('Focus-A'),
+        redrawn: folderRowByPath('Focus-Z') !== folder,
+        focusPath: document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.folderPath : null,
+        notBody: document.activeElement !== document.body,
+      };
+      await closeTree(h);
+      await tidyFolders([], [id]);
+      const pass = before.focusPath === 'Focus-Z' && !before.aRowBefore && sameNode && after.open && after.newFolder && after.redrawn && after.focusPath === 'Focus-Z' && after.notBody;
+      return { pass, notes: JSON.stringify({ before, sameNode, after }) };
     },
   });
 

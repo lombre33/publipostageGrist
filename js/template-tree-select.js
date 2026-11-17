@@ -191,10 +191,13 @@ const TemplateTreeSelect = (function () {
   function render() {
     // Un ré-affichage pendant que le popup est ouvert (clic sur une épingle) reconstruit tout popup.innerHTML : sans ceci, la ligne qui avait le
     // focus clavier roulant disparaîtrait et le focus retomberait sur <body>, cassant la navigation clavier.
-    let focusedId;
+    // La ligne qui avait le focus : un modèle (data-template-id) ou un dossier (data-folder-path). Un redessin que personne n'a demandé - la relecture du
+    // rangement à l'ouverture (reread) - tombe aussi sur un dossier.
+    let focusedRowSelector = null;
     if (popup.contains(document.activeElement)) {
       const focusedRow = document.activeElement.closest('.tts-row');
-      if (focusedRow) focusedId = focusedRow.dataset.templateId;
+      if (focusedRow && focusedRow.dataset.templateId !== undefined) focusedRowSelector = '.tts-row[data-template-id="' + CSS.escape(focusedRow.dataset.templateId) + '"]';
+      else if (focusedRow && focusedRow.dataset.folderPath !== undefined) focusedRowSelector = '.tts-row[data-folder-path="' + CSS.escape(focusedRow.dataset.folderPath) + '"]';
     }
     // Seules les lignes sont redessinées : l'en-tête (titre et « Organiser ») reste en place, avec son id et son focus.
     Array.from(popup.children).forEach((child) => { if (child !== head) popup.removeChild(child); });
@@ -203,7 +206,8 @@ const TemplateTreeSelect = (function () {
     // modèle pas encore enregistré », que le déclencheur affiche. L'arbre vient des mêmes données que ce <select> (Templates.getCached(),
     // TemplatePreferences.getCached()), pas de ses <option> : elles ne portent ni typeModele ni le statut « par défaut » en donnée structurée,
     // seulement un texte déjà mis en forme par refreshTemplateList (js/main.js).
-    const view = TemplateOrganizer.buildView(Templates.getCached(), TemplatePreferences.getCached());
+    // Les dossiers qui n'ont que leur ligne d'état (créés vides dans GFS, ModeleId = 0) figurent dans l'arbre : TemplatePreferences.listStateFolders().
+    const view = TemplateOrganizer.buildView(Templates.getCached(), TemplatePreferences.getCached(), TemplatePreferences.listStateFolders());
 
     if (!view.pinned.length && !view.tree.length) popup.appendChild(el('div', 'tts-empty', I18n.t('templateTree.empty')));
     appendSections(popup, view, p => makeLeafRow(p, 0), n => makeRow(n, 0));
@@ -211,8 +215,8 @@ const TemplateTreeSelect = (function () {
     syncTriggerLabel();
     syncDisabledState();
 
-    if (focusedId !== undefined) {
-      const toRefocus = popup.querySelector('.tts-row[data-template-id="' + CSS.escape(focusedId) + '"]');
+    if (focusedRowSelector) {
+      const toRefocus = popup.querySelector(focusedRowSelector);
       if (toRefocus) setRovingFocus(toRefocus);
     }
   }
@@ -305,14 +309,19 @@ const TemplateTreeSelect = (function () {
     // La barre de GFS (js/gfs-bar.js) : le panneau glisse hors de sa zone, ou se plafonne et défile sous une barre en bas.
     ViewportFit.avoidBar(popup, rect);
   }
-  // Ouvert quand la barre de GFS bouge ou que le cadre change de taille : il se recale d'après la nouvelle zone.
-  GfsBar.onChange(() => { if (popup.classList.contains('is-open')) positionPopup(); });
+  // Ouvert quand la barre de GFS bouge ou que le cadre change de taille : il se recale d'après la nouvelle zone. `popup &&` : le contexte de GFS rappelle ses
+  // abonnés dès le démarrage, parfois avant qu'attach() ait créé le panneau (ou après detach()) ; sans cette garde l'abonné levait « popup is undefined »
+  // (consigne 072, point c).
+  GfsBar.onChange(() => { if (popup && popup.classList.contains('is-open')) positionPopup(); });
 
   let outsideScrollHandler = null;
   function openPopup() {
     if (popup.classList.contains('is-open')) return;
     folderOverrides.clear();  // chaque ouverture repart de l'état par défaut de la personne (voir folderOverrides)
     render();
+    // GFS range aussi dans la table du rangement : ce que ce widget a chargé au démarrage peut être dépassé. Le panneau s'ouvre tout de suite sur ce qu'on sait ; la
+    // table est relue à chaque ouverture et le panneau se redessine seulement si le rangement a changé (js/template-arrangement.js:reread).
+    TemplateArrangement.reread();
     popup.classList.add('is-open');
     positionPopup();
     Layers.raise(popup); // au-dessus d'une barre flottante de tableau ou d'image et des menus déjà ouverts (js/layers.js)

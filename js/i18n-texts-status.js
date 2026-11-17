@@ -125,6 +125,8 @@ const I18nTextsStatus = {
   'status.templateUnfiled': { fr: 'Modèle « {name} » sorti de son dossier.', en: 'Template “{name}” taken out of its folder.' },
   'status.folderCollapsed': { fr: 'Dossier « {folder} » : s’ouvre replié dans la liste.', en: 'Folder “{folder}”: opens collapsed in the list.' },
   'status.folderExpanded': { fr: 'Dossier « {folder} » : s’ouvre déplié dans la liste.', en: 'Folder “{folder}”: opens expanded in the list.' },
+  'status.folderCreated': { fr: 'Dossier « {folder} » créé.', en: 'Folder “{folder}” created.' },
+  'status.folderDeleted': { fr: 'Dossier « {folder} » supprimé.', en: 'Folder “{folder}” deleted.' },
   'status.linkRestored': { fr: 'Lien « {link} » rétabli.', en: 'Link “{link}” restored.' },
   'status.linkRemoved': { fr: 'Lien « {link} » retiré.', en: 'Link “{link}” removed.' },
   'status.settingSet': { fr: 'Réglage « {setting} » : {value}.', en: 'Setting “{setting}”: {value}.' },
