@@ -633,6 +633,15 @@ try {
   check('l\'état dit « OpenDocument généré. » (rien n\'est resté de côté dans ce document)', (await status(page)) === 'OpenDocument généré.', await status(page));
   await sleep(600);
   await parkMouse(page);
+  // Ce que le fichier ne reprend pas est dit dans le coin d'état : une image illisible, ici.
+  await page.evaluate(() => Editor.setHTML('<p>Bonjour, voici votre courrier.</p><p><img class="editor-image" src="data:image/png;base64,iVBORw0KGgo=" alt="x"></p>'));
+  await sleep(300);
+  const odfNotCarried = await download(page, () => click(page, EXPORT_MENU));
+  check('une image illisible dans le document : le fichier .odt part quand même, et l\'état dit ce qui n\'est pas repris', /\.odt$/i.test(nameOf(odfNotCarried) || '') && (await status(page)) === 'OpenDocument généré. Non repris : 1 image.', { name: nameOf(odfNotCarried), status: await status(page) });
+  await page.evaluate(() => Editor.setHTML('<p>Bonjour, voici votre courrier.</p>'));
+  await sleep(300);
+  await sleep(600);
+  await parkMouse(page);
   await chooseExportLines(page, 'zip');
   await parkMouse(page);
   await click(page, '.tiptap p');

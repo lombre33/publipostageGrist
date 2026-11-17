@@ -82,7 +82,7 @@ const OdtExport = (function () {
   function newContext(options) {
     return {
       autoStyles: [], names: new Map(), counts: {}, fonts: new Set([BODY_FONT, CODE_FONT]), tables: 0, listLevel: 0, deferred: [], report: new Map(), flow: { pageBreak: false, started: false }, depth: 0,
-      contentWidthPt: options.contentWidthPt,
+      contentWidthPt: options.contentWidthPt, marginLeftPt: options.marginLeftPt || 0, marginTopPt: options.marginTopPt || 0, topBandPt: options.topBandPt || 0, images: new Map(), parts: [], pictureNames: new Map(), notes: 0, frames: 0, namePrefix: '', headings: new Map(), headingList: [],
     };
   }
   // Le nom du style de ce genre (`prefix` : P, T, Table...) et de cette clé ; `build(name)` écrit son XML la première fois.
@@ -91,7 +91,7 @@ const OdtExport = (function () {
     let styleName = ctx.names.get(cacheKey);
     if (!styleName) {
       ctx.counts[prefix] = (ctx.counts[prefix] || 0) + 1;
-      styleName = prefix + ctx.counts[prefix];
+      styleName = ctx.namePrefix + prefix + ctx.counts[prefix];
       ctx.names.set(cacheKey, styleName);
       ctx.autoStyles.push(build(styleName));
     }
@@ -193,8 +193,9 @@ const OdtExport = (function () {
       const tag = node.tagName;
       if (tag === 'BR') { out += '<text:line-break/>'; state.blank = true; return; }
       if (/^(?:SCRIPT|STYLE|TEMPLATE|INPUT|LABEL|BUTTON)$/.test(tag)) return;
-      if (tag === 'IMG') { countLost(ctx, 'images'); return; }
-      if (node.classList && (node.classList.contains('footnote-ref-marker') || node.classList.contains('page-number-badge'))) { countLost(ctx, node.classList.contains('page-number-badge') ? 'fields' : 'notes'); return; }
+      if (tag === 'IMG') { out += imageXml(ctx, node); return; }
+      if (node.classList && node.classList.contains('footnote-ref-marker')) { out += noteXml(ctx, node); return; }
+      if (node.classList && node.classList.contains('page-number-badge')) { out += '<text:page-number text:select-page="current">1</text:page-number>'; return; }
       if (tag === 'A') {
         const href = safeLink(node.getAttribute('href'));
         const inner = inlineXml(Array.from(node.childNodes), lookOf(look, node, base), state, ctx, base);
@@ -204,6 +205,103 @@ const OdtExport = (function () {
       out += inlineXml(Array.from(node.childNodes), lookOf(look, node, base), state, ctx, base);
     });
     return out;
+  }
+
+  // --- Les images et les notes ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // Les types d'image qu'un OpenDocument garde tels quels ; tout le reste (WEBP, SVG) est redessiné en PNG, comme pour le Word.
+  const PICTURE_TYPES = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/bmp': 'bmp' };
+  const DEFAULT_PICTURE_RATIO = 0.75;
+  const DEFAULT_PICTURE_WIDTH_PX = 320;
+  // Une image lue : ses octets (rangés dans `Pictures/` du paquet, une fois par adresse) et sa taille ; une image qu'on ne sait pas lire ne reste pas en silence : elle est comptée.
+  async function readPicture(ctx, img) {
+    const src = img.getAttribute('src') || '';
+    if (!src) return null;
+    if (ctx.pictureNames.has(src)) return ctx.pictureNames.get(src);
+    let blob;
+    try { blob = await ImageIo.fetchBlob(src); } catch (e) { return null; }
+    let type = PICTURE_TYPES[blob.type];
+    let ratio = DEFAULT_PICTURE_RATIO;
+    try {
+      if (type) {
+        const decoded = await ImageIo.load(blob);
+        if (decoded.naturalWidth && decoded.naturalHeight) ratio = decoded.naturalHeight / decoded.naturalWidth;
+      } else {
+        const canvas = await ImageIo.draw(blob);
+        blob = await ImageIo.pngBlob(canvas);
+        type = 'png';
+        ratio = canvas.height / canvas.width;
+      }
+    } catch (e) { return null; }
+    const number = ctx.parts.length + 1;
+    const picture = { path: 'Pictures/image' + number + '.' + type, mediaType: type === 'jpg' ? 'image/jpeg' : 'image/' + type, data: await blob.arrayBuffer(), ratio };
+    ctx.parts.push(picture);
+    ctx.pictureNames.set(src, picture);
+    return picture;
+  }
+  // Avant d'écrire le texte (qui reste d'un seul tenant, sans attente) : chaque image du document est lue, sa taille posée (la largeur réglée dans l'éditeur, ramenée à celle de la page).
+  async function prepareImages(ctx, root) {
+    const images = Array.from(root.querySelectorAll('img'));
+    for (const img of images) {
+      if (img.hasAttribute('data-pdf-skip')) continue;
+      // « Sur toutes les pages » (js/page-layer.js) : l'image se pose dans l'en-tête de chaque page, pas dans le texte.
+      if (typeof PageLayer !== 'undefined' && PageLayer.isRepeatedEl(img)) continue;
+      const picture = await readPicture(ctx, img);
+      if (!picture) continue;
+      const widthPx = Math.max(1, parseFloat(img.style.width) || DEFAULT_PICTURE_WIDTH_PX);
+      const widthPt = Math.min(widthPx * PT_PER_PX, ctx.contentWidthPt > 0 ? ctx.contentWidthPt : Infinity);
+      ctx.images.set(img, { picture, widthPt, heightPt: Math.max(1, widthPt * picture.ratio) });
+    }
+  }
+  // Où et comment une image se pose, comme dans le Word : dans la ligne (ancrée « comme un caractère ») ; à gauche ou à droite avec le texte qui l'entoure (`data-align`) ; devant ou derrière le texte à une
+  // place de la page (`data-layer`, avec la position que l'éditeur a relevée : `data-page-left-pt`, `data-page-top-pt`, `data-page-index`). Un calque dont la position n'est pas connue reste dans la ligne, et est compté.
+  function placementOf(ctx, img) {
+    const layer = img.getAttribute('data-layer');
+    if (layer === 'front' || layer === 'behind') {
+      const left = parseFloat(img.getAttribute('data-page-left-pt'));
+      const top = parseFloat(img.getAttribute('data-page-top-pt'));
+      if (Number.isFinite(left) && Number.isFinite(top) && img.hasAttribute('data-page-index')) return { kind: layer, x: ctx.marginLeftPt + left, y: ctx.marginTopPt + ctx.topBandPt + top };
+      countLost(ctx, 'imagesFloating');
+      return { kind: 'inline' };
+    }
+    const align = img.getAttribute('data-align');
+    if (align === 'left' || align === 'right') return { kind: 'side', side: align };
+    return { kind: 'inline' };
+  }
+  const WRAP_SIDE_CM = centimeters(9);
+  const WRAP_BELOW_CM = centimeters(6);
+  function frameStyleOf(ctx, place) {
+    const kind = place.kind === 'side' ? 'side-' + place.side : place.kind;
+    return styleNameOf(ctx, 'fr', kind, (name) => {
+      const head = '<style:style style:name="' + name + '" style:family="graphic" style:parent-style-name="Graphics"><style:graphic-properties ';
+      if (place.kind === 'inline') {
+        return head + 'style:wrap="none" style:vertical-pos="top" style:vertical-rel="baseline" fo:margin-left="0cm" fo:margin-right="0cm" fo:margin-top="0cm" fo:margin-bottom="0cm" fo:padding="0cm" fo:border="none"/></style:style>';
+      }
+      if (place.kind === 'side') {
+        const right = place.side === 'right';
+        return head + 'style:wrap="parallel" style:number-wrapped-paragraphs="no-limit" style:wrap-contour="false" style:horizontal-pos="' + place.side + '" style:horizontal-rel="paragraph" style:vertical-pos="top" style:vertical-rel="paragraph"'
+          + ' fo:margin-left="' + (right ? WRAP_SIDE_CM : '0cm') + '" fo:margin-right="' + (right ? '0cm' : WRAP_SIDE_CM) + '" fo:margin-top="0cm" fo:margin-bottom="' + WRAP_BELOW_CM + '" fo:padding="0cm" fo:border="none"/></style:style>';
+      }
+      return head + 'style:wrap="run-through" style:run-through="' + (place.kind === 'behind' ? 'background' : 'foreground') + '" style:horizontal-pos="from-left" style:horizontal-rel="page" style:vertical-pos="from-top" style:vertical-rel="page"'
+        + ' fo:margin-left="0cm" fo:margin-right="0cm" fo:margin-top="0cm" fo:margin-bottom="0cm" fo:padding="0cm" fo:border="none"/></style:style>';
+    });
+  }
+  function imageXml(ctx, img) {
+    const prepared = ctx.images.get(img);
+    if (!prepared) { countLost(ctx, 'images'); return ''; }
+    const place = placementOf(ctx, img);
+    const style = frameStyleOf(ctx, place);
+    ctx.frames += 1;
+    const alt = String(img.getAttribute('alt') || '').trim();
+    const anchor = place.kind === 'inline' ? 'as-char' : 'paragraph';
+    const position = place.kind === 'front' || place.kind === 'behind' ? ' svg:x="' + centimeters(place.x) + '" svg:y="' + centimeters(place.y) + '"' : '';
+    return '<draw:frame draw:style-name="' + style + '" draw:name="Image' + ctx.frames + '" text:anchor-type="' + anchor + '"' + position + ' svg:width="' + centimeters(prepared.widthPt) + '" svg:height="' + centimeters(prepared.heightPt) + '" draw:z-index="' + (place.kind === 'behind' ? 0 : ctx.frames) + '">'
+      + '<draw:image xlink:href="' + prepared.picture.path + '" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/>' + (alt ? '<svg:desc>' + escText(alt) + '</svg:desc>' : '') + '</draw:frame>';
+  }
+  // Une note de bas de page : son numéro dans le texte, son texte au pied de la page (que LibreOffice et Word placent).
+  function noteXml(ctx, marker) {
+    ctx.notes += 1;
+    const text = textXml(marker.getAttribute('data-note-text') || '', { blank: true });
+    return '<text:note text:id="ftn' + ctx.notes + '" text:note-class="footnote"><text:note-citation>' + ctx.notes + '</text:note-citation><text:note-body><text:p text:style-name="Footnote">' + text + '</text:p></text:note-body></text:note>';
   }
 
   // --- Les paragraphes -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -262,11 +360,18 @@ const OdtExport = (function () {
   function paragraphXml(ctx, el, children, options) {
     const opts = options || {};
     const props = Object.assign(propsOf(el, !opts.inList), opts.props || {});
+    // Une image centrée (`data-align`) : l'OpenDocument aligne le paragraphe qui la porte (à gauche ou à droite, l'image est posée avec le texte autour d'elle : `placementOf`).
+    if (!props.align) {
+      const aligned = Array.from(el.children || []).find(child => child.tagName === 'IMG' && child.getAttribute('data-align') === 'center');
+      if (aligned) props.align = 'center';
+    }
     if (!opts.inList && takeBreak(ctx)) props.breakBefore = true;
     ctx.flow.started = true;
     const state = { blank: true };
     const base = opts.base || STYLE.bodyPt;
-    const inner = (opts.prefix ? textXml(opts.prefix, state) : '') + inlineXml(children, Object.assign({}, BASE_LOOK, opts.look || {}), state, ctx, base);
+    let inner = (opts.prefix ? textXml(opts.prefix, state) : '') + inlineXml(children, Object.assign({}, BASE_LOOK, opts.look || {}), state, ctx, base);
+    // Le titre que le sommaire vise : un signet autour de son texte.
+    if (opts.anchor) inner = '<text:bookmark-start text:name="' + opts.anchor + '"/>' + inner + '<text:bookmark-end text:name="' + opts.anchor + '"/>';
     const style = paragraphStyleOf(ctx, opts.parent || 'Standard', props);
     if (opts.level) return '<text:h text:style-name="' + style + '" text:outline-level="' + opts.level + '">' + inner + '</text:h>';
     return '<text:p text:style-name="' + style + '">' + inner + '</text:p>';
@@ -305,10 +410,10 @@ const OdtExport = (function () {
     const tag = el.tagName;
     if (ctx.depth > MAX_DEPTH) return paragraphXml(ctx, el, [document.createTextNode(el.textContent)], { inList: opts.inList });
     if (el.classList.contains('page-break-marker')) { ctx.flow.pageBreak = true; return ''; }
-    if (el.classList.contains('toc-marker')) { countLost(ctx, 'toc'); return ''; }
+    if (el.classList.contains('toc-marker')) return tocXml(ctx, el);
     if (/^H[1-6]$/.test(tag)) {
       const level = Number(tag.slice(1));
-      return paragraphXml(ctx, el, Array.from(el.childNodes), { parent: 'Heading_20_' + level, level, base: STYLE.headingPt[tag], inList: opts.inList });
+      return paragraphXml(ctx, el, Array.from(el.childNodes), { parent: 'Heading_20_' + level, level, base: STYLE.headingPt[tag], inList: opts.inList, anchor: ctx.headings.get(el) });
     }
     if (tag === 'P') return paragraphXml(ctx, el, Array.from(el.childNodes), { inList: opts.inList, parent: opts.parent, base: opts.base });
     if (tag === 'BLOCKQUOTE') {
@@ -333,6 +438,39 @@ const OdtExport = (function () {
     const inner = blocksOf(ctx, el, opts);
     ctx.depth -= 1;
     return inner;
+  }
+
+  // --- Le sommaire ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // Les titres du corps, dans l'ordre : chacun reçoit un signet (`__RefHeading___Toc1`...) que les entrées du sommaire visent. Posés avant d'écrire le texte : le sommaire vient avant ses titres.
+  function collectHeadings(ctx, root) {
+    Array.from(root.querySelectorAll('h1, h2, h3, h4, h5, h6')).forEach((el) => {
+      const anchor = '__RefHeading___Toc' + (ctx.headingList.length + 1);
+      ctx.headings.set(el, anchor);
+      ctx.headingList.push({ level: Number(el.tagName.slice(1)), text: (el.textContent || '').replace(/\s+/g, ' ').trim(), anchor });
+    });
+  }
+  // Un vrai sommaire OpenDocument (`text:table-of-content`) : ses entrées sont écrites (une par titre des niveaux réglés, avec un lien vers son signet), sans numéro de page - que seul l'éditeur de
+  // texte calcule : « Mettre à jour l'index » de LibreOffice les écrit. Le modèle d'entrée porte les numéros de page quand le sommaire les demande.
+  function tocXml(ctx, marker) {
+    const options = TocOptions.normalize(TocOptions.ofElement(marker));
+    const title = I18n.t('pdf.tocTitle');
+    const breakBefore = takeBreak(ctx);
+    ctx.flow.started = true;
+    const titleStyle = paragraphStyleOf(ctx, 'Contents_20_Heading', breakBefore ? { breakBefore: true } : {});
+    const entries = ctx.headingList.filter(entry => entry.text && TocOptions.covers(options, entry.level));
+    let templates = '';
+    for (let level = options.from; level <= options.to; level++) {
+      templates += '<text:table-of-content-entry-template text:outline-level="' + level + '" text:style-name="Contents_20_' + level + '"><text:index-entry-link-start text:style-name="Index_20_Link"/><text:index-entry-text/>'
+        + (options.pages ? '<text:index-entry-tab-stop style:type="right" style:leader-char="."/><text:index-entry-page-number/>' : '') + '<text:index-entry-link-end/></text:table-of-content-entry-template>';
+    }
+    const rows = entries.length
+      ? entries.map(entry => '<text:p text:style-name="Contents_20_' + entry.level + '"><text:a xlink:type="simple" xlink:href="#' + entry.anchor + '" text:style-name="Index_20_Link" text:visited-style-name="Index_20_Link">' + textXml(entry.text, { blank: true }) + '</text:a></text:p>').join('')
+      : '<text:p text:style-name="Contents_20_1">' + escText(I18n.t('docx.tocEmpty')) + '</text:p>';
+    ctx.tocs = (ctx.tocs || 0) + 1;
+    const name = 'Table of Contents' + ctx.tocs;
+    return '<text:table-of-content text:protected="false" text:name="' + name + '"><text:table-of-content-source text:outline-level="' + options.to + '"><text:index-title-template text:style-name="Contents_20_Heading">' + escText(title)
+      + '</text:index-title-template>' + templates + '</text:table-of-content-source><text:index-body><text:index-title text:name="' + name + '_Head"><text:p text:style-name="' + titleStyle + '">' + escText(title) + '</text:p></text:index-title>'
+      + rows + '</text:index-body></text:table-of-content>';
   }
 
   // --- Les listes ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -465,8 +603,19 @@ const OdtExport = (function () {
 
   // --- Les fichiers du paquet ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
   const fontFaces = ctx => Array.from(ctx.fonts).map(font => '<style:font-face style:name="' + escAttr(font) + '" svg:font-family="' + escAttr(/\s/.test(font) ? "'" + font + "'" : font) + '"/>').join('');
+  // Les six niveaux d'entrée du sommaire : un cran de retrait par niveau, les points de conduite et le numéro de page à droite.
+  function contentsStylesXml(contentWidthPt) {
+    let out = '';
+    for (let level = 1; level <= 6; level++) {
+      const left = (level - 1) * 12;
+      const right = Math.max(left + 20, (contentWidthPt || 480) - left);
+      out += '<style:style style:name="Contents_20_' + level + '" style:display-name="Contents ' + level + '" style:family="paragraph" style:parent-style-name="Index" style:class="index"><style:paragraph-properties fo:margin-left="' + centimeters(left)
+        + '" fo:margin-top="0cm" fo:margin-bottom="0.1cm"><style:tab-stops><style:tab-stop style:position="' + centimeters(right) + '" style:type="right" style:leader-char="."/></style:tab-stops></style:paragraph-properties></style:style>';
+    }
+    return out;
+  }
   // Les styles nommés : les valeurs par défaut (police et taille du corps, interligne de l'éditeur), les titres, la citation, le code, le trait, le lien.
-  function namedStylesXml() {
+  function namedStylesXml(contentWidthPt) {
     const heading = (level) => {
       const size = STYLE.headingPt['H' + level];
       return '<style:style style:name="Heading_20_' + level + '" style:display-name="Heading ' + level + '" style:family="paragraph" style:parent-style-name="Heading" style:next-style-name="Standard" style:default-outline-level="' + level
@@ -484,44 +633,110 @@ const OdtExport = (function () {
       + STYLE.codeFillColor + '"/><style:text-properties style:font-name="' + CODE_FONT + '" fo:font-size="' + STYLE.codePt + 'pt"/></style:style>'
       + '<style:style style:name="Horizontal_20_Line" style:display-name="Horizontal Line" style:family="paragraph" style:parent-style-name="Standard" style:class="html"><style:paragraph-properties fo:margin-top="0.1cm" fo:margin-bottom="0.1cm"'
       + ' fo:border-bottom="0.75pt solid #b8c0c9" fo:border-top="none" fo:border-left="none" fo:border-right="none"/><style:text-properties fo:font-size="2pt"/></style:style>'
+      + '<style:style style:name="Index" style:family="paragraph" style:parent-style-name="Standard" style:class="index"/>'
+      + '<style:style style:name="Contents_20_Heading" style:display-name="Contents Heading" style:family="paragraph" style:parent-style-name="Index" style:class="index"><style:paragraph-properties fo:margin-top="0.4cm" fo:margin-bottom="0.2cm" fo:keep-with-next="always"/><style:text-properties fo:font-size="16pt" fo:font-weight="bold"/></style:style>'
+      + contentsStylesXml(contentWidthPt)
+      + '<style:style style:name="Index_20_Link" style:display-name="Index Link" style:family="text"/>'
+      + '<style:style style:name="Footnote" style:family="paragraph" style:parent-style-name="Standard" style:class="extra"><style:paragraph-properties fo:margin-left="0.5cm" fo:text-indent="-0.5cm"/><style:text-properties fo:font-size="' + STYLE.bodyPt * 0.85 + 'pt"/></style:style>'
+      + '<style:style style:name="Graphics" style:family="graphic"><style:graphic-properties text:anchor-type="paragraph" svg:x="0cm" svg:y="0cm" style:wrap="dynamic" style:number-wrapped-paragraphs="no-limit" style:wrap-contour="false"'
+      + ' style:vertical-pos="top" style:vertical-rel="paragraph" style:horizontal-pos="center" style:horizontal-rel="paragraph"/></style:style>'
       + '<style:style style:name="Internet_20_link" style:display-name="Internet link" style:family="text"><style:text-properties fo:color="' + STYLE.linkColor + '" style:text-underline-style="solid" style:text-underline-width="auto" style:text-underline-color="font-color"/></style:style>'
       + '<style:style style:name="Visited_20_Internet_20_Link" style:display-name="Visited Internet Link" style:family="text"><style:text-properties fo:color="#551a8b" style:text-underline-style="solid" style:text-underline-width="auto" style:text-underline-color="font-color"/></style:style>';
     return out;
   }
+  // La bande d'une zone (en-tête ou pied) : la hauteur de la zone de l'éditeur, puis l'écart avec le texte. Sans contenu dans la zone, pas de bande : la page garde sa marge.
+  function bandStyleXml(zone, wanted) {
+    if (!wanted) return '';
+    const height = centimeters(PageLayout.HEADER_FOOTER_ZONE_PX * PT_PER_PX);
+    const gap = centimeters(PageLayout.HEADER_FOOTER_GAP_PT);
+    return '<style:' + zone + '-style><style:header-footer-properties fo:min-height="' + height + '" fo:margin-' + (zone === 'header' ? 'bottom' : 'top') + '="' + gap + '"/></style:' + zone + '-style>';
+  }
   // La page : format et sens (`margins.format`, `margins.orientation`), marges en millimètres.
-  function pageLayoutXml(margins) {
+  function pageLayoutXml(margins, bands) {
     const size = PageLayout.pageSizeMmFor(margins.orientation === 'landscape' ? 'landscape' : 'portrait', margins.format);
     const side = value => fixed((Number.isFinite(value) ? value : PageLayout.DEFAULT_MARGIN_MM) / 10, 3) + 'cm';
     return '<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="' + fixed(size.width / 10, 3) + 'cm" fo:page-height="' + fixed(size.height / 10, 3) + 'cm" style:print-orientation="'
       + (margins.orientation === 'landscape' ? 'landscape' : 'portrait') + '" fo:margin-top="' + side(margins.top) + '" fo:margin-bottom="' + side(margins.bottom) + '" fo:margin-left="' + side(margins.left) + '" fo:margin-right="' + side(margins.right)
-      + '" style:writing-mode="lr-tb"/></style:page-layout>';
+      + '" style:writing-mode="lr-tb"/>' + bandStyleXml('header', bands && bands.header) + bandStyleXml('footer', bands && bands.footer) + '</style:page-layout>';
   }
-  const stylesXml = (ctx, margins) => XML_HEAD + '<office:document-styles ' + namespaceAttrs + ' office:version="1.3"><office:font-face-decls>' + fontFaces(ctx) + '</office:font-face-decls><office:styles>' + namedStylesXml()
-    + '</office:styles><office:automatic-styles>' + pageLayoutXml(margins) + '</office:automatic-styles><office:master-styles><style:master-page style:name="Standard" style:page-layout-name="pm1"/></office:master-styles></office:document-styles>';
+  // `zones` : { bands: { header, footer }, styles: [styles automatiques des zones], master: XML des en-têtes et pieds }.
+  const stylesXml = (ctx, margins, zones) => XML_HEAD + '<office:document-styles ' + namespaceAttrs + ' office:version="1.3"><office:font-face-decls>' + fontFaces(ctx) + '</office:font-face-decls><office:styles>' + namedStylesXml(ctx.contentWidthPt)
+    + '</office:styles><office:automatic-styles>' + pageLayoutXml(margins, zones.bands) + zones.styles.join('') + '</office:automatic-styles><office:master-styles><style:master-page style:name="Standard" style:page-layout-name="pm1">' + zones.master
+    + '</style:master-page></office:master-styles></office:document-styles>';
   const contentXml = (ctx, body) => XML_HEAD + '<office:document-content ' + namespaceAttrs + ' office:version="1.3"><office:font-face-decls>' + fontFaces(ctx) + '</office:font-face-decls><office:automatic-styles>'
     + ctx.autoStyles.join('') + '</office:automatic-styles><office:body><office:text>' + body + '</office:text></office:body></office:document-content>';
   const metaXml = title => XML_HEAD + '<office:document-meta ' + namespaceAttrs + ' office:version="1.3"><office:meta><meta:generator>' + GENERATOR + '</meta:generator>' + (title ? '<dc:title>' + escText(title) + '</dc:title>' : '')
     + '<meta:creation-date>' + new Date().toISOString().replace(/\.\d+Z$/, '') + '</meta:creation-date></office:meta></office:document-meta>';
-  const manifestXml = () => XML_HEAD + '<manifest:manifest ' + namespaceAttrs + ' manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:version="1.3" manifest:media-type="' + MIME + '"/>'
-    + ['content.xml', 'styles.xml', 'meta.xml'].map(path => '<manifest:file-entry manifest:full-path="' + path + '" manifest:media-type="text/xml"/>').join('') + '</manifest:manifest>';
+  const manifestXml = (ctx) => XML_HEAD + '<manifest:manifest ' + namespaceAttrs + ' manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:version="1.3" manifest:media-type="' + MIME + '"/>'
+    + ['content.xml', 'styles.xml', 'meta.xml'].map(path => '<manifest:file-entry manifest:full-path="' + path + '" manifest:media-type="text/xml"/>').join('')
+    + ctx.parts.map(part => '<manifest:file-entry manifest:full-path="' + part.path + '" manifest:media-type="' + part.mediaType + '"/>').join('') + '</manifest:manifest>';
 
-  // Le document : `html` (déjà résolu pour la ligne), `options.margins` (en mm : { top, right, bottom, left, orientation, format }, ceux de PageLayout.getMarginsMm() à défaut), `options.title`.
+  // --- Les en-têtes et pieds de page ------------------------------------------------------------------------------------------------------------------------------------------------------
+  // Les zones comme dans le PDF et le Word : sur toutes les pages dès qu'une variante a du contenu, une variante pour la première page quand elle est demandée.
+  function zonesOf(headerFooterData) {
+    const enabled = !!(headerFooterData && headerFooterData.enabled);
+    const differentFirstPage = enabled && !!headerFooterData.differentFirstPage;
+    const variants = differentFirstPage ? ['default', 'first'] : ['default'];
+    const html = (zone, variant) => (enabled && headerFooterData[zone] && headerFooterData[zone][variant]) || '';
+    return { enabled, variants, html, has: zone => variants.some(variant => PageLayout.hasZoneContent(html(zone, variant))) };
+  }
+  // Le XML d'une zone. Ses styles automatiques vont dans `styles.xml` (là où l'en-tête est écrit), sous des noms à eux (MP1, MT1...) : ceux du corps sont dans `content.xml` et ne se voient pas d'ici.
+  async function zoneContent(ctx, html) {
+    const saved = { names: ctx.names, counts: ctx.counts, autoStyles: ctx.autoStyles, namePrefix: ctx.namePrefix, flow: ctx.flow, headings: ctx.headings };
+    ctx.names = new Map(); ctx.counts = {}; ctx.autoStyles = []; ctx.namePrefix = 'M'; ctx.flow = { pageBreak: false, started: false }; ctx.headings = new Map();
+    try {
+      const root = document.createElement('div');
+      Dom.setMarkup(root, HtmlSanitize.clean(html || ''));
+      Array.from(root.querySelectorAll('.page-break-marker, .toc-marker')).forEach(el => el.remove());
+      ReaderMode.trimTrailingBlankBlocks(root);
+      await prepareImages(ctx, root);
+      const body = blocksOf(ctx, root, {});
+      return { body, styles: ctx.autoStyles };
+    } finally {
+      ctx.names = saved.names; ctx.counts = saved.counts; ctx.autoStyles = saved.autoStyles; ctx.namePrefix = saved.namePrefix; ctx.flow = saved.flow; ctx.headings = saved.headings;
+    }
+  }
+  // Les en-têtes et pieds de la page maîtresse : { bands, styles, master }.
+  async function zonesXml(ctx, zones) {
+    const out = { bands: { header: zones.has('header'), footer: zones.has('footer') }, styles: [], master: '' };
+    for (const zone of ['header', 'footer']) {
+      if (!out.bands[zone]) continue;
+      for (const variant of zones.variants) {
+        const html = zones.html(zone, variant);
+        const made = PageLayout.hasZoneContent(html) ? await zoneContent(ctx, html) : { body: '', styles: [] };
+        out.styles.push(...made.styles);
+        const tag = 'style:' + zone + (variant === 'first' ? '-first' : '');
+        out.master += '<' + tag + '>' + (made.body || '<text:p text:style-name="Standard"/>') + '</' + tag + '>';
+      }
+    }
+    return out;
+  }
+
+  // Le document : `html` (déjà résolu pour la ligne), `options.headerFooterData` (les zones d'en-tête et de pied, résolues aussi), `options.margins` (en mm : { top, right, bottom, left, orientation, format }, ceux de PageLayout.getMarginsMm() à défaut), `options.title`.
   // Rend { blob, report: [{ key, n }] } : le fichier et ce que le moteur n'a pas repris (jamais perdu en silence).
   async function build(html, options) {
     const opts = options || {};
     await ExportCommon.ensureJsZipLoaded();
     const margins = Object.assign({}, PageLayout.getMarginsMm(), opts.margins || {});
     const size = PageLayout.pageSizeMmFor(margins.orientation === 'landscape' ? 'landscape' : 'portrait', margins.format);
-    const ctx = newContext({ contentWidthPt: (size.width - (margins.left || 0) - (margins.right || 0)) * PageLayout.MM_TO_PT });
+    const zoneSet = zonesOf(opts.headerFooterData);
+    const ctx = newContext({
+      contentWidthPt: (size.width - (margins.left || 0) - (margins.right || 0)) * PageLayout.MM_TO_PT, marginLeftPt: (margins.left || 0) * PageLayout.MM_TO_PT, marginTopPt: (margins.top || 0) * PageLayout.MM_TO_PT,
+      topBandPt: zoneSet.has('header') ? PageLayout.HEADER_FOOTER_ZONE_PX * PT_PER_PX + PageLayout.HEADER_FOOTER_GAP_PT : 0,
+    });
     const root = document.createElement('div');
     Dom.setMarkup(root, HtmlSanitize.clean(html || ''));
     ReaderMode.trimTrailingBlankBlocks(root);
+    await prepareImages(ctx, root);
+    collectHeadings(ctx, root);
     const body = blocksOf(ctx, root, {});
+    const zones = await zonesXml(ctx, zoneSet);
     const zip = new JSZip();
     zip.file('mimetype', MIME, { compression: 'STORE' });
-    zip.file('META-INF/manifest.xml', manifestXml());
+    zip.file('META-INF/manifest.xml', manifestXml(ctx), { createFolders: false });
+    ctx.parts.forEach(part => zip.file(part.path, part.data, { createFolders: false }));   // pas d'entrée de dossier : « Pictures/ » n'est écrit nulle part
     zip.file('content.xml', contentXml(ctx, body));
-    zip.file('styles.xml', stylesXml(ctx, margins));
+    zip.file('styles.xml', stylesXml(ctx, margins, zones));
     zip.file('meta.xml', metaXml(opts.title));
     const blob = await zip.generateAsync({ type: 'blob', mimeType: MIME, compression: 'DEFLATE' });
     return { blob, report: Array.from(ctx.report.entries()).map(entry => ({ key: entry[0], n: entry[1] })) };
@@ -529,8 +744,11 @@ const OdtExport = (function () {
 
   // Le document d'une ligne : le HTML résolu pour elle (variables remplacées), son nom de fichier, puis le fichier.
   async function getOdtBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, margins) {
-    const { resolvedHtml, filename } = await ExportCommon.resolveRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData);
-    const built = await build(resolvedHtml, { margins });
+    // Comme le Word : les images d'un autre site et les images sans texte alternatif se confirment une fois, avant tout (js/external-images.js, js/alt-reminder.js).
+    await ExternalImages.confirmExport(htmlContent, headerFooterData);
+    await AltReminder.confirmExport(htmlContent, headerFooterData);
+    const { resolvedHtml, filename, resolvedHeaderFooterData } = await ExportCommon.resolveRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData);
+    const built = await build(resolvedHtml, { margins, headerFooterData: resolvedHeaderFooterData });
     return { blob: built.blob, filename, report: built.report };
   }
   async function exportCurrentRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, margins) {

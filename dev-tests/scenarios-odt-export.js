@@ -1,5 +1,5 @@
 // Suite "odtExport" - l'EXPORT OpenDocument texte (js/odt-export.js) : le HTML d'un document devient un .odt, SANS bibliothèque de plus (JSZip, XML écrit à la main). Chantier « formats libres » : le premier
-// lot est le texte et sa structure ; images, notes, en-têtes et pieds de page, sommaire et commentaires suivent (lots 3b et 3c).
+// lot est le texte et sa structure ; puis (lot 3b) les images, les notes, le numéro de page, les en-têtes et pieds de page et le sommaire. Les commentaires et le suivi des modifications ne sont pas écrits (le Word non plus).
 //
 // Les cas écrivent le fichier dans la page puis le RELISENT de deux façons : sa forme (le paquet : `mimetype` en premier et non compressé, un manifeste qui nomme chaque partie, du XML bien formé, chaque style
 // utilisé déclaré) et son sens (l'import OpenDocument du même chantier, js/odt-import.js, relit le fichier : ce qu'on y retrouve est ce que LibreOffice et les autres y verront). Un essai d'aller-retour ne
@@ -9,7 +9,9 @@
 //    couleur, fond, taille, police, espacement, petites capitales, majuscules), liens sûrs seulement ;
 //  - les listes à puces et numérotées emboîtées (signe, style, départ), les listes de tâches ;
 //  - les tableaux (colonnes, fusions, fonds, traits, alignement vertical, hauteur de ligne) ;
-//  - la page (A4, Lettre en paysage, marges) ; ce que le moteur ne reprend pas encore est COMPTÉ (images, notes, numéro de page, sommaire).
+//  - la page (A4, Lettre en paysage, marges) ; ce que le moteur ne reprend pas est COMPTÉ (images illisibles ou posées devant le texte).
+//  - les images (`Pictures/`, manifeste, taille, texte alternatif, alignement), les notes de bas de page et le champ du numéro de page ;
+//  - les en-têtes et pieds de page (page maîtresse, première page différente, bande réservée, styles à part) ; le sommaire (index, entrées, signets, niveaux et numéros de page réglés).
 (function () {
   const cases = [];
   const result = bad => ({ pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' });
@@ -238,12 +240,207 @@
     return result(bad);
   });
 
-  add('odtExport_what_is_not_carried_yet_is_counted', 'images, notes, numéro de page, sommaire : comptés dans `report` (jamais perdus en silence) tant que leur lot n\'est pas fait', async () => {
+  // Une image PNG de la couleur et de la taille voulues, en data URI, dessinée dans la page.
+  const pngOf = (width, height, color) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    const context = canvas.getContext('2d');
+    context.fillStyle = color; context.fillRect(0, 0, width, height);
+    return canvas.toDataURL('image/png');
+  };
+  const CM_PER_PX = 0.75 * 2.54 / 72;
+
+  add('odtExport_images_are_written_once_sized_and_read_back', 'les images : un fichier `Pictures/` par image différente (la même image deux fois n\'en fait qu\'un), nommé au manifeste, à la taille réglée dans l\'éditeur ; l\'import les retrouve avec leur texte alternatif', async () => {
     const { bad, expect } = checker();
-    const html = '<p>Texte <img class="editor-image" src="data:image/png;base64,iVBORw0KGgo=" alt=""> et note<sup class="footnote-ref-marker" data-note-id="n1" data-note-text="Voici"></sup> page <span class="page-number-badge" data-format="n">#</span></p><div class="toc-marker"></div>';
+    const red = pngOf(40, 20, '#c00');
+    const blue = pngOf(10, 10, '#00c');
+    const html = '<p>Avant <img class="editor-image" src="' + red + '" alt="Logo rouge" style="width: 200px"> et <img class="editor-image" src="' + red + '" style="width: 100px"> puis <img class="editor-image" src="' + blue + '"> fin</p>';
     const made = await packageOf(html);
-    const keys = made.built.report.map(entry => entry.key).sort();
-    expect('images, notes, numéro de page et sommaire sont comptés', JSON.stringify(keys) === JSON.stringify(['fields', 'images', 'notes', 'toc']), made.built.report);
+    const pictures = made.names.filter(name => /^Pictures\//.test(name));
+    expect('deux fichiers d\'image (le rouge une fois, le bleu une fois)', pictures.length === 2 && pictures.every(name => /\.png$/.test(name)), pictures);
+    const manifest = await made.text('META-INF/manifest.xml');
+    expect('le manifeste nomme chaque image avec son type', pictures.every(name => manifest.indexOf('manifest:full-path="' + name + '" manifest:media-type="image/png"') >= 0), manifest.slice(-400));
+    const content = new DOMParser().parseFromString(await made.text('content.xml'), 'application/xml');
+    const frames = Array.from(content.getElementsByTagNameNS('urn:oasis:names:tc:opendocument:xmlns:drawing:1.0', 'frame'));
+    const widths = frames.map(frame => parseFloat(frame.getAttributeNS('urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0', 'width')));
+    const heights = frames.map(frame => parseFloat(frame.getAttributeNS('urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0', 'height')));
+    expect('trois cadres, ancrés dans la ligne', frames.length === 3 && frames.every(frame => frame.getAttributeNS('urn:oasis:names:tc:opendocument:xmlns:text:1.0', 'anchor-type') === 'as-char'), frames.length);
+    expect('la largeur réglée (200 px, 100 px) est celle du cadre, la hauteur suit les proportions (2 pour 1)', Math.abs(widths[0] - 200 * CM_PER_PX) < 0.01 && Math.abs(widths[1] - 100 * CM_PER_PX) < 0.01 && Math.abs(heights[0] - widths[0] / 2) < 0.01, { widths, heights });
+    expect('sans largeur réglée, l\'image prend 320 px (comme l\'éditeur)', Math.abs(widths[2] - 320 * CM_PER_PX) < 0.01, widths);
+    expect('le texte alternatif est la description du cadre', /<svg:desc>Logo rouge<\/svg:desc>/.test(await made.text('content.xml')));
+    expect('rien n\'est resté de côté', !made.built.report.length, made.built.report);
+    const back = await OdtImport.fromBuffer(await made.buffer());
+    const images = Array.from(dom(back.html).querySelectorAll('img'));
+    expect('l\'import retrouve les trois images, en data URI, le texte alternatif et la largeur', images.length === 3 && images.every(img => /^data:image\/png/.test(img.getAttribute('src'))) && images[0].getAttribute('alt') === 'Logo rouge' && Math.abs(parseFloat(images[0].style.width) - 200) < 2, images.map(img => [img.getAttribute('alt'), img.style.width]));
+    expect('le texte autour revient', textOf(back.html) === 'Avant et puis fin', textOf(back.html));
+    return result(bad);
+  });
+
+  add('odtExport_an_unreadable_image_is_counted_and_a_layer_without_a_known_place_stays_in_the_line', 'une image qu\'on ne sait pas lire est comptée (`images`) et n\'écrit rien ; un calque dont la place sur la page est inconnue reste dans la ligne et est compté à part (`imagesFloating`)', async () => {
+    const { bad, expect } = checker();
+    const ok = pngOf(8, 8, '#0a0');
+    const html = '<p>A <img src="data:image/png;base64,iVBORw0KGgo=" alt=""> B <img class="editor-image" src="' + ok + '" data-layer="front" style="width: 50px"> C <img alt="vide"></p>';
+    const made = await packageOf(html);
+    const report = {};
+    made.built.report.forEach(entry => { report[entry.key] = entry.n; });
+    expect('deux images illisibles (une tronquée, une sans adresse), un calque sans place connue', report.images === 2 && report.imagesFloating === 1 && Object.keys(report).length === 2, made.built.report);
+    const xml = await made.text('content.xml');
+    expect('l\'image lisible est écrite malgré tout, dans la ligne', made.names.filter(name => /^Pictures\//.test(name)).length === 1 && /text:anchor-type="as-char"/.test(xml), made.names);
+    expect('le texte reste', textOf((await OdtImport.fromBuffer(await made.buffer())).html) === 'A B C', 'texte');
+    return result(bad);
+  });
+
+  add('odtExport_a_side_image_wraps_and_a_layer_sits_on_the_page', 'une image à gauche ou à droite est habillée par le texte (ancrée au paragraphe, côté choisi) ; un calque devant ou derrière le texte est posé à sa place sur la page (marges et bande de l\'en-tête comprises)', async () => {
+    const { bad, expect } = checker();
+    const ok = pngOf(40, 20, '#0a0');
+    const layer = kind => '<img class="editor-image" src="' + ok + '" data-layer="' + kind + '" data-page-index="0" data-page-left-pt="30" data-page-top-pt="10" style="width: 60px">';
+    const html = '<p><img class="editor-image" src="' + ok + '" data-align="left" style="width: 100px">Texte à droite de l\'image.</p><p><img class="editor-image" src="' + ok + '" data-align="right" style="width: 100px">Texte à gauche.</p>'
+      + '<p>Devant' + layer('front') + '</p><p>Derrière' + layer('behind') + '</p>';
+    const made = await packageOf(html);
+    const doc = await xmlOf(made, 'content.xml');
+    const frames = Array.from(doc.getElementsByTagNameNS(NS.draw, 'frame'));
+    const anchors = frames.map(frame => frame.getAttributeNS(NS.text, 'anchor-type'));
+    expect('quatre cadres, tous ancrés au paragraphe', frames.length === 4 && anchors.every(kind => kind === 'paragraph'), anchors);
+    const styleOf = frame => { const name = frame.getAttributeNS(NS.draw, 'style-name'); const style = Array.from(doc.getElementsByTagNameNS(NS.style, 'style')).find(el => el.getAttributeNS(NS.style, 'name') === name); return style ? style.firstElementChild : null; };
+    const prop = (frame, name) => (styleOf(frame) || { getAttributeNS: () => null }).getAttributeNS(NS.style, name);
+    expect('à gauche et à droite : le texte entoure l\'image, du côté choisi', prop(frames[0], 'wrap') === 'parallel' && prop(frames[0], 'horizontal-pos') === 'left' && prop(frames[1], 'wrap') === 'parallel' && prop(frames[1], 'horizontal-pos') === 'right', [prop(frames[0], 'horizontal-pos'), prop(frames[1], 'horizontal-pos')]);
+    expect('devant et derrière : traversé par le texte, devant ou derrière, relatif à la page', prop(frames[2], 'run-through') === 'foreground' && prop(frames[3], 'run-through') === 'background' && prop(frames[2], 'horizontal-rel') === 'page' && prop(frames[2], 'vertical-rel') === 'page', [prop(frames[2], 'run-through'), prop(frames[3], 'run-through')]);
+    const x = parseFloat(frames[2].getAttributeNS(NS.svg, 'x'));
+    const y = parseFloat(frames[2].getAttributeNS(NS.svg, 'y'));
+    expect('la place : marge gauche (20 mm) + 30 pt, marge haute (20 mm) + 10 pt', Math.abs(x - (20 * 72 / 25.4 + 30) * 2.54 / 72) < 0.02 && Math.abs(y - (20 * 72 / 25.4 + 10) * 2.54 / 72) < 0.02, { x, y });
+    expect('rien n\'est resté de côté', !made.built.report.length, made.built.report);
+    const withHeader = await packageOf('<p>Devant' + layer('front') + '</p>', { headerFooterData: { enabled: true, header: { default: '<p>En-tête</p>' }, footer: {} } });
+    const frame = (await xmlOf(withHeader, 'content.xml')).getElementsByTagNameNS(NS.draw, 'frame')[0];
+    const y2 = parseFloat(frame.getAttributeNS(NS.svg, 'y'));
+    expect('avec un en-tête, la place du haut compte la bande de l\'en-tête', y2 > (20 * 72 / 25.4 + 10 + 20) * 2.54 / 72, y2);
+    expect('le texte autour revient', textOf((await OdtImport.fromBuffer(await made.buffer())).html).indexOf('Texte à droite de l\'image.') >= 0, 'texte');
+    return result(bad);
+  });
+
+  add('odtExport_a_centered_image_centers_its_paragraph', 'une image centrée (`data-align="center"`) centre le paragraphe qui la porte', async () => {
+    const { bad, expect } = checker();
+    const ok = pngOf(8, 8, '#0a0');
+    const made = await packageOf('<p><img class="editor-image" src="' + ok + '" data-align="center"></p>');
+    const styles = await made.text('content.xml');
+    expect('un paragraphe centré, l\'image dans la ligne', /fo:text-align="center"/.test(styles) && /text:anchor-type="as-char"/.test(styles), styles.slice(0, 600));
+    return result(bad);
+  });
+
+  add('odtExport_footnotes_and_page_numbers_are_written', 'une note de bas de page devient une vraie note (numéro dans le texte, texte au pied) et un numéro de page un champ ; l\'import les retrouve', async () => {
+    const { bad, expect } = checker();
+    const html = '<p>Texte<sup class="footnote-ref-marker" data-note-id="n1" data-note-text="Voici la note"></sup> puis<sup class="footnote-ref-marker" data-note-id="n2" data-note-text="Seconde  note"></sup> page <span class="page-number-badge" data-format="n">#</span></p>';
+    const made = await packageOf(html);
+    const xml = await made.text('content.xml');
+    expect('deux notes de bas de page, numérotées 1 et 2', (xml.match(/text:note-class="footnote"/g) || []).length === 2 && /<text:note-citation>1<\/text:note-citation>/.test(xml) && /<text:note-citation>2<\/text:note-citation>/.test(xml), xml.slice(0, 500));
+    expect('le texte de la note est dans son corps, ses espaces gardés', /<text:note-body><text:p text:style-name="Footnote">Voici la note<\/text:p>/.test(xml) && /Seconde <text:s\/>note/.test(xml), xml.slice(0, 700));
+    expect('le numéro de page est un champ', /<text:page-number text:select-page="current">1<\/text:page-number>/.test(xml));
+    expect('rien n\'est resté de côté', !made.built.report.length, made.built.report);
+    const back = await OdtImport.fromBuffer(await made.buffer());
+    const markers = Array.from(dom(back.html).querySelectorAll('.footnote-ref-marker'));
+    expect('l\'import retrouve les deux notes avec leur texte', markers.length === 2 && markers[0].getAttribute('data-note-text') === 'Voici la note' && /Seconde\s+note/.test(markers[1].getAttribute('data-note-text')), markers.map(m => m.getAttribute('data-note-text')));
+    expect('et le numéro de page', !!dom(back.html).querySelector('.page-number-badge'), back.html.slice(0, 300));
+    return result(bad);
+  });
+
+  const NS = { office: 'urn:oasis:names:tc:opendocument:xmlns:office:1.0', style: 'urn:oasis:names:tc:opendocument:xmlns:style:1.0', text: 'urn:oasis:names:tc:opendocument:xmlns:text:1.0', draw: 'urn:oasis:names:tc:opendocument:xmlns:drawing:1.0', svg: 'urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0', xlink: 'http://www.w3.org/1999/xlink' };
+  const xmlOf = async (made, path) => new DOMParser().parseFromString(await made.text(path), 'application/xml');
+  const wellFormed = (doc) => !doc.getElementsByTagName('parsererror').length;
+
+  add('odtExport_headers_and_footers_are_written_with_a_first_page_variant', 'en-têtes et pieds de page : écrits dans la page maîtresse (une variante pour la première page quand elle est demandée), le numéro de page est un champ, la bande de la zone est réservée ; l\'import les retrouve', async () => {
+    const { bad, expect } = checker();
+    const zones = { enabled: true, differentFirstPage: true, header: { default: '<p>Rapport annuel</p>', first: '' }, footer: { default: '<p>Page <span class="page-number-badge" data-format="n">#</span></p>', first: '<p>Première page</p>' } };
+    const made = await packageOf('<p>Corps du document</p>', { headerFooterData: zones });
+    const styles = await xmlOf(made, 'styles.xml');
+    expect('styles.xml est du XML bien formé', wellFormed(styles), (styles.getElementsByTagName('parsererror')[0] || {}).textContent);
+    const master = styles.getElementsByTagNameNS(NS.style, 'master-page')[0];
+    const names = Array.from(master.children).map(el => el.localName);
+    expect('la page maîtresse porte l\'en-tête, celui de la première page, le pied et celui de la première page', names.join() === 'header,header-first,footer,footer-first', names);
+    const text = el => el.textContent.replace(/\s+/g, ' ').trim();
+    const zone = name => Array.from(master.children).find(el => el.localName === name);
+    expect('l\'en-tête garde son texte, celui de la première page est vide', text(zone('header')) === 'Rapport annuel' && text(zone('header-first')) === '', names);
+    expect('le pied a « Page » et le champ du numéro de page, celui de la première page son propre texte', /^Page 1$/.test(text(zone('footer'))) && zone('footer').getElementsByTagNameNS(NS.text, 'page-number').length === 1 && text(zone('footer-first')) === 'Première page', text(zone('footer')));
+    const layout = styles.getElementsByTagNameNS(NS.style, 'page-layout')[0];
+    expect('la page réserve la bande de l\'en-tête et celle du pied', layout.getElementsByTagNameNS(NS.style, 'header-style').length === 1 && layout.getElementsByTagNameNS(NS.style, 'footer-style').length === 1, 'bandes');
+    expect('le corps reste dans content.xml, les zones n\'y sont pas', !/Rapport annuel|Première page/.test(await made.text('content.xml')));
+    expect('rien n\'est resté de côté', !made.built.report.length, made.built.report);
+    const back = await OdtImport.fromBuffer(await made.buffer());
+    const hf = back.headerFooter;
+    expect('l\'import retrouve les zones : en-tête, pied avec numéro de page, première page différente', !!hf && hf.enabled && hf.differentFirstPage && /Rapport annuel/.test(hf.header.default) && /page-number-badge/.test(hf.footer.default) && /Première page/.test(hf.footer.first), hf);
+    return result(bad);
+  });
+
+  add('odtExport_zones_that_are_off_or_empty_leave_the_page_alone', 'des zones éteintes ou vides n\'écrivent ni en-tête, ni pied, ni bande : la page garde ses marges', async () => {
+    const { bad, expect } = checker();
+    for (const [label, data] of [['sans réglage', null], ['éteintes', { enabled: false, header: { default: '<p>Perdu</p>' }, footer: {} }], ['allumées mais vides', { enabled: true, header: { default: '<p><br></p>' }, footer: { default: '' } }]]) {
+      const made = await packageOf('<p>Corps</p>', { headerFooterData: data });
+      const styles = await made.text('styles.xml');
+      expect(label + ' : ni en-tête, ni pied, ni bande', !/<style:(?:header|footer)/.test(styles) && !/header-style|footer-style/.test(styles) && !/Perdu/.test(styles), styles.slice(-500));
+    }
+    return result(bad);
+  });
+
+  add('odtExport_a_header_with_an_image_and_a_footer_with_a_list_keep_their_own_styles', 'une image dans un en-tête (le fichier d\'image est dans le paquet) et une liste ou un style de texte dans un pied : leurs styles sont écrits dans styles.xml, sous des noms distincts de ceux du corps', async () => {
+    const { bad, expect } = checker();
+    const logo = pngOf(30, 10, '#036');
+    const zones = { enabled: true, differentFirstPage: false, header: { default: '<p style="text-align:center"><img class="editor-image" src="' + logo + '" style="width: 90px" alt="Logo"></p>' }, footer: { default: '<ul><li><p><strong>Gras</strong> du pied</p></li></ul>' } };
+    const made = await packageOf('<p><strong>Corps</strong> en gras</p>', { headerFooterData: zones });
+    expect('l\'image de l\'en-tête est dans le paquet et le manifeste', made.names.some(name => /^Pictures\/image\d+\.png$/.test(name)) && /Pictures\/image1\.png/.test(await made.text('META-INF/manifest.xml')), made.names);
+    const styles = await xmlOf(made, 'styles.xml');
+    expect('styles.xml est bien formé et l\'en-tête porte son cadre d\'image', wellFormed(styles) && styles.getElementsByTagNameNS(NS.draw, 'frame').length === 1, 'cadre');
+    const autoHere = Array.from(styles.getElementsByTagNameNS(NS.office, 'automatic-styles')[0].children).map(el => el.getAttributeNS(NS.style, 'name') || el.getAttribute('style:name'));
+    const content = await xmlOf(made, 'content.xml');
+    const autoBody = Array.from(content.getElementsByTagNameNS(NS.office, 'automatic-styles')[0].children).map(el => el.getAttribute('style:name'));
+    expect('les styles de l\'en-tête et du pied sont dans styles.xml, ceux du corps dans content.xml, sans nom commun', autoHere.filter(name => /^M/.test(name)).length >= 3 && !autoHere.some(name => autoBody.indexOf(name) >= 0 && !/^pm/.test(name)), { autoHere, autoBody });
+    expect('chaque style que l\'en-tête ou le pied utilise existe', (await made.text('styles.xml')).match(/text:style-name="([^"]+)"/g).every(use => { const name = use.slice(17, -1); return autoHere.indexOf(name) >= 0 || /^(?:Standard|Internet_20_link|Visited_20_Internet_20_Link|Footnote|Contents|Index)/.test(name); }), autoHere);
+    return result(bad);
+  });
+
+  add('odtExport_the_table_of_contents_is_a_real_index_with_links_to_the_headings', 'le sommaire est un vrai index OpenDocument : une entrée par titre des niveaux réglés, un lien vers un signet posé sur le titre, le modèle d\'entrée avec ou sans numéros de page ; l\'import le retrouve', async () => {
+    const { bad, expect } = checker();
+    const html = '<div class="toc-marker"></div><h1>Un</h1><p>texte</p><h2>Deux</h2><h3>Trois</h3><h1>Quatre</h1>';
+    const made = await packageOf(html);
+    const content = await xmlOf(made, 'content.xml');
+    expect('content.xml est bien formé', wellFormed(content), (content.getElementsByTagName('parsererror')[0] || {}).textContent);
+    const toc = content.getElementsByTagNameNS(NS.text, 'table-of-content')[0];
+    expect('un sommaire', !!toc);
+    const entries = Array.from(toc.getElementsByTagNameNS(NS.text, 'index-body')[0].getElementsByTagNameNS(NS.text, 'a'));
+    expect('quatre entrées (Un, Deux, Trois, Quatre), dans l\'ordre', entries.map(el => el.textContent).join() === 'Un,Deux,Trois,Quatre', entries.map(el => el.textContent));
+    const bookmarks = Array.from(content.getElementsByTagNameNS(NS.text, 'bookmark-start')).map(el => el.getAttribute('text:name'));
+    expect('chaque entrée vise un signet posé sur son titre', entries.every(el => bookmarks.indexOf(el.getAttributeNS(NS.xlink, 'href').slice(1)) >= 0) && bookmarks.length === 4, { bookmarks, links: entries.map(el => el.getAttributeNS(NS.xlink, 'href')) });
+    const headings = Array.from(content.getElementsByTagNameNS(NS.text, 'h'));
+    expect('le signet entoure le texte du titre', headings.length === 4 && headings.every(h => h.firstElementChild && h.firstElementChild.localName === 'bookmark-start' && h.lastElementChild.localName === 'bookmark-end'), headings.length);
+    const levels = Array.from(toc.getElementsByTagNameNS(NS.text, 'table-of-content-entry-template'));
+    expect('un modèle d\'entrée par niveau (1 à 6), avec numéro de page', levels.length === 6 && levels.every(el => el.getElementsByTagNameNS(NS.text, 'index-entry-page-number').length === 1), levels.length);
+    expect('le titre du sommaire est « Sommaire »', /Sommaire/.test(toc.getElementsByTagNameNS(NS.text, 'index-title')[0].textContent), 'titre');
+    const styles = await made.text('styles.xml');
+    expect('les styles Contents_20_1 à 6, Contents_20_Heading et Index_20_Link existent', [1, 2, 3, 4, 5, 6].every(n => styles.indexOf('style:name="Contents_20_' + n + '"') >= 0) && styles.indexOf('style:name="Contents_20_Heading"') >= 0 && styles.indexOf('style:name="Index_20_Link"') >= 0, 'styles');
+    expect('rien n\'est resté de côté', !made.built.report.length, made.built.report);
+    const back = await OdtImport.fromBuffer(await made.buffer());
+    expect('l\'import retrouve un sommaire et les quatre titres', !!dom(back.html).querySelector('.toc-marker') && dom(back.html).querySelectorAll('h1, h2, h3').length === 4, back.html.slice(0, 300));
+    const some = await packageOf('<div class="toc-marker" data-toc-from="2" data-toc-to="3" data-toc-pages="false"></div><h1>Un</h1><h2>Deux</h2><h3>Trois</h3><h4>Quatre</h4>');
+    const doc = await xmlOf(some, 'content.xml');
+    const only = Array.from(doc.getElementsByTagNameNS(NS.text, 'index-body')[0].getElementsByTagNameNS(NS.text, 'a')).map(el => el.textContent);
+    const templates = Array.from(doc.getElementsByTagNameNS(NS.text, 'table-of-content-entry-template'));
+    expect('niveaux 2 à 3 sans numéros de page : seules Deux et Trois sont listées, deux modèles sans numéro', only.join() === 'Deux,Trois' && templates.length === 2 && templates.every(el => !el.getElementsByTagNameNS(NS.text, 'index-entry-page-number').length), { only, templates: templates.length });
+    const empty = await packageOf('<div class="toc-marker"></div><p>sans titre</p>');
+    expect('sans titre : la phrase « aucun titre » tient la place', /aucun titre/.test(await empty.text('content.xml')), 'vide');
+    return result(bad);
+  });
+
+  add('odtExport_a_page_break_before_the_table_of_contents_goes_to_its_title', 'un saut de page posé avant le sommaire est porté par le titre du sommaire', async () => {
+    const { bad, expect } = checker();
+    const made = await packageOf('<p>Avant</p><div class="page-break-marker"></div><div class="toc-marker"></div><h1>Un</h1>');
+    const content = await made.text('content.xml');
+    const after = content.slice(content.indexOf('<text:index-title '));
+    const styleName = (after.match(/<text:p text:style-name="([^"]+)"/) || [])[1];
+    expect('le titre du sommaire a un style qui ouvre une page', !!styleName && new RegExp('style:name="' + styleName + '"[^>]*>(?:(?!</style:style>).)*fo:break-before="page"').test(content), styleName);
+    return result(bad);
+  });
+
+  add('odtExport_what_is_not_carried_is_counted', 'ce que le fichier ne reprend pas est compté dans `report` : une image illisible, une image posée devant le texte', async () => {
+    const { bad, expect } = checker();
+    const made = await packageOf('<p>Texte <img src="data:image/png;base64,iVBORw0KGgo="> fin</p>');
+    expect('l\'image illisible est comptée', JSON.stringify(made.built.report) === JSON.stringify([{ key: 'images', n: 1 }]), made.built.report);
     return result(bad);
   });
 
