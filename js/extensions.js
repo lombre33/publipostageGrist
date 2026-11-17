@@ -46,12 +46,13 @@ const Extensions = (function () {
       styles: ['pdf-view.css'],
       libraries: [{ id: 'pdfjs', forme: 'module' }],
     },
-    // La police Marianne pour le PDF (extensions/polices/, demande du 11/11) : la police de l'État, dont l'usage est réservé à l'administration, n'est PAS dans le dépôt ; ses quatre fichiers sont lus de jsDelivr, vérifiés
-    // contre leur empreinte, quand la personne déclare avoir le droit de s'en servir (js/pdf-font-plan.js). Sans GFS la fenêtre des polices le dit et Marianne est remplacée par Roboto.
+    // Les polices du PDF (extensions/polices/, demande du 11/11) : la police Marianne - celle de l'État, dont l'usage est réservé à l'administration, n'est PAS dans le dépôt - et les polices LIBRES de
+    // js/free-fonts.js (Open Sans, Lato, Inter...) ; leurs fichiers sont lus de jsDelivr, vérifiés contre leur empreinte, quand la personne les inclut dans la fenêtre « Polices du document »
+    // (js/pdf-font-plan.js). Sans GFS la fenêtre le dit et ces polices sont remplacées par la plus proche (Roboto...). woff.js : ce que les deux se partagent (lire, vérifier, rendre en TrueType).
     polices: {
       nameKey: 'extension.polices.name',
-      version: '0.1',
-      scripts: ['marianne.js'],
+      version: '0.2',
+      scripts: ['woff.js', 'marianne.js', 'libres.js'],
       styles: [],
     },
     // Le mode « Identité de l'État » (DSFR, étude du 13/11) : couleurs, styles, modèles et contrôle qui reprennent l'identité visuelle de l'État, réservés à l'administration. Au premier lot l'extension n'est que

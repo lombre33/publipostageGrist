@@ -5,6 +5,9 @@
 // n'est lu de jsDelivr avant ce oui, et le fichier lu est vérifié contre son empreinte ; sans GFS le bloc le dit et Marianne reste en Roboto.
 // Les essais ne lisent PAS la vraie Marianne (sa licence : elle n'est pas dans le dépôt, et le réseau n'est pas un prérequis) : un faux serveur rend, pour les quatre fichiers, des WOFF faits ici avec Arimo
 // (les quatre graisses ont quatre noms de police distincts), et le test pose leurs empreintes. Le vrai téléchargement se vérifie à la main (dev-tests/README.md).
+// Lot 2 (demande d'Antoine du 12/11, « avec GFS seulement ») : les polices LIBRES du catalogue (js/free-fonts.js : Open Sans, Lato, Inter...) ont leur bloc à part dans la fenêtre, avec leur licence ; avec
+// l'extension « polices » la case « Inclure » est cochée au départ et « Exporter » lit leurs fichiers (extensions/polices/libres.js, vérifiés contre leur empreinte) ; sans elle la fenêtre dit par quoi
+// elles sont remplacées. Là aussi un faux serveur rend des WOFF faits avec Arimo, et le test pose leurs empreintes : aucun essai ne lit le vrai jsDelivr.
 // Joué « hébergé » (dev-tests/gfs-stub.js) : l'extension « polices » est active ou non selon `setExtensions`. Les polices du PDF se lisent dans les octets du fichier (les noms /BaseFont).
 (function () {
   const cases = [];
@@ -127,7 +130,7 @@
     const { expectCall, tries } = options || {};
     const calls = [];
     const real = PdfExport.exportCurrentRecord;
-    PdfExport.exportCurrentRecord = async () => { calls.push({ marianne: PdfFontPlan.current().marianne }); };
+    PdfExport.exportCurrentRecord = async () => { calls.push({ marianne: PdfFontPlan.current().marianne, free: PdfFontPlan.current().free.slice() }); };
     try {
       document.getElementById('btn-export-pdf').click();
       const opened = await waitOpen(tries);
@@ -490,6 +493,261 @@
       return result(bad);
     })),
   });
+
+  // --- Les polices libres (lot 2) ---
+  // Le faux serveur de jsDelivr pour les polices libres : pour chaque police nommée, des WOFF faits avec Arimo (un par graisse que la police porte), et leurs empreintes posées dans PolicesLibres.HASHES
+  // (sauf `wrongHash`). `fetched` : les adresses demandées.
+  async function withFakeFreeFonts(names, fn, options) {
+    const wrongHash = !!(options && options.wrongHash);
+    await Extensions.ensure('polices');
+    await PdfExport.ensurePdfLibsLoaded();
+    const files = {};
+    for (const style of STYLES) files[style] = await woffOf(window.pdfMake.vfs[ARIMO[style]]);
+    const fonts = names.map(name => FreeFonts.find(name));
+    const saved = {};
+    for (const font of fonts) {
+      saved[font.slug] = PolicesLibres.HASHES[font.slug];
+      if (!wrongHash) { const hashes = {}; for (const style of STYLES) hashes[style] = await digestOf(files[style]); PolicesLibres.HASHES[font.slug] = hashes; }
+    }
+    const originalFetch = window.fetch;
+    const fetched = [];
+    window.fetch = function (input, init) {
+      const url = String((input && input.url) || input);
+      const style = url.startsWith(PolicesLibres.BASE) && STYLES.find(candidate => url.endsWith('-latin-' + PolicesLibres.STYLES[candidate][0] + '.woff'));
+      if (!style) return originalFetch.apply(this, arguments);
+      fetched.push(url);
+      return Promise.resolve(new Response(files[style], { status: 200 }));
+    };
+    PolicesLibres.forget();
+    try { return await fn({ fetched, fonts }); } finally {
+      window.fetch = originalFetch;
+      fonts.forEach((font) => {
+        PolicesLibres.HASHES[font.slug] = saved[font.slug];
+        STYLES.forEach((style) => { delete window.pdfMake.vfs['PPLibre-' + font.slug + '-' + style + '.ttf']; });
+        delete window.pdfMake.fonts[font.name];
+      });
+      PolicesLibres.forget();
+      PdfFontPlan.reset();
+    }
+  }
+  const fontsourceUrl = /^https:\/\/cdn\.jsdelivr\.net\/npm\/@fontsource\/[a-z0-9-]+@\d+\.\d+\.\d+\/files\/[a-z0-9-]+-latin-(400|700)-(normal|italic)\.woff$/;
+
+  cases.push({
+    id: 'pdffontplan_scan_tells_free_fonts_from_the_ones_the_pdf_replaces',
+    description: 'Une police du catalogue libre (Open Sans, Lato...) n’est plus rangée avec celles que le PDF remplace : elle a sa liste à part, avec la plus proche pour le cas où elle n’est pas incluse ; le reste (Aptos, Cambria) et Marianne ne changent pas ; un document sans police libre n’en liste aucune',
+    run: async () => {
+      await PdfExport.ensurePdfLibsLoaded();
+      const found = PdfFontPlan.scan([para('Open Sans', 'a') + para('open sans', 'b') + para('Aptos', 'c') + para('Lato', 'd') + para('Cambria', 'e') + para('Marianne', 'f') + para('Arial', 'g')]);
+      const bad = [];
+      const free = found.free.map(font => font.name + '>' + font.family + '>' + font.license).join();
+      if (free !== 'Open Sans>Roboto>' + FreeFonts.find('Open Sans').license + ',Lato>Roboto>' + FreeFonts.find('Lato').license) bad.push('libres=' + free);
+      if (found.replaced.map(item => item.name + '>' + item.family).join() !== 'Aptos>Roboto,Cambria>Tinos') bad.push('remplacées=' + found.replaced.map(item => item.name).join());
+      if (found.marianne !== true) bad.push('Marianne=' + found.marianne);
+      if (PdfFontPlan.scan([para('Aptos', 'a') + para('Arial', 'b')]).free.length) bad.push('un document sans police libre en liste');
+      if (PdfFontPlan.substituteFor('open sans') !== null) bad.push('sans plan, Open Sans reste à Roboto (null) : ' + PdfFontPlan.substituteFor('open sans'));
+      return result(bad);
+    },
+  });
+
+  cases.push({
+    id: 'pdffontplan_window_free_block_with_the_extension_has_the_box_ticked',
+    description: 'Avec l’extension « polices » : le bloc « Polices libres » n’est montré que si le document en use une, avec son nom et sa licence, la case « Inclure » cochée au départ, et rien n’est lu de jsDelivr avant « Exporter » ; Aptos reste dans la liste des remplacées ; aucun bloc Marianne sans Marianne',
+    run: async () => withExtensions(['graphique', 'polices'], () => withFakeFreeFonts(['Open Sans'], async ({ fetched }) => {
+      const bad = [];
+      let pending = PdfFontPlan.review([para('Open Sans', 'Bonjour') + para('Aptos', 'x')]);
+      if (!(await waitOpen())) return result(['la fenêtre ne s’ouvre pas']);
+      const sections = Array.from(overlay().querySelectorAll('.pp-fonts-section')).filter(shown);
+      if (sections.length !== 2) bad.push('blocs montrés=' + sections.length);
+      const rows = rowsText();
+      const licensed = 'Open Sans ' + I18n.t('pdfFonts.free.licensed', { license: FreeFonts.find('Open Sans').license });
+      if (JSON.stringify(rows) !== JSON.stringify(['Aptos → Roboto', licensed]) && JSON.stringify(rows) !== JSON.stringify([licensed, 'Aptos → Roboto'])) bad.push('lignes=' + JSON.stringify(rows));
+      const box = pick('#pp-fonts-free');
+      if (!shown(box) || !box.checked) bad.push('la case « Inclure » n’est pas montrée cochée');
+      if (box.closest('label').textContent.trim() !== I18n.t('pdfFonts.free.include')) bad.push('texte de la case=' + box.closest('label').textContent);
+      if (shown(pick('.pp-fonts-free-note')) || shown(pick('.pp-fonts-free-activate'))) bad.push('la phrase « demande GFS » est montrée avec l’extension');
+      if (shown(pick('.pp-fonts-choice'))) bad.push('un bloc Marianne est montré sans Marianne');
+      if (fetched.length) bad.push('requêtes avant « Exporter » : ' + fetched.join());
+      cancelButton().click();
+      if ((await pending) !== null) bad.push('Annuler ne rend pas null');
+      // Un document sans police libre : pas de bloc ni de case.
+      pending = PdfFontPlan.review([para('Aptos', 'x')]);
+      await waitOpen();
+      if (shown(pick('#pp-fonts-free')) || Array.from(overlay().querySelectorAll('.pp-fonts-section')).filter(shown).length !== 1) bad.push('un bloc libre est montré sans police libre');
+      cancelButton().click();
+      await pending;
+      return result(bad);
+    })),
+  });
+
+  cases.push({
+    id: 'pdffontplan_export_reads_the_free_fonts_after_the_yes_and_the_pdf_writes_them',
+    description: 'Avec l’extension, case cochée : « Exporter » lit les quatre fichiers d’Open Sans (adresse Fontsource à version exacte, sur jsDelivr seulement), le plan rend la police, et le PDF l’écrit en quatre polices distinctes au lieu de Roboto ; case décochée : rien n’est lu et le PDF reste à la plus proche',
+    run: async (h) => withExtensions(['graphique', 'polices'], () => withFakeFreeFonts(['Open Sans'], async ({ fetched }) => {
+      const bad = [];
+      const html = four('Open Sans');
+      let pending = PdfFontPlan.review([html]);
+      if (!(await waitOpen())) return result(['la fenêtre ne s’ouvre pas']);
+      okButton().click();
+      const plan = await pending;
+      if (!plan || JSON.stringify(plan.free) !== JSON.stringify(['open sans']) || plan.marianne !== false) bad.push('plan=' + JSON.stringify(plan));
+      if (fetched.length !== 4 || !fetched.every(url => fontsourceUrl.test(url)) || !fetched.every(url => url.indexOf('/open-sans@' + FreeFonts.find('Open Sans').version + '/') !== -1)) bad.push('requêtes=' + JSON.stringify(fetched));
+      if (!(await waitClosed())) bad.push('la fenêtre reste ouverte');
+      const base64 = (await pdfOf(h, html)).base64;
+      if (arimoCount(base64) !== 4 || baseFontsOf(base64).includes('Roboto-Regular')) bad.push('polices du PDF=' + baseFontsOf(base64).join());
+      // Case décochée.
+      PdfFontPlan.reset();
+      fetched.length = 0;
+      pending = PdfFontPlan.review([html]);
+      await waitOpen();
+      pick('#pp-fonts-free').click();
+      okButton().click();
+      const second = await pending;
+      if (!second || second.free.length) bad.push('case décochée, plan=' + JSON.stringify(second));
+      if (fetched.length) bad.push('case décochée, requêtes=' + fetched.join());
+      const plain = (await pdfOf(h, html)).base64;
+      if (!baseFontsOf(plain).includes('Roboto-Regular') && !baseFontsOf(plain).includes('Arimo-Regular')) bad.push('case décochée, polices=' + baseFontsOf(plain).join());
+      return result(bad);
+    })),
+  });
+
+  cases.push({
+    id: 'pdffontplan_free_font_that_does_not_match_its_hash_is_refused',
+    description: 'Un fichier de police libre qui ne correspond pas à l’empreinte du dépôt est refusé : rien n’entre dans pdfMake, la fenêtre reste ouverte et nomme la police, et la personne peut décocher pour exporter avec la plus proche',
+    run: async (h) => withExtensions(['graphique', 'polices'], () => withFakeFreeFonts(['Open Sans'], async ({ fetched }) => {
+      const bad = [];
+      const pending = PdfFontPlan.review([four('Open Sans')]);
+      if (!(await waitOpen())) return result(['la fenêtre ne s’ouvre pas']);
+      okButton().click();
+      for (let i = 0; i < 60 && !pick('.pp-fonts-status.is-problem'); i++) await sleep(30);
+      const status = pick('.pp-fonts-status');
+      if (!status.classList.contains('is-problem') || status.textContent !== I18n.t('pdfFonts.free.failed', { font: 'Open Sans' })) bad.push('phrase=' + status.textContent);
+      if (!isOpen()) bad.push('la fenêtre s’est refermée');
+      if (okButton().disabled) bad.push('Exporter reste grisé : la personne ne peut pas décocher et repartir');
+      if (STYLES.some(style => window.pdfMake.vfs['PPLibre-open-sans-' + style + '.ttf']) || (window.pdfMake.fonts && window.pdfMake.fonts['Open Sans'])) bad.push('un fichier est entré dans pdfMake');
+      if (!fetched.length) bad.push('aucune requête');
+      pick('#pp-fonts-free').click();
+      okButton().click();
+      const plan = await pending;
+      if (!plan || plan.free.length) bad.push('plan=' + JSON.stringify(plan));
+      const base64 = (await pdfOf(h, four('Open Sans'))).base64;
+      if (arimoCount(base64) !== 0 && !baseFontsOf(base64).includes('Roboto-Regular')) bad.push('le PDF écrit un faux fichier : ' + baseFontsOf(base64).join());
+      return result(bad);
+    }, { wrongHash: true })),
+  });
+
+  cases.push({
+    id: 'pdffontplan_free_font_without_italics_takes_the_nearest_style',
+    description: 'Une police libre dont le paquet n’a que le normal et le gras (Oswald) : seuls ces deux fichiers sont lus, l’italique est rendu par le normal et le gras italique par le gras',
+    run: async (h) => withExtensions(['graphique', 'polices'], () => withFakeFreeFonts(['Oswald'], async ({ fetched, fonts }) => {
+      const bad = [];
+      if (fonts[0].styles !== 'nb') return result(['essai mal posé : Oswald porte ' + fonts[0].styles + ' (le test attend nb)']);
+      const html = four('Oswald');
+      const pending = PdfFontPlan.review([html]);
+      if (!(await waitOpen())) return result(['la fenêtre ne s’ouvre pas']);
+      okButton().click();
+      const plan = await pending;
+      if (!plan || JSON.stringify(plan.free) !== JSON.stringify(['oswald'])) bad.push('plan=' + JSON.stringify(plan));
+      if (fetched.length !== 2) bad.push('requêtes=' + JSON.stringify(fetched));
+      const family = window.pdfMake.fonts.Oswald || {};
+      const want = { normal: 'PPLibre-oswald-normal.ttf', bold: 'PPLibre-oswald-bold.ttf', italics: 'PPLibre-oswald-normal.ttf', bolditalics: 'PPLibre-oswald-bold.ttf' };
+      if (JSON.stringify(family) !== JSON.stringify(want)) bad.push('famille=' + JSON.stringify(family));
+      const base64 = (await pdfOf(h, html)).base64;
+      if (arimoCount(base64) !== 2) bad.push('polices du PDF=' + baseFontsOf(base64).join());
+      return result(bad);
+    })),
+  });
+
+  cases.push({
+    id: 'pdffontplan_without_the_extension_a_free_font_is_listed_with_its_closest_one',
+    description: 'Sans l’extension « polices » : le bloc « Polices libres » dit que les inclure demande l’extension (ou GFS), liste « Open Sans → Roboto », n’a pas de case, porte le bouton d’activation seulement quand GFS répond ; « Exporter » garde la plus proche et rien n’est lu',
+    run: async (h) => withExtensions(['graphique'], async () => {
+      const bad = [];
+      const originalFetch = window.fetch;
+      const asked = [];
+      window.fetch = function (input) { const url = String((input && input.url) || input); if (url.indexOf('cdn.jsdelivr.net') !== -1) asked.push(url); return originalFetch.apply(this, arguments); };
+      try {
+        const name = Extensions.nameOf('polices');
+        let pending = PdfFontPlan.review([para('Open Sans', 'Bonjour')]);
+        if (!(await waitOpen())) return result(['la fenêtre ne s’ouvre pas']);
+        if (JSON.stringify(rowsText()) !== JSON.stringify(['Open Sans → Roboto'])) bad.push('lignes=' + JSON.stringify(rowsText()));
+        if (shown(pick('#pp-fonts-free'))) bad.push('la case est montrée sans l’extension');
+        if (pick('.pp-fonts-free-note').textContent !== I18n.t('pdfFonts.free.needsExtension', { extension: name }) || !shown(pick('.pp-fonts-free-note'))) bad.push('phrase=' + pick('.pp-fonts-free-note').textContent);
+        if (!shown(pick('.pp-fonts-free-activate')) || pick('.pp-fonts-free-activate').textContent !== I18n.t('pdfFonts.marianne.activate', { extension: name })) bad.push('bouton d’activation absent');
+        okButton().click();
+        const plan = await pending;
+        if (!plan || plan.free.length || plan.marianne) bad.push('plan=' + JSON.stringify(plan));
+        const base64 = (await pdfOf(h, four('Open Sans'))).base64;
+        if (arimoCount(base64) !== 0 || !baseFontsOf(base64).includes('Roboto-Regular')) bad.push('PDF=' + baseFontsOf(base64).join());
+        // GFS ne répond pas : la phrase seule, sans bouton.
+        const answering = GfsLink.isAnswering;
+        GfsLink.isAnswering = () => false;
+        try {
+          pending = PdfFontPlan.review([para('Open Sans', 'Bonjour')]);
+          await waitOpen();
+          if (shown(pick('.pp-fonts-free-activate'))) bad.push('le bouton est montré quand GFS ne répond pas');
+          if (pick('.pp-fonts-free-note').textContent !== I18n.t('pdfFonts.free.needsGfs')) bad.push('phrase sans réponse=' + pick('.pp-fonts-free-note').textContent);
+          okButton().click();
+          await pending;
+        } finally { GfsLink.isAnswering = answering; }
+        if (asked.length) bad.push('requêtes=' + asked.join());
+      } finally { window.fetch = originalFetch; }
+      return result(bad);
+    }),
+  });
+
+  cases.push({
+    id: 'pdffontplan_free_fonts_and_marianne_are_asked_in_the_same_window',
+    description: 'Un document en Marianne ET en Open Sans : une seule fenêtre, les deux blocs ; avec Marianne incluse (case de déclaration) et les polices libres cochées, « Exporter » lit les deux et le plan rend les deux ; le moteur du PDF d’une ligne reçoit ce plan, remis à zéro à la fin',
+    run: async (h) => withExtensions(['graphique', 'polices'], () => withFakeMarianne(async () => withFakeFreeFonts(['Open Sans'], async () => {
+      const bad = [];
+      await seed(h, para('Marianne', 'Bonjour') + para('Open Sans', 'Salut'));
+      const run = await clickExport((opened) => {
+        if (!opened) { bad.push('la fenêtre ne s’ouvre pas'); return; }
+        if (Array.from(overlay().querySelectorAll('.pp-fonts-section')).filter(shown).length !== 2) bad.push('blocs montrés=' + Array.from(overlay().querySelectorAll('.pp-fonts-section')).filter(shown).length);
+        pick('#pp-fonts-include').click();
+        pick('#pp-fonts-consent').click();
+        okButton().click();
+      }, { expectCall: true });
+      if (run.calls.length !== 1 || run.calls[0].marianne !== true || JSON.stringify(run.calls[0].free) !== JSON.stringify(['open sans'])) bad.push('exports=' + JSON.stringify(run.calls));
+      if (PdfFontPlan.current().free.length || PdfFontPlan.current().marianne) bad.push('le plan reste après l’export');
+      return result(bad);
+    }))),
+  });
+
+  cases.push({
+    id: 'pdffontplan_batch_asks_once_for_free_fonts_too',
+    description: 'Le lot de PDF avec une police libre : une seule fenêtre pour les trois documents, et chaque document est écrit avec le plan choisi (la police libre incluse)',
+    run: async (h) => withExtensions(['graphique', 'polices'], () => withFakeFreeFonts(['Open Sans'], async () => {
+      const bad = [];
+      await seed(h, para('Open Sans', 'Bonjour ') + `<p><span class="var-badge" data-table="${TABLE}" data-column="Nom" data-key="${TABLE}.Nom"></span></p>`);
+      const plans = [];
+      const real = PdfExport.getNativePdfBlobForRecord;
+      PdfExport.getNativePdfBlobForRecord = function () { plans.push(PdfFontPlan.current().free.join()); return real.apply(this, arguments); };
+      const origCreate = URL.createObjectURL;
+      const origClick = HTMLAnchorElement.prototype.click;
+      const dialogs = h.stubDialogs({ confirm: () => true });
+      const downloads = [];
+      URL.createObjectURL = obj => origCreate.call(URL, obj);
+      HTMLAnchorElement.prototype.click = function () { if (this.download) { downloads.push(this.download); return; } return origClick.call(this); };
+      let windows = 0;
+      try {
+        const watching = (async () => { for (let i = 0; i < 20; i++) { if (await waitOpen()) { windows++; okButton().click(); return true; } } return false; })();
+        document.getElementById('v2-btn-export-pdf-batch').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        if (!(await watching)) bad.push('la fenêtre ne s’ouvre pas');
+        for (let i = 0; i < 300 && !downloads.length; i++) await sleep(100);
+        if (windows !== 1) bad.push('fenêtres=' + windows);
+        if (plans.length !== 3 || plans.some(plan => plan !== 'open sans')) bad.push('plans des documents=' + JSON.stringify(plans));
+        if (PdfFontPlan.current().free.length) bad.push('le plan reste après le lot');
+      } finally {
+        PdfExport.getNativePdfBlobForRecord = real;
+        URL.createObjectURL = origCreate;
+        HTMLAnchorElement.prototype.click = origClick;
+        dialogs.restore();
+      }
+      return result(bad);
+    })),
+  });
+
 
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pdfFontPlan = cases;

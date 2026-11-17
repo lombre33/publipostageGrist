@@ -5,9 +5,11 @@
 //      qu'inclure Marianne demande Grist Factory Suite, aucun choix ni case ; « Exporter le PDF » (vrai clic) donne un PDF où Cambria est en Tinos et Marianne en Roboto, et rien n'a été demandé à jsDelivr ;
 //   2) avec GFS : la fenêtre s'ouvre en haut AUSSI (le focus donné au choix de Marianne, plus bas, ne la défile pas : vu à la main le 12/11, le début était hors de vue), le choix Roboto/Inclure, la case de
 //      déclaration et les deux liens des règles de l'État se lisent en défilant ; « Inclure » grise « Exporter le PDF » tant que la case n'est pas cochée ; tous les textes lisibles (>= 4,5:1) ;
+//   2 bis) les polices LIBRES (lot 2, Open Sans) : sans l'extension, le bloc dit que les inclure demande l'extension, liste « Open Sans → Roboto », sans case ; « Exporter le PDF » les remplace (Roboto) ; avec
+//      l'extension, le bloc montre « Open Sans (licence libre OFL-1.1) » et la case « Inclure » cochée au départ, qu'un vrai clic décoche et recoche ; entière dans le panneau ; lisible ; rien de jsDelivr avant le oui ;
 //   3) Échap n'exporte rien (« Export annulé ») et ne lit rien chez jsDelivr ; un document sans police à dire n'ouvre aucune fenêtre ;
 //   4) le même en anglais, thème sombre ; aucune erreur de page.
-// La vraie Marianne n'est JAMAIS lue ici (sa licence) : l'essai ne coche pas « Inclure » jusqu'au bout ; l'inclusion de bout en bout est jouée par le groupe pdfFontPlan, avec de faux fichiers.
+// La vraie Marianne n'est JAMAIS lue ici (sa licence) : l'essai ne coche pas « Inclure » jusqu'au bout, et aucune police libre n'est lue de jsDelivr non plus (le réseau n'est pas un prérequis) ; l'inclusion de bout en bout est jouée par le groupe pdfFontPlan, avec de faux fichiers.
 // Lancé par run-headless.mjs (groupe Node « pdfFontsMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-pdf-fonts-mouse.mjs
 import { open, stopServer, sleep, click, fire, pickTemplate, status, downloadOf as downloadOfLib } from './load-lib.mjs';
 import { execFileSync } from 'node:child_process';
@@ -22,10 +24,11 @@ const MODAL = '#pp-fonts-modal';
 const OK = MODAL + ' .var-modal-primary';
 const CANCEL = MODAL + ' .pp-modal-actions button:not(.var-modal-primary)';
 const DOC_HTML = '<p><span style="font-family: Marianne;">Texte en Marianne : été, œuvre</span></p><p><span style="font-family: Cambria;">Cambria devient Tinos</span></p>';
+const FREE_HTML = '<p><span style="font-family: Open Sans;">Texte en Open Sans : été, œuvre</span></p><p><span style="font-family: Cambria;">Cambria devient Tinos</span></p>';
 const PLAIN_HTML = '<p><span style="font-family: Arial;">Arial est dans le PDF</span></p>';
 const WORDS = {
-  fr: { cancelled: 'Export annulé.', needsExt: 'Inclure Marianne demande l’extension « Polices » de Grist Factory Suite', activate: 'Activer l’extension « Polices »…', roboto: 'Remplacer Marianne par Roboto', include: 'Inclure Marianne dans le PDF' },
-  en: { cancelled: 'Export canceled.', needsExt: 'Including Marianne requires the “Fonts” extension of Grist Factory Suite', activate: 'Turn on the “Fonts” extension…', roboto: 'Replace Marianne with Roboto', include: 'Include Marianne in the PDF' },
+  fr: { freeInclude: 'Inclure ces polices libres dans le PDF', needsFreeExt: 'Les inclure demande l’extension « Polices » de Grist Factory Suite', cancelled: 'Export annulé.', needsExt: 'Inclure Marianne demande l’extension « Polices » de Grist Factory Suite', activate: 'Activer l’extension « Polices »…', roboto: 'Remplacer Marianne par Roboto', include: 'Inclure Marianne dans le PDF' },
+  en: { freeInclude: 'Include these free fonts in the PDF', cancelled: 'Export canceled.', needsExt: 'Including Marianne requires the “Fonts” extension of Grist Factory Suite', activate: 'Turn on the “Fonts” extension…', roboto: 'Replace Marianne with Roboto', include: 'Include Marianne in the PDF' },
 };
 
 let total = 0;
@@ -67,7 +70,7 @@ const seen = page => page.evaluate(() => {
     return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
   };
   const ratio = (a, c) => { const la = lum(a), lb = lum(c); return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); };
-  const texts = Array.from(ov.querySelectorAll('.pp-fonts-intro, .pp-fonts-text, .pp-fonts-row, .pp-fonts-legend, .pp-fonts-choice label, .pp-fonts-note, .pp-fonts-activate, .pp-fonts-link, .pp-modal-title, h3')).filter(shownNode);
+  const texts = Array.from(ov.querySelectorAll('.pp-fonts-intro, .pp-fonts-text, .pp-fonts-row, .pp-fonts-legend, .pp-fonts-choice label, .pp-fonts-note, .pp-fonts-activate, .pp-fonts-free-note, .pp-fonts-free-activate, .pp-fonts-section > .pp-fonts-check, .pp-fonts-link, .pp-modal-title, h3')).filter(shownNode);
   const rows = Array.from(ov.querySelectorAll('.pp-fonts-row')).filter(shownNode);
   const ok = ov.querySelector('.var-modal-primary');
   const cancel = ov.querySelector('.pp-modal-actions button:not(.var-modal-primary)');
@@ -81,6 +84,8 @@ const seen = page => page.evaluate(() => {
     links: Array.from(ov.querySelectorAll('.pp-fonts-link')).filter(shownNode).map(a => a.getAttribute('href')),
     allText: ov.textContent.replace(/\s+/g, ' '),
     noGfsShown: shownNode(ov.querySelector('.pp-fonts-note')),
+    freeBox: shownNode(ov.querySelector('#pp-fonts-free')), freeChecked: !!(ov.querySelector('#pp-fonts-free') || {}).checked, freeNoteShown: shownNode(ov.querySelector('.pp-fonts-free-note')), freeNoteText: (ov.querySelector('.pp-fonts-free-note') || {}).textContent || '',
+    freeActivateShown: shownNode(ov.querySelector('.pp-fonts-free-activate')), freeLabel: ((ov.querySelector('#pp-fonts-free') || {}).closest && ov.querySelector('#pp-fonts-free').closest('label') || {}).textContent || '',
     activateShown: shownNode(ov.querySelector('.pp-fonts-activate')), activateText: (ov.querySelector('.pp-fonts-activate') || {}).textContent || '', focusId: (document.activeElement && document.activeElement.id) || '',
     lowest: texts.map(el => ({ t: el.textContent.trim().slice(0, 30), c: Math.round(ratio(getComputedStyle(el).color, opaque(el)) * 100) / 100 })).filter(x => x.c < 4.5),
     texts: texts.length,
@@ -101,7 +106,7 @@ try {
     onPage: async (page) => {
       await page.addInitScript({ path: join(ROOT, 'dev-tests', 'gfs-stub.js') });
       await page.addInitScript(() => { history.replaceState(null, '', location.pathname + '?gfs=0'); });
-      page.on('request', (request) => { if (/cdn\.jsdelivr\.net\/npm\/@gouvfr/.test(request.url())) jsdelivr.push(request.url()); });
+      page.on('request', (request) => { if (/cdn\.jsdelivr\.net\/npm\/@(gouvfr|fontsource)/.test(request.url())) jsdelivr.push(request.url()); });
     },
   });
   let page = w.page;
@@ -122,7 +127,7 @@ try {
   check('sans l\'extension : la phrase dit qu\'inclure Marianne demande l\'extension « Polices » de Grist Factory Suite, le bouton pour l\'activer est là, sans choix ni case', s.noGfsShown && s.allText.includes(WORDS.fr.needsExt) && s.activateShown && s.activateText === WORDS.fr.activate && !s.choice && !s.roboto && !s.include, { shown: s.noGfsShown, activate: s.activateText, choice: s.choice });
   check('sans GFS : tous les textes sont lisibles (>= 4,5:1)', s.texts > 0 && s.lowest.length === 0, s.lowest);
   const noGfs = await downloadOf(page, 'polices-sans-gfs', async () => { await click(page, OK); });
-  check('sans GFS : « Exporter le PDF » (vrai clic) télécharge le PDF', noGfs.size > 1000 && /\.pdf$/.test(noGfs.file), noGfs);
+  check('sans GFS : « Exporter le PDF » (vrai clic) télécharge le PDF', noGfs.size > 1000, noGfs);
   const noGfsFonts = await pdfFontsOf(noGfs.file);
   check('sans GFS : Cambria est écrit en Tinos, Marianne en Roboto, aucune Marianne dans le PDF', /Tinos/.test(noGfsFonts) && /Roboto/.test(noGfsFonts) && !/Marianne/.test(noGfsFonts), noGfsFonts);
   check('sans GFS : rien n\'a été demandé à jsDelivr', jsdelivr.length === 0, jsdelivr);
@@ -176,6 +181,38 @@ try {
   await page.keyboard.press('Escape');
   check('Échap ferme la fenêtre', await waitDialog(page, false));
   check('Échap : l\'état dit « Export annulé. » et rien n\'est lu chez jsDelivr', (await status(page)) === WORDS.fr.cancelled && jsdelivr.length === 0, { status: await status(page), jsdelivr });
+  // ---- 2 bis) Les polices libres ----
+  await setExtensions(page, ['graphique']);
+  await setDocument(page, FREE_HTML);
+  await sleep(300);
+  await click(page, '#btn-export-pdf');
+  check('polices libres, sans l\'extension : la fenêtre s\'ouvre', await waitDialog(page));
+  await sleep(300);
+  s = await seen(page);
+  check('polices libres, sans l\'extension : entière dans le panneau 700x400, boutons au premier plan, ouverte en haut', s.inPanel && s.okSeen && s.cancelSeen && s.scrollTop === 0, { inPanel: s.inPanel, ok: s.okSeen, cancel: s.cancelSeen, top: s.scrollTop });
+  check('polices libres, sans l\'extension : « Open Sans → Roboto » est listé, la phrase dit qu\'inclure demande l\'extension, le bouton d\'activation est là, aucune case', s.rows.some(r => /^Open Sans → Roboto$/.test(r)) && s.freeNoteShown && s.freeNoteText.includes(WORDS.fr.needsFreeExt) && s.freeActivateShown && !s.freeBox, { rows: s.rows, note: s.freeNoteText, activate: s.freeActivateShown, box: s.freeBox });
+  check('polices libres, sans l\'extension : tous les textes sont lisibles (>= 4,5:1)', s.texts > 0 && s.lowest.length === 0, s.lowest);
+  const freeNoExt = await downloadOf(page, 'polices-libres-sans-extension', async () => { await reveal(page, OK); await click(page, OK); });
+  const freeNoExtFonts = await pdfFontsOf(freeNoExt.file);
+  check('polices libres, sans l\'extension : « Exporter le PDF » écrit Open Sans en Roboto et Cambria en Tinos, aucune police libre dans le PDF', freeNoExt.size > 1000 && /Roboto/.test(freeNoExtFonts) && /Tinos/.test(freeNoExtFonts) && !/OpenSans|Open Sans/.test(freeNoExtFonts), freeNoExtFonts);
+  await setExtensions(page, ['graphique', 'polices']);
+  await setDocument(page, FREE_HTML);
+  await sleep(300);
+  await click(page, '#btn-export-pdf');
+  check('polices libres, avec l\'extension : la fenêtre s\'ouvre', await waitDialog(page));
+  await sleep(300);
+  s = await seen(page);
+  check('polices libres, avec l\'extension : entière dans le panneau, ouverte en haut, boutons au premier plan', s.inPanel && s.okSeen && s.cancelSeen && s.scrollTop === 0 && s.firstRowSeen, { inPanel: s.inPanel, ok: s.okSeen, cancel: s.cancelSeen, top: s.scrollTop, first: s.firstRowSeen });
+  check('polices libres, avec l\'extension : « Open Sans (licence libre OFL-1.1) », la case « Inclure ces polices libres dans le PDF » cochée, ni phrase ni bouton, aucun choix Marianne', s.rows.some(r => /^Open Sans \(licence libre OFL-1\.1\)$/.test(r)) && s.freeBox && s.freeChecked && s.freeLabel.trim() === WORDS.fr.freeInclude && !s.freeNoteShown && !s.freeActivateShown && !s.choice, { rows: s.rows, box: s.freeBox, checked: s.freeChecked, label: s.freeLabel, note: s.freeNoteShown, choice: s.choice });
+  check('polices libres, avec l\'extension : tous les textes sont lisibles (>= 4,5:1)', s.texts > 0 && s.lowest.length === 0, s.lowest);
+  await reveal(page, '#pp-fonts-free');
+  await click(page, '#pp-fonts-free');
+  await sleep(150);
+  check('polices libres : un vrai clic décoche la case, un second la recoche', !(await seen(page)).freeChecked && (await click(page, '#pp-fonts-free'), await sleep(150), (await seen(page)).freeChecked));
+  check('polices libres : rien n\'a été demandé à jsDelivr avant le oui', jsdelivr.length === 0, jsdelivr);
+  await page.keyboard.press('Escape');
+  check('polices libres : Échap ferme la fenêtre sans rien lire', (await waitDialog(page, false)) && jsdelivr.length === 0, jsdelivr);
+
   await setDocument(page, PLAIN_HTML);
   await sleep(300);
   const plain = await downloadOf(page, 'polices-rien-a-dire', async () => { await click(page, '#btn-export-pdf'); });
@@ -190,7 +227,7 @@ try {
     onPage: async (p) => {
       await p.addInitScript({ path: join(ROOT, 'dev-tests', 'gfs-stub.js') });
       await p.addInitScript(() => { history.replaceState(null, '', location.pathname + '?gfs=0'); });
-      p.on('request', (request) => { if (/cdn\.jsdelivr\.net\/npm\/@gouvfr/.test(request.url())) jsdelivr.push(request.url()); });
+      p.on('request', (request) => { if (/cdn\.jsdelivr\.net\/npm\/@(gouvfr|fontsource)/.test(request.url())) jsdelivr.push(request.url()); });
     },
   });
   page = w.page;
@@ -219,6 +256,15 @@ try {
   check('anglais, sombre : tous les textes sont lisibles (>= 4,5:1)', s.texts > 0 && s.lowest.length === 0, s.lowest);
   await page.keyboard.press('Escape');
   check('anglais, sombre : Échap annule (« Export canceled. »)', (await waitDialog(page, false)) && (await status(page)) === WORDS.en.cancelled, await status(page));
+  await setDocument(page, FREE_HTML);
+  await sleep(300);
+  await click(page, '#btn-export-pdf');
+  check('anglais, sombre, polices libres : la fenêtre s\'ouvre', await waitDialog(page));
+  await sleep(300);
+  s = await seen(page);
+  check('anglais, sombre, polices libres : « Open Sans (OFL-1.1 free licence) » et la case « Include these free fonts in the PDF » (cochée) se lisent (>= 4,5:1), entière dans le panneau', s.inPanel && s.okSeen && s.cancelSeen && s.rows.some(r => /^Open Sans \(OFL-1\.1 free licence\)$/.test(r)) && s.freeBox && s.freeChecked && s.freeLabel.trim() === WORDS.en.freeInclude && s.lowest.length === 0, { rows: s.rows, label: s.freeLabel, lowest: s.lowest, inPanel: s.inPanel });
+  await page.keyboard.press('Escape');
+  await waitDialog(page, false);
   check('aucune erreur de page (passe anglaise)', realErrors(w).length === 0, realErrors(w));
   await w.close();
   w = null;

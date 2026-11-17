@@ -4,12 +4,14 @@
 //  - le PDF remplace une police qu'il n'a pas par la plus proche qu'il a (`substituteFor` : Cambria par Tinos, Consolas par Cousine, Arial Narrow par Arimo ; sinon Roboto), la même règle que l'import Word et
 //    PowerPoint (ExportCommon.Ooxml.nearestFamily) ;
 //  - à l'export, une fenêtre « Polices du document » (`review`) dit quelles polices du document seront remplacées et par quoi. Elle ne s'ouvre que s'il y en a une, ou si le document est écrit en Marianne ;
+//  - les polices LIBRES (js/free-fonts.js : Open Sans, Lato, Inter...) ont leur bloc, seulement quand le document en emploie : avec GFS (extension « polices », extensions/polices/libres.js) la personne peut les
+//    inclure d'une case, cochée au départ (leur licence permet de les copier : rien à déclarer), lues de jsDelivr le temps de l'export ; hors GFS le bloc le dit et la plus proche les remplace ;
 //  - Marianne a son bloc, seulement quand le document l'emploie : la police de l'État dont l'usage est réservé à l'administration (Système de Design de l'État). Avec GFS (extension « polices »,
 //    extensions/polices/marianne.js), la personne peut l'inclure en déclarant, case cochée, avoir le droit de s'en servir ; elle est alors lue de jsDelivr le temps de l'export. Hors GFS, le bloc le dit et
 //    Marianne est remplacée par Roboto.
 // Un export qui ne passe pas par la fenêtre (PDF joint à une ligne, assemblage par GFS...) suit le plan de départ : le remplacement par la plus proche, jamais Marianne. Le plan choisi ne vaut que pour
 // l'export qui l'a demandé : js/main-export.js le remet à zéro à sa fin (`reset`).
-//    review(texts) -> Promise<plan | null>   texts : le HTML du document (et de ses en-têtes et pieds) ; null : la personne renonce. plan : { marianne }.
+//    review(texts) -> Promise<plan | null>   texts : le HTML du document (et de ses en-têtes et pieds) ; null : la personne renonce. plan : { marianne, free } (free : les noms, en minuscules, des polices libres incluses).
 const PdfFontPlan = (function () {
   const el = Dom.el;
   const EXTENSION = 'polices';
@@ -25,14 +27,19 @@ const PdfFontPlan = (function () {
   const PDF_FAMILY = { 'arial': 'Arimo', 'times new roman': 'Tinos', 'georgia': 'Gelasio', 'courier new': 'Cousine', 'calibri': 'Carlito' };
   const LIKE = { Arimo: 'Arial', Tinos: 'Times New Roman', Gelasio: 'Georgia', Cousine: 'Courier New', Carlito: 'Calibri' };
 
-  const DEFAULT_PLAN = Object.freeze({ marianne: false });
+  const DEFAULT_PLAN = Object.freeze({ marianne: false, free: Object.freeze([]) });
   let plan = DEFAULT_PLAN;
 
-  // La police du PDF qui remplace la famille `lower` (en minuscules) : celle du plan pour Marianne, la plus proche des six sinon, null quand il n'y en a pas (Roboto écrit alors le texte).
-  function substituteFor(lower) {
-    if (lower === MARIANNE) return plan.marianne ? 'Marianne' : null;
+  // La plus proche des six polices du PDF pour la famille `lower` (en minuscules), null quand il n'y en a pas (Roboto écrit alors le texte).
+  function closestFor(lower) {
     const near = typeof ExportCommon !== 'undefined' && ExportCommon.Ooxml ? ExportCommon.Ooxml.nearestFamily(lower) : null;
     return near ? PDF_FAMILY[near.toLowerCase()] || null : null;
+  }
+  // La police du PDF qui remplace la famille `lower` (en minuscules) : celle du plan pour Marianne et pour une police libre incluse, la plus proche des six sinon, null quand il n'y en a pas.
+  function substituteFor(lower) {
+    if (lower === MARIANNE) return plan.marianne ? 'Marianne' : null;
+    if (plan.free.includes(lower)) { const font = FreeFonts.find(lower); if (font) return font.name; }
+    return closestFor(lower);
   }
 
   // Les familles que les textes nomment en premier (comme le PDF : la première de la liste), sans les noms génériques : { lower -> nom tel qu'écrit }.
@@ -53,16 +60,20 @@ const PdfFontPlan = (function () {
     return found;
   }
 
-  // Ce qui change pour ces textes : { replaced: [{ name, family }], marianne }. Une famille que le PDF écrit telle quelle (ou par son équivalent de même chasse : Arial par Arimo...) n'est pas comptée.
+  // Ce qui change pour ces textes : { replaced: [{ name, family }], free: [{ name, slug, license, family }], marianne }. Une famille que le PDF écrit telle quelle (ou par son équivalent de même
+  // chasse : Arial par Arimo...) n'est pas comptée ; une police libre de js/free-fonts.js va dans `free` (avec la police qui la remplace sans GFS), les autres dans `replaced`.
   function scan(texts) {
     const replaced = [];
+    const free = [];
     let marianne = false;
     familiesIn(texts).forEach((name, lower) => {
       if (lower === MARIANNE) { marianne = true; return; }
       if (typeof PdfExport !== 'undefined' && PdfExport.hasEmbeddedFamily(lower)) return;
-      replaced.push({ name, family: substituteFor(lower) || 'Roboto' });
+      const font = typeof FreeFonts !== 'undefined' ? FreeFonts.find(lower) : null;
+      if (font) free.push(Object.assign({}, font, { family: closestFor(lower) || 'Roboto' }));
+      else replaced.push({ name, family: closestFor(lower) || 'Roboto' });
     });
-    return { replaced, marianne };
+    return { replaced, free, marianne };
   }
 
   // « Tinos (proche de Times New Roman) », ou « Roboto ».
@@ -108,6 +119,17 @@ const PdfFontPlan = (function () {
     const list = el('ul', 'pp-fonts-list');
     replaced.append(replacedTitle, replacedText, list);
 
+    const free = el('section', 'pp-fonts-section');
+    const freeTitle = el('h4', 'pp-fonts-heading');
+    const freeText = el('p', 'pp-fonts-text');
+    const freeList = el('ul', 'pp-fonts-list');
+    const freeNote = el('p', 'pp-fonts-text pp-fonts-free-note');
+    const freeActivate = el('button', 'pp-fonts-free-activate');
+    freeActivate.type = 'button';
+    freeActivate.addEventListener('click', onActivate);
+    const freeUse = check('pp-fonts-free');
+    free.append(freeTitle, freeText, freeList, freeNote, freeActivate, freeUse.wrap);
+
     const marianne = el('section', 'pp-fonts-section');
     const marianneTitle = el('h4', 'pp-fonts-heading');
     const marianneText = el('p', 'pp-fonts-text');
@@ -122,9 +144,10 @@ const PdfFontPlan = (function () {
     const include = check('pp-fonts-include', 'pp-fonts-marianne');
     const consent = check('pp-fonts-consent');
     consent.wrap.classList.add('pp-fonts-consent');
+    choice.append(legend, useRoboto.wrap, include.wrap, consent.wrap);
+    // Ce que dit le chargement (« Téléchargement… », « n'a pas pu être chargée ») : une ligne pour toute la fenêtre.
     const status = el('p', 'pp-fonts-status');
     status.setAttribute('role', 'status');
-    choice.append(legend, useRoboto.wrap, include.wrap, consent.wrap, status);
     const rules = el('div', 'pp-fonts-rules');
     const rulesLabel = el('span', 'pp-fonts-rules-label');
     const rulesList = el('ul', 'pp-fonts-rules-list');
@@ -134,9 +157,9 @@ const PdfFontPlan = (function () {
     rules.append(rulesLabel, rulesList);
     marianne.append(marianneTitle, marianneText, noGfs, activate, choice, rules);
 
-    win.body.append(intro, replaced, marianne);
+    win.body.append(intro, replaced, free, marianne, status);
     const { cancel, ok } = win.addButtons();
-    refs = { intro, replaced, replacedTitle, replacedText, list, marianne, marianneTitle, marianneText, noGfs, activate, choice, legend, useRoboto, include, consent, status, rules, rulesLabel, linkTypography, linkTerms, cancel, ok };
+    refs = { intro, replaced, replacedTitle, replacedText, list, free, freeTitle, freeText, freeList, freeNote, freeActivate, freeUse, marianne, marianneTitle, marianneText, noGfs, activate, choice, legend, useRoboto, include, consent, status, rules, rulesLabel, linkTypography, linkTerms, cancel, ok };
 
     cancel.addEventListener('click', () => { if (current) current.finish(null); });
     win.body.addEventListener('change', () => { setStatus(''); render(); });
@@ -147,20 +170,48 @@ const PdfFontPlan = (function () {
     refs.status.textContent = text;
     refs.status.classList.toggle('is-problem', !!problem);
   }
-  // La case de la déclaration ne sert qu'avec « Inclure » ; « Exporter » reste grisé tant que la déclaration manque.
-  // Ce que la fenêtre dit de l'extension « polices » : active, le choix (Roboto / Inclure) ; sinon la phrase qui dit pourquoi il n'y est pas, et - dans GFS, qui répond - le bouton qui ouvre
-  // la fenêtre d'installation de GFS pour la cocher. Rejouée à chaque événement `extensions` de GFS : cochée là-bas, la fenêtre ouverte montre le choix sans se refermer.
+  // Les lignes du bloc des polices libres : avec l'extension, le nom et la licence ; sans elle, ce qui les remplace dans le PDF.
+  function fillFreeRows(found, can) {
+    refs.freeList.textContent = '';
+    found.free.forEach((font) => {
+      const item = el('li', 'pp-fonts-row');
+      if (can) item.append(el('span', 'pp-fonts-name', font.name), document.createTextNode(' '), el('span', 'pp-fonts-to', I18n.t('pdfFonts.free.licensed', { license: font.license })));
+      else {
+        const arrow = el('span', 'pp-fonts-arrow', '→');
+        arrow.setAttribute('aria-hidden', 'true');
+        item.append(el('span', 'pp-fonts-name', font.name), document.createTextNode(' '), arrow, document.createTextNode(' '), el('span', 'pp-fonts-to', describe(font.family)));
+      }
+      refs.freeList.appendChild(item);
+    });
+  }
+
+  // Ce que la fenêtre dit de l'extension « polices » : active, le choix de Marianne (Roboto / Inclure) et la case des polices libres ; sinon la phrase qui dit pourquoi ils n'y sont pas, et - dans GFS,
+  // qui répond - le bouton qui ouvre la fenêtre d'installation de GFS pour la cocher. Rejouée à chaque événement `extensions` de GFS : cochée là-bas, la fenêtre ouverte montre le choix sans se refermer.
   function showAvailability() {
-    if (!current || !refs || !current.found.marianne) return;
+    if (!current || !refs) return;
+    const found = current.found;
     const can = Extensions.isActive(EXTENSION);
     const askable = !can && GfsLink.hosted && GfsLink.isAnswering();
-    const focusWasOnButton = document.activeElement === refs.activate;
-    refs.noGfs.textContent = I18n.t(askable ? 'pdfFonts.marianne.needsExtension' : 'pdfFonts.marianne.needsGfs', { extension: Extensions.nameOf(EXTENSION) });
-    refs.noGfs.hidden = can;
-    refs.activate.textContent = I18n.t('pdfFonts.marianne.activate', { extension: Extensions.nameOf(EXTENSION) });
-    refs.activate.hidden = !askable;
-    refs.choice.hidden = !can;
-    if (focusWasOnButton && can) refs.useRoboto.input.focus();
+    const focusWasOnButton = document.activeElement === refs.activate || document.activeElement === refs.freeActivate;
+    const name = Extensions.nameOf(EXTENSION);
+    if (found.marianne) {
+      refs.noGfs.textContent = I18n.t(askable ? 'pdfFonts.marianne.needsExtension' : 'pdfFonts.marianne.needsGfs', { extension: name });
+      refs.noGfs.hidden = can;
+      refs.activate.textContent = I18n.t('pdfFonts.marianne.activate', { extension: name });
+      refs.activate.hidden = !askable;
+      refs.choice.hidden = !can;
+    }
+    if (found.free.length) {
+      const wasHidden = refs.freeUse.wrap.hidden;
+      refs.freeNote.textContent = I18n.t(askable ? 'pdfFonts.free.needsExtension' : 'pdfFonts.free.needsGfs', { extension: name });
+      refs.freeNote.hidden = can;
+      refs.freeActivate.textContent = I18n.t('pdfFonts.marianne.activate', { extension: name });
+      refs.freeActivate.hidden = !askable;
+      refs.freeUse.wrap.hidden = !can;
+      if (can && wasHidden) refs.freeUse.input.checked = true;
+      fillFreeRows(found, can);
+    }
+    if (focusWasOnButton && can) (found.marianne ? refs.useRoboto.input : refs.freeUse.input).focus();
   }
 
   // Le bouton n'est pas grisé pendant la demande (un bouton grisé perd le focus, et deux clics ne posent qu'une demande chez GFS : GfsLink.install).
@@ -176,28 +227,38 @@ const PdfFontPlan = (function () {
     ok.disabled = include.input.checked && !consent.input.checked;
   }
 
-  // « Exporter le PDF » : sans Marianne, tel quel ; avec elle, d'abord son chargement (la fenêtre reste ouverte et le dit), et si elle ne vient pas la personne choisit Roboto ou réessaie.
+  // « Exporter le PDF » : sans Marianne ni police libre incluse, tel quel ; sinon d'abord leur chargement (la fenêtre reste ouverte et le dit), et si une ne vient pas la personne décoche ou réessaie.
   async function accept() {
     if (!current || refs.ok.disabled) return;
-    if (!refs.include.input.checked) { current.finish(DEFAULT_PLAN); return; }
+    const found = current.found;
+    const wantMarianne = found.marianne && !refs.choice.hidden && refs.include.input.checked;
+    const wantFree = found.free.length > 0 && !refs.freeUse.wrap.hidden && refs.freeUse.input.checked;
+    if (!wantMarianne && !wantFree) { current.finish(DEFAULT_PLAN); return; }
     const mine = ++token;
     refs.ok.disabled = true;
     refs.cancel.disabled = false;
-    setStatus(I18n.t('pdfFonts.marianne.loading'));
-    let result = { ok: false };
+    setStatus(I18n.t('pdfFonts.loading'));
+    let problem = '';
     try {
       await Extensions.ensure(EXTENSION);
       await ExportEngines.ensure('pdf');
       await PdfExport.ensurePdfLibsLoaded();
-      result = await PolicesMarianne.load(window.pdfMake);
-    } catch (e) { result = { ok: false, reason: 'engine' }; }
+      if (wantMarianne) {
+        const result = await PolicesMarianne.load(window.pdfMake);
+        if (!result.ok) problem = I18n.t('pdfFonts.marianne.failed');
+      }
+      if (!problem && wantFree) {
+        const result = await PolicesLibres.load(window.pdfMake, found.free);
+        if (!result.ok) problem = I18n.t('pdfFonts.free.failed', { font: result.font || '' });
+      }
+    } catch (e) { problem = I18n.t(wantMarianne ? 'pdfFonts.marianne.failed' : 'pdfFonts.free.failed', { font: '' }); }
     if (mine !== token || !current) return;
-    if (result.ok) { current.finish(Object.freeze({ marianne: true })); return; }
-    setStatus(I18n.t('pdfFonts.marianne.failed'), true);
+    if (!problem) { current.finish(Object.freeze({ marianne: wantMarianne, free: Object.freeze(wantFree ? found.free.map(font => font.name.toLowerCase()) : []) })); return; }
+    setStatus(problem, true);
     render();
   }
 
-  function open(found, canInclude) {
+  function open(found) {
     ensure();
     if (current) current.finish(null);
     token++;
@@ -229,6 +290,12 @@ const PdfFontPlan = (function () {
         item.append(el('span', 'pp-fonts-name', name), document.createTextNode(' '), arrow, document.createTextNode(' '), el('span', 'pp-fonts-to', describe(family)));
         r.list.appendChild(item);
       });
+      r.free.hidden = !found.free.length;
+      r.freeTitle.textContent = I18n.t('pdfFonts.free.title');
+      r.freeText.textContent = I18n.t('pdfFonts.free.text');
+      r.freeUse.text.textContent = I18n.t('pdfFonts.free.include');
+      r.freeUse.input.checked = false;
+      r.freeUse.wrap.hidden = true;
       r.marianne.hidden = !found.marianne;
       r.marianneTitle.textContent = I18n.t('pdfFonts.marianne.title');
       r.marianneText.textContent = I18n.t('pdfFonts.marianne.text');
@@ -248,7 +315,8 @@ const PdfFontPlan = (function () {
       r.cancel.disabled = false;
       setStatus('');
       render();
-      win.show(() => (canInclude && found.marianne ? r.useRoboto.input : r.ok));
+      const can = Extensions.isActive(EXTENSION);
+      win.show(() => (can && found.marianne ? r.useRoboto.input : can && found.free.length ? r.freeUse.input : r.ok));
       // Le focus donné au choix de Marianne (plus bas dans la fenêtre) la fait défiler : on la rend en haut, où se lisent la phrase et les polices remplacées.
       win.body.scrollTop = 0;
     });
@@ -260,8 +328,8 @@ const PdfFontPlan = (function () {
     if (typeof ModalBase === 'undefined') return plan;
     await ExportEngines.ensure('pdf');
     const found = scan(texts);
-    if (!found.replaced.length && !found.marianne) return plan;
-    const chosen = await open(found, found.marianne && Extensions.isActive(EXTENSION));
+    if (!found.replaced.length && !found.free.length && !found.marianne) return plan;
+    const chosen = await open(found);
     if (!chosen) return null;
     plan = chosen;
     return plan;

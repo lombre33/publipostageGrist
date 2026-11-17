@@ -1489,17 +1489,44 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     if (/(?:https?:)?\/\/[^\s'"`]*plotly|plotly[^\n]*(?:https?:)?\/\/[^\s'"`]+\.js\b/i.test(code)) named.push(rel);
     if (/\b2\.13\.2\b/.test(code)) versions.push(rel);
   }
-  // La seule exception : les quatre empreintes de la police Marianne (ce sont des polices, pas du code ; le fichier se lit chez jsDelivr et se vérifie avant d'entrer dans le PDF, cf. la ligne suivante).
-  const FONT_EXTENSION = 'extensions/polices/marianne.js';
-  check('extension : ni l\'adresse de Plotly ni une empreinte (sha384-…) ne sont écrites dans le code du widget ou de ses extensions, ni ailleurs dans la page que dans sa politique (la source vient de GFS) - sauf les quatre empreintes des fichiers de la police Marianne',
-    named.length === 0 && !jsFiles.filter(rel => rel.startsWith('extensions/') && rel !== FONT_EXTENSION).some(rel => /sha(256|384|512)-[A-Za-z0-9+/=]{20,}/.test(read(rel))), named.join(', '));
+  // La seule exception : les empreintes des polices (Marianne, et les polices libres de js/free-fonts.js) : ce sont des polices, pas du code ; leur fichier se lit chez jsDelivr et se vérifie avant d'entrer dans
+  // le PDF, cf. les lignes suivantes.
+  const FONT_EXTENSIONS = ['extensions/polices/marianne.js', 'extensions/polices/libres.js'];
+  check('extension : ni l\'adresse de Plotly ni une empreinte (sha384-…) ne sont écrites dans le code du widget ou de ses extensions, ni ailleurs dans la page que dans sa politique (la source vient de GFS) - sauf les empreintes des fichiers des polices (Marianne, polices libres)',
+    named.length === 0 && !jsFiles.filter(rel => rel.startsWith('extensions/') && !FONT_EXTENSIONS.includes(rel)).some(rel => /sha(256|384|512)-[A-Za-z0-9+/=]{20,}/.test(read(rel))), named.join(', '));
   const fontFilesInTree = ['js', 'extensions', 'css', 'img'].flatMap(dir => listFiles(dir, /\.(woff2?|ttf|otf)$/i));
-  const marianneCode = noCommentsJs(read(FONT_EXTENSION));
+  const noScriptTag = code => !/createElement\(\s*['"]script['"]\s*\)/.test(code);
+  // La lecture d'un fichier de police, commune à Marianne et aux polices libres (extensions/polices/woff.js) : l'empreinte est comparée AVANT que le fichier soit rendu en TrueType et rendu à pdfMake.
+  const woffCode = noCommentsJs(read('extensions/polices/woff.js'));
+  const verifiedFirst = woffCode.indexOf('digest !== expected') > 0 && woffCode.indexOf('digest !== expected') < woffCode.indexOf('await woffToSfnt(bytes)') && /await digestOf\(bytes\)/.test(woffCode) && /referrerPolicy: 'no-referrer'/.test(woffCode) && /credentials: 'omit'/.test(woffCode);
+  check('extension polices : la lecture d\'un fichier de police (woff.js) compare son empreinte SHA-384 AVANT de le convertir et de le rendre à pdfMake, sans cookie ni référent',
+    verifiedFirst && noScriptTag(woffCode), JSON.stringify({ verifiedFirst }));
+  const marianneCode = noCommentsJs(read('extensions/polices/marianne.js'));
   const marianneAddresses = marianneCode.match(/https?:\/\/[^\s'"`]+/g) || [];
-  const marianneOrder = marianneCode.indexOf('await digestOf(bytes)') > 0 && marianneCode.indexOf('await digestOf(bytes)') < marianneCode.indexOf('await woffToSfnt(bytes)') && /digest !== \(hashes/.test(marianneCode);
-  check('extension polices : la police Marianne ne se lit que chez jsDelivr, dans la version exacte du DSFR (jamais flottante), chaque fichier avec son empreinte SHA-384, comparée avant que le fichier entre dans pdfMake ; aucune balise script, aucun fichier de la police dans le dépôt',
-    marianneAddresses.length === 1 && /^https:\/\/cdn\.jsdelivr\.net\/npm\/@gouvfr\/dsfr@/.test(marianneAddresses[0]) && /const VERSION = '\d+\.\d+\.\d+';/.test(marianneCode) && (marianneCode.match(/hash: 'sha384-[A-Za-z0-9+/=]{64}'/g) || []).length === 4 && marianneOrder && !/createElement\(\s*['"]script['"]\s*\)/.test(marianneCode) && fontFilesInTree.length === 0,
-    JSON.stringify({ addresses: marianneAddresses, order: marianneOrder }));
+  check('extension polices : la police Marianne ne se lit que chez jsDelivr, dans la version exacte du DSFR (jamais flottante), chaque fichier avec son empreinte SHA-384 comparée par la lecture commune (woff.js) ; aucune balise script, aucun fichier de la police dans le dépôt',
+    marianneAddresses.length === 1 && /^https:\/\/cdn\.jsdelivr\.net\/npm\/@gouvfr\/dsfr@/.test(marianneAddresses[0]) && /const VERSION = '\d+\.\d+\.\d+';/.test(marianneCode) && (marianneCode.match(/hash: 'sha384-[A-Za-z0-9+/=]{64}'/g) || []).length === 4 && /PolicesWoff\.fetchVerified\(/.test(marianneCode) && noScriptTag(marianneCode) && fontFilesInTree.length === 0,
+    JSON.stringify({ addresses: marianneAddresses }));
+  // Les polices libres : la liste (js/free-fonts.js) et les empreintes (extensions/polices/libres.js) sont ÉCRITES par outils/polices-libres.mjs ; ici on relit leur accord, sans réseau.
+  const freeCode = noCommentsJs(read('extensions/polices/libres.js'));
+  const freeAddresses = freeCode.match(/https?:\/\/[^\s'"`]+/g) || [];
+  const freeList = Array.from(read('js/free-fonts.js').matchAll(/\{ name: '([^']+)', slug: '([^']+)', version: '([^']+)', license: '([^']+)', styles: '([a-z]+)' \}/g)).map(m => ({ name: m[1], slug: m[2], version: m[3], license: m[4], styles: m[5] }));
+  // Les empreintes se lisent dans le texte entre les marques « generated » (noCommentsJs prendrait le « // » d'une empreinte base64 pour un commentaire).
+  const hashBlock = read('extensions/polices/libres.js').split('// <generated:hashes>')[1].split('// </generated:hashes>')[0];
+  const freeHashes = new Map(Array.from(hashBlock.matchAll(/'([a-z0-9-]+)': \{ ([^}]+) \},/g)).map(m => [m[1], m[2].match(/\b(?:normal|bold|italics|bolditalics): 'sha384-[A-Za-z0-9+/=]{64}'/g) || []]));
+  const STYLE_LETTER = { n: 'normal', b: 'bold', i: 'italics', j: 'bolditalics' };
+  const freeProblems = [];
+  freeList.forEach((font) => {
+    if (!/^\d+\.\d+\.\d+$/.test(font.version)) freeProblems.push(font.name + ' : version ' + font.version + ' (exacte x.y.z)');
+    if (!/^(OFL|Apache|MIT|Ubuntu|LicenseRef-Ubuntu)/i.test(font.license)) freeProblems.push(font.name + ' : licence ' + font.license);
+    if (!font.styles.includes('n')) freeProblems.push(font.name + ' : pas de graisse normale');
+    const want = Array.from(font.styles).map(letter => STYLE_LETTER[letter]).sort().join();
+    const got = (freeHashes.get(font.slug) || []).map(entry => entry.split(':')[0]).sort().join();
+    if (want !== got) freeProblems.push(font.name + ' : empreintes ' + got + ' pour les graisses ' + want);
+  });
+  Array.from(freeHashes.keys()).filter(slug => !freeList.some(font => font.slug === slug)).forEach(slug => freeProblems.push(slug + ' : empreintes sans police dans js/free-fonts.js'));
+  check('extension polices : les polices libres (js/free-fonts.js) ne se lisent que chez jsDelivr, paquet @fontsource, à leur version EXACTE ; chacune a une licence libre, sa graisse normale, et exactement une empreinte SHA-384 par graisse déclarée (écrites ensemble par outils/polices-libres.mjs), comparée par la lecture commune ; aucune balise script, aucun fichier de police dans le dépôt',
+    freeList.length >= 20 && freeProblems.length === 0 && freeAddresses.length === 1 && freeAddresses[0] === 'https://cdn.jsdelivr.net/npm/@fontsource/' && /PolicesWoff\.fetchVerified\(/.test(freeCode) && noScriptTag(freeCode) && fontFilesInTree.length === 0,
+    JSON.stringify({ polices: freeList.length, addresses: freeAddresses, problemes: freeProblems.slice(0, 5) }));
   check('extension : la version exacte de Plotly (2.13.2) s\'écrit une fois dans le code, avec son identifiant, dans extensions/graphique/chart-plot.js (la politique d\'index.html la porte aussi, dans l\'adresse)',
     versions.length === 1 && versions[0] === 'extensions/graphique/chart-plot.js' && /const LIBRARY = \{ id: 'plotly', version: '2\.13\.2' \};/.test(read('extensions/graphique/chart-plot.js')), versions.join(', '));
   const plot = noCommentsJs(read('extensions/graphique/chart-plot.js'));
