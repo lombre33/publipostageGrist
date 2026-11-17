@@ -1788,8 +1788,10 @@ const FloatingToolbars = (function () {
   // La barre flottante d'une pastille « @ » (js/mention.js) sélectionnée, comme celle d'une bulle de variable : « Autres colonnes de la même fiche », qui ouvre la fenêtre des bulles
   // (js/variable-linked-attrs.js) sur la ligne de la fiche - et non sur celle que la page affiche - pour changer la colonne que la pastille lit ou en citer d'autres à la suite. Grisé, jamais retiré,
   // quand la table ou la ligne de la fiche n'existe plus : sa raison en info-bulle est le message de la pastille rouge. Un second bouton, « Mise en forme conditionnelle » (js/conditional-style-window.js), allumé quand la pastille en porte une. Masquée tant qu'une fenêtre de bulle est ouverte, comme celle d'une bulle.
-  // Pour le document seulement : les champs texte (Objet, À, Cc…) n'ont pas de pastille « @ ».
-  function createMentionToolbar(editor) {
+  // Dans un champ texte (Objet, À, Cc…, `options.field`) la même barre : « Autres colonnes de la même fiche » y lit l'Email d'une personne dans « À » ; la mise en forme selon la ligne y est grisée, avec sa raison,
+  // comme celle d'une puce (un champ écrit une ligne sans mise en forme).
+  function createMentionToolbar(editor, options) {
+    const inField = !!(options && options.field);
     function selectedMention() {
       const node = editor.state.selection.node;
       return node && node.type.name === 'mention' ? { node, pos: editor.state.selection.from } : null;
@@ -1798,7 +1800,7 @@ const FloatingToolbars = (function () {
       const chip = selectedMention();
       if (action === 'mention-linked' && chip && Mention.columnsStatus(chip.node.attrs).enabled) VariableLinkedAttrs.openAt(editor, chip.pos);
       // Mise en forme conditionnelle (js/conditional-style-window.js) : selon la ligne de la page, comme celle d'une puce.
-      if (action === 'mention-style' && chip) ConditionalStyleWindow.openAt(editor, chip.pos);
+      if (action === 'mention-style' && chip && !inField) ConditionalStyleWindow.openAt(editor, chip.pos);
     }
     function wire() {
       const label = I18n.t('mention.toolbar.linked');
@@ -1806,21 +1808,25 @@ const FloatingToolbars = (function () {
       const html = `<button data-action="mention-linked" title="${label}" aria-label="${label}">${Icons.svg('varLinked')}</button>`
         + `<button data-action="mention-style" title="${styleLabel}" aria-label="${styleLabel}">${Icons.svg('varStyle')}</button>`;
       const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-mention-toolbar', html, onAction);
-      EditorCore.registerFloatingPanel(panel);
+      EditorCore.registerFloatingPanel(panel, inField ? options.ownerEl : null);
       const ui = controlsOf(panel);
       const check = ({ transaction } = {}) => {
         // Le blur de l'éditeur ne change ni la sélection ni le document : cf. wireImageFloatingToolbar.
         if (transaction && transaction.getMeta('blur')) return;
         const chip = selectedMention();
-        if (!chip || variableWindowOpen()) { panel.hide(); return; }
+        if (!chip || variableWindowOpen(inField ? options.hostWindow : undefined)) { panel.hide(); return; }
         const dom = editor.view.nodeDOM(chip.pos);
         // Éditeur masqué (Lecture, résumé d'un macro-modèle) : cf. createVariableToolbar.
         if (!dom || !dom.getClientRects().length) { panel.hide(); return; }
         const status = Mention.columnsStatus(chip.node.attrs);
         ui.setDisabled('mention-linked', !status.enabled, status.title);
         ui.button('mention-linked').setAttribute('aria-label', status.title);
-        ui.setActive('mention-style', ConditionalStyle.isSet(chip.node.attrs.condStyle));
-        panel.show(dom, anchoredBarOptions);
+        if (inField) {
+          const styleTitle = I18n.t('varToolbar.styleInField');
+          ui.setDisabled('mention-style', true, styleTitle);
+          ui.button('mention-style').setAttribute('aria-label', styleTitle);
+        } else ui.setActive('mention-style', ConditionalStyle.isSet(chip.node.attrs.condStyle));
+        panel.show(dom, inField ? undefined : anchoredBarOptions);
       };
       editor.on('selectionUpdate', check);
       editor.on('transaction', check);
@@ -1829,6 +1835,12 @@ const FloatingToolbars = (function () {
     return { wire };
   }
   function wireMentionFloatingToolbar() { return createMentionToolbar(editor).wire(); }
+  // La barre des pastilles « @ » d'un champ texte : une par champ, sur son propre éditeur ; `ownerEl` est l'élément du champ, `extra` les réglages d'un champ porté par une fenêtre (cf. attachVariableToolbar).
+  function attachMentionToolbar(fieldEditor, ownerEl, extra) {
+    const panel = createMentionToolbar(fieldEditor, { field: true, ownerEl, hostWindow: extra && extra.hostWindow }).wire();
+    if (extra && extra.windowEl) Layers.above(panel.el, extra.windowEl);
+    return panel;
+  }
 
   // La barre flottante de la copie en texte d'une diapositive (js/slide-copies.js), tant que la sélection tient dans la copie : la diapositive qu'elle suit et « Détacher », qui la libère (elle
   // garde ce qu'elle montre et s'écrit de nouveau). Ancrée sur le premier bloc de la copie ; elle se montre aussi quand la présentation ou la diapositive n'existe plus (la copie n'est alors plus
@@ -2070,5 +2082,5 @@ const FloatingToolbars = (function () {
     return { wireSuggestionFloatingToolbar };
   })();
 
-  return { setEditor, wireColorPickers, wireTableFloatingToolbar, wireImageFloatingToolbar, wireVariableFloatingToolbar, attachVariableToolbar, wireTimeChipFloatingToolbar, attachTimeChipToolbar, wireEmojiChipFloatingToolbar, wireMentionFloatingToolbar, wireCopyFloatingToolbar, wireTocFloatingToolbar, variableWindowOpen, wireSuggestionFloatingToolbar };
+  return { setEditor, wireColorPickers, wireTableFloatingToolbar, wireImageFloatingToolbar, wireVariableFloatingToolbar, attachVariableToolbar, attachMentionToolbar, wireTimeChipFloatingToolbar, attachTimeChipToolbar, wireEmojiChipFloatingToolbar, wireMentionFloatingToolbar, wireCopyFloatingToolbar, wireTocFloatingToolbar, variableWindowOpen, wireSuggestionFloatingToolbar };
 })();

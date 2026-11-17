@@ -1953,7 +1953,7 @@ const ReaderMode = (function () {
   }
   // Un champ texte (Objet, À, Cc, Cci, nom du PDF) dont une bulle porte un réglage ou qui a une puce, enregistré en HTML (js/field-codec.js) : chaque
   // bulle devient son texte pour la ligne `record` - condition, autres attributs, boucle dans la phrase, liste, format de nombre ou de date comme dans le
-  // corps d'un modèle (resolveBadgeNode) -, chaque puce sa valeur du moment (smartChipValue), le texte autour reste tel quel. Les champs gardent leurs
+  // corps d'un modèle (resolveBadgeNode) -, chaque puce sa valeur du moment (smartChipValue), chaque pastille « @ » le nom de sa fiche (Mention.resolve), le texte autour reste tel quel. Les champs gardent leurs
   // règles d'avant : un nombre, un zéro et un Oui / Non s'écrivent tels que Grist les stocke (`rawNumbers`, Variables.formatValue), sauf si la bulle
   // choisit son format. `valueText` (facultatif) : ce qui se fait de la valeur de chaque bulle ou puce avant de la poser (les caractères interdits d'un
   // nom de fichier). Une image (colonne Pièces jointes) ne s'écrit pas : rien.
@@ -1963,11 +1963,14 @@ const ReaderMode = (function () {
     const loopCtx = LoopRules.createContext();
     // Une bulle à sinon : celle de sa condition remplie, ou la variable de son sinon (js/variable-otherwise.js), avant de lire les bulles.
     await VariableOtherwise.resolve(wrapper, tableId || lastCurrentTableId, record);
-    const atoms = wrapper.querySelectorAll(BADGE_SELECTOR + ', .smart-chip');
+    const atoms = wrapper.querySelectorAll(BADGE_SELECTOR + ', .smart-chip, .mention-chip');
     await Promise.all(Array.from(atoms).map(async atom => {
       let text = '';
       try {
-        if (atom.matches('.smart-chip')) {
+        // Une pastille « @ » : le nom d'aujourd'hui de la fiche qu'elle cite (« [Fiche introuvable] » quand sa ligne n'existe plus), jamais la ligne de la page.
+        if (atom.matches('.mention-chip')) {
+          text = (await Mention.resolve(Mention.fieldAttrsOf(atom))).text;
+        } else if (atom.matches('.smart-chip')) {
           text = (await smartChipValue(atom.getAttribute('data-chip-kind'), atom.getAttribute('data-chip-time'), atom.getAttribute('data-chip-emoji'))).text;
         } else {
           const { node } = await resolveBadgeNode(atom, tableId || lastCurrentTableId, record, parseBadgeFormat(atom), loopCtx, { rawNumbers: true });

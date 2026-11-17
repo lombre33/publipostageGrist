@@ -54,7 +54,10 @@ const SuggestionList = (function () {
 
     function place(props) {
       const rect = props.clientRect && props.clientRect();
-      if (rect) ViewportFit.placePopup(box, rect, { gap: 4 });
+      // Le champ d'une fenêtre (le « Sinon afficher » de js/variable-condition.js) : la liste s'ouvre devant elle, pas dessous.
+      const dom = props.editor && props.editor.view && props.editor.view.dom;
+      const over = dom && dom.closest ? dom.closest('.pp-modal') : null;
+      if (rect) ViewportFit.placePopup(box, rect, over ? { gap: 4, over } : { gap: 4 });
     }
 
     // Une liste sans ligne qui a quelque chose à dire : un texte seul, sans ligne choisie (les touches ne sont pas prises).

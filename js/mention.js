@@ -12,6 +12,10 @@
 // « @ » n'ouvre la liste qu'en début de mot : une adresse e-mail tapée (marie@exemple.fr) n'ouvre rien. Il laisse la main à la touche que Réglages a donnée à
 // « # » ou à « § » quand c'en est une.
 //
+// Les champs texte (Objet, À, Cc, Cci, nom du PDF, « Sinon afficher » des fenêtres : js/field-editor.js) ont la même pastille et le même « @ » : « Madame @Marie Martin » dans l'objet, « @Marie Martin » dans « À » puis
+// « Autres colonnes de la même fiche » (la barre de la pastille) pour lire son Email au lieu de son nom. Une adresse que l'on tape (marie@exemple.fr) n'ouvre rien - le « @ » n'ouvre la liste qu'en début de mot -,
+// et quand la liste s'ouvre sur un « @ » que l'on voulait en texte, Échap la ferme et le texte tapé reste tel quel (js/suggestion-list.js). Le champ s'enregistre alors en HTML (js/field-codec.js), la pastille écrite comme dans le corps d'un modèle.
+//
 // Dans une case de tableau ou une colonne de zone 2 colonnes, une pastille plus longue que sa place ne la traverse pas et ne passe pas sur plusieurs lignes : son nom est
 // coupé par « … », comme celui d'une bulle de variable, et se lit en entier au survol (chipView, css/mention.css). L'éditeur est seul à la couper : Lecture et exports écrivent
 // le nom en entier, qui passe à la ligne dans la case.
@@ -220,15 +224,19 @@ const Mention = (function () {
     return { range: { from, to: config.$position.pos }, query: match[2], text: char + match[2] };
   }
 
-  function createExtension(Extension, Suggestion, PluginKey) {
+  // `options.field` : l'extension d'un champ texte (js/field-editor.js), dont l'éditeur n'est pas celui du document : la liste, partagée avec lui, ne reste pas ouverte sous un champ que le curseur a quitté.
+  function createExtension(Extension, Suggestion, PluginKey, options) {
     // Reçoit Extension, Suggestion et PluginKey de js/editor.js plutôt que de les importer (cf. TextExpansion.createExtension) : la clé par défaut de
     // Suggestion est celle du panneau # - deux plugins ne peuvent pas la partager.
     const pluginKey = new PluginKey('mentionSuggestion');
+    const inField = !!(options && options.field);
     return Extension.create({
-      name: 'mentionSuggestion',
+      name: inField ? 'mentionFieldSuggestion' : 'mentionSuggestion',
       // Avant les autres extensions, comme celles de « # » et de « § » : dans une case de grille ou de tableau, les flèches et Tab de prosemirror-tables passeraient
       // sinon avant la liste ouverte. Hors liste ouverte, elle rend la main sans rien consommer.
       priority: 1000,
+      // Un clic sur une ligne de la liste garde le focus du champ (mousedown sans effet par défaut, js/suggestion-list.js) : il n'arrive pas ici.
+      onBlur() { if (inField) suggestions.hide(); },
       addProseMirrorPlugins() {
         return [
           Suggestion({
@@ -268,6 +276,19 @@ const Mention = (function () {
     const condStyle = ConditionalStyle.parse(element.getAttribute('data-cond-style'));
     return Object.assign(refOf(element), { label: element.textContent }, condStyle ? { condStyle } : {});
   };
+
+  // Les attributs d'une pastille dans un champ texte (js/field-codec.js) : la fiche et son nom, rien d'autre - la mise en forme selon la ligne est propre au document.
+  const fieldAttrsOf = element => Object.assign(refOf(element), { label: element.textContent });
+  // Le HTML d'une pastille posée dans un champ texte (valeur enregistrée, texte collé) : sans TipTap, la même que celle que l'éditeur écrit.
+  function html(attrs) {
+    const span = document.createElement('span');
+    span.className = 'mention-chip';
+    span.setAttribute('contenteditable', 'false');
+    const ref = refAttributes({ table: attrs.table, row: attrs.row, column: attrs.column });
+    Object.keys(ref).forEach(name => span.setAttribute(name, ref[name]));
+    span.textContent = attrs.label || '';
+    return span.outerHTML;
+  }
 
   // Nœud atome en ligne et sélectionnable comme une bulle : <span class="mention-chip" data-mention-table data-mention-row data-mention-column>Nom</span>.
   function createNode(Node, mergeAttributes) {
@@ -425,5 +446,5 @@ const Mention = (function () {
     return { labels };
   }
 
-  return { triggerChar, createNode, createExtension, items, resolve, attrsOf, refOf, markChips, labelColumnOf, reset, chipText, columnsStatus, valuesOf };
+  return { triggerChar, createNode, createExtension, items, resolve, attrsOf, refOf, fieldAttrsOf, html, markChips, labelColumnOf, reset, chipText, columnsStatus, valuesOf, hideList: suggestions.hide };
 })();

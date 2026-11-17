@@ -9,6 +9,8 @@
 // puce n'est posée, du HTML sinon.
 // Annuler et Rétablir (Ctrl + Z, Ctrl + Y, boutons de la barre) : chaque champ garde l'historique de sa frappe tant qu'il a le focus ; une fois quitté, sa séance
 // laisse un repère dans l'historique du modèle (js/history-markers.js, domaine « fields ») qui rend sa valeur d'avant ou d'après (`snapshot`, `restore`, `settle`).
+// « @ » y cite une fiche comme dans le corps d'un modèle (js/mention.js) : la pastille violette, la liste des fiches de toutes les tables, sa barre « Autres colonnes de la même fiche » pour lire l'Email d'une personne
+// dans « À ». Pas dans le champ PJ, qui ne garde que des bulles de colonnes Pièces jointes. Une adresse tapée (marie@exemple.fr) n'ouvre pas la liste, et Échap la ferme en gardant le texte tapé.
 // Un quatrième usage, hors de la page : le « Sinon afficher » d'un bloc de texte ou d'une valeur conditionnels (js/variable-condition.js). Le champ est monté dans la
 // fenêtre de condition (`options.hostWindow`, `options.windowEl`), d'une ligne pour la valeur, de plusieurs pour le bloc (`options.multiline`, un paragraphe par ligne). Il reprend l'interface d'un
 // <input> (`value`, `placeholder`, `disabled`, `maxLength`, évènement `input`) pour que la fenêtre le traite comme le champ de texte qu'il remplace, mais n'entre pas dans
@@ -19,23 +21,27 @@ const FieldEditor = (function () {
   let watchingFocus = false;
 
   const { docJson, itemsOfDoc, linesDocJson, linesOfDoc } = (function () {
-    // Le document d'un champ : un seul paragraphe (un par ligne pour un champ de plusieurs lignes), du texte, des bulles et des puces (les éléments { text }, { badge }
-    // ou { chip } de FieldCodec)
+    // Le document d'un champ : un seul paragraphe (un par ligne pour un champ de plusieurs lignes), du texte, des bulles, des puces et des pastilles « @ » (les éléments
+    // { text }, { badge }, { chip } ou { mention } de FieldCodec)
 
-    function nodeJson(item) {
+    // `mentions` : le champ a la pastille « @ » (pas le champ PJ) ; sans elle, une pastille d'une valeur enregistrée s'écrit comme le texte qu'elle est.
+    function nodeJson(item, mentions) {
       if (FieldCodec.isText(item)) return { type: 'text', text: item.text };
       if (FieldCodec.isChip(item)) return { type: 'smartChip', attrs: Object.assign({}, item.chip) };
+      if (FieldCodec.isMention(item)) return mentions ? { type: 'mention', attrs: Object.assign({}, item.mention) } : (item.mention.label ? { type: 'text', text: item.mention.label } : null);
       return { type: 'varBadge', attrs: Object.assign({}, item.badge) };
     }
-    const paragraphJson = items => ({ type: 'paragraph', content: items.map(nodeJson) });
-    const docJson = items => ({ type: 'doc', content: [paragraphJson(items)] });
-    const linesDocJson = lines => ({ type: 'doc', content: (lines.length ? lines : [[]]).map(paragraphJson) });
+    const paragraphJson = (items, mentions) => ({ type: 'paragraph', content: items.map(item => nodeJson(item, mentions)).filter(Boolean) });
+    const docJson = (items, mentions) => ({ type: 'doc', content: [paragraphJson(items, mentions)] });
+    const linesDocJson = (lines, mentions) => ({ type: 'doc', content: (lines.length ? lines : [[]]).map(items => paragraphJson(items, mentions)) });
     function itemsOfDoc(doc) {
       const items = [];
       doc.descendants(node => {
         if (node.isText) items.push({ text: node.text });
         else if (node.type.name === 'varBadge') items.push({ badge: Object.assign({}, node.attrs) });
         else if (node.type.name === 'smartChip') items.push({ chip: Object.assign({}, node.attrs) });
+        // La pastille d'un champ ne garde que sa fiche et son nom : pas de mise en forme selon la ligne (`condStyle`), propre au document.
+        else if (node.type.name === 'mention') items.push({ mention: { table: node.attrs.table, row: node.attrs.row, column: node.attrs.column, label: node.attrs.label } });
         return true;
       });
       return items;
@@ -54,7 +60,10 @@ const FieldEditor = (function () {
   const storedOf = field => (field.multiline ? FieldCodec.toStoredLines(linesOfDoc(field.editor.state.doc))
     : FieldCodec.toStored(itemsOfDoc(field.editor.state.doc), { keepSpaces: field.keepSpaces }));
   const contentOf = (field, stored) => (field.multiline ? FieldCodec.linesOf(stored) : FieldCodec.itemsOf(stored));
-  const docOf = (field, content) => field.editor.schema.nodeFromJSON(field.multiline ? linesDocJson(content) : docJson(content));
+  const docOf = (field, content) => {
+    const mentions = !!field.editor.schema.nodes.mention;
+    return field.editor.schema.nodeFromJSON(field.multiline ? linesDocJson(content, mentions) : docJson(content, mentions));
+  };
   // Les caractères que le champ porte, comme la limite d'un <input> les compte : le texte, et « #Clé » pour une variable.
   const lengthOf = (doc, multiline) => (multiline ? linesOfDoc(doc).map(FieldCodec.serializePlain).join('\n') : FieldCodec.serializePlain(itemsOfDoc(doc))).length;
 
@@ -68,7 +77,8 @@ const FieldEditor = (function () {
     // bulle copiée dans un autre champ ou dans le document arrive avec ses réglages - et les puces. Un <template> est inerte : rien ne s'exécute ni ne se charge.
     // Un emoji collé comme une image (Teams, Outlook sur le web, Gmail : `<img alt="😀">`) redevient son caractère d'abord (js/emoji-paste.js), sans quoi il disparaîtrait.
     // `lines` : un champ de plusieurs lignes, où un changement de bloc ou de ligne est un changement de paragraphe.
-    function inlineHtml(html, lines) {
+    // `mentions` : le champ a la pastille « @ » ; sans elle, le nom de la fiche se colle comme du texte.
+    function inlineHtml(html, lines, mentions) {
       const template = Dom.inertTemplate(EmojiPaste.textFromImages(html));
       let out = '';
       const walk = parent => parent.childNodes.forEach(node => {
@@ -88,6 +98,12 @@ const FieldEditor = (function () {
           out += chip.kind === EmojiChip.KIND ? FieldCodec.escapeText(chip.emoji) : EditorNodes.smartChipHtml(chip);
           return;
         }
+        if (node.matches('span.mention-chip')) {
+          // Une pastille « @ » du document ou d'un autre champ se colle avec sa fiche ; sa mise en forme selon la ligne reste au document.
+          const attrs = Mention.fieldAttrsOf(node);
+          out += mentions ? Mention.html(attrs) : FieldCodec.escapeText(attrs.label);
+          return;
+        }
         const block = BLOCK_TAGS.test(node.tagName);
         if (block) out += lines ? '</p><p>' : ' ';
         walk(node);
@@ -101,11 +117,11 @@ const FieldEditor = (function () {
     // Le texte brut d'une sélection copiée : une bulle s'écrit « #Clé », comme dans la valeur enregistrée.
     const plainText = slice => FieldCodec.serializePlain(itemsOfDoc(slice.content));
 
-    function editorProps(multiline) {
+    function editorProps(multiline, mentions) {
       return {
         // `role` est repris ici : TipTap le pose à la création seulement, et setEditable (la Lecture) remplace tous les attributs de la vue.
         attributes: { role: 'textbox', 'aria-multiline': multiline ? 'true' : 'false', autocapitalize: 'off', autocorrect: 'off' },
-        transformPastedHTML: html => inlineHtml(html, multiline),
+        transformPastedHTML: html => inlineHtml(html, multiline, mentions),
         transformPastedText: multiline ? text => text : flatText,
         clipboardTextSerializer: plainText,
         // Gras, italique et souligné du navigateur : le champ n'a aucune mise en forme.
@@ -118,11 +134,11 @@ const FieldEditor = (function () {
     return { editorProps };
   })();
 
-  // Les extensions d'un champ : le texte, un paragraphe unique (un ou plusieurs pour un champ de plusieurs lignes), la bulle de variable et la puce, Entrée et la liste
-  // « # ». L'ordre compte : TipTap essaie la dernière extension rangée en premier, la liste ouverte garde donc Entrée, Tab, Échap et les flèches. Un champ de plusieurs
+  // Les extensions d'un champ : le texte, un paragraphe unique (un ou plusieurs pour un champ de plusieurs lignes), la bulle de variable, la puce et la pastille « @ » (`options.mentions`), Entrée et les listes
+  // « # » et « @ ». L'ordre compte : TipTap essaie la dernière extension rangée en premier, la liste ouverte garde donc Entrée, Tab, Échap et les flèches. Un champ de plusieurs
   // lignes garde Entrée pour changer de ligne ; `options.max` limite ce qu'il porte, comme le `maxLength` d'un <input>.
   function extensions(libs, host, options) {
-    const { Extension, Node: TiptapNode, mergeAttributes, StarterKit, Document, Suggestion, Plugin } = libs;
+    const { Extension, Node: TiptapNode, mergeAttributes, StarterKit, Document, Suggestion, Plugin, PluginKey } = libs;
     const press = () => { host.dispatchEvent(new CustomEvent('fieldenter')); return true; };
     const lengthLimit = options.limit ? Extension.create({
       name: 'fieldLimit',
@@ -148,9 +164,11 @@ const FieldEditor = (function () {
       Document.extend({ content: options.multiline ? 'paragraph+' : 'paragraph' }),
       EditorNodes.createVarBadgeNode(TiptapNode, mergeAttributes),
       EditorNodes.createSmartChipNode(TiptapNode, mergeAttributes),
+      options.mentions ? Mention.createNode(TiptapNode, mergeAttributes) : null,
       options.multiline ? null : Extension.create({ name: 'fieldEnter', addKeyboardShortcuts: () => ({ Enter: press, 'Shift-Enter': press, 'Mod-Enter': press }) }),
       lengthLimit,
       Variables.createFieldExtension(Extension, Suggestion),
+      options.mentions ? Mention.createExtension(Extension, Suggestion, PluginKey, { field: true }) : null,
     ].filter(Boolean);
   }
 
@@ -338,15 +356,18 @@ const FieldEditor = (function () {
       multiline: !!opts.multiline, keepSpaces: !!opts.keepSpaces, hostWindow: opts.hostWindow || null, limit: opts.limit || null,
       variablesKind: (host.dataset && host.dataset.variablesKind) || '',
     };
+    // La pastille « @ » : dans tous les champs sauf celui des pièces jointes, qui ne cite que des colonnes Pièces jointes.
+    field.mentions = !field.variablesKind;
     field.editor = new libs.TiptapEditor({
       element: host,
-      extensions: extensions(libs, host, { multiline: field.multiline, limit: field.hostWindow ? () => (field.limit ? field.limit() : 0) : null }),
+      extensions: extensions(libs, host, { multiline: field.multiline, mentions: field.mentions, limit: field.hostWindow ? () => (field.limit ? field.limit() : 0) : null }),
       content: field.multiline ? linesDocJson([[]]) : docJson([]),
-      editorProps: editorProps(field.multiline),
+      editorProps: editorProps(field.multiline, field.mentions),
       enableInputRules: false,
       enablePasteRules: false,
       onUpdate: () => { field.shown = null; sync(field); emit(host, 'input', true); },
-      onTransaction: () => sync(field),
+      // Une pastille « @ » posée ou collée prend son état du moment (nom à jour, info-bulle, rouge quand sa fiche n'existe plus) : js/mention.js la repeint, comme dans le document.
+      onTransaction: () => { sync(field); if (field.mentions) Mention.markChips(field.editor.view.dom); },
       onFocus: () => open(field),
       onBlur: () => {
         emit(host, 'blur');
@@ -370,6 +391,7 @@ const FieldEditor = (function () {
     // La barre d'une bulle du « Sinon afficher » d'une fenêtre passe devant elle et ne se cache pas avec elle (FloatingToolbars.createVariableToolbar).
     const barExtra = field.hostWindow ? { sinon: true, hostWindow: field.hostWindow, windowEl: opts.windowEl } : undefined;
     field.panels = [FloatingToolbars.attachVariableToolbar(field.editor, host, barExtra), FloatingToolbars.attachTimeChipToolbar(field.editor, host, barExtra)];
+    if (field.mentions) field.panels.push(FloatingToolbars.attachMentionToolbar(field.editor, host, barExtra));
     host.classList.toggle('is-multiline', field.multiline);
     // Le bord du champ, hors du texte, place le curseur : un clic y viserait sinon rien.
     host.addEventListener('mousedown', event => {

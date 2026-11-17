@@ -3,11 +3,11 @@
 //  - le TEXTE BRUT d'avant, « Suivi_#TpProjet.Nom » : tout modèle déjà enregistré se relit tel quel, et un champ dont les variables n'ont aucun réglage
 //    s'enregistre encore ainsi (Variables.findTextVariables les retrouve) ;
 //  - le HTML `<p class="pp-field">…<span class="var-badge" …>…</span></p>` dès qu'une bulle porte un réglage (condition, autre format, boucle, liste,
-//    texte « Avant » / « Après », sinon), qu'une puce (date, heure, email, nom) y est posée, ou que le texte autour d'une bulle la collerait à d'autres
+//    texte « Avant » / « Après », sinon), qu'une puce (date, heure, email, nom) ou une pastille « @ » (une fiche, js/mention.js) y est posée, ou que le texte autour d'une bulle la collerait à d'autres
 //    lettres d'une clé (« #Projet.Nom » puis « Long » se relirait « #Projet.NomLong »). Les bulles et les puces y sont écrites comme dans le corps d'un
 //    modèle (EditorNodes.varBadgeHtml, smartChipHtml), pour que le suivi des renommages et la résolution les lisent pareil.
-// Une valeur est une suite d'éléments : { text }, { badge } (les attributs d'un nœud varBadge) ou { chip } (ceux d'un nœud smartChip : son genre et,
-// pour l'heure actuelle, son écriture). Sans TipTap ni éditeur : le champ, la résolution et les tests passent par ici.
+// Une valeur est une suite d'éléments : { text }, { badge } (les attributs d'un nœud varBadge), { chip } (ceux d'un nœud smartChip : son genre et,
+// pour l'heure actuelle, son écriture) ou { mention } (ceux d'un nœud mention : la table, la ligne et la colonne de la fiche, et son nom). Sans TipTap ni éditeur : le champ, la résolution et les tests passent par ici.
 const FieldCodec = (function () {
   const RICH_OPEN = '<p class="pp-field">';
   const RICH_CLOSE = '</p>';
@@ -15,9 +15,12 @@ const FieldCodec = (function () {
   const isRich = value => typeof value === 'string' && value.startsWith(RICH_OPEN) && value.endsWith(RICH_CLOSE);
   const isText = item => item.text != null;
   const isChip = item => item.chip != null;
+  const isMention = item => item.mention != null;
   // Une bulle sans réglage s'écrit « #Clé » en texte brut ; les réglages (format, condition, boucle, texte « Avant » / « Après », sinon) ne tiennent que
   // dans le HTML.
   const isPlainBadge = attrs => !attrs.format && !attrs.condition && !attrs.loop && !attrs.before && !attrs.after && !attrs.otherwise && !attrs.otherwiseText;
+  // Ce qui s'écrit encore en texte brut : du texte, une bulle sans réglage. Une puce et une pastille « @ » n'existent qu'en HTML.
+  const isPlainItem = item => isText(item) || (!isChip(item) && !isMention(item) && isPlainBadge(item.badge));
 
   // Les textes voisins n'en font qu'un, un texte vide disparaît.
   function mergeText(items) {
@@ -63,6 +66,7 @@ const FieldCodec = (function () {
       if (node.nodeType === Node.TEXT_NODE) items.push({ text: node.nodeValue });
       else if (node.nodeType === Node.ELEMENT_NODE && node.matches('span.var-badge')) items.push({ badge: EditorNodes.varBadgeAttrsOf(node) });
       else if (node.nodeType === Node.ELEMENT_NODE && node.matches('span.smart-chip')) items.push({ chip: EditorNodes.smartChipAttrsOf(node) });
+      else if (node.nodeType === Node.ELEMENT_NODE && node.matches('span.mention-chip')) items.push({ mention: Mention.fieldAttrsOf(node) });
       else if (node.textContent) items.push({ text: node.textContent });
     });
     return mergeText(items);
@@ -96,12 +100,13 @@ const FieldCodec = (function () {
 
   // Un texte posé tel quel dans du HTML (partagé avec js/field-editor.js : le texte collé).
   const escapeText = text => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  // Le texte brut d'une suite : une bulle s'écrit « #Clé », une puce par son libellé (le texte copié d'un champ ; l'écriture enregistrée d'une puce est le
-  // HTML, jamais ce texte).
+  // Le texte brut d'une suite : une bulle s'écrit « #Clé », une puce par son libellé, une pastille « @ » par le nom de sa fiche, comme dans le presse-papiers du document (le
+  // texte copié d'un champ ; l'écriture enregistrée d'une puce ou d'une pastille est le HTML, jamais ce texte).
   function serializePlain(items) {
     const trigger = Variables.triggerChar();
     return items.map(item => {
       if (isText(item)) return item.text;
+      if (isMention(item)) return item.mention.label || '';
       return isChip(item) ? EditorNodes.smartChipLabel(item.chip.kind) : trigger + item.badge.key;
     }).join('');
   }
@@ -109,6 +114,7 @@ const FieldCodec = (function () {
   function itemsHtml(items) {
     return items.map(item => {
       if (isText(item)) return escapeText(item.text);
+      if (isMention(item)) return Mention.html(item.mention);
       return isChip(item) ? EditorNodes.smartChipHtml(item.chip) : EditorNodes.varBadgeHtml(item.badge);
     }).join('');
   }
@@ -117,13 +123,16 @@ const FieldCodec = (function () {
     return RICH_OPEN + itemsHtml(items) + RICH_CLOSE;
   }
 
-  // Deux suites disent la même chose : mêmes textes, mêmes puces (genre et, pour l'heure, écriture), mêmes variables (table, colonne, clé).
+  // Deux suites disent la même chose : mêmes textes, mêmes puces (genre et, pour l'heure, écriture), mêmes fiches (table, ligne, colonne), mêmes variables (table, colonne, clé).
   function sameItems(a, b) {
     if (a.length !== b.length) return false;
     return a.every((item, index) => {
       const other = b[index];
       if (isText(item) || isText(other)) return isText(item) && isText(other) && item.text === other.text;
       if (isChip(item) || isChip(other)) return isChip(item) && isChip(other) && item.chip.kind === other.chip.kind && (item.chip.time || null) === (other.chip.time || null);
+      if (isMention(item) || isMention(other)) {
+        return isMention(item) && isMention(other) && item.mention.table === other.mention.table && Number(item.mention.row) === Number(other.mention.row) && item.mention.column === other.mention.column;
+      }
       return item.badge.table === other.badge.table && item.badge.column === other.badge.column && item.badge.key === other.badge.key;
     });
   }
@@ -137,7 +146,7 @@ const FieldCodec = (function () {
     const merged = mergeText(items).flatMap(item => (isText(item) ? parsePlain(item.text) : [item]));
     const list = keepSpaces ? mergeText(merged) : trimEnds(merged);
     if (!list.length) return '';
-    if (list.every(item => isText(item) || (!isChip(item) && isPlainBadge(item.badge)))) {
+    if (list.every(isPlainItem)) {
       const plain = serializePlain(list);
       if (!isRich(plain) && sameItems(parsePlain(plain), list)) return plain;
     }
@@ -152,7 +161,7 @@ const FieldCodec = (function () {
   function toStoredLines(lines) {
     const list = cleanLines(lines);
     if (!list.length) return '';
-    if (list.every(items => items.every(item => isText(item) || (!isChip(item) && isPlainBadge(item.badge))))) {
+    if (list.every(items => items.every(isPlainItem))) {
       const plain = list.map(serializePlain).join('\n');
       if (!isRich(plain) && list.every(items => sameItems(parsePlain(serializePlain(items)), items))) return plain;
     }
@@ -167,7 +176,7 @@ const FieldCodec = (function () {
   }
 
   return {
-    isRich, isText, isChip, isPlainBadge, itemsOf, linesOf, hasContent, cleanLines, toStored, toStoredLines, itemsHtml, serializePlain, serializeRich, parsePlain, sameItems,
+    isRich, isText, isChip, isMention, isPlainBadge, itemsOf, linesOf, hasContent, cleanLines, toStored, toStoredLines, itemsHtml, serializePlain, serializeRich, parsePlain, sameItems,
     variablesIn, escapeText,
   };
 })();
