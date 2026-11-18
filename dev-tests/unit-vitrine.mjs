@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Tests purs (sans navigateur) du dossier `vitrine/` : ce que GFS demande à chaque app pour sa carte et sa fiche dans la fenêtre « Apps et extensions » (consigne 071 de GFS, 17/11) :
-// `vitrine.json` (une description de 280 caractères au plus en une à trois phrases, sans promesse de sécurité, trois captures, chacune avec une légende de 60 caractères au plus,
-// en français et en anglais) et `1.webp`, `2.webp`, `3.webp` (WebP, 960 x 600 px, 60 Ko au plus chacune). Le dossier ne porte rien d'autre : GFS en copie les images chez lui.
-// Les captures elles-mêmes (l'app seule, dans un vrai Grist, en clair, sans nom de personne réel) ne se vérifient pas par un script : elles sont prises dans le banc du vrai Grist (`labo-grist-reel/lab-vitrine.mjs`, grist-static) et relues à l'œil.
+// `vitrine.json` (une description de 280 caractères au plus en une à trois phrases, sans promesse de sécurité, de trois à six captures - « trois conseillées, six au plus », guide des apps de GFS, règle 22 -,
+// chacune avec une légende de 60 caractères au plus, en français et en anglais) et `1.webp`, `2.webp`... une par capture (WebP, 960 x 600 px, 60 Ko au plus chacune). Le dossier ne porte rien d'autre : GFS en copie les images chez lui.
+// Les captures elles-mêmes (l'app seule, dans un vrai Grist, en clair, sans nom de personne réel) ne se vérifient pas par un script : elles sont prises dans le banc du vrai Grist (`labo-grist-reel/lab-vitrine2.mjs`, grist-static) et relues à l'œil.
 // Lancer : node dev-tests/unit-vitrine.mjs
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +14,7 @@ const DIR = join(ROOT, 'vitrine');
 const WIDTH = 960, HEIGHT = 600;
 const MAX_BYTES = 60000;           // « 60 Ko au plus » : lu au plus strict (60 000 octets, pas 61 440)
 const MAX_DESCRIPTION = 280, MAX_LEGEND = 60;
+const MIN_CAPTURES = 3, MAX_CAPTURES = 6;   // « trois conseillées, six au plus » (guide des apps de GFS, règle 22 ; contrats 2.2 : six au plus)
 
 // Largeur et hauteur d'un WebP d'après son en-tête : les trois formes du format (avec perte `VP8 `, sans perte `VP8L`, étendue `VP8X`). Rend null quand ce n'est pas un WebP.
 function webpSize(buffer) {
@@ -32,8 +33,6 @@ const SECURITY_PROMISE = /s[ée]curi|chiffr|encrypt|prot[ée]g|protect|confident
 check('le dossier vitrine/ existe à la racine', existsSync(DIR) && statSync(DIR).isDirectory());
 if (existsSync(DIR)) {
   const names = readdirSync(DIR).sort();
-  check('vitrine/ ne porte que vitrine.json et les trois images', JSON.stringify(names) === JSON.stringify(['1.webp', '2.webp', '3.webp', 'vitrine.json']), names);
-
   let data = null;
   try { data = JSON.parse(readFileSync(join(DIR, 'vitrine.json'), 'utf8')); } catch (e) { check('vitrine.json se lit', false, e.message); }
   if (data) {
@@ -48,7 +47,9 @@ if (existsSync(DIR)) {
     }
     check('description : seulement fr et en', JSON.stringify(Object.keys(data.description || {}).sort()) === JSON.stringify(['en', 'fr']));
     const captures = Array.isArray(data.captures) ? data.captures : [];
-    check('trois captures', captures.length === 3, captures.length);
+    check(`de ${MIN_CAPTURES} à ${MAX_CAPTURES} captures (${captures.length})`, captures.length >= MIN_CAPTURES && captures.length <= MAX_CAPTURES);
+    const wanted = captures.map((capture, i) => `${i + 1}.webp`).concat(['vitrine.json']).sort();
+    check('vitrine/ ne porte que vitrine.json et une image par capture', JSON.stringify(names) === JSON.stringify(wanted), names);
     captures.forEach((capture, i) => {
       const file = `${i + 1}.webp`;
       check(`capture ${i + 1} : son fichier est ${file}`, capture.fichier === file, capture.fichier);
@@ -61,7 +62,8 @@ if (existsSync(DIR)) {
     });
   }
 
-  for (let i = 1; i <= 3; i++) {
+  const images = names.filter((name) => /\.webp$/.test(name));
+  for (let i = 1; i <= images.length; i++) {
     const path = join(DIR, `${i}.webp`);
     if (!existsSync(path)) { check(`${i}.webp existe`, false); continue; }
     const buffer = readFileSync(path);
@@ -72,8 +74,9 @@ if (existsSync(DIR)) {
   }
 }
 
-// Le détecteur : une description trop longue, quatre phrases, une promesse de sécurité, une image de mauvaise taille ou qui n'est pas un WebP sont vues.
+// Le détecteur : une description trop longue, quatre phrases, une promesse de sécurité, deux ou sept captures, une image de mauvaise taille ou qui n'est pas un WebP sont vues.
 check('détecteur : une description de 281 caractères est vue', 'x'.repeat(281).length > MAX_DESCRIPTION);
+check('détecteur : deux captures et sept captures sont vues, trois, cinq et six passent', [2, 7].every((n) => n < MIN_CAPTURES || n > MAX_CAPTURES) && [3, 5, 6].every((n) => n >= MIN_CAPTURES && n <= MAX_CAPTURES));
 check('détecteur : quatre phrases sont vues', sentences('Un. Deux. Trois. Quatre.') === 4 && sentences('Un seul texte sans fin') === 1);
 check('détecteur : une promesse de sécurité est vue (en français et en anglais)', SECURITY_PROMISE.test('Vos données restent sécurisées.') && SECURITY_PROMISE.test('Your data stays safe.') && SECURITY_PROMISE.test('Encrypted end to end') && !SECURITY_PROMISE.test('Un document par ligne de la table.'));
 const fakeVp8 = Buffer.alloc(40); fakeVp8.write('RIFF', 0, 'latin1'); fakeVp8.write('WEBP', 8, 'latin1'); fakeVp8.write('VP8 ', 12, 'latin1'); fakeVp8.writeUInt16LE(960, 26); fakeVp8.writeUInt16LE(600, 28);

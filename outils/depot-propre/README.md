@@ -78,7 +78,7 @@ chemin est affiché.
   développement, et les poser dans le dépôt public est une décision à part.
   `.github` (le Dependabot du dépôt de développement, lot D de la consigne 063 de GFS) aussi : il reste dans
   le dépôt de développement, le dépôt public a son propre `.github`, que `publier.sh` ne touche pas.
-  `vitrine/` (la description et les trois captures de la carte de l'app dans la fenêtre « Apps et extensions »
+  `vitrine/` (la description et les captures, de trois à six, de la carte de l'app dans la fenêtre « Apps et extensions »
   de GFS, consigne 071) aussi : GFS en copie les images chez lui, le dépôt public n'a pas à les porter.
 - Un fichier ou un dossier de `PUBLIES` que le dépôt de développement ne suit pas. `.nojekyll`, un fichier vide
   à la racine, en fait partie : il part avec le reste, car le dépôt public a son propre site (GitHub Pages) et,

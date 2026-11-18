@@ -53,7 +53,7 @@ HTML
   mkdir -p bibliotheques; echo '{}' > package.json; echo '{}' > bibliotheques/catalogue.json
   # Dependabot du dépôt de développement (consigne 063 de GFS, lot D) : à la racine du dépôt de développement, .github ne part pas (le dépôt public porte le sien, que publier.sh ne touche pas).
   mkdir -p .github; printf 'version: 2\nupdates: []\n' > .github/dependabot.yml
-  # La vitrine de GFS (consigne 071) : la description et les trois captures de la carte de l'app ; à la racine du dépôt de développement, vitrine/ ne part pas (GFS en copie les images chez lui).
+  # La vitrine de GFS (consigne 071) : la description et les captures, de trois à six, de la carte de l'app ; à la racine du dépôt de développement, vitrine/ ne part pas (GFS en copie les images chez lui).
   mkdir -p vitrine; echo '{}' > vitrine/vitrine.json; echo x > vitrine/1.webp
   # La copie figée de l'éditeur (consigne 066 de GFS) : du code de tiers construit par l'outil du kit, que publier.sh fait partir avec la page (PUBLIES) ; le faux en porte un module, ses licences et son manifeste.
   mkdir -p vendor/editeur; echo 'export default 1;' > vendor/editeur/prosemirror.js; echo 'licences' > vendor/editeur/LICENCES.txt; echo '{}' > vendor/editeur/COPIE.json

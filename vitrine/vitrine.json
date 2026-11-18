@@ -1,28 +1,49 @@
 {
   "description": {
-    "fr": "Écrivez un modèle (contrat, courrier, e-mail, grille) et insérez-y les champs de votre table Grist. Publipostage+ en tire un document par ligne, à lire à l'écran ou à exporter en PDF ou en Excel.",
-    "en": "Write a template (contract, letter, email, grid) and insert the fields of your Grist table. Publipostage+ builds one document per row, to read on screen or export as PDF or Excel."
+    "fr": "Écrivez un modèle (contrat, courrier, e-mail, grille, présentation) et insérez-y les champs de votre table Grist. Publipostage+ en tire un document par ligne, à lire à l'écran ou à exporter en PDF ou en Excel, avec plus de vingt modèles pour démarrer.",
+    "en": "Write a template (contract, letter, email, grid, presentation) and insert the fields of your Grist table. Publipostage+ builds one document per row, to read on screen or export as PDF or Excel, with over twenty templates to start from."
   },
   "captures": [
     {
       "fichier": "1.webp",
       "legende": {
-        "fr": "Le modèle d'un contrat, avec les champs de la table Grist",
-        "en": "A contract template, with the fields of the Grist table"
+        "fr": "Une présentation par ligne de la table Grist",
+        "en": "One presentation per row of the Grist table"
       }
     },
     {
       "fichier": "2.webp",
       "legende": {
-        "fr": "Le même contrat, lu avec les données d'une ligne",
-        "en": "The same contract, read with the data of one row"
+        "fr": "Tapez # pour insérer un champ de la table Grist",
+        "en": "Type # to insert a field from the Grist table"
       }
     },
     {
       "fichier": "3.webp",
       "legende": {
+        "fr": "Une facture par ligne de la table, totaux compris",
+        "en": "One invoice per table row, totals included"
+      }
+    },
+    {
+      "fichier": "4.webp",
+      "legende": {
+        "fr": "Un e-mail par ligne : objet, destinataires et texte",
+        "en": "One email per row: subject, recipients and text"
+      }
+    },
+    {
+      "fichier": "5.webp",
+      "legende": {
         "fr": "Une grille Excel remplie par la table Grist",
         "en": "An Excel grid filled in from the Grist table"
+      }
+    },
+    {
+      "fichier": "6.webp",
+      "legende": {
+        "fr": "Plus de vingt modèles prêts à l'emploi",
+        "en": "Over twenty ready-made templates"
       }
     }
   ]
