@@ -892,9 +892,11 @@
    en haut et en bas, intitulés à 4 px au-dessus et 2 px au-dessous, filet de séparation sans marge), et le menu finit vers 396 px. Une ligne de plus ne tenait plus : la ligne « Email (.eml) »
    (11 types) puis « HTML (modèle) » (12) l'ont poussé à 417 puis 441 px, où « Impression navigateur » et « Léger » n'étaient plus atteignables à la souris (le menu finit sous le bas du panneau).
    Plutôt que de resserrer encore, le menu prend la classe `v2-hover-flyout-scrollable` (comme « Titre », js/editor-core.js:positionFlyout) : sa hauteur est celle de la place qui reste sous
-   son bouton et le reste défile à la molette. Aucune ligne de ce menu ne porte d'info-bulle `[data-tip]` (un grisé dit sa raison par le `title`), donc rien n'est rogné. */
+   son bouton et le reste défile à la molette. Aucune ligne de ce menu ne porte d'info-bulle `[data-tip]` (un grisé dit sa raison par le `title`), donc rien n'est rogné. Aucune ne se focalise non plus : le menu porte `tabindex="-1"` (index.html), sinon le navigateur
+   en ferait un arrêt de Tab dès qu'il défile (js/editor-core.js, essai saveMenuMouse § 5b). */
 /* Menu « + » (Nouveau modèle, les cinq imports, « Créer à partir d'un modèle… ») : avec la ligne « Importer un HTML… » il finissait à 410 px dans un cadre de 400 (essai gfsBarFit, « le menu reste dans le cadre »). Il défile
-   comme « Titre » (`v2-hover-flyout-scrollable`, aucune ligne à info-bulle) et son écart entre lignes passe de 3 à 1 px : à 700×400 il tient sans barre de défilement, plus petit il défile. */
+   comme « Titre » (`v2-hover-flyout-scrollable`, aucune ligne à info-bulle) et son écart entre lignes passe de 3 à 1 px : avec les cinq imports il tenait à 700×400 sans barre de défilement ; le sixième (« Importer un OpenDocument… ») le fait défiler de 23 px à 700×400, et plus petit il défile davantage. Comme celui de « Type d'export »
+   il porte `tabindex="-1"` (index.html) : aucune de ses lignes ne se focalise, et Tab depuis « + » s'arrêtait sur le menu au lieu d'arriver sur Enregistrer (js/editor-core.js, essai saveMenuMouse § 5b). */
 #v2-new-template-flyout { gap: 1px; }
 #v2-quality-flyout { gap: 0; padding-top: 2px; padding-bottom: 2px; }
 #v2-quality-flyout .v2-hover-row { padding: 4px 9px; line-height: 16px; }

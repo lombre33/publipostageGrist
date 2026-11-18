@@ -13,6 +13,9 @@
 //      renommer puis cliquer Enregistrer : le champ de nom se referme (il perd le focus comme avant) et le nouveau nom est enregistré ;
 //   5) au clavier : Tab depuis Enregistrer descend dans le menu (anneau de focus visible), dans l'ordre (« Enregistrer sous… », « Historique des versions… », « Enregistrement automatique »), puis sort ; Entrée sur « Enregistrer sous… » ouvre la fenêtre, le focus revient au
 //      bouton Enregistrer ; Espace sur la case la bascule ; Entrée sur le bouton enregistre ;
+//   5b) aucun menu au survol n'est un arrêt de Tab à lui seul : à 700×400 comme à 700×300, où les menus « + » et « Type d'export » défilent sans qu'aucune de leurs lignes se focalise (le navigateur fait alors du menu un
+//      arrêt de Tab : Tab depuis « + » s'y arrêtait au lieu d'arriver sur Enregistrer), Tab depuis le bouton de chaque menu n'arrive jamais sur la boîte d'un menu ; et un appui de la souris sur le titre ou sur une ligne
+//      de ces deux menus ne leur laisse pas le focus (qui garderait leur menu ouvert souris partie) : il se referme comme avant ;
 //   6) interface en anglais : « Save (Ctrl+S) », « Save as… », « Auto-save » ;
 //   7) l'indicateur de la carte « Les deux » (01/10) : enregistrement automatique coupé, une frappe écrit « Modifications non enregistrées. » dans le coin d'état - en entier à 700 px,
 //      sans changer la hauteur de la barre, d'une couleur plus soutenue que les autres messages -, il tient 3 s sans qu'une écriture parte, un clic sur Enregistrer le remplace par
@@ -372,6 +375,61 @@ for (const theme of ['light', 'dark']) {
   const w2 = await updates(page);
   await page.keyboard.press('Enter'); await page.waitForTimeout(600);
   check(`${T} : Entrée sur le bouton Enregistrer enregistre en un geste (une écriture)`, (await updates(page)) - w2 === 1, { w2, now: await updates(page) });
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+
+  // 5b) Aucun menu au survol n'est un arrêt de Tab à lui seul. Un cadre qui défile, dont rien ne se focalise, devient un arrêt de Tab (Chromium comme Firefox) : à 700×400 le menu « + » (douze lignes) défile de 23 px et
+  //     « Type d'export » de 81, aucune de leurs lignes ne se focalise, et Tab depuis « + » s'arrêtait sur le menu au lieu d'arriver sur Enregistrer (tout le clavier du menu Enregistrer, plus haut, en était décalé). Ces
+  //     deux menus portent `tabindex="-1"` (index.html). Un tel menu se focalise pourtant à la souris : un appui sur son titre ou sur une ligne lui donnerait le focus, qui garderait son menu ouvert souris partie
+  //     (`:focus-within`) : js/editor-core.js lui reprend aussitôt le focus que l'appui lui donne (sans retenir l'appui : une ligne de menu garde son geste).
+  for (const height of [HEIGHT, 300]) {
+    await page.setViewportSize({ width: WIDTH, height });
+    await page.waitForTimeout(200);
+    const groups = await page.evaluate(() => document.querySelectorAll('.v2-hover-group').length);
+    const scrolled = {}, stops = [];
+    let tried = 0;
+    for (let i = 0; i < groups; i++) {
+      const trigger = await page.evaluate((idx) => {
+        const g = document.querySelectorAll('.v2-hover-group')[idx], b = g.querySelector(':scope > button'), f = g.querySelector(':scope > .v2-hover-flyout');
+        if (!b || !f) return null;
+        const r = b.getBoundingClientRect();
+        if (!(r.width > 0 && r.height > 0) || getComputedStyle(b).visibility === 'hidden') return null;
+        b.focus();
+        // le menu s'ouvre au focus du bouton (:focus-within) : c'est là qu'il se mesure, avant que Tab ne le laisse derrière
+        return { id: b.id, menu: f.id, scrolls: getComputedStyle(f).display !== 'none' && f.scrollHeight > f.clientHeight + 1 };
+      }, i);
+      if (!trigger) continue;
+      tried += 1;
+      scrolled[trigger.menu || trigger.id] = trigger.scrolls;
+      await page.keyboard.press('Tab');
+      const after = await page.evaluate(() => { const a = document.activeElement; return { onMenu: !!a && a.classList.contains('v2-hover-flyout'), at: a ? (a.id || a.className) : null }; });
+      if (after.onMenu) stops.push({ depuis: trigger.id, sur: after.at });
+    }
+    check(`${T} : à ${WIDTH}×${height}, les menus « + » et « Type d’export » défilent (sans cela l’essai suivant ne prouverait rien)`, scrolled['v2-new-template-flyout'] === true && scrolled['v2-quality-flyout'] === true, scrolled);
+    check(`${T} : ... et Tab depuis le bouton de chacun des menus au survol (${tried}) n’arrive jamais sur la boîte d’un menu : aucun n’est un arrêt de Tab à lui seul`, tried >= 12 && stops.length === 0, { tried, stops });
+  }
+  await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+  await page.waitForTimeout(200);
+  for (const [name, trigger, menu, row] of [['« + »', '#btn-new', '#v2-new-template-flyout', '#v2-btn-new-document'], ['« Type d’export »', '#v2-btn-quality', '#v2-quality-flyout', '#v2-quality-flyout [data-export-type="pdf"]']]) {
+    for (const [what, spotOf] of [['son titre', menu + ' .v2-hover-flyout-label'], ['une de ses lignes', row]]) {
+      await page.evaluate(() => document.querySelector('.ProseMirror').focus());
+      await page.mouse.move(10, 385, { steps: 3 });
+      const b = await rectOf(page, trigger);
+      await page.mouse.move(b.x, b.y, { steps: 4 });
+      await page.waitForTimeout(200);
+      const title = await rectOf(page, menu + ' .v2-hover-flyout-label'), spot = await rectOf(page, spotOf);
+      await page.mouse.move(b.x, spot.y, { steps: 12 }); await page.mouse.move(spot.x, spot.y, { steps: 4 });
+      await page.mouse.down();
+      const pressed = await page.evaluate((m) => { const a = document.activeElement, f = document.querySelector(m); return { menuFocused: !!a && f.contains(a), at: a ? (a.id || a.tagName) : null }; }, menu);
+      // relâché sur le titre : aucune ligne n'est cliquée (aucune action ne part)
+      await page.mouse.move(title.x, title.y, { steps: 3 });
+      await page.mouse.up();
+      await page.waitForTimeout(150);
+      await page.mouse.move(10, 385, { steps: 8 });
+      await page.waitForTimeout(350);
+      const gone = await page.evaluate((m) => { const f = document.querySelector(m); return { display: getComputedStyle(f).display, menuFocused: f.contains(document.activeElement) }; }, menu);
+      check(`${T} : un appui de la souris sur ${what} du menu ${name} ne lui laisse pas le focus, et le menu se referme souris partie`, !pressed.menuFocused && !gone.menuFocused && gone.display === 'none', { pressed, gone });
+    }
+  }
   await page.evaluate(() => document.activeElement && document.activeElement.blur());
 
   // 7) le choix survit à un rechargement ; interface en anglais

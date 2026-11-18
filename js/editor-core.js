@@ -748,6 +748,16 @@ const EditorCore = (function () {
     return !active.closest('.ProseMirror') && active.matches('input, textarea, select');
   }
   document.addEventListener('mousedown', (event) => { if (menuTriggerOf(event.target)) event.preventDefault(); });
+  // Un menu qui défile et dont aucune ligne ne se focalise (« + », « Type d'export ») porte `tabindex="-1"` (index.html) : le navigateur fait d'un cadre qui défile, et dont rien ne se focalise, un arrêt de Tab
+  // à lui seul (Chromium et Firefox), dès que le cadre est trop petit pour le montrer en entier (le menu « + » à 700×400) ; Tab depuis « + » s'arrêtait sur le menu au lieu d'aller à Enregistrer, et le clavier de
+  // tout le menu Enregistrer avec lui. Un `tabindex="-1"` se focalise pourtant à la souris : un appui sur le titre, un filet ou une ligne du menu lui donnerait le focus, qui garderait son menu ouvert souris
+  // partie (`:focus-within`). Le focus qu'il prend ainsi est rendu aussitôt : il tombe sur le document, comme il le faisait quand le navigateur n'avait aucun élément à focaliser (un champ en cours de saisie
+  // le perd et se valide, voir isFormFieldFocus). L'appui, lui, n'est pas retenu : une ligne de menu garde son geste (toolbar_every_menu_button_refuses_the_focus_on_a_mouse_press…). Tout menu qui porte
+  // `tabindex="-1"` hérite de ce traitement.
+  document.addEventListener('focusin', (event) => {
+    const flyout = event.target;
+    if (flyout instanceof HTMLElement && flyout.matches('.v2-hover-flyout[tabindex="-1"]')) flyout.blur();
+  });
   document.addEventListener('click', (event) => {
     if (!menuTriggerOf(event.target)) return;
     const active = document.activeElement;
