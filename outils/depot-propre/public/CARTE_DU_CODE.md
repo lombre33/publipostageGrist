@@ -78,7 +78,7 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 
 ## La carte, famille par famille
 
-### Grist et les données du document (22 fichiers, 8 200 lignes)
+### Grist et les données du document (23 fichiers, 9 000 lignes)
 
 | Fichier | Rôle |
 |---|---|
@@ -566,7 +566,7 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 
 ## The map, family by family
 
-### Grist and the document's data (22 files, 8,200 lines)
+### Grist and the document's data (23 files, 9,000 lines)
 
 | File | Role |
 |---|---|
