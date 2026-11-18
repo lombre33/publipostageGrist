@@ -105,6 +105,16 @@ body.pp-grid-mode #v2-a4-toggle:not([data-pp-lock-blocks]) { pointer-events: non
    résumé d'un macro-modèle, `pp-editor-hidden` : js/main.js:syncEditorVisibilityForMode). */
 .v2-cell-bar-dock { display: none; flex: none; align-items: center; box-sizing: border-box; min-height: 34px; padding: 3px 8px; background: var(--surface); border-bottom: 1px solid var(--border); }
 body.pp-grid-mode:not(.pp-editor-hidden) .v2-cell-bar-dock { display: flex; }
+/* Onglets des feuilles (js/grid-sheets.js) : une ligne sous le plan de travail pour une grille importée d'un classeur à plusieurs feuilles, comme dans Excel. Montrée tant qu'il y a plusieurs feuilles (`pp-has-sheets`)
+   et que l'éditeur est à l'écran (pas en Lecture ni sur le résumé d'un macro-modèle, `pp-editor-hidden`) ; trop d'onglets pour la largeur : la ligne défile. L'onglet montré porte le trait d'accent du haut, en gras. */
+.v2-sheet-tabs { display: none; flex: none; align-items: stretch; gap: 1px; box-sizing: border-box; min-height: 30px; padding: 0 8px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; background: var(--surface); border-top: 1px solid var(--border); }
+body.pp-has-sheets:not(.pp-editor-hidden) .v2-sheet-tabs { display: flex; }
+.v2-sheet-tab { flex: none; max-width: 200px; padding: 0 14px; border: 0; border-top: 2px solid transparent; border-radius: 0; background: transparent; color: var(--text-muted); font: 500 12px/1 var(--font-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.v2-sheet-tab:hover { background: var(--surface-sunken); color: var(--text); }
+.v2-sheet-tab.is-active { border-top-color: var(--accent); background: var(--surface-sunken); color: var(--text); font-weight: 700; }
+.v2-sheet-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media print { .v2-sheet-tabs { display: none !important; } }
+
 .v2-cell-bar-dock .v2-floating-toolbar { position: static; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
 /* Une barre trop large pour le panneau passe à la ligne (tout reste atteignable) plutôt que de déborder ; un trait fin sépare les groupes (lignes
    et colonnes, fusion, fond, alignement). Elle garde le niveau des barres flottantes (--z-floating-toolbar, css/style.css : un enfant de bande

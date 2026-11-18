@@ -415,7 +415,7 @@
 
   cases.push({
     id: 'gridImport_hidden_sheets_rows_and_columns_are_left_out_and_the_status_names_the_sheet',
-    description: 'Une feuille masquée n\'est pas proposée (la liste ne montre que « Devis » et « Autre ») ; la feuille choisie est lue : une ligne et une colonne masquées ne viennent pas, une fusion qui les enjambe se réduit aux cases visibles ; avec plusieurs feuilles le coin d\'état donne le nom de la feuille lue, son rang parmi les feuilles proposées et dit que les autres ne le sont pas.',
+    description: 'Une feuille masquée n\'est pas proposée (la liste ne montre que « Toutes les feuilles », « Devis » et « Autre ») ; la feuille choisie est lue : une ligne et une colonne masquées ne viennent pas, une fusion qui les enjambe se réduit aux cases visibles ; avec plusieurs feuilles le coin d\'état donne le nom de la feuille lue, son rang parmi les feuilles proposées et dit que les autres ne le sont pas.',
     run: async (h) => {
       const spec = {
         sheets: [
@@ -428,7 +428,7 @@
         const out = await importAndRead(h, spec, null, async () => { clickSheet('Devis'); return {}; });
         const text = doc().textContent;
         const checks = {
-          offered: out.list && out.list.rows.join('|') === 'Devis|Autre',
+          offered: out.list && out.list.rows.join('|') === 'Toutes les feuilles (onglets)|Devis|Autre',
           sheet: out.opened && out.grid && !out.error && /Devis/.test(out.status) && /1 sur 2/.test(out.status) && /Les autres ne le sont pas/.test(out.status),
           shape: shape() === '2,3',
           merged: cellAt(0, 0).text === 'a' && cellAt(0, 0).colspan === 2 && cellAt(0, 2).text === 'd',
@@ -787,13 +787,13 @@
       await settle(h);
       const fr = seen.fr, en = seen.en;
       const checks = {
-        namesInOrder: fr.list.rows.join('|') === 'Devis|Détails des lignes|Récapitulatif annuel',
+        namesInOrder: fr.list.rows.join('|') === 'Toutes les feuilles (onglets)|Devis|Détails des lignes|Récapitulatif annuel',
         searchReady: fr.list.focused && fr.list.placeholder === 'Rechercher une feuille…' && fr.list.search === '' && fr.list.inPanel,
         nothingYet: fr.seen.gridWhileOpen === false && fr.seen.textWhileOpen === 'Mon document',
         statusWhileOpen: fr.seen.statusWhileOpen === '',
         accentsAndCaseIgnored: fr.seen.detail.rows.join('|') === 'Détails des lignes' && fr.seen.detail.search === 'DETAIL',
         noMatch: fr.seen.zzz.rows.length === 0 && fr.seen.zzz.emptyShown === 'Aucune feuille ne correspond.',
-        clearedAgain: fr.seen.cleared.rows.length === 3,
+        clearedAgain: fr.seen.cleared.rows.length === 4,
         chosenBecomesTheGrid: frGrid.active && frGrid.shape === '1,1,1' && frGrid.first === 'Détails' && frGrid.last === 'ligne 2',
         statusNamesIt: !fr.error && /^Feuille « Détails des lignes » \(2 sur 3\) importée : 3 lignes, 1 colonne\. Les autres ne le sont pas\.$/.test(fr.status),
         leftNothing: !leftFr && !leftEn,
@@ -801,6 +801,51 @@
         enterPicks: enGrid.active && enGrid.text === 'Récap' && !en.error && /^Sheet “Récapitulatif annuel” \(3 of 3\) imported: 1 row, 1 column\. The others are not\.$/.test(en.status),
       };
       return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, fr: { list: fr.list, seen: fr.seen, status: fr.status }, en: { list: en.list, status: en.status }, frGrid, enGrid }) };
+    },
+  });
+
+  // Choix d'Antoine du 18/11 (« Onglets seulement après un import Excel ») : la première ligne de la liste, « Toutes les feuilles », importe chaque feuille visible en un onglet (js/grid-sheets.js).
+  cases.push({
+    id: 'gridImport_all_sheets_line_imports_every_visible_sheet_as_a_tab_and_the_excel_export_gives_them_back',
+    description: 'La ligne « Toutes les feuilles (onglets) » de la liste des feuilles importe chaque feuille visible : la grille s\'ouvre sur la première, la barre d\'onglets porte les trois noms (la feuille masquée est laissée de côté), le coin d\'état le dit en français et en anglais, et l\'Excel exporté rend les mêmes feuilles, dans le même ordre',
+    run: async (h) => {
+      const bytes = await buildXlsx(THREE());
+      await settle(h);
+      await h.resetEditor();
+      const seen = {};
+      await withChoose('discard', async () => {
+        seen.fr = await importThroughMenu(h, bytes, null, async (first) => {
+          const out = { first, firstRow: sheetList().rows[0] };
+          clickSheet('Toutes les feuilles (onglets)');
+          return out;
+        });
+      });
+      const names = Array.from(document.querySelectorAll('#v2-sheet-tabs [role="tab"]')).map(tab => tab.textContent);
+      const html = Editor.getHTML();
+      const fr = { active: GridEditor.isActive(), first: cellAt(0, 0).text, names, barShown: getComputedStyle(document.getElementById('v2-sheet-tabs')).display !== 'none', tables: (html.match(/<table\b/g) || []).length, status: seen.fr.status, error: seen.fr.error };
+      await ExportCommon.ensureJsZipLoaded();
+      const { blob } = await XlsxExport.getXlsxBlobForRecord(html, 'Tbl', { id: 1 }, '');
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const exported = Array.from(new DOMParser().parseFromString(await zip.file('xl/workbook.xml').async('string'), 'application/xml').getElementsByTagName('sheet')).map(sheet => sheet.getAttribute('name'));
+      await settle(h);
+      await h.resetEditor();
+      const before = I18n.getLang();
+      I18n.setLang('en');
+      try {
+        seen.en = await importThroughMenu(h, bytes, null, async (first) => { const out = { firstRow: sheetList().rows[0] }; clickSheet('All sheets (tabs)'); return out; });
+      } finally { I18n.setLang(before); }
+      const en = { status: seen.en.status, tabs: document.querySelectorAll('#v2-sheet-tabs [role="tab"]').length };
+      await settle(h);
+      const checks = {
+        firstLine: seen.fr.seen.firstRow === 'Toutes les feuilles (onglets)' && seen.en.seen.firstRow === 'All sheets (tabs)',
+        gridOnFirstSheet: fr.active && fr.first === 'Devis Alpha',
+        tabs: fr.names.join('|') === 'Devis|Détails des lignes|Récapitulatif annuel' && fr.barShown,
+        allTablesSaved: fr.tables === 3,
+        statusFr: !fr.error && fr.status === 'Excel importé : 3 feuilles, en onglets sous la grille. Nommez le modèle puis enregistrez-le.',
+        statusEn: !seen.en.error && en.status === 'Excel imported: 3 sheets, as tabs under the grid. Name the template, then save it.' && en.tabs === 3,
+        excelGivesThemBack: exported.join('|') === 'Devis|Détails des lignes|Récapitulatif annuel',
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, fr, en, exported }) };
     },
   });
 

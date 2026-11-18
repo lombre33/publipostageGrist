@@ -155,6 +155,10 @@ const I18nTextsExport = {
   'status.xlsxImporting': { fr: 'Lecture du classeur Excel…', en: 'Reading the Excel workbook…' },
   'status.xlsxImported': { fr: 'Excel importé : {rows} {rows|ligne|lignes}, {cols} {cols|colonne|colonnes}. Nommez le modèle puis enregistrez-le.', en: 'Excel imported: {rows} {rows|row|rows}, {cols} {cols|column|columns}. Name the template, then save it.' },
   'status.xlsxImportedSheet': { fr: 'Feuille « {sheet} » ({index} sur {total}) importée : {rows} {rows|ligne|lignes}, {cols} {cols|colonne|colonnes}. Les autres ne le sont pas.', en: 'Sheet “{sheet}” ({index} of {total}) imported: {rows} {rows|row|rows}, {cols} {cols|column|columns}. The others are not.' },
+  // « Toutes les feuilles » : la première ligne de la liste des feuilles d'un classeur importé (js/grid-xlsx-import.js:chooseSheet) ; la grille a alors un onglet par feuille (js/grid-sheets.js).
+  'xlsx.import.allSheets': { fr: 'Toutes les feuilles (onglets)', en: 'All sheets (tabs)' },
+  'status.xlsxImportedSheets': { fr: 'Excel importé : {n} feuilles, en onglets sous la grille. Nommez le modèle puis enregistrez-le.', en: 'Excel imported: {n} sheets, as tabs under the grid. Name the template, then save it.' },
+  'status.xlsxImportedSheetsSkipped': { fr: 'Excel importé : {n} feuilles en onglets ; {skipped} {skipped|feuille vide ou trop grande n’est pas reprise|feuilles vides ou trop grandes ne sont pas reprises}. Nommez le modèle puis enregistrez-le.', en: 'Excel imported: {n} sheets as tabs; {skipped} empty or too large {skipped|sheet is|sheets are} not imported. Name the template, then save it.' },
   // Le compte rendu d'un import Excel (js/grid-xlsx-import.js:reportOf, js/main.js:tellXlsxImportReport) : une ligne par genre, `xlsx.import.report.<genre>`, dans l'ordre de REPORT_KEYS.
   'xlsx.import.reportTitle': { fr: 'Ce que l’import n’a pas repris tel quel', en: 'What the import did not carry over as is' },
   'xlsx.import.reportIntro': { fr: 'Le classeur est importé. Il avait ceci, que la grille n’a pas pu reprendre tel quel :', en: 'The workbook is imported. It had the following, which the grid could not carry over as is:' },

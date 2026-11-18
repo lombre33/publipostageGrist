@@ -232,6 +232,9 @@ const I18nTextsTemplates = {
   'grid.resizeColumn': { fr: 'Tirer pour régler la largeur de la colonne', en: 'Drag to set the column width' },
   'grid.resizeRow': { fr: 'Tirer pour régler la hauteur de la ligne', en: 'Drag to set the row height' },
   'grid.cellBar': { fr: 'Barre de la case', en: 'Cell toolbar' },
+  // Les onglets d'une grille importée d'un classeur à plusieurs feuilles (js/grid-sheets.js) : le nom de la barre, et le nom d'une feuille que le classeur n'a pas nommée.
+  'grid.sheets.aria': { fr: 'Feuilles de la grille', en: 'Grid sheets' },
+  'grid.sheets.default': { fr: 'Feuille {n}', en: 'Sheet {n}' },
   'grid.pageBreak': { fr: 'Saut de page · nouvelle page du PDF, nouvelle feuille de l’Excel', en: 'Page break · new page in the PDF, new sheet in the Excel file' },
   'grid.pageBreakDocument': { fr: 'Saut de page · nouvelle page du PDF et du Word', en: 'Page break · new page in the PDF and Word files' },
   'toolbar.autosave.aria': { fr: 'Enregistrement automatique — enregistre le modèle toutes les ~2,5 secondes pendant que vous éditez. Désactiver si vous préférez enregistrer vous-même.', en: 'Auto-save — saves the template roughly every 2.5 seconds while you edit. Turn off if you prefer to save manually.' },

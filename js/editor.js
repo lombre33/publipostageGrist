@@ -887,8 +887,13 @@ const Editor = (function () {
   // Une grille s'enregistre et s'exporte sans le paragraphe vide caché sous son tableau (GridEditor.serialize). `doc` : le HTML d'un état à venir du document, jamais posé dans l'éditeur,
   // écrit par le même sérialiseur que celui de l'éditeur (js/linked-table.js:prepareSend écrit le document avec les bases d'après un envoi aux modèles, que l'éditeur ne prend qu'une fois
   // Grist d'accord).
+  // Une grille à onglets (js/grid-sheets.js) s'enregistre et s'exporte en un seul texte, les tableaux de toutes ses feuilles à la suite : celui de l'éditeur est la feuille montrée, les autres attendent dans GridSheets.
   function getHTML(doc) {
     if (!editor) return '';
+    return GridSheets.compose(sheetHTML(doc));
+  }
+  // Le texte du document de l'éditeur seul : pour une grille à onglets, le tableau de la feuille montrée.
+  function sheetHTML(doc) {
     // Le texte écrit d'avance par `prepareHTML`, tant que le document n'a pas changé : rendu une fois, puis oublié (une copie de plus en mémoire n'a pas à rester).
     if (!doc && preparedHtml) {
       const prepared = preparedHtml;
@@ -1095,7 +1100,9 @@ const Editor = (function () {
   // Âge au-delà duquel l'affichage d'un modèle relit le schéma exact même sans bulle rouge (setHTML) ; le même qu'au démarrage (js/main.js).
   const SCHEMA_MAX_AGE_MS = 60000;
 
-  function setHTML(html, suiviModifications) {
+  function setHTML(html, suiviModifications, options) {
+    // `options.sheets` : le texte est celui d'une grille (js/main.js:loadContentIntoEditor) ; s'il porte plusieurs tableaux nommés, ce sont les feuilles d'une grille à onglets (js/grid-sheets.js) : l'éditeur reçoit la
+    // première, les autres attendent dans GridSheets. Sans cette option (tout autre chargement), les onglets s'effacent.
     // `suiviModifications` : métadonnée { [id]: {author, createdAt} } relue depuis la colonne Grist du modèle (null pour un modèle jamais suivi, ou
     // de type macro, cf. js/templates.js). Le chargement passe par `loadTrackedDocument` (js/track-changes.js), pas par `setContent` : le suivi peut
     // être actif à ce moment (rien ne l'aurait désactivé entre deux modèles), et le pont TipTap interpréterait un `setContent` comme une suggestion
@@ -1105,6 +1112,7 @@ const Editor = (function () {
     const wasTrackChangesOn = isTrackChangesOn();
     // Les repères de la zone répétée d'une boucle (css/loop-marks.css) ne servent que si le texte chargé a une boucle : leur feuille s'éteint ici et se rallume pendant la pose s'il en a une (js/loop-marks.js).
     LoopMarks.reset();
+    html = GridSheets.adopt(html || '', !!(options && options.sheets));
     editor.commands.loadTrackedDocument(html || '');
     // Sans cela, l'historique Annuler/Rétablir s'accumulerait à travers les changements de modèle : un Annuler après chargement pouvait faire
     // réapparaître le contenu d'un modèle précédent.
@@ -1122,6 +1130,26 @@ const Editor = (function () {
     // ci-dessus.
     editor.view.dispatch(editor.state.tr);
     settleLoadedDocument(html || '');
+  }
+
+  // Montre une autre feuille d'une grille à onglets (js/grid-sheets.js) : le tableau de l'éditeur est remplacé par `html`, celui de la feuille qu'on ouvre, comme le fait le chargement d'un modèle (ni suivi, ni 'update' : rien
+  // n'est marqué modifié, le document entier n'a pas changé). L'historique d'Annuler est celui du texte de l'éditeur : celui de la feuille qu'on quitte est mis de côté sous `leaving`, celui de la feuille qu'on ouvre est
+  // rendu sous `entering` (s'il défait toujours le même tableau, sinon on repart d'un historique vide). `at` : la position du curseur dans la feuille qu'on ouvre, celle où on l'avait laissé (sans elle, la première case). Rend
+  // { html, at } de la feuille quittée : son tableau et la position de son curseur, que GridSheets garde.
+  function swapSheet(html, leaving, entering, at) {
+    if (!editor) return null;
+    const left = { html: sheetHTML(), at: editor.state.selection.anchor };
+    HeaderFooterPreview.stashHistory(leaving);
+    LoopMarks.reset();
+    editor.commands.loadTrackedDocument(html || '');
+    HeaderFooterPreview.restoreHistory(entering);
+    // Le curseur d'une feuille est celui qu'elle avait : le tableau est le même qu'à la sortie, ses positions aussi. Sans lui il suivrait le remplacement jusqu'en fin de tableau.
+    const { state, view } = editor;
+    const pos = Math.max(1, Math.min(at || 1, state.doc.content.size));
+    view.dispatch(state.tr.setSelection(EditorCore.getTextSelectionClass().near(state.doc.resolve(pos), 1)).setMeta('addToHistory', false).setMeta('preventUpdate', true));
+    settleLoadedDocument(html || '');
+    GridEditor.refresh();
+    return left;
   }
 
   // Ce que la pose d'un document fait une fois le texte en place : colonnes de tableau, pagination, images en calque, validité des bulles, copie du HTML au repos. `html` : le texte chargé (le verdict des
@@ -1412,7 +1440,7 @@ const Editor = (function () {
   }
 
   return {
-    init, loadLibraries, loadedLibraries, markBadgeValidity, refreshLinkState, badgeProblemText, getHTML, prepareHTML, setHTML, appendHTML, settleAppended, settleAppendedSteps, getHeadingNumberingStyle, insertImageAtDefaultSize,
+    init, loadLibraries, loadedLibraries, markBadgeValidity, refreshLinkState, badgeProblemText, getHTML, prepareHTML, setHTML, swapSheet, appendHTML, settleAppended, settleAppendedSteps, getHeadingNumberingStyle, insertImageAtDefaultSize,
     getHeaderFooterData: HeaderFooterPreview.getHeaderFooterData, setHeaderFooterData: HeaderFooterPreview.setHeaderFooterData,
     exitHeaderFooterModeIfActive: HeaderFooterPreview.exitHeaderFooterModeIfActive,
     // Aperçu A4 rallumé, facteur d'ajustement changé... : la pagination est refaite, et la position des images d'un modèle chargé sans mise en page

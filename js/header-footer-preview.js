@@ -53,7 +53,7 @@ const HeaderFooterPreview = (function () {
 
   // L'éditeur n'a qu'un historique d'Annuler, celui du texte qu'il contient. En changeant de texte (le corps, l'en-tête, le pied) on met de côté celui qu'on quitte et on rend
   // celui du texte qu'on retrouve, à condition qu'il défasse toujours le même document : sans cela ses pas ne s'y appliqueraient pas, on repart d'un historique vide.
-  const storyHistory = new Map(); // « main » ou « zone:variante » -> { history, doc }
+  const storyHistory = new Map(); // « main » ou « zone:variante » -> { history, doc } ; « feuille:n » pour les feuilles d'une grille à onglets (js/grid-sheets.js, Editor.swapSheet)
   const storyKey = mode => (mode ? mode.zone + ':' + mode.variant : 'main');
   const historyPlugin = () => (editor && editor.state.plugins.find(plugin => plugin.key === 'history$')) || null;
   function stashHistory(key) {
@@ -1840,7 +1840,7 @@ const HeaderFooterPreview = (function () {
   return {
     setEditor, setEmailMode, getHfMode, mainDocumentHtml, scheduleZoneCheck, refreshZoneOverflow, shrinkZoneImage, createEscapeExtension,
     enterHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter, listStories, openStory, onStoriesChange,
-    getHeaderFooterData, setHeaderFooterData, snapshot, restore,
+    getHeaderFooterData, setHeaderFooterData, snapshot, restore, stashHistory, restoreHistory,
     schedulePaginationRecompute, schedulePaginationAfterEdit, paginationHolds, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, reconcileLayerImagesWithGrid, recaptureLayeredImageGrids,
     rowPadOf, pageBreaks, pageIndexOf, pageIndexResolver, pageBodyTops, onPaginated, scrollToPage, pageScreenTop, breaksOf,
   };

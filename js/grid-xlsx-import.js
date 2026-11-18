@@ -6,8 +6,10 @@
 // diverger.
 //   GridXlsxImport.openFile(file) -> Promise<{ sheets: [{ index, name }], build(index, { lang }) }>
 //     le classeur lu une fois : ses feuilles visibles, dans l'ordre d'Excel, et la grille de celle qu'on choisit
-//   GridXlsxImport.chooseSheet(sheets, { anchor }) -> Promise<index | null>
-//     la liste avec recherche des feuilles (js/search-select.js), sous le rectangle que rend `anchor()` ; null : Échap ou un clic ailleurs
+//     `buildAll({ lang })` rend toutes les feuilles visibles en une grille à onglets (js/grid-sheets.js) : un tableau nommé par feuille ; une feuille vide ou trop grande n'est pas reprise (`skipped`) et moins de deux
+//     feuilles reprises n'ont pas d'onglets (le résultat est celui de la seule feuille reprise, `tabs` faux)
+//   GridXlsxImport.chooseSheet(sheets, { anchor, allLabel }) -> Promise<index | 'all' | null>
+//     la liste avec recherche des feuilles (js/search-select.js), sous le rectangle que rend `anchor()` ; null : Échap ou un clic ailleurs ; `allLabel` ajoute en tête la ligne « toutes les feuilles » (rend 'all')
 //   GridXlsxImport.importFile(file, { lang, sheetIndex? }) -> Promise<{ html, model, sheetName, sheetIndex, sheetCount, rows, cols }>
 //     rejette avec une Error dont `code` dit pourquoi
 //   GridXlsxImport.fromArrayBuffer(buffer, { lang, sheetIndex? }) -> idem, depuis les octets du fichier
@@ -27,6 +29,8 @@ const GridXlsxImport = (function () {
   const MAX_FILE_BYTES = 100 * 1024 * 1024;       // un classeur plus lourd n'est pas lu
   const MAX_UNPACKED_BYTES = 600 * 1024 * 1024;   // ce qu'il pèse une fois défait, d'après son répertoire : plus, c'est une bombe de compression (même mesure que l'import PowerPoint)
   const MAX_CELLS = 5000; // la frappe dans une grille coûte à proportion de son nombre de cases : au-delà, elle devient pénible
+  const MAX_TAB_SHEETS = 20;      // les onglets d'une grille importée : au plus autant de feuilles, et MAX_TAB_CELLS cases en tout (le modèle enregistré porte toutes les feuilles dans une seule cellule Grist)
+  const MAX_TAB_CELLS = 40000;
   const MIN_COL_PX = 24; // la plus petite colonne d'une grille
   const DEFAULT_COL_PX = 64; // 8,43 caractères : la largeur d'une colonne sans largeur écrite
   const DEFAULT_ROW_PT = 15;
@@ -435,6 +439,37 @@ const GridXlsxImport = (function () {
     };
   }
 
+  // Toutes les feuilles visibles du classeur en une grille à onglets : un tableau nommé par feuille, dans l'ordre d'Excel. Une feuille vide ou trop grande (une feuille, ou trop de cases en tout : MAX_TAB_CELLS) n'est pas reprise, et
+  // `skipped` les compte. Moins de deux feuilles reprises : pas d'onglets, le résultat est celui de la seule feuille reprise. Le compte rendu est la somme de ceux des feuilles.
+  function buildAllSheets(workbook, count, options) {
+    const built = [];
+    let skipped = 0;
+    let cells = 0;
+    for (let index = 0; index < count; index++) {
+      try {
+        const sheet = buildModel(workbook, Object.assign({}, options, { sheetIndex: index }));
+        const size = sheet.model.rows.length * sheet.model.width;
+        if (built.length >= MAX_TAB_SHEETS || cells + size > MAX_TAB_CELLS) { skipped++; continue; }
+        built.push(sheet);
+        cells += size;
+      } catch (e) {
+        if (e && (e.code === 'empty' || e.code === 'tooBig')) skipped++;
+        else throw e;
+      }
+    }
+    if (!built.length) throw fail('empty', 'Aucune feuille du classeur n\'a de case à importer.');
+    if (built.length === 1) return Object.assign(built[0], { sheetCount: count, skipped, tabs: false });
+    const names = GridSheets.uniqueNames(built.map(sheet => sheet.sheetName));
+    const totals = new Map();
+    built.forEach(sheet => sheet.report.forEach(({ key, n }) => totals.set(key, (totals.get(key) || 0) + n)));
+    return {
+      html: built.map((sheet, at) => GridTable.toHtml(sheet.model, { sizes: true, sheetName: names[at] })).join(''),
+      sheetNames: names, sheetName: names[0], sheetIndex: 0, sheetCount: count, sheets: built.length, skipped, tabs: true,
+      rows: built.reduce((sum, sheet) => sum + sheet.rows, 0), cols: Math.max(...built.map(sheet => sheet.cols)),
+      report: REPORT_KEYS.filter(key => totals.has(key)).map(key => ({ key, n: totals.get(key) })),
+    };
+  }
+
   // Les octets d'un classeur, lus par ExcelJS (chargé à la demande) : le classeur, ou l'erreur d'une personne qui a choisi un mauvais fichier.
   async function readWorkbook(buffer) {
     const bytes = new Uint8Array(buffer);
@@ -562,6 +597,7 @@ const GridXlsxImport = (function () {
     return {
       sheets: shown.map((sheet, index) => ({ index, name: sheet.name })),
       build: (index, options) => buildModel(workbook, Object.assign({}, options, { sheetIndex: index })),
+      buildAll: options => buildAllSheets(workbook, shown.length, options),
     };
   }
 
@@ -574,6 +610,13 @@ const GridXlsxImport = (function () {
       const host = document.createElement('div');
       host.id = 'v2-xlsx-sheet-search';
       const select = document.createElement('select');
+      // « Toutes les feuilles » en tête (js/main-import.js : l'import d'un classeur Excel) : la grille a un onglet par feuille.
+      if (options && options.allLabel) {
+        const all = document.createElement('option');
+        all.value = 'all';
+        all.textContent = options.allLabel;
+        select.appendChild(all);
+      }
       sheets.forEach(({ index, name }) => {
         const option = document.createElement('option');
         option.value = String(index);
@@ -594,7 +637,7 @@ const GridXlsxImport = (function () {
           // premier (une promesse ne se tient qu'une fois).
           onClose: () => setTimeout(() => { cleanup(); resolve(null); }, 0),
         });
-        select.addEventListener('change', () => resolve(Number(select.value)));
+        select.addEventListener('change', () => resolve(select.value === 'all' ? 'all' : Number(select.value)));
         search.open();
       } catch (e) {
         console.warn('[GridXlsxImport] liste des feuilles indisponible', e);

@@ -781,7 +781,10 @@ const XlsxExport = (function () {
     // Les feuilles d'un enregistrement : une seule, ou une par tranche de lignes que les sauts de page de la grille délimitent (« nom », « nom
     // (2) »... : le nom de la suivante se prend comme celui d'un enregistrement de même nom). Elles ont toutes les mêmes colonnes et chacune recompte
     // ses lignes depuis 1 ; la première est rendue.
-    const table = root.querySelector('table');
+    // Une grille à onglets (js/grid-sheets.js) a un tableau nommé par feuille : chacun s'écrit dans les siennes, au nom de son onglet (suivi de celui du fichier dans un classeur qui réunit plusieurs enregistrements). Les
+    // sauts de page de chaque tableau en font des feuilles de plus.
+    const tabs = sheetTables(root, options.usedNames ? name : '');
+    const table = tabs.length ? tabs[0].table : root.querySelector('table');
     // Un objet de réglages neuf par feuille : ExcelJS peut garder une référence à celui qu'on lui donne.
     const sheetOptions = () => ({
       views: [{ showGridLines: false }],
@@ -791,7 +794,7 @@ const XlsxExport = (function () {
       },
     });
     const used = options.usedNames || new Set();
-    const newSheet = () => workbook.addWorksheet(sheetNameFrom(name, used), sheetOptions());
+    const newSheet = (title) => workbook.addWorksheet(sheetNameFrom(title || name, used), sheetOptions());
     if (!table) {
       const sheet = newSheet();
       sheet.getColumn(1).width = 80;
@@ -800,16 +803,26 @@ const XlsxExport = (function () {
       cell.font = fontOf({}); cell.alignment = { vertical: 'top', wrapText: true };
       return sheet;
     }
-    const allRows = ExportCommon.tableRows(table);
-    const widthsPx = columnWidthsPx(table, ExportCommon.placeCells(allRows).width);
-    const borderSides = ExportCommon.cellBorderSides(table);
     let first = null;
-    for (const [from, to] of ExportCommon.gridRowSegments(allRows)) {
-      const sheet = newSheet();
-      await fillTableSheet(workbook, sheet, allRows.slice(from, to), widthsPx, borderSides);
-      first = first || sheet;
+    for (const entry of (tabs.length ? tabs : [{ table, title: '' }])) {
+      const allRows = ExportCommon.tableRows(entry.table);
+      const widthsPx = columnWidthsPx(entry.table, ExportCommon.placeCells(allRows).width);
+      const borderSides = ExportCommon.cellBorderSides(entry.table);
+      for (const [from, to] of ExportCommon.gridRowSegments(allRows)) {
+        const sheet = newSheet(entry.title);
+        await fillTableSheet(workbook, sheet, allRows.slice(from, to), widthsPx, borderSides);
+        first = first || sheet;
+      }
     }
     return first;
+  }
+
+  // Les tableaux d'une grille à onglets (js/grid-sheets.js), dans l'ordre des onglets : [{ table, title }], `title` étant le nom de la feuille d'Excel (celui de l'onglet ; suivi du nom du fichier quand le classeur réunit plusieurs
+  // enregistrements, `batchName`). Vide pour une grille d'une seule feuille et pour tout autre texte : le premier tableau s'écrit sous le nom du fichier, comme avant.
+  function sheetTables(root, batchName) {
+    const tables = Array.from(root.querySelectorAll('table[data-sheet-name]'));
+    if (tables.length < 2) return [];
+    return tables.map(table => ({ table, title: table.getAttribute('data-sheet-name') + (batchName ? ' - ' + batchName : '') }));
   }
 
   function cellRuns(content) {
@@ -912,8 +925,9 @@ const XlsxExport = (function () {
     // date). Le tableau est rendu hors écran le temps de la mesure (largeur des colonnes et hauteur des lignes telles que l'éditeur les affiche).
     const root = document.createElement('div');
     Dom.setMarkup(root, HtmlSanitize.clean(resolvedHtml || ''));
-    const table = root.querySelector('table');
-    const widthPx = table ? Math.max(100, Math.round(parseFloat(table.style.width) || table.getBoundingClientRect().width || 800)) : 800;
+    const tables = Array.from(root.querySelectorAll('table'));
+    // La plus large des feuilles d'une grille à onglets : le plan hors écran les met toutes, l'une sous l'autre.
+    const widthPx = tables.length ? Math.max(100, ...tables.map(table => Math.round(parseFloat(table.style.width) || table.getBoundingClientRect().width || 800))) : 800;
     const detach = ExportCommon.attachMeasureHost(root, widthPx + 24);
     try {
       await Promise.all(Array.from(root.querySelectorAll('img')).map(img => (img.decode ? img.decode().catch(() => {}) : Promise.resolve())));

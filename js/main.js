@@ -471,7 +471,8 @@
     // chargement : venant d'un document, `setHTML` rognerait le tableau à la largeur d'une page (clampOverflowingTables ne mesure que sous cette
     // classe), et un classeur de 20 colonnes de 64 px arriverait à 36 px par colonne.
     if (GridEditor.isGridType(typeModele)) { editorContainer.classList.remove('a4-preview'); readerContainer.classList.remove('a4-preview'); }
-    Editor.setHTML(plan ? plan.first : (tpl ? tpl.contenu : ''), tpl ? tpl.suiviModifications : null);
+    // Une grille dont le texte porte plusieurs tableaux nommés est une grille à onglets (js/grid-sheets.js) : seule sa première feuille entre dans l'éditeur.
+    Editor.setHTML(plan ? plan.first : (tpl ? tpl.contenu : ''), tpl ? tpl.suiviModifications : null, { sheets: GridEditor.isGridType(typeModele) });
     Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
   }
 

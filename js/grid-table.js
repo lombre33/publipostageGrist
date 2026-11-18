@@ -397,7 +397,9 @@ const GridTable = (function () {
     }).join('');
     const total = widths.reduce((sum, w) => sum + w, 0);
     const colgroup = sizes ? `<colgroup>${widths.map(w => `<col style="width: ${w}px;">`).join('')}</colgroup>` : '';
-    return `<table${sizes ? ` style="width: ${total}px;"` : ''}>${colgroup}<tbody>${rows}</tbody></table>`;
+    // `sheetName` : le tableau est une feuille d'une grille à onglets (js/grid-sheets.js).
+    const sheet = options && options.sheetName ? ` data-sheet-name="${escapeAttr(options.sheetName)}"` : '';
+    return `<table${sheet}${sizes ? ` style="width: ${total}px;"` : ''}>${colgroup}<tbody>${rows}</tbody></table>`;
   }
 
   // Le modèle avec les traits que deux cases se partagent mis d'accord (js/table-borders.js : un trait n'a qu'une valeur, écrite sur ses deux cases).

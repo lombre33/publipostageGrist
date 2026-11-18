@@ -321,10 +321,10 @@ const statusOf = page => page.evaluate(() => {
 });
 
 const TEXTS = {
-  fr: { row: 'Importer un Excel…', placeholder: 'Rechercher une feuille…', noMatch: 'Aucune feuille ne correspond.', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler', close: 'Fermer',
+  fr: { row: 'Importer un Excel…', allSheets: 'Toutes les feuilles (onglets)', placeholder: 'Rechercher une feuille…', noMatch: 'Aucune feuille ne correspond.', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler', close: 'Fermer',
     reportTitle: 'Ce que l’import n’a pas repris tel quel', reportMessage: 'Le classeur est importé. Il avait ceci, que la grille n’a pas pu reprendre tel quel :\n• 1 formule remplacée par son résultat',
     imported: /^Feuille « Facture » \(1 sur 2\) importée : 5 lignes, 5 colonnes\./, unreadable: 'Ce fichier n’est pas un classeur Excel (.xlsx) lisible.', euro: /^12,50\s€$/, total: /^20,50\s€$/ },
-  en: { row: 'Import from Excel…', placeholder: 'Search for a sheet…', noMatch: 'No sheet matches.', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
+  en: { row: 'Import from Excel…', allSheets: 'All sheets (tabs)', placeholder: 'Search for a sheet…', noMatch: 'No sheet matches.', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
     reportTitle: 'What the import did not carry over as is', reportMessage: 'The workbook is imported. It had the following, which the grid could not carry over as is:\n• 1 formula replaced by its result',
     imported: /^Sheet “Facture” \(1 of 2\) imported: 5 rows, 5 columns\./, unreadable: 'This file is not a readable Excel (.xlsx) workbook.', euro: /^12\.50\s€$/, total: /^20\.50\s€$/ },
 };
@@ -383,8 +383,8 @@ async function run(theme, lang) {
     await chooser.setFiles(invoicePath);
     list = await waitForSheetList(page);
   }
-  check(`${label} - le classeur a deux feuilles visibles : la liste des feuilles s'ouvre une fois le classeur lu, « Facture » puis « Détails », et rien n'est encore importé`,
-    !!list && list.rows.map(r => r.text).join('|') === 'Facture|Détails' && !(await gridActive(page)), { list });
+  check(`${label} - le classeur a deux feuilles visibles : la liste des feuilles s'ouvre une fois le classeur lu, « Toutes les feuilles » en tête, puis « Facture » et « Détails », et rien n'est encore importé`,
+    !!list && list.rows.map(r => r.text).join('|') === T.allSheets + '|Facture|Détails' && !(await gridActive(page)), { list });
   if (list) {
     check(`${label} - la liste s'ouvre sous le « + » d'où l'on est parti, entière dans le panneau, une seule dans la page`, list.belowPlus && list.inPanel && list.hostCount === 1, { left: list.left, top: list.top, right: list.right, bottom: list.bottom, belowPlus: list.belowPlus, inPanel: list.inPanel, hosts: list.hostCount });
     check(`${label} - chaque ligne est atteignable à la souris (rien ne la recouvre), dans le panneau, et lisible (contraste d'au moins 4,5 : 1)`, list.rows.every(r => r.reachable && r.inPanel && r.contrast >= 4.5), list.rows);

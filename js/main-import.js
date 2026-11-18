@@ -124,8 +124,10 @@ const MainImport = (function () {
           // Sous le « + » : c'est de là que la personne est partie. Elle recouvre le coin d'état, qui n'a rien à dire pendant ce temps (« Lecture… »
           // serait faux, la lecture est finie) ; refermée sans choix, la liste ne change rien : le coin d'état redit l'état du modèle en cours.
           setStatus('');
-          const picked = await GridXlsxImport.chooseSheet(book.sheets, { anchor: () => document.getElementById('btn-new').getBoundingClientRect() });
+          // « Toutes les feuilles » en tête de la liste : la grille a un onglet par feuille (js/grid-sheets.js) ; choisir une feuille n'en importe qu'une, comme avant.
+          const picked = await GridXlsxImport.chooseSheet(book.sheets, { anchor: () => document.getElementById('btn-new').getBoundingClientRect(), allLabel: I18n.t('xlsx.import.allSheets') });
           if (picked === null) { updateSaveStatus(); refocusEditorIfLost(); return null; }
+          if (picked === 'all') return book.buildAll({ lang: I18n.getLang() });
           index = picked;
           chosen = book.sheets[index].name;
         }
@@ -148,6 +150,10 @@ const MainImport = (function () {
       loadTemplateIntoEditor({ id: null, nom: '', contenu: imported.html, typeModele: GridEditor.TYPE, marginsMm: null, suiviModifications: null, headerFooter: null }, GridEditor.TYPE);
       markAutosaveDirty();
       const counts = { rows: imported.rows, cols: imported.cols };
+      if (imported.tabs) {
+        setStatus(I18n.t(imported.skipped ? 'status.xlsxImportedSheetsSkipped' : 'status.xlsxImportedSheets', { n: imported.sheets, skipped: imported.skipped }));
+        return;
+      }
       setStatus(imported.sheetCount > 1
         ? I18n.t('status.xlsxImportedSheet', Object.assign({ sheet: imported.sheetName, index: imported.sheetIndex + 1, total: imported.sheetCount }, counts))
         : I18n.t(singleKey || 'status.xlsxImported', counts));

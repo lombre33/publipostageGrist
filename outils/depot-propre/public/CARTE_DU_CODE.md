@@ -36,7 +36,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
   les préférences d'affichage (langue, thème, raccourcis…) dans le navigateur.
-- **Le volume** : 193 fichiers dans `js/` (89 000 lignes : 67 100 de code, 17 300 de commentaires, 4 600 de
+- **Le volume** : 194 fichiers dans `js/` (89 000 lignes : 67 100 de code, 17 300 de commentaires, 4 600 de
   blanc), 47 dans `extensions/` (13 400 lignes, dont 2 900 dans `graphique/`, 1 700 dans `edition/`, 7 400 dans
   `diapositives/` et 1 400 dans `lecture-pdf/`), 58 feuilles de style (4 800 lignes), une page de 1 100 lignes.
   Quatre fichiers de polices du PDF pèsent 2,5 Mo en quelques lignes (des données) ; les `js/i18n-texts-*.js` sont du texte à
@@ -223,13 +223,14 @@ téléchargement. Les lots (un PDF ou un ZIP pour toutes les lignes) passent par
 | `js/reader-mode.js` | Le document résolu pour une ligne et paginé (même calcul des coupures que l'éditeur : `placeSimpleSeamsAtOnce`, puis `placeSeam`, mêmes réserves vérifiées et surveillées, `watchGeometry` ; `computePageBreakOffsets` ignore de même un bloc non rendu ; `layOutSheets` suspend l'ancrage de défilement le temps de la mise en page) ; `preview()` sert aussi tous les exports. L'entrée en Lecture dessine la page une seule fois : `refitToContent` relit le facteur d'ajustement une fois la page posée (une barre de défilement qui prend de la largeur le change) et ne refait que la mise en page ; `renderRecord` lance la lecture des types de colonnes pendant que le HTML se construit, et `resolveReaderBody` fait partir ensemble les images de variable, les codes QR, les graphiques et les puces. `layoutSeams` pose chaque suite de coupures simples d'un coup (`placeSimpleSeamsAtOnce(pass, offsets, start)`, qui reprend à la coupure `start`) et les coupures dans un tableau ou une zone une à une (`placeSeam`), puis reprend la suite simple d'après ; un lot qui ne pose rien arrête les lots de ce calcul (`pass.atOnce`). |
 | `js/reader-guide.js` | Le guide affiché quand aucune ligne n'est choisie, et la carte « Donnez l'accès complet à ce widget » que l'éditeur montre à la place du document quand Grist ne lui donne pas l'accès complet. |
 
-### Mode grille (6 fichiers, 4 400 lignes)
+### Mode grille (7 fichiers, 4 600 lignes)
 
 | Fichier | Rôle |
 |---|---|
 | `js/grid-editor.js` | Le modèle « grille » : un seul tableau de tableur, colonnes et lignes réglables. |
 | `js/grid-table.js` | Lire un tableau collé depuis Excel, Google Sheets ou LibreOffice. |
 | `js/grid-xlsx-import.js` | Importer un classeur `.xlsx` dans une grille. |
+| `js/grid-sheets.js` | Les onglets d'une grille importée d'un classeur Excel à plusieurs feuilles : l'éditeur ne garde que la feuille montrée, les autres attendent ici, et le texte enregistré les porte toutes. |
 | `js/table-borders.js` | La règle des bordures, écrite une fois pour l'éditeur, la Lecture, le PDF et l'Excel. |
 | `js/xlsx-number-format.js` | Le texte qu'Excel montrerait pour un format de nombre ou de date. |
 | `js/xlsx-pivot.js` | Le vrai tableau croisé d'Excel pour l'export Excel d'une grille qui porte un tableau croisé : le plan (données à plat, champs, éléments dans l'ordre du tableau, grille des cases) et les parties du fichier (cache, enregistrements, définition du tableau) ; module pur. |
@@ -525,7 +526,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
-- **The size**: 193 files in `js/` (89,000 lines: 67,100 of code, 17,300 of comments, 4,600 blank), 47 in
+- **The size**: 194 files in `js/` (89,000 lines: 67,100 of code, 17,300 of comments, 4,600 blank), 47 in
   `extensions/` (13,400 lines, 2,900 of them in `graphique/`, 1,700 in `edition/`, 7,400 in `diapositives/` and 1,400 in
   `lecture-pdf/`), 58 stylesheets (4,800 lines), a 1,100-line page. Four PDF font files weigh 2.5 MB in a few lines
   (data); the `js/i18n-texts-*.js` files are text to translate, not logic.
@@ -711,13 +712,14 @@ ZIP for all rows) go through `js/main.js` (`onExportBatch`) and `js/pdf-merge.js
 | `js/reader-mode.js` | The document resolved for a row and paginated (the same cut calculation as the editor: `placeSimpleSeamsAtOnce`, then `placeSeam`, the same reserves checked and watched, `watchGeometry`; `layOutSheets` suspends scroll anchoring for the time of the layout); `preview()` also serves all the exports. Entering Reading draws the page only once: `refitToContent` reads the fit factor again once the page is laid out (a scrollbar that takes width changes it) and only redoes the layout; `renderRecord` starts reading the column types while the HTML is being built, and `resolveReaderBody` starts the variable images, the QR codes, the charts and the chips together. `layoutSeams` places each run of plain page breaks at once (`placeSimpleSeamsAtOnce(pass, offsets, start)`, which resumes at cut `start`) and the cuts inside a table or a zone one by one (`placeSeam`), then resumes with the next plain run; a batch that places nothing stops the batches of that calculation (`pass.atOnce`). |
 | `js/reader-guide.js` | The guide shown when no row is chosen, and the "Give this widget full access" card the editor shows in place of the document when Grist does not give it full access. |
 
-### Grid mode (6 files, 4,400 lines)
+### Grid mode (7 files, 4,600 lines)
 
 | File | Role |
 |---|---|
 | `js/grid-editor.js` | The "grid" template: a single spreadsheet-like table, with adjustable columns and rows. |
 | `js/grid-table.js` | Reading a table pasted from Excel, Google Sheets or LibreOffice. |
 | `js/grid-xlsx-import.js` | Importing an `.xlsx` workbook into a grid. |
+| `js/grid-sheets.js` | The tabs of a grid imported from an Excel workbook with several sheets: the editor only keeps the shown sheet, the others wait here, and the saved text carries them all. |
 | `js/table-borders.js` | The border rule, written once for the editor, Reading mode, the PDF and the Excel file. |
 | `js/xlsx-number-format.js` | The text Excel would show for a number or date format. |
 | `js/xlsx-pivot.js` | The real Excel pivot table for the Excel export of a grid that carries a pivot table: the plan (flat data, fields, items in the table's order, grid of cells) and the file's parts (cache, records, table definition); pure module. |

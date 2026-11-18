@@ -102,6 +102,13 @@ const GridEditor = (function () {
               parseHTML: el => (el.getAttribute('data-grid-lines') === GRID_LINES_OFF ? GRID_LINES_OFF : null),
               renderHTML: attrs => (attrs.gridLines === GRID_LINES_OFF ? { 'data-grid-lines': GRID_LINES_OFF } : {}),
             },
+            // `sheetName` : le nom de la feuille que ce tableau est dans une grille à onglets (js/grid-sheets.js), `data-sheet-name` dans le HTML du modèle. Null pour tout tableau d'un document et pour toute
+            // grille d'une seule feuille : aucun changement de rendu ni de HTML.
+            sheetName: {
+              default: null,
+              parseHTML: el => el.getAttribute('data-sheet-name') || null,
+              renderHTML: attrs => (attrs.sheetName ? { 'data-sheet-name': attrs.sheetName } : {}),
+            },
           });
         },
       });
