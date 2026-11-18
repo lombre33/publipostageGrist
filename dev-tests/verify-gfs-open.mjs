@@ -193,7 +193,7 @@ console.log('\n== Au démarrage : le modèle que GFS désigne ==');
 {
   let o = await startWith('GFS désigne « Départ B » : il s’ouvre à la place du ★, et le coin d’état dit pourquoi', { stub: { ouverture: WHAT(2) } }, 'Départ B', 2, PHRASE.fr);
   const got = await shown(o.page);
-  const sent = await o.page.evaluate(() => window.__gfsStub.calls.map(c => c.nom));
+  const sent = await o.page.evaluate(() => window.__gfsStub.calls.map(c => c.nom).filter(nom => nom !== 'securite'));   // hors le `relais` du kit (`securite`, consigne 084) : ce n'est pas une demande à GFS ; dev-tests/verify-gfs-violations.mjs le juge
   check('le texte de ce modèle est à l’écran, sans classe d’erreur', got.text === 'Contenu B' && got.statusClass === '', got);
   check('GFS a reçu l’appel `contexte` et rien d’autre au démarrage', JSON.stringify(sent) === JSON.stringify(['contexte']), sent);
   check('rien n’est écrit : ni écriture de modèle (★ compris), ni option de la vue', JSON.stringify(await writes(o.page)) === JSON.stringify({ models: 0, options: 'null' }), await writes(o.page));
@@ -267,7 +267,7 @@ console.log('\n== Au démarrage : « Nouveau » ouvre un modèle vierge du type 
   check('le ★ (ni aucun autre modèle) ne s’est ouvert : seul le vierge est passé par `setCurrentId`', onlyBlank(seen.opened), seen.opened);
   check('le coin d’état garde l’avertissement « modèle non enregistré », pas « Widget prêt. »', WARNING.fr.test(got.status) && got.statusClass === 'error-msg', got);
   check('rien n’est écrit : ni modèle, ni ★, ni option de la vue', await nothingWritten(o.page), await writes(o.page));
-  const sent = await o.page.evaluate(() => window.__gfsStub.calls.map(c => c.nom));
+  const sent = await o.page.evaluate(() => window.__gfsStub.calls.map(c => c.nom).filter(nom => nom !== 'securite'));   // hors le `relais` du kit (`securite`, consigne 084) : ce n'est pas une demande à GFS ; dev-tests/verify-gfs-violations.mjs le juge
   check('GFS a reçu l’appel `contexte` et rien d’autre au démarrage', JSON.stringify(sent) === JSON.stringify(['contexte']), sent);
   await o.context.close();
 
@@ -960,7 +960,7 @@ console.log('\n== « Nouveau > Importer » au démarrage : le fichier est dans l
   check('markdown : le document du fichier est à l’écran, sans nom ni modèle courant (le ★ s’était ouvert avant, l’import a suivi)', got.current == null && got.name === '' && got.list === '' && got.text === MARKDOWN_TEXT && got.opened.join() === '1,null', got);
   check('le coin d’état dit « Markdown importé. Nommez le modèle puis enregistrez-le. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', got.status === IMPORTED.markdown.fr, got);
   check('le fichier reçu est lu tel quel, sans sélecteur, rien d’écrit', got.mdReads.length === 1 && got.mdReads[0].name === 'note.md' && got.picker === 0 && got.fileInputs === 0 && await nothingWritten(o.page), got);
-  check('GFS a reçu l’appel `contexte` et rien d’autre : ni appel, ni réponse', JSON.stringify(await o.page.evaluate(() => window.__gfsStub.calls.map(c => c.nom))) === JSON.stringify(['contexte']) && (await answers(o.page)).length === 0, await o.page.evaluate(() => window.__gfsStub.calls.map(c => c.nom)));
+  check('GFS a reçu l’appel `contexte` et rien d’autre (hors le `relais` du kit, `securite`) : ni appel, ni réponse', JSON.stringify(await o.page.evaluate(() => window.__gfsStub.calls.map(c => c.nom).filter(nom => nom !== 'securite'))) === JSON.stringify(['contexte']) && (await answers(o.page)).length === 0, await o.page.evaluate(() => window.__gfsStub.calls.map(c => c.nom)));
   check('`GfsLink.opening()` garde l’importation (une valeur, un `File`)', await o.page.evaluate(() => { const i = GfsLink.opening().importation; return !!i && i.valeur === 'markdown' && i.fichier instanceof File && i.fichier.name === 'note.md'; }));
   await o.context.close();
 

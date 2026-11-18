@@ -94,7 +94,7 @@ chemin est affiché.
   journal ni ses essais, ni ce que l'app n'importe pas et que les contrôles refuseraient (`KIT_RETIRES` : `js/synchro`,
   le moteur de partage de GFS venu avec le kit 0.23.0, dont les notes citent par son prénom la personne qui a demandé
   le widget). Ce que la page ou `js/` en importe (`kit/js/ambiance-message.js`, `ambiance-pose.js`,
-  `correcteurs-message.js`, `correcteurs-pose.js`, `once.js`) doit y être, sinon `controles.mjs` s'arrête.
+  `correcteurs-message.js`, `correcteurs-pose.js`, `violations-message.js`, `violations-pose.js`, `once.js`) doit y être, sinon `controles.mjs` s'arrête.
 - Un sous-dossier de `public/` autre que `screenshots/`, ou autre chose qu'un `.png` dans `public/screenshots/`.
 - Une version qui n'est pas du semver, ou une étiquette déjà prise.
 - D'écraser ce que le dépôt public a reçu depuis la dernière étiquette (une contribution acceptée là-bas et

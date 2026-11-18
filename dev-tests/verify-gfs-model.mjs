@@ -162,7 +162,8 @@ console.log('\n== Au démarrage : GFS désigne « Facture, devis ou avoir » =='
   got = await received(page);
   check('rien n’est écrit dans la table des modèles : le modèle ne naît qu’au premier « Enregistrer »', got.models === 0 && got.names.length === 6, got);
   check('l’app est passée par le ★ puis par un modèle sans identifiant, rien d’autre (jamais un autre modèle entre les deux)', same(await opened(page), ['1', 'null']), await opened(page));
-  check('GFS a reçu l’appel `contexte` et rien d’autre au démarrage', same(await page.evaluate(() => window.__gfsStub.calls.map(c => c.nom)), ['contexte']), await page.evaluate(() => window.__gfsStub.calls.map(c => c.nom)));
+  // L'appel `securite` (le `relais` du kit, consigne 084) n'est pas une demande à GFS : il n'entre pas dans ce compte ; dev-tests/verify-gfs-violations.mjs le juge.
+  check('GFS a reçu l’appel `contexte` et rien d’autre au démarrage', same(await page.evaluate(() => window.__gfsStub.calls.map(c => c.nom).filter(nom => nom !== 'securite')), ['contexte']), await page.evaluate(() => window.__gfsStub.calls.map(c => c.nom)));
   check('aucune boîte native (confirm / alert / prompt) n’a été posée', o.natives.length === 0, o.natives);
 
   // Tapé : le modèle n'existe toujours pas - l'enregistrement automatique ne crée jamais de modèle (deux passages de 2,5 s).

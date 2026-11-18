@@ -14,6 +14,9 @@
 //   figée » (`{}` : tout au CDN) ; undefined : un GFS d'avant la 065, dont le contexte et l'événement `extensions` n'ont pas de `natives` (par défaut). Réglée avant le chargement de la page, comme `mode` ; setNatives(objet) la change et
 //   envoie l'événement `extensions` (`{ extensions, bibliotheques, natives }`), comme GFS quand la personne change le choix « CDN ou copie figée » d'une fonction. C'est le test qui sert les fichiers (dev-tests/verify-native-libs.mjs).
 //   window.__gfsStub.calls : les appels reçus ({ nom, args, id }) ; ignoreContext : ne pas répondre (GFS absent) ; installReply : { actives } ou { error } que reçoit `installer`.
+//   L'appel `securite` (consigne 084, contrats de GFS 5.4 point 14 ; guide des apps, règle S8) : l'app dit à GFS, sans `id`, que sa politique de contenu a bloqué un appel (`{ quoi: 'relais', kit }` au démarrage du relais, puis
+//   `{ quoi: 'bloque', directive, cible, source, disposition, fois }`). GFS ne répond rien : le stub le note dans `calls` comme tout appel et ne répond rien non plus (le jugement de la forme et de ce qui ne part pas est celui de
+//   dev-tests/verify-gfs-violations.mjs, d'après le contrat, pas celui du stub).
 //   window.__gfsStub.adresseWidget : l'adresse du widget que rend le contexte (contrats 5.2, consigne 009) : celle de GFS, que portent les sections de la page, jamais celle de la page de test (le widget n'en
 //   est que le sous-cadre) ; null : GFS ne la donne pas. Réglée avant le chargement de la page, comme `mode` : le contexte ne se demande qu'au démarrage, et l'événement `extensions` n'en porte pas.
 //   window.__gfsStub.ouverture : l'`ouverture` que rend le contexte (contrats 5.2, point 3, consigne 010) : null, ou { fichier: null | { id, type }, type, dossier, raison } ; réglée avant le chargement.
@@ -486,6 +489,8 @@
       stub.deposit(message).catch((e) => { console.error('[gfs-stub] ranger en échec', e); if (Number.isInteger(message.id)) stub.post({ type: 'erreur', id: message.id, code: 'GFS_ECHEC', message: String(e && e.message || e) }); });
     } else if (message.nom === 'joindre') {
       stub.attach(message).catch((e) => { console.error('[gfs-stub] joindre en échec', e); if (Number.isInteger(message.id)) stub.post({ type: 'erreur', id: message.id, code: 'GFS_ECHEC', message: String(e && e.message || e) }); });
+    } else if (message.nom === 'securite') {
+      // Sans `id` : GFS n'a rien à répondre ; l'appel est déjà dans `calls`.
     } else if (message.nom === 'installer') {
       const reply = stub.installReply || { actives: stub.extensions.slice() };
       if (reply.error) stub.post({ type: 'erreur', id: message.id, code: 'GFS_REFUSE', message: reply.error });

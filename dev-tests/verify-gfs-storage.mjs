@@ -389,7 +389,7 @@ if (wanted(5)) {
   await sleep(300);
   await closeSettings(old.page, old.app);
   await clickMenuRow(old.page, old.app, '#btn-save', '#v2-btn-autosave');
-  const sent = await old.page.evaluate(() => window.__gfsStub.calls.map(c => c.nom));
+  const sent = await old.page.evaluate(() => window.__gfsStub.calls.map(c => c.nom).filter(nom => nom !== 'securite'));   // hors le `relais` du kit (`securite`, consigne 084) : ce n'est pas une demande à GFS ; dev-tests/verify-gfs-violations.mjs le juge
   check('rien n’est envoyé à GFS : ni `stockage.ecrire` (elle ne le connaît pas), ni rien d’autre que le contexte', !sent.includes('stockage.ecrire') && sent.every(nom => nom === 'contexte'), sent);
   await old.page.context().close();
 
@@ -400,7 +400,7 @@ if (wanted(5)) {
   await settingsTab(mute.page, mute.app, 'theme');
   await realClick(mute.page, mute.app, 'input[name="settings-theme"][value="dark"]');
   await sleep(400);
-  const sentMute = await mute.page.evaluate(() => window.__gfsStub.calls.map(c => c.nom));
+  const sentMute = await mute.page.evaluate(() => window.__gfsStub.calls.map(c => c.nom).filter(nom => nom !== 'securite'));   // de même
   check('le changement de thème vaut pour la séance et rien n’est envoyé à GFS que la demande de contexte', (await lookOf(mute.app)).theme === 'dark' && sentMute.every(nom => nom === 'contexte'), sentMute);
   await mute.page.context().close();
 }

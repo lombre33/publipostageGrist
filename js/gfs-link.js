@@ -1,6 +1,6 @@
 // Le lien avec Grist Factory Suite (GFS) : ce que le widget en sait quand GFS l'héberge, et rien quand il tourne seul (une fenêtre de Grist qui charge l'adresse de ce dépôt).
 // Les messages de GFS ont leur enveloppe (contrats de GFS, section 5) : { gfs: <contrat>, type: 'appel' | 'reponse' | 'erreur' | 'evenement', id, nom, args | data }, sans le `mtype` du
-// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Quatorze choses seulement :
+// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Quinze choses seulement :
 //  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }), les copies figées des bibliothèques natives de l'app
 //    dont la personne a mis la fonction en « copie figée » (`natives`, { id: { version, src, integrite, forme } }, consigne 065 : js/native-libs.js, le seul à les lire),
 //    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre),
@@ -38,9 +38,12 @@
 //  - l'appel `ouvrir`, que GFS envoie à l'app déjà ouverte quand la personne double-clique un autre fichier (consigne 010) ou choisit « Nouveau > Importer » (consigne 035, avec le fichier) ou « Lire » sur un PDF (consigne 040, avec le PDF) ou « Nouveau > Depuis un modèle » (consigne 075, avec l'identifiant du modèle) : l'abonné de `onOpen` répond, ce fichier lui rend la réponse ;
 //  - l'appel `fermer { raison }` (consigne 047), que GFS envoie à l'app active avant de la remplacer par une autre app ou de lui faire laisser la place au fichier d'une autre app (`raison` : `app`, `explorateur`, `nouveau`,
 //    `importer`, `lire` ou `lien`) et dont il attend `{ ferme: true | false }` avant de détruire son cadre : l'abonné de `onClose` répond (js/gfs-open.js : ce qui attend est enregistré avant le `oui`). Une réponse qui
-//    échoue est une erreur (`GFS_ECHEC`, GFS demande alors à la personne), jamais un `oui`. Tout autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3).
+//    échoue est une erreur (`GFS_ECHEC`, GFS demande alors à la personne), jamais un `oui`. Tout autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3) ;
+//  - l'appel `securite` (consigne 084, contrats 5.4 point 14, règle S8), sans `id` (GFS ne répond rien) : le relais des appels que la politique de contenu de la page bloque. `{ quoi: 'relais', kit }` une fois, quand il démarre ;
+//    `{ quoi: 'bloque', directive, cible, source, disposition, fois }` à chaque appel bloqué que le relais n'a pas déjà dit, par `tell` (le kit, kit/js/violations-pose.js, en fait les messages : le nom d'hôte seul, jamais l'adresse
+//    entière, son chemin ni ses paramètres ; js/gfs-violations.js, le seul à s'en servir). Cela informe GFS, cela ne protège pas : la protection est la politique de contenu de la page.
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
-// `library()` et `native()` ne rendent rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `players()` rend [], `player()` rend faux, `settingsSaved()` rend null, `ambiance()` rend null, `correcteurs()` rend { coupes: false }, `hideBar()` rend faux, `opensInNewTab()` rend faux et `deposit()` et `attach()` rejettent sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
+// `library()` et `native()` ne rendent rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `players()` rend [], `player()` rend faux, `settingsSaved()` rend null, `ambiance()` rend null, `correcteurs()` rend { coupes: false }, `hideBar()` rend faux, `tell()` rend faux, `opensInNewTab()` rend faux et `deposit()` et `attach()` rejettent sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
 // qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js, js/gfs-open.js, js/person-store.js et js/gfs-bar.js, jamais par ce fichier (sauf `opensInNewTab`, que trois liens consultent, consigne 011).
 const GfsLink = (function () {
   const CONTRACT = 0;                // le contrat que parle l'app, celui de son manifeste
@@ -55,6 +58,7 @@ const GfsLink = (function () {
   const PLAYER_PROVIDERS = ['youtube', 'vimeo'];   // les sites dont l'app sait monter l'identifiant (js/video-frame.js) : un autre nom que GFS annoncerait n'est pas gardé
   const PLAYER_CALLS = ['afficher', 'deplacer', 'masquer', 'fermer'];   // les quatre appels `lecteur.<nom>` que l'app envoie
   const PLAYER_STATES = ['lecture', 'pause', 'fin', 'erreur'];
+  const TELL_CALLS = ['securite'];   // les appels sans réponse que le relais des appels bloqués (js/gfs-violations.js) envoie par `tell` : un autre nom n'est pas envoyé
   const AMBIANCE_WAIT_MS = 1500;      // le contexte porte une ambiance et le lecteur du kit n'est pas encore là : `ready` l'attend ce temps au plus (l'ambiance se pose alors avant l'affichage)
 
   const hostContract = (function () {
@@ -454,6 +458,15 @@ const GfsLink = (function () {
     try { window.parent.postMessage({ gfs: CONTRACT, type: 'appel', nom: 'lecteur.' + action, args }, '*'); } catch (e) { return false; }
     return true;
   }
+  // Un appel à GFS qui n'attend aucune réponse (contrats 5.1, point 2) : `{ gfs, type: 'appel', nom, args? }`, sans `id`. C'est ce que le relais des appels bloqués du kit (kit/js/violations-pose.js) appelle, avec le nom `securite`
+  // (consigne 084) : `args` est ce que le kit a réduit (l'hôte seul, jamais l'adresse). Rend faux, sans rien envoyer, seule, pour un nom hors de TELL_CALLS, ou quand GFS n'est plus là (le cadre parent refuse le message).
+  function tell(name, args) {
+    if (!hosted || TELL_CALLS.indexOf(name) === -1) return false;
+    const message = { gfs: CONTRACT, type: 'appel', nom: name };
+    if (args !== undefined) message.args = args;
+    try { window.parent.postMessage(message, '*'); } catch (e) { return false; }
+    return true;
+  }
   // Un abonné est rappelé (`fn({ id, etat })`) à chaque événement `lecteur` de GFS. Rend de quoi se désabonner.
   function onPlayerEvent(fn) { playerListeners.add(fn); return () => playerListeners.delete(fn); }
   // Un abonné est rappelé à chaque changement des extensions actives ou de leurs sources, et une fois quand le contexte arrive. Rend de quoi se désabonner.
@@ -560,5 +573,5 @@ const GfsLink = (function () {
     call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(readerIfNeeded).then(settleReady);
   } else settleReady();
 
-  return { hosted, ready, isAnswering, extensions: getExtensions, library, native, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, correcteurs: getCorrecteurs, players: getPlayers, player, onChange, onLanguage, onSettings, onBar, onAmbiance, onCorrecteurs, onPlayerEvent, onOpen, onClose, install, deposit, attach };
+  return { hosted, ready, isAnswering, extensions: getExtensions, library, native, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, correcteurs: getCorrecteurs, players: getPlayers, player, tell, onChange, onLanguage, onSettings, onBar, onAmbiance, onCorrecteurs, onPlayerEvent, onOpen, onClose, install, deposit, attach };
 })();

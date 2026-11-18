@@ -44,7 +44,7 @@ PUBLIES=(index.html nouveautes.html css js extensions img templates-gallery LICE
 # modeles/ (consigne 075 de GFS : le catalogue modeles.json et la vignette de chacun des modèles de départ que GFS propose dans « Nouveau > Depuis un modèle ») reste aussi dans le dépôt de développement : GFS copie le catalogue et les vignettes chez lui (sa politique de sécurité ne charge une image que de lui), la galerie du dépôt public est templates-gallery/.
 # SECURITY.md (consigne 083 de GFS, règle S9 : GFS lit un SECURITY.md à la racine du dépôt de développement) reste aussi dans le dépôt de développement : le dépôt public reçoit le sien, celui de outils/depot-propre/public/, posé par-dessus (étape 5).
 EXCLUS=(.claude .github .gitignore .gitmodules AUDIT_CODE.md CAHIER_DES_CHARGES.md GFS-ETAT.md README.md SECURITY.md bibliotheques dev-tests modeles outils package.json planning prototypes templates-gallery-dev vitrine)
-# Ce que le dépôt public reçoit du kit (consignes 041 et 068 de GFS : l'app en importe ambiance-message.js, ambiance-pose.js, correcteurs-message.js et correcteurs-pose.js, qui importent once.js) : ce que le kit sert, sa licence ;
+# Ce que le dépôt public reçoit du kit (consignes 041, 068 et 084 de GFS : l'app en importe ambiance-message.js, ambiance-pose.js, correcteurs-message.js, correcteurs-pose.js et violations-pose.js, qui importent once.js et, pour la dernière, violations-message.js) : ce que le kit sert, sa licence ;
 # ni son README, ni son journal, ni ses essais.
 KIT_PARTIES=(css js LICENSE)
 # Ce qui n'en part pas bien qu'il soit dans une de ces parties : ce que l'app n'importe pas et qui ferait refuser l'envoi. js/synchro est le moteur de partage de GFS (kit 0.23.0) : ses notes et deux de ses fichiers citent par son prénom
