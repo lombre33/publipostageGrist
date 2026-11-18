@@ -746,10 +746,12 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // des valeurs d'exemple dans ses essais de synchro, que ce contrôle-ci prendrait pour des jetons en dur). vendor/ (la copie figée de l'éditeur) est du code de tiers, minifié : il n'est pas lu non plus.
 {
   const kitParties = ((read('outils/depot-propre/publier.sh').match(/^KIT_PARTIES=\(([^)]*)\)/m) || [])[1] || '').split(/\s+/).filter(Boolean);
+  const kitRetires = ((read('outils/depot-propre/publier.sh').match(/^KIT_RETIRES=\(([^)]*)\)/m) || [])[1] || '').split(/\s+/).filter(Boolean); // ce qui n'en part pas non plus (js/synchro)
   const walkText = (dir, exts, out = []) => {
     for (const name of readdirSync(join(ROOT, dir))) {
       if (name.startsWith('.') || name === 'node_modules') continue;
       if (dir === 'kit' && !kitParties.includes(name)) continue;
+      if (kitRetires.includes(dir ? `${dir}/${name}`.replace(/^kit\//, '') : name)) continue;
       if (!dir && name === 'vendor') continue; // la copie figée de l'éditeur (consigne 066 de GFS) : du code de tiers, minifié, construit par l'outil du kit
       const rel = dir ? `${dir}/${name}` : name;
       if (statSync(join(ROOT, rel)).isDirectory()) walkText(rel, exts, out);
@@ -1644,8 +1646,13 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     // Une entrée de PUBLIES absente du dossier de travail n'est pas copiée : controles.mjs la signale (sa liste de fichiers requis) et la section 30 la nomme, au lieu d'un plantage ici.
     // Le kit (un sous-module) ne part que par KIT_PARTIES, comme dans publier.sh : ni son README, ni son journal, ni ses essais, ni son lien .git. Sans `git submodule update --init kit`, il n'y a rien à copier.
     const kitParties = ((read('outils/depot-propre/publier.sh').match(/^KIT_PARTIES=\(([^)]*)\)/m) || [])[1] || '').split(/\s+/).filter(Boolean);
+    const kitRetires = ((read('outils/depot-propre/publier.sh').match(/^KIT_RETIRES=\(([^)]*)\)/m) || [])[1] || '').split(/\s+/).filter(Boolean); // retiré après la copie, comme publier.sh
     for (const entree of publiees) {
-      if (entree === 'kit') { for (const partie of kitParties) if (existsSync(join(ROOT, 'kit', partie))) cpSync(join(ROOT, 'kit', partie), join(arbre, 'kit', partie), { recursive: true }); continue; }
+      if (entree === 'kit') {
+        for (const partie of kitParties) if (existsSync(join(ROOT, 'kit', partie))) cpSync(join(ROOT, 'kit', partie), join(arbre, 'kit', partie), { recursive: true });
+        for (const retire of kitRetires) rmSync(join(arbre, 'kit', retire), { recursive: true, force: true });
+        continue;
+      }
       if (existsSync(join(ROOT, entree))) cpSync(join(ROOT, entree), join(arbre, entree), { recursive: true });
     }
     const documents = join(ROOT, 'outils/depot-propre/public');

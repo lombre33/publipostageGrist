@@ -58,8 +58,8 @@
     https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js
     https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js
     https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
-    'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-kt7Ckq2EhQRroEps+r7UdhQxk8dazDJkevBw/DlPsks='
-    'sha256-lmFNeMqoAkHe4DsO9iMIqUl0O983bV9b7rh75o+9c5M=' 'sha256-NOQDvFtAZJzyogwgFo789ZWtP6KbE82bIykO7VsHKO0='
+    'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-XAcQXofTk/Zum7H+65ng/L7IsfqW0rxOm8AbhzfWXls='
+    'sha256-B7EnCjvjMJrNKIDB+fTRZAQE7Pph451Prd3POS2KQZI=' 'sha256-NOQDvFtAZJzyogwgFo789ZWtP6KbE82bIykO7VsHKO0='
     'sha256-dr2nJ9qlSEpVpFpN01rgQ3bZHAcSZWrebqvX0xSlX7I=';
   object-src 'none'; base-uri 'none'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; form-action 'none'">
 <!-- Enregistrement automatique coupé (pp_autosave_enabled = 'false', cf. js/main.js:isAutosaveEnabled) : le bouton Enregistrer est noir et blanc dès le PREMIER affichage, pas bleu le temps que
@@ -102,10 +102,10 @@
 <script type="application/json" id="gfs-carte-cdn">
 {
   "imports": {
-    "kit/ambiance-message": "./kit/js/ambiance-message.js?v=1fd425d",
-    "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=1fd425d",
-    "kit/correcteurs-message": "./kit/js/correcteurs-message.js?v=1fd425d",
-    "kit/correcteurs-pose": "./kit/js/correcteurs-pose.js?v=1fd425d",
+    "kit/ambiance-message": "./kit/js/ambiance-message.js?v=7aa030c",
+    "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=7aa030c",
+    "kit/correcteurs-message": "./kit/js/correcteurs-message.js?v=7aa030c",
+    "kit/correcteurs-pose": "./kit/js/correcteurs-pose.js?v=7aa030c",
     "https://esm.sh/@floating-ui/dom@^1.0.0?target=es2022": "https://esm.sh/@floating-ui/dom@1.8.0?target=es2022",
     "https://esm.sh/@floating-ui/core@^1.6.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
     "https://esm.sh/@floating-ui/core@^1.8.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
@@ -169,10 +169,10 @@
 <script type="application/json" id="gfs-carte-copie">
 {
   "imports": {
-    "kit/ambiance-message": "./kit/js/ambiance-message.js?v=1fd425d",
-    "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=1fd425d",
-    "kit/correcteurs-message": "./kit/js/correcteurs-message.js?v=1fd425d",
-    "kit/correcteurs-pose": "./kit/js/correcteurs-pose.js?v=1fd425d",
+    "kit/ambiance-message": "./kit/js/ambiance-message.js?v=7aa030c",
+    "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=7aa030c",
+    "kit/correcteurs-message": "./kit/js/correcteurs-message.js?v=7aa030c",
+    "kit/correcteurs-pose": "./kit/js/correcteurs-pose.js?v=7aa030c",
     "https://esm.sh/@floating-ui/dom@^1.0.0?target=es2022": "https://esm.sh/@floating-ui/dom@1.8.0?target=es2022",
     "https://esm.sh/@floating-ui/core@^1.6.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
     "https://esm.sh/@floating-ui/core@^1.8.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
@@ -308,7 +308,7 @@
 <link rel="stylesheet" href="css/gfs-ambiance.css?v=0.1">
 <!-- précharge des scripts : début (écrit par outils/precharger-scripts.mjs d'après les balises <script> ci-dessous : ne pas le modifier à la main) -->
 <!-- Sans ce bloc, les scripts se chargent un par un (la politique de sécurité de cette page est une balise <meta> : le navigateur ne lit plus la page à l'avance) : 8 s de plus à 30 ms d'aller-retour. -->
-<link rel="preload" as="script" href="js/gfs-link.js?v=0.19">
+<link rel="preload" as="script" href="js/gfs-link.js?v=0.20">
 <link rel="preload" as="script" href="js/person-store.js?v=0.3">
 <link rel="preload" as="script" href="js/gfs-bar.js?v=0.5">
 <link rel="preload" as="script" href="js/gfs-ambiance.js?v=0.1">
@@ -329,7 +329,7 @@
 <link rel="preload" as="script" href="js/space-gap.js?v=0.3">
 <link rel="preload" as="script" href="js/reader-mode.js?v=0.208">
 <link rel="preload" as="script" href="js/reader-guide.js?v=0.7">
-<link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.12">
+<link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.13">
 <link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.32">
 <link rel="preload" as="script" href="js/i18n-texts-format.js?v=0.4">
 <link rel="preload" as="script" href="js/i18n-texts-blocks.js?v=0.6">
@@ -440,7 +440,7 @@
 <link rel="preload" as="script" href="js/eml-export.js?v=0.1">
 <link rel="preload" as="script" href="js/template-gallery.js?v=0.16">
 <link rel="preload" as="script" href="js/template-pack.js?v=0.5">
-<link rel="preload" as="script" href="js/template-gallery-modal.js?v=0.12">
+<link rel="preload" as="script" href="js/template-gallery-modal.js?v=0.13">
 <link rel="preload" as="script" href="js/settings.js?v=0.32">
 <link rel="preload" as="script" href="js/condition-rules.js?v=0.18">
 <link rel="preload" as="script" href="js/condition-fields.js?v=0.26">
@@ -477,7 +477,7 @@
 <link rel="preload" as="script" href="js/typing-style.js?v=0.6">
 <link rel="preload" as="script" href="js/anchors.js?v=0.6">
 <link rel="preload" as="script" href="js/qr-code.js?v=0.10">
-<link rel="preload" as="script" href="js/gfs-open.js?v=0.7">
+<link rel="preload" as="script" href="js/gfs-open.js?v=0.8">
 <link rel="preload" as="script" href="js/extensions.js?v=0.98">
 <link rel="preload" as="script" href="js/pdf-reading.js?v=0.3">
 <link rel="preload" as="script" href="js/chart-entry.js?v=0.5">
@@ -579,7 +579,7 @@
 <link rel="preload" as="script" href="js/main-reader.js?v=0.2">
 <link rel="preload" as="script" href="js/main-live.js?v=0.5">
 <link rel="preload" as="script" href="js/main-slides.js?v=0.2">
-<link rel="preload" as="script" href="js/main.js?v=0.261">
+<link rel="preload" as="script" href="js/main.js?v=0.262">
 <!-- précharge des scripts : fin -->
 </head>
 <body>
@@ -1403,7 +1403,7 @@
      le dit (js/gfs-correcteurs.js, consigne 068) AVANT tout autre script : le contexte que GFS donne (dont l'espace de l'app, consigne 024, sa barre, consigne 025, l'ambiance qu'il a choisie et ses correcteurs) est demandé dès le premier script
      et arrive pendant que les autres se chargent, si bien que le thème, les raccourcis ou le caractère de déclenchement que ces scripts lisent en se chargeant sont déjà ceux de la personne, que la zone de la barre est connue de qui voudra
      s'en écarter, que l'ambiance est posée avant que les autres n'aient fini de se charger et que la marque des correcteurs est sur chaque zone de texte dès qu'elle naît. -->
-<script src="js/gfs-link.js?v=0.19"></script>
+<script src="js/gfs-link.js?v=0.20"></script>
 <script src="js/person-store.js?v=0.3"></script>
 <script src="js/gfs-bar.js?v=0.5"></script>
 <script src="js/gfs-ambiance.js?v=0.1"></script>
@@ -1435,7 +1435,7 @@
 <script src="js/space-gap.js?v=0.3"></script>
 <script src="js/reader-mode.js?v=0.208"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
-<script src="js/i18n-texts-templates.js?v=0.12"></script>
+<script src="js/i18n-texts-templates.js?v=0.13"></script>
 <script src="js/i18n-texts-export.js?v=0.32"></script>
 <script src="js/i18n-texts-format.js?v=0.4"></script>
 <script src="js/i18n-texts-blocks.js?v=0.6"></script>
@@ -1572,7 +1572,7 @@
 <script src="js/eml-export.js?v=0.1"></script>
 <script src="js/template-gallery.js?v=0.16"></script>
 <script src="js/template-pack.js?v=0.5"></script>
-<script src="js/template-gallery-modal.js?v=0.12"></script>
+<script src="js/template-gallery-modal.js?v=0.13"></script>
 <script src="js/settings.js?v=0.32"></script>
 <script src="js/condition-rules.js?v=0.18"></script>
 <script src="js/condition-fields.js?v=0.26"></script>
@@ -1609,7 +1609,7 @@
 <script src="js/typing-style.js?v=0.6"></script>
 <script src="js/anchors.js?v=0.6"></script>
 <script src="js/qr-code.js?v=0.10"></script>
-<script src="js/gfs-open.js?v=0.7"></script>
+<script src="js/gfs-open.js?v=0.8"></script>
 <script src="js/extensions.js?v=0.98"></script>
 <script src="js/pdf-reading.js?v=0.3"></script>
 <script src="js/chart-entry.js?v=0.5"></script>
@@ -1711,6 +1711,6 @@
 <script src="js/main-reader.js?v=0.2"></script>
 <script src="js/main-live.js?v=0.5"></script>
 <script src="js/main-slides.js?v=0.2"></script>
-<script src="js/main.js?v=0.261"></script>
+<script src="js/main.js?v=0.262"></script>
 </body>
 </html>

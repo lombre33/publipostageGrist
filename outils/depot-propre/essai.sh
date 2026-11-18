@@ -55,6 +55,8 @@ HTML
   mkdir -p .github; printf 'version: 2\nupdates: []\n' > .github/dependabot.yml
   # La vitrine de GFS (consigne 071) : la description et les captures, de trois à six, de la carte de l'app ; à la racine du dépôt de développement, vitrine/ ne part pas (GFS en copie les images chez lui).
   mkdir -p vitrine; echo '{}' > vitrine/vitrine.json; echo x > vitrine/1.webp
+  # Les modèles de départ de « Nouveau > Depuis un modèle » (consigne 075) : le catalogue et une vignette par modèle ; à la racine du dépôt de développement, modeles/ ne part pas (GFS les copie chez lui).
+  mkdir -p modeles; echo '[]' > modeles/modeles.json; echo x > modeles/facture.webp
   # La copie figée de l'éditeur (consigne 066 de GFS) : du code de tiers construit par l'outil du kit, que publier.sh fait partir avec la page (PUBLIES) ; le faux en porte un module, ses licences et son manifeste.
   mkdir -p vendor/editeur; echo 'export default 1;' > vendor/editeur/prosemirror.js; echo 'licences' > vendor/editeur/LICENCES.txt; echo '{}' > vendor/editeur/COPIE.json
   # Les outils, avec le bandeau de la bêta figée (beta-bandeau.mjs et les deux fichiers de beta/) : controles.mjs et publier.sh les lisent à côté d'eux.
@@ -67,9 +69,12 @@ HTML
   git init -q -b main "$T/kit-src"
   (
     cd "$T/kit-src"
-    mkdir -p css js test
+    mkdir -p css js/synchro/logic test
     echo '.kit { color: #000; }' > css/tokens.css
     for f in ambiance-message ambiance-pose correcteurs-message correcteurs-pose once; do echo "export default '$f';" > "js/$f.js"; done
+    # Le moteur de partage du kit 0.23.0 (js/synchro) : l'app ne l'importe pas, et ses notes citent par son prénom la personne qui a demandé le widget (KIT_RETIRES de publier.sh : il ne part pas, sinon controles.mjs refuserait l'envoi).
+    printf '// décision d%sAntoine, le 6 novembre\nexport default 1;\n' "'" > js/synchro/logic/exports.js
+    printf '# synchro\nAntoine : « un exemple ».\n' > js/synchro/README.md
     printf 'GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\n' > LICENSE
     echo '# kit' > README.md; echo x > CHANGELOG.md; echo x > test/a.mjs
     G add -A; G commit -qm kit
@@ -149,6 +154,7 @@ vrai "dev-tests, planning et outils ne partent pas" test -z "$(git -C "$P" ls-tr
 vrai "package.json et bibliotheques/ (la liste unique des bibliothèques et son catalogue) sont connus du dépôt de développement et ne partent pas" test -f "$T/dev/package.json" -a -z "$(git -C "$P" ls-tree --name-only HEAD | grep -E '^(package.json|bibliotheques)$')"
 vrai "le .github du dépôt de développement (Dependabot, lot D de la consigne 063) est connu de lui et ne part pas : le dépôt public garde le sien" test -f "$T/dev/.github/dependabot.yml" -a -z "$(git -C "$P" ls-tree --name-only HEAD | grep -x '.github')"
 vrai "vitrine/ (la description et les captures de la carte dans GFS, consigne 071) est connu du dépôt de développement et ne part pas" test -f "$T/dev/vitrine/vitrine.json" -a -z "$(git -C "$P" ls-tree --name-only HEAD | grep -x 'vitrine')"
+vrai "modeles/ (le catalogue et les vignettes des modèles de départ dans « Nouveau > Depuis un modèle » de GFS, consigne 075) est connu du dépôt de développement et ne part pas" test -f "$T/dev/modeles/modeles.json" -a -z "$(git -C "$P" ls-tree --name-only HEAD | grep -x 'modeles')"
 vrai ".nojekyll part avec le reste, vide, à la racine du dépôt public" test -f "$P/.nojekyll" -a ! -s "$P/.nojekyll" -a -n "$(git -C "$P" ls-tree --name-only HEAD | grep -x '.nojekyll')"
 vrai "les documents publics sont là, README du dépôt de développement absent" test -f "$P/SECURITY.md" -a -f "$P/NOTICE" -a "$(head -1 "$P/README.md")" = "# Publipostage+ pour Grist"
 # Un gabarit resté en place s'écrit {{MAJUSCULES}} (comme le cherche controles.mjs) : la carte décrit aussi des {{variables}} de modèle, qui sont du texte.
@@ -162,6 +168,7 @@ kit_en_fichiers() { # css, js et licence du kit, en fichiers ordinaires, sans .g
 }
 vrai "le kit part en fichiers (css, js, licence), au commit épinglé, sans .gitmodules ni sous-module" kit_en_fichiers
 vrai "... sans son README, son journal ni ses essais" test ! -e "$P/kit/README.md" -a ! -e "$P/kit/CHANGELOG.md" -a ! -e "$P/kit/test" -a ! -e "$P/kit/.git"
+vrai "... ni son moteur de partage (js/synchro, que l'app n'importe pas) : un prénom dans ses notes ne fait pas refuser l'envoi" test ! -e "$P/kit/js/synchro" -a -s "$P/kit/js/once.js"
 vrai "la copie figée de l'éditeur part avec la page : un module, ses licences et son manifeste (vendor/editeur)" test -s "$P/vendor/editeur/prosemirror.js" -a -s "$P/vendor/editeur/LICENCES.txt" -a -s "$P/vendor/editeur/COPIE.json"
 vrai "la date est écrite en toutes lettres" grep -q "4 octobre 2026" "$P/README.md"
 vrai "la sauvegarde .bundle existe" test -s "$T/sortie1/publication-1.0.0-beta.1.bundle"
@@ -222,6 +229,7 @@ muter "un dossier de développement" "présente à la racine" "mkdir dev-tests; 
 muter "la liste des bibliothèques (package.json) à la racine du dépôt public" "présente à la racine : package.json" "echo '{}' > package.json"
 muter "le catalogue des bibliothèques (bibliotheques/) à la racine du dépôt public" "présente à la racine : bibliotheques" "mkdir bibliotheques; echo x > bibliotheques/a"
 muter "la vitrine de GFS (vitrine/) à la racine du dépôt public" "présente à la racine : vitrine" "mkdir vitrine; echo x > vitrine/a"
+muter "les modèles de départ de GFS (modeles/) à la racine du dépôt public" "présente à la racine : modeles" "mkdir modeles; echo x > modeles/a"
 muter "un fichier cité par la page, absent" "cite des fichiers absents" "rm img/logo.jpg"
 # nouveautes.html (consigne 070 de GFS) : la page que le bouton du bandeau de la bêta ouvre. Elle n'est pas le widget : sa politique de sécurité ne laisse passer que ses propres fichiers, sans script en ligne ni connexion.
 muter "la page des nouveautés absente" "fichier absent : nouveautes.html" "rm nouveautes.html"

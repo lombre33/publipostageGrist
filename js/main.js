@@ -1038,7 +1038,8 @@
       clearTemplateSelection: () => { templateSelect.value = ''; },
       // `saveCreated` enregistre l'écran comme un modèle neuf et le range dans l'historique d'Annuler / Rétablir (saveAsNewTemplate) ; `currentTemplateId`, le modèle que l'écran montre avant que le nouveau le remplace.
       loadTemplateIntoEditor, saveCreated: saveAsNewTemplate, currentTemplateId: () => Templates.getCurrentId(), setStatus, hasEditsToConfirmBeforeLeaving, askBeforeLeaving, savedTemplateName,
-      saveWatchdogMs: SAVE_WATCHDOG_MS,
+      // `isReadOnly` : un document en lecture seule n'ouvre pas le modèle de départ que GFS demande (TemplateGalleryModal.openFromGfs).
+      isReadOnly, saveWatchdogMs: SAVE_WATCHDOG_MS,
     });
   }
 
@@ -1219,10 +1220,11 @@
       currentId: () => Templates.getCurrentId(),
       currentRecord: () => ({ record: latestRecord, tableId: latestRecordTableId }),
     });
-    // GFS (js/gfs-open.js, consignes GFS 010, 014, 035 et 047) : le modèle qu'il désigne s'ouvre au démarrage, et son appel `ouvrir` passe par le chemin du sélecteur, comme la règle de ligne ; « Nouveau » ouvre un modèle vierge du type
-    // demandé, par le chemin du bouton « Nouveau » de ce type ; « Nouveau > Importer » importe le fichier qu'il donne, par le chemin de la ligne d'import du menu « + ». Avant de quitter le modèle ouvert, ce qui attend est enregistré
+    // GFS (js/gfs-open.js, consignes GFS 010, 014, 035, 047 et 075) : le modèle qu'il désigne s'ouvre au démarrage, et son appel `ouvrir` passe par le chemin du sélecteur, comme la règle de ligne ; « Nouveau » ouvre un modèle vierge du type
+    // demandé, par le chemin du bouton « Nouveau » de ce type ; « Nouveau > Importer » importe le fichier qu'il donne, par le chemin de la ligne d'import du menu « + » ; « Nouveau > Depuis un modèle » ouvre, non enregistré, le modèle de la
+    // galerie qu'il nomme (TemplateGalleryModal.openFromGfs), avec la demande d'accord de la galerie avant ses tables. Avant de quitter le modèle ouvert, ce qui attend est enregistré
     // sans question quand l'enregistrement automatique est allumé (saveBeforeGfsLeaves), et l'appel `fermer` y répond (leaveForGfs). Seul, rien n'arrive.
-    GfsOpen.init({ openTemplate: openTemplateForRow, openBlank: openBlankOfType, importFile: importFileFromGfs, readPdf: PdfReading.open, say: text => setStatus(text), saveBeforeLeaving: saveBeforeGfsLeaves, leave: leaveForGfs });
+    GfsOpen.init({ openTemplate: openTemplateForRow, openBlank: openBlankOfType, importFile: importFileFromGfs, readPdf: PdfReading.open, openModel: TemplateGalleryModal.openFromGfs, say: text => setStatus(text), saveBeforeLeaving: saveBeforeGfsLeaves, leave: leaveForGfs });
     PdfReading.init({ leave: leaveForPdf, show: () => switchMode('read'), say: (text, isError) => setStatus(text, isError), layoutChanged: () => refreshPageFitZoom() });
     PdfReading.onChange(onPdfReadingChange);
     PdfReading.onLocksChanged(applyPdfLocks);
@@ -1309,7 +1311,8 @@
     AccessRights.onChange(onAccessRightsChange);
     GristAPI.onAccessLevelChange(onWidgetAccessChange);
     const opening = GfsLink.opening();
-    await switchMode(startMode({ blank: gfsBlankOpened || gfsBlankType !== null, importing: !!opening && opening.raison === 'importer', hasTemplate: startupTemplateId !== undefined }));
+    // `importing` : un fichier ou un modèle de départ que GFS donne va s'ouvrir juste après (« Nouveau > Importer », « Nouveau > Depuis un modèle ») : il se pose dans l'éditeur, le départ est en Édition.
+    await switchMode(startMode({ blank: gfsBlankOpened || gfsBlankType !== null, importing: !!opening && (opening.raison === 'importer' || opening.raison === 'modele'), hasTemplate: startupTemplateId !== undefined }));
     FirstContact.ready();
     setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'));
     // Juste après « Widget prêt. » : la phrase qui dit pourquoi ce modèle s'est ouvert (GFS) la remplace ; les avertissements de checkAfterOpen passent après elle, et l'import que GFS demande (« Nouveau > Importer ») puis les appels `ouvrir` reçus pendant le démarrage sont traités à la fin de ce tour.

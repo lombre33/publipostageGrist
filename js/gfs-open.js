@@ -1,5 +1,5 @@
 // Ce que l'app fait d'une ouverture que GFS (Grist Factory Suite) lui demande - consigne GFS 010 : le modèle que GFS désigne s'ouvre, et le coin d'état dit pourquoi ; consigne 014 : « Nouveau » ouvre un modèle
-// vierge du type demandé ; consigne 035 : « Nouveau > Importer » donne à l'app le fichier que GFS a fait choisir, et l'app l'importe. Rien d'autre n'est écrit : ni le modèle de la vue (`modeleDeLaVue`), ni le ★, ni
+// vierge du type demandé ; consigne 035 : « Nouveau > Importer » donne à l'app le fichier que GFS a fait choisir, et l'app l'importe ; consigne 075 : « Nouveau > Depuis un modèle » donne l'identifiant d'un modèle de départ, et l'app l'ouvre non enregistré. Rien d'autre n'est écrit : ni le modèle de la vue (`modeleDeLaVue`), ni le ★, ni
 // aucun réglage, ni aucune ligne de `Publipostage_Modeles` (un modèle vierge naît à son premier « Enregistrer », comme avec le bouton « Nouveau ») - la personne n'a pas d'« Enregistrer » à faire dans Grist.
 //  - Au démarrage, l'`ouverture` du contexte (GfsLink.opening) passe avant l'ordre habituel de js/main.js (la ligne, le modèle de la vue, le ★). Sans modèle qui s'ouvre - rien demandé, introuvable, ou d'un type que la
 //    garde « type inconnu » ne laisse pas ouvrir - l'ordre habituel reste, sans message d'erreur. « Nouveau » (pas de fichier, un `type`) ouvre à la place de cet ordre un modèle vierge de ce type : document, grille, email,
@@ -16,6 +16,12 @@
 //    la question « Enregistrer / Abandonner / Annuler » d'un modèle modifié se pose avant de le quitter, après la lecture du PDF (un PDF illisible ne coûte rien). Une ouverture `lire` sans `lecture` bien formée
 //    (js/gfs-link.js ne la garde que bien formée) n'ouvre rien, et jamais un modèle vierge à la place. Au démarrage, comme l'import : l'ordre habituel ouvre son modèle, « Widget prêt. » se dit, puis le PDF le
 //    remplace (avant les appels `ouvrir` qui attendaient) ; un PDF qui ne s'ouvre pas laisse le modèle habituel, et le coin d'état dit pourquoi.
+//    Une ouverture de raison `modele` porte `modele: { id }` (consigne 075, « Nouveau > Depuis un modèle » : la personne a choisi un modèle de départ dans la fenêtre de GFS, parmi le catalogue `modeles/modeles.json` de l'app) : c'est
+//    un modèle NON ENREGISTRÉ fait d'après la galerie de l'app (js/template-gallery-modal.js `openFromGfs`), comme un « Nouveau » vierge qui aurait déjà son texte - ni le modèle d'un fichier, ni un « Nouveau » du type, ni
+//    l'ordre habituel qui prend sa place, même quand `modele` est illisible (js/gfs-link.js ne le garde que bien formé). Rien n'est écrit dans la table des modèles avant le premier « Enregistrer » ; un modèle qui vient avec ses tables
+//    ne les crée qu'après la demande d'accord habituelle de la galerie, et un refus ou « Annuler » laisse tout en place. Un `id` que la galerie ne connaît pas, un `type` que la garde « type inconnu » refuse, une présentation
+//    sans l'extension « diapositives », un modèle illisible, une personne qui annule ou un document en lecture seule : rien n'est ouvert, jamais un modèle vierge à la place. Au démarrage, comme l'import : l'ordre habituel
+//    ouvre son modèle, « Widget prêt. » se dit, puis le modèle de départ le remplace (avant les appels `ouvrir` qui attendaient).
 //  - L'app déjà ouverte reçoit l'appel `ouvrir` (GfsLink.onOpen) : un à la fois, après la fin du démarrage, par le chemin du sélecteur de modèles - donc avec sa question « Enregistrer / Abandonner /
 //    Annuler » quand des modifications attendent encore (voir plus bas ce que l'enregistrement automatique allumé en a déjà enregistré). Pour « Nouveau », par celui du bouton « Nouveau » du même type (js/main.js `openBlankOfType`), question comprise. GFS reçoit `{ ouvert }` : vrai quand le modèle
 //    demandé (ou importé) est ouvert à la fin (c'était déjà lui : rien ne change, rien n'est dit ; un modèle vierge : à l'écran, son avertissement « modèle non enregistré » intact ; un macro-modèle : son écran de composition est
@@ -28,10 +34,11 @@
 //    (« Annuler » : faux, tout reste en place). Elle ne se ferme pas d'elle-même et ne répond jamais vrai avant d'avoir fini d'écrire. La réponse ne dépend ni de la raison ni du démarrage : un `fermer` reçu avant
 //    l'inscription attend `init`, un autre pendant que le démarrage s'achève trouve un modèle sans rien à enregistrer.
 // Seule (adresse sans `gfs=`), GfsLink ne rend aucune ouverture et n'appelle jamais : l'ordre d'arrivée est celui d'avant. Ce fichier n'écrit ni n'écoute aucun message : tout passe par js/gfs-link.js.
-//   GfsOpen.init({ openTemplate(id) -> Promise<bool>, openBlank(type) -> Promise<bool>, importFile(valeur, fichier) -> Promise<bool>, readPdf(lecture) -> Promise<bool>, say(text), saveBeforeLeaving() -> Promise,
-//                  leave(raison) -> Promise<bool> })  s'inscrit aux appels `ouvrir` et `fermer` ;
+//   GfsOpen.init({ openTemplate(id) -> Promise<bool>, openBlank(type) -> Promise<bool>, importFile(valeur, fichier) -> Promise<bool>, readPdf(lecture) -> Promise<bool>, openModel(id) -> Promise<bool>, say(text),
+//                  saveBeforeLeaving() -> Promise, leave(raison) -> Promise<bool> })  s'inscrit aux appels `ouvrir` et `fermer` ;
 //                                                                                                       `openTemplate` rend vrai si le modèle est ouvert à la fin, `openBlank` si le modèle vierge de ce type l'est,
 //                                                                                                       `importFile` si le modèle importé de ce fichier l'est, `readPdf` si le PDF (`lecture`) est lu à l'écran,
+//                                                                                                       `openModel` si le modèle de départ de ce catalogue (`modele.id`) est à l'écran, non enregistré,
 //                                                                                                       `say` écrit dans le coin d'état, `saveBeforeLeaving` enregistre ce qui attend avant qu'un autre fichier
 //                                                                                                       s'ouvre (sans rien poser comme question), `leave` répond à `fermer` : vrai si l'app peut laisser la place
 //   GfsOpen.startupTemplateId() -> Promise<id | null>               à attendre avant de choisir le modèle de départ
@@ -56,16 +63,28 @@ const GfsOpen = (function () {
   // Une ouverture de raison `lire` (consigne 040) : GFS donne un PDF à lire. Elle n'est ni le modèle d'un fichier ni un « Nouveau » du type, même quand sa `lecture` est illisible (js/gfs-link.js ne la garde que bien formée).
   const isReading = opening => !!opening && opening.raison === 'lire';
 
+  // Une ouverture de raison `modele` (consigne 075) : GFS demande un modèle de départ du catalogue de l'app. Elle n'est ni le modèle d'un fichier ni un « Nouveau » du type, même quand son `modele` est illisible (js/gfs-link.js ne le
+  // garde que bien formé) : le modèle vierge qui prendrait sa place ferait ouvrir autre chose que ce que la personne a choisi.
+  const isModel = opening => !!opening && opening.raison === 'modele';
+
+  // L'identifiant du modèle de départ que cette ouverture demande, ou null : pas de `modele` bien formé, ou un `type` que la garde « type inconnu » refuse (GFS donne le type de l'entrée du catalogue ; l'absent n'est pas refusé,
+  // c'est la galerie qui sait de quel type est son modèle).
+  function requestedModel(opening) {
+    if (!isModel(opening) || !opening.modele) return null;
+    if (opening.type && !Templates.isOpenableType(opening.type)) return null;
+    return opening.modele.id;
+  }
+
   // L'identifiant du modèle que cette ouverture désigne, ou null : pas de fichier, modèle introuvable, ou d'un type que la garde « type inconnu » (Templates.openableById) n'ouvre pas.
   function designated(opening) {
-    const tpl = opening && opening.fichier && !isImport(opening) && !isReading(opening) ? Templates.openableById(opening.fichier.id) : undefined;
+    const tpl = opening && opening.fichier && !isImport(opening) && !isReading(opening) && !isModel(opening) ? Templates.openableById(opening.fichier.id) : undefined;
     return tpl ? tpl.id : null;
   }
 
   // Le type du modèle vierge que cette ouverture demande (« Nouveau » : pas de fichier et un type que la garde « type inconnu » laisse ouvrir), ou null. Un type absent n'en est pas un : la garde l'accepte pour un
   // ancien modèle, qui n'en a pas, mais ici c'est une ouverture mal formée.
   function requestedBlank(opening) {
-    if (!opening || opening.fichier || !opening.type || isImport(opening) || isReading(opening)) return null;
+    if (!opening || opening.fichier || !opening.type || isImport(opening) || isReading(opening) || isModel(opening)) return null;
     return Templates.isOpenableType(opening.type) ? opening.type : null;
   }
 
@@ -96,6 +115,8 @@ const GfsOpen = (function () {
       startupTask = Promise.resolve().then(() => importFrom(opening)).catch((e) => { console.warn('[GfsOpen] import demandé au démarrage en échec', e); return false; });
     } else if (isReading(opening)) {
       startupTask = Promise.resolve().then(() => readFrom(opening)).catch((e) => { console.warn('[GfsOpen] lecture de PDF demandée au démarrage en échec', e); return false; });
+    } else if (isModel(opening)) {
+      startupTask = Promise.resolve().then(() => modelFrom(opening)).catch((e) => { console.warn('[GfsOpen] modèle de départ demandé au démarrage en échec', e); return false; });
     }
     settleStarted(true);
   }
@@ -117,6 +138,14 @@ const GfsOpen = (function () {
     return (await hooks.readPdf(wanted)) === true;
   }
 
+  // Le modèle de départ que cette ouverture demande : vrai quand il est à l'écran à la fin, non enregistré ; faux sans `modele` bien formé, pour un `id` inconnu de la galerie, un `type` refusé, un modèle illisible, une présentation sans
+  // l'extension, une personne qui annule (la question d'enregistrement ou celle des tables) ou un document en lecture seule (js/template-gallery-modal.js `openFromGfs`).
+  async function modelFrom(opening) {
+    const id = requestedModel(opening);
+    if (id === null) return false;
+    return (await hooks.openModel(id)) === true;
+  }
+
   // Ce qui attend d'être enregistré l'est avant de quitter le modèle à l'écran pour celui-ci (consigne 047) : js/main.js `saveBeforeGfsLeaves`, qui ne pose aucune question.
   const settle = () => hooks.saveBeforeLeaving();
 
@@ -128,6 +157,10 @@ const GfsOpen = (function () {
     if (isReading(opening)) {
       if (opening.lecture) await settle();
       return readFrom(opening);
+    }
+    if (isModel(opening)) {
+      if (requestedModel(opening) !== null) await settle();
+      return modelFrom(opening);
     }
     const blank = requestedBlank(opening);
     if (blank !== null) {

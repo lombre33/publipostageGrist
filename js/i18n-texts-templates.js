@@ -437,6 +437,8 @@ const I18nTextsTemplates = {
   'gallery.tag.stock': { fr: 'Stock', en: 'Stock' },
   'gallery.tag.metier': { fr: 'Métier', en: 'Sector' },
   'gallery.tag.presentation': { fr: 'Présentation', en: 'Presentation' },
+  // « Nouveau > Depuis un modèle » de GFS (js/template-gallery-modal.js : openFromGfs) : le modèle que GFS demande n'est pas dans la galerie de cette version, ou son type ne s'y ouvre pas ; rien n'est ouvert (jamais un modèle vierge à la place).
+  'status.gfsModelUnknown': { fr: 'Ce modèle n’existe pas dans cette version de Publipostage+ : rien n’a été ouvert.', en: 'This template does not exist in this version of Publipostage+: nothing was opened.' },
 
   // --- Macro modèles (page de garde + annexes conditionnelles, planning/feature-macro-modeles.md) ---
   'macro.editButton': { fr: 'Modifier la composition', en: 'Edit composition' },
