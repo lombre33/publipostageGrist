@@ -109,6 +109,21 @@ const TrackChangesResolve = (function () {
     });
   }
 
+  // Un colspan ou un rowspan que le tableau de la case peut porter : 1 000 au plus (HtmlSanitize.spanValue), et jamais plus que la plus longue de ses lignes (colspan) ou que son nombre de lignes (rowspan) -
+  // sinon ProseMirror ajouterait à chaque autre ligne les cases qui lui manquent.
+  function spanWithinTable(doc, pos, attrName, value) {
+    const $pos = doc.resolve(pos);
+    let limit = HtmlSanitize.MAX_SPAN;
+    for (let depth = $pos.depth; depth > 0; depth -= 1) {
+      const node = $pos.node(depth);
+      if (node.type.name !== 'table') continue;
+      if (attrName === 'rowspan') limit = node.childCount;
+      else { limit = 1; node.forEach((row) => { limit = Math.max(limit, row.childCount); }); }
+      break;
+    }
+    return Math.min(HtmlSanitize.spanValue(value), Math.max(1, limit));
+  }
+
   // Résout les marques `modification` (un attribut de nœud qui a changé : alignement, taille d'une image, largeur d'une case fusionnée...) des
   // suggestions `ids` : « accepter » retire la marque, « refuser » la retire et rend l'ancienne valeur - la même règle que revertModifications de la
   // lib, qui ne sait pas la restreindre à une suggestion. Du dernier au premier : les positions lues restent vraies.
@@ -121,7 +136,8 @@ const TrackChangesResolve = (function () {
       if (node.isText) tr.removeMark(pos, pos + node.nodeSize, mark); else tr.removeNodeMark(pos, mark);
       if (accept) return;
       const { type, attrName, previousValue } = mark.attrs;
-      if (type === 'attr' && typeof attrName === 'string') tr.setNodeAttribute(pos, attrName, previousValue);
+      // L'ancienne valeur d'un colspan ou d'un rowspan vient du document enregistré : bornée comme à la lecture du HTML (un 9999999 figeait l'éditeur au « Refuser »), à la largeur et à la hauteur du tableau.
+      if (type === 'attr' && typeof attrName === 'string') tr.setNodeAttribute(pos, attrName, attrName === 'colspan' || attrName === 'rowspan' ? spanWithinTable(tr.doc, pos, attrName, previousValue) : previousValue);
       else if (type === 'nodeType' && tr.doc.type.schema.nodes[previousValue]) tr.setNodeMarkup(pos, tr.doc.type.schema.nodes[previousValue], null);
     });
     if (!accept) releaseFrozenColumnWidths(tr, found);

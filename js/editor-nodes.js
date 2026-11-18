@@ -617,7 +617,12 @@ const EditorNodes = (function () {
       return CellExtension.extend({
         addAttributes() {
           const parent = this.parent();
-          return Object.assign({}, parent, { colwidth: Object.assign({}, parent.colwidth, { parseHTML: parseColwidthOnce }) });
+          // `colspan` et `rowspan` sont bornés à la lecture (HtmlSanitize.cellSpan : 1 000 au plus, et ce que le tableau peut porter) : un tableau collé ou enregistré avec un colspan de 9999999 figeait l'éditeur.
+          return Object.assign({}, parent, {
+            colwidth: Object.assign({}, parent.colwidth, { parseHTML: parseColwidthOnce }),
+            colspan: Object.assign({}, parent.colspan, { parseHTML: element => HtmlSanitize.cellSpan(element, 'colspan') }),
+            rowspan: Object.assign({}, parent.rowspan, { parseHTML: element => HtmlSanitize.cellSpan(element, 'rowspan') }),
+          });
         },
       });
     }

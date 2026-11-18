@@ -1051,11 +1051,11 @@ const DocxImport = (function () {
     // Les lignes et leurs cases, chacune avec sa colonne de départ (la grille compte les colonnes avant les fusions).
     const rows = kids(tbl, 'tr').map((tr) => {
       const trPr = kid(tr, 'trPr');
-      let col = Number(attr(kid(trPr, 'gridBefore'), 'val') || 0);
+      let col = Math.min(HtmlSanitize.MAX_SPAN, Math.max(0, Number(attr(kid(trPr, 'gridBefore'), 'val')) || 0));
       const cells = [];
       const take = (tc) => {
         const tcPr = kid(tc, 'tcPr');
-        const span = Math.max(1, Number(attr(kid(tcPr, 'gridSpan'), 'val') || 1));
+        const span = HtmlSanitize.spanValue(attr(kid(tcPr, 'gridSpan'), 'val')); // 1 à 1 000 : un gridSpan de 9999999 bâtissait une grille de cette largeur
         const merge = kid(tcPr, 'vMerge');
         cells.push({ tc, tcPr, col, span, vmerge: merge ? (attr(merge, 'val') === 'restart' ? 'restart' : 'continue') : null, down: 1, skip: false });
         col += span;

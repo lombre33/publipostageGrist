@@ -7,6 +7,50 @@ const HtmlSanitize = (function () {
   const HTML_NS = 'http://www.w3.org/1999/xhtml';
   const MAX_PASSES = 5;
   const MEMO_MAX = 8;
+  // Un colspan ou un rowspan : un entier de 1 à 1 000 (la borne qu'appliquent les navigateurs), 1 pour tout le reste (« abc », 0, -3, vide). Sans borne, un tableau
+  // à colspan="9999999" fige l'éditeur à l'ouverture ou au collage et plante l'export Word : chaque bibliothèque bâtit une grille de cette largeur.
+  const MAX_SPAN = 1000;
+  function spanValue(raw) {
+    const n = parseInt(String(raw == null ? '' : raw), 10);
+    return n >= 1 ? Math.min(n, MAX_SPAN) : 1;
+  }
+  // Mais la borne par case ne suffit pas : un colspan de 1000 dans la première ligne fait ajouter à CHAQUE autre ligne (ProseMirror « rectangularise » le tableau) les cases qui lui manquent -
+  // 200 lignes de 2 cases = 199 000 cases et 9 secondes ; 1 000 lignes = 89 secondes. Un tableau honnête est rectangulaire (ses cases couvrent exactement lignes x largeur) ou presque (une page web
+  // qui laisse une ligne courte). Quand l'écart entre le rectangle que les colspan annoncent et ce que les cases couvrent dépasse MAX_SLACK, le colspan d'une case est ramené au plus grand
+  // nombre de cases d'une ligne : le tableau garde sa largeur réelle et plus aucune case n'est ajoutée. Un rowspan ne dépasse jamais le nombre de lignes.
+  const MAX_SLACK = 5000;
+  const tableStats = new WeakMap(); // un tableau lu une fois, avant que ses cases soient réécrites : la même limite pour toutes ses cases
+  const cellsOfRow = tr => Array.from(tr.children).filter(cell => cell.localName === 'td' || cell.localName === 'th');
+  function statsOf(table) {
+    let stats = tableStats.get(table);
+    if (stats) return stats;
+    const rows = Array.from(table.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
+    let width = 0;
+    let area = 0;
+    let ownCells = 1;
+    rows.forEach((tr, index) => {
+      const cells = cellsOfRow(tr);
+      let sum = 0;
+      ownCells = Math.max(ownCells, cells.length);
+      cells.forEach((cell) => {
+        const colspan = spanValue(cell.getAttribute('colspan'));
+        sum += colspan;
+        area += colspan * Math.min(spanValue(cell.getAttribute('rowspan')), rows.length - index);
+      });
+      width = Math.max(width, sum);
+    });
+    stats = { rows: Math.max(1, rows.length), colspanMax: Math.abs(rows.length * width - area) <= MAX_SLACK ? MAX_SPAN : ownCells };
+    tableStats.set(table, stats);
+    return stats;
+  }
+  // Le colspan ou le rowspan d'une case, borné (spanValue) puis ramené à ce que son tableau peut porter.
+  function cellSpan(cell, name) {
+    const value = spanValue(cell.getAttribute(name));
+    const table = typeof cell.closest === 'function' ? cell.closest('table') : null;
+    if (!table || value === 1) return value;
+    const stats = statsOf(table);
+    return Math.min(value, name === 'colspan' ? stats.colspanMax : stats.rows);
+  }
 
   // Tout ce que l'éditeur écrit, plus les balises de texte courantes : une autre balise est ouverte (son texte reste), jamais gardée.
   const KEPT_TAGS = new Set(('a abbr acronym address article aside b bdi bdo big blockquote br caption center cite code col colgroup dd del dfn div dl dt em figcaption figure font footer ' +
@@ -87,6 +131,9 @@ const HtmlSanitize = (function () {
       const anchor = internalAnchorId(el.getAttribute('href'));
       if (safe) el.setAttribute('href', safe); else if (anchor) el.setAttribute('href', '#' + anchor); else el.removeAttribute('href');
     }
+    if (tag === 'td' || tag === 'th') {
+      ['colspan', 'rowspan'].forEach((name) => { if (el.hasAttribute(name)) el.setAttribute(name, String(cellSpan(el, name))); });
+    }
     if (el.hasAttribute('style')) cleanStyle(el);
   }
 
@@ -131,5 +178,5 @@ const HtmlSanitize = (function () {
     return result;
   }
 
-  return { clean, parseInert, safeLinkHref, internalAnchorId, isSafeArt };
+  return { clean, parseInert, safeLinkHref, internalAnchorId, isSafeArt, spanValue, cellSpan, MAX_SPAN };
 })();

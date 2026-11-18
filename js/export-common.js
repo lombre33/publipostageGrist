@@ -138,10 +138,10 @@ const ExportCommon = (function () {
     root.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, td, th').forEach(el => { if (!el.hasChildNodes()) el.appendChild(document.createElement('br')); });
   }
 
-  // Les <tr> d'un tableau dans l'ordre du document, les <td>/<th> d'une ligne, et le colspan ou rowspan d'une case (au moins 1).
+  // Les <tr> d'un tableau dans l'ordre du document, les <td>/<th> d'une ligne, et le colspan ou rowspan d'une case (de 1 à 1 000, ramené à ce que son tableau peut porter : HtmlSanitize.cellSpan).
   const tableRows = table => Array.from(table.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
   const cellsOf = tr => Array.from(tr.children).filter(cell => /^(TD|TH)$/i.test(cell.tagName));
-  const spanOf = (cell, attribute) => Math.max(1, parseInt(cell.getAttribute(attribute) || '1', 10) || 1);
+  const spanOf = (cell, attribute) => HtmlSanitize.cellSpan(cell, attribute);
 
   // Pose chaque case sur la grille du tableau : une case fusionnée sur plusieurs lignes n'est pas répétée dans les lignes d'après et décale celles
   // qui la suivent. { placed: [{ el, row, col, rowspan, colspan }] depuis 0, width: nombre de colonnes } ; un rowspan qui dépasse le bas du tableau

@@ -397,6 +397,179 @@
     },
   });
 
+  // --- colspan et rowspan : bornés partout (essai d'injection du 18/11 : un tableau à colspan="9999999", écrit dans un modèle ou collé, figeait l'éditeur, plantait le Word et figeait le PDF) ---
+  // Les valeurs lues d'une case : 1 à 1 000, 1 pour tout ce qui n'est pas un entier positif. Les tests « figés avant » ne sont lancés qu'avec la borne : sur l'ancien code ils ne rendent pas la main.
+  const GIANT = 9999999;
+  const spanTable = (cellAttrs, rows) => '<p>avant</p><table><tbody>' + Array.from({ length: rows || 2 }, (_, r) => '<tr>' + [0, 1].map(c => `<td${r === 0 && c === 0 ? ' ' + cellAttrs : ''}><p>${'AB'[c]}${r + 1}</p></td>`).join('') + '</tr>').join('') + '</tbody></table><p>après</p>';
+  const spansOfEditor = () => {
+    const out = [];
+    EditorCore.getEditor().state.doc.descendants((node) => { if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') out.push([node.attrs.colspan, node.attrs.rowspan]); });
+    return out;
+  };
+  const withinMs = async (ms, work) => { const t0 = performance.now(); const value = await Promise.race([work(), sleep(ms).then(() => { throw new Error('délai de ' + ms + ' ms dépassé'); })]); return { value, ms: Math.round(performance.now() - t0) }; };
+
+  cases.push({
+    id: 'hs_table_spans_are_bounded_by_the_filter',
+    description: 'HtmlSanitize.clean : le colspan et le rowspan d\'une case sont des entiers de 1 à 1 000 (9999999 devient 1000 ; « abc », 0, -3, vide, 1e9 deviennent 1), un rowspan ne dépasse pas les lignes du tableau, le résultat est stable ; spanValue en dit autant',
+    run: async () => {
+      const values = [[String(GIANT), 1000], ['abc', 1], ['0', 1], ['-3', 1], ['', 1], ['3', 3], ['2.7', 2], [' 5 ', 5], ['1e9', 1], ['1000', 1000], ['1001', 1000]];
+      const read = (html, name) => Array.from(new DOMParser().parseFromString(html, 'text/html').querySelectorAll('td, th')).map(c => c.getAttribute(name));
+      // Les colspan, sur une ligne : le rectangle annoncé est celui que les cases couvrent, aucune limite de tableau n'entre en jeu.
+      const oneRow = '<table><tbody><tr>' + values.map(([v]) => `<td colspan="${v}">x</td>`).join('') + `<th colspan="${GIANT}">h</th></tr></tbody></table>`;
+      const cleanedCols = HtmlSanitize.clean(oneRow);
+      const cols = read(cleanedCols, 'colspan');
+      // Les rowspan, sur 1 005 lignes (un rowspan va jusqu'au bas du tableau, pas au-delà).
+      const tall = '<table><tbody><tr>' + values.map(([v]) => `<td rowspan="${v}">x</td>`).join('') + `<th rowspan="${GIANT}">h</th></tr>` + '<tr><td>y</td></tr>'.repeat(1004) + '</tbody></table>';
+      const cleanedRows = HtmlSanitize.clean(tall);
+      const rows = read(cleanedRows, 'rowspan').slice(0, 12);
+      // Un tableau d'une ligne : un rowspan ne peut pas la dépasser.
+      const short = read(HtmlSanitize.clean('<table><tbody><tr><td rowspan="5">a</td><td>b</td></tr></tbody></table>'), 'rowspan');
+      const expected = values.map(([, n]) => String(n)).concat(['1000']);
+      const direct = [HtmlSanitize.spanValue(null), HtmlSanitize.spanValue(undefined), HtmlSanitize.spanValue('abc'), HtmlSanitize.spanValue(GIANT), HtmlSanitize.spanValue('7')];
+      const stable = HtmlSanitize.clean(cleanedCols) === cleanedCols && HtmlSanitize.clean(cleanedRows) === cleanedRows;
+      const pass = JSON.stringify(cols) === JSON.stringify(expected) && JSON.stringify(rows) === JSON.stringify(expected) && short[0] === '1'
+        && JSON.stringify(direct) === JSON.stringify([1, 1, 1, 1000, 7]) && stable && HtmlSanitize.MAX_SPAN === 1000;
+      return { pass, notes: JSON.stringify({ cols, rows, short, direct, stable }) };
+    },
+  });
+
+  cases.push({
+    id: 'hs_table_spans_one_wide_cell_does_not_widen_every_row',
+    description: 'HtmlSanitize.clean : un colspan de 1000 dans la première ligne d\'un tableau de 200 lignes de deux cases est ramené à 2 (sinon chaque ligne recevait 998 cases en plus), alors que les fusions honnêtes ne bougent pas : titre sur toute la largeur, cellule sur deux lignes, page web aux lignes inégales',
+    run: async () => {
+      const row = n => '<tr>' + '<td>x</td>'.repeat(n) + '</tr>';
+      const colspanOfFirst = html => new DOMParser().parseFromString(HtmlSanitize.clean(html), 'text/html').querySelector('td').getAttribute('colspan');
+      const hostile = `<table><tbody><tr><td colspan="1000">titre</td></tr>${row(2).repeat(199)}</tbody></table>`;
+      const title = `<table><tbody><tr><td colspan="6">titre</td></tr>${row(6).repeat(20)}</tbody></table>`;
+      const wide = `<table><tbody><tr><td colspan="300">titre</td></tr>${row(300).repeat(3)}</tbody></table>`;
+      const ragged = `<table><tbody><tr><td colspan="8">titre</td></tr>${row(8)}${row(5)}${row(8)}</tbody></table>`;
+      const down = new DOMParser().parseFromString(HtmlSanitize.clean(`<table><tbody><tr><td rowspan="2">a</td><td>b</td></tr><tr><td>c</td></tr><tr><td>d</td><td>e</td></tr></tbody></table>`), 'text/html').querySelector('td').getAttribute('rowspan');
+      const got = { hostile: colspanOfFirst(hostile), title: colspanOfFirst(title), wide: colspanOfFirst(wide), ragged: colspanOfFirst(ragged), down };
+      return { pass: got.hostile === '2' && got.title === '6' && got.wide === '300' && got.ragged === '8' && got.down === '2', notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'hs_table_spans_invalid_values_open_without_error',
+    description: 'Editor.setHTML : un tableau dont une case porte un colspan ou un rowspan invalide (« abc », 0, -3) s\'ouvre sans erreur, la case compte pour 1 et le texte est gardé (avant : « No cell with offset… » et un éditeur vide)',
+    run: async () => {
+      const out = [];
+      for (const attrs of ['colspan="abc"', 'rowspan="0"', 'colspan="-3"', 'rowspan="x"', 'colspan="" rowspan=""']) {
+        let error = '';
+        try { Editor.setHTML(spanTable(attrs), null); await sleep(150); } catch (e) { error = String(e && e.message || e).slice(0, 80); }
+        const spans = error ? [] : spansOfEditor();
+        const html = error ? '' : Editor.getHTML();
+        out.push({ attrs, error, spans: JSON.stringify(spans), text: /A1/.test(html) && /B2/.test(html) && /après/.test(html) });
+      }
+      const pass = out.every(o => !o.error && o.text && JSON.parse(o.spans).length === 4 && JSON.parse(o.spans).every(([c, r]) => c === 1 && r === 1));
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'hs_table_spans_giant_values_open_and_paste_fast',
+    description: 'Editor.setHTML et le collage : un tableau à colspan de 9999999, seul ou dans une première ligne de 200 lignes, s\'ouvre et se colle en moins de 4 secondes sans ajouter de milliers de cases, les cases valent 1000 au plus, le reste du document est là (avant : éditeur figé, 9 secondes pour 200 lignes, 89 pour 1 000)',
+    run: async () => {
+      const out = {};
+      const countCells = () => spansOfEditor().length;
+      const flat = '<p>avant</p><table><tbody><tr><td colspan="' + GIANT + '" rowspan="' + GIANT + '"><p>A1</p></td><td><p>B1</p></td></tr><tr><td><p>A2</p></td><td><p>B2</p></td></tr></tbody></table><p>après</p>';
+      const tall = '<p>avant</p><table><tbody><tr><td colspan="' + GIANT + '"><p>A1</p></td></tr>' + Array.from({ length: 199 }, (_, r) => `<tr><td><p>A${r + 2}</p></td><td><p>B${r + 2}</p></td></tr>`).join('') + '</tbody></table><p>après</p>';
+      const paste = async (html) => {
+        Editor.setHTML('<p>base</p>', null); await sleep(150);
+        EditorCore.getEditor().commands.focus('end');
+        const dt = new DataTransfer(); dt.setData('text/html', html); dt.setData('text/plain', 'texte');
+        document.querySelector('.ProseMirror').dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+        await sleep(300);
+      };
+      const flatOpen = await withinMs(8000, async () => { Editor.setHTML(flat, null); await sleep(150); return spansOfEditor(); });
+      out.flatOpen = { ms: flatOpen.ms, cells: flatOpen.value.length, max: Math.max(...flatOpen.value.flat()) };
+      const tallOpen = await withinMs(30000, async () => { Editor.setHTML(tall, null); await sleep(150); return spansOfEditor(); });
+      out.tallOpen = { ms: tallOpen.ms, cells: tallOpen.value.length, first: tallOpen.value[0] };
+      const flatPaste = await withinMs(8000, async () => { await paste(flat); return spansOfEditor(); });
+      out.flatPaste = { ms: flatPaste.ms, cells: flatPaste.value.length };
+      const tallPaste = await withinMs(30000, async () => { await paste(tall); return spansOfEditor(); });
+      out.tallPaste = { ms: tallPaste.ms, cells: tallPaste.value.length };
+      const html = Editor.getHTML();
+      const pass = flatOpen.ms < 4000 && flatOpen.value.length <= 8 && out.flatOpen.max === 1000
+        && tallOpen.ms < 4000 && tallOpen.value.length < 600 && tallOpen.value[0][0] === 2
+        && flatPaste.ms < 4000 && flatPaste.value.length <= 8 && tallPaste.ms < 4000 && tallPaste.value.length < 600
+        && /A1/.test(html) && /B200/.test(html) && /après/.test(html);
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'hs_table_spans_exports_survive_giant_values',
+    description: 'Word, PDF, ODT et Excel d\'un tableau à colspan et rowspan de 9999999 : chaque fichier est fabriqué en moins de 30 secondes, avec le texte du tableau (avant : Word plantait l\'onglet, le PDF se figeait, ODT et Excel levaient une erreur)',
+    run: async () => {
+      const html = spanTable(`colspan="${GIANT}" rowspan="${GIANT}"`);
+      const HF = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
+      const out = {};
+      const make = async (name, work) => {
+        try { const r = await withinMs(30000, work); out[name] = { ms: r.ms, bytes: r.value }; } catch (e) { out[name] = { error: String(e && e.message || e).slice(0, 100) }; }
+      };
+      await DocxExport.ensureDocxLibLoaded();
+      await make('docx', async () => (await DocxExport.getDocxBlobForRecord(html, null, {}, '', HF, null)).blob.size);
+      await make('odt', async () => (await OdtExport.getOdtBlobForRecord(html, null, {}, '', HF, null)).blob.size);
+      await XlsxExport.ensureExcelLibLoaded();
+      await make('xlsx', async () => (await XlsxExport.getXlsxBlobForRecord(html, null, {}, '', {})).blob.size);
+      await PdfExport.ensurePdfLibsLoaded();
+      await make('pdf', async () => (await PdfExport.getNativePdfBlobForRecord(html, null, {}, '', HF, undefined)).blob.size);
+      const pass = ['docx', 'odt', 'xlsx', 'pdf'].every(k => out[k] && !out[k].error && out[k].bytes > 1000);
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'hs_table_spans_imports_write_bounded_values',
+    description: 'Import Word et PowerPoint : un gridSpan, un gridBefore ou un rowSpan de 9999999 donne un colspan ou un rowspan de 1000 au plus, une valeur illisible donne 1, le texte des cases est gardé',
+    run: async () => {
+      await ExportEngines.loadAll();
+      await ExportCommon.ensureJsZipLoaded();
+      const zipOf = async (parts) => { const z = new JSZip(); Object.entries(parts).forEach(([k, v]) => z.file(k, v)); return z.generateAsync({ type: 'arraybuffer' }); };
+      const CT = '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/></Types>';
+      const rels = (type, target) => `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="${target}"/></Relationships>`;
+      const spansIn = html => (String(html).match(/(?:col|row)span="\d+"/g) || []);
+      const out = {};
+      const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+      const wc = (props, text) => `<w:tc><w:tcPr>${props}</w:tcPr><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc>`;
+      const docx = `<?xml version="1.0"?><w:document ${W}><w:body><w:tbl><w:tblPr/><w:tblGrid><w:gridCol w="3000"/><w:gridCol w="3000"/></w:tblGrid><w:tr><w:trPr><w:gridBefore w:val="${GIANT}"/></w:trPr>${wc(`<w:gridSpan w:val="${GIANT}"/>`, 'AA')}${wc('', 'BB')}</w:tr><w:tr>${wc('<w:gridSpan w:val="abc"/>', 'CC')}${wc('', 'DD')}</w:tr></w:tbl><w:p><w:r><w:t>fin</w:t></w:r></w:p></w:body></w:document>`;
+      const word = await withinMs(20000, async () => DocxImport.fromBuffer(await zipOf({ '[Content_Types].xml': CT, '_rels/.rels': rels('officeDocument', 'word/document.xml'), 'word/document.xml': docx })));
+      out.docx = { ms: word.ms, spans: spansIn(word.value.html), text: /AA/.test(word.value.html) && /CC/.test(word.value.html) };
+      const P = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
+      const tc = (attrs, t) => `<a:tc ${attrs}><a:txBody><a:bodyPr/><a:p><a:r><a:t>${t}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`;
+      const slide = `<?xml version="1.0"?><p:sld ${P}><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="4" name="T"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="100000" y="100000"/><a:ext cx="6000000" cy="1000000"/></p:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr/><a:tblGrid><a:gridCol w="3000000"/><a:gridCol w="3000000"/></a:tblGrid><a:tr h="500000">${tc(`rowSpan="${GIANT}" gridSpan="${GIANT}"`, 'AA')}${tc('', 'BB')}</a:tr><a:tr h="500000">${tc('rowSpan="abc"', 'CC')}${tc('', 'DD')}</a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame></p:spTree></p:cSld></p:sld>`;
+      const pres = `<?xml version="1.0"?><p:presentation ${P}><p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst><p:sldSz cx="9144000" cy="5143500"/></p:presentation>`;
+      const slideRels = '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>';
+      const pptx = await withinMs(20000, async () => PptxImport.fromBuffer(await zipOf({ '[Content_Types].xml': CT, '_rels/.rels': rels('officeDocument', 'ppt/presentation.xml'), 'ppt/presentation.xml': pres, 'ppt/_rels/presentation.xml.rels': slideRels, 'ppt/slides/slide1.xml': slide })));
+      out.pptx = { ms: pptx.ms, spans: spansIn(pptx.value.html), text: /AA/.test(pptx.value.html) && /CC/.test(pptx.value.html) };
+      const bounded = list => list.length > 0 && list.every(v => Number(v.replace(/\D/g, '')) >= 2 && Number(v.replace(/\D/g, '')) <= 1000);
+      const pass = bounded(out.docx.spans) && out.docx.text && bounded(out.pptx.spans) && out.pptx.text;
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'hs_table_spans_rejecting_a_tracked_change_stays_bounded',
+    description: 'Suivi des modifications : « Refuser » le changement du colspan d\'une case dont l\'ancienne valeur enregistrée est 9999999 la remet à la largeur du tableau (2 ici), sans ajouter de cases aux autres lignes (avant : éditeur figé)',
+    run: async () => {
+      const mark = JSON.stringify({ id: 7, type: 'attr', attrName: 'colspan', previousValue: GIANT, newValue: 2 }).replace(/"/g, '&quot;');
+      Editor.setHTML(`<p>avant</p><table><tbody><tr><td colspan="2" data-tc-modification="${mark}"><p>AA</p></td></tr><tr><td><p>BB</p></td><td><p>CC</p></td></tr></tbody></table><p>après</p>`, null);
+      await sleep(200);
+      const editor = EditorCore.getEditor();
+      let marked = 0;
+      editor.state.doc.descendants((node) => { if (node.marks.some(m => m.type.name === 'modification')) marked += 1; });
+      const done = await withinMs(8000, async () => {
+        const tr = editor.state.tr;
+        TrackChangesResolve.resolveModifications(tr, new Set(['7']), false);
+        editor.view.dispatch(tr);
+        await sleep(200);
+        return spansOfEditor();
+      });
+      return { pass: marked === 1 && done.value.length === 3 && done.value[0][0] === 2 && done.ms < 4000, notes: JSON.stringify({ marked, ms: done.ms, spans: done.value }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.htmlSanitize = cases;
 })();
