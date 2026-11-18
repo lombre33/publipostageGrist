@@ -10,6 +10,9 @@
 //   donne pas. C'est le test qui la fixe (le fichier qu'il sert lui-même, dev-tests/live-test-kit.mjs) ; l'extension « edition » l'exige (`requires`).
 //   window.__gfsStub.pdfjs : la bibliothèque « pdfjs » de la lecture de PDF, { src, integrite, forme: 'module' } (consigne GFS 040 : pdf.js 6.5 et son moteur en UN fichier de forme module, qui se range dans
 //   GfsPaquets.pdfjs) - null : GFS ne la donne pas. C'est le test qui la fixe (le fichier qu'il sert lui-même, dev-tests/verify-gfs-read.mjs) ; l'extension « lecture-pdf » l'exige (`requires`).
+//   window.__gfsStub.natives : les copies figées que GFS donne des bibliothèques natives de l'app (contrats 5.2 point 12, consigne 065) : `{ id: { version, src, integrite, forme } }` pour celles dont la personne a mis la fonction en « copie
+//   figée » (`{}` : tout au CDN) ; undefined : un GFS d'avant la 065, dont le contexte et l'événement `extensions` n'ont pas de `natives` (par défaut). Réglée avant le chargement de la page, comme `mode` ; setNatives(objet) la change et
+//   envoie l'événement `extensions` (`{ extensions, bibliotheques, natives }`), comme GFS quand la personne change le choix « CDN ou copie figée » d'une fonction. C'est le test qui sert les fichiers (dev-tests/verify-native-libs.mjs).
 //   window.__gfsStub.calls : les appels reçus ({ nom, args, id }) ; ignoreContext : ne pas répondre (GFS absent) ; installReply : { actives } ou { error } que reçoit `installer`.
 //   window.__gfsStub.adresseWidget : l'adresse du widget que rend le contexte (contrats 5.2, consigne 009) : celle de GFS, que portent les sections de la page, jamais celle de la page de test (le widget n'en
 //   est que le sous-cadre) ; null : GFS ne la donne pas. Réglée avant le chargement de la page, comme `mode` : le contexte ne se demande qu'au démarrage, et l'événement `extensions` n'en porte pas.
@@ -137,6 +140,7 @@
       if (stub.ambiance !== undefined) data.ambiance = JSON.parse(JSON.stringify(stub.ambiance));
       if (stub.correcteurs !== undefined) data.correcteurs = JSON.parse(JSON.stringify(stub.correcteurs));
       if (stub.lecteurs !== undefined) data.lecteurs = stub.lecteurs.slice();
+      if (stub.natives !== undefined) data.natives = JSON.parse(JSON.stringify(stub.natives));
       return data;
     },
     // La barre que GFS montre à l'app : null quand il n'y en a pas (explorateur ouvert) ou que l'app l'a masquée.
@@ -429,8 +433,14 @@
     ouvrir(args) { return stub.call('ouvrir', args); },
     fermer(raison) { return stub.call('fermer', { raison }); },
     // L'événement `extensions` : la liste active et la source de leurs bibliothèques.
-    send() { stub.post({ type: 'evenement', nom: 'extensions', data: { extensions: stub.extensions.slice(), bibliotheques: stub.libraries(stub.extensions) } }); },
+    send() {
+      const data = { extensions: stub.extensions.slice(), bibliotheques: stub.libraries(stub.extensions) };
+      if (stub.natives !== undefined) data.natives = JSON.parse(JSON.stringify(stub.natives));
+      stub.post({ type: 'evenement', nom: 'extensions', data });
+    },
     setExtensions(list) { stub.extensions = list.slice(); stub.send(); },
+    // Le choix « CDN ou copie figée » d'une fonction change (contrats 5.2 point 12) : le même événement `extensions`, avec les copies que GFS donne maintenant.
+    setNatives(next) { stub.natives = next; stub.send(); },
     // L'événement `langue` : la personne change la langue de GFS (un seul choix pour GFS et toutes ses apps). Rien n'est envoyé quand elle ne change pas, comme GFS.
     setLangue(next) {
       if (next === stub.langue) return;

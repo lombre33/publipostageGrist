@@ -13,8 +13,7 @@
 const QrCode = (function () {
   const el = Dom.el;
 
-  // Recalculer le hash si la version change : `curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A`.
-  const LIB = { src: 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js', integrity: 'sha384-mZT2gIty7ZDdOGkxfP6joZcYdMW1Jvj9dRlfpTmaJAKKXTqzygtB22k7FLe+KZC1' };
+  // La bibliothèque (qrcode-generator) vient de la copie figée de GFS ou du CDN, avec son empreinte (SRI) : js/native-libs.js, fonction « qr ».
   const ERROR_LEVEL = 'M';      // 15 % de la surface peut manquer : le niveau d'usage pour une adresse imprimée
   const QUIET_MODULES = 4;      // la marge blanche exigée par la norme, comptée en modules
   const TARGET_PX = 640;        // côté visé de l'image : de quoi imprimer net à 3 cm, avec des modules de pixels entiers
@@ -28,7 +27,7 @@ const QrCode = (function () {
   // charge pas, et réessayée alors à l'appel suivant.
   function ensureLibrary() {
     if (!libPromise) {
-      libPromise = (window.qrcode ? Promise.resolve() : ExportCommon.loadScriptOnce(LIB)).then(() => {
+      libPromise = (window.qrcode ? Promise.resolve() : NativeLibs.load('qrcode-generator')).then(() => {
         const utf8 = window.qrcode.stringToBytesFuncs && window.qrcode.stringToBytesFuncs['UTF-8'];
         if (utf8) window.qrcode.stringToBytes = utf8;
       }).catch(e => { libPromise = null; throw e; });
@@ -398,5 +397,5 @@ const QrCode = (function () {
     closeWindow();
   }
 
-  return { LIB, ensureLibrary, dataUri, resolveImage, needsImage, isSelected, attrsFor, open };
+  return { ensureLibrary, dataUri, resolveImage, needsImage, isSelected, attrsFor, open };
 })();

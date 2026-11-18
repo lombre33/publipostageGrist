@@ -293,9 +293,10 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('export : un seul chargeur de script CDN (createElement("script") hors export-common.js)', loaders.length === 0, loaders.join(', '));
   const downloads = others.filter(([, t]) => /\.download\s*=/.test(t)).map(([f]) => f);
   check('export : un seul téléchargement de Blob (<a>.download hors export-common.js)', downloads.length === 0, downloads.join(', '));
-  // JSZip (archive des lots ZIP) se charge seul depuis export-common.js : le lot PDF (pdfmake, polices, ~4 Mo) n'a pas à le traîner, ni le lot DOCX à charger le PDF pour lui.
-  const jsZipLoaders = others.filter(([, t]) => /jszip\/[\d.]+\/jszip/i.test(t)).map(([f]) => f);
-  check('export : JSZip ne se charge que par ExportCommon.ensureJsZipLoaded, hors du lot PDF', jsZipLoaders.length === 0 && /jszip\/[\d.]+\/jszip/i.test(read('js/export-common.js')), jsZipLoaders.join(', '));
+  // JSZip (archive des lots ZIP) se charge seul depuis export-common.js : le lot PDF (pdfmake, polices, ~4 Mo) n'a pas à le traîner, ni le lot DOCX à charger le PDF pour lui. Son adresse est dans le tableau de
+  // js/native-libs.js (fonction « zip », consigne 065 : la copie de GFS ou le CDN) ; seul ExportCommon.ensureJsZipLoaded demande `NativeLibs.load('jszip')`, et le lot PDF ne le demande pas avec pdfmake.
+  const jsZipLoaders = others.filter(([f, t]) => f !== 'js/native-libs.js' && (/jszip\/[\d.]+\/jszip/i.test(t) || /NativeLibs\.load\([^)]*['"]jszip['"]/.test(t))).map(([f]) => f);
+  check('export : JSZip ne se charge que par ExportCommon.ensureJsZipLoaded, hors du lot PDF', jsZipLoaders.length === 0 && /NativeLibs\.load\('jszip'\)/.test(read('js/export-common.js')) && /'jszip':[^\n]*jszip\/[\d.]+\/jszip/i.test(read('js/native-libs.js')), jsZipLoaders.join(', '));
 }
 
 // ============================================================================
@@ -2324,6 +2325,54 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('anglais : aucun fichier qui écrit dans les tables du widget n\'ajoute une colonne avec un libellé (identifiant = libellé ; js/schema-columns.js seul garde les libellés d\'avant)', labelled.length === 0, labelled.join(' '));
   check('anglais : le registre de js/schema-columns.js ne nomme que des tables Publipostage_ et des colonnes de lettres seules (aucun accent, aucun blanc, aucun tiret)',
     [...registry.matchAll(/\bid: '([^']+)'/g)].every(match => /^Publipostage_[A-Za-z]+$/.test(match[1])) && [...registry.matchAll(/^\s*\['([A-Za-z]+)', '([A-Za-z]+)'(?:, '[^']*')?\],?\s*$/gm)].length >= 40, '');
+}
+
+// ============================================================================
+// 41. Les bibliothèques natives par fonction : la copie de GFS ou le CDN, sept fonctions, rien d'oublié (consigne 065 de GFS)
+// ============================================================================
+// Une bibliothèque « native » (celle que le code charge lui-même au premier usage : les exports, l'import Markdown, le QR code) se charge par js/native-libs.js : la copie figée de GFS quand la personne l'a choisie pour la
+// fonction ET que chaque bibliothèque de la fonction en a une à la version de la liste, sinon le CDN. Ce contrôle garde le tableau du fichier contre la liste (package.json) et le catalogue (bibliotheques/catalogue.json) :
+// les sept fonctions de la consigne 076, chaque bibliothèque dans une seule, ses version, adresse et empreinte égales à celles de la liste et du catalogue, aucune bibliothèque de la liste oubliée ni inventée, chaque
+// bibliothèque demandée par un `NativeLibs.load(...)` de sa fonction, et aucun autre chargeur qui l'irait chercher à son CDN.
+{
+  const list = JSON.parse(read('package.json'));
+  const deps = { ...(list.devDependencies || {}), ...(list.dependencies || {}) };
+  const declared = (list.gfs && list.gfs.bibliotheques) || {};
+  const catalogue = existsSync(join(ROOT, 'bibliotheques', 'catalogue.json')) ? JSON.parse(read('bibliotheques/catalogue.json')).bibliotheques || [] : [];
+  const source = read('js/native-libs.js');
+  const context = vm.createContext({ document: {}, console });
+  vm.runInContext(source + '\nthis.__NativeLibs = NativeLibs;', context);
+  const native = context.__NativeLibs;
+  const SEVEN = { 'pdf': ['pdfmake', 'pdfmake-polices'], 'pdf-assemblage': ['pdf-lib'], 'zip': ['jszip'], 'word': ['docx', 'docx-charts'], 'excel': ['exceljs'], 'markdown': ['marked'], 'qr': ['qrcode-generator'] };
+  const functions = native.functions();
+  check('bibliothèques natives : les sept fonctions de la consigne 076 de GFS (pdf, pdf-assemblage, zip, word, excel, markdown, qr), chacune avec ses bibliothèques, et rien d\'autre (l\'éditeur est la huitième, à part)',
+    JSON.stringify(functions) === JSON.stringify(Object.keys(SEVEN)) && functions.every(fn => JSON.stringify(native.librariesOf(fn)) === JSON.stringify(SEVEN[fn])), JSON.stringify(functions.map(fn => [fn, native.librariesOf(fn)])));
+  const inTable = functions.flatMap(fn => native.librariesOf(fn));
+  check('bibliothèques natives : chaque bibliothèque n\'est que dans une fonction, et ce sont exactement celles de la liste (gfs.bibliotheques de package.json), sans oubli ni invention',
+    new Set(inTable).size === inTable.length && JSON.stringify([...inTable].sort()) === JSON.stringify(Object.keys(declared).sort()), JSON.stringify({ tableau: [...inTable].sort(), liste: Object.keys(declared).sort() }));
+  const apart = inTable.flatMap((id) => {
+    const entry = catalogue.find(item => item.id === id);
+    const cdn = native.cdnOf(id);
+    const problems = [];
+    if (!declared[id] || native.versionOf(id) !== deps[declared[id].paquet]) problems.push(`${id} : version ${native.versionOf(id)} (liste : ${declared[id] ? deps[declared[id].paquet] : 'absente'})`);
+    if (!entry || !cdn || !entry.cdn || cdn.src !== entry.cdn.src) problems.push(`${id} : adresse ${cdn && cdn.src} (catalogue : ${entry && entry.cdn && entry.cdn.src})`);
+    if (!entry || !cdn || !entry.cdn || cdn.integrity !== entry.cdn.integrite) problems.push(`${id} : empreinte ${cdn && cdn.integrity} (catalogue : ${entry && entry.cdn && entry.cdn.integrite})`);
+    return problems;
+  });
+  check('bibliothèques natives : la version, l\'adresse du CDN et l\'empreinte de chacune sont celles de la liste et du catalogue (la version s\'écrit dans package.json, puis `node kit/outils/bibliotheques.mjs`, puis ici)', inTable.length >= 9 && apart.length === 0, apart.join(' ; '));
+  // Chaque appel `NativeLibs.load('a', 'b')` du code ne mêle que les bibliothèques d'UNE fonction (la décision se prend par fonction), et chaque bibliothèque du tableau est demandée quelque part.
+  const callers = jsFiles.filter(f => f !== 'js/native-libs.js').flatMap(f => [...noCommentsJs(read(f)).matchAll(/NativeLibs\.load\(([^)]*)\)/g)].map(m => ({ file: f, ids: [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1]) })));
+  const mixed = callers.filter(call => call.ids.length === 0 || new Set(call.ids.map(id => native.functionOf(id))).size !== 1 || call.ids.some(id => native.functionOf(id) === null)).map(call => `${call.file} : ${call.ids.join(', ') || '(aucun identifiant littéral)'}`);
+  check('bibliothèques natives : chaque `NativeLibs.load(...)` du code nomme des bibliothèques du tableau, toutes d\'une même fonction', callers.length >= 8 && mixed.length === 0, mixed.join(' ; ') || `${callers.length} appels`);
+  const asked = new Set(callers.flatMap(call => call.ids));
+  const idle = inTable.filter(id => !asked.has(id));
+  check('bibliothèques natives : chaque bibliothèque du tableau est demandée par un `NativeLibs.load(...)` (une bibliothèque que rien ne charge n\'a rien à faire dans la liste des natives)', idle.length === 0, idle.join(', '));
+  // Aucun autre chargeur n'a l'adresse d'un de ces CDN : tout passe par le tableau (sinon la personne qui a choisi la copie figée aurait un export au CDN sans le savoir).
+  const addresses = inTable.map(id => native.cdnOf(id).src);
+  const strays = jsFiles.filter(f => f !== 'js/native-libs.js').filter(f => addresses.some(address => read(f).includes(address))).map(f => f);
+  check('bibliothèques natives : aucun autre fichier de js/ ni d\'extensions/ n\'écrit l\'adresse de CDN d\'une de ces bibliothèques (tout passe par js/native-libs.js)', strays.length === 0, strays.join(', '));
+  const index = read('index.html');
+  check('bibliothèques natives : index.html charge js/native-libs.js après js/export-common.js (la seule porte des scripts) et avant les modules qui l\'appellent', /<script src="js\/export-common\.js\?v=[\d.]+"><\/script>\s*<script src="js\/native-libs\.js\?v=[\d.]+"><\/script>/.test(index) && index.indexOf('js/native-libs.js?v=') < index.indexOf('data-engine="pdf"'), 'balise absente ou mal placée');
 }
 
 summarizeAndExit();

@@ -130,7 +130,7 @@ export async function start({ name, port, popupBlocker = false, scrollbars = fal
   // l'app s'est laissé en se rechargeant elle-même). `popups` : la fenêtre à part du diaporama (extensions/diapositives/present.html) s'ouvre pour de bon ; faux (par défaut), le navigateur de l'essai la
   // refuse (`window.open` rend null, comme un bloqueur de fenêtres) et le diaporama se joue dans le panneau, ce que la plupart des scripts mesurent. `before(page, context)` : appelée une fois la page créée et AVANT toute adresse chargée,
   // pour ce qui doit être en place au premier chargement (une route qui coupe un fichier du kit, un écouteur de console).
-  async function openPage({ hosted = true, stub = null, seed = '', lang = 'fr', colorScheme = 'light', init = '', search = '', hash = '', ready = true, width = WIDTH, height = HEIGHT, storage = null, framed = null, bypassCSP = true, popups = false, before = null } = {}) {
+  async function openPage({ hosted = true, stub = null, seed = '', lang = 'fr', colorScheme = 'light', init = '', search = '', hash = '', ready = true, width = WIDTH, height = HEIGHT, storage = null, framed = null, bypassCSP = true, popups = false, before = null, realIntegrity = false } = {}) {
     const context = await browser.newContext(Object.assign({ bypassCSP, viewport: { width, height }, colorScheme }, framed ? { locale: lang === 'en' ? 'en-US' : 'fr-FR' } : {}));
     const page = await context.newPage();
     if (before) await before(page, context);
@@ -154,7 +154,22 @@ export async function start({ name, port, popupBlocker = false, scrollbars = fal
       for (const [re, rel] of umdRoutes) {
         await page.route(re, async route => route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', headers: { 'Access-Control-Allow-Origin': '*' }, body: await readFile(join(CACHE, rel), 'utf8') }));
       }
-      await page.addInitScript(() => { Object.defineProperty(HTMLScriptElement.prototype, 'integrity', { configurable: true, get: () => '', set: () => {} }); });
+      // L'empreinte (SRI) d'un script est ignorée : le miroir n'a pas les octets exacts de tous les fichiers des CDN (vfs_fonts.min.js et qrcode.min.js de cdnjs ne sont pas ceux de npm). `realIntegrity` la garde VRAIE pour un script qui ne vient
+      // pas d'un CDN (la copie figée de GFS, que le test sert lui-même : une fausse empreinte y est refusée par le navigateur, comme chez une personne) ; celle des CDN reste ignorée. `window.__integrity` garde chaque empreinte demandée
+      // ({ src, integrity, enforced }) : de quoi lire, dans un essai, quelle empreinte l'app a posée sur quel fichier.
+      await page.addInitScript((real) => {
+        const native = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'integrity');
+        window.__integrity = [];
+        Object.defineProperty(HTMLScriptElement.prototype, 'integrity', {
+          configurable: true,
+          get() { return real ? native.get.call(this) : ''; },
+          set(value) {
+            const enforced = real && !/^https:\/\/(?:cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net)\//.test(this.src);
+            window.__integrity.push({ src: this.src, integrity: String(value), enforced });
+            if (enforced) native.set.call(this, value);
+          },
+        });
+      }, realIntegrity);
       await page.route('**://fonts.googleapis.com/**', route => route.fulfill({ status: 200, contentType: 'text/css', body: '' }));
       await page.route('**://fonts.gstatic.com/**', route => route.fulfill({ status: 200, body: '' }));
     }

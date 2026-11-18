@@ -74,7 +74,7 @@ try {
   const catalogue = JSON.parse(readFileSync(join(ROOT, 'bibliotheques', 'catalogue.json'), 'utf8')).bibliotheques.find(entry => entry.id === 'docx');
   const flipped = catalogue.cdn.integrite.replace(/^sha384-./, prefix => prefix.slice(0, -1) + (prefix.endsWith('A') ? 'B' : 'A'));
   const integrity = verify(copy(dir => change(dir, 'bibliotheques/catalogue.json', catalogue.cdn.integrite, flipped)));
-  check('une empreinte changée dans le catalogue ne s\'accorde plus avec celle que le code écrit à côté de l\'adresse : le fichier de js/ est nommé', integrity.status === 1 && /js\/docx-export\.js/.test(integrity.err) && /empreinte/.test(integrity.err), `${integrity.status} ${integrity.err}`.slice(0, 300));
+  check('une empreinte changée dans le catalogue ne s\'accorde plus avec celle que le code écrit à côté de l\'adresse : le fichier de js/ est nommé', integrity.status === 1 && /js\/native-libs\.js/.test(integrity.err) && /empreinte/.test(integrity.err), `${integrity.status} ${integrity.err}`.slice(0, 300));
 
   const pin = verify(copy(dir => change(dir, 'index.html', 'ambiance-pose.js?v=', 'ambiance-pose.js?v=deadbee#', 2)));
   check('le ?v= du kit changé dans la page (ses deux cartes) sans l\'être dans la liste (gfs.carte.fixes) est refusé', pin.status === 1 && /kit\/ambiance-pose/.test(pin.err), `${pin.status} ${pin.err}`.slice(0, 300));

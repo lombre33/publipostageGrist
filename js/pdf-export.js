@@ -2,11 +2,9 @@
 // périmés) ; leur code reste dans l'historique git (js/pdf-export-alt.js). L'impression navigateur est revenue autrement : js/print-export.js. « Léger » est ce même PDF
 // vectoriel dont les images sont ramenées à 150 ppi (ImageIo.lighten) : le texte, les traits et la page ne changent pas.
 const PdfExport = (function () {
-  // Chargés au premier export (1-2 s d'ouverture gagnées). `integrity` (SRI sha384) à recalculer si la version change : `curl -s <url> | openssl dgst
-  // -sha384 -binary | openssl base64 -A`.
-  const PDF_LIB_URLS = [
-    { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js', integrity: 'sha384-VFQrHzqBh5qiJIU0uGU5CIW3+OWpdGGJM9LBnGbuIH2mkICcFZ7lPd/AAtI7SNf7' },
-    { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js', integrity: 'sha384-dWs4+zGqy/KS6giKxiK+6iowhidQwjVFaiE1lMar36QwIulE44VyBSQp0brMCx4D' },
+  // Chargés au premier export (1-2 s d'ouverture gagnées). pdfmake et ses polices (vfs_fonts) viennent de la copie figée de GFS ou du CDN, avec leur empreinte (SRI) : js/native-libs.js, fonction « pdf » ;
+  // les fichiers qui suivent sont ceux du dépôt.
+  const PDF_APP_FILES = [
     // Chemins relatifs à index.html, même origine que la page : pas de SRI nécessaire (une compromission serait déjà celle du dépôt lui-même).
     { src: 'js/pdf-fonts.js?v=0.68' },
     { src: 'js/pdf-fonts-extra.js?v=0.68' },
@@ -17,11 +15,12 @@ const PdfExport = (function () {
     { src: 'js/pdf-fonts-symbols.js?v=0.2' },
   ];
   let pdfLibsPromise = null;
-  // Séquentiel (pas Promise.all) : pdf-fonts*.js lisent window.pdfMake.vfs à l'exécution, donc s'exécutent après pdfmake.min.js et vfs_fonts.min.js.
+  // Séquentiel (pas Promise.all) : pdf-fonts*.js lisent window.pdfMake.vfs à l'exécution, donc s'exécutent après pdfmake.min.js et vfs_fonts.min.js (NativeLibs.load les pose dans l'ordre).
   async function ensurePdfLibsLoaded() {
     if (!pdfLibsPromise) {
       pdfLibsPromise = (async () => {
-        for (const lib of PDF_LIB_URLS) await ExportCommon.loadScriptOnce(lib);
+        await NativeLibs.load('pdfmake', 'pdfmake-polices');
+        for (const lib of PDF_APP_FILES) await ExportCommon.loadScriptOnce(lib);
       })().catch(e => { pdfLibsPromise = null; throw e; });
     }
     return pdfLibsPromise;

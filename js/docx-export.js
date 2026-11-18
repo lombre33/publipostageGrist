@@ -15,21 +15,18 @@
 const DocxExport = (function () {
   // Chargement paresseux (comme ensurePdfLibsLoaded) : évite ~1,1 Mo au premier chargement du widget pour une fonctionnalité pas toujours utilisée.
   // `docx` n'est pas sur cdnjs ; jsDelivr sert le fichier tel que publié sur npm (dist/index.iife.js, pas ...iife.min.js, que jsDelivr reminifie à la
-  // volée : incompatible avec un SRI stable). Recalculer l'integrity si la version change : `curl -s <url> | openssl dgst -sha384 -binary | openssl
-  // base64 -A`.
-  const DOCX_LIB = { src: 'https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/index.iife.js', integrity: 'sha384-ud8085E8t6iW4uUom5nN5cpzTZ4OdsNKB/AKWfOsI62tzsoV2X7r7/o4KWESO8rq' };
+  // volée : incompatible avec un SRI stable). D'où il vient (la copie figée de GFS ou le CDN, avec son empreinte SRI) : js/native-libs.js, fonction « word ».
   let docxLibPromise = null;
   async function ensureDocxLibLoaded() {
-    if (!docxLibPromise) docxLibPromise = ExportCommon.loadScriptOnce(DOCX_LIB).catch(e => { docxLibPromise = null; throw e; });
+    if (!docxLibPromise) docxLibPromise = NativeLibs.load('docx').catch(e => { docxLibPromise = null; throw e; });
     return docxLibPromise;
   }
   // Les graphiques natifs de Word (docx/charts : `docxCharts.ChartRun`) sont un second fichier de la MÊME version de docx, qui lit le global `docx` du premier : ils se chargent à la demande, au premier
-  // graphique créé (« Créer un graphique… ») d'un export, et jamais pour un document sans graphique (215 Ko de plus). Même règle pour l'empreinte : `curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A`.
-  const DOCX_CHARTS_LIB = { src: 'https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/charts.iife.js', integrity: 'sha384-PFbg0J+cwbPG1He8zpFvlw/uXmHMA3ea3Gyyw9aS2IIjX0zKpD7YeprlCNVCMs1Y' };
+  // graphique créé (« Créer un graphique… ») d'un export, et jamais pour un document sans graphique (215 Ko de plus). Même fonction « word » : la copie de GFS ou le CDN, au choix de la personne au moment de ce second chargement.
   let docxChartsPromise = null;
   async function ensureDocxChartsLoaded() {
     await ensureDocxLibLoaded();
-    if (!docxChartsPromise) docxChartsPromise = (window.docxCharts ? Promise.resolve() : ExportCommon.loadScriptOnce(DOCX_CHARTS_LIB)).catch(e => { docxChartsPromise = null; throw e; });
+    if (!docxChartsPromise) docxChartsPromise = (window.docxCharts ? Promise.resolve() : NativeLibs.load('docx-charts')).catch(e => { docxChartsPromise = null; throw e; });
     return docxChartsPromise;
   }
 

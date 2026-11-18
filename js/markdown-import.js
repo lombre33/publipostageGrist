@@ -17,12 +17,11 @@
 const MarkdownImport = (function () {
   // Au-delà, la page ne tiendrait pas le document (marked, puis l'éditeur, lisent tout en mémoire).
   const MAX_BYTES = 10 * 1024 * 1024;
-  // marked 15.0.12, MIT : ~40 Ko, chargé au premier import seulement. Recalculer l'empreinte si la version change : `curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A`
-  // (le fichier de cdnjs est celui de npm, octet pour octet).
-  const MARKED_LIB = { src: 'https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js', integrity: 'sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+' };
+  // marked, MIT : ~40 Ko, chargé au premier import seulement (le fichier de cdnjs est celui de npm, octet pour octet). D'où il vient (la copie figée de GFS ou le CDN, avec son empreinte SRI) :
+  // js/native-libs.js, fonction « markdown ».
   let libPromise = null;
   function ensureLibLoaded() {
-    if (!libPromise) libPromise = (window.marked ? Promise.resolve() : ExportCommon.loadScriptOnce(MARKED_LIB)).catch(e => { libPromise = null; throw e; });
+    if (!libPromise) libPromise = (window.marked ? Promise.resolve() : NativeLibs.load('marked')).catch(e => { libPromise = null; throw e; });
     return libPromise;
   }
 

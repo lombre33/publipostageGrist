@@ -4,13 +4,11 @@
 // PdfExport.ensurePdfLibsLoaded : seuls en ont besoin ce PDF unique et le PDF d'un document qui mêle des formats de page (`joinParts`). `createSheets` sert l'« Assemblage
 // avant impression » (js/sheet-layout.js) : les mêmes PDF par ligne, posés sur des feuilles.
 const PdfMerge = (function () {
-  // `integrity` (SRI sha384) : même recette que js/pdf-export.js ; fichier identique octet pour octet à dist/pdf-lib.min.js du paquet npm
-  // pdf-lib@1.17.1.
-  const PDF_LIB = { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js', integrity: 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' };
+  // pdf-lib (le fichier est identique octet pour octet à dist/pdf-lib.min.js du paquet npm) vient de la copie figée de GFS ou du CDN, avec son empreinte (SRI) : js/native-libs.js, fonction « pdf-assemblage ».
   let libPromise = null;
   function ensureLibLoaded() {
     if (!libPromise) {
-      libPromise = (window.PDFLib ? Promise.resolve() : ExportCommon.loadScriptOnce(PDF_LIB)).catch(e => { libPromise = null; throw e; });
+      libPromise = (window.PDFLib ? Promise.resolve() : NativeLibs.load('pdf-lib')).catch(e => { libPromise = null; throw e; });
     }
     return libPromise;
   }

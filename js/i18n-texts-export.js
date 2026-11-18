@@ -627,6 +627,16 @@ const I18nTextsExport = {
   'batchScope.view': { fr: '{view|Celle affichée|Celles affichées}', en: '{view|Displayed row|Displayed rows}' },
   'batchScope.viewGrid': { fr: '{view|Celle affichée|Celles affichées}', en: '{view|Displayed value|Displayed values}' },
   'batchScope.all': { fr: 'Toute la table', en: 'Whole table' },
+  // --- Les bibliothèques natives de l'app : la copie figée de GFS ou le CDN (js/native-libs.js, consigne 065). Les sept noms sont ceux des fonctions dans GFS ; la phrase se lit en tête du coin d'état quand la copie de GFS n'a pas servi (js/main.js) ---
+  'native.function.pdf': { fr: 'Export PDF', en: 'PDF export' },
+  'native.function.pdf-assemblage': { fr: 'Assemblage de PDF', en: 'PDF assembly' },
+  'native.function.zip': { fr: 'Archives ZIP', en: 'ZIP archives' },
+  'native.function.word': { fr: 'Word et graphiques', en: 'Word and charts' },
+  'native.function.excel': { fr: 'Export Excel', en: 'Excel export' },
+  'native.function.markdown': { fr: 'Import Markdown', en: 'Markdown import' },
+  'native.function.qr': { fr: 'QR code', en: 'QR code' },
+  'native.fallback.echec': { fr: '{fonction} : la copie de GFS n’a pas pu se charger, le CDN a servi.', en: '{fonction}: GFS’s copy failed to load, the CDN was used.' },
+  'native.fallback.ecart': { fr: '{fonction} : la copie de GFS n’est pas à la version de l’app, le CDN a servi.', en: '{fonction}: GFS’s copy is not the app’s version, the CDN was used.' },
   // --- Images qu'un export n'a pas pu lire : leur nombre s'écrit avant l'état de fin d'export (js/main.js:setExportDoneStatus) ---
   'status.imagesUnread': { fr: '{n} {n|image introuvable|images introuvables} (voir la console).', en: '{n} missing {n|image|images} (see console).' },
 };

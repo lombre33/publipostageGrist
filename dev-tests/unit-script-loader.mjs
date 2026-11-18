@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Tests purs (sans navigateur) du chargeur de scripts des exports : js/export-common.js (ExportCommon.scriptRefusal et ExportCommon.loadScriptOnce) - cf. dev-tests/unit-harness.mjs
-// pour le contexte général. Audit externe de la bêta, 04/10, point C-EXFIL-05 (« URL de script dynamique ») : la bibliothèque à charger vient de sept constantes écrites dans le code (pdfmake et
-// ses polices, JSZip, pdf-lib, ExcelJS, qrcode-generator, docx), et le chargeur refuse tout le reste AVANT d'ajouter la balise :
+// pour le contexte général. Audit externe de la bêta, 04/10, point C-EXFIL-05 (« URL de script dynamique ») : la bibliothèque à charger vient du tableau écrit dans le code (js/native-libs.js : neuf
+// bibliothèques rangées en sept fonctions - pdfmake et ses polices, pdf-lib, JSZip, docx et ses graphiques, ExcelJS, marked, qrcode-generator -, ou la copie figée que GFS en garde, du même
+// dépôt que la page ou de son origine), et le chargeur refuse tout le reste AVANT d'ajouter la balise :
 //  1) une adresse n'est permise que si elle vient d'un des deux CDN de la politique de sécurité du contenu (cdnjs.cloudflare.com, cdn.jsdelivr.net), en https, ET porte une empreinte SRI
 //     (sha256, sha384 ou sha512), ou si elle vient du dépôt lui-même (même origine que la page, sans empreinte) ;
 //  2) tout autre site, un faux CDN (`cdnjs.cloudflare.com.autre.site`, `cdn.jsdelivr.net@autre.site`), le http, un schéma javascript: ou data:, une adresse vide ou illisible, une empreinte

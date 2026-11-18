@@ -11,13 +11,11 @@
 // avec son texte. Les listes s'écrivent « • », « 1. » et « ☐ » devant leurs lignes (Excel n'a pas de liste dans une case) ; une image se pose sur sa
 // case, à sa taille.
 const XlsxExport = (function () {
-  const EXCEL_LIB = { src: 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js', integrity: 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' };
   let excelLibPromise = null;
   async function ensureExcelLibLoaded() {
     // Chargement paresseux (comme DocxExport) : ExcelJS pèse ~0,9 Mo, inutile au premier chargement du widget. cdnjs le sert tel que publié sur npm
-    // (dist/exceljs.min.js), d'où un SRI stable. Recalculer l'integrity si la version change : `curl -s <url> | openssl dgst -sha384 -binary |
-    // openssl base64 -A`.
-    if (!excelLibPromise) excelLibPromise = (window.ExcelJS ? Promise.resolve() : ExportCommon.loadScriptOnce(EXCEL_LIB)).catch(e => { excelLibPromise = null; throw e; });
+    // (dist/exceljs.min.js), d'où un SRI stable. D'où il vient (la copie figée de GFS ou le CDN, avec son empreinte SRI) : js/native-libs.js, fonction « excel ».
+    if (!excelLibPromise) excelLibPromise = (window.ExcelJS ? Promise.resolve() : NativeLibs.load('exceljs')).catch(e => { excelLibPromise = null; throw e; });
     return excelLibPromise;
   }
 

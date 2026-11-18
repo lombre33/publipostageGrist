@@ -1,7 +1,8 @@
 // Le lien avec Grist Factory Suite (GFS) : ce que le widget en sait quand GFS l'héberge, et rien quand il tourne seul (une fenêtre de Grist qui charge l'adresse de ce dépôt).
 // Les messages de GFS ont leur enveloppe (contrats de GFS, section 5) : { gfs: <contrat>, type: 'appel' | 'reponse' | 'erreur' | 'evenement', id, nom, args | data }, sans le `mtype` du
 // protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Quatorze choses seulement :
-//  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }),
+//  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }), les copies figées des bibliothèques natives de l'app
+//    dont la personne a mis la fonction en « copie figée » (`natives`, { id: { version, src, integrite, forme } }, consigne 065 : js/native-libs.js, le seul à les lire),
 //    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre),
 //    `ouverture`, ce que GFS demande d'ouvrir au démarrage (consigne 010 ; pour « Nouveau > Importer », le fichier à importer que GFS donne, consigne 035 ; pour « Nouveau > Depuis un modèle », l'identifiant du modèle de départ choisi, consigne 075), `langue`, la langue qui vaut maintenant (`fr` ou `en`, consigne 019), `stockage`, l'espace de cette app chez GFS
 //    (`{ clé: texte }`, consigne 024) et `barre`, la barre de GFS posée par-dessus le cadre (`{ bord, epaisseur, zone }` ou null, consigne 025) ;
@@ -10,7 +11,7 @@
 //  - l'événement `barre`, `{ barre }` de la même forme, une fois par changement (la personne déplace la barre, le cadre change de taille, l'explorateur s'ouvre ou se ferme, l'app la masque ou la
 //    rend) et l'appel `barre.masquer { masquee }`, sans `id`, que fait un diaporama à son ouverture et à chaque sortie : GFS pose la barre, l'app écarte ce qu'elle met sous la zone (js/gfs-bar.js,
 //    le seul à s'en servir) ;
-//  - l'événement `extensions`, quand la personne en active ou en désactive une dans GFS : la même forme ;
+//  - l'événement `extensions`, quand la personne en active ou en désactive une dans GFS, ou change le choix « CDN ou copie figée » d'une fonction : la même forme (`natives` comprise : `{}` quand tout est au CDN) ;
 //  - l'événement `langue`, `{ langue: 'fr' | 'en' }`, quand la personne change la langue de GFS (un seul choix pour GFS et toutes ses apps, contrats 5.2 point 6) : une seule fois par changement, sans que GFS
 //    touche au cadre de l'app, qui décide comment suivre (js/settings.js:followGfsLanguage) ;
 //  - l'événement `reglages`, `{ enregistres: true | false }` (consigne 039), que GFS envoie après chaque écriture des réglages de la vue de l'app (`setOption`, `setOptions`, `clearOptions`) : `true`, le réglage est
@@ -39,12 +40,13 @@
 //    `importer`, `lire` ou `lien`) et dont il attend `{ ferme: true | false }` avant de détruire son cadre : l'abonné de `onClose` répond (js/gfs-open.js : ce qui attend est enregistré avant le `oui`). Une réponse qui
 //    échoue est une erreur (`GFS_ECHEC`, GFS demande alors à la personne), jamais un `oui`. Tout autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3).
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
-// `library()` ne rend rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `players()` rend [], `player()` rend faux, `settingsSaved()` rend null, `ambiance()` rend null, `correcteurs()` rend { coupes: false }, `hideBar()` rend faux, `opensInNewTab()` rend faux et `deposit()` et `attach()` rejettent sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
+// `library()` et `native()` ne rendent rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `players()` rend [], `player()` rend faux, `settingsSaved()` rend null, `ambiance()` rend null, `correcteurs()` rend { coupes: false }, `hideBar()` rend faux, `opensInNewTab()` rend faux et `deposit()` et `attach()` rejettent sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
 // qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js, js/gfs-open.js, js/person-store.js et js/gfs-bar.js, jamais par ce fichier (sauf `opensInNewTab`, que trois liens consultent, consigne 011).
 const GfsLink = (function () {
   const CONTRACT = 0;                // le contrat que parle l'app, celui de son manifeste
   const CONTEXT_TIMEOUT_MS = 5000;   // contrats 5.1, point 4 : l'app attend `contexte` 5 secondes au plus
   const ID_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
+  const SRI_PATTERN = /^sha(?:256|384|512)-[A-Za-z0-9+/]+={0,2}$/;   // une empreinte (SRI) : sans elle, une copie figée de GFS ne se charge jamais
   const STORAGE_KEY = /^[A-Za-z0-9_.:-]{1,64}$/;   // contrats 5.3 : la forme d'une clé de l'espace d'une app (1 à 64 caractères)
   const BAR_EDGES = { gauche: 'left', haut: 'top', droite: 'right', bas: 'bottom' };   // contrats 5.2, point 7 : les quatre bords où GFS pose sa barre, nommés comme le reste de l'app
   const IMPORT_REASON = 'importer';   // contrats 5.2, point 3 (consigne 035) : la raison d'une ouverture qui porte `importation`
@@ -65,6 +67,7 @@ const GfsLink = (function () {
 
   let extensions = [];
   let libraries = new Map();   // identifiant -> { src, integrite, forme } (forme : 'script' ou 'module', contrats de GFS 5.2 point 4)
+  let natives = new Map();     // identifiant -> { version, src, integrite, forme } : la copie figée que GFS donne d'une bibliothèque native de l'app, quand la personne a mis sa fonction en « copie figée » (contrats 5.2 point 12, consigne 065)
   let address = '';            // `adresseWidget` du contexte ('' : seul, ou GFS ne l'a pas donnée)
   let opening = null;          // `ouverture` du contexte : null, ou { fichier: null | { id, type }, type, dossier, raison[, importation: { valeur, fichier: File }][, lecture: { id, fichier: File }][, modele: { id }] }
   let language = null;         // `langue` du contexte, puis de l'événement `langue` : 'fr' ou 'en' (null : seul, ou GFS ne la donne pas)
@@ -169,7 +172,22 @@ const GfsLink = (function () {
     return list.filter((name, at) => list.indexOf(name) === at);
   }
 
-  // Ce que GFS donne (contexte ou événement `extensions`) : une liste d'identifiants, des sources, l'adresse du widget, l'ouverture demandée, la langue, l'espace de l'app, la barre, l'ambiance et les correcteurs, rien d'autre n'est gardé. L'événement
+  // `natives` du contexte ou de l'événement `extensions` (contrats 5.2 point 12, consigne 065) : { id: { version, src, integrite, forme } }, une entrée par bibliothèque native dont la personne a mis la
+  // fonction en « copie figée » ; `{}` ou rien quand tout est au CDN (le défaut, et un GFS d'avant). Une entrée n'est gardée que complète et lisible : un identifiant de bibliothèque, une version, une adresse,
+  // une empreinte (SRI) et une forme `script` ou `module` (`script` quand GFS n'en dit rien). Le reste est écarté sans bruit : la fonction se charge alors par le CDN, comme avant.
+  function normalizeNatives(raw) {
+    const out = new Map();
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+    Object.keys(raw).sort().forEach((id) => {
+      const lib = raw[id];
+      if (!ID_PATTERN.test(id) || !lib || typeof lib !== 'object') return;
+      if (typeof lib.version !== 'string' || !lib.version.trim() || typeof lib.src !== 'string' || !lib.src.trim() || typeof lib.integrite !== 'string' || !SRI_PATTERN.test(lib.integrite)) return;
+      out.set(id, { version: lib.version.trim(), src: lib.src.trim(), integrite: lib.integrite, forme: lib.forme === 'module' ? 'module' : 'script' });
+    });
+    return out;
+  }
+
+  // Ce que GFS donne (contexte ou événement `extensions`) : une liste d'identifiants, des sources, les copies figées des bibliothèques natives, l'adresse du widget, l'ouverture demandée, la langue, l'espace de l'app, la barre, l'ambiance et les correcteurs, rien d'autre n'est gardé. L'événement
   // `extensions` n'a ni adresse, ni ouverture, ni langue, ni espace, ni barre, ni ambiance, ni correcteurs : il ne les efface pas. La langue du contexte (`fr` ou `en`) fait foi à chaque appel `contexte` ; elle est gardée sans rappeler personne
   // (applyLanguage rappelle ceux qui suivent l'événement `langue`). Il en va de même de la barre : celle du contexte est gardée sans rappeler personne (le départ lit `bar()`), applyBar rappelle ceux qui suivent
   // l'événement `barre`.
@@ -191,9 +209,11 @@ const GfsLink = (function () {
       // `forme` manque chez un GFS d'avant le 16/10 : un script classique, comme Plotly.
       if (ID_PATTERN.test(id) && lib && typeof lib.src === 'string' && typeof lib.integrite === 'string') nextLibraries.set(id, { src: lib.src, integrite: lib.integrite, forme: lib.forme === 'module' ? 'module' : 'script' });
     });
-    const changed = !known || JSON.stringify([extensions, Array.from(libraries)]) !== JSON.stringify([nextExtensions, Array.from(nextLibraries)]);
+    const nextNatives = normalizeNatives(data.natives);
+    const changed = !known || JSON.stringify([extensions, Array.from(libraries), Array.from(natives)]) !== JSON.stringify([nextExtensions, Array.from(nextLibraries), Array.from(nextNatives)]);
     extensions = nextExtensions;
     libraries = nextLibraries;
+    natives = nextNatives;
     known = true;
     if (changed) listeners.forEach((fn) => { try { fn(); } catch (e) { console.warn('[GfsLink] abonné en échec', e); } });
   }
@@ -374,6 +394,12 @@ const GfsLink = (function () {
   // Les extensions que la personne a activées dans GFS, et la source de la bibliothèque `id` ({ src, integrite, forme } ou null).
   const getExtensions = () => extensions.slice();
   const library = id => libraries.get(id) || null;
+  // La copie figée que GFS donne de la bibliothèque native `id` ({ version, src, integrite, forme }, une copie) ou null : seule, avec un GFS d'avant la 065, ou quand la personne a laissé la fonction de `id` au CDN.
+  // js/native-libs.js, le seul à s'en servir, compare sa `version` à celle de la liste de l'app avant de la charger.
+  const native = (id) => {
+    const copy = natives.get(id);
+    return copy ? { version: copy.version, src: copy.src, integrite: copy.integrite, forme: copy.forme } : null;
+  };
   // L'adresse du widget dans Grist (sans requête) que GFS a donnée dans le contexte : celle de GFS, que portent les sections de la page. '' seul, si GFS ne répond pas ou ne la donne pas.
   const widgetAddress = () => address;
   // GFS a répondu (le contexte ou un événement est arrivé) : faux seul, et faux tant qu'un GFS qui ne répond pas laisse passer ses 5 secondes.
@@ -534,5 +560,5 @@ const GfsLink = (function () {
     call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(readerIfNeeded).then(settleReady);
   } else settleReady();
 
-  return { hosted, ready, isAnswering, extensions: getExtensions, library, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, correcteurs: getCorrecteurs, players: getPlayers, player, onChange, onLanguage, onSettings, onBar, onAmbiance, onCorrecteurs, onPlayerEvent, onOpen, onClose, install, deposit, attach };
+  return { hosted, ready, isAnswering, extensions: getExtensions, library, native, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, correcteurs: getCorrecteurs, players: getPlayers, player, onChange, onLanguage, onSettings, onBar, onAmbiance, onCorrecteurs, onPlayerEvent, onOpen, onClose, install, deposit, attach };
 })();

@@ -85,11 +85,10 @@ const ExportCommon = (function () {
   }
 
   // JSZip fabrique l'archive des exports en lot (PDF et Word en ZIP) : ~0,1 Mo, chargé seul, sans pdfmake ni ses polices (~4 Mo) que seul l'export
-  // PDF demande (js/pdf-export.js:ensurePdfLibsLoaded). SRI sha384 comme les autres bibliothèques CDN.
-  const JSZIP_LIB = { src: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', integrity: 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG' };
+  // PDF demande (js/pdf-export.js:ensurePdfLibsLoaded). D'où il vient (la copie figée de GFS ou le CDN, avec son empreinte SRI) : js/native-libs.js, fonction « zip ».
   let jsZipPromise = null;
   function ensureJsZipLoaded() {
-    if (!jsZipPromise) jsZipPromise = (window.JSZip ? Promise.resolve() : loadScriptOnce(JSZIP_LIB)).catch(e => { jsZipPromise = null; throw e; });
+    if (!jsZipPromise) jsZipPromise = (window.JSZip ? Promise.resolve() : NativeLibs.load('jszip')).catch(e => { jsZipPromise = null; throw e; });
     return jsZipPromise;
   }
 

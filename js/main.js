@@ -73,10 +73,25 @@
     MainToolbar.syncToolbarState();
   });
 
+  // Une copie figée de GFS qui n'a pas servi (js/native-libs.js, consigne 065) : la bibliothèque est venue du CDN, et la personne le lit dans le coin d'état. L'export qui l'a chargée écrit ensuite ses propres états
+  // (« Génération… », « PDF généré ») : la phrase se met en TÊTE de ceux qui suivent pendant NATIVE_NOTE_MS, le coin d'état coupant ce qui dépasse à droite (comme le nombre d'images introuvables, js/main-export.js:setExportDoneStatus).
+  const NATIVE_NOTE_MS = 20000;
+  let nativeNote = null;   // { text, at } : la dernière phrase, avec l'heure où elle a été dite
   function setStatus(msg, isError) {
-    statusMsg.textContent = msg;
+    const note = nativeNote && Date.now() - nativeNote.at < NATIVE_NOTE_MS ? nativeNote.text : '';
+    const text = msg == null ? '' : String(msg);
+    statusMsg.textContent = note && text && text.indexOf(note) !== 0 ? note + ' ' + text : text;
     statusMsg.className = isError ? 'error-msg' : '';
   }
+  document.addEventListener('pp:nativeFallback', (event) => {
+    const detail = (event && event.detail) || {};
+    const text = I18n.t(detail.raison === 'echec' ? 'native.fallback.echec' : 'native.fallback.ecart', { fonction: I18n.t('native.function.' + detail.fonction) });
+    // Ce que le coin d'état dit déjà, sans l'ancienne phrase qu'il portait en tête : la nouvelle passe devant.
+    const shown = statusMsg.textContent;
+    const rest = nativeNote && shown.indexOf(nativeNote.text) === 0 ? shown.slice(nativeNote.text.length).replace(/^ /, '') : shown;
+    nativeNote = { text, at: Date.now() };
+    statusMsg.textContent = rest ? text + ' ' + rest : text;
+  });
 
   function getPdfFilenameTemplate() {
     return pdfFilenameInput ? pdfFilenameInput.value.trim() : '';
