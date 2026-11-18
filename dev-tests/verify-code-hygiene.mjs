@@ -86,6 +86,8 @@
 //  39. la copie figée de l'éditeur (vendor/editeur, consigne 066 de GFS, construite par l'outil du kit) : un fichier du dossier n'est plus celui de son manifeste, une version de la carte monte dans la liste sans que la copie
 //      soit refaite, la carte « copie » de la page ne nomme plus chaque module à l'empreinte de son fichier, une licence qui n'est plus compatible avec la GPL-3.0 de l'app arrive avec un paquet, la clé du stockage de la
 //      liste n'est plus celle que la case « Éditeur hors ligne » de Réglages écrit.
+//  40. les tables et les colonnes du widget qui se disent en français ailleurs que dans le registre de js/schema-columns.js (Publipostage_Modeles, Contenu, Jeton, ModeleId, Utilisateur...), ou qui reçoivent un
+//      libellé différent de leur identifiant : la table ou la colonne serait créée en double, ou lue à vide, sur un document passé à l'anglais (demande du 16/11 : identifiant = libellé).
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -2286,6 +2288,35 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const incompatible = heads.filter(head => !FREE.has(head.licence)).map(head => `${head.name}@${head.version} : ${head.licence}`);
   check('copie de l\'éditeur : LICENCES.txt nomme chaque paquet de la copie à sa version, et chaque licence est de celles que la GPL-3.0 de l\'app accepte (MIT, ISC, BSD, Apache-2.0, 0BSD)',
     !!manifest && heads.length >= 40 && unlisted.length === 0 && incompatible.length === 0, [...unlisted.map(item => `${item} sans licence`), ...incompatible].join(' ; ') || `${heads.length} paquets`);
+}
+
+// ============================================================================
+// 40. Les tables et les colonnes du widget se disent en anglais, identifiant égal au libellé (demande du 16/11, colonnes et tables en anglais)
+// ============================================================================
+// Le code du widget nomme ses tables et ses colonnes en anglais (Publipostage_Templates, Name, Content, Token...) ; les noms d'avant (Publipostage_Modeles, Nom, Contenu, Jeton...) ne sont écrits que dans
+// le registre de js/schema-columns.js, qui lit et écrit sous les noms que chaque document porte. Ce contrôle empêche un module d'en réécrire un à côté (la table ou la colonne serait alors créée en double,
+// ou lue à vide, sur un document passé à l'anglais), et de poser un libellé qui diffère de l'identifiant (Grist garderait alors deux noms pour la même colonne). Les commentaires n'entrent pas dans la lecture ;
+// les textes de l'interface (js/i18n-texts-*.js) non plus : ils parlent à la personne, pas à Grist.
+{
+  const LEGACY_TABLES = ['Publipostage_Modeles', 'Publipostage_Commentaires', 'Publipostage_LiensTables', 'Publipostage_PreferencesModeles', 'Publipostage_Abreviations', 'Publipostage_FormatsPage'];
+  // Les noms de colonnes d'avant qui ne sont jamais autre chose qu'une colonne du widget (Nom, Texte, Fin, Date, PJ, Cc, Mode, Page, Margins... sont aussi des mots ou des noms qui ont gardé leur nom).
+  const LEGACY_COLUMNS = ['Contenu', 'NomFichierPDF', 'DateModif', 'EstParDefaut', 'TypeModele', 'Destinataires', 'Cci', 'Objet', 'SuiviModifications', 'Jeton', 'ModifiePar', 'MotDePassePdf', 'ModeleId',
+    'Auteur', 'CreeLe', 'LectureId', 'Debut', 'Citation', 'Avant', 'Apres', 'Resolu', 'Genre', 'Donnees', 'Utilisateur', 'Epingle', 'Dossier', 'Replie', 'TypeExport', 'QualitePdf', 'LignesExport', 'Abreviation',
+    'Largeur', 'Hauteur', 'TableCible', 'ColonneCible', 'ColonneSource', 'TableSource'];
+  const columnPattern = new RegExp(`(?:['"\`](?:${LEGACY_COLUMNS.join('|')})['"\`])|(?:\\.(?:${LEGACY_COLUMNS.join('|')})(?![\\w$]))|(?:(?<![\\w$.])(?:${LEGACY_COLUMNS.join('|')})\\s*:)`);
+  const scanned = jsFiles.filter(rel => rel !== 'js/schema-columns.js' && !/^js\/i18n-texts-/.test(rel));
+  const registry = noCommentsJs(read('js/schema-columns.js'));
+  check('anglais : l\'analyse lit bien le code (garde-fou de l\'analyse elle-même : le registre de js/schema-columns.js nomme Publipostage_Modeles et la colonne Contenu)', registry.includes('Publipostage_Modeles') && registry.includes("'Contenu'"), '');
+  const tablesBack = scanned.flatMap(rel => LEGACY_TABLES.filter(name => noCommentsJs(read(rel)).includes(name)).map(name => `${rel} : ${name}`));
+  check('anglais : aucun fichier hors de js/schema-columns.js n\'écrit le nom d\'avant d\'une table du widget (Publipostage_Modeles, _Commentaires, _LiensTables, _PreferencesModeles, _Abreviations, _FormatsPage)', tablesBack.length === 0, tablesBack.join(' ; '));
+  const columnsBack = scanned.flatMap(rel => noCommentsJs(read(rel)).split('\n').map((line, i) => [rel, i + 1, line]).filter(([, , line]) => columnPattern.test(line)).map(([r, n, line]) => `${r}:${n} ${line.trim().slice(0, 80)}`));
+  check('anglais : aucun fichier hors de js/schema-columns.js n\'écrit un nom d\'avant de colonne du widget (Contenu, Jeton, ModeleId, Utilisateur, TableCible... entre guillemets, après un point ou comme clé d\'objet)', columnsBack.length === 0, columnsBack.slice(0, 8).join(' ; '));
+  // Identifiant = libellé : un widget n'écrit plus de libellé pour ses colonnes (AddColumn, AddVisibleColumn, AddTable) ; le traducteur seul remet l'ancien libellé quand le document garde l'ancien nom.
+  const labelled = scanned.filter(rel => noCommentsJs(read(rel)).includes('SchemaColumns.docApi')).filter(rel => /isFormula\s*:\s*(?:false|true)[^}]*\blabel\s*:|\blabel\s*:[^}]*\bisFormula\s*:/.test(noCommentsJs(read(rel))));
+  check('anglais : l\'analyse des libellés lit bien le code (garde-fou : des fichiers passent par SchemaColumns.docApi)', scanned.filter(rel => noCommentsJs(read(rel)).includes('SchemaColumns.docApi')).length >= 8, '');
+  check('anglais : aucun fichier qui écrit dans les tables du widget n\'ajoute une colonne avec un libellé (identifiant = libellé ; js/schema-columns.js seul garde les libellés d\'avant)', labelled.length === 0, labelled.join(' '));
+  check('anglais : le registre de js/schema-columns.js ne nomme que des tables Publipostage_ et des colonnes de lettres seules (aucun accent, aucun blanc, aucun tiret)',
+    [...registry.matchAll(/\bid: '([^']+)'/g)].every(match => /^Publipostage_[A-Za-z]+$/.test(match[1])) && [...registry.matchAll(/^\s*\['([A-Za-z]+)', '([A-Za-z]+)'(?:, '[^']*')?\],?\s*$/gm)].length >= 40, '');
 }
 
 summarizeAndExit();
