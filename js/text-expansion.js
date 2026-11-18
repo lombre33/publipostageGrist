@@ -12,11 +12,11 @@
 // que le `char` du panneau # (js/variables.js) est figé à la construction de l'éditeur.
 // Ajouter, modifier et supprimer une abréviation se défont par Ctrl + Z (js/expansion-history.js, qui appelle `add`, `update` et `remove` ci-dessous) ; le caractère déclencheur aussi (js/settings-history.js).
 const TextExpansion = (function () {
-  const TABLE_NAME = 'Publipostage_Abreviations';
+  const TABLE_NAME = 'Publipostage_Abbreviations';
   const TABLE_COLUMNS = [
-    { id: 'Utilisateur', type: 'Text' },
-    { id: 'Abreviation', type: 'Text' },
-    { id: 'Texte', type: 'Text' },
+    { id: 'User', type: 'Text' },
+    { id: 'Abbreviation', type: 'Text' },
+    { id: 'Text', type: 'Text' },
   ];
   const DEFAULT_CHAR = '§';
   // Tapés juste après une abréviation entière, ces caractères la remplacent par son texte : l'espace (normale, insécable, fine insécable), la
@@ -84,17 +84,17 @@ const TextExpansion = (function () {
     const email = (await userEmail.get()) || '';
     const found = [];
     let tables;
-    try { tables = await grist.docApi.listTables(); } catch (e) { console.warn('[text-expansion] liste des tables illisible', e); return found; }
+    try { tables = await SchemaColumns.docApi.listTables(); } catch (e) { console.warn('[text-expansion] liste des tables illisible', e); return found; }
     // Pas de table = aucune abréviation : elle n'est créée qu'à la première écriture (ensureTable), jamais pour lire.
     if (tables.indexOf(TABLE_NAME) === -1) return found;
     tableKnown = true;
     let tableData;
-    try { tableData = await grist.docApi.fetchTable(TABLE_NAME); } catch (e) { console.warn('[text-expansion] lecture des abréviations impossible', e); return found; }
+    try { tableData = await SchemaColumns.docApi.fetchTable(TABLE_NAME); } catch (e) { console.warn('[text-expansion] lecture des abréviations impossible', e); return found; }
     for (let i = 0; i < tableData.id.length; i++) {
-      if (((tableData.Utilisateur && tableData.Utilisateur[i]) || '') !== email) continue;
-      const abbreviation = String((tableData.Abreviation && tableData.Abreviation[i]) || '').trim();
+      if (((tableData.User && tableData.User[i]) || '') !== email) continue;
+      const abbreviation = String((tableData.Abbreviation && tableData.Abbreviation[i]) || '').trim();
       if (!abbreviation) continue;
-      found.push({ rowId: tableData.id[i], abbreviation, text: String((tableData.Texte && tableData.Texte[i]) || '') });
+      found.push({ rowId: tableData.id[i], abbreviation, text: String((tableData.Text && tableData.Text[i]) || '') });
     }
     return found;
   }
@@ -192,7 +192,7 @@ const TextExpansion = (function () {
   // Aucune ligne de la table n'a le numéro `rowId`, de quelque personne qu'elle soit : la table est commune à toutes les personnes du document, alors que `entries` n'a que les lignes de la courante.
   async function rowIdIsFree(rowId) {
     try {
-      const tableData = await grist.docApi.fetchTable(TABLE_NAME);
+      const tableData = await SchemaColumns.docApi.fetchTable(TABLE_NAME);
       return !!tableData && Array.isArray(tableData.id) && tableData.id.indexOf(rowId) === -1;
     } catch (e) { return false; }
   }
@@ -207,7 +207,7 @@ const TextExpansion = (function () {
       await ensureTable();
       const email = (await userEmail.get()) || '';
       const rowId = Number.isInteger(wantedRowId) && wantedRowId >= 1 && (await rowIdIsFree(wantedRowId)) ? wantedRowId : null;
-      const result = await grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, rowId, { Utilisateur: email, Abreviation: clean.abbreviation, Texte: clean.text }]]);
+      const result = await SchemaColumns.docApi.applyUserActions([['AddRecord', TABLE_NAME, rowId, { User: email, Abbreviation: clean.abbreviation, Text: clean.text }]]);
       const entry = { rowId: result.retValues[0], abbreviation: clean.abbreviation, text: clean.text };
       entries.get().push(entry);
       return Object.assign({}, entry);
@@ -222,7 +222,7 @@ const TextExpansion = (function () {
       const clean = cleanEntry(rawAbbreviation, rawText);
       const problem = checkEntry(clean.abbreviation, clean.text, rowId);
       if (problem) throw validationError(problem);
-      await grist.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, rowId, { Abreviation: clean.abbreviation, Texte: clean.text }]]);
+      await SchemaColumns.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, rowId, { Abbreviation: clean.abbreviation, Text: clean.text }]]);
       entry.abbreviation = clean.abbreviation;
       entry.text = clean.text;
       return Object.assign({}, entry);
@@ -234,7 +234,7 @@ const TextExpansion = (function () {
       await load();
       const index = entries.get().findIndex(e => e.rowId === rowId);
       if (index === -1) return false;
-      await grist.docApi.applyUserActions([['RemoveRecord', TABLE_NAME, rowId]]);
+      await SchemaColumns.docApi.applyUserActions([['RemoveRecord', TABLE_NAME, rowId]]);
       entries.get().splice(index, 1);
       return true;
     });

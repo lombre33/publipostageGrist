@@ -18,28 +18,28 @@
 // Poser la ligne d'état d'un dossier créé vide (`createFolderState` : « Nouveau dossier » de « Organiser mes modèles ») en fait un dossier que GFS voit aussi ; la retirer (`clearFolderState`) supprime
 // le dossier vide, et c'est aussi ce que défaire le geste qui l'avait posée fait : sans cela, un dossier que Ctrl + Z vide resterait là, vide.
 const TemplatePreferences = (function () {
-  const TABLE_NAME = 'Publipostage_PreferencesModeles';
+  const TABLE_NAME = 'Publipostage_TemplatePreferences';
   // Sentinelle de la ligne « état d'un dossier » : un vrai ModeleId (id de ligne Grist) est toujours >= 1.
   const FOLDER_ROW_MODELE_ID = 0;
 
   const TABLE_COLUMNS = [
-    { id: 'Utilisateur', type: 'Text' },
-    { id: 'ModeleId', type: 'Int' },
-    { id: 'Epingle', type: 'Bool' },
+    { id: 'User', type: 'Text' },
+    { id: 'TemplateId', type: 'Int' },
+    { id: 'Pinned', type: 'Bool' },
     // Chemin complet séparé par « / » (ex. « Factures/Clients A ») : des dossiers imbriqués sans changer de schéma.
-    { id: 'Dossier', type: 'Text' },
+    { id: 'Folder', type: 'Text' },
     // Replie : uniquement sur les lignes ModeleId = 0 (état d'un dossier).
-    { id: 'Replie', type: 'Bool' },
+    { id: 'Collapsed', type: 'Bool' },
     // Réglages d'export de la personne pour ce modèle (lignes ModeleId >= 1) : vides tant qu'elle n'a rien changé.
-    { id: 'TypeExport', type: 'Text' },
-    { id: 'QualitePdf', type: 'Text' },
-    { id: 'LignesExport', type: 'Text' },
+    { id: 'ExportType', type: 'Text' },
+    { id: 'PdfQuality', type: 'Text' },
+    { id: 'ExportLines', type: 'Text' },
   ];
   // Les trois réglages d'export : le nom côté widget (`field`), la colonne Grist et son intitulé quand elle est ajoutée à un document ancien.
   const EXPORT_FIELDS = [
-    { field: 'type', column: 'TypeExport', label: 'Type d\'export' },
-    { field: 'quality', column: 'QualitePdf', label: 'Qualité du PDF' },
-    { field: 'lines', column: 'LignesExport', label: 'Lignes exportées' },
+    { field: 'type', column: 'ExportType' },
+    { field: 'quality', column: 'PdfQuality' },
+    { field: 'lines', column: 'ExportLines' },
   ];
 
   let tableChecked = false;
@@ -61,10 +61,10 @@ const TemplatePreferences = (function () {
   let replieColumnPresent = false;
   async function ensureReplieColumn() {
     if (replieColumnPresent) return;
-    const tableData = await grist.docApi.fetchTable(TABLE_NAME);
-    if (!('Replie' in tableData)) {
-      await grist.docApi.applyUserActions([
-        ['AddVisibleColumn', TABLE_NAME, 'Replie', { type: 'Bool', isFormula: false, label: 'Dossier replié par défaut' }]
+    const tableData = await SchemaColumns.docApi.fetchTable(TABLE_NAME);
+    if (!('Collapsed' in tableData)) {
+      await SchemaColumns.docApi.applyUserActions([
+        ['AddVisibleColumn', TABLE_NAME, 'Collapsed', { type: 'Bool', isFormula: false }]
       ]);
     }
     replieColumnPresent = true;
@@ -75,10 +75,10 @@ const TemplatePreferences = (function () {
   let exportColumnsPresent = false;
   async function ensureExportColumns() {
     if (exportColumnsPresent) return;
-    const tableData = await grist.docApi.fetchTable(TABLE_NAME);
+    const tableData = await SchemaColumns.docApi.fetchTable(TABLE_NAME);
     const missing = EXPORT_FIELDS.filter((f) => !(f.column in tableData));
     if (missing.length) {
-      await grist.docApi.applyUserActions(missing.map((f) => ['AddVisibleColumn', TABLE_NAME, f.column, { type: 'Text', isFormula: false, label: f.label }]));
+      await SchemaColumns.docApi.applyUserActions(missing.map((f) => ['AddVisibleColumn', TABLE_NAME, f.column, { type: 'Text', isFormula: false }]));
     }
     exportColumnsPresent = true;
   }
@@ -132,9 +132,9 @@ const TemplatePreferences = (function () {
   }
 
   async function readTable() {
-    const tableData = await grist.docApi.fetchTable(TABLE_NAME);
+    const tableData = await SchemaColumns.docApi.fetchTable(TABLE_NAME);
     // Schéma relu à chaque lecture : Replie peut manquer (document ancien) ou avoir été ajoutée ailleurs.
-    replieColumnPresent = ('Replie' in tableData);
+    replieColumnPresent = ('Collapsed' in tableData);
     exportColumnsPresent = EXPORT_FIELDS.every((f) => f.column in tableData);
     return tableData;
   }
@@ -142,13 +142,13 @@ const TemplatePreferences = (function () {
   // Remplit `into` ({ cache, folderStates }) d'après ce que dit la table pour la personne `email`. Une lecture sans Utilisateur ni ModeleId (règle d'accès qui
   // les cache, lecture partielle) ne dit rien de la personne : aucune préférence, sans erreur. Dossier et Epingle absents se lisent vides.
   function parseRows(tableData, email, into) {
-    const count = tableData.Utilisateur && tableData.ModeleId ? tableData.id.length : 0;
-    const folderOf = i => normalizeFolderPath(tableData.Dossier ? tableData.Dossier[i] : null);
+    const count = tableData.User && tableData.TemplateId ? tableData.id.length : 0;
+    const folderOf = i => normalizeFolderPath(tableData.Folder ? tableData.Folder[i] : null);
     for (let i = 0; i < count; i++) {
-      if ((tableData.Utilisateur[i] || '') !== email) continue;
-      if (tableData.ModeleId[i] === FOLDER_ROW_MODELE_ID) {
+      if ((tableData.User[i] || '') !== email) continue;
+      if (tableData.TemplateId[i] === FOLDER_ROW_MODELE_ID) {
         const chemin = folderOf(i);
-        const replie = !!(tableData.Replie && tableData.Replie[i]);
+        const replie = !!(tableData.Collapsed && tableData.Collapsed[i]);
         // Plusieurs lignes pour un même dossier (double écriture d'un autre onglet, ou de GFS) : la première fait foi, c'est celle que setFolderCollapsed met
         // à jour ; `rowIds` les garde toutes, pour que retirer le dossier les retire toutes.
         if (chemin) {
@@ -161,12 +161,12 @@ const TemplatePreferences = (function () {
       // Les réglages d'export manquent aux lignes d'un document ancien (colonnes pas encore ajoutées) : ils se lisent vides, le réglage d'origine.
       const exportChoices = {};
       EXPORT_FIELDS.forEach(({ field, column }) => { exportChoices[field] = tableData[column] ? String(tableData[column][i] || '') : ''; });
-      const known = into.cache[tableData.ModeleId[i]];
-      into.cache[tableData.ModeleId[i]] = {
+      const known = into.cache[tableData.TemplateId[i]];
+      into.cache[tableData.TemplateId[i]] = {
         // La dernière ligne de la personne pour ce modèle fait foi ; `rowIds` les garde toutes, dans l'ordre de la table : une écriture les met toutes à jour.
         rowId: tableData.id[i],
         rowIds: (known ? known.rowIds : []).concat(tableData.id[i]),
-        epingle: !!(tableData.Epingle && tableData.Epingle[i]),
+        epingle: !!(tableData.Pinned && tableData.Pinned[i]),
         dossier: folderOf(i),
         exportChoices,
       };
@@ -236,21 +236,21 @@ const TemplatePreferences = (function () {
       const existing = cache[id];
       if (existing) {
         // Toutes les lignes de la personne pour ce modèle, comme GFS (il lit la première, ce widget la dernière : elles doivent dire la même chose).
-        await grist.docApi.applyUserActions(existing.rowIds.map((rowId) => ['UpdateRecord', TABLE_NAME, rowId, patch]));
-        if ('Epingle' in patch) existing.epingle = !!patch.Epingle;
-        if ('Dossier' in patch) existing.dossier = normalizeFolderPath(patch.Dossier);
+        await SchemaColumns.docApi.applyUserActions(existing.rowIds.map((rowId) => ['UpdateRecord', TABLE_NAME, rowId, patch]));
+        if ('Pinned' in patch) existing.epingle = !!patch.Pinned;
+        if ('Folder' in patch) existing.dossier = normalizeFolderPath(patch.Folder);
         return existing;
       }
-      const columns = Object.assign({ Utilisateur: email, ModeleId: id, Epingle: false, Dossier: '' }, patch);
-      const result = await grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, columns]]);
-      const row = { rowId: result.retValues[0], rowIds: [result.retValues[0]], epingle: !!columns.Epingle, dossier: normalizeFolderPath(columns.Dossier), exportChoices: emptyExportChoices() };
+      const columns = Object.assign({ User: email, TemplateId: id, Pinned: false, Folder: '' }, patch);
+      const result = await SchemaColumns.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, columns]]);
+      const row = { rowId: result.retValues[0], rowIds: [result.retValues[0]], epingle: !!columns.Pinned, dossier: normalizeFolderPath(columns.Folder), exportChoices: emptyExportChoices() };
       cache[id] = row;
       return row;
     });
   }
 
-  function setPinned(modeleId, pinned) { return upsert(modeleId, { Epingle: !!pinned }); }
-  function setFolder(modeleId, path) { return upsert(modeleId, { Dossier: normalizeFolderPath(path) || '' }); }
+  function setPinned(modeleId, pinned) { return upsert(modeleId, { Pinned: !!pinned }); }
+  function setFolder(modeleId, path) { return upsert(modeleId, { Folder: normalizeFolderPath(path) || '' }); }
 
   // Les écritures d'état de dossier passent par la file `writes` : deux clics rapides sur le même interrupteur ne doivent pas créer deux lignes (la seconde ne
   // verrait pas encore le rowId de la première).
@@ -275,12 +275,12 @@ const TemplatePreferences = (function () {
       const wanted = state.replie;  // l'état le plus récent : plusieurs clics de suite font une seule écriture utile
       if (state.rowId != null) {
         if (wanted === state.saved) return state;
-        await grist.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, state.rowId, { Replie: wanted }]]);
+        await SchemaColumns.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, state.rowId, { Collapsed: wanted }]]);
       } else {
         if (!wanted) return state;  // « déplié » est l'état par défaut : pas de ligne à créer
         const email = (await userEmail.get()) || '';
-        const result = await grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, {
-          Utilisateur: email, ModeleId: FOLDER_ROW_MODELE_ID, Epingle: false, Dossier: key, Replie: true,
+        const result = await SchemaColumns.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, {
+          User: email, TemplateId: FOLDER_ROW_MODELE_ID, Pinned: false, Folder: key, Collapsed: true,
         }]]);
         state.rowId = result.retValues[0];
         state.rowIds = [state.rowId];
@@ -309,9 +309,9 @@ const TemplatePreferences = (function () {
       const known = folderStates[key];
       if (known && known.rowId != null) return false;
       if (collapsed) await ensureReplieColumn();
-      const columns = { Utilisateur: email, ModeleId: FOLDER_ROW_MODELE_ID, Epingle: false, Dossier: key };
-      if (collapsed) columns.Replie = true;
-      const result = await grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, columns]]);
+      const columns = { User: email, TemplateId: FOLDER_ROW_MODELE_ID, Pinned: false, Folder: key };
+      if (collapsed) columns.Collapsed = true;
+      const result = await SchemaColumns.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, columns]]);
       // Un geste sur l'interrupteur de ce dossier, parti avant la fin de cette écriture, a déjà son entrée : elle prend la ligne (son état affiché reste, la file l'écrira ensuite).
       const state = folderStates[key] || (folderStates[key] = { rowId: null, rowIds: [], replie: false, saved: false });
       state.rowId = result.retValues[0];
@@ -343,7 +343,7 @@ const TemplatePreferences = (function () {
       if (!tableChecked) return false;
       const email = (await userEmail.get()) || '';
       const state = (await readRows(email)).folderStates[key];
-      if (state) await grist.docApi.applyUserActions([['BulkRemoveRecord', TABLE_NAME, state.rowIds.slice()]]);
+      if (state) await SchemaColumns.docApi.applyUserActions([['BulkRemoveRecord', TABLE_NAME, state.rowIds.slice()]]);
       // Un geste sur un dossier qui attend encore dans la file garde son entrée (il la complétera : plus aucune ligne, il en ajoutera une) ; sinon l'entrée part.
       const current = folderStates[key];
       if (current) {
@@ -398,13 +398,13 @@ const TemplatePreferences = (function () {
       EXPORT_FIELDS.forEach(({ field, column }) => { written[field] = column in patch ? patch[column] : ((cache[id] && cache[id].exportChoices && cache[id].exportChoices[field]) || ''); });
       const existing = cache[id];  // une épingle posée entre-temps, ou une ligne de GFS, a pu créer la ligne
       if (existing) {
-        await grist.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, existing.rowId, patch]]);
+        await SchemaColumns.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, existing.rowId, patch]]);
         existing.exportChoices = written;
         return existing;
       }
-      const columns = { Utilisateur: email, ModeleId: id, Epingle: false, Dossier: '' };
+      const columns = { User: email, TemplateId: id, Pinned: false, Folder: '' };
       EXPORT_FIELDS.forEach(({ field, column }) => { columns[column] = written[field]; });
-      const result = await grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, columns]]);
+      const result = await SchemaColumns.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, columns]]);
       cache[id] = { rowId: result.retValues[0], rowIds: [result.retValues[0]], epingle: false, dossier: null, exportChoices: written };
       return cache[id];
     });

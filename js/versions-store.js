@@ -23,12 +23,12 @@
 const VersionsStore = (function () {
   const TABLE_NAME = 'Publipostage_Versions';
   const TABLE_COLUMNS = [
-    { id: 'Jeton', type: 'Text' },     // le modèle (Templates.ensureToken), pas son numéro de ligne que Grist peut redonner
-    { id: 'Date', type: 'DateTime' },  // quand l'état gardé avait été enregistré
-    { id: 'Auteur', type: 'Text' },    // qui l'avait enregistré : « Nom <adresse> » ou l'adresse seule, vide quand elle n'était pas connue
-    { id: 'Nom', type: 'Text' },       // le nom donné par une personne ; vide pour une version gardée toute seule (jamais effacée par un plafond quand il est rempli)
-    { id: 'Genre', type: 'Text' },     // '' (gardée toute seule) ou 'restauration' (l'état remplacé par une restauration)
-    { id: 'Donnees', type: 'Text' },   // l'état, compressé
+    { id: 'Token', type: 'Text' },    // le modèle (Templates.ensureToken), pas son numéro de ligne que Grist peut redonner
+    { id: 'Date', type: 'DateTime' }, // quand l'état gardé avait été enregistré
+    { id: 'Author', type: 'Text' },   // qui l'avait enregistré : « Nom <adresse> » ou l'adresse seule, vide quand elle n'était pas connue
+    { id: 'Name', type: 'Text' },     // le nom donné par une personne ; vide pour une version gardée toute seule (jamais effacée par un plafond quand il est rempli)
+    { id: 'Kind', type: 'Text' },     // '' (gardée toute seule) ou 'restauration' (l'état remplacé par une restauration)
+    { id: 'Data', type: 'Text' },     // l'état, compressé
   ];
   const FORMAT = 1;
   const KEEP_AFTER_MS = 5 * 60 * 1000;     // un état resté tel quel 5 minutes est un point de reprise
@@ -230,7 +230,7 @@ const VersionsStore = (function () {
       if (packed.length > MAX_VERSION_CHARS) { tooHeavy.set(String(rowId), { at: Date.now(), chars: weight }); return null; }
       await ensureTable();
       const at = toMs(dateModif);
-      const fields = { Jeton: token, Date: new Date(at === null ? Date.now() : at).toISOString(), Auteur: modifiePar, Nom: '', Genre: genre || '', Donnees: packed };
+      const fields = { Token: token, Date: new Date(at === null ? Date.now() : at).toISOString(), Author: modifiePar, Name: '', Kind: genre || '', Data: packed };
       return {
         action: ['AddRecord', TABLE_NAME, null, fields],
         commit(addedRowId) {
@@ -254,18 +254,18 @@ const VersionsStore = (function () {
   // La table en entier : { exists, entries }, `entries` = [{ rowId, token, at (ms), author, name, genre, data, size }]. Lève si Grist ne répond pas. Une
   // table absente est un historique vide (jamais créée pour lire).
   async function readAll() {
-    const tables = await grist.docApi.listTables();
+    const tables = await SchemaColumns.docApi.listTables();
     if (!tables.includes(TABLE_NAME)) return { exists: false, entries: [] };
     tableKnown = true;
-    const tableData = await grist.docApi.fetchTable(TABLE_NAME);
+    const tableData = await SchemaColumns.docApi.fetchTable(TABLE_NAME);
     const text = (column, i) => String((tableData[column] && tableData[column][i]) || '');
     const entries = [];
     for (let i = 0; i < tableData.id.length; i++) {
-      const token = text('Jeton', i);
-      const packed = text('Donnees', i);
+      const token = text('Token', i);
+      const packed = text('Data', i);
       if (!token || !packed) continue;
       const at = toMs(tableData.Date ? tableData.Date[i] : null);
-      entries.push({ rowId: tableData.id[i], token, at: at === null ? 0 : at, author: text('Auteur', i), name: text('Nom', i), genre: text('Genre', i), data: packed, size: packed.length });
+      entries.push({ rowId: tableData.id[i], token, at: at === null ? 0 : at, author: text('Author', i), name: text('Name', i), genre: text('Kind', i), data: packed, size: packed.length });
     }
     return { exists: true, entries };
   }
@@ -310,7 +310,7 @@ const VersionsStore = (function () {
 
   function removeRows(rowIds) {
     if (!rowIds.length) return Promise.resolve();
-    return writes.enqueue(() => grist.docApi.applyUserActions([['BulkRemoveRecord', TABLE_NAME, rowIds]]));
+    return writes.enqueue(() => SchemaColumns.docApi.applyUserActions([['BulkRemoveRecord', TABLE_NAME, rowIds]]));
   }
 
   // Les jetons des modèles du document, d'après la table des modèles relue à neuf : { token (celui du modèle `rowId`, '' tant qu'aucune copie n'en a été gardée), known (tous
@@ -370,7 +370,7 @@ const VersionsStore = (function () {
   // disparue). Rend le nom écrit.
   async function renameVersion(rowId, name) {
     const label = cleanName(name);
-    await writes.enqueue(() => grist.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, rowId, { Nom: label }]]));
+    await writes.enqueue(() => SchemaColumns.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, rowId, { Name: label }]]));
     return label;
   }
 
@@ -387,8 +387,8 @@ const VersionsStore = (function () {
     const token = await tokenFor();
     if (!token) throw new Error('Jeton du modèle introuvable.');
     await ensureTable();
-    const fields = { Jeton: token, Date: new Date(at || Date.now()).toISOString(), Auteur: author || '', Nom: label, Genre: '', Donnees: packed };
-    const result = await writes.enqueue(() => grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, fields]]));
+    const fields = { Token: token, Date: new Date(at || Date.now()).toISOString(), Author: author || '', Name: label, Kind: '', Data: packed };
+    const result = await writes.enqueue(() => SchemaColumns.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, fields]]));
     const added = result && result.retValues ? result.retValues[0] : null;
     kept.set(String(modelRowId), { at: Date.now(), key: keyOf(text) });
     noteAdded(added);

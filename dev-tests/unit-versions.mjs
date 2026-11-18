@@ -939,7 +939,7 @@ async function main() {
     const rowId = doc.addRow(VERSIONS, versionRow('tokA', 30));
     const label = await t.run(`VersionsStore.renameVersion(${rowId}, '  Avant   envoi ')`);
     check('renameVersion : une seule écriture, la colonne Nom seule, sur la bonne ligne, le nom nettoyé', label === 'Avant envoi' && doc.calls.length === 1 && json(doc.calls[0].actions) === json([['UpdateRecord', VERSIONS, rowId, { Nom: 'Avant envoi' }]]) && doc.row(VERSIONS, rowId).Nom === 'Avant envoi', json(doc.calls));
-    check('renameVersion : rien n\'est lu pour écrire un nom', doc.reads.length === 0, doc.reads.join(','));
+    check('renameVersion : la table des versions n\'est pas lue pour écrire un nom (le traducteur des noms ne lit que les métadonnées de Grist, quelques Ko)', doc.reads.every(name => /^_grist_/.test(name)), doc.reads.join(','));
     await t.run(`VersionsStore.renameVersion(${rowId}, '')`);
     check('renameVersion : un nom vide retire le nom', doc.row(VERSIONS, rowId).Nom === '');
     const failures = [];

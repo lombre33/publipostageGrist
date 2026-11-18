@@ -507,7 +507,7 @@
     add: 'Ajouter',
     cancel: 'Annuler',
     empty: 'Aucune abréviation pour l’instant.',
-    note: 'Chaque personne a les siennes, enregistrées dans le document (table Publipostage_Abreviations).',
+    note: 'Chaque personne a les siennes, enregistrées dans le document (table des abréviations du widget).',
   };
   const settingsTabCase = {
     id: 'te_settings_tab_is_listed_and_translated',

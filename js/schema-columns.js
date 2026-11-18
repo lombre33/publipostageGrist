@@ -7,10 +7,10 @@
 //  - listTables et fetchTable rendent les noms anglais, que le document porte les anciens ou les nouveaux ;
 //  - applyUserActions reçoit les noms anglais et écrit ceux que le document a : une colonne qui existe sous son ancien nom est écrite sous cet ancien nom, une colonne
 //    qui n'existe pas encore est créée sous le nom que dit l'interrupteur (englishOnDisk), avec, sous l'ancien nom, le libellé que l'ancien code lui donnait ;
-//  - une table ou une colonne qui n'est pas dans la liste passe telle quelle : les tables de la personne, les métadonnées de Grist, et les tables du widget pas
-//    encore reprises ici (leur module écrit encore les noms d'avant, et le document les a sous ces noms).
+//  - une table ou une colonne qui n'est pas dans la liste passe telle quelle : les tables de la personne, les métadonnées de Grist, et les deux tables du widget qui
+//    s'appelaient déjà en anglais (Publipostage_Direct, Publipostage_UserProbe).
 // Ce que le document porte ne change PAS tant que englishOnDisk est faux (le défaut) : un document neuf naît sous les anciens noms, un document d'avant garde les siens.
-// L'interrupteur ne s'allume qu'avec le renommage réel des documents, à la demande du porteur du projet et une fois GFS prévenu (GFS écrit lui-même la colonne `Nom` des modèles) ;
+// L'interrupteur ne s'allume qu'avec le renommage réel des documents, à la demande du porteur du projet et une fois GFS prévenu (GFS écrit lui-même la colonne `Nom` des modèles et les lignes d'état de dossier des préférences, et lit le `Jeton` des versions) ;
 // il décide alors des noms des tables et des colonnes créées ensuite, et de celui que l'on prend quand un document porte les deux.
 //
 // Pourquoi un traducteur et pas `grist.docApi = ...` : le paquet de Grist (grist-plugin-api.js) exporte `docApi` par un accesseur sans écriture ; on ne peut pas
@@ -48,6 +48,76 @@ const SchemaColumns = (function () {
         ['Token', 'Jeton', 'Identité du modèle'],
         ['ModifiedBy', 'ModifiePar', 'Modifié par'],
         ['PdfPassword', 'MotDePassePdf', 'Mot de passe des PDF protégés'],
+      ],
+    },
+    {
+      id: 'Publipostage_Comments',
+      legacyId: 'Publipostage_Commentaires',
+      columns: [
+        ['TemplateId', 'ModeleId'],
+        ['Author', 'Auteur'],
+        ['Text', 'Texte'],
+        ['CreatedAt', 'CreeLe'],
+        ['PdfId', 'LectureId'],
+        ['Start', 'Debut'],
+        ['End', 'Fin'],
+        ['Quote', 'Citation'],
+        ['Before', 'Avant'],
+        ['After', 'Apres'],
+        ['Resolved', 'Resolu'],
+      ],
+    },
+    {
+      id: 'Publipostage_Versions',
+      legacyId: 'Publipostage_Versions',
+      columns: [
+        ['Token', 'Jeton'],
+        ['Author', 'Auteur'],
+        ['Name', 'Nom'],
+        ['Kind', 'Genre'],
+        ['Data', 'Donnees'],
+      ],
+    },
+    {
+      id: 'Publipostage_TemplatePreferences',
+      legacyId: 'Publipostage_PreferencesModeles',
+      columns: [
+        ['User', 'Utilisateur'],
+        ['TemplateId', 'ModeleId'],
+        ['Pinned', 'Epingle'],
+        ['Folder', 'Dossier'],
+        ['Collapsed', 'Replie', 'Dossier replié par défaut'],
+        ['ExportType', 'TypeExport', 'Type d\'export'],
+        ['PdfQuality', 'QualitePdf', 'Qualité du PDF'],
+        ['ExportLines', 'LignesExport', 'Lignes exportées'],
+      ],
+    },
+    {
+      id: 'Publipostage_Abbreviations',
+      legacyId: 'Publipostage_Abreviations',
+      columns: [
+        ['User', 'Utilisateur'],
+        ['Abbreviation', 'Abreviation'],
+        ['Text', 'Texte'],
+      ],
+    },
+    {
+      id: 'Publipostage_PageFormats',
+      legacyId: 'Publipostage_FormatsPage',
+      columns: [
+        ['Name', 'Nom'],
+        ['Width', 'Largeur'],
+        ['Height', 'Hauteur'],
+      ],
+    },
+    {
+      id: 'Publipostage_TableLinks',
+      legacyId: 'Publipostage_LiensTables',
+      columns: [
+        ['TargetTable', 'TableCible'],
+        ['TargetColumn', 'ColonneCible'],
+        ['SourceColumn', 'ColonneSource'],
+        ['SourceTable', 'TableSource', 'Table de la page'],
       ],
     },
   ];

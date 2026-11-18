@@ -573,7 +573,7 @@ const I18nTextsSettings = {
     fr: 'Tapez le caractère déclencheur puis une abréviation, par exemple « {example} », et un espace : elle est remplacée par son texte.',
     en: 'Type the trigger character and an abbreviation, for example “{example}”, then a space: it is replaced by its text.',
   },
-  'settings.expansion.perPerson': { fr: 'Chaque personne a les siennes, enregistrées dans le document (table Publipostage_Abreviations).', en: 'Everyone has their own, saved in the document (Publipostage_Abreviations table).' },
+  'settings.expansion.perPerson': { fr: 'Chaque personne a les siennes, enregistrées dans le document (table des abréviations du widget).', en: 'Everyone has their own, saved in the document (the widget\'s abbreviations table).' },
   'settings.expansion.char': { fr: 'Caractère déclencheur', en: 'Trigger character' },
   'settings.expansion.char.invalid': { fr: 'Un seul caractère, qui ne soit ni une lettre, ni un chiffre, ni une espace, ni . , ; : ! ? ) ] } » - _', en: 'One character only, not a letter, a digit, a space, nor . , ; : ! ? ) ] } » - _' },
   'settings.expansion.char.sameAsVariables': { fr: 'Ce caractère ouvre déjà le panneau des variables (onglet Insertion) : choisissez-en un autre.', en: 'This character already opens the variables panel (Insert tab): pick another one.' },

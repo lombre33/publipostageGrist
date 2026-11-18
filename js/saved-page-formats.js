@@ -13,11 +13,11 @@
 // Un nom déjà pris (casse et espaces ignorés) devient « nom (2) », « nom (3) »... comme celui d'un modèle (Templates.uniqueName) ; la valeur est
 // retenue à l'enregistrement, jamais refusée.
 const SavedPageFormats = (function () {
-  const TABLE_NAME = 'Publipostage_FormatsPage';
+  const TABLE_NAME = 'Publipostage_PageFormats';
   const TABLE_COLUMNS = [
-    { id: 'Nom', type: 'Text' },
-    { id: 'Largeur', type: 'Numeric' },
-    { id: 'Hauteur', type: 'Numeric' },
+    { id: 'Name', type: 'Text' },
+    { id: 'Width', type: 'Numeric' },
+    { id: 'Height', type: 'Numeric' },
   ];
   const MAX_NAME_LENGTH = 120; // large : une coupe silencieuse n'a de sens que pour un collage absurde
 
@@ -46,16 +46,16 @@ const SavedPageFormats = (function () {
   async function readEntries() {
     const found = [];
     let tables;
-    try { tables = await grist.docApi.listTables(); } catch (e) { console.warn('[saved-page-formats] liste des tables illisible', e); return found; }
+    try { tables = await SchemaColumns.docApi.listTables(); } catch (e) { console.warn('[saved-page-formats] liste des tables illisible', e); return found; }
     // Pas de table = aucun format enregistré : elle n'est créée qu'à la première écriture (ensureTable), jamais pour lire.
     if (tables.indexOf(TABLE_NAME) === -1) return found;
     tableKnown = true;
     let tableData;
-    try { tableData = await grist.docApi.fetchTable(TABLE_NAME); } catch (e) { console.warn('[saved-page-formats] lecture des formats enregistrés impossible', e); return found; }
+    try { tableData = await SchemaColumns.docApi.fetchTable(TABLE_NAME); } catch (e) { console.warn('[saved-page-formats] lecture des formats enregistrés impossible', e); return found; }
     for (let i = 0; i < tableData.id.length; i++) {
-      const name = cleanName(tableData.Nom && tableData.Nom[i]);
-      const widthMm = tenth(Number(tableData.Largeur && tableData.Largeur[i]));
-      const heightMm = tenth(Number(tableData.Hauteur && tableData.Hauteur[i]));
+      const name = cleanName(tableData.Name && tableData.Name[i]);
+      const widthMm = tenth(Number(tableData.Width && tableData.Width[i]));
+      const heightMm = tenth(Number(tableData.Height && tableData.Height[i]));
       if (!name || !validSize(widthMm, heightMm)) continue;
       found.push({ rowId: tableData.id[i], name, widthMm, heightMm });
     }
@@ -121,7 +121,7 @@ const SavedPageFormats = (function () {
       const name = uniqueName(rawName);
       if (!name) throw invalid('name');
       await ensureTable();
-      const result = await grist.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, { Nom: name, Largeur: w, Hauteur: h }]]);
+      const result = await SchemaColumns.docApi.applyUserActions([['AddRecord', TABLE_NAME, null, { Name: name, Width: w, Height: h }]]);
       const entry = { rowId: result.retValues[0], name, widthMm: w, heightMm: h };
       entries.get().push(entry);
       return Object.assign({}, entry);
@@ -133,7 +133,7 @@ const SavedPageFormats = (function () {
       await load();
       const index = entries.get().findIndex(e => String(e.rowId) === String(rowId));
       if (index === -1) return false; // retiré entre-temps (autre onglet) : rien à supprimer
-      await grist.docApi.applyUserActions([['RemoveRecord', TABLE_NAME, entries.get()[index].rowId]]);
+      await SchemaColumns.docApi.applyUserActions([['RemoveRecord', TABLE_NAME, entries.get()[index].rowId]]);
       entries.get().splice(index, 1);
       return true;
     });

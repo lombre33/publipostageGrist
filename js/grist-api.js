@@ -8,10 +8,10 @@ const GristAPI = (function () {
   // les autres (grist-core, WidgetFrame.ts : _grist_Tables sans filtre) ; une nouvelle table interne s'ajoute donc ici, car dev-tests/grist-stub.js ne
   // liste jamais ses tables internes et ne révélerait pas l'oubli.
   const INTERNAL_TABLES = [
-    'Publipostage_Templates', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_PreferencesModeles', 'Publipostage_Commentaires',
-    'Publipostage_Abreviations', 'Publipostage_FormatsPage', 'Publipostage_Versions', 'Publipostage_Direct',
+    'Publipostage_Templates', 'Publipostage_TableLinks', 'Publipostage_UserProbe', 'Publipostage_TemplatePreferences', 'Publipostage_Comments',
+    'Publipostage_Abbreviations', 'Publipostage_PageFormats', 'Publipostage_Versions', 'Publipostage_Direct',
   ];
-  const LINKS_TABLE_NAME = 'Publipostage_LiensTables';
+  const LINKS_TABLE_NAME = 'Publipostage_TableLinks';
   // Table interne de getCurrentUserEmail() et getCurrentUserName() (chips « Email de l'utilisateur » et « Nom de l'utilisateur ») : des colonnes à
   // formule déclenchée (`user.Email`, `user.Name`) capturent qui a réellement déclenché le calcul ; la ligne est supprimée après chaque lecture.
   const USER_PROBE_TABLE_NAME = 'Publipostage_UserProbe';
@@ -1023,10 +1023,10 @@ const GristAPI = (function () {
     const tables = await listAllTablesCached();
     try {
       await addTableIfMissing(tables, LINKS_TABLE_NAME, [
-        { id: 'TableCible', type: 'Text' },
+        { id: 'TargetTable', type: 'Text' },
         { id: 'Mode', type: 'Text' },
-        { id: 'ColonneCible', type: 'Text' },
-        { id: 'ColonneSource', type: 'Text' },
+        { id: 'TargetColumn', type: 'Text' },
+        { id: 'SourceColumn', type: 'Text' },
       ]);
     } catch (e) {
       if (isTablesDeclined(e)) throw e; // la personne refuse la table : l'appelant s'arrête (lire ne demande rien, enregistrer une règle s'interrompt)
@@ -1034,7 +1034,7 @@ const GristAPI = (function () {
     }
   }
 
-  const LINK_SOURCE_COLUMN = 'TableSource';
+  const LINK_SOURCE_COLUMN = 'SourceTable';
   const linkPairKey = (tableCible, tableSource) => tableCible + '\u0000' + (tableSource || '');
 
   async function loadLinkRules() {
@@ -1046,18 +1046,18 @@ const GristAPI = (function () {
     }
     _linkRulesByPair = {};
     try {
-      const linksData = await grist.docApi.fetchTable(LINKS_TABLE_NAME);
+      const linksData = await SchemaColumns.docApi.fetchTable(LINKS_TABLE_NAME);
       const ids = linksData && linksData.id ? linksData.id : [];
       for (let i = 0; i < ids.length; i++) {
         // Une table créée avant la colonne TableSource, ou une ligne qui l'a vide, ne porte que le lien commun à toutes les tables.
         const tableSource = (linksData[LINK_SOURCE_COLUMN] && linksData[LINK_SOURCE_COLUMN][i]) || '';
-        _linkRulesByPair[linkPairKey(linksData.TableCible[i], tableSource)] = {
+        _linkRulesByPair[linkPairKey(linksData.TargetTable[i], tableSource)] = {
           id: linksData.id[i],
-          tableCible: linksData.TableCible[i],
+          tableCible: linksData.TargetTable[i],
           tableSource,
           mode: linksData.Mode[i],
-          colonneCible: linksData.ColonneCible[i],
-          colonneSource: linksData.ColonneSource[i]
+          colonneCible: linksData.TargetColumn[i],
+          colonneSource: linksData.SourceColumn[i]
         };
       }
     } catch (e) {
@@ -1104,9 +1104,9 @@ const GristAPI = (function () {
   function ensureLinkSourceColumn() {
     if (!_linkSourceColumn) {
       _linkSourceColumn = (async () => {
-        const linksData = await grist.docApi.fetchTable(LINKS_TABLE_NAME);
+        const linksData = await SchemaColumns.docApi.fetchTable(LINKS_TABLE_NAME);
         if (linksData && LINK_SOURCE_COLUMN in linksData) return;
-        await grist.docApi.applyUserActions([['AddVisibleColumn', LINKS_TABLE_NAME, LINK_SOURCE_COLUMN, { type: 'Text', isFormula: false, label: 'Table de la page' }]]);
+        await SchemaColumns.docApi.applyUserActions([['AddVisibleColumn', LINKS_TABLE_NAME, LINK_SOURCE_COLUMN, { type: 'Text', isFormula: false }]]);
       })();
       _linkSourceColumn.catch(() => { _linkSourceColumn = null; });
     }
@@ -1129,23 +1129,23 @@ const GristAPI = (function () {
       }
     }
     const columns = {
-      TableCible: tableCible,
+      TargetTable: tableCible,
       Mode: rule.mode,
-      ColonneCible: rule.mode === 'match' ? (rule.colonneCible || '') : '',
-      ColonneSource: rule.mode === 'match' ? (rule.colonneSource || '') : ''
+      TargetColumn: rule.mode === 'match' ? (rule.colonneCible || '') : '',
+      SourceColumn: rule.mode === 'match' ? (rule.colonneSource || '') : ''
     };
     if (tableSource) columns[LINK_SOURCE_COLUMN] = tableSource;
     const key = linkPairKey(tableCible, tableSource);
     const existing = _linkRulesByPair[key];
     let id;
     if (existing) {
-      await grist.docApi.applyUserActions([['UpdateRecord', LINKS_TABLE_NAME, existing.id, columns]]);
+      await SchemaColumns.docApi.applyUserActions([['UpdateRecord', LINKS_TABLE_NAME, existing.id, columns]]);
       id = existing.id;
     } else {
-      const result = await grist.docApi.applyUserActions([['AddRecord', LINKS_TABLE_NAME, null, columns]]);
+      const result = await SchemaColumns.docApi.applyUserActions([['AddRecord', LINKS_TABLE_NAME, null, columns]]);
       id = result.retValues[0];
     }
-    _linkRulesByPair[key] = { id, tableCible, tableSource, mode: columns.Mode, colonneCible: columns.ColonneCible, colonneSource: columns.ColonneSource };
+    _linkRulesByPair[key] = { id, tableCible, tableSource, mode: columns.Mode, colonneCible: columns.TargetColumn, colonneSource: columns.SourceColumn };
   }
 
   // Retire le lien d'un couple (`tableSource` vide : le lien commun). Sans `tableSource`, tous les liens de `tableCible`.
@@ -1154,7 +1154,7 @@ const GristAPI = (function () {
       ? Object.keys(_linkRulesByPair).filter(key => _linkRulesByPair[key].tableCible === tableCible)
       : [linkPairKey(tableCible, tableSource)].filter(key => _linkRulesByPair[key]);
     if (!keys.length) return;
-    await grist.docApi.applyUserActions(keys.map(key => ['RemoveRecord', LINKS_TABLE_NAME, _linkRulesByPair[key].id]));
+    await SchemaColumns.docApi.applyUserActions(keys.map(key => ['RemoveRecord', LINKS_TABLE_NAME, _linkRulesByPair[key].id]));
     keys.forEach(key => { delete _linkRulesByPair[key]; });
   }
 

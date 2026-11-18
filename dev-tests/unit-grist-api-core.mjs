@@ -178,7 +178,7 @@ async function main() {
     const added = doc.actions('AddTable');
     check('init : la table des liens est créée, une fois, avec ses quatre colonnes',
       added.length === 1 && added[0][1] === 'Publipostage_LiensTables' && same(added[0][2].map((c) => c.id), ['TableCible', 'Mode', 'ColonneCible', 'ColonneSource']), JSON.stringify(added));
-    check('init : sa page est rangée', same(log.pages, ['Publipostage_LiensTables']), JSON.stringify(log.pages));
+    check('init : sa page est rangée', same(log.pages, ['Publipostage_TableLinks']), JSON.stringify(log.pages));
     await run('GristAPI.refreshSchema()');
     check('une relecture du schéma ne recrée pas la table des liens, qui reste cachée de la liste des tables', doc.actions('AddTable').length === 1 && same(await run('GristAPI.getTables()'), ['Missions', 'Personnes']), JSON.stringify(await run('GristAPI.getTables()')));
   });

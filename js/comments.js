@@ -13,25 +13,25 @@
 const Comments = (function () {
   const element = Dom.el;
 
-  const TABLE_NAME = 'Publipostage_Commentaires';
+  const TABLE_NAME = 'Publipostage_Comments';
   // Les colonnes d'un fil de modèle : celles que la table a toujours eues, et seules créées avec elle par un commentaire de modèle.
   const MODEL_COLUMNS = [
-    { id: 'ModeleId', type: 'Int' },
+    { id: 'TemplateId', type: 'Int' },
     { id: 'CommentId', type: 'Text' },
-    { id: 'Auteur', type: 'Text' },
-    { id: 'Texte', type: 'Text' },
-    { id: 'CreeLe', type: 'DateTime' },
+    { id: 'Author', type: 'Text' },
+    { id: 'Text', type: 'Text' },
+    { id: 'CreatedAt', type: 'DateTime' },
   ];
   // Celles de plus d'un fil de PDF : la clé du PDF, puis - sur la ligne du PREMIER message seulement - la page, le début et la fin du passage dans le texte de la page, la citation, un peu de texte avant et après, et l'état résolu.
   const PDF_COLUMNS = [
-    { id: 'LectureId', type: 'Text' },
+    { id: 'PdfId', type: 'Text' },
     { id: 'Page', type: 'Int' },
-    { id: 'Debut', type: 'Int' },
-    { id: 'Fin', type: 'Int' },
-    { id: 'Citation', type: 'Text' },
-    { id: 'Avant', type: 'Text' },
-    { id: 'Apres', type: 'Text' },
-    { id: 'Resolu', type: 'Bool' },
+    { id: 'Start', type: 'Int' },
+    { id: 'End', type: 'Int' },
+    { id: 'Quote', type: 'Text' },
+    { id: 'Before', type: 'Text' },
+    { id: 'After', type: 'Text' },
+    { id: 'Resolved', type: 'Bool' },
   ];
   // Toutes : la table qu'un fil de PDF crée dans un document qui n'en a pas ; dans une table d'avant, il n'ajoute que celles qui manquent.
   const TABLE_COLUMNS = MODEL_COLUMNS.concat(PDF_COLUMNS);
@@ -130,11 +130,11 @@ const Comments = (function () {
   async function readThreads(modeleId) {
     // Les messages de ce modèle, relus dans la table de tout le document.
     const threads = {};
-    const tableData = await grist.docApi.fetchTable(TABLE_NAME);
+    const tableData = await SchemaColumns.docApi.fetchTable(TABLE_NAME);
     for (let i = 0; i < tableData.id.length; i++) {
-      if (Number(tableData.ModeleId[i]) !== Number(modeleId)) continue;
+      if (Number(tableData.TemplateId[i]) !== Number(modeleId)) continue;
       const cid = tableData.CommentId[i];
-      const message = { id: tableData.id[i], auteur: tableData.Auteur[i] || '', texte: tableData.Texte[i] || '', creeLe: tableData.CreeLe[i] || '' };
+      const message = { id: tableData.id[i], auteur: tableData.Author[i] || '', texte: tableData.Text[i] || '', creeLe: tableData.CreatedAt[i] || '' };
       message.uid = knownUids.get(contentKey(message)) || 'g' + message.id;
       (threads[cid] = threads[cid] || []).push(message);
     }
@@ -171,9 +171,9 @@ const Comments = (function () {
     currentModeleId = modeleId;
     if (!(await ensureTableExists())) { tellAdoptFailed('declined'); return false; }
     const actions = [];
-    threads.forEach(thread => thread.messages.forEach(m => actions.push(['AddRecord', TABLE_NAME, null, { ModeleId: modeleId, CommentId: thread.id, Auteur: m.auteur || '', Texte: m.texte || '', CreeLe: m.creeLe || '' }])));
+    threads.forEach(thread => thread.messages.forEach(m => actions.push(['AddRecord', TABLE_NAME, null, { TemplateId: modeleId, CommentId: thread.id, Author: m.auteur || '', Text: m.texte || '', CreatedAt: m.creeLe || '' }])));
     try {
-      await grist.docApi.applyUserActions(actions);
+      await SchemaColumns.docApi.applyUserActions(actions);
       if (staged === threads) staged = [];
       return true;
     } catch (e) {
@@ -218,8 +218,8 @@ const Comments = (function () {
     const creeLe = new Date().toISOString();
     let newId = null;
     try {
-      const result = await grist.docApi.applyUserActions([
-        ['AddRecord', TABLE_NAME, null, { ModeleId: currentModeleId, CommentId: commentId, Auteur: auteur, Texte: trimmed, CreeLe: creeLe }]
+      const result = await SchemaColumns.docApi.applyUserActions([
+        ['AddRecord', TABLE_NAME, null, { TemplateId: currentModeleId, CommentId: commentId, Author: auteur, Text: trimmed, CreatedAt: creeLe }]
       ]);
       newId = (result && result.retValues) ? result.retValues[0] : null;
     } catch (e) { console.error('[Comments] Erreur enregistrement du message', e); return false; }
@@ -240,7 +240,7 @@ const Comments = (function () {
     delete threadsByCommentId[commentId];
     notifyChange();
     if (!rows.length) return;
-    try { await grist.docApi.applyUserActions(rows.map(r => ['RemoveRecord', TABLE_NAME, r.id])); }
+    try { await SchemaColumns.docApi.applyUserActions(rows.map(r => ['RemoveRecord', TABLE_NAME, r.id])); }
     catch (e) {
       console.error('[Comments] Erreur suppression du fil', e);
       // Les lignes sont restées dans la table : le fil les garde, pour que l'historique n'en recrée pas un double (Ctrl + Z rend la marque, et ces lignes sont toujours là).
@@ -293,10 +293,10 @@ const Comments = (function () {
     queueWrites(async () => {
       // Le numéro de ligne se lit ici, pas plus haut : un message que la file vient de recréer ne l'avait pas encore.
       const rows = dropped.filter(m => m.id != null);
-      if (rows.length) await grist.docApi.applyUserActions(rows.map(m => ['RemoveRecord', TABLE_NAME, m.id]));
+      if (rows.length) await SchemaColumns.docApi.applyUserActions(rows.map(m => ['RemoveRecord', TABLE_NAME, m.id]));
       if (!returned.length) return;
       if (!(await ensureTableExists())) throw new Error('la table des fils n’a pas pu être créée');
-      const result = await grist.docApi.applyUserActions(returned.map(m => ['AddRecord', TABLE_NAME, null, { ModeleId: modeleId, CommentId: commentId, Auteur: m.auteur, Texte: m.texte, CreeLe: m.creeLe }]));
+      const result = await SchemaColumns.docApi.applyUserActions(returned.map(m => ['AddRecord', TABLE_NAME, null, { TemplateId: modeleId, CommentId: commentId, Author: m.auteur, Text: m.texte, CreatedAt: m.creeLe }]));
       returned.forEach((m, i) => { m.id = result && result.retValues && result.retValues[i] != null ? result.retValues[i] : null; });
     });
     syncPopup();

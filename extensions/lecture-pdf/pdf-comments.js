@@ -18,7 +18,7 @@
 //    PdfComments.comment()    PdfComments.lockReason() -> texte | null    PdfComments.threads() -> [fils]    PdfComments.whenIdle() -> Promise
 const PdfComments = (function () {
   const TABLE = Comments.TABLE_NAME;
-  const KEY_COLUMN = 'LectureId';
+  const KEY_COLUMN = 'PdfId';
   const kit = Comments.kit;
 
   let key = null;               // l'identifiant que GFS donne au PDF à l'écran : la clé de ses fils
@@ -67,9 +67,9 @@ const PdfComments = (function () {
 
   // Les données de la table, ou null quand elle n'existe pas ou n'a pas la colonne de la clé (aucun fil, et rien n'est créé).
   async function readTable() {
-    const tables = await grist.docApi.listTables();
+    const tables = await SchemaColumns.docApi.listTables();
     if (tables.indexOf(TABLE) === -1) return null;
-    const data = await grist.docApi.fetchTable(TABLE);
+    const data = await SchemaColumns.docApi.fetchTable(TABLE);
     return data && KEY_COLUMN in data ? data : null;
   }
 
@@ -87,11 +87,11 @@ const PdfComments = (function () {
         thread = { id: cid, page: NaN, debut: NaN, fin: NaN, citation: '', avant: '', apres: '', resolved: false, anchorRow: null, messages: [], at: null, state: 'pending' };
         found.set(cid, thread);
       }
-      thread.messages.push({ id: ids[i], auteur: text(column('Auteur')[i]), texte: text(column('Texte')[i]), creeLe: text(column('CreeLe')[i]) });
-      const from = number(column('Debut')[i]);
-      const to = number(column('Fin')[i]);
-      if (thread.anchorRow === null && text(column('Citation')[i]) && to > from) {
-        Object.assign(thread, { anchorRow: ids[i], page: number(column('Page')[i]), debut: from, fin: to, citation: text(column('Citation')[i]), avant: text(column('Avant')[i]), apres: text(column('Apres')[i]), resolved: isTrue(column('Resolu')[i]) });
+      thread.messages.push({ id: ids[i], auteur: text(column('Author')[i]), texte: text(column('Text')[i]), creeLe: text(column('CreatedAt')[i]) });
+      const from = number(column('Start')[i]);
+      const to = number(column('End')[i]);
+      if (thread.anchorRow === null && text(column('Quote')[i]) && to > from) {
+        Object.assign(thread, { anchorRow: ids[i], page: number(column('Page')[i]), debut: from, fin: to, citation: text(column('Quote')[i]), avant: text(column('Before')[i]), apres: text(column('After')[i]), resolved: isTrue(column('Resolved')[i]) });
       }
     }
     found.forEach(thread => thread.messages.sort(byDate));
@@ -99,13 +99,13 @@ const PdfComments = (function () {
   }
 
   async function columnsOf() {
-    return Object.keys(await grist.docApi.fetchTable(TABLE)).map(name => name.toLowerCase());
+    return Object.keys(await SchemaColumns.docApi.fetchTable(TABLE)).map(name => name.toLowerCase());
   }
 
   // Avant la première écriture d'un fil : la table (créée avec toutes ses colonnes, après l'accord de la personne) et les colonnes qui lui manquent (`AddColumn` seulement, en un seul lot : tout ou rien, après avoir relu celles
   // qui sont là). Rend { ok: true }, ou { stop: 'declined' } (la personne refuse la table), ou { stop: 'refused', reason } (Grist refuse la structure, ou la colonne ajoutée a pris un autre nom parce que le sien était pris).
   async function ensureStructure() {
-    const tables = await grist.docApi.listTables();
+    const tables = await SchemaColumns.docApi.listTables();
     if (tables.indexOf(TABLE) === -1) {
       try { await GristAPI.ensureTable(TABLE, Comments.TABLE_COLUMNS); }
       catch (e) {
@@ -116,7 +116,7 @@ const PdfComments = (function () {
     const present = await columnsOf();
     const missing = Comments.PDF_COLUMNS.filter(column => present.indexOf(column.id.toLowerCase()) === -1);
     if (!missing.length) return { ok: true };
-    try { await grist.docApi.applyUserActions(missing.map(column => ['AddColumn', TABLE, column.id, { type: column.type, isFormula: false }])); }
+    try { await SchemaColumns.docApi.applyUserActions(missing.map(column => ['AddColumn', TABLE, column.id, { type: column.type, isFormula: false }])); }
     catch (e) { return { stop: 'refused', reason: reasonOf(e) }; }
     const after = await columnsOf();
     const absent = missing.filter(column => after.indexOf(column.id.toLowerCase()) === -1);
@@ -130,16 +130,16 @@ const PdfComments = (function () {
 
   // Les colonnes d'une ligne de message : la clé, l'auteur, le texte, la date - et, pour le premier message du fil seulement, l'ancre et l'état résolu.
   function rowFields(forKey, thread, message, first) {
-    const fields = { [KEY_COLUMN]: forKey, CommentId: thread.id, Auteur: message.auteur, Texte: message.texte, CreeLe: message.creeLe };
-    if (first) Object.assign(fields, { Page: thread.page, Debut: thread.debut, Fin: thread.fin, Citation: thread.citation, Avant: thread.avant, Apres: thread.apres, Resolu: !!thread.resolved });
+    const fields = { [KEY_COLUMN]: forKey, CommentId: thread.id, Author: message.auteur, Text: message.texte, CreatedAt: message.creeLe };
+    if (first) Object.assign(fields, { Page: thread.page, Start: thread.debut, End: thread.fin, Quote: thread.citation, Before: thread.avant, After: thread.apres, Resolved: !!thread.resolved });
     return fields;
   }
 
   async function addRows(list) {
-    const result = await grist.docApi.applyUserActions(list.map(fields => ['AddRecord', TABLE, null, fields]));
+    const result = await SchemaColumns.docApi.applyUserActions(list.map(fields => ['AddRecord', TABLE, null, fields]));
     return list.map((fields, i) => (result && result.retValues ? result.retValues[i] : null));
   }
-  const removeRows = ids => grist.docApi.applyUserActions(ids.map(id => ['RemoveRecord', TABLE, id]));
+  const removeRows = ids => SchemaColumns.docApi.applyUserActions(ids.map(id => ['RemoveRecord', TABLE, id]));
 
   // Un message se reconnaît à ce qu'il dit, jamais au numéro de sa ligne : Annuler qui rend une ligne supprimée lui en donne un autre (comme pour les fils d'un modèle, js/comments.js `contentKey`).
   const messageKey = (when, who, said) => [text(when), text(who), text(said)].join('\u0001');
@@ -152,10 +152,10 @@ const PdfComments = (function () {
     const column = name => data[name] || [];
     column('id').forEach((id, i) => {
       if (text(column(KEY_COLUMN)[i]) !== forKey || text(column('CommentId')[i]) !== commentId) return;
-      const anchor = !!text(column('Citation')[i]) && number(column('Fin')[i]) > number(column('Debut')[i]);
+      const anchor = !!text(column('Quote')[i]) && number(column('End')[i]) > number(column('Start')[i]);
       const fields = {};
-      (anchor ? ['LectureId', 'CommentId', 'Auteur', 'Texte', 'CreeLe', 'Page', 'Debut', 'Fin', 'Citation', 'Avant', 'Apres', 'Resolu'] : ['LectureId', 'CommentId', 'Auteur', 'Texte', 'CreeLe']).forEach((name) => { fields[name] = column(name)[i]; });
-      rows.push({ id, anchor, key: messageKey(column('CreeLe')[i], column('Auteur')[i], column('Texte')[i]), fields });
+      (anchor ? ['PdfId', 'CommentId', 'Author', 'Text', 'CreatedAt', 'Page', 'Start', 'End', 'Quote', 'Before', 'After', 'Resolved'] : ['PdfId', 'CommentId', 'Author', 'Text', 'CreatedAt']).forEach((name) => { fields[name] = column(name)[i]; });
+      rows.push({ id, anchor, key: messageKey(column('CreatedAt')[i], column('Author')[i], column('Text')[i]), fields });
     });
     return rows;
   }
@@ -591,7 +591,7 @@ const PdfComments = (function () {
   const setResolved = (forKey, commentId, value) => enqueue(async () => {
     const anchor = (await rowsOf(forKey, commentId)).find(row => row.anchor);
     if (!anchor) throw gone();
-    await grist.docApi.applyUserActions([['UpdateRecord', TABLE, anchor.id, { Resolu: value }]]);
+    await SchemaColumns.docApi.applyUserActions([['UpdateRecord', TABLE, anchor.id, { Resolved: value }]]);
   });
 
   function toggleResolved(commentId) {
