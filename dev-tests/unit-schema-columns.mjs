@@ -10,7 +10,10 @@
 //  - un document sans la table : la création suit l'interrupteur (noms d'avant et libellés d'avant, ou noms anglais sans libellé), une colonne ajoutée puis écrite dans la foulée ;
 //  - une écriture qui arrive avant toute lecture (les colonnes viennent des métadonnées de Grist, jamais d'une lecture de la table entière) ;
 //  - ce qui n'est pas dans la liste passe tel quel (tables de la personne, métadonnées de Grist, autres tables du widget pas encore reprises) ;
-//  - whereIs : l'endroit réel, avec le libellé que la personne voit.
+//  - whereIs : l'endroit réel, avec le libellé que la personne voit ;
+//  - la reprise d'un document d'avant (migrate, SchemaColumns.planRenames) : un seul lot (RenameTable, RenameColumn, libellés) rejoué en entier ou pas du tout, les données et les lignes intactes, rien de
+//    renommé pour un compte Lecteur, quand le nom anglais est pris (à la casse près) ou quand le document porte les deux, ni quand le lot est refusé (le document garde ses noms, lus tels quels) ; deux fenêtres
+//    qui reprennent en même temps ; un document déjà repris n'est plus touché.
 // Lancer : node dev-tests/unit-schema-columns.mjs
 import { createContext, loadScript, evalIn, check, summarizeAndExit } from './unit-harness.mjs';
 
@@ -21,10 +24,17 @@ class Doc {
   constructor(tables = {}) {
     this.tables = {};
     Object.keys(tables).forEach((name) => { this.tables[name] = { cols: tables[name].slice(), rows: [] }; });
+    // Les libellés que Grist garde par colonne quand ils diffèrent de l'identifiant d'origine : { table: { colonne: libellé } } ; absent, le libellé est l'identifiant.
+    this.labels = {};
     this.journal = [];
+    this.bundles = [];
     this.reads = [];
     this.nextId = 1;
+    this.failBundles = 0; // les prochains lots refusés en entier (un autre widget a renommé entre-temps, ou Grist refuse)
   }
+
+  labelOf(table, col) { return (this.labels[table] && this.labels[table][col]) !== undefined ? this.labels[table][col] : col; }
+  setLabels(table, labels) { this.labels[table] = Object.assign({}, this.labels[table], labels); }
 
   async listTables() { this.reads.push('listTables'); return Object.keys(this.tables); }
 
@@ -33,8 +43,8 @@ class Doc {
     const names = Object.keys(this.tables);
     if (name === '_grist_Tables') return { id: names.map((_, i) => i + 1), tableId: names.slice() };
     if (name === '_grist_Tables_column') {
-      const out = { id: [], parentId: [], colId: [] };
-      names.forEach((tableName, t) => this.tables[tableName].cols.forEach((col) => { out.id.push(out.id.length + 1); out.parentId.push(t + 1); out.colId.push(col); }));
+      const out = { id: [], parentId: [], colId: [], label: [] };
+      names.forEach((tableName, t) => this.tables[tableName].cols.forEach((col) => { out.id.push(out.id.length + 1); out.parentId.push(t + 1); out.colId.push(col); out.label.push(this.labelOf(tableName, col)); }));
       return out;
     }
     const table = this.tables[name];
@@ -44,13 +54,54 @@ class Doc {
     return out;
   }
 
+  // Un lot est appliqué en entier ou pas du tout, comme Grist : l'état d'avant est rendu quand une action échoue.
   async applyUserActions(actions) {
+    const before = JSON.stringify({ tables: this.tables, labels: this.labels });
+    const journaled = this.journal.length;
+    try {
+      if (this.failBundles > 0) { this.failBundles--; throw new Error('refusé'); }
+      const result = this.applyAll(actions);
+      this.bundles.push(actions);
+      return result;
+    } catch (e) {
+      const saved = JSON.parse(before);
+      this.tables = saved.tables;
+      this.labels = saved.labels;
+      this.journal.length = journaled;
+      throw e;
+    }
+  }
+
+  applyAll(actions) {
     const retValues = [];
     for (const action of actions) {
       this.journal.push(action);
       const table = this.tables[action[1]];
       if (action[0] === 'AddTable') { this.tables[action[1]] = { cols: action[2].map((c) => c.id), rows: [] }; retValues.push(null); }
-      else if (action[0] === 'AddVisibleColumn' || action[0] === 'AddColumn') { if (!table.cols.includes(action[2])) table.cols.push(action[2]); retValues.push({ colId: action[2] }); }
+      else if (action[0] === 'RenameTable') {
+        if (!table) throw new Error('Table inconnue ' + action[1]);
+        const taken = new Set(Object.keys(this.tables).map((name) => name.toLowerCase()));
+        let target = action[2];
+        for (let n = 2; taken.has(target.toLowerCase()); n++) target = action[2] + n; // Grist numérote un nom pris, il ne le refuse pas
+        const moved = {};
+        Object.keys(this.tables).forEach((name) => { moved[name === action[1] ? target : name] = this.tables[name]; });
+        this.tables = moved;
+        if (this.labels[action[1]]) { this.labels[target] = this.labels[action[1]]; delete this.labels[action[1]]; }
+        retValues.push(null);
+      } else if (action[0] === 'RenameColumn') {
+        if (!table || !table.cols.includes(action[2])) throw new Error('Colonne inconnue ' + action[1] + '.' + action[2]);
+        if (table.cols.some((c) => c.toLowerCase() === action[3].toLowerCase())) throw new Error('Nom pris ' + action[3]);
+        this.setLabels(action[1], { [action[3]]: this.labelOf(action[1], action[2]) }); // le libellé ne suit PAS le renommage (mesuré dans grist-static 0.1.6)
+        if (this.labels[action[1]]) delete this.labels[action[1]][action[2]];
+        table.cols = table.cols.map((c) => (c === action[2] ? action[3] : c));
+        table.rows.forEach((row) => { if (action[2] in row) { row[action[3]] = row[action[2]]; delete row[action[2]]; } });
+        retValues.push(null);
+      } else if (action[0] === 'ModifyColumn') {
+        if (!table || !table.cols.includes(action[2])) throw new Error('Colonne inconnue ' + action[1] + '.' + action[2]);
+        if (action[3] && action[3].label !== undefined) this.setLabels(action[1], { [action[2]]: action[3].label });
+        retValues.push(null);
+      }
+      else if (action[0] === 'AddVisibleColumn' || action[0] === 'AddColumn') { if (!table.cols.includes(action[2])) table.cols.push(action[2]); if (action[3] && action[3].label) this.setLabels(action[1], { [action[2]]: action[3].label }); retValues.push({ colId: action[2] }); }
       else if (action[0] === 'AddRecord') { const row = Object.assign({ id: this.nextId++ }, action[3]); table.rows.push(row); retValues.push(row.id); }
       else if (action[0] === 'UpdateRecord') { const row = table.rows.find((r) => r.id === action[2]); if (row) Object.assign(row, action[3]); retValues.push(null); }
       else retValues.push(null);
@@ -65,11 +116,13 @@ class Doc {
 const LEGACY_COLS = ['Nom', 'Contenu', 'NomFichierPDF', 'DateModif', 'HeaderFooter', 'Margins', 'EstParDefaut', 'TypeModele', 'Destinataires', 'Cc', 'Cci', 'Objet', 'PJ', 'SuiviModifications', 'Jeton', 'ModifiePar', 'MotDePassePdf'];
 const ENGLISH_COLS = ['Name', 'Content', 'PdfFileName', 'ModifiedAt', 'HeaderFooter', 'Margins', 'IsDefault', 'TemplateType', 'To', 'Cc', 'Bcc', 'Subject', 'Attachments', 'TrackedChanges', 'Token', 'ModifiedBy', 'PdfPassword'];
 
-function fresh(doc, { englishOnDisk = false } = {}) {
-  const globals = { grist: { docApi: doc } };
-  const ctx = createContext(globals);
+function fresh(doc, { englishOnDisk = false, migrate = false, globals = {} } = {}) {
+  // Un journal muet : le traducteur avertit (console.warn) quand un lot de renommage est refusé, ce que plusieurs cas jouent exprès.
+  const quiet = { warn() {}, log() {}, error() {} };
+  const ctx = createContext(Object.assign({ grist: { docApi: doc }, console: quiet }, globals));
   loadScript(ctx, 'js/schema-columns.js');
-  evalIn(ctx, `SchemaColumns.setEnglishOnDisk(${englishOnDisk})`);
+  evalIn(ctx, `SchemaColumns.setEnglishOnDisk(${englishOnDisk || migrate})`);
+  evalIn(ctx, `SchemaColumns.setRenameDocuments(${migrate})`);
   return { api: evalIn(ctx, 'SchemaColumns.docApi'), schema: evalIn(ctx, 'SchemaColumns'), run: (expr) => evalIn(ctx, expr) };
 }
 
@@ -262,6 +315,167 @@ async function main() {
     const off = fresh(offDoc, { englishOnDisk: false });
     await off.api.applyUserActions([['AddTable', 'Publipostage_Versions', [{ id: 'Token', type: 'Text' }, { id: 'Date', type: 'DateTime' }, { id: 'Kind', type: 'Text' }]]]);
     check('interrupteur éteint : la table des versions naît sous son nom (inchangé) et ses colonnes d\'avant', same(offDoc.last(), ['AddTable', 'Publipostage_Versions', [{ id: 'Jeton', type: 'Text' }, { id: 'Date', type: 'DateTime' }, { id: 'Genre', type: 'Text' }]]), offDoc.last());
+  });
+
+  // --- La reprise d'un document d'avant ---------------------------------------------------------------------------------------------------------------------------------------
+  // Un document créé par l'ancien code : les sept tables sous leurs noms français, chaque colonne sous le sien, avec le libellé que l'ancien code lui donnait (DateModif : « Dernière modification »...).
+  function legacyDoc() {
+    const { schema } = fresh(new Doc());
+    const doc = new Doc();
+    schema.TABLES.forEach((t) => {
+      doc.tables[t.legacyId] = { cols: t.columns.map((c) => c[1]), rows: [] };
+      t.columns.forEach((c) => { if (c[2]) doc.setLabels(t.legacyId, { [c[1]]: c[2] }); });
+    });
+    doc.tables.Missions = { cols: ['Nom'], rows: [{ id: 1, Nom: 'Paris' }] };
+    doc.tables.Publipostage_Modeles.rows.push({ id: 1, Nom: 'Facture', Contenu: '<p>a</p>', Jeton: 'tok1' }, { id: 2, Nom: 'Devis', Contenu: '<p>b</p>', Jeton: 'tok2' });
+    doc.tables.Publipostage_Commentaires.rows.push({ id: 1, ModeleId: 1, Texte: 'à revoir' });
+    doc.tables.Publipostage_Versions.rows.push({ id: 1, Jeton: 'tok1', Nom: 'v1', Donnees: '{}' });
+    return doc;
+  }
+  const renameActions = (doc) => doc.writes().filter((a) => ['RenameTable', 'RenameColumn', 'ModifyColumn'].includes(a[0]));
+  const labelsAreIds = (doc, schema) => schema.TABLES.every((t) => t.columns.every((c) => !doc.tables[t.id] || !doc.tables[t.id].cols.includes(c[0]) || doc.labelOf(t.id, c[0]) === c[0]));
+
+  await section('la reprise : un document d\'avant est renommé en un seul lot, sans rien perdre', async () => {
+    const doc = legacyDoc();
+    const { api, schema } = fresh(doc, { migrate: true });
+    const read = await api.fetchTable('Publipostage_Templates');
+    check('la première lecture reprend le document : un seul lot', doc.bundles.length === 1, doc.bundles.length);
+    check('les sept tables portent leur nom anglais (la table des versions garde le sien) et plus rien d\'avant', schema.TABLES.every((t) => t.id in doc.tables && (t.legacyId === t.id || !(t.legacyId in doc.tables))), Object.keys(doc.tables));
+    check('chaque colonne de la liste porte son nom anglais, aucune colonne d\'avant ne reste', schema.TABLES.every((t) => same(doc.tables[t.id].cols, t.columns.map((c) => c[0]))), schema.TABLES.map((t) => doc.tables[t.id].cols.join(',')));
+    check('l\'identifiant de chaque colonne est son libellé (le libellé ne suit pas le renommage dans Grist : le lot le pose)', labelsAreIds(doc, schema), JSON.stringify(doc.labels));
+    check('les lignes sont intactes, sous les noms anglais', same(read.Name, ['Facture', 'Devis']) && same(read.Content, ['<p>a</p>', '<p>b</p>']) && same(read.id, [1, 2]) && same(read.Token, ['tok1', 'tok2']), JSON.stringify(read));
+    check('les commentaires et les versions aussi', same(doc.tables.Publipostage_Comments.rows, [{ id: 1, TemplateId: 1, Text: 'à revoir' }]) && same(doc.tables.Publipostage_Versions.rows, [{ id: 1, Token: 'tok1', Name: 'v1', Data: '{}' }]), JSON.stringify(doc.tables.Publipostage_Comments.rows));
+    check('la table de la personne n\'est pas touchée', same(doc.tables.Missions, { cols: ['Nom'], rows: [{ id: 1, Nom: 'Paris' }] }), JSON.stringify(doc.tables.Missions));
+    const result = schema.lastMigration();
+    check('la reprise dit ce qu\'elle a fait : six tables, des colonnes, des libellés, rien d\'échoué', result && result.tables === 6 && result.columns > 30 && result.labels > 40 && result.failed === false && result.skipped.length === 0, JSON.stringify(result));
+    await api.applyUserActions([['UpdateRecord', 'Publipostage_Templates', 1, { Content: '<p>c</p>', ModifiedAt: 'x' }]]);
+    check('l\'écriture suivante va sous les noms anglais, sans recréer de table d\'avant', same(doc.last(), ['UpdateRecord', 'Publipostage_Templates', 1, { Content: '<p>c</p>', ModifiedAt: 'x' }]) && !('Publipostage_Modeles' in doc.tables), doc.last());
+    const again = await api.listTables();
+    check('la liste des tables rend les noms anglais, une fois chacun', same(again, ['Publipostage_Templates', 'Publipostage_Comments', 'Publipostage_Versions', 'Publipostage_TemplatePreferences', 'Publipostage_Abbreviations', 'Publipostage_PageFormats', 'Publipostage_TableLinks', 'Missions']), again);
+  });
+
+  await section('la reprise : les trois colonnes qui n\'avaient que le libellé français, et les libellés d\'avant', async () => {
+    const doc = legacyDoc();
+    check('départ : Margins se lit « Marges de page », DateModif « Dernière modification »', doc.labelOf('Publipostage_Modeles', 'Margins') === 'Marges de page' && doc.labelOf('Publipostage_Modeles', 'DateModif') === 'Dernière modification', JSON.stringify(doc.labels));
+    const { api } = fresh(doc, { migrate: true });
+    await api.listTables();
+    check('Margins, HeaderFooter et Cc ont gardé leur identifiant et ont pris leur identifiant pour libellé', ['Margins', 'HeaderFooter', 'Cc'].every((c) => doc.labelOf('Publipostage_Templates', c) === c), JSON.stringify(doc.labels.Publipostage_Templates));
+    check('DateModif devenue ModifiedAt a pris ModifiedAt pour libellé', doc.labelOf('Publipostage_Templates', 'ModifiedAt') === 'ModifiedAt', JSON.stringify(doc.labels.Publipostage_Templates));
+    check('un seul lot, et ses actions sont RenameTable, RenameColumn, ModifyColumn dans cet ordre pour chaque table', doc.bundles.length === 1 && doc.bundles[0].every((a) => ['RenameTable', 'RenameColumn', 'ModifyColumn'].includes(a[0])), doc.bundles.length);
+  });
+
+  await section('la reprise : un document déjà repris n\'est plus touché', async () => {
+    const doc = legacyDoc();
+    await fresh(doc, { migrate: true }).api.listTables();
+    const before = doc.bundles.length;
+    const renamedBefore = renameActions(doc).length;
+    const next = fresh(doc, { migrate: true });
+    await next.api.fetchTable('Publipostage_Templates');
+    check('une seconde ouverture ne renomme rien et n\'écrit rien', doc.bundles.length === before && renameActions(doc).length === renamedBefore && renamedBefore > 0, doc.bundles.length);
+    check('et la reprise n\'a rien à dire', next.schema.lastMigration() === null, JSON.stringify(next.schema.lastMigration()));
+  });
+
+  await section('la reprise : un document neuf (aucune table du widget) n\'est ni lu ni écrit', async () => {
+    const doc = new Doc({ Missions: ['Nom'] });
+    const { api } = fresh(doc, { migrate: true });
+    await api.listTables();
+    check('aucune écriture, aucune lecture des métadonnées', doc.bundles.length === 0 && !doc.reads.includes('_grist_Tables') && !doc.reads.includes('_grist_Tables_column'), doc.reads);
+  });
+
+  await section('la reprise : un compte Lecteur ne renomme rien, le document se lit sous ses noms d\'avant', async () => {
+    const doc = legacyDoc();
+    const { api } = fresh(doc, { migrate: true, globals: { GristAPI: { isDocumentReadOnly: () => true } } });
+    const read = await api.fetchTable('Publipostage_Templates');
+    check('aucune écriture', doc.bundles.length === 0 && 'Publipostage_Modeles' in doc.tables, doc.bundles.length);
+    check('la lecture rend quand même les noms anglais', same(read.Name, ['Facture', 'Devis']) && same(read.Token, ['tok1', 'tok2']), Object.keys(read));
+  });
+
+  await section('la reprise : hébergé par GFS, le widget ne renomme rien et ne se plaint pas', async () => {
+    const doc = legacyDoc();
+    doc.failBundles = 1; // si le lot partait quand même, il serait refusé (le courtier de GFS refuse RenameColumn) : il ne doit pas partir
+    const warnings = [];
+    const { api, schema } = fresh(doc, { migrate: true, globals: { GfsLink: { hosted: true }, console: { warn: (...args) => warnings.push(args), log() {}, error() {} } } });
+    const read = await api.fetchTable('Publipostage_Templates');
+    check('aucune écriture, aucun lot tenté, aucun avertissement', doc.bundles.length === 0 && doc.failBundles === 1 && warnings.length === 0 && 'Publipostage_Modeles' in doc.tables, JSON.stringify(warnings));
+    check('la reprise n\'a rien à dire, le document se lit sous ses noms d\'avant', schema.lastMigration() === null && same(read.Name, ['Facture', 'Devis']), JSON.stringify(schema.lastMigration()));
+    doc.failBundles = 0;
+    await api.applyUserActions([['UpdateRecord', 'Publipostage_Templates', 1, { Content: '<p>y</p>' }]]);
+    check('et l\'écriture suit les noms du document', same(doc.last(), ['UpdateRecord', 'Publipostage_Modeles', 1, { Contenu: '<p>y</p>' }]), doc.last());
+  });
+
+  await section('la reprise : éteinte, le document garde ses noms', async () => {
+    const doc = legacyDoc();
+    const { api } = fresh(doc, { englishOnDisk: true });
+    await api.fetchTable('Publipostage_Templates');
+    check('renameDocuments éteint : aucune écriture', doc.bundles.length === 0 && 'Publipostage_Modeles' in doc.tables, doc.bundles.length);
+  });
+
+  await section('la reprise : le nom anglais est déjà pris, ou le document porte les deux noms', async () => {
+    const taken = legacyDoc();
+    taken.tables.publipostage_templates = { cols: ['x'], rows: [] }; // une table de la personne, à la casse près
+    const a = fresh(taken, { migrate: true });
+    await a.api.listTables();
+    check('un nom pris à la casse près : la table des modèles n\'est pas renommée (Grist la numéroterait)', 'Publipostage_Modeles' in taken.tables && !Object.keys(taken.tables).some((n) => /^Publipostage_Templates\d/i.test(n)), Object.keys(taken.tables));
+    check('les autres tables le sont, et la reprise nomme celle qui reste', 'Publipostage_Comments' in taken.tables && a.schema.lastMigration().skipped.includes('Publipostage_Templates'), JSON.stringify(a.schema.lastMigration()));
+    const both = legacyDoc();
+    both.tables.Publipostage_Templates = { cols: ['Name'], rows: [{ id: 1, Name: 'déjà là' }] }; // une fenêtre d'une version d'avant a recréé la table, ou une reprise a été coupée
+    const b = fresh(both, { migrate: true });
+    await b.api.listTables();
+    check('deux jeux de noms pour une table : aucune des deux n\'est renommée, la reprise le dit', 'Publipostage_Modeles' in both.tables && same(both.tables.Publipostage_Templates.cols, ['Name']) && b.schema.lastMigration().skipped.includes('Publipostage_Templates'), JSON.stringify(b.schema.lastMigration()));
+    const readBoth = await b.api.fetchTable('Publipostage_Templates');
+    check('et le traducteur lit celle en anglais (l\'interrupteur est allumé)', same(readBoth.Name, ['déjà là']), JSON.stringify(readBoth));
+    const column = legacyDoc();
+    column.tables.Publipostage_Modeles.cols.push('name'); // une colonne de la personne, à la casse près de « Name »
+    const c = fresh(column, { migrate: true });
+    await c.api.listTables();
+    check('un nom de colonne pris à la casse près : cette colonne garde son nom d\'avant, les autres sont renommées', column.tables.Publipostage_Templates.cols.includes('Nom') && column.tables.Publipostage_Templates.cols.includes('Content') && c.schema.lastMigration().skipped.includes('Publipostage_Templates.Name'), column.tables.Publipostage_Templates.cols.join(','));
+    const partial = legacyDoc();
+    partial.tables.Publipostage_Modeles.cols = partial.tables.Publipostage_Modeles.cols.map((c) => (c === 'Contenu' ? 'Content' : c)); // un renommage coupé en route : une colonne déjà anglaise
+    const d = fresh(partial, { migrate: true });
+    await d.api.listTables();
+    check('un renommage à moitié fait se termine : toutes les colonnes sont anglaises', same(partial.tables.Publipostage_Templates.cols, d.schema.TABLES[0].columns.map((c) => c[0])), partial.tables.Publipostage_Templates.cols.join(','));
+  });
+
+  await section('la reprise : le lot est refusé, le document garde ses noms et se lit toujours', async () => {
+    const doc = legacyDoc();
+    doc.failBundles = 1;
+    const { api, schema } = fresh(doc, { migrate: true });
+    const read = await api.fetchTable('Publipostage_Templates');
+    check('rien n\'a changé dans le document (tout ou rien)', 'Publipostage_Modeles' in doc.tables && doc.tables.Publipostage_Modeles.cols.includes('Nom') && doc.bundles.length === 0, Object.keys(doc.tables));
+    check('la reprise dit qu\'elle a échoué', schema.lastMigration() && schema.lastMigration().failed === true, JSON.stringify(schema.lastMigration()));
+    check('la lecture et l\'écriture suivantes passent sous les noms d\'avant, sans nouvelle tentative', same(read.Name, ['Facture', 'Devis']), JSON.stringify(read));
+    await api.applyUserActions([['UpdateRecord', 'Publipostage_Templates', 1, { Content: '<p>z</p>' }]]);
+    check('l\'écriture arrive sous les noms du document', same(doc.last(), ['UpdateRecord', 'Publipostage_Modeles', 1, { Contenu: '<p>z</p>' }]) && doc.bundles.length === 1, doc.last());
+  });
+
+  await section('la reprise : deux fenêtres du même document reprennent en même temps', async () => {
+    const doc = legacyDoc();
+    const first = fresh(doc, { migrate: true });
+    const second = fresh(doc, { migrate: true });
+    const [a, b] = await Promise.all([first.api.fetchTable('Publipostage_Templates'), second.api.fetchTable('Publipostage_Templates')]);
+    check('une seule reprise a réussi', doc.bundles.length === 1, doc.bundles.length);
+    check('les deux fenêtres lisent les mêmes noms anglais et les mêmes lignes', same(a.Name, ['Facture', 'Devis']) && same(b.Name, ['Facture', 'Devis']), JSON.stringify([a.Name, b.Name]));
+    await second.api.applyUserActions([['UpdateRecord', 'Publipostage_Templates', 2, { Name: 'Devis 2' }]]);
+    check('celle qui a perdu écrit sous les noms que le document porte maintenant', same(doc.last(), ['UpdateRecord', 'Publipostage_Templates', 2, { Name: 'Devis 2' }]), doc.last());
+  });
+
+  await section('la reprise : une table du widget créée ensuite naît en anglais, sans libellé', async () => {
+    const doc = legacyDoc();
+    delete doc.tables.Publipostage_Abreviations;
+    const { api } = fresh(doc, { migrate: true });
+    await api.listTables();
+    await api.applyUserActions([['AddTable', 'Publipostage_Abbreviations', [{ id: 'User', type: 'Text' }, { id: 'Abbreviation', type: 'Text' }, { id: 'Text', type: 'Text' }]]]);
+    check('la table des abréviations est créée sous son nom et ses colonnes anglais', same(doc.last(), ['AddTable', 'Publipostage_Abbreviations', [{ id: 'User', type: 'Text' }, { id: 'Abbreviation', type: 'Text' }, { id: 'Text', type: 'Text' }]]), doc.last());
+  });
+
+  await section('planRenames : le plan seul', async () => {
+    const { schema } = fresh(new Doc());
+    const plan = schema.planRenames(new Set(['Publipostage_Modeles']), (t) => (t === 'Publipostage_Modeles' ? new Map([['Nom', 'Nom'], ['Margins', 'Marges de page']]) : null));
+    check('un plan sans état du document : les actions de cette seule table', same(plan.actions, [['RenameTable', 'Publipostage_Modeles', 'Publipostage_Templates'], ['RenameColumn', 'Publipostage_Templates', 'Nom', 'Name'], ['ModifyColumn', 'Publipostage_Templates', 'Name', { label: 'Name' }], ['ModifyColumn', 'Publipostage_Templates', 'Margins', { label: 'Margins' }]]), JSON.stringify(plan.actions));
+    const none = schema.planRenames(new Set(['Missions']), () => null);
+    check('aucune table du widget : aucun plan', none.actions.length === 0 && none.tables === 0, JSON.stringify(none));
+    const unknown = schema.planRenames(new Set(['Publipostage_Modeles']), () => new Map([['Nom', undefined]]));
+    check('un libellé que les métadonnées ne donnent pas n\'est pas réécrit', unknown.actions.every((a) => a[0] !== 'ModifyColumn'), JSON.stringify(unknown.actions));
   });
 
   await section('la liste est complète et sans doublon', async () => {

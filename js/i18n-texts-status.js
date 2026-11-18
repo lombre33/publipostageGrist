@@ -78,6 +78,7 @@ const I18nTextsStatus = {
   'pdf.comment.status.resolved': { fr: 'Commentaire résolu.', en: 'Comment resolved.' },
   'pdf.comment.status.reopened': { fr: 'Commentaire rouvert.', en: 'Comment reopened.' },
   'status.gristApiError': { fr: 'Erreur init API Grist.', en: 'Error initializing Grist API.' },
+  'status.schemaRenamed': { fr: 'Les tables du widget dans ce document ont pris des noms anglais (Publipostage_Templates…) : vos modèles et vos données sont intacts.', en: 'The widget\'s tables in this document now have English names (Publipostage_Templates…): your templates and data are unchanged.' },
   // init() (js/main.js) n'a de filet que sur TemplateTreeSelect.attach() : une exception ailleurs bloquerait tout le reste (Enregistrer, Ctrl+S,
   // l'auto-save) sans le moindre message, seule la console en montrant la cause. init().catch(...) affiche l'erreur ici plutôt que de laisser le
   // widget muet.

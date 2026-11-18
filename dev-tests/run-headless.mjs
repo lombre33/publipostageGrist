@@ -276,6 +276,7 @@ const GROUPS = {
   pageZoom: 'scenarios-page-zoom', // zoom de la page (js/page-zoom.js, css/page-zoom.css) : pastille du coin bas droit (au repos le pourcentage seul ; moins, plus et Ajuster à sa gauche au survol et au focus), place contre le bord du document, échelle des niveaux et bornes, Ctrl + molette, Ctrl + plus / moins / 0, ajustement à la largeur du panneau, grisé avec sa raison, Édition et Lecture, niveau gardé par modèle, anglais, ajustement qui lit les deux conteneurs et la sonde avant d'écrire le facteur ; affichage seulement
   landmarks: 'scenarios-landmarks', // repères de la page et noms des champs (index.html ; audit externe du 04/10, D-RGAA-region et F-RGAA-04) : la barre du haut est le « banner », l'éditeur, le résumé d'un macro-modèle, la carte de l'accès et la Lecture sont les quatre « main » (un seul à l'écran), onze champs nommés en français et en anglais, étiquettes de la fenêtre des liens, zone d'écriture nommée (zone de texte à plusieurs lignes, en français, en anglais et en édition d'un en-tête)
   betaCompat: 'scenarios-beta-compat', // jeu figé de la compatibilité avec la bêta (dev-tests/beta-compat-set.json) : 90 documents de test de la bêta et 13 jeux d'en-tête et de pied relus comme la bêta les relisait, les 13 modèles d'usage rouverts (HTML, en-tête, marges) puis exportés sans données (PDF page par page, Word, lignes de l'e-mail) ; à rejouer pour tout lot qui touche l'éditeur ou les exports
+  schemaMigration: 'scenarios-schema-migration', // le widget ouvre un document D'AVANT (noms français, libellés d'avant, lignes semées) et le renomme à sa première lecture (js/schema-columns.js, migrate ; colonnes et tables en anglais, lot 5) : un lot, les libellés, les lignes intactes, plus rien d'avant, une seconde lecture ne renomme rien
   schemaEnglish: 'scenarios-schema-english', // le widget sur un document dont les tables et les colonnes portent les NOMS ANGLAIS (js/schema-columns.js, colonnes et tables en anglais, lot 3) : page posée avec le faux Grist en anglais et l'interrupteur englishOnDisk allumé (ENGLISH_DISK_GROUPS), chaque module du widget écrit sa table sous des noms anglais et plus rien d'avant ni aucun libellé ne reste dans le document
   versions: 'scenarios-versions', // historique des versions d'un modèle (js/versions-store.js, js/versions-history.js, table Publipostage_Versions) : la ligne « Historique des versions… » du menu Enregistrer et la fenêtre chargée à son premier clic, un vrai Enregistrer qui garde l'état remplacé dans le même lot sans lire la table, table interne jamais offerte, liste (version actuelle en tête, plus récente d'abord), aperçu document / e-mail / macro-modèle, historique vide, lecture en échec, version illisible, Restaurer (question, éditeur et modèle, état remplacé gardé, texte tapé enregistré d'abord, refus, échec, lenteur), anglais
 };
@@ -757,9 +758,30 @@ const HOSTED_GROUPS = new Set(['chart', 'chartMake', 'chartOffice', 'saveReminde
 // a déclaré `actions.joindre` et les deux clés, le grisé est levé). `rowAttachment` joue ce qui se passe quand on remet la constante à `false` : la case et la section grisées dans GFS, rien d'envoyé. Le groupe `gfsAttach`
 // joue le fichier tel qu'il est en production (constante à `true`). Si le texte à changer n'est plus là, le groupe s'arrête : il ne jouerait plus que l'état de production.
 const GREYED_GROUPS = new Set(['rowAttachment']);
-// Les groupes joués sur un document aux noms anglais : le faux Grist porte les tables du widget sous leurs noms anglais (`window.__schemaNames`, dev-tests/grist-stub.js) et l'interrupteur
-// `englishOnDisk` de js/schema-columns.js est allumé (la page reçoit le fichier avec `let englishOnDisk = true;`, comme GREYED_GROUPS rejoue le grisé : le vrai fichier n'est jamais touché).
-const ENGLISH_DISK_GROUPS = new Set(['schemaEnglish']);
+// Les groupes joués avec un autre mode des noms du widget que les noms d'avant (`window.__schemaNames`, posé avant le chargement : js/schema-columns.js et dev-tests/grist-stub.js le lisent) : un document
+// déjà aux noms anglais, ou un document d'avant que le widget renomme.
+const SCHEMA_MODES = { schemaEnglish: 'english', schemaMigration: 'migrate' };
+// Ce que le faux Grist porte d'avance, avant que le widget ne lise quoi que ce soit (window.__preSeedGristStub, dev-tests/grist-stub.js) : le document d'avant du groupe schemaMigration.
+const SCHEMA_PRESEED = {
+  schemaMigration: () => {
+    window.__preSeedGristStub = (stub) => {
+      const seed = (table, rows) => {
+        const columnar = stub.state.rows[table];
+        rows.forEach(row => Object.keys(row).forEach(k => { if (!(k in columnar)) columnar[k] = columnar.id.map(() => null); }));
+        rows.forEach(row => { columnar.id.push(row.id); Object.keys(columnar).forEach(k => { if (k !== 'id') columnar[k].push(k in row ? row[k] : null); }); });
+        stub.state.nextRowId[table] = rows.reduce((max, row) => Math.max(max, row.id), 0) + 1;
+      };
+      seed('Publipostage_Modeles', [
+        { id: 1, Nom: 'Facture', Contenu: '<p>Bonjour {{Nom}}</p>', Jeton: 'tok-facture', Margins: '20,20,20,20' },
+        { id: 2, Nom: 'Devis', Contenu: '<p>Devis</p>', Jeton: 'tok-devis' },
+      ]);
+      seed('Publipostage_Commentaires', [{ id: 1, ModeleId: 1, CommentId: 'c1', Auteur: 'Alice', Texte: 'à relire', CreeLe: 1 }]);
+      seed('Publipostage_LiensTables', [{ id: 1, TableCible: 'Factures', Mode: 'column', ColonneCible: 'Client', ColonneSource: 'Nom' }]);
+      // Les libellés que l'ancien code posait en ajoutant ces colonnes : la reprise doit les ramener à l'identifiant.
+      stub.setColumnLabels('Publipostage_Modeles', { DateModif: 'Dernière modification', HeaderFooter: 'En-tête / pied de page', Margins: 'Marges de page', EstParDefaut: 'Modèle par défaut' });
+    };
+  },
+};
 
 async function runGroup(name, probeExpr, lang) {
   const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
@@ -816,13 +838,10 @@ async function runGroup(name, probeExpr, lang) {
     if (greyed === source) throw new Error('« const GFS_ATTACH_WIRED = true; » est introuvable dans js/row-attachment.js : le groupe ' + name + ' ne peut pas rejouer le grisé');
     await page.route('**/js/row-attachment.js*', route => route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: greyed }));
   }
-  if (ENGLISH_DISK_GROUPS.has(name)) {
-    const source = await readFile(join(ROOT, 'js', 'schema-columns.js'), 'utf8');
-    const english = source.replace('let englishOnDisk = false;', 'let englishOnDisk = true;');
-    if (english === source) throw new Error('« let englishOnDisk = false; » est introuvable dans js/schema-columns.js : le groupe ' + name + ' ne peut pas rejouer un document aux noms anglais');
-    await page.addInitScript(() => { window.__schemaNames = 'english'; });
-    await page.route('**/js/schema-columns.js*', route => route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: english }));
-  }
+  // Le mode des noms du widget dans le document (js/schema-columns.js lit `globalThis.__schemaNames` au chargement ; le faux Grist, dev-tests/grist-stub.js, aussi) : « legacy » (le défaut des essais) pour
+  // les noms d'avant, « english » pour un document déjà aux noms anglais, « migrate » pour un document d'avant que le widget renomme à sa première lecture.
+  if (SCHEMA_MODES[name]) await page.addInitScript(mode => { window.__schemaNames = mode; }, SCHEMA_MODES[name]);
+  if (SCHEMA_PRESEED[name]) await page.addInitScript(SCHEMA_PRESEED[name]);
   if (hosted) await page.addInitScript({ path: join(ROOT, 'dev-tests', 'gfs-stub.js') });
   await page.goto(`${BASE}/_test-harness.html${hosted ? '?gfs=0' : ''}`, { waitUntil: 'load' });
   // L'éditeur se construit par import() dynamiques (js/editor.js) - attendre le vrai signe de vie,

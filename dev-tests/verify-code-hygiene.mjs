@@ -2133,7 +2133,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     'js/comments.js': { cible: 'widget', actions: ['AddRecord', 'RemoveRecord'] },
     'js/export-date.js': { cible: 'document', actions: ['BulkUpdateRecord'], pourquoi: 'la colonne de date d\'export que la personne a choisie dans sa table' },
     'js/grist-api.js': { cible: 'widget', actions: ['AddColumn', 'AddRecord', 'AddTable', 'AddVisibleColumn', 'RemoveRecord', 'UpdateRecord'], pourquoi: 'AddTable : la porte addTableIfMissing, derrière la fenêtre de consentement du 05/10' },
-    'js/schema-columns.js': { cible: 'widget', actions: [], pourquoi: 'le traducteur des noms anglais : il relaie, sous les noms que le document porte, ce que les modules du widget écrivent dans leurs tables ; il n\'écrit rien de lui-même, d\'où aucune action nommée ici : les actions sont celles de ces modules, relevées dans leurs fichiers' },
+    'js/schema-columns.js': { cible: 'widget', actions: ['ModifyColumn', 'RenameColumn', 'RenameTable'], pourquoi: 'le traducteur des noms anglais : il relaie, sous les noms que le document porte, ce que les modules du widget écrivent dans leurs tables (leurs actions sont relevées dans leurs fichiers) ; et la reprise d\'un document d\'avant (migrate), SEUL endroit qui renomme : RenameTable, RenameColumn et le libellé (ModifyColumn) des tables et colonnes de SON registre, en un seul lot que Grist rejoue en entier ou pas du tout, jamais une table ni une colonne de la personne' },
     'js/page-tree.js': { cible: 'métadonnées', actions: ['UpdateRecord'], tables: ['_grist_Pages'], pourquoi: 'l\'état plié du groupe de pages du widget' },
     'js/row-attachment.js': { cible: 'document', actions: ['AddVisibleColumn', 'BulkUpdateRecord'], pourquoi: 'le PDF joint à la ligne : une colonne de pièces jointes de la table de la personne' },
     'js/saved-page-formats.js': { cible: 'widget', actions: ['AddRecord', 'RemoveRecord'] },
@@ -2160,7 +2160,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const drift = expectedFiles.filter(rel => found[rel] && JSON.stringify(found[rel].actions) !== JSON.stringify(WRITERS[rel].actions)).map(rel => `${rel} : ${found[rel].actions.join(',')} (inventaire : ${WRITERS[rel].actions.join(',')})`);
   check('écritures : chaque fichier n\'emploie que les actions de l\'inventaire (une action de plus, comme RemoveTable ou BulkUpdateRecord, change ce que le widget peut faire du document)', drift.length === 0, drift.join(' ; '));
   // La seule exception : js/grist-api.js crée la table dont addTableIfMissing(name, colonnes) reçoit le nom (la porte unique de création des tables du widget, section « tables du widget » de ce fichier, derrière le consentement).
-  const stray = expectedFiles.filter(rel => found[rel] && WRITERS[rel].cible === 'widget').flatMap(rel => found[rel].targets.filter(([verb, table]) => !WIDGET_TABLE.test(table) && !(rel === 'js/grist-api.js' && verb === 'AddTable' && table === 'name')).map(([verb, table]) => `${rel} : ${verb} sur ${table}`));
+  const stray = expectedFiles.filter(rel => found[rel] && WRITERS[rel].cible === 'widget').flatMap(rel => found[rel].targets.filter(([verb, table]) => !WIDGET_TABLE.test(table) && !(rel === 'js/grist-api.js' && verb === 'AddTable' && table === 'name') && !(rel === 'js/schema-columns.js' && /^(?:RenameTable|RenameColumn|ModifyColumn)$/.test(verb) && /^table\.(?:id|legacyId)$/.test(table))).map(([verb, table]) => `${rel} : ${verb} sur ${table}`));
   check('écritures : un fichier « widget » n\'écrit que dans ses propres tables (TABLE_NAME, TABLE, LINKS_TABLE_NAME, USER_PROBE_TABLE_NAME, Templates.TABLE_NAME), jamais dans une table nommée autrement', stray.length === 0, stray.join(' ; '));
   const unnamed = expectedFiles.filter(rel => WRITERS[rel].cible === 'widget' && found[rel]).filter(rel => {
     const declared = [...found[rel].code.matchAll(/\bconst (?:TABLE_NAME|TABLE|LINKS_TABLE_NAME|USER_PROBE_TABLE_NAME)\s*=\s*['"]([^'"]+)['"]/g)].map(m => m[1]);
@@ -2170,8 +2170,15 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const meta = Object.keys(found).filter(rel => found[rel].targets.some(([, table]) => /^['"]_grist_/.test(table) || table === 'PAGES')).sort();
   const metaExpected = expectedFiles.filter(rel => (WRITERS[rel].tables || []).length).sort();
   check('écritures : les tables de Grist (`_grist_Pages`, `_grist_Tables_column`) ne sont écrites que par js/page-tree.js (l\'état plié de son groupe de pages) et js/template-pack.js (les colonnes à afficher des tables qu\'il crée)', JSON.stringify(meta) === JSON.stringify(metaExpected), meta.join(' '));
-  const removers = Object.keys(found).filter(rel => found[rel].actions.some(verb => /^(RemoveTable|RenameTable|RemoveColumn|RenameColumn|ModifyColumn)$/.test(verb))).sort();
-  check('écritures : seul js/template-pack.js supprime une table, et jamais celle d\'un autre (le retour arrière de ce qu\'il vient de créer) ; rien ne renomme ni ne supprime une colonne de la personne', JSON.stringify(removers) === JSON.stringify(['js/template-pack.js']), removers.join(' '));
+  const removers = Object.keys(found).filter(rel => found[rel].actions.some(verb => /^(RemoveTable|RemoveColumn)$/.test(verb))).sort();
+  check('écritures : seul js/template-pack.js supprime une table, et jamais celle d\'un autre (le retour arrière de ce qu\'il vient de créer) ; rien ne supprime une colonne de la personne', JSON.stringify(removers) === JSON.stringify(['js/template-pack.js']), removers.join(' '));
+  // Le renommage : une seule porte, la reprise des documents d'avant de js/schema-columns.js, et seulement avec les noms de son registre (table.legacyId > table.id, pair.legacy > pair.id, le libellé de la colonne = son identifiant).
+  const renamers = Object.keys(found).filter(rel => found[rel].actions.some(verb => /^(RenameTable|RenameColumn|ModifyColumn)$/.test(verb))).sort();
+  check('écritures : seul js/schema-columns.js renomme une table ou une colonne, ou change un libellé (la reprise d\'un document d\'avant) ; rien ne renomme une table ni une colonne de la personne', JSON.stringify(renamers) === JSON.stringify(['js/schema-columns.js']), renamers.join(' '));
+  const registryCode = found['js/schema-columns.js'] ? found['js/schema-columns.js'].code : '';
+  const renameLines = [...registryCode.matchAll(/\[\s*'(?:RenameTable|RenameColumn|ModifyColumn)'[^\]]*\]/g)].map(m => m[0].replace(/\s+/g, ' '));
+  const expectedRenames = ["['RenameTable', table.legacyId, table.id]", "['RenameColumn', table.id, pair.legacy, pair.id]", "['ModifyColumn', table.id, pair.id, { label: pair.id }]"];
+  check('écritures : la reprise ne renomme qu\'avec les noms du registre - une table (legacyId vers id), une colonne (legacy vers id) et le libellé de cette colonne (son identifiant), rien d\'autre', JSON.stringify(renameLines.map(line => line.replace(/\s*\}\s*\]$/, ' }]'))) === JSON.stringify(expectedRenames), renameLines.join(' ; '));
 }
 
 // ============================================================================

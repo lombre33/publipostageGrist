@@ -9,9 +9,12 @@
 //    qui n'existe pas encore est créée sous le nom que dit l'interrupteur (englishOnDisk), avec, sous l'ancien nom, le libellé que l'ancien code lui donnait ;
 //  - une table ou une colonne qui n'est pas dans la liste passe telle quelle : les tables de la personne, les métadonnées de Grist, et les deux tables du widget qui
 //    s'appelaient déjà en anglais (Publipostage_Direct, Publipostage_UserProbe).
-// Ce que le document porte ne change PAS tant que englishOnDisk est faux (le défaut) : un document neuf naît sous les anciens noms, un document d'avant garde les siens.
-// L'interrupteur ne s'allume qu'avec le renommage réel des documents, à la demande du porteur du projet et une fois GFS prévenu (GFS écrit lui-même la colonne `Nom` des modèles et les lignes d'état de dossier des préférences, et lit le `Jeton` des versions) ;
-// il décide alors des noms des tables et des colonnes créées ensuite, et de celui que l'on prend quand un document porte les deux.
+// Le renommage des documents d'avant se fait ICI, à la première lecture ou écriture d'une table du widget (migrate) : un seul lot d'actions (RenameTable, RenameColumn, puis le
+// libellé de chaque colonne, qui ne suit pas le renommage dans Grist), que Grist rejoue en entier ou pas du tout. Un document qui ne s'y prête pas (lecteur, deux jeux de noms à la fois,
+// nom déjà pris) garde ses noms d'avant, et le traducteur continue de le lire et de l'écrire sous ces noms : le renommage est une commodité, jamais une condition.
+// Deux interrupteurs : englishOnDisk (les noms que prend une table ou une colonne créée, et celui que l'on préfère quand un document porte les deux) et renameDocuments (le renommage ci-dessus).
+// Les essais posent `globalThis.__schemaNames` avant le chargement (dev-tests/grist-stub.js, dev-tests/unit-harness.mjs) : 'legacy' éteint les deux (le faux Grist porte les noms d'avant),
+// 'english' allume le premier seul, 'migrate' les deux ; absent (le widget en vrai), les deux sont allumés.
 //
 // Pourquoi un traducteur et pas `grist.docApi = ...` : le paquet de Grist (grist-plugin-api.js) exporte `docApi` par un accesseur sans écriture ; on ne peut pas
 // le remplacer. Les modules qui lisent ou écrivent les tables du widget passent donc ici ; ce que la personne a dans ses tables passe toujours par grist.docApi.
@@ -21,8 +24,11 @@
 //   SchemaColumns.whereIs(table, colonne) -> { table, column, label } : où la colonne est dans CE document, avec les noms que la personne voit dans Grist
 //   SchemaColumns.setEnglishOnDisk(vrai | faux), SchemaColumns.reset() -> l'interrupteur, et l'oubli de ce qui a été lu du document (essais)
 const SchemaColumns = (function () {
-  // Faux : le document garde (et reçoit) les noms français d'avant. Vrai : les noms anglais. Un seul réglage, posé par le renommage des documents.
-  let englishOnDisk = false;
+  // Faux : le document garde (et reçoit) les noms français d'avant. Vrai : les noms anglais.
+  const testMode = typeof globalThis !== 'undefined' ? globalThis.__schemaNames : undefined;
+  let englishOnDisk = testMode !== 'legacy';
+  // Vrai : les tables et les colonnes d'un document d'avant sont renommées à leur première lecture (migrate). Faux : il garde ses noms, lus tels quels.
+  let renameDocuments = testMode === undefined || testMode === 'migrate';
 
   // [nom anglais, nom d'avant, libellé que l'ancien code donnait à la colonne en l'ajoutant (absent : celui de Grist, c'est-à-dire l'identifiant)]. Les trois colonnes
   // dont le nom n'a pas changé (HeaderFooter, Margins, Cc) n'avaient que le libellé français.
@@ -140,7 +146,11 @@ const SchemaColumns = (function () {
   function real() { return grist.docApi; }
 
   function setEnglishOnDisk(on) { englishOnDisk = !!on; }
-  function reset() { tableNames = null; columnsByTable = new Map(); namesRead = null; }
+  function setRenameDocuments(on) { renameDocuments = !!on; }
+  // Oublie ce qui a été lu du document (le document a changé sous nos pieds : un renommage, une autre fenêtre).
+  function forgetDocument() { tableNames = null; columnsByTable = new Map(); namesRead = null; }
+  // Oublie aussi la reprise du document (essais : chaque scénario repart d'un widget qui n'a rien lu ni renommé).
+  function reset() { forgetDocument(); migration = null; migrationResult = null; }
 
   // Le nom réel d'une table de la liste : celui que le document porte ; quand il porte les deux, celui que l'interrupteur préfère ; quand il n'en porte aucun
   // (ou qu'on ne sait pas encore), celui que l'interrupteur dit pour une table à créer.
@@ -191,6 +201,112 @@ const SchemaColumns = (function () {
     } catch (e) { return found; }
     columnsByTable.set(actual, found);
     return found;
+  }
+
+  // --- La reprise des documents d'avant ---------------------------------------------------------------------------------------------------------------------------------------
+
+  // Le lot d'actions qui met à l'anglais les tables et les colonnes que le document porte sous leurs noms d'avant. `names` : les tables du document ; `labelsOf(table)` : les colonnes d'une
+  // table (nom -> libellé), absente quand la table n'existe pas. Rien n'est renommé quand le nom anglais est déjà pris (à la casse près : Grist numéroterait « …2 » au lieu de refuser) ni
+  // quand le document porte les deux noms (le traducteur les départage) ; une colonne ou une table qui n'est pas dans la liste n'est jamais touchée. Grist ne change PAS le libellé d'une
+  // colonne qu'il renomme (mesuré dans grist-static 0.1.6 : « Nom » devient « Name », libellé « Nom ») : chaque colonne de la liste reçoit donc le libellé de son identifiant.
+  function planRenames(names, labelsOf) {
+    const actions = [];
+    const plan = { actions, tables: 0, columns: 0, labels: 0, skipped: [] };
+    const takenTables = new Set([...names].map(name => name.toLowerCase()));
+    TABLES.forEach(table => {
+      const hasLegacy = names.has(table.legacyId);
+      const hasEnglish = names.has(table.id);
+      if (!hasLegacy && !hasEnglish) return;
+      const renamed = hasLegacy && table.legacyId !== table.id;
+      if (renamed && (hasEnglish || takenTables.has(table.id.toLowerCase()))) { plan.skipped.push(table.id); return; }
+      const before = hasEnglish ? table.id : table.legacyId;
+      const columns = labelsOf(before);
+      if (!columns) return;
+      if (renamed) { actions.push(['RenameTable', table.legacyId, table.id]); plan.tables++; }
+      const takenColumns = new Set([...columns.keys()].map(column => column.toLowerCase()));
+      table.pairs.forEach(pair => {
+        const hasOld = columns.has(pair.legacy);
+        const hasNew = columns.has(pair.id);
+        if (!hasOld && !hasNew) return;
+        const renamedColumn = hasOld && !hasNew && pair.legacy !== pair.id;
+        if (renamedColumn && takenColumns.has(pair.id.toLowerCase())) { plan.skipped.push(table.id + '.' + pair.id); return; }
+        if (hasOld && hasNew && pair.legacy !== pair.id) return;
+        if (renamedColumn) { actions.push(['RenameColumn', table.id, pair.legacy, pair.id]); plan.columns++; }
+        const label = columns.get(hasNew ? pair.id : pair.legacy);
+        if (label !== undefined && label !== null && label !== pair.id) { actions.push(['ModifyColumn', table.id, pair.id, { label: pair.id }]); plan.labels++; }
+      });
+    });
+    return plan;
+  }
+
+  // Les tables du document et, pour chacune de la liste, ses colonnes avec leur libellé, lus dans les métadonnées de Grist (quelques Ko, jamais les tables).
+  async function readSchema() {
+    const list = await real().listTables();
+    const names = new Set(list || []);
+    const registered = TABLES.some(table => names.has(table.id) || names.has(table.legacyId));
+    if (!registered) return { names, labelsOf: () => null };
+    const [tables, columns] = await Promise.all([real().fetchTable('_grist_Tables'), real().fetchTable('_grist_Tables_column')]);
+    const byRef = new Map();
+    (tables.tableId || []).forEach((tableId, i) => byRef.set(tables.id[i], tableId));
+    const labelsByTable = new Map();
+    (columns.colId || []).forEach((colId, i) => {
+      const tableId = byRef.get(columns.parentId[i]);
+      if (!tableId) return;
+      if (!labelsByTable.has(tableId)) labelsByTable.set(tableId, new Map());
+      labelsByTable.get(tableId).set(colId, columns.label ? columns.label[i] : undefined);
+    });
+    return { names, labelsOf: tableId => labelsByTable.get(tableId) || null };
+  }
+
+  // Hébergé par Grist Factory Suite, le widget n'écrit pas la structure lui-même : le courtier de GFS refuse RenameColumn et ModifyColumn (consigne 080), un lot qui en porte serait refusé en entier. Le
+  // document garde alors ses noms - GFS lit les deux jeux de noms - et la reprise se fait à la première ouverture hors de GFS.
+  function isHostedByGfs() {
+    return typeof GfsLink !== 'undefined' && !!GfsLink.hosted;
+  }
+
+  function isReadOnlyDocument() {
+    return typeof GristAPI !== 'undefined' && typeof GristAPI.isDocumentReadOnly === 'function' && GristAPI.isDocumentReadOnly();
+  }
+
+  // Ce que la reprise a fait, pour que js/main.js le dise : { tables, columns, labels, skipped, failed } ; null tant qu'elle n'a pas fini ou quand elle n'avait rien à faire.
+  let migration = null;
+  let migrationResult = null;
+  const migratedListeners = [];
+
+  async function migrate() {
+    if (!renameDocuments || !englishOnDisk) return null;
+    // Un compte Lecteur n'écrit rien : le renommage attend le premier compte qui peut modifier le document, et le traducteur lit les noms d'avant en attendant.
+    if (isReadOnlyDocument() || isHostedByGfs()) return null;
+    let schema;
+    try { schema = await readSchema(); } catch (e) { return null; } // accès à la table seule, ou métadonnées illisibles : rien n'est lu ni renommé
+    tableNames = new Set(schema.names);
+    const plan = planRenames(schema.names, schema.labelsOf);
+    if (!plan.actions.length) { if (plan.skipped.length) console.warn('[SchemaColumns] noms d\'avant gardés', plan.skipped); return null; }
+    try {
+      await real().applyUserActions(plan.actions);
+    } catch (e) {
+      // Un autre widget du même document a pu renommer entre-temps, ou Grist refuse : tout est refusé ensemble, le document garde ses noms, lus tels quels.
+      console.warn('[SchemaColumns] renommage des tables du widget refusé, les noms d\'avant sont gardés', e);
+      forgetDocument();
+      migrationResult = { tables: 0, columns: 0, labels: 0, skipped: plan.skipped, failed: true };
+      return migrationResult;
+    }
+    forgetDocument();
+    migrationResult = { tables: plan.tables, columns: plan.columns, labels: plan.labels, skipped: plan.skipped, failed: false };
+    migratedListeners.splice(0).forEach(listener => { try { listener(migrationResult); } catch (e) { /* un écouteur qui échoue n'arrête pas les autres */ } });
+    return migrationResult;
+  }
+
+  // Lancée par la première lecture ou écriture d'une table du widget (docApi), une fois par document ; tout appel suivant attend la même reprise.
+  function ensureMigrated() {
+    if (!migration) migration = migrate().catch(() => null);
+    return migration;
+  }
+  function lastMigration() { return migrationResult; }
+  // `listener(result)` quand la reprise a renommé quelque chose ; tout de suite quand elle l'a déjà fait.
+  function onMigrated(listener) {
+    if (migrationResult && !migrationResult.failed) listener(migrationResult);
+    else migratedListeners.push(listener);
   }
 
   // Les colonnes d'une lecture complète, rendues sous leurs noms anglais (les noms que le document porte, sauf une colonne de la personne qui aurait déjà le nom anglais).
@@ -273,6 +389,7 @@ const SchemaColumns = (function () {
   const docApi = {
     // Les tables du document, sous leurs noms anglais : une table portée sous l'ancien nom et sous le nouveau n'est rendue qu'une fois.
     async listTables(...rest) {
+      await ensureMigrated();
       const list = await real().listTables(...rest);
       tableNames = new Set(list || []);
       const seen = new Set();
@@ -284,6 +401,7 @@ const SchemaColumns = (function () {
     async fetchTable(name, ...rest) {
       const table = byEnglish.get(name);
       if (!table) return real().fetchTable(name, ...rest);
+      await ensureMigrated();
       let actual = actualTableIn(table, tableNames);
       let columns;
       try {
@@ -301,6 +419,7 @@ const SchemaColumns = (function () {
     },
 
     async applyUserActions(actions, ...rest) {
+      if ((actions || []).some(action => byEnglish.has(action[1]))) await ensureMigrated();
       const learned = [];
       const translated = [];
       for (const action of actions || []) translated.push(await translate(action, learned));
@@ -310,5 +429,5 @@ const SchemaColumns = (function () {
     },
   };
 
-  return { docApi, actualTable, whereIs, setEnglishOnDisk, reset, TABLES };
+  return { docApi, actualTable, whereIs, setEnglishOnDisk, setRenameDocuments, reset, TABLES, planRenames, lastMigration, onMigrated };
 })();

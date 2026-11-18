@@ -4,7 +4,7 @@
 //
 // L'ancrage (quelle portée de texte est commentée, son état résolu ou actif) vit dans le document lui-même, par la marque `commentMark`
 // (js/editor-nodes.js:createCommentMark) : ProseMirror la déplace, l'étend et la découpe au fil des modifications, sans code de suivi. Le contenu du
-// fil (qui a écrit quoi, quand) vit dans une table Grist compagnon (Publipostage_Commentaires, comme Publipostage_LiensTables), partagée entre toutes
+// fil (qui a écrit quoi, quand) vit dans une table Grist compagnon (Publipostage_Comments, comme Publipostage_TableLinks), partagée entre toutes
 // les personnes du document, contrairement à un stockage local.
 //
 // Les fils d'un PDF lu dans la Lecture (consigne GFS 045) vivent dans la même table : un PDF n'a pas de document où poser une marque, l'ancre du passage (page, positions dans le texte de la page, citation) et l'état « résolu » sont donc

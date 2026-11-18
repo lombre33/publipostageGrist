@@ -1,6 +1,6 @@
 // Rangement des modèles par personne (épingle, dossier, dossier replié par défaut) : planning/feature-rangement-tri-modeles.md.
-// Table dédiée Publipostage_PreferencesModeles : une préférence est une relation (personne × modèle), pas un attribut du modèle (même principe que
-// Publipostage_Commentaires, js/comments.js) ; elle évite aussi de toucher aux colonnes de Templates.save().
+// Table dédiée Publipostage_TemplatePreferences : une préférence est une relation (personne × modèle), pas un attribut du modèle (même principe que
+// Publipostage_Comments, js/comments.js) ; elle évite aussi de toucher aux colonnes de Templates.save().
 // Identification : GristAPI.getCurrentUserEmail(). Si elle échoue, repli anonyme silencieux (Utilisateur = '') plutôt que de bloquer l'action :
 // épingle et dossier deviennent alors une préférence partagée par toutes les personnes sans identité résolue (comme Auteur = '' des commentaires).
 // État d'un dossier : un dossier n'existe que par le champ Dossier des lignes de modèles, son état ne peut pas vivre sur l'une d'elles. Il vit sur

@@ -4,7 +4,7 @@
 // du widget, les noms d'aujourd'hui sont donc comparés, identifiant par identifiant, à ceux de la dernière ouverture ; ce qui a changé de nom est
 // réécrit là où le widget l'a écrit : les modèles (bulles, conditions, boucles, calculs, blocs, valeurs et cases conditionnels, images liées, QR
 // codes, en-têtes et pieds de page, macro-modèles, nom du PDF, champs de l'e-mail) et les clés de correspondance entre tables
-// (Publipostage_LiensTables).
+// (Publipostage_TableLinks).
 //
 // Rien n'est lu ni écrit avant l'affichage du modèle, pour ne pas ralentir l'ouverture : js/main.js appelle checkAfterOpen en toute dernière ligne
 // d'init(), sans l'attendre. L'instantané (identifiant -> nom, pour chaque table et chaque colonne) vit dans le stockage du navigateur, par document

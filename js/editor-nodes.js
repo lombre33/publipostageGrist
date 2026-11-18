@@ -466,7 +466,7 @@ const EditorNodes = (function () {
     // Commentaire : une marque, pas un nœud. Contrairement à une note de bas de page (un point unique), un commentaire s'attache à une portée de texte
     // existant, comme gras ou italique : ProseMirror la déplace, l'étend et la découpe au fil des modifications, sans code de suivi (cf. js/comments.js
     // pour le choix face à un vrai suivi de modifications). Le fil de discussion (auteur, texte, réponses) vit dans la table Grist
-    // Publipostage_Commentaires (js/comments.js), seul un identifiant relie la portée à son fil. `resolved` vit ici, dans le document : c'est une
+    // Publipostage_Comments (js/comments.js), seul un identifiant relie la portée à son fil. `resolved` vit ici, dans le document : c'est une
     // propriété de cette portée, pas du message échangé, et dans le document elle voyage avec le reste (enregistrement automatique, Annuler/Rétablir,
     // export) sans resynchronisation.
     // `excludes: ''` (au lieu du défaut, le nom de la marque) : sans cela, une deuxième marque commentaire (id différent) sur une portée qui chevauche

@@ -1,7 +1,7 @@
 // Fenêtre « Autres attributs » d'une bulle #Variable : depuis une variable dont la ligne est déterminée dans une autre table (ex.
 // #Annuaire.NomPrenom, trouvée via Dossiers.Responsable), insère d'autres colonnes de la même ligne (ex. Annuaire.Telephone) juste après elle,
 // séparées par une espace. Les bulles insérées sont des #Variable ordinaires de cette table : elles passent par la même règle de liaison (une par
-// table liée et par table de la page, Publipostage_LiensTables), donc désignent la même ligne, en lecture comme à l'export. Proposée pour :
+// table liée et par table de la page, Publipostage_TableLinks), donc désignent la même ligne, en lecture comme à l'export. Proposée pour :
 //  - une variable d'une autre table (liée à son insertion ; sinon la fenêtre de choix de la clé s'ouvre d'abord, comme à l'insertion) ;
 //  - une colonne Référence de la table de la page (ex. #Dossiers.Responsable) : la table référencée est liée par cette colonne si elle ne l'est pas
 //    encore. Quand la page a plusieurs colonnes Référence vers cette même table (ex. Demandeur et Valideur vers l'Annuaire, deux personnes dans la

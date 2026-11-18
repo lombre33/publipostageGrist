@@ -28,10 +28,13 @@ try {
 // (page.addInitScript) avant le chargement. Chez GFS, c'est l'espace que le test donne (`stub.stockage`) qui dit ce que la personne a vu.
 try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null) localStorage.setItem('pp_news_seen', '99'); } catch (e) { /* stockage refusé : la fenêtre ne s'ouvre pas toute seule non plus */ }
 
+// Le mode des noms du widget (js/schema-columns.js le lit au chargement) : sans autre mot de la page, les essais jouent un document aux noms d'avant et un widget qui n'y touche pas.
+if (!window.__schemaNames) window.__schemaNames = 'legacy';
+
 (function () {
   // Les noms que le document porte pour les tables du widget qu'il crée d'avance : ceux d'avant (Publipostage_Modeles, Nom, Contenu...), par défaut - un document créé par la bêta ou par une
   // version d'avant -, ou les noms anglais (Publipostage_Templates, Name, Content...) quand la page est posée avec `window.__schemaNames = 'english'` avant le chargement (dev-tests/run-headless.mjs,
-  // groupe schemaEnglish : la page y allume aussi l'interrupteur englishOnDisk de js/schema-columns.js). Les scénarios qui lisent le faux Grist en direct nomment ses tables par `__gristStub.names`.
+  // groupe schemaEnglish : js/schema-columns.js y lit le même mot ; « migrate » joue un document d'avant que le widget renomme, groupe schemaMigration). Les scénarios qui lisent le faux Grist en direct nomment ses tables par `__gristStub.names`.
   const ENGLISH_NAMES = window.__schemaNames === 'english';
   const NAMES = ENGLISH_NAMES
     ? { models: 'Publipostage_Templates', links: 'Publipostage_TableLinks', comments: 'Publipostage_Comments', date: 'ModifiedAt',
@@ -261,15 +264,25 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
   // Peuple _grist_Tables/_grist_Tables_column pour que getColumnType()/getColumnChoices() fonctionnent
   // (refreshColumnTypes, cf. js/grist-api.js) - un seul appel idempotent suffit,
   // reconstruit tout à chaque fois à partir de state.tables/columns/choices, avec les identifiants de ligne de metaIds ci-dessus.
+  // Les colonnes d'une table que les métadonnées de Grist décrivent : celles de son schéma (state.columns) ; pour une table du widget, seulement quand la page joue un document que le widget
+  // renomme (`__schemaNames` = « migrate », groupe schemaMigration) : les clés de ses lignes, toutes en Texte. Dans les autres modes les tables du widget n'ont pas de colonnes dans les métadonnées, comme avant.
+  function metaColumns(t) {
+    if (state.columns[t]) return state.columns[t];
+    if (window.__schemaNames !== 'migrate' || !/^Publipostage_/.test(t) || !state.rows[t]) return {};
+    const out = {};
+    Object.keys(state.rows[t]).forEach(colId => { if (colId !== 'id' && colId !== 'manualSort') out[colId] = 'Text'; });
+    return out;
+  }
+
   function rebuildColumnMeta() {
     const gtc = columnarEmpty(['parentId', 'colId', 'type', 'widgetOptions', 'displayCol', 'visibleCol', 'label', 'isFormula', 'formula', 'rules']);
     const rowIdOf = {}; // "table.colonne" -> id de ligne dans _grist_Tables_column, pour displayCol
-    state.tables.forEach(t => Object.keys(state.columns[t] || {}).forEach(colId => { rowIdOf[t + '.' + colId] = columnRowId(t, colId); }));
+    state.tables.forEach(t => Object.keys(metaColumns(t)).forEach(colId => { rowIdOf[t + '.' + colId] = columnRowId(t, colId); }));
     state.tables.forEach(t => {
-      Object.keys(state.columns[t] || {}).forEach(colId => {
+      Object.keys(metaColumns(t)).forEach(colId => {
         const choices = state.choices[t] && state.choices[t][colId];
         const helper = state.displayCols[t] && state.displayCols[t][colId];
-        gtc.id.push(rowIdOf[t + '.' + colId]); gtc.parentId.push(tableRowId(t)); gtc.colId.push(colId); gtc.type.push(state.columns[t][colId]);
+        gtc.id.push(rowIdOf[t + '.' + colId]); gtc.parentId.push(tableRowId(t)); gtc.colId.push(colId); gtc.type.push(metaColumns(t)[colId]);
         const formats = state.formats[t] && state.formats[t][colId];
         // La mise en forme conditionnelle, comme Grist la range : `rules` (RefList : ['L', identifiants des colonnes d'aide, dans l'ordre]) et `rulesOptions` du widgetOptions, même ordre.
         const conditional = (state.condRules[t] && state.condRules[t][colId]) || [];
@@ -280,7 +293,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
         gtc.widgetOptions.push(Object.keys(widgetOptions).length ? JSON.stringify(widgetOptions) : '');
         gtc.displayCol.push((helper && rowIdOf[t + '.' + helper]) || 0);
         const shown = state.visibleCols[t] && state.visibleCols[t][colId];
-        const linked = /^Ref(?:List)?:(.+)$/.exec(state.columns[t][colId]);
+        const linked = /^Ref(?:List)?:(.+)$/.exec(metaColumns(t)[colId]);
         gtc.visibleCol.push((shown && linked && rowIdOf[linked[1] + '.' + shown]) || 0);
         gtc.label.push((state.labels[t] && state.labels[t][colId]) || colId);
         const formula = formulaOf(t, colId);
@@ -290,7 +303,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     });
     // Ce qui a disparu du schéma perd son identifiant (jamais redonné : les compteurs ne reculent pas).
     const liveColumns = {};
-    state.tables.forEach(t => Object.keys(state.columns[t] || {}).forEach(colId => { liveColumns[tableRowId(t) + '\n' + colId] = true; }));
+    state.tables.forEach(t => Object.keys(metaColumns(t)).forEach(colId => { liveColumns[tableRowId(t) + '\n' + colId] = true; }));
     Object.keys(metaIds.columns).forEach(key => { if (!liveColumns[key]) delete metaIds.columns[key]; });
     const liveTables = state.tables.concat(Object.keys(state.primaryViewOf));
     Object.keys(metaIds.tables).forEach(t => { if (liveTables.indexOf(t) === -1) delete metaIds.tables[t]; });
@@ -805,6 +818,28 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
         // Une table dont le schéma est connu (setVariables, ou AddTable d'un modèle de la galerie) garde la colonne dans ses métadonnées. Les tables du widget, non : voir isWidgetTable.
         if (!isWidgetTable(tableId) && state.columns[tableId]) { registerColumn(tableId, colId, action[3] || {}); rebuildColumnMeta(); }
         retValues.push({ colId });
+      } else if (type === 'RenameTable' && isWidgetTable(tableId)) {
+        // Comme le vrai Grist (mesuré dans grist-static 0.1.6 le 18/11) : un nom déjà pris, à la casse près, est numéroté (« Publipostage_templates2 ») au lieu d'être refusé ; une table inconnue lève.
+        if (!state.rows[tableId]) throw new Error('Table inconnue : ' + tableId);
+        let target = action[2];
+        const taken = new Set(Object.keys(state.rows).map(name => name.toLowerCase()));
+        for (let n = 2; taken.has(target.toLowerCase()); n++) target = action[2] + n;
+        renameTable(tableId, target);
+        retValues.push(null);
+      } else if (type === 'RenameColumn' && isWidgetTable(tableId)) {
+        // Le libellé ne suit PAS le renommage (mesuré dans grist-static 0.1.6 le 18/11 : « Nom » devient « Name », libellé « Nom ») : une colonne sans libellé à part garde son ancien identifiant pour libellé.
+        const table = state.rows[tableId];
+        if (!table || !(action[2] in table)) throw new Error('Colonne inconnue : ' + tableId + '.' + action[2]);
+        if (Object.keys(table).some(key => key.toLowerCase() === action[3].toLowerCase())) throw new Error('Nom de colonne pris : ' + tableId + '.' + action[3]);
+        if (!(state.labels[tableId] && state.labels[tableId][action[2]])) state.labels[tableId] = Object.assign({}, state.labels[tableId], { [action[2]]: action[2] });
+        state.rows[tableId] = renameKey(table, action[2], action[3]);
+        state.labels[tableId] = renameKey(state.labels[tableId], action[2], action[3]);
+        rebuildColumnMeta();
+        retValues.push(null);
+      } else if (type === 'ModifyColumn' && isWidgetTable(tableId)) {
+        if (!state.rows[tableId] || !(action[2] in state.rows[tableId])) throw new Error('Colonne inconnue : ' + tableId + '.' + action[2]);
+        if (action[3] && action[3].label !== undefined) { state.labels[tableId] = Object.assign({}, state.labels[tableId], { [action[2]]: action[3].label }); rebuildColumnMeta(); }
+        retValues.push(null);
       } else if (type === 'SetDisplayFormula') {
         setDisplayFormula(tableId, action[3], action[4]);
         retValues.push(null);

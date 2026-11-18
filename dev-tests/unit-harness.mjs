@@ -13,7 +13,8 @@ import { dirname, join } from 'node:path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 export function createContext(globals) {
-  return vm.createContext(Object.assign({ console }, globals));
+  // `__schemaNames` : le mode des noms du widget que js/schema-columns.js lit au chargement ; « legacy » : le document porte les noms d'avant et le widget n'y touche pas (un essai qui joue autre chose le dit dans `globals`).
+  return vm.createContext(Object.assign({ console, __schemaNames: 'legacy' }, globals));
 }
 
 export function loadScript(context, relPath) {

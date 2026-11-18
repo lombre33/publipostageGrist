@@ -214,15 +214,17 @@ Dans le document, le widget écrit dans neuf tables, toutes préfixées `Publipo
 
 | Table | Contenu |
 |---|---|
-| `Publipostage_Modeles` | Les modèles, et une ligne « Réglages du document » qui garde les couleurs partagées par tous les modèles et, seulement si vous choisissez « Le même pour tous, enregistré dans le document » pour un PDF protégé, ce mot de passe commun, en clair, dans sa colonne `MotDePassePdf`. |
-| `Publipostage_Commentaires` | Les fils de commentaires. |
-| `Publipostage_PreferencesModeles` | Les épingles, dossiers et choix d'export de chaque personne. |
-| `Publipostage_Abreviations` | Les abréviations qui se développent à la frappe. |
-| `Publipostage_FormatsPage` | Les formats de page enregistrés, partagés par tout le document. |
-| `Publipostage_LiensTables` | Les clés de correspondance entre tables. |
+| `Publipostage_Templates` | Les modèles, et une ligne « Réglages du document » qui garde les couleurs partagées par tous les modèles et, seulement si vous choisissez « Le même pour tous, enregistré dans le document » pour un PDF protégé, ce mot de passe commun, en clair, dans sa colonne `MotDePassePdf`. |
+| `Publipostage_Comments` | Les fils de commentaires. |
+| `Publipostage_TemplatePreferences` | Les épingles, dossiers et choix d'export de chaque personne. |
+| `Publipostage_Abbreviations` | Les abréviations qui se développent à la frappe. |
+| `Publipostage_PageFormats` | Les formats de page enregistrés, partagés par tout le document. |
+| `Publipostage_TableLinks` | Les clés de correspondance entre tables. |
 | `Publipostage_Versions` | Les versions gardées de chaque modèle : créée à la première version gardée, lue seulement à l'ouverture de l'historique. |
 | `Publipostage_Direct` | Le tuyau de l'écriture en direct, que seul Grist Factory Suite utilise (voir [À part](#à-part--grist-factory-suite)). |
 | `Publipostage_UserProbe` | Sert à lire l'e-mail de la personne connectée. |
+
+Un document créé par une version antérieure porte ces tables sous des noms français (`Publipostage_Modeles`, `Publipostage_Commentaires`, `Publipostage_PreferencesModeles`, `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables`) et des colonnes françaises (`Nom`, `Contenu`, `Jeton`…). À sa première ouverture par une personne qui peut modifier le document, le widget les renomme en anglais, une seule fois, en un seul lot que Grist applique en entier ou pas du tout : les lignes sont conservées, le libellé de chaque colonne devient son identifiant, et les formules que vous auriez écrites sur ces colonnes suivent (Grist les réécrit). Il ne renomme jamais une table ni une colonne qui n'est pas la sienne. Un compte Lecteur ne renomme rien, ni le widget ouvert dans Grist Factory Suite (le renommage se fait à la première ouverture hors de Grist Factory Suite), et le widget lit le document sous les noms qu'il porte. Revenir ensuite à la bêta figée n'est plus possible sur ce document : la bêta cherche les anciens noms.
 
 Dans les tables qui portent vos données, le widget n'écrit dans aucune colonne existante, sauf deux que vous choisissez dans Réglages > Vue, et seulement quand vous l'avez demandé. « Date du dernier export PDF » : il y écrit, après chaque PDF réussi, le moment de l'export pour les lignes dont le PDF vient d'être produit (une seule écriture par export). « PDF joint à la ligne » (une colonne de type Pièces jointes, cochée dans le menu Exporter) : il y ajoute le PDF de la ligne, ou remplace celui de même nom selon votre réglage, et laisse les autres pièces jointes de la cellule ; pour envoyer le fichier, il demande à Grist, à chaque export seulement, un jeton qui peut écrire dans le document, ne le garde pas et le jette à la fin de l'export. Sans colonne choisie, il n'écrit rien. Un compte Lecteur de Grist n'écrit rien.
 
@@ -556,15 +558,17 @@ In the document, the widget writes to nine tables, all prefixed `Publipostage_`.
 
 | Table | Content |
 |---|---|
-| `Publipostage_Modeles` | The templates, and a "Réglages du document" row that keeps the colors shared by every template and, only if you choose "Same for all, saved in the document" for a protected PDF, that shared password, in plain text, in its `MotDePassePdf` column. |
-| `Publipostage_Commentaires` | The comment threads. |
-| `Publipostage_PreferencesModeles` | Each person's pins, folders and export choices. |
-| `Publipostage_Abreviations` | The abbreviations that expand as you type. |
-| `Publipostage_FormatsPage` | The saved page formats, shared by the whole document. |
-| `Publipostage_LiensTables` | The matching keys between tables. |
+| `Publipostage_Templates` | The templates, and a "Réglages du document" row that keeps the colors shared by every template and, only if you choose "Same for all, saved in the document" for a protected PDF, that shared password, in plain text, in its `MotDePassePdf` column. |
+| `Publipostage_Comments` | The comment threads. |
+| `Publipostage_TemplatePreferences` | Each person's pins, folders and export choices. |
+| `Publipostage_Abbreviations` | The abbreviations that expand as you type. |
+| `Publipostage_PageFormats` | The saved page formats, shared by the whole document. |
+| `Publipostage_TableLinks` | The matching keys between tables. |
 | `Publipostage_Versions` | The versions kept for each template: created when the first version is kept, only read when the history is opened. |
 | `Publipostage_Direct` | The pipe of live editing, which only Grist Factory Suite uses (see [Set apart: Grist Factory Suite](#set-apart-grist-factory-suite)). |
 | `Publipostage_UserProbe` | Used to read the connected user's e-mail. |
+
+A document created by an earlier version carries these tables under French names (`Publipostage_Modeles`, `Publipostage_Commentaires`, `Publipostage_PreferencesModeles`, `Publipostage_Abreviations`, `Publipostage_FormatsPage`, `Publipostage_LiensTables`) and French columns (`Nom`, `Contenu`, `Jeton`…). The first time a person who can edit the document opens it, the widget renames them to English, once, in a single batch that Grist applies entirely or not at all: the rows are kept, each column's label becomes its identifier, and any formulas you wrote on those columns follow (Grist rewrites them). It never renames a table or a column that is not its own. A Viewer account renames nothing, nor does the widget opened inside Grist Factory Suite (the renaming happens the first time the document is opened outside Grist Factory Suite), and the widget reads the document under the names it carries. Going back to the frozen beta is no longer possible on such a document: the beta looks for the old names.
 
 In the tables that hold your data, the widget writes to no existing column, except two that you choose in Settings > View, and only when you asked for it. "Date of the last PDF export": it writes there, after each successful PDF, the moment of the export for the rows whose PDF has just been made (a single write per export). "PDF attached to the row" (an Attachments column, ticked in the Export menu): it adds the row's PDF there, or replaces the one with the same name according to your setting, and leaves the cell's other attachments alone; to send the file, it asks Grist, for each export only, for a token that can write to the document, does not keep it and drops it at the end of the export. With no column chosen, it writes nothing. A Grist Viewer account writes nothing.
 

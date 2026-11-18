@@ -1180,6 +1180,8 @@
     // et l'avertissement, qui demande une action, se lit en premier ; « Mis à jour après un renommage… » le suit au lieu d'être effacé (message
     // entier au survol, js/viewport-fit.js).
     const untouched = () => !hasEditsToConfirmBeforeLeaving();
+    // Les tables du widget, renommées en anglais à la première lecture d'un document d'avant (js/schema-columns.js, migrate) : la personne les voit changer dans Grist, le coin d'état le lui dit une fois.
+    SchemaColumns.onMigrated(() => setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready') + ' ' + I18n.t('status.schemaRenamed')));
     let renamedMessage = '';
     SchemaRenames.checkAfterOpen({ isUntouched: untouched, notify: msg => { renamedMessage = msg; setStatus(msg); } })
       .catch(e => console.warn('[main] suivi des renommages impossible', e))
