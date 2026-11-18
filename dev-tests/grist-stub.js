@@ -29,6 +29,17 @@ try {
 try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null) localStorage.setItem('pp_news_seen', '99'); } catch (e) { /* stockage refusé : la fenêtre ne s'ouvre pas toute seule non plus */ }
 
 (function () {
+  // Les noms que le document porte pour les tables du widget qu'il crée d'avance : ceux d'avant (Publipostage_Modeles, Nom, Contenu...), par défaut - un document créé par la bêta ou par une
+  // version d'avant -, ou les noms anglais (Publipostage_Templates, Name, Content...) quand la page est posée avec `window.__schemaNames = 'english'` avant le chargement (dev-tests/run-headless.mjs,
+  // groupe schemaEnglish : la page y allume aussi l'interrupteur englishOnDisk de js/schema-columns.js). Les scénarios qui lisent le faux Grist en direct nomment ses tables par `__gristStub.names`.
+  const ENGLISH_NAMES = window.__schemaNames === 'english';
+  const NAMES = ENGLISH_NAMES
+    ? { models: 'Publipostage_Templates', links: 'Publipostage_TableLinks', comments: 'Publipostage_Comments', date: 'ModifiedAt',
+      modelColumns: ['Name', 'Content', 'PdfFileName', 'HeaderFooter', 'ModifiedAt', 'Margins', 'IsDefault'], linkColumns: ['TargetTable', 'Mode', 'TargetColumn', 'SourceColumn'],
+      commentColumns: ['TemplateId', 'CommentId', 'Author', 'Text', 'CreatedAt'] }
+    : { models: 'Publipostage_Modeles', links: 'Publipostage_LiensTables', comments: 'Publipostage_Commentaires', date: 'DateModif',
+      modelColumns: ['Nom', 'Contenu', 'NomFichierPDF', 'HeaderFooter', 'DateModif', 'Margins', 'EstParDefaut'], linkColumns: ['TableCible', 'Mode', 'ColonneCible', 'ColonneSource'],
+      commentColumns: ['ModeleId', 'CommentId', 'Auteur', 'Texte', 'CreeLe'] };
   const state = {
     // Les 4 tables internes pré-remplies plus bas (Publipostage_Modeles/LiensTables/UserProbe/
     // Commentaires) DOIVENT apparaître ici dès le départ, pas seulement dans state.rows : sans ça,
@@ -40,7 +51,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     // project-publipostage-stub-listtables-vs-preseeded-tables) : ce décalage masquait totalement, dans
     // toute la suite dev-tests/, le VRAI volume d'appels AddTable/ensureTableExists qu'un Enregistrer ou
     // un tick d'auto-save déclenche en pratique.
-    tables: ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_Commentaires'],
+    tables: [NAMES.models, NAMES.links, 'Publipostage_UserProbe', NAMES.comments],
     columns: {}, // { tableId: { colId: type } }
     choices: {}, // { tableId: { colId: string[] } } - colonnes Choice/ChoiceList (widgetOptions.choices, cf. setVariables)
     displayCols: {}, // { tableId: { colId: colonne d'affichage } } - Références affichées par une colonne d'aide gristHelper_Display* (cf. setVariables)
@@ -69,7 +80,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     viewCalls: [],
     // Les écouteurs `grist.on('message', ...)` : le bus de messages de Grist, que grist.onRecords lit aussi (message `dataChange`, cf. fireViewChange). Ajouter ne remplace jamais.
     messageCallbacks: [],
-    nextRowId: { Publipostage_Modeles: 1, Publipostage_LiensTables: 1, Publipostage_UserProbe: 1 },
+    nextRowId: { [NAMES.models]: 1, [NAMES.links]: 1, Publipostage_UserProbe: 1 },
     // Niveau d'accès RÉELLEMENT accordé au widget (settings.accessLevel de onOptions côté grist-core,
     // JAMAIS ce que grist.getOptions() renvoie - WidgetAPI.getOptions() est les options JSON PROPRES au
     // widget, pas InteractionOptions, vérifié à la source le 2026-09-28). 'full' par défaut pour ne rien
@@ -116,10 +127,10 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
   // UpdateRecord : `ensureMarginsColumn()`/`ensureDefaultColumn()` testent `'Margins' in data`, et une
   // table à qui ces clés manquent envoie le code sur un chemin de migration qu'un vrai document Grist
   // déjà à jour ne prend jamais.
-  state.rows.Publipostage_Modeles = columnarEmpty(['Nom', 'Contenu', 'NomFichierPDF', 'HeaderFooter', 'DateModif', 'Margins', 'EstParDefaut']);
-  state.rows.Publipostage_LiensTables = columnarEmpty(['TableCible', 'Mode', 'ColonneCible', 'ColonneSource']);
+  state.rows[NAMES.models] = columnarEmpty(NAMES.modelColumns);
+  state.rows[NAMES.links] = columnarEmpty(NAMES.linkColumns);
   state.rows.Publipostage_UserProbe = columnarEmpty(['Email']);
-  state.rows.Publipostage_Commentaires = columnarEmpty(['ModeleId', 'CommentId', 'Auteur', 'Texte', 'CreeLe']);
+  state.rows[NAMES.comments] = columnarEmpty(NAMES.commentColumns);
   state.rows._grist_Tables = columnarEmpty(['tableId', 'primaryViewId']);
   // Volet des pages du document (js/page-tree.js) : une vue et une page par table créée par AddTable, comme useractions.py:doAddView - voir addPage / resetPages ci-dessous.
   // Vide au départ : les quatre tables internes pré-remplies représentent un document déjà migré dont on ne connaît pas le volet ; un scénario le pose avec resetPages.
@@ -133,7 +144,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
   // _grist_DocInfo : la ligne unique des réglages du document, dont documentSettings (JSON) porte la langue et la devise - celle d'un document neuf, « en-US » (setDocumentSettings pour une autre).
   state.rows._grist_DocInfo = { id: [1], documentSettings: [JSON.stringify({ locale: 'en-US', engine: 'python3' })] };
 
-  const INTERNAL_TABLES = ['Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_Commentaires', '_grist_Tables', '_grist_Tables_column', '_grist_DocInfo', '_grist_Attachments'];
+  const INTERNAL_TABLES = [NAMES.models, NAMES.links, 'Publipostage_UserProbe', NAMES.comments, '_grist_Tables', '_grist_Tables_column', '_grist_DocInfo', '_grist_Attachments'];
 
   // Grist représente en réalité un DateTime comme un timestamp Unix NUMÉRIQUE (secondes depuis
   // l'epoch, cf. documentation/grist-data-format.md du projet grist-core) - jamais la chaîne ISO que
@@ -661,7 +672,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     checkDenied(actions);
     actions.forEach(a => state.actionLog.push(a));
     // Une écriture dans la table des modèles vient d'avoir lieu : la prochaine lecture de cette table peut échouer (failReadBackOnce). Synchrone, aucun tour de microtâche de plus.
-    if (actions.some(a => a[1] === 'Publipostage_Modeles' && (a[0] === 'UpdateRecord' || a[0] === 'AddRecord'))) state.modelsWriteSeen = true;
+    if (actions.some(a => a[1] === NAMES.models && (a[0] === 'UpdateRecord' || a[0] === 'AddRecord'))) state.modelsWriteSeen = true;
     const retValues = [];
     actions.forEach(action => {
       const [type, tableId] = action;
@@ -709,7 +720,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
         Object.keys(table).forEach(k => { if (Array.isArray(table[k])) table[k].splice(at, 0, k === 'id' ? newId : null); });
         Object.keys(fields).forEach(k => {
           if (!table[k]) table[k] = table.id.map(() => null);
-          table[k][at] = (tableId === 'Publipostage_Modeles' && k === 'DateModif') ? coerceDateModif(fields[k]) : fields[k];
+          table[k][at] = (tableId === NAMES.models && k === NAMES.date) ? coerceDateModif(fields[k]) : fields[k];
         });
         // Formule déclenchée à la création (user.Email) - seulement si un scénario a fixé l'email (setUserEmail).
         if (tableId === 'Publipostage_UserProbe' && state.userEmail) {
@@ -735,7 +746,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
           refuseFormulaColumns(tableId, Object.keys(fields));
           const idx = table.id.indexOf(rowId);
           if (idx !== -1) Object.keys(fields).forEach(k => {
-            table[k][idx] = (tableId === 'Publipostage_Modeles' && k === 'DateModif') ? coerceDateModif(fields[k]) : fields[k];
+            table[k][idx] = (tableId === NAMES.models && k === NAMES.date) ? coerceDateModif(fields[k]) : fields[k];
           });
           convertEmptyColumns(tableId, Object.keys(fields));
         }
@@ -817,7 +828,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     if (idx === -1) return;
     Object.keys(fields).forEach(k => {
       if (!table[k]) table[k] = table.id.map(() => null);
-      table[k][idx] = (tableId === 'Publipostage_Modeles' && k === 'DateModif') ? coerceDateModif(fields[k]) : fields[k];
+      table[k][idx] = (tableId === NAMES.models && k === NAMES.date) ? coerceDateModif(fields[k]) : fields[k];
     });
   }
 
@@ -908,7 +919,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
   // Ce que rend fetchTable : une copie de la table, ou - une seule fois, quand failReadBackOnce l'a armé et qu'une écriture de la table des modèles a eu lieu depuis - une panne
   // de réseau simulée. Synchrone : l'appelant (une fonction async) garde les mêmes tours de microtâche qu'avant.
   function readTable(tableId) {
-    if (tableId === 'Publipostage_Modeles' && state.failNextModelsFetchAfterWrite && state.modelsWriteSeen) {
+    if (tableId === NAMES.models && state.failNextModelsFetchAfterWrite && state.modelsWriteSeen) {
       state.failNextModelsFetchAfterWrite = false; state.modelsWriteSeen = false;
       throw new Error('Réseau coupé (simulé par failReadBackOnce)');
     }
@@ -1041,7 +1052,7 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
     return server;
   }
 
-  window.__gristStub = { installUploadServer, state, setViewer, setVariables, setColumnLabels, setColumnFormats, setColumnRules, setDocumentSettings, setAttachments, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, countSaves, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure, fireViewChange, denyTable, denyStructure };
+  window.__gristStub = { names: NAMES, installUploadServer, state, setViewer, setVariables, setColumnLabels, setColumnFormats, setColumnRules, setDocumentSettings, setAttachments, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, countSaves, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure, fireViewChange, denyTable, denyStructure };
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.
