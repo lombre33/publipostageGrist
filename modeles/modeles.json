@@ -1,0 +1,156 @@
+[
+  {
+    "id": "facture", "type": "document",
+    "nom": { "fr": "Facture, devis ou avoir", "en": "Invoice, quote or credit note" },
+    "description": { "fr": "Facture, devis ou avoir : lignes de détail, TVA, total en toutes lettres et numéros de page, à partir de vos tables.", "en": "Invoice, quote or credit note: line items, VAT, total in words and page numbers, built from your tables." },
+    "etiquettes": [ { "fr": "Vente", "en": "Sales" } ],
+    "vignette": "facture.webp", "tables": true
+  },
+  {
+    "id": "courrier-relance", "type": "document",
+    "nom": { "fr": "Courrier de relance", "en": "Payment reminder letter" },
+    "description": { "fr": "Courrier de relance d’une facture impayée : premier rappel, deuxième relance ou mise en demeure selon le cas, daté du jour.", "en": "Reminder letter for an unpaid invoice: first reminder, second reminder or formal notice as needed, dated today." },
+    "etiquettes": [ { "fr": "Vente", "en": "Sales" } ],
+    "vignette": "courrier-relance.webp", "tables": true
+  },
+  {
+    "id": "contrat-prestation-services", "type": "document",
+    "nom": { "fr": "Contrat de prestation de services", "en": "Service agreement" },
+    "description": { "fr": "Contrat de prestation de services : parties, articles numérotés, cases à cocher, notes de bas de page, en-tête et pied de page.", "en": "Service agreement: parties, numbered clauses, tick boxes, footnotes, header and footer." },
+    "etiquettes": [ { "fr": "Administratif", "en": "Admin" } ],
+    "vignette": "contrat-prestation-services.webp", "tables": true
+  },
+  {
+    "id": "attestation", "type": "document",
+    "nom": { "fr": "Attestation d’emploi ou de stage", "en": "Employment or internship certificate" },
+    "description": { "fr": "Attestation d’emploi ou de stage selon le cas, avec logo, signature et code QR, remplie depuis la ligne choisie.", "en": "Employment or internship certificate as needed, with logo, signature and QR code, filled in from the chosen row." },
+    "etiquettes": [ { "fr": "Administratif", "en": "Admin" } ],
+    "vignette": "attestation.webp", "tables": true
+  },
+  {
+    "id": "quittance-loyer", "type": "document",
+    "nom": { "fr": "Quittance de loyer", "en": "Rent receipt" },
+    "description": { "fr": "Quittance de loyer : période, bailleur, locataire, détail du loyer et des charges, montant en lettres, un PDF par quittance.", "en": "Rent receipt: period, landlord, tenant, rent and charges breakdown, amount in words, one PDF per receipt." },
+    "etiquettes": [ { "fr": "Administratif", "en": "Admin" } ],
+    "vignette": "quittance-loyer.webp", "tables": true
+  },
+  {
+    "id": "flyer-a6", "type": "document",
+    "nom": { "fr": "Flyer A6", "en": "A6 flyer" },
+    "description": { "fr": "Flyer A6 d’événement : visuel, date, lieu, tarif et code QR de réservation, plusieurs par feuille A4 à imprimer.", "en": "A6 event flyer: visual, date, venue, price and booking QR code, several per A4 sheet to print." },
+    "etiquettes": [ { "fr": "Événement", "en": "Event" }, { "fr": "Impression", "en": "Print" } ],
+    "vignette": "flyer-a6.webp", "tables": true
+  },
+  {
+    "id": "invitation-a6", "type": "document",
+    "nom": { "fr": "Invitation A6 paysage", "en": "A6 landscape invitation" },
+    "description": { "fr": "Invitation A6 paysage : un carton nominatif par invité, avec numéro de table, date limite de réponse et code QR.", "en": "A6 landscape invitation: one named card per guest, with table number, reply deadline and QR code." },
+    "etiquettes": [ { "fr": "Événement", "en": "Event" }, { "fr": "Impression", "en": "Print" } ],
+    "vignette": "invitation-a6.webp", "tables": true
+  },
+  {
+    "id": "affiche-a3", "type": "document",
+    "nom": { "fr": "Affiche A3", "en": "A3 poster" },
+    "description": { "fr": "Affiche A3 d’événement : grand visuel, titre, date, lieu, tarif et code QR d’inscription, prête pour l’imprimeur.", "en": "A3 event poster: large visual, title, date, venue, price and registration QR code, ready for the printer." },
+    "etiquettes": [ { "fr": "Événement", "en": "Event" }, { "fr": "Impression", "en": "Print" } ],
+    "vignette": "affiche-a3.webp", "tables": true
+  },
+  {
+    "id": "badge-evenement", "type": "document",
+    "nom": { "fr": "Badge d’événement A6", "en": "A6 event badge" },
+    "description": { "fr": "Badge A6 d’événement : prénom, nom, société et bandeau de couleur selon la catégorie (intervenant, VIP, presse…).", "en": "A6 event badge: first name, surname, company and a colour band by category (speaker, VIP, press…)." },
+    "etiquettes": [ { "fr": "Événement", "en": "Event" }, { "fr": "Impression", "en": "Print" } ],
+    "vignette": "badge-evenement.webp", "tables": true
+  },
+  {
+    "id": "carte-de-visite", "type": "document",
+    "nom": { "fr": "Carte de visite 85 × 55", "en": "Business card 85 × 55" },
+    "description": { "fr": "Carte de visite 85 × 55 mm : logo, nom, fonction, coordonnées et code QR, une carte par contact, plusieurs par feuille.", "en": "Business card 85 × 55 mm: logo, name, job title, contact details and QR code, one card per contact, several per sheet." },
+    "etiquettes": [ { "fr": "Impression", "en": "Print" } ],
+    "vignette": "carte-de-visite.webp", "tables": true
+  },
+  {
+    "id": "etiquette-adresse", "type": "document",
+    "nom": { "fr": "Étiquette d’adresse 70 × 37", "en": "Address label 70 × 37" },
+    "description": { "fr": "Étiquette d’adresse 70 × 37 mm : civilité, nom, société et adresse de chaque contact, plusieurs par feuille adhésive.", "en": "Address label 70 × 37 mm: title, name, company and address of each contact, several per adhesive sheet." },
+    "etiquettes": [ { "fr": "Impression", "en": "Print" } ],
+    "vignette": "etiquette-adresse.webp", "tables": true
+  },
+  {
+    "id": "bon-de-commande", "type": "document",
+    "nom": { "fr": "Bon de commande fournisseur", "en": "Supplier purchase order" },
+    "description": { "fr": "Bon de commande fournisseur : société, fournisseur, lignes de commande, totaux, mention de livraison express et code QR.", "en": "Supplier purchase order: company, supplier, order lines, totals, express delivery notice and QR code." },
+    "etiquettes": [ { "fr": "Stock", "en": "Stock" } ],
+    "vignette": "bon-de-commande.webp", "tables": true
+  },
+  {
+    "id": "etiquette-produit", "type": "document",
+    "nom": { "fr": "Étiquette produit A6", "en": "A6 product label" },
+    "description": { "fr": "Étiquette produit A6 : désignation, référence, emplacement, stock, alerte « à réapprovisionner », DLC et code QR.", "en": "A6 product label: name, reference, location, stock, “to reorder” alert, use-by date and QR code." },
+    "etiquettes": [ { "fr": "Stock", "en": "Stock" }, { "fr": "Impression", "en": "Print" } ],
+    "vignette": "etiquette-produit.webp", "tables": true
+  },
+  {
+    "id": "fiche-inventaire", "type": "document",
+    "nom": { "fr": "Fiche d’inventaire d’un emplacement", "en": "Location inventory sheet" },
+    "description": { "fr": "Fiche d’inventaire d’un emplacement : produits à compter, stock théorique, colonnes de comptage et d’écart, à imprimer.", "en": "Inventory sheet for one stock location: products to count, expected stock, counted quantity and gap columns, to print." },
+    "etiquettes": [ { "fr": "Stock", "en": "Stock" } ],
+    "vignette": "fiche-inventaire.webp", "tables": true
+  },
+  {
+    "id": "bon-de-mouvement", "type": "document",
+    "nom": { "fr": "Bon de mouvement de stock", "en": "Stock movement slip" },
+    "description": { "fr": "Bon de réception, de sortie ou de transfert interne : lignes avec lot et DLC, total des quantités, signatures.", "en": "Goods-in, goods-out or internal transfer slip: lines with batch and use-by date, total quantity, signatures." },
+    "etiquettes": [ { "fr": "Stock", "en": "Stock" } ],
+    "vignette": "bon-de-mouvement.webp", "tables": true
+  },
+  {
+    "id": "reappro-email", "type": "email",
+    "nom": { "fr": "Email de réapprovisionnement", "en": "Restock email" },
+    "description": { "fr": "E-mail au fournisseur qui liste les produits passés sous leur seuil, avec le stock, la quantité à commander et le délai.", "en": "Email to a supplier listing the products below their reorder threshold, with stock, quantity to order and lead time." },
+    "etiquettes": [ { "fr": "Stock", "en": "Stock" } ],
+    "vignette": "reappro-email.webp", "tables": true
+  },
+  {
+    "id": "valorisation-grille", "type": "grille",
+    "nom": { "fr": "Valorisation du stock (Excel)", "en": "Stock valuation (Excel)" },
+    "description": { "fr": "Valorisation du stock par catégorie dans une grille façon Excel : stock, prix d’achat, valeur de chaque produit, total.", "en": "Stock valuation by category in an Excel-style grid: stock, purchase price, value of each product, total." },
+    "etiquettes": [ { "fr": "Stock", "en": "Stock" } ],
+    "vignette": "valorisation-grille.webp", "tables": true
+  },
+  {
+    "id": "bulletin", "type": "document",
+    "nom": { "fr": "Bulletin scolaire", "en": "School report card" },
+    "description": { "fr": "Bulletin scolaire : notes par matière, coefficients, moyenne de la classe, appréciations et mention du conseil de classe.", "en": "School report: marks by subject, weighting, class average, comments and the class council’s remark." },
+    "etiquettes": [ { "fr": "Métier", "en": "Sector" } ],
+    "vignette": "bulletin.webp", "tables": true
+  },
+  {
+    "id": "fiche-recette", "type": "document",
+    "nom": { "fr": "Fiche recette", "en": "Recipe sheet" },
+    "description": { "fr": "Fiche technique de recette : ingrédients, quantités pour le service, coût matière total et par couvert, allergènes.", "en": "Recipe technical sheet: ingredients, quantities for service, total and per-cover food cost, allergens." },
+    "etiquettes": [ { "fr": "Métier", "en": "Sector" } ],
+    "vignette": "fiche-recette.webp", "tables": true
+  },
+  {
+    "id": "emargement", "type": "document",
+    "nom": { "fr": "Feuille d’émargement", "en": "Attendance sheet" },
+    "description": { "fr": "Feuille d’émargement de formation, A4 paysage : participants, demi-journées à signer, signature du formateur.", "en": "Training attendance sheet, A4 landscape: participants, half-days to sign, trainer’s signature." },
+    "etiquettes": [ { "fr": "Métier", "en": "Sector" } ],
+    "vignette": "emargement.webp", "tables": true
+  },
+  {
+    "id": "emargement-grille", "type": "grille",
+    "nom": { "fr": "Émargement en grille (Excel)", "en": "Attendance grid (Excel)" },
+    "description": { "fr": "Feuille d’émargement dans une grille façon Excel : une ligne par participant, une colonne par demi-journée.", "en": "Attendance sheet in an Excel-style grid: one row per participant, one column per half-day." },
+    "etiquettes": [ { "fr": "Métier", "en": "Sector" } ],
+    "vignette": "emargement-grille.webp", "tables": true
+  },
+  {
+    "id": "proposition-commerciale", "type": "presentation",
+    "nom": { "fr": "Présentation commerciale", "en": "Sales presentation" },
+    "description": { "fr": "Proposition commerciale en diapositives : une présentation par contact, avec graphiques liés à vos tables.", "en": "Sales proposal as slides: one presentation per contact, with charts linked to your tables." },
+    "etiquettes": [ { "fr": "Vente", "en": "Sales" }, { "fr": "Présentation", "en": "Presentation" } ],
+    "vignette": "proposition-commerciale.webp", "extensions": [ "graphique" ], "tables": true
+  }
+]

@@ -80,6 +80,8 @@ chemin est affiché.
   le dépôt de développement, le dépôt public a son propre `.github`, que `publier.sh` ne touche pas.
   `vitrine/` (la description et les captures, de trois à six, de la carte de l'app dans la fenêtre « Apps et extensions »
   de GFS, consigne 071) aussi : GFS en copie les images chez lui, le dépôt public n'a pas à les porter.
+  `modeles/` (le catalogue `modeles.json` et une vignette par modèle de départ, pour le « Nouveau > Depuis un modèle » de
+  GFS, consigne 075) aussi : GFS copie le catalogue et les vignettes chez lui, la galerie du dépôt public est `templates-gallery/`.
 - Un fichier ou un dossier de `PUBLIES` que le dépôt de développement ne suit pas. `.nojekyll`, un fichier vide
   à la racine, en fait partie : il part avec le reste, car le dépôt public a son propre site (GitHub Pages) et,
   sans lui, Pages passe les `.md` dans Jekyll avant de publier ; un `.md` qui porte une accolade double ouverte
@@ -87,7 +89,9 @@ chemin est affiché.
 - Un kit que le dépôt de développement ne récupère pas (`git submodule update --init kit`), ou qui n'est pas un
   sous-module. Le dépôt public n'a pas de sous-module : `.gitmodules` ne part pas (`EXCLUS`), le kit y arrive en
   fichiers ordinaires, ceux de son commit épinglé (`KIT_PARTIES` : `css`, `js`, `LICENSE`), sans son README, son
-  journal ni ses essais. Ce que la page ou `js/` en importe (`kit/js/ambiance-message.js`, `ambiance-pose.js`,
+  journal ni ses essais, ni ce que l'app n'importe pas et que les contrôles refuseraient (`KIT_RETIRES` : `js/synchro`,
+  le moteur de partage de GFS venu avec le kit 0.23.0, dont les notes citent par son prénom la personne qui a demandé
+  le widget). Ce que la page ou `js/` en importe (`kit/js/ambiance-message.js`, `ambiance-pose.js`,
   `correcteurs-message.js`, `correcteurs-pose.js`, `once.js`) doit y être, sinon `controles.mjs` s'arrête.
 - Un sous-dossier de `public/` autre que `screenshots/`, ou autre chose qu'un `.png` dans `public/screenshots/`.
 - Une version qui n'est pas du semver, ou une étiquette déjà prise.

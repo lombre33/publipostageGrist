@@ -7,6 +7,8 @@
 // DOM passive (le HTML lu dans un conteneur .tiptap), pas une seconde instance TipTap, donc sans risque pour le document en cours d'édition.
 // Ce que la galerie demande à js/main.js lui est donné à wire : changer le modèle de l'éditeur, l'enregistrer, poser un message dans le coin d'état,
 // poser la question « Enregistrer / Abandonner / Annuler » quand une modification attend.
+// Une seconde porte, celle de GFS (consigne GFS 075, « Nouveau > Depuis un modèle ») : `openFromGfs(id)` ouvre à l'écran, NON ENREGISTRÉ, le modèle de ce catalogue que la personne a choisi dans la fenêtre de GFS
+// (js/gfs-open.js, `ouverture.modele`) ; les 22 entrées du catalogue de GFS (modeles/modeles.json) sont celles de cette galerie, aux mêmes identifiants.
 const TemplateGalleryModal = (function () {
   let host = null; // ce que js/main.js met à la disposition de la galerie (cf. wire)
   let galleryModal = null;
@@ -323,8 +325,8 @@ const TemplateGalleryModal = (function () {
   }
 
   // La question avant de créer : les tables à créer (avec leurs colonnes, dont celles de calcul), celles qui y sont déjà et restent telles quelles.
-  function confirmMessage(pack, plan) {
-    const lines = [I18n.t('dialog.pack.intro', { name: entryName(currentEntry), n: plan.create.length })];
+  function confirmMessage(pack, plan, entry = currentEntry) {
+    const lines = [I18n.t('dialog.pack.intro', { name: entryName(entry), n: plan.create.length })];
     plan.create.forEach(id => {
       const table = pack.tables.find(t => t.id === id);
       const calc = table.columns.filter(column => column.formula).length;
@@ -338,8 +340,8 @@ const TemplateGalleryModal = (function () {
   }
 
   // Le refus : une ligne par table qui gêne (colonnes manquantes, type différent, nom pris sans respecter la casse), puis quoi faire.
-  function conflictMessage(conflicts) {
-    const lines = [I18n.t('dialog.pack.conflictIntro', { name: entryName(currentEntry) }), ''];
+  function conflictMessage(conflicts, entry = currentEntry) {
+    const lines = [I18n.t('dialog.pack.conflictIntro', { name: entryName(entry) }), ''];
     conflicts.forEach(conflict => {
       const table = conflict.table;
       const named = conflict.problems.find(problem => problem.kind === 'name');
@@ -353,8 +355,8 @@ const TemplateGalleryModal = (function () {
   }
 
   // Une seule touche : « Fermer » (Dialogs.choose sans choix ne garde que le bouton d'annulation).
-  function showConflicts(conflicts) {
-    return Dialogs.choose({ title: I18n.t('dialog.pack.conflictTitle'), message: conflictMessage(conflicts), choices: [], cancelLabel: I18n.t('common.close') });
+  function showConflicts(conflicts, entry = currentEntry) {
+    return Dialogs.choose({ title: I18n.t('dialog.pack.conflictTitle'), message: conflictMessage(conflicts, entry), choices: [], cancelLabel: I18n.t('common.close') });
   }
 
   async function useWithPack() {
@@ -390,8 +392,70 @@ const TemplateGalleryModal = (function () {
     host.setStatus(parts.join(' '));
   }
 
+  // ---- « Nouveau > Depuis un modèle » de GFS (consigne GFS 075) ----
+
+  // Le modèle du catalogue que GFS désigne par son identifiant s'ouvre à l'écran, NON ENREGISTRÉ, comme un « Nouveau » vierge qui aurait déjà son texte : le texte du modèle, son type, sa page, son en-tête et son pied, le nom de la
+  // galerie déjà dans le champ du nom, et rien d'écrit dans la table des modèles avant le premier « Enregistrer » (l'enregistrement automatique ne crée jamais de modèle). Un modèle à pack (js/template-pack.js) vient avec ses tables :
+  // la demande d'accord habituelle de « Créer avec ses tables » les liste d'abord, et rien n'est créé sans elle. Tout se contrôle AVANT le premier effet - l'identifiant, le type, la lecture du modèle et de son pack, l'extension qu'il
+  // exige (une présentation demande « diapositives », un graphique « graphique » : sans elle, la fenêtre d'explication s'ouvre comme au clic de la galerie), la question « Enregistrer / Abandonner / Annuler » quand des modifications
+  // attendent, les conflits de tables, l'accord - et rend faux, sans rien avoir changé, au premier refus : jamais un modèle vierge à la place. true : le modèle est à l'écran (ses tables créées avec l'accord, ou celles du document
+  // qui lui conviennent) ; false : il ne l'est pas. Un document en lecture seule ne peut rien enregistrer : faux d'emblée, comme « Nouveau ».
+  async function openFromGfs(id) {
+    if (!host || host.isReadOnly()) return false;
+    let entry;
+    try { entry = (await TemplateGallery.loadManifest()).find(candidate => candidate.id === id); }
+    catch (e) {
+      console.error('[template-gallery-modal] échec du chargement du manifeste', e);
+      host.setStatus(I18n.t('status.galleryLoadError'), true);
+      return false;
+    }
+    if (!entry) { host.setStatus(I18n.t('status.gfsModelUnknown'), true); return false; }
+    const [html, pack, headerFooter] = await Promise.allSettled([TemplateGallery.fetchHtml(entry), TemplateGallery.fetchPack(entry), TemplateGallery.fetchHeaderFooter(entry)]);
+    if (pack.status === 'rejected') {
+      console.error('[template-gallery-modal] échec du chargement du pack', pack.reason);
+      host.setStatus(I18n.t('status.packLoadError'), true);
+      return false;
+    }
+    if (html.status === 'rejected' || headerFooter.status === 'rejected' || !html.value) {
+      console.error('[template-gallery-modal] échec du chargement du modèle', html.status === 'rejected' ? html.reason : headerFooter.status === 'rejected' ? headerFooter.reason : 'modèle vide');
+      host.setStatus(I18n.t('status.templateLoadError'), true);
+      return false;
+    }
+    const found = pack.value;
+    // La garde « type inconnu » : un modèle d'un type que cette version ne sait pas ouvrir (un type d'un catalogue plus récent) n'est pas ouvert, il n'est pas non plus remplacé par un autre.
+    if (!Templates.isOpenableType(found ? found.template.type : 'document')) { host.setStatus(I18n.t('status.gfsModelUnknown'), true); return false; }
+    if (!(await ensureExtensions(found))) return false;
+    // Avant tout effet : « Annuler » ne laisse rien derrière elle (ni table ni modèle).
+    if (host.hasEditsToConfirmBeforeLeaving() && !(await host.askBeforeLeaving())) return false;
+    if (found) {
+      let plan;
+      try { plan = TemplatePack.plan(found, await TemplatePack.readDocumentSchema()); }
+      catch (e) {
+        console.error('[template-gallery-modal] échec de la lecture des tables du document', e);
+        host.setStatus(I18n.t('status.packReadError'), true);
+        return false;
+      }
+      if (plan.conflicts.length) { await showConflicts(plan.conflicts, entry); return false; }
+      if (plan.create.length && !(await Dialogs.confirm({ title: I18n.t('dialog.pack.title'), message: confirmMessage(found, plan, entry), confirmLabel: I18n.t('common.create') }))) return false;
+      try { await TemplatePack.apply(found); }
+      catch (e) {
+        // Un conflit apparu entre la question et la création (une autre fenêtre a créé une table) se dit comme le premier ; les autres échecs, au coin d'état.
+        if (TemplatePack.isPackError(e) && e.packCode === 'conflict') { await showConflicts(e.details.conflicts, entry); return false; }
+        console.error('[template-gallery-modal] échec de la création des tables du modèle', e);
+        host.setStatus(I18n.t(TemplatePack.isPackError(e) && e.packCode === 'renamed' ? 'status.packRenamed' : 'status.packError'), true);
+        return false;
+      }
+    }
+    // La galerie ouverte dans l'app (ou son aperçu) ne reste pas devant le modèle qui vient d'arriver ; un aperçu en cours de lecture ne repeint plus rien.
+    closeAll();
+    // Un modèle sans pack n'a pas de tables : « Utiliser ce modèle », les badges en moins ; avec son pack, il garde ses variables.
+    host.clearTemplateSelection();
+    host.loadTemplateIntoEditor(Object.assign({ id: null, contenu: found ? html.value : TemplateGallery.stripVariableBadges(html.value), headerFooter: headerFooter.value, nom: entryName(entry), nomFichierPDF: '' }, packSettings(found, !found)));
+    return true;
+  }
+
   // `options` (gardé dans `host`) : { clearTemplateSelection, loadTemplateIntoEditor, saveCreated, currentTemplateId, setStatus,
-  // hasEditsToConfirmBeforeLeaving, askBeforeLeaving, savedTemplateName, saveWatchdogMs }.
+  // hasEditsToConfirmBeforeLeaving, askBeforeLeaving, savedTemplateName, isReadOnly, saveWatchdogMs }.
   function wire(options) {
     const openLink = document.getElementById('v2-btn-new-from-template');
     const galleryClose = document.getElementById('tpl-gallery-close');
@@ -436,5 +500,5 @@ const TemplateGalleryModal = (function () {
     SlidesEntry.onChange(() => { if (currentEntry) renderPreviewMeta(); });
   }
 
-  return { wire };
+  return { wire, openFromGfs };
 })();

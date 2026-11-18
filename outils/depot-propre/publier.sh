@@ -41,10 +41,14 @@ PUBLIES=(index.html nouveautes.html css js extensions img templates-gallery LICE
 # .github (Dependabot du dépôt de développement, lot D de la consigne 063 de GFS) y reste aussi : le dépôt public porte son propre .github, que ce script ne touche pas.
 # package.json (la liste unique des bibliothèques, consignes 063 et 067 de GFS) et bibliotheques/ (son catalogue) restent dans le dépôt de développement : les poser dans le dépôt public, pour Dependabot, est une décision à part.
 # vitrine/ (consigne 071 de GFS : la description et les captures, de trois à six, de la carte et de la fiche de l'app dans la fenêtre « Apps et extensions » de GFS) reste aussi dans le dépôt de développement : GFS en copie les images chez lui, ce qu'un utilisateur du dépôt public n'a pas à porter.
-EXCLUS=(.claude .github .gitignore .gitmodules AUDIT_CODE.md CAHIER_DES_CHARGES.md GFS-ETAT.md README.md bibliotheques dev-tests outils package.json planning prototypes templates-gallery-dev vitrine)
+# modeles/ (consigne 075 de GFS : le catalogue modeles.json et la vignette de chacun des modèles de départ que GFS propose dans « Nouveau > Depuis un modèle ») reste aussi dans le dépôt de développement : GFS copie le catalogue et les vignettes chez lui (sa politique de sécurité ne charge une image que de lui), la galerie du dépôt public est templates-gallery/.
+EXCLUS=(.claude .github .gitignore .gitmodules AUDIT_CODE.md CAHIER_DES_CHARGES.md GFS-ETAT.md README.md bibliotheques dev-tests modeles outils package.json planning prototypes templates-gallery-dev vitrine)
 # Ce que le dépôt public reçoit du kit (consignes 041 et 068 de GFS : l'app en importe ambiance-message.js, ambiance-pose.js, correcteurs-message.js et correcteurs-pose.js, qui importent once.js) : ce que le kit sert, sa licence ;
 # ni son README, ni son journal, ni ses essais.
 KIT_PARTIES=(css js LICENSE)
+# Ce qui n'en part pas bien qu'il soit dans une de ces parties : ce que l'app n'importe pas et qui ferait refuser l'envoi. js/synchro est le moteur de partage de GFS (kit 0.23.0) : ses notes et deux de ses fichiers citent par son prénom
+# la personne qui a demandé le widget, et le contrôle « prénom » de controles.mjs refuse un arbre qui l'écrit (c'est le kit de GFS, que ce dépôt ne corrige pas). Un dossier du kit que l'app n'importe pas et que les contrôles refusent se range ici de la même façon.
+KIT_RETIRES=(js/synchro)
 
 DEV=""
 PROPRE=""
@@ -199,6 +203,7 @@ node "$ICI/beta-bandeau.mjs" --poser "$PROPRE" --etiquette "$BETA_ETIQUETTE" >/d
 # `git archive` ne descend pas dans un sous-module (il laisse un dossier vide) : le kit vient de son propre commit épinglé.
 mkdir -p "$PROPRE/kit"
 git -C "$DEV/kit" archive --format=tar "$KIT_COMMIT" "${KIT_PARTIES[@]}" | tar -x -C "$PROPRE/kit"
+for x in "${KIT_RETIRES[@]}"; do rm -rf "${PROPRE:?}/kit/${x:?}"; done
 for nom in "${DOCS[@]}"; do
   sed -e "s/{{VERSION}}/$VERSION/g" -e "s/{{DATE_FR}}/$DATE_FR/g" -e "s/{{DATE_EN}}/$DATE_EN/g" -e "s/{{DATE}}/$DATE_PUB/g" \
     "$ICI/public/$nom" > "$PROPRE/$nom"

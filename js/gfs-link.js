@@ -3,7 +3,7 @@
 // protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Quatorze choses seulement :
 //  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }),
 //    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre),
-//    `ouverture`, ce que GFS demande d'ouvrir au démarrage (consigne 010 ; pour « Nouveau > Importer », le fichier à importer que GFS donne, consigne 035), `langue`, la langue qui vaut maintenant (`fr` ou `en`, consigne 019), `stockage`, l'espace de cette app chez GFS
+//    `ouverture`, ce que GFS demande d'ouvrir au démarrage (consigne 010 ; pour « Nouveau > Importer », le fichier à importer que GFS donne, consigne 035 ; pour « Nouveau > Depuis un modèle », l'identifiant du modèle de départ choisi, consigne 075), `langue`, la langue qui vaut maintenant (`fr` ou `en`, consigne 019), `stockage`, l'espace de cette app chez GFS
 //    (`{ clé: texte }`, consigne 024) et `barre`, la barre de GFS posée par-dessus le cadre (`{ bord, epaisseur, zone }` ou null, consigne 025) ;
 //  - l'appel `stockage.ecrire { cle, valeur }`, sans `id` (GFS ne répond rien) : une clé de cet espace change (`valeur` null la retire). Le cadre isolé de GFS refuse son propre stockage de navigateur ;
 //    ce sont ces deux-là qui gardent, pour chaque personne, ce que l'app se rappelle (js/person-store.js, le seul à s'en servir) ;
@@ -34,7 +34,7 @@
 //  - l'appel `joindre { table, colonne, mode?, fichiers: [{ ligne, fichier, nom }] }` (consigne 053, contrats 5.4 point 12), que l'app envoie pour que GFS joigne lui-même chaque PDF à la cellule « Pièces jointes » de sa ligne : l'app ne reçoit
 //    aucun jeton d'écriture, elle donne les octets (`fichier` : un `File` ou un `Blob`), au plus 200 entrées par appel, sans délai (GFS envoie les fichiers un à un) ; la réponse est `{ colonne, probleme, joints, echecs }` (ce que Grist refuse est dans
 //    `probleme` et `echecs`, pas une erreur de l'appel) et un refus de l'appel lui-même garde son `code` (`GFS_REFUSE`, `GFS_LECTURE_SEULE`, `GFS_INACTIF`, `GFS_INCONNU` pour un GFS d'avant ce geste) : js/row-attachment.js, le seul à s'en servir, traduit le rapport ;
-//  - l'appel `ouvrir`, que GFS envoie à l'app déjà ouverte quand la personne double-clique un autre fichier (consigne 010) ou choisit « Nouveau > Importer » (consigne 035, avec le fichier) ou « Lire » sur un PDF (consigne 040, avec le PDF) : l'abonné de `onOpen` répond, ce fichier lui rend la réponse ;
+//  - l'appel `ouvrir`, que GFS envoie à l'app déjà ouverte quand la personne double-clique un autre fichier (consigne 010) ou choisit « Nouveau > Importer » (consigne 035, avec le fichier) ou « Lire » sur un PDF (consigne 040, avec le PDF) ou « Nouveau > Depuis un modèle » (consigne 075, avec l'identifiant du modèle) : l'abonné de `onOpen` répond, ce fichier lui rend la réponse ;
 //  - l'appel `fermer { raison }` (consigne 047), que GFS envoie à l'app active avant de la remplacer par une autre app ou de lui faire laisser la place au fichier d'une autre app (`raison` : `app`, `explorateur`, `nouveau`,
 //    `importer`, `lire` ou `lien`) et dont il attend `{ ferme: true | false }` avant de détruire son cadre : l'abonné de `onClose` répond (js/gfs-open.js : ce qui attend est enregistré avant le `oui`). Une réponse qui
 //    échoue est une erreur (`GFS_ECHEC`, GFS demande alors à la personne), jamais un `oui`. Tout autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3).
@@ -49,6 +49,7 @@ const GfsLink = (function () {
   const BAR_EDGES = { gauche: 'left', haut: 'top', droite: 'right', bas: 'bottom' };   // contrats 5.2, point 7 : les quatre bords où GFS pose sa barre, nommés comme le reste de l'app
   const IMPORT_REASON = 'importer';   // contrats 5.2, point 3 (consigne 035) : la raison d'une ouverture qui porte `importation`
   const READ_REASON = 'lire';         // contrats 5.2, point 3 (consigne 040) : la raison d'une ouverture qui porte `lecture`
+  const MODEL_REASON = 'modele';      // contrats 5.2, point 3 (consigne 075) : la raison d'une ouverture qui porte `modele`
   const PLAYER_PROVIDERS = ['youtube', 'vimeo'];   // les sites dont l'app sait monter l'identifiant (js/video-frame.js) : un autre nom que GFS annoncerait n'est pas gardé
   const PLAYER_CALLS = ['afficher', 'deplacer', 'masquer', 'fermer'];   // les quatre appels `lecteur.<nom>` que l'app envoie
   const PLAYER_STATES = ['lecture', 'pause', 'fin', 'erreur'];
@@ -65,7 +66,7 @@ const GfsLink = (function () {
   let extensions = [];
   let libraries = new Map();   // identifiant -> { src, integrite, forme } (forme : 'script' ou 'module', contrats de GFS 5.2 point 4)
   let address = '';            // `adresseWidget` du contexte ('' : seul, ou GFS ne l'a pas donnée)
-  let opening = null;          // `ouverture` du contexte : null, ou { fichier: null | { id, type }, type, dossier, raison[, importation: { valeur, fichier: File }][, lecture: { id, fichier: File }] }
+  let opening = null;          // `ouverture` du contexte : null, ou { fichier: null | { id, type }, type, dossier, raison[, importation: { valeur, fichier: File }][, lecture: { id, fichier: File }][, modele: { id }] }
   let language = null;         // `langue` du contexte, puis de l'événement `langue` : 'fr' ou 'en' (null : seul, ou GFS ne la donne pas)
   let storage = null;          // `stockage` du contexte (consigne 024) : Map clé -> texte, l'espace de cette app chez GFS (null : seul, GFS ne répond pas ou ne le donne pas)
   let players = [];            // `lecteurs` du contexte, puis de l'événement `lecteurs` : les sites que GFS sait jouer (vide : seul, ou GFS ne les donne pas)
@@ -115,7 +116,9 @@ const GfsLink = (function () {
   // `importation: { valeur, fichier }` : `valeur` un texte (`excel`, `markdown`, `html`, `powerpoint`, `word` ou `opendocument`) et `fichier` un `File`. Pour toute autre raison, ou si `valeur` n'est pas un texte ou `fichier` pas un
   // `File`, l'ouverture est lue sans importation. Pour la raison `lire` (« Lire » sur un PDF, consigne 040 : GFS garde le PDF, le télécharge lui-même et le donne, une seule fois), s'y ajoute
   // `lecture: { id, fichier }` : `id` un texte (l'identifiant du PDF chez GFS) et `fichier` un `File` (le PDF, à son nom) ; pour toute autre raison, ou si `id` n'est pas un texte ou `fichier` pas un `File`,
-  // l'ouverture est lue sans lecture. Rien d'autre n'est gardé ; null quand ce n'est pas un objet.
+  // l'ouverture est lue sans lecture. Pour la raison `modele` (« Nouveau > Depuis un modèle », consigne 075 : la personne a choisi un modèle de départ dans la fenêtre de GFS, parmi le catalogue `modeles/modeles.json` de
+  // cette app), s'y ajoute `modele: { id }` : `id` un texte, l'identifiant d'une entrée de ce catalogue (rogné) ; pour toute autre raison, ou si `id` n'est pas un texte ou est vide, l'ouverture est lue sans modèle
+  // (js/gfs-open.js n'ouvre alors rien). Rien d'autre n'est gardé ; null quand ce n'est pas un objet.
   function normalizeOpening(raw) {
     if (!raw || typeof raw !== 'object') return null;
     const file = raw.fichier && typeof raw.fichier === 'object' && raw.fichier.id != null && String(raw.fichier.id).trim() !== '' ? raw.fichier : null;
@@ -128,6 +131,10 @@ const GfsLink = (function () {
     const reading = raw.lecture;
     if (found.raison === READ_REASON && reading && typeof reading === 'object' && typeof reading.id === 'string' && typeof File === 'function' && reading.fichier instanceof File) {
       found.lecture = { id: reading.id, fichier: reading.fichier };
+    }
+    const model = raw.modele;
+    if (found.raison === MODEL_REASON && model && typeof model === 'object' && typeof model.id === 'string' && model.id.trim() !== '') {
+      found.modele = { id: model.id.trim() };
     }
     return found;
   }
@@ -374,7 +381,7 @@ const GfsLink = (function () {
   // Un lien `mailto:` ou `tel:` suivi dans le cadre isolé de GFS le fait mourir (sa politique `frame-src` ne connaît pas ces adresses, consigne 011) : hébergée, l'app l'ouvre donc dans un
   // nouvel onglet, où rien ne casse. Seule, faux : ces liens se comportent comme avant.
   const opensInNewTab = href => hosted && /^(?:mailto|tel):/i.test(String(href == null ? '' : href).trim());
-  // Ce que GFS demande d'ouvrir au démarrage (`ouverture` du contexte) : null, ou { fichier: null | { id, type }, type, dossier, raison[, importation: { valeur, fichier }][, lecture: { id, fichier }] } (voir normalizeOpening). null seul, si GFS
+  // Ce que GFS demande d'ouvrir au démarrage (`ouverture` du contexte) : null, ou { fichier: null | { id, type }, type, dossier, raison[, importation: { valeur, fichier }][, lecture: { id, fichier }][, modele: { id }] } (voir normalizeOpening). null seul, si GFS
   // ne répond pas, ou s'il n'a rien demandé.
   const getOpening = () => opening;
   // La langue de GFS qui vaut maintenant, 'fr' ou 'en' : celle du contexte, puis celle du dernier événement `langue`. null seul, si GFS ne répond pas ou ne la donne pas (un GFS d'avant la consigne 019).
@@ -438,7 +445,7 @@ const GfsLink = (function () {
   // Un abonné des réglages est rappelé (`fn(true | false)`, ce que rend `settingsSaved()`) à chaque événement `reglages` qui change l'état, jamais à l'arrivée du contexte (il n'en porte pas) : le départ lit
   // `settingsSaved()`. Rend de quoi se désabonner.
   function onSettings(fn) { settingsListeners.add(fn); return () => settingsListeners.delete(fn); }
-  // Inscrit celui qui ouvre ce que GFS demande : `fn({ fichier, type, dossier, raison[, importation][, lecture] })` rend (une promesse de) vrai quand le fichier demandé est ouvert à la fin, faux sinon ; GFS en reçoit
+  // Inscrit celui qui ouvre ce que GFS demande : `fn({ fichier, type, dossier, raison[, importation][, lecture][, modele] })` rend (une promesse de) vrai quand le fichier demandé est ouvert à la fin, faux sinon ; GFS en reçoit
   // `{ ouvert }`, sans délai (la personne peut prendre son temps). Un seul abonné ; les appels arrivés avant lui lui sont donnés dans l'ordre.
   function onOpen(fn) {
     openHandler = fn;
