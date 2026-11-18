@@ -352,7 +352,7 @@
     }
   },
   "devDependencies": {
-    "esbuild": "0.25.10",
+    "esbuild": "0.28.2",
     "jsqr": "1.4.0",
     "pdfjs-dist": "3.11.174",
     "echarts": "6.1.0"
