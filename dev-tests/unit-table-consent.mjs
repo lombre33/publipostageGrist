@@ -84,6 +84,7 @@ function fresh(doc, { hooks = null, scripts = [] } = {}) {
     __hooks: hooks ? hooks.hooks : null,
   };
   const ctx = createContext(globals);
+  loadScript(ctx, 'js/schema-columns.js');
   loadScript(ctx, 'js/grist-api.js');
   scripts.forEach((path) => loadScript(ctx, path));
   if (hooks) evalIn(ctx, 'GristAPI.setTableConsent(__hooks)');
@@ -106,9 +107,9 @@ async function main() {
     const doc = new Doc(['Missions']);
     const q = makeHooks();
     const { run, log } = fresh(doc, { hooks: q });
-    check('la table du widget est créée après un « oui »', (await attempt(run, 'Publipostage_Modeles')) === 'créée' && same(doc.added(), ['Publipostage_Modeles']), doc.added());
+    check('la table du widget est créée après un « oui »', (await attempt(run, 'Publipostage_Templates')) === 'créée' && same(doc.added(), ['Publipostage_Modeles']), doc.added());
     check('une seule question', q.asked === 1, q.asked);
-    check('sa page est rangée', same(log.pages, ['Publipostage_Modeles']), log.pages);
+    check('sa page est rangée', same(log.pages, ['Publipostage_Templates']), log.pages);
     check('une autre table du widget, plus tard : créée sans nouvelle question (« oui » vaut pour la session)', (await attempt(run, 'Publipostage_Commentaires')) === 'créée' && q.asked === 1, q.asked);
     check('aucune erreur écrite', log.errors.length === 0, log.errors);
   });
@@ -134,26 +135,26 @@ async function main() {
     const other = new Doc(['Publipostage_Commentaires']);
     const q2 = makeHooks({ answers: [false] });
     const second = fresh(other, { hooks: q2 });
-    check('n\'importe laquelle des sept compte', (await attempt(second.run, 'Publipostage_Modeles')) === 'créée' && q2.asked === 0, q2.asked);
+    check('n\'importe laquelle des sept compte', (await attempt(second.run, 'Publipostage_Templates')) === 'créée' && q2.asked === 0, q2.asked);
   });
 
   await section('un refus', async () => {
     const doc = new Doc(['Missions']);
     const q = makeHooks({ answers: [false] });
     const { run, log } = fresh(doc, { hooks: q });
-    const result = await attempt(run, 'Publipostage_Modeles');
+    const result = await attempt(run, 'Publipostage_Templates');
     check('rien n\'est créé et l\'erreur est celle du refus', result === 'refusée' && doc.added().length === 0 && log.pages.length === 0, { result, added: doc.added() });
     check('aucune erreur écrite', log.errors.length === 0 && log.warnings.length === 0, { errors: log.errors, warnings: log.warnings });
-    check('sans geste depuis le refus : refusée sans nouvelle question, quelle que soit la table', (await attempt(run, 'Publipostage_LiensTables')) === 'refusée' && (await attempt(run, 'Publipostage_Modeles')) === 'refusée' && q.asked === 1, q.asked);
+    check('sans geste depuis le refus : refusée sans nouvelle question, quelle que soit la table', (await attempt(run, 'Publipostage_LiensTables')) === 'refusée' && (await attempt(run, 'Publipostage_Templates')) === 'refusée' && q.asked === 1, q.asked);
   });
 
   await section('après un refus, un geste repose la question', async () => {
     const doc = new Doc();
     const q = makeHooks({ answers: [false, true] });
     const { run } = fresh(doc, { hooks: q });
-    await attempt(run, 'Publipostage_Modeles');
+    await attempt(run, 'Publipostage_Templates');
     q.gestures++; // un clic de la personne
-    check('un geste, puis une création : la question est reposée et le « oui » crée la table', (await attempt(run, 'Publipostage_Modeles')) === 'créée' && q.asked === 2 && same(doc.added(), ['Publipostage_Modeles']), { asked: q.asked, added: doc.added() });
+    check('un geste, puis une création : la question est reposée et le « oui » crée la table', (await attempt(run, 'Publipostage_Templates')) === 'créée' && q.asked === 2 && same(doc.added(), ['Publipostage_Modeles']), { asked: q.asked, added: doc.added() });
     q.gestures += 5;
     check('« oui » gardé : plus de question, même après d\'autres gestes', (await attempt(run, 'Publipostage_Commentaires')) === 'créée' && q.asked === 2, q.asked);
   });
@@ -162,19 +163,19 @@ async function main() {
     const doc = new Doc();
     const q = makeHooks({ answers: [false, false, true] });
     const { run } = fresh(doc, { hooks: q });
-    await attempt(run, 'Publipostage_Modeles');
+    await attempt(run, 'Publipostage_Templates');
     q.gestures++;
-    check('deuxième refus : refusée', (await attempt(run, 'Publipostage_Modeles')) === 'refusée' && q.asked === 2, q.asked);
+    check('deuxième refus : refusée', (await attempt(run, 'Publipostage_Templates')) === 'refusée' && q.asked === 2, q.asked);
     check('encore refusée sans nouvelle question tant que la personne ne fait rien', (await attempt(run, 'Publipostage_LiensTables')) === 'refusée' && q.asked === 2, q.asked);
     q.gestures++;
-    check('un nouveau geste : troisième question, « oui »', (await attempt(run, 'Publipostage_Modeles')) === 'créée' && q.asked === 3, q.asked);
+    check('un nouveau geste : troisième question, « oui »', (await attempt(run, 'Publipostage_Templates')) === 'créée' && q.asked === 3, q.asked);
   });
 
   await section('les gestes faits pendant la question comptent avant le refus', async () => {
     const doc = new Doc();
     const q = makeHooks({ answers: [false], manual: true });
     const { run } = fresh(doc, { hooks: q });
-    const first = attempt(run, 'Publipostage_Modeles');
+    const first = attempt(run, 'Publipostage_Templates');
     await sleep(5);
     q.gestures += 3; // Tab dans la fenêtre, puis le clic sur « Ne pas créer »
     q.release();
@@ -186,7 +187,7 @@ async function main() {
     const doc = new Doc();
     const q = makeHooks({ manual: true });
     const { run, log } = fresh(doc, { hooks: q });
-    const pending = attempt(run, 'Publipostage_Modeles');
+    const pending = attempt(run, 'Publipostage_Templates');
     await sleep(5);
     doc.tables.Publipostage_Modeles = { cols: [], rows: [] }; // une autre fenêtre du document a répondu « oui » avant
     q.release();
@@ -197,20 +198,20 @@ async function main() {
     const doc = new Doc();
     const q = makeHooks({ answers: [new Error('fenêtre indisponible')] });
     const { run, log } = fresh(doc, { hooks: q });
-    check('rien n\'est créé (jamais d\'accord supposé) et l\'échec se voit', (await attempt(run, 'Publipostage_Modeles')) === 'refusée' && doc.added().length === 0 && log.errors.length === 1, { added: doc.added(), errors: log.errors });
+    check('rien n\'est créé (jamais d\'accord supposé) et l\'échec se voit', (await attempt(run, 'Publipostage_Templates')) === 'refusée' && doc.added().length === 0 && log.errors.length === 1, { added: doc.added(), errors: log.errors });
   });
 
   await section('sans question branchée', async () => {
     const doc = new Doc();
     const { run } = fresh(doc);
-    check('un module essayé seul crée sa table comme avant', (await attempt(run, 'Publipostage_Modeles')) === 'créée' && same(doc.added(), ['Publipostage_Modeles']), doc.added());
+    check('un module essayé seul crée sa table comme avant', (await attempt(run, 'Publipostage_Templates')) === 'créée' && same(doc.added(), ['Publipostage_Modeles']), doc.added());
   });
 
   await section('une table déjà là', async () => {
     const doc = new Doc(['Publipostage_Modeles']);
     const q = makeHooks();
     const { run } = fresh(doc, { hooks: q });
-    check('rien à créer, rien à demander', (await attempt(run, 'Publipostage_Modeles')) === 'déjà là' && q.asked === 0, q.asked);
+    check('rien à créer, rien à demander', (await attempt(run, 'Publipostage_Templates')) === 'déjà là' && q.asked === 0, q.asked);
   });
 
   // === ce que les modules du widget en font ===

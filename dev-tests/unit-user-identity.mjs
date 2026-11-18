@@ -100,6 +100,7 @@ function fresh(doc) {
     grist: { docApi: doc, ready() {}, onRecord() {}, onOptions() {}, async getOptions() { return null; } },
     console: { log() {}, warn() {}, error() {} },
   });
+  loadScript(ctx, 'js/schema-columns.js');
   loadScript(ctx, 'js/grist-api.js');
   return { run: (expr) => evalIn(ctx, expr) };
 }

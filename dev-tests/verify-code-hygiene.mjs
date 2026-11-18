@@ -935,10 +935,10 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   // Deux exceptions, deux gestes explicites qui ne sont pas des tables du widget : la galerie de modèles crée la table de DONNÉES que la personne vient de nommer elle-même dans une fenêtre
   // (js/template-gallery-modal.js, useWithData) ; l'installateur des modèles à pack (js/template-pack.js) crée les tables du modèle que la personne a choisi, que la fenêtre lui a nommées une à une
   // et qu'elle a acceptées (contrôle plus bas : la galerie est la seule à l'appeler, et la question précède l'appel).
-  const ALLOWED = ['js/grist-api.js', 'js/template-gallery-modal.js', 'js/template-pack.js'];
+  const ALLOWED = ['js/grist-api.js', 'js/schema-columns.js', 'js/template-gallery-modal.js', 'js/template-pack.js'];
   const creators = jsFiles.filter(rel => /['"]AddTable['"]/.test(noCommentsJs(read(rel))));
   check('tables : l\'analyse lit bien le code (garde-fou de l\'analyse elle-même : js/grist-api.js écrit un AddTable)', creators.includes('js/grist-api.js'), creators.join(', '));
-  check('tables : « AddTable » n\'est écrit que dans js/grist-api.js (addTableIfMissing, qui pose la question), dans la galerie de modèles (la table que la personne nomme elle-même) et dans l\'installateur des modèles à pack - toute autre création de table passerait sans question',
+  check('tables : « AddTable » n\'est écrit que dans js/grist-api.js (addTableIfMissing, qui pose la question), dans le traducteur des noms de js/schema-columns.js (il relaie, sans en créer d\'autre, ce que addTableIfMissing lui envoie), dans la galerie de modèles (la table que la personne nomme elle-même) et dans l\'installateur des modèles à pack - toute autre création de table passerait sans question',
     creators.every(rel => ALLOWED.includes(rel)), creators.filter(rel => !ALLOWED.includes(rel)).join(', '));
 
   const installers = jsFiles.filter(rel => /TemplatePack\.apply\(/.test(noCommentsJs(read(rel))));
@@ -2124,6 +2124,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     'js/comments.js': { cible: 'widget', actions: ['AddRecord', 'RemoveRecord'] },
     'js/export-date.js': { cible: 'document', actions: ['BulkUpdateRecord'], pourquoi: 'la colonne de date d\'export que la personne a choisie dans sa table' },
     'js/grist-api.js': { cible: 'widget', actions: ['AddColumn', 'AddRecord', 'AddTable', 'AddVisibleColumn', 'RemoveRecord', 'UpdateRecord'], pourquoi: 'AddTable : la porte addTableIfMissing, derrière la fenêtre de consentement du 05/10' },
+    'js/schema-columns.js': { cible: 'widget', actions: [], pourquoi: 'le traducteur des noms anglais : il relaie, sous les noms que le document porte, ce que les modules du widget écrivent dans leurs tables ; il n\'écrit rien de lui-même, d\'où aucune action nommée ici : les actions sont celles de ces modules, relevées dans leurs fichiers' },
     'js/page-tree.js': { cible: 'métadonnées', actions: ['UpdateRecord'], tables: ['_grist_Pages'], pourquoi: 'l\'état plié du groupe de pages du widget' },
     'js/row-attachment.js': { cible: 'document', actions: ['AddVisibleColumn', 'BulkUpdateRecord'], pourquoi: 'le PDF joint à la ligne : une colonne de pièces jointes de la table de la personne' },
     'js/saved-page-formats.js': { cible: 'widget', actions: ['AddRecord', 'RemoveRecord'] },

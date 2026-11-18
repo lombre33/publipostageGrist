@@ -596,7 +596,7 @@ window.EditorTestSuites.pageLayout = (function () {
           savedId = saved.id;
           await Templates.loadAll();
           const tpl = Templates.getCached().find(t => t.id === savedId);
-          const raw = await grist.docApi.fetchTable(Templates.TABLE_NAME);
+          const raw = await SchemaColumns.docApi.fetchTable(Templates.TABLE_NAME);
           const rawMargins = JSON.parse(raw.Margins[raw.id.indexOf(savedId)]);
           PageLayout.setMarginsMm(null); // un autre modèle (neuf) est chargé entre-temps : portrait
           const reset = PageLayout.getOrientation();

@@ -40,6 +40,7 @@ const RULES = {
 };
 
 const ctx = createContext({ grist: { docApi: {} } });
+loadScript(ctx, 'js/schema-columns.js');
 loadScript(ctx, 'js/grist-api.js');
 const api = evalIn(ctx, 'GristAPI');
 api.getColumnType = (table, column) => TYPES[table + '.' + column];

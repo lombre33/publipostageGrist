@@ -1,7 +1,7 @@
 // Rangement des pages que Grist crée avec les tables du widget. grist-core (sandbox/grist/useractions.py : AddTable -> doAddView) crée pour chaque
 // AddTable une page au premier niveau, tout en bas du volet des pages ; le widget en crée jusqu'à sept (modèles, commentaires, préférences de
 // rangement, abréviations, formats de page, liens entre tables, sonde de l'identité), autant de lignes dans la navigation.
-// Ici : la page de `Publipostage_Modeles` reste au premier niveau et se replie par défaut ; celle de chaque autre table passe juste dessous, comme le
+// Ici : la page de `Publipostage_Templates` reste au premier niveau et se replie par défaut ; celle de chaque autre table passe juste dessous, comme le
 // glisser-déposer de Grist (app/client/models/TreeModel.ts : UpdateRecord sur `_grist_Pages`, `indentation` et `pagePos` = position de la page qui
 // doit la suivre). Le « replié par défaut » est l'option que Grist lit (app/client/models/entities/PageRec.ts : `_grist_Pages.options` =
 // {"collapsed": true}, case « Replier par défaut » du menu d'une page) ; elle n'est posée qu'à la création de la table des modèles (document neuf),
@@ -12,7 +12,7 @@
 //   PageTree.whenIdle() -> Promise<void> ; les rangements demandés sont finis (tests)
 //   PageTree.reset() -> oublie les tables en attente (tests : chaque scénario repart d'un volet à lui)
 const PageTree = (function () {
-  const MAIN_TABLE = 'Publipostage_Modeles';
+  const MAIN_TABLE = 'Publipostage_Templates';
   const PAGES = '_grist_Pages';
 
   // Tables créées pendant la session dont la page n'est pas encore rangée (la page des modèles peut ne pas exister encore).
@@ -38,8 +38,10 @@ const PageTree = (function () {
   // Dans l'ordre du volet : par pagePos, une position absente en dernier.
   const byPosition = (a, b) => (a.pagePos == null ? Infinity : a.pagePos) - (b.pagePos == null ? Infinity : b.pagePos) || a.id - b.id;
 
+  // `tableId` : le nom anglais d'une table du widget ; les métadonnées de Grist la nomment comme le document la porte (SchemaColumns.actualTable).
   function pageOfTable(tableId, snap) {
-    const table = snap.tables.find(row => row.tableId === tableId);
+    const actual = SchemaColumns.actualTable(tableId);
+    const table = snap.tables.find(row => row.tableId === actual);
     if (!table || !table.primaryViewId) return null;
     return snap.pages.find(page => page.viewRef === table.primaryViewId) || null;
   }

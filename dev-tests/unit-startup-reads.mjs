@@ -157,7 +157,7 @@ function makeDoc({ latencyMs = 0, without = [], modeles = true, rows = 2 } = {})
 
 // Un contexte par scénario : GristAPI et Templates gardent un état module-niveau (schéma, lectures en cours, migrations déjà faites) qui ne doit pas fuiter d'un
 // scénario à l'autre, exactement comme un rechargement de page.
-function fresh(doc, { scripts = ['js/grist-api.js', 'js/templates.js'] } = {}) {
+function fresh(doc, { scripts = ['js/schema-columns.js', 'js/grist-api.js', 'js/templates.js'] } = {}) {
   const clock = { now: 1700000000000 };
   class FakeDate extends Date { static now() { return clock.now; } }
   const timers = [];

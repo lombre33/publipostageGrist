@@ -24,6 +24,8 @@
   const cases = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const ed = () => EditorCore.getEditor();
+  // La table des modèles telle que le faux Grist la porte (ses anciens noms, tant que le document n'est pas passé à l'anglais) : le code dit Templates.TABLE_NAME, le faux Grist reçoit le nom que le traducteur choisit.
+  const modelsOnDisk = () => SchemaColumns.actualTable(Templates.TABLE_NAME);
   // Plus de 500 ms entre deux gestes : prosemirror-history groupe sinon les transactions rapprochées en UN seul évènement (un Annuler défait alors les deux).
   const GROUP_GAP_MS = 700;
   const ATTR = 'data-linked-template';
@@ -1013,9 +1015,9 @@
   // === 8) Les deux sens du lien (lot 6b) ===============================================================================================================================
 
   const stub = () => window.__gristStub;
-  const rowOf = id => stub().getRow(Templates.TABLE_NAME, id);
+  const rowOf = id => stub().getRow(modelsOnDisk(), id);
   // Les écritures de ce cas dans la table des modèles : une action par ligne, avec les colonnes qu'elle touche.
-  const modelWrites = () => stub().getActionLog().filter(a => (a[0] === 'UpdateRecord' || a[0] === 'AddRecord') && a[1] === Templates.TABLE_NAME);
+  const modelWrites = () => stub().getActionLog().filter(a => (a[0] === 'UpdateRecord' || a[0] === 'AddRecord') && a[1] === modelsOnDisk());
   const statusLine = () => { const el = document.getElementById('status-msg'); return { text: el.textContent, error: el.classList.contains('error-msg') }; };
   function say(text) { const el = document.getElementById('status-msg'); if (el) { el.textContent = text; el.className = ''; } }
   const pullRow = () => menu() && menu().querySelector('[data-action="linked-pull"]');
@@ -1094,7 +1096,7 @@
       Editor.setHTML(linkedDoc(m.id, 'A', 2, 2));
       await sleep(200);
       await cursorIn(0, 0, 0);
-      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Contenu: gridHtml('N', 2, 2), DateModif: new Date().toISOString() });
+      stub().remoteWrite(modelsOnDisk(), m.id, { Contenu: gridHtml('N', 2, 2), DateModif: new Date().toISOString() });
       if (Templates.byId(m.id).contenu.indexOf('NA1') !== -1) bad.push('le cache aurait déjà dû être périmé');
       await sleep(GROUP_GAP_MS);
       const done = await LinkedTable.pull(ed());
@@ -1138,7 +1140,7 @@
       Editor.setHTML(WITH_TABLE(m.id));
       await sleep(200);
       await cursorIn(0, 0, 0);
-      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Contenu: '<p>plus de tableau</p>' });
+      stub().remoteWrite(modelsOnDisk(), m.id, { Contenu: '<p>plus de tableau</p>' });
       const reference = docJson();
       stub().clearActionLog();
       say('');
@@ -1339,7 +1341,7 @@
       answerWith(true);
       const real = grist.docApi.applyUserActions;
       grist.docApi.applyUserActions = async (actions) => {
-        if (actions.some(a => a[0] === 'UpdateRecord' && a[1] === Templates.TABLE_NAME)) throw new Error('refusé par les règles d\'accès');
+        if (actions.some(a => a[0] === 'UpdateRecord' && a[1] === modelsOnDisk())) throw new Error('refusé par les règles d\'accès');
         return real.call(grist.docApi, actions);
       };
       let failed;
@@ -1821,7 +1823,7 @@
       press(barButton()); await sleep(150);
       if (!menuOpen() || !openRow()) return { pass: false, notes: 'la ligne « Ouvrir le modèle » est introuvable' };
       // Le modèle disparaît de Grist ; le cache ne le sait pas encore (l'appui relit la liste avant d'ouvrir).
-      await stub().applyUserActions([['RemoveRecord', Templates.TABLE_NAME, m.id]]);
+      await stub().applyUserActions([['RemoveRecord', modelsOnDisk(), m.id]]);
       press(openRow());
       await sleep(900);
       const line = statusLine();
@@ -1837,7 +1839,7 @@
       await sleep(100);
       press(barButton()); await sleep(150);
       if (!menuOpen() || !openRow()) { bad.push('la ligne « Ouvrir le modèle » est introuvable (numéro repris)'); return { pass: false, notes: bad.join(' | ') }; }
-      await stub().applyUserActions([['UpdateRecord', Templates.TABLE_NAME, m2.id, { TypeModele: 'document' }]]);
+      await stub().applyUserActions([['UpdateRecord', modelsOnDisk(), m2.id, { TypeModele: 'document' }]]);
       press(openRow());
       await sleep(900);
       const line2 = statusLine();
@@ -1901,7 +1903,7 @@
       const m = await model('Doc perdu', gridHtml('G', 2, 2));
       const d = await openedDoc(m, 'G', 2, 2);
       if (!(await openFromMenu(0, 0))) return { pass: false, notes: 'la ligne « Ouvrir le modèle » est introuvable' };
-      await stub().applyUserActions([['RemoveRecord', Templates.TABLE_NAME, d.id]]);
+      await stub().applyUserActions([['RemoveRecord', modelsOnDisk(), d.id]]);
       const before = screenOf();
       document.getElementById('btn-linked-return').click();
       await sleep(900);
@@ -1996,8 +1998,8 @@
       stub().clearActionLog();
       await h.clickButton('btn-delete');
       await sleep(900);
-      const writes = stub().getActionLog().filter(a => a[1] === Templates.TABLE_NAME).map(a => a[0] + ':' + (a[0] === 'RemoveRecord' ? a[2] : ''));
-      if (stub().getRow(Templates.TABLE_NAME, m.id)) bad.push('le modèle n\'est pas supprimé');
+      const writes = stub().getActionLog().filter(a => a[1] === modelsOnDisk()).map(a => a[0] + ':' + (a[0] === 'RemoveRecord' ? a[2] : ''));
+      if (stub().getRow(modelsOnDisk(), m.id)) bad.push('le modèle n\'est pas supprimé');
       if (writes.some(w => !/^RemoveRecord:/.test(w))) bad.push('autre chose que la suppression a été écrit : ' + JSON.stringify(writes));
       if (String(rowOf(first).Contenu) !== docHtml) bad.push('le contenu d\'un document a été touché');
       made.splice(made.indexOf(m.id), 1);
@@ -2037,7 +2039,7 @@
       await ActionHistory.whenIdle();
       await sleep(400);
       if (JSON.stringify(rowOf(m.id)) !== before) bad.push('Ctrl + Z n\'a pas rendu la ligne telle qu\'elle était : ' + JSON.stringify(rowOf(m.id)));
-      const writes = stub().getActionLog().filter(a => a[1] === Templates.TABLE_NAME).map(a => a[0] + ':' + a[2]);
+      const writes = stub().getActionLog().filter(a => a[1] === modelsOnDisk()).map(a => a[0] + ':' + a[2]);
       if (writes.join() !== 'AddRecord:' + m.id) bad.push('autre chose que le retour de la ligne a été écrit : ' + JSON.stringify(writes));
       if (!(await linkAlive())) bad.push('la ligne est revenue mais le tableau du document n\'a pas retrouvé son lien : ' + markClass());
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
@@ -2219,7 +2221,7 @@
       // Vivant d'abord : le cas prouve ce qu'il retire.
       if (!LinkedTable.status(ed().state) || markClass() === '-' || !linkedParts().some(visible)) bad.push('le lien vivant manque au départ : ' + JSON.stringify([!!LinkedTable.status(ed().state), markClass()]));
       // Le numéro désigne maintenant un autre modèle : sa ligne porte un autre jeton.
-      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Jeton: NEW_TOKEN });
+      stub().remoteWrite(modelsOnDisk(), m.id, { Jeton: NEW_TOKEN });
       await Templates.loadAll();
       ed().commands.setTextSelection(cellText(0, 0, 1));
       await sleep(150);
@@ -2248,7 +2250,7 @@
       if (!here || here.at.node.attrs.linkedKey !== NEW_TOKEN) bad.push('le curseur n\'est pas dans le tableau posé : ' + JSON.stringify(here && here.at.node.attrs.linkedKey));
       closePicker();
       // « Mettre à jour » agit sur le tableau lié bien à ce modèle, pas sur celui qui est resté : le modèle a changé, seul le premier tableau est remplacé.
-      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Contenu: gridHtml('N', 2, 2), DateModif: new Date().toISOString() });
+      stub().remoteWrite(modelsOnDisk(), m.id, { Contenu: gridHtml('N', 2, 2), DateModif: new Date().toISOString() });
       const liveIndex = tablesOf().findIndex(t => t.node.attrs.linkedKey === NEW_TOKEN);
       await cursorIn(liveIndex, 0, 0);
       const pulled = await LinkedTable.pull(ed());
@@ -2307,7 +2309,7 @@
       const reference = docJson();
       // Mettre à jour : le jeton change pendant la lecture des modèles.
       const realLoadAll = Templates.loadAll;
-      Templates.loadAll = function () { stub().remoteWrite(Templates.TABLE_NAME, m.id, { Jeton: NEW_TOKEN }); return realLoadAll.apply(this, arguments); };
+      Templates.loadAll = function () { stub().remoteWrite(modelsOnDisk(), m.id, { Jeton: NEW_TOKEN }); return realLoadAll.apply(this, arguments); };
       stub().clearActionLog();
       say('');
       let pulled;
@@ -2316,12 +2318,12 @@
       if (pulled !== false || docJson() !== reference || modelWrites().length) bad.push('mise à jour : ' + JSON.stringify([pulled, docJson() === reference, modelWrites().length]));
       if (lineA.text !== I18n.t('linkedTable.gone', { name: m.nom }) || !lineA.error) bad.push('mise à jour, ligne d\'état : ' + JSON.stringify(lineA));
       // Envoyer : le jeton change pendant la fenêtre de confirmation.
-      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Jeton: realToken });
+      stub().remoteWrite(modelsOnDisk(), m.id, { Jeton: realToken });
       await Templates.loadAll();
       ed().commands.setTextSelection(cellText(0, 1, 1));
       await sleep(150);
       const asked = [];
-      Dialogs.confirm = async (options) => { asked.push(options); stub().remoteWrite(Templates.TABLE_NAME, m.id, { Jeton: NEW_TOKEN }); await Templates.loadAll(); return true; };
+      Dialogs.confirm = async (options) => { asked.push(options); stub().remoteWrite(modelsOnDisk(), m.id, { Jeton: NEW_TOKEN }); await Templates.loadAll(); return true; };
       stub().clearActionLog();
       say('');
       const sent = await LinkedTable.push(ed());
@@ -2330,22 +2332,22 @@
       if (lineB.text !== I18n.t('linkedTable.gone', { name: m.nom }) || !lineB.error) bad.push('envoi, ligne d\'état : ' + JSON.stringify(lineB));
       if (rowOf(m.id).Contenu.indexOf('MA1') === -1) bad.push('le modèle a été écrasé : ' + rowOf(m.id).Contenu.slice(0, 80));
       // Le jeton qui disparaît pendant la lecture des modèles (« Mettre à jour ») : l'action s'arrête sur le jeton qu'elle a lu, elle n'en écrit pas un neuf à la place.
-      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Jeton: realToken });
+      stub().remoteWrite(modelsOnDisk(), m.id, { Jeton: realToken });
       await Templates.loadAll();
       await cursorIn(0, 0, 0);
-      Templates.loadAll = function () { stub().remoteWrite(Templates.TABLE_NAME, m.id, { Jeton: '' }); return realLoadAll.apply(this, arguments); };
+      Templates.loadAll = function () { stub().remoteWrite(modelsOnDisk(), m.id, { Jeton: '' }); return realLoadAll.apply(this, arguments); };
       stub().clearActionLog();
       say('');
       let pulledBare;
       try { pulledBare = await LinkedTable.pull(ed()); } finally { Templates.loadAll = realLoadAll; }
       if (pulledBare !== false || modelWrites().length || docJson() !== reference || Templates.byId(m.id).jeton !== '') bad.push('mise à jour, jeton disparu : ' + JSON.stringify([pulledBare, modelWrites().map(columnsWritten), docJson() === reference, Templates.byId(m.id).jeton]));
       // Le jeton qui change pendant la lecture des modèles (« Envoyer ») : la fenêtre de confirmation ne s'ouvre même pas.
-      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Jeton: realToken });
+      stub().remoteWrite(modelsOnDisk(), m.id, { Jeton: realToken });
       await Templates.loadAll();
       await cursorIn(0, 1, 1);
       const askedEarly = [];
       Dialogs.confirm = async (options) => { askedEarly.push(options); return true; };
-      Templates.loadAll = function () { stub().remoteWrite(Templates.TABLE_NAME, m.id, { Jeton: NEW_TOKEN }); return realLoadAll.apply(this, arguments); };
+      Templates.loadAll = function () { stub().remoteWrite(modelsOnDisk(), m.id, { Jeton: NEW_TOKEN }); return realLoadAll.apply(this, arguments); };
       stub().clearActionLog();
       say('');
       let sentEarly;
@@ -2546,7 +2548,7 @@
   }
   // Le modèle change ailleurs (une autre personne l'enregistre) et le cache des modèles le relit, comme un passage de l'enregistrement automatique.
   async function modelBecomes(m, html) {
-    stub().remoteWrite(Templates.TABLE_NAME, m.id, { Contenu: html });
+    stub().remoteWrite(modelsOnDisk(), m.id, { Contenu: html });
     await Templates.loadAll();
   }
   // Les largeurs de colonnes que la page pose d'elle-même (js/editor.js:clampOverflowingTables) : toutes les cases du tableau de rang `t` à `px`, hors de l'historique.
@@ -3233,7 +3235,7 @@
       await cursorAt('avant');
       await sleep(GROUP_GAP_MS);
       // Le modèle change AVANT la frappe : un passage qui a déjà lu l'ancien modèle et enregistré le document ne relit qu'au repos (15 s), après le délai du cas ; ici tout passage qui suit la frappe lit le nouveau.
-      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Contenu: gridHtml('N', 2, 2) });
+      stub().remoteWrite(modelsOnDisk(), m.id, { Contenu: gridHtml('N', 2, 2) });
       ed().chain().focus().insertContent('x').run();
       await sleep(200);
       const cursorBefore = ed().state.selection.from;
@@ -3259,7 +3261,7 @@
       const d = await savedSyncedDoc(m, 'O', 2, 2);
       await openByList(d.id, d.nom);
       stub().clearActionLog();
-      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Contenu: gridHtml('N', 2, 2) });
+      stub().remoteWrite(modelsOnDisk(), m.id, { Contenu: gridHtml('N', 2, 2) });
       const followed = await waitFor(() => textsOf(tablesOf()[0].node) === labels('N', 2, 2), 24000);
       if (!followed) bad.push('le tableau ne suit pas le modèle au repos : ' + textsOf(tablesOf()[0].node));
       await sleep(3000);
@@ -3430,7 +3432,7 @@
     const bundles = [];
     const stats = { refused: 0 };
     api.applyUserActions = async function (actions) {
-      const mine = actions.filter(a => a[1] === Templates.TABLE_NAME && (a[0] === 'UpdateRecord' || a[0] === 'AddRecord'));
+      const mine = actions.filter(a => a[1] === modelsOnDisk() && (a[0] === 'UpdateRecord' || a[0] === 'AddRecord'));
       // La création du jeton d'un modèle (Templates.ensureToken : une mise à jour de la seule colonne Jeton, avant le lot qui garde sa version) n'est pas un lot de ces cas.
       const tokenOnly = mine.length === 1 && mine[0][0] === 'UpdateRecord' && Object.keys(mine[0][3] || {}).join() === 'Jeton';
       if (mine.length && !tokenOnly) bundles.push(mine.map(a => ({ type: a[0], id: a[2], columns: Object.keys(a[3] || {}).sort().join() })));
@@ -3583,7 +3585,7 @@
       const docBefore = String(rowOf(d.id).Contenu);
       const modelBefore = String(rowOf(m.id).Contenu);
       const baseBefore = tableAttrs().linkedBase;
-      const rec = recordBundles(actions => (actions.some(a => a[0] === 'UpdateRecord' && a[1] === Templates.TABLE_NAME) ? 'refusé par les règles d\'accès' : null));
+      const rec = recordBundles(actions => (actions.some(a => a[0] === 'UpdateRecord' && a[1] === modelsOnDisk()) ? 'refusé par les règles d\'accès' : null));
       try {
         await typeInTable('X');
         if (!(await waitFor(() => rec.stats.refused >= 1, 9000))) bad.push('aucun lot n\'a été tenté');
@@ -3619,7 +3621,7 @@
       let typed = false;
       api.applyUserActions = async function (actions) {
         const result = await real.apply(api, arguments);
-        if (!typed && actions.some(a => a[0] === 'UpdateRecord' && a[1] === Templates.TABLE_NAME && a[2] === m.id)) {
+        if (!typed && actions.some(a => a[0] === 'UpdateRecord' && a[1] === modelsOnDisk() && a[2] === m.id)) {
           typed = true;
           ed().chain().focus().setTextSelection(cellText(0, 0, 1)).insertContent('Y').run();
         }
@@ -3651,7 +3653,7 @@
       const d = await reopenedDoc(m, 'O', 2, 2);
       await typeInTable('X');
       const elsewhere = gridHtml('N', 2, 2);
-      stub().remoteWrite(Templates.TABLE_NAME, m.id, { Contenu: elsewhere });
+      stub().remoteWrite(modelsOnDisk(), m.id, { Contenu: elsewhere });
       if (planNow() !== 'push') bad.push('le cache d\'avant ne dit plus « à envoyer » : ' + planNow());
       say('');
       const saved = await saveByHand(h);
@@ -3678,7 +3680,7 @@
         await cursorIn(0, 0, 0);
         await sleep(GROUP_GAP_MS);
         // Le changement d'ailleurs et la frappe dans le même tour : aucune lecture de fond ne tombe entre les deux.
-        stub().remoteWrite(Templates.TABLE_NAME, m.id, { Contenu: elsewhere });
+        stub().remoteWrite(modelsOnDisk(), m.id, { Contenu: elsewhere });
         ed().chain().focus().insertContent('X').run();
         if (!(await waitFor(() => cellsOfRow(d.id) === TYPED_CELLS, 9000))) bad.push('le document n\'a pas été écrit : ' + cellsOfRow(d.id));
         await sleep(400);
@@ -3754,7 +3756,7 @@
       const modelBefore = String(rowOf(m.id).Contenu);
       const baseBefore = tableAttrs().linkedBase;
       say('');
-      const refused = await saveByHand(h, actions => (actions.some(a => a[0] === 'UpdateRecord' && a[1] === Templates.TABLE_NAME) ? 'refusé par les règles d\'accès' : null));
+      const refused = await saveByHand(h, actions => (actions.some(a => a[0] === 'UpdateRecord' && a[1] === modelsOnDisk()) ? 'refusé par les règles d\'accès' : null));
       if (refused.stats.refused !== 1) bad.push('le lot n\'a pas été tenté : ' + refused.stats.refused);
       if (String(rowOf(d.id).Contenu) !== docBefore || String(rowOf(m.id).Contenu) !== modelBefore) bad.push('une ligne a changé malgré le refus');
       if (tableAttrs().linkedBase !== baseBefore || planNow() !== 'push' || textsOf(tablesOf()[0].node) !== TYPED_CELLS) bad.push('après le refus : ' + tableAttrs().linkedBase + ' ' + planNow() + ' ' + textsOf(tablesOf()[0].node));
@@ -3792,7 +3794,7 @@
 
   // Une ligne retirée de la table des modèles sans que le widget le sache (une autre personne supprime le modèle) : la forme de la table des tests, colonne par colonne.
   function dropRowQuietly(id) {
-    const table = stub().state.rows[Templates.TABLE_NAME];
+    const table = stub().state.rows[modelsOnDisk()];
     const at = table.id.indexOf(id);
     if (at !== -1) Object.keys(table).forEach(k => table[k].splice(at, 1));
   }
@@ -3809,9 +3811,9 @@
       let dropped = false;
       // Comme Grist : une mise à jour d'une ligne qui n'existe plus refuse tout le lot (le faux Grist, lui, ignore une mise à jour seule).
       const rec = recordBundles(actions => {
-        if (!actions.some(a => a[0] === 'UpdateRecord' && a[1] === Templates.TABLE_NAME && a[2] === m.id)) return null;
+        if (!actions.some(a => a[0] === 'UpdateRecord' && a[1] === modelsOnDisk() && a[2] === m.id)) return null;
         if (!dropped) { dropped = true; dropRowQuietly(m.id); }
-        return stub().getRow(Templates.TABLE_NAME, m.id) ? null : 'Error : la ligne ' + m.id + ' n\'existe pas';
+        return stub().getRow(modelsOnDisk(), m.id) ? null : 'Error : la ligne ' + m.id + ' n\'existe pas';
       });
       try {
         await typeInTable('X');

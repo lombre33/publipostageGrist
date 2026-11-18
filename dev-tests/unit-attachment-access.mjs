@@ -21,6 +21,7 @@ function fresh() {
     ready() {}, onRecord() {}, onOptions() {}, async getOptions() { return null; },
   };
   const ctx = createContext({ grist, URL, console: { log() {}, warn: (...args) => warnings.push(args.map(String).join(' ')), error() {} } });
+  loadScript(ctx, 'js/schema-columns.js');
   loadScript(ctx, 'js/grist-api.js');
   return { ctx, run: (expr) => evalIn(ctx, expr), tokenRequests, warnings };
 }

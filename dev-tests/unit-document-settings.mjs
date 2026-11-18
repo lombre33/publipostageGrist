@@ -98,7 +98,7 @@ function fresh(doc, extra) {
     grist: { docApi: doc, ready() {}, onRecord() {}, onOptions() {}, async getOptions() { return null; } },
     console: { log() {}, warn(...a) { warnings.push(a.join(' ')); }, error(...a) { warnings.push(a.join(' ')); } },
   }, extra));
-  ['js/grist-api.js', 'js/templates.js'].forEach((s) => loadScript(ctx, s));
+  ['js/schema-columns.js', 'js/grist-api.js', 'js/templates.js'].forEach((s) => loadScript(ctx, s));
   return { ctx, warnings, run: (expr) => evalIn(ctx, expr) };
 }
 

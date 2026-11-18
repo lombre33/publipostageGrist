@@ -205,7 +205,7 @@ function fresh(doc, { compression = true, versions = true } = {}) {
       }
       globalThis.Date = Fake;
     })();`);
-  ['js/grist-api.js', 'js/templates.js'].concat(versions ? ['js/versions-store.js'] : []).forEach((s) => loadScript(ctx, s));
+  ['js/schema-columns.js', 'js/grist-api.js', 'js/templates.js'].concat(versions ? ['js/versions-store.js'] : []).forEach((s) => loadScript(ctx, s));
   const run = (expr) => evalIn(ctx, expr);
   const t = {
     ctx, doc, warnings, timers, run, compressions,

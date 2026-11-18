@@ -593,22 +593,22 @@ const SchemaRenames = (function () {
     return count ? { text: JSON.stringify(parsed), count } : { text: json, count: 0 };
   }
 
-  // Un modèle lu tel que Grist le range ({ id, Contenu, HeaderFooter, … } en texte brut) : ce qu'il faut écrire pour qu'il suive les renommages, ou
+  // Un modèle lu tel que Grist le range ({ id, Content, HeaderFooter, … } en texte brut) : ce qu'il faut écrire pour qu'il suive les renommages, ou
   // null.
   function planTemplate(row, m, ctx) {
     // Un modèle d'un type que le widget ne connaît pas (js/templates.js, isKnownType) n'est jamais réécrit : son contenu n'est pas du HTML de ce widget. Une présentation est réécrite, même quand
     // GFS a éteint son extension : son contenu est celui d'un document, et ses variables doivent suivre la colonne renommée.
-    if (!Templates.isKnownType(row.TypeModele)) return null;
-    const TEXT_COLUMNS = ['NomFichierPDF', 'Destinataires', 'Cc', 'Cci', 'Objet', 'PJ'];
+    if (!Templates.isKnownType(row.TemplateType)) return null;
+    const TEXT_COLUMNS = ['PdfFileName', 'To', 'Cc', 'Bcc', 'Subject', 'Attachments'];
     const fields = {};
     let count = 0;
     const keep = (column, text, n) => { if (n) { fields[column] = text; count += n; } };
-    if (row.TypeModele === 'macro') {
-      const next = rewriteMacro(row.Contenu, m, ctx.page);
-      keep('Contenu', next.text, next.count);
+    if (row.TemplateType === 'macro') {
+      const next = rewriteMacro(row.Content, m, ctx.page);
+      keep('Content', next.text, next.count);
     } else {
-      const next = rewriteHtml(row.Contenu, m, ctx);
-      keep('Contenu', next.html, next.count);
+      const next = rewriteHtml(row.Content, m, ctx);
+      keep('Content', next.html, next.count);
       const headers = rewriteHeaderFooter(row.HeaderFooter, m, ctx);
       keep('HeaderFooter', headers.text, headers.count);
     }
@@ -656,8 +656,8 @@ const SchemaRenames = (function () {
   }
 
   async function fetchTemplateRows() {
-    const TEMPLATE_COLUMNS = ['Nom', 'TypeModele', 'Contenu', 'HeaderFooter', 'NomFichierPDF', 'Destinataires', 'Cc', 'Cci', 'Objet', 'PJ'];
-    const tableData = await grist.docApi.fetchTable(Templates.TABLE_NAME);
+    const TEMPLATE_COLUMNS = ['Name', 'TemplateType', 'Content', 'HeaderFooter', 'PdfFileName', 'To', 'Cc', 'Bcc', 'Subject', 'Attachments'];
+    const tableData = await SchemaColumns.docApi.fetchTable(Templates.TABLE_NAME);
     return (tableData.id || []).map((id, i) => {
       const row = { id };
       TEMPLATE_COLUMNS.forEach(column => { row[column] = tableData[column] ? tableData[column][i] : undefined; });
@@ -697,7 +697,7 @@ const SchemaRenames = (function () {
   // intervalle de quelques millisecondes. La clé du nouveau couple d'abord, l'ancienne retirée ensuite : une panne entre les deux laisse une clé de
   // trop, jamais une clé perdue.
   async function writeRewrites(templates, links) {
-    if (templates.length) await grist.docApi.applyUserActions(templates.map(t => ['UpdateRecord', Templates.TABLE_NAME, t.id, t.fields]));
+    if (templates.length) await SchemaColumns.docApi.applyUserActions(templates.map(t => ['UpdateRecord', Templates.TABLE_NAME, t.id, t.fields]));
     for (const link of links) {
       await GristAPI.saveLinkRule(link.rule.tableCible, link.rule);
       if (link.from.tableCible !== link.rule.tableCible || link.from.tableSource !== link.rule.tableSource) await GristAPI.deleteLinkRule(link.from.tableCible, link.from.tableSource);

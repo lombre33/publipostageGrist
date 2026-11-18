@@ -316,9 +316,9 @@ const VersionsStore = (function () {
   // Les jetons des modèles du document, d'après la table des modèles relue à neuf : { token (celui du modèle `rowId`, '' tant qu'aucune copie n'en a été gardée), known (tous
   // les jetons posés, ou null quand la colonne manque ou que la table n'a aucune ligne : les orphelines ne se cherchent alors pas) }.
   async function readModelTokens(rowId) {
-    const tableData = await grist.docApi.fetchTable((typeof Templates !== 'undefined' && Templates.TABLE_NAME) || 'Publipostage_Modeles');
+    const tableData = await SchemaColumns.docApi.fetchTable((typeof Templates !== 'undefined' && Templates.TABLE_NAME) || 'Publipostage_Templates');
     const ids = Array.isArray(tableData.id) ? tableData.id : [];
-    const column = Array.isArray(tableData.Jeton) ? tableData.Jeton : null;
+    const column = Array.isArray(tableData.Token) ? tableData.Token : null;
     const at = ids.findIndex(id => String(id) === String(rowId));
     return {
       token: at === -1 || !column ? '' : String(column[at] || ''),

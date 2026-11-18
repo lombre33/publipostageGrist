@@ -9,7 +9,10 @@
 (function () {
   const cases = [];
   const stub = () => window.__gristStub;
+  // Le faux Grist porte la table des modèles sous son ancien nom ; le code du widget la nomme en anglais (SchemaColumns la traduit vers le nom que le document porte).
   const MODELES = 'Publipostage_Modeles';
+  const MODELES_CODE = 'Publipostage_Templates';
+  const nameInCode = tableId => (tableId === MODELES ? MODELES_CODE : tableId);
   const COMMENTS = 'Publipostage_Commentaires';
   const ABBREVIATIONS = 'Publipostage_Abreviations';
   const COLUMNS = [{ id: 'Texte', type: 'Text' }];
@@ -20,7 +23,7 @@
   // Crée la table comme le fait le widget (AddTable puis l'appel de js/page-tree.js) et attend la fin du rangement.
   async function createTable(tableId) {
     await stub().applyUserActions([['AddTable', tableId, COLUMNS]]);
-    PageTree.afterTableCreated(tableId);
+    PageTree.afterTableCreated(nameInCode(tableId));
     await PageTree.whenIdle();
   }
 
@@ -91,7 +94,7 @@
     description: 'Replier par défaut garde les autres options de la page (le reste du JSON de _grist_Pages.options)',
     run: async () => {
       freshLayout([{ table: MODELES, options: '{"foo":"bar"}' }]);
-      PageTree.afterTableCreated(MODELES);
+      PageTree.afterTableCreated(MODELES_CODE);
       await PageTree.whenIdle();
       const pages = stub().state.rows._grist_Pages;
       const options = JSON.parse(pages.options[0]);

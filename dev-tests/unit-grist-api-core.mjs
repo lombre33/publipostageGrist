@@ -118,6 +118,7 @@ function fresh(doc, { gristExtra = {}, withPageTree = true } = {}) {
   };
   if (withPageTree) globals.PageTree = { afterTableCreated: (name) => log.pages.push(name) };
   const ctx = createContext(globals);
+  loadScript(ctx, 'js/schema-columns.js');
   loadScript(ctx, 'js/grist-api.js');
   return { run: (expr) => evalIn(ctx, expr), log, ctx };
 }

@@ -8,7 +8,7 @@ const GristAPI = (function () {
   // les autres (grist-core, WidgetFrame.ts : _grist_Tables sans filtre) ; une nouvelle table interne s'ajoute donc ici, car dev-tests/grist-stub.js ne
   // liste jamais ses tables internes et ne révélerait pas l'oubli.
   const INTERNAL_TABLES = [
-    'Publipostage_Modeles', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_PreferencesModeles', 'Publipostage_Commentaires',
+    'Publipostage_Templates', 'Publipostage_LiensTables', 'Publipostage_UserProbe', 'Publipostage_PreferencesModeles', 'Publipostage_Commentaires',
     'Publipostage_Abreviations', 'Publipostage_FormatsPage', 'Publipostage_Versions', 'Publipostage_Direct',
   ];
   const LINKS_TABLE_NAME = 'Publipostage_LiensTables';
@@ -53,7 +53,7 @@ const GristAPI = (function () {
   let _rawTablesLoading = null;
   function loadRawTables() {
     if (!_rawTablesLoading) {
-      _rawTablesLoading = grist.docApi.listTables().then(list => { _rawTables = list || []; return _rawTables; });
+      _rawTablesLoading = SchemaColumns.docApi.listTables().then(list => { _rawTables = list || []; return _rawTables; });
       const done = () => { _rawTablesLoading = null; };
       _rawTablesLoading.then(done, done);
     }
@@ -134,8 +134,8 @@ const GristAPI = (function () {
     if (!granted) throw tablesDeclinedError();
     // La question a pu durer : une autre fenêtre du même document a pu créer la table entre-temps, et la créer une seconde fois la doublerait (Grist
     // nommerait la seconde « …2 »).
-    if (asked && (await grist.docApi.listTables()).includes(name)) { rememberRawTable(name); return false; }
-    await grist.docApi.applyUserActions([['AddTable', name, columns]]);
+    if (asked && (await SchemaColumns.docApi.listTables()).includes(name)) { rememberRawTable(name); return false; }
+    await SchemaColumns.docApi.applyUserActions([['AddTable', name, columns]]);
     rememberRawTable(name);
     if (typeof PageTree !== 'undefined') PageTree.afterTableCreated(name);
     return true;
@@ -143,7 +143,7 @@ const GristAPI = (function () {
   // La table interne `name` d'un module du widget (modèles, commentaires, préférences, abréviations, formats de page), créée au premier besoin. La
   // liste des tables est relue à neuf : une autre fenêtre a pu créer la table depuis la dernière lecture, et la créer une seconde fois la doublerait.
   async function ensureTable(name, columns) {
-    return addTableIfMissing(await grist.docApi.listTables(), name, columns);
+    return addTableIfMissing(await SchemaColumns.docApi.listTables(), name, columns);
   }
   // File d'écritures d'un module : les tâches passent l'une après l'autre, et l'échec de l'une n'arrête pas les suivantes (il ne remonte qu'à son
   // appelant). `reset` repart d'une file vide.

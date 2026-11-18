@@ -14,6 +14,7 @@ function freshModule({ initialTables = [], email = 'a@exemple.fr', emailFails = 
   const docApi = new FakeDocApi(initialTables, docOptions);
   const ctx = createContext(Object.assign({ grist: { docApi } }, console ? { console } : {}));
   // Le vrai js/grist-api.js (création de la table, file d'écriture) ; seule l'identification est simulée.
+  loadScript(ctx, 'js/schema-columns.js');
   loadScript(ctx, 'js/grist-api.js');
   let declined = emailDeclinesFirst;
   evalIn(ctx, 'GristAPI').getCurrentUserEmail = async () => {

@@ -365,11 +365,11 @@ async function followScenario(label, lang) {
     return { id: saved.id, modelId: Number(attrs.linkedTemplate), key: !!attrs.linkedKey, base: !!attrs.linkedBase };
   }, { nom });
   check(`${label}, suivre le modèle : le tableau posé par la liste porte son numéro, son jeton et sa base, et le document est enregistré`, !!placed.id && placed.key && placed.base, placed);
-  const writeModel = html => page.evaluate(async ({ id, html }) => { __gristStub.remoteWrite(Templates.TABLE_NAME, id, { Contenu: html }); await Templates.loadAll(); }, { id: placed.modelId, html });
+  const writeModel = html => page.evaluate(async ({ id, html }) => { __gristStub.remoteWrite(SchemaColumns.actualTable(Templates.TABLE_NAME), id, { Contenu: html }); await Templates.loadAll(); }, { id: placed.modelId, html });
 
   // Le modèle change pendant que le document est fermé ; la liste l'ouvre.
   await writeModel(grid2);
-  const rowBefore = await page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id).Contenu, placed.id);
+  const rowBefore = await page.evaluate(id => __gristStub.getRow(SchemaColumns.actualTable(Templates.TABLE_NAME), id).Contenu, placed.id);
   await openSaved(placed.id);
   const followed = await statusNow();
   const shown = await corner();
@@ -378,13 +378,13 @@ async function followScenario(label, lang) {
   check(`${label}, suivre le modèle : la ligne d'état est dans le coin du panneau ${WIDTH}x${HEIGHT}, au premier plan, lisible (${shown.contrast.toFixed(1)}:1, au moins 4,5:1), et son message entier est en info-bulle quand il est coupé`,
     seen(shown.box) && shown.contrast >= 4.5 && (!shown.info.cut || shown.info.title === texts.pulled(model)), shown);
   await snap(`${label}-14-suit-le-modele`);
-  const written = await page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id).Contenu, placed.id);
+  const written = await page.evaluate(id => __gristStub.getRow(SchemaColumns.actualTable(Templates.TABLE_NAME), id).Contenu, placed.id);
   const asked = await leave();
   check(`${label}, suivre le modèle : ouvrir n'a rien écrit (la ligne du document est la même) et quitter ne pose aucune question « Modifications non enregistrées »`, written === rowBefore && asked === 0, { same: written === rowBefore, asked });
 
   // Le modèle suit le document (lot 6c-2b) : une frappe réelle dans le tableau lié, le vrai bouton Enregistrer. La ligne du modèle reçoit le tableau avec celle du document, et la ligne d'état le dit dans le coin du panneau,
   // lisible, sans que « Enregistré à… » l'efface.
-  const modelRow = () => page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id), placed.modelId);
+  const modelRow = () => page.evaluate(id => __gristStub.getRow(SchemaColumns.actualTable(Templates.TABLE_NAME), id), placed.modelId);
   await openSaved(placed.id);
   await clickInText('A2');
   await page.keyboard.type('qk');
@@ -398,7 +398,7 @@ async function followScenario(label, lang) {
   const sent = await statusNow();
   const sentCorner = await corner();
   const modelAfterSend = await modelRow();
-  const docAfterSend = await page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id), placed.id);
+  const docAfterSend = await page.evaluate(id => __gristStub.getRow(SchemaColumns.actualTable(Templates.TABLE_NAME), id), placed.id);
   const changedColumns = Object.keys(modelAfterSend).filter(k => JSON.stringify(modelAfterSend[k]) !== JSON.stringify(modelBeforeSend[k])).sort().join(',');
   check(`${label}, le modèle suit le document : le vrai bouton Enregistrer écrit la frappe dans la ligne du document ET dans celle du modèle (seules les colonnes Contenu et DateModif du modèle changent, ni lien ni base dans le modèle) et la ligne d'état dit « ${texts.pushed(model)} »`,
     /qk/.test(docAfterSend.Contenu) && /qk/.test(modelAfterSend.Contenu) && !/data-linked-/.test(modelAfterSend.Contenu) && changedColumns === 'Contenu,DateModif' && sent.text === texts.pushed(model) && !sent.error, { changedColumns, sent });
@@ -411,7 +411,7 @@ async function followScenario(label, lang) {
   await clickInText('B2');
   await page.keyboard.type('zz');
   await page.waitForTimeout(250);
-  await page.evaluate(({ id, html }) => { __gristStub.remoteWrite(Templates.TABLE_NAME, id, { Contenu: html }); }, { id: placed.modelId, html: grid3 });
+  await page.evaluate(({ id, html }) => { __gristStub.remoteWrite(SchemaColumns.actualTable(Templates.TABLE_NAME), id, { Contenu: html }); }, { id: placed.modelId, html: grid3 });
   await clickAt('#btn-save');
   await page.waitForTimeout(900);
   const refused = await statusNow();
@@ -730,7 +730,7 @@ async function run(theme) {
   await openPickerByMouse();
   await clickOption('Grille des tarifs');
   const modelId = await page.evaluate(() => Templates.getCached().find(t => t.nom === 'Grille des tarifs').id);
-  const modelRow = () => page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id), modelId);
+  const modelRow = () => page.evaluate(id => __gristStub.getRow(SchemaColumns.actualTable(Templates.TABLE_NAME), id), modelId);
   const statusNow = () => page.evaluate(() => ({ text: document.getElementById('status-msg').textContent, error: document.getElementById('status-msg').classList.contains('error-msg') }));
   const dialogState = () => page.evaluate(() => {
     const ov = document.getElementById('pp-dialog-modal');
@@ -816,7 +816,7 @@ async function run(theme) {
     changed === 'Contenu,DateModif' && /zz/.test(rowAfter.Contenu) && !/data-linked-/.test(rowAfter.Contenu) && stPush.text === 'Modèle « Grille des tarifs » mis à jour avec ce tableau.' && !stPush.error && !(await dialogState()).open && (await focusIn()) === 'editor',
     { changed, status: stPush, dialog: await dialogState(), focus: await focusIn() });
   // Le modèle est remis tel qu'il était pour les passes suivantes.
-  await page.evaluate(async ({ id, grid }) => { __gristStub.remoteWrite(Templates.TABLE_NAME, id, { Contenu: grid }); await Templates.loadAll(); }, { id: modelId, grid: GRID });
+  await page.evaluate(async ({ id, grid }) => { __gristStub.remoteWrite(SchemaColumns.actualTable(Templates.TABLE_NAME), id, { Contenu: grid }); await Templates.loadAll(); }, { id: modelId, grid: GRID });
 
   // 10) Ouvrir le modèle et revenir au document, à la vraie souris. Un document ENREGISTRÉ qui pose le tableau lié à « Grille des tarifs » (ouvert par la liste : la fenêtre « Modifications non enregistrées » du
   // texte de départ reçoit « Abandonner », ce n'est que la mise en place). Puis tout est réel : la case du tableau, le bouton du lien, la ligne « Ouvrir le modèle » (dans le panneau, au premier plan, lisible), le modèle
@@ -902,7 +902,7 @@ async function run(theme) {
   await clickDialogButton('Enregistrer');
   await page.waitForTimeout(1300);
   const saved10 = await onScreen();
-  const storedDoc = await page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id).Contenu, savedDoc.id);
+  const storedDoc = await page.evaluate(id => __gristStub.getRow(SchemaColumns.actualTable(Templates.TABLE_NAME), id).Contenu, savedDoc.id);
   check(`${T}, ouvrir le modèle : « Enregistrer » écrit le document avec la frappe puis ouvre le modèle avec son bandeau`, /zz/.test(storedDoc) && saved10.name === 'Grille des tarifs' && saved10.grid && saved10.bar, { saved10, stored: storedDoc.slice(0, 160) });
   // La suppression du modèle, pendant qu'il est à l'écran : la confirmation dit dans combien de modèles il est posé.
   await clickAt('#btn-delete');
@@ -919,7 +919,7 @@ async function run(theme) {
   await page.waitForTimeout(400);
   const stay10 = await onScreen();
   check(`${T}, supprimer le modèle : « Annuler » ne supprime rien, le modèle et son bandeau restent`, !(await dialogState()).open && stay10.name === 'Grille des tarifs' && stay10.grid && stay10.bar
-    && !!(await page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id), savedDoc.modelId)), { stay10 });
+    && !!(await page.evaluate(id => __gristStub.getRow(SchemaColumns.actualTable(Templates.TABLE_NAME), id), savedDoc.modelId)), { stay10 });
   // Remise en place pour la suite : le document vierge, l'enregistrement automatique rallumé.
   await page.evaluate(async () => {
     const realChoose = Dialogs.choose;
@@ -996,7 +996,7 @@ async function runEnglish() {
     enRows.map(r => r.text).join('|') === 'Update from the template|Send to the template|Open the template|Detach from the template' && /^Replace this table’s cells with those of the Grid template “Grille des tarifs”/.test(enRows[0].title)
       && /^Replace the table of the Grid template “Grille des tarifs” with this one/.test(enRows[1].title) && /^Open the Grid template “Grille des tarifs” in the editor/.test(enRows[2].title) && enBoxes.every(seen), { enRows, enBoxes });
   await snap('en-3-deux-sens-menu');
-  const enBefore = (await page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id), await page.evaluate(() => Templates.getCached().find(t => t.nom === 'Grille des tarifs').id))).Contenu;
+  const enBefore = (await page.evaluate(id => __gristStub.getRow(SchemaColumns.actualTable(Templates.TABLE_NAME), id), await page.evaluate(() => Templates.getCached().find(t => t.nom === 'Grille des tarifs').id))).Contenu;
   const pushAt = await centerOf(ROW_PUSH);
   await page.mouse.move(pushAt.x, pushAt.y, { steps: 6 });
   await page.waitForTimeout(100);
@@ -1016,7 +1016,7 @@ async function runEnglish() {
   await page.mouse.move(cancelAt.x, cancelAt.y, { steps: 4 });
   await page.mouse.click(cancelAt.x, cancelAt.y);
   await page.waitForTimeout(400);
-  const enAfter = (await page.evaluate(id => __gristStub.getRow(Templates.TABLE_NAME, id), await page.evaluate(() => Templates.getCached().find(t => t.nom === 'Grille des tarifs').id))).Contenu;
+  const enAfter = (await page.evaluate(id => __gristStub.getRow(SchemaColumns.actualTable(Templates.TABLE_NAME), id), await page.evaluate(() => Templates.getCached().find(t => t.nom === 'Grille des tarifs').id))).Contenu;
   check('anglais, deux sens : « Cancel » ferme la fenêtre et n\'écrit rien dans le modèle', enAfter === enBefore && !(await page.evaluate(() => { const ov = document.getElementById('pp-dialog-modal'); return ov && ov.style.display !== 'none'; })), { same: enAfter === enBefore });
   // Ouvrir le modèle, revenir au document et supprimer le modèle, en anglais : la ligne du menu, le bandeau (texte, bouton, étiquette), la confirmation de suppression qui dit où le modèle est posé.
   const enDocName = 'Contract en';
