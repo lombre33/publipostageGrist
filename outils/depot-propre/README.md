@@ -82,6 +82,8 @@ chemin est affiché.
   de GFS, consigne 071) aussi : GFS en copie les images chez lui, le dépôt public n'a pas à les porter.
   `modeles/` (le catalogue `modeles.json` et une vignette par modèle de départ, pour le « Nouveau > Depuis un modèle » de
   GFS, consigne 075) aussi : GFS copie le catalogue et les vignettes chez lui, la galerie du dépôt public est `templates-gallery/`.
+  `SECURITY.md` (celui de la racine du dépôt de développement, que GFS lit pour la règle S9 de sa consigne 083) aussi : le dépôt public
+  reçoit le sien, celui de `public/`, posé par-dessus.
 - Un fichier ou un dossier de `PUBLIES` que le dépôt de développement ne suit pas. `.nojekyll`, un fichier vide
   à la racine, en fait partie : il part avec le reste, car le dépôt public a son propre site (GitHub Pages) et,
   sans lui, Pages passe les `.md` dans Jekyll avant de publier ; un `.md` qui porte une accolade double ouverte

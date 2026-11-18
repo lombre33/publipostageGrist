@@ -57,6 +57,9 @@ HTML
   mkdir -p vitrine; echo '{}' > vitrine/vitrine.json; echo x > vitrine/1.webp
   # Les modèles de départ de « Nouveau > Depuis un modèle » (consigne 075) : le catalogue et une vignette par modèle ; à la racine du dépôt de développement, modeles/ ne part pas (GFS les copie chez lui).
   mkdir -p modeles; echo '[]' > modeles/modeles.json; echo x > modeles/facture.webp
+  # Le SECURITY.md de la racine du dépôt de développement (consigne 083 de GFS, règle S9 : GFS lit un SECURITY.md à la racine) : il ne part pas, le dépôt public reçoit celui de outils/depot-propre/public/ ;
+  # le faux porte un texte que le document public n'a pas, pour qu'on voie lequel des deux est parti.
+  echo 'SECURITY_RACINE_DEV_ESSAI' > SECURITY.md
   # La copie figée de l'éditeur (consigne 066 de GFS) : du code de tiers construit par l'outil du kit, que publier.sh fait partir avec la page (PUBLIES) ; le faux en porte un module, ses licences et son manifeste.
   mkdir -p vendor/editeur; echo 'export default 1;' > vendor/editeur/prosemirror.js; echo 'licences' > vendor/editeur/LICENCES.txt; echo '{}' > vendor/editeur/COPIE.json
   # Les outils, avec le bandeau de la bêta figée (beta-bandeau.mjs et les deux fichiers de beta/) : controles.mjs et publier.sh les lisent à côté d'eux.
@@ -157,6 +160,7 @@ vrai "vitrine/ (la description et les captures de la carte dans GFS, consigne 07
 vrai "modeles/ (le catalogue et les vignettes des modèles de départ dans « Nouveau > Depuis un modèle » de GFS, consigne 075) est connu du dépôt de développement et ne part pas" test -f "$T/dev/modeles/modeles.json" -a -z "$(git -C "$P" ls-tree --name-only HEAD | grep -x 'modeles')"
 vrai ".nojekyll part avec le reste, vide, à la racine du dépôt public" test -f "$P/.nojekyll" -a ! -s "$P/.nojekyll" -a -n "$(git -C "$P" ls-tree --name-only HEAD | grep -x '.nojekyll')"
 vrai "les documents publics sont là, README du dépôt de développement absent" test -f "$P/SECURITY.md" -a -f "$P/NOTICE" -a "$(head -1 "$P/README.md")" = "# Publipostage+ pour Grist"
+vrai "le SECURITY.md de la racine du dépôt de développement (règle S9 de GFS, consigne 083) est connu de lui et ne part pas : le dépôt public a celui de public/" bash -c "grep -q SECURITY_RACINE_DEV_ESSAI '$T/dev/SECURITY.md' && ! grep -q SECURITY_RACINE_DEV_ESSAI '$P/SECURITY.md' && grep -q '^# Politique de sécurité' '$P/SECURITY.md'"
 # Un gabarit resté en place s'écrit {{MAJUSCULES}} (comme le cherche controles.mjs) : la carte décrit aussi des {{variables}} de modèle, qui sont du texte.
 vrai "la carte du code part avec les documents publics, version et date remplacées" bash -c "grep -q '^# Carte du code de Publipostage+' '$P/CARTE_DU_CODE.md' && ! grep -qE '\{\{[A-Z_]+\}\}' '$P/CARTE_DU_CODE.md'"
 vrai "la note de version part avec les documents publics, version et dates remplacées, en français puis en anglais" bash -c "grep -q '^# Publipostage+ : notes de version' '$P/PATCH_NOTES.md' && grep -q '^# Publipostage+: release notes (English)' '$P/PATCH_NOTES.md' && ! grep -qE '\{\{[A-Z_]+\}\}' '$P/PATCH_NOTES.md' && grep -qF '**Publipostage+ 1.0.0-beta.1**, publiée le 4 octobre 2026' '$P/PATCH_NOTES.md' && grep -qF '**Publipostage+ 1.0.0-beta.1**, released on October 4, 2026' '$P/PATCH_NOTES.md'"

@@ -42,7 +42,8 @@ PUBLIES=(index.html nouveautes.html css js extensions img templates-gallery LICE
 # package.json (la liste unique des bibliothèques, consignes 063 et 067 de GFS) et bibliotheques/ (son catalogue) restent dans le dépôt de développement : les poser dans le dépôt public, pour Dependabot, est une décision à part.
 # vitrine/ (consigne 071 de GFS : la description et les captures, de trois à six, de la carte et de la fiche de l'app dans la fenêtre « Apps et extensions » de GFS) reste aussi dans le dépôt de développement : GFS en copie les images chez lui, ce qu'un utilisateur du dépôt public n'a pas à porter.
 # modeles/ (consigne 075 de GFS : le catalogue modeles.json et la vignette de chacun des modèles de départ que GFS propose dans « Nouveau > Depuis un modèle ») reste aussi dans le dépôt de développement : GFS copie le catalogue et les vignettes chez lui (sa politique de sécurité ne charge une image que de lui), la galerie du dépôt public est templates-gallery/.
-EXCLUS=(.claude .github .gitignore .gitmodules AUDIT_CODE.md CAHIER_DES_CHARGES.md GFS-ETAT.md README.md bibliotheques dev-tests modeles outils package.json planning prototypes templates-gallery-dev vitrine)
+# SECURITY.md (consigne 083 de GFS, règle S9 : GFS lit un SECURITY.md à la racine du dépôt de développement) reste aussi dans le dépôt de développement : le dépôt public reçoit le sien, celui de outils/depot-propre/public/, posé par-dessus (étape 5).
+EXCLUS=(.claude .github .gitignore .gitmodules AUDIT_CODE.md CAHIER_DES_CHARGES.md GFS-ETAT.md README.md SECURITY.md bibliotheques dev-tests modeles outils package.json planning prototypes templates-gallery-dev vitrine)
 # Ce que le dépôt public reçoit du kit (consignes 041 et 068 de GFS : l'app en importe ambiance-message.js, ambiance-pose.js, correcteurs-message.js et correcteurs-pose.js, qui importent once.js) : ce que le kit sert, sa licence ;
 # ni son README, ni son journal, ni ses essais.
 KIT_PARTIES=(css js LICENSE)
