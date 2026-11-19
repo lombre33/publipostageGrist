@@ -44,6 +44,9 @@
   --warn-ink: #7a4a00;
   --warn-soft: #fff3d6;
   --warn-soft-border: #e3b866;
+  /* La pastille orange d'un avertissement posée sur un bouton de la barre (css/pdf-fonts.css : `.pp-chip-flag`, les polices que le PDF ne peut pas écrire) : un aplat, pas du texte. Orange franc qui garde 4,5:1 sur les trois fonds
+     où le bouton se trouve (`--surface` 5,3:1, `--surface-sunken` au survol 4,7:1, `--bg` 4,9:1) ; en sombre un orange clair (6,5:1 au moins sur `--surface-sunken`). Jamais écrit en dur ailleurs. */
+  --warn-dot: #b04e00;
   /* Bouton Enregistrer quand l'enregistrement automatique est coupé : noir et blanc classique (glyphe blanc dessus : 15,5:1), là où
      l'enregistrement automatique actif le garde bleu. En sombre le fond reste noir, plus foncé que la barre, cerné par la bordure des boutons.
      Survol : plus clair, le glyphe reste à plus de 9:1. */
@@ -126,6 +129,7 @@
   --warn-ink: #f0c36d;
   --warn-soft: #3a2e12;
   --warn-soft-border: #6b5320;
+  --warn-dot: #f2a33a;
   --solid-neutral: #0b0f16;
   --solid-neutral-hover: #262e3c;
   --solid-neutral-border: #465166;
@@ -163,6 +167,7 @@
     --warn-ink: #f0c36d;
     --warn-soft: #3a2e12;
     --warn-soft-border: #6b5320;
+    --warn-dot: #f2a33a;
     --solid-neutral: #0b0f16;
     --solid-neutral-hover: #262e3c;
     --solid-neutral-border: #465166;

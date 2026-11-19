@@ -231,7 +231,7 @@
 })();
 </script>
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.69">
-<link rel="stylesheet" href="css/style.css?v=0.110">
+<link rel="stylesheet" href="css/style.css?v=0.111">
 <link rel="stylesheet" href="css/reader-guide.css?v=0.5">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.151">
 <link rel="stylesheet" href="css/toolbar-v2.css?v=0.88">
@@ -294,7 +294,7 @@
 <link rel="stylesheet" href="css/heading-styles.css?v=0.2">
 <link rel="stylesheet" href="css/sheet-assembly.css?v=0.3">
 <link rel="stylesheet" href="css/pdf-protection.css?v=0.3">
-<link rel="stylesheet" href="css/pdf-fonts.css?v=0.3">
+<link rel="stylesheet" href="css/pdf-fonts.css?v=0.4">
 <link rel="stylesheet" href="css/state-mode.css?v=0.1">
 <link rel="stylesheet" href="css/state-check.css?v=0.1">
 <link rel="stylesheet" href="css/versions-history.css?v=0.2">
@@ -333,7 +333,7 @@
 <link rel="preload" as="script" href="js/reader-mode.js?v=0.209">
 <link rel="preload" as="script" href="js/reader-guide.js?v=0.7">
 <link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.14">
-<link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.35">
+<link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.36">
 <link rel="preload" as="script" href="js/i18n-texts-format.js?v=0.4">
 <link rel="preload" as="script" href="js/i18n-texts-blocks.js?v=0.7">
 <link rel="preload" as="script" href="js/i18n-texts-editor.js?v=0.1">
@@ -432,7 +432,7 @@
 <link rel="preload" as="script" href="js/heading-styles.js?v=0.6">
 <link rel="preload" as="script" href="js/page-copies.js?v=0.3">
 <link rel="preload" as="script" href="js/email-plain-text.js?v=0.3">
-<link rel="preload" as="script" href="js/editor.js?v=2.120">
+<link rel="preload" as="script" href="js/editor.js?v=2.121">
 <link rel="preload" as="script" href="js/export-common.js?v=0.41">
 <link rel="preload" as="script" href="js/native-libs.js?v=0.1">
 <link rel="preload" as="script" href="js/pdf-glyph-fallback.js?v=0.3">
@@ -550,7 +550,8 @@
 <link rel="preload" as="script" href="js/pdf-protection.js?v=0.2">
 <link rel="preload" as="script" href="js/pdf-protection-dialog.js?v=0.5">
 <link rel="preload" as="script" href="js/free-fonts.js?v=0.1">
-<link rel="preload" as="script" href="js/pdf-font-plan.js?v=0.3">
+<link rel="preload" as="script" href="js/pdf-font-plan.js?v=0.4">
+<link rel="preload" as="script" href="js/pdf-font-notice.js?v=0.1">
 <link rel="preload" as="script" href="js/page-sense-edit.js?v=0.2">
 <link rel="preload" as="script" href="js/orientation-toggle.js?v=0.21">
 <link rel="preload" as="script" href="js/clean-reading.js?v=0.8">
@@ -582,7 +583,7 @@
 <link rel="preload" as="script" href="js/main-macro-return.js?v=0.2">
 <link rel="preload" as="script" href="js/main-access.js?v=0.5">
 <link rel="preload" as="script" href="js/main-reader.js?v=0.2">
-<link rel="preload" as="script" href="js/main-live.js?v=0.5">
+<link rel="preload" as="script" href="js/main-live.js?v=0.6">
 <link rel="preload" as="script" href="js/main-slides.js?v=0.2">
 <link rel="preload" as="script" href="js/main.js?v=0.265">
 <!-- précharge des scripts : fin -->
@@ -931,6 +932,8 @@
       <button type="button" class="v2-format-chip" id="v2-font-chip" data-tip="Police" aria-label="Police" data-i18n-tip="font.family" data-i18n-aria="font.family">
         <span class="v2-format-chip-val" id="v2-font-chip-val">Roboto</span>
         <span class="v2-format-chip-caret" id="v2-font-chip-caret"></span>
+        <!-- La pastille orange des polices que le PDF ne peut pas écrire (js/pdf-font-notice.js, css/pdf-fonts.css) : allumée tant que le document en contient, avec leur nombre dans l'info-bulle et le nom du bouton ; décorative pour le lecteur d'écran, qui lit le nombre. -->
+        <span class="pp-chip-flag" id="v2-font-chip-flag" aria-hidden="true" hidden></span>
       </button>
       <span class="v2-sep"></span>
       <span class="v2-color-split" id="v2-text-color-split">
@@ -1039,6 +1042,12 @@
   <div id="linked-return-bar" class="macro-return-bar" role="region" aria-label="Retour au document" data-i18n-aria="linkedTable.return.aria" hidden>
     <span class="macro-return-text" id="linked-return-text"></span>
     <button type="button" id="btn-linked-return" class="macro-return-btn" data-i18n="linkedTable.return.button">Revenir au document</button>
+  </div>
+  <!-- Bandeau « Polices que le PDF ne peut pas écrire » (js/pdf-font-notice.js, css/pdf-fonts.css) : la même ligne fine que les deux bandeaux de retour (classes macro-return-*, css/toolbar-v2.css), montrée à l'ouverture d'un document qui en contient (un import compris) ; « Remplacer… » ouvre la fenêtre qui les change partout d'un coup, « Fermer » retire le bandeau (la pastille de « Police » reste). -->
+  <div id="pdf-fonts-bar" class="macro-return-bar pp-fonts-bar" role="region" aria-label="Polices du PDF" data-i18n-aria="pdfFonts.bar.aria" hidden>
+    <span class="macro-return-text pp-fonts-bar-text"></span>
+    <button type="button" class="macro-return-btn pp-fonts-bar-swap" data-i18n="pdfFonts.bar.replace">Remplacer…</button>
+    <button type="button" class="macro-return-btn pp-fonts-bar-close" data-i18n="common.close">Fermer</button>
   </div>
   <div id="v2-cell-bar-dock" class="v2-cell-bar-dock" role="toolbar" aria-label="Barre de la case" data-i18n-aria="grid.cellBar"></div>
   <!-- Languette du plan du document (js/document-outline.js, css/document-outline.css) : comme celle du panneau du haut, une ligne de hauteur nulle juste avant le document, où la languette est accrochée au bord gauche ; un clic ouvre le volet qui liste les titres. Hors de la barre d'outils : elle reste gelée. Cachée quand le volet est ouvert ou n'a rien à lister (grille, présentation, Lecture épurée). -->
@@ -1457,7 +1466,7 @@
 <script src="js/reader-mode.js?v=0.209"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
 <script src="js/i18n-texts-templates.js?v=0.14"></script>
-<script src="js/i18n-texts-export.js?v=0.35"></script>
+<script src="js/i18n-texts-export.js?v=0.36"></script>
 <script src="js/i18n-texts-format.js?v=0.4"></script>
 <script src="js/i18n-texts-blocks.js?v=0.7"></script>
 <script src="js/i18n-texts-editor.js?v=0.1"></script>
@@ -1556,7 +1565,7 @@
 <script src="js/heading-styles.js?v=0.6"></script>
 <script src="js/page-copies.js?v=0.3"></script>
 <script src="js/email-plain-text.js?v=0.3"></script>
-<script src="js/editor.js?v=2.120"></script>
+<script src="js/editor.js?v=2.121"></script>
 <script src="js/export-common.js?v=0.41"></script>
 <script src="js/native-libs.js?v=0.1"></script>
 <script src="js/pdf-glyph-fallback.js?v=0.3"></script>
@@ -1700,7 +1709,8 @@
 <script src="js/pdf-protection.js?v=0.2"></script>
 <script src="js/pdf-protection-dialog.js?v=0.5"></script>
 <script src="js/free-fonts.js?v=0.1"></script>
-<script src="js/pdf-font-plan.js?v=0.3"></script>
+<script src="js/pdf-font-plan.js?v=0.4"></script>
+<script src="js/pdf-font-notice.js?v=0.1"></script>
 <script src="js/page-sense-edit.js?v=0.2"></script>
 <script src="js/orientation-toggle.js?v=0.21"></script>
 <script src="js/clean-reading.js?v=0.8"></script>
@@ -1732,7 +1742,7 @@
 <script src="js/main-macro-return.js?v=0.2"></script>
 <script src="js/main-access.js?v=0.5"></script>
 <script src="js/main-reader.js?v=0.2"></script>
-<script src="js/main-live.js?v=0.5"></script>
+<script src="js/main-live.js?v=0.6"></script>
 <script src="js/main-slides.js?v=0.2"></script>
 <script src="js/main.js?v=0.265"></script>
 </body>

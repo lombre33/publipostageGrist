@@ -1130,6 +1130,8 @@ const Editor = (function () {
     // ci-dessus.
     editor.view.dispatch(editor.state.tr);
     settleLoadedDocument(html || '');
+    // Un document vient d'être posé (ouverture, import, un autre modèle) : le bandeau des polices que le PDF ne peut pas écrire se refait pour lui (js/pdf-font-notice.js).
+    if (typeof PdfFontNotice !== 'undefined') PdfFontNotice.documentLoaded();
   }
 
   // Montre une autre feuille d'une grille à onglets (js/grid-sheets.js) : le tableau de l'éditeur est remplacé par `html`, celui de la feuille qu'on ouvre, comme le fait le chargement d'un modèle (ni suivi, ni 'update' : rien

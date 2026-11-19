@@ -21,7 +21,7 @@
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const result = bad => ({ pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' });
   const baseFontsOf = base64 => Array.from(new Set((atob(base64).match(/\/BaseFont\s*\/[A-Za-z0-9+\-_]+/g) || []).map(s => s.replace(/^\/BaseFont\s*\//, '').replace(/^[A-Z]{6}\+/, '')))).sort();
-  const para = (font, text, extra) => `<p><span style="font-family: ${font};${extra || ''}">${text}</span></p>`;
+  const para = (font, text, extra) => `<p><span style="font-family: ${font}${extra ? '; ' + extra : ''}">${text}</span></p>`;
   const four = font => para(font, 'Maigre ') + para(font, 'Gras ', 'font-weight: bold;') + para(font, 'Italique ', 'font-style: italic;') + para(font, 'Gras italique ', 'font-weight: bold; font-style: italic;');
 
   const overlay = () => document.getElementById('pp-fonts-modal');
@@ -181,6 +181,21 @@
       if (found.marianne !== true) bad.push('Marianne=' + found.marianne);
       const none = PdfFontPlan.scan([para('Arial', 'a') + para('Calibri', 'b')]);
       if (none.replaced.length || none.marianne) bad.push('rien à dire=' + JSON.stringify(none));
+      return result(bad);
+    },
+  });
+
+  cases.push({
+    id: 'pdffontplan_scan_names_a_header_font_written_as_the_editor_writes_it',
+    description: 'L’en-tête et le pied sont lus comme l’éditeur les écrit : un style entre guillemets doubles, seul dans son attribut et sans point-virgule, ne fait pas lire « Cambria\'>Entête » à la place de « Cambria » ; idem entre guillemets simples et avec des guillemets dans la valeur',
+    run: async (h) => {
+      await PdfExport.ensurePdfLibsLoaded();
+      const header = { default: '<p><span style="font-family: Cambria">Entête</span></p>', first: '' };
+      const footer = { default: '<p><span style=\'font-family: Consolas\'>Pied</span></p><p><span style="font-family: &quot;Segoe UI&quot;, sans-serif">Marge</span></p>', first: '' };
+      const found = PdfFontPlan.scan([{ enabled: true, header, footer }]);
+      const got = found.replaced.map(item => item.name + '>' + item.family).join();
+      const bad = [];
+      if (got !== 'Cambria>Tinos,Consolas>Cousine,Segoe UI>Roboto') bad.push('liste=' + got);
       return result(bad);
     },
   });

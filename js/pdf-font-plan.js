@@ -12,6 +12,8 @@
 // Un export qui ne passe pas par la fenêtre (PDF joint à une ligne, assemblage par GFS...) suit le plan de départ : le remplacement par la plus proche, jamais Marianne. Le plan choisi ne vaut que pour
 // l'export qui l'a demandé : js/main-export.js le remet à zéro à sa fin (`reset`).
 //    review(texts) -> Promise<plan | null>   texts : le HTML du document (et de ses en-têtes et pieds) ; null : la personne renonce. plan : { marianne, free } (free : les noms, en minuscules, des polices libres incluses).
+// L'éditeur dit la même chose AVANT l'export (js/pdf-font-notice.js : un message à l'ouverture, un moyen de les remplacer, une pastille sur « Police ») : il s'appuie sur `scan` pour la liste et sur `likeOf` pour la police de
+// l'éditeur qui correspond à celle que le PDF écrit (Tinos : « Times New Roman »), sans rien changer à cette fenêtre.
 const PdfFontPlan = (function () {
   const el = Dom.el;
   const EXTENSION = 'polices';
@@ -30,6 +32,11 @@ const PdfFontPlan = (function () {
   const DEFAULT_PLAN = Object.freeze({ marianne: false, free: Object.freeze([]) });
   let plan = DEFAULT_PLAN;
 
+  // Les familles que le PDF écrit telles quelles : Roboto et celles que son moteur sait sous un équivalent de même chasse (js/pdf-export.js : FONT_FAMILY_MAP). Le moteur ne se charge qu'au premier export (js/export-engines.js)
+  // alors que l'éditeur relève les polices dès l'ouverture (js/pdf-font-notice.js) : tant qu'il n'est pas là, cette liste en tient lieu ; une fois chargé, c'est lui qui décide (l'essai `pdfFontsEditor` compare les deux).
+  const WRITTEN_AS_IS = Object.freeze(['roboto', 'arial', 'helvetica', 'times new roman', 'times', 'georgia', 'courier new', 'courier', 'calibri']);
+  const writtenAsIs = lower => (typeof PdfExport !== 'undefined' ? PdfExport.hasEmbeddedFamily(lower) : WRITTEN_AS_IS.indexOf(lower) !== -1);
+
   // La plus proche des six polices du PDF pour la famille `lower` (en minuscules), null quand il n'y en a pas (Roboto écrit alors le texte).
   function closestFor(lower) {
     const near = typeof ExportCommon !== 'undefined' && ExportCommon.Ooxml ? ExportCommon.Ooxml.nearestFamily(lower) : null;
@@ -42,10 +49,11 @@ const PdfFontPlan = (function () {
     return closestFor(lower);
   }
 
-  // Les familles que les textes nomment en premier (comme le PDF : la première de la liste), sans les noms génériques : { lower -> nom tel qu'écrit }.
+  // Les familles que les textes nomment en premier (comme le PDF : la première de la liste), sans les noms génériques : { lower -> nom tel qu'écrit }. Un objet (l'en-tête et le pied) est lu écrit en JSON, dont les guillemets
+  // d'attribut deviennent des « ' » avant la lecture : la valeur s'arrête donc aussi à « > », sinon `style="font-family: Cambria">texte` nommait la police « Cambria'>texte ».
   function familiesIn(texts) {
     const found = new Map();
-    const pattern = /font-family\s*:\s*([^;"}<]+)/gi;
+    const pattern = /font-family\s*:\s*([^;"}<>]+)/gi;
     (texts || []).forEach((raw) => {
       if (raw == null) return;
       const text = (typeof raw === 'string' ? raw : JSON.stringify(raw)).replace(/&quot;|&#0?34;|\\u0022|\\"/g, "'");
@@ -68,7 +76,7 @@ const PdfFontPlan = (function () {
     let marianne = false;
     familiesIn(texts).forEach((name, lower) => {
       if (lower === MARIANNE) { marianne = true; return; }
-      if (typeof PdfExport !== 'undefined' && PdfExport.hasEmbeddedFamily(lower)) return;
+      if (writtenAsIs(lower)) return;
       const font = typeof FreeFonts !== 'undefined' ? FreeFonts.find(lower) : null;
       if (font) free.push(Object.assign({}, font, { family: closestFor(lower) || 'Roboto' }));
       else replaced.push({ name, family: closestFor(lower) || 'Roboto' });
@@ -78,6 +86,10 @@ const PdfFontPlan = (function () {
 
   // « Tinos (proche de Times New Roman) », ou « Roboto ».
   const describe = family => (LIKE[family] ? I18n.t('pdfFonts.like', { family, like: LIKE[family] }) : family);
+  // La police du menu de l'éditeur que le PDF écrit sous ce nom : « Times New Roman » pour Tinos, « Roboto » quand le PDF n'a rien de plus proche (Roboto elle-même ou une autre police du PDF sans équivalent).
+  const likeOf = family => LIKE[family] || 'Roboto';
+  // La première famille d'une valeur de `font-family` (« 'Cambria', serif » -> « Cambria »), comme `familiesIn` la lit dans le texte.
+  const firstFamilyOf = value => String(value == null ? '' : value).replace(/&quot;|&#0?34;|\\u0022|\\"/g, "'").split(',')[0].trim().replace(/^['"]+|['"]+$/g, '').trim();
 
   // === La fenêtre ===
 
@@ -337,5 +349,5 @@ const PdfFontPlan = (function () {
 
   const reset = () => { plan = DEFAULT_PLAN; };
 
-  return { review, reset, substituteFor, scan, familiesIn, current: () => plan, RULES, EXTENSION };
+  return { review, reset, substituteFor, scan, familiesIn, likeOf, firstFamilyOf, describe, writtenAsIs, WRITTEN_AS_IS, current: () => plan, RULES, EXTENSION };
 })();

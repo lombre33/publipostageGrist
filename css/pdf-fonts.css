@@ -28,3 +28,27 @@
 .pp-fonts-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pp-fonts-activate, .pp-fonts-free-activate { display: block; margin: 0 0 8px; padding: 0; border: 0; background: none; font: inherit; font-size: 12.5px; font-weight: 600; text-align: left; color: var(--accent-ink); text-decoration: underline; cursor: pointer; overflow-wrap: anywhere; }
 .pp-fonts-activate:focus-visible, .pp-fonts-free-activate:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Les polices que le PDF ne peut pas écrire, dites dans l'éditeur (js/pdf-font-notice.js). Jetons seulement, clair et sombre.
+   Le bandeau (#pdf-fonts-bar, index.html) est la ligne fine des bandeaux de retour (classes macro-return-*, css/toolbar-v2.css) : la même apparence, le texte coupé par « … » quand la ligne manque de place (le title natif le dit en
+   entier), deux boutons à droite. Il n'a de sens qu'avec le texte à l'écran : pas en Lecture ni sur le résumé d'un macro-modèle (`pp-editor-hidden`, js/main.js:syncEditorVisibilityForMode), pas en Lecture épurée. */
+.pp-fonts-bar[hidden] { display: none; }
+body.pp-editor-hidden #pdf-fonts-bar, body.pp-clean-reading #pdf-fonts-bar { display: none; }
+/* La pastille orange du bouton « Police » : un aplat dans le coin haut droit du bouton, au-dessus du chevron (qui occupe le milieu de la hauteur), cerné d'un filet de la couleur du fond pour la détacher du bord. Elle ne dit rien seule :
+   le nombre est dans l'info-bulle et le nom du bouton. Jeton `--warn-dot` (css/style.css), 4,5:1 sur les trois fonds du bouton en clair comme en sombre. */
+#v2-font-chip { position: relative; }
+.pp-chip-flag { position: absolute; top: 1px; right: 1px; width: 8px; height: 8px; border-radius: 50%; background: var(--warn-dot); box-shadow: 0 0 0 1.5px var(--surface); pointer-events: none; }
+.pp-chip-flag[hidden] { display: none; }
+#v2-font-chip:hover .pp-chip-flag { box-shadow: 0 0 0 1.5px var(--surface-sunken); }
+/* La fenêtre « Remplacer des polices » (#pp-font-swap-modal) : une ligne par police, son nom, la flèche, la liste de celles qui peuvent la remplacer et « Remplacer ». Le nom se coupe et le reste passe à la ligne dans les
+   376 px du panneau de 700x400 ; le bouton grisé garde sa place et dit sa raison au survol (title) et sous la liste. */
+.pp-fontswap-list { padding-left: 0; }
+.pp-fontswap-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0 0 8px; }
+.pp-fontswap-row .pp-fonts-name { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.pp-fontswap-select { flex: 1 1 140px; min-width: 0; height: 28px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-btn, var(--radius-sm)); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12.5px; }
+.pp-fontswap-select:focus-visible, .pp-fontswap-apply:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-fontswap-apply { flex: none; height: 28px; padding: 0 12px; border: 1px solid var(--fill-line, var(--accent-solid)); border-radius: var(--radius-btn, var(--radius-sm)); background: var(--fill, var(--accent-solid)); color: var(--on-accent); font-family: var(--font-ui); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.pp-fontswap-apply:hover { background: var(--fill-hover, var(--accent-solid-hover)); border-color: var(--fill-line, var(--accent-solid-hover)); }
+.pp-fontswap-apply[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.pp-fontswap-apply[aria-disabled="true"]:hover { background: var(--fill, var(--accent-solid)); }
+.pp-fontswap-status { color: var(--text); }
