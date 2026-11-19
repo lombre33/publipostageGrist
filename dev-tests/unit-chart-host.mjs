@@ -264,6 +264,25 @@ console.log('Le remappage d\'un rapport : le plan et la source vue sous les iden
   const twice = plain(run('ChartHostSource.aliasColumns(__real, { A1: "Montant", A2: "Montant" })'));
   check('deux identifiants attendus sur la même colonne : elle est montrée sous les deux (et sous le sien), une seule lecture', ['A1', 'A2', 'Montant'].every(id => twice.colonnes.some(colonne => colonne.id === id)) && twice.lignes[2].A1 === 120.5 && twice.lignes[2].A2 === 120.5);
   check('les colonnes et les lignes lues ne sont pas modifiées', same(plain(real), plain(await orders.charger('Commandes'))));
+
+  // La source que reçoit le module de Grist BI.
+  context.__reglages = { locale: 'fr-FR', currency: 'EUR', autre: 'x' };
+  const given = plain(run('ChartHostSource.moduleSource(__real, __reglages, { Date_d_envoi: "Le" })'));
+  const src = given.source;
+  const cols = Object.fromEntries(src.colonnes.map(colonne => [colonne.id, colonne]));
+  check('la source du module : trois entrées { lignes, colonnes, reglages } et la table des identifiants de ligne, dans le même ordre que les lignes', same(Object.keys(src), ['lignes', 'colonnes', 'reglages']) && same(given.ids, real.lignes.map(line => line.id)) && src.lignes.length === real.lignes.length);
+  check('une ligne du module n\'a JAMAIS l\'identifiant de ligne de Grist (le module n\'a aucune clé à ignorer)', src.lignes.every(line => !('id' in line)) && !('id' in cols));
+  check('les valeurs sont celles de l\'hôte sous les identifiants de la définition : date en texte, liste en tableau, cellule en erreur à null, jamais 0', src.lignes[2].Date_d_envoi === '2026-03-01' && src.lignes[2].Le === '2026-03-01' && Array.isArray(src.lignes[2].Etiquettes) && src.lignes[1].Montant === null && src.lignes[0].Montant === null);
+  check('une colonne dit son identifiant, son libellé, son type et son format (null sans réglage) ; le genre seulement pour text, number, bool, date et list', cols.Montant.genre === 'number' && cols.Montant.libelle === 'Montant HT' && cols.Montant.type === 'Numeric' && cols.Montant.format.numMode === 'currency' && cols.Quantite.format === null && cols.Etiquettes.genre === 'list' && cols.Le.genre === 'date' && cols.Payee.genre === 'bool' && cols.Statut.genre === 'text');
+  check('une colonne `any` ou `other` ne dit pas de genre (le module devine d\'après les valeurs)', !('genre' in cols.Calcul) && !('genre' in cols.Pieces));
+  check('la colonne remappée porte le format de la vraie colonne, sous l\'identifiant demandé', cols.Date_d_envoi.libelle === 'Date d’envoi' && cols.Date_d_envoi.genre === 'date' && cols.Le.libelle === 'Date d’envoi');
+  check('les réglages du document : seulement la langue et la devise, du texte non vide ; sans réglage un objet vide', same(src.reglages, { locale: 'fr-FR', currency: 'EUR' }) && same(plain(run('ChartHostSource.moduleSource(__real, null).source.reglages')), {}) && same(plain(run('ChartHostSource.moduleSource(__real, { locale: "", currency: 3 }).source.reglages')), {}));
+  check('chaque appel rend une NOUVELLE source (le module compare par référence : « même référence » veut dire « même contenu »), et les lignes lues ne bougent pas', run('ChartHostSource.moduleSource(__real).source') !== run('ChartHostSource.moduleSource(__real).source') && same(plain(real), plain(await orders.charger('Commandes'))));
+  check('une colonne que l\'hôte n\'a pas décrite plus loin (ni format ni genre) : format null, aucun champ inventé', same(plain(run('ChartHostSource.moduleSource({ colonnes: [{ id: "A", libelle: "A", type: "Text" }], lignes: [{ id: 7, A: "x" }] }).source.colonnes')), [{ id: 'A', libelle: 'A', type: 'Text', format: null }]));
+  check('une table sans ligne : une source sans ligne, des colonnes quand même (le module dit « vide », jamais un cadre blanc)', same(plain(run('ChartHostSource.moduleSource({ colonnes: __real.colonnes, lignes: [] }).source.lignes')), []) && plain(run('ChartHostSource.moduleSource({ colonnes: __real.colonnes, lignes: [] }).source.colonnes')).length === real.colonnes.length);
+  context.__ids = given.ids;
+  check('les rangs que rend le module (`surMarque`) redeviennent des identifiants de ligne, dans l\'ordre dit', same(plain(run('ChartHostSource.rowsOfRanks(__ids, [2, 0])')), [given.ids[2], given.ids[0]]));
+  check('un rang hors de la source, négatif, décimal ou pas un nombre est écarté ; un identifiant n\'est jamais rendu deux fois ; rien ou n\'importe quoi donne une liste vide', same(plain(run('ChartHostSource.rowsOfRanks(__ids, [1, 1, 9, -1, 0.5, "0", null, 1])')), [given.ids[1]]) && same(plain(run('ChartHostSource.rowsOfRanks(__ids, undefined)')), []) && same(plain(run('ChartHostSource.rowsOfRanks(__ids, "012")')), []));
 }
 
 console.log('Le vrai module de Grist BI (si son dépôt est là)');
@@ -293,6 +312,9 @@ console.log('Le vrai module de Grist BI (si son dépôt est là)');
       byId.t1.status === 'ok' && byId.t2.status === 'remapped' && same(byId.t2.mapping, { Date_d_envoi: 'Le' }) && byId.t3.status === 'grisee' && byId.t3.grisee.raison === 'jointure' && byId.t4.status === 'blocked' && same(byId.t4.problems.missing, ['Zone']) && same(byId.t4.problems.incompatible, ['Statut']) && byId.t5.status === 'ok', json(plan.pages[0].tuiles.map(tile => [tile.id, tile.status])));
     const calcul = bi.groupes(plain(run('ChartHostSource.aliasColumns(__real, { Date_d_envoi: "Le" })')).lignes, 'Date_d_envoi', 'Montant', 'none');
     check('le module trace les lignes de l\'hôte : un point par ligne (« aucun »), la date lue sous l\'identifiant de la définition, la cellule en erreur sans point', calcul.length === 3 && calcul[2].dimension === '2026-03-01' && calcul[2].value === 120.5 && calcul[1].value === null && calcul[0].dimension === null, json(calcul));
+    const fournie = plain(run('ChartHostSource.moduleSource(__real, { locale: "fr-FR" }, { Date_d_envoi: "Le" })')).source;
+    const trace = bi.groupes(fournie.lignes, 'Date_d_envoi', 'Montant', 'none');
+    check('la source du module de l\'hôte se trace telle quelle chez le vrai module : les mêmes points que par aliasColumns, sans identifiant de ligne dans les entrées', trace.length === calcul.length && trace.every((point, i) => point.dimension === calcul[i].dimension && point.value === calcul[i].value));
     const jours = bi.jour(plain(run('ChartHostSource.aliasColumns(__real, {})')).lignes[1].A);
     check('une date et heure de l\'hôte est lue au jour par le module (23:30 UTC = le lendemain à Paris)', jours === '2026-01-16' || bi.jour('2026-01-16T00:30:00') === '2026-01-16');
   }

@@ -14,6 +14,7 @@
 // `planReport` et `aliasColumns` font le remappage d'un rapport importé sans toucher à sa définition : le plan dit, tuile par tuile, ce qui se retrouve, ce qui change de colonne et ce qui demande un choix ; la source est ensuite
 // vue sous les identifiants que la définition cite. `matchColumns` est la moitié « données » du remappage : les colonnes qu'un graphique ou un rapport demande (identifiant, libellé, genre) retrouvées dans une table du document, par leur identifiant puis par
 // leur libellé, sans jamais en choisir une qui ne peut pas porter le genre demandé (un nombre à mesurer dans une colonne de texte) ni deviner entre deux.
+// `moduleSource` met ce que `charger` rend dans la forme que le module reçoit ({ lignes SANS identifiant de ligne, colonnes, reglages } et la table des identifiants) ; `rowsOfRanks` traduit les rangs qu'il rend en retour (clic sur une marque).
 // Les noms qui franchissent la frontière (tables, charger, colonnes, lignes) sont ceux de la réponse de Grist BI du 18/11 ; le reste est écrit ici, en un seul endroit, et se corrige ici.
 const ChartHostSource = (function () {
   const { pureTypeOf, isoInTimezone } = ViewSource;
@@ -215,18 +216,48 @@ const ChartHostSource = (function () {
   // Les colonnes d'une table lue (`charger`) sous les identifiants que la définition attend : `mapping` { identifiant attendu : colonne de la table }. La définition de Grist BI reste celle qu'elle est,
   // le module lit les identifiants qu'elle cite. Une colonne de la table qu'une entrée vise est montrée sous l'identifiant attendu (son libellé, son type et ses réglages restent les siens) ; une
   // colonne dont l'identifiant est pris ainsi n'est plus montrée sous le sien (elle ne peut pas être deux colonnes à la fois). Rien d'autre ne change : les lignes lues ne sont pas modifiées.
-  function aliasColumns(loaded, mapping) {
+  function shownColumns(loaded, mapping) {
     const moved = Object.keys(mapping || {}).filter(ask => mapping[ask] !== ask);
     const shown = [];
     loaded.colonnes.forEach((colonne) => {
       moved.filter(ask => mapping[ask] === colonne.id).forEach(ask => shown.push({ from: colonne.id, colonne: Object.assign({}, colonne, { id: ask }) }));
       if (moved.indexOf(colonne.id) === -1) shown.push({ from: colonne.id, colonne });
     });
+    return shown;
+  }
+  function aliasColumns(loaded, mapping) {
+    const shown = shownColumns(loaded, mapping);
     return {
       colonnes: shown.map(entry => entry.colonne),
       lignes: loaded.lignes.map((row) => { const line = { id: row.id }; shown.forEach((entry) => { line[entry.colonne.id] = row[entry.from]; }); return line; }),
     };
   }
 
-  return { make, reports, matchColumns, planReport, aliasColumns, genreOf, cellOf, columnsOf, linesOf };
+  // La source que le module de Grist BI reçoit (`monter`, `image`, `modeleOffice`) : { source: { lignes, colonnes, reglages }, ids }. `lignes` : une ligne par enregistrement SANS l'identifiant de ligne de Grist
+  // (le module n'en voit jamais) ; `ids` garde cet identifiant dans le même ordre, pour que `rowsOfRanks` traduise les rangs que le module rend (`surMarque`). `colonnes` : { id, libelle, type, genre?, element?,
+  // format } sous les identifiants de la définition (`mapping`, cf. aliasColumns) ; `genre` n'est dit que pour text, number, bool, date et list (une colonne `any` ou `other` laisse le module deviner d'après
+  // les valeurs). `reglages` : { locale?, currency? } du document. Le module compare ses entrées par RÉFÉRENCE : garder la même source tant que rien ne change, en faire une nouvelle quand les lignes changent.
+  const MODULE_GENRES = ['text', 'number', 'bool', 'date', 'list'];
+  function moduleSource(loaded, reglages, mapping) {
+    const shown = shownColumns(loaded, mapping);
+    const colonnes = shown.map((entry) => {
+      const colonne = entry.colonne;
+      const out = { id: colonne.id, libelle: colonne.libelle, type: colonne.type, format: colonne.format == null ? null : colonne.format };
+      if (MODULE_GENRES.indexOf(colonne.genre) !== -1) out.genre = colonne.genre;
+      if (colonne.element) out.element = colonne.element;
+      return out;
+    });
+    const lignes = loaded.lignes.map((row) => { const line = {}; shown.forEach((entry) => { line[entry.colonne.id] = row[entry.from]; }); return line; });
+    const found = {};
+    ['locale', 'currency'].forEach((key) => { if (reglages && typeof reglages[key] === 'string' && reglages[key]) found[key] = reglages[key]; });
+    return { source: { lignes, colonnes, reglages: found }, ids: loaded.lignes.map(row => row.id) };
+  }
+  // Les identifiants de ligne des rangs que le module rend (`surMarque` : { colonne, valeur, lignes }) ; un rang qui n'est pas un entier de la source est écarté, un identifiant n'est jamais rendu deux fois.
+  function rowsOfRanks(ids, ranks) {
+    const found = new Set();
+    (Array.isArray(ranks) ? ranks : []).forEach((rank) => { if (Number.isInteger(rank) && rank >= 0 && rank < ids.length) found.add(ids[rank]); });
+    return Array.from(found);
+  }
+
+  return { make, reports, matchColumns, planReport, aliasColumns, moduleSource, rowsOfRanks, genreOf, cellOf, columnsOf, linesOf };
 })();
