@@ -50,10 +50,16 @@
    native (`accent-color: auto`), texte jamais barré. « accentPlain » : même case d'accent, texte qui reste normal une fois cochée. */
 .tiptap ul[data-type="taskList"], .reader-content ul[data-type="taskList"] { list-style: none; padding-left: 0; }
 .tiptap ul[data-type="taskList"] li, .reader-content ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 6px; }
-.tiptap ul[data-type="taskList"] li > label, .reader-content ul[data-type="taskList"] li > label { flex: none; margin-top: .2em; }
+/* La case est au milieu de la première ligne du texte, quel que soit le style et sans rien devoir à la ligne de base que le navigateur donne à une case native : l'étiquette est une boîte flexible qui n'a que la
+   case pour contenu (la case y devient un bloc, sans marge au-dessus ni en dessous), posée sous le haut de la ligne de la moitié de ce que la ligne a de plus que la case, soit (interligne - 15 px) / 2 : la ligne fait
+   1,42 em (celle de `.tiptap` et de `.reader-content`), d'où .71em - 7,5 px, un calcul en em pour qu'il suive la taille du texte et le zoom de la feuille, comme les .2em d'avant.
+   Avant, la case native gardait les 3 px de marge que le navigateur lui donne en haut et en bas, en plus des .2em de l'étiquette : dans Chromium les styles « accent » étaient 3,3 px sous le milieu de la ligne (« classic »,
+   sans marge, 0,3 px), et un élément d'une ligne faisait 26,5 px (« accent ») ou 23,5 px (« classic ») au lieu des 19,9 px de la ligne, que le PDF lui donne : il fait maintenant la hauteur de sa ligne. Les marges de gauche (4 px)
+   et de droite (3 px) restent celles de la case native, écrites ici pour que le texte parte au même endroit partout. */
+.tiptap ul[data-type="taskList"] li > label, .reader-content ul[data-type="taskList"] li > label { flex: none; display: flex; margin-top: calc(.71em - 7.5px); }
 .tiptap ul[data-type="taskList"] li > div, .reader-content ul[data-type="taskList"] li > div { flex: 1; min-width: 0; }
 .tiptap ul[data-type="taskList"] input[type="checkbox"],
-.reader-content ul[data-type="taskList"] input[type="checkbox"] { width: 15px; height: 15px; }
+.reader-content ul[data-type="taskList"] input[type="checkbox"] { width: 15px; height: 15px; margin: 0 3px 0 4px; }
 .tiptap ul[data-type="taskList"]:not([data-tasklist-style="classic"]) input[type="checkbox"],
 .reader-content ul[data-type="taskList"]:not([data-tasklist-style="classic"]) input[type="checkbox"] { accent-color: var(--accent, #2f6fed); }
 /* « classic » ne peut pas se contenter de `accent-color: auto` : le navigateur choisit alors la couleur de remplissage (Chrome prend un bleu

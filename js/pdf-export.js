@@ -857,16 +857,16 @@ const PdfExport = (function () {
   // Case à cocher dessinée en vectoriel via `canvas` plutôt qu'en glyphe de police (☑/☐ hors WinAnsi, même contrainte que les puces rondes/carrées) :
   // un rectangle + une coche ne dépendent d'aucune police embarquée.
   // Prend la place et la taille de celle de l'éditeur (css/editor-v2.css, mesuré à 14 px de corps) : 15 px de côté (11,25 pt), le texte 6 px (4,5 pt) plus loin.
-  // Les styles « accent » posent la case native de Chromium, avec ses marges (4 px à gauche, 3 px à droite et au-dessus) et les .2em du label : case à 3 pt du bord
-  // de l'élément, texte à 21 pt. « classic » la dessine à la main, sans marge : case au bord, texte à 15,75 pt, case 3 px plus haut. `top` : le haut de la case sous
-  // le haut de la première ligne, réglé pour qu'elle ait, par rapport à la ligne de base, la même place que dans l'éditeur (la ligne de base du PDF est à 9,74 pt
-  // du haut de l'item, celle de l'éditeur à 10,5 pt).
+  // Les styles « accent » posent la case native, avec ses marges de gauche (4 px) et de droite (3 px) : case à 3 pt du bord de l'élément, texte à 21 pt. « classic » la dessine à la main, sans marge :
+  // case au bord, texte à 15,75 pt. `top` : le haut de la case sous le haut de la première ligne, le même pour les trois styles (l'éditeur centre la case sur sa ligne, css/editor-v2.css : 1,83 pt sous le haut de
+  // l'élément), réglé pour qu'elle ait, par rapport à la ligne de base, la même place que dans l'éditeur (la ligne de base du PDF est à 9,74 pt du haut de l'item, celle de l'éditeur à 10,6 pt : 0,9 pt plus bas).
   const TASK_BOX_PT = 11.25;
   const TASK_TEXT_GAP_PT = 4.5;
+  const TASK_BOX_TOP_PT = 0.95;
   function taskBoxGeometry(style) {
     return style === 'classic'
-      ? { left: 0, top: 1.3, width: TASK_BOX_PT + TASK_TEXT_GAP_PT }
-      : { left: 3, top: 3.6, width: 3 + TASK_BOX_PT + 2.25 + TASK_TEXT_GAP_PT };
+      ? { left: 0, top: TASK_BOX_TOP_PT, width: TASK_BOX_PT + TASK_TEXT_GAP_PT }
+      : { left: 3, top: TASK_BOX_TOP_PT, width: 3 + TASK_BOX_PT + 2.25 + TASK_TEXT_GAP_PT };
   }
   // `rtl` : la case de droite à gauche est contre la marge de droite, l'espace du texte à sa gauche (le dessin de gauche à droite a l'espace à droite de la case).
   function taskCheckboxCanvas(checked, style, rtl) {
