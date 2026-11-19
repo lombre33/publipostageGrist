@@ -289,7 +289,7 @@ const state = page => page.evaluate(() => ({
     const visible = id => { const e = el(id); return !!e && !e.hidden && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden'; };
     return {
       enabledShown: visible('settings-rowtemplate-enabled'), enabled: el('settings-rowtemplate-enabled').disabled,
-      set: el('settings-viewtemplate-set').disabled, clear: el('settings-viewtemplate-clear').disabled,
+      set: el('settings-viewtemplate-set').getAttribute('aria-disabled') === 'true', clear: el('settings-viewtemplate-clear').getAttribute('aria-disabled') === 'true',
       hintRow: visible('settings-rowtemplate-locked'), hintView: visible('settings-viewtemplate-locked'), reminder: visible('settings-save-reminder'),
     };
   });

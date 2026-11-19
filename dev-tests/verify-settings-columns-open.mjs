@@ -328,7 +328,7 @@ const vueTab = () => page.evaluate(() => ({
   rowBodyInert: document.getElementById('settings-rowtemplate-body').inert,
   rowChecked: document.getElementById('settings-rowtemplate-enabled').checked,
   viewHint: !document.getElementById('settings-viewtemplate-locked').hidden,
-  viewSetDisabled: document.getElementById('settings-viewtemplate-set').disabled,
+  viewSetDisabled: document.getElementById('settings-viewtemplate-set').getAttribute('aria-disabled') === 'true',
 }));
 const accessTab = () => page.evaluate(() => ({
   triggers: ['table', 'email', 'readonly', 'export', 'comments'].map(name => document.querySelector('#settings-access-' + name + ' + .ss-wrap .ss-trigger').disabled),

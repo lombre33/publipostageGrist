@@ -296,11 +296,11 @@ async function run() {
   check('les deux boutons de la vue tiennent dans la fenêtre 700x400, sans défilement horizontal', within(viewGeometry.set) && within(viewGeometry.clear) && !viewGeometry.hScroll, viewGeometry);
   check('l’état dit que le modèle par défaut du document s’ouvre, et le bouton nomme le modèle ouvert', /par défaut du document/.test(viewGeometry.status) && viewGeometry.label === 'Utiliser « Ligne - B urgent » pour cette vue', viewGeometry);
   await realClick('#settings-viewtemplate-set', 400);
-  const chosen = await page.evaluate(() => ({ option: (window.__gristStub.state.options || {}).modeleDeLaVue, status: document.getElementById('settings-viewtemplate-status').textContent, setDisabled: document.getElementById('settings-viewtemplate-set').disabled, clearDisabled: document.getElementById('settings-viewtemplate-clear').disabled }));
+  const chosen = await page.evaluate(() => ({ option: (window.__gristStub.state.options || {}).modeleDeLaVue, status: document.getElementById('settings-viewtemplate-status').textContent, setDisabled: document.getElementById('settings-viewtemplate-set').getAttribute('aria-disabled') === 'true', clearDisabled: document.getElementById('settings-viewtemplate-clear').getAttribute('aria-disabled') === 'true' }));
   check('un vrai clic choisit le modèle ouvert pour la vue : option du widget écrite, état mis à jour, bouton grisé', String(chosen.option) === String(ids.B) && chosen.status === 'Modèle de cette vue : « Ligne - B urgent ».' && chosen.setDisabled && !chosen.clearDisabled, chosen);
   if (SHOTS) await page.screenshot({ path: join(SHOTS, 'view-template-700x400.png') });
   await realClick('#settings-viewtemplate-clear', 400);
-  const cleared = await page.evaluate(() => ({ option: (window.__gristStub.state.options || {}).modeleDeLaVue || null, status: document.getElementById('settings-viewtemplate-status').textContent, clearDisabled: document.getElementById('settings-viewtemplate-clear').disabled }));
+  const cleared = await page.evaluate(() => ({ option: (window.__gristStub.state.options || {}).modeleDeLaVue || null, status: document.getElementById('settings-viewtemplate-status').textContent, clearDisabled: document.getElementById('settings-viewtemplate-clear').getAttribute('aria-disabled') === 'true' }));
   check('« Retirer » enlève le choix de la vue', cleared.option === null && /par défaut du document/.test(cleared.status) && cleared.clearDisabled, cleared);
   await realClick('#settings-close', 500);
 
@@ -339,18 +339,104 @@ async function run() {
       const b = document.getElementById('settings-viewtemplate-set');
       const r = b.getBoundingClientRect();
       const m = document.querySelector('#settings-modal .modal-content').getBoundingClientRect();
-      return { disabled: b.disabled, label: b.textContent, title: b.title, fits: r.left >= m.left && r.right <= m.right && r.width > 40 && r.height >= 24 };
+      return { disabled: b.getAttribute('aria-disabled') === 'true' || b.disabled, label: b.textContent, title: b.title, fits: r.left >= m.left && r.right <= m.right && r.width > 40 && r.height >= 24 };
     });
     check(`${kind} ouvert : le bouton de la vue est actif, sans infobulle d'interdit, nomme le modèle et tient dans la fenêtre`, !button.disabled && button.title === '' && button.label === `Utiliser « ${nom} » pour cette vue` && button.fits, button);
     await realClick('#settings-viewtemplate-set', 400);
-    const picked = await page.evaluate(() => ({ option: (window.__gristStub.state.options || {}).modeleDeLaVue, status: document.getElementById('settings-viewtemplate-status').textContent, setDisabled: document.getElementById('settings-viewtemplate-set').disabled, clearDisabled: document.getElementById('settings-viewtemplate-clear').disabled }));
+    const picked = await page.evaluate(() => ({ option: (window.__gristStub.state.options || {}).modeleDeLaVue, status: document.getElementById('settings-viewtemplate-status').textContent, setDisabled: document.getElementById('settings-viewtemplate-set').getAttribute('aria-disabled') === 'true', clearDisabled: document.getElementById('settings-viewtemplate-clear').getAttribute('aria-disabled') === 'true' }));
     check(`${kind} : un vrai clic le choisit pour la vue (option écrite, état à jour, bouton grisé)`, String(picked.option) === String(id) && picked.status === `Modèle de cette vue : « ${nom} ».` && picked.setDisabled && !picked.clearDisabled, picked);
     if (SHOTS) await page.screenshot({ path: join(SHOTS, `view-template-${kind === 'email' ? 'email' : 'macro'}-700x400.png`) });
     await realClick('#settings-viewtemplate-clear', 400);
-    const undone = await page.evaluate(() => ({ option: (window.__gristStub.state.options || {}).modeleDeLaVue || null, clearDisabled: document.getElementById('settings-viewtemplate-clear').disabled }));
+    const undone = await page.evaluate(() => ({ option: (window.__gristStub.state.options || {}).modeleDeLaVue || null, clearDisabled: document.getElementById('settings-viewtemplate-clear').getAttribute('aria-disabled') === 'true' }));
     check(`${kind} : « Retirer » défait le choix`, undone.option === null && undone.clearDisabled, undone);
     await realClick('#settings-close', 500);
   }
+
+  // 10) Consigne 088 de GFS (demande du porteur : « indiquer pourquoi à chaque fois qu'une option est grisée ») : un modèle neuf, pas encore enregistré, est ouvert. Les deux boutons de la vue sont
+  // grisés par aria-disabled (jamais `disabled`) : ils reçoivent le vrai survol et le vrai Tab, disent leur raison (info-bulle, phrase visible sous l'état, description que lit le lecteur d'écran,
+  // vue par le navigateur lui-même), et ni un clic, ni Entrée, ni Espace n'écrit rien. La phrase tient dans la fenêtre 700x400. Une fois enregistré sous un nom, la phrase disparaît et le bouton
+  // porte le nom, sans info-bulle.
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('DOM.enable');
+  await cdp.send('Accessibility.enable');
+  // Ce que le navigateur dit d'un élément à la technologie d'assistance : nom, description, grisé, atteignable.
+  const axOf = async (selector) => {
+    const { root } = await cdp.send('DOM.getDocument');
+    const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: root.nodeId, selector });
+    const { nodes } = await cdp.send('Accessibility.getPartialAXTree', { nodeId, fetchRelatives: false });
+    const node = nodes[0];
+    const props = Object.fromEntries((node.properties || []).map(p => [p.name, p.value.value]));
+    return { role: node.role && node.role.value, name: node.name && node.name.value, description: node.description ? node.description.value : '', disabled: props.disabled === true, focusable: props.focusable === true };
+  };
+  const optionOfView = () => page.evaluate(() => (window.__gristStub.state.options || {}).modeleDeLaVue || null);
+  const SENTENCE = 'Ce modèle n’est pas encore enregistré : donnez-lui un nom et cliquez sur Enregistrer, il pourra alors devenir celui de cette vue.';
+  const NOTHING = 'Aucun modèle n’est choisi pour cette vue : il n’y a rien à retirer.';
+  await page.evaluate(async () => {
+    await RowTemplate.save(null);
+    await ViewTemplate.clear();
+    document.getElementById('v2-btn-new-document').click();
+    await new Promise(r => setTimeout(r, 200));
+  });
+  check('un modèle neuf, pas encore enregistré, est ouvert (aucun identifiant)', (await current()) == null, await current());
+  const optionBefore = await optionOfView();
+  await realClick('#v2-btn-settings', 500);
+  await realClick('.settings-tab[data-settings-tab="rowTemplate"]', 300);
+  await page.evaluate(() => document.getElementById('settings-viewtemplate-section').scrollIntoView({ block: 'end' }));
+  await page.waitForTimeout(200);
+  const geo = await page.evaluate(() => {
+    const modal = document.querySelector('#settings-modal .modal-content').getBoundingClientRect();
+    const body = document.querySelector('#settings-modal .settings-body');
+    const rect = id => { const r = document.getElementById(id).getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height }; };
+    return { status: rect('settings-viewtemplate-status'), sentence: rect('settings-viewtemplate-unsaved'), set: rect('settings-viewtemplate-set'), modal: { l: modal.left, r: modal.right }, hScroll: body.scrollWidth > body.clientWidth + 1 };
+  });
+  check('la phrase « pas encore enregistré » est visible, sous l’état et avant les boutons, et tient dans la fenêtre 700x400 sans défilement horizontal',
+    geo.sentence.h > 10 && geo.sentence.l >= geo.modal.l && geo.sentence.r <= geo.modal.r && geo.status.b <= geo.sentence.t + 1 && geo.sentence.b <= geo.set.t + 1 && !geo.hScroll, geo);
+  if (SHOTS) await page.screenshot({ path: join(SHOTS, 'view-template-unsaved-700x400.png') });
+  const greyedSet = await page.evaluate(() => { const b = document.getElementById('settings-viewtemplate-set'); return { aria: b.getAttribute('aria-disabled'), native: b.disabled, title: b.title, describedBy: b.getAttribute('aria-describedby'), sentence: document.getElementById('settings-viewtemplate-unsaved').textContent }; });
+  check('« Utiliser… » : aria-disabled="true", pas `disabled`, sa raison en info-bulle, décrit par la phrase visible', greyedSet.aria === 'true' && !greyedSet.native && greyedSet.title === SENTENCE && greyedSet.describedBy === 'settings-viewtemplate-unsaved' && greyedSet.sentence === SENTENCE, greyedSet);
+  // Le vrai Tab, de l'état aux deux boutons : un <button disabled> serait sauté.
+  await page.evaluate(() => { const s = document.getElementById('settings-viewtemplate-status'); s.tabIndex = -1; s.focus(); });
+  await page.keyboard.press('Tab');
+  const tab1 = await page.evaluate(() => document.activeElement && document.activeElement.id);
+  const axSet = await axOf('#settings-viewtemplate-set');
+  await page.keyboard.press('Tab');
+  const tab2 = await page.evaluate(() => document.activeElement && document.activeElement.id);
+  const axClear = await axOf('#settings-viewtemplate-clear');
+  await page.evaluate(() => document.getElementById('settings-viewtemplate-status').removeAttribute('tabindex'));
+  check('au vrai Tab, le clavier atteint « Utiliser… » puis « Retirer » (grisés, pas sautés)', tab1 === 'settings-viewtemplate-set' && tab2 === 'settings-viewtemplate-clear', { tab1, tab2 });
+  check('le navigateur les donne au lecteur d’écran comme boutons grisés, atteignables, avec leur raison pour description',
+    axSet.role === 'button' && axSet.disabled && axSet.focusable && axSet.description === SENTENCE && axClear.role === 'button' && axClear.disabled && axClear.focusable && axClear.description === NOTHING, { axSet, axClear });
+  // Le vrai survol : le grisé reçoit :hover mais ne s'éclaire pas, curseur par défaut.
+  const bg0 = await page.evaluate(() => getComputedStyle(document.getElementById('settings-viewtemplate-set')).backgroundColor);
+  await realHover('#settings-viewtemplate-set');
+  const hover = await page.evaluate(() => { const b = document.getElementById('settings-viewtemplate-set'); const cs = getComputedStyle(b); return { hovered: b.matches(':hover'), bg: cs.backgroundColor, cursor: cs.cursor, opacity: cs.opacity }; });
+  check('survolé à la vraie souris, « Utiliser… » grisé reçoit le survol (son info-bulle peut s’afficher) sans s’éclaircir, curseur par défaut', hover.hovered && hover.bg === bg0 && hover.cursor === 'default' && Number(hover.opacity) < 1, { bg0, hover });
+  // Ni un vrai clic, ni Entrée, ni Espace sur un bouton grisé n'écrit.
+  await realClick('#settings-viewtemplate-set', 250);
+  await realClick('#settings-viewtemplate-clear', 250);
+  await page.evaluate(() => document.getElementById('settings-viewtemplate-set').focus());
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Space');
+  await page.waitForTimeout(250);
+  check('un clic, Entrée ou Espace sur un bouton grisé n’écrit rien (ni choix, ni retrait)', (await optionOfView()) === optionBefore, { before: optionBefore, after: await optionOfView() });
+  await realClick('#settings-close', 500);
+  // Enregistré sous un nom : la phrase disparaît, le bouton porte le nom et n'a plus d'info-bulle.
+  await page.evaluate(async () => {
+    Editor.setHTML('<p>Contenu Z</p>');
+    document.getElementById('template-name').value = 'Ligne - Z enregistré';
+    document.getElementById('btn-save').click();
+    await new Promise(r => setTimeout(r, 600));
+  });
+  check('le modèle est enregistré (il a un identifiant)', (await current()) != null, await current());
+  await realClick('#v2-btn-settings', 500);
+  await realClick('.settings-tab[data-settings-tab="rowTemplate"]', 300);
+  await page.evaluate(() => document.getElementById('settings-viewtemplate-section').scrollIntoView({ block: 'end' }));
+  await page.waitForTimeout(200);
+  const saved = await page.evaluate(() => { const b = document.getElementById('settings-viewtemplate-set'); const s = document.getElementById('settings-viewtemplate-unsaved'); return { aria: b.getAttribute('aria-disabled'), title: b.title, describedBy: b.getAttribute('aria-describedby'), label: b.textContent, sentenceHidden: s.hidden || s.getBoundingClientRect().height === 0 }; });
+  const axSaved = await axOf('#settings-viewtemplate-set');
+  check('une fois enregistré sous un nom : la phrase disparaît, le bouton est actif, porte le nom, sans info-bulle ni description',
+    saved.aria === null && saved.title === '' && saved.describedBy === null && saved.label === 'Utiliser « Ligne - Z enregistré » pour cette vue' && saved.sentenceHidden && !axSaved.disabled && axSaved.description === '', { saved, axSaved });
+  await realClick('#settings-close', 500);
 }
 
 // La page ne change plus de langue en route : Réglages garde le choix et la recharge. Le script fait pareil - il garde la langue, recharge, attend le widget -,

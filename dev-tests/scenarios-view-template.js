@@ -82,12 +82,52 @@
     el('settings-close').click();
     await sleep(400);
   }
+  // Grisé par aria-disabled, jamais par `disabled` (consigne 088 de GFS) : l'état d'un bouton est lu là.
+  const greyed = id => el(id).getAttribute('aria-disabled') === 'true';
   const panel = () => ({
     status: el('settings-viewtemplate-status').textContent,
-    setLabel: el('settings-viewtemplate-set').textContent, setDisabled: el('settings-viewtemplate-set').disabled, setTitle: el('settings-viewtemplate-set').title,
-    clearDisabled: el('settings-viewtemplate-clear').disabled, locked: !el('settings-viewtemplate-locked').hidden,
+    setLabel: el('settings-viewtemplate-set').textContent, setDisabled: greyed('settings-viewtemplate-set'), setTitle: el('settings-viewtemplate-set').title,
+    clearDisabled: greyed('settings-viewtemplate-clear'), locked: !el('settings-viewtemplate-locked').hidden,
     visible: el('settings-viewtemplate-set').getBoundingClientRect().height > 0 && el('settings-viewtemplate-clear').getBoundingClientRect().height > 0,
   });
+  // Ce que dit chaque bouton de lui-même (088) : sa raison en info-bulle, sa description, le natif `disabled`, et la phrase visible sous l'état. `described` : le texte de l'élément que `aria-describedby` désigne.
+  const shown = id => { const node = el(id); return !!node && !node.hidden && node.getBoundingClientRect().height > 0; };
+  const buttonSays = id => {
+    const button = el(id);
+    const target = button.getAttribute('aria-describedby');
+    const described = target && el(target) ? el(target).textContent : null;
+    return { greyed: button.getAttribute('aria-disabled') === 'true', nativeDisabled: button.disabled, title: button.title, describedBy: target, described, tabbable: button.tabIndex >= 0 };
+  };
+  const reasonPanel = () => ({ set: buttonSays('settings-viewtemplate-set'), clear: buttonSays('settings-viewtemplate-clear'), sentence: shown('settings-viewtemplate-unsaved') ? el('settings-viewtemplate-unsaved').textContent : null, lockedShown: shown('settings-viewtemplate-locked') });
+  // Les phrases de la consigne 088, mot pour mot, dans les deux langues.
+  const SAYS = {
+    fr: {
+      unsaved: 'Ce modèle n’est pas encore enregistré : donnez-lui un nom et cliquez sur Enregistrer, il pourra alors devenir celui de cette vue.',
+      already: 'Ce modèle est déjà celui de cette vue.',
+      nothing: 'Aucun modèle n’est choisi pour cette vue : il n’y a rien à retirer.',
+      locked: 'Vous êtes en lecture seule : ce réglage est verrouillé.',
+    },
+    en: {
+      unsaved: 'This template is not saved yet: give it a name and click Save, then it can become the one for this view.',
+      already: 'This template is already the one for this view.',
+      nothing: 'No template is chosen for this view: there is nothing to remove.',
+      locked: 'You are read-only: this setting is locked.',
+    },
+  };
+  // Un clic sur un bouton grisé n'écrit rien : les écritures de l'option du widget se comptent par la fonction même que ViewTemplate appelle.
+  async function clickCountingWrites(...ids) {
+    const original = GristAPI.setWidgetOption;
+    let writes = 0;
+    GristAPI.setWidgetOption = function () { writes++; return original.apply(this, arguments); };
+    try { ids.forEach(id => el(id).click()); await sleep(250); } finally { GristAPI.setWidgetOption = original; }
+    return writes;
+  }
+  async function openNewUnsaved(h) {
+    await h.resetEditor();
+    h.openFlyout('#v2-new-template-group');
+    await h.clickButton('v2-btn-new-document'); // nouveau modèle, jamais enregistré : aucun id à choisir
+    await sleep(150);
+  }
   async function cleanup() {
     await ViewTemplate.clear();
     stub().setWidgetOptions(null);
@@ -327,6 +367,118 @@
         stub().dropTable(RIGHTS_TABLE);
         await GristAPI.refreshSchema();
       }
+    },
+  });
+
+  // Consigne 088 de GFS (demande du porteur du 19/11 : « indiquer pourquoi à chaque fois qu'une option est grisée ») : chaque état grisé dit sa raison - au survol (`title`), en phrase visible
+  // quand le modèle ouvert n'est pas enregistré, au lecteur d'écran (`aria-describedby`) - et le bouton est grisé par aria-disabled, jamais par `disabled` (il garde le survol et le focus).
+  cases.push({
+    id: 'view_template_unsaved_template_says_why_both_buttons_are_greyed_then_names_itself_once_saved',
+    description: "Modèle ouvert pas encore enregistré : « Utiliser… » grisé par aria-disabled (pas `disabled`, atteignable), sa raison en info-bulle ET en phrase visible sous l'état (aria-describedby vers elle) ; « Retirer » dit qu'il n'y a rien à retirer ; un clic n'écrit rien. Après « Enregistrer » sous un nom : la phrase disparaît, le bouton porte le nom, sans info-bulle",
+    run: async (h) => {
+      await ensureFixture(h);
+      await openNewUnsaved(h);
+      await openSettings();
+      const unsaved = Object.assign({ currentId: Templates.getCurrentId() }, reasonPanel());
+      const writes = await clickCountingWrites('settings-viewtemplate-set', 'settings-viewtemplate-clear');
+      await closeSettings();
+      Editor.setHTML('<p>Contenu Z</p>');
+      el('template-name').value = 'Vue - Z enregistré';
+      await h.clickButton('btn-save');
+      await sleep(400);
+      const savedId = Templates.getCurrentId();
+      await openSettings();
+      const saved = Object.assign({ label: el('settings-viewtemplate-set').textContent }, reasonPanel());
+      await closeSettings();
+      if (savedId != null) await Templates.remove(savedId);
+      await cleanup();
+      const says = SAYS.fr;
+      const pass = unsaved.currentId == null
+        && unsaved.set.greyed && !unsaved.set.nativeDisabled && unsaved.set.tabbable && unsaved.set.title === says.unsaved
+        && unsaved.sentence === says.unsaved && unsaved.set.describedBy === 'settings-viewtemplate-unsaved' && unsaved.set.described === says.unsaved
+        && unsaved.clear.greyed && !unsaved.clear.nativeDisabled && unsaved.clear.tabbable && unsaved.clear.title === says.nothing && unsaved.clear.describedBy === null
+        && !unsaved.lockedShown && writes === 0
+        && savedId != null && !saved.set.greyed && !saved.set.nativeDisabled && saved.set.title === '' && saved.set.describedBy === null && saved.sentence === null
+        && saved.label === 'Utiliser « Vue - Z enregistré » pour cette vue' && saved.clear.greyed && saved.clear.title === says.nothing;
+      return { pass, notes: JSON.stringify({ unsaved, writes, saved }) };
+    },
+  });
+
+  cases.push({
+    id: 'view_template_greyed_buttons_say_why_when_already_chosen_and_when_nothing_is_chosen',
+    description: "Sans choix pour la vue : « Utiliser « X » » est actif (sans info-bulle ni phrase), « Retirer » grisé dit qu'il n'y a rien à retirer. Modèle ouvert déjà celui de la vue : « Utiliser… » grisé dit « déjà celui de cette vue » (info-bulle seule, pas de phrase visible), « Retirer » devient actif sans info-bulle ; un clic sur le grisé n'écrit rien",
+    run: async (h) => {
+      const f = await ensureFixture(h);
+      await openByHand(f.B);
+      await openSettings();
+      const noChoice = reasonPanel();
+      await closeSettings();
+      await ViewTemplate.set(f.B);
+      await openSettings();
+      const already = reasonPanel();
+      const writes = await clickCountingWrites('settings-viewtemplate-set');
+      const stillChosen = same(optionNow(), f.B);
+      await closeSettings();
+      await cleanup();
+      const says = SAYS.fr;
+      const pass = !noChoice.set.greyed && !noChoice.set.nativeDisabled && noChoice.set.title === '' && noChoice.set.describedBy === null && noChoice.sentence === null
+        && noChoice.clear.greyed && !noChoice.clear.nativeDisabled && noChoice.clear.tabbable && noChoice.clear.title === says.nothing && noChoice.clear.describedBy === null
+        && already.set.greyed && !already.set.nativeDisabled && already.set.tabbable && already.set.title === says.already && already.set.describedBy === null && already.sentence === null
+        && !already.clear.greyed && already.clear.title === '' && writes === 0 && stillChosen;
+      return { pass, notes: JSON.stringify({ noChoice, already, writes, stillChosen }) };
+    },
+  });
+
+  cases.push({
+    id: 'view_template_read_only_says_the_lock_on_both_buttons_even_for_an_unsaved_template',
+    description: "En lecture seule, les deux boutons sont grisés par aria-disabled avec la phrase du verrou pour info-bulle et description (la ligne du verrou, déjà visible) ; la phrase « pas encore enregistré » ne paraît pas, même pour un modèle neuf ; un clic n'écrit rien",
+    run: async (h) => {
+      const f = await ensureFixture(h);
+      await openNewUnsaved(h);
+      const savedRights = AccessRights.get;
+      AccessRights.get = () => ({ readOnly: true, canExport: false, canComment: false });
+      try {
+        await openSettings();
+        const readOnly = reasonPanel();
+        const writes = await clickCountingWrites('settings-viewtemplate-set', 'settings-viewtemplate-clear');
+        await closeSettings();
+        const says = SAYS.fr;
+        const pass = readOnly.set.greyed && !readOnly.set.nativeDisabled && readOnly.set.tabbable && readOnly.set.title === says.locked && readOnly.set.describedBy === 'settings-viewtemplate-locked' && readOnly.set.described === says.locked
+          && readOnly.clear.greyed && !readOnly.clear.nativeDisabled && readOnly.clear.tabbable && readOnly.clear.title === says.locked && readOnly.clear.describedBy === 'settings-viewtemplate-locked'
+          && readOnly.lockedShown && readOnly.sentence === null && writes === 0 && f.A != null;
+        return { pass, notes: JSON.stringify({ readOnly, writes }) };
+      } finally { AccessRights.get = savedRights; await cleanup(); }
+    },
+  });
+
+  // Les mêmes raisons en anglais : le HTML statique (la phrase visible) est traduit au chargement, donc ce cas se rejoue dans la seconde page, qui démarre en anglais.
+  cases.push({
+    id: 'view_template_greyed_buttons_say_why_in_english',
+    lang: 'en',
+    description: "En anglais : la phrase « pas encore enregistré » (visible, info-bulle, description), « déjà celui de cette vue », « rien à retirer » et le verrou sont dits en anglais, sur les mêmes boutons grisés par aria-disabled",
+    run: async (h) => {
+      const f = await ensureFixture(h);
+      await openNewUnsaved(h);
+      await openSettings();
+      const unsaved = reasonPanel();
+      await closeSettings();
+      await openByHand(f.B);
+      await ViewTemplate.set(f.B);
+      await openSettings();
+      const already = reasonPanel();
+      await closeSettings();
+      const savedRights = AccessRights.get;
+      AccessRights.get = () => ({ readOnly: true, canExport: false, canComment: false });
+      let readOnly;
+      try { await openSettings(); readOnly = reasonPanel(); await closeSettings(); } finally { AccessRights.get = savedRights; }
+      await cleanup();
+      const says = SAYS.en;
+      const pass = I18n.getLang() === 'en'
+        && unsaved.set.greyed && !unsaved.set.nativeDisabled && unsaved.set.title === says.unsaved && unsaved.sentence === says.unsaved && unsaved.set.described === says.unsaved
+        && unsaved.clear.greyed && unsaved.clear.title === says.nothing
+        && already.set.greyed && already.set.title === says.already && already.sentence === null
+        && readOnly.set.greyed && readOnly.set.title === says.locked && readOnly.clear.title === says.locked && readOnly.lockedShown && readOnly.sentence === null;
+      return { pass, notes: JSON.stringify({ lang: I18n.getLang(), unsaved, already, readOnly }) };
     },
   });
 

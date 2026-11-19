@@ -206,8 +206,8 @@
         const viewTab = {
           rowTemplateEnable: el('settings-rowtemplate-enabled').disabled,
           rowTemplateHint: shown('settings-rowtemplate-locked'),
-          viewTemplateSet: el('settings-viewtemplate-set').disabled,
-          viewTemplateClear: el('settings-viewtemplate-clear').disabled,
+          viewTemplateSet: el('settings-viewtemplate-set').getAttribute('aria-disabled') === 'true',
+          viewTemplateClear: el('settings-viewtemplate-clear').getAttribute('aria-disabled') === 'true',
           viewTemplateHint: shown('settings-viewtemplate-locked'),
         };
         const reminder = el('settings-save-reminder');

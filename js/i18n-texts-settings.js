@@ -306,6 +306,13 @@ const I18nTextsSettings = {
   'settings.viewTemplate.useNamed': { fr: 'Utiliser « {name} » pour cette vue', en: 'Use “{name}” for this view' },
   'settings.viewTemplate.clear': { fr: 'Retirer', en: 'Remove' },
   'settings.viewTemplate.locked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé.', en: 'You are read-only: this setting is locked.' },
+  // Pourquoi un des deux boutons est grisé (consigne 088 de GFS) : la phrase est son info-bulle ; celle du modèle pas encore enregistré est aussi affichée sous l'état.
+  'settings.viewTemplate.reason.unsaved': {
+    fr: 'Ce modèle n’est pas encore enregistré : donnez-lui un nom et cliquez sur Enregistrer, il pourra alors devenir celui de cette vue.',
+    en: 'This template is not saved yet: give it a name and click Save, then it can become the one for this view.',
+  },
+  'settings.viewTemplate.reason.already': { fr: 'Ce modèle est déjà celui de cette vue.', en: 'This template is already the one for this view.' },
+  'settings.viewTemplate.reason.nothingToRemove': { fr: 'Aucun modèle n’est choisi pour cette vue : il n’y a rien à retirer.', en: 'No template is chosen for this view: there is nothing to remove.' },
   // Réglages > Vue > Date du dernier export PDF (js/export-date.js).
   'settings.exportDate.title': { fr: 'Date du dernier export PDF', en: 'Date of the last PDF export' },
   'settings.exportDate.intro': {
