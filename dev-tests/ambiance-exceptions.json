@@ -64,7 +64,6 @@
     {"fichier": "css/editor-v2.css", "selecteur": "comment-mark|v2-comment-popup-badge", "categorie": "etat"},
     {"fichier": "css/editor-v2.css", "selecteur": "smart-chip|page-number-badge|footnote-ref-marker|var-badge", "categorie": "type"},
     {"fichier": "css/editor-v2.css", "selecteur": "selectedCell|column-resize-handle|two-columns-zone|editor-image-view|^\\.v2-hf-zone-pencil$", "categorie": "canevas"},
-    {"fichier": "css/editor-v2.css", "selecteur": "^\\.v2-fill-bar$", "categorie": "choix"},
     {"fichier": "css/editor-v2.css", "selecteur": "^(?:\\.two-columns-mm-popover|\\.v2-hf-overflow|#v2-footnote-popup|#v2-comment-popup|#autocomplete-box|\\.v2-hover-flyout|\\.v2-format-panel|\\.v2-color-dropdown|\\.v2-floating-toolbar)$|caret", "categorie": "neutre"}
   ]
 }

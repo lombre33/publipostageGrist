@@ -69,7 +69,10 @@
 .reader-content ul[data-type="taskList"][data-tasklist-style="classic"] input[type="checkbox"]:checked { border-color: #222; }
 .tiptap ul[data-type="taskList"][data-tasklist-style="classic"] input[type="checkbox"]:checked::after,
 .reader-content ul[data-type="taskList"][data-tasklist-style="classic"] input[type="checkbox"]:checked::after {
-  content: ''; position: absolute; left: 3px; top: -1px; width: 4px; height: 8px;
+  /* Coche centrée (consigne 089) : le coin de bordure pivoté (6 × 10 px dont 2 px de trait) a son encre à 1,29 px sous le centre de sa boîte ; la boîte est donc posée à 3 px à gauche et
+     6,29 px au-dessus du centre de la case. En pourcentages, le centre reste le centre quelle que soit l'épaisseur de bordure que le navigateur retient (1 px dans Chromium et Firefox pour 1,5 px
+     demandé) : l'ancien `left: 3px; top: -1px` la laissait 0,5 px à gauche et 1 px en haut. */
+  content: ''; position: absolute; left: calc(50% - 3px); top: calc(50% - 6.29px); width: 4px; height: 8px;
   border: solid #222; border-width: 0 2px 2px 0; transform: rotate(40deg);
 }
 /* Lecture : aperçu figé du contenu résolu, pas un formulaire. Une case cliquable n'enregistrerait rien ; elle est désactivée plutôt que retirée du
@@ -92,8 +95,10 @@
 }
 .resolved-checkbox[data-checkbox-style="classic"] { border-radius: .143em; }
 .resolved-checkbox[data-checked="true"]:not([data-checkbox-style="classic"]) { background: currentColor; }
+/* Coche centrée (consigne 089), comme celle de la liste à cases : la boîte de la coche (.433 × .713 em, traits compris) est posée pour que l'encre du coin pivoté, à .093 em sous le centre de
+   sa boîte, tombe au centre de la case. */
 .resolved-checkbox[data-checked="true"]::after {
-  content: ''; position: absolute; left: .21em; top: -.07em; width: .29em; height: .57em;
+  content: ''; position: absolute; left: calc(50% - .2165em); top: calc(50% - .4497em); width: .29em; height: .57em;
   border: solid currentColor; border-width: 0 .143em .143em 0; transform: rotate(40deg);
 }
 .resolved-checkbox[data-checked="true"]:not([data-checkbox-style="classic"])::after { border-color: #fff; }
@@ -922,7 +927,19 @@
 .v2-fill-chip { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 6px; border: 1px solid transparent; border-radius: var(--radius-xs, 4px); background: transparent; cursor: pointer; color: var(--text, #3a4452); }
 .v2-fill-chip:hover { background: var(--surface-sunken, #f2f4f7); border-color: var(--border, #d7dde3); }
 .v2-fill-chip svg { width: 14px; height: 14px; }
-.v2-fill-bar { width: 14px; height: 3px; border-radius: var(--radius-xs, 1px); background: #000; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08); }
+/* La pastille de couleur courante (js/editor-core.js:setColorBar écrit son fond en style en ligne, `transparent` sans couleur). Elle se voit TOUJOURS (consigne 089 de GFS : « sans fond »
+   elle n'était qu'un contour à 8 % de noir, un tiret pâle que l'œil prenait pour un bouton grisé) : un contour de l'encre de l'icône (`currentColor`, 4,5:1 au moins sur la barre, en clair et
+   en sombre), un intérieur vide sans couleur ou de la couleur choisie ; un fond blanc se lit contre ce contour. */
+.v2-fill-bar { position: relative; overflow: hidden; box-sizing: border-box; width: 15px; height: 5px; border: 1px solid currentColor; border-radius: 2px; background: transparent; }
+/* « Aucun fond » : la pastille est barrée d'un trait de l'encre de l'icône (js/editor-core.js:setColorBar pose `is-none`) - sans lui, un fond blanc et l'absence de fond se confondraient sur la barre claire. */
+.v2-fill-bar.is-none::after { content: ''; position: absolute; left: -1px; right: -1px; top: 50%; height: 1px; margin-top: -.5px; background: currentColor; transform: rotate(-14deg); }
+/* Le bouton qui porte une pastille (`.has-bar` : « Fond de cellule » de la barre d'un tableau, fond et trait de la barre d'un cadre libre) : l'icône, la pastille SOUS elle, le chevron à droite.
+   `.v2-floating-toolbar button` (largeur 28 px, sans marge) l'emportait sur `.v2-fill-chip` : le bouton, écrasé à 28 px, réduisait l'icône à 7 px et la pastille à 6 px, tout pâle (mesuré à l'écran,
+   consigne 089 de GFS) ; sa largeur suit donc son contenu. L'ordre du HTML (icône, pastille, chevron) ne change pas : la grille place les trois. */
+.v2-floating-toolbar .v2-fill-chip.has-bar { display: inline-grid; grid-template-columns: 15px auto; grid-template-rows: auto auto; align-content: center; justify-content: center; align-items: center; justify-items: center; column-gap: 3px; row-gap: 1px; width: auto; padding: 0 5px; flex-shrink: 0; }
+.v2-floating-toolbar .v2-fill-chip.has-bar > svg:first-child { grid-area: 1 / 1; width: 15px; height: 15px; }
+.v2-floating-toolbar .v2-fill-chip.has-bar > .v2-fill-bar { grid-area: 2 / 1; }
+.v2-floating-toolbar .v2-fill-chip.has-bar > svg:last-child { grid-area: 1 / 2 / 3 / 3; width: 10px; height: 10px; }
 
 /* Police et taille compactes : une pastille icône et valeur et un stepper -/valeur/+ remplacent les `<select>` natifs (la police imposait sa
    largeur de texte, « Times New Roman » par exemple, à toute la barre) et ouvrent `.v2-format-panel` au clic (même mécanisme flottant que le menu

@@ -49,11 +49,14 @@ const Icons = (function () {
       comment: '<path d="M4 5h16v11H9l-4 3.5V16H4z"/><path d="M8 9h8M8 12.5h5"/>',
       indent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M4 9.2v5.6l4.5-2.8z" fill="currentColor" stroke="none"/>',
       outdent: '<path d="M4 6h16M11 12h9M4 18h16"/><path d="M8.5 9.2v5.6L4 12z" fill="currentColor" stroke="none"/>',
-      // 3 styles de case à cocher, différenciés par la forme - le rendu réel dans le document dépend de data-tasklist-style (CSS + taskCheckboxCanvas
-      // côté export PDF), pas de ces icônes elles-mêmes.
-      checklistAccentStrike: '<rect x="3" y="9" width="7" height="7" rx="1.5"/><path d="M4.5 12.5l1.3 1.3L9 11"/><path d="M13 12.5h8"/>',
-      checklistClassic: '<rect x="3" y="9" width="7" height="7"/><path d="M4.5 12.5l1.3 1.3L9 11"/>',
-      checklistAccentPlain: '<rect x="3" y="9" width="7" height="7" rx="1.5"/><path d="M4.5 12.5l1.3 1.3L9 11"/><path d="M13 12.5h5"/>',
+      // 3 styles de case à cocher (barre des listes, barre « Oui / Non » d'une bulle de variable) : chaque icône montre le RENDU COCHÉ du style, tel que le document le dessine (css/editor-v2.css,
+      // taskCheckboxCanvas côté export PDF), à 16 px et à 20 px. « accent, texte barré » (le défaut) : case pleine, coche en réserve, une ligne de texte grisée et barrée. « accent, texte normal » : la même case
+      // pleine, une ligne de texte normale. « classique » : case à contour, intérieur vide, coche franche, une ligne de texte normale. Une icône n'a qu'une couleur (`currentColor`, le bleu d'accent quand le
+      // bouton est actif) : la coche en réserve est un tracé évidé (`fill-rule="evenodd"`, la coche découpée dans la case), le texte grisé une opacité, jamais une seconde couleur écrite en dur. La case fait 12 sur 12
+      // dans le cadre de 24 (l'ancienne en faisait 7 : à 16 px le trait de 2 la remplissait) ; la coche, centrée dans la case, est la même dans les trois.
+      checklistAccentStrike: '<path fill-rule="evenodd" fill="currentColor" stroke="none" d="M4.6 6h6.8a2.6 2.6 0 0 1 2.6 2.6v6.8a2.6 2.6 0 0 1-2.6 2.6h-6.8a2.6 2.6 0 0 1-2.6-2.6v-6.8a2.6 2.6 0 0 1 2.6-2.6zM4.33 12.6L7.2 15.47L11.67 9.91L9.95 8.54L7.02 12.18L5.89 11.05z"/><rect x="16.9" y="9.9" width="5.2" height="4.2" rx="1.2" fill="currentColor" stroke="none" fill-opacity=".35"/><path d="M15.3 12h8.4" stroke-width="1.3" stroke-linecap="butt"/>',
+      checklistClassic: '<rect x="2.9" y="6.9" width="10.2" height="10.2" rx="1.2" stroke-width="1.8"/><path d="M5.11 11.83L7.11 13.83L10.81 9.23" stroke-width="2.2" stroke-linecap="butt" stroke-linejoin="miter"/><rect x="16.9" y="9.9" width="5.2" height="4.2" rx="1.2" fill="currentColor" stroke="none"/>',
+      checklistAccentPlain: '<path fill-rule="evenodd" fill="currentColor" stroke="none" d="M4.6 6h6.8a2.6 2.6 0 0 1 2.6 2.6v6.8a2.6 2.6 0 0 1-2.6 2.6h-6.8a2.6 2.6 0 0 1-2.6-2.6v-6.8a2.6 2.6 0 0 1 2.6-2.6zM4.33 12.6L7.2 15.47L11.67 9.91L9.95 8.54L7.02 12.18L5.89 11.05z"/><rect x="16.9" y="9.9" width="5.2" height="4.2" rx="1.2" fill="currentColor" stroke="none"/>',
       bulletDisc: '<circle cx="12" cy="12" r="4.2" fill="currentColor" stroke="none"/>',
       bulletCircle: '<circle cx="12" cy="12" r="4.2"/>',
       bulletSquare: '<rect x="7.8" y="7.8" width="8.4" height="8.4" fill="currentColor" stroke="none"/>',
@@ -142,7 +145,11 @@ const Icons = (function () {
       formatPainter: '<rect x="3" y="3" width="14" height="6" rx="1.5"/><path d="M17 6h2.5A1.5 1.5 0 0 1 21 7.5V11a1.5 1.5 0 0 1-1.5 1.5H12V15"/><rect x="10" y="15" width="4" height="6" rx="1"/>',
       // Effacer la mise en forme (js/format-painter.js, la ligne « Effacer » du menu du pinceau : le bouton la porte quand elle est cochée) : un T barré d'une petite croix. Une icône = une fonction : ni le rouleau du pinceau, ni la gomme d'une suppression.
       clearFormat: '<path d="M4 7V4h12v3M10 4v11M7 15h6"/><path d="M15.5 14.5l5 5M20.5 14.5l-5 5"/>',
-      fill: '<path d="M13 2 4 11a4 4 0 0 0 0 5.5A4 4 0 0 0 9.5 21a4 4 0 0 0 5.5-5.5z"/><path d="M4 15h11"/>',
+      // Fond de cellule (barre du tableau) et fond d'un objet (barre du cadre libre) : un pot de peinture qui verse - le seau penché (un carré sur la pointe), son niveau de peinture resté
+      // à l'horizontale, l'anse, la goutte pleine qui tombe (consigne 089 de GFS : la goutte et son trait se lisaient « liquide », pas « peindre le fond de la case »).
+      fill: '<rect x="5.5" y="5.5" width="11" height="11" rx="1.8" transform="rotate(45 11 11)"/><path d="M5.2 12.4h11.6"/><path d="M4.9 4.9 8.7 8.7"/><path d="M20.1 14.9c.9 1.2 1.5 2 1.5 2.8a1.5 1.5 0 0 1-3 0c0-.8.6-1.6 1.5-2.8z" fill="currentColor"/>',
+      // « Personnalisé… » des menus de couleur (js/color-palette.js) : l'ancienne goutte et son trait. Le pot de peinture est la fonction « fond » ; une icône = une fonction.
+      colorCustom: '<path d="M13 2 4 11a4 4 0 0 0 0 5.5A4 4 0 0 0 9.5 21a4 4 0 0 0 5.5-5.5z"/><path d="M4 15h11"/>',
       caretDown: '<path d="M6 9l6 6 6-6"/>',
       noColor: '<circle cx="12" cy="12" r="8.5"/><path d="M5.5 5.5l13 13"/>',
       // Symbole « # » : ouvre l'autocomplétion #Variable et chips (js/variables.js) sans taper le déclencheur ; même icône dans les deux modes

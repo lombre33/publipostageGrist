@@ -27,8 +27,8 @@ const FrameToolbar = (function () {
       });
     }
     const button = (action, icon, key) => '<button data-action="' + action + '" title="' + I18n.t(key) + '" aria-label="' + I18n.t(key) + '">' + Icons.svg(icon) + '</button>';
-    const chip = (action, icon, key, bar) => '<button data-action="' + action + '" class="v2-fill-chip" id="v2-frame-' + action + '" title="' + I18n.t(key) + '" aria-label="' + I18n.t(key)
-      + '" aria-haspopup="true" aria-expanded="false">' + Icons.svg(icon) + (bar ? '<span class="v2-fill-bar" id="v2-frame-' + bar + '-bar"></span>' : '') + Icons.svg('caretDown') + '</button>';
+    const chip = (action, icon, key, bar) => '<button data-action="' + action + '" class="v2-fill-chip' + (bar ? ' has-bar' : '') + '" id="v2-frame-' + action + '" title="' + I18n.t(key) + '" aria-label="' + I18n.t(key)
+      + '" aria-haspopup="true" aria-expanded="false">' + Icons.svg(icon) + (bar ? '<span class="v2-fill-bar is-none" id="v2-frame-' + bar + '-bar"></span>' : '') + Icons.svg('caretDown') + '</button>';
     const html = [
       chip('fill-open', 'fill', 'frame.fill', 'fill'),
       chip('line-open', 'shapeLine', 'frame.line', 'line'),

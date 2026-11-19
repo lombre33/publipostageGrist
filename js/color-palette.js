@@ -54,7 +54,7 @@ const ColorPalette = (function () {
   function footer(opts) {
     const none = opts.noneKey ? I18n.t(opts.noneKey) : '';
     return '<div class="v2-color-dropdown-footer">'
-      + `<button type="button" class="cp-custom" data-action="${opts.customAction}" title="${I18n.t('colorDropdown.custom')}">${Icons.svg('fill')}<span>${I18n.t('colorDropdown.customLabel')}</span></button>`
+      + `<button type="button" class="cp-custom" data-action="${opts.customAction}" title="${I18n.t('colorDropdown.custom')}">${Icons.svg('colorCustom')}<span>${I18n.t('colorDropdown.customLabel')}</span></button>`
       + (none ? `<button type="button" data-action="${opts.noneAction}" title="${none}">${Icons.svg('noColor')}<span>${none}</span></button>` : '')
       + '</div>';
   }

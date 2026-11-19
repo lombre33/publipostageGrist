@@ -104,7 +104,7 @@ const HtmlExport = (function () {
     '.pp-doc .pp-checkbox { display: inline-block; position: relative; box-sizing: border-box; width: 1.07em; height: 1.07em; margin: 0 .1em; vertical-align: -.16em; overflow: hidden; white-space: nowrap; text-indent: 3em; text-decoration: none; border: .107em solid currentColor; border-radius: .2em; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }',
     '.pp-doc .pp-checkbox.pp-classic { border-radius: .143em; }',
     '.pp-doc .pp-checkbox.pp-checked:not(.pp-classic) { background: currentColor; }',
-    '.pp-doc .pp-checkbox.pp-checked::after { content: ""; position: absolute; left: .21em; top: -.07em; width: .29em; height: .57em; border: solid currentColor; border-width: 0 .143em .143em 0; transform: rotate(40deg); }',
+    '.pp-doc .pp-checkbox.pp-checked::after { content: ""; position: absolute; left: calc(50% - .2165em); top: calc(50% - .4497em); width: .29em; height: .57em; border: solid currentColor; border-width: 0 .143em .143em 0; transform: rotate(40deg); }',
     '.pp-doc .pp-checkbox.pp-checked:not(.pp-classic)::after { border-color: #fff; }',
     '.pp-doc .pp-checkbox.pp-struck { background-image: linear-gradient(currentColor, currentColor); background-size: 100% .1em; background-position: 0 50%; background-repeat: no-repeat; }',
     '.pp-doc .pp-checkbox.pp-struck.pp-checked:not(.pp-classic) { background-image: linear-gradient(#fff, #fff); background-size: 100% .1em; background-position: 0 50%; background-repeat: no-repeat; }',

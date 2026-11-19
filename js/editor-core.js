@@ -790,7 +790,9 @@ const EditorCore = (function () {
   }
   function setColorBar(id, color) {
     const el = document.getElementById(id);
-    if (el) el.style.background = color || 'transparent';
+    if (!el) return;
+    el.style.background = color || 'transparent';
+    el.classList.toggle('is-none', !color);
   }
   function setColorIcon(id, color) {
     const el = document.getElementById(id);

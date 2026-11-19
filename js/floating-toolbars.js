@@ -216,8 +216,8 @@ const FloatingToolbars = (function () {
         + barButton('cell-split', 'cellSplit', I18n.t('table.cellSplit'))
         + '<span class="v2-floating-sep"></span>'
         + `<button data-action="caption" title="${I18n.t('caption.addTable')}" aria-label="${I18n.t('caption.addTable')}">${Icons.svg('caption')}</button>`
-        + `<button data-action="fill-open" class="v2-fill-chip" id="v2-table-fill-btn" title="${I18n.t('table.fillOpen')}">`
-        + Icons.svg('fill') + '<span class="v2-fill-bar" id="v2-table-fill-bar"></span>' + Icons.svg('caretDown')
+        + `<button data-action="fill-open" class="v2-fill-chip has-bar" id="v2-table-fill-btn" title="${I18n.t('table.fillOpen')}">`
+        + Icons.svg('fill') + '<span class="v2-fill-bar is-none" id="v2-table-fill-bar"></span>' + Icons.svg('caretDown')
         + '</button>'
         + barButton(...spec.cellStyle)
         + `<button data-action="borders-open" class="v2-fill-chip v2-borders-chip" id="v2-table-borders-btn" title="${I18n.t('table.bordersOpen')}" aria-haspopup="true" aria-expanded="false">`

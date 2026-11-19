@@ -877,10 +877,12 @@ const PdfExport = (function () {
     const scale = side / 8;
     const at = (x, y) => ({ x: Math.round((left + 0.5 + x * scale) * 100) / 100, y: Math.round((0.5 + y * scale) * 100) / 100 });
     const check = [at(1.6, 4.6), at(3.3, 6.6), at(6.6, 2)];
+    // La coche de « classic » est centrée dans sa case (consigne 089, comme dans l'éditeur et à la Lecture) : mesurée sur le PDF, l'encre de la première était 0,125 pt trop à droite et 0,75 pt trop bas.
+    const classicCheck = [at(1.5, 3.94), at(3.2, 5.94), at(6.5, 1.34)];
     const rect = { type: 'rect', x: left + 0.5, y: 0.5, w: side, h: side, r: style === 'classic' ? 0.5 : 1.6, lineWidth: 1 };
     if (style === 'classic') {
       const shapes = [Object.assign({}, rect, { lineColor: '#555' })];
-      if (checked) shapes.push({ type: 'polyline', lineWidth: 1.7, lineColor: '#222', points: check });
+      if (checked) shapes.push({ type: 'polyline', lineWidth: 1.7, lineColor: '#222', points: classicCheck });
       return shapes;
     }
     if (checked) return [Object.assign({}, rect, { color: '#2f6fed', lineColor: '#2f6fed' }), { type: 'polyline', lineWidth: 1.8, lineColor: '#ffffff', points: check }];
