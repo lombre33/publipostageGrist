@@ -46,13 +46,14 @@ window.EditorTestSuites.undoSettings = (function () {
   const html = document.documentElement;
   const shownTheme = () => html.getAttribute('data-theme') || 'system';
   const shownBubbles = () => (html.getAttribute('data-bubble-marks') === 'marks' ? 'marks' : 'default');
-  const KEYS = { theme: 'pp_theme', bubbles: 'pp_bubble_marks', altReminder: 'pp_alt_reminder', trigger: 'pp_trigger_char', mail: 'pp_mail_client', shortcuts: 'pp_shortcuts', expansion: 'pp_expansion_char' };
+  const KEYS = { theme: 'pp_theme', bubbles: 'pp_bubble_marks', altReminder: 'pp_alt_reminder', trigger: 'pp_trigger_char', mail: 'pp_mail_client', pdfMany: 'pp_export_pdf_many', shortcuts: 'pp_shortcuts', expansion: 'pp_expansion_char' };
   const said = (label, value) => I18n.t('status.settingSet', { setting: label, value });
   const themeSaid = theme => said(I18n.t('settings.tab.theme'), I18n.t('settings.theme.' + theme));
   const bubblesSaid = value => said(I18n.t('settings.bubbleMarks.title'), I18n.t('settings.bubbleMarks.' + value));
   const altSaid = value => said(I18n.t('settings.accessibility.title'), I18n.t('settings.accessibility.' + value));
   const triggerSaid = char => said(I18n.t('settings.triggerKey.name'), char);
   const mailSaid = client => said(I18n.t('settings.tab.mailClient'), I18n.t('settings.mailClient.' + client));
+  const pdfManySaid = value => said(I18n.t('settings.pdfMany.title'), I18n.t('settings.pdfMany.' + value));
 
   // Les réglages de départ sont gardés une fois pour toutes et rendus à la fin de chaque cas : d'autres suites lisent le thème et le reste.
   let saved = null;
@@ -80,6 +81,7 @@ window.EditorTestSuites.undoSettings = (function () {
     Settings.setBubbleMarks('default');
     MailtoExport.setMailClient('standard');
     PersonStore.remove(KEYS.altReminder);
+    PersonStore.remove(KEYS.pdfMany);
     PersonStore.remove(KEYS.trigger);
     PersonStore.remove(KEYS.expansion);
     Shortcuts.resetAll();
@@ -278,6 +280,32 @@ window.EditorTestSuites.undoSettings = (function () {
           check(problems, 'Ctrl + Y : Zimbra, la jauge avertie', [MailtoExport.getMailClient(), heard, status()], ['zimbra', 3, mailSaid('zimbra')]);
         } finally { document.removeEventListener('pp:mailClientChanged', listen); }
         return verdict(problems, { client: MailtoExport.getMailClient(), heard });
+      } finally { await leave(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_settings_the_pdf_many_files_choice_goes_back_and_forth',
+    description: 'PDF en plusieurs fichiers (Réglages > Thème, « Des PDF un par un ») : Ctrl + Z rend l\'archive ZIP (réglage et clé gardée), Ctrl + Y rend « un par un » ; le coin d\'état dit le choix ; choisir ce qui l\'est déjà ne laisse pas de pas',
+    async run(h) {
+      const problems = [];
+      try {
+        await seed(h);
+        check(problems, 'au départ : l\'archive, aucune clé gardée', [PdfDelivery.manyFiles(), PersonStore.get(KEYS.pdfMany)], ['zip', null]);
+        await pickRadio(h, 'theme', 'settings-pdf-many', 'each');
+        check(problems, 'un par un est posé et gardé', [PdfDelivery.manyFiles(), PersonStore.get(KEYS.pdfMany)], ['each', 'each']);
+        await undo(h);
+        check(problems, 'Ctrl + Z : l\'archive (réglage et clé gardée)', [PdfDelivery.manyFiles(), PersonStore.get(KEYS.pdfMany)], ['zip', 'zip']);
+        check(problems, 'Ctrl + Z : le coin d\'état dit le choix', status(), pdfManySaid('zip'));
+        await openTab(h, 'theme');
+        check(problems, 'les Réglages rouverts cochent l\'archive', checkedValue('settings-pdf-many'), 'zip');
+        await closeSettings(h);
+        await redo(h);
+        check(problems, 'Ctrl + Y : un par un', [PdfDelivery.manyFiles(), status()], ['each', pdfManySaid('each')]);
+        reserve().reset();
+        await pickRadio(h, 'theme', 'settings-pdf-many', 'each');
+        check(problems, 'le même choix ne laisse pas de pas', reserve().count(), 0);
+        return verdict(problems, { choice: PdfDelivery.manyFiles() });
       } finally { await leave(h); }
     },
   });

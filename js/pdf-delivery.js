@@ -50,6 +50,26 @@ const PdfDelivery = (function () {
     return { download: where !== 'gfs', shelve: where !== 'download', attach: RowAttachment.active() };
   }
 
+  // Quand l'export fait PLUSIEURS PDF (toutes les lignes de la vue, ou une ligne que « Un document par valeur » découpe) et qu'ils se téléchargent : `zip` (l'origine, une archive), `each` (chaque PDF téléchargé seul, sous le
+  // nom de son entrée de l'archive) ou `ask` (une fenêtre le demande à chaque export de plusieurs PDF, js/main-export.js:askMany ; sans réponse possible - rien ne se télécharge, ou un seul PDF -, l'archive). Un autre réglage de la personne (clé `pp_export_pdf_many`, onglet Export de Réglages, défait par Ctrl + Z comme les autres) ; il ne dit rien de la destination ci-dessus : « Ranger dans GFS » range
+  // déjà chaque PDF seul, il ne touche que ce qui se télécharge. Il ne vaut que pour les PDF en archive : le PDF unique et la planche n'ont qu'un fichier, Word, Excel et les autres formats gardent leur archive.
+  const MANY_KEY = 'pp_export_pdf_many';
+  const MANY_CHOICES = ['zip', 'each', 'ask'];
+  const MANY_ORIGIN = 'zip';
+  // Le choix gardé (une valeur étrangère vaut l'origine : l'archive, comme avant ce réglage). `ask` se rend tel quel : c'est à l'export de poser la question, ou de prendre l'archive quand il n'y a rien à demander.
+  function manyFiles() {
+    const raw = PersonStore.get(MANY_KEY);
+    return MANY_CHOICES.indexOf(raw) === -1 ? MANY_ORIGIN : raw;
+  }
+  // Garde le choix (vrai quand le navigateur ou l'espace de GFS l'a retenu). Une valeur qui n'est pas un des trois choix n'écrit rien.
+  const chooseMany = value => MANY_CHOICES.indexOf(value) !== -1 && PersonStore.set(MANY_KEY, value);
+  // Le réglage tel que SettingsHistory le défait et le rétablit (le coin d'état dit ce qui vient de changer).
+  const MANY_SETTING = {
+    read: manyFiles,
+    write: chooseMany,
+    say: value => I18n.t('status.settingSet', { setting: I18n.t('settings.pdfMany.title'), value: I18n.t('settings.pdfMany.' + value) }),
+  };
+
   // Le nom du PDF pour GFS : 1 à 200 signes, un retour à la ligne devenu une espace, « .pdf » au bout (GFS l'ajouterait, la longueur se compte avec lui).
   function nameFor(name) {
     const clean = String(name == null ? '' : name).replace(/[\r\n]+/g, ' ').trim().replace(/\.pdf$/i, '') || 'publipostage';
@@ -248,5 +268,5 @@ const PdfDelivery = (function () {
     });
   }
 
-  return { KEY, DESTINATIONS, chosen, destination, available, choose, plan, lotFor, nameFor, deliver, onProgress, onAttachProgress, keep, takeReport, describe, sync, wire };
+  return { KEY, DESTINATIONS, MANY_KEY, MANY_CHOICES, MANY_SETTING, chosen, destination, available, choose, plan, manyFiles, chooseMany, lotFor, nameFor, deliver, onProgress, onAttachProgress, keep, takeReport, describe, sync, wire };
 })();

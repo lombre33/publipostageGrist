@@ -437,6 +437,9 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs
 .settings-radio-row label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); cursor: pointer; }
 /* Hébergée par GFS, la langue est celle de GFS : les deux cases sont grisées (js/settings.js:applyLanguageLock), jamais masquées, et la phrase dessous dit où la choisir. */
 .settings-radio-row label.is-disabled { opacity: .45; cursor: default; }
+/* Trois choix aux libellés longs (Réglages > Thème > « PDF en plusieurs fichiers ») : chacun garde son libellé sur une ligne, la rangée passe à la ligne quand le cadre est étroit au lieu d'écraser les mots. */
+.settings-radio-row-wrap { flex-wrap: wrap; gap: 6px 16px; }
+.settings-radio-row-wrap label { white-space: nowrap; }
 .settings-language-gfs-note { margin: 12px 0 0; }
 /* Onglet Marges : les préréglages sont le commutateur de css/shortcuts.css (.settings-switch, sa marge du bas comprise) ; au milieu des quatre champs, la chaîne qui les lie (.settings-margins-link, son aspect est dans
    css/variable-actions.css). Trois colonnes : Haut et Bas à gauche, Droite et Gauche à droite (l'ordre du document), la chaîne au centre, sur les deux rangées. Une personne en lecture seule ne change aucune marge (js/main.js) :

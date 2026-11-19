@@ -355,7 +355,8 @@ async function runTheme(theme) {
     const scrollerNow = (await measure(page)).scroller;
     if (scrollerNow && scrollerNow.scrollHeight > scrollerNow.clientHeight + 1) {
       await page.mouse.move(scrollerNow.left + scrollerNow.width / 2, scrollerNow.top + Math.min(20, scrollerNow.height / 2), { steps: 3 });
-      for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 250);
+      // Le bloc Thème est long (la dernière section, « PDF en plusieurs fichiers », est tout en bas) : on défile jusqu'au bout, pas d'un nombre de crans fixé d'avance.
+      for (let i = 0; i < 10; i++) await page.mouse.wheel(0, 250);
       await page.waitForTimeout(250);
     }
     const themeAfter = await measure(page);
@@ -363,7 +364,7 @@ async function runTheme(theme) {
     check(`${tag} - Thème : la dernière note du bloc se lit en entier (${scrollerNow ? scrollerNow.scrollHeight : '?'}px pour ${scrollerNow ? Math.round(scrollerNow.clientHeight) : '?'}px), « Fermer » ne bouge pas`, !!themeHint && themeHint.inside && Math.abs(themeAfter.close.top - themeBox.close.top) < 1 && themeAfter.closeTouched, { themeHint, closeBefore: themeBox.close.top, closeAfter: themeAfter.close.top });
     if (scrollerNow) {
       await page.mouse.move(scrollerNow.left + scrollerNow.width / 2, scrollerNow.top + Math.min(20, scrollerNow.height / 2), { steps: 2 });
-      for (let i = 0; i < 4; i++) await page.mouse.wheel(0, -250);
+      for (let i = 0; i < 10; i++) await page.mouse.wheel(0, -250);
       await page.waitForTimeout(250);
     }
 
@@ -372,6 +373,38 @@ async function runTheme(theme) {
     const paleAgain = await atomLooks(page);
     const resetMarks = await page.evaluate(() => ({ attr: document.documentElement.getAttribute('data-bubble-marks'), stored: localStorage.getItem('pp_bubble_marks'), byDefault: document.querySelector('input[name="settings-bubble-marks"][value="default"]').checked }));
     check(`${tag} - Thème : un vrai clic sur « ${wanted.labels[0]} » le rétablit : les atomes redeviennent pâles, l'attribut de la page est retiré`, resetMarks.attr === null && resetMarks.stored === 'default' && resetMarks.byDefault && paleAgain.every(paleLook), { resetMarks, paleAgain });
+    // Thème > « PDF en plusieurs fichiers » (tout en bas du bloc) : trois choix lisibles, d'un vrai clic le choix est pris et gardé dans le navigateur (`pp_export_pdf_many`), « Une archive ZIP » est coché au départ.
+    {
+      const sectionWanted = lang === 'fr'
+        ? { title: 'PDF en plusieurs fichiers', labels: ['Une archive ZIP', 'Des PDF un par un', 'Me demander à chaque export'] }
+        : { title: 'PDFs in several files', labels: ['A ZIP archive', 'PDFs one by one', 'Ask me at each export'] };
+      // La section n'est pas la dernière du bloc (« Identité de l'État » et « Éditeur hors ligne » suivent) : on la ramène au milieu du cadre, comme le ferait la personne en défilant.
+      await page.evaluate(() => { document.querySelector('input[name="settings-pdf-many"][value="each"]').scrollIntoView({ block: 'center' }); });
+      await page.waitForTimeout(250);
+      const manyChoices = await page.evaluate(() => ({
+        title: (document.getElementById('settings-pdf-many-title') || {}).textContent,
+        radios: Array.from(document.querySelectorAll('input[name="settings-pdf-many"]')).map(r => ({ value: r.value, checked: r.checked, label: r.closest('label').textContent.trim(), shown: r.getClientRects().length > 0 })),
+        stored: localStorage.getItem('pp_export_pdf_many'),
+      }));
+      const eachBox = await boxOf(page, 'input[name="settings-pdf-many"][value="each"]');
+      const frame = (await measure(page)).scroller;
+      check(`${tag} - Thème : « ${sectionWanted.title} », trois choix lisibles (${sectionWanted.labels.join(', ')}), « ${sectionWanted.labels[0]} » coché au départ, rien de gardé`,
+        manyChoices.title === sectionWanted.title && manyChoices.radios.map(r => r.label).join('|') === sectionWanted.labels.join('|') && manyChoices.radios.map(r => r.value).join('|') === 'zip|each|ask' && manyChoices.radios[0].checked && !manyChoices.radios[1].checked && !manyChoices.radios[2].checked && manyChoices.radios.every(r => r.shown) && manyChoices.stored === null, manyChoices);
+      check(`${tag} - Thème : les trois choix de « ${sectionWanted.title} » se voient dans le cadre du contenu une fois défilé`, !!eachBox && !!frame && eachBox.top >= frame.top - 1 && eachBox.bottom <= frame.bottom + 1, { eachBox, frame });
+      await realClick(page, 'input[name="settings-pdf-many"][value="each"]');
+      await page.waitForTimeout(150);
+      const pickedEach = await page.evaluate(() => ({ stored: localStorage.getItem('pp_export_pdf_many'), state: PdfDelivery.manyFiles(), each: document.querySelector('input[name="settings-pdf-many"][value="each"]').checked, zip: document.querySelector('input[name="settings-pdf-many"][value="zip"]').checked }));
+      check(`${tag} - Thème : un vrai clic sur « ${sectionWanted.labels[1]} » le choisit à l'instant et le garde dans le navigateur`, pickedEach.stored === 'each' && pickedEach.state === 'each' && pickedEach.each && !pickedEach.zip, pickedEach);
+      await realClick(page, 'input[name="settings-pdf-many"][value="ask"]');
+      await page.waitForTimeout(150);
+      const pickedAsk = await page.evaluate(() => ({ stored: localStorage.getItem('pp_export_pdf_many'), state: PdfDelivery.manyFiles(), ask: document.querySelector('input[name="settings-pdf-many"][value="ask"]').checked, each: document.querySelector('input[name="settings-pdf-many"][value="each"]').checked }));
+      check(`${tag} - Thème : un vrai clic sur « ${sectionWanted.labels[2]} » le choisit (un seul choix à la fois)`, pickedAsk.stored === 'ask' && pickedAsk.state === 'ask' && pickedAsk.ask && !pickedAsk.each, pickedAsk);
+      await realClick(page, 'input[name="settings-pdf-many"][value="zip"]');
+      await page.waitForTimeout(150);
+      const backZip = await page.evaluate(() => ({ state: PdfDelivery.manyFiles(), zip: document.querySelector('input[name="settings-pdf-many"][value="zip"]').checked }));
+      check(`${tag} - Thème : un vrai clic sur « ${sectionWanted.labels[0]} » rétablit l'archive`, backZip.state === 'zip' && backZip.zip, backZip);
+      await page.evaluate(() => localStorage.removeItem('pp_export_pdf_many'));
+    }
   }
 
   // Vrai clic sur Fermer : la fenêtre se ferme.

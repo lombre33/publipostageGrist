@@ -638,6 +638,82 @@
   });
 
   cases.push({
+    id: 'pdfshelve_zip_export_with_the_one_by_one_choice_downloads_each_pdf_alone_beside_the_shelving',
+    description: 'Avec « Des PDF un par un » (Réglages > Thème) : « les deux » range les trois PDF chez GFS ET les télécharge seuls (aucune archive) ; « Ranger dans GFS » seul ne télécharge rien ; un PDF que GFS n’a pas gardé est téléchargé seul, sans archive des non-gardés ; sans GFS, un par un',
+    run: async (h) => {
+      const problems = [];
+      await setup(h);
+      await seed(h);
+      PdfDelivery.chooseMany('each');
+      try {
+        const plain = await runExport(h, 'v2-btn-export-pdf-batch', done(/téléchargés un par un\.$/), { settle: 600 });
+        check(problems, 'Télécharger : trois PDF seuls, aucun appel à GFS', [plain.downloads.length, plain.downloads.some(d => /\.zip$/.test(d.name)), gfs().calls.filter(c => c.nom === 'ranger').length, plain.status], [3, false, 0, '3 PDF générés — téléchargés un par un.']);
+        const names = plain.downloads.map(d => d.name);
+        // Les deux : rangés un à un ET téléchargés un à un.
+        PdfDelivery.choose('both');
+        const both = await runExport(h, 'v2-btn-export-pdf-batch', done(/téléchargés un par un\.$/), { settle: 600 });
+        check(problems, 'Les deux : trois téléchargements seuls et trois dépôts chez GFS', [both.downloads.map(d => d.name), keptNamesOf().length, gfs().rangerAppels.map(c => c.suivants)], [names, 3, [2, 1, 0]]);
+        check(problems, 'Les deux : la phrase dit le rangement puis le téléchargement un par un', both.status, '3 PDF rangés dans GFS. 3 PDF générés — téléchargés un par un.');
+        // Ranger seul : rien n'est téléchargé, un par un ou pas.
+        PdfDelivery.choose('gfs');
+        gfs().fichiers = [];
+        gfs().rangerAppels = [];
+        const shelved = await runExport(h, 'v2-btn-export-pdf-batch', done(/rangés dans GFS\.$/), { settle: 400 });
+        check(problems, 'Ranger seul : rien n’est téléchargé', [shelved.downloads.length, keptNamesOf().length, shelved.status], [0, 3, '3 PDF rangés dans GFS.']);
+        // Un échec isolé : le PDF que GFS n'a pas gardé part seul, sans archive.
+        gfs().fichiers = [];
+        gfs().rangerAppels = [];
+        gfs().ranger = { erreurs: { 2: { code: 'GFS_ECHEC', message: 'Le serveur Grist ne répond pas.' } } };
+        const failing = await runExport(h, 'v2-btn-export-pdf-batch', done(/téléchargés un par un\.$/), { settle: 600 });
+        check(problems, 'Échec isolé : le deuxième PDF est téléchargé seul', [failing.downloads.map(d => d.name), failing.downloads[0] ? String.fromCharCode.apply(null, Array.from(new Uint8Array(await failing.downloads[0].blob.arrayBuffer()).slice(0, 5))) : '', keptNamesOf().length], [[names[1]], '%PDF-', 2]);
+        check(problems, 'Échec isolé : la raison en tête, en rouge', [failing.status.indexOf('GFS n’a pas gardé 1 PDF (Le serveur Grist ne répond pas) : téléchargé. 2 PDF rangés dans GFS.'), failing.error], [0, 'error-msg']);
+      } finally { PersonStore.remove(PdfDelivery.MANY_KEY); }
+      finish();
+      return verdict(problems, {});
+    },
+  });
+
+  cases.push({
+    id: 'pdfshelve_ask_me_choice_asks_only_when_pdfs_are_downloaded_and_follows_the_answer_beside_the_shelving',
+    description: 'Avec « Me demander » : « Télécharger » et « les deux » posent la question « Comment les recevoir ? » (une seule fois par export), la réponse « Des PDF un par un » télécharge les trois PDF seuls et « Une archive ZIP » l’archive, le rangement chez GFS se fait dans les deux cas ; « Ranger dans GFS » seul ne télécharge rien et ne pose AUCUNE question',
+    run: async (h) => {
+      const problems = [];
+      await setup(h);
+      await seed(h);
+      PdfDelivery.chooseMany('ask');
+      const asked = [];
+      let answer = 'each';
+      const outer = h.stubDialogs({ choose: opts => { asked.push(opts); return answer; } });
+      try {
+        const each = await runExport(h, 'v2-btn-export-pdf-batch', done(/téléchargés un par un\.$/), { settle: 600 });
+        check(problems, 'Télécharger, réponse « un par un » : une question, trois PDF seuls', [asked.length, asked[0] && asked[0].title, each.downloads.length, each.downloads.some(d => /\.zip$/.test(d.name)), each.status], [1, 'Exporter les lignes', 3, false, '3 PDF générés — téléchargés un par un.']);
+        check(problems, 'La question : la phrase du lot et les deux boutons', [asked[0] && String(asked[0].message).split('\n')[0], asked[0] && asked[0].choices.map(c => c.value)], ['Générer 3 PDF pour chacune des 3 lignes de « ' + TABLE + ' ». Comment les recevoir ?', ['zip', 'each']]);
+        // Les deux, réponse « archive » : trois copies chez GFS ET l'archive téléchargée.
+        PdfDelivery.choose('both');
+        answer = 'zip';
+        const both = await runExport(h, 'v2-btn-export-pdf-batch', done(/archive ZIP téléchargée\.$/), { settle: 600 });
+        check(problems, 'Les deux, réponse « archive » : l’archive ET trois dépôts', [asked.length, both.downloads.map(d => d.name), keptNamesOf().length], [2, [TABLE + '-export-pdf.zip'], 3]);
+        // Ranger seul : rien à recevoir, donc rien à demander.
+        PdfDelivery.choose('gfs');
+        gfs().fichiers = [];
+        gfs().rangerAppels = [];
+        const before = asked.length;
+        const shelved = await runExport(h, 'v2-btn-export-pdf-batch', done(/rangés dans GFS\.$/), { settle: 400 });
+        check(problems, 'Ranger seul : aucune question, rien téléchargé', [asked.length - before, shelved.downloads.length, keptNamesOf().length, shelved.status], [0, 0, 3, '3 PDF rangés dans GFS.']);
+        // Annuler la question : rien n'est fabriqué ni rangé.
+        PdfDelivery.choose('both');
+        gfs().fichiers = [];
+        gfs().rangerAppels = [];
+        answer = null;
+        const refused = await runExport(h, 'v2-btn-export-pdf-batch', () => false, { settle: 1500 });
+        check(problems, 'Annuler la question : rien ne part nulle part', [refused.downloads.length, keptNamesOf().length, gfs().rangerAppels.length, refused.stamps.length], [0, 0, 0, 0]);
+      } finally { outer.restore(); PersonStore.remove(PdfDelivery.MANY_KEY); }
+      finish();
+      return verdict(problems, {});
+    },
+  });
+
+  cases.push({
     id: 'pdfshelve_merged_pdf_and_sheets_are_shelved_as_one_file',
     description: 'Le PDF réuni (« Toutes les lignes de la vue en un seul PDF ») et l’assemblage avant impression sont rangés comme UN fichier (`<table>-export.pdf`, `<table>-assemblage.pdf`, sans lot), de vrais PDF de trois pages pour le premier, et téléchargés aussi avec « les deux » ; un seul appel part',
     run: async (h) => {

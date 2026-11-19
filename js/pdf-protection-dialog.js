@@ -233,7 +233,12 @@ const PdfProtectionDialog = (function () {
   // Le texte d'accueil d'un lot : combien de PDF, de quelle table, avec quel mot de passe (le même pour tous, ou celui de leur ligne).
   function introText(mode) {
     if (!context.batch) return '';
-    const key = mode === 'column' ? (context.grid ? 'pdfProtect.batchColumnGrid' : 'pdfProtect.batchColumn') : (context.grid ? 'pdfProtect.batchGrid' : 'pdfProtect.batch');
+    // `files` : les PDF ne vont pas dans une archive (« Des PDF un par un », « Me demander » : js/pdf-delivery.js:manyFiles) - la phrase n'en parle pas.
+    // Les clés en toutes lettres (le contrôle des clés sans usage, `codeHygiene`, ne lit pas celles qu'on compose).
+    const files = !!context.files;
+    const key = mode === 'column'
+      ? (context.grid ? (files ? 'pdfProtect.batchColumnGridFiles' : 'pdfProtect.batchColumnGrid') : (files ? 'pdfProtect.batchColumnFiles' : 'pdfProtect.batchColumn'))
+      : (context.grid ? (files ? 'pdfProtect.batchGridFiles' : 'pdfProtect.batchGrid') : (files ? 'pdfProtect.batchFiles' : 'pdfProtect.batch'));
     return I18n.t(key, { count: Math.max(0, Number(context.count) || 0), table: context.table || '' });
   }
 
@@ -362,7 +367,7 @@ const PdfProtectionDialog = (function () {
     run.finish(settings);
   }
 
-  // Ouvre la fenêtre. `table` : la table de l'export (la colonne des mots de passe en est une) ; `batch` : un lot (archive ZIP) de `count` PDF, dont elle tient lieu de
+  // Ouvre la fenêtre. `table` : la table de l'export (la colonne des mots de passe en est une) ; `batch` : un lot (archive ZIP, ou `files` : des PDF sans archive) de `count` PDF, dont elle tient lieu de
   // confirmation (`grid` : un modèle de grille, dont les lignes sont des « valeurs ») ; sans `batch`, c'est le PDF de la ligne affichée. Une demande qui arrive pendant qu'une
   // autre est ouverte annule la première (résolue comme Annuler).
   function open(opts) {

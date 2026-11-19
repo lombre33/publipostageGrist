@@ -234,7 +234,7 @@
 <link rel="stylesheet" href="css/style.css?v=0.110">
 <link rel="stylesheet" href="css/reader-guide.css?v=0.5">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.150">
-<link rel="stylesheet" href="css/toolbar-v2.css?v=0.87">
+<link rel="stylesheet" href="css/toolbar-v2.css?v=0.88">
 <link rel="stylesheet" href="css/grid.css?v=0.18">
 <link rel="stylesheet" href="css/template-tree-select.css?v=0.24">
 <link rel="stylesheet" href="css/template-organize-modal.css?v=0.11">
@@ -333,14 +333,14 @@
 <link rel="preload" as="script" href="js/reader-mode.js?v=0.208">
 <link rel="preload" as="script" href="js/reader-guide.js?v=0.7">
 <link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.14">
-<link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.34">
+<link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.35">
 <link rel="preload" as="script" href="js/i18n-texts-format.js?v=0.4">
 <link rel="preload" as="script" href="js/i18n-texts-blocks.js?v=0.7">
 <link rel="preload" as="script" href="js/i18n-texts-editor.js?v=0.1">
 <link rel="preload" as="script" href="js/i18n-texts-review.js?v=0.5">
 <link rel="preload" as="script" href="js/i18n-texts-slides.js?v=0.3">
 <link rel="preload" as="script" href="js/i18n-texts-motion.js?v=0.3">
-<link rel="preload" as="script" href="js/i18n-texts-settings.js?v=0.18">
+<link rel="preload" as="script" href="js/i18n-texts-settings.js?v=0.19">
 <link rel="preload" as="script" href="js/i18n-texts-status.js?v=0.9">
 <link rel="preload" as="script" href="js/i18n-texts-variables.js?v=0.8">
 <link rel="preload" as="script" href="js/i18n-texts-eml.js?v=0.1">
@@ -446,7 +446,7 @@
 <link rel="preload" as="script" href="js/template-gallery.js?v=0.16">
 <link rel="preload" as="script" href="js/template-pack.js?v=0.5">
 <link rel="preload" as="script" href="js/template-gallery-modal.js?v=0.13">
-<link rel="preload" as="script" href="js/settings.js?v=0.32">
+<link rel="preload" as="script" href="js/settings.js?v=0.33">
 <link rel="preload" as="script" href="js/condition-rules.js?v=0.18">
 <link rel="preload" as="script" href="js/condition-fields.js?v=0.26">
 <link rel="preload" as="script" href="js/modal-base.js?v=0.7">
@@ -534,7 +534,7 @@
 <link rel="preload" as="script" href="js/template-arrangement.js?v=0.3">
 <link rel="preload" as="script" href="js/link-rule-history.js?v=0.1">
 <link rel="preload" as="script" href="js/settings-history.js?v=0.4">
-<link rel="preload" as="script" href="js/pdf-delivery.js?v=0.5">
+<link rel="preload" as="script" href="js/pdf-delivery.js?v=0.6">
 <link rel="preload" as="script" href="js/expansion-history.js?v=0.1">
 <link rel="preload" as="script" href="js/format-slots.js?v=0.1">
 <link rel="preload" as="script" href="js/format-slots-menu.js?v=0.2">
@@ -548,7 +548,7 @@
 <link rel="preload" as="script" href="js/page-size-dialog.js?v=0.5">
 <link rel="preload" as="script" href="js/sheet-assembly-dialog.js?v=0.7">
 <link rel="preload" as="script" href="js/pdf-protection.js?v=0.2">
-<link rel="preload" as="script" href="js/pdf-protection-dialog.js?v=0.4">
+<link rel="preload" as="script" href="js/pdf-protection-dialog.js?v=0.5">
 <link rel="preload" as="script" href="js/free-fonts.js?v=0.1">
 <link rel="preload" as="script" href="js/pdf-font-plan.js?v=0.3">
 <link rel="preload" as="script" href="js/page-sense-edit.js?v=0.2">
@@ -572,7 +572,7 @@
 <link rel="preload" as="script" href="js/batch-progress.js?v=0.1">
 <link rel="preload" as="script" href="js/batch-precheck.js?v=0.2">
 <link rel="preload" as="script" href="js/email-drafts.js?v=0.1">
-<link rel="preload" as="script" href="js/main-export.js?v=0.14">
+<link rel="preload" as="script" href="js/main-export.js?v=0.15">
 <link rel="preload" as="script" href="js/main-autosave.js?v=0.4">
 <link rel="preload" as="script" href="js/main-save.js?v=0.3">
 <link rel="preload" as="script" href="js/main-leave.js?v=0.1">
@@ -1206,6 +1206,18 @@
           <p class="settings-access-hint" id="settings-alt-reminder-hint" data-i18n="settings.accessibility.altReminderHint">Éteint, rien ne change. Allumé, un export Word, PowerPoint, HTML ou Markdown s’arrête une fois pour dire combien d’images n’ont pas de texte alternatif (une image décorative n’en a pas besoin), même pour un lot entier. Le PDF n’écrit pas de texte alternatif : il n’est pas concerné.</p>
           <p class="settings-access-hint" data-i18n="settings.accessibility.perBrowser">Ce choix est propre à ce navigateur, comme la langue et le thème.</p>
         </section>
+        <!-- PDF en plusieurs fichiers (js/pdf-delivery.js:manyFiles, clé pp_export_pdf_many) : une archive ZIP (l'origine) ou des PDF téléchargés un par un, quand un export PDF fait plusieurs fichiers. Une section de cet onglet, comme Accessibilité : la barre des onglets est pleine à 700 px. -->
+        <section class="settings-section settings-theme-section" aria-labelledby="settings-pdf-many-title">
+          <h4 class="settings-section-title" id="settings-pdf-many-title" data-i18n="settings.pdfMany.title">PDF en plusieurs fichiers</h4>
+          <p class="settings-panel-intro" data-i18n="settings.pdfMany.intro">Quand un export PDF fait plusieurs fichiers - toutes les lignes de la vue, ou une ligne que « Un document par valeur » découpe en plusieurs documents -, comment les recevoir.</p>
+          <div class="settings-radio-row settings-radio-row-wrap" role="radiogroup" aria-labelledby="settings-pdf-many-title">
+            <label><input type="radio" name="settings-pdf-many" value="zip"><span data-i18n="settings.pdfMany.zip">Une archive ZIP</span></label>
+            <label><input type="radio" name="settings-pdf-many" value="each"><span data-i18n="settings.pdfMany.each">Des PDF un par un</span></label>
+            <label><input type="radio" name="settings-pdf-many" value="ask"><span data-i18n="settings.pdfMany.ask">Me demander à chaque export</span></label>
+          </div>
+          <p class="settings-access-hint" data-i18n="settings.pdfMany.hint">Archive ZIP : un seul fichier, comme avant. Un par un : chaque PDF se télécharge seul, sous son nom ; le navigateur peut demander une fois l’autorisation de télécharger plusieurs fichiers, et au-delà de quelques dizaines de PDF l’archive reste plus confortable. Me demander : une fenêtre pose la question à chaque export de plusieurs PDF. Ce choix ne touche ni le PDF unique, ni « Ranger dans GFS » (il range déjà chaque PDF seul), ni Word, Excel et les autres formats.</p>
+          <p class="settings-access-hint" data-i18n="settings.pdfMany.perBrowser">Ce choix est propre à ce navigateur, comme la langue et le thème.</p>
+        </section>
         <!-- Identité de l'État (js/state-mode.js) : le mode DSFR, éteint au départ, réservé à l'administration. Sans Grist Factory Suite, ou sans son extension « etat », le bouton est grisé (aria-disabled), la phrase du dessous dit pourquoi et le clic explique. -->
         <section class="settings-section settings-theme-section" aria-labelledby="settings-etat-title">
           <h4 class="settings-section-title" id="settings-etat-title" data-i18n="settings.etat.title">Identité de l’État (DSFR)</h4>
@@ -1444,14 +1456,14 @@
 <script src="js/reader-mode.js?v=0.208"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
 <script src="js/i18n-texts-templates.js?v=0.14"></script>
-<script src="js/i18n-texts-export.js?v=0.34"></script>
+<script src="js/i18n-texts-export.js?v=0.35"></script>
 <script src="js/i18n-texts-format.js?v=0.4"></script>
 <script src="js/i18n-texts-blocks.js?v=0.7"></script>
 <script src="js/i18n-texts-editor.js?v=0.1"></script>
 <script src="js/i18n-texts-review.js?v=0.5"></script>
 <script src="js/i18n-texts-slides.js?v=0.3"></script>
 <script src="js/i18n-texts-motion.js?v=0.3"></script>
-<script src="js/i18n-texts-settings.js?v=0.18"></script>
+<script src="js/i18n-texts-settings.js?v=0.19"></script>
 <script src="js/i18n-texts-status.js?v=0.9"></script>
 <script src="js/i18n-texts-variables.js?v=0.8"></script>
 <script src="js/i18n-texts-eml.js?v=0.1"></script>
@@ -1583,7 +1595,7 @@
 <script src="js/template-gallery.js?v=0.16"></script>
 <script src="js/template-pack.js?v=0.5"></script>
 <script src="js/template-gallery-modal.js?v=0.13"></script>
-<script src="js/settings.js?v=0.32"></script>
+<script src="js/settings.js?v=0.33"></script>
 <script src="js/condition-rules.js?v=0.18"></script>
 <script src="js/condition-fields.js?v=0.26"></script>
 <script src="js/modal-base.js?v=0.7"></script>
@@ -1671,7 +1683,7 @@
 <script src="js/template-arrangement.js?v=0.3"></script>
 <script src="js/link-rule-history.js?v=0.1"></script>
 <script src="js/settings-history.js?v=0.4"></script>
-<script src="js/pdf-delivery.js?v=0.5"></script>
+<script src="js/pdf-delivery.js?v=0.6"></script>
 <script src="js/expansion-history.js?v=0.1"></script>
 <script src="js/format-slots.js?v=0.1"></script>
 <script src="js/format-slots-menu.js?v=0.2"></script>
@@ -1685,7 +1697,7 @@
 <script src="js/page-size-dialog.js?v=0.5"></script>
 <script src="js/sheet-assembly-dialog.js?v=0.7"></script>
 <script src="js/pdf-protection.js?v=0.2"></script>
-<script src="js/pdf-protection-dialog.js?v=0.4"></script>
+<script src="js/pdf-protection-dialog.js?v=0.5"></script>
 <script src="js/free-fonts.js?v=0.1"></script>
 <script src="js/pdf-font-plan.js?v=0.3"></script>
 <script src="js/page-sense-edit.js?v=0.2"></script>
@@ -1709,7 +1721,7 @@
 <script src="js/batch-progress.js?v=0.1"></script>
 <script src="js/batch-precheck.js?v=0.2"></script>
 <script src="js/email-drafts.js?v=0.1"></script>
-<script src="js/main-export.js?v=0.14"></script>
+<script src="js/main-export.js?v=0.15"></script>
 <script src="js/main-autosave.js?v=0.4"></script>
 <script src="js/main-save.js?v=0.3"></script>
 <script src="js/main-leave.js?v=0.1"></script>

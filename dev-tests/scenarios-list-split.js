@@ -471,6 +471,83 @@
     },
   });
 
+  cases.push({
+    id: 'listsplit_single_pdf_export_downloads_one_pdf_per_value_when_the_setting_says_one_by_one',
+    description: '« Exporter en PDF » sur une ligne à deux valeurs, avec « Des PDF un par un » (Réglages > Thème > PDF en plusieurs fichiers) : deux vrais PDF téléchargés seuls, nommés comme les entrées de l’archive (« Alpha - Santé.pdf », « Alpha - Social.pdf »), chacun avec sa valeur, aucune archive, le coin d’état dit « téléchargés un par un » ; une ligne à une seule valeur reste le PDF ordinaire',
+    run: async (h) => {
+      await seed(h, BODY);
+      PdfDelivery.chooseMany('each');
+      let all;
+      let one;
+      try {
+        all = await withFilenameTemplate(NAME, () => clickExportRow(h, 'btn-export-pdf', 2));
+        const startedAt = Date.now();
+        while (!/un par un\.$/.test(document.getElementById('status-msg').textContent) && Date.now() - startedAt < 8000) await h.sleep(100);
+        const finalStatus = document.getElementById('status-msg').textContent;
+        const names = all.downloads.map(d => d.name);
+        const texts = {};
+        for (const d of all.downloads) texts[d.name] = squash((await pdfPageTexts(h, d.blob)).join(' '));
+        window.__gristStub.fireRecord(Object.assign({}, RECORD_2), TABLE);
+        await h.sleep(60);
+        one = await withFilenameTemplate(NAME, () => clickAndCapturePdf(h, 'btn-export-pdf'));
+        const pdfBlob = one.blobs.find(b => b && /pdf/i.test(b.type || ''));
+        const oneText = pdfBlob ? squash((await pdfPageTexts(h, pdfBlob)).join(' ')) : '';
+        const pass = JSON.stringify(names) === JSON.stringify(['Alpha - Santé.pdf', 'Alpha - Social.pdf'])
+          && texts['Alpha - Santé.pdf'] === squash('DossierAlpha:Santé/fr,en') && texts['Alpha - Social.pdf'] === squash('DossierAlpha:Social/fr,en')
+          && !all.downloads.some(d => d.blob && /zip/i.test(d.blob.type || ''))
+          && all.statuses.some(st => st === 'Téléchargement des PDF un par un : 2/2…') && finalStatus === '2 PDF générés — téléchargés un par un.'
+          && !one.blobs.some(b => b && /zip/i.test(b.type || '')) && oneText === squash('DossierBeta:Sport/fr');
+        return { pass, notes: JSON.stringify({ names, texts, finalStatus, statuses: all.statuses.filter(st => /un par un/.test(st)), oneText }) };
+      } finally { PersonStore.remove(PdfDelivery.MANY_KEY); }
+    },
+  });
+
+  cases.push({
+    id: 'listsplit_single_pdf_export_asks_zip_or_one_by_one_when_the_setting_says_ask_me',
+    description: '« Exporter en PDF » sur une ligne à deux valeurs, avec « Me demander » : une fenêtre « PDF en plusieurs fichiers » (« Cet export fait 2 PDF. Comment les recevoir ? », deux boutons) ; « Une archive ZIP » donne l’archive de d’avant, « Des PDF un par un » deux PDF seuls, Annuler ne génère rien ; une ligne à une seule valeur n’ouvre pas la fenêtre ; au-delà de 50 documents la question tient lieu de confirmation (titre « Un document par valeur ») et Annuler ne fabrique rien',
+    run: async (h) => {
+      await seed(h, BODY);
+      PdfDelivery.chooseMany('ask');
+      const asked = [];
+      let answer = 'each';
+      const outer = h.stubDialogs({ choose: opts => { asked.push(opts); return answer; } });
+      try {
+        const each = await withFilenameTemplate(NAME, () => clickExportRow(h, 'btn-export-pdf', 2));
+        const startedAt = Date.now();
+        while (!/un par un\.$/.test(document.getElementById('status-msg').textContent) && Date.now() - startedAt < 8000) await h.sleep(100);
+        const eachStatus = document.getElementById('status-msg').textContent;
+        answer = 'zip';
+        const zipped = await withFilenameTemplate(NAME, () => clickExportRow(h, 'btn-export-pdf', 1));
+        const zipNames = zipped.downloads[0] && zipped.downloads[0].blob ? (await zipEntries(zipped.downloads[0].blob)).names : [];
+        answer = null;
+        const cancelled = await withFilenameTemplate(NAME, () => clickAnswering(h, 'btn-export-pdf', true, 2500));
+        const afterThree = asked.length;
+        // Au-delà de 50 documents, la question tient lieu de la confirmation « Générer l'archive ? » : « Annuler » ne fabrique rien.
+        window.__gristStub.fireRecord({ id: 1, Titre: 'Alpha', Themes: Array.from({ length: 51 }, (_, i) => 'v' + String(i + 1).padStart(2, '0')), Langues: ['fr'] }, TABLE);
+        await h.sleep(60);
+        const big = await withFilenameTemplate(NAME, () => clickAnswering(h, 'btn-export-pdf', true, 2500));
+        const bigAsk = asked[afterThree] || {};
+        const afterBig = asked.length;
+        window.__gristStub.fireRecord(Object.assign({}, RECORD_2), TABLE);
+        await h.sleep(60);
+        await withFilenameTemplate(NAME, () => clickAndCapturePdf(h, 'btn-export-pdf'));
+        const first = asked[0] || { choices: [] };
+        const checks = {
+          asksThree: afterThree === 3,
+          firstDialog: first.title === 'PDF en plusieurs fichiers' && String(first.message).split('\n')[0] === 'Cet export fait 2 PDF. Comment les recevoir ?' && String(first.message).includes('Réglages > Thème > PDF en plusieurs fichiers.'),
+          twoButtons: JSON.stringify(first.choices.map(c => c.value)) === JSON.stringify(['zip', 'each']) && first.choices[0].primary === true,
+          each: JSON.stringify(each.downloads.map(d => d.name)) === JSON.stringify(['Alpha - Santé.pdf', 'Alpha - Social.pdf']) && eachStatus === '2 PDF générés — téléchargés un par un.',
+          zip: zipped.downloads.length === 1 && /\.zip$/.test(zipped.downloads[0].name) && JSON.stringify(zipNames) === JSON.stringify(['Alpha - Santé.pdf', 'Alpha - Social.pdf']),
+          cancelledNothing: cancelled.downloads.length === 0 && cancelled.status === 'Export annulé.',
+          bigAskedInPlaceOfConfirm: big.asked.length === 0 && bigAsk.title === 'Un document par valeur' && String(bigAsk.message).split('\n')[0] === 'Cette ligne fait 51 PDF, un par valeur des listes réglées « Un document par valeur ». Comment les recevoir ?',
+          bigCancelled: big.downloads.length === 0 && big.status === 'Export annulé.',
+          oneValueNoDialog: asked.length === afterBig,
+        };
+        return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, asked: asked.length, title: first.title, message: first.message, each: each.downloads.map(d => d.name), eachStatus, zip: zipped.downloads.map(d => d.name), zipNames, cancelled: cancelled.status, bigAsk, bigStatus: big.status }) };
+      } finally { outer.restore(); PersonStore.remove(PdfDelivery.MANY_KEY); }
+    },
+  });
+
   // Un clic sur la ligne du menu, la confirmation (si elle est posée) refusée ou acceptée comme `answer`, et ce qui se passe pendant `waitMs` : les questions posées, les fichiers téléchargés, le coin d'état.
   async function clickAnswering(h, rowId, answer, waitMs) {
     const asked = [];

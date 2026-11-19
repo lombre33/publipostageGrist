@@ -393,6 +393,7 @@ if (has('README.md')) {
     pp_track_format: ['suivre la mise en forme', 'track formatting'],
     pp_sheet_assembly: ['assemblage avant impression', 'sheet assembly before printing'],
     pp_export_destination: ['destination des pdf', 'pdf destination'],
+    pp_export_pdf_many: ['pdf en plusieurs fichiers', 'pdfs in several files'],
     pp_export_attach: ['joindre à la ligne', 'attach to the row'],
     pp_page_zoom: ['niveau de zoom', 'zoom level'],
     pp_pdf_protection: ['pdf protégé', 'protected pdf'],

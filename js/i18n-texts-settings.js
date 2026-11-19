@@ -81,6 +81,20 @@ const I18nTextsSettings = {
   'settings.accessibility.perBrowser': { fr: 'Ce choix est propre à ce navigateur, comme la langue et le thème.', en: 'This choice is specific to this browser, like the language and the theme.' },
   'settings.accessibility.on': { fr: 'allumé', en: 'on' },
   'settings.accessibility.off': { fr: 'éteint', en: 'off' },
+  // « PDF en plusieurs fichiers » (Réglages > Thème, js/pdf-delivery.js:manyFiles) : une archive ZIP ou des PDF téléchargés un par un quand un export PDF fait plusieurs fichiers.
+  'settings.pdfMany.title': { fr: 'PDF en plusieurs fichiers', en: 'PDFs in several files' },
+  'settings.pdfMany.intro': {
+    fr: 'Quand un export PDF fait plusieurs fichiers - toutes les lignes de la vue, ou une ligne que « Un document par valeur » découpe en plusieurs documents -, comment les recevoir.',
+    en: 'When a PDF export makes several files - all the rows of the view, or a row that “One document per value” splits into several documents - how to receive them.',
+  },
+  'settings.pdfMany.zip': { fr: 'Une archive ZIP', en: 'A ZIP archive' },
+  'settings.pdfMany.each': { fr: 'Des PDF un par un', en: 'PDFs one by one' },
+  'settings.pdfMany.ask': { fr: 'Me demander à chaque export', en: 'Ask me at each export' },
+  'settings.pdfMany.hint': {
+    fr: 'Archive ZIP : un seul fichier, comme avant. Un par un : chaque PDF se télécharge seul, sous son nom ; le navigateur peut demander une fois l’autorisation de télécharger plusieurs fichiers, et au-delà de quelques dizaines de PDF l’archive reste plus confortable. Me demander : une fenêtre pose la question à chaque export de plusieurs PDF. Ce choix ne touche ni le PDF unique, ni « Ranger dans GFS » (il range déjà chaque PDF seul), ni Word, Excel et les autres formats.',
+    en: 'ZIP archive: a single file, as before. One by one: each PDF downloads on its own, under its name; the browser may ask once for permission to download several files, and beyond a few dozen PDFs the archive stays more comfortable. Ask me: a window asks the question at each export of several PDFs. This choice does not touch the single PDF, “Save to GFS” (it already saves each PDF on its own), or Word, Excel and the other formats.',
+  },
+  'settings.pdfMany.perBrowser': { fr: 'Ce choix est propre à ce navigateur, comme la langue et le thème.', en: 'This choice is specific to this browser, like the language and the theme.' },
   // Mode « Identité de l'État » (DSFR, js/state-mode.js) : une section de l'onglet Thème, puis la fenêtre où la personne déclare son droit de l'allumer. Jamais « officiel » ni « conforme au DSFR » : le mode reprend des couleurs et des styles, il ne certifie rien.
   'settings.etat.title': { fr: 'Identité de l’État (DSFR)', en: 'French State identity (DSFR)' },
   'settings.etat.intro': {

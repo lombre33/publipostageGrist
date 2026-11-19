@@ -315,6 +315,7 @@ const Settings = (function () {
     const frenchTypographyBox = byId('settings-french-typography');
     const wordCountBox = byId('settings-word-count');
     const mailClientRadios = all('input[name="settings-mail-client"]');
+    const pdfManyRadios = all('input[name="settings-pdf-many"]');
     const triggerSelect = byId('settings-trigger-char');
     const reloadNotice = byId('settings-trigger-reload-notice');
     openBtn.addEventListener('click', () => {
@@ -329,6 +330,7 @@ const Settings = (function () {
       syncOfflineEditor();
       StateMode.syncSettings();
       mailClientRadios.forEach(r => { r.checked = (r.value === MailtoExport.getMailClient()); });
+      pdfManyRadios.forEach(r => { r.checked = (r.value === PdfDelivery.manyFiles()); });
       if (triggerSelect) triggerSelect.value = Variables.triggerChar();
       if (reloadNotice) reloadNotice.hidden = true;
       syncMarginInputs(marginInputs);
@@ -498,6 +500,11 @@ const Settings = (function () {
       wordCountBox.checked = WordCount.isOn();
     });
     wireRadios('settings-mail-client', value => SettingsHistory.track(MAIL_CLIENT_SETTING, () => MailtoExport.setMailClient(value)));
+    // Stockage refusé (le choix ne serait pas retenu) : les cases reviennent à ce qui est en vigueur, comme celles de la langue.
+    wireRadios('settings-pdf-many', value => {
+      SettingsHistory.track(PdfDelivery.MANY_SETTING, () => PdfDelivery.chooseMany(value));
+      all('input[name="settings-pdf-many"]').forEach(r => { r.checked = (r.value === PdfDelivery.manyFiles()); });
+    });
     wireTriggerChar(leave);
     wireOfflineEditor(leave);
     StateMode.mountSettings();

@@ -588,19 +588,19 @@ const MainExport = (function () {
     };
     const BATCH_EXPORTS = {
       pdfZip: Object.assign({}, PDF_BATCH, {
-        confirm: 'confirm.batchExport', done: 'status.batchExportDone', doneWithFailures: 'status.batchExportDoneWithFailures',
+        confirm: 'confirm.batchExport', done: 'status.batchExportDone', doneWithFailures: 'status.batchExportDoneWithFailures', doneEach: 'status.batchExportDoneEach', doneWithFailuresEach: 'status.batchExportDoneWithFailuresEach',
         entryExt: '.pdf', fileSuffix: '-export-pdf.zip',
         loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await ExportCommon.ensureJsZipLoaded(); },
       }),
       // « PDF protégé » en lot : les PDF d'une archive ZIP, chacun chiffré avec le même mot de passe (`protect` : la fenêtre js/pdf-protection-dialog.js tient lieu de confirmation).
       pdfProtectedZip: Object.assign({}, PDF_BATCH, {
-        protect: true, confirm: 'confirm.batchExport', done: 'status.batchExportDoneProtected', doneWithFailures: 'status.batchExportDoneWithFailuresProtected',
+        protect: true, confirm: 'confirm.batchExport', done: 'status.batchExportDoneProtected', doneWithFailures: 'status.batchExportDoneWithFailuresProtected', doneEach: 'status.batchExportDoneProtectedEach', doneWithFailuresEach: 'status.batchExportDoneWithFailuresProtectedEach',
         entryExt: '.pdf', fileSuffix: '-export-pdf-protege.zip',
         loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await ExportCommon.ensureJsZipLoaded(); },
       }),
       // « PDF/A (archivage) » en lot : les PDF d'une archive ZIP, chacun passé en PDF/A-2b (`archive` : openBatchSink pose `{ archive: true }` sur chaque ligne, js/pdf-export.js).
       pdfArchiveZip: Object.assign({}, PDF_BATCH, {
-        archive: true, engines: ['pdf', 'archive'], confirm: 'confirm.batchExport', done: 'status.batchExportDoneArchive', doneWithFailures: 'status.batchExportDoneWithFailuresArchive',
+        archive: true, engines: ['pdf', 'archive'], confirm: 'confirm.batchExport', done: 'status.batchExportDoneArchive', doneWithFailures: 'status.batchExportDoneWithFailuresArchive', doneEach: 'status.batchExportDoneArchiveEach', doneWithFailuresEach: 'status.batchExportDoneWithFailuresArchiveEach',
         entryExt: '.pdf', fileSuffix: '-export-pdfa.zip',
         loadLibs: async () => { await PdfExport.ensurePdfLibsLoaded(); await ExportCommon.ensureJsZipLoaded(); },
       }),
@@ -830,21 +830,40 @@ const MainExport = (function () {
     // valeurs en font 400, deux de 100 en font 10 000, dans une archive construite en mémoire).
     const SPLIT_CONFIRM_FROM = 50;
 
+    // « Me demander » (Réglages > Thème > PDF en plusieurs fichiers, js/pdf-delivery.js:manyFiles) : la question est posée quand l'export fait plusieurs PDF d'une archive (pas le PDF unique ni la planche, pas un autre format) et qu'ils se
+    // téléchargent (`plan().download` : « Ranger dans GFS » seul ne télécharge rien). Rend 'zip', 'each' ou null (la personne annule).
+    const asksManyFiles = (cfg, jobCount) => !!cfg.shelvable && !cfg.merged && jobCount > 1 && PdfDelivery.manyFiles() === 'ask' && PdfDelivery.plan().download;
+    async function askMany(message, title) {
+      return Dialogs.choose({
+        title: title || I18n.t('settings.pdfMany.title'), message,
+        choices: [{ value: 'zip', label: I18n.t('settings.pdfMany.zip'), primary: true }, { value: 'each', label: I18n.t('settings.pdfMany.each') }],
+      });
+    }
+
     // L'accord avant un export en lot : `{}`, ou `{ layout }` pour les planches, qui se règlent dans leur propre fenêtre (feuille, emplacements, traits
     // de coupe) : elle tient lieu de confirmation. Un export seul n'en demande pas, son clic vaut accord, sauf quand sa ligne fait plus de
     // SPLIT_CONFIRM_FROM documents. null : la personne renonce.
-    async function confirmBatch(cfg, { only, tableId, rowCount, jobCount, splitting, protection, linkedView, confirmed }) {
+    async function confirmBatch(cfg, { only, tableId, rowCount, jobCount, splitting, protection, linkedView, confirmed, asksMany }) {
       // Un lot « PDF protégé » : la fenêtre du mot de passe tient lieu de confirmation (elle dit combien de PDF partent). Un document que « Un document par valeur » découpe l'a
       // déjà posée au départ de l'export (exportRecordAs, `protection`) : ici seule la question de ses nombreux documents peut encore se poser.
       if (cfg.protect && !protection) {
-        const asked = await PdfProtectionDialog.open({ batch: true, count: jobCount, table: tableId, grid: GridEditor.isGridType(getCurrentTypeModele()) });
+        // `files` : sans archive à dire (« Des PDF un par un » ou « Me demander » : la phrase ne parle plus de ZIP).
+        const asked = await PdfProtectionDialog.open({ batch: true, count: jobCount, table: tableId, grid: GridEditor.isGridType(getCurrentTypeModele()), files: PdfDelivery.manyFiles() !== 'zip' });
         if (!asked) setStatus(I18n.t('status.exportCancelled'));
         return asked ? { protection: asked } : null;
       }
       const setup = cfg.protect ? { protection } : {};
+      // « Des PDF un par un » : la confirmation ne parle plus d'une archive.
+      const eachNow = !!cfg.shelvable && !cfg.merged && PdfDelivery.manyFiles() === 'each';
       if (only) {
         if (jobCount <= SPLIT_CONFIRM_FROM) return setup;
-        const proceed = await Dialogs.confirm({ title: I18n.t('varList.split.label'), message: I18n.t('confirm.splitExport', { documents: jobCount }), confirmLabel: I18n.t('common.generate') });
+        // « Me demander » : la question du ZIP ou des PDF un par un tient lieu de confirmation (la phrase d'ici parle d'archive).
+        if (asksMany) {
+          const many = await askMany(I18n.t('manyFiles.askSplit', { documents: jobCount }), I18n.t('varList.split.label'));
+          if (!many) setStatus(I18n.t('status.exportCancelled'));
+          return many ? Object.assign({}, setup, { many }) : null;
+        }
+        const proceed = await Dialogs.confirm({ title: I18n.t('varList.split.label'), message: I18n.t(eachNow ? 'confirm.splitExportEach' : 'confirm.splitExport', { documents: jobCount }), confirmLabel: I18n.t('common.generate') });
         // « Génération en cours… » (exportRecordAs) ne doit pas rester affiché derrière un renoncement.
         if (!proceed) setStatus(I18n.t('status.exportCancelled'));
         return proceed ? setup : null;
@@ -852,8 +871,13 @@ const MainExport = (function () {
       if (cfg.sheets) return (await SheetAssemblyDialog.open({ count: jobCount, table: tableId, grid: GridEditor.isGridType(getCurrentTypeModele()) })) || null;
       // La fenêtre du contrôle d'avant lot vient de demander « Générer quand même » ou « sans ces lignes » : une seconde confirmation de suite ne ferait que répéter la question.
       if (confirmed) return setup;
+      // « Me demander » : la question du ZIP ou des PDF un par un tient lieu de confirmation (la phrase de `cfg.confirm` parle d'archive).
+      if (asksMany) {
+        const many = await askMany(I18n.t('manyFiles.askBatch', { documents: jobCount, count: rowCount, table: tableId }) + (linkedView ? '\n\n' + I18n.t('confirm.linkedViewNote', { name: linkedView }) : ''), exportText('dialog.batchExport.title'));
+        return many ? Object.assign({}, setup, { many }) : null;
+      }
       const note = (splitting ? '\n\n' + I18n.t('confirm.splitNote', { documents: jobCount }) : '') + (linkedView ? '\n\n' + I18n.t('confirm.linkedViewNote', { name: linkedView }) : '');
-      const proceed = await Dialogs.confirm({ title: exportText('dialog.batchExport.title'), message: exportText(cfg.confirm, { count: rowCount, table: tableId }) + note, confirmLabel: I18n.t('common.generate') });
+      const proceed = await Dialogs.confirm({ title: exportText('dialog.batchExport.title'), message: exportText(eachNow && cfg.confirm === 'confirm.batchExport' ? 'confirm.batchExportEach' : cfg.confirm, { count: rowCount, table: tableId }) + note, confirmLabel: I18n.t('common.generate') });
       return proceed ? setup : null;
     }
 
@@ -959,8 +983,15 @@ const MainExport = (function () {
         rows = rows.filter(row => kept.has(row.id));
         splitting = jobs.some(job => ListSplit.hasPins(job.variant));
       }
-      const sheetSetup = await confirmBatch(cfg, { only, tableId, rowCount: rows.length, jobCount: jobs.length, splitting, protection: preset && preset.protection, linkedView: linked, confirmed: checked.confirmed });
+      const asksMany = asksManyFiles(cfg, jobs.length);
+      const sheetSetup = await confirmBatch(cfg, { only, tableId, rowCount: rows.length, jobCount: jobs.length, splitting, protection: preset && preset.protection, linkedView: linked, confirmed: checked.confirmed, asksMany });
       if (!sheetSetup) return;
+      // Les cas où une fenêtre a déjà demandé son accord (le mot de passe d'un PDF protégé, un contrôle d'avant lot, une ligne de moins de SPLIT_CONFIRM_FROM documents) posent la question à part.
+      let many = sheetSetup.many;
+      if (asksMany && !many) {
+        many = await askMany(I18n.t('manyFiles.ask', { documents: jobs.length }));
+        if (!many) { setStatus(I18n.t('status.exportCancelled')); return; }
+      }
       // Les polices des PDF du lot : une seule fenêtre « Polices du document » pour tous les documents du lot ; y renoncer ne lance rien.
       if (cfg.engines.includes('pdf') && typeof PdfFontPlan !== 'undefined' && !(await PdfFontPlan.review(batchFontTexts(jobs, templatesCache)))) { setStatus(I18n.t('status.exportCancelled')); return; }
 
@@ -983,7 +1014,7 @@ const MainExport = (function () {
       // referme avant que l'export libère ses contrôles.
       if (!ok) { setStatus(I18n.t(cfg.noFile), true); await BatchFailures.show(failures, { ok, format: cfg.label }); return; }
 
-      await finishBatchExport(cfg, sink, { only, tableId, rows, openSource, splitting, ok, failed, exportedIds });
+      await finishBatchExport(cfg, sink, { only, tableId, rows, openSource, splitting, ok, failed, exportedIds, many });
       await BatchFailures.show(failures, { ok, format: cfg.label });
       // Les PDF qui ont des pages blanches sont dans le fichier téléchargé : la fin du lot dit lesquels, pour les corriger et les refaire.
       await BatchFailures.showBlankPages(blankRows);
@@ -1123,27 +1154,45 @@ const MainExport = (function () {
       });
     }
 
+    // « Des PDF un par un » : chaque PDF se télécharge seul, sous le nom de son entrée de l'archive (les noms sont déjà uniques : uniqueZipFilename), le coin d'état dit où l'on en est. Une courte pause entre deux : un navigateur
+    // à qui l'on demande une rafale de téléchargements en laisse tomber, ou demande d'abord l'autorisation d'en faire plusieurs.
+    const EACH_DOWNLOAD_GAP_MS = 150;
+    async function downloadEach(files) {
+      for (let i = 0; i < files.length; i++) {
+        if (i) await new Promise(resolve => setTimeout(resolve, EACH_DOWNLOAD_GAP_MS));
+        setStatus(I18n.t('status.pdfEachDownloading', { current: i + 1, total: files.length }));
+        ExportCommon.downloadBlob(files[i].blob, files[i].name);
+      }
+    }
+
     // La fin d'un export en lot : le fichier assemblé est téléchargé, le coin d'état dit combien de documents (et de planches) il contient.
     // Un lot PDF (`shelvable`) peut aussi, ou à la place, se ranger dans GFS (js/pdf-delivery.js) : le PDF unique ou la planche d'un bloc, l'archive PDF par PDF. Le coin d'état dit alors ce que GFS a gardé, et les lignes ne sont datées
     // que si leur PDF est parti quelque part (téléchargé ou rangé).
-    async function finishBatchExport(cfg, sink, { only, tableId, rows, openSource, splitting, ok, failed, exportedIds }) {
+    async function finishBatchExport(cfg, sink, { only, tableId, rows, openSource, splitting, ok, failed, exportedIds, many }) {
       // Archive d'un export seul : nommée comme la ligne ; sinon comme la table.
       const baseName = async () => (only ? (sanitizeFilenamePart(await ReaderMode.resolveFilename(openSource.filenameTemplate, tableId, rows[0])) || sanitizeFilenamePart(tableId)) : sanitizeFilenamePart(tableId));
       // La jointure à la ligne ne vaut que pour un PDF par ligne (l'archive ZIP) : un PDF réuni ou posé sur des planches n'a pas de ligne à lui (la case du menu est grisée alors).
       const how = cfg.shelvable ? Object.assign(PdfDelivery.plan(), cfg.merged ? { attach: false } : {}) : { download: true, shelve: false, attach: false };
+      // « Des PDF un par un » (Réglages, js/pdf-delivery.js:manyFiles) : ce qui se télécharge d'une archive de PDF part PDF par PDF, sans archive. Le PDF unique et la planche n'ont qu'un fichier, les autres formats gardent leur archive.
+      // Le choix de la fenêtre « Me demander » (`many`), sinon le réglage ; « Me demander » sans question posée (rien ne se télécharge, un seul PDF) garde l'archive.
+      const each = !!cfg.shelvable && !cfg.merged && (many || PdfDelivery.manyFiles()) === 'each';
       let delivery = null;
       let stampIds = exportedIds;
       if (!how.shelve && !how.attach) {
-        setStatus(I18n.t(sink.finishing));
-        const outBlob = await sink.finish();
-        ExportCommon.downloadBlob(outBlob, (await baseName()) + cfg.fileSuffix);
+        if (each) await downloadEach(sink.files);
+        else {
+          setStatus(I18n.t(sink.finishing));
+          const outBlob = await sink.finish();
+          ExportCommon.downloadBlob(outBlob, (await baseName()) + cfg.fileSuffix);
+        }
       } else {
         // Rangé seul, une archive ne se fabrique pas : chaque PDF part tel quel.
-        if (how.download || cfg.merged) setStatus(I18n.t(sink.finishing));
+        if ((how.download || cfg.merged) && !each) setStatus(I18n.t(sink.finishing));
         const base = await baseName();
         let merged = null;
         const files = cfg.merged ? [{ name: base + cfg.fileSuffix, blob: async () => merged || (merged = await sink.finish()) }] : sink.files;
         delivery = await PdfDelivery.deliver(files, async subset => {
+          if (each) { await downloadEach(subset || files); return; }
           ExportCommon.downloadBlob(cfg.merged ? await files[0].blob() : await sink.finish(subset), base + cfg.fileSuffix);
         }, { plan: how, lot: PdfDelivery.lotFor(tableId), table: tableId });
         // Un seul fichier (réuni ou posé sur des planches) : ses lignes sont datées s'il est parti ; une archive : les lignes dont chaque PDF est parti.
@@ -1157,7 +1206,7 @@ const MainExport = (function () {
       const note = cfg.stampsExportDate ? await stampExportDate(tableId, stampIds) : '';
       const sheets = sink.sheetCount ? sink.sheetCount() : 0;
       const useSplitTexts = splitting && cfg.splitDone;
-      const doneKey = failed ? (useSplitTexts ? cfg.splitDoneWithFailures : cfg.doneWithFailures) : (useSplitTexts ? cfg.splitDone : cfg.done);
+      const doneKey = failed ? (useSplitTexts ? cfg.splitDoneWithFailures : (each ? cfg.doneWithFailuresEach : cfg.doneWithFailures)) : (useSplitTexts ? cfg.splitDone : (each ? cfg.doneEach : cfg.done));
       // Rien n'est téléchargé quand tout est rangé : la phrase « archive ZIP téléchargée » ne serait pas vraie, celle de GFS dit ce qu'il a gardé.
       const said = PdfDelivery.describe(delivery, failed);
       const usual = exportText(doneKey, { ok, failed, sheets });
