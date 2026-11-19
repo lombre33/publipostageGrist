@@ -940,6 +940,17 @@ const PdfExport = (function () {
     return runs;
   }
 
+  // Comme trimEdgeWhitespace, mais les retours SAISIS (Maj+Entrée, un <br>) qui TERMINENT le bloc gardent leurs lignes (consigne 092 de GFS) : l'éditeur et Word montrent « B<br> » en deux lignes, « B » puis une ligne vide,
+  // alors que le navigateur n'en montre qu'une et que le trim retire les `\n` de fin. Les n retours reviennent en un dernier run, de la mise en forme du dernier d'entre eux (la hauteur de la ligne vide est celle de sa
+  // taille), `\n` x n puis une espace pour que la dernière ligne existe. `node` : le bloc qui porte `runs`.
+  function trimEdgeKeepingReturns(node, runs) {
+    const endingReturns = ReaderMode.trailingTypedBreaks(node, true).length;
+    const lastReturn = endingReturns ? runs.slice().reverse().find(run => run.text === '\n') : null;
+    const trimmed = trimEdgeWhitespace(runs);
+    if (lastReturn) trimmed.push(Object.assign({}, lastReturn, { text: '\n'.repeat(endingReturns) + ' ' }));
+    return trimmed;
+  }
+
   // Les éléments d'une liste de case, une ligne chacun, suivis de ceux de leurs sous-listes (à tout niveau) : une sous-liste n'était pas lue comme une liste
   // (ses <li> partaient en texte « en ligne ») et sortait sans puce ni retrait, à gauche de la case.
   function listLinesOf(list, lines) {
@@ -1153,7 +1164,7 @@ const PdfExport = (function () {
     // Un texte à ombre ou à contour est dessiné en vectoriel, comme dans le flux (effectBlockFrom).
     const effect = effectBlockFrom(node, node.tagName, null, null);
     if (effect) return effect;
-    const obj = cellTextObject(node, trimEdgeWhitespace(stripImageMarkers(rawRuns)), cellAlign, cellWidthPt);
+    const obj = cellTextObject(node, trimEdgeKeepingReturns(node, stripImageMarkers(rawRuns)), cellAlign, cellWidthPt);
     attributeNestedPendingImages(images, before, obj, node, rootRect, nestedPending);
     return obj;
   }
@@ -3675,7 +3686,7 @@ const PdfExport = (function () {
   // Les blocs d'un nœud de texte ordinaire (paragraphe, titre, élément de liste, citation) : son bloc de texte, ses images, ses sous-listes.
   function ordinaryBlocks(ctx, { rawRuns, images, nestedLists }) {
     const { node, tag, pageBreakBefore, headingMarkers, availableWidthPt, rootRect } = ctx;
-    const runs = trimEdgeWhitespace(rawRuns.filter(r => !r._imageMarker));
+    const runs = trimEdgeKeepingReturns(node, rawRuns.filter(r => !r._imageMarker));
     const effect = effectBlockFrom(node, tag, headingMarkers, ctx.rulePart);
     const block = effect || textBlockFrom(node, tag, runs, headingMarkers, ctx.rulePart);
     // Le dessin d'un texte à effet porte déjà ses images du flux : seules celles en calque restent des blocs à part.
@@ -4324,6 +4335,8 @@ const PdfExport = (function () {
         el.appendChild(br);
       }
     });
+    // Un retour saisi qui termine un bloc a sa ligne dans le PDF (trimEdgeKeepingReturns) : la mesure la compte aussi (consigne 092 de GFS).
+    ExportCommon.fillTrailingBreaks(root, 'data-pdf-measure-filler');
   }
   // Image en calque (flottante) : celles que l'éditeur pose en position:absolute (même définition que pdfImageFromNode).
   const LAYER_IMAGE_SELECTOR = 'img.editor-image[data-layer="front"], img.editor-image[data-layer="behind"]';

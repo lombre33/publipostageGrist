@@ -220,9 +220,51 @@ const ReaderMode = (function () {
   // Ligne vide (Entrée deux fois) : Editor.getHTML() la sérialise en <p></p>. Dans l'éditeur, ProseMirror ne lui garde sa ligne que par un <br
   // class="ProseMirror-trailingBreak"> absent de ce HTML, et les paragraphes n'ont ici aucune marge (margin: 0) : sans hauteur propre, l'espacement
   // entre deux blocs disparaîtrait en Lecture alors que l'éditeur et les exports le gardent. Appelée après la résolution des bulles : un paragraphe
-  // qui ne contenait qu'une bulle vide ou masquée par sa condition garde lui aussi sa ligne, comme dans l'export. Un <br> saisi (Maj+Entrée) compte
-  // comme du contenu et n'est jamais doublé : le PDF n'ajoute pas non plus de ligne après un retour à la ligne placé en fin de paragraphe.
+  // qui ne contenait qu'une bulle vide ou masquée par sa condition garde lui aussi sa ligne, comme dans l'export. Un <br> saisi (Maj+Entrée) au MILIEU d'un
+  // texte compte comme du contenu et n'est jamais doublé ; celui qui TERMINE le bloc (consigne 092 de GFS) reçoit sa ligne, comme dans l'éditeur, où ProseMirror
+  // pose derrière lui son <br> de fin : n retours de fin montrent n + 1 lignes (le navigateur, lui, n'en ouvre aucune après un <br> qui finit un bloc).
   const BLANK_LINE_BLOCKS = 'p, h1, h2, h3, h4, h5, h6';
+  // Les retours saisis (Maj+Entrée) qui TERMINENT un bloc, du premier au dernier (liste vide : le bloc ne finit pas par un retour) : les <br> consécutifs qui sont ce que le bloc contient en dernier, à travers
+  // les balises en ligne qui les enveloppent (`<strong>texte<br></strong>`). Ni le <br> de fin de ProseMirror, ni celui que la Lecture pose (`pp-blank-line`), ni ceux que les exports posent pour leurs mesures
+  // (`data-measure-filler`, `data-pdf-measure-filler`) ne sont des retours saisis. Un blanc ou un retour qui SÉPARE deux blocs (un élément de liste dont le dernier paragraphe est vide) n'en est pas un non plus : seul un
+  // <br> en est un. Sert à la Lecture (keepBlankLines), aux hôtes de mesure d'Excel et du PDF (ExportCommon.fillTrailingBreaks) et au texte des paragraphes du PDF (js/pdf-export.js:ordinaryBlocks).
+  const REPLACED_TAGS = /^(IMG|BR|SVG|CANVAS|VIDEO|AUDIO|IFRAME|OBJECT|EMBED|INPUT|HR)$/;
+  const isFillerBreak = node => node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR'
+    && (node.classList.contains('ProseMirror-trailingBreak') || node.classList.contains('pp-blank-line')
+      || node.hasAttribute('data-measure-filler') || node.hasAttribute('data-pdf-measure-filler'));
+  const isTypedBreak = node => node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR' && !isFillerBreak(node);
+  const isEmptyNode = node => (node.nodeType === Node.TEXT_NODE ? node.nodeValue === '' : node.nodeType === Node.ELEMENT_NODE && !REPLACED_TAGS.test(node.tagName) && !node.firstChild);
+  function lastLeaf(node) {
+    // Le dernier contenu de `node` : on descend par le dernier enfant qui n'est ni un texte vide ni une balise vide.
+    while (node.nodeType === Node.ELEMENT_NODE && !REPLACED_TAGS.test(node.tagName)) {
+      let child = node.lastChild;
+      while (child && isEmptyNode(child)) child = child.previousSibling;
+      if (!child) return node;
+      node = child;
+    }
+    return node;
+  }
+  function leafBefore(node, root) {
+    // Le contenu qui précède `node` dans `root` : le dernier contenu du frère d'avant, ou, sans frère, celui d'avant son parent.
+    for (let current = node; current && current !== root; current = current.parentNode) {
+      let before = current.previousSibling;
+      while (before && isEmptyNode(before)) before = before.previousSibling;
+      if (before) return lastLeaf(before);
+    }
+    return null;
+  }
+  // `throughFillers` : on compte aussi les retours que leur <br> de remplissage suit déjà (celui des exports, posé par ExportCommon.fillTrailingBreaks) ; sans lui, un bloc déjà rempli n'a plus de retour à remplir
+  // (rien n'est ajouté deux fois).
+  function trailingTypedBreaks(block, throughFillers) {
+    const found = [];
+    let leaf = lastLeaf(block);
+    while (throughFillers && leaf && leaf !== block && isFillerBreak(leaf)) leaf = leafBefore(leaf, block);
+    while (leaf && leaf !== block && isTypedBreak(leaf)) {
+      found.unshift(leaf);
+      leaf = leafBefore(leaf, block);
+    }
+    return found;
+  }
   // Ce qui occupe une ligne sans porter de texte : le marqueur de note de bas de page n'a que le numéro de son compteur CSS.
   const NON_TEXT_CONTENT = 'img, br, svg, canvas, video, audio, iframe, object, embed, input, .footnote-ref-marker';
   // Une image en calque (devant ou derrière le texte) est hors du flux : elle ne remplit pas la ligne de son paragraphe. Celui qui n'en porte que
@@ -236,10 +278,12 @@ const ReaderMode = (function () {
   }
   function keepBlankLines(root) {
     root.querySelectorAll(BLANK_LINE_BLOCKS).forEach(block => {
-      if (block.textContent !== '' || holdsInFlowContent(block)) return;
+      const endingReturns = trailingTypedBreaks(block);
+      if (!endingReturns.length && (block.textContent !== '' || holdsInFlowContent(block))) return;
       const filler = document.createElement('br');
       filler.className = 'pp-blank-line';
-      block.appendChild(filler);
+      if (endingReturns.length) endingReturns[endingReturns.length - 1].after(filler);
+      else block.appendChild(filler);
     });
   }
   // Fin de document sans rien à montrer : quand il n'y a pas de contenu, les marges ne créent pas de nouvelle page. Une dernière ligne vide (Entrée
@@ -2014,5 +2058,5 @@ const ReaderMode = (function () {
       catch (e) { return ''; }
     });
   }
-  return { render, lend, renderInto, resolvedHtml, preview, peek, inspect, resolveFilename, autoName, isAutoName, fieldText, splitBadges, trimTrailingBlankBlocks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll, slideShown, showSlide };
+  return { render, lend, renderInto, resolvedHtml, preview, peek, inspect, resolveFilename, autoName, isAutoName, fieldText, splitBadges, trimTrailingBlankBlocks, trailingTypedBreaks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll, slideShown, showSlide };
 })();

@@ -381,7 +381,32 @@ const DocxExport = (function () {
     names.forEach((name, i) => root.splice(at + i, 0, new docx.BuilderElement({ name })));
     return run;
   }
-  const textRun = (text, style) => withEffects(new docx.TextRun(Object.assign(tabbed(text), runOpts(style))), style);
+  // `lineBreak` : le run commence par un `w:br` (une ligne de plus) ; sans texte, il n'écrit que ce saut de ligne.
+  const textRun = (text, style, lineBreak) => withEffects(new docx.TextRun(Object.assign(lineBreak && !text ? {} : tabbed(text), runOpts(style), lineBreak ? { break: 1 } : {})), style);
+
+  // Un retour à la ligne DANS un texte - la valeur d'une colonne Texte à plusieurs lignes, `\n` ou `\r\n` (consigne 091 de GFS) - est une vraie ligne de Word : un `w:br` entre deux séries de texte
+  // (un U+000A écrit dans <w:t> n'en est pas un, Word le lit comme une espace). Comme à la Lecture (`white-space: break-spaces`) : le retour qui TERMINE le texte n'ouvre pas de ligne quand
+  // il termine aussi son bloc (« Dupont\n » reste « Dupont »), et le blanc entre deux blocs n'est pas du texte. `node` : le nœud du texte (le texte même, ou la valeur qui le porte).
+  const LINE_END = /\r\n?|\n/;
+  const TEXT_BLOCKS = /^(P|H[1-6]|DIV|BLOCKQUOTE|PRE|LI|UL|OL|TABLE|TD|TH)$/;
+  const isTextBlock = n => !!n && n.nodeType === Node.ELEMENT_NODE && TEXT_BLOCKS.test(n.tagName);
+  // Rien ne suit ce nœud sur sa ligne : on remonte tant que le parent est en ligne (une valeur, un lien) et on regarde ce qui suit, un bloc ou du blanc n'étant pas du contenu.
+  function endsItsBlock(node) {
+    for (let cur = node; cur && !isTextBlock(cur); cur = cur.parentNode) {
+      for (let next = cur.nextSibling; next; next = next.nextSibling) {
+        if (isTextBlock(next)) return true;
+        if (next.nodeType === Node.ELEMENT_NODE || (next.nodeType === Node.TEXT_NODE && next.nodeValue.trim() !== '')) return false;
+      }
+    }
+    return true;
+  }
+  function linedTextRuns(text, style, node) {
+    if (!LINE_END.test(text)) return [textRun(text, style)];
+    if (text.trim() === '' && (isTextBlock(node.previousSibling) || isTextBlock(node.nextSibling))) return [];
+    const pieces = text.split(LINE_END);
+    if (!pieces[pieces.length - 1] && endsItsBlock(node)) pieces.pop();
+    return pieces.flatMap((piece, i) => (i || piece ? [textRun(piece, style, i > 0)] : []));
+  }
 
   // Case à cocher d'une variable Oui / Non (js/reader-mode.js:checkboxNode) : le caractère ☑ ou ☐ en « Segoe UI Symbol » (Word, Google Docs et
   // LibreOffice en prennent une autre si elle manque), dans la couleur de la case (style en ligne, déjà lu par inheritedRunStyle) et jamais barré :
@@ -396,7 +421,7 @@ const DocxExport = (function () {
   // .var-badge et .smart-chip ne devraient jamais arriver ici (ReaderMode.preview les résout déjà en <span class="resolved-var"> ou en texte simple) :
   // gardés par robustesse, comme dans js/pdf-export.js.
   function valueRuns(node, style) {
-    return node.textContent ? [textRun(node.textContent, style)] : [];
+    return node.textContent ? linedTextRuns(node.textContent, style, node) : [];
   }
 
   function pageNumberRuns(node, style) {
@@ -859,7 +884,7 @@ const DocxExport = (function () {
   // (une image se télécharge) : le parcours est séquentiel, largement suffisant pour le nombre d'images d'un courrier.
   async function inlineNodesFrom(node, parentStyle, ctx) {
     const style = inheritedRunStyle(node, parentStyle);
-    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? [textRun(node.nodeValue, style)] : [];
+    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue ? linedTextRuns(node.nodeValue, style, node) : [];
     if (node.nodeType !== Node.ELEMENT_NODE) return [];
     const leaf = LEAF_RUNS.find(([matches]) => matches(node));
     return leaf ? leaf[1](node, style, ctx) : inlineChildrenFrom(node, style, ctx);

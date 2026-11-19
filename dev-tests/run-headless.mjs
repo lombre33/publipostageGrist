@@ -69,6 +69,7 @@ const GROUPS = {
   pdfFidelity: 'scenarios-pdf-fidelity',
   pdfGroundTruth: 'scenarios-pdf-ground-truth',
   readModeFidelity: 'scenarios-readmode-fidelity',
+  lineBreaks: 'scenarios-line-breaks', // les retours à la ligne d'un modèle et d'une valeur jusqu'aux sorties (consignes 091 et 092 de GFS) : n retours saisis en fin de case ou de paragraphe = n + 1 lignes en Lecture, dans le texte et la hauteur de ligne d'Excel et d'ODS et dans le PDF (grille et document), Word inchangé ; une valeur Texte à plusieurs lignes (`\n`, `\r\n`) garde ses lignes dans Excel (wrapText), ODS et Word (`w:br`), le blanc entre deux blocs n'en ajoute pas
   pageLayout: 'scenarios-pagelayout',
   marginPresets: 'scenarios-margin-presets', // préréglages de marges (Aucune, Étroites, Classiques, Larges : ceux de Word) et chaîne « Lier les quatre marges » de l'onglet Marges (js/settings.js), PageLayout.boundedMarginsMm : ce que chaque bouton pose, celui qui est enfoncé (même sur une petite page), la chaîne (une saisie pour les quatre, bornée par paire, relâchée par « Larges »), deux langues
   orientation: 'scenarios-orientation',

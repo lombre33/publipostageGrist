@@ -270,8 +270,11 @@ const XlsxExport = (function () {
   const BLOCK_TAGS = /^(P|H[1-6]|DIV|BLOCKQUOTE|PRE|LI|UL|OL|TABLE)$/;
   function createLineBuilder() {
     // Les lignes de segments { text, style } d'une case en cours de lecture. Un bloc (paragraphe, titre, élément de liste) commence une ligne ; une
-    // ligne vide est gardée (Entrée deux fois), celles de la fin non.
+    // ligne vide est gardée (Entrée deux fois), celles de la fin non - sauf celles qu'un retour SAISI (Maj+Entrée, un <br>) vient d'ouvrir : « B<br> » est « B » puis
+    // une ligne vide, comme dans l'éditeur et dans Word (consigne 092 de GFS). Le retour d'un texte (la valeur d'une colonne qui en contient, consigne 091) n'en est pas un :
+    // « Dupont\n » reste « Dupont ».
     const lines = [[]];
+    let kept = 1; // le nombre de lignes que `dropTrailingEmptyLines` ne retire pas : jusqu'à la dernière ouverte par un retour saisi
     let blockSeen = false; // un bloc (paragraphe, titre, élément) a commencé : le suivant ouvre une nouvelle ligne, même si la précédente est vide
     let continueLine = false; // juste après le repère d'un élément de liste : son premier paragraphe reste sur la même ligne
     const startLine = () => { if (blockSeen || lines.length > 1 || lines[0].length) lines.push([]); };
@@ -283,11 +286,11 @@ const XlsxExport = (function () {
     return {
       lines,
       addText,
-      lineBreak: () => { lines.push([]); },
+      lineBreak: (typed = true) => { lines.push([]); if (typed) kept = lines.length; },
       openBlock() { if (continueLine) continueLine = false; else startLine(); blockSeen = true; },
       openItem(marker, style) { startLine(); blockSeen = true; addText(marker, style); continueLine = true; },
       closeItem() { continueLine = false; },
-      dropTrailingEmptyLines() { while (lines.length > 1 && lines[lines.length - 1].length === 0) lines.pop(); },
+      dropTrailingEmptyLines() { while (lines.length > kept && lines[lines.length - 1].length === 0) lines.pop(); },
     };
   }
   const isBlockSibling = n => !!n && n.nodeType === 1 && BLOCK_TAGS.test(n.tagName);
@@ -309,10 +312,11 @@ const XlsxExport = (function () {
     const images = [];
     let horizontal = null;
     const visitText = (node, style) => {
-      const value = node.nodeValue.replace(/\r\n?|\n/g, ' ');
       // L'espace ou le retour à la ligne entre deux blocs n'est pas du texte.
-      if (value.trim() === '' && (isBlockSibling(node.previousSibling) || isBlockSibling(node.nextSibling))) return;
-      out.addText(value, style);
+      if (node.nodeValue.trim() === '' && (isBlockSibling(node.previousSibling) || isBlockSibling(node.nextSibling))) return;
+      // Un retour à la ligne DANS un texte (la valeur d'une colonne Texte à plusieurs lignes, `\n` comme `\r\n`, consigne 091 de GFS) est une vraie ligne, comme à la Lecture (`white-space: break-spaces`) et
+      // dans le PDF : on coupe le texte à ses retours au lieu de les changer en espaces. Un retour qui termine le texte n'ouvre pas de ligne (dropTrailingEmptyLines).
+      node.nodeValue.split(/\r\n?|\n/).forEach((piece, i) => { if (i) out.lineBreak(false); out.addText(piece, style); });
     };
     // Une liste : le repère de chaque élément (puce, numéro, case cochée ou non) puis son contenu ; une sous-liste prend un retrait de plus.
     const visitList = (node, own, listCtx) => {
@@ -336,7 +340,7 @@ const XlsxExport = (function () {
       if (node.nodeType === 3) { visitText(node, style); return; }
       if (node.nodeType !== 1) return;
       const tag = node.tagName;
-      if (tag === 'BR') { if (!node.classList.contains('ProseMirror-trailingBreak')) out.lineBreak(); return; }
+      if (tag === 'BR') { if (!node.classList.contains('ProseMirror-trailingBreak') && !node.hasAttribute('data-measure-filler')) out.lineBreak(); return; }
       if (tag === 'IMG') { images.push(node); return; }
       if (tag === 'STYLE' || tag === 'SCRIPT') return;
       const own = inheritedRun(node, style);
@@ -928,6 +932,8 @@ const XlsxExport = (function () {
     const tables = Array.from(root.querySelectorAll('table'));
     // La plus large des feuilles d'une grille à onglets : le plan hors écran les met toutes, l'une sous l'autre.
     const widthPx = tables.length ? Math.max(100, ...tables.map(table => Math.round(parseFloat(table.style.width) || table.getBoundingClientRect().width || 800))) : 800;
+    // Un retour saisi en fin de case est une ligne de la hauteur de la ligne : le <br> que la mesure compte et que readCellContent n'écrit pas (consigne 092 de GFS).
+    ExportCommon.fillTrailingBreaks(root);
     const detach = ExportCommon.attachMeasureHost(root, widthPx + 24);
     try {
       await Promise.all(Array.from(root.querySelectorAll('img')).map(img => (img.decode ? img.decode().catch(() => {}) : Promise.resolve())));

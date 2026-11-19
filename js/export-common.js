@@ -138,6 +138,20 @@ const ExportCommon = (function () {
     root.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, td, th').forEach(el => { if (!el.hasChildNodes()) el.appendChild(document.createElement('br')); });
   }
 
+  // Un retour saisi (Maj+Entrée) qui TERMINE un bloc n'ouvre aucune ligne dans un hôte de mesure, alors que l'éditeur lui laisse la sienne (le <br> de fin que ProseMirror pose, absent de Editor.getHTML()) et que Word écrit
+  // son `w:br` : sans un <br> de plus derrière lui, la hauteur mesurée serait d'une ligne trop courte par retour de fin (consigne 092 de GFS). Le <br> ajouté porte `attribute` : il compte pour la mesure, et
+  // personne ne l'écrit (`data-measure-filler` pour l'Excel, `data-pdf-measure-filler` pour le PDF, que leurs lecteurs de texte écartent). Un bloc qui ne finit pas par un retour saisi, un bloc vide et un retour qui sépare deux
+  // blocs ne changent pas (ReaderMode.trailingTypedBreaks).
+  function fillTrailingBreaks(root, attribute = 'data-measure-filler') {
+    root.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, td, th').forEach(el => {
+      const endingReturns = ReaderMode.trailingTypedBreaks(el);
+      if (!endingReturns.length) return;
+      const filler = document.createElement('br');
+      filler.setAttribute(attribute, '1');
+      endingReturns[endingReturns.length - 1].after(filler);
+    });
+  }
+
   // Les <tr> d'un tableau dans l'ordre du document, les <td>/<th> d'une ligne, et le colspan ou rowspan d'une case (de 1 à 1 000, ramené à ce que son tableau peut porter : HtmlSanitize.cellSpan).
   const tableRows = table => Array.from(table.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
   const cellsOf = tr => Array.from(tr.children).filter(cell => /^(TD|TH)$/i.test(cell.tagName));
@@ -839,6 +853,6 @@ const ExportCommon = (function () {
     return { NAMESPACES, XML_HEAD, namespaceAttrs, escText, escAttr, fixed, attrsOf, textXml };
   })();
 
-  return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, fillEmptyBlocks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
+  return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, fillEmptyBlocks, fillTrailingBreaks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
     resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages, isMergeImage, Ooxml, Markup, Odf, OdfXml };
 })();
