@@ -223,11 +223,11 @@
     "carte": {
       "origine": "https://esm.sh",
       "fixes": {
-        "kit/ambiance-message": "./kit/js/ambiance-message.js?v=a1ed9db",
-        "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=a1ed9db",
-        "kit/correcteurs-message": "./kit/js/correcteurs-message.js?v=a1ed9db",
-        "kit/correcteurs-pose": "./kit/js/correcteurs-pose.js?v=a1ed9db",
-        "kit/violations-pose": "./kit/js/violations-pose.js?v=a1ed9db",
+        "kit/ambiance-message": "./kit/js/ambiance-message.js?v=ed0a575",
+        "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=ed0a575",
+        "kit/correcteurs-message": "./kit/js/correcteurs-message.js?v=ed0a575",
+        "kit/correcteurs-pose": "./kit/js/correcteurs-pose.js?v=ed0a575",
+        "kit/violations-pose": "./kit/js/violations-pose.js?v=ed0a575",
         "https://esm.sh/@floating-ui/dom@^1.0.0?target=es2022": "https://esm.sh/@floating-ui/dom@1.8.0?target=es2022",
         "https://esm.sh/@floating-ui/core@^1.6.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
         "https://esm.sh/@floating-ui/core@^1.8.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
