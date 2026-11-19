@@ -88,6 +88,9 @@
 //      liste n'est plus celle que la case « Éditeur hors ligne » de Réglages écrit.
 //  40. les tables et les colonnes du widget qui se disent en français ailleurs que dans le registre de js/schema-columns.js (Publipostage_Modeles, Contenu, Jeton, ModeleId, Utilisateur...), ou qui reçoivent un
 //      libellé différent de leur identifiant : la table ou la colonne serait créée en double, ou lue à vide, sur un document passé à l'anglais (demande du 16/11 : identifiant = libellé).
+//  41. les bibliothèques natives par fonction (consigne 065 de GFS) : la copie de GFS ou le CDN, sept fonctions, chaque bibliothèque dans une seule, sa version, son adresse et son empreinte égales à celles de la liste et du catalogue.
+//  42. le README.md de la racine (consigne 086 de GFS, point 3) : la puce « Aucune donnée n'est stockée hors de Grist », en français et en anglais, dit `localStorage`, nomme chaque clé `pp_…` que le code garde dans le navigateur (et aucune
+//      qu'il ne garde plus) et dit ce que le code n'écrit pas ; et le code n'écrit en effet rien dans `sessionStorage`, `IndexedDB` ni dans un cookie.
 //
 // Volontairement PERMISSIF : un nom cité seulement dans un commentaire compte comme utilisé, un préfixe construit (`'toc-level-' + n`) couvre toute la
 // famille. Le but est de ne jamais faire échouer un changement légitime, seulement d'attraper ce qui n'a plus AUCUN point d'entrée. Une classe posée
@@ -2373,6 +2376,39 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('bibliothèques natives : aucun autre fichier de js/ ni d\'extensions/ n\'écrit l\'adresse de CDN d\'une de ces bibliothèques (tout passe par js/native-libs.js)', strays.length === 0, strays.join(', '));
   const index = read('index.html');
   check('bibliothèques natives : index.html charge js/native-libs.js après js/export-common.js (la seule porte des scripts) et avant les modules qui l\'appellent', /<script src="js\/export-common\.js\?v=[\d.]+"><\/script>\s*<script src="js\/native-libs\.js\?v=[\d.]+"><\/script>/.test(index) && index.indexOf('js/native-libs.js?v=') < index.indexOf('data-engine="pdf"'), 'balise absente ou mal placée');
+}
+
+// ============================================================================
+// 42. Le README de la racine dit ce que le widget garde dans le navigateur (consigne 086 de GFS, point 3)
+// ============================================================================
+// L'outil d'audit de GFS ne lit que le README.md de la racine et y cherche le mot du mécanisme, `localStorage` : sans lui, le constat « stockage hors de Grist » pèse 12 points sur l'axe sécurité, avec lui 3. La puce « Aucune donnée
+// n'est stockée hors de Grist » le dit en français et en anglais, avec chaque clé `pp_…` que le code garde dans le navigateur et ce que le code n'écrit pas (`sessionStorage`, `IndexedDB`, un cookie) : une promesse qu'un lecteur
+// vérifie, donc une phrase qui doit rester vraie. Une clé nouvelle s'ajoute ICI, dans les deux langues (comme à STORED de outils/depot-propre/controles.mjs et au README du dépôt public) ; un `sessionStorage`, un `indexedDB` ou un
+// cookie écrit par le code la rend fausse.
+{
+  const readme = read('README.md');
+  const bullets = {
+    français: (readme.match(/^- \*\*Aucune donnée n'est stockée hors de Grist\*\*[^\n]*/m) || [''])[0],
+    anglais: (readme.match(/^- \*\*No data is stored outside of Grist\*\*[^\n]*/m) || [''])[0],
+  };
+  // Les clés que le code garde : celles de js/ et d'index.html, comme le fait controles.mjs, sauf deux options du widget que Grist garde avec lui (pas dans le navigateur) ; `pp_schema_` est un préfixe (une clé par document).
+  const IN_GRIST = new Set(['pp_attach_column', 'pp_attach_mode']);
+  const keys = new Set();
+  for (const file of [...listFiles('js', /\.js$/), 'index.html']) {
+    for (const match of read(file).matchAll(/['"`](pp_[A-Za-z0-9_]+)/g)) if (!IN_GRIST.has(match[1])) keys.add(match[1].startsWith('pp_schema_') ? 'pp_schema_' : match[1]);
+  }
+  const named = (bullet, key) => (key.endsWith('_') ? bullet.includes('`' + key) : bullet.includes('`' + key + '`'));
+  for (const [lang, bullet] of Object.entries(bullets)) {
+    check(`README.md (${lang}) : la puce sur le stockage existe et dit \`localStorage\` (le mot que l'outil d'audit de GFS cherche)`, bullet !== '' && bullet.includes('`localStorage`'), bullet.slice(0, 80));
+    const missing = [...keys].filter(key => !named(bullet, key));
+    check(`README.md (${lang}) : chaque clé que le code garde dans le navigateur y est nommée (${keys.size} clés, \`pp_schema_…\` pour les noms des tables et des colonnes)`, keys.size >= 20 && missing.length === 0, missing.join(', ') || `${keys.size} clés`);
+    const stale = [...bullet.matchAll(/`(pp_[A-Za-z0-9_]+)/g)].map(match => match[1]).filter(key => !keys.has(key) && !(key.startsWith('pp_schema_') && keys.has('pp_schema_')));
+    check(`README.md (${lang}) : aucune clé n'y est nommée que le code ne garde plus`, bullet !== '' && stale.length === 0, stale.join(', '));
+    check(`README.md (${lang}) : la puce dit ce que le code n'écrit pas : \`sessionStorage\`, \`IndexedDB\` et un cookie`, bullet.includes('`sessionStorage`') && bullet.includes('`IndexedDB`') && /cookie/.test(bullet), bullet.slice(-160));
+  }
+  const strangers = [...listFiles('js', /\.js$/), ...listFiles('extensions', /\.js$/), 'index.html', 'nouveautes.html']
+    .filter(file => existsSync(join(ROOT, file)) && /\b(?:sessionStorage|indexedDB|IndexedDB)\b|document\.cookie/.test(noCommentsJs(read(file))));
+  check('le code du widget (js/, extensions/, les pages) n\'écrit rien dans sessionStorage, IndexedDB ni dans un cookie : ce que le README promet', strangers.length === 0, strangers.join(', '));
 }
 
 summarizeAndExit();

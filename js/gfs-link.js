@@ -1,6 +1,7 @@
 // Le lien avec Grist Factory Suite (GFS) : ce que le widget en sait quand GFS l'héberge, et rien quand il tourne seul (une fenêtre de Grist qui charge l'adresse de ce dépôt).
 // Les messages de GFS ont leur enveloppe (contrats de GFS, section 5) : { gfs: <contrat>, type: 'appel' | 'reponse' | 'erreur' | 'evenement', id, nom, args | data }, sans le `mtype` du
-// protocole des widgets de Grist, envoyée au cadre parent avec `targetOrigin "*"` (le sous-cadre d'une app a une origine opaque). Quinze choses seulement :
+// protocole des widgets de Grist, envoyée au cadre parent par une seule fonction (`sendToHost`) : à `targetOrigin "*"` tant que GFS n'a rien dit (la demande de `contexte`, la première, ne porte aucune donnée : le sous-cadre d'une app
+// a une origine opaque et ne sait pas encore d'où il est cadré), puis à l'origine de GFS, retenue à son premier message valide (`holdOrigin`, consigne 086, contrats de GFS 1.2 point 4). Quinze choses seulement :
 //  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }), les copies figées des bibliothèques natives de l'app
 //    dont la personne a mis la fonction en « copie figée » (`natives`, { id: { version, src, integrite, forme } }, consigne 065 : js/native-libs.js, le seul à les lire),
 //    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre),
@@ -43,7 +44,7 @@
 //    `{ quoi: 'bloque', directive, cible, source, disposition, fois }` à chaque appel bloqué que le relais n'a pas déjà dit, par `tell` (le kit, kit/js/violations-pose.js, en fait les messages : le nom d'hôte seul, jamais l'adresse
 //    entière, son chemin ni ses paramètres ; js/gfs-violations.js, le seul à s'en servir). Cela informe GFS, cela ne protège pas : la protection est la politique de contenu de la page.
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
-// `library()` et `native()` ne rendent rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `players()` rend [], `player()` rend faux, `settingsSaved()` rend null, `ambiance()` rend null, `correcteurs()` rend { coupes: false }, `hideBar()` rend faux, `tell()` rend faux, `opensInNewTab()` rend faux et `deposit()` et `attach()` rejettent sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
+// `library()` et `native()` ne rendent rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `players()` rend [], `player()` rend faux, `settingsSaved()` rend null, `ambiance()` rend null, `correcteurs()` rend { coupes: false }, `hideBar()` rend faux, `tell()` rend faux, `opensInNewTab()` rend faux et `deposit()` et `attach()` rejettent sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS (le premier de ceux-là dit, par `event.origin`, l'origine que viseront les envois suivants) ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
 // qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js, js/gfs-open.js, js/person-store.js et js/gfs-bar.js, jamais par ce fichier (sauf `opensInNewTab`, que trois liens consultent, consigne 011).
 const GfsLink = (function () {
   const CONTRACT = 0;                // le contrat que parle l'app, celui de son manifeste
@@ -60,6 +61,7 @@ const GfsLink = (function () {
   const PLAYER_STATES = ['lecture', 'pause', 'fin', 'erreur'];
   const TELL_CALLS = ['securite'];   // les appels sans réponse que le relais des appels bloqués (js/gfs-violations.js) envoie par `tell` : un autre nom n'est pas envoyé
   const AMBIANCE_WAIT_MS = 1500;      // le contexte porte une ambiance et le lecteur du kit n'est pas encore là : `ready` l'attend ce temps au plus (l'ambiance se pose alors avant l'affichage)
+  const ORIGIN_PATTERN = /^https?:\/\/[^/]+$/;   // contrats de GFS 1.2, point 4 : l'origine que le navigateur donne à un message, `http(s)://hôte` sans chemin ; `"null"` (une origine opaque), rien ou une adresse avec chemin n'est pas retenu
 
   const hostContract = (function () {
     try {
@@ -96,6 +98,7 @@ const GfsLink = (function () {
   let closeHandler = null;     // celui qui s'est inscrit pour l'appel `fermer` (onClose)
   const earlyCloses = [];      // les appels `fermer` arrivés avant lui : ils attendent son inscription
   let known = false;          // le contexte (ou un événement) est arrivé
+  let hostOrigin = null;      // l'origine de GFS, retenue au premier message valide de son cadre (consigne 086) : null tant qu'il n'a rien dit, et les envois partent alors à '*'
   const listeners = new Set();
   const pending = new Map();   // id d'appel -> { resolve, reject }
   const installing = new Map();
@@ -103,6 +106,17 @@ const GfsLink = (function () {
   let settleReady;
   // Résolue quand le contexte est arrivé ou que ses 5 secondes sont passées (jamais rejetée) : tout de suite quand l'app est seule.
   const ready = new Promise((resolve) => { settleReady = resolve; });
+
+  // L'envoi à GFS, le seul de ce fichier (consigne 086, contrats de GFS 1.2 point 4). Le tout premier message de l'app, la demande de `contexte`, part à '*' : elle ne sait pas encore d'où elle est cadrée, et son cadre a
+  // une origine opaque. Dès le premier message valide de GFS, `holdOrigin` retient l'origine que le navigateur lui donne et tout envoi suivant la vise : un cadre parent qui n'est plus à cette origine ne reçoit rien.
+  // Le sens inverse (de GFS vers l'app) garde '*' : une origine opaque ne se vise pas. Lève comme `postMessage` : chaque appelant garde son `try`.
+  function sendToHost(message) { window.parent.postMessage(message, hostOrigin || '*'); }
+
+  // Retient l'origine d'un message que `onMessage` vient de reconnaître (sa source est le cadre parent, son contrat est celui de GFS) : un `http(s)://hôte` sans chemin. `"null"`, rien ou une adresse avec chemin ne le
+  // sont pas, et la première retenue reste : un message qui vient ensuite d'une autre origine ne la remplace pas.
+  function holdOrigin(origin) {
+    if (hostOrigin === null && typeof origin === 'string' && ORIGIN_PATTERN.test(origin)) hostOrigin = origin;
+  }
 
   function call(name, args, timeoutMs) {
     return new Promise((resolve, reject) => {
@@ -114,7 +128,7 @@ const GfsLink = (function () {
       if (timeoutMs) timer = setTimeout(() => done(reject)(new Error('GFS ne répond pas : ' + name)), timeoutMs);
       const message = { gfs: CONTRACT, type: 'appel', id, nom: name };
       if (args !== undefined) message.args = args;
-      try { window.parent.postMessage(message, '*'); } catch (e) { done(reject)(e); }
+      try { sendToHost(message); } catch (e) { done(reject)(e); }
     });
   }
 
@@ -329,6 +343,7 @@ const GfsLink = (function () {
     if (event.source !== window.parent) return;
     const message = event.data;
     if (!message || typeof message !== 'object' || message.gfs !== hostContract) return;
+    holdOrigin(event.origin);
     if (message.type === 'reponse' || message.type === 'erreur') {
       const entry = pending.get(message.id);
       if (!entry) return;
@@ -348,7 +363,7 @@ const GfsLink = (function () {
 
   // La réponse de l'app à un appel de GFS : l'enveloppe porte le contrat de l'app et reprend l'`id` de l'appel.
   function reply(id, fields) {
-    try { window.parent.postMessage(Object.assign({ gfs: CONTRACT, id }, fields), '*'); } catch (e) { /* GFS n'est plus là : personne n'attend la réponse */ }
+    try { sendToHost(Object.assign({ gfs: CONTRACT, id }, fields)); } catch (e) { /* GFS n'est plus là : personne n'attend la réponse */ }
   }
 
   // La raison d'un appel `fermer` (contrats 5.4, point 3) : l'un des six mots du contrat, '' pour tout autre texte ou une forme inattendue. La réponse n'en dépend pas - l'app enregistre avant de partir quelle que soit la raison -
@@ -429,7 +444,7 @@ const GfsLink = (function () {
   function storageSet(key, value) {
     if (storage === null || typeof key !== 'string' || !STORAGE_KEY.test(key) || (value !== null && typeof value !== 'string')) return false;
     if (value === null) storage.delete(key); else storage.set(key, value);
-    try { window.parent.postMessage({ gfs: CONTRACT, type: 'appel', nom: 'stockage.ecrire', args: { cle: key, valeur: value } }, '*'); } catch (e) { return false; }
+    try { sendToHost({ gfs: CONTRACT, type: 'appel', nom: 'stockage.ecrire', args: { cle: key, valeur: value } }); } catch (e) { return false; }
     return true;
   }
   // La barre de GFS qui vaut maintenant (consigne 025) : celle du contexte, puis celle du dernier événement `barre`. null seul, si GFS ne répond pas ou ne la donne pas (un GFS d'avant la consigne 025), si son
@@ -440,7 +455,7 @@ const GfsLink = (function () {
   // la rend quand même. Rend faux, sans rien envoyer, seule ou quand `masked` n'est pas un booléen.
   function hideBar(masked) {
     if (!hosted || typeof masked !== 'boolean') return false;
-    try { window.parent.postMessage({ gfs: CONTRACT, type: 'appel', nom: 'barre.masquer', args: { masquee: masked } }, '*'); } catch (e) { return false; }
+    try { sendToHost({ gfs: CONTRACT, type: 'appel', nom: 'barre.masquer', args: { masquee: masked } }); } catch (e) { return false; }
     return true;
   }
   // L'ambiance que la personne a choisie pour GFS et ses apps (consigne 041) : celle du contexte, puis celle du dernier événement `ambiance`, lue par le kit : { id, couleur, ajustee, clair, sombre, forme } (voir
@@ -455,7 +470,7 @@ const GfsLink = (function () {
   // une adresse). Faux, sans rien envoyer, seul ou pour une action hors de la liste.
   function player(action, args) {
     if (!hosted || PLAYER_CALLS.indexOf(action) === -1 || !args || typeof args !== 'object') return false;
-    try { window.parent.postMessage({ gfs: CONTRACT, type: 'appel', nom: 'lecteur.' + action, args }, '*'); } catch (e) { return false; }
+    try { sendToHost({ gfs: CONTRACT, type: 'appel', nom: 'lecteur.' + action, args }); } catch (e) { return false; }
     return true;
   }
   // Un appel à GFS qui n'attend aucune réponse (contrats 5.1, point 2) : `{ gfs, type: 'appel', nom, args? }`, sans `id`. C'est ce que le relais des appels bloqués du kit (kit/js/violations-pose.js) appelle, avec le nom `securite`
@@ -464,7 +479,7 @@ const GfsLink = (function () {
     if (!hosted || TELL_CALLS.indexOf(name) === -1) return false;
     const message = { gfs: CONTRACT, type: 'appel', nom: name };
     if (args !== undefined) message.args = args;
-    try { window.parent.postMessage(message, '*'); } catch (e) { return false; }
+    try { sendToHost(message); } catch (e) { return false; }
     return true;
   }
   // Un abonné est rappelé (`fn({ id, etat })`) à chaque événement `lecteur` de GFS. Rend de quoi se désabonner.
