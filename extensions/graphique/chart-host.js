@@ -11,7 +11,8 @@
 // `reports` lit la table des rapports de Grist BI (`BI_Dashboard_Config`, la seule voie : GFS ne la rend pas, le manifeste de Publipostage+ lit déjà toutes les tables) et rend ses lignes TELLES QUELLES à la
 // fonction de lecture que Grist BI écrit dans le module (`lireRapport` : elle seule connaît les trois formats historiques de la configuration) ; sans cette table, l'insertion d'un rapport est grisée avec sa raison. Le
 // texte de la configuration est NON FIABLE (une autre personne du document peut avoir écrit la ligne) : ce fichier n'en lit rien, et ce que le module en tire n'est jamais écrit comme du balisage.
-// `matchColumns` est la moitié « données » du remappage : les colonnes qu'un graphique ou un rapport demande (identifiant, libellé, genre) retrouvées dans une table du document, par leur identifiant puis par
+// `planReport` et `aliasColumns` font le remappage d'un rapport importé sans toucher à sa définition : le plan dit, tuile par tuile, ce qui se retrouve, ce qui change de colonne et ce qui demande un choix ; la source est ensuite
+// vue sous les identifiants que la définition cite. `matchColumns` est la moitié « données » du remappage : les colonnes qu'un graphique ou un rapport demande (identifiant, libellé, genre) retrouvées dans une table du document, par leur identifiant puis par
 // leur libellé, sans jamais en choisir une qui ne peut pas porter le genre demandé (un nombre à mesurer dans une colonne de texte) ni deviner entre deux.
 // Les noms qui franchissent la frontière (tables, charger, colonnes, lignes) sont ceux de la réponse de Grist BI du 18/11 ; le reste est écrit ici, en un seul endroit, et se corrige ici.
 const ChartHostSource = (function () {
@@ -195,5 +196,37 @@ const ChartHostSource = (function () {
     return result;
   }
 
-  return { make, reports, matchColumns, genreOf, cellOf, columnsOf, linesOf };
+  // Le plan d'un rapport importé : ce que chaque tuile demande, retrouvé dans les colonnes de la table choisie. `lu` est ce que `lireRapport` du module rend, `colonnes` celles de `charger`, `module` porte
+  // `colonnesDeDefinition` (le module se donne à l'hôte, il n'est jamais importé ici). Par tuile : `status` « grisee » (le module la grise : jointure, forme à venir…, sa raison est gardée telle quelle),
+  // « ok » (toutes ses colonnes y sont, sous leur identifiant), « remapped » (retrouvées sous un autre : `mapping` ne dit que celles qui changent) ou « blocked » (`problems` : missing, incompatible,
+  // ambiguous : la personne choisit). La définition n'est jamais modifiée : le remappage se joue sur la source (`aliasColumns`).
+  function planTile(tile, colonnes, module) {
+    if (tile.grisee) return { id: tile.id, status: 'grisee', grisee: tile.grisee, mapping: {}, problems: null };
+    const found = matchColumns(module.colonnesDeDefinition(tile.definition), colonnes);
+    const problems = { missing: found.missing, incompatible: found.incompatible, ambiguous: found.ambiguous };
+    const mapping = {};
+    Object.keys(found.mapping).forEach((ask) => { if (found.mapping[ask] !== ask) mapping[ask] = found.mapping[ask]; });
+    if (problems.missing.length || problems.incompatible.length || problems.ambiguous.length) return { id: tile.id, status: 'blocked', mapping, problems, grisee: null };
+    return { id: tile.id, status: Object.keys(mapping).length ? 'remapped' : 'ok', mapping, problems: null, grisee: null };
+  }
+  const planReport = (lu, colonnes, module) => (!lu || !lu.ok ? { ok: false, raison: lu ? lu.raison : 'invalide', pages: [] }
+    : { ok: true, pages: lu.pages.map(page => ({ id: page.id, nom: page.nom, tuiles: page.tuiles.map(tile => planTile(tile, colonnes, module)) })) });
+
+  // Les colonnes d'une table lue (`charger`) sous les identifiants que la définition attend : `mapping` { identifiant attendu : colonne de la table }. La définition de Grist BI reste celle qu'elle est,
+  // le module lit les identifiants qu'elle cite. Une colonne de la table qu'une entrée vise est montrée sous l'identifiant attendu (son libellé, son type et ses réglages restent les siens) ; une
+  // colonne dont l'identifiant est pris ainsi n'est plus montrée sous le sien (elle ne peut pas être deux colonnes à la fois). Rien d'autre ne change : les lignes lues ne sont pas modifiées.
+  function aliasColumns(loaded, mapping) {
+    const moved = Object.keys(mapping || {}).filter(ask => mapping[ask] !== ask);
+    const shown = [];
+    loaded.colonnes.forEach((colonne) => {
+      moved.filter(ask => mapping[ask] === colonne.id).forEach(ask => shown.push({ from: colonne.id, colonne: Object.assign({}, colonne, { id: ask }) }));
+      if (moved.indexOf(colonne.id) === -1) shown.push({ from: colonne.id, colonne });
+    });
+    return {
+      colonnes: shown.map(entry => entry.colonne),
+      lignes: loaded.lignes.map((row) => { const line = { id: row.id }; shown.forEach((entry) => { line[entry.colonne.id] = row[entry.from]; }); return line; }),
+    };
+  }
+
+  return { make, reports, matchColumns, planReport, aliasColumns, genreOf, cellOf, columnsOf, linesOf };
 })();

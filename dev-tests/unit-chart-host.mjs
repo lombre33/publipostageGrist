@@ -9,7 +9,9 @@
 //  - le branchement sur GristAPI et Variables avec les bons arguments (et les noms que ces modules exportent vraiment) ;
 //  - le remappage des colonnes : par identifiant, puis par libellé sans accents ni casse, jamais une colonne qui ne peut pas porter le genre demandé, jamais un choix entre deux.
 // Lancer : node dev-tests/unit-chart-host.mjs
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
+import { join } from 'node:path';
 import { createContext, loadScript, evalIn, check, summarizeAndExit } from './unit-harness.mjs';
 
 const json = value => JSON.stringify(value);
@@ -222,6 +224,78 @@ console.log('Le remappage des colonnes');
   check('sans genre demandé, toute colonne de même identifiant convient ; la liste est vide quand rien n\'est demandé', same(free.mapping, { Statut: 'Statut' }) && same(free.missing, ['Nom_inconnu']) && same(matchOf([]).mapping, {}) && same(plain(run('ChartHostSource.matchColumns')(undefined, colonnes)).missing, []));
   const priority = plain(run('ChartHostSource.matchColumns')([{ id: 'A', libelle: 'B', genre: 'number' }], [{ id: 'B', libelle: 'B', genre: 'number' }, { id: 'A', libelle: 'Autre', genre: 'number' }]));
   check('l\'identifiant l\'emporte sur le libellé quand les deux existent', priority.mapping.A === 'A' && priority.how.A === 'id');
+}
+
+console.log('Le remappage d\'un rapport : le plan et la source vue sous les identifiants de la définition');
+{
+  const colonnes = loaded.colonnes;
+  // Un module de Grist BI de poche : les colonnes qu'une tuile demande, comme `colonnesDeDefinition` les rend ([{ id, genre? }]).
+  const fakeModule = { colonnesDeDefinition: definition => definition.demandes };
+  context.__fakeModule = fakeModule;
+  const lu = {
+    ok: true,
+    pages: [{ id: 'p1', nom: 'Ventes', tuiles: [
+      { id: 'exacte', definition: { demandes: [{ id: 'Statut' }, { id: 'Montant', genre: 'number' }] }, grisee: null },
+      { id: 'renommee', definition: { demandes: [{ id: 'Date_d_envoi', genre: 'date' }, { id: 'Quantite_', libelle: 'Quantité', genre: 'number' }] }, grisee: null },
+      { id: 'bloquee', definition: { demandes: [{ id: 'Zone' }, { id: 'Statut', genre: 'number' }, { id: 'Remise', genre: 'number' }] }, grisee: null },
+      { id: 'jointure', definition: null, grisee: { raison: 'jointure', colonnes: ['Clients.Nom'] } },
+      { id: 'note', definition: { demandes: [] }, grisee: null },
+    ] }],
+  };
+  context.__lu = lu; context.__colonnes = colonnes;
+  const plan = plain(run('ChartHostSource.planReport(__lu, __colonnes, __fakeModule)'));
+  const tiles = Object.fromEntries(plan.pages[0].tuiles.map(tile => [tile.id, tile]));
+  check('un rapport lu : ses pages et ses tuiles dans l\'ordre, chacune avec son état', plan.ok === true && same(plan.pages[0].tuiles.map(tile => tile.id), ['exacte', 'renommee', 'bloquee', 'jointure', 'note']) && plan.pages[0].nom === 'Ventes', json(plan.pages[0].tuiles.map(tile => tile.status)));
+  check('une tuile dont toutes les colonnes y sont sous leur identifiant : « ok », rien à remapper ; une note sans colonne aussi', tiles.exacte.status === 'ok' && same(tiles.exacte.mapping, {}) && tiles.note.status === 'ok');
+  check('une tuile dont les colonnes se retrouvent sous un autre identifiant : « remapped », et le plan ne dit que celles qui changent', tiles.renommee.status === 'remapped' && same(tiles.renommee.mapping, { Date_d_envoi: 'Le', Quantite_: 'Quantite' }), json(tiles.renommee));
+  check('une tuile avec une colonne absente, une qui ne peut pas porter son genre : « blocked », chacune dite à sa place (la personne choisit, rien n\'est deviné)', tiles.bloquee.status === 'blocked' && same(tiles.bloquee.problems, { missing: ['Zone', 'Remise'], incompatible: ['Statut'], ambiguous: [] }), json(tiles.bloquee));
+  check('une tuile que le module grise (jointure) garde sa raison telle quelle : « grisee », jamais cherchée dans la table', tiles.jointure.status === 'grisee' && tiles.jointure.grisee.raison === 'jointure' && same(tiles.jointure.grisee.colonnes, ['Clients.Nom']));
+  check('un rapport que le module refuse : { ok: false, raison }, aucune page', same(plain(run('ChartHostSource.planReport({ ok: false, raison: "json" }, [], {})')), { ok: false, raison: 'json', pages: [] }) && run('ChartHostSource.planReport(null, [], {})').ok === false);
+
+  const real = plain(await orders.charger('Commandes'));
+  context.__real = real;
+  const aliased = plain(run('ChartHostSource.aliasColumns(__real, { Date_d_envoi: "Le", Quantite_: "Quantite", Statut: "Statut" })'));
+  const col = Object.fromEntries(aliased.colonnes.map(colonne => [colonne.id, colonne]));
+  check('la source vue sous les identifiants de la définition : la colonne du document porte l\'identifiant attendu, avec son libellé, son type et ses réglages (la colonne garde aussi le sien : une autre tuile du rapport peut la citer par lui)', col.Date_d_envoi && col.Date_d_envoi.libelle === 'Date d’envoi' && col.Date_d_envoi.genre === 'date' && col.Quantite_.type === 'Int' && col.Le && col.Le.libelle === 'Date d’envoi' && col.Quantite);
+  check('les lignes suivent : la même valeur sous le nouvel identifiant, l\'identifiant de ligne gardé', aliased.lignes[2].Date_d_envoi === '2026-03-01' && aliased.lignes[2].Quantite_ === 2 && aliased.lignes.every((line, i) => line.id === real.lignes[i].id));
+  check('une entrée identité (la colonne garde son identifiant) ne change rien', same(plain(run('ChartHostSource.aliasColumns(__real, { Montant: "Montant" })')), real) && same(plain(run('ChartHostSource.aliasColumns(__real, undefined)')), real));
+  const collision = plain(run('ChartHostSource.aliasColumns(__real, { Montant: "Quantite" })'));
+  check('un identifiant pris par une autre colonne : la colonne qui le portait n\'est plus montrée sous lui (elle ne peut pas être deux colonnes), celle qu\'on y met porte ses valeurs', collision.colonnes.filter(colonne => colonne.id === 'Montant').length === 1 && collision.colonnes.find(colonne => colonne.id === 'Montant').libelle === 'Quantite' && collision.lignes[2].Montant === 2 && collision.colonnes.some(colonne => colonne.id === 'Quantite'));
+  const twice = plain(run('ChartHostSource.aliasColumns(__real, { A1: "Montant", A2: "Montant" })'));
+  check('deux identifiants attendus sur la même colonne : elle est montrée sous les deux (et sous le sien), une seule lecture', ['A1', 'A2', 'Montant'].every(id => twice.colonnes.some(colonne => colonne.id === id)) && twice.lignes[2].A1 === 120.5 && twice.lignes[2].A2 === 120.5);
+  check('les colonnes et les lignes lues ne sont pas modifiées', same(plain(real), plain(await orders.charger('Commandes'))));
+}
+
+console.log('Le vrai module de Grist BI (si son dépôt est là)');
+{
+  // Le module écrit par Grist BI (js/graphique/, branche bêta de sa PR n°134) : l'essai le charge tel quel ; sans lui il se saute et le dit. Chemin du dépôt de Grist BI : BI_DEPOT.
+  const depot = process.env.BI_DEPOT || '/home/user/lombre33/grist-bi';
+  const entry = join(depot, 'js', 'graphique', 'index.js');
+  if (!existsSync(entry)) console.log('  saute - le module de Grist BI est introuvable (BI_DEPOT : ' + depot + ')');
+  else {
+    const bi = await import(pathToFileURL(entry).href);
+    const config = JSON.stringify({ pages: [{ id: 'p1', name: 'Ventes', tiles: [
+      { id: 't1', type: 'bar', dimension: 'Statut', measure: 'Montant', aggFn: 'sum' },
+      { id: 't2', type: 'line', dimension: 'Date_d_envoi.Annee', measure: 'Quantite', aggFn: 'sum' },
+      { id: 't3', type: 'bar', dimension: 'Clients.Nom', measure: 'Montant', aggFn: 'sum' },
+      { id: 't4', type: 'bar', dimension: 'Zone', measure: 'Statut', aggFn: 'sum' },
+      { id: 't5', type: 'text', text: 'Une note' },
+    ] }] });
+    const found = await run('ChartHostSource.reports()');
+    const row = plain(found).rows.find(line => line.id === 4);
+    const read = bi.lireRapport({ id: 1, table: 'Commandes', config });
+    check('une ligne de reports() va telle quelle à lireRapport du module (même forme { id, table, config })', bi.lireRapport(plain(found).rows[0]).ok === true && read.ok === true && read.table === 'Commandes' && read.pages[0].tuiles.length === 5, json(bi.lireRapport(plain(found).rows[0])).slice(0, 120));
+    check('une configuration hostile (une ligne écrite par une autre personne) ne fait pas tomber la lecture, et son identifiant de tuile est assaini', row !== undefined && bi.lireRapport(row).ok === true && bi.lireRapport(row).pages[0].tuiles.every(tile => /^[A-Za-z0-9_-]+$/.test(tile.id)), json(bi.lireRapport(row)).slice(0, 160));
+    context.__bi = bi; context.__read = read; context.__cols = loaded.colonnes;
+    const plan = plain(run('ChartHostSource.planReport(__read, __cols, __bi)'));
+    const byId = Object.fromEntries(plan.pages[0].tuiles.map(tile => [tile.id, tile]));
+    check('le plan avec le vrai module : « ok », « remapped » (une dérivée Annee se lit sur sa colonne de dates, retrouvée par libellé), « grisee » pour la jointure, « blocked » pour la colonne absente, la note sans colonne',
+      byId.t1.status === 'ok' && byId.t2.status === 'remapped' && same(byId.t2.mapping, { Date_d_envoi: 'Le' }) && byId.t3.status === 'grisee' && byId.t3.grisee.raison === 'jointure' && byId.t4.status === 'blocked' && same(byId.t4.problems.missing, ['Zone']) && same(byId.t4.problems.incompatible, ['Statut']) && byId.t5.status === 'ok', json(plan.pages[0].tuiles.map(tile => [tile.id, tile.status])));
+    const calcul = bi.groupes(plain(run('ChartHostSource.aliasColumns(__real, { Date_d_envoi: "Le" })')).lignes, 'Date_d_envoi', 'Montant', 'none');
+    check('le module trace les lignes de l\'hôte : un point par ligne (« aucun »), la date lue sous l\'identifiant de la définition, la cellule en erreur sans point', calcul.length === 3 && calcul[2].dimension === '2026-03-01' && calcul[2].value === 120.5 && calcul[1].value === null && calcul[0].dimension === null, json(calcul));
+    const jours = bi.jour(plain(run('ChartHostSource.aliasColumns(__real, {})')).lignes[1].A);
+    check('une date et heure de l\'hôte est lue au jour par le module (23:30 UTC = le lendemain à Paris)', jours === '2026-01-16' || bi.jour('2026-01-16T00:30:00') === '2026-01-16');
+  }
 }
 
 summarizeAndExit();
