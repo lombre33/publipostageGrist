@@ -34,7 +34,7 @@ const MAX_MIB = 150;
 const TEXTS = {
   fr: {
     row: 'Importer un Word…', adoptTitle: 'Discussions du Word non enregistrées', adoptReason: /Grist refuse d’écrire/, unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler', close: 'Fermer',
-    imported: 'Word importé. Nommez le modèle puis enregistrez-le.', importedPattern: /Word importé/,
+    imported: 'Word importé. Nommez le document puis enregistrez-le.', importedPattern: /Word importé/,
     reading: /^Lecture du fichier Word/,
     unreadable: 'Ce fichier n’est pas un document Word (.docx) lisible.', unreadablePattern: /n’est pas un document Word/,
     legacy: 'Format .doc d’avant 2007 ou fichier protégé : enregistrez-le en .docx sans mot de passe.', legacyPattern: /d’avant 2007/,
@@ -48,7 +48,7 @@ const TEXTS = {
   },
   en: {
     row: 'Import from Word…', adoptTitle: 'Word discussions not saved', adoptReason: /Grist refuses to write/, unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
-    imported: 'Word imported. Name the template, then save it.', importedPattern: /Word imported/,
+    imported: 'Word imported. Name the document, then save it.', importedPattern: /Word imported/,
     reading: /^Reading the Word file/,
     unreadable: 'This file is not a readable Word (.docx) document.', unreadablePattern: /not a readable Word/,
     legacy: 'Pre-2007 .doc format or password-protected file: save it as .docx without a password.', legacyPattern: /Pre-2007/,

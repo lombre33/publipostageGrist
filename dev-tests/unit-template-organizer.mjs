@@ -195,7 +195,7 @@ function view(templates, prefs, folders) {
   check('chemins vides ignorés, noms-pièges acceptés (Object.prototype)', JSON.stringify(names(odd.tree)) === JSON.stringify(['__proto__', 'constructor', 'Factures']), JSON.stringify(names(odd.tree)));
 }
 
-// 11. « Supprimer » sur un dossier vide (« Organiser mes modèles ») : findFolder retrouve un dossier de l'arbre par son chemin, à toute profondeur ; un dossier sans modèle ni sous-dossier a une liste
+// 11. « Supprimer » sur un dossier vide (« Organiser mes documents ») : findFolder retrouve un dossier de l'arbre par son chemin, à toute profondeur ; un dossier sans modèle ni sous-dossier a une liste
 // `enfants` vide, un dossier qui porte un modèle ou un sous-dossier non ; un modèle n'est jamais pris pour un dossier.
 {
   const templates = [{ id: 1, nom: 'Facture' }, { id: 2, nom: 'Contrat' }];

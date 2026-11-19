@@ -1,4 +1,4 @@
-// Suite "templateOrganize" - js/template-organize-modal.js ("Organiser mes modèles", créer des dossiers
+// Suite "templateOrganize" - js/template-organize-modal.js ("Organiser mes documents", créer des dossiers
 // et y ranger des modèles). Complète dev-tests/scenarios-template-tree.js plutôt que de la dupliquer :
 // ici seulement ce que ce nouveau module ajoute (bouton toolbar dédié, recherche, "Déplacer vers…",
 // glisser-déposer, boutons "+", créer et supprimer un dossier vide, synchronisation bidirectionnelle avec l'arbre de la barre).
@@ -99,7 +99,7 @@
 
   cases.push({
     id: 'organize_tree_no_longer_has_organize_row',
-    description: 'Le panneau de l’arbre ne contient pas de LIGNE "Organiser mes modèles" (c’est le bouton de son en-tête, qui n’est pas une ligne de l’arbre)',
+    description: 'Le panneau de l’arbre ne contient pas de LIGNE "Organiser mes documents" (c’est le bouton de son en-tête, qui n’est pas une ligne de l’arbre)',
     run: async (h) => {
       await openTreePopup(h);
       const pass = !popup().querySelector('.tts-row-organize');
@@ -850,7 +850,7 @@
   // ce que fait un panneau bas pour la fenêtre, et on mesure la géométrie réelle (getBoundingClientRect, elementFromPoint), pas un attribut CSS. ---
   cases.push({
     id: 'organize_modal_fits_a_short_window_title_and_close_reachable_and_new_folder_row_in_view',
-    description: 'Dans une fenêtre basse (overlay de 300 px), la fenêtre « Organiser mes modèles » tient entièrement (titre et « Fermer » atteignables au clic), seule la liste défile, et un dossier tout juste créé est ramené en vue',
+    description: 'Dans une fenêtre basse (overlay de 300 px), la fenêtre « Organiser mes documents » tient entièrement (titre et « Fermer » atteignables au clic), seule la liste défile, et un dossier tout juste créé est ramené en vue',
     run: async (h) => {
       const ids = [await fileInto(h, 'Fenêtre basse - Modèle 1', 'Fenetre-Basse'), await fileInto(h, 'Fenêtre basse - Modèle 2', 'Fenetre-Basse')];
       const overlay = modal();
@@ -903,7 +903,7 @@
 
   cases.push({
     id: 'organize_row_star_sets_moves_and_clears_the_default_keeping_window_toolbar_and_dropdown_in_step',
-    description: 'L’étoile d’une ligne de « Organiser mes modèles » pose, déplace puis retire le modèle par défaut du document : la fenêtre reste ouverte, la ligne qui le porte dit « au démarrage », le bouton réel de la liste et l’étoile de la barre suivent, le modèle ouvert ne change pas',
+    description: 'L’étoile d’une ligne de « Organiser mes documents » pose, déplace puis retire le modèle par défaut du document : la fenêtre reste ouverte, la ligne qui le porte dit « au démarrage », le bouton réel de la liste et l’étoile de la barre suivent, le modèle ouvert ne change pas',
     run: async (h) => {
       const idA = await createTemplate(h, 'Organiser étoile - A');
       const idB = await createTemplate(h, 'Organiser étoile - B'); // B reste le modèle ouvert
@@ -1045,7 +1045,7 @@
   // La légende est écrite dans la langue de la page : le cas se joue en français, puis dans une seconde page qui démarre en anglais (la copie `lang: 'en'`).
   const legendCase = {
     id: 'organize_legend_explains_the_default_star_in_both_languages_and_clears_the_close_button',
-    description: 'En bas de la fenêtre une légende dit le rôle de l’étoile (« s’ouvre au démarrage du widget, pour tout le document. Un seul à la fois. »), avec la même icône que les lignes, dans la langue de la page ; elle reste dans la fenêtre et ne recouvre pas « Fermer »',
+    description: 'En bas de la fenêtre une légende dit le rôle de l’étoile (« s’ouvre au démarrage du widget, dans tout ce document Grist. Un seul à la fois. »), avec la même icône que les lignes, dans la langue de la page ; elle reste dans la fenêtre et ne recouvre pas « Fermer »',
     run: async (h) => {
       TemplateOrganizeModal.open();
       await h.sleep(40);
@@ -1064,8 +1064,8 @@
       TemplateOrganizeModal.close();
       const ok = (x) => x.geo.inside && x.geo.clear && x.geo.shown;
       const wording = lang === 'en'
-        ? /when the widget starts/.test(here.text) && /whole document/.test(here.text)
-        : /démarrage du widget/.test(here.text) && /tout le document/.test(here.text) && /Un seul/.test(here.text);
+        ? /when the widget starts/.test(here.text) && /whole Grist document/.test(here.text)
+        : /démarrage du widget/.test(here.text) && /tout ce document Grist/.test(here.text) && /Un seul/.test(here.text);
       const pass = !!legend && !!glyph && !!mask && mask !== 'none' && (!rowMask || mask === rowMask)
         && here.text === I18n.t('organize.modal.defaultLegend') && wording && ok(here);
       return { pass, notes: JSON.stringify({ lang, here, hasMask: !!mask, sameAsRows: !rowMask || mask === rowMask }) };
@@ -1075,14 +1075,14 @@
   cases.push(Object.assign({}, legendCase, {
     id: 'organize_legend_explains_the_default_star_in_english_on_a_page_that_starts_in_english',
     lang: 'en',
-    description: 'Page qui démarre en anglais : la légende de l’étoile dit « when the widget starts », « whole document », avec la même icône que les lignes, et ne recouvre pas « Fermer »',
+    description: 'Page qui démarre en anglais : la légende de l’étoile dit « when the widget starts », « whole Grist document », avec la même icône que les lignes, et ne recouvre pas « Fermer »',
   }));
 
   // Demande d'Antoine du 21/10 (« dans la drop down de choix des modèles, coloré l'icone comme dans gfs ») : la couleur de la sorte ne vaut que dans la liste déroulante (css/template-tree-select.css). Les lignes
   // de cette fenêtre en sont la même brique (rowShell), mais il ne l'a pas demandée ici : l'icône d'un document y garde la couleur du texte, comme avant.
   cases.push({
     id: 'organize_kind_icons_stay_monochrome_while_the_dropdown_colours_them',
-    description: 'Dans « Organiser mes modèles », l’icône d’un document garde la couleur du texte de sa ligne, alors que la même ligne est bleue dans la liste déroulante (la couleur de la sorte ne vaut que dans la liste)',
+    description: 'Dans « Organiser mes documents », l’icône d’un document garde la couleur du texte de sa ligne, alors que la même ligne est bleue dans la liste déroulante (la couleur de la sorte ne vaut que dans la liste)',
     run: async (h) => {
       const id = await createTemplate(h, 'Organiser - Icône sans couleur');
       await openTreePopup(h);
@@ -1106,7 +1106,7 @@
     },
   });
 
-  // --- Consigne 072 (17/11) : GFS range aussi dans la table des préférences. « Organiser mes modèles » montre un dossier qui n'a que sa ligne d'état (ModeleId 0, ce que GFS
+  // --- Consigne 072 (17/11) : GFS range aussi dans la table des préférences. « Organiser mes documents » montre un dossier qui n'a que sa ligne d'état (ModeleId 0, ce que GFS
   // écrit pour « Nouveau dossier ») comme un dossier vide, relit la table à chaque ouverture (une ligne écrite par une autre connexion pendant que le widget est ouvert), et un
   // modèle s'y range comme dans les autres. « Une autre connexion » = des lignes écrites directement dans la table du stub, sans passer par le widget. ---
   cases.push({

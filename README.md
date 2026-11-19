@@ -16,7 +16,7 @@ Widget personnalisé conçu par [Grist Factory](https://grist-factory.fr). Moteu
 
 1. Dans une page Grist, ajoutez un widget **personnalisé** et collez `https://lombre33.github.io/publipostageGrist/`. Acceptez l'accès complet au document quand Grist le demande (voir [Sécurité et permissions](#sécurité-et-permissions)).
 2. Liez le widget à la table dont les lignes fournissent les données : il suit la ligne sélectionnée.
-3. Ouvrez le menu **Nouveau modèle** puis **Nouveau document**, ou **Créer à partir d'un modèle…** pour partir de la galerie.
+3. Ouvrez le menu **Nouveau** puis **Nouveau document**, ou **Créer à partir d'un modèle…** pour partir de la galerie.
 4. Écrivez le texte et tapez `#` pour insérer une variable (`#Table.Colonne`).
 5. Passez en **Mode lecture** pour voir le document rempli avec la ligne sélectionnée, puis **Exporter** (en PDF, le type d'export de départ).
 
@@ -137,7 +137,7 @@ A custom widget made by [Grist Factory](https://grist-factory.fr). Editing engin
 
 1. In a Grist page, add a **custom** widget and paste `https://lombre33.github.io/publipostageGrist/`. Grant full access to the document when Grist asks (see "Security" below).
 2. Link the widget to the table whose rows provide the data: it follows the selected row.
-3. Open the **New template** menu then **New document**, or **Create from a template…** to start from the gallery.
+3. Open the **New** menu then **New document**, or **Create from a template…** to start from the gallery.
 4. Write your text and type `#` to insert a variable (`#Table.Column`).
 5. Switch to **Reading mode** to see the document filled with the selected row, then **Export** (as PDF, the default export type).
 

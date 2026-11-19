@@ -542,7 +542,7 @@ async function main() {
     check('retirer pendant l’écriture : le retrait attend le geste, aucune ligne ne reste', await cleared === true && stateRows('En file').length === 0 && !(await run('TemplatePreferences.listFolders()')).includes('En file'));
   }
 
-  // 23. Créer un dossier vide (« Nouveau dossier » de « Organiser mes modèles », consigne 072 de GFS) : la même ligne d'état que GFS écrit pour le sien (ModeleId 0, Dossier = le chemin, Epingle faux,
+  // 23. Créer un dossier vide (« Nouveau dossier » de « Organiser mes documents », consigne 072 de GFS) : la même ligne d'état que GFS écrit pour le sien (ModeleId 0, Dossier = le chemin, Epingle faux,
   // pas de Replie), lue avant d'être écrite (GFS a pu la poser entre-temps), une seule par dossier, retirée par clearFolderState (« Supprimer »).
   {
     const { docApi, run } = freshModule({ initialTables: [TABLE_NAME], docOptions: { latencyMs: 4 } });

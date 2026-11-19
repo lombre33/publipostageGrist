@@ -3,7 +3,7 @@
 // pas un type que le widget sait ouvrir ici (« presentation », dont l'extension « diapositives » de Grist Factory Suite n'est pas active - le widget est seul -, « hologramme » d'une version plus
 // récente) est préservé :
 //  - il n'est ouvert par aucun chemin : ni le modèle choisi pour la vue, ni la règle de ligne, ni la ligne marquée ★ dans la table ne le chargent au démarrage (le vrai ★ s'ouvre) ;
-//  - la liste des modèles et « Organiser mes modèles » le montrent grisé, avec la raison sous son nom (deux textes) et l'icône de son type quand le widget le connaît ; clic et Entrée ne le
+//  - la liste des modèles et « Organiser mes documents » le montrent grisé, avec la raison sous son nom (deux textes) et l'icône de son type quand le widget le connaît ; clic et Entrée ne le
 //    choisissent pas ; son étoile est grisée ;
 //  - rien n'est écrit sur sa ligne, quoi qu'on fasse autour (poser le ★ d'un autre modèle, enregistrer) : une présentation ne change jamais de type, un type que le widget ne connaît pas n'est
 //    jamais réécrit ; Réglages le dit, et la liste des règles ne le propose pas. Les présentations, extension active, sont dans dev-tests/verify-slides-gfs.mjs.
@@ -139,13 +139,13 @@ const TEXTS = {
   fr: {
     extension: 'Demande l’extension Diapositives (Grist Factory Suite)',
     newer: 'Créé avec une version plus récente de Publipostage+',
-    starTip: 'Ce modèle ne s’ouvre pas ici : il ne peut pas être le modèle par défaut du document',
+    starTip: 'Ce document ne s’ouvre pas ici : il ne peut pas être le document par défaut',
     viewStatus: 'Modèle de cette vue : « Présentation 1 ». Demande l’extension Diapositives (Grist Factory Suite). Il ne s’ouvre pas ici : le modèle par défaut du document s’ouvre à la place.',
   },
   en: {
     extension: 'Needs the Slides extension (Grist Factory Suite)',
     newer: 'Created with a newer version of Publipostage+',
-    starTip: 'This template cannot be opened here: it cannot be the document’s default template',
+    starTip: 'This document cannot be opened here: it cannot be the default document',
     viewStatus: 'Template for this view: “Présentation 1”. Needs the Slides extension (Grist Factory Suite). It cannot be opened here: the document’s default template opens instead.',
   },
 };
@@ -252,7 +252,7 @@ async function run(lang, colorScheme) {
   const afterStar = await state();
   check('l’étoile grisée de la ligne d’un type inconnu ne pose pas le ★', String(afterStar.defaultId) === '3' && (await writesOnUnknown()).length === 0, { afterStar, writes: await writesOnUnknown() });
 
-  // --- « Organiser mes modèles » : les mêmes lignes grisées, avec leur raison.
+  // --- « Organiser mes documents » : les mêmes lignes grisées, avec leur raison.
   await click('#btn-organize-templates');
   await page.waitForFunction(() => { const m = document.getElementById('template-organize-modal'); return !!m && m.style.display !== 'none' && m.getBoundingClientRect().height > 0; }, null, { timeout: 5000 }).catch(() => {});
   const organize = await page.evaluate(() => {
@@ -277,8 +277,8 @@ async function run(lang, colorScheme) {
     return { p: info(2), n: info(4), doc: info(1) };
   });
   await page.screenshot({ path: `/tmp/unknown-type-organize-${lang}-${colorScheme}.png` }).catch(() => {});
-  check('« Organiser mes modèles » liste « Présentation 1 » grisée avec la raison de l’extension', !!organize.p && organize.p.unavailable && organize.p.ariaDisabled === 'true' && organize.p.reason === t.extension && organize.p.reasonInside, organize.p);
-  check('« Organiser mes modèles » liste « Nouveauté » grisée avec la raison de la version plus récente', !!organize.n && organize.n.unavailable && organize.n.ariaDisabled === 'true' && organize.n.reason === t.newer && organize.n.reasonInside, organize.n);
+  check('« Organiser mes documents » liste « Présentation 1 » grisée avec la raison de l’extension', !!organize.p && organize.p.unavailable && organize.p.ariaDisabled === 'true' && organize.p.reason === t.extension && organize.p.reasonInside, organize.p);
+  check('« Organiser mes documents » liste « Nouveauté » grisée avec la raison de la version plus récente', !!organize.n && organize.n.unavailable && organize.n.ariaDisabled === 'true' && organize.n.reason === t.newer && organize.n.reasonInside, organize.n);
   check('leurs étoiles y sont grisées, celle d’un modèle ordinaire ne l’est pas', !!organize.p && !!organize.n && !!organize.doc && organize.p.starDisabled && organize.n.starDisabled && !organize.doc.starDisabled, organize);
   if (organize.p && rgb(organize.p.reasonColor) && rgb(organize.p.bg)) {
     const r = Math.round(ratio(rgb(organize.p.reasonColor), rgb(organize.p.bg)) * 100) / 100;

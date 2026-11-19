@@ -178,7 +178,7 @@
       await reset(h);
       const expected = {
         open: true, dialog: 'dialog true', labelled: 'Palette de commandes', sameIds: true, names: true, boldKey: 'Alt+B', italicKey: 'Ctrl+I', tableKey: '""',
-        groups: 'Modèles|Affichage|Mise en forme|Insertion|Historique et suivi', focusInInput: true, closed: true, storage: true,
+        groups: 'Documents|Affichage|Mise en forme|Insertion|Historique et suivi', focusInInput: true, closed: true, storage: true,
       };
       return { pass: JSON.stringify(out) === JSON.stringify(expected), notes: JSON.stringify(out) };
     },
@@ -210,7 +210,7 @@
 
   cases.push({
     id: 'cp_palette_ranks_names_that_start_with_the_word_before_the_rest',
-    description: 'Ordre : le nom qui commence par le premier mot (rang 0), puis le nom qui le contient (1), puis le groupe ou les mots en plus (2) ; à rang égal, l\'ordre de Réglages. « titre » : Titre 1, 2, 3 d\'abord ; « liste » : les noms qui commencent par « Liste » dans l\'ordre de Réglages (Liste des modèles, Liste des raccourcis, Liste à puces, Liste numérotée…) ; « mise » : Appliquer la mise en forme avant les commandes qui n\'ont que le groupe',
+    description: 'Ordre : le nom qui commence par le premier mot (rang 0), puis le nom qui le contient (1), puis le groupe ou les mots en plus (2) ; à rang égal, l\'ordre de Réglages. « titre » : Titre 1, 2, 3 d\'abord ; « liste » : les noms qui commencent par « Liste » dans l\'ordre de Réglages (Liste des documents, Liste des raccourcis, Liste à puces, Liste numérotée…) ; « mise » : Appliquer la mise en forme avant les commandes qui n\'ont que le groupe',
     run: async (h) => {
       await reset(h);
       CommandPalette.open();
@@ -232,7 +232,7 @@
       await reset(h);
       const expected = {
         titre: 'heading1,heading2,heading3', titreThen: true,
-        listeStarts: 'Liste des modèles | Liste des raccourcis | Liste à puces | Liste numérotée',
+        listeStarts: 'Liste des documents | Liste des raccourcis | Liste à puces | Liste numérotée',
         miseNameFirst: true, miseAll: true,
       };
       return { pass: JSON.stringify(out) === JSON.stringify(expected), notes: JSON.stringify(out) };
@@ -335,7 +335,7 @@
       await reset(h, 'en');
       const expected = {
         title: 'Command palette', label: 'Search for a command', placeholder: 'A command or a heading: pdf, table, introduction…', hint: '↑ ↓ to choose · Enter to run · Esc to close', close: 'Close', listLabel: 'Commands and headings',
-        groups: 'Templates|View|Formatting|Insert|History and tracking', pdf: 'Export', bold: 'Bold', none: 'No command matches “zzzz”.', heading: 'Heading 1, Heading 2, Heading 3', keywords: true,
+        groups: 'Documents|View|Formatting|Insert|History and tracking', pdf: 'Export', bold: 'Bold', none: 'No command matches “zzzz”.', heading: 'Heading 1, Heading 2, Heading 3', keywords: true,
       };
       return { pass: JSON.stringify(out) === JSON.stringify(expected), notes: JSON.stringify(out) };
     },

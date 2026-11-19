@@ -317,7 +317,7 @@ async function emailLayout(width, height) {
 async function statusStability(height) {
   console.log('\n=== Hauteur de la barre selon le message d\'état, 700 à 900px ===');
   const { browser, page } = await openAt(800, height);
-  const messages = ['', 'Enregistré à 12:34:56.', 'Modèle non enregistré : donnez-lui un nom puis cliquez sur Enregistrer pour activer l’enregistrement automatique.'];
+  const messages = ['', 'Enregistré à 12:34:56.', 'Document non enregistré : donnez-lui un nom puis cliquez sur Enregistrer pour activer l’enregistrement automatique.'];
   const unstable = [];
   for (let w = 700; w <= 900; w += 20) {
     await page.setViewportSize({ width: w, height });

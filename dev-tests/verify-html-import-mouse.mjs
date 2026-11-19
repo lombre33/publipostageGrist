@@ -31,7 +31,7 @@ const HEIGHT = 400;
 const TEXTS = {
   fr: {
     row: 'Importer un HTML…', md: 'Importer un Markdown…', word: 'Importer un Word…', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler',
-    reading: /^Lecture du fichier HTML/, imported: 'HTML importé. Nommez le modèle puis enregistrez-le.', reportTitle: 'Ce que l’import n’a pas repris tel quel',
+    reading: /^Lecture du fichier HTML/, imported: 'HTML importé. Nommez le document puis enregistrez-le.', reportTitle: 'Ce que l’import n’a pas repris tel quel',
     reportIntro: 'La page est importée. Elle avait ceci, que l’éditeur n’a pas pu reprendre tel quel :',
     reportLines: ['• 1 image rangée à côté du fichier (adresse relative), remplacée par un mot', '• 1 lien vers une autre page du site (adresse relative), repris comme texte', '• 1 programme (script) retiré',
       '• 3 blocs de navigation (menus, colonnes latérales, en-têtes ou pieds du site) repris comme du texte', '• 1 élément caché par la page retiré'],
@@ -42,7 +42,7 @@ const TEXTS = {
   },
   en: {
     row: 'Import from HTML…', md: 'Import from Markdown…', word: 'Import from Word…', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel',
-    reading: /^Reading the HTML file/, imported: 'HTML imported. Name the template, then save it.', reportTitle: 'What the import did not carry over as is',
+    reading: /^Reading the HTML file/, imported: 'HTML imported. Name the document, then save it.', reportTitle: 'What the import did not carry over as is',
     reportIntro: 'The page is imported. It had the following, which the editor could not carry over as is:',
     reportLines: ['• 1 image stored next to the file (relative address), replaced by a word', '• 1 link to another page of the site (relative address) kept as text', '• 1 script removed',
       '• 3 navigation blocks (menu, sidebar, site header or footer) kept as text', '• 1 element hidden by the page removed'],

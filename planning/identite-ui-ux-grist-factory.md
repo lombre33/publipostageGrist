@@ -309,6 +309,13 @@ Arbitré le 29/09 (« Oui, partout », en ligne `fc44fb1`) après un relevé de 
 entre parenthèses et trois écritures du vide :
 - Le mot est **« modèle »**, jamais « template » dans un texte français (fichiers et identifiants peuvent garder
   `template`) ; on écrit « Macro-modèle », avec majuscule et trait d'union.
+- **Exception arbitrée le 19/11** (carte « Seulement les gestes de tous les jours », demande d'Antoine : le widget devient un éditeur plus large que le
+  publipostage) : pour les **gestes de tous les jours** - renommer, nouveau, enregistrer, supprimer, la liste du haut, « Organiser », l'étoile - le mot est
+  **« document »** (« Nom du document », « Supprimer ce document ? », « Document par défaut »), en anglais « document » (jamais « template » à ces endroits). « Modèle »
+  reste partout ailleurs pour l'instant : la galerie, la Lecture, la boucle, les variables, les exports « (modèle) », « Modèle selon la ligne », Réglages > Vue, les tableaux
+  liés (« modèle Grille ») et le nom « Macro-modèle ». Le document de Grist s'écrit « ce document Grist » (jamais « le document » seul dans un de ces textes) ; le titre
+  du menu « + » est « Nouveau » (`toolbar.newHeading`), parce que sa première ligne est déjà « Nouveau document ». Le groupe `codeHygiene` garde la liste des clés
+  (`I18N_DOCUMENT_KEYS`). Une extension à d'autres écrans (étape suivante possible : Réglages > Vue, tableaux liés, versions, commentaires) demande une carte à Antoine.
 - L'onglet du panneau « # » qui propose les puces (date du jour, heure, e-mail, nom, note de bas de page, texte, valeur et case conditionnels,
   calcul) s'appelle **« Puces »** en français et « Chips » en anglais (choix d'Antoine du 05/10) ; jamais « chip(s) » dans un texte français, l'aide
   du caractère déclencheur et le nom du bouton « Insérer une variable » compris. Les lignes de cette charte qui disent « l'onglet Chips » parlent de lui.

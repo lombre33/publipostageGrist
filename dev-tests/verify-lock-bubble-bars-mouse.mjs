@@ -389,7 +389,7 @@ const softState = (page, selector) => page.evaluate(sel => { const b = document.
     const starName = await textOf(page, '.pp-lockbubble-name');
     if (starOpened) await press(page, '.pp-lockbubble-more');
     const starChecks = await checksOf(page);
-    t.check('boutons : ★ sans modèle ouvert : un vrai appui ouvre la bulle, qui dit qu\'aucun modèle n\'est ouvert et le geste', starOpened && /défaut/i.test(starName) && has(starChecks, /Aucun modèle n’est ouvert/, true), { starOpened, starName, starChecks });
+    t.check('boutons : ★ sans modèle ouvert : un vrai appui ouvre la bulle, qui dit qu\'aucun modèle n\'est ouvert et le geste', starOpened && /défaut/i.test(starName) && has(starChecks, /Aucun document n’est ouvert/, true), { starOpened, starName, starChecks });
   } else {
     t.check('boutons : ★ est actif dans cette page d\'essai (aucun grisé à lire)', !!star && !star.soft, star);
   }

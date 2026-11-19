@@ -335,6 +335,47 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const htmlTemplate = htmlText.match(/[^<>"\n]*\b(?:un|ce|ces|de|des|le|du)\s+templates?\b[^<>"\n]*/gi) || [];
   check('vocabulaire : « modèle », jamais « template », dans les textes français', template.length === 0 && htmlTemplate.length === 0, '\n    ' + [...template, ...htmlTemplate].join('\n    '));
 
+  // « Document », pas « modèle », pour les gestes de tous les jours (demande d'Antoine du 19/11, carte « Seulement les gestes de tous les jours » : renommer, nouveau, enregistrer, supprimer, la liste du haut, « Organiser »,
+  // l'étoile, les phrases qui suivent un import, les libellés des raccourcis). Le reste (galerie, Lecture, boucle, variables, exports « (modèle) », « Modèle selon la ligne », Réglages > Vue, tableaux liés) garde « modèle » :
+  // une clé n'entre dans cette liste que sur une carte d'Antoine. « Macro-modèle » ne change pas. Le document de Grist s'écrit « ce document Grist ».
+  const I18N_DOCUMENT_KEYS = [
+    'template.select', 'template.newOption', 'template.namePlaceholder', 'template.rename.aria', 'template.setDefault.tip', 'template.setDefault.aria', 'templateTree.pin.aria',
+    'templateTree.default.aria', 'templateTree.default.setTip', 'templateTree.default.clearTip', 'templateTree.default.unavailableTip', 'templateTree.default.unopenableTip',
+    'templateTree.allSection', 'templateTree.title', 'templateTree.empty', 'organize.modal.title', 'organize.modal.defaultLegend', 'organize.modal.searchPlaceholder',
+    'organize.modal.noMatch', 'organize.modal.newFolderHint', 'organize.modal.folderDefault.aria', 'toolbar.organizeTemplates', 'toolbar.new', 'toolbar.autosave.aria',
+    'status.templateNameRequired', 'status.nameKept', 'status.unsavedTemplateWarning', 'status.saveRefused', 'status.deleteRefused', 'status.deleteError',
+    'status.noTemplateSelected', 'status.defaultTemplateSet', 'status.defaultTemplateCleared', 'status.defaultTemplateError', 'status.templateDeleted', 'status.templateRemoved',
+    'status.templateRestored', 'status.templateRestoredAs', 'status.templatePinned', 'status.templateUnpinned', 'status.templateMoved', 'status.templateUnfiled',
+    'status.templateSavedAsNew', 'status.templateLoadError', 'autosave.conflict.message', 'dialog.unsaved.messageNoName', 'confirm.deleteTemplate', 'prompt.newTemplateName',
+    'prompt.firstSaveNoSuggestion', 'status.xlsxImported', 'status.xlsxImportedSheets', 'status.xlsxImportedSheetsSkipped', 'status.mdImported', 'status.mdImportedImages',
+    'status.mdImportedVariables', 'status.docxImported', 'status.odtImported', 'status.odsImported', 'status.odpImported', 'status.htmlImported', 'status.pptxImported',
+    'importPlacing.saving', 'lock.defaultNone', 'lock.defaultType', 'lockBubble.bar.chk.noTemplate', 'lockBubble.bar.chk.noTemplateNote', 'lockBubble.bar.fix.defaultNone',
+    'lockBubble.bar.chk.templateType', 'lockBubble.bar.chk.templateTypeNote', 'lockBubble.bar.fix.defaultType', 'history.defaultChanged', 'history.templateGone',
+    'history.nameChanged', 'history.templateBack', 'history.removeCopyMessage', 'history.removeCopyTables', 'shortcuts.action.rename', 'shortcuts.action.setDefault',
+    'shortcuts.action.templates', 'shortcuts.action.delete', 'settings.keys.group.templates', 'toolbar.newHeading',
+  ];
+  const inDocumentKeys = entries.filter(e => I18N_DOCUMENT_KEYS.includes(e.key));
+  const frModele = inDocumentKeys.filter(e => /mod[eè]le/i.test(e.fr.replace(/macro-mod[eè]le/gi, '')));
+  const enTemplate = inDocumentKeys.filter(e => /template/i.test(e.en.replace(/macro-template/gi, '')));
+  check('vocabulaire : les ' + I18N_DOCUMENT_KEYS.length + ' textes des gestes de tous les jours existent et disent « document », jamais « modèle », en français',
+    inDocumentKeys.length === I18N_DOCUMENT_KEYS.length && frModele.length === 0, '\n    ' + (inDocumentKeys.length === I18N_DOCUMENT_KEYS.length ? frModele.map(e => `${e.key} : ${e.fr}`).join('\n    ') : I18N_DOCUMENT_KEYS.filter(k => !inDocumentKeys.some(e => e.key === k)).join(', ') + ' manque'));
+  check('vocabulaire : les mêmes textes disent « document », jamais « template », en anglais', enTemplate.length === 0, '\n    ' + enTemplate.map(e => `${e.key} : ${e.en}`).join('\n    '));
+  // Les textes de secours d'index.html (ce que l'on lit avant que `I18n` ait posé la langue) suivent : un élément qui porte une de ces clés ne dit pas « modèle ».
+  const htmlStale = [];
+  for (const key of I18N_DOCUMENT_KEYS) {
+    for (const m of htmlText.matchAll(new RegExp(`<[^>]*data-i18n(?:-\\w+)?="${key.replace(/\./g, '\\.')}"[^>]*>[^<]*`, 'g'))) {
+      if (/mod[eè]le/i.test(m[0].replace(/macro-mod[eè]le/gi, '').replace(/data-i18n(?:-\w+)?="[^"]*"/g, '').replace(/\bid="[^"]*"/g, ''))) htmlStale.push(`${key} : ${m[0].trim().slice(0, 140)}`);
+    }
+  }
+  check('vocabulaire : index.html ne dit plus « modèle » sur un élément des gestes de tous les jours', htmlStale.length === 0, '\n    ' + htmlStale.join('\n    '));
+  // Là où une phrase de ces écrans parle du document de Grist (et non de celui du widget), elle dit « document Grist » : sans cela, « ce document » s'entend comme celui qu'on nomme et qu'on enregistre.
+  const gristDocument = ['organize.modal.intro', 'status.saveDeclined', 'organize.modal.defaultLegend', 'templateTree.default.setTip', 'templateTree.default.clearTip'].map(k => entries.find(e => e.key === k));
+  check('vocabulaire : le document de Grist s\'écrit « document Grist » dans les textes de la liste, d\'« Organiser » et de l\'enregistrement (français et anglais)',
+    gristDocument.every(e => !!e && /document Grist/.test(e.fr) && /Grist document/.test(e.en)), gristDocument.filter(e => !e || !/document Grist/.test(e.fr) || !/Grist document/.test(e.en)).map(e => e && e.key).join(', '));
+  const headingEntry = entries.find(e => e.key === 'toolbar.newHeading');
+  check('vocabulaire : le titre du menu « + » est « Nouveau » (sa première ligne est déjà « Nouveau document »)',
+    !!headingEntry && headingEntry.fr === 'Nouveau' && headingEntry.en === 'New' && /data-i18n="toolbar\.newHeading"/.test(htmlText));
+
   // « Puces » : en français, l'onglet du menu « # », l'aide du caractère déclencheur (Réglages) et le nom du bouton « Insérer une variable » disent « puces », jamais « chips » (choix d'Antoine du 05/10) ;
   // l'anglais garde « chip(s) ». Seuls les textes lus comptent : un nom de classe ou d'id d'index.html (`v2-format-chip`) n'en est pas un, d'où les nœuds de texte et les attributs lus par une personne.
   const readableHtml = [...htmlText.matchAll(/>([^<>]*)</g), ...htmlText.matchAll(/\b(?:aria-label|data-tip|title|placeholder|alt)="([^"]*)"/g)].map(m => m[1].trim()).filter(Boolean);

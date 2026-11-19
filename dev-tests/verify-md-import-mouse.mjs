@@ -34,22 +34,22 @@ const HEIGHT = 400;
 const TEXTS = {
   fr: {
     row: 'Importer un Markdown…', excel: 'Importer un Excel…', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler',
-    reading: /^Lecture du fichier Markdown/, imported: 'Markdown importé. Nommez le modèle puis enregistrez-le.',
-    importedImages: 'Markdown importé ; 1 image locale non reprise. Nommez le modèle puis enregistrez-le.',
+    reading: /^Lecture du fichier Markdown/, imported: 'Markdown importé. Nommez le document puis enregistrez-le.',
+    importedImages: 'Markdown importé ; 1 image locale non reprise. Nommez le document puis enregistrez-le.',
     unreadable: 'Ce fichier n’est pas un texte Markdown lisible.', empty: 'Ce fichier Markdown est vide : il n’y a rien à importer.',
     tooBig: /^Ce fichier est trop gros pour être importé : 10,1 Mo \(au plus 10 Mo\)\.$/, placeholder: '[image non reprise : Logo]',
     mdTemplate: 'Markdown (modèle)', templateExported: 'Modèle exporté en Markdown, variables comprises.',
-    importedVariable: 'Markdown importé ; 1 variable inconnue laissée en texte. Nommez le modèle puis enregistrez-le.',
+    importedVariable: 'Markdown importé ; 1 variable inconnue laissée en texte. Nommez le document puis enregistrez-le.',
     importedImageVariables: 'Markdown importé ; 1 image locale non reprise, 2 variables inconnues.',
   },
   en: {
     row: 'Import from Markdown…', excel: 'Import from Excel…', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel',
-    reading: /^Reading the Markdown file/, imported: 'Markdown imported. Name the template, then save it.',
-    importedImages: 'Markdown imported; 1 local image not imported. Name the template, then save it.',
+    reading: /^Reading the Markdown file/, imported: 'Markdown imported. Name the document, then save it.',
+    importedImages: 'Markdown imported; 1 local image not imported. Name the document, then save it.',
     unreadable: 'This file is not readable Markdown text.', empty: 'This Markdown file is empty: there is nothing to import.',
     tooBig: /^This file is too big to import: 10\.1 MB \(at most 10 MB\)\.$/, placeholder: '[image not imported: Logo]',
     mdTemplate: 'Markdown (template)', templateExported: 'Template exported to Markdown, variables included.',
-    importedVariable: 'Markdown imported; 1 unknown variable left as text. Name the template, then save it.',
+    importedVariable: 'Markdown imported; 1 unknown variable left as text. Name the document, then save it.',
     importedImageVariables: 'Markdown imported; 1 local image not imported, 2 unknown variables.',
   },
 };

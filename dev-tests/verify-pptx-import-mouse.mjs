@@ -40,7 +40,7 @@ const MAX_MIB = 150;
 const TEXTS = {
   fr: {
     row: 'Importer un PowerPoint…', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler', close: 'Fermer',
-    imported: n => `PowerPoint importé : ${n} ${n === 1 ? 'diapositive' : 'diapositives'}. Nommez le modèle puis enregistrez-le.`, importedPattern: /PowerPoint importé/,
+    imported: n => `PowerPoint importé : ${n} ${n === 1 ? 'diapositive' : 'diapositives'}. Nommez le document puis enregistrez-le.`, importedPattern: /PowerPoint importé/,
     reading: /^Lecture du fichier PowerPoint/,
     unreadable: 'Ce fichier n’est pas une présentation PowerPoint (.pptx) lisible.', unreadablePattern: /n’est pas une présentation/,
     legacy: 'Format .ppt d’avant 2007 ou fichier protégé : enregistrez-le en .pptx sans mot de passe.', legacyPattern: /d’avant 2007/,
@@ -57,7 +57,7 @@ const TEXTS = {
   },
   en: {
     row: 'Import from PowerPoint…', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
-    imported: n => `PowerPoint imported: ${n} ${n === 1 ? 'slide' : 'slides'}. Name the template, then save it.`, importedPattern: /PowerPoint imported/,
+    imported: n => `PowerPoint imported: ${n} ${n === 1 ? 'slide' : 'slides'}. Name the document, then save it.`, importedPattern: /PowerPoint imported/,
     reading: /^Reading the PowerPoint file/,
     unreadable: 'This file is not a readable PowerPoint (.pptx) presentation.', unreadablePattern: /not a readable PowerPoint/,
     legacy: 'Pre-2007 .ppt format or password-protected file: save it as .pptx without a password.', legacyPattern: /Pre-2007/,

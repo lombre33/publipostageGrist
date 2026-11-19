@@ -33,7 +33,7 @@ const CM = 72 / 2.54;
 const TEXTS = {
   fr: {
     unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler', close: 'Fermer',
-    imported: n => `Présentation OpenDocument importée : ${n} ${n === 1 ? 'diapositive' : 'diapositives'}. Nommez le modèle puis enregistrez-le.`, importedPattern: /Présentation OpenDocument importée/,
+    imported: n => `Présentation OpenDocument importée : ${n} ${n === 1 ? 'diapositive' : 'diapositives'}. Nommez le document puis enregistrez-le.`, importedPattern: /Présentation OpenDocument importée/,
     reading: /^Lecture (du fichier|de la présentation) OpenDocument/,
     reportTitle: 'Ce que l’import n’a pas repris tel quel', reportIntro: 'La présentation est importée. Le fichier avait ceci, que l’éditeur n’a pas pu reprendre tel quel :',
     report: ['2 animations d’objets non reprises', '1 tracé libre, courbe ou polygone non repris', '1 forme remplacée par un rectangle'],
@@ -45,7 +45,7 @@ const TEXTS = {
   },
   en: {
     unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
-    imported: n => `OpenDocument presentation imported: ${n} ${n === 1 ? 'slide' : 'slides'}. Name the template, then save it.`, importedPattern: /OpenDocument presentation imported/,
+    imported: n => `OpenDocument presentation imported: ${n} ${n === 1 ? 'slide' : 'slides'}. Name the document, then save it.`, importedPattern: /OpenDocument presentation imported/,
     reading: /^Reading the OpenDocument (file|presentation)/,
     reportTitle: 'What the import did not carry over as is', reportIntro: 'The presentation is imported. The file had the following, which the editor could not carry over as is:',
     report: ['2 object animations not imported', '1 free drawing, curve or polygon not imported', '1 shape replaced by a rectangle'],

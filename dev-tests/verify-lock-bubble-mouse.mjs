@@ -257,16 +257,16 @@ async function newTemplate(page, kind) {
   t.check('email : la bulle dit la raison de l\'info-bulle et rien n\'est écrit dans le coin d\'état', (await textOf(page, '.pp-lockbubble-why')) === await page.evaluate(() => document.getElementById('v2-btn-table').getAttribute('title')) && !/email/i.test(await textOf(page, '#status-msg')));
   await press(page, '.pp-lockbubble-more');
   const checks = await checksOf(page);
-  t.check('email : droits ✓, mode Édition ✓, « Ce modèle est un email » ✕ avec le nom du modèle', checks.length === 3 && !checks[0].no && !checks[1].no && checks[2].no && /Ce modèle est un email/.test(checks[2].text) && /« Nouveau modèle »/.test(checks[2].text), checks);
+  t.check('email : droits ✓, mode Édition ✓, « Ce modèle est un email » ✕ avec le nom du modèle', checks.length === 3 && !checks[0].no && !checks[1].no && checks[2].no && /Ce modèle est un email/.test(checks[2].text) && /« Nouveau document »/.test(checks[2].text), checks);
   t.check('email : le geste dit de créer un modèle Document, sans bouton', /modèle Document/.test(await textOf(page, '.pp-lockbubble-fix')) && !(await page.$('.pp-lockbubble-act')));
-  t.check('email : ce que le widget voit nomme le modèle et son type', /Modèle« Nouveau modèle », email/.test(await textOf(page, '.pp-lockbubble-ctx')));
+  t.check('email : ce que le widget voit nomme le modèle et son type', /Modèle« Nouveau document », email/.test(await textOf(page, '.pp-lockbubble-ctx')));
   t.check('email : le document n\'a pas bougé', (await html(page)) === before);
   await press(page, '.pp-lockbubble-copy');
   const copied = await readClipboard(page);
   await press(page, '.pp-lockbubble-mask input');
   await press(page, '.pp-lockbubble-copy');
   const hidden = await readClipboard(page);
-  t.check('email : le texte copié nomme le modèle ; masqué, il devient « Modèle »', /Nouveau modèle/.test(copied) && !/Nouveau modèle/.test(hidden) && /Modèle/.test(hidden), { copied, hidden });
+  t.check('email : le texte copié nomme le modèle ; masqué, il devient « Modèle »', /« Nouveau document »/.test(copied) && !/« Nouveau document »/.test(hidden) && /Modèle/.test(hidden), { copied, hidden });
   await page.keyboard.press('Escape');
 
   // La Lecture : « Gras » grisé, le bouton fait le geste.

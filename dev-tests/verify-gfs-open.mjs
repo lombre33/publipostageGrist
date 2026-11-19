@@ -38,7 +38,7 @@ const READY = { fr: 'Widget prêt.', en: 'Widget ready.' };
 const WHAT = (id, extra) => Object.assign({ fichier: id == null ? null : { id: String(id), type: 'modele' }, type: id == null ? 'document' : '', dossier: '', raison: 'explorateur' }, extra || {});
 // « Nouveau » (consigne 014) : pas de fichier, le type demandé.
 const NEW = (type, extra) => Object.assign({ fichier: null, type, dossier: '', raison: 'nouveau' }, extra || {});
-const WARNING = { fr: /^Modèle non enregistré/, en: /^Template not saved/ };
+const WARNING = { fr: /^Document non enregistré/, en: /^Document not saved/ };
 const MACRO_TITLE = { fr: 'Macro-modèle', en: 'Macro template' };
 const ROW_RULES = { enabled: true, rules: [{ column: 'Statut', operator: '=', value: 'Urgent', modeleId: '3' }], otherwise: 'default' };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -165,12 +165,12 @@ const pressDialog = async (page, label) => {
 const waitStatus = (page, pattern, ms = 40000) => page.waitForFunction(source => new RegExp(source).test(document.getElementById('status-msg').textContent), pattern.source, { timeout: ms }).catch(() => {});
 // Les phrases du coin d'état d'un import réussi ou refusé (js/i18n.js), identiques à celles du menu « + ».
 const IMPORTED = {
-  markdown: { fr: 'Markdown importé. Nommez le modèle puis enregistrez-le.', en: 'Markdown imported. Name the template, then save it.' },
-  excel: { fr: 'Excel importé : 3 lignes, 2 colonnes. Nommez le modèle puis enregistrez-le.', en: 'Excel imported: 3 rows, 2 columns. Name the template, then save it.' },
-  powerpoint: { fr: 'PowerPoint importé : 2 diapositives. Nommez le modèle puis enregistrez-le.', en: 'PowerPoint imported: 2 slides. Name the template, then save it.' },
-  word: { fr: 'Word importé. Nommez le modèle puis enregistrez-le.', en: 'Word imported. Name the template, then save it.' },
-  html: { fr: 'HTML importé. Nommez le modèle puis enregistrez-le.', en: 'HTML imported. Name the template, then save it.' },
-  opendocument: { fr: 'OpenDocument importé. Nommez le modèle puis enregistrez-le.', en: 'OpenDocument imported. Name the template, then save it.' },
+  markdown: { fr: 'Markdown importé. Nommez le document puis enregistrez-le.', en: 'Markdown imported. Name the document, then save it.' },
+  excel: { fr: 'Excel importé : 3 lignes, 2 colonnes. Nommez le document puis enregistrez-le.', en: 'Excel imported: 3 rows, 2 columns. Name the document, then save it.' },
+  powerpoint: { fr: 'PowerPoint importé : 2 diapositives. Nommez le document puis enregistrez-le.', en: 'PowerPoint imported: 2 slides. Name the document, then save it.' },
+  word: { fr: 'Word importé. Nommez le document puis enregistrez-le.', en: 'Word imported. Name the document, then save it.' },
+  html: { fr: 'HTML importé. Nommez le document puis enregistrez-le.', en: 'HTML imported. Name the document, then save it.' },
+  opendocument: { fr: 'OpenDocument importé. Nommez le document puis enregistrez-le.', en: 'OpenDocument imported. Name the document, then save it.' },
 };
 const REFUSED = {
   markdown: 'Ce fichier Markdown est vide : il n’y a rien à importer.',
@@ -747,7 +747,7 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   let reply = await askImport(page, 'markdown', SOURCES.markdown);
   let got = await importState(page);
   check('markdown : `{ ouvert: true }` avec l’`id` de l’appel, le document importé est à l’écran : sans nom, sans modèle courant, le texte du fichier', reply.type === 'reponse' && reply.gfs === 0 && Number.isInteger(reply.id) && reply.data.ouvert === true && got.current == null && got.list === '' && got.name === '' && got.text === MARKDOWN_TEXT && !got.grid, { reply, got });
-  check('le coin d’état dit la phrase du menu « + » : « Markdown importé. Nommez le modèle puis enregistrez-le. »', got.status === IMPORTED.markdown.fr, got);
+  check('le coin d’état dit la phrase du menu « + » : « Markdown importé. Nommez le document puis enregistrez-le. »', got.status === IMPORTED.markdown.fr, got);
   check('le fichier reçu est lu tel quel, sans sélecteur : une lecture, celle de note.md, aucun clic sur un champ de fichier, aucun champ dans la page', got.mdReads.length === 1 && got.mdReads[0].name === 'note.md' && got.mdReads[0].size === new TextEncoder().encode(MARKDOWN.text).length && got.picker === 0 && got.fileInputs === 0, got);
   check('aucun modèle vierge n’a été ouvert à la place (« Nouveau » du type n’est pas ce que GFS demande) : un seul modèle sans identifiant est passé par `setCurrentId`, celui de l’import', blanksOpened(got) === 1, got.opened);
   check('rien n’est écrit avant le premier « Enregistrer » : ni modèle, ni ★, ni option de la vue', await nothingWritten(), await writes(page));
@@ -771,7 +771,7 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   reply = await pending;
   got = await importState(page);
   check('« Ne pas enregistrer » : `{ ouvert: true }`, la grille du classeur est à l’écran avec ses cases, sans nom ni modèle courant', reply.type === 'reponse' && reply.data.ouvert === true && got.grid && got.current == null && got.name === '' && ['Produit', 'Quantité', 'Vis', '12', 'Clou', '7'].every(text => got.cells.includes(text)), { reply, got });
-  check('le coin d’état dit la phrase du menu « + » : « Excel importé : 3 lignes, 2 colonnes. Nommez le modèle puis enregistrez-le. »', got.status === IMPORTED.excel.fr, got);
+  check('le coin d’état dit la phrase du menu « + » : « Excel importé : 3 lignes, 2 colonnes. Nommez le document puis enregistrez-le. »', got.status === IMPORTED.excel.fr, got);
   check('aucun sélecteur de fichier, aucune lecture Markdown de plus, rien d’écrit', got.picker === 0 && got.fileInputs === 0 && got.mdReads.length === 1 && await nothingWritten(), got);
 
   // PowerPoint, l'extension « diapositives » étant éteinte : refusé proprement, comme le menu qui explique.
@@ -787,7 +787,7 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   reply = await pending;
   got = await importState(page);
   check('powerpoint, l’extension étant active : `{ ouvert: true }`, la présentation est à l’écran avec la bande de ses deux diapositives, sans nom ni modèle courant', reply.type === 'reponse' && reply.data.ouvert === true && got.strip && got.slides === 2 && got.current == null && got.name === '' && /Bilan GFS/.test(got.text) && /Suite/.test(got.text) && !got.grid, { reply, got });
-  check('le coin d’état dit la phrase du menu « + » : « PowerPoint importé : 2 diapositives. Nommez le modèle puis enregistrez-le. »', got.status === IMPORTED.powerpoint.fr, got);
+  check('le coin d’état dit la phrase du menu « + » : « PowerPoint importé : 2 diapositives. Nommez le document puis enregistrez-le. »', got.status === IMPORTED.powerpoint.fr, got);
   check('aucun sélecteur de fichier, aucune fenêtre de rapport (le fichier est repris en entier), rien d’écrit', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(page)).open && await nothingWritten(), got);
 
   // Un fichier refusé : `{ ouvert: false }`, la phrase du menu « + » en erreur, et aucune question même quand le modèle attend d'être enregistré (« un fichier refusé ne coûte rien »).
@@ -855,7 +855,7 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   reply = await pending;
   got = await importState(page);
   check('« Ne pas enregistrer » : `{ ouvert: true }`, le document du fichier Word est à l’écran (son titre et son texte), sans nom ni modèle courant', reply.type === 'reponse' && reply.data.ouvert === true && got.current == null && got.list === '' && got.name === '' && !got.grid && got.slides === 0 && got.text.includes('Bilan Word GFS') && got.text.includes(WORD_TEXT), { reply, got });
-  check('le coin d’état dit la phrase du menu « + » : « Word importé. Nommez le modèle puis enregistrez-le. »', got.status === IMPORTED.word.fr, got);
+  check('le coin d’état dit la phrase du menu « + » : « Word importé. Nommez le document puis enregistrez-le. »', got.status === IMPORTED.word.fr, got);
   check('aucun sélecteur de fichier, aucune fenêtre de rapport (le fichier est repris en entier), rien d’écrit', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(page)).open && await nothingWritten(), got);
   check('un seul modèle sans identifiant de plus est passé par `setCurrentId` (celui de l’import) : « Nouveau » du type n’est pas ce que GFS demande', blanksOpened(got) === blanksBefore + 1, got.opened);
 
@@ -887,7 +887,7 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   reply = await pending;
   got = await importState(page);
   check('« Ne pas enregistrer » : `{ ouvert: true }`, la page est à l’écran (son titre et son texte), sans nom ni modèle courant', reply.type === 'reponse' && reply.data.ouvert === true && got.current == null && got.list === '' && got.name === '' && !got.grid && got.slides === 0 && got.text.includes('Page HTML de GFS') && got.text.includes(HTML_TEXT), { reply, got });
-  check('le coin d’état dit la phrase du menu « + » : « HTML importé. Nommez le modèle puis enregistrez-le. »', got.status === IMPORTED.html.fr, got);
+  check('le coin d’état dit la phrase du menu « + » : « HTML importé. Nommez le document puis enregistrez-le. »', got.status === IMPORTED.html.fr, got);
   check('aucun sélecteur de fichier, aucune fenêtre de rapport (la page est reprise en entier), rien d’écrit, un seul modèle sans identifiant de plus', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(page)).open && await nothingWritten() && blanksOpened(got) === htmlBlanksBefore + 1, got);
 
   // L'archive ZIP de la page (la page et son dossier d'images) arrive par la MÊME valeur `html` : l'app la reconnaît à ses premiers octets, pas à son extension.
@@ -916,7 +916,7 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   reply = await pending;
   got = await importState(page);
   check('« Ne pas enregistrer » : `{ ouvert: true }`, le document du fichier est à l’écran (son titre et son texte), sans nom ni modèle courant', reply.type === 'reponse' && reply.data.ouvert === true && got.current == null && got.list === '' && got.name === '' && !got.grid && got.slides === 0 && got.text.includes('Bilan OpenDocument GFS') && got.text.includes(ODT_TEXT), { reply, got });
-  check('le coin d’état dit la phrase du menu « + » : « OpenDocument importé. Nommez le modèle puis enregistrez-le. », aucune fenêtre de rapport (rien n’est resté de côté), aucun sélecteur, rien d’écrit', got.status === IMPORTED.opendocument.fr && !(await dialogOf(page)).open && got.picker === 0 && got.fileInputs === 0 && await nothingWritten(), got);
+  check('le coin d’état dit la phrase du menu « + » : « OpenDocument importé. Nommez le document puis enregistrez-le. », aucune fenêtre de rapport (rien n’est resté de côté), aucun sélecteur, rien d’écrit', got.status === IMPORTED.opendocument.fr && !(await dialogOf(page)).open && got.picker === 0 && got.fileInputs === 0 && await nothingWritten(), got);
   reply = await askImport(page, 'opendocument', NOT_AN_ODT);
   got = await importState(page);
   check(`un fichier qui n’est pas un OpenDocument : \`{ ouvert: false }\`, le coin d’état dit « ${REFUSED.opendocument} » en erreur, le document reste, aucune question`, reply.type === 'reponse' && reply.data.ouvert === false && got.status === REFUSED.opendocument && got.statusClass === 'error-msg' && got.text.includes(ODT_TEXT) && !(await dialogOf(page)).open, { reply, got });
@@ -958,7 +958,7 @@ console.log('\n== « Nouveau > Importer » au démarrage : le fichier est dans l
   await waitStatus(o.page, /^Markdown importé/);
   let got = await importState(o.page);
   check('markdown : le document du fichier est à l’écran, sans nom ni modèle courant (le ★ s’était ouvert avant, l’import a suivi)', got.current == null && got.name === '' && got.list === '' && got.text === MARKDOWN_TEXT && got.opened.join() === '1,null', got);
-  check('le coin d’état dit « Markdown importé. Nommez le modèle puis enregistrez-le. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', got.status === IMPORTED.markdown.fr, got);
+  check('le coin d’état dit « Markdown importé. Nommez le document puis enregistrez-le. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', got.status === IMPORTED.markdown.fr, got);
   check('le fichier reçu est lu tel quel, sans sélecteur, rien d’écrit', got.mdReads.length === 1 && got.mdReads[0].name === 'note.md' && got.picker === 0 && got.fileInputs === 0 && await nothingWritten(o.page), got);
   check('GFS a reçu l’appel `contexte` et rien d’autre (hors le `relais` du kit, `securite`) : ni appel, ni réponse', JSON.stringify(await o.page.evaluate(() => window.__gfsStub.calls.map(c => c.nom).filter(nom => nom !== 'securite'))) === JSON.stringify(['contexte']) && (await answers(o.page)).length === 0, await o.page.evaluate(() => window.__gfsStub.calls.map(c => c.nom)));
   check('`GfsLink.opening()` garde l’importation (une valeur, un `File`)', await o.page.evaluate(() => { const i = GfsLink.opening().importation; return !!i && i.valeur === 'markdown' && i.fichier instanceof File && i.fichier.name === 'note.md'; }));
@@ -983,7 +983,7 @@ console.log('\n== « Nouveau > Importer » au démarrage : le fichier est dans l
   await waitStatus(o.page, /^Word importé/);
   got = await importState(o.page);
   check('word : le document du fichier est à l’écran (son titre et son texte), sans nom ni modèle courant (le ★ s’était ouvert avant, l’import a suivi)', got.current == null && got.name === '' && got.list === '' && got.text.includes('Bilan Word GFS') && got.text.includes(WORD_TEXT) && got.opened.join() === '1,null', got);
-  check('le coin d’état dit « Word importé. Nommez le modèle puis enregistrez-le. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', got.status === IMPORTED.word.fr, got);
+  check('le coin d’état dit « Word importé. Nommez le document puis enregistrez-le. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', got.status === IMPORTED.word.fr, got);
   check('le fichier reçu est lu tel quel, une fois, sans sélecteur, aucune fenêtre de rapport, rien d’écrit', JSON.stringify(await o.page.evaluate(() => window.__docxReads)) === JSON.stringify([{ name: 'bilan.docx', size: Buffer.from(SOURCES.word.base64, 'base64').length }]) && got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(o.page)).open && await nothingWritten(o.page), got);
   check('`GfsLink.opening()` garde l’importation (la valeur `word`, un `File`)', await o.page.evaluate(() => { const i = GfsLink.opening().importation; return !!i && i.valeur === 'word' && i.fichier instanceof File && i.fichier.name === 'bilan.docx'; }));
   await o.context.close();
@@ -993,7 +993,7 @@ console.log('\n== « Nouveau > Importer » au démarrage : le fichier est dans l
   await waitStatus(o.page, /^HTML importé/);
   got = await importState(o.page);
   check('html : la page du fichier est à l’écran (son titre et son texte), sans nom ni modèle courant (le ★ s’était ouvert avant, l’import a suivi)', got.current == null && got.name === '' && got.list === '' && got.text.includes('Page HTML de GFS') && got.text.includes(HTML_TEXT) && got.opened.join() === '1,null', got);
-  check('le coin d’état dit « HTML importé. Nommez le modèle puis enregistrez-le. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', got.status === IMPORTED.html.fr, got);
+  check('le coin d’état dit « HTML importé. Nommez le document puis enregistrez-le. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', got.status === IMPORTED.html.fr, got);
   check('aucun sélecteur de fichier, aucune fenêtre de rapport, rien d’écrit', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(o.page)).open && await nothingWritten(o.page), got);
   check('`GfsLink.opening()` garde l’importation (la valeur `html`, un `File`)', await o.page.evaluate(() => { const i = GfsLink.opening().importation; return !!i && i.valeur === 'html' && i.fichier instanceof File && i.fichier.name === 'page.html'; }));
   await o.context.close();
@@ -1010,7 +1010,7 @@ console.log('\n== « Nouveau > Importer » au démarrage : le fichier est dans l
   await waitStatus(o.page, /^OpenDocument importé/);
   got = await importState(o.page);
   check('opendocument : le document du fichier est à l’écran (son titre et son texte), sans nom ni modèle courant (le ★ s’était ouvert avant, l’import a suivi)', got.current == null && got.name === '' && got.list === '' && got.text.includes('Bilan OpenDocument GFS') && got.text.includes(ODT_TEXT) && got.opened.join() === '1,null', got);
-  check('le coin d’état dit « OpenDocument importé. Nommez le modèle puis enregistrez-le. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', got.status === IMPORTED.opendocument.fr, got);
+  check('le coin d’état dit « OpenDocument importé. Nommez le document puis enregistrez-le. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', got.status === IMPORTED.opendocument.fr, got);
   check('aucun sélecteur de fichier, aucune fenêtre de rapport, rien d’écrit', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(o.page)).open && await nothingWritten(o.page), got);
   check('`GfsLink.opening()` garde l’importation (la valeur `opendocument`, un `File`)', await o.page.evaluate(() => { const i = GfsLink.opening().importation; return !!i && i.valeur === 'opendocument' && i.fichier instanceof File && i.fichier.name === 'bilan.odt'; }));
   await o.context.close();
@@ -1018,25 +1018,25 @@ console.log('\n== « Nouveau > Importer » au démarrage : le fichier est dans l
   o = await startImporting('opendocument', SOURCES.opendocument, { lang: 'en' });
   await waitStatus(o.page, /^OpenDocument imported/);
   got = await importState(o.page);
-  check('en anglais : « OpenDocument imported. Name the template, then save it. », le document du fichier est à l’écran', got.status === IMPORTED.opendocument.en && got.text.includes(ODT_TEXT) && got.current == null, got);
+  check('en anglais : « OpenDocument imported. Name the document, then save it. », le document du fichier est à l’écran', got.status === IMPORTED.opendocument.en && got.text.includes(ODT_TEXT) && got.current == null, got);
   await o.context.close();
 
   o = await startImporting('html', SOURCES.html, { lang: 'en' });
   await waitStatus(o.page, /^HTML imported/);
   got = await importState(o.page);
-  check('en anglais : « HTML imported. Name the template, then save it. », la page du fichier est à l’écran', got.status === IMPORTED.html.en && got.text.includes(HTML_TEXT) && got.current == null, got);
+  check('en anglais : « HTML imported. Name the document, then save it. », la page du fichier est à l’écran', got.status === IMPORTED.html.en && got.text.includes(HTML_TEXT) && got.current == null, got);
   await o.context.close();
 
   o = await startImporting('markdown', SOURCES.markdown, { lang: 'en' });
   await waitStatus(o.page, /^Markdown imported/);
   got = await importState(o.page);
-  check('en anglais : « Markdown imported. Name the template, then save it. », le document du fichier est à l’écran', got.status === IMPORTED.markdown.en && got.text === MARKDOWN_TEXT && got.current == null, got);
+  check('en anglais : « Markdown imported. Name the document, then save it. », le document du fichier est à l’écran', got.status === IMPORTED.markdown.en && got.text === MARKDOWN_TEXT && got.current == null, got);
   await o.context.close();
 
   o = await startImporting('word', SOURCES.word, { lang: 'en' });
   await waitStatus(o.page, /^Word imported/);
   got = await importState(o.page);
-  check('en anglais : « Word imported. Name the template, then save it. », le document du fichier Word est à l’écran', got.status === IMPORTED.word.en && got.text.includes(WORD_TEXT) && got.current == null, got);
+  check('en anglais : « Word imported. Name the document, then save it. », le document du fichier Word est à l’écran', got.status === IMPORTED.word.en && got.text.includes(WORD_TEXT) && got.current == null, got);
   await o.context.close();
 
   // Un fichier refusé : le modèle habituel reste, l'erreur reste à l'écran (« Widget prêt. » ne la recouvre pas), jamais un modèle vierge.

@@ -6,7 +6,7 @@
 // donnent --font-ui ; ce script le mesure dans un vrai navigateur : tout bouton, champ ou texte de l'interface a EXACTEMENT la police du bouton « Enregistrer » (qui commence par system-ui), garde sa taille de police
 // (12,5 px les lignes des menus, 11,5 et 12 px les boutons d'une variable, 10,5 px le fantôme) et les lignes du menu des polices gardent leur hauteur (26 px). Parcours : au repos (le DOM entier, éléments cachés compris),
 // le menu des polices puis celui des tailles (un clic sur une ligne le ferme), la barre d'une variable de chaque type (texte, nombre, date, oui/non), les zones d'en-tête et de pied survolées, un nouvel email, les sept onglets des
-// Réglages, la galerie, le macro-modèle, « Organiser mes modèles », la liste des modèles, « Enregistrer sous… » ; un guetteur de DOM contrôle aussi tout élément apparu pendant le parcours (les fenêtres montées par script).
+// Réglages, la galerie, le macro-modèle, « Organiser mes documents », la liste des modèles, « Enregistrer sous… » ; un guetteur de DOM contrôle aussi tout élément apparu pendant le parcours (les fenêtres montées par script).
 // Une seconde page (un en-tête et un pied remplis, assez de lignes pour une deuxième page) vérifie aussi que le TEXTE des en-têtes et pieds de page de la feuille est en Roboto, comme le document - « Oui, Roboto » d'Antoine
 // du 12/10, à la carte « Passer le texte des en-têtes et pieds de page en Roboto ? » : zones de bord, survol à la souris, bandes de couture. Ce texte est du contenu du modèle, pas de l'interface.
 // La même seconde page, en anglais, vérifie les lettres des boutons jour / mois / année de la barre d'une date - « Oui, D M Y » d'Antoine du 12/10, à la carte « Traduire les boutons J, M, A de la date en anglais ? » :

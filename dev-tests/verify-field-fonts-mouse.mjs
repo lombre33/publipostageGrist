@@ -4,7 +4,7 @@
 // champs de la barre du haut avaient « font-family: Arial » écrit en dur (css/style.css, `#toolbar-top select, input[type="text"], .pp-field-editor`) et tous ceux qu'aucune règle ne touchait (marges, caractère
 // déclencheur, recherche de la galerie, nom du macro-modèle...) gardaient la police par défaut du navigateur, Arial elle aussi. Une règle de base (`input, select, textarea`) leur donne --font-ui ; ce script le
 // mesure dans un vrai navigateur : chaque champ a EXACTEMENT la police du bouton voisin « Enregistrer » (qui commence par system-ui) et garde sa taille. Parcours : la barre du haut, un nouvel email (Objet, À, Cc, Cci
-// et nom du PDF, du texte tapé au clavier), les sept onglets des Réglages (marges, caractère déclencheur), la galerie, le macro-modèle, « Organiser mes modèles », « Enregistrer sous… » ; un guetteur de DOM
+// et nom du PDF, du texte tapé au clavier), les sept onglets des Réglages (marges, caractère déclencheur), la galerie, le macro-modèle, « Organiser mes documents », « Enregistrer sous… » ; un guetteur de DOM
 // contrôle aussi tout champ apparu pendant le parcours (les fenêtres montées par script). Les boutons et les textes ne sont pas dans ce contrôle : quelques-uns gardent Arial par héritage (menu des polices et des tailles, « + Ajouter un en-tête » ; charte UX/UI, §5).
 // Lancé par run-headless.mjs (groupe Node "fieldFontsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-field-fonts-mouse.mjs
 import { createServer } from 'node:http';
@@ -249,7 +249,7 @@ for (const tab of ['language', 'theme', 'triggerKey', 'pageMargins', 'access', '
 check('Réglages : sur chacun des sept onglets, tous les champs de la fenêtre ont la police des boutons', Object.values(bySettingsTab).every(list => list.length === 0), bySettingsTab);
 await realClick(page, '#settings-close', 300);
 
-// ===== 4) Galerie de modèles, macro-modèle, « Organiser mes modèles », « Enregistrer sous… » =====
+// ===== 4) Galerie de modèles, macro-modèle, « Organiser mes documents », « Enregistrer sous… » =====
 await realHover(page, '#v2-new-template-group #btn-new');
 await realClick(page, '#v2-btn-new-from-template', 900);
 check('Galerie : la fenêtre est ouverte', await shown(page, '#template-gallery-modal'));
@@ -268,9 +268,9 @@ await realClick(page, '#macro-editor-cancel', 300);
 
 await realClick(page, '.tts-trigger', 300);
 await realClick(page, '#btn-organize-templates', 500);
-check('Organiser mes modèles : la fenêtre est ouverte', await shown(page, '#template-organize-modal'));
+check('Organiser mes documents : la fenêtre est ouverte', await shown(page, '#template-organize-modal'));
 const organize = await fontOf(page, '#template-organize-search');
-check('Organiser mes modèles : le champ de recherche a la police des boutons', !!organize && organize.ff === ref, organize);
+check('Organiser mes documents : le champ de recherche a la police des boutons', !!organize && organize.ff === ref, organize);
 await realClick(page, '#template-organize-close', 300);
 await page.keyboard.press('Escape');
 

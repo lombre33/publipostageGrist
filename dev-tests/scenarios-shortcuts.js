@@ -982,7 +982,7 @@
       out.backToKeys = { keys: !document.getElementById('settings-keys-section').hidden, expansion: !document.getElementById('settings-expansion-section').hidden, selected: document.getElementById('settings-switch-keys').getAttribute('aria-selected') };
       Shortcuts.setKey('modeRead', 'Alt+r');
       out.afterChange = { key: text('modeRead', '.settings-key-btn'), resetEnabled: !((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(byAction('modeRead').querySelector('.settings-key-reset')), resetAllEnabled: !((el) => el.disabled || el.hasAttribute('data-pp-lock-soft'))(document.getElementById('settings-keys-reset-all')) };
-      const pass = out.rows === Shortcuts.ACTIONS.length && out.labelled === 5 && out.groups === 'Modèles|Affichage|Mise en forme|Insertion|Historique et suivi'
+      const pass = out.rows === Shortcuts.ACTIONS.length && out.labelled === 5 && out.groups === 'Documents|Affichage|Mise en forme|Insertion|Historique et suivi'
         && out.modeRead === 'Mode lecture=Alt+L' && out.none === 'Aucune (italique)' && out.resetDisabled && out.resetAllDisabled && out.keysShown && !out.expansionShown
         && !out.afterSwitch.keys && out.afterSwitch.expansion && out.afterSwitch.selected === 'true' && out.afterSwitch.stored === 'expansion'
         && out.backToKeys.keys && !out.backToKeys.expansion && out.backToKeys.selected === 'true'
@@ -1094,7 +1094,7 @@
       const mac = { modeRead: document.querySelector('.settings-key-row[data-action="modeRead"] .settings-key-btn').textContent, bold: document.querySelector('.settings-key-row[data-action="bold"] .settings-key-btn').textContent, heading: document.querySelector('.settings-key-row[data-action="heading1"] .settings-key-btn').textContent };
       Shortcuts.setPlatform(null);
       const pass = fr.tab === 'Raccourcis' && fr.switchKeys === 'Touches' && fr.switchExpansion === 'Abréviations' && fr.switchAria === 'Sections des raccourcis' && fr.title === 'Touches du clavier'
-        && fr.resetAll === 'Tout remettre par défaut' && fr.reset === 'Par défaut' && fr.group === 'Modèles' && fr.groups === 5 && fr.name === 'Mode lecture' && fr.key === 'Alt+Maj+1'
+        && fr.resetAll === 'Tout remettre par défaut' && fr.reset === 'Par défaut' && fr.group === 'Documents' && fr.groups === 5 && fr.name === 'Mode lecture' && fr.key === 'Alt+Maj+1'
         && fr.keyAria === 'Mode lecture : touche Alt+L. Appuyer pour la changer' && fr.noneAria === 'Insérer un tableau : aucune touche. Appuyer pour en choisir une' && fr.resetAria === 'Remettre la touche d’origine de « Gras »'
         && mac.modeRead === '⌥L' && mac.bold === '⌘B' && mac.heading === '⌥⇧1';
       await reset(h);
@@ -1120,7 +1120,7 @@
       ShortcutsPanel.stopRecording();
       const pass = I18n.getLang() === 'en'
         && en.tab === 'Shortcuts' && en.switchKeys === 'Keys' && en.switchExpansion === 'Abbreviations' && en.switchAria === 'Shortcut sections' && en.title === 'Keyboard keys'
-        && en.resetAll === 'Reset all to default' && en.reset === 'Default' && en.group === 'Templates' && en.groups === 5 && en.name === 'Read mode' && en.key === 'Alt+Shift+1'
+        && en.resetAll === 'Reset all to default' && en.reset === 'Default' && en.group === 'Documents' && en.groups === 5 && en.name === 'Read mode' && en.key === 'Alt+Shift+1'
         && en.keyAria === 'Read mode: key Alt+L. Press to change it' && en.resetAria === 'Restore the default key for “Bold”'
         && enError === 'Alt+L is already the key for “Read mode”.' && enAlone === 'Add Ctrl (⌘ on Mac) or Alt: a key on its own would be typed into the text.';
       await reset(h, 'en');

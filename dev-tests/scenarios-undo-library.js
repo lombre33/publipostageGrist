@@ -1,10 +1,10 @@
 // Suite "undoLibrary" - Ctrl + Z, Ctrl + Y et les boutons Annuler / Rétablir rendent aussi les actions de la BIBLIOTHÈQUE et des Réglages (suite de scenarios-undo-comments.js : demande du 22/10, « Il doit prendre en compte 100% des
 // actions faites dans le widget », et réponse du 27/10 « Oui, tout, Réglages compris »). Ces actions visent plus que le modèle ouvert, alors que l'historique de l'éditeur est celui du modèle affiché (Editor.setHTML le vide à chaque
 // modèle chargé) : js/action-history.js garde de quoi les défaire et refaire, et le nouvel historique reçoit le repère de celles qui sont faites (js/history-markers.js, domaine « actions »). Ici : 1) le ★ « modèle par défaut » du
-// document (le bouton de la barre, une ligne de la liste, une ligne d'« Organiser mes modèles »). Et deux états du MODÈLE OUVERT, rangés dans son historique comme le texte (domaines « name » et « exportChoices » de
+// document (le bouton de la barre, une ligne de la liste, une ligne d'« Organiser mes documents »). Et deux états du MODÈLE OUVERT, rangés dans son historique comme le texte (domaines « name » et « exportChoices » de
 // js/history-markers.js) : 2) le nom que le crayon lui donne, 3) le type, la qualité du PDF et les lignes d'export qu'on lui choisit. Puis 4) la suppression d'un modèle : Ctrl + Z rend sa ligne (même numéro, même jeton) et
 // rouvre le modèle, Ctrl + Y le supprime de nouveau. Et 5) le rangement de la personne : l'épingle d'un modèle, le dossier où il est rangé, le dossier « replié par défaut » (js/template-arrangement.js, par la liste des modèles et la
-// fenêtre « Organiser mes modèles »). Enfin 6) les copies (go général du 02/11, carte « Ctrl + Z doit-il retirer la copie… ? », option « Oui, avec une question ») : « Enregistrer sous… » et un modèle de la galerie - Ctrl + Z
+// fenêtre « Organiser mes documents »). Enfin 6) les copies (go général du 02/11, carte « Ctrl + Z doit-il retirer la copie… ? », option « Oui, avec une question ») : « Enregistrer sous… » et un modèle de la galerie - Ctrl + Z
 // demande « Retirer … ? » puis retire la copie et rouvre le modèle d'où elle venait, Ctrl + Y la rend ; les tables que la galerie crée avec son modèle ne sont jamais touchées.
 //
 // Les attendus sont ceux de la personne qui défait : UN Ctrl + Z rend le ★ à ce qu'il était (au modèle d'avant, ou à aucun), UN Ctrl + Y le repose ; l'ordre est celui des gestes, texte et actions mêlés ; depuis un AUTRE modèle
@@ -1158,7 +1158,7 @@ window.EditorTestSuites.undoLibrary = (function () {
     if (popupOpen()) await press(h, trigger());
     await h.sleep(150);
   }
-  // La fenêtre « Organiser mes modèles » : `use` agit dedans, puis elle est refermée (sauf `keepOpen`).
+  // La fenêtre « Organiser mes documents » : `use` agit dedans, puis elle est refermée (sauf `keepOpen`).
   async function inWindow(h, use, keepOpen) {
     TemplateOrganizeModal.open();
     await h.sleep(80);
@@ -1203,7 +1203,7 @@ window.EditorTestSuites.undoLibrary = (function () {
 
   cases.push({
     id: 'undo_library_pin_in_the_window_comes_back_by_the_bar_buttons_and_the_open_window_follows',
-    description: 'L\'épingle posée dans « Organiser mes modèles » : fenêtre refermée, le bouton Annuler de la barre la retire et le bouton Rétablir la repose ; fenêtre rouverte, la ligne montre l\'état rendu, et une fenêtre restée ouverte se redessine d\'elle-même',
+    description: 'L\'épingle posée dans « Organiser mes documents » : fenêtre refermée, le bouton Annuler de la barre la retire et le bouton Rétablir la repose ; fenêtre rouverte, la ligne montre l\'état rendu, et une fenêtre restée ouverte se redessine d\'elle-même',
     async run(h) {
       const problems = [];
       try {

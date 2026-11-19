@@ -14,7 +14,7 @@
 //      gardent leur ordre ;
 //   8) la suppression d'un modèle, au vrai clic sur la corbeille puis sur « Supprimer » de la fenêtre : Ctrl + Z rend la ligne telle qu'elle était et rouvre le modèle (nom, texte, ★, choix d'export), Ctrl + Y le supprime de
 //      nouveau, les boutons de la barre aussi, et rien n'est réécrit dans la table une fois le modèle rendu ;
-//   9) le rangement de la personne, aux vrais clics : l'épingle d'une ligne de la liste, puis dans « Organiser mes modèles » le dossier tapé dans « Déplacer vers… » et le dossier « replié par défaut » : Ctrl + Z les défait dans
+//   9) le rangement de la personne, aux vrais clics : l'épingle d'une ligne de la liste, puis dans « Organiser mes documents » le dossier tapé dans « Déplacer vers… » et le dossier « replié par défaut » : Ctrl + Z les défait dans
 //      l'ordre inverse (la fenêtre refermée), Ctrl + Y les rend, les boutons de la barre aussi, le texte et l'épingle gardent leur ordre ;
 //   10) aucune erreur de page.
 // Lancé par run-headless.mjs (groupe Node « undoLibraryMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-undo-library-mouse.mjs
@@ -348,7 +348,7 @@ async function phase(lang, theme) {
     check(`${tag} 9 : Ctrl + Y la repose`, (await pinOf(page, 3)) && JSON.stringify(await pinnedShown(page)) === JSON.stringify([THREE]), { table: await pinOf(page, 3), shown: await pinnedShown(page) });
     check(`${tag} 9 : le coin d'état dit ce qui a été rétabli`, (await status(page)) === await said(page, 'status.templatePinned', THREE), await status(page));
 
-    // « Organiser mes modèles » : 0002 rangé dans un dossier imbriqué, par la saisie « Déplacer vers… », puis ce dossier réglé « replié par défaut ».
+    // « Organiser mes documents » : 0002 rangé dans un dossier imbriqué, par la saisie « Déplacer vers… », puis ce dossier réglé « replié par défaut ».
     await click(page, '.tts-trigger');
     await sleep(350);
     await click(page, '#btn-organize-templates');

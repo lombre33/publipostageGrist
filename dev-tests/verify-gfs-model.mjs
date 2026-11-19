@@ -42,7 +42,7 @@ const NEW = type => ({ fichier: null, type, dossier: '', raison: 'nouveau' });
 const FILE = id => ({ fichier: { id: String(id), type: 'modele' }, type: '', dossier: '', raison: 'explorateur' });
 
 const READY = { fr: 'Widget prêt.', en: 'Widget ready.' };
-const WARNING = { fr: /^Modèle non enregistré/, en: /^Template not saved/ };
+const WARNING = { fr: /^Document non enregistré/, en: /^Document not saved/ };
 const UNKNOWN = {
   fr: 'Ce modèle n’existe pas dans cette version de Publipostage+ : rien n’a été ouvert.',
   en: 'This template does not exist in this version of Publipostage+: nothing was opened.',
@@ -295,7 +295,7 @@ console.log('\n== L’appel `ouvrir` : l’app est déjà ouverte ==');
   reply = await ask(page, MODEL('facture'), 15000);
   seen = await shown(page);
   got = await received(page);
-  check('le texte du modèle ne vient pas : `{ ouvert: false }`, le coin d’état dit « Impossible de charger ce modèle. », ni fenêtre ni table', reply.data && reply.data.ouvert === false && seen.status === 'Impossible de charger ce modèle.' && seen.statusClass === 'error-msg' && seen.name === before.name && (await noDialog(page)) && got.tables.length === 0, { reply, seen, got });
+  check('le texte du modèle ne vient pas : `{ ouvert: false }`, le coin d’état dit « Impossible de charger ce document. », ni fenêtre ni table', reply.data && reply.data.ouvert === false && seen.status === 'Impossible de charger ce document.' && seen.statusClass === 'error-msg' && seen.name === before.name && (await noDialog(page)) && got.tables.length === 0, { reply, seen, got });
   await page.unroute('**/templates-gallery/facture/template.html*');
   await page.route('**/templates-gallery/facture/pack.json*', route => route.abort());
   reply = await ask(page, MODEL('facture'), 15000);

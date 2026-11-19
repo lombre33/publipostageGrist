@@ -841,8 +841,8 @@
         gridOnFirstSheet: fr.active && fr.first === 'Devis Alpha',
         tabs: fr.names.join('|') === 'Devis|Détails des lignes|Récapitulatif annuel' && fr.barShown,
         allTablesSaved: fr.tables === 3,
-        statusFr: !fr.error && fr.status === 'Excel importé : 3 feuilles, en onglets sous la grille. Nommez le modèle puis enregistrez-le.',
-        statusEn: !seen.en.error && en.status === 'Excel imported: 3 sheets, as tabs under the grid. Name the template, then save it.' && en.tabs === 3,
+        statusFr: !fr.error && fr.status === 'Excel importé : 3 feuilles, en onglets sous la grille. Nommez le document puis enregistrez-le.',
+        statusEn: !seen.en.error && en.status === 'Excel imported: 3 sheets, as tabs under the grid. Name the document, then save it.' && en.tabs === 3,
         excelGivesThemBack: exported.join('|') === 'Devis|Détails des lignes|Récapitulatif annuel',
       };
       return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, fr, en, exported }) };

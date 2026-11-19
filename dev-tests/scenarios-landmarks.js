@@ -131,14 +131,14 @@
     run: async (h) => {
       await h.resetEditor();
       const FIELDS = [
-        ['template-name', 'Nom du modèle', 'Template name'],
+        ['template-name', 'Nom du document', 'Document name'],
         ['pdf-filename-template', 'Nom de fichier PDF (variables #… autorisées)', 'PDF file name (#… variables allowed)'],
         ['v2-email-subject', 'Objet', 'Subject'],
         ['v2-email-to', 'À', 'To'],
         ['v2-email-cc', 'Cc', 'Cc'],
         ['v2-email-cci', 'Copie cachée', 'Bcc'],
         ['tpl-gallery-search', 'Rechercher un modèle…', 'Search for a template…'],
-        ['template-organize-search', 'Rechercher un modèle…', 'Search for a template…'],
+        ['template-organize-search', 'Rechercher un document…', 'Search for a document…'],
         ['settings-trigger-char', 'Caractère à taper dans le texte pour ouvrir la liste des variables et des Puces.', 'Character to type in the text to open the list of variables and Chips.'],
       ];
       const column = I18n.getLang() === 'en' ? 2 : 1;
@@ -153,7 +153,7 @@
   cases.push(fieldNamesCase, Object.assign({}, fieldNamesCase, {
     id: 'landmarks_fields_are_named_in_an_english_page',
     lang: 'en',
-    description: 'Page qui démarre en anglais : les champs que l\'audit trouvait sans nom ont leur nom en anglais (« Template name », « Subject », « Bcc », « Search for a template… »…), appliqué par I18n au chargement'
+    description: 'Page qui démarre en anglais : les champs que l\'audit trouvait sans nom ont leur nom en anglais (« Document name », « Subject », « Bcc », « Search for a template… »…), appliqué par I18n au chargement'
   }));
 
   // La zone où l'on écrit le document (l'élément `.ProseMirror`) est une zone de texte à plusieurs lignes qui porte un nom (RGAA : une zone de saisie se nomme ; relevé par axe-core sur la bêta). js/editor.js (editorAttributes) le pose

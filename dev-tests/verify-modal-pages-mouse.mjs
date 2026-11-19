@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Les sept fenêtres écrites dans index.html - Réglages, Tables liées, Clé de correspondance, Macro-modèle, Organiser mes modèles, Galerie et Aperçu - sur la base
+// Les sept fenêtres écrites dans index.html - Réglages, Tables liées, Clé de correspondance, Macro-modèle, Organiser mes documents, Galerie et Aperçu - sur la base
 // commune des fenêtres (js/modal-base.js `adopt`, css/modal-base.css), à 700x400 (le panneau d'Antoine), à la VRAIE souris (page.mouse) et au VRAI clavier (Tab,
 // Maj+Tab, Échap), en clair et en sombre (audit UX/UI du 2026-09-29, base commune, lot 2). Le lot 1 (Condition d'affichage, Autres attributs, Boucle) a son
 // script : verify-modal-base-mouse.mjs. Les scénarios qui tournent dans la page (dispatchEvent) ne voient ni le focus qui quitte la fenêtre, ni la molette qui fait
@@ -326,7 +326,7 @@ const WINDOWS = [
   },
   {
     // « Organiser » est dans l'en-tête de la liste des modèles (depuis le 2026-10-01) : on ouvre la liste au vrai clic, puis le bouton ; le focus revient au déclencheur de la liste.
-    key: 'organize', label: 'Organiser mes modèles', id: '#template-organize-modal', width: 480, backSelector: '.tts-trigger', scrolls: true,
+    key: 'organize', label: 'Organiser mes documents', id: '#template-organize-modal', width: 480, backSelector: '.tts-trigger', scrolls: true,
     fixed: ['#template-organize-modal h3', '#template-organize-search', '#template-organize-new-folder', '#template-organize-close'],
     open: async () => { await realClick('.tts-trigger', 250); await realClick('#btn-organize-templates', 0); },
   },

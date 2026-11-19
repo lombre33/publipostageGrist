@@ -207,11 +207,11 @@ const shot = async (s, name) => { if (SHOTS) await s.page.screenshot({ path: joi
 const TEXTS = {
   fr: {
     title: 'Créer les tables du widget dans ce document ?', decline: 'Ne pas créer', create: 'Créer les tables', head: 'Publipostage+ range vos modèles',
-    notSaved: 'Non enregistré : les tables du widget n’ont pas été créées dans ce document.', saved: /Enregistré à/,
+    notSaved: 'Non enregistré : les tables du widget n’ont pas été créées dans ce document Grist.', saved: /Enregistré à/,
   },
   en: {
     title: 'Create the widget’s tables in this document?', decline: 'Don’t create', create: 'Create the tables', head: 'Publipostage+ keeps your templates',
-    notSaved: 'Not saved: the widget’s tables were not created in this document.', saved: /Saved at/,
+    notSaved: 'Not saved: the widget’s tables were not created in this Grist document.', saved: /Saved at/,
   },
 };
 

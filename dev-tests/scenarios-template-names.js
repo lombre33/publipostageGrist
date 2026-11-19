@@ -371,9 +371,9 @@
       await validateRename(h);
       const neverNamed = { field: nameInput().value, label: triggerLabel(), closed: nameInput().hidden, id: Templates.getCurrentId(), kept: status().indexOf('est gardé') !== -1 };
       const pass = whileErased.field === '' && whileErased.open
-        && byEnter.field === 'Nom effacé - modèle' && byEnter.label === 'Nom effacé - modèle' && byEnter.closed && byEnter.status === 'Nom du modèle requis : « Nom effacé - modèle » est gardé.'
+        && byEnter.field === 'Nom effacé - modèle' && byEnter.label === 'Nom effacé - modèle' && byEnter.closed && byEnter.status === 'Nom du document requis : « Nom effacé - modèle » est gardé.'
         && afterEnter.stored === 'Nom effacé - modèle' && afterEnter.content.indexOf('après Entrée') !== -1
-        && byBlur.field === 'Nom effacé - modèle' && byBlur.label === 'Nom effacé - modèle' && byBlur.closed && byBlur.status === 'Nom du modèle requis : « Nom effacé - modèle » est gardé.'
+        && byBlur.field === 'Nom effacé - modèle' && byBlur.label === 'Nom effacé - modèle' && byBlur.closed && byBlur.status === 'Nom du document requis : « Nom effacé - modèle » est gardé.'
         && afterBlur.stored === 'Nom effacé - modèle' && afterBlur.content.indexOf('après le clic') !== -1 && afterBlur.count === 1
         && macroBack.field === 'Macro nom effacé' && macroBack.label === 'Macro nom effacé' && macroBack.closed
         && macroAfter.stored === 'Macro nom effacé' && macroAfter.type === 'macro'
@@ -573,7 +573,7 @@
     },
   });
 
-  // Le premier « Enregistrer » d'un modèle sans nom, Ctrl+S compris (audit « confort d'usage » du 12/11, idée 11, GO d'Antoine) : au lieu de la seule phrase rouge « Nom du modèle requis. », la
+  // Le premier « Enregistrer » d'un modèle sans nom, Ctrl+S compris (audit « confort d'usage » du 12/11, idée 11, GO d'Antoine) : au lieu de la seule phrase rouge « Nom du document requis. », la
   // fenêtre du nom s'ouvre avec le premier titre du document déjà écrit (à défaut, son début ; sans rien, vide). Annuler ne dit rien et n'écrit rien ; un nom pris reçoit son « (2) » ; un modèle
   // qui a déjà un nom ne voit jamais la fenêtre. Code : js/main-save.js (`suggestedName`, `askFirstName`, `runSave`).
   async function newUnnamed(h, html) {
@@ -611,7 +611,7 @@
         if (dialogs.asked.length !== 1) bad.push('fenêtres posées : ' + dialogs.asked.length + ' pour ' + one.html.slice(0, 30));
         if (asked.value !== one.want) bad.push('proposé ' + JSON.stringify(asked.value) + ' au lieu de ' + JSON.stringify(one.want));
         if (asked.message !== one.message) bad.push('message ' + JSON.stringify(asked.message));
-        if (asked.title !== 'Enregistrer' || asked.label !== 'Nom du nouveau modèle' || asked.confirmLabel !== 'Enregistrer') bad.push('libellés ' + JSON.stringify([asked.title, asked.label, asked.confirmLabel]));
+        if (asked.title !== 'Enregistrer' || asked.label !== 'Nom du nouveau document' || asked.confirmLabel !== 'Enregistrer') bad.push('libellés ' + JSON.stringify([asked.title, asked.label, asked.confirmLabel]));
         if (rows().Nom.length !== before + 1 || !saved || saved.nom !== one.want || nameInput().value !== one.want) bad.push('enregistré sous ' + JSON.stringify(saved && saved.nom) + ', champ ' + JSON.stringify(nameInput().value));
         if (/requis/.test(status())) bad.push('phrase rouge : ' + status());
       }
@@ -621,7 +621,7 @@
 
   cases.push({
     id: 'names_first_save_without_a_name_and_without_text_asks_with_an_empty_field_and_cancel_writes_nothing',
-    description: 'Un modèle neuf vide : la fenêtre s\'ouvre champ vide et dit pourquoi (« Ce modèle n\'a pas encore de nom. ») ; la valider vide rend la phrase rouge « Nom du modèle requis. » sans rien écrire ; Annuler ne dit rien (pas de phrase rouge) et n\'écrit rien ; un nom tapé dans la fenêtre s\'enregistre',
+    description: 'Un modèle neuf vide : la fenêtre s\'ouvre champ vide et dit pourquoi (« Ce document n\'a pas encore de nom. ») ; la valider vide rend la phrase rouge « Nom du document requis. » sans rien écrire ; Annuler ne dit rien (pas de phrase rouge) et n\'écrit rien ; un nom tapé dans la fenêtre s\'enregistre',
     run: async (h) => {
       const bad = [];
       await newUnnamed(h, '<p></p>');
@@ -631,8 +631,8 @@
       try {
         await h.clickButton('btn-save'); await h.sleep(300);
         const first = dialogs.asked[0] || {};
-        if (first.value !== '' || first.message !== 'Ce modèle n’a pas encore de nom.') bad.push('fenêtre vide : ' + JSON.stringify([first.value, first.message]));
-        if (rows().Nom.length !== before || status() !== 'Nom du modèle requis.') bad.push('validée vide : ' + rows().Nom.length + ' lignes, « ' + status() + ' »');
+        if (first.value !== '' || first.message !== 'Ce document n’a pas encore de nom.') bad.push('fenêtre vide : ' + JSON.stringify([first.value, first.message]));
+        if (rows().Nom.length !== before || status() !== 'Nom du document requis.') bad.push('validée vide : ' + rows().Nom.length + ' lignes, « ' + status() + ' »');
         document.getElementById('status-msg').textContent = '';
         answer = null;
         await h.clickButton('btn-save'); await h.sleep(300);

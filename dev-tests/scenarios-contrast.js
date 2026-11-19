@@ -90,7 +90,7 @@
         const tab = Array.from(document.querySelectorAll('.settings-tab')).find(t => !t.classList.contains('active'));
         return {
           'onglet inactif des Réglages': round2(textRatio(tab)),
-          'introduction de Organiser mes modèles': round2(textRatio(document.querySelector('.template-organize-intro'))),
+          'introduction de Organiser mes documents': round2(textRatio(document.querySelector('.template-organize-intro'))),
           'introduction du macro-modèle': round2(textRatio(document.querySelector('.macro-editor-intro'))),
         };
       });
@@ -1000,11 +1000,11 @@
     },
   });
 
-  // L'étoile « modèle par défaut au démarrage du widget » des lignes de la liste et de « Organiser mes modèles » (demande du 2026-10-12) : la mention « au démarrage », l'icône (au repos, sur le
+  // L'étoile « modèle par défaut au démarrage du widget » des lignes de la liste et de « Organiser mes documents » (demande du 2026-10-12) : la mention « au démarrage », l'icône (au repos, sur le
   // défaut avec sa pastille, sur la ligne ouverte) et la légende du bas de la fenêtre. Les lignes sont fabriquées (survol et ligne ouverte ne se forcent pas dans le navigateur) ; la légende est l'élément réel.
   cases.push({
     id: 'contrast_default_star_note_icon_and_legend_reach_4_5_and_3_to_1_in_light_and_dark',
-    description: 'Mention « au démarrage » et légende de « Organiser mes modèles » : 4,5:1 au moins sur leur fond ; icône de l’étoile (au repos, modèle par défaut avec sa pastille, ligne ouverte, ligne survolée) et icône de la légende : 3:1 au moins ; en clair et en sombre',
+    description: 'Mention « au démarrage » et légende de « Organiser mes documents » : 4,5:1 au moins sur leur fond ; icône de l’étoile (au repos, modèle par défaut avec sa pastille, ligne ouverte, ligne survolée) et icône de la légende : 3:1 au moins ; en clair et en sombre',
     run: async () => {
       const legend = document.querySelector('.template-organize-legend');
       const legendGlyph = document.querySelector('.template-organize-legend .tts-star-glyph');
@@ -1020,7 +1020,7 @@
         'mention sur une ligne': textIn(line('', note + star(' is-default')), '.tts-default-note'),
         'mention sur la ligne ouverte': textIn(line('aria-selected="true"', note + star(' is-default')), '.tts-default-note'),
         'mention sur une ligne survolée': textIn(line(hover, note + star(' is-default')), '.tts-default-note'),
-        'légende de Organiser mes modèles': round2(textRatio(legend)),
+        'légende de Organiser mes documents': round2(textRatio(legend)),
       }));
       const icons = inBothThemes(() => ({
         'étoile au repos': iconIn(line('', star('')), '.tts-star-btn'),

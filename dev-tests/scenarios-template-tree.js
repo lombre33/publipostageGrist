@@ -621,7 +621,7 @@
       } finally { I18n.setLang(lang); await h.sleep(100); }
       await clickEl(h, starOf(popup(), id)); await h.sleep(300);
       popup().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-      const pass = fr.note === 'au démarrage' && en.note === 'at startup' && /when the widget starts/.test(en.title) && /whole document/.test(en.title) && /widget starts/.test(en.aria) && fr.title !== en.title && /démarrage du widget/.test(fr.title);
+      const pass = fr.note === 'au démarrage' && en.note === 'at startup' && /when the widget starts/.test(en.title) && /whole Grist document/.test(en.title) && /widget starts/.test(en.aria) && fr.title !== en.title && /démarrage du widget/.test(fr.title);
       return { pass, notes: JSON.stringify({ fr, en }) };
     },
   });
@@ -869,7 +869,7 @@
     },
   });
 
-  // --- Dossier déplié / replié par défaut (29/09, demande d'Antoine) : réglage PAR UTILISATEUR, écrit depuis « Organiser mes modèles »
+  // --- Dossier déplié / replié par défaut (29/09, demande d'Antoine) : réglage PAR UTILISATEUR, écrit depuis « Organiser mes documents »
   // (dev-tests/scenarios-template-organize.js), lu ici à chaque ouverture de la liste. Ligne d'état = une ligne de la table de préférences avec
   // ModeleId 0 et le chemin du dossier (cf. js/template-preferences.js). ---
   function folderRowByPath(path) { return popup() && popup().querySelector('.tts-row-folder[data-folder-path="' + path + '"]'); }
@@ -1013,7 +1013,7 @@
 
   cases.push({
     id: 'tree_header_holds_organize_button_top_right_and_opens_the_window',
-    description: '« Organiser mes modèles » est en haut à droite du panneau (plus dans la barre), reste visible quand la liste défile, referme le panneau et ouvre la fenêtre ; à sa fermeture le focus revient au déclencheur',
+    description: '« Organiser mes documents » est en haut à droite du panneau (plus dans la barre), reste visible quand la liste défile, referme le panneau et ouvre la fenêtre ; à sa fermeture le focus revient au déclencheur',
     run: async (h) => {
       await createTemplate(h, 'document', 'Entête - Un');
       await openPopup(h);
@@ -1106,7 +1106,7 @@
 
   cases.push({
     id: 'tree_without_any_template_says_so_and_keeps_organize_reachable',
-    description: 'Sans aucun modèle enregistré, la liste dit « Aucun modèle enregistré. » (plus de ligne « Nouveau modèle » pour la remplir) et « Organiser » reste là, avec le focus pour qu’Échap marche',
+    description: 'Sans aucun modèle enregistré, la liste dit « Aucun document enregistré. » (plus de ligne « Nouveau modèle » pour la remplir) et « Organiser » reste là, avec le focus pour qu’Échap marche',
     run: async (h) => {
       await h.resetEditor();
       const original = Templates.getCached;

@@ -7,9 +7,9 @@
 // Ce que ce script prouve, par thème :
 //  (a) la liste est relue à chaque ouverture (vrai clic sur le déclencheur) : un dossier créé, un modèle rangé et un modèle épinglé dans GFS pendant que la liste était fermée
 //      apparaissent à l'ouverture suivante, sans doublon, et le widget n'écrit rien en relisant ;
-//  (b) un dossier qui n'a que sa ligne d'état est un dossier vide de l'arbre (replié ou déplié selon « Replie »), dans la liste ET dans « Organiser mes modèles » ;
+//  (b) un dossier qui n'a que sa ligne d'état est un dossier vide de l'arbre (replié ou déplié selon « Replie »), dans la liste ET dans « Organiser mes documents » ;
 //  (c) le widget ouvert seul (sans GFS) montre son rangement : tout ce qui précède se joue dans une page sans GFS, et l'abonné de la barre de GFS (garde `popup &&`) ne lève rien ;
-//  (d) un dossier vide se crée et se supprime dans « Organiser mes modèles » (décision du porteur du 17/11, « Créer et supprimer ») : « Nouveau dossier » GARDE le dossier vide (sa ligne d'état est
+//  (d) un dossier vide se crée et se supprime dans « Organiser mes documents » (décision du porteur du 17/11, « Créer et supprimer ») : « Nouveau dossier » GARDE le dossier vide (sa ligne d'état est
 //      écrite, GFS la voit), un dossier vide porte « Supprimer » (au premier plan, dans la fenêtre à 700x400), supprimer retire la ligne d'état, et les deux gestes se défont et se rétablissent
 //      au vrai clavier (Ctrl + Z, Ctrl + Y, la fenêtre fermée : une fenêtre ouverte garde la touche).
 // Lancé par run-headless.mjs (groupe Node "templateRereadMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-template-reread-mouse.mjs
@@ -222,7 +222,7 @@ async function playScheme(scheme) {
   check(tag('700x400 : la liste relue tient toujours dans la fenêtre'), !!geoAfter && geoAfter.top >= 0 && geoAfter.bottom <= geoAfter.vh && geoAfter.overflowX <= 20, geoAfter);
   await shot(page, `liste-relue-${scheme}`);
 
-  // La fenêtre « Organiser mes modèles » (vrai clic sur son bouton) : mêmes dossiers vides, avec l'interrupteur « replié par défaut » ; relue aussi à l'ouverture.
+  // La fenêtre « Organiser mes documents » (vrai clic sur son bouton) : mêmes dossiers vides, avec l'interrupteur « replié par défaut » ; relue aussi à l'ouverture.
   const organize = await center(page, '#btn-organize-templates');
   await page.mouse.move(organize.x - 12, organize.y - 4, { steps: 2 }); await page.mouse.click(organize.x, organize.y); await page.waitForTimeout(500);
   let orows = await organizeFolders(page);

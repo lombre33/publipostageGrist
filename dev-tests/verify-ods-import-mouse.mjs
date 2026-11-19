@@ -29,7 +29,7 @@ const SHEET_MIME = 'application/vnd.oasis.opendocument.spreadsheet';
 const TEXTS = {
   fr: {
     row: 'Importer un OpenDocument…', placeholder: 'Rechercher une feuille…', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler', close: 'Fermer',
-    importedSheet: /^Feuille « Détail » \(2 sur 2\) importée : 3 lignes, 2 colonnes\./, imported: 'OpenDocument importé : 2 lignes, 2 colonnes. Nommez le modèle puis enregistrez-le.', importedPattern: /importé/,
+    importedSheet: /^Feuille « Détail » \(2 sur 2\) importée : 3 lignes, 2 colonnes\./, imported: 'OpenDocument importé : 2 lignes, 2 colonnes. Nommez le document puis enregistrez-le.', importedPattern: /importé/,
     reportTitle: 'Ce que l’import n’a pas repris tel quel', reportIntro: 'Le classeur est importé. Il avait ceci, que la grille n’a pas pu reprendre tel quel :', report: ['1 formule remplacée par son résultat', '1 ligne masquée non reprise'],
     drawing: 'Ce fichier OpenDocument est un dessin : seuls les textes, tableurs et présentations sont lus.', drawingPattern: /est un dessin/,
     empty: 'Ce tableur ne contient aucune case à importer.', emptyPattern: /ne contient aucune case/,
@@ -38,7 +38,7 @@ const TEXTS = {
   },
   en: {
     row: 'Import from OpenDocument…', placeholder: 'Search for a sheet…', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
-    importedSheet: /^Sheet “Détail” \(2 of 2\) imported: 3 rows, 2 columns\./, imported: 'OpenDocument imported: 2 rows, 2 columns. Name the template, then save it.', importedPattern: /imported/,
+    importedSheet: /^Sheet “Détail” \(2 of 2\) imported: 3 rows, 2 columns\./, imported: 'OpenDocument imported: 2 rows, 2 columns. Name the document, then save it.', importedPattern: /imported/,
     reportTitle: 'What the import did not carry over as is', reportIntro: 'The workbook is imported. It had the following, which the grid could not carry over as is:', report: ['1 formula replaced by its result', '1 hidden row not imported'],
     drawing: 'This OpenDocument file is a drawing: only texts, spreadsheets and presentations are read.', drawingPattern: /is a drawing/,
     empty: 'This spreadsheet has no cells to import.', emptyPattern: /has no cells/,

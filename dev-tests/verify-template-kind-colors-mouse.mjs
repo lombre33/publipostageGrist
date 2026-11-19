@@ -4,7 +4,7 @@
 // page ; ici on regarde les pixels d'une vraie capture : une icône peinte en masque n'a de couleur que si le navigateur la peint.
 //  SEUL, français, clair : un clic de souris ouvre la liste. Les icônes du document (bleu), de la grille (vert) sont à la couleur de l'explorateur de GFS ; la présentation, grisée (l'extension « diapositives »
 //   est éteinte), l'e-mail, le macro-modèle et le dossier gardent celle du texte ; une ligne survolée et la ligne choisie gardent la leur ; le déclencheur suit le modèle ouvert (document bleu, e-mail et
-//   macro-modèle neutres) ; « Organiser mes modèles » reste monochrome.
+//   macro-modèle neutres) ; « Organiser mes documents » reste monochrome.
 //  HÉBERGÉ, anglais, sombre, extension « diapositives » active : la présentation est orange, ouverte par un clic elle colore le déclencheur ; GFS l'éteint en direct : le déclencheur et la ligne perdent la
 //   couleur, rien ne disparaît ; rallumée, l'orange revient.
 // Les couleurs attendues sont celles de l'explorateur de GFS (css/gfs.css de GFS : --t-doc, --t-grid, --t-slides), écrites ici et non lues dans la feuille.
@@ -188,14 +188,14 @@ async function run({ label, hosted, extensions, lang, colorScheme, theme }) {
     check(`${label} : l'extension rallumée, le déclencheur redevient orange`, back.ok, back);
   }
 
-  // « Organiser mes modèles » (même brique de ligne) reste monochrome : l'icône du document y a la couleur du texte de sa ligne.
+  // « Organiser mes documents » (même brique de ligne) reste monochrome : l'icône du document y a la couleur du texte de sa ligne.
   await tools.openList();
   const organize = await tools.centerOf('#btn-organize-templates');
   await page.mouse.move(organize.x - 10, organize.y); await page.mouse.move(organize.x, organize.y, { steps: 3 }); await sleep(80); await page.mouse.click(organize.x, organize.y); await sleep(400);
   const windowRow = '#template-organize-list .tts-row-leaf[data-template-id="' + ID.doc + '"]';
   const inWindow = await tools.painted(`${windowRow} .tts-icon`, rgbOf(await tools.colourOf(windowRow)), want.document);
   await snap(page, `${label.replace(/\W+/g, '-')}-organiser`);
-  check(`${label} : dans « Organiser mes modèles », l'icône du document garde la couleur du texte (la couleur ne vaut que dans la liste déroulante)`, inWindow.ok, inWindow);
+  check(`${label} : dans « Organiser mes documents », l'icône du document garde la couleur du texte (la couleur ne vaut que dans la liste déroulante)`, inWindow.ok, inWindow);
   await page.keyboard.press('Escape'); await sleep(200);
 }
 

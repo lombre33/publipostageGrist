@@ -913,7 +913,7 @@ async function run(theme) {
   const delButtons = [await hit(DIALOG_CANCEL), await hit(DIALOG_OK)];
   const wantedMessage = 'Ce modèle Grille est posé comme tableau lié dans 1 modèle : ces tableaux resteront, détachés.';
   check(`${T}, supprimer le modèle : la confirmation dit « ${wantedMessage} » dans le panneau, boutons au premier plan`,
-    del10.open && del10.title === 'Supprimer ce modèle ?' && del10.message === wantedMessage && delBox.inPanel && delButtons.every(seen), { del10, delBox, delButtons });
+    del10.open && del10.title === 'Supprimer ce document ?' && del10.message === wantedMessage && delBox.inPanel && delButtons.every(seen), { del10, delBox, delButtons });
   await snap(`${T}-13-suppression`);
   await clickAt(DIALOG_CANCEL);
   await page.waitForTimeout(400);
@@ -1065,8 +1065,8 @@ async function runEnglish() {
     return { open, title: open ? ov.querySelector('h3').textContent : '', message: open ? ov.querySelector('.pp-dialog-message').textContent : '', buttons: open ? Array.from(ov.querySelectorAll('.pp-modal-actions button')).filter(b => !b.hidden).map(b => b.textContent) : [] };
   });
   const enDelBox = await hit(DIALOG + ' .modal-content');
-  check('anglais, supprimer le modèle : « Delete this template? » dit « This Grid template is placed as a linked table in 1 template: those tables will stay, detached. », dans le panneau',
-    enDel.open && enDel.title === 'Delete this template?' && enDel.message === 'This Grid template is placed as a linked table in 1 template: those tables will stay, detached.' && enDelBox.inPanel && seen(await hit(DIALOG_CANCEL)) && seen(await hit(DIALOG_OK)), { enDel, enDelBox });
+  check('anglais, supprimer le modèle : « Delete this document? » dit « This Grid template is placed as a linked table in 1 template: those tables will stay, detached. », dans le panneau',
+    enDel.open && enDel.title === 'Delete this document?' && enDel.message === 'This Grid template is placed as a linked table in 1 template: those tables will stay, detached.' && enDelBox.inPanel && seen(await hit(DIALOG_CANCEL)) && seen(await hit(DIALOG_OK)), { enDel, enDelBox });
   await snap('en-6-suppression');
   await clickSel(DIALOG_CANCEL);
   await page.waitForTimeout(400);

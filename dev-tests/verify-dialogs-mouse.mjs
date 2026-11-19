@@ -3,10 +3,10 @@
 // (page.mouse) et au VRAI clavier (frappe, Entrée, Échap, Tab), en clair et en sombre - à la place de window.prompt / window.confirm (choix d'Antoine du
 // 2026-09-29). Deux parties : 1) la fenêtre elle-même (run) ; 2) les endroits du widget qui l'appellent (runSites), chacun déclenché par le vrai clic sur
 // le vrai bouton : image par adresse, enregistrer sous, supprimer un modèle, email trop long, les trois exports en lot, la table créée depuis la galerie,
-// supprimer un fil de commentaires, nouveau dossier / sous-dossier / déplacer vers un dossier (Organiser mes modèles), supprimer une correspondance de tables.
+// supprimer un fil de commentaires, nouveau dossier / sous-dossier / déplacer vers un dossier (Organiser mes documents), supprimer une correspondance de tables.
 // Le verrou d'export (withExportLock, js/main.js) grise le bouton avant que la fenêtre « Email trop long » s'ouvre : lancé au clavier (vraies touches Tab et Entrée),
 // le clavier doit revenir sur « Créer l'email » et sur « Exporter en PDF » à la fermeture ; lancé à la souris, rien ne change (aucun cadre de focus).
-// Les scénarios qui tournent dans la page ne voient ni le focus rendu à l'élément d'origine, ni la fenêtre posée AU-DESSUS d'une autre (Organiser mes modèles,
+// Les scénarios qui tournent dans la page ne voient ni le focus rendu à l'élément d'origine, ni la fenêtre posée AU-DESSUS d'une autre (Organiser mes documents,
 // la galerie, Tables liées : z-index 2000), ni qu'un Tab ou un Échap n'atteint que la fenêtre du dessus.
 // Lancé par run-headless.mjs (groupe Node "dialogsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-dialogs-mouse.mjs
 // DIALOGS_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
@@ -216,13 +216,13 @@ async function run(theme) {
 
   // 1) Saisie : ouverte dans le panneau, champ prérempli et sélectionné, la frappe réelle le remplace, Entrée valide, le focus revient au bouton d'origine.
   await focusOn('v2-btn-settings');
-  await ask('prompt', { title: 'Nouveau modèle', label: 'Nom du nouveau modèle :', value: 'Sans titre', confirmLabel: 'Créer' });
+  await ask('prompt', { title: 'Nouveau modèle', label: 'Nom du nouveau document :', value: 'Sans titre', confirmLabel: 'Créer' });
   let s = await state();
   check(`${T}, saisie : la fenêtre s’ouvre dans le panneau ${WIDTH}x${HEIGHT} avec son titre, son libellé et le champ prérempli`,
-    s.open && inPanel(s.box) && s.title === 'Nouveau modèle' && s.label === 'Nom du nouveau modèle :' && s.inputShown && s.inputValue === 'Sans titre' && s.message === null, s);
+    s.open && inPanel(s.box) && s.title === 'Nouveau modèle' && s.label === 'Nom du nouveau document :' && s.inputShown && s.inputValue === 'Sans titre' && s.message === null, s);
   check(`${T}, saisie : le focus est dans le champ, texte entier sélectionné`, s.focus === 'input' && s.selection[0] === 0 && s.selection[1] === 'Sans titre'.length, s);
   check(`${T}, saisie : boutons Annuler et Créer, Créer est le bouton principal`, JSON.stringify(s.buttons) === '["Annuler","Créer"]' && s.primary === 'Créer', s);
-  check(`${T}, saisie : role="dialog" aria-modal, nommée par son titre, champ nommé par son libellé`, s.aria.role === 'dialog' && s.aria.modal === 'true' && s.aria.labelledText === 'Nouveau modèle' && s.inputLabelledText === 'Nom du nouveau modèle :' && s.aria.describedBy === null, s);
+  check(`${T}, saisie : role="dialog" aria-modal, nommée par son titre, champ nommé par son libellé`, s.aria.role === 'dialog' && s.aria.modal === 'true' && s.aria.labelledText === 'Nouveau modèle' && s.inputLabelledText === 'Nom du nouveau document :' && s.aria.describedBy === null, s);
   const expectedScrim = await scrimNow();
   check(`${T}, saisie : le voile prend la couleur du thème (--pp-scrim) et passe au-dessus des fenêtres de 2000`, s.bg === expectedScrim && Number(s.z) > 2000, { bg: s.bg, expectedScrim, z: s.z });
   const t1 = await hitTest('#pp-dialog-modal h3'), o1 = await hitTest(OK), i1 = await hitTest('#pp-dialog-modal .pp-dialog-input');
@@ -237,12 +237,12 @@ async function run(theme) {
   check(`${T}, saisie : le focus revient à l’élément qui l’avait à l’ouverture`, await focusIs('v2-btn-settings'));
 
   // 2) Annuler : Échap et clic sur Annuler rendent null ; Créer avec un champ vide rend '' (pas null : « aucun dossier » n'est pas « annulé »).
-  await ask('prompt', { title: 'Nouveau modèle', label: 'Nom du nouveau modèle :', value: 'x', confirmLabel: 'Créer' });
+  await ask('prompt', { title: 'Nouveau modèle', label: 'Nom du nouveau document :', value: 'x', confirmLabel: 'Créer' });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
   r = await result();
   check(`${T}, saisie : Échap annule - la promesse rend null, la fenêtre se ferme, le focus revient`, r.done && r.value === null && !(await isOpen()) && await focusIs('v2-btn-settings'), r);
-  await ask('prompt', { title: 'Nouveau modèle', label: 'Nom du nouveau modèle :', value: 'x', confirmLabel: 'Créer' });
+  await ask('prompt', { title: 'Nouveau modèle', label: 'Nom du nouveau document :', value: 'x', confirmLabel: 'Créer' });
   const cancel = await click(CANCEL);
   r = await result();
   check(`${T}, saisie : un vrai clic sur Annuler rend null`, seen(cancel) && r.done && r.value === null && !(await isOpen()), { cancel, r });
@@ -296,13 +296,13 @@ async function run(theme) {
   check(`${T}, confirmation : Entrée sur le bouton principal (focus d’ouverture) valide`, r.done && r.value === true, r);
 
   // 5) Confirmation destructrice : le focus arrive sur Annuler (une frappe d'Entrée distraite ne supprime rien) ; Tab puis Entrée confirme.
-  await ask('confirm', { title: 'Supprimer le modèle', message: 'Supprimer ce modèle ?', confirmLabel: 'Supprimer', danger: true });
+  await ask('confirm', { title: 'Supprimer le modèle', message: 'Supprimer ce document ?', confirmLabel: 'Supprimer', danger: true });
   check(`${T}, confirmation destructrice : le focus arrive sur Annuler`, (await state()).focus === 'Annuler', (await state()).focus);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(200);
   r = await result();
   check(`${T}, confirmation destructrice : Entrée d’emblée annule (false)`, r.done && r.value === false, r);
-  await ask('confirm', { title: 'Supprimer le modèle', message: 'Supprimer ce modèle ?', confirmLabel: 'Supprimer', danger: true });
+  await ask('confirm', { title: 'Supprimer le modèle', message: 'Supprimer ce document ?', confirmLabel: 'Supprimer', danger: true });
   await page.keyboard.press('Tab');
   check(`${T}, confirmation destructrice : Tab amène sur Supprimer`, (await state()).focus === 'Supprimer', (await state()).focus);
   await page.keyboard.press('Enter');
@@ -321,7 +321,7 @@ async function run(theme) {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
 
-  // 7) AU-DESSUS d'une fenêtre écrite dans index.html (Organiser mes modèles, z-index 2000) : la saisie est au premier plan, Tab et Échap ne touchent qu'elle,
+  // 7) AU-DESSUS d'une fenêtre écrite dans index.html (Organiser mes documents, z-index 2000) : la saisie est au premier plan, Tab et Échap ne touchent qu'elle,
   // Organiser reste ouverte dessous, puis se ferme à son tour au second Échap.
   await page.evaluate(() => TemplateOrganizeModal.open());
   await page.waitForTimeout(400);
@@ -502,7 +502,7 @@ async function realClick(selector, wait = 300) {
   await page.waitForTimeout(wait);
   return c;
 }
-// « Organiser mes modèles » est dans l'en-tête de la liste des modèles (depuis le 2026-10-01) : ouvrir la liste au vrai clic, puis le bouton.
+// « Organiser mes documents » est dans l'en-tête de la liste des modèles (depuis le 2026-10-01) : ouvrir la liste au vrai clic, puis le bouton.
 async function openOrganize() {
   await realClick('.tts-trigger', 250);
   await realClick('#btn-organize-templates', 700);
@@ -634,8 +634,8 @@ async function runSites(theme) {
   await openSaveAs();
   s = await state();
   // La copie est proposée sous le premier nom libre (« Modèle … (2) », retour d'Antoine du 01/10), sélectionné : Entrée suffit, une frappe le remplace.
-  expectDialog(`${T}, enregistrer sous : la fenêtre s’ouvre avec le libellé « Nom du nouveau modèle » et le premier nom libre déjà saisi`, s,
-    { title: 'Enregistrer sous (copie)', label: 'Nom du nouveau modèle', message: null, value: `Modèle ${T} (2)`, buttons: ['Annuler', 'Enregistrer'], focus: 'input' });
+  expectDialog(`${T}, enregistrer sous : la fenêtre s’ouvre avec le libellé « Nom du nouveau document » et le premier nom libre déjà saisi`, s,
+    { title: 'Enregistrer sous (copie)', label: 'Nom du nouveau document', message: null, value: `Modèle ${T} (2)`, buttons: ['Annuler', 'Enregistrer'], focus: 'input' });
   check(`${T}, enregistrer sous : la proposition est sélectionnée en entier`, s.selection[0] === 0 && s.selection[1] === `Modèle ${T} (2)`.length, s.selection);
   await snap(`${T}-s2-enregistrer-sous`);
   await page.keyboard.press('Escape');
@@ -650,8 +650,8 @@ async function runSites(theme) {
   // 3) Supprimer le modèle courant (la copie) : confirmation destructrice, le focus arrive sur Annuler.
   await realClick('#btn-delete');
   s = await state();
-  expectDialog(`${T}, supprimer un modèle : « Supprimer ce modèle ? », focus sur Annuler (confirmation destructrice)`, s,
-    { title: 'Supprimer ce modèle ?', message: null, buttons: ['Annuler', 'Supprimer'], focus: 'Annuler' });
+  expectDialog(`${T}, supprimer un modèle : « Supprimer ce document ? », focus sur Annuler (confirmation destructrice)`, s,
+    { title: 'Supprimer ce document ?', message: null, buttons: ['Annuler', 'Supprimer'], focus: 'Annuler' });
   await snap(`${T}-s3-supprimer-modele`);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(300);
@@ -1031,7 +1031,7 @@ async function runSites(theme) {
   await page.waitForTimeout(700);
   check(`${T}, commentaire : « Supprimer » (clic réel) retire le fil, sa marque et ses lignes`, (await threadRows()) === 0 && !(await centerOf('.tiptap .comment-mark')), await threadRows());
 
-  // 8) Organiser mes modèles : nouveau dossier, sous-dossier, déplacer vers un dossier - la saisie est AU-DESSUS de la fenêtre (Échap ne ferme qu'elle).
+  // 8) Organiser mes documents : nouveau dossier, sous-dossier, déplacer vers un dossier - la saisie est AU-DESSUS de la fenêtre (Échap ne ferme qu'elle).
   await page.evaluate(async name => {
     Editor.setHTML('<p>Modèle à ranger</p>'); document.getElementById('template-name').value = name;
     document.getElementById('btn-save').click();
@@ -1136,12 +1136,12 @@ async function runEnglish() {
   await realClick('#btn-save', 800);
   await openSaveAs();
   s = await state();
-  expectDialog(`${T}, enregistrer sous : « Save as (copy) », « Save », le premier nom libre déjà saisi`, s, { title: 'Save as (copy)', label: 'Name of the new template', message: null, value: 'Template EN (2)', buttons: ['Cancel', 'Save'], focus: 'input' });
+  expectDialog(`${T}, enregistrer sous : « Save as (copy) », « Save », le premier nom libre déjà saisi`, s, { title: 'Save as (copy)', label: 'Name of the new document', message: null, value: 'Template EN (2)', buttons: ['Cancel', 'Save'], focus: 'input' });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
   await realClick('#btn-delete');
   s = await state();
-  expectDialog(`${T}, supprimer un modèle : « Delete this template? », focus sur Cancel`, s, { title: 'Delete this template?', message: null, buttons: ['Cancel', 'Delete'], focus: 'Cancel' });
+  expectDialog(`${T}, supprimer un modèle : « Delete this document? », focus sur Cancel`, s, { title: 'Delete this document?', message: null, buttons: ['Cancel', 'Delete'], focus: 'Cancel' });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
   await startBatch('docx', 'zip');

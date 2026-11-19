@@ -76,7 +76,7 @@ function hits(rect, bar) {
 const WINDOWS = [
   { name: 'la galerie de modèles (grande)', overlay: '#template-gallery-modal', size: 'lg', open: ({ app }) => app.evaluate(() => document.getElementById('v2-btn-new-from-template').click()), close: '#tpl-gallery-close' },
   { name: 'Réglages (moyenne, haute)', overlay: '#settings-modal', size: 'md', open: async ({ page, app }) => { const at = await center(app, '#v2-btn-settings'); await page.mouse.click(at.x, at.y); }, close: '#settings-close' },
-  { name: 'une confirmation (petite)', overlay: '#pp-dialog-modal', size: 'sm', open: ({ app }) => app.evaluate(() => { window.__asked = Dialogs.confirm({ title: 'Supprimer ce modèle ?', message: 'Cette action ne peut pas être annulée.' }); }), close: '#pp-dialog-modal .pp-modal-actions button' },
+  { name: 'une confirmation (petite)', overlay: '#pp-dialog-modal', size: 'sm', open: ({ app }) => app.evaluate(() => { window.__asked = Dialogs.confirm({ title: 'Supprimer ce document ?', message: 'Cette action ne peut pas être annulée.' }); }), close: '#pp-dialog-modal .pp-modal-actions button' },
 ];
 const center = (app, selector) => app.evaluate((sel) => { const r = document.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, selector);
 

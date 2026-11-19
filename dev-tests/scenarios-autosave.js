@@ -505,7 +505,7 @@
         const draft = statusNow();
         const pass = UNSAVED_RE.test(offPending.text) && offPending.unsaved && offPending.text === 'Modifications non enregistrées.'
           && SAVED_RE.test(afterOn.text) && !afterOn.unsaved && stored
-          && /^(Modèle non enregistré|Template not saved)/.test(draft.text) && draft.error && !draft.unsaved;
+          && /^(Document non enregistré|Document not saved)/.test(draft.text) && draft.error && !draft.unsaved;
         return { pass, notes: JSON.stringify({ offPending, afterOn, stored, draft }) };
       } finally {
         I18n.setLang('fr');

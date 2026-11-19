@@ -332,20 +332,20 @@
 <link rel="preload" as="script" href="js/space-gap.js?v=0.3">
 <link rel="preload" as="script" href="js/reader-mode.js?v=0.209">
 <link rel="preload" as="script" href="js/reader-guide.js?v=0.7">
-<link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.14">
-<link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.36">
+<link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.15">
+<link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.37">
 <link rel="preload" as="script" href="js/i18n-texts-format.js?v=0.4">
 <link rel="preload" as="script" href="js/i18n-texts-blocks.js?v=0.7">
 <link rel="preload" as="script" href="js/i18n-texts-editor.js?v=0.1">
-<link rel="preload" as="script" href="js/i18n-texts-review.js?v=0.5">
+<link rel="preload" as="script" href="js/i18n-texts-review.js?v=0.6">
 <link rel="preload" as="script" href="js/i18n-texts-slides.js?v=0.3">
 <link rel="preload" as="script" href="js/i18n-texts-motion.js?v=0.3">
-<link rel="preload" as="script" href="js/i18n-texts-settings.js?v=0.20">
-<link rel="preload" as="script" href="js/i18n-texts-status.js?v=0.9">
+<link rel="preload" as="script" href="js/i18n-texts-settings.js?v=0.21">
+<link rel="preload" as="script" href="js/i18n-texts-status.js?v=0.10">
 <link rel="preload" as="script" href="js/i18n-texts-variables.js?v=0.8">
 <link rel="preload" as="script" href="js/i18n-texts-eml.js?v=0.1">
 <link rel="preload" as="script" href="js/i18n-texts-pivot.js?v=0.3">
-<link rel="preload" as="script" href="js/i18n-texts-lockbubble.js?v=0.4">
+<link rel="preload" as="script" href="js/i18n-texts-lockbubble.js?v=0.5">
 <link rel="preload" as="script" href="js/i18n-texts-state.js?v=0.1">
 <link rel="preload" as="script" href="js/i18n.js?v=0.382">
 <link rel="preload" as="script" href="js/shortcuts.js?v=0.44">
@@ -593,16 +593,16 @@
   <div id="toolbar-top" role="banner">
     <div class="bar-row">
       <div class="title-cluster" id="v2-title-cluster">
-        <select id="template-select" class="template-select" aria-label="Modèle" data-i18n-aria="template.select"><option value="" data-i18n="template.newOption">— Nouveau modèle —</option></select>
-        <input id="template-name" type="text" class="title-cluster-input" placeholder="Nom du modèle" data-i18n-placeholder="template.namePlaceholder" aria-label="Nom du modèle" data-i18n-aria="template.namePlaceholder" hidden>
-        <button id="btn-rename-template" type="button" class="rename-btn" aria-label="Renommer le modèle" data-tip="Renommer" data-i18n-aria="template.rename.aria" data-i18n-tip="template.rename.tip"></button>
-        <button id="btn-set-default-template" type="button" class="rename-btn" aria-label="Définir ce modèle comme modèle par défaut à l'ouverture" data-tip="Modèle par défaut" data-i18n-aria="template.setDefault.aria" data-i18n-tip="template.setDefault.tip"></button>
+        <select id="template-select" class="template-select" aria-label="Document" data-i18n-aria="template.select"><option value="" data-i18n="template.newOption">— Nouveau document —</option></select>
+        <input id="template-name" type="text" class="title-cluster-input" placeholder="Nom du document" data-i18n-placeholder="template.namePlaceholder" aria-label="Nom du document" data-i18n-aria="template.namePlaceholder" hidden>
+        <button id="btn-rename-template" type="button" class="rename-btn" aria-label="Renommer le document" data-tip="Renommer" data-i18n-aria="template.rename.aria" data-i18n-tip="template.rename.tip"></button>
+        <button id="btn-set-default-template" type="button" class="rename-btn" aria-label="Définir ce document comme document par défaut à l'ouverture" data-tip="Document par défaut" data-i18n-aria="template.setDefault.aria" data-i18n-tip="template.setDefault.tip"></button>
       </div>
       <div class="action-cluster">
         <span class="v2-hover-group" id="v2-new-template-group" data-close-on-click>
-          <button id="btn-new" aria-label="Nouveau modèle" data-i18n-aria="toolbar.new"></button>
+          <button id="btn-new" aria-label="Nouveau document" data-i18n-aria="toolbar.new"></button>
           <span class="v2-hover-flyout v2-hover-flyout-v v2-hover-flyout-scrollable" id="v2-new-template-flyout" tabindex="-1">
-            <span class="v2-hover-flyout-label" data-i18n="toolbar.new">Nouveau modèle</span>
+            <span class="v2-hover-flyout-label" data-i18n="toolbar.newHeading">Nouveau</span>
             <span class="v2-hover-row" id="v2-btn-new-document" data-i18n="toolbar.newDocument">Nouveau document</span>
             <span class="v2-hover-row" id="v2-btn-new-email" data-i18n="toolbar.newEmail">Nouvel email</span>
             <span class="v2-hover-row" id="v2-btn-new-macro" data-i18n="toolbar.newMacro">Nouveau macro-modèle</span>
@@ -625,7 +625,7 @@
             <span class="v2-hover-row" id="v2-btn-save-as" role="menuitem" tabindex="0" data-i18n="toolbar.saveAsRow">Enregistrer sous…</span>
             <span class="v2-hover-row" id="v2-btn-history" role="menuitem" tabindex="0" data-i18n="toolbar.versionsRow">Historique des versions…</span>
             <span class="v2-hover-hsep"></span>
-            <span class="v2-hover-row v2-hover-row-check" id="v2-btn-autosave" role="menuitemcheckbox" aria-checked="true" tabindex="0" aria-label="Enregistrement automatique — enregistre le modèle toutes les ~2,5 secondes pendant que vous éditez. Désactiver si vous préférez enregistrer vous-même." data-i18n="toolbar.autosave.row" data-i18n-aria="toolbar.autosave.aria">Enregistrement automatique</span>
+            <span class="v2-hover-row v2-hover-row-check" id="v2-btn-autosave" role="menuitemcheckbox" aria-checked="true" tabindex="0" aria-label="Enregistrement automatique — enregistre le document toutes les ~2,5 secondes pendant que vous éditez. Désactiver si vous préférez enregistrer vous-même." data-i18n="toolbar.autosave.row" data-i18n-aria="toolbar.autosave.aria">Enregistrement automatique</span>
           </span>
         </span>
         <button id="btn-delete" aria-label="Supprimer" data-tip="Supprimer" data-i18n-aria="toolbar.delete" data-i18n-tip="toolbar.delete"></button>
@@ -1030,7 +1030,7 @@
     </div>
   </div>
   <div id="autosave-conflict-banner" class="autosave-conflict-banner" style="display:none;" role="alert">
-    <span data-i18n="autosave.conflict.message">Ce modèle a été modifié ailleurs pendant votre édition.</span>
+    <span data-i18n="autosave.conflict.message">Ce document a été modifié ailleurs pendant votre édition.</span>
     <button type="button" id="autosave-conflict-reload" data-i18n="autosave.conflict.reload">Recharger la dernière version</button>
   </div>
   <!-- Bandeau « Revenir au macro-modèle » : une ligne fine entre la barre d'outils et le texte, montrée par js/main.js (syncMacroReturnBar) tant que le modèle à l'écran a été ouvert par le stylo du résumé d'un macro-modèle. -->
@@ -1123,15 +1123,15 @@
   </div></div>
   <div id="template-organize-modal" class="pp-modal pp-modal-page" style="display:none;" tabindex="-1"><div class="pp-modal-box modal-content template-organize-modal-content" data-size="md" role="dialog" aria-modal="true" aria-labelledby="template-organize-title" tabindex="-1">
     <div class="pp-modal-header">
-      <h3 id="template-organize-title" data-i18n="organize.modal.title">Organiser mes modèles</h3>
-      <p class="template-organize-intro" data-i18n="organize.modal.intro">Ce rangement est personnel : les autres personnes qui utilisent ce document ne le voient pas.</p>
+      <h3 id="template-organize-title" data-i18n="organize.modal.title">Organiser mes documents</h3>
+      <p class="template-organize-intro" data-i18n="organize.modal.intro">Ce rangement est personnel : les autres personnes qui utilisent ce document Grist ne le voient pas.</p>
       <div class="template-organize-search">
-        <input type="search" id="template-organize-search" data-i18n-placeholder="organize.modal.searchPlaceholder" placeholder="Rechercher un modèle…" aria-label="Rechercher un modèle…" data-i18n-aria="organize.modal.searchPlaceholder">
+        <input type="search" id="template-organize-search" data-i18n-placeholder="organize.modal.searchPlaceholder" placeholder="Rechercher un document…" aria-label="Rechercher un document…" data-i18n-aria="organize.modal.searchPlaceholder">
         <button id="template-organize-new-folder" class="tom-new-folder-btn" data-i18n="organize.modal.newFolderRoot">+ Nouveau dossier</button>
       </div>
     </div>
     <div id="template-organize-list" class="pp-modal-body template-organize-list"></div>
-    <div class="pp-modal-actions modal-actions"><p class="template-organize-legend"><span class="tts-star-glyph" aria-hidden="true"></span><span data-i18n="organize.modal.defaultLegend">Modèle par défaut : il s’ouvre au démarrage du widget, pour tout le document. Un seul à la fois.</span></p><button id="template-organize-close" data-i18n="common.close">Fermer</button></div>
+    <div class="pp-modal-actions modal-actions"><p class="template-organize-legend"><span class="tts-star-glyph" aria-hidden="true"></span><span data-i18n="organize.modal.defaultLegend">Document par défaut : il s’ouvre au démarrage du widget, dans tout ce document Grist. Un seul à la fois.</span></p><button id="template-organize-close" data-i18n="common.close">Fermer</button></div>
   </div></div>
   <div id="template-preview-modal" class="pp-modal pp-modal-page" style="display:none;" tabindex="-1"><div class="pp-modal-box modal-content template-preview-modal-content" data-size="lg" role="dialog" aria-modal="true" aria-labelledby="tpl-preview-name" tabindex="-1">
     <div class="pp-modal-header tpl-preview-header">
@@ -1465,20 +1465,20 @@
 <script src="js/space-gap.js?v=0.3"></script>
 <script src="js/reader-mode.js?v=0.209"></script>
 <script src="js/reader-guide.js?v=0.7"></script>
-<script src="js/i18n-texts-templates.js?v=0.14"></script>
-<script src="js/i18n-texts-export.js?v=0.36"></script>
+<script src="js/i18n-texts-templates.js?v=0.15"></script>
+<script src="js/i18n-texts-export.js?v=0.37"></script>
 <script src="js/i18n-texts-format.js?v=0.4"></script>
 <script src="js/i18n-texts-blocks.js?v=0.7"></script>
 <script src="js/i18n-texts-editor.js?v=0.1"></script>
-<script src="js/i18n-texts-review.js?v=0.5"></script>
+<script src="js/i18n-texts-review.js?v=0.6"></script>
 <script src="js/i18n-texts-slides.js?v=0.3"></script>
 <script src="js/i18n-texts-motion.js?v=0.3"></script>
-<script src="js/i18n-texts-settings.js?v=0.20"></script>
-<script src="js/i18n-texts-status.js?v=0.9"></script>
+<script src="js/i18n-texts-settings.js?v=0.21"></script>
+<script src="js/i18n-texts-status.js?v=0.10"></script>
 <script src="js/i18n-texts-variables.js?v=0.8"></script>
 <script src="js/i18n-texts-eml.js?v=0.1"></script>
 <script src="js/i18n-texts-pivot.js?v=0.3"></script>
-<script src="js/i18n-texts-lockbubble.js?v=0.4"></script>
+<script src="js/i18n-texts-lockbubble.js?v=0.5"></script>
 <script src="js/i18n-texts-state.js?v=0.1"></script>
 <script src="js/i18n.js?v=0.382"></script>
 <script src="js/shortcuts.js?v=0.44"></script>

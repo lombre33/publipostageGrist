@@ -759,7 +759,7 @@ async function englishPart() {
     name: document.querySelector('.settings-key-row[data-action="heading1"] .settings-key-name').textContent,
     comment: document.querySelector('.settings-key-row[data-action="comment"] .settings-key-btn').textContent,
   }));
-  check(`${T} : onglet, titre, groupes et touches de la liste sont en anglais (« Alt+Shift+1 », « Ctrl+Alt+M »)`, labels.tab === 'Shortcuts' && labels.title === 'Keyboard keys' && labels.group === 'Templates|View|Formatting|Insert|History and tracking' && labels.heading === 'Alt+Shift+1' && labels.comment === 'Ctrl+Alt+M', labels);
+  check(`${T} : onglet, titre, groupes et touches de la liste sont en anglais (« Alt+Shift+1 », « Ctrl+Alt+M »)`, labels.tab === 'Shortcuts' && labels.title === 'Keyboard keys' && labels.group === 'Documents|View|Formatting|Insert|History and tracking' && labels.heading === 'Alt+Shift+1' && labels.comment === 'Ctrl+Alt+M', labels);
   await snap(`${T}-1-liste`);
   await closeSettings();
   await remapPart(T, false);

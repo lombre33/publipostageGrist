@@ -83,10 +83,10 @@ const I18nTextsStatus = {
   // l'auto-save) sans le moindre message, seule la console en montrant la cause. init().catch(...) affiche l'erreur ici plutôt que de laisser le
   // widget muet.
   'status.initError': { fr: 'Erreur au chargement du widget : {message}', en: 'Error loading the widget: {message}' },
-  'status.templateNameRequired': { fr: 'Nom du modèle requis.', en: 'Template name required.' },
+  'status.templateNameRequired': { fr: 'Nom du document requis.', en: 'Document name required.' },
   'status.nameExists': { fr: 'Ce nom existe déjà : renommé « {name} ».', en: 'This name already exists: renamed “{name}”.' },
   // Le nom a été effacé dans le champ du crayon « Renommer » (Entrée, clic ailleurs) : le champ reprend celui d'avant (js/main.js:wireTemplateRename).
-  'status.nameKept': { fr: 'Nom du modèle requis : « {name} » est gardé.', en: 'Template name required: “{name}” is kept.' },
+  'status.nameKept': { fr: 'Nom du document requis : « {name} » est gardé.', en: 'Document name required: “{name}” is kept.' },
   // Coin « info » (#status-msg) piloté par l'état réel de sauvegarde (cf. js/main.js:updateSaveStatus) plutôt que par le dernier événement quel
   // qu'il soit : affiché uniquement quand tout ce qui a été tapé est bien enregistré, vide sinon (frappe en attente du prochain passage de
   // l'enregistrement automatique, brouillon jamais enregistré, conflit) - sauf enregistrement automatique coupé, cf. unsavedChanges plus bas.
@@ -99,31 +99,31 @@ const I18nTextsStatus = {
   // Cas « brouillon jamais enregistré » de updateSaveStatus() (Templates.getCurrentId() encore null) : sans ce message, le coin « info » resterait
   // vide et rien n'expliquerait pourquoi l'auto-save (qui ne crée jamais de modèle, cf. main.js:autosaveTick « if (!id) return ») ne fait rien
   // pendant la frappe. Même style d'alerte que templateNameRequired ci-dessus (même cause : pas encore de nom ni de ligne Grist).
-  'status.unsavedTemplateWarning': { fr: 'Modèle non enregistré : donnez-lui un nom puis cliquez sur Enregistrer pour activer l’enregistrement automatique.', en: 'Template not saved: name it and click Save to enable auto-save.' },
+  'status.unsavedTemplateWarning': { fr: 'Document non enregistré : donnez-lui un nom puis cliquez sur Enregistrer pour activer l’enregistrement automatique.', en: 'Document not saved: name it and click Save to enable auto-save.' },
   'status.autosaveConflictReloaded': { fr: 'Dernière version rechargée.', en: 'Latest version reloaded.' },
   'status.autosaveDisabled': { fr: 'Enregistrement automatique désactivé.', en: 'Auto-save turned off.' },
   'status.autosaveEnabled': { fr: 'Enregistrement automatique réactivé.', en: 'Auto-save turned back on.' },
   'status.autosaveError': { fr: 'Échec de l’enregistrement automatique.', en: 'Auto-save failed.' },
   'status.saveError': { fr: 'Échec de l’enregistrement.', en: 'Save failed.' },
   // Les tables du widget n'ont pas été créées (réponse de la personne à la fenêtre « tableConsent ») : Enregistrer ne peut rien écrire, et le dit.
-  'status.saveDeclined': { fr: 'Non enregistré : les tables du widget n’ont pas été créées dans ce document.', en: 'Not saved: the widget’s tables were not created in this document.' },
+  'status.saveDeclined': { fr: 'Non enregistré : les tables du widget n’ont pas été créées dans ce document Grist.', en: 'Not saved: the widget’s tables were not created in this Grist document.' },
   // Grist refuse d'écrire ou de supprimer (« Blocked by row update access rules » : un fichier que la personne lit sans pouvoir le modifier, par exemple partagé en lecture par GFS, consigne 060) : le début du texte tient dans le coin, la suite se lit au survol.
-  'status.saveRefused': { fr: 'Non enregistré : Grist refuse l’écriture dans ce modèle (règle d’accès, lecture seule pour vous). Voyez avec son auteur ou un propriétaire du document.', en: 'Not saved: Grist refuses writing to this template (access rule, read-only for you). Ask its author or a document owner.' },
-  'status.deleteRefused': { fr: 'Non supprimé : Grist refuse la suppression de ce modèle (règle d’accès, lecture seule pour vous). Voyez avec son auteur ou un propriétaire du document.', en: 'Not deleted: Grist refuses deleting this template (access rule, read-only for you). Ask its author or a document owner.' },
-  'status.deleteError': { fr: 'Échec de la suppression du modèle.', en: 'Deleting the template failed.' },
-  'status.noTemplateSelected': { fr: 'Aucun modèle sélectionné.', en: 'No template selected.' },
-  'status.defaultTemplateSet': { fr: 'Modèle par défaut défini : « {name} » s’ouvrira au démarrage du widget.', en: 'Default template set: “{name}” will open when the widget starts.' },
-  'status.defaultTemplateCleared': { fr: 'Modèle par défaut retiré : « {name} » ne s’ouvrira plus au démarrage.', en: 'Default template removed: “{name}” will no longer open at startup.' },
-  'status.defaultTemplateError': { fr: 'Échec de l’enregistrement du modèle par défaut.', en: 'Saving the default template failed.' },
+  'status.saveRefused': { fr: 'Non enregistré : Grist refuse l’écriture dans ce document (règle d’accès, lecture seule pour vous). Voyez avec son auteur ou un propriétaire de ce document Grist.', en: 'Not saved: Grist refuses writing to this document (access rule, read-only for you). Ask its author or an owner of this Grist document.' },
+  'status.deleteRefused': { fr: 'Non supprimé : Grist refuse la suppression de ce document (règle d’accès, lecture seule pour vous). Voyez avec son auteur ou un propriétaire de ce document Grist.', en: 'Not deleted: Grist refuses deleting this document (access rule, read-only for you). Ask its author or an owner of this Grist document.' },
+  'status.deleteError': { fr: 'Échec de la suppression du document.', en: 'Deleting the document failed.' },
+  'status.noTemplateSelected': { fr: 'Aucun document sélectionné.', en: 'No document selected.' },
+  'status.defaultTemplateSet': { fr: 'Document par défaut défini : « {name} » s’ouvrira au démarrage du widget.', en: 'Default document set: “{name}” will open when the widget starts.' },
+  'status.defaultTemplateCleared': { fr: 'Document par défaut retiré : « {name} » ne s’ouvrira plus au démarrage.', en: 'Default document removed: “{name}” will no longer open at startup.' },
+  'status.defaultTemplateError': { fr: 'Échec de l’enregistrement du document par défaut.', en: 'Saving the default document failed.' },
   'status.templateUnavailable': { fr: '« {name} » ne s’ouvre pas ici. {reason}.', en: '“{name}” cannot be opened here. {reason}.' },
-  'status.templateDeleted': { fr: 'Modèle supprimé.', en: 'Template deleted.' },
-  'status.templateRemoved': { fr: 'Modèle « {name} » retiré.', en: 'Template “{name}” removed.' },
-  'status.templateRestored': { fr: 'Modèle « {name} » rétabli.', en: 'Template “{name}” restored.' },
-  'status.templateRestoredAs': { fr: 'Modèle rétabli sous le nom « {name} » : son nom d’origine est pris.', en: 'Template restored as “{name}”: its original name is taken.' },
-  'status.templatePinned': { fr: 'Modèle « {name} » épinglé.', en: 'Template “{name}” pinned.' },
-  'status.templateUnpinned': { fr: 'Modèle « {name} » retiré des épinglés.', en: 'Template “{name}” removed from pinned.' },
-  'status.templateMoved': { fr: 'Modèle « {name} » rangé dans le dossier « {folder} ».', en: 'Template “{name}” moved to the folder “{folder}”.' },
-  'status.templateUnfiled': { fr: 'Modèle « {name} » sorti de son dossier.', en: 'Template “{name}” taken out of its folder.' },
+  'status.templateDeleted': { fr: 'Document supprimé.', en: 'Document deleted.' },
+  'status.templateRemoved': { fr: 'Document « {name} » retiré.', en: 'Document “{name}” removed.' },
+  'status.templateRestored': { fr: 'Document « {name} » rétabli.', en: 'Document “{name}” restored.' },
+  'status.templateRestoredAs': { fr: 'Document rétabli sous le nom « {name} » : son nom d’origine est pris.', en: 'Document restored as “{name}”: its original name is taken.' },
+  'status.templatePinned': { fr: 'Document « {name} » épinglé.', en: 'Document “{name}” pinned.' },
+  'status.templateUnpinned': { fr: 'Document « {name} » retiré des épinglés.', en: 'Document “{name}” removed from pinned.' },
+  'status.templateMoved': { fr: 'Document « {name} » rangé dans le dossier « {folder} ».', en: 'Document “{name}” moved to the folder “{folder}”.' },
+  'status.templateUnfiled': { fr: 'Document « {name} » sorti de son dossier.', en: 'Document “{name}” taken out of its folder.' },
   'status.folderCollapsed': { fr: 'Dossier « {folder} » : s’ouvre replié dans la liste.', en: 'Folder “{folder}”: opens collapsed in the list.' },
   'status.folderExpanded': { fr: 'Dossier « {folder} » : s’ouvre déplié dans la liste.', en: 'Folder “{folder}”: opens expanded in the list.' },
   'status.folderCreated': { fr: 'Dossier « {folder} » créé.', en: 'Folder “{folder}” created.' },
@@ -157,7 +157,7 @@ const I18nTextsStatus = {
   'status.pdfPasswordProblem.mixedFormats': { fr: 'Un PDF protégé ne peut pas mêler des pages de formats différents (une diapositive entre des pages A4) : ce macro-modèle en assemble. Aucun PDF n’a été généré.', en: 'A protected PDF cannot mix pages of different formats (a slide among A4 pages): this macro template assembles both. No PDF was generated.' },
   'status.pdfGenerationError': { fr: 'Erreur génération PDF.', en: 'PDF generation error.' },
   // --- Auto-save (bandeau de conflit, main.js) ---
-  'autosave.conflict.message': { fr: 'Ce modèle a été modifié ailleurs pendant votre édition.', en: 'This template was modified elsewhere while you were editing.' },
+  'autosave.conflict.message': { fr: 'Ce document a été modifié ailleurs pendant votre édition.', en: 'This document was modified elsewhere while you were editing.' },
   'autosave.conflict.reload': { fr: 'Recharger la dernière version', en: 'Reload latest version' },
 
   // --- Confirmations / invites (main.js) ; titres des fenêtres de saisie et de confirmation (js/dialogs.js), qui prennent aussi les textes des
@@ -192,7 +192,7 @@ const I18nTextsStatus = {
   // d'annuler pour lui en donner un.
   'dialog.unsaved.title': { fr: 'Modifications non enregistrées', en: 'Unsaved changes' },
   'dialog.unsaved.message': { fr: '« {name} » a des modifications non enregistrées. Les enregistrer avant de continuer ?', en: '“{name}” has unsaved changes. Save them before continuing?' },
-  'dialog.unsaved.messageNoName': { fr: 'Ce nouveau modèle n’a pas de nom et n’est pas enregistré. Annulez pour lui en donner un, ou fermez-le sans l’enregistrer.', en: 'This new template has no name and is not saved. Cancel to give it a name, or close it without saving.' },
+  'dialog.unsaved.messageNoName': { fr: 'Ce nouveau document n’a pas de nom et n’est pas enregistré. Annulez pour lui en donner un, ou fermez-le sans l’enregistrer.', en: 'This new document has no name and is not saved. Cancel to give it a name, or close it without saving.' },
   'dialog.unsaved.discard': { fr: 'Ne pas enregistrer', en: 'Don’t save' },
   'alert.noRecordForExport': { fr: 'Aucune ligne n’est sélectionnée. Cliquez sur une ligne dans Grist, puis exportez en PDF.', en: 'No row is selected. Click a row in Grist, then export to PDF.' },
   'alert.noRecordForExportDocx': { fr: 'Aucune ligne n’est sélectionnée. Cliquez sur une ligne dans Grist, puis exportez en Word.', en: 'No row is selected. Click a row in Grist, then export to Word.' },
@@ -202,7 +202,7 @@ const I18nTextsStatus = {
   'alert.noRecordForExportHtml': { fr: 'Aucune ligne n’est sélectionnée. Cliquez sur une ligne dans Grist, puis exportez en HTML.', en: 'No row is selected. Click a row in Grist, then export to HTML.' },
   'alert.noRecordForExportXlsx': { fr: 'Aucune valeur de la table sélectionnée : impossible d’exporter en Excel.', en: 'No table value selected: cannot export to Excel.' },
   'alert.noRecordForExportGrid': { fr: 'Aucune valeur de la table sélectionnée : impossible d’exporter en PDF.', en: 'No table value selected: cannot export to PDF.' },
-  'confirm.deleteTemplate': { fr: 'Supprimer ce modèle ?', en: 'Delete this template?' },
+  'confirm.deleteTemplate': { fr: 'Supprimer ce document ?', en: 'Delete this document?' },
   'confirm.batchExport': { fr: 'Générer un PDF pour {count|la ligne|chacune des {count} lignes} de « {table} » et {count|le placer|les regrouper} dans une archive ZIP ?', en: 'Generate a PDF for {count|the row|each of the {count} rows} in “{table}” and {count|put it|bundle them} into a ZIP archive?' },
   'confirm.batchExportDocx': { fr: 'Générer un DOCX pour {count|la ligne|chacune des {count} lignes} de « {table} » et {count|le placer|les regrouper} dans une archive ZIP ?', en: 'Generate a DOCX for {count|the row|each of the {count} rows} in “{table}” and {count|put it|bundle them} into a ZIP archive?' },
   'confirm.batchExportPptx': { fr: 'Générer un PowerPoint pour {count|la ligne|chacune des {count} lignes} de « {table} » et {count|le placer|les regrouper} dans une archive ZIP ?', en: 'Generate a PowerPoint for {count|the row|each of the {count} rows} in “{table}” and {count|put it|bundle them} into a ZIP archive?' },
@@ -263,11 +263,11 @@ const I18nTextsStatus = {
   'attach.gfs.inactive': { fr: 'PDF non joint à la ligne : l’app n’est plus l’app active dans Grist Factory Suite.', en: 'PDF not attached to the row: this app is no longer the active app in Grist Factory Suite.' },
   'attach.gfs.failed': { fr: 'PDF non joint à la ligne : Grist Factory Suite n’a pas pu le faire{detail}.', en: 'PDF not attached to the row: Grist Factory Suite could not do it{detail}.' },
   'attach.reason.row': { fr: 'la ligne n’existe plus', en: 'the row no longer exists' },
-  'prompt.newTemplateName': { fr: 'Nom du nouveau modèle', en: 'Name of the new template' },
+  'prompt.newTemplateName': { fr: 'Nom du nouveau document', en: 'Name of the new document' },
   // Le premier « Enregistrer » d'un modèle sans nom (Ctrl+S compris) : la fenêtre propose le premier titre du document (à défaut, son début) ; sans rien à proposer, elle dit pourquoi elle s'ouvre.
   'prompt.firstSaveFromTitle': { fr: 'Proposé : le premier titre du document.', en: 'Suggested: the first heading of the document.' },
   'prompt.firstSaveFromText': { fr: 'Proposé : le début du document.', en: 'Suggested: the start of the document.' },
-  'prompt.firstSaveNoSuggestion': { fr: 'Ce modèle n’a pas encore de nom.', en: 'This template has no name yet.' },
+  'prompt.firstSaveNoSuggestion': { fr: 'Ce document n’a pas encore de nom.', en: 'This document has no name yet.' },
   'prompt.newTableName': { fr: 'Nom de la nouvelle table Grist', en: 'Name of the new Grist table' },
 
   // --- Panneau `#` : onglets ---

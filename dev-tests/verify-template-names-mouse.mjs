@@ -8,7 +8,7 @@
 //      rouvrir le crayon et valider sans rien changer ne le numérote pas ;
 //   3) la galerie : « Utiliser ce modèle » deux fois de suite donne « nom » puis « nom (2) » ;
 //   4) Entrée valide le nom (demande d'Antoine du 20/10) : la fenêtre du macro-modèle (nom saisi puis Entrée, nom changé puis Entrée, Échap qui garde son rôle, nom vide), puis un modèle neuf dont le crayon valide un nom
-//      (le titre le montre au lieu de « — Nouveau modèle — », le modèle suivant repart de l'invite) ;
+//      (le titre le montre au lieu de « — Nouveau document — », le modèle suivant repart de l'invite) ;
 //   5) nom effacé et Échap dans le crayon (suite du 20/10, carte « Nom effacé et Échap seulement ») : le nom effacé puis Entrée ou un clic ailleurs revient et le coin d'état le dit,
 //      ce qui est tapé ensuite s'enregistre ; Échap abandonne la frappe, y compris un nom tapé à moitié que l'enregistrement automatique avait déjà écrit ;
 //   6) interface en anglais : la proposition et les messages.
@@ -277,7 +277,7 @@ const again = await openGalleryCard();
 n = await names(page);
 st = await statusInfo(page);
 check('galerie : le même modèle une seconde fois s’appelle « nom (2) », la galerie se ferme, le coin d’état annonce le nom retenu et non celui de la galerie', again === galleryName && n.includes(galleryName + ' (2)') && n.filter(x => x === galleryName).length === 1 && (await label(page)) === galleryName + ' (2)'
-  && st.text === 'Modèle « ' + galleryName + ' (2) » enregistré comme nouveau modèle.', { again, n, label: await label(page), st });
+  && st.text === 'Modèle « ' + galleryName + ' (2) » enregistré comme nouveau document.', { again, n, label: await label(page), st });
 await away(page);
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
@@ -373,7 +373,7 @@ await away(page);
 await newMenuRow('#v2-btn-new-document');
 let title = await titleInfo();
 const barBefore = (await statusInfo(page)).barH;
-check('« Nouveau document » : le titre dit « — Nouveau modèle — », aucun modèle courant', title.label === '— Nouveau modèle —' && title.id == null && !title.fieldOpen, title);
+check('« Nouveau document » : le titre dit « — Nouveau document — », aucun modèle courant', title.label === '— Nouveau document —' && title.id == null && !title.fieldOpen, title);
 await realClick(page, '#btn-rename-template', 250);
 await page.keyboard.type('Facture en cours');
 title = await titleInfo();
@@ -381,7 +381,7 @@ check('... pendant la frappe, le champ est ouvert et le titre ne bouge pas', tit
 await page.keyboard.press('Enter'); await page.waitForTimeout(400);
 title = await titleInfo();
 st = await statusInfo(page);
-check('Entrée : le champ se ferme et le titre montre « Facture en cours » (plus « — Nouveau modèle — »), dans le panneau, sans changer la hauteur de la barre ; le modèle n’est pas encore enregistré',
+check('Entrée : le champ se ferme et le titre montre « Facture en cours » (plus « — Nouveau document — »), dans le panneau, sans changer la hauteur de la barre ; le modèle n’est pas encore enregistré',
   !title.fieldOpen && title.label === 'Facture en cours' && title.field === 'Facture en cours' && title.id == null && title.triggerShown && st.barH === barBefore && !(await names(page)).includes('Facture en cours'), { title, st, barBefore });
 await page.screenshot({ path: SHOTS + '/4-modele-neuf-nom-valide.png', clip: { x: 0, y: 0, width: 700, height: 150 } });
 await away(page);
@@ -390,7 +390,7 @@ await away(page);
 await newMenuRow('#v2-btn-new-document', 600);
 await clickQuestion('Ne pas enregistrer');
 title = await titleInfo();
-check('« Ne pas enregistrer » puis un modèle vierge : le titre repart de « — Nouveau modèle — », le champ est vide', title.label === '— Nouveau modèle —' && title.field === '' && title.id == null, title);
+check('« Ne pas enregistrer » puis un modèle vierge : le titre repart de « — Nouveau document — », le champ est vide', title.label === '— Nouveau document —' && title.field === '' && title.id == null, title);
 
 // Entrée, puis Enregistrer : le modèle existe sous ce nom, le titre ne bouge pas.
 await realClick(page, '#btn-rename-template', 250);
@@ -416,7 +416,7 @@ const typeInEditor = async (text) => {
   await page.keyboard.type(text);
 };
 const barRef = (await statusInfo(page)).barH;
-const MSG = 'Nom du modèle requis : « Facture en cours » est gardé.';
+const MSG = 'Nom du document requis : « Facture en cours » est gardé.';
 
 // Le nom effacé puis Entrée : le champ reprend le nom d'avant, le coin d'état le dit.
 await realClick(page, '#btn-rename-template', 250);
@@ -504,7 +504,7 @@ await markStatus(page);
 await page.keyboard.press('Enter'); await page.waitForTimeout(900);
 n = await names(page);
 st = await statusInfo(page);
-check('Entrée enregistre le modèle sous « Bail de location » (une ligne de plus), le titre le montre, sans phrase rouge « Nom du modèle requis. »',
+check('Entrée enregistre le modèle sous « Bail de location » (une ligne de plus), le titre le montre, sans phrase rouge « Nom du document requis. »',
   n.length === before + 1 && n.filter(x => x === 'Bail de location').length === 1 && (await label(page)) === 'Bail de location' && !st.seen.some(t => /requis/.test(t)), { n, label: await label(page), seen: st.seen });
 await away(page);
 
@@ -518,8 +518,8 @@ dlg = await dialogInfo(page);
 n = await names(page);
 st = await statusInfo(page);
 title = await titleInfo();
-check('Échap dans cette fenêtre : elle se ferme, rien n’est enregistré, aucune phrase rouge, le modèle reste sans nom (« — Nouveau modèle — »)',
-  !dlg.shown && n.length === before && !n.includes('Quittance de loyer') && !st.seen.some(t => /requis/.test(t)) && title.label === '— Nouveau modèle —' && title.id == null, { dlg, n, seen: st.seen, title });
+check('Échap dans cette fenêtre : elle se ferme, rien n’est enregistré, aucune phrase rouge, le modèle reste sans nom (« — Nouveau document — »)',
+  !dlg.shown && n.length === before && !n.includes('Quittance de loyer') && !st.seen.some(t => /requis/.test(t)) && title.label === '— Nouveau document —' && title.id == null, { dlg, n, seen: st.seen, title });
 await page.keyboard.press('Control+s'); await page.waitForTimeout(500);
 dlg = await dialogInfo(page);
 check('Ctrl+S une seconde fois : la fenêtre revient avec la même proposition', dlg.shown && dlg.value === 'Quittance de loyer', dlg);
@@ -548,12 +548,12 @@ await markStatus(page);
 await realClick(page, '#btn-rename-template', 250);
 await page.keyboard.press('Backspace'); await page.keyboard.press('Enter'); await page.waitForTimeout(250);
 st = await statusInfo(page);
-check('anglais : le nom effacé revient et le coin d’état dit « Template name required: “Quittance (3)” is kept. »', st.seen.includes('Template name required: “Quittance (3)” is kept.') && (await label(page)) === 'Quittance (3)', { st, label: await label(page) });
+check('anglais : le nom effacé revient et le coin d’état dit « Document name required: “Quittance (3)” is kept. »', st.seen.includes('Document name required: “Quittance (3)” is kept.') && (await label(page)) === 'Quittance (3)', { st, label: await label(page) });
 await newDocumentWithHeading('Lease', 'Don’t save');
 await page.keyboard.press('Control+s'); await page.waitForTimeout(600);
 dlg = await dialogInfo(page);
 firstSave = await dialogText(page);
-check('anglais : Ctrl+S sans nom : « Save », « Name of the new template », « Suggested: the first heading of the document. », « Lease » sélectionné', dlg.shown && dlg.value === 'Lease' && dlg.selected && firstSave.title === 'Save' && firstSave.message === 'Suggested: the first heading of the document.' && dlg.buttons.join('|') === 'Cancel|Save', { dlg, firstSave });
+check('anglais : Ctrl+S sans nom : « Save », « Name of the new document », « Suggested: the first heading of the document. », « Lease » sélectionné', dlg.shown && dlg.value === 'Lease' && dlg.selected && firstSave.title === 'Save' && firstSave.message === 'Suggested: the first heading of the document.' && dlg.buttons.join('|') === 'Cancel|Save', { dlg, firstSave });
 await page.keyboard.press('Escape'); await page.waitForTimeout(300);
 await page.evaluate(() => I18n.setLang('fr'));
 await page.context().close();

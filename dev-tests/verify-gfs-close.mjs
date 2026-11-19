@@ -264,7 +264,7 @@ console.log('\n== Enregistrement automatique allumé, mais l’app ne peut pas d
   await waitDialog(page);
   let d = await dialogOf(page);
   check('sans nom : la question n’a pas d’« Enregistrer » (Annuler | Ne pas enregistrer), elle dit pourquoi', d.open && labelsOf(d) === 'Annuler|Ne pas enregistrer' && /pas de nom/.test(d.message), d);
-  check('rien n’a été créé, et l’app n’a pas tenté d’enregistrer sans nom (aucun « Nom du modèle requis. » dans le coin d’état)', (await rowCount(page)) === rows && (await saves(page)) === 0 && (await shown(page)).status !== 'Nom du modèle requis.', { rows: await rowCount(page), saves: await saves(page), status: (await shown(page)).status });
+  check('rien n’a été créé, et l’app n’a pas tenté d’enregistrer sans nom (aucun « Nom du document requis. » dans le coin d’état)', (await rowCount(page)) === rows && (await saves(page)) === 0 && (await shown(page)).status !== 'Nom du document requis.', { rows: await rowCount(page), saves: await saves(page), status: (await shown(page)).status });
   await clickDialog(page, 'Annuler');
   let reply = await pending;
   check('« Annuler » : `{ ferme: false }`', reply.type === 'reponse' && reply.data.ferme === false, reply);

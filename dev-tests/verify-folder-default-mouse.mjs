@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Dossier déplié ou replié par défaut dans la liste déroulante des modèles (interrupteur de « Organiser mes modèles »), à la VRAIE souris et à la taille du
+// Dossier déplié ou replié par défaut dans la liste déroulante des modèles (interrupteur de « Organiser mes documents »), à la VRAIE souris et à la taille du
 // panneau Grist d'Antoine (~700x400) : les scénarios de dev-tests/scenarios-template-organize.js et scenarios-template-tree.js tournent DANS la page
 // (dispatchEvent), ils ne prouvent ni qu'un vrai clic atteint l'interrupteur (au premier plan, 20x20), ni que la liste déroulante s'ouvre réellement repliée
 // ou déplie au clic, ni que l'état survit à un rechargement de la page, ni que la colonne Replie manquante d'un document ancien est ajoutée.

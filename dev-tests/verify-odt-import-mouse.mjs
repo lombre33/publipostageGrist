@@ -33,7 +33,7 @@ const MAX_MIB = 150;
 const TEXTS = {
   fr: {
     row: 'Importer un OpenDocument…', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler', close: 'Fermer',
-    imported: 'OpenDocument importé. Nommez le modèle puis enregistrez-le.', importedPattern: /OpenDocument importé/,
+    imported: 'OpenDocument importé. Nommez le document puis enregistrez-le.', importedPattern: /OpenDocument importé/,
     reading: /^Lecture du fichier OpenDocument/,
     unreadable: 'Ce fichier n’est pas un document OpenDocument lisible.', unreadablePattern: /n’est pas un document OpenDocument/,
     encrypted: 'Fichier OpenDocument protégé par un mot de passe : enregistrez-le sans mot de passe.', encryptedPattern: /protégé par un mot de passe/,
@@ -47,7 +47,7 @@ const TEXTS = {
   },
   en: {
     row: 'Import from OpenDocument…', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
-    imported: 'OpenDocument imported. Name the template, then save it.', importedPattern: /OpenDocument imported/,
+    imported: 'OpenDocument imported. Name the document, then save it.', importedPattern: /OpenDocument imported/,
     reading: /^Reading the OpenDocument file/,
     unreadable: 'This file is not a readable OpenDocument file.', unreadablePattern: /not a readable OpenDocument/,
     encrypted: 'Password-protected OpenDocument file: save it without a password.', encryptedPattern: /Password-protected/,
