@@ -18,7 +18,8 @@ const ModalBase = (function () {
   let lastOutside = null;    // dernier élément focalisé hors d'une fenêtre reprise : l'ouvreur quand le module a déjà mis le focus dedans
 
   // Éléments atteignables à Tab dans `root`, dans l'ordre du document : ni désactivés, ni cachés (hidden, display:none d'un ancêtre), ni retirés de
-  // l'ordre de tabulation (tabindex="-1", comme les lignes d'une liste avec recherche).
+  // l'ordre de tabulation (tabindex="-1", comme les lignes d'une liste avec recherche). Exportée : une fenêtre retracée y retrouve le champ qui avait le
+  // focus par son rang (js/condition-fields.js:refreshColumnsOnOpen).
   function focusables(root) {
     return Array.from(root.querySelectorAll(FOCUSABLE)).filter(e =>
       !e.disabled && e.tabIndex >= 0 && !e.closest('[hidden]') && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden');
@@ -173,5 +174,5 @@ const ModalBase = (function () {
     return win;
   }
 
-  return { create, adopt };
+  return { create, adopt, focusables };
 })();

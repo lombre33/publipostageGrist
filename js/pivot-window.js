@@ -433,8 +433,9 @@ const PivotWindow = (function () {
 
   // === Ce que dit chaque partie des réglages ===
 
-  // La liste des tables, puis tout ce qui en dépend : les sources, les listes de colonnes.
-  function renderTable() {
+  // Ce que l'app lit de Grist : la liste des tables, les sources, les listes de colonnes (lignes, colonnes, valeur) et les colonnes du filtre, tracés d'après le brouillon `state.working`. Retracé seul quand une
+  // colonne ou une table est ajoutée, ou une colonne retypée, dans Grist pendant que la fenêtre est ouverte (ConditionFields.refreshColumnsOnOpen) : ce que la personne a choisi y est écrit, rien ne bouge d'autre.
+  function renderLists() {
     const w = state.working;
     refs.table.textContent = '';
     tableChoices().forEach((name) => { const item = option(name, name); item.dataset.name = name; refs.table.appendChild(item); });
@@ -448,12 +449,18 @@ const PivotWindow = (function () {
       selectPath(node, w.table, path || '');
       if (refs.search[name]) refs.search[name].sync();
     });
+    renderFilter();
+  }
+
+  // La liste des tables, puis tout ce qui en dépend : les sources, les listes de colonnes.
+  function renderTable() {
+    const w = state.working;
+    renderLists();
     const second = !!w.rows[1];
     refs.rowBox.hidden = !second;
     refs.rowAdd.hidden = second;
     syncKind();
     syncTotals();
-    renderFilter();
     syncFormat();
   }
 
@@ -612,6 +619,9 @@ const PivotWindow = (function () {
     renderTable();
     win.show(() => (state.working.rows[0] ? refs.table : refs.row1));
     refreshPreview();
+    // Une colonne ajoutée ou retypée dans Grist depuis le chargement : relue à l'ouverture, les listes se retracent si quelque chose a changé (consigne 093).
+    const opened = state;
+    ConditionFields.refreshColumnsOnOpen(() => { renderLists(); previewRun.schedule(); }, { box: win.box, current: () => state === opened });
   }
   const isOpen = () => !!win && win.isOpen();
 

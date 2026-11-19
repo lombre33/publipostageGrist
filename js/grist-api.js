@@ -17,6 +17,9 @@ const GristAPI = (function () {
   const USER_PROBE_TABLE_NAME = 'Publipostage_UserProbe';
   let _tables = [];
   let _columnsByTable = {};
+  // { tableId: [colId…] } - ce que les MÉTADONNÉES disaient des colonnes de chaque table à la dernière passe de schéma (metaColumnsOf) : le repère qui fait reconnaître une colonne
+  // AJOUTÉE (ou retirée) depuis, sans prendre pour une nouvelle celle qu'une règle d'accès cache aux listes exactes (refreshColumnMeta).
+  let _metaColumns = {};
   let _columnTypesByTable = {};
   let _columnChoicesByTable = {};
   // { tableId: { colId: colonne d'affichage } } - pour une Référence, la colonne d'aide (« gristHelper_Display… ») que Grist calcule dans la même
@@ -529,6 +532,8 @@ const GristAPI = (function () {
     } catch (e) {
       console.error('[GristAPI] refreshSchema: erreur globale —', e);
     }
+    // Le repère des colonnes ajoutées depuis (refreshColumnMeta) : les métadonnées de CETTE passe ; illisibles, il n'y en a pas et rien n'est deviné.
+    try { const [tablesMeta, colsMeta] = await metaRead; _metaColumns = metaColumnsOf(tablesMeta, colsMeta); } catch (e) { _metaColumns = {}; }
     await refreshColumnTypes(metaRead);
   }
 
@@ -564,8 +569,8 @@ const GristAPI = (function () {
   // Colonnes provisoires : celles que les métadonnées (_grist_Tables_column) rangent sous chaque table, dans l'ordre de leur position (parentPos,
   // celui du code que Grist génère pour la table). Les mêmes que les clés de fetchTable, à l'ordre et aux colonnes qu'un accès restreint cache près :
   // ce que la passe complète corrige.
-  async function provisionalColumnsByTable(metaRead) {
-    const [tablesMeta, colsMeta] = await metaRead;
+  // Les colonnes que les métadonnées rangent sous chaque table : { tableId: [colId…] } dans l'ordre de leur position (parentPos), sans manualSort.
+  function metaColumnsOf(tablesMeta, colsMeta) {
     const tableIdByRowId = tableIdsByRowId(tablesMeta);
     const parentIds = colsMeta.parentId || [];
     const colIds = colsMeta.colId || [];
@@ -577,9 +582,69 @@ const GristAPI = (function () {
       const pos = colsMeta.parentPos && colsMeta.parentPos[i] != null ? colsMeta.parentPos[i] : i;
       (found[tableId] = found[tableId] || []).push({ colId, pos });
     }
+    const listed = {};
+    Object.keys(found).forEach(tableId => { listed[tableId] = found[tableId].sort((a, b) => a.pos - b.pos).map(c => c.colId); });
+    return listed;
+  }
+  async function provisionalColumnsByTable(metaRead) {
+    const [tablesMeta, colsMeta] = await metaRead;
+    const listed = metaColumnsOf(tablesMeta, colsMeta);
     const next = {};
-    _tables.forEach(t => { next[t] = (found[t] || []).sort((a, b) => a.pos - b.pos).map(c => c.colId); });
+    _tables.forEach(t => { next[t] = listed[t] || []; });
     return next;
+  }
+
+  // Relecture LÉGÈRE des colonnes et de leurs types (consigne 093 de GFS), pour une fenêtre qui les liste et qui s'ouvre : Grist change pendant que l'app reste ouverte à côté (une colonne
+  // ajoutée, une colonne vide passée en case à cocher) et la passe complète (refreshSchema : fetchTable de chaque table, 1,4 million de cases sur un gros document) n'est pas pour une fenêtre
+  // qui s'ouvre. Les métadonnées suffisent (_grist_Tables, _grist_Tables_column, _grist_DocInfo : quelques Ko) avec listTables : les types, choix et libellés se refont d'un coup
+  // (refreshColumnTypes) ; les listes de colonnes gardent celles que fetchTable a rendues - une colonne qu'une règle d'accès cache n'y est pas et n'y revient pas, jamais remplacée par la liste
+  // provisoire des métadonnées -, moins celles que Grist a retirées, plus celles qu'il a ajoutées depuis la dernière lecture des métadonnées (`_metaColumns`), à leur place dans l'ordre de Grist. Une
+  // table que l'app ne connaissait pas prend toutes les colonnes que disent les métadonnées. Rend une promesse de vrai quand quelque chose a changé (la liste des tables, des colonnes, un type, un choix,
+  // un libellé), de faux sinon ou quand les métadonnées sont illisibles : l'appelant ne retrace sa fenêtre que dans le premier cas. Une seule relecture à la fois : les appels qui se chevauchent
+  // en partagent une.
+  let _columnMetaPass = null;
+  const schemaSignature = () => JSON.stringify([_tables, _columnsByTable, _columnTypesByTable, _columnChoicesByTable, _columnLabelsByTable]);
+  function refreshColumnMeta() {
+    if (_columnMetaPass) return _columnMetaPass;
+    const pass = (async () => {
+      // Ce que la fenêtre qui demande a sous les yeux : une passe complète déjà partie, qui change des listes avant la fin, compte aussi comme un changement à retracer.
+      const before = schemaSignature();
+      // Une passe complète déjà partie lit des métadonnées plus anciennes que celles de cette relecture : elle finit d'abord, pour ne pas écraser par du périmé ce que celle-ci rend.
+      if (_schemaPass) await _schemaPass.promise.catch(() => {});
+      const metaRead = readColumnMeta();
+      metaRead.catch(() => {});
+      let listed;
+      try {
+        const [tablesMeta, colsMeta] = await metaRead;
+        listed = metaColumnsOf(tablesMeta, colsMeta);
+        await loadRawTables();
+      } catch (e) {
+        return schemaSignature() !== before;
+      }
+      _tables = _rawTables.filter(t => INTERNAL_TABLES.indexOf(t) === -1);
+      const next = {};
+      _tables.forEach(t => {
+        const now = listed[t] || [];
+        const known = _columnsByTable[t];
+        const earlier = _metaColumns[t];
+        if (!known) { next[t] = now; return; }
+        if (!earlier) { next[t] = known; return; }
+        const kept = known.filter(c => now.indexOf(c) !== -1 || earlier.indexOf(c) === -1);
+        next[t] = kept;
+        now.forEach((c, at) => {
+          if (earlier.indexOf(c) !== -1 || kept.indexOf(c) !== -1) return;
+          let after = -1;
+          for (let k = at - 1; k >= 0 && after === -1; k--) after = kept.indexOf(now[k]);
+          kept.splice(after + 1, 0, c);
+        });
+      });
+      _columnsByTable = next;
+      _metaColumns = listed;
+      await refreshColumnTypes(metaRead);
+      return schemaSignature() !== before;
+    })().finally(() => { _columnMetaPass = null; });
+    _columnMetaPass = pass;
+    return pass;
   }
 
   // Types de la « colonne à afficher » d'une Référence dont les valeurs se proposent dans un champ Valeur (getReferenceValues). « Any » : une colonne
@@ -1368,5 +1433,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

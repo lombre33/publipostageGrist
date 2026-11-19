@@ -246,6 +246,9 @@ const VariableCondition = (function () {
       EditorCore.hideFloatingContextToolbars();
       ctx.win.show(() => r.rulesBox.querySelector('select.macro-rule-column'));
       updatePreview();
+      // Une colonne ajoutée ou retypée dans Grist depuis le chargement (une case à cocher) : relue à l'ouverture, la liste se retrace si quelque chose a changé (consigne 093).
+      const opened = ctx.state;
+      ConditionFields.refreshColumnsOnOpen(ctx.redraw, { box: ctx.win.box, current: () => ctx.state === opened });
     }
 
     // Vrai quand `editor` est celui d'un champ « Sinon afficher » de cette fenêtre : la condition d'une variable qu'on y tape s'ouvre dans la fenêtre d'après.

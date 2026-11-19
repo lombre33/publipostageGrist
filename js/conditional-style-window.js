@@ -541,6 +541,9 @@ const ConditionalStyleWindow = (function () {
     // Le focus donné à la première carte fait défiler le contenu jusqu'à elle ; la fenêtre s'ouvre pourtant toujours en haut, sur l'introduction et « Comme dans Grist ».
     win.body.scrollTop = 0;
     updatePreview();
+    // Une colonne ajoutée ou retypée dans Grist depuis le chargement : relue à l'ouverture, la liste se retrace si quelque chose a changé (consigne 093).
+    const opened = state;
+    ConditionFields.refreshColumnsOnOpen(() => { renderRules(); previewRun.schedule(); }, { box: win.box, current: () => state === opened });
   }
 
   // Ouverte depuis la barre du tableau (js/floating-toolbars.js, « cell-style ») : sur les cases visées ou sur leur ligne. Sans tableau sous le curseur, ne fait rien.

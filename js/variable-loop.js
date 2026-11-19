@@ -1053,6 +1053,9 @@ const VariableLoop = (function () {
     win.show(() => r.repeatSeg.querySelector('button[aria-pressed="true"]'));
     updatePreview();
     if (probing) probeLinkedView(state);
+    // Une colonne ajoutée ou retypée dans Grist depuis le chargement : relue à l'ouverture, les listes de colonnes (la colonne qui rattache, le filtre, le tri) se retracent si quelque chose a changé (consigne 093).
+    const opened = state;
+    ConditionFields.refreshColumnsOnOpen(() => { renderSource(); renderFilter(); renderSort(); previewRun.schedule(); }, { box: win.box, current: () => state === opened });
   }
 
   return { openAt, isOpen, status, diagnose, diagnoseRow, rowStatus, openRow, loopTablesAt, setContext, zonesAt, nestableAt, nestableInFedZoneAt, feedsAt };

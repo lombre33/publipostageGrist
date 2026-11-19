@@ -143,6 +143,9 @@ const MacroEditor = (function () {
     const m = modal();
     if (m) m.style.display = 'flex';
     if (nameInput()) nameInput().focus();
+    // Une colonne ajoutée ou retypée dans Grist depuis le chargement : relue à l'ouverture, les règles se retracent si quelque chose a changé (consigne 093).
+    const opened = slots;
+    if (m) ConditionFields.refreshColumnsOnOpen(renderSlots, { box: m, current: () => slots === opened && m.style.display === 'flex' });
   }
 
   function closeModal() {

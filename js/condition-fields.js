@@ -746,5 +746,34 @@ const ConditionFields = (function () {
     return { row, modeleSelect };
   }
 
-  return { appendColumnOption, friendlyTypeLabel, ensureTableLinked, emptyRule, buildRuleRow, buildAddRuleButton, buildAddGroupButton, renderItems, buildTemplateRule };
+  // Relit les colonnes et leurs types quand une fenêtre qui les liste vient de s'ouvrir (consigne 093 de GFS). L'app reste ouverte à côté de Grist, où la personne ajoute une colonne ou passe une colonne
+  // vide en case à cocher avant de revenir à sa condition : les listes gardaient ce que l'app avait lu au chargement - la colonne manquait, ou son ancien type cachait « (case à cocher) » et la
+  // liste Oui / Non du champ Valeur. La relecture est LÉGÈRE (GristAPI.refreshColumnMeta : les métadonnées, jamais les tables) et part après l'ouverture : la fenêtre s'ouvre tout de suite sur ce que
+  // l'app sait, et `redraw` ne la retrace QUE si quelque chose a changé (aucun clignotement, aucun retard sur un document inchangé). `redraw` retrace depuis le brouillon de la fenêtre, où tout ce que
+  // la personne a choisi ou tapé est déjà écrit (les champs mutent la règle sur place : `rule.column`, `rule.value`) : rien n'est perdu, et une colonne ajoutée depuis que la règle cite déjà reprend sa
+  // place dans la liste au lieu de la saisie avancée. Le focus et le curseur reviennent au champ qui les avait (même rang parmi les champs de `box`). `current()` dit si c'est encore la même ouverture
+  // (fenêtre fermée, ou rouverte sur autre chose entre-temps : rien à retracer). Rend une promesse de vrai quand la fenêtre a été retracée.
+  function refreshColumnsOnOpen(redraw, { box, current }) {
+    if (typeof GristAPI.refreshColumnMeta !== 'function') return Promise.resolve(false);
+    return GristAPI.refreshColumnMeta().then(changed => {
+      if (!changed || !current()) return false;
+      const active = document.activeElement;
+      const rank = active && box.contains(active) ? ModalBase.focusables(box).indexOf(active) : -1;
+      const caret = rank !== -1 && typeof active.selectionStart === 'number' ? { start: active.selectionStart, end: active.selectionEnd } : null;
+      redraw();
+      if (rank !== -1 && document.activeElement !== active) {
+        const next = ModalBase.focusables(box)[rank];
+        if (next) {
+          next.focus({ preventScroll: true });
+          if (caret && typeof next.setSelectionRange === 'function') next.setSelectionRange(caret.start, caret.end);
+        }
+      }
+      return true;
+    }).catch(e => {
+      console.warn('[ConditionFields] relecture des colonnes à l\'ouverture échouée', e);
+      return false;
+    });
+  }
+
+  return { appendColumnOption, friendlyTypeLabel, ensureTableLinked, emptyRule, buildRuleRow, buildAddRuleButton, buildAddGroupButton, renderItems, buildTemplateRule, refreshColumnsOnOpen };
 })();
