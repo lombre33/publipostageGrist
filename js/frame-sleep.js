@@ -109,20 +109,55 @@ const FrameSleep = (function () {
     return { first, last };
   }
 
+  // La pose PAR MORCEAUX d'un gros texte (js/import-placing.js : un import, l'ouverture d'un gros modèle) ajoute les blocs À LA FIN, un morceau à la fois, et chaque morceau déclenchait une passe qui relisait TOUS
+  // les blocs d'avant (21/11, une présentation de 79 diapositives sous Firefox : 45 ms par morceau au début, 200 ms à la fin ; en Chromium la passe seule fait 5 des 35 s de l'ouverture d'un modèle de 19 000 cadres).
+  // Pendant une pose, la passe se REPREND donc là où la précédente s'est arrêtée (`swept`), tant que rien de ce dont elle dépend n'a bougé : le résultat est celui d'une passe entière, sans la relire. Ce dont
+  // elle dépend : l'écran (`near`), la sélection (`picked`), les ancres de réserve (`carriers`), et les cadres ou sauts de page déjà revus (`sweptDirty` : un bloc de ce genre arrivé ou parti AVANT la fin de
+  // ce qui a été revu, vu par l'observateur des enfants du texte ; un cadre réveillé par `wakeAt` efface aussi `swept`). Hors pose, la passe est toujours entière, comme avant.
+  let swept = null;               // { to, slide, last, count, key, picked, carriers } : jusqu'où la dernière passe d'une pose a revu les blocs, la diapositive où l'on y était, le dernier cadre ou saut vu, les endormis comptés
+  let sweptDirty = false;         // ce qui a été revu n'est plus celui de la passe : elle repart du début
+  let passesFull = 0;             // les passes faites (essais, mesures) : entières, et reprises là où la précédente s'était arrêtée
+  let passesResumed = 0;
+  const isFrameOrBreak = node => node.nodeType === 1 && (node.classList.contains(FreeFrame.CLASS) || node.classList.contains(BREAK_CLASS));
+  const sameCarriers = (a, b) => a === b || (!!a && !!b && sameSet(a, b));
+  // Les changements d'enfants que l'observateur a vus : seuls comptent un cadre ou un saut de page parti, ou arrivé avant le dernier bloc revu (un paragraphe qu'on retire ou qu'on pose à la fin, non).
+  function noteChanges(records) {
+    if (!swept || sweptDirty) return;
+    for (let r = 0; r < records.length; r++) {
+      const removed = records[r].removedNodes;
+      for (let k = 0; k < removed.length; k++) if (isFrameOrBreak(removed[k])) { sweptDirty = true; return; }
+      const added = records[r].addedNodes;
+      for (let k = 0; k < added.length; k++) {
+        if (!isFrameOrBreak(added[k])) continue;
+        if (swept.last && !(swept.last.compareDocumentPosition(added[k]) & Node.DOCUMENT_POSITION_FOLLOWING)) { sweptDirty = true; return; }
+      }
+    }
+  }
+
   // Met chaque cadre dans l'état de sa diapositive. Les réveils d'abord, puis la mesure de ceux qui vont dormir (toutes les lectures ensemble : une seule mise en page), puis leur classe.
   // Une ancre qui porte la réserve d'une coupure de page (la dernière pagination l'a choisie : sa marge du bas écarte les pages) reste éveillée : hors du flux, sa marge n'écarterait plus rien.
   function apply() {
     if (!view) return;
+    if (watcher) noteChanges(watcher.takeRecords());
     const sleeping = on && near !== null;
     const children = view.dom.children;
     const carriers = sleeping ? new Set(HeaderFooterPreview.pageBreaks().map(brk => brk.afterEl)) : null;
+    const key = sleeping ? near.first + ':' + near.last : '';
+    const placing = ImportPlacing.isPlacing();
+    const resume = placing && !!swept && !sweptDirty && swept.key === key && swept.picked === picked && sameCarriers(swept.carriers, carriers)
+      && swept.to <= children.length && (swept.to === 0 || children[swept.to - 1] === swept.last);
+    if (resume) passesResumed += 1; else passesFull += 1;
     const toSleep = [];
-    let count = 0;
-    let slide = 0;
-    for (let i = 0; i < children.length; i++) {
+    let count = resume ? swept.count : 0;
+    let slide = resume ? swept.slide : 0;
+    let last = resume ? swept.last : null;
+    let to = resume ? swept.to : 0;
+    for (let i = resume ? swept.to : 0; i < children.length; i++) {
       const classes = children[i].classList;
-      if (classes.contains(BREAK_CLASS)) { slide += 1; continue; }
+      if (classes.contains(BREAK_CLASS)) { slide += 1; last = children[i]; to = i + 1; continue; }
       if (!classes.contains(FreeFrame.CLASS)) continue;
+      last = children[i];
+      to = i + 1;
       const sleep = sleeping && (slide < near.first || slide > near.last) && !picked.has(slide) && !carriers.has(children[i]);
       if (sleep) count += 1;
       if (sleep === classes.contains(FreeFrame.ASLEEP)) continue;
@@ -131,6 +166,8 @@ const FrameSleep = (function () {
     toSleep.forEach((dom) => { FreeFrame.overflowsPage(dom); });
     toSleep.forEach((dom) => { dom.classList.add(FreeFrame.ASLEEP); });
     asleepCount = count;
+    swept = placing ? { to, slide, last, count, key, picked, carriers } : null;
+    sweptDirty = false;
   }
 
   // L'écran a bougé (défilement, pagination, taille du panneau) ou des blocs sont arrivés : l'état se relit à l'image suivante, une fois.
@@ -153,6 +190,7 @@ const FrameSleep = (function () {
     while (node && node.parentNode !== view.dom) node = node.parentNode;
     if (!node || !node.classList || !node.classList.contains(FreeFrame.ASLEEP)) return;
     node.classList.remove(FreeFrame.ASLEEP);
+    swept = null;                    // un cadre revu s'est réveillé : la prochaine passe est entière
     schedule();
   }
 
@@ -236,13 +274,15 @@ const FrameSleep = (function () {
         picked = pickedOf(view.state);
         seenDoc = null;
         seenSelection = null;
+        swept = null;
+        sweptDirty = false;
         const box = scroller();
         if (box) box.addEventListener('scroll', schedule, { passive: true });
         window.addEventListener('resize', schedule);
         const stopPaginated = HeaderFooterPreview.onPaginated(schedule);
         // Une ancre posée ou refaite par ProseMirror n'a pas la classe : elle la reçoit avant l'image suivante (les mutations se livrent à la fin de la tâche), et l'écran se relit (des diapositives ont pu
         // changer de rang).
-        watcher = new MutationObserver(() => { if (on || asleepCount) { apply(); schedule(); } });
+        watcher = new MutationObserver((records) => { noteChanges(records); if (on || asleepCount) { apply(); schedule(); } });
         watcher.observe(view.dom, { childList: true });
         // La tournée : ses causes sans transaction (une police, une image), et les gestes pendant lesquels elle attend.
         const dom = view.dom;
@@ -285,6 +325,7 @@ const FrameSleep = (function () {
             tourDue = false;
             pressed = false;
             delete editorView.coordsAtPos;
+            swept = null;
             view = null;
           },
         };
@@ -299,11 +340,14 @@ const FrameSleep = (function () {
   // Les cadres de la diapositive de rang `slide` dorment-ils, d'après la dernière passe ?
   const sleeps = slide => on && near !== null && (slide < near.first || slide > near.last) && !picked.has(slide);
 
+  // Les passes d'une pose par morceaux : { full, resumed } (essais, mesures).
+  const passes = () => ({ full: passesFull, resumed: passesResumed });
+
   // Les tournées finies, et celle qui attend ou tourne (essais, mesures).
   const toursDone = () => tours;
   const tourPending = () => tourDue || !!tourList;
   // Monte à chaque tournée qui a changé des réponses « ce cadre dépasse » : un verdict gardé sous un autre nombre est périmé.
   const answersEpoch = () => epoch;
 
-  return { createPlugin, isOn, asleep, sleeps, wakeAt, recheck, onRechecked, answersEpoch, toursDone, tourPending, MIN_FRAMES, AHEAD, TOUR_WAIT_MS, TOUR_QUIET_MS };
+  return { createPlugin, isOn, asleep, sleeps, passes, wakeAt, recheck, onRechecked, answersEpoch, toursDone, tourPending, MIN_FRAMES, AHEAD, TOUR_WAIT_MS, TOUR_QUIET_MS };
 })();

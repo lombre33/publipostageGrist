@@ -212,6 +212,15 @@ const ImportPlacing = (function () {
   const COST_MS_PER_MARKER = 8;
   const COST_MS_PER_CHAR = 0.00005;
   const STEP_MS = 40;                // le travail d'un pas de la pose : la page reprend la main après chacun (un cadre ~1 ms : une quarantaine de cadres)
+  // Chaque pas coûte en plus un travail FIXE qui grandit avec le nombre de blocs de premier niveau déjà posés (ProseMirror relit la liste des blocs à chaque transaction : mise en ordre des nœuds de la page, contrôle
+  // du contenu, greffons) : 14 ms au premier pas, 47 ms au dernier pour 19 000 cadres en Chromium, et chez une personne sous Firefox (79 diapositives, 95 000 éléments) 45 ms au premier, 200 à 360 ms aux derniers,
+  // alors que le travail utile du pas ne bouge pas. À budget fixe, la pose de 220 pas passait ainsi plus de la moitié de son temps à refaire ce travail. Le pas GRANDIT donc avec le texte déjà posé : STEP_MS
+  // au début, jusqu'à STEP_MAX_FACTOR fois plus (le travail fixe se partage entre plus de cadres, trois fois moins de pas en fin de pose) ; la page reprend toujours la main après chacun.
+  const STEP_GROW_BLOCKS = 6000;     // le nombre de blocs déjà posés pour que le pas passe de STEP_MS à deux fois STEP_MS
+  const STEP_MAX_FACTOR = 3;
+  const stepBudgetFor = placedBlocks => STEP_MS * Math.min(STEP_MAX_FACTOR, 1 + Math.max(0, placedBlocks) / STEP_GROW_BLOCKS);
+  // Le budget du prochain pas, d'après les blocs que l'éditeur a déjà (pas de lecture de mise en page : le nombre d'enfants du texte).
+  const stepBudgetNow = () => stepBudgetFor(EditorCore.getEditor().view.dom.children.length);
   const FIRST_MS = 50;               // celui du premier morceau d'une ouverture, que le chemin habituel pose d'un bloc, à froid (le moteur n'a encore rien chauffé : deux à quatre fois l'estimation) : la page ne s'arrête pas plus de 300 ms avant le voile
   const SPLIT_SLACK = 1.5;           // un texte qui coûte moins d'une fois et demie le pas n'est pas coupé (un pas de plus ne vaut pas un reste de rien)
   const cellsIn = text => occurrences(text, '<td') + occurrences(text, '<th ') + occurrences(text, '<th>');
@@ -229,9 +238,11 @@ const ImportPlacing = (function () {
   // compris - en pas qui coûtent chacun à peu près `budget` ms (un bloc plus lourd à lui seul fait un pas à lui seul). Chaque pas est { text, ms } ; les pas mis bout à bout redonnent exactement le texte. La
   // lecture est paresseuse : un pas ne parcourt que son propre texte, la page ne s'arrête pas à lire le suivant (un texte de 19 millions de signes ne se lit pas d'un coup). `knownMs` : le coût du texte, quand
   // l'appelant l'a déjà calculé.
-  function* stepsOf(text, budget, knownMs) {
+  function* stepsOf(text, budgetOf, knownMs) {
+    // `budgetOf` : un nombre de ms, ou une fonction qui rend le budget du pas qui commence (il grandit avec le texte posé, voir stepBudgetFor).
+    const budgetNow = typeof budgetOf === 'function' ? budgetOf : () => budgetOf;
     const totalMs = typeof knownMs === 'number' ? knownMs : profileOf(text).ms;
-    if (totalMs <= budget * SPLIT_SLACK) { yield { text, ms: totalMs }; return; }
+    if (totalMs <= budgetNow() * SPLIT_SLACK) { yield { text, ms: totalMs }; return; }
     const tags = new RegExp(STEP_TAGS.source, 'g');
     let from = 0;
     let depth = 0;
@@ -254,6 +265,7 @@ const ImportPlacing = (function () {
       if (!boundary) continue;
       const at = found.index + tag.length;
       const ms = tagMs + (at - from) * COST_MS_PER_CHAR;
+      const budget = budgetNow();
       if (ms < budget || totalMs - doneMs - ms < budget / 2) continue;      // pas assez pour un pas, ou il ne resterait qu'une queue de rien
       yield { text: text.slice(from, at), ms };
       from = at;
@@ -324,7 +336,7 @@ const ImportPlacing = (function () {
         const lead = markers && typeof markers[i] === 'string' ? markers[i] : PAGE_BREAK;
         let refused = false;
         let first = true;
-        for (const step of stepsOf(pieces[i], STEP_MS)) {
+        for (const step of stepsOf(pieces[i], stepBudgetNow)) {
           if (!first && shouldStop()) return failed;
           const html = (first ? lead : '') + step.text;
           if (strict && !balanced(html)) throw Object.assign(new Error('un morceau est coupé en deux'), { code: 'split' });
@@ -493,5 +505,5 @@ const ImportPlacing = (function () {
   // Une pose est-elle en cours (import ou ouverture par morceaux) ? Le texte de l'éditeur n'est alors pas complet, ni sa mise en page à jour.
   const isPlacing = () => !!activeRun;
 
-  return { begin, whenQuiet, slidesOf, takeFirst, appendSlides, prepareSave, planOpen, fillOpened, stopFill, isFilling, isPlacing, whenFilled, closingText, closingShare, stepsOf, profileOf, FIRST_SLIDES, FIRST_MS, STEP_MS, PAGE_BREAK };
+  return { begin, whenQuiet, slidesOf, takeFirst, appendSlides, prepareSave, planOpen, fillOpened, stopFill, isFilling, isPlacing, whenFilled, closingText, closingShare, stepsOf, profileOf, stepBudgetFor, FIRST_SLIDES, FIRST_MS, STEP_MS, STEP_GROW_BLOCKS, STEP_MAX_FACTOR, PAGE_BREAK };
 })();

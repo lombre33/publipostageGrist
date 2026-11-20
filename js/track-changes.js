@@ -202,6 +202,8 @@ const TrackChanges = (function () {
               .setMeta('addToHistory', false)
               .setMeta('preventUpdate', true);
             if (options && options.dropTrailing && last && last.type.name === 'paragraph' && last.content.size === 0) next.delete(doc.content.size - last.nodeSize, doc.content.size);
+            // Où le morceau commence : les greffons qui relisent tout le texte à chaque transaction n'ont à lire que lui (EditorCore.appendedFrom).
+            next.setMeta(EditorCore.APPENDED_FROM_META, next.doc.content.size);
             editor.view.dispatch(next.insert(next.doc.content.size, docNode.content));
             return true;
           },

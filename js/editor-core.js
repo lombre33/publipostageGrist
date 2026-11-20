@@ -902,6 +902,23 @@ const EditorCore = (function () {
       return textOnly;
     });
   }
+  // Un morceau ajouté À LA FIN d'un texte (js/track-changes.js : appendTrackedDocument, la pose par morceaux d'un gros fichier - un import, l'ouverture d'un gros modèle) : la position, dans le texte d'après, où
+  // il commence ; null pour toute autre suite de transactions. Le texte d'avant est celui que les greffons ont déjà rangé, rien n'y change : ce qu'un greffon relit à chaque transaction sur le texte ENTIER
+  // (un parcours de tous les nœuds : 5 ms par morceau à 19 000 cadres, d'autant plus que le texte grandit) ne regarde plus que ce morceau. Les transactions qu'un greffon ajoute derrière (le paragraphe que
+  // TipTap range sous le dernier bloc) sont comptées avec elle quand elles ne touchent que la fin ; un greffon qui ne voit que celles-là (ProseMirror ne lui donne que les nouvelles) en est averti de même,
+  // par la transaction de départ qu'elles portent (`appendedTransaction`).
+  const APPENDED_FROM_META = 'ppAppendedFrom';
+  function appendedFrom(transactions) {
+    let from = null;
+    for (const tr of transactions) {
+      const root = tr.getMeta('appendedTransaction') || tr;
+      const at = root.getMeta(APPENDED_FROM_META);
+      if (typeof at !== 'number' || (from !== null && at !== from)) return null;
+      from = at;
+      if (tr !== root && !tr.steps.every(step => typeof step.from === 'number' && step.from >= at)) return null;
+    }
+    return from;
+  }
   function toggleList(name, command) {
     // Pose la liste `name` (bulletList, orderedList...) avec la commande `command` de TipTap, ou la retire : ce que font le bouton « Liste à puces » et
     // les touches Ctrl+Maj+8 et Ctrl+Maj+7 (js/shortcuts.js). Sur une sélection de cases, dans toutes les cases, l'état voulu étant l'inverse de celui
@@ -1064,7 +1081,7 @@ const EditorCore = (function () {
     patchNodeAndReselect, editorContentWidthPx, pageScale, atPageScale, layoutZoom, contentZoom, contentZoomIsOff, settleContentZoom, createStepSheets, nextInFlow, gapAbove, opensPageAt, fitReserve, reserveRule, placeReservesAtOnce, reserveRoundingName, createFloatingPanel,
     registerFloatingPanel, hideFloatingContextToolbars, isFormFieldFocus, closeHoverMenu,
     getOpenDropdownPanel, setOpenDropdownPanel, closeDropdownPanel, wireDropdownButton,
-    setColorBar, setColorIcon, createSelectionPreserver, isCellSelection, runOnSelectedCells, isInsideNode, isTextOnlyEdit,
+    setColorBar, setColorIcon, createSelectionPreserver, isCellSelection, runOnSelectedCells, isInsideNode, isTextOnlyEdit, appendedFrom, APPENDED_FROM_META,
     toggleList, isQuoteActive, quoteSelectedCells, canShiftListsInSelectedCells, shiftListsInSelectedCells, canShiftListItem, shiftListItem,
   };
 })();

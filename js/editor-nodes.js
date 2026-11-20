@@ -1380,6 +1380,8 @@ const EditorNodes = (function () {
       // suggestions est concernée (sa transaction porte le méta `skip` de la bibliothèque), et seule une valeur dont tout le contenu était suggéré
       // (inséré ou supprimé) et qui s'est vidée par elle : un texte effacé à la main dans une valeur la laisse vide, comme hors suivi.
       if (!transactions.some(tr => tr.docChanged && TrackChanges.isSkipped(tr))) return null;
+      // Un morceau ajouté à la fin d'un texte (EditorCore.appendedFrom) ne vide aucune valeur du texte d'avant : rien à relire, le parcours de tous les nœuds est évité.
+      if (EditorCore.appendedFrom(transactions) !== null) return null;
       const type = newState.schema.nodes.conditionalValue;
       const emptied = [];
       newState.doc.descendants((node, pos) => { if (node.type === type && node.content.size === 0) emptied.push({ pos, size: node.nodeSize }); });

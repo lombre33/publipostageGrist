@@ -96,7 +96,11 @@ const Anchors = (function () {
     // Du texte tapé ou effacé dans un bloc ne touche ni la place d'un signet, ni son nom, ni son adresse : rien à normaliser, et le parcours du document entier (0,4 ms par lettre dans un texte de 117 pages) est évité.
     if (transactions.every(tr => !tr.docChanged || EditorCore.isTextOnlyEdit(tr))) return null;
     const doc = state.doc;
-    const present = idsIn(doc, -1);
+    // Un morceau ajouté à la fin d'un texte déjà rangé (EditorCore.appendedFrom) : seul lui est à parcourir. Une passe entière aurait déjà vu, avant lui, les adresses des blocs du premier niveau (`seen`) ;
+    // elles ne se lisent que si le morceau porte un signet ou un nom (la plupart n'en ont pas), et leur parcours est celui du premier niveau, pas de tous les nœuds.
+    const from = EditorCore.appendedFrom(transactions);
+    let presentIds = from === null ? idsIn(doc, -1) : null;
+    const present = { has: id => (presentIds = presentIds || idsIn(doc, -1)).has(id) };
     const seen = new Set();
     let tr = null;
     const rewrite = (pos, id, name) => {
@@ -104,10 +108,16 @@ const Anchors = (function () {
       tr.setNodeAttribute(pos, 'anchorId', id);
       tr.setNodeAttribute(pos, 'anchorName', name);
     };
-    doc.descendants((node, pos, parent) => {
+    let seeded = from === null;
+    const seedSeen = () => {
+      seeded = true;
+      doc.forEach((node, pos) => { if (pos < from && isTarget(node) && node.attrs.anchorId) seen.add(node.attrs.anchorId); });
+    };
+    const visit = (node, pos, parent) => {
       if (!isTarget(node)) return true;
       const { anchorId, anchorName, caption } = node.attrs;
       if (!anchorId && !anchorName) return false;
+      if (!seeded) seedSeen();
       const name = cleanName(anchorName) || null;
       let id = isId(anchorId) ? anchorId : null;
       if (parent !== doc || caption || (id && seen.has(id))) { rewrite(pos, null, null); return false; }
@@ -116,7 +126,9 @@ const Anchors = (function () {
       seen.add(id);
       if (id !== anchorId || name !== (anchorName || null)) rewrite(pos, id, name);
       return false;
-    });
+    };
+    if (from === null) doc.descendants(visit);
+    else doc.nodesBetween(from, doc.content.size, visit);
     return tr;
   }
 
