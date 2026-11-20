@@ -42,20 +42,35 @@ const PdfFontNotice = (function () {
 
   // === Le relevé ===
 
+  // Les polices d'écriture (`fontFamily` de la marque `textStyle`) d'un nœud et de tout ce qu'il contient, dans l'ordre où elles paraissent la première fois (celui d'un parcours du document de haut en bas). Mémorisées PAR NŒUD :
+  // ProseMirror ne recrée que les nœuds qu'une frappe touche (le paragraphe, ses parents jusqu'au document) et partage tous les autres, de sorte qu'un relevé refait après une lettre ne relit que ce chemin et reprend la réponse
+  // de chaque frère au lieu de parcourir tous les nœuds du texte (20/11 : `typing_letter_walks_the_whole_document_a_bounded_number_of_times`). Un nœud ne change jamais : sa réponse mémorisée est toujours juste.
+  const NO_FONTS = Object.freeze([]);
+  const fontsOfNode = new WeakMap();
+  function fontsIn(node) {
+    const known = fontsOfNode.get(node);
+    if (known) return known;
+    let found = NO_FONTS;
+    const add = (value) => {
+      if (found === NO_FONTS) found = [];
+      if (!found.includes(value)) found.push(value);
+    };
+    if (node.isInline) {
+      node.marks.forEach((mark) => {
+        const value = mark.type.name === 'textStyle' ? mark.attrs.fontFamily : null;
+        if (value) add(value);
+      });
+    }
+    node.content.forEach((child) => { fontsIn(child).forEach(add); });
+    // Une feuille (un texte, une image) se relit en un instant : seuls les nœuds qui en contiennent d'autres sont mémorisés.
+    if (node.childCount) fontsOfNode.set(node, found);
+    return found;
+  }
+
   // Ce que le relevé lit, dans la forme que `PdfFontPlan.scan` comprend (du texte contenant `font-family: …`, ou l'objet de l'en-tête et du pied qu'il met en texte) : chaque valeur distincte des marques de texte du document,
   // puis le brouillon de l'en-tête et du pied. Pas le HTML entier : ce qui se relève est ce qui se remplace.
   function textsOfDocument() {
-    const texts = [];
-    const distinct = new Set();
-    editor.state.doc.descendants((node) => {
-      if (!node.isInline || !node.marks.length) return;
-      node.marks.forEach((mark) => {
-        const value = mark.type.name === 'textStyle' ? mark.attrs.fontFamily : null;
-        if (!value || distinct.has(value)) return;
-        distinct.add(value);
-        texts.push('font-family: ' + String(value).replace(/"/g, "'"));
-      });
-    });
+    const texts = fontsIn(editor.state.doc).map(value => 'font-family: ' + String(value).replace(/"/g, "'"));
     texts.push(HeaderFooterPreview.getHeaderFooterData());
     return texts;
   }

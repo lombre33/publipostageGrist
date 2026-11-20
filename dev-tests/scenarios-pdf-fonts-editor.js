@@ -495,6 +495,63 @@
     },
   });
 
+  // --- Le relevé mémorisé par nœud (20/11, « le coût de frappe de pdf-font-notice.js ») : une lettre ne relit que le chemin qu'elle touche, la liste reste celle d'un parcours complet du document ---
+  cases.push({
+    id: 'pdffontseditor_the_list_after_typing_deleting_pasting_and_undoing_is_the_one_of_a_full_walk',
+    description: 'Le relevé reprend la réponse des nœuds que la frappe n\'a pas touchés au lieu de parcourir tout le texte : après une lettre tapée dans un passage, un passage effacé, une police ajoutée AVANT les autres (l\'ordre) et Annuler, la liste, son ordre et la pastille sont ceux d\'un parcours complet du document (l\'ancien relevé)',
+    run: async (h) => {
+      const bad = [];
+      const filler = Array.from({ length: 40 }, (_, i) => `<p>Ligne ${i}</p>`).join('');
+      await open(h, MIXED + filler + para('Cambria', 'tard'));
+      // L'ancien relevé, tel qu'il était écrit : chaque valeur distincte de la marque `textStyle`, dans l'ordre du document, puis l'en-tête et le pied.
+      const reference = () => {
+        const texts = [];
+        const distinct = new Set();
+        editor().state.doc.descendants((node) => {
+          if (!node.isInline || !node.marks.length) return;
+          node.marks.forEach((mark) => {
+            const value = mark.type.name === 'textStyle' ? mark.attrs.fontFamily : null;
+            if (!value || distinct.has(value)) return;
+            distinct.add(value);
+            texts.push('font-family: ' + String(value).replace(/"/g, "'"));
+          });
+        });
+        texts.push(HeaderFooterPreview.getHeaderFooterData());
+        return PdfFontPlan.scan(texts).replaced.map(font => font.name).join();
+      };
+      const mine = () => { PdfFontNotice.scanNow(); return PdfFontNotice.fonts().map(font => font.name).join(); };
+      const same = (label) => { const a = mine(); const b = reference(); if (a !== b) bad.push(label + ' : ' + a + ' au lieu de ' + b); return a; };
+      const first = same('à l\'ouverture');
+      if (first !== 'Cambria,Consolas') bad.push('à l\'ouverture : attendu Cambria,Consolas, vu ' + first);
+      const textPos = (needle) => { let at = -1; editor().state.doc.descendants((node, pos) => { if (at < 0 && node.isText && node.text.indexOf(needle) >= 0) at = pos + node.text.indexOf(needle); }); return at; };
+      // Une lettre tapée dans le passage de Consolas : rien ne change.
+      editor().view.dispatch(editor().state.tr.insertText('x', textPos('Code') + 2));
+      same('après une lettre dans le passage de Consolas');
+      if (!dotOn()) bad.push('la pastille s\'éteint après une lettre');
+      // Le seul paragraphe de Consolas effacé : il n'est plus dans la liste.
+      const range = (() => { let out = null; editor().state.doc.forEach((node, offset) => { if (!out && node.textContent.indexOf('Co') === 0 && node.textContent.indexOf('de') > 0) out = [offset, offset + node.nodeSize]; }); return out; })();
+      if (!range) bad.push('le paragraphe de Consolas est introuvable');
+      else {
+        editor().view.dispatch(editor().state.tr.delete(range[0], range[1]));
+        const afterDelete = same('après avoir effacé le paragraphe de Consolas');
+        if (afterDelete !== 'Cambria') bad.push('après l\'effacement : attendu Cambria, vu ' + afterDelete);
+        // Annuler le rend.
+        editor().commands.undo();
+        const afterUndo = same('après Annuler');
+        if (afterUndo !== 'Cambria,Consolas') bad.push('après Annuler : attendu Cambria,Consolas, vu ' + afterUndo);
+      }
+      // Une police posée AVANT les autres passe en tête : l'ordre est celui de la première apparition dans le texte.
+      editor().commands.insertContentAt(0, para('Consolas', 'neuf'));
+      const ordered = same('après un passage de Consolas posé en tête');
+      if (ordered !== 'Consolas,Cambria') bad.push('l\'ordre après la pose en tête : attendu Consolas,Cambria, vu ' + ordered);
+      // Tout effacer : plus de police, la pastille s'éteint.
+      editor().view.dispatch(editor().state.tr.delete(0, editor().state.doc.content.size));
+      const none = same('après avoir tout effacé');
+      if (none !== '' || dotOn()) bad.push('tout effacé : liste « ' + none + ' », pastille ' + dotOn());
+      return result(bad);
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pdfFontsEditor = cases;
 })();
