@@ -1650,8 +1650,10 @@ const HeaderFooterPreview = (function () {
       },
     });
     built.slice(steps.length).forEach(({ seam }) => seam.remove());
+    // Toutes les hauteurs de couture se lisent avant la première écriture (js/reader-mode.js:placeSimpleSeamsAtOnce dit pourquoi : `toLayoutY` demande la mise en page, `seam.style.top` la défait).
+    const seamTops = steps.map(step => toLayoutY(step.afterBottomScreen) + step.remaining);
     steps.forEach((step, i) => {
-      const seamTop = toLayoutY(step.afterBottomScreen) + step.remaining;
+      const seamTop = seamTops[i];
       if (cuts[i].next) pass.reserves.push({ next: cuts[i].next, bodyTopRel: step.bodyTopRel });
       marginRules.push(ruleOf(i, step.margin));
       built[i].seam.style.top = seamTop + 'px';
