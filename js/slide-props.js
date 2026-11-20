@@ -606,14 +606,16 @@ const SlideProps = (function () {
   // Le même travail que forOutput, mais rendu comme l'ARBRE lu une fois (un `body` d'un document inerte) au lieu d'un texte relu à chaque étape : les étapes suivantes de js/slides-entry.js:outputHtml (objets
   // masqués, thème, sauts de diapositive) continuent sur ce même arbre au lieu de le sérialiser et de le relire quatre fois. Null quand forOutput rend le texte tel quel (ni fond de thème, ni décor, ni repère,
   // le nom de la classe n'étant dans le texte que comme du texte) : l'appelant reprend alors le chemin par le texte, qui n'a rien changé.
-  function forOutputTree(html, { anchors = false, background = '', decor = null } = {}) {
+  // `first` : une étape de plus sur l'arbre juste lu, avant les siennes (js/slide-links.js:stripIn, qui retire les repères des diapositives liées : le texte n'est lu qu'une fois pour elle et pour les autres) ; elle dit vrai quand elle a changé l'arbre.
+  function forOutputTree(html, { anchors = false, background = '', decor = null, first = null } = {}) {
     const paper = background && html ? colorOf(background) : '';
     const frames = typeof decor === 'function' && html ? decor : null;
     const text = String(html == null ? '' : html);
-    if (!paper && !frames && text.indexOf(CLASS) === -1) return null;
+    if (!paper && !frames && !first && text.indexOf(CLASS) === -1) return null;
     const body = HtmlSanitize.parseInert(text);
+    const changed = first ? first(body) : false;
     if (paper || frames) withPaperIn(body, paper, frames);
-    return rewriteIn(body, outputEach(anchors)) || paper || frames ? body : null;
+    return rewriteIn(body, outputEach(anchors)) || paper || frames || changed ? body : null;
   }
   // Le HTML avec un fond pour CHAQUE diapositive : celle qui n'en a pas prend `paper` (#rrggbb), le fond que le thème de la présentation donne à toutes ses diapositives (js/slide-theme.js:paperOf, option `background` de
   // forOutput). Une diapositive qui a un repère sans fond le reçoit dans ce repère, une qui n'a pas de repère en reçoit un en tête, celle qui a déjà son fond le garde. Le repère écrit ici est celui que l'éditeur écrirait pour

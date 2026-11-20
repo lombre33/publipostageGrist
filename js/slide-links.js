@@ -127,10 +127,13 @@ const SlideLinks = (function () {
     const text = String(html == null ? '' : html);
     if (text.indexOf(CLASS) === -1) return text;
     const body = HtmlSanitize.parseInert(text);
+    return stripIn(body) ? body.innerHTML : text;
+  }
+  // Retire les repères d'un arbre déjà lu (un `body` d'un document inerte) ; vrai s'il y en avait.
+  function stripIn(body) {
     const found = body.querySelectorAll('div.' + CLASS);
-    if (!found.length) return text;
     found.forEach(el => el.remove());
-    return body.innerHTML;
+    return found.length > 0;
   }
 
   // ---- Les diapositives d'un texte et leurs empreintes ------------------------------------------------------------------------------------------------
@@ -846,13 +849,22 @@ const SlideLinks = (function () {
 
   // ---- Les sorties d'une présentation fermée ----------------------------------------------------------------------------------------------------------
 
+  // Ce que forOutput fera du texte `html` : 'none' (pas un repère : rendu tel quel), 'strip' (les repères s'en vont, aucune diapositive liée à comparer à sa source : ils peuvent partir de l'arbre que lit déjà
+  // l'appelant, `stripIn`, sans une lecture de plus), 'sync' (une diapositive liée à comparer à sa source, que l'éditeur sait faire : forOutput).
+  function outputKind(html) {
+    const text = String(html == null ? '' : html);
+    if (text.indexOf(CLASS) === -1) return 'none';
+    const editor = EditorCore.getEditor();
+    return !libs || !editor || editor.isDestroyed || text.indexOf(DOM_ATTRS.linkSlide) === -1 ? 'strip' : 'sync';
+  }
   // Le HTML d'une présentation tel que la Lecture et les exports le reçoivent : sans repère, et, quand l'éditeur est là, chaque diapositive liée que seule sa source a changée depuis la
   // dernière synchro prend celle de la source, comme le fera l'éditeur à l'ouverture (« Suit la source » : toujours). Le HTML sans repère est rendu tel quel, sans être relu.
   function forOutput(html) {
     const text = String(html == null ? '' : html);
-    if (text.indexOf(CLASS) === -1) return text;
+    const kind = outputKind(text);
+    if (kind === 'none') return text;
+    if (kind === 'strip') return strip(text);
     const editor = EditorCore.getEditor();
-    if (!libs || !editor || editor.isDestroyed || text.indexOf(DOM_ATTRS.linkSlide) === -1) return strip(text);
     const parsed = parseHtml(editor, text);
     const tr = libs.EditorState.create({ doc: parsed.doc }).tr;
     let changed = false;
@@ -1226,7 +1238,7 @@ const SlideLinks = (function () {
   }
 
   return {
-    NODE, CLASS, ATTRS, MODES, configure, wire, attrsOfEl, domAttrs, strip, forOutput, createExtension, isSyncTransaction, follow, hasPending, prepareSend, noteKnown, adopt,
+    NODE, CLASS, ATTRS, MODES, configure, wire, attrsOfEl, domAttrs, strip, stripIn, outputKind, forOutput, createExtension, isSyncTransaction, follow, hasPending, prepareSend, noteKnown, adopt,
     infoAt, infoList, markSync, blockedReason, setMode, detach, versionsAt, resolve, anchorSource, tagImported, linkedFrom, hashOf, liveChannels, liveHashes, liveOut, liveIn,
     wantsRepublish: () => republish.size > 0,
     // Ce que js/slide-copies.js (la copie en texte d'une diapositive, dans un document) emprunte au module : la lecture d'une présentation et de ses diapositives, leurs empreintes, ce qui passe

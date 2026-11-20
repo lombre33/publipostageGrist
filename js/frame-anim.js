@@ -147,11 +147,18 @@ const FrameAnim = (function () {
     const raw = String(html == null ? '' : html);
     if (raw.indexOf(ATTR) === -1) return raw;
     const body = HtmlSanitize.parseInert(raw);
-    let slide = 0;
-    body.querySelectorAll(BREAK + ', [' + ATTR + ']').forEach((node) => {
-      if (node.matches(BREAK)) slide += 1; else node.setAttribute(SLIDE_ATTR, String(slide));
-    });
+    stampIn(body);
     return body.innerHTML;
+  }
+  // La même chose sur un arbre déjà lu (js/slides-entry.js:outputHtml, `stampAnimations` : le texte de la sortie n'est pas relu pour cela) ; vrai quand un élément animé a reçu son rang.
+  function stampIn(root) {
+    let slide = 0; let stamped = false;
+    root.querySelectorAll(BREAK + ', [' + ATTR + ']').forEach((node) => {
+      if (node.matches(BREAK)) { slide += 1; return; }
+      node.setAttribute(SLIDE_ATTR, String(slide));
+      stamped = true;
+    });
+    return stamped;
   }
   // Ce qui bouge quand l'élément `node` s'anime : la boîte d'un cadre, l'élément lui-même pour tout autre (paragraphe, titre, point de liste, image, tableau).
   const boxOf = node => (node.matches(FRAME) ? node.querySelector(':scope > .pp-free-frame-box') : node);
@@ -169,5 +176,5 @@ const FrameAnim = (function () {
     return found;
   }
 
-  return { EFFECTS, SIDED, SIDES, STARTS, DURATION, DELAY, ORDER_MAX, ATTR, SLIDE_ATTR, normalized, text, parse, same, stepsOf, keyframes, play, stampSlides, framesOf };
+  return { EFFECTS, SIDED, SIDES, STARTS, DURATION, DELAY, ORDER_MAX, ATTR, SLIDE_ATTR, normalized, text, parse, same, stepsOf, keyframes, play, stampSlides, stampIn, framesOf };
 })();

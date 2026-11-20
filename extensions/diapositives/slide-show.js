@@ -345,7 +345,7 @@ const SlideShow = (function () {
     const light = source.indexOf('data-link-slide') === -1 ? HeavyImages.lighten(source) : null;
     const text = light ? light.html : source;
     // Une présentation qui a des vues de diapositive (js/slide-view.js) garde le repère des diapositives que le texte vise : la copie que la vue montre se prend à cette adresse.
-    const html = SlidesEntry.outputHtml('presentation', text, { theme: PageLayout.getTheme(), anchors: SlideView.shows(text) });
+    const html = SlidesEntry.outputHtml('presentation', text, { theme: PageLayout.getTheme(), anchors: SlideView.shows(text), stampAnimations: true });
     const headerFooter = Editor.getHeaderFooterData();
     const how = { startPage: fromCurrent ? firstPageOf(currentSlide()) : 0, fromCurrent: !!fromCurrent };
     const focusBack = document.activeElement;
@@ -377,7 +377,7 @@ const SlideShow = (function () {
     try {
       const slides = readSlides();
       // La fenêtre fermée pendant la préparation (le départ d'une grosse présentation dure : on perd patience et on ferme l'onglet) : le rendu s'arrête au prochain point d'arrêt, au lieu d'aller au bout page figée.
-      job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: document.body, cancelled: link.isClosed });
+      job = await PrintExport.stage(html, GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: document.body, cancelled: link.isClosed });
       if (link.isClosed()) { job.dispose(); job = null; link.release(); return; }
       const payload = SlideWindow.pack(job, Object.assign({}, slides, how), light ? light.images : null);
       job.dispose();
@@ -410,7 +410,7 @@ const SlideShow = (function () {
     if (refusal) player.note(I18n.t(refusal), 8000);
     try {
       // Quitté (Échap, « Quitter ») pendant la préparation : le rendu s'arrête au prochain point d'arrêt.
-      const job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: player.root, cancelled: () => run !== current });
+      const job = await PrintExport.stage(html, GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: player.root, cancelled: () => run !== current });
       if (run !== current) { job.dispose(); return; }
       player.load(job, slides, how);
       trace('première diapositive dans le panneau');
@@ -437,7 +437,7 @@ const SlideShow = (function () {
     link.follow(state => speaker.setState(state), stop, () => speaker.reset());
     try {
       // La console quittée, ou la fenêtre fermée, pendant la préparation : le rendu s'arrête au prochain point d'arrêt.
-      const job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: speaker.boxes.current, cancelled: () => run !== current || link.isClosed() });
+      const job = await PrintExport.stage(html, GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: speaker.boxes.current, cancelled: () => run !== current || link.isClosed() });
       if (run !== current) return;
       if (link.isClosed()) { job.dispose(); stop(); return; }
       link.deliver(SlideWindow.pack(job, Object.assign({}, data, how), light ? light.images : null));
