@@ -872,7 +872,7 @@ const PptxImport = (function () {
     const percent = (((para.lnSpc ? para.lnSpc.val : 100000) / 1000) - (shape.lineCut || 0)) / 100;
     const ppt = exact ? (para.lnSpc.val / 100) / size : percent * ParagraphFormat.NATURAL_LINE;
     // L'éditeur pose chaque ligne au moins à la hauteur du corps de son paragraphe (14 px, 10,5 pt) fois l'interligne, quelle que soit la taille des séries de caractères : un texte de 9 pt y aurait des lignes de 12,3 pt
-    // au lieu de 10,5, un tableau de lignes de 18 pt des lignes de 19 pt dont le texte, réduit en vain jusqu'à 60 %, ne tiendrait toujours pas (retour d'Antoine du 20/11). L'interligne est donc ramené au rapport de la
+    // au lieu de 10,5, un tableau de lignes de 18 pt des lignes de 19 pt dont le texte, réduit en vain jusqu'à 60 %, ne tiendrait toujours pas. L'interligne est donc ramené au rapport de la
     // taille posée au corps de l'éditeur quand elle est plus petite : la ligne mesure alors ce que PowerPoint lui donne.
     const placed = size * grow;
     const line = placed > 0 && placed < STRUT_PT ? ppt * placed / STRUT_PT : ppt;
@@ -2162,7 +2162,7 @@ const PptxImport = (function () {
     else if (/\/ole$/.test(uri) || ole) { report.embedded += 1; noteTo(report, 'embedded', attr(ole, 'progId')); }
     else { report.unreadable += 1; noteTo(report, 'unreadable', I18n.t('importReport.unreadable.graphic', { name: uri.split('/').pop() || '?' })); }
   }
-  // Un schéma SmartArt (carte « Liens + SmartArt modifiables » d'Antoine, 20/11). PowerPoint garde dans le fichier le DESSIN qu'il a calculé pour chaque schéma (`ppt/diagrams/drawingN.xml`, relation
+  // Un schéma SmartArt. PowerPoint garde dans le fichier le DESSIN qu'il a calculé pour chaque schéma (`ppt/diagrams/drawingN.xml`, relation
   // `diagramDrawing`, que le modèle de données `dgm:dataModelExt` désigne) : des formes `dsp:sp` (forme, fond, trait, texte, rectangle du texte `txXfrm`) dans le repère du cadre, en EMU depuis son coin. L'import les
   // reprend comme des formes ordinaires - les mêmes que celles d'un objet de la diapositive - à la place du cadre : le schéma se voit comme dans PowerPoint et chaque texte se corrige, mais il ne se redessine plus tout
   // seul (la disposition `dgm:` n'est pas reprise). Un schéma sans dessin enregistré (un fichier fait par un programme), illisible ou de plus de MAX_DIAGRAM_SHAPES formes reste compté, avec sa raison. Une
