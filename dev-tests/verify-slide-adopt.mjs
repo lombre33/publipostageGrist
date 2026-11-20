@@ -4,7 +4,7 @@
 // « Garder liée » écrit dans la ligne de la source le numéro de la diapositive liée (son repère, js/slide-links.js:anchorSource) ; la présentation ouverte ailleurs (Slides+) voit alors sa ligne changer pendant
 // qu'on y tape : `SlideLinks.adopt` prend ce repère sans bandeau, mais refusait quand la personne avait tapé dans CETTE diapositive (sa version n'était plus celle d'avant) : le bandeau, et « Recharger la dernière
 // version » qui perd ce qu'elle venait de taper. Désormais, quand l'autre page n'a posé que le repère, il se pose sur la diapositive d'ici, tapée ou non, et rien ne se demande.
-// L'app hébergée par GFS (extension « diapositives »), 700x400, vrai clavier. « Source » (3 diapositives) est à l'écran, sans repère :
+// L'app hébergée par GFS (extension « diapositives »), 700x400, vrai clavier. « Source » (3 diapositives) est à l'écran, sans repère (puis, plus bas, les trois d'un coup) :
 //  - sans frappe ici : la ligne réécrite avec le repère de la diapositive 2 est adoptée : aucun bandeau, la diapositive 2 porte le repère ;
 //  - avec une frappe dans la diapositive 2 (« Deux texte ici », pas encore enregistrée) : aucun bandeau, la frappe est gardée, la diapositive 2 porte le repère, aucune fenêtre « Demander » ; l'enregistrement
 //    qui suit écrit les deux (le texte tapé et le repère) ;
@@ -48,21 +48,23 @@ const typeAfter = async (page, text, typed) => {
   await sleep(300);
 };
 // La ligne de « Source » telle qu'une autre page l'écrirait : son repère (numéro de diapositive) à la fin de la diapositive `n`, ou un mot changé.
-const writeElsewhere = (page, { tag, replace }) => page.evaluate(({ id, slide, replace }) => {
+// `tag` : le numéro d'une diapositive (1, 2, 3), ou `tags` : plusieurs d'un coup (20/11 : « Garder liée » numérote TOUTES les diapositives de la source en une écriture, js/slide-links.js:anchorSource).
+const writeElsewhere = (page, { tag, tags, replace }) => page.evaluate(({ id, slides, replace }) => {
   const stub = window.__gristStub;
   const editor = EditorCore.getEditor();
   let html = stub.getRow('Publipostage_Modeles', 7).Contenu;
-  if (slide) {
-    const node = editor.schema.nodes.slideLink.create(Object.assign(Object.fromEntries(SlideLinks.ATTRS.map(name => [name, null])), { slideId: id }));
-    const tagHtml = Editor.getHTML(editor.schema.topNodeType.create(null, [node]));
+  if (slides.length) {
     const parts = html.split('<div class="page-break-marker"');
-    parts[slide - 1] += tagHtml;
+    slides.forEach((slide) => {
+      const node = editor.schema.nodes.slideLink.create(Object.assign(Object.fromEntries(SlideLinks.ATTRS.map(name => [name, null])), { slideId: slide === 2 ? id : id + slide }));
+      parts[slide - 1] += Editor.getHTML(editor.schema.topNodeType.create(null, [node]));
+    });
     html = parts.join('<div class="page-break-marker"');
   }
   if (replace) html = html.split(replace[0]).join(replace[1]);
   stub.remoteWrite('Publipostage_Modeles', 7, { Contenu: html, DateModif: new Date().toISOString() });
   return html;
-}, { id: ID2, slide: tag, replace: replace || null });
+}, { id: ID2, slides: tags || (tag ? [tag] : []), replace: replace || null });
 const view = page => page.evaluate(() => {
   const editor = EditorCore.getEditor();
   const slides = SlideStrip.slidesOf(editor.state.doc);
@@ -106,6 +108,16 @@ const settle = async (page) => {
   await page.waitForFunction(() => /Deux texte ici/.test(window.__gristStub.getRow('Publipostage_Modeles', 7).Contenu), null, { timeout: 15000 }).catch(() => {});
   const saved = await view(page);
   check('l’enregistrement qui suit écrit le texte tapé ET le repère', /Deux texte ici/.test(saved.stored) && saved.stored.includes('data-slide-id="' + ID2 + '"'), saved.stored.slice(0, 400));
+}
+
+// --- Les trois diapositives reçoivent leur repère d'un coup (la source numérotée en entier), pendant une frappe dans la 2.
+{
+  const page = await openSource();
+  await typeAfter(page, 'Deux texte', ' ici');
+  await writeElsewhere(page, { tags: [1, 2, 3] });
+  await settle(page);
+  const v = await view(page);
+  check('les trois repères arrivent d’un coup pendant une frappe dans la 2 : aucun bandeau, aucune fenêtre « Demander », la frappe gardée, les trois diapositives numérotées', !v.banner && !v.ask && v.texts[1] === 'Deux texte ici' && v.ids.every(Boolean) && new Set(v.ids).size === 3, v);
 }
 
 // --- Une frappe dans la diapositive 3 : même résultat pour le repère de la 2.

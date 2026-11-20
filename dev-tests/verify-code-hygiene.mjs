@@ -1658,6 +1658,14 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     check('diaporama à part : le HTML reçu est lu dans un fragment inerte (`Dom.inertTemplate`), nettoyé (`clean` : script, cadre, objet, base, formulaire, gestionnaire `on…`, adresse `javascript:`) AVANT d\'entrer dans la page ; les feuilles de style ne viennent que de http(s) ; les variables de page posées sont celles de `--pp-`',
       /const content = clean\(Dom\.inertTemplate\(payload\.scope\)\.content\);\s*const own = adoptImages\(content, payload\.images\);[\s\S]*?await settleLinks\([\s\S]*?await loadFonts\(\);\s*shadow\.appendChild\(content\);/.test(unpackCode) && (unpackCode.match(/shadow\.appendChild\(content\)/g) || []).length === 1 && /FORBIDDEN = 'script, iframe, frame, frameset, object, embed, applet, base, meta, link, form, noscript, portal'/.test(sender)
         && /name\.indexOf\('on'\) === 0/.test(sender) && /\^\(\?:javascript\|vbscript\|data:text\\\/html\)/.test(sender) && /\^https\?:\\\/\\\//.test(sender) && /\^--pp-\[\\w-\]\+\$/.test(sender), 'extensions/diapositives/slide-window.js');
+    // La mise en page des coutures (20/11, un diaporama de 79 diapositives met 27 s sous Firefox) : les hauteurs de toutes les coutures d'une suite se lisent AVANT la première écriture (`toLayoutY` demande la mise en page,
+    // `seam.style.top` la défait : une mise en page par coupure), dans la Lecture comme dans l'éditeur.
+    const readerSeams = noCommentsJs(read('js/reader-mode.js'));
+    const editorSeams = noCommentsJs(read('js/header-footer-preview.js'));
+    check('mise en page des coutures : les hauteurs de toutes les coutures d\'une suite se lisent AVANT la première écriture de `seam.style.top` (`toLayoutY` demande la mise en page, l\'écriture la défait : une mise en page par coupure), dans la Lecture (js/reader-mode.js) et dans l\'éditeur (js/header-footer-preview.js)',
+      /const seamTops = placed\.map\(step => toLayoutY\(step\.afterBottomScreen\) \+ step\.remaining\);\s*placed\.forEach\(\(step, i\) => \{\s*const seamTop = seamTops\[i\];/.test(readerSeams)
+      && /const seamTops = steps\.map\(step => toLayoutY\(step\.afterBottomScreen\) \+ step\.remaining\);\s*steps\.forEach\(\(step, i\) => \{\s*const seamTop = seamTops\[i\];/.test(editorSeams)
+      && !/placed\.forEach\([^)]*=> \{[^}]*toLayoutY/.test(readerSeams), 'js/reader-mode.js, js/header-footer-preview.js');
     // Les images lourdes sorties du texte le temps d'un rendu (js/heavy-images.js, 11/11) : une adresse `blob:` meurt avec la page. Un texte allégé qui atteindrait un enregistrement ou un export perdrait ses images :
     // il n'est fait qu'au départ du diaporama, pour un rendu qu'on jette. Et la fenêtre ne charge jamais une adresse que l'app lui nomme : elle ne prend que des fichiers d'image, sous une adresse qu'elle crée.
     const starter = noCommentsJs(read('extensions/diapositives/slide-show.js'));

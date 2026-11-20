@@ -344,7 +344,8 @@ const EditorCore = (function () {
       while (placed < held && io.bottom(placed) === actual[placed].bottom && opens(io.nextTop(placed), planned[placed])) placed++;
     }
     if (placed < inSheet) io.write(planned.slice(0, placed).map(step => step.margin));
-    return { steps: planned.slice(0, placed), missed };
+    // `held`, `exact`, `rounding` : de quoi lire, dans le rapport de fluidité, pourquoi une suite s'arrête avant sa fin (js/reader-mode.js:placeSimpleSeamsAtOnce).
+    return { steps: planned.slice(0, placed), missed, held, exact, rounding: reserveRounding.name };
   }
 
   function nextInFlow(el) {

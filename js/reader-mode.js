@@ -626,6 +626,12 @@ const ReaderMode = (function () {
     pages[pages.length - 1].bottom = seamTop + footAreaPx;
     pages.push({ top: seamTop + footAreaPx + divider.getBoundingClientRect().height / zoom, bodyTop: seamTop + seamHeight });
   }
+  // MESURE TEMPORAIRE, avec le suivi du lag (js/perf-trace.js : à retirer avec lui) - 20/11 : un diaporama de 79 diapositives met 27 s à se mettre en page sous Firefox (1 à 2 s sous Chromium), en cinq suites de
+  // coupures de 2 à 3 s chacune, entre lesquelles la page attend encore 1 s. `paginationTrace` n'existe que le temps d'une mise en page du rendu d'impression et du diaporama (renderInto) : chaque suite y laisse
+  // une ligne du rapport (combien de coupures, combien tenues, où elle s'est arrêtée, ce qu'ont coûté les lectures avant et après chaque écriture de feuille).
+  let paginationTrace = null;
+  const TRACED_BATCHES_MAX = 8;
+  const traceMark = (label) => { if (typeof PerfTrace !== 'undefined') PerfTrace.mark(label); };
   function placeSimpleSeamsAtOnce(pass, offsets, start) {
     // Les coutures d'une suite de coupures simples (ni entre deux lignes d'un tableau, ni dans une zone à deux colonnes) qui commence à la coupure `start`, posées d'un coup, chaque
     // coupure vérifiée, la première qui n'est pas au rendez-vous et toutes celles d'après laissées à placeSeam (carte du 21/10, « Accélérer ») : même calcul que l'éditeur
@@ -656,19 +662,44 @@ const ReaderMode = (function () {
     });
     const ruleOf = (i, margin) => EditorCore.reserveRule(sheetSel, cuts[i].el, cuts[i].nth, margin);
     let sheet = null;
-    const { steps: placed, missed } = EditorCore.placeReservesAtOnce(count, {
+    const trace = paginationTrace;
+    const reads = [0, 0, 0, 0];   // ms de lecture avant la première écriture de feuille, après la première, après la deuxième, après les suivantes
+    let writes = 0; let writeMs = 0;
+    const startedAt = trace ? performance.now() : 0;
+    const read = (i, top) => {
+      const from = trace ? performance.now() : 0;
+      const el = top ? cuts[i].next : cuts[i].el;
+      const value = el ? el.getBoundingClientRect()[top ? 'top' : 'bottom'] : null;
+      if (trace) reads[Math.min(writes, 3)] += performance.now() - from;
+      return value;
+    };
+    const { steps: placed, missed, held, exact, rounding } = EditorCore.placeReservesAtOnce(count, {
       zoom, rootTop: wrapperRect.top, bodyTopRel: pass.bodyTopRel, capacityOf: () => geometry.pageContentHeightPx, seamHeightOf: i => cuts[i].seamHeight,
     }, {
-      bottom: i => cuts[i].el.getBoundingClientRect().bottom,
-      nextTop: i => (cuts[i].next ? cuts[i].next.getBoundingClientRect().top : null),
+      bottom: i => read(i, false),
+      nextTop: i => read(i, true),
       write(margins) {
+        const from = trace ? performance.now() : 0;
         const text = margins.map((margin, i) => ruleOf(i, margin)).join('\n');
         if (sheet) sheet.textContent = text; else sheet = steps.add(text);
+        writes++;
+        if (trace) writeMs += performance.now() - from;
       },
     });
+    if (trace) {
+      trace.batches++;
+      if (trace.batches <= TRACED_BATCHES_MAX) {
+        traceMark('pagination : suite de ' + count + ' coupures dès la ' + (start + 1) + 'e, ' + placed.length + ' posées (tenues ' + held + ', exactes ' + exact + ', arrondi ' + rounding + (missed ? ', NON RECONNU' : '') + ') ; '
+          + writes + ' écriture(s) de feuille ' + Math.round(writeMs) + ' ms ; lectures avant/après 1/2/3+ : ' + reads.map(ms => Math.round(ms)).join('/') + ' ms ; suite entière ' + Math.round(performance.now() - startedAt) + ' ms');
+      }
+    }
     built.slice(placed.length).forEach(({ seam }) => seam.remove());
+    // Les hauteurs de toutes les coutures se lisent AVANT d'écrire la première : `toLayoutY` lit `clientTop` et `scrollTop` du conteneur, ce qui demande la mise en page, et chaque `seam.style.top`
+    // écrit la rendait de nouveau à refaire - une mise en page par coupure (77 pour une présentation de 79 diapositives : 0,6 ms chacune sous Chromium, mais Firefox refait le calcul de tout
+    // l'arbre à chaque fois). Les écritures ne touchent que des coutures en position absolue : les lectures rendent les mêmes nombres.
+    const seamTops = placed.map(step => toLayoutY(step.afterBottomScreen) + step.remaining);
     placed.forEach((step, i) => {
-      const seamTop = toLayoutY(step.afterBottomScreen) + step.remaining;
+      const seamTop = seamTops[i];
       if (cuts[i].next) pass.reserves.push({ next: cuts[i].next, bodyTopRel: step.bodyTopRel });
       marginRules.push(ruleOf(i, step.margin));
       built[i].seam.style.top = seamTop + 'px';
@@ -726,7 +757,9 @@ const ReaderMode = (function () {
     for (let i = 0; i < offsets.length;) {
       const placed = pass.atOnce ? placeSimpleSeamsAtOnce(pass, offsets, i) : 0;
       if (placed > 0) { i += placed; continue; }
+      const from = paginationTrace ? performance.now() : 0;
       placeSeam(pass, offsets[i], i);
+      if (paginationTrace) { paginationTrace.singles++; paginationTrace.singleMs += performance.now() - from; }
       i++;
     }
     // La dernière page, jusqu'à sa hauteur réelle : la feuille ne descend jamais sous le haut du corps de cette page, plus la hauteur utile d'une
@@ -1456,6 +1489,42 @@ const ReaderMode = (function () {
   const PRINT_VIEW = { tint: false };
   const PRINT_SETTLE_MS = 8000;
   const PRINT_RELAYOUTS_MAX = 3;
+  // MESURE TEMPORAIRE (suivi du lag, js/perf-trace.js) : ce que coûte la mise en page redemandée après chaque sorte d'écriture sur le document de l'impression ou du diaporama - un attribut, une marge
+  // en ligne, une feuille de style ajoutée, réécrite, retirée, un bloc ajouté. Une seule fois par séance, et seulement quand une mise en page a pris 4 s ou plus. Chaque écriture est défaite aussitôt :
+  // rien ne reste. Rend la ligne du rapport.
+  const FLUSH_PROBE_FROM_MS = 4000;
+  let flushProbed = false;
+  function probeFlushCosts(container, wrapper) {
+    const out = [];
+    const flush = () => container.getBoundingClientRect();
+    const time = (name, change) => {
+      change();
+      const from = performance.now();
+      flush();
+      out.push(name + ' ' + Math.round(performance.now() - from));
+    };
+    flush();
+    time('rien', () => {});
+    time('attribut posé', () => wrapper.setAttribute('data-pp-probe', '1'));
+    time('attribut retiré', () => wrapper.removeAttribute('data-pp-probe'));
+    const block = Array.from(wrapper.children).find(el => el.tagName !== 'STYLE');
+    if (block) {
+      const original = block.getAttribute('style');
+      time('marge en ligne posée', () => { block.style.marginBottom = '1px'; });
+      time('marge en ligne retirée', () => { if (original === null) block.removeAttribute('style'); else block.setAttribute('style', original); });
+    }
+    const sheet = document.createElement('style');
+    sheet.className = 'pp-probe-style';
+    time('feuille ajoutée', () => wrapper.appendChild(sheet));
+    time('feuille réécrite, règle sans effet', () => { sheet.textContent = '.pp-probe-none { color: red; }'; });
+    if (block) time('feuille réécrite, marge d\u2019un bloc', () => { sheet.textContent = EditorCore.reserveRule(sheetSelector(wrapper), block, 1, 1); });
+    time('feuille retirée', () => sheet.remove());
+    const added = document.createElement('div');
+    added.className = 'pp-probe-block';
+    time('bloc ajouté', () => container.appendChild(added));
+    time('bloc retiré', () => added.remove());
+    return 'sonde de mise en page (ms de lecture après chaque écriture) : ' + out.join(' ; ');
+  }
   // `checkpoint` (facultatif, js/print-export.js:checkpointOf) : appelé aux endroits où le rendu peut s'abandonner sans rien laisser derrière lui (il rejette quand plus personne n'attend le rendu).
   async function renderInto(container, htmlContent, tableId, record, headerFooterData, checkpoint) {
     return GristAPI.withReadPass(async () => {
@@ -1480,7 +1549,17 @@ const ReaderMode = (function () {
       const widest = widestSheetPx(sections);
       if (widest) container.style.setProperty('--pp-page-width', widest + 'px');
       const wrappers = sections ? sections.map(section => section.wrapper) : [wrapper];
-      const layOut = () => layOutSheets(container, sections, wrapper, zones);
+      let layOutMs = 0;
+      const layOut = () => {
+        const from = performance.now();
+        paginationTrace = { batches: 0, singles: 0, singleMs: 0 };
+        try { return layOutSheets(container, sections, wrapper, zones); } finally {
+          layOutMs = performance.now() - from;
+          const trace = paginationTrace;
+          paginationTrace = null;
+          traceMark('pagination : ' + (trace.batches + trace.singles) + ' suites ou coupures seules, ' + trace.batches + ' suites d\u2019un coup, ' + trace.singles + ' coupures une à une (' + Math.round(trace.singleMs) + ' ms) ; mise en page entière ' + Math.round(layOutMs) + ' ms');
+        }
+      };
       const fonts = container.ownerDocument.fonts;
       const settle = async () => { await settleImages(container, PRINT_SETTLE_MS); if (fonts) await fonts.ready; };
       await settle();
@@ -1489,6 +1568,8 @@ const ReaderMode = (function () {
       // en page se refait alors (comme watchGeometry à l'écran) jusqu'à ce qu'elles ne bougent plus.
       const sizes = () => wrappers.concat(Array.from(container.querySelectorAll('img'))).map(el => { const r = el.getBoundingClientRect(); return Math.round(r.width) + 'x' + Math.round(r.height); }).join('|');
       let paged = layOut();
+      // Une mise en page lente (4 s ou plus) fait mesurer UNE fois ce que coûte chaque sorte d'écriture (probeFlushCosts) : mesure temporaire du même suivi, qui laisse la page comme elle était.
+      if (!flushProbed && layOutMs >= FLUSH_PROBE_FROM_MS) { flushProbed = true; traceMark(probeFlushCosts(container, wrapper)); }
       // Les en-têtes et pieds des coutures sont écrits par la pagination : leurs images d'un autre site reprennent leur adresse, puis chargent.
       ExternalImages.unblockIn(container);
       for (let round = 0; round < PRINT_RELAYOUTS_MAX; round++) {
@@ -2087,5 +2168,5 @@ const ReaderMode = (function () {
       catch (e) { return ''; }
     });
   }
-  return { render, lend, renderInto, resolvedHtml, preview, peek, inspect, resolveFilename, autoName, isAutoName, fieldText, splitBadges, trimTrailingBlankBlocks, trailingTypedBreaks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll, showsNoRow: () => noRowShown, slideShown, showSlide };
+  return { render, lend, renderInto, probeFlushCosts, resolvedHtml, preview, peek, inspect, resolveFilename, autoName, isAutoName, fieldText, splitBadges, trimTrailingBlankBlocks, trailingTypedBreaks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll, showsNoRow: () => noRowShown, slideShown, showSlide };
 })();

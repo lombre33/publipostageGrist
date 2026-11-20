@@ -150,6 +150,13 @@ const I18nTextsSlides = {
   'slides.copy.barGone': { fr: 'Sa diapositive d’origine n’existe plus', en: 'Its original slide no longer exists' },
   'slides.copy.detach': { fr: 'Détacher', en: 'Detach' },
   'slides.copy.detachTip': { fr: 'Le texte reste tel qu’il est et ne suit plus la diapositive : il s’écrit de nouveau ici.', en: 'The text stays as it is and no longer follows the slide: it can be edited here again.' },
+  // « Mettre à jour maintenant » (js/slide-copies.js : `updateNow`, le bouton de la barre d'une diapositive liée dans un document ; demande du 20/11).
+  'slides.copy.refresh': { fr: 'Mettre à jour maintenant', en: 'Update now' },
+  'slides.copy.refreshTip': { fr: 'Reprendre tout de suite la dernière version de la diapositive, sans attendre la lecture suivante.', en: 'Take the slide’s latest version right now, without waiting for the next check.' },
+  'slides.copy.refreshing': { fr: 'Mise à jour depuis « {name} »…', en: 'Updating from “{name}”…' },
+  'slides.copy.upToDate': { fr: 'La diapositive {n} de « {name} » est déjà à jour.', en: 'Slide {n} of “{name}” is already up to date.' },
+  'slides.copy.refreshFailed': { fr: 'Mise à jour impossible : « {name} » n’a pas pu être relue.', en: 'Couldn’t update: “{name}” could not be read.' },
+  'slides.copy.refreshOff': { fr: 'Pas de mise à jour pendant le suivi des modifications ou l’écriture en direct.', en: 'No update while changes are tracked or during live writing.' },
   'slides.copy.detached': { fr: 'Texte détaché : il ne suit plus sa diapositive.', en: 'Text detached: it no longer follows its slide.' },
   'slides.page.keepLinkedTip': { fr: 'Les diapositives restent liées à la page : elles la suivent quand elle change et ne s’écrivent plus ici, jusqu’à « Détacher ».', en: 'The slides stay linked to the page: they follow it when it changes and can’t be edited here until you detach them.' },
   'slides.page.hintLinked': { fr: 'Un clic sur une page l’importe en diapositives après la diapositive {n}, liées à la page.', en: 'Click a page to import it as slides after slide {n}, linked to the page.' },

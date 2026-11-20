@@ -10,3 +10,5 @@
 .v2-copy-toolbar { align-items: center; max-width: min(380px, calc(100vw - 16px)); }
 .v2-copy-name { min-width: 0; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12.5px/26px var(--font-ui); color: var(--text, #3a4452); }
 .v2-floating-toolbar .v2-copy-detach { flex: none; width: auto; gap: 5px; padding: 0 8px; font: 12.5px/1 var(--font-ui); color: var(--text, #3a4452); }
+/* « Mettre à jour maintenant » : un bouton d'icône (la largeur d'icône de `.v2-floating-toolbar button`) ; absent quand la diapositive d'origine n'existe plus. */
+.v2-floating-toolbar .v2-copy-refresh[hidden] { display: none; }

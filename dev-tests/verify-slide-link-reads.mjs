@@ -6,7 +6,8 @@
 // « Offre » de 12 diapositives de 60 formes de décor, un logo de 150 Ko chacune (environ 2,5 Mo de texte), colonne `Jeton` vide.
 //  - la PREMIÈRE liaison de la présentation (elle n'a pas encore de jeton) : du clic au coin d'état, au plus TROIS lectures de la table entière (celle de la source, celle du jeton écrit, la date relue ; il y en avait
 //    quatre) et AUCUNE lecture du texte de la source par le navigateur (HtmlSanitize.parseInert sur le texte entier : il y en avait deux) ;
-//  - la SECONDE (le jeton existe) : au plus deux lectures de la table, le texte de la source lu une seule fois (la première liaison y a posé un repère : le volet ne l'a pas relu) ;
+//  - la SECONDE (le jeton existe, 20/11 : « l'import dans le document depuis un ppt très lourd en cliquant garder lié est très long, laggy ») : AUCUNE lecture de la table, AUCUNE écriture de la source - la première
+//    liaison a donné leur numéro à TOUTES les diapositives de la présentation, en une seule écriture ;
 //  - le résultat est celui d'avant : la copie est posée avec son repère (un lien vers « Offre »), la ligne de la source reçoit le numéro de chaque diapositive liée, une fois, sans autre changement de son texte.
 // Lancé par run-headless.mjs (groupe Node « slideLinkReads », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slide-link-reads.mjs
 import { start, seedModels } from './gfs-page.mjs';
@@ -169,17 +170,20 @@ await sleep(1500);
 
 // Ce que le navigateur fait d'une table lourde : les lectures de la table des modèles et les lectures d'un texte entier de la source, comptées depuis le clic.
 await app.evaluate((size) => {
-  window.__reads = 0; window.__parses = 0; window.__big = size;
+  window.__reads = 0; window.__parses = 0; window.__writes = 0; window.__big = size;
   const docApi = grist.docApi;
   const fetchTable = docApi.fetchTable.bind(docApi);
   // Ne comptent que les lectures de la liaison : le passage de l'enregistrement automatique (toutes les 2,5 s) et l'enregistrement du document ouvert (saveRow) lisent la table eux aussi, et selon l'instant
   // où ils tombent par rapport au clic (le moindre retard de la page les déplace) ils se retrouvaient dans la fenêtre : l'essai ne mesurait plus la liaison.
-  docApi.fetchTable = (table) => { if (table === 'Publipostage_Modeles' && !/runAutosaveTick|saveRow/.test(new Error().stack)) window.__reads++; return fetchTable(table); };
+  docApi.fetchTable = (table) => { if (table === 'Publipostage_Modeles' && !/runAutosaveTick|saveRow/.test(new Error().stack)) { window.__reads++; (window.__readStacks = window.__readStacks || []).push(new Error().stack.split('\n').slice(2, 14).map(l => l.trim().replace(/^at /, '').replace(/\(?http:\/\/[^/]+\//, '(')).join(' < ')); } return fetchTable(table); };
+  // Les écritures du texte de la source (une action qui porte un texte aussi long que la source) hors enregistrement du document ouvert.
+  const apply = docApi.applyUserActions.bind(docApi);
+  docApi.applyUserActions = (actions, ...rest) => { if (Array.isArray(actions) && actions.some(a => a && a[3] && Object.values(a[3]).some(v => typeof v === 'string' && v.length >= window.__big / 2)) && !/runAutosaveTick|saveRow/.test(new Error().stack)) window.__writes++; return apply(actions, ...rest); };
   const parse = HtmlSanitize.parseInert;
   HtmlSanitize.parseInert = function (html) { if (String(html).length >= window.__big / 2 && !/runAutosaveTick|saveRow/.test(new Error().stack)) window.__parses++; return parse.apply(this, arguments); };
 }, heavy.length);
-const counts = () => app.evaluate(() => ({ reads: window.__reads, parses: window.__parses }));
-const resetCounts = () => app.evaluate(() => { window.__reads = 0; window.__parses = 0; });
+const counts = () => app.evaluate(() => ({ stacks: window.__readStacks, reads: window.__reads, parses: window.__parses, writes: window.__writes }));
+const resetCounts = () => app.evaluate(() => { window.__readStacks = []; window.__reads = 0; window.__parses = 0; window.__writes = 0; });
 // Ce que le coin d'état a dit depuis `watchStatus` : l'enregistrement automatique le recouvre vite, on ne le lit pas à un instant donné.
 const watchStatus = () => app.evaluate(() => {
   const el = document.getElementById('status-msg');
@@ -214,6 +218,7 @@ const first = Date.now();
 await a.clickThumb(2, 0);
 const one = await waitSaid(/3 de « Offre » insérée en texte, liée à sa source/, first);
 let c = one.counts;
+const first_writes = c.writes;
 check('la diapositive 3 est posée, liée à « Offre » (' + one.took + ' ms)', one.ok, await said());
 check('première liaison : au plus trois lectures de la table des modèles entière (il y en avait quatre)', c.reads <= 3, c);
 check('première liaison : le texte de la source n’est relu par le navigateur NI une fois (il l’était deux fois)', c.parses === 0, c);
@@ -231,9 +236,12 @@ const second = Date.now();
 await a.clickThumb(4, 0);
 const two = await waitSaid(/5 de « Offre » insérée en texte, liée à sa source/, second);
 c = two.counts;
-check('seconde liaison (' + two.took + ' ms) : au plus deux lectures de la table, et le texte de la source n’est lu qu’une fois (la première liaison l’a changé : il y avait le repère de plus ; il l’était deux fois)', c.reads <= 2 && c.parses <= 1, c);
+check('seconde liaison (' + two.took + ' ms) : AUCUNE lecture de la table, AUCUNE écriture de la source (la première a numéroté toutes ses diapositives), le texte de la source lu au plus une fois par le navigateur', c.reads === 0 && c.writes === 0 && c.parses <= 1, c);
+check('première liaison : une seule écriture du texte de la source (' + first_writes + ')', first_writes === 1, first_writes);
 tags = await copies();
 source = await stored();
-check('deux copies liées, chacune à sa diapositive ; la source porte les deux numéros', tags.length === 2 && tags[0].linkSlide !== tags[1].linkSlide && (source.match(/data-slide-id/g) || []).length === 2, { tags: tags.length, ids: (source.match(/data-slide-id/g) || []).length });
+const ids = (source.match(/data-slide-id="([a-z0-9]+)"/g) || []);
+check('deux copies liées, chacune à sa diapositive ; la source porte le numéro de CHAQUE diapositive (' + SLIDES + '), tous différents', tags.length === 2 && tags[0].linkSlide !== tags[1].linkSlide && ids.length === SLIDES && new Set(ids).size === SLIDES && source.includes('data-slide-id="' + tags[1].linkSlide + '"'), { tags: tags.length, ids: ids.length, distinct: new Set(ids).size });
+check('le texte de la source n’a pas bougé d’un mot : mêmes diapositives, mêmes titres', (source.match(/page-break-marker/g) || []).length === SLIDES - 1 && source.includes('Titre 1</h1>') && source.includes('Titre 12</h1>'), (source.match(/page-break-marker/g) || []).length);
 
 await t.finish();
