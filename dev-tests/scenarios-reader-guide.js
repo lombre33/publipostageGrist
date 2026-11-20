@@ -43,14 +43,19 @@
     reader().style.display = 'block';
     await ReaderMode.render('<p>Modèle</p>', TABLE, null, NO_HF);
   }
+  // Un niveau d'accès donné au test devient celui du faux Grist le temps du test (les `fireLinking` qui suivent le gardent) ; finish() rend celui d'avant.
+  let accessBefore = null;
+  function giveAccess(level) { if (accessBefore === null) accessBefore = stub().state.accessLevel; stub().state.accessLevel = level; }
   async function setup(h, linking, lang, accessLevel) {
     await h.resetEditor();
     I18n.setLang(lang || 'fr');
+    if (typeof accessLevel === 'string') giveAccess(accessLevel);
     fireLinking(linking, accessLevel);
     await showEmptyReader();
   }
   async function finish() {
     I18n.setLang('fr');
+    if (accessBefore !== null) { stub().state.accessLevel = accessBefore; accessBefore = null; }
     fireLinking({});
     const r = reader();
     r.style.display = 'none';
@@ -60,9 +65,9 @@
 
   cases.push({
     id: 'reader_guide_replaces_the_empty_message_when_the_widget_is_not_linked',
-    description: 'Sans « Sélectionner par », la Lecture sans ligne montre le guide en quatre étapes (chacune avec son titre, ses repères numérotés et sa capture) à la place de « Aucune ligne sélectionnée »',
+    description: 'Sans « Sélectionner par » ET sans l\'accès complet (le seul cas où la Lecture sans ligne n\'a pas de document à montrer), la Lecture montre le guide en quatre étapes (chacune avec son titre, ses repères numérotés et sa capture) à la place de « Aucune ligne sélectionnée »',
     run: async (h) => {
-      await setup(h, UNLINKED);
+      await setup(h, UNLINKED, 'fr', 'none');
       const got = {
         guide: !!guide(),
         message: !!message(),
@@ -87,7 +92,7 @@
     run: async (h) => {
       const out = {};
       for (const lang of ['fr', 'en']) {
-        await setup(h, UNLINKED, lang);
+        await setup(h, UNLINKED, lang, 'none');
         await waitFor(() => imgs().length === 4 && imgs().every(i => i.complete), 5000);
         out[lang] = imgs().map(i => ({
           file: (i.getAttribute('src') || '').replace(/^.*\//, '').replace(/\?.*$/, ''),
@@ -106,12 +111,12 @@
     id: 'reader_guide_texts_are_written_in_the_interface_language',
     description: 'Le guide est écrit dans la langue de l\'interface (libellés de Grist compris : « Ajouter une vue à la page » / « Add widget to page »), captures comprises',
     run: async (h) => {
-      await setup(h, UNLINKED, 'fr');
+      await setup(h, UNLINKED, 'fr', 'none');
       // La deuxième étape (le tableau sur la page) est celle qui cite des libellés de Grist ; la première est l'accès complet.
       const lead = () => text(steps()[1].querySelector('.reader-guide-lead'));
       const fr = { title: text(reader().querySelector('.reader-guide-title')), lead: lead(), src: imgs()[1].getAttribute('src') };
       await finish();
-      await setup(h, UNLINKED, 'en');
+      await setup(h, UNLINKED, 'en', 'none');
       const en = { title: text(reader().querySelector('.reader-guide-title')), lead: lead(), src: imgs()[1].getAttribute('src'), all: text(guide()) };
       await finish();
       const frenchLeft = /Reliez|Étape|Cliquez|Choisissez|Donnez|Vérifiez|Ouvrez|accès|tableau/.test(en.all);
@@ -136,10 +141,10 @@
           order: !!(lead && title && marks) && !!(title.compareDocumentPosition(lead) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(lead.compareDocumentPosition(marks) & Node.DOCUMENT_POSITION_FOLLOWING),
         };
       };
-      await setup(h, UNLINKED, 'fr');
+      await setup(h, UNLINKED, 'fr', 'none');
       const fr = read();
       await finish();
-      await setup(h, UNLINKED, 'en');
+      await setup(h, UNLINKED, 'en', 'none');
       const en = read();
       await finish();
       const pass = fr.leads.length === 4 && fr.last === 'Le tableau est vide ? Ajoutez-y d’abord une ligne.' && fr.order && fr.leads.every(Boolean)
@@ -168,10 +173,10 @@
           intro: text(reader().querySelector('.reader-guide-intro')),
         };
       };
-      await setup(h, UNLINKED, 'fr');
+      await setup(h, UNLINKED, 'fr', 'none');
       const fr = read();
       await finish();
-      await setup(h, UNLINKED, 'en');
+      await setup(h, UNLINKED, 'en', 'none');
       const en = read();
       await finish();
       const frenchInEnglish = /Donnez|Déjà|Vue|Niveau|Accepter|accès|Passez|cliquez|panneau/.test(en.first + ' ' + en.alt);
@@ -283,9 +288,9 @@
 
   cases.push({
     id: 'reader_guide_keeps_the_short_message_when_the_widget_is_already_linked',
-    description: 'Un widget déjà relié n\'a rien à régler, seulement un clic à faire : la Lecture sans ligne garde son court message (« Aucune ligne sélectionnée » et son indication), sans guide',
+    description: 'Un widget déjà relié mais qui n\'a que l\'accès à la table (« lecture de table » : des lignes arrivent, mais Grist lui refuse les modèles) garde son court message (« Aucune ligne sélectionnée » et son indication), sans guide ; avec l\'accès complet, la Lecture sans ligne n\'a plus de message : elle montre le document',
     run: async (h) => {
-      await setup(h, LINKED);
+      await setup(h, LINKED, 'fr', 'read table');
       const got = { guide: !!guide(), message: !!message(), title: text(reader().querySelector('.reader-empty-title')), hint: text(reader().querySelector('.reader-empty-hint')) };
       await finish();
       return { pass: !got.guide && got.message && got.title === 'Aucune ligne sélectionnée' && /Sélectionnez une ligne/.test(got.hint), notes: JSON.stringify(got) };
@@ -294,9 +299,9 @@
 
   cases.push({
     id: 'reader_guide_follows_the_link_live_without_reloading',
-    description: 'Dès que Grist renvoie les options du widget avec un autre lien (« Sélectionner par » choisi, puis vidé), la Lecture sans ligne passe du guide au court message et revient, sans rendu demandé',
+    description: 'Dès que Grist renvoie les options du widget avec un autre lien (« Sélectionner par » choisi, puis vidé), la Lecture sans ligne d\'un widget qui n\'a que l\'accès à la table passe du guide au court message et revient, sans rendu demandé',
     run: async (h) => {
-      await setup(h, UNLINKED);
+      await setup(h, UNLINKED, 'fr', 'read table');
       const seen = [];
       const note = (label) => seen.push(label + ':' + (guide() ? 'guide' : message() ? 'message' : 'rien'));
       note('start');
@@ -321,7 +326,7 @@
     description: 'Une version de Grist qui ne dit pas le lien (settings sans `linking`, ou `linking` vide) n\'est jamais prise pour « relié » : le guide reste, avec en dernière ligne quoi faire si le widget l\'est déjà ; l\'état « non relié » connu n\'a pas cette ligne',
     run: async (h) => {
       const got = {};
-      await setup(h, undefined);
+      await setup(h, undefined, 'fr', 'none');
       got.absent = { state: GristAPI.getLinkState(), guide: !!guide(), unsure: text(reader().querySelector('.reader-guide-unsure')) };
       fireLinking({});
       await sleep(40);
@@ -343,10 +348,11 @@
 
   cases.push({
     id: 'reader_guide_gives_way_to_the_document_when_a_row_arrives_and_does_not_come_back',
-    description: 'Au vrai passage en Lecture sans ligne le guide s\'affiche ; une ligne qui arrive (clic dans le tableau relié) le remplace par le document, et un changement de lien ne le fait pas revenir',
+    description: 'Au vrai passage en Lecture sans ligne, pour un widget qui n\'a que l\'accès à la table, le guide s\'affiche ; une ligne qui arrive (clic dans le tableau relié) le remplace par le document, et un changement de lien ne le fait pas revenir',
     run: async (h) => {
       await h.resetEditor();
       I18n.setLang('fr');
+      giveAccess('read table');
       stub().setVariables(TABLE, { Client: 'Text' });
       stub().setRows(TABLE, [{ id: 1, Client: 'Dupont' }]);
       await GristAPI.refreshSchema();
@@ -373,7 +379,7 @@
     id: 'reader_guide_shot_is_a_button_that_zooms_to_full_size_and_back',
     description: 'La capture d\'une étape est un bouton (clavier compris) : un clic l\'affiche à sa taille réelle dans sa carte (aria-pressed, info-bulle), un second la rétrécit à 66 %, sans toucher aux autres étapes',
     run: async (h) => {
-      await setup(h, UNLINKED);
+      await setup(h, UNLINKED, 'fr', 'none');
       await waitFor(() => imgs().every(i => i.complete && i.naturalWidth > 0), 5000);
       const first = reader().querySelector('.reader-guide-shot');
       const second = steps()[1].querySelector('.reader-guide-shot');
@@ -426,7 +432,7 @@
     id: 'reader_guide_texts_reach_4_5_on_their_backgrounds_in_light_and_dark',
     description: 'Le guide passe les jetons de contraste : titre, introduction, « Étape n », titres, phrases, lignes de repères et dernière ligne à 4,5:1 au moins sur leur fond, chiffre blanc des ronds sur --accent-solid, en clair et en sombre, avec l\'aperçu A4 allumé (plan de travail) comme coupé (conteneur blanc) : tout le texte est posé sur la carte, jamais sur le conteneur',
     run: async (h) => {
-      await setup(h, undefined); // « inconnu » : la dernière ligne est là elle aussi
+      await setup(h, undefined, 'fr', 'none'); // « inconnu » : la dernière ligne est là elle aussi
       const html = document.documentElement;
       const before = html.getAttribute('data-theme');
       // Transitions coupées le temps de la mesure : le fond du plan de travail et les couleurs en transition rendent encore la valeur du thème d'avant juste après le changement.
@@ -667,6 +673,277 @@
       const bad = [];
       for (const theme of Object.keys(byTheme)) for (const [name, value] of Object.entries(byTheme[theme])) if (!(value >= 4.5)) bad.push(theme + ' ' + name + ' ' + value);
       return { pass: !!sameLook && sameLook.diff.length === 0 && bad.length === 0, notes: JSON.stringify({ sameLook, bad, byTheme }) };
+    },
+  });
+
+  // --- La Lecture SANS ligne montre le document (demande d'Antoine du 2026-11-20 : « passer en mode lecture indépendamment des lignes », avec « juste un warning discret » qui dit qu'aucune
+  // ligne n'est sélectionnée) : la pastille de js/reading-line.js à la place du message qui bloquait ; le guide à quatre étapes ne prend la Lecture que sans l'accès complet, et reste à un clic de la pastille.
+  const pill = () => document.getElementById('pp-reading-line');
+  const pillShown = () => { const el = pill(); return !!el && !el.hidden && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0; };
+  const pillHelp = () => pill() && pill().querySelector('.pp-reading-line-help');
+  const visible = el => !!el && !el.hidden && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0;
+  const helpWindow = () => document.getElementById('pp-reader-guide-modal');
+  const helpOpen = () => !!helpWindow() && getComputedStyle(helpWindow()).display !== 'none';
+  // Le vrai passage en Lecture d'un document sans ligne : le faux Grist n'a rien à lui donner.
+  async function readWithoutRow(h, html, linking, lang) {
+    await h.resetEditor();
+    I18n.setLang(lang || 'fr');
+    stub().setVariables(TABLE, { Client: 'Text' });
+    stub().setRows(TABLE, []);
+    stub().setViewRows(null);
+    await GristAPI.refreshSchema();
+    fireLinking(linking);
+    stub().fireRecord(null, TABLE);
+    Editor.setHTML(html);
+    await sleep(300);
+    document.getElementById('btn-mode-read').click();
+    await waitFor(() => !!reader().querySelector('.reader-content'), 5000);
+    await sleep(250);
+  }
+  async function backToEdit() {
+    I18n.setLang('fr');
+    if (helpOpen()) { const close = document.getElementById('pp-reader-guide-modal-close'); if (close) close.click(); }
+    stub().state.accessLevel = 'full';
+    fireLinking({});
+    document.getElementById('btn-mode-edit').click();
+    await sleep(250);
+    const r = reader();
+    r.style.display = 'none';
+    r.innerHTML = '';
+  }
+  const BADGE_HTML = '<span class="var-badge" data-table="' + TABLE + '" data-column="Client" data-key="' + TABLE + '.Client"></span>';
+
+  cases.push({
+    id: 'reading_without_a_row_shows_the_document_whatever_the_link_state',
+    description: 'Sans ligne sélectionnée, la Lecture montre le document (au lieu de « Aucune ligne sélectionnée » ou du guide), que le widget soit relié, non relié ou d\'un lien inconnu : le texte, sans message ni guide dans la page',
+    run: async (h) => {
+      const got = {};
+      for (const [name, linking] of [['relié', LINKED], ['non relié', UNLINKED], ['inconnu', undefined]]) {
+        await h.resetEditor();
+        I18n.setLang('fr');
+        fireLinking(linking);
+        reader().style.display = 'block';
+        await ReaderMode.render('<h1>Plan de la formation</h1><p>Bienvenue à tous.</p>', TABLE, null, NO_HF);
+        got[name] = { doc: text(reader().querySelector('.reader-content')), guide: !!guide(), message: !!message(), noRow: ReaderMode.showsNoRow() };
+        await finish();
+      }
+      const pass = Object.values(got).every(v => v.doc.includes('Plan de la formation') && v.doc.includes('Bienvenue à tous.') && !v.guide && !v.message && v.noRow === true);
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'reading_without_a_row_leaves_merge_fields_empty_and_raises_no_error',
+    description: 'Sans ligne, la Lecture écrit les champs de fusion comme pour une ligne qui n\'existe pas (vides), sans « variables non résolues » ni erreur : une bulle, une boucle sur des lignes, un calcul, un texte conditionnel et un saut de diapositive passent tous, et le texte autour reste',
+    run: async (h) => {
+      await h.resetEditor();
+      I18n.setLang('fr');
+      stub().setVariables(TABLE, { Client: 'Text', Montant: 'Numeric' });
+      stub().setRows(TABLE, []);
+      await GristAPI.refreshSchema();
+      fireLinking(LINKED);
+      reader().style.display = 'block';
+      const loop = ' data-loop="{&quot;repeat&quot;:&quot;row&quot;,&quot;table&quot;:&quot;' + TABLE + '&quot;,&quot;empty&quot;:&quot;header&quot;}" data-loop-repeat="row"';
+      const html = '<h1>Titre fixe</h1>'
+        + '<p>Client : ' + BADGE_HTML + ' (fin)</p>'
+        + '<table><tbody><tr><td><p>' + BADGE_HTML.replace('></span>', loop + '></span>') + '</p></td></tr></tbody></table>'
+        + '<p>Total : <span class="calc-badge" data-formula="' + '2 + 3' + '"></span></p>'
+        + '<div class="conditional-text"><p>Bloc conditionnel</p></div>'
+        + '<div class="page-break-marker" data-slide-break="true"></div><h1>Seconde diapositive</h1>';
+      const errors = [];
+      const realError = console.error;
+      console.error = (...args) => { errors.push(args.map(String).join(' ').slice(0, 160)); };
+      const thrown = [];
+      const onError = event => thrown.push(String(event.message || event.reason || event).slice(0, 160));
+      window.addEventListener('error', onError);
+      window.addEventListener('unhandledrejection', onError);
+      let failure = null;
+      try { await ReaderMode.render(html, TABLE, null, NO_HF); } catch (e) { failure = String(e && e.message || e); }
+      await sleep(250);
+      console.error = realError;
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onError);
+      const doc = text(reader().querySelector('.reader-content'));
+      const got = { failure, errors, thrown, doc: doc.slice(0, 200), errorMsg: reader().querySelectorAll('.error-msg').length, unresolved: reader().textContent.includes('n’ont pas pu être résolues'), noRow: ReaderMode.showsNoRow() };
+      await finish();
+      const pass = !failure && !errors.length && !thrown.length && got.errorMsg === 0 && !got.unresolved
+        && doc.includes('Titre fixe') && doc.includes('Client :') && doc.includes('(fin)') && doc.includes('Seconde diapositive') && got.noRow;
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'reading_without_a_row_keeps_the_guide_or_the_message_when_the_widget_lacks_full_access',
+    description: 'Sans l\'accès complet, Grist n\'envoie aucune ligne et refuse la lecture des modèles : il n\'y a pas de document à montrer, la Lecture sans ligne garde sa carte (le guide, l\'étape de l\'accès, ou le court message d\'un widget relié) et la pastille ne se dit pas « sans ligne »',
+    run: async (h) => {
+      const got = {};
+      for (const [name, linking, level] of [['non relié, aucun accès', UNLINKED, 'none'], ['relié, aucun accès', LINKED, 'none'], ['relié, lecture de table', LINKED, 'read table']]) {
+        await setup(h, linking, 'fr', level);
+        got[name] = { guide: !!guide(), message: !!message(), doc: !!reader().querySelector('.reader-content'), noRow: ReaderMode.showsNoRow() };
+        await finish();
+      }
+      const pass = got['non relié, aucun accès'].guide && !got['non relié, aucun accès'].doc && got['relié, aucun accès'].guide && !got['relié, aucun accès'].doc
+        && got['relié, lecture de table'].message && !got['relié, lecture de table'].doc && Object.values(got).every(v => v.noRow === false);
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'reading_without_a_row_says_so_in_a_quiet_pill_that_a_row_replaces',
+    description: 'Au vrai passage en Lecture d\'un document dans une table sans ligne : le document s\'affiche et la pastille discrète du coin bas gauche dit « Aucune ligne sélectionnée » (sans flèches, avec une info-bulle qui explique, en français et en anglais) ; une ligne qui arrive la remplace par les données de la ligne ; l\'Édition ne la montre pas',
+    run: async (h) => {
+      const got = {};
+      await readWithoutRow(h, '<p>Facture de ' + BADGE_HTML + '</p>', LINKED, 'fr');
+      const view = () => ({ doc: text(reader().querySelector('.reader-content')), pill: pillShown(), label: text(pill() && pill().querySelector('.pp-reading-line-label')), title: pill() ? pill().title : '',
+        arrows: pill() ? Array.from(pill().querySelectorAll('.pp-reading-line-btn:not(.pp-reading-line-help)')).filter(visible).length : -1, help: visible(pillHelp()), guide: !!guide(), message: !!message(), cls: pill() ? pill().className : '' });
+      got.fr = view();
+      I18n.setLang('en');
+      stub().fireRecord(null, TABLE);
+      await sleep(100);
+      document.getElementById('btn-mode-edit').click();
+      await sleep(250);
+      got.editHidden = !pillShown();
+      document.getElementById('btn-mode-read').click();
+      await waitFor(() => pillShown(), 3000);
+      await sleep(250);
+      got.en = view();
+      // Une ligne arrive : le document se remplit, la pastille « sans ligne » s'en va (une seule ligne dans la vue : pas de « ligne 1 sur 1 »).
+      stub().setRows(TABLE, [{ id: 1, Client: 'Dupont' }]);
+      stub().fireRecord({ id: 1, Client: 'Dupont' }, TABLE);
+      await waitFor(() => text(reader().querySelector('.reader-content')).includes('Dupont'), 5000);
+      await sleep(250);
+      got.row = { doc: text(reader().querySelector('.reader-content')), pill: pillShown(), noRow: ReaderMode.showsNoRow() };
+      await backToEdit();
+      const fr = got.fr, en = got.en;
+      const pass = fr.doc.includes('Facture de') && fr.pill && fr.label === 'Aucune ligne sélectionnée' && /champs de fusion restent vides/.test(fr.title) && fr.arrows === 0 && !fr.help && !fr.guide && !fr.message && /is-norow/.test(fr.cls)
+        && got.editHidden && en.pill && en.label === 'No row selected' && /merge fields stay empty/.test(en.title) && !/ligne/.test(en.label + en.title)
+        && got.row.doc.includes('Dupont') && !got.row.pill && got.row.noRow === false;
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'reading_with_a_row_keeps_the_row_pill_as_it_was',
+    description: 'La pastille « ‹ Martin · ligne 2 sur 3 › » d\'une Lecture AVEC ligne ne change pas : son texte est le seul nom et position (rien d\'autre dans textContent), ses deux flèches sont là, ni le « ? » ni la forme « sans ligne » ; elle est un repère nommé (région) dans les deux cas',
+    run: async (h) => {
+      await h.resetEditor();
+      I18n.setLang('fr');
+      stub().setVariables(TABLE, { Client: 'Text' });
+      stub().setRows(TABLE, [{ id: 1, Client: 'Dupont' }, { id: 2, Client: 'Martin' }]);
+      stub().setViewRows(null);
+      await GristAPI.refreshSchema();
+      fireLinking(UNLINKED);
+      Editor.setHTML('<p>Facture de ' + BADGE_HTML + '</p>');
+      await sleep(300);
+      const shape = () => ({ shown: pillShown(), text: pill() ? pill().textContent : null, role: pill() ? pill().getAttribute('role') : null, named: !!(pill() && pill().getAttribute('aria-label')),
+        arrows: pill() ? Array.from(pill().querySelectorAll('.pp-reading-line-btn:not(.pp-reading-line-help)')).filter(visible).length : -1, help: visible(pillHelp()), cls: pill() ? pill().className : '' });
+      stub().fireRecord({ id: 2, Client: 'Martin' }, TABLE);
+      document.getElementById('btn-mode-read').click();
+      await waitFor(() => pillShown(), 5000);
+      await sleep(300);
+      const withRow = shape();
+      stub().fireRecord(null, TABLE);
+      document.getElementById('btn-mode-edit').click();
+      await sleep(250);
+      document.getElementById('btn-mode-read').click();
+      await sleep(900);
+      const without = shape();
+      await backToEdit();
+      const pass = withRow.shown && withRow.text === 'Martin · ligne 2 sur 2' && withRow.arrows === 2 && !withRow.help && !/is-norow/.test(withRow.cls) && withRow.role === 'region' && withRow.named
+        && without.shown && without.text === 'Aucune ligne sélectionnée' && without.arrows === 0 && /is-norow/.test(without.cls) && without.role === 'region' && without.named;
+      return { pass, notes: JSON.stringify({ withRow, without }) };
+    },
+  });
+
+  cases.push({
+    id: 'reading_without_a_row_keeps_the_four_step_guide_one_click_away_when_the_widget_is_not_linked',
+    description: 'Le « ? » de la pastille ne se montre que pour un widget non relié (ou dont le lien est inconnu) ; un clic ouvre le guide à quatre étapes dans une fenêtre (titre de la fenêtre, quatre captures chargées, pas de second titre dans la carte), qui se ferme au bouton, à Échap et rend le focus ; un lien qui change en direct montre ou cache le « ? »',
+    run: async (h) => {
+      const got = {};
+      await readWithoutRow(h, '<p>Facture de ' + BADGE_HTML + '</p>', UNLINKED, 'fr');
+      got.unlinked = { pill: pillShown(), help: visible(pillHelp()), helpName: pillHelp() ? pillHelp().getAttribute('aria-label') : null };
+      pillHelp().focus();
+      pillHelp().click();
+      await waitFor(() => helpOpen(), 2000);
+      await sleep(150);
+      const box = helpWindow() && helpWindow().querySelector('.pp-modal-box');
+      const shots = helpWindow() ? Array.from(helpWindow().querySelectorAll('.reader-guide-shot img')) : [];
+      await waitFor(() => shots.every(i => i.complete), 3000);
+      got.opened = {
+        open: helpOpen(), title: text(helpWindow() && helpWindow().querySelector('h3')), steps: helpWindow() ? helpWindow().querySelectorAll('.reader-guide-step').length : 0,
+        innerTitle: helpWindow() ? !!helpWindow().querySelector('.reader-guide-title') : null, shots: shots.length, loaded: shots.filter(i => i.complete && i.naturalWidth > 0).length,
+        labelled: box ? box.getAttribute('aria-labelledby') === 'pp-reader-guide-modal-title' : false, inContainer: !!guide(),
+      };
+      document.getElementById('pp-reader-guide-modal-close').click();
+      await sleep(120);
+      got.closed = { open: helpOpen(), focusBack: document.activeElement === pillHelp() };
+      pillHelp().click();
+      await sleep(150);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await sleep(150);
+      got.escape = { open: helpOpen() };
+      // Le lien change en direct : relié -> plus de « ? » ; non relié -> il revient.
+      fireLinking(LINKED);
+      await sleep(150);
+      got.linkedLive = { pill: pillShown(), help: visible(pillHelp()) };
+      fireLinking(UNLINKED);
+      await sleep(150);
+      got.unlinkedLive = { pill: pillShown(), help: visible(pillHelp()) };
+      fireLinking({});
+      await sleep(150);
+      got.unknown = { help: visible(pillHelp()) };
+      await backToEdit();
+      await readWithoutRow(h, '<p>Facture</p>', LINKED, 'fr');
+      got.linked = { pill: pillShown(), help: visible(pillHelp()) };
+      await backToEdit();
+      await readWithoutRow(h, '<p>Facture</p>', UNLINKED, 'en');
+      pillHelp().click();
+      await waitFor(() => helpOpen(), 2000);
+      got.en = { title: text(helpWindow().querySelector('h3')), close: text(document.getElementById('pp-reader-guide-modal-close')), firstStep: text(helpWindow().querySelector('.reader-guide-step-title')), frenchInEnglish: /[éèàç]/.test(text(helpWindow().querySelector('.pp-modal-body')).replace(/[“”’]/g, '')) };
+      await backToEdit();
+      const o = got.opened;
+      const pass = got.unlinked.pill && got.unlinked.help && got.unlinked.helpName === 'Comment relier ce widget à un tableau ?'
+        && o.open && o.title === 'Reliez ce widget à votre tableau' && o.steps === 4 && o.innerTitle === false && o.shots === 4 && o.loaded === 4 && o.labelled && !o.inContainer
+        && got.closed.open === false && got.closed.focusBack && got.escape.open === false
+        && got.linkedLive.pill && !got.linkedLive.help && got.unlinkedLive.help && got.unknown.help
+        && got.linked.pill && !got.linked.help
+        && got.en.title === 'Link this widget to your table' && got.en.close === 'Close' && got.en.firstStep === 'Give this widget full access' && !got.en.frenchInEnglish;
+      return { pass, notes: JSON.stringify(got) };
+    },
+  });
+
+  cases.push({
+    id: 'reading_without_a_row_pill_and_help_window_reach_4_5_in_light_and_dark',
+    description: 'La pastille « Aucune ligne sélectionnée » (libellé et « ? ») et le guide de la fenêtre passent 4,5:1 sur leur fond, en clair et en sombre',
+    run: async (h) => {
+      await readWithoutRow(h, '<p>Facture</p>', UNLINKED, 'fr');
+      const html = document.documentElement;
+      const before = html.getAttribute('data-theme');
+      const noMotion = document.createElement('style');
+      noMotion.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+      document.head.appendChild(noMotion);
+      const byTheme = {};
+      try {
+        pillHelp().click();
+        await waitFor(() => helpOpen(), 2000);
+        for (const theme of ['light', 'dark']) {
+          html.setAttribute('data-theme', theme);
+          await sleep(60);
+          const win = helpWindow();
+          byTheme[theme] = {
+            pastille: textRatio(pill().querySelector('.pp-reading-line-label')), aide: textRatio(pillHelp()),
+            fenetreTitre: textRatio(win.querySelector('h3')), introduction: textRatio(win.querySelector('.reader-guide-intro')), etape: textRatio(win.querySelector('.reader-guide-eyebrow')),
+            phrase: textRatio(win.querySelector('.reader-guide-lead')), repere: textRatio(win.querySelector('.reader-guide-mark-text')), ronds: textRatio(win.querySelector('.reader-guide-mark')),
+          };
+        }
+      } finally {
+        if (before === null) html.removeAttribute('data-theme'); else html.setAttribute('data-theme', before);
+        noMotion.remove();
+      }
+      await backToEdit();
+      const bad = [];
+      for (const theme of Object.keys(byTheme)) for (const [name, value] of Object.entries(byTheme[theme])) if (!(value >= 4.5)) bad.push(theme + ' ' + name + ' ' + value);
+      return { pass: bad.length === 0, notes: JSON.stringify({ bad, byTheme }) };
     },
   });
 

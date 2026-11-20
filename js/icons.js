@@ -291,6 +291,9 @@ const Icons = (function () {
       slideNotes: '<path d="M6 3.5h8.5L19 8v12.5H6z"/><path d="M14.5 3.5V8H19"/><path d="M9 12.5h7M9 15.5h7M9 18.5h4.5"/>',
       // La vue intervenant (extensions/diapositives/slide-speaker.js) : « diapositive précédente » (le chevron qui regarde à gauche, comme chevronRight regarde à droite) et le chrono - pause, reprise, remise à zéro
       // (une flèche qui revient en arrière : l'image dans le miroir de la poignée de rotation d'un cadre, qui tourne dans l'autre sens).
+      // Le « ? » de la pastille « Aucune ligne sélectionnée » de la Lecture (js/reading-line.js) : il ouvre le guide pour relier le widget à un tableau. Une icône et non le texte « ? » : le texte de la pastille
+      // reste son seul libellé (textContent).
+      helpCircle: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.9.7c0 1.6-2.5 2-2.5 3.6"/><path d="M12 17.2h.01"/>',
       chevronLeft: '<path d="m15 6-6 6 6 6"/>',
       chronoPause: '<path d="M9 5.5v13M15 5.5v13"/>',
       chronoPlay: '<path d="m8 5.5 10.5 6.5L8 18.5z"/>',
